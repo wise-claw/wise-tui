@@ -21,7 +21,6 @@ import {
   Layout,
   Modal,
   Row,
-  Segmented,
   Space,
   Spin,
   Tag,
@@ -146,7 +145,6 @@ import {
 import { isOmcMonitorEmployeeRecord } from "../../utils/omcMonitorEmployeeSession";
 import { listRepositoryMainOwnerDisplayGaps, repositoryOwnerBasenamesInScopeRelaxed } from "../../utils/projectPrdScopeDisplay";
 import { SplitRuntimeMessages } from "./SplitRuntimeMessages";
-import { UnmetConditionsQuestionIcon } from "./UnmetConditionsQuestionIcon";
 import { TaskAnchorPopoverBody } from "./TaskAnchorPopoverBody";
 import { RequirementNameModal } from "./RequirementNameModal";
 import { RuntimePromptEditModal } from "./RuntimePromptEditModal";
@@ -156,6 +154,8 @@ import { RequirementBoardActions } from "./RequirementBoardActions";
 import { reconcileResolvedAnchorRanges } from "./anchorReconcile";
 import { TaskAiPopoverContent } from "./TaskAiPopoverContent";
 import { TaskCard } from "./TaskCard";
+import { SplitQualityStrip } from "./SplitQualityStrip";
+import { TaskBoardHeader } from "./TaskBoardHeader";
 import type {
   RequirementEntry,
   RequirementNameModalMode,
@@ -3964,114 +3964,29 @@ export function PrdTaskSplitPanel({
                   条由本地自动映射生成（不依赖模型返回 requirement 映射字段）。
                 </Typography.Text>
               ) : null}
-              {splitQualityStats ? (
-                <div className="app-prd-task-panel__quality-strip">
-                  <span className="app-prd-task-panel__quality-chip">
-                    映射覆盖 {splitQualityStats.mappedTaskCount}/{splitQualityStats.totalTasks}（{splitQualityStats.mappingRate}%）
-                  </span>
-                  <span
-                    className={[
-                      "app-prd-task-panel__quality-chip",
-                      splitQualityStats.untraceableTaskIds.length > 0
-                        ? "app-prd-task-panel__quality-chip--warning"
-                        : "app-prd-task-panel__quality-chip--good",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                  >
-                    锚点可追溯 {splitQualityStats.traceableTaskCount}/{splitQualityStats.totalTasks}（{splitQualityStats.traceRate}%）
-                  </span>
-                  {splitQualityStats.untraceableTaskIds.length > 0 ? (
-                    <span className="app-prd-task-panel__quality-chip app-prd-task-panel__quality-chip--warning">
-                      不可追溯：{splitQualityStats.untraceableTaskIds.join(", ")}
-                    </span>
-                  ) : null}
-                </div>
-              ) : null}
+              <SplitQualityStrip stats={splitQualityStats} />
 
               <div ref={taskSplitHostRef} className="app-prd-task-panel__task-card-host">
                   <Card
                     size="small"
                     title={(
-                      <div className="app-prd-task-panel__task-title-row">
-                        <div className="app-prd-task-panel__task-title-row-main">
-                          <span>
-                            拆分任务
-                            <Typography.Text type="secondary">（{filteredTasks.length}）</Typography.Text>
-                          </span>
-                          {unmetTaskIds.length > 0 ? (
-                            <Dropdown
-                              trigger={["click"]}
-                              placement="bottomLeft"
-                              menu={{ items: unmetPreconditionsMenuItems }}
-                              overlayClassName="app-prd-task-panel__unmet-dropdown-root"
-                            >
-                              <button
-                                type="button"
-                                className="app-prd-task-panel__unmet-trigger"
-                                title="存在问题任务，点击查看锚点"
-                                aria-label={`存在问题任务 ${unmetTaskIds.length} 个，点击查看锚点`}
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <UnmetConditionsQuestionIcon />
-                                <span className="app-prd-task-panel__unmet-trigger-count">
-                                  {unmetTaskIds.length}
-                                </span>
-                              </button>
-                            </Dropdown>
-                          ) : null}
-                        </div>
-                        <div className="app-prd-task-panel__task-title-row-tools">
-                          <Button
-                            size="small"
-                            type="primary"
-                            className="app-prd-task-panel__task-toolbar-btn"
-                            loading={confirmSavingTaskId === "__all__"}
-                            disabled={!activeResult || activeResult.splitTasks.length === 0 || Boolean(confirmSavingTaskId)}
-                            onClick={() => void handleConfirmAllTasks()}
-                          >
-                            一键确认
-                          </Button>
-                          <Button
-                            size="small"
-                            className="app-prd-task-panel__task-toolbar-btn"
-                            onClick={() => void handleAddTask()}
-                            disabled={Boolean(confirmSavingTaskId)}
-                          >
-                            新增
-                          </Button>
-                          <Button
-                            size="small"
-                            danger
-                            type="default"
-                            className="app-prd-task-panel__task-toolbar-btn"
-                            icon={<DeleteOutlined />}
-                            onClick={() => handleClearAllTasks()}
-                            disabled={!activeResult || activeResult.splitTasks.length === 0}
-                          >
-                            全部清空
-                          </Button>
-                          <Segmented
-                            size="small"
-                            className="app-prd-task-panel__task-toolbar-segmented"
-                            value={taskConfirmFilter}
-                            onChange={(value: string | number) => setTaskConfirmFilter(value as TaskConfirmFilter)}
-                            options={[
-                              { label: `未确认（${taskConfirmCounts.unconfirmedCount}）`, value: "unconfirmed" },
-                              { label: `已确认（${taskConfirmCounts.confirmedCount}）`, value: "confirmed" },
-                            ]}
-                          />
-                          {showRoleFilterTabs ? (
-                            <Segmented
-                              size="small"
-                              className="app-prd-task-panel__task-toolbar-segmented"
-                              value={taskRoleFilter}
-                              onChange={(value: string | number) => setTaskRoleFilter(value as TaskRoleFilter)}
-                              options={taskRoleFilterOptions}
-                            />
-                          ) : null}
-                        </div>
-                      </div>
+                      <TaskBoardHeader
+                        filteredTasksCount={filteredTasks.length}
+                        unmetTaskIds={unmetTaskIds}
+                        unmetMenuItems={unmetPreconditionsMenuItems}
+                        confirmSavingTaskId={confirmSavingTaskId}
+                        activeResult={activeResult}
+                        taskConfirmFilter={taskConfirmFilter}
+                        taskConfirmCounts={taskConfirmCounts}
+                        taskRoleFilter={taskRoleFilter}
+                        taskRoleFilterOptions={taskRoleFilterOptions}
+                        showRoleFilterTabs={showRoleFilterTabs}
+                        onConfirmAll={() => void handleConfirmAllTasks()}
+                        onAddTask={() => void handleAddTask()}
+                        onClearAllTasks={() => handleClearAllTasks()}
+                        onTaskConfirmFilterChange={setTaskConfirmFilter}
+                        onTaskRoleFilterChange={setTaskRoleFilter}
+                      />
                     )}
                     className="app-prd-task-panel__result-card app-prd-task-panel__task-card"
                     bodyStyle={{ padding: 0 }}
