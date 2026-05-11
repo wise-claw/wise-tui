@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { TaskItem } from "../../types";
-import { estimateDaysFromSize, sameApiSpec, taskToMarkdown } from "./helpers";
+import {
+  estimateDaysFromSize,
+  parseTaskMarkdownDraft,
+  sameApiSpec,
+  taskToMarkdown,
+} from "./helpers";
 
 const baseTask: TaskItem = {
   id: "t1",
@@ -87,5 +92,106 @@ describe("sameApiSpec", () => {
   });
   test("different endpoint → not equal", () => {
     expect(sameApiSpec(a as never, { ...a, endpoint: "/y" } as never)).toBe(false);
+  });
+});
+
+describe("parseTaskMarkdownDraft", () => {
+  test("parses sections, lists and trims description", () => {
+    const md = [
+      "#### 任务内容",
+      "示例描述",
+      "",
+      "#### 子任务",
+      "- 子A",
+      "- 子B",
+      "",
+      "#### 验收标准（DoD）",
+      "- 验收A",
+    ].join("\n");
+    const parsed = parseTaskMarkdownDraft(md);
+    expect(parsed.description).toBe("示例描述");
+    expect(parsed.subtasks).toEqual(["子A", "子B"]);
+    expect(parsed.dod).toEqual(["验收A"]);
+    expect(parsed.apiSpec).toBeUndefined();
+  });
+
+  test("parses apiSpec block including 错误码 list", () => {
+    const md = [
+      "#### 任务内容",
+      "x",
+      "",
+      "#### 接口协议",
+      "- 接口路径：/api/x",
+      "- 请求方法：POST",
+      "- 请求定义：{}",
+      "- 响应定义：{}",
+      "- 错误码：400, 500",
+      "",
+      "#### 子任务",
+      "",
+      "#### 验收标准（DoD）",
+    ].join("\n");
+    const parsed = parseTaskMarkdownDraft(md);
+    expect(parsed.apiSpec).toBeDefined();
+    expect(parsed.apiSpec?.endpoint).toBe("/api/x");
+    expect(parsed.apiSpec?.method).toBe("POST");
+    expect(parsed.apiSpec?.errorCodes).toEqual(["400", "500"]);
+  });
+
+  test("treats '无' as empty error codes", () => {
+    const md = [
+      "#### 任务内容",
+      "",
+      "#### 接口协议",
+      "- 接口路径：/api/x",
+      "- 错误码：无",
+      "",
+      "#### 子任务",
+      "",
+      "#### 验收标准（DoD）",
+    ].join("\n");
+    const parsed = parseTaskMarkdownDraft(md);
+    expect(parsed.apiSpec?.errorCodes).toEqual([]);
+  });
+
+  test("falls back to POST when method is unknown", () => {
+    const md = [
+      "#### 任务内容",
+      "",
+      "#### 接口协议",
+      "- 接口路径：/api/x",
+      "- 请求方法：HOP",
+      "",
+      "#### 子任务",
+      "",
+      "#### 验收标准（DoD）",
+    ].join("\n");
+    expect(parseTaskMarkdownDraft(md).apiSpec?.method).toBe("POST");
+  });
+
+  test("round-trips with taskToMarkdown for a representative task", () => {
+    const task: TaskItem = {
+      id: "t1",
+      title: "示例",
+      description: "示例描述",
+      role: "fullstack",
+      size: "M",
+      subtasks: ["子A", "子B"],
+      dod: ["验收A"],
+      apiSpec: {
+        endpoint: "/api/x",
+        method: "POST",
+        requestSchema: "{}",
+        responseSchema: "{}",
+        errorCodes: ["400"],
+      },
+    } as unknown as TaskItem;
+    const md = taskToMarkdown(task);
+    const parsed = parseTaskMarkdownDraft(md);
+    expect(parsed.description).toBe("示例描述");
+    expect(parsed.subtasks).toEqual(["子A", "子B"]);
+    expect(parsed.dod).toEqual(["验收A"]);
+    expect(parsed.apiSpec?.endpoint).toBe("/api/x");
+    expect(parsed.apiSpec?.errorCodes).toEqual(["400"]);
   });
 });
