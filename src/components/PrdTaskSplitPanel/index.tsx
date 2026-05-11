@@ -1,6 +1,5 @@
 import {
   CloseOutlined,
-  CopyOutlined,
   DeleteOutlined,
   DownOutlined,
   PlusOutlined,
@@ -145,8 +144,6 @@ import {
   type TaskAiMode,
   type TaskConfirmFilter,
 } from "./helpers";
-import { LinkifiedPre } from "../ClaudeSessions/LinkifiedPre";
-import { SystemMessageContent } from "../ClaudeSessions/SystemMessageContent";
 import { sameStringArray, sameTaskAnchorPositions } from "../../utils/anchorStability";
 import { WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED } from "../../constants/workflowUiEvents";
 import {
@@ -159,6 +156,21 @@ import {
 } from "../../services/projectPrdScope";
 import { isOmcMonitorEmployeeRecord } from "../../utils/omcMonitorEmployeeSession";
 import { listRepositoryMainOwnerDisplayGaps, repositoryOwnerBasenamesInScopeRelaxed } from "../../utils/projectPrdScopeDisplay";
+import { SplitRuntimeMessageRow } from "./SplitRuntimeMessageRow";
+import { UnmetConditionsQuestionIcon } from "./UnmetConditionsQuestionIcon";
+import { TaskAnchorPopoverBody } from "./TaskAnchorPopoverBody";
+import type {
+  RequirementEntry,
+  RequirementNameModalMode,
+  SplitApplyMode,
+  SplitPromptDraftBySlot,
+  SplitQualitySummary,
+  SplitRetryPhase,
+  SplitRuntimeLogItem,
+  SplitRuntimeLogRole,
+  SplitWizardStep,
+  TaskRoleFilter,
+} from "./types";
 import "./index.css";
 
 const MilkdownEditor = lazy(() => import("../MilkdownViewer").then((module) => ({ default: module.MilkdownEditor })));
@@ -179,142 +191,6 @@ interface Props {
 
 const TASK_LIST_BUTTON_SELECTOR = '[data-ui-anchor="session-task-list-btn"]';
 const TASK_SPLIT_CLOSE_ANIMATION_MS = 420;
-
-type RequirementEntry = {
-  id: string;
-  type: "functional" | "nonFunctional" | "acceptance";
-  label: string;
-  content: string;
-};
-
-type TaskRoleFilter = "all" | TaskRole;
-type SplitRuntimeLogRole = "system" | "user" | "assistant" | "error";
-type SplitRetryPhase = "phase1" | "phase2";
-type SplitPromptDraftBySlot = Record<string, string>;
-type RequirementNameModalMode = "save" | "create";
-
-interface SplitRuntimeLogItem {
-  id: string;
-  role: SplitRuntimeLogRole;
-  text: string;
-  at: number;
-  retryPhase?: SplitRetryPhase;
-}
-
-interface SplitQualitySummary {
-  totalTasks: number;
-  mappedTaskCount: number;
-  traceableTaskCount: number;
-  untraceableTaskIds: string[];
-}
-
-type SplitApplyMode = "replace" | "append";
-type SplitWizardStep = "prompts" | "runtime";
-
-// ── Split runtime（与 Claude 会话区一致的消息气泡） ──
-
-function SplitRuntimeMessageRow(input: {
-  log: SplitRuntimeLogItem;
-  retryingPhase: SplitRetryPhase | null;
-  onRetryStage: (phase: SplitRetryPhase) => void;
-}) {
-  const { log, retryingPhase, onRetryStage } = input;
-  const [copied, setCopied] = useState(false);
-  const bubbleRole: "user" | "assistant" | "system" =
-    log.role === "user" ? "user" : log.role === "assistant" ? "assistant" : "system";
-  const sender =
-    log.role === "user"
-      ? "我"
-      : log.role === "assistant"
-        ? "Claude"
-        : log.role === "error"
-          ? "错误"
-          : "系统";
-  const avatarLetter =
-    log.role === "user" ? "我" : log.role === "assistant" ? "C" : log.role === "error" ? "!" : "S";
-  const timeStr = new Date(log.at).toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
-  const isStageStartMessage = log.role === "system" && /^开始执行阶段\d+/.test(log.text.trim());
-  const rowClass = [
-    "app-claude-message",
-    `app-claude-message--${bubbleRole}`,
-    log.role === "error" ? "app-prd-task-panel__split-runtime-msg--error" : "",
-    isStageStartMessage ? "app-prd-task-panel__split-runtime-msg--stage-running" : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-  const copyText = useCallback(async () => {
-    const content = log.text ?? "";
-    if (!content.trim()) return;
-    try {
-      await navigator.clipboard.writeText(content);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1400);
-    } catch {
-      const ta = document.createElement("textarea");
-      ta.value = content;
-      ta.style.position = "fixed";
-      ta.style.left = "-9999px";
-      document.body.appendChild(ta);
-      ta.select();
-      const ok = document.execCommand("copy");
-      document.body.removeChild(ta);
-      if (ok) {
-        setCopied(true);
-        window.setTimeout(() => setCopied(false), 1400);
-      }
-    }
-  }, [log.text]);
-  const canRetry = Boolean(log.retryPhase);
-  const retryBusy = canRetry && retryingPhase === log.retryPhase;
-
-  return (
-    <div className={rowClass}>
-      <div className="app-claude-message-avatar">{avatarLetter}</div>
-      <div className="app-claude-message-body">
-        <div className="app-claude-message-header">
-          <span className="app-claude-message-sender">{sender}</span>
-          <button
-            type="button"
-            className={`app-prd-task-panel__split-runtime-copy-btn ${copied ? "is-copied" : ""}`}
-            onClick={() => void copyText()}
-            aria-label="复制该条处理信息"
-            title={copied ? "已复制" : "复制"}
-          >
-            <CopyOutlined />
-            <span>{copied ? "已复制" : "复制"}</span>
-          </button>
-          {canRetry ? (
-            <Button
-              size="small"
-              type="default"
-              className="app-prd-task-panel__split-runtime-retry-btn"
-              onClick={() => log.retryPhase && onRetryStage(log.retryPhase)}
-              loading={retryBusy}
-            >
-              重试{log.retryPhase === "phase1" ? "阶段1" : "阶段2"}
-            </Button>
-          ) : null}
-          <span className="app-claude-message-time">{timeStr}</span>
-        </div>
-        <div className="app-claude-message-content">
-          {bubbleRole === "system" ? (
-            <SystemMessageContent text={log.text} />
-          ) : (
-            <LinkifiedPre text={log.text} className="app-claude-message-text" />
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 const FALLBACK_CLAUDE_SPLIT_SYSTEM_INSTRUCTION = [
   "硬性要求：",
@@ -338,103 +214,6 @@ function scrollToTaskCard(taskId: string) {
     const el = document.querySelector<HTMLElement>(`[data-task-id="${taskId}"]`);
     el?.scrollIntoView({ behavior: "smooth", block: "center" });
   });
-}
-
-/** 拆分任务标题旁：不满足条件入口（红色问号 + 数量） */
-function UnmetConditionsQuestionIcon() {
-  return (
-    <svg
-      className="app-prd-task-panel__unmet-q-svg"
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden
-    >
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.75" />
-      <path
-        d="M9.75 9.75a2.25 2.25 0 0 1 4.35 1.125c0 1.5-2.1 2.062-2.1 3.375V14.25M12 16.5h.01"
-        stroke="currentColor"
-        strokeWidth="1.75"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function TaskAnchorPopoverBody({
-  task,
-  activeResult,
-  anchorResolvedInEditor,
-}: {
-  task: TaskItem;
-  activeResult: SplitResult | null;
-  anchorResolvedInEditor: boolean;
-}) {
-  if (!activeResult) {
-    return <Typography.Text type="secondary">暂无拆分结果。</Typography.Text>;
-  }
-  const descriptor = task.taskAnchors ?? activeResult.taskAnchorDescriptors?.[task.id];
-  const position = activeResult.taskAnchorPositions?.[task.id];
-  const anchorText = (activeResult.taskAnchorTexts?.[task.id] ?? "").trim();
-  const link = activeResult.claudeSplitMapping?.taskRequirementLinks?.find((l) => l.taskId === task.id);
-  const hasAny = Boolean(descriptor || position || anchorText || link);
-  if (!hasAny) {
-    return <Typography.Text type="secondary">当前任务尚无锚点与映射记录。</Typography.Text>;
-  }
-  return (
-    <div
-      className="app-prd-task-panel__task-anchor-popover-inner"
-      onMouseDown={(e) => e.stopPropagation()}
-      onClick={(e) => e.stopPropagation()}
-    >
-      <Space direction="vertical" size={10} style={{ width: "100%" }}>
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          任务 id：<Typography.Text code>{task.id}</Typography.Text>
-          {anchorResolvedInEditor ? " · 已在需求侧解析到锚点" : ""}
-        </Typography.Text>
-        {descriptor ? (
-          <>
-            <Typography.Text strong>结构化 taskAnchors</Typography.Text>
-            <pre className="app-prd-task-panel__task-anchor-popover-pre">
-              {JSON.stringify(descriptor, null, 2)}
-            </pre>
-          </>
-        ) : null}
-        {position ? (
-          <>
-            <Typography.Text strong>文档选区 taskAnchorPositions</Typography.Text>
-            <Typography.Text copyable code>
-              {`from=${position.from}, to=${position.to}`}
-            </Typography.Text>
-          </>
-        ) : null}
-        {anchorText ? (
-          <>
-            <Typography.Text strong>缓存文本 taskAnchorTexts</Typography.Text>
-            <Typography.Paragraph className="app-prd-task-panel__task-anchor-popover-text" style={{ marginBottom: 0 }}>
-              {anchorText}
-            </Typography.Paragraph>
-          </>
-        ) : null}
-        {link ? (
-          <>
-            <Typography.Text strong>需求映射</Typography.Text>
-            <Typography.Text code copyable>
-              {`requirementIds: ${(link.requirementIds ?? []).join(", ") || "（空）"}`}
-            </Typography.Text>
-            {link.rationale?.trim() ? (
-              <Typography.Paragraph type="secondary" style={{ marginBottom: 0, fontSize: 12 }}>
-                {link.rationale.trim()}
-              </Typography.Paragraph>
-            ) : null}
-          </>
-        ) : null}
-      </Space>
-    </div>
-  );
 }
 
 export function PrdTaskSplitPanel({
