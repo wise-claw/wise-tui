@@ -63,6 +63,13 @@ import { ClaudeCodeUsageHeaderBtn } from "./ClaudeCodeUsagePopover";
 import { RepositoryFilesExplorer, type GitPanelOpenFileOptions } from "./GitPanel";
 import "./GitPanel/index.css";
 
+const LEFT_FILES_EXPLORER_COLLAPSED_KEY = "wise.leftPanel.filesExplorerCollapsed";
+
+function readLeftFilesExplorerCollapsedFromStorage(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(LEFT_FILES_EXPLORER_COLLAPSED_KEY) === "1";
+}
+
 // ── Session helpers ──
 
 /** 系统注册表中有进程、但 Wise `sessions` 中无对应 `claudeSessionId` 时的列表占位行（与底部「数量」统计一致）。 */
@@ -689,6 +696,18 @@ export function LeftSidebar({
   const [claudeSystemSessionSearch, setClaudeSystemSessionSearch] = useState("");
   const [systemSessionDrawerId, setSystemSessionDrawerId] = useState<string | null>(null);
   const [repositoryFileTreeSearch, setRepositoryFileTreeSearch] = useState("");
+  const [filesExplorerSectionCollapsed, setFilesExplorerSectionCollapsed] = useState(
+    readLeftFilesExplorerCollapsedFromStorage,
+  );
+
+  const handleFilesExplorerSectionCollapsedChange = useCallback((next: boolean) => {
+    setFilesExplorerSectionCollapsed(next);
+    try {
+      window.localStorage.setItem(LEFT_FILES_EXPLORER_COLLAPSED_KEY, next ? "1" : "0");
+    } catch {
+      /* ignore quota / private mode */
+    }
+  }, []);
 
   const refreshRepositoryAssociatePresets = useCallback(async () => {
     const raw = await getAppSettingJson<unknown>(REPOSITORY_ASSOCIATE_PRESETS_STORAGE_KEY);
@@ -1273,16 +1292,23 @@ export function LeftSidebar({
         </div>
 
         {activeRepositoryPath ? (
-          <div className="app-left-sidebar-files-explorer">
-            <div className="app-left-sidebar-files-explorer-search">
-              <Input
-                size="small"
-                allowClear
-                placeholder="搜索文件..."
-                value={repositoryFileTreeSearch}
-                onChange={(e) => setRepositoryFileTreeSearch(e.target.value)}
-              />
-            </div>
+          <div
+            className={
+              "app-left-sidebar-files-explorer" +
+              (filesExplorerSectionCollapsed ? " app-left-sidebar-files-explorer--section-collapsed" : "")
+            }
+          >
+            {!filesExplorerSectionCollapsed ? (
+              <div className="app-left-sidebar-files-explorer-search">
+                <Input
+                  size="small"
+                  allowClear
+                  placeholder="搜索文件..."
+                  value={repositoryFileTreeSearch}
+                  onChange={(e) => setRepositoryFileTreeSearch(e.target.value)}
+                />
+              </div>
+            ) : null}
             <div className="app-left-sidebar-files-explorer-body">
               <RepositoryFilesExplorer
                 repositoryPath={activeRepositoryPath}
@@ -1294,6 +1320,8 @@ export function LeftSidebar({
                 search={repositoryFileTreeSearch}
                 onOpenFile={onOpenActiveRepositoryFile}
                 onClearExplorerSearch={() => setRepositoryFileTreeSearch("")}
+                sectionCollapsed={filesExplorerSectionCollapsed}
+                onSectionCollapsedChange={handleFilesExplorerSectionCollapsedChange}
               />
             </div>
           </div>

@@ -683,6 +683,12 @@
   position: relative;
 }
 
+/* 左栏：整块收起后仅保留仓库标题一行，点击标题展开 */
+.git-files-mode--section-collapsed {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
 .git-files-explorer-scroll-region {
   flex: 1 1 0;
   min-height: 0;
@@ -710,6 +716,32 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+button.git-files-explorer-title.git-files-explorer-title--toggle {
+  border: none;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 100%;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-align: left;
+  color: inherit;
+  border-radius: 4px;
+}
+
+button.git-files-explorer-title.git-files-explorer-title--toggle:focus-visible {
+  outline: 1px solid var(--ant-color-primary);
+  outline-offset: 1px;
+}
+
+button.git-files-explorer-title.git-files-explorer-title--toggle:hover {
+  color: var(--ant-color-primary);
 }
 
 .git-files-explorer-actions {

@@ -228,14 +228,19 @@ body {
   flex-direction: column;
   background: var(--ant-color-fill-quaternary);
   border-right: 1px solid var(--ant-color-border-secondary);
-  overflow-y: auto;
+  overflow: hidden;
   transition: width 0.2s ease;
   position: relative;
+  min-height: 0;
+  height: 100%;
 }
 
 .app-left-sidebar .ant-layout-sider-children {
   display: flex;
   flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  height: 100%;
 }
 
 /* 与中栏 .app-chat-topbar（上下 4px + 约 28px 控件）顶缘对齐；浅色下为白底，深色用 token */
@@ -393,6 +398,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
   padding-top: 4px;
   padding-bottom: 4px;
   border-bottom: 1px solid var(--ant-color-split);
+  flex-shrink: 0;
 }
 
 .app-left-sidebar-mcp-nav,
@@ -1441,22 +1447,50 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
   overflow: hidden;
 }
 
+.app-left-sidebar-project-and-files > .app-repository-header {
+  flex-shrink: 0;
+}
+
+/* 项目列表按内容高度，不撑满空白；多项目时封顶并内部滚动，剩余高度给文件树 */
 .app-left-sidebar-project-and-files > .app-repository-list {
   flex: 0 1 auto;
-  max-height: 200px;
+  align-self: stretch;
+  max-height: min(50%, 360px);
   min-height: 0;
   padding: 0 6px 0;
   overflow-y: auto;
 }
 
+/* 共用布局；仅展开态吃掉剩余高度，避免与收起态同特异性时 flex:1 盖住 flex:0 把标题栏顶到底部 */
 .app-left-sidebar-files-explorer {
-  flex: 1 1 0;
-  min-height: 0;
   display: flex;
   flex-direction: column;
   border-top: 1px solid var(--ant-color-border-secondary);
   margin-top: 2px;
   overflow: hidden;
+  background: var(--ant-color-bg-container);
+  min-height: 0;
+}
+
+.app-left-sidebar-files-explorer:not(.app-left-sidebar-files-explorer--section-collapsed) {
+  flex: 1 1 0;
+}
+
+/* 收起后仅占一行；margin-top:auto 贴「项目」区底（系统条上方），中间空白留给项目列表 */
+.app-left-sidebar-files-explorer--section-collapsed {
+  flex: 0 0 auto;
+  flex-grow: 0;
+  min-height: 0;
+  padding: 0;
+  box-sizing: border-box;
+  margin-top: auto;
+}
+
+/* 收起时父级高度为 auto，子项 flex:1 会塌成 0 高，必须改为按内容撑开 */
+.app-left-sidebar-files-explorer--section-collapsed .app-left-sidebar-files-explorer-body {
+  flex: 0 0 auto;
+  min-height: auto;
+  overflow: visible;
 }
 
 .app-left-sidebar-files-explorer-search {
@@ -1476,7 +1510,8 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
   flex-direction: column;
 }
 
-.app-left-sidebar-files-explorer-body .git-files-mode {
+/* 仅展开的文件树占满 body；收起态不要匹配本规则（否则单行栏会被 flex:1 拉满整段空白） */
+.app-left-sidebar-files-explorer-body .git-files-mode:not(.git-files-mode--section-collapsed) {
   flex: 1 1 0;
   min-height: 0;
   overflow: hidden;
@@ -1484,13 +1519,20 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
   flex-direction: column;
 }
 
-.app-repository-list {
+.app-left-sidebar-files-explorer-body .git-files-mode--section-collapsed {
+  flex: 0 0 auto;
+  flex-grow: 0;
+  min-height: 0;
+  overflow: visible;
+}
+
+/* 仅左栏：与 ProjectList 组件中的 .app-repository-list 区分，避免全局 flex 互相覆盖 */
+.app-left-sidebar .app-repository-list {
   padding: 2px 6px 12px;
-  flex: 1;
-  overflow-y: auto;
 }
 
 .app-left-sidebar-system-inline {
+  flex-shrink: 0;
   border-top: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 60%, transparent);
   padding: 6px 6px;
   font-size: 12px;

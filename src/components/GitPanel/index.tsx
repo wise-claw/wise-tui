@@ -919,6 +919,9 @@ export interface RepositoryFilesExplorerProps {
   search: string;
   onOpenFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
   onClearExplorerSearch?: () => void;
+  /** 与右栏 Claude Code 类似：收起后仅保留标题栏，点击仓库名展开 */
+  sectionCollapsed?: boolean;
+  onSectionCollapsedChange?: (collapsed: boolean) => void;
 }
 
 export function RepositoryFilesExplorer({
@@ -927,6 +930,8 @@ export function RepositoryFilesExplorer({
   search,
   onOpenFile,
   onClearExplorerSearch,
+  sectionCollapsed = false,
+  onSectionCollapsedChange,
 }: RepositoryFilesExplorerProps) {
   const [loading, setLoading] = useState(false);
   const [explorerEntries, setExplorerEntries] = useState<RepositoryExplorerEntry[]>([]);
@@ -1308,6 +1313,27 @@ export function RepositoryFilesExplorer({
   const rootInline = inlineCreate?.parentDir === "";
   const treeEmpty = filteredTree.length === 0 && !rootInline;
 
+  const setSectionCollapsed = onSectionCollapsedChange;
+
+  if (sectionCollapsed && setSectionCollapsed) {
+    return (
+      <div className="git-files-mode git-files-mode--section-collapsed">
+        <div className="git-files-explorer-bar">
+          <Tooltip title="点击展开文件树" mouseEnterDelay={0.35}>
+            <button
+              type="button"
+              className="git-files-explorer-title git-files-explorer-title--toggle"
+              title={repositoryPath}
+              onClick={() => setSectionCollapsed(false)}
+            >
+              {repositoryLabel || "资源管理器"}
+            </button>
+          </Tooltip>
+        </div>
+      </div>
+    );
+  }
+
   const treeBody = treeEmpty ? (
     <Empty
       description={search.trim() ? "未找到匹配文件" : "暂无文件"}
@@ -1357,9 +1383,22 @@ export function RepositoryFilesExplorer({
   return (
     <div className="git-files-mode">
       <div className="git-files-explorer-bar">
-        <span className="git-files-explorer-title" title={repositoryPath}>
-          {repositoryLabel || "资源管理器"}
-        </span>
+        {setSectionCollapsed ? (
+          <Tooltip title="点击收起文件树" mouseEnterDelay={0.35}>
+            <button
+              type="button"
+              className="git-files-explorer-title git-files-explorer-title--toggle"
+              title={repositoryPath}
+              onClick={() => setSectionCollapsed(true)}
+            >
+              {repositoryLabel || "资源管理器"}
+            </button>
+          </Tooltip>
+        ) : (
+          <span className="git-files-explorer-title" title={repositoryPath}>
+            {repositoryLabel || "资源管理器"}
+          </span>
+        )}
         <span className="git-files-explorer-actions">
           <Tooltip title="新建文件">
             <Button
