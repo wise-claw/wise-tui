@@ -27,7 +27,6 @@ import {
   Segmented,
   Space,
   Spin,
-  Steps,
   Tag,
   Tooltip,
   Typography,
@@ -161,6 +160,7 @@ import { UnmetConditionsQuestionIcon } from "./UnmetConditionsQuestionIcon";
 import { TaskAnchorPopoverBody } from "./TaskAnchorPopoverBody";
 import { RequirementNameModal } from "./RequirementNameModal";
 import { RuntimePromptEditModal } from "./RuntimePromptEditModal";
+import { SplitPromptWizardModal } from "./SplitPromptWizardModal";
 import type {
   RequirementEntry,
   RequirementNameModalMode,
@@ -3625,161 +3625,32 @@ export function PrdTaskSplitPanel({
           }
           : undefined}
       >
-      <Modal
-        title="需求"
+      <SplitPromptWizardModal
         open={splitPromptAdjustModalOpen}
-        maskClosable={!parsing && !splitPromptAdjustStarting}
-        onCancel={() => {
-          if (splitPromptAdjustStarting || splitPromptOptimizingSlot) return;
-          if (parsing && splitWizardStep === "runtime") return;
+        step={splitWizardStep}
+        parsing={parsing}
+        starting={splitPromptAdjustStarting}
+        saving={splitPromptAdjustSaving}
+        optimizingSlot={splitPromptOptimizingSlot}
+        loading={splitPromptAdjustLoading}
+        draftBySlot={splitPromptAdjustDraftBySlot}
+        runtimeLogs={splitRuntimeLogs}
+        runtimeListRef={splitRuntimeListRef}
+        retryingPhase={retryingPhase}
+        onStepChange={setSplitWizardStep}
+        onClose={() => {
           setSplitPromptAdjustModalOpen(false);
           setSplitWizardStep("prompts");
           setSplitRuntimeVisible(false);
         }}
-        width={980}
-        destroyOnHidden
-        styles={{
-          body: splitWizardStep === "runtime"
-            ? { maxHeight: "min(680px, 82vh)", display: "flex", flexDirection: "column", paddingTop: 8 }
-            : { maxHeight: "min(720px, 82vh)", overflowY: "auto" },
+        onDraftChange={(slot, markdown) => {
+          setSplitPromptAdjustDraftBySlot((prev) => ({ ...prev, [slot]: markdown }));
         }}
-        footer={splitWizardStep === "prompts"
-          ? (
-            <Space>
-              <Button
-                onClick={() => {
-                  if (splitPromptAdjustStarting || splitPromptOptimizingSlot) return;
-                  setSplitPromptAdjustModalOpen(false);
-                  setSplitWizardStep("prompts");
-                  setSplitRuntimeVisible(false);
-                }}
-                disabled={splitPromptAdjustStarting || splitPromptAdjustSaving || !!splitPromptOptimizingSlot}
-              >
-                关闭
-              </Button>
-              <Button
-                onClick={() => void handleSaveSplitPromptAdjustDrafts()}
-                loading={splitPromptAdjustSaving}
-                disabled={splitPromptAdjustStarting || !!splitPromptOptimizingSlot}
-              >
-                保存提示词
-              </Button>
-              <Button
-                type="primary"
-                onClick={() => void handleStartSplitFromAdjustModal()}
-                loading={splitPromptAdjustStarting}
-                disabled={splitPromptAdjustSaving || !!splitPromptOptimizingSlot}
-              >
-                开始拆分
-              </Button>
-            </Space>
-            )
-          : (
-            <Space>
-              <Button
-                onClick={() => {
-                  if (parsing || splitPromptAdjustStarting) return;
-                  setSplitWizardStep("prompts");
-                }}
-                disabled={parsing || splitPromptAdjustStarting}
-              >
-                上一步
-              </Button>
-              <Button
-                type="primary"
-                onClick={() => {
-                  if (parsing) return;
-                  setSplitPromptAdjustModalOpen(false);
-                  setSplitWizardStep("prompts");
-                  setSplitRuntimeVisible(false);
-                }}
-              >
-                完成并关闭
-              </Button>
-            </Space>
-            )}
-      >
-        <Steps
-          size="small"
-          current={splitWizardStep === "prompts" ? 0 : 1}
-          style={{ marginBottom: 14 }}
-          items={[{ title: "提示词" }, { title: "处理信息 · Claude Code 会话" }]}
-        />
-        {splitWizardStep === "prompts"
-          ? (
-            <Spin spinning={splitPromptAdjustLoading}>
-              <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-                  第 1 步：编辑阶段 1/2 的系统提示词；点击「开始拆分」后在同弹窗第 2 步查看执行日志与会话信息。「保存提示词」将写入仓库级覆盖。
-                </Typography.Paragraph>
-                <Space align="center" style={{ justifyContent: "space-between", width: "100%" }}>
-                  <Typography.Text strong>阶段1（拆分）</Typography.Text>
-                  <Button
-                    size="small"
-                    loading={splitPromptOptimizingSlot === PROMPT_SLOT_PRD_TASK_SPLIT_PHASE1}
-                    disabled={!!splitPromptOptimizingSlot || splitPromptAdjustStarting || splitPromptAdjustSaving}
-                    onClick={() => void handleOptimizeSplitPromptDraft(PROMPT_SLOT_PRD_TASK_SPLIT_PHASE1)}
-                  >
-                    AI优化
-                  </Button>
-                </Space>
-                <div className="app-prd-task-panel__split-prompt-milkdown">
-                  <MilkdownEditor
-                    floatingToolbar={false}
-                    text={splitPromptAdjustDraftBySlot[PROMPT_SLOT_PRD_TASK_SPLIT_PHASE1] ?? ""}
-                    onChange={(markdown) => {
-                      setSplitPromptAdjustDraftBySlot((prev) => ({
-                        ...prev,
-                        [PROMPT_SLOT_PRD_TASK_SPLIT_PHASE1]: markdown,
-                      }));
-                    }}
-                  />
-                </div>
-                <Space align="center" style={{ justifyContent: "space-between", width: "100%" }}>
-                  <Typography.Text strong>阶段2（溯源）</Typography.Text>
-                  <Button
-                    size="small"
-                    loading={splitPromptOptimizingSlot === PROMPT_SLOT_PRD_TASK_SPLIT_PHASE2}
-                    disabled={!!splitPromptOptimizingSlot || splitPromptAdjustStarting || splitPromptAdjustSaving}
-                    onClick={() => void handleOptimizeSplitPromptDraft(PROMPT_SLOT_PRD_TASK_SPLIT_PHASE2)}
-                  >
-                    AI优化
-                  </Button>
-                </Space>
-                <div className="app-prd-task-panel__split-prompt-milkdown">
-                  <MilkdownEditor
-                    floatingToolbar={false}
-                    text={splitPromptAdjustDraftBySlot[PROMPT_SLOT_PRD_TASK_SPLIT_PHASE2] ?? ""}
-                    onChange={(markdown) => {
-                      setSplitPromptAdjustDraftBySlot((prev) => ({
-                        ...prev,
-                        [PROMPT_SLOT_PRD_TASK_SPLIT_PHASE2]: markdown,
-                      }));
-                    }}
-                  />
-                </div>
-              </Space>
-            </Spin>
-            )
-          : (
-            <div className="app-prd-task-panel__split-runtime app-prd-task-panel__split-runtime--in-modal">
-              <div className="app-prd-task-panel__split-runtime-head">
-                <Space size={8} align="center" className="app-prd-task-panel__split-runtime-head-title">
-                  <Typography.Text type="secondary">
-                    第 2 步：下方为 Claude Code 执行过程与系统消息，与主会话区气泡样式一致；失败项可重试对应阶段。
-                  </Typography.Text>
-                  {parsing ? <Spin size="small" aria-label="拆分进行中" /> : null}
-                </Space>
-              </div>
-              <SplitRuntimeMessages
-                logs={splitRuntimeLogs}
-                listRef={splitRuntimeListRef}
-                retryingPhase={retryingPhase}
-                onRetryStage={(phase) => { void handleRetrySplitStage(phase); }}
-              />
-            </div>
-            )}
-      </Modal>
+        onSavePrompts={() => void handleSaveSplitPromptAdjustDrafts()}
+        onStartSplit={() => void handleStartSplitFromAdjustModal()}
+        onOptimize={(slot) => void handleOptimizeSplitPromptDraft(slot)}
+        onRetryStage={(phase) => { void handleRetrySplitStage(phase); }}
+      />
       <RuntimePromptEditModal
         open={runtimePromptModalOpen}
         linkedRepositoryId={linkedRepositoryId}
