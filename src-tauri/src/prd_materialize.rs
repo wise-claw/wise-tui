@@ -33,7 +33,12 @@ fn sanitize_run_id(raw: Option<String>) -> String {
 }
 
 fn strip_query_fragment(s: &str) -> &str {
-    s.split('?').next().unwrap_or(s).split('#').next().unwrap_or(s)
+    s.split('?')
+        .next()
+        .unwrap_or(s)
+        .split('#')
+        .next()
+        .unwrap_or(s)
 }
 
 fn percent_decode_path(s: &str) -> Result<PathBuf, String> {
@@ -126,20 +131,23 @@ fn rewrite_markdown_images(
     while cursor < md.len() {
         match scan_md_image(md, cursor) {
             Some((abs, url_start, url_end)) => {
-                out.push_str(md.get(cursor..abs).ok_or_else(|| "PRD 内容切片越界".to_string())?);
-                let alt = md
-                    .get(abs + 2..url_start.saturating_sub(2))
-                    .unwrap_or("");
+                out.push_str(
+                    md.get(cursor..abs)
+                        .ok_or_else(|| "PRD 内容切片越界".to_string())?,
+                );
+                let alt = md.get(abs + 2..url_start.saturating_sub(2)).unwrap_or("");
                 let url = md
                     .get(url_start..url_end)
                     .ok_or_else(|| "图片 URL 切片越界".to_string())?
                     .trim();
 
                 let mut new_url = url.to_string();
-                if let Some(src_path) = asset_like_url_to_path(url)
-                    .or_else(|| file_url_to_path(url))
+                if let Some(src_path) =
+                    asset_like_url_to_path(url).or_else(|| file_url_to_path(url))
                 {
-                    if src_path.is_file() && is_allowed_image_source(&src_path, prd_images_root, project) {
+                    if src_path.is_file()
+                        && is_allowed_image_source(&src_path, prd_images_root, project)
+                    {
                         let dest_name = next_image_dest_name(img_counter, &src_path);
                         img_counter += 1;
                         let dest = assets_dir.join(&dest_name);
@@ -252,8 +260,7 @@ pub fn append_project_relative_file(
         .append(true)
         .open(&full_path)
         .map_err(|e| format!("打开文件失败: {e}"))?;
-    file
-        .write_all(payload.as_bytes())
+    file.write_all(payload.as_bytes())
         .map_err(|e| format!("追加写入失败: {e}"))?;
 
     let canon_file = full_path
@@ -265,7 +272,10 @@ pub fn append_project_relative_file(
     Ok(())
 }
 
-pub fn read_project_relative_file(project_path: String, relative_path: String) -> Result<String, String> {
+pub fn read_project_relative_file(
+    project_path: String,
+    relative_path: String,
+) -> Result<String, String> {
     let project = PathBuf::from(&project_path);
     if !project.is_dir() {
         return Err("仓库路径无效或不是目录".into());
@@ -375,7 +385,9 @@ pub fn append_wise_relative_file(relative_path: String, payload: String) -> Resu
         return Err("相对路径不能为空".into());
     }
     let full_path = safe_join_under_wise(rel)?;
-    let base = crate::wise_dir()?.canonicalize().map_err(|e| format!("解析 ~/.wise 目录失败: {e}"))?;
+    let base = crate::wise_dir()?
+        .canonicalize()
+        .map_err(|e| format!("解析 ~/.wise 目录失败: {e}"))?;
     let parent = full_path
         .parent()
         .ok_or_else(|| "无效文件路径".to_string())?;
@@ -402,8 +414,7 @@ pub fn append_wise_relative_file(relative_path: String, payload: String) -> Resu
         .append(true)
         .open(&full_path)
         .map_err(|e| format!("打开文件失败: {e}"))?;
-    file
-        .write_all(payload.as_bytes())
+    file.write_all(payload.as_bytes())
         .map_err(|e| format!("追加写入失败: {e}"))?;
 
     let canon_file = full_path
@@ -418,7 +429,9 @@ pub fn append_wise_relative_file(relative_path: String, payload: String) -> Resu
 /// 读取用户目录 `~/.wise/` 下 UTF-8 文本文件。
 pub fn read_wise_relative_file(relative_path: String) -> Result<String, String> {
     let candidate = safe_join_under_wise(relative_path.trim())?;
-    let base = crate::wise_dir()?.canonicalize().map_err(|e| format!("解析 ~/.wise 目录失败: {e}"))?;
+    let base = crate::wise_dir()?
+        .canonicalize()
+        .map_err(|e| format!("解析 ~/.wise 目录失败: {e}"))?;
     let meta = fs::metadata(&candidate).map_err(|e| format!("文件不存在或无法访问: {e}"))?;
     if !meta.is_file() {
         return Err("目标不是普通文件".into());
@@ -485,14 +498,16 @@ pub fn materialize_prd_snapshot(
         let idx_path = run_dir.join("requirements-index.json");
         let pretty = serde_json::to_string_pretty(&val)
             .map_err(|e| format!("序列化 requirements-index 失败: {e}"))?;
-        fs::write(&idx_path, pretty).map_err(|e| format!("写入 requirements-index.json 失败: {e}"))?;
+        fs::write(&idx_path, pretty)
+            .map_err(|e| format!("写入 requirements-index.json 失败: {e}"))?;
         requirements_index_relative_path = Some(idx_path.to_string_lossy().to_string());
 
         let mapping_seed = json!({ "version": 1, "taskRequirementLinks": [] });
         let map_pretty = serde_json::to_string_pretty(&mapping_seed)
             .map_err(|e| format!("序列化 split-mapping 模板失败: {e}"))?;
         let map_path = run_dir.join("split-mapping.json");
-        fs::write(&map_path, map_pretty).map_err(|e| format!("写入 split-mapping.json 失败: {e}"))?;
+        fs::write(&map_path, map_pretty)
+            .map_err(|e| format!("写入 split-mapping.json 失败: {e}"))?;
         split_mapping_relative_path = Some(map_path.to_string_lossy().to_string());
     }
 
@@ -501,8 +516,8 @@ pub fn materialize_prd_snapshot(
         "runId": run_id,
     });
     if let Some(raw_meta) = snapshot_meta_json.filter(|s| !s.trim().is_empty()) {
-        let parsed_meta: serde_json::Value =
-            serde_json::from_str(raw_meta.trim()).map_err(|e| format!("snapshot meta JSON 无效: {e}"))?;
+        let parsed_meta: serde_json::Value = serde_json::from_str(raw_meta.trim())
+            .map_err(|e| format!("snapshot meta JSON 无效: {e}"))?;
         if let Some(obj) = parsed_meta.as_object() {
             let meta_obj = meta
                 .as_object_mut()
@@ -513,7 +528,8 @@ pub fn materialize_prd_snapshot(
         }
     }
     let meta_path = run_dir.join("meta.json");
-    let meta_pretty = serde_json::to_string_pretty(&meta).map_err(|e| format!("序列化 meta.json 失败: {e}"))?;
+    let meta_pretty =
+        serde_json::to_string_pretty(&meta).map_err(|e| format!("序列化 meta.json 失败: {e}"))?;
     fs::write(&meta_path, meta_pretty).map_err(|e| format!("写入 meta.json 失败: {e}"))?;
 
     Ok(MaterializePrdSnapshotResult {

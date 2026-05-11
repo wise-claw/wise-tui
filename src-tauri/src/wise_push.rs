@@ -5,12 +5,12 @@ use serde::Deserialize;
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
 use tokio::sync::oneshot;
+use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::http::{header, HeaderValue, Request, Uri};
 use tokio_tungstenite::tungstenite::Message;
-use tokio_tungstenite::connect_async;
 
 use crate::wise_db::WiseDb;
-use crate::wise_mascot::{IngestInboundPayload, WiseToastMerge, process_inbound_ingest};
+use crate::wise_mascot::{process_inbound_ingest, IngestInboundPayload, WiseToastMerge};
 
 pub struct WisePushControl {
     cancel_tx: Mutex<Option<oneshot::Sender<()>>>,
@@ -94,7 +94,12 @@ async fn one_ws_session(app: &AppHandle, url: &str, token: Option<&str>) -> Resu
     Ok(())
 }
 
-async fn push_runner(app: AppHandle, url: String, token: Option<String>, mut cancel: oneshot::Receiver<()>) {
+async fn push_runner(
+    app: AppHandle,
+    url: String,
+    token: Option<String>,
+    mut cancel: oneshot::Receiver<()>,
+) {
     loop {
         tokio::select! {
             _ = &mut cancel => break,

@@ -16,11 +16,12 @@ use tokio_tungstenite::tungstenite::Message;
 
 use crate::dingtalk_enterprise_bot::dingtalk_internal_access_token;
 use crate::wise_db::WiseDb;
-use crate::wise_mascot::{IngestInboundPayload, WiseToastMerge, process_inbound_ingest};
+use crate::wise_mascot::{process_inbound_ingest, IngestInboundPayload, WiseToastMerge};
 
 const SETTINGS_KEY: &str = "wise.dingtalk.enterprise_bot.v1";
 const CONNECTIONS_OPEN: &str = "https://api.dingtalk.com/v1.0/gateway/connections/open";
-const ROBOT_MESSAGE_FILE_DOWNLOAD: &str = "https://api.dingtalk.com/v1.0/robot/messageFiles/download";
+const ROBOT_MESSAGE_FILE_DOWNLOAD: &str =
+    "https://api.dingtalk.com/v1.0/robot/messageFiles/download";
 /// 钉钉单聊图片常见约 5MB；此处允许到 6MiB 二进制，避免网关侧误拒收。
 const MAX_INGEST_IMAGE_BYTES: usize = 6 * 1024 * 1024;
 
@@ -59,9 +60,15 @@ fn frame_headers(frame: &Value) -> Option<&serde_json::Map<String, Value>> {
         .or_else(|| frame.get("header").and_then(|h| h.as_object()))
 }
 
-fn parse_saved_enterprise_bot_config(raw: Option<String>) -> Result<(String, String, String), String> {
-    let raw = raw.ok_or_else(|| "未找到钉钉配置：请先在侧栏保存 AppKey（Client ID）与 AppSecret（Client Secret）".to_string())?;
-    let v: Value = serde_json::from_str(&raw).map_err(|e| format!("解析钉钉配置 JSON 失败: {}", e))?;
+fn parse_saved_enterprise_bot_config(
+    raw: Option<String>,
+) -> Result<(String, String, String), String> {
+    let raw = raw.ok_or_else(|| {
+        "未找到钉钉配置：请先在侧栏保存 AppKey（Client ID）与 AppSecret（Client Secret）"
+            .to_string()
+    })?;
+    let v: Value =
+        serde_json::from_str(&raw).map_err(|e| format!("解析钉钉配置 JSON 失败: {}", e))?;
     let app_key = v
         .get("appKey")
         .and_then(|x| x.as_str())
@@ -86,7 +93,10 @@ fn parse_saved_enterprise_bot_config(raw: Option<String>) -> Result<(String, Str
     Ok((app_key, app_secret, robot_code))
 }
 
-async fn register_stream_ticket(client_id: &str, client_secret: &str) -> Result<(String, String), String> {
+async fn register_stream_ticket(
+    client_id: &str,
+    client_secret: &str,
+) -> Result<(String, String), String> {
     let client = reqwest::Client::new();
     let body = json!({
         "clientId": client_id,
@@ -161,7 +171,8 @@ fn ack_event_ok(message_id: &str) -> String {
 }
 
 fn ack_ping_ok(message_id: &str, opaque: &str) -> String {
-    let data = serde_json::to_string(&json!({ "opaque": opaque })).unwrap_or_else(|_| "{}".to_string());
+    let data =
+        serde_json::to_string(&json!({ "opaque": opaque })).unwrap_or_else(|_| "{}".to_string());
     json!({
         "code": 200,
         "message": "OK",
@@ -203,7 +214,10 @@ fn resolve_bot_sender_user_id(inner: &Value) -> Result<String, String> {
             }
         }
     }
-    Err("机器人回调缺少发送方 userId（已尝试 senderStaffId / senderId / userId 等字段）".to_string())
+    Err(
+        "机器人回调缺少发送方 userId（已尝试 senderStaffId / senderId / userId 等字段）"
+            .to_string(),
+    )
 }
 
 /// Stream 帧 `data` 在协议上为 JSON 字符串，但部分网关/SDK 可能已解析为 Object，需兼容。
@@ -306,7 +320,10 @@ fn sniff_image_mime_from_magic(bytes: &[u8]) -> &'static str {
     if bytes.len() >= 6 && bytes[0] == 0x47 && bytes[1] == 0x49 && bytes[2] == 0x46 {
         return "image/gif";
     }
-    if bytes.len() >= 12 && bytes[0..4] == [0x52u8, 0x49, 0x46, 0x46] && bytes[8..12] == [0x57u8, 0x45, 0x42, 0x50] {
+    if bytes.len() >= 12
+        && bytes[0..4] == [0x52u8, 0x49, 0x46, 0x46]
+        && bytes[8..12] == [0x57u8, 0x45, 0x42, 0x50]
+    {
         return "image/webp";
     }
     "application/octet-stream"
@@ -346,13 +363,20 @@ async fn dingtalk_robot_resolve_download_url(
     if let Some(code) = v.get("code").and_then(|c| c.as_str()) {
         if !code.is_empty() && code != "OK" {
             let msg = v.get("message").and_then(|m| m.as_str()).unwrap_or("");
-            return Err(format!("messageFiles/download code={} message={}", code, msg));
+            return Err(format!(
+                "messageFiles/download code={} message={}",
+                code, msg
+            ));
         }
     }
-    pick_download_url_from_json(&v).ok_or_else(|| format!("messageFiles/download 未返回 downloadUrl: {}", v))
+    pick_download_url_from_json(&v)
+        .ok_or_else(|| format!("messageFiles/download 未返回 downloadUrl: {}", v))
 }
 
-async fn http_get_bytes_limited(url: &str, max_bytes: usize) -> Result<(Vec<u8>, Option<String>), String> {
+async fn http_get_bytes_limited(
+    url: &str,
+    max_bytes: usize,
+) -> Result<(Vec<u8>, Option<String>), String> {
     let client = reqwest::Client::new();
     let resp = client
         .get(url)
@@ -396,7 +420,12 @@ async fn dingtalk_fetch_image_data_url_for_code(
     Ok(format!("data:{};base64,{}", mime, b64))
 }
 
-fn dispatch_dingtalk_automation_ingest(app: tauri::AppHandle, automation: Value, conv: String, msg_id: Option<String>) {
+fn dispatch_dingtalk_automation_ingest(
+    app: tauri::AppHandle,
+    automation: Value,
+    conv: String,
+    msg_id: Option<String>,
+) {
     let body = match serde_json::to_string(&automation) {
         Ok(s) => s,
         Err(e) => {
@@ -414,7 +443,10 @@ fn dispatch_dingtalk_automation_ingest(app: tauri::AppHandle, automation: Value,
         match (app.try_state::<WiseDb>(), app.try_state::<WiseToastMerge>()) {
             (Some(db), Some(merge)) => {
                 if let Err(e) = process_inbound_ingest(&app, &db, &merge, payload) {
-                    eprintln!("dingtalk_stream_gateway: process_inbound_ingest 失败: {}", e);
+                    eprintln!(
+                        "dingtalk_stream_gateway: process_inbound_ingest 失败: {}",
+                        e
+                    );
                 }
             }
             (db_ok, merge_ok) => {
@@ -502,7 +534,8 @@ async fn ingest_bot_picture_message(app: &tauri::AppHandle, inner: &Value) -> Re
                 "图片入站需要 robotCode：请在回调 JSON 或侧栏机器人配置中填写 robotCode".to_string()
             })?;
 
-        dingtalk_fetch_image_data_url_for_code(&app_key, &app_secret, &robot_code, &download_code).await
+        dingtalk_fetch_image_data_url_for_code(&app_key, &app_secret, &robot_code, &download_code)
+            .await
     }
     .await;
 
@@ -673,7 +706,8 @@ async fn ingest_bot_callback_message(app: tauri::AppHandle, inner: Value) {
 }
 
 fn handle_stream_text(app: &tauri::AppHandle, text: &str) -> Result<String, String> {
-    let frame: Value = serde_json::from_str(text).map_err(|e| format!("Stream 帧非 JSON: {}", e))?;
+    let frame: Value =
+        serde_json::from_str(text).map_err(|e| format!("Stream 帧非 JSON: {}", e))?;
     let headers = frame_headers(&frame).ok_or("Stream 帧缺少 headers")?;
     let message_id = headers
         .get("messageId")
@@ -706,7 +740,8 @@ fn handle_stream_text(app: &tauri::AppHandle, text: &str) -> Result<String, Stri
         }
         ("SYSTEM", "disconnect") => Ok(ack_unknown_ok(&message_id)),
         ("CALLBACK", "/v1.0/im/bot/messages/get") => {
-            let inner = parse_bot_callback_inner(&frame).map_err(|e| format!("机器人回调: {}", e))?;
+            let inner =
+                parse_bot_callback_inner(&frame).map_err(|e| format!("机器人回调: {}", e))?;
             let app_handle = app.clone();
             tokio::spawn(async move {
                 ingest_bot_callback_message(app_handle, inner).await;
@@ -790,12 +825,16 @@ pub async fn dingtalk_stream_gateway_start(
 }
 
 #[tauri::command]
-pub fn dingtalk_stream_gateway_stop(control: State<'_, DingTalkStreamGatewayControl>) -> Result<(), String> {
+pub fn dingtalk_stream_gateway_stop(
+    control: State<'_, DingTalkStreamGatewayControl>,
+) -> Result<(), String> {
     control.stop_locked();
     Ok(())
 }
 
 #[tauri::command]
-pub fn dingtalk_stream_gateway_is_running(control: State<'_, DingTalkStreamGatewayControl>) -> bool {
+pub fn dingtalk_stream_gateway_is_running(
+    control: State<'_, DingTalkStreamGatewayControl>,
+) -> bool {
     control.is_running()
 }

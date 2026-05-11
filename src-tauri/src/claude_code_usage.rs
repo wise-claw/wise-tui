@@ -1,7 +1,7 @@
 //! 从本机 Claude Code 项目 JSONL 汇总用量（路径与字段对齐 [ccusage](https://github.com/ryoppippi/ccusage)）。
 //! 性能：并行按文件扫描、行级字符串预筛、仅保留最近 `RETENTION_DAYS` 的日历日；命令异步 `spawn_blocking` 避免阻塞运行时。
 
-use chrono::{Datelike, Duration, Local, NaiveDate, TimeZone, Weekday, Utc};
+use chrono::{Datelike, Duration, Local, NaiveDate, TimeZone, Utc, Weekday};
 use rayon::prelude::*;
 use serde::Serialize;
 use serde_json::Value;
@@ -134,7 +134,10 @@ fn collect_jsonl_paths(projects_root: &Path, cap: usize, sink: &mut Vec<PathBuf>
     if !projects_root.is_dir() {
         return;
     }
-    for entry in walkdir::WalkDir::new(projects_root).into_iter().filter_map(Result::ok) {
+    for entry in walkdir::WalkDir::new(projects_root)
+        .into_iter()
+        .filter_map(Result::ok)
+    {
         if sink.len() >= cap {
             break;
         }
@@ -172,9 +175,7 @@ fn parse_cost_usd(v: &Value) -> Option<f64> {
 
 #[inline]
 fn line_maybe_usage_row(line: &str) -> bool {
-    line.contains("assistant")
-        && line.contains("input_tokens")
-        && line.contains("timestamp")
+    line.contains("assistant") && line.contains("input_tokens") && line.contains("timestamp")
 }
 
 fn parse_usage_event(line: &str, min_day: NaiveDate) -> Option<(NaiveDate, Acc)> {
@@ -338,7 +339,8 @@ fn label_for_month(sort_key: &str) -> String {
 fn rollup_to_weeks(daily: &HashMap<String, Acc>) -> BTreeMap<String, Acc> {
     let mut out: BTreeMap<String, Acc> = BTreeMap::new();
     for (dk, acc) in daily {
-        let d = NaiveDate::parse_from_str(dk, "%Y-%m-%d").unwrap_or_else(|_| Local::now().date_naive());
+        let d =
+            NaiveDate::parse_from_str(dk, "%Y-%m-%d").unwrap_or_else(|_| Local::now().date_naive());
         let wk = week_sort_key(d);
         out.entry(wk).or_default().merge(acc);
     }
@@ -348,14 +350,19 @@ fn rollup_to_weeks(daily: &HashMap<String, Acc>) -> BTreeMap<String, Acc> {
 fn rollup_to_months(daily: &HashMap<String, Acc>) -> BTreeMap<String, Acc> {
     let mut out: BTreeMap<String, Acc> = BTreeMap::new();
     for (dk, acc) in daily {
-        let d = NaiveDate::parse_from_str(dk, "%Y-%m-%d").unwrap_or_else(|_| Local::now().date_naive());
+        let d =
+            NaiveDate::parse_from_str(dk, "%Y-%m-%d").unwrap_or_else(|_| Local::now().date_naive());
         let mk = month_key(d);
         out.entry(mk).or_default().merge(acc);
     }
     out
 }
 
-fn fill_day_window(anchor: NaiveDate, days: u32, source: &HashMap<String, Acc>) -> Vec<(String, Acc)> {
+fn fill_day_window(
+    anchor: NaiveDate,
+    days: u32,
+    source: &HashMap<String, Acc>,
+) -> Vec<(String, Acc)> {
     let mut v = Vec::new();
     for i in (0..days).rev() {
         let d = anchor - Duration::days(i64::from(i));
@@ -435,7 +442,10 @@ fn build_snapshot_inner() -> Result<ClaudeUsageSnapshotResponse, String> {
             month: empty(),
             scanned_files: 0,
             data_roots: vec![],
-            hint: Some("未找到 Claude Code 数据目录（~/.config/claude/projects 或 ~/.claude/projects）。".into()),
+            hint: Some(
+                "未找到 Claude Code 数据目录（~/.config/claude/projects 或 ~/.claude/projects）。"
+                    .into(),
+            ),
             events_parsed: 0,
         });
     }
@@ -443,7 +453,11 @@ fn build_snapshot_inner() -> Result<ClaudeUsageSnapshotResponse, String> {
     let mut files: Vec<PathBuf> = Vec::new();
     for b in &bases {
         let projects = b.join("projects");
-        collect_jsonl_paths(&projects, MAX_JSONL_FILES.saturating_sub(files.len()), &mut files);
+        collect_jsonl_paths(
+            &projects,
+            MAX_JSONL_FILES.saturating_sub(files.len()),
+            &mut files,
+        );
         if files.len() >= MAX_JSONL_FILES {
             break;
         }
@@ -462,8 +476,7 @@ fn build_snapshot_inner() -> Result<ClaudeUsageSnapshotResponse, String> {
 
     let day_buckets = {
         let rows = fill_day_window(anchor, 30, &daily);
-        rows
-            .into_iter()
+        rows.into_iter()
             .map(|(k, acc)| {
                 let d = NaiveDate::parse_from_str(&k, "%Y-%m-%d").unwrap_or(anchor);
                 acc_to_bucket(k.clone(), label_for_day(d), acc)
@@ -474,8 +487,7 @@ fn build_snapshot_inner() -> Result<ClaudeUsageSnapshotResponse, String> {
     let week_buckets = {
         let weeks_map = rollup_to_weeks(&daily);
         let keys = distinct_week_keys_back(anchor, RETENTION_DAYS, 12);
-        keys
-            .into_iter()
+        keys.into_iter()
             .map(|k| {
                 let acc = weeks_map.get(&k).cloned().unwrap_or_default();
                 acc_to_bucket(k.clone(), label_for_week(&k), acc)
@@ -486,8 +498,7 @@ fn build_snapshot_inner() -> Result<ClaudeUsageSnapshotResponse, String> {
     let month_buckets = {
         let months_map = rollup_to_months(&daily);
         let keys = distinct_month_keys_back(anchor, RETENTION_DAYS, 12);
-        keys
-            .into_iter()
+        keys.into_iter()
             .map(|k| {
                 let acc = months_map.get(&k).cloned().unwrap_or_default();
                 acc_to_bucket(k.clone(), label_for_month(&k), acc)
@@ -508,7 +519,10 @@ fn build_snapshot_inner() -> Result<ClaudeUsageSnapshotResponse, String> {
         None
     };
 
-    let data_roots: Vec<String> = bases.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+    let data_roots: Vec<String> = bases
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
 
     Ok(ClaudeUsageSnapshotResponse {
         day,

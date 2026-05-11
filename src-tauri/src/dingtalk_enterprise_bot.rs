@@ -3,8 +3,8 @@
 
 use std::path::Path;
 
-use reqwest::Client;
 use reqwest::multipart::Part;
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -17,7 +17,10 @@ struct GetTokenResp {
 }
 
 /// 供 Stream 网关等模块复用：用 AppKey / AppSecret 换取新版接口用的 `access_token`（请求头 `x-acs-dingtalk-access-token`）。
-pub async fn dingtalk_internal_access_token(app_key: &str, app_secret: &str) -> Result<String, String> {
+pub async fn dingtalk_internal_access_token(
+    app_key: &str,
+    app_secret: &str,
+) -> Result<String, String> {
     get_internal_access_token(app_key, app_secret).await
 }
 
@@ -62,7 +65,10 @@ pub struct DingTalkOtoBatchSendResult {
 }
 
 /// 从钉钉新网关 JSON 中拼可读错误（含 HTTP 4xx/5xx 体）。
-fn format_dingtalk_robot_api_error(status: reqwest::StatusCode, value: &serde_json::Value) -> String {
+fn format_dingtalk_robot_api_error(
+    status: reqwest::StatusCode,
+    value: &serde_json::Value,
+) -> String {
     let code = value
         .get("code")
         .and_then(|c| c.as_str())
@@ -96,7 +102,11 @@ fn format_dingtalk_robot_api_error(status: reqwest::StatusCode, value: &serde_js
 }
 
 fn normalize_oto_user_ids(user_ids: Vec<String>) -> Result<Vec<String>, String> {
-    let mut user_ids: Vec<String> = user_ids.into_iter().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+    let mut user_ids: Vec<String> = user_ids
+        .into_iter()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
     if user_ids.is_empty() {
         return Err("至少填写一个接收人 userId".to_string());
     }
@@ -132,7 +142,8 @@ async fn robot_oto_batch_send(
         .map_err(|e| format!("请求 batchSend 失败: {}", e))?;
     let status = resp.status();
     let raw = resp.text().await.map_err(|e| e.to_string())?;
-    let value: serde_json::Value = serde_json::from_str(&raw).unwrap_or_else(|_| json!({ "raw": raw }));
+    let value: serde_json::Value =
+        serde_json::from_str(&raw).unwrap_or_else(|_| json!({ "raw": raw }));
     if !status.is_success() {
         return Err(format_dingtalk_robot_api_error(status, &value));
     }
@@ -149,7 +160,11 @@ struct OapiMediaUploadResp {
 }
 
 /// 旧版 `oapi.dingtalk.com/media/upload`，单聊图片消息的 `photoURL` 可填此处返回的 `media_id`。
-async fn upload_oapi_robot_image_media(access_token: &str, bytes: Vec<u8>, filename: &str) -> Result<String, String> {
+async fn upload_oapi_robot_image_media(
+    access_token: &str,
+    bytes: Vec<u8>,
+    filename: &str,
+) -> Result<String, String> {
     const MAX_OAPI_IMAGE_BYTES: usize = 1024 * 1024;
     if bytes.is_empty() {
         return Err("图片文件为空".to_string());
@@ -182,20 +197,22 @@ async fn upload_oapi_robot_image_media(access_token: &str, bytes: Vec<u8>, filen
         .map_err(|e| format!("解析 media/upload 响应失败: {}", e))?;
     if body.errcode != 0 {
         let msg = body.errmsg.unwrap_or_default();
-        return Err(format!("media/upload 失败 errcode={} {}", body.errcode, msg));
+        return Err(format!(
+            "media/upload 失败 errcode={} {}",
+            body.errcode, msg
+        ));
     }
     body.media_id
         .filter(|s| !s.is_empty())
         .ok_or_else(|| "media/upload 未返回 media_id".to_string())
 }
 
-fn parse_batch_send_response(value: &serde_json::Value) -> Result<DingTalkOtoBatchSendResult, String> {
+fn parse_batch_send_response(
+    value: &serde_json::Value,
+) -> Result<DingTalkOtoBatchSendResult, String> {
     if let Some(code) = value.get("code").and_then(|c| c.as_str()) {
         if !code.is_empty() && code != "OK" {
-            let msg = value
-                .get("message")
-                .and_then(|m| m.as_str())
-                .unwrap_or("");
+            let msg = value.get("message").and_then(|m| m.as_str()).unwrap_or("");
             return Err(format!("钉钉接口返回 code={} message={}", code, msg));
         }
     }
@@ -225,7 +242,10 @@ fn parse_batch_send_response(value: &serde_json::Value) -> Result<DingTalkOtoBat
 
 /// 校验应用凭证是否有效（能换取 access_token）。
 #[tauri::command]
-pub async fn dingtalk_enterprise_bot_ping(app_key: String, app_secret: String) -> Result<(), String> {
+pub async fn dingtalk_enterprise_bot_ping(
+    app_key: String,
+    app_secret: String,
+) -> Result<(), String> {
     let _ = get_internal_access_token(app_key.trim(), app_secret.trim()).await?;
     Ok(())
 }

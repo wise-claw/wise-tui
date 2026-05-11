@@ -30,7 +30,77 @@ const MIGRATION_011: &str = include_str!("../migrations/011_task_event_acceptanc
 const MIGRATION_012: &str = include_str!("../migrations/012_prd_executable_tasks.sql");
 const MIGRATION_013: &str = include_str!("../migrations/013_project_icon_badge.sql");
 const MIGRATION_014: &str = include_str!("../migrations/014_project_repository_display_order.sql");
-const PLATFORM_SPLIT_PROMPT_SEED_JSON: &str = include_str!("../migrations/005_platform_split_prompt_seed.json");
+const PLATFORM_SPLIT_PROMPT_SEED_JSON: &str =
+    include_str!("../migrations/005_platform_split_prompt_seed.json");
+
+enum MigrationAction {
+    Sql(&'static str),
+    Seed(fn(&Connection) -> Result<(), String>),
+}
+
+struct Migration {
+    name: &'static str,
+    action: MigrationAction,
+}
+
+const MIGRATIONS: &[Migration] = &[
+    Migration {
+        name: "001_init",
+        action: MigrationAction::Sql(MIGRATION_001),
+    },
+    Migration {
+        name: "002_mascot_prefs_toast",
+        action: MigrationAction::Sql(MIGRATION_002),
+    },
+    Migration {
+        name: "003_projects_and_settings",
+        action: MigrationAction::Sql(MIGRATION_003),
+    },
+    Migration {
+        name: "004_prd_task_split_results",
+        action: MigrationAction::Sql(MIGRATION_004),
+    },
+    Migration {
+        name: "005_platform_split_prompt_default",
+        action: MigrationAction::Seed(seed_platform_split_prompt_default),
+    },
+    Migration {
+        name: "006_workflow_store",
+        action: MigrationAction::Sql(MIGRATION_006),
+    },
+    Migration {
+        name: "007_employee_workflow",
+        action: MigrationAction::Sql(MIGRATION_007),
+    },
+    Migration {
+        name: "008_employee_repository_mapping",
+        action: MigrationAction::Sql(MIGRATION_008),
+    },
+    Migration {
+        name: "009_employee_display_order",
+        action: MigrationAction::Sql(MIGRATION_009),
+    },
+    Migration {
+        name: "010_workflow_graph",
+        action: MigrationAction::Sql(MIGRATION_010),
+    },
+    Migration {
+        name: "011_task_event_acceptance_idempotency",
+        action: MigrationAction::Sql(MIGRATION_011),
+    },
+    Migration {
+        name: "012_prd_executable_tasks",
+        action: MigrationAction::Sql(MIGRATION_012),
+    },
+    Migration {
+        name: "013_project_icon_badge",
+        action: MigrationAction::Sql(MIGRATION_013),
+    },
+    Migration {
+        name: "014_project_repository_display_order",
+        action: MigrationAction::Sql(MIGRATION_014),
+    },
+];
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -173,11 +243,9 @@ impl WiseDb {
     pub fn mascot_visible_pref(&self) -> Result<bool, String> {
         let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
         let v: i64 = g
-            .query_row(
-                "SELECT visible FROM mascot_prefs WHERE id = 1",
-                [],
-                |row| row.get(0),
-            )
+            .query_row("SELECT visible FROM mascot_prefs WHERE id = 1", [], |row| {
+                row.get(0)
+            })
             .map_err(|e| e.to_string())?;
         Ok(v != 0)
     }
@@ -635,7 +703,10 @@ impl WiseDb {
         Ok(out)
     }
 
-    pub fn list_workflow_stages(&self, workflow_id: &str) -> Result<Vec<WiseWorkflowStageRow>, String> {
+    pub fn list_workflow_stages(
+        &self,
+        workflow_id: &str,
+    ) -> Result<Vec<WiseWorkflowStageRow>, String> {
         let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
         let mut stmt = g
             .prepare(
@@ -664,7 +735,10 @@ impl WiseDb {
         Ok(out)
     }
 
-    pub fn list_stage_assignees(&self, stage_ids: &[String]) -> Result<Vec<WiseStageAssigneeRow>, String> {
+    pub fn list_stage_assignees(
+        &self,
+        stage_ids: &[String],
+    ) -> Result<Vec<WiseStageAssigneeRow>, String> {
         if stage_ids.is_empty() {
             return Ok(Vec::new());
         }
@@ -719,7 +793,13 @@ impl WiseDb {
                name = excluded.name,
                is_default = excluded.is_default,
                updated_at = excluded.updated_at",
-            params![workflow_id, name, if is_default { 1 } else { 0 }, now_ms, now_ms],
+            params![
+                workflow_id,
+                name,
+                if is_default { 1 } else { 0 },
+                now_ms,
+                now_ms
+            ],
         )
         .map_err(|e| e.to_string())?;
         tx.execute(
@@ -829,8 +909,11 @@ impl WiseDb {
                 in_progress_task_refs
             ));
         }
-        tx.execute("DELETE FROM tasks WHERE workflow_id = ?1", params![workflow_id])
-            .map_err(|e| e.to_string())?;
+        tx.execute(
+            "DELETE FROM tasks WHERE workflow_id = ?1",
+            params![workflow_id],
+        )
+        .map_err(|e| e.to_string())?;
         tx.execute(
             "DELETE FROM stage_assignees WHERE stage_id IN (SELECT id FROM workflow_stages WHERE workflow_id = ?1)",
             params![workflow_id],
@@ -919,7 +1002,12 @@ impl WiseDb {
         Ok(())
     }
 
-    pub fn add_repository_to_project(&self, project_id: &str, repository_id: i64, now_ms: i64) -> Result<(), String> {
+    pub fn add_repository_to_project(
+        &self,
+        project_id: &str,
+        repository_id: i64,
+        now_ms: i64,
+    ) -> Result<(), String> {
         let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
         g.execute(
             "INSERT OR IGNORE INTO project_repositories (project_id, repository_id, created_at, display_order)
@@ -992,7 +1080,12 @@ impl WiseDb {
         Ok(())
     }
 
-    pub fn remove_repository_from_project(&self, project_id: &str, repository_id: i64, now_ms: i64) -> Result<(), String> {
+    pub fn remove_repository_from_project(
+        &self,
+        project_id: &str,
+        repository_id: i64,
+        now_ms: i64,
+    ) -> Result<(), String> {
         let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
         g.execute(
             "DELETE FROM project_repositories WHERE project_id = ?1 AND repository_id = ?2",
@@ -1078,8 +1171,11 @@ impl WiseDb {
                 params![&payload, now],
             )
             .map_err(|e| e.to_string())?;
-            g.execute("DELETE FROM app_settings WHERE key = 'prd_task_split_result'", [])
-                .map_err(|e| e.to_string())?;
+            g.execute(
+                "DELETE FROM app_settings WHERE key = 'prd_task_split_result'",
+                [],
+            )
+            .map_err(|e| e.to_string())?;
             return Ok(Some(payload));
         }
         Ok(None)
@@ -1087,12 +1183,18 @@ impl WiseDb {
 
     pub fn clear_prd_task_split_payload(&self) -> Result<(), String> {
         let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
-        g.execute("DELETE FROM prd_task_split_results WHERE id = 'current'", [])
-            .map_err(|e| e.to_string())?;
+        g.execute(
+            "DELETE FROM prd_task_split_results WHERE id = 'current'",
+            [],
+        )
+        .map_err(|e| e.to_string())?;
         g.execute("DELETE FROM prd_executable_tasks WHERE id = 'current'", [])
             .map_err(|e| e.to_string())?;
-        g.execute("DELETE FROM app_settings WHERE key = 'prd_task_split_result'", [])
-            .map_err(|e| e.to_string())?;
+        g.execute(
+            "DELETE FROM app_settings WHERE key = 'prd_task_split_result'",
+            [],
+        )
+        .map_err(|e| e.to_string())?;
         Ok(())
     }
 
@@ -1157,7 +1259,10 @@ impl WiseDb {
         Ok(())
     }
 
-    pub fn get_workflow_run_payload(&self, workflow_run_id: &str) -> Result<Option<String>, String> {
+    pub fn get_workflow_run_payload(
+        &self,
+        workflow_run_id: &str,
+    ) -> Result<Option<String>, String> {
         let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
         let payload: Option<String> = g
             .query_row(
@@ -1175,9 +1280,7 @@ impl WiseDb {
         let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
         let cap = limit.clamp(1, 2000);
         let mut stmt = g
-            .prepare(
-                "SELECT payload FROM workflow_runs ORDER BY updated_at DESC LIMIT ?1",
-            )
+            .prepare("SELECT payload FROM workflow_runs ORDER BY updated_at DESC LIMIT ?1")
             .map_err(|e| e.to_string())?;
         let rows = stmt
             .query_map(params![cap], |row| row.get::<_, String>(0))
@@ -1190,7 +1293,11 @@ impl WiseDb {
     }
 
     /// Claude 标签从临时 id 合并为 `session_id` 后，同步工作流库中的会话引用，保证 OMC 批量 / 团队任务与「执行详情」跳转仍可用。
-    pub fn migrate_claude_tab_session_references(&self, from_tab_id: &str, to_session_id: &str) -> Result<(), String> {
+    pub fn migrate_claude_tab_session_references(
+        &self,
+        from_tab_id: &str,
+        to_session_id: &str,
+    ) -> Result<(), String> {
         let from = from_tab_id.trim();
         let to = to_session_id.trim();
         if from.is_empty() || to.is_empty() || from == to {
@@ -1198,8 +1305,11 @@ impl WiseDb {
         }
         let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
 
-        g.execute("UPDATE tasks SET creator = ?2 WHERE creator = ?1", params![from, to])
-            .map_err(|e| e.to_string())?;
+        g.execute(
+            "UPDATE tasks SET creator = ?2 WHERE creator = ?1",
+            params![from, to],
+        )
+        .map_err(|e| e.to_string())?;
 
         let collected: Vec<(String, String, String, i64)> = {
             let mut stmt = g
@@ -1217,7 +1327,9 @@ impl WiseDb {
                     ))
                 })
                 .map_err(|e| e.to_string())?;
-            mapped.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+            mapped
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?
         };
 
         for (workflow_run_id, _repository_path, payload, updated_at) in collected {
@@ -1270,7 +1382,9 @@ impl WiseDb {
             )
             .map_err(|e| e.to_string())?;
         let rows = stmt
-            .query_map(params![workflow_run_id, from, until], |row| row.get::<_, String>(0))
+            .query_map(params![workflow_run_id, from, until], |row| {
+                row.get::<_, String>(0)
+            })
             .map_err(|e| e.to_string())?;
         let mut out = Vec::new();
         for item in rows {
@@ -1279,7 +1393,10 @@ impl WiseDb {
         Ok(out)
     }
 
-    pub fn get_workflow_graph(&self, workflow_id: &str) -> Result<Option<WiseWorkflowGraphRow>, String> {
+    pub fn get_workflow_graph(
+        &self,
+        workflow_id: &str,
+    ) -> Result<Option<WiseWorkflowGraphRow>, String> {
         let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
         let row = g
             .query_row(
@@ -1337,271 +1454,36 @@ fn run_migrations(conn: &Connection) -> Result<(), String> {
     )
     .map_err(|e| e.to_string())?;
 
-    let exists: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM _migrations WHERE name = '001_init'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or(0);
-
-    if exists == 0 {
-        conn.execute_batch(MIGRATION_001)
-            .map_err(|e| e.to_string())?;
-        conn.execute(
-            "INSERT INTO _migrations (name) VALUES ('001_init')",
-            [],
-        )
-        .map_err(|e| e.to_string())?;
-    }
-
-    let exists2: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM _migrations WHERE name = '002_mascot_prefs_toast'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or(0);
-
-    if exists2 == 0 {
-        conn.execute_batch(MIGRATION_002)
-            .map_err(|e| e.to_string())?;
-        conn
-            .execute(
-                "INSERT INTO _migrations (name) VALUES ('002_mascot_prefs_toast')",
-                [],
+    for migration in MIGRATIONS {
+        if !migration_applied(conn, migration.name)? {
+            apply_migration(conn, migration)?;
+            conn.execute(
+                "INSERT INTO _migrations (name) VALUES (?1)",
+                params![migration.name],
             )
             .map_err(|e| e.to_string())?;
-    }
-
-    let exists3: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM _migrations WHERE name = '003_projects_and_settings'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or(0);
-
-    if exists3 == 0 {
-        conn.execute_batch(MIGRATION_003)
-            .map_err(|e| e.to_string())?;
-        conn
-            .execute(
-                "INSERT INTO _migrations (name) VALUES ('003_projects_and_settings')",
-                [],
-            )
-            .map_err(|e| e.to_string())?;
-    }
-
-    let exists4: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM _migrations WHERE name = '004_prd_task_split_results'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or(0);
-
-    if exists4 == 0 {
-        conn.execute_batch(MIGRATION_004)
-            .map_err(|e| e.to_string())?;
-        conn
-            .execute(
-                "INSERT INTO _migrations (name) VALUES ('004_prd_task_split_results')",
-                [],
-            )
-            .map_err(|e| e.to_string())?;
-    }
-
-    let exists5: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM _migrations WHERE name = '005_platform_split_prompt_default'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or(0);
-
-    if exists5 == 0 {
-        seed_platform_split_prompt_default(conn)?;
-        conn
-            .execute(
-                "INSERT INTO _migrations (name) VALUES ('005_platform_split_prompt_default')",
-                [],
-            )
-            .map_err(|e| e.to_string())?;
-    }
-
-    let exists6: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM _migrations WHERE name = '006_workflow_store'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or(0);
-
-    if exists6 == 0 {
-        conn.execute_batch(MIGRATION_006)
-            .map_err(|e| e.to_string())?;
-        conn
-            .execute(
-                "INSERT INTO _migrations (name) VALUES ('006_workflow_store')",
-                [],
-            )
-            .map_err(|e| e.to_string())?;
-    }
-
-    let exists7: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM _migrations WHERE name = '007_employee_workflow'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or(0);
-
-    if exists7 == 0 {
-        conn.execute_batch(MIGRATION_007)
-            .map_err(|e| e.to_string())?;
-        conn
-            .execute(
-                "INSERT INTO _migrations (name) VALUES ('007_employee_workflow')",
-                [],
-            )
-            .map_err(|e| e.to_string())?;
-    }
-
-    let exists8: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM _migrations WHERE name = '008_employee_repository_mapping'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or(0);
-
-    if exists8 == 0 {
-        conn.execute_batch(MIGRATION_008)
-            .map_err(|e| e.to_string())?;
-        conn
-            .execute(
-                "INSERT INTO _migrations (name) VALUES ('008_employee_repository_mapping')",
-                [],
-            )
-            .map_err(|e| e.to_string())?;
-    }
-
-    let exists9: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM _migrations WHERE name = '009_employee_display_order'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or(0);
-
-    if exists9 == 0 {
-        conn.execute_batch(MIGRATION_009)
-            .map_err(|e| e.to_string())?;
-        conn
-            .execute(
-                "INSERT INTO _migrations (name) VALUES ('009_employee_display_order')",
-                [],
-            )
-            .map_err(|e| e.to_string())?;
-    }
-
-    let exists10: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM _migrations WHERE name = '010_workflow_graph'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or(0);
-
-    if exists10 == 0 {
-        conn.execute_batch(MIGRATION_010)
-            .map_err(|e| e.to_string())?;
-        conn
-            .execute(
-                "INSERT INTO _migrations (name) VALUES ('010_workflow_graph')",
-                [],
-            )
-            .map_err(|e| e.to_string())?;
-    }
-
-    let exists11: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM _migrations WHERE name = '011_task_event_acceptance_idempotency'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or(0);
-
-    if exists11 == 0 {
-        conn.execute_batch(MIGRATION_011)
-            .map_err(|e| e.to_string())?;
-        conn
-            .execute(
-                "INSERT INTO _migrations (name) VALUES ('011_task_event_acceptance_idempotency')",
-                [],
-            )
-            .map_err(|e| e.to_string())?;
-    }
-
-    let exists12: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM _migrations WHERE name = '012_prd_executable_tasks'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or(0);
-
-    if exists12 == 0 {
-        conn.execute_batch(MIGRATION_012)
-            .map_err(|e| e.to_string())?;
-        conn
-            .execute(
-                "INSERT INTO _migrations (name) VALUES ('012_prd_executable_tasks')",
-                [],
-            )
-            .map_err(|e| e.to_string())?;
-    }
-
-    let exists13: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM _migrations WHERE name = '013_project_icon_badge'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or(0);
-
-    if exists13 == 0 {
-        conn.execute_batch(MIGRATION_013)
-            .map_err(|e| e.to_string())?;
-        conn
-            .execute(
-                "INSERT INTO _migrations (name) VALUES ('013_project_icon_badge')",
-                [],
-            )
-            .map_err(|e| e.to_string())?;
-    }
-
-    let exists14: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM _migrations WHERE name = '014_project_repository_display_order'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or(0);
-
-    if exists14 == 0 {
-        conn.execute_batch(MIGRATION_014)
-            .map_err(|e| e.to_string())?;
-        conn
-            .execute(
-                "INSERT INTO _migrations (name) VALUES ('014_project_repository_display_order')",
-                [],
-            )
-            .map_err(|e| e.to_string())?;
+        }
     }
 
     Ok(())
+}
+
+fn migration_applied(conn: &Connection, name: &str) -> Result<bool, String> {
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM _migrations WHERE name = ?1",
+            params![name],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(count > 0)
+}
+
+fn apply_migration(conn: &Connection, migration: &Migration) -> Result<(), String> {
+    match migration.action {
+        MigrationAction::Sql(sql) => conn.execute_batch(sql).map_err(|e| e.to_string()),
+        MigrationAction::Seed(seed) => seed(conn),
+    }
 }
 
 /// 首次迁移时写入「PRD 任务拆分」平台默认提示词（`app_settings`），已存在同名 key 则跳过。
@@ -1634,4 +1516,77 @@ fn unix_now_ms() -> i64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn migration_registry_preserves_ordered_names() {
+        let names: Vec<&str> = MIGRATIONS.iter().map(|migration| migration.name).collect();
+        assert_eq!(
+            names,
+            vec![
+                "001_init",
+                "002_mascot_prefs_toast",
+                "003_projects_and_settings",
+                "004_prd_task_split_results",
+                "005_platform_split_prompt_default",
+                "006_workflow_store",
+                "007_employee_workflow",
+                "008_employee_repository_mapping",
+                "009_employee_display_order",
+                "010_workflow_graph",
+                "011_task_event_acceptance_idempotency",
+                "012_prd_executable_tasks",
+                "013_project_icon_badge",
+                "014_project_repository_display_order",
+            ]
+        );
+    }
+
+    #[test]
+    fn run_migrations_applies_all_entries_and_is_idempotent() {
+        let conn = Connection::open_in_memory().expect("in-memory sqlite opens");
+
+        run_migrations(&conn).expect("first migration run succeeds");
+        run_migrations(&conn).expect("second migration run is idempotent");
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM _migrations", [], |row| row.get(0))
+            .expect("migration rows can be counted");
+        assert_eq!(count, MIGRATIONS.len() as i64);
+
+        let stored_names: Vec<String> = conn
+            .prepare("SELECT name FROM _migrations ORDER BY name ASC")
+            .expect("migration query prepares")
+            .query_map([], |row| row.get::<_, String>(0))
+            .expect("migration query runs")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("migration names collect");
+        assert_eq!(
+            stored_names,
+            MIGRATIONS
+                .iter()
+                .map(|migration| migration.name.to_string())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn run_migrations_seeds_platform_split_prompt_setting() {
+        let conn = Connection::open_in_memory().expect("in-memory sqlite opens");
+
+        run_migrations(&conn).expect("migrations succeed");
+
+        let value: String = conn
+            .query_row(
+                "SELECT value FROM app_settings WHERE key = 'split_prompt_layers:platform_default'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("seed setting exists");
+        serde_json::from_str::<serde_json::Value>(&value).expect("seed setting is valid JSON");
+    }
 }

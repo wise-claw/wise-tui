@@ -12,7 +12,8 @@ fn git_status(dir: &std::path::Path) -> String {
 }
 
 fn main() {
-    let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/wise-git-reset-test");
+    let dir =
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/wise-git-reset-test");
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     Command::new("git")
@@ -36,7 +37,10 @@ fn main() {
             .output()
             .ok();
         let r = repo.reset_default(None, [spec]);
-        println!("  None [{spec:?}] => {r:?}  status: {}", git_status(&dir).trim_end());
+        println!(
+            "  None [{spec:?}] => {r:?}  status: {}",
+            git_status(&dir).trim_end()
+        );
     }
 
     println!("--- with commit: reset_default HEAD . ---");

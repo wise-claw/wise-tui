@@ -66,7 +66,10 @@ impl WiseToastMerge {
 
 fn emit_unread(app: &AppHandle, db: &WiseDb) -> Result<(), String> {
     let total = db.unread_total()?;
-    let _ = app.emit("wise-unread-changed", &serde_json::json!({ "total": total }));
+    let _ = app.emit(
+        "wise-unread-changed",
+        &serde_json::json!({ "total": total }),
+    );
     Ok(())
 }
 
@@ -240,7 +243,11 @@ pub fn wise_notification_mark_all_read(app: AppHandle, db: State<WiseDb>) -> Res
 }
 
 #[tauri::command]
-pub fn wise_notification_mark_read(app: AppHandle, db: State<WiseDb>, message_id: String) -> Result<(), String> {
+pub fn wise_notification_mark_read(
+    app: AppHandle,
+    db: State<WiseDb>,
+    message_id: String,
+) -> Result<(), String> {
     db.mark_inbound_read_by_id(&message_id)?;
     emit_unread(&app, &db)?;
     Ok(())
@@ -315,7 +322,9 @@ pub fn apply_mascot_position_from_db(app: &AppHandle, db: &WiseDb) -> Result<(),
             ny = py;
         }
     }
-    w.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(nx, ny)))
-        .map_err(|e| e.to_string())?;
+    w.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(
+        nx, ny,
+    )))
+    .map_err(|e| e.to_string())?;
     Ok(())
 }

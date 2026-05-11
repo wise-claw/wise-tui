@@ -1,64 +1,121 @@
-# Wise tauri
+# Wise
 
-基于 **Tauri 2**、**Bun**、**Vite**、**React** 与 **Ant Design** 的桌面端壳：含侧栏导航、顶栏、内容区与 `invoke` 调用 Rust 示例，可直接扩展业务。
+Wise is a Tauri 2 desktop orchestration client for working with local code repositories and Claude Code workflows. It is no longer a starter desktop shell: the app coordinates repositories, Claude sessions, workflow graphs, PRD task splitting, terminal sessions, notifications, and persistent project state.
 
-## 环境要求
+## Feature Matrix
 
-- [Bun](https://bun.sh/)（建议与 `packageManager` 字段一致）
-- [Rust stable](https://rustup.rs/)（`tauri build` / `tauri dev` 需要）
-- macOS / Windows / Linux 桌面开发依赖见 [Tauri 前置条件](https://tauri.app/start/prerequisites/)
+| Area | What it does |
+|------|--------------|
+| Repository workspace | Tracks local repositories and projects in the left sidebar. |
+| Claude sessions | Creates, restores, runs, cancels, and routes Claude Code sessions per repository. |
+| Team workflow | Configures employees, workflow templates, graph-based workflow stages, task events, and acceptance verdicts. |
+| PRD task split | Parses PRD/source material and materializes executable task snapshots. |
+| Terminal and Git | Opens repository terminals, Git panels, diffs, history, branches, and worktrees. |
+| MCP and skills | Displays Claude MCP, hooks, subagents, project skills, and local skills metadata. |
+| Monitoring | Shows employee/team progress, background invocation details, and notification inbox state. |
+| Multi-window desktop | Uses a main Tauri window plus a mascot window with shared app data. |
 
-## 本地开发
+## Architecture
+
+```text
+React desktop shell
+  src/App.tsx
+  src/components/
+  src/hooks/
+        |
+        v
+Frontend service layer
+  src/services/*
+  src/services/workflow/*
+        |
+        v
+Tauri IPC commands and events
+  src-tauri/src/lib.rs
+  src-tauri/src/*.rs
+        |
+        v
+Local persistence and OS integration
+  ~/.wise/wise.db
+  ~/.wise/repositories.json
+  ~/.wise/tabs.json
+  local Claude/Git/terminal processes
+```
+
+Key files:
+
+- `src/main.tsx`: main window React entry.
+- `src/mascot.tsx`: mascot window React entry.
+- `src/App.tsx`: desktop workspace shell and cross-panel coordination.
+- `src/services/`: typed Tauri IPC wrappers and pure service logic.
+- `src/services/workflow/`: workflow engine, replay, facade, event store, and adapters.
+- `src/hooks/useClaudeSessions.ts`: Claude Code session and stream orchestration.
+- `src-tauri/src/lib.rs`: Tauri app setup and command registration.
+- `src-tauri/src/wise_db.rs`: SQLite setup and migrations.
+- `src-tauri/src/wise_paths.rs`: `~/.wise` path and atomic file helpers.
+- `src-tauri/src/repository_files.rs`: repository explorer/search/create/delete filesystem commands.
+- `src-tauri/migrations/`: append-only SQLite migrations.
+- `src-tauri/capabilities/default.json`: Tauri 2 capability allowlist.
+
+## Storage
+
+Wise stores durable app data under `~/.wise/`:
+
+- `~/.wise/wise.db`: SQLite database for app settings, projects, workflows, task snapshots, messages, and mappings.
+- `~/.wise/repositories.json`: legacy/current repository sidebar storage.
+- `~/.wise/tabs.json`: legacy/current tab storage.
+- `~/.wise/prd-images/` and `~/.wise/prd-runs/`: materialized PRD assets.
+
+The asset protocol is intentionally scoped to `$HOME/.wise/**` in `src-tauri/tauri.conf.json`.
+
+## Requirements
+
+- Bun matching `package.json` `packageManager` (`bun@1.3.5`).
+- Rust stable for Tauri commands and packaging.
+- Platform prerequisites from the Tauri 2 documentation.
+
+## Commands
 
 ```bash
 bun install
-bun run tauri:dev
-```
-
-- 会启动 Vite（`http://localhost:16088`）并由 Tauri 打开桌面窗口。
-- 若仅调试前端（不启 Rust 壳），可另开终端执行 `bun run dev`，再用浏览器打开上述地址（部分 Tauri API 在浏览器中不可用）。
-
-## 打包
-
-```bash
+bun test
+bun run build
 bun run tauri:build
 ```
 
-- 产物目录：`src-tauri/target/release/bundle/`（各平台安装包形态不同，如 `.dmg`、`.msi`、`.AppImage` 等）。
-- 应用显示名与窗口标题在 `src-tauri/tauri.conf.json` 的 `productName` / `windows[].title`。
-- Bundle Identifier：`identifier` 字段（当前为 `com.wise.tauri`，可按组织域名修改）。
+Useful scripts:
 
-## 部署
+- `bun test`: runs Bun tests under `src/**/*.test.ts`.
+- `bun run build`: runs TypeScript check and Vite production build.
+- `bun run tauri:dev`: starts Vite and opens the Tauri desktop window.
+- `bun run tauri:build`: builds the desktop app bundle.
+- `bun run tauri`: direct Tauri CLI access.
 
-1. **手动 / 内网分发**：将 `bundle` 目录下对应平台的安装包拷贝到下载站或对象存储即可。
-2. **GitHub Release（CI）**：
-   - 推送以 `v` 开头的 tag（例如 `v0.1.0`）会触发 `.github/workflows/tauri-release.yml`，由 [tauri-action](https://github.com/tauri-apps/tauri-action) 构建并创建**草稿** Release，你在 Release 页面检查附件后发布即可。
-3. **PR / 主分支检查**：`.github/workflows/ci.yml` 执行 `bun run build`（前端类型检查与 Vite 构建）。
+Agent note: project rules prohibit AI agents from running frontend dev/build/start/serve commands unless explicitly allowed. Agents should use code review, `bun test`, and targeted static checks by default.
 
-### macOS：提示「已损坏，无法打开」
+## Package Manager Policy
 
-从网页或网盘下载的 `.app` / `.dmg` 若**未使用 Apple「Developer ID」签名并公证**，系统会加上隔离属性（quarantine），此时常见提示是**「已损坏，无法打开」**（并不一定是文件真的坏了）。
+Bun is the only supported JavaScript package manager for this repository. Keep `bun.lock` tracked. Do not commit `package-lock.json`, `pnpm-lock.yaml`, or `yarn.lock`.
 
-**正式解决（推荐给对外分发）**
+## Development Guidelines
 
-1. 使用付费 [Apple Developer Program](https://developer.apple.com/programs/)，在「Certificates」中创建 **Developer ID Application** 证书，导出为 `.p12` 并转为 base64。
-2. 在 GitHub 仓库 **Settings → Secrets and variables → Actions** 中配置（名称需与 workflow 一致）：
-   - `APPLE_CERTIFICATE`、`APPLE_CERTIFICATE_PASSWORD`、`KEYCHAIN_PASSWORD`（CI 导入证书用）
-   - 公证（使用 Developer ID 时必需）：`APPLE_ID`、`APPLE_PASSWORD`（Apple 账号的 [App 专用密码](https://support.apple.com/HT204397)）、`APPLE_TEAM_ID`
-3. 重新打 tag 触发 `tauri-release.yml` 构建后再下载安装。流程与变量说明见 [Tauri：macOS 代码签名](https://v2.tauri.app/distribute/sign/macos/)。若使用 App Store Connect API 密钥公证，需在 workflow 中把私钥 `.p8` 写入文件并设置 `APPLE_API_ISSUER`、`APPLE_API_KEY`、`APPLE_API_KEY_PATH`（见该文档）。
+Project coding rules live in `.trellis/spec/`:
 
-**临时绕过（仅自用或内测，自行承担风险）**
+- `.trellis/spec/frontend/`: React, hooks, services, state, type safety, UI quality, and testing.
+- `.trellis/spec/tauri/`: Tauri IPC, capabilities, filesystem security, persistence, and migrations.
+- `.trellis/spec/guides/`: cross-layer and reuse thinking guides.
 
-在终端执行（将路径换成你拖入终端的 `Wise.app` 或挂载 DMG 后的 `.app` 路径）：
+Before large changes, create or select a Trellis task under `.trellis/tasks/` and keep commits scoped to that task.
 
-```bash
-xattr -dr com.apple.quarantine "/Applications/Wise.app"
+## Distribution
+
+Manual/internal distribution can use the platform bundle under:
+
+```text
+src-tauri/target/release/bundle/
 ```
 
-也可在 **系统设置 → 隐私与安全性** 中查看是否出现「仍要打开」；或对应用**右键 → 打开**试一次。
+macOS builds distributed outside the App Store require Developer ID signing and notarization to avoid quarantine warnings. Windows builds need code signing to reduce SmartScreen warnings.
 
-Windows 安装包若需消除 SmartScreen 警告，需另行购买代码签名证书并在构建时配置。
+## Recommended IDE
 
-## 推荐 IDE
-
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+VS Code with Tauri and rust-analyzer works well for the current stack.

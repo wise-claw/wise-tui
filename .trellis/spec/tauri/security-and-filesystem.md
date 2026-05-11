@@ -34,6 +34,24 @@ paths that can be rendered by the frontend.
 User project files should be served or copied through a validated backend flow,
 not exposed by widening asset protocol access.
 
+## Content Security Policy
+
+`src-tauri/tauri.conf.json` currently keeps `csp` as `null`. This is an
+explicit compatibility position, not an accidental template leftover. The app
+renders local editor surfaces, Markdown/HTML previews, Monaco, Milkdown, image
+previews, and Tauri asset-protocol resources; enabling CSP must be tested
+against those surfaces together.
+
+Rules:
+
+- Do not broaden `assetProtocol.scope` as a substitute for CSP.
+- When enabling CSP, verify local assets, `asset://` resources, Monaco,
+  Milkdown, markdown sanitization, and PRD image previews.
+- Keep DOMPurify-based sanitization active for rendered Markdown/HTML even
+  after a CSP is introduced.
+- If CSP stays disabled for compatibility, document the reason in the task or
+  PR and keep filesystem scope narrow.
+
 ---
 
 ## Path Validation

@@ -83,7 +83,13 @@ type TaskBadgeState =
 - Extract when the new component has a name from the product domain, owns a
   repeated UI pattern, or isolates expensive rendering.
 - Keep orchestration in hooks when several components need the same stateful behavior.
-- Use Ant Design and Semi UI primitives already present in the codebase.
+- Use Ant Design as the default UI system for new controls, layout primitives,
+  feedback, overlays, forms, tables, tabs, and icons.
+- Semi UI is allowed only for the Claude composer `AIChatInput` integration
+  under `src/components/ClaudeChatInput/`; its tokens must be bridged to Ant
+  Design variables through `composer-semi-tokens.css`.
+- Do not introduce new Semi UI usage outside the composer without first
+  documenting why Ant Design cannot satisfy the interaction.
 - Use existing icons from `@ant-design/icons`, `@vscode/codicons`, or
   `src/components/icons/` before adding another icon package.
 

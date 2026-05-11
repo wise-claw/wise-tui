@@ -143,9 +143,7 @@ pub async fn get_cua_driver_status() -> Result<CuaDriverStatus, String> {
         .await
         .map_err(|e| format!("检测 cua-driver 时被中断: {}", e))?;
     let installed = resolved.is_some();
-    let resolved_path = resolved
-        .as_ref()
-        .map(|p| p.to_string_lossy().to_string());
+    let resolved_path = resolved.as_ref().map(|p| p.to_string_lossy().to_string());
     let version_line = match &resolved {
         Some(p) => read_version_line_async(p).await,
         None => None,
@@ -222,8 +220,12 @@ pub fn macos_open_privacy_pane(pane: String) -> Result<(), String> {
         return Err("仅 macOS 支持".to_string());
     }
     let url = match pane.trim() {
-        "accessibility" => "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
-        "screenCapture" => "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+        "accessibility" => {
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+        }
+        "screenCapture" => {
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+        }
         other => {
             return Err(format!(
                 "未知面板「{}」；仅支持 accessibility、screenCapture",

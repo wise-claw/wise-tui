@@ -143,4 +143,3 @@ pub fn parse_subagent_markdown(raw: &str) -> Result<SubagentParsed, String> {
         prompt,
     })
 }
-

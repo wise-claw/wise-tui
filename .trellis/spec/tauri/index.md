@@ -78,8 +78,10 @@ stay in render or services.
 
 ## Canonical Examples
 
-- `src-tauri/src/lib.rs` for current command registration and app setup.
+- `src-tauri/src/lib.rs` for command registration and app setup only.
 - `src-tauri/src/wise_db.rs` for SQLite setup, migrations, and shared DB state.
+- `src-tauri/src/wise_paths.rs` for `~/.wise` paths and atomic file writes.
+- `src-tauri/src/repository_files.rs` for repository explorer/search/create/delete filesystem commands.
 - `src-tauri/src/prd_materialize.rs` for path canonicalization and asset handling.
 - `src-tauri/src/skills_sh.rs` for command execution around project directories.
 - `src/services/claude.ts` and `src/services/repository.ts` for frontend command wrappers.

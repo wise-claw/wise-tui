@@ -15,7 +15,9 @@ The active frontend stack is:
 - React 19 with functional components and hooks.
 - TypeScript in strict mode.
 - Vite 7 with Bun as the package manager and test runner.
-- Ant Design, Semi UI, Ant Design Icons, X6, Milkdown, Monaco, and xterm.
+- Ant Design as the default UI system; Semi UI is retained only for the Claude
+  composer `AIChatInput`.
+- Ant Design Icons, X6, Milkdown, Monaco, and xterm.
 - Tauri IPC wrappers in `src/services/`; UI code should not call raw commands directly.
 
 These files describe how to add code that looks native to the current project.
