@@ -12,6 +12,7 @@ mod repository_files;
 mod skills_sh;
 mod subagents_parser;
 mod system_resource;
+mod trellis_bridge;
 mod wise_db;
 mod wise_mascot;
 mod wise_paths;
