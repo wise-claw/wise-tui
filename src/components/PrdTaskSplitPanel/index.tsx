@@ -156,9 +156,10 @@ import {
 } from "../../services/projectPrdScope";
 import { isOmcMonitorEmployeeRecord } from "../../utils/omcMonitorEmployeeSession";
 import { listRepositoryMainOwnerDisplayGaps, repositoryOwnerBasenamesInScopeRelaxed } from "../../utils/projectPrdScopeDisplay";
-import { SplitRuntimeMessageRow } from "./SplitRuntimeMessageRow";
+import { SplitRuntimeMessages } from "./SplitRuntimeMessages";
 import { UnmetConditionsQuestionIcon } from "./UnmetConditionsQuestionIcon";
 import { TaskAnchorPopoverBody } from "./TaskAnchorPopoverBody";
+import { RequirementNameModal } from "./RequirementNameModal";
 import type {
   RequirementEntry,
   RequirementNameModalMode,
@@ -3769,27 +3770,12 @@ export function PrdTaskSplitPanel({
                   {parsing ? <Spin size="small" aria-label="拆分进行中" /> : null}
                 </Space>
               </div>
-              <div className="app-prd-task-panel__split-runtime-list">
-                <div
-                  ref={splitRuntimeListRef}
-                  className="app-claude-messages app-prd-task-panel__split-runtime-messages"
-                >
-                  {splitRuntimeLogs.length === 0 ? (
-                    <div className="app-claude-messages-empty">
-                      <p>暂无处理记录</p>
-                    </div>
-                  ) : (
-                    splitRuntimeLogs.map((log) => (
-                      <SplitRuntimeMessageRow
-                        key={log.id}
-                        log={log}
-                        retryingPhase={retryingPhase}
-                        onRetryStage={(phase) => { void handleRetrySplitStage(phase); }}
-                      />
-                    ))
-                  )}
-                </div>
-              </div>
+              <SplitRuntimeMessages
+                logs={splitRuntimeLogs}
+                listRef={splitRuntimeListRef}
+                retryingPhase={retryingPhase}
+                onRetryStage={(phase) => { void handleRetrySplitStage(phase); }}
+              />
             </div>
             )}
       </Modal>
@@ -3905,34 +3891,15 @@ export function PrdTaskSplitPanel({
           </Typography.Text>
         ) : null}
       </Modal>
-      <Modal
-        title={requirementNameModalMode === "create" ? "新增需求" : "填写需求名称"}
+      <RequirementNameModal
         open={requirementNameModalOpen}
-        onCancel={() => {
-          if (requirementNameSaving) return;
-          setRequirementNameModalOpen(false);
-        }}
-        destroyOnHidden
-        okText={requirementNameModalMode === "create" ? "确认并创建" : "确认并保存"}
-        cancelText="取消"
-        confirmLoading={requirementNameSaving}
-        onOk={() => void handleConfirmRequirementNameModal()}
-      >
-        <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
-          {requirementNameModalMode === "create"
-            ? "请输入新需求名称，确认后将创建一个空白需求并切换到该需求。"
-            : "首次保存需要为当前需求起一个名称，便于区分与检索；之后保存将不再询问。"}
-        </Typography.Paragraph>
-        <Input
-          placeholder="例如：智能待办清单 App PRD"
-          value={requirementNameInput}
-          onChange={(e) => setRequirementNameInput(e.target.value)}
-          maxLength={120}
-          showCount
-          onPressEnter={() => void handleConfirmRequirementNameModal()}
-          autoFocus
-        />
-      </Modal>
+        mode={requirementNameModalMode}
+        saving={requirementNameSaving}
+        value={requirementNameInput}
+        onChange={setRequirementNameInput}
+        onCancel={() => setRequirementNameModalOpen(false)}
+        onConfirm={() => void handleConfirmRequirementNameModal()}
+      />
       <Space direction="vertical" size={4} className="app-prd-task-panel__stack">
         <Space className="app-prd-task-panel__header" align="start">
           <div className="app-prd-task-panel__header-summary-wrap" style={{ minWidth: 0, flex: 1 }}>
@@ -4226,27 +4193,12 @@ export function PrdTaskSplitPanel({
                             aria-label="关闭处理信息面板"
                           />
                         </div>
-                        <div className="app-prd-task-panel__split-runtime-list">
-                          <div
-                            ref={splitRuntimeListRef}
-                            className="app-claude-messages app-prd-task-panel__split-runtime-messages"
-                          >
-                            {splitRuntimeLogs.length === 0 ? (
-                              <div className="app-claude-messages-empty">
-                                <p>暂无处理记录</p>
-                              </div>
-                            ) : (
-                              splitRuntimeLogs.map((log) => (
-                                <SplitRuntimeMessageRow
-                                  key={log.id}
-                                  log={log}
-                                  retryingPhase={retryingPhase}
-                                  onRetryStage={(phase) => { void handleRetrySplitStage(phase); }}
-                                />
-                              ))
-                            )}
-                          </div>
-                        </div>
+                        <SplitRuntimeMessages
+                          logs={splitRuntimeLogs}
+                          listRef={splitRuntimeListRef}
+                          retryingPhase={retryingPhase}
+                          onRetryStage={(phase) => { void handleRetrySplitStage(phase); }}
+                        />
                     </div>
                   ) : null}
                 </div>
