@@ -5,6 +5,7 @@ import {
   createRepositoryFromPathWithType,
   loadRepositories,
   removeRepository,
+  updateRepositoryMainOwnerAgent,
 } from "../services/repository";
 import {
   addRepositoryToProject,
@@ -294,6 +295,11 @@ export function useRepositoryList() {
   }, []);
 
   /** 将仓库从其它项目移入目标项目（目标项目已有该仓库时仅解除其它项目关联） */
+  const handleUpdateRepositoryMainOwnerAgent = useCallback(async (repositoryId: number, mainOwnerAgentName: string | null) => {
+    const updated = await updateRepositoryMainOwnerAgent(repositoryId, mainOwnerAgentName);
+    setRepositories((prev) => prev.map((r) => (r.id === repositoryId ? updated : r)));
+  }, []);
+
   const handleMoveRepositoryToProject = useCallback(
     async (targetProjectId: string, repositoryId: number) => {
       const owningIds = projects.filter((p) => p.repositoryIds.includes(repositoryId)).map((p) => p.id);
@@ -338,6 +344,7 @@ export function useRepositoryList() {
     handleRemoveRepository,
     handleReorderRepositoriesInProject,
     handleMoveRepositoryToProject,
+    handleUpdateRepositoryMainOwnerAgent,
     togglePinProject,
   };
 }

@@ -12,6 +12,11 @@ export interface Repository {
   iconColor?: string | null;
   /** 侧栏圆形角标内展示的角标标题；未设置时角标内显示角色默认文案（前/后/文）。 */
   iconDisplayName?: string | null;
+  /**
+   * 配置为仓库「主 Owner」的子代理名称（须与标签展示名中 `…/员工:名称` 的名称段一致，如 executor）。
+   * 未设置时侧栏点仓库仍优先人类主会话（无 `员工:` 段的标签）。
+   */
+  mainOwnerAgentName?: string | null;
   branch?: string;
   createdAt: string;
   updatedAt: string;

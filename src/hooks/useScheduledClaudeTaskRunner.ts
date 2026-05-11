@@ -3,7 +3,7 @@ import { CronExpressionParser } from "cron-parser";
 import type { ClaudeSession, EmployeeItem, PendingExecutionTask, Repository } from "../types";
 import { buildClaudeOutgoingPrompt } from "../services/claudeComposerPrompt";
 import { patchRepositoryScheduledClaudeTask, readRepositoryScheduledClaudeTasks } from "../services/repositoryScheduledClaudeTasksStore";
-import { resolveBoundMainSessionId } from "../utils/repositoryMainSessionBinding";
+import { resolveBoundMainSessionId, resolveMainOwnerAgentNameForRepositoryPath } from "../utils/repositoryMainSessionBinding";
 import { isOmcMonitorEmployeeRecord } from "../utils/omcMonitorEmployeeSession";
 
 const TICK_MS = 45_000;
@@ -60,7 +60,8 @@ export function useScheduledClaudeTaskRunner({
           }
           if (tasks.length === 0) continue;
 
-          const mainId = resolveBoundMainSessionId(repoPath, bindings, sessions);
+          const mainOwnerPick = resolveMainOwnerAgentNameForRepositoryPath(repos, repoPath);
+          const mainId = resolveBoundMainSessionId(repoPath, bindings, sessions, mainOwnerPick);
           if (!mainId) continue;
 
           const mainSess = sessions.find((s) => s.id === mainId);

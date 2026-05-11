@@ -24,6 +24,23 @@ export function repositoryFolderBasename(repository: Pick<Repository, "path" | "
   return repository.name.trim() || "未命名仓库";
 }
 
+/** 新建 Claude 标签时：主 Owner 为子代理时的 `repositoryName`（与 `…/员工:姓名` 规则一致）。 */
+export function repositoryDisplayNameForMainOwnerAgent(
+  repository: Pick<Repository, "path" | "name">,
+  agentName: string,
+): string {
+  return `${repositoryFolderBasename(repository)}/员工:${agentName.trim()}`;
+}
+
+/** 侧栏「主会话」新建标签用的展示名：配置了主 Owner 智能体则为员工子标签名，否则为目录名。 */
+export function repositorySessionTabDisplayName(
+  repository: Pick<Repository, "path" | "name" | "mainOwnerAgentName">,
+): string {
+  const agent = repository.mainOwnerAgentName?.trim();
+  if (agent) return repositoryDisplayNameForMainOwnerAgent(repository, agent);
+  return repositoryFolderBasename(repository);
+}
+
 /**
  * 角标标题全文（用于提示等）：有角标标题用其文案；无则用角色默认字（前/后/文），
  * 不使用目录名或仓库名。

@@ -13,9 +13,9 @@ import {
 import { stripAssistantStreamNoiseForDingTalkExport } from "../utils/dingTalkOutboundAssistantText";
 import { resolveRepositoryForDingTalkAutomation } from "../utils/resolveRepositoryForDingTalkAutomation";
 import { pickSessionForRepositorySidebarSelect } from "../utils/claudeSessionSelection";
-import { repositoryFolderBasename } from "../utils/repositoryType";
+import { repositorySessionTabDisplayName } from "../utils/repositoryType";
 import { loadSessionOwnerHints } from "../utils/sessionOwnerHints";
-import { resolveBoundMainSessionId } from "../utils/repositoryMainSessionBinding";
+import { resolveBoundMainSessionId, resolveMainOwnerAgentNameForRepositoryPath } from "../utils/repositoryMainSessionBinding";
 
 type CreateSession = (
   repositoryPath: string,
@@ -261,23 +261,26 @@ export function useDingTalkAutomationInbound({
             duration: 0,
           });
           let targetId: string | null = null;
+          const mainOwnerPick = resolveMainOwnerAgentNameForRepositoryPath(repositoriesRef.current, repositoryPath);
           if (isSwitch) {
             targetId = resolveBoundMainSessionId(
               repositoryPath,
               repositoryMainSessionBindingsRef.current,
               sessionsRef.current,
+              mainOwnerPick,
             );
             if (!targetId) {
               const picked = pickSessionForRepositorySidebarSelect(
                 sessionsRef.current,
                 repositoryPath,
                 loadSessionOwnerHints(),
+                { mainOwnerAgentName: mainOwnerPick },
               );
               targetId = picked?.id ?? null;
             }
           }
           if (!targetId) {
-            targetId = await createSessionRef.current(repositoryPath, repositoryFolderBasename(repo));
+            targetId = await createSessionRef.current(repositoryPath, repositorySessionTabDisplayName(repo));
           }
           bindRepositoryMainSessionRef.current(repositoryPath, targetId);
           jumpToSessionWithRepositoryRef.current(targetId);
@@ -329,16 +332,19 @@ export function useDingTalkAutomationInbound({
       }
 
       const repositoryPath = repository.path.trim();
+      const mainOwnerPick = resolveMainOwnerAgentNameForRepositoryPath(repositoriesRef.current, repositoryPath);
       let targetId = resolveBoundMainSessionId(
         repositoryPath,
         repositoryMainSessionBindingsRef.current,
         sessionsRef.current,
+        mainOwnerPick,
       );
       if (!targetId) {
         const picked = pickSessionForRepositorySidebarSelect(
           sessionsRef.current,
           repositoryPath,
           loadSessionOwnerHints(),
+          { mainOwnerAgentName: mainOwnerPick },
         );
         targetId = picked?.id ?? null;
       }
@@ -350,7 +356,7 @@ export function useDingTalkAutomationInbound({
             content: `正在打开「${repository.name}」并创建主会话…`,
             duration: 0,
           });
-          targetId = await createSessionRef.current(repositoryPath, repositoryFolderBasename(repository));
+          targetId = await createSessionRef.current(repositoryPath, repositorySessionTabDisplayName(repository));
           bindRepositoryMainSessionRef.current(repositoryPath, targetId);
         } catch (err) {
           message.destroy(uxMessageKey);

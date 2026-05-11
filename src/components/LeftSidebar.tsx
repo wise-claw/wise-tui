@@ -266,6 +266,8 @@ interface Props {
   onCreateRepositoryTask: (repository: Repository, mode: TaskMode) => void;
   onOpenPromptsProject?: (project: ProjectItem) => void;
   onOpenPromptsRepository?: (project: ProjectItem, repository: Repository) => void;
+  /** 配置仓库「主 Owner」智能体（与 `员工:名称` 一致） */
+  onOpenRepositoryMainOwner?: (repository: Repository) => void;
   sessions: ClaudeSession[];
   activeSessionId: string | null;
   onSelectSession: (sessionId: string) => void;
@@ -379,6 +381,7 @@ function RepositoryRow({
   onOpenInFinder,
   onOpenRepositoryInEditor,
   onOpenPromptsRepository,
+  onOpenRepositoryMainOwner,
   repositoryReorder,
 }: {
   project: ProjectItem;
@@ -390,11 +393,13 @@ function RepositoryRow({
   onOpenInFinder: (repository: Repository) => void;
   onOpenRepositoryInEditor: (repository: Repository) => void;
   onOpenPromptsRepository?: (project: ProjectItem, repository: Repository) => void;
+  onOpenRepositoryMainOwner?: (repository: Repository) => void;
   repositoryReorder?: RepositoryReorderUi;
 }) {
   const moreItems: MenuProps["items"] = [
     { key: "finder", label: "Finder打开" },
     { key: "editor", label: repositoryEditorOpenMenuLabel() },
+    ...(onOpenRepositoryMainOwner ? [{ key: "main-owner", label: "主 Owner 智能体…" }] satisfies MenuProps["items"] : []),
     { key: "prompts", label: "提示词" },
     { key: "detach", label: "移出项目", danger: true },
   ];
@@ -445,6 +450,7 @@ function RepositoryRow({
             onClick: ({ key }) => {
               if (key === "finder") onOpenInFinder(repository);
               if (key === "editor") onOpenRepositoryInEditor(repository);
+              if (key === "main-owner") onOpenRepositoryMainOwner?.(repository);
               if (key === "detach") onDetachFromProject(project.id, repository.id);
               if (key === "prompts") onOpenPromptsRepository?.(project, repository);
             },
@@ -473,6 +479,7 @@ function ProjectRepositoryRows({
   onOpenInFinder,
   openRepositoryInPreferredEditor,
   onOpenPromptsRepository,
+  onOpenRepositoryMainOwner,
   onReorderRepositoriesInProject,
   onMoveRepositoryToProject,
   repoSidebarDragRef,
@@ -487,6 +494,7 @@ function ProjectRepositoryRows({
   onOpenInFinder: (repository: Repository) => void;
   openRepositoryInPreferredEditor: (repository: Repository) => void;
   onOpenPromptsRepository?: (project: ProjectItem, repository: Repository) => void;
+  onOpenRepositoryMainOwner?: (repository: Repository) => void;
   onReorderRepositoriesInProject?: (projectId: string, repositoryIds: number[]) => void | Promise<void>;
   onMoveRepositoryToProject?: (targetProjectId: string, repositoryId: number) => void | Promise<void>;
   repoSidebarDragRef: React.MutableRefObject<{ sourceProjectId: string; repositoryId: number } | null>;
@@ -594,6 +602,7 @@ function ProjectRepositoryRows({
             onOpenInFinder={onOpenInFinder}
             onOpenRepositoryInEditor={openRepositoryInPreferredEditor}
             onOpenPromptsRepository={onOpenPromptsRepository}
+            onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
             repositoryReorder={reorderUi}
           />
         );
@@ -628,6 +637,7 @@ export function LeftSidebar({
   onCreateRepositoryTask,
   onOpenPromptsProject,
   onOpenPromptsRepository,
+  onOpenRepositoryMainOwner,
   sessions,
   activeSessionId: _activeSessionId,
   onSelectSession: _onSelectSession,
@@ -1309,6 +1319,7 @@ export function LeftSidebar({
                       onOpenInFinder={onOpenInFinder}
                       openRepositoryInPreferredEditor={openRepositoryInPreferredEditor}
                       onOpenPromptsRepository={onOpenPromptsRepository}
+                      onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
                       onReorderRepositoriesInProject={onReorderRepositoriesInProject}
                       onMoveRepositoryToProject={handleMoveRepositoryWithExpand}
                       repoSidebarDragRef={repoSidebarDragRef}

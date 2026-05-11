@@ -15,11 +15,12 @@ import {
 } from "../services/mainWindowLayout";
 import { pickSessionForRepositorySidebarSelect } from "../utils/claudeSessionSelection";
 import { loadSessionOwnerHints } from "../utils/sessionOwnerHints";
-import { repositoryFolderBasename } from "../utils/repositoryType";
+import { repositorySessionTabDisplayName } from "../utils/repositoryType";
 import {
   isRepositoryMainSessionTab,
   normalizeRepositoryPathKey as normalizeRepositoryPathForMatch,
   resolveBoundMainSessionId,
+  resolveMainOwnerAgentNameForRepositoryPath,
 } from "../utils/repositoryMainSessionBinding";
 import { usePersistedMainLayoutSiderWidths } from "./usePersistedMainLayoutSiderWidths";
 
@@ -147,7 +148,9 @@ export function useMainLayoutModes({
     try {
       snapshotDualPaneWindowBeforeOpen();
       setDualPaneSecondaryRepositoryId(null);
-      const id = await createSession(activeRepository.path, activeRepository.name, { skipActivate: true });
+      const id = await createSession(activeRepository.path, repositorySessionTabDisplayName(activeRepository), {
+        skipActivate: true,
+      });
       setDualPaneSecondarySessionId(id);
       setDualPaneEnabled(true);
     } catch (error) {
@@ -165,7 +168,7 @@ export function useMainLayoutModes({
       if (!dualPaneEnabled) {
         snapshotDualPaneWindowBeforeOpen();
       }
-      const id = await createSession(repository.path, repositoryFolderBasename(repository), { skipActivate: true });
+      const id = await createSession(repository.path, repositorySessionTabDisplayName(repository), { skipActivate: true });
       setDualPaneSecondarySessionId(id);
       setDualPaneSecondaryRepositoryId(null);
       setDualPaneEnabled(true);
@@ -185,10 +188,18 @@ export function useMainLayoutModes({
       const pathKey = normalizeRepositoryPathForMatch(repo.path);
       const leftId = activeSessionIdLatestRef.current?.trim() ?? "";
 
-      const bound = resolveBoundMainSessionId(repo.path, repositoryMainBindingsLatestRef.current, sessionsNow);
+      const mainOwnerPick = resolveMainOwnerAgentNameForRepositoryPath(repositories, repo.path);
+      const bound = resolveBoundMainSessionId(
+        repo.path,
+        repositoryMainBindingsLatestRef.current,
+        sessionsNow,
+        mainOwnerPick,
+      );
       const boundSession = bound ? sessionsNow.find((s) => s.id === bound) : undefined;
-      const boundOk = Boolean(boundSession && isRepositoryMainSessionTab(boundSession, pathKey));
-      const picked = pickSessionForRepositorySidebarSelect(sessionsNow, repo.path, ownerHints);
+      const boundOk = Boolean(boundSession && isRepositoryMainSessionTab(boundSession, pathKey, mainOwnerPick));
+      const picked = pickSessionForRepositorySidebarSelect(sessionsNow, repo.path, ownerHints, {
+        mainOwnerAgentName: mainOwnerPick,
+      });
 
       let nextSecondary: string;
       if (boundOk && boundSession && boundSession.id !== leftId) {
@@ -197,7 +208,7 @@ export function useMainLayoutModes({
         nextSecondary = picked.id;
       } else {
         try {
-          nextSecondary = await createSession(repo.path, repositoryFolderBasename(repo), { skipActivate: true });
+          nextSecondary = await createSession(repo.path, repositorySessionTabDisplayName(repo), { skipActivate: true });
         } catch (error) {
           console.error("Failed to switch dual-pane secondary repository:", error);
           message.error("切换右侧仓库失败");

@@ -30,6 +30,9 @@ pub(crate) struct StoredRepository {
     /// 角标首字来源；为空则取 `name`（目录名）首字。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     icon_display_name: Option<String>,
+    /// 主 Owner 子代理展示名（与 `repositoryName` 中 `…/员工:姓名` 的姓名一致）；未设置则为人类主会话逻辑。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    main_owner_agent_name: Option<String>,
     branch: Option<String>,
     #[serde(alias = "created_at")]
     created_at: String,
@@ -346,6 +349,7 @@ pub(crate) fn create_repository_from_path(
         repository_type: normalized_repository_type,
         icon_color: normalize_hex_icon_color(icon_color),
         icon_display_name: icon_disp,
+        main_owner_agent_name: None,
         branch: git_commands::get_git_branch(&folder_path),
         created_at: now.to_string(),
         updated_at: now.to_string(),
@@ -375,6 +379,34 @@ pub(crate) fn update_repository_icon_display(
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string());
     repositories[idx].icon_display_name = trimmed;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_millis() as i64;
+    repositories[idx].updated_at = now.to_string();
+    save_repositories(&app, &repositories)?;
+    let mut out = repositories[idx].clone();
+    out.branch = git_commands::get_git_branch(&out.path);
+    Ok(out)
+}
+
+#[tauri::command]
+pub(crate) fn update_repository_main_owner_agent(
+    app: tauri::AppHandle,
+    id: i64,
+    main_owner_agent_name: Option<String>,
+) -> Result<StoredRepository, String> {
+    let mut repositories = load_repositories(&app);
+    let idx = repositories
+        .iter()
+        .position(|p| p.id == id)
+        .ok_or_else(|| "仓库未找到".to_string())?;
+    let trimmed = main_owner_agent_name
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+    repositories[idx].main_owner_agent_name = trimmed;
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|e| e.to_string())?

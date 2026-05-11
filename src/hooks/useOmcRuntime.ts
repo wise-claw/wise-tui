@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { message } from "antd";
-import type { ClaudeSession, EmployeeItem } from "../types";
+import type { ClaudeSession, EmployeeItem, Repository } from "../types";
 import {
   WORKFLOW_UI_EVENT_BACKGROUND_INVOCATION_BUNDLE_CHANGED,
   WORKFLOW_UI_EVENT_INVOCATION_STREAM,
@@ -41,12 +41,14 @@ import {
   isRepositoryMainSessionTab,
   normalizeRepositoryPathKey as normalizeRepositoryPathForMatch,
   resolveBoundMainSessionId,
+  resolveMainOwnerAgentNameForRepositoryPath,
 } from "../utils/repositoryMainSessionBinding";
 
 interface UseOmcRuntimeOptions {
   employees: EmployeeItem[];
   jumpToSessionWithRepository: (sessionId: string) => void;
   repositoryMainSessionBindings: Record<string, string>;
+  repositories: Repository[];
   sessions: ClaudeSession[];
 }
 
@@ -91,6 +93,7 @@ export function useOmcRuntime({
   employees,
   jumpToSessionWithRepository,
   repositoryMainSessionBindings,
+  repositories,
   sessions,
 }: UseOmcRuntimeOptions) {
   const [omcBatchRuntime, setOmcBatchRuntime] = useState<WorkflowOmcBatchRuntimeDetail | null>(null);
@@ -107,10 +110,12 @@ export function useOmcRuntime({
   const employeesRef = useRef(employees);
   const jumpToSessionWithRepositoryRef = useRef(jumpToSessionWithRepository);
   const repositoryMainSessionBindingsRef = useRef(repositoryMainSessionBindings);
+  const repositoriesRef = useRef(repositories);
   const sessionsRef = useRef(sessions);
   employeesRef.current = employees;
   jumpToSessionWithRepositoryRef.current = jumpToSessionWithRepository;
   repositoryMainSessionBindingsRef.current = repositoryMainSessionBindings;
+  repositoriesRef.current = repositories;
   sessionsRef.current = sessions;
 
   const flushDirectBatchInvocationUiNowRef = useRef<() => void>(() => {});
@@ -534,19 +539,23 @@ export function useOmcRuntime({
     if (!rp || !ik) return;
 
     const sessionsNow = sessionsRef.current;
+    const mainOwnerPick = resolveMainOwnerAgentNameForRepositoryPath(repositoriesRef.current, rp);
     let targetId: string | null = resolveBoundMainSessionId(
       rp,
       repositoryMainSessionBindingsRef.current,
       sessionsNow,
+      mainOwnerPick,
     );
     if (!targetId) {
-      const picked = pickSessionForRepositorySidebarSelect(sessionsNow, rp, loadSessionOwnerHints());
+      const picked = pickSessionForRepositorySidebarSelect(sessionsNow, rp, loadSessionOwnerHints(), {
+        mainOwnerAgentName: mainOwnerPick,
+      });
       targetId = picked?.id ?? null;
     }
     const pathKey = normalizeRepositoryPathForMatch(rp);
     if (!targetId && anchorSid) {
       const anchorHit = sessionsNow.find((item) => item.id === anchorSid || item.claudeSessionId?.trim() === anchorSid);
-      if (anchorHit && isRepositoryMainSessionTab(anchorHit, pathKey)) {
+      if (anchorHit && isRepositoryMainSessionTab(anchorHit, pathKey, mainOwnerPick)) {
         targetId = anchorHit.id;
       }
     }

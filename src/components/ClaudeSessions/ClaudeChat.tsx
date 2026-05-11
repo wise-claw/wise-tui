@@ -103,7 +103,10 @@ import {
   messageTextLooksLikeOmcDispatch,
   parseOmcSlashCommandFromUserText,
 } from "../../utils/omcUserMessageText";
-import { resolveBoundMainSessionId } from "../../utils/repositoryMainSessionBinding";
+import {
+  resolveBoundMainSessionId,
+  resolveMainOwnerAgentNameForRepositoryPath,
+} from "../../utils/repositoryMainSessionBinding";
 import { getAppSetting, setAppSetting } from "../../services/appSettingsStore";
 import {
   SESSION_NOTIFICATION_UI_EVENT_OPEN_PANEL,
@@ -125,6 +128,7 @@ import { isOmcDirectBatchInvocationRunning } from "../../utils/omcDirectBatchInv
 import type {
   EmployeeItem,
   PendingExecutionTask,
+  Repository,
   TaskItem,
   TaskFlowStatus,
   WorkflowGraph,
@@ -346,6 +350,8 @@ interface Props {
   } | null;
   /** 与侧栏仓库主会话绑定一致，用于 OMC 批量等挂到固定主标签 */
   repositoryMainBindings?: Record<string, string>;
+  /** 解析各仓库「主 Owner 智能体」配置（与 `resolveMainOwnerAgentNameForRepositoryPath` 一致） */
+  repositories?: Repository[];
   /** 将系统消息写入指定 tab 会话（如主会话上的批量 OMC 系统提示） */
   onAppendSystemMessage?: (sessionId: string, text: string) => void;
   /** 仅追加用户气泡（不 invoke），用于批量 OMC 展示与子进程一致的派发正文 */
@@ -500,6 +506,7 @@ export function ClaudeChat({
   taskListConcurrentCapacity,
   resolveTaskListOmcInvokeConcurrency,
   repositoryMainBindings = {},
+  repositories = [],
   onAppendSystemMessage,
   onAppendUserMessage,
   onNotifyOmcEmployeeDirectBatchTaskDone,
@@ -1387,11 +1394,19 @@ export function ClaudeChat({
 
   /** OMC 批量与后台 invocation 流统一挂到「仓库主标签」，避免从员工子标签发起时执行详情无法在中栏主会话打开。 */
   const omcBatchAnchorSessionId = useMemo(() => {
-    const bound = resolveBoundMainSessionId(session.repositoryPath, repositoryMainBindings, sessions);
+    const mainOwnerAgentName = resolveMainOwnerAgentNameForRepositoryPath(repositories, session.repositoryPath);
+    const bound = resolveBoundMainSessionId(
+      session.repositoryPath,
+      repositoryMainBindings,
+      sessions,
+      mainOwnerAgentName,
+    );
     if (bound) return bound;
-    const main = pickSessionForRepositorySidebarSelect(sessions, session.repositoryPath, sessionOwnerHints);
+    const main = pickSessionForRepositorySidebarSelect(sessions, session.repositoryPath, sessionOwnerHints, {
+      mainOwnerAgentName,
+    });
     return main?.id ?? session.id;
-  }, [sessions, session.repositoryPath, session.id, sessionOwnerHints, repositoryMainBindings]);
+  }, [sessions, session.repositoryPath, session.id, sessionOwnerHints, repositoryMainBindings, repositories]);
 
   useEffect(() => {
     function onOmcBatchRuntime(ev: Event) {

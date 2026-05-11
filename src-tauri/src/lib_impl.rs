@@ -84,6 +84,7 @@ pub fn run() {
             app_state_commands::list_repositories,
             app_state_commands::create_repository_from_path,
             app_state_commands::update_repository_icon_display,
+            app_state_commands::update_repository_main_owner_agent,
             app_state_commands::remove_repository,
             app_state_commands::remove_repository_global,
             app_state_commands::list_projects,

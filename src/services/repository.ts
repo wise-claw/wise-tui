@@ -58,6 +58,17 @@ export async function updateRepositoryIconDisplay(
   });
 }
 
+export async function updateRepositoryMainOwnerAgent(
+  id: number,
+  mainOwnerAgentName: string | null,
+): Promise<Repository> {
+  const trimmed = mainOwnerAgentName?.trim();
+  return invoke<Repository>("update_repository_main_owner_agent", {
+    id,
+    mainOwnerAgentName: trimmed && trimmed.length > 0 ? trimmed : null,
+  });
+}
+
 /**
  * Load all saved repositories from persistent storage.
  */

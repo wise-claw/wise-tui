@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { pickSessionForRepositorySidebarSelect } from "../utils/claudeSessionSelection";
+import { resolveMainOwnerAgentNameForRepositoryPath } from "../utils/repositoryMainSessionBinding";
 import { OMC_MONITOR_EMPLOYEE_NAME } from "../constants/omcMonitor";
 import {
   findLatestUserOmcDispatchPayload,
@@ -21,6 +22,7 @@ import { listRunningClaudeSessions } from "../services/claude";
 import { isClaudeSessionRunningInHostOrUi } from "../services/claudeSessionState";
 import type {
   ClaudeSession,
+  Repository,
   EmployeeItem,
   EmployeeMonitorItem,
   MonitorStats,
@@ -34,6 +36,7 @@ import type {
 
 interface UseMonitorOverviewInput {
   employees: EmployeeItem[];
+  repositories: Repository[];
   workflowTemplates: WorkflowTemplateItem[];
   workflowTasks: WorkflowTaskItem[];
   workflowGraphsByWorkflowId: Record<string, WorkflowGraph>;
@@ -279,6 +282,7 @@ function resolveOmcWorkerBoundSessionId(
   allSessions: ClaudeSession[],
   sessionsById: Map<string, ClaudeSession>,
   repositoryPathFallback: string | undefined,
+  repositories: Repository[],
   employees: EmployeeItem[],
   directBatchTaskIdBySessionId: Map<string, string>,
   registryRunningClaudeSessionIds: ReadonlySet<string>,
@@ -307,7 +311,10 @@ function resolveOmcWorkerBoundSessionId(
   }
   const repo = repositoryPathFallback?.trim();
   if (!sid && repo) {
-    const mainPick = pickSessionForRepositorySidebarSelect(allSessions, repo, loadSessionOwnerHints());
+    const mainOwnerPick = resolveMainOwnerAgentNameForRepositoryPath(repositories, repo);
+    const mainPick = pickSessionForRepositorySidebarSelect(allSessions, repo, loadSessionOwnerHints(), {
+      mainOwnerAgentName: mainOwnerPick,
+    });
     sid = mainPick?.id;
   }
   if (!sid) {
@@ -352,6 +359,7 @@ function extractOmcProgressText(
 
 export function useMonitorOverview({
   employees,
+  repositories,
   workflowTemplates,
   workflowTasks,
   workflowGraphsByWorkflowId,
@@ -577,6 +585,7 @@ export function useMonitorOverview({
           sessions,
           sessionsById,
           undefined,
+          repositories,
           employees,
           directBatchTaskIdBySessionId,
           registryRunningClaudeSessionIds,
@@ -634,6 +643,7 @@ export function useMonitorOverview({
         sessions,
         sessionsById,
         repoFallbackMerged,
+        repositories,
         employees,
         directBatchTaskIdBySessionId,
         registryRunningClaudeSessionIds,
@@ -837,6 +847,7 @@ export function useMonitorOverview({
     };
   }, [
     employees,
+    repositories,
     sessions,
     taskPendingEmployeesByTaskId,
     workflowRuntimeSnapshotsByTaskId,

@@ -1074,6 +1074,7 @@ export function ClaudeSessions({
                 taskListConcurrentCapacity={taskListConcurrentCapacity}
                 resolveTaskListOmcInvokeConcurrency={resolveTaskListOmcInvokeConcurrency}
                 repositoryMainBindings={repositoryMainBindings}
+                repositories={repositories ?? []}
                 onAppendSystemMessage={onAppendSystemMessage}
                 onAppendUserMessage={onAppendUserMessage}
                 onNotifyOmcEmployeeDirectBatchTaskDone={onNotifyOmcEmployeeDirectBatchTaskDone}
@@ -1128,6 +1129,7 @@ export function ClaudeSessions({
                 taskListConcurrentCapacity={taskListConcurrentCapacity}
                 resolveTaskListOmcInvokeConcurrency={resolveTaskListOmcInvokeConcurrency}
                 repositoryMainBindings={repositoryMainBindings}
+                repositories={repositories ?? []}
                 onAppendSystemMessage={onAppendSystemMessage}
                 onAppendUserMessage={onAppendUserMessage}
                 onNotifyOmcEmployeeDirectBatchTaskDone={onNotifyOmcEmployeeDirectBatchTaskDone}
@@ -1211,6 +1213,7 @@ export function ClaudeSessions({
             taskListConcurrentCapacity={taskListConcurrentCapacity}
             resolveTaskListOmcInvokeConcurrency={resolveTaskListOmcInvokeConcurrency}
             repositoryMainBindings={repositoryMainBindings}
+            repositories={repositories ?? []}
             onAppendSystemMessage={onAppendSystemMessage}
             onAppendUserMessage={onAppendUserMessage}
             onNotifyOmcEmployeeDirectBatchTaskDone={onNotifyOmcEmployeeDirectBatchTaskDone}

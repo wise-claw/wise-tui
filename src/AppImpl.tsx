@@ -15,11 +15,16 @@ import type {
   WorkflowTaskItem,
   WorkflowTemplateItem,
 } from "./types";
-import { repositoryFolderBasename, repositoryTypeChineseLabel } from "./utils/repositoryType";
+import {
+  repositoryFolderBasename,
+  repositorySessionTabDisplayName,
+  repositoryTypeChineseLabel,
+} from "./utils/repositoryType";
 import { useRepositoryList } from "./hooks/useRepositoryList";
 import { useClaudeSessions, type ClaudeTurnCompletePayload } from "./hooks/useClaudeSessions";
 import { openInFinder } from "./services/repository";
 import { AppWorkspaceLayout } from "./components/AppWorkspaceLayout";
+import { RepositoryMainOwnerModal } from "./components/RepositoryMainOwnerModal";
 import type { PromptsOpenContext } from "./components/PromptsPanel";
 import { reloadAppWindow } from "./services/window";
 import { wiseMascotShow } from "./services/wiseMascot";
@@ -72,6 +77,7 @@ import {
   parseRepositoryMainSessionBindings,
   REPOSITORY_MAIN_SESSION_BINDING_STORAGE_KEY,
   resolveBoundMainSessionId,
+  resolveMainOwnerAgentNameForRepositoryPath,
 } from "./utils/repositoryMainSessionBinding";
 import { loadSessionOwnerHints } from "./utils/sessionOwnerHints";
 import type { WorkflowGraphRuntimeState } from "./services/workflowGraphRuntime";
@@ -185,11 +191,14 @@ export default function App() {
     handleDetachRepositoryFromProject,
     handleReorderRepositoriesInProject,
     handleMoveRepositoryToProject,
+    handleUpdateRepositoryMainOwnerAgent,
     pinnedProjectIds,
     togglePinProject,
   } = useRepositoryList();
 
   const [repositoryMainSessionBindings, setRepositoryMainSessionBindings] = useState<Record<string, string>>({});
+  const [repositoryMainOwnerModalRepo, setRepositoryMainOwnerModalRepo] = useState<Repository | null>(null);
+  const [repositoryMainOwnerAgentOptions, setRepositoryMainOwnerAgentOptions] = useState<string[]>(["executor"]);
 
   useEffect(() => {
     let cancelled = false;
@@ -217,6 +226,44 @@ export default function App() {
       return next;
     });
   }, []);
+
+  const openRepositoryMainOwnerModal = useCallback(async (repository: Repository) => {
+    setRepositoryMainOwnerModalRepo(repository);
+    try {
+      const subagents = await listClaudeSubagents(repository.path);
+      const sorted = [...subagents].sort((a, b) => {
+        if (a.isCollaborationMode !== b.isCollaborationMode) {
+          return a.isCollaborationMode ? -1 : 1;
+        }
+        return a.name.localeCompare(b.name);
+      });
+      setRepositoryMainOwnerAgentOptions(Array.from(new Set(["executor", ...sorted.map((item) => item.name)])));
+    } catch (error) {
+      console.error("Failed to load claude subagents:", error);
+      setRepositoryMainOwnerAgentOptions(["executor"]);
+    }
+  }, []);
+
+  const handlePersistRepositoryMainOwnerAgent = useCallback(
+    async (repository: Repository, mainOwnerAgentName: string | null) => {
+      try {
+        await handleUpdateRepositoryMainOwnerAgent(repository.id, mainOwnerAgentName);
+        const key = normalizeRepositoryPathForMatch(repository.path);
+        setRepositoryMainSessionBindings((prev) => {
+          if (!(key in prev)) return prev;
+          const next = { ...prev };
+          delete next[key];
+          void setAppSetting(REPOSITORY_MAIN_SESSION_BINDING_STORAGE_KEY, JSON.stringify(next));
+          return next;
+        });
+        message.success("主 Owner 智能体已更新");
+      } catch (err) {
+        message.error(err instanceof Error ? err.message : String(err));
+        throw err;
+      }
+    },
+    [handleUpdateRepositoryMainOwnerAgent],
+  );
 
   const migrateRepositoryMainSessionBindingTabIds = useCallback((fromTabId: string, toClaudeSessionId: string) => {
     setRepositoryMainSessionBindings((prev) => {
@@ -491,6 +538,7 @@ export default function App() {
     employees,
     jumpToSessionWithRepository,
     repositoryMainSessionBindings,
+    repositories,
     sessions,
   });
   moveOmcRuntimeSessionIdRef.current = moveOmcRuntimeSessionId;
@@ -513,6 +561,7 @@ export default function App() {
     executeSession,
     flushDingTalkAutomationReplyForTurn,
     repositoryMainSessionBindings,
+    repositories,
     sessions,
     setEmployeeTaskCounts,
     setEmployees,
@@ -655,6 +704,7 @@ export default function App() {
 
   const { employeeMonitorItems, teamMonitorItems, stats: monitorStats } = useMonitorOverview({
     employees,
+    repositories,
     workflowTemplates,
     workflowTasks,
     workflowTaskEventsByTaskId,
@@ -939,7 +989,13 @@ export default function App() {
       } else {
         setActiveRepositoryId(repositoryId);
       }
-      const boundId = resolveBoundMainSessionId(repository.path, repositoryMainSessionBindings, sessions);
+      const mainOwnerPick = resolveMainOwnerAgentNameForRepositoryPath(repositories, repository.path);
+      const boundId = resolveBoundMainSessionId(
+        repository.path,
+        repositoryMainSessionBindings,
+        sessions,
+        mainOwnerPick,
+      );
       if (boundId) {
         switchSession(boundId);
         return;
@@ -948,6 +1004,7 @@ export default function App() {
         sessions,
         repository.path,
         loadSessionOwnerHints(),
+        { mainOwnerAgentName: mainOwnerPick },
       );
       if (latestForRepo) {
         bindRepositoryMainSession(repository.path, latestForRepo.id);
@@ -955,7 +1012,7 @@ export default function App() {
         return;
       }
       void (async () => {
-        const id = await createSession(repository.path, repositoryFolderBasename(repository));
+        const id = await createSession(repository.path, repositorySessionTabDisplayName(repository));
         bindRepositoryMainSession(repository.path, id);
       })();
     },
@@ -1047,7 +1104,7 @@ export default function App() {
     }
     if (mode === "chat") {
       setTaskSplitMode(false);
-      const id = await createSession(repository.path, repositoryFolderBasename(repository));
+      const id = await createSession(repository.path, repositorySessionTabDisplayName(repository));
       bindRepositoryMainSession(repository.path, id);
       return;
     }
@@ -1057,7 +1114,7 @@ export default function App() {
       setTaskSplitMode(true);
       return;
     }
-    const sessionId = await createSession(repository.path, repositoryFolderBasename(repository));
+    const sessionId = await createSession(repository.path, repositorySessionTabDisplayName(repository));
     executeSession(
       sessionId,
       applyTemplate(repositorySplitTemplate || DEFAULT_REPOSITORY_SPLIT_TEMPLATE, {
@@ -1246,6 +1303,7 @@ export default function App() {
   };
 
   return (
+    <>
     <AppWorkspaceLayout
       dark={dark}
       collapsed={collapsed}
@@ -1294,6 +1352,7 @@ export default function App() {
         onCreateRepositoryTask: handleCreateRepositoryTask,
         onOpenPromptsProject: handleOpenPromptsForProject,
         onOpenPromptsRepository: handleOpenPromptsForRepository,
+        onOpenRepositoryMainOwner: openRepositoryMainOwnerModal,
         sessions,
         activeSessionId,
         onSelectSession: jumpToSessionLeavingMcpHub,
@@ -1613,5 +1672,13 @@ export default function App() {
           : null
       }
     />
+    <RepositoryMainOwnerModal
+      open={repositoryMainOwnerModalRepo != null}
+      repository={repositoryMainOwnerModalRepo}
+      agentNameOptions={repositoryMainOwnerAgentOptions}
+      onClose={() => setRepositoryMainOwnerModalRepo(null)}
+      onSave={handlePersistRepositoryMainOwnerAgent}
+    />
+    </>
   );
 }

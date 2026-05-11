@@ -14,6 +14,7 @@ import type {
   WorkflowTaskEventItem,
   WorkflowTaskItem,
   WorkflowTemplateItem,
+  Repository,
 } from "../types";
 import type { ClaudeTurnCompletePayload } from "./useClaudeSessions";
 import {
@@ -69,6 +70,7 @@ import {
   isRepositoryMainSessionTab,
   normalizeRepositoryPathKey as normalizeRepositoryPathForMatch,
   resolveBoundMainSessionId,
+  resolveMainOwnerAgentNameForRepositoryPath,
 } from "../utils/repositoryMainSessionBinding";
 import { extractBoundEmployeeNameFromDisplay } from "../utils/sessionOwnerHints";
 import type { WorkflowVerdictMode } from "../constants/workflowVerdictMode";
@@ -106,6 +108,7 @@ interface UseWorkflowTeamAutomationOptions {
   executeSession: ExecuteSession;
   flushDingTalkAutomationReplyForTurn: (input: FlushDingTalkAutomationReplyForTurnInput) => boolean;
   repositoryMainSessionBindings: Record<string, string>;
+  repositories: Repository[];
   sessions: ClaudeSession[];
   setEmployeeTaskCounts: Dispatch<SetStateAction<EmployeeTaskCountItem[]>>;
   setEmployees: Dispatch<SetStateAction<EmployeeItem[]>>;
@@ -161,6 +164,7 @@ export function useWorkflowTeamAutomation({
   executeSession,
   flushDingTalkAutomationReplyForTurn,
   repositoryMainSessionBindings,
+  repositories,
   sessions,
   setEmployeeTaskCounts,
   setEmployees,
@@ -186,6 +190,7 @@ export function useWorkflowTeamAutomation({
   const activeSessionIdRef = useRef(activeSessionId);
   const employeesRef = useRef(employees);
   const repositoryMainSessionBindingsRef = useRef(repositoryMainSessionBindings);
+  const repositoriesRef = useRef(repositories);
   const sessionsRef = useRef(sessions);
   const taskPendingEmployeesByTaskIdRef = useRef(taskPendingEmployeesByTaskId);
   const workflowRuntimeStateByTaskIdRef = useRef(workflowRuntimeStateByTaskId);
@@ -195,6 +200,7 @@ export function useWorkflowTeamAutomation({
   activeSessionIdRef.current = activeSessionId;
   employeesRef.current = employees;
   repositoryMainSessionBindingsRef.current = repositoryMainSessionBindings;
+  repositoriesRef.current = repositories;
   sessionsRef.current = sessions;
   taskPendingEmployeesByTaskIdRef.current = taskPendingEmployeesByTaskId;
   workflowRuntimeStateByTaskIdRef.current = workflowRuntimeStateByTaskId;
@@ -466,10 +472,21 @@ export function useWorkflowTeamAutomation({
         if (!targetSess) return;
         if (!extractBoundEmployeeNameFromDisplay(targetSess.repositoryName ?? "")) return;
         const pathKey = normalizeRepositoryPathForMatch(targetSess.repositoryPath);
+        const mainOwner = resolveMainOwnerAgentNameForRepositoryPath(
+          repositoriesRef.current,
+          targetSess.repositoryPath,
+        );
         let viewer: string | null =
-          resolveBoundMainSessionId(targetSess.repositoryPath, repositoryMainSessionBindingsRef.current, sessionsRef.current) ?? null;
+          resolveBoundMainSessionId(
+            targetSess.repositoryPath,
+            repositoryMainSessionBindingsRef.current,
+            sessionsRef.current,
+            mainOwner,
+          ) ?? null;
         if (!viewer || viewer === targetTid) {
-          const fb = sessionsRef.current.find((s) => isRepositoryMainSessionTab(s, pathKey) && s.id !== targetTid);
+          const fb = sessionsRef.current.find(
+            (s) => isRepositoryMainSessionTab(s, pathKey, mainOwner) && s.id !== targetTid,
+          );
           viewer = fb?.id ?? null;
         }
         if (!viewer || viewer === targetTid) {
