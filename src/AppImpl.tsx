@@ -1,7 +1,6 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { App as AntdApp, ConfigProvider, Drawer, Layout, message, Spin, theme } from "antd";
-import zhCN from "antd/locale/zh_CN";
+import { message } from "antd";
 import type {
   ClaudeSession,
   EmployeeItem,
@@ -20,27 +19,18 @@ import { repositoryFolderBasename, repositoryTypeChineseLabel } from "./utils/re
 import { useRepositoryList } from "./hooks/useRepositoryList";
 import { useClaudeSessions, type ClaudeTurnCompletePayload } from "./hooks/useClaudeSessions";
 import { openInFinder } from "./services/repository";
-import { LeftSidebar } from "./components/LeftSidebar";
-import { ClaudeSessions } from "./components/ClaudeSessions";
-import { McpHub } from "./components/McpHub";
-import { SkillsHub } from "./components/SkillsHub";
-import { CommandPalette } from "./components/CommandPalette";
-import { RepositoryFileEditorPanel } from "./components/RepositoryFileEditorPanel";
-import { RepositoryFilePreviewModal } from "./components/RepositoryFilePreviewModal";
+import { AppWorkspaceLayout } from "./components/AppWorkspaceLayout";
 import type { PromptsOpenContext } from "./components/PromptsPanel";
 import { reloadAppWindow } from "./services/window";
 import { wiseMascotShow } from "./services/wiseMascot";
 import { getTaskTemplate, setTaskTemplate } from "./services/projectState";
 import { ensureCrepeToolbarTitleHintsInstalled } from "./utils/crepeToolbarTitles";
-import { MainLayoutResizeHandle } from "./components/MainLayoutResizeHandle";
 import {
   WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL,
 } from "./constants/workflowUiEvents";
 import { listEmployeeTaskCounts, listEmployees, createEmployee, updateEmployee, deleteEmployee, moveEmployeeDisplayOrder } from "./services/employees";
 import { deleteWorkflowTemplate, listWorkflowTemplates, saveWorkflowTemplate } from "./services/workflowTemplates";
 import { getWorkflowGraph, saveWorkflowGraph, validateWorkflowGraph } from "./services/workflowGraphs";
-import { EmployeeConfigModal } from "./components/EmployeeConfigModal";
-import { ProgressMonitorDrawer } from "./components/ProgressMonitorDrawer";
 import {
   endWorkflowTask,
   listTaskEvents,
@@ -107,15 +97,6 @@ import { useMainLayoutModes } from "./hooks/useMainLayoutModes";
 import { useDingTalkAutomationInbound } from "./hooks/useDingTalkAutomationInbound";
 import { useOmcRuntime } from "./hooks/useOmcRuntime";
 import { useWorkflowTeamAutomation } from "./hooks/useWorkflowTeamAutomation";
-
-const RightPanel = lazy(() => import("./components/RightPanel").then((module) => ({ default: module.RightPanel })));
-const PrdTaskSplitPanel = lazy(() =>
-  import("./components/PrdTaskSplitPanel").then((module) => ({ default: module.PrdTaskSplitPanel })),
-);
-const PromptsPanel = lazy(() => import("./components/PromptsPanel").then((module) => ({ default: module.PromptsPanel })));
-const WorkflowConfigModal = lazy(() =>
-  import("./components/WorkflowConfigModal").then((module) => ({ default: module.WorkflowConfigModal })),
-);
 
 // ── App ──
 
@@ -846,8 +827,6 @@ export default function App() {
     })();
   }, [activeSessionId]);
 
-  const algorithm = dark ? theme.darkAlgorithm : theme.defaultAlgorithm;
-
   const activeRepository = repositories.find((p) => p.id === activeRepositoryId);
   const {
     closeFileEditorPanel,
@@ -1264,394 +1243,326 @@ export default function App() {
   };
 
   return (
-    <ConfigProvider
-      locale={zhCN}
-      theme={{
-        algorithm,
+    <AppWorkspaceLayout
+      dark={dark}
+      collapsed={collapsed}
+      promptsMode={promptsMode}
+      taskSplitMode={taskSplitMode}
+      mcpHubMode={mcpHubMode}
+      skillsHubMode={skillsHubMode}
+      compactLayoutMode={compactLayoutMode}
+      effectiveRightCollapsed={effectiveRightCollapsed}
+      mainLayoutContentRef={mainLayoutContentRef}
+      mainLayoutLeftWidthPx={mainLayoutLeftWidthPx}
+      mainLayoutRightWidthPx={mainLayoutRightWidthPx}
+      onToggleCompactLayoutMode={handleToggleCompactLayoutMode}
+      onLeftWidthChange={setMainLayoutLeftWidthPx}
+      onRightWidthChange={setMainLayoutRightWidthPx}
+      onCloseTaskSplit={() => setTaskSplitMode(false)}
+      leftSidebarProps={{
+        projects,
+        activeProjectId,
+        repositories,
+        activeRepositoryId,
+        mcpNavActive: mcpHubMode,
+        onOpenMcpHub: () => {
+          setPromptsMode(false);
+          setSkillsHubMode(false);
+          setMcpHubMode(true);
+        },
+        skillsNavActive: skillsHubMode,
+        onOpenSkillsHub: () => {
+          setPromptsMode(false);
+          setMcpHubMode(false);
+          setSkillsHubMode(true);
+        },
+        onProjectSelect: handleProjectSelectLeavingMcpHub,
+        onCreateProject: handleCreateProject,
+        onUpdateProject: handleUpdateProject,
+        onDeleteProject: handleDeleteProject,
+        pinnedProjectIds,
+        onTogglePinProject: togglePinProject,
+        onAddRepositoryToProject: handleAddRepositoryToProject,
+        onDetachRepositoryFromProject: handleDetachRepositoryFromProject,
+        onReorderRepositoriesInProject: handleReorderRepositoriesInProject,
+        onMoveRepositoryToProject: handleMoveRepositoryToProject,
+        onRepositorySelect: handleSidebarRepositorySelectLeavingMcpHub,
+        onOpenInFinder: handleOpenInFinder,
+        onCreateProjectTask: handleCreateProjectTask,
+        onCreateRepositoryTask: handleCreateRepositoryTask,
+        onOpenPromptsProject: handleOpenPromptsForProject,
+        onOpenPromptsRepository: handleOpenPromptsForRepository,
+        sessions,
+        activeSessionId,
+        onSelectSession: jumpToSessionLeavingMcpHub,
+        employees,
+        employeeTaskCounts,
+        onMoveEmployee: async (employeeId, direction) => {
+          await moveEmployeeDisplayOrder({ employeeId, direction });
+          await refreshEmployeeData();
+        },
+        onCancelSessionFromMonitor: cancelSession,
+        onOpenTaskDetailFromMonitor: (taskId) => {
+          setMonitorDrawerTarget({ type: "task", taskId });
+        },
+        onReloadFullDiskTranscript: reloadFullDiskTranscript,
+        activeRepositoryPath: activeRepository?.path,
+        activeRepositoryName: activeRepository?.name,
+        onOpenActiveRepositoryFile: openRepositoryFile,
       }}
-    >
-      <AntdApp>
-        <Layout className="app-main-layout" style={{ minWidth: 0, flex: 1, minHeight: 0, height: "100%" }}>
-          <LeftSidebar
-            dark={dark}
-            collapsed={collapsed}
-            siderWidth={mainLayoutLeftWidthPx}
-            compactLayoutMode={compactLayoutMode}
-            onToggleCompactLayoutMode={handleToggleCompactLayoutMode}
-            projects={projects}
-            activeProjectId={activeProjectId}
-            repositories={repositories}
-            activeRepositoryId={activeRepositoryId}
-            mcpNavActive={mcpHubMode}
-            onOpenMcpHub={() => {
-              setPromptsMode(false);
-              setSkillsHubMode(false);
-              setMcpHubMode(true);
-            }}
-            skillsNavActive={skillsHubMode}
-            onOpenSkillsHub={() => {
-              setPromptsMode(false);
-              setMcpHubMode(false);
-              setSkillsHubMode(true);
-            }}
-            onProjectSelect={handleProjectSelectLeavingMcpHub}
-            onCreateProject={handleCreateProject}
-            onUpdateProject={handleUpdateProject}
-            onDeleteProject={handleDeleteProject}
-            pinnedProjectIds={pinnedProjectIds}
-            onTogglePinProject={togglePinProject}
-            onAddRepositoryToProject={handleAddRepositoryToProject}
-            onDetachRepositoryFromProject={handleDetachRepositoryFromProject}
-            onReorderRepositoriesInProject={handleReorderRepositoriesInProject}
-            onMoveRepositoryToProject={handleMoveRepositoryToProject}
-            onRepositorySelect={handleSidebarRepositorySelectLeavingMcpHub}
-            onOpenInFinder={handleOpenInFinder}
-            onCreateProjectTask={handleCreateProjectTask}
-            onCreateRepositoryTask={handleCreateRepositoryTask}
-            onOpenPromptsProject={handleOpenPromptsForProject}
-            onOpenPromptsRepository={handleOpenPromptsForRepository}
-            sessions={sessions}
-            activeSessionId={activeSessionId}
-            onSelectSession={jumpToSessionLeavingMcpHub}
-            employees={employees}
-            employeeTaskCounts={employeeTaskCounts}
-            onMoveEmployee={async (employeeId, direction) => {
-              await moveEmployeeDisplayOrder({ employeeId, direction });
-              await refreshEmployeeData();
-            }}
-            onCancelSessionFromMonitor={cancelSession}
-            onOpenTaskDetailFromMonitor={(taskId) => {
-              setMonitorDrawerTarget({ type: "task", taskId });
-            }}
-            onReloadFullDiskTranscript={reloadFullDiskTranscript}
-            activeRepositoryPath={activeRepository?.path}
-            activeRepositoryName={activeRepository?.name}
-            onOpenActiveRepositoryFile={openRepositoryFile}
-          />
-
-          {!promptsMode && !collapsed ? (
-            <MainLayoutResizeHandle
-              variant="left"
-              startWidthPx={mainLayoutLeftWidthPx}
-              onWidthChange={setMainLayoutLeftWidthPx}
-            />
-          ) : null}
-
-          {promptsMode ? (
-            <div className="app-full-width-main">
-              <Suspense
-                fallback={
-                  <div className="app-file-editor-loading">
-                    <Spin size="small" />
-                  </div>
-                }
-              >
-                <PromptsPanel
-                  onClose={() => {
-                    setPromptsOpenContext(null);
-                    setPromptsMode(false);
-                  }}
-                  projects={projects}
-                  repositories={repositories}
-                  activeProjectId={activeProjectId}
-                  activeRepositoryId={activeRepositoryId}
-                  openContext={promptsOpenContext}
-                  repositoryListLoading={repositoryListLoading}
-                />
-              </Suspense>
-            </div>
-          ) : (
-            <>
-              <div className="app-main-chat-with-right-pane">
-              <Layout.Content ref={mainLayoutContentRef} className="app-main-layout-content">
-                <ClaudeSessions
-                sessions={sessions}
-                activeSessionId={activeSessionId}
-                onReloadFullDiskTranscript={reloadFullDiskTranscript}
-                omcBatchPipelineActive={Boolean(omcBatchRuntime?.active)}
-                onAddWorktreeRepositoryToProject={handleAddWorktreeRepositoryToProject}
-                activeRepository={activeRepository}
-                repositories={repositories}
-                activeRepositoryId={activeRepositoryId}
-                onSelectRepository={setActiveRepositoryId}
-                onUpdateSessionModel={updateSessionModel}
-                onExecuteSession={handleComposerExecute}
-                onSendMessage={handleSendMessageWithTask}
-                onCancelSession={cancelSession}
-                onCloseSession={handleCloseSession}
-                onSwitchSession={jumpToSessionWithRepository}
-                onNewSession={(repository) => void handleCreateRepositoryTask(repository, "chat")}
-                repositoryMainBindings={repositoryMainSessionBindings}
-                onAppendSystemMessage={appendSystemMessage}
-                onAppendUserMessage={appendUserMessage}
-                onNotifyOmcEmployeeDirectBatchTaskDone={notifyOmcEmployeeDirectBatchTaskDone}
-                onPrepareFreshOmcEmployeeWorkerForDirectBatch={prepareFreshOmcEmployeeWorkerForDirectBatch}
-                onRefreshHistorySessions={handleRefreshHistorySessions}
-                onRespondToQuestion={respondToQuestion}
-                onDismissQuestion={dismissQuestion}
-                onRespondToPermission={respondToPermission}
-                onClearTodos={clearTodos}
-                onClearFollowups={clearFollowups}
-                onClearRevertItems={clearRevertItems}
-                onSendFollowup={sendFollowup}
-                onRestoreRevert={restoreRevert}
-                dualPaneEnabled={dualPaneEnabled}
-                onToggleDualPane={handleToggleDualPane}
-                secondarySessionId={dualPaneSecondarySessionId}
-                dualPaneSecondaryRepositoryId={dualPaneSecondaryRepositoryId}
-                onDualPaneSecondaryRepositorySelect={handleDualPaneSecondaryRepositorySelect}
-                onNewSecondarySession={handleNewSecondarySession}
-                onToggleSidebar={() => setCollapsed((c) => !c)}
-                onToggleRightPanel={handleToggleRightPanel}
-                onToggleTerminal={() => setTerminalCollapsed((c) => !c)}
-                onSearch={() => setSearchOpen(true)}
-                collapsed={collapsed}
-                rightCollapsed={effectiveRightCollapsed}
-                terminalCollapsed={terminalCollapsed}
-                onOpenWorkflowConfig={() => setWorkflowConfigOpen(true)}
-                employees={employees}
-                mentionEmployees={mentionEmployees}
-                workflowTasks={workflowTasks}
-                taskPendingEmployeesByTaskId={taskPendingEmployeesByTaskId}
-                workflowTemplates={workflowTemplates}
-                workflowGraphsByWorkflowId={workflowGraphsByWorkflowId}
-                workflowGraphStatusByWorkflowId={workflowGraphStatusByWorkflowId}
-                hideMessages={editorVisible}
-                hideSessionTools={editorVisible}
-                onOpenTaskDetail={(taskId) => {
-                  setMonitorDrawerTarget({ type: "task", taskId });
-                }}
-                taskListConcurrentCapacity={
-                  monitorClaudeConcurrency
-                    ? Math.max(0, monitorClaudeConcurrency.limit - monitorClaudeConcurrency.activeCount)
-                    : undefined
-                }
-                resolveTaskListOmcInvokeConcurrency={resolveTaskListOmcInvokeConcurrency}
-                panelBelowMessages={
-                  editorVisible ? (
-                    <RepositoryFileEditorPanel
-                      activePath={fileEditorActivePath}
-                      dark={dark}
-                      dirty={editorDirty}
-                      saving={editorSaving}
-                      tabs={fileEditorTabs}
-                      onActivePathChange={setFileEditorActivePath}
-                      onClosePanel={closeFileEditorPanel}
-                      onCloseTab={closeFileEditorTab}
-                      onSave={() => {
-                        void saveEditor();
-                      }}
-                      onTabContentChange={handleFileEditorTabContentChange}
-                    />
-                  ) : null
-                }
-                onDecideWorkflowTask={handleDecideWorkflowTask}
-              />
-              </Layout.Content>
-
-              {!effectiveRightCollapsed ? (
-                <MainLayoutResizeHandle
-                  variant="right"
-                  startWidthPx={mainLayoutRightWidthPx}
-                  onWidthChange={setMainLayoutRightWidthPx}
-                />
-              ) : null}
-
-              <Suspense fallback={null}>
-                <RightPanel
-                  dark={dark}
-                  collapsed={effectiveRightCollapsed}
-                  siderWidth={mainLayoutRightWidthPx}
-                  repositoryPath={activeRepository?.path}
-                  repositoryName={activeRepository?.name}
-                  onOpenFile={openRepositoryFile}
-                  monitorStats={monitorStats}
-                  monitorPanelSessions={monitorPanelSessionsMerged}
-                  monitorTranscriptSourceSessions={sessions}
-                  employeeMonitorItems={employeeMonitorItems}
-                  teamMonitorItems={publishedTeamMonitorItems}
-                  monitorActiveTarget={monitorDrawerTarget}
-                  onOpenTeamMonitorDetail={(workflowId) => {
-                    setMonitorDrawerTarget({ type: "team", workflowId });
-                  }}
-                  onOpenEmployeeConfig={() => {
-                    void openEmployeeConfigWithContext();
-                  }}
-                  onOpenWorkflowConfig={() => setWorkflowConfigOpen(true)}
-                  onStopEmployeeMonitor={(employeeId) => handleStopEmployeeMonitorRef.current(employeeId)}
-                  onStopTeamMonitor={(workflowId) => {
-                    const item = teamMonitorItems.find((entry) => entry.workflowId === workflowId);
-                    if (!item?.activeTaskId) return;
-                    const targetTaskId = item.activeTaskId;
-                    const task = workflowTasks.find((entry) => entry.id === targetTaskId);
-                    if (task?.creator) {
-                      cancelSession(task.creator);
-                    }
-                    void endWorkflowTask({
-                      taskId: targetTaskId,
-                      reason: "在监控面板中手动结束团队任务",
-                    })
-                      .then(async (updatedTask) => {
-                        setWorkflowTasks((prev) =>
-                          prev.map((entry) => (entry.id === updatedTask.id ? updatedTask : entry)),
-                        );
-                        const [events, pendingEmployees] = await Promise.all([
-                          listTaskEvents(updatedTask.id),
-                          listTaskPendingEmployees(updatedTask.id),
-                        ]);
-                        setWorkflowTaskEventsByTaskId((prev) => ({ ...prev, [updatedTask.id]: events }));
-                        setTaskPendingEmployeesByTaskId((prev) => ({ ...prev, [updatedTask.id]: pendingEmployees }));
-                      })
-                      .catch((error) => {
-                        console.error("Failed to end team workflow task:", error);
-                        message.error("结束团队任务失败");
-                      });
-                  }}
-                  monitorClaudeConcurrency={monitorClaudeConcurrency}
-                  onCancelSessionFromMonitor={cancelSession}
-                  onOpenTaskDetailFromMonitor={(taskId) => {
-                    setMonitorDrawerTarget({ type: "task", taskId });
-                  }}
-                  onOpenOmcBatchInvocationDetail={handleOpenOmcBatchInvocationDetail}
-                  onCancelOmcDirectBatchInvocation={handleCancelOmcDirectBatchInvocation}
-                  onReloadFullDiskTranscript={reloadFullDiskTranscript}
-                />
-              </Suspense>
-
-              <CommandPalette
-                open={searchOpen}
-                onClose={() => setSearchOpen(false)}
-                repositoryPath={activeRepository?.path}
-              />
-              {mcpHubMode ? (
-                <div className="app-mcp-hub-overlay" role="region" aria-label="MCP 管理">
-                  <McpHub repositoryPath={activeRepository?.path ?? null} onClose={() => setMcpHubMode(false)} />
-                </div>
-              ) : null}
-              {skillsHubMode ? (
-                <div className="app-skills-hub-overlay" role="region" aria-label="skills.sh 技能目录">
-                  <SkillsHub repositoryPath={activeRepository?.path ?? null} onClose={() => setSkillsHubMode(false)} />
-                </div>
-              ) : null}
-              </div>
-            </>
-          )}
-          <Drawer
-            open={taskSplitMode}
-            onClose={() => setTaskSplitMode(false)}
-            title={null}
-            closable={false}
-            placement="right"
-            width="100vw"
-            styles={{
-              body: {
-                height: "100vh",
-                overflow: "hidden",
-                padding: 0,
-                display: "flex",
-                flexDirection: "column",
+      promptsPanelProps={{
+        onClose: () => {
+          setPromptsOpenContext(null);
+          setPromptsMode(false);
+        },
+        projects,
+        repositories,
+        activeProjectId,
+        activeRepositoryId,
+        openContext: promptsOpenContext,
+        repositoryListLoading,
+      }}
+      claudeSessionsProps={{
+        sessions,
+        activeSessionId,
+        onReloadFullDiskTranscript: reloadFullDiskTranscript,
+        omcBatchPipelineActive: Boolean(omcBatchRuntime?.active),
+        onAddWorktreeRepositoryToProject: handleAddWorktreeRepositoryToProject,
+        activeRepository,
+        repositories,
+        activeRepositoryId,
+        onSelectRepository: setActiveRepositoryId,
+        onUpdateSessionModel: updateSessionModel,
+        onExecuteSession: handleComposerExecute,
+        onSendMessage: handleSendMessageWithTask,
+        onCancelSession: cancelSession,
+        onCloseSession: handleCloseSession,
+        onSwitchSession: jumpToSessionWithRepository,
+        onNewSession: (repository) => void handleCreateRepositoryTask(repository, "chat"),
+        repositoryMainBindings: repositoryMainSessionBindings,
+        onAppendSystemMessage: appendSystemMessage,
+        onAppendUserMessage: appendUserMessage,
+        onNotifyOmcEmployeeDirectBatchTaskDone: notifyOmcEmployeeDirectBatchTaskDone,
+        onPrepareFreshOmcEmployeeWorkerForDirectBatch: prepareFreshOmcEmployeeWorkerForDirectBatch,
+        onRefreshHistorySessions: handleRefreshHistorySessions,
+        onRespondToQuestion: respondToQuestion,
+        onDismissQuestion: dismissQuestion,
+        onRespondToPermission: respondToPermission,
+        onClearTodos: clearTodos,
+        onClearFollowups: clearFollowups,
+        onClearRevertItems: clearRevertItems,
+        onSendFollowup: sendFollowup,
+        onRestoreRevert: restoreRevert,
+        dualPaneEnabled,
+        onToggleDualPane: handleToggleDualPane,
+        secondarySessionId: dualPaneSecondarySessionId,
+        dualPaneSecondaryRepositoryId,
+        onDualPaneSecondaryRepositorySelect: handleDualPaneSecondaryRepositorySelect,
+        onNewSecondarySession: handleNewSecondarySession,
+        onToggleSidebar: () => setCollapsed((c) => !c),
+        onToggleRightPanel: handleToggleRightPanel,
+        onToggleTerminal: () => setTerminalCollapsed((c) => !c),
+        onSearch: () => setSearchOpen(true),
+        collapsed,
+        rightCollapsed: effectiveRightCollapsed,
+        terminalCollapsed,
+        onOpenWorkflowConfig: () => setWorkflowConfigOpen(true),
+        employees,
+        mentionEmployees,
+        workflowTasks,
+        taskPendingEmployeesByTaskId,
+        workflowTemplates,
+        workflowGraphsByWorkflowId,
+        workflowGraphStatusByWorkflowId,
+        hideMessages: editorVisible,
+        hideSessionTools: editorVisible,
+        onOpenTaskDetail: (taskId) => {
+          setMonitorDrawerTarget({ type: "task", taskId });
+        },
+        taskListConcurrentCapacity: monitorClaudeConcurrency
+          ? Math.max(0, monitorClaudeConcurrency.limit - monitorClaudeConcurrency.activeCount)
+          : undefined,
+        resolveTaskListOmcInvokeConcurrency,
+        onDecideWorkflowTask: handleDecideWorkflowTask,
+      }}
+      repositoryFileEditorPanelProps={
+        editorVisible
+          ? {
+              activePath: fileEditorActivePath,
+              dark,
+              dirty: editorDirty,
+              saving: editorSaving,
+              tabs: fileEditorTabs,
+              onActivePathChange: setFileEditorActivePath,
+              onClosePanel: closeFileEditorPanel,
+              onCloseTab: closeFileEditorTab,
+              onSave: () => {
+                void saveEditor();
               },
-            }}
-            destroyOnHidden={false}
-            rootClassName="app-task-split-fullscreen-drawer"
-          >
-            <Suspense
-              fallback={
-                <div className="app-file-editor-loading">
-                  <Spin size="small" />
-                </div>
-              }
-            >
-              <PrdTaskSplitPanel
-                onClose={() => setTaskSplitMode(false)}
-                projects={projects}
-                repositories={repositories}
-                activeProjectId={activeProjectId}
-                activeRepositoryId={activeRepositoryId}
-              />
-            </Suspense>
-          </Drawer>
-        </Layout>
-
-        <RepositoryFilePreviewModal preview={repositoryBinaryPreview} onClose={closeRepositoryBinaryPreview} />
-
-        <ProgressMonitorDrawer
-          open={monitorDrawerTarget != null}
-          target={monitorDrawerTarget}
-          onClose={() => setMonitorDrawerTarget(null)}
-          employeeItems={employeeMonitorItems}
-          teamItems={teamMonitorItems}
-          workflowTasks={workflowTasks}
-          workflowTaskEventsByTaskId={workflowTaskEventsByTaskId}
-          workflowRuntimeSnapshotsByTaskId={workflowRuntimeSnapshotsByTaskId}
-          taskPendingEmployeesByTaskId={taskPendingEmployeesByTaskId}
-          sessions={monitorPanelSessionsMerged}
-          transcriptSourceSessions={sessions}
-          employees={employees}
-          workflowTemplates={workflowTemplates}
-          onOpenOmcBatchInvocationDetail={(input) => {
-            handleOpenOmcBatchInvocationDetail(input);
-            setMonitorDrawerTarget(null);
-          }}
-          onCancelOmcDirectBatchInvocation={handleCancelOmcDirectBatchInvocation}
-          onJumpToSession={(sessionId) => {
-            jumpToSessionWithRepository(sessionId);
-            setMonitorDrawerTarget(null);
-          }}
-          onReloadFullDiskTranscript={reloadFullDiskTranscript}
-        />
-
-        {employeeConfigOpen ? (
-          <EmployeeConfigModal
-            open={employeeConfigOpen}
-            loading={employeeLoading}
-            employees={employees}
-            workflowTemplates={workflowTemplates}
-            workflowGraphsByWorkflowId={workflowGraphsByWorkflowId}
-            repositories={repositories}
-            agentTypeOptions={employeeAgentTypeOptions}
-            defaultRepositoryIds={employeeConfigDefaultRepositoryIds}
-            onClose={() => setEmployeeConfigOpen(false)}
-            onCreate={async (input) => {
-              setEmployeeLoading(true);
-              try {
-                await createEmployee(input);
-                await refreshEmployeeData();
-              } finally {
-                setEmployeeLoading(false);
-              }
-            }}
-            onUpdate={async (input) => {
-              setEmployeeLoading(true);
-              try {
-                await updateEmployee(input);
-                await refreshEmployeeData();
-              } finally {
-                setEmployeeLoading(false);
-              }
-            }}
-            onDelete={async (employeeId) => {
-              setEmployeeLoading(true);
-              try {
-                await deleteEmployee(employeeId);
-                await refreshEmployeeData();
-              } finally {
-                setEmployeeLoading(false);
-              }
-            }}
-          />
-        ) : null}
-        {workflowConfigOpen ? (
-          <Suspense fallback={null}>
-            <WorkflowConfigModal
-              open={workflowConfigOpen}
-              loading={workflowLoading}
-              employees={employees}
-              repositoryPath={activeRepository?.path ?? null}
-              templates={workflowTemplates}
-              selectableEmployeeIds={selectableWorkflowEmployeeIds}
-              onClose={() => setWorkflowConfigOpen(false)}
-              onSaveTemplate={async (input) => {
+              onTabContentChange: handleFileEditorTabContentChange,
+            }
+          : null
+      }
+      rightPanelProps={{
+        dark,
+        collapsed: effectiveRightCollapsed,
+        siderWidth: mainLayoutRightWidthPx,
+        repositoryPath: activeRepository?.path,
+        repositoryName: activeRepository?.name,
+        onOpenFile: openRepositoryFile,
+        monitorStats,
+        monitorPanelSessions: monitorPanelSessionsMerged,
+        monitorTranscriptSourceSessions: sessions,
+        employeeMonitorItems,
+        teamMonitorItems: publishedTeamMonitorItems,
+        monitorActiveTarget: monitorDrawerTarget,
+        onOpenTeamMonitorDetail: (workflowId) => {
+          setMonitorDrawerTarget({ type: "team", workflowId });
+        },
+        onOpenEmployeeConfig: () => {
+          void openEmployeeConfigWithContext();
+        },
+        onOpenWorkflowConfig: () => setWorkflowConfigOpen(true),
+        onStopEmployeeMonitor: (employeeId) => handleStopEmployeeMonitorRef.current(employeeId),
+        onStopTeamMonitor: (workflowId) => {
+          const item = teamMonitorItems.find((entry) => entry.workflowId === workflowId);
+          if (!item?.activeTaskId) return;
+          const targetTaskId = item.activeTaskId;
+          const task = workflowTasks.find((entry) => entry.id === targetTaskId);
+          if (task?.creator) {
+            cancelSession(task.creator);
+          }
+          void endWorkflowTask({
+            taskId: targetTaskId,
+            reason: "在监控面板中手动结束团队任务",
+          })
+            .then(async (updatedTask) => {
+              setWorkflowTasks((prev) =>
+                prev.map((entry) => (entry.id === updatedTask.id ? updatedTask : entry)),
+              );
+              const [events, pendingEmployees] = await Promise.all([
+                listTaskEvents(updatedTask.id),
+                listTaskPendingEmployees(updatedTask.id),
+              ]);
+              setWorkflowTaskEventsByTaskId((prev) => ({ ...prev, [updatedTask.id]: events }));
+              setTaskPendingEmployeesByTaskId((prev) => ({ ...prev, [updatedTask.id]: pendingEmployees }));
+            })
+            .catch((error) => {
+              console.error("Failed to end team workflow task:", error);
+              message.error("结束团队任务失败");
+            });
+        },
+        monitorClaudeConcurrency,
+        onCancelSessionFromMonitor: cancelSession,
+        onOpenTaskDetailFromMonitor: (taskId) => {
+          setMonitorDrawerTarget({ type: "task", taskId });
+        },
+        onOpenOmcBatchInvocationDetail: handleOpenOmcBatchInvocationDetail,
+        onCancelOmcDirectBatchInvocation: handleCancelOmcDirectBatchInvocation,
+        onReloadFullDiskTranscript: reloadFullDiskTranscript,
+      }}
+      commandPaletteProps={{
+        open: searchOpen,
+        onClose: () => setSearchOpen(false),
+        repositoryPath: activeRepository?.path,
+      }}
+      mcpHubProps={{
+        repositoryPath: activeRepository?.path ?? null,
+        onClose: () => setMcpHubMode(false),
+      }}
+      skillsHubProps={{
+        repositoryPath: activeRepository?.path ?? null,
+        onClose: () => setSkillsHubMode(false),
+      }}
+      prdTaskSplitPanelProps={{
+        onClose: () => setTaskSplitMode(false),
+        projects,
+        repositories,
+        activeProjectId,
+        activeRepositoryId,
+      }}
+      repositoryFilePreviewModalProps={{
+        preview: repositoryBinaryPreview,
+        onClose: closeRepositoryBinaryPreview,
+      }}
+      progressMonitorDrawerProps={{
+        open: monitorDrawerTarget != null,
+        target: monitorDrawerTarget,
+        onClose: () => setMonitorDrawerTarget(null),
+        employeeItems: employeeMonitorItems,
+        teamItems: teamMonitorItems,
+        workflowTasks,
+        workflowTaskEventsByTaskId,
+        workflowRuntimeSnapshotsByTaskId,
+        taskPendingEmployeesByTaskId,
+        sessions: monitorPanelSessionsMerged,
+        transcriptSourceSessions: sessions,
+        employees,
+        workflowTemplates,
+        onOpenOmcBatchInvocationDetail: (input) => {
+          handleOpenOmcBatchInvocationDetail(input);
+          setMonitorDrawerTarget(null);
+        },
+        onCancelOmcDirectBatchInvocation: handleCancelOmcDirectBatchInvocation,
+        onJumpToSession: (sessionId) => {
+          jumpToSessionWithRepository(sessionId);
+          setMonitorDrawerTarget(null);
+        },
+        onReloadFullDiskTranscript: reloadFullDiskTranscript,
+      }}
+      employeeConfigModalProps={
+        employeeConfigOpen
+          ? {
+              open: employeeConfigOpen,
+              loading: employeeLoading,
+              employees,
+              workflowTemplates,
+              workflowGraphsByWorkflowId,
+              repositories,
+              agentTypeOptions: employeeAgentTypeOptions,
+              defaultRepositoryIds: employeeConfigDefaultRepositoryIds,
+              onClose: () => setEmployeeConfigOpen(false),
+              onCreate: async (input) => {
+                setEmployeeLoading(true);
+                try {
+                  await createEmployee(input);
+                  await refreshEmployeeData();
+                } finally {
+                  setEmployeeLoading(false);
+                }
+              },
+              onUpdate: async (input) => {
+                setEmployeeLoading(true);
+                try {
+                  await updateEmployee(input);
+                  await refreshEmployeeData();
+                } finally {
+                  setEmployeeLoading(false);
+                }
+              },
+              onDelete: async (employeeId) => {
+                setEmployeeLoading(true);
+                try {
+                  await deleteEmployee(employeeId);
+                  await refreshEmployeeData();
+                } finally {
+                  setEmployeeLoading(false);
+                }
+              },
+            }
+          : null
+      }
+      workflowConfigModalProps={
+        workflowConfigOpen
+          ? {
+              open: workflowConfigOpen,
+              loading: workflowLoading,
+              employees,
+              repositoryPath: activeRepository?.path ?? null,
+              templates: workflowTemplates,
+              selectableEmployeeIds: selectableWorkflowEmployeeIds,
+              onClose: () => setWorkflowConfigOpen(false),
+              onSaveTemplate: async (input) => {
                 setWorkflowLoading(true);
                 try {
                   const savedTemplate = await saveWorkflowTemplate(input);
@@ -1660,11 +1571,11 @@ export default function App() {
                 } finally {
                   setWorkflowLoading(false);
                 }
-              }}
-              onLoadGraphItem={async (workflowId) => {
+              },
+              onLoadGraphItem: async (workflowId) => {
                 return getWorkflowGraph({ workflowId });
-              }}
-              onSaveGraph={async (input) => {
+              },
+              onSaveGraph: async (input) => {
                 const savedGraph = await saveWorkflowGraph({
                   workflowId: input.workflowId,
                   graph: input.graph,
@@ -1678,11 +1589,11 @@ export default function App() {
                   ...prev,
                   [input.workflowId]: savedGraph.status,
                 }));
-              }}
-              onValidateGraph={async (graph) => {
+              },
+              onValidateGraph: async (graph) => {
                 return validateWorkflowGraph({ graph });
-              }}
-              onDeleteTemplate={async (workflowId) => {
+              },
+              onDeleteTemplate: async (workflowId) => {
                 setWorkflowLoading(true);
                 try {
                   await deleteWorkflowTemplate(workflowId);
@@ -1694,11 +1605,10 @@ export default function App() {
                 } finally {
                   setWorkflowLoading(false);
                 }
-              }}
-            />
-          </Suspense>
-        ) : null}
-      </AntdApp>
-    </ConfigProvider>
+              },
+            }
+          : null
+      }
+    />
   );
 }
