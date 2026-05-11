@@ -1,0 +1,37 @@
+{
+  "id": "audit-remediation-roadmap",
+  "name": "audit-remediation-roadmap",
+  "title": "Post-read audit remediation roadmap",
+  "description": "Parent task for the issues found during the deep codebase read: architecture size, low tests, stale docs, dependency drift, migration boilerplate, metadata/security cleanup, and commit hygiene.",
+  "status": "planning",
+  "dev_type": "planning",
+  "scope": null,
+  "package": null,
+  "priority": "P0",
+  "creator": "xuning",
+  "assignee": "xuning",
+  "createdAt": "2026-05-11",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "05-11-audit-architecture-split",
+    "05-11-audit-test-coverage-core",
+    "05-11-audit-readme-architecture",
+    "05-11-audit-ui-dependency-consolidation",
+    "05-11-audit-lockfile-policy",
+    "05-11-audit-migration-registration",
+    "05-11-audit-tauri-metadata-csp",
+    "05-11-audit-commit-hygiene"
+  ],
+  "parent": null,
+  "relatedFiles": [
+    ".trellis/tasks/05-11-audit-*"
+  ],
+  "notes": "Created from the visible post-read audit findings.",
+  "meta": {}
+}

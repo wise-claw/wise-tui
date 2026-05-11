@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Current frontend conventions"}
+{"file": ".trellis/spec/tauri/index.md", "reason": "Current Tauri conventions"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Cross-layer planning checklist"}
