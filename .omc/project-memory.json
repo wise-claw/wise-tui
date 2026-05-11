@@ -1,0 +1,300 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1778203774833,
+  "projectRoot": "/Users/sjl/Documents/chuanye/wise",
+  "techStack": {
+    "languages": [
+      {
+        "name": "JavaScript/TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "package.json"
+        ]
+      },
+      {
+        "name": "TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "tsconfig.json"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "react",
+        "version": "19.1.0",
+        "category": "frontend"
+      },
+      {
+        "name": "react-dom",
+        "version": "19.1.0",
+        "category": "frontend"
+      },
+      {
+        "name": "vite",
+        "version": "7.0.4",
+        "category": "build"
+      }
+    ],
+    "packageManager": "npm",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": "npm run build",
+    "testCommand": "npm test",
+    "lintCommand": null,
+    "devCommand": "npm run dev",
+    "scripts": {
+      "postinstall": "bun run scripts/patch-crepe-slash-menu.mjs",
+      "dev": "vite",
+      "build": "tsc && vite build",
+      "test": "bun test",
+      "preview": "vite preview",
+      "tauri:dev": "tauri dev",
+      "tauri:build": "tauri build",
+      "tauri": "tauri",
+      "icon:generate": "tauri icon ./app-icon.png",
+      "emit:platform-split-prompt-seed": "bun run scripts/emit-platform-split-prompt-seed.ts"
+    }
+  },
+  "conventions": {
+    "namingStyle": "camelCase",
+    "importStyle": "ES modules",
+    "testPattern": null,
+    "fileOrganization": "type-based"
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "public",
+      "scripts",
+      "src"
+    ],
+    "gitBranches": {
+      "defaultBranch": "master",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "design": {
+      "path": "design",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1778203774827,
+      "keyFiles": []
+    },
+    "dist": {
+      "path": "dist",
+      "purpose": "Distribution/build output",
+      "fileCount": 4,
+      "lastAccessed": 1778203774827,
+      "keyFiles": [
+        "index.html",
+        "mascot.html",
+        "tauri.svg",
+        "vite.svg"
+      ]
+    },
+    "extras": {
+      "path": "extras",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1778203774829,
+      "keyFiles": [
+        "check-prd-split-evolution.mjs"
+      ]
+    },
+    "orchestrator-service": {
+      "path": "orchestrator-service",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1778203774830,
+      "keyFiles": []
+    },
+    "picture": {
+      "path": "picture",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1778203774830,
+      "keyFiles": []
+    },
+    "public": {
+      "path": "public",
+      "purpose": "Public files",
+      "fileCount": 2,
+      "lastAccessed": 1778203774830,
+      "keyFiles": [
+        "tauri.svg",
+        "vite.svg"
+      ]
+    },
+    "scripts": {
+      "path": "scripts",
+      "purpose": "Build/utility scripts",
+      "fileCount": 3,
+      "lastAccessed": 1778203774830,
+      "keyFiles": [
+        "emit-platform-split-prompt-seed.ts",
+        "generate-dmg-background.py",
+        "patch-crepe-slash-menu.mjs"
+      ]
+    },
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 8,
+      "lastAccessed": 1778203774830,
+      "keyFiles": [
+        "App.css",
+        "App.tsx",
+        "bootstrapDompurifyForTauriAssets.ts",
+        "main.tsx",
+        "mascot.css"
+      ]
+    },
+    "src-tauri": {
+      "path": "src-tauri",
+      "purpose": null,
+      "fileCount": 7,
+      "lastAccessed": 1778203774830,
+      "keyFiles": [
+        "Cargo.lock",
+        "Cargo.toml",
+        "Info.plist",
+        "build.rs",
+        "tauri.conf.json"
+      ]
+    },
+    "dist/assets": {
+      "path": "dist/assets",
+      "purpose": "Static assets",
+      "fileCount": 99,
+      "lastAccessed": 1778203774831,
+      "keyFiles": [
+        "ClaudeHooksConfigPanel-C9KhK5Zl.js",
+        "ClaudeMcpConfigPanel-DT1XBt5O.js",
+        "ClaudeMcpConfigPanel-j-W08UnM.css"
+      ]
+    },
+    "orchestrator-service/scripts": {
+      "path": "orchestrator-service/scripts",
+      "purpose": "Build/utility scripts",
+      "fileCount": 0,
+      "lastAccessed": 1778203774831,
+      "keyFiles": []
+    },
+    "orchestrator-service/src": {
+      "path": "orchestrator-service/src",
+      "purpose": "Source code",
+      "fileCount": 0,
+      "lastAccessed": 1778203774831,
+      "keyFiles": []
+    },
+    "src/assets": {
+      "path": "src/assets",
+      "purpose": "Static assets",
+      "fileCount": 1,
+      "lastAccessed": 1778203774831,
+      "keyFiles": [
+        "react.svg"
+      ]
+    },
+    "src/components": {
+      "path": "src/components",
+      "purpose": "UI components",
+      "fileCount": 6,
+      "lastAccessed": 1778203774831,
+      "keyFiles": [
+        "ClaudeHooksConfigPanel.tsx",
+        "ClaudeMcpConfigPanel.tsx",
+        "ClaudeMcpLayout.css"
+      ]
+    },
+    "src/data": {
+      "path": "src/data",
+      "purpose": "Data files",
+      "fileCount": 0,
+      "lastAccessed": 1778203774831,
+      "keyFiles": []
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "src/components/ClaudeSessions/WorkflowTaskTimeline.tsx",
+      "accessCount": 10,
+      "lastAccessed": 1778204362362,
+      "type": "file"
+    },
+    {
+      "path": "src/types.ts",
+      "accessCount": 7,
+      "lastAccessed": 1778204730930,
+      "type": "file"
+    },
+    {
+      "path": "vite.config.ts",
+      "accessCount": 2,
+      "lastAccessed": 1778204367069,
+      "type": "file"
+    },
+    {
+      "path": "src/services/workflowGraphRuntime.ts",
+      "accessCount": 2,
+      "lastAccessed": 1778204690384,
+      "type": "file"
+    },
+    {
+      "path": "src/App.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1778204722782,
+      "type": "file"
+    },
+    {
+      "path": "src/components/WorkflowDesigner/index.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1778203807062,
+      "type": "file"
+    },
+    {
+      "path": "src/components/WorkflowDesigner/nodes/TaskNode.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1778203825160,
+      "type": "file"
+    },
+    {
+      "path": "src/components/WorkflowDesigner/nodes/EndNode.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1778203828730,
+      "type": "file"
+    },
+    {
+      "path": "src/components/WorkflowDesigner/nodes/StartNode.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1778203832314,
+      "type": "file"
+    },
+    {
+      "path": "src/components/WorkflowDesigner/nodes/ApprovalNode.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1778203834796,
+      "type": "file"
+    },
+    {
+      "path": "src/components/WorkflowDesigner/edges/WorkflowEdge.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1778203837322,
+      "type": "file"
+    },
+    {
+      "path": "src/components/WorkflowRuntimeViewer/index.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1778203866785,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}

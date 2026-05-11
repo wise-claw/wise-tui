@@ -1,0 +1,109 @@
+.app-dingtalk-ebot-popover {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 456px;
+}
+
+.app-dingtalk-ebot-popover__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.app-dingtalk-ebot-popover__label {
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-dingtalk-ebot-popover__label-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 10px;
+}
+
+.app-dingtalk-ebot-popover__label-link {
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.app-dingtalk-ebot-popover__section-title {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.app-dingtalk-ebot-popover__collapse {
+  background: var(--ant-color-fill-quaternary);
+  border-radius: var(--ant-border-radius, 6px);
+}
+
+.app-dingtalk-ebot-popover__collapse .ant-collapse-header {
+  padding: 6px 10px !important;
+  font-size: 12px;
+  align-items: center !important;
+}
+
+.app-dingtalk-ebot-popover__collapse .ant-collapse-content-box {
+  padding: 0 10px 10px !important;
+}
+
+.app-dingtalk-ebot-popover__steps {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-dingtalk-ebot-popover__steps li + li {
+  margin-top: 6px;
+}
+
+.app-dingtalk-ebot-popover__bullet-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-dingtalk-ebot-popover__bullet-list li + li {
+  margin-top: 6px;
+}
+
+.app-dingtalk-ebot-popover__field-guide {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-dingtalk-ebot-popover__actions {
+  margin-top: 2px;
+}
+
+.app-dingtalk-ebot-popover__stream-row {
+  margin-bottom: 4px;
+}
+
+.app-dingtalk-ebot-popover__debug-json {
+  font-family: var(--ant-font-family-code, ui-monospace, monospace);
+  font-size: 11px;
+}
+
+.app-dingtalk-ebot-popover__json-sample {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  font-size: 10px;
+  line-height: 1.45;
+  font-family: var(--ant-font-family-code, ui-monospace, monospace);
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-radius: var(--ant-border-radius-sm, 4px);
+  background: var(--ant-color-fill-secondary);
+  color: var(--ant-color-text-secondary);
+  max-height: 200px;
+  overflow: auto;
+}

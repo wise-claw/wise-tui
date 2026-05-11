@@ -1,0 +1,112 @@
+.app-employee-config-modal {
+  width: 100%;
+}
+
+.app-employee-config-form {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
+}
+
+.app-employee-config-row {
+  display: grid;
+  grid-template-columns: 180px 200px minmax(220px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.app-employee-config-row--compact {
+  grid-template-columns: 160px 180px auto;
+}
+
+.app-employee-config-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-left: 12px;
+}
+
+.app-employee-config-form .ant-form-item {
+  margin-bottom: 0;
+  margin-right: 0;
+  flex: 1;
+}
+
+.app-employee-config-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.app-employee-config-field-label {
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  height: 34px;
+  line-height: 34px;
+  white-space: nowrap;
+}
+
+.app-employee-config-item {
+  min-width: 0;
+}
+
+.app-employee-config-item--name .ant-input {
+  width: 160px;
+  height: 34px !important;
+  line-height: 32px !important;
+  box-sizing: border-box;
+}
+
+.app-employee-config-item--agent .ant-select {
+  width: 180px;
+  height: 32px;
+}
+
+.app-employee-config-item--agent .ant-select-single:not(.ant-select-customize-input) .ant-select-selector {
+  height: 34px !important;
+  min-height: 34px !important;
+  box-sizing: border-box;
+}
+
+.app-employee-config-item--agent .ant-select-single .ant-select-selector .ant-select-selection-item,
+.app-employee-config-item--agent .ant-select-single .ant-select-selector .ant-select-selection-placeholder {
+  line-height: 32px !important;
+}
+
+.app-employee-config-item--repositories .ant-select {
+  width: 100%;
+}
+
+.app-employee-config-row .ant-input-affix-wrapper,
+.app-employee-config-row .ant-btn-sm {
+  height: 32px;
+}
+
+.app-employee-config-row .ant-select-single:not(.ant-select-customize-input) .ant-select-selector {
+  align-items: center;
+}
+
+.app-employee-config-row .ant-select-single .ant-select-selector .ant-select-selection-item,
+.app-employee-config-row .ant-select-single .ant-select-selector .ant-select-selection-placeholder {
+  line-height: 30px;
+}
+
+@media (max-width: 960px) {
+  .app-employee-config-row {
+    grid-template-columns: 1fr;
+  }
+
+  .app-employee-config-item--name .ant-input,
+  .app-employee-config-item--agent .ant-select {
+    width: 100%;
+  }
+
+  .app-employee-config-actions {
+    align-items: center;
+    justify-content: flex-end;
+  }
+}

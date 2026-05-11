@@ -1,0 +1,170 @@
+/* ── 消息通知 Popover（仅收件箱）── */
+
+.app-status-popover-trigger {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 顶栏铃铛：右上角数字（未读条数） */
+.app-notification-bell-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+}
+
+.app-notification-bell-count {
+  position: absolute;
+  top: -3px;
+  right: -4px;
+  z-index: 1;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: var(--ant-color-error);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+  pointer-events: none;
+  box-shadow: 0 0 0 1px var(--ant-color-bg-container);
+}
+
+.app-status-popover .ant-popover-inner {
+  border-radius: 12px;
+  overflow: hidden;
+  min-width: 300px;
+  max-width: min(680px, calc(100vw - 24px));
+}
+
+.app-status-popover-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 360px;
+}
+
+.app-status-popover-content--inbox-only {
+  min-width: 360px;
+}
+
+.app-status-popover-body {
+  padding: 8px 14px 12px;
+  min-height: 120px;
+  max-width: 380px;
+}
+
+.app-status-popover-body--inbox {
+  padding: 10px 12px 12px;
+}
+
+.app-status-loading,
+.app-status-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-status-error {
+  color: var(--ant-color-error);
+  font-size: 12px;
+}
+
+/* ── 通知收件箱 ── */
+
+.app-notification-inbox {
+  display: flex;
+  flex-direction: column;
+  min-height: 200px;
+  max-height: min(420px, 55vh);
+}
+
+.app-notification-inbox-toolbar {
+  flex-shrink: 0;
+  padding: 0 4px 8px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-notification-inbox-list {
+  flex: 1;
+  overflow: auto;
+  padding: 6px 0 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.app-notification-row {
+  display: flex;
+  gap: 8px;
+  padding: 8px 6px;
+  border-radius: 8px;
+  align-items: flex-start;
+}
+
+.app-notification-row:hover {
+  background: var(--ant-color-fill-secondary);
+}
+
+.app-notification-row--clickable {
+  cursor: pointer;
+}
+
+.app-notification-row--clickable:focus-visible {
+  outline: 2px solid var(--ant-color-primary);
+  outline-offset: -2px;
+}
+
+.app-notification-row--read {
+  opacity: 0.72;
+}
+
+.app-notification-row-dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--ant-color-primary);
+}
+
+.app-notification-row-dot--read {
+  background: var(--ant-color-border);
+}
+
+.app-notification-row-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.app-notification-row-meta {
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--ant-color-text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+
+.app-notification-row-body {
+  font-size: 13px;
+  color: var(--ant-color-text);
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.app-notification-row-time {
+  font-size: 11px;
+  color: var(--ant-color-text-quaternary);
+  margin-top: 4px;
+}

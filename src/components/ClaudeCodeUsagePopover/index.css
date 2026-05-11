@@ -1,0 +1,108 @@
+.app-cc-usage-popover {
+  width: min(300px, 86vw);
+}
+
+.app-cc-usage-popover .ant-segmented {
+  margin-bottom: 10px;
+}
+
+.app-cc-usage-chart {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 2px;
+  height: 96px;
+  padding: 6px 2px 4px;
+  margin-bottom: 8px;
+  border-radius: 10px;
+  background: linear-gradient(
+    180deg,
+    var(--ant-color-fill-secondary) 0%,
+    var(--ant-color-fill-tertiary) 100%
+  );
+  border: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-cc-usage-bar-wrap {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  cursor: default;
+}
+
+.app-cc-usage-bar-wrap--active .app-cc-usage-bar {
+  opacity: 1;
+  filter: brightness(1.08);
+}
+
+.app-cc-usage-bar {
+  width: 100%;
+  max-width: 10px;
+  min-height: 2px;
+  border-radius: 4px 4px 2px 2px;
+  background: var(--ant-color-warning);
+  opacity: 0.85;
+  transition: opacity 0.12s, filter 0.12s;
+}
+
+.app-cc-usage-x-label {
+  font-size: 11px;
+  color: var(--ant-color-primary);
+  text-align: center;
+  margin-bottom: 6px;
+  min-height: 16px;
+}
+
+.app-cc-usage-detail {
+  font-size: 12px;
+  color: var(--ant-color-success);
+  margin-bottom: 4px;
+  word-break: break-all;
+}
+
+.app-cc-usage-total {
+  font-size: 12px;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-cc-usage-hint {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
+  line-height: 1.45;
+}
+
+.app-cc-usage-refresh {
+  margin-top: 6px;
+  font-size: 11px;
+}
+
+.app-cc-usage-header-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ant-color-text-tertiary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  -webkit-app-region: no-drag;
+}
+
+.app-cc-usage-header-btn:hover {
+  background: var(--ant-color-fill-content);
+  color: var(--ant-color-text);
+}
+
+.app-cc-usage-header-btn svg {
+  width: 16px;
+  height: 16px;
+}

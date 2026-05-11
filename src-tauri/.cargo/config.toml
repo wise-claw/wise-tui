@@ -1,0 +1,12 @@
+# 与 src-tauri/tauri.conf.json > bundle > macOS > minimumSystemVersion 保持一致（当前 12.0）。
+# - [env]：供 build.rs / cc-rs 等读取，避免 ring、libgit2、openssl-sys 等按默认 SDK 抬最低系统。
+# - rustflags：最终链接显式带上 -mmacosx-version-min，与 LSMinimumSystemVersion 对齐。
+# Release CI 中仍写入 GITHUB_ENV（见 .github/workflows/desktop-release.yml）。
+[env]
+MACOSX_DEPLOYMENT_TARGET = "12.0"
+
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-mmacosx-version-min=12.0"]
+
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-mmacosx-version-min=12.0"]

@@ -1,0 +1,26 @@
+.app-stream-json-stdout-help-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 2px;
+  border: none;
+  border-radius: var(--ant-border-radius-sm, 4px);
+  background: transparent;
+  color: var(--ant-color-text-secondary);
+  cursor: help;
+  line-height: 0;
+}
+
+.app-stream-json-stdout-help-btn:hover,
+.app-stream-json-stdout-help-btn:focus-visible {
+  color: var(--ant-color-text);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--ant-color-primary-bg);
+}
+
+.app-stream-json-stdout-help-icon {
+  display: block;
+  vertical-align: top;
+}

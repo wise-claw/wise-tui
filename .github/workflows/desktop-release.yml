@@ -1,0 +1,104 @@
+name: Desktop Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos-latest, ubuntu-latest, windows-latest]
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      # 与 src-tauri/tauri.conf.json bundle.macOS.minimumSystemVersion（12.0）一致。
+      # C/C++ 依赖（ring、libgit2 等）会读 CFLAGS/CXXFLAGS；仅 mac job 执行。
+      - name: macOS deployment target and native dep flags
+        if: matrix.platform == 'macos-latest'
+        run: |
+          echo "MACOSX_DEPLOYMENT_TARGET=12.0" >> "$GITHUB_ENV"
+          echo "CFLAGS=-mmacosx-version-min=12.0" >> "$GITHUB_ENV"
+          echo "CXXFLAGS=-mmacosx-version-min=12.0" >> "$GITHUB_ENV"
+
+      # macOS：未配置签名/公证时，从浏览器下载的 .dmg 常被提示「已损坏，无法打开」（实为隔离 + 未公证）。
+      # 在仓库 Settings → Secrets and variables → Actions 中配置（勿提交到仓库）：
+      #   APPLE_CERTIFICATE（base64 的 .p12）、APPLE_CERTIFICATE_PASSWORD、KEYCHAIN_PASSWORD
+      #   公证（使用 Developer ID 时必需）：APPLE_ID、APPLE_PASSWORD（App 专用密码）、APPLE_TEAM_ID
+      #   或 API 密钥方式：APPLE_API_ISSUER、APPLE_API_KEY、APPLE_API_KEY_PATH（见官方文档）
+      # 详见 https://v2.tauri.app/distribute/sign/macos/
+      - name: Import Apple code signing certificate (macOS)
+        if: matrix.platform == 'macos-latest'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${APPLE_CERTIFICATE:-}" ]; then
+            echo "::notice title=macOS 未签名::未设置 APPLE_CERTIFICATE，产物将不会用 Apple 证书签名；用户从网络下载时可能被 macOS 拦截。发布请在 Secrets 中配置证书并完成公证，或告知用户使用「移除隔离」命令（见 README）。"
+            exit 0
+          fi
+          if [ -z "${APPLE_CERTIFICATE_PASSWORD:-}" ] || [ -z "${KEYCHAIN_PASSWORD:-}" ]; then
+            echo "::error::已设置 APPLE_CERTIFICATE 时还需 APPLE_CERTIFICATE_PASSWORD 与 KEYCHAIN_PASSWORD"
+            exit 1
+          fi
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "${RUNNER_TEMP}/certificate.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -t 3600 -u build.keychain
+          security import "${RUNNER_TEMP}/certificate.p12" -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+          security find-identity -v -p codesigning build.keychain
+          CERT_LINE=$(security find-identity -v -p codesigning build.keychain | grep "Developer ID Application" | head -n1 || true)
+          if [ -z "$CERT_LINE" ]; then
+            CERT_LINE=$(security find-identity -v -p codesigning build.keychain | grep "Apple Development" | head -n1 || true)
+          fi
+          if [ -z "$CERT_LINE" ]; then
+            echo "::error::钥匙串中未找到 Developer ID Application 或 Apple Development 的 codesigning 身份"
+            exit 1
+          fi
+          CERT_ID=$(echo "$CERT_LINE" | awk -F'"' '{print $2}')
+          echo "APPLE_SIGNING_IDENTITY=$CERT_ID" >> "$GITHUB_ENV"
+
+      - name: Build and upload artifacts
+        uses: tauri-apps/tauri-action@v0.6.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ env.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          projectPath: .
+          tagName: ${{ github.ref_name }}
+          releaseName: Wise Desktop ${{ github.ref_name }}
+          releaseBody: "安装包见下方 Assets；若为草稿 Release，可在 GitHub Release 页面编辑后发布。"
+          releaseDraft: true
+          prerelease: false
+          uploadUpdaterJson: false

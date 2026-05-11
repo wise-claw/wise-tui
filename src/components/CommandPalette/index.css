@@ -1,0 +1,87 @@
+.app-command-palette-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 80px;
+  background: rgba(0, 0, 0, 0.25);
+  animation: app-palette-fade-in 0.12s ease;
+}
+
+@keyframes app-palette-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.app-command-palette {
+  width: 480px;
+  max-height: 320px;
+  background: var(--ant-color-bg-container);
+  border-radius: 8px;
+  box-shadow: var(--ant-box-shadow-secondary);
+  border: 1px solid var(--ant-color-border-secondary);
+  overflow: hidden;
+}
+
+.app-command-palette-input {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  font-size: 13px;
+}
+
+.app-command-palette-input .ant-input {
+  font-size: 13px;
+  color: var(--ant-color-text);
+}
+
+.app-command-palette-input .ant-input::placeholder {
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-command-palette-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-command-palette-list {
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 2px 0;
+}
+
+.app-command-palette-item {
+  padding: 5px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--ant-color-text);
+  transition: background 0.12s;
+  user-select: none;
+  font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
+}
+
+.app-command-palette-item:hover,
+.app-command-palette-item--active {
+  background: var(--ant-color-fill-content);
+}
+
+.app-command-palette-item--active {
+  border-left: 2px solid var(--ant-color-primary);
+}
+
+.app-command-palette-item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-command-palette-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--ant-color-text-tertiary);
+  font-size: 12px;
+}

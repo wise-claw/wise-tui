@@ -1,0 +1,195 @@
+/* 技能页内 Alert：单行 + 收紧内边距 */
+.app-skills-hub-alert--compact.ant-alert {
+  padding: 5px 10px;
+  align-items: center;
+}
+
+.app-skills-hub-alert--compact.ant-alert .ant-alert-icon {
+  margin-inline-end: 8px;
+  font-size: 14px;
+}
+
+.app-skills-hub-alert--compact .ant-alert-message {
+  margin-bottom: 0 !important;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.app-skills-hub-alert--compact .ant-alert-content {
+  min-width: 0;
+}
+
+.app-skills-hub-alert-inline {
+  display: block;
+}
+
+.app-skills-hub-root {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 16px;
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  background: var(--ant-color-bg-layout);
+}
+
+.app-skills-hub-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.app-skills-hub-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.app-skills-hub-title {
+  margin: 0 !important;
+  font-weight: 600 !important;
+  font-size: 14px !important;
+  line-height: 1.2 !important;
+  min-width: 0;
+  flex: 1;
+}
+
+.app-skills-hub-close-btn {
+  flex-shrink: 0;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-skills-hub-close-btn:hover {
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-tertiary);
+}
+
+.app-skills-hub-subtitle {
+  margin-bottom: 0 !important;
+  margin-top: 0 !important;
+  font-size: 11px;
+  line-height: 1.35;
+  max-width: 640px;
+}
+
+.app-skills-hub-scope-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.app-skills-hub-scope-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ant-color-text-secondary);
+  flex-shrink: 0;
+}
+
+/* 选中项：主色蓝字；滑块用主色浅底，深浅主题均可用 token */
+.app-skills-hub-scope-segmented.ant-segmented .ant-segmented-item-label {
+  transition: color 0.15s ease;
+}
+
+.app-skills-hub-scope-segmented.ant-segmented .ant-segmented-item:not(.ant-segmented-item-selected) .ant-segmented-item-label {
+  color: var(--ant-color-text-secondary);
+}
+
+.app-skills-hub-scope-segmented.ant-segmented .ant-segmented-item-selected,
+.app-skills-hub-scope-segmented.ant-segmented .ant-segmented-item-selected .ant-segmented-item-label {
+  color: var(--ant-color-primary);
+  font-weight: 600;
+}
+
+.app-skills-hub-scope-segmented.ant-segmented .ant-segmented-thumb {
+  background: var(--ant-color-primary-bg);
+}
+
+.app-skills-hub-search-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.app-skills-hub-search {
+  flex: 1;
+  min-width: 200px;
+  max-width: 420px;
+}
+
+.app-skills-hub-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+}
+
+.app-skills-hub-card {
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-height: 0;
+}
+
+.app-skills-hub-card-name {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--ant-color-text);
+  word-break: break-word;
+}
+
+.app-skills-hub-card-meta {
+  font-size: 10px;
+  color: var(--ant-color-text-tertiary);
+  line-height: 1.3;
+}
+
+.app-skills-hub-card-source {
+  font-size: 10px;
+  color: var(--ant-color-text-secondary);
+  font-family: var(--ant-font-family-code);
+  word-break: break-all;
+}
+
+.app-skills-hub-card-actions {
+  margin-top: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  padding-top: 4px;
+  border-top: 1px solid var(--ant-color-border-secondary);
+}
+
+/* 卡片底部操作区：比默认 small 更紧凑 */
+.app-skills-hub-card-actions .ant-btn.ant-btn-sm {
+  height: 22px;
+  padding: 0 6px;
+  font-size: 11px;
+  line-height: 1;
+  border-radius: 4px;
+}
+
+.app-skills-hub-card-link {
+  font-size: 11px;
+  line-height: 22px;
+  padding: 0 2px;
+}
+
+.app-skills-hub-loading {
+  display: flex;
+  justify-content: center;
+  padding: 20px;
+}
+
+.app-skills-hub-empty {
+  margin: 10px 0;
+}

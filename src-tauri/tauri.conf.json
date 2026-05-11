@@ -1,0 +1,74 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Wise",
+  "version": "1.0.0",
+  "identifier": "com.wise.desktop",
+  "build": {
+    "beforeDevCommand": "bun run dev",
+    "devUrl": "http://localhost:16088",
+    "beforeBuildCommand": "bun run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Wise",
+        "width": 1120,
+        "height": 720,
+        "hiddenTitle": true,
+        "titleBarStyle": "Overlay",
+        "dragDropEnabled": false
+      },
+      {
+        "label": "mascot",
+        "title": "Wise Mascot",
+        "url": "mascot.html",
+        "width": 200,
+        "height": 240,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "visible": false,
+        "skipTaskbar": true
+      }
+    ],
+    "security": {
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$HOME/.wise/**"]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "createUpdaterArtifacts": false,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "12.0",
+      "dmg": {
+        "background": "dmg/dmg-background.png",
+        "windowSize": {
+          "width": 660,
+          "height": 420
+        },
+        "appPosition": {
+          "x": 150,
+          "y": 168
+        },
+        "applicationFolderPosition": {
+          "x": 468,
+          "y": 168
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,4201 @@
+import {
+  BellOutlined,
+  CheckCircleOutlined,
+  CommentOutlined,
+  FieldTimeOutlined,
+  QuestionCircleOutlined,
+  ReloadOutlined,
+  UnorderedListOutlined,
+} from "@ant-design/icons";
+import {
+  Alert,
+  Button,
+  Drawer,
+  Tooltip,
+  message,
+  Popover,
+  Popconfirm,
+  Empty,
+  Modal,
+  Spin,
+  Table,
+  Tag,
+  Input,
+  Select,
+  Space,
+} from "antd";
+import type { ColumnsType } from "antd/es/table";
+import {
+  useRef,
+  useEffect,
+  useLayoutEffect,
+  useState,
+  useCallback,
+  useMemo,
+  useSyncExternalStore,
+  type PointerEvent,
+} from "react";
+import type {
+  ClaudeComposerExecuteBubbleOptions,
+  ClaudeSession,
+  GitStatusResponse,
+  GitWorktreeEntry,
+  TodoItem,
+  QuestionRequest,
+  PermissionRequest,
+} from "../../types";
+import type { ControlRequestStatus } from "../../notifications";
+import { StreamingReplyHint } from "./Markdown";
+import { ClaudeChatMessageRow } from "./ClaudeChatMessageRow";
+import { ComposerRegion, type DualPaneComposerRepositoryPickerProps } from "../ClaudeChatInput";
+import { gitCommit, gitPull, gitPush, gitStage, gitStatus, gitWorktreeList, gitWorktreeRemove } from "../../services/git";
+import { openInFinder } from "../../services/repository";
+import { executeClaudeCodeAndWait, getClaudeConfigModel } from "../../services/claude";
+import { scheduleDirectOmcBatchAfterMacrotask } from "../../services/omcDirectBatchExecution";
+import { BackgroundInvocationDock } from "./BackgroundInvocationDock";
+import { PendingTaskQueuePanel } from "./PendingTaskQueuePanel";
+import { RepositoryScheduledTasksModal } from "../RepositoryScheduledTasksModal";
+import { usePendingTaskQueue } from "../../hooks/usePendingTaskQueue";
+import { useQuestionDockTabsForRepository } from "../../hooks/useQuestionDockTabs";
+import { useWorkflowRun } from "../../hooks/useWorkflowRun";
+import type { OmcBatchTemplateId } from "../../services/workflow/actions";
+import { loadPrdTaskSplitResult, savePrdTaskSplitResult } from "../../services/prdTaskSplitStore";
+import { refreshSplitResultDerivedFields } from "../../services/taskSplitter";
+import {
+  wiseNotificationListRecent,
+  wiseNotificationMarkAllRead,
+  wiseNotificationMarkRead,
+  type WiseInboundMessageRow,
+} from "../../services/wiseMascot";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import {
+  readDeferredSendNext,
+  writeDeferredSendNext,
+} from "../../services/pendingTaskQueueStore";
+import {
+  getRepositoryBaseDisplayName,
+  stripRedundantRepoBracketPrefix,
+} from "../../utils/sessionRepositoryDisplay";
+import {
+  extractNotificationScrollKeyword,
+  formatNotificationInboxDisplayLine,
+  WISE_PENDING_NOTIFICATION_SCROLL_STORAGE_KEY,
+} from "../../utils/claudeTurnNotificationBody";
+import type { SessionOwnerHint } from "../../utils/sessionOwnerHints";
+import {
+  extractBoundEmployeeNameFromDisplay,
+  loadSessionOwnerHints,
+  parseOwnerHintFromNotificationBody,
+  persistSessionOwnerHints,
+  resolveOwnerHintForSession,
+  WISE_SESSION_OWNER_HINTS_CHANGED_EVENT,
+} from "../../utils/sessionOwnerHints";
+import { extractClaudeInvocationFinalText } from "../../utils/claudeInvocationText";
+import { removeSplitResultTasksByIds } from "../../utils/removeSplitResultTasksByIds";
+import {
+  getMessageSenderGroupKey,
+  isToolOnlyUserMessage,
+  userMessagePlainTextForDisplay,
+} from "../../utils/claudeChatMessageDisplay";
+import { pickSessionForRepositorySidebarSelect } from "../../utils/claudeSessionSelection";
+import { buildOmcBatchTaskIntentOneLiner } from "../../utils/omcBatchTaskIntentOneLiner";
+import {
+  messageTextLooksLikeOmcDispatch,
+  parseOmcSlashCommandFromUserText,
+} from "../../utils/omcUserMessageText";
+import { resolveBoundMainSessionId } from "../../utils/repositoryMainSessionBinding";
+import { getAppSetting, setAppSetting } from "../../services/appSettingsStore";
+import {
+  SESSION_NOTIFICATION_UI_EVENT_OPEN_PANEL,
+  WORKFLOW_UI_EVENT_FOCUS_TASK_TOOL,
+  WORKFLOW_UI_EVENT_OMC_BATCH_RUNTIME_CHANGED,
+  WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL,
+  WORKFLOW_UI_EVENT_REPO_WORKTREES_MAY_HAVE_CHANGED,
+  WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED,
+  type RepoWorktreesMayHaveChangedDetail,
+  type WorkflowOmcBatchRuntimeDetail,
+} from "../../constants/workflowUiEvents";
+import { TEAM_AUTO_DRIVER_PREFIXES } from "../../constants/teamAutoDriver";
+import { OMC_MONITOR_EMPLOYEE_NAME } from "../../constants/omcMonitor";
+import {
+  getOmcDirectBatchInvocationsSnapshot,
+  subscribeOmcDirectBatchInvocations,
+} from "../../stores/omcDirectBatchInvocationsStore";
+import { isOmcDirectBatchInvocationRunning } from "../../utils/omcDirectBatchInvocationDisplay";
+import type {
+  EmployeeItem,
+  PendingExecutionTask,
+  TaskItem,
+  TaskFlowStatus,
+  WorkflowGraph,
+  WorkflowTaskItem,
+  WorkflowTemplateItem,
+} from "../../types";
+
+function formatWorktreeBranchLabel(branch: string | null): string {
+  if (!branch?.trim()) return "（detached）";
+  return branch.replace(/^refs\/heads\//, "");
+}
+
+function sessionRepoPathKey(p: string): string {
+  return p.trim().replace(/\\/g, "/").replace(/\/$/, "");
+}
+
+function formatWorktreePathRelative(repoPath: string, worktreePath: string): string {
+  const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/$/, "");
+  const r = norm(repoPath);
+  const w = norm(worktreePath);
+  if (w.startsWith(`${r}/`)) return w.slice(r.length + 1);
+  return worktreePath;
+}
+
+function sameLogicalClaudeSession(a: ClaudeSession, b: ClaudeSession): boolean {
+  if (a.id === b.id) {
+    return true;
+  }
+  const ac = a.claudeSessionId?.trim();
+  const bc = b.claudeSessionId?.trim();
+  if (ac && (ac === b.id || (bc && ac === bc))) {
+    return true;
+  }
+  if (bc && (bc === a.id || (ac && bc === ac))) {
+    return true;
+  }
+  return false;
+}
+
+function buildTaskExecutionPrompt(task: TaskItem): string {
+  const lines = [
+    `请执行以下任务：${task.title || task.id}`,
+    "",
+    `任务ID：${task.id}`,
+    `角色：${formatTaskRoleLabel(task.role)}`,
+    `规模：${task.size}`,
+    `预估工期：${task.estimateDays} 天`,
+  ];
+  if (task.description.trim()) {
+    lines.push("", "任务描述：", task.description.trim());
+  }
+  if (task.dod.length > 0) {
+    lines.push("", "验收标准：");
+    for (const item of task.dod) {
+      if (item.trim()) {
+        lines.push(`- ${item.trim()}`);
+      }
+    }
+  }
+  return lines.join("\n");
+}
+
+/** 「可执行任务」仅展示「未完成 / 已完成」：持久化与展示统一为 todo | done。 */
+function normalizeSplitTaskListFlowStatus(status: TaskFlowStatus | undefined): "todo" | "done" | undefined {
+  if (status === undefined) return undefined;
+  if (status === "done") return "done";
+  return "todo";
+}
+
+function splitTaskListBinaryLabel(status: TaskFlowStatus | undefined): string {
+  return status === "done" ? "已完成" : "未完成";
+}
+
+/** 拆分任务 `role` 展示与下发提示词用中文标签（数据层仍为英文枚举）。 */
+function formatTaskRoleLabel(role: string | undefined): string {
+  const r = (role ?? "").trim().toLowerCase();
+  if (r === "frontend") return "前端";
+  if (r === "backend") return "后端";
+  if (r === "document") return "文档";
+  if (r === "fullstack" || r === "full-stack") return "全栈";
+  if (r === "devops") return "运维";
+  if (r === "mobile") return "移动端";
+  if (r === "design" || r === "designer") return "设计";
+  return (role ?? "").trim() || "未指定";
+}
+
+/** 通知 `conversationId` 是否归属当前标签会话（含临时 id 与磁盘 Claude id 合并后的别名）。 */
+function notificationInboxConversationMatchesSession(
+  conversationId: string,
+  sess: ClaudeSession,
+  allSessions: ClaudeSession[],
+): boolean {
+  const c = conversationId.trim();
+  if (!c) return false;
+  if (c === sess.id) return true;
+  const claude = sess.claudeSessionId?.trim();
+  if (claude && c === claude) return true;
+  const owner = allSessions.find((s) => s.id === c || (s.claudeSessionId?.trim() && s.claudeSessionId.trim() === c));
+  if (!owner) return false;
+  return sameLogicalClaudeSession(owner, sess);
+}
+
+/** 仅按 `conversationId` 判断是否属于当前会话所在仓库的通知面板范围（不含已读判断）。 */
+function notificationConversationInSessionInboxScope(
+  conversationId: string,
+  sess: ClaudeSession,
+  allSessions: ClaudeSession[],
+): boolean {
+  const c = conversationId.trim();
+  if (!c) return false;
+  const owner = allSessions.find((s) => s.id === c || (s.claudeSessionId?.trim() && s.claudeSessionId.trim() === c));
+  if (owner) {
+    return owner.repositoryPath === sess.repositoryPath;
+  }
+  return notificationInboxConversationMatchesSession(c, sess, allSessions);
+}
+
+/**
+ * 会话内通知面板：展示「当前仓库」下任意标签产生的未读（主会话 / 员工 / 团队子标签），
+ * 以便员工执行完成等写入的通知在同仓其他标签上也能出现；无法在 `sessions` 中解析时退化为仅当前标签 id 匹配。
+ */
+function notificationRowInSessionInboxScope(
+  row: WiseInboundMessageRow,
+  sess: ClaudeSession,
+  allSessions: ClaudeSession[],
+): boolean {
+  if (row.readAt) {
+    return false;
+  }
+  return notificationConversationInSessionInboxScope(row.conversationId, sess, allSessions);
+}
+
+function countSessionUnreadNotifications(
+  rows: WiseInboundMessageRow[],
+  sess: ClaudeSession,
+  allSessions: ClaudeSession[],
+): number {
+  return rows.filter((r) => notificationRowInSessionInboxScope(r, sess, allSessions)).length;
+}
+
+function isWorkflowTraceEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem("wise.workflow.trace") === "1";
+  } catch {
+    return false;
+  }
+}
+
+function logWorkflowTrace(step: string, payload: Record<string, unknown>) {
+  if (!isWorkflowTraceEnabled()) return;
+  console.debug(`[wise-workflow-trace] ${step}`, payload);
+}
+
+/** 主 Claude Code 从 running/connecting 进入空闲后，自动出队待发送任务前等待，减轻与子进程收尾的竞态 */
+const POST_CLAUDE_IDLE_PENDING_DISPATCH_DELAY_MS = 500;
+
+interface Props {
+  session: ClaudeSession;
+  sessions?: ClaudeSession[];
+  onSwitchSession?: (
+    sessionId: string,
+    options?: { collapseSessionNotificationPanel?: boolean },
+  ) => void;
+  /** 由父级在「返回主会话」等场景传入，使重挂载后面板默认收起 */
+  initialNotificationPanelCollapsed?: boolean;
+  onCreateNewSession?: () => void;
+  onSend: (prompt: string) => void;
+  onExecute: (
+    sessionId: string,
+    prompt: string,
+    dispatchTarget?: Pick<PendingExecutionTask, "targetType" | "targetEmployeeName" | "targetWorkflowId" | "targetWorkflowName">,
+    executeOptions?: ClaudeComposerExecuteBubbleOptions,
+  ) => boolean | void | Promise<boolean | void>;
+  onSessionModelChange: (model: string) => void;
+  onCancel: (opts?: { retractLastUserTurn?: boolean }) => void;
+  // Dock props
+  todos: TodoItem[];
+  questionRequest: QuestionRequest | null;
+  questionRequestQueueLength?: number;
+  questionRequestStatus?: ControlRequestStatus | null;
+  questionRequestError?: string | null;
+  permissionRequest: PermissionRequest | null;
+  permissionRequestStatus?: ControlRequestStatus | null;
+  permissionRequestError?: string | null;
+  followupItems: { id: string; text: string }[];
+  revertItems: { id: string; text: string }[];
+  respondQuestionAt: (sessionId: string, answers: string[], customAnswer?: string) => void;
+  dismissQuestionAt: (sessionId: string) => void;
+  onRespondToPermission: (response: "allow_once" | "allow_always" | "deny") => void;
+  onClearTodos: () => void;
+  onClearFollowups: () => void;
+  onClearRevertItems: () => void;
+  onSendFollowup: (id: string) => void;
+  onRestoreRevert: (id: string) => void | Promise<void>;
+  onOpenWorkflowConfig?: () => void;
+  employees?: EmployeeItem[];
+  mentionEmployees?: EmployeeItem[];
+  workflowTasks?: WorkflowTaskItem[];
+  taskPendingEmployeesByTaskId?: Record<string, Array<{ employeeId: string; name: string }>>;
+  workflowTemplates?: WorkflowTemplateItem[];
+  workflowGraphsByWorkflowId?: Record<string, WorkflowGraph>;
+  workflowGraphStatusByWorkflowId?: Record<string, string>;
+  onOpenTaskDetail?: (taskId: string) => void;
+  panelBelowMessages?: React.ReactNode;
+  hideMessages?: boolean;
+  hideSessionTools?: boolean;
+  /**
+   * 侧栏展示的「当前仓库 Claude 槽位剩余」估算（并发上限 − 运行中会话数），仅作提示，不再限制可执行任务多选条数。
+   */
+  taskListConcurrentCapacity?: number;
+  /**
+   * 按当前 `session` 解析项目/仓库并发上下文（与主会话 `executeClaudeCode` 一致）；
+   * 双栏时左右标签各自解析，避免误用主标签的 scope key。
+   */
+  resolveTaskListOmcInvokeConcurrency?: (session: ClaudeSession) => {
+    concurrencyScopeKey: string;
+    concurrencyLimit: number;
+  } | null;
+  /** 与侧栏仓库主会话绑定一致，用于 OMC 批量等挂到固定主标签 */
+  repositoryMainBindings?: Record<string, string>;
+  /** 将系统消息写入指定 tab 会话（如主会话上的批量 OMC 系统提示） */
+  onAppendSystemMessage?: (sessionId: string, text: string) => void;
+  /** 仅追加用户气泡（不 invoke），用于批量 OMC 展示与子进程一致的派发正文 */
+  onAppendUserMessage?: (sessionId: string, text: string) => void;
+  /**
+   * 直连批量 OMC：单条任务在可执行任务中成功标为已完成时，向「OMC员工」工作标签追加系统提示。
+   */
+  onNotifyOmcEmployeeDirectBatchTaskDone?: (input: {
+    repositoryPath: string;
+    repositoryDisplayName: string;
+    employeeMessage: string;
+  }) => void;
+  /** 直连批量 OMC 启动前：清空「OMC员工」该仓库标签并预建新会话，避免沿用 */
+  onPrepareFreshOmcEmployeeWorkerForDirectBatch?: (input: {
+    repositoryPath: string;
+    repositoryDisplayName: string;
+  }) => void | Promise<void>;
+  /** 从历史会话弹窗重新扫描磁盘上的 Claude 会话并合并到标签列表 */
+  onRefreshHistorySessions?: () => void | Promise<void>;
+  /** App 侧 `omcBatchRuntime.active`：批量 OMC 调度中（含任务间隙），用于员工空闲判定 */
+  omcBatchPipelineActive?: boolean;
+  /** 工作树列表：将路径加入当前侧栏项目（由 App 注入） */
+  onAddWorktreeRepositoryToProject?: (worktreePath: string) => void | Promise<void>;
+  /** 从磁盘读取完整 jsonl 覆盖当前标签消息（`diskTranscriptPartial` 时） */
+  onReloadFullDiskTranscript?: (sessionId: string) => void | Promise<void>;
+  /** 双栏右侧主会话：输入框底栏仓库选择（由父级仅在右侧注入） */
+  dualPaneRepositoryPicker?: DualPaneComposerRepositoryPickerProps;
+}
+
+interface SessionSendTraceEntry {
+  id: string;
+  sessionId: string;
+  createdAt: number;
+  composerText: string;
+  outboundText: string;
+  nodes: Array<{ label: string; timestamp: number; detail?: string }>;
+}
+
+function mapClaudeExecutionStatusLabel(status: ClaudeSession["status"]): string {
+  if (status === "running") return "运行中";
+  if (status === "connecting") return "连接中";
+  if (status === "completed") return "已完成";
+  if (status === "cancelled") return "已取消";
+  if (status === "error") return "异常";
+  return "空闲";
+}
+
+function executionStatusTagColor(
+  status: ClaudeSession["status"],
+): "default" | "processing" | "success" | "error" {
+  if (status === "running" || status === "connecting") return "processing";
+  if (status === "completed") return "success";
+  if (status === "error") return "error";
+  return "default";
+}
+
+function formatCompletionActivityTime(t: number): string {
+  const d = new Date(t);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+interface RepositorySessionExecutionRow {
+  key: string;
+  sessionId: string;
+  ownerType: "main" | "employee" | "team";
+  scopeLabel: string;
+  preview: string;
+  status: ClaudeSession["status"];
+  statusLabel: string;
+  claudeSessionId: string;
+  messageCount: number;
+  updatedAt: number;
+}
+
+type TaskCompletionOwnerFilter = "all" | RepositorySessionExecutionRow["ownerType"];
+type TaskCompletionStatusFilter = "all" | ClaudeSession["status"];
+
+function rowMatchesCompletionSearch(row: RepositorySessionExecutionRow, q: string): boolean {
+  const needle = q.trim().toLowerCase();
+  if (!needle) return true;
+  const hay = [
+    row.scopeLabel,
+    row.preview,
+    row.claudeSessionId,
+    row.sessionId,
+    row.statusLabel,
+    row.ownerType === "main" ? "主会话" : row.ownerType === "employee" ? "员工" : "团队",
+  ]
+    .join("\n")
+    .toLowerCase();
+  return hay.includes(needle);
+}
+
+const RETURN_MAIN_SESSION_KEY = "wise:return-main-session-id";
+/** 无并发上下文时「可执行任务」多选上限回退值 */
+const TASK_LIST_MAX_SELECTED = 50;
+
+/** 中栏「历史会话」「完成任务」：首屏条数与滚动加载步长 */
+const FEATURE_SESSION_LIST_PAGE_SIZE = 50;
+
+/** 设为 true 时显示会话特性面板「完成任务」入口与弹窗 */
+const SHOW_SESSION_TASK_COMPLETION_FEATURE = false;
+
+const TASK_COMPLETION_MODAL_HINT =
+  "以下为当前仓库内各标签会话（主会话、员工独立会话、团队流程会话）的 Claude Code 运行状态与上下文概况，便于核对是否均已执行完毕。各标签上的发送节点明细请在对应标签打开「会话跟踪」查看。";
+
+function getSessionTraceStorageKey(sessionId: string, repositoryPath?: string): string {
+  return `wise:claude:session-send-traces:${repositoryPath ?? ""}:${sessionId}`;
+}
+
+export function ClaudeChat({
+  session,
+  sessions = [],
+  onSwitchSession,
+  initialNotificationPanelCollapsed = false,
+  onCreateNewSession,
+  onSend: _onSend,
+  onExecute,
+  onSessionModelChange,
+  onCancel,
+  todos,
+  questionRequest,
+  questionRequestQueueLength = 0,
+  questionRequestStatus,
+  questionRequestError,
+  permissionRequest,
+  permissionRequestStatus,
+  permissionRequestError,
+  followupItems,
+  revertItems,
+  respondQuestionAt,
+  dismissQuestionAt,
+  onRespondToPermission,
+  onClearTodos,
+  onClearFollowups,
+  onClearRevertItems,
+  onSendFollowup,
+  onRestoreRevert,
+  onOpenWorkflowConfig,
+  employees = [],
+  mentionEmployees = [],
+  workflowTasks = [],
+  taskPendingEmployeesByTaskId = {},
+  workflowTemplates = [],
+  workflowGraphsByWorkflowId = {},
+  workflowGraphStatusByWorkflowId = {},
+  onOpenTaskDetail,
+  panelBelowMessages,
+  hideMessages = false,
+  hideSessionTools = false,
+  taskListConcurrentCapacity,
+  resolveTaskListOmcInvokeConcurrency,
+  repositoryMainBindings = {},
+  onAppendSystemMessage,
+  onAppendUserMessage,
+  onNotifyOmcEmployeeDirectBatchTaskDone,
+  onPrepareFreshOmcEmployeeWorkerForDirectBatch,
+  onRefreshHistorySessions,
+  omcBatchPipelineActive = false,
+  onAddWorktreeRepositoryToProject,
+  onReloadFullDiskTranscript,
+  dualPaneRepositoryPicker,
+}: Props) {
+  const chatRootRef = useRef<HTMLDivElement>(null);
+  const composerTrayRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const root = chatRootRef.current;
+    const tray = composerTrayRef.current;
+    if (!root || !tray) return;
+
+    function syncComposerTrayHeight() {
+      const r = chatRootRef.current;
+      const t = composerTrayRef.current;
+      if (!r || !t) return;
+      const h = Math.max(1, Math.ceil(t.offsetHeight));
+      r.style.setProperty("--app-composer-tray-h", `${h}px`);
+    }
+
+    syncComposerTrayHeight();
+    const ro = new ResizeObserver(() => {
+      syncComposerTrayHeight();
+    });
+    ro.observe(tray);
+    return () => {
+      ro.disconnect();
+    };
+  }, [session.id]);
+
+  useLayoutEffect(() => {
+    const root = chatRootRef.current;
+    if (!root) return;
+    let rafId: number | null = null;
+
+    function syncSessionOwnerAnchor() {
+      const el = chatRootRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      el.style.setProperty("--app-session-owner-anchor-left", `${r.left}px`);
+      el.style.setProperty("--app-session-owner-anchor-width", `${r.width}px`);
+    }
+    function scheduleSyncSessionOwnerAnchor() {
+      if (rafId != null) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null;
+        syncSessionOwnerAnchor();
+      });
+    }
+
+    syncSessionOwnerAnchor();
+    const ro = new ResizeObserver(() => {
+      scheduleSyncSessionOwnerAnchor();
+    });
+    ro.observe(root);
+    window.addEventListener("resize", scheduleSyncSessionOwnerAnchor);
+    window.addEventListener("scroll", scheduleSyncSessionOwnerAnchor, true);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", scheduleSyncSessionOwnerAnchor);
+      window.removeEventListener("scroll", scheduleSyncSessionOwnerAnchor, true);
+      if (rafId != null) {
+        window.cancelAnimationFrame(rafId);
+      }
+    };
+  }, [session.id, hideMessages, hideSessionTools]);
+
+  const sessionBusyForEscRef = useRef(false);
+  sessionBusyForEscRef.current = session.status === "running" || session.status === "connecting";
+  const onCancelForEscRef = useRef(onCancel);
+  onCancelForEscRef.current = onCancel;
+
+  /** 点击消息区等非控件时让中栏获得焦点，便于 Esc 终止 Claude Code（否则 activeElement 常在 body） */
+  const onChatPointerDownCapture = useCallback((e: PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    const root = chatRootRef.current;
+    if (!root) return;
+    const hit = e.target;
+    if (!(hit instanceof Element)) return;
+    if (
+      hit.closest(
+        "button, a, input, textarea, select, [contenteditable='true'], [role='textbox'], [role='menuitem']",
+      )
+    ) {
+      return;
+    }
+    if (hit.closest("[data-wise-composer-root]")) return;
+    if (hit.closest(".monaco-editor, .milkdown")) return;
+    if (document.activeElement === root) return;
+    root.focus({ preventScroll: true });
+  }, []);
+
+  /** 占用中 Esc 仅停止（不撤 transcript）：composer 用 useLayoutEffect 抢先处理「撤回刚发」 */
+  useEffect(() => {
+    function onWindowEscCapture(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      if (!sessionBusyForEscRef.current) return;
+      const root = chatRootRef.current;
+      if (!root) return;
+      const t = e.target;
+      const ae = document.activeElement;
+      const inside =
+        (t instanceof Node && root.contains(t)) || (ae instanceof Node && root.contains(ae));
+      if (!inside) return;
+      if (ae instanceof Element) {
+        if (ae.closest(".ant-modal-wrap") || ae.closest(".ant-image-preview-root")) return;
+      }
+      if (root.querySelector(".app-claude-slash-popover")) return;
+
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      onCancelForEscRef.current();
+    }
+    window.addEventListener("keydown", onWindowEscCapture, { capture: true });
+    return () => window.removeEventListener("keydown", onWindowEscCapture, { capture: true });
+  }, []);
+
+  const { tasks: pendingTasks, addTask, removeTask, pinTask, updateTask, clearAll } = usePendingTaskQueue(
+    session.id,
+    session.repositoryPath,
+  );
+
+  const { run: workflowRun } = useWorkflowRun(session.id, session.repositoryPath);
+  const omcBatchUserAbortRef = useRef(false);
+  const omcBatchInFlightRef = useRef(false);
+  const [splitTodoTasks, setSplitTodoTasks] = useState<TaskItem[]>([]);
+  /** 「可执行任务」角标：仅统计未完成（todo）条数 */
+  const splitIncompleteTaskCount = useMemo(
+    () => splitTodoTasks.filter((task) => task.flowStatus === "todo").length,
+    [splitTodoTasks],
+  );
+  const showPendingTaskQueue = pendingTasks.length > 0;
+
+  const syncSplitTaskList = useCallback(async () => {
+    const split = await loadPrdTaskSplitResult();
+    if (!split) {
+      setSplitTodoTasks([]);
+      return;
+    }
+    const listedTasks = split.executableTasks
+      .map((task) => {
+        const fs = normalizeSplitTaskListFlowStatus(task.flowStatus);
+        if (fs === undefined) return { ...task, flowStatus: undefined };
+        return { ...task, flowStatus: fs };
+      })
+      .filter((task) => task.flowStatus === "todo" || task.flowStatus === "done");
+    setSplitTodoTasks(listedTasks);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const sync = async () => {
+      const split = await loadPrdTaskSplitResult();
+      if (cancelled) return;
+      if (!split) {
+        setSplitTodoTasks([]);
+        return;
+      }
+      const listedTasks = split.executableTasks
+        .map((task) => {
+          const fs = normalizeSplitTaskListFlowStatus(task.flowStatus);
+          if (fs === undefined) return { ...task, flowStatus: undefined };
+          return { ...task, flowStatus: fs };
+        })
+        .filter((task) => task.flowStatus === "todo" || task.flowStatus === "done");
+      setSplitTodoTasks(listedTasks);
+    };
+    void sync();
+    const handleSplitTodoCountUpdated = () => {
+      void sync();
+    };
+    window.addEventListener(WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED, handleSplitTodoCountUpdated as EventListener);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED, handleSplitTodoCountUpdated as EventListener);
+    };
+  }, [session.id, session.repositoryPath]);
+
+  useEffect(() => {
+    const valid = new Set(splitTodoTasks.map((task) => task.id));
+    setTaskListSelectedIds((prev) => prev.filter((id) => valid.has(id)));
+  }, [splitTodoTasks]);
+
+  const pendingTasksRef = useRef(pendingTasks);
+  pendingTasksRef.current = pendingTasks;
+  /** 待办出队串行：一次只派发一条；onExecute 同步返回后释放门闸，后续项由会话占用态与 findFirstDispatchableTask 门控 */
+  const pendingQueueDispatchInFlightRef = useRef(false);
+
+  const wasRunningRef = useRef(session.status === "running");
+  const deferredSendNextRef = useRef(false);
+  const [deferredSendQueued, setDeferredSendQueued] = useState(false);
+
+  const dispatchPendingTask = useCallback(
+    (task: PendingExecutionTask) => {
+      if (pendingQueueDispatchInFlightRef.current) {
+        return;
+      }
+      pendingQueueDispatchInFlightRef.current = true;
+      const { id, promptText, targetType, targetEmployeeName, targetWorkflowId, targetWorkflowName, executorLabel } = task;
+      logWorkflowTrace("queue.dispatch.consume", {
+        sessionId: session.id,
+        taskId: id,
+        targetType: targetType ?? "main",
+        targetEmployeeName: targetEmployeeName ?? "",
+        targetWorkflowId: targetWorkflowId ?? "",
+        targetWorkflowName: targetWorkflowName ?? "",
+      });
+      void (async () => {
+        try {
+          const started = await Promise.resolve(
+            onExecute(session.id, promptText, { targetType, targetEmployeeName, targetWorkflowId, targetWorkflowName }),
+          );
+          if (started === false) {
+            // 并发门闸：`executeSession` 内已 `onClaudeSpawnBlocked`，此处不再重复 toast
+            return;
+          }
+          removeTask(id);
+        } catch (error) {
+          console.error("Failed to dispatch pending task, requeueing:", error);
+          addTask({
+            promptText,
+            executorLabel,
+            targetType,
+            targetEmployeeName,
+            targetWorkflowId,
+            targetWorkflowName,
+          });
+          void message.error("任务分发失败，已重新加入待办队列。");
+        } finally {
+          pendingQueueDispatchInFlightRef.current = false;
+        }
+      })();
+    },
+    [addTask, onExecute, removeTask, session.id],
+  );
+
+  const wasClaudeCodeSessionActiveRef = useRef(
+    session.status === "running" || session.status === "connecting",
+  );
+  const idlePendingDispatchHoldUntilRef = useRef(0);
+  const idlePendingDispatchTimerRef = useRef<number | null>(null);
+
+  const clearIdlePendingDispatchTimer = useCallback(() => {
+    if (idlePendingDispatchTimerRef.current !== null) {
+      clearTimeout(idlePendingDispatchTimerRef.current);
+      idlePendingDispatchTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      clearIdlePendingDispatchTimer();
+    };
+  }, [clearIdlePendingDispatchTimer]);
+
+  useEffect(() => {
+    const active = session.status === "running" || session.status === "connecting";
+    const prev = wasClaudeCodeSessionActiveRef.current;
+    wasClaudeCodeSessionActiveRef.current = active;
+    if (prev && !active) {
+      idlePendingDispatchHoldUntilRef.current = Date.now() + POST_CLAUDE_IDLE_PENDING_DISPATCH_DELAY_MS;
+    } else if (!prev && active) {
+      clearIdlePendingDispatchTimer();
+      idlePendingDispatchHoldUntilRef.current = 0;
+    }
+  }, [session.status, clearIdlePendingDispatchTimer]);
+
+  const handleComposerExecute = useCallback(
+    (
+      sessionId: string,
+      prompt: string,
+      consumePending?: string | PendingExecutionTask,
+      dispatchTarget?: {
+        targetType: "main" | "employee" | "team";
+        targetEmployeeName?: string;
+        targetWorkflowId?: string;
+        targetWorkflowName?: string;
+      },
+      executeOptions?: ClaudeComposerExecuteBubbleOptions,
+    ) => {
+      if (consumePending) {
+        const queued =
+          typeof consumePending === "object"
+            ? consumePending
+            : pendingTasksRef.current.find((item) => item.id === consumePending);
+        if (queued) {
+          dispatchPendingTask(queued);
+          return;
+        }
+        if (typeof consumePending === "string") {
+          removeTask(consumePending);
+        }
+        if (dispatchTarget && dispatchTarget.targetType !== "main") {
+          onExecute(sessionId, prompt, dispatchTarget, executeOptions);
+          return;
+        }
+      }
+      onExecute(sessionId, prompt, undefined, executeOptions);
+    },
+    [dispatchPendingTask, onExecute, removeTask],
+  );
+
+  const isMainIdle = session.status !== "running" && session.status !== "connecting";
+
+  const directOmcInvocationsForIdle = useSyncExternalStore(
+    subscribeOmcDirectBatchInvocations,
+    getOmcDirectBatchInvocationsSnapshot,
+    getOmcDirectBatchInvocationsSnapshot,
+  );
+  const omcMonitorPipelineBusy =
+    omcBatchPipelineActive || directOmcInvocationsForIdle.some(isOmcDirectBatchInvocationRunning);
+
+  const isEmployeeIdle = useCallback(
+    (employeeName?: string) => {
+      const normalized = employeeName?.trim();
+      if (!normalized) {
+        return true;
+      }
+      const employee = employees.find((item) => item.name.trim() === normalized);
+      if (!employee) {
+        // 未匹配到员工时降级为主会话调度，避免任务永久阻塞。
+        return true;
+      }
+      if (normalized === OMC_MONITOR_EMPLOYEE_NAME && omcMonitorPipelineBusy) {
+        return false;
+      }
+      const hasRunningEmployeeSession = sessions.some((item) => {
+        if (item.repositoryPath !== session.repositoryPath) {
+          return false;
+        }
+        const ownerName =
+          extractBoundEmployeeNameFromDisplay(item.repositoryName ?? "") ??
+          extractEmployeeNameFromBracketPreview(item.diskPreview);
+        if (!ownerName || ownerName.trim() !== normalized) {
+          return false;
+        }
+        return item.status === "running" || item.status === "connecting";
+      });
+      if (hasRunningEmployeeSession) {
+        return false;
+      }
+      return !workflowTasks.some((task) => {
+        if (task.status !== "in_progress") {
+          return false;
+        }
+        return (taskPendingEmployeesByTaskId[task.id] ?? []).some((pending) => pending.employeeId === employee.id);
+      });
+    },
+    [
+      employees,
+      workflowTasks,
+      taskPendingEmployeesByTaskId,
+      sessions,
+      session.repositoryPath,
+      omcMonitorPipelineBusy,
+    ],
+  );
+
+  const isTeamIdle = useCallback(
+    (workflowId?: string) => {
+      const targetWorkflowId = workflowId?.trim();
+      if (!targetWorkflowId) {
+        return true;
+      }
+      const status = (workflowGraphStatusByWorkflowId[targetWorkflowId] ?? "").toLowerCase();
+      if (status !== "published") {
+        return false;
+      }
+      return !workflowTasks.some((task) => task.workflowId === targetWorkflowId && task.status === "in_progress");
+    },
+    [workflowTasks, workflowGraphStatusByWorkflowId],
+  );
+
+  const canDispatchHead = useCallback(
+    (task: (typeof pendingTasks)[number] | undefined) => {
+      if (!task) return false;
+      const targetType = task.targetType ?? "main";
+      if (targetType === "main") {
+        return isMainIdle;
+      }
+      if (targetType === "employee") {
+        return isEmployeeIdle(task.targetEmployeeName);
+      }
+      if (targetType === "team") {
+        return isTeamIdle(task.targetWorkflowId);
+      }
+      return true;
+    },
+    [isMainIdle, isEmployeeIdle, isTeamIdle],
+  );
+
+  const findFirstDispatchableTask = useCallback(
+    (tasks: PendingExecutionTask[]): { task: PendingExecutionTask; index: number } | null => {
+      for (let i = 0; i < tasks.length; i += 1) {
+        const task = tasks[i];
+        if (canDispatchHead(task)) {
+          return { task, index: i };
+        }
+      }
+      return null;
+    },
+    [canDispatchHead],
+  );
+
+  /** 须在 findFirstDispatchableTask 之后定义：延迟窗口内可重算队首，避免 latch 吞调度或闭包仍指向已删任务 */
+  const scheduleIdleAwarePendingDispatch = useCallback(
+    (task: PendingExecutionTask) => {
+      const holdUntil = idlePendingDispatchHoldUntilRef.current;
+      const delay = Math.max(0, holdUntil - Date.now());
+      if (delay <= 0) {
+        clearIdlePendingDispatchTimer();
+        dispatchPendingTask(task);
+        return;
+      }
+      // 始终用最新入参替换尚未触发的定时器，避免旧闭包仍指向已删项或吞掉重调度
+      clearIdlePendingDispatchTimer();
+      const scheduledId = task.id;
+      idlePendingDispatchTimerRef.current = window.setTimeout(() => {
+        idlePendingDispatchTimerRef.current = null;
+        if (pendingQueueDispatchInFlightRef.current) {
+          return;
+        }
+        const next = findFirstDispatchableTask(pendingTasksRef.current);
+        if (!next) return;
+        if (next.task.id !== scheduledId) {
+          queueMicrotask(() => {
+            scheduleIdleAwarePendingDispatch(next.task);
+          });
+          return;
+        }
+        dispatchPendingTask(next.task);
+      }, delay);
+    },
+    [clearIdlePendingDispatchTimer, dispatchPendingTask, findFirstDispatchableTask],
+  );
+
+  const getPendingTaskDispatchState = useCallback(
+    (task: PendingExecutionTask): { label: string; tone: "ready" | "waiting" } => {
+      const targetType = task.targetType ?? "main";
+      if (targetType === "main" && !isMainIdle) {
+        return { label: "等待主会话空闲", tone: "waiting" };
+      }
+      if (targetType === "employee") {
+        if (isEmployeeIdle(task.targetEmployeeName)) {
+          return { label: "员工空闲可执行", tone: "ready" };
+        }
+        const name = task.targetEmployeeName?.trim() || task.executorLabel;
+        return { label: `等待员工空闲: ${name}`, tone: "waiting" };
+      }
+      if (targetType === "team") {
+        const workflowId = task.targetWorkflowId?.trim();
+        const status = workflowId ? (workflowGraphStatusByWorkflowId[workflowId] ?? "").toLowerCase() : "";
+        if (status !== "published") {
+          return { label: "团队未发布，无法调度", tone: "waiting" };
+        }
+        if (isTeamIdle(task.targetWorkflowId)) {
+          return { label: "团队空闲可执行", tone: "ready" };
+        }
+        const teamName = task.targetWorkflowName?.trim() || task.executorLabel;
+        return { label: `等待团队空闲: ${teamName}`, tone: "waiting" };
+      }
+      return { label: "主会话可执行", tone: "ready" };
+    },
+    [isMainIdle, isEmployeeIdle, isTeamIdle, workflowGraphStatusByWorkflowId],
+  );
+
+  const handleSendNextFromQueue = useCallback(() => {
+    const first = pendingTasks[0];
+    if (!first) {
+      message.warning("队列为空");
+      return;
+    }
+    const targetType = first.targetType ?? "main";
+    if (session.status === "running" && targetType === "main") {
+      deferredSendNextRef.current = true;
+      setDeferredSendQueued(true);
+      void writeDeferredSendNext(session.id, session.repositoryPath, true);
+      message.info("当前有任务在执行，队首将在本轮结束后自动发送。");
+      return;
+    }
+    if (targetType === "team") {
+      const workflowId = first.targetWorkflowId?.trim();
+      const status = workflowId ? (workflowGraphStatusByWorkflowId[workflowId] ?? "").toLowerCase() : "";
+      if (status !== "published") {
+        const teamName = first.targetWorkflowName?.trim() || first.executorLabel;
+        logWorkflowTrace("queue.dispatch.blocked_unpublished", {
+          sessionId: session.id,
+          queueTaskId: first.id,
+          workflowId: workflowId ?? "",
+          teamName,
+        });
+        Modal.confirm({
+          title: "团队未发布，无法调度",
+          content: `队首任务目标为「${teamName}」，请先发布团队流程后再发送。`,
+          okText: "去团队配置",
+          cancelText: "稍后处理",
+          onOk: () => {
+            onOpenWorkflowConfig?.();
+          },
+        });
+        return;
+      }
+    }
+    const dispatchable = findFirstDispatchableTask(pendingTasks);
+    if (!dispatchable) {
+      const dispatchState = getPendingTaskDispatchState(first);
+      message.info(dispatchState.label);
+      return;
+    }
+    if (dispatchable.index > 0) {
+      message.info(`队首暂不可执行，已调度第 ${dispatchable.index + 1} 项任务。`);
+    }
+    dispatchPendingTask(dispatchable.task);
+  }, [
+    session.status,
+    session.repositoryPath,
+    pendingTasks,
+    findFirstDispatchableTask,
+    getPendingTaskDispatchState,
+    dispatchPendingTask,
+    workflowGraphStatusByWorkflowId,
+    onOpenWorkflowConfig,
+  ]);
+
+  const clearAllPendingAndDeferred = useCallback(() => {
+    deferredSendNextRef.current = false;
+    setDeferredSendQueued(false);
+    void writeDeferredSendNext(session.id, session.repositoryPath, false);
+    clearAll();
+  }, [clearAll, session.id, session.repositoryPath]);
+
+  useEffect(() => {
+    const running = session.status === "running";
+    const prevWasRunning = wasRunningRef.current;
+    wasRunningRef.current = running;
+    if (!prevWasRunning || running) return;
+
+    if (!deferredSendNextRef.current) return;
+    deferredSendNextRef.current = false;
+    setDeferredSendQueued(false);
+    void writeDeferredSendNext(session.id, session.repositoryPath, false);
+
+    if (session.status === "error" || session.status === "cancelled") {
+      message.warning(
+        session.status === "cancelled" ? "执行已取消，未自动发送队首任务。" : "执行出错，未自动发送队首任务。",
+      );
+      return;
+    }
+
+    const dispatchable = findFirstDispatchableTask(pendingTasksRef.current);
+    if (!dispatchable) return;
+    scheduleIdleAwarePendingDispatch(dispatchable.task);
+  }, [
+    session.status,
+    session.id,
+    session.repositoryPath,
+    scheduleIdleAwarePendingDispatch,
+    findFirstDispatchableTask,
+  ]);
+
+  useEffect(() => {
+    if (pendingTasks.length === 0 && deferredSendQueued) {
+      deferredSendNextRef.current = false;
+      setDeferredSendQueued(false);
+      void writeDeferredSendNext(session.id, session.repositoryPath, false);
+    }
+  }, [pendingTasks.length, deferredSendQueued, session.id, session.repositoryPath]);
+
+  useEffect(() => {
+    if (pendingQueueDispatchInFlightRef.current) return;
+    if (deferredSendNextRef.current) return;
+    const dispatchable = findFirstDispatchableTask(pendingTasks);
+    if (!dispatchable) return;
+    scheduleIdleAwarePendingDispatch(dispatchable.task);
+  }, [pendingTasks, findFirstDispatchableTask, session.id, scheduleIdleAwarePendingDispatch]);
+
+  useEffect(() => {
+    const sid = session.id;
+    const rp = session.repositoryPath;
+    let cancelled = false;
+    void (async () => {
+      let stored = await readDeferredSendNext(sid, rp);
+      if (stored && pendingTasks.length === 0) {
+        await writeDeferredSendNext(sid, rp, false);
+        stored = false;
+      }
+      if (cancelled) return;
+      deferredSendNextRef.current = stored;
+      setDeferredSendQueued(stored);
+      wasRunningRef.current = session.status === "running";
+
+      if (
+        stored &&
+        pendingTasks.length > 0 &&
+        session.status !== "running" &&
+        session.status !== "connecting"
+      ) {
+        if (session.status === "error" || session.status === "cancelled") {
+          await writeDeferredSendNext(sid, rp, false);
+          if (cancelled) return;
+          deferredSendNextRef.current = false;
+          setDeferredSendQueued(false);
+          message.warning("检测到上次「本轮结束后发送」预约，但会话未成功结束，已取消自动发送。");
+          return;
+        }
+        const dispatchable = findFirstDispatchableTask(pendingTasks);
+        if (dispatchable) {
+          await writeDeferredSendNext(sid, rp, false);
+          if (cancelled) return;
+          deferredSendNextRef.current = false;
+          setDeferredSendQueued(false);
+          queueMicrotask(() => scheduleIdleAwarePendingDispatch(dispatchable.task));
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    session.id,
+    session.repositoryPath,
+    session.status,
+    pendingTasks,
+    scheduleIdleAwarePendingDispatch,
+    findFirstDispatchableTask,
+  ]);
+
+  // Auto-scroll messages（流式时 messages 极高频更新；仅贴底时跟随 + rAF 写 scrollTop，避免与用户滚动打架）
+  const autoScrollThrottleRef = useRef<{ timer?: number; lastAt: number }>({ lastAt: 0 });
+  const AUTOSCROLL_THROTTLE_MS = 120;
+
+  /** 消息列表滚动容器：用 scrollTop 贴底，避免 scrollIntoView 触发布局与祖先滚动链，减轻手动滚动时卡顿 */
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
+  /** 用户是否在底部附近；上滑阅读历史后为 false，流式输出不再抢滚动 */
+  const pinToBottomRef = useRef(true);
+  const lastUserMessagePinIdRef = useRef<number | null>(null);
+  const MESSAGES_PIN_THRESHOLD_PX = 80;
+
+  const [fullTranscriptLoading, setFullTranscriptLoading] = useState(false);
+
+  const tailMessageForThinkingHint = useMemo(
+    () => (session.messages.length > 0 ? session.messages[session.messages.length - 1]! : null),
+    [session.messages],
+  );
+  const showListEndThinkingHint = useMemo(
+    () =>
+      session.status === "running" &&
+      tailMessageForThinkingHint !== null &&
+      (tailMessageForThinkingHint.role === "user" || tailMessageForThinkingHint.role === "assistant"),
+    [session.status, tailMessageForThinkingHint],
+  );
+
+  useEffect(() => {
+    const t = autoScrollThrottleRef.current.timer;
+    if (t != null) {
+      window.clearTimeout(t);
+      autoScrollThrottleRef.current.timer = undefined;
+    }
+    autoScrollThrottleRef.current.lastAt = 0;
+    pinToBottomRef.current = true;
+    lastUserMessagePinIdRef.current = null;
+  }, [session.id]);
+
+  /** 用户新发出一条 user 消息时恢复贴底，便于立刻看到自己发送的内容 */
+  useEffect(() => {
+    if (session.messages.length === 0) return;
+    const last = session.messages[session.messages.length - 1]!;
+    if (last.role !== "user") return;
+    if (lastUserMessagePinIdRef.current === last.id) return;
+    lastUserMessagePinIdRef.current = last.id;
+    pinToBottomRef.current = true;
+  }, [session.messages]);
+
+  useLayoutEffect(() => {
+    if (hideMessages) return;
+    const sc = messagesScrollRef.current;
+    if (!sc) return;
+    let pinRaf = 0;
+    const syncPin = () => {
+      const dist = sc.scrollHeight - sc.scrollTop - sc.clientHeight;
+      pinToBottomRef.current = dist <= MESSAGES_PIN_THRESHOLD_PX;
+    };
+    const onScroll = () => {
+      if (pinRaf !== 0) return;
+      pinRaf = window.requestAnimationFrame(() => {
+        pinRaf = 0;
+        syncPin();
+      });
+    };
+    sc.addEventListener("scroll", onScroll, { passive: true });
+    syncPin();
+    return () => {
+      sc.removeEventListener("scroll", onScroll);
+      if (pinRaf !== 0) window.cancelAnimationFrame(pinRaf);
+    };
+  }, [session.id, hideMessages]);
+
+  useEffect(() => {
+    if (hideMessages) return;
+    const sc = messagesScrollRef.current;
+    if (!sc || !pinToBottomRef.current) return;
+
+    const runScroll = () => {
+      if (!pinToBottomRef.current) return;
+      sc.scrollTop = sc.scrollHeight;
+      autoScrollThrottleRef.current.lastAt = Date.now();
+    };
+
+    const throttled = session.status === "running" || session.status === "connecting";
+    if (!throttled) {
+      if (autoScrollThrottleRef.current.timer != null) {
+        window.clearTimeout(autoScrollThrottleRef.current.timer);
+        autoScrollThrottleRef.current.timer = undefined;
+      }
+      const raf = window.requestAnimationFrame(runScroll);
+      return () => window.cancelAnimationFrame(raf);
+    }
+
+    const now = Date.now();
+    const { lastAt, timer } = autoScrollThrottleRef.current;
+    if (now - lastAt >= AUTOSCROLL_THROTTLE_MS) {
+      if (timer != null) {
+        window.clearTimeout(timer);
+        autoScrollThrottleRef.current.timer = undefined;
+      }
+      const raf = window.requestAnimationFrame(runScroll);
+      return () => window.cancelAnimationFrame(raf);
+    }
+    if (timer == null) {
+      autoScrollThrottleRef.current.timer = window.setTimeout(() => {
+        autoScrollThrottleRef.current.timer = undefined;
+        window.requestAnimationFrame(runScroll);
+      }, AUTOSCROLL_THROTTLE_MS - (now - lastAt));
+    }
+    return () => {
+      const t2 = autoScrollThrottleRef.current.timer;
+      if (t2 != null) {
+        window.clearTimeout(t2);
+        autoScrollThrottleRef.current.timer = undefined;
+      }
+    };
+  }, [session.messages, session.status, hideMessages]);
+
+  useEffect(() => {
+    return () => {
+      const t = autoScrollThrottleRef.current.timer;
+      if (t != null) {
+        window.clearTimeout(t);
+        autoScrollThrottleRef.current.timer = undefined;
+      }
+    };
+  }, []);
+  const [stats, setStats] = useState({ additions: 0, deletions: 0 });
+
+  useEffect(() => {
+    let cancelled = false;
+    const VISIBLE_POLL_INTERVAL_MS = 5000;
+    const HIDDEN_POLL_INTERVAL_MS = 15000;
+
+    async function refreshStats() {
+      try {
+        const status = await gitStatus(session.repositoryPath);
+        if (cancelled) return;
+        setStats({
+          additions: Math.max(0, status.additions || 0),
+          deletions: Math.max(0, status.deletions || 0),
+        });
+      } catch {
+        if (cancelled) return;
+        setStats({ additions: 0, deletions: 0 });
+      }
+    }
+
+    const tick = () => {
+      if (document.visibilityState === "visible") {
+        void refreshStats();
+      }
+    };
+
+    void refreshStats();
+    const timer = window.setInterval(() => {
+      tick();
+    }, document.visibilityState === "visible" ? VISIBLE_POLL_INTERVAL_MS : HIDDEN_POLL_INTERVAL_MS);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refreshStats();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [session.repositoryPath]);
+
+  const [taskListDrawerOpen, setTaskListDrawerOpen] = useState(false);
+  const [taskListSelectedIds, setTaskListSelectedIds] = useState<string[]>([]);
+  const [taskListStatusFilter, setTaskListStatusFilter] = useState<"all" | "todo" | "done">("todo");
+  const [omcBatchPopoverOpen, setOmcBatchPopoverOpen] = useState(false);
+  const [omcBatchTemplateId, setOmcBatchTemplateId] = useState<OmcBatchTemplateId>("autopilot");
+  const [historyPopoverOpen, setHistoryPopoverOpen] = useState(false);
+  const [userQuestionsPopoverOpen, setUserQuestionsPopoverOpen] = useState(false);
+  const [historySearchText, setHistorySearchText] = useState("");
+  const [historyVisibleCount, setHistoryVisibleCount] = useState(FEATURE_SESSION_LIST_PAGE_SIZE);
+  const [historySessionsRefreshing, setHistorySessionsRefreshing] = useState(false);
+  const historyPopoverScrollRef = useRef<HTMLDivElement>(null);
+  const [sessionTraceDrawerOpen, setSessionTraceDrawerOpen] = useState(false);
+  const [sessionSendTraces, setSessionSendTraces] = useState<SessionSendTraceEntry[]>([]);
+  const [notificationRows, setNotificationRows] = useState<WiseInboundMessageRow[]>([]);
+  const [notificationLoading, setNotificationLoading] = useState(false);
+  const [notificationPanelCollapsed, setNotificationPanelCollapsed] = useState(
+    () => initialNotificationPanelCollapsed,
+  );
+  /** 已在当前会话通知列表中出现过的未读 id，用于首屏不闪、仅对新条目播放冒泡入场 */
+  const sessionNotificationSeenIdsRef = useRef<Set<string>>(new Set());
+  const [notificationBubbleEnterIds, setNotificationBubbleEnterIds] = useState<Set<string>>(() => new Set());
+  const [notificationBadgePulse, setNotificationBadgePulse] = useState(false);
+  const [notificationTitleCountPulse, setNotificationTitleCountPulse] = useState(false);
+  const [reviewGitStatsPulse, setReviewGitStatsPulse] = useState(false);
+  const [pushPopoverOpen, setPushPopoverOpen] = useState(false);
+  const [pushSummaryDraft, setPushSummaryDraft] = useState("");
+  const [pushSummaryLoading, setPushSummaryLoading] = useState(false);
+  const [pushSummaryPhase, setPushSummaryPhase] = useState<string>("");
+  const [pushSubmitting, setPushSubmitting] = useState(false);
+  const [gitWorktreePopoverOpen, setGitWorktreePopoverOpen] = useState(false);
+  const [linkedWorktrees, setLinkedWorktrees] = useState<GitWorktreeEntry[]>([]);
+  const [gitWorktreeLoading, setGitWorktreeLoading] = useState(false);
+  const [gitWorktreeRemovingPath, setGitWorktreeRemovingPath] = useState<string | null>(null);
+  const [gitWorktreeAddingToProjectPath, setGitWorktreeAddingToProjectPath] = useState<string | null>(null);
+  const prevSessionUnreadCountRef = useRef(0);
+  const prevGitStatsForPulseRef = useRef({ additions: 0, deletions: 0 });
+  const [returnMainSessionId, setReturnMainSessionId] = useState<string | null>(null);
+  const [sessionOwnerHints, setSessionOwnerHints] = useState<Record<string, SessionOwnerHint>>(() => loadSessionOwnerHints());
+  const sessionForNotificationPanelRef = useRef(session);
+  sessionForNotificationPanelRef.current = session;
+  const sessionsForNotificationMatchRef = useRef(sessions);
+  sessionsForNotificationMatchRef.current = sessions;
+
+  useEffect(() => {
+    const onHintsExternal = () => setSessionOwnerHints(loadSessionOwnerHints());
+    window.addEventListener(WISE_SESSION_OWNER_HINTS_CHANGED_EVENT, onHintsExternal);
+    return () => window.removeEventListener(WISE_SESSION_OWNER_HINTS_CHANGED_EVENT, onHintsExternal);
+  }, []);
+
+  const sessionOwnerInfo = useMemo(
+    () =>
+      resolveSessionOwnerInfo({
+        session,
+        workflowTasks,
+        workflowTemplates,
+        taskPendingEmployeesByTaskId,
+        ownerHint: resolveOwnerHintForSession(sessionOwnerHints, session),
+      }),
+    [session, workflowTasks, workflowTemplates, taskPendingEmployeesByTaskId, sessionOwnerHints],
+  );
+
+  const questionDockTabs = useQuestionDockTabsForRepository(session, sessions, sessionOwnerHints);
+
+  const sessionUserQuestionsForPopover = useMemo(() => {
+    const rows: { id: number; text: string; timestamp: number }[] = [];
+    for (const m of session.messages) {
+      if (m.role !== "user" || isToolOnlyUserMessage(m)) continue;
+      const text = userMessagePlainTextForDisplay(m).trim();
+      if (!text) continue;
+      rows.push({ id: m.id, text, timestamp: m.timestamp });
+    }
+    rows.sort((a, b) => b.timestamp - a.timestamp);
+    return rows;
+  }, [session.messages]);
+
+  const scrollToSessionMessageId = useCallback((messageId: number) => {
+    window.setTimeout(() => {
+      const row = document.querySelector(`[data-message-id="${CSS.escape(String(messageId))}"]`);
+      row?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 50);
+  }, []);
+
+  /** OMC 批量与后台 invocation 流统一挂到「仓库主标签」，避免从员工子标签发起时执行详情无法在中栏主会话打开。 */
+  const omcBatchAnchorSessionId = useMemo(() => {
+    const bound = resolveBoundMainSessionId(session.repositoryPath, repositoryMainBindings, sessions);
+    if (bound) return bound;
+    const main = pickSessionForRepositorySidebarSelect(sessions, session.repositoryPath, sessionOwnerHints);
+    return main?.id ?? session.id;
+  }, [sessions, session.repositoryPath, session.id, sessionOwnerHints, repositoryMainBindings]);
+
+  useEffect(() => {
+    function onOmcBatchRuntime(ev: Event) {
+      const detail = (ev as CustomEvent<WorkflowOmcBatchRuntimeDetail>).detail;
+      if (!detail || detail.active || !detail.abortedByUser) return;
+      const sid = detail.sessionId?.trim() ?? "";
+      if (!sid) return;
+      const anchor = omcBatchAnchorSessionId.trim();
+      const claudeSid = session.claudeSessionId?.trim() ?? "";
+      if (sid !== anchor && sid !== session.id.trim() && sid !== claudeSid) return;
+      omcBatchUserAbortRef.current = true;
+    }
+    window.addEventListener(WORKFLOW_UI_EVENT_OMC_BATCH_RUNTIME_CHANGED, onOmcBatchRuntime as EventListener);
+    return () => {
+      window.removeEventListener(WORKFLOW_UI_EVENT_OMC_BATCH_RUNTIME_CHANGED, onOmcBatchRuntime as EventListener);
+    };
+  }, [omcBatchAnchorSessionId, session.claudeSessionId, session.id]);
+
+  const inferredMainSessionId = useMemo(() => {
+    if (sessionOwnerInfo.type === "main") {
+      return null;
+    }
+    const candidates = sessions
+      .filter((item) => item.id !== session.id && item.repositoryPath === session.repositoryPath)
+      .map((item) => ({
+        session: item,
+        ownerInfo: resolveSessionOwnerInfo({
+          session: item,
+          workflowTasks,
+          workflowTemplates,
+          taskPendingEmployeesByTaskId,
+          ownerHint: resolveOwnerHintForSession(sessionOwnerHints, item),
+        }),
+      }))
+      .filter((item) => item.ownerInfo.type === "main")
+      .sort((a, b) => getSessionUpdatedAt(b.session) - getSessionUpdatedAt(a.session));
+    return candidates[0]?.session.id ?? null;
+  }, [
+    sessionOwnerInfo.type,
+    sessions,
+    session.id,
+    session.repositoryPath,
+    workflowTasks,
+    workflowTemplates,
+    taskPendingEmployeesByTaskId,
+    sessionOwnerHints,
+  ]);
+
+  const effectiveReturnMainSessionId =
+    returnMainSessionId && returnMainSessionId !== session.id
+      ? returnMainSessionId
+      : inferredMainSessionId && inferredMainSessionId !== session.id
+        ? inferredMainSessionId
+        : null;
+
+  const [taskCompletionModalOpen, setTaskCompletionModalOpen] = useState(false);
+  const [scheduledTasksModalOpen, setScheduledTasksModalOpen] = useState(false);
+  const [completionSearchText, setCompletionSearchText] = useState("");
+  const [completionOwnerFilter, setCompletionOwnerFilter] = useState<TaskCompletionOwnerFilter>("all");
+  const [completionStatusFilter, setCompletionStatusFilter] = useState<TaskCompletionStatusFilter>("all");
+  const [completionVisibleCount, setCompletionVisibleCount] = useState(FEATURE_SESSION_LIST_PAGE_SIZE);
+  const completionTableWrapRef = useRef<HTMLDivElement>(null);
+  const completionFilteredLengthRef = useRef(0);
+
+  const repositorySessionExecutionRows = useMemo((): RepositorySessionExecutionRow[] => {
+    const path = session.repositoryPath;
+    const sameRepo = sessions.filter((s) => s.repositoryPath === path);
+    const rows: RepositorySessionExecutionRow[] = sameRepo.map((s) => {
+      const owner = resolveSessionOwnerInfo({
+        session: s,
+        workflowTasks,
+        workflowTemplates,
+        taskPendingEmployeesByTaskId,
+        ownerHint: resolveOwnerHintForSession(sessionOwnerHints, s),
+      });
+      const scopeLabel = owner.name ? `${owner.typeLabel} · ${owner.name}` : owner.typeLabel;
+      return {
+        key: s.id,
+        sessionId: s.id,
+        ownerType: owner.type,
+        scopeLabel,
+        preview: getSessionPreview(s),
+        status: s.status,
+        statusLabel: mapClaudeExecutionStatusLabel(s.status),
+        claudeSessionId: s.claudeSessionId?.trim() || "—",
+        messageCount: s.messages.length,
+        updatedAt: getSessionUpdatedAt(s),
+      };
+    });
+    const ownerRank = (t: RepositorySessionExecutionRow["ownerType"]) => (t === "main" ? 0 : t === "employee" ? 1 : 2);
+    rows.sort((a, b) => {
+      const r = ownerRank(a.ownerType) - ownerRank(b.ownerType);
+      if (r !== 0) return r;
+      return b.updatedAt - a.updatedAt;
+    });
+    return rows;
+  }, [
+    sessions,
+    session.repositoryPath,
+    workflowTasks,
+    workflowTemplates,
+    taskPendingEmployeesByTaskId,
+    sessionOwnerHints,
+  ]);
+
+  const taskCompletionTableColumns: ColumnsType<RepositorySessionExecutionRow> = useMemo(
+    () => [
+      {
+        title: "范围",
+        dataIndex: "scopeLabel",
+        width: "12%",
+        ellipsis: true,
+      },
+      {
+        title: "摘要",
+        dataIndex: "preview",
+        width: "26%",
+        ellipsis: { showTitle: false },
+        render: (preview: string) => {
+          const text = preview?.trim() ? preview : "—";
+          const tip = text === "—" ? undefined : text;
+          return (
+            <Tooltip title={tip} placement="topLeft" mouseEnterDelay={0.35}>
+              <span className="app-task-completion-modal__ellipsis-cell">{text}</span>
+            </Tooltip>
+          );
+        },
+      },
+      {
+        title: "状态",
+        dataIndex: "status",
+        width: "8%",
+        ellipsis: true,
+        render: (_: ClaudeSession["status"], record) => (
+          <Tag color={executionStatusTagColor(record.status)} className="app-task-completion-modal__tag-compact">
+            {record.statusLabel}
+          </Tag>
+        ),
+      },
+      {
+        title: "会话 ID",
+        dataIndex: "sessionId",
+        width: "24%",
+        ellipsis: { showTitle: false },
+        render: (id: string) => (
+          <Tooltip title={id} placement="topLeft" mouseEnterDelay={0.35}>
+            <span className="app-task-completion-modal__ellipsis-cell app-task-completion-modal__mono">{id}</span>
+          </Tooltip>
+        ),
+      },
+      {
+        title: "条",
+        dataIndex: "messageCount",
+        width: "6%",
+        align: "right",
+      },
+      {
+        title: "活动时间",
+        dataIndex: "updatedAt",
+        width: "16%",
+        ellipsis: true,
+        render: (t: number) => formatCompletionActivityTime(t),
+      },
+      {
+        title: "操作",
+        key: "actions",
+        width: "8%",
+        align: "center",
+        render: (_: unknown, record) => (
+          <Button
+            type="link"
+            size="small"
+            className="app-task-completion-modal__enter-btn"
+            disabled={!onSwitchSession}
+            onClick={() => {
+              onSwitchSession?.(record.sessionId);
+              setTaskCompletionModalOpen(false);
+            }}
+          >
+            进入
+          </Button>
+        ),
+      },
+    ],
+    [onSwitchSession, setTaskCompletionModalOpen],
+  );
+
+  const completionFilteredRows = useMemo(() => {
+    return repositorySessionExecutionRows.filter((row) => {
+      if (completionOwnerFilter !== "all" && row.ownerType !== completionOwnerFilter) {
+        return false;
+      }
+      if (completionStatusFilter !== "all" && row.status !== completionStatusFilter) {
+        return false;
+      }
+      if (!rowMatchesCompletionSearch(row, completionSearchText)) {
+        return false;
+      }
+      return true;
+    });
+  }, [
+    repositorySessionExecutionRows,
+    completionOwnerFilter,
+    completionStatusFilter,
+    completionSearchText,
+  ]);
+
+  completionFilteredLengthRef.current = completionFilteredRows.length;
+
+  const completionDisplayedRows = useMemo(
+    () => completionFilteredRows.slice(0, completionVisibleCount),
+    [completionFilteredRows, completionVisibleCount],
+  );
+
+  const completionHasMore = completionVisibleCount < completionFilteredRows.length;
+
+  useEffect(() => {
+    if (!taskCompletionModalOpen) return;
+    setCompletionSearchText("");
+    setCompletionOwnerFilter("all");
+    setCompletionStatusFilter("all");
+    setCompletionVisibleCount(FEATURE_SESSION_LIST_PAGE_SIZE);
+  }, [taskCompletionModalOpen]);
+
+  useEffect(() => {
+    setCompletionVisibleCount(FEATURE_SESSION_LIST_PAGE_SIZE);
+  }, [completionSearchText, completionOwnerFilter, completionStatusFilter]);
+
+  useEffect(() => {
+    if (!taskCompletionModalOpen) return;
+    let bodyEl: HTMLDivElement | null = null;
+    const handler = () => {
+      if (!bodyEl) return;
+      const max = completionFilteredLengthRef.current;
+      if (bodyEl.scrollTop + bodyEl.clientHeight >= bodyEl.scrollHeight - 48) {
+        setCompletionVisibleCount((n) => Math.min(n + FEATURE_SESSION_LIST_PAGE_SIZE, max));
+      }
+    };
+    const timer = window.setTimeout(() => {
+      bodyEl = completionTableWrapRef.current?.querySelector<HTMLDivElement>(".ant-table-body") ?? null;
+      bodyEl?.addEventListener("scroll", handler);
+    }, 50);
+    return () => {
+      window.clearTimeout(timer);
+      bodyEl?.removeEventListener("scroll", handler);
+    };
+  }, [taskCompletionModalOpen, completionDisplayedRows.length, completionFilteredRows.length]);
+
+  /** 当前仓库范围内未读通知（含员工/团队子会话），用于会话内消息通知面板列表与显隐 */
+  const sessionUnreadNotificationRows = useMemo(
+    () => notificationRows.filter((row) => notificationRowInSessionInboxScope(row, session, sessions)),
+    [notificationRows, session, sessions],
+  );
+
+  const sessionUnreadCount = sessionUnreadNotificationRows.length;
+
+  useEffect(() => {
+    sessionNotificationSeenIdsRef.current.clear();
+    setNotificationBubbleEnterIds(new Set());
+    prevSessionUnreadCountRef.current = 0;
+    setNotificationBadgePulse(false);
+    setNotificationTitleCountPulse(false);
+    prevGitStatsForPulseRef.current = { additions: 0, deletions: 0 };
+    setReviewGitStatsPulse(false);
+  }, [session.id, session.repositoryPath]);
+
+  useLayoutEffect(() => {
+    const rows = sessionUnreadNotificationRows;
+    const seen = sessionNotificationSeenIdsRef.current;
+    const ids = rows.map((r) => r.id);
+    if (seen.size === 0) {
+      ids.forEach((id) => seen.add(id));
+      return;
+    }
+    const newly = ids.filter((id) => !seen.has(id));
+    ids.forEach((id) => seen.add(id));
+    if (newly.length === 0) {
+      return;
+    }
+    setNotificationBubbleEnterIds(new Set(newly));
+    const t = window.setTimeout(() => setNotificationBubbleEnterIds(new Set()), 520);
+    return () => window.clearTimeout(t);
+  }, [sessionUnreadNotificationRows]);
+
+  useEffect(() => {
+    const n = sessionUnreadCount;
+    const prev = prevSessionUnreadCountRef.current;
+    const increased = n > prev && prev > 0;
+    prevSessionUnreadCountRef.current = n;
+    if (!increased) {
+      return;
+    }
+    if (notificationPanelCollapsed) {
+      setNotificationBadgePulse(true);
+      const t = window.setTimeout(() => setNotificationBadgePulse(false), 480);
+      return () => window.clearTimeout(t);
+    }
+    setNotificationTitleCountPulse(true);
+    const t = window.setTimeout(() => setNotificationTitleCountPulse(false), 480);
+    return () => window.clearTimeout(t);
+  }, [sessionUnreadCount, notificationPanelCollapsed]);
+
+  useEffect(() => {
+    const prev = prevGitStatsForPulseRef.current;
+    const additionsIncreased = stats.additions > prev.additions && prev.additions > 0;
+    const deletionsIncreased = stats.deletions > prev.deletions && prev.deletions > 0;
+    prevGitStatsForPulseRef.current = { additions: stats.additions, deletions: stats.deletions };
+    if (!additionsIncreased && !deletionsIncreased) {
+      return;
+    }
+    setReviewGitStatsPulse(true);
+    const t = window.setTimeout(() => setReviewGitStatsPulse(false), 480);
+    return () => window.clearTimeout(t);
+  }, [stats.additions, stats.deletions]);
+
+  const loadPushSummaryDraft = useCallback(async () => {
+    if (!session.repositoryPath) return;
+    setPushSummaryLoading(true);
+    setPushSummaryPhase("读取 Git 变更中...");
+    try {
+      const status = await gitStatus(session.repositoryPath);
+      const fallback = buildAiCommitSummary(status);
+      const changedFiles = [...status.staged, ...status.unstaged]
+        .map((item) => `- ${item.path} (${item.status}, +${item.additions}, -${item.deletions})`)
+        .join("\n");
+      setPushSummaryPhase("调用 Claude Code 生成总结...");
+      const prompt = [
+        "你是资深工程师，请基于以下 git 改动生成一段简洁的中文提交总结草稿。",
+        "要求：",
+        "1) 2-4 行；",
+        "2) 第一行说明本次改动目标；",
+        "3) 后续行按要点概述影响范围；",
+        "4) 不要使用 markdown 标题，不要输出解释。",
+        "",
+        `仓库路径: ${session.repositoryPath}`,
+        `分支: ${status.branch ?? "(unknown)"}`,
+        `总计: +${Math.max(0, status.additions || 0)} / -${Math.max(0, status.deletions || 0)}`,
+        `暂存文件数: ${status.staged.length}, 未暂存文件数: ${status.unstaged.length}`,
+        "文件清单：",
+        changedFiles || "- 无",
+        "",
+        "请仅输出最终提交总结正文。",
+      ].join("\n");
+      const configuredModel = await getClaudeConfigModel(session.repositoryPath);
+      const result = await executeClaudeCodeAndWait({
+        repositoryPath: session.repositoryPath,
+        prompt,
+        model: configuredModel ?? undefined,
+        timeoutMs: 45_000,
+        connectionMode: "oneshot",
+      });
+      setPushSummaryPhase("整理生成结果...");
+      if (!result.success) {
+        setPushSummaryDraft(fallback);
+        return;
+      }
+      const cleaned = extractClaudeInvocationFinalText(result.outputLines);
+      setPushSummaryDraft(cleaned || fallback);
+    } catch {
+      setPushSummaryPhase("生成失败，使用默认模板...");
+      const status = await gitStatus(session.repositoryPath).catch(() => null);
+      setPushSummaryDraft(status ? buildAiCommitSummary(status) : "");
+    } finally {
+      setPushSummaryLoading(false);
+      setPushSummaryPhase("");
+    }
+  }, [session.repositoryPath]);
+
+  useEffect(() => {
+    if (!pushPopoverOpen) return;
+    void loadPushSummaryDraft();
+  }, [pushPopoverOpen, loadPushSummaryDraft]);
+
+  const handlePushSubmit = useCallback(async () => {
+    const repoPath = session.repositoryPath;
+    const commitMessage = pushSummaryDraft.trim();
+    if (!repoPath) {
+      message.error("当前会话未绑定仓库，无法推送");
+      return;
+    }
+    if (!commitMessage) {
+      message.warning("请先填写提交总结");
+      return;
+    }
+    setPushSubmitting(true);
+    try {
+      const latestStatus = await gitStatus(repoPath);
+      if (latestStatus.staged.length === 0 && latestStatus.unstaged.length === 0) {
+        message.info("当前没有可提交的改动");
+        setPushPopoverOpen(false);
+        return;
+      }
+      for (const file of latestStatus.unstaged) {
+        await gitStage(repoPath, file.path);
+      }
+      await gitCommit(repoPath, commitMessage);
+      await gitPull(repoPath);
+      await gitPush(repoPath);
+      message.success("提交并推送成功");
+      setPushPopoverOpen(false);
+      const refreshed = await gitStatus(repoPath);
+      setStats({
+        additions: Math.max(0, refreshed.additions || 0),
+        deletions: Math.max(0, refreshed.deletions || 0),
+      });
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      message.error(`推送失败: ${errMsg}`);
+      try {
+        const latest = await gitStatus(repoPath).catch(() => null);
+        const stagedFiles = latest?.staged.map((f) => `${f.path}(${f.status}, +${f.additions}, -${f.deletions})`) ?? [];
+        const unstagedFiles = latest?.unstaged.map((f) => `${f.path}(${f.status}, +${f.additions}, -${f.deletions})`) ?? [];
+        const autoFixPrompt = [
+          "下面是一次 git 提交/同步/推送流程失败日志，请直接定位问题并修改代码后再次验证。",
+          "优先处理 pre-commit、husky、lint、typecheck 或测试失败。",
+          "",
+          `仓库路径：${repoPath}`,
+          `分支：${latest?.branch ?? "unknown"}`,
+          `提交信息：${commitMessage}`,
+          `变更统计：+${Math.max(0, latest?.additions || 0)} / -${Math.max(0, latest?.deletions || 0)}`,
+          `暂存文件：${stagedFiles.length > 0 ? stagedFiles.join("、") : "(无)"}`,
+          `未暂存文件：${unstagedFiles.length > 0 ? unstagedFiles.join("、") : "(无)"}`,
+          "",
+          "失败日志：",
+          "```text",
+          errMsg,
+          "```",
+          "",
+          "请输出并执行修复步骤，完成后给出简短结果说明。",
+        ].join("\n");
+        _onSend(autoFixPrompt);
+        message.info("已将失败日志交给 Claude Code 自动修复。");
+      } catch {
+        // ignore auto-fix dispatch failure
+      }
+    } finally {
+      setPushSubmitting(false);
+    }
+  }, [_onSend, pushSummaryDraft, session.repositoryPath]);
+
+  const loadLinkedWorktrees = useCallback(async () => {
+    const p = session.repositoryPath?.trim();
+    if (!p) {
+      setLinkedWorktrees([]);
+      return;
+    }
+    setGitWorktreeLoading(true);
+    try {
+      const list = await gitWorktreeList(p);
+      const extras = list.filter((w) => !w.isPrimary);
+      const seen = new Set<string>();
+      const deduped: GitWorktreeEntry[] = [];
+      for (const w of extras) {
+        const key = sessionRepoPathKey(w.path);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        deduped.push(w);
+      }
+      setLinkedWorktrees(deduped);
+    } finally {
+      setGitWorktreeLoading(false);
+    }
+  }, [session.repositoryPath]);
+
+  useEffect(() => {
+    void loadLinkedWorktrees();
+  }, [loadLinkedWorktrees]);
+
+  useEffect(() => {
+    const onRepoWorktreesMayHaveChanged = (ev: Event): void => {
+      const detail = (ev as CustomEvent<RepoWorktreesMayHaveChangedDetail>).detail;
+      const anchor = session.repositoryPath?.trim();
+      const changed = detail?.repositoryPath?.trim();
+      if (!anchor || !changed) return;
+      if (sessionRepoPathKey(anchor) !== sessionRepoPathKey(changed)) return;
+      void loadLinkedWorktrees();
+    };
+    window.addEventListener(WORKFLOW_UI_EVENT_REPO_WORKTREES_MAY_HAVE_CHANGED, onRepoWorktreesMayHaveChanged);
+    return () => {
+      window.removeEventListener(WORKFLOW_UI_EVENT_REPO_WORKTREES_MAY_HAVE_CHANGED, onRepoWorktreesMayHaveChanged);
+    };
+  }, [session.repositoryPath, loadLinkedWorktrees]);
+
+  const handleGitWorktreeRemove = useCallback(
+    async (worktreePath: string) => {
+      const p = session.repositoryPath?.trim();
+      if (!p) return;
+      setGitWorktreeRemovingPath(worktreePath);
+      try {
+        await gitWorktreeRemove(p, worktreePath);
+        message.success("已移除 worktree");
+        await loadLinkedWorktrees();
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        message.error(errMsg);
+      } finally {
+        setGitWorktreeRemovingPath(null);
+      }
+    },
+    [session.repositoryPath, loadLinkedWorktrees],
+  );
+
+  const handleOpenWorktreeInFinder = useCallback((worktreePath: string) => {
+    void openInFinder(worktreePath).catch((err) => {
+      console.error("openInFinder:", err);
+      message.error(err instanceof Error ? err.message : String(err));
+    });
+  }, []);
+
+  const handleAddWorktreeToProject = useCallback(
+    async (worktreePath: string) => {
+      if (!onAddWorktreeRepositoryToProject) return;
+      setGitWorktreeAddingToProjectPath(worktreePath);
+      try {
+        await onAddWorktreeRepositoryToProject(worktreePath);
+      } catch (err) {
+        message.error(err instanceof Error ? err.message : String(err));
+      } finally {
+        setGitWorktreeAddingToProjectPath(null);
+      }
+    },
+    [onAddWorktreeRepositoryToProject],
+  );
+
+  const loadNotificationRows = useCallback(async (options?: { quiet?: boolean }) => {
+    const quiet = options?.quiet === true;
+    if (!quiet) {
+      setNotificationLoading(true);
+    }
+    try {
+      const rows = await wiseNotificationListRecent(50);
+      setNotificationRows(rows);
+    } catch {
+      if (!quiet) {
+        setNotificationRows([]);
+      }
+    } finally {
+      if (!quiet) {
+        setNotificationLoading(false);
+      }
+    }
+  }, []);
+
+  const handleNotificationMarkRead = useCallback((row: WiseInboundMessageRow) => {
+    if (row.readAt) {
+      return;
+    }
+    const readStamp = new Date().toISOString();
+    setNotificationRows((prev) => {
+      const next = prev.map((r) => (r.id === row.id ? { ...r, readAt: readStamp } : r));
+      queueMicrotask(() => {
+        if (
+          countSessionUnreadNotifications(
+            next,
+            sessionForNotificationPanelRef.current,
+            sessionsForNotificationMatchRef.current,
+          ) === 0
+        ) {
+          setNotificationPanelCollapsed(true);
+        }
+      });
+      return next;
+    });
+    void wiseNotificationMarkRead(row.id).catch(() => {
+      setNotificationRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, readAt: null } : r)));
+      void message.error("标记已读失败");
+    });
+  }, []);
+
+  const handleNotificationMarkAllRead = useCallback(() => {
+    void (async () => {
+      try {
+        await wiseNotificationMarkAllRead();
+        const readStamp = new Date().toISOString();
+        setNotificationRows((prev) => prev.map((r) => (r.readAt ? r : { ...r, readAt: readStamp })));
+        setNotificationPanelCollapsed(true);
+        void loadNotificationRows({ quiet: true });
+      } catch {
+        void message.error("全部已读失败");
+        void loadNotificationRows({ quiet: true });
+      }
+    })();
+  }, [loadNotificationRows]);
+
+  const handleNotificationJump = useCallback(
+    (row: WiseInboundMessageRow) => {
+      const conversationId = row.conversationId.trim();
+      if (!conversationId) {
+        return;
+      }
+      const targetSession = sessions.find(
+        (item) => item.id === conversationId || item.claudeSessionId === conversationId,
+      );
+      if (!targetSession) {
+        message.warning("未找到该通知对应的会话");
+        return;
+      }
+      const ownerHint = parseOwnerHintFromNotificationBody(row.body);
+      if (ownerHint) {
+        setSessionOwnerHints((prev) => {
+          const next = { ...prev, [conversationId]: ownerHint };
+          persistSessionOwnerHints(next);
+          return next;
+        });
+      }
+      if (targetSession.id !== session.id) {
+        try {
+          sessionStorage.setItem(RETURN_MAIN_SESSION_KEY, session.id);
+          setReturnMainSessionId(session.id);
+        } catch {
+          /* ignore */
+        }
+      }
+      try {
+        const taskIdHint = row.body.match(/任务\s+([^\s：\n]+)/)?.[1]?.trim();
+        sessionStorage.setItem(
+          WISE_PENDING_NOTIFICATION_SCROLL_STORAGE_KEY,
+          JSON.stringify({
+            conversationId: conversationId,
+            messageId: row.id,
+            body: row.body,
+            taskId: taskIdHint || undefined,
+          }),
+        );
+      } catch {
+        /* ignore */
+      }
+      onSwitchSession?.(targetSession.id);
+      if (!row.readAt) {
+        const readStamp = new Date().toISOString();
+        setNotificationRows((prev) => {
+          const next = prev.map((r) => (r.id === row.id ? { ...r, readAt: readStamp } : r));
+          queueMicrotask(() => {
+            if (
+              countSessionUnreadNotifications(
+                next,
+                sessionForNotificationPanelRef.current,
+                sessionsForNotificationMatchRef.current,
+              ) === 0
+            ) {
+              setNotificationPanelCollapsed(true);
+            }
+          });
+          return next;
+        });
+        void wiseNotificationMarkRead(row.id).catch(() => {
+          setNotificationRows((prev) =>
+            prev.map((r) => (r.id === row.id ? { ...r, readAt: null } : r)),
+          );
+        });
+      }
+    },
+    [onSwitchSession, session.id, sessions],
+  );
+
+  const handleReturnMainSession = useCallback(() => {
+    const targetId = effectiveReturnMainSessionId?.trim();
+    if (!targetId) {
+      return;
+    }
+    const targetExists = sessions.some((item) => item.id === targetId);
+    if (!targetExists) {
+      message.warning("主会话不存在或已关闭");
+      try {
+        sessionStorage.removeItem(RETURN_MAIN_SESSION_KEY);
+      } catch {
+        /* ignore */
+      }
+      setReturnMainSessionId(null);
+      return;
+    }
+    const mainSession = sessions.find((item) => item.id === targetId);
+    setSessionOwnerHints((prev) => {
+      const next = { ...prev };
+      delete next[targetId];
+      const claudeId = mainSession?.claudeSessionId?.trim();
+      if (claudeId) {
+        delete next[claudeId];
+      }
+      persistSessionOwnerHints(next);
+      return next;
+    });
+    onSwitchSession?.(targetId, { collapseSessionNotificationPanel: true });
+    try {
+      sessionStorage.removeItem(RETURN_MAIN_SESSION_KEY);
+    } catch {
+      /* ignore */
+    }
+    setReturnMainSessionId(null);
+  }, [effectiveReturnMainSessionId, onSwitchSession, sessions]);
+
+  useEffect(() => {
+    if (!hideSessionTools) {
+      return;
+    }
+    setHistoryPopoverOpen(false);
+    setHistorySearchText("");
+  }, [hideSessionTools]);
+
+  useEffect(() => {
+    let unlisten: UnlistenFn | undefined;
+    void loadNotificationRows();
+    void (async () => {
+      unlisten = await listen("wise-unread-changed", () => {
+        void loadNotificationRows({ quiet: true });
+      });
+    })();
+    return () => {
+      void unlisten?.();
+    };
+  }, [loadNotificationRows]);
+
+  useEffect(() => {
+    function handleOpenSessionNotificationPanel(event: Event) {
+      const custom = event as CustomEvent<{ conversationId?: string }>;
+      const conversationId = custom.detail?.conversationId;
+      if (typeof conversationId !== "string" || !conversationId.trim()) {
+        return;
+      }
+      const s = sessionForNotificationPanelRef.current;
+      if (!notificationConversationInSessionInboxScope(conversationId, s, sessionsForNotificationMatchRef.current)) {
+        return;
+      }
+      setNotificationPanelCollapsed(false);
+      void loadNotificationRows({ quiet: true });
+    }
+    window.addEventListener(SESSION_NOTIFICATION_UI_EVENT_OPEN_PANEL, handleOpenSessionNotificationPanel);
+    return () => {
+      window.removeEventListener(SESSION_NOTIFICATION_UI_EVENT_OPEN_PANEL, handleOpenSessionNotificationPanel);
+    };
+  }, [loadNotificationRows]);
+
+  useEffect(() => {
+    if (sessionUnreadNotificationRows.length === 0) {
+      setNotificationPanelCollapsed(true);
+    }
+  }, [sessionUnreadNotificationRows.length]);
+
+  const repositoryHistorySessions = useMemo(
+    () =>
+      sessions
+        .filter((item) => item.repositoryPath === session.repositoryPath)
+        .sort((a, b) => getSessionUpdatedAt(b) - getSessionUpdatedAt(a)),
+    [sessions, session.repositoryPath],
+  );
+
+  const filteredHistorySessions = useMemo(() => {
+    const keyword = historySearchText.trim().toLocaleLowerCase("zh-CN");
+    if (!keyword) {
+      return repositoryHistorySessions;
+    }
+    return repositoryHistorySessions.filter((item) => {
+      const preview = getSessionPreview(item).toLocaleLowerCase("zh-CN");
+      const repositoryName = item.repositoryName.toLocaleLowerCase("zh-CN");
+      return preview.includes(keyword) || repositoryName.includes(keyword);
+    });
+  }, [repositoryHistorySessions, historySearchText]);
+
+  const filteredHistoryLengthRef = useRef(0);
+  filteredHistoryLengthRef.current = filteredHistorySessions.length;
+
+  const groupedHistorySessions = useMemo(
+    () => groupSessionsByDay(filteredHistorySessions.slice(0, historyVisibleCount)),
+    [filteredHistorySessions, historyVisibleCount],
+  );
+
+  const historyRefreshInFlightRef = useRef(false);
+  const handleHistorySessionsRefresh = useCallback(() => {
+    if (!onRefreshHistorySessions || historyRefreshInFlightRef.current) return;
+    historyRefreshInFlightRef.current = true;
+    setHistorySessionsRefreshing(true);
+    void Promise.resolve(onRefreshHistorySessions())
+      .catch(() => {
+        message.error("刷新历史会话失败");
+      })
+      .finally(() => {
+        historyRefreshInFlightRef.current = false;
+        setHistorySessionsRefreshing(false);
+      });
+  }, [onRefreshHistorySessions]);
+
+  useEffect(() => {
+    if (!taskCompletionModalOpen) return;
+    handleHistorySessionsRefresh();
+  }, [taskCompletionModalOpen, handleHistorySessionsRefresh]);
+
+  useEffect(() => {
+    setHistoryVisibleCount(FEATURE_SESSION_LIST_PAGE_SIZE);
+  }, [historySearchText]);
+
+  useEffect(() => {
+    if (!historyPopoverOpen) return;
+    let el: HTMLDivElement | null = null;
+    const handler = () => {
+      if (!el) return;
+      const max = filteredHistoryLengthRef.current;
+      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 24) {
+        setHistoryVisibleCount((n) => Math.min(n + FEATURE_SESSION_LIST_PAGE_SIZE, max));
+      }
+    };
+    const timer = window.setTimeout(() => {
+      el = historyPopoverScrollRef.current;
+      el?.addEventListener("scroll", handler);
+    }, 50);
+    return () => {
+      window.clearTimeout(timer);
+      el?.removeEventListener("scroll", handler);
+    };
+  }, [historyPopoverOpen, groupedHistorySessions.length, historyVisibleCount, filteredHistorySessions.length]);
+
+  const publishedTeamMentions = useMemo(
+    () =>
+      workflowTemplates
+        .filter((item) => (workflowGraphStatusByWorkflowId[item.id] ?? "").toLowerCase() === "published")
+        .map((item) => ({ id: item.id, name: item.name })),
+    [workflowTemplates, workflowGraphStatusByWorkflowId],
+  );
+  const taskListEmployeeOptions = useMemo(
+    () => mentionEmployees.filter((item) => item.name.trim().length > 0),
+    [mentionEmployees],
+  );
+  const taskListTeamOptions = publishedTeamMentions;
+  /** 与侧栏「剩余槽位」解耦：可一次勾选多条，由后台按仓库并发上限排队执行 */
+  const taskListMultiSelectCap = TASK_LIST_MAX_SELECTED;
+  const monitorClaudeSlotsRemaining =
+    typeof taskListConcurrentCapacity === "number" ? Math.max(0, Math.floor(taskListConcurrentCapacity)) : null;
+  const filteredTaskList = useMemo(() => {
+    if (taskListStatusFilter === "todo") return splitTodoTasks.filter((task) => task.flowStatus === "todo");
+    if (taskListStatusFilter === "done") return splitTodoTasks.filter((task) => task.flowStatus === "done");
+    const todos = splitTodoTasks.filter((task) => task.flowStatus === "todo");
+    const dones = splitTodoTasks.filter((task) => task.flowStatus === "done");
+    return [...todos, ...dones];
+  }, [splitTodoTasks, taskListStatusFilter]);
+  const taskListSelectableSliceIds = useMemo(
+    () => filteredTaskList.slice(0, taskListMultiSelectCap).map((task) => task.id),
+    [filteredTaskList, taskListMultiSelectCap],
+  );
+  const taskListSelectedSet = useMemo(() => new Set(taskListSelectedIds), [taskListSelectedIds]);
+  const taskListAllFilteredSelected = useMemo(() => {
+    if (taskListSelectableSliceIds.length === 0) return false;
+    if (taskListSelectedIds.length !== taskListSelectableSliceIds.length) return false;
+    return taskListSelectableSliceIds.every((id) => taskListSelectedSet.has(id));
+  }, [taskListSelectableSliceIds, taskListSelectedIds, taskListSelectedSet]);
+
+  useEffect(() => {
+    setTaskListSelectedIds((prev) => {
+      if (prev.length <= taskListMultiSelectCap) return prev;
+      return prev.slice(0, taskListMultiSelectCap);
+    });
+  }, [taskListMultiSelectCap]);
+
+  /** 将「可执行任务」中的 flowStatus（仅 todo/done）写入 SQLite 拆分结果并刷新派生字段。 */
+  const persistSplitTaskFlowStatus = useCallback(async (taskId: string, nextStatus: TaskFlowStatus): Promise<boolean> => {
+    const normalized: "todo" | "done" = nextStatus === "done" ? "done" : "todo";
+    const split = await loadPrdTaskSplitResult();
+    if (!split) {
+      void message.warning("未找到可执行任务数据，无法保存状态。");
+      return false;
+    }
+    if (!split.executableTasks.some((item) => item.id === taskId)) {
+      void message.warning("可执行任务列表中找不到该任务，无法保存状态。");
+      return false;
+    }
+    const nextTasks = split.executableTasks.map((item) => (item.id === taskId ? { ...item, flowStatus: normalized } : item));
+    try {
+      await savePrdTaskSplitResult(refreshSplitResultDerivedFields({ ...split, executableTasks: nextTasks }));
+      await syncSplitTaskList();
+      return true;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      void message.error(`保存任务状态失败：${msg}`);
+      return false;
+    }
+  }, [syncSplitTaskList]);
+
+  const persistSplitTaskDispatchField = useCallback(
+    async (taskId: string, field: "splitListEmployeeName" | "splitListWorkflowId", rawValue: string) => {
+      const trimmed = rawValue.trim();
+      const split = await loadPrdTaskSplitResult();
+      if (!split) {
+        void message.warning("未找到可执行任务数据，无法保存选择。");
+        return;
+      }
+      const nextTasks = split.executableTasks.map((item) => {
+        if (item.id !== taskId) return item;
+        const next = { ...item };
+        if (!trimmed) {
+          delete next[field];
+        } else {
+          next[field] = trimmed;
+        }
+        return next;
+      });
+      try {
+        await savePrdTaskSplitResult(refreshSplitResultDerivedFields({ ...split, executableTasks: nextTasks }));
+        await syncSplitTaskList();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        void message.error(`保存失败：${msg}`);
+      }
+    },
+    [syncSplitTaskList],
+  );
+
+  useEffect(() => {
+    if (!workflowRun?.tasks?.length) return;
+    let cancelled = false;
+    const syncFlowRunStatusToSplitStore = async () => {
+      const split = await loadPrdTaskSplitResult();
+      if (!split || cancelled) return;
+      const flowStatusByTaskId = new Map(workflowRun.tasks.map((item) => [item.taskId, item.flowStatus] as const));
+      let changed = false;
+      const nextTasks = split.executableTasks.map((task) => {
+        const wf = flowStatusByTaskId.get(task.id);
+        if (wf === undefined) return task;
+        const fromWf: TaskFlowStatus = wf === "done" ? "done" : "todo";
+        /** 工作流快照为 todo 而拆分结果为 done 时，须跟随为未完成，不得保留「已完成」 */
+        if (wf === "todo" && task.flowStatus === "done") {
+          changed = true;
+          return { ...task, flowStatus: "todo" as TaskFlowStatus };
+        }
+        // 用户在列表中已标为已完成时，不因工作流仍为待审等而回写为未完成
+        if (task.flowStatus === "done" && fromWf !== "done") return task;
+        if (task.flowStatus === fromWf) return task;
+        changed = true;
+        return { ...task, flowStatus: fromWf };
+      });
+      if (!changed || cancelled) return;
+      try {
+        await savePrdTaskSplitResult(refreshSplitResultDerivedFields({ ...split, executableTasks: nextTasks }));
+        if (cancelled) return;
+        await syncSplitTaskList();
+      } catch (err) {
+        if (cancelled) return;
+        const msg = err instanceof Error ? err.message : String(err);
+        void message.error(`同步工作流状态到拆分结果失败：${msg}`);
+      }
+    };
+    void syncFlowRunStatusToSplitStore();
+    return () => {
+      cancelled = true;
+    };
+  }, [workflowRun, syncSplitTaskList]);
+
+  const handleOmcBatchConfirmFromPopover = useCallback(() => {
+    const repoPath = session.repositoryPath?.trim() ?? "";
+    if (!repoPath) {
+      void message.warning("当前会话未关联仓库路径，无法批量 OMC。");
+      return;
+    }
+    const selectedSet = new Set(taskListSelectedIds);
+    const selectedInOrder = filteredTaskList.filter((t) => selectedSet.has(t.id));
+    const tasksToRun = selectedInOrder.filter((t) => t.flowStatus === "todo");
+    if (tasksToRun.length === 0) {
+      if (selectedInOrder.length === 0) {
+        void message.info("请先勾选要批量执行的未完成任务。");
+      } else {
+        void message.warning("所选任务均为已完成，未启动批量 OMC。");
+      }
+      return;
+    }
+    if (omcBatchInFlightRef.current) {
+      void message.warning("上一批批量 OMC 仍在后台执行中，请稍候。");
+      return;
+    }
+
+    const skippedDone = selectedInOrder.length - tasksToRun.length;
+    if (skippedDone > 0) {
+      void message.info(`已跳过 ${skippedDone} 条已完成任务，将在后台对 ${tasksToRun.length} 条未完成任务启动 OMC。`);
+    }
+
+    const conc = resolveTaskListOmcInvokeConcurrency?.(session);
+    const repoDisplayRaw = (session.repositoryName ?? "").trim();
+    const repoDisplay =
+      getRepositoryBaseDisplayName(repoDisplayRaw).trim() ||
+      session.repositoryPath?.replace(/\\/g, "/").split("/").filter(Boolean).pop()?.trim() ||
+      repoPath;
+    const batchParams = {
+      anchorSessionId: omcBatchAnchorSessionId,
+      repositoryPath: repoPath,
+      repositoryDisplayName: repoDisplay,
+      tasks: tasksToRun,
+      templateId: omcBatchTemplateId,
+      subagentType: "executor",
+      concurrencyScopeKey: conc?.concurrencyScopeKey,
+      concurrencyLimit: conc?.concurrencyLimit,
+      userAbortRef: omcBatchUserAbortRef,
+      inFlightRef: omcBatchInFlightRef,
+      buildTaskAppendix: buildOmcBatchTaskIntentOneLiner,
+      syncSplitTaskList,
+      onExecutableTaskDoneAfterOmcSuccess: async (taskId: string) => {
+        const ok = await persistSplitTaskFlowStatus(taskId, "done");
+        if (ok) {
+          window.dispatchEvent(new CustomEvent(WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED, { detail: {} }));
+        }
+        return ok;
+      },
+      onAppendSystemMessage,
+      onAppendDispatchUserMessage: onAppendUserMessage,
+      onNotifyOmcEmployeeDirectBatchTaskDone,
+    };
+
+    omcBatchInFlightRef.current = true;
+    omcBatchUserAbortRef.current = false;
+    void (async () => {
+      try {
+        await onPrepareFreshOmcEmployeeWorkerForDirectBatch?.({
+          repositoryPath: repoPath,
+          repositoryDisplayName: repoDisplay,
+        });
+      } catch (err) {
+        console.error("prepareFreshOmcEmployeeWorkerForDirectBatch failed:", err);
+        omcBatchInFlightRef.current = false;
+        void message.error("准备 OMC 员工新会话失败，已取消本次批量执行。");
+        return;
+      }
+      /** 分帧：避免「巨型 Drawer 卸载 + 批任务全局事件」挤在同一帧拖死主线程 */
+      requestAnimationFrame(() => {
+        setOmcBatchPopoverOpen(false);
+        setTaskListDrawerOpen(false);
+        requestAnimationFrame(() => {
+          scheduleDirectOmcBatchAfterMacrotask(batchParams);
+        });
+      });
+    })();
+  }, [
+    filteredTaskList,
+    omcBatchAnchorSessionId,
+    omcBatchTemplateId,
+    onAppendSystemMessage,
+    onAppendUserMessage,
+    onNotifyOmcEmployeeDirectBatchTaskDone,
+    onPrepareFreshOmcEmployeeWorkerForDirectBatch,
+    persistSplitTaskFlowStatus,
+    resolveTaskListOmcInvokeConcurrency,
+    session,
+    syncSplitTaskList,
+    taskListSelectedIds,
+  ]);
+
+  const handleRunTaskInMainSession = useCallback(async (task: TaskItem) => {
+    onExecute(session.id, buildTaskExecutionPrompt(task));
+    void message.success(`任务 ${task.id} 已在主会话开始执行（仍为未完成，完成后请标记已完成）。`);
+  }, [onExecute, session.id]);
+
+  const handleRunTaskByEmployee = useCallback(async (task: TaskItem) => {
+    const employeeName = task.splitListEmployeeName?.trim();
+    if (!employeeName) {
+      void message.info("请先选择员工（选择会立即保存到拆分结果）。");
+      return;
+    }
+    onExecute(session.id, buildTaskExecutionPrompt(task), {
+      targetType: "employee",
+      targetEmployeeName: employeeName,
+    });
+    void message.success(`任务 ${task.id} 已派发给员工 ${employeeName}（仍为未完成，完成后请标记已完成）。`);
+  }, [onExecute, session.id]);
+
+  const handleRunTaskByTeam = useCallback(async (task: TaskItem) => {
+    const workflowId = task.splitListWorkflowId?.trim();
+    const workflowName = taskListTeamOptions.find((item) => item.id === workflowId)?.name;
+    if (!workflowId || !workflowName) {
+      void message.info("请先选择团队流程（选择会立即保存到拆分结果）。");
+      return;
+    }
+    onExecute(session.id, buildTaskExecutionPrompt(task), {
+      targetType: "team",
+      targetWorkflowId: workflowId,
+      targetWorkflowName: workflowName,
+    });
+    void message.success(`任务 ${task.id} 已派发到团队 ${workflowName}（仍为未完成，完成后请标记已完成）。`);
+  }, [onExecute, session.id, taskListTeamOptions]);
+
+  const handleCompleteTaskManually = useCallback(async (task: TaskItem) => {
+    const ok = await persistSplitTaskFlowStatus(task.id, "done");
+    if (ok) void message.success(`任务 ${task.id} 已手动标记为完成并已写入可执行任务表。`);
+  }, [persistSplitTaskFlowStatus]);
+
+  const handleAdjustTaskStatus = useCallback(async (task: TaskItem, status: TaskFlowStatus) => {
+    const ok = await persistSplitTaskFlowStatus(task.id, status);
+    if (ok) void message.success(`任务 ${task.id} 已保存为${splitTaskListBinaryLabel(status)}（可执行任务）`);
+  }, [persistSplitTaskFlowStatus]);
+
+  const persistSplitAfterRemovingTasks = useCallback(
+    async (ids: string[]): Promise<boolean> => {
+      const unique = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
+      if (unique.length === 0) return false;
+      const split = await loadPrdTaskSplitResult();
+      if (!split) {
+        void message.error("未找到可执行任务数据，无法删除。");
+        return false;
+      }
+      const next = removeSplitResultTasksByIds(split, unique);
+      try {
+        await savePrdTaskSplitResult(next);
+        setTaskListSelectedIds((prev) => prev.filter((id) => !unique.includes(id)));
+        await syncSplitTaskList();
+        window.dispatchEvent(new CustomEvent(WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED, { detail: {} }));
+        return true;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        void message.error(`删除保存失败：${msg}`);
+        return false;
+      }
+    },
+    [syncSplitTaskList],
+  );
+
+  const handleConfirmDeleteSplitTask = useCallback(
+    async (task: TaskItem) => {
+      const ok = await persistSplitAfterRemovingTasks([task.id]);
+      if (ok) void message.success(`已删除任务 ${task.id}`);
+    },
+    [persistSplitAfterRemovingTasks],
+  );
+
+  const handleDeleteAllSplitTasks = useCallback(() => {
+    const ids = splitTodoTasks.map((task) => task.id.trim()).filter(Boolean);
+    if (ids.length === 0) {
+      void message.info("暂无可删除任务。");
+      return;
+    }
+    const n = ids.length;
+    Modal.confirm({
+      title: "全部删除可执行任务",
+      content: `将删除当前仓库下共 ${n} 条可执行任务（未完成与已完成均包含）。任务依赖中会移除对这些 id 的引用。此操作不可撤销。`,
+      okText: "继续",
+      cancelText: "取消",
+      onOk: () => {
+        Modal.confirm({
+          title: "再次确认删除",
+          content: `请再次确认：将永久删除全部 ${n} 条可执行任务。`,
+          okText: "确认删除",
+          okType: "danger",
+          cancelText: "取消",
+          onOk: async () => {
+            const ok = await persistSplitAfterRemovingTasks(ids);
+            if (ok) void message.success(`已删除全部 ${n} 条任务`);
+          },
+        });
+      },
+    });
+  }, [persistSplitAfterRemovingTasks, splitTodoTasks]);
+
+  useEffect(() => {
+    function handleFocusTaskTool(event: Event) {
+      const custom = event as CustomEvent<{ taskId?: string }>;
+      const taskId = custom.detail?.taskId?.trim();
+      if (!taskId) return;
+      const id = taskId;
+
+      function tryScroll(): boolean {
+        const target = document.querySelector(`[data-task-id="${CSS.escape(id)}"]`);
+        if (target instanceof HTMLElement) {
+          target.scrollIntoView({ behavior: "smooth", block: "center" });
+          return true;
+        }
+        return false;
+      }
+
+      if (tryScroll()) return;
+
+      setTaskListStatusFilter("all");
+      setTaskListDrawerOpen(true);
+      window.setTimeout(() => {
+        tryScroll();
+      }, 280);
+    }
+    window.addEventListener(WORKFLOW_UI_EVENT_FOCUS_TASK_TOOL, handleFocusTaskTool as EventListener);
+    return () => {
+      window.removeEventListener(WORKFLOW_UI_EVENT_FOCUS_TASK_TOOL, handleFocusTaskTool as EventListener);
+    };
+  }, []);
+
+  const traceDrawerWidth = Math.min(620, typeof window !== "undefined" ? window.innerWidth - 24 : 620);
+  const sessionTraceStorageKey = getSessionTraceStorageKey(session.id, session.repositoryPath);
+  const tracePersistTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const raw = await getAppSetting(sessionTraceStorageKey);
+      if (cancelled) return;
+      if (!raw) {
+        setSessionSendTraces([]);
+        return;
+      }
+      try {
+        const parsed = JSON.parse(raw) as SessionSendTraceEntry[];
+        if (!Array.isArray(parsed)) {
+          setSessionSendTraces([]);
+          return;
+        }
+        setSessionSendTraces(parsed.slice(0, 50));
+      } catch {
+        setSessionSendTraces([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionTraceStorageKey]);
+
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem(RETURN_MAIN_SESSION_KEY);
+      setReturnMainSessionId(stored && stored.trim() ? stored : null);
+    } catch {
+      setReturnMainSessionId(null);
+    }
+  }, [session.id]);
+
+  useEffect(() => {
+    let pending: { conversationId?: string; messageId?: string; body?: string; taskId?: string } | null = null;
+    try {
+      const raw = sessionStorage.getItem(WISE_PENDING_NOTIFICATION_SCROLL_STORAGE_KEY);
+      if (raw) {
+        pending = JSON.parse(raw) as {
+          conversationId?: string;
+          messageId?: string;
+          body?: string;
+          taskId?: string;
+        };
+      }
+    } catch {
+      pending = null;
+    }
+    if (!pending?.conversationId) {
+      return;
+    }
+    const matchesSession =
+      pending.conversationId === session.id || pending.conversationId === (session.claudeSessionId ?? "");
+    if (!matchesSession) {
+      return;
+    }
+
+    const taskIdHint = pending.taskId?.trim();
+    if (taskIdHint) {
+      const byTask = document.querySelector(`[data-task-id="${CSS.escape(taskIdHint)}"]`);
+      if (byTask) {
+        window.setTimeout(() => {
+          byTask.scrollIntoView({ behavior: "smooth", block: "center" });
+          try {
+            sessionStorage.removeItem(WISE_PENDING_NOTIFICATION_SCROLL_STORAGE_KEY);
+          } catch {
+            /* ignore */
+          }
+        }, 50);
+        return;
+      }
+    }
+
+    const escapedMessageId = CSS.escape((pending.messageId ?? "").trim());
+    let target: Element | null = null;
+    if (escapedMessageId) {
+      target = document.querySelector(`[data-message-id="${escapedMessageId}"]`);
+    }
+    if (!target && pending.body?.trim()) {
+      const keyword = extractNotificationScrollKeyword(pending.body);
+      if (keyword) {
+        for (let i = session.messages.length - 1; i >= 0; i -= 1) {
+          const msg = session.messages[i];
+          const partTexts =
+            msg.parts
+              ?.filter((part): part is { type: "text"; text: string } => part.type === "text" && typeof part.text === "string")
+              .map((part) => part.text) ?? [];
+          const fullText = [msg.content, ...partTexts].join("\n");
+          if (fullText.includes(keyword)) {
+            target = document.querySelector(`[data-message-id="${CSS.escape(String(msg.id))}"]`);
+            break;
+          }
+        }
+      }
+    }
+    if (!target) {
+      return;
+    }
+    window.setTimeout(() => {
+      const rawId = (pending.messageId ?? "").trim();
+      const scrollIndex =
+        rawId !== ""
+          ? session.messages.findIndex((m) => String(m.id) === rawId)
+          : session.messages.findIndex((m) => String(m.id) === target?.getAttribute("data-message-id"));
+      if (scrollIndex >= 0) {
+        const msg = session.messages[scrollIndex];
+        const row =
+          msg != null
+            ? document.querySelector(`[data-message-id="${CSS.escape(String(msg.id))}"]`)
+            : null;
+        row?.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else {
+        target?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      try {
+        sessionStorage.removeItem(WISE_PENDING_NOTIFICATION_SCROLL_STORAGE_KEY);
+      } catch {
+        /* ignore */
+      }
+    }, 50);
+  }, [session.id, session.claudeSessionId, session.messages]);
+
+  useEffect(() => {
+    if (tracePersistTimerRef.current != null) {
+      window.clearTimeout(tracePersistTimerRef.current);
+    }
+    tracePersistTimerRef.current = window.setTimeout(() => {
+      void setAppSetting(sessionTraceStorageKey, JSON.stringify(sessionSendTraces.slice(0, 50)));
+      tracePersistTimerRef.current = null;
+    }, 600);
+    return () => {
+      if (tracePersistTimerRef.current != null) {
+        window.clearTimeout(tracePersistTimerRef.current);
+        tracePersistTimerRef.current = null;
+      }
+    };
+  }, [sessionSendTraces, sessionTraceStorageKey]);
+
+  return (
+    <div
+      ref={chatRootRef}
+      className="app-claude-chat"
+      tabIndex={-1}
+      onPointerDownCapture={onChatPointerDownCapture}
+    >
+      {!hideSessionTools && (
+        <div className="app-claude-session-feature-panel" role="toolbar" aria-label="会话功能面板">
+          <div className="app-claude-session-feature-panel__left">
+            <div className="app-claude-session-history-tools" role="toolbar" aria-label="历史会话与历史消息">
+              <div className="app-claude-session-tool-group app-claude-session-tool-group--compact">
+              <Popover
+                trigger="click"
+                placement="bottomLeft"
+                open={historyPopoverOpen}
+                onOpenChange={(nextOpen) => {
+                  setHistoryPopoverOpen(nextOpen);
+                  if (nextOpen) {
+                    setUserQuestionsPopoverOpen(false);
+                    setHistoryVisibleCount(FEATURE_SESSION_LIST_PAGE_SIZE);
+                    handleHistorySessionsRefresh();
+                  } else {
+                    setHistorySearchText("");
+                  }
+                }}
+                overlayClassName="app-claude-session-history-popover"
+                content={
+                  <div ref={historyPopoverScrollRef} className="app-claude-session-history-popover__content">
+                    <div className="app-claude-session-history-popover__search-wrap">
+                      <div className="app-claude-session-history-popover__search-row">
+                        <input
+                          value={historySearchText}
+                          onChange={(event) => setHistorySearchText(event.target.value)}
+                          className="app-claude-session-history-popover__search-input"
+                          placeholder="搜索会话..."
+                        />
+                        {onRefreshHistorySessions ? (
+                          <Tooltip title="从磁盘重新扫描会话" mouseEnterDelay={0.35}>
+                            <Button
+                              type="text"
+                              size="small"
+                              className="app-claude-session-history-popover__refresh"
+                              icon={<ReloadOutlined />}
+                              loading={historySessionsRefreshing}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleHistorySessionsRefresh();
+                              }}
+                              aria-label="刷新历史会话"
+                            />
+                          </Tooltip>
+                        ) : null}
+                      </div>
+                    </div>
+                    {groupedHistorySessions.length === 0 ? (
+                      <div className="app-claude-session-history-popover__empty">
+                        <Empty
+                          image={Empty.PRESENTED_IMAGE_SIMPLE}
+                          description={historySearchText.trim() ? "未找到匹配会话" : "暂无历史会话"}
+                        />
+                      </div>
+                    ) : (
+                      groupedHistorySessions.map((group) => (
+                        <div key={group.key} className="app-claude-session-history-popover__group">
+                          <div className="app-claude-session-history-popover__group-title">{group.label}</div>
+                          <div className="app-claude-session-history-popover__group-list">
+                            {group.items.map((item) => {
+                              const active = item.id === session.id;
+                              return (
+                                <button
+                                  key={item.id}
+                                  type="button"
+                                  className={`app-claude-session-history-popover__item ${active ? "app-claude-session-history-popover__item--active" : ""}`}
+                                  onClick={() => {
+                                    onSwitchSession?.(item.id);
+                                    setHistoryPopoverOpen(false);
+                                    setHistorySearchText("");
+                                  }}
+                                >
+                                  <span className="app-claude-session-history-popover__item-dot" />
+                                  <span className="app-claude-session-history-popover__item-title">{getSessionPreview(item)}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                }
+              >
+                <Tooltip title="历史会话" mouseEnterDelay={0.35}>
+                  <button
+                    type="button"
+                    className="app-claude-session-tool-btn app-claude-session-tool-btn--history"
+                    onClick={() => {
+                      if (historyPopoverOpen) {
+                        setHistorySearchText("");
+                      }
+                    }}
+                  >
+                    <ClockIcon />
+                    <span className="app-claude-session-tool-btn__text">历史会话</span>
+                  </button>
+                </Tooltip>
+              </Popover>
+
+              <Popover
+                trigger="click"
+                placement="bottomLeft"
+                open={userQuestionsPopoverOpen}
+                onOpenChange={(nextOpen) => {
+                  setUserQuestionsPopoverOpen(nextOpen);
+                  if (nextOpen) {
+                    setHistoryPopoverOpen(false);
+                    setHistorySearchText("");
+                  }
+                }}
+                overlayClassName="app-claude-session-user-questions-popover"
+                content={
+                  <div className="app-claude-session-user-questions-popover__content">
+                    {sessionUserQuestionsForPopover.length === 0 ? (
+                      <div className="app-claude-session-user-questions-popover__empty">
+                        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无我的提问" />
+                      </div>
+                    ) : (
+                      sessionUserQuestionsForPopover.map((row) => (
+                        <button
+                          key={row.id}
+                          type="button"
+                          className="app-claude-session-user-questions-popover__item"
+                          title={row.text}
+                          onClick={() => {
+                            scrollToSessionMessageId(row.id);
+                            setUserQuestionsPopoverOpen(false);
+                          }}
+                        >
+                          <span className="app-claude-session-user-questions-popover__item-text">
+                            {row.text}
+                          </span>
+                          <span className="app-claude-session-user-questions-popover__item-time">
+                            {formatShortQuestionTime(row.timestamp)}
+                          </span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                }
+              >
+                <Tooltip title="历史消息" mouseEnterDelay={0.35}>
+                  <button type="button" className="app-claude-session-tool-btn app-claude-session-tool-btn--user-questions">
+                    <CommentOutlined />
+                    <span className="app-claude-session-tool-btn__text">历史消息</span>
+                  </button>
+                </Tooltip>
+              </Popover>
+              </div>
+            </div>
+
+            {/* <div className="app-claude-session-tools" role="toolbar" aria-label="会话跟踪">
+              <Tooltip title="会话跟踪" mouseEnterDelay={0.35}>
+                <button
+                  type="button"
+                  className="app-claude-session-tool-btn"
+                  onClick={handleOpenSessionTraceDrawer}
+                >
+                  <ProfileOutlined />
+                  <span className="app-claude-session-tool-btn__text">会话跟踪</span>
+                </button>
+              </Tooltip>
+            </div> */}
+          </div>
+
+          <div className="app-claude-session-feature-panel__right">
+            <div
+              className="app-claude-session-tools app-claude-session-tool-group app-claude-session-tool-group--compact"
+              role="toolbar"
+              aria-label={SHOW_SESSION_TASK_COMPLETION_FEATURE ? "可执行任务与完成情况" : "可执行任务与定时任务"}
+            >
+              <Tooltip title="定时任务：Cron 触发 Claude Code" mouseEnterDelay={0.35}>
+                <button
+                  type="button"
+                  className="app-claude-session-tool-btn"
+                  data-ui-anchor="session-scheduled-tasks-btn"
+                  onClick={() => setScheduledTasksModalOpen(true)}
+                >
+                  <FieldTimeOutlined />
+                  <span className="app-claude-session-tool-btn__text">定时任务</span>
+                </button>
+              </Tooltip>
+              <Tooltip title="可执行任务" mouseEnterDelay={0.35}>
+                <button
+                  type="button"
+                  className={[
+                    "app-claude-session-tool-btn app-claude-session-tool-btn--task-list",
+                    splitIncompleteTaskCount > 0 ? "app-claude-session-tool-btn--task-list--badged" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  data-ui-anchor="session-task-list-btn"
+                  onClick={() => {
+                    setTaskListStatusFilter("todo");
+                    setTaskListDrawerOpen(true);
+                  }}
+                >
+                  <UnorderedListOutlined />
+                  <span className="app-claude-session-tool-btn__text">可执行任务</span>
+                  {splitIncompleteTaskCount > 0 ? (
+                    <span className="app-claude-session-tool-btn__badge" aria-label={`未完成可执行任务数量 ${splitIncompleteTaskCount}`}>
+                      {splitIncompleteTaskCount}
+                    </span>
+                  ) : null}
+                </button>
+              </Tooltip>
+              {SHOW_SESSION_TASK_COMPLETION_FEATURE ? (
+                <Tooltip title="查看本仓库各标签会话的 Claude Code 执行情况" mouseEnterDelay={0.35}>
+                  <button
+                    type="button"
+                    className="app-claude-session-tool-btn"
+                    onClick={() => setTaskCompletionModalOpen(true)}
+                  >
+                    <CheckCircleOutlined />
+                    <span className="app-claude-session-tool-btn__text">完成任务</span>
+                  </button>
+                </Tooltip>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <RepositoryScheduledTasksModal
+        open={scheduledTasksModalOpen}
+        onClose={() => setScheduledTasksModalOpen(false)}
+        repositoryPath={session.repositoryPath}
+        repositoryDisplayName={session.repositoryName}
+        employees={employees}
+        workflowTemplates={workflowTemplates}
+        workflowGraphsByWorkflowId={workflowGraphsByWorkflowId}
+      />
+
+      {SHOW_SESSION_TASK_COMPLETION_FEATURE ? (
+        <Modal
+          title={(
+            <span className="app-task-completion-modal__title-wrap">
+              <span className="app-task-completion-modal__title-text">完成任务</span>
+              <Tooltip
+                title={TASK_COMPLETION_MODAL_HINT}
+                placement="bottomLeft"
+                mouseEnterDelay={0.35}
+                overlayInnerStyle={{ maxWidth: 420 }}
+              >
+                <button type="button" className="app-task-completion-modal__title-help" aria-label="说明">
+                  <QuestionCircleOutlined />
+                </button>
+              </Tooltip>
+            </span>
+          )}
+          open={taskCompletionModalOpen}
+          onCancel={() => setTaskCompletionModalOpen(false)}
+          footer={
+            <Button type="primary" onClick={() => setTaskCompletionModalOpen(false)}>
+              关闭
+            </Button>
+          }
+          width={Math.min(960, typeof window !== "undefined" ? window.innerWidth - 48 : 960)}
+          destroyOnClose
+          className="app-task-completion-modal"
+        >
+          <div className="app-task-completion-modal__toolbar">
+            <div className="app-task-completion-modal__filters" aria-label="筛选">
+              <span className="app-task-completion-modal__filter-label">筛选</span>
+              <Select<TaskCompletionOwnerFilter>
+                size="small"
+                value={completionOwnerFilter}
+                onChange={setCompletionOwnerFilter}
+                className="app-task-completion-modal__select app-task-completion-modal__select--type"
+                popupMatchSelectWidth={false}
+                options={[
+                  { value: "all", label: "全部类型" },
+                  { value: "main", label: "主会话" },
+                  { value: "employee", label: "员工" },
+                  { value: "team", label: "团队" },
+                ]}
+              />
+              <Select<TaskCompletionStatusFilter>
+                size="small"
+                value={completionStatusFilter}
+                onChange={setCompletionStatusFilter}
+                className="app-task-completion-modal__select app-task-completion-modal__select--status"
+                popupMatchSelectWidth={false}
+                options={[
+                  { value: "all", label: "全部状态" },
+                  { value: "idle", label: "空闲" },
+                  { value: "connecting", label: "连接中" },
+                  { value: "running", label: "运行中" },
+                  { value: "completed", label: "已完成" },
+                  { value: "cancelled", label: "已取消" },
+                  { value: "error", label: "异常" },
+                ]}
+              />
+            </div>
+            <div className="app-task-completion-modal__search-row">
+              <Input.Search
+                allowClear
+                size="small"
+                placeholder="搜索摘要、范围、ID…"
+                value={completionSearchText}
+                onChange={(e) => setCompletionSearchText(e.target.value)}
+                className="app-task-completion-modal__search"
+              />
+              {onRefreshHistorySessions ? (
+                <Tooltip title="从磁盘重新扫描会话并刷新列表" mouseEnterDelay={0.35}>
+                  <Button
+                    type="default"
+                    size="small"
+                    icon={<ReloadOutlined />}
+                    loading={historySessionsRefreshing}
+                    onClick={() => {
+                      handleHistorySessionsRefresh();
+                    }}
+                    aria-label="刷新会话列表"
+                  >
+                    刷新
+                  </Button>
+                </Tooltip>
+              ) : null}
+            </div>
+          </div>
+          <div className="app-task-completion-modal__count">
+            已显示 {completionDisplayedRows.length} / {completionFilteredRows.length} 条
+            {completionHasMore ? "，表格内向下滚动加载更多" : completionFilteredRows.length > 0 ? "（已全部加载）" : null}
+          </div>
+          <div ref={completionTableWrapRef} className="app-task-completion-modal__table-wrap">
+            <Table<RepositorySessionExecutionRow>
+              className="app-task-completion-modal__table"
+              tableLayout="fixed"
+              size="small"
+              pagination={false}
+              rowKey="key"
+              columns={taskCompletionTableColumns}
+              dataSource={completionDisplayedRows}
+              locale={{
+                emptyText:
+                  repositorySessionExecutionRows.length === 0
+                    ? "当前仓库暂无会话标签"
+                    : "没有符合筛选/搜索条件的会话",
+              }}
+              scroll={{ y: 340 }}
+            />
+          </div>
+        </Modal>
+      ) : null}
+
+      <Drawer
+        title={
+          splitIncompleteTaskCount > 0
+            ? `可执行任务（未完成 ${splitIncompleteTaskCount}）`
+            : "可执行任务"
+        }
+        placement="right"
+        width={traceDrawerWidth}
+        open={taskListDrawerOpen}
+        onClose={() => setTaskListDrawerOpen(false)}
+        destroyOnClose={false}
+        classNames={{ body: "app-claude-task-list-drawer-body" }}
+        styles={{
+          body: {
+            padding: 12,
+            display: "flex",
+            flexDirection: "column",
+            minHeight: 0,
+            overflow: "hidden",
+          },
+        }}
+      >
+        <div className="app-claude-task-list-drawer-inner">
+        {splitTodoTasks.length === 0 ? (
+          <div className="app-claude-task-list-empty">
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无可执行任务" />
+          </div>
+        ) : (
+          <div className="app-claude-task-list">
+            <div className="app-claude-task-list__batch-bar">
+              <label className="app-claude-task-list__batch-check">
+                <span>筛选</span>
+                <select
+                  className="app-claude-task-list__batch-filter"
+                  value={taskListStatusFilter}
+                  onChange={(e) => {
+                    setTaskListStatusFilter(e.currentTarget.value as "all" | "todo" | "done");
+                  }}
+                >
+                  <option value="all">全部</option>
+                  <option value="todo">未完成</option>
+                  <option value="done">已完成</option>
+                </select>
+              </label>
+              <label className="app-claude-task-list__batch-check">
+                <input
+                  type="checkbox"
+                  disabled={taskListSelectableSliceIds.length === 0}
+                  checked={taskListAllFilteredSelected}
+                  onChange={(e) => {
+                    if (e.currentTarget.checked) {
+                      const next = taskListSelectableSliceIds.slice();
+                      setTaskListSelectedIds(next);
+                      if (filteredTaskList.length > taskListMultiSelectCap) {
+                        void message.info(`当前视图共 ${filteredTaskList.length} 条，已自动只选前 ${taskListMultiSelectCap} 条（单次批量多选上限）。`);
+                      }
+                      return;
+                    }
+                    setTaskListSelectedIds([]);
+                  }}
+                />
+                <span>全选当前视图</span>
+              </label>
+              <span className="app-claude-task-list__batch-count">
+                已选 {taskListSelectedIds.length} / {taskListMultiSelectCap}
+                {monitorClaudeSlotsRemaining != null ? (
+                  <span className="app-claude-task-list__batch-slots-hint">
+                    （槽位约剩 {monitorClaudeSlotsRemaining}）
+                  </span>
+                ) : null}
+              </span>
+              <div className="app-claude-task-list__batch-actions">
+                <Popover
+                  trigger="click"
+                  open={omcBatchPopoverOpen}
+                  onOpenChange={setOmcBatchPopoverOpen}
+                  placement="bottomLeft"
+                  overlayClassName="app-claude-task-list__omc-popover-root"
+                  content={(
+                    <div className="app-claude-task-list__omc-popover">
+                      <div className="app-claude-task-list__omc-field">
+                        <label htmlFor="omc-batch-template">OMC 模板</label>
+                        <select
+                          id="omc-batch-template"
+                          className="app-claude-task-list__omc-select"
+                          value={omcBatchTemplateId}
+                          onChange={(e) => {
+                            setOmcBatchTemplateId(e.currentTarget.value as OmcBatchTemplateId);
+                          }}
+                        >
+                          <option value="autopilot">autopilot（/autopilot）</option>
+                          <option value="ultraqa">ultraqa（/ultraqa）</option>
+                          <option value="verify">verify（/verify）</option>
+                          <option value="team">team（/team）</option>
+                        </select>
+                      </div>
+                      <div className="app-claude-task-list__omc-footer">
+                        <Button size="small" onClick={() => setOmcBatchPopoverOpen(false)}>
+                          关闭
+                        </Button>
+                        <Button type="primary" size="small" onClick={handleOmcBatchConfirmFromPopover}>
+                          执行
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                >
+                  <button type="button" className="app-claude-task-list__batch-action-btn">
+                    批量OMC执行
+                  </button>
+                </Popover>
+                <button
+                  type="button"
+                  className="app-claude-task-list__batch-action-btn app-claude-task-list__batch-action-btn--danger"
+                  onClick={handleDeleteAllSplitTasks}
+                >
+                  全部删除
+                </button>
+              </div>
+            </div>
+            {filteredTaskList.length === 0 ? (
+              <div className="app-claude-task-list-empty">
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无可执行任务" />
+              </div>
+            ) : null}
+            {filteredTaskList.map((task) => {
+              const taskDescription = task.description.trim() || "暂无任务描述";
+              const taskSubtasks = task.subtasks.filter((item) => item.trim().length > 0);
+              const taskDod = task.dod.filter((item) => item.trim().length > 0);
+              const taskDependencies = task.dependencies.filter((item) => item.trim().length > 0);
+              return (
+                <div key={task.id} className="app-claude-task-list__item" data-task-id={task.id}>
+                  <div className="app-claude-task-list__body">
+                    <div className="app-claude-task-list__left">
+                      <div className="app-claude-task-list__title-row">
+                        <label className="app-claude-task-list__item-check">
+                          <input
+                            type="checkbox"
+                            checked={taskListSelectedSet.has(task.id)}
+                            onChange={(e) => {
+                              const checked = e.currentTarget.checked;
+                              setTaskListSelectedIds((prev) => {
+                                if (checked) {
+                                  if (prev.length >= taskListMultiSelectCap) {
+                                    void message.info(`最多只能勾选 ${taskListMultiSelectCap} 条（单次批量多选上限）。`);
+                                    return prev;
+                                  }
+                                  return prev.includes(task.id) ? prev : [...prev, task.id];
+                                }
+                                return prev.filter((id) => id !== task.id);
+                              });
+                            }}
+                          />
+                        </label>
+                        <span className="app-claude-task-list__id">{task.id}</span>
+                        <span className="app-claude-task-list__title">{task.title || "(未命名任务)"}</span>
+                        <Popover
+                          trigger="click"
+                          placement="leftTop"
+                          overlayClassName="app-claude-task-list__detail-popover"
+                          content={(
+                            <div className="app-claude-task-list__detail-content">
+                              <div className="app-claude-task-list__content-block">
+                                <div className="app-claude-task-list__content-title">任务描述</div>
+                                <div className="app-claude-task-list__content-text">{taskDescription}</div>
+                              </div>
+                              <div className="app-claude-task-list__content-block">
+                                <div className="app-claude-task-list__content-title">子任务</div>
+                                {taskSubtasks.length > 0 ? (
+                                  <ul className="app-claude-task-list__content-list">
+                                    {taskSubtasks.map((item, index) => (
+                                      <li key={`${task.id}_subtask_${index}`}>{item}</li>
+                                    ))}
+                                  </ul>
+                                ) : (
+                                  <div className="app-claude-task-list__content-empty">暂无子任务</div>
+                                )}
+                              </div>
+                              <div className="app-claude-task-list__content-block">
+                                <div className="app-claude-task-list__content-title">验收标准</div>
+                                {taskDod.length > 0 ? (
+                                  <ul className="app-claude-task-list__content-list">
+                                    {taskDod.map((item, index) => (
+                                      <li key={`${task.id}_dod_${index}`}>{item}</li>
+                                    ))}
+                                  </ul>
+                                ) : (
+                                  <div className="app-claude-task-list__content-empty">暂无验收标准</div>
+                                )}
+                              </div>
+                              <div className="app-claude-task-list__content-block">
+                                <div className="app-claude-task-list__content-title">依赖任务</div>
+                                {taskDependencies.length > 0 ? (
+                                  <div className="app-claude-task-list__dependency-list">
+                                    {taskDependencies.map((item) => (
+                                      <span key={`${task.id}_dep_${item}`} className="app-claude-task-list__dependency-tag">
+                                        {item}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="app-claude-task-list__content-empty">无依赖</div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        >
+                          <button type="button" className="app-claude-task-list__action-btn app-claude-task-list__detail-btn">
+                            详情
+                          </button>
+                        </Popover>
+                      </div>
+                      <div className="app-claude-task-list__meta">
+                        <span>角色：{formatTaskRoleLabel(task.role)}</span>
+                        <span>规模：{task.size}</span>
+                        <span>估时：{task.estimateDays} 天</span>
+                        <span className="app-claude-task-list__status">状态：{splitTaskListBinaryLabel(task.flowStatus)}</span>
+                        {task.splitSourceTaskId?.trim() ? <span>来源：{task.splitSourceTaskId.trim()}</span> : null}
+                      </div>
+                      <div className="app-claude-task-list__actions">
+                        <div className="app-claude-task-list__action-group">
+                          <select
+                            className="app-claude-task-list__select"
+                            value={task.flowStatus ?? "todo"}
+                            onChange={(e) => {
+                              const v = e.currentTarget.value;
+                              if (v !== "todo" && v !== "done") return;
+                              void handleAdjustTaskStatus(task, v);
+                            }}
+                          >
+                            <option value="todo">未完成</option>
+                            <option value="done">已完成</option>
+                          </select>
+                          <button
+                            type="button"
+                            className="app-claude-task-list__action-btn app-claude-task-list__action-btn--success"
+                            onClick={() => {
+                              void handleCompleteTaskManually(task);
+                            }}
+                          >
+                            完成
+                          </button>
+                          <Popconfirm
+                            title="删除该可执行任务？"
+                            description="不可撤销；其他任务依赖中会移除对该 id 的引用。"
+                            okText="删除"
+                            okButtonProps={{ danger: true }}
+                            cancelText="取消"
+                            onConfirm={() => {
+                              void handleConfirmDeleteSplitTask(task);
+                            }}
+                          >
+                            <button type="button" className="app-claude-task-list__action-btn app-claude-task-list__action-btn--danger">
+                              删除
+                            </button>
+                          </Popconfirm>
+                        </div>
+                        <div className="app-claude-task-list__action-group">
+                          <button
+                            type="button"
+                            className="app-claude-task-list__action-btn app-claude-task-list__action-btn--primary"
+                            onClick={() => {
+                              void handleRunTaskInMainSession(task);
+                            }}
+                          >
+                            主会话执行
+                          </button>
+                        </div>
+                        <div className="app-claude-task-list__action-group app-claude-task-list__inline-runner">
+                          <select
+                            className="app-claude-task-list__select"
+                            value={task.splitListEmployeeName ?? ""}
+                            onChange={(e) => {
+                              void persistSplitTaskDispatchField(task.id, "splitListEmployeeName", e.currentTarget.value);
+                            }}
+                          >
+                            <option value="">选择员工</option>
+                            {taskListEmployeeOptions.map((employee) => (
+                              <option key={employee.id} value={employee.name}>
+                                {employee.name}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            className="app-claude-task-list__action-btn"
+                            onClick={() => {
+                              void handleRunTaskByEmployee(task);
+                            }}
+                          >
+                            员工执行
+                          </button>
+                        </div>
+                        <div className="app-claude-task-list__action-group app-claude-task-list__inline-runner">
+                          <select
+                            className="app-claude-task-list__select"
+                            value={task.splitListWorkflowId ?? ""}
+                            onChange={(e) => {
+                              void persistSplitTaskDispatchField(task.id, "splitListWorkflowId", e.currentTarget.value);
+                            }}
+                          >
+                            <option value="">选择团队</option>
+                            {taskListTeamOptions.map((team) => (
+                              <option key={team.id} value={team.id}>
+                                {team.name}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            className="app-claude-task-list__action-btn"
+                            onClick={() => {
+                              void handleRunTaskByTeam(task);
+                            }}
+                          >
+                            团队执行
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        </div>
+      </Drawer>
+
+      <Drawer
+        title="会话跟踪"
+        placement="right"
+        width={traceDrawerWidth}
+        open={sessionTraceDrawerOpen}
+        onClose={() => setSessionTraceDrawerOpen(false)}
+        destroyOnClose={false}
+        styles={{ body: { padding: 12, overflow: "auto" } }}
+      >
+        <div className="app-claude-session-trace-list">
+          <div className="app-claude-session-trace-actions">
+            <button
+              type="button"
+              className="app-claude-session-trace-actions__btn"
+              onClick={() => {
+                if (sessionSendTraces.length === 0) {
+                  message.info("暂无可导出的跟踪记录");
+                  return;
+                }
+                const payload = {
+                  sessionId: session.id,
+                  repositoryPath: session.repositoryPath,
+                  exportedAt: Date.now(),
+                  traces: sessionSendTraces,
+                };
+                const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+                const url = URL.createObjectURL(blob);
+                const anchor = document.createElement("a");
+                anchor.href = url;
+                anchor.download = `session-trace-${session.id}-${Date.now()}.json`;
+                document.body.appendChild(anchor);
+                anchor.click();
+                anchor.remove();
+                URL.revokeObjectURL(url);
+                message.success("会话跟踪已导出");
+              }}
+            >
+              导出 JSON
+            </button>
+            <button
+              type="button"
+              className="app-claude-session-trace-actions__btn"
+              onClick={() => {
+                setSessionSendTraces([]);
+                message.success("会话跟踪已清空");
+              }}
+            >
+              清空记录
+            </button>
+          </div>
+          {sessionSendTraces.length === 0 ? (
+            <div className="app-claude-session-trace-empty">
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无会话跟踪记录" />
+            </div>
+          ) : (
+            sessionSendTraces.map((entry) => (
+              <div key={entry.id} className="app-claude-session-trace-card">
+                <div className="app-claude-session-trace-card__head">
+                  <span className="app-claude-session-trace-card__title">发送时间</span>
+                  <span className="app-claude-session-trace-card__time">
+                    {new Date(entry.createdAt).toLocaleString("zh-CN")}
+                  </span>
+                </div>
+                <div className="app-claude-session-trace-card__section">
+                  <div className="app-claude-session-trace-card__label">输入消息</div>
+                  <pre className="app-claude-session-trace-card__text">{entry.composerText || "(空)"}</pre>
+                </div>
+                <div className="app-claude-session-trace-card__section">
+                  <div className="app-claude-session-trace-card__label">发送消息内容</div>
+                  <pre className="app-claude-session-trace-card__text">{entry.outboundText || "(空)"}</pre>
+                </div>
+                <div className="app-claude-session-trace-card__section">
+                  <div className="app-claude-session-trace-card__label">关键节点</div>
+                  <ul className="app-claude-session-trace-card__timeline">
+                    {entry.nodes.map((node, index) => (
+                      <li key={`${entry.id}_${node.label}_${index}`} className="app-claude-session-trace-card__timeline-item">
+                        <span className="app-claude-session-trace-card__timeline-time">
+                          {new Date(node.timestamp).toLocaleTimeString("zh-CN")}
+                        </span>
+                        <span className="app-claude-session-trace-card__timeline-label">{node.label}</span>
+                        {node.detail ? <span className="app-claude-session-trace-card__timeline-detail">{node.detail}</span> : null}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </Drawer>
+
+      {/* Messages */}
+      {!hideMessages && (
+        <div ref={messagesScrollRef} className="app-claude-messages">
+          {session.diskTranscriptPartial && onReloadFullDiskTranscript ? (
+            <Alert
+              className="app-claude-messages-disk-partial-alert"
+              type="info"
+              showIcon
+              message="当前为磁盘会话记录的尾部加载（节省内存）。若需查看更早轮次，可加载完整历史。"
+              action={
+                <Space>
+                  <Button
+                    size="small"
+                    loading={fullTranscriptLoading}
+                    onClick={() => {
+                      setFullTranscriptLoading(true);
+                      void Promise.resolve(onReloadFullDiskTranscript(session.id)).finally(() => {
+                        setFullTranscriptLoading(false);
+                      });
+                    }}
+                  >
+                    加载完整历史
+                  </Button>
+                </Space>
+              }
+            />
+          ) : null}
+          {session.messages.length === 0 ? (
+            <div className="app-claude-messages-empty">
+              <p>发送消息开始与 Claude Code 对话</p>
+            </div>
+          ) : (
+            <>
+              {session.messages.flatMap((msg, originalIndex) => {
+                const streamingThisBubble =
+                  session.status === "running" &&
+                  msg.role === "assistant" &&
+                  originalIndex === session.messages.length - 1;
+                const toolUser = isToolOnlyUserMessage(msg);
+                const prevInSession =
+                  originalIndex > 0 ? session.messages[originalIndex - 1] : undefined;
+                const mergedWithPrevious =
+                  prevInSession !== undefined &&
+                  getMessageSenderGroupKey(prevInSession) === getMessageSenderGroupKey(msg);
+                return [
+                  <ClaudeChatMessageRow
+                    key={msg.id}
+                    msg={msg}
+                    streamingThisBubble={streamingThisBubble}
+                    mergedWithPrevious={mergedWithPrevious}
+                    toolUser={toolUser}
+                    onOpenTaskDetail={onOpenTaskDetail}
+                  />,
+                ];
+              })}
+              {showListEndThinkingHint ? (
+                <div className="app-claude-messages-end-thinking">
+                  <StreamingReplyHint />
+                </div>
+              ) : null}
+            </>
+          )}
+        </div>
+      )}
+      {panelBelowMessages}
+
+      {showPendingTaskQueue ? (
+        <div className="app-pending-task-queue-anchor">
+          <PendingTaskQueuePanel
+            sessionStatus={session.status}
+            tasks={pendingTasks}
+            deferredSendQueued={deferredSendQueued}
+            taskDispatchStateById={Object.fromEntries(
+              pendingTasks.map((task) => [task.id, getPendingTaskDispatchState(task)]),
+            )}
+            onPin={pinTask}
+            onRemove={removeTask}
+            onUpdate={updateTask}
+            onSendNext={handleSendNextFromQueue}
+            onClearAll={clearAllPendingAndDeferred}
+          />
+        </div>
+      ) : null}
+
+      {!hideMessages ? (
+        <div className="app-session-owner-panel">
+          <span className={`app-session-owner-panel__tag app-session-owner-panel__tag--${sessionOwnerInfo.type}`}>
+            {sessionOwnerInfo.typeLabel}
+          </span>
+          {sessionOwnerInfo.name.trim() ? (
+            <span className="app-session-owner-panel__text">{sessionOwnerInfo.name}</span>
+          ) : null}
+          {session.status === "running" || session.status === "connecting" ? (
+            <Tooltip title="终止当前 Claude Code 运行（与输入区停止按钮相同）" placement="bottom" mouseEnterDelay={0.35}>
+              <button
+                type="button"
+                className="app-session-owner-panel__end-btn"
+                aria-label="结束当前运行"
+                onClick={() => onCancel()}
+              >
+                结束
+              </button>
+            </Tooltip>
+          ) : null}
+          {effectiveReturnMainSessionId ? (
+            <Tooltip title="返回主会话" placement="bottom">
+              <button
+                type="button"
+                className="app-session-owner-panel__return-btn"
+                aria-label="返回主会话"
+                onClick={handleReturnMainSession}
+              >
+                <svg viewBox="0 0 16 16" aria-hidden>
+                  <path
+                    d="M7 4L4.5 6.5L7 9"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M5 6.5H9.2C11.3 6.5 13 8.2 13 10.3C13 12.4 11.3 14 9.2 14H5.8"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+            </Tooltip>
+          ) : null}
+        </div>
+      ) : null}
+
+      {sessionUnreadNotificationRows.length > 0 ? (
+        <div className="app-session-notification-dock">
+          {notificationPanelCollapsed ? (
+            <button
+              type="button"
+              className="app-session-notification-dock__collapsed-trigger"
+              aria-expanded={false}
+              aria-label="展开消息通知"
+              onClick={() => {
+                setNotificationPanelCollapsed(false);
+              }}
+            >
+              <BellOutlined aria-hidden />
+              <span
+                className={`app-session-notification-dock__collapsed-badge${notificationBadgePulse ? " app-session-notification-dock__collapsed-badge--pulse" : ""}`}
+              >
+                {sessionUnreadCount > 99 ? "99+" : sessionUnreadCount}
+              </span>
+            </button>
+          ) : (
+            <div className="app-session-notification-panel" role="region" aria-label="消息通知">
+              <div className="app-session-notification-panel__head">
+                <span className="app-session-notification-panel__title-wrap">
+                  <span className="app-session-notification-panel__title">消息通知</span>
+                  <span
+                    className={`app-session-notification-panel__count${notificationTitleCountPulse ? " app-session-notification-panel__count--pulse" : ""}`}
+                    aria-label={`${sessionUnreadCount} 条未读`}
+                  >
+                    {sessionUnreadCount > 99 ? "99+" : sessionUnreadCount}
+                  </span>
+                </span>
+                <div className="app-session-notification-panel__head-actions">
+                  <button
+                    type="button"
+                    className="app-session-notification-panel__collapse-btn"
+                    aria-label="收起消息通知面板"
+                    onClick={() => {
+                      setNotificationPanelCollapsed(true);
+                    }}
+                  >
+                    收起
+                  </button>
+                  <button
+                    type="button"
+                    className="app-session-notification-panel__refresh-btn"
+                    onClick={() => {
+                      void loadNotificationRows();
+                    }}
+                    disabled={notificationLoading}
+                  >
+                    {notificationLoading ? "刷新中..." : "刷新"}
+                  </button>
+                  <div className="app-session-notification-panel__head-trailing">
+                    <button
+                      type="button"
+                      className="app-session-notification-panel__mark-all-read-btn"
+                      disabled={notificationLoading}
+                      onClick={() => {
+                        handleNotificationMarkAllRead();
+                      }}
+                    >
+                      全部已读
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div className="app-session-notification-panel__body">
+                <div className="app-session-notification-panel__list">
+                  {sessionUnreadNotificationRows.map((row) => {
+                    const notificationBodyDisplay = formatNotificationInboxDisplayLine({
+                      body: row.body,
+                      conversationId: row.conversationId,
+                      sessions,
+                      repositoryDisplayNameForInbound: session.repositoryName ?? "",
+                    });
+                    const titleLines = `${notificationBodyDisplay}\n原文：${row.body}\n${row.conversationId}${row.createdAt ? ` · ${row.createdAt}` : ""}`;
+                    return (
+                    <div
+                      key={row.id}
+                      className={`app-session-notification-panel__item ${row.readAt ? "app-session-notification-panel__item--read" : ""}${notificationBubbleEnterIds.has(row.id) ? " app-session-notification-panel__item--bubble-enter" : ""}`}
+                    >
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        className="app-session-notification-panel__item-hit"
+                        title={titleLines}
+                        onClick={() => {
+                          handleNotificationJump(row);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            handleNotificationJump(row);
+                          }
+                        }}
+                      >
+                        <span className="app-session-notification-panel__dot" aria-hidden />
+                        <div className="app-session-notification-panel__item-main">
+                          <div className="app-session-notification-panel__item-body">{notificationBodyDisplay}</div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="app-session-notification-panel__item-read-btn"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleNotificationMarkRead(row);
+                        }}
+                      >
+                        已读
+                      </button>
+                    </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      <div className="app-session-quick-actions app-session-quick-actions--composer">
+        <div className="app-session-quick-actions__row">
+          <div className="app-session-quick-actions__group app-session-quick-actions__group--segmented">
+            <button
+              type="button"
+              className="app-followup-review-btn app-followup-review-btn--split"
+              onClick={() => onCreateNewSession?.()}
+            >
+              <span className="app-followup-review-btn__label">新建会话</span>
+            </button>
+            <button
+              type="button"
+              className="app-followup-review-btn app-followup-review-btn--split"
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent(WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL));
+              }}
+            >
+              <span className="app-followup-review-btn__label">需求拆分</span>
+            </button>
+            <Popover
+              trigger="click"
+              placement="topLeft"
+              open={pushPopoverOpen}
+              onOpenChange={(open) => setPushPopoverOpen(open)}
+              overlayClassName="app-push-popover"
+              content={
+                <div className="app-push-popover__content">
+                  <div className="app-push-popover__title">推送前提交总结（AI 生成草稿）</div>
+                  {pushSummaryLoading ? (
+                    <div className="app-push-popover__loading">
+                      <Spin size="small" />
+                      <span>{pushSummaryPhase || "正在生成提交总结..."}</span>
+                    </div>
+                  ) : null}
+                  <textarea
+                    className="app-push-popover__textarea"
+                    value={pushSummaryDraft}
+                    onChange={(event) => setPushSummaryDraft(event.target.value)}
+                    placeholder="正在生成提交总结..."
+                    disabled={pushSummaryLoading || pushSubmitting}
+                  />
+                  <div className="app-push-popover__footer">
+                    <button
+                      type="button"
+                      className="app-push-popover__submit"
+                      onClick={() => void handlePushSubmit()}
+                      disabled={pushSummaryLoading || pushSubmitting}
+                    >
+                      {pushSubmitting ? "推送中..." : "推送"}
+                    </button>
+                  </div>
+                </div>
+              }
+            >
+              <button type="button" className="app-followup-review-btn">
+                <span className="app-followup-review-btn__label">推送</span>
+                <span
+                  className={`app-followup-review-btn__stats${reviewGitStatsPulse ? " app-followup-review-btn__stats--pulse" : ""}`}
+                >
+                  <span className="app-followup-review-btn__add">+{stats.additions}</span>
+                  <span className="app-followup-review-btn__del">-{stats.deletions}</span>
+                </span>
+              </button>
+            </Popover>
+          </div>
+          {session.repositoryPath ? (
+            <div className="app-session-quick-actions__group app-session-quick-actions__group--right">
+              <Popover
+                trigger="click"
+                placement="topRight"
+                open={gitWorktreePopoverOpen}
+                onOpenChange={(open) => {
+                  setGitWorktreePopoverOpen(open);
+                  if (open) void loadLinkedWorktrees();
+                }}
+                overlayClassName="app-gitworktree-popover"
+                content={
+                  <div className="app-gitworktree-popover__content">
+                    <div className="app-gitworktree-popover__title">本仓库额外 worktree</div>
+                    {gitWorktreeLoading ? (
+                      <div className="app-gitworktree-popover__loading">
+                        <Spin size="small" />
+                        <span>加载中...</span>
+                      </div>
+                    ) : linkedWorktrees.length === 0 ? (
+                      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无额外 worktree" />
+                    ) : (
+                      <ul className="app-gitworktree-popover__list">
+                        {linkedWorktrees.map((w) => (
+                          <li key={w.path} className="app-gitworktree-popover__item">
+                            <div className="app-gitworktree-popover__item-main">
+                              <div className="app-gitworktree-popover__branch">{formatWorktreeBranchLabel(w.branch)}</div>
+                              <div className="app-gitworktree-popover__path" title={w.path}>
+                                {formatWorktreePathRelative(session.repositoryPath ?? "", w.path)}
+                              </div>
+                            </div>
+                            <div className="app-gitworktree-popover__item-actions">
+                              <Tooltip title="在系统文件管理器中打开此目录">
+                                <Button type="link" size="small" onClick={() => handleOpenWorktreeInFinder(w.path)}>
+                                  打开目录
+                                </Button>
+                              </Tooltip>
+                              {onAddWorktreeRepositoryToProject ? (
+                                <Tooltip title="加入左侧当前项目，便于在仓库列表中切换">
+                                  <Button
+                                    type="link"
+                                    size="small"
+                                    loading={gitWorktreeAddingToProjectPath === w.path}
+                                    disabled={
+                                      (gitWorktreeAddingToProjectPath !== null &&
+                                        gitWorktreeAddingToProjectPath !== w.path) ||
+                                      (gitWorktreeRemovingPath !== null && gitWorktreeRemovingPath !== w.path)
+                                    }
+                                    onClick={() => void handleAddWorktreeToProject(w.path)}
+                                  >
+                                    加入项目
+                                  </Button>
+                                </Tooltip>
+                              ) : null}
+                              <Popconfirm
+                                title="撤回此 worktree？"
+                                description="将执行 git worktree remove --force，并删除该 worktree 对应的工作区目录。"
+                                okText="确定"
+                                cancelText="取消"
+                                overlayInnerStyle={{ width: "min(92vw, 300px)", maxWidth: "min(92vw, 300px)" }}
+                                onConfirm={() => void handleGitWorktreeRemove(w.path)}
+                              >
+                                <Button
+                                  type="link"
+                                  size="small"
+                                  danger
+                                  loading={gitWorktreeRemovingPath === w.path}
+                                  disabled={
+                                    (gitWorktreeRemovingPath !== null && gitWorktreeRemovingPath !== w.path) ||
+                                    (gitWorktreeAddingToProjectPath !== null &&
+                                      gitWorktreeAddingToProjectPath !== w.path)
+                                  }
+                                >
+                                  撤销
+                                </Button>
+                              </Popconfirm>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                }
+              >
+                <button
+                  type="button"
+                  className="app-followup-review-btn app-gitworktree-btn"
+                  title="查看并管理本仓库的额外 git worktree"
+                >
+                  <span className="app-followup-review-btn__label">工作树</span>
+                  {linkedWorktrees.length > 0 ? (
+                    <span className="app-gitworktree-btn__badge" aria-label={`${linkedWorktrees.length} 个 worktree`}>
+                      {linkedWorktrees.length > 99 ? "99+" : linkedWorktrees.length}
+                    </span>
+                  ) : null}
+                </button>
+              </Popover>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {/* Composer：高度写入 --app-composer-tray-h，供快捷条定位；后台 invocation 仅保留抽屉（无浮层摘要） */}
+      <div ref={composerTrayRef} className="app-claude-composer-tray">
+        <BackgroundInvocationDock session={session} />
+
+        <ComposerRegion
+          session={session}
+          employeesForDispatchRoute={employees}
+          pendingExecutionTaskCount={pendingTasks.length}
+          onExecute={handleComposerExecute}
+          onSessionModelChange={onSessionModelChange}
+          onCancel={onCancel}
+          todos={todos}
+          questionRequest={questionRequest}
+          questionRequestQueueLength={questionRequestQueueLength}
+          questionRequestStatus={questionRequestStatus}
+          questionRequestError={questionRequestError}
+          questionDockTabs={questionDockTabs}
+          permissionRequest={permissionRequest}
+          permissionRequestStatus={permissionRequestStatus}
+          permissionRequestError={permissionRequestError}
+          followupItems={followupItems}
+          revertItems={revertItems}
+          respondQuestionAt={respondQuestionAt}
+          dismissQuestionAt={dismissQuestionAt}
+          onRespondToPermission={onRespondToPermission}
+          onClearTodos={onClearTodos}
+          onClearFollowups={onClearFollowups}
+          onClearRevertItems={onClearRevertItems}
+          onSendFollowup={onSendFollowup}
+          onRestoreRevert={onRestoreRevert}
+          employeeMentions={mentionEmployees.map((item) => ({ id: item.id, name: item.name }))}
+          teamMentions={publishedTeamMentions}
+          onEnqueueAsPendingTask={(payload) => addTask(payload)}
+          onTrackSendFlow={(entry) => {
+            if (entry.sessionId !== session.id) return;
+            const traceItem: SessionSendTraceEntry = {
+              id: `trace_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+              sessionId: entry.sessionId,
+              createdAt: Date.now(),
+              composerText: entry.composerText,
+              outboundText: entry.outboundText,
+              nodes: entry.nodes,
+            };
+            setSessionSendTraces((prev) => [traceItem, ...prev].slice(0, 50));
+          }}
+          dualPaneRepositoryPicker={dualPaneRepositoryPicker}
+        />
+
+      </div>
+    </div>
+  );
+}
+
+function resolveSessionOwnerInfo(input: {
+  session: ClaudeSession;
+  workflowTasks: WorkflowTaskItem[];
+  workflowTemplates: WorkflowTemplateItem[];
+  taskPendingEmployeesByTaskId: Record<string, Array<{ employeeId: string; name: string }>>;
+  ownerHint: SessionOwnerHint | null;
+}): { type: "main" | "employee" | "team"; typeLabel: string; name: string } {
+  const { session, workflowTasks, workflowTemplates, taskPendingEmployeesByTaskId, ownerHint } = input;
+  if (ownerHint) {
+    return {
+      type: ownerHint.type,
+      typeLabel: ownerHint.type === "employee" ? "员工会话" : "团队会话",
+      name: ownerHint.name,
+    };
+  }
+  const employeeNameFromRepo = extractBoundEmployeeNameFromDisplay(session.repositoryName ?? "");
+  const employeeNameFromPreview = extractEmployeeNameFromBracketPreview(session.diskPreview);
+  const employeeName = employeeNameFromRepo ?? employeeNameFromPreview;
+  if (employeeName) {
+    return {
+      type: "employee",
+      typeLabel: "员工会话",
+      name: employeeName,
+    };
+  }
+  const omcCommand = extractOmcCommandFromUserPrompt(session);
+  if (omcCommand) {
+    return {
+      type: "employee",
+      typeLabel: "员工会话",
+      name: `OMC员工 · ${omcCommand}`,
+    };
+  }
+
+  const latestUserText = getLatestUserPlainText(session);
+  const isTeamAutoDriver = TEAM_AUTO_DRIVER_PREFIXES.some((prefix) => latestUserText.startsWith(prefix));
+  if (isTeamAutoDriver) {
+    const latestTask = [...workflowTasks].sort((a, b) => b.updatedAt - a.updatedAt)[0];
+    const workflowTemplateById = new Map(workflowTemplates.map((item) => [item.id, item.name] as const));
+    const teamName =
+      (latestTask ? workflowTemplateById.get(latestTask.workflowId) : undefined) ??
+      getLatestDispatchedTeamName(session) ??
+      "团队流程";
+    const pendingEmployees = latestTask ? taskPendingEmployeesByTaskId[latestTask.id] ?? [] : [];
+    const currentEmployeeName = pendingEmployees[0]?.name?.trim();
+    return {
+      type: "team",
+      typeLabel: "团队会话",
+      name: currentEmployeeName ? `${teamName} · 当前：${currentEmployeeName}` : teamName,
+    };
+  }
+
+  return {
+    type: "main",
+    typeLabel: "主会话",
+    name: "",
+  };
+}
+
+/** 通知 / 磁盘预览常见前缀 `[仓库/员工:姓名]`，在 repositoryName 已被覆盖时兜底识别员工。 */
+function extractEmployeeNameFromBracketPreview(preview: string | undefined): string | null {
+  if (!preview?.trim()) {
+    return null;
+  }
+  const marker = "员工:";
+  const open = preview.indexOf("[");
+  const close = preview.indexOf("]", open + 1);
+  if (open < 0 || close <= open) {
+    return null;
+  }
+  const inner = preview.slice(open + 1, close);
+  const idx = inner.lastIndexOf(marker);
+  if (idx < 0) {
+    return null;
+  }
+  const value = inner.slice(idx + marker.length).trim();
+  return value || null;
+}
+
+function getLatestUserPlainText(session: ClaudeSession): string {
+  for (let i = session.messages.length - 1; i >= 0; i -= 1) {
+    const msg = session.messages[i];
+    if (msg.role !== "user") {
+      continue;
+    }
+    const fromParts =
+      msg.parts
+        ?.filter((part): part is { type: "text"; text: string } => part.type === "text" && typeof part.text === "string")
+        .map((part) => part.text.trim())
+        .filter(Boolean)
+        .join("\n\n") ?? "";
+    if (fromParts) {
+      return fromParts;
+    }
+    const fromContent = msg.content.trim();
+    if (fromContent) {
+      return fromContent;
+    }
+  }
+  return "";
+}
+
+function extractOmcCommandFromUserPrompt(session: ClaudeSession): string | null {
+  const latestUserText = getLatestUserPlainText(session);
+  if (!latestUserText) return null;
+  if (!messageTextLooksLikeOmcDispatch(latestUserText)) return null;
+  return parseOmcSlashCommandFromUserText(latestUserText) ?? "/autopilot";
+}
+
+function getLatestDispatchedTeamName(session: ClaudeSession): string | null {
+  for (let i = session.messages.length - 1; i >= 0; i -= 1) {
+    const msg = session.messages[i];
+    if (msg.role !== "system") {
+      continue;
+    }
+    const systemText =
+      msg.parts
+        ?.filter((part): part is { type: "text"; text: string } => part.type === "text" && typeof part.text === "string")
+        .map((part) => part.text)
+        .join("\n") || msg.content;
+    if (!systemText.includes("任务分发记录") || !systemText.includes("类型：团队流程")) {
+      continue;
+    }
+    const targetLine = systemText
+      .split("\n")
+      .map((line) => line.trim())
+      .find((line) => line.startsWith("- 目标："));
+    if (!targetLine) {
+      continue;
+    }
+    const teamName = targetLine.replace("- 目标：", "").trim();
+    if (teamName) {
+      return teamName;
+    }
+  }
+  return null;
+}
+
+interface SessionGroup {
+  key: string;
+  label: string;
+  items: ClaudeSession[];
+}
+
+function groupSessionsByDay(sessions: ClaudeSession[]): SessionGroup[] {
+  const now = Date.now();
+  const oneDay = 24 * 60 * 60 * 1000;
+  const groups = new Map<string, SessionGroup>();
+  for (const item of sessions) {
+    const dayStart = getDayStart(getSessionUpdatedAt(item));
+    const diffDays = Math.floor((getDayStart(now) - dayStart) / oneDay);
+    const label = diffDays <= 0 ? "Today" : diffDays === 1 ? "Yesterday" : "Previous 7 days";
+    const key = diffDays <= 0 ? "today" : diffDays === 1 ? "yesterday" : "previous";
+    const group = groups.get(key);
+    if (group) {
+      group.items.push(item);
+      continue;
+    }
+    groups.set(key, {
+      key,
+      label,
+      items: [item],
+    });
+  }
+  return ["today", "yesterday", "previous"]
+    .map((key) => groups.get(key))
+    .filter((item): item is SessionGroup => Boolean(item));
+}
+
+function getSessionUpdatedAt(session: ClaudeSession): number {
+  const lastTimestamp = session.messages[session.messages.length - 1]?.timestamp;
+  return typeof lastTimestamp === "number" ? lastTimestamp : session.createdAt;
+}
+
+function getDayStart(timestamp: number): number {
+  const date = new Date(timestamp);
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
+}
+
+function getSessionPreview(session: ClaudeSession): string {
+  const repo = session.repositoryName ?? "";
+  const firstUserMsg = session.messages.find((m) => m.role === "user");
+  if (firstUserMsg) {
+    const line = truncateSingleLine(stripRedundantRepoBracketPrefix(firstUserMsg.content, repo), 28);
+    if (line.trim()) {
+      return line;
+    }
+  }
+  const fromDisk = session.diskPreview?.trim();
+  if (fromDisk) {
+    const line = truncateSingleLine(stripRedundantRepoBracketPrefix(fromDisk, repo), 28);
+    if (line.trim()) {
+      return line;
+    }
+  }
+  return "新会话";
+}
+
+function buildAiCommitSummary(status: GitStatusResponse): string {
+  const changedFiles = [...status.staged, ...status.unstaged];
+  const uniqueFiles = Array.from(new Set(changedFiles.map((item) => item.path))).slice(0, 5);
+  const fileSummary = uniqueFiles.length > 0 ? `涉及文件：${uniqueFiles.join("、")}` : "涉及文件：当前无改动文件";
+  const totalChanged = changedFiles.length;
+  const scopeText = totalChanged > 0 ? `本次改动覆盖 ${totalChanged} 个文件` : "本次改动较小";
+  return [
+    `${scopeText}，优化会话与界面交互体验。`,
+    fileSummary,
+    `变更统计：+${Math.max(0, status.additions || 0)} / -${Math.max(0, status.deletions || 0)}。`,
+  ].join("\n");
+}
+
+function truncateSingleLine(value: string, maxLength: number): string {
+  const singleLine = value.replace(/\s+/g, " ").trim();
+  return singleLine.length > maxLength ? `${singleLine.slice(0, maxLength)}...` : singleLine;
+}
+
+function formatShortQuestionTime(ms: number): string {
+  try {
+    return new Date(ms).toLocaleString("zh-CN", {
+      month: "numeric",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
+
+function ClockIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M12 7.5V12L15.5 13.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}

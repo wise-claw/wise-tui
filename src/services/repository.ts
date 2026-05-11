@@ -1,0 +1,103 @@
+import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
+import type { AddRepositoryOptions, Repository } from "../types";
+
+/**
+ * Open native folder picker dialog.
+ * Returns selected directory path, or null if user cancelled.
+ */
+export async function pickFolder(): Promise<string | null> {
+  try {
+    const result = await open({ directory: true, multiple: false });
+    if (typeof result === "string") return result;
+    if (Array.isArray(result)) {
+      const arr = result as string[];
+      if (arr.length > 0) return arr[0];
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Create a new repository entry from a selected folder path.
+ */
+export async function createRepositoryFromPath(folderPath: string): Promise<Repository> {
+  return invoke<Repository>("create_repository_from_path", {
+    folderPath,
+    repositoryType: "frontend",
+    iconDisplayName: null,
+    iconColor: null,
+  });
+}
+
+export async function createRepositoryFromPathWithType(
+  folderPath: string,
+  repositoryType: Repository["repositoryType"],
+  options?: AddRepositoryOptions,
+): Promise<Repository> {
+  const iconDisplayName = options?.iconDisplayName?.trim();
+  const iconColor = options?.iconColor?.trim();
+  return invoke<Repository>("create_repository_from_path", {
+    folderPath,
+    repositoryType,
+    iconDisplayName: iconDisplayName && iconDisplayName.length > 0 ? iconDisplayName : null,
+    iconColor: iconColor && iconColor.length > 0 ? iconColor : null,
+  });
+}
+
+export async function updateRepositoryIconDisplay(
+  id: number,
+  iconDisplayName: string | null,
+): Promise<Repository> {
+  const trimmed = iconDisplayName?.trim();
+  return invoke<Repository>("update_repository_icon_display", {
+    id,
+    iconDisplayName: trimmed && trimmed.length > 0 ? trimmed : null,
+  });
+}
+
+/**
+ * Load all saved repositories from persistent storage.
+ */
+export async function loadRepositories(): Promise<Repository[]> {
+  try {
+    return invoke<Repository[]>("list_repositories");
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Remove a repository by its id.
+ */
+export async function removeRepository(id: number): Promise<void> {
+  return invoke("remove_repository_global", { id });
+}
+
+/**
+ * Open a path in the system file explorer (Finder on macOS).
+ */
+export async function openInFinder(path: string): Promise<void> {
+  return invoke("open_in_finder", { path });
+}
+
+/**
+ * Open a repository path with a specific application or command.
+ */
+export async function openWorkspaceIn(
+  path: string,
+  options: {
+    appName?: string;
+    command?: string;
+    args?: string[];
+  },
+): Promise<void> {
+  return invoke("open_workspace_in", {
+    path,
+    appName: options.appName ?? null,
+    command: options.command ?? null,
+    args: options.args ?? [],
+  });
+}

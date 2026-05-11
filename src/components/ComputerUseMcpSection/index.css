@@ -1,0 +1,24 @@
+.app-computer-use-mcp-section {
+  margin-bottom: 0;
+}
+
+.app-mcp-computer-use-card .app-mcp-hub-card-actions.app-mcp-computer-use-card-actions {
+  padding-top: 2px;
+  gap: 2px;
+}
+
+.app-mcp-computer-use-card .app-mcp-computer-use-card-actions .ant-btn.ant-btn-sm.ant-btn-default,
+.app-mcp-computer-use-card .app-mcp-computer-use-card-actions .ant-btn.ant-btn-sm.ant-btn-primary {
+  height: 22px;
+  padding-inline: 6px;
+  padding-block: 0;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.app-mcp-computer-use-card .app-mcp-computer-use-card-actions .ant-btn.ant-btn-sm.ant-btn-link {
+  height: 22px;
+  padding-inline: 2px;
+  font-size: 11px;
+  line-height: 22px;
+}

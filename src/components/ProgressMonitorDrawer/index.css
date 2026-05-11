@@ -1,0 +1,228 @@
+.app-monitor-drawer--omc {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ant-margin-sm, 12px);
+  min-height: 0;
+}
+
+.app-monitor-drawer__omc-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ant-margin-xs, 8px);
+}
+
+.app-monitor-drawer__omc-scroll {
+  max-height: min(560px, calc(100vh - 220px));
+  overflow-y: auto;
+  border: 1px solid var(--ant-color-border-secondary, rgba(0, 0, 0, 0.06));
+  border-radius: var(--ant-border-radius-sm, 6px);
+  padding: var(--ant-padding-xs, 8px);
+  background: var(--ant-color-fill-quaternary, rgba(0, 0, 0, 0.02));
+}
+
+.app-monitor-drawer__omc-msg-item.ant-list-item {
+  padding: var(--ant-padding-xs, 8px) 0;
+}
+
+.app-monitor-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.app-monitor-drawer--team {
+  position: relative;
+  padding-bottom: 210px;
+}
+
+.app-monitor-drawer__section {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 10px;
+  background: var(--ant-color-bg-container);
+  padding: 10px;
+}
+
+.app-monitor-drawer__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-monitor-drawer__source-tag.ant-tag {
+  margin-inline-end: 0;
+}
+
+.app-monitor-drawer__card {
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary);
+  padding: 7px 9px;
+  font-size: 12px;
+  color: var(--ant-color-text);
+}
+
+.app-monitor-drawer__acceptance-card {
+  min-height: 0;
+}
+
+.app-monitor-drawer__muted {
+  font-size: 12px;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-monitor-drawer__path-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.app-monitor-drawer__copy-btn {
+  border: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-bg-container);
+  color: var(--ant-color-text-secondary);
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+
+.app-monitor-drawer__message {
+  width: 100%;
+}
+
+.app-monitor-drawer__message--button {
+  border: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-bg-container);
+  border-radius: 8px;
+  text-align: left;
+  padding: 8px;
+  cursor: pointer;
+}
+
+.app-monitor-drawer__message--button:hover {
+  border-color: var(--ant-color-primary-border);
+  background: var(--ant-color-primary-bg);
+}
+
+.app-monitor-drawer__message-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-monitor-drawer__message-body {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--ant-color-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.app-monitor-drawer__event {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--ant-color-text);
+}
+
+.app-monitor-drawer__event-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.app-monitor-drawer__more-btn.ant-btn {
+  align-self: flex-start;
+}
+
+.app-monitor-drawer__jump-btn.ant-btn {
+  align-self: flex-start;
+}
+
+.app-monitor-drawer__team-step-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.app-monitor-drawer__team-step-card.ant-card .ant-card-body {
+  padding: 10px 12px;
+}
+
+.app-monitor-drawer__team-step-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.app-monitor-drawer__team-step-head-right {
+  flex-shrink: 0;
+  align-items: center;
+}
+
+.app-monitor-drawer__team-step-time {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-monitor-drawer__team-step-body {
+  min-width: 0;
+}
+
+.app-monitor-drawer__team-step-card--body-clamped .app-monitor-drawer__team-step-body {
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.app-monitor-drawer__team-step-copy-link.ant-btn.ant-btn-link {
+  padding: 0;
+  height: auto;
+  font-size: 11px;
+}
+
+.app-monitor-drawer__team-step-expand.ant-btn.ant-btn-link {
+  padding: 0;
+  height: auto;
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+.app-monitor-drawer__team-step-pre {
+  margin: 0;
+  max-height: none;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-fill-quaternary);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--ant-color-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.app-monitor-drawer__team-next-executor {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--ant-color-text-secondary);
+}

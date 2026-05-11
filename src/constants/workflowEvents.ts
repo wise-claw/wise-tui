@@ -1,0 +1,2 @@
+export const WORKFLOW_EVENT_TYPE_ACCEPTANCE_VERDICT_SUBMITTED = "workflow_acceptance_verdict_submitted";
+export const WORKFLOW_EVENT_TYPE_ACCEPTANCE_VERDICT_UNRESOLVED = "workflow_acceptance_verdict_unresolved";

@@ -1,0 +1,311 @@
+import type { MutableRefObject } from "react";
+import type { ClaudeSession, MessagePart } from "../types";
+import { appendAssistantStreamParts, capAssistantStreamBufferText } from "./claudeStreamAssembler";
+import {
+  appendSystemMessageBySessionOrClaudeId,
+  extractLatestAssistantPlainText,
+  finalizeSessionAfterComplete,
+} from "./claudeSessionState";
+
+type SetSessions = (updater: (prev: ClaudeSession[]) => ClaudeSession[]) => void;
+type SetActiveSessionId = (updater: (prev: string | null) => string | null) => void;
+
+interface ExtractPartsResult {
+  parts: MessagePart[];
+  isInit: boolean;
+  sessionId: string | null;
+}
+
+interface RuntimeDeps {
+  sessionsRef: MutableRefObject<ClaudeSession[]>;
+  streamingTargetIdRef: MutableRefObject<string | null>;
+  sessionIdMapRef: MutableRefObject<Map<string, string>>;
+  lastStreamLineBySessionRef: MutableRefObject<Map<string, { line: string; at: number }>>;
+  lastStreamTextBySessionRef: MutableRefObject<Map<string, { text: string; at: number }>>;
+  lastUserSendNonceRef: MutableRefObject<number>;
+  /** 按标签会话 id 累积流式助手可见文本，支持多会话并行时互不串台 */
+  assistantStreamTextByTabRef: MutableRefObject<Map<string, string>>;
+  setSessions: SetSessions;
+  setActiveSessionId: SetActiveSessionId;
+  ingestClaudeStreamLineForHub: (sessionId: string, line: string) => void;
+  ingestStreamAssistText: (sessionId: string, text: string) => void;
+  migrateSessionKey: (from: string, to: string) => void;
+  notifyCompletion: (payload: { tid: string; success: boolean; nonce: number; previewRaw: string; structuredVerdict?: unknown }) => void;
+  parseStreamLineSessionId: (line: string) => string | null;
+  resolveTabIdForClaudeStream: (
+    sessions: ClaudeSession[],
+    lineSid: string | null,
+    refTid: string | null,
+  ) => string | null;
+  resolveTabIdFromCompletePayload: (
+    payload: unknown,
+    sessions: ClaudeSession[],
+    refTid: string | null,
+  ) => string | null;
+  resolveSuccessFromCompletePayload: (payload: unknown) => boolean;
+  extractSystemErrorMessageFromStreamLine: (line: string) => string | null;
+  extractPartsFromStreamLine: (line: string) => ExtractPartsResult;
+  /** 临时 tab id 合并为 Claude `session_id` 时通知宿主（用于双栏右侧绑定 id 同步） */
+  onSessionTabIdMigrated?: (fromTabId: string, toClaudeSessionId: string) => void;
+  /** 与 `executeSession` 写入的轮次 nonce 对齐；全局 `claude-complete` 用于通知去重，避免误用「当前最新」nonce */
+  expectedTurnNonceByTabIdRef?: MutableRefObject<Map<string, number>>;
+  /**
+   * 一轮流式结束后用磁盘 `*.jsonl` 覆盖内存消息，与 Claude Code 原生会话对齐。
+   * 流式路径会把多行 delta 压成少量气泡并带去重，仅靠内存会与 jsonl 条数不一致。
+   */
+  reloadTranscriptFromDisk?: (input: {
+    tabId: string;
+    repositoryPath: string;
+    claudeSessionId: string;
+  }) => void | Promise<void>;
+}
+
+
+function extractStructuredVerdictFromCompletePayload(payload: unknown): unknown {
+  if (!payload || typeof payload !== "object") return undefined;
+  const obj = payload as Record<string, unknown>;
+  return obj.structuredVerdict ?? obj.workflowAcceptanceVerdictPayload ?? obj.verdictPayload;
+}
+
+export function createClaudeStreamRuntime(deps: RuntimeDeps) {
+  const {
+    sessionsRef,
+    streamingTargetIdRef,
+    sessionIdMapRef,
+    lastStreamLineBySessionRef,
+    lastStreamTextBySessionRef,
+    lastUserSendNonceRef,
+    assistantStreamTextByTabRef,
+    setSessions,
+    setActiveSessionId,
+    ingestClaudeStreamLineForHub,
+    ingestStreamAssistText,
+    migrateSessionKey,
+    notifyCompletion,
+    parseStreamLineSessionId,
+    resolveTabIdForClaudeStream,
+    resolveTabIdFromCompletePayload,
+    resolveSuccessFromCompletePayload,
+    extractSystemErrorMessageFromStreamLine,
+    extractPartsFromStreamLine,
+    onSessionTabIdMigrated,
+    reloadTranscriptFromDisk,
+    expectedTurnNonceByTabIdRef,
+  } = deps;
+
+  /** 多标签并行时：用 invocation 通道回退到发送时的 tab id，且勿写全局 `streamingTargetIdRef`（否则后发送会话会抢走先发送会话的流式路由）。 */
+  function handleOutputForSendTab(stableTabId: string, payload: unknown) {
+    const line = typeof payload === "string" ? payload : JSON.stringify(payload);
+    const lineSid = parseStreamLineSessionId(line);
+    const mapped = sessionIdMapRef.current.get(stableTabId) ?? stableTabId;
+    let tid = resolveTabIdForClaudeStream(sessionsRef.current, lineSid, lineSid ? null : mapped);
+    if (!tid) {
+      tid = resolveTabIdForClaudeStream(sessionsRef.current, null, mapped);
+    }
+    if (!tid) return;
+    applyOutputLine(tid, line, { syncStreamingTargetRefOnInit: false });
+  }
+
+  function applyOutputLine(
+    tid: string,
+    line: string,
+    opts: { syncStreamingTargetRefOnInit: boolean },
+  ) {
+    const now = Date.now();
+    const prevLine = lastStreamLineBySessionRef.current.get(tid);
+    if (prevLine && prevLine.line === line && now - prevLine.at < 1500) {
+      return;
+    }
+    lastStreamLineBySessionRef.current.set(tid, { line, at: now });
+    ingestClaudeStreamLineForHub(tid, line);
+    const systemErrMsg = extractSystemErrorMessageFromStreamLine(line);
+    if (systemErrMsg) {
+      setSessions((prev) => appendSystemMessageBySessionOrClaudeId(prev, tid, systemErrMsg));
+    }
+    const { parts, isInit, sessionId: realSessionId } = extractPartsFromStreamLine(line);
+    const dedupedParts = parts.filter((part) => {
+      if (part.type !== "text") return true;
+      const normalized = part.text.trim();
+      if (normalized.length < 12) return true;
+      const prevText = lastStreamTextBySessionRef.current.get(tid);
+      if (prevText && prevText.text === normalized && now - prevText.at < 1500) {
+        return false;
+      }
+      lastStreamTextBySessionRef.current.set(tid, { text: normalized, at: now });
+      return true;
+    });
+
+    const prevAssist = assistantStreamTextByTabRef.current.get(tid) ?? "";
+    let nextAssist = prevAssist;
+    for (const part of dedupedParts) {
+      if (part.type === "text" && part.text) {
+        ingestStreamAssistText(tid, part.text);
+        nextAssist += part.text;
+      } else if (part.type === "reasoning" && part.text) {
+        nextAssist += part.text;
+      }
+    }
+    if (nextAssist !== prevAssist) {
+      assistantStreamTextByTabRef.current.set(tid, capAssistantStreamBufferText(nextAssist));
+    }
+
+    setSessions((prev) =>
+      prev.map((s) => {
+        if (s.id !== tid && s.claudeSessionId !== tid) return s;
+        let updated = { ...s };
+        if (isInit && realSessionId) {
+          sessionIdMapRef.current.set(tid, realSessionId);
+          updated = { ...updated, id: realSessionId, claudeSessionId: realSessionId };
+          if (opts.syncStreamingTargetRefOnInit) {
+            streamingTargetIdRef.current = realSessionId;
+          }
+          setActiveSessionId((aid) => (aid === tid ? realSessionId : aid));
+        }
+        if (dedupedParts.length > 0 && !isInit) {
+          updated = appendAssistantStreamParts(updated, dedupedParts);
+        }
+        return updated;
+      }),
+    );
+
+    if (isInit && realSessionId) {
+      migrateSessionKey(tid, realSessionId);
+      const buf = assistantStreamTextByTabRef.current.get(tid);
+      if (buf !== undefined) {
+        assistantStreamTextByTabRef.current.delete(tid);
+        assistantStreamTextByTabRef.current.set(realSessionId, capAssistantStreamBufferText(buf));
+      }
+      onSessionTabIdMigrated?.(tid, realSessionId);
+    }
+  }
+
+  function handleOutput(payload: unknown) {
+    const refTid = streamingTargetIdRef.current;
+    const line = typeof payload === "string" ? payload : JSON.stringify(payload);
+    const lineSid = parseStreamLineSessionId(line);
+    const tid = resolveTabIdForClaudeStream(sessionsRef.current, lineSid, refTid);
+    if (!tid) return;
+    applyOutputLine(tid, line, { syncStreamingTargetRefOnInit: true });
+  }
+
+  function looksLikeClaudeUuid(s: string): boolean {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s.trim());
+  }
+
+  function clearAssistBufferKeysForTab(session: ClaudeSession | undefined, tid: string) {
+    assistantStreamTextByTabRef.current.delete(tid);
+    if (session) {
+      assistantStreamTextByTabRef.current.delete(session.id);
+      const cc = session.claudeSessionId?.trim();
+      if (cc) assistantStreamTextByTabRef.current.delete(cc);
+    }
+  }
+
+  function applySessionComplete(tid: string, payload: unknown, turnNonce: number) {
+    const session = sessionsRef.current.find((s) => s.id === tid || s.claudeSessionId === tid);
+    if (session) {
+      if (session.status === "completed" || session.status === "cancelled" || session.status === "error") {
+        clearAssistBufferKeysForTab(session, tid);
+        return;
+      }
+    }
+    const success = resolveSuccessFromCompletePayload(payload);
+    const buf = assistantStreamTextByTabRef.current;
+    const chunks = [
+      (buf.get(tid) ?? "").trim(),
+      session ? (buf.get(session.id) ?? "").trim() : "",
+      session?.claudeSessionId?.trim() ? (buf.get(session.claudeSessionId.trim()) ?? "").trim() : "",
+    ];
+    const fromRef = chunks.reduce((best, cur) => (cur.length > best.length ? cur : best), "");
+    const fromMessages = extractLatestAssistantPlainText(session);
+    // 流式缓冲与 messages 偶发不同步时，用会话内最后一条助手消息兜底，避免验收解析拿不到正文。
+    const previewRaw = (fromRef.length > 0 ? fromRef : fromMessages).trim();
+    const noAssistantReply = previewRaw.length === 0;
+    clearAssistBufferKeysForTab(session, tid);
+    const structuredVerdict = extractStructuredVerdictFromCompletePayload(payload);
+    notifyCompletion({ tid, success, nonce: turnNonce, previewRaw, structuredVerdict });
+    setSessions((prev) =>
+      finalizeSessionAfterComplete({
+        sessions: prev,
+        targetId: tid,
+        success,
+        noAssistantReply,
+      }),
+    );
+    // 多员工/多会话并行时：仅当「当前仍指向本会话」时才清空，避免误清其它仍在流式中的标签
+    const refT = streamingTargetIdRef.current;
+    if (
+      refT !== null &&
+      (refT === tid ||
+        (session && (refT === session.id || refT === session.claudeSessionId?.trim())))
+    ) {
+      streamingTargetIdRef.current = null;
+    }
+
+    if (reloadTranscriptFromDisk && success) {
+      const stableTabId = session?.id ?? tid;
+      const repo = session?.repositoryPath?.trim() ?? "";
+      const tidTrim = tid.trim();
+      const ccid =
+        session?.claudeSessionId?.trim() ||
+        sessionIdMapRef.current.get(stableTabId)?.trim() ||
+        sessionIdMapRef.current.get(tidTrim)?.trim() ||
+        (looksLikeClaudeUuid(tidTrim) ? tidTrim : "");
+      if (repo && ccid) {
+        window.setTimeout(() => {
+          void reloadTranscriptFromDisk({ tabId: stableTabId, repositoryPath: repo, claudeSessionId: ccid });
+        }, 120);
+      }
+    }
+  }
+
+  function handleComplete(payload: unknown) {
+    const tid = resolveTabIdFromCompletePayload(payload, sessionsRef.current, streamingTargetIdRef.current);
+    if (!tid) return;
+    const session = sessionsRef.current.find((s) => s.id === tid || s.claudeSessionId === tid);
+    const tabKey = session?.id ?? tid;
+    const cc = session?.claudeSessionId?.trim();
+    const mapRef = expectedTurnNonceByTabIdRef?.current;
+    const nonceForTurn =
+      (mapRef?.get(tabKey) ?? mapRef?.get(tid) ?? (cc ? mapRef?.get(cc) : undefined)) ??
+      lastUserSendNonceRef.current;
+    applySessionComplete(tid, payload, nonceForTurn);
+  }
+
+  function handleCompleteForSendTab(stableTabId: string, payload: unknown, turnNonce: number) {
+    const mapped = sessionIdMapRef.current.get(stableTabId) ?? stableTabId;
+    let tid = resolveTabIdFromCompletePayload(payload, sessionsRef.current, streamingTargetIdRef.current);
+    if (!tid) tid = resolveTabIdFromCompletePayload(payload, sessionsRef.current, mapped);
+    if (!tid) {
+      const session = sessionsRef.current.find((s) => s.id === mapped || s.claudeSessionId === mapped);
+      tid = session?.id ?? null;
+    }
+    if (!tid) return;
+    applySessionComplete(tid, payload, turnNonce);
+  }
+
+  function handleError(payload: unknown) {
+    const tid = streamingTargetIdRef.current;
+    if (!tid) return;
+    const errorMsg = typeof payload === "string" ? payload : JSON.stringify(payload);
+    setSessions((prev) => appendSystemMessageBySessionOrClaudeId(prev, tid, `Claude stderr: ${errorMsg}`));
+  }
+
+  function handleErrorForSendTab(stableTabId: string, payload: unknown) {
+    const mapped = sessionIdMapRef.current.get(stableTabId) ?? stableTabId;
+    const session = sessionsRef.current.find((s) => s.id === mapped || s.claudeSessionId === mapped);
+    const tid = session?.id ?? mapped;
+    const errorMsg = typeof payload === "string" ? payload : JSON.stringify(payload);
+    setSessions((prev) => appendSystemMessageBySessionOrClaudeId(prev, tid, `Claude stderr: ${errorMsg}`));
+  }
+
+  return {
+    handleOutput,
+    handleComplete,
+    handleError,
+    handleOutputForSendTab,
+    handleCompleteForSendTab,
+    handleErrorForSendTab,
+  };
+}
+

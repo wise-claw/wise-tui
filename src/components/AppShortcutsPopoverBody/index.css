@@ -1,0 +1,36 @@
+/* 与全局 `.app-shortcuts-popover__*` 配合：Popover 内更紧凑 */
+.app-shortcuts-popover--compact .app-shortcuts-popover__intro {
+  font-size: 11px;
+  line-height: 1.45;
+  margin-bottom: 8px;
+}
+
+.app-shortcuts-popover--compact .app-shortcuts-popover__group + .app-shortcuts-popover__group {
+  margin-top: 8px;
+}
+
+.app-shortcuts-popover--compact .app-shortcuts-popover__section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ant-color-text-tertiary);
+  margin-bottom: 4px;
+}
+
+.app-shortcuts-popover--compact .app-shortcuts-popover__row {
+  font-size: 11px;
+  line-height: 1.4;
+  gap: 6px 10px;
+}
+
+.app-shortcuts-popover--compact .app-shortcuts-popover__group .app-shortcuts-popover__row + .app-shortcuts-popover__row {
+  margin-top: 4px;
+}
+
+.app-shortcuts-popover--compact .app-shortcuts-popover__kbd {
+  font-size: 10px;
+  padding: 1px 5px;
+}
+
+.app-shortcuts-popover--compact .app-shortcuts-popover__desc {
+  color: var(--ant-color-text-secondary);
+}

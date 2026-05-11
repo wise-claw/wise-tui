@@ -1,0 +1,170 @@
+/* ── Project List（与侧栏仓库行密度、选中态一致；无左侧条） ── */
+
+.app-repository-list {
+  padding: 2px 6px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.app-repository-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px 3px 0px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.35;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.app-repository-item:hover .app-repository-action {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.app-repository-item:hover {
+  background: var(--ant-color-fill-tertiary);
+}
+
+.app-repository-item--repo.app-repository-item--repo-active {
+  background: var(--ant-control-item-bg-active);
+}
+
+.app-repository-item--repo.app-repository-item--repo-active:hover {
+  background: var(--ant-control-item-bg-active);
+}
+
+.app-repository-item--repo.app-repository-item--repo-active .app-repository-name {
+  font-weight: 500;
+  color: var(--ant-color-text);
+}
+
+.app-repository-item--repo.app-repository-item--repo-active .app-repository-icon {
+  color: var(--ant-color-primary);
+}
+
+.app-repository-item--add {
+  opacity: 0.6;
+}
+
+.app-repository-item--add:hover {
+  opacity: 1;
+}
+
+.app-repository-icon {
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ant-color-text-secondary);
+  flex-shrink: 0;
+}
+
+.app-repository-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.app-repository-icon-wrapper {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.app-repository-icon--folder {
+  position: absolute;
+  inset: 0;
+  transition: opacity 0.15s;
+}
+
+.app-repository-icon--expand {
+  position: absolute;
+  inset: 0;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.app-repository-item:hover .app-repository-icon--folder {
+  opacity: 0;
+}
+
+.app-repository-item:hover .app-repository-icon--expand {
+  opacity: 1;
+}
+
+.app-repository-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--ant-color-text);
+}
+
+.app-repository-add-icon {
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ant-color-text-tertiary);
+  flex-shrink: 0;
+}
+
+.app-repository-add-icon svg {
+  width: 13px;
+  height: 13px;
+}
+
+.app-repository-add-text {
+  font-size: 12px;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-repository-action {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ant-color-text-tertiary);
+  flex-shrink: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s, color 0.15s;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.app-repository-action svg {
+  width: 13px;
+  height: 13px;
+}
+
+.app-repository-action:hover {
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-content);
+}
+
+.app-repository-action--plus {
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-repository-item--repo-active .app-repository-action--plus {
+  color: var(--ant-color-primary);
+}
+
+.app-repository-action--plus:hover {
+  background: var(--ant-color-primary-bg);
+  color: var(--ant-color-primary);
+}
+
+.app-repository-action--remove:hover {
+  color: var(--ant-color-error);
+  background: var(--ant-color-error-bg);
+}

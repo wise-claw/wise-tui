@@ -1,0 +1,345 @@
+/* ── MCP list (shared: RightPanel 等) — compact ── */
+
+.app-mcp-panel-root {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.app-mcp-computer-use-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-mcp-computer-use-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+  flex: 1;
+}
+
+.app-mcp-computer-use-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+  white-space: nowrap;
+}
+
+.app-mcp-computer-use-hint {
+  font-size: 10px;
+  color: var(--ant-color-text-tertiary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.app-mcp-computer-use-link-btn {
+  padding: 0 4px;
+  height: auto;
+  font-size: 11px;
+}
+
+.app-mcp-computer-use-install-log {
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  font-size: 10px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--ant-color-text);
+}
+
+.app-mcp-panel-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.app-mcp-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.app-mcp-section-head {
+  margin-bottom: 4px;
+}
+
+.app-mcp-section-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ant-color-text-tertiary);
+  letter-spacing: 0.02em;
+}
+
+.app-mcp-section-hint {
+  font-size: 9px;
+  color: var(--ant-color-text-quaternary);
+  line-height: 1.35;
+  margin-top: 1px;
+}
+
+.app-mcp-empty {
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
+  padding: 4px 2px;
+}
+
+.app-mcp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.app-mcp-item {
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 6px;
+  background: var(--ant-color-fill-quaternary);
+  padding: 5px 7px;
+}
+
+.app-mcp-item-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.app-mcp-item-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.app-mcp-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ant-color-fill);
+  color: var(--ant-color-text-tertiary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.app-mcp-item-meta {
+  min-width: 0;
+  flex: 1;
+}
+
+.app-mcp-item-name-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.app-mcp-item-name-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+  line-height: 1.25;
+}
+
+.app-mcp-runtime-tag {
+  margin: 0 !important;
+  font-size: 10px !important;
+  line-height: 1.2 !important;
+  padding: 0 5px !important;
+}
+
+.app-mcp-item-command {
+  font-size: 10px;
+  line-height: 1.3;
+  word-break: break-all;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-mcp-item-source {
+  font-size: 9px;
+  line-height: 1.25;
+  color: var(--ant-color-text-quaternary);
+  margin-top: 1px;
+  word-break: break-all;
+  font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+}
+
+.app-mcp-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.app-mcp-item-actions .ant-switch {
+  transform: scale(0.9);
+  transform-origin: center right;
+}
+
+.app-mcp-icon-btn {
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--ant-color-text-tertiary);
+  cursor: pointer;
+}
+
+.app-mcp-icon-btn .anticon {
+  font-size: 11px;
+}
+
+.app-mcp-icon-btn:hover {
+  background: var(--ant-color-fill-content);
+  color: var(--ant-color-text);
+}
+
+.app-mcp-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 5px;
+}
+
+.app-mcp-tool-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--ant-color-fill);
+  color: var(--ant-color-text-secondary);
+  font-size: 9px;
+  line-height: 1.35;
+  font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+}
+
+.app-claude-mcp-panel-loading,
+.app-claude-mcp-panel-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 72px;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-claude-mcp-panel-error {
+  color: var(--ant-color-error);
+  font-size: 11px;
+}
+
+/* MCP 空状态在右栏内略小 */
+.app-claude-code-tools-scroll .ant-empty-description {
+  font-size: 11px;
+}
+
+/* 添加 MCP：仅图标 + 文字（text 按钮，无实心主按钮） */
+.app-tab-extra-mcp-btn.ant-btn.ant-btn-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: auto;
+  min-height: 20px;
+  padding: 0 4px;
+  font-size: 10px;
+  line-height: 1.2;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-tab-extra-mcp-btn.ant-btn.ant-btn-text .anticon {
+  font-size: 11px;
+}
+
+.app-tab-extra-mcp-btn.ant-btn.ant-btn-text:hover {
+  color: var(--ant-color-primary);
+  background: var(--ant-color-fill-tertiary);
+}
+
+.app-status-popover-tabs .app-tab-extra-mcp-btn.ant-btn.ant-btn-text {
+  font-size: 11px;
+  min-height: 22px;
+  padding: 0 6px;
+}
+
+.app-status-popover-tabs .app-tab-extra-mcp-btn.ant-btn.ant-btn-text .anticon {
+  font-size: 12px;
+}
+
+/* ── 添加 MCP 弹窗：窄版、紧凑间距 ── */
+
+.app-mcp-add-modal .ant-modal {
+  max-width: calc(100vw - 24px);
+}
+
+.app-mcp-add-modal .ant-modal-content {
+  padding: 10px 12px 4px;
+}
+
+.app-mcp-add-modal .ant-modal-header {
+  margin-bottom: 0;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-mcp-add-modal .ant-modal-title {
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.app-mcp-add-modal .ant-modal-body {
+  padding: 10px 0 4px;
+}
+
+.app-mcp-add-modal .ant-modal-footer {
+  margin-top: 4px;
+  padding-top: 8px;
+}
+
+.app-mcp-add-form.ant-form-vertical .ant-form-item {
+  margin-bottom: 8px;
+}
+
+.app-mcp-add-form.ant-form-vertical .ant-form-item-label {
+  padding-bottom: 2px;
+}
+
+.app-mcp-add-form.ant-form-vertical .ant-form-item-label > label {
+  height: auto;
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.app-mcp-add-transport.ant-radio-group {
+  display: flex;
+  width: 100%;
+}
+
+.app-mcp-add-transport .ant-radio-button-wrapper {
+  flex: 1;
+  padding-inline: 4px;
+  text-align: center;
+  font-size: 11px;
+}

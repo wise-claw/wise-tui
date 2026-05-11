@@ -1,0 +1,29 @@
+.app-main-layout-resize-handle {
+  flex-shrink: 0;
+  width: var(--app-main-layout-resize-hit, 1px);
+  align-self: stretch;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  background: transparent;
+  position: relative;
+  z-index: 2;
+}
+
+.app-main-layout-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--ant-color-split);
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.app-main-layout-resize-handle:hover::after {
+  background: var(--ant-color-primary);
+  opacity: 1;
+}

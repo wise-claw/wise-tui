@@ -1,0 +1,161 @@
+/* 将 Semi AIChatInput 用到的语义 token 接到 Ant Design 全局 CSS 变量，随主题 / 暗色模式一致 */
+.app-claude-semi-chat-input-wrap {
+  --semi-color-border: var(--ant-color-border-secondary);
+  --semi-color-text-0: var(--ant-color-text);
+  --semi-color-text-1: var(--ant-color-text-secondary);
+  --semi-color-text-2: var(--ant-color-text-tertiary);
+  --semi-color-fill-0: var(--ant-color-fill-tertiary);
+  --semi-color-fill-1: var(--ant-color-fill-secondary);
+  --semi-color-fill-2: var(--ant-color-fill-secondary);
+  --semi-color-bg-2: var(--ant-color-bg-elevated);
+  --semi-color-primary: var(--ant-color-primary);
+  --semi-color-primary-hover: var(--ant-color-primary-hover);
+  --semi-color-primary-active: var(--ant-color-primary-active);
+  --semi-color-primary-light-default: var(--ant-color-primary-bg);
+  /* 与下方 `.tiptap` 行高一致，供 `.semi-aiChatInput-editor-content` 的 max-height 计算 */
+  --app-semi-ai-chat-editor-line-px: 20px;
+  min-width: 0;
+}
+
+/* 会话输入：略小于 Semi 默认 14px，与消息区 13px 更接近 */
+.app-claude-semi-chat-input-wrap .semi-aiChatInput-editor-content .tiptap {
+  font-size: 12.5px;
+  line-height: 20px;
+}
+
+.app-claude-semi-chat-input-wrap .semi-aiChatInput-editor-content .tiptap .node-inputSlot {
+  font-size: 12.5px;
+  line-height: 18px;
+}
+
+.app-claude-semi-chat-input-wrap .semi-aiChatInput-editor-content .tiptap .select-slot {
+  font-size: 12.5px;
+  line-height: 18px;
+}
+
+.app-claude-semi-chat-input-wrap .semi-aiChatInput {
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
+  min-height: calc(3em + 12px);
+}
+
+/* 编辑区可视高度最多约 3 行（超出由 Semi 自带的 overflow:auto 滚动） */
+.app-claude-semi-chat-input-wrap .semi-aiChatInput-editor-content {
+  max-height: calc(3 * var(--app-semi-ai-chat-editor-line-px));
+}
+
+/* 底栏单行：收紧 Semi 默认大间距，缩小发送按钮 */
+.app-claude-semi-chat-input-wrap .semi-aiChatInput-footer {
+  margin-top: 4px;
+  column-gap: 6px;
+  align-items: center;
+}
+
+.app-claude-semi-chat-input-wrap .semi-aiChatInput-footer-configure {
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+}
+
+.app-claude-semi-chat-input-wrap .semi-aiChatInput-footer-action {
+  flex-shrink: 0;
+  column-gap: 4px;
+}
+
+.app-claude-semi-chat-input-wrap .semi-aiChatInput-footer-action-button {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+}
+
+.app-claude-semi-chat-input-wrap .semi-aiChatInput-footer-action-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.app-claude-semi-footer-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+.app-claude-dual-pane-repo-picker {
+  max-width: min(168px, 34vw);
+  min-width: 0;
+  flex-shrink: 1;
+}
+
+.app-claude-dual-pane-repo-picker .ant-select-selector {
+  color: var(--ant-color-text-secondary);
+  min-height: 22px !important;
+  height: 22px !important;
+  padding-block: 0 !important;
+  padding-inline: 4px 18px !important;
+  align-items: center;
+}
+
+.app-claude-dual-pane-repo-picker .ant-select-selection-item,
+.app-claude-dual-pane-repo-picker .ant-select-selection-placeholder {
+  line-height: 20px !important;
+  font-size: 12px;
+}
+
+.app-claude-dual-pane-repo-picker .ant-select-selection-search-input {
+  height: 20px !important;
+  line-height: 20px !important;
+}
+
+.app-claude-dual-pane-repo-picker .ant-select-arrow {
+  inset-inline-end: 5px;
+}
+
+/* 双栏底栏：仓库下拉列表更紧凑 */
+.app-claude-dual-pane-repo-picker-dropdown.ant-select-dropdown {
+  padding: 1px 0;
+}
+
+.app-claude-dual-pane-repo-picker-dropdown .ant-select-item {
+  min-height: 0;
+  padding: 4px 8px;
+  line-height: 1.2;
+  font-size: 12px;
+}
+
+.app-claude-dual-pane-repo-picker-dropdown .ant-select-item-option-content {
+  line-height: 1.2;
+}
+
+/* 分支触发器：与图标区分间距；分支名过长时省略以防挤压模型选择 */
+.app-claude-semi-footer-toolbar-left .app-claude-semi-footer-branch-trigger {
+  margin-inline-start: 4px;
+  max-width: min(200px, 38vw);
+  min-width: 0;
+}
+
+.app-claude-semi-footer-branch-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-claude-semi-footer-toolbar-right {
+  align-items: center;
+}
+
+.app-claude-semi-footer-stop-btn {
+  flex-shrink: 0;
+  padding: 0 6px !important;
+  height: 24px !important;
+  font-size: 12px !important;
+  color: var(--ant-color-text-secondary) !important;
+}
+
+.app-claude-semi-footer-stop-btn:hover {
+  color: var(--ant-color-error) !important;
+}

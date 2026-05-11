@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wise.local/requirements-index.schema.json",
+  "title": "Requirements index for PRD task split (Claude input bundle)",
+  "description": "与 TaskItem.sourceRequirementIds 对齐：每条引用须出现在 requirements[].id（spec §4 I1 / §6）。",
+  "type": "object",
+  "required": ["version", "requirements"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
+    "runId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "物化快照时由运行时注入，可选。"
+    },
+    "requirements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "content", "start", "end"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^req-(functional|nonfunctional|acceptance)-[0-9]+$"
+          },
+          "content": {
+            "type": "string"
+          },
+          "start": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "end": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

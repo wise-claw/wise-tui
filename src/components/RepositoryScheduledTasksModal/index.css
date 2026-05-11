@@ -1,0 +1,85 @@
+.app-scheduled-tasks-modal .ant-modal-header {
+  padding-bottom: 8px;
+}
+
+.app-scheduled-tasks-modal__toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.app-scheduled-tasks-modal__hint {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ant-color-text-secondary);
+  max-width: 520px;
+}
+
+.app-scheduled-tasks-modal__table .ant-table {
+  font-size: 12px;
+}
+
+.app-scheduled-tasks-modal__table .ant-table-cell {
+  padding: 6px 8px !important;
+}
+
+.app-scheduled-tasks-modal__cron {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+}
+
+.app-scheduled-tasks-modal__mono-muted {
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-scheduled-tasks-drawer .ant-drawer-body {
+  padding-top: 12px;
+}
+
+.app-scheduled-tasks-drawer__field {
+  margin-bottom: 12px;
+}
+
+.app-scheduled-tasks-drawer__label {
+  display: block;
+  font-size: 12px;
+  color: var(--ant-color-text-secondary);
+  margin-bottom: 4px;
+}
+
+.app-scheduled-tasks-drawer__editor {
+  min-height: 220px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: var(--ant-border-radius-sm);
+  overflow: hidden;
+  background: var(--ant-color-bg-container);
+}
+
+.app-scheduled-tasks-drawer__editor .app-prompt-milkdown-field {
+  padding: 8px 10px 10px;
+}
+
+.app-scheduled-tasks-drawer__editor .app-prompt-milkdown-field__label-row {
+  display: none;
+}
+
+/* react-js-cron：抽屉内紧凑排布 + 与 Ant Design token 对齐的错误态 */
+.app-scheduled-tasks-drawer__cron {
+  width: 100%;
+}
+
+.app-scheduled-tasks-drawer__cron .react-js-cron {
+  gap: 2px 6px;
+}
+
+.app-scheduled-tasks-drawer__cron .react-js-cron-field {
+  margin-bottom: 6px;
+}
+
+.app-scheduled-tasks-drawer__cron div.react-js-cron-error div.react-js-cron-custom-select {
+  border-color: var(--ant-color-error) !important;
+  background: var(--ant-color-error-bg) !important;
+}

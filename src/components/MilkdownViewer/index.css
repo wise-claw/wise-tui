@@ -1,0 +1,281 @@
+.app-milkdown-viewer {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+}
+
+.app-milkdown-viewer .milkdown {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+}
+
+.app-milkdown-viewer [data-milkdown-root] {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+}
+
+.app-milkdown-viewer .milkdown .ProseMirror {
+  box-sizing: border-box;
+  min-height: 100%;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ant-color-text);
+  padding: 0 0 24px;
+  outline: none;
+}
+
+/* Fallback: some Milkdown bundles mount ProseMirror directly under root */
+.app-milkdown-viewer [data-milkdown-root] > .ProseMirror {
+  min-height: 100%;
+  box-sizing: border-box;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ant-color-text);
+  padding: 0 0 24px;
+  outline: none;
+}
+
+.app-milkdown-viewer--crepe {
+  position: relative;
+  z-index: 1;
+  min-height: 100%;
+}
+
+/*
+ * SlashProvider 未把 floating-ui 的 strategy 写入 style，Crepe 主题仍为 position:absolute。
+ * 与补丁里的 strategy:'fixed' + root:body 配套，强制 fixed 方与视口坐标一致。
+ */
+.app-milkdown-viewer--crepe .milkdown-slash-menu[data-show="true"] {
+  position: fixed !important;
+  z-index: 10050 !important;
+}
+
+/* Crepe 块侧柄：默认「+」与拖拽柄两项，仅保留「+」新增段落 */
+.app-milkdown-viewer .milkdown-block-handle .operation-item + .operation-item {
+  display: none !important;
+}
+
+.app-milkdown-anchor-host {
+  position: relative;
+  min-height: 100%;
+}
+
+.app-milkdown-task-anchor-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.app-milkdown-task-anchor-group {
+  position: absolute;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  pointer-events: none;
+  transform: translateY(0);
+}
+
+.app-milkdown-task-anchor-group--selected .app-milkdown-task-anchor-badge {
+  box-shadow: 0 0 0 2px rgba(200, 140, 0, 0.5), 0 2px 4px rgba(0, 0, 0, 0.18);
+}
+
+.app-milkdown-task-anchor-badge {
+  pointer-events: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: linear-gradient(160deg, #ffd54a, #f0b400);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.app-milkdown-task-anchor-badge + .app-milkdown-task-anchor-badge {
+  margin-left: -5px;
+}
+
+.app-milkdown-task-anchor-badge:hover {
+  filter: brightness(1.06);
+}
+
+.app-milkdown-viewer .milkdown .ProseMirror .app-milkdown-task-anchor-highlight {
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  background-color: rgba(255, 249, 230, 0.96) !important;
+  border-bottom: 3px solid rgba(240, 180, 0, 0.98) !important;
+  padding-bottom: 1px;
+}
+
+.app-milkdown-viewer .milkdown .ProseMirror .app-milkdown-task-anchor-highlight--selected {
+  background-color: rgba(255, 243, 176, 0.98) !important;
+  border-bottom-width: 4px !important;
+  border-bottom-color: rgba(220, 160, 0, 1) !important;
+}
+
+.app-milkdown-viewer .milkdown .ProseMirror .app-milkdown-task-anchor-focus-highlight {
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  background-color: rgba(82, 196, 26, 0.22) !important;
+  border-bottom: 2px solid rgba(56, 158, 13, 0.95) !important;
+  padding-bottom: 1px;
+}
+
+/* Normalize Crepe typography to match app UI scale */
+.app-milkdown-viewer .milkdown .ProseMirror h1 {
+  font-size: 20px;
+  line-height: 1.26;
+  margin: 0.3em 0 0.2em;
+}
+
+.app-milkdown-viewer .milkdown .ProseMirror h2 {
+  font-size: 18px;
+  line-height: 1.3;
+  margin: 0.28em 0 0.18em;
+}
+
+.app-milkdown-viewer .milkdown .ProseMirror h3 {
+  font-size: 16px;
+  line-height: 1.34;
+  margin: 0.25em 0 0.16em;
+}
+
+.app-milkdown-viewer .milkdown .ProseMirror h4 {
+  font-size: 15px;
+  line-height: 1.4;
+  margin: 0.22em 0 0.14em;
+}
+
+.app-milkdown-viewer .milkdown .ProseMirror h5 {
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 0.2em 0 0.12em;
+}
+
+.app-milkdown-viewer .milkdown .ProseMirror h6 {
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0.18em 0 0.1em;
+}
+
+.app-milkdown-viewer .milkdown .ProseMirror p,
+.app-milkdown-viewer .milkdown .ProseMirror li {
+  font-size: 13px;
+  padding: 0;
+}
+
+.app-milkdown-viewer .milkdown .ProseMirror img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  cursor: zoom-in;
+}
+
+.app-milkdown-viewer .milkdown-image-block img[data-type="image-block"] {
+  cursor: zoom-in;
+}
+
+.app-milkdown-image-preview-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.app-milkdown-image-preview-dialog {
+  position: relative;
+  max-width: min(96vw, 1200px);
+  max-height: min(92vh, 900px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.app-milkdown-image-preview-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  max-height: calc(92vh - 48px);
+  transition: transform 0.06s ease-out;
+}
+
+.app-milkdown-image-preview-img {
+  display: block;
+  max-width: min(90vw, 1100px);
+  max-height: calc(88vh - 40px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 6px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+}
+
+.app-milkdown-image-preview-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.85);
+  text-align: center;
+  user-select: none;
+}
+
+.milkdown .milkdown-image-block .image-resize-handle {
+  border-radius: 2px;
+  background: var(--ant-color-primary, #1677ff);
+  opacity: 0.85;
+}
+
+.milkdown .milkdown-list-item-block li .label-wrapper {
+  height: 24px;
+}
+
+/* Crepe 默认 toolbar.css 使用 overflow:hidden，会裁掉子按钮 ::after 提示；必须覆盖为 visible */
+.milkdown .milkdown-toolbar,
+.milkdown-toolbar {
+  overflow: visible !important;
+}
+
+/* Crepe 选区气泡：悬停 / 键盘聚焦时显示与 Ant Tooltip 接近的文案（data 由 crepeToolbarTitles 写入） */
+.milkdown-toolbar button.toolbar-item[data-wise-crepe-title] {
+  position: relative;
+}
+
+.milkdown-toolbar button.toolbar-item[data-wise-crepe-title]:hover::after,
+.milkdown-toolbar button.toolbar-item[data-wise-crepe-title]:focus-visible::after {
+  content: attr(data-wise-crepe-title);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: nowrap;
+  color: var(--ant-color-text-light-solid);
+  background-color: var(--ant-color-bg-spotlight);
+  border-radius: var(--ant-border-radius-sm);
+  box-shadow: var(--ant-box-shadow-secondary);
+  pointer-events: none;
+  z-index: 10050;
+}
