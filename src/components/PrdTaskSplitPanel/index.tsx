@@ -20,13 +20,11 @@ import {
   Dropdown,
   Layout,
   Modal,
-  Popover,
   Row,
   Segmented,
   Space,
   Spin,
   Tag,
-  Tooltip,
   Typography,
 } from "antd";
 import type { MenuProps } from "antd";
@@ -48,8 +46,6 @@ import type {
 import {
   defaultTaskRoleForRepositoryType,
   repositoryFolderBasename,
-  taskRoleChineseLabel,
-  taskRoleTagModifierClass,
 } from "../../utils/repositoryType";
 import { usePrdInput } from "../../hooks/usePrdInput";
 import type { MilkdownEditorHandle, MilkdownTaskAnchor } from "../MilkdownViewer";
@@ -159,7 +155,7 @@ import { RequirementBoardHeader } from "./RequirementBoardHeader";
 import { RequirementBoardActions } from "./RequirementBoardActions";
 import { reconcileResolvedAnchorRanges } from "./anchorReconcile";
 import { TaskAiPopoverContent } from "./TaskAiPopoverContent";
-import { TaskApiSpecEditor } from "./TaskApiSpecEditor";
+import { TaskCard } from "./TaskCard";
 import type {
   RequirementEntry,
   RequirementNameModalMode,
@@ -4094,6 +4090,7 @@ export function PrdTaskSplitPanel({
                             const unmetCollapsed = taskUnmetCollapsedById[task.id] ?? false;
                             const checkCollapsed = taskCheckCollapsedById[task.id] ?? false;
                             const taskAiMode = getTaskAiMode(task);
+                            const draftedTask = getDraftedTask(task);
                             const taskAiPopoverContent = (
                               <TaskAiPopoverContent
                                 mode={taskAiMode}
@@ -4136,350 +4133,107 @@ export function PrdTaskSplitPanel({
                                 onSaveOptimized={() => void handleSaveOptimizedTaskContent(task)}
                               />
                             );
+                            const taskAnchorPopoverContent = (
+                              <TaskAnchorPopoverBody
+                                task={task}
+                                activeResult={activeResult}
+                                anchorResolvedInEditor={resolvedTaskAnchorIds.includes(task.id)}
+                              />
+                            );
+                            const currentAiMode =
+                              taskAiPopoverTaskId === task.id ? taskAiPopoverMode : null;
                             return (
-                            <div
-                              key={task.id}
-                              data-task-id={task.id}
-                              className={`app-prd-task-panel__task-list-item ${selectedTaskId === task.id ? "is-active" : ""}`}
-                              tabIndex={0}
-                              onClick={() => {
-                                if (selectedTaskId !== null && selectedTaskId !== task.id) {
-                                  milkdownEditorRef.current?.clearRequirementFocusHighlight();
-                                }
-                                setSelectedTaskId(task.id);
-                                setSelectedAnchorTaskId(task.id);
-                              }}
-                            >
-                            <div className="app-prd-task-panel__task-card-head">
-                              <div className="app-prd-task-panel__task-card-meta-row">
-                                <Button
-                                  type="text"
-                                  size="small"
-                                  className="app-prd-task-panel__task-link-btn"
-                                  title={`定位需求锚点 #${anchorLabelFromTaskId(task.id)}`}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (selectedTaskId !== task.id) {
-                                      milkdownEditorRef.current?.clearRequirementFocusHighlight();
-                                    }
-                                    setSelectedTaskId(task.id);
-                                    setSelectedAnchorTaskId(task.id);
-                                    const locatedByAnchor = scrollToTaskAnchorInPrd(task);
-                                    if (locatedByAnchor) return;
-                                    const requirementId = pickRequirementIdForTask(task);
-                                    if (requirementId) {
-                                      const locatedByRequirement = scrollToRequirementInPrd(requirementId);
-                                      if (locatedByRequirement) return;
-                                    }
-                                    message.warning("没有相应的锚点。");
-                                  }}
-                                >
-                                  定位需求 #{anchorLabelFromTaskId(task.id)}
-                                </Button>
-                                <div className="app-prd-task-panel__task-card-tags">
-                                  <span
-                                    className={`app-prd-task-panel__task-role-tag ${taskRoleTagModifierClass(task.role)}`}
-                                  >
-                                    {taskRoleChineseLabel(task.role)}
-                                  </span>
-                                </div>
-                                <Button
-                                  type="text"
-                                  danger
-                                  size="small"
-                                  className="app-prd-task-panel__task-delete-btn"
-                                  icon={<DeleteOutlined />}
-                                  title="删除该任务项"
-                                  aria-label={`删除任务 ${task.id}`}
-                                  disabled={(activeResult?.splitTasks.length ?? 0) <= 1}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDeleteTask(task.id);
-                                  }}
-                                />
-                              </div>
-                            </div>
-                            <div
-                              className="app-prd-task-panel__task-card-editor is-editing"
-                              onMouseDown={(e) => {
-                                e.stopPropagation();
-                              }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                              }}
-                            >
-                              <MilkdownEditor
-                                floatingToolbar={false}
-                                text={pendingTaskContentById[task.id] ?? taskToMarkdown(getDraftedTask(task))}
-                                onChange={(markdown) => {
+                              <TaskCard
+                                key={task.id}
+                                task={task}
+                                draftedTask={draftedTask}
+                                selected={selectedTaskId === task.id}
+                                canDelete={(activeResult?.splitTasks.length ?? 0) > 1}
+                                pendingContent={pendingTaskContentById[task.id]}
+                                draftedTaskMarkdown={taskToMarkdown(draftedTask)}
+                                pendingApiSpec={pendingTaskApiSpecById[task.id]}
+                                showApiSpec={Boolean(draftedTask.apiSpec) || task.title.includes("接口协议")}
+                                executionStatus={displayExecutionStatus(task)}
+                                generatingTaskId={generatingExecutableTaskId}
+                                savingTaskId={savingTaskId}
+                                confirmSavingTaskId={confirmSavingTaskId}
+                                closingMotionActive={Boolean(closingToTaskListMotion)}
+                                taskUnmetLines={taskUnmetLines}
+                                taskExecutableCheckResult={taskExecutableCheckResult}
+                                unmetCollapsed={unmetCollapsed}
+                                checkCollapsed={checkCollapsed}
+                                anchorPopoverOpen={taskAnchorPopoverTaskId === task.id}
+                                aiPopoverMode={currentAiMode}
+                                taskAiPopoverContent={taskAiPopoverContent}
+                                taskAnchorPopoverContent={taskAnchorPopoverContent}
+                                onSelect={() => {
+                                  if (selectedTaskId !== null && selectedTaskId !== task.id) {
+                                    milkdownEditorRef.current?.clearRequirementFocusHighlight();
+                                  }
+                                  setSelectedTaskId(task.id);
+                                  setSelectedAnchorTaskId(task.id);
+                                }}
+                                onLocateAnchor={() => {
+                                  if (selectedTaskId !== task.id) {
+                                    milkdownEditorRef.current?.clearRequirementFocusHighlight();
+                                  }
+                                  setSelectedTaskId(task.id);
+                                  setSelectedAnchorTaskId(task.id);
+                                  const locatedByAnchor = scrollToTaskAnchorInPrd(task);
+                                  if (locatedByAnchor) return;
+                                  const requirementId = pickRequirementIdForTask(task);
+                                  if (requirementId) {
+                                    const locatedByRequirement = scrollToRequirementInPrd(requirementId);
+                                    if (locatedByRequirement) return;
+                                  }
+                                  message.warning("没有相应的锚点。");
+                                }}
+                                onDelete={() => handleDeleteTask(task.id)}
+                                onPendingContentChange={(markdown) => {
                                   setPendingTaskContentById((prev) => {
                                     if (prev[task.id] === markdown) return prev;
-                                    return {
-                                      ...prev,
-                                      [task.id]: markdown,
-                                    };
+                                    return { ...prev, [task.id]: markdown };
                                   });
                                 }}
-                              />
-                            </div>
-                          {(getDraftedTask(task).apiSpec || task.title.includes("接口协议")) ? (
-                            <TaskApiSpecEditor
-                              value={pendingTaskApiSpecById[task.id] ?? getDraftedTask(task).apiSpec}
-                              draftedTask={getDraftedTask(task)}
-                              onChange={(nextSpec) => {
-                                setPendingTaskApiSpecById((prev) => ({
-                                  ...prev,
-                                  [task.id]: nextSpec,
-                                }));
-                              }}
-                            />
-                          ) : null}
-                            <div
-                              className="app-prd-task-panel__task-card-footer"
-                              onMouseDown={(e) => e.stopPropagation()}
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <div className="app-prd-task-panel__task-execution-row">
-                                <Popover
-                                  trigger="click"
-                                  placement="topLeft"
-                                  open={taskAnchorPopoverTaskId === task.id}
-                                  onOpenChange={(open) => {
-                                    if (open) {
-                                      setTaskAiPopoverTaskId(null);
-                                      setTaskAiPopoverMode(null);
-                                      setTaskAnchorPopoverTaskId(task.id);
-                                      return;
-                                    }
-                                    setTaskAnchorPopoverTaskId((prev) => (prev === task.id ? null : prev));
-                                  }}
-                                  overlayClassName="app-prd-task-panel__task-anchor-popover"
-                                  content={(
-                                    <TaskAnchorPopoverBody
-                                      task={task}
-                                      activeResult={activeResult}
-                                      anchorResolvedInEditor={resolvedTaskAnchorIds.includes(task.id)}
-                                    />
-                                  )}
-                                >
-                                  <Button
-                                    type="default"
-                                    size="small"
-                                    className="app-prd-task-panel__task-anchor-btn"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                    }}
-                                  >
-                                    taskAnchors
-                                  </Button>
-                                </Popover>
-                                <div className="app-prd-task-panel__task-execution-actions">
-                                <Tooltip
-                                  title={
-                                    displayExecutionStatus(task) === "executable"
-                                      ? "根据当前拆分任务生成一条可执行任务（写入可执行任务列表）"
-                                      : "请先点击「任务合理，确认」或消除缺口后再生成"
+                                onPendingApiSpecChange={(spec) => {
+                                  setPendingTaskApiSpecById((prev) => ({ ...prev, [task.id]: spec }));
+                                }}
+                                onAnchorPopoverChange={(open) => {
+                                  if (open) {
+                                    setTaskAiPopoverTaskId(null);
+                                    setTaskAiPopoverMode(null);
+                                    setTaskAnchorPopoverTaskId(task.id);
+                                    return;
                                   }
-                                >
-                                  <span className="app-prd-task-panel__task-generate-exec-footer-wrap">
-                                    <Button
-                                      type="default"
-                                      size="small"
-                                      className="app-prd-task-panel__task-save-btn"
-                                      loading={generatingExecutableTaskId === task.id}
-                                      disabled={
-                                        displayExecutionStatus(task) !== "executable"
-                                        || Boolean(confirmSavingTaskId)
-                                        || Boolean(closingToTaskListMotion)
-                                        || (generatingExecutableTaskId !== null
-                                          && generatingExecutableTaskId !== task.id)
-                                      }
-                                      onClick={() => void handleGenerateExecutableForSplitTask(task.id)}
-                                    >
-                                      生成可执行任务
-                                    </Button>
-                                  </span>
-                                </Tooltip>
-                                <Popover
-                                  trigger="click"
-                                  placement="leftTop"
-                                  open={taskAiPopoverTaskId === task.id && taskAiPopoverMode === "optimize"}
-                                  onOpenChange={(open) => {
-                                    if (open) {
-                                      setTaskAnchorPopoverTaskId(null);
-                                      openTaskAiPopover(task, "optimize");
-                                      return;
-                                    }
-                                    if (taskAiPopoverTaskId === task.id && taskAiPopoverMode === "optimize") {
-                                      setTaskAiPopoverTaskId(null);
-                                      setTaskAiPopoverMode(null);
-                                    }
-                                  }}
-                                  overlayClassName="app-prd-task-panel__task-ai-popover"
-                                  content={taskAiPopoverContent}
-                                >
-                                  <Button
-                                    type="default"
-                                    size="small"
-                                    className="app-prd-task-panel__task-save-btn"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      openTaskAiPopover(task, "optimize");
-                                    }}
-                                  >
-                                    内容优化
-                                  </Button>
-                                </Popover>
-                                <Popover
-                                  trigger="click"
-                                  placement="leftTop"
-                                  open={taskAiPopoverTaskId === task.id && taskAiPopoverMode === "check"}
-                                  onOpenChange={(open) => {
-                                    if (open) {
-                                      setTaskAnchorPopoverTaskId(null);
-                                      openTaskAiPopover(task, "check");
-                                      return;
-                                    }
-                                    if (taskAiPopoverTaskId === task.id && taskAiPopoverMode === "check") {
-                                      setTaskAiPopoverTaskId(null);
-                                      setTaskAiPopoverMode(null);
-                                    }
-                                  }}
-                                  overlayClassName="app-prd-task-panel__task-ai-popover"
-                                  content={taskAiPopoverContent}
-                                >
-                                  <Button
-                                    type="default"
-                                    size="small"
-                                    className="app-prd-task-panel__task-save-btn"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      openTaskAiPopover(task, "check");
-                                    }}
-                                  >
-                                    可执行检测
-                                  </Button>
-                                </Popover>
-                                <Button
-                                  type="default"
-                                  size="small"
-                                  className="app-prd-task-panel__task-save-btn"
-                                  loading={savingTaskId === task.id}
-                                  onClick={() => void handleSaveTaskDraft(task.id)}
-                                >
-                                  保存
-                                </Button>
-                                {displayExecutionStatus(task) !== "executable" ? (
-                                  <Button
-                                    type="primary"
-                                    size="small"
-                                    className="app-prd-task-panel__task-confirm-btn"
-                                    loading={confirmSavingTaskId === task.id}
-                                    disabled={Boolean(savingTaskId) || (Boolean(confirmSavingTaskId) && confirmSavingTaskId !== task.id)}
-                                    onClick={() => void handleConfirmTaskAdjustment(task.id)}
-                                  >
-                                    任务合理，确认
-                                  </Button>
-                                ) : null}
-                                </div>
-                              </div>
-                              {taskUnmetLines.length > 0 || taskExecutableCheckResult.trim() ? (
-                                <div className="app-prd-task-panel__task-unmet-box">
-                                  {taskUnmetLines.length > 0 && !unmetCollapsed ? (
-                                    <>
-                                      <div className="app-prd-task-panel__task-unmet-title-row">
-                                        <div className="app-prd-task-panel__task-unmet-title">
-                                          待沟通或补充的缺口（请合并进任务描述 / 子任务 / 验收标准 / 接口协议等）
-                                        </div>
-                                        <Button
-                                          size="small"
-                                          type="text"
-                                          className="app-prd-task-panel__task-unmet-toggle-btn"
-                                          onClick={() => {
-                                            setTaskUnmetCollapsedById((prev) => ({
-                                              ...prev,
-                                              [task.id]: !unmetCollapsed,
-                                            }));
-                                          }}
-                                        >
-                                          收起缺口
-                                        </Button>
-                                      </div>
-                                      <ul className="app-prd-task-panel__task-unmet-list">
-                                        {taskUnmetLines.map((line) => (
-                                          <li key={line}>{line}</li>
-                                        ))}
-                                      </ul>
-                                    </>
-                                  ) : null}
-                                  {taskUnmetLines.length > 0 && unmetCollapsed ? (
-                                    <div className="app-prd-task-panel__task-unmet-title-row">
-                                      <div className="app-prd-task-panel__task-unmet-title">
-                                        待沟通或补充的缺口（已收起）
-                                      </div>
-                                      <Button
-                                        size="small"
-                                        type="text"
-                                        className="app-prd-task-panel__task-unmet-toggle-btn"
-                                        onClick={() => {
-                                          setTaskUnmetCollapsedById((prev) => ({
-                                            ...prev,
-                                            [task.id]: false,
-                                          }));
-                                        }}
-                                      >
-                                        展开缺口
-                                      </Button>
-                                    </div>
-                                  ) : null}
-                                  {taskExecutableCheckResult.trim() && !checkCollapsed ? (
-                                    <div className="app-prd-task-panel__task-unmet-check-result">
-                                      <div className="app-prd-task-panel__task-unmet-title-row">
-                                        <div className="app-prd-task-panel__task-unmet-title">可执行检测结果</div>
-                                        <Button
-                                          size="small"
-                                          type="text"
-                                          className="app-prd-task-panel__task-unmet-toggle-btn"
-                                          onClick={() => {
-                                            setTaskCheckCollapsedById((prev) => ({
-                                              ...prev,
-                                              [task.id]: !checkCollapsed,
-                                            }));
-                                          }}
-                                        >
-                                          收起检测
-                                        </Button>
-                                      </div>
-                                      <pre className="app-prd-task-panel__task-unmet-check-result-text">
-                                        {taskExecutableCheckResult}
-                                      </pre>
-                                    </div>
-                                  ) : null}
-                                  {taskExecutableCheckResult.trim() && checkCollapsed ? (
-                                    <div className="app-prd-task-panel__task-unmet-check-result">
-                                      <div className="app-prd-task-panel__task-unmet-title-row">
-                                        <div className="app-prd-task-panel__task-unmet-title">可执行检测结果（已收起）</div>
-                                        <Button
-                                          size="small"
-                                          type="text"
-                                          className="app-prd-task-panel__task-unmet-toggle-btn"
-                                          onClick={() => {
-                                            setTaskCheckCollapsedById((prev) => ({
-                                              ...prev,
-                                              [task.id]: false,
-                                            }));
-                                          }}
-                                        >
-                                          展开检测
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  ) : null}
-                                </div>
-                              ) : null}
-                              {null}
-                            </div>
-                            </div>
+                                  setTaskAnchorPopoverTaskId((prev) => (prev === task.id ? null : prev));
+                                }}
+                                onAiPopoverChange={(mode, open) => {
+                                  if (open) {
+                                    setTaskAnchorPopoverTaskId(null);
+                                    openTaskAiPopover(task, mode);
+                                    return;
+                                  }
+                                  if (taskAiPopoverTaskId === task.id && taskAiPopoverMode === mode) {
+                                    setTaskAiPopoverTaskId(null);
+                                    setTaskAiPopoverMode(null);
+                                  }
+                                }}
+                                onGenerateExecutable={() => void handleGenerateExecutableForSplitTask(task.id)}
+                                onSaveDraft={() => void handleSaveTaskDraft(task.id)}
+                                onConfirmAdjustment={() => void handleConfirmTaskAdjustment(task.id)}
+                                onToggleUnmet={() => {
+                                  setTaskUnmetCollapsedById((prev) => ({
+                                    ...prev,
+                                    [task.id]: !unmetCollapsed,
+                                  }));
+                                }}
+                                onToggleCheck={() => {
+                                  setTaskCheckCollapsedById((prev) => ({
+                                    ...prev,
+                                    [task.id]: !checkCollapsed,
+                                  }));
+                                }}
+                              />
                             );
                           })
                         )}
