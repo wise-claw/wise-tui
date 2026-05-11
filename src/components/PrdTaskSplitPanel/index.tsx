@@ -117,6 +117,7 @@ import {
   createRequirementHistoryId,
   defaultTaskConfirmFilterByTasks,
   dirnameFromAbsolutePath,
+  estimateDaysFromSize,
   formatClaudeRuntimeSessionInfo,
   includesLoosely,
   mergeSplitResultsByAppend,
@@ -125,9 +126,11 @@ import {
   pickMostRelevantRequirementId,
   remapAnchorRangeFromMarkdownToVisible,
   remapSplitResultAnchorOffsetsFromMarkdown,
+  sameApiSpec,
   stripEmbeddedTaskAnchorsFromRequirementMarkdown,
   stripRequirementsIndexSection,
   stripSectionByHeading,
+  taskToMarkdown,
   toErrorMessage,
   type TaskAiMode,
   type TaskConfirmFilter,
@@ -2780,12 +2783,6 @@ export function PrdTaskSplitPanel({
     }
   }
 
-  function estimateDaysFromSize(size: TaskSize): number {
-    if (size === "S") return 1;
-    if (size === "M") return 2;
-    return 4;
-  }
-
   function resetRequirementTaskView() {
     setActiveResult(null);
     setSelectedTaskId(null);
@@ -3192,20 +3189,6 @@ export function PrdTaskSplitPanel({
     };
   }
 
-  function sameApiSpec(a: TaskApiSpec | undefined, b: TaskApiSpec | undefined): boolean {
-    if (!a && !b) return true;
-    if (!a || !b) return false;
-    if (a.endpoint !== b.endpoint) return false;
-    if (a.method !== b.method) return false;
-    if (a.requestSchema !== b.requestSchema) return false;
-    if (a.responseSchema !== b.responseSchema) return false;
-    if (a.errorCodes.length !== b.errorCodes.length) return false;
-    for (let i = 0; i < a.errorCodes.length; i += 1) {
-      if (a.errorCodes[i] !== b.errorCodes[i]) return false;
-    }
-    return true;
-  }
-
   function hasTaskDraftChanges(task: TaskItem): boolean {
     const merged = buildTaskFromDraft(task);
     if (merged.description !== task.description) return true;
@@ -3550,33 +3533,6 @@ export function PrdTaskSplitPanel({
     setSelectedTaskId(nextId);
     requestAnimationFrame(() => scrollToTaskCard(nextId));
     message.success("已新增任务。");
-  }
-
-  function taskToMarkdown(task: TaskItem): string {
-    const taskDescription = task.description.trim();
-    const subtaskLines = task.subtasks;
-    const dodLines = task.dod;
-    return [
-      "#### 任务内容",
-      taskDescription,
-      "",
-      ...(task.apiSpec
-        ? [
-          "#### 接口协议",
-          `- 接口路径：${task.apiSpec.endpoint}`,
-          `- 请求方法：${task.apiSpec.method}`,
-          `- 请求定义：${task.apiSpec.requestSchema}`,
-          `- 响应定义：${task.apiSpec.responseSchema}`,
-          `- 错误码：${task.apiSpec.errorCodes.join(", ") || "无"}`,
-          "",
-        ]
-        : []),
-      "#### 子任务",
-      ...subtaskLines.map((item) => `- ${item}`),
-      "",
-      "#### 验收标准（DoD）",
-      ...dodLines.map((item) => `- ${item}`),
-    ].join("\n");
   }
 
   const promptActionItems: MenuProps["items"] = [
