@@ -1,5 +1,5 @@
 .app-prd-task-panel {
-  padding: 4px 8px;
+  padding: 4px 2px;
   overflow: hidden;
   background: var(--ant-color-bg-layout);
   height: 100%;
@@ -28,13 +28,37 @@
 .app-prd-task-panel__header {
   width: 100%;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  padding-left: 6px;
 }
 
-.app-prd-task-panel__title {
-  margin: 0 !important;
-  font-size: 14px !important;
-  line-height: 1.2 !important;
+.app-prd-task-panel__header-summary-wrap {
+  width: 100%;
+  min-width: 0;
+}
+
+.app-prd-task-panel__header-project-line {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.app-prd-task-panel__header-repo-tag.ant-tag {
+  margin-inline-end: 0 !important;
+  margin-bottom: 0;
+  padding: 0 5px;
+  font-size: 11px;
+  line-height: 1.35;
+  font-weight: 400;
+  color: var(--ant-color-text-tertiary) !important;
+  background: var(--ant-color-fill-quaternary) !important;
+  border: none !important;
+  border-radius: var(--ant-border-radius-sm);
+}
+
+.app-prd-task-panel__header-actions {
+  flex-shrink: 0;
+  padding-top: 1px;
 }
 
 .app-prd-task-panel__header-actions .ant-btn.ant-btn-sm {

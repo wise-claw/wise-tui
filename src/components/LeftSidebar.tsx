@@ -158,6 +158,19 @@ function RequirementIcon() {
   );
 }
 
+/** 对话：仓库行打开 Claude 会话（16px 线性稿） */
+function ChatIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <path
+        d="M3 4.5A1.5 1.5 0 0 1 4.5 3h7A1.5 1.5 0 0 1 13 4.5v5A1.5 1.5 0 0 1 11.5 11H7l-2.5 2V11h0A1.5 1.5 0 0 1 3 9.5v-5z"
+        stroke="currentColor"
+        strokeWidth="1.2"
+      />
+    </svg>
+  );
+}
+
 function McpNavIcon() {
   return (
     <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
@@ -277,21 +290,37 @@ interface Props {
   onOpenActiveRepositoryFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
 }
 
-function TaskModeActions({ onSelect }: { onSelect: (mode: TaskMode) => void }) {
+/** 项目行：打开需求（PRD 任务拆分） */
+function ProjectRequirementAction({ onOpen }: { onOpen: () => void }) {
   return (
-    <>
-      <Tooltip title="需求" mouseEnterDelay={0.3}>
-        <span
-          className="app-repository-action app-repository-action--task"
-          onClick={(e) => {
-            e.stopPropagation();
-            onSelect("split");
-          }}
-        >
-          <RequirementIcon />
-        </span>
-      </Tooltip>
-    </>
+    <Tooltip title="需求" mouseEnterDelay={0.3}>
+      <span
+        className="app-repository-action app-repository-action--task"
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpen();
+        }}
+      >
+        <RequirementIcon />
+      </span>
+    </Tooltip>
+  );
+}
+
+/** 仓库行：打开对话（主会话） */
+function RepositoryConversationAction({ onOpen }: { onOpen: () => void }) {
+  return (
+    <Tooltip title="对话" mouseEnterDelay={0.3}>
+      <span
+        className="app-repository-action app-repository-action--task"
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpen();
+        }}
+      >
+        <ChatIcon />
+      </span>
+    </Tooltip>
   );
 }
 
@@ -427,7 +456,7 @@ function RepositoryRow({
             <MoreIcon />
           </span>
         </Dropdown>
-        <TaskModeActions onSelect={(mode) => onOpenTaskMode(repository, mode)} />
+        <RepositoryConversationAction onOpen={() => onOpenTaskMode(repository, "chat")} />
       </div>
 
     </div>
@@ -1250,7 +1279,7 @@ export function LeftSidebar({
                     <MoreIcon />
                   </span>
                 </Dropdown>
-                <TaskModeActions onSelect={(mode) => onCreateProjectTask(project, mode)} />
+                <ProjectRequirementAction onOpen={() => onCreateProjectTask(project, "split")} />
                 <span
                   className="app-repository-action app-repository-action--plus"
                   onClick={(e) => {

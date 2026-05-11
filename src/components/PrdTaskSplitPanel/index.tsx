@@ -25,6 +25,7 @@ import {
   Space,
   Spin,
   Steps,
+  Tag,
   Tooltip,
   Typography,
 } from "antd";
@@ -589,6 +590,31 @@ export function PrdTaskSplitPanel({
     () => (linkedRepositoryId ? repositoriesById.get(linkedRepositoryId) ?? null : null),
     [linkedRepositoryId, repositoriesById],
   );
+  /** 顶栏单行：当前项目 + 该项目下全部仓库（顺序与侧栏项目内仓库一致）。 */
+  const projectForHeader = useMemo(
+    () => linkedProject ?? (activeProjectId ? projects.find((p) => p.id === activeProjectId) ?? null : null),
+    [linkedProject, activeProjectId, projects],
+  );
+  const headerProjectName = useMemo(() => projectForHeader?.name?.trim() || null, [projectForHeader]);
+  /** 顶栏仓库标签：项目内顺序；无项目时仅当前关联仓库一条。 */
+  const headerRepositoryTagItems = useMemo(() => {
+    if (projectForHeader) {
+      return projectForHeader.repositoryIds
+        .map((id) => {
+          const r = repositoriesById.get(id);
+          if (!r) return null;
+          const label = repositoryFolderBasename(r).trim();
+          if (!label) return null;
+          return { key: String(id), label };
+        })
+        .filter((x): x is { key: string; label: string } => x != null);
+    }
+    if (linkedRepositoryId != null && linkedRepository) {
+      const label = repositoryFolderBasename(linkedRepository).trim();
+      if (label) return [{ key: String(linkedRepositoryId), label }];
+    }
+    return [];
+  }, [projectForHeader, linkedRepositoryId, linkedRepository, repositoriesById]);
   const localSpecRepositoryPath = useMemo(() => {
     const byName = repositories.find(
       (repo) => repositoryFolderBasename(repo).trim().toLowerCase() === "wise",
@@ -1047,8 +1073,9 @@ export function PrdTaskSplitPanel({
   }, [selectedTaskId]);
 
   useEffect(() => {
+    const projectDraftScope = activeProjectId?.trim() || linkedProjectId?.trim() || null;
     void (async () => {
-      const draft = await loadPrdDraft();
+      const draft = await loadPrdDraft(projectDraftScope);
       if (!draft) return;
       const historical = (draft.requirements ?? []).filter((item) => item.requirementDisplayName.trim().length > 0);
       if (historical.length > 0) {
@@ -1095,7 +1122,7 @@ export function PrdTaskSplitPanel({
       setLinkedRepositoryId(draft.linkedRepositoryId);
       setRequirementDisplayName(named ? named : null);
     })();
-  }, [setInputValue]);
+  }, [activeProjectId, linkedProjectId, setInputValue]);
 
   useEffect(() => {
     if (!activeRequirementId) return;
@@ -2629,7 +2656,8 @@ export function PrdTaskSplitPanel({
       ? nextHistory.find((item) => item.id === nextActiveRequirementId) ?? null
       : null;
     const noActive = !nextActiveRequirementId || !selected;
-    await savePrdDraft({
+    const projectDraftScope = activeProjectId?.trim() || linkedProjectId?.trim() || null;
+    await savePrdDraft(projectDraftScope, {
       inputValue: selected?.inputValue ?? (noActive ? "" : inputValue),
       originalInputValue: selected?.originalInputValue ?? (noActive ? null : originalInputValue),
       contextMode: selected?.contextMode ?? contextMode,
@@ -3406,7 +3434,7 @@ export function PrdTaskSplitPanel({
           : undefined}
       >
       <Modal
-        title="任务拆分"
+        title="需求"
         open={splitPromptAdjustModalOpen}
         maskClosable={!parsing && !splitPromptAdjustStarting}
         onCancel={() => {
@@ -3682,16 +3710,34 @@ export function PrdTaskSplitPanel({
         />
       </Modal>
       <Space direction="vertical" size={4} className="app-prd-task-panel__stack">
-        <Space className="app-prd-task-panel__header">
-          <Typography.Title level={4} className="app-prd-task-panel__title">
-            任务拆分
-          </Typography.Title>
+        <Space className="app-prd-task-panel__header" align="start">
+          <div className="app-prd-task-panel__header-summary-wrap" style={{ minWidth: 0, flex: 1 }}>
+            {headerProjectName || headerRepositoryTagItems.length > 0 ? (
+              <Space wrap size={[6, 4]} align="center">
+                {headerProjectName ? (
+                  <Typography.Text type="secondary" className="app-prd-task-panel__header-project-line">
+                    项目：{headerProjectName}
+                  </Typography.Text>
+                ) : null}
+                {headerRepositoryTagItems.map((item) => (
+                  <Tag key={item.key} className="app-prd-task-panel__header-repo-tag" bordered={false}>
+                    {item.label}
+                  </Tag>
+                ))}
+                {headerProjectName && headerRepositoryTagItems.length === 0 ? (
+                  <Tag className="app-prd-task-panel__header-repo-tag" bordered={false}>
+                    暂无仓库
+                  </Tag>
+                ) : null}
+              </Space>
+            ) : null}
+          </div>
           <Space className="app-prd-task-panel__header-actions">
             <Button
               size="small"
               icon={<CloseOutlined />}
               onClick={onClose}
-              aria-label="关闭任务拆分面板"
+              aria-label="关闭需求面板"
               disabled={closingToTaskListMotion?.active}
             />
           </Space>

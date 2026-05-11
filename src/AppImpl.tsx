@@ -421,6 +421,7 @@ export default function App() {
     (sessionId: string) => {
       const sid = sessionId.trim();
       if (!sid) return;
+      setTaskSplitMode(false);
       if (isOmcBatchHistoryStubSessionId(sid)) {
         const anchor = parseOmcBatchHistoryStubAnchorSessionId(sid);
         if (anchor) {
@@ -453,7 +454,7 @@ export default function App() {
       }
       switchSession(canonicalId);
     },
-    [projects, repositories, selectProjectAndRepository, setActiveRepositoryId, switchSession],
+    [projects, repositories, selectProjectAndRepository, setActiveRepositoryId, setTaskSplitMode, switchSession],
   );
 
   const jumpToSessionWithRepositoryRef = useRef(jumpToSessionWithRepository);
@@ -994,6 +995,7 @@ export default function App() {
     (repositoryId: number | null) => {
       setMcpHubMode(false);
       setSkillsHubMode(false);
+      setTaskSplitMode(false);
       handleSidebarRepositorySelect(repositoryId);
     },
     [handleSidebarRepositorySelect],
@@ -1044,6 +1046,7 @@ export default function App() {
       setActiveRepositoryId(repository.id);
     }
     if (mode === "chat") {
+      setTaskSplitMode(false);
       const id = await createSession(repository.path, repositoryFolderBasename(repository));
       bindRepositoryMainSession(repository.path, id);
       return;
