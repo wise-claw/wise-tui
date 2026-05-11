@@ -41,6 +41,7 @@ import {
   ExclamationCircleOutlined,
   FileAddOutlined,
   FolderAddOutlined,
+  FolderOpenOutlined,
   MinusSquareOutlined,
   VerticalAlignTopOutlined,
   VerticalAlignBottomOutlined,
@@ -1326,7 +1327,10 @@ export function RepositoryFilesExplorer({
               title={repositoryPath}
               onClick={() => setSectionCollapsed(false)}
             >
-              {repositoryLabel || "资源管理器"}
+              <span className="git-files-explorer-title-icon-wrap" aria-hidden>
+                <FolderOpenOutlined />
+              </span>
+              <span className="git-files-explorer-title-text">{repositoryLabel || "资源管理器"}</span>
             </button>
           </Tooltip>
         </div>
@@ -1391,12 +1395,18 @@ export function RepositoryFilesExplorer({
               title={repositoryPath}
               onClick={() => setSectionCollapsed(true)}
             >
-              {repositoryLabel || "资源管理器"}
+              <span className="git-files-explorer-title-icon-wrap" aria-hidden>
+                <FolderOpenOutlined />
+              </span>
+              <span className="git-files-explorer-title-text">{repositoryLabel || "资源管理器"}</span>
             </button>
           </Tooltip>
         ) : (
           <span className="git-files-explorer-title" title={repositoryPath}>
-            {repositoryLabel || "资源管理器"}
+            <span className="git-files-explorer-title-icon-wrap" aria-hidden>
+              <FolderOpenOutlined />
+            </span>
+            <span className="git-files-explorer-title-text">{repositoryLabel || "资源管理器"}</span>
           </span>
         )}
         <span className="git-files-explorer-actions">

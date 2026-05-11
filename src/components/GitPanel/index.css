@@ -705,13 +705,37 @@
   flex-shrink: 0;
   border-bottom: 1px solid var(--ant-color-border-secondary);
 }
+.git-files-mode--section-collapsed .git-files-explorer-bar {
+  padding: 4px 8px;
+}
 
 .git-files-explorer-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--ant-color-text-secondary);
   text-transform: uppercase;
+}
+
+.git-files-explorer-title-icon-wrap {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--ant-color-text-tertiary);
+}
+
+.git-files-explorer-title-icon-wrap .anticon {
+  vertical-align: 0;
+}
+
+.git-files-explorer-title-text {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -733,6 +757,7 @@ button.git-files-explorer-title.git-files-explorer-title--toggle {
   text-align: left;
   color: inherit;
   border-radius: 4px;
+  justify-content: flex-start;
 }
 
 button.git-files-explorer-title.git-files-explorer-title--toggle:focus-visible {
@@ -741,6 +766,10 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:focus-visible {
 }
 
 button.git-files-explorer-title.git-files-explorer-title--toggle:hover {
+  color: var(--ant-color-primary);
+}
+
+button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-files-explorer-title-icon-wrap {
   color: var(--ant-color-primary);
 }
 
