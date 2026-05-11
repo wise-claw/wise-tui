@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { AddRepositoryOptions, Repository } from "../types";
+import type { AddRepositoryOptions, Repository, SddMode } from "../types";
 
 /**
  * Open native folder picker dialog.
@@ -67,6 +67,17 @@ export async function updateRepositoryMainOwnerAgent(
     id,
     mainOwnerAgentName: trimmed && trimmed.length > 0 ? trimmed : null,
   });
+}
+
+export async function updateRepositorySddMode(
+  id: number,
+  sddMode: SddMode | null,
+): Promise<Repository> {
+  const allowed: SddMode[] = ["auto", "wise_trellis", "project_owned", "off"];
+  if (sddMode !== null && !allowed.includes(sddMode)) {
+    throw new Error(`WF_INVALID_INPUT: sddMode value not allowed: ${sddMode}`);
+  }
+  return invoke<Repository>("update_repository_sdd_mode", { id, sddMode });
 }
 
 /**
