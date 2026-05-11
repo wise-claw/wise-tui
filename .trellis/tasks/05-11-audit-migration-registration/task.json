@@ -3,7 +3,7 @@
   "name": "audit-migration-registration",
   "title": "Deduplicate SQLite migration registration",
   "description": "Remove repetitive migration include/registration boilerplate from WiseDb and replace it with an ordered migration registry.",
-  "status": "planning",
+  "status": "completed",
   "dev_type": "feature",
   "scope": null,
   "package": null,
@@ -11,11 +11,11 @@
   "creator": "xuning",
   "assignee": "xuning",
   "createdAt": "2026-05-11",
-  "completedAt": null,
+  "completedAt": "2026-05-11",
   "branch": null,
   "base_branch": "main",
   "worktree_path": null,
-  "commit": null,
+  "commit": "14aa0b0",
   "pr_url": null,
   "subtasks": [],
   "children": [],
@@ -24,6 +24,6 @@
     "src-tauri/src/wise_db.rs",
     "src-tauri/migrations/"
   ],
-  "notes": "Created from the visible post-read audit findings.",
+  "notes": "Commit 14aa0b0 replaced repeated migration application blocks with an ordered migration registry while preserving migration order and seed behavior.",
   "meta": {}
 }

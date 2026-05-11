@@ -3,7 +3,7 @@
   "name": "audit-test-coverage-core",
   "title": "Raise regression coverage for workflow and persistence core",
   "description": "Add focused tests for workflow runtime, split policy routing, Claude stream parsing, and Wise SQLite/persistence contracts.",
-  "status": "planning",
+  "status": "completed",
   "dev_type": "feature",
   "scope": null,
   "package": null,
@@ -11,11 +11,11 @@
   "creator": "xuning",
   "assignee": "xuning",
   "createdAt": "2026-05-11",
-  "completedAt": null,
+  "completedAt": "2026-05-11",
   "branch": null,
   "base_branch": "main",
   "worktree_path": null,
-  "commit": null,
+  "commit": "14aa0b0",
   "pr_url": null,
   "subtasks": [],
   "children": [],
@@ -27,6 +27,6 @@
     "src-tauri/src/wise_db.rs",
     "src/services/workflow/*.test.ts"
   ],
-  "notes": "Created from the visible post-read audit findings.",
+  "notes": "Commit 14aa0b0 added focused Bun tests for workflow runtime, split policy routing, and Claude stream parsing, plus Rust migration registry tests in wise_db.rs.",
   "meta": {}
 }

@@ -3,7 +3,7 @@
   "name": "audit-architecture-split",
   "title": "Architecture split for oversized app and Tauri modules",
   "description": "Split the oversized React App shell and Rust Tauri command aggregate into maintainable feature modules without changing user-facing behavior.",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": "feature",
   "scope": null,
   "package": null,
@@ -15,7 +15,7 @@
   "branch": null,
   "base_branch": "main",
   "worktree_path": null,
-  "commit": null,
+  "commit": "14aa0b0",
   "pr_url": null,
   "subtasks": [],
   "children": [],
@@ -28,6 +28,6 @@
     "src/services/",
     "src-tauri/src/"
   ],
-  "notes": "Created from the visible post-read audit findings.",
+  "notes": "First split pass landed in commit 14aa0b0: App.tsx delegates to AppImpl, lib.rs delegates to lib_impl, Rust command clusters moved into domain modules, and AppImpl/lib_impl are both under 2,000 lines. Work continues on remaining oversized orchestration files without behavior changes.",
   "meta": {}
 }

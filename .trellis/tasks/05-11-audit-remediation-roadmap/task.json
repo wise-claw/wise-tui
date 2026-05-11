@@ -3,7 +3,7 @@
   "name": "audit-remediation-roadmap",
   "title": "Post-read audit remediation roadmap",
   "description": "Parent task for the issues found during the deep codebase read: architecture size, low tests, stale docs, dependency drift, migration boilerplate, metadata/security cleanup, and commit hygiene.",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": "planning",
   "scope": null,
   "package": null,
@@ -15,7 +15,7 @@
   "branch": null,
   "base_branch": "main",
   "worktree_path": null,
-  "commit": null,
+  "commit": "822db1f, 14aa0b0",
   "pr_url": null,
   "subtasks": [],
   "children": [
@@ -32,6 +32,6 @@
   "relatedFiles": [
     ".trellis/tasks/05-11-audit-*"
   ],
-  "notes": "Created from the visible post-read audit findings.",
+  "notes": "Roadmap was created in 822db1f. Commit 14aa0b0 completed most child remediation slices; the architecture split child remains active for continued behavior-preserving file decomposition.",
   "meta": {}
 }

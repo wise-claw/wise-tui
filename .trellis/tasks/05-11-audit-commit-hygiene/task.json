@@ -3,7 +3,7 @@
   "name": "audit-commit-hygiene",
   "title": "Define commit hygiene and Trellis handoff workflow",
   "description": "Turn the commit hygiene findings into a repeatable workflow so large Trellis and CLAUDE.md-style changes are split into reviewable commits.",
-  "status": "planning",
+  "status": "completed",
   "dev_type": "docs",
   "scope": null,
   "package": null,
@@ -11,11 +11,11 @@
   "creator": "xuning",
   "assignee": "xuning",
   "createdAt": "2026-05-11",
-  "completedAt": null,
+  "completedAt": "2026-05-11",
   "branch": null,
   "base_branch": "main",
   "worktree_path": null,
-  "commit": null,
+  "commit": "14aa0b0",
   "pr_url": null,
   "subtasks": [],
   "children": [],
@@ -25,6 +25,6 @@
     ".trellis/spec/guides/",
     ".trellis/workflow.md"
   ],
-  "notes": "Created from the visible post-read audit findings.",
+  "notes": "Commit 14aa0b0 added .trellis/spec/guides/commit-hygiene.md and linked it from the shared guide index.",
   "meta": {}
 }
