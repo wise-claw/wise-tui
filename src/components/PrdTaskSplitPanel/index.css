@@ -35,6 +35,88 @@
 .app-prd-task-panel__header-summary-wrap {
   width: 100%;
   min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.app-prd-task-panel__header-summary-project {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.app-prd-task-panel__header-summary-project-inner.ant-space {
+  width: 100%;
+}
+
+.app-prd-task-panel__header-project-scope {
+  flex-shrink: 0;
+}
+
+/* 顶栏：员工 / 团队 左侧打开 Popover，右侧「+」打开新增，中间竖线分隔 */
+.app-prd-task-panel__header-scope-split {
+  display: inline-flex;
+  align-items: stretch;
+  vertical-align: middle;
+}
+
+.app-prd-task-panel__header-scope-split__trigger-wrap,
+.app-prd-task-panel__header-scope-split__addon-wrap {
+  display: flex;
+  align-items: stretch;
+}
+
+.app-prd-task-panel__header-scope-split__trigger-wrap > span,
+.app-prd-task-panel__header-scope-split__addon-wrap > span {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.app-prd-task-panel__header-scope-split__divider {
+  width: 0;
+  flex: 0 0 1px;
+  align-self: stretch;
+  margin-block: 2px;
+  background: var(--ant-color-split, var(--ant-color-border-secondary));
+  z-index: 1;
+}
+
+.app-prd-task-panel__header-scope-split .ant-btn.ant-btn-sm.app-prd-task-panel__header-scope-split__main,
+.app-prd-task-panel__header-scope-split .ant-btn.ant-btn-sm.app-prd-task-panel__header-scope-split__addon {
+  height: 22px;
+  padding-block: 0;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.app-prd-task-panel__header-scope-split__main.ant-btn-sm {
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+  border-inline-end-width: 0;
+  padding-inline: 5px 4px;
+  gap: 3px;
+}
+
+.app-prd-task-panel__header-scope-split__main.ant-btn-sm .ant-btn-icon {
+  margin-inline-end: 2px !important;
+}
+
+.app-prd-task-panel__header-scope-split__main.ant-btn-sm .anticon {
+  font-size: 11px;
+}
+
+.app-prd-task-panel__header-scope-split__addon.ant-btn-sm {
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+  border-inline-start-width: 0;
+  min-width: 22px;
+  padding-inline: 2px;
+}
+
+.app-prd-task-panel__header-scope-split__addon.ant-btn-sm .anticon {
+  margin-inline-end: 0 !important;
+  font-size: 11px;
 }
 
 .app-prd-task-panel__header-project-line {
@@ -191,6 +273,7 @@
 .app-prd-task-panel__section-title-main {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   min-width: 0;
 }

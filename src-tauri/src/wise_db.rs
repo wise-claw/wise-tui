@@ -30,6 +30,7 @@ const MIGRATION_011: &str = include_str!("../migrations/011_task_event_acceptanc
 const MIGRATION_012: &str = include_str!("../migrations/012_prd_executable_tasks.sql");
 const MIGRATION_013: &str = include_str!("../migrations/013_project_icon_badge.sql");
 const MIGRATION_014: &str = include_str!("../migrations/014_project_repository_display_order.sql");
+const MIGRATION_015: &str = include_str!("../migrations/015_project_prd_scope.sql");
 const PLATFORM_SPLIT_PROMPT_SEED_JSON: &str =
     include_str!("../migrations/005_platform_split_prompt_seed.json");
 
@@ -99,6 +100,10 @@ const MIGRATIONS: &[Migration] = &[
     Migration {
         name: "014_project_repository_display_order",
         action: MigrationAction::Sql(MIGRATION_014),
+    },
+    Migration {
+        name: "015_project_prd_scope",
+        action: MigrationAction::Sql(MIGRATION_015),
     },
 ];
 
@@ -999,6 +1004,140 @@ impl WiseDb {
         if n == 0 {
             return Err("项目未找到".to_string());
         }
+        Ok(())
+    }
+
+    pub fn list_project_prd_employee_ids(&self, project_id: &str) -> Result<Vec<String>, String> {
+        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let mut stmt = g
+            .prepare(
+                "SELECT employee_id FROM project_prd_employees
+                 WHERE project_id = ?1
+                 ORDER BY created_at ASC, employee_id ASC",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(params![project_id], |row| row.get::<_, String>(0))
+            .map_err(|e| e.to_string())?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r.map_err(|e| e.to_string())?);
+        }
+        Ok(out)
+    }
+
+    pub fn list_project_prd_workflow_ids(&self, project_id: &str) -> Result<Vec<String>, String> {
+        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let mut stmt = g
+            .prepare(
+                "SELECT workflow_id FROM project_prd_workflows
+                 WHERE project_id = ?1
+                 ORDER BY created_at ASC, workflow_id ASC",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(params![project_id], |row| row.get::<_, String>(0))
+            .map_err(|e| e.to_string())?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r.map_err(|e| e.to_string())?);
+        }
+        Ok(out)
+    }
+
+    pub fn add_project_prd_employee(&self, project_id: &str, employee_id: &str, now_ms: i64) -> Result<(), String> {
+        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let exists: i64 = g
+            .query_row("SELECT COUNT(*) FROM projects WHERE id = ?1", params![project_id], |row| {
+                row.get(0)
+            })
+            .map_err(|e| e.to_string())?;
+        if exists == 0 {
+            return Err("项目未找到".into());
+        }
+        let emp: i64 = g
+            .query_row(
+                "SELECT COUNT(*) FROM employees WHERE id = ?1",
+                params![employee_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| e.to_string())?;
+        if emp == 0 {
+            return Err("员工未找到".into());
+        }
+        g.execute(
+            "INSERT OR IGNORE INTO project_prd_employees (project_id, employee_id, created_at) VALUES (?1, ?2, ?3)",
+            params![project_id, employee_id, now_ms],
+        )
+        .map_err(|e| e.to_string())?;
+        g.execute(
+            "UPDATE projects SET updated_at = ?1 WHERE id = ?2",
+            params![now_ms, project_id],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn remove_project_prd_employee(&self, project_id: &str, employee_id: &str, now_ms: i64) -> Result<(), String> {
+        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        g.execute(
+            "DELETE FROM project_prd_employees WHERE project_id = ?1 AND employee_id = ?2",
+            params![project_id, employee_id],
+        )
+        .map_err(|e| e.to_string())?;
+        g.execute(
+            "UPDATE projects SET updated_at = ?1 WHERE id = ?2",
+            params![now_ms, project_id],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn add_project_prd_workflow(&self, project_id: &str, workflow_id: &str, now_ms: i64) -> Result<(), String> {
+        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let exists: i64 = g
+            .query_row("SELECT COUNT(*) FROM projects WHERE id = ?1", params![project_id], |row| {
+                row.get(0)
+            })
+            .map_err(|e| e.to_string())?;
+        if exists == 0 {
+            return Err("项目未找到".into());
+        }
+        let wf: i64 = g
+            .query_row(
+                "SELECT COUNT(*) FROM workflows WHERE id = ?1",
+                params![workflow_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| e.to_string())?;
+        if wf == 0 {
+            return Err("团队未找到".into());
+        }
+        g.execute(
+            "INSERT OR IGNORE INTO project_prd_workflows (project_id, workflow_id, created_at) VALUES (?1, ?2, ?3)",
+            params![project_id, workflow_id, now_ms],
+        )
+        .map_err(|e| e.to_string())?;
+        g.execute(
+            "UPDATE projects SET updated_at = ?1 WHERE id = ?2",
+            params![now_ms, project_id],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn remove_project_prd_workflow(&self, project_id: &str, workflow_id: &str, now_ms: i64) -> Result<(), String> {
+        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        g.execute(
+            "DELETE FROM project_prd_workflows WHERE project_id = ?1 AND workflow_id = ?2",
+            params![project_id, workflow_id],
+        )
+        .map_err(|e| e.to_string())?;
+        g.execute(
+            "UPDATE projects SET updated_at = ?1 WHERE id = ?2",
+            params![now_ms, project_id],
+        )
+        .map_err(|e| e.to_string())?;
         Ok(())
     }
 

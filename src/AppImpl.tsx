@@ -103,6 +103,7 @@ import { useMainLayoutModes } from "./hooks/useMainLayoutModes";
 import { useDingTalkAutomationInbound } from "./hooks/useDingTalkAutomationInbound";
 import { useOmcRuntime } from "./hooks/useOmcRuntime";
 import { useWorkflowTeamAutomation } from "./hooks/useWorkflowTeamAutomation";
+import { addProjectPrdEmployee, addProjectPrdWorkflow } from "./services/projectPrdScope";
 
 // ── App ──
 
@@ -126,8 +127,12 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [employeeConfigOpen, setEmployeeConfigOpen] = useState(false);
   const [employeeConfigDefaultRepositoryIds, setEmployeeConfigDefaultRepositoryIds] = useState<number[]>([]);
+  /** 非空：从需求面板打开员工配置，新建成功后自动关联到该项目。 */
+  const [employeeConfigPrdProjectId, setEmployeeConfigPrdProjectId] = useState<string | null>(null);
   const [employeeAgentTypeOptions, setEmployeeAgentTypeOptions] = useState<string[]>(["executor"]);
   const [workflowConfigOpen, setWorkflowConfigOpen] = useState(false);
+  /** 非空：从需求面板打开团队配置，保存模板后自动关联到该项目。 */
+  const [workflowConfigPrdProjectId, setWorkflowConfigPrdProjectId] = useState<string | null>(null);
   const [employeeLoading, setEmployeeLoading] = useState(false);
   const [workflowLoading, setWorkflowLoading] = useState(false);
   const [monitorDrawerTarget, setMonitorDrawerTarget] = useState<MonitorDrawerTarget | null>(null);
@@ -879,6 +884,83 @@ export default function App() {
   }, [activeSessionId]);
 
   const activeRepository = repositories.find((p) => p.id === activeRepositoryId);
+
+  const workflowModalRepositoryPath = useMemo(() => {
+    const fromProject = workflowConfigPrdProjectId?.trim();
+    if (fromProject) {
+      const proj = projects.find((p) => p.id === fromProject);
+      const rid = proj?.repositoryIds?.[0];
+      if (rid != null) {
+        return repositories.find((r) => r.id === rid)?.path ?? null;
+      }
+      return null;
+    }
+    return activeRepository?.path ?? null;
+  }, [workflowConfigPrdProjectId, projects, repositories, activeRepository?.path]);
+
+  const loadEmployeeAgentTypeOptionsFromRepositoryPath = useCallback(async (repositoryPath: string | null) => {
+    try {
+      const subagents = await listClaudeSubagents(repositoryPath);
+      const sorted = [...subagents].sort((a, b) => {
+        if (a.isCollaborationMode !== b.isCollaborationMode) {
+          return a.isCollaborationMode ? -1 : 1;
+        }
+        return a.name.localeCompare(b.name);
+      });
+      const merged = Array.from(new Set(["executor", ...sorted.map((item) => item.name)]));
+      setEmployeeAgentTypeOptions(merged);
+    } catch (error) {
+      console.error("Failed to load claude subagents:", error);
+      setEmployeeAgentTypeOptions(["executor"]);
+    }
+  }, []);
+
+  const openEmployeeConfigWithContext = useCallback(async () => {
+    setEmployeeConfigPrdProjectId(null);
+    setEmployeeConfigDefaultRepositoryIds(activeRepositoryId ? [activeRepositoryId] : []);
+    await loadEmployeeAgentTypeOptionsFromRepositoryPath(activeRepository?.path ?? null);
+    setEmployeeConfigOpen(true);
+  }, [activeRepositoryId, activeRepository?.path, loadEmployeeAgentTypeOptionsFromRepositoryPath]);
+
+  const openEmployeeConfigForProject = useCallback(async () => {
+    const pid = activeProjectId?.trim() ?? "";
+    if (!pid) {
+      message.warning("请先在侧栏选择项目");
+      return;
+    }
+    const proj = projects.find((p) => p.id === pid);
+    const repoIds = proj?.repositoryIds ?? [];
+    if (repoIds.length === 0) {
+      message.warning("该项目下暂无仓库，请先在侧栏为项目关联仓库后再新增员工");
+      return;
+    }
+    setEmployeeConfigPrdProjectId(pid);
+    setEmployeeConfigDefaultRepositoryIds([...repoIds]);
+    const firstRepo = repositories.find((r) => r.id === repoIds[0]);
+    await loadEmployeeAgentTypeOptionsFromRepositoryPath(firstRepo?.path ?? null);
+    setEmployeeConfigOpen(true);
+  }, [activeProjectId, projects, repositories, loadEmployeeAgentTypeOptionsFromRepositoryPath]);
+
+  const openWorkflowConfigFromSidebar = useCallback(() => {
+    setWorkflowConfigPrdProjectId(null);
+    setWorkflowConfigOpen(true);
+  }, []);
+
+  const openWorkflowConfigForProject = useCallback(() => {
+    const pid = activeProjectId?.trim() ?? "";
+    if (!pid) {
+      message.warning("请先在侧栏选择项目");
+      return;
+    }
+    const proj = projects.find((p) => p.id === pid);
+    if (!proj?.repositoryIds?.length) {
+      message.warning("该项目下暂无仓库，请先在侧栏为项目关联仓库后再管理团队");
+      return;
+    }
+    setWorkflowConfigPrdProjectId(pid);
+    setWorkflowConfigOpen(true);
+  }, [activeProjectId, projects]);
+
   const {
     closeFileEditorPanel,
     closeFileEditorTab,
@@ -1075,25 +1157,6 @@ export default function App() {
     },
     [jumpToSessionWithRepository],
   );
-
-  async function openEmployeeConfigWithContext() {
-    setEmployeeConfigDefaultRepositoryIds(activeRepositoryId ? [activeRepositoryId] : []);
-    try {
-      const subagents = await listClaudeSubagents(activeRepository?.path ?? null);
-      const sorted = [...subagents].sort((a, b) => {
-        if (a.isCollaborationMode !== b.isCollaborationMode) {
-          return a.isCollaborationMode ? -1 : 1;
-        }
-        return a.name.localeCompare(b.name);
-      });
-      const merged = Array.from(new Set(["executor", ...sorted.map((item) => item.name)]));
-      setEmployeeAgentTypeOptions(merged);
-    } catch (error) {
-      console.error("Failed to load claude subagents:", error);
-      setEmployeeAgentTypeOptions(["executor"]);
-    }
-    setEmployeeConfigOpen(true);
-  }
 
   async function handleCreateRepositoryTask(repository: Repository, mode: TaskMode) {
     const ownerProject = projects.find((p) => p.repositoryIds.includes(repository.id));
@@ -1427,7 +1490,7 @@ export default function App() {
         collapsed,
         rightCollapsed: effectiveRightCollapsed,
         terminalCollapsed,
-        onOpenWorkflowConfig: () => setWorkflowConfigOpen(true),
+        onOpenWorkflowConfig: openWorkflowConfigFromSidebar,
         employees,
         mentionEmployees,
         workflowTasks,
@@ -1484,7 +1547,7 @@ export default function App() {
         onOpenEmployeeConfig: () => {
           void openEmployeeConfigWithContext();
         },
-        onOpenWorkflowConfig: () => setWorkflowConfigOpen(true),
+        onOpenWorkflowConfig: openWorkflowConfigFromSidebar,
         onStopEmployeeMonitor: (employeeId) => handleStopEmployeeMonitorRef.current(employeeId),
         onStopTeamMonitor: (workflowId) => {
           const item = teamMonitorItems.find((entry) => entry.workflowId === workflowId);
@@ -1542,6 +1605,10 @@ export default function App() {
         repositories,
         activeProjectId,
         activeRepositoryId,
+        employees,
+        workflowTemplates,
+        onOpenEmployeeConfigForProject: () => void openEmployeeConfigForProject(),
+        onOpenWorkflowConfigForProject: openWorkflowConfigForProject,
       }}
       repositoryFilePreviewModalProps={{
         preview: repositoryBinaryPreview,
@@ -1583,11 +1650,23 @@ export default function App() {
               repositories,
               agentTypeOptions: employeeAgentTypeOptions,
               defaultRepositoryIds: employeeConfigDefaultRepositoryIds,
-              onClose: () => setEmployeeConfigOpen(false),
+              onClose: () => {
+                setEmployeeConfigOpen(false);
+                setEmployeeConfigPrdProjectId(null);
+              },
               onCreate: async (input) => {
                 setEmployeeLoading(true);
                 try {
-                  await createEmployee(input);
+                  const created = await createEmployee(input);
+                  const linkPid = employeeConfigPrdProjectId?.trim() ?? "";
+                  if (linkPid) {
+                    try {
+                      await addProjectPrdEmployee(linkPid, created.id);
+                      message.success("已加入当前项目的需求成员");
+                    } catch (err) {
+                      message.error(`员工已创建，但关联到项目失败：${toUiErrorMessage(err)}`);
+                    }
+                  }
                   await refreshEmployeeData();
                 } finally {
                   setEmployeeLoading(false);
@@ -1620,15 +1699,27 @@ export default function App() {
               open: workflowConfigOpen,
               loading: workflowLoading,
               employees,
-              repositoryPath: activeRepository?.path ?? null,
+              repositoryPath: workflowModalRepositoryPath,
               templates: workflowTemplates,
               selectableEmployeeIds: selectableWorkflowEmployeeIds,
-              onClose: () => setWorkflowConfigOpen(false),
+              onClose: () => {
+                setWorkflowConfigOpen(false);
+                setWorkflowConfigPrdProjectId(null);
+              },
               onSaveTemplate: async (input) => {
                 setWorkflowLoading(true);
                 try {
                   const savedTemplate = await saveWorkflowTemplate(input);
                   await refreshWorkflowTemplates();
+                  const linkPid = workflowConfigPrdProjectId?.trim() ?? "";
+                  if (linkPid) {
+                    try {
+                      await addProjectPrdWorkflow(linkPid, savedTemplate.id);
+                      message.success("已关联到当前项目");
+                    } catch (err) {
+                      message.error(`模板已保存，但关联到项目失败：${toUiErrorMessage(err)}`);
+                    }
+                  }
                   return savedTemplate;
                 } finally {
                   setWorkflowLoading(false);

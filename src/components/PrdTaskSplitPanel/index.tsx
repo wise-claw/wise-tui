@@ -8,12 +8,15 @@ import {
   PlayCircleOutlined,
   SaveOutlined,
   SettingOutlined,
+  TeamOutlined,
+  UserOutlined,
 } from "@ant-design/icons";
 import {
   App as AntdApp,
   Button,
   Card,
   Col,
+  Divider,
   Dropdown,
   Input,
   Layout,
@@ -32,6 +35,7 @@ import {
 import type { MenuProps } from "antd";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
+  EmployeeItem,
   PrdDocument,
   ProjectItem,
   Repository,
@@ -43,6 +47,7 @@ import type {
   TaskRole,
   TaskSize,
   TaskSplitContext,
+  WorkflowTemplateItem,
 } from "../../types";
 import {
   defaultTaskRoleForRepositoryType,
@@ -143,6 +148,15 @@ import { LinkifiedPre } from "../ClaudeSessions/LinkifiedPre";
 import { SystemMessageContent } from "../ClaudeSessions/SystemMessageContent";
 import { sameStringArray, sameTaskAnchorPositions } from "../../utils/anchorStability";
 import { WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED } from "../../constants/workflowUiEvents";
+import {
+  addProjectPrdEmployee,
+  addProjectPrdWorkflow,
+  listProjectPrdEmployeeIds,
+  listProjectPrdWorkflowIds,
+  removeProjectPrdEmployee,
+  removeProjectPrdWorkflow,
+} from "../../services/projectPrdScope";
+import { isOmcMonitorEmployeeRecord } from "../../utils/omcMonitorEmployeeSession";
 import "./index.css";
 
 const MilkdownEditor = lazy(() => import("../MilkdownViewer").then((module) => ({ default: module.MilkdownEditor })));
@@ -153,6 +167,12 @@ interface Props {
   repositories: Repository[];
   activeProjectId: string | null;
   activeRepositoryId: number | null;
+  employees: EmployeeItem[];
+  workflowTemplates: WorkflowTemplateItem[];
+  /** 与侧栏仓库一致：打开全局「员工」配置（新建后自动关联当前项目）。 */
+  onOpenEmployeeConfigForProject?: () => void;
+  /** 与侧栏仓库一致：打开全局「团队」配置（保存模板后自动关联当前项目）。 */
+  onOpenWorkflowConfigForProject?: () => void;
 }
 
 const TASK_LIST_BUTTON_SELECTOR = '[data-ui-anchor="session-task-list-btn"]';
@@ -421,6 +441,10 @@ export function PrdTaskSplitPanel({
   repositories,
   activeProjectId,
   activeRepositoryId,
+  employees,
+  workflowTemplates,
+  onOpenEmployeeConfigForProject,
+  onOpenWorkflowConfigForProject,
 }: Props) {
   const { message } = AntdApp.useApp();
   const [parsing, setParsing] = useState(false);
@@ -478,6 +502,13 @@ export function PrdTaskSplitPanel({
   const [requirementNameSaving, setRequirementNameSaving] = useState(false);
   const [requirementHistory, setRequirementHistory] = useState<PrdRequirementHistoryItem[]>([]);
   const [activeRequirementId, setActiveRequirementId] = useState<string | null>(null);
+  const [projectPrdEmployeeIds, setProjectPrdEmployeeIds] = useState<string[]>([]);
+  const [projectPrdWorkflowIds, setProjectPrdWorkflowIds] = useState<string[]>([]);
+  const [projectPrdScopeLoading, setProjectPrdScopeLoading] = useState(false);
+  const [projectPrdLinkModalOpen, setProjectPrdLinkModalOpen] = useState(false);
+  const [projectPrdLinkKind, setProjectPrdLinkKind] = useState<"employee" | "workflow">("employee");
+  const [projectPrdLinkSelection, setProjectPrdLinkSelection] = useState<string | null>(null);
+  const [projectPrdLinkSaving, setProjectPrdLinkSaving] = useState(false);
   const [splitError, setSplitError] = useState<string | null>(null);
   const [splitRuntimeVisible, setSplitRuntimeVisible] = useState(false);
   const [splitRuntimeLogs, setSplitRuntimeLogs] = useState<SplitRuntimeLogItem[]>([]);
@@ -511,6 +542,204 @@ export function PrdTaskSplitPanel({
     () => new Map(requirementHistory.map((item) => [item.id, item])),
     [requirementHistory],
   );
+
+  const reloadProjectPrdScope = useCallback(async () => {
+    const pid = activeProjectId?.trim() ?? "";
+    if (!pid) {
+      setProjectPrdEmployeeIds([]);
+      setProjectPrdWorkflowIds([]);
+      setProjectPrdLinkModalOpen(false);
+      return;
+    }
+    setProjectPrdScopeLoading(true);
+    try {
+      const [empIds, wfIds] = await Promise.all([listProjectPrdEmployeeIds(pid), listProjectPrdWorkflowIds(pid)]);
+      setProjectPrdEmployeeIds(empIds);
+      setProjectPrdWorkflowIds(wfIds);
+    } catch (err) {
+      console.error(err);
+      message.error("加载项目成员失败");
+    } finally {
+      setProjectPrdScopeLoading(false);
+    }
+  }, [activeProjectId, message, employees, workflowTemplates]);
+
+  useEffect(() => {
+    void reloadProjectPrdScope();
+  }, [reloadProjectPrdScope]);
+
+  const removeProjectEmployeeFromPrd = useCallback(
+    async (employeeId: string) => {
+      const pid = activeProjectId?.trim() ?? "";
+      if (!pid) return;
+      try {
+        await removeProjectPrdEmployee(pid, employeeId);
+        message.success("已移除");
+        await reloadProjectPrdScope();
+      } catch (err) {
+        message.error(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [activeProjectId, message, reloadProjectPrdScope],
+  );
+
+  const removeProjectWorkflowFromPrd = useCallback(
+    async (workflowId: string) => {
+      const pid = activeProjectId?.trim() ?? "";
+      if (!pid) return;
+      try {
+        await removeProjectPrdWorkflow(pid, workflowId);
+        message.success("已移除");
+        await reloadProjectPrdScope();
+      } catch (err) {
+        message.error(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [activeProjectId, message, reloadProjectPrdScope],
+  );
+
+  const handleConfirmProjectPrdLinkExisting = useCallback(async () => {
+    const pid = activeProjectId?.trim() ?? "";
+    const sel = projectPrdLinkSelection?.trim() ?? "";
+    if (!pid || !sel) {
+      message.warning(projectPrdLinkKind === "employee" ? "请选择员工" : "请选择团队");
+      return;
+    }
+    setProjectPrdLinkSaving(true);
+    try {
+      if (projectPrdLinkKind === "employee") {
+        await addProjectPrdEmployee(pid, sel);
+      } else {
+        await addProjectPrdWorkflow(pid, sel);
+      }
+      message.success("已关联");
+      setProjectPrdLinkModalOpen(false);
+      setProjectPrdLinkSelection(null);
+      await reloadProjectPrdScope();
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setProjectPrdLinkSaving(false);
+    }
+  }, [
+    activeProjectId,
+    message,
+    projectPrdLinkKind,
+    projectPrdLinkSelection,
+    reloadProjectPrdScope,
+  ]);
+
+  const openProjectPrdLinkEmployeeModal = useCallback(() => {
+    setProjectPrdLinkKind("employee");
+    setProjectPrdLinkSelection(null);
+    setProjectPrdLinkModalOpen(true);
+  }, []);
+
+  const openProjectPrdLinkWorkflowModal = useCallback(() => {
+    setProjectPrdLinkKind("workflow");
+    setProjectPrdLinkSelection(null);
+    setProjectPrdLinkModalOpen(true);
+  }, []);
+
+  const projectPrdAddEmployeeOptions = useMemo(
+    () =>
+      employees
+        .filter((e) => e.enabled && !isOmcMonitorEmployeeRecord(e))
+        .filter((e) => !projectPrdEmployeeIds.includes(e.id))
+        .map((e) => ({
+          value: e.id,
+          label: `${e.name}（${e.agentType}）`,
+        })),
+    [employees, projectPrdEmployeeIds],
+  );
+
+  const projectPrdAddWorkflowOptions = useMemo(
+    () =>
+      workflowTemplates.filter((w) => !projectPrdWorkflowIds.includes(w.id)).map((w) => ({ value: w.id, label: w.name })),
+    [workflowTemplates, projectPrdWorkflowIds],
+  );
+
+  const projectEmployeePopoverContent = useMemo(() => {
+    if (!activeProjectId?.trim()) {
+      return <Typography.Text type="secondary">未选择项目</Typography.Text>;
+    }
+    return (
+      <div style={{ maxWidth: 280 }}>
+        {projectPrdEmployeeIds.length === 0 ? (
+          <Typography.Text type="secondary">尚未配置员工</Typography.Text>
+        ) : (
+          <div style={{ maxHeight: 280, overflowY: "auto" }}>
+            <Space direction="vertical" size={6} style={{ width: "100%" }}>
+              {projectPrdEmployeeIds.map((id) => {
+                const emp = employees.find((e) => e.id === id);
+                return (
+                  <div key={id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <Typography.Text ellipsis style={{ flex: 1, margin: 0 }}>
+                      {emp?.name ?? id}
+                    </Typography.Text>
+                    <Button type="link" size="small" danger onClick={() => void removeProjectEmployeeFromPrd(id)}>
+                      移除
+                    </Button>
+                  </div>
+                );
+              })}
+            </Space>
+          </div>
+        )}
+        <Divider style={{ margin: "10px 0 6px" }} />
+        <Button type="link" size="small" style={{ padding: 0, height: "auto" }} onClick={openProjectPrdLinkEmployeeModal}>
+          关联已有员工…
+        </Button>
+      </div>
+    );
+  }, [
+    activeProjectId,
+    employees,
+    openProjectPrdLinkEmployeeModal,
+    projectPrdEmployeeIds,
+    removeProjectEmployeeFromPrd,
+  ]);
+
+  const projectTeamPopoverContent = useMemo(() => {
+    if (!activeProjectId?.trim()) {
+      return <Typography.Text type="secondary">未选择项目</Typography.Text>;
+    }
+    return (
+      <div style={{ maxWidth: 280 }}>
+        {projectPrdWorkflowIds.length === 0 ? (
+          <Typography.Text type="secondary">尚未配置团队</Typography.Text>
+        ) : (
+          <div style={{ maxHeight: 280, overflowY: "auto" }}>
+            <Space direction="vertical" size={6} style={{ width: "100%" }}>
+              {projectPrdWorkflowIds.map((id) => {
+                const wf = workflowTemplates.find((w) => w.id === id);
+                return (
+                  <div key={id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <Typography.Text ellipsis style={{ flex: 1, margin: 0 }}>
+                      {wf?.name ?? id}
+                    </Typography.Text>
+                    <Button type="link" size="small" danger onClick={() => void removeProjectWorkflowFromPrd(id)}>
+                      移除
+                    </Button>
+                  </div>
+                );
+              })}
+            </Space>
+          </div>
+        )}
+        <Divider style={{ margin: "10px 0 6px" }} />
+        <Button type="link" size="small" style={{ padding: 0, height: "auto" }} onClick={openProjectPrdLinkWorkflowModal}>
+          关联已有团队…
+        </Button>
+      </div>
+    );
+  }, [
+    activeProjectId,
+    openProjectPrdLinkWorkflowModal,
+    projectPrdWorkflowIds,
+    removeProjectWorkflowFromPrd,
+    workflowTemplates,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -3682,6 +3911,40 @@ export function PrdTaskSplitPanel({
         </Space>
       </Modal>
       <Modal
+        title={projectPrdLinkKind === "employee" ? "关联已有员工" : "关联已有团队"}
+        open={projectPrdLinkModalOpen}
+        onCancel={() => {
+          if (projectPrdLinkSaving) return;
+          setProjectPrdLinkModalOpen(false);
+          setProjectPrdLinkSelection(null);
+        }}
+        destroyOnClose
+        okText="关联"
+        cancelText="取消"
+        confirmLoading={projectPrdLinkSaving}
+        onOk={() => void handleConfirmProjectPrdLinkExisting()}
+      >
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
+          将侧栏已有员工或团队模板关联到当前项目，便于在需求顶栏查看；新建请使用右侧「+」打开与仓库一致的全局配置。
+        </Typography.Paragraph>
+        <Select
+          showSearch
+          allowClear
+          optionFilterProp="label"
+          placeholder={projectPrdLinkKind === "employee" ? "选择员工" : "选择团队"}
+          style={{ width: "100%" }}
+          value={projectPrdLinkSelection ?? undefined}
+          onChange={(v) => setProjectPrdLinkSelection(v ?? null)}
+          options={projectPrdLinkKind === "employee" ? projectPrdAddEmployeeOptions : projectPrdAddWorkflowOptions}
+        />
+        {(projectPrdLinkKind === "employee" ? projectPrdAddEmployeeOptions : projectPrdAddWorkflowOptions).length ===
+        0 ? (
+          <Typography.Text type="secondary" style={{ display: "block", marginTop: 8 }}>
+            {projectPrdLinkKind === "employee" ? "没有可关联的员工（均已关联或已禁用）。" : "没有可关联的团队（均已关联）。"}
+          </Typography.Text>
+        ) : null}
+      </Modal>
+      <Modal
         title={requirementNameModalMode === "create" ? "新增需求" : "填写需求名称"}
         open={requirementNameModalOpen}
         onCancel={() => {
@@ -3713,24 +3976,93 @@ export function PrdTaskSplitPanel({
         <Space className="app-prd-task-panel__header" align="start">
           <div className="app-prd-task-panel__header-summary-wrap" style={{ minWidth: 0, flex: 1 }}>
             {headerProjectName || headerRepositoryTagItems.length > 0 ? (
-              <Space wrap size={[6, 4]} align="center">
-                {headerProjectName ? (
-                  <Typography.Text type="secondary" className="app-prd-task-panel__header-project-line">
-                    项目：{headerProjectName}
-                  </Typography.Text>
-                ) : null}
-                {headerRepositoryTagItems.map((item) => (
-                  <Tag key={item.key} className="app-prd-task-panel__header-repo-tag" bordered={false}>
-                    {item.label}
-                  </Tag>
-                ))}
-                {headerProjectName && headerRepositoryTagItems.length === 0 ? (
-                  <Tag className="app-prd-task-panel__header-repo-tag" bordered={false}>
-                    暂无仓库
-                  </Tag>
-                ) : null}
-              </Space>
+              <div className="app-prd-task-panel__header-summary-project">
+                <Space
+                  wrap
+                  size={[6, 4]}
+                  align="center"
+                  className="app-prd-task-panel__header-summary-project-inner"
+                >
+                  {headerProjectName ? (
+                    <Typography.Text type="secondary" className="app-prd-task-panel__header-project-line">
+                      项目：{headerProjectName}
+                    </Typography.Text>
+                  ) : null}
+                  {headerRepositoryTagItems.map((item) => (
+                    <Tag key={item.key} className="app-prd-task-panel__header-repo-tag" bordered={false}>
+                      {item.label}
+                    </Tag>
+                  ))}
+                  {headerProjectName && headerRepositoryTagItems.length === 0 ? (
+                    <Tag className="app-prd-task-panel__header-repo-tag" bordered={false}>
+                      暂无仓库
+                    </Tag>
+                  ) : null}
+                </Space>
+              </div>
             ) : null}
+            <Space size={4} wrap align="center" className="app-prd-task-panel__header-project-scope">
+              <div className="app-prd-task-panel__header-scope-split">
+                <div className="app-prd-task-panel__header-scope-split__trigger-wrap">
+                  <Popover title="项目员工" trigger="click" content={projectEmployeePopoverContent}>
+                    <Button
+                      size="small"
+                      type="default"
+                      icon={<UserOutlined />}
+                      disabled={!activeProjectId?.trim()}
+                      loading={projectPrdScopeLoading}
+                      className="app-prd-task-panel__requirement-op-btn app-prd-task-panel__header-scope-split__main"
+                    >
+                      员工（{projectPrdEmployeeIds.length}）
+                    </Button>
+                  </Popover>
+                </div>
+                <span className="app-prd-task-panel__header-scope-split__divider" aria-hidden />
+                <div className="app-prd-task-panel__header-scope-split__addon-wrap">
+                  <Tooltip title="新增员工（与仓库配置一致）">
+                    <Button
+                      size="small"
+                      type="default"
+                      icon={<PlusOutlined />}
+                      disabled={!activeProjectId?.trim()}
+                      aria-label="新增员工"
+                      className="app-prd-task-panel__requirement-op-btn app-prd-task-panel__header-scope-split__addon"
+                      onClick={() => onOpenEmployeeConfigForProject?.()}
+                    />
+                  </Tooltip>
+                </div>
+              </div>
+              <div className="app-prd-task-panel__header-scope-split">
+                <div className="app-prd-task-panel__header-scope-split__trigger-wrap">
+                  <Popover title="项目团队" trigger="click" content={projectTeamPopoverContent}>
+                    <Button
+                      size="small"
+                      type="default"
+                      icon={<TeamOutlined />}
+                      disabled={!activeProjectId?.trim()}
+                      loading={projectPrdScopeLoading}
+                      className="app-prd-task-panel__requirement-op-btn app-prd-task-panel__header-scope-split__main"
+                    >
+                      团队（{projectPrdWorkflowIds.length}）
+                    </Button>
+                  </Popover>
+                </div>
+                <span className="app-prd-task-panel__header-scope-split__divider" aria-hidden />
+                <div className="app-prd-task-panel__header-scope-split__addon-wrap">
+                  <Tooltip title="新增团队（与仓库配置一致）">
+                    <Button
+                      size="small"
+                      type="default"
+                      icon={<PlusOutlined />}
+                      disabled={!activeProjectId?.trim()}
+                      aria-label="新增团队"
+                      className="app-prd-task-panel__requirement-op-btn app-prd-task-panel__header-scope-split__addon"
+                      onClick={() => onOpenWorkflowConfigForProject?.()}
+                    />
+                  </Tooltip>
+                </div>
+              </div>
+            </Space>
           </div>
           <Space className="app-prd-task-panel__header-actions">
             <Button

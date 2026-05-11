@@ -652,6 +652,82 @@ pub(crate) fn set_active_project_id(
 }
 
 #[tauri::command]
+pub(crate) fn list_project_prd_employee_ids(
+    db: tauri::State<'_, wise_db::WiseDb>,
+    project_id: String,
+) -> Result<Vec<String>, String> {
+    let pid = project_id.trim();
+    if pid.is_empty() {
+        return Err("项目 id 无效".into());
+    }
+    db.list_project_prd_employee_ids(pid)
+}
+
+#[tauri::command]
+pub(crate) fn list_project_prd_workflow_ids(
+    db: tauri::State<'_, wise_db::WiseDb>,
+    project_id: String,
+) -> Result<Vec<String>, String> {
+    let pid = project_id.trim();
+    if pid.is_empty() {
+        return Err("项目 id 无效".into());
+    }
+    db.list_project_prd_workflow_ids(pid)
+}
+
+#[tauri::command]
+pub(crate) fn add_project_prd_employee(
+    db: tauri::State<'_, wise_db::WiseDb>,
+    project_id: String,
+    employee_id: String,
+) -> Result<(), String> {
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_millis() as i64;
+    db.add_project_prd_employee(project_id.trim(), employee_id.trim(), now_ms)
+}
+
+#[tauri::command]
+pub(crate) fn remove_project_prd_employee(
+    db: tauri::State<'_, wise_db::WiseDb>,
+    project_id: String,
+    employee_id: String,
+) -> Result<(), String> {
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_millis() as i64;
+    db.remove_project_prd_employee(project_id.trim(), employee_id.trim(), now_ms)
+}
+
+#[tauri::command]
+pub(crate) fn add_project_prd_workflow(
+    db: tauri::State<'_, wise_db::WiseDb>,
+    project_id: String,
+    workflow_id: String,
+) -> Result<(), String> {
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_millis() as i64;
+    db.add_project_prd_workflow(project_id.trim(), workflow_id.trim(), now_ms)
+}
+
+#[tauri::command]
+pub(crate) fn remove_project_prd_workflow(
+    db: tauri::State<'_, wise_db::WiseDb>,
+    project_id: String,
+    workflow_id: String,
+) -> Result<(), String> {
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_millis() as i64;
+    db.remove_project_prd_workflow(project_id.trim(), workflow_id.trim(), now_ms)
+}
+
+#[tauri::command]
 pub(crate) fn list_employees(
     db: tauri::State<'_, wise_db::WiseDb>,
 ) -> Result<Vec<EmployeeItem>, String> {
