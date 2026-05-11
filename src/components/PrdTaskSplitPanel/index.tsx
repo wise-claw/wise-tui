@@ -160,6 +160,7 @@ import { SplitRuntimeMessages } from "./SplitRuntimeMessages";
 import { UnmetConditionsQuestionIcon } from "./UnmetConditionsQuestionIcon";
 import { TaskAnchorPopoverBody } from "./TaskAnchorPopoverBody";
 import { RequirementNameModal } from "./RequirementNameModal";
+import { RuntimePromptEditModal } from "./RuntimePromptEditModal";
 import type {
   RequirementEntry,
   RequirementNameModalMode,
@@ -3779,84 +3780,24 @@ export function PrdTaskSplitPanel({
             </div>
             )}
       </Modal>
-      <Modal
-        title="拆分执行提示词"
+      <RuntimePromptEditModal
         open={runtimePromptModalOpen}
+        linkedRepositoryId={linkedRepositoryId}
+        loading={runtimePromptLoading}
+        saving={runtimePromptSaving}
+        optimizingSlot={runtimePromptOptimizingSlot}
+        slot={runtimePromptSlot}
+        draftBySlot={runtimePromptDraftBySlot}
+        onSlotChange={setRuntimePromptSlot}
+        onDraftChange={updateRuntimePromptDraft}
+        onResetToDefault={() => void handleResetRuntimePromptToDefault()}
         onCancel={() => {
-          if (runtimePromptOptimizingSlot) return;
           setRuntimePromptModalOpen(false);
           setRuntimePromptSaving(false);
         }}
-        width={920}
-        destroyOnHidden
-        footer={(
-          <Space wrap>
-            <Button
-              onClick={() => void handleResetRuntimePromptToDefault()}
-              disabled={!linkedRepositoryId || runtimePromptLoading || runtimePromptSaving || !!runtimePromptOptimizingSlot}
-            >
-              恢复默认
-            </Button>
-            <Button onClick={() => setRuntimePromptModalOpen(false)} disabled={runtimePromptSaving || !!runtimePromptOptimizingSlot}>
-              关闭
-            </Button>
-            <Button
-              type="primary"
-              onClick={() => void handleSaveRuntimePromptDraft()}
-              loading={runtimePromptSaving}
-              disabled={!!runtimePromptOptimizingSlot}
-            >
-              保存
-            </Button>
-          </Space>
-        )}
-      >
-        <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
-          这里展示并编辑拆分执行时实际使用的阶段提示词（仓库级覆盖）。当前仅编辑系统提示词正文。
-        </Typography.Paragraph>
-        <Space direction="vertical" size={10} style={{ width: "100%" }}>
-          <Segmented
-            size="small"
-            value={runtimePromptSlot}
-            options={[
-              { label: "阶段1（拆分）", value: PROMPT_SLOT_PRD_TASK_SPLIT_PHASE1 },
-              { label: "阶段2（溯源）", value: PROMPT_SLOT_PRD_TASK_SPLIT_PHASE2 },
-            ]}
-            onChange={(value) => {
-              if (
-                value === PROMPT_SLOT_PRD_TASK_SPLIT_PHASE1
-                || value === PROMPT_SLOT_PRD_TASK_SPLIT_PHASE2
-              ) {
-                setRuntimePromptSlot(value);
-              }
-            }}
-          />
-          <Space align="center" style={{ justifyContent: "space-between", width: "100%" }}>
-            <Typography.Text strong>
-              {runtimePromptSlot === PROMPT_SLOT_PRD_TASK_SPLIT_PHASE1 ? "阶段1（拆分）提示词" : "阶段2（溯源）提示词"}
-            </Typography.Text>
-            <Button
-              size="small"
-              loading={runtimePromptOptimizingSlot === runtimePromptSlot}
-              disabled={!!runtimePromptOptimizingSlot || runtimePromptSaving || runtimePromptLoading}
-              onClick={() => void handleOptimizeRuntimePromptDraft(runtimePromptSlot)}
-            >
-              AI优化
-            </Button>
-          </Space>
-          <Spin spinning={runtimePromptLoading}>
-            <div className="app-prd-task-panel__split-prompt-milkdown">
-              <MilkdownEditor
-                floatingToolbar={false}
-                text={runtimePromptDraftBySlot[runtimePromptSlot] ?? ""}
-                onChange={(markdown) => {
-                  updateRuntimePromptDraft(runtimePromptSlot, markdown);
-                }}
-              />
-            </div>
-          </Spin>
-        </Space>
-      </Modal>
+        onSave={() => void handleSaveRuntimePromptDraft()}
+        onOptimize={(slot) => void handleOptimizeRuntimePromptDraft(slot)}
+      />
       <Modal
         title={projectPrdLinkKind === "employee" ? "关联已有员工" : "关联已有团队"}
         open={projectPrdLinkModalOpen}
