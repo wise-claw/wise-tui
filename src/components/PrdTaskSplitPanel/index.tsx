@@ -161,6 +161,8 @@ import { TaskAnchorPopoverBody } from "./TaskAnchorPopoverBody";
 import { RequirementNameModal } from "./RequirementNameModal";
 import { RuntimePromptEditModal } from "./RuntimePromptEditModal";
 import { SplitPromptWizardModal } from "./SplitPromptWizardModal";
+import { RequirementBoardHeader } from "./RequirementBoardHeader";
+import { RequirementBoardActions } from "./RequirementBoardActions";
 import type {
   RequirementEntry,
   RequirementNameModalMode,
@@ -3843,67 +3845,23 @@ export function PrdTaskSplitPanel({
             <Card
               size="small"
               title={(
-                <div className="app-prd-task-panel__section-title">
-                  <div className="app-prd-task-panel__section-title-main">
-                    <span>需求</span>
-                    <Select
-                      size="small"
-                      className="app-prd-task-panel__requirement-select"
-                      placeholder="选择需求"
-                      value={activeRequirementId ?? undefined}
-                      style={{ minWidth: 160, maxWidth: 360 }}
-                      showSearch
-                      optionFilterProp="label"
-                      options={sortedRequirementHistory.map((item) => ({
-                        value: item.id,
-                        label: item.requirementDisplayName,
-                      }))}
-                      onChange={(value) => {
-                        const picked = requirementHistoryById.get(value);
-                        if (!picked) return;
-                        switchToRequirement(picked);
-                      }}
-                    />
-                  </div>
-                  <Space size={4} className="app-prd-task-panel__requirement-title-actions">
-                    <Button
-                      type="default"
-                      size="small"
-                      className="app-prd-task-panel__requirement-op-btn app-prd-task-panel__requirement-op-btn--pin"
-                      icon={<PushpinOutlined />}
-                      disabled={!activeRequirementId}
-                      onClick={() => handlePinActiveRequirement()}
-                    >
-                      {activeRequirement?.isPinned ? "已置顶" : "置顶"}
-                    </Button>
-                    <Button
-                      size="small"
-                      className="app-prd-task-panel__requirement-op-btn"
-                      icon={<PlusOutlined />}
-                      onClick={() => {
-                        setRequirementNameModalMode("create");
-                        setRequirementNameInput("");
-                        setRequirementNameModalOpen(true);
-                      }}
-                    >
-                      新增
-                    </Button>
-                    <Tooltip title="删除当前需求">
-                      <Button
-                        type="default"
-                        danger
-                        size="small"
-                        className="app-prd-task-panel__requirement-op-btn app-prd-task-panel__requirement-op-btn--delete"
-                        icon={<DeleteOutlined />}
-                        disabled={!activeRequirementId}
-                        aria-label="删除当前需求"
-                        onClick={() => handleDeleteActiveRequirement()}
-                      >
-                        删除
-                      </Button>
-                    </Tooltip>
-                  </Space>
-                </div>
+                <RequirementBoardHeader
+                  activeRequirementId={activeRequirementId}
+                  activeRequirement={activeRequirement ?? null}
+                  options={sortedRequirementHistory}
+                  onPick={(value) => {
+                    const picked = requirementHistoryById.get(value);
+                    if (!picked) return;
+                    switchToRequirement(picked);
+                  }}
+                  onPin={() => handlePinActiveRequirement()}
+                  onCreate={() => {
+                    setRequirementNameModalMode("create");
+                    setRequirementNameInput("");
+                    setRequirementNameModalOpen(true);
+                  }}
+                  onDelete={() => handleDeleteActiveRequirement()}
+                />
               )}
               className="app-prd-task-panel__left-card"
               bodyStyle={{ padding: "0 0 16px 0" }}
@@ -4020,40 +3978,14 @@ export function PrdTaskSplitPanel({
                     当前输入为 URL，若左侧仅显示链接文本则无法定位需求锚点；请先执行一次拆分以回填正文后再查看锚点。
                   </Typography.Text>
                 ) : null}
-                <div className="app-prd-task-panel__actions-row">
-                  <Space className="app-prd-task-panel__actions-left">
-                    <Button
-                      icon={<SaveOutlined />}
-                      className="app-prd-task-panel__action-btn"
-                      onClick={() => void handleUserPersistPrdDraft()}
-                      disabled={!hasInput}
-                    >
-                      保存
-                    </Button>
-                    <Button
-                      type="primary"
-                      icon={<PlayCircleOutlined />}
-                      className="app-prd-task-panel__btn-primary app-prd-task-panel__action-btn"
-                      onClick={() => void handleOpenSplitPromptAdjustModal()}
-                      loading={parsing}
-                      disabled={!hasInput || parsing || splitPromptAdjustStarting}
-                    >
-                      拆分
-                    </Button>
-                  </Space>
-                  <Space size={8}>
-                    <Dropdown menu={{ items: promptActionItems }} trigger={["click"]} placement="bottomRight">
-                      <Button
-                        icon={<SettingOutlined />}
-                        className="app-prd-task-panel__btn-secondary app-prd-task-panel__action-btn"
-                        aria-label="更多操作"
-                      >
-                        更多操作
-                        <DownOutlined />
-                      </Button>
-                    </Dropdown>
-                  </Space>
-                </div>
+                <RequirementBoardActions
+                  hasInput={hasInput}
+                  parsing={parsing}
+                  splitStarting={splitPromptAdjustStarting}
+                  promptActionItems={promptActionItems}
+                  onSaveDraft={() => void handleUserPersistPrdDraft()}
+                  onStartSplit={() => void handleOpenSplitPromptAdjustModal()}
+                />
               </Space>
             </Card>
           </Col>
