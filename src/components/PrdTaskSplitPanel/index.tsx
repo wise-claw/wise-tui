@@ -18,12 +18,10 @@ import {
   Col,
   Divider,
   Dropdown,
-  Input,
   Layout,
   Modal,
   Popover,
   Row,
-  Select,
   Segmented,
   Space,
   Spin,
@@ -117,9 +115,7 @@ import {
   API_METHOD_OPTIONS,
   TASK_AI_DEFAULT_PROMPT_BY_MODE,
   anchorLabelFromTaskId,
-  buildApiSpecTemplate,
   buildExecutableTaskCopiesFromSplitSources,
-  buildRequestSchemaByMethod,
   buildSelectionAnchorTextHash,
   buildSnapshotAbsoluteDisplayPath,
   clipRuntimeLogText,
@@ -129,7 +125,6 @@ import {
   formatClaudeRuntimeSessionInfo,
   includesLoosely,
   mergeSplitResultsByAppend,
-  normalizeJsonText,
   parseClaudeRuntimeSessionInfo,
   parseTaskNumericOrdinal,
   pickMostRelevantRequirementId,
@@ -164,6 +159,7 @@ import { RequirementBoardHeader } from "./RequirementBoardHeader";
 import { RequirementBoardActions } from "./RequirementBoardActions";
 import { reconcileResolvedAnchorRanges } from "./anchorReconcile";
 import { TaskAiPopoverContent } from "./TaskAiPopoverContent";
+import { TaskApiSpecEditor } from "./TaskApiSpecEditor";
 import type {
   RequirementEntry,
   RequirementNameModalMode,
@@ -4227,143 +4223,16 @@ export function PrdTaskSplitPanel({
                               />
                             </div>
                           {(getDraftedTask(task).apiSpec || task.title.includes("接口协议")) ? (
-                            <div
-                              className="app-prd-task-panel__task-api-spec-block"
-                            >
-                              {(() => {
-                                const method = (pendingTaskApiSpecById[task.id] ?? getDraftedTask(task).apiSpec)?.method;
-                                if (method !== "GET" && method !== "DELETE") return null;
-                                return (
-                                  <Typography.Text type="warning">
-                                    当前方法通常不使用请求体，建议优先使用 query/path 参数定义请求。
-                                  </Typography.Text>
-                                );
-                              })()}
-                              <Typography.Text type="secondary">接口协议（结构化）</Typography.Text>
-                              <Space direction="vertical" size={6} style={{ width: "100%", marginTop: 6 }}>
-                                <Space>
-                                  <Button
-                                    size="small"
-                                    onClick={() => {
-                                      setPendingTaskApiSpecById((prev) => ({
-                                        ...prev,
-                                        [task.id]: buildApiSpecTemplate(getDraftedTask(task)),
-                                      }));
-                                    }}
-                                  >
-                                    一键生成 REST 模板
-                                  </Button>
-                                </Space>
-                                <Input
-                                  size="small"
-                                  placeholder="接口路径，例如 /api/tasks/split"
-                                  value={(pendingTaskApiSpecById[task.id] ?? getDraftedTask(task).apiSpec)?.endpoint ?? ""}
-                                  onChange={(e) => {
-                                    const base = pendingTaskApiSpecById[task.id] ?? getDraftedTask(task).apiSpec ?? {
-                                      endpoint: "",
-                                      method: "POST" as const,
-                                      requestSchema: "",
-                                      responseSchema: "",
-                                      errorCodes: [],
-                                    };
-                                    setPendingTaskApiSpecById((prev) => ({
-                                      ...prev,
-                                      [task.id]: { ...base, endpoint: e.target.value },
-                                    }));
-                                  }}
-                                />
-                                <Select
-                                  size="small"
-                                  value={(pendingTaskApiSpecById[task.id] ?? getDraftedTask(task).apiSpec)?.method ?? "POST"}
-                                  options={API_METHOD_OPTIONS.map((item) => ({ label: item, value: item }))}
-                                  onChange={(value) => {
-                                    const draftedTask = getDraftedTask(task);
-                                    const base = pendingTaskApiSpecById[task.id] ?? draftedTask.apiSpec ?? {
-                                      endpoint: "",
-                                      method: "POST" as const,
-                                      requestSchema: "",
-                                      responseSchema: "",
-                                      errorCodes: [],
-                                    };
-                                    const defaultPost = normalizeJsonText(buildRequestSchemaByMethod("POST", draftedTask.title));
-                                    const defaultGet = normalizeJsonText(buildRequestSchemaByMethod("GET", draftedTask.title));
-                                    const defaultDelete = normalizeJsonText(buildRequestSchemaByMethod("DELETE", draftedTask.title));
-                                    const currentNormalized = normalizeJsonText(base.requestSchema);
-                                    const shouldAutoUpdateRequest = currentNormalized.length === 0
-                                      || currentNormalized === defaultPost
-                                      || currentNormalized === defaultGet
-                                      || currentNormalized === defaultDelete;
-                                    setPendingTaskApiSpecById((prev) => ({
-                                      ...prev,
-                                      [task.id]: {
-                                        ...base,
-                                        method: value,
-                                        requestSchema: shouldAutoUpdateRequest
-                                          ? buildRequestSchemaByMethod(value, draftedTask.title)
-                                          : base.requestSchema,
-                                      },
-                                    }));
-                                  }}
-                                />
-                                <Input.TextArea
-                                  rows={2}
-                                  placeholder="请求定义（JSON Schema 或字段说明）"
-                                  value={(pendingTaskApiSpecById[task.id] ?? getDraftedTask(task).apiSpec)?.requestSchema ?? ""}
-                                  onChange={(e) => {
-                                    const base = pendingTaskApiSpecById[task.id] ?? getDraftedTask(task).apiSpec ?? {
-                                      endpoint: "",
-                                      method: "POST" as const,
-                                      requestSchema: "",
-                                      responseSchema: "",
-                                      errorCodes: [],
-                                    };
-                                    setPendingTaskApiSpecById((prev) => ({
-                                      ...prev,
-                                      [task.id]: { ...base, requestSchema: e.target.value },
-                                    }));
-                                  }}
-                                />
-                                <Input.TextArea
-                                  rows={2}
-                                  placeholder="响应定义（JSON Schema 或字段说明）"
-                                  value={(pendingTaskApiSpecById[task.id] ?? getDraftedTask(task).apiSpec)?.responseSchema ?? ""}
-                                  onChange={(e) => {
-                                    const base = pendingTaskApiSpecById[task.id] ?? getDraftedTask(task).apiSpec ?? {
-                                      endpoint: "",
-                                      method: "POST" as const,
-                                      requestSchema: "",
-                                      responseSchema: "",
-                                      errorCodes: [],
-                                    };
-                                    setPendingTaskApiSpecById((prev) => ({
-                                      ...prev,
-                                      [task.id]: { ...base, responseSchema: e.target.value },
-                                    }));
-                                  }}
-                                />
-                                <Input
-                                  size="small"
-                                  placeholder="错误码，逗号分隔，例如 400,401,500"
-                                  value={((pendingTaskApiSpecById[task.id] ?? getDraftedTask(task).apiSpec)?.errorCodes ?? []).join(", ")}
-                                  onChange={(e) => {
-                                    const base = pendingTaskApiSpecById[task.id] ?? getDraftedTask(task).apiSpec ?? {
-                                      endpoint: "",
-                                      method: "POST" as const,
-                                      requestSchema: "",
-                                      responseSchema: "",
-                                      errorCodes: [],
-                                    };
-                                    setPendingTaskApiSpecById((prev) => ({
-                                      ...prev,
-                                      [task.id]: {
-                                        ...base,
-                                        errorCodes: e.target.value.split(",").map((item) => item.trim()).filter(Boolean),
-                                      },
-                                    }));
-                                  }}
-                                />
-                              </Space>
-                            </div>
+                            <TaskApiSpecEditor
+                              value={pendingTaskApiSpecById[task.id] ?? getDraftedTask(task).apiSpec}
+                              draftedTask={getDraftedTask(task)}
+                              onChange={(nextSpec) => {
+                                setPendingTaskApiSpecById((prev) => ({
+                                  ...prev,
+                                  [task.id]: nextSpec,
+                                }));
+                              }}
+                            />
                           ) : null}
                             <div
                               className="app-prd-task-panel__task-card-footer"
