@@ -163,6 +163,7 @@ import { SplitPromptWizardModal } from "./SplitPromptWizardModal";
 import { RequirementBoardHeader } from "./RequirementBoardHeader";
 import { RequirementBoardActions } from "./RequirementBoardActions";
 import { reconcileResolvedAnchorRanges } from "./anchorReconcile";
+import { TaskAiPopoverContent } from "./TaskAiPopoverContent";
 import type {
   RequirementEntry,
   RequirementNameModalMode,
@@ -4098,89 +4099,46 @@ export function PrdTaskSplitPanel({
                             const checkCollapsed = taskCheckCollapsedById[task.id] ?? false;
                             const taskAiMode = getTaskAiMode(task);
                             const taskAiPopoverContent = (
-                              <div
-                                className="app-prd-task-panel__task-ai-popover-content"
-                                onMouseDown={(e) => e.stopPropagation()}
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <div className="app-prd-task-panel__task-ai-popover-main">
-                                  <Typography.Text strong>提示词</Typography.Text>
-                                  <div className="app-prd-task-panel__split-prompt-milkdown">
-                                    <MilkdownEditor
-                                      floatingToolbar={false}
-                                      text={getTaskAiInput(task, taskAiMode)}
-                                      onChange={(markdown) => {
-                                        setTaskAiInputById((prev) => ({
-                                          ...prev,
-                                          [task.id]: {
-                                            ...(prev[task.id] ?? {}),
-                                            [taskAiMode]: markdown,
-                                          },
-                                        }));
-                                      }}
-                                    />
-                                  </div>
-                                  {taskAiMode === "optimize" ? (
-                                    <>
-                                      <Typography.Text strong>优化后任务内容</Typography.Text>
-                                      <div className="app-prd-task-panel__split-prompt-milkdown">
-                                        <MilkdownEditor
-                                          floatingToolbar={false}
-                                          text={taskAiOptimizedContentById[task.id] ?? ""}
-                                          onChange={(markdown) => {
-                                            setTaskAiOptimizedContentById((prev) => ({
-                                              ...prev,
-                                              [task.id]: markdown,
-                                            }));
-                                          }}
-                                        />
-                                      </div>
-                                    </>
-                                  ) : null}
-                                </div>
-                                <div className="app-prd-task-panel__task-ai-popover-actions">
-                                  <Button
-                                    size="small"
-                                    disabled={!!taskAiActionLoadingById[task.id]}
-                                    onClick={() => {
-                                      setTaskAiPopoverTaskId(null);
-                                      setTaskAiPopoverMode(null);
-                                    }}
-                                  >
-                                    关闭
-                                  </Button>
-                                  <Button
-                                    type="primary"
-                                    size="small"
-                                    loading={!!taskAiActionLoadingById[task.id]}
-                                    disabled={!!taskAiActionLoadingById[task.id]}
-                                    onClick={() => {
-                                      const prompt = getTaskAiInput(task, taskAiMode).trim();
-                                      if (!prompt) {
-                                        message.warning("请输入提示词后再执行。");
-                                        return;
-                                      }
-                                      if (taskAiMode === "optimize") {
-                                        void handleOptimizeTaskContent(task, prompt);
-                                        return;
-                                      }
-                                      void handleCheckTaskExecutable(task, prompt);
-                                    }}
-                                  >
-                                    {taskAiMode === "optimize" ? "优化" : "确定"}
-                                  </Button>
-                                  {taskAiMode === "optimize" ? (
-                                    <Button
-                                      size="small"
-                                      loading={taskAiSavingTaskId === task.id}
-                                      disabled={!(taskAiOptimizedReadyById[task.id] ?? false) || !!taskAiActionLoadingById[task.id]}
-                                      onClick={() => void handleSaveOptimizedTaskContent(task)}
-                                    >
-                                      保存
-                                    </Button>
-                                  ) : null}
-                                </div>
-                              </div>
+                              <TaskAiPopoverContent
+                                mode={taskAiMode}
+                                promptText={getTaskAiInput(task, taskAiMode)}
+                                optimizedText={taskAiOptimizedContentById[task.id] ?? ""}
+                                actionLoading={!!taskAiActionLoadingById[task.id]}
+                                saving={taskAiSavingTaskId === task.id}
+                                optimizedReady={taskAiOptimizedReadyById[task.id] ?? false}
+                                onPromptChange={(markdown) => {
+                                  setTaskAiInputById((prev) => ({
+                                    ...prev,
+                                    [task.id]: {
+                                      ...(prev[task.id] ?? {}),
+                                      [taskAiMode]: markdown,
+                                    },
+                                  }));
+                                }}
+                                onOptimizedTextChange={(markdown) => {
+                                  setTaskAiOptimizedContentById((prev) => ({
+                                    ...prev,
+                                    [task.id]: markdown,
+                                  }));
+                                }}
+                                onClose={() => {
+                                  setTaskAiPopoverTaskId(null);
+                                  setTaskAiPopoverMode(null);
+                                }}
+                                onSubmit={() => {
+                                  const prompt = getTaskAiInput(task, taskAiMode).trim();
+                                  if (!prompt) {
+                                    message.warning("请输入提示词后再执行。");
+                                    return;
+                                  }
+                                  if (taskAiMode === "optimize") {
+                                    void handleOptimizeTaskContent(task, prompt);
+                                    return;
+                                  }
+                                  void handleCheckTaskExecutable(task, prompt);
+                                }}
+                                onSaveOptimized={() => void handleSaveOptimizedTaskContent(task)}
+                              />
                             );
                             return (
                             <div
