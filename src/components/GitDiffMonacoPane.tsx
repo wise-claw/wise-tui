@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useRef } from "react";
 import { Spin } from "antd";
+import { configureWiseMonacoTypeScript } from "../services/monacoTypeScriptEnvironment";
 
 const DiffEditor = lazy(() =>
   import("@monaco-editor/react").then((m) => ({ default: m.DiffEditor })),
@@ -54,6 +55,9 @@ export function GitDiffMonacoPane({
         language={language}
         originalModelPath={`wise-diff-left:${relativePath}`}
         modifiedModelPath={`wise-diff-right:${relativePath}`}
+        beforeMount={(monaco) => {
+          configureWiseMonacoTypeScript(monaco);
+        }}
         onMount={(diffEditor) => {
           modifiedListenerRef.current?.dispose();
           modifiedListenerRef.current = null;

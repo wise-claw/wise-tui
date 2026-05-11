@@ -1391,6 +1391,7 @@ export default function App() {
               activePath: fileEditorActivePath,
               dark,
               dirty: editorDirty,
+              repositoryPath: activeRepository?.path,
               saving: editorSaving,
               tabs: fileEditorTabs,
               onActivePathChange: setFileEditorActivePath,

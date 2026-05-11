@@ -1,9 +1,16 @@
-import { lazy, Suspense, type MouseEvent } from "react";
+import { lazy, Suspense, useEffect, useRef, type MouseEvent } from "react";
 import { CloseOutlined } from "@ant-design/icons";
 import { Button, Spin } from "antd";
+import type * as Monaco from "monaco-editor";
 import { GitDiffMonacoPane } from "./GitDiffMonacoPane";
 import type { FileEditorTab } from "../hooks/useRepositoryFileEditor";
 import { monacoLanguageFromRepositoryPath } from "../utils/repositoryFilePreview";
+import {
+  configureWiseMonacoTypeScript,
+  isTypeScriptLikeRepositoryPath,
+  monacoUriForRepositoryPath,
+  syncMonacoRepositoryTypeScriptModels,
+} from "../services/monacoTypeScriptEnvironment";
 
 const MonacoEditor = lazy(() => import("@monaco-editor/react"));
 
@@ -11,6 +18,7 @@ interface Props {
   activePath: string | null;
   dark: boolean;
   dirty: boolean;
+  repositoryPath: string | null | undefined;
   saving: boolean;
   tabs: FileEditorTab[];
   onActivePathChange: (path: string) => void;
@@ -24,6 +32,7 @@ export function RepositoryFileEditorPanel({
   activePath,
   dark,
   dirty,
+  repositoryPath,
   saving,
   tabs,
   onActivePathChange,
@@ -32,7 +41,27 @@ export function RepositoryFileEditorPanel({
   onSave,
   onTabContentChange,
 }: Props) {
+  const monacoRef = useRef<typeof Monaco | null>(null);
   const activeTab = tabs.find((tab) => tab.relativePath === activePath) ?? null;
+  const activeLanguage = monacoLanguageFromRepositoryPath(activeTab?.relativePath ?? null);
+  const activeEditorPath =
+    activeTab && isTypeScriptLikeRepositoryPath(activeTab.relativePath)
+      ? monacoUriForRepositoryPath(activeTab.relativePath, repositoryPath)
+      : activeTab?.relativePath;
+
+  useEffect(() => {
+    const monaco = monacoRef.current;
+    if (!monaco || !repositoryPath || !activeTab || !isTypeScriptLikeRepositoryPath(activeTab.relativePath)) {
+      return;
+    }
+    void syncMonacoRepositoryTypeScriptModels({
+      monaco,
+      repositoryPath,
+      sourceFiles: tabs
+        .filter((tab) => !tab.loading && tab.diffOriginal === undefined)
+        .map((tab) => ({ relativePath: tab.relativePath, content: tab.content })),
+    });
+  }, [activeTab, repositoryPath, tabs]);
 
   return (
     <div className="app-file-editor-panel">
@@ -117,13 +146,28 @@ export function RepositoryFileEditorPanel({
                 }
               >
                 <MonacoEditor
-                  key={`${activeTab.relativePath}:${monacoLanguageFromRepositoryPath(activeTab.relativePath)}`}
+                  key={`${activeTab.relativePath}:${activeLanguage}`}
                   className="app-file-editor-monaco"
                   height="100%"
-                  path={activeTab.relativePath}
-                  defaultLanguage={monacoLanguageFromRepositoryPath(activeTab.relativePath)}
-                  language={monacoLanguageFromRepositoryPath(activeTab.relativePath)}
+                  path={activeEditorPath}
+                  defaultLanguage={activeLanguage}
+                  language={activeLanguage}
                   value={activeTab.content}
+                  beforeMount={(monaco) => {
+                    configureWiseMonacoTypeScript(monaco);
+                  }}
+                  onMount={(_editor, monaco) => {
+                    monacoRef.current = monaco;
+                    if (repositoryPath && isTypeScriptLikeRepositoryPath(activeTab.relativePath)) {
+                      void syncMonacoRepositoryTypeScriptModels({
+                        monaco,
+                        repositoryPath,
+                        sourceFiles: tabs
+                          .filter((tab) => !tab.loading && tab.diffOriginal === undefined)
+                          .map((tab) => ({ relativePath: tab.relativePath, content: tab.content })),
+                      });
+                    }
+                  }}
                   onChange={(value) => onTabContentChange(activeTab.relativePath, value ?? "")}
                   theme={dark ? "vs-dark" : "vs"}
                   options={{
