@@ -3710,7 +3710,7 @@ export function PrdTaskSplitPanel({
                       className="app-prd-task-panel__requirement-select"
                       placeholder="选择需求"
                       value={activeRequirementId ?? undefined}
-                      style={{ minWidth: 240, maxWidth: 360 }}
+                      style={{ minWidth: 160, maxWidth: 360 }}
                       showSearch
                       optionFilterProp="label"
                       options={sortedRequirementHistory.map((item) => ({

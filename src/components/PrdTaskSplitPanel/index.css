@@ -1,5 +1,5 @@
 .app-prd-task-panel {
-  padding: 16px 8px;
+  padding: 4px 8px;
   overflow: hidden;
   background: var(--ant-color-bg-layout);
   height: 100%;
@@ -29,7 +29,6 @@
   width: 100%;
   justify-content: space-between;
   align-items: center;
-  padding-top: 10px;
 }
 
 .app-prd-task-panel__title {

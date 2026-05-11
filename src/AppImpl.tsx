@@ -1258,7 +1258,6 @@ export default function App() {
       onToggleCompactLayoutMode={handleToggleCompactLayoutMode}
       onLeftWidthChange={setMainLayoutLeftWidthPx}
       onRightWidthChange={setMainLayoutRightWidthPx}
-      onCloseTaskSplit={() => setTaskSplitMode(false)}
       leftSidebarProps={{
         projects,
         activeProjectId,

@@ -1,5 +1,5 @@
 import { Suspense, lazy, type ComponentProps, type RefObject } from "react";
-import { App as AntdApp, ConfigProvider, Drawer, Layout, Spin, theme } from "antd";
+import { App as AntdApp, ConfigProvider, Layout, Spin, theme } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import { ClaudeSessions } from "./ClaudeSessions";
 import { CommandPalette } from "./CommandPalette";
@@ -63,7 +63,6 @@ export interface AppWorkspaceLayoutProps {
   onToggleCompactLayoutMode: () => void;
   onLeftWidthChange: (widthPx: number) => void;
   onRightWidthChange: (widthPx: number) => void;
-  onCloseTaskSplit: () => void;
 }
 
 function PanelLoadingFallback() {
@@ -102,7 +101,6 @@ export function AppWorkspaceLayout({
   onToggleCompactLayoutMode,
   onLeftWidthChange,
   onRightWidthChange,
-  onCloseTaskSplit,
 }: AppWorkspaceLayoutProps) {
   const algorithm = dark ? theme.darkAlgorithm : theme.defaultAlgorithm;
 
@@ -174,31 +172,15 @@ export function AppWorkspaceLayout({
                   <SkillsHub {...skillsHubProps} />
                 </div>
               ) : null}
+              {taskSplitMode ? (
+                <div className="app-task-split-overlay" role="dialog" aria-label="需求管理">
+                  <Suspense fallback={<PanelLoadingFallback />}>
+                    <PrdTaskSplitPanel {...prdTaskSplitPanelProps} />
+                  </Suspense>
+                </div>
+              ) : null}
             </div>
           )}
-          <Drawer
-            open={taskSplitMode}
-            onClose={onCloseTaskSplit}
-            title={null}
-            closable={false}
-            placement="right"
-            width="100vw"
-            styles={{
-              body: {
-                height: "100vh",
-                overflow: "hidden",
-                padding: 0,
-                display: "flex",
-                flexDirection: "column",
-              },
-            }}
-            destroyOnHidden={false}
-            rootClassName="app-task-split-fullscreen-drawer"
-          >
-            <Suspense fallback={<PanelLoadingFallback />}>
-              <PrdTaskSplitPanel {...prdTaskSplitPanelProps} />
-            </Suspense>
-          </Drawer>
         </Layout>
 
         <RepositoryFilePreviewModal {...repositoryFilePreviewModalProps} />

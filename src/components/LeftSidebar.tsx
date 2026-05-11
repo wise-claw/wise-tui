@@ -142,10 +142,18 @@ function PlusIcon() {
   );
 }
 
-function ChatIcon() {
+/** 需求：折角文档 + 清单行（16px 线性稿，与侧栏其它操作图标一致） */
+function RequirementIcon() {
   return (
-    <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M3 4.5A1.5 1.5 0 0 1 4.5 3h7A1.5 1.5 0 0 1 13 4.5v5A1.5 1.5 0 0 1 11.5 11H7l-2.5 2V11h0A1.5 1.5 0 0 1 3 9.5v-5z" stroke="currentColor" strokeWidth="1.2" />
+    <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <path
+        d="M4.25 2.25h6.3l2.2 2.2V13H4.25V2.25z"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinejoin="round"
+      />
+      <path d="M10.55 2.25v2.2h2.2" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+      <path d="M5.35 7.35h5.3M5.35 9.35h5.3M5.35 11.35h3.4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
     </svg>
   );
 }
@@ -272,15 +280,15 @@ interface Props {
 function TaskModeActions({ onSelect }: { onSelect: (mode: TaskMode) => void }) {
   return (
     <>
-      <Tooltip title="对话" mouseEnterDelay={0.3}>
+      <Tooltip title="需求" mouseEnterDelay={0.3}>
         <span
           className="app-repository-action app-repository-action--task"
           onClick={(e) => {
             e.stopPropagation();
-            onSelect("chat");
+            onSelect("split");
           }}
         >
-          <ChatIcon />
+          <RequirementIcon />
         </span>
       </Tooltip>
     </>
