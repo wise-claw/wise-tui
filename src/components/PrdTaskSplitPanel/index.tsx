@@ -39,7 +39,6 @@ import type {
   ProjectItem,
   Repository,
   SplitResult,
-  TaskAnchorPosition,
   TaskApiSpec,
   TaskExecutionStatus,
   TaskItem,
@@ -143,7 +142,7 @@ import {
   type TaskAiMode,
   type TaskConfirmFilter,
 } from "./helpers";
-import { sameStringArray, sameTaskAnchorPositions } from "../../utils/anchorStability";
+import { sameStringArray } from "../../utils/anchorStability";
 import { WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED } from "../../constants/workflowUiEvents";
 import {
   addProjectPrdEmployee,
@@ -163,6 +162,7 @@ import { RuntimePromptEditModal } from "./RuntimePromptEditModal";
 import { SplitPromptWizardModal } from "./SplitPromptWizardModal";
 import { RequirementBoardHeader } from "./RequirementBoardHeader";
 import { RequirementBoardActions } from "./RequirementBoardActions";
+import { reconcileResolvedAnchorRanges } from "./anchorReconcile";
 import type {
   RequirementEntry,
   RequirementNameModalMode,
@@ -3901,35 +3901,8 @@ export function PrdTaskSplitPanel({
                         if (filteredTasks.length === 0) return;
                         setActiveResult((prev) => {
                           if (!prev) return prev;
-                          const taskIds = new Set(prev.splitTasks.map((task) => task.id));
-                          const resolvedNow: Record<string, TaskAnchorPosition> = {};
-                          for (const [taskId, range] of Object.entries(ranges)) {
-                            if (!taskIds.has(taskId)) continue;
-                            const from = Number(range.from);
-                            const to = Number(range.to);
-                            if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) continue;
-                            resolvedNow[taskId] = { from: Math.floor(from), to: Math.floor(to) };
-                          }
-                          const current = prev.taskAnchorPositions ?? {};
-                          if (Object.keys(resolvedNow).length === 0) {
-                            return prev;
-                          }
-                          // 采用增量合并，避免状态切换时瞬时回传不完整导致锚点位置被清空后又恢复而闪烁。
-                          const mergedPositionsRaw: Record<string, TaskAnchorPosition> = {
-                            ...current,
-                            ...resolvedNow,
-                          };
-                          const mergedPositions: Record<string, TaskAnchorPosition> = {};
-                          for (const [taskId, pos] of Object.entries(mergedPositionsRaw)) {
-                            if (!taskIds.has(taskId)) continue;
-                            mergedPositions[taskId] = pos;
-                          }
-                          const nextPositions = Object.keys(mergedPositions).length > 0 ? mergedPositions : undefined;
-                          if (sameTaskAnchorPositions(prev.taskAnchorPositions, nextPositions)) return prev;
-                          const merged: SplitResult = {
-                            ...prev,
-                            taskAnchorPositions: nextPositions,
-                          };
+                          const merged = reconcileResolvedAnchorRanges(prev, ranges);
+                          if (!merged) return prev;
                           latestAnchorRangePersistResultRef.current = merged;
                           if (anchorRangePersistTimerRef.current != null) {
                             window.clearTimeout(anchorRangePersistTimerRef.current);
