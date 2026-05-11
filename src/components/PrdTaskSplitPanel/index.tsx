@@ -149,6 +149,7 @@ import { isOmcMonitorEmployeeRecord } from "../../utils/omcMonitorEmployeeSessio
 import { listRepositoryMainOwnerDisplayGaps, repositoryOwnerBasenamesInScopeRelaxed } from "../../utils/projectPrdScopeDisplay";
 import { SplitRuntimeMessages } from "./SplitRuntimeMessages";
 import { TaskAnchorPopoverBody } from "./TaskAnchorPopoverBody";
+import { InlineRuntimePanel } from "./InlineRuntimePanel";
 import { RequirementNameModal } from "./RequirementNameModal";
 import { RuntimePromptEditModal } from "./RuntimePromptEditModal";
 import { SplitPromptWizardModal } from "./SplitPromptWizardModal";
@@ -3799,28 +3800,16 @@ export function PrdTaskSplitPanel({
                         focusTaskWithFilterSync(taskId);
                       }}
                     />
-                  {splitRuntimeVisible ? (
-                    <div ref={splitRuntimeRef} className="app-prd-task-panel__split-runtime">
-                        <div className="app-prd-task-panel__split-runtime-head">
-                          <Space size={8} align="center" className="app-prd-task-panel__split-runtime-head-title">
-                            <Typography.Text strong>处理信息 · Claude Code 会话</Typography.Text>
-                            {parsing ? <Spin size="small" aria-label="拆分进行中" /> : null}
-                          </Space>
-                          <Button
-                            size="small"
-                            icon={<CloseOutlined />}
-                            onClick={() => setSplitRuntimeVisible(false)}
-                            aria-label="关闭处理信息面板"
-                          />
-                        </div>
-                        <SplitRuntimeMessages
-                          logs={splitRuntimeLogs}
-                          listRef={splitRuntimeListRef}
-                          retryingPhase={retryingPhase}
-                          onRetryStage={(phase) => { void handleRetrySplitStage(phase); }}
-                        />
-                    </div>
-                  ) : null}
+                  <InlineRuntimePanel
+                    visible={splitRuntimeVisible}
+                    parsing={parsing}
+                    containerRef={splitRuntimeRef}
+                    listRef={splitRuntimeListRef}
+                    logs={splitRuntimeLogs}
+                    retryingPhase={retryingPhase}
+                    onClose={() => setSplitRuntimeVisible(false)}
+                    onRetryStage={(phase) => { void handleRetrySplitStage(phase); }}
+                  />
                 </div>
                 {inputError ? <Typography.Text type="danger">{inputError}</Typography.Text> : null}
                 {showUrlAnchorHint ? (
