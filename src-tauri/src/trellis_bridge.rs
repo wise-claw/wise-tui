@@ -49,20 +49,24 @@ pub struct TrellisResearchFileRow {
     pub modified_at: Option<u64>,
 }
 
-fn validate_task_id(task_id: &str) -> Result<(), String> {
-    if task_id.is_empty() {
-        return Err("WF_INVALID_INPUT: empty taskId".into());
+fn validate_simple_slug(value: &str, field: &str) -> Result<(), String> {
+    if value.is_empty() {
+        return Err(format!("WF_INVALID_INPUT: empty {field}"));
     }
-    if task_id.contains("..") {
-        return Err("WF_INVALID_INPUT: taskId contains ..".into());
+    if value.contains("..") {
+        return Err(format!("WF_INVALID_INPUT: {field} contains .."));
     }
-    let ok = task_id
+    let ok = value
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.');
     if !ok {
-        return Err("WF_INVALID_INPUT: taskId has illegal chars".into());
+        return Err(format!("WF_INVALID_INPUT: {field} has illegal chars"));
     }
     Ok(())
+}
+
+fn validate_task_id(task_id: &str) -> Result<(), String> {
+    validate_simple_slug(task_id, "taskId")
 }
 
 fn canon_trellis_tasks_root(repo_path: &str) -> Result<PathBuf, String> {
@@ -346,6 +350,121 @@ pub fn trellis_detect_sdd_signals(repo_path: String) -> Result<SddSignalsRow, St
         has_open_spec: repo_canon.join(".openspec").is_dir(),
         has_generic_spec: repo_canon.join(".spec").is_dir(),
     })
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrellisSpecAreaRow {
+    pub area: String,
+    pub has_index: bool,
+    pub md_file_count: u64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrellisSpecIndexRow {
+    pub area: String,
+    pub content: String,
+    pub size_bytes: u64,
+}
+
+fn trellis_spec_root_path(repo_path: &str) -> Result<PathBuf, String> {
+    if repo_path.trim().is_empty() {
+        return Err("WF_INVALID_INPUT: empty repoPath".into());
+    }
+    let raw = PathBuf::from(repo_path);
+    if !raw.is_absolute() {
+        return Err("WF_INVALID_INPUT: repoPath must be absolute".into());
+    }
+    let repo_canon = raw
+        .canonicalize()
+        .map_err(|e| format!("WF_INVALID_INPUT: repo not found: {e}"))?;
+    Ok(repo_canon.join(".trellis").join("spec"))
+}
+
+#[tauri::command]
+pub fn trellis_list_spec_areas(repo_path: String) -> Result<Vec<TrellisSpecAreaRow>, String> {
+    let spec_root = trellis_spec_root_path(&repo_path)?;
+    if !spec_root.is_dir() {
+        return Ok(Vec::new());
+    }
+    let entries = fs::read_dir(&spec_root).map_err(|e| e.to_string())?;
+    let mut rows = Vec::new();
+    for entry in entries.flatten() {
+        let Ok(ft) = entry.file_type() else { continue };
+        if !ft.is_dir() {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.starts_with('.') {
+            continue;
+        }
+        if validate_simple_slug(&name, "area").is_err() {
+            continue;
+        }
+        let dir = entry.path();
+        let has_index = dir.join("index.md").is_file();
+        let md_file_count: u64 = match fs::read_dir(&dir) {
+            Ok(iter) => iter
+                .flatten()
+                .filter(|child| {
+                    child.file_type().map(|t| t.is_file()).unwrap_or(false)
+                        && child.file_name().to_string_lossy().ends_with(".md")
+                })
+                .count() as u64,
+            Err(_) => 0,
+        };
+        rows.push(TrellisSpecAreaRow {
+            area: name,
+            has_index,
+            md_file_count,
+        });
+    }
+    rows.sort_by(|a, b| a.area.cmp(&b.area));
+    Ok(rows)
+}
+
+#[tauri::command]
+pub fn trellis_read_spec_index(
+    repo_path: String,
+    area: String,
+) -> Result<TrellisSpecIndexRow, String> {
+    validate_simple_slug(&area, "area")?;
+    let spec_root = trellis_spec_root_path(&repo_path)?;
+    let index_path = spec_root.join(&area).join("index.md");
+    if !index_path.is_file() {
+        return Ok(TrellisSpecIndexRow {
+            area,
+            content: String::new(),
+            size_bytes: 0,
+        });
+    }
+    let raw = fs::read_to_string(&index_path).map_err(|e| e.to_string())?;
+    let size_bytes = raw.len() as u64;
+    let content = truncate_prd(raw);
+    Ok(TrellisSpecIndexRow {
+        area,
+        content,
+        size_bytes,
+    })
+}
+
+#[tauri::command]
+pub fn trellis_write_spec_index(
+    repo_path: String,
+    area: String,
+    content: String,
+) -> Result<(), String> {
+    if content.len() > MAX_PRD_BYTES {
+        return Err(format!(
+            "WF_INVALID_INPUT: content exceeds {MAX_PRD_BYTES} bytes",
+        ));
+    }
+    validate_simple_slug(&area, "area")?;
+    let spec_root = trellis_spec_root_path(&repo_path)?;
+    let area_dir = spec_root.join(&area);
+    fs::create_dir_all(&area_dir).map_err(|e| e.to_string())?;
+    atomic_write(&area_dir.join("index.md"), content.as_bytes())
 }
 
 #[cfg(test)]
