@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Frontend quality review"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Type contract review"}
+{"file": ".trellis/spec/tauri/ipc-guidelines.md", "reason": "IPC compatibility review"}
+{"file": ".trellis/spec/tauri/security-and-filesystem.md", "reason": "Security boundary review"}
