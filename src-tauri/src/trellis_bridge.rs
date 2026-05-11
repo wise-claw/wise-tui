@@ -319,6 +319,35 @@ pub fn trellis_list_research(
     Ok(rows)
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SddSignalsRow {
+    pub has_trellis_tasks: bool,
+    pub has_trellis_spec: bool,
+    pub has_open_spec: bool,
+    pub has_generic_spec: bool,
+}
+
+#[tauri::command]
+pub fn trellis_detect_sdd_signals(repo_path: String) -> Result<SddSignalsRow, String> {
+    if repo_path.trim().is_empty() {
+        return Err("WF_INVALID_INPUT: empty repoPath".into());
+    }
+    let raw = PathBuf::from(&repo_path);
+    if !raw.is_absolute() {
+        return Err("WF_INVALID_INPUT: repoPath must be absolute".into());
+    }
+    let repo_canon = raw
+        .canonicalize()
+        .map_err(|e| format!("WF_INVALID_INPUT: repo not found: {e}"))?;
+    Ok(SddSignalsRow {
+        has_trellis_tasks: repo_canon.join(".trellis").join("tasks").is_dir(),
+        has_trellis_spec: repo_canon.join(".trellis").join("spec").is_dir(),
+        has_open_spec: repo_canon.join(".openspec").is_dir(),
+        has_generic_spec: repo_canon.join(".spec").is_dir(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
