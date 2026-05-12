@@ -337,6 +337,35 @@ export function useWorkflowTeamAutomation({
     [appendSystemMessage, ensureEmployeeWorkerTabSessionId],
   );
 
+  const persistRuntimeSnapshotExecutor = useCallback(
+    async (input: { taskId: string; snapshotId: string; executorSessionId: string }) => {
+      const { taskId, snapshotId, executorSessionId } = input;
+      setWorkflowRuntimeSnapshotsByTaskId((prev) => {
+        const list = prev[taskId] ?? [];
+        const next = list.map((s) => (s.id === snapshotId ? { ...s, executorSessionId } : s));
+        return { ...prev, [taskId]: next };
+      });
+      try {
+        const ev = await appendTaskEvent({
+          taskId,
+          eventType: "workflow_runtime_snapshot_executor",
+          payloadJson: JSON.stringify({
+            action: "runtime_snapshot_executor",
+            snapshotId,
+            executorSessionId,
+          }),
+        });
+        setWorkflowTaskEventsByTaskId((prev) => ({
+          ...prev,
+          [taskId]: [...(prev[taskId] ?? []), ev],
+        }));
+      } catch (e) {
+        console.error("Failed to persist workflow runtime snapshot executor:", e);
+      }
+    },
+    [setWorkflowRuntimeSnapshotsByTaskId, setWorkflowTaskEventsByTaskId],
+  );
+
   const dispatchTeamStepToEmployeeSession = useCallback(
     async (input: {
       task: WorkflowTaskItem;
@@ -348,6 +377,8 @@ export function useWorkflowTeamAutomation({
       };
       previousNodeLabel: string;
       decision?: "pass" | "reject";
+      /** 派发快照 id：派发成功绑定员工会话后写入 `executorSessionId` */
+      attachExecutorToSnapshotId?: string;
     }): Promise<boolean> => {
       const { task, dispatch } = input;
       const ownerSession = sessionsRef.current.find((item) => item.id === task.creator);
@@ -407,6 +438,14 @@ export function useWorkflowTeamAutomation({
       if (!targetSessionId) {
         return false;
       }
+      const attachId = input.attachExecutorToSnapshotId?.trim();
+      if (attachId) {
+        await persistRuntimeSnapshotExecutor({
+          taskId: task.id,
+          snapshotId: attachId,
+          executorSessionId: targetSessionId,
+        });
+      }
       const autoPrompt = buildTeamWorkerExecutePrompt(dispatch.input, targetEmployee.agentType?.trim());
       workflowTaskByWorkerSessionRef.current.set(targetSessionId, task.id);
       const targetSession = sessionsRef.current.find((item) => item.id === targetSessionId);
@@ -429,6 +468,7 @@ export function useWorkflowTeamAutomation({
       appendSystemMessage,
       ensureEmployeeWorkerTabSessionId,
       executeSession,
+      persistRuntimeSnapshotExecutor,
       setWorkflowRuntimeSnapshotsByTaskId,
       setWorkflowTaskEventsByTaskId,
     ],
@@ -672,6 +712,7 @@ export function useWorkflowTeamAutomation({
                       input: firstStep.dispatch.input,
                     },
                     previousNodeLabel: "开始",
+                    attachExecutorToSnapshotId: dispatchSnapshot.id,
                   });
                 } else {
                   appendSystemMessage(sessionId, `团队流程「${mentionedTeam.name}」未找到可执行节点。`);
@@ -1125,6 +1166,7 @@ export function useWorkflowTeamAutomation({
               dispatch: rollbackDispatch,
               previousNodeLabel: currentNode.data.label,
               decision: "reject",
+              attachExecutorToSnapshotId: rollbackDispatchSnapshotForReject?.id,
             });
             await refreshEmployeeData();
             return;
@@ -1187,6 +1229,7 @@ export function useWorkflowTeamAutomation({
           toNodeName: effectiveDispatch?.employeeName,
           toNodeType: effectiveDispatch?.nodeType,
           decision,
+          executorSessionId: session?.id,
           inputPreview: effectiveDispatch ? snapshotWorkflowDispatchInput(effectiveDispatch.input) : "(流程已结束)",
           outputPreview: snapshotWorkflowAssistantOutput(output),
           createdAt: Date.now(),
@@ -1286,6 +1329,7 @@ export function useWorkflowTeamAutomation({
             },
             previousNodeLabel: currentNode.data.label,
             decision,
+            attachExecutorToSnapshotId: nextDispatchSnapshotForPersist?.id,
           });
         } else if (effectiveCompleted) {
           try {
@@ -1409,6 +1453,7 @@ export function useWorkflowTeamAutomation({
               toNodeName: effectiveDispatch?.employeeName,
               toNodeType: effectiveDispatch?.nodeType,
               decision,
+              executorSessionId: taskSession?.id,
               inputPreview: effectiveDispatch ? snapshotWorkflowDispatchInput(effectiveDispatch.input) : "(流程已结束)",
               outputPreview: snapshotWorkflowAssistantOutput(latestAssistantOutput),
               createdAt: Date.now(),
@@ -1507,6 +1552,7 @@ export function useWorkflowTeamAutomation({
                 },
                 previousNodeLabel: "人工验收节点",
                 decision,
+                attachExecutorToSnapshotId: nextDispatchSnapshotManual?.id,
               });
             } else if (effectiveCompleted) {
               try {

@@ -1642,6 +1642,7 @@ export default function App() {
         transcriptSourceSessions: sessions,
         employees,
         workflowTemplates,
+        workflowGraphsByWorkflowId,
         onOpenOmcBatchInvocationDetail: (input) => {
           handleOpenOmcBatchInvocationDetail(input);
           setMonitorDrawerTarget(null);
@@ -1652,6 +1653,10 @@ export default function App() {
           setMonitorDrawerTarget(null);
         },
         onReloadFullDiskTranscript: reloadFullDiskTranscript,
+        onCancelSession: cancelSession,
+        onOpenTaskDetail: (taskId) => {
+          setMonitorDrawerTarget({ type: "task", taskId });
+        },
       }}
       employeeConfigModalProps={
         employeeConfigOpen
