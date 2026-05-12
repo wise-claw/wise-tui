@@ -4,6 +4,7 @@ import {
   getEffectiveRepoSddMode,
   getProjectSddMode,
   getRoleTags,
+  shouldHideEmployeeUi,
 } from "./projectRepositoryRoles";
 
 function repo(overrides: Partial<Repository> = {}): Repository {
@@ -101,5 +102,24 @@ describe("getProjectSddMode", () => {
   test("handles null/undefined inputs", () => {
     expect(getProjectSddMode(null)).toBe("wise_trellis");
     expect(getProjectSddMode(undefined)).toBe("wise_trellis");
+  });
+});
+
+describe("shouldHideEmployeeUi", () => {
+  test("hides when project is wise_trellis", () => {
+    expect(shouldHideEmployeeUi(project({ sddMode: "wise_trellis" }))).toBe(true);
+  });
+
+  test("does not hide when project is project_owned", () => {
+    expect(shouldHideEmployeeUi(project({ sddMode: "project_owned" }))).toBe(false);
+  });
+
+  test("hides when project has no explicit sddMode (default wise_trellis)", () => {
+    expect(shouldHideEmployeeUi(project())).toBe(true);
+  });
+
+  test("does not hide when no active project", () => {
+    expect(shouldHideEmployeeUi(null)).toBe(false);
+    expect(shouldHideEmployeeUi(undefined)).toBe(false);
   });
 });

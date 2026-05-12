@@ -36,3 +36,13 @@ export function getEffectiveRepoSddMode(
 export function getProjectSddMode(project: ProjectItem | undefined | null): ProjectSddMode {
   return project?.sddMode ?? "wise_trellis";
 }
+
+/**
+ * `wise_trellis` 项目下 EmployeeItem UI 入口应当隐藏；`project_owned` 项目保留旧 UI 作为 legacy 兜底。
+ * 没有活跃项目时不隐藏（用户处于非项目语境时仍能配置员工）。
+ */
+export function shouldHideEmployeeUi(
+  project: ProjectItem | undefined | null,
+): boolean {
+  return getProjectSddMode(project) === "wise_trellis" && project != null;
+}
