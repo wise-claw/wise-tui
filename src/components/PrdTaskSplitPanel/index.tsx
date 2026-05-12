@@ -16,6 +16,7 @@ import {
   App as AntdApp,
   Button,
   Card,
+  Checkbox,
   Col,
   Divider,
   Dropdown,
@@ -29,6 +30,7 @@ import {
   Space,
   Spin,
   Steps,
+  Tabs,
   Tag,
   Tooltip,
   Typography,
@@ -158,7 +160,11 @@ import {
   removeProjectPrdWorkflow,
 } from "../../services/projectPrdScope";
 import { isOmcMonitorEmployeeRecord } from "../../utils/omcMonitorEmployeeSession";
-import { listRepositoryMainOwnerDisplayGaps, repositoryOwnerBasenamesInScopeRelaxed } from "../../utils/projectPrdScopeDisplay";
+import {
+  listEmployeeIdsWithRepositoryOwnerBadgeInProjectScope,
+  listRepositoryMainOwnerDisplayGaps,
+  repositoryOwnerBasenamesInScopeRelaxed,
+} from "../../utils/projectPrdScopeDisplay";
 import "./index.css";
 
 const MilkdownEditor = lazy(() => import("../MilkdownViewer").then((module) => ({ default: module.MilkdownEditor })));
@@ -495,6 +501,16 @@ export function PrdTaskSplitPanel({
     [PROMPT_SLOT_PRD_TASK_SPLIT_PHASE2]: "",
   });
   const [splitWizardStep, setSplitWizardStep] = useState<SplitWizardStep>("prompts");
+  /** 拆分向导内选中的参与员工（存在顶栏项目上下文时；来自显式关联 + 主 Owner 成员池）。 */
+  const [splitWizardEmployeeIds, setSplitWizardEmployeeIds] = useState<string[]>([]);
+  const [splitWizardActiveEmployeeId, setSplitWizardActiveEmployeeId] = useState<string>("");
+  const [splitEmployeeAddPopoverOpen, setSplitEmployeeAddPopoverOpen] = useState(false);
+  const [splitEmployeePickerSelection, setSplitEmployeePickerSelection] = useState<string[]>([]);
+  /**
+   * 拆分弹窗内「可选池」中的项目显式关联员工 id。
+   * 与侧栏 `activeProjectId` 对应的 `projectPrdEmployeeIds` 可能不同步（草稿 `linkedProjectId` 为另一项目时），在打开弹窗时按 `projectForHeader.id` 拉取并写入。
+   */
+  const [splitWizardModalExplicitEmployeeIds, setSplitWizardModalExplicitEmployeeIds] = useState<string[]>([]);
   const { inputValue, setInputValue, error: inputError, parse } = usePrdInput("");
   const [originalInputValue, setOriginalInputValue] = useState<string | null>(null);
   const [requirementDisplayName, setRequirementDisplayName] = useState<string | null>(null);
@@ -661,6 +677,38 @@ export function PrdTaskSplitPanel({
     [workflowTemplates, projectPrdWorkflowIds],
   );
 
+  useEffect(() => {
+    if (splitWizardEmployeeIds.length === 0) {
+      if (splitWizardActiveEmployeeId !== "") setSplitWizardActiveEmployeeId("");
+      return;
+    }
+    if (!splitWizardEmployeeIds.includes(splitWizardActiveEmployeeId)) {
+      setSplitWizardActiveEmployeeId(splitWizardEmployeeIds[0] ?? "");
+    }
+  }, [splitWizardEmployeeIds, splitWizardActiveEmployeeId]);
+
+  const removeSplitWizardEmployee = useCallback((employeeId: string) => {
+    setSplitWizardEmployeeIds((prev) => prev.filter((id) => id !== employeeId));
+  }, []);
+
+  const applySplitEmployeePickerSelection = useCallback(() => {
+    const picked = splitEmployeePickerSelection.filter(Boolean);
+    if (picked.length === 0) {
+      message.info("请先勾选要添加的员工");
+      return;
+    }
+    setSplitWizardEmployeeIds((prev) => {
+      const next = [...prev];
+      for (const id of picked) {
+        if (!next.includes(id)) next.push(id);
+      }
+      return next;
+    });
+    setSplitEmployeePickerSelection([]);
+    setSplitEmployeeAddPopoverOpen(false);
+    message.success(`已添加 ${picked.length} 名员工`);
+  }, [splitEmployeePickerSelection, message]);
+
   const projectTeamPopoverContent = useMemo(() => {
     if (!activeProjectId?.trim()) {
       return <Typography.Text type="secondary">未选择项目</Typography.Text>;
@@ -789,6 +837,12 @@ export function PrdTaskSplitPanel({
     [linkedProject, activeProjectId, projects],
   );
   const headerProjectName = useMemo(() => projectForHeader?.name?.trim() || null, [projectForHeader]);
+
+  const splitWizardShowEmployeePicker = useMemo(
+    () => Boolean(projectForHeader?.id?.trim()),
+    [projectForHeader],
+  );
+
   /** 顶栏仓库标签：项目内顺序；无项目时仅当前关联仓库一条。 */
   const headerRepositoryTagItems = useMemo(() => {
     if (projectForHeader) {
@@ -825,6 +879,30 @@ export function PrdTaskSplitPanel({
       .map((id) => repositoriesById.get(id))
       .filter((r): r is Repository => Boolean(r));
   }, [projectForHeader, repositoriesById]);
+
+  /** 项目内各仓上会以顶栏「Owner」角标展示的员工（与 repositoryOwnerBasenamesInScopeRelaxed 一致）。 */
+  const splitWizardProjectResolvedOwnerEmployeeIds = useMemo(() => {
+    const rids = projectForHeader?.repositoryIds ?? [];
+    if (rids.length === 0) return [];
+    return listEmployeeIdsWithRepositoryOwnerBadgeInProjectScope(rids, repositories, employees);
+  }, [projectForHeader, repositories, employees]);
+
+  const splitWizardProjectEmployeePickPoolIds = useMemo(() => {
+    const pool = new Set(splitWizardModalExplicitEmployeeIds);
+    for (const id of splitWizardProjectResolvedOwnerEmployeeIds) {
+      pool.add(id);
+    }
+    return pool;
+  }, [splitWizardModalExplicitEmployeeIds, splitWizardProjectResolvedOwnerEmployeeIds]);
+
+  const splitWizardEmployeeAddOptions = useMemo(
+    () =>
+      employees
+        .filter((e) => e.enabled && !isOmcMonitorEmployeeRecord(e))
+        .filter((e) => splitWizardProjectEmployeePickPoolIds.has(e.id) && !splitWizardEmployeeIds.includes(e.id))
+        .map((e) => ({ value: e.id, label: `${e.name}（${e.agentType}）` })),
+    [employees, splitWizardProjectEmployeePickPoolIds, splitWizardEmployeeIds],
+  );
 
   const employeesForPrdHeaderScope = useMemo(
     () => employees.filter((e) => e.enabled && !isOmcMonitorEmployeeRecord(e)),
@@ -2179,6 +2257,8 @@ export function PrdTaskSplitPanel({
         `${sceneLabel}：Claude 双阶段执行完成，raw=${buildSnapshotAbsoluteDisplayPath(`${runDir}/split-result.raw.json`)}`,
       );
       if (splitExecutionOptions?.closeSplitWizardOnTwoStageSuccess) {
+        setSplitEmployeeAddPopoverOpen(false);
+        setSplitWizardModalExplicitEmployeeIds([]);
         setSplitPromptAdjustModalOpen(false);
         setSplitWizardStep("prompts");
         setSplitRuntimeVisible(false);
@@ -2495,8 +2575,38 @@ export function PrdTaskSplitPanel({
     setSplitWizardStep("prompts");
     setSplitPromptAdjustModalOpen(true);
     setSplitPromptAdjustLoading(true);
+    setSplitEmployeeAddPopoverOpen(false);
+    setSplitEmployeePickerSelection([]);
     try {
       setSplitPromptAdjustDraftBySlot(await loadSplitPromptDraftsForEditing());
+      const headerPid = projectForHeader?.id?.trim() ?? "";
+      if (headerPid) {
+        let explicit: string[] = [];
+        try {
+          explicit = await listProjectPrdEmployeeIds(headerPid);
+        } catch {
+          explicit = [];
+        }
+        if (explicit.length === 0 && headerPid === (activeProjectId?.trim() ?? "")) {
+          explicit = [...projectPrdEmployeeIds];
+        }
+        setSplitWizardModalExplicitEmployeeIds(explicit);
+        const rids = projectForHeader?.repositoryIds ?? [];
+        const ownerIds = listEmployeeIdsWithRepositoryOwnerBadgeInProjectScope(rids, repositories, employees);
+        const merged: string[] = [];
+        for (const id of explicit) {
+          if (!merged.includes(id)) merged.push(id);
+        }
+        for (const id of ownerIds) {
+          if (!merged.includes(id)) merged.push(id);
+        }
+        setSplitWizardEmployeeIds(merged);
+        setSplitWizardActiveEmployeeId(merged[0] ?? "");
+      } else {
+        setSplitWizardModalExplicitEmployeeIds([]);
+        setSplitWizardEmployeeIds([]);
+        setSplitWizardActiveEmployeeId("");
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       message.error(`加载拆分执行提示词失败：${msg}`);
@@ -2504,6 +2614,13 @@ export function PrdTaskSplitPanel({
       setSplitPromptAdjustLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (!splitPromptAdjustModalOpen) return;
+    const hp = projectForHeader?.id?.trim() ?? "";
+    if (!hp || hp !== (activeProjectId?.trim() ?? "")) return;
+    setSplitWizardModalExplicitEmployeeIds([...projectPrdEmployeeIds]);
+  }, [splitPromptAdjustModalOpen, projectForHeader, activeProjectId, projectPrdEmployeeIds]);
 
   function updateRuntimePromptDraft(slot: string, value: string) {
     setRuntimePromptDraftBySlot((prev) => ({ ...prev, [slot]: value }));
@@ -3851,6 +3968,8 @@ export function PrdTaskSplitPanel({
         onCancel={() => {
           if (splitPromptAdjustStarting || splitPromptOptimizingSlot) return;
           if (parsing && splitWizardStep === "runtime") return;
+          setSplitEmployeeAddPopoverOpen(false);
+          setSplitWizardModalExplicitEmployeeIds([]);
           setSplitPromptAdjustModalOpen(false);
           setSplitWizardStep("prompts");
           setSplitRuntimeVisible(false);
@@ -3868,6 +3987,8 @@ export function PrdTaskSplitPanel({
               <Button
                 onClick={() => {
                   if (splitPromptAdjustStarting || splitPromptOptimizingSlot) return;
+                  setSplitEmployeeAddPopoverOpen(false);
+                  setSplitWizardModalExplicitEmployeeIds([]);
                   setSplitPromptAdjustModalOpen(false);
                   setSplitWizardStep("prompts");
                   setSplitRuntimeVisible(false);
@@ -3908,6 +4029,8 @@ export function PrdTaskSplitPanel({
                 type="primary"
                 onClick={() => {
                   if (parsing) return;
+                  setSplitEmployeeAddPopoverOpen(false);
+                  setSplitWizardModalExplicitEmployeeIds([]);
                   setSplitPromptAdjustModalOpen(false);
                   setSplitWizardStep("prompts");
                   setSplitRuntimeVisible(false);
@@ -3931,6 +4054,92 @@ export function PrdTaskSplitPanel({
                 <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
                   第 1 步：编辑阶段 1/2 的系统提示词；点击「开始拆分」后在同弹窗第 2 步查看执行日志与会话信息。「保存提示词」将写入仓库级覆盖。
                 </Typography.Paragraph>
+                {splitWizardShowEmployeePicker ? (
+                  <div>
+                    <Typography.Paragraph type="secondary" style={{ marginBottom: 8, fontSize: 12 }}>
+                      参与拆分的员工（默认包含顶栏「员工」显式关联与各仓库主 Owner 对应员工，可在此收窄或补充）。
+                    </Typography.Paragraph>
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 10, width: "100%" }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        {splitWizardEmployeeIds.length === 0 ? (
+                          <Typography.Text type="secondary">尚未选择员工。</Typography.Text>
+                        ) : (
+                          <Tabs
+                            size="small"
+                            type="card"
+                            activeKey={splitWizardActiveEmployeeId || splitWizardEmployeeIds[0]}
+                            onChange={(k) => setSplitWizardActiveEmployeeId(k)}
+                            items={splitWizardEmployeeIds.map((id) => {
+                              const emp = employees.find((e) => e.id === id);
+                              const labelText = emp?.name?.trim() || id;
+                              return {
+                                key: id,
+                                label: (
+                                  <Space size={4} align="center">
+                                    <span>{labelText}</span>
+                                    <CloseOutlined
+                                      aria-label={`移除 ${labelText}`}
+                                      style={{ fontSize: 11, color: "var(--ant-color-text-tertiary)" }}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        removeSplitWizardEmployee(id);
+                                      }}
+                                    />
+                                  </Space>
+                                ),
+                              };
+                            })}
+                          />
+                        )}
+                      </div>
+                      <Popover
+                        trigger="click"
+                        placement="bottomRight"
+                        open={splitEmployeeAddPopoverOpen}
+                        onOpenChange={(open) => {
+                          setSplitEmployeeAddPopoverOpen(open);
+                          if (open) setSplitEmployeePickerSelection([]);
+                        }}
+                        title="从项目关联与主 Owner 员工中添加"
+                        content={(
+                          <div style={{ width: 280 }}>
+                            {splitWizardEmployeeAddOptions.length === 0 ? (
+                              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                {splitWizardProjectEmployeePickPoolIds.size === 0
+                                  ? "暂无可用成员：请在顶栏「员工」中关联，或为项目内仓库配置主 Owner，并确保对应员工勾选该仓库且 agentType 与主 Owner 一致。"
+                                  : "所选员工已全部加入列表。"}
+                              </Typography.Text>
+                            ) : (
+                              <Space direction="vertical" size={10} style={{ width: "100%" }}>
+                                <Checkbox.Group
+                                  style={{
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    gap: 6,
+                                    maxHeight: 240,
+                                    overflowY: "auto",
+                                  }}
+                                  value={splitEmployeePickerSelection}
+                                  options={splitWizardEmployeeAddOptions}
+                                  onChange={(checked) => {
+                                    setSplitEmployeePickerSelection(checked as string[]);
+                                  }}
+                                />
+                                <Button size="small" type="primary" block onClick={() => applySplitEmployeePickerSelection()}>
+                                  添加选中
+                                </Button>
+                              </Space>
+                            )}
+                          </div>
+                        )}
+                      >
+                        <Button size="small" type="default" icon={<PlusOutlined />}>
+                          添加员工
+                        </Button>
+                      </Popover>
+                    </div>
+                  </div>
+                ) : null}
                 <Space align="center" style={{ justifyContent: "space-between", width: "100%" }}>
                   <Typography.Text strong>阶段1（拆分）</Typography.Text>
                   <Button

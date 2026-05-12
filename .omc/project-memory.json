@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1778203774833,
-  "projectRoot": "/Users/sjl/Documents/chuanye/wise",
+  "lastScanned": 1778580437320,
+  "projectRoot": "/Users/sjl/Documents/github/wise",
   "techStack": {
     "languages": [
       {
@@ -60,8 +60,8 @@
     }
   },
   "conventions": {
-    "namingStyle": "camelCase",
-    "importStyle": "ES modules",
+    "namingStyle": null,
+    "importStyle": null,
     "testPattern": null,
     "fileOrganization": "type-based"
   },
@@ -74,7 +74,7 @@
       "src"
     ],
     "gitBranches": {
-      "defaultBranch": "master",
+      "defaultBranch": "main",
       "branchingStrategy": null
     }
   },
@@ -83,15 +83,15 @@
     "design": {
       "path": "design",
       "purpose": null,
-      "fileCount": 0,
-      "lastAccessed": 1778203774827,
+      "fileCount": 1,
+      "lastAccessed": 1778580437313,
       "keyFiles": []
     },
     "dist": {
       "path": "dist",
       "purpose": "Distribution/build output",
       "fileCount": 4,
-      "lastAccessed": 1778203774827,
+      "lastAccessed": 1778580437313,
       "keyFiles": [
         "index.html",
         "mascot.html",
@@ -103,7 +103,7 @@
       "path": "extras",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1778203774829,
+      "lastAccessed": 1778580437316,
       "keyFiles": [
         "check-prd-split-evolution.mjs"
       ]
@@ -111,22 +111,22 @@
     "orchestrator-service": {
       "path": "orchestrator-service",
       "purpose": null,
-      "fileCount": 0,
-      "lastAccessed": 1778203774830,
+      "fileCount": 1,
+      "lastAccessed": 1778580437317,
       "keyFiles": []
     },
     "picture": {
       "path": "picture",
       "purpose": null,
       "fileCount": 0,
-      "lastAccessed": 1778203774830,
+      "lastAccessed": 1778580437317,
       "keyFiles": []
     },
     "public": {
       "path": "public",
       "purpose": "Public files",
       "fileCount": 2,
-      "lastAccessed": 1778203774830,
+      "lastAccessed": 1778580437317,
       "keyFiles": [
         "tauri.svg",
         "vite.svg"
@@ -136,7 +136,7 @@
       "path": "scripts",
       "purpose": "Build/utility scripts",
       "fileCount": 3,
-      "lastAccessed": 1778203774830,
+      "lastAccessed": 1778580437317,
       "keyFiles": [
         "emit-platform-split-prompt-seed.ts",
         "generate-dmg-background.py",
@@ -146,21 +146,21 @@
     "src": {
       "path": "src",
       "purpose": "Source code",
-      "fileCount": 8,
-      "lastAccessed": 1778203774830,
+      "fileCount": 10,
+      "lastAccessed": 1778580437317,
       "keyFiles": [
         "App.css",
         "App.tsx",
+        "AppImpl.tsx",
         "bootstrapDompurifyForTauriAssets.ts",
-        "main.tsx",
-        "mascot.css"
+        "main.tsx"
       ]
     },
     "src-tauri": {
       "path": "src-tauri",
       "purpose": null,
       "fileCount": 7,
-      "lastAccessed": 1778203774830,
+      "lastAccessed": 1778580437317,
       "keyFiles": [
         "Cargo.lock",
         "Cargo.toml",
@@ -169,36 +169,43 @@
         "tauri.conf.json"
       ]
     },
+    "tools": {
+      "path": "tools",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1778580437317,
+      "keyFiles": []
+    },
     "dist/assets": {
       "path": "dist/assets",
       "purpose": "Static assets",
-      "fileCount": 99,
-      "lastAccessed": 1778203774831,
+      "fileCount": 100,
+      "lastAccessed": 1778580437318,
       "keyFiles": [
-        "ClaudeHooksConfigPanel-C9KhK5Zl.js",
-        "ClaudeMcpConfigPanel-DT1XBt5O.js",
-        "ClaudeMcpConfigPanel-j-W08UnM.css"
+        "ClaudeHooksConfigPanel-Dk61-uMF.js",
+        "ClaudeMcpConfigPanel-DIWQQWM-.js",
+        "KaTeX_AMS-Regular-BQhdFMY1.woff2"
       ]
     },
     "orchestrator-service/scripts": {
       "path": "orchestrator-service/scripts",
       "purpose": "Build/utility scripts",
       "fileCount": 0,
-      "lastAccessed": 1778203774831,
+      "lastAccessed": 1778580437318,
       "keyFiles": []
     },
     "orchestrator-service/src": {
       "path": "orchestrator-service/src",
       "purpose": "Source code",
-      "fileCount": 0,
-      "lastAccessed": 1778203774831,
+      "fileCount": 1,
+      "lastAccessed": 1778580437318,
       "keyFiles": []
     },
     "src/assets": {
       "path": "src/assets",
       "purpose": "Static assets",
       "fileCount": 1,
-      "lastAccessed": 1778203774831,
+      "lastAccessed": 1778580437318,
       "keyFiles": [
         "react.svg"
       ]
@@ -206,19 +213,19 @@
     "src/components": {
       "path": "src/components",
       "purpose": "UI components",
-      "fileCount": 6,
-      "lastAccessed": 1778203774831,
+      "fileCount": 14,
+      "lastAccessed": 1778580437319,
       "keyFiles": [
+        "AppWorkspaceLayout.tsx",
         "ClaudeHooksConfigPanel.tsx",
-        "ClaudeMcpConfigPanel.tsx",
-        "ClaudeMcpLayout.css"
+        "ClaudeMcpConfigPanel.tsx"
       ]
     },
     "src/data": {
       "path": "src/data",
       "purpose": "Data files",
       "fileCount": 0,
-      "lastAccessed": 1778203774831,
+      "lastAccessed": 1778580437319,
       "keyFiles": []
     }
   },
@@ -233,6 +240,24 @@
       "path": "src/types.ts",
       "accessCount": 7,
       "lastAccessed": 1778204730930,
+      "type": "file"
+    },
+    {
+      "path": "src/components/EmployeeConfigModal/index.tsx",
+      "accessCount": 7,
+      "lastAccessed": 1778580646412,
+      "type": "file"
+    },
+    {
+      "path": "src/AppImpl.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1778580569275,
+      "type": "file"
+    },
+    {
+      "path": "src/components/LeftSidebar.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1778580586369,
       "type": "file"
     },
     {

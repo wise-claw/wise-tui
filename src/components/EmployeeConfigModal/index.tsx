@@ -1,5 +1,5 @@
 import { Button, Form, Input, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Typography } from "antd";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { EmployeeItem, Repository, WorkflowGraph, WorkflowTemplateItem } from "../../types";
 import { collectTeamMemberEmployeeIds } from "../../utils/collectTeamMemberEmployeeIds";
 import { repositoryFolderBasename } from "../../utils/repositoryType";
@@ -42,6 +42,13 @@ interface Props {
   hideEmployeesAssociatedOnlyWithDefaultRepositories?: boolean;
   /** 在启用上一项过滤时，始终保留在表格中的员工 id（如 project_prd 关联）。 */
   alwaysShowEmployeeIds?: string[];
+  /**
+   * 从侧栏「仓库」打开：与需求面板相同展示 Owner 列与「仓库」表单项，但不关联 project_prd。
+   * 须与 `hideEmployeesAssociatedOnlyWithDefaultRepositories` 同时为 true 以启用项目级表格过滤与 Owner UI。
+   */
+  repositoryOwnerScopeOnly?: boolean;
+  /** 新建员工时默认「员工名称」（侧栏仓库流程下为仓库目录名）。 */
+  initialCreateEmployeeName?: string | null;
   onClose: () => void;
   onCreate: (input: {
     name: string;
@@ -66,6 +73,8 @@ export function EmployeeConfigModal({
   defaultRepositoryIds = [],
   hideEmployeesAssociatedOnlyWithDefaultRepositories = false,
   alwaysShowEmployeeIds = [],
+  repositoryOwnerScopeOnly = false,
+  initialCreateEmployeeName = null,
   onClose,
   onCreate,
   onUpdate,
@@ -84,9 +93,12 @@ export function EmployeeConfigModal({
     return merged.map((value) => ({ value, label: value }));
   }, [agentTypeOptions, employees]);
   const hideRepositorySelector = defaultRepositoryIds.length > 0;
-  /** 从项目需求面板打开：选单个仓作为 Owner，并展示 Owner 列 */
+  /** 项目需求面板或侧栏仓库：展示 Owner 列与「仓库」表单项 */
   const projectOwnerPickMode =
-    hideEmployeesAssociatedOnlyWithDefaultRepositories && defaultRepositoryIds.length > 0;
+    defaultRepositoryIds.length > 0 &&
+    (hideEmployeesAssociatedOnlyWithDefaultRepositories || repositoryOwnerScopeOnly);
+  const singleOwnerRepositoryId =
+    repositoryOwnerScopeOnly && defaultRepositoryIds.length === 1 ? defaultRepositoryIds[0] : undefined;
   const teamEmployeeIds = useMemo(
     () => collectTeamMemberEmployeeIds(workflowTemplates, workflowGraphsByWorkflowId),
     [workflowTemplates, workflowGraphsByWorkflowId],
@@ -146,12 +158,31 @@ export function EmployeeConfigModal({
   function handleCreateClick() {
     setEditingId(null);
     form.setFieldsValue({
-      name: "",
+      name: initialCreateEmployeeName?.trim() ?? "",
       agentType: "executor",
       repositoryIds: defaultRepositoryIds,
-      ownerRepositoryId: undefined,
+      ownerRepositoryId: singleOwnerRepositoryId ?? undefined,
     });
   }
+
+  useEffect(() => {
+    if (!open || editingId) return;
+    if (!repositoryOwnerScopeOnly || !initialCreateEmployeeName?.trim()) return;
+    form.setFieldsValue({
+      name: initialCreateEmployeeName.trim(),
+      agentType: "executor",
+      repositoryIds: defaultRepositoryIds,
+      ownerRepositoryId: singleOwnerRepositoryId ?? undefined,
+    });
+  }, [
+    open,
+    editingId,
+    repositoryOwnerScopeOnly,
+    initialCreateEmployeeName,
+    defaultRepositoryIds,
+    singleOwnerRepositoryId,
+    form,
+  ]);
 
   async function handleSubmit() {
     const values = await form.validateFields();
@@ -168,7 +199,10 @@ export function EmployeeConfigModal({
       return;
     }
     if (projectOwnerPickMode) {
-      const ownerRid = values.ownerRepositoryId as number;
+      const ownerRid = (values.ownerRepositoryId as number | undefined) ?? defaultRepositoryIds[0];
+      if (ownerRid == null) {
+        throw new Error("缺少 Owner 仓库");
+      }
       await onCreate({
         name: values.name,
         agentType: values.agentType,
@@ -278,14 +312,13 @@ export function EmployeeConfigModal({
                 </Form.Item>
               </div>
             ) : null}
-            {projectOwnerPickMode && !editingEmployee ? (
+            {projectOwnerPickMode && !editingEmployee && !singleOwnerRepositoryId ? (
               <div className="app-employee-config-field">
                 <div className="app-employee-config-field-label" title="作为该仓唯一主 Owner 的新员工将关联此仓库">
-                  仓库 Owner
+                  仓库
                 </div>
                 <Form.Item
                   name="ownerRepositoryId"
-                  rules={[{ required: true, message: "请选择作为 Owner 的仓库" }]}
                   className="app-employee-config-item app-employee-config-item--owner-repo"
                 >
                   <Select
@@ -453,9 +486,15 @@ export function EmployeeConfigModal({
             },
           ]}
         />
-        {hideEmployeesAssociatedOnlyWithDefaultRepositories && defaultRepositoryIds.length > 0 ? (
+        {hideEmployeesAssociatedOnlyWithDefaultRepositories && defaultRepositoryIds.length > 0
+        && !repositoryOwnerScopeOnly ? (
           <Typography.Text type="secondary" className="app-employee-config-footnote">
             已从本表隐藏「仅关联当前项目内仓库」的员工（一般为各仓侧创建的配置）；项目需求面板显式关联的成员、以及在本项目内仓上配置为主 Owner 的员工仍会显示。若某仓仅在仓库侧配置了主 Owner、且尚未与任何员工关联，将以「仅仓库」行展示。在侧栏进入单个仓库打开员工配置可查看与编辑全部员工。
+          </Typography.Text>
+        ) : null}
+        {repositoryOwnerScopeOnly && defaultRepositoryIds.length > 0 ? (
+          <Typography.Text type="secondary" className="app-employee-config-footnote">
+            从侧栏仓库打开：新建时默认员工名称为该仓库目录名；保存后会自动勾选本仓库并写入仓库主 Owner，表格中「Owner 标识」列与项目需求面板规则一致。
           </Typography.Text>
         ) : null}
       </Space>

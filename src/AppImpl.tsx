@@ -24,7 +24,6 @@ import { useRepositoryList } from "./hooks/useRepositoryList";
 import { useClaudeSessions, type ClaudeTurnCompletePayload } from "./hooks/useClaudeSessions";
 import { openInFinder } from "./services/repository";
 import { AppWorkspaceLayout } from "./components/AppWorkspaceLayout";
-import { RepositoryMainOwnerModal } from "./components/RepositoryMainOwnerModal";
 import type { PromptsOpenContext } from "./components/PromptsPanel";
 import { reloadAppWindow } from "./services/window";
 import { wiseMascotShow } from "./services/wiseMascot";
@@ -204,8 +203,9 @@ export default function App() {
   } = useRepositoryList();
 
   const [repositoryMainSessionBindings, setRepositoryMainSessionBindings] = useState<Record<string, string>>({});
-  const [repositoryMainOwnerModalRepo, setRepositoryMainOwnerModalRepo] = useState<Repository | null>(null);
-  const [repositoryMainOwnerAgentOptions, setRepositoryMainOwnerAgentOptions] = useState<string[]>(["executor"]);
+  /** 从侧栏仓库打开员工配置：与需求面板相同的 Owner 表格式，但不写 project_prd。 */
+  const [employeeConfigRepositoryOwnerScopeOnly, setEmployeeConfigRepositoryOwnerScopeOnly] = useState(false);
+  const [employeeConfigInitialCreateEmployeeName, setEmployeeConfigInitialCreateEmployeeName] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -234,23 +234,6 @@ export default function App() {
     });
   }, []);
 
-  const openRepositoryMainOwnerModal = useCallback(async (repository: Repository) => {
-    setRepositoryMainOwnerModalRepo(repository);
-    try {
-      const subagents = await listClaudeSubagents(repository.path);
-      const sorted = [...subagents].sort((a, b) => {
-        if (a.isCollaborationMode !== b.isCollaborationMode) {
-          return a.isCollaborationMode ? -1 : 1;
-        }
-        return a.name.localeCompare(b.name);
-      });
-      setRepositoryMainOwnerAgentOptions(Array.from(new Set(["executor", ...sorted.map((item) => item.name)])));
-    } catch (error) {
-      console.error("Failed to load claude subagents:", error);
-      setRepositoryMainOwnerAgentOptions(["executor"]);
-    }
-  }, []);
-
   const handlePersistRepositoryMainOwnerAgent = useCallback(
     async (repository: Repository, mainOwnerAgentName: string | null) => {
       try {
@@ -263,7 +246,7 @@ export default function App() {
           void setAppSetting(REPOSITORY_MAIN_SESSION_BINDING_STORAGE_KEY, JSON.stringify(next));
           return next;
         });
-        message.success("主 Owner 智能体已更新");
+        message.success(mainOwnerAgentName?.trim() ? "仓库已更新" : "已清除仓库");
       } catch (err) {
         message.error(err instanceof Error ? err.message : String(err));
         throw err;
@@ -920,6 +903,8 @@ export default function App() {
   const openEmployeeConfigWithContext = useCallback(async () => {
     setEmployeeConfigPrdProjectId(null);
     setEmployeeConfigPrdVisibleEmployeeIds([]);
+    setEmployeeConfigRepositoryOwnerScopeOnly(false);
+    setEmployeeConfigInitialCreateEmployeeName(null);
     setEmployeeConfigDefaultRepositoryIds(activeRepositoryId ? [activeRepositoryId] : []);
     await loadEmployeeAgentTypeOptionsFromRepositoryPath(activeRepository?.path ?? null);
     setEmployeeConfigOpen(true);
@@ -938,6 +923,8 @@ export default function App() {
       return;
     }
     setEmployeeConfigPrdProjectId(pid);
+    setEmployeeConfigRepositoryOwnerScopeOnly(false);
+    setEmployeeConfigInitialCreateEmployeeName(null);
     setEmployeeConfigDefaultRepositoryIds([...repoIds]);
     let prdEmployeeIds: string[] = [];
     try {
@@ -950,6 +937,19 @@ export default function App() {
     await loadEmployeeAgentTypeOptionsFromRepositoryPath(firstRepo?.path ?? null);
     setEmployeeConfigOpen(true);
   }, [activeProjectId, projects, repositories, loadEmployeeAgentTypeOptionsFromRepositoryPath]);
+
+  const openEmployeeConfigForRepositoryOwner = useCallback(
+    async (repository: Repository) => {
+      setEmployeeConfigRepositoryOwnerScopeOnly(true);
+      setEmployeeConfigInitialCreateEmployeeName(repositoryFolderBasename(repository));
+      setEmployeeConfigPrdProjectId(null);
+      setEmployeeConfigPrdVisibleEmployeeIds([]);
+      setEmployeeConfigDefaultRepositoryIds([repository.id]);
+      await loadEmployeeAgentTypeOptionsFromRepositoryPath(repository.path);
+      setEmployeeConfigOpen(true);
+    },
+    [loadEmployeeAgentTypeOptionsFromRepositoryPath],
+  );
 
   const openWorkflowConfigFromSidebar = useCallback(() => {
     setWorkflowConfigPrdProjectId(null);
@@ -1425,7 +1425,9 @@ export default function App() {
         onCreateRepositoryTask: handleCreateRepositoryTask,
         onOpenPromptsProject: handleOpenPromptsForProject,
         onOpenPromptsRepository: handleOpenPromptsForRepository,
-        onOpenRepositoryMainOwner: openRepositoryMainOwnerModal,
+        onOpenRepositoryMainOwner: (repository) => {
+          void openEmployeeConfigForRepositoryOwner(repository);
+        },
         sessions,
         activeSessionId,
         onSelectSession: jumpToSessionLeavingMcpHub,
@@ -1660,12 +1662,17 @@ export default function App() {
               repositories,
               agentTypeOptions: employeeAgentTypeOptions,
               defaultRepositoryIds: employeeConfigDefaultRepositoryIds,
-              hideEmployeesAssociatedOnlyWithDefaultRepositories: Boolean(employeeConfigPrdProjectId?.trim()),
+              hideEmployeesAssociatedOnlyWithDefaultRepositories:
+                Boolean(employeeConfigPrdProjectId?.trim()) || employeeConfigRepositoryOwnerScopeOnly,
               alwaysShowEmployeeIds: employeeConfigPrdVisibleEmployeeIds,
+              repositoryOwnerScopeOnly: employeeConfigRepositoryOwnerScopeOnly,
+              initialCreateEmployeeName: employeeConfigInitialCreateEmployeeName,
               onClose: () => {
                 setEmployeeConfigOpen(false);
                 setEmployeeConfigPrdProjectId(null);
                 setEmployeeConfigPrdVisibleEmployeeIds([]);
+                setEmployeeConfigRepositoryOwnerScopeOnly(false);
+                setEmployeeConfigInitialCreateEmployeeName(null);
               },
               onCreate: async (input) => {
                 setEmployeeLoading(true);
@@ -1678,9 +1685,14 @@ export default function App() {
                   });
                   if (input.ownerRepositoryId != null) {
                     try {
-                      await handleUpdateRepositoryMainOwnerAgent(input.ownerRepositoryId, created.agentType.trim());
+                      const ownerRepo = repositories.find((r) => r.id === input.ownerRepositoryId);
+                      if (ownerRepo) {
+                        await handlePersistRepositoryMainOwnerAgent(ownerRepo, created.agentType.trim());
+                      } else {
+                        await handleUpdateRepositoryMainOwnerAgent(input.ownerRepositoryId, created.agentType.trim());
+                      }
                     } catch (err) {
-                      message.error(`员工已创建，但设置仓库 Owner 失败：${toUiErrorMessage(err)}`);
+                      message.error(`员工已创建，但设置仓库失败：${toUiErrorMessage(err)}`);
                     }
                   }
                   const linkPid = employeeConfigPrdProjectId?.trim() ?? "";
@@ -1720,7 +1732,7 @@ export default function App() {
                       const r = repositories.find((x) => x.id === rid);
                       if (r?.mainOwnerAgentName?.trim() === agent) {
                         try {
-                          await handleUpdateRepositoryMainOwnerAgent(rid, null);
+                          await handlePersistRepositoryMainOwnerAgent(r, null);
                         } catch {
                           /* ignore per-repo clear errors */
                         }
@@ -1805,13 +1817,6 @@ export default function App() {
             }
           : null
       }
-    />
-    <RepositoryMainOwnerModal
-      open={repositoryMainOwnerModalRepo != null}
-      repository={repositoryMainOwnerModalRepo}
-      agentNameOptions={repositoryMainOwnerAgentOptions}
-      onClose={() => setRepositoryMainOwnerModalRepo(null)}
-      onSave={handlePersistRepositoryMainOwnerAgent}
     />
     </>
   );

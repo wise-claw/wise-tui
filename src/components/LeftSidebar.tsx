@@ -399,7 +399,7 @@ function RepositoryRow({
   const moreItems: MenuProps["items"] = [
     { key: "finder", label: "Finder打开" },
     { key: "editor", label: repositoryEditorOpenMenuLabel() },
-    ...(onOpenRepositoryMainOwner ? [{ key: "main-owner", label: "主 Owner 智能体…" }] satisfies MenuProps["items"] : []),
+    ...(onOpenRepositoryMainOwner ? [{ key: "main-owner", label: "仓库" }] satisfies MenuProps["items"] : []),
     { key: "prompts", label: "提示词" },
     { key: "detach", label: "移出项目", danger: true },
   ];
@@ -447,8 +447,8 @@ function RepositoryRow({
           {hasMainOwner ? (
             <span
               className="app-repository-main-owner-badge"
-              aria-label="已配置主 Owner"
-              title="已配置主 Owner"
+              aria-label="已配置仓库"
+              title="已配置仓库"
             >
               <UserOutlined />
             </span>
