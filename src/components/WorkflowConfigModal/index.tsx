@@ -63,12 +63,16 @@ interface Props {
   loading: boolean;
   employees: EmployeeItem[];
   templates: WorkflowTemplateItem[];
+  projects?: { id: string; name: string }[];
+  /** workflowId -> [projectId, ...] map loaded from backend */
+  workflowProjectIds?: Record<string, string[]>;
   onClose: () => void;
   onSaveTemplate: (input: {
     workflowId?: string;
     name: string;
     isDefault: boolean;
     stages: WorkflowTemplateStage[];
+    projectIds?: string[];
   }) => Promise<WorkflowTemplateItem>;
   onLoadGraphItem: (workflowId: string) => Promise<WorkflowGraphItem | null>;
   onSaveGraph: (input: { workflowId: string; graph: WorkflowGraph; status?: "draft" | "published" }) => Promise<void>;
@@ -1263,6 +1267,8 @@ export function WorkflowConfigModal({
   loading,
   employees,
   templates,
+  projects,
+  workflowProjectIds = {},
   onClose,
   onSaveTemplate,
   onLoadGraphItem,
@@ -1274,6 +1280,7 @@ export function WorkflowConfigModal({
 }: Props) {
   const [form] = Form.useForm();
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [editingProjectIds, setEditingProjectIds] = useState<string[]>([]);
   const [canvasSnapshot, setCanvasSnapshot] = useState<CanvasSnapshot>(createDefaultCanvasSnapshot());
   const editingLoadSeqRef = useRef(0);
   const [validationErrors, setValidationErrors] = useState<WorkflowGraphValidationResult["errors"]>([]);
@@ -1349,6 +1356,7 @@ export function WorkflowConfigModal({
 
   function resetEditor() {
     setEditingTemplateId(null);
+    setEditingProjectIds([]);
     setCanvasSnapshot(createDefaultCanvasSnapshot());
     setValidationErrors([]);
     form.setFieldsValue({ name: "", isDefault: false });
@@ -1381,6 +1389,7 @@ export function WorkflowConfigModal({
         name: normalizedName,
         isDefault: Boolean(values.isDefault),
         stages,
+        projectIds: editingProjectIds,
       });
       try {
         await onSaveGraph({ workflowId: savedTemplate.id, graph, status: "draft" });
@@ -1427,6 +1436,7 @@ export function WorkflowConfigModal({
         name: normalizedName,
         isDefault: Boolean(values.isDefault),
         stages,
+        projectIds: editingProjectIds,
       });
       await onSaveGraph({ workflowId: savedTemplate.id, graph, status: "published" });
       setGraphStatusByWorkflowId((prev) => ({ ...prev, [savedTemplate.id]: "published" }));
@@ -1460,6 +1470,7 @@ export function WorkflowConfigModal({
       name: row.name,
       isDefault: row.isDefault,
     });
+    setEditingProjectIds(workflowProjectIds[row.id] ?? []);
   }
 
   async function handleDeleteTemplate(workflowId: string) {
@@ -1588,6 +1599,22 @@ export function WorkflowConfigModal({
               <Form.Item name="isDefault" valuePropName="checked">
                 <Switch checkedChildren="默认" unCheckedChildren="非默认" />
               </Form.Item>
+              {projects && projects.length > 0 && (
+                <Form.Item label="所属项目">
+                  <Select
+                    mode="multiple"
+                    allowClear
+                    placeholder="所属项目"
+                    maxTagCount="responsive"
+                    value={editingProjectIds}
+                    onChange={(value: string[]) => setEditingProjectIds(value)}
+                    options={projects.map((p) => ({
+                      value: p.id,
+                      label: p.name,
+                    }))}
+                  />
+                </Form.Item>
+              )}
             </div>
             <div className="app-workflow-config-editor-form-actions">
               <Form.Item>

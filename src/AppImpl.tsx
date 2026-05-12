@@ -102,7 +102,7 @@ import { useMainLayoutModes } from "./hooks/useMainLayoutModes";
 import { useDingTalkAutomationInbound } from "./hooks/useDingTalkAutomationInbound";
 import { useOmcRuntime } from "./hooks/useOmcRuntime";
 import { useWorkflowTeamAutomation } from "./hooks/useWorkflowTeamAutomation";
-import { addProjectPrdEmployee, addProjectPrdWorkflow, listProjectPrdEmployeeIds } from "./services/projectPrdScope";
+import { addProjectPrdWorkflow, listProjectPrdEmployeeIds, listProjectPrdWorkflowIds, listWorkflowProjectIds } from "./services/projectPrdScope";
 
 // ── App ──
 
@@ -134,6 +134,10 @@ export default function App() {
   const [workflowConfigOpen, setWorkflowConfigOpen] = useState(false);
   /** 非空：从需求面板打开团队配置，保存模板后自动关联到该项目。 */
   const [workflowConfigPrdProjectId, setWorkflowConfigPrdProjectId] = useState<string | null>(null);
+  /** 当前项目的团队 workflow id 列表，用于过滤团队监控项。 */
+  const [teamProjectWorkflowIds, setTeamProjectWorkflowIds] = useState<string[]>([]);
+  /** workflowId -> [projectId, ...] map，用于 WorkflowConfigModal 中展示已关联项目。 */
+  const [workflowProjectIdsMap, setWorkflowProjectIdsMap] = useState<Record<string, string[]>>({});
   const [employeeLoading, setEmployeeLoading] = useState(false);
   const [workflowLoading, setWorkflowLoading] = useState(false);
   const [monitorDrawerTarget, setMonitorDrawerTarget] = useState<MonitorDrawerTarget | null>(null);
@@ -725,6 +729,34 @@ export default function App() {
       ),
     [teamMonitorItems, workflowGraphStatusByWorkflowId],
   );
+
+  /** Filter monitor items by project/repository context */
+  const filteredEmployeeMonitorItems = useMemo(() => {
+    const pid = activeProjectId?.trim() || null;
+    const rid = activeRepositoryId ?? null;
+    if (pid) {
+      return employeeMonitorItems.filter((item) => {
+        const emp = employees.find((e) => e.id === item.employeeId);
+        return emp?.projectIds.includes(pid);
+      });
+    }
+    if (rid) {
+      return employeeMonitorItems.filter((item) => {
+        const emp = employees.find((e) => e.id === item.employeeId);
+        return emp?.repositoryIds.includes(rid);
+      });
+    }
+    return [];
+  }, [employeeMonitorItems, employees, activeProjectId, activeRepositoryId]);
+
+  const filteredTeamMonitorItems = useMemo(() => {
+    const pid = activeProjectId?.trim() || null;
+    if (!pid) return [];
+    return publishedTeamMonitorItems.filter((item) => {
+      const wfIds = teamProjectWorkflowIds;
+      return wfIds.includes(item.workflowId);
+    });
+  }, [publishedTeamMonitorItems, teamProjectWorkflowIds, activeProjectId]);
   useEffect(() => {
     const workflowIds = Array.from(new Set([...workflowTemplates.map((item) => item.id), ...workflowTasks.map((item) => item.workflowId)]));
     const missingIds = workflowIds.filter((workflowId) => !workflowGraphsByWorkflowId[workflowId]);
@@ -910,6 +942,46 @@ export default function App() {
     await loadEmployeeAgentTypeOptionsFromRepositoryPath(activeRepository?.path ?? null);
     setEmployeeConfigOpen(true);
   }, [activeRepositoryId, activeRepository?.path, loadEmployeeAgentTypeOptionsFromRepositoryPath]);
+
+  /** 当前项目变化时，加载该项目的团队 workflow ids */
+  useEffect(() => {
+    const pid = activeProjectId?.trim() ?? "";
+    if (!pid) {
+      setTeamProjectWorkflowIds([]);
+      return;
+    }
+    void listProjectPrdWorkflowIds(pid).then(
+      (ids) => setTeamProjectWorkflowIds(ids),
+      () => setTeamProjectWorkflowIds([]),
+    );
+  }, [activeProjectId]);
+
+  /** WorkflowConfigModal 打开且 templates 就绪时，加载所有 workflow -> projectIds 映射 */
+  useEffect(() => {
+    if (!workflowConfigOpen || workflowTemplates.length === 0) {
+      setWorkflowProjectIdsMap({});
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const entries = await Promise.all(
+        workflowTemplates.map(async (tpl) => {
+          try {
+            const ids = await listWorkflowProjectIds(tpl.id);
+            return [tpl.id, ids] as const;
+          } catch {
+            return [tpl.id, []] as const;
+          }
+        }),
+      );
+      if (!cancelled) {
+        setWorkflowProjectIdsMap(Object.fromEntries(entries));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [workflowConfigOpen, workflowTemplates]);
 
   const openEmployeeConfigForProject = useCallback(async () => {
     const pid = activeProjectId?.trim() ?? "";
@@ -1559,8 +1631,8 @@ export default function App() {
         monitorStats,
         monitorPanelSessions: monitorPanelSessionsMerged,
         monitorTranscriptSourceSessions: sessions,
-        employeeMonitorItems,
-        teamMonitorItems: publishedTeamMonitorItems,
+        employeeMonitorItems: filteredEmployeeMonitorItems,
+        teamMonitorItems: filteredTeamMonitorItems,
         monitorActiveTarget: monitorDrawerTarget,
         onOpenTeamMonitorDetail: (workflowId) => {
           setMonitorDrawerTarget({ type: "team", workflowId });
@@ -1674,6 +1746,7 @@ export default function App() {
               workflowTemplates,
               workflowGraphsByWorkflowId,
               repositories,
+              projects,
               agentTypeOptions: employeeAgentTypeOptions,
               defaultRepositoryIds: employeeConfigDefaultRepositoryIds,
               hideEmployeesAssociatedOnlyWithDefaultRepositories:
@@ -1681,6 +1754,7 @@ export default function App() {
               alwaysShowEmployeeIds: employeeConfigPrdVisibleEmployeeIds,
               repositoryOwnerScopeOnly: employeeConfigRepositoryOwnerScopeOnly,
               initialCreateEmployeeName: employeeConfigInitialCreateEmployeeName,
+              singleProjectScopeId: employeeConfigPrdProjectId?.trim() || null,
               onClose: () => {
                 setEmployeeConfigOpen(false);
                 setEmployeeConfigPrdProjectId(null);
@@ -1691,12 +1765,19 @@ export default function App() {
               onCreate: async (input) => {
                 setEmployeeLoading(true);
                 try {
+                  const linkPid = employeeConfigPrdProjectId?.trim() ?? "";
                   const created = await createEmployee({
                     name: input.name,
                     agentType: input.agentType,
                     enabled: input.enabled,
                     repositoryIds: input.repositoryIds,
+                    projectIds: linkPid ? [linkPid] : [],
                   });
+                  if (linkPid) {
+                    setEmployeeConfigPrdVisibleEmployeeIds((prev) =>
+                      prev.includes(created.id) ? prev : [...prev, created.id],
+                    );
+                  }
                   if (input.ownerRepositoryId != null) {
                     try {
                       const ownerRepo = repositories.find((r) => r.id === input.ownerRepositoryId);
@@ -1709,18 +1790,6 @@ export default function App() {
                       message.error(`员工已创建，但设置仓库失败：${toUiErrorMessage(err)}`);
                     }
                   }
-                  const linkPid = employeeConfigPrdProjectId?.trim() ?? "";
-                  if (linkPid) {
-                    try {
-                      await addProjectPrdEmployee(linkPid, created.id);
-                      message.success("已加入当前项目的需求成员");
-                      setEmployeeConfigPrdVisibleEmployeeIds((prev) =>
-                        prev.includes(created.id) ? prev : [...prev, created.id],
-                      );
-                    } catch (err) {
-                      message.error(`员工已创建，但关联到项目失败：${toUiErrorMessage(err)}`);
-                    }
-                  }
                   await refreshEmployeeData();
                 } finally {
                   setEmployeeLoading(false);
@@ -1729,7 +1798,10 @@ export default function App() {
               onUpdate: async (input) => {
                 setEmployeeLoading(true);
                 try {
-                  await updateEmployee(input);
+                  await updateEmployee({
+                    ...input,
+                    projectIds: input.projectIds,
+                  });
                   await refreshEmployeeData();
                 } finally {
                   setEmployeeLoading(false);
@@ -1770,6 +1842,8 @@ export default function App() {
               employees,
               repositoryPath: workflowModalRepositoryPath,
               templates: workflowTemplates,
+              projects,
+              workflowProjectIds: workflowProjectIdsMap,
               selectableEmployeeIds: selectableWorkflowEmployeeIds,
               onClose: () => {
                 setWorkflowConfigOpen(false);

@@ -409,9 +409,11 @@ function RepositoryRow({
   const moreItems: MenuProps["items"] = [
     { key: "finder", label: "Finder打开" },
     { key: "editor", label: repositoryEditorOpenMenuLabel() },
+    { type: "divider" },
     ...(onOpenRepositoryMainOwner ? [{ key: "main-owner", label: "配置Owner" }] satisfies MenuProps["items"] : []),
     { key: "prompts", label: "提示词" },
     { key: "sdd-mode", label: "SDD 模式" },
+    { type: "divider" },
     { key: "detach", label: "移出项目", danger: true },
   ];
 

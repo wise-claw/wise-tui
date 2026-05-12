@@ -102,6 +102,7 @@ pub fn run() {
             app_state_commands::set_active_project_id,
             app_state_commands::list_project_prd_employee_ids,
             app_state_commands::list_project_prd_workflow_ids,
+            app_state_commands::list_workflow_project_ids,
             app_state_commands::add_project_prd_employee,
             app_state_commands::remove_project_prd_employee,
             app_state_commands::add_project_prd_workflow,

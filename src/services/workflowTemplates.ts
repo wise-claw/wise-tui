@@ -10,8 +10,15 @@ export async function saveWorkflowTemplate(input: {
   name: string;
   isDefault: boolean;
   stages: WorkflowTemplateStage[];
+  projectIds?: string[];
 }): Promise<WorkflowTemplateItem> {
-  return invoke<WorkflowTemplateItem>("save_workflow_template", input);
+  return invoke<WorkflowTemplateItem>("save_workflow_template", {
+    workflowId: input.workflowId,
+    name: input.name,
+    isDefault: input.isDefault,
+    stages: input.stages,
+    projectIds: input.projectIds ?? [],
+  });
 }
 
 export async function deleteWorkflowTemplate(workflowId: string): Promise<void> {

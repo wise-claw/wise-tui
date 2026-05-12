@@ -247,14 +247,20 @@
     },
     {
       "path": "src/AppImpl.tsx",
-      "accessCount": 17,
-      "lastAccessed": 1778585933901,
+      "accessCount": 55,
+      "lastAccessed": 1778590845985,
       "type": "file"
     },
     {
       "path": "src/components/EmployeeConfigModal/index.tsx",
+      "accessCount": 54,
+      "lastAccessed": 1778590833631,
+      "type": "file"
+    },
+    {
+      "path": "src/types.ts",
       "accessCount": 15,
-      "lastAccessed": 1778585484086,
+      "lastAccessed": 1778589903753,
       "type": "file"
     },
     {
@@ -264,9 +270,9 @@
       "type": "file"
     },
     {
-      "path": "src/types.ts",
-      "accessCount": 10,
-      "lastAccessed": 1778584582660,
+      "path": "src/components/LeftSidebar.tsx",
+      "accessCount": 9,
+      "lastAccessed": 1778590104515,
       "type": "file"
     },
     {
@@ -282,9 +288,9 @@
       "type": "file"
     },
     {
-      "path": "src/components/LeftSidebar.tsx",
+      "path": "src-tauri/src/lib_impl.rs",
       "accessCount": 5,
-      "lastAccessed": 1778584627151,
+      "lastAccessed": 1778590177499,
       "type": "file"
     },
     {
@@ -330,33 +336,27 @@
       "type": "file"
     },
     {
+      "path": "src/services/workflowGraphRuntime.ts",
+      "accessCount": 3,
+      "lastAccessed": 1778588123883,
+      "type": "file"
+    },
+    {
+      "path": "src/App.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1778588922117,
+      "type": "file"
+    },
+    {
       "path": "vite.config.ts",
       "accessCount": 2,
       "lastAccessed": 1778204367069,
       "type": "file"
     },
     {
-      "path": "src/services/workflowGraphRuntime.ts",
-      "accessCount": 2,
-      "lastAccessed": 1778204690384,
-      "type": "file"
-    },
-    {
-      "path": "src/App.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1778204722782,
-      "type": "file"
-    },
-    {
       "path": "src/services/trellisTaskMapping.ts",
       "accessCount": 2,
       "lastAccessed": 1778513388689,
-      "type": "file"
-    },
-    {
-      "path": "src-tauri/src/lib_impl.rs",
-      "accessCount": 2,
-      "lastAccessed": 1778513525152,
       "type": "file"
     },
     {

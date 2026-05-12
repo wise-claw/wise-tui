@@ -10,12 +10,14 @@ export async function createEmployee(input: {
   agentType: string;
   enabled?: boolean;
   repositoryIds?: number[];
+  projectIds?: string[];
 }): Promise<EmployeeItem> {
   return invoke<EmployeeItem>("create_employee", {
     name: input.name,
     agentType: input.agentType,
     enabled: input.enabled ?? true,
     repositoryIds: input.repositoryIds ?? [],
+    projectIds: input.projectIds ?? [],
   });
 }
 
@@ -25,6 +27,7 @@ export async function updateEmployee(input: {
   agentType: string;
   enabled: boolean;
   repositoryIds?: number[];
+  projectIds?: string[];
 }): Promise<EmployeeItem> {
   return invoke<EmployeeItem>("update_employee", input);
 }

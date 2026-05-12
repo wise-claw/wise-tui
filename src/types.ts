@@ -65,6 +65,7 @@ export interface EmployeeItem {
   updatedAt: number;
   displayOrder: number;
   repositoryIds: number[];
+  projectIds: string[];
 }
 
 export interface EmployeeTaskCountItem {
