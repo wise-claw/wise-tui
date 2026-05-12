@@ -1,5 +1,5 @@
 import type { TaskItem } from "../types";
-import type { OmcBatchTemplateId } from "./workflow/actions";
+import type { DirectOmcBatchTemplateId } from "../constants/omcBatchTemplates";
 import { executeClaudeCodeAndWait, type ClaudeInvocationResult } from "./claude";
 import { gitWorktreeAddOmcBatch } from "./git";
 import { buildOmcClaudeCodeInvocationPrompt } from "./workflow/omcAdapter";
@@ -18,7 +18,7 @@ export interface StartDirectOmcBatchParams {
   /** 员工标签展示用仓库名（`createSession` 第二段前缀）；缺省则用 `repositoryPath` */
   repositoryDisplayName?: string;
   tasks: TaskItem[];
-  templateId: OmcBatchTemplateId;
+  templateId: DirectOmcBatchTemplateId;
   subagentType: string;
   concurrencyScopeKey?: string;
   concurrencyLimit?: number;

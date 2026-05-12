@@ -39,12 +39,16 @@ export async function createRepositoryFromPathWithType(
 ): Promise<Repository> {
   const iconDisplayName = options?.iconDisplayName?.trim();
   const iconColor = options?.iconColor?.trim();
-  return invoke<Repository>("create_repository_from_path", {
+  const repository = await invoke<Repository>("create_repository_from_path", {
     folderPath,
     repositoryType,
     iconDisplayName: iconDisplayName && iconDisplayName.length > 0 ? iconDisplayName : null,
     iconColor: iconColor && iconColor.length > 0 ? iconColor : null,
   });
+  if (options?.sddMode && options.sddMode !== "auto") {
+    return updateRepositorySddMode(repository.id, options.sddMode);
+  }
+  return repository;
 }
 
 export async function updateRepositoryIconDisplay(

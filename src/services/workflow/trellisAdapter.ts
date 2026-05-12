@@ -12,23 +12,24 @@ interface ResolvedStage {
   prompt: string;
 }
 
-interface InvokeParams {
+interface TrellisInvokeParams {
   repositoryPath: string;
   prompt: string;
-  connectionMode?: "oneshot" | "resume";
+  connectionMode?: Parameters<typeof executeClaudeCodeAndWait>[0]["connectionMode"];
   bare?: boolean;
   timeoutMs?: number;
   streamUi?: {
     sessionId: string;
     repositoryPath: string;
     taskId?: string;
+    taskTitle?: string;
     templateId?: string;
     attempt?: number;
     omcInvocationSource?: "workflow" | "direct_batch";
   };
 }
 
-export type TrellisInvokeFn = (params: InvokeParams) => Promise<ClaudeInvocationResult>;
+export type TrellisInvokeFn = (params: TrellisInvokeParams) => Promise<ClaudeInvocationResult>;
 export type TrellisWorktreeFn = (
   repoPath: string,
   taskId: string,

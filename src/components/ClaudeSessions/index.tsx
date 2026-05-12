@@ -1037,6 +1037,7 @@ export function ClaudeSessions({
                 key={activeSession.id}
                 session={activeSession}
                 sessions={sessions}
+                repositories={repositories}
                 initialNotificationPanelCollapsed={
                   pendingCollapseNotificationForSessionId === activeSession.id
                 }
@@ -1092,6 +1093,7 @@ export function ClaudeSessions({
                   key={secondarySession.id}
                   session={secondarySession}
                   sessions={sessions}
+                  repositories={repositories}
                   initialNotificationPanelCollapsed={
                     pendingCollapseNotificationForSessionId === secondarySession.id
                   }
@@ -1176,6 +1178,7 @@ export function ClaudeSessions({
             key={activeSession.id}
             session={activeSession}
             sessions={sessions}
+            repositories={repositories}
             initialNotificationPanelCollapsed={
               pendingCollapseNotificationForSessionId === activeSession.id
             }

@@ -57,8 +57,14 @@ import { PendingTaskQueuePanel } from "./PendingTaskQueuePanel";
 import { RepositoryScheduledTasksModal } from "../RepositoryScheduledTasksModal";
 import { usePendingTaskQueue } from "../../hooks/usePendingTaskQueue";
 import { useQuestionDockTabsForRepository } from "../../hooks/useQuestionDockTabs";
-import { useWorkflowRun } from "../../hooks/useWorkflowRun";
-import type { OmcBatchTemplateId } from "../../services/workflow/actions";
+import { requestWorkflowRunRefresh, useWorkflowRun } from "../../hooks/useWorkflowRun";
+import { getWorkflowFacade } from "../../services/workflow";
+import { runSplitTasksOmcBatch } from "../../services/workflow/actions";
+import {
+  isDirectOmcBatchTemplateId,
+  TRELLIS_BATCH_TEMPLATE_ID,
+  type OmcBatchTemplateId,
+} from "../../constants/omcBatchTemplates";
 import { loadPrdTaskSplitResult, savePrdTaskSplitResult } from "../../services/prdTaskSplitStore";
 import { refreshSplitResultDerivedFields } from "../../services/taskSplitter";
 import {
@@ -289,6 +295,7 @@ const POST_CLAUDE_IDLE_PENDING_DISPATCH_DELAY_MS = 500;
 interface Props {
   session: ClaudeSession;
   sessions?: ClaudeSession[];
+  repositories?: Repository[];
   onSwitchSession?: (
     sessionId: string,
     options?: { collapseSessionNotificationPanel?: boolean },
@@ -466,6 +473,7 @@ function getSessionTraceStorageKey(sessionId: string, repositoryPath?: string): 
 export function ClaudeChat({
   session,
   sessions = [],
+  repositories = [],
   onSwitchSession,
   initialNotificationPanelCollapsed = false,
   onCreateNewSession,
@@ -636,6 +644,13 @@ export function ClaudeChat({
   );
 
   const { run: workflowRun } = useWorkflowRun(session.id, session.repositoryPath);
+  const sessionRepository = useMemo(
+    () =>
+      repositories.find(
+        (repository) => sessionRepoPathKey(repository.path) === sessionRepoPathKey(session.repositoryPath),
+      ) ?? null,
+    [repositories, session.repositoryPath],
+  );
   const omcBatchUserAbortRef = useRef(false);
   const omcBatchInFlightRef = useRef(false);
   const [splitTodoTasks, setSplitTodoTasks] = useState<TaskItem[]>([]);
@@ -2384,6 +2399,77 @@ export function ClaudeChat({
       getRepositoryBaseDisplayName(repoDisplayRaw).trim() ||
       session.repositoryPath?.replace(/\\/g, "/").split("/").filter(Boolean).pop()?.trim() ||
       repoPath;
+    if (omcBatchTemplateId === TRELLIS_BATCH_TEMPLATE_ID) {
+      if (sessionRepository?.sddMode === "off") {
+        void message.warning("当前仓库已关闭 SDD，未启动 Trellis 批量执行。");
+        return;
+      }
+      omcBatchInFlightRef.current = true;
+      omcBatchUserAbortRef.current = false;
+      requestAnimationFrame(() => {
+        setOmcBatchPopoverOpen(false);
+        setTaskListDrawerOpen(false);
+        requestAnimationFrame(() => {
+          window.dispatchEvent(
+            new CustomEvent(WORKFLOW_UI_EVENT_OMC_BATCH_RUNTIME_CHANGED, {
+              detail: {
+                active: true,
+                sessionId: omcBatchAnchorSessionId,
+                runningCount: tasksToRun.length,
+                updatedAt: Date.now(),
+              } satisfies WorkflowOmcBatchRuntimeDetail,
+            }),
+          );
+          void (async () => {
+            try {
+              const result = await runSplitTasksOmcBatch({
+                facade: getWorkflowFacade(),
+                sessionId: omcBatchAnchorSessionId,
+                repositoryPath: repoPath,
+                tasks: tasksToRun,
+                templateId: TRELLIS_BATCH_TEMPLATE_ID,
+                subagentType: "trellis-implement",
+                concurrency: 1,
+                boundWorkflowRunId:
+                  omcBatchAnchorSessionId === session.id ? (workflowRun?.workflowRunId ?? null) : null,
+              });
+              onAppendSystemMessage?.(
+                omcBatchAnchorSessionId,
+                `[系统] Trellis 批量执行结束：任务 ${result.taskCount} 条，成功 ${result.doneCount}，失败 ${result.failedCount}。${result.workflowRunId ? `\n工作流：${result.workflowRunId}` : ""}`,
+              );
+              requestWorkflowRunRefresh(omcBatchAnchorSessionId, repoPath);
+              requestWorkflowRunRefresh(session.id, repoPath);
+              await syncSplitTaskList();
+            } catch (err) {
+              console.error("trellis batch job failed:", err);
+              const msg = err instanceof Error ? err.message : String(err);
+              onAppendSystemMessage?.(omcBatchAnchorSessionId, `[系统] Trellis 批量执行失败：${msg}`);
+              void message.error("Trellis 批量执行失败");
+            } finally {
+              window.dispatchEvent(
+                new CustomEvent(WORKFLOW_UI_EVENT_OMC_BATCH_RUNTIME_CHANGED, {
+                  detail: {
+                    active: false,
+                    sessionId: omcBatchAnchorSessionId,
+                    runningCount: 0,
+                    updatedAt: Date.now(),
+                  } satisfies WorkflowOmcBatchRuntimeDetail,
+                }),
+              );
+              omcBatchInFlightRef.current = false;
+              omcBatchUserAbortRef.current = false;
+            }
+          })();
+        });
+      });
+      return;
+    }
+
+    if (!isDirectOmcBatchTemplateId(omcBatchTemplateId)) {
+      void message.error("未知批量执行模板。");
+      return;
+    }
+
     const batchParams = {
       anchorSessionId: omcBatchAnchorSessionId,
       repositoryPath: repoPath,
@@ -2443,8 +2529,10 @@ export function ClaudeChat({
     persistSplitTaskFlowStatus,
     resolveTaskListOmcInvokeConcurrency,
     session,
+    sessionRepository?.sddMode,
     syncSplitTaskList,
     taskListSelectedIds,
+    workflowRun?.workflowRunId,
   ]);
 
   const handleRunTaskInMainSession = useCallback(async (task: TaskItem) => {
@@ -3160,7 +3248,7 @@ export function ClaudeChat({
                   content={(
                     <div className="app-claude-task-list__omc-popover">
                       <div className="app-claude-task-list__omc-field">
-                        <label htmlFor="omc-batch-template">OMC 模板</label>
+                        <label htmlFor="omc-batch-template">执行模板</label>
                         <select
                           id="omc-batch-template"
                           className="app-claude-task-list__omc-select"
@@ -3173,6 +3261,7 @@ export function ClaudeChat({
                           <option value="ultraqa">ultraqa（/ultraqa）</option>
                           <option value="verify">verify（/verify）</option>
                           <option value="team">team（/team）</option>
+                          <option value="trellis">trellis（Trellis adapter）</option>
                         </select>
                       </div>
                       <div className="app-claude-task-list__omc-footer">

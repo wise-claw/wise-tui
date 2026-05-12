@@ -56,6 +56,9 @@ fn validate_simple_slug(value: &str, field: &str) -> Result<(), String> {
     if value.contains("..") {
         return Err(format!("WF_INVALID_INPUT: {field} contains .."));
     }
+    if value == "." || value.starts_with('.') {
+        return Err(format!("WF_INVALID_INPUT: {field} must not be hidden"));
+    }
     let ok = value
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.');
@@ -481,6 +484,8 @@ mod tests {
     #[test]
     fn validate_task_id_rejects_dotdot_slash_and_specials() {
         assert!(validate_task_id("").is_err());
+        assert!(validate_task_id(".").is_err());
+        assert!(validate_task_id(".hidden").is_err());
         assert!(validate_task_id("..").is_err());
         assert!(validate_task_id("foo/../bar").is_err());
         assert!(validate_task_id("foo bar").is_err());

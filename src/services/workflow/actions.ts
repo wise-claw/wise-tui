@@ -1,5 +1,6 @@
 import type { TaskItem } from "../../types";
 import type { TaskStateDTO, WorkflowFacade, WorkflowRunDTO, WorkflowStage } from "../../types/workflow";
+import type { OmcBatchTemplateId } from "../../constants/omcBatchTemplates";
 
 export interface AdvanceStageWithGatesResult {
   ok: boolean;
@@ -144,8 +145,6 @@ export async function runTurnTaskLifecycle(params: {
   }
   return { status: "blocked", message: "Gate 检查未通过" };
 }
-
-export type OmcBatchTemplateId = "autopilot" | "ultraqa" | "verify" | "team";
 
 /** `runSplitTasksOmcBatch` 的完整返回，便于主会话写入系统摘要。 */
 export interface RunSplitTasksOmcBatchResult {

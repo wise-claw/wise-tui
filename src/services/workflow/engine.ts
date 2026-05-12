@@ -107,7 +107,7 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
   constructor(
     private readonly store: WorkflowStore,
     private readonly taskRouter: TaskRouter,
-    private readonly omcAdapter: OmcWorkflowAdapter,
+    omcAdapter: OmcWorkflowAdapter,
     private readonly gateEngine: GateEngine,
     adapterRegistry?: AdapterRegistry,
   ) {
@@ -520,4 +520,3 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
     return replayWorkflowRun(run, events);
   }
 }
-
