@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { WorkflowInvocationStreamDetail } from "../constants/workflowUiEvents";
-import type { Repository } from "../types";
+import type { ProjectItem, Repository } from "../types";
 import { buildRepositoryMemberMonitorItems } from "./useMonitorOverview";
 
 function repo(input: Partial<Repository> & Pick<Repository, "id" | "path">): Repository {
@@ -12,6 +12,17 @@ function repo(input: Partial<Repository> & Pick<Repository, "id" | "path">): Rep
     sddMode: input.sddMode,
     createdAt: "2026-05-12T00:00:00.000Z",
     updatedAt: "2026-05-12T00:00:00.000Z",
+  };
+}
+
+function project(input: Partial<ProjectItem> & Pick<ProjectItem, "id">): ProjectItem {
+  return {
+    id: input.id,
+    name: input.name ?? "Demo",
+    repositoryIds: input.repositoryIds ?? [],
+    createdAt: input.createdAt ?? 0,
+    updatedAt: input.updatedAt ?? 0,
+    sddMode: input.sddMode,
   };
 }
 
@@ -99,5 +110,41 @@ describe("buildRepositoryMemberMonitorItems", () => {
       activeSubagentCount: 0,
       subagents: [],
     });
+  });
+
+  test("project-level sddMode supersedes legacy repo.sddMode", () => {
+    const items = buildRepositoryMemberMonitorItems(
+      [
+        repo({
+          id: 1,
+          name: "frontend app",
+          path: "/repo/frontend",
+          repositoryType: "frontend",
+          sddMode: "off",
+        }),
+      ],
+      [],
+      [project({ id: "p1", repositoryIds: [1], sddMode: "wise_trellis" })],
+    );
+
+    expect(items).toHaveLength(1);
+    expect(items[0]?.repositoryId).toBe(1);
+    expect(items[0]?.status).toBe("idle");
+  });
+
+  test("project_owned project hides the repo even if repo.sddMode says wise_trellis", () => {
+    const items = buildRepositoryMemberMonitorItems(
+      [
+        repo({
+          id: 1,
+          path: "/repo/frontend",
+          sddMode: "wise_trellis",
+        }),
+      ],
+      [],
+      [project({ id: "p1", repositoryIds: [1], sddMode: "project_owned" })],
+    );
+
+    expect(items).toHaveLength(0);
   });
 });

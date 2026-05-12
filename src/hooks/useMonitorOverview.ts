@@ -33,6 +33,7 @@ import type {
   EmployeeItem,
   EmployeeMonitorItem,
   MonitorStats,
+  ProjectItem,
   RepositoryMemberMonitorItem,
   RepositoryMemberMonitorSubagentItem,
   TeamMonitorItem,
@@ -42,10 +43,12 @@ import type {
   WorkflowTaskItem,
   WorkflowTemplateItem,
 } from "../types";
+import { getEffectiveRepoSddMode } from "../utils/projectRepositoryRoles";
 
 interface UseMonitorOverviewInput {
   employees: EmployeeItem[];
   repositories: Repository[];
+  projects?: ProjectItem[];
   workflowTemplates: WorkflowTemplateItem[];
   workflowTasks: WorkflowTaskItem[];
   workflowGraphsByWorkflowId: Record<string, WorkflowGraph>;
@@ -194,13 +197,14 @@ function repositoryMemberSubagentStatus(
 export function buildRepositoryMemberMonitorItems(
   repositories: Repository[],
   invocations: readonly WorkflowInvocationStreamDetail[],
+  projects: ReadonlyArray<ProjectItem> = [],
 ): RepositoryMemberMonitorItem[] {
   const reposById = new Map(repositories.map((repo) => [repo.id, repo] as const));
   const itemsByRepositoryId = new Map<number, RepositoryMemberMonitorItem>();
   const now = Date.now();
 
   for (const repo of repositories) {
-    if (repo.sddMode !== "wise_trellis") continue;
+    if (getEffectiveRepoSddMode(repo, projects) !== "wise_trellis") continue;
     const repositoryPath = repo.path.trim();
     if (!repositoryPath) continue;
     itemsByRepositoryId.set(repo.id, {
@@ -458,6 +462,7 @@ function extractOmcProgressText(
 export function useMonitorOverview({
   employees,
   repositories,
+  projects = [],
   workflowTemplates,
   workflowTasks,
   workflowGraphsByWorkflowId,
@@ -680,10 +685,11 @@ export function useMonitorOverview({
       mergedOmcSignals.length > 0 ||
       Boolean(omcBatchRuntime?.active) ||
       hasRunningDirectBatchInvocationRows;
-    const repositoryMemberMonitorItems = buildRepositoryMemberMonitorItems(repositories, [
-      ...directBatchInvocationsSnap,
-      ...repositoryMemberInvocationsSnap,
-    ]);
+    const repositoryMemberMonitorItems = buildRepositoryMemberMonitorItems(
+      repositories,
+      [...directBatchInvocationsSnap, ...repositoryMemberInvocationsSnap],
+      projects,
+    );
     const omcMonitorItem: EmployeeMonitorItem = (() => {
       if (!hasOmcActivity) {
         const boundOmcSessionId = resolveOmcWorkerBoundSessionId(
@@ -956,6 +962,7 @@ export function useMonitorOverview({
   }, [
     employees,
     repositories,
+    projects,
     sessions,
     taskPendingEmployeesByTaskId,
     workflowRuntimeSnapshotsByTaskId,

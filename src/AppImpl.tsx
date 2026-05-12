@@ -713,6 +713,7 @@ export default function App() {
   const { employeeMonitorItems, repositoryMemberMonitorItems, teamMonitorItems, stats: monitorStats } = useMonitorOverview({
     employees,
     repositories,
+    projects,
     workflowTemplates,
     workflowTasks,
     workflowTaskEventsByTaskId,
