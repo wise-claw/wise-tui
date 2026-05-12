@@ -1,9 +1,30 @@
-import { Button, Form, Input, Modal, Popconfirm, Select, Space, Switch, Table, Tag } from "antd";
+import { Button, Form, Input, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Typography } from "antd";
 import { useMemo, useState } from "react";
 import type { EmployeeItem, Repository, WorkflowGraph, WorkflowTemplateItem } from "../../types";
 import { collectTeamMemberEmployeeIds } from "../../utils/collectTeamMemberEmployeeIds";
 import { repositoryFolderBasename } from "../../utils/repositoryType";
+import {
+  isEmployeeRepositoryOwnerInScopeRelaxed,
+  listRepositoryMainOwnerDisplayGaps,
+  repositoryOwnerBasenamesInScopeRelaxed,
+  someEmployeeDisplaysMainOwnerForRepository,
+  shouldHideEmployeeAssociatedOnlyWithDefaultRepositoryIds,
+} from "../../utils/projectPrdScopeDisplay";
 import "./index.css";
+
+type RepoOwnerGapTableRow = {
+  rowKind: "repoOwnerGap";
+  id: string;
+  repositoryId: number;
+  repoLabel: string;
+  agentName: string;
+};
+
+type EmployeeConfigTableRow = EmployeeItem | RepoOwnerGapTableRow;
+
+function isRepoOwnerGapRow(row: EmployeeConfigTableRow): row is RepoOwnerGapTableRow {
+  return "rowKind" in row && row.rowKind === "repoOwnerGap";
+}
 
 interface Props {
   open: boolean;
@@ -14,8 +35,22 @@ interface Props {
   repositories: Repository[];
   agentTypeOptions: string[];
   defaultRepositoryIds?: number[];
+  /**
+   * 为 true 时（例如从需求面板按项目打开）：表格中隐藏「关联仓库全部属于 defaultRepositoryIds」的员工
+   *（典型为各仓下创建的配置）；`alwaysShowEmployeeIds` 中的 id 仍会显示（如项目需求面板显式关联的成员）。
+   */
+  hideEmployeesAssociatedOnlyWithDefaultRepositories?: boolean;
+  /** 在启用上一项过滤时，始终保留在表格中的员工 id（如 project_prd 关联）。 */
+  alwaysShowEmployeeIds?: string[];
   onClose: () => void;
-  onCreate: (input: { name: string; agentType: string; enabled: boolean; repositoryIds: number[] }) => Promise<void>;
+  onCreate: (input: {
+    name: string;
+    agentType: string;
+    enabled: boolean;
+    repositoryIds: number[];
+    /** 创建后把该仓 `mainOwnerAgentName` 设为员工的 `agentType` */
+    ownerRepositoryId?: number | null;
+  }) => Promise<void>;
   onUpdate: (input: { employeeId: string; name: string; agentType: string; enabled: boolean; repositoryIds: number[] }) => Promise<void>;
   onDelete: (employeeId: string) => Promise<void>;
 }
@@ -29,6 +64,8 @@ export function EmployeeConfigModal({
   repositories,
   agentTypeOptions,
   defaultRepositoryIds = [],
+  hideEmployeesAssociatedOnlyWithDefaultRepositories = false,
+  alwaysShowEmployeeIds = [],
   onClose,
   onCreate,
   onUpdate,
@@ -47,25 +84,103 @@ export function EmployeeConfigModal({
     return merged.map((value) => ({ value, label: value }));
   }, [agentTypeOptions, employees]);
   const hideRepositorySelector = defaultRepositoryIds.length > 0;
+  /** 从项目需求面板打开：选单个仓作为 Owner，并展示 Owner 列 */
+  const projectOwnerPickMode =
+    hideEmployeesAssociatedOnlyWithDefaultRepositories && defaultRepositoryIds.length > 0;
   const teamEmployeeIds = useMemo(
     () => collectTeamMemberEmployeeIds(workflowTemplates, workflowGraphsByWorkflowId),
     [workflowTemplates, workflowGraphsByWorkflowId],
   );
 
+  const alwaysShowEmployeeIdSet = useMemo(
+    () => new Set((alwaysShowEmployeeIds ?? []).map((id) => id.trim()).filter(Boolean)),
+    [alwaysShowEmployeeIds],
+  );
+
+  const tableEmployees = useMemo(() => {
+    if (!hideEmployeesAssociatedOnlyWithDefaultRepositories || defaultRepositoryIds.length === 0) {
+      return employees;
+    }
+    return employees.filter((e) => {
+      if (alwaysShowEmployeeIdSet.has(e.id)) return true;
+      if (isEmployeeRepositoryOwnerInScopeRelaxed(e, defaultRepositoryIds, repositories, employees)) return true;
+      return !shouldHideEmployeeAssociatedOnlyWithDefaultRepositoryIds(e, defaultRepositoryIds);
+    });
+  }, [
+    employees,
+    defaultRepositoryIds,
+    hideEmployeesAssociatedOnlyWithDefaultRepositories,
+    alwaysShowEmployeeIdSet,
+    repositories,
+  ]);
+
+  const repoOwnerGapRows = useMemo((): RepoOwnerGapTableRow[] => {
+    if (!projectOwnerPickMode) return [];
+    const gaps = listRepositoryMainOwnerDisplayGaps(repositories, employees).filter((g) =>
+      defaultRepositoryIds.includes(g.repositoryId),
+    );
+    return gaps
+      .filter(
+        (g) =>
+          !someEmployeeDisplaysMainOwnerForRepository(
+            g.repositoryId,
+            defaultRepositoryIds,
+            repositories,
+            employees,
+          ),
+      )
+      .map((g) => ({
+        rowKind: "repoOwnerGap" as const,
+        id: `__repo_owner_gap__:${g.repositoryId}`,
+        repositoryId: g.repositoryId,
+        repoLabel: g.repoLabel,
+        agentName: g.agentName,
+      }));
+  }, [projectOwnerPickMode, repositories, employees, defaultRepositoryIds]);
+
+  const tableDataSource = useMemo(
+    (): EmployeeConfigTableRow[] => [...tableEmployees, ...repoOwnerGapRows],
+    [tableEmployees, repoOwnerGapRows],
+  );
+
   function handleCreateClick() {
     setEditingId(null);
-    form.setFieldsValue({ name: "", agentType: "executor", repositoryIds: defaultRepositoryIds });
+    form.setFieldsValue({
+      name: "",
+      agentType: "executor",
+      repositoryIds: defaultRepositoryIds,
+      ownerRepositoryId: undefined,
+    });
   }
 
   async function handleSubmit() {
     const values = await form.validateFields();
     if (editingEmployee) {
+      const nextRepositoryIds =
+        hideRepositorySelector ? editingEmployee.repositoryIds : (values.repositoryIds ?? []);
       await onUpdate({
         employeeId: editingEmployee.id,
         name: values.name,
         agentType: values.agentType,
         enabled: editingEmployee.enabled,
-        repositoryIds: values.repositoryIds ?? [],
+        repositoryIds: nextRepositoryIds,
+      });
+      return;
+    }
+    if (projectOwnerPickMode) {
+      const ownerRid = values.ownerRepositoryId as number;
+      await onCreate({
+        name: values.name,
+        agentType: values.agentType,
+        enabled: true,
+        repositoryIds: [ownerRid],
+        ownerRepositoryId: ownerRid,
+      });
+      form.setFieldsValue({
+        name: "",
+        agentType: "executor",
+        ownerRepositoryId: undefined,
+        repositoryIds: defaultRepositoryIds,
       });
       return;
     }
@@ -91,18 +206,32 @@ export function EmployeeConfigModal({
       open={open}
       onCancel={onClose}
       footer={null}
-      width={860}
+      width={projectOwnerPickMode ? 800 : 700}
       destroyOnHidden
+      rootClassName="app-employee-config-modal-root"
     >
-      <Space direction="vertical" size={16} className="app-employee-config-modal">
+      <Space direction="vertical" size={10} className="app-employee-config-modal">
         <Form
           form={form}
           layout="inline"
           size="small"
-          initialValues={{ name: "", agentType: "executor", repositoryIds: defaultRepositoryIds }}
-          className="app-employee-config-form"
+          initialValues={{
+            name: "",
+            agentType: "executor",
+            repositoryIds: defaultRepositoryIds,
+            ownerRepositoryId: undefined,
+          }}
+          className={`app-employee-config-form${projectOwnerPickMode ? " app-employee-config-form--project-owner" : ""}`}
         >
-          <div className={`app-employee-config-row ${hideRepositorySelector ? "app-employee-config-row--compact" : ""}`}>
+          <div
+            className={`app-employee-config-row ${
+              projectOwnerPickMode
+                ? "app-employee-config-row--project-owner"
+                : hideRepositorySelector
+                  ? "app-employee-config-row--compact"
+                  : ""
+            }`}
+          >
             <div className="app-employee-config-field">
               <div className="app-employee-config-field-label">员工名称</div>
               <Form.Item
@@ -149,8 +278,37 @@ export function EmployeeConfigModal({
                 </Form.Item>
               </div>
             ) : null}
+            {projectOwnerPickMode && !editingEmployee ? (
+              <div className="app-employee-config-field">
+                <div className="app-employee-config-field-label" title="作为该仓唯一主 Owner 的新员工将关联此仓库">
+                  仓库 Owner
+                </div>
+                <Form.Item
+                  name="ownerRepositoryId"
+                  rules={[{ required: true, message: "请选择作为 Owner 的仓库" }]}
+                  className="app-employee-config-item app-employee-config-item--owner-repo"
+                >
+                  <Select
+                    allowClear
+                    showSearch
+                    placeholder="选择仓库（每仓仅 1 名 Owner）"
+                    optionFilterProp="label"
+                    popupMatchSelectWidth={false}
+                    options={defaultRepositoryIds.map((id) => {
+                      const repository = repositories.find((r) => r.id === id);
+                      const labelBase = repository ? repositoryFolderBasename(repository) : `仓库 #${id}`;
+                      const taken = Boolean(repository?.mainOwnerAgentName?.trim());
+                      return {
+                        value: id,
+                        label: taken ? `${labelBase}（已有 Owner）` : labelBase,
+                        disabled: taken,
+                      };
+                    })}
+                  />
+                </Form.Item>
+              </div>
+            ) : null}
             <div className="app-employee-config-actions">
-              <div className="app-employee-config-field-label">操作</div>
               <Button size="small" type="primary" loading={loading} onClick={() => void handleSubmit()}>
                 {editingEmployee ? "保存编辑" : "新增员工"}
               </Button>
@@ -158,69 +316,148 @@ export function EmployeeConfigModal({
             </div>
           </div>
         </Form>
-        <Table<EmployeeItem>
-          rowKey="id"
+        <Table<EmployeeConfigTableRow>
+          rowKey={(r) => r.id}
           loading={loading}
-          dataSource={employees}
+          dataSource={tableDataSource}
           pagination={false}
           size="small"
+          className="app-employee-config-table"
           columns={[
-            { title: "姓名", dataIndex: "name" },
-            { title: "智能体", dataIndex: "agentType" },
+            {
+              title: "姓名",
+              key: "name",
+              render: (_, row) => {
+                if (isRepoOwnerGapRow(row)) {
+                  return (
+                    <Space size={4} wrap>
+                      <Typography.Text ellipsis={{ tooltip: row.repoLabel }}>{row.repoLabel}</Typography.Text>
+                      <Tag className="app-employee-config-owner-tag">仅仓库</Tag>
+                    </Space>
+                  );
+                }
+                return row.name;
+              },
+            },
+            {
+              title: "智能体",
+              key: "agentType",
+              render: (_, row) => (isRepoOwnerGapRow(row) ? row.agentName : row.agentType),
+            },
+            ...(projectOwnerPickMode
+              ? [
+                  {
+                    title: "Owner 标识",
+                    key: "ownerScope",
+                    render: (_: unknown, row: EmployeeConfigTableRow) => {
+                      if (isRepoOwnerGapRow(row)) {
+                        return (
+                          <Tag color="purple" className="app-employee-config-owner-tag">
+                            主 Owner
+                          </Tag>
+                        );
+                      }
+                      const names = repositoryOwnerBasenamesInScopeRelaxed(
+                        row,
+                        defaultRepositoryIds,
+                        repositories,
+                        employees,
+                      );
+                      if (names.length === 0) return "—";
+                      return (
+                        <Space size={2} wrap className="app-employee-config-owner-tags">
+                          {names.map((n) => (
+                            <Tag key={n} color="blue" className="app-employee-config-owner-tag">
+                              {n}
+                            </Tag>
+                          ))}
+                        </Space>
+                      );
+                    },
+                  },
+                ]
+              : []),
             {
               title: "团队成员",
               key: "teamMember",
-              render: (_, row) =>
-                teamEmployeeIds.has(row.id) ? <Tag color="processing">是</Tag> : <Tag>否</Tag>,
+              render: (_, row) => {
+                if (isRepoOwnerGapRow(row)) return "—";
+                return teamEmployeeIds.has(row.id) ? <Tag color="processing">是</Tag> : <Tag>否</Tag>;
+              },
             },
             {
               title: "状态",
-              dataIndex: "enabled",
-              render: (enabled: boolean, row) => (
-                <Switch
-                  checked={enabled}
-                  checkedChildren="启用"
-                  unCheckedChildren="禁用"
-                  loading={loading}
-                  onChange={(next) => {
-                    void handleToggleEnabled(row, next);
-                  }}
-                />
-              ),
+              key: "enabled",
+              render: (_: unknown, row) => {
+                if (isRepoOwnerGapRow(row)) {
+                  return (
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      —
+                    </Typography.Text>
+                  );
+                }
+                return (
+                  <Switch
+                    size="small"
+                    checked={row.enabled}
+                    checkedChildren="启用"
+                    unCheckedChildren="禁用"
+                    loading={loading}
+                    onChange={(next) => {
+                      void handleToggleEnabled(row, next);
+                    }}
+                  />
+                );
+              },
             },
             {
               title: "操作",
               key: "actions",
-              render: (_, row) => (
-                <Space size={8}>
-                  <Button
-                    size="small"
-                    onClick={() => {
-                      setEditingId(row.id);
-                      form.setFieldsValue({
-                        name: row.name,
-                        agentType: row.agentType,
-                        repositoryIds: row.repositoryIds,
-                      });
-                    }}
-                  >
-                    编辑
-                  </Button>
-                  <Popconfirm
-                    title="确认删除该员工？"
-                    onConfirm={() => onDelete(row.id)}
-                    okText="删除"
-                    cancelText="取消"
-                  >
-                    <Button size="small" danger>
-                      删除
+              render: (_, row) => {
+                if (isRepoOwnerGapRow(row)) {
+                  return (
+                    <Typography.Text type="secondary" style={{ fontSize: 11 }} ellipsis={{ tooltip: "在侧栏进入单个仓库后打开员工配置，可为员工关联仓库" }}>
+                      在单仓员工配置中关联仓库
+                    </Typography.Text>
+                  );
+                }
+                return (
+                  <Space size={6}>
+                    <Button
+                      size="small"
+                      onClick={() => {
+                        setEditingId(row.id);
+                        form.setFieldsValue({
+                          name: row.name,
+                          agentType: row.agentType,
+                          repositoryIds: row.repositoryIds,
+                          ownerRepositoryId: undefined,
+                        });
+                      }}
+                    >
+                      编辑
                     </Button>
-                  </Popconfirm>
-                </Space>
-              ),
+                    <Popconfirm
+                      title="确认删除该员工？"
+                      onConfirm={() => onDelete(row.id)}
+                      okText="删除"
+                      cancelText="取消"
+                    >
+                      <Button size="small" danger>
+                        删除
+                      </Button>
+                    </Popconfirm>
+                  </Space>
+                );
+              },
             },
           ]}
         />
+        {hideEmployeesAssociatedOnlyWithDefaultRepositories && defaultRepositoryIds.length > 0 ? (
+          <Typography.Text type="secondary" className="app-employee-config-footnote">
+            已从本表隐藏「仅关联当前项目内仓库」的员工（一般为各仓侧创建的配置）；项目需求面板显式关联的成员、以及在本项目内仓上配置为主 Owner 的员工仍会显示。若某仓仅在仓库侧配置了主 Owner、且尚未与任何员工关联，将以「仅仓库」行展示。在侧栏进入单个仓库打开员工配置可查看与编辑全部员工。
+          </Typography.Text>
+        ) : null}
       </Space>
     </Modal>
   );

@@ -1,32 +1,84 @@
+/* 员工配置弹窗：紧凑布局（rootClassName 挂在 Modal 根节点） */
+.app-employee-config-modal-root .ant-modal-header {
+  padding: 8px 12px;
+  margin-bottom: 0;
+}
+
+.app-employee-config-modal-root .ant-modal-title {
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.app-employee-config-modal-root .ant-modal-close {
+  top: 8px;
+  inset-inline-end: 10px;
+}
+
+.app-employee-config-modal-root .ant-modal-body {
+  padding: 10px 12px 12px;
+}
+
 .app-employee-config-modal {
   width: 100%;
 }
 
 .app-employee-config-form {
   width: 100%;
-  padding: 8px;
+  padding: 6px;
   border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 8px;
+  border-radius: 6px;
   background: var(--ant-color-bg-container);
 }
 
 .app-employee-config-row {
   display: grid;
-  grid-template-columns: 180px 200px minmax(220px, 1fr) auto;
-  gap: 8px;
+  grid-template-columns: 156px 172px minmax(180px, 1fr) auto;
+  gap: 6px;
   align-items: center;
 }
 
 .app-employee-config-row--compact {
-  grid-template-columns: 160px 180px auto;
+  grid-template-columns: 140px 156px auto;
+}
+
+.app-employee-config-row--project-owner {
+  grid-template-columns: minmax(148px, 1fr) minmax(148px, 1fr) minmax(220px, 1.6fr) auto;
+  gap: 6px;
+}
+
+.app-employee-config-form--project-owner .app-employee-config-item--name .ant-input {
+  width: 100%;
+  max-width: 200px;
+}
+
+.app-employee-config-form--project-owner .app-employee-config-item--agent .ant-select {
+  width: 100%;
+  max-width: 200px;
+}
+
+.app-employee-config-item--owner-repo .ant-select {
+  width: 100%;
+  min-width: 120px;
+  height: 28px;
+}
+
+.app-employee-config-item--owner-repo .ant-select-single:not(.ant-select-customize-input) .ant-select-selector {
+  height: 30px !important;
+  min-height: 30px !important;
+  box-sizing: border-box;
+}
+
+.app-employee-config-item--owner-repo .ant-select-single .ant-select-selector .ant-select-selection-item,
+.app-employee-config-item--owner-repo .ant-select-single .ant-select-selector .ant-select-selection-placeholder {
+  line-height: 28px !important;
 }
 
 .app-employee-config-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 6px;
-  margin-left: 12px;
+  gap: 4px;
+  margin-left: 6px;
 }
 
 .app-employee-config-form .ant-form-item {
@@ -38,16 +90,18 @@
 .app-employee-config-field {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+  min-width: 0;
 }
 
 .app-employee-config-field-label {
   color: var(--ant-color-text-secondary);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
-  height: 34px;
-  line-height: 34px;
+  height: 28px;
+  line-height: 28px;
   white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .app-employee-config-item {
@@ -55,26 +109,28 @@
 }
 
 .app-employee-config-item--name .ant-input {
-  width: 160px;
-  height: 34px !important;
-  line-height: 32px !important;
+  width: 140px;
+  height: 30px !important;
+  line-height: 28px !important;
   box-sizing: border-box;
+  font-size: 12px;
 }
 
 .app-employee-config-item--agent .ant-select {
-  width: 180px;
-  height: 32px;
+  width: 156px;
+  height: 28px;
 }
 
 .app-employee-config-item--agent .ant-select-single:not(.ant-select-customize-input) .ant-select-selector {
-  height: 34px !important;
-  min-height: 34px !important;
+  height: 30px !important;
+  min-height: 30px !important;
   box-sizing: border-box;
 }
 
 .app-employee-config-item--agent .ant-select-single .ant-select-selector .ant-select-selection-item,
 .app-employee-config-item--agent .ant-select-single .ant-select-selector .ant-select-selection-placeholder {
-  line-height: 32px !important;
+  line-height: 28px !important;
+  font-size: 12px;
 }
 
 .app-employee-config-item--repositories .ant-select {
@@ -83,7 +139,9 @@
 
 .app-employee-config-row .ant-input-affix-wrapper,
 .app-employee-config-row .ant-btn-sm {
-  height: 32px;
+  height: 28px;
+  font-size: 12px;
+  padding-inline: 8px;
 }
 
 .app-employee-config-row .ant-select-single:not(.ant-select-customize-input) .ant-select-selector {
@@ -92,11 +150,36 @@
 
 .app-employee-config-row .ant-select-single .ant-select-selector .ant-select-selection-item,
 .app-employee-config-row .ant-select-single .ant-select-selector .ant-select-selection-placeholder {
-  line-height: 30px;
+  line-height: 26px;
+  font-size: 12px;
+}
+
+.app-employee-config-table.ant-table-wrapper .ant-table.ant-table-small .ant-table-thead > tr > th {
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
+.app-employee-config-table.ant-table-wrapper .ant-table.ant-table-small .ant-table-tbody > tr > td {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.app-employee-config-owner-tag.ant-tag {
+  margin-inline-end: 0;
+  line-height: 18px;
+  padding: 0 5px;
+  font-size: 11px;
+}
+
+.app-employee-config-footnote {
+  display: block;
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 @media (max-width: 960px) {
-  .app-employee-config-row {
+  .app-employee-config-row,
+  .app-employee-config-row--project-owner {
     grid-template-columns: 1fr;
   }
 
@@ -108,5 +191,6 @@
   .app-employee-config-actions {
     align-items: center;
     justify-content: flex-end;
+    margin-left: 0;
   }
 }

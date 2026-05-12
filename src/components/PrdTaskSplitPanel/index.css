@@ -138,6 +138,17 @@
   border-radius: var(--ant-border-radius-sm);
 }
 
+.app-prd-task-panel__header-repo-tag-wrap {
+  display: inline-flex;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.app-prd-task-panel__header-repo-tag--interactive.ant-tag:hover {
+  background: var(--ant-color-fill-tertiary) !important;
+  color: var(--ant-color-text-secondary) !important;
+}
+
 .app-prd-task-panel__header-actions {
   flex-shrink: 0;
   padding-top: 1px;
@@ -1991,4 +2002,38 @@
 }
 .milkdown .milkdown-slash-menu .tab-group ul li {
   padding: 2px 6px;
+}
+
+/* 顶栏「项目员工」Popover：紧凑内边距；标题与正文同左缘（仅 inner 负责水平 padding） */
+.app-prd-project-employee-popover .ant-popover-inner {
+  padding: 6px 8px !important;
+}
+.app-prd-project-employee-popover .ant-popover-title {
+  min-height: auto;
+  margin: 0;
+  padding: 0 0 4px;
+  font-size: 13px;
+  line-height: 1.25;
+  border-bottom: none;
+}
+.app-prd-project-employee-popover .ant-popover-inner-content {
+  padding: 0;
+}
+.app-prd-project-employee-popover-inner .ant-btn-link {
+  line-height: 1.35;
+  font-size: 12px;
+}
+.app-prd-project-employee-tooltip-inner {
+  max-width: 380px;
+  color: rgba(255, 255, 255, 0.92);
+}
+.app-prd-project-employee-tooltip-inner .ant-typography {
+  color: inherit !important;
+}
+.app-prd-project-employee-tooltip-inner strong {
+  color: inherit;
+  font-weight: 600;
+}
+.app-prd-project-employee-tooltip-inner-muted.ant-typography {
+  color: rgba(255, 255, 255, 0.72) !important;
 }

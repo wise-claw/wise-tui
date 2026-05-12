@@ -103,7 +103,7 @@ import { useMainLayoutModes } from "./hooks/useMainLayoutModes";
 import { useDingTalkAutomationInbound } from "./hooks/useDingTalkAutomationInbound";
 import { useOmcRuntime } from "./hooks/useOmcRuntime";
 import { useWorkflowTeamAutomation } from "./hooks/useWorkflowTeamAutomation";
-import { addProjectPrdEmployee, addProjectPrdWorkflow } from "./services/projectPrdScope";
+import { addProjectPrdEmployee, addProjectPrdWorkflow, listProjectPrdEmployeeIds } from "./services/projectPrdScope";
 
 // ── App ──
 
@@ -129,6 +129,8 @@ export default function App() {
   const [employeeConfigDefaultRepositoryIds, setEmployeeConfigDefaultRepositoryIds] = useState<number[]>([]);
   /** 非空：从需求面板打开员工配置，新建成功后自动关联到该项目。 */
   const [employeeConfigPrdProjectId, setEmployeeConfigPrdProjectId] = useState<string | null>(null);
+  /** 从需求面板打开员工配置时拉取，用于表格「始终显示」项目显式关联的员工 id。 */
+  const [employeeConfigPrdVisibleEmployeeIds, setEmployeeConfigPrdVisibleEmployeeIds] = useState<string[]>([]);
   const [employeeAgentTypeOptions, setEmployeeAgentTypeOptions] = useState<string[]>(["executor"]);
   const [workflowConfigOpen, setWorkflowConfigOpen] = useState(false);
   /** 非空：从需求面板打开团队配置，保存模板后自动关联到该项目。 */
@@ -917,6 +919,7 @@ export default function App() {
 
   const openEmployeeConfigWithContext = useCallback(async () => {
     setEmployeeConfigPrdProjectId(null);
+    setEmployeeConfigPrdVisibleEmployeeIds([]);
     setEmployeeConfigDefaultRepositoryIds(activeRepositoryId ? [activeRepositoryId] : []);
     await loadEmployeeAgentTypeOptionsFromRepositoryPath(activeRepository?.path ?? null);
     setEmployeeConfigOpen(true);
@@ -936,6 +939,13 @@ export default function App() {
     }
     setEmployeeConfigPrdProjectId(pid);
     setEmployeeConfigDefaultRepositoryIds([...repoIds]);
+    let prdEmployeeIds: string[] = [];
+    try {
+      prdEmployeeIds = await listProjectPrdEmployeeIds(pid);
+    } catch (error) {
+      console.error("Failed to list project PRD employee ids:", error);
+    }
+    setEmployeeConfigPrdVisibleEmployeeIds(prdEmployeeIds);
     const firstRepo = repositories.find((r) => r.id === repoIds[0]);
     await loadEmployeeAgentTypeOptionsFromRepositoryPath(firstRepo?.path ?? null);
     setEmployeeConfigOpen(true);
@@ -1650,19 +1660,37 @@ export default function App() {
               repositories,
               agentTypeOptions: employeeAgentTypeOptions,
               defaultRepositoryIds: employeeConfigDefaultRepositoryIds,
+              hideEmployeesAssociatedOnlyWithDefaultRepositories: Boolean(employeeConfigPrdProjectId?.trim()),
+              alwaysShowEmployeeIds: employeeConfigPrdVisibleEmployeeIds,
               onClose: () => {
                 setEmployeeConfigOpen(false);
                 setEmployeeConfigPrdProjectId(null);
+                setEmployeeConfigPrdVisibleEmployeeIds([]);
               },
               onCreate: async (input) => {
                 setEmployeeLoading(true);
                 try {
-                  const created = await createEmployee(input);
+                  const created = await createEmployee({
+                    name: input.name,
+                    agentType: input.agentType,
+                    enabled: input.enabled,
+                    repositoryIds: input.repositoryIds,
+                  });
+                  if (input.ownerRepositoryId != null) {
+                    try {
+                      await handleUpdateRepositoryMainOwnerAgent(input.ownerRepositoryId, created.agentType.trim());
+                    } catch (err) {
+                      message.error(`员工已创建，但设置仓库 Owner 失败：${toUiErrorMessage(err)}`);
+                    }
+                  }
                   const linkPid = employeeConfigPrdProjectId?.trim() ?? "";
                   if (linkPid) {
                     try {
                       await addProjectPrdEmployee(linkPid, created.id);
                       message.success("已加入当前项目的需求成员");
+                      setEmployeeConfigPrdVisibleEmployeeIds((prev) =>
+                        prev.includes(created.id) ? prev : [...prev, created.id],
+                      );
                     } catch (err) {
                       message.error(`员工已创建，但关联到项目失败：${toUiErrorMessage(err)}`);
                     }
@@ -1684,7 +1712,22 @@ export default function App() {
               onDelete: async (employeeId) => {
                 setEmployeeLoading(true);
                 try {
+                  const row = employees.find((e) => e.id === employeeId);
                   await deleteEmployee(employeeId);
+                  const agent = row?.agentType?.trim();
+                  if (agent && row?.repositoryIds?.length) {
+                    for (const rid of row.repositoryIds) {
+                      const r = repositories.find((x) => x.id === rid);
+                      if (r?.mainOwnerAgentName?.trim() === agent) {
+                        try {
+                          await handleUpdateRepositoryMainOwnerAgent(rid, null);
+                        } catch {
+                          /* ignore per-repo clear errors */
+                        }
+                      }
+                    }
+                  }
+                  setEmployeeConfigPrdVisibleEmployeeIds((prev) => prev.filter((id) => id !== employeeId));
                   await refreshEmployeeData();
                 } finally {
                   setEmployeeLoading(false);
