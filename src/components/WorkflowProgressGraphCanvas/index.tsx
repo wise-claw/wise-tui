@@ -1,5 +1,6 @@
 import { Graph, type Edge as X6Edge, type Node as X6Node } from "@antv/x6";
-import { memo, useEffect, useMemo, useRef } from "react";
+import { Popover } from "antd";
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { EmployeeItem, WorkflowGraph } from "../../types";
 import {
   createGraphNodeFromSnapshotNode,
@@ -75,6 +76,10 @@ export interface WorkflowProgressGraphCanvasProps {
   /** Fixed height for drawer embedding */
   height?: number;
   className?: string;
+  /** 悬停任务类节点时展示（返回 null 则不出现浮层） */
+  renderNodeHoverContent?: (nodeId: string) => ReactNode | null;
+  /** 点击节点（如任务节点） */
+  onNodeClick?: (nodeId: string) => void;
 }
 
 function snapshotFingerprint(snapshot: CanvasSnapshot): string {
@@ -84,6 +89,8 @@ function snapshotFingerprint(snapshot: CanvasSnapshot): string {
   });
 }
 
+type HoverState = { nodeId: string; content: ReactNode; rect: DOMRect } | null;
+
 export const WorkflowProgressGraphCanvas = memo(function WorkflowProgressGraphCanvasInner({
   workflowGraph,
   employees,
@@ -92,9 +99,31 @@ export const WorkflowProgressGraphCanvas = memo(function WorkflowProgressGraphCa
   flowTargetId,
   height = 220,
   className,
+  renderNodeHoverContent,
+  onNodeClick,
 }: WorkflowProgressGraphCanvasProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const graphRef = useRef<Graph | null>(null);
+  const hoverHandlersRef = useRef({ renderNodeHoverContent, onNodeClick });
+  hoverHandlersRef.current = { renderNodeHoverContent, onNodeClick };
+
+  const [hover, setHover] = useState<HoverState>(null);
+  const hoverEnterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hoverLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearHoverEnterTimer = () => {
+    if (hoverEnterTimerRef.current) {
+      clearTimeout(hoverEnterTimerRef.current);
+      hoverEnterTimerRef.current = null;
+    }
+  };
+  const clearHoverLeaveTimer = () => {
+    if (hoverLeaveTimerRef.current) {
+      clearTimeout(hoverLeaveTimerRef.current);
+      hoverLeaveTimerRef.current = null;
+    }
+  };
+
   const employeeNameById = useMemo(() => Object.fromEntries(employees.map((e) => [e.id, e.name])), [employees]);
   const canvasSnapshot = useMemo(() => workflowGraphToCanvasSnapshot(workflowGraph), [workflowGraph]);
   const structureKey = useMemo(() => snapshotFingerprint(canvasSnapshot), [canvasSnapshot]);
@@ -119,7 +148,51 @@ export const WorkflowProgressGraphCanvas = memo(function WorkflowProgressGraphCa
       },
     });
     graphRef.current = graph;
+
+    const onNodeMouseEnter = ({ node }: { node: X6Node }) => {
+      const fn = hoverHandlersRef.current.renderNodeHoverContent;
+      if (!fn) return;
+      clearHoverEnterTimer();
+      clearHoverLeaveTimer();
+      hoverEnterTimerRef.current = setTimeout(() => {
+        const content = fn(node.id);
+        if (content == null) {
+          return;
+        }
+        const view = graph.findViewByCell(node);
+        const dom = view?.container;
+        if (!dom) return;
+        const rect = dom.getBoundingClientRect();
+        setHover({ nodeId: node.id, content, rect });
+      }, 140);
+    };
+
+    const onNodeMouseLeave = () => {
+      clearHoverEnterTimer();
+      hoverLeaveTimerRef.current = setTimeout(() => setHover(null), 220);
+    };
+
+    const onBlankMouseDown = () => {
+      setHover(null);
+    };
+
+    const onNodeClickHandler = ({ node, e }: { node: X6Node; e: { stopPropagation?: () => void } }) => {
+      e.stopPropagation?.();
+      hoverHandlersRef.current.onNodeClick?.(node.id);
+    };
+
+    graph.on("node:mouseenter", onNodeMouseEnter);
+    graph.on("node:mouseleave", onNodeMouseLeave);
+    graph.on("blank:mousedown", onBlankMouseDown);
+    graph.on("node:click", onNodeClickHandler);
+
     return () => {
+      clearHoverEnterTimer();
+      clearHoverLeaveTimer();
+      graph.off("node:mouseenter", onNodeMouseEnter);
+      graph.off("node:mouseleave", onNodeMouseLeave);
+      graph.off("blank:mousedown", onBlankMouseDown);
+      graph.off("node:click", onNodeClickHandler);
       graph.dispose();
       graphRef.current = null;
     };
@@ -144,6 +217,7 @@ export const WorkflowProgressGraphCanvas = memo(function WorkflowProgressGraphCa
     });
     graph.getNodes().forEach((node) => refreshNodePorts(graph, node, false));
     graph.centerContent();
+    setHover(null);
   }, [canvasSnapshot, employeeNameById]);
 
   useEffect(() => {
@@ -163,15 +237,52 @@ export const WorkflowProgressGraphCanvas = memo(function WorkflowProgressGraphCa
       const edge = graph.getEdges().find((e) => e.getSourceCellId() === flowSourceId && e.getTargetCellId() === flowTargetId);
       if (edge) applyFlowEdge(edge);
     }
-  }, [activeNodeId, flowSourceId, flowTargetId, structureKey]);
+  }, [activeNodeId, flowSourceId, flowTargetId, structureKey, canvasSnapshot.nodes.length]);
 
   if (!workflowGraph || canvasSnapshot.nodes.length === 0) {
     return null;
   }
 
   return (
-    <div className={["app-workflow-progress-graph", className].filter(Boolean).join(" ")} style={{ height }}>
+    <div className={["app-workflow-progress-graph", className].filter(Boolean).join(" ")} style={{ height, position: "relative" }}>
       <div ref={containerRef} className="app-workflow-progress-graph__viewport" />
+      {hover ? (
+        <Popover
+          open
+          mouseEnterDelay={0}
+          mouseLeaveDelay={280}
+          placement="rightTop"
+          zIndex={1100}
+          getPopupContainer={() => containerRef.current?.parentElement ?? document.body}
+          onOpenChange={(next) => {
+            if (!next) {
+              setHover(null);
+            }
+          }}
+          content={
+            <div
+              className="app-workflow-progress-graph__hover-pop"
+              onMouseEnter={() => {
+                clearHoverLeaveTimer();
+              }}
+            >
+              {hover.content}
+            </div>
+          }
+        >
+          <div
+            aria-hidden
+            style={{
+              position: "fixed",
+              left: hover.rect.left,
+              top: hover.rect.top,
+              width: Math.max(1, hover.rect.width),
+              height: Math.max(1, hover.rect.height),
+              pointerEvents: "none",
+            }}
+          />
+        </Popover>
+      ) : null}
     </div>
   );
 });

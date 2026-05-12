@@ -11,6 +11,13 @@
   height: 100%;
 }
 
+.app-workflow-progress-graph__hover-pop {
+  max-width: 400px;
+  max-height: min(70vh, 520px);
+  overflow: auto;
+  font-size: 12px;
+}
+
 @keyframes app-workflow-progress-edge-flow {
   to {
     stroke-dashoffset: -26;

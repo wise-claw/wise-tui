@@ -254,6 +254,8 @@ export interface WorkflowRuntimeStepSnapshot {
   toNodeId?: string;
   toNodeName?: string;
   toNodeType?: WorkflowGraphNodeType;
+  /** Wise 会话 id，派发目标员工会话；决策步为产出该决策输出的会话 */
+  executorSessionId?: string;
   decision?: "pass" | "reject";
   inputPreview: string;
   outputPreview: string;

@@ -132,6 +132,7 @@ export function eventHasCorrelationId(event: WorkflowTaskEventItem, correlationI
 export function extractRuntimeSnapshotsFromEvents(events: WorkflowTaskEventItem[]): WorkflowRuntimeStepSnapshot[] {
   const snapshots: WorkflowRuntimeStepSnapshot[] = [];
   const updates: Array<{ snapshotId: string; outputPreview: string }> = [];
+  const executorPatches: Array<{ snapshotId: string; executorSessionId: string }> = [];
   const sortedEvents = [...events].sort((a, b) => a.createdAt - b.createdAt);
   for (const event of sortedEvents) {
     if (!event.payloadJson) {
@@ -150,19 +151,32 @@ export function extractRuntimeSnapshotsFromEvents(events: WorkflowTaskEventItem[
         if (payload.snapshotId && typeof payload.outputPreview === "string") {
           updates.push({ snapshotId: payload.snapshotId, outputPreview: payload.outputPreview });
         }
+        continue;
+      }
+      if (event.eventType === "workflow_runtime_snapshot_executor") {
+        const payload = JSON.parse(event.payloadJson) as { snapshotId?: string; executorSessionId?: string };
+        const sid = typeof payload.snapshotId === "string" ? payload.snapshotId.trim() : "";
+        const ex = typeof payload.executorSessionId === "string" ? payload.executorSessionId.trim() : "";
+        if (sid && ex) {
+          executorPatches.push({ snapshotId: sid, executorSessionId: ex });
+        }
       }
     } catch {
       // ignore malformed runtime payload
     }
   }
-  if (updates.length > 0) {
-    const snapshotById = new Map(snapshots.map((item) => [item.id, item] as const));
-    for (const update of updates) {
-      const snapshot = snapshotById.get(update.snapshotId);
-      if (!snapshot) {
-        continue;
-      }
-      snapshot.outputPreview = update.outputPreview;
+  const snapshotById = new Map(snapshots.map((item) => [item.id, item] as const));
+  for (const update of updates) {
+    const snapshot = snapshotById.get(update.snapshotId);
+    if (!snapshot) {
+      continue;
+    }
+    snapshot.outputPreview = update.outputPreview;
+  }
+  for (const patch of executorPatches) {
+    const snapshot = snapshotById.get(patch.snapshotId);
+    if (snapshot) {
+      snapshot.executorSessionId = patch.executorSessionId;
     }
   }
   return sortWorkflowRuntimeSnapshotsChronological(snapshots);

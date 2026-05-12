@@ -1651,6 +1651,10 @@ export default function App() {
           setMonitorDrawerTarget(null);
         },
         onReloadFullDiskTranscript: reloadFullDiskTranscript,
+        onCancelSession: cancelSession,
+        onOpenTaskDetail: (taskId) => {
+          setMonitorDrawerTarget({ type: "task", taskId });
+        },
       }}
       employeeConfigModalProps={
         employeeConfigOpen
