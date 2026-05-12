@@ -357,8 +357,6 @@ interface Props {
   } | null;
   /** 与侧栏仓库主会话绑定一致，用于 OMC 批量等挂到固定主标签 */
   repositoryMainBindings?: Record<string, string>;
-  /** 解析各仓库「主 Owner 智能体」配置（与 `resolveMainOwnerAgentNameForRepositoryPath` 一致） */
-  repositories?: Repository[];
   /** 将系统消息写入指定 tab 会话（如主会话上的批量 OMC 系统提示） */
   onAppendSystemMessage?: (sessionId: string, text: string) => void;
   /** 仅追加用户气泡（不 invoke），用于批量 OMC 展示与子进程一致的派发正文 */
@@ -514,7 +512,6 @@ export function ClaudeChat({
   taskListConcurrentCapacity,
   resolveTaskListOmcInvokeConcurrency,
   repositoryMainBindings = {},
-  repositories = [],
   onAppendSystemMessage,
   onAppendUserMessage,
   onNotifyOmcEmployeeDirectBatchTaskDone,
