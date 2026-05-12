@@ -44,6 +44,10 @@ import {
   migrateWorkflowSessionTabReferences,
 } from "./services/workflowTasks";
 import { cancelClaudeInvocation, listClaudeSubagents } from "./services/claude";
+import {
+  dispatchAtMentionPromptToRepos,
+  planAtMentionDispatch,
+} from "./services/atMentionDispatch";
 import { useMonitorOverview } from "./hooks/useMonitorOverview";
 import { useIntervalSyncedState } from "./hooks/useIntervalSyncedState";
 import { useScheduledClaudeTaskRunner } from "./hooks/useScheduledClaudeTaskRunner";
@@ -621,6 +625,42 @@ export default function App() {
       limitsMap: claudeConcurrencyLimitsMap,
       preferredProjectId: activeProjectId,
     });
+
+  /** @-mention 派发拦截：wise_trellis 项目下，`@<roleTag>` 命中项目仓库时改走多仓库 trellis-implement 直派；其他场景回退到原 send 路径。 */
+  const handleSendMessageWithAtMention = useCallback(
+    (prompt: string) => {
+      const activeProject = activeProjectId
+        ? projects.find((p) => p.id === activeProjectId) ?? null
+        : null;
+      const plan = planAtMentionDispatch({
+        activeProject,
+        repositories,
+        prompt,
+      });
+      if (plan.kind === "dispatch" && activeProject && activeSessionId) {
+        void dispatchAtMentionPromptToRepos({
+          project: activeProject,
+          matchedRepos: plan.matchedRepos,
+          body: plan.body,
+          sessionId: activeSessionId,
+        }).catch((err) => {
+          const text = err instanceof Error ? err.message : String(err);
+          message.error(`@-mention 派发失败: ${text}`);
+        });
+        const tagsText = plan.mentionedTags.map((t) => `@${t}`).join(" ");
+        const reposText = plan.matchedRepos.map((r) => r.name).join(", ");
+        message.success(`${tagsText} → ${reposText}`);
+        return;
+      }
+      if (plan.kind === "warn_then_fallthrough") {
+        message.warning(
+          `${plan.mentionedTags.map((t) => `@${t}`).join(", ")} 未匹配项目仓库；按常规消息发送。`,
+        );
+      }
+      handleSendMessageWithTask(prompt);
+    },
+    [activeProjectId, activeSessionId, handleSendMessageWithTask, projects, repositories],
+  );
 
   const handleClaudeConcurrencyLimitChange = useCallback(
     async (projectId: string, repositoryId: number, nextRaw: number) => {
@@ -1471,7 +1511,7 @@ export default function App() {
         onSelectRepository: setActiveRepositoryId,
         onUpdateSessionModel: updateSessionModel,
         onExecuteSession: handleComposerExecute,
-        onSendMessage: handleSendMessageWithTask,
+        onSendMessage: handleSendMessageWithAtMention,
         onCancelSession: cancelSession,
         onCloseSession: handleCloseSession,
         onSwitchSession: jumpToSessionWithRepository,
