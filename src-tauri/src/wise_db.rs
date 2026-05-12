@@ -31,6 +31,7 @@ const MIGRATION_012: &str = include_str!("../migrations/012_prd_executable_tasks
 const MIGRATION_013: &str = include_str!("../migrations/013_project_icon_badge.sql");
 const MIGRATION_014: &str = include_str!("../migrations/014_project_repository_display_order.sql");
 const MIGRATION_015: &str = include_str!("../migrations/015_project_prd_scope.sql");
+const MIGRATION_016: &str = include_str!("../migrations/016_project_trellis_root.sql");
 const PLATFORM_SPLIT_PROMPT_SEED_JSON: &str =
     include_str!("../migrations/005_platform_split_prompt_seed.json");
 
@@ -105,6 +106,10 @@ const MIGRATIONS: &[Migration] = &[
         name: "015_project_prd_scope",
         action: MigrationAction::Sql(MIGRATION_015),
     },
+    Migration {
+        name: "016_project_trellis_root",
+        action: MigrationAction::Sql(MIGRATION_016),
+    },
 ];
 
 #[derive(Debug, Clone, Serialize)]
@@ -117,6 +122,9 @@ pub struct WiseProjectRow {
     pub icon_display_name: Option<String>,
     pub icon_color: Option<String>,
     pub repository_ids: Vec<i64>,
+    pub root_path: String,
+    pub sdd_mode: String,
+    pub main_agent: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -404,7 +412,8 @@ impl WiseDb {
         let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
         let mut stmt = g
             .prepare(
-                "SELECT id, name, created_at, updated_at, icon_display_name, icon_color
+                "SELECT id, name, created_at, updated_at, icon_display_name, icon_color,
+                        root_path, sdd_mode, main_agent
                  FROM projects
                  ORDER BY updated_at DESC",
             )
@@ -418,14 +427,26 @@ impl WiseDb {
                     row.get::<_, i64>(3)?,
                     row.get::<_, Option<String>>(4)?,
                     row.get::<_, Option<String>>(5)?,
+                    row.get::<_, String>(6)?,
+                    row.get::<_, String>(7)?,
+                    row.get::<_, Option<String>>(8)?,
                 ))
             })
             .map_err(|e| e.to_string())?;
 
         let mut out = Vec::new();
         for r in rows {
-            let (id, name, created_at, updated_at, icon_display_name, icon_color) =
-                r.map_err(|e| e.to_string())?;
+            let (
+                id,
+                name,
+                created_at,
+                updated_at,
+                icon_display_name,
+                icon_color,
+                root_path,
+                sdd_mode,
+                main_agent,
+            ) = r.map_err(|e| e.to_string())?;
             let mut links_stmt = g
                 .prepare(
                     "SELECT repository_id
@@ -449,6 +470,9 @@ impl WiseDb {
                 icon_display_name,
                 icon_color,
                 repository_ids,
+                root_path,
+                sdd_mode,
+                main_agent,
             });
         }
         Ok(out)
@@ -983,6 +1007,63 @@ impl WiseDb {
             .execute(
                 "UPDATE projects SET name = ?1, updated_at = ?2 WHERE id = ?3",
                 params![name, now_ms, id],
+            )
+            .map_err(|e| e.to_string())?;
+        if n == 0 {
+            return Err("项目未找到".to_string());
+        }
+        Ok(())
+    }
+
+    pub fn update_project_root_path(
+        &self,
+        id: &str,
+        root_path: &str,
+        now_ms: i64,
+    ) -> Result<(), String> {
+        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let n = g
+            .execute(
+                "UPDATE projects SET root_path = ?1, updated_at = ?2 WHERE id = ?3",
+                params![root_path, now_ms, id],
+            )
+            .map_err(|e| e.to_string())?;
+        if n == 0 {
+            return Err("项目未找到".to_string());
+        }
+        Ok(())
+    }
+
+    pub fn update_project_sdd_mode(
+        &self,
+        id: &str,
+        sdd_mode: &str,
+        now_ms: i64,
+    ) -> Result<(), String> {
+        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let n = g
+            .execute(
+                "UPDATE projects SET sdd_mode = ?1, updated_at = ?2 WHERE id = ?3",
+                params![sdd_mode, now_ms, id],
+            )
+            .map_err(|e| e.to_string())?;
+        if n == 0 {
+            return Err("项目未找到".to_string());
+        }
+        Ok(())
+    }
+
+    pub fn update_project_main_agent(
+        &self,
+        id: &str,
+        main_agent: Option<&str>,
+        now_ms: i64,
+    ) -> Result<(), String> {
+        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let n = g
+            .execute(
+                "UPDATE projects SET main_agent = ?1, updated_at = ?2 WHERE id = ?3",
+                params![main_agent, now_ms, id],
             )
             .map_err(|e| e.to_string())?;
         if n == 0 {
