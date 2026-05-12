@@ -1,6 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { AddRepositoryOptions, Repository, SddMode } from "../types";
+import type {
+  AddRepositoryOptions,
+  ProjectItem,
+  ProjectSddMode,
+  Repository,
+  SddMode,
+} from "../types";
 
 /**
  * Open native folder picker dialog.
@@ -82,6 +88,55 @@ export async function updateRepositorySddMode(
     throw new Error(`WF_INVALID_INPUT: sddMode value not allowed: ${sddMode}`);
   }
   return invoke<Repository>("update_repository_sdd_mode", { id, sddMode });
+}
+
+/** 写入仓库的多角色标签数组。后端会去空白、去重、按 32 字符限制校验。 */
+export async function updateRepositoryRoleTags(
+  id: number,
+  roleTags: ReadonlyArray<string>,
+): Promise<Repository> {
+  const normalized = Array.from(
+    new Set(roleTags.map((tag) => tag.trim()).filter((tag) => tag.length > 0)),
+  );
+  return invoke<Repository>("update_repository_role_tags", {
+    id,
+    roleTags: normalized,
+  });
+}
+
+/** 写入项目根目录绝对路径（持有 `.trellis/`）。空串会被后端拒绝。 */
+export async function updateProjectRootPath(
+  projectId: string,
+  rootPath: string,
+): Promise<ProjectItem> {
+  return invoke<ProjectItem>("update_project_root_path", {
+    projectId,
+    rootPath: rootPath.trim(),
+  });
+}
+
+/** 写入项目级 SDD 模式。 */
+export async function updateProjectSddMode(
+  projectId: string,
+  sddMode: ProjectSddMode,
+): Promise<ProjectItem> {
+  const allowed: ProjectSddMode[] = ["wise_trellis", "project_owned"];
+  if (!allowed.includes(sddMode)) {
+    throw new Error(`WF_INVALID_INPUT: project sddMode not allowed: ${sddMode}`);
+  }
+  return invoke<ProjectItem>("update_project_sdd_mode", { projectId, sddMode });
+}
+
+/** 写入项目级主会话 Agent。传 null 清空。 */
+export async function updateProjectMainAgent(
+  projectId: string,
+  mainAgent: string | null,
+): Promise<ProjectItem> {
+  const trimmed = mainAgent?.trim();
+  return invoke<ProjectItem>("update_project_main_agent", {
+    projectId,
+    mainAgent: trimmed && trimmed.length > 0 ? trimmed : null,
+  });
 }
 
 /**
