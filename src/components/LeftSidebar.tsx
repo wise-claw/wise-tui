@@ -1,4 +1,4 @@
-import { PushpinOutlined } from "@ant-design/icons";
+import { PushpinOutlined, UserOutlined } from "@ant-design/icons";
 import { App as AntdApp, Button, Divider, Drawer, Dropdown, Empty, Input, Layout, Modal, Popover, Select, Space, Tag, Tooltip, Typography } from "antd";
 import type { MenuProps } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -413,6 +413,8 @@ function RepositoryRow({
   const foreignDropClass =
     repositoryReorder?.foreignDropRowId === repository.id ? " app-repository-row--foreign-drop" : "";
 
+  const hasMainOwner = Boolean(repository.mainOwnerAgentName?.trim());
+
   return (
     <div
       className={`app-repository-row${dropRowClass}${foreignDropClass}`}
@@ -438,8 +440,19 @@ function RepositoryRow({
             <RepoDragHandleIcon />
           </span>
         ) : null}
-        <span className="app-repository-icon app-repository-icon--folder">
-          <RepositoryTypeIcon repository={repository} />
+        <span className="app-repository-icon-wrap">
+          <span className="app-repository-icon app-repository-icon--folder">
+            <RepositoryTypeIcon repository={repository} />
+          </span>
+          {hasMainOwner ? (
+            <span
+              className="app-repository-main-owner-badge"
+              aria-label="已配置主 Owner"
+              title="已配置主 Owner"
+            >
+              <UserOutlined />
+            </span>
+          ) : null}
         </span>
         <span className="app-repository-name">{repositoryFolderBasename(repository)}</span>
         <Dropdown

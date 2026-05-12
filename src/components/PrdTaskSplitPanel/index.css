@@ -139,9 +139,34 @@
 }
 
 .app-prd-task-panel__header-repo-tag-wrap {
+  position: relative;
   display: inline-flex;
   cursor: pointer;
   vertical-align: middle;
+}
+
+.app-prd-task-panel__header-repo-tag-owner-mark {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ant-color-success);
+  color: var(--ant-color-text-light-solid);
+  font-size: 6px;
+  line-height: 1;
+  box-shadow: 0 0 0 1px var(--ant-color-bg-layout);
+  pointer-events: none;
+}
+
+.app-prd-task-panel__header-repo-tag-owner-mark .anticon svg {
+  width: 7px;
+  height: 7px;
 }
 
 .app-prd-task-panel__header-repo-tag--interactive.ant-tag:hover {

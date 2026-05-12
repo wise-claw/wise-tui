@@ -1722,6 +1722,37 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
   flex-shrink: 0;
 }
 
+.app-repository-icon-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.app-repository-main-owner-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ant-color-success);
+  color: var(--ant-color-text-light-solid);
+  font-size: 6px;
+  line-height: 1;
+  box-shadow: 0 0 0 1px var(--ant-color-bg-layout);
+  pointer-events: none;
+}
+
+.app-repository-main-owner-badge .anticon svg {
+  width: 7px;
+  height: 7px;
+}
+
 .app-repository-icon svg {
   width: 14px;
   height: 14px;

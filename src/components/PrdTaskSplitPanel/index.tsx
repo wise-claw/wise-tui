@@ -798,13 +798,23 @@ export function PrdTaskSplitPanel({
           if (!r) return null;
           const label = repositoryFolderBasename(r).trim();
           if (!label) return null;
-          return { key: String(id), label, repositoryId: id };
+          const hasMainOwner = Boolean(r.mainOwnerAgentName?.trim());
+          return { key: String(id), label, repositoryId: id, hasMainOwner };
         })
-        .filter((x): x is { key: string; label: string; repositoryId: number } => x != null);
+        .filter((x): x is { key: string; label: string; repositoryId: number; hasMainOwner: boolean } => x != null);
     }
     if (linkedRepositoryId != null && linkedRepository) {
       const label = repositoryFolderBasename(linkedRepository).trim();
-      if (label) return [{ key: String(linkedRepositoryId), label, repositoryId: linkedRepositoryId }];
+      if (label) {
+        return [
+          {
+            key: String(linkedRepositoryId),
+            label,
+            repositoryId: linkedRepositoryId,
+            hasMainOwner: Boolean(linkedRepository.mainOwnerAgentName?.trim()),
+          },
+        ];
+      }
     }
     return [];
   }, [projectForHeader, linkedRepositoryId, linkedRepository, repositoriesById]);
@@ -4238,6 +4248,15 @@ export function PrdTaskSplitPanel({
                         <Tag className="app-prd-task-panel__header-repo-tag app-prd-task-panel__header-repo-tag--interactive" bordered={false}>
                           {item.label}
                         </Tag>
+                        {item.hasMainOwner ? (
+                          <span
+                            className="app-prd-task-panel__header-repo-tag-owner-mark"
+                            aria-label="已配置主 Owner"
+                            title="已配置主 Owner"
+                          >
+                            <UserOutlined />
+                          </span>
+                        ) : null}
                       </span>
                     </Popover>
                   ))}
