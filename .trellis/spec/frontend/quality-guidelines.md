@@ -101,6 +101,8 @@ the test runner for those files.
 - Trellis child execution is identified by `stage`, `subagentType`, `taskId`, and `invocationKey`.
 - `WorkflowTemplateAssignee.employeeId` must contain real employee ids only. Trellis sub-agent names belong in a separate stage route contract.
 - Monitor UI groups Trellis invocations as `repository member -> subagent rows`.
+- EmployeeItem UI entry points (config buttons, employee monitor section) are gated by `shouldHideEmployeeUi(activeProject)`; `wise_trellis` projects hide them, `project_owned` projects keep them as a legacy escape hatch.
+- `@<roleTag>` prompts arriving at the AppImpl send path are routed via `planAtMentionDispatch` and `dispatchAtMentionPromptToRepos`; matched repos receive a `trellis-implement` subagent with full streamUi attribution so the existing RepositoryMember monitor renders them without bespoke wiring.
 
 ### 4. Validation & Error Matrix
 

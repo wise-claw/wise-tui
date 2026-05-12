@@ -43,6 +43,8 @@ interface Props {
   onOpenWorkflowConfig?: () => void;
   onStopEmployeeMonitor?: (employeeId: string) => void;
   onStopTeamMonitor?: (workflowId: string) => void;
+  /** 隐藏 EmployeeItem UI 区块（当活动项目 `sddMode === "wise_trellis"` 时）。 */
+  hideEmployeeUi?: boolean;
   monitorClaudeConcurrency?: {
     activeCount: number;
     limit: number;
@@ -78,6 +80,7 @@ export function RightPanel({
   onOpenWorkflowConfig,
   onStopEmployeeMonitor,
   onStopTeamMonitor,
+  hideEmployeeUi = false,
   monitorClaudeConcurrency,
   onCancelSessionFromMonitor,
   onOpenTaskDetailFromMonitor,
@@ -125,6 +128,7 @@ export function RightPanel({
                 onOpenWorkflowConfig={onOpenWorkflowConfig}
                 onStopEmployee={(employeeId) => onStopEmployeeMonitor?.(employeeId)}
                 onStopTeam={(workflowId) => onStopTeamMonitor?.(workflowId)}
+                hideEmployeeUi={hideEmployeeUi}
                 claudeConcurrency={monitorClaudeConcurrency ?? null}
                 onCancelSession={onCancelSessionFromMonitor}
                 onOpenTaskDetail={onOpenTaskDetailFromMonitor}

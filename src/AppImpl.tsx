@@ -48,6 +48,7 @@ import {
   dispatchAtMentionPromptToRepos,
   planAtMentionDispatch,
 } from "./services/atMentionDispatch";
+import { shouldHideEmployeeUi } from "./utils/projectRepositoryRoles";
 import { useMonitorOverview } from "./hooks/useMonitorOverview";
 import { useIntervalSyncedState } from "./hooks/useIntervalSyncedState";
 import { useScheduledClaudeTaskRunner } from "./hooks/useScheduledClaudeTaskRunner";
@@ -1639,6 +1640,9 @@ export default function App() {
         onOpenOmcBatchInvocationDetail: handleOpenOmcBatchInvocationDetail,
         onCancelOmcDirectBatchInvocation: handleCancelOmcDirectBatchInvocation,
         onReloadFullDiskTranscript: reloadFullDiskTranscript,
+        hideEmployeeUi: shouldHideEmployeeUi(
+          activeProjectId ? projects.find((p) => p.id === activeProjectId) ?? null : null,
+        ),
       }}
       commandPaletteProps={{
         open: searchOpen,
