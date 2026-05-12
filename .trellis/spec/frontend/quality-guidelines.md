@@ -70,6 +70,73 @@ the test runner for those files.
 
 ---
 
+## Scenario: Repository-Owned Trellis Execution Metadata
+
+### 1. Scope / Trigger
+
+- Trigger: Trellis execution crosses UI selection, workflow routing, Claude invocation streams, runtime stores, and monitor rendering.
+- Applies when `templateId === "trellis"` and the work belongs to a repository member rather than an `EmployeeItem`.
+
+### 2. Signatures
+
+- `ExecuteTaskInput.executionMetadata?: TrellisExecutionMetadata`
+- `OmcWorkflowAdapter.execute(...).executionMetadata?: TrellisExecutionMetadata`
+- `WorkflowInvocationStreamDetail.ownerKind?: "repository"`
+- `WorkflowInvocationStreamDetail.ownerRepositoryId?: number`
+- `WorkflowInvocationStreamDetail.repositoryType?: "frontend" | "backend" | "document"`
+- `WorkflowInvocationStreamDetail.stage?: string`
+- `WorkflowInvocationStreamDetail.subagentType?: string`
+
+### 3. Contracts
+
+- Repository identity is `ownerKind: "repository"` plus `ownerRepositoryId`; do not encode repositories as `EmployeeItem`.
+- `repositoryType` is spec/context area only. It must not become a worker identity.
+- Trellis child execution is identified by `stage`, `subagentType`, `taskId`, and `invocationKey`.
+- `WorkflowTemplateAssignee.employeeId` must contain real employee ids only. Trellis sub-agent names belong in a separate stage route contract.
+- Monitor UI groups Trellis invocations as `repository member -> subagent rows`.
+
+### 4. Validation & Error Matrix
+
+- Missing `ownerRepositoryId` -> do not render as a repository-member invocation row.
+- Unknown `repositoryType` -> fall back to repository record type when available.
+- Missing `subagentType` -> display `trellis-implement` only as a UI fallback, not as owner identity.
+- `sddMode: "wise_trellis"` with no invocations -> render an idle repository member.
+
+### 5. Good/Base/Bad Cases
+
+- Good: frontend repo with `wise_trellis` shows an idle repository member, then `trellis-implement` appears underneath during execution.
+- Base: non-Trellis employee/team workflows continue to dispatch through `EmployeeItem.agentType`.
+- Bad: `employeeId: "trellis-check"` in a workflow assignee, because that makes a child subagent look like a team member.
+
+### 6. Tests Required
+
+- Adapter/engine tests assert metadata reaches workflow events and Claude stream UI params.
+- Store/persistence tests assert repository attribution survives snapshot updates and local persistence.
+- Monitor overview tests assert idle `wise_trellis` repos and active Trellis invocations group under the repository member.
+- Trellis defaults tests assert stage routing is separate from employee assignees.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+assignees: [{ employeeId: "trellis-implement", requiredCount: 1, isRequired: true }]
+```
+
+#### Correct
+
+```ts
+executionMetadata: {
+  ownerKind: "repository",
+  ownerRepositoryId: repository.id,
+  repositoryType: repository.repositoryType,
+  stage: "implement",
+  subagentType: "trellis-implement",
+}
+```
+
+---
+
 ## Review Checklist
 
 Before considering frontend work done, check:
