@@ -1640,6 +1640,7 @@ export default function App() {
         transcriptSourceSessions: sessions,
         employees,
         workflowTemplates,
+        workflowGraphsByWorkflowId,
         onOpenOmcBatchInvocationDetail: (input) => {
           handleOpenOmcBatchInvocationDetail(input);
           setMonitorDrawerTarget(null);

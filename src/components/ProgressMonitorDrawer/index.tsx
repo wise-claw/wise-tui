@@ -6,6 +6,7 @@ import type {
   EmployeeMonitorItem,
   MonitorDrawerTarget,
   TeamMonitorItem,
+  WorkflowGraph,
   WorkflowRuntimeStepSnapshot,
   WorkflowTaskEventItem,
   WorkflowTaskItem,
@@ -16,6 +17,7 @@ import {
   subscribeOmcDirectBatchInvocations,
 } from "../../stores/omcDirectBatchInvocationsStore";
 import { sortWorkflowRuntimeSnapshotsChronological } from "../../utils/sortWorkflowRuntimeSnapshots";
+import { resolveWorkflowProgressGraphHighlight } from "../../utils/resolveWorkflowProgressGraphHighlight";
 import { describeNextExecutorAfterDispatch } from "../../utils/workflowTeamNextExecutor";
 import {
   WORKFLOW_EVENT_TYPE_ACCEPTANCE_VERDICT_SUBMITTED,
@@ -38,6 +40,7 @@ import {
   historySessionStatusLabel,
   historySessionStatusTagColor,
 } from "../ProgressMonitorPanel";
+import { WorkflowProgressGraphCanvas } from "../WorkflowProgressGraphCanvas";
 import "./index.css";
 
 /** OMC 员工直连批量：与列表同源订阅，用于状态标签上路数 */
@@ -150,6 +153,8 @@ interface Props {
   sessions: ClaudeSession[];
   employees: EmployeeItem[];
   workflowTemplates: WorkflowTemplateItem[];
+  /** 与监控台同源的工作流图，用于团队/任务详情中的只读进度画布 */
+  workflowGraphsByWorkflowId?: Record<string, WorkflowGraph>;
   onJumpToSession?: (sessionId: string) => void;
   onOpenOmcBatchInvocationDetail?: (input: { sessionId: string; repositoryPath: string; invocationKey: string }) => void;
   onCancelOmcDirectBatchInvocation?: (invocationKey: string) => void;
@@ -541,6 +546,7 @@ export function ProgressMonitorDrawer({
   sessions,
   employees,
   workflowTemplates,
+  workflowGraphsByWorkflowId = {},
   onJumpToSession,
   onOpenOmcBatchInvocationDetail,
   onCancelOmcDirectBatchInvocation,
@@ -706,9 +712,43 @@ export function ProgressMonitorDrawer({
     return collectOmcRuns(events, teamTask.id);
   }, [teamTask, workflowTaskEventsByTaskId]);
 
+  const teamWorkflowGraph = useMemo(() => {
+    if (!teamItem) return null;
+    return workflowGraphsByWorkflowId[teamItem.workflowId] ?? null;
+  }, [teamItem, workflowGraphsByWorkflowId]);
+
+  const teamProgressHighlight = useMemo(() => {
+    if (!teamTask) {
+      return { activeNodeId: null as string | null, flowSourceId: null as string | null, flowTargetId: null as string | null };
+    }
+    return resolveWorkflowProgressGraphHighlight({
+      graph: teamWorkflowGraph,
+      snapshotsSorted: teamSnapshotsSorted,
+      taskStatus: teamTask.status,
+    });
+  }, [teamTask, teamWorkflowGraph, teamSnapshotsSorted]);
+
   const selectedTask = target?.type === "task" ? workflowTasks.find((item) => item.id === target.taskId) : undefined;
   const selectedTaskEvents = selectedTask ? (workflowTaskEventsByTaskId[selectedTask.id] ?? []) : [];
   const selectedTaskSnapshots = selectedTask ? (workflowRuntimeSnapshotsByTaskId[selectedTask.id] ?? []) : [];
+  const selectedTaskSnapshotsSorted = useMemo(
+    () => (selectedTask ? sortWorkflowRuntimeSnapshotsChronological(selectedTaskSnapshots) : []),
+    [selectedTask, selectedTaskSnapshots],
+  );
+  const selectedTaskWorkflowGraph = useMemo(() => {
+    if (!selectedTask) return null;
+    return workflowGraphsByWorkflowId[selectedTask.workflowId] ?? null;
+  }, [selectedTask, workflowGraphsByWorkflowId]);
+  const selectedTaskProgressHighlight = useMemo(() => {
+    if (!selectedTask) {
+      return { activeNodeId: null as string | null, flowSourceId: null as string | null, flowTargetId: null as string | null };
+    }
+    return resolveWorkflowProgressGraphHighlight({
+      graph: selectedTaskWorkflowGraph,
+      snapshotsSorted: selectedTaskSnapshotsSorted,
+      taskStatus: selectedTask.status,
+    });
+  }, [selectedTask, selectedTaskWorkflowGraph, selectedTaskSnapshotsSorted]);
   const selectedTaskSessionIds = useMemo(() => {
     if (!selectedTask) return [];
     const related = new Map<string, ClaudeSession>();
@@ -904,6 +944,23 @@ export function ProgressMonitorDrawer({
             ) : null}
           </div>
 
+          {teamWorkflowGraph && teamWorkflowGraph.nodes.length > 0 ? (
+            <div className="app-monitor-drawer__section app-monitor-drawer__section--workflow-graph">
+              <Typography.Text type="secondary">流程进度</Typography.Text>
+              <Typography.Paragraph type="secondary" style={{ marginBottom: 8, fontSize: 11 }}>
+                与团队工作流编排视图一致：橙色描边为当前节点，流动线段表示最近一次派发沿有向边推进。
+              </Typography.Paragraph>
+              <WorkflowProgressGraphCanvas
+                workflowGraph={teamWorkflowGraph}
+                employees={employees}
+                activeNodeId={teamProgressHighlight.activeNodeId}
+                flowSourceId={teamProgressHighlight.flowSourceId}
+                flowTargetId={teamProgressHighlight.flowTargetId}
+                height={240}
+              />
+            </div>
+          ) : null}
+
           <div className="app-monitor-drawer__section">
             <Typography.Text type="secondary">阶段执行记录</Typography.Text>
             <Typography.Paragraph type="secondary" style={{ marginBottom: 6, fontSize: 11 }}>
@@ -1032,6 +1089,23 @@ export function ProgressMonitorDrawer({
             </div>
             <div className="app-monitor-drawer__card">{selectedTask.content || "(空任务描述)"}</div>
           </div>
+
+          {selectedTaskWorkflowGraph && selectedTaskWorkflowGraph.nodes.length > 0 ? (
+            <div className="app-monitor-drawer__section app-monitor-drawer__section--workflow-graph">
+              <Typography.Text type="secondary">流程进度</Typography.Text>
+              <Typography.Paragraph type="secondary" style={{ marginBottom: 8, fontSize: 11 }}>
+                与团队工作流编排视图一致：橙色描边为当前节点，流动线段表示最近一次派发沿有向边推进。
+              </Typography.Paragraph>
+              <WorkflowProgressGraphCanvas
+                workflowGraph={selectedTaskWorkflowGraph}
+                employees={employees}
+                activeNodeId={selectedTaskProgressHighlight.activeNodeId}
+                flowSourceId={selectedTaskProgressHighlight.flowSourceId}
+                flowTargetId={selectedTaskProgressHighlight.flowTargetId}
+                height={220}
+              />
+            </div>
+          ) : null}
 
           <div className="app-monitor-drawer__section">
             <Typography.Text type="secondary">会话信息列表</Typography.Text>
