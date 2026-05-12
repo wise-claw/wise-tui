@@ -1,3 +1,0 @@
-{"file": ".trellis/spec/tauri/index.md", "reason": "Tauri backend conventions"}
-{"file": ".trellis/spec/tauri/security-and-filesystem.md", "reason": "CSP, capability, and asset scope rules"}
-{"file": ".trellis/spec/tauri/ipc-guidelines.md", "reason": "Command safety boundaries if config changes affect IPC"}

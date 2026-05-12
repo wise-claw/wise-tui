@@ -1,8 +1,0 @@
-{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend conventions root — extraction targets and module boundaries"}
-{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Component decomposition rules — sub-component extraction patterns"}
-{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "Custom hook conventions — naming, return shape, test pattern"}
-{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Where extracted files live (co-locate under PrdTaskSplitPanel/)"}
-{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Local type extraction into types.ts — discriminated unions, no any"}
-{"file": ".trellis/spec/frontend/state-management.md", "reason": "When to lift state into hooks vs keep in component"}
-{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Avoid premature DRY during extraction"}
-{"file": ".trellis/spec/guides/commit-hygiene.md", "reason": "One-commit-per-milestone format for staged PRs"}

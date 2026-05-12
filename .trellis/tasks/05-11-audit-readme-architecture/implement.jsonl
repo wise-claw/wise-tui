@@ -1,4 +1,0 @@
-{"file": ".trellis/spec/frontend/index.md", "reason": "Actual frontend stack and architecture"}
-{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Current directory conventions"}
-{"file": ".trellis/spec/tauri/index.md", "reason": "Actual Tauri backend architecture"}
-{"file": ".trellis/spec/tauri/persistence-and-migrations.md", "reason": "Storage model"}

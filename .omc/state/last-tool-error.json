@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"wc -l src/components/AppImpl.tsx src/components/LeftSidebar.tsx 2>/dev/null\",\"description\":\"Reference line counts\"}",
+  "error": "Exit code 1\n 1650 src/components/LeftSidebar.tsx\n 1650 total",
+  "timestamp": "2026-05-11T16:11:17.623Z",
+  "retry_count": 1
+}
