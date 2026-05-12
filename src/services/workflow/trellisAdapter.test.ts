@@ -66,6 +66,63 @@ describe("TrellisWorkflowAdapter", () => {
     expect(result.progressSignals?.[0]?.stage).toBe("trellis.check.dispatched");
   });
 
+  test("trellis execution carries repository member attribution", async () => {
+    let capturedStreamUi:
+      | {
+          ownerKind?: string;
+          ownerRepositoryId?: number;
+          ownerRepositoryName?: string;
+          repositoryType?: string;
+          stage?: string;
+          subagentType?: string;
+          taskId?: string;
+        }
+      | undefined;
+    const adapter = new TrellisWorkflowAdapter({
+      prepareWorktree: fakeWorktree(),
+      invokeClaude: async (params) => {
+        capturedStreamUi = params.streamUi;
+        return successInvocation();
+      },
+    });
+
+    const result = await adapter.execute({
+      workflowRunId: "wf-repo-owner",
+      repositoryPath: "/repo/frontend",
+      sessionId: "session-owner",
+      taskId: "task-owner-1",
+      templateId: "trellis",
+      subagentType: "trellis-implement",
+      executionMetadata: {
+        ownerKind: "repository",
+        ownerRepositoryId: 42,
+        ownerRepositoryName: "frontend app",
+        ownerRepositoryPath: "/repo/frontend",
+        repositoryType: "frontend",
+      },
+      attempt: 2,
+    });
+
+    expect(result.progressSignals?.[0]?.metadata).toMatchObject({
+      ownerKind: "repository",
+      ownerRepositoryId: 42,
+      ownerRepositoryName: "frontend app",
+      repositoryType: "frontend",
+      stage: "implement",
+      subagentType: "trellis-implement",
+      taskId: "task-owner-1",
+    });
+    expect(capturedStreamUi).toMatchObject({
+      ownerKind: "repository",
+      ownerRepositoryId: 42,
+      ownerRepositoryName: "frontend app",
+      repositoryType: "frontend",
+      stage: "implement",
+      subagentType: "trellis-implement",
+      taskId: "task-owner-1",
+    });
+  });
+
   test("unknown subagentType falls back to /trellis:continue", async () => {
     let capturedPrompt = "";
     const adapter = new TrellisWorkflowAdapter({

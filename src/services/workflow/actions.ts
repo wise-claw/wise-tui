@@ -1,5 +1,11 @@
 import type { TaskItem } from "../../types";
-import type { TaskStateDTO, WorkflowFacade, WorkflowRunDTO, WorkflowStage } from "../../types/workflow";
+import type {
+  TaskStateDTO,
+  TrellisExecutionMetadata,
+  WorkflowFacade,
+  WorkflowRunDTO,
+  WorkflowStage,
+} from "../../types/workflow";
 import type { OmcBatchTemplateId } from "../../constants/omcBatchTemplates";
 
 export interface AdvanceStageWithGatesResult {
@@ -83,15 +89,17 @@ export async function runTurnTaskLifecycle(params: {
   taskId: string;
   templateId?: string;
   subagentType?: string;
+  executionMetadata?: TrellisExecutionMetadata;
   /** 每次批量/重试传入不同值，避免 worktree 与 Claude 会话与上一轮粘连 */
   attemptFrom?: number;
 }): Promise<RunTurnTaskLifecycleResult> {
-  const { facade, workflowRunId, taskId, templateId, subagentType, attemptFrom } = params;
+  const { facade, workflowRunId, taskId, templateId, subagentType, executionMetadata, attemptFrom } = params;
   const run = await facade.executeTask({
     workflowRunId,
     taskId,
     templateId,
     subagentType,
+    executionMetadata,
     attemptFrom,
   });
   if (!run.ok) {
@@ -190,12 +198,13 @@ export async function runSplitTasksOmcBatch(params: {
   tasks: TaskItem[];
   templateId: OmcBatchTemplateId;
   subagentType?: string;
+  executionMetadata?: TrellisExecutionMetadata;
   /** 同时执行的 OMC/Claude 调用数，建议与仓库 Claude 并发槽位对齐 */
   concurrency: number;
   /** 若 UI 已持有当前会话绑定的工作流 id，可传入以避免每次 listRuns */
   boundWorkflowRunId?: string | null;
 }): Promise<RunSplitTasksOmcBatchResult> {
-  const { facade, sessionId, repositoryPath, tasks, templateId, subagentType } = params;
+  const { facade, sessionId, repositoryPath, tasks, templateId, subagentType, executionMetadata } = params;
   const parallel = Math.max(1, Math.min(10, Math.floor(params.concurrency)));
   const subagentLabel = subagentType?.trim() || "executor";
   const baseMeta = (): Omit<RunSplitTasksOmcBatchResult, "message"> => ({
@@ -259,6 +268,13 @@ export async function runSplitTasksOmcBatch(params: {
         taskId: task.id,
         templateId,
         subagentType,
+        executionMetadata: executionMetadata
+          ? {
+              ...executionMetadata,
+              taskId: task.id,
+              subagentType: subagentLabel,
+            }
+          : undefined,
         attemptFrom: batchEpoch + index + 1,
       });
       if (result.status === "done") doneCount += 1;

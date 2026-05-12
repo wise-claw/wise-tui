@@ -112,6 +112,30 @@ export interface TeamMonitorItem {
   updatedAt: number;
 }
 
+export interface RepositoryMemberMonitorSubagentItem {
+  invocationKey: string;
+  taskId?: string;
+  taskTitle?: string;
+  stage?: string;
+  subagentType: string;
+  status: "running" | "completed" | "failed";
+  attempt?: number;
+  previewText: string;
+  updatedAt: number;
+}
+
+export interface RepositoryMemberMonitorItem {
+  repositoryId: number;
+  repositoryName: string;
+  repositoryPath: string;
+  repositoryType: Repository["repositoryType"];
+  status: MonitorStatus;
+  previewText: string;
+  activeSubagentCount: number;
+  subagents: RepositoryMemberMonitorSubagentItem[];
+  updatedAt: number;
+}
+
 export interface MonitorStats {
   activeEmployees: number;
   employeesInProgress: number;

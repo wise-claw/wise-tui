@@ -710,7 +710,7 @@ export default function App() {
     rustSpawnSlotOccupied,
   ]);
 
-  const { employeeMonitorItems, teamMonitorItems, stats: monitorStats } = useMonitorOverview({
+  const { employeeMonitorItems, repositoryMemberMonitorItems, teamMonitorItems, stats: monitorStats } = useMonitorOverview({
     employees,
     repositories,
     workflowTemplates,
@@ -1551,6 +1551,7 @@ export default function App() {
         monitorPanelSessions: monitorPanelSessionsMerged,
         monitorTranscriptSourceSessions: sessions,
         employeeMonitorItems,
+        repositoryMemberMonitorItems,
         teamMonitorItems: publishedTeamMonitorItems,
         monitorActiveTarget: monitorDrawerTarget,
         onOpenTeamMonitorDetail: (workflowId) => {

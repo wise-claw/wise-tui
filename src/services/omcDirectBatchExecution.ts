@@ -1,5 +1,6 @@
 import type { TaskItem } from "../types";
 import type { DirectOmcBatchTemplateId } from "../constants/omcBatchTemplates";
+import type { TrellisExecutionMetadata } from "../types/workflow";
 import { executeClaudeCodeAndWait, type ClaudeInvocationResult } from "./claude";
 import { gitWorktreeAddOmcBatch } from "./git";
 import { buildOmcClaudeCodeInvocationPrompt } from "./workflow/omcAdapter";
@@ -20,6 +21,7 @@ export interface StartDirectOmcBatchParams {
   tasks: TaskItem[];
   templateId: DirectOmcBatchTemplateId;
   subagentType: string;
+  executionMetadata?: TrellisExecutionMetadata;
   concurrencyScopeKey?: string;
   concurrencyLimit?: number;
   userAbortRef: BoolRef;
@@ -88,6 +90,7 @@ async function runDirectOmcBatchJob(
     tasks: tasksSnapshot,
     templateId: templateIdSnapshot,
     subagentType: subagentSnapshot,
+    executionMetadata,
     concurrencyScopeKey: scopeKey,
     concurrencyLimit: scopeLimit,
     userAbortRef,
@@ -188,6 +191,13 @@ async function runDirectOmcBatchJob(
             templateId: templateIdSnapshot,
             attempt,
             omcInvocationSource: "direct_batch",
+            ...(executionMetadata
+              ? {
+                  ...executionMetadata,
+                  taskId: task.id,
+                  subagentType: executionMetadata.subagentType ?? subagentSnapshot,
+                }
+              : {}),
           },
         });
         break;

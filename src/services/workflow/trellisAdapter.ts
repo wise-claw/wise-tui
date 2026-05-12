@@ -1,4 +1,4 @@
-import type { OmcWorkflowAdapter, WorkflowApiError } from "../../types/workflow";
+import type { OmcWorkflowAdapter, TrellisExecutionMetadata, WorkflowApiError } from "../../types/workflow";
 import { executeClaudeCodeAndWait, type ClaudeInvocationResult } from "../claude";
 import { gitWorktreeAddOmcBatch } from "../git";
 
@@ -18,15 +18,7 @@ interface TrellisInvokeParams {
   connectionMode?: Parameters<typeof executeClaudeCodeAndWait>[0]["connectionMode"];
   bare?: boolean;
   timeoutMs?: number;
-  streamUi?: {
-    sessionId: string;
-    repositoryPath: string;
-    taskId?: string;
-    taskTitle?: string;
-    templateId?: string;
-    attempt?: number;
-    omcInvocationSource?: "workflow" | "direct_batch";
-  };
+  streamUi?: Parameters<typeof executeClaudeCodeAndWait>[0]["streamUi"];
 }
 
 export type TrellisInvokeFn = (params: TrellisInvokeParams) => Promise<ClaudeInvocationResult>;
@@ -84,7 +76,7 @@ function artifactTypeFromRef(ref: string): string {
 function buildError(
   message: string,
   resolved: ResolvedStage,
-  input: { templateId: string; subagentType?: string },
+  input: { templateId: string; subagentType?: string; executionMetadata?: TrellisExecutionMetadata },
   startedAt: number,
 ): WorkflowApiError {
   return {
@@ -94,7 +86,8 @@ function buildError(
     details: {
       templateId: input.templateId,
       stageHint: resolved.hint,
-      subagentType: input.subagentType ?? "trellis-implement",
+      ...(input.executionMetadata ?? {}),
+      subagentType: input.executionMetadata?.subagentType ?? input.subagentType ?? "trellis-implement",
     },
   };
 }
@@ -117,10 +110,17 @@ export class TrellisWorkflowAdapter implements OmcWorkflowAdapter {
     taskId: string;
     templateId: string;
     subagentType?: string;
+    executionMetadata?: TrellisExecutionMetadata;
     attempt: number;
   }): ReturnType<OmcWorkflowAdapter["execute"]> {
     const startedAt = Date.now();
     const resolved = resolveStage(input.subagentType, input.taskId);
+    const executionMetadata = {
+      ...(input.executionMetadata ?? {}),
+      stage: input.executionMetadata?.stage ?? resolved.artifactStage,
+      subagentType: input.executionMetadata?.subagentType ?? input.subagentType ?? resolved.hint,
+      taskId: input.executionMetadata?.taskId ?? input.taskId,
+    };
     const baseArtifacts = uniqueArtifacts([
       `trellis://task/${input.taskId}/${resolved.artifactStage}/attempt-${input.attempt}`,
       `repo://${input.repositoryPath}`,
@@ -133,7 +133,7 @@ export class TrellisWorkflowAdapter implements OmcWorkflowAdapter {
         metadata: {
           stageHint: resolved.hint,
           templateId: input.templateId,
-          subagentType: input.subagentType ?? "trellis-implement",
+          ...executionMetadata,
         },
       },
     ];
@@ -153,10 +153,10 @@ export class TrellisWorkflowAdapter implements OmcWorkflowAdapter {
         streamUi: {
           sessionId: input.sessionId,
           repositoryPath: input.repositoryPath,
-          taskId: input.taskId,
           templateId: input.templateId,
           attempt: input.attempt,
           omcInvocationSource: "workflow",
+          ...executionMetadata,
         },
       });
       if (!invocation.success) {

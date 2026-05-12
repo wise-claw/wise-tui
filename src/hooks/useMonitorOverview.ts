@@ -10,11 +10,18 @@ import {
 } from "../utils/omcUserMessageText";
 import { loadSessionOwnerHints } from "../utils/sessionOwnerHints";
 import { isOmcBatchHistoryStubSessionId } from "../utils/omcEmployeeBatchHistory";
-import type { WorkflowOmcBatchRuntimeDetail } from "../constants/workflowUiEvents";
+import type {
+  WorkflowInvocationStreamDetail,
+  WorkflowOmcBatchRuntimeDetail,
+} from "../constants/workflowUiEvents";
 import {
   getOmcDirectBatchInvocationsSnapshot,
   subscribeOmcDirectBatchInvocations,
 } from "../stores/omcDirectBatchInvocationsStore";
+import {
+  getRepositoryMemberInvocationsSnapshot,
+  subscribeRepositoryMemberInvocations,
+} from "../stores/repositoryMemberInvocationsStore";
 import { sanitizeOmcDirectBatchPreviewLineForList } from "../utils/claudeInvocationText";
 import { isOmcDirectBatchInvocationRunning } from "../utils/omcDirectBatchInvocationDisplay";
 import { omcWorkerRepositoryBoundNameMatchers } from "../utils/omcMonitorEmployeeSession";
@@ -26,6 +33,8 @@ import type {
   EmployeeItem,
   EmployeeMonitorItem,
   MonitorStats,
+  RepositoryMemberMonitorItem,
+  RepositoryMemberMonitorSubagentItem,
   TeamMonitorItem,
   WorkflowGraph,
   WorkflowRuntimeStepSnapshot,
@@ -54,6 +63,7 @@ interface MonitorLookup {
 
 interface UseMonitorOverviewResult {
   employeeMonitorItems: EmployeeMonitorItem[];
+  repositoryMemberMonitorItems: RepositoryMemberMonitorItem[];
   teamMonitorItems: TeamMonitorItem[];
   stats: MonitorStats;
   lookup: MonitorLookup;
@@ -171,6 +181,94 @@ function parseEventPayload(event: WorkflowTaskEventItem): Record<string, unknown
   } catch {
     return null;
   }
+}
+
+function repositoryMemberSubagentStatus(
+  phase: WorkflowInvocationStreamDetail["phase"],
+  success: boolean | undefined,
+): RepositoryMemberMonitorSubagentItem["status"] {
+  if (phase !== "complete") return "running";
+  return success === false ? "failed" : "completed";
+}
+
+export function buildRepositoryMemberMonitorItems(
+  repositories: Repository[],
+  invocations: readonly WorkflowInvocationStreamDetail[],
+): RepositoryMemberMonitorItem[] {
+  const reposById = new Map(repositories.map((repo) => [repo.id, repo] as const));
+  const itemsByRepositoryId = new Map<number, RepositoryMemberMonitorItem>();
+  const now = Date.now();
+
+  for (const repo of repositories) {
+    if (repo.sddMode !== "wise_trellis") continue;
+    const repositoryPath = repo.path.trim();
+    if (!repositoryPath) continue;
+    itemsByRepositoryId.set(repo.id, {
+      repositoryId: repo.id,
+      repositoryName: repo.name.trim() || repositoryPath,
+      repositoryPath,
+      repositoryType: repo.repositoryType,
+      status: "idle",
+      previewText: "暂无 Trellis 子进程",
+      activeSubagentCount: 0,
+      subagents: [],
+      updatedAt: now,
+    });
+  }
+
+  for (const inv of invocations) {
+    if (inv.templateId !== "trellis" || inv.ownerKind !== "repository") continue;
+    const repositoryId = inv.ownerRepositoryId;
+    if (typeof repositoryId !== "number" || !Number.isFinite(repositoryId)) continue;
+    const repo = reposById.get(repositoryId);
+    const repositoryPath = inv.ownerRepositoryPath?.trim() || repo?.path?.trim() || inv.repositoryPath?.trim();
+    if (!repositoryPath) continue;
+    const repositoryName = inv.ownerRepositoryName?.trim() || repo?.name?.trim() || repositoryPath;
+    const repositoryType = inv.repositoryType ?? repo?.repositoryType ?? "frontend";
+    const status = repositoryMemberSubagentStatus(inv.phase, inv.success);
+    const previewSource = inv.previewLine?.trim() || inv.taskTitle?.trim() || inv.taskId?.trim() || "Trellis subagent";
+    const subagent: RepositoryMemberMonitorSubagentItem = {
+      invocationKey: inv.invocationKey,
+      ...(inv.taskId?.trim() ? { taskId: inv.taskId.trim() } : {}),
+      ...(inv.taskTitle?.trim() ? { taskTitle: inv.taskTitle.trim() } : {}),
+      ...(inv.stage?.trim() ? { stage: inv.stage.trim() } : {}),
+      subagentType: inv.subagentType?.trim() || "trellis-implement",
+      status,
+      ...(typeof inv.attempt === "number" ? { attempt: inv.attempt } : {}),
+      previewText: truncateText(previewSource, 72),
+      updatedAt: now,
+    };
+    const current = itemsByRepositoryId.get(repositoryId);
+    if (!current) {
+      itemsByRepositoryId.set(repositoryId, {
+        repositoryId,
+        repositoryName,
+        repositoryPath,
+        repositoryType,
+        status: status === "running" ? "in_progress" : "idle",
+        previewText: subagent.previewText,
+        activeSubagentCount: status === "running" ? 1 : 0,
+        subagents: [subagent],
+        updatedAt: subagent.updatedAt,
+      });
+      continue;
+    }
+    const subagents = [...current.subagents, subagent].sort((a, b) => b.updatedAt - a.updatedAt);
+    const activeSubagentCount = subagents.filter((item) => item.status === "running").length;
+    itemsByRepositoryId.set(repositoryId, {
+      ...current,
+      status: activeSubagentCount > 0 ? "in_progress" : "idle",
+      previewText: subagents[0]?.previewText ?? current.previewText,
+      activeSubagentCount,
+      subagents,
+      updatedAt: Math.max(current.updatedAt, subagent.updatedAt),
+    });
+  }
+
+  return Array.from(itemsByRepositoryId.values()).sort((a, b) => {
+    if (a.status !== b.status) return a.status === "in_progress" ? -1 : 1;
+    return b.updatedAt - a.updatedAt;
+  });
 }
 
 function extractOmcActiveSignal(task: WorkflowTaskItem, events: WorkflowTaskEventItem[]): OmcActiveExecutionSignal | null {
@@ -421,6 +519,11 @@ export function useMonitorOverview({
     getOmcDirectBatchInvocationsSnapshot,
     getOmcDirectBatchInvocationsSnapshot,
   );
+  const repositoryMemberInvocationsSnap = useSyncExternalStore(
+    subscribeRepositoryMemberInvocations,
+    getRepositoryMemberInvocationsSnapshot,
+    getRepositoryMemberInvocationsSnapshot,
+  );
   const hasRunningDirectBatchInvocationRows = directBatchInvocationsSnap.some(isOmcDirectBatchInvocationRunning);
   return useMemo(() => {
     const directBatchTaskIdBySessionId = (() => {
@@ -577,6 +680,10 @@ export function useMonitorOverview({
       mergedOmcSignals.length > 0 ||
       Boolean(omcBatchRuntime?.active) ||
       hasRunningDirectBatchInvocationRows;
+    const repositoryMemberMonitorItems = buildRepositoryMemberMonitorItems(repositories, [
+      ...directBatchInvocationsSnap,
+      ...repositoryMemberInvocationsSnap,
+    ]);
     const omcMonitorItem: EmployeeMonitorItem = (() => {
       if (!hasOmcActivity) {
         const boundOmcSessionId = resolveOmcWorkerBoundSessionId(
@@ -838,6 +945,7 @@ export function useMonitorOverview({
 
     return {
       employeeMonitorItems,
+      repositoryMemberMonitorItems,
       teamMonitorItems,
       stats,
       lookup: {
@@ -857,6 +965,7 @@ export function useMonitorOverview({
     workflowGraphsByWorkflowId,
     omcBatchRuntime,
     directBatchInvocationsSnap,
+    repositoryMemberInvocationsSnap,
     registryRunningClaudeSessionIds,
   ]);
 }

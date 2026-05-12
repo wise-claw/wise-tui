@@ -52,6 +52,13 @@ export interface WorkflowInvocationStreamDetail {
   templateId?: string;
   /** 团队编排 / 后台任务第几轮执行（重试时递增） */
   attempt?: number;
+  ownerKind?: "repository";
+  ownerRepositoryId?: number;
+  ownerRepositoryName?: string;
+  ownerRepositoryPath?: string;
+  repositoryType?: "frontend" | "backend" | "document";
+  stage?: string;
+  subagentType?: string;
   lineCount?: number;
   errCount?: number;
   /** 最近一行 stdout 截断预览 */
@@ -83,4 +90,3 @@ export interface OpenBackgroundInvocationDrawerDetail {
   /** 打开后默认选中的后台 invocation */
   preferredInvocationKey?: string;
 }
-

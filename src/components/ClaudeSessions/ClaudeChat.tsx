@@ -60,6 +60,7 @@ import { useQuestionDockTabsForRepository } from "../../hooks/useQuestionDockTab
 import { requestWorkflowRunRefresh, useWorkflowRun } from "../../hooks/useWorkflowRun";
 import { getWorkflowFacade } from "../../services/workflow";
 import { runSplitTasksOmcBatch } from "../../services/workflow/actions";
+import { resolveTrellisSubagentForStage } from "../../services/workflow/trellisDefaults";
 import {
   isDirectOmcBatchTemplateId,
   TRELLIS_BATCH_TEMPLATE_ID,
@@ -2396,7 +2397,17 @@ export function ClaudeChat({
       getRepositoryBaseDisplayName(repoDisplayRaw).trim() ||
       session.repositoryPath?.replace(/\\/g, "/").split("/").filter(Boolean).pop()?.trim() ||
       repoPath;
+    const repositoryMemberMetadata = sessionRepository
+      ? {
+          ownerKind: "repository" as const,
+          ownerRepositoryId: sessionRepository.id,
+          ownerRepositoryName: repoDisplay,
+          ownerRepositoryPath: sessionRepository.path,
+          repositoryType: sessionRepository.repositoryType,
+        }
+      : undefined;
     if (omcBatchTemplateId === TRELLIS_BATCH_TEMPLATE_ID) {
+      const trellisImplementSubagent = resolveTrellisSubagentForStage("implement") ?? "trellis-implement";
       if (sessionRepository?.sddMode === "off") {
         void message.warning("当前仓库已关闭 SDD，未启动 Trellis 批量执行。");
         return;
@@ -2425,7 +2436,8 @@ export function ClaudeChat({
                 repositoryPath: repoPath,
                 tasks: tasksToRun,
                 templateId: TRELLIS_BATCH_TEMPLATE_ID,
-                subagentType: "trellis-implement",
+                subagentType: trellisImplementSubagent,
+                executionMetadata: repositoryMemberMetadata,
                 concurrency: 1,
                 boundWorkflowRunId:
                   omcBatchAnchorSessionId === session.id ? (workflowRun?.workflowRunId ?? null) : null,

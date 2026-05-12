@@ -6,6 +6,7 @@ import type {
   OmcWorkflowAdapter,
   RunGateChecksInput,
   TaskRouter,
+  TrellisExecutionMetadata,
   WorkflowEventEnvelope,
   WorkflowRunDTO,
   WorkflowStore,
@@ -53,15 +54,30 @@ class TestTaskRouter implements TaskRouter {
 }
 
 class TestOmcAdapter implements OmcWorkflowAdapter {
-  async execute(_: {
+  public latestInput:
+    | {
+        workflowRunId: string;
+        repositoryPath: string;
+        sessionId: string;
+        taskId: string;
+        templateId: string;
+        subagentType?: string;
+        executionMetadata?: TrellisExecutionMetadata;
+        attempt: number;
+      }
+    | null = null;
+
+  async execute(input: {
     workflowRunId: string;
     repositoryPath: string;
     sessionId: string;
     taskId: string;
     templateId: string;
     subagentType?: string;
+    executionMetadata?: TrellisExecutionMetadata;
     attempt: number;
   }) {
+    this.latestInput = input;
     return {
       status: "succeeded" as const,
       artifactRefs: ["artifact://test"],
@@ -96,6 +112,13 @@ function createEngine() {
     new TestOmcAdapter(),
     new TestGateEngine(),
   );
+}
+
+function createEngineHarness() {
+  const store = new MemoryWorkflowStore();
+  const adapter = new TestOmcAdapter();
+  const engine = new DefaultWorkflowEngine(store, new TestTaskRouter(), adapter, new TestGateEngine());
+  return { engine, store, adapter };
 }
 
 describe("DefaultWorkflowEngine", () => {
@@ -174,5 +197,53 @@ describe("DefaultWorkflowEngine", () => {
     expect(task?.latestTemplateId).toBe("verify");
     expect(task?.artifactRefs.length).toBeGreaterThan(0);
   });
-});
 
+  test("executeTask carries repository member metadata into adapter and events", async () => {
+    const { engine, store, adapter } = createEngineHarness();
+    const run = await engine.createRun({
+      sessionId: "s5",
+      repositoryPath: "/tmp/frontend",
+      taskSnapshotId: "snap-5",
+      startStage: "implement",
+    });
+    const executionMetadata: TrellisExecutionMetadata = {
+      ownerKind: "repository",
+      ownerRepositoryId: 7,
+      ownerRepositoryName: "frontend app",
+      ownerRepositoryPath: "/tmp/frontend",
+      repositoryType: "frontend",
+      stage: "implement",
+      subagentType: "trellis-implement",
+      taskId: "task-repo-member",
+    };
+
+    await engine.executeTask({
+      workflowRunId: run.workflowRunId,
+      taskId: "task-repo-member",
+      templateId: "trellis",
+      subagentType: "trellis-implement",
+      executionMetadata,
+    });
+
+    expect(adapter.latestInput?.executionMetadata).toMatchObject(executionMetadata);
+    const events = await store.listEvents(run.workflowRunId);
+    const started = events.find((event) => event.eventType === "task.run.started");
+    const adapterProgress = events.find((event) => {
+      if (event.eventType !== "task.run.progressed") return false;
+      const payload = event.payload as { stage?: string };
+      return payload.stage === "adapter.execute.started";
+    });
+    expect(started?.payload).toMatchObject({
+      taskId: "task-repo-member",
+      templateId: "trellis",
+      subagentType: "trellis-implement",
+      metadata: executionMetadata,
+    });
+    expect(adapterProgress?.payload).toMatchObject({
+      taskId: "task-repo-member",
+      templateId: "trellis",
+      subagentType: "trellis-implement",
+      metadata: executionMetadata,
+    });
+  });
+});

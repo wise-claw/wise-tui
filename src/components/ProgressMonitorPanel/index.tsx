@@ -4,6 +4,7 @@ import type {
   ClaudeSession,
   EmployeeMonitorItem,
   MonitorDrawerTarget,
+  RepositoryMemberMonitorItem,
   TeamMonitorItem,
 } from "../../types";
 import type { WorkflowInvocationStreamDetail } from "../../constants/workflowUiEvents";
@@ -47,6 +48,15 @@ function TeamMiniIcon() {
   );
 }
 
+function RepositoryMiniIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden>
+      <path d="M3 4.5h10v7H3z" fill="none" stroke="currentColor" strokeWidth="1.1" />
+      <path d="M5 4.5V3h6v1.5M5.25 7h5.5M5.25 9.5h3.5" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 interface MonitorClaudeConcurrencyProps {
   activeCount: number;
   limit: number;
@@ -55,6 +65,7 @@ interface MonitorClaudeConcurrencyProps {
 
 interface Props {
   employeeItems: EmployeeMonitorItem[];
+  repositoryMemberItems: RepositoryMemberMonitorItem[];
   teamItems: TeamMonitorItem[];
   sessions: ClaudeSession[];
   activeTarget?: MonitorDrawerTarget | null;
@@ -359,6 +370,13 @@ function taskResultTag(status?: EmployeeMonitorItem["latestTaskStatus"]) {
   );
 }
 
+function repositoryTypeLabel(value: RepositoryMemberMonitorItem["repositoryType"]): string {
+  if (value === "frontend") return "前端";
+  if (value === "backend") return "后端";
+  if (value === "document") return "文档";
+  return value;
+}
+
 function memberTooltipContent(memberNames?: string[]) {
   if (!memberNames || memberNames.length === 0) {
     return "暂无团队成员";
@@ -511,6 +529,7 @@ export function HistorySessionPopoverContent({
 
 export function ProgressMonitorPanel({
   employeeItems,
+  repositoryMemberItems,
   teamItems,
   sessions,
   activeTarget,
@@ -584,6 +603,10 @@ export function ProgressMonitorPanel({
   const teamInProgress = useMemo(
     () => teamItems.filter((item) => item.status === "in_progress").length,
     [teamItems],
+  );
+  const repositoryMemberInProgress = useMemo(
+    () => repositoryMemberItems.filter((item) => item.status === "in_progress").length,
+    [repositoryMemberItems],
   );
 
   const teamHistorySessionsByWorkflowId = useMemo(() => {
@@ -827,6 +850,54 @@ export function ProgressMonitorPanel({
           })
         )}
       </div>
+
+      {repositoryMemberItems.length > 0 ? (
+        <div className="app-monitor-panel__section">
+          <div className="app-monitor-panel__section-head">
+            <div className="app-monitor-panel__section-title-wrap">
+              <Typography.Text className="app-monitor-panel__section-title">
+                <span className="app-monitor-panel__section-icon"><RepositoryMiniIcon /></span>
+                仓库成员
+              </Typography.Text>
+              <Typography.Text className="app-monitor-panel__meta">
+                总数 {repositoryMemberItems.length} · 进行中 {repositoryMemberInProgress} · 空闲 {repositoryMemberItems.length - repositoryMemberInProgress}
+              </Typography.Text>
+            </div>
+          </div>
+          {repositoryMemberItems.map((item) => (
+            <div key={item.repositoryId} className="app-monitor-panel__item app-monitor-panel__item--readonly">
+              <div className="app-monitor-panel__item-row">
+                <span className="app-monitor-panel__item-name-wrap">
+                  <Tooltip title={item.repositoryPath}>
+                    <span className="app-monitor-panel__item-name">{item.repositoryName}</span>
+                  </Tooltip>
+                  <span className="app-monitor-panel__repo-type">{repositoryTypeLabel(item.repositoryType)}</span>
+                  {statusText(item.status)}
+                </span>
+                <span className="app-monitor-panel__item-actions">
+                  <span className="app-monitor-panel__result-pill">
+                    子进程 {item.activeSubagentCount}/{item.subagents.length}
+                  </span>
+                </span>
+              </div>
+              <div className="app-monitor-panel__subagent-tree" aria-label={`${item.repositoryName} Trellis 子进程`}>
+                {item.subagents.slice(0, 3).map((subagent) => (
+                  <div key={subagent.invocationKey} className="app-monitor-panel__subagent-row">
+                    <span className="app-monitor-panel__subagent-branch" aria-hidden />
+                    <span className="app-monitor-panel__subagent-main">
+                      <span className="app-monitor-panel__subagent-name">{subagent.subagentType}</span>
+                      {subagent.stage ? <span className="app-monitor-panel__subagent-stage">{subagent.stage}</span> : null}
+                    </span>
+                    <span className={`app-monitor-panel__subagent-status app-monitor-panel__subagent-status--${subagent.status}`}>
+                      {subagent.status === "running" ? "运行中" : subagent.status === "failed" ? "失败" : "完成"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       <div className="app-monitor-panel__section">
         <div className="app-monitor-panel__section-head">

@@ -5,6 +5,7 @@ import type {
   EmployeeMonitorItem,
   MonitorDrawerTarget,
   MonitorStats,
+  RepositoryMemberMonitorItem,
   TeamMonitorItem,
 } from "../types";
 import { MAIN_LAYOUT_RIGHT_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths";
@@ -34,6 +35,7 @@ interface Props {
   monitorPanelSessions?: ClaudeSession[];
   monitorTranscriptSourceSessions?: ClaudeSession[];
   employeeMonitorItems?: EmployeeMonitorItem[];
+  repositoryMemberMonitorItems?: RepositoryMemberMonitorItem[];
   teamMonitorItems?: TeamMonitorItem[];
   monitorActiveTarget?: MonitorDrawerTarget | null;
   onOpenTeamMonitorDetail?: (workflowId: string) => void;
@@ -68,6 +70,7 @@ export function RightPanel({
   monitorPanelSessions,
   monitorTranscriptSourceSessions,
   employeeMonitorItems = [],
+  repositoryMemberMonitorItems = [],
   teamMonitorItems = [],
   monitorActiveTarget,
   onOpenTeamMonitorDetail,
@@ -113,6 +116,7 @@ export function RightPanel({
             <div className="app-right-panel-team">
               <ProgressMonitorPanel
                 employeeItems={employeeMonitorItems}
+                repositoryMemberItems={repositoryMemberMonitorItems}
                 teamItems={teamMonitorItems}
                 sessions={sessionsForMonitor}
                 activeTarget={monitorActiveTarget}

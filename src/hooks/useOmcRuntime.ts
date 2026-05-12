@@ -30,6 +30,11 @@ import {
   resetOmcDirectBatchInvocationsStore,
   setOmcDirectBatchInvocationsStore,
 } from "../stores/omcDirectBatchInvocationsStore";
+import {
+  digestRepositoryMemberInvocations,
+  resetRepositoryMemberInvocationsStore,
+  setRepositoryMemberInvocationsStore,
+} from "../stores/repositoryMemberInvocationsStore";
 import { isOmcDirectBatchInvocationRunning } from "../utils/omcDirectBatchInvocationDisplay";
 import {
   extractRepositoryBoundEmployeeName,
@@ -79,7 +84,7 @@ function mergeHydratedInvocation(
   return withSubprocessSid(chosen, other);
 }
 
-const OMC_TEMPLATE_SET = new Set(["autopilot", "ultraqa", "verify", "team"]);
+const OMC_TEMPLATE_SET = new Set(["autopilot", "ultraqa", "verify", "team", "trellis"]);
 const DIRECT_BATCH_UI_PROGRESS_DEBOUNCE_MS = 720;
 
 function isOmcLikeInvocation(detail: WorkflowInvocationStreamDetail): boolean {
@@ -101,6 +106,7 @@ export function useOmcRuntime({
   omcBatchRuntimeRef.current = omcBatchRuntime;
 
   const omcDirectBatchInvocationRef = useRef<Map<string, WorkflowInvocationStreamDetail>>(new Map());
+  const repositoryMemberInvocationRef = useRef<Map<string, WorkflowInvocationStreamDetail>>(new Map());
   const omcDirectBatchEndPendingRef = useRef(false);
   const omcDirectBatchProgressUiTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const omcInvocationRuntimeRef = useRef<Map<string, WorkflowInvocationStreamDetail>>(new Map());
@@ -181,6 +187,15 @@ export function useOmcRuntime({
     };
 
     const applyInvocationRuntime = () => {
+      const repositoryMemberInvocations = Array.from(repositoryMemberInvocationRef.current.values()).sort((a, b) => {
+        const ta = typeof a.attempt === "number" ? a.attempt : 0;
+        const tb = typeof b.attempt === "number" ? b.attempt : 0;
+        return tb - ta;
+      });
+      setRepositoryMemberInvocationsStore(
+        repositoryMemberInvocations,
+        digestRepositoryMemberInvocations(repositoryMemberInvocations),
+      );
       const list = Array.from(omcInvocationRuntimeRef.current.values());
       if (list.length === 0) {
         if (directBatchRefHasRunning()) {
@@ -382,6 +397,9 @@ export function useOmcRuntime({
         return;
       }
 
+      if (detail.templateId === "trellis" && detail.ownerKind === "repository") {
+        repositoryMemberInvocationRef.current.set(detail.invocationKey, detail);
+      }
       if (!isOmcLikeInvocation(detail)) return;
       const invSidRaw = typeof detail.sessionId === "string" ? detail.sessionId.trim() : "";
       const invRp = typeof detail.repositoryPath === "string" ? detail.repositoryPath.trim() : "";
@@ -460,6 +478,8 @@ export function useOmcRuntime({
         omcDirectBatchProgressUiTimeoutRef.current = null;
       }
       cancelOmcDirectBatchInvocationsPersistSchedule();
+      repositoryMemberInvocationRef.current.clear();
+      resetRepositoryMemberInvocationsStore();
       window.removeEventListener(WORKFLOW_UI_EVENT_OMC_BATCH_RUNTIME_CHANGED, handleOmcBatchRuntimeChanged as EventListener);
       window.removeEventListener(WORKFLOW_UI_EVENT_INVOCATION_STREAM, handleInvocationRuntimeChanged as EventListener);
       window.removeEventListener(
