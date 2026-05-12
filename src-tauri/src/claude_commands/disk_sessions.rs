@@ -5,8 +5,7 @@ use std::io::BufRead;
 use std::path::{Path, PathBuf};
 
 fn claude_projects_root() -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or_else(|| "HOME directory not found".to_string())?;
-    Ok(home.join(".claude").join("projects"))
+    Ok(crate::claude_config_dir::user_claude_dir().join("projects"))
 }
 
 /// Encodes an absolute project path into Claude Code's directory name under `~/.claude/projects/`.

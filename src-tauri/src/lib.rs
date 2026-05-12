@@ -1,6 +1,7 @@
 mod app_state_commands;
 mod claude_code_usage;
 mod claude_commands;
+mod claude_config_dir;
 mod cua_driver;
 mod dingtalk_enterprise_bot;
 mod dingtalk_stream_gateway;

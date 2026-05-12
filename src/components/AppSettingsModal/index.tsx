@@ -1,14 +1,15 @@
-import { LeftOutlined, RobotOutlined } from "@ant-design/icons";
+import { FolderOpenOutlined, LeftOutlined, RobotOutlined } from "@ant-design/icons";
 import { Button, Modal } from "antd";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { AppShortcutsPopoverBody } from "../AppShortcutsPopoverBody";
+import { ClaudeConfigDirPanel } from "../ClaudeConfigDirPanel";
 import { ClaudeSandboxHelpPopoverBody } from "../ClaudeSandboxHelpPopoverBody";
 import { DingTalkEnterpriseBotPopoverBody } from "../DingTalkEnterpriseBotPopoverBody";
 import { IconClaudeSandboxHelp } from "../icons/IconClaudeSandboxHelp";
 import { IconKeyboardShortcuts } from "../icons/IconKeyboardShortcuts";
 import "./index.css";
 
-export type AppSettingsModalTab = "dingtalk" | "shortcuts" | "sandbox";
+export type AppSettingsModalTab = "claudeConfigDir" | "dingtalk" | "shortcuts" | "sandbox";
 
 interface Props {
   open: boolean;
@@ -18,6 +19,7 @@ interface Props {
 }
 
 const TABS: { key: AppSettingsModalTab; label: string; icon: ReactNode }[] = [
+  { key: "claudeConfigDir", label: "Claude Code 配置目录", icon: <FolderOpenOutlined /> },
   { key: "dingtalk", label: "钉钉企业内部应用机器人", icon: <RobotOutlined /> },
   { key: "shortcuts", label: "快捷键说明", icon: <IconKeyboardShortcuts /> },
   { key: "sandbox", label: "Claude 沙箱 / git·rm 权限", icon: <IconClaudeSandboxHelp /> },
@@ -82,6 +84,9 @@ export function AppSettingsModal({ open, onClose, initialTab = "dingtalk" }: Pro
           <main className="app-settings-modal__main">
             <TypographyTitle tab={tab} />
             <div className="app-settings-modal__scroll">
+              <div className="app-settings-modal__pane" hidden={tab !== "claudeConfigDir"}>
+                <ClaudeConfigDirPanel />
+              </div>
               <div className="app-settings-modal__pane" hidden={tab !== "dingtalk"}>
                 <DingTalkEnterpriseBotPopoverBody />
               </div>

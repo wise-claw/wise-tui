@@ -1,7 +1,8 @@
 use crate::{
-    app_state_commands, claude_code_usage, claude_commands, cua_driver, dingtalk_enterprise_bot,
-    dingtalk_stream_gateway, git_commands, prd_url_fetch, repository_files, skills_sh,
-    system_resource, trellis_bridge, wise_db, wise_mascot, wise_push, workspace_commands,
+    app_state_commands, claude_code_usage, claude_commands, claude_config_dir, cua_driver,
+    dingtalk_enterprise_bot, dingtalk_stream_gateway, git_commands, prd_url_fetch,
+    repository_files, skills_sh, system_resource, trellis_bridge, wise_db, wise_mascot, wise_push,
+    workspace_commands,
 };
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
@@ -66,6 +67,7 @@ pub fn run() {
             app.manage(dingtalk_stream_gateway::DingTalkStreamGatewayControl::default());
             let wise_db = wise_db::WiseDb::open().map_err(|e| e.to_string())?;
             wise_mascot::restore_mascot_on_launch(app.handle(), &wise_db)?;
+            claude_config_dir::init_from_db(&wise_db);
             app.manage(wise_db);
 
             #[cfg(target_os = "macos")]
@@ -210,6 +212,8 @@ pub fn run() {
             claude_code_usage::get_claude_code_usage_snapshot,
             claude_commands::get_claude_config_model,
             claude_commands::get_claude_model_picker_options,
+            claude_config_dir::get_claude_user_config_dir,
+            claude_config_dir::set_claude_user_config_dir,
             claude_commands::mcp::get_claude_mcp_status,
             claude_commands::mcp::get_claude_mcp_runtime_health,
             claude_commands::mcp::remove_claude_mcp_server,
