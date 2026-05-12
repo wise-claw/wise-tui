@@ -20,7 +20,12 @@ export interface Repository {
   branch?: string;
   createdAt: string;
   updatedAt: string;
+  /** 仓库使用哪种 SDD（spec-driven development）流程；省略视同 `auto`。 */
+  sddMode?: SddMode;
 }
+
+/** Wise 集成的 SDD 模式选择；`auto` 由探测器结合 `.trellis/.openspec/.spec` 等信号推断。 */
+export type SddMode = "auto" | "wise_trellis" | "project_owned" | "off";
 
 /** 「关联仓库」弹窗确认后、选择目录并创建条目时传入的展示选项。 */
 export interface AddRepositoryOptions {
@@ -28,6 +33,8 @@ export interface AddRepositoryOptions {
   iconDisplayName?: string;
   /** 非空则写入持久化角标色；`null` / 省略表示与角色标签默认色一致。 */
   iconColor?: string | null;
+  /** 创建后写入仓库 SDD 模式；省略则保持自动模式。 */
+  sddMode?: SddMode;
 }
 
 /** 在「关联仓库」弹窗中保存的常用角标 + 角色组合，供下拉直接复选。 */

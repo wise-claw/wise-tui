@@ -303,19 +303,17 @@ pub(crate) fn list_claude_project_skills(
     list_claude_skills_under_dir(&skills_dir)
 }
 
-/// 用户级 `~/.claude/skills/`（与官方 `skills` CLI `-g` 一致）。
+/// 用户级 `~/.claude/skills/`（与官方 `skills` CLI `-g` 一致；自定义目录时同步切换）。
 #[tauri::command]
 pub(crate) fn list_claude_user_skills() -> Result<Vec<ClaudeProjectSkill>, String> {
-    let home = dirs::home_dir().ok_or_else(|| "Could not resolve home directory".to_string())?;
-    let skills_dir = home.join(".claude").join("skills");
+    let skills_dir = crate::claude_config_dir::user_claude_dir().join("skills");
     list_claude_skills_under_dir(&skills_dir)
 }
 
 #[tauri::command]
 pub(crate) fn list_claude_plugin_cache_skills() -> Result<Vec<ClaudeProjectSkill>, String> {
-    let home = dirs::home_dir().ok_or_else(|| "Could not resolve home directory".to_string())?;
     let mut out: Vec<ClaudeProjectSkill> = Vec::new();
-    for (plugin_rel, root) in discover_plugin_roots_under_claude_cache(&home) {
+    for (plugin_rel, root) in discover_plugin_roots_under_claude_cache() {
         let skills_dir = root.join("skills");
         if !skills_dir.is_dir() {
             continue;

@@ -1,4 +1,4 @@
-import type { SplitResult, TaskApiSpec, TaskItem } from "../../types";
+import type { SplitResult, TaskApiSpec, TaskItem, TaskSize } from "../../types";
 import { allSplitResultTaskItems } from "../../services/splitResultModel";
 import { refreshSplitResultDerivedFields } from "../../services/taskSplitter";
 
@@ -526,5 +526,126 @@ export function mergeSplitResultsByAppend(base: SplitResult, incoming: SplitResu
     taskAnchorDescriptors: pruneAnchorRecord(merged.taskAnchorDescriptors),
     taskAnchorTexts: pruneAnchorRecord(merged.taskAnchorTexts),
     taskAnchorPositions: pruneAnchorRecord(merged.taskAnchorPositions),
+  };
+}
+
+export function estimateDaysFromSize(size: TaskSize): number {
+  if (size === "S") return 1;
+  if (size === "M") return 2;
+  return 4;
+}
+
+export function sameApiSpec(a: TaskApiSpec | undefined, b: TaskApiSpec | undefined): boolean {
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+  if (a.endpoint !== b.endpoint) return false;
+  if (a.method !== b.method) return false;
+  if (a.requestSchema !== b.requestSchema) return false;
+  if (a.responseSchema !== b.responseSchema) return false;
+  if (a.errorCodes.length !== b.errorCodes.length) return false;
+  for (let i = 0; i < a.errorCodes.length; i += 1) {
+    if (a.errorCodes[i] !== b.errorCodes[i]) return false;
+  }
+  return true;
+}
+
+export function taskToMarkdown(task: TaskItem): string {
+  const taskDescription = task.description.trim();
+  const subtaskLines = task.subtasks;
+  const dodLines = task.dod;
+  return [
+    "#### 任务内容",
+    taskDescription,
+    "",
+    ...(task.apiSpec
+      ? [
+        "#### 接口协议",
+        `- 接口路径：${task.apiSpec.endpoint}`,
+        `- 请求方法：${task.apiSpec.method}`,
+        `- 请求定义：${task.apiSpec.requestSchema}`,
+        `- 响应定义：${task.apiSpec.responseSchema}`,
+        `- 错误码：${task.apiSpec.errorCodes.join(", ") || "无"}`,
+        "",
+      ]
+      : []),
+    "#### 子任务",
+    ...subtaskLines.map((item) => `- ${item}`),
+    "",
+    "#### 验收标准（DoD）",
+    ...dodLines.map((item) => `- ${item}`),
+  ].join("\n");
+}
+
+export function parseTaskMarkdownDraft(
+  markdown: string,
+): Pick<TaskItem, "description" | "subtasks" | "dod"> & { apiSpec?: TaskApiSpec } {
+  const lines = markdown.split(/\r?\n/);
+  type Section = "none" | "description" | "api" | "subtasks" | "dod";
+  let section: Section = "none";
+  const descriptionLines: string[] = [];
+  const apiLines: string[] = [];
+  const subtaskLines: string[] = [];
+  const dodLines: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/^####\s*任务内容/.test(trimmed)) {
+      section = "description";
+      continue;
+    }
+    if (/^####\s*接口协议/.test(trimmed)) {
+      section = "api";
+      continue;
+    }
+    if (/^####\s*子任务/.test(trimmed)) {
+      section = "subtasks";
+      continue;
+    }
+    if (/^####\s*验收标准/.test(trimmed)) {
+      section = "dod";
+      continue;
+    }
+    if (section === "description") descriptionLines.push(line);
+    if (section === "api") apiLines.push(line);
+    if (section === "subtasks") subtaskLines.push(line);
+    if (section === "dod") dodLines.push(line);
+  }
+
+  const toList = (source: string[]): string[] =>
+    source
+      .map((line) => line.replace(/^\s*[-*]\s+/, "").trim())
+      .filter((line) => line.length > 0);
+
+  const pickApi = (label: string): string => {
+    const row = apiLines.find((line) => new RegExp(`^\\s*[-*]?\\s*${label}\\s*[：:]`).test(line.trim()));
+    if (!row) return "";
+    return row.replace(new RegExp(`^\\s*[-*]?\\s*${label}\\s*[：:]\\s*`), "").trim();
+  };
+
+  const methodRaw = pickApi("请求方法").toUpperCase();
+  const method = API_METHOD_OPTIONS.find((item) => item === methodRaw) ?? "POST";
+  const endpoint = pickApi("接口路径");
+  const requestSchema = pickApi("请求定义");
+  const responseSchema = pickApi("响应定义");
+  const errorCodesRaw = pickApi("错误码");
+  const errorCodes = errorCodesRaw
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0 && item !== "无");
+  const hasApiSpec = [endpoint, requestSchema, responseSchema, errorCodesRaw].some((item) => item.trim().length > 0);
+
+  return {
+    description: descriptionLines.join("\n").trim(),
+    subtasks: toList(subtaskLines),
+    dod: toList(dodLines),
+    apiSpec: hasApiSpec
+      ? {
+        endpoint,
+        method,
+        requestSchema,
+        responseSchema,
+        errorCodes,
+      }
+      : undefined,
   };
 }

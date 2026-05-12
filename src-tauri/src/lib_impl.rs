@@ -1,7 +1,8 @@
 use crate::{
-    app_state_commands, claude_code_usage, claude_commands, cua_driver, dingtalk_enterprise_bot,
-    dingtalk_stream_gateway, git_commands, prd_url_fetch, repository_files, skills_sh,
-    system_resource, wise_db, wise_mascot, wise_push, workspace_commands,
+    app_state_commands, claude_code_usage, claude_commands, claude_config_dir, cua_driver,
+    dingtalk_enterprise_bot, dingtalk_stream_gateway, git_commands, prd_url_fetch,
+    repository_files, skills_sh, system_resource, trellis_bridge, wise_db, wise_mascot, wise_push,
+    workspace_commands,
 };
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
@@ -66,6 +67,7 @@ pub fn run() {
             app.manage(dingtalk_stream_gateway::DingTalkStreamGatewayControl::default());
             let wise_db = wise_db::WiseDb::open().map_err(|e| e.to_string())?;
             wise_mascot::restore_mascot_on_launch(app.handle(), &wise_db)?;
+            claude_config_dir::init_from_db(&wise_db);
             app.manage(wise_db);
 
             #[cfg(target_os = "macos")]
@@ -85,6 +87,7 @@ pub fn run() {
             app_state_commands::create_repository_from_path,
             app_state_commands::update_repository_icon_display,
             app_state_commands::update_repository_main_owner_agent,
+            app_state_commands::update_repository_sdd_mode,
             app_state_commands::remove_repository,
             app_state_commands::remove_repository_global,
             app_state_commands::list_projects,
@@ -185,6 +188,15 @@ pub fn run() {
             repository_files::create_repository_file,
             repository_files::create_repository_directory,
             repository_files::delete_repository_entry,
+            trellis_bridge::trellis_list_tasks,
+            trellis_bridge::trellis_read_task,
+            trellis_bridge::trellis_write_prd,
+            trellis_bridge::trellis_write_status,
+            trellis_bridge::trellis_list_research,
+            trellis_bridge::trellis_detect_sdd_signals,
+            trellis_bridge::trellis_list_spec_areas,
+            trellis_bridge::trellis_read_spec_index,
+            trellis_bridge::trellis_write_spec_index,
             claude_commands::terminal::terminal_open,
             claude_commands::terminal::terminal_write,
             claude_commands::terminal::terminal_resize,
@@ -200,6 +212,8 @@ pub fn run() {
             claude_code_usage::get_claude_code_usage_snapshot,
             claude_commands::get_claude_config_model,
             claude_commands::get_claude_model_picker_options,
+            claude_config_dir::get_claude_user_config_dir,
+            claude_config_dir::set_claude_user_config_dir,
             claude_commands::mcp::get_claude_mcp_status,
             claude_commands::mcp::get_claude_mcp_runtime_health,
             claude_commands::mcp::remove_claude_mcp_server,

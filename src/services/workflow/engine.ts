@@ -25,6 +25,7 @@ import type {
   WorkflowRunDTO,
   WorkflowStore,
 } from "../../types/workflow";
+import { DefaultAdapterRegistry, type AdapterRegistry } from "./adapterRegistry";
 import { replayWorkflowRun } from "./replay";
 
 const STAGE_ORDER = ["split", "clarify", "implement", "verify", "review", "delivery"] as const;
@@ -37,6 +38,8 @@ function gatePlanForTemplate(templateId: string): GateCheckBatchDTO["checks"][nu
       return ["test", "lint", "review"];
     case "team":
       return ["build", "test", "review"];
+    case "trellis":
+      return ["test", "review"];
     case "autopilot":
     default:
       return ["build", "test"];
@@ -99,12 +102,17 @@ function ensureNextStage(fromStage: string, toStage: string): boolean {
 }
 
 export class DefaultWorkflowEngine implements WorkflowEngine {
+  private readonly adapterRegistry: AdapterRegistry;
+
   constructor(
     private readonly store: WorkflowStore,
     private readonly taskRouter: TaskRouter,
-    private readonly omcAdapter: OmcWorkflowAdapter,
+    omcAdapter: OmcWorkflowAdapter,
     private readonly gateEngine: GateEngine,
-  ) {}
+    adapterRegistry?: AdapterRegistry,
+  ) {
+    this.adapterRegistry = adapterRegistry ?? DefaultAdapterRegistry.of(omcAdapter);
+  }
 
   async createRun(input: CreateWorkflowRunInput): Promise<WorkflowRunDTO> {
     const now = Date.now();
@@ -239,7 +247,8 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
       }),
     );
 
-    const execution = await this.omcAdapter.execute({
+    const adapter = this.adapterRegistry.resolve(routed.templateId);
+    const execution = await adapter.execute({
       workflowRunId: input.workflowRunId,
       repositoryPath: run.repositoryPath,
       sessionId: run.sessionId,
@@ -511,4 +520,3 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
     return replayWorkflowRun(run, events);
   }
 }
-

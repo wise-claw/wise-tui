@@ -38,6 +38,8 @@ pub(crate) struct StoredRepository {
     created_at: String,
     #[serde(alias = "updated_at")]
     updated_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sdd_mode: Option<String>,
 }
 
 fn default_repository_type() -> String {
@@ -353,6 +355,7 @@ pub(crate) fn create_repository_from_path(
         branch: git_commands::get_git_branch(&folder_path),
         created_at: now.to_string(),
         updated_at: now.to_string(),
+        sdd_mode: None,
     };
 
     let mut repositories = load_repositories(&app);
@@ -407,6 +410,43 @@ pub(crate) fn update_repository_main_owner_agent(
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string());
     repositories[idx].main_owner_agent_name = trimmed;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_millis() as i64;
+    repositories[idx].updated_at = now.to_string();
+    save_repositories(&app, &repositories)?;
+    let mut out = repositories[idx].clone();
+    out.branch = git_commands::get_git_branch(&out.path);
+    Ok(out)
+}
+
+#[tauri::command]
+pub(crate) fn update_repository_sdd_mode(
+    app: tauri::AppHandle,
+    id: i64,
+    sdd_mode: Option<String>,
+) -> Result<StoredRepository, String> {
+    const ALLOWED: &[&str] = &["auto", "wise_trellis", "project_owned", "off"];
+    let normalized = match sdd_mode {
+        None => None,
+        Some(value) => {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                None
+            } else if !ALLOWED.contains(&trimmed) {
+                return Err("WF_INVALID_INPUT: sddMode value not allowed".into());
+            } else {
+                Some(trimmed.to_string())
+            }
+        }
+    };
+    let mut repositories = load_repositories(&app);
+    let idx = repositories
+        .iter()
+        .position(|p| p.id == id)
+        .ok_or_else(|| "仓库未找到".to_string())?;
+    repositories[idx].sdd_mode = normalized;
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|e| e.to_string())?

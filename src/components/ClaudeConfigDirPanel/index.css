@@ -1,0 +1,84 @@
+.app-claude-config-dir-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 720px;
+}
+
+.app-claude-config-dir-panel__intro {
+  margin: 0;
+}
+
+.app-claude-config-dir-panel__current {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--ant-color-fill-quaternary);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: var(--ant-border-radius, 8px);
+}
+
+.app-claude-config-dir-panel__current-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.app-claude-config-dir-panel__current-default {
+  font-size: 12px;
+}
+
+.app-claude-config-dir-panel__choices {
+  width: 100%;
+}
+
+.app-claude-config-dir-panel__choice {
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
+  padding: 6px 0;
+}
+
+.app-claude-config-dir-panel__choice .ant-radio {
+  margin-top: 2px;
+}
+
+.app-claude-config-dir-panel__choice .ant-radio + span {
+  padding-inline-start: 8px;
+  width: 100%;
+}
+
+.app-claude-config-dir-panel__choice-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.app-claude-config-dir-panel__choice-desc {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.app-claude-config-dir-panel__custom-input {
+  width: 100%;
+  margin-top: 2px;
+}
+
+.app-claude-config-dir-panel__hint {
+  margin: 0;
+}
+
+.app-claude-config-dir-panel__hint-list {
+  margin: 0;
+  padding-inline-start: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.app-claude-config-dir-panel__actions {
+  margin-top: 4px;
+}

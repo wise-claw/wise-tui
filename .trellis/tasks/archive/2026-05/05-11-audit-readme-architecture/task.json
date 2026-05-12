@@ -1,0 +1,32 @@
+{
+  "id": "audit-readme-architecture",
+  "name": "audit-readme-architecture",
+  "title": "Rewrite README to match actual Wise architecture",
+  "description": "Replace outdated desktop-shell README content with the real feature matrix, architecture diagram, storage model, and verification commands.",
+  "status": "completed",
+  "dev_type": "docs",
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "xuning",
+  "assignee": "xuning",
+  "createdAt": "2026-05-11",
+  "completedAt": "2026-05-12",
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": "14aa0b0",
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "05-11-audit-remediation-roadmap",
+  "relatedFiles": [
+    "README.md",
+    "CLAUDE.md",
+    "package.json",
+    "src/",
+    "src-tauri/"
+  ],
+  "notes": "Commit 14aa0b0 rewrote README.md and refreshed CLAUDE.md to describe the actual Wise architecture and verification commands.",
+  "meta": {}
+}

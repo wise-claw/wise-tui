@@ -1037,6 +1037,7 @@ export function ClaudeSessions({
                 key={activeSession.id}
                 session={activeSession}
                 sessions={sessions}
+                repositories={repositories}
                 initialNotificationPanelCollapsed={
                   pendingCollapseNotificationForSessionId === activeSession.id
                 }
@@ -1074,7 +1075,6 @@ export function ClaudeSessions({
                 taskListConcurrentCapacity={taskListConcurrentCapacity}
                 resolveTaskListOmcInvokeConcurrency={resolveTaskListOmcInvokeConcurrency}
                 repositoryMainBindings={repositoryMainBindings}
-                repositories={repositories ?? []}
                 onAppendSystemMessage={onAppendSystemMessage}
                 onAppendUserMessage={onAppendUserMessage}
                 onNotifyOmcEmployeeDirectBatchTaskDone={onNotifyOmcEmployeeDirectBatchTaskDone}
@@ -1092,6 +1092,7 @@ export function ClaudeSessions({
                   key={secondarySession.id}
                   session={secondarySession}
                   sessions={sessions}
+                  repositories={repositories}
                   initialNotificationPanelCollapsed={
                     pendingCollapseNotificationForSessionId === secondarySession.id
                   }
@@ -1120,35 +1121,34 @@ export function ClaudeSessions({
                   mentionEmployees={mentionEmployees}
                   workflowTasks={secondarySessionWorkflowTasks}
                   taskPendingEmployeesByTaskId={taskPendingEmployeesByTaskId}
-                workflowTemplates={workflowTemplates}
-                workflowGraphsByWorkflowId={workflowGraphsByWorkflowId}
-                workflowGraphStatusByWorkflowId={workflowGraphStatusByWorkflowId}
-                onOpenTaskDetail={onOpenTaskDetail}
-                hideMessages={hideMessages}
-                hideSessionTools={hideSessionTools}
-                taskListConcurrentCapacity={taskListConcurrentCapacity}
-                resolveTaskListOmcInvokeConcurrency={resolveTaskListOmcInvokeConcurrency}
-                repositoryMainBindings={repositoryMainBindings}
-                repositories={repositories ?? []}
-                onAppendSystemMessage={onAppendSystemMessage}
-                onAppendUserMessage={onAppendUserMessage}
-                onNotifyOmcEmployeeDirectBatchTaskDone={onNotifyOmcEmployeeDirectBatchTaskDone}
-                onPrepareFreshOmcEmployeeWorkerForDirectBatch={onPrepareFreshOmcEmployeeWorkerForDirectBatch}
-                onRefreshHistorySessions={onRefreshHistorySessions}
-                omcBatchPipelineActive={omcBatchPipelineActive}
-                onAddWorktreeRepositoryToProject={onAddWorktreeRepositoryToProject}
-                onReloadFullDiskTranscript={onReloadFullDiskTranscript}
-                dualPaneRepositoryPicker={
-                  onDualPaneSecondaryRepositorySelect && activeRepository
-                    ? {
-                        repositories: repositories ?? [],
-                        valueRepositoryId: (dualPaneSecondaryRepository ?? activeRepository).id,
-                        onSelectRepositoryId: (id) => {
-                          void onDualPaneSecondaryRepositorySelect(id);
-                        },
-                      }
-                    : undefined
-                }
+                  workflowTemplates={workflowTemplates}
+                  workflowGraphsByWorkflowId={workflowGraphsByWorkflowId}
+                  workflowGraphStatusByWorkflowId={workflowGraphStatusByWorkflowId}
+                  onOpenTaskDetail={onOpenTaskDetail}
+                  hideMessages={hideMessages}
+                  hideSessionTools={hideSessionTools}
+                  taskListConcurrentCapacity={taskListConcurrentCapacity}
+                  resolveTaskListOmcInvokeConcurrency={resolveTaskListOmcInvokeConcurrency}
+                  repositoryMainBindings={repositoryMainBindings}
+                  onAppendSystemMessage={onAppendSystemMessage}
+                  onAppendUserMessage={onAppendUserMessage}
+                  onNotifyOmcEmployeeDirectBatchTaskDone={onNotifyOmcEmployeeDirectBatchTaskDone}
+                  onPrepareFreshOmcEmployeeWorkerForDirectBatch={onPrepareFreshOmcEmployeeWorkerForDirectBatch}
+                  onRefreshHistorySessions={onRefreshHistorySessions}
+                  omcBatchPipelineActive={omcBatchPipelineActive}
+                  onAddWorktreeRepositoryToProject={onAddWorktreeRepositoryToProject}
+                  onReloadFullDiskTranscript={onReloadFullDiskTranscript}
+                  dualPaneRepositoryPicker={
+                    onDualPaneSecondaryRepositorySelect && activeRepository
+                      ? {
+                          repositories: repositories ?? [],
+                          valueRepositoryId: (dualPaneSecondaryRepository ?? activeRepository).id,
+                          onSelectRepositoryId: (id) => {
+                            void onDualPaneSecondaryRepositorySelect(id);
+                          },
+                        }
+                      : undefined
+                  }
                 />
               ) : (
                 <div className="app-claude-session-empty">
@@ -1176,6 +1176,7 @@ export function ClaudeSessions({
             key={activeSession.id}
             session={activeSession}
             sessions={sessions}
+            repositories={repositories}
             initialNotificationPanelCollapsed={
               pendingCollapseNotificationForSessionId === activeSession.id
             }
@@ -1213,7 +1214,6 @@ export function ClaudeSessions({
             taskListConcurrentCapacity={taskListConcurrentCapacity}
             resolveTaskListOmcInvokeConcurrency={resolveTaskListOmcInvokeConcurrency}
             repositoryMainBindings={repositoryMainBindings}
-            repositories={repositories ?? []}
             onAppendSystemMessage={onAppendSystemMessage}
             onAppendUserMessage={onAppendUserMessage}
             onNotifyOmcEmployeeDirectBatchTaskDone={onNotifyOmcEmployeeDirectBatchTaskDone}

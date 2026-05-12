@@ -6,6 +6,7 @@ import {
   loadRepositories,
   removeRepository,
   updateRepositoryMainOwnerAgent,
+  updateRepositorySddMode,
 } from "../services/repository";
 import {
   addRepositoryToProject,
@@ -283,6 +284,14 @@ export function useRepositoryList() {
     [removeRepositoryGloballyFromState],
   );
 
+  const handleUpdateRepositorySddMode = useCallback(async (
+    repositoryId: number,
+    sddMode: Repository["sddMode"],
+  ) => {
+    const updated = await updateRepositorySddMode(repositoryId, sddMode ?? null);
+    setRepositories((prev) => prev.map((repo) => (repo.id === repositoryId ? updated : repo)));
+  }, []);
+
   const handleReorderRepositoriesInProject = useCallback(async (projectId: string, repositoryIds: number[]) => {
     await reorderProjectRepositoriesInProject(projectId, repositoryIds);
     setProjects((prev) =>
@@ -342,6 +351,7 @@ export function useRepositoryList() {
     handleAddRepositoryPathToProject,
     handleDetachRepositoryFromProject,
     handleRemoveRepository,
+    handleUpdateRepositorySddMode,
     handleReorderRepositoriesInProject,
     handleMoveRepositoryToProject,
     handleUpdateRepositoryMainOwnerAgent,

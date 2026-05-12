@@ -1,0 +1,32 @@
+{
+  "id": "audit-ui-dependency-consolidation",
+  "name": "audit-ui-dependency-consolidation",
+  "title": "Consolidate frontend UI framework dependencies",
+  "description": "Decide and execute a pragmatic consolidation path for Ant Design and Semi UI usage so new UI follows one primary design system.",
+  "status": "completed",
+  "dev_type": "feature",
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "xuning",
+  "assignee": "xuning",
+  "createdAt": "2026-05-11",
+  "completedAt": "2026-05-12",
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": "14aa0b0",
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "05-11-audit-remediation-roadmap",
+  "relatedFiles": [
+    "package.json",
+    "bun.lock",
+    "src/components/",
+    "src/App.tsx",
+    ".trellis/spec/frontend/component-guidelines.md"
+  ],
+  "notes": "Commit 14aa0b0 documented Ant Design as the default UI system and limited Semi UI to the Claude AIChatInput composer. Inventory confirmed Semi is still used there, so no dependency removal was safe in this slice.",
+  "meta": {}
+}

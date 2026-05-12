@@ -568,8 +568,7 @@ pub(crate) struct ClaudeModelPickerOptions {
 fn collect_claude_model_picker_options(
     project_path: Option<String>,
 ) -> Result<ClaudeModelPickerOptions, String> {
-    let home = dirs::home_dir().ok_or_else(|| "Could not resolve home directory".to_string())?;
-    let user_settings = home.join(".claude").join("settings.json");
+    let user_settings = crate::claude_config_dir::user_claude_dir().join("settings.json");
     let user_val = read_json_file(&user_settings);
     let user_models = user_val
         .as_ref()
@@ -825,10 +824,10 @@ fn build_hook_scope_data(path: &Path) -> ClaudeHookScopeData {
 fn hooks_settings_path_for_scope(
     scope: &str,
     project_path: Option<&str>,
-    home: &Path,
+    _home: &Path,
 ) -> Result<PathBuf, String> {
     match scope {
-        "user" => Ok(home.join(".claude").join("settings.json")),
+        "user" => Ok(crate::claude_config_dir::user_claude_dir().join("settings.json")),
         "project" => {
             let pp = project_path
                 .map(str::trim)
@@ -959,8 +958,7 @@ fn normalize_hook_handler_input(
 pub(crate) fn get_claude_hooks_status(
     project_path: Option<String>,
 ) -> Result<ClaudeHooksStatusResponse, String> {
-    let home = dirs::home_dir().ok_or_else(|| "Could not resolve home directory".to_string())?;
-    let user_path = home.join(".claude").join("settings.json");
+    let user_path = crate::claude_config_dir::user_claude_dir().join("settings.json");
     let project_root = canonicalize_existing_project_dir(project_path.as_deref());
     let project_path_file = project_root
         .as_ref()
@@ -1153,13 +1151,12 @@ pub(crate) fn set_claude_disable_all_hooks(
     write_json_pretty(&path, &root)
 }
 
-/// User `~/.claude/settings.json`, optionally overridden by `{project}/.claude/settings.json`.
+/// User `~/.claude/settings.json`（或自定义目录下的 settings.json）, optionally overridden by `{project}/.claude/settings.json`.
 #[tauri::command]
 pub(crate) fn get_claude_config_model(
     project_path: Option<String>,
 ) -> Result<Option<String>, String> {
-    let home = dirs::home_dir().ok_or_else(|| "Could not resolve home directory".to_string())?;
-    let user_settings = home.join(".claude").join("settings.json");
+    let user_settings = crate::claude_config_dir::user_claude_dir().join("settings.json");
     let user_model = read_claude_settings_model(&user_settings);
 
     let project_model = project_path

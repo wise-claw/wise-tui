@@ -1,6 +1,7 @@
 mod app_state_commands;
 mod claude_code_usage;
 mod claude_commands;
+mod claude_config_dir;
 mod cua_driver;
 mod dingtalk_enterprise_bot;
 mod dingtalk_stream_gateway;
@@ -12,6 +13,7 @@ mod repository_files;
 mod skills_sh;
 mod subagents_parser;
 mod system_resource;
+mod trellis_bridge;
 mod wise_db;
 mod wise_mascot;
 mod wise_paths;

@@ -90,6 +90,10 @@ const MAX_DEPENDENCY_MODEL_COUNT = 80;
 const MAX_DEPENDENCY_DEPTH = 3;
 const CONFIGURED_MONACO_INSTANCES = new WeakSet<MonacoApi>();
 const REGISTERED_AMBIENT_MODULES = new WeakMap<MonacoApi, Set<string>>();
+const REGISTERED_REPOSITORY_EXTRA_LIBS = new WeakMap<
+  MonacoApi,
+  Map<string, { content: string; disposable: Monaco.IDisposable }>
+>();
 const DEPENDENCY_FILE_CONTENT_CACHE = new Map<string, string>();
 const PENDING_DEPENDENCY_FILES = new Map<string, Promise<string | null>>();
 
@@ -112,11 +116,10 @@ export function configureWiseMonacoTypeScript(monaco: MonacoApi): void {
   CONFIGURED_MONACO_INSTANCES.add(monaco);
 
   const ts = getMonacoTypeScriptRuntime(monaco);
-  const moduleResolutionKind = resolveMonacoBundlerModuleResolution(ts);
   const compilerOptions: MonacoCompilerOptions = {
     target: ts.ScriptTarget.ES2020,
     module: ts.ModuleKind.ESNext,
-    moduleResolution: moduleResolutionKind,
+    moduleResolution: resolveMonacoBundlerModuleResolution(ts),
     jsx: ts.JsxEmit.ReactJSX,
     useDefineForClassFields: true,
     allowSyntheticDefaultImports: true,
@@ -159,7 +162,7 @@ export async function syncMonacoRepositoryTypeScriptModels({
     .filter((file) => file.relativePath.length > 0);
 
   for (const source of normalizedSources) {
-    ensureMonacoModel(monaco, repositoryPath, source.relativePath, source.content);
+    registerRepositorySource(monaco, repositoryPath, source, true);
   }
 
   const queue = normalizedSources.map((source) => ({ ...source, depth: 0 }));
@@ -168,7 +171,7 @@ export async function syncMonacoRepositoryTypeScriptModels({
 
   while (queue.length > 0 && loadedCount < MAX_DEPENDENCY_MODEL_COUNT) {
     const current = queue.shift()!;
-    const imports = extractModuleSpecifiers(current.content);
+    const imports = extractMonacoTypeScriptModuleSpecifiers(current.content);
     registerAmbientModules(monaco, imports.filter((specifier) => !isRelativeModuleSpecifier(specifier)));
 
     if (current.depth >= MAX_DEPENDENCY_DEPTH) continue;
@@ -180,7 +183,7 @@ export async function syncMonacoRepositoryTypeScriptModels({
 
       visited.add(dependency.relativePath);
       loadedCount += 1;
-      ensureMonacoModel(monaco, repositoryPath, dependency.relativePath, dependency.content);
+      registerRepositorySource(monaco, repositoryPath, dependency, false);
       if (isTypeScriptLikeRepositoryPath(dependency.relativePath)) {
         queue.push({ ...dependency, depth: current.depth + 1 });
       }
@@ -214,6 +217,11 @@ function resolveMonacoBundlerModuleResolution(
   if (typeof bundler === "number") {
     return bundler;
   }
+  // Monaco's public contribution enum may omit Bundler while the bundled
+  // TypeScript worker still understands the real TypeScript numeric value.
+  if (runtimeKinds.NodeNext === undefined) {
+    return 100;
+  }
   return ts.ModuleResolutionKind.NodeJs ?? 2;
 }
 
@@ -235,6 +243,48 @@ function ensureMonacoModel(monaco: MonacoApi, repositoryPath: string, relativePa
     return;
   }
   monaco.editor.createModel(content, monacoLanguageForTypeScriptModel(relativePath), uri);
+}
+
+function registerRepositorySource(
+  monaco: MonacoApi,
+  repositoryPath: string,
+  source: MonacoRepositorySourceFile,
+  openInEditor: boolean,
+): void {
+  if (openInEditor || !isExtraLibSupportedRepositoryPath(source.relativePath)) {
+    disposeRepositoryExtraLib(monaco, repositoryPath, source.relativePath);
+    ensureMonacoModel(monaco, repositoryPath, source.relativePath, source.content);
+    return;
+  }
+
+  const filePath = monacoUriForRepositoryPath(source.relativePath, repositoryPath);
+  let registered = REGISTERED_REPOSITORY_EXTRA_LIBS.get(monaco);
+  if (!registered) {
+    registered = new Map();
+    REGISTERED_REPOSITORY_EXTRA_LIBS.set(monaco, registered);
+  }
+  const existing = registered.get(filePath);
+  if (existing?.content === source.content) {
+    return;
+  }
+  existing?.disposable.dispose();
+  const ts = getMonacoTypeScriptRuntime(monaco);
+  registered.set(filePath, {
+    content: source.content,
+    disposable: ts.typescriptDefaults.addExtraLib(source.content, filePath),
+  });
+}
+
+function disposeRepositoryExtraLib(monaco: MonacoApi, repositoryPath: string, relativePath: string): void {
+  const registered = REGISTERED_REPOSITORY_EXTRA_LIBS.get(monaco);
+  if (!registered) return;
+  const filePath = monacoUriForRepositoryPath(relativePath, repositoryPath);
+  registered.get(filePath)?.disposable.dispose();
+  registered.delete(filePath);
+}
+
+function isExtraLibSupportedRepositoryPath(relativePath: string): boolean {
+  return isTypeScriptLikeRepositoryPath(relativePath);
 }
 
 function registerAmbientModules(monaco: MonacoApi, moduleSpecifiers: string[]): void {
@@ -259,7 +309,7 @@ function registerAmbientModules(monaco: MonacoApi, moduleSpecifiers: string[]): 
   );
 }
 
-function extractModuleSpecifiers(source: string): string[] {
+export function extractMonacoTypeScriptModuleSpecifiers(source: string): string[] {
   const specifiers: string[] = [];
   const re =
     /\b(?:import|export)\s+(?:type\s+)?(?:[^'"]*?\s+from\s*)?["']([^"']+)["']|import\s*\(\s*["']([^"']+)["']\s*\)|require\s*\(\s*["']([^"']+)["']\s*\)/g;
@@ -278,7 +328,7 @@ async function readFirstExistingRelativeImport(
   fromRelativePath: string,
   specifier: string,
 ): Promise<MonacoRepositorySourceFile | null> {
-  const candidates = resolveRelativeImportCandidates(fromRelativePath, specifier);
+  const candidates = resolveMonacoRepositoryRelativeImportCandidates(fromRelativePath, specifier);
   for (const candidate of candidates) {
     const content = await readProjectFileIfExists(repositoryPath, candidate);
     if (content != null) {
@@ -288,7 +338,7 @@ async function readFirstExistingRelativeImport(
   return null;
 }
 
-function resolveRelativeImportCandidates(fromRelativePath: string, specifier: string): string[] {
+export function resolveMonacoRepositoryRelativeImportCandidates(fromRelativePath: string, specifier: string): string[] {
   const fromDir = dirname(normalizeRepositoryRelativePath(fromRelativePath));
   const rawTarget = normalizeRepositoryRelativePath(`${fromDir}/${specifier}`);
   const ext = getPathExtension(rawTarget);

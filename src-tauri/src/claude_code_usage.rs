@@ -118,7 +118,10 @@ fn claude_code_base_dirs() -> Vec<PathBuf> {
     }
 
     if let Some(home) = dirs::home_dir() {
-        for rel in [home.join(".config").join("claude"), home.join(".claude")] {
+        for rel in [
+            home.join(".config").join("claude"),
+            crate::claude_config_dir::user_claude_dir(),
+        ] {
             if rel.is_dir() {
                 let key = rel.to_string_lossy().to_string();
                 if seen.insert(key) {

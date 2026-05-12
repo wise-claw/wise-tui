@@ -1,13 +1,7 @@
 import {
   CloseOutlined,
-  CopyOutlined,
-  DeleteOutlined,
-  DownOutlined,
   PlusOutlined,
-  PushpinOutlined,
-  PlayCircleOutlined,
   QuestionCircleOutlined,
-  SaveOutlined,
   SettingOutlined,
   TeamOutlined,
   UserOutlined,
@@ -16,21 +10,15 @@ import {
   App as AntdApp,
   Button,
   Card,
-  Checkbox,
   Col,
   Divider,
-  Dropdown,
-  Input,
   Layout,
   Modal,
   Popover,
   Row,
   Select,
-  Segmented,
   Space,
   Spin,
-  Steps,
-  Tabs,
   Tag,
   Tooltip,
   Typography,
@@ -43,7 +31,6 @@ import type {
   ProjectItem,
   Repository,
   SplitResult,
-  TaskAnchorPosition,
   TaskApiSpec,
   TaskExecutionStatus,
   TaskItem,
@@ -55,8 +42,6 @@ import type {
 import {
   defaultTaskRoleForRepositoryType,
   repositoryFolderBasename,
-  taskRoleChineseLabel,
-  taskRoleTagModifierClass,
 } from "../../utils/repositoryType";
 import { usePrdInput } from "../../hooks/usePrdInput";
 import type { MilkdownEditorHandle, MilkdownTaskAnchor } from "../MilkdownViewer";
@@ -119,37 +104,35 @@ import {
 } from "../../services/splitPromptLayersStore";
 import { explainClaudeSplitExitCode, runPrdSplitClaude } from "../../services/claudeSplitExecutor";
 import {
-  API_METHOD_OPTIONS,
   TASK_AI_DEFAULT_PROMPT_BY_MODE,
   anchorLabelFromTaskId,
-  buildApiSpecTemplate,
   buildExecutableTaskCopiesFromSplitSources,
-  buildRequestSchemaByMethod,
   buildSelectionAnchorTextHash,
   buildSnapshotAbsoluteDisplayPath,
   clipRuntimeLogText,
   createRequirementHistoryId,
   defaultTaskConfirmFilterByTasks,
   dirnameFromAbsolutePath,
+  estimateDaysFromSize,
   formatClaudeRuntimeSessionInfo,
   includesLoosely,
   mergeSplitResultsByAppend,
-  normalizeJsonText,
   parseClaudeRuntimeSessionInfo,
+  parseTaskMarkdownDraft,
   parseTaskNumericOrdinal,
   pickMostRelevantRequirementId,
   remapAnchorRangeFromMarkdownToVisible,
   remapSplitResultAnchorOffsetsFromMarkdown,
+  sameApiSpec,
   stripEmbeddedTaskAnchorsFromRequirementMarkdown,
   stripRequirementsIndexSection,
   stripSectionByHeading,
+  taskToMarkdown,
   toErrorMessage,
   type TaskAiMode,
   type TaskConfirmFilter,
 } from "./helpers";
-import { LinkifiedPre } from "../ClaudeSessions/LinkifiedPre";
-import { SystemMessageContent } from "../ClaudeSessions/SystemMessageContent";
-import { sameStringArray, sameTaskAnchorPositions } from "../../utils/anchorStability";
+import { sameStringArray } from "../../utils/anchorStability";
 import { WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED } from "../../constants/workflowUiEvents";
 import {
   addProjectPrdEmployee,
@@ -160,11 +143,31 @@ import {
   removeProjectPrdWorkflow,
 } from "../../services/projectPrdScope";
 import { isOmcMonitorEmployeeRecord } from "../../utils/omcMonitorEmployeeSession";
-import {
-  listEmployeeIdsWithRepositoryOwnerBadgeInProjectScope,
-  listRepositoryMainOwnerDisplayGaps,
-  repositoryOwnerBasenamesInScopeRelaxed,
-} from "../../utils/projectPrdScopeDisplay";
+import { listRepositoryMainOwnerDisplayGaps, repositoryOwnerBasenamesInScopeRelaxed } from "../../utils/projectPrdScopeDisplay";
+import { TaskAnchorPopoverBody } from "./TaskAnchorPopoverBody";
+import { InlineRuntimePanel } from "./InlineRuntimePanel";
+import { RequirementNameModal } from "./RequirementNameModal";
+import { RuntimePromptEditModal } from "./RuntimePromptEditModal";
+import { SplitPromptWizardModal } from "./SplitPromptWizardModal";
+import { RequirementBoardHeader } from "./RequirementBoardHeader";
+import { RequirementBoardActions } from "./RequirementBoardActions";
+import { reconcileResolvedAnchorRanges } from "./anchorReconcile";
+import { TaskAiPopoverContent } from "./TaskAiPopoverContent";
+import { TaskCard } from "./TaskCard";
+import { SplitQualityStrip } from "./SplitQualityStrip";
+import { TaskBoardHeader } from "./TaskBoardHeader";
+import type {
+  RequirementEntry,
+  RequirementNameModalMode,
+  SplitApplyMode,
+  SplitPromptDraftBySlot,
+  SplitQualitySummary,
+  SplitRetryPhase,
+  SplitRuntimeLogItem,
+  SplitRuntimeLogRole,
+  SplitWizardStep,
+  TaskRoleFilter,
+} from "./types";
 import "./index.css";
 
 const MilkdownEditor = lazy(() => import("../MilkdownViewer").then((module) => ({ default: module.MilkdownEditor })));
@@ -185,142 +188,6 @@ interface Props {
 
 const TASK_LIST_BUTTON_SELECTOR = '[data-ui-anchor="session-task-list-btn"]';
 const TASK_SPLIT_CLOSE_ANIMATION_MS = 420;
-
-type RequirementEntry = {
-  id: string;
-  type: "functional" | "nonFunctional" | "acceptance";
-  label: string;
-  content: string;
-};
-
-type TaskRoleFilter = "all" | TaskRole;
-type SplitRuntimeLogRole = "system" | "user" | "assistant" | "error";
-type SplitRetryPhase = "phase1" | "phase2";
-type SplitPromptDraftBySlot = Record<string, string>;
-type RequirementNameModalMode = "save" | "create";
-
-interface SplitRuntimeLogItem {
-  id: string;
-  role: SplitRuntimeLogRole;
-  text: string;
-  at: number;
-  retryPhase?: SplitRetryPhase;
-}
-
-interface SplitQualitySummary {
-  totalTasks: number;
-  mappedTaskCount: number;
-  traceableTaskCount: number;
-  untraceableTaskIds: string[];
-}
-
-type SplitApplyMode = "replace" | "append";
-type SplitWizardStep = "prompts" | "runtime";
-
-// ── Split runtime（与 Claude 会话区一致的消息气泡） ──
-
-function SplitRuntimeMessageRow(input: {
-  log: SplitRuntimeLogItem;
-  retryingPhase: SplitRetryPhase | null;
-  onRetryStage: (phase: SplitRetryPhase) => void;
-}) {
-  const { log, retryingPhase, onRetryStage } = input;
-  const [copied, setCopied] = useState(false);
-  const bubbleRole: "user" | "assistant" | "system" =
-    log.role === "user" ? "user" : log.role === "assistant" ? "assistant" : "system";
-  const sender =
-    log.role === "user"
-      ? "我"
-      : log.role === "assistant"
-        ? "Claude"
-        : log.role === "error"
-          ? "错误"
-          : "系统";
-  const avatarLetter =
-    log.role === "user" ? "我" : log.role === "assistant" ? "C" : log.role === "error" ? "!" : "S";
-  const timeStr = new Date(log.at).toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
-  const isStageStartMessage = log.role === "system" && /^开始执行阶段\d+/.test(log.text.trim());
-  const rowClass = [
-    "app-claude-message",
-    `app-claude-message--${bubbleRole}`,
-    log.role === "error" ? "app-prd-task-panel__split-runtime-msg--error" : "",
-    isStageStartMessage ? "app-prd-task-panel__split-runtime-msg--stage-running" : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-  const copyText = useCallback(async () => {
-    const content = log.text ?? "";
-    if (!content.trim()) return;
-    try {
-      await navigator.clipboard.writeText(content);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1400);
-    } catch {
-      const ta = document.createElement("textarea");
-      ta.value = content;
-      ta.style.position = "fixed";
-      ta.style.left = "-9999px";
-      document.body.appendChild(ta);
-      ta.select();
-      const ok = document.execCommand("copy");
-      document.body.removeChild(ta);
-      if (ok) {
-        setCopied(true);
-        window.setTimeout(() => setCopied(false), 1400);
-      }
-    }
-  }, [log.text]);
-  const canRetry = Boolean(log.retryPhase);
-  const retryBusy = canRetry && retryingPhase === log.retryPhase;
-
-  return (
-    <div className={rowClass}>
-      <div className="app-claude-message-avatar">{avatarLetter}</div>
-      <div className="app-claude-message-body">
-        <div className="app-claude-message-header">
-          <span className="app-claude-message-sender">{sender}</span>
-          <button
-            type="button"
-            className={`app-prd-task-panel__split-runtime-copy-btn ${copied ? "is-copied" : ""}`}
-            onClick={() => void copyText()}
-            aria-label="复制该条处理信息"
-            title={copied ? "已复制" : "复制"}
-          >
-            <CopyOutlined />
-            <span>{copied ? "已复制" : "复制"}</span>
-          </button>
-          {canRetry ? (
-            <Button
-              size="small"
-              type="default"
-              className="app-prd-task-panel__split-runtime-retry-btn"
-              onClick={() => log.retryPhase && onRetryStage(log.retryPhase)}
-              loading={retryBusy}
-            >
-              重试{log.retryPhase === "phase1" ? "阶段1" : "阶段2"}
-            </Button>
-          ) : null}
-          <span className="app-claude-message-time">{timeStr}</span>
-        </div>
-        <div className="app-claude-message-content">
-          {bubbleRole === "system" ? (
-            <SystemMessageContent text={log.text} />
-          ) : (
-            <LinkifiedPre text={log.text} className="app-claude-message-text" />
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 const FALLBACK_CLAUDE_SPLIT_SYSTEM_INSTRUCTION = [
   "硬性要求：",
@@ -344,103 +211,6 @@ function scrollToTaskCard(taskId: string) {
     const el = document.querySelector<HTMLElement>(`[data-task-id="${taskId}"]`);
     el?.scrollIntoView({ behavior: "smooth", block: "center" });
   });
-}
-
-/** 拆分任务标题旁：不满足条件入口（红色问号 + 数量） */
-function UnmetConditionsQuestionIcon() {
-  return (
-    <svg
-      className="app-prd-task-panel__unmet-q-svg"
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden
-    >
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.75" />
-      <path
-        d="M9.75 9.75a2.25 2.25 0 0 1 4.35 1.125c0 1.5-2.1 2.062-2.1 3.375V14.25M12 16.5h.01"
-        stroke="currentColor"
-        strokeWidth="1.75"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function TaskAnchorPopoverBody({
-  task,
-  activeResult,
-  anchorResolvedInEditor,
-}: {
-  task: TaskItem;
-  activeResult: SplitResult | null;
-  anchorResolvedInEditor: boolean;
-}) {
-  if (!activeResult) {
-    return <Typography.Text type="secondary">暂无拆分结果。</Typography.Text>;
-  }
-  const descriptor = task.taskAnchors ?? activeResult.taskAnchorDescriptors?.[task.id];
-  const position = activeResult.taskAnchorPositions?.[task.id];
-  const anchorText = (activeResult.taskAnchorTexts?.[task.id] ?? "").trim();
-  const link = activeResult.claudeSplitMapping?.taskRequirementLinks?.find((l) => l.taskId === task.id);
-  const hasAny = Boolean(descriptor || position || anchorText || link);
-  if (!hasAny) {
-    return <Typography.Text type="secondary">当前任务尚无锚点与映射记录。</Typography.Text>;
-  }
-  return (
-    <div
-      className="app-prd-task-panel__task-anchor-popover-inner"
-      onMouseDown={(e) => e.stopPropagation()}
-      onClick={(e) => e.stopPropagation()}
-    >
-      <Space direction="vertical" size={10} style={{ width: "100%" }}>
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          任务 id：<Typography.Text code>{task.id}</Typography.Text>
-          {anchorResolvedInEditor ? " · 已在需求侧解析到锚点" : ""}
-        </Typography.Text>
-        {descriptor ? (
-          <>
-            <Typography.Text strong>结构化 taskAnchors</Typography.Text>
-            <pre className="app-prd-task-panel__task-anchor-popover-pre">
-              {JSON.stringify(descriptor, null, 2)}
-            </pre>
-          </>
-        ) : null}
-        {position ? (
-          <>
-            <Typography.Text strong>文档选区 taskAnchorPositions</Typography.Text>
-            <Typography.Text copyable code>
-              {`from=${position.from}, to=${position.to}`}
-            </Typography.Text>
-          </>
-        ) : null}
-        {anchorText ? (
-          <>
-            <Typography.Text strong>缓存文本 taskAnchorTexts</Typography.Text>
-            <Typography.Paragraph className="app-prd-task-panel__task-anchor-popover-text" style={{ marginBottom: 0 }}>
-              {anchorText}
-            </Typography.Paragraph>
-          </>
-        ) : null}
-        {link ? (
-          <>
-            <Typography.Text strong>需求映射</Typography.Text>
-            <Typography.Text code copyable>
-              {`requirementIds: ${(link.requirementIds ?? []).join(", ") || "（空）"}`}
-            </Typography.Text>
-            {link.rationale?.trim() ? (
-              <Typography.Paragraph type="secondary" style={{ marginBottom: 0, fontSize: 12 }}>
-                {link.rationale.trim()}
-              </Typography.Paragraph>
-            ) : null}
-          </>
-        ) : null}
-      </Space>
-    </div>
-  );
 }
 
 export function PrdTaskSplitPanel({
@@ -501,16 +271,6 @@ export function PrdTaskSplitPanel({
     [PROMPT_SLOT_PRD_TASK_SPLIT_PHASE2]: "",
   });
   const [splitWizardStep, setSplitWizardStep] = useState<SplitWizardStep>("prompts");
-  /** 拆分向导内选中的参与员工（存在顶栏项目上下文时；来自显式关联 + 主 Owner 成员池）。 */
-  const [splitWizardEmployeeIds, setSplitWizardEmployeeIds] = useState<string[]>([]);
-  const [splitWizardActiveEmployeeId, setSplitWizardActiveEmployeeId] = useState<string>("");
-  const [splitEmployeeAddPopoverOpen, setSplitEmployeeAddPopoverOpen] = useState(false);
-  const [splitEmployeePickerSelection, setSplitEmployeePickerSelection] = useState<string[]>([]);
-  /**
-   * 拆分弹窗内「可选池」中的项目显式关联员工 id。
-   * 与侧栏 `activeProjectId` 对应的 `projectPrdEmployeeIds` 可能不同步（草稿 `linkedProjectId` 为另一项目时），在打开弹窗时按 `projectForHeader.id` 拉取并写入。
-   */
-  const [splitWizardModalExplicitEmployeeIds, setSplitWizardModalExplicitEmployeeIds] = useState<string[]>([]);
   const { inputValue, setInputValue, error: inputError, parse } = usePrdInput("");
   const [originalInputValue, setOriginalInputValue] = useState<string | null>(null);
   const [requirementDisplayName, setRequirementDisplayName] = useState<string | null>(null);
@@ -677,38 +437,6 @@ export function PrdTaskSplitPanel({
     [workflowTemplates, projectPrdWorkflowIds],
   );
 
-  useEffect(() => {
-    if (splitWizardEmployeeIds.length === 0) {
-      if (splitWizardActiveEmployeeId !== "") setSplitWizardActiveEmployeeId("");
-      return;
-    }
-    if (!splitWizardEmployeeIds.includes(splitWizardActiveEmployeeId)) {
-      setSplitWizardActiveEmployeeId(splitWizardEmployeeIds[0] ?? "");
-    }
-  }, [splitWizardEmployeeIds, splitWizardActiveEmployeeId]);
-
-  const removeSplitWizardEmployee = useCallback((employeeId: string) => {
-    setSplitWizardEmployeeIds((prev) => prev.filter((id) => id !== employeeId));
-  }, []);
-
-  const applySplitEmployeePickerSelection = useCallback(() => {
-    const picked = splitEmployeePickerSelection.filter(Boolean);
-    if (picked.length === 0) {
-      message.info("请先勾选要添加的员工");
-      return;
-    }
-    setSplitWizardEmployeeIds((prev) => {
-      const next = [...prev];
-      for (const id of picked) {
-        if (!next.includes(id)) next.push(id);
-      }
-      return next;
-    });
-    setSplitEmployeePickerSelection([]);
-    setSplitEmployeeAddPopoverOpen(false);
-    message.success(`已添加 ${picked.length} 名员工`);
-  }, [splitEmployeePickerSelection, message]);
-
   const projectTeamPopoverContent = useMemo(() => {
     if (!activeProjectId?.trim()) {
       return <Typography.Text type="secondary">未选择项目</Typography.Text>;
@@ -838,11 +566,6 @@ export function PrdTaskSplitPanel({
   );
   const headerProjectName = useMemo(() => projectForHeader?.name?.trim() || null, [projectForHeader]);
 
-  const splitWizardShowEmployeePicker = useMemo(
-    () => Boolean(projectForHeader?.id?.trim()),
-    [projectForHeader],
-  );
-
   /** 顶栏仓库标签：项目内顺序；无项目时仅当前关联仓库一条。 */
   const headerRepositoryTagItems = useMemo(() => {
     if (projectForHeader) {
@@ -879,30 +602,6 @@ export function PrdTaskSplitPanel({
       .map((id) => repositoriesById.get(id))
       .filter((r): r is Repository => Boolean(r));
   }, [projectForHeader, repositoriesById]);
-
-  /** 项目内各仓上会以顶栏「Owner」角标展示的员工（与 repositoryOwnerBasenamesInScopeRelaxed 一致）。 */
-  const splitWizardProjectResolvedOwnerEmployeeIds = useMemo(() => {
-    const rids = projectForHeader?.repositoryIds ?? [];
-    if (rids.length === 0) return [];
-    return listEmployeeIdsWithRepositoryOwnerBadgeInProjectScope(rids, repositories, employees);
-  }, [projectForHeader, repositories, employees]);
-
-  const splitWizardProjectEmployeePickPoolIds = useMemo(() => {
-    const pool = new Set(splitWizardModalExplicitEmployeeIds);
-    for (const id of splitWizardProjectResolvedOwnerEmployeeIds) {
-      pool.add(id);
-    }
-    return pool;
-  }, [splitWizardModalExplicitEmployeeIds, splitWizardProjectResolvedOwnerEmployeeIds]);
-
-  const splitWizardEmployeeAddOptions = useMemo(
-    () =>
-      employees
-        .filter((e) => e.enabled && !isOmcMonitorEmployeeRecord(e))
-        .filter((e) => splitWizardProjectEmployeePickPoolIds.has(e.id) && !splitWizardEmployeeIds.includes(e.id))
-        .map((e) => ({ value: e.id, label: `${e.name}（${e.agentType}）` })),
-    [employees, splitWizardProjectEmployeePickPoolIds, splitWizardEmployeeIds],
-  );
 
   const employeesForPrdHeaderScope = useMemo(
     () => employees.filter((e) => e.enabled && !isOmcMonitorEmployeeRecord(e)),
@@ -2257,8 +1956,6 @@ export function PrdTaskSplitPanel({
         `${sceneLabel}：Claude 双阶段执行完成，raw=${buildSnapshotAbsoluteDisplayPath(`${runDir}/split-result.raw.json`)}`,
       );
       if (splitExecutionOptions?.closeSplitWizardOnTwoStageSuccess) {
-        setSplitEmployeeAddPopoverOpen(false);
-        setSplitWizardModalExplicitEmployeeIds([]);
         setSplitPromptAdjustModalOpen(false);
         setSplitWizardStep("prompts");
         setSplitRuntimeVisible(false);
@@ -2575,38 +2272,8 @@ export function PrdTaskSplitPanel({
     setSplitWizardStep("prompts");
     setSplitPromptAdjustModalOpen(true);
     setSplitPromptAdjustLoading(true);
-    setSplitEmployeeAddPopoverOpen(false);
-    setSplitEmployeePickerSelection([]);
     try {
       setSplitPromptAdjustDraftBySlot(await loadSplitPromptDraftsForEditing());
-      const headerPid = projectForHeader?.id?.trim() ?? "";
-      if (headerPid) {
-        let explicit: string[] = [];
-        try {
-          explicit = await listProjectPrdEmployeeIds(headerPid);
-        } catch {
-          explicit = [];
-        }
-        if (explicit.length === 0 && headerPid === (activeProjectId?.trim() ?? "")) {
-          explicit = [...projectPrdEmployeeIds];
-        }
-        setSplitWizardModalExplicitEmployeeIds(explicit);
-        const rids = projectForHeader?.repositoryIds ?? [];
-        const ownerIds = listEmployeeIdsWithRepositoryOwnerBadgeInProjectScope(rids, repositories, employees);
-        const merged: string[] = [];
-        for (const id of explicit) {
-          if (!merged.includes(id)) merged.push(id);
-        }
-        for (const id of ownerIds) {
-          if (!merged.includes(id)) merged.push(id);
-        }
-        setSplitWizardEmployeeIds(merged);
-        setSplitWizardActiveEmployeeId(merged[0] ?? "");
-      } else {
-        setSplitWizardModalExplicitEmployeeIds([]);
-        setSplitWizardEmployeeIds([]);
-        setSplitWizardActiveEmployeeId("");
-      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       message.error(`加载拆分执行提示词失败：${msg}`);
@@ -2614,13 +2281,6 @@ export function PrdTaskSplitPanel({
       setSplitPromptAdjustLoading(false);
     }
   }
-
-  useEffect(() => {
-    if (!splitPromptAdjustModalOpen) return;
-    const hp = projectForHeader?.id?.trim() ?? "";
-    if (!hp || hp !== (activeProjectId?.trim() ?? "")) return;
-    setSplitWizardModalExplicitEmployeeIds([...projectPrdEmployeeIds]);
-  }, [splitPromptAdjustModalOpen, projectForHeader, activeProjectId, projectPrdEmployeeIds]);
 
   function updateRuntimePromptDraft(slot: string, value: string) {
     setRuntimePromptDraftBySlot((prev) => ({ ...prev, [slot]: value }));
@@ -3121,12 +2781,6 @@ export function PrdTaskSplitPanel({
     }
   }
 
-  function estimateDaysFromSize(size: TaskSize): number {
-    if (size === "S") return 1;
-    if (size === "M") return 2;
-    return 4;
-  }
-
   function resetRequirementTaskView() {
     setActiveResult(null);
     setSelectedTaskId(null);
@@ -3448,78 +3102,6 @@ export function PrdTaskSplitPanel({
     return buildTaskFromDraft(task);
   }
 
-  function parseTaskMarkdownDraft(markdown: string): Pick<TaskItem, "description" | "subtasks" | "dod"> & { apiSpec?: TaskApiSpec } {
-    const lines = markdown.split(/\r?\n/);
-    type Section = "none" | "description" | "api" | "subtasks" | "dod";
-    let section: Section = "none";
-    const descriptionLines: string[] = [];
-    const apiLines: string[] = [];
-    const subtaskLines: string[] = [];
-    const dodLines: string[] = [];
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (/^####\s*任务内容/.test(trimmed)) {
-        section = "description";
-        continue;
-      }
-      if (/^####\s*接口协议/.test(trimmed)) {
-        section = "api";
-        continue;
-      }
-      if (/^####\s*子任务/.test(trimmed)) {
-        section = "subtasks";
-        continue;
-      }
-      if (/^####\s*验收标准/.test(trimmed)) {
-        section = "dod";
-        continue;
-      }
-      if (section === "description") descriptionLines.push(line);
-      if (section === "api") apiLines.push(line);
-      if (section === "subtasks") subtaskLines.push(line);
-      if (section === "dod") dodLines.push(line);
-    }
-
-    const toList = (source: string[]): string[] =>
-      source
-        .map((line) => line.replace(/^\s*[-*]\s+/, "").trim())
-        .filter((line) => line.length > 0);
-
-    const pickApi = (label: string): string => {
-      const row = apiLines.find((line) => new RegExp(`^\\s*[-*]?\\s*${label}\\s*[：:]`).test(line.trim()));
-      if (!row) return "";
-      return row.replace(new RegExp(`^\\s*[-*]?\\s*${label}\\s*[：:]\\s*`), "").trim();
-    };
-
-    const methodRaw = pickApi("请求方法").toUpperCase();
-    const method = API_METHOD_OPTIONS.find((item) => item === methodRaw) ?? "POST";
-    const endpoint = pickApi("接口路径");
-    const requestSchema = pickApi("请求定义");
-    const responseSchema = pickApi("响应定义");
-    const errorCodesRaw = pickApi("错误码");
-    const errorCodes = errorCodesRaw
-      .split(",")
-      .map((item) => item.trim())
-      .filter((item) => item.length > 0 && item !== "无");
-    const hasApiSpec = [endpoint, requestSchema, responseSchema, errorCodesRaw].some((item) => item.trim().length > 0);
-
-    return {
-      description: descriptionLines.join("\n").trim(),
-      subtasks: toList(subtaskLines),
-      dod: toList(dodLines),
-      apiSpec: hasApiSpec
-        ? {
-          endpoint,
-          method,
-          requestSchema,
-          responseSchema,
-          errorCodes,
-        }
-        : undefined,
-    };
-  }
-
   function buildTaskFromDraft(task: TaskItem): TaskItem {
     const draftedTask = getDraftedTask(task);
     const markdownDraft = pendingTaskContentById[task.id] ?? taskToMarkdown(draftedTask);
@@ -3531,20 +3113,6 @@ export function PrdTaskSplitPanel({
       dod: parsed.dod,
       apiSpec: pendingTaskApiSpecById[task.id] ?? parsed.apiSpec ?? draftedTask.apiSpec,
     };
-  }
-
-  function sameApiSpec(a: TaskApiSpec | undefined, b: TaskApiSpec | undefined): boolean {
-    if (!a && !b) return true;
-    if (!a || !b) return false;
-    if (a.endpoint !== b.endpoint) return false;
-    if (a.method !== b.method) return false;
-    if (a.requestSchema !== b.requestSchema) return false;
-    if (a.responseSchema !== b.responseSchema) return false;
-    if (a.errorCodes.length !== b.errorCodes.length) return false;
-    for (let i = 0; i < a.errorCodes.length; i += 1) {
-      if (a.errorCodes[i] !== b.errorCodes[i]) return false;
-    }
-    return true;
   }
 
   function hasTaskDraftChanges(task: TaskItem): boolean {
@@ -3893,33 +3461,6 @@ export function PrdTaskSplitPanel({
     message.success("已新增任务。");
   }
 
-  function taskToMarkdown(task: TaskItem): string {
-    const taskDescription = task.description.trim();
-    const subtaskLines = task.subtasks;
-    const dodLines = task.dod;
-    return [
-      "#### 任务内容",
-      taskDescription,
-      "",
-      ...(task.apiSpec
-        ? [
-          "#### 接口协议",
-          `- 接口路径：${task.apiSpec.endpoint}`,
-          `- 请求方法：${task.apiSpec.method}`,
-          `- 请求定义：${task.apiSpec.requestSchema}`,
-          `- 响应定义：${task.apiSpec.responseSchema}`,
-          `- 错误码：${task.apiSpec.errorCodes.join(", ") || "无"}`,
-          "",
-        ]
-        : []),
-      "#### 子任务",
-      ...subtaskLines.map((item) => `- ${item}`),
-      "",
-      "#### 验收标准（DoD）",
-      ...dodLines.map((item) => `- ${item}`),
-    ].join("\n");
-  }
-
   const promptActionItems: MenuProps["items"] = [
     {
       key: "runtime-prompt",
@@ -3961,346 +3502,50 @@ export function PrdTaskSplitPanel({
           }
           : undefined}
       >
-      <Modal
-        title="需求"
+      <SplitPromptWizardModal
         open={splitPromptAdjustModalOpen}
-        maskClosable={!parsing && !splitPromptAdjustStarting}
-        onCancel={() => {
-          if (splitPromptAdjustStarting || splitPromptOptimizingSlot) return;
-          if (parsing && splitWizardStep === "runtime") return;
-          setSplitEmployeeAddPopoverOpen(false);
-          setSplitWizardModalExplicitEmployeeIds([]);
+        step={splitWizardStep}
+        parsing={parsing}
+        starting={splitPromptAdjustStarting}
+        saving={splitPromptAdjustSaving}
+        optimizingSlot={splitPromptOptimizingSlot}
+        loading={splitPromptAdjustLoading}
+        draftBySlot={splitPromptAdjustDraftBySlot}
+        runtimeLogs={splitRuntimeLogs}
+        runtimeListRef={splitRuntimeListRef}
+        retryingPhase={retryingPhase}
+        onStepChange={setSplitWizardStep}
+        onClose={() => {
           setSplitPromptAdjustModalOpen(false);
           setSplitWizardStep("prompts");
           setSplitRuntimeVisible(false);
         }}
-        width={980}
-        destroyOnHidden
-        styles={{
-          body: splitWizardStep === "runtime"
-            ? { maxHeight: "min(680px, 82vh)", display: "flex", flexDirection: "column", paddingTop: 8 }
-            : { maxHeight: "min(720px, 82vh)", overflowY: "auto" },
+        onDraftChange={(slot, markdown) => {
+          setSplitPromptAdjustDraftBySlot((prev) => ({ ...prev, [slot]: markdown }));
         }}
-        footer={splitWizardStep === "prompts"
-          ? (
-            <Space>
-              <Button
-                onClick={() => {
-                  if (splitPromptAdjustStarting || splitPromptOptimizingSlot) return;
-                  setSplitEmployeeAddPopoverOpen(false);
-                  setSplitWizardModalExplicitEmployeeIds([]);
-                  setSplitPromptAdjustModalOpen(false);
-                  setSplitWizardStep("prompts");
-                  setSplitRuntimeVisible(false);
-                }}
-                disabled={splitPromptAdjustStarting || splitPromptAdjustSaving || !!splitPromptOptimizingSlot}
-              >
-                关闭
-              </Button>
-              <Button
-                onClick={() => void handleSaveSplitPromptAdjustDrafts()}
-                loading={splitPromptAdjustSaving}
-                disabled={splitPromptAdjustStarting || !!splitPromptOptimizingSlot}
-              >
-                保存提示词
-              </Button>
-              <Button
-                type="primary"
-                onClick={() => void handleStartSplitFromAdjustModal()}
-                loading={splitPromptAdjustStarting}
-                disabled={splitPromptAdjustSaving || !!splitPromptOptimizingSlot}
-              >
-                开始拆分
-              </Button>
-            </Space>
-            )
-          : (
-            <Space>
-              <Button
-                onClick={() => {
-                  if (parsing || splitPromptAdjustStarting) return;
-                  setSplitWizardStep("prompts");
-                }}
-                disabled={parsing || splitPromptAdjustStarting}
-              >
-                上一步
-              </Button>
-              <Button
-                type="primary"
-                onClick={() => {
-                  if (parsing) return;
-                  setSplitEmployeeAddPopoverOpen(false);
-                  setSplitWizardModalExplicitEmployeeIds([]);
-                  setSplitPromptAdjustModalOpen(false);
-                  setSplitWizardStep("prompts");
-                  setSplitRuntimeVisible(false);
-                }}
-              >
-                完成并关闭
-              </Button>
-            </Space>
-            )}
-      >
-        <Steps
-          size="small"
-          current={splitWizardStep === "prompts" ? 0 : 1}
-          style={{ marginBottom: 14 }}
-          items={[{ title: "提示词" }, { title: "处理信息 · Claude Code 会话" }]}
-        />
-        {splitWizardStep === "prompts"
-          ? (
-            <Spin spinning={splitPromptAdjustLoading}>
-              <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-                  第 1 步：编辑阶段 1/2 的系统提示词；点击「开始拆分」后在同弹窗第 2 步查看执行日志与会话信息。「保存提示词」将写入仓库级覆盖。
-                </Typography.Paragraph>
-                {splitWizardShowEmployeePicker ? (
-                  <div>
-                    <Typography.Paragraph type="secondary" style={{ marginBottom: 8, fontSize: 12 }}>
-                      参与拆分的员工（默认包含顶栏「员工」显式关联与各仓库主 Owner 对应员工，可在此收窄或补充）。
-                    </Typography.Paragraph>
-                    <div style={{ display: "flex", alignItems: "flex-start", gap: 10, width: "100%" }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        {splitWizardEmployeeIds.length === 0 ? (
-                          <Typography.Text type="secondary">尚未选择员工。</Typography.Text>
-                        ) : (
-                          <Tabs
-                            size="small"
-                            type="card"
-                            activeKey={splitWizardActiveEmployeeId || splitWizardEmployeeIds[0]}
-                            onChange={(k) => setSplitWizardActiveEmployeeId(k)}
-                            items={splitWizardEmployeeIds.map((id) => {
-                              const emp = employees.find((e) => e.id === id);
-                              const labelText = emp?.name?.trim() || id;
-                              return {
-                                key: id,
-                                label: (
-                                  <Space size={4} align="center">
-                                    <span>{labelText}</span>
-                                    <CloseOutlined
-                                      aria-label={`移除 ${labelText}`}
-                                      style={{ fontSize: 11, color: "var(--ant-color-text-tertiary)" }}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        removeSplitWizardEmployee(id);
-                                      }}
-                                    />
-                                  </Space>
-                                ),
-                              };
-                            })}
-                          />
-                        )}
-                      </div>
-                      <Popover
-                        trigger="click"
-                        placement="bottomRight"
-                        open={splitEmployeeAddPopoverOpen}
-                        onOpenChange={(open) => {
-                          setSplitEmployeeAddPopoverOpen(open);
-                          if (open) setSplitEmployeePickerSelection([]);
-                        }}
-                        title="从项目关联与主 Owner 员工中添加"
-                        content={(
-                          <div style={{ width: 280 }}>
-                            {splitWizardEmployeeAddOptions.length === 0 ? (
-                              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                                {splitWizardProjectEmployeePickPoolIds.size === 0
-                                  ? "暂无可用成员：请在顶栏「员工」中关联，或为项目内仓库配置主 Owner，并确保对应员工勾选该仓库且 agentType 与主 Owner 一致。"
-                                  : "所选员工已全部加入列表。"}
-                              </Typography.Text>
-                            ) : (
-                              <Space direction="vertical" size={10} style={{ width: "100%" }}>
-                                <Checkbox.Group
-                                  style={{
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    gap: 6,
-                                    maxHeight: 240,
-                                    overflowY: "auto",
-                                  }}
-                                  value={splitEmployeePickerSelection}
-                                  options={splitWizardEmployeeAddOptions}
-                                  onChange={(checked) => {
-                                    setSplitEmployeePickerSelection(checked as string[]);
-                                  }}
-                                />
-                                <Button size="small" type="primary" block onClick={() => applySplitEmployeePickerSelection()}>
-                                  添加选中
-                                </Button>
-                              </Space>
-                            )}
-                          </div>
-                        )}
-                      >
-                        <Button size="small" type="default" icon={<PlusOutlined />}>
-                          添加员工
-                        </Button>
-                      </Popover>
-                    </div>
-                  </div>
-                ) : null}
-                <Space align="center" style={{ justifyContent: "space-between", width: "100%" }}>
-                  <Typography.Text strong>阶段1（拆分）</Typography.Text>
-                  <Button
-                    size="small"
-                    loading={splitPromptOptimizingSlot === PROMPT_SLOT_PRD_TASK_SPLIT_PHASE1}
-                    disabled={!!splitPromptOptimizingSlot || splitPromptAdjustStarting || splitPromptAdjustSaving}
-                    onClick={() => void handleOptimizeSplitPromptDraft(PROMPT_SLOT_PRD_TASK_SPLIT_PHASE1)}
-                  >
-                    AI优化
-                  </Button>
-                </Space>
-                <div className="app-prd-task-panel__split-prompt-milkdown">
-                  <MilkdownEditor
-                    floatingToolbar={false}
-                    text={splitPromptAdjustDraftBySlot[PROMPT_SLOT_PRD_TASK_SPLIT_PHASE1] ?? ""}
-                    onChange={(markdown) => {
-                      setSplitPromptAdjustDraftBySlot((prev) => ({
-                        ...prev,
-                        [PROMPT_SLOT_PRD_TASK_SPLIT_PHASE1]: markdown,
-                      }));
-                    }}
-                  />
-                </div>
-                <Space align="center" style={{ justifyContent: "space-between", width: "100%" }}>
-                  <Typography.Text strong>阶段2（溯源）</Typography.Text>
-                  <Button
-                    size="small"
-                    loading={splitPromptOptimizingSlot === PROMPT_SLOT_PRD_TASK_SPLIT_PHASE2}
-                    disabled={!!splitPromptOptimizingSlot || splitPromptAdjustStarting || splitPromptAdjustSaving}
-                    onClick={() => void handleOptimizeSplitPromptDraft(PROMPT_SLOT_PRD_TASK_SPLIT_PHASE2)}
-                  >
-                    AI优化
-                  </Button>
-                </Space>
-                <div className="app-prd-task-panel__split-prompt-milkdown">
-                  <MilkdownEditor
-                    floatingToolbar={false}
-                    text={splitPromptAdjustDraftBySlot[PROMPT_SLOT_PRD_TASK_SPLIT_PHASE2] ?? ""}
-                    onChange={(markdown) => {
-                      setSplitPromptAdjustDraftBySlot((prev) => ({
-                        ...prev,
-                        [PROMPT_SLOT_PRD_TASK_SPLIT_PHASE2]: markdown,
-                      }));
-                    }}
-                  />
-                </div>
-              </Space>
-            </Spin>
-            )
-          : (
-            <div className="app-prd-task-panel__split-runtime app-prd-task-panel__split-runtime--in-modal">
-              <div className="app-prd-task-panel__split-runtime-head">
-                <Space size={8} align="center" className="app-prd-task-panel__split-runtime-head-title">
-                  <Typography.Text type="secondary">
-                    第 2 步：下方为 Claude Code 执行过程与系统消息，与主会话区气泡样式一致；失败项可重试对应阶段。
-                  </Typography.Text>
-                  {parsing ? <Spin size="small" aria-label="拆分进行中" /> : null}
-                </Space>
-              </div>
-              <div className="app-prd-task-panel__split-runtime-list">
-                <div
-                  ref={splitRuntimeListRef}
-                  className="app-claude-messages app-prd-task-panel__split-runtime-messages"
-                >
-                  {splitRuntimeLogs.length === 0 ? (
-                    <div className="app-claude-messages-empty">
-                      <p>暂无处理记录</p>
-                    </div>
-                  ) : (
-                    splitRuntimeLogs.map((log) => (
-                      <SplitRuntimeMessageRow
-                        key={log.id}
-                        log={log}
-                        retryingPhase={retryingPhase}
-                        onRetryStage={(phase) => { void handleRetrySplitStage(phase); }}
-                      />
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-            )}
-      </Modal>
-      <Modal
-        title="拆分执行提示词"
+        onSavePrompts={() => void handleSaveSplitPromptAdjustDrafts()}
+        onStartSplit={() => void handleStartSplitFromAdjustModal()}
+        onOptimize={(slot) => void handleOptimizeSplitPromptDraft(slot)}
+        onRetryStage={(phase) => { void handleRetrySplitStage(phase); }}
+      />
+      <RuntimePromptEditModal
         open={runtimePromptModalOpen}
+        linkedRepositoryId={linkedRepositoryId}
+        loading={runtimePromptLoading}
+        saving={runtimePromptSaving}
+        optimizingSlot={runtimePromptOptimizingSlot}
+        slot={runtimePromptSlot}
+        draftBySlot={runtimePromptDraftBySlot}
+        onSlotChange={setRuntimePromptSlot}
+        onDraftChange={updateRuntimePromptDraft}
+        onResetToDefault={() => void handleResetRuntimePromptToDefault()}
         onCancel={() => {
-          if (runtimePromptOptimizingSlot) return;
           setRuntimePromptModalOpen(false);
           setRuntimePromptSaving(false);
         }}
-        width={920}
-        destroyOnHidden
-        footer={(
-          <Space wrap>
-            <Button
-              onClick={() => void handleResetRuntimePromptToDefault()}
-              disabled={!linkedRepositoryId || runtimePromptLoading || runtimePromptSaving || !!runtimePromptOptimizingSlot}
-            >
-              恢复默认
-            </Button>
-            <Button onClick={() => setRuntimePromptModalOpen(false)} disabled={runtimePromptSaving || !!runtimePromptOptimizingSlot}>
-              关闭
-            </Button>
-            <Button
-              type="primary"
-              onClick={() => void handleSaveRuntimePromptDraft()}
-              loading={runtimePromptSaving}
-              disabled={!!runtimePromptOptimizingSlot}
-            >
-              保存
-            </Button>
-          </Space>
-        )}
-      >
-        <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
-          这里展示并编辑拆分执行时实际使用的阶段提示词（仓库级覆盖）。当前仅编辑系统提示词正文。
-        </Typography.Paragraph>
-        <Space direction="vertical" size={10} style={{ width: "100%" }}>
-          <Segmented
-            size="small"
-            value={runtimePromptSlot}
-            options={[
-              { label: "阶段1（拆分）", value: PROMPT_SLOT_PRD_TASK_SPLIT_PHASE1 },
-              { label: "阶段2（溯源）", value: PROMPT_SLOT_PRD_TASK_SPLIT_PHASE2 },
-            ]}
-            onChange={(value) => {
-              if (
-                value === PROMPT_SLOT_PRD_TASK_SPLIT_PHASE1
-                || value === PROMPT_SLOT_PRD_TASK_SPLIT_PHASE2
-              ) {
-                setRuntimePromptSlot(value);
-              }
-            }}
-          />
-          <Space align="center" style={{ justifyContent: "space-between", width: "100%" }}>
-            <Typography.Text strong>
-              {runtimePromptSlot === PROMPT_SLOT_PRD_TASK_SPLIT_PHASE1 ? "阶段1（拆分）提示词" : "阶段2（溯源）提示词"}
-            </Typography.Text>
-            <Button
-              size="small"
-              loading={runtimePromptOptimizingSlot === runtimePromptSlot}
-              disabled={!!runtimePromptOptimizingSlot || runtimePromptSaving || runtimePromptLoading}
-              onClick={() => void handleOptimizeRuntimePromptDraft(runtimePromptSlot)}
-            >
-              AI优化
-            </Button>
-          </Space>
-          <Spin spinning={runtimePromptLoading}>
-            <div className="app-prd-task-panel__split-prompt-milkdown">
-              <MilkdownEditor
-                floatingToolbar={false}
-                text={runtimePromptDraftBySlot[runtimePromptSlot] ?? ""}
-                onChange={(markdown) => {
-                  updateRuntimePromptDraft(runtimePromptSlot, markdown);
-                }}
-              />
-            </div>
-          </Spin>
-        </Space>
-      </Modal>
+        onSave={() => void handleSaveRuntimePromptDraft()}
+        onOptimize={(slot) => void handleOptimizeRuntimePromptDraft(slot)}
+      />
       <Modal
         title={projectPrdLinkKind === "employee" ? "关联已有员工" : "关联已有团队"}
         open={projectPrdLinkModalOpen}
@@ -4335,34 +3580,15 @@ export function PrdTaskSplitPanel({
           </Typography.Text>
         ) : null}
       </Modal>
-      <Modal
-        title={requirementNameModalMode === "create" ? "新增需求" : "填写需求名称"}
+      <RequirementNameModal
         open={requirementNameModalOpen}
-        onCancel={() => {
-          if (requirementNameSaving) return;
-          setRequirementNameModalOpen(false);
-        }}
-        destroyOnHidden
-        okText={requirementNameModalMode === "create" ? "确认并创建" : "确认并保存"}
-        cancelText="取消"
-        confirmLoading={requirementNameSaving}
-        onOk={() => void handleConfirmRequirementNameModal()}
-      >
-        <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
-          {requirementNameModalMode === "create"
-            ? "请输入新需求名称，确认后将创建一个空白需求并切换到该需求。"
-            : "首次保存需要为当前需求起一个名称，便于区分与检索；之后保存将不再询问。"}
-        </Typography.Paragraph>
-        <Input
-          placeholder="例如：智能待办清单 App PRD"
-          value={requirementNameInput}
-          onChange={(e) => setRequirementNameInput(e.target.value)}
-          maxLength={120}
-          showCount
-          onPressEnter={() => void handleConfirmRequirementNameModal()}
-          autoFocus
-        />
-      </Modal>
+        mode={requirementNameModalMode}
+        saving={requirementNameSaving}
+        value={requirementNameInput}
+        onChange={setRequirementNameInput}
+        onCancel={() => setRequirementNameModalOpen(false)}
+        onConfirm={() => void handleConfirmRequirementNameModal()}
+      />
       <Space direction="vertical" size={4} className="app-prd-task-panel__stack">
         <Space className="app-prd-task-panel__header" align="start">
           <div className="app-prd-task-panel__header-summary-wrap" style={{ minWidth: 0, flex: 1 }}>
@@ -4494,67 +3720,23 @@ export function PrdTaskSplitPanel({
             <Card
               size="small"
               title={(
-                <div className="app-prd-task-panel__section-title">
-                  <div className="app-prd-task-panel__section-title-main">
-                    <span>需求</span>
-                    <Select
-                      size="small"
-                      className="app-prd-task-panel__requirement-select"
-                      placeholder="选择需求"
-                      value={activeRequirementId ?? undefined}
-                      style={{ minWidth: 160, maxWidth: 360 }}
-                      showSearch
-                      optionFilterProp="label"
-                      options={sortedRequirementHistory.map((item) => ({
-                        value: item.id,
-                        label: item.requirementDisplayName,
-                      }))}
-                      onChange={(value) => {
-                        const picked = requirementHistoryById.get(value);
-                        if (!picked) return;
-                        switchToRequirement(picked);
-                      }}
-                    />
-                  </div>
-                  <Space size={4} className="app-prd-task-panel__requirement-title-actions">
-                    <Button
-                      type="default"
-                      size="small"
-                      className="app-prd-task-panel__requirement-op-btn app-prd-task-panel__requirement-op-btn--pin"
-                      icon={<PushpinOutlined />}
-                      disabled={!activeRequirementId}
-                      onClick={() => handlePinActiveRequirement()}
-                    >
-                      {activeRequirement?.isPinned ? "已置顶" : "置顶"}
-                    </Button>
-                    <Button
-                      size="small"
-                      className="app-prd-task-panel__requirement-op-btn"
-                      icon={<PlusOutlined />}
-                      onClick={() => {
-                        setRequirementNameModalMode("create");
-                        setRequirementNameInput("");
-                        setRequirementNameModalOpen(true);
-                      }}
-                    >
-                      新增
-                    </Button>
-                    <Tooltip title="删除当前需求">
-                      <Button
-                        type="default"
-                        danger
-                        size="small"
-                        className="app-prd-task-panel__requirement-op-btn app-prd-task-panel__requirement-op-btn--delete"
-                        icon={<DeleteOutlined />}
-                        disabled={!activeRequirementId}
-                        aria-label="删除当前需求"
-                        onClick={() => handleDeleteActiveRequirement()}
-                      >
-                        删除
-                      </Button>
-                    </Tooltip>
-                  </Space>
-                </div>
+                <RequirementBoardHeader
+                  activeRequirementId={activeRequirementId}
+                  activeRequirement={activeRequirement ?? null}
+                  options={sortedRequirementHistory}
+                  onPick={(value) => {
+                    const picked = requirementHistoryById.get(value);
+                    if (!picked) return;
+                    switchToRequirement(picked);
+                  }}
+                  onPin={() => handlePinActiveRequirement()}
+                  onCreate={() => {
+                    setRequirementNameModalMode("create");
+                    setRequirementNameInput("");
+                    setRequirementNameModalOpen(true);
+                  }}
+                  onDelete={() => handleDeleteActiveRequirement()}
+                />
               )}
               className="app-prd-task-panel__left-card"
               bodyStyle={{ padding: "0 0 16px 0" }}
@@ -4594,35 +3776,8 @@ export function PrdTaskSplitPanel({
                         if (filteredTasks.length === 0) return;
                         setActiveResult((prev) => {
                           if (!prev) return prev;
-                          const taskIds = new Set(prev.splitTasks.map((task) => task.id));
-                          const resolvedNow: Record<string, TaskAnchorPosition> = {};
-                          for (const [taskId, range] of Object.entries(ranges)) {
-                            if (!taskIds.has(taskId)) continue;
-                            const from = Number(range.from);
-                            const to = Number(range.to);
-                            if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) continue;
-                            resolvedNow[taskId] = { from: Math.floor(from), to: Math.floor(to) };
-                          }
-                          const current = prev.taskAnchorPositions ?? {};
-                          if (Object.keys(resolvedNow).length === 0) {
-                            return prev;
-                          }
-                          // 采用增量合并，避免状态切换时瞬时回传不完整导致锚点位置被清空后又恢复而闪烁。
-                          const mergedPositionsRaw: Record<string, TaskAnchorPosition> = {
-                            ...current,
-                            ...resolvedNow,
-                          };
-                          const mergedPositions: Record<string, TaskAnchorPosition> = {};
-                          for (const [taskId, pos] of Object.entries(mergedPositionsRaw)) {
-                            if (!taskIds.has(taskId)) continue;
-                            mergedPositions[taskId] = pos;
-                          }
-                          const nextPositions = Object.keys(mergedPositions).length > 0 ? mergedPositions : undefined;
-                          if (sameTaskAnchorPositions(prev.taskAnchorPositions, nextPositions)) return prev;
-                          const merged: SplitResult = {
-                            ...prev,
-                            taskAnchorPositions: nextPositions,
-                          };
+                          const merged = reconcileResolvedAnchorRanges(prev, ranges);
+                          if (!merged) return prev;
                           latestAnchorRangePersistResultRef.current = merged;
                           if (anchorRangePersistTimerRef.current != null) {
                             window.clearTimeout(anchorRangePersistTimerRef.current);
@@ -4642,43 +3797,16 @@ export function PrdTaskSplitPanel({
                         focusTaskWithFilterSync(taskId);
                       }}
                     />
-                  {splitRuntimeVisible ? (
-                    <div ref={splitRuntimeRef} className="app-prd-task-panel__split-runtime">
-                        <div className="app-prd-task-panel__split-runtime-head">
-                          <Space size={8} align="center" className="app-prd-task-panel__split-runtime-head-title">
-                            <Typography.Text strong>处理信息 · Claude Code 会话</Typography.Text>
-                            {parsing ? <Spin size="small" aria-label="拆分进行中" /> : null}
-                          </Space>
-                          <Button
-                            size="small"
-                            icon={<CloseOutlined />}
-                            onClick={() => setSplitRuntimeVisible(false)}
-                            aria-label="关闭处理信息面板"
-                          />
-                        </div>
-                        <div className="app-prd-task-panel__split-runtime-list">
-                          <div
-                            ref={splitRuntimeListRef}
-                            className="app-claude-messages app-prd-task-panel__split-runtime-messages"
-                          >
-                            {splitRuntimeLogs.length === 0 ? (
-                              <div className="app-claude-messages-empty">
-                                <p>暂无处理记录</p>
-                              </div>
-                            ) : (
-                              splitRuntimeLogs.map((log) => (
-                                <SplitRuntimeMessageRow
-                                  key={log.id}
-                                  log={log}
-                                  retryingPhase={retryingPhase}
-                                  onRetryStage={(phase) => { void handleRetrySplitStage(phase); }}
-                                />
-                              ))
-                            )}
-                          </div>
-                        </div>
-                    </div>
-                  ) : null}
+                  <InlineRuntimePanel
+                    visible={splitRuntimeVisible}
+                    parsing={parsing}
+                    containerRef={splitRuntimeRef}
+                    listRef={splitRuntimeListRef}
+                    logs={splitRuntimeLogs}
+                    retryingPhase={retryingPhase}
+                    onClose={() => setSplitRuntimeVisible(false)}
+                    onRetryStage={(phase) => { void handleRetrySplitStage(phase); }}
+                  />
                 </div>
                 {inputError ? <Typography.Text type="danger">{inputError}</Typography.Text> : null}
                 {showUrlAnchorHint ? (
@@ -4686,40 +3814,14 @@ export function PrdTaskSplitPanel({
                     当前输入为 URL，若左侧仅显示链接文本则无法定位需求锚点；请先执行一次拆分以回填正文后再查看锚点。
                   </Typography.Text>
                 ) : null}
-                <div className="app-prd-task-panel__actions-row">
-                  <Space className="app-prd-task-panel__actions-left">
-                    <Button
-                      icon={<SaveOutlined />}
-                      className="app-prd-task-panel__action-btn"
-                      onClick={() => void handleUserPersistPrdDraft()}
-                      disabled={!hasInput}
-                    >
-                      保存
-                    </Button>
-                    <Button
-                      type="primary"
-                      icon={<PlayCircleOutlined />}
-                      className="app-prd-task-panel__btn-primary app-prd-task-panel__action-btn"
-                      onClick={() => void handleOpenSplitPromptAdjustModal()}
-                      loading={parsing}
-                      disabled={!hasInput || parsing || splitPromptAdjustStarting}
-                    >
-                      拆分
-                    </Button>
-                  </Space>
-                  <Space size={8}>
-                    <Dropdown menu={{ items: promptActionItems }} trigger={["click"]} placement="bottomRight">
-                      <Button
-                        icon={<SettingOutlined />}
-                        className="app-prd-task-panel__btn-secondary app-prd-task-panel__action-btn"
-                        aria-label="更多操作"
-                      >
-                        更多操作
-                        <DownOutlined />
-                      </Button>
-                    </Dropdown>
-                  </Space>
-                </div>
+                <RequirementBoardActions
+                  hasInput={hasInput}
+                  parsing={parsing}
+                  splitStarting={splitPromptAdjustStarting}
+                  promptActionItems={promptActionItems}
+                  onSaveDraft={() => void handleUserPersistPrdDraft()}
+                  onStartSplit={() => void handleOpenSplitPromptAdjustModal()}
+                />
               </Space>
             </Card>
           </Col>
@@ -4732,114 +3834,29 @@ export function PrdTaskSplitPanel({
                   条由本地自动映射生成（不依赖模型返回 requirement 映射字段）。
                 </Typography.Text>
               ) : null}
-              {splitQualityStats ? (
-                <div className="app-prd-task-panel__quality-strip">
-                  <span className="app-prd-task-panel__quality-chip">
-                    映射覆盖 {splitQualityStats.mappedTaskCount}/{splitQualityStats.totalTasks}（{splitQualityStats.mappingRate}%）
-                  </span>
-                  <span
-                    className={[
-                      "app-prd-task-panel__quality-chip",
-                      splitQualityStats.untraceableTaskIds.length > 0
-                        ? "app-prd-task-panel__quality-chip--warning"
-                        : "app-prd-task-panel__quality-chip--good",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                  >
-                    锚点可追溯 {splitQualityStats.traceableTaskCount}/{splitQualityStats.totalTasks}（{splitQualityStats.traceRate}%）
-                  </span>
-                  {splitQualityStats.untraceableTaskIds.length > 0 ? (
-                    <span className="app-prd-task-panel__quality-chip app-prd-task-panel__quality-chip--warning">
-                      不可追溯：{splitQualityStats.untraceableTaskIds.join(", ")}
-                    </span>
-                  ) : null}
-                </div>
-              ) : null}
+              <SplitQualityStrip stats={splitQualityStats} />
 
               <div ref={taskSplitHostRef} className="app-prd-task-panel__task-card-host">
                   <Card
                     size="small"
                     title={(
-                      <div className="app-prd-task-panel__task-title-row">
-                        <div className="app-prd-task-panel__task-title-row-main">
-                          <span>
-                            拆分任务
-                            <Typography.Text type="secondary">（{filteredTasks.length}）</Typography.Text>
-                          </span>
-                          {unmetTaskIds.length > 0 ? (
-                            <Dropdown
-                              trigger={["click"]}
-                              placement="bottomLeft"
-                              menu={{ items: unmetPreconditionsMenuItems }}
-                              overlayClassName="app-prd-task-panel__unmet-dropdown-root"
-                            >
-                              <button
-                                type="button"
-                                className="app-prd-task-panel__unmet-trigger"
-                                title="存在问题任务，点击查看锚点"
-                                aria-label={`存在问题任务 ${unmetTaskIds.length} 个，点击查看锚点`}
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <UnmetConditionsQuestionIcon />
-                                <span className="app-prd-task-panel__unmet-trigger-count">
-                                  {unmetTaskIds.length}
-                                </span>
-                              </button>
-                            </Dropdown>
-                          ) : null}
-                        </div>
-                        <div className="app-prd-task-panel__task-title-row-tools">
-                          <Button
-                            size="small"
-                            type="primary"
-                            className="app-prd-task-panel__task-toolbar-btn"
-                            loading={confirmSavingTaskId === "__all__"}
-                            disabled={!activeResult || activeResult.splitTasks.length === 0 || Boolean(confirmSavingTaskId)}
-                            onClick={() => void handleConfirmAllTasks()}
-                          >
-                            一键确认
-                          </Button>
-                          <Button
-                            size="small"
-                            className="app-prd-task-panel__task-toolbar-btn"
-                            onClick={() => void handleAddTask()}
-                            disabled={Boolean(confirmSavingTaskId)}
-                          >
-                            新增
-                          </Button>
-                          <Button
-                            size="small"
-                            danger
-                            type="default"
-                            className="app-prd-task-panel__task-toolbar-btn"
-                            icon={<DeleteOutlined />}
-                            onClick={() => handleClearAllTasks()}
-                            disabled={!activeResult || activeResult.splitTasks.length === 0}
-                          >
-                            全部清空
-                          </Button>
-                          <Segmented
-                            size="small"
-                            className="app-prd-task-panel__task-toolbar-segmented"
-                            value={taskConfirmFilter}
-                            onChange={(value: string | number) => setTaskConfirmFilter(value as TaskConfirmFilter)}
-                            options={[
-                              { label: `未确认（${taskConfirmCounts.unconfirmedCount}）`, value: "unconfirmed" },
-                              { label: `已确认（${taskConfirmCounts.confirmedCount}）`, value: "confirmed" },
-                            ]}
-                          />
-                          {showRoleFilterTabs ? (
-                            <Segmented
-                              size="small"
-                              className="app-prd-task-panel__task-toolbar-segmented"
-                              value={taskRoleFilter}
-                              onChange={(value: string | number) => setTaskRoleFilter(value as TaskRoleFilter)}
-                              options={taskRoleFilterOptions}
-                            />
-                          ) : null}
-                        </div>
-                      </div>
+                      <TaskBoardHeader
+                        filteredTasksCount={filteredTasks.length}
+                        unmetTaskIds={unmetTaskIds}
+                        unmetMenuItems={unmetPreconditionsMenuItems}
+                        confirmSavingTaskId={confirmSavingTaskId}
+                        activeResult={activeResult}
+                        taskConfirmFilter={taskConfirmFilter}
+                        taskConfirmCounts={taskConfirmCounts}
+                        taskRoleFilter={taskRoleFilter}
+                        taskRoleFilterOptions={taskRoleFilterOptions}
+                        showRoleFilterTabs={showRoleFilterTabs}
+                        onConfirmAll={() => void handleConfirmAllTasks()}
+                        onAddTask={() => void handleAddTask()}
+                        onClearAllTasks={() => handleClearAllTasks()}
+                        onTaskConfirmFilterChange={setTaskConfirmFilter}
+                        onTaskRoleFilterChange={setTaskRoleFilter}
+                      />
                     )}
                     className="app-prd-task-panel__result-card app-prd-task-panel__task-card"
                     bodyStyle={{ padding: 0 }}
@@ -4858,562 +3875,150 @@ export function PrdTaskSplitPanel({
                             const unmetCollapsed = taskUnmetCollapsedById[task.id] ?? false;
                             const checkCollapsed = taskCheckCollapsedById[task.id] ?? false;
                             const taskAiMode = getTaskAiMode(task);
+                            const draftedTask = getDraftedTask(task);
                             const taskAiPopoverContent = (
-                              <div
-                                className="app-prd-task-panel__task-ai-popover-content"
-                                onMouseDown={(e) => e.stopPropagation()}
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <div className="app-prd-task-panel__task-ai-popover-main">
-                                  <Typography.Text strong>提示词</Typography.Text>
-                                  <div className="app-prd-task-panel__split-prompt-milkdown">
-                                    <MilkdownEditor
-                                      floatingToolbar={false}
-                                      text={getTaskAiInput(task, taskAiMode)}
-                                      onChange={(markdown) => {
-                                        setTaskAiInputById((prev) => ({
-                                          ...prev,
-                                          [task.id]: {
-                                            ...(prev[task.id] ?? {}),
-                                            [taskAiMode]: markdown,
-                                          },
-                                        }));
-                                      }}
-                                    />
-                                  </div>
-                                  {taskAiMode === "optimize" ? (
-                                    <>
-                                      <Typography.Text strong>优化后任务内容</Typography.Text>
-                                      <div className="app-prd-task-panel__split-prompt-milkdown">
-                                        <MilkdownEditor
-                                          floatingToolbar={false}
-                                          text={taskAiOptimizedContentById[task.id] ?? ""}
-                                          onChange={(markdown) => {
-                                            setTaskAiOptimizedContentById((prev) => ({
-                                              ...prev,
-                                              [task.id]: markdown,
-                                            }));
-                                          }}
-                                        />
-                                      </div>
-                                    </>
-                                  ) : null}
-                                </div>
-                                <div className="app-prd-task-panel__task-ai-popover-actions">
-                                  <Button
-                                    size="small"
-                                    disabled={!!taskAiActionLoadingById[task.id]}
-                                    onClick={() => {
-                                      setTaskAiPopoverTaskId(null);
-                                      setTaskAiPopoverMode(null);
-                                    }}
-                                  >
-                                    关闭
-                                  </Button>
-                                  <Button
-                                    type="primary"
-                                    size="small"
-                                    loading={!!taskAiActionLoadingById[task.id]}
-                                    disabled={!!taskAiActionLoadingById[task.id]}
-                                    onClick={() => {
-                                      const prompt = getTaskAiInput(task, taskAiMode).trim();
-                                      if (!prompt) {
-                                        message.warning("请输入提示词后再执行。");
-                                        return;
-                                      }
-                                      if (taskAiMode === "optimize") {
-                                        void handleOptimizeTaskContent(task, prompt);
-                                        return;
-                                      }
-                                      void handleCheckTaskExecutable(task, prompt);
-                                    }}
-                                  >
-                                    {taskAiMode === "optimize" ? "优化" : "确定"}
-                                  </Button>
-                                  {taskAiMode === "optimize" ? (
-                                    <Button
-                                      size="small"
-                                      loading={taskAiSavingTaskId === task.id}
-                                      disabled={!(taskAiOptimizedReadyById[task.id] ?? false) || !!taskAiActionLoadingById[task.id]}
-                                      onClick={() => void handleSaveOptimizedTaskContent(task)}
-                                    >
-                                      保存
-                                    </Button>
-                                  ) : null}
-                                </div>
-                              </div>
+                              <TaskAiPopoverContent
+                                mode={taskAiMode}
+                                promptText={getTaskAiInput(task, taskAiMode)}
+                                optimizedText={taskAiOptimizedContentById[task.id] ?? ""}
+                                actionLoading={!!taskAiActionLoadingById[task.id]}
+                                saving={taskAiSavingTaskId === task.id}
+                                optimizedReady={taskAiOptimizedReadyById[task.id] ?? false}
+                                onPromptChange={(markdown) => {
+                                  setTaskAiInputById((prev) => ({
+                                    ...prev,
+                                    [task.id]: {
+                                      ...(prev[task.id] ?? {}),
+                                      [taskAiMode]: markdown,
+                                    },
+                                  }));
+                                }}
+                                onOptimizedTextChange={(markdown) => {
+                                  setTaskAiOptimizedContentById((prev) => ({
+                                    ...prev,
+                                    [task.id]: markdown,
+                                  }));
+                                }}
+                                onClose={() => {
+                                  setTaskAiPopoverTaskId(null);
+                                  setTaskAiPopoverMode(null);
+                                }}
+                                onSubmit={() => {
+                                  const prompt = getTaskAiInput(task, taskAiMode).trim();
+                                  if (!prompt) {
+                                    message.warning("请输入提示词后再执行。");
+                                    return;
+                                  }
+                                  if (taskAiMode === "optimize") {
+                                    void handleOptimizeTaskContent(task, prompt);
+                                    return;
+                                  }
+                                  void handleCheckTaskExecutable(task, prompt);
+                                }}
+                                onSaveOptimized={() => void handleSaveOptimizedTaskContent(task)}
+                              />
                             );
+                            const taskAnchorPopoverContent = (
+                              <TaskAnchorPopoverBody
+                                task={task}
+                                activeResult={activeResult}
+                                anchorResolvedInEditor={resolvedTaskAnchorIds.includes(task.id)}
+                              />
+                            );
+                            const currentAiMode =
+                              taskAiPopoverTaskId === task.id ? taskAiPopoverMode : null;
                             return (
-                            <div
-                              key={task.id}
-                              data-task-id={task.id}
-                              className={`app-prd-task-panel__task-list-item ${selectedTaskId === task.id ? "is-active" : ""}`}
-                              tabIndex={0}
-                              onClick={() => {
-                                if (selectedTaskId !== null && selectedTaskId !== task.id) {
-                                  milkdownEditorRef.current?.clearRequirementFocusHighlight();
-                                }
-                                setSelectedTaskId(task.id);
-                                setSelectedAnchorTaskId(task.id);
-                              }}
-                            >
-                            <div className="app-prd-task-panel__task-card-head">
-                              <div className="app-prd-task-panel__task-card-meta-row">
-                                <Button
-                                  type="text"
-                                  size="small"
-                                  className="app-prd-task-panel__task-link-btn"
-                                  title={`定位需求锚点 #${anchorLabelFromTaskId(task.id)}`}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (selectedTaskId !== task.id) {
-                                      milkdownEditorRef.current?.clearRequirementFocusHighlight();
-                                    }
-                                    setSelectedTaskId(task.id);
-                                    setSelectedAnchorTaskId(task.id);
-                                    const locatedByAnchor = scrollToTaskAnchorInPrd(task);
-                                    if (locatedByAnchor) return;
-                                    const requirementId = pickRequirementIdForTask(task);
-                                    if (requirementId) {
-                                      const locatedByRequirement = scrollToRequirementInPrd(requirementId);
-                                      if (locatedByRequirement) return;
-                                    }
-                                    message.warning("没有相应的锚点。");
-                                  }}
-                                >
-                                  定位需求 #{anchorLabelFromTaskId(task.id)}
-                                </Button>
-                                <div className="app-prd-task-panel__task-card-tags">
-                                  <span
-                                    className={`app-prd-task-panel__task-role-tag ${taskRoleTagModifierClass(task.role)}`}
-                                  >
-                                    {taskRoleChineseLabel(task.role)}
-                                  </span>
-                                </div>
-                                <Button
-                                  type="text"
-                                  danger
-                                  size="small"
-                                  className="app-prd-task-panel__task-delete-btn"
-                                  icon={<DeleteOutlined />}
-                                  title="删除该任务项"
-                                  aria-label={`删除任务 ${task.id}`}
-                                  disabled={(activeResult?.splitTasks.length ?? 0) <= 1}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDeleteTask(task.id);
-                                  }}
-                                />
-                              </div>
-                            </div>
-                            <div
-                              className="app-prd-task-panel__task-card-editor is-editing"
-                              onMouseDown={(e) => {
-                                e.stopPropagation();
-                              }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                              }}
-                            >
-                              <MilkdownEditor
-                                floatingToolbar={false}
-                                text={pendingTaskContentById[task.id] ?? taskToMarkdown(getDraftedTask(task))}
-                                onChange={(markdown) => {
+                              <TaskCard
+                                key={task.id}
+                                task={task}
+                                draftedTask={draftedTask}
+                                selected={selectedTaskId === task.id}
+                                canDelete={(activeResult?.splitTasks.length ?? 0) > 1}
+                                pendingContent={pendingTaskContentById[task.id]}
+                                draftedTaskMarkdown={taskToMarkdown(draftedTask)}
+                                pendingApiSpec={pendingTaskApiSpecById[task.id]}
+                                showApiSpec={Boolean(draftedTask.apiSpec) || task.title.includes("接口协议")}
+                                executionStatus={displayExecutionStatus(task)}
+                                generatingTaskId={generatingExecutableTaskId}
+                                savingTaskId={savingTaskId}
+                                confirmSavingTaskId={confirmSavingTaskId}
+                                closingMotionActive={Boolean(closingToTaskListMotion)}
+                                taskUnmetLines={taskUnmetLines}
+                                taskExecutableCheckResult={taskExecutableCheckResult}
+                                unmetCollapsed={unmetCollapsed}
+                                checkCollapsed={checkCollapsed}
+                                anchorPopoverOpen={taskAnchorPopoverTaskId === task.id}
+                                aiPopoverMode={currentAiMode}
+                                taskAiPopoverContent={taskAiPopoverContent}
+                                taskAnchorPopoverContent={taskAnchorPopoverContent}
+                                onSelect={() => {
+                                  if (selectedTaskId !== null && selectedTaskId !== task.id) {
+                                    milkdownEditorRef.current?.clearRequirementFocusHighlight();
+                                  }
+                                  setSelectedTaskId(task.id);
+                                  setSelectedAnchorTaskId(task.id);
+                                }}
+                                onLocateAnchor={() => {
+                                  if (selectedTaskId !== task.id) {
+                                    milkdownEditorRef.current?.clearRequirementFocusHighlight();
+                                  }
+                                  setSelectedTaskId(task.id);
+                                  setSelectedAnchorTaskId(task.id);
+                                  const locatedByAnchor = scrollToTaskAnchorInPrd(task);
+                                  if (locatedByAnchor) return;
+                                  const requirementId = pickRequirementIdForTask(task);
+                                  if (requirementId) {
+                                    const locatedByRequirement = scrollToRequirementInPrd(requirementId);
+                                    if (locatedByRequirement) return;
+                                  }
+                                  message.warning("没有相应的锚点。");
+                                }}
+                                onDelete={() => handleDeleteTask(task.id)}
+                                onPendingContentChange={(markdown) => {
                                   setPendingTaskContentById((prev) => {
                                     if (prev[task.id] === markdown) return prev;
-                                    return {
-                                      ...prev,
-                                      [task.id]: markdown,
-                                    };
+                                    return { ...prev, [task.id]: markdown };
                                   });
                                 }}
-                              />
-                            </div>
-                          {(getDraftedTask(task).apiSpec || task.title.includes("接口协议")) ? (
-                            <div
-                              className="app-prd-task-panel__task-api-spec-block"
-                            >
-                              {(() => {
-                                const method = (pendingTaskApiSpecById[task.id] ?? getDraftedTask(task).apiSpec)?.method;
-                                if (method !== "GET" && method !== "DELETE") return null;
-                                return (
-                                  <Typography.Text type="warning">
-                                    当前方法通常不使用请求体，建议优先使用 query/path 参数定义请求。
-                                  </Typography.Text>
-                                );
-                              })()}
-                              <Typography.Text type="secondary">接口协议（结构化）</Typography.Text>
-                              <Space direction="vertical" size={6} style={{ width: "100%", marginTop: 6 }}>
-                                <Space>
-                                  <Button
-                                    size="small"
-                                    onClick={() => {
-                                      setPendingTaskApiSpecById((prev) => ({
-                                        ...prev,
-                                        [task.id]: buildApiSpecTemplate(getDraftedTask(task)),
-                                      }));
-                                    }}
-                                  >
-                                    一键生成 REST 模板
-                                  </Button>
-                                </Space>
-                                <Input
-                                  size="small"
-                                  placeholder="接口路径，例如 /api/tasks/split"
-                                  value={(pendingTaskApiSpecById[task.id] ?? getDraftedTask(task).apiSpec)?.endpoint ?? ""}
-                                  onChange={(e) => {
-                                    const base = pendingTaskApiSpecById[task.id] ?? getDraftedTask(task).apiSpec ?? {
-                                      endpoint: "",
-                                      method: "POST" as const,
-                                      requestSchema: "",
-                                      responseSchema: "",
-                                      errorCodes: [],
-                                    };
-                                    setPendingTaskApiSpecById((prev) => ({
-                                      ...prev,
-                                      [task.id]: { ...base, endpoint: e.target.value },
-                                    }));
-                                  }}
-                                />
-                                <Select
-                                  size="small"
-                                  value={(pendingTaskApiSpecById[task.id] ?? getDraftedTask(task).apiSpec)?.method ?? "POST"}
-                                  options={API_METHOD_OPTIONS.map((item) => ({ label: item, value: item }))}
-                                  onChange={(value) => {
-                                    const draftedTask = getDraftedTask(task);
-                                    const base = pendingTaskApiSpecById[task.id] ?? draftedTask.apiSpec ?? {
-                                      endpoint: "",
-                                      method: "POST" as const,
-                                      requestSchema: "",
-                                      responseSchema: "",
-                                      errorCodes: [],
-                                    };
-                                    const defaultPost = normalizeJsonText(buildRequestSchemaByMethod("POST", draftedTask.title));
-                                    const defaultGet = normalizeJsonText(buildRequestSchemaByMethod("GET", draftedTask.title));
-                                    const defaultDelete = normalizeJsonText(buildRequestSchemaByMethod("DELETE", draftedTask.title));
-                                    const currentNormalized = normalizeJsonText(base.requestSchema);
-                                    const shouldAutoUpdateRequest = currentNormalized.length === 0
-                                      || currentNormalized === defaultPost
-                                      || currentNormalized === defaultGet
-                                      || currentNormalized === defaultDelete;
-                                    setPendingTaskApiSpecById((prev) => ({
-                                      ...prev,
-                                      [task.id]: {
-                                        ...base,
-                                        method: value,
-                                        requestSchema: shouldAutoUpdateRequest
-                                          ? buildRequestSchemaByMethod(value, draftedTask.title)
-                                          : base.requestSchema,
-                                      },
-                                    }));
-                                  }}
-                                />
-                                <Input.TextArea
-                                  rows={2}
-                                  placeholder="请求定义（JSON Schema 或字段说明）"
-                                  value={(pendingTaskApiSpecById[task.id] ?? getDraftedTask(task).apiSpec)?.requestSchema ?? ""}
-                                  onChange={(e) => {
-                                    const base = pendingTaskApiSpecById[task.id] ?? getDraftedTask(task).apiSpec ?? {
-                                      endpoint: "",
-                                      method: "POST" as const,
-                                      requestSchema: "",
-                                      responseSchema: "",
-                                      errorCodes: [],
-                                    };
-                                    setPendingTaskApiSpecById((prev) => ({
-                                      ...prev,
-                                      [task.id]: { ...base, requestSchema: e.target.value },
-                                    }));
-                                  }}
-                                />
-                                <Input.TextArea
-                                  rows={2}
-                                  placeholder="响应定义（JSON Schema 或字段说明）"
-                                  value={(pendingTaskApiSpecById[task.id] ?? getDraftedTask(task).apiSpec)?.responseSchema ?? ""}
-                                  onChange={(e) => {
-                                    const base = pendingTaskApiSpecById[task.id] ?? getDraftedTask(task).apiSpec ?? {
-                                      endpoint: "",
-                                      method: "POST" as const,
-                                      requestSchema: "",
-                                      responseSchema: "",
-                                      errorCodes: [],
-                                    };
-                                    setPendingTaskApiSpecById((prev) => ({
-                                      ...prev,
-                                      [task.id]: { ...base, responseSchema: e.target.value },
-                                    }));
-                                  }}
-                                />
-                                <Input
-                                  size="small"
-                                  placeholder="错误码，逗号分隔，例如 400,401,500"
-                                  value={((pendingTaskApiSpecById[task.id] ?? getDraftedTask(task).apiSpec)?.errorCodes ?? []).join(", ")}
-                                  onChange={(e) => {
-                                    const base = pendingTaskApiSpecById[task.id] ?? getDraftedTask(task).apiSpec ?? {
-                                      endpoint: "",
-                                      method: "POST" as const,
-                                      requestSchema: "",
-                                      responseSchema: "",
-                                      errorCodes: [],
-                                    };
-                                    setPendingTaskApiSpecById((prev) => ({
-                                      ...prev,
-                                      [task.id]: {
-                                        ...base,
-                                        errorCodes: e.target.value.split(",").map((item) => item.trim()).filter(Boolean),
-                                      },
-                                    }));
-                                  }}
-                                />
-                              </Space>
-                            </div>
-                          ) : null}
-                            <div
-                              className="app-prd-task-panel__task-card-footer"
-                              onMouseDown={(e) => e.stopPropagation()}
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <div className="app-prd-task-panel__task-execution-row">
-                                <Popover
-                                  trigger="click"
-                                  placement="topLeft"
-                                  open={taskAnchorPopoverTaskId === task.id}
-                                  onOpenChange={(open) => {
-                                    if (open) {
-                                      setTaskAiPopoverTaskId(null);
-                                      setTaskAiPopoverMode(null);
-                                      setTaskAnchorPopoverTaskId(task.id);
-                                      return;
-                                    }
-                                    setTaskAnchorPopoverTaskId((prev) => (prev === task.id ? null : prev));
-                                  }}
-                                  overlayClassName="app-prd-task-panel__task-anchor-popover"
-                                  content={(
-                                    <TaskAnchorPopoverBody
-                                      task={task}
-                                      activeResult={activeResult}
-                                      anchorResolvedInEditor={resolvedTaskAnchorIds.includes(task.id)}
-                                    />
-                                  )}
-                                >
-                                  <Button
-                                    type="default"
-                                    size="small"
-                                    className="app-prd-task-panel__task-anchor-btn"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                    }}
-                                  >
-                                    taskAnchors
-                                  </Button>
-                                </Popover>
-                                <div className="app-prd-task-panel__task-execution-actions">
-                                <Tooltip
-                                  title={
-                                    displayExecutionStatus(task) === "executable"
-                                      ? "根据当前拆分任务生成一条可执行任务（写入可执行任务列表）"
-                                      : "请先点击「任务合理，确认」或消除缺口后再生成"
+                                onPendingApiSpecChange={(spec) => {
+                                  setPendingTaskApiSpecById((prev) => ({ ...prev, [task.id]: spec }));
+                                }}
+                                onAnchorPopoverChange={(open) => {
+                                  if (open) {
+                                    setTaskAiPopoverTaskId(null);
+                                    setTaskAiPopoverMode(null);
+                                    setTaskAnchorPopoverTaskId(task.id);
+                                    return;
                                   }
-                                >
-                                  <span className="app-prd-task-panel__task-generate-exec-footer-wrap">
-                                    <Button
-                                      type="default"
-                                      size="small"
-                                      className="app-prd-task-panel__task-save-btn"
-                                      loading={generatingExecutableTaskId === task.id}
-                                      disabled={
-                                        displayExecutionStatus(task) !== "executable"
-                                        || Boolean(confirmSavingTaskId)
-                                        || Boolean(closingToTaskListMotion)
-                                        || (generatingExecutableTaskId !== null
-                                          && generatingExecutableTaskId !== task.id)
-                                      }
-                                      onClick={() => void handleGenerateExecutableForSplitTask(task.id)}
-                                    >
-                                      生成可执行任务
-                                    </Button>
-                                  </span>
-                                </Tooltip>
-                                <Popover
-                                  trigger="click"
-                                  placement="leftTop"
-                                  open={taskAiPopoverTaskId === task.id && taskAiPopoverMode === "optimize"}
-                                  onOpenChange={(open) => {
-                                    if (open) {
-                                      setTaskAnchorPopoverTaskId(null);
-                                      openTaskAiPopover(task, "optimize");
-                                      return;
-                                    }
-                                    if (taskAiPopoverTaskId === task.id && taskAiPopoverMode === "optimize") {
-                                      setTaskAiPopoverTaskId(null);
-                                      setTaskAiPopoverMode(null);
-                                    }
-                                  }}
-                                  overlayClassName="app-prd-task-panel__task-ai-popover"
-                                  content={taskAiPopoverContent}
-                                >
-                                  <Button
-                                    type="default"
-                                    size="small"
-                                    className="app-prd-task-panel__task-save-btn"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      openTaskAiPopover(task, "optimize");
-                                    }}
-                                  >
-                                    内容优化
-                                  </Button>
-                                </Popover>
-                                <Popover
-                                  trigger="click"
-                                  placement="leftTop"
-                                  open={taskAiPopoverTaskId === task.id && taskAiPopoverMode === "check"}
-                                  onOpenChange={(open) => {
-                                    if (open) {
-                                      setTaskAnchorPopoverTaskId(null);
-                                      openTaskAiPopover(task, "check");
-                                      return;
-                                    }
-                                    if (taskAiPopoverTaskId === task.id && taskAiPopoverMode === "check") {
-                                      setTaskAiPopoverTaskId(null);
-                                      setTaskAiPopoverMode(null);
-                                    }
-                                  }}
-                                  overlayClassName="app-prd-task-panel__task-ai-popover"
-                                  content={taskAiPopoverContent}
-                                >
-                                  <Button
-                                    type="default"
-                                    size="small"
-                                    className="app-prd-task-panel__task-save-btn"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      openTaskAiPopover(task, "check");
-                                    }}
-                                  >
-                                    可执行检测
-                                  </Button>
-                                </Popover>
-                                <Button
-                                  type="default"
-                                  size="small"
-                                  className="app-prd-task-panel__task-save-btn"
-                                  loading={savingTaskId === task.id}
-                                  onClick={() => void handleSaveTaskDraft(task.id)}
-                                >
-                                  保存
-                                </Button>
-                                {displayExecutionStatus(task) !== "executable" ? (
-                                  <Button
-                                    type="primary"
-                                    size="small"
-                                    className="app-prd-task-panel__task-confirm-btn"
-                                    loading={confirmSavingTaskId === task.id}
-                                    disabled={Boolean(savingTaskId) || (Boolean(confirmSavingTaskId) && confirmSavingTaskId !== task.id)}
-                                    onClick={() => void handleConfirmTaskAdjustment(task.id)}
-                                  >
-                                    任务合理，确认
-                                  </Button>
-                                ) : null}
-                                </div>
-                              </div>
-                              {taskUnmetLines.length > 0 || taskExecutableCheckResult.trim() ? (
-                                <div className="app-prd-task-panel__task-unmet-box">
-                                  {taskUnmetLines.length > 0 && !unmetCollapsed ? (
-                                    <>
-                                      <div className="app-prd-task-panel__task-unmet-title-row">
-                                        <div className="app-prd-task-panel__task-unmet-title">
-                                          待沟通或补充的缺口（请合并进任务描述 / 子任务 / 验收标准 / 接口协议等）
-                                        </div>
-                                        <Button
-                                          size="small"
-                                          type="text"
-                                          className="app-prd-task-panel__task-unmet-toggle-btn"
-                                          onClick={() => {
-                                            setTaskUnmetCollapsedById((prev) => ({
-                                              ...prev,
-                                              [task.id]: !unmetCollapsed,
-                                            }));
-                                          }}
-                                        >
-                                          收起缺口
-                                        </Button>
-                                      </div>
-                                      <ul className="app-prd-task-panel__task-unmet-list">
-                                        {taskUnmetLines.map((line) => (
-                                          <li key={line}>{line}</li>
-                                        ))}
-                                      </ul>
-                                    </>
-                                  ) : null}
-                                  {taskUnmetLines.length > 0 && unmetCollapsed ? (
-                                    <div className="app-prd-task-panel__task-unmet-title-row">
-                                      <div className="app-prd-task-panel__task-unmet-title">
-                                        待沟通或补充的缺口（已收起）
-                                      </div>
-                                      <Button
-                                        size="small"
-                                        type="text"
-                                        className="app-prd-task-panel__task-unmet-toggle-btn"
-                                        onClick={() => {
-                                          setTaskUnmetCollapsedById((prev) => ({
-                                            ...prev,
-                                            [task.id]: false,
-                                          }));
-                                        }}
-                                      >
-                                        展开缺口
-                                      </Button>
-                                    </div>
-                                  ) : null}
-                                  {taskExecutableCheckResult.trim() && !checkCollapsed ? (
-                                    <div className="app-prd-task-panel__task-unmet-check-result">
-                                      <div className="app-prd-task-panel__task-unmet-title-row">
-                                        <div className="app-prd-task-panel__task-unmet-title">可执行检测结果</div>
-                                        <Button
-                                          size="small"
-                                          type="text"
-                                          className="app-prd-task-panel__task-unmet-toggle-btn"
-                                          onClick={() => {
-                                            setTaskCheckCollapsedById((prev) => ({
-                                              ...prev,
-                                              [task.id]: !checkCollapsed,
-                                            }));
-                                          }}
-                                        >
-                                          收起检测
-                                        </Button>
-                                      </div>
-                                      <pre className="app-prd-task-panel__task-unmet-check-result-text">
-                                        {taskExecutableCheckResult}
-                                      </pre>
-                                    </div>
-                                  ) : null}
-                                  {taskExecutableCheckResult.trim() && checkCollapsed ? (
-                                    <div className="app-prd-task-panel__task-unmet-check-result">
-                                      <div className="app-prd-task-panel__task-unmet-title-row">
-                                        <div className="app-prd-task-panel__task-unmet-title">可执行检测结果（已收起）</div>
-                                        <Button
-                                          size="small"
-                                          type="text"
-                                          className="app-prd-task-panel__task-unmet-toggle-btn"
-                                          onClick={() => {
-                                            setTaskCheckCollapsedById((prev) => ({
-                                              ...prev,
-                                              [task.id]: false,
-                                            }));
-                                          }}
-                                        >
-                                          展开检测
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  ) : null}
-                                </div>
-                              ) : null}
-                              {null}
-                            </div>
-                            </div>
+                                  setTaskAnchorPopoverTaskId((prev) => (prev === task.id ? null : prev));
+                                }}
+                                onAiPopoverChange={(mode, open) => {
+                                  if (open) {
+                                    setTaskAnchorPopoverTaskId(null);
+                                    openTaskAiPopover(task, mode);
+                                    return;
+                                  }
+                                  if (taskAiPopoverTaskId === task.id && taskAiPopoverMode === mode) {
+                                    setTaskAiPopoverTaskId(null);
+                                    setTaskAiPopoverMode(null);
+                                  }
+                                }}
+                                onGenerateExecutable={() => void handleGenerateExecutableForSplitTask(task.id)}
+                                onSaveDraft={() => void handleSaveTaskDraft(task.id)}
+                                onConfirmAdjustment={() => void handleConfirmTaskAdjustment(task.id)}
+                                onToggleUnmet={() => {
+                                  setTaskUnmetCollapsedById((prev) => ({
+                                    ...prev,
+                                    [task.id]: !unmetCollapsed,
+                                  }));
+                                }}
+                                onToggleCheck={() => {
+                                  setTaskCheckCollapsedById((prev) => ({
+                                    ...prev,
+                                    [task.id]: !checkCollapsed,
+                                  }));
+                                }}
+                              />
                             );
                           })
                         )}

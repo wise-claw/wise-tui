@@ -42,8 +42,8 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "npm run build",
-    "testCommand": "npm test",
+    "buildCommand": "python3 ./.trellis/scripts/add_session.py --title \"Pass-2 PrdTaskSplitPanel decomposition: 14 milestones\" --commit \"cf56efc,9a051b7,8330852,9294147,52a2217,967fc41,34ee6ab,12306f0,b5206fe,debf344,18065e0,d55b9f5,cab16c8,5266366,7f2d7c0\" --summary \"Behavior-preserving decomposition of PrdTaskSplitPanel/index.tsx across 14 milestones. Extracted 22 new modules (leaves, modals, section components, pure helpers, hooks-friendly panel parts). Added 22 unit tests (anchor reconciler, taskToMarkdown, parseTaskMarkdownDraft, estimateDaysFromSize, sameApiSpec). index.tsx 4706 -> 3488 (-1218 lines, -25.9%). 95/95 tests pass, 0 new tsc errors. PRD strict <=500 line target deferred to follow-up pass-3 task (custom-hook surgery). Also created 4 placeholder follow-up tasks (pass-3, AppImpl split, LeftSidebar split, project-wide architecture review).\"",
+    "testCommand": "bun test 2>&1 | tail -5 && wc -l src/components/PrdTaskSplitPanel/index.tsx",
     "lintCommand": null,
     "devCommand": "npm run dev",
     "scripts": {
@@ -227,9 +227,24 @@
       "fileCount": 0,
       "lastAccessed": 1778580437319,
       "keyFiles": []
+    },
+    "src-tauri/examples": {
+      "path": "src-tauri/examples",
+      "purpose": "Example code",
+      "fileCount": 1,
+      "lastAccessed": 1778580437319,
+      "keyFiles": [
+        "test_reset_default.rs"
+      ]
     }
   },
   "hotPaths": [
+    {
+      "path": "src/components/PrdTaskSplitPanel/index.tsx",
+      "accessCount": 114,
+      "lastAccessed": 1778520324732,
+      "type": "file"
+    },
     {
       "path": "src/components/ClaudeSessions/WorkflowTaskTimeline.tsx",
       "accessCount": 10,
@@ -238,8 +253,62 @@
     },
     {
       "path": "src/types.ts",
-      "accessCount": 7,
-      "lastAccessed": 1778204730930,
+      "accessCount": 8,
+      "lastAccessed": 1778519857618,
+      "type": "file"
+    },
+    {
+      "path": ".trellis/tasks/05-12-pass-2-architecture-split-decompose-prdtasksplitpanel/prd.md",
+      "accessCount": 8,
+      "lastAccessed": 1778520394906,
+      "type": "file"
+    },
+    {
+      "path": "src/components/PrdTaskSplitPanel/TaskCard.tsx",
+      "accessCount": 6,
+      "lastAccessed": 1778519520427,
+      "type": "file"
+    },
+    {
+      "path": "src-tauri/src/trellis_bridge.rs",
+      "accessCount": 3,
+      "lastAccessed": 1778513525010,
+      "type": "file"
+    },
+    {
+      "path": "src/services/trellisTaskMapping.test.ts",
+      "accessCount": 3,
+      "lastAccessed": 1778513525413,
+      "type": "file"
+    },
+    {
+      "path": ".trellis/tasks/05-11-audit-architecture-split/task.json",
+      "accessCount": 3,
+      "lastAccessed": 1778515278993,
+      "type": "file"
+    },
+    {
+      "path": "src/components/PrdTaskSplitPanel/SplitPromptWizardModal.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1778517605533,
+      "type": "file"
+    },
+    {
+      "path": "src/components/PrdTaskSplitPanel/helpers.ts",
+      "accessCount": 3,
+      "lastAccessed": 1778519875690,
+      "type": "directory"
+    },
+    {
+      "path": "src/components/PrdTaskSplitPanel/helpers.test.ts",
+      "accessCount": 3,
+      "lastAccessed": 1778520061276,
+      "type": "file"
+    },
+    {
+      "path": ".trellis/tasks/05-12-pass-2-architecture-split-decompose-prdtasksplitpanel/task.json",
+      "accessCount": 3,
+      "lastAccessed": 1778520417806,
       "type": "file"
     },
     {
@@ -276,6 +345,60 @@
       "path": "src/App.tsx",
       "accessCount": 2,
       "lastAccessed": 1778204722782,
+      "type": "file"
+    },
+    {
+      "path": "src/services/trellisTaskMapping.ts",
+      "accessCount": 2,
+      "lastAccessed": 1778513388689,
+      "type": "file"
+    },
+    {
+      "path": "src-tauri/src/lib_impl.rs",
+      "accessCount": 2,
+      "lastAccessed": 1778513525152,
+      "type": "file"
+    },
+    {
+      "path": ".trellis/tasks/05-12-pass-2-architecture-split-decompose-prdtasksplitpanel/implement.jsonl",
+      "accessCount": 2,
+      "lastAccessed": 1778516343709,
+      "type": "file"
+    },
+    {
+      "path": ".trellis/tasks/05-12-pass-2-architecture-split-decompose-prdtasksplitpanel/check.jsonl",
+      "accessCount": 2,
+      "lastAccessed": 1778516343816,
+      "type": "file"
+    },
+    {
+      "path": "src/components/PrdTaskSplitPanel/RuntimePromptEditModal.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1778517363731,
+      "type": "file"
+    },
+    {
+      "path": "src/services/prdDraftStore.ts",
+      "accessCount": 2,
+      "lastAccessed": 1778517883561,
+      "type": "directory"
+    },
+    {
+      "path": "src/components/PrdTaskSplitPanel/RequirementBoardHeader.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1778517903435,
+      "type": "file"
+    },
+    {
+      "path": "src/components/PrdTaskSplitPanel/TaskAiPopoverContent.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1778518474074,
+      "type": "file"
+    },
+    {
+      "path": "src/components/PrdTaskSplitPanel/TaskApiSpecEditor.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1778518881150,
       "type": "file"
     },
     {
@@ -318,6 +441,114 @@
       "path": "src/components/WorkflowRuntimeViewer/index.tsx",
       "accessCount": 1,
       "lastAccessed": 1778203866785,
+      "type": "file"
+    },
+    {
+      "path": ".trellis/tasks/05-11-wise-trellis-p4-spec-feedback/prd.md",
+      "accessCount": 1,
+      "lastAccessed": 1778513179178,
+      "type": "file"
+    },
+    {
+      "path": "src/services/trellisSpecBridge.ts",
+      "accessCount": 1,
+      "lastAccessed": 1778513388828,
+      "type": "file"
+    },
+    {
+      "path": "src/components/AppWorkspaceLayout.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1778515945104,
+      "type": "directory"
+    },
+    {
+      "path": "src/components/PrdTaskSplitPanel/types.ts",
+      "accessCount": 1,
+      "lastAccessed": 1778516502630,
+      "type": "file"
+    },
+    {
+      "path": "src/components/PrdTaskSplitPanel/UnmetConditionsQuestionIcon.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1778516502741,
+      "type": "file"
+    },
+    {
+      "path": "src/components/PrdTaskSplitPanel/SplitRuntimeMessageRow.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1778516502847,
+      "type": "file"
+    },
+    {
+      "path": "src/components/PrdTaskSplitPanel/TaskAnchorPopoverBody.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1778516502955,
+      "type": "file"
+    },
+    {
+      "path": "src/components/PrdTaskSplitPanel/SplitRuntimeMessages.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1778516900830,
+      "type": "file"
+    },
+    {
+      "path": "src/components/PrdTaskSplitPanel/RequirementNameModal.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1778516900942,
+      "type": "file"
+    },
+    {
+      "path": "src/services/splitPromptBundle.ts",
+      "accessCount": 1,
+      "lastAccessed": 1778517341310,
+      "type": "directory"
+    },
+    {
+      "path": "src/components/PrdTaskSplitPanel/RequirementBoardActions.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1778517778555,
+      "type": "file"
+    },
+    {
+      "path": "src/components/MilkdownViewer",
+      "accessCount": 1,
+      "lastAccessed": 1778518044622,
+      "type": "directory"
+    },
+    {
+      "path": "src/components/PrdTaskSplitPanel/anchorReconcile.ts",
+      "accessCount": 1,
+      "lastAccessed": 1778518091613,
+      "type": "file"
+    },
+    {
+      "path": "src/components/PrdTaskSplitPanel/anchorReconcile.test.ts",
+      "accessCount": 1,
+      "lastAccessed": 1778518117398,
+      "type": "file"
+    },
+    {
+      "path": "src/components/PrdTaskSplitPanel/SplitQualityStrip.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1778519663795,
+      "type": "file"
+    },
+    {
+      "path": "src/components/PrdTaskSplitPanel/TaskBoardHeader.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1778519663907,
+      "type": "file"
+    },
+    {
+      "path": "src/components/PrdTaskSplitPanel/InlineRuntimePanel.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1778520190477,
+      "type": "file"
+    },
+    {
+      "path": "src/components/PrdTaskSplitPanel/PanelHeader.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1778520293433,
       "type": "file"
     }
   ],

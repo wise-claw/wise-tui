@@ -11,6 +11,7 @@ import type {
   ProjectItem,
   Repository,
   RepositoryAssociatePreset,
+  SddMode,
   TaskMode,
 } from "../types";
 import {
@@ -61,6 +62,12 @@ import { isClaudeSessionRunningInHostOrUi } from "../services/claudeSessionState
 import { getSystemResourceSnapshot } from "../services/systemResource";
 import { ClaudeCodeUsageHeaderBtn } from "./ClaudeCodeUsagePopover";
 import { RepositoryFilesExplorer, type GitPanelOpenFileOptions } from "./GitPanel";
+import { SddModeSwitch } from "./SddModeSwitch";
+import {
+  detectSddSignals,
+  resolveAutoSddMode,
+  type SddSignals,
+} from "../services/trellis/sddModeDetector";
 import "./GitPanel/index.css";
 
 const LEFT_FILES_EXPLORER_COLLAPSED_KEY = "wise.leftPanel.filesExplorerCollapsed";
@@ -256,6 +263,7 @@ interface Props {
     options?: AddRepositoryOptions,
   ) => void;
   onDetachRepositoryFromProject: (projectId: string, repositoryId: number) => void;
+  onUpdateRepositorySddMode?: (repositoryId: number, sddMode: SddMode) => void | Promise<void>;
   /** 项目内仓库拖拽排序；未传则单项目多仓时不显示排序手柄（仍可拖入其它项目） */
   onReorderRepositoriesInProject?: (projectId: string, repositoryIds: number[]) => void | Promise<void>;
   /** 从侧栏拖入仓库到目标项目；未传则仅支持同项目内排序 */
@@ -382,6 +390,7 @@ function RepositoryRow({
   onOpenRepositoryInEditor,
   onOpenPromptsRepository,
   onOpenRepositoryMainOwner,
+  onConfigureSddMode,
   repositoryReorder,
 }: {
   project: ProjectItem;
@@ -394,6 +403,7 @@ function RepositoryRow({
   onOpenRepositoryInEditor: (repository: Repository) => void;
   onOpenPromptsRepository?: (project: ProjectItem, repository: Repository) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
+  onConfigureSddMode?: (repository: Repository) => void;
   repositoryReorder?: RepositoryReorderUi;
 }) {
   const moreItems: MenuProps["items"] = [
@@ -401,6 +411,7 @@ function RepositoryRow({
     { key: "editor", label: repositoryEditorOpenMenuLabel() },
     ...(onOpenRepositoryMainOwner ? [{ key: "main-owner", label: "仓库" }] satisfies MenuProps["items"] : []),
     { key: "prompts", label: "提示词" },
+    { key: "sdd-mode", label: "SDD 模式" },
     { key: "detach", label: "移出项目", danger: true },
   ];
 
@@ -466,6 +477,7 @@ function RepositoryRow({
               if (key === "main-owner") onOpenRepositoryMainOwner?.(repository);
               if (key === "detach") onDetachFromProject(project.id, repository.id);
               if (key === "prompts") onOpenPromptsRepository?.(project, repository);
+              if (key === "sdd-mode") onConfigureSddMode?.(repository);
             },
           }}
           trigger={["click"]}
@@ -495,6 +507,7 @@ function ProjectRepositoryRows({
   onOpenRepositoryMainOwner,
   onReorderRepositoriesInProject,
   onMoveRepositoryToProject,
+  onConfigureSddMode,
   repoSidebarDragRef,
   onRepoSidebarDragEnd,
 }: {
@@ -510,6 +523,7 @@ function ProjectRepositoryRows({
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
   onReorderRepositoriesInProject?: (projectId: string, repositoryIds: number[]) => void | Promise<void>;
   onMoveRepositoryToProject?: (targetProjectId: string, repositoryId: number) => void | Promise<void>;
+  onConfigureSddMode?: (repository: Repository) => void;
   repoSidebarDragRef: React.MutableRefObject<{ sourceProjectId: string; repositoryId: number } | null>;
   onRepoSidebarDragEnd: () => void;
 }) {
@@ -616,6 +630,7 @@ function ProjectRepositoryRows({
             onOpenRepositoryInEditor={openRepositoryInPreferredEditor}
             onOpenPromptsRepository={onOpenPromptsRepository}
             onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
+            onConfigureSddMode={onConfigureSddMode}
             repositoryReorder={reorderUi}
           />
         );
@@ -642,6 +657,7 @@ export function LeftSidebar({
   onTogglePinProject,
   onAddRepositoryToProject,
   onDetachRepositoryFromProject,
+  onUpdateRepositorySddMode,
   onReorderRepositoriesInProject,
   onMoveRepositoryToProject,
   onRepositorySelect,
@@ -693,8 +709,13 @@ export function LeftSidebar({
   const [editProject, setEditProject] = useState<ProjectItem | null>(null);
   const [pendingAddRepositoryProjectId, setPendingAddRepositoryProjectId] = useState<string | null>(null);
   const [newRepositoryType, setNewRepositoryType] = useState<Repository["repositoryType"]>("frontend");
+  const [newRepositorySddMode, setNewRepositorySddMode] = useState<SddMode>("auto");
   const [newRepositoryDisplayName, setNewRepositoryDisplayName] = useState("");
   const [newRepositoryIconColor, setNewRepositoryIconColor] = useState<string | null>(null);
+  const [sddModeRepository, setSddModeRepository] = useState<Repository | null>(null);
+  const [sddModeDraft, setSddModeDraft] = useState<SddMode>("auto");
+  const [sddModeSaving, setSddModeSaving] = useState(false);
+  const [sddModeSignals, setSddModeSignals] = useState<SddSignals | null>(null);
   const [repositoryAssociatePresets, setRepositoryAssociatePresets] = useState<RepositoryAssociatePreset[]>([]);
   const [associateSelectValue, setAssociateSelectValue] = useState<string>("frontend");
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
@@ -777,6 +798,33 @@ export function LeftSidebar({
   useEffect(() => {
     void refreshRepositoryAssociatePresets();
   }, [refreshRepositoryAssociatePresets]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!sddModeRepository) {
+      setSddModeSignals(null);
+      return;
+    }
+    setSddModeSignals(null);
+    void detectSddSignals(sddModeRepository.path).then(
+      (signals) => {
+        if (!cancelled) setSddModeSignals(signals);
+      },
+      () => {
+        if (!cancelled) {
+          setSddModeSignals({
+            hasTrellisTasks: false,
+            hasTrellisSpec: false,
+            hasOpenSpec: false,
+            hasGenericSpec: false,
+          });
+        }
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [sddModeRepository]);
 
   useEffect(() => {
     setRepositoryFileTreeSearch("");
@@ -1061,9 +1109,33 @@ export function LeftSidebar({
     setPendingAddRepositoryProjectId(projectId);
     setAssociateSelectValue("frontend");
     setNewRepositoryType("frontend");
+    setNewRepositorySddMode("auto");
     setNewRepositoryDisplayName("");
     setNewRepositoryIconColor(null);
     void refreshRepositoryAssociatePresets();
+  }
+
+  function openRepositorySddModeModal(repository: Repository) {
+    setSddModeRepository(repository);
+    setSddModeDraft(repository.sddMode ?? "auto");
+  }
+
+  async function submitRepositorySddMode() {
+    if (!sddModeRepository || !onUpdateRepositorySddMode) {
+      setSddModeRepository(null);
+      return;
+    }
+    setSddModeSaving(true);
+    try {
+      await onUpdateRepositorySddMode(sddModeRepository.id, sddModeDraft);
+      message.success("SDD 模式已保存");
+      setSddModeRepository(null);
+    } catch (err) {
+      console.error(err);
+      message.error("保存 SDD 模式失败");
+    } finally {
+      setSddModeSaving(false);
+    }
   }
 
   function submitAddRepository() {
@@ -1080,6 +1152,7 @@ export function LeftSidebar({
     const opts: AddRepositoryOptions = {
       iconDisplayName: iconText.length > 0 ? iconText : undefined,
       iconColor: newRepositoryIconColor,
+      sddMode: newRepositorySddMode,
     };
     setPendingAddRepositoryProjectId(null);
     void onAddRepositoryToProject(projectId, newRepositoryType, opts);
@@ -1335,6 +1408,7 @@ export function LeftSidebar({
                       onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
                       onReorderRepositoriesInProject={onReorderRepositoriesInProject}
                       onMoveRepositoryToProject={handleMoveRepositoryWithExpand}
+                      onConfigureSddMode={openRepositorySddModeModal}
                       repoSidebarDragRef={repoSidebarDragRef}
                       onRepoSidebarDragEnd={clearRepoSidebarDrag}
                     />
@@ -1657,6 +1731,45 @@ export function LeftSidebar({
               style={{ width: "100%" }}
             />
           </div>
+          <div>
+            <div className="app-add-repo-field-label">SDD 模式</div>
+            <SddModeSwitch
+              value={newRepositorySddMode}
+              autoResolved="wise_trellis"
+              onChange={setNewRepositorySddMode}
+              size="small"
+            />
+          </div>
+        </Space>
+      </Modal>
+      <Modal
+        title="仓库 SDD 模式"
+        open={Boolean(sddModeRepository)}
+        onCancel={() => setSddModeRepository(null)}
+        onOk={() => void submitRepositorySddMode()}
+        confirmLoading={sddModeSaving}
+        okText="保存"
+        cancelText="取消"
+        width={460}
+      >
+        <Space direction="vertical" size={10} style={{ width: "100%" }}>
+          <Typography.Text strong>
+            {sddModeRepository ? repositoryFolderBasename(sddModeRepository) : ""}
+          </Typography.Text>
+          <SddModeSwitch
+            value={sddModeDraft}
+            autoResolved={resolveAutoSddMode(
+              sddModeSignals ?? {
+                hasTrellisTasks: false,
+                hasTrellisSpec: false,
+                hasOpenSpec: false,
+                hasGenericSpec: false,
+              },
+            )}
+            disabled={!onUpdateRepositorySddMode || sddModeSaving}
+            onChange={setSddModeDraft}
+            size="small"
+          />
         </Space>
       </Modal>
       <AppSettingsModal open={appSettingsOpen} onClose={() => setAppSettingsOpen(false)} />
@@ -1671,4 +1784,3 @@ function formatBytes(bytes: number): string {
   const mb = bytes / (1024 * 1024);
   return `${mb.toFixed(0)}MB`;
 }
-

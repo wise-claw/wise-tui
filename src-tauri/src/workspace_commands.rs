@@ -8,8 +8,7 @@ use tauri::Emitter;
 use tauri_plugin_opener::OpenerExt;
 
 fn user_claude_agents_dir() -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or_else(|| "Could not resolve home directory".to_string())?;
-    Ok(home.join(".claude").join("agents"))
+    Ok(crate::claude_config_dir::user_claude_dir().join("agents"))
 }
 
 #[tauri::command]

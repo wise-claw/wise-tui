@@ -1681,6 +1681,7 @@ mod tests {
                 "012_prd_executable_tasks",
                 "013_project_icon_badge",
                 "014_project_repository_display_order",
+                "015_project_prd_scope",
             ]
         );
     }
