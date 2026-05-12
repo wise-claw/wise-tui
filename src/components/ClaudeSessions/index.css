@@ -281,6 +281,17 @@
   color: var(--ant-color-text-quaternary);
 }
 
+.app-run-command-popover__error-monitor-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.app-run-command-popover__error-monitor-label {
+  font-size: 12px;
+  color: var(--ant-color-text-secondary);
+}
+
 .app-run-command-popover__url {
   border: 1px solid var(--ant-color-primary-border);
   background: var(--ant-color-primary-bg);

@@ -246,6 +246,18 @@
       "type": "file"
     },
     {
+      "path": "src/AppImpl.tsx",
+      "accessCount": 17,
+      "lastAccessed": 1778585933901,
+      "type": "file"
+    },
+    {
+      "path": "src/components/EmployeeConfigModal/index.tsx",
+      "accessCount": 15,
+      "lastAccessed": 1778585484086,
+      "type": "file"
+    },
+    {
       "path": "src/components/ClaudeSessions/WorkflowTaskTimeline.tsx",
       "accessCount": 10,
       "lastAccessed": 1778204362362,
@@ -253,8 +265,8 @@
     },
     {
       "path": "src/types.ts",
-      "accessCount": 8,
-      "lastAccessed": 1778519857618,
+      "accessCount": 10,
+      "lastAccessed": 1778584582660,
       "type": "file"
     },
     {
@@ -267,6 +279,12 @@
       "path": "src/components/PrdTaskSplitPanel/TaskCard.tsx",
       "accessCount": 6,
       "lastAccessed": 1778519520427,
+      "type": "file"
+    },
+    {
+      "path": "src/components/LeftSidebar.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1778584627151,
       "type": "file"
     },
     {
@@ -309,24 +327,6 @@
       "path": ".trellis/tasks/05-12-pass-2-architecture-split-decompose-prdtasksplitpanel/task.json",
       "accessCount": 3,
       "lastAccessed": 1778520417806,
-      "type": "file"
-    },
-    {
-      "path": "src/components/EmployeeConfigModal/index.tsx",
-      "accessCount": 7,
-      "lastAccessed": 1778580646412,
-      "type": "file"
-    },
-    {
-      "path": "src/AppImpl.tsx",
-      "accessCount": 3,
-      "lastAccessed": 1778580569275,
-      "type": "file"
-    },
-    {
-      "path": "src/components/LeftSidebar.tsx",
-      "accessCount": 3,
-      "lastAccessed": 1778580586369,
       "type": "file"
     },
     {
@@ -537,18 +537,6 @@
       "path": "src/components/PrdTaskSplitPanel/TaskBoardHeader.tsx",
       "accessCount": 1,
       "lastAccessed": 1778519663907,
-      "type": "file"
-    },
-    {
-      "path": "src/components/PrdTaskSplitPanel/InlineRuntimePanel.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1778520190477,
-      "type": "file"
-    },
-    {
-      "path": "src/components/PrdTaskSplitPanel/PanelHeader.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1778520293433,
       "type": "file"
     }
   ],

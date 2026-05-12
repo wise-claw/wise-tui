@@ -292,7 +292,7 @@ export function EmployeeConfigModal({
                 />
               </Form.Item>
             </div>
-            {!hideRepositorySelector ? (
+            {(!hideRepositorySelector || repositoryOwnerScopeOnly) ? (
               <div className="app-employee-config-field">
                 <div className="app-employee-config-field-label">关联仓库</div>
                 <Form.Item
@@ -301,9 +301,10 @@ export function EmployeeConfigModal({
                 >
                   <Select
                     mode="multiple"
-                    allowClear
+                    allowClear={repositoryOwnerScopeOnly ? false : true}
                     placeholder="关联仓库"
                     maxTagCount="responsive"
+                    disabled={repositoryOwnerScopeOnly}
                     options={repositories.map((repository) => ({
                       value: repository.id,
                       label: repositoryFolderBasename(repository),

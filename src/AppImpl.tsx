@@ -1472,6 +1472,13 @@ export default function App() {
         onSelectRepository: setActiveRepositoryId,
         onUpdateSessionModel: updateSessionModel,
         onExecuteSession: handleComposerExecute,
+        onAutoFixRunError: activeRepository
+          ? async (prompt: string) => {
+              const repoPath = activeRepository.path;
+              const sessionId = await createSession(repoPath, `错误修复`);
+              executeSession(sessionId, prompt);
+            }
+          : undefined,
         onSendMessage: handleSendMessageWithTask,
         onCancelSession: cancelSession,
         onCloseSession: handleCloseSession,
