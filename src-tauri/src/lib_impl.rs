@@ -81,6 +81,22 @@ pub fn run() {
         .manage(Mutex::new(claude_commands::TerminalManager::new()))
         .manage(claude_commands::ClaudeProcessState::default())
         .manage(claude_commands::ClaudeSessionRegistry::new())
+        .on_window_event(|window, event| {
+            // macOS：主窗口红点关闭默认会销毁窗口，导致后续点击程序坞图标只触发
+            // `RunEvent::Reopen` 但 `get_webview_window("main")` 已为 None，没有任何窗口可显示。
+            // 与原生 macOS App 行为对齐：拦截关闭事件 → 阻止销毁 → 隐藏；
+            // 由 `RunEvent::Reopen`（见下方 run 回调）调用 `wise_main_window_focus` 重新唤起。
+            #[cfg(target_os = "macos")]
+            if window.label() == "main" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+            // 非 macOS 沿用平台默认行为（Windows / Linux 通常希望关闭即退出）。
+            #[cfg(not(target_os = "macos"))]
+            let _ = (window, event);
+        })
         .invoke_handler(tauri::generate_handler![
             app_state_commands::greet,
             app_state_commands::list_repositories,
