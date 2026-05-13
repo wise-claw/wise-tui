@@ -1,0 +1,6 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend layer spec for composer popover + new helper additions."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"§3 contract — buildProjectRoleTagOptions is the canonical roleTag aggregator; hideEmployeeUi extends to the popover when project is wise_trellis."}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Discriminated union extension on SlashOption with the new roleTag variant; explicit return types."}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Composer popover renders within Semi-UI AIChatInput; keep prop pipeline minimal and avoid coupling to internal Tiptap state."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"AppImpl → composer surface → SlashPopover → option-builder; verify single data direction."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Reuse insertPlainAt / ensureSpaceAfterAtInsert and getRoleTags — do not invent new insertion or tag-aggregation helpers."}
