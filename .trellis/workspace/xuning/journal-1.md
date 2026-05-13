@@ -85,3 +85,36 @@ Behavior-preserving decomposition of PrdTaskSplitPanel/index.tsx across 14 miles
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: Composer roleTag at-mention popover
+
+**Date**: 2026-05-13
+**Task**: Composer roleTag at-mention popover
+**Branch**: `main`
+
+### Summary
+
+Completed roleTag options in the composer at-mention popover for wise_trellis projects, added helper tests, and verified with bun test, tsc, and cargo check.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `482c937` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
