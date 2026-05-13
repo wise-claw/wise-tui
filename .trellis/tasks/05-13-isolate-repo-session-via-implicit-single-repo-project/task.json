@@ -1,7 +1,7 @@
 {
-  "id": "composer-at-mention-popover-for-project-role-tags-v2",
-  "name": "composer-at-mention-popover-for-project-role-tags-v2",
-  "title": "Composer at-mention popover for project role tags v2",
+  "id": "isolate-repo-session-via-implicit-single-repo-project",
+  "name": "isolate-repo-session-via-implicit-single-repo-project",
+  "title": "isolate repo session via implicit single-repo project",
   "description": "",
   "status": "in_progress",
   "dev_type": null,

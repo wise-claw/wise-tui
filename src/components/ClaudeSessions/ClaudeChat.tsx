@@ -111,7 +111,7 @@ import {
   parseOmcSlashCommandFromUserText,
 } from "../../utils/omcUserMessageText";
 import {
-  resolveBoundMainSessionId,
+  resolveRepositoryMainSessionId,
   resolveMainOwnerAgentNameForRepositoryPath,
 } from "../../utils/repositoryMainSessionBinding";
 import { getAppSetting, setAppSetting } from "../../services/appSettingsStore";
@@ -297,6 +297,7 @@ interface Props {
   session: ClaudeSession;
   sessions?: ClaudeSession[];
   repositories?: Repository[];
+  activeRepository?: Repository;
   onSwitchSession?: (
     sessionId: string,
     options?: { collapseSessionNotificationPanel?: boolean },
@@ -475,6 +476,7 @@ export function ClaudeChat({
   session,
   sessions = [],
   repositories = [],
+  activeRepository,
   onSwitchSession,
   initialNotificationPanelCollapsed = false,
   onCreateNewSession,
@@ -648,11 +650,14 @@ export function ClaudeChat({
   const { run: workflowRun } = useWorkflowRun(session.id, session.repositoryPath);
   const sessionRepository = useMemo(
     () =>
+      activeRepository ??
       repositories.find(
         (repository) => sessionRepoPathKey(repository.path) === sessionRepoPathKey(session.repositoryPath),
       ) ?? null,
-    [repositories, session.repositoryPath],
+    [activeRepository, repositories, session.repositoryPath],
   );
+  const repositoryScopePath = sessionRepository?.path?.trim() || session.repositoryPath.trim();
+  const gitRepositoryPath = sessionRepository?.path?.trim() || session.repositoryPath.trim();
   const omcBatchUserAbortRef = useRef(false);
   const omcBatchInFlightRef = useRef(false);
   const [splitTodoTasks, setSplitTodoTasks] = useState<TaskItem[]>([]);
@@ -1291,7 +1296,8 @@ export function ClaudeChat({
 
     async function refreshStats() {
       try {
-        const status = await gitStatus(session.repositoryPath);
+        if (!gitRepositoryPath) throw new Error("missing_git_repository_path");
+        const status = await gitStatus(gitRepositoryPath);
         if (cancelled) return;
         setStats({
           additions: Math.max(0, status.additions || 0),
@@ -1325,7 +1331,7 @@ export function ClaudeChat({
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [session.repositoryPath]);
+  }, [gitRepositoryPath]);
 
   const [taskListDrawerOpen, setTaskListDrawerOpen] = useState(false);
   const [taskListSelectedIds, setTaskListSelectedIds] = useState<string[]>([]);
@@ -1411,19 +1417,19 @@ export function ClaudeChat({
 
   /** OMC 批量与后台 invocation 流统一挂到「仓库主标签」，避免从员工子标签发起时执行详情无法在中栏主会话打开。 */
   const omcBatchAnchorSessionId = useMemo(() => {
-    const mainOwnerAgentName = resolveMainOwnerAgentNameForRepositoryPath(repositories, session.repositoryPath);
-    const bound = resolveBoundMainSessionId(
-      session.repositoryPath,
+    const mainOwnerAgentName = resolveMainOwnerAgentNameForRepositoryPath(repositories, repositoryScopePath);
+    const bound = resolveRepositoryMainSessionId(
+      repositoryScopePath,
       repositoryMainBindings,
       sessions,
       mainOwnerAgentName,
     );
     if (bound) return bound;
-    const main = pickSessionForRepositorySidebarSelect(sessions, session.repositoryPath, sessionOwnerHints, {
+    const main = pickSessionForRepositorySidebarSelect(sessions, repositoryScopePath, sessionOwnerHints, {
       mainOwnerAgentName,
     });
     return main?.id ?? session.id;
-  }, [sessions, session.repositoryPath, session.id, sessionOwnerHints, repositoryMainBindings, repositories]);
+  }, [sessions, repositoryScopePath, session.id, sessionOwnerHints, repositoryMainBindings, repositories]);
 
   useEffect(() => {
     function onOmcBatchRuntime(ev: Event) {
@@ -1740,11 +1746,11 @@ export function ClaudeChat({
   }, [stats.additions, stats.deletions]);
 
   const loadPushSummaryDraft = useCallback(async () => {
-    if (!session.repositoryPath) return;
+    if (!gitRepositoryPath) return;
     setPushSummaryLoading(true);
     setPushSummaryPhase("读取 Git 变更中...");
     try {
-      const status = await gitStatus(session.repositoryPath);
+      const status = await gitStatus(gitRepositoryPath);
       const fallback = buildAiCommitSummary(status);
       const changedFiles = [...status.staged, ...status.unstaged]
         .map((item) => `- ${item.path} (${item.status}, +${item.additions}, -${item.deletions})`)
@@ -1758,7 +1764,7 @@ export function ClaudeChat({
         "3) 后续行按要点概述影响范围；",
         "4) 不要使用 markdown 标题，不要输出解释。",
         "",
-        `仓库路径: ${session.repositoryPath}`,
+        `仓库路径: ${gitRepositoryPath}`,
         `分支: ${status.branch ?? "(unknown)"}`,
         `总计: +${Math.max(0, status.additions || 0)} / -${Math.max(0, status.deletions || 0)}`,
         `暂存文件数: ${status.staged.length}, 未暂存文件数: ${status.unstaged.length}`,
@@ -1767,9 +1773,9 @@ export function ClaudeChat({
         "",
         "请仅输出最终提交总结正文。",
       ].join("\n");
-      const configuredModel = await getClaudeConfigModel(session.repositoryPath);
+      const configuredModel = await getClaudeConfigModel(gitRepositoryPath);
       const result = await executeClaudeCodeAndWait({
-        repositoryPath: session.repositoryPath,
+        repositoryPath: gitRepositoryPath,
         prompt,
         model: configuredModel ?? undefined,
         timeoutMs: 45_000,
@@ -1784,13 +1790,13 @@ export function ClaudeChat({
       setPushSummaryDraft(cleaned || fallback);
     } catch {
       setPushSummaryPhase("生成失败，使用默认模板...");
-      const status = await gitStatus(session.repositoryPath).catch(() => null);
+      const status = await gitStatus(gitRepositoryPath).catch(() => null);
       setPushSummaryDraft(status ? buildAiCommitSummary(status) : "");
     } finally {
       setPushSummaryLoading(false);
       setPushSummaryPhase("");
     }
-  }, [session.repositoryPath]);
+  }, [gitRepositoryPath]);
 
   useEffect(() => {
     if (!pushPopoverOpen) return;
@@ -1798,7 +1804,7 @@ export function ClaudeChat({
   }, [pushPopoverOpen, loadPushSummaryDraft]);
 
   const handlePushSubmit = useCallback(async () => {
-    const repoPath = session.repositoryPath;
+    const repoPath = gitRepositoryPath;
     const commitMessage = pushSummaryDraft.trim();
     if (!repoPath) {
       message.error("当前会话未绑定仓库，无法推送");
@@ -1862,10 +1868,10 @@ export function ClaudeChat({
     } finally {
       setPushSubmitting(false);
     }
-  }, [_onSend, pushSummaryDraft, session.repositoryPath]);
+  }, [_onSend, pushSummaryDraft, gitRepositoryPath]);
 
   const loadLinkedWorktrees = useCallback(async () => {
-    const p = session.repositoryPath?.trim();
+    const p = gitRepositoryPath;
     if (!p) {
       setLinkedWorktrees([]);
       return;
@@ -1886,7 +1892,7 @@ export function ClaudeChat({
     } finally {
       setGitWorktreeLoading(false);
     }
-  }, [session.repositoryPath]);
+  }, [gitRepositoryPath]);
 
   useEffect(() => {
     void loadLinkedWorktrees();
@@ -1895,7 +1901,7 @@ export function ClaudeChat({
   useEffect(() => {
     const onRepoWorktreesMayHaveChanged = (ev: Event): void => {
       const detail = (ev as CustomEvent<RepoWorktreesMayHaveChangedDetail>).detail;
-      const anchor = session.repositoryPath?.trim();
+      const anchor = gitRepositoryPath;
       const changed = detail?.repositoryPath?.trim();
       if (!anchor || !changed) return;
       if (sessionRepoPathKey(anchor) !== sessionRepoPathKey(changed)) return;
@@ -1905,11 +1911,11 @@ export function ClaudeChat({
     return () => {
       window.removeEventListener(WORKFLOW_UI_EVENT_REPO_WORKTREES_MAY_HAVE_CHANGED, onRepoWorktreesMayHaveChanged);
     };
-  }, [session.repositoryPath, loadLinkedWorktrees]);
+  }, [gitRepositoryPath, loadLinkedWorktrees]);
 
   const handleGitWorktreeRemove = useCallback(
     async (worktreePath: string) => {
-      const p = session.repositoryPath?.trim();
+      const p = gitRepositoryPath;
       if (!p) return;
       setGitWorktreeRemovingPath(worktreePath);
       try {
@@ -1923,7 +1929,7 @@ export function ClaudeChat({
         setGitWorktreeRemovingPath(null);
       }
     },
-    [session.repositoryPath, loadLinkedWorktrees],
+    [gitRepositoryPath, loadLinkedWorktrees],
   );
 
   const handleOpenWorktreeInFinder = useCallback((worktreePath: string) => {
@@ -2165,9 +2171,12 @@ export function ClaudeChat({
   const repositoryHistorySessions = useMemo(
     () =>
       sessions
-        .filter((item) => item.repositoryPath === session.repositoryPath)
+        .filter((item) => {
+          const path = item.repositoryPath?.trim() ?? "";
+          return path === repositoryScopePath;
+        })
         .sort((a, b) => getSessionUpdatedAt(b) - getSessionUpdatedAt(a)),
-    [sessions, session.repositoryPath],
+    [sessions, repositoryScopePath],
   );
 
   const filteredHistorySessions = useMemo(() => {
@@ -3060,8 +3069,8 @@ export function ClaudeChat({
       <RepositoryScheduledTasksModal
         open={scheduledTasksModalOpen}
         onClose={() => setScheduledTasksModalOpen(false)}
-        repositoryPath={session.repositoryPath}
-        repositoryDisplayName={session.repositoryName}
+        repositoryPath={repositoryScopePath}
+        repositoryDisplayName={sessionRepository?.name ?? session.repositoryName}
         employees={employees}
         workflowTemplates={workflowTemplates}
         workflowGraphsByWorkflowId={workflowGraphsByWorkflowId}
@@ -4031,6 +4040,7 @@ export function ClaudeChat({
 
         <ComposerRegion
           session={session}
+          gitRepositoryPath={gitRepositoryPath}
           employeesForDispatchRoute={employees}
           pendingExecutionTaskCount={pendingTasks.length}
           onExecute={handleComposerExecute}

@@ -78,6 +78,7 @@ export interface DualPaneComposerRepositoryPickerProps {
 
 interface ComposerInnerProps {
   session: ClaudeSession;
+  gitRepositoryPath?: string;
   /** 第三参：刚入队的任务（优先）或任务 id；第四参：兜底分发目标（避免 ref 未刷新时回退主会话） */
   onExecute: (
     sessionId: string,
@@ -311,6 +312,7 @@ function formatRelativeTime(timestamp: number | null): string {
 
 function ComposerInner({
   session,
+  gitRepositoryPath,
   onExecute,
   onSessionModelChange,
   onCancel: _onCancel,
@@ -520,17 +522,26 @@ function ComposerInner({
   const onCancelRef = useRef(_onCancel);
   onCancelRef.current = _onCancel;
   const loadActiveBranch = useCallback(async () => {
+    if (!gitRepositoryPath) {
+      setActiveBranch("-");
+      return;
+    }
     try {
-      const status = await gitStatus(session.repositoryPath);
+      const status = await gitStatus(gitRepositoryPath);
       setActiveBranch(status.branch?.trim() || "(detached)");
     } catch {
       setActiveBranch("-");
     }
-  }, [session.repositoryPath]);
+  }, [gitRepositoryPath]);
   const loadBranches = useCallback(async () => {
+    if (!gitRepositoryPath) {
+      setBranches([]);
+      setActiveBranch("-");
+      return;
+    }
     setBranchListLoading(true);
     try {
-      const list = await gitListBranches(session.repositoryPath);
+      const list = await gitListBranches(gitRepositoryPath);
       setBranches(list);
       const current = list.find((item) => item.isCurrent && !item.isRemote);
       if (current?.name) {
@@ -544,13 +555,13 @@ function ComposerInner({
     } finally {
       setBranchListLoading(false);
     }
-  }, [session.repositoryPath, loadActiveBranch]);
+  }, [gitRepositoryPath, loadActiveBranch]);
   const handleCheckoutBranch = useCallback(
     async (name: string) => {
-      if (!name.trim()) return;
+      if (!name.trim() || !gitRepositoryPath) return;
       setBranchActionLoading(true);
       try {
-        await gitCheckoutBranch(session.repositoryPath, name.trim());
+        await gitCheckoutBranch(gitRepositoryPath, name.trim());
         setActiveBranch(name.trim());
         await loadBranches();
         message.success(`已切换到分支: ${name.trim()}`);
@@ -561,7 +572,7 @@ function ComposerInner({
         setBranchActionLoading(false);
       }
     },
-    [session.repositoryPath, loadBranches],
+    [gitRepositoryPath, loadBranches],
   );
   const handleCreateBranch = useCallback(async () => {
     const name = branchCreateName.trim();
@@ -569,9 +580,13 @@ function ComposerInner({
       message.warning("请输入新分支名称");
       return;
     }
+    if (!gitRepositoryPath) {
+      message.warning("当前会话未绑定 Git 仓库，无法创建分支");
+      return;
+    }
     setBranchActionLoading(true);
     try {
-      await gitCreateBranch(session.repositoryPath, name, branchCreateFromRef ?? null, true);
+      await gitCreateBranch(gitRepositoryPath, name, branchCreateFromRef ?? null, true);
       setBranchCreateName("");
       setDetachedTargetRef("");
       setActiveBranch(name);
@@ -583,26 +598,30 @@ function ComposerInner({
     } finally {
       setBranchActionLoading(false);
     }
-  }, [branchCreateName, branchCreateFromRef, session.repositoryPath, loadBranches]);
+  }, [branchCreateName, branchCreateFromRef, gitRepositoryPath, loadBranches]);
   const handleCheckoutDetached = useCallback(async () => {
     const target = detachedTargetRef.trim();
     if (!target) {
       message.warning("请输入目标分支/标签/提交");
       return;
     }
+    if (!gitRepositoryPath) {
+      message.warning("当前会话未绑定 Git 仓库，无法切换 detached 引用");
+      return;
+    }
     setBranchActionLoading(true);
     try {
-      await gitCheckoutDetached(session.repositoryPath, target);
+      await gitCheckoutDetached(gitRepositoryPath, target);
       setActiveBranch("(detached)");
       await loadBranches();
       message.success(`已 detached checkout: ${target}`);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       message.error(`Detached checkout 失败: ${msg}`);
-    } finally {
-      setBranchActionLoading(false);
-    }
-  }, [detachedTargetRef, session.repositoryPath, loadBranches]);
+      } finally {
+        setBranchActionLoading(false);
+      }
+  }, [detachedTargetRef, gitRepositoryPath, loadBranches]);
   const filteredBranches = useMemo(() => {
     const keyword = branchQuery.trim().toLowerCase();
     if (!keyword) return branches;
@@ -1777,6 +1796,7 @@ function ComposerInner({
 
 export interface ComposerRegionProps {
   session: ClaudeSession;
+  gitRepositoryPath?: string;
   /** 第三参：刚入队的任务（优先）或任务 id；第四参：兜底分发目标（避免 ref 未刷新时回退主会话） */
   onExecute: (
     sessionId: string,

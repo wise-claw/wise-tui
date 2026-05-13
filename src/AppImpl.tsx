@@ -49,6 +49,7 @@ import {
   planAtMentionDispatch,
 } from "./services/atMentionDispatch";
 import { resolveProjectMainSessionAnchor } from "./utils/projectSessionAnchor";
+import { resolveSidebarSelectionTarget } from "./utils/sidebarSelectionTarget";
 import { shouldHideEmployeeUi } from "./utils/projectRepositoryRoles";
 import { buildProjectRoleTagOptions } from "./utils/projectRoleTagOptions";
 import { useMonitorOverview } from "./hooks/useMonitorOverview";
@@ -83,7 +84,8 @@ import {
   normalizeRepositoryPathKey as normalizeRepositoryPathForMatch,
   parseRepositoryMainSessionBindings,
   REPOSITORY_MAIN_SESSION_BINDING_STORAGE_KEY,
-  resolveBoundMainSessionId,
+  resolveRepositoryForSession,
+  resolveRepositoryMainSessionId,
   resolveMainOwnerAgentNameForRepositoryPath,
 } from "./utils/repositoryMainSessionBinding";
 import { loadSessionOwnerHints } from "./utils/sessionOwnerHints";
@@ -105,11 +107,11 @@ import {
 import {
   extractRuntimeSnapshotsFromEvents,
 } from "./services/workflowGraphHelpers";
-import { useRepositoryFileEditor } from "./hooks/useRepositoryFileEditor";
 import { useMainLayoutModes } from "./hooks/useMainLayoutModes";
 import { useDingTalkAutomationInbound } from "./hooks/useDingTalkAutomationInbound";
 import { useOmcRuntime } from "./hooks/useOmcRuntime";
 import { useWorkflowTeamAutomation } from "./hooks/useWorkflowTeamAutomation";
+import { useWorkspaceMode } from "./hooks/useWorkspaceMode";
 import { addProjectPrdEmployee, addProjectPrdWorkflow, listProjectPrdEmployeeIds } from "./services/projectPrdScope";
 
 // ── App ──
@@ -196,19 +198,23 @@ export default function App() {
     loading: repositoryListLoading,
     setActiveRepositoryId,
     setActiveProjectId,
-    selectProjectAndRepository,
+    setActiveRepositoryWithOwner,
     handleCreateProject,
     handleUpdateProject,
     handleDeleteProject,
     handleAddRepositoryToProject,
     handleAddRepositoryPathToProject,
+    handleAddFloatingRepository,
+    handlePromoteFloatingRepositoryToProject,
     handleDetachRepositoryFromProject,
+    handleRemoveRepository,
     handleUpdateRepositorySddMode,
     handleReorderRepositoriesInProject,
     handleMoveRepositoryToProject,
     handleUpdateRepositoryMainOwnerAgent,
     pinnedProjectIds,
     togglePinProject,
+    floatingRepositories,
   } = useRepositoryList();
 
   const [repositoryMainSessionBindings, setRepositoryMainSessionBindings] = useState<Record<string, string>>({});
@@ -502,21 +508,28 @@ export default function App() {
         switchSession(canonicalId);
         return;
       }
-      const wantPath = normalizeRepositoryPathForMatch(target.repositoryPath);
-      const repo = repositories.find((item) => normalizeRepositoryPathForMatch(item.path) === wantPath);
+      const repo = resolveRepositoryForSession({
+        session: target,
+        repositories,
+        bindings: repositoryMainSessionBindings,
+        sessions: sessionsLatestRef.current,
+        preferredRepositoryId: activeRepositoryId,
+      });
       if (repo) {
-        const ownerProject = projects.find((p) => p.repositoryIds.includes(repo.id));
         flushSync(() => {
-          if (ownerProject) {
-            selectProjectAndRepository(ownerProject.id, repo.id);
-          } else {
-            setActiveRepositoryId(repo.id);
-          }
+          setActiveRepositoryWithOwner(repo.id);
         });
       }
       switchSession(canonicalId);
     },
-    [projects, repositories, selectProjectAndRepository, setActiveRepositoryId, setTaskSplitMode, switchSession],
+    [
+      activeRepositoryId,
+      repositories,
+      repositoryMainSessionBindings,
+      setActiveRepositoryWithOwner,
+      setTaskSplitMode,
+      switchSession,
+    ],
   );
 
   const jumpToSessionWithRepositoryRef = useRef(jumpToSessionWithRepository);
@@ -779,6 +792,7 @@ export default function App() {
     () => (activeProjectId ? projects.find((p) => p.id === activeProjectId) ?? null : null),
     [activeProjectId, projects],
   );
+  const workspaceMode = useWorkspaceMode({ activeProjectId, projects });
   const composerProjectRoleTagOptions = useMemo(() => {
     if (!shouldHideEmployeeUi(activeProject)) {
       return [];
@@ -1030,22 +1044,6 @@ export default function App() {
   }, [activeProjectId, projects]);
 
   const {
-    closeFileEditorPanel,
-    closeFileEditorTab,
-    closeRepositoryBinaryPreview,
-    editorDirty,
-    editorSaving,
-    editorVisible,
-    fileEditorActivePath,
-    fileEditorTabs,
-    openRepositoryFile,
-    repositoryBinaryPreview,
-    saveEditor,
-    setFileEditorActivePath,
-    setFileEditorTabs,
-  } = useRepositoryFileEditor({ repositoryPath: activeRepository?.path });
-
-  const {
     compactLayoutMode,
     effectiveRightCollapsed,
     handleDualPaneSecondaryRepositorySelect,
@@ -1073,15 +1071,6 @@ export default function App() {
     setDualPaneSecondaryRepositoryId,
     setDualPaneSecondarySessionId,
   });
-
-  const handleFileEditorTabContentChange = useCallback(
-    (relativePath: string, content: string) => {
-      setFileEditorTabs((prev) =>
-        prev.map((tab) => (tab.relativePath === relativePath ? { ...tab, content } : tab)),
-      );
-    },
-    [setFileEditorTabs],
-  );
 
   const handleAddWorktreeRepositoryToProject = useCallback(
     async (worktreePath: string) => {
@@ -1133,15 +1122,16 @@ export default function App() {
       if (!repository) {
         return;
       }
-      const ownerProject = projects.find((p) => p.repositoryIds.includes(repositoryId));
-      if (ownerProject) {
-        selectProjectAndRepository(ownerProject.id, repositoryId);
-      } else {
-        setActiveRepositoryId(repositoryId);
-      }
-      const mainOwnerPick = resolveMainOwnerAgentNameForRepositoryPath(repositories, repository.path);
-      const boundId = resolveBoundMainSessionId(
-        repository.path,
+      setActiveRepositoryWithOwner(repositoryId);
+      const ownerProject = projects.find((p) => p.repositoryIds.includes(repositoryId)) ?? null;
+      const target = resolveSidebarSelectionTarget({
+        repository,
+        ownerProject,
+        repositories,
+      });
+      const mainOwnerPick = resolveMainOwnerAgentNameForRepositoryPath(repositories, target.path);
+      const boundId = resolveRepositoryMainSessionId(
+        target.path,
         repositoryMainSessionBindings,
         sessions,
         mainOwnerPick,
@@ -1152,18 +1142,18 @@ export default function App() {
       }
       const latestForRepo = pickSessionForRepositorySidebarSelect(
         sessions,
-        repository.path,
+        target.path,
         loadSessionOwnerHints(),
         { mainOwnerAgentName: mainOwnerPick },
       );
       if (latestForRepo) {
-        bindRepositoryMainSession(repository.path, latestForRepo.id);
+        bindRepositoryMainSession(target.path, latestForRepo.id);
         switchSession(latestForRepo.id);
         return;
       }
       void (async () => {
-        const id = await createSession(repository.path, repositorySessionTabDisplayName(repository));
-        bindRepositoryMainSession(repository.path, id);
+        const id = await createSession(target.path, target.displayName);
+        bindRepositoryMainSession(target.path, id);
       })();
     },
     [
@@ -1172,27 +1162,28 @@ export default function App() {
       projects,
       repositories,
       repositoryMainSessionBindings,
-      selectProjectAndRepository,
       sessions,
       setActiveRepositoryId,
+      setActiveRepositoryWithOwner,
       switchSession,
     ],
   );
 
-  /** 进入应用：仓库与会话 hydrated 后，打开侧栏排序第一项项目下第一个仓库的主会话（与 `useRepositoryList` 默认项一致）。 */
+  /**
+   * 进入应用：仓库与会话 hydrated 后，对 `useRepositoryList` 通过 lastSession 或首项策略
+   * 选出的 `activeRepositoryId` 打开/恢复主会话（不再要求首项必须是 project，游离 repo 同样适用）。
+   */
   const startupFirstProjectRepoSessionAppliedRef = useRef(false);
   useEffect(() => {
     if (repositoryListLoading || !tabsHydrated) return;
     if (startupFirstProjectRepoSessionAppliedRef.current) return;
-    const firstProject = projects[0];
-    if (!firstProject?.repositoryIds?.length) return;
-    const firstRepoId = firstProject.repositoryIds[0];
-    if (!repositories.some((r) => r.id === firstRepoId)) return;
+    if (activeRepositoryId == null) return;
+    if (!repositories.some((r) => r.id === activeRepositoryId)) return;
     startupFirstProjectRepoSessionAppliedRef.current = true;
-    handleSidebarRepositorySelect(firstRepoId);
+    handleSidebarRepositorySelect(activeRepositoryId);
   }, [
+    activeRepositoryId,
     handleSidebarRepositorySelect,
-    projects,
     repositories,
     repositoryListLoading,
     tabsHydrated,
@@ -1212,9 +1203,19 @@ export default function App() {
     (projectId: string) => {
       setMcpHubMode(false);
       setSkillsHubMode(false);
-      setActiveProjectId(projectId);
+      const project = projects.find((p) => p.id === projectId) ?? null;
+      const firstRepoId = project?.repositoryIds[0] ?? null;
+      // 进项目即开主会话：通过 handleSidebarRepositorySelect 统一路由
+      // - multi_repo → 绑定/恢复/创建 anchor.path 上的项目主会话
+      // - single_repo → per-repo session
+      // - 项目无 repo → 只切 activeProjectId 等待用户后续操作
+      if (firstRepoId != null) {
+        handleSidebarRepositorySelect(firstRepoId);
+      } else {
+        setActiveProjectId(projectId);
+      }
     },
-    [setActiveProjectId],
+    [handleSidebarRepositorySelect, projects, setActiveProjectId],
   );
 
   const jumpToSessionLeavingMcpHub = useCallback(
@@ -1227,16 +1228,17 @@ export default function App() {
   );
 
   async function handleCreateRepositoryTask(repository: Repository, mode: TaskMode) {
-    const ownerProject = projects.find((p) => p.repositoryIds.includes(repository.id));
-    if (ownerProject) {
-      selectProjectAndRepository(ownerProject.id, repository.id);
-    } else {
-      setActiveRepositoryId(repository.id);
-    }
+    setActiveRepositoryWithOwner(repository.id);
+    const ownerProject = projects.find((p) => p.repositoryIds.includes(repository.id)) ?? null;
+    const target = resolveSidebarSelectionTarget({
+      repository,
+      ownerProject,
+      repositories,
+    });
     if (mode === "chat") {
       setTaskSplitMode(false);
-      const id = await createSession(repository.path, repositorySessionTabDisplayName(repository));
-      bindRepositoryMainSession(repository.path, id);
+      const id = await createSession(target.path, target.displayName);
+      bindRepositoryMainSession(target.path, id);
       return;
     }
     if (mode === "split") {
@@ -1245,6 +1247,7 @@ export default function App() {
       setTaskSplitMode(true);
       return;
     }
+    // 默认模式（split prompt 执行）保持 per-repo 语义：repo 维度的任务拆分依赖 repo.path 上下文
     const sessionId = await createSession(repository.path, repositorySessionTabDisplayName(repository));
     executeSession(
       sessionId,
@@ -1455,6 +1458,7 @@ export default function App() {
       onToggleCompactLayoutMode={handleToggleCompactLayoutMode}
       onLeftWidthChange={setMainLayoutLeftWidthPx}
       onRightWidthChange={setMainLayoutRightWidthPx}
+      activeRepositoryPath={activeRepository?.path}
       leftSidebarProps={{
         projects,
         activeProjectId,
@@ -1479,6 +1483,10 @@ export default function App() {
         pinnedProjectIds,
         onTogglePinProject: togglePinProject,
         onAddRepositoryToProject: handleAddRepositoryToProject,
+        onAddFloatingRepository: handleAddFloatingRepository,
+        onPromoteFloatingRepositoryToProject: handlePromoteFloatingRepositoryToProject,
+        floatingRepositories,
+        onRemoveRepository: handleRemoveRepository,
         onDetachRepositoryFromProject: handleDetachRepositoryFromProject,
         onUpdateRepositorySddMode: handleUpdateRepositorySddMode,
         onReorderRepositoriesInProject: handleReorderRepositoriesInProject,
@@ -1506,7 +1514,6 @@ export default function App() {
         onReloadFullDiskTranscript: reloadFullDiskTranscript,
         activeRepositoryPath: activeRepository?.path,
         activeRepositoryName: activeRepository?.name,
-        onOpenActiveRepositoryFile: openRepositoryFile,
       }}
       promptsPanelProps={{
         onClose: () => {
@@ -1529,6 +1536,8 @@ export default function App() {
         activeRepository,
         repositories,
         activeRepositoryId,
+        workspaceMode,
+        activeProject,
         onSelectRepository: setActiveRepositoryId,
         onUpdateSessionModel: updateSessionModel,
         onExecuteSession: handleComposerExecute,
@@ -1574,8 +1583,6 @@ export default function App() {
         workflowTemplates,
         workflowGraphsByWorkflowId,
         workflowGraphStatusByWorkflowId,
-        hideMessages: editorVisible,
-        hideSessionTools: editorVisible,
         onOpenTaskDetail: (taskId) => {
           setMonitorDrawerTarget({ type: "task", taskId });
         },
@@ -1585,32 +1592,12 @@ export default function App() {
         resolveTaskListOmcInvokeConcurrency,
         onDecideWorkflowTask: handleDecideWorkflowTask,
       }}
-      repositoryFileEditorPanelProps={
-        editorVisible
-          ? {
-              activePath: fileEditorActivePath,
-              dark,
-              dirty: editorDirty,
-              repositoryPath: activeRepository?.path,
-              saving: editorSaving,
-              tabs: fileEditorTabs,
-              onActivePathChange: setFileEditorActivePath,
-              onClosePanel: closeFileEditorPanel,
-              onCloseTab: closeFileEditorTab,
-              onSave: () => {
-                void saveEditor();
-              },
-              onTabContentChange: handleFileEditorTabContentChange,
-            }
-          : null
-      }
       rightPanelProps={{
         dark,
         collapsed: effectiveRightCollapsed,
         siderWidth: mainLayoutRightWidthPx,
         repositoryPath: activeRepository?.path,
         repositoryName: activeRepository?.name,
-        onOpenFile: openRepositoryFile,
         monitorStats,
         monitorPanelSessions: monitorPanelSessionsMerged,
         monitorTranscriptSourceSessions: sessions,
@@ -1687,10 +1674,6 @@ export default function App() {
         workflowTemplates,
         onOpenEmployeeConfigForProject: () => void openEmployeeConfigForProject(),
         onOpenWorkflowConfigForProject: openWorkflowConfigForProject,
-      }}
-      repositoryFilePreviewModalProps={{
-        preview: repositoryBinaryPreview,
-        onClose: closeRepositoryBinaryPreview,
       }}
       progressMonitorDrawerProps={{
         open: monitorDrawerTarget != null,

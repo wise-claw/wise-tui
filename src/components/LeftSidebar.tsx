@@ -63,6 +63,7 @@ import { getSystemResourceSnapshot } from "../services/systemResource";
 import { ClaudeCodeUsageHeaderBtn } from "./ClaudeCodeUsagePopover";
 import { RepositoryFilesExplorer, type GitPanelOpenFileOptions } from "./GitPanel";
 import { SddModeSwitch } from "./SddModeSwitch";
+import { resolveWorkspaceMode } from "../utils/workspaceMode";
 import {
   detectSddSignals,
   resolveAutoSddMode,
@@ -262,6 +263,20 @@ interface Props {
     repositoryType: Repository["repositoryType"],
     options?: AddRepositoryOptions,
   ) => void;
+  /** 不绑定 project 的游离仓库添加入口；选目录后立即出现在侧栏顶层。 */
+  onAddFloatingRepository?: (
+    repositoryType: Repository["repositoryType"],
+    options?: AddRepositoryOptions,
+  ) => void;
+  /** 把游离 repo 升格为新项目：内部创建项目 + 关联。 */
+  onPromoteFloatingRepositoryToProject?: (
+    repositoryId: number,
+    projectName: string,
+  ) => void | Promise<void>;
+  /** 顶层未关联到任何 project 的游离仓库列表。 */
+  floatingRepositories?: Repository[];
+  /** 顶层游离 repo 删除入口；不绑定 project 上下文。 */
+  onRemoveRepository?: (repository: Repository) => void | Promise<void>;
   onDetachRepositoryFromProject: (projectId: string, repositoryId: number) => void;
   onUpdateRepositorySddMode?: (repositoryId: number, sddMode: SddMode) => void | Promise<void>;
   /** 项目内仓库拖拽排序；未传则单项目多仓时不显示排序手柄（仍可拖入其它项目） */
@@ -392,6 +407,7 @@ function RepositoryRow({
   onOpenRepositoryMainOwner,
   onConfigureSddMode,
   repositoryReorder,
+  hideChatAction = false,
 }: {
   project: ProjectItem;
   repository: Repository;
@@ -405,6 +421,11 @@ function RepositoryRow({
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
   onConfigureSddMode?: (repository: Repository) => void;
   repositoryReorder?: RepositoryReorderUi;
+  /**
+   * 多仓项目里 repo 不是独立 agent，对话按钮没有动作语义；隐藏以避免误导。
+   * 单仓 / 游离 repo 仍渲染。
+   */
+  hideChatAction?: boolean;
 }) {
   const moreItems: MenuProps["items"] = [
     { key: "finder", label: "Finder打开" },
@@ -487,9 +508,116 @@ function RepositoryRow({
             <MoreIcon />
           </span>
         </Dropdown>
-        <RepositoryConversationAction onOpen={() => onOpenTaskMode(repository, "chat")} />
+        {hideChatAction ? null : (
+          <RepositoryConversationAction onOpen={() => onOpenTaskMode(repository, "chat")} />
+        )}
       </div>
 
+    </div>
+  );
+}
+
+/**
+ * 侧栏顶层游离仓库行。
+ *
+ * 与 `RepositoryRow` 区别：
+ * - 不绑定 `project` 上下文（菜单无「移出项目」，改为「升格为新项目」/「加入现有项目」）
+ * - 没有项目内排序/跨项目拖入；点击 = 选中并恢复主会话
+ */
+function FloatingRepositoryRow({
+  repository,
+  isActiveRepository,
+  joinableProjects,
+  onRepositorySelect,
+  onOpenTaskMode,
+  onOpenInFinder,
+  onOpenRepositoryInEditor,
+  onOpenRepositoryMainOwner,
+  onConfigureSddMode,
+  onPromoteToNewProject,
+  onJoinExistingProject,
+  onRemove,
+}: {
+  repository: Repository;
+  isActiveRepository: boolean;
+  joinableProjects: ProjectItem[];
+  onRepositorySelect: (id: number | null) => void;
+  onOpenTaskMode: (repository: Repository, mode: TaskMode) => void;
+  onOpenInFinder: (repository: Repository) => void;
+  onOpenRepositoryInEditor: (repository: Repository) => void;
+  onOpenRepositoryMainOwner?: (repository: Repository) => void;
+  onConfigureSddMode?: (repository: Repository) => void;
+  onPromoteToNewProject?: (repository: Repository) => void;
+  onJoinExistingProject?: (repository: Repository, projectId: string) => void;
+  onRemove: (repository: Repository) => void;
+}) {
+  const hasMainOwner = Boolean(repository.mainOwnerAgentName?.trim());
+  const joinChildren: MenuProps["items"] = joinableProjects.map((p) => ({
+    key: `join-${p.id}`,
+    label: p.name,
+  }));
+  const moreItems: MenuProps["items"] = [
+    { key: "finder", label: "Finder打开" },
+    { key: "editor", label: repositoryEditorOpenMenuLabel() },
+    ...(onOpenRepositoryMainOwner ? [{ key: "main-owner", label: "主 Owner 智能体…" }] satisfies MenuProps["items"] : []),
+    { key: "sdd-mode", label: "SDD 模式" },
+    { type: "divider" },
+    ...(onPromoteToNewProject ? [{ key: "promote", label: "升格为新项目…" }] satisfies MenuProps["items"] : []),
+    ...(onJoinExistingProject && joinChildren.length > 0
+      ? [{ key: "join", label: "加入现有项目", children: joinChildren }] satisfies MenuProps["items"]
+      : []),
+    { type: "divider" },
+    { key: "remove", label: "移除仓库", danger: true },
+  ];
+
+  return (
+    <div className="app-repository-row">
+      <div
+        className={`app-repository-item app-repository-item--repo${isActiveRepository ? " app-repository-item--repo-active" : ""}`}
+        onClick={() => onRepositorySelect(repository.id)}
+      >
+        <span className="app-repository-icon-wrap">
+          <span className="app-repository-icon app-repository-icon--folder">
+            <RepositoryTypeIcon repository={repository} />
+          </span>
+          {hasMainOwner ? (
+            <span
+              className="app-repository-main-owner-badge"
+              aria-label="已配置主 Owner"
+              title="已配置主 Owner"
+            >
+              <UserOutlined />
+            </span>
+          ) : null}
+        </span>
+        <span className="app-repository-name">{repositoryFolderBasename(repository)}</span>
+        <Dropdown
+          rootClassName="app-sidebar-more-menu-dropdown"
+          menu={{
+            className: "app-sidebar-more-menu-inner",
+            items: moreItems,
+            onClick: ({ key }) => {
+              if (key === "finder") onOpenInFinder(repository);
+              if (key === "editor") onOpenRepositoryInEditor(repository);
+              if (key === "main-owner") onOpenRepositoryMainOwner?.(repository);
+              if (key === "sdd-mode") onConfigureSddMode?.(repository);
+              if (key === "promote") onPromoteToNewProject?.(repository);
+              if (typeof key === "string" && key.startsWith("join-")) {
+                const projectId = key.slice("join-".length);
+                onJoinExistingProject?.(repository, projectId);
+              }
+              if (key === "remove") onRemove(repository);
+            },
+          }}
+          trigger={["click"]}
+          placement="bottomRight"
+        >
+          <span className="app-repository-action" onClick={(e) => e.stopPropagation()}>
+            <MoreIcon />
+          </span>
+        </Dropdown>
+        <RepositoryConversationAction onOpen={() => onOpenTaskMode(repository, "chat")} />
+      </div>
     </div>
   );
 }
@@ -510,6 +638,7 @@ function ProjectRepositoryRows({
   onConfigureSddMode,
   repoSidebarDragRef,
   onRepoSidebarDragEnd,
+  hideChatAction = false,
 }: {
   project: ProjectItem;
   projectRepos: Repository[];
@@ -526,6 +655,8 @@ function ProjectRepositoryRows({
   onConfigureSddMode?: (repository: Repository) => void;
   repoSidebarDragRef: React.MutableRefObject<{ sourceProjectId: string; repositoryId: number } | null>;
   onRepoSidebarDragEnd: () => void;
+  /** 多仓项目里 repo 是 subagent 实现位置而非独立 agent，传 true 时不渲染行尾「对话」icon。 */
+  hideChatAction?: boolean;
 }) {
   const { message } = AntdApp.useApp();
   const [dropHint, setDropHint] = useState<{ anchorRepositoryId: number; placement: "before" | "after" } | null>(
@@ -632,6 +763,7 @@ function ProjectRepositoryRows({
             onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
             onConfigureSddMode={onConfigureSddMode}
             repositoryReorder={reorderUi}
+            hideChatAction={hideChatAction}
           />
         );
       })}
@@ -656,6 +788,10 @@ export function LeftSidebar({
   pinnedProjectIds,
   onTogglePinProject,
   onAddRepositoryToProject,
+  onAddFloatingRepository,
+  onPromoteFloatingRepositoryToProject,
+  floatingRepositories = [],
+  onRemoveRepository,
   onDetachRepositoryFromProject,
   onUpdateRepositorySddMode,
   onReorderRepositoriesInProject,
@@ -708,6 +844,11 @@ export function LeftSidebar({
   const [projectNameInput, setProjectNameInput] = useState("");
   const [editProject, setEditProject] = useState<ProjectItem | null>(null);
   const [pendingAddRepositoryProjectId, setPendingAddRepositoryProjectId] = useState<string | null>(null);
+  /** 游离仓库添加 modal：开关由 `pendingAddFloatingRepository` 切换；与 project 内添加 modal 复用表单字段。 */
+  const [pendingAddFloatingRepository, setPendingAddFloatingRepository] = useState(false);
+  /** 待升格为新项目的游离 repo（菜单触发后弹出输入项目名 modal）。 */
+  const [promotingFloatingRepo, setPromotingFloatingRepo] = useState<Repository | null>(null);
+  const [promotingFloatingRepoName, setPromotingFloatingRepoName] = useState("");
   const [newRepositoryType, setNewRepositoryType] = useState<Repository["repositoryType"]>("frontend");
   const [newRepositorySddMode, setNewRepositorySddMode] = useState<SddMode>("auto");
   const [newRepositoryDisplayName, setNewRepositoryDisplayName] = useState("");
@@ -1107,12 +1248,30 @@ export function LeftSidebar({
 
   function openAddRepositoryModal(projectId: string) {
     setPendingAddRepositoryProjectId(projectId);
+    setPendingAddFloatingRepository(false);
     setAssociateSelectValue("frontend");
     setNewRepositoryType("frontend");
     setNewRepositorySddMode("auto");
     setNewRepositoryDisplayName("");
     setNewRepositoryIconColor(null);
     void refreshRepositoryAssociatePresets();
+  }
+
+  /** 顶层「添加游离仓库」入口：与项目内关联弹窗共用表单字段，但提交走 `onAddFloatingRepository`。 */
+  function openAddFloatingRepositoryModal() {
+    setPendingAddRepositoryProjectId(null);
+    setPendingAddFloatingRepository(true);
+    setAssociateSelectValue("frontend");
+    setNewRepositoryType("frontend");
+    setNewRepositorySddMode("auto");
+    setNewRepositoryDisplayName("");
+    setNewRepositoryIconColor(null);
+    void refreshRepositoryAssociatePresets();
+  }
+
+  function closeAddRepositoryModal() {
+    setPendingAddRepositoryProjectId(null);
+    setPendingAddFloatingRepository(false);
   }
 
   function openRepositorySddModeModal(repository: Repository) {
@@ -1139,7 +1298,9 @@ export function LeftSidebar({
   }
 
   function submitAddRepository() {
-    if (!pendingAddRepositoryProjectId) return;
+    const projectId = pendingAddRepositoryProjectId;
+    const floatingMode = pendingAddFloatingRepository;
+    if (!projectId && !floatingMode) return;
     if (isCustomPresetSelectValue(associateSelectValue)) {
       const presetId = associateSelectValue.slice("custom:".length);
       if (!repositoryAssociatePresets.some((p) => p.id === presetId)) {
@@ -1147,15 +1308,45 @@ export function LeftSidebar({
         return;
       }
     }
-    const projectId = pendingAddRepositoryProjectId;
     const iconText = newRepositoryDisplayName.trim();
     const opts: AddRepositoryOptions = {
       iconDisplayName: iconText.length > 0 ? iconText : undefined,
       iconColor: newRepositoryIconColor,
       sddMode: newRepositorySddMode,
     };
+    if (floatingMode) {
+      if (!onAddFloatingRepository) {
+        message.warning("当前环境未启用「添加游离仓库」入口");
+        return;
+      }
+      setPendingAddFloatingRepository(false);
+      void onAddFloatingRepository(newRepositoryType, opts);
+      return;
+    }
     setPendingAddRepositoryProjectId(null);
-    void onAddRepositoryToProject(projectId, newRepositoryType, opts);
+    void onAddRepositoryToProject(projectId as string, newRepositoryType, opts);
+  }
+
+  function submitPromoteFloatingRepository() {
+    if (!promotingFloatingRepo) return;
+    const trimmed = promotingFloatingRepoName.trim();
+    if (!trimmed) {
+      message.warning("请输入项目名");
+      return;
+    }
+    if (!onPromoteFloatingRepositoryToProject) {
+      message.warning("当前环境未启用「升格为新项目」");
+      return;
+    }
+    const repoId = promotingFloatingRepo.id;
+    setPromotingFloatingRepo(null);
+    setPromotingFloatingRepoName("");
+    void Promise.resolve(onPromoteFloatingRepositoryToProject(repoId, trimmed)).catch(
+      (err: unknown) => {
+        message.error("升格为新项目失败");
+        console.error(err);
+      },
+    );
   }
 
   return (
@@ -1239,6 +1430,17 @@ export function LeftSidebar({
             项目
           </Typography.Text>
           <div className="app-repository-header-actions">
+            {onAddFloatingRepository ? (
+              <Tooltip title="添加游离仓库（不绑定项目）" mouseEnterDelay={0.3}>
+                <button
+                  className="app-repository-header-btn"
+                  aria-label="添加游离仓库"
+                  onClick={openAddFloatingRepositoryModal}
+                >
+                  <PlusIcon />
+                </button>
+              </Tooltip>
+            ) : null}
             <Tooltip title="新建项目" mouseEnterDelay={0.3}>
               <button
                 className="app-repository-header-btn"
@@ -1255,6 +1457,55 @@ export function LeftSidebar({
         </div>
 
         <div className="app-repository-list">
+        {floatingRepositories.length > 0 ? (
+          <div className="app-repository-floating-group" aria-label="游离仓库">
+            {floatingRepositories.map((repository) => (
+              <FloatingRepositoryRow
+                key={repository.id}
+                repository={repository}
+                isActiveRepository={repository.id === activeRepositoryId && !activeProjectId}
+                joinableProjects={projects}
+                onRepositorySelect={onRepositorySelect}
+                onOpenTaskMode={onCreateRepositoryTask}
+                onOpenInFinder={onOpenInFinder}
+                onOpenRepositoryInEditor={openRepositoryInPreferredEditor}
+                onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
+                onConfigureSddMode={onUpdateRepositorySddMode ? openRepositorySddModeModal : undefined}
+                onPromoteToNewProject={
+                  onPromoteFloatingRepositoryToProject
+                    ? (repo) => {
+                        setPromotingFloatingRepo(repo);
+                        setPromotingFloatingRepoName(repositoryFolderBasename(repo));
+                      }
+                    : undefined
+                }
+                onJoinExistingProject={
+                  onMoveRepositoryToProject
+                    ? (repo, projectId) => {
+                        void Promise.resolve(onMoveRepositoryToProject(projectId, repo.id)).catch(
+                          (err: unknown) => {
+                            message.error("加入项目失败");
+                            console.error(err);
+                          },
+                        );
+                      }
+                    : undefined
+                }
+                onRemove={(repo) => {
+                  if (!onRemoveRepository) return;
+                  modal.confirm({
+                    title: "确认移除游离仓库？",
+                    content: `仓库「${repositoryFolderBasename(repo)}」将从 Wise 列表移除（不会删除磁盘文件，也不会动 .trellis）。`,
+                    okText: "移除",
+                    okType: "danger",
+                    cancelText: "取消",
+                    onOk: () => onRemoveRepository(repo),
+                  });
+                }}
+              />
+            ))}
+          </div>
+        ) : null}
         {projects.map((project) => {
           const projectRepos = project.repositoryIds
             .map((id) => repositoriesById.get(id))
@@ -1411,6 +1662,12 @@ export function LeftSidebar({
                       onConfigureSddMode={openRepositorySddModeModal}
                       repoSidebarDragRef={repoSidebarDragRef}
                       onRepoSidebarDragEnd={clearRepoSidebarDrag}
+                      hideChatAction={
+                        resolveWorkspaceMode({
+                          activeProjectId: project.id,
+                          projects: [project],
+                        }) === "multi_repo"
+                      }
                     />
                   )}
                 </div>
@@ -1418,7 +1675,7 @@ export function LeftSidebar({
             </div>
           );
         })}
-        {projects.length === 0 && (
+        {projects.length === 0 && floatingRepositories.length === 0 && (
           <div className="app-repository-item app-repository-item--add" onClick={() => setCreateProjectOpen(true)}>
             <span className="app-repository-add-icon"><PlusIcon /></span>
             <span className="app-repository-add-text">新建项目</span>
@@ -1643,9 +1900,28 @@ export function LeftSidebar({
         />
       </Modal>
       <Modal
-        title="关联仓库"
-        open={Boolean(pendingAddRepositoryProjectId)}
-        onCancel={() => setPendingAddRepositoryProjectId(null)}
+        title={promotingFloatingRepo ? `升格仓库「${repositoryFolderBasename(promotingFloatingRepo)}」为新项目` : "升格为新项目"}
+        open={Boolean(promotingFloatingRepo)}
+        onCancel={() => {
+          setPromotingFloatingRepo(null);
+          setPromotingFloatingRepoName("");
+        }}
+        onOk={submitPromoteFloatingRepository}
+        okText="创建项目并加入"
+        cancelText="取消"
+      >
+        <Input
+          value={promotingFloatingRepoName}
+          onChange={(e) => setPromotingFloatingRepoName(e.target.value)}
+          placeholder="请输入新项目名称"
+          onPressEnter={submitPromoteFloatingRepository}
+          autoFocus
+        />
+      </Modal>
+      <Modal
+        title={pendingAddFloatingRepository ? "添加游离仓库" : "关联仓库"}
+        open={Boolean(pendingAddRepositoryProjectId) || pendingAddFloatingRepository}
+        onCancel={closeAddRepositoryModal}
         onOk={submitAddRepository}
         okText="继续选择仓库目录"
         cancelText="取消"
