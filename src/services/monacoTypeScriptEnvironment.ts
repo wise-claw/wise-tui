@@ -96,6 +96,7 @@ const REGISTERED_REPOSITORY_EXTRA_LIBS = new WeakMap<
 >();
 const DEPENDENCY_FILE_CONTENT_CACHE = new Map<string, string>();
 const PENDING_DEPENDENCY_FILES = new Map<string, Promise<string | null>>();
+const LAST_SYNC_SIGNATURE_BY_REPOSITORY = new WeakMap<MonacoApi, Map<string, string>>();
 
 export function isTypeScriptLikeRepositoryPath(path: string): boolean {
   return TYPESCRIPT_LIKE_EXTENSIONS.has(getPathExtension(path));
@@ -160,6 +161,23 @@ export async function syncMonacoRepositoryTypeScriptModels({
       content: file.content,
     }))
     .filter((file) => file.relativePath.length > 0);
+  if (normalizedSources.length === 0) {
+    return;
+  }
+
+  const syncSignature = normalizedSources
+    .map((source) => `${source.relativePath}:${stableHash(source.content)}`)
+    .sort()
+    .join("|");
+  let repositorySignatures = LAST_SYNC_SIGNATURE_BY_REPOSITORY.get(monaco);
+  if (!repositorySignatures) {
+    repositorySignatures = new Map();
+    LAST_SYNC_SIGNATURE_BY_REPOSITORY.set(monaco, repositorySignatures);
+  }
+  if (repositorySignatures.get(repositoryPath) === syncSignature) {
+    return;
+  }
+  repositorySignatures.set(repositoryPath, syncSignature);
 
   for (const source of normalizedSources) {
     registerRepositorySource(monaco, repositoryPath, source, true);
@@ -205,8 +223,9 @@ function applyWiseTypeScriptDefaults(
     noSyntaxValidation: false,
     noSemanticValidation: false,
     noSuggestionDiagnostics: false,
+    onlyVisible: true,
   });
-  defaults.setEagerModelSync(true);
+  defaults.setEagerModelSync(false);
 }
 
 function resolveMonacoBundlerModuleResolution(

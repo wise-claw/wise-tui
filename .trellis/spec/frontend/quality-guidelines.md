@@ -70,6 +70,93 @@ the test runner for those files.
 
 ---
 
+## Scenario: Project-Owned Trellis Execution Metadata
+
+### 1. Scope / Trigger
+
+- Trigger: Trellis execution crosses UI selection, workflow routing, Claude invocation streams, runtime stores, and monitor rendering.
+- Applies when the owning `Project.sddMode === "wise_trellis"` and the work belongs to a repository member rather than an `EmployeeItem`.
+
+### 2. Signatures
+
+- `Project.rootPath: string` — absolute path holding `<rootPath>/.trellis/`.
+- `Project.sddMode: ProjectSddMode` — `"wise_trellis" | "project_owned"`.
+- `Project.mainAgent?: string | null` — reserved for the main-session full-stack dispatch flow.
+- `Repository.roleTags?: string[]` — multi-tag routing taxonomy; legacy `repositoryType` is read-deprecated.
+- `ExecuteTaskInput.executionMetadata?: TrellisExecutionMetadata`
+- `OmcWorkflowAdapter.execute(...).executionMetadata?: TrellisExecutionMetadata`
+- `WorkflowInvocationStreamDetail.ownerKind?: "repository"`
+- `WorkflowInvocationStreamDetail.ownerRepositoryId?: number`
+- `WorkflowInvocationStreamDetail.repositoryType?: "frontend" | "backend" | "document"`
+- `WorkflowInvocationStreamDetail.stage?: string`
+- `WorkflowInvocationStreamDetail.subagentType?: string`
+
+### 3. Contracts
+
+- SDD ownership lives on `Project`, not on `Repository`. Use `getEffectiveRepoSddMode(repo, projects)` to compute the effective mode; never read `repo.sddMode` directly in new code.
+- `.trellis/` always sits at `<project.rootPath>/.trellis/`. Repository paths are independent — a repo may sit inside, outside, or anywhere relative to `rootPath`.
+- Repository identity is `ownerKind: "repository"` plus `ownerRepositoryId`; do not encode repositories as `EmployeeItem`.
+- `Repository.roleTags` is the routing taxonomy (e.g. `["frontend", "test"]`). It is read via `getRoleTags(repo)` which falls back to `[repositoryType]` for legacy rows.
+- `repositoryType` is read-deprecated and kept as the single-tag fallback. Do not write new logic that pivots on it.
+- Trellis child execution is identified by `stage`, `subagentType`, `taskId`, and `invocationKey`.
+- `WorkflowTemplateAssignee.employeeId` must contain real employee ids only. Trellis sub-agent names belong in a separate stage route contract.
+- Monitor UI groups Trellis invocations as `repository member -> subagent rows`.
+- EmployeeItem UI entry points (config buttons, employee monitor section) are gated by `shouldHideEmployeeUi(activeProject)`; `wise_trellis` projects hide them, `project_owned` projects keep them as a legacy escape hatch.
+- `@<roleTag>` prompts arriving at the AppImpl send path are routed via `planAtMentionDispatch` and `dispatchAtMentionPromptToRepos`; matched repos receive a `trellis-implement` subagent with full streamUi attribution so the existing RepositoryMember monitor renders them without bespoke wiring.
+- New project-level main sessions resolve their `ClaudeSession.repositoryPath` via `resolveProjectMainSessionAnchor(project, repositories)`. Multi-repo `wise_trellis` projects with a non-empty `rootPath` anchor at the project root; single-repo or `project_owned` projects keep anchoring at the first member repo. The session's `repositoryName` becomes `Project: <name>` when project-rooted, so downstream UI can disambiguate from repo-rooted sessions.
+
+### 4. Validation & Error Matrix
+
+- Missing `ownerRepositoryId` -> do not render as a repository-member invocation row.
+- Unknown `repositoryType` -> fall back to repository record type when available.
+- Missing `subagentType` -> display `trellis-implement` only as a UI fallback, not as owner identity.
+- Project `sddMode = "wise_trellis"` with no invocations -> render every member repo as idle.
+- Repo not present in any project -> consult `repo.sddMode` for legacy back-compat; coerce `"off"` to `project_owned`.
+
+### 5. Good/Base/Bad Cases
+
+- Good: project with `sddMode: "wise_trellis"` shows all its repo members as idle, then `trellis-implement` appears underneath the targeted member during execution.
+- Base: non-Trellis employee/team workflows continue to dispatch through `EmployeeItem.agentType` when the owning project is `project_owned`.
+- Bad: `employeeId: "trellis-check"` in a workflow assignee, because that makes a child subagent look like a team member.
+- Bad: writing to `repo.sddMode` after migration; new code must write `Project.sddMode`.
+
+### 6. Tests Required
+
+- Helper tests assert `getRoleTags` fallback and `getEffectiveRepoSddMode` precedence (project > legacy repo > default).
+- Adapter/engine tests assert metadata reaches workflow events and Claude stream UI params.
+- Store/persistence tests assert repository attribution survives snapshot updates and local persistence.
+- Monitor overview tests assert project `wise_trellis` repos render as idle members and project `project_owned` hides them even when the legacy repo field disagrees.
+- Trellis defaults tests assert stage routing is separate from employee assignees.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+// New code reading repo.sddMode directly
+if (repo.sddMode === "wise_trellis") { ... }
+
+// Workflow assignee using a Trellis subagent name as employeeId
+assignees: [{ employeeId: "trellis-implement", requiredCount: 1, isRequired: true }]
+```
+
+#### Correct
+
+```ts
+// Compute effective mode via the project-aware helper
+if (getEffectiveRepoSddMode(repo, projects) === "wise_trellis") { ... }
+
+executionMetadata: {
+  ownerKind: "repository",
+  ownerRepositoryId: repository.id,
+  repositoryType: repository.repositoryType,
+  stage: "implement",
+  subagentType: "trellis-implement",
+}
+```
+
+---
+
 ## Review Checklist
 
 Before considering frontend work done, check:

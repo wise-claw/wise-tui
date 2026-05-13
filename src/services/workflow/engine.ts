@@ -224,6 +224,7 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
       ? {
           templateId: input.templateId,
           subagentType: input.subagentType,
+          executionMetadata: input.executionMetadata,
           gatePlan: task.gateSummary.required.length > 0 ? task.gateSummary.required : gatePlanForTemplate(input.templateId),
           priority: 50,
           rationale: ["manual override"],
@@ -235,7 +236,14 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
 
     await this.store.appendEvent(createEvent(run, "task.routed", { taskId: input.taskId, ...routed }));
     await this.store.appendEvent(
-      createEvent(run, "task.run.started", { taskId: input.taskId, taskRunId, attempt, templateId: routed.templateId }),
+      createEvent(run, "task.run.started", {
+        taskId: input.taskId,
+        taskRunId,
+        attempt,
+        templateId: routed.templateId,
+        subagentType: routed.subagentType,
+        metadata: routed.executionMetadata ?? {},
+      }),
     );
     await this.store.appendEvent(
       createEvent(run, "task.run.progressed", {
@@ -244,6 +252,7 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
         stage: "adapter.execute.started",
         templateId: routed.templateId,
         subagentType: routed.subagentType ?? "executor",
+        metadata: routed.executionMetadata ?? {},
       }),
     );
 
@@ -255,6 +264,7 @@ export class DefaultWorkflowEngine implements WorkflowEngine {
       taskId: input.taskId,
       templateId: routed.templateId,
       subagentType: routed.subagentType,
+      executionMetadata: routed.executionMetadata,
       attempt,
     });
     const endedAt = Date.now();

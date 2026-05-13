@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, type MouseEvent } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, type MouseEvent } from "react";
 import { CloseOutlined } from "@ant-design/icons";
 import { Button, Spin } from "antd";
 import type * as Monaco from "monaco-editor";
@@ -48,6 +48,13 @@ export function RepositoryFileEditorPanel({
     activeTab && isTypeScriptLikeRepositoryPath(activeTab.relativePath)
       ? monacoUriForRepositoryPath(activeTab.relativePath, repositoryPath)
       : activeTab?.relativePath;
+  const activeTypeScriptSources = useMemo(
+    () =>
+      activeTab && !activeTab.loading && activeTab.diffOriginal === undefined
+        ? [{ relativePath: activeTab.relativePath, content: activeTab.content }]
+        : [],
+    [activeTab],
+  );
 
   useEffect(() => {
     const monaco = monacoRef.current;
@@ -57,11 +64,9 @@ export function RepositoryFileEditorPanel({
     void syncMonacoRepositoryTypeScriptModels({
       monaco,
       repositoryPath,
-      sourceFiles: tabs
-        .filter((tab) => !tab.loading && tab.diffOriginal === undefined)
-        .map((tab) => ({ relativePath: tab.relativePath, content: tab.content })),
+      sourceFiles: activeTypeScriptSources,
     });
-  }, [activeTab, repositoryPath, tabs]);
+  }, [activeTab, activeTypeScriptSources, repositoryPath]);
 
   return (
     <div className="app-file-editor-panel">
@@ -162,9 +167,7 @@ export function RepositoryFileEditorPanel({
                       void syncMonacoRepositoryTypeScriptModels({
                         monaco,
                         repositoryPath,
-                        sourceFiles: tabs
-                          .filter((tab) => !tab.loading && tab.diffOriginal === undefined)
-                          .map((tab) => ({ relativePath: tab.relativePath, content: tab.content })),
+                        sourceFiles: activeTypeScriptSources,
                       });
                     }
                   }}

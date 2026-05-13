@@ -5,6 +5,7 @@ import type {
   EmployeeMonitorItem,
   MonitorDrawerTarget,
   MonitorStats,
+  RepositoryMemberMonitorItem,
   TeamMonitorItem,
 } from "../types";
 import { MAIN_LAYOUT_RIGHT_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths";
@@ -34,6 +35,7 @@ interface Props {
   monitorPanelSessions?: ClaudeSession[];
   monitorTranscriptSourceSessions?: ClaudeSession[];
   employeeMonitorItems?: EmployeeMonitorItem[];
+  repositoryMemberMonitorItems?: RepositoryMemberMonitorItem[];
   teamMonitorItems?: TeamMonitorItem[];
   monitorActiveTarget?: MonitorDrawerTarget | null;
   onOpenTeamMonitorDetail?: (workflowId: string) => void;
@@ -41,6 +43,8 @@ interface Props {
   onOpenWorkflowConfig?: () => void;
   onStopEmployeeMonitor?: (employeeId: string) => void;
   onStopTeamMonitor?: (workflowId: string) => void;
+  /** 隐藏 EmployeeItem UI 区块（当活动项目 `sddMode === "wise_trellis"` 时）。 */
+  hideEmployeeUi?: boolean;
   monitorClaudeConcurrency?: {
     activeCount: number;
     limit: number;
@@ -68,6 +72,7 @@ export function RightPanel({
   monitorPanelSessions,
   monitorTranscriptSourceSessions,
   employeeMonitorItems = [],
+  repositoryMemberMonitorItems = [],
   teamMonitorItems = [],
   monitorActiveTarget,
   onOpenTeamMonitorDetail,
@@ -75,6 +80,7 @@ export function RightPanel({
   onOpenWorkflowConfig,
   onStopEmployeeMonitor,
   onStopTeamMonitor,
+  hideEmployeeUi = false,
   monitorClaudeConcurrency,
   onCancelSessionFromMonitor,
   onOpenTaskDetailFromMonitor,
@@ -113,6 +119,7 @@ export function RightPanel({
             <div className="app-right-panel-team">
               <ProgressMonitorPanel
                 employeeItems={employeeMonitorItems}
+                repositoryMemberItems={repositoryMemberMonitorItems}
                 teamItems={teamMonitorItems}
                 sessions={sessionsForMonitor}
                 activeTarget={monitorActiveTarget}
@@ -121,6 +128,7 @@ export function RightPanel({
                 onOpenWorkflowConfig={onOpenWorkflowConfig}
                 onStopEmployee={(employeeId) => onStopEmployeeMonitor?.(employeeId)}
                 onStopTeam={(workflowId) => onStopTeamMonitor?.(workflowId)}
+                hideEmployeeUi={hideEmployeeUi}
                 claudeConcurrency={monitorClaudeConcurrency ?? null}
                 onCancelSession={onCancelSessionFromMonitor}
                 onOpenTaskDetail={onOpenTaskDetailFromMonitor}

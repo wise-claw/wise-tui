@@ -1,0 +1,10 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend layer entry — verify all changes follow the layered structure."}
+{"file":".trellis/spec/frontend/state-management.md","reason":"Verify workspaceMode derivation is single-source; activeProjectId correctly cleared on floating-repo select; no duplicate sources of truth introduced."}
+{"file":".trellis/spec/frontend/hook-guidelines.md","reason":"Verify useWorkspaceMode is pure-derived (no Tauri side effects), memoized, and exposes a clear return shape."}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Verify WorkspaceMode union is exhaustively narrowed at all consumers; no any/unchecked casts, no implicit nullish hiding of zero-repo cases."}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Verify LeftSidebar floating-repo additions and 'add floating repo' entry do not directly call invoke; all I/O routed through services."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Verify §3 employee-UI hide-rule still holds for floating repos in single_repo mode; no regression in shouldHideEmployeeUi."}
+{"file":".trellis/spec/tauri/ipc-guidelines.md","reason":"If list_floating_repositories was added, verify naming/serde/error-code conformance."}
+{"file":".trellis/spec/tauri/persistence-and-migrations.md","reason":"Confirm no new migration was added (M0 must be schema-neutral)."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Verify single-direction layering: AppImpl/hooks -> services -> IPC, never reversed."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Verify promotion reuses createProject + addRepositoryToProject; no duplicated session anchor logic; no parallel implementation of existing utils."}

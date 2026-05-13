@@ -24,6 +24,9 @@ pub(crate) struct StoredRepository {
     path: String,
     #[serde(default = "default_repository_type", alias = "repository_type")]
     repository_type: String,
+    /// 多角色标签（路径 X 引入）。空数组时读取 fallback 为 `[repository_type]`。
+    #[serde(default, alias = "role_tags")]
+    role_tags: Vec<String>,
     /// 侧栏圆形角标背景色（`#rgb` / `#rrggbb`）；为空则按 `repository_type` 使用默认色。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     icon_color: Option<String>,
@@ -73,6 +76,13 @@ pub(crate) struct StoredProject {
     icon_display_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     icon_color: Option<String>,
+    /// 项目根目录绝对路径；持有 `.trellis/`。空字符串表示尚未设置（迁移期或新建未配置）。
+    root_path: String,
+    /// 项目级 SDD 模式：`wise_trellis` | `project_owned`。
+    sdd_mode: String,
+    /// 项目级主会话 Agent（路径 Y 消费）。为空则未配置。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    main_agent: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -349,6 +359,7 @@ pub(crate) fn create_repository_from_path(
         id: now,
         name: folder_label,
         path: folder_path.clone(),
+        role_tags: vec![normalized_repository_type.clone()],
         repository_type: normalized_repository_type,
         icon_color: normalize_hex_icon_color(icon_color),
         icon_display_name: icon_disp,
@@ -460,6 +471,44 @@ pub(crate) fn update_repository_sdd_mode(
 }
 
 #[tauri::command]
+pub(crate) fn update_repository_role_tags(
+    app: tauri::AppHandle,
+    id: i64,
+    role_tags: Vec<String>,
+) -> Result<StoredRepository, String> {
+    let mut normalized: Vec<String> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for tag in role_tags {
+        let trimmed = tag.trim();
+        if trimmed.is_empty() {
+            return Err("WF_INVALID_INPUT: roleTags entry must be non-empty".into());
+        }
+        if trimmed.chars().count() > 32 {
+            return Err("WF_INVALID_INPUT: roleTags entry exceeds 32 chars".into());
+        }
+        let owned = trimmed.to_string();
+        if seen.insert(owned.clone()) {
+            normalized.push(owned);
+        }
+    }
+    let mut repositories = load_repositories(&app);
+    let idx = repositories
+        .iter()
+        .position(|p| p.id == id)
+        .ok_or_else(|| "仓库未找到".to_string())?;
+    repositories[idx].role_tags = normalized;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_millis() as i64;
+    repositories[idx].updated_at = now.to_string();
+    save_repositories(&app, &repositories)?;
+    let mut out = repositories[idx].clone();
+    out.branch = git_commands::get_git_branch(&out.path);
+    Ok(out)
+}
+
+#[tauri::command]
 pub(crate) fn remove_repository(app: tauri::AppHandle, id: i64) -> Result<(), String> {
     let mut repositories = load_repositories(&app);
     let len_before = repositories.len();
@@ -470,26 +519,74 @@ pub(crate) fn remove_repository(app: tauri::AppHandle, id: i64) -> Result<(), St
     save_repositories(&app, &repositories)
 }
 
+fn map_project_row(row: wise_db::WiseProjectRow) -> StoredProject {
+    StoredProject {
+        id: row.id,
+        name: row.name,
+        repository_ids: row.repository_ids,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        icon_display_name: row.icon_display_name,
+        icon_color: row.icon_color,
+        root_path: row.root_path,
+        sdd_mode: row.sdd_mode,
+        main_agent: row.main_agent,
+    }
+}
+
 fn map_projects(rows: Vec<wise_db::WiseProjectRow>) -> Vec<StoredProject> {
-    rows.into_iter()
-        .map(|row| StoredProject {
-            id: row.id,
-            name: row.name,
-            repository_ids: row.repository_ids,
-            created_at: row.created_at,
-            updated_at: row.updated_at,
-            icon_display_name: row.icon_display_name.clone(),
-            icon_color: row.icon_color.clone(),
-        })
-        .collect()
+    rows.into_iter().map(map_project_row).collect()
+}
+
+/// 路径 X 一次性回填：项目首次升级到 root_path / main_agent 时，从首个成员仓库派生默认值。
+/// 仅在字段为空且首个仓库存在时写回；幂等。
+fn backfill_project_trellis_fields(
+    app: &tauri::AppHandle,
+    db: &wise_db::WiseDb,
+    rows: &[wise_db::WiseProjectRow],
+) -> Result<bool, String> {
+    let repositories = load_repositories(app);
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_millis() as i64;
+    let mut changed = false;
+    for row in rows {
+        let Some(repo_id) = row.repository_ids.first().copied() else {
+            continue;
+        };
+        let Some(repo) = repositories.iter().find(|r| r.id == repo_id) else {
+            continue;
+        };
+        if row.root_path.is_empty() && !repo.path.trim().is_empty() {
+            db.update_project_root_path(&row.id, repo.path.trim(), now_ms)?;
+            changed = true;
+        }
+        if row.main_agent.is_none() {
+            if let Some(name) = repo.main_owner_agent_name.as_deref() {
+                let trimmed = name.trim();
+                if !trimmed.is_empty() {
+                    db.update_project_main_agent(&row.id, Some(trimmed), now_ms)?;
+                    changed = true;
+                }
+            }
+        }
+    }
+    Ok(changed)
 }
 
 #[tauri::command]
 pub(crate) fn list_projects(
+    app: tauri::AppHandle,
     db: tauri::State<'_, wise_db::WiseDb>,
 ) -> Result<Vec<StoredProject>, String> {
     let rows = db.list_projects()?;
-    Ok(map_projects(rows))
+    let final_rows = if backfill_project_trellis_fields(&app, &db, &rows)? {
+        db.list_projects()?
+    } else {
+        rows
+    };
+    Ok(map_projects(final_rows))
 }
 
 #[tauri::command]
@@ -525,15 +622,7 @@ pub(crate) fn create_project(
         .into_iter()
         .find(|item| item.id == id)
         .ok_or_else(|| "项目创建失败".to_string())?;
-    Ok(StoredProject {
-        id: row.id,
-        name: row.name,
-        repository_ids: row.repository_ids,
-        created_at: row.created_at,
-        updated_at: row.updated_at,
-        icon_display_name: row.icon_display_name.clone(),
-        icon_color: row.icon_color.clone(),
-    })
+    Ok(map_project_row(row))
 }
 
 #[tauri::command]
@@ -556,15 +645,7 @@ pub(crate) fn update_project_name(
         .into_iter()
         .find(|item| item.id == project_id)
         .ok_or_else(|| "项目未找到".to_string())?;
-    Ok(StoredProject {
-        id: row.id,
-        name: row.name,
-        repository_ids: row.repository_ids,
-        created_at: row.created_at,
-        updated_at: row.updated_at,
-        icon_display_name: row.icon_display_name.clone(),
-        icon_color: row.icon_color.clone(),
-    })
+    Ok(map_project_row(row))
 }
 
 #[tauri::command]
@@ -594,15 +675,77 @@ pub(crate) fn update_project_icon_badge(
         .into_iter()
         .find(|item| item.id == project_id)
         .ok_or_else(|| "项目未找到".to_string())?;
-    Ok(StoredProject {
-        id: row.id,
-        name: row.name,
-        repository_ids: row.repository_ids,
-        created_at: row.created_at,
-        updated_at: row.updated_at,
-        icon_display_name: row.icon_display_name.clone(),
-        icon_color: row.icon_color.clone(),
-    })
+    Ok(map_project_row(row))
+}
+
+#[tauri::command]
+pub(crate) fn update_project_root_path(
+    db: tauri::State<'_, wise_db::WiseDb>,
+    project_id: String,
+    root_path: String,
+) -> Result<StoredProject, String> {
+    let trimmed = root_path.trim();
+    if trimmed.is_empty() {
+        return Err("WF_INVALID_INPUT: rootPath must be non-empty".into());
+    }
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_millis() as i64;
+    db.update_project_root_path(&project_id, trimmed, now_ms)?;
+    let rows = db.list_projects()?;
+    let row = rows
+        .into_iter()
+        .find(|item| item.id == project_id)
+        .ok_or_else(|| "项目未找到".to_string())?;
+    Ok(map_project_row(row))
+}
+
+#[tauri::command]
+pub(crate) fn update_project_sdd_mode(
+    db: tauri::State<'_, wise_db::WiseDb>,
+    project_id: String,
+    sdd_mode: String,
+) -> Result<StoredProject, String> {
+    const ALLOWED: &[&str] = &["wise_trellis", "project_owned"];
+    let trimmed = sdd_mode.trim();
+    if !ALLOWED.contains(&trimmed) {
+        return Err("WF_INVALID_INPUT: sddMode must be wise_trellis or project_owned".into());
+    }
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_millis() as i64;
+    db.update_project_sdd_mode(&project_id, trimmed, now_ms)?;
+    let rows = db.list_projects()?;
+    let row = rows
+        .into_iter()
+        .find(|item| item.id == project_id)
+        .ok_or_else(|| "项目未找到".to_string())?;
+    Ok(map_project_row(row))
+}
+
+#[tauri::command]
+pub(crate) fn update_project_main_agent(
+    db: tauri::State<'_, wise_db::WiseDb>,
+    project_id: String,
+    main_agent: Option<String>,
+) -> Result<StoredProject, String> {
+    let normalized = main_agent
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_millis() as i64;
+    db.update_project_main_agent(&project_id, normalized, now_ms)?;
+    let rows = db.list_projects()?;
+    let row = rows
+        .into_iter()
+        .find(|item| item.id == project_id)
+        .ok_or_else(|| "项目未找到".to_string())?;
+    Ok(map_project_row(row))
 }
 
 #[tauri::command]

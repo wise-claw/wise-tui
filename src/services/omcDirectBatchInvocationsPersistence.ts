@@ -27,12 +27,24 @@ export function digestOmcDirectBatchInvocationsList(list: WorkflowInvocationStre
     .map((d) => {
       const pl = d.previewLine ?? "";
       const plShort = pl.length > 96 ? pl.slice(0, 96) : pl;
-      return `${d.invocationKey}\t${d.phase}\t${d.lineCount ?? 0}\t${d.errCount ?? 0}\t${plShort}`;
+      return [
+        d.invocationKey,
+        d.phase,
+        d.lineCount ?? 0,
+        d.errCount ?? 0,
+        d.ownerRepositoryId ?? "",
+        d.repositoryType ?? "",
+        d.stage ?? "",
+        d.subagentType ?? "",
+        plShort,
+      ].join("\t");
     })
     .join("\n");
 }
 
-function slimInvocationForPersistence(inv: WorkflowInvocationStreamDetail): WorkflowInvocationStreamDetail {
+export function serializeOmcDirectBatchInvocationForPersistence(
+  inv: WorkflowInvocationStreamDetail,
+): WorkflowInvocationStreamDetail {
   const raw = inv.dispatchPrompt?.trim() ?? "";
   const dispatchPrompt =
     raw.length > MAX_DISPATCH_PROMPT_CHARS ? `${raw.slice(0, MAX_DISPATCH_PROMPT_CHARS)}\n…[truncated]` : raw || undefined;
@@ -46,6 +58,13 @@ function slimInvocationForPersistence(inv: WorkflowInvocationStreamDetail): Work
     taskTitle: inv.taskTitle,
     templateId: inv.templateId,
     attempt: inv.attempt,
+    ownerKind: inv.ownerKind,
+    ownerRepositoryId: inv.ownerRepositoryId,
+    ownerRepositoryName: inv.ownerRepositoryName,
+    ownerRepositoryPath: inv.ownerRepositoryPath,
+    repositoryType: inv.repositoryType,
+    stage: inv.stage,
+    subagentType: inv.subagentType,
     lineCount: inv.lineCount,
     errCount: inv.errCount,
     previewLine: inv.previewLine,
@@ -82,7 +101,7 @@ function removeLocalStorageRaw(): void {
   }
 }
 
-function parsePersistedRow(raw: unknown): WorkflowInvocationStreamDetail | null {
+export function parsePersistedOmcDirectBatchInvocationRow(raw: unknown): WorkflowInvocationStreamDetail | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
   const invocationKey = typeof o.invocationKey === "string" ? o.invocationKey.trim() : "";
@@ -95,6 +114,19 @@ function parsePersistedRow(raw: unknown): WorkflowInvocationStreamDetail | null 
   const taskTitle = typeof o.taskTitle === "string" ? o.taskTitle : undefined;
   const templateId = typeof o.templateId === "string" ? o.templateId : undefined;
   const attempt = typeof o.attempt === "number" && Number.isFinite(o.attempt) ? o.attempt : undefined;
+  const ownerKind = o.ownerKind === "repository" ? "repository" : undefined;
+  const ownerRepositoryId =
+    typeof o.ownerRepositoryId === "number" && Number.isFinite(o.ownerRepositoryId)
+      ? o.ownerRepositoryId
+      : undefined;
+  const ownerRepositoryName = typeof o.ownerRepositoryName === "string" ? o.ownerRepositoryName : undefined;
+  const ownerRepositoryPath = typeof o.ownerRepositoryPath === "string" ? o.ownerRepositoryPath : undefined;
+  const repositoryType =
+    o.repositoryType === "frontend" || o.repositoryType === "backend" || o.repositoryType === "document"
+      ? o.repositoryType
+      : undefined;
+  const stage = typeof o.stage === "string" ? o.stage : undefined;
+  const subagentType = typeof o.subagentType === "string" ? o.subagentType : undefined;
   const lineCount = typeof o.lineCount === "number" && Number.isFinite(o.lineCount) ? o.lineCount : undefined;
   const errCount = typeof o.errCount === "number" && Number.isFinite(o.errCount) ? o.errCount : undefined;
   const previewLine = typeof o.previewLine === "string" ? o.previewLine : undefined;
@@ -114,6 +146,13 @@ function parsePersistedRow(raw: unknown): WorkflowInvocationStreamDetail | null 
     ...(taskTitle ? { taskTitle } : {}),
     ...(templateId ? { templateId } : {}),
     ...(attempt !== undefined ? { attempt } : {}),
+    ...(ownerKind ? { ownerKind } : {}),
+    ...(ownerRepositoryId !== undefined ? { ownerRepositoryId } : {}),
+    ...(ownerRepositoryName ? { ownerRepositoryName } : {}),
+    ...(ownerRepositoryPath ? { ownerRepositoryPath } : {}),
+    ...(repositoryType ? { repositoryType } : {}),
+    ...(stage ? { stage } : {}),
+    ...(subagentType ? { subagentType } : {}),
     ...(lineCount !== undefined ? { lineCount } : {}),
     ...(errCount !== undefined ? { errCount } : {}),
     ...(previewLine ? { previewLine } : {}),
@@ -128,7 +167,7 @@ function parsePersistedJsonPayload(raw: string): WorkflowInvocationStreamDetail[
   if (!Array.isArray(parsed)) return [];
   const rows: WorkflowInvocationStreamDetail[] = [];
   for (const item of parsed) {
-    const inv = parsePersistedRow(item);
+    const inv = parsePersistedOmcDirectBatchInvocationRow(item);
     if (inv) rows.push(inv);
   }
   return sortOmcDirectBatchInvocationsForStore(rows).slice(-MAX_PERSISTED_ITEMS);
@@ -186,7 +225,7 @@ export function cancelOmcDirectBatchInvocationsPersistSchedule(): void {
 export async function flushPersistOmcDirectBatchInvocations(list: WorkflowInvocationStreamDetail[]): Promise<void> {
   cancelOmcDirectBatchInvocationsPersistSchedule();
   const sorted = sortOmcDirectBatchInvocationsForStore(list).slice(-MAX_PERSISTED_ITEMS);
-  const slim = sorted.map(slimInvocationForPersistence);
+  const slim = sorted.map(serializeOmcDirectBatchInvocationForPersistence);
   if (slim.length === 0) {
     await clearOmcDirectBatchInvocationsPersisted();
     return;

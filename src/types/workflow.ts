@@ -3,6 +3,18 @@ import type { TaskFlowStatus } from "../types";
 export type WorkflowStage = "split" | "clarify" | "implement" | "verify" | "review" | "delivery";
 export type WorkflowStatus = "running" | "blocked" | "completed" | "failed" | "cancelled";
 export type GateType = "build" | "test" | "lint" | "review" | "security";
+export type TrellisRepositoryType = "frontend" | "backend" | "document";
+
+export interface TrellisExecutionMetadata {
+  ownerKind?: "repository";
+  ownerRepositoryId?: number;
+  ownerRepositoryName?: string;
+  ownerRepositoryPath?: string;
+  repositoryType?: TrellisRepositoryType;
+  stage?: string;
+  subagentType?: string;
+  taskId?: string;
+}
 
 export interface WorkflowApiError {
   code: WorkflowApiErrorCode;
@@ -199,6 +211,7 @@ export interface ExecuteTaskInput {
   taskId: string;
   templateId?: string;
   subagentType?: string;
+  executionMetadata?: TrellisExecutionMetadata;
   attemptFrom?: number;
   dryRun?: boolean;
 }
@@ -323,6 +336,7 @@ export interface TaskRouter {
   routeTask(input: { workflowRunId: string; taskId: string }): Promise<{
     templateId: string;
     subagentType?: string;
+    executionMetadata?: TrellisExecutionMetadata;
     gatePlan: GateType[];
     priority: number;
     rationale: string[];
@@ -337,6 +351,7 @@ export interface OmcWorkflowAdapter {
     taskId: string;
     templateId: string;
     subagentType?: string;
+    executionMetadata?: TrellisExecutionMetadata;
     attempt: number;
   }): Promise<{
     status: "succeeded" | "failed" | "aborted";
@@ -399,4 +414,3 @@ export interface WorkflowFacade {
   respondQuestion(input: RespondQuestionInput): Promise<ApiResult<QuestionDecisionDTO>>;
   replayEvents(input: ReplayEventsInput): Promise<ApiResult<WorkflowRunDTO>>;
 }
-

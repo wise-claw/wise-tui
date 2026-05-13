@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import {
   useCallback,
   useEffect,
@@ -125,6 +125,16 @@ function getStatusColor(status: string): string {
     default:
       return "var(--ant-color-text-tertiary)";
   }
+}
+
+function hasExpandedDescendant(expandedDirs: Set<string>, path: string): boolean {
+  const prefix = `${path}/`;
+  for (const entry of expandedDirs) {
+    if (entry.startsWith(prefix)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function formatRelativeTime(timestamp: number): string {
@@ -792,7 +802,60 @@ interface RepositoryTreeNodeProps {
   onInlineCancel: () => void;
 }
 
-function RepositoryTreeNode({
+function repositoryTreeNodeShouldUpdate(
+  prev: Readonly<RepositoryTreeNodeProps>,
+  next: Readonly<RepositoryTreeNodeProps>,
+): boolean {
+  if (prev.node !== next.node) return false;
+  if (prev.depth !== next.depth) return false;
+  if (prev.onToggleDir !== next.onToggleDir) return false;
+  if (prev.onOpenFile !== next.onOpenFile) return false;
+  if (prev.onSelectNode !== next.onSelectNode) return false;
+  if (prev.onInlineValueChange !== next.onInlineValueChange) return false;
+  if (prev.onInlineCommit !== next.onInlineCommit) return false;
+  if (prev.onInlineCancel !== next.onInlineCancel) return false;
+
+  const nodePath = prev.node.path;
+  const prevExpanded = prev.expandedDirs.has(nodePath);
+  const nextExpanded = next.expandedDirs.has(nodePath);
+  if (prevExpanded !== nextExpanded) return false;
+
+  const prevSelected = prev.selectedPath === nodePath;
+  const nextSelected = next.selectedPath === nodePath;
+  if (prevSelected !== nextSelected) return false;
+
+  const prevInlineRelevant =
+    prev.inlineCreate?.parentDir === nodePath ||
+    prev.inlineCreate?.parentDir.startsWith(`${nodePath}/`) ||
+    prev.inlineCreate?.parentDir === "";
+  const nextInlineRelevant =
+    next.inlineCreate?.parentDir === nodePath ||
+    next.inlineCreate?.parentDir.startsWith(`${nodePath}/`) ||
+    next.inlineCreate?.parentDir === "";
+  if (prevInlineRelevant || nextInlineRelevant) {
+    if (prev.inlineCreate?.parentDir !== next.inlineCreate?.parentDir) return false;
+    if (prev.inlineCreate?.type !== next.inlineCreate?.type) return false;
+    if (prev.inlineCreate?.value !== next.inlineCreate?.value) return false;
+  }
+
+  if (prev.node.isDir && next.node.isDir && (prevExpanded || nextExpanded)) {
+    const prevSelectedInBranch =
+      prev.selectedPath != null &&
+      (prev.selectedPath === nodePath || prev.selectedPath.startsWith(`${nodePath}/`));
+    const nextSelectedInBranch =
+      next.selectedPath != null &&
+      (next.selectedPath === nodePath || next.selectedPath.startsWith(`${nodePath}/`));
+    if (prevSelectedInBranch !== nextSelectedInBranch) return false;
+
+    const prevExpandedInBranch = hasExpandedDescendant(prev.expandedDirs, nodePath);
+    const nextExpandedInBranch = hasExpandedDescendant(next.expandedDirs, nodePath);
+    if (prevExpandedInBranch !== nextExpandedInBranch) return false;
+  }
+
+  return true;
+}
+
+function RepositoryTreeNodeInner({
   node,
   expandedDirs,
   selectedPath,
@@ -913,6 +976,8 @@ function RepositoryTreeNode({
     </div>
   );
 }
+
+const RepositoryTreeNode = memo(RepositoryTreeNodeInner, repositoryTreeNodeShouldUpdate);
 
 export interface RepositoryFilesExplorerProps {
   repositoryPath: string;
@@ -1311,6 +1376,14 @@ export function RepositoryFilesExplorer({
     setInlineCreate((prev) => (prev ? { ...prev, value } : null));
   }, []);
 
+  const handleSelectNode = useCallback((path: string, isDir: boolean) => {
+    setSelected({ path, isDir });
+  }, []);
+
+  const handleInlineCommit = useCallback(() => {
+    void commitInlineCreate();
+  }, [commitInlineCreate]);
+
   const rootInline = inlineCreate?.parentDir === "";
   const treeEmpty = filteredTree.length === 0 && !rootInline;
 
@@ -1374,10 +1447,10 @@ export function RepositoryFilesExplorer({
           onToggleDir={handleToggleDir}
           onOpenFile={onOpenFile}
           depth={0}
-          onSelectNode={(path, isDir) => setSelected({ path, isDir })}
+          onSelectNode={handleSelectNode}
           inlineCreate={inlineCreate}
           onInlineValueChange={handleInlineValueChange}
-          onInlineCommit={() => void commitInlineCreate()}
+          onInlineCommit={handleInlineCommit}
           onInlineCancel={cancelInlineCreate}
         />
       ))}

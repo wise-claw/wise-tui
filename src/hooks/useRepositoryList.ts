@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import type { AddRepositoryOptions, ProjectItem, Repository } from "../types";
 import {
   pickFolder,
@@ -20,13 +20,27 @@ import {
 } from "../services/projectState";
 import { deleteAppSetting, getAppSetting, setAppSetting } from "../services/appSettingsStore";
 import { normalizeRepositoryPathKey } from "../utils/repositoryMainSessionBinding";
+import { selectFloatingRepositories } from "../utils/floatingRepositories";
 import {
   PINNED_PROJECT_IDS_STORAGE_KEY,
   parsePinnedProjectIdsFromSetting,
   sortProjectsByPinOrder,
 } from "../utils/projectPinOrder";
+import {
+  WORKSPACE_LAST_SESSION_REPO_ID_STORAGE_KEY,
+  resolveStartupSelection,
+} from "../utils/startupRepoSelection";
 
 const LEGACY_APP_SETTING_KEY_PROJECTS = "wise.projects.v1";
+
+function parseLastSessionRepoId(raw: string | null): number | null {
+  if (raw == null) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  if (!Number.isInteger(parsed) || parsed <= 0) return null;
+  return parsed;
+}
 
 interface LegacyProjectItem {
   id: string;
@@ -50,10 +64,11 @@ export function useRepositoryList() {
   useEffect(() => {
     void (async () => {
       try {
-        const [repositoryList, dbProjects, rawPins] = await Promise.all([
+        const [repositoryList, dbProjects, rawPins, rawLastSessionRepoId] = await Promise.all([
           loadRepositories(),
           listProjects(),
           getAppSetting(PINNED_PROJECT_IDS_STORAGE_KEY),
+          getAppSetting(WORKSPACE_LAST_SESSION_REPO_ID_STORAGE_KEY),
         ]);
         let projectList = dbProjects;
 
@@ -89,15 +104,22 @@ export function useRepositoryList() {
         }
         const sortedProjects = sortProjectsByPinOrder(projectList, pins);
 
+        const parsedLastSessionRepoId = parseLastSessionRepoId(rawLastSessionRepoId);
+        const startup = resolveStartupSelection({
+          lastSessionRepoId: parsedLastSessionRepoId,
+          projects: sortedProjects,
+          repositories: repositoryList,
+        });
+        if (startup.shouldClearLastSession) {
+          void deleteAppSetting(WORKSPACE_LAST_SESSION_REPO_ID_STORAGE_KEY);
+        }
+
         setRepositories(repositoryList);
         setPinnedProjectIds(pins);
         setProjects(sortedProjects);
-        /** 进入应用：默认排序后的第一个项目及其下第一个仓库（与侧栏展示顺序一致），不再恢复上次活动项目。 */
-        const firstProjectForDefault = sortedProjects[0] ?? null;
-        const active = firstProjectForDefault?.id ?? null;
-        setActiveProjectId(active);
-        await persistActiveProjectId(active);
-        setActiveRepositoryId(firstProjectForDefault?.repositoryIds[0] ?? repositoryList[0]?.id ?? null);
+        setActiveProjectId(startup.projectId);
+        await persistActiveProjectId(startup.projectId);
+        setActiveRepositoryId(startup.repositoryId);
       } finally {
         setLoading(false);
       }
@@ -109,6 +131,27 @@ export function useRepositoryList() {
     [projects, activeProjectId],
   );
 
+  /**
+   * 持久化 activeRepositoryId 为 lastSessionRepoId。
+   * 初次启动由 loader 直接装填，effect 跳过首次以避免覆盖 loader 的恢复结果。
+   */
+  const lastSessionPersistInitialRef = useRef(true);
+  useEffect(() => {
+    if (loading) return;
+    if (lastSessionPersistInitialRef.current) {
+      lastSessionPersistInitialRef.current = false;
+      return;
+    }
+    if (activeRepositoryId == null) {
+      void deleteAppSetting(WORKSPACE_LAST_SESSION_REPO_ID_STORAGE_KEY);
+    } else {
+      void setAppSetting(
+        WORKSPACE_LAST_SESSION_REPO_ID_STORAGE_KEY,
+        String(activeRepositoryId),
+      );
+    }
+  }, [activeRepositoryId, loading]);
+
   const projectRepositories = useMemo(() => {
     if (!activeProject) return [];
     const byId = new Map(repositories.map((repo) => [repo.id, repo]));
@@ -116,6 +159,12 @@ export function useRepositoryList() {
       .map((id) => byId.get(id))
       .filter((repo): repo is Repository => Boolean(repo));
   }, [activeProject, repositories]);
+
+  /** 未关联到任何 project 的 repo（侧栏顶层游离区数据源）。 */
+  const floatingRepositories = useMemo(
+    () => selectFloatingRepositories(projects, repositories),
+    [projects, repositories],
+  );
 
   const handleCreateProject = useCallback(async (name: string) => {
     const trimmed = name.trim();
@@ -180,6 +229,23 @@ export function useRepositoryList() {
     void persistActiveProjectId(projectId);
   }, []);
 
+  /**
+   * 选中 repo 并把 activeProjectId 同步到其 owner project（游离 repo 时清空）。
+   *
+   * 取代散落在 AppImpl 的 `ownerProject ? selectProjectAndRepository : setActiveRepositoryId`
+   * 模式，避免选中游离 repo 时残留 stale activeProjectId 污染右侧面板。
+   */
+  const setActiveRepositoryWithOwner = useCallback(
+    (repositoryId: number) => {
+      const ownerProject = projects.find((p) => p.repositoryIds.includes(repositoryId));
+      const ownerProjectId = ownerProject?.id ?? null;
+      setActiveProjectId(ownerProjectId);
+      setActiveRepositoryId(repositoryId);
+      void persistActiveProjectId(ownerProjectId);
+    },
+    [projects],
+  );
+
   const handleAddRepositoryToProject = useCallback(async (
     projectId: string,
     repositoryType: Repository["repositoryType"],
@@ -210,6 +276,54 @@ export function useRepositoryList() {
     void persistActiveProjectId(projectId);
     setActiveRepositoryId(repositoryId);
   }, [repositories]);
+
+  /**
+   * 创建不属于任何 project 的游离仓库；选目录后立即在侧栏顶层平铺显示，
+   * 同时清空 activeProjectId 避免右侧面板残留 stale 项目上下文。
+   */
+  const handleAddFloatingRepository = useCallback(
+    async (
+      repositoryType: Repository["repositoryType"],
+      options?: AddRepositoryOptions,
+    ) => {
+      const folderPath = await pickFolder();
+      if (!folderPath) return;
+      let repository = repositories.find((item) => item.path === folderPath) ?? null;
+      if (!repository) {
+        repository = await createRepositoryFromPathWithType(folderPath, repositoryType, options);
+        setRepositories((prev) => [...prev, repository as Repository]);
+      }
+      setActiveProjectId(null);
+      setActiveRepositoryId(repository.id);
+      void persistActiveProjectId(null);
+    },
+    [repositories],
+  );
+
+  /**
+   * 将游离 repo 升格为新项目：创建项目 → 关联 repo → 切换到该项目卡。
+   * repo 一旦关联即从游离区出栈（M:N 关联表更新，前端派生自动反映）。
+   */
+  const handlePromoteFloatingRepositoryToProject = useCallback(
+    async (repositoryId: number, projectName: string) => {
+      const trimmed = projectName.trim();
+      if (!trimmed) return;
+      const createdProject = await createProject(trimmed);
+      await addRepositoryToProject(createdProject.id, repositoryId);
+      const merged: ProjectItem = {
+        ...createdProject,
+        repositoryIds: createdProject.repositoryIds.includes(repositoryId)
+          ? createdProject.repositoryIds
+          : [...createdProject.repositoryIds, repositoryId],
+        updatedAt: Date.now(),
+      };
+      setProjects((prev) => [...prev, merged]);
+      setActiveProjectId(createdProject.id);
+      setActiveRepositoryId(repositoryId);
+      void persistActiveProjectId(createdProject.id);
+    },
+    [],
+  );
 
   /**
    * 将指定磁盘目录作为仓库加入项目（不弹文件夹选择器），供 worktree 等已知路径场景使用。
@@ -339,16 +453,20 @@ export function useRepositoryList() {
     activeProject,
     activeProjectId,
     projectRepositories,
+    floatingRepositories,
     activeRepositoryId,
     loading,
     setActiveRepositoryId,
     setActiveProjectId: handleSelectProject,
     selectProjectAndRepository,
+    setActiveRepositoryWithOwner,
     handleCreateProject,
     handleUpdateProject,
     handleDeleteProject,
     handleAddRepositoryToProject,
     handleAddRepositoryPathToProject,
+    handleAddFloatingRepository,
+    handlePromoteFloatingRepositoryToProject,
     handleDetachRepositoryFromProject,
     handleRemoveRepository,
     handleUpdateRepositorySddMode,

@@ -3,6 +3,7 @@ import type {
   ClaudeSession,
   EmployeeItem,
   PendingExecutionTask,
+  ProjectItem,
   Repository,
   WorkflowGraph,
   WorkflowTaskItem,
@@ -21,6 +22,9 @@ import { getOpenAppPreferenceSync, hydrateOpenAppPreference } from "../../servic
 import { openTerminalSession, writeTerminalSession } from "../../services/terminal";
 import { subscribeTerminalExit, subscribeTerminalOutput } from "../../services/events";
 import { openExternalUrl } from "../../services/openExternal";
+import { filterSessionsForWorkspace } from "../../utils/projectSessionPanelFilter";
+import { resolveRepositoryForSession } from "../../utils/repositoryMainSessionBinding";
+import type { WorkspaceMode } from "../../utils/workspaceMode";
 import "./index.css";
 
 const TerminalPanelLazy = lazy(() =>
@@ -805,6 +809,13 @@ interface Props {
   activeRepository?: Repository;
   repositories?: Repository[];
   activeRepositoryId?: number | null;
+  /**
+   * 与 `useWorkspaceMode` 一致的派生形态。`multi_repo` 时面板只展示锚点 path 的项目主会话；
+   * `single_repo` 维持历史列表行为。缺省按 `single_repo` 处理（向后兼容）。
+   */
+  workspaceMode?: WorkspaceMode;
+  /** 当 `workspaceMode === "multi_repo"` 时用于解析项目主会话 anchor.path。 */
+  activeProject?: ProjectItem | null;
   onSelectRepository?: (id: number) => void;
   onUpdateSessionModel: (sessionId: string, model: string) => void;
   onExecuteSession: (
@@ -845,6 +856,8 @@ interface Props {
   onOpenWorkflowConfig?: () => void;
   employees?: EmployeeItem[];
   mentionEmployees?: EmployeeItem[];
+  composerProjectRoleTagOptions?: ReadonlyArray<import("../../utils/projectRoleTagOptions").RoleTagOption>;
+  composerHideEmployeesInAtMode?: boolean;
   workflowTasks?: WorkflowTaskItem[];
   onDecideWorkflowTask?: (input: {
     taskId: string;
@@ -897,11 +910,13 @@ interface Props {
 }
 
 export function ClaudeSessions({
-  sessions,
+  sessions: incomingSessions,
   activeSessionId,
   activeRepository,
   repositories,
   activeRepositoryId,
+  workspaceMode = "single_repo",
+  activeProject = null,
   onSelectRepository,
   onUpdateSessionModel,
   onExecuteSession,
@@ -935,6 +950,8 @@ export function ClaudeSessions({
   onOpenWorkflowConfig,
   employees = [],
   mentionEmployees = [],
+  composerProjectRoleTagOptions = [],
+  composerHideEmployeesInAtMode = false,
   workflowTasks = [],
   taskPendingEmployeesByTaskId = {},
   workflowTemplates = [],
@@ -957,10 +974,32 @@ export function ClaudeSessions({
   onAddWorktreeRepositoryToProject,
   onReloadFullDiskTranscript,
 }: Props) {
+  const sessions = useMemo(
+    () =>
+      filterSessionsForWorkspace({
+        sessions: incomingSessions,
+        workspaceMode,
+        project: activeProject,
+        repositories: repositories ?? [],
+      }),
+    [incomingSessions, workspaceMode, activeProject, repositories],
+  );
+
   const activeSession =
     activeRepository == null
       ? undefined
-      : sessions.find((s) => s.id === activeSessionId && s.repositoryPath === activeRepository.path);
+      : sessions.find((s) => {
+          if (s.id !== activeSessionId) return false;
+          return (
+            resolveRepositoryForSession({
+              session: s,
+              repositories: repositories ?? [],
+              bindings: repositoryMainBindings,
+              sessions,
+              preferredRepositoryId: activeRepository.id,
+            })?.id === activeRepository.id
+          );
+        });
 
   const dualPaneSecondaryRepository = useMemo(() => {
     if (!activeRepository) return null;
@@ -974,8 +1013,19 @@ export function ClaudeSessions({
     if (!dualPaneEnabled) return undefined;
     const repo = dualPaneSecondaryRepository;
     if (!repo || !secondarySessionId) return undefined;
-    return sessions.find((s) => s.id === secondarySessionId && s.repositoryPath === repo.path);
-  }, [dualPaneEnabled, dualPaneSecondaryRepository, secondarySessionId, sessions]);
+    return sessions.find((s) => {
+      if (s.id !== secondarySessionId) return false;
+      return (
+        resolveRepositoryForSession({
+          session: s,
+          repositories: repositories ?? [],
+          bindings: repositoryMainBindings,
+          sessions,
+          preferredRepositoryId: repo.id,
+        })?.id === repo.id
+      );
+    });
+  }, [dualPaneEnabled, dualPaneSecondaryRepository, secondarySessionId, sessions, repositories, repositoryMainBindings]);
 
   const [pendingCollapseNotificationForSessionId, setPendingCollapseNotificationForSessionId] = useState<
     string | null
@@ -1000,14 +1050,27 @@ export function ClaudeSessions({
         return;
       }
       if (repositories?.length && onSelectRepository) {
-        const targetRepository = repositories.find((item) => item.path === targetSession.repositoryPath);
+        const targetRepository = resolveRepositoryForSession({
+          session: targetSession,
+          repositories,
+          bindings: repositoryMainBindings,
+          sessions,
+          preferredRepositoryId: activeRepositoryId,
+        });
         if (targetRepository && targetRepository.id !== activeRepositoryId) {
           onSelectRepository(targetRepository.id);
         }
       }
       onSwitchSession(sessionId);
     },
-    [sessions, repositories, onSelectRepository, activeRepositoryId, onSwitchSession],
+    [
+      sessions,
+      repositories,
+      repositoryMainBindings,
+      onSelectRepository,
+      activeRepositoryId,
+      onSwitchSession,
+    ],
   );
 
   useEffect(() => {
@@ -1024,7 +1087,7 @@ export function ClaudeSessions({
       {/* Topbar always visible */}
       <Topbar
         activeRepository={activeRepository}
-        activeSessionRepositoryPath={activeSession?.repositoryPath}
+        activeSessionRepositoryPath={activeRepository?.path}
         onToggleSidebar={onToggleSidebar}
         onToggleRightPanel={onToggleRightPanel}
         onToggleTerminal={onToggleTerminal}
@@ -1051,6 +1114,7 @@ export function ClaudeSessions({
                 session={activeSession}
                 sessions={sessions}
                 repositories={repositories}
+                activeRepository={activeRepository}
                 initialNotificationPanelCollapsed={
                   pendingCollapseNotificationForSessionId === activeSession.id
                 }
@@ -1076,6 +1140,8 @@ export function ClaudeSessions({
                 onOpenWorkflowConfig={onOpenWorkflowConfig}
                 employees={employees}
                 mentionEmployees={mentionEmployees}
+                projectRoleTagOptions={composerProjectRoleTagOptions}
+                hideEmployeesInAtMode={composerHideEmployeesInAtMode}
                 workflowTasks={activeSessionWorkflowTasks}
                 taskPendingEmployeesByTaskId={taskPendingEmployeesByTaskId}
                 workflowTemplates={workflowTemplates}
@@ -1107,6 +1173,7 @@ export function ClaudeSessions({
                   session={secondarySession}
                   sessions={sessions}
                   repositories={repositories}
+                  activeRepository={dualPaneSecondaryRepository ?? activeRepository}
                   initialNotificationPanelCollapsed={
                     pendingCollapseNotificationForSessionId === secondarySession.id
                   }
@@ -1133,6 +1200,8 @@ export function ClaudeSessions({
                   onOpenWorkflowConfig={onOpenWorkflowConfig}
                   employees={employees}
                   mentionEmployees={mentionEmployees}
+                  projectRoleTagOptions={composerProjectRoleTagOptions}
+                  hideEmployeesInAtMode={composerHideEmployeesInAtMode}
                   workflowTasks={secondarySessionWorkflowTasks}
                   taskPendingEmployeesByTaskId={taskPendingEmployeesByTaskId}
                   workflowTemplates={workflowTemplates}
@@ -1192,6 +1261,7 @@ export function ClaudeSessions({
             session={activeSession}
             sessions={sessions}
             repositories={repositories}
+            activeRepository={activeRepository}
             initialNotificationPanelCollapsed={
               pendingCollapseNotificationForSessionId === activeSession.id
             }
@@ -1217,6 +1287,8 @@ export function ClaudeSessions({
             onOpenWorkflowConfig={onOpenWorkflowConfig}
             employees={employees}
             mentionEmployees={mentionEmployees}
+            projectRoleTagOptions={composerProjectRoleTagOptions}
+            hideEmployeesInAtMode={composerHideEmployeesInAtMode}
             workflowTasks={activeSessionWorkflowTasks}
             taskPendingEmployeesByTaskId={taskPendingEmployeesByTaskId}
             workflowTemplates={workflowTemplates}

@@ -125,6 +125,41 @@ function dispatchInvocationStreamUi(detail: WorkflowInvocationStreamDetail): voi
   window.dispatchEvent(new CustomEvent(WORKFLOW_UI_EVENT_INVOCATION_STREAM, { detail }));
 }
 
+type ClaudeInvocationStreamUi = Omit<
+  WorkflowInvocationStreamDetail,
+  | "phase"
+  | "invocationKey"
+  | "lineCount"
+  | "errCount"
+  | "previewLine"
+  | "success"
+  | "dispatchPrompt"
+  | "subprocessSessionId"
+>;
+
+type InvocationStreamAttribution = Pick<
+  WorkflowInvocationStreamDetail,
+  | "ownerKind"
+  | "ownerRepositoryId"
+  | "ownerRepositoryName"
+  | "ownerRepositoryPath"
+  | "repositoryType"
+  | "stage"
+  | "subagentType"
+>;
+
+function invocationStreamAttribution(streamUi: ClaudeInvocationStreamUi): InvocationStreamAttribution {
+  return {
+    ownerKind: streamUi.ownerKind,
+    ownerRepositoryId: streamUi.ownerRepositoryId,
+    ownerRepositoryName: streamUi.ownerRepositoryName,
+    ownerRepositoryPath: streamUi.ownerRepositoryPath,
+    repositoryType: streamUi.repositoryType,
+    stage: streamUi.stage,
+    subagentType: streamUi.subagentType,
+  };
+}
+
 export async function executeClaudeCodeAndWait(params: {
   repositoryPath: string;
   prompt: string;
@@ -136,16 +171,7 @@ export async function executeClaudeCodeAndWait(params: {
   /** 透传 `executeClaudeCode`：编排/OMC 子进程建议 true */
   bare?: boolean;
   /** 若提供，则向会话 UI 派发轻量进度事件（右下角摘要），不写入主聊天 */
-  streamUi?: {
-    sessionId: string;
-    repositoryPath: string;
-    taskId?: string;
-    /** 直连批量等场景：侧栏列表优先展示标题 */
-    taskTitle?: string;
-    templateId?: string;
-    attempt?: number;
-    omcInvocationSource?: "workflow" | "direct_batch";
-  };
+  streamUi?: ClaudeInvocationStreamUi;
 }): Promise<ClaudeInvocationResult> {
   const invocationKey = crypto.randomUUID();
   const outputLines: string[] = [];
@@ -217,6 +243,7 @@ export async function executeClaudeCodeAndWait(params: {
       ...(streamUi.taskTitle?.trim() ? { taskTitle: streamUi.taskTitle.trim() } : {}),
       templateId: streamUi.templateId,
       attempt: streamUi.attempt,
+      ...invocationStreamAttribution(streamUi),
       lineCount: outputLines.length,
       errCount: errorLines.length,
       previewLine: previewLine && previewLine.length > 160 ? `${previewLine.slice(0, 160)}…` : previewLine,
@@ -239,6 +266,7 @@ export async function executeClaudeCodeAndWait(params: {
       ...(streamUi.taskTitle?.trim() ? { taskTitle: streamUi.taskTitle.trim() } : {}),
       templateId: streamUi.templateId,
       attempt: streamUi.attempt,
+      ...invocationStreamAttribution(streamUi),
       lineCount: 0,
       errCount: 0,
       ...(params.prompt !== undefined ? { dispatchPrompt: params.prompt } : {}),
@@ -259,6 +287,7 @@ export async function executeClaudeCodeAndWait(params: {
       ...(streamUi.taskTitle?.trim() ? { taskTitle: streamUi.taskTitle.trim() } : {}),
       templateId: streamUi.templateId,
       attempt: streamUi.attempt,
+      ...invocationStreamAttribution(streamUi),
       lineCount: 0,
       errCount: 0,
       ...(dispatchPrompt.trim().length > 0 ? { dispatchPrompt } : {}),
@@ -299,6 +328,7 @@ export async function executeClaudeCodeAndWait(params: {
             ...(streamUi.taskTitle?.trim() ? { taskTitle: streamUi.taskTitle.trim() } : {}),
             ...(streamUi.templateId?.trim() ? { templateId: streamUi.templateId.trim() } : {}),
             ...(typeof streamUi.attempt === "number" ? { attempt: streamUi.attempt } : {}),
+            ...invocationStreamAttribution(streamUi),
             lineCount: outSnap.length,
             errCount: errSnap.length,
             subprocessSessionId: sid,
@@ -349,6 +379,7 @@ export async function executeClaudeCodeAndWait(params: {
         ...(streamUi.taskTitle?.trim() ? { taskTitle: streamUi.taskTitle.trim() } : {}),
         templateId: streamUi.templateId,
         attempt: streamUi.attempt,
+        ...invocationStreamAttribution(streamUi),
         lineCount: outSnap.length,
         errCount: errSnap.length,
         success,
@@ -368,6 +399,7 @@ export async function executeClaudeCodeAndWait(params: {
         ...(streamUi.taskTitle?.trim() ? { taskTitle: streamUi.taskTitle.trim() } : {}),
         templateId: streamUi.templateId,
         attempt: streamUi.attempt,
+        ...invocationStreamAttribution(streamUi),
         lineCount: outSnap.length,
         errCount: errSnap.length,
         success,
@@ -397,6 +429,7 @@ export async function executeClaudeCodeAndWait(params: {
         ...(streamUi.taskTitle?.trim() ? { taskTitle: streamUi.taskTitle.trim() } : {}),
         templateId: streamUi.templateId,
         attempt: streamUi.attempt,
+        ...invocationStreamAttribution(streamUi),
         lineCount: outSnap.length,
         errCount: errSnap.length,
         success: false,
@@ -414,6 +447,7 @@ export async function executeClaudeCodeAndWait(params: {
         ...(streamUi.taskTitle?.trim() ? { taskTitle: streamUi.taskTitle.trim() } : {}),
         templateId: streamUi.templateId,
         attempt: streamUi.attempt,
+        ...invocationStreamAttribution(streamUi),
         lineCount: outSnap.length,
         errCount: errSnap.length,
         success: false,
@@ -474,6 +508,7 @@ export async function executeClaudeCodeAndWait(params: {
         ...(streamUi.taskTitle?.trim() ? { taskTitle: streamUi.taskTitle.trim() } : {}),
         templateId: streamUi.templateId,
         attempt: streamUi.attempt,
+        ...invocationStreamAttribution(streamUi),
         lineCount: outSnap.length,
         errCount: errSnap.length,
         success: false,

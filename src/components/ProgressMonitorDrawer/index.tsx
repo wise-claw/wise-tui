@@ -184,6 +184,12 @@ interface OmcExecutionRun {
   templateId?: string;
   attempt?: number;
   subagentType?: string;
+  ownerKind?: "repository";
+  ownerRepositoryId?: number;
+  ownerRepositoryName?: string;
+  ownerRepositoryPath?: string;
+  repositoryType?: "frontend" | "backend" | "document";
+  trellisStage?: string;
   omcCommand?: string;
   startedAt?: number;
   endedAt?: number;
@@ -200,6 +206,14 @@ function formatWorkflowNodeTypeLabel(nodeType?: string): string {
   if (nodeType === "task") return "执行节点";
   if (nodeType === "approval") return "审批节点";
   return nodeType;
+}
+
+function formatRepositoryTypeLabel(value?: string): string | null {
+  if (!value) return null;
+  if (value === "frontend") return "前端";
+  if (value === "backend") return "后端";
+  if (value === "document") return "文档";
+  return value;
 }
 
 interface AcceptanceVerdictEventPayload {
@@ -491,6 +505,24 @@ function collectOmcRuns(events: WorkflowTaskEventItem[], taskId: string): OmcExe
     if (subagentType) run.subagentType = subagentType;
     const metadataSubagent = typeof metadata?.subagentType === "string" ? metadata.subagentType.trim() : "";
     if (metadataSubagent) run.subagentType = metadataSubagent;
+    const ownerKind = typeof metadata?.ownerKind === "string" ? metadata.ownerKind.trim() : "";
+    if (ownerKind === "repository") run.ownerKind = "repository";
+    const ownerRepositoryId = typeof metadata?.ownerRepositoryId === "number" ? metadata.ownerRepositoryId : undefined;
+    if (typeof ownerRepositoryId === "number" && Number.isFinite(ownerRepositoryId)) {
+      run.ownerRepositoryId = ownerRepositoryId;
+    }
+    const ownerRepositoryName =
+      typeof metadata?.ownerRepositoryName === "string" ? metadata.ownerRepositoryName.trim() : "";
+    if (ownerRepositoryName) run.ownerRepositoryName = ownerRepositoryName;
+    const ownerRepositoryPath =
+      typeof metadata?.ownerRepositoryPath === "string" ? metadata.ownerRepositoryPath.trim() : "";
+    if (ownerRepositoryPath) run.ownerRepositoryPath = ownerRepositoryPath;
+    const repositoryType = typeof metadata?.repositoryType === "string" ? metadata.repositoryType.trim() : "";
+    if (repositoryType === "frontend" || repositoryType === "backend" || repositoryType === "document") {
+      run.repositoryType = repositoryType;
+    }
+    const trellisStage = typeof metadata?.stage === "string" ? metadata.stage.trim() : "";
+    if (trellisStage) run.trellisStage = trellisStage;
 
     if (event.eventType === "task.run.started") {
       run.startedAt = event.createdAt;
@@ -1036,6 +1068,11 @@ export function ProgressMonitorDrawer({
                         </Tag>
                         {run.attempt ? <Tag>attempt {run.attempt}</Tag> : null}
                         {run.omcCommand ? <Tag>{run.omcCommand}</Tag> : null}
+                        {run.ownerKind === "repository" ? (
+                          <Tag color="geekblue">仓库成员: {run.ownerRepositoryName || run.ownerRepositoryPath || run.ownerRepositoryId}</Tag>
+                        ) : null}
+                        {run.repositoryType ? <Tag>{formatRepositoryTypeLabel(run.repositoryType)}</Tag> : null}
+                        {run.trellisStage ? <Tag>阶段: {run.trellisStage}</Tag> : null}
                         {run.subagentType ? <Tag>子代理: {run.subagentType}</Tag> : null}
                       </Space>
                       <div className="app-monitor-drawer__muted">
