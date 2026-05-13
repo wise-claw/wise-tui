@@ -32,7 +32,7 @@
 
 .app-employee-config-row {
   display: grid;
-  grid-template-columns: 156px 172px minmax(180px, 1fr) auto;
+  grid-template-columns: 140px 152px minmax(200px, 1fr) auto;
   gap: 6px;
   align-items: center;
 }
@@ -135,6 +135,11 @@
 
 .app-employee-config-item--repositories .ant-select {
   width: 100%;
+}
+
+.app-employee-config-item--projects .ant-select {
+  width: 100%;
+  min-width: 180px;
 }
 
 .app-employee-config-row .ant-input-affix-wrapper,
