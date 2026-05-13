@@ -280,6 +280,8 @@ pub fn run() {
             claude_commands::attachments::append_wise_relative_file,
             claude_commands::attachments::read_wise_relative_file,
             claude_commands::prd_split::run_prd_split_claude,
+            claude_commands::prd_split_pipeline::prd_split_create_parent_task,
+            claude_commands::prd_split_pipeline::prd_split_materialize_tasks,
             claude_commands::attachments::capture_screenshot,
             app_state_commands::load_session_tabs,
             app_state_commands::save_session_tabs,
