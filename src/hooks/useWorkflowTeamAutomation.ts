@@ -117,7 +117,6 @@ interface UseWorkflowTeamAutomationOptions {
   setWorkflowRuntimeStateByTaskId: Dispatch<SetStateAction<RuntimeStateMap>>;
   setWorkflowTaskEventsByTaskId: Dispatch<SetStateAction<WorkflowEventMap>>;
   setWorkflowTasks: Dispatch<SetStateAction<WorkflowTaskItem[]>>;
-  switchSession: (sessionId: string) => void;
   taskPendingEmployeesByTaskId: PendingEmployeeMap;
   workflowGraphStatusByWorkflowId: Record<string, string>;
   workflowGraphsByWorkflowId: Record<string, WorkflowGraph>;
@@ -173,7 +172,6 @@ export function useWorkflowTeamAutomation({
   setWorkflowRuntimeStateByTaskId,
   setWorkflowTaskEventsByTaskId,
   setWorkflowTasks,
-  switchSession,
   taskPendingEmployeesByTaskId,
   workflowGraphStatusByWorkflowId,
   workflowRuntimeStateByTaskId,

@@ -31,6 +31,7 @@ const MIGRATION_012: &str = include_str!("../migrations/012_prd_executable_tasks
 const MIGRATION_013: &str = include_str!("../migrations/013_project_icon_badge.sql");
 const MIGRATION_014: &str = include_str!("../migrations/014_project_repository_display_order.sql");
 const MIGRATION_015: &str = include_str!("../migrations/015_project_prd_scope.sql");
+const MIGRATION_016: &str = include_str!("../migrations/016_seed_default_employees.sql");
 const PLATFORM_SPLIT_PROMPT_SEED_JSON: &str =
     include_str!("../migrations/005_platform_split_prompt_seed.json");
 
@@ -104,6 +105,10 @@ const MIGRATIONS: &[Migration] = &[
     Migration {
         name: "015_project_prd_scope",
         action: MigrationAction::Sql(MIGRATION_015),
+    },
+    Migration {
+        name: "016_seed_default_employees",
+        action: MigrationAction::Sql(MIGRATION_016),
     },
 ];
 
