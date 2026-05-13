@@ -254,6 +254,7 @@ export function EmployeeConfigModal({
       agentType: row.agentType,
       enabled,
       repositoryIds: row.repositoryIds,
+      projectIds: row.projectIds,
     });
   }
 
@@ -263,7 +264,7 @@ export function EmployeeConfigModal({
       open={open}
       onCancel={onClose}
       footer={null}
-      width={projectOwnerPickMode ? 800 : 700}
+      width={projectOwnerPickMode ? 850 : 780}
       destroyOnHidden
       rootClassName="app-employee-config-modal-root"
     >

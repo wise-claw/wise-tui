@@ -746,12 +746,9 @@ export default function App() {
     () => employeeMonitorItems.map((item) => item.employeeId),
     [employeeMonitorItems],
   );
-  const publishedTeamMonitorItems = useMemo(
-    () =>
-      teamMonitorItems.filter(
-        (item) => (workflowGraphStatusByWorkflowId[item.workflowId] ?? "").toLowerCase() === "published",
-      ),
-    [teamMonitorItems, workflowGraphStatusByWorkflowId],
+  const defaultWorkflowIds = useMemo(
+    () => new Set(workflowTemplates.filter((t) => t.isDefault).map((t) => t.id)),
+    [workflowTemplates],
   );
 
   /** Filter monitor items by project/repository context */
@@ -761,13 +758,15 @@ export default function App() {
     if (pid) {
       return employeeMonitorItems.filter((item) => {
         const emp = employees.find((e) => e.id === item.employeeId);
-        return emp?.projectIds.includes(pid);
+        const pids = emp?.projectIds ?? [];
+        return pids.length === 0 || pids.includes(pid);
       });
     }
     if (rid) {
       return employeeMonitorItems.filter((item) => {
         const emp = employees.find((e) => e.id === item.employeeId);
-        return emp?.repositoryIds.includes(rid);
+        const rids = emp?.repositoryIds ?? [];
+        return rids.length === 0 || rids.includes(rid);
       });
     }
     return [];
@@ -776,11 +775,13 @@ export default function App() {
   const filteredTeamMonitorItems = useMemo(() => {
     const pid = activeProjectId?.trim() || null;
     if (!pid) return [];
-    return publishedTeamMonitorItems.filter((item) => {
-      const wfIds = teamProjectWorkflowIds;
-      return wfIds.includes(item.workflowId);
+    return teamMonitorItems.filter((item) => {
+      const isDefault = defaultWorkflowIds.has(item.workflowId);
+      const isPublished = (workflowGraphStatusByWorkflowId[item.workflowId] ?? "").toLowerCase() === "published";
+      if (!isPublished && !isDefault) return false;
+      return teamProjectWorkflowIds.includes(item.workflowId) || isDefault;
     });
-  }, [publishedTeamMonitorItems, teamProjectWorkflowIds, activeProjectId]);
+  }, [teamMonitorItems, teamProjectWorkflowIds, workflowGraphStatusByWorkflowId, defaultWorkflowIds, activeProjectId]);
   useEffect(() => {
     const workflowIds = Array.from(new Set([...workflowTemplates.map((item) => item.id), ...workflowTasks.map((item) => item.workflowId)]));
     const missingIds = workflowIds.filter((workflowId) => !workflowGraphsByWorkflowId[workflowId]);
