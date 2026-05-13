@@ -1,11 +1,12 @@
-import { Button, Card, Drawer, Empty, List, Space, Tag, Tooltip, Typography } from "antd";
-import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Button, Drawer, Empty, List, Space, Tag, Tooltip, Typography, message } from "antd";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import type {
   ClaudeSession,
   EmployeeItem,
   EmployeeMonitorItem,
   MonitorDrawerTarget,
   TeamMonitorItem,
+  WorkflowGraph,
   WorkflowRuntimeStepSnapshot,
   WorkflowTaskEventItem,
   WorkflowTaskItem,
@@ -16,7 +17,9 @@ import {
   subscribeOmcDirectBatchInvocations,
 } from "../../stores/omcDirectBatchInvocationsStore";
 import { sortWorkflowRuntimeSnapshotsChronological } from "../../utils/sortWorkflowRuntimeSnapshots";
+import { resolveWorkflowProgressGraphHighlight } from "../../utils/resolveWorkflowProgressGraphHighlight";
 import { describeNextExecutorAfterDispatch } from "../../utils/workflowTeamNextExecutor";
+import { findLatestRuntimeSnapshotForGraphNode } from "../../utils/findLatestRuntimeSnapshotForGraphNode";
 import {
   WORKFLOW_EVENT_TYPE_ACCEPTANCE_VERDICT_SUBMITTED,
   WORKFLOW_EVENT_TYPE_ACCEPTANCE_VERDICT_UNRESOLVED,
@@ -31,13 +34,9 @@ import {
   isOmcDirectBatchInvocationRunning,
 } from "../../utils/omcDirectBatchInvocationDisplay";
 import type { WorkflowInvocationStreamDetail } from "../../constants/workflowUiEvents";
-import { ClaudeSessionMessagesColumn } from "../ClaudeSessions/ClaudeSessionMessagesColumn";
 import { OmcDirectBatchInvocationDetailDrawer } from "../ProgressMonitorPanel/OmcDirectBatchInvocationDetailDrawer";
-import {
-  HistorySessionDrawerTitle,
-  historySessionStatusLabel,
-  historySessionStatusTagColor,
-} from "../ProgressMonitorPanel";
+import { MonitorHistorySessionTranscriptDrawer } from "../ProgressMonitorPanel/MonitorHistorySessionTranscriptDrawer";
+import { WorkflowProgressGraphCanvas } from "../WorkflowProgressGraphCanvas";
 import "./index.css";
 
 /** OMC 员工直连批量：与列表同源订阅，用于状态标签上路数 */
@@ -150,12 +149,18 @@ interface Props {
   sessions: ClaudeSession[];
   employees: EmployeeItem[];
   workflowTemplates: WorkflowTemplateItem[];
+  /** 与监控台同源的工作流图，用于团队/任务详情中的只读进度画布 */
+  workflowGraphsByWorkflowId?: Record<string, WorkflowGraph>;
   onJumpToSession?: (sessionId: string) => void;
   onOpenOmcBatchInvocationDetail?: (input: { sessionId: string; repositoryPath: string; invocationKey: string }) => void;
   onCancelOmcDirectBatchInvocation?: (invocationKey: string) => void;
   onReloadFullDiskTranscript?: (sessionKey: string) => void | Promise<void>;
   /** 历史执行会话消息抽屉：应用实时会话列表解析正文，避免与节流 `sessions` 不同步导致消息闪没 */
   transcriptSourceSessions?: ClaudeSession[];
+  /** 与监控台一致：抽屉内停止运行中会话 */
+  onCancelSession?: (sessionId: string) => void;
+  /** 历史消息内「查看任务详情」 */
+  onOpenTaskDetail?: (taskId: string) => void;
 }
 
 interface SessionMessageRow {
@@ -256,6 +261,98 @@ async function copyText(text: string): Promise<void> {
   await navigator.clipboard.writeText(text);
 }
 
+const RUNTIME_GRAPH_HOVER_PREVIEW_MAX = 1200;
+
+function buildRuntimeGraphHoverNodeContent(input: {
+  nodeId: string;
+  snapshotsSorted: WorkflowRuntimeStepSnapshot[];
+  taskPending: Array<{ employeeId: string; name: string }>;
+  taskStatus: WorkflowTaskItem["status"];
+  employees: EmployeeItem[];
+}): ReactNode | null {
+  const { nodeId, snapshotsSorted, taskPending, taskStatus, employees } = input;
+  const nid = nodeId.trim();
+  let bestIdx = -1;
+  let best: WorkflowRuntimeStepSnapshot | undefined;
+  for (let i = snapshotsSorted.length - 1; i >= 0; i -= 1) {
+    const s = snapshotsSorted[i];
+    if (!s || s.toNodeId?.trim() !== nid) continue;
+    best = s;
+    bestIdx = i;
+    break;
+  }
+  if (!best || bestIdx < 0) return null;
+  const nextExecutor = describeNextExecutorAfterDispatch(snapshotsSorted, bestIdx, taskPending, taskStatus);
+  const name = best.toNodeName?.trim();
+  const emp = name ? employees.find((e) => e.name.trim() === name) : undefined;
+  const agent = emp?.agentType?.trim();
+  const inputText = best.inputPreview?.trim() || "(无)";
+  const outputText = best.outputPreview?.trim() || "(无)";
+  const clamp = (t: string) => (t.length > RUNTIME_GRAPH_HOVER_PREVIEW_MAX ? `${t.slice(0, RUNTIME_GRAPH_HOVER_PREVIEW_MAX)}…` : t);
+  const awaiting = outputText === "(待执行)";
+  return (
+    <div>
+      <div style={{ marginBottom: 6 }}>
+        <Typography.Text strong style={{ fontSize: 12 }}>
+          {best.phase === "dispatch" ? "派发" : "决策"} · {best.toNodeName?.trim() || best.toNodeId || "—"}
+        </Typography.Text>
+        {awaiting ? (
+          <Tag color="processing" style={{ marginLeft: 8 }}>
+            待返回
+          </Tag>
+        ) : null}
+        <span className="app-monitor-drawer__muted" style={{ marginLeft: 8, fontSize: 11 }}>
+          {formatTime(best.createdAt)}
+        </span>
+      </div>
+      {best.executorSessionId?.trim() ? (
+        <div className="app-monitor-drawer__muted" style={{ fontSize: 11, marginBottom: 4 }}>
+          已绑定 Wise 会话：可点击节点打开消息抽屉
+        </div>
+      ) : (
+        <div className="app-monitor-drawer__muted" style={{ fontSize: 11, marginBottom: 4 }}>
+          该步骤未记录执行会话，无法从节点直达消息抽屉
+        </div>
+      )}
+      {best.toNodeType ? (
+        <div className="app-monitor-drawer__muted" style={{ fontSize: 11 }}>
+          节点类型：{formatWorkflowNodeTypeLabel(best.toNodeType)}
+          {agent ? ` · 执行前缀：/${agent}` : ""}
+        </div>
+      ) : null}
+      <div style={{ marginTop: 8 }}>
+        <Space size={6} align="center" style={{ marginBottom: 4 }}>
+          <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+            输入（派发拼接）
+          </Typography.Text>
+          <Button type="link" size="small" style={{ padding: 0, height: "auto", fontSize: 11 }} onClick={() => void copyText(inputText)}>
+            复制
+          </Button>
+        </Space>
+        <pre className="app-monitor-drawer__team-step-pre" style={{ maxHeight: 180, overflow: "auto" }}>
+          {clamp(inputText)}
+        </pre>
+      </div>
+      <div style={{ marginTop: 8 }}>
+        <Space size={6} align="center" style={{ marginBottom: 4 }}>
+          <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+            会话返回
+          </Typography.Text>
+          <Button type="link" size="small" style={{ padding: 0, height: "auto", fontSize: 11 }} onClick={() => void copyText(outputText)}>
+            复制
+          </Button>
+        </Space>
+        <pre className="app-monitor-drawer__team-step-pre" style={{ maxHeight: 180, overflow: "auto" }}>
+          {clamp(outputText)}
+        </pre>
+      </div>
+      <div className="app-monitor-drawer__muted" style={{ marginTop: 6, fontSize: 11 }}>
+        下一阶段执行方：<strong>{nextExecutor}</strong>
+      </div>
+    </div>
+  );
+}
+
 function extractBoundEmployeeName(repositoryName: string): string | null {
   const marker = "员工:";
   const idx = repositoryName.lastIndexOf(marker);
@@ -303,99 +400,6 @@ function resolveTeamDrawerTask(teamItem: TeamMonitorItem | undefined, tasks: Wor
   const active = list.find((t) => t.status === "in_progress");
   if (active) return active;
   return [...list].sort((a, b) => b.updatedAt - a.updatedAt)[0];
-}
-
-const TEAM_DISPATCH_CARD_COLLAPSE_CHARS = 3600;
-
-interface TeamDispatchStepCardProps {
-  snapshot: WorkflowRuntimeStepSnapshot;
-  stepNo: number;
-  nextExecutor: string;
-  employees: EmployeeItem[];
-}
-
-function TeamDispatchStepCard({ snapshot, stepNo, nextExecutor, employees }: TeamDispatchStepCardProps) {
-  const [bodyExpanded, setBodyExpanded] = useState(false);
-  const stageMarker = snapshot.toNodeId?.trim() || snapshot.toNodeName?.trim() || "unknown-node";
-
-  const executorAgentHint = useMemo(() => {
-    const name = snapshot.toNodeName?.trim();
-    if (!name) {
-      return null;
-    }
-    const emp = employees.find((e) => e.name.trim() === name);
-    const agent = emp?.agentType?.trim();
-    return agent ? `执行前缀：/${agent}` : null;
-  }, [employees, snapshot.toNodeName]);
-
-  const inputText = snapshot.inputPreview?.trim() || "(无)";
-  const outputText = snapshot.outputPreview?.trim() || "(无)";
-  const awaiting = outputText === "(待执行)";
-  const collapsible = inputText.length + outputText.length > TEAM_DISPATCH_CARD_COLLAPSE_CHARS;
-  const clampBody = collapsible && !bodyExpanded;
-
-  return (
-    <Card
-      size="small"
-      className={`app-monitor-drawer__team-step-card${clampBody ? " app-monitor-drawer__team-step-card--body-clamped" : ""}`}
-      bordered
-    >
-      <div className="app-monitor-drawer__team-step-head">
-        <Typography.Text strong style={{ fontSize: 12 }}>
-          第 {stepNo} 步 · {snapshot.toNodeName?.trim() || snapshot.toNodeId || "未知执行方"}
-        </Typography.Text>
-        <Space size={4} wrap className="app-monitor-drawer__team-step-head-right">
-          {awaiting ? (
-            <Tag color="processing" style={{ margin: 0 }}>
-              待返回
-            </Tag>
-          ) : null}
-          <span className="app-monitor-drawer__team-step-time">{formatTime(snapshot.createdAt)}</span>
-        </Space>
-      </div>
-      {snapshot.toNodeType ? (
-        <div className="app-monitor-drawer__muted" style={{ marginTop: 4 }}>
-          节点类型：{formatWorkflowNodeTypeLabel(snapshot.toNodeType)}
-          {executorAgentHint ? <span> · {executorAgentHint}</span> : null}
-        </div>
-      ) : executorAgentHint ? (
-        <div className="app-monitor-drawer__muted" style={{ marginTop: 4 }}>
-          {executorAgentHint}
-        </div>
-      ) : null}
-      <div className="app-monitor-drawer__muted" style={{ marginTop: 2 }}>
-        阶段标识：{stageMarker}
-      </div>
-      <div className="app-monitor-drawer__team-step-body">
-        <Space align="center" size={8} style={{ margin: "8px 0 2px" }}>
-          <Typography.Paragraph type="secondary" style={{ margin: 0, fontSize: 11 }}>
-            输入 Claude Code（派发拼接）
-          </Typography.Paragraph>
-          <Button type="link" size="small" className="app-monitor-drawer__team-step-copy-link" onClick={() => void copyText(inputText)}>
-            复制
-          </Button>
-        </Space>
-        <pre className="app-monitor-drawer__team-step-pre">{inputText}</pre>
-        <Space align="center" size={8} style={{ margin: "8px 0 2px" }}>
-          <Typography.Paragraph type="secondary" style={{ margin: 0, fontSize: 11 }}>
-            会话返回
-          </Typography.Paragraph>
-          <Button type="link" size="small" className="app-monitor-drawer__team-step-copy-link" onClick={() => void copyText(outputText)}>
-            复制
-          </Button>
-        </Space>
-        <pre className="app-monitor-drawer__team-step-pre">{outputText}</pre>
-        {collapsible ? (
-          <Button type="link" size="small" className="app-monitor-drawer__team-step-expand" onClick={() => setBodyExpanded((v) => !v)}>
-            {bodyExpanded ? "收起长文" : "展开长文"}
-          </Button>
-        ) : null}
-      </div>
-      <div className="app-monitor-drawer__team-next-executor">
-        下一阶段执行方：<strong>{nextExecutor}</strong>
-      </div>
-    </Card>
-  );
 }
 
 function extractEventEmployeeIds(events: WorkflowTaskEventItem[]): string[] {
@@ -541,11 +545,14 @@ export function ProgressMonitorDrawer({
   sessions,
   employees,
   workflowTemplates,
+  workflowGraphsByWorkflowId = {},
   onJumpToSession,
   onOpenOmcBatchInvocationDetail,
   onCancelOmcDirectBatchInvocation,
   onReloadFullDiskTranscript,
   transcriptSourceSessions,
+  onCancelSession,
+  onOpenTaskDetail,
 }: Props) {
   const [employeeMessageLimit, setEmployeeMessageLimit] = useState(20);
   const [omcDirectBatchDetailSnapshot, setOmcDirectBatchDetailSnapshot] = useState<WorkflowInvocationStreamDetail | null>(null);
@@ -647,19 +654,6 @@ export function ProgressMonitorDrawer({
     if (!teamTask) return [];
     return sortWorkflowRuntimeSnapshotsChronological(workflowRuntimeSnapshotsByTaskId[teamTask.id] ?? []);
   }, [teamTask, workflowRuntimeSnapshotsByTaskId]);
-  const teamDispatchCards = useMemo(() => {
-    if (!teamTask) return [];
-    const sorted = teamSnapshotsSorted;
-    const pending = taskPendingEmployeesByTaskId[teamTask.id] ?? [];
-    return sorted
-      .map((snapshot, index) => ({ snapshot, index }))
-      .filter((row) => row.snapshot.phase === "dispatch")
-      .map((row, stepIdx) => ({
-        ...row,
-        stepNo: stepIdx + 1,
-        nextExecutor: describeNextExecutorAfterDispatch(sorted, row.index, pending, teamTask.status),
-      }));
-  }, [teamTask, teamSnapshotsSorted, taskPendingEmployeesByTaskId]);
   const teamLatestAcceptanceEvent = useMemo(() => {
     if (!teamTask) return null;
     const events = workflowTaskEventsByTaskId[teamTask.id] ?? [];
@@ -706,9 +700,100 @@ export function ProgressMonitorDrawer({
     return collectOmcRuns(events, teamTask.id);
   }, [teamTask, workflowTaskEventsByTaskId]);
 
+  const teamWorkflowGraph = useMemo(() => {
+    if (!teamItem) return null;
+    return workflowGraphsByWorkflowId[teamItem.workflowId] ?? null;
+  }, [teamItem, workflowGraphsByWorkflowId]);
+
+  const teamProgressHighlight = useMemo(() => {
+    if (!teamTask) {
+      return { activeNodeId: null as string | null, flowSourceId: null as string | null, flowTargetId: null as string | null };
+    }
+    return resolveWorkflowProgressGraphHighlight({
+      graph: teamWorkflowGraph,
+      snapshotsSorted: teamSnapshotsSorted,
+      taskStatus: teamTask.status,
+    });
+  }, [teamTask, teamWorkflowGraph, teamSnapshotsSorted]);
+
   const selectedTask = target?.type === "task" ? workflowTasks.find((item) => item.id === target.taskId) : undefined;
   const selectedTaskEvents = selectedTask ? (workflowTaskEventsByTaskId[selectedTask.id] ?? []) : [];
   const selectedTaskSnapshots = selectedTask ? (workflowRuntimeSnapshotsByTaskId[selectedTask.id] ?? []) : [];
+  const selectedTaskSnapshotsSorted = useMemo(
+    () => (selectedTask ? sortWorkflowRuntimeSnapshotsChronological(selectedTaskSnapshots) : []),
+    [selectedTask, selectedTaskSnapshots],
+  );
+  const selectedTaskWorkflowGraph = useMemo(() => {
+    if (!selectedTask) return null;
+    return workflowGraphsByWorkflowId[selectedTask.workflowId] ?? null;
+  }, [selectedTask, workflowGraphsByWorkflowId]);
+  const selectedTaskProgressHighlight = useMemo(() => {
+    if (!selectedTask) {
+      return { activeNodeId: null as string | null, flowSourceId: null as string | null, flowTargetId: null as string | null };
+    }
+    return resolveWorkflowProgressGraphHighlight({
+      graph: selectedTaskWorkflowGraph,
+      snapshotsSorted: selectedTaskSnapshotsSorted,
+      taskStatus: selectedTask.status,
+    });
+  }, [selectedTask, selectedTaskWorkflowGraph, selectedTaskSnapshotsSorted]);
+  const teamTaskPending = teamTask ? taskPendingEmployeesByTaskId[teamTask.id] ?? [] : [];
+  const selectedTaskPending = selectedTask ? taskPendingEmployeesByTaskId[selectedTask.id] ?? [] : [];
+
+  const renderTeamGraphHover = useCallback(
+    (nodeId: string) =>
+      teamTask
+        ? buildRuntimeGraphHoverNodeContent({
+            nodeId,
+            snapshotsSorted: teamSnapshotsSorted,
+            taskPending: teamTaskPending,
+            taskStatus: teamTask.status,
+            employees,
+          })
+        : null,
+    [employees, teamSnapshotsSorted, teamTask, teamTaskPending],
+  );
+
+  const onTeamGraphNodeClick = useCallback(
+    (nodeId: string) => {
+      if (!teamTask) return;
+      const hit = findLatestRuntimeSnapshotForGraphNode(teamSnapshotsSorted, nodeId);
+      if (!hit?.executorSessionId?.trim()) {
+        message.warning("该节点暂无已记录的执行会话，无法打开消息抽屉");
+        return;
+      }
+      setHistoryPeekSessionId(hit.executorSessionId.trim());
+    },
+    [teamSnapshotsSorted, teamTask],
+  );
+
+  const renderTaskGraphHover = useCallback(
+    (nodeId: string) =>
+      selectedTask
+        ? buildRuntimeGraphHoverNodeContent({
+            nodeId,
+            snapshotsSorted: selectedTaskSnapshotsSorted,
+            taskPending: selectedTaskPending,
+            taskStatus: selectedTask.status,
+            employees,
+          })
+        : null,
+    [employees, selectedTask, selectedTaskPending, selectedTaskSnapshotsSorted],
+  );
+
+  const onTaskGraphNodeClick = useCallback(
+    (nodeId: string) => {
+      if (!selectedTask) return;
+      const hit = findLatestRuntimeSnapshotForGraphNode(selectedTaskSnapshotsSorted, nodeId);
+      if (!hit?.executorSessionId?.trim()) {
+        message.warning("该节点暂无已记录的执行会话，无法打开消息抽屉");
+        return;
+      }
+      setHistoryPeekSessionId(hit.executorSessionId.trim());
+    },
+    [selectedTask, selectedTaskSnapshotsSorted],
+  );
+
   const selectedTaskSessionIds = useMemo(() => {
     if (!selectedTask) return [];
     const related = new Map<string, ClaudeSession>();
@@ -734,37 +819,6 @@ export function ProgressMonitorDrawer({
   }, [employeeById, selectedTask, selectedTaskEvents, sessions]);
 
   const sessionsForHistoryTranscript = transcriptSourceSessions ?? sessions;
-  const liveHistoryPeekSession = useMemo(() => {
-    if (!historyPeekSessionId) return undefined;
-    return sessionsForHistoryTranscript.find(
-      (item) => item.id === historyPeekSessionId || item.claudeSessionId === historyPeekSessionId,
-    );
-  }, [historyPeekSessionId, sessionsForHistoryTranscript]);
-
-  const peekDrawerTranscriptTargetId = liveHistoryPeekSession?.id ?? null;
-  const peekDrawerTranscriptMessagesLen = liveHistoryPeekSession?.messages.length ?? 0;
-  const peekDrawerTranscriptStatus = liveHistoryPeekSession?.status;
-  const peekDrawerTranscriptClaudeId = liveHistoryPeekSession?.claudeSessionId?.trim() ?? "";
-
-  useEffect(() => {
-    if (!historyPeekSessionId || !onReloadFullDiskTranscript || !peekDrawerTranscriptTargetId) return;
-    if (peekDrawerTranscriptMessagesLen > 0) return;
-    if (peekDrawerTranscriptStatus === "running" || peekDrawerTranscriptStatus === "connecting") return;
-    if (!peekDrawerTranscriptClaudeId) return;
-    void onReloadFullDiskTranscript(peekDrawerTranscriptTargetId);
-  }, [
-    historyPeekSessionId,
-    onReloadFullDiskTranscript,
-    peekDrawerTranscriptTargetId,
-    peekDrawerTranscriptMessagesLen,
-    peekDrawerTranscriptStatus,
-    peekDrawerTranscriptClaudeId,
-  ]);
-
-  const historyPeekDrawerWidth = useMemo(
-    () => Math.min(560, typeof window !== "undefined" ? window.innerWidth - 24 : 560),
-    [],
-  );
 
   const title =
     target?.type === "employee"
@@ -904,29 +958,25 @@ export function ProgressMonitorDrawer({
             ) : null}
           </div>
 
-          <div className="app-monitor-drawer__section">
-            <Typography.Text type="secondary">阶段执行记录</Typography.Text>
-            <Typography.Paragraph type="secondary" style={{ marginBottom: 6, fontSize: 11 }}>
-              派发正文与员工会话一致；返回为助手产出（超长截断）；下一阶段优先下一条派发、再决策、进行中才用待派发兜底。超长卡片可展开。
-            </Typography.Paragraph>
-            {teamTask && teamDispatchCards.length > 0 ? (
-              <div className="app-monitor-drawer__team-step-list">
-                {teamDispatchCards.map((row) => (
-                  <TeamDispatchStepCard
-                    key={row.snapshot.id}
-                    snapshot={row.snapshot}
-                    stepNo={row.stepNo}
-                    nextExecutor={row.nextExecutor}
-                    employees={employees}
-                  />
-                ))}
-              </div>
-            ) : teamTask ? (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无派发与回传记录" />
-            ) : (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无关联任务" />
-            )}
-          </div>
+          {teamWorkflowGraph && teamWorkflowGraph.nodes.length > 0 ? (
+            <div className="app-monitor-drawer__section app-monitor-drawer__section--workflow-graph">
+              <Typography.Text type="secondary">流程进度</Typography.Text>
+              <Typography.Paragraph type="secondary" style={{ marginBottom: 8, fontSize: 11 }}>
+                与团队工作流编排视图一致：橙色描边为当前节点，流动线段表示最近一次派发沿有向边推进。悬停任务类节点可查看派发/返回摘要；已绑定 Wise 会话时可点击查看消息抽屉。
+              </Typography.Paragraph>
+              <WorkflowProgressGraphCanvas
+                workflowGraph={teamWorkflowGraph}
+                employees={employees}
+                activeNodeId={teamProgressHighlight.activeNodeId}
+                flowSourceId={teamProgressHighlight.flowSourceId}
+                flowTargetId={teamProgressHighlight.flowTargetId}
+                height={240}
+                renderNodeHoverContent={renderTeamGraphHover}
+                onNodeClick={onTeamGraphNodeClick}
+              />
+            </div>
+          ) : null}
+
           <div className="app-monitor-drawer__section app-monitor-drawer__section--acceptance-fixed">
             <Typography.Text type="secondary">验收判定记录</Typography.Text>
             {teamTask && teamLatestAcceptanceEvent ? (
@@ -1033,6 +1083,25 @@ export function ProgressMonitorDrawer({
             <div className="app-monitor-drawer__card">{selectedTask.content || "(空任务描述)"}</div>
           </div>
 
+          {selectedTaskWorkflowGraph && selectedTaskWorkflowGraph.nodes.length > 0 ? (
+            <div className="app-monitor-drawer__section app-monitor-drawer__section--workflow-graph">
+              <Typography.Text type="secondary">流程进度</Typography.Text>
+              <Typography.Paragraph type="secondary" style={{ marginBottom: 8, fontSize: 11 }}>
+                与团队工作流编排视图一致：橙色描边为当前节点，流动线段表示最近一次派发沿有向边推进。悬停任务类节点可查看派发/返回摘要；已绑定 Wise 会话时可点击查看消息抽屉。
+              </Typography.Paragraph>
+              <WorkflowProgressGraphCanvas
+                workflowGraph={selectedTaskWorkflowGraph}
+                employees={employees}
+                activeNodeId={selectedTaskProgressHighlight.activeNodeId}
+                flowSourceId={selectedTaskProgressHighlight.flowSourceId}
+                flowTargetId={selectedTaskProgressHighlight.flowTargetId}
+                height={220}
+                renderNodeHoverContent={renderTaskGraphHover}
+                onNodeClick={onTaskGraphNodeClick}
+              />
+            </div>
+          ) : null}
+
           <div className="app-monitor-drawer__section">
             <Typography.Text type="secondary">会话信息列表</Typography.Text>
             {selectedTaskSessionIds.length > 0 ? (
@@ -1092,32 +1161,15 @@ export function ProgressMonitorDrawer({
       onClose={() => setOmcDirectBatchDetailSnapshot(null)}
       onOpenInMainSessionBackground={onOpenOmcBatchInvocationDetail ? handleOpenOmcBatchFromDetailDrawer : undefined}
     />
-    <Drawer
-      title={<HistorySessionDrawerTitle session={liveHistoryPeekSession} />}
+    <MonitorHistorySessionTranscriptDrawer
       open={historyPeekSessionId !== null}
+      sessionId={historyPeekSessionId}
       onClose={() => setHistoryPeekSessionId(null)}
-      placement="right"
-      destroyOnClose
-      width={historyPeekDrawerWidth}
-      classNames={{ body: "app-monitor-panel__history-session-drawer-body" }}
-      extra={
-        liveHistoryPeekSession ? (
-          <Space size="small" wrap align="center">
-            <Tag color={historySessionStatusTagColor(liveHistoryPeekSession.status)}>
-              {historySessionStatusLabel(liveHistoryPeekSession.status)}
-            </Tag>
-          </Space>
-        ) : null
-      }
-    >
-      {!liveHistoryPeekSession ? (
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未找到该会话" />
-      ) : (
-        <div className="app-monitor-panel__history-session-drawer-scroll">
-          <ClaudeSessionMessagesColumn session={liveHistoryPeekSession} showAllMessages />
-        </div>
-      )}
-    </Drawer>
+      transcriptSourceSessions={sessionsForHistoryTranscript}
+      onReloadFullDiskTranscript={onReloadFullDiskTranscript}
+      onCancelSession={onCancelSession}
+      onOpenTaskDetail={onOpenTaskDetail}
+    />
     </>
   );
 }

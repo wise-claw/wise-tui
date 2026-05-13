@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1778514967986,
-  "projectRoot": "/Users/starlight/Documents/wise",
+  "lastScanned": 1778580437320,
+  "projectRoot": "/Users/sjl/Documents/github/wise",
   "techStack": {
     "languages": [
       {
@@ -60,8 +60,8 @@
     }
   },
   "conventions": {
-    "namingStyle": "camelCase",
-    "importStyle": "ES modules",
+    "namingStyle": null,
+    "importStyle": null,
     "testPattern": null,
     "fileOrganization": "type-based"
   },
@@ -83,24 +83,50 @@
     "design": {
       "path": "design",
       "purpose": null,
-      "fileCount": 0,
-      "lastAccessed": 1778514967974,
+      "fileCount": 1,
+      "lastAccessed": 1778580437313,
       "keyFiles": []
+    },
+    "dist": {
+      "path": "dist",
+      "purpose": "Distribution/build output",
+      "fileCount": 4,
+      "lastAccessed": 1778580437313,
+      "keyFiles": [
+        "index.html",
+        "mascot.html",
+        "tauri.svg",
+        "vite.svg"
+      ]
     },
     "extras": {
       "path": "extras",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1778514967974,
+      "lastAccessed": 1778580437316,
       "keyFiles": [
         "check-prd-split-evolution.mjs"
       ]
+    },
+    "orchestrator-service": {
+      "path": "orchestrator-service",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1778580437317,
+      "keyFiles": []
+    },
+    "picture": {
+      "path": "picture",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1778580437317,
+      "keyFiles": []
     },
     "public": {
       "path": "public",
       "purpose": "Public files",
       "fileCount": 2,
-      "lastAccessed": 1778514967977,
+      "lastAccessed": 1778580437317,
       "keyFiles": [
         "tauri.svg",
         "vite.svg"
@@ -110,7 +136,7 @@
       "path": "scripts",
       "purpose": "Build/utility scripts",
       "fileCount": 3,
-      "lastAccessed": 1778514967978,
+      "lastAccessed": 1778580437317,
       "keyFiles": [
         "emit-platform-split-prompt-seed.ts",
         "generate-dmg-background.py",
@@ -120,8 +146,8 @@
     "src": {
       "path": "src",
       "purpose": "Source code",
-      "fileCount": 9,
-      "lastAccessed": 1778514967978,
+      "fileCount": 10,
+      "lastAccessed": 1778580437317,
       "keyFiles": [
         "App.css",
         "App.tsx",
@@ -133,8 +159,8 @@
     "src-tauri": {
       "path": "src-tauri",
       "purpose": null,
-      "fileCount": 6,
-      "lastAccessed": 1778514967978,
+      "fileCount": 7,
+      "lastAccessed": 1778580437317,
       "keyFiles": [
         "Cargo.lock",
         "Cargo.toml",
@@ -143,11 +169,43 @@
         "tauri.conf.json"
       ]
     },
+    "tools": {
+      "path": "tools",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1778580437317,
+      "keyFiles": []
+    },
+    "dist/assets": {
+      "path": "dist/assets",
+      "purpose": "Static assets",
+      "fileCount": 100,
+      "lastAccessed": 1778580437318,
+      "keyFiles": [
+        "ClaudeHooksConfigPanel-Dk61-uMF.js",
+        "ClaudeMcpConfigPanel-DIWQQWM-.js",
+        "KaTeX_AMS-Regular-BQhdFMY1.woff2"
+      ]
+    },
+    "orchestrator-service/scripts": {
+      "path": "orchestrator-service/scripts",
+      "purpose": "Build/utility scripts",
+      "fileCount": 0,
+      "lastAccessed": 1778580437318,
+      "keyFiles": []
+    },
+    "orchestrator-service/src": {
+      "path": "orchestrator-service/src",
+      "purpose": "Source code",
+      "fileCount": 1,
+      "lastAccessed": 1778580437318,
+      "keyFiles": []
+    },
     "src/assets": {
       "path": "src/assets",
       "purpose": "Static assets",
       "fileCount": 1,
-      "lastAccessed": 1778514967979,
+      "lastAccessed": 1778580437318,
       "keyFiles": [
         "react.svg"
       ]
@@ -155,19 +213,26 @@
     "src/components": {
       "path": "src/components",
       "purpose": "UI components",
-      "fileCount": 13,
-      "lastAccessed": 1778514967979,
+      "fileCount": 14,
+      "lastAccessed": 1778580437319,
       "keyFiles": [
         "AppWorkspaceLayout.tsx",
         "ClaudeHooksConfigPanel.tsx",
         "ClaudeMcpConfigPanel.tsx"
       ]
     },
+    "src/data": {
+      "path": "src/data",
+      "purpose": "Data files",
+      "fileCount": 0,
+      "lastAccessed": 1778580437319,
+      "keyFiles": []
+    },
     "src-tauri/examples": {
       "path": "src-tauri/examples",
       "purpose": "Example code",
       "fileCount": 1,
-      "lastAccessed": 1778514967980,
+      "lastAccessed": 1778580437319,
       "keyFiles": [
         "test_reset_default.rs"
       ]
@@ -181,15 +246,39 @@
       "type": "file"
     },
     {
-      "path": "src/components/ClaudeSessions/WorkflowTaskTimeline.tsx",
-      "accessCount": 10,
-      "lastAccessed": 1778204362362,
+      "path": "src/AppImpl.tsx",
+      "accessCount": 82,
+      "lastAccessed": 1778630124152,
+      "type": "file"
+    },
+    {
+      "path": "src/components/EmployeeConfigModal/index.tsx",
+      "accessCount": 54,
+      "lastAccessed": 1778590833631,
+      "type": "file"
+    },
+    {
+      "path": "src/components/AppWorkspaceLayout.tsx",
+      "accessCount": 23,
+      "lastAccessed": 1778630105765,
+      "type": "directory"
+    },
+    {
+      "path": "src/components/LeftSidebar.tsx",
+      "accessCount": 20,
+      "lastAccessed": 1778630183552,
       "type": "file"
     },
     {
       "path": "src/types.ts",
-      "accessCount": 8,
-      "lastAccessed": 1778519857618,
+      "accessCount": 18,
+      "lastAccessed": 1778629787263,
+      "type": "file"
+    },
+    {
+      "path": "src/components/ClaudeSessions/WorkflowTaskTimeline.tsx",
+      "accessCount": 10,
+      "lastAccessed": 1778204362362,
       "type": "file"
     },
     {
@@ -202,6 +291,12 @@
       "path": "src/components/PrdTaskSplitPanel/TaskCard.tsx",
       "accessCount": 6,
       "lastAccessed": 1778519520427,
+      "type": "file"
+    },
+    {
+      "path": "src-tauri/src/lib_impl.rs",
+      "accessCount": 5,
+      "lastAccessed": 1778590177499,
       "type": "file"
     },
     {
@@ -247,33 +342,27 @@
       "type": "file"
     },
     {
+      "path": "src/services/workflowGraphRuntime.ts",
+      "accessCount": 3,
+      "lastAccessed": 1778588123883,
+      "type": "file"
+    },
+    {
+      "path": "src/App.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1778588922117,
+      "type": "file"
+    },
+    {
       "path": "vite.config.ts",
       "accessCount": 2,
       "lastAccessed": 1778204367069,
       "type": "file"
     },
     {
-      "path": "src/services/workflowGraphRuntime.ts",
-      "accessCount": 2,
-      "lastAccessed": 1778204690384,
-      "type": "file"
-    },
-    {
-      "path": "src/App.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1778204722782,
-      "type": "file"
-    },
-    {
       "path": "src/services/trellisTaskMapping.ts",
       "accessCount": 2,
       "lastAccessed": 1778513388689,
-      "type": "file"
-    },
-    {
-      "path": "src-tauri/src/lib_impl.rs",
-      "accessCount": 2,
-      "lastAccessed": 1778513525152,
       "type": "file"
     },
     {
@@ -373,12 +462,6 @@
       "type": "file"
     },
     {
-      "path": "src/components/AppWorkspaceLayout.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1778515945104,
-      "type": "directory"
-    },
-    {
       "path": "src/components/PrdTaskSplitPanel/types.ts",
       "accessCount": 1,
       "lastAccessed": 1778516502630,
@@ -454,18 +537,6 @@
       "path": "src/components/PrdTaskSplitPanel/TaskBoardHeader.tsx",
       "accessCount": 1,
       "lastAccessed": 1778519663907,
-      "type": "file"
-    },
-    {
-      "path": "src/components/PrdTaskSplitPanel/InlineRuntimePanel.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1778520190477,
-      "type": "file"
-    },
-    {
-      "path": "src/components/PrdTaskSplitPanel/PanelHeader.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1778520293433,
       "type": "file"
     }
   ],

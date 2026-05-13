@@ -565,6 +565,7 @@ export function PrdTaskSplitPanel({
     [linkedProject, activeProjectId, projects],
   );
   const headerProjectName = useMemo(() => projectForHeader?.name?.trim() || null, [projectForHeader]);
+
   /** 顶栏仓库标签：项目内顺序；无项目时仅当前关联仓库一条。 */
   const headerRepositoryTagItems = useMemo(() => {
     if (projectForHeader) {

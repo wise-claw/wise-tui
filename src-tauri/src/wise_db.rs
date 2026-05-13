@@ -31,6 +31,7 @@ const MIGRATION_012: &str = include_str!("../migrations/012_prd_executable_tasks
 const MIGRATION_013: &str = include_str!("../migrations/013_project_icon_badge.sql");
 const MIGRATION_014: &str = include_str!("../migrations/014_project_repository_display_order.sql");
 const MIGRATION_015: &str = include_str!("../migrations/015_project_prd_scope.sql");
+const MIGRATION_016: &str = include_str!("../migrations/016_seed_default_employees.sql");
 const PLATFORM_SPLIT_PROMPT_SEED_JSON: &str =
     include_str!("../migrations/005_platform_split_prompt_seed.json");
 
@@ -105,6 +106,10 @@ const MIGRATIONS: &[Migration] = &[
         name: "015_project_prd_scope",
         action: MigrationAction::Sql(MIGRATION_015),
     },
+    Migration {
+        name: "016_seed_default_employees",
+        action: MigrationAction::Sql(MIGRATION_016),
+    },
 ];
 
 #[derive(Debug, Clone, Serialize)]
@@ -130,6 +135,7 @@ pub struct WiseEmployeeRow {
     pub updated_at: i64,
     pub display_order: i64,
     pub repository_ids: Vec<i64>,
+    pub project_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -474,6 +480,7 @@ impl WiseDb {
                     updated_at: row.get(5)?,
                     display_order: row.get(6)?,
                     repository_ids: Vec::new(),
+                    project_ids: Vec::new(),
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -496,6 +503,24 @@ impl WiseDb {
                 repository_ids.push(rel.map_err(|e| e.to_string())?);
             }
             row.repository_ids = repository_ids;
+
+            let mut proj_stmt = g
+                .prepare(
+                    "SELECT project_id
+                     FROM project_prd_employees
+                     WHERE employee_id = ?1
+                     ORDER BY created_at ASC",
+                )
+                .map_err(|e| e.to_string())?;
+            let proj_rows = proj_stmt
+                .query_map(params![row.id.clone()], |r| r.get::<_, String>(0))
+                .map_err(|e| e.to_string())?;
+            let mut project_ids = Vec::new();
+            for proj in proj_rows {
+                project_ids.push(proj.map_err(|e| e.to_string())?);
+            }
+            row.project_ids = project_ids;
+
             out.push(row);
         }
         Ok(out)
@@ -1139,6 +1164,25 @@ impl WiseDb {
         )
         .map_err(|e| e.to_string())?;
         Ok(())
+    }
+
+    pub fn list_workflow_project_ids(&self, workflow_id: &str) -> Result<Vec<String>, String> {
+        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let mut stmt = g
+            .prepare(
+                "SELECT project_id FROM project_prd_workflows
+                 WHERE workflow_id = ?1
+                 ORDER BY created_at ASC",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(params![workflow_id], |row| row.get::<_, String>(0))
+            .map_err(|e| e.to_string())?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r.map_err(|e| e.to_string())?);
+        }
+        Ok(out)
     }
 
     pub fn add_repository_to_project(

@@ -24,7 +24,6 @@ import { useRepositoryList } from "./hooks/useRepositoryList";
 import { useClaudeSessions, type ClaudeTurnCompletePayload } from "./hooks/useClaudeSessions";
 import { openInFinder } from "./services/repository";
 import { AppWorkspaceLayout } from "./components/AppWorkspaceLayout";
-import { RepositoryMainOwnerModal } from "./components/RepositoryMainOwnerModal";
 import type { PromptsOpenContext } from "./components/PromptsPanel";
 import { reloadAppWindow } from "./services/window";
 import { wiseMascotShow } from "./services/wiseMascot";
@@ -103,12 +102,14 @@ import { useMainLayoutModes } from "./hooks/useMainLayoutModes";
 import { useDingTalkAutomationInbound } from "./hooks/useDingTalkAutomationInbound";
 import { useOmcRuntime } from "./hooks/useOmcRuntime";
 import { useWorkflowTeamAutomation } from "./hooks/useWorkflowTeamAutomation";
-import { addProjectPrdEmployee, addProjectPrdWorkflow, listProjectPrdEmployeeIds } from "./services/projectPrdScope";
+import { addProjectPrdWorkflow, listProjectPrdEmployeeIds, listProjectPrdWorkflowIds, listWorkflowProjectIds } from "./services/projectPrdScope";
 
 // ── App ──
 
 export default function App() {
   const [taskSplitMode, setTaskSplitMode] = useState(false);
+  /** 任务面板：在主区+右栏之上叠层展示任务列表（不盖左栏）。 */
+  const [taskPanelMode, setTaskPanelMode] = useState(false);
   const [promptsMode, setPromptsMode] = useState(false);
   /** 左栏 MCP：在主区+右栏之上叠层展示（与技能目录相同，不盖左栏）。 */
   const [mcpHubMode, setMcpHubMode] = useState(false);
@@ -135,6 +136,10 @@ export default function App() {
   const [workflowConfigOpen, setWorkflowConfigOpen] = useState(false);
   /** 非空：从需求面板打开团队配置，保存模板后自动关联到该项目。 */
   const [workflowConfigPrdProjectId, setWorkflowConfigPrdProjectId] = useState<string | null>(null);
+  /** 当前项目的团队 workflow id 列表，用于过滤团队监控项。 */
+  const [teamProjectWorkflowIds, setTeamProjectWorkflowIds] = useState<string[]>([]);
+  /** workflowId -> [projectId, ...] map，用于 WorkflowConfigModal 中展示已关联项目。 */
+  const [workflowProjectIdsMap, setWorkflowProjectIdsMap] = useState<Record<string, string[]>>({});
   const [employeeLoading, setEmployeeLoading] = useState(false);
   const [workflowLoading, setWorkflowLoading] = useState(false);
   const [monitorDrawerTarget, setMonitorDrawerTarget] = useState<MonitorDrawerTarget | null>(null);
@@ -205,8 +210,9 @@ export default function App() {
   } = useRepositoryList();
 
   const [repositoryMainSessionBindings, setRepositoryMainSessionBindings] = useState<Record<string, string>>({});
-  const [repositoryMainOwnerModalRepo, setRepositoryMainOwnerModalRepo] = useState<Repository | null>(null);
-  const [repositoryMainOwnerAgentOptions, setRepositoryMainOwnerAgentOptions] = useState<string[]>(["executor"]);
+  /** 从侧栏仓库打开员工配置：与需求面板相同的 Owner 表格式，但不写 project_prd。 */
+  const [employeeConfigRepositoryOwnerScopeOnly, setEmployeeConfigRepositoryOwnerScopeOnly] = useState(false);
+  const [employeeConfigInitialCreateEmployeeName, setEmployeeConfigInitialCreateEmployeeName] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -235,23 +241,6 @@ export default function App() {
     });
   }, []);
 
-  const openRepositoryMainOwnerModal = useCallback(async (repository: Repository) => {
-    setRepositoryMainOwnerModalRepo(repository);
-    try {
-      const subagents = await listClaudeSubagents(repository.path);
-      const sorted = [...subagents].sort((a, b) => {
-        if (a.isCollaborationMode !== b.isCollaborationMode) {
-          return a.isCollaborationMode ? -1 : 1;
-        }
-        return a.name.localeCompare(b.name);
-      });
-      setRepositoryMainOwnerAgentOptions(Array.from(new Set(["executor", ...sorted.map((item) => item.name)])));
-    } catch (error) {
-      console.error("Failed to load claude subagents:", error);
-      setRepositoryMainOwnerAgentOptions(["executor"]);
-    }
-  }, []);
-
   const handlePersistRepositoryMainOwnerAgent = useCallback(
     async (repository: Repository, mainOwnerAgentName: string | null) => {
       try {
@@ -264,7 +253,7 @@ export default function App() {
           void setAppSetting(REPOSITORY_MAIN_SESSION_BINDING_STORAGE_KEY, JSON.stringify(next));
           return next;
         });
-        message.success("主 Owner 智能体已更新");
+        message.success(mainOwnerAgentName?.trim() ? "仓库已更新" : "已清除仓库");
       } catch (err) {
         message.error(err instanceof Error ? err.message : String(err));
         throw err;
@@ -578,7 +567,6 @@ export default function App() {
     setWorkflowRuntimeStateByTaskId,
     setWorkflowTaskEventsByTaskId,
     setWorkflowTasks,
-    switchSession,
     taskPendingEmployeesByTaskId,
     workflowGraphStatusByWorkflowId,
     workflowGraphsByWorkflowId,
@@ -742,6 +730,34 @@ export default function App() {
       ),
     [teamMonitorItems, workflowGraphStatusByWorkflowId],
   );
+
+  /** Filter monitor items by project/repository context */
+  const filteredEmployeeMonitorItems = useMemo(() => {
+    const pid = activeProjectId?.trim() || null;
+    const rid = activeRepositoryId ?? null;
+    if (pid) {
+      return employeeMonitorItems.filter((item) => {
+        const emp = employees.find((e) => e.id === item.employeeId);
+        return emp?.projectIds.includes(pid);
+      });
+    }
+    if (rid) {
+      return employeeMonitorItems.filter((item) => {
+        const emp = employees.find((e) => e.id === item.employeeId);
+        return emp?.repositoryIds.includes(rid);
+      });
+    }
+    return [];
+  }, [employeeMonitorItems, employees, activeProjectId, activeRepositoryId]);
+
+  const filteredTeamMonitorItems = useMemo(() => {
+    const pid = activeProjectId?.trim() || null;
+    if (!pid) return [];
+    return publishedTeamMonitorItems.filter((item) => {
+      const wfIds = teamProjectWorkflowIds;
+      return wfIds.includes(item.workflowId);
+    });
+  }, [publishedTeamMonitorItems, teamProjectWorkflowIds, activeProjectId]);
   useEffect(() => {
     const workflowIds = Array.from(new Set([...workflowTemplates.map((item) => item.id), ...workflowTasks.map((item) => item.workflowId)]));
     const missingIds = workflowIds.filter((workflowId) => !workflowGraphsByWorkflowId[workflowId]);
@@ -921,10 +937,52 @@ export default function App() {
   const openEmployeeConfigWithContext = useCallback(async () => {
     setEmployeeConfigPrdProjectId(null);
     setEmployeeConfigPrdVisibleEmployeeIds([]);
+    setEmployeeConfigRepositoryOwnerScopeOnly(false);
+    setEmployeeConfigInitialCreateEmployeeName(null);
     setEmployeeConfigDefaultRepositoryIds(activeRepositoryId ? [activeRepositoryId] : []);
     await loadEmployeeAgentTypeOptionsFromRepositoryPath(activeRepository?.path ?? null);
     setEmployeeConfigOpen(true);
   }, [activeRepositoryId, activeRepository?.path, loadEmployeeAgentTypeOptionsFromRepositoryPath]);
+
+  /** 当前项目变化时，加载该项目的团队 workflow ids */
+  useEffect(() => {
+    const pid = activeProjectId?.trim() ?? "";
+    if (!pid) {
+      setTeamProjectWorkflowIds([]);
+      return;
+    }
+    void listProjectPrdWorkflowIds(pid).then(
+      (ids) => setTeamProjectWorkflowIds(ids),
+      () => setTeamProjectWorkflowIds([]),
+    );
+  }, [activeProjectId]);
+
+  /** WorkflowConfigModal 打开且 templates 就绪时，加载所有 workflow -> projectIds 映射 */
+  useEffect(() => {
+    if (!workflowConfigOpen || workflowTemplates.length === 0) {
+      setWorkflowProjectIdsMap({});
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const entries = await Promise.all(
+        workflowTemplates.map(async (tpl) => {
+          try {
+            const ids = await listWorkflowProjectIds(tpl.id);
+            return [tpl.id, ids] as const;
+          } catch {
+            return [tpl.id, []] as const;
+          }
+        }),
+      );
+      if (!cancelled) {
+        setWorkflowProjectIdsMap(Object.fromEntries(entries));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [workflowConfigOpen, workflowTemplates]);
 
   const openEmployeeConfigForProject = useCallback(async () => {
     const pid = activeProjectId?.trim() ?? "";
@@ -939,6 +997,8 @@ export default function App() {
       return;
     }
     setEmployeeConfigPrdProjectId(pid);
+    setEmployeeConfigRepositoryOwnerScopeOnly(false);
+    setEmployeeConfigInitialCreateEmployeeName(null);
     setEmployeeConfigDefaultRepositoryIds([...repoIds]);
     let prdEmployeeIds: string[] = [];
     try {
@@ -951,6 +1011,19 @@ export default function App() {
     await loadEmployeeAgentTypeOptionsFromRepositoryPath(firstRepo?.path ?? null);
     setEmployeeConfigOpen(true);
   }, [activeProjectId, projects, repositories, loadEmployeeAgentTypeOptionsFromRepositoryPath]);
+
+  const openEmployeeConfigForRepositoryOwner = useCallback(
+    async (repository: Repository) => {
+      setEmployeeConfigRepositoryOwnerScopeOnly(true);
+      setEmployeeConfigInitialCreateEmployeeName(repositoryFolderBasename(repository));
+      setEmployeeConfigPrdProjectId(null);
+      setEmployeeConfigPrdVisibleEmployeeIds([]);
+      setEmployeeConfigDefaultRepositoryIds([repository.id]);
+      await loadEmployeeAgentTypeOptionsFromRepositoryPath(repository.path);
+      setEmployeeConfigOpen(true);
+    },
+    [loadEmployeeAgentTypeOptionsFromRepositoryPath],
+  );
 
   const openWorkflowConfigFromSidebar = useCallback(() => {
     setWorkflowConfigPrdProjectId(null);
@@ -1188,7 +1261,7 @@ export default function App() {
       setTaskSplitMode(true);
       return;
     }
-    const sessionId = await createSession(repository.path, repositorySessionTabDisplayName(repository));
+    const sessionId = await createSession(repository.path, repositorySessionTabDisplayName(repository), { skipActivate: true });
     executeSession(
       sessionId,
       applyTemplate(repositorySplitTemplate || DEFAULT_REPOSITORY_SPLIT_TEMPLATE, {
@@ -1222,7 +1295,7 @@ export default function App() {
       setTaskSplitMode(true);
       return;
     }
-    const sessionId = await createSession(primaryRepo.path, `${project.name}/${repositoryFolderBasename(primaryRepo)}`);
+    const sessionId = await createSession(primaryRepo.path, `${project.name}/${repositoryFolderBasename(primaryRepo)}`, { skipActivate: true });
     const repoPaths = repos.map((repo) => `- ${repo.path}`).join("\n");
     executeSession(
       sessionId,
@@ -1383,6 +1456,7 @@ export default function App() {
       collapsed={collapsed}
       promptsMode={promptsMode}
       taskSplitMode={taskSplitMode}
+      taskPanelMode={taskPanelMode}
       mcpHubMode={mcpHubMode}
       skillsHubMode={skillsHubMode}
       compactLayoutMode={compactLayoutMode}
@@ -1427,7 +1501,9 @@ export default function App() {
         onCreateRepositoryTask: handleCreateRepositoryTask,
         onOpenPromptsProject: handleOpenPromptsForProject,
         onOpenPromptsRepository: handleOpenPromptsForRepository,
-        onOpenRepositoryMainOwner: openRepositoryMainOwnerModal,
+        onOpenRepositoryMainOwner: (repository) => {
+          void openEmployeeConfigForRepositoryOwner(repository);
+        },
         sessions,
         activeSessionId,
         onSelectSession: jumpToSessionLeavingMcpHub,
@@ -1445,6 +1521,28 @@ export default function App() {
         activeRepositoryPath: activeRepository?.path,
         activeRepositoryName: activeRepository?.name,
         onOpenActiveRepositoryFile: openRepositoryFile,
+        taskCardsNavProps: {
+          activeProject: projects.find((p) => p.id === activeProjectId) ?? null,
+          requirementPanelActive: taskSplitMode,
+          taskPanelActive: taskPanelMode,
+          onRequireProjectSelect: () => {
+            message.warning("请先选择一个项目");
+          },
+          onOpenRequirementPanel: () => {
+            setPromptsMode(false);
+            setMcpHubMode(false);
+            setSkillsHubMode(false);
+            setTaskPanelMode(false);
+            setTaskSplitMode(true);
+          },
+          onOpenTaskPanel: () => {
+            setPromptsMode(false);
+            setMcpHubMode(false);
+            setSkillsHubMode(false);
+            setTaskSplitMode(false);
+            setTaskPanelMode(true);
+          },
+        },
       }}
       promptsPanelProps={{
         onClose: () => {
@@ -1470,6 +1568,13 @@ export default function App() {
         onSelectRepository: setActiveRepositoryId,
         onUpdateSessionModel: updateSessionModel,
         onExecuteSession: handleComposerExecute,
+        onAutoFixRunError: activeRepository
+          ? async (prompt: string) => {
+              const repoPath = activeRepository.path;
+              const sessionId = await createSession(repoPath, `错误修复`, { skipActivate: true });
+              executeSession(sessionId, prompt);
+            }
+          : undefined,
         onSendMessage: handleSendMessageWithTask,
         onCancelSession: cancelSession,
         onCloseSession: handleCloseSession,
@@ -1550,8 +1655,8 @@ export default function App() {
         monitorStats,
         monitorPanelSessions: monitorPanelSessionsMerged,
         monitorTranscriptSourceSessions: sessions,
-        employeeMonitorItems,
-        teamMonitorItems: publishedTeamMonitorItems,
+        employeeMonitorItems: filteredEmployeeMonitorItems,
+        teamMonitorItems: filteredTeamMonitorItems,
         monitorActiveTarget: monitorDrawerTarget,
         onOpenTeamMonitorDetail: (workflowId) => {
           setMonitorDrawerTarget({ type: "team", workflowId });
@@ -1622,6 +1727,10 @@ export default function App() {
         onOpenEmployeeConfigForProject: () => void openEmployeeConfigForProject(),
         onOpenWorkflowConfigForProject: openWorkflowConfigForProject,
       }}
+      taskPanelProps={{
+        activeProject: projects.find((p) => p.id === activeProjectId) ?? null,
+        onClose: () => setTaskPanelMode(false),
+      }}
       repositoryFilePreviewModalProps={{
         preview: repositoryBinaryPreview,
         onClose: closeRepositoryBinaryPreview,
@@ -1640,6 +1749,7 @@ export default function App() {
         transcriptSourceSessions: sessions,
         employees,
         workflowTemplates,
+        workflowGraphsByWorkflowId,
         onOpenOmcBatchInvocationDetail: (input) => {
           handleOpenOmcBatchInvocationDetail(input);
           setMonitorDrawerTarget(null);
@@ -1650,6 +1760,10 @@ export default function App() {
           setMonitorDrawerTarget(null);
         },
         onReloadFullDiskTranscript: reloadFullDiskTranscript,
+        onCancelSession: cancelSession,
+        onOpenTaskDetail: (taskId) => {
+          setMonitorDrawerTarget({ type: "task", taskId });
+        },
       }}
       employeeConfigModalProps={
         employeeConfigOpen
@@ -1660,41 +1774,48 @@ export default function App() {
               workflowTemplates,
               workflowGraphsByWorkflowId,
               repositories,
+              projects,
               agentTypeOptions: employeeAgentTypeOptions,
               defaultRepositoryIds: employeeConfigDefaultRepositoryIds,
-              hideEmployeesAssociatedOnlyWithDefaultRepositories: Boolean(employeeConfigPrdProjectId?.trim()),
+              hideEmployeesAssociatedOnlyWithDefaultRepositories:
+                Boolean(employeeConfigPrdProjectId?.trim()) || employeeConfigRepositoryOwnerScopeOnly,
               alwaysShowEmployeeIds: employeeConfigPrdVisibleEmployeeIds,
+              repositoryOwnerScopeOnly: employeeConfigRepositoryOwnerScopeOnly,
+              initialCreateEmployeeName: employeeConfigInitialCreateEmployeeName,
+              singleProjectScopeId: employeeConfigPrdProjectId?.trim() || null,
               onClose: () => {
                 setEmployeeConfigOpen(false);
                 setEmployeeConfigPrdProjectId(null);
                 setEmployeeConfigPrdVisibleEmployeeIds([]);
+                setEmployeeConfigRepositoryOwnerScopeOnly(false);
+                setEmployeeConfigInitialCreateEmployeeName(null);
               },
               onCreate: async (input) => {
                 setEmployeeLoading(true);
                 try {
+                  const linkPid = employeeConfigPrdProjectId?.trim() ?? "";
                   const created = await createEmployee({
                     name: input.name,
                     agentType: input.agentType,
                     enabled: input.enabled,
                     repositoryIds: input.repositoryIds,
+                    projectIds: linkPid ? [linkPid] : [],
                   });
+                  if (linkPid) {
+                    setEmployeeConfigPrdVisibleEmployeeIds((prev) =>
+                      prev.includes(created.id) ? prev : [...prev, created.id],
+                    );
+                  }
                   if (input.ownerRepositoryId != null) {
                     try {
-                      await handleUpdateRepositoryMainOwnerAgent(input.ownerRepositoryId, created.agentType.trim());
+                      const ownerRepo = repositories.find((r) => r.id === input.ownerRepositoryId);
+                      if (ownerRepo) {
+                        await handlePersistRepositoryMainOwnerAgent(ownerRepo, created.agentType.trim());
+                      } else {
+                        await handleUpdateRepositoryMainOwnerAgent(input.ownerRepositoryId, created.agentType.trim());
+                      }
                     } catch (err) {
-                      message.error(`员工已创建，但设置仓库 Owner 失败：${toUiErrorMessage(err)}`);
-                    }
-                  }
-                  const linkPid = employeeConfigPrdProjectId?.trim() ?? "";
-                  if (linkPid) {
-                    try {
-                      await addProjectPrdEmployee(linkPid, created.id);
-                      message.success("已加入当前项目的需求成员");
-                      setEmployeeConfigPrdVisibleEmployeeIds((prev) =>
-                        prev.includes(created.id) ? prev : [...prev, created.id],
-                      );
-                    } catch (err) {
-                      message.error(`员工已创建，但关联到项目失败：${toUiErrorMessage(err)}`);
+                      message.error(`员工已创建，但设置仓库失败：${toUiErrorMessage(err)}`);
                     }
                   }
                   await refreshEmployeeData();
@@ -1705,7 +1826,10 @@ export default function App() {
               onUpdate: async (input) => {
                 setEmployeeLoading(true);
                 try {
-                  await updateEmployee(input);
+                  await updateEmployee({
+                    ...input,
+                    projectIds: input.projectIds,
+                  });
                   await refreshEmployeeData();
                 } finally {
                   setEmployeeLoading(false);
@@ -1722,7 +1846,7 @@ export default function App() {
                       const r = repositories.find((x) => x.id === rid);
                       if (r?.mainOwnerAgentName?.trim() === agent) {
                         try {
-                          await handleUpdateRepositoryMainOwnerAgent(rid, null);
+                          await handlePersistRepositoryMainOwnerAgent(r, null);
                         } catch {
                           /* ignore per-repo clear errors */
                         }
@@ -1746,6 +1870,8 @@ export default function App() {
               employees,
               repositoryPath: workflowModalRepositoryPath,
               templates: workflowTemplates,
+              projects,
+              workflowProjectIds: workflowProjectIdsMap,
               selectableEmployeeIds: selectableWorkflowEmployeeIds,
               onClose: () => {
                 setWorkflowConfigOpen(false);
@@ -1807,13 +1933,6 @@ export default function App() {
             }
           : null
       }
-    />
-    <RepositoryMainOwnerModal
-      open={repositoryMainOwnerModalRepo != null}
-      repository={repositoryMainOwnerModalRepo}
-      agentNameOptions={repositoryMainOwnerAgentOptions}
-      onClose={() => setRepositoryMainOwnerModalRepo(null)}
-      onSave={handlePersistRepositoryMainOwnerAgent}
     />
     </>
   );

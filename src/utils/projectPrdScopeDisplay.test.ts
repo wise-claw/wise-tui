@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
   isEmployeeRepositoryOwnerInScope,
+  listEmployeeIdsWithRepositoryOwnerBadgeInProjectScope,
   listRepositoryMainOwnerDisplayGaps,
   repositoryBasenamesWhereEmployeeIsConfiguredMainOwner,
   repositoryOwnerBasenamesInScope,
@@ -33,6 +34,19 @@ describe("resolveMainOwnerEmployeeIdsForProjectRepositories", () => {
       { id: "b", agentType: "executor", enabled: true, repositoryIds: [1] },
     ];
     expect(resolveMainOwnerEmployeeIdsForProjectRepositories(repos, employees)).toEqual(["b"]);
+  });
+});
+
+describe("listEmployeeIdsWithRepositoryOwnerBadgeInProjectScope", () => {
+  it("includes singleton global agent match as owner (same as header Owner badge)", () => {
+    const repos = [
+      { id: 1, path: "/p/a", name: "a", mainOwnerAgentName: "executor" },
+      { id: 2, path: "/p/b", name: "b", mainOwnerAgentName: "executor" },
+    ];
+    const employees = [
+      { id: "only", name: "E", agentType: "executor", enabled: true, repositoryIds: [] as number[] },
+    ];
+    expect(listEmployeeIdsWithRepositoryOwnerBadgeInProjectScope([1, 2], repos, employees)).toEqual(["only"]);
   });
 });
 

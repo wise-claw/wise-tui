@@ -15,7 +15,6 @@ import type * as PrdTaskSplitPanelModule from "./PrdTaskSplitPanel";
 import type * as PromptsPanelModule from "./PromptsPanel";
 import type * as RightPanelModule from "./RightPanel";
 import type * as WorkflowConfigModalModule from "./WorkflowConfigModal";
-
 const RightPanel = lazy(() => import("./RightPanel").then((module) => ({ default: module.RightPanel })));
 const PrdTaskSplitPanel = lazy(() =>
   import("./PrdTaskSplitPanel").then((module) => ({ default: module.PrdTaskSplitPanel })),
@@ -23,6 +22,9 @@ const PrdTaskSplitPanel = lazy(() =>
 const PromptsPanel = lazy(() => import("./PromptsPanel").then((module) => ({ default: module.PromptsPanel })));
 const WorkflowConfigModal = lazy(() =>
   import("./WorkflowConfigModal").then((module) => ({ default: module.WorkflowConfigModal })),
+);
+const TaskPanel = lazy(() =>
+  import("./TaskPanel").then((module) => ({ default: module.TaskPanel })),
 );
 
 type ClaudeSessionsProps = Omit<ComponentProps<typeof ClaudeSessions>, "panelBelowMessages">;
@@ -40,6 +42,7 @@ export interface AppWorkspaceLayoutProps {
   collapsed: boolean;
   promptsMode: boolean;
   taskSplitMode: boolean;
+  taskPanelMode: boolean;
   mcpHubMode: boolean;
   skillsHubMode: boolean;
   compactLayoutMode: boolean;
@@ -56,6 +59,7 @@ export interface AppWorkspaceLayoutProps {
   mcpHubProps: ComponentProps<typeof McpHub>;
   skillsHubProps: ComponentProps<typeof SkillsHub>;
   prdTaskSplitPanelProps: PrdTaskSplitPanelProps;
+  taskPanelProps: ComponentProps<typeof TaskPanel>;
   repositoryFilePreviewModalProps: ComponentProps<typeof RepositoryFilePreviewModal>;
   progressMonitorDrawerProps: ComponentProps<typeof ProgressMonitorDrawer>;
   employeeConfigModalProps: ComponentProps<typeof EmployeeConfigModal> | null;
@@ -78,6 +82,7 @@ export function AppWorkspaceLayout({
   collapsed,
   promptsMode,
   taskSplitMode,
+  taskPanelMode,
   mcpHubMode,
   skillsHubMode,
   compactLayoutMode,
@@ -94,6 +99,7 @@ export function AppWorkspaceLayout({
   mcpHubProps,
   skillsHubProps,
   prdTaskSplitPanelProps,
+  taskPanelProps,
   repositoryFilePreviewModalProps,
   progressMonitorDrawerProps,
   employeeConfigModalProps,
@@ -176,6 +182,13 @@ export function AppWorkspaceLayout({
                 <div className="app-task-split-overlay" role="dialog" aria-label="需求管理">
                   <Suspense fallback={<PanelLoadingFallback />}>
                     <PrdTaskSplitPanel {...prdTaskSplitPanelProps} />
+                  </Suspense>
+                </div>
+              ) : null}
+              {taskPanelMode ? (
+                <div className="app-task-panel-overlay" role="dialog" aria-label="任务列表">
+                  <Suspense fallback={<PanelLoadingFallback />}>
+                    <TaskPanel {...taskPanelProps} />
                   </Suspense>
                 </div>
               ) : null}

@@ -68,6 +68,10 @@ import {
   resolveAutoSddMode,
   type SddSignals,
 } from "../services/trellis/sddModeDetector";
+import {
+  TaskCardsNav,
+  type TaskCardsNavProps,
+} from "./TaskCardsNav";
 import "./GitPanel/index.css";
 
 const LEFT_FILES_EXPLORER_COLLAPSED_KEY = "wise.leftPanel.filesExplorerCollapsed";
@@ -298,6 +302,8 @@ interface Props {
   activeRepositoryPath?: string;
   activeRepositoryName?: string;
   onOpenActiveRepositoryFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
+  /** 左栏「需求/任务」卡片行 */
+  taskCardsNavProps?: TaskCardsNavProps;
 }
 
 /** 项目行：打开需求（PRD 任务拆分） */
@@ -409,9 +415,11 @@ function RepositoryRow({
   const moreItems: MenuProps["items"] = [
     { key: "finder", label: "Finder打开" },
     { key: "editor", label: repositoryEditorOpenMenuLabel() },
-    ...(onOpenRepositoryMainOwner ? [{ key: "main-owner", label: "主 Owner 智能体…" }] satisfies MenuProps["items"] : []),
+    { type: "divider" },
+    ...(onOpenRepositoryMainOwner ? [{ key: "main-owner", label: "配置Owner" }] satisfies MenuProps["items"] : []),
     { key: "prompts", label: "提示词" },
     { key: "sdd-mode", label: "SDD 模式" },
+    { type: "divider" },
     { key: "detach", label: "移出项目", danger: true },
   ];
 
@@ -458,8 +466,8 @@ function RepositoryRow({
           {hasMainOwner ? (
             <span
               className="app-repository-main-owner-badge"
-              aria-label="已配置主 Owner"
-              title="已配置主 Owner"
+              aria-label="已配置仓库"
+              title="已配置仓库"
             >
               <UserOutlined />
             </span>
@@ -683,6 +691,7 @@ export function LeftSidebar({
   activeRepositoryPath,
   activeRepositoryName,
   onOpenActiveRepositoryFile,
+  taskCardsNavProps,
 }: Props) {
   const { message, modal } = AntdApp.useApp();
 
@@ -1202,6 +1211,10 @@ export function LeftSidebar({
           <ClaudeCodeUsageHeaderBtn />
         </div>
       </div>
+
+      {taskCardsNavProps ? (
+        <TaskCardsNav {...taskCardsNavProps} />
+      ) : null}
 
       {onOpenMcpHub || onOpenSkillsHub ? (
         <div className="app-left-sidebar-top-nav-stack">
