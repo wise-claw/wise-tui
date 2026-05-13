@@ -27,6 +27,21 @@ over adding more responsibility to already-large files.
 
 ---
 
+## Parallel Ownership
+
+When multiple agents or processes are active in the same dirty worktree, each
+change set must stay inside its declared owner paths.
+
+- Do not edit or stage files owned by another active process.
+- Use pathspec-limited `git diff`, `git add`, and review commands before
+  committing.
+- If global checks fail in unrelated owner paths, record the blocking files and
+  keep the commit scoped to the current owner.
+- Do not mix CSS-only cleanup, Rust command splits, or unrelated refactors into
+  a frontend component split commit.
+
+---
+
 ## Forbidden Patterns
 
 - Do not run frontend dev/build/start/serve commands during agent verification

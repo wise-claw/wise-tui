@@ -95,6 +95,26 @@ type TaskBadgeState =
 
 ---
 
+## Large Component Splits
+
+Large feature components must be split by responsibility before they become
+hard to review. Treat roughly 500 lines as the target ceiling for leaf modules.
+An `index.tsx` entry file may temporarily stay larger during a staged split,
+but it should trend below 800 lines and must not keep growing.
+
+Rules:
+
+- Keep `index.tsx` as the public entry and orchestration layer.
+- Move pure logic into colocated `.ts` modules with focused tests.
+- Move stateful orchestration into `use*.ts` hooks when it is reusable or makes
+  the entry component hard to scan.
+- Move UI sections into `PascalCase.tsx` child components.
+- Do not leave extracted algorithms duplicated in the original component.
+- Keep external imports stable through the feature entry or existing public
+  file; callers should not need to know the internal split layout.
+
+---
+
 ## Styling Patterns
 
 The project uses regular CSS files imported by components.
