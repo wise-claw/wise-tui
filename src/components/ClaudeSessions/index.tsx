@@ -836,6 +836,8 @@ interface Props {
   onOpenWorkflowConfig?: () => void;
   employees?: EmployeeItem[];
   mentionEmployees?: EmployeeItem[];
+  composerProjectRoleTagOptions?: ReadonlyArray<import("../../utils/projectRoleTagOptions").RoleTagOption>;
+  composerHideEmployeesInAtMode?: boolean;
   workflowTasks?: WorkflowTaskItem[];
   onDecideWorkflowTask?: (input: {
     taskId: string;
@@ -923,6 +925,8 @@ export function ClaudeSessions({
   onOpenWorkflowConfig,
   employees = [],
   mentionEmployees = [],
+  composerProjectRoleTagOptions = [],
+  composerHideEmployeesInAtMode = false,
   workflowTasks = [],
   taskPendingEmployeesByTaskId = {},
   workflowTemplates = [],
@@ -1063,6 +1067,8 @@ export function ClaudeSessions({
                 onOpenWorkflowConfig={onOpenWorkflowConfig}
                 employees={employees}
                 mentionEmployees={mentionEmployees}
+                projectRoleTagOptions={composerProjectRoleTagOptions}
+                hideEmployeesInAtMode={composerHideEmployeesInAtMode}
                 workflowTasks={activeSessionWorkflowTasks}
                 taskPendingEmployeesByTaskId={taskPendingEmployeesByTaskId}
                 workflowTemplates={workflowTemplates}
@@ -1119,6 +1125,8 @@ export function ClaudeSessions({
                   onOpenWorkflowConfig={onOpenWorkflowConfig}
                   employees={employees}
                   mentionEmployees={mentionEmployees}
+                  projectRoleTagOptions={composerProjectRoleTagOptions}
+                  hideEmployeesInAtMode={composerHideEmployeesInAtMode}
                   workflowTasks={secondarySessionWorkflowTasks}
                   taskPendingEmployeesByTaskId={taskPendingEmployeesByTaskId}
                   workflowTemplates={workflowTemplates}
@@ -1202,6 +1210,8 @@ export function ClaudeSessions({
             onOpenWorkflowConfig={onOpenWorkflowConfig}
             employees={employees}
             mentionEmployees={mentionEmployees}
+            projectRoleTagOptions={composerProjectRoleTagOptions}
+            hideEmployeesInAtMode={composerHideEmployeesInAtMode}
             workflowTasks={activeSessionWorkflowTasks}
             taskPendingEmployeesByTaskId={taskPendingEmployeesByTaskId}
             workflowTemplates={workflowTemplates}

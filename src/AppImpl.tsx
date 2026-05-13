@@ -50,6 +50,7 @@ import {
 } from "./services/atMentionDispatch";
 import { resolveProjectMainSessionAnchor } from "./utils/projectSessionAnchor";
 import { shouldHideEmployeeUi } from "./utils/projectRepositoryRoles";
+import { buildProjectRoleTagOptions } from "./utils/projectRoleTagOptions";
 import { useMonitorOverview } from "./hooks/useMonitorOverview";
 import { useIntervalSyncedState } from "./hooks/useIntervalSyncedState";
 import { useScheduledClaudeTaskRunner } from "./hooks/useScheduledClaudeTaskRunner";
@@ -774,6 +775,19 @@ export default function App() {
         !isOmcMonitorEmployeeRecord(item),
     );
   }, [employeeMonitorItems, employees]);
+  const activeProject = useMemo(
+    () => (activeProjectId ? projects.find((p) => p.id === activeProjectId) ?? null : null),
+    [activeProjectId, projects],
+  );
+  const composerProjectRoleTagOptions = useMemo(() => {
+    if (!shouldHideEmployeeUi(activeProject)) {
+      return [];
+    }
+    return buildProjectRoleTagOptions(activeProject, repositories);
+  }, [activeProject, repositories]);
+  const composerHideEmployeesInAtMode = useMemo(() => {
+    return shouldHideEmployeeUi(activeProject);
+  }, [activeProject]);
   const selectableWorkflowEmployeeIds = useMemo(
     () => employeeMonitorItems.map((item) => item.employeeId),
     [employeeMonitorItems],
@@ -1553,6 +1567,8 @@ export default function App() {
         onOpenWorkflowConfig: openWorkflowConfigFromSidebar,
         employees,
         mentionEmployees,
+        composerProjectRoleTagOptions,
+        composerHideEmployeesInAtMode,
         workflowTasks,
         taskPendingEmployeesByTaskId,
         workflowTemplates,
@@ -1646,9 +1662,7 @@ export default function App() {
         onOpenOmcBatchInvocationDetail: handleOpenOmcBatchInvocationDetail,
         onCancelOmcDirectBatchInvocation: handleCancelOmcDirectBatchInvocation,
         onReloadFullDiskTranscript: reloadFullDiskTranscript,
-        hideEmployeeUi: shouldHideEmployeeUi(
-          activeProjectId ? projects.find((p) => p.id === activeProjectId) ?? null : null,
-        ),
+        hideEmployeeUi: shouldHideEmployeeUi(activeProject),
       }}
       commandPaletteProps={{
         open: searchOpen,

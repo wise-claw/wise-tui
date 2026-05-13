@@ -3,6 +3,7 @@ import { Spin } from "antd";
 import { listClaudePluginCacheSkills, listClaudeProjectSkills } from "../../services/claude";
 import { searchRepositoryFiles } from "../../services/repositoryFiles";
 import type { ClaudeProjectSkill } from "../../types";
+import type { RoleTagOption } from "../../utils/projectRoleTagOptions";
 import type { TriggerInfo } from "./slash-trigger";
 import {
   ensureSpaceAfterAtInsert,
@@ -12,13 +13,17 @@ import {
 } from "./composer-plain-utils";
 
 export interface SlashOption {
-  type: "agent" | "team" | "file" | "command";
+  type: "agent" | "team" | "file" | "command" | "roleTag";
   label: string;
   description?: string;
   path?: string;
   name?: string;
   workflowId?: string;
   group?: "omc" | "claude" | "skill";
+  /** roleTag 类型携带的覆盖仓库数；UI 行尾展示。 */
+  repoCount?: number;
+  /** roleTag 类型携带的覆盖仓库列表；供 title / 后续扩展使用。 */
+  repoNames?: string[];
 }
 
 /** 与 Semi AIChatInput 搭配：用纯文本 + 光标操作 @ / 补全，不再依赖 contentEditable DOM。 */
@@ -38,6 +43,10 @@ interface SlashPopoverProps {
   repositoryPath?: string;
   employeeOptions?: Array<{ id: string; name: string }>;
   teamOptions?: Array<{ id: string; name: string }>;
+  /** wise_trellis 项目下注入的角色标签选项；其他项目省略。 */
+  projectRoleTagOptions?: ReadonlyArray<RoleTagOption>;
+  /** 当 wise_trellis 项目隐藏员工 UI 时，把 @-mode 的员工行一并去除。 */
+  hideEmployeesInAtMode?: boolean;
 }
 
 const CLAUDE_BUILTIN_COMMANDS: SlashOption[] = [
@@ -214,6 +223,8 @@ export function SlashPopover({
   repositoryPath,
   employeeOptions = [],
   teamOptions = [],
+  projectRoleTagOptions = [],
+  hideEmployeesInAtMode = false,
 }: SlashPopoverProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [fileResults, setFileResults] = useState<SlashOption[]>([]);
@@ -284,7 +295,16 @@ export function SlashPopover({
     };
   }, [mode, query, repositoryPath]);
 
-  const options = getFilteredOptions(mode, query, fileResults, employeeOptions, teamOptions, skillSlashOptions);
+  const options = getFilteredOptions(
+    mode,
+    query,
+    fileResults,
+    employeeOptions,
+    teamOptions,
+    skillSlashOptions,
+    projectRoleTagOptions,
+    hideEmployeesInAtMode,
+  );
 
   useEffect(() => {
     setSelectedIndex(0);
@@ -306,6 +326,8 @@ export function SlashPopover({
         } else if (option.type === "agent" && option.name) {
           ({ plain, cursor } = insertPlainAt(plain, cursor, `@${option.name}`));
         } else if (option.type === "team" && option.name) {
+          ({ plain, cursor } = insertPlainAt(plain, cursor, `@${option.name}`));
+        } else if (option.type === "roleTag" && option.name) {
           ({ plain, cursor } = insertPlainAt(plain, cursor, `@${option.name}`));
         }
         ({ plain, cursor } = ensureSpaceAfterAtInsert(plain, cursor));
@@ -500,6 +522,22 @@ function renderOptionContent(opt: SlashOption) {
               <path d="M2.5 17c0-2 2.5-3.5 4.5-3.5s4.5 1.5 4.5 3.5" />
               <path d="M16.5 17c0-1.5-1.27-2.73-3-3" />
             </svg>
+          ) : opt.type === "roleTag" ? (
+            <span
+              className="app-claude-slash-popover__roletag-glyph"
+              aria-hidden
+              style={{
+                fontSize: "13px",
+                fontWeight: 600,
+                lineHeight: 1,
+                color: "var(--ant-color-primary)",
+                display: "inline-flex",
+                width: "16px",
+                justifyContent: "center",
+              }}
+            >
+              #
+            </span>
           ) : (
             // Lightning bolt SVG fallback
             <svg
@@ -598,6 +636,35 @@ function renderOptionContent(opt: SlashOption) {
             <MentionKindTeamIcon />
           </span>
         )}
+        {opt.type === "roleTag" && (
+          <>
+            <span
+              style={{
+                color: "var(--ant-color-text-tertiary)",
+                fontSize: "12px",
+                marginLeft: "12px",
+                flex: "1 1 0%",
+                minWidth: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {opt.description}
+            </span>
+            <span
+              className="app-claude-slash-popover__kind"
+              title={
+                opt.repoNames && opt.repoNames.length > 0
+                  ? `角色标签：覆盖 ${opt.repoCount ?? 0} 个仓库\n${opt.repoNames.join(", ")}`
+                  : `角色标签：覆盖 ${opt.repoCount ?? 0} 个仓库`
+              }
+              style={{ fontSize: "11px", color: "var(--ant-color-text-tertiary)" }}
+            >
+              {`· ${opt.repoCount ?? 0} ${opt.repoCount === 1 ? "repo" : "repos"}`}
+            </span>
+          </>
+        )}
       </span>
     </>
   );
@@ -610,6 +677,8 @@ function getFilteredOptions(
   employeeOptions: Array<{ id: string; name: string }>,
   teamOptions: Array<{ id: string; name: string }>,
   skillSlashOptions: SlashOption[],
+  projectRoleTagOptions: ReadonlyArray<RoleTagOption> = [],
+  hideEmployeesInAtMode = false,
 ): SlashOption[] {
   if (!mode) return [];
 
@@ -627,6 +696,15 @@ function getFilteredOptions(
     return [...builtinsFiltered, ...skillsFiltered];
   }
 
+  const roleTagRows: SlashOption[] = projectRoleTagOptions.map((tag) => ({
+    type: "roleTag" as const,
+    label: tag.label,
+    name: tag.tag,
+    description: tag.description,
+    repoCount: tag.repoCount,
+    repoNames: tag.repoNames,
+  }));
+
   const teams: SlashOption[] = teamOptions.map((team) => ({
     type: "team" as const,
     label: team.name,
@@ -634,14 +712,17 @@ function getFilteredOptions(
     workflowId: team.id,
   }));
 
-  const agents: SlashOption[] = employeeOptions.map((employee) => ({
-    type: "agent",
-    label: employee.name,
-    name: employee.name,
-  }));
+  const agents: SlashOption[] = hideEmployeesInAtMode
+    ? []
+    : employeeOptions.map((employee) => ({
+        type: "agent" as const,
+        label: employee.name,
+        name: employee.name,
+      }));
 
   const q = query.toLowerCase();
   const filtered = [
+    ...roleTagRows.filter((r) => !q || r.label.toLowerCase().includes(q)),
     ...agents.filter((a) => !q || a.label.toLowerCase().includes(q)),
     ...teams.filter((t) => !q || t.label.toLowerCase().includes(q)),
     ...fileResults.filter((f) => !q || f.label.toLowerCase().includes(q) || (f.description ?? "").toLowerCase().includes(q)),

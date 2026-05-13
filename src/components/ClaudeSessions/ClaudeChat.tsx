@@ -335,6 +335,8 @@ interface Props {
   onOpenWorkflowConfig?: () => void;
   employees?: EmployeeItem[];
   mentionEmployees?: EmployeeItem[];
+  projectRoleTagOptions?: ReadonlyArray<import("../../utils/projectRoleTagOptions").RoleTagOption>;
+  hideEmployeesInAtMode?: boolean;
   workflowTasks?: WorkflowTaskItem[];
   taskPendingEmployeesByTaskId?: Record<string, Array<{ employeeId: string; name: string }>>;
   workflowTemplates?: WorkflowTemplateItem[];
@@ -501,6 +503,8 @@ export function ClaudeChat({
   onOpenWorkflowConfig,
   employees = [],
   mentionEmployees = [],
+  projectRoleTagOptions = [],
+  hideEmployeesInAtMode = false,
   workflowTasks = [],
   taskPendingEmployeesByTaskId = {},
   workflowTemplates = [],
@@ -4053,6 +4057,8 @@ export function ClaudeChat({
           onRestoreRevert={onRestoreRevert}
           employeeMentions={mentionEmployees.map((item) => ({ id: item.id, name: item.name }))}
           teamMentions={publishedTeamMentions}
+          projectRoleTagOptions={projectRoleTagOptions}
+          hideEmployeesInAtMode={hideEmployeesInAtMode}
           onEnqueueAsPendingTask={(payload) => addTask(payload)}
           onTrackSendFlow={(entry) => {
             if (entry.sessionId !== session.id) return;

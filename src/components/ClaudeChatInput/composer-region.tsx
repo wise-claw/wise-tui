@@ -126,6 +126,8 @@ interface ComposerInnerProps {
   }) => PendingExecutionTask;
   employeeMentions?: Array<{ id: string; name: string }>;
   teamMentions?: Array<{ id: string; name: string }>;
+  projectRoleTagOptions?: ReadonlyArray<import("../../utils/projectRoleTagOptions").RoleTagOption>;
+  hideEmployeesInAtMode?: boolean;
   onTrackSendFlow?: (entry: {
     sessionId: string;
     composerText: string;
@@ -334,6 +336,8 @@ function ComposerInner({
   onEnqueueAsPendingTask,
   employeeMentions = [],
   teamMentions = [],
+  projectRoleTagOptions = [],
+  hideEmployeesInAtMode = false,
   onTrackSendFlow,
   employeesForDispatchRoute,
   pendingExecutionTaskCount = 0,
@@ -1762,6 +1766,8 @@ function ComposerInner({
         repositoryPath={session.repositoryPath}
         employeeOptions={employeeMentions}
         teamOptions={teamMentions}
+        projectRoleTagOptions={projectRoleTagOptions}
+        hideEmployeesInAtMode={hideEmployeesInAtMode}
       />
     </div>
   );
@@ -1819,6 +1825,8 @@ export interface ComposerRegionProps {
   }) => PendingExecutionTask;
   employeeMentions?: Array<{ id: string; name: string }>;
   teamMentions?: Array<{ id: string; name: string }>;
+  projectRoleTagOptions?: ReadonlyArray<import("../../utils/projectRoleTagOptions").RoleTagOption>;
+  hideEmployeesInAtMode?: boolean;
   onTrackSendFlow?: (entry: {
     sessionId: string;
     composerText: string;
