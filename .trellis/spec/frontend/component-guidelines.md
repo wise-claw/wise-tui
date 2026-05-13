@@ -153,3 +153,6 @@ Wise is a desktop app, but UI still needs accessible interaction basics:
 - Using `useEffect` to derive data that can be computed during render.
 - Adding another UI library for a single control.
 - Creating large anonymous object/array props inline for frequently rendered children.
+- During large-component extraction, move one stateful concern fully into one
+  controller hook or module. Do not leave old modal state, effects, and submit
+  handlers beside the new controller path.

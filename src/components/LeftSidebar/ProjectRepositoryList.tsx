@@ -1,0 +1,421 @@
+import type { MutableRefObject } from "react";
+import { PushpinOutlined } from "@ant-design/icons";
+import { Dropdown, Tooltip, Typography } from "antd";
+import type { MenuProps } from "antd";
+import type { ProjectItem, Repository, TaskMode } from "../../types";
+import { resolveWorkspaceMode } from "../../utils/workspaceMode";
+import {
+  ExpandIcon,
+  MoreIcon,
+  PlusIcon,
+  ProjectIcon,
+  RequirementIcon,
+} from "./SidebarIcons";
+import {
+  FloatingRepositoryRow,
+  ProjectRepositoryRows,
+} from "./repositoryRows";
+
+interface ProjectRepositoryListProps {
+  projects: ProjectItem[];
+  repositoriesById: Map<number, Repository>;
+  floatingRepositories: Repository[];
+  activeProjectId: string | null;
+  activeRepositoryId: number | null;
+  pinnedProjectIds: string[];
+  expandedProjects: Set<string>;
+  projectDropTargetId: string | null;
+  repoSidebarDragRef: MutableRefObject<{ sourceProjectId: string; repositoryId: number } | null>;
+  onProjectSelect: (projectId: string) => void;
+  onRepositorySelect: (id: number | null) => void;
+  onCreateProjectClick: () => void;
+  onAddFloatingRepositoryClick?: () => void;
+  onAddRepositoryToProjectClick: (projectId: string) => void;
+  onToggleProjectExpand: (projectId: string) => void;
+  onTogglePinProject: (projectId: string) => void;
+  onRenameProject: (project: ProjectItem) => void;
+  onDeleteProject: (project: ProjectItem) => void;
+  onOpenPromptsProject?: (project: ProjectItem) => void;
+  onCreateProjectTask: (project: ProjectItem, mode: TaskMode) => void;
+  onCreateRepositoryTask: (repository: Repository, mode: TaskMode) => void;
+  onOpenInFinder: (repository: Repository) => void;
+  openRepositoryInPreferredEditor: (repository: Repository) => void;
+  onOpenPromptsRepository?: (project: ProjectItem, repository: Repository) => void;
+  onOpenRepositoryMainOwner?: (repository: Repository) => void;
+  onConfigureRepositorySddMode?: (repository: Repository) => void;
+  onPromoteFloatingRepository?: (repository: Repository) => void;
+  onJoinFloatingRepository?: (repository: Repository, projectId: string) => void;
+  onRemoveFloatingRepository: (repository: Repository) => void;
+  onDetachRepositoryFromProject: (projectId: string, repositoryId: number) => void;
+  onReorderRepositoriesInProject?: (projectId: string, repositoryIds: number[]) => void | Promise<void>;
+  onMoveRepositoryToProject?: (targetProjectId: string, repositoryId: number) => void | Promise<void>;
+  onMoveRepositoryToProjectWithExpand: (targetProjectId: string, repositoryId: number) => Promise<void>;
+  onProjectDropTargetChange: (projectId: string | null | ((cur: string | null) => string | null)) => void;
+  onClearRepoSidebarDrag: () => void;
+  onMoveRepositoryError: (message: string, err: unknown) => void;
+}
+
+export function ProjectRepositoryList({
+  projects,
+  repositoriesById,
+  floatingRepositories,
+  activeProjectId,
+  activeRepositoryId,
+  pinnedProjectIds,
+  expandedProjects,
+  projectDropTargetId,
+  repoSidebarDragRef,
+  onProjectSelect,
+  onRepositorySelect,
+  onCreateProjectClick,
+  onAddFloatingRepositoryClick,
+  onAddRepositoryToProjectClick,
+  onToggleProjectExpand,
+  onTogglePinProject,
+  onRenameProject,
+  onDeleteProject,
+  onOpenPromptsProject,
+  onCreateProjectTask,
+  onCreateRepositoryTask,
+  onOpenInFinder,
+  openRepositoryInPreferredEditor,
+  onOpenPromptsRepository,
+  onOpenRepositoryMainOwner,
+  onConfigureRepositorySddMode,
+  onPromoteFloatingRepository,
+  onJoinFloatingRepository,
+  onRemoveFloatingRepository,
+  onDetachRepositoryFromProject,
+  onReorderRepositoriesInProject,
+  onMoveRepositoryToProject,
+  onMoveRepositoryToProjectWithExpand,
+  onProjectDropTargetChange,
+  onClearRepoSidebarDrag,
+  onMoveRepositoryError,
+}: ProjectRepositoryListProps) {
+  return (
+    <>
+      <div className="app-repository-header">
+        <Typography.Text className="app-repository-header-title">
+          项目
+        </Typography.Text>
+        <div className="app-repository-header-actions">
+          {onAddFloatingRepositoryClick ? (
+            <Tooltip title="添加游离仓库（不绑定项目）" mouseEnterDelay={0.3}>
+              <button
+                className="app-repository-header-btn"
+                aria-label="添加游离仓库"
+                onClick={onAddFloatingRepositoryClick}
+              >
+                <PlusIcon />
+              </button>
+            </Tooltip>
+          ) : null}
+          <Tooltip title="新建项目" mouseEnterDelay={0.3}>
+            <button
+              className="app-repository-header-btn"
+              aria-label="新建项目"
+              onClick={onCreateProjectClick}
+            >
+              <ProjectIcon />
+            </button>
+          </Tooltip>
+        </div>
+      </div>
+
+      <div className="app-repository-list">
+        {floatingRepositories.length > 0 ? (
+          <div className="app-repository-floating-group" aria-label="游离仓库">
+            {floatingRepositories.map((repository) => (
+              <FloatingRepositoryRow
+                key={repository.id}
+                repository={repository}
+                isActiveRepository={repository.id === activeRepositoryId && !activeProjectId}
+                joinableProjects={projects}
+                onRepositorySelect={onRepositorySelect}
+                onOpenTaskMode={onCreateRepositoryTask}
+                onOpenInFinder={onOpenInFinder}
+                onOpenRepositoryInEditor={openRepositoryInPreferredEditor}
+                onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
+                onConfigureSddMode={onConfigureRepositorySddMode}
+                onPromoteToNewProject={onPromoteFloatingRepository}
+                onJoinExistingProject={onJoinFloatingRepository}
+                onRemove={onRemoveFloatingRepository}
+              />
+            ))}
+          </div>
+        ) : null}
+        {projects.map((project) => (
+          <ProjectRow
+            key={project.id}
+            project={project}
+            projectRepos={project.repositoryIds
+              .map((id) => repositoriesById.get(id))
+              .filter((item): item is Repository => Boolean(item))}
+            isActiveProject={project.id === activeProjectId}
+            activeRepositoryId={activeRepositoryId}
+            isPinned={pinnedProjectIds.includes(project.id)}
+            expanded={expandedProjects.has(project.id)}
+            projectDropTargetId={projectDropTargetId}
+            repoSidebarDragRef={repoSidebarDragRef}
+            onProjectSelect={onProjectSelect}
+            onRepositorySelect={onRepositorySelect}
+            onToggleProjectExpand={onToggleProjectExpand}
+            onTogglePinProject={onTogglePinProject}
+            onRenameProject={onRenameProject}
+            onDeleteProject={onDeleteProject}
+            onOpenPromptsProject={onOpenPromptsProject}
+            onCreateProjectTask={onCreateProjectTask}
+            onCreateRepositoryTask={onCreateRepositoryTask}
+            onAddRepositoryToProjectClick={onAddRepositoryToProjectClick}
+            onOpenInFinder={onOpenInFinder}
+            openRepositoryInPreferredEditor={openRepositoryInPreferredEditor}
+            onOpenPromptsRepository={onOpenPromptsRepository}
+            onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
+            onConfigureRepositorySddMode={onConfigureRepositorySddMode}
+            onDetachRepositoryFromProject={onDetachRepositoryFromProject}
+            onReorderRepositoriesInProject={onReorderRepositoriesInProject}
+            onMoveRepositoryToProject={onMoveRepositoryToProject}
+            onMoveRepositoryToProjectWithExpand={onMoveRepositoryToProjectWithExpand}
+            onProjectDropTargetChange={onProjectDropTargetChange}
+            onClearRepoSidebarDrag={onClearRepoSidebarDrag}
+            onMoveRepositoryError={onMoveRepositoryError}
+          />
+        ))}
+        {projects.length === 0 && floatingRepositories.length === 0 && (
+          <div className="app-repository-item app-repository-item--add" onClick={onCreateProjectClick}>
+            <span className="app-repository-add-icon"><PlusIcon /></span>
+            <span className="app-repository-add-text">新建项目</span>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+function ProjectRequirementAction({ onOpen }: { onOpen: () => void }) {
+  return (
+    <Tooltip title="需求" mouseEnterDelay={0.3}>
+      <span
+        className="app-repository-action app-repository-action--task"
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpen();
+        }}
+      >
+        <RequirementIcon />
+      </span>
+    </Tooltip>
+  );
+}
+
+interface ProjectRowProps {
+  project: ProjectItem;
+  projectRepos: Repository[];
+  isActiveProject: boolean;
+  activeRepositoryId: number | null;
+  isPinned: boolean;
+  expanded: boolean;
+  projectDropTargetId: string | null;
+  repoSidebarDragRef: MutableRefObject<{ sourceProjectId: string; repositoryId: number } | null>;
+  onProjectSelect: (projectId: string) => void;
+  onRepositorySelect: (id: number | null) => void;
+  onToggleProjectExpand: (projectId: string) => void;
+  onTogglePinProject: (projectId: string) => void;
+  onRenameProject: (project: ProjectItem) => void;
+  onDeleteProject: (project: ProjectItem) => void;
+  onOpenPromptsProject?: (project: ProjectItem) => void;
+  onCreateProjectTask: (project: ProjectItem, mode: TaskMode) => void;
+  onCreateRepositoryTask: (repository: Repository, mode: TaskMode) => void;
+  onAddRepositoryToProjectClick: (projectId: string) => void;
+  onOpenInFinder: (repository: Repository) => void;
+  openRepositoryInPreferredEditor: (repository: Repository) => void;
+  onOpenPromptsRepository?: (project: ProjectItem, repository: Repository) => void;
+  onOpenRepositoryMainOwner?: (repository: Repository) => void;
+  onConfigureRepositorySddMode?: (repository: Repository) => void;
+  onDetachRepositoryFromProject: (projectId: string, repositoryId: number) => void;
+  onReorderRepositoriesInProject?: (projectId: string, repositoryIds: number[]) => void | Promise<void>;
+  onMoveRepositoryToProject?: (targetProjectId: string, repositoryId: number) => void | Promise<void>;
+  onMoveRepositoryToProjectWithExpand: (targetProjectId: string, repositoryId: number) => Promise<void>;
+  onProjectDropTargetChange: (projectId: string | null | ((cur: string | null) => string | null)) => void;
+  onClearRepoSidebarDrag: () => void;
+  onMoveRepositoryError: (message: string, err: unknown) => void;
+}
+
+function ProjectRow({
+  project,
+  projectRepos,
+  isActiveProject,
+  activeRepositoryId,
+  isPinned,
+  expanded,
+  projectDropTargetId,
+  repoSidebarDragRef,
+  onProjectSelect,
+  onRepositorySelect,
+  onToggleProjectExpand,
+  onTogglePinProject,
+  onRenameProject,
+  onDeleteProject,
+  onOpenPromptsProject,
+  onCreateProjectTask,
+  onCreateRepositoryTask,
+  onAddRepositoryToProjectClick,
+  onOpenInFinder,
+  openRepositoryInPreferredEditor,
+  onOpenPromptsRepository,
+  onOpenRepositoryMainOwner,
+  onConfigureRepositorySddMode,
+  onDetachRepositoryFromProject,
+  onReorderRepositoriesInProject,
+  onMoveRepositoryToProject,
+  onMoveRepositoryToProjectWithExpand,
+  onProjectDropTargetChange,
+  onClearRepoSidebarDrag,
+  onMoveRepositoryError,
+}: ProjectRowProps) {
+  const projectMoreItems: MenuProps["items"] = [
+    { key: "pin", label: isPinned ? "取消置顶" : "置顶" },
+    { key: "rename", label: "重命名项目" },
+    { key: "add-repo", label: "关联仓库" },
+    { key: "prompts", label: "提示词" },
+    { type: "divider" },
+    { key: "delete", label: <span style={{ color: "var(--ant-color-error)" }}>删除项目</span> },
+  ];
+
+  return (
+    <div
+      className={`app-repository-row${projectDropTargetId === project.id ? " app-repository-row--project-drop" : ""}`}
+      onDragOver={
+        onMoveRepositoryToProject
+          ? (e) => {
+              const dragged = repoSidebarDragRef.current;
+              if (!dragged || dragged.sourceProjectId === project.id) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "move";
+              onProjectDropTargetChange(project.id);
+            }
+          : undefined
+      }
+      onDragLeave={
+        onMoveRepositoryToProject
+          ? (e) => {
+              const related = e.relatedTarget as Node | null;
+              if (related && (e.currentTarget as HTMLElement).contains(related)) return;
+              onProjectDropTargetChange((cur) => (cur === project.id ? null : cur));
+            }
+          : undefined
+      }
+      onDrop={
+        onMoveRepositoryToProject
+          ? (e) => {
+              e.preventDefault();
+              const dragged = repoSidebarDragRef.current;
+              onClearRepoSidebarDrag();
+              if (!dragged || dragged.sourceProjectId === project.id) return;
+              void onMoveRepositoryToProjectWithExpand(project.id, dragged.repositoryId).catch((err: unknown) => {
+                onMoveRepositoryError("移动仓库到项目失败", err);
+              });
+            }
+          : undefined
+      }
+    >
+      <div
+        className={`app-repository-item app-repository-item--project${isActiveProject ? " app-repository-item--project-active" : ""}`}
+        onClick={() => onProjectSelect(project.id)}
+      >
+        <span
+          className="app-repository-expand"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleProjectExpand(project.id);
+          }}
+        >
+          <ExpandIcon expanded={expanded} />
+        </span>
+        <span className="app-repository-icon">
+          <ProjectIcon />
+        </span>
+        <span className="app-repository-name">{project.name}</span>
+        <Tooltip title={isPinned ? "取消置顶" : "置顶"} mouseEnterDelay={0.35}>
+          <span
+            className={`app-repository-action app-repository-action--pin${isPinned ? " app-repository-action--pin-active" : ""}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onTogglePinProject(project.id);
+            }}
+            role="button"
+            aria-label={isPinned ? "取消置顶" : "置顶"}
+          >
+            <PushpinOutlined />
+          </span>
+        </Tooltip>
+        <Dropdown
+          rootClassName="app-sidebar-more-menu-dropdown"
+          menu={{
+            className: "app-sidebar-more-menu-inner",
+            items: projectMoreItems,
+            onClick: ({ key }) => {
+              if (key === "pin") onTogglePinProject(project.id);
+              if (key === "rename") onRenameProject(project);
+              if (key === "add-repo") onAddRepositoryToProjectClick(project.id);
+              if (key === "prompts") onOpenPromptsProject?.(project);
+              if (key === "delete") onDeleteProject(project);
+            },
+          }}
+          trigger={["click"]}
+          placement="bottomRight"
+        >
+          <span className="app-repository-action" onClick={(e) => e.stopPropagation()}>
+            <MoreIcon />
+          </span>
+        </Dropdown>
+        <ProjectRequirementAction onOpen={() => onCreateProjectTask(project, "split")} />
+        <span
+          className="app-repository-action app-repository-action--plus"
+          onClick={(e) => {
+            e.stopPropagation();
+            onAddRepositoryToProjectClick(project.id);
+          }}
+          title="关联仓库"
+        >
+          <PlusIcon />
+        </span>
+      </div>
+
+      {expanded && (
+        <div className="app-repository-sessions">
+          {projectRepos.length === 0 ? (
+            <div className="app-session-item" onClick={() => onAddRepositoryToProjectClick(project.id)}>
+              <span className="app-session-item-name">点击关联仓库</span>
+            </div>
+          ) : (
+            <ProjectRepositoryRows
+              project={project}
+              projectRepos={projectRepos}
+              activeRepositoryId={activeRepositoryId}
+              onRepositorySelect={onRepositorySelect}
+              onCreateRepositoryTask={onCreateRepositoryTask}
+              onDetachRepositoryFromProject={onDetachRepositoryFromProject}
+              onOpenInFinder={onOpenInFinder}
+              openRepositoryInPreferredEditor={openRepositoryInPreferredEditor}
+              onOpenPromptsRepository={onOpenPromptsRepository}
+              onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
+              onReorderRepositoriesInProject={onReorderRepositoriesInProject}
+              onMoveRepositoryToProject={onMoveRepositoryToProjectWithExpand}
+              onConfigureSddMode={onConfigureRepositorySddMode}
+              repoSidebarDragRef={repoSidebarDragRef}
+              onRepoSidebarDragEnd={onClearRepoSidebarDrag}
+              hideChatAction={
+                resolveWorkspaceMode({
+                  activeProjectId: project.id,
+                  projects: [project],
+                }) === "multi_repo"
+              }
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
