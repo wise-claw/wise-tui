@@ -24,6 +24,7 @@ These guides help you **ask the right questions before coding**.
 | [Code Reuse Thinking Guide](./code-reuse-thinking-guide.md) | Identify patterns and reduce duplication | When you notice repeated patterns |
 | [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md) | Think through data flow across layers | Features spanning multiple layers |
 | [Commit Hygiene](./commit-hygiene.md) | Keep commits scoped and reviewable | Before committing Trellis, docs, frontend, or Tauri changes |
+| [trellis-splitter Prompt](./trellis-splitter-prompt.md) | Single source of truth for the short-lived PRD-split subagent | When implementing / updating Stage 5 platform agent configs (`.claude/agents/trellis-splitter.md`, etc.) |
 
 ---
 
