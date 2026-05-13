@@ -2,6 +2,7 @@ import {
   BellOutlined,
   CheckCircleOutlined,
   CommentOutlined,
+  DeleteOutlined,
   FieldTimeOutlined,
   QuestionCircleOutlined,
   ReloadOutlined,
@@ -380,6 +381,8 @@ interface Props {
   }) => void | Promise<void>;
   /** 从历史会话弹窗重新扫描磁盘上的 Claude 会话并合并到标签列表 */
   onRefreshHistorySessions?: () => void | Promise<void>;
+  /** 历史会话弹窗内删除某条会话（物理删除磁盘 jsonl，不可恢复）。运行中的会话会抛错。 */
+  onDeleteHistorySession?: (sessionId: string) => Promise<void>;
   /** App 侧 `omcBatchRuntime.active`：批量 OMC 调度中（含任务间隙），用于员工空闲判定 */
   omcBatchPipelineActive?: boolean;
   /** 工作树列表：将路径加入当前侧栏项目（由 App 注入） */
@@ -524,6 +527,7 @@ export function ClaudeChat({
   onNotifyOmcEmployeeDirectBatchTaskDone,
   onPrepareFreshOmcEmployeeWorkerForDirectBatch,
   onRefreshHistorySessions,
+  onDeleteHistorySession,
   omcBatchPipelineActive = false,
   onAddWorktreeRepositoryToProject,
   onReloadFullDiskTranscript,
@@ -2214,6 +2218,49 @@ export function ClaudeChat({
       });
   }, [onRefreshHistorySessions]);
 
+  /**
+   * 历史会话弹窗内删除一条会话：先 `Modal.confirm` 二次确认，再调 hook 的 `deleteSession`。
+   *
+   * 注意：物理删除 jsonl 不可恢复；后端 IPC 抛错（如运行中拒绝）时仅 toast 提示，
+   * 不抹掉本地 tab，让用户先取消运行再重试。
+   */
+  const handleDeleteHistorySession = useCallback(
+    (sessionId: string, previewText: string) => {
+      if (!onDeleteHistorySession) return;
+      const preview = (previewText || "").trim() || "(无预览)";
+      Modal.confirm({
+        title: "删除该历史会话？",
+        content: (
+          <div>
+            <div style={{ marginBottom: 8 }}>
+              <span style={{ color: "var(--ant-color-text-tertiary)" }}>预览：</span>
+              <span>{preview.length > 80 ? `${preview.slice(0, 80)}…` : preview}</span>
+            </div>
+            <div style={{ color: "var(--ant-color-error)" }}>
+              将删除磁盘上的 Claude Code 会话记录（jsonl），不可恢复。
+              请确保该会话未在其他终端或 Claude CLI 中打开。
+            </div>
+          </div>
+        ),
+        okText: "删除",
+        okType: "danger",
+        cancelText: "取消",
+        autoFocusButton: "cancel",
+        onOk: async () => {
+          try {
+            await onDeleteHistorySession(sessionId);
+            message.success("已删除该历史会话");
+          } catch (err) {
+            const text = err instanceof Error ? err.message : String(err ?? "");
+            message.error(text || "删除历史会话失败");
+            throw err;
+          }
+        },
+      });
+    },
+    [onDeleteHistorySession],
+  );
+
   useEffect(() => {
     if (!taskCompletionModalOpen) return;
     handleHistorySessionsRefresh();
@@ -2903,20 +2950,37 @@ export function ClaudeChat({
                           <div className="app-claude-session-history-popover__group-list">
                             {group.items.map((item) => {
                               const active = item.id === session.id;
+                              const preview = getSessionPreview(item);
                               return (
-                                <button
-                                  key={item.id}
-                                  type="button"
-                                  className={`app-claude-session-history-popover__item ${active ? "app-claude-session-history-popover__item--active" : ""}`}
-                                  onClick={() => {
-                                    onSwitchSession?.(item.id);
-                                    setHistoryPopoverOpen(false);
-                                    setHistorySearchText("");
-                                  }}
-                                >
-                                  <span className="app-claude-session-history-popover__item-dot" />
-                                  <span className="app-claude-session-history-popover__item-title">{getSessionPreview(item)}</span>
-                                </button>
+                                <div key={item.id} className="app-claude-session-history-popover__item-row">
+                                  <button
+                                    type="button"
+                                    className={`app-claude-session-history-popover__item ${active ? "app-claude-session-history-popover__item--active" : ""}`}
+                                    onClick={() => {
+                                      onSwitchSession?.(item.id);
+                                      setHistoryPopoverOpen(false);
+                                      setHistorySearchText("");
+                                    }}
+                                  >
+                                    <span className="app-claude-session-history-popover__item-dot" />
+                                    <span className="app-claude-session-history-popover__item-title">{preview}</span>
+                                  </button>
+                                  {onDeleteHistorySession ? (
+                                    <Tooltip title="删除该历史会话" mouseEnterDelay={0.35}>
+                                      <Button
+                                        type="text"
+                                        size="small"
+                                        className="app-claude-session-history-popover__item-delete"
+                                        icon={<DeleteOutlined />}
+                                        aria-label="删除该历史会话"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          handleDeleteHistorySession(item.id, preview);
+                                        }}
+                                      />
+                                    </Tooltip>
+                                  ) : null}
+                                </div>
                               );
                             })}
                           </div>

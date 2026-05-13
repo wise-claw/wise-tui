@@ -1,3 +1,4 @@
+use crate::claude_config_dir::user_claude_dir;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -8,9 +9,7 @@ pub(crate) fn read_json_file(path: &Path) -> Option<serde_json::Value> {
 }
 
 pub(crate) fn resolve_omc_plugin_root() -> Option<PathBuf> {
-    let home = dirs::home_dir()?;
-    let base = home
-        .join(".claude")
+    let base = user_claude_dir()
         .join("plugins")
         .join("cache")
         .join("omc")

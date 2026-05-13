@@ -9,7 +9,7 @@ import type {
   WorkflowTaskItem,
   WorkflowTemplateItem,
 } from "../../types";
-import { Button, Empty, Input, message, Popover, Spin, Tooltip } from "antd";
+import { Button, Empty, Input, message, Popover, Spin, Switch, Tooltip } from "antd";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import { useDockSlice } from "../../hooks/useDockSlice";
 import { ClaudeChat } from "./ClaudeChat";
@@ -243,7 +243,8 @@ interface TopbarProps {
   collapsed?: boolean;
   rightCollapsed?: boolean;
   terminalCollapsed?: boolean;
-  onAutoFixRunError?: (prompt: string) => void;
+  onAutoFixRunError?: (prompt: string) => void | Promise<void>;
+  /** 双窗格模式开关 */
   dualPaneEnabled?: boolean;
   onToggleDualPane?: () => void;
 }
@@ -272,6 +273,7 @@ function Topbar({
   const [runStatusHint, setRunStatusHint] = useState("未运行");
   const [runOutputPreview, setRunOutputPreview] = useState<Array<{ text: string; isError: boolean }>>([]);
   const [runDetectedUrl, setRunDetectedUrl] = useState<string | null>(null);
+  const [runErrorMonitorEnabled, setRunErrorMonitorEnabled] = useState(true);
   const runLogTailRef = useRef("");
   const runChunkBufferRef = useRef("");
   const idleTimerRef = useRef<number | null>(null);
@@ -516,7 +518,7 @@ function Topbar({
           setRunStatusHint(`已自动打开地址：${urlToOpen}`);
         }
       }
-      if (RUN_ERROR_REGEX.test(payload.data)) {
+      if (RUN_ERROR_REGEX.test(payload.data) && runErrorMonitorEnabled) {
         errorDetectedRef.current = true;
         setRunPopoverOpen(true);
         setRunStatusHint("检测到报错，等待自动处理...");
@@ -571,6 +573,7 @@ function Topbar({
     onAutoFixRunError,
     runCommand,
     runCwd,
+    runErrorMonitorEnabled,
     runPreferredUrl,
   ]);
 
@@ -659,6 +662,10 @@ function Topbar({
               <div className="app-run-command-popover__hint">
                 日志自动识别仅限 localhost / 本机 IP；已保存指定地址时自动打开始终用该地址。优先级：指定
                 &gt; 检测 &gt; 默认
+              </div>
+              <div className="app-run-command-popover__error-monitor-toggle">
+                <Switch size="small" checked={runErrorMonitorEnabled} onChange={setRunErrorMonitorEnabled} />
+                <span className="app-run-command-popover__error-monitor-label">AI 报错监控</span>
               </div>
               <div className="app-run-command-popover__status">{runStatusHint}</div>
               {runDetectedUrl ? (
@@ -830,6 +837,8 @@ interface Props {
   onClearRevertItems: (sessionId: string) => void;
   onSendFollowup: (sessionId: string, id: string) => void;
   onRestoreRevert: (sessionId: string, itemId: string) => void | Promise<void>;
+  /** 终端运行报错自动修复：创建独立 Claude 会话处理（非主会话） */
+  onAutoFixRunError?: (prompt: string) => void | Promise<void>;
   dualPaneEnabled?: boolean;
   onToggleDualPane?: () => void;
   secondarySessionId?: string | null;
@@ -890,6 +899,8 @@ interface Props {
   }) => void | Promise<void>;
   /** 从历史会话弹窗重新扫描当前仓库磁盘上的 Claude 会话 */
   onRefreshHistorySessions?: () => void | Promise<void>;
+  /** 历史会话弹窗内删除某条会话（物理删除 jsonl + 内存清理）。运行中状态会被拒绝，由调用方做二次确认。 */
+  onDeleteHistorySession?: (sessionId: string) => Promise<void>;
   /** 直连批量 OMC 进行中（`omcBatchRuntime.active`），供各标签内「OMC员工」空闲判定与监控一致 */
   omcBatchPipelineActive?: boolean;
   /** 工作树弹窗：将 worktree 目录加入当前侧栏项目 */
@@ -935,6 +946,7 @@ export function ClaudeSessions({
   collapsed,
   rightCollapsed,
   terminalCollapsed,
+  onAutoFixRunError: onAutoFixRunErrorFromProps,
   onOpenWorkflowConfig,
   employees = [],
   mentionEmployees = [],
@@ -957,6 +969,7 @@ export function ClaudeSessions({
   onNotifyOmcEmployeeDirectBatchTaskDone,
   onPrepareFreshOmcEmployeeWorkerForDirectBatch,
   onRefreshHistorySessions,
+  onDeleteHistorySession,
   omcBatchPipelineActive = false,
   onAddWorktreeRepositoryToProject,
   onReloadFullDiskTranscript,
@@ -1082,7 +1095,7 @@ export function ClaudeSessions({
         collapsed={collapsed}
         rightCollapsed={rightCollapsed}
         terminalCollapsed={terminalCollapsed}
-        onAutoFixRunError={(prompt) => onSendMessage(prompt)}
+        onAutoFixRunError={(prompt) => onAutoFixRunErrorFromProps?.(prompt)}
         dualPaneEnabled={dualPaneEnabled}
         onToggleDualPane={onToggleDualPane}
       />
@@ -1146,6 +1159,7 @@ export function ClaudeSessions({
                 onNotifyOmcEmployeeDirectBatchTaskDone={onNotifyOmcEmployeeDirectBatchTaskDone}
                 onPrepareFreshOmcEmployeeWorkerForDirectBatch={onPrepareFreshOmcEmployeeWorkerForDirectBatch}
                 onRefreshHistorySessions={onRefreshHistorySessions}
+                onDeleteHistorySession={onDeleteHistorySession}
                 omcBatchPipelineActive={omcBatchPipelineActive}
                 onAddWorktreeRepositoryToProject={onAddWorktreeRepositoryToProject}
                 onReloadFullDiskTranscript={onReloadFullDiskTranscript}
@@ -1204,6 +1218,7 @@ export function ClaudeSessions({
                   onNotifyOmcEmployeeDirectBatchTaskDone={onNotifyOmcEmployeeDirectBatchTaskDone}
                   onPrepareFreshOmcEmployeeWorkerForDirectBatch={onPrepareFreshOmcEmployeeWorkerForDirectBatch}
                   onRefreshHistorySessions={onRefreshHistorySessions}
+                  onDeleteHistorySession={onDeleteHistorySession}
                   omcBatchPipelineActive={omcBatchPipelineActive}
                   onAddWorktreeRepositoryToProject={onAddWorktreeRepositoryToProject}
                   onReloadFullDiskTranscript={onReloadFullDiskTranscript}
@@ -1291,6 +1306,7 @@ export function ClaudeSessions({
             onNotifyOmcEmployeeDirectBatchTaskDone={onNotifyOmcEmployeeDirectBatchTaskDone}
             onPrepareFreshOmcEmployeeWorkerForDirectBatch={onPrepareFreshOmcEmployeeWorkerForDirectBatch}
             onRefreshHistorySessions={onRefreshHistorySessions}
+            onDeleteHistorySession={onDeleteHistorySession}
             omcBatchPipelineActive={omcBatchPipelineActive}
             onAddWorktreeRepositoryToProject={onAddWorktreeRepositoryToProject}
             onReloadFullDiskTranscript={onReloadFullDiskTranscript}

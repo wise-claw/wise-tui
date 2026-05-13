@@ -96,6 +96,7 @@ pub(crate) struct EmployeeItem {
     updated_at: i64,
     display_order: i64,
     repository_ids: Vec<i64>,
+    project_ids: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -859,6 +860,14 @@ pub(crate) fn list_project_prd_workflow_ids(
 }
 
 #[tauri::command]
+pub(crate) fn list_workflow_project_ids(
+    db: tauri::State<'_, wise_db::WiseDb>,
+    workflow_id: String,
+) -> Result<Vec<String>, String> {
+    db.list_workflow_project_ids(&workflow_id)
+}
+
+#[tauri::command]
 pub(crate) fn add_project_prd_employee(
     db: tauri::State<'_, wise_db::WiseDb>,
     project_id: String,
@@ -926,6 +935,7 @@ pub(crate) fn list_employees(
             updated_at: row.updated_at,
             display_order: row.display_order,
             repository_ids: row.repository_ids,
+            project_ids: row.project_ids,
         })
         .collect())
 }
@@ -937,6 +947,7 @@ pub(crate) fn create_employee(
     agent_type: String,
     enabled: Option<bool>,
     repository_ids: Option<Vec<i64>>,
+    project_ids: Option<Vec<String>>,
 ) -> Result<EmployeeItem, String> {
     let now_ms = unix_now_ms();
     let normalized_name = name.trim();
@@ -949,6 +960,7 @@ pub(crate) fn create_employee(
     }
     let id = format!("employee_{}", Uuid::new_v4().simple());
     let repository_ids = repository_ids.unwrap_or_default();
+    let project_ids = project_ids.unwrap_or_default();
     db.create_employee(
         &id,
         normalized_name,
@@ -957,6 +969,9 @@ pub(crate) fn create_employee(
         now_ms,
         &repository_ids,
     )?;
+    for pid in &project_ids {
+        let _ = db.add_project_prd_employee(pid, &id, now_ms);
+    }
     let created = db
         .list_employees()?
         .into_iter()
@@ -971,6 +986,7 @@ pub(crate) fn create_employee(
         updated_at: created.updated_at,
         display_order: created.display_order,
         repository_ids: created.repository_ids,
+        project_ids: created.project_ids,
     })
 }
 
@@ -982,6 +998,7 @@ pub(crate) fn update_employee(
     agent_type: String,
     enabled: bool,
     repository_ids: Option<Vec<i64>>,
+    project_ids: Option<Vec<String>>,
 ) -> Result<EmployeeItem, String> {
     let now_ms = unix_now_ms();
     let normalized_name = name.trim();
@@ -993,6 +1010,7 @@ pub(crate) fn update_employee(
         return Err("智能体不能为空".to_string());
     }
     let repository_ids = repository_ids.unwrap_or_default();
+    let new_project_ids = project_ids.unwrap_or_default();
     db.update_employee(
         &employee_id,
         normalized_name,
@@ -1001,6 +1019,22 @@ pub(crate) fn update_employee(
         now_ms,
         &repository_ids,
     )?;
+
+    let updated = db
+        .list_employees()?
+        .into_iter()
+        .find(|item| item.id == employee_id)
+        .ok_or_else(|| "员工更新后读取失败".to_string())?;
+
+    let old_ids: std::collections::HashSet<String> = updated.project_ids.iter().cloned().collect();
+    let new_ids: std::collections::HashSet<String> = new_project_ids.iter().cloned().collect();
+    for pid in old_ids.difference(&new_ids) {
+        let _ = db.remove_project_prd_employee(pid, &employee_id, now_ms);
+    }
+    for pid in new_ids.difference(&old_ids) {
+        let _ = db.add_project_prd_employee(pid, &employee_id, now_ms);
+    }
+
     let updated = db
         .list_employees()?
         .into_iter()
@@ -1015,6 +1049,7 @@ pub(crate) fn update_employee(
         updated_at: updated.updated_at,
         display_order: updated.display_order,
         repository_ids: updated.repository_ids,
+        project_ids: updated.project_ids,
     })
 }
 
@@ -1101,6 +1136,7 @@ pub(crate) fn save_workflow_template(
     name: String,
     is_default: bool,
     stages: Vec<WorkflowTemplateStage>,
+    project_ids: Option<Vec<String>>,
 ) -> Result<WorkflowTemplateItem, String> {
     let now_ms = unix_now_ms();
     let normalized_name = name.trim();
@@ -1160,6 +1196,22 @@ pub(crate) fn save_workflow_template(
         &db_stages,
         &db_assignees,
     )?;
+
+    // Sync project associations
+    if let Some(new_project_ids) = project_ids {
+        let old_ids = db
+            .list_workflow_project_ids(&workflow_id_value)
+            .unwrap_or_default();
+        let old_set: std::collections::HashSet<String> = old_ids.iter().cloned().collect();
+        let new_set: std::collections::HashSet<String> = new_project_ids.iter().cloned().collect();
+        for pid in old_set.difference(&new_set) {
+            let _ = db.remove_project_prd_workflow(pid, &workflow_id_value, now_ms);
+        }
+        for pid in new_set.difference(&old_set) {
+            let _ = db.add_project_prd_workflow(pid, &workflow_id_value, now_ms);
+        }
+    }
+
     let templates = list_workflow_templates(db)?;
     templates
         .into_iter()

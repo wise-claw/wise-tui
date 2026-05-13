@@ -23,3 +23,7 @@ export async function addProjectPrdWorkflow(projectId: string, workflowId: strin
 export async function removeProjectPrdWorkflow(projectId: string, workflowId: string): Promise<void> {
   await invoke("remove_project_prd_workflow", { projectId, workflowId });
 }
+
+export async function listWorkflowProjectIds(workflowId: string): Promise<string[]> {
+  return invoke<string[]>("list_workflow_project_ids", { workflowId });
+}

@@ -1,7 +1,8 @@
 use crate::{
-    app_state_commands, claude_code_usage, claude_commands, cua_driver, dingtalk_enterprise_bot,
-    dingtalk_stream_gateway, git_commands, prd_url_fetch, repository_files, skills_sh,
-    system_resource, trellis_bridge, wise_db, wise_mascot, wise_push, workspace_commands,
+    app_state_commands, claude_code_usage, claude_commands, claude_config_dir, cua_driver,
+    dingtalk_enterprise_bot, dingtalk_stream_gateway, git_commands, prd_url_fetch,
+    repository_files, skills_sh, system_resource, trellis_bridge, wise_db, wise_mascot, wise_push,
+    workspace_commands,
 };
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
@@ -66,6 +67,7 @@ pub fn run() {
             app.manage(dingtalk_stream_gateway::DingTalkStreamGatewayControl::default());
             let wise_db = wise_db::WiseDb::open().map_err(|e| e.to_string())?;
             wise_mascot::restore_mascot_on_launch(app.handle(), &wise_db)?;
+            claude_config_dir::init_from_db(&wise_db);
             app.manage(wise_db);
 
             #[cfg(target_os = "macos")]
@@ -79,6 +81,22 @@ pub fn run() {
         .manage(Mutex::new(claude_commands::TerminalManager::new()))
         .manage(claude_commands::ClaudeProcessState::default())
         .manage(claude_commands::ClaudeSessionRegistry::new())
+        .on_window_event(|window, event| {
+            // macOS：主窗口红点关闭默认会销毁窗口，导致后续点击程序坞图标只触发
+            // `RunEvent::Reopen` 但 `get_webview_window("main")` 已为 None，没有任何窗口可显示。
+            // 与原生 macOS App 行为对齐：拦截关闭事件 → 阻止销毁 → 隐藏；
+            // 由 `RunEvent::Reopen`（见下方 run 回调）调用 `wise_main_window_focus` 重新唤起。
+            #[cfg(target_os = "macos")]
+            if window.label() == "main" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+            // 非 macOS 沿用平台默认行为（Windows / Linux 通常希望关闭即退出）。
+            #[cfg(not(target_os = "macos"))]
+            let _ = (window, event);
+        })
         .invoke_handler(tauri::generate_handler![
             app_state_commands::greet,
             app_state_commands::list_repositories,
@@ -104,6 +122,7 @@ pub fn run() {
             app_state_commands::set_active_project_id,
             app_state_commands::list_project_prd_employee_ids,
             app_state_commands::list_project_prd_workflow_ids,
+            app_state_commands::list_workflow_project_ids,
             app_state_commands::add_project_prd_employee,
             app_state_commands::remove_project_prd_employee,
             app_state_commands::add_project_prd_workflow,
@@ -214,6 +233,8 @@ pub fn run() {
             claude_code_usage::get_claude_code_usage_snapshot,
             claude_commands::get_claude_config_model,
             claude_commands::get_claude_model_picker_options,
+            claude_config_dir::get_claude_user_config_dir,
+            claude_config_dir::set_claude_user_config_dir,
             claude_commands::mcp::get_claude_mcp_status,
             claude_commands::mcp::get_claude_mcp_runtime_health,
             claude_commands::mcp::remove_claude_mcp_server,
@@ -247,6 +268,7 @@ pub fn run() {
             claude_commands::project_skills::format_claude_project_skill_file,
             claude_commands::disk_sessions::list_claude_disk_sessions,
             claude_commands::disk_sessions::load_claude_session_jsonl,
+            claude_commands::disk_sessions::delete_claude_disk_session,
             claude_commands::attachments::save_composer_image,
             claude_commands::attachments::save_prd_pasted_image,
             claude_commands::attachments::materialize_prd_snapshot,

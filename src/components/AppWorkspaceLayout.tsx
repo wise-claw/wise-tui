@@ -211,6 +211,7 @@ export interface AppWorkspaceLayoutProps {
   collapsed: boolean;
   promptsMode: boolean;
   taskSplitMode: boolean;
+  taskPanelMode: boolean;
   mcpHubMode: boolean;
   skillsHubMode: boolean;
   compactLayoutMode: boolean;
@@ -248,6 +249,7 @@ export function AppWorkspaceLayout({
   collapsed,
   promptsMode,
   taskSplitMode,
+  taskPanelMode,
   mcpHubMode,
   skillsHubMode,
   compactLayoutMode,

@@ -60,8 +60,7 @@ fn project_claude_agents_dir(project_path: &str) -> Result<PathBuf, String> {
 }
 
 fn user_claude_agents_dir() -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or_else(|| "Could not resolve home directory".to_string())?;
-    Ok(home.join(".claude").join("agents"))
+    Ok(crate::claude_config_dir::user_claude_dir().join("agents"))
 }
 
 fn parse_skill_frontmatter_name_desc(raw: &str) -> Option<(String, String)> {
@@ -251,9 +250,9 @@ pub(crate) fn list_claude_subagents(
             &omc_root.join("agents"),
         ));
     }
-    if let Some(home) = dirs::home_dir() {
+    {
         let omc_canon = resolve_omc_plugin_root().and_then(|p| fs::canonicalize(p).ok());
-        for (_rel, root) in discover_plugin_roots_under_claude_cache(&home) {
+        for (_rel, root) in discover_plugin_roots_under_claude_cache() {
             if let Some(ref oc) = omc_canon {
                 if let Ok(rc) = fs::canonicalize(&root) {
                     if rc == *oc {

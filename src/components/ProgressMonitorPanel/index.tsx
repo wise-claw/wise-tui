@@ -1,4 +1,4 @@
-import { Button, Drawer, Empty, InputNumber, Popover, Space, Tag, Tooltip, Typography } from "antd";
+import { Empty, InputNumber, Popover, Tag, Tooltip, Typography } from "antd";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type {
   ClaudeSession,
@@ -27,9 +27,18 @@ import {
   MIN_CLAUDE_CONCURRENCY_LIMIT,
 } from "../../services/claudeConcurrencyLimits";
 import { sanitizeOmcDirectBatchPreviewLineForList } from "../../utils/claudeInvocationText";
-import { ClaudeSessionMessagesColumn } from "../ClaudeSessions/ClaudeSessionMessagesColumn";
 import { OmcDirectBatchInvocationDetailDrawer } from "./OmcDirectBatchInvocationDetailDrawer";
+import { MonitorHistorySessionTranscriptDrawer } from "./MonitorHistorySessionTranscriptDrawer";
+import { getSessionPreview } from "./historySessionDrawerChrome";
+
 import "./index.css";
+
+export {
+  getSessionPreview,
+  HistorySessionDrawerTitle,
+  historySessionStatusLabel,
+  historySessionStatusTagColor,
+} from "./historySessionDrawerChrome";
 
 function EmployeeMiniIcon() {
   return (
@@ -397,60 +406,6 @@ export function sessionUpdatedAt(session: ClaudeSession): number {
   return typeof lastTimestamp === "number" ? lastTimestamp : session.createdAt;
 }
 
-export function getSessionPreview(session: ClaudeSession): string {
-  const fallback = session.diskPreview?.trim() || "新会话";
-  for (let i = session.messages.length - 1; i >= 0; i -= 1) {
-    const msg = session.messages[i];
-    if (msg.role !== "user" && msg.role !== "assistant") continue;
-    const text = msg.content.trim();
-    if (text) {
-      return text.length > 42 ? `${text.slice(0, 42)}...` : text;
-    }
-  }
-  return fallback.length > 42 ? `${fallback.slice(0, 42)}...` : fallback;
-}
-
-export function historySessionStatusLabel(status: ClaudeSession["status"]): string {
-  if (status === "running") return "运行中";
-  if (status === "connecting") return "连接中";
-  if (status === "completed") return "已完成";
-  if (status === "cancelled") return "已取消";
-  if (status === "error") return "异常";
-  return "空闲";
-}
-
-export function historySessionStatusTagColor(
-  status: ClaudeSession["status"],
-): "default" | "processing" | "success" | "error" {
-  if (status === "running" || status === "connecting") return "processing";
-  if (status === "completed") return "success";
-  if (status === "error") return "error";
-  return "default";
-}
-
-/** 历史会话抽屉标题：展示仓库/标签名 + 可复制的 Claude Code 会话 id（无落盘 id 时退回 Wise 标签 id） */
-export function HistorySessionDrawerTitle({ session }: { session: ClaudeSession | undefined }) {
-  if (!session) {
-    return <span>会话消息</span>;
-  }
-  const name = session.repositoryName?.trim();
-  const primary = name && name.length > 0 ? name : getSessionPreview(session);
-  const claudeId = session.claudeSessionId?.trim();
-  const copyText = claudeId && claudeId.length > 0 ? claudeId : session.id;
-  return (
-    <div className="app-monitor-panel__history-drawer-title">
-      <div className="app-monitor-panel__history-drawer-title__primary">{primary}</div>
-      <Typography.Text
-        type="secondary"
-        className="app-monitor-panel__history-drawer-title__session-id"
-        copyable={{ text: copyText, tooltips: ["复制 Claude Code 会话 ID", "已复制"] }}
-      >
-        Claude Code 会话：{copyText}
-      </Typography.Text>
-    </div>
-  );
-}
-
 export function HistorySessionPopoverContent({
   searchValue,
   onSearchChange,
@@ -636,38 +591,7 @@ export function ProgressMonitorPanel({
     return map;
   }, [employeeHistorySessionsByName, teamItems]);
 
-  const historyMessagesDrawerWidth = useMemo(
-    () => Math.min(560, typeof window !== "undefined" ? window.innerWidth - 24 : 560),
-    [],
-  );
-
   const sessionsForHistoryTranscript = transcriptSourceSessions ?? sessions;
-  const liveHistorySession = useMemo(() => {
-    if (!historyMessagesSessionId) return undefined;
-    return sessionsForHistoryTranscript.find(
-      (item) => item.id === historyMessagesSessionId || item.claudeSessionId === historyMessagesSessionId,
-    );
-  }, [historyMessagesSessionId, sessionsForHistoryTranscript]);
-
-  const peekTranscriptTargetId = liveHistorySession?.id ?? null;
-  const peekTranscriptMessagesLen = liveHistorySession?.messages.length ?? 0;
-  const peekTranscriptStatus = liveHistorySession?.status;
-  const peekTranscriptClaudeId = liveHistorySession?.claudeSessionId?.trim() ?? "";
-
-  useEffect(() => {
-    if (!historyMessagesSessionId || !onReloadFullDiskTranscript || !peekTranscriptTargetId) return;
-    if (peekTranscriptMessagesLen > 0) return;
-    if (peekTranscriptStatus === "running" || peekTranscriptStatus === "connecting") return;
-    if (!peekTranscriptClaudeId) return;
-    void onReloadFullDiskTranscript(peekTranscriptTargetId);
-  }, [
-    historyMessagesSessionId,
-    onReloadFullDiskTranscript,
-    peekTranscriptTargetId,
-    peekTranscriptMessagesLen,
-    peekTranscriptStatus,
-    peekTranscriptClaudeId,
-  ]);
 
   function openHistoryMessagesDrawer(sessionId: string) {
     setEmployeeHistoryPopoverId(null);
@@ -694,11 +618,6 @@ export function ProgressMonitorPanel({
     setEmployeeHistorySearch("");
     setOmcDirectBatchDetailSnapshot(inv);
   }, []);
-
-  const canStopLiveSession =
-    Boolean(onCancelSession) &&
-    liveHistorySession != null &&
-    (liveHistorySession.status === "running" || liveHistorySession.status === "connecting");
 
   return (
     <div className="app-monitor-panel">
@@ -1022,47 +941,15 @@ export function ProgressMonitorPanel({
         )}
       </div>
 
-      <Drawer
-        title={<HistorySessionDrawerTitle session={liveHistorySession} />}
+      <MonitorHistorySessionTranscriptDrawer
         open={historyMessagesSessionId !== null}
+        sessionId={historyMessagesSessionId}
         onClose={closeHistoryMessagesDrawer}
-        placement="right"
-        destroyOnClose
-        width={historyMessagesDrawerWidth}
-        classNames={{ body: "app-monitor-panel__history-session-drawer-body" }}
-        extra={
-          liveHistorySession ? (
-            <Space size="small" wrap align="center">
-              <Tag color={historySessionStatusTagColor(liveHistorySession.status)}>
-                {historySessionStatusLabel(liveHistorySession.status)}
-              </Tag>
-              {canStopLiveSession && onCancelSession ? (
-                <Button
-                  size="small"
-                  danger
-                  onClick={() => {
-                    onCancelSession(liveHistorySession.id);
-                  }}
-                >
-                  停止
-                </Button>
-              ) : null}
-            </Space>
-          ) : null
-        }
-      >
-        {!liveHistorySession ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未找到该会话" />
-        ) : (
-          <div className="app-monitor-panel__history-session-drawer-scroll">
-            <ClaudeSessionMessagesColumn
-              session={liveHistorySession}
-              onOpenTaskDetail={onOpenTaskDetail}
-              showAllMessages
-            />
-          </div>
-        )}
-      </Drawer>
+        transcriptSourceSessions={sessionsForHistoryTranscript}
+        onReloadFullDiskTranscript={onReloadFullDiskTranscript}
+        onCancelSession={onCancelSession}
+        onOpenTaskDetail={onOpenTaskDetail}
+      />
 
       <OmcDirectBatchInvocationDetailDrawer
         open={omcDirectBatchDetailSnapshot !== null}

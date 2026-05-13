@@ -1,4 +1,5 @@
 import type { EmployeeItem, Repository } from "../types";
+import { isOmcMonitorEmployeeRecord } from "./omcMonitorEmployeeSession";
 import { repositoryFolderBasename } from "./repositoryType";
 
 /**
@@ -176,6 +177,27 @@ export function repositoryOwnerBasenamesInScopeRelaxed(
     }
   }
   return Array.from(basenames);
+}
+
+/**
+ * 与需求顶栏员工「Owner」角标一致：在项目仓库 id 集合内，任意仓库上满足
+ * {@link repositoryOwnerBasenamesInScopeRelaxed} 的启用员工（含「仅全局唯一 agent 匹配主 Owner」的推断）。
+ */
+export function listEmployeeIdsWithRepositoryOwnerBadgeInProjectScope(
+  projectRepositoryIds: readonly number[],
+  repositories: Array<Pick<Repository, "id" | "path" | "name" | "mainOwnerAgentName">>,
+  employees: Array<Pick<EmployeeItem, "id" | "name" | "agentType" | "enabled" | "repositoryIds">>,
+): string[] {
+  const ids = projectRepositoryIds.filter((id) => Number.isFinite(id));
+  if (ids.length === 0) return [];
+  const out = new Set<string>();
+  for (const e of employees) {
+    if (!e.enabled || isOmcMonitorEmployeeRecord(e)) continue;
+    if (repositoryOwnerBasenamesInScopeRelaxed(e, ids, repositories, employees).length > 0) {
+      out.add(e.id);
+    }
+  }
+  return [...out];
 }
 
 export function isEmployeeRepositoryOwnerInScopeRelaxed(

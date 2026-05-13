@@ -1,5 +1,5 @@
-import { Button, Form, Input, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Typography } from "antd";
-import { useMemo, useState } from "react";
+import { App, Button, Form, Input, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Typography } from "antd";
+import { useEffect, useMemo, useState } from "react";
 import type { EmployeeItem, Repository, WorkflowGraph, WorkflowTemplateItem } from "../../types";
 import { collectTeamMemberEmployeeIds } from "../../utils/collectTeamMemberEmployeeIds";
 import { repositoryFolderBasename } from "../../utils/repositoryType";
@@ -33,6 +33,7 @@ interface Props {
   workflowTemplates: WorkflowTemplateItem[];
   workflowGraphsByWorkflowId?: Record<string, WorkflowGraph>;
   repositories: Repository[];
+  projects?: { id: string; name: string }[];
   agentTypeOptions: string[];
   defaultRepositoryIds?: number[];
   /**
@@ -42,16 +43,28 @@ interface Props {
   hideEmployeesAssociatedOnlyWithDefaultRepositories?: boolean;
   /** 在启用上一项过滤时，始终保留在表格中的员工 id（如 project_prd 关联）。 */
   alwaysShowEmployeeIds?: string[];
+  /**
+   * 从侧栏「仓库」打开：与需求面板相同展示 Owner 列与「仓库」表单项，但不关联 project_prd。
+   * 须与 `hideEmployeesAssociatedOnlyWithDefaultRepositories` 同时为 true 以启用项目级表格过滤与 Owner UI。
+   */
+  repositoryOwnerScopeOnly?: boolean;
+  /** 新建员工时默认「员工名称」（侧栏仓库流程下为仓库目录名）。 */
+  initialCreateEmployeeName?: string | null;
+  /**
+   * 从项目上下文打开时传入单一项目 id：自动归属该项目且隐藏「所属项目」字段，避免用户误操作。
+   */
+  singleProjectScopeId?: string | null;
   onClose: () => void;
   onCreate: (input: {
     name: string;
     agentType: string;
     enabled: boolean;
     repositoryIds: number[];
+    projectIds?: string[];
     /** 创建后把该仓 `mainOwnerAgentName` 设为员工的 `agentType` */
     ownerRepositoryId?: number | null;
   }) => Promise<void>;
-  onUpdate: (input: { employeeId: string; name: string; agentType: string; enabled: boolean; repositoryIds: number[] }) => Promise<void>;
+  onUpdate: (input: { employeeId: string; name: string; agentType: string; enabled: boolean; repositoryIds: number[]; projectIds?: string[] }) => Promise<void>;
   onDelete: (employeeId: string) => Promise<void>;
 }
 
@@ -62,15 +75,20 @@ export function EmployeeConfigModal({
   workflowTemplates,
   workflowGraphsByWorkflowId = {},
   repositories,
+  projects,
   agentTypeOptions,
   defaultRepositoryIds = [],
   hideEmployeesAssociatedOnlyWithDefaultRepositories = false,
   alwaysShowEmployeeIds = [],
+  repositoryOwnerScopeOnly = false,
+  initialCreateEmployeeName = null,
+  singleProjectScopeId = null,
   onClose,
   onCreate,
   onUpdate,
   onDelete,
 }: Props) {
+  const { message } = App.useApp();
   const [form] = Form.useForm();
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -84,9 +102,12 @@ export function EmployeeConfigModal({
     return merged.map((value) => ({ value, label: value }));
   }, [agentTypeOptions, employees]);
   const hideRepositorySelector = defaultRepositoryIds.length > 0;
-  /** 从项目需求面板打开：选单个仓作为 Owner，并展示 Owner 列 */
+  /** 项目需求面板或侧栏仓库：展示 Owner 列与「仓库」表单项 */
   const projectOwnerPickMode =
-    hideEmployeesAssociatedOnlyWithDefaultRepositories && defaultRepositoryIds.length > 0;
+    defaultRepositoryIds.length > 0 &&
+    (hideEmployeesAssociatedOnlyWithDefaultRepositories || repositoryOwnerScopeOnly);
+  const singleOwnerRepositoryId =
+    repositoryOwnerScopeOnly && defaultRepositoryIds.length === 1 ? defaultRepositoryIds[0] : undefined;
   const teamEmployeeIds = useMemo(
     () => collectTeamMemberEmployeeIds(workflowTemplates, workflowGraphsByWorkflowId),
     [workflowTemplates, workflowGraphsByWorkflowId],
@@ -146,48 +167,84 @@ export function EmployeeConfigModal({
   function handleCreateClick() {
     setEditingId(null);
     form.setFieldsValue({
-      name: "",
+      name: initialCreateEmployeeName?.trim() ?? "",
       agentType: "executor",
       repositoryIds: defaultRepositoryIds,
-      ownerRepositoryId: undefined,
+      projectIds: singleProjectScopeId ? [singleProjectScopeId] : undefined,
+      ownerRepositoryId: singleOwnerRepositoryId ?? undefined,
     });
   }
 
+  useEffect(() => {
+    if (!open || editingId) return;
+    if (!repositoryOwnerScopeOnly || !initialCreateEmployeeName?.trim()) return;
+    form.setFieldsValue({
+      name: initialCreateEmployeeName.trim(),
+      agentType: "executor",
+      repositoryIds: defaultRepositoryIds,
+      projectIds: singleProjectScopeId ? [singleProjectScopeId] : undefined,
+      ownerRepositoryId: singleOwnerRepositoryId ?? undefined,
+    });
+  }, [
+    open,
+    editingId,
+    repositoryOwnerScopeOnly,
+    initialCreateEmployeeName,
+    defaultRepositoryIds,
+    singleOwnerRepositoryId,
+    singleProjectScopeId,
+    form,
+  ]);
+
   async function handleSubmit() {
-    const values = await form.validateFields();
-    if (editingEmployee) {
-      const nextRepositoryIds =
-        hideRepositorySelector ? editingEmployee.repositoryIds : (values.repositoryIds ?? []);
-      await onUpdate({
-        employeeId: editingEmployee.id,
-        name: values.name,
-        agentType: values.agentType,
-        enabled: editingEmployee.enabled,
-        repositoryIds: nextRepositoryIds,
-      });
-      return;
+    try {
+      const values = await form.validateFields(["name", "agentType"]);
+      if (editingEmployee) {
+        const nextRepositoryIds =
+          hideRepositorySelector ? editingEmployee.repositoryIds : (values.repositoryIds ?? defaultRepositoryIds);
+        await onUpdate({
+          employeeId: editingEmployee.id,
+          name: values.name,
+          agentType: values.agentType,
+          enabled: editingEmployee.enabled,
+          repositoryIds: nextRepositoryIds,
+          projectIds: values.projectIds ?? editingEmployee.projectIds,
+        });
+        return;
+      }
+      if (projectOwnerPickMode) {
+        const ownerRid =
+          (values.ownerRepositoryId as number | undefined) ??
+          defaultRepositoryIds[0];
+        if (ownerRid == null) {
+          message.error("缺少 Owner 仓库");
+          return;
+        }
+        await onCreate({
+          name: values.name,
+          agentType: values.agentType,
+          enabled: true,
+          repositoryIds: [ownerRid],
+          ownerRepositoryId: ownerRid,
+        });
+        form.setFieldsValue({
+          name: "",
+          agentType: "executor",
+          ownerRepositoryId: undefined,
+          repositoryIds: defaultRepositoryIds,
+        });
+        return;
+      }
+      const selectedRepositoryIds: number[] = values.repositoryIds ?? defaultRepositoryIds;
+      const mergedRepositoryIds = Array.from(new Set([...defaultRepositoryIds, ...selectedRepositoryIds]));
+      await onCreate({ name: values.name, agentType: values.agentType, enabled: true, repositoryIds: mergedRepositoryIds });
+      form.setFieldsValue({ name: "", agentType: "executor", repositoryIds: defaultRepositoryIds });
+    } catch (error) {
+      console.error("handleSubmit error:", error);
+      if (error instanceof Error) {
+        message.error(error.message);
+      }
     }
-    if (projectOwnerPickMode) {
-      const ownerRid = values.ownerRepositoryId as number;
-      await onCreate({
-        name: values.name,
-        agentType: values.agentType,
-        enabled: true,
-        repositoryIds: [ownerRid],
-        ownerRepositoryId: ownerRid,
-      });
-      form.setFieldsValue({
-        name: "",
-        agentType: "executor",
-        ownerRepositoryId: undefined,
-        repositoryIds: defaultRepositoryIds,
-      });
-      return;
-    }
-    const selectedRepositoryIds: number[] = values.repositoryIds ?? [];
-    const mergedRepositoryIds = Array.from(new Set([...defaultRepositoryIds, ...selectedRepositoryIds]));
-    await onCreate({ name: values.name, agentType: values.agentType, enabled: true, repositoryIds: mergedRepositoryIds });
-    form.setFieldsValue({ name: "", agentType: "executor", repositoryIds: defaultRepositoryIds });
   }
 
   async function handleToggleEnabled(row: EmployeeItem, enabled: boolean) {
@@ -197,6 +254,7 @@ export function EmployeeConfigModal({
       agentType: row.agentType,
       enabled,
       repositoryIds: row.repositoryIds,
+      projectIds: row.projectIds,
     });
   }
 
@@ -206,7 +264,7 @@ export function EmployeeConfigModal({
       open={open}
       onCancel={onClose}
       footer={null}
-      width={projectOwnerPickMode ? 800 : 700}
+      width={projectOwnerPickMode ? 850 : 780}
       destroyOnHidden
       rootClassName="app-employee-config-modal-root"
     >
@@ -258,7 +316,7 @@ export function EmployeeConfigModal({
                 />
               </Form.Item>
             </div>
-            {!hideRepositorySelector ? (
+            {(!hideRepositorySelector || repositoryOwnerScopeOnly) ? (
               <div className="app-employee-config-field">
                 <div className="app-employee-config-field-label">关联仓库</div>
                 <Form.Item
@@ -267,9 +325,10 @@ export function EmployeeConfigModal({
                 >
                   <Select
                     mode="multiple"
-                    allowClear
+                    allowClear={repositoryOwnerScopeOnly ? false : true}
                     placeholder="关联仓库"
                     maxTagCount="responsive"
+                    disabled={repositoryOwnerScopeOnly}
                     options={repositories.map((repository) => ({
                       value: repository.id,
                       label: repositoryFolderBasename(repository),
@@ -278,14 +337,33 @@ export function EmployeeConfigModal({
                 </Form.Item>
               </div>
             ) : null}
-            {projectOwnerPickMode && !editingEmployee ? (
+            {projects && projects.length > 0 && !repositoryOwnerScopeOnly && !singleProjectScopeId ? (
+              <div className="app-employee-config-field">
+                <div className="app-employee-config-field-label">所属项目</div>
+                <Form.Item
+                  name="projectIds"
+                  className="app-employee-config-item app-employee-config-item--projects"
+                >
+                  <Select
+                    mode="multiple"
+                    allowClear
+                    placeholder="所属项目"
+                    maxTagCount="responsive"
+                    options={projects.map((p) => ({
+                      value: p.id,
+                      label: p.name,
+                    }))}
+                  />
+                </Form.Item>
+              </div>
+            ) : null}
+            {projectOwnerPickMode && !editingEmployee && !singleOwnerRepositoryId ? (
               <div className="app-employee-config-field">
                 <div className="app-employee-config-field-label" title="作为该仓唯一主 Owner 的新员工将关联此仓库">
-                  仓库 Owner
+                  仓库
                 </div>
                 <Form.Item
                   name="ownerRepositoryId"
-                  rules={[{ required: true, message: "请选择作为 Owner 的仓库" }]}
                   className="app-employee-config-item app-employee-config-item--owner-repo"
                 >
                   <Select
@@ -365,13 +443,9 @@ export function EmployeeConfigModal({
                       );
                       if (names.length === 0) return "—";
                       return (
-                        <Space size={2} wrap className="app-employee-config-owner-tags">
-                          {names.map((n) => (
-                            <Tag key={n} color="blue" className="app-employee-config-owner-tag">
-                              {n}
-                            </Tag>
-                          ))}
-                        </Space>
+                        <Tag color="blue" className="app-employee-config-owner-tag">
+                          Owner
+                        </Tag>
                       );
                     },
                   },
@@ -431,6 +505,7 @@ export function EmployeeConfigModal({
                           name: row.name,
                           agentType: row.agentType,
                           repositoryIds: row.repositoryIds,
+                          projectIds: row.projectIds,
                           ownerRepositoryId: undefined,
                         });
                       }}
@@ -453,9 +528,15 @@ export function EmployeeConfigModal({
             },
           ]}
         />
-        {hideEmployeesAssociatedOnlyWithDefaultRepositories && defaultRepositoryIds.length > 0 ? (
+        {hideEmployeesAssociatedOnlyWithDefaultRepositories && defaultRepositoryIds.length > 0
+        && !repositoryOwnerScopeOnly ? (
           <Typography.Text type="secondary" className="app-employee-config-footnote">
             已从本表隐藏「仅关联当前项目内仓库」的员工（一般为各仓侧创建的配置）；项目需求面板显式关联的成员、以及在本项目内仓上配置为主 Owner 的员工仍会显示。若某仓仅在仓库侧配置了主 Owner、且尚未与任何员工关联，将以「仅仓库」行展示。在侧栏进入单个仓库打开员工配置可查看与编辑全部员工。
+          </Typography.Text>
+        ) : null}
+        {repositoryOwnerScopeOnly && defaultRepositoryIds.length > 0 ? (
+          <Typography.Text type="secondary" className="app-employee-config-footnote">
+            从侧栏仓库打开：新建时默认员工名称为该仓库目录名；保存后会自动勾选本仓库并写入仓库主 Owner，表格中「Owner 标识」列与项目需求面板规则一致。
           </Typography.Text>
         ) : null}
       </Space>

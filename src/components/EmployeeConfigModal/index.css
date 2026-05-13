@@ -32,18 +32,18 @@
 
 .app-employee-config-row {
   display: grid;
-  grid-template-columns: 156px 172px minmax(180px, 1fr) auto;
-  gap: 6px;
+  grid-template-columns: 140px 152px 1fr auto;
+  gap: 8px;
   align-items: center;
 }
 
 .app-employee-config-row--compact {
-  grid-template-columns: 140px 156px auto;
+  grid-template-columns: 140px 156px 1fr auto;
 }
 
 .app-employee-config-row--project-owner {
-  grid-template-columns: minmax(148px, 1fr) minmax(148px, 1fr) minmax(220px, 1.6fr) auto;
-  gap: 6px;
+  grid-template-columns: 148px 148px minmax(220px, 1.2fr) minmax(220px, 1.6fr) auto;
+  gap: 8px;
 }
 
 .app-employee-config-form--project-owner .app-employee-config-item--name .ant-input {
@@ -79,6 +79,8 @@
   justify-content: flex-end;
   gap: 4px;
   margin-left: 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .app-employee-config-form .ant-form-item {
@@ -102,6 +104,8 @@
   line-height: 28px;
   white-space: nowrap;
   flex: 0 0 auto;
+  position: relative;
+  z-index: 2;
 }
 
 .app-employee-config-item {
@@ -117,7 +121,6 @@
 }
 
 .app-employee-config-item--agent .ant-select {
-  width: 156px;
   height: 28px;
 }
 
@@ -135,6 +138,11 @@
 
 .app-employee-config-item--repositories .ant-select {
   width: 100%;
+}
+
+.app-employee-config-item--projects .ant-select {
+  width: 100%;
+  min-width: 150px;
 }
 
 .app-employee-config-row .ant-input-affix-wrapper,
@@ -189,8 +197,6 @@
   }
 
   .app-employee-config-actions {
-    align-items: center;
-    justify-content: flex-end;
     margin-left: 0;
   }
 }

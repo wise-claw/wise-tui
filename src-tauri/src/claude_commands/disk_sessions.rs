@@ -5,8 +5,7 @@ use std::io::BufRead;
 use std::path::{Path, PathBuf};
 
 fn claude_projects_root() -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or_else(|| "HOME directory not found".to_string())?;
-    Ok(home.join(".claude").join("projects"))
+    Ok(crate::claude_config_dir::user_claude_dir().join("projects"))
 }
 
 /// Encodes an absolute project path into Claude Code's directory name under `~/.claude/projects/`.
@@ -224,17 +223,21 @@ pub(crate) fn list_claude_disk_sessions(
     Ok(out)
 }
 
-#[tauri::command]
-pub(crate) fn load_claude_session_jsonl(
-    project_path: String,
-    session_id: String,
-    tail_lines: Option<usize>,
-) -> Result<Vec<String>, String> {
-    if !is_safe_claude_session_filename(&session_id) {
+/// 解析 `~/.claude/projects/<encoded>/<session_id>.jsonl` 的绝对路径，并强制限定在项目目录沙箱内。
+///
+/// 用于 `load_claude_session_jsonl` / `delete_claude_disk_session` 共享路径校验：
+/// 1. `session_id` 必须满足 `is_safe_claude_session_filename`（32~48 个 ASCII 十六进制或 `-`）；
+/// 2. 解析 `project_path` 编码后的目录并 `canonicalize`，避免被符号链接跳出；
+/// 3. 目标 jsonl 必须存在且 `canonicalize` 后仍在项目目录内，防止越界删/读。
+fn resolve_session_jsonl_path(
+    project_path: &str,
+    session_id: &str,
+) -> Result<(PathBuf, PathBuf), String> {
+    if !is_safe_claude_session_filename(session_id) {
         return Err("invalid session id".into());
     }
     let root = claude_projects_root()?;
-    let dir_name = encoded_claude_project_dir(Path::new(&project_path))?;
+    let dir_name = encoded_claude_project_dir(Path::new(project_path))?;
     let dir = root.join(&dir_name);
     let dir_canon =
         fs::canonicalize(&dir).map_err(|e| format!("bad project sessions dir: {}", e))?;
@@ -246,6 +249,16 @@ pub(crate) fn load_claude_session_jsonl(
     if !path_canon.starts_with(&dir_canon) {
         return Err("session path outside project dir".into());
     }
+    Ok((dir_canon, path_canon))
+}
+
+#[tauri::command]
+pub(crate) fn load_claude_session_jsonl(
+    project_path: String,
+    session_id: String,
+    tail_lines: Option<usize>,
+) -> Result<Vec<String>, String> {
+    let (_dir_canon, path_canon) = resolve_session_jsonl_path(&project_path, &session_id)?;
     let file = fs::File::open(&path_canon).map_err(|e| e.to_string())?;
     let reader = std::io::BufReader::new(file);
     match tail_lines.filter(|&n| n > 0) {
@@ -268,4 +281,21 @@ pub(crate) fn load_claude_session_jsonl(
             Ok(dq.into_iter().collect())
         }
     }
+}
+
+/// 物理删除 `~/.claude/projects/<encoded>/<session_id>.jsonl`。
+///
+/// 与 Claude Code CLI 行为对齐：删除即真删，不再可恢复。前端必须做二次确认，
+/// 且在会话处于 `running` / `connecting` 时拒绝调用（避免与正在写盘的 Claude 子进程冲突）。
+///
+/// 安全约束：复用 `resolve_session_jsonl_path` 校验，确保 `session_id` 形态合法、
+/// 解析后的 jsonl 真实存在于该项目目录内（canonicalize + `starts_with`）。
+#[tauri::command]
+pub(crate) fn delete_claude_disk_session(
+    project_path: String,
+    session_id: String,
+) -> Result<(), String> {
+    let (_dir_canon, path_canon) = resolve_session_jsonl_path(&project_path, &session_id)?;
+    fs::remove_file(&path_canon).map_err(|e| format!("remove session jsonl: {}", e))?;
+    Ok(())
 }

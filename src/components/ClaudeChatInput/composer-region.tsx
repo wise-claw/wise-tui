@@ -1186,6 +1186,28 @@ function ComposerInner({
     [handleNativeFilesDropped],
   );
 
+  const handleInputAreaPaste = useCallback(
+    (e: React.ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      const imageFiles: File[] = [];
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) imageFiles.push(file);
+        }
+      }
+
+      if (imageFiles.length > 0) {
+        e.preventDefault();
+        addImageFilesFromList(imageFiles);
+      }
+    },
+    [addImageFilesFromList],
+  );
+
   const handleFileAttach = useCallback(() => {
     const input = document.createElement("input");
     input.type = "file";
@@ -1687,6 +1709,7 @@ function ComposerInner({
         onDragLeave={handleInputAreaDragLeave}
         onDropCapture={handleInputAreaDropCapture}
         onDrop={handleInputAreaDrop}
+        onPaste={handleInputAreaPaste}
       >
         <div
           className={`app-claude-input-container${dragOverNativeFiles ? " app-claude-input-container--drop-target" : ""}`}

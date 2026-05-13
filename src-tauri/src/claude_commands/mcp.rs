@@ -256,7 +256,7 @@ fn build_mcp_items_from_settings_mcp_block(
     build_mcp_items_from_map(map, scope, source_path, claude_json_project_key)
 }
 
-fn claude_plugin_data_dir_from_ref(home: &Path, plugin_ref: &str) -> PathBuf {
+fn claude_plugin_data_dir_from_ref(plugin_ref: &str) -> PathBuf {
     let id: String = plugin_ref
         .chars()
         .map(|c| match c {
@@ -264,7 +264,10 @@ fn claude_plugin_data_dir_from_ref(home: &Path, plugin_ref: &str) -> PathBuf {
             _ => '-',
         })
         .collect();
-    home.join(".claude").join("plugins").join("data").join(id)
+    crate::claude_config_dir::user_claude_dir()
+        .join("plugins")
+        .join("data")
+        .join(id)
 }
 
 fn resolve_plugin_relative_path(plugin_root: &Path, rel: &str) -> PathBuf {
@@ -344,13 +347,12 @@ fn collect_mcp_maps_from_plugin_mcp_spec(
 
 /// 将已解析的 MCP 服务器表写入 `out`（展开 `${CLAUDE_PLUGIN_ROOT}` / `${CLAUDE_PLUGIN_DATA}`）。
 fn append_mcp_declaration_maps(
-    home: &Path,
     plugin_ref: &str,
     plugin_root: &Path,
     maps: Vec<(String, serde_json::Map<String, serde_json::Value>)>,
     out: &mut Vec<ClaudeMcpItem>,
 ) {
-    let data_dir = claude_plugin_data_dir_from_ref(home, plugin_ref);
+    let data_dir = claude_plugin_data_dir_from_ref(plugin_ref);
     let data_dir_str = data_dir.to_string_lossy().to_string();
     for (src_path, map) in maps {
         for (name, cfg_orig) in map.iter() {
@@ -387,7 +389,6 @@ fn append_mcp_declaration_maps(
 
 /// 从单个插件根目录（cache 安装副本或 marketplaces 解压目录）解析 MCP 条目并追加到 `out`。
 fn push_mcp_declarations_from_plugin_dir(
-    home: &Path,
     plugin_ref: &str,
     plugin_root: &Path,
     out: &mut Vec<ClaudeMcpItem>,
@@ -418,7 +419,7 @@ fn push_mcp_declarations_from_plugin_dir(
         }
     }
 
-    append_mcp_declaration_maps(home, plugin_ref, plugin_root, maps, out);
+    append_mcp_declaration_maps(plugin_ref, plugin_root, maps, out);
 }
 
 /// 解析 `installed_plugins.json` 中的 `installPath` / `install_path`（支持 `~`、相对路径、`$HOME/`、环境变量）。
@@ -461,8 +462,10 @@ fn dedupe_plugin_mcp_items(items: Vec<ClaudeMcpItem>) -> Vec<ClaudeMcpItem> {
     out
 }
 
-fn claude_plugins_cache_dir(home: &Path) -> PathBuf {
-    home.join(".claude").join("plugins").join("cache")
+fn claude_plugins_cache_dir() -> PathBuf {
+    crate::claude_config_dir::user_claude_dir()
+        .join("plugins")
+        .join("cache")
 }
 
 fn dir_has_skill_md_subdirs(skills_dir: &Path) -> bool {
@@ -556,9 +559,9 @@ fn plugin_package_root_declares_mcp(plugin_root: &Path) -> bool {
     plugin_root.join(".mcp.json").is_file()
 }
 
-/// 枚举 `~/.claude/plugins/cache/**` 下全部插件包根路径，返回 `(相对 cache 的路径片段, 绝对路径)`。
-pub(crate) fn discover_plugin_roots_under_claude_cache(home: &Path) -> Vec<(String, PathBuf)> {
-    let cache = claude_plugins_cache_dir(home);
+/// 枚举 `~/.claude/plugins/cache/**`（或自定义目录下同名子树）下全部插件包根路径。
+pub(crate) fn discover_plugin_roots_under_claude_cache() -> Vec<(String, PathBuf)> {
+    let cache = claude_plugins_cache_dir();
     if !cache.is_dir() {
         return Vec::new();
     }
@@ -819,10 +822,11 @@ fn extra_known_marketplace_directory_roots_from_settings_value(
     out
 }
 
-/// 定位「插件市场」根目录：优先 `~/.claude/plugins/marketplaces/<id>`，其次大小写不敏感、`plugins/<id>`、再在 `cache/**` 内按目录名匹配（兼容真实安装路径与标准布局不一致）。
-fn resolve_plugin_marketplace_root_dir(home: &Path, marketplace_id: &str) -> Option<PathBuf> {
+/// 定位「插件市场」根目录：优先 `~/.claude/plugins/marketplaces/<id>`（或自定义目录的对应位置），其次大小写不敏感、`plugins/<id>`、再在 `cache/**` 内按目录名匹配（兼容真实安装路径与标准布局不一致）。
+fn resolve_plugin_marketplace_root_dir(marketplace_id: &str) -> Option<PathBuf> {
     let id_lower = marketplace_id.to_lowercase();
-    let marketplaces_parent = home.join(".claude").join("plugins").join("marketplaces");
+    let user_claude = crate::claude_config_dir::user_claude_dir();
+    let marketplaces_parent = user_claude.join("plugins").join("marketplaces");
     let primary = marketplaces_parent.join(marketplace_id);
     if primary.is_dir() {
         return fs::canonicalize(&primary).ok().or(Some(primary));
@@ -841,11 +845,11 @@ fn resolve_plugin_marketplace_root_dir(home: &Path, marketplace_id: &str) -> Opt
             }
         }
     }
-    let flat = home.join(".claude").join("plugins").join(marketplace_id);
+    let flat = user_claude.join("plugins").join(marketplace_id);
     if flat.is_dir() {
         return fs::canonicalize(&flat).ok().or(Some(flat));
     }
-    let cache = claude_plugins_cache_dir(home);
+    let cache = claude_plugins_cache_dir();
     if let Ok(cache_canon) = fs::canonicalize(&cache) {
         if cache_canon.is_dir() {
             let walker = WalkDir::new(&cache_canon)
@@ -904,7 +908,6 @@ fn plugin_dir_root_if_valid(candidate: &Path) -> Option<PathBuf> {
 }
 
 fn resolve_marketplace_plugin_root_from_slugs(
-    home: &Path,
     marketplace_id: &str,
     plugin_slug: &str,
     extra_marketplace_roots: &HashMap<String, PathBuf>,
@@ -921,7 +924,7 @@ fn resolve_marketplace_plugin_root_from_slugs(
         })
         .filter(|p| p.is_dir())
         .map(|p| fs::canonicalize(&p).unwrap_or(p))
-        .or_else(|| resolve_plugin_marketplace_root_dir(home, marketplace_id))?;
+        .or_else(|| resolve_plugin_marketplace_root_dir(marketplace_id))?;
     let direct = [
         mdir.join("plugins").join(plugin_slug),
         mdir.join(plugin_slug),
@@ -958,7 +961,7 @@ fn resolve_marketplace_plugin_root_from_slugs(
 
 /// 单条 `plugin-slug@marketplace-id` 开关：解析磁盘上的插件根并写入 `out`（与根级、`enabledPlugins` 内写法共用）。
 fn push_mcp_from_settings_plugin_marketplace_toggle_if_enabled(
-    home: &Path,
+    _home: &Path,
     toggle_key: &str,
     val: &serde_json::Value,
     extra_marketplace_roots: &HashMap<String, PathBuf>,
@@ -974,7 +977,6 @@ fn push_mcp_from_settings_plugin_marketplace_toggle_if_enabled(
         return;
     }
     let Some(plugin_root) = resolve_marketplace_plugin_root_from_slugs(
-        home,
         marketplace_id.as_str(),
         plugin_slug.as_str(),
         extra_marketplace_roots,
@@ -986,17 +988,17 @@ fn push_mcp_from_settings_plugin_marketplace_toggle_if_enabled(
         return;
     }
     let plugin_ref = format!("settingsToggle:{toggle_key}");
-    push_mcp_declarations_from_plugin_dir(home, &plugin_ref, &plugin_root, out);
+    push_mcp_declarations_from_plugin_dir(&plugin_ref, &plugin_root, out);
 }
 
-/// 从用户 `~/.claude/settings.json` 中读取 `plugin@marketplace` 启用项并解析对应插件包内的 MCP（与 `installed_plugins.json` / 目录扫描互补）。
+/// 从用户级 settings.json（默认 `~/.claude/settings.json`，自定义目录时同步切换）读取 `plugin@marketplace` 启用项并解析对应插件包内的 MCP（与 `installed_plugins.json` / 目录扫描互补）。
 /// Claude Code 常把开关写在根级，或写在 `enabledPlugins` 对象内，两者都扫描。
 fn collect_mcp_from_claude_settings_marketplace_plugin_toggles(
     home: &Path,
     seen_roots: &mut HashSet<String>,
     out: &mut Vec<ClaudeMcpItem>,
 ) {
-    let path = home.join(".claude").join("settings.json");
+    let path = crate::claude_config_dir::user_claude_dir().join("settings.json");
     let Some(file_v) = read_json_file(&path) else {
         return;
     };
@@ -1050,8 +1052,7 @@ fn collect_installed_plugin_mcp_items(home: &Path) -> Vec<ClaudeMcpItem> {
     let mut out: Vec<ClaudeMcpItem> = Vec::new();
     let mut seen_roots: HashSet<String> = HashSet::new();
 
-    let installed_path = home
-        .join(".claude")
+    let installed_path = crate::claude_config_dir::user_claude_dir()
         .join("plugins")
         .join("installed_plugins.json");
     let installed_hint_base = installed_path.to_string_lossy().to_string();
@@ -1083,7 +1084,7 @@ fn collect_installed_plugin_mcp_items(home: &Path) -> Vec<ClaudeMcpItem> {
                     if !seen_roots.insert(canon_key) {
                         continue;
                     }
-                    push_mcp_declarations_from_plugin_dir(home, plugin_ref, &plugin_root, &mut out);
+                    push_mcp_declarations_from_plugin_dir(plugin_ref, &plugin_root, &mut out);
                     // 安装记录上可附带与 manifest 合并的 mcpServers（Claude Code 部分版本会写在这里）
                     if let Some(spec) = ent
                         .get("mcpServers")
@@ -1102,7 +1103,6 @@ fn collect_installed_plugin_mcp_items(home: &Path) -> Vec<ClaudeMcpItem> {
                             &mut inline_maps,
                         );
                         append_mcp_declaration_maps(
-                            home,
                             plugin_ref,
                             &plugin_root,
                             inline_maps,
@@ -1116,9 +1116,11 @@ fn collect_installed_plugin_mcp_items(home: &Path) -> Vec<ClaudeMcpItem> {
 
     collect_mcp_from_claude_settings_marketplace_plugin_toggles(home, &mut seen_roots, &mut out);
 
-    // Claude Code 还会在 `~/.claude/plugins/marketplaces/<id>/` 下放一份与 cache 并行的清单。
+    // Claude Code 还会在 `~/.claude/plugins/marketplaces/<id>/`（或自定义目录的对应位置）下放一份与 cache 并行的清单。
     // 官方市场多为 monorepo（如 `plugins/<name>/.claude-plugin/plugin.json`），必须递归枚举子目录，否则会漏掉 manifest 内 `mcpServers`。
-    let marketplaces = home.join(".claude").join("plugins").join("marketplaces");
+    let marketplaces = crate::claude_config_dir::user_claude_dir()
+        .join("plugins")
+        .join("marketplaces");
     if let Ok(rd) = fs::read_dir(&marketplaces) {
         for ent in rd.flatten() {
             let root = ent.path();
@@ -1158,18 +1160,18 @@ fn collect_installed_plugin_mcp_items(home: &Path) -> Vec<ClaudeMcpItem> {
                 } else {
                     format!("marketplace:{}:{}", mid, rel_slug)
                 };
-                push_mcp_declarations_from_plugin_dir(home, &plugin_ref, &plugin_root, &mut out);
+                push_mcp_declarations_from_plugin_dir(&plugin_ref, &plugin_root, &mut out);
             }
         }
     }
 
-    for (rel, plugin_root) in discover_plugin_roots_under_claude_cache(home) {
+    for (rel, plugin_root) in discover_plugin_roots_under_claude_cache() {
         let canon_key = plugin_root.to_string_lossy().to_string();
         if !seen_roots.insert(canon_key) {
             continue;
         }
         let plugin_ref = format!("cache:{}", rel);
-        push_mcp_declarations_from_plugin_dir(home, &plugin_ref, &plugin_root, &mut out);
+        push_mcp_declarations_from_plugin_dir(&plugin_ref, &plugin_root, &mut out);
     }
 
     let mut out = dedupe_plugin_mcp_items(out);
@@ -1295,15 +1297,15 @@ fn mcp_cli_cwd(scope: &str, project_path: Option<&str>, home: &Path) -> Result<P
 }
 
 fn allowed_mcp_source_paths(
-    home: &Path,
+    _home: &Path,
     project_path: Option<&str>,
 ) -> Result<Vec<PathBuf>, String> {
     let mut paths: Vec<PathBuf> = Vec::new();
-    let hj = home.join(".claude.json");
+    let hj = crate::claude_config_dir::user_claude_root_json();
     if hj.exists() {
         paths.push(fs::canonicalize(&hj).map_err(|e| e.to_string())?);
     }
-    let us = home.join(".claude").join("settings.json");
+    let us = crate::claude_config_dir::user_claude_dir().join("settings.json");
     if us.exists() {
         paths.push(fs::canonicalize(&us).map_err(|e| e.to_string())?);
     }
@@ -1438,7 +1440,7 @@ fn get_claude_mcp_status_collect(
     project_path: Option<String>,
 ) -> Result<ClaudeMcpStatusResponse, String> {
     let home = dirs::home_dir().ok_or_else(|| "Could not resolve home directory".to_string())?;
-    let claude_json_path = home.join(".claude.json");
+    let claude_json_path = crate::claude_config_dir::user_claude_root_json();
     let claude_json_str = claude_json_path.to_string_lossy().to_string();
 
     let mut user = Vec::new();
@@ -1487,7 +1489,7 @@ fn get_claude_mcp_status_collect(
         }
     }
 
-    let user_settings_path = home.join(".claude").join("settings.json");
+    let user_settings_path = crate::claude_config_dir::user_claude_dir().join("settings.json");
     let legacy_user_settings = read_json_file(&user_settings_path)
         .map(|v| {
             build_mcp_items_from_settings_mcp_block(

@@ -30,3 +30,17 @@ export async function loadClaudeSessionJsonl(
     tailLines,
   });
 }
+
+/**
+ * 物理删除 `~/.claude/projects/<encoded>/<sessionId>.jsonl`。
+ *
+ * 不可恢复，调用方必须先做二次确认。Rust 侧已对 `sessionId` 形态、目录沙箱做校验，
+ * 但若 Claude Code CLI 正在写入同一 jsonl（例如同名会话仍在运行），删除可能扰动外部进程，
+ * 调用方应保证会话当前不在运行状态。
+ */
+export async function deleteClaudeDiskSession(repositoryPath: string, sessionId: string): Promise<void> {
+  await invoke<void>("delete_claude_disk_session", {
+    projectPath: repositoryPath,
+    sessionId,
+  });
+}
