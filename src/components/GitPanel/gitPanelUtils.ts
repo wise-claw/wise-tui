@@ -1,0 +1,81 @@
+import type { GitStatusResponse } from "../../types";
+
+export function getStatusSymbol(status: string): string {
+  switch (status) {
+    case "A":
+      return "A";
+    case "M":
+      return "M";
+    case "D":
+      return "D";
+    case "R":
+      return "R";
+    case "T":
+      return "T";
+    default:
+      return "?";
+  }
+}
+
+export function buildCommitDraftFromStatus(status: GitStatusResponse): string {
+  const files = [...status.staged, ...status.unstaged];
+  const topFiles = Array.from(new Set(files.map((item) => item.path))).slice(0, 4);
+  const headline = files.length > 0 ? "更新代码变更，完善当前分支功能实现。" : "更新代码。";
+  const scopeLine = topFiles.length > 0 ? `涉及：${topFiles.join("、")}` : "涉及：无变更文件";
+  const statLine = `统计：+${Math.max(0, status.additions || 0)} / -${Math.max(0, status.deletions || 0)}`;
+  return [headline, scopeLine, statLine].join("\n");
+}
+
+export function getStatusColor(status: string): string {
+  switch (status) {
+    case "A":
+      return "#52c41a";
+    case "M":
+      return "#faad14";
+    case "D":
+      return "#ff4d4f";
+    default:
+      return "var(--ant-color-text-tertiary)";
+  }
+}
+
+export function hasExpandedDescendant(expandedDirs: Set<string>, path: string): boolean {
+  const prefix = `${path}/`;
+  for (const entry of expandedDirs) {
+    if (entry.startsWith(prefix)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function formatRelativeTime(timestamp: number): string {
+  const now = Date.now() / 1000;
+  const diff = now - timestamp;
+  if (diff < 60) return "刚刚";
+  if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`;
+  if (diff < 604800) return `${Math.floor(diff / 86400)} 天前`;
+  return new Date(timestamp * 1000).toLocaleDateString();
+}
+
+export function splitPath(path: string) {
+  const parts = path.split("/");
+  if (parts.length === 1) return { name: path, dir: "" };
+  return { name: parts[parts.length - 1], dir: parts.slice(0, -1).join("/") };
+}
+
+export function splitNameAndExt(name: string) {
+  const lastDot = name.lastIndexOf(".");
+  if (lastDot <= 0 || lastDot === name.length - 1) return { base: name, ext: "" };
+  return { base: name.slice(0, lastDot), ext: name.slice(lastDot + 1).toLowerCase() };
+}
+
+/** Let the browser paint loading state before a potentially slow Tauri call starts. */
+export function yieldToPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve());
+    });
+  });
+}
