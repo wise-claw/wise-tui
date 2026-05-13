@@ -1,0 +1,6 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend layer spec for new service module and helper additions."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Project-Owned Trellis Execution Metadata contract (§3) — new code must not read repo.sddMode directly; @-mention dispatch must use projects-aware helpers."}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Discriminated unions and exhaustive enum patterns for AtMention parser and interception result types."}
+{"file":".trellis/spec/frontend/state-management.md","reason":"Stable stores for invocation tracking — ensure dispatcher writes through repositoryMemberInvocationsStore where appropriate."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Composer → AppImpl handler → service dispatcher → TrellisWorkflowAdapter → claude invocation; verify the data flow is single-direction with no leaked state."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Reuse TrellisWorkflowAdapter instead of duplicating worktree+claude invocation logic."}
