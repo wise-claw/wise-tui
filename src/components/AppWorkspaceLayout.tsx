@@ -249,7 +249,6 @@ export function AppWorkspaceLayout({
   collapsed,
   promptsMode,
   taskSplitMode,
-  taskPanelMode,
   mcpHubMode,
   skillsHubMode,
   compactLayoutMode,

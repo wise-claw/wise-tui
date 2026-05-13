@@ -111,14 +111,18 @@ import { useDingTalkAutomationInbound } from "./hooks/useDingTalkAutomationInbou
 import { useOmcRuntime } from "./hooks/useOmcRuntime";
 import { useWorkflowTeamAutomation } from "./hooks/useWorkflowTeamAutomation";
 import { useWorkspaceMode } from "./hooks/useWorkspaceMode";
-import { addProjectPrdEmployee, addProjectPrdWorkflow, listProjectPrdEmployeeIds } from "./services/projectPrdScope";
+import {
+  addProjectPrdWorkflow,
+  listProjectPrdEmployeeIds,
+  listWorkflowProjectIds,
+} from "./services/projectPrdScope";
 
 // ── App ──
 
 export default function App() {
   const [taskSplitMode, setTaskSplitMode] = useState(false);
   /** 任务面板：在主区+右栏之上叠层展示任务列表（不盖左栏）。 */
-  const [taskPanelMode, setTaskPanelMode] = useState(false);
+  const [taskPanelMode] = useState(false);
   const [promptsMode, setPromptsMode] = useState(false);
   /** 左栏 MCP：在主区+右栏之上叠层展示（与技能目录相同，不盖左栏）。 */
   const [mcpHubMode, setMcpHubMode] = useState(false);
@@ -145,8 +149,6 @@ export default function App() {
   const [workflowConfigOpen, setWorkflowConfigOpen] = useState(false);
   /** 非空：从需求面板打开团队配置，保存模板后自动关联到该项目。 */
   const [workflowConfigPrdProjectId, setWorkflowConfigPrdProjectId] = useState<string | null>(null);
-  /** 当前项目的团队 workflow id 列表，用于过滤团队监控项。 */
-  const [teamProjectWorkflowIds, setTeamProjectWorkflowIds] = useState<string[]>([]);
   /** workflowId -> [projectId, ...] map，用于 WorkflowConfigModal 中展示已关联项目。 */
   const [workflowProjectIdsMap, setWorkflowProjectIdsMap] = useState<Record<string, string[]>>({});
   const [employeeLoading, setEmployeeLoading] = useState(false);
@@ -817,42 +819,6 @@ export default function App() {
     () => employeeMonitorItems.map((item) => item.employeeId),
     [employeeMonitorItems],
   );
-  const defaultWorkflowIds = useMemo(
-    () => new Set(workflowTemplates.filter((t) => t.isDefault).map((t) => t.id)),
-    [workflowTemplates],
-  );
-
-  /** Filter monitor items by project/repository context */
-  const filteredEmployeeMonitorItems = useMemo(() => {
-    const pid = activeProjectId?.trim() || null;
-    const rid = activeRepositoryId ?? null;
-    if (pid) {
-      return employeeMonitorItems.filter((item) => {
-        const emp = employees.find((e) => e.id === item.employeeId);
-        const pids = emp?.projectIds ?? [];
-        return pids.length === 0 || pids.includes(pid);
-      });
-    }
-    if (rid) {
-      return employeeMonitorItems.filter((item) => {
-        const emp = employees.find((e) => e.id === item.employeeId);
-        const rids = emp?.repositoryIds ?? [];
-        return rids.length === 0 || rids.includes(rid);
-      });
-    }
-    return [];
-  }, [employeeMonitorItems, employees, activeProjectId, activeRepositoryId]);
-
-  const filteredTeamMonitorItems = useMemo(() => {
-    const pid = activeProjectId?.trim() || null;
-    if (!pid) return [];
-    return teamMonitorItems.filter((item) => {
-      const isDefault = defaultWorkflowIds.has(item.workflowId);
-      const isPublished = (workflowGraphStatusByWorkflowId[item.workflowId] ?? "").toLowerCase() === "published";
-      if (!isPublished && !isDefault) return false;
-      return teamProjectWorkflowIds.includes(item.workflowId) || isDefault;
-    });
-  }, [teamMonitorItems, teamProjectWorkflowIds, workflowGraphStatusByWorkflowId, defaultWorkflowIds, activeProjectId]);
   useEffect(() => {
     const workflowIds = Array.from(new Set([...workflowTemplates.map((item) => item.id), ...workflowTasks.map((item) => item.workflowId)]));
     const missingIds = workflowIds.filter((workflowId) => !workflowGraphsByWorkflowId[workflowId]);
@@ -1038,19 +1004,6 @@ export default function App() {
     await loadEmployeeAgentTypeOptionsFromRepositoryPath(activeRepository?.path ?? null);
     setEmployeeConfigOpen(true);
   }, [activeRepositoryId, activeRepository?.path, loadEmployeeAgentTypeOptionsFromRepositoryPath]);
-
-  /** 当前项目变化时，加载该项目的团队 workflow ids */
-  useEffect(() => {
-    const pid = activeProjectId?.trim() ?? "";
-    if (!pid) {
-      setTeamProjectWorkflowIds([]);
-      return;
-    }
-    void listProjectPrdWorkflowIds(pid).then(
-      (ids) => setTeamProjectWorkflowIds(ids),
-      () => setTeamProjectWorkflowIds([]),
-    );
-  }, [activeProjectId]);
 
   /** WorkflowConfigModal 打开且 templates 就绪时，加载所有 workflow -> projectIds 映射 */
   useEffect(() => {
@@ -1704,7 +1657,7 @@ export default function App() {
         monitorTranscriptSourceSessions: sessions,
         employeeMonitorItems,
         repositoryMemberMonitorItems,
-        teamMonitorItems: publishedTeamMonitorItems,
+        teamMonitorItems,
         monitorActiveTarget: monitorDrawerTarget,
         onOpenTeamMonitorDetail: (workflowId) => {
           setMonitorDrawerTarget({ type: "team", workflowId });
