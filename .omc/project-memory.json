@@ -247,8 +247,8 @@
     },
     {
       "path": "src/AppImpl.tsx",
-      "accessCount": 55,
-      "lastAccessed": 1778590845985,
+      "accessCount": 82,
+      "lastAccessed": 1778630124152,
       "type": "file"
     },
     {
@@ -258,21 +258,27 @@
       "type": "file"
     },
     {
+      "path": "src/components/AppWorkspaceLayout.tsx",
+      "accessCount": 23,
+      "lastAccessed": 1778630105765,
+      "type": "directory"
+    },
+    {
+      "path": "src/components/LeftSidebar.tsx",
+      "accessCount": 20,
+      "lastAccessed": 1778630183552,
+      "type": "file"
+    },
+    {
       "path": "src/types.ts",
-      "accessCount": 15,
-      "lastAccessed": 1778589903753,
+      "accessCount": 18,
+      "lastAccessed": 1778629787263,
       "type": "file"
     },
     {
       "path": "src/components/ClaudeSessions/WorkflowTaskTimeline.tsx",
       "accessCount": 10,
       "lastAccessed": 1778204362362,
-      "type": "file"
-    },
-    {
-      "path": "src/components/LeftSidebar.tsx",
-      "accessCount": 9,
-      "lastAccessed": 1778590104515,
       "type": "file"
     },
     {
@@ -454,12 +460,6 @@
       "accessCount": 1,
       "lastAccessed": 1778513388828,
       "type": "file"
-    },
-    {
-      "path": "src/components/AppWorkspaceLayout.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1778515945104,
-      "type": "directory"
     },
     {
       "path": "src/components/PrdTaskSplitPanel/types.ts",

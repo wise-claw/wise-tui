@@ -256,12 +256,8 @@ export function useWorkflowTeamAutomation({
         return { sessionId, deferExecute: true };
       }
       const createPromise = (async (): Promise<string> => {
-        const previousActiveSessionId = activeSessionIdRef.current;
-        const createdSessionId = await createSession(repositoryPath, `${repositoryName}/员工:${employee.name}`);
+        const createdSessionId = await createSession(repositoryPath, `${repositoryName}/员工:${employee.name}`, { skipActivate: true });
         employeeSessionIdByKeyRef.current.set(key, createdSessionId);
-        if (previousActiveSessionId && previousActiveSessionId !== createdSessionId) {
-          switchSession(previousActiveSessionId);
-        }
         return createdSessionId;
       })();
       employeeSessionCreateByKeyRef.current.set(key, createPromise);
@@ -271,7 +267,7 @@ export function useWorkflowTeamAutomation({
       const sessionId = await createPromise;
       return { sessionId, deferExecute: true };
     },
-    [createSession, switchSession],
+    [createSession],
   );
 
   const prepareFreshOmcEmployeeWorkerForDirectBatch = useCallback(

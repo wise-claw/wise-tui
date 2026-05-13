@@ -108,6 +108,8 @@ import { addProjectPrdWorkflow, listProjectPrdEmployeeIds, listProjectPrdWorkflo
 
 export default function App() {
   const [taskSplitMode, setTaskSplitMode] = useState(false);
+  /** 任务面板：在主区+右栏之上叠层展示任务列表（不盖左栏）。 */
+  const [taskPanelMode, setTaskPanelMode] = useState(false);
   const [promptsMode, setPromptsMode] = useState(false);
   /** 左栏 MCP：在主区+右栏之上叠层展示（与技能目录相同，不盖左栏）。 */
   const [mcpHubMode, setMcpHubMode] = useState(false);
@@ -1260,7 +1262,7 @@ export default function App() {
       setTaskSplitMode(true);
       return;
     }
-    const sessionId = await createSession(repository.path, repositorySessionTabDisplayName(repository));
+    const sessionId = await createSession(repository.path, repositorySessionTabDisplayName(repository), { skipActivate: true });
     executeSession(
       sessionId,
       applyTemplate(repositorySplitTemplate || DEFAULT_REPOSITORY_SPLIT_TEMPLATE, {
@@ -1294,7 +1296,7 @@ export default function App() {
       setTaskSplitMode(true);
       return;
     }
-    const sessionId = await createSession(primaryRepo.path, `${project.name}/${repositoryFolderBasename(primaryRepo)}`);
+    const sessionId = await createSession(primaryRepo.path, `${project.name}/${repositoryFolderBasename(primaryRepo)}`, { skipActivate: true });
     const repoPaths = repos.map((repo) => `- ${repo.path}`).join("\n");
     executeSession(
       sessionId,
@@ -1455,6 +1457,7 @@ export default function App() {
       collapsed={collapsed}
       promptsMode={promptsMode}
       taskSplitMode={taskSplitMode}
+      taskPanelMode={taskPanelMode}
       mcpHubMode={mcpHubMode}
       skillsHubMode={skillsHubMode}
       compactLayoutMode={compactLayoutMode}
@@ -1519,6 +1522,28 @@ export default function App() {
         activeRepositoryPath: activeRepository?.path,
         activeRepositoryName: activeRepository?.name,
         onOpenActiveRepositoryFile: openRepositoryFile,
+        taskCardsNavProps: {
+          activeProject: projects.find((p) => p.id === activeProjectId) ?? null,
+          requirementPanelActive: taskSplitMode,
+          taskPanelActive: taskPanelMode,
+          onRequireProjectSelect: () => {
+            message.warning("请先选择一个项目");
+          },
+          onOpenRequirementPanel: () => {
+            setPromptsMode(false);
+            setMcpHubMode(false);
+            setSkillsHubMode(false);
+            setTaskPanelMode(false);
+            setTaskSplitMode(true);
+          },
+          onOpenTaskPanel: () => {
+            setPromptsMode(false);
+            setMcpHubMode(false);
+            setSkillsHubMode(false);
+            setTaskSplitMode(false);
+            setTaskPanelMode(true);
+          },
+        },
       }}
       promptsPanelProps={{
         onClose: () => {
@@ -1547,7 +1572,7 @@ export default function App() {
         onAutoFixRunError: activeRepository
           ? async (prompt: string) => {
               const repoPath = activeRepository.path;
-              const sessionId = await createSession(repoPath, `错误修复`);
+              const sessionId = await createSession(repoPath, `错误修复`, { skipActivate: true });
               executeSession(sessionId, prompt);
             }
           : undefined,
@@ -1702,6 +1727,10 @@ export default function App() {
         workflowTemplates,
         onOpenEmployeeConfigForProject: () => void openEmployeeConfigForProject(),
         onOpenWorkflowConfigForProject: openWorkflowConfigForProject,
+      }}
+      taskPanelProps={{
+        activeProject: projects.find((p) => p.id === activeProjectId) ?? null,
+        onClose: () => setTaskPanelMode(false),
       }}
       repositoryFilePreviewModalProps={{
         preview: repositoryBinaryPreview,

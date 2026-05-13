@@ -68,6 +68,10 @@ import {
   resolveAutoSddMode,
   type SddSignals,
 } from "../services/trellis/sddModeDetector";
+import {
+  TaskCardsNav,
+  type TaskCardsNavProps,
+} from "./TaskCardsNav";
 import "./GitPanel/index.css";
 
 const LEFT_FILES_EXPLORER_COLLAPSED_KEY = "wise.leftPanel.filesExplorerCollapsed";
@@ -298,6 +302,8 @@ interface Props {
   activeRepositoryPath?: string;
   activeRepositoryName?: string;
   onOpenActiveRepositoryFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
+  /** 左栏「需求/任务」卡片行 */
+  taskCardsNavProps?: TaskCardsNavProps;
 }
 
 /** 项目行：打开需求（PRD 任务拆分） */
@@ -685,6 +691,7 @@ export function LeftSidebar({
   activeRepositoryPath,
   activeRepositoryName,
   onOpenActiveRepositoryFile,
+  taskCardsNavProps,
 }: Props) {
   const { message, modal } = AntdApp.useApp();
 
@@ -1204,6 +1211,10 @@ export function LeftSidebar({
           <ClaudeCodeUsageHeaderBtn />
         </div>
       </div>
+
+      {taskCardsNavProps ? (
+        <TaskCardsNav {...taskCardsNavProps} />
+      ) : null}
 
       {onOpenMcpHub || onOpenSkillsHub ? (
         <div className="app-left-sidebar-top-nav-stack">
