@@ -48,6 +48,7 @@ import {
   dispatchAtMentionPromptToRepos,
   planAtMentionDispatch,
 } from "./services/atMentionDispatch";
+import { resolveProjectMainSessionAnchor } from "./utils/projectSessionAnchor";
 import { shouldHideEmployeeUi } from "./utils/projectRepositoryRoles";
 import { useMonitorOverview } from "./hooks/useMonitorOverview";
 import { useIntervalSyncedState } from "./hooks/useIntervalSyncedState";
@@ -1250,12 +1251,17 @@ export default function App() {
       message.warning("该项目下暂无仓库，请先关联仓库");
       return;
     }
+    const anchor = resolveProjectMainSessionAnchor(project, repositories);
+    if (!anchor.path) {
+      message.warning("该项目缺少根目录，请先在项目设置中配置 rootPath");
+      return;
+    }
     const primaryRepo = repos[0];
     setActiveProjectId(project.id);
     setActiveRepositoryId(primaryRepo.id);
     if (mode === "chat") {
-      const id = await createSession(primaryRepo.path, `${project.name}/${repositoryFolderBasename(primaryRepo)}`);
-      bindRepositoryMainSession(primaryRepo.path, id);
+      const id = await createSession(anchor.path, anchor.displayName);
+      bindRepositoryMainSession(anchor.path, id);
       return;
     }
     if (mode === "split") {
@@ -1264,14 +1270,14 @@ export default function App() {
       setTaskSplitMode(true);
       return;
     }
-    const sessionId = await createSession(primaryRepo.path, `${project.name}/${repositoryFolderBasename(primaryRepo)}`);
+    const sessionId = await createSession(anchor.path, anchor.displayName);
     const repoPaths = repos.map((repo) => `- ${repo.path}`).join("\n");
     executeSession(
       sessionId,
       applyTemplate(projectSplitTemplate || DEFAULT_PROJECT_SPLIT_TEMPLATE, {
         projectName: project.name,
         repoName: repositoryFolderBasename(primaryRepo),
-        repoPath: primaryRepo.path,
+        repoPath: anchor.isProjectRooted ? anchor.path : primaryRepo.path,
         repoList: repoPaths,
       }),
     );

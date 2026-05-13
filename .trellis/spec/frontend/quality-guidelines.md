@@ -103,6 +103,7 @@ the test runner for those files.
 - Monitor UI groups Trellis invocations as `repository member -> subagent rows`.
 - EmployeeItem UI entry points (config buttons, employee monitor section) are gated by `shouldHideEmployeeUi(activeProject)`; `wise_trellis` projects hide them, `project_owned` projects keep them as a legacy escape hatch.
 - `@<roleTag>` prompts arriving at the AppImpl send path are routed via `planAtMentionDispatch` and `dispatchAtMentionPromptToRepos`; matched repos receive a `trellis-implement` subagent with full streamUi attribution so the existing RepositoryMember monitor renders them without bespoke wiring.
+- New project-level main sessions resolve their `ClaudeSession.repositoryPath` via `resolveProjectMainSessionAnchor(project, repositories)`. Multi-repo `wise_trellis` projects with a non-empty `rootPath` anchor at the project root; single-repo or `project_owned` projects keep anchoring at the first member repo. The session's `repositoryName` becomes `Project: <name>` when project-rooted, so downstream UI can disambiguate from repo-rooted sessions.
 
 ### 4. Validation & Error Matrix
 
