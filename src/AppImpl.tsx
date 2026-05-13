@@ -338,6 +338,7 @@ export default function App() {
     appendSystemMessage,
     appendUserMessage,
     closeSession,
+    deleteSession,
     switchSession,
     cancelSession,
     respondToQuestion,
@@ -456,6 +457,28 @@ export default function App() {
       closeSession(sessionId);
     },
     [closeSession],
+  );
+
+  /**
+   * 历史会话弹窗内删除某条会话：物理删除磁盘 jsonl（不可恢复），并清理与之绑定的主会话映射。
+   * `deleteSession` 内部对 running / connecting 状态会抛错，由调用方承接 toast。
+   */
+  const handleDeleteHistorySession = useCallback(
+    async (sessionId: string) => {
+      const session = sessionsLatestRef.current.find((s) => s.id === sessionId);
+      if (session?.repositoryPath) {
+        const key = normalizeRepositoryPathForMatch(session.repositoryPath);
+        setRepositoryMainSessionBindings((prev) => {
+          if (prev[key] !== sessionId) return prev;
+          const next = { ...prev };
+          delete next[key];
+          void setAppSetting(REPOSITORY_MAIN_SESSION_BINDING_STORAGE_KEY, JSON.stringify(next));
+          return next;
+        });
+      }
+      await deleteSession(sessionId);
+    },
+    [deleteSession],
   );
   const activeSessionIdLatestRef = useRef(activeSessionId);
   activeSessionIdLatestRef.current = activeSessionId;
@@ -1586,6 +1609,7 @@ export default function App() {
         onNotifyOmcEmployeeDirectBatchTaskDone: notifyOmcEmployeeDirectBatchTaskDone,
         onPrepareFreshOmcEmployeeWorkerForDirectBatch: prepareFreshOmcEmployeeWorkerForDirectBatch,
         onRefreshHistorySessions: handleRefreshHistorySessions,
+        onDeleteHistorySession: handleDeleteHistorySession,
         onRespondToQuestion: respondToQuestion,
         onDismissQuestion: dismissQuestion,
         onRespondToPermission: respondToPermission,

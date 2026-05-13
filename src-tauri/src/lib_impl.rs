@@ -264,6 +264,7 @@ pub fn run() {
             claude_commands::project_skills::format_claude_project_skill_file,
             claude_commands::disk_sessions::list_claude_disk_sessions,
             claude_commands::disk_sessions::load_claude_session_jsonl,
+            claude_commands::disk_sessions::delete_claude_disk_session,
             claude_commands::attachments::save_composer_image,
             claude_commands::attachments::save_prd_pasted_image,
             claude_commands::attachments::materialize_prd_snapshot,

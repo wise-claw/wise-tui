@@ -22,7 +22,7 @@ import {
   submitClaudeStdinLine,
   listRunningClaudeSessions,
 } from "../services/claude";
-import { listClaudeDiskSessions, loadClaudeSessionJsonl } from "../services/claudeDisk";
+import { deleteClaudeDiskSession, listClaudeDiskSessions, loadClaudeSessionJsonl } from "../services/claudeDisk";
 import { loadSessionTabsState, saveSessionTabsState } from "../services/tabsStore";
 import {
   CLAUDE_DISK_JSONL_TAIL_LINES_INITIAL,
@@ -326,6 +326,17 @@ interface UseClaudeSessionsReturn {
   sendMessage: (prompt: string) => void;
   sendMessageToSession: (sessionId: string, prompt: string, opts?: ClaudeComposerExecuteBubbleOptions) => void;
   closeSession: (sessionId: string) => void;
+  /**
+   * 物理删除磁盘 jsonl（`~/.claude/projects/<encoded>/<sid>.jsonl`）并清理内存标签。
+   *
+   * 行为：
+   * - 运行中 / 连接中（status === "running" | "connecting"）会拒绝并抛错；
+   * - 仅存在于内存的草稿（无 `claudeSessionId`）不会调用后端，但仍会触发 `closeSession`；
+   * - 后端 IPC 失败时抛错，标签不会被清掉，便于上层 toast 后用户重试。
+   *
+   * 调用方必须先做二次确认（jsonl 删除不可恢复）。
+   */
+  deleteSession: (sessionId: string) => Promise<void>;
   switchSession: (sessionId: string) => void;
   cancelSession: (sessionId: string, opts?: { retractLastUserTurn?: boolean }) => void;
   respondToQuestion: (sessionId: string, answers: string[], customAnswer?: string) => void;
@@ -1291,6 +1302,26 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     persistWorkflowBindings(workflowRunBySessionRef.current);
   }, [detachClaudeInvocationsForSessionKey]);
 
+  const deleteSession = useCallback(
+    async (sessionId: string) => {
+      const target = sessionsRef.current.find((s) => s.id === sessionId);
+      if (!target) {
+        return;
+      }
+      if (target.status === "running" || target.status === "connecting") {
+        throw new Error("会话正在运行，请先取消后再删除");
+      }
+      const claudeSessionId = target.claudeSessionId?.trim();
+      if (claudeSessionId && target.repositoryPath) {
+        // 后端校验 sessionId 形态并把删除限定在 `~/.claude/projects/<encoded>/`，
+        // 失败时抛错给上层做 toast；不在这里吞掉，避免静默丢失。
+        await deleteClaudeDiskSession(target.repositoryPath, claudeSessionId);
+      }
+      closeSession(sessionId);
+    },
+    [closeSession],
+  );
+
   const switchSession = useCallback((sessionId: string) => {
     setActiveSessionId(sessionId);
   }, []);
@@ -1601,6 +1632,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     sendMessage,
     sendMessageToSession,
     closeSession,
+    deleteSession,
     switchSession,
     cancelSession,
     respondToQuestion,

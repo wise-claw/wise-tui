@@ -886,6 +886,8 @@ interface Props {
   }) => void | Promise<void>;
   /** 从历史会话弹窗重新扫描当前仓库磁盘上的 Claude 会话 */
   onRefreshHistorySessions?: () => void | Promise<void>;
+  /** 历史会话弹窗内删除某条会话（物理删除 jsonl + 内存清理）。运行中状态会被拒绝，由调用方做二次确认。 */
+  onDeleteHistorySession?: (sessionId: string) => Promise<void>;
   /** 直连批量 OMC 进行中（`omcBatchRuntime.active`），供各标签内「OMC员工」空闲判定与监控一致 */
   omcBatchPipelineActive?: boolean;
   /** 工作树弹窗：将 worktree 目录加入当前侧栏项目 */
@@ -950,6 +952,7 @@ export function ClaudeSessions({
   onNotifyOmcEmployeeDirectBatchTaskDone,
   onPrepareFreshOmcEmployeeWorkerForDirectBatch,
   onRefreshHistorySessions,
+  onDeleteHistorySession,
   omcBatchPipelineActive = false,
   onAddWorktreeRepositoryToProject,
   onReloadFullDiskTranscript,
@@ -1090,6 +1093,7 @@ export function ClaudeSessions({
                 onNotifyOmcEmployeeDirectBatchTaskDone={onNotifyOmcEmployeeDirectBatchTaskDone}
                 onPrepareFreshOmcEmployeeWorkerForDirectBatch={onPrepareFreshOmcEmployeeWorkerForDirectBatch}
                 onRefreshHistorySessions={onRefreshHistorySessions}
+                onDeleteHistorySession={onDeleteHistorySession}
                 omcBatchPipelineActive={omcBatchPipelineActive}
                 onAddWorktreeRepositoryToProject={onAddWorktreeRepositoryToProject}
                 onReloadFullDiskTranscript={onReloadFullDiskTranscript}
@@ -1145,6 +1149,7 @@ export function ClaudeSessions({
                   onNotifyOmcEmployeeDirectBatchTaskDone={onNotifyOmcEmployeeDirectBatchTaskDone}
                   onPrepareFreshOmcEmployeeWorkerForDirectBatch={onPrepareFreshOmcEmployeeWorkerForDirectBatch}
                   onRefreshHistorySessions={onRefreshHistorySessions}
+                  onDeleteHistorySession={onDeleteHistorySession}
                   omcBatchPipelineActive={omcBatchPipelineActive}
                   onAddWorktreeRepositoryToProject={onAddWorktreeRepositoryToProject}
                   onReloadFullDiskTranscript={onReloadFullDiskTranscript}
@@ -1229,6 +1234,7 @@ export function ClaudeSessions({
             onNotifyOmcEmployeeDirectBatchTaskDone={onNotifyOmcEmployeeDirectBatchTaskDone}
             onPrepareFreshOmcEmployeeWorkerForDirectBatch={onPrepareFreshOmcEmployeeWorkerForDirectBatch}
             onRefreshHistorySessions={onRefreshHistorySessions}
+            onDeleteHistorySession={onDeleteHistorySession}
             omcBatchPipelineActive={omcBatchPipelineActive}
             onAddWorktreeRepositoryToProject={onAddWorktreeRepositoryToProject}
             onReloadFullDiskTranscript={onReloadFullDiskTranscript}
