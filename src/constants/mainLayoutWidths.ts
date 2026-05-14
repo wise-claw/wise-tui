@@ -12,7 +12,7 @@ export const MAIN_LAYOUT_LEFT_SIDER_MIN_WIDTH_PX = 200;
 export const MAIN_LAYOUT_LEFT_SIDER_MAX_WIDTH_PX = 480;
 
 /** 右栏可拖动宽度范围。 */
-export const MAIN_LAYOUT_RIGHT_SIDER_MIN_WIDTH_PX = 220;
+export const MAIN_LAYOUT_RIGHT_SIDER_MIN_WIDTH_PX = 300;
 export const MAIN_LAYOUT_RIGHT_SIDER_MAX_WIDTH_PX = 640;
 
 /** 拖动时中栏至少保留的逻辑宽度，避免三栏挤死。 */
