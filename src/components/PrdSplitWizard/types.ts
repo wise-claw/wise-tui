@@ -15,6 +15,8 @@ import type {
 import type { DispatchClusterRawOutput } from "../../services/prdSplit/splitterDispatch";
 import type { ExistingParentRef } from "../../services/prdSplit/existingParentScanner";
 import type { DiffReason } from "../../services/prdSplit/diffReplay";
+import type { ClusterPlanEdits } from "./clusterPlanEdits";
+import { emptyClusterPlanEdits } from "./clusterPlanEdits";
 
 export type WizardStage = "input" | "plan" | "dispatch" | "review" | "writing" | "done";
 
@@ -85,8 +87,12 @@ export interface WizardState {
   prd: PrdDocument | null;
   /** v2 requirements index（input → plan 计算）。 */
   requirementsIndex: RequirementsIndexV2 | null;
-  /** cluster plan（plan stage 持有，dispatch/review 沿用）。 */
+  /** cluster plan（plan stage 持有，dispatch/review 沿用）。语义：**生效 plan = basePlan + clusterPlanEdits 派生**。 */
   plan: ClusterPlan | null;
+  /** 算法原始产出（`planClusters` 的输出，未受人工编辑影响）。用于 derive + 还原默认。 */
+  basePlan: ClusterPlan | null;
+  /** 用户对 cluster plan 的编辑层（reassign / 新建 / rename）。 */
+  clusterPlanEdits: ClusterPlanEdits;
   /** 选中参与拆分的 repo id 子集；空 = 用项目下全部 repo。 */
   selectedRepositoryIds: number[];
   /** dispatch 阶段每 cluster 的运行态。 */
@@ -118,6 +124,8 @@ export function emptyWizardState(): WizardState {
     prd: null,
     requirementsIndex: null,
     plan: null,
+    basePlan: null,
+    clusterPlanEdits: emptyClusterPlanEdits(),
     selectedRepositoryIds: [],
     clusterRuns: {},
     context: null,

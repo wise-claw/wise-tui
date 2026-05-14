@@ -27,8 +27,16 @@ import type {
 } from "./types";
 import { emptyWizardState } from "./types";
 import { ensureClusterEdit } from "./taskEdits";
+import {
+  applyReassign,
+  collectAffectedClusterIds,
+  deriveEffectivePlan,
+  emptyClusterPlanEdits,
+  undoReassign,
+  type ClusterPlanEditAction,
+} from "./clusterPlanEdits";
 
-type Action =
+export type Action =
   | { type: "reset"; project: ProjectRef | null; repositories: PlannerRepo[]; selectedRepositoryIds: number[]; context: TaskSplitContext | null }
   | { type: "set-project"; project: ProjectRef | null; repositories: PlannerRepo[] }
   | { type: "set-selected-repos"; ids: number[] }
@@ -57,9 +65,14 @@ type Action =
   | { type: "set-global-error"; error: string | null }
   | { type: "back-to-input" }
   | { type: "back-to-plan" }
-  | { type: "back-to-dispatch" };
+  | { type: "back-to-dispatch" }
+  | { type: "reassign-requirement"; requirementId: string; targetClusterId: string }
+  | { type: "undo-reassign"; requirementId: string }
+  | { type: "add-manual-cluster"; cluster: ClusterPlanItem }
+  | { type: "rename-cluster"; clusterId: string; title: string }
+  | { type: "reset-cluster-plan-edits" };
 
-function reducer(state: WizardState, action: Action): WizardState {
+export function reducer(state: WizardState, action: Action): WizardState {
   switch (action.type) {
     case "reset":
       return {
@@ -75,11 +88,14 @@ function reducer(state: WizardState, action: Action): WizardState {
       return { ...state, selectedRepositoryIds: action.ids };
     case "set-prd-markdown":
       return { ...state, prdMarkdown: action.markdown };
-    case "go-to-plan":
+    case "go-to-plan": {
+      const edits = emptyClusterPlanEdits();
       return {
         ...state,
         stage: "plan",
-        plan: action.plan,
+        basePlan: action.plan,
+        plan: deriveEffectivePlan(action.plan, edits),
+        clusterPlanEdits: edits,
         prd: action.prd,
         requirementsIndex: action.index,
         clusterRuns: Object.fromEntries(
@@ -88,7 +104,10 @@ function reducer(state: WizardState, action: Action): WizardState {
         existingParents: null,
         diffByCluster: {},
         globalError: null,
+        editsByCluster: {},
+        writeResults: [],
       };
+    }
     case "set-existing-parents": {
       // 默认开关：若存在 unchanged cluster，开启 only-dirty；若有任何 existingParent，开启 reuse。
       const hasUnchanged = Object.values(action.diffByCluster).some((d) => d.kind === "unchanged");
@@ -268,14 +287,115 @@ function reducer(state: WizardState, action: Action): WizardState {
     case "set-global-error":
       return { ...state, globalError: action.error };
     case "back-to-input":
-      return { ...state, stage: "input" };
+      return {
+        ...state,
+        stage: "input",
+        basePlan: null,
+        plan: null,
+        clusterPlanEdits: emptyClusterPlanEdits(),
+        prd: null,
+        requirementsIndex: null,
+        clusterRuns: {},
+        existingParents: null,
+        diffByCluster: {},
+        editsByCluster: {},
+        writeResults: [],
+        globalError: null,
+      };
     case "back-to-plan":
       return { ...state, stage: "plan" };
     case "back-to-dispatch":
       return { ...state, stage: "dispatch" };
+    case "reassign-requirement": {
+      if (!state.basePlan) return state;
+      const planAction: ClusterPlanEditAction = {
+        type: "reassign-requirement",
+        requirementId: action.requirementId,
+        targetClusterId: action.targetClusterId,
+      };
+      const affected = collectAffectedClusterIds(state.plan, planAction);
+      const nextEdits = applyReassign(
+        state.clusterPlanEdits,
+        state.basePlan,
+        action.requirementId,
+        action.targetClusterId,
+      );
+      return withDerivedPlan(invalidateRuns({ ...state, clusterPlanEdits: nextEdits }, affected));
+    }
+    case "undo-reassign": {
+      if (!state.basePlan) return state;
+      const before = state.clusterPlanEdits;
+      const target = before.reassignedRequirements[action.requirementId];
+      if (!target) return state;
+      const planAction: ClusterPlanEditAction = {
+        type: "reassign-requirement",
+        requirementId: action.requirementId,
+        targetClusterId: target,
+      };
+      const affected = collectAffectedClusterIds(state.plan, planAction);
+      const nextEdits = undoReassign(before, action.requirementId);
+      return withDerivedPlan(invalidateRuns({ ...state, clusterPlanEdits: nextEdits }, affected));
+    }
+    case "add-manual-cluster": {
+      if (!state.basePlan) return state;
+      const baseIds = new Set(state.basePlan.clusters.map((c) => c.id));
+      const manualIds = new Set(state.clusterPlanEdits.manualClusters.map((c) => c.id));
+      if (baseIds.has(action.cluster.id) || manualIds.has(action.cluster.id)) return state;
+      const nextEdits = {
+        ...state.clusterPlanEdits,
+        manualClusters: [...state.clusterPlanEdits.manualClusters, action.cluster],
+      };
+      const next: WizardState = {
+        ...state,
+        clusterPlanEdits: nextEdits,
+        clusterRuns: { ...state.clusterRuns, [action.cluster.id]: makeIdleRun(action.cluster.id) },
+      };
+      return withDerivedPlan(next);
+    }
+    case "rename-cluster": {
+      if (!state.basePlan) return state;
+      const trimmed = action.title.trim();
+      const nextOverrides = { ...state.clusterPlanEdits.titleOverrides };
+      if (trimmed.length === 0) {
+        delete nextOverrides[action.clusterId];
+      } else {
+        nextOverrides[action.clusterId] = trimmed;
+      }
+      const nextEdits = { ...state.clusterPlanEdits, titleOverrides: nextOverrides };
+      return withDerivedPlan({ ...state, clusterPlanEdits: nextEdits });
+    }
+    case "reset-cluster-plan-edits": {
+      if (!state.basePlan) return state;
+      return withDerivedPlan({ ...state, clusterPlanEdits: emptyClusterPlanEdits() });
+    }
     default:
       return state;
   }
+}
+
+/** 重算 effective plan + 同步 clusterRuns 集合（新增的 cluster 加 idle run、被剔除的 cluster 删 run）。 */
+function withDerivedPlan(state: WizardState): WizardState {
+  if (!state.basePlan) return state;
+  const effective = deriveEffectivePlan(state.basePlan, state.clusterPlanEdits);
+  const effectiveIds = new Set(effective.clusters.map((c) => c.id));
+  const nextRuns: Record<string, ClusterRunState> = {};
+  for (const id of effectiveIds) {
+    nextRuns[id] = state.clusterRuns[id] ?? makeIdleRun(id);
+  }
+  return { ...state, plan: effective, clusterRuns: nextRuns };
+}
+
+/** 把指定 cluster 的 run 重置回 idle（保留 dispatching / creating-parent 进行中的状态）。 */
+function invalidateRuns(state: WizardState, clusterIds: string[]): WizardState {
+  if (clusterIds.length === 0) return state;
+  const nextRuns = { ...state.clusterRuns };
+  for (const cid of clusterIds) {
+    const cur = nextRuns[cid];
+    if (!cur) continue;
+    if (cur.status === "dispatching" || cur.status === "creating-parent") continue;
+    nextRuns[cid] = makeIdleRun(cid);
+  }
+  return { ...state, clusterRuns: nextRuns };
 }
 
 function makeIdleRun(clusterId: string): ClusterRunState {
@@ -315,6 +435,11 @@ export interface UseSplitWizardStateApi {
   backToInput(): void;
   backToPlan(): void;
   backToDispatch(): void;
+  reassignRequirement(requirementId: string, targetClusterId: string): void;
+  undoReassign(requirementId: string): void;
+  addManualCluster(cluster: ClusterPlanItem): void;
+  renameCluster(clusterId: string, title: string): void;
+  resetClusterPlanEdits(): void;
 }
 
 export function useSplitWizardState(): UseSplitWizardStateApi {
@@ -411,6 +536,12 @@ export function useSplitWizardState(): UseSplitWizardStateApi {
       backToInput: () => dispatch({ type: "back-to-input" }),
       backToPlan: () => dispatch({ type: "back-to-plan" }),
       backToDispatch: () => dispatch({ type: "back-to-dispatch" }),
+      reassignRequirement: (requirementId, targetClusterId) =>
+        dispatch({ type: "reassign-requirement", requirementId, targetClusterId }),
+      undoReassign: (requirementId) => dispatch({ type: "undo-reassign", requirementId }),
+      addManualCluster: (cluster) => dispatch({ type: "add-manual-cluster", cluster }),
+      renameCluster: (clusterId, title) => dispatch({ type: "rename-cluster", clusterId, title }),
+      resetClusterPlanEdits: () => dispatch({ type: "reset-cluster-plan-edits" }),
     }),
     [state, parseAndPlan, refreshExistingParents],
   );

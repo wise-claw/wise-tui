@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { Button, Modal, Result, Select, Space, Steps, Typography } from "antd";
+import { ExclamationCircleOutlined } from "@ant-design/icons";
 import { ClusterPlanStage } from "./stages/ClusterPlanStage";
 import { InputStage } from "./stages/InputStage";
 import { ReviewStage } from "./stages/ReviewStage";
@@ -10,7 +11,8 @@ import type { ProjectItem, Repository } from "../../types";
 import type { PlannerRepo } from "../../services/prdSplit/clusterPlanner";
 
 const STEP_KEYS = ["input", "plan", "dispatch", "review"] as const;
-const STEP_TITLES: Record<(typeof STEP_KEYS)[number], string> = {
+type StepKey = (typeof STEP_KEYS)[number];
+const STEP_TITLES: Record<StepKey, string> = {
   input: "PRD",
   plan: "Cluster",
   dispatch: "派发",
@@ -80,7 +82,7 @@ export function PrdSplitWizardModal({
     }
   }, [open, state.project, initialProjectId, eligibleProjects, ensureProject]);
 
-  const stageKey: (typeof STEP_KEYS)[number] = useMemo(() => {
+  const stageKey: StepKey = useMemo(() => {
     if (state.stage === "input") return "input";
     if (state.stage === "plan") return "plan";
     if (state.stage === "dispatch") return "dispatch";
@@ -88,6 +90,44 @@ export function PrdSplitWizardModal({
   }, [state.stage]);
 
   const currentStepIndex = STEP_KEYS.indexOf(stageKey);
+
+  // 追踪用户已到达的最大步骤，用于约束 Steps 只能跳到已到达的 step。
+  const maxReachedRef = useRef(0);
+  if (currentStepIndex > maxReachedRef.current) {
+    maxReachedRef.current = currentStepIndex;
+  }
+  // wizard 重置 / 切项目时回到 0
+  useEffect(() => {
+    if (!open) maxReachedRef.current = 0;
+  }, [open]);
+  useEffect(() => {
+    if (state.stage === "input" && state.basePlan === null) {
+      maxReachedRef.current = 0;
+    }
+  }, [state.stage, state.basePlan]);
+
+  const onStepClick = useCallback(
+    (idx: number) => {
+      if (idx === currentStepIndex) return;
+      if (idx > maxReachedRef.current) return;
+      const target = STEP_KEYS[idx];
+      if (target === "input") {
+        Modal.confirm({
+          title: "回到 PRD 编辑？",
+          icon: <ExclamationCircleOutlined />,
+          content: "会清空 cluster 编辑 / splitter 输出 / 任务编辑（PRD 文本保留）。",
+          okText: "确认回到 PRD",
+          cancelText: "取消",
+          onOk: () => api.backToInput(),
+        });
+        return;
+      }
+      if (target === "plan") api.backToPlan();
+      else if (target === "dispatch") api.backToDispatch();
+      // review 跳转目前无 backToReview action；保留按钮路径
+    },
+    [api, currentStepIndex],
+  );
 
   const onNextFromInput = useCallback(() => {
     if (!state.project) {
@@ -120,7 +160,11 @@ export function PrdSplitWizardModal({
         <Steps
           size="small"
           current={currentStepIndex}
-          items={STEP_KEYS.map((key) => ({ title: STEP_TITLES[key] }))}
+          onChange={onStepClick}
+          items={STEP_KEYS.map((key, idx) => ({
+            title: STEP_TITLES[key],
+            disabled: idx > maxReachedRef.current,
+          }))}
         />
 
         <div style={{ minHeight: 320 }}>
