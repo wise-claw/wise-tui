@@ -176,6 +176,11 @@ export async function openWorkspaceIn(
     /** 与 VS Code / Cursor CLI `-g` 一致：1-based 行、列；仅对 `code`/`cursor`/`codium` 命令生效 */
     gotoLine?: number;
     gotoColumn?: number;
+    /**
+     * 代码图谱目录节点：`path` 须为仓库根，本字段为相对目录（如 `src/api/foo`）。
+     * Rust 侧对 VS Code 系 CLI 执行 `cursor 仓库根 -g 目录下首个源文件:1:1`，以整仓打开并靠近该目录。
+     */
+    graphIdeFolderRelative?: string | null;
   },
 ): Promise<void> {
   return invoke("open_workspace_in", {
@@ -185,5 +190,6 @@ export async function openWorkspaceIn(
     args: options.args ?? [],
     gotoLine: options.gotoLine ?? null,
     gotoColumn: options.gotoColumn ?? null,
+    graphIdeFolderRelative: options.graphIdeFolderRelative ?? null,
   });
 }

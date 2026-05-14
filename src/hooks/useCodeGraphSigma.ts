@@ -237,7 +237,10 @@ export function useCodeGraphSigma(options: UseCodeGraphSigmaOptions = {}): UseCo
       setSelectedNodeState(null);
 
       runLayout(newGraph);
-      sigma.getCamera().animatedReset({ duration: 500 });
+      // 与布局后的节点坐标、归一化范围对齐；否则相机会按旧 extent 解释，随后 process 再跑会「跳走」
+      sigma.refresh();
+      // 不用 animatedReset：500ms 与 focus 的 animate 叠在一起，且收尾会拉回默认视角
+      sigma.getCamera().setState({ x: 0.5, y: 0.5, ratio: 1, angle: 0 });
     },
     [runLayout],
   );
@@ -411,7 +414,8 @@ export function useCodeGraphSigma(options: UseCodeGraphSigmaOptions = {}): UseCo
         selectedNodeRef.current = null;
         setSelectedNodeState(null);
         runLayout(pending);
-        sigma.getCamera().animatedReset({ duration: 500 });
+        sigma.refresh();
+        sigma.getCamera().setState({ x: 0.5, y: 0.5, ratio: 1, angle: 0 });
       }
     };
 
@@ -449,15 +453,23 @@ export function useCodeGraphSigma(options: UseCodeGraphSigmaOptions = {}): UseCo
     const g = graphRef.current;
     if (!sigma || !g || !g.hasNode(nodeId)) return;
 
-    const alreadySelected = selectedNodeRef.current === nodeId;
+    // 相机 state 的 x/y 在「framed graph」空间，不能用 graphology 里的原始坐标（见 sigma 坐标系文档）
+    const sigmaWithDisplay = sigma as Sigma & {
+      getNodeDisplayData?: (id: string) => { x?: number; y?: number } | undefined;
+    };
+    let display = sigmaWithDisplay.getNodeDisplayData?.(nodeId);
+    if (display == null || typeof display.x !== "number" || typeof display.y !== "number") {
+      sigma.refresh();
+      display = sigmaWithDisplay.getNodeDisplayData?.(nodeId);
+    }
+    if (display == null || typeof display.x !== "number" || typeof display.y !== "number") {
+      return;
+    }
+
     selectedNodeRef.current = nodeId;
     setSelectedNodeState(nodeId);
 
-    if (!alreadySelected) {
-      const nodeAttrs = g.getNodeAttributes(nodeId);
-      sigma.getCamera().animate({ x: nodeAttrs.x, y: nodeAttrs.y, ratio: 0.15 }, { duration: 400 });
-    }
-    sigma.refresh();
+    sigma.getCamera().animate({ x: display.x, y: display.y, ratio: 0.15 }, { duration: 400 });
   }, []);
 
   const zoomIn = useCallback(() => {

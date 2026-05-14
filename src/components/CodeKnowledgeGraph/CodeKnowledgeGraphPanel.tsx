@@ -176,7 +176,7 @@ export function CodeKnowledgeGraphPanel({
     if (pending && pending.repoId === repositoryId) {
       pendingCrossRepoSearchPickRef.current = null;
       setSubgraphFocusId(pending.id);
-      setSubgraphDirection(undefined);
+      setSubgraphDirection("downstream");
       setSubgraphRefreshKey((k) => k + 1);
       setSelectedNode(pending);
       return;
@@ -451,7 +451,7 @@ export function CodeKnowledgeGraphPanel({
       } else {
         setSelectedNode(node);
         setSubgraphFocusId(node.id);
-        setSubgraphDirection(undefined);
+        setSubgraphDirection("downstream");
         setSubgraphRefreshKey((k) => k + 1);
       }
     },
@@ -517,11 +517,14 @@ export function CodeKnowledgeGraphPanel({
             <div className="app-code-graph-right-column-meta">
               <InspectorPanel
                 node={selectedNode}
-                repositoryPath={currentRepo?.path}
+                repositoryPath={repositoryPathForSelectedGraphNode}
                 onOpenRepositoryFile={onOpenRepositoryFile}
               />
             </div>
-            <CodeGraphSourcePreview repositoryPath={currentRepo?.path} selectedNode={selectedNode} />
+            <CodeGraphSourcePreview
+              repositoryPath={repositoryPathForSelectedGraphNode}
+              selectedNode={selectedNode}
+            />
           </div>
         </div>
       );
@@ -543,6 +546,14 @@ export function CodeKnowledgeGraphPanel({
     () => (subgraphHopScope === "all" ? "全部" : `${subgraphHopScope} 跳`),
     [subgraphHopScope],
   );
+
+  /** 侧栏 IDE / Monaco：按节点所属仓库拼接绝对路径，避免与当前下拉仓库不一致时打开错误目录 */
+  const repositoryPathForSelectedGraphNode = useMemo(() => {
+    if (!repositories?.length) return currentRepo?.path ?? null;
+    const rid = selectedNode?.repoId ?? repositoryId;
+    if (rid == null) return currentRepo?.path ?? null;
+    return repositories.find((r) => r.id === rid)?.path ?? currentRepo?.path ?? null;
+  }, [repositories, selectedNode?.repoId, repositoryId, currentRepo?.path]);
 
   if (loading) {
     return (
