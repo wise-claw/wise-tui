@@ -402,6 +402,18 @@ function makeIdleRun(clusterId: string): ClusterRunState {
   return { clusterId, parentTaskName: null, parentTaskPath: null, status: "idle", errors: [] };
 }
 
+export function resolveWizardPlannerOptions(
+  repositoryCount: number,
+  requirementCount: number,
+  options?: { maxRequirementsPerCluster?: number },
+): { maxRequirementsPerCluster?: number } | undefined {
+  if (repositoryCount !== 1) return options ?? undefined;
+  return {
+    ...options,
+    maxRequirementsPerCluster: Math.max(1, requirementCount),
+  };
+}
+
 export interface UseSplitWizardStateApi {
   state: WizardState;
   reset(project: ProjectRef | null, repositories: PlannerRepo[], context: TaskSplitContext | null): void;
@@ -464,7 +476,11 @@ export function useSplitWizardState(): UseSplitWizardStateApi {
       const plan = planClusters({
         repositories: repos,
         requirements: upgraded.requirements.map((r) => ({ id: r.id, content: r.content })),
-        options: options ?? undefined,
+        options: resolveWizardPlannerOptions(
+          repos.length,
+          upgraded.requirements.length,
+          options,
+        ),
       });
       dispatch({ type: "go-to-plan", plan, prd, index: upgraded });
       return { ok: true };

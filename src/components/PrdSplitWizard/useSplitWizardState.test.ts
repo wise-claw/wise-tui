@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ClusterPlan, ClusterPlanItem } from "../../services/prdSplit/clusterPlanner";
 import { emptyWizardState } from "./types";
-import { reducer } from "./useSplitWizardState";
+import { reducer, resolveWizardPlannerOptions } from "./useSplitWizardState";
 import { emptyClusterPlanEdits } from "./clusterPlanEdits";
 import type { ClusterEditState, WizardState } from "./types";
 
@@ -251,5 +251,20 @@ describe("reducer · go-to-plan resets plan edits", () => {
     });
     expect(state.clusterPlanEdits).toEqual(emptyClusterPlanEdits());
     expect(state.plan?.clusters[0].id).toBe("c-z");
+  });
+});
+
+describe("resolveWizardPlannerOptions", () => {
+  test("single-repository wizard targets force one cluster regardless of caller cap", () => {
+    expect(resolveWizardPlannerOptions(1, 37, { maxRequirementsPerCluster: 10 })).toEqual({
+      maxRequirementsPerCluster: 37,
+    });
+  });
+
+  test("multi-repository wizard targets keep caller/default planner options", () => {
+    expect(resolveWizardPlannerOptions(2, 37, { maxRequirementsPerCluster: 10 })).toEqual({
+      maxRequirementsPerCluster: 10,
+    });
+    expect(resolveWizardPlannerOptions(2, 37)).toBeUndefined();
   });
 });

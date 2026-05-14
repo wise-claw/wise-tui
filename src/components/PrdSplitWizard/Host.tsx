@@ -21,11 +21,13 @@ export const OPEN_PRD_SPLIT_WIZARD_EVENT = "open-prd-split-wizard";
 
 export interface OpenPrdSplitWizardEventDetail {
   projectId?: string | null;
+  repositoryId?: number | null;
 }
 
 export function PrdSplitWizardHost() {
   const [open, setOpen] = useState(false);
   const [initialProjectId, setInitialProjectId] = useState<string | null>(null);
+  const [initialRepositoryId, setInitialRepositoryId] = useState<number | null>(null);
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [repositories, setRepositories] = useState<Repository[]>([]);
 
@@ -47,6 +49,7 @@ export function PrdSplitWizardHost() {
     function onOpen(e: Event) {
       const detail = (e as CustomEvent<OpenPrdSplitWizardEventDetail>).detail;
       setInitialProjectId(detail?.projectId ?? null);
+      setInitialRepositoryId(detail?.repositoryId ?? null);
       setOpen(true);
       void refresh();
     }
@@ -56,6 +59,7 @@ export function PrdSplitWizardHost() {
 
   const onFabClick = useCallback(() => {
     setInitialProjectId(null);
+    setInitialRepositoryId(null);
     setOpen(true);
     void refresh();
   }, [refresh]);
@@ -84,6 +88,7 @@ export function PrdSplitWizardHost() {
         projects={projects}
         repositories={repositories}
         initialProjectId={initialProjectId}
+        initialRepositoryId={initialRepositoryId}
       />
     </>
   );

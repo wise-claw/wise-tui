@@ -96,6 +96,7 @@ export function ClusterPlanStage({ api }: Props) {
     Object.keys(state.clusterPlanEdits.reassignedRequirements).length > 0 ||
     state.clusterPlanEdits.manualClusters.length > 0 ||
     Object.keys(state.clusterPlanEdits.titleOverrides).length > 0;
+  const isRepoMode = state.context?.mode === "repository";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -104,10 +105,17 @@ export function ClusterPlanStage({ api }: Props) {
         showIcon
         message="第 2 步 · 审阅 Cluster 划分"
         description={
-          <Typography.Paragraph style={{ margin: 0 }}>
-            每个 cluster 将被独立派发给 <code>trellis-splitter</code> 子代理，并行执行。子任务的归属仓位由 cluster 的 primary repo 决定。
-            点击 requirement 标签可把它<strong>移到其他 cluster</strong>；点击 cluster 标题旁的编辑按钮可<strong>重命名</strong>；底部「+ 新建 cluster」可<strong>手工新建</strong>。
-          </Typography.Paragraph>
+          isRepoMode ? (
+            <Typography.Paragraph style={{ margin: 0 }}>
+              单仓模式：所有 requirement 归到唯一一个 cluster，将被独立派发给 <code>trellis-splitter</code>。
+              下方可调整 requirement 标签或重命名 cluster；多 cluster 编辑能力在多仓项目模式下启用。
+            </Typography.Paragraph>
+          ) : (
+            <Typography.Paragraph style={{ margin: 0 }}>
+              每个 cluster 将被独立派发给 <code>trellis-splitter</code> 子代理，并行执行。子任务的归属仓位由 cluster 的 primary repo 决定。
+              点击 requirement 标签可把它<strong>移到其他 cluster</strong>；点击 cluster 标题旁的编辑按钮可<strong>重命名</strong>；底部「+ 新建 cluster」可<strong>手工新建</strong>。
+            </Typography.Paragraph>
+          )
         }
       />
 
@@ -188,10 +196,15 @@ export function ClusterPlanStage({ api }: Props) {
         <Button
           icon={<PlusOutlined />}
           onClick={() => setManualModalOpen(true)}
-          disabled={isDispatching}
+          disabled={isDispatching || isRepoMode}
         >
           新建 cluster
         </Button>
+        {isRepoMode ? (
+          <Typography.Text type="secondary" style={{ marginInlineStart: 8, fontSize: 12 }}>
+            单仓模式下不支持新建额外 cluster
+          </Typography.Text>
+        ) : null}
       </div>
 
       {plan.diagnostics.requirementsCoverage.orphan.length > 0 ? (

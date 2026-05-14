@@ -62,6 +62,7 @@ export function ReviewStage({ api }: Props) {
   const succeededClusters = clusters.filter(
     (c) => state.clusterRuns[c.id]?.status === "succeeded",
   );
+  const isRepoMode = state.context?.mode === "repository";
 
   const writeAll = async () => {
     if (!state.project) return;
@@ -178,11 +179,19 @@ export function ReviewStage({ api }: Props) {
         showIcon
         message="第 4 步 · Review 与人工编排"
         description={
-          <Typography.Paragraph style={{ margin: 0 }}>
-            可在此编辑任务（标题 / 描述 / 角色 / 子项 / DoD / 溯源 requirement）、新增手工任务、删除冗余任务；
-            点「PRD 锚点」查看任务在原文的位置；validation 未通过的 cluster 可派遣 verifier 二次修复；
-            最后「落盘到 Trellis」会把（编辑后的）所有成功 cluster 子任务写到 <code>.trellis/tasks/&lt;parent&gt;/&lt;child&gt;/</code>。
-          </Typography.Paragraph>
+          isRepoMode ? (
+            <Typography.Paragraph style={{ margin: 0 }}>
+              单仓模式：在此审阅并编辑本仓库的任务（标题 / 描述 / 角色 / 子项 / DoD / 溯源 requirement）；
+              点「PRD 锚点」查看任务在原文的位置；validation 未通过时可派遣 verifier 二次修复；
+              最后「落盘到 Trellis」会把任务写到该仓库的 <code>.trellis/tasks/</code>。
+            </Typography.Paragraph>
+          ) : (
+            <Typography.Paragraph style={{ margin: 0 }}>
+              可在此编辑任务（标题 / 描述 / 角色 / 子项 / DoD / 溯源 requirement）、新增手工任务、删除冗余任务；
+              点「PRD 锚点」查看任务在原文的位置；validation 未通过的 cluster 可派遣 verifier 二次修复；
+              最后「落盘到 Trellis」会把（编辑后的）所有成功 cluster 子任务写到 <code>.trellis/tasks/&lt;parent&gt;/&lt;child&gt;/</code>。
+            </Typography.Paragraph>
+          )
         }
       />
 
@@ -194,7 +203,9 @@ export function ReviewStage({ api }: Props) {
           disabled={succeededClusters.length === 0}
           onClick={writeAll}
         >
-          落盘到 Trellis（{succeededClusters.length} 个 cluster）
+          {isRepoMode
+            ? "落盘到 Trellis"
+            : `落盘到 Trellis（${succeededClusters.length} 个 cluster）`}
         </Button>
       </Space>
 

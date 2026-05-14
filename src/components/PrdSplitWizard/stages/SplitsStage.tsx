@@ -22,6 +22,7 @@ export function SplitsStage({ api }: Props) {
   const [dispatching, setDispatching] = useState(false);
 
   const clusters = state.plan?.clusters ?? [];
+  const isRepoMode = state.context?.mode === "repository";
   const hasBaseline = (state.existingParents?.size ?? 0) > 0;
   const unchangedCount = useMemo(
     () => clusters.filter((c) => state.diffByCluster[c.id]?.kind === "unchanged").length,
@@ -68,12 +69,23 @@ export function SplitsStage({ api }: Props) {
         showIcon
         message="第 3 步 · 派发 splitter 子代理"
         description={
-          <Typography.Paragraph style={{ margin: 0 }}>
-            点击「派发」按钮后，每个待派的 cluster 会并行起一个短命 <code>trellis-splitter</code> 子代理，输入 bundle 落盘到
-            <code> ~/.wise/prd-runs/</code>，原始输出 + normalizer 结果汇总在下方卡片里。
-          </Typography.Paragraph>
+          isRepoMode ? (
+            <Typography.Paragraph style={{ margin: 0 }}>
+              单仓模式会派发 1 个短命 <code>trellis-splitter</code> 子代理；输入 bundle 落盘到
+              <code> ~/.wise/prd-runs/</code>，原始输出 + normalizer 结果汇总在下方卡片里。
+            </Typography.Paragraph>
+          ) : (
+            <Typography.Paragraph style={{ margin: 0 }}>
+              点击「派发」按钮后，每个待派的 cluster 会并行起一个短命 <code>trellis-splitter</code> 子代理，输入 bundle 落盘到
+              <code> ~/.wise/prd-runs/</code>，原始输出 + normalizer 结果汇总在下方卡片里。
+            </Typography.Paragraph>
+          )
         }
       />
+
+      {state.globalError ? (
+        <Alert type="error" showIcon message="派发失败" description={state.globalError} />
+      ) : null}
 
       {hasBaseline ? (
         <Space orientation="vertical" size={4}>
@@ -230,6 +242,7 @@ async function runCluster(
         errors: [`创建父任务失败: ${message}`],
         endedAt: Date.now(),
       });
+      api.setGlobalError(`创建父任务失败：${message}`);
       return;
     }
   }
@@ -260,6 +273,7 @@ async function runCluster(
       errors: [`splitter 派发失败: ${message}`],
       endedAt: Date.now(),
     });
+    api.setGlobalError(`splitter 派发失败：${message}`);
   }
 }
 
