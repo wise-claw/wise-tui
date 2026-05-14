@@ -102,6 +102,7 @@ export function LeftSidebar({
     [message],
   );
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
+  const [embedTrellisForNewProject, setEmbedTrellisForNewProject] = useState(true);
   const [projectNameInput, setProjectNameInput] = useState("");
   const [editProject, setEditProject] = useState<ProjectItem | null>(null);
   /** 待升格为新项目的游离 repo（菜单触发后弹出输入项目名 modal）。 */
@@ -139,15 +140,19 @@ export function LeftSidebar({
     setRepositoryFileTreeSearch("");
   }, [activeRepositoryPath]);
 
-  function submitCreateProject() {
+  async function submitCreateProject() {
     const name = projectNameInput.trim();
     if (!name) {
       message.warning("项目名称不能为空");
       return;
     }
-    onCreateProject(name);
-    setProjectNameInput("");
-    setCreateProjectOpen(false);
+    try {
+      await Promise.resolve(onCreateProject(name, { embedTrellis: embedTrellisForNewProject }));
+      setProjectNameInput("");
+      setCreateProjectOpen(false);
+    } catch (e: unknown) {
+      message.error(e instanceof Error ? e.message : String(e));
+    }
   }
 
   function submitUpdateProject() {
@@ -224,6 +229,7 @@ export function LeftSidebar({
           onRepositorySelect={onRepositorySelect}
           onCreateProjectClick={() => {
             setProjectNameInput("");
+            setEmbedTrellisForNewProject(true);
             setCreateProjectOpen(true);
           }}
           onAddFloatingRepositoryClick={
@@ -350,6 +356,8 @@ export function LeftSidebar({
 
       <ProjectNameModals
         createOpen={createProjectOpen}
+        embedTrellisForNewProject={embedTrellisForNewProject}
+        onEmbedTrellisForNewProjectChange={setEmbedTrellisForNewProject}
         editProject={editProject}
         projectNameInput={projectNameInput}
         onProjectNameInputChange={setProjectNameInput}

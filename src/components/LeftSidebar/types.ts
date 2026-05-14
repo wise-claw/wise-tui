@@ -24,7 +24,7 @@ export interface LeftSidebarProps {
   repositories: Repository[];
   activeRepositoryId: number | null;
   onProjectSelect: (projectId: string) => void;
-  onCreateProject: (name: string) => void;
+  onCreateProject: (name: string, options?: { embedTrellis?: boolean }) => void | Promise<void>;
   onUpdateProject: (projectId: string, name: string) => void;
   onDeleteProject: (projectId: string) => void;
   pinnedProjectIds: string[];

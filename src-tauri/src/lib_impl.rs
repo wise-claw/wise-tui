@@ -1,7 +1,8 @@
 use crate::{
     app_state_commands, claude_code_usage, claude_commands, claude_config_dir, cua_driver,
     dingtalk_enterprise_bot, dingtalk_stream_gateway, git_commands, prd_url_fetch,
-    repository_files, skills_sh, system_resource, trellis_bridge, wise_db, wise_mascot, wise_push,
+    repository_files, skills_sh, system_resource, trellis_bootstrap, trellis_bridge, wise_db,
+    wise_mascot, wise_push,
     workspace_commands,
 };
 use std::sync::Mutex;
@@ -218,6 +219,7 @@ pub fn run() {
             repository_files::create_repository_file,
             repository_files::create_repository_directory,
             repository_files::delete_repository_entry,
+            trellis_bootstrap::bootstrap_trellis_if_missing,
             trellis_bridge::trellis_list_tasks,
             trellis_bridge::trellis_read_task,
             trellis_bridge::trellis_write_prd,
