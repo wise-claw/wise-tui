@@ -546,3 +546,240 @@
     box-shadow: 0 0 12px 2px rgba(24, 144, 255, 0.2);
   }
 }
+
+/* ── 仓库 Popover：与侧栏仓库行一致，使用 Ant 主题变量、紧凑布局 ───────────── */
+/* Ant Design 6：卡片样式在 .ant-popover-container，须透明化以免与下方 .app-code-graph-repo-dropdown 双框 */
+
+.app-code-graph-repo-popover-root .ant-popover-container {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+.app-code-graph-repo-popover-root .ant-popover-inner {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.app-code-graph-repo-dropdown {
+  min-width: 220px;
+  max-width: 300px;
+  border-radius: 6px;
+  border: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-bg-elevated);
+  box-shadow: var(--ant-box-shadow-secondary, 0 6px 16px 0 rgba(0, 0, 0, 0.08));
+  overflow: hidden;
+}
+
+.app-code-graph-repo-dropdown-header {
+  padding: 5px 10px 3px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--ant-color-text-tertiary);
+  text-transform: uppercase;
+}
+
+.app-code-graph-repo-dropdown-list {
+  list-style: none;
+  margin: 0;
+  padding: 2px 4px 4px;
+}
+
+.app-code-graph-repo-dropdown-li {
+  margin: 0;
+  padding: 0 4px;
+}
+
+.app-code-graph-repo-dropdown-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 6px;
+  padding: 3px 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ant-color-text);
+  font-size: 12px;
+  line-height: 1.35;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s ease;
+}
+
+.app-code-graph-repo-dropdown-row:hover {
+  background: var(--ant-color-fill-tertiary);
+}
+
+.app-code-graph-repo-dropdown-row--active {
+  background: var(--ant-control-item-bg-active);
+}
+
+.app-code-graph-repo-dropdown-row--active:hover {
+  background: var(--ant-control-item-bg-active);
+}
+
+.app-code-graph-repo-dropdown-row--active .app-code-graph-repo-dropdown-name {
+  font-weight: 500;
+}
+
+.app-code-graph-repo-dropdown-row-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.app-code-graph-repo-dropdown-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.app-code-graph-repo-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-code-graph-repo-dropdown-row--active .app-code-graph-repo-icon {
+  color: var(--ant-color-primary);
+}
+
+.app-code-graph-repo-dropdown-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.app-code-graph-repo-dropdown-active-pill {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: lowercase;
+  padding: 0 6px;
+  line-height: 18px;
+  border-radius: 4px;
+  color: var(--ant-color-primary);
+  background: var(--ant-color-primary-bg);
+}
+
+.app-code-graph-repo-dropdown-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  color: var(--ant-color-text-tertiary);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    color 0.12s ease,
+    background 0.12s ease;
+}
+
+.app-code-graph-repo-dropdown-icon-btn .anticon svg {
+  width: 12px;
+  height: 12px;
+}
+
+.app-code-graph-repo-dropdown-icon-btn:hover {
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-content);
+}
+
+.app-code-graph-repo-dropdown-icon-btn--danger:hover {
+  color: var(--ant-color-error);
+  background: var(--ant-color-error-bg);
+}
+
+.app-code-graph-repo-dropdown-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 10px 6px;
+  border: none;
+  border-top: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-bg-elevated);
+  color: var(--ant-color-text-tertiary);
+  font-size: 12px;
+  line-height: 1.35;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    color 0.12s ease,
+    background 0.12s ease;
+}
+
+.app-code-graph-repo-dropdown-footer:hover {
+  background: var(--ant-color-fill-tertiary);
+  color: var(--ant-color-primary);
+}
+
+.app-code-graph-repo-dropdown-footer-icon {
+  font-size: 13px;
+}
+
+.app-code-graph-repo-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid var(--ant-color-border);
+  background: var(--ant-color-bg-container);
+  color: var(--ant-color-text);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+.app-code-graph-repo-trigger:hover:not(:disabled) {
+  border-color: var(--ant-color-primary-hover);
+}
+
+.app-code-graph-repo-trigger--open {
+  border-color: var(--ant-color-primary);
+  box-shadow: 0 0 0 1px var(--ant-color-primary-bg);
+}
+
+.app-code-graph-repo-trigger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.app-code-graph-repo-trigger-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ant-color-fill-secondary);
+  flex-shrink: 0;
+}
+
+.app-code-graph-repo-trigger-dot--ok {
+  background: var(--ant-color-success);
+}
+
+.app-code-graph-repo-trigger-label {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-code-graph-repo-trigger-caret {
+  font-size: 10px;
+  color: var(--ant-color-text-tertiary);
+}

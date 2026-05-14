@@ -218,7 +218,12 @@ export function LeftSidebar({
         onOpenCodeKnowledgeGraph={onOpenCodeKnowledgeGraph}
       />
 
-      <div className="app-left-sidebar-project-and-files">
+      <div
+        className="app-left-sidebar-project-and-files"
+        data-files-explorer-section-collapsed={
+          activeRepositoryPath && filesExplorerSectionCollapsed ? "true" : undefined
+        }
+      >
         <ProjectRepositoryList
           projects={projects}
           repositoriesById={projectRepositoryState.repositoriesById}

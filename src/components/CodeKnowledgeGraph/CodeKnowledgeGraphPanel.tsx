@@ -4,7 +4,7 @@ import {
   PlayCircleOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
-import { Alert, Button, Empty, Progress, Select, Space, Spin, Tag, Typography } from "antd";
+import { Alert, Button, Empty, message, Progress, Select, Space, Spin, Tag, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getCodeGraphIndexStatus,
@@ -31,6 +31,7 @@ import {
   HOP_SELECT_OPTIONS,
   type SubgraphHopScope,
 } from "./CodeKnowledgeGraphChartColumn";
+import { CodeGraphRepositoryPopover } from "./CodeGraphRepositoryPopover";
 import { InspectorPanel } from "./InspectorPanel";
 import "./CodeKnowledgeGraphPanel.css";
 
@@ -38,6 +39,7 @@ interface RepositoryInfo {
   id: number;
   name: string;
   path: string;
+  repositoryType?: "frontend" | "backend" | "document";
 }
 
 interface Props {
@@ -49,6 +51,10 @@ interface Props {
   onClose?: () => void;
   /** 侧栏「在编辑器中打开」：非 Monaco 类型或预览失败时使用 */
   onOpenRepositoryFile?: (relativePath: string) => void;
+  /** 从 Wise 全局移除仓库（Popover 内删除） */
+  onRemoveRepository?: (repositoryId: number) => void | Promise<void>;
+  /** 添加游离仓库（Popover 底栏「分析新仓库」） */
+  onOpenAddRepository?: () => void | Promise<void>;
 }
 
 const SUBGRAPH_SEARCH_DEBOUNCE_MS = 220;
@@ -69,6 +75,8 @@ export function CodeKnowledgeGraphPanel({
   onSelectRepository,
   onClose,
   onOpenRepositoryFile,
+  onRemoveRepository,
+  onOpenAddRepository,
 }: Props) {
   const [indexStatus, setIndexStatus] = useState<CodeGraphIndexStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -342,6 +350,23 @@ export function CodeKnowledgeGraphPanel({
     }
   }, [repositoryId]);
 
+  const handleReindexRepository = useCallback(
+    async (targetId: number) => {
+      if (targetId === repositoryId) {
+        await handleReindex();
+        return;
+      }
+      try {
+        await triggerCodeGraphReindex({ repositoryId: targetId });
+        const name = repositories?.find((r) => r.id === targetId)?.name ?? String(targetId);
+        message.success(`已为「${name}」提交重建索引`);
+      } catch {
+        message.error("提交索引失败");
+      }
+    },
+    [repositoryId, handleReindex, repositories],
+  );
+
   const handleNodeClick = useCallback((node: GraphNode) => {
     setSelectedNode(node);
   }, []);
@@ -584,19 +609,19 @@ export function CodeKnowledgeGraphPanel({
             <Typography.Title level={5} style={{ margin: 0 }}>
               代码图谱
             </Typography.Title>
-            {currentRepo && (
-              <Tag>{currentRepo.name}</Tag>
-            )}
-            {onSelectRepository && repositories && repositories.length > 1 && (
-              <Select
-                size="small"
-                style={{ width: 160 }}
-                placeholder="选择仓库"
-                value={repositoryId}
-                onChange={(id: number) => onSelectRepository(id)}
-                options={repositories.map((r) => ({ label: r.name, value: r.id }))}
+            {repositories && repositories.length > 0 && onSelectRepository ? (
+              <CodeGraphRepositoryPopover
+                repositories={repositories}
+                activeRepositoryId={repositoryId}
+                activeRepositoryIndexed={isIndexed && indexStatus?.repositoryId === repositoryId}
+                onSelectRepository={onSelectRepository}
+                onReindexRepository={handleReindexRepository}
+                onRemoveRepository={onRemoveRepository}
+                onOpenAddRepository={onOpenAddRepository}
               />
-            )}
+            ) : currentRepo ? (
+              <Tag>{currentRepo.name}</Tag>
+            ) : null}
           </div>
           <Space>
             {indexStatus?.indexVersion && (
@@ -685,18 +710,9 @@ export function CodeKnowledgeGraphPanel({
       <div className="app-code-graph-content">
         {!repositoryId ? (
           <Empty
-            description="请先选择要索引的仓库"
+            description="请从上方仓库菜单选择要索引的仓库"
             image={Empty.PRESENTED_IMAGE_SIMPLE}
-          >
-            {onSelectRepository && repositories && repositories.length > 0 && (
-              <Select
-                style={{ width: 200 }}
-                placeholder="选择仓库"
-                onChange={(id: number) => onSelectRepository(id)}
-                options={repositories.map((r) => ({ label: r.name, value: r.id }))}
-              />
-            )}
-          </Empty>
+          />
         ) : indexError ? (
           <div style={{ maxWidth: 480, padding: 24 }}>
             <Alert

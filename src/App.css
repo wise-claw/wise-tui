@@ -1468,6 +1468,12 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
   overflow-y: auto;
 }
 
+/* 文件树收起后无「弹性」占位：项目列表吃掉原空白区，可滚动浏览全部仓库 */
+.app-left-sidebar-project-and-files[data-files-explorer-section-collapsed="true"] > .app-repository-list {
+  flex: 1 1 0;
+  max-height: none;
+}
+
 /* 共用布局；仅展开态吃掉剩余高度，避免与收起态同特异性时 flex:1 盖住 flex:0 把标题栏顶到底部 */
 .app-left-sidebar-files-explorer {
   display: flex;
@@ -1483,14 +1489,13 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
   flex: 1 1 0;
 }
 
-/* 收起后仅占一行；margin-top:auto 贴「项目」区底（系统条上方），中间空白留给项目列表 */
+/* 收起后仅占一行，紧跟项目列表（由 data-files-explorer-section-collapsed 让列表 flex 吃满上方高度） */
 .app-left-sidebar-files-explorer--section-collapsed {
   flex: 0 0 auto;
   flex-grow: 0;
   min-height: 0;
   padding: 0;
   box-sizing: border-box;
-  margin-top: auto;
 }
 
 /* 收起时父级高度为 auto，子项 flex:1 会塌成 0 高，必须改为按内容撑开 */

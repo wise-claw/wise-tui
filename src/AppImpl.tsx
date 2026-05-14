@@ -1738,10 +1738,20 @@ export default function App() {
       }}
       codeKnowledgeGraphProps={{
         repositoryId: activeRepository?.id ?? null,
-        repositories: repositories.map((r) => ({ id: r.id, name: r.name, path: r.path })),
+        repositories: repositories.map((r) => ({
+          id: r.id,
+          name: r.name,
+          path: r.path,
+          repositoryType: r.repositoryType,
+        })),
         searchRepositoryIds: codeGraphSearchRepositoryIds,
-        onSelectRepository: setActiveRepositoryId,
+        onSelectRepository: setActiveRepositoryWithOwner,
         onClose: () => setCodeKnowledgeGraphMode(false),
+        onRemoveRepository: async (repoId) => {
+          const repo = repositories.find((r) => r.id === repoId);
+          if (repo) await handleRemoveRepository(repo);
+        },
+        onOpenAddRepository: () => void handleAddFloatingRepository("frontend"),
       }}
       prdTaskSplitPanelProps={{
         onClose: () => setTaskSplitMode(false),
