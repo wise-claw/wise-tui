@@ -404,6 +404,148 @@ pub(crate) async fn prd_split_mark_children_status(
     })
 }
 
+// ── Stage 2: legacy prd-runs migration ──
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LegacyRunSummary {
+    run_id: String,
+    run_dir: String,
+    created_at_ms: u64,
+    prd_preview: String,
+    /// 是否含 `split-result.raw.json`（有内容即视为可迁移）。
+    has_split_result: bool,
+    task_count: u32,
+    repository_id: Option<i64>,
+    repository_name: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ListLegacyRunsOutput {
+    runs: Vec<LegacyRunSummary>,
+}
+
+#[tauri::command]
+pub(crate) async fn prd_split_list_legacy_runs() -> Result<ListLegacyRunsOutput, String> {
+    let base = crate::wise_dir()
+        .map_err(|e| format!("解析 ~/.wise 失败: {e}"))?
+        .join("prd-runs");
+    if !base.is_dir() {
+        return Ok(ListLegacyRunsOutput { runs: vec![] });
+    }
+    let mut runs: Vec<LegacyRunSummary> = Vec::new();
+    let entries = fs::read_dir(&base).map_err(|e| format!("读 prd-runs 失败: {e}"))?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let run_id = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
+        if run_id.is_empty() {
+            continue;
+        }
+        let created_at_ms = entry
+            .metadata()
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        let prd_preview = fs::read_to_string(path.join("prd.md"))
+            .unwrap_or_default()
+            .lines()
+            .take(3)
+            .collect::<Vec<_>>()
+            .join(" / ");
+        let split_path = path.join("split-result.raw.json");
+        let has_split_result = split_path.is_file();
+        let task_count = if has_split_result {
+            fs::read_to_string(&split_path)
+                .ok()
+                .and_then(|s| serde_json::from_str::<Value>(&s).ok())
+                .and_then(|v| v.get("tasks").and_then(|t| t.as_array().map(|a| a.len() as u32)))
+                .unwrap_or(0)
+        } else {
+            0
+        };
+        let (repository_id, repository_name) = read_repo_context(&path);
+        runs.push(LegacyRunSummary {
+            run_id,
+            run_dir: path.to_string_lossy().to_string(),
+            created_at_ms,
+            prd_preview,
+            has_split_result,
+            task_count,
+            repository_id,
+            repository_name,
+        });
+    }
+    runs.sort_by(|a, b| b.created_at_ms.cmp(&a.created_at_ms));
+    Ok(ListLegacyRunsOutput { runs })
+}
+
+fn read_repo_context(run_dir: &Path) -> (Option<i64>, Option<String>) {
+    let raw = match fs::read_to_string(run_dir.join("repo-context.json")) {
+        Ok(s) => s,
+        Err(_) => return (None, None),
+    };
+    let value: Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(_) => return (None, None),
+    };
+    let id = value.get("repositoryId").and_then(|v| v.as_i64());
+    let name = value
+        .get("repositoryName")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    (id, name)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ReadLegacyRunInput {
+    run_id: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ReadLegacyRunOutput {
+    run_id: String,
+    run_dir: String,
+    prd_markdown: String,
+    split_result_raw_json: Option<String>,
+    requirements_index_json: Option<String>,
+    repo_context_json: Option<String>,
+    meta_json: Option<String>,
+}
+
+#[tauri::command]
+pub(crate) async fn prd_split_read_legacy_run(
+    input: ReadLegacyRunInput,
+) -> Result<ReadLegacyRunOutput, String> {
+    if input.run_id.trim().is_empty() || input.run_id.contains('/') || input.run_id.contains("..") {
+        return Err("非法 run_id".to_string());
+    }
+    let base = crate::wise_dir()
+        .map_err(|e| format!("解析 ~/.wise 失败: {e}"))?
+        .join("prd-runs");
+    let run_dir = base.join(&input.run_id);
+    if !run_dir.is_dir() {
+        return Err(format!("run 目录不存在: {}", run_dir.to_string_lossy()));
+    }
+    let read_opt = |name: &str| fs::read_to_string(run_dir.join(name)).ok();
+    Ok(ReadLegacyRunOutput {
+        run_id: input.run_id,
+        run_dir: run_dir.to_string_lossy().to_string(),
+        prd_markdown: read_opt("prd.md").unwrap_or_default(),
+        split_result_raw_json: read_opt("split-result.raw.json"),
+        requirements_index_json: read_opt("requirements-index.json"),
+        repo_context_json: read_opt("repo-context.json"),
+        meta_json: read_opt("meta.json"),
+    })
+}
+
 // ── helpers ──
 
 fn validate_project_root(raw: &str) -> Result<PathBuf, String> {

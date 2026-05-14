@@ -1,8 +1,27 @@
-import { useMemo } from "react";
-import { Alert, Card, Checkbox, Input, Tag, Typography } from "antd";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Alert,
+  Button,
+  Card,
+  Checkbox,
+  Input,
+  List,
+  Modal,
+  Space,
+  Tag,
+  Tooltip,
+  Typography,
+  message,
+} from "antd";
+import { HistoryOutlined } from "@ant-design/icons";
 import type { PlannerRepo } from "../../../services/prdSplit/clusterPlanner";
 import { repositoryTypeChineseLabel } from "../../../utils/repositoryType";
 import type { UseSplitWizardStateApi } from "../useSplitWizardState";
+import {
+  listLegacyRuns,
+  readLegacyRun,
+  type LegacyRunSummary,
+} from "../../../services/prdSplit/legacyRunsImport";
 
 interface Props {
   api: UseSplitWizardStateApi;
@@ -10,6 +29,7 @@ interface Props {
 
 export function InputStage({ api }: Props) {
   const { state } = api;
+  const [legacyOpen, setLegacyOpen] = useState(false);
 
   const reposByType = useMemo(() => {
     const groups: Record<string, PlannerRepo[]> = { frontend: [], backend: [], document: [] };
@@ -71,7 +91,18 @@ export function InputStage({ api }: Props) {
         )}
       </Card>
 
-      <Card size="small" title="PRD（Markdown 文本）" bordered>
+      <Card
+        size="small"
+        title="PRD（Markdown 文本）"
+        bordered
+        extra={
+          <Tooltip title="从 ~/.wise/prd-runs/ 旧拆分历史里挑一份 PRD，覆盖当前文本。Trellis 落盘动作仍由你在 Review 阶段触发。">
+            <Button size="small" icon={<HistoryOutlined />} onClick={() => setLegacyOpen(true)}>
+              从历史 PRD 运行导入
+            </Button>
+          </Tooltip>
+        }
+      >
         <Input.TextArea
           value={state.prdMarkdown}
           onChange={(e) => api.setPrdMarkdown(e.target.value)}
@@ -87,7 +118,135 @@ export function InputStage({ api }: Props) {
       {state.globalError ? (
         <Alert type="error" showIcon message="解析或规划失败" description={state.globalError} />
       ) : null}
+
+      <LegacyRunsModal
+        open={legacyOpen}
+        onClose={() => setLegacyOpen(false)}
+        onPick={(markdown, summary) => {
+          api.setPrdMarkdown(markdown);
+          setLegacyOpen(false);
+          message.success(`已导入历史 PRD（${summary.runId.slice(0, 8)}…）`);
+        }}
+      />
     </div>
+  );
+}
+
+function LegacyRunsModal({
+  open,
+  onClose,
+  onPick,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onPick: (markdown: string, summary: LegacyRunSummary) => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [runs, setRuns] = useState<LegacyRunSummary[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [picking, setPicking] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    listLegacyRuns()
+      .then((list) => {
+        if (cancelled) return;
+        setRuns(list);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  const handlePick = async (summary: LegacyRunSummary) => {
+    setPicking(summary.runId);
+    try {
+      const detail = await readLegacyRun(summary.runId);
+      if (!detail.prdMarkdown.trim()) {
+        message.error("该运行没有可恢复的 prd.md 内容");
+        return;
+      }
+      onPick(detail.prdMarkdown, summary);
+    } catch (err) {
+      const m = err instanceof Error ? err.message : String(err);
+      message.error(`读取失败：${m}`);
+    } finally {
+      setPicking(null);
+    }
+  };
+
+  return (
+    <Modal
+      open={open}
+      onCancel={onClose}
+      footer={null}
+      width="min(900px, 92vw)"
+      title="历史 PRD 运行（~/.wise/prd-runs/）"
+    >
+      {error ? (
+        <Alert type="error" showIcon message="读取历史目录失败" description={error} />
+      ) : null}
+      {!error && !loading && runs.length === 0 ? (
+        <Alert
+          type="info"
+          showIcon
+          message="没有历史运行可导入"
+          description="`~/.wise/prd-runs/` 目录为空，或刚刚被清理。"
+        />
+      ) : null}
+      <List
+        loading={loading}
+        dataSource={runs}
+        renderItem={(item) => (
+          <List.Item
+            actions={[
+              <Button
+                key="pick"
+                type="primary"
+                size="small"
+                loading={picking === item.runId}
+                onClick={() => handlePick(item)}
+                disabled={!item.hasSplitResult && item.taskCount === 0 && !item.prdPreview}
+              >
+                导入这份 PRD
+              </Button>,
+            ]}
+          >
+            <List.Item.Meta
+              title={
+                <Space>
+                  <Typography.Text code>{item.runId.slice(0, 8)}…</Typography.Text>
+                  {item.repositoryName ? (
+                    <Tag color="processing">{item.repositoryName}</Tag>
+                  ) : null}
+                  <Tag>{new Date(item.createdAtMs).toLocaleString()}</Tag>
+                  {item.hasSplitResult ? (
+                    <Tag color="success">{item.taskCount} tasks</Tag>
+                  ) : (
+                    <Tag>仅 PRD</Tag>
+                  )}
+                </Space>
+              }
+              description={
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  {item.prdPreview || "（无 PRD 预览）"}
+                </Typography.Text>
+              }
+            />
+          </List.Item>
+        )}
+      />
+    </Modal>
   );
 }
 

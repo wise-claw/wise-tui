@@ -293,6 +293,8 @@ pub fn run() {
             claude_commands::prd_split_pipeline::prd_split_dispatch_cluster,
             claude_commands::prd_split_pipeline::prd_split_scan_project_parents,
             claude_commands::prd_split_pipeline::prd_split_mark_children_status,
+            claude_commands::prd_split_pipeline::prd_split_list_legacy_runs,
+            claude_commands::prd_split_pipeline::prd_split_read_legacy_run,
             claude_commands::attachments::capture_screenshot,
             app_state_commands::load_session_tabs,
             app_state_commands::save_session_tabs,
