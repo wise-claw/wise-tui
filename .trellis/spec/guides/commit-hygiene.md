@@ -42,6 +42,7 @@ Small cross-layer changes may share a commit only when the frontend and backend 
 Before committing:
 
 - `git status --short` contains only files that belong to the commit.
+- In a parallel dirty worktree, use pathspec-limited `git diff`, `git add`, and verification notes. If a global check fails only in unrelated paths, record the blocking paths and keep the commit scoped to the touched files.
 - Generated files are expected and reproducible.
 - Required tests/checks for the touched layer passed or are documented as blocked.
 - Documentation and specs match the behavior implemented.

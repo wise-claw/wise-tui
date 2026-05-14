@@ -1,17 +1,41 @@
-import { Alert, Button, Card, Collapse, Modal, Space, Tag, Tooltip, Typography, message } from "antd";
-import { CloudUploadOutlined, FileSearchOutlined } from "@ant-design/icons";
+import {
+  Alert,
+  Button,
+  Card,
+  Collapse,
+  Form,
+  Input,
+  Modal,
+  Select,
+  Space,
+  Tag,
+  Tooltip,
+  Typography,
+  message,
+} from "antd";
+import {
+  CloudUploadOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  FileSearchOutlined,
+  PlusOutlined,
+  SafetyCertificateOutlined,
+  UndoOutlined,
+} from "@ant-design/icons";
 import { useMemo, useRef, useState } from "react";
 import type { UseSplitWizardStateApi } from "../useSplitWizardState";
-import type { ClusterRunState } from "../types";
+import type { ClusterEditState, ClusterRunState } from "../types";
 import { writeClusterTasks } from "../../../services/prdSplit/trellisWriter";
+import { dispatchClusterVerifier } from "../../../services/prdSplit/verifierDispatch";
 import {
   buildClusterPrdMarkdown,
   buildHighlightSegments,
   type HighlightRange,
 } from "../../../services/prdSplit/clusterPrdSlice";
 import type { ClusterPlanItem } from "../../../services/prdSplit/clusterPlanner";
-import type { PrdDocument, TaskItem } from "../../../types";
+import type { PrdDocument, TaskItem, TaskRole } from "../../../types";
 import type { RequirementsIndexV2 } from "../../../services/prdSplit/requirementsIndexVersion";
+import { applyEditsToSplitResult, applyTaskEdits, isEditedTask, isManualTask } from "../taskEdits";
 
 interface Props {
   api: UseSplitWizardStateApi;
@@ -26,6 +50,7 @@ interface AnchorViewerState {
 export function ReviewStage({ api }: Props) {
   const { state } = api;
   const [writing, setWriting] = useState(false);
+  const [verifyingClusterId, setVerifyingClusterId] = useState<string | null>(null);
   const [anchorViewer, setAnchorViewer] = useState<AnchorViewerState | null>(null);
 
   const clusters = state.plan?.clusters ?? [];
@@ -50,6 +75,8 @@ export function ReviewStage({ api }: Props) {
           });
           continue;
         }
+        const edits = state.editsByCluster[cluster.id];
+        const effective = applyEditsToSplitResult(run.normalized, edits);
         try {
           const out = await writeClusterTasks({
             projectRootPath: state.project.rootPath,
@@ -60,7 +87,7 @@ export function ReviewStage({ api }: Props) {
               primaryRepositoryId: cluster.primaryRepositoryId,
               repositoryIds: cluster.repositoryIds,
             },
-            normalized: run.normalized,
+            normalized: effective,
             prdSource: state.prd!,
           });
           api.addWriteResult({
@@ -89,7 +116,53 @@ export function ReviewStage({ api }: Props) {
     }
   };
 
-  const openAnchorViewer = (cluster: ClusterPlanItem, tasks: TaskItem[], focusTaskId: string | null) => {
+  const runVerifier = async (cluster: ClusterPlanItem) => {
+    if (!state.project || !state.prd || !state.requirementsIndex) return;
+    const run = state.clusterRuns[cluster.id];
+    if (!run?.parentTaskPath) {
+      message.warning("没有父任务路径，无法派 verifier");
+      return;
+    }
+    setVerifyingClusterId(cluster.id);
+    try {
+      const result = await dispatchClusterVerifier({
+        projectRootPath: state.project.rootPath,
+        parentTaskPath: run.parentTaskPath,
+        cluster,
+        prd: state.prd,
+        requirementsIndex: state.requirementsIndex,
+        context: state.context,
+        previousOutput: run.raw?.rawOutput ?? null,
+        validationIssues: run.validationIssues ?? [],
+      });
+      if (result.errors.length === 0 && result.normalized) {
+        api.patchClusterRun(cluster.id, {
+          status: "succeeded",
+          raw: result.raw,
+          normalized: result.normalized,
+          validationIssues: [],
+          errors: [],
+          endedAt: Date.now(),
+        });
+        message.success("verifier 已修复并通过 strict 校验");
+      } else {
+        api.patchClusterRun(cluster.id, {
+          raw: result.raw,
+          validationIssues: result.validationIssues,
+          errors: result.errors,
+        });
+        message.error(`verifier 未能完全修复（${result.errors.length} 项错误）`);
+      }
+    } finally {
+      setVerifyingClusterId(null);
+    }
+  };
+
+  const openAnchorViewer = (
+    cluster: ClusterPlanItem,
+    tasks: TaskItem[],
+    focusTaskId: string | null,
+  ) => {
     setAnchorViewer({ cluster, tasks, focusedTaskId: focusTaskId });
   };
 
@@ -98,11 +171,12 @@ export function ReviewStage({ api }: Props) {
       <Alert
         type="info"
         showIcon
-        message="第 4 步 · Review 与落盘"
+        message="第 4 步 · Review 与人工编排"
         description={
           <Typography.Paragraph style={{ margin: 0 }}>
-            下方展示每个 cluster 的子任务、溯源链与锚点摘要。点「锚点速览」可在 PRD 切片中高亮任务对应原文段；
-            点「落盘到 Trellis」会把所有成功 cluster 的子任务写到 <code>.trellis/tasks/&lt;parent&gt;/&lt;child&gt;/</code>。
+            可在此编辑任务（标题 / 描述 / 角色 / 子项 / DoD / 溯源 requirement）、新增手工任务、删除冗余任务；
+            点「PRD 锚点」查看任务在原文的位置；validation 未通过的 cluster 可派遣 verifier 二次修复；
+            最后「落盘到 Trellis」会把（编辑后的）所有成功 cluster 子任务写到 <code>.trellis/tasks/&lt;parent&gt;/&lt;child&gt;/</code>。
           </Typography.Paragraph>
         }
       />
@@ -127,7 +201,14 @@ export function ReviewStage({ api }: Props) {
         defaultActiveKey={clusters.map((c) => c.id)}
         items={clusters.map((cluster) => {
           const run = state.clusterRuns[cluster.id];
+          const edits = state.editsByCluster[cluster.id];
           const writeResult = state.writeResults.find((r) => r.clusterId === cluster.id);
+          const effectiveTasks = run?.normalized
+            ? applyTaskEdits(run.normalized.splitTasks, edits)
+            : [];
+          const editedCount = effectiveTasks.filter((t) => isEditedTask(t, edits)).length;
+          const manualCount = effectiveTasks.filter((t) => isManualTask(t, edits)).length;
+          const deletedCount = edits?.deletedTaskIds.length ?? 0;
           return {
             key: cluster.id,
             label: (
@@ -135,12 +216,18 @@ export function ReviewStage({ api }: Props) {
                 <Typography.Text code>{cluster.id}</Typography.Text>
                 <Typography.Text strong>{cluster.title}</Typography.Text>
                 {run?.status === "succeeded" ? (
-                  <Tag color="success">{run.normalized?.splitTasks.length ?? 0} tasks</Tag>
+                  <Tag color="success">{effectiveTasks.length} tasks</Tag>
                 ) : run?.status === "skipped-clean" ? (
                   <Tag>跳过（unchanged）</Tag>
                 ) : (
                   <Tag color="error">未产出</Tag>
                 )}
+                {editedCount > 0 ? <Tag color="warning">已改 {editedCount}</Tag> : null}
+                {manualCount > 0 ? <Tag color="blue">新增 {manualCount}</Tag> : null}
+                {deletedCount > 0 ? <Tag color="red">已删 {deletedCount}</Tag> : null}
+                {(run?.validationIssues?.length ?? 0) > 0 ? (
+                  <Tag color="error">issue × {run!.validationIssues!.length}</Tag>
+                ) : null}
                 {writeResult ? (
                   writeResult.error ? (
                     <Tag color="error">写入失败</Tag>
@@ -151,13 +238,17 @@ export function ReviewStage({ api }: Props) {
               </Space>
             ),
             children: (
-              <ClusterTasks
+              <ClusterTasksPanel
                 cluster={cluster}
                 run={run}
+                edits={edits}
+                requirementsIndex={state.requirementsIndex}
+                api={api}
+                effectiveTasks={effectiveTasks}
                 writeResult={writeResult}
-                onAnchorView={(taskId) =>
-                  openAnchorViewer(cluster, run?.normalized?.splitTasks ?? [], taskId)
-                }
+                verifying={verifyingClusterId === cluster.id}
+                onAnchorView={(taskId) => openAnchorViewer(cluster, effectiveTasks, taskId)}
+                onRunVerifier={() => runVerifier(cluster)}
               />
             ),
           };
@@ -179,15 +270,27 @@ export function ReviewStage({ api }: Props) {
   );
 }
 
-function ClusterTasks({
+function ClusterTasksPanel({
+  cluster,
   run,
+  edits,
+  api,
+  effectiveTasks,
   writeResult,
+  verifying,
   onAnchorView,
+  onRunVerifier,
 }: {
   cluster: ClusterPlanItem;
   run: ClusterRunState | undefined;
+  edits: ClusterEditState | undefined;
+  requirementsIndex: RequirementsIndexV2 | null;
+  api: UseSplitWizardStateApi;
+  effectiveTasks: TaskItem[];
   writeResult: { childTaskNames: string[]; warnings: string[]; error?: string } | undefined;
+  verifying: boolean;
   onAnchorView: (taskId: string | null) => void;
+  onRunVerifier: () => void;
 }) {
   if (!run || !run.normalized) {
     return (
@@ -196,19 +299,66 @@ function ClusterTasks({
       </Typography.Text>
     );
   }
-  const tasks: TaskItem[] = run.normalized.splitTasks;
-  const hasAnchors = tasks.some((t) => t.taskAnchors);
+  const hasIssues = (run.validationIssues?.length ?? 0) > 0;
+  const requirementOptions = cluster.requirementIds.map((id) => ({ value: id, label: id }));
+
+  const addManualTask = () => {
+    const ordinal = effectiveTasks.length + 1;
+    const newTask: TaskItem = {
+      id: `manual-${cluster.id}-${Date.now()}`,
+      title: "新任务",
+      description: "（请补充任务说明）",
+      role: deriveDefaultRole(effectiveTasks, cluster),
+      size: "M",
+      estimateDays: 2,
+      dependencies: [],
+      sourceRefs: [],
+      sourceRequirementIds: cluster.requirementIds.slice(0, 1),
+      subtasks: [],
+      dod: [],
+      executionStatus: "executable",
+      executionStatusManual: true,
+      flowStatus: "todo",
+    };
+    api.addManualTask(cluster.id, newTask);
+    message.info(`已新增任务 #${ordinal}（手工创建）`);
+  };
+
   return (
     <Space direction="vertical" size={8} style={{ width: "100%" }}>
-      {hasAnchors ? (
-        <Button
-          size="small"
-          icon={<FileSearchOutlined />}
-          onClick={() => onAnchorView(null)}
-        >
-          锚点速览（高亮 PRD 中所有任务范围）
+      <Space wrap>
+        <Button size="small" icon={<PlusOutlined />} onClick={addManualTask}>
+          新增任务
         </Button>
-      ) : null}
+        <Button size="small" icon={<FileSearchOutlined />} onClick={() => onAnchorView(null)}>
+          锚点速览（高亮所有任务）
+        </Button>
+        {hasIssues ? (
+          <Tooltip title="派遣 trellis-verifier 子代理，基于现有 issue 列表自动修复输出">
+            <Button
+              size="small"
+              type="primary"
+              ghost
+              icon={<SafetyCertificateOutlined />}
+              loading={verifying}
+              onClick={onRunVerifier}
+            >
+              派遣 verifier（{run.validationIssues!.length} 条 issue）
+            </Button>
+          </Tooltip>
+        ) : null}
+        {edits && (Object.keys(edits.patches).length > 0 || edits.manualTasks.length > 0 || edits.deletedTaskIds.length > 0) ? (
+          <Button
+            size="small"
+            danger
+            icon={<UndoOutlined />}
+            onClick={() => api.discardClusterEdits(cluster.id)}
+          >
+            放弃本 cluster 编辑
+          </Button>
+        ) : null}
+      </Space>
+
       {writeResult?.error ? (
         <Alert type="error" message="本 cluster 落盘失败" description={writeResult.error} />
       ) : null}
@@ -226,36 +376,196 @@ function ClusterTasks({
           }
         />
       ) : null}
-      {tasks.map((task, idx) => (
-        <Card
+
+      {edits?.deletedTaskIds.length ? (
+        <DeletedTasksBanner
+          deletedIds={edits.deletedTaskIds}
+          onRestore={(taskId) => api.restoreTask(cluster.id, taskId)}
+        />
+      ) : null}
+
+      {effectiveTasks.map((task, idx) => (
+        <TaskEditorCard
           key={task.id}
-          size="small"
-          title={
-            <Space>
-              <Tag color={taskColorByIndex(idx)} style={{ minWidth: 24, textAlign: "center" }}>
-                #{idx + 1}
-              </Tag>
-              {task.title}
-            </Space>
-          }
-          extra={
-            task.taskAnchors ? (
-              <Tooltip title="在 PRD 中高亮本任务对应原文段">
-                <Button size="small" icon={<FileSearchOutlined />} onClick={() => onAnchorView(task.id)}>
-                  PRD 锚点
-                </Button>
-              </Tooltip>
-            ) : null
-          }
-        >
-          <Space wrap size={4} style={{ marginBlockEnd: 8 }}>
-            <Tag color={roleColor(task.role)}>{task.role}</Tag>
-            <Tag>{task.size}</Tag>
-            <Tag>预估 {task.estimateDays} d</Tag>
-            {task.executionStatus === "not_executable" ? (
-              <Tag color="warning">not_executable</Tag>
-            ) : null}
-          </Space>
+          index={idx}
+          cluster={cluster}
+          task={task}
+          edits={edits}
+          requirementOptions={requirementOptions}
+          api={api}
+          onAnchorView={() => onAnchorView(task.id)}
+        />
+      ))}
+    </Space>
+  );
+}
+
+function DeletedTasksBanner({
+  deletedIds,
+  onRestore,
+}: {
+  deletedIds: string[];
+  onRestore: (taskId: string) => void;
+}) {
+  return (
+    <Alert
+      type="warning"
+      message={`已剔除 ${deletedIds.length} 个任务（落盘时不写入）`}
+      description={
+        <Space wrap size={4}>
+          {deletedIds.map((id) => (
+            <Tag key={id} closable={false}>
+              <Typography.Text code>{id}</Typography.Text>{" "}
+              <Button size="small" type="link" onClick={() => onRestore(id)}>
+                恢复
+              </Button>
+            </Tag>
+          ))}
+        </Space>
+      }
+    />
+  );
+}
+
+function TaskEditorCard({
+  index,
+  cluster,
+  task,
+  edits,
+  requirementOptions,
+  api,
+  onAnchorView,
+}: {
+  index: number;
+  cluster: ClusterPlanItem;
+  task: TaskItem;
+  edits: ClusterEditState | undefined;
+  requirementOptions: { value: string; label: string }[];
+  api: UseSplitWizardStateApi;
+  onAnchorView: () => void;
+}) {
+  const [editMode, setEditMode] = useState(false);
+  const edited = isEditedTask(task, edits);
+  const manual = isManualTask(task, edits);
+
+  const onPatch = (field: keyof TaskItem, value: unknown) => {
+    if (manual) {
+      api.patchManualTask(cluster.id, task.id, { [field]: value } as Partial<TaskItem>);
+    } else {
+      api.patchTaskEdit(cluster.id, task.id, { [field]: value as never });
+    }
+  };
+
+  return (
+    <Card
+      size="small"
+      title={
+        <Space>
+          <Tag color={taskColorByIndex(index)} style={{ minWidth: 24, textAlign: "center" }}>
+            #{index + 1}
+          </Tag>
+          {editMode ? (
+            <Input
+              value={task.title}
+              onChange={(e) => onPatch("title", e.target.value)}
+              size="small"
+              style={{ width: 320 }}
+            />
+          ) : (
+            <Typography.Text strong>{task.title}</Typography.Text>
+          )}
+          {manual ? <Tag color="blue">新增</Tag> : edited ? <Tag color="warning">已改</Tag> : null}
+        </Space>
+      }
+      extra={
+        <Space size={4}>
+          {task.taskAnchors ? (
+            <Tooltip title="在 PRD 中高亮本任务对应原文段">
+              <Button size="small" icon={<FileSearchOutlined />} onClick={onAnchorView}>
+                PRD 锚点
+              </Button>
+            </Tooltip>
+          ) : null}
+          <Button
+            size="small"
+            type={editMode ? "primary" : "default"}
+            icon={<EditOutlined />}
+            onClick={() => setEditMode((v) => !v)}
+          >
+            {editMode ? "完成" : "编辑"}
+          </Button>
+          <Tooltip title={manual ? "从手动任务列表移除" : "标记删除（落盘时不写入；可恢复）"}>
+            <Button
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              onClick={() => {
+                if (manual) api.removeManualTask(cluster.id, task.id);
+                else api.deleteTask(cluster.id, task.id);
+              }}
+            />
+          </Tooltip>
+        </Space>
+      }
+    >
+      <Space wrap size={4} style={{ marginBlockEnd: 8 }}>
+        {editMode ? (
+          <Select
+            size="small"
+            value={task.role}
+            onChange={(v: TaskRole) => onPatch("role", v)}
+            style={{ minWidth: 110 }}
+            options={[
+              { value: "frontend", label: "前端 frontend" },
+              { value: "backend", label: "后端 backend" },
+              { value: "document", label: "文档 document" },
+            ]}
+          />
+        ) : (
+          <Tag color={roleColor(task.role)}>{task.role}</Tag>
+        )}
+        <Tag>{task.size}</Tag>
+        <Tag>预估 {task.estimateDays} d</Tag>
+        {task.executionStatus === "not_executable" ? (
+          <Tag color="warning">not_executable</Tag>
+        ) : null}
+      </Space>
+
+      {editMode ? (
+        <Form layout="vertical" size="small" component="div">
+          <Form.Item label="描述">
+            <Input.TextArea
+              value={task.description}
+              onChange={(e) => onPatch("description", e.target.value)}
+              autoSize={{ minRows: 2, maxRows: 8 }}
+            />
+          </Form.Item>
+          <Form.Item label="溯源 requirement">
+            <Select
+              mode="multiple"
+              value={task.sourceRequirementIds}
+              onChange={(v: string[]) => onPatch("sourceRequirementIds", v)}
+              options={requirementOptions}
+              size="small"
+            />
+          </Form.Item>
+          <Form.Item label={`子项（${task.subtasks.length}）`}>
+            <ListEditor
+              items={task.subtasks}
+              onChange={(items) => onPatch("subtasks", items)}
+              placeholder="添加一条子项"
+            />
+          </Form.Item>
+          <Form.Item label={`DoD（${task.dod.length}）`}>
+            <ListEditor
+              items={task.dod}
+              onChange={(items) => onPatch("dod", items)}
+              placeholder="添加一条验收标准"
+            />
+          </Form.Item>
+        </Form>
+      ) : (
+        <>
           {task.description ? (
             <Typography.Paragraph style={{ marginBlockEnd: 6 }}>{task.description}</Typography.Paragraph>
           ) : null}
@@ -290,8 +600,75 @@ function ClusterTasks({
               </ul>
             </details>
           ) : null}
-        </Card>
+        </>
+      )}
+    </Card>
+  );
+}
+
+function ListEditor({
+  items,
+  onChange,
+  placeholder,
+}: {
+  items: string[];
+  onChange: (items: string[]) => void;
+  placeholder: string;
+}) {
+  const [draft, setDraft] = useState("");
+  return (
+    <Space direction="vertical" size={4} style={{ width: "100%" }}>
+      {items.map((item, idx) => (
+        <Space key={idx} style={{ width: "100%" }}>
+          <Input
+            size="small"
+            value={item}
+            onChange={(e) => {
+              const next = [...items];
+              next[idx] = e.target.value;
+              onChange(next);
+            }}
+            style={{ flex: 1, minWidth: 320 }}
+          />
+          <Button
+            size="small"
+            type="text"
+            danger
+            icon={<DeleteOutlined />}
+            onClick={() => onChange(items.filter((_, i) => i !== idx))}
+          />
+        </Space>
       ))}
+      <Space style={{ width: "100%" }}>
+        <Input
+          size="small"
+          value={draft}
+          placeholder={placeholder}
+          onChange={(e) => setDraft(e.target.value)}
+          onPressEnter={() => {
+            const v = draft.trim();
+            if (v) {
+              onChange([...items, v]);
+              setDraft("");
+            }
+          }}
+          style={{ flex: 1, minWidth: 320 }}
+        />
+        <Button
+          size="small"
+          type="dashed"
+          icon={<PlusOutlined />}
+          onClick={() => {
+            const v = draft.trim();
+            if (v) {
+              onChange([...items, v]);
+              setDraft("");
+            }
+          }}
+        >
+          添加
+        </Button>
+      </Space>
     </Space>
   );
 }
@@ -422,6 +799,19 @@ function AnchorViewerModal({
       </div>
     </Modal>
   );
+}
+
+function deriveDefaultRole(existingTasks: TaskItem[], cluster: ClusterPlanItem): TaskRole {
+  // 用已有任务的多数 role；否则按 cluster repo type 默认。
+  const counts = new Map<TaskRole, number>();
+  for (const t of existingTasks) counts.set(t.role, (counts.get(t.role) ?? 0) + 1);
+  const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  if (sorted.length > 0) return sorted[0][0];
+  // 没有可参考任务时，从 cluster id 猜（cluster id 形如 cluster-frontend-1 / cluster-backend-1 / cluster-document-1）
+  if (cluster.id.includes("frontend")) return "frontend";
+  if (cluster.id.includes("backend")) return "backend";
+  if (cluster.id.includes("document")) return "document";
+  return "frontend";
 }
 
 function truncate(text: string, max: number): string {

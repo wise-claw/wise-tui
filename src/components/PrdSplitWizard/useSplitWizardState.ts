@@ -16,14 +16,17 @@ import {
   type ExistingParentRef,
 } from "../../services/prdSplit/existingParentScanner";
 import { computeDirtyClusters } from "../../services/prdSplit/diffReplay";
+import type { TaskItem } from "../../types";
 import type {
   ClusterDiffStatus,
   ClusterRunState,
   ProjectRef,
+  TaskEditPatch,
   WizardState,
   WizardWriteResult,
 } from "./types";
 import { emptyWizardState } from "./types";
+import { ensureClusterEdit } from "./taskEdits";
 
 type Action =
   | { type: "reset"; project: ProjectRef | null; repositories: PlannerRepo[]; selectedRepositoryIds: number[]; context: TaskSplitContext | null }
@@ -34,6 +37,14 @@ type Action =
   | { type: "set-existing-parents"; existing: Map<string, ExistingParentRef> | null; diffByCluster: Record<string, ClusterDiffStatus> }
   | { type: "set-reuse-existing-parents"; value: boolean }
   | { type: "set-dispatch-only-dirty"; value: boolean }
+  | { type: "patch-task-edit"; clusterId: string; taskId: string; patch: Partial<TaskEditPatch> }
+  | { type: "clear-task-edit"; clusterId: string; taskId: string }
+  | { type: "delete-task"; clusterId: string; taskId: string }
+  | { type: "restore-task"; clusterId: string; taskId: string }
+  | { type: "add-manual-task"; clusterId: string; task: TaskItem }
+  | { type: "remove-manual-task"; clusterId: string; taskId: string }
+  | { type: "patch-manual-task"; clusterId: string; taskId: string; patch: Partial<TaskItem> }
+  | { type: "discard-cluster-edits"; clusterId: string }
   | { type: "go-to-dispatch" }
   | { type: "set-cluster-run"; clusterId: string; run: ClusterRunState }
   | { type: "patch-cluster-run"; clusterId: string; patch: Partial<ClusterRunState> }
@@ -93,6 +104,123 @@ function reducer(state: WizardState, action: Action): WizardState {
       return { ...state, reuseExistingParents: action.value };
     case "set-dispatch-only-dirty":
       return { ...state, dispatchOnlyDirty: action.value };
+    case "patch-task-edit": {
+      const cur = ensureClusterEdit(state.editsByCluster, action.clusterId);
+      const prevPatch = cur.patches[action.taskId] ?? {};
+      const nextPatch: TaskEditPatch = { ...prevPatch, ...action.patch };
+      return {
+        ...state,
+        editsByCluster: {
+          ...state.editsByCluster,
+          [action.clusterId]: {
+            ...cur,
+            patches: { ...cur.patches, [action.taskId]: nextPatch },
+          },
+        },
+      };
+    }
+    case "clear-task-edit": {
+      const cur = state.editsByCluster[action.clusterId];
+      if (!cur) return state;
+      const { [action.taskId]: _, ...rest } = cur.patches;
+      return {
+        ...state,
+        editsByCluster: {
+          ...state.editsByCluster,
+          [action.clusterId]: { ...cur, patches: rest },
+        },
+      };
+    }
+    case "delete-task": {
+      const cur = ensureClusterEdit(state.editsByCluster, action.clusterId);
+      // 如果是 manual task 直接从 manualTasks 移除；否则进 deletedTaskIds
+      const isManual = cur.manualTasks.some((t) => t.id === action.taskId);
+      if (isManual) {
+        return {
+          ...state,
+          editsByCluster: {
+            ...state.editsByCluster,
+            [action.clusterId]: {
+              ...cur,
+              manualTasks: cur.manualTasks.filter((t) => t.id !== action.taskId),
+            },
+          },
+        };
+      }
+      if (cur.deletedTaskIds.includes(action.taskId)) return state;
+      return {
+        ...state,
+        editsByCluster: {
+          ...state.editsByCluster,
+          [action.clusterId]: {
+            ...cur,
+            deletedTaskIds: [...cur.deletedTaskIds, action.taskId],
+          },
+        },
+      };
+    }
+    case "restore-task": {
+      const cur = state.editsByCluster[action.clusterId];
+      if (!cur) return state;
+      return {
+        ...state,
+        editsByCluster: {
+          ...state.editsByCluster,
+          [action.clusterId]: {
+            ...cur,
+            deletedTaskIds: cur.deletedTaskIds.filter((id) => id !== action.taskId),
+          },
+        },
+      };
+    }
+    case "add-manual-task": {
+      const cur = ensureClusterEdit(state.editsByCluster, action.clusterId);
+      return {
+        ...state,
+        editsByCluster: {
+          ...state.editsByCluster,
+          [action.clusterId]: { ...cur, manualTasks: [...cur.manualTasks, action.task] },
+        },
+      };
+    }
+    case "remove-manual-task": {
+      const cur = state.editsByCluster[action.clusterId];
+      if (!cur) return state;
+      return {
+        ...state,
+        editsByCluster: {
+          ...state.editsByCluster,
+          [action.clusterId]: {
+            ...cur,
+            manualTasks: cur.manualTasks.filter((t) => t.id !== action.taskId),
+          },
+        },
+      };
+    }
+    case "patch-manual-task": {
+      const cur = state.editsByCluster[action.clusterId];
+      if (!cur) return state;
+      return {
+        ...state,
+        editsByCluster: {
+          ...state.editsByCluster,
+          [action.clusterId]: {
+            ...cur,
+            manualTasks: cur.manualTasks.map((t) =>
+              t.id === action.taskId ? { ...t, ...action.patch } : t,
+            ),
+          },
+        },
+      };
+    }
+    case "discard-cluster-edits":
+      return {
+        ...state,
+        editsByCluster: {
+          ...state.editsByCluster,
+          [action.clusterId]: { patches: {}, manualTasks: [], deletedTaskIds: [] },
+        },
+      };
     case "go-to-dispatch":
       return { ...state, stage: "dispatch", globalError: null };
     case "set-cluster-run":
@@ -147,6 +275,14 @@ export interface UseSplitWizardStateApi {
   refreshExistingParents(): Promise<void>;
   setReuseExistingParents(value: boolean): void;
   setDispatchOnlyDirty(value: boolean): void;
+  patchTaskEdit(clusterId: string, taskId: string, patch: Partial<TaskEditPatch>): void;
+  clearTaskEdit(clusterId: string, taskId: string): void;
+  deleteTask(clusterId: string, taskId: string): void;
+  restoreTask(clusterId: string, taskId: string): void;
+  addManualTask(clusterId: string, task: TaskItem): void;
+  removeManualTask(clusterId: string, taskId: string): void;
+  patchManualTask(clusterId: string, taskId: string, patch: Partial<TaskItem>): void;
+  discardClusterEdits(clusterId: string): void;
   goToDispatch(): void;
   setClusterRun(clusterId: string, run: ClusterRunState): void;
   patchClusterRun(clusterId: string, patch: Partial<ClusterRunState>): void;
@@ -229,6 +365,18 @@ export function useSplitWizardState(): UseSplitWizardStateApi {
       refreshExistingParents,
       setReuseExistingParents: (value) => dispatch({ type: "set-reuse-existing-parents", value }),
       setDispatchOnlyDirty: (value) => dispatch({ type: "set-dispatch-only-dirty", value }),
+      patchTaskEdit: (clusterId, taskId, patch) =>
+        dispatch({ type: "patch-task-edit", clusterId, taskId, patch }),
+      clearTaskEdit: (clusterId, taskId) =>
+        dispatch({ type: "clear-task-edit", clusterId, taskId }),
+      deleteTask: (clusterId, taskId) => dispatch({ type: "delete-task", clusterId, taskId }),
+      restoreTask: (clusterId, taskId) => dispatch({ type: "restore-task", clusterId, taskId }),
+      addManualTask: (clusterId, task) => dispatch({ type: "add-manual-task", clusterId, task }),
+      removeManualTask: (clusterId, taskId) =>
+        dispatch({ type: "remove-manual-task", clusterId, taskId }),
+      patchManualTask: (clusterId, taskId, patch) =>
+        dispatch({ type: "patch-manual-task", clusterId, taskId, patch }),
+      discardClusterEdits: (clusterId) => dispatch({ type: "discard-cluster-edits", clusterId }),
       goToDispatch: () => dispatch({ type: "go-to-dispatch" }),
       setClusterRun: (clusterId, run) => dispatch({ type: "set-cluster-run", clusterId, run }),
       patchClusterRun: (clusterId, patch) => dispatch({ type: "patch-cluster-run", clusterId, patch }),

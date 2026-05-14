@@ -6,7 +6,7 @@
  *                                                    ↘ error → 回到对应 stage
  */
 
-import type { PrdDocument, SplitResult, TaskSplitContext } from "../../types";
+import type { PrdDocument, SplitResult, TaskItem, TaskRole, TaskSplitContext } from "../../types";
 import type { ClusterPlan, ClusterPlanItem, PlannerRepo } from "../../services/prdSplit/clusterPlanner";
 import type { RequirementsIndexV2 } from "../../services/prdSplit/requirementsIndexVersion";
 import type {
@@ -52,6 +52,25 @@ export type ClusterDiffStatus =
   | { kind: "unchanged"; existingParent: ExistingParentRef }
   | { kind: "dirty"; existingParent: ExistingParentRef; reasons: DiffReason[] };
 
+/** 单个任务的人工编辑补丁（Review 阶段产生；落盘前与 normalized 合并）。 */
+export interface TaskEditPatch {
+  title?: string;
+  description?: string;
+  role?: TaskRole;
+  subtasks?: string[];
+  dod?: string[];
+  sourceRequirementIds?: string[];
+}
+
+export interface ClusterEditState {
+  /** 既有任务的字段补丁；空对象 = 无修改。 */
+  patches: Record<string, TaskEditPatch>;
+  /** 用户新增的任务（不来自 splitter）。 */
+  manualTasks: TaskItem[];
+  /** 被用户从结果中剔除的任务 id。 */
+  deletedTaskIds: string[];
+}
+
 export interface WizardState {
   stage: WizardStage;
   /** 当前 wizard 关联的项目根；从入参或下拉选择。 */
@@ -84,6 +103,8 @@ export interface WizardState {
   reuseExistingParents: boolean;
   /** dispatch 行为开关：跳过 unchanged cluster（默认 true 当存在 unchanged）。 */
   dispatchOnlyDirty: boolean;
+  /** Review 阶段的人工编辑；按 clusterId 隔离。 */
+  editsByCluster: Record<string, ClusterEditState>;
 }
 
 export function emptyWizardState(): WizardState {
@@ -104,6 +125,7 @@ export function emptyWizardState(): WizardState {
     diffByCluster: {},
     reuseExistingParents: true,
     dispatchOnlyDirty: true,
+    editsByCluster: {},
   };
 }
 
