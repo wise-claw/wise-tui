@@ -201,6 +201,14 @@ export function composeSplitterPrompt(input: {
   lines.push("5. `clusterId` 必须等于本 cluster 的 id；`repoTarget` 缺省由本地兜底。");
   lines.push("6. 仅输出一个顶层 JSON 对象，不要前后附加任何文字。");
   lines.push("");
+  lines.push("## 分类与设计输出要求");
+  lines.push("- `classification` 取值二选一：");
+  lines.push("  - `\"lightweight\"`：单角色、不跨仓、subtasks ≤ 3 且 dod ≤ 3 的小任务。可省略 `designMarkdown` / `implementMarkdown`。");
+  lines.push("  - `\"complex\"`：以上任一条件不满足。**必须**提供非空 `designMarkdown` 与 `implementMarkdown`。");
+  lines.push("- `designMarkdown`：建议章节 — `## Architecture` / `## Data Contract` / `## Compatibility` / `## Risks`。");
+  lines.push("- `implementMarkdown`：建议章节 — `## Ordered Steps` / `## Validation Commands` / `## Rollback Points`。");
+  lines.push("- markdown 字符串内不要使用三引号 ```代码块```，需要代码示例时用四空格缩进或反引号 inline，避免破坏外层 JSON 转义。");
+  lines.push("");
   lines.push("现在产出 JSON。");
   return lines.join("\n");
 }
@@ -301,6 +309,9 @@ const OUTPUT_SCHEMA_JSON = JSON.stringify(
             },
             clusterId: { type: "string" },
             repoTarget: { type: ["integer", "null"] },
+            classification: { enum: ["lightweight", "complex"] },
+            designMarkdown: { type: "string" },
+            implementMarkdown: { type: "string" },
           },
         },
       },

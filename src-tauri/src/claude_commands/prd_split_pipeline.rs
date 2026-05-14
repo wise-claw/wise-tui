@@ -57,6 +57,12 @@ pub(crate) struct ChildTaskPayload {
     source_requirement_ids: Vec<String>,
     #[serde(default)]
     task_anchors: Option<Value>,
+    #[serde(default)]
+    classification: Option<String>,
+    #[serde(default)]
+    design_markdown: Option<String>,
+    #[serde(default)]
+    implement_markdown: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -188,6 +194,11 @@ pub(crate) async fn prd_split_materialize_tasks(
         let deps = child.dependencies.clone();
         let req_ids = child.source_requirement_ids.clone();
         let anchors = child.task_anchors.clone();
+        let classification = child
+            .classification
+            .clone()
+            .filter(|s| s == "lightweight" || s == "complex")
+            .unwrap_or_else(|| "lightweight".to_string());
 
         patch_task_json(&child_path, |task| {
             task["repositoryId"] = json!(repo_id);
@@ -201,6 +212,7 @@ pub(crate) async fn prd_split_materialize_tasks(
                 .ok_or_else(|| "task.json meta 字段缺失".to_string())?;
             meta.insert("sourceRequirementIds".to_string(), json!(req_ids));
             meta.insert("childDependencies".to_string(), json!(deps));
+            meta.insert("classification".to_string(), json!(classification));
             if let Some(anchor) = anchors.as_ref() {
                 meta.insert("taskAnchors".to_string(), anchor.clone());
             }
@@ -209,6 +221,25 @@ pub(crate) async fn prd_split_materialize_tasks(
 
         fs::write(child_path.join("prd.md"), &child.prd_markdown)
             .map_err(|e| format!("写子任务 prd.md 失败 ({child_name}): {e}"))?;
+
+        if let Some(design) = child
+            .design_markdown
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            fs::write(child_path.join("design.md"), format!("{design}\n"))
+                .map_err(|e| format!("写子任务 design.md 失败 ({child_name}): {e}"))?;
+        }
+        if let Some(impl_md) = child
+            .implement_markdown
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            fs::write(child_path.join("implement.md"), format!("{impl_md}\n"))
+                .map_err(|e| format!("写子任务 implement.md 失败 ({child_name}): {e}"))?;
+        }
 
         child_task_names.push(child_name);
     }

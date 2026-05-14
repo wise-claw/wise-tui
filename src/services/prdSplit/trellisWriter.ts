@@ -60,6 +60,9 @@ interface RustChildTaskPayload {
   dependencies: string[];
   sourceRequirementIds: string[];
   taskAnchors: TaskAnchorDescriptor | null;
+  classification: "lightweight" | "complex";
+  designMarkdown: string | null;
+  implementMarkdown: string | null;
 }
 
 interface RustMaterializePayload {
@@ -132,6 +135,10 @@ export function buildMaterializePayload(input: WriteClusterTasksInput): RustMate
 }
 
 function projectChildTask(task: TaskItem, cluster: ClusterRef): RustChildTaskPayload {
+  const classification: "lightweight" | "complex" =
+    task.classification === "complex" ? "complex" : "lightweight";
+  const designMarkdown = task.designMarkdown?.trim();
+  const implementMarkdown = task.implementMarkdown?.trim();
   return {
     title: task.title,
     slug: deriveSlug(task.title, task.id),
@@ -142,6 +149,9 @@ function projectChildTask(task: TaskItem, cluster: ClusterRef): RustChildTaskPay
     dependencies: [...task.dependencies],
     sourceRequirementIds: [...task.sourceRequirementIds],
     taskAnchors: task.taskAnchors ?? null,
+    classification,
+    designMarkdown: designMarkdown && designMarkdown.length > 0 ? designMarkdown : null,
+    implementMarkdown: implementMarkdown && implementMarkdown.length > 0 ? implementMarkdown : null,
   };
 }
 
