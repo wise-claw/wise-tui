@@ -3,7 +3,7 @@ import {
   PlayCircleOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
-import { Alert, Button, Empty, Progress, Select, Space, Spin, Tag, Typography } from "antd";
+import { Alert, Button, Empty, Progress, Segmented, Select, Space, Spin, Tag, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getCodeGraphIndexStatus,
@@ -11,10 +11,17 @@ import {
   triggerCodeGraphReindex,
 } from "../../services/codeKnowledgeGraph";
 import { parseCodeGraphSubgraphResponse } from "../../utils/codeKnowledgeGraphResponse";
-import type { CodeGraphIndexStatusResponse, CodeGraphSubgraphResponse, GraphNode } from "../../types/codeKnowledgeGraph";
+import type {
+  CodeGraphIndexStatusResponse,
+  CodeGraphSubgraphRequest,
+  CodeGraphSubgraphResponse,
+  GraphNode,
+} from "../../types/codeKnowledgeGraph";
 import { GraphCanvas } from "./GraphCanvas";
 import { InspectorPanel } from "./InspectorPanel";
 import "./CodeKnowledgeGraphPanel.css";
+
+type SubgraphHopScope = "all" | 1 | 2 | 3;
 
 interface RepositoryInfo {
   id: number;
@@ -34,6 +41,8 @@ export function CodeKnowledgeGraphPanel({ repositoryId, repositories, onSelectRe
   const [loading, setLoading] = useState(true);
   const [reindexing, setReindexing] = useState(false);
   const [subgraphData, setSubgraphData] = useState<CodeGraphSubgraphResponse | null>(null);
+  const [subgraphHopScope, setSubgraphHopScope] = useState<SubgraphHopScope>("all");
+  const [subgraphFocusId, setSubgraphFocusId] = useState<string | undefined>(undefined);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [subgraphLoading, setSubgraphLoading] = useState(false);
   const [indexError, setIndexError] = useState<string | null>(null);
@@ -49,20 +58,7 @@ export function CodeKnowledgeGraphPanel({ repositoryId, repositories, onSelectRe
       const status = await getCodeGraphIndexStatus(repositoryId);
       setIndexStatus(status);
 
-      // If indexed, fetch subgraph
       if (status.status === "done") {
-        setSubgraphLoading(true);
-        try {
-          const raw = await getCodeGraphSubgraph({ repositoryId, hop: 1 });
-          const parsed = parseCodeGraphSubgraphResponse(raw);
-          setSubgraphData(parsed);
-        } catch {
-          // Ignore subgraph fetch errors
-        } finally {
-          setSubgraphLoading(false);
-        }
-
-        // Stop polling once indexed
         if (pollRef.current) {
           clearInterval(pollRef.current);
           pollRef.current = null;
@@ -130,6 +126,47 @@ export function CodeKnowledgeGraphPanel({ repositoryId, repositories, onSelectRe
   }, [fetchStatus]);
 
   useEffect(() => {
+    setSubgraphFocusId(undefined);
+    setSubgraphHopScope("all");
+    setSelectedNode(null);
+    setSubgraphData(null);
+  }, [repositoryId]);
+
+  useEffect(() => {
+    if (!repositoryId) {
+      setSubgraphLoading(false);
+      return;
+    }
+    if (indexStatus?.status !== "done" || indexStatus.repositoryId !== repositoryId) {
+      setSubgraphLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setSubgraphLoading(true);
+
+    (async () => {
+      try {
+        const req: CodeGraphSubgraphRequest = { repositoryId };
+        if (subgraphFocusId) req.focusNodeId = subgraphFocusId;
+        if (subgraphHopScope !== "all") req.hop = subgraphHopScope;
+        const raw = await getCodeGraphSubgraph(req);
+        if (cancelled) return;
+        setSubgraphData(parseCodeGraphSubgraphResponse(raw));
+      } catch {
+        if (!cancelled) setSubgraphData(null);
+      } finally {
+        if (!cancelled) setSubgraphLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      setSubgraphLoading(false);
+    };
+  }, [repositoryId, indexStatus?.status, indexStatus?.repositoryId, subgraphFocusId, subgraphHopScope]);
+
+  useEffect(() => {
     if (!onClose) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -143,6 +180,8 @@ export function CodeKnowledgeGraphPanel({ repositoryId, repositories, onSelectRe
     setReindexing(true);
     setSubgraphData(null);
     setSelectedNode(null);
+    setSubgraphFocusId(undefined);
+    setSubgraphHopScope("all");
     try {
       await triggerCodeGraphReindex({ repositoryId });
       setIndexStatus({ status: "indexing", repositoryId, progress: 1 });
@@ -158,23 +197,10 @@ export function CodeKnowledgeGraphPanel({ repositoryId, repositories, onSelectRe
     setSelectedNode(node);
   }, []);
 
-  const handleNodeExpand = useCallback(
-    async (node: GraphNode) => {
-      if (!repositoryId) return;
-      setSubgraphLoading(true);
-      try {
-        const raw = await getCodeGraphSubgraph({ repositoryId, focusNodeId: node.id, hop: 1 });
-        const parsed = parseCodeGraphSubgraphResponse(raw);
-        setSubgraphData(parsed);
-        setSelectedNode(node);
-      } catch {
-        // Ignore errors
-      } finally {
-        setSubgraphLoading(false);
-      }
-    },
-    [repositoryId],
-  );
+  const handleNodeExpand = useCallback((node: GraphNode) => {
+    setSubgraphFocusId(node.id);
+    setSelectedNode(node);
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -212,12 +238,30 @@ export function CodeKnowledgeGraphPanel({ repositoryId, repositories, onSelectRe
               flexDirection: "column",
             }}
           >
-            <GraphCanvas
-              data={subgraphData}
-              onNodeClick={handleNodeClick}
-              onStageClick={() => setSelectedNode(null)}
-              selectedNode={selectedNode}
-            />
+            <div className="app-code-graph-subgraph-toolbar">
+              <Typography.Text type="secondary" className="app-code-graph-subgraph-toolbar-label">
+                子图范围（相对当前焦点）
+              </Typography.Text>
+              <Segmented<SubgraphHopScope>
+                size="small"
+                value={subgraphHopScope}
+                onChange={(v) => setSubgraphHopScope(v)}
+                options={[
+                  { label: "全部", value: "all" },
+                  { label: "1 跳", value: 1 },
+                  { label: "2 跳", value: 2 },
+                  { label: "3 跳", value: 3 },
+                ]}
+              />
+            </div>
+            <div style={{ flex: 1, minHeight: 0, minWidth: 0, display: "flex", flexDirection: "column" }}>
+              <GraphCanvas
+                data={subgraphData}
+                onNodeClick={handleNodeClick}
+                onStageClick={() => setSelectedNode(null)}
+                selectedNode={selectedNode}
+              />
+            </div>
           </div>
           <div style={{ width: 280, borderLeft: "1px solid var(--ant-color-border)", overflow: "auto" }}>
             <InspectorPanel
@@ -235,7 +279,7 @@ export function CodeKnowledgeGraphPanel({ repositoryId, repositories, onSelectRe
         image={Empty.PRESENTED_IMAGE_SIMPLE}
       />
     );
-  }, [subgraphLoading, subgraphData, selectedNode, handleNodeClick, handleNodeExpand, repositoryId]);
+  }, [subgraphLoading, subgraphData, selectedNode, subgraphHopScope, handleNodeClick, handleNodeExpand, repositoryId]);
 
   const currentRepo = useMemo(
     () => repositories?.find((r) => r.id === repositoryId) ?? null,

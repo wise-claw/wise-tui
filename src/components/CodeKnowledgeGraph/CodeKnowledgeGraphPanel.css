@@ -18,9 +18,20 @@
   margin-bottom: 8px;
 }
 
-.app-code-graph-header-actions {
+.app-code-graph-subgraph-toolbar {
+  flex-shrink: 0;
   display: flex;
-  justify-content: flex-start;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--ant-color-border);
+  background: var(--ant-color-bg-container);
+}
+
+.app-code-graph-subgraph-toolbar-label {
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .app-code-graph-content {

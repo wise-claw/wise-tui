@@ -25,7 +25,7 @@ pub fn get_code_graph_subgraph(
         &conn,
         req.repository_id,
         req.focus_node_id.as_deref(),
-        req.hop.unwrap_or(1),
+        req.hop,
         req.node_type_filter.as_ref().map(|f| f.as_slice()),
     )
 }
@@ -321,7 +321,7 @@ pub fn get_code_graph_multi_subgraph(
     }
 
     let conn = state.0.lock().map_err(|_| "db lock poisoned".to_string())?;
-    let hop = hop.unwrap_or(1).min(3);
+    let hop_opt = hop;
 
     // Collect nodes and edges from each repo, merging them
     let mut all_nodes: Vec<types::GraphNode> = Vec::new();
@@ -334,7 +334,7 @@ pub fn get_code_graph_multi_subgraph(
             &conn,
             *repo_id,
             focus_node_id.as_deref(),
-            hop,
+            hop_opt,
             None,
         )?;
         max_total_edges += result.meta.total_edge_hint.unwrap_or(0);

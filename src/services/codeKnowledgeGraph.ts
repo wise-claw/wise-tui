@@ -48,6 +48,7 @@ export async function getCodeGraphMultiSubgraph(
   repositoryIds: number[],
   options?: {
     focusNodeId?: string;
+    /** 不传或 `undefined`：不限制跳数；`1`–`3`：限制 BFS 深度 */
     hop?: 1 | 2 | 3;
     includeCrossRepoEdges?: boolean;
   },

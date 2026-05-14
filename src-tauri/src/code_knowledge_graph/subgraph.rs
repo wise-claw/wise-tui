@@ -7,10 +7,15 @@ pub fn query_subgraph(
     conn: &rusqlite::Connection,
     repo_id: i64,
     focus_node_id: Option<&str>,
-    hop: u8,
+    hop: Option<u8>,
     node_type_filter: Option<&[String]>,
 ) -> Result<CodeGraphSubgraphResponse, String> {
-    let hop = if hop == 0 { 1 } else { hop.min(3) };
+    // `None` = 不限制深度，展开从焦点可达的全部子图（仍受 MAX_NODES 截断）
+    let hop_cap: u32 = match hop {
+        None => u32::MAX,
+        Some(0) => 1,
+        Some(h) => (h as u32).clamp(1, 3),
+    };
 
     let total_edge_hint: i64 = conn
         .query_row(
@@ -30,10 +35,10 @@ pub fn query_subgraph(
     // BFS to collect subgraph
     let mut visited_nodes: HashSet<String> = HashSet::new();
     let mut visited_edges: HashSet<String> = HashSet::new();
-    let mut queue: Vec<(String, u8)> = vec![(focus_id.clone(), 0)];
+    let mut queue: Vec<(String, u32)> = vec![(focus_id.clone(), 0)];
 
     while let Some((node_id, current_hop)) = queue.pop() {
-        if current_hop >= hop {
+        if current_hop >= hop_cap {
             visited_nodes.insert(node_id);
             continue;
         }
@@ -63,7 +68,7 @@ pub fn query_subgraph(
         for (edge_id, _source, target) in &edges {
             visited_edges.insert(edge_id.clone());
             if !visited_nodes.contains(target) {
-                queue.push((target.clone(), current_hop + 1));
+                queue.push((target.clone(), current_hop.saturating_add(1)));
             }
         }
 
@@ -87,7 +92,7 @@ pub fn query_subgraph(
         for (edge_id, source, _target) in &edges {
             visited_edges.insert(edge_id.clone());
             if !visited_nodes.contains(source) {
-                queue.push((source.clone(), current_hop + 1));
+                queue.push((source.clone(), current_hop.saturating_add(1)));
             }
         }
     }

@@ -81,6 +81,22 @@ const getLayoutDuration = (nodeCount: number): number => {
   return 20000;
 };
 
+/**
+ * FA2 Web Worker 在运行期会持续把坐标写回 graph，Sigma 跟着高频重绘，节点会一直「抖」。
+ * 常见代码子图规模下改为一笔同步 `assign`，最后只做一次 `refresh`，观感稳定。
+ */
+const SYNC_FA2_MAX_NODES = 2000;
+
+function getSyncFa2Iterations(n: number): number {
+  if (n <= 2) return 48;
+  if (n <= 8) return 110;
+  if (n <= 24) return 180;
+  if (n <= 80) return 300;
+  if (n <= 300) return 440;
+  if (n <= 900) return 560;
+  return Math.min(680, 480 + Math.floor(n / 6));
+}
+
 export interface UseCodeGraphSigmaReturn {
   containerRef: RefObject<HTMLDivElement | null>;
   sigmaRef: RefObject<Sigma | null>;
@@ -140,7 +156,23 @@ export function useCodeGraphSigma(options: UseCodeGraphSigmaOptions = {}): UseCo
 
     const inferredSettings = forceAtlas2.inferSettings(graph);
     const customSettings = getFA2Settings(nodeCount);
-    const settings = { ...inferredSettings, ...customSettings };
+    let settings = { ...inferredSettings, ...customSettings };
+
+    if (nodeCount <= SYNC_FA2_MAX_NODES) {
+      if (nodeCount < 160) {
+        settings = {
+          ...settings,
+          slowDown: Math.max(settings.slowDown ?? 1, 7),
+          gravity: Math.min(1.25, (settings.gravity ?? 0.8) + 0.2),
+        };
+      }
+      const iterations = getSyncFa2Iterations(nodeCount);
+      forceAtlas2.assign(graph, { iterations, settings });
+      noverlap.assign(graph, NOVERLAP_SETTINGS);
+      sigmaRef.current?.refresh();
+      setIsLayoutRunning(false);
+      return;
+    }
 
     const layout = new FA2Layout(graph, { settings });
     layoutRef.current = layout;

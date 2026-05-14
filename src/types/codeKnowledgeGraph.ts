@@ -44,6 +44,7 @@ export interface GraphMeta {
 export interface CodeGraphSubgraphRequest {
   repositoryId: number;
   focusNodeId?: string;
+  /** 省略或 `undefined`：不限制跳数，展开焦点可达的全部子图；`1`–`3`：限制 BFS 深度 */
   hop?: 1 | 2 | 3;
   nodeTypeFilter?: string[];
 }
