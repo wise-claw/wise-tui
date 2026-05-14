@@ -30,6 +30,7 @@ function mergePatch(task: TaskItem, patch: TaskEditPatch | undefined): TaskItem 
     subtasks: patch.subtasks ?? task.subtasks,
     dod: patch.dod ?? task.dod,
     sourceRequirementIds: patch.sourceRequirementIds ?? task.sourceRequirementIds,
+    taskAnchors: patch.taskAnchors ?? task.taskAnchors,
   };
 }
 

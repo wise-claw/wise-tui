@@ -39,6 +39,7 @@ type Action =
   | { type: "set-dispatch-only-dirty"; value: boolean }
   | { type: "patch-task-edit"; clusterId: string; taskId: string; patch: Partial<TaskEditPatch> }
   | { type: "clear-task-edit"; clusterId: string; taskId: string }
+  | { type: "clear-task-anchor-edit"; clusterId: string; taskId: string }
   | { type: "delete-task"; clusterId: string; taskId: string }
   | { type: "restore-task"; clusterId: string; taskId: string }
   | { type: "add-manual-task"; clusterId: string; task: TaskItem }
@@ -128,6 +129,24 @@ function reducer(state: WizardState, action: Action): WizardState {
         editsByCluster: {
           ...state.editsByCluster,
           [action.clusterId]: { ...cur, patches: rest },
+        },
+      };
+    }
+    case "clear-task-anchor-edit": {
+      const cur = state.editsByCluster[action.clusterId];
+      if (!cur) return state;
+      const prevPatch = cur.patches[action.taskId];
+      if (!prevPatch) return state;
+      const { taskAnchors: _anchor, ...rest } = prevPatch;
+      const restKeys = Object.keys(rest);
+      const nextPatches = restKeys.length === 0
+        ? Object.fromEntries(Object.entries(cur.patches).filter(([k]) => k !== action.taskId))
+        : { ...cur.patches, [action.taskId]: rest };
+      return {
+        ...state,
+        editsByCluster: {
+          ...state.editsByCluster,
+          [action.clusterId]: { ...cur, patches: nextPatches },
         },
       };
     }
@@ -277,6 +296,7 @@ export interface UseSplitWizardStateApi {
   setDispatchOnlyDirty(value: boolean): void;
   patchTaskEdit(clusterId: string, taskId: string, patch: Partial<TaskEditPatch>): void;
   clearTaskEdit(clusterId: string, taskId: string): void;
+  clearTaskAnchorEdit(clusterId: string, taskId: string): void;
   deleteTask(clusterId: string, taskId: string): void;
   restoreTask(clusterId: string, taskId: string): void;
   addManualTask(clusterId: string, task: TaskItem): void;
@@ -369,6 +389,8 @@ export function useSplitWizardState(): UseSplitWizardStateApi {
         dispatch({ type: "patch-task-edit", clusterId, taskId, patch }),
       clearTaskEdit: (clusterId, taskId) =>
         dispatch({ type: "clear-task-edit", clusterId, taskId }),
+      clearTaskAnchorEdit: (clusterId, taskId) =>
+        dispatch({ type: "clear-task-anchor-edit", clusterId, taskId }),
       deleteTask: (clusterId, taskId) => dispatch({ type: "delete-task", clusterId, taskId }),
       restoreTask: (clusterId, taskId) => dispatch({ type: "restore-task", clusterId, taskId }),
       addManualTask: (clusterId, task) => dispatch({ type: "add-manual-task", clusterId, task }),

@@ -6,7 +6,7 @@
  *                                                    ↘ error → 回到对应 stage
  */
 
-import type { PrdDocument, SplitResult, TaskItem, TaskRole, TaskSplitContext } from "../../types";
+import type { PrdDocument, SplitResult, TaskAnchorDescriptor, TaskItem, TaskRole, TaskSplitContext } from "../../types";
 import type { ClusterPlan, ClusterPlanItem, PlannerRepo } from "../../services/prdSplit/clusterPlanner";
 import type { RequirementsIndexV2 } from "../../services/prdSplit/requirementsIndexVersion";
 import type {
@@ -60,6 +60,8 @@ export interface TaskEditPatch {
   subtasks?: string[];
   dod?: string[];
   sourceRequirementIds?: string[];
+  /** 锚点编辑：用户在 PRD 视图中重选 / 微调后的 from/to/textHash/context。 */
+  taskAnchors?: TaskAnchorDescriptor;
 }
 
 export interface ClusterEditState {

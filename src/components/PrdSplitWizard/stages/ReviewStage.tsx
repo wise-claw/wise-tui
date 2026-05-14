@@ -5,6 +5,7 @@ import {
   Collapse,
   Form,
   Input,
+  InputNumber,
   Modal,
   Select,
   Space,
@@ -32,8 +33,13 @@ import {
   buildHighlightSegments,
   type HighlightRange,
 } from "../../../services/prdSplit/clusterPrdSlice";
+import {
+  captureSelectionOffset,
+  deriveAnchorFromRange,
+  shiftAnchorEdge,
+} from "../anchorEdits";
 import type { ClusterPlanItem } from "../../../services/prdSplit/clusterPlanner";
-import type { PrdDocument, TaskItem, TaskRole } from "../../../types";
+import type { PrdDocument, TaskAnchorDescriptor, TaskItem, TaskRole } from "../../../types";
 import type { RequirementsIndexV2 } from "../../../services/prdSplit/requirementsIndexVersion";
 import { applyEditsToSplitResult, applyTaskEdits, isEditedTask, isManualTask } from "../taskEdits";
 
@@ -43,7 +49,6 @@ interface Props {
 
 interface AnchorViewerState {
   cluster: ClusterPlanItem;
-  tasks: TaskItem[];
   focusedTaskId: string | null;
 }
 
@@ -160,10 +165,10 @@ export function ReviewStage({ api }: Props) {
 
   const openAnchorViewer = (
     cluster: ClusterPlanItem,
-    tasks: TaskItem[],
+    _tasks: TaskItem[],
     focusTaskId: string | null,
   ) => {
-    setAnchorViewer({ cluster, tasks, focusedTaskId: focusTaskId });
+    setAnchorViewer({ cluster, focusedTaskId: focusTaskId });
   };
 
   return (
@@ -260,6 +265,9 @@ export function ReviewStage({ api }: Props) {
           state={anchorViewer}
           prd={state.prd}
           requirementsIndex={state.requirementsIndex}
+          api={api}
+          run={state.clusterRuns[anchorViewer.cluster.id]}
+          edits={state.editsByCluster[anchorViewer.cluster.id]}
           onClose={() => setAnchorViewer(null)}
           onFocusTask={(taskId) =>
             setAnchorViewer((curr) => (curr ? { ...curr, focusedTaskId: taskId } : null))
@@ -677,22 +685,36 @@ function AnchorViewerModal({
   state,
   prd,
   requirementsIndex,
+  api,
+  run,
+  edits,
   onClose,
   onFocusTask,
 }: {
   state: AnchorViewerState;
   prd: PrdDocument | null;
   requirementsIndex: RequirementsIndexV2 | null;
+  api: UseSplitWizardStateApi;
+  run: ClusterRunState | undefined;
+  edits: ClusterEditState | undefined;
   onClose: () => void;
   onFocusTask: (taskId: string | null) => void;
 }) {
-  const { cluster, tasks, focusedTaskId } = state;
+  const { cluster, focusedTaskId } = state;
   const containerRef = useRef<HTMLDivElement>(null);
+  const [shiftDelta, setShiftDelta] = useState<number>(10);
+  const [selectionVersion, setSelectionVersion] = useState(0);
 
   const clusterPrd = useMemo(() => {
     if (!prd || !requirementsIndex) return "";
     return buildClusterPrdMarkdown(prd, requirementsIndex, cluster.requirementIds);
   }, [prd, requirementsIndex, cluster.requirementIds]);
+
+  // 每次 edits / run 变化时重算 effective tasks，保证 modal 内显示与 patch 同步。
+  const tasks: TaskItem[] = useMemo(
+    () => (run?.normalized ? applyTaskEdits(run.normalized.splitTasks, edits) : []),
+    [run, edits],
+  );
 
   const ranges: HighlightRange[] = useMemo(
     () =>
@@ -703,6 +725,56 @@ function AnchorViewerModal({
   );
 
   const segments = useMemo(() => buildHighlightSegments(clusterPrd, ranges), [clusterPrd, ranges]);
+
+  const focusedTask = useMemo(
+    () => tasks.find((t) => t.id === focusedTaskId) ?? null,
+    [tasks, focusedTaskId],
+  );
+
+  const writeAnchorForTask = (task: TaskItem, anchor: TaskAnchorDescriptor) => {
+    if (isManualTask(task, edits)) {
+      api.patchManualTask(cluster.id, task.id, { taskAnchors: anchor });
+    } else {
+      api.patchTaskEdit(cluster.id, task.id, { taskAnchors: anchor });
+    }
+  };
+
+  const resetAnchorForTask = (task: TaskItem) => {
+    if (isManualTask(task, edits)) {
+      // manual task 无原始锚点，无法 "复原"；直接清空。
+      api.patchManualTask(cluster.id, task.id, { taskAnchors: undefined });
+      return;
+    }
+    api.clearTaskAnchorEdit(cluster.id, task.id);
+  };
+
+  const commitSelectionToFocused = () => {
+    if (!focusedTask || !containerRef.current) return;
+    const offset = captureSelectionOffset(containerRef.current);
+    if (!offset) {
+      message.warning("请先在 PRD 视图中选中一段非空文本");
+      return;
+    }
+    const anchor = deriveAnchorFromRange(clusterPrd, offset.from, offset.to);
+    writeAnchorForTask(focusedTask, anchor);
+    message.success(`已把选段写入 ${focusedTask.id} 的锚点（${anchor.to - anchor.from} 字符）`);
+    window.getSelection()?.removeAllRanges();
+    setSelectionVersion((v) => v + 1);
+  };
+
+  const shiftEdge = (edge: "start" | "end", delta: number) => {
+    if (!focusedTask) return;
+    if (!focusedTask.taskAnchors) {
+      message.warning("当前任务尚无锚点 — 先用「选段→锚点」建立一个");
+      return;
+    }
+    const next = shiftAnchorEdge(focusedTask.taskAnchors, edge, delta, clusterPrd);
+    writeAnchorForTask(focusedTask, next);
+  };
+
+  const isFocusedEdited = focusedTask
+    ? Boolean(edits?.patches[focusedTask.id]?.taskAnchors)
+    : false;
 
   return (
     <Modal
@@ -718,86 +790,198 @@ function AnchorViewerModal({
         </Space>
       }
     >
-      <div style={{ display: "flex", gap: 12, maxHeight: "70vh" }}>
-        <div
-          ref={containerRef}
-          style={{
-            flex: 1,
-            overflow: "auto",
-            background: "#fafafa",
-            border: "1px solid #f0f0f0",
-            padding: 12,
-            borderRadius: 6,
-            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-            fontSize: 12,
-            lineHeight: 1.6,
-            whiteSpace: "pre-wrap",
-          }}
-        >
-          {segments.map((seg, idx) => {
-            if (seg.taskIds.length === 0) return <span key={idx}>{seg.text}</span>;
-            const colorIndex = tasks.findIndex((t) => t.id === seg.taskIds[0]);
-            const baseColor = taskBgColor(colorIndex >= 0 ? colorIndex : 0);
-            const focused = focusedTaskId && seg.taskIds.includes(focusedTaskId);
-            return (
-              <mark
-                key={idx}
-                data-task-id={seg.taskIds.join(",")}
-                style={{
-                  background: baseColor,
-                  borderBottom: focused ? "2px solid #ff7a45" : "none",
-                  padding: "0 2px",
-                  borderRadius: 2,
-                  cursor: "pointer",
-                }}
-                onClick={() => onFocusTask(seg.taskIds[0] ?? null)}
-              >
-                {seg.text}
-              </mark>
-            );
-          })}
-        </div>
-
-        <div
-          style={{
-            width: 260,
-            overflow: "auto",
-            borderLeft: "1px solid #f0f0f0",
-            paddingInlineStart: 12,
-          }}
-        >
-          <Typography.Text strong>任务列表</Typography.Text>
-          <ul style={{ paddingInlineStart: 18, marginBlock: 8 }}>
-            {tasks.map((task, idx) => (
-              <li key={task.id} style={{ marginBlockEnd: 6, fontSize: 12 }}>
-                <Button
-                  type={focusedTaskId === task.id ? "primary" : "link"}
-                  size="small"
-                  style={{ padding: 0 }}
-                  onClick={() => {
-                    onFocusTask(task.id);
-                    requestAnimationFrame(() => {
-                      const el = containerRef.current?.querySelector(
-                        `mark[data-task-id*="${cssEscape(task.id)}"]`,
-                      );
-                      el?.scrollIntoView({ behavior: "smooth", block: "center" });
-                    });
+      <Space direction="vertical" size={8} style={{ width: "100%" }}>
+        <AnchorEditToolbar
+          focusedTask={focusedTask}
+          isEdited={isFocusedEdited}
+          shiftDelta={shiftDelta}
+          onShiftDeltaChange={setShiftDelta}
+          onCommitSelection={commitSelectionToFocused}
+          onShiftEdge={shiftEdge}
+          onReset={() => focusedTask && resetAnchorForTask(focusedTask)}
+        />
+        <div style={{ display: "flex", gap: 12, maxHeight: "60vh" }}>
+          <div
+            ref={containerRef}
+            // 监听 selection 变化以驱动「选段→锚点」按钮的 enable 态。
+            onMouseUp={() => setSelectionVersion((v) => v + 1)}
+            onKeyUp={() => setSelectionVersion((v) => v + 1)}
+            style={{
+              flex: 1,
+              overflow: "auto",
+              background: "#fafafa",
+              border: "1px solid #f0f0f0",
+              padding: 12,
+              borderRadius: 6,
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+              fontSize: 12,
+              lineHeight: 1.6,
+              whiteSpace: "pre-wrap",
+              userSelect: "text",
+            }}
+          >
+            {segments.map((seg, idx) => {
+              if (seg.taskIds.length === 0) return <span key={idx}>{seg.text}</span>;
+              const colorIndex = tasks.findIndex((t) => t.id === seg.taskIds[0]);
+              const baseColor = taskBgColor(colorIndex >= 0 ? colorIndex : 0);
+              const focused = focusedTaskId && seg.taskIds.includes(focusedTaskId);
+              return (
+                <mark
+                  key={idx}
+                  data-task-id={seg.taskIds.join(",")}
+                  style={{
+                    background: baseColor,
+                    borderBottom: focused ? "2px solid #ff7a45" : "none",
+                    padding: "0 2px",
+                    borderRadius: 2,
+                    cursor: "pointer",
                   }}
+                  onClick={() => onFocusTask(seg.taskIds[0] ?? null)}
                 >
-                  <Tag color={taskColorByIndex(idx)} style={{ marginInlineEnd: 4 }}>
-                    #{idx + 1}
-                  </Tag>
-                  {truncate(task.title, 24)}
-                </Button>
-              </li>
-            ))}
-          </ul>
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            click 任意高亮段或左侧任务可联动焦点。
-          </Typography.Text>
+                  {seg.text}
+                </mark>
+              );
+            })}
+            {/* 占位防止 lint：selectionVersion 仅用于触发 toolbar 重渲染 */}
+            <span hidden>{selectionVersion}</span>
+          </div>
+
+          <div
+            style={{
+              width: 280,
+              overflow: "auto",
+              borderLeft: "1px solid #f0f0f0",
+              paddingInlineStart: 12,
+            }}
+          >
+            <Typography.Text strong>任务列表</Typography.Text>
+            <ul style={{ paddingInlineStart: 18, marginBlock: 8 }}>
+              {tasks.map((task, idx) => {
+                const taskEdited = Boolean(edits?.patches[task.id]?.taskAnchors);
+                return (
+                  <li key={task.id} style={{ marginBlockEnd: 6, fontSize: 12 }}>
+                    <Button
+                      type={focusedTaskId === task.id ? "primary" : "link"}
+                      size="small"
+                      style={{ padding: 0 }}
+                      onClick={() => {
+                        onFocusTask(task.id);
+                        requestAnimationFrame(() => {
+                          const el = containerRef.current?.querySelector(
+                            `mark[data-task-id*="${cssEscape(task.id)}"]`,
+                          );
+                          el?.scrollIntoView({ behavior: "smooth", block: "center" });
+                        });
+                      }}
+                    >
+                      <Tag color={taskColorByIndex(idx)} style={{ marginInlineEnd: 4 }}>
+                        #{idx + 1}
+                      </Tag>
+                      {truncate(task.title, 22)}
+                      {taskEdited ? (
+                        <Tag color="warning" style={{ marginInlineStart: 4 }}>
+                          锚点已改
+                        </Tag>
+                      ) : null}
+                    </Button>
+                  </li>
+                );
+              })}
+            </ul>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              click 高亮段或左侧任务选中焦点；选中焦点后用上方工具栏在 PRD 里选段或微调 from/to。
+            </Typography.Text>
+          </div>
         </div>
-      </div>
+      </Space>
     </Modal>
+  );
+}
+
+function AnchorEditToolbar({
+  focusedTask,
+  isEdited,
+  shiftDelta,
+  onShiftDeltaChange,
+  onCommitSelection,
+  onShiftEdge,
+  onReset,
+}: {
+  focusedTask: TaskItem | null;
+  isEdited: boolean;
+  shiftDelta: number;
+  onShiftDeltaChange: (v: number) => void;
+  onCommitSelection: () => void;
+  onShiftEdge: (edge: "start" | "end", delta: number) => void;
+  onReset: () => void;
+}) {
+  if (!focusedTask) {
+    return (
+      <Alert
+        type="info"
+        showIcon
+        message="先在右侧任务列表点一项作为「焦点任务」，工具栏会展开"
+      />
+    );
+  }
+  const anchor = focusedTask.taskAnchors;
+  return (
+    <Card size="small" bodyStyle={{ padding: 8 }}>
+      <Space wrap size={6}>
+        <Typography.Text strong>焦点：</Typography.Text>
+        <Tag color="processing">{focusedTask.id}</Tag>
+        <Typography.Text>{truncate(focusedTask.title, 28)}</Typography.Text>
+        {anchor ? (
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            [{anchor.from}, {anchor.to}] · {anchor.to - anchor.from} chars
+          </Typography.Text>
+        ) : (
+          <Tag>无锚点</Tag>
+        )}
+        {isEdited ? <Tag color="warning">已改</Tag> : null}
+
+        <Tooltip title="将 PRD 视图中当前选中的文本写入焦点任务的锚点（覆盖）">
+          <Button size="small" type="primary" onClick={onCommitSelection}>
+            选段→锚点
+          </Button>
+        </Tooltip>
+
+        <span>微调步长：</span>
+        <InputNumber
+          size="small"
+          min={1}
+          max={500}
+          value={shiftDelta}
+          onChange={(v) => onShiftDeltaChange(typeof v === "number" ? v : 10)}
+          style={{ width: 70 }}
+        />
+        <Tooltip title="左缘左移（扩大）">
+          <Button size="small" disabled={!anchor} onClick={() => onShiftEdge("start", -shiftDelta)}>
+            ↤ -{shiftDelta}
+          </Button>
+        </Tooltip>
+        <Tooltip title="左缘右移（缩小）">
+          <Button size="small" disabled={!anchor} onClick={() => onShiftEdge("start", shiftDelta)}>
+            ↦ +{shiftDelta}
+          </Button>
+        </Tooltip>
+        <Tooltip title="右缘右移（扩大）">
+          <Button size="small" disabled={!anchor} onClick={() => onShiftEdge("end", shiftDelta)}>
+            ↦ +{shiftDelta}
+          </Button>
+        </Tooltip>
+        <Tooltip title="右缘左移（缩小）">
+          <Button size="small" disabled={!anchor} onClick={() => onShiftEdge("end", -shiftDelta)}>
+            ↤ -{shiftDelta}
+          </Button>
+        </Tooltip>
+        <Tooltip title="复原到 splitter 生成的原始锚点（清除本地 patch）">
+          <Button size="small" icon={<UndoOutlined />} disabled={!isEdited} onClick={onReset}>
+            复原
+          </Button>
+        </Tooltip>
+      </Space>
+    </Card>
   );
 }
 
