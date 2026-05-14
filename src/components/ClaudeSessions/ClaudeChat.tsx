@@ -3046,7 +3046,7 @@ export function ClaudeChat({
             </Button>
           }
           width={Math.min(960, typeof window !== "undefined" ? window.innerWidth - 48 : 960)}
-          destroyOnClose
+          destroyOnHidden
           className="app-task-completion-modal"
         >
           <div className="app-task-completion-modal__toolbar">
@@ -3141,10 +3141,10 @@ export function ClaudeChat({
             : "可执行任务"
         }
         placement="right"
-        width={traceDrawerWidth}
+        size={traceDrawerWidth}
         open={taskListDrawerOpen}
         onClose={() => setTaskListDrawerOpen(false)}
-        destroyOnClose={false}
+        destroyOnHidden={false}
         classNames={{ body: "app-claude-task-list-drawer-body" }}
         styles={{
           body: {
@@ -3467,10 +3467,10 @@ export function ClaudeChat({
       <Drawer
         title="会话跟踪"
         placement="right"
-        width={traceDrawerWidth}
+        size={traceDrawerWidth}
         open={sessionTraceDrawerOpen}
         onClose={() => setSessionTraceDrawerOpen(false)}
-        destroyOnClose={false}
+        destroyOnHidden={false}
         styles={{ body: { padding: 12, overflow: "auto" } }}
       >
         <div className="app-claude-session-trace-list">

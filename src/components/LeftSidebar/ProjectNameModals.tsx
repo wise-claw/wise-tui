@@ -45,7 +45,7 @@ export function ProjectNameModals({
         onCancel={onCancelCreate}
         onOk={onSubmitCreate}
         okText="创建"
-        cancelText="取消"
+        footer={(_, { OkBtn }) => <OkBtn />}
       >
         <Space direction="vertical" size="middle" style={{ width: "100%" }}>
           <Input

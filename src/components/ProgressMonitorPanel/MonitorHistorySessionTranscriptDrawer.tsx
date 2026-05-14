@@ -71,8 +71,8 @@ export function MonitorHistorySessionTranscriptDrawer({
       open={open}
       onClose={onClose}
       placement="right"
-      destroyOnClose
-      width={drawerWidth}
+      destroyOnHidden
+      size={drawerWidth}
       classNames={{ body: "app-monitor-panel__history-session-drawer-body" }}
       extra={
         liveSession ? (

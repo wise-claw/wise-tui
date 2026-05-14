@@ -104,7 +104,7 @@ export function PrdSplitWizardModal({
     <Modal
       open={open}
       onCancel={onClose}
-      destroyOnClose
+      destroyOnHidden
       width="min(1100px, 92vw)"
       footer={null}
       maskClosable={false}

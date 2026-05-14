@@ -329,7 +329,7 @@ export function RepositoryScheduledTasksModal({
         onCancel={onClose}
         footer={null}
         width={Math.min(920, typeof window !== "undefined" ? window.innerWidth - 40 : 920)}
-        destroyOnClose
+        destroyOnHidden
         className="app-scheduled-tasks-modal"
         title={(
           <Space direction="vertical" size={0}>
@@ -361,13 +361,13 @@ export function RepositoryScheduledTasksModal({
       <Drawer
         title={tasks.some((t) => t.id === editing?.id) ? "编辑定时任务" : "新建定时任务"}
         placement="right"
-        width={Math.min(560, typeof window !== "undefined" ? window.innerWidth - 24 : 560)}
+        size={Math.min(560, typeof window !== "undefined" ? window.innerWidth - 24 : 560)}
         open={drawerOpen}
         onClose={() => {
           setDrawerOpen(false);
           setEditing(null);
         }}
-        destroyOnClose={false}
+        destroyOnHidden={false}
         className="app-scheduled-tasks-drawer"
         extra={(
           <Space>
