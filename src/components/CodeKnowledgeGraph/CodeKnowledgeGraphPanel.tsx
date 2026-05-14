@@ -174,6 +174,11 @@ export function CodeKnowledgeGraphPanel({ repositoryId, repositories, onSelectRe
     );
   }, [subgraphLoading, subgraphData, selectedNode, handleNodeClick, handleNodeExpand, repositoryId]);
 
+  const currentRepo = useMemo(
+    () => repositories?.find((r) => r.id === repositoryId) ?? null,
+    [repositories, repositoryId],
+  );
+
   if (loading) {
     return (
       <div className="app-code-graph-panel">
@@ -192,11 +197,6 @@ export function CodeKnowledgeGraphPanel({ repositoryId, repositories, onSelectRe
   const isIndexed = indexStatus?.status === "done";
   const isIndexing = indexStatus?.status === "indexing";
   const hasData = subgraphData && subgraphData.nodes.length > 0;
-
-  const currentRepo = useMemo(
-    () => repositories?.find((r) => r.id === repositoryId) ?? null,
-    [repositories, repositoryId],
-  );
 
   return (
     <div className="app-code-graph-panel">
