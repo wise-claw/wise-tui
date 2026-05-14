@@ -84,13 +84,21 @@ pub fn run() {
         .on_window_event(|window, event| {
             // macOS：主窗口红点关闭默认会销毁窗口，导致后续点击程序坞图标只触发
             // `RunEvent::Reopen` 但 `get_webview_window("main")` 已为 None，没有任何窗口可显示。
-            // 与原生 macOS App 行为对齐：拦截关闭事件 → 阻止销毁 → 隐藏；
-            // 由 `RunEvent::Reopen`（见下方 run 回调）调用 `wise_main_window_focus` 重新唤起。
+            // 与原生 macOS App 行为对齐：拦截关闭事件 → 阻止销毁 → 隐藏整个应用。
+            //
+            // 注意：这里调用 `app_handle().hide()`（NSApp.hide:，即 Cmd+H）而**不是**
+            // `window.hide()`。原因：
+            // - `window.hide()` 走的是 NSWindow.orderOut:，单个 NSWindow 被移出窗口序列；
+            //   配合 `macos-private-api`（透明背景 / 自定义 chrome）会让 WKWebView 渲染层
+            //   失效，dock 点击后 `show()` 出来一片白（已知白屏问题）。
+            // - `app_handle().hide()` 走的是 NSApp.hide:，整个应用进入 hidden 状态，
+            //   WKWebView 渲染状态完整保留；dock 点击时 macOS 系统自动 unhide，再触发
+            //   `RunEvent::Reopen`（见 run 回调），不会白屏。
             #[cfg(target_os = "macos")]
             if window.label() == "main" {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
-                    let _ = window.hide();
+                    let _ = window.app_handle().hide();
                 }
             }
             // 非 macOS 沿用平台默认行为（Windows / Linux 通常希望关闭即退出）。
@@ -311,9 +319,14 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| {
-            // macOS：点击程序坞图标时 NSApplication 触发 Reopen；聚焦主窗口（含从最小化恢复）。
+            // macOS：点击程序坞图标时 NSApplication 触发 Reopen。
+            //
+            // 配合 `on_window_event` 里把红点关闭改为 `app_handle().hide()`：dock 点击时
+            // 系统会先 NSApp.unhide，再发 Reopen。这里显式再 `app.show()` 一次保证窗口栈
+            // 归位（hide 之前已最小化等场景下也能覆盖），然后聚焦主窗口。
             #[cfg(target_os = "macos")]
             if matches!(event, tauri::RunEvent::Reopen { .. }) {
+                let _ = app_handle.show();
                 let _ = wise_mascot::wise_main_window_focus(app_handle.clone());
             }
         });
