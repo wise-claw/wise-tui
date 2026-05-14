@@ -2,26 +2,32 @@ import { listen } from "@tauri-apps/api/event";
 import {
   PlayCircleOutlined,
   ReloadOutlined,
+  SearchOutlined,
 } from "@ant-design/icons";
-import { Alert, Button, Empty, Progress, Segmented, Select, Space, Spin, Tag, Typography } from "antd";
+import { Alert, Button, Empty, Progress, Select, Space, Spin, Tag, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getCodeGraphIndexStatus,
   getCodeGraphSubgraph,
   triggerCodeGraphReindex,
 } from "../../services/codeKnowledgeGraph";
+import { filterGraphNodesForSearch } from "../../utils/codeGraphNodeSearch";
 import { parseCodeGraphSubgraphResponse } from "../../utils/codeKnowledgeGraphResponse";
 import type {
   CodeGraphIndexStatusResponse,
+  CodeGraphSubgraphDirection,
   CodeGraphSubgraphRequest,
   CodeGraphSubgraphResponse,
   GraphNode,
 } from "../../types/codeKnowledgeGraph";
-import { GraphCanvas } from "./GraphCanvas";
+import {
+  CodeKnowledgeGraphChartColumn,
+  type CodeKnowledgeGraphChartColumnHandle,
+  HOP_SELECT_OPTIONS,
+  type SubgraphHopScope,
+} from "./CodeKnowledgeGraphChartColumn";
 import { InspectorPanel } from "./InspectorPanel";
 import "./CodeKnowledgeGraphPanel.css";
-
-type SubgraphHopScope = "all" | 1 | 2 | 3;
 
 interface RepositoryInfo {
   id: number;
@@ -34,20 +40,36 @@ interface Props {
   repositories?: RepositoryInfo[];
   onSelectRepository?: (repoId: number) => void;
   onClose?: () => void;
+  /** 在仓库内置编辑器（Monaco）中打开相对路径 */
+  onOpenRepositoryFile?: (relativePath: string) => void;
 }
 
-export function CodeKnowledgeGraphPanel({ repositoryId, repositories, onSelectRepository, onClose }: Props) {
+const SUBGRAPH_SEARCH_DEBOUNCE_MS = 220;
+const SUBGRAPH_SEARCH_MIN_QUERY_LEN = 1;
+
+export function CodeKnowledgeGraphPanel({
+  repositoryId,
+  repositories,
+  onSelectRepository,
+  onClose,
+  onOpenRepositoryFile,
+}: Props) {
   const [indexStatus, setIndexStatus] = useState<CodeGraphIndexStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [reindexing, setReindexing] = useState(false);
   const [subgraphData, setSubgraphData] = useState<CodeGraphSubgraphResponse | null>(null);
-  const [subgraphHopScope, setSubgraphHopScope] = useState<SubgraphHopScope>("all");
+  const [subgraphHopScope, setSubgraphHopScope] = useState<SubgraphHopScope>(3);
   const [subgraphFocusId, setSubgraphFocusId] = useState<string | undefined>(undefined);
+  /** `undefined`：双向子图；侧栏「展开子图」会清回双向 */
+  const [subgraphDirection, setSubgraphDirection] = useState<CodeGraphSubgraphDirection | undefined>(undefined);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [subgraphLoading, setSubgraphLoading] = useState(false);
   const [indexError, setIndexError] = useState<string | null>(null);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const chartColumnRef = useRef<CodeKnowledgeGraphChartColumnHandle | null>(null);
+  const [subgraphSearchInput, setSubgraphSearchInput] = useState("");
+  const [subgraphSearchDebounced, setSubgraphSearchDebounced] = useState("");
 
   const fetchStatus = useCallback(async () => {
     if (!repositoryId) {
@@ -127,10 +149,23 @@ export function CodeKnowledgeGraphPanel({ repositoryId, repositories, onSelectRe
 
   useEffect(() => {
     setSubgraphFocusId(undefined);
-    setSubgraphHopScope("all");
+    setSubgraphHopScope(3);
+    setSubgraphDirection(undefined);
     setSelectedNode(null);
     setSubgraphData(null);
   }, [repositoryId]);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      setSubgraphSearchDebounced(subgraphSearchInput.trim());
+    }, SUBGRAPH_SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(t);
+  }, [subgraphSearchInput]);
+
+  useEffect(() => {
+    setSubgraphSearchInput("");
+    setSubgraphSearchDebounced("");
+  }, [subgraphData]);
 
   useEffect(() => {
     if (!repositoryId) {
@@ -150,6 +185,7 @@ export function CodeKnowledgeGraphPanel({ repositoryId, repositories, onSelectRe
         const req: CodeGraphSubgraphRequest = { repositoryId };
         if (subgraphFocusId) req.focusNodeId = subgraphFocusId;
         if (subgraphHopScope !== "all") req.hop = subgraphHopScope;
+        if (subgraphDirection) req.direction = subgraphDirection;
         const raw = await getCodeGraphSubgraph(req);
         if (cancelled) return;
         setSubgraphData(parseCodeGraphSubgraphResponse(raw));
@@ -164,7 +200,7 @@ export function CodeKnowledgeGraphPanel({ repositoryId, repositories, onSelectRe
       cancelled = true;
       setSubgraphLoading(false);
     };
-  }, [repositoryId, indexStatus?.status, indexStatus?.repositoryId, subgraphFocusId, subgraphHopScope]);
+  }, [repositoryId, indexStatus?.status, indexStatus?.repositoryId, subgraphFocusId, subgraphHopScope, subgraphDirection]);
 
   useEffect(() => {
     if (!onClose) return;
@@ -181,7 +217,8 @@ export function CodeKnowledgeGraphPanel({ repositoryId, repositories, onSelectRe
     setSubgraphData(null);
     setSelectedNode(null);
     setSubgraphFocusId(undefined);
-    setSubgraphHopScope("all");
+    setSubgraphHopScope(3);
+    setSubgraphDirection(undefined);
     try {
       await triggerCodeGraphReindex({ repositoryId });
       setIndexStatus({ status: "indexing", repositoryId, progress: 1 });
@@ -197,10 +234,58 @@ export function CodeKnowledgeGraphPanel({ repositoryId, repositories, onSelectRe
     setSelectedNode(node);
   }, []);
 
+  const handleStageClearSelection = useCallback(() => {
+    setSelectedNode(null);
+  }, []);
+
   const handleNodeExpand = useCallback((node: GraphNode) => {
     setSubgraphFocusId(node.id);
+    setSubgraphDirection(undefined);
     setSelectedNode(node);
   }, []);
+
+  const handleSubgraphRollUp = useCallback(() => {
+    if (!selectedNode) return;
+    setSubgraphFocusId(selectedNode.id);
+    setSubgraphDirection("upstream");
+  }, [selectedNode]);
+
+  const handleSubgraphDrillDown = useCallback(() => {
+    if (!selectedNode) return;
+    setSubgraphFocusId(selectedNode.id);
+    setSubgraphDirection("downstream");
+  }, [selectedNode]);
+
+  const subgraphSearchOptions = useMemo(() => {
+    if (!subgraphData?.nodes.length) return [];
+    if (subgraphSearchDebounced.length < SUBGRAPH_SEARCH_MIN_QUERY_LEN) return [];
+    return filterGraphNodesForSearch(subgraphData.nodes, subgraphSearchDebounced).map((node) => ({
+      value: node.id,
+      label: (
+        <div className="app-code-graph-search-option">
+          <span className="app-code-graph-search-option-title">{node.label}</span>
+          <span className="app-code-graph-search-option-meta">
+            {node.kind} · {node.path}
+          </span>
+        </div>
+      ),
+    }));
+  }, [subgraphData?.nodes, subgraphSearchDebounced]);
+
+  const handleSubgraphSearchPick = useCallback(
+    (nodeId: string) => {
+      if (!subgraphData?.nodes.length) return;
+      const node = subgraphData.nodes.find((x) => x.id === nodeId);
+      if (!node) return;
+      handleNodeClick(node);
+      setSubgraphSearchInput("");
+      setSubgraphSearchDebounced("");
+      requestAnimationFrame(() => {
+        chartColumnRef.current?.focusNodeById(nodeId);
+      });
+    },
+    [subgraphData, handleNodeClick],
+  );
 
   // Cleanup on unmount
   useEffect(() => {
@@ -212,9 +297,13 @@ export function CodeKnowledgeGraphPanel({ repositoryId, repositories, onSelectRe
     };
   }, []);
 
-  const graphContent = useMemo(() => {
+  const renderIndexedBody = () => {
     if (subgraphLoading) {
-      return <Spin tip="加载子图中..." />;
+      return (
+        <div className="app-code-graph-centered-loading">
+          <Spin tip="加载子图中..." />
+        </div>
+      );
     }
     if (subgraphData && subgraphData.nodes.length > 0) {
       return (
@@ -229,44 +318,21 @@ export function CodeKnowledgeGraphPanel({ repositoryId, repositories, onSelectRe
             minHeight: 0,
           }}
         >
-          <div
-            style={{
-              flex: 1,
-              minWidth: 0,
-              minHeight: 0,
-              display: "flex",
-              flexDirection: "column",
-            }}
-          >
-            <div className="app-code-graph-subgraph-toolbar">
-              <Typography.Text type="secondary" className="app-code-graph-subgraph-toolbar-label">
-                子图范围（相对当前焦点）
-              </Typography.Text>
-              <Segmented<SubgraphHopScope>
-                size="small"
-                value={subgraphHopScope}
-                onChange={(v) => setSubgraphHopScope(v)}
-                options={[
-                  { label: "全部", value: "all" },
-                  { label: "1 跳", value: 1 },
-                  { label: "2 跳", value: 2 },
-                  { label: "3 跳", value: 3 },
-                ]}
-              />
-            </div>
-            <div style={{ flex: 1, minHeight: 0, minWidth: 0, display: "flex", flexDirection: "column" }}>
-              <GraphCanvas
-                data={subgraphData}
-                onNodeClick={handleNodeClick}
-                onStageClick={() => setSelectedNode(null)}
-                selectedNode={selectedNode}
-              />
-            </div>
-          </div>
+          <CodeKnowledgeGraphChartColumn
+            ref={chartColumnRef}
+            subgraphData={subgraphData}
+            selectedNode={selectedNode}
+            onSelectNode={handleNodeClick}
+            onStageClick={handleStageClearSelection}
+            subgraphHopLabel={subgraphHopLabel}
+            onSubgraphRollUp={handleSubgraphRollUp}
+            onSubgraphDrillDown={handleSubgraphDrillDown}
+          />
           <div style={{ width: 280, borderLeft: "1px solid var(--ant-color-border)", overflow: "auto" }}>
             <InspectorPanel
               node={selectedNode}
               onNodeExpand={handleNodeExpand}
+              onOpenRepositoryFile={onOpenRepositoryFile}
               repositoryId={repositoryId}
             />
           </div>
@@ -275,15 +341,20 @@ export function CodeKnowledgeGraphPanel({ repositoryId, repositories, onSelectRe
     }
     return (
       <Empty
-        description="子图为空，当前仓库可能无 TypeScript/JavaScript 文件"
+        description="子图为空，当前仓库可能无已索引的源码或配置（与 GitNexus 语言扩展对齐，含 Spring Boot 常用文件）"
         image={Empty.PRESENTED_IMAGE_SIMPLE}
       />
     );
-  }, [subgraphLoading, subgraphData, selectedNode, subgraphHopScope, handleNodeClick, handleNodeExpand, repositoryId]);
+  };
 
   const currentRepo = useMemo(
     () => repositories?.find((r) => r.id === repositoryId) ?? null,
     [repositories, repositoryId],
+  );
+
+  const subgraphHopLabel = useMemo(
+    () => (subgraphHopScope === "all" ? "全部" : `${subgraphHopScope} 跳`),
+    [subgraphHopScope],
   );
 
   if (loading) {
@@ -295,7 +366,9 @@ export function CodeKnowledgeGraphPanel({ repositoryId, repositories, onSelectRe
           </Typography.Title>
         </header>
         <div className="app-code-graph-content">
-          <Spin tip="加载中..." />
+          <div className="app-code-graph-centered-loading">
+            <Spin tip="加载中..." />
+          </div>
         </div>
       </div>
     );
@@ -358,6 +431,47 @@ export function CodeKnowledgeGraphPanel({ repositoryId, repositories, onSelectRe
           >
             {isIndexed ? "重建索引" : "开始索引"}
           </Button>
+          {isIndexed && hasData && !subgraphLoading && subgraphData && (
+            <div className="app-code-graph-subgraph-toolbar app-code-graph-subgraph-toolbar--header">
+              <Typography.Text type="secondary" className="app-code-graph-subgraph-toolbar-label">
+                范围
+              </Typography.Text>
+              <Select<SubgraphHopScope>
+                size="small"
+                className="app-code-graph-hop-select"
+                popupMatchSelectWidth={false}
+                value={subgraphHopScope}
+                onChange={setSubgraphHopScope}
+                options={HOP_SELECT_OPTIONS}
+                aria-label="子图跳数"
+              />
+              <div className="app-code-graph-subgraph-toolbar-spacer" aria-hidden />
+              <Select
+                showSearch
+                allowClear
+                className="app-code-graph-node-search"
+                size="small"
+                placeholder="搜索节点（名称 / 路径）"
+                suffixIcon={<SearchOutlined />}
+                filterOption={false}
+                searchValue={subgraphSearchInput}
+                onSearch={setSubgraphSearchInput}
+                onSelect={(id) => handleSubgraphSearchPick(String(id))}
+                onClear={() => {
+                  setSubgraphSearchInput("");
+                  setSubgraphSearchDebounced("");
+                }}
+                options={subgraphSearchOptions}
+                notFoundContent={
+                  subgraphSearchDebounced.length < SUBGRAPH_SEARCH_MIN_QUERY_LEN
+                    ? `至少输入 ${SUBGRAPH_SEARCH_MIN_QUERY_LEN} 个字符`
+                    : "无匹配节点"
+                }
+                listHeight={320}
+                virtual={subgraphData.nodes.length > 120}
+              />
+            </div>
+          )}
         </div>
       </header>
       <div className="app-code-graph-content">
@@ -421,7 +535,7 @@ export function CodeKnowledgeGraphPanel({ repositoryId, repositories, onSelectRe
             </Empty>
           )
         ) : (
-          graphContent
+          renderIndexedBody()
         )}
       </div>
     </div>

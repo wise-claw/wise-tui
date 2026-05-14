@@ -163,6 +163,22 @@ const ConnectedRightPanel = memo(function ConnectedRightPanel({
   return <MemoRightPanel {...rightPanelProps} onOpenFile={openRepositoryFile} />;
 });
 
+const ConnectedCodeKnowledgeGraphPanel = memo(function ConnectedCodeKnowledgeGraphPanel({
+  codeKnowledgeGraphProps,
+}: {
+  codeKnowledgeGraphProps: ComponentProps<typeof CodeKnowledgeGraphPanel>;
+}) {
+  const openRepositoryFile = useRepositoryFileEditorOpenFile();
+  return (
+    <CodeKnowledgeGraphPanel
+      {...codeKnowledgeGraphProps}
+      onOpenRepositoryFile={(relativePath) => {
+        openRepositoryFile(relativePath);
+      }}
+    />
+  );
+});
+
 const ConnectedRepositoryFileEditorPanel = memo(function ConnectedRepositoryFileEditorPanel({
   dark,
 }: {
@@ -406,7 +422,7 @@ export function AppWorkspaceLayout({
                     ) : null}
                     {codeKnowledgeGraphMode ? (
                       <div className="app-code-graph-overlay" role="region" aria-label="代码知识图谱">
-                        <CodeKnowledgeGraphPanel {...codeKnowledgeGraphProps} />
+                        <ConnectedCodeKnowledgeGraphPanel codeKnowledgeGraphProps={codeKnowledgeGraphProps} />
                       </div>
                     ) : null}
                     {taskSplitMode ? (

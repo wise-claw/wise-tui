@@ -41,6 +41,32 @@ const brightenColor = (hex: string, factor: number): string => {
   );
 };
 
+/** Reducers run every frame during pan/zoom — cache dim/brighten results by (hex, param). */
+const DIM_COLOR_CACHE = new Map<string, string>();
+const BRIGHTEN_COLOR_CACHE = new Map<string, string>();
+
+function dimColorCached(hex: string, amount: number): string {
+  const key = `${hex}|${amount}`;
+  let v = DIM_COLOR_CACHE.get(key);
+  if (v === undefined) {
+    v = dimColor(hex, amount);
+    if (DIM_COLOR_CACHE.size > 400) DIM_COLOR_CACHE.clear();
+    DIM_COLOR_CACHE.set(key, v);
+  }
+  return v;
+}
+
+function brightenColorCached(hex: string, factor: number): string {
+  const key = `${hex}|${factor}`;
+  let v = BRIGHTEN_COLOR_CACHE.get(key);
+  if (v === undefined) {
+    v = brightenColor(hex, factor);
+    if (BRIGHTEN_COLOR_CACHE.size > 400) BRIGHTEN_COLOR_CACHE.clear();
+    BRIGHTEN_COLOR_CACHE.set(key, v);
+  }
+  return v;
+}
+
 export interface UseCodeGraphSigmaOptions {
   onNodeClick?: (nodeId: string) => void;
   onNodeHover?: (nodeId: string | null) => void;
@@ -129,15 +155,14 @@ export function useCodeGraphSigma(options: UseCodeGraphSigmaOptions = {}): UseCo
   const [sigmaReady, setSigmaReady] = useState(false);
 
   const setSelectedNode = useCallback((nodeId: string | null) => {
+    if (selectedNodeRef.current === nodeId) {
+      return;
+    }
     selectedNodeRef.current = nodeId;
     setSelectedNodeState(nodeId);
 
     const sigma = sigmaRef.current;
     if (!sigma) return;
-
-    const camera = sigma.getCamera();
-    const currentRatio = camera.ratio;
-    camera.animate({ ratio: currentRatio * 1.0001 }, { duration: 50 });
     sigma.refresh();
   }, []);
 
@@ -300,50 +325,51 @@ export function useCodeGraphSigma(options: UseCodeGraphSigmaOptions = {}): UseCo
         hideEdgesOnMove: true,
         zIndex: true,
         nodeReducer: (node, data) => {
-          const res = { ...data };
           if (data.hidden) {
-            res.hidden = true;
-            return res;
+            return { ...data, hidden: true };
           }
           const currentSelected = selectedNodeRef.current;
           const g = graphRef.current;
-          if (currentSelected && g) {
-            const isSelected = node === currentSelected;
-            const isNeighbor = g.hasEdge(node, currentSelected) || g.hasEdge(currentSelected, node);
-            if (isSelected) {
-              res.color = data.color;
-              res.size = (data.size || 8) * 1.8;
-              res.zIndex = 2;
-              res.highlighted = true;
-            } else if (isNeighbor) {
-              res.color = data.color;
-              res.size = (data.size || 8) * 1.3;
-              res.zIndex = 1;
-            } else {
-              res.color = dimColor(data.color, 0.25);
-              res.size = (data.size || 8) * 0.6;
-              res.zIndex = 0;
-            }
+          if (!currentSelected || !g) {
+            return data;
+          }
+          const res = { ...data };
+          const isSelected = node === currentSelected;
+          const isNeighbor = g.hasEdge(node, currentSelected) || g.hasEdge(currentSelected, node);
+          if (isSelected) {
+            res.color = data.color;
+            res.size = (data.size || 8) * 1.8;
+            res.zIndex = 2;
+            res.highlighted = true;
+          } else if (isNeighbor) {
+            res.color = data.color;
+            res.size = (data.size || 8) * 1.3;
+            res.zIndex = 1;
+          } else {
+            res.color = dimColorCached(data.color, 0.25);
+            res.size = (data.size || 8) * 0.6;
+            res.zIndex = 0;
           }
           return res;
         },
         edgeReducer: (edge, data) => {
-          const res = { ...data };
           const currentSelected = selectedNodeRef.current;
           const g = graphRef.current;
-          if (!g) return res;
+          if (!g) return data;
+          if (!currentSelected) {
+            return data;
+          }
+          const res = { ...data };
           const [source, target] = g.extremities(edge);
-          if (currentSelected) {
-            const isConnected = source === currentSelected || target === currentSelected;
-            if (isConnected) {
-              res.color = brightenColor(data.color, 1.5);
-              res.size = Math.max(3, (data.size || 1) * 4);
-              res.zIndex = 2;
-            } else {
-              res.color = dimColor(data.color, 0.1);
-              res.size = 0.3;
-              res.zIndex = 0;
-            }
+          const isConnected = source === currentSelected || target === currentSelected;
+          if (isConnected) {
+            res.color = brightenColorCached(data.color, 1.5);
+            res.size = Math.max(3, (data.size || 1) * 4);
+            res.zIndex = 2;
+          } else {
+            res.color = dimColorCached(data.color, 0.1);
+            res.size = 0.3;
+            res.zIndex = 0;
           }
           return res;
         },
@@ -389,7 +415,13 @@ export function useCodeGraphSigma(options: UseCodeGraphSigmaOptions = {}): UseCo
       }
     };
 
-    const ro = new ResizeObserver(() => tryInit());
+    const ro = new ResizeObserver(() => {
+      if (sigmaRef.current && containerRef.current) {
+        sigmaRef.current.resize();
+        return;
+      }
+      tryInit();
+    });
     ro.observe(el);
     tryInit();
     pollId = setInterval(tryInit, 100);

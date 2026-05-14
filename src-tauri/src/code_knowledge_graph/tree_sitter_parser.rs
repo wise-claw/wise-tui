@@ -1,4 +1,187 @@
+use std::collections::HashSet;
+use std::sync::LazyLock;
+
+use regex::Regex;
+
 use crate::code_knowledge_graph::storage as graph_storage;
+
+static VUE_SCRIPT_INNER: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?si)<script\b[^>]*>([\s\S]*?)</script>")
+        .expect("vue <script> inner regex")
+});
+
+static JAVA_IMPORT: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^\s*import\s+(?:static\s+)?([\w$.]+)\s*;")
+        .expect("java import regex")
+});
+
+static JAVA_TYPE_DECL: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)(?<!\.)\b(class|interface|enum|record)\s+([A-Za-z_]\w*)\b")
+        .expect("java type decl regex")
+});
+
+static RUST_MOD_SEMI: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^\s*(?:pub\s+)?mod\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;")
+        .expect("rust mod semi regex")
+});
+
+static RUST_FN_LINE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?(?:unsafe\s+)?(?:const\s+)?fn\s+([a-zA-Z_][a-zA-Z0-9_]*)")
+        .expect("rust fn line regex")
+});
+
+static RUST_STRUCT_LINE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^\s*(?:pub(?:\([^)]*\))?\s+)?struct\s+([A-Za-z_][\w]*)")
+        .expect("rust struct line regex")
+});
+
+static RUST_ENUM_LINE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^\s*(?:pub(?:\([^)]*\))?\s+)?enum\s+([A-Za-z_][\w]*)")
+        .expect("rust enum line regex")
+});
+
+static RUST_TRAIT_LINE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^\s*(?:pub(?:\([^)]*\))?\s+)?trait\s+([A-Za-z_][\w]*)")
+        .expect("rust trait line regex")
+});
+
+static RUST_TYPE_LINE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^\s*(?:pub(?:\([^)]*\))?\s+)?type\s+([A-Za-z_][\w]*)\s*=")
+        .expect("rust type alias line regex")
+});
+
+static RUST_MOD_INLINE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^\s*(?:pub\s+)?mod\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\{")
+        .expect("rust mod inline regex")
+});
+
+/// JSON `"$ref": "..."` and YAML `$ref: "..."` / `'...'`
+static REF_DOLLAR_QUOTED: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?m)['"]?\$ref['"]?\s*:\s*["']([^"']+)["']"#).expect("ref $ref quoted regex")
+});
+
+/// OpenAPI-style unquoted `$ref: ./file.yaml` (avoids lines already using quotes)
+static REF_YAML_UNQUOTED: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^\s*\$ref\s*:\s*([^'\s#][^\s#]*)").expect("ref yaml unquoted regex")
+});
+
+static PYTHON_FROM: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^\s*from\s+([\w.]+)\s+import\s+").expect("python from import")
+});
+
+static PYTHON_IMPORT_LINE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^\s*import\s+(.+)$").expect("python import line")
+});
+
+static PYTHON_CLASS: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^\s*class\s+(\w+)").expect("python class")
+});
+
+static PYTHON_DEF: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^\s*(?:async\s+)?def\s+(\w+)\s*\(").expect("python def")
+});
+
+static GO_IMPORT_QUOTED: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?m)import\s+"([^"]+)""#).expect("go import quoted")
+});
+
+static GO_FUNC: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^func\s+(?:\([^)]*\)\s+)?(\w+)\s*\(").expect("go func")
+});
+
+static CS_TYPE_LINE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^\s*(?:public|internal|private|protected|file|abstract|sealed|static|partial|readonly|unsafe|\s)*\s*(?:ref\s+struct|record\s+struct|record|class|interface|struct|enum)\s+(\w+)\b")
+        .expect("csharp type line")
+});
+
+static RUBY_REQUIRE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?m)require(?:_relative)?\s+['"]([^'"]+)['"]"#).expect("ruby require")
+});
+
+static RUBY_CLASS_MOD: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^\s*(class|module)\s+(\w+)").expect("ruby class module")
+});
+
+static PHP_USE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^\s*use\s+([\w\\]+)\s*;").expect("php use")
+});
+
+static PHP_CLASS_LIKE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^\s*(?:abstract\s+|final\s+)?(?:class|interface|trait)\s+(\w+)\b")
+        .expect("php class like")
+});
+
+static PHP_FUNCTION: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^\s*(?:static\s+)?function\s+(\w+)\s*\(").expect("php function")
+});
+
+static SWIFT_TYPE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^\s*(?:public|private|internal|fileprivate|open|\s)*\s*(?:indirect\s+)?(?:class|struct|enum|protocol|actor)\s+(\w+)\b")
+        .expect("swift type")
+});
+
+static SWIFT_FUNC: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^\s*(?:public|private|internal|fileprivate|open|\s)*\s*func\s+(\w+)\s*[\(:]")
+        .expect("swift func")
+});
+
+static DART_IMPORT_EXPORT: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?m)^\s*(?:import|export)\s+['"]([^'"]+)['"]"#).expect("dart import export")
+});
+
+static DART_CLASS_MIXIN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^\s*(?:abstract\s+)?(?:class|mixin|extension)\s+(\w+)\b").expect("dart class")
+});
+
+static CPP_INCLUDE_LOCAL: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?m)#include\s+"([^"]+)""#).expect("cpp local include")
+});
+
+static MAVEN_MODULE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)<module>\s*([^<]+?)\s*</module>").expect("maven module")
+});
+
+static XML_SPRING_IMPORT: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?m)<import\s+[^>]*\bresource\s*=\s*["']([^"']+)["']"#).expect("xml spring import")
+});
+
+static SPRING_CONFIG_IMPORT_PROP: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)(?:^|\n)\s*spring\.config\.import\s*=\s*([^\n#]+)").expect("spring.config.import")
+});
+
+static GRADLE_APPLY_FROM: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r#"(?m)(?:apply\s*\(\s*from\s*=\s*["']([^'"]+)["']\)|apply\s+from\s*:\s*['"]([^'"]+)['"])"#,
+    )
+    .expect("gradle apply from")
+});
+
+static KOTLIN_DATA_CLASS: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^\s*(?:public\s+|internal\s+|private\s+|protected\s+)?data\s+class\s+(\w+)\b")
+        .expect("kotlin data class")
+});
+
+static KOTLIN_CLASS: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^\s*(?:public\s+|internal\s+|private\s+|protected\s+|abstract\s+|sealed\s+)*\s*class\s+(\w+)\b")
+        .expect("kotlin class")
+});
+
+static KOTLIN_INTERFACE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^\s*(?:public\s+|internal\s+)?interface\s+(\w+)\b").expect("kotlin interface")
+});
+
+static KOTLIN_OBJECT: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^\s*(?:public\s+|internal\s+|private\s+)?object\s+(\w+)\b").expect("kotlin object")
+});
+
+static KOTLIN_ENUM_CLASS: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^\s*(?:public\s+|internal\s+)?enum\s+class\s+(\w+)\b").expect("kotlin enum class")
+});
+
+static KOTLIN_FUN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^\s*(?:public\s+|internal\s+|private\s+|protected\s+)?(?:suspend\s+)?fun\s+(\w+)\s*[:(]")
+        .expect("kotlin fun")
+});
 
 pub struct Parser;
 
@@ -15,18 +198,806 @@ impl Parser {
         relative_path: &str,
         conn: &rusqlite::Connection,
     ) -> Result<(usize, usize), String> {
-        // File node is already created by index_repository — just extract symbols/imports
+        let ext = relative_path
+            .rsplit_once('.')
+            .map(|(_, e)| e)
+            .unwrap_or("");
+        let norm_path = relative_path.replace('\\', "/");
 
-        // Extract imports via regex-based parsing
-        let import_count = self.extract_imports(conn, content, file_node_id, repo_id, relative_path)?;
+        if ext.eq_ignore_ascii_case("vue") {
+            self.parse_vue_file(content, file_node_id, repo_id, relative_path, conn)
+        } else if ext.eq_ignore_ascii_case("java") {
+            self.parse_java_file(content, file_node_id, repo_id, relative_path, conn)
+        } else if ext.eq_ignore_ascii_case("kt") || ext.eq_ignore_ascii_case("kts") {
+            if norm_path.ends_with(".gradle.kts") {
+                self.parse_gradle_file(content, file_node_id, repo_id, relative_path, conn)
+            } else {
+                self.parse_kotlin_file(content, file_node_id, repo_id, relative_path, conn)
+            }
+        } else if ext.eq_ignore_ascii_case("rs") {
+            self.parse_rust_file(content, file_node_id, repo_id, relative_path, conn)
+        } else if ext.eq_ignore_ascii_case("yaml")
+            || ext.eq_ignore_ascii_case("yml")
+            || ext.eq_ignore_ascii_case("json")
+        {
+            self.parse_json_yaml_file(content, file_node_id, repo_id, relative_path, conn)
+        } else if ext.eq_ignore_ascii_case("py") {
+            self.parse_python_file(content, file_node_id, repo_id, relative_path, conn)
+        } else if ext.eq_ignore_ascii_case("go") {
+            self.parse_go_file(content, file_node_id, repo_id, relative_path, conn)
+        } else if ext.eq_ignore_ascii_case("cs") {
+            self.parse_csharp_file(content, file_node_id, repo_id, relative_path, conn)
+        } else if ext.eq_ignore_ascii_case("rb")
+            || ext.eq_ignore_ascii_case("rake")
+            || ext.eq_ignore_ascii_case("gemspec")
+        {
+            self.parse_ruby_file(content, file_node_id, repo_id, relative_path, conn)
+        } else if ext.eq_ignore_ascii_case("php")
+            || ext.eq_ignore_ascii_case("phtml")
+            || ext.eq_ignore_ascii_case("php3")
+            || ext.eq_ignore_ascii_case("php4")
+            || ext.eq_ignore_ascii_case("php5")
+            || ext.eq_ignore_ascii_case("php8")
+        {
+            self.parse_php_file(content, file_node_id, repo_id, relative_path, conn)
+        } else if ext.eq_ignore_ascii_case("swift") {
+            self.parse_swift_file(content, file_node_id, repo_id, relative_path, conn)
+        } else if ext.eq_ignore_ascii_case("dart") {
+            self.parse_dart_file(content, file_node_id, repo_id, relative_path, conn)
+        } else if ext.eq_ignore_ascii_case("c")
+            || ext.eq_ignore_ascii_case("cc")
+            || ext.eq_ignore_ascii_case("cpp")
+            || ext.eq_ignore_ascii_case("cxx")
+            || ext.eq_ignore_ascii_case("h")
+            || ext.eq_ignore_ascii_case("hh")
+            || ext.eq_ignore_ascii_case("hpp")
+            || ext.eq_ignore_ascii_case("hxx")
+        {
+            self.parse_cpp_family_file(content, file_node_id, repo_id, relative_path, conn)
+        } else if ext.eq_ignore_ascii_case("properties") {
+            self.parse_properties_file(content, file_node_id, repo_id, relative_path, conn)
+        } else if ext.eq_ignore_ascii_case("xml") {
+            self.parse_xml_file(content, file_node_id, repo_id, relative_path, conn)
+        } else if ext.eq_ignore_ascii_case("gradle") {
+            self.parse_gradle_file(content, file_node_id, repo_id, relative_path, conn)
+        } else if ext.eq_ignore_ascii_case("cbl")
+            || ext.eq_ignore_ascii_case("cob")
+            || ext.eq_ignore_ascii_case("cpy")
+            || ext.eq_ignore_ascii_case("cobol")
+        {
+            Ok((0, 0))
+        } else if ext.eq_ignore_ascii_case("ts")
+            || ext.eq_ignore_ascii_case("tsx")
+            || ext.eq_ignore_ascii_case("js")
+            || ext.eq_ignore_ascii_case("jsx")
+            || ext.eq_ignore_ascii_case("mjs")
+            || ext.eq_ignore_ascii_case("cjs")
+            || ext.eq_ignore_ascii_case("mts")
+            || ext.eq_ignore_ascii_case("cts")
+        {
+            self.parse_ts_js_file(content, file_node_id, repo_id, relative_path, conn)
+        } else {
+            Ok((0, 0))
+        }
+    }
 
-        // Extract basic symbols (function/class declarations) via regex
-        let symbol_count = self.extract_symbols_regex(conn, content, file_node_id, repo_id, relative_path)?;
+    fn parse_ts_js_file(
+        &mut self,
+        content: &str,
+        file_node_id: &str,
+        repo_id: i64,
+        relative_path: &str,
+        conn: &rusqlite::Connection,
+    ) -> Result<(usize, usize), String> {
+        let import_count =
+            self.extract_imports(conn, content, file_node_id, repo_id, relative_path)?;
+        let symbol_count =
+            self.extract_symbols_regex(conn, content, file_node_id, repo_id, relative_path, 0)?;
+        Ok((symbol_count, symbol_count + import_count))
+    }
+
+    fn parse_vue_file(
+        &mut self,
+        content: &str,
+        file_node_id: &str,
+        repo_id: i64,
+        relative_path: &str,
+        conn: &rusqlite::Connection,
+    ) -> Result<(usize, usize), String> {
+        let mut symbol_count = 0usize;
+        let mut import_count = 0usize;
+
+        for cap in VUE_SCRIPT_INNER.captures_iter(content) {
+            let Some(inner_m) = cap.get(1) else {
+                continue;
+            };
+            let inner = inner_m.as_str();
+            if inner.trim().is_empty() {
+                continue;
+            }
+            let line_offset = byte_offset_to_line_number(content, inner_m.start());
+            import_count +=
+                self.extract_imports(conn, inner, file_node_id, repo_id, relative_path)?;
+            symbol_count += self.extract_symbols_regex(
+                conn,
+                inner,
+                file_node_id,
+                repo_id,
+                relative_path,
+                line_offset,
+            )?;
+        }
 
         Ok((symbol_count, symbol_count + import_count))
     }
 
-    fn extract_symbols_regex(
+    fn parse_java_file(
+        &mut self,
+        content: &str,
+        file_node_id: &str,
+        repo_id: i64,
+        relative_path: &str,
+        conn: &rusqlite::Connection,
+    ) -> Result<(usize, usize), String> {
+        let import_count =
+            self.extract_java_imports(conn, content, file_node_id, repo_id, relative_path)?;
+        let symbol_count =
+            self.extract_java_symbols(conn, content, file_node_id, repo_id, relative_path)?;
+        Ok((symbol_count, symbol_count + import_count))
+    }
+
+    fn parse_rust_file(
+        &mut self,
+        content: &str,
+        file_node_id: &str,
+        repo_id: i64,
+        relative_path: &str,
+        conn: &rusqlite::Connection,
+    ) -> Result<(usize, usize), String> {
+        let import_count =
+            self.extract_rust_imports(conn, content, file_node_id, repo_id, relative_path)?;
+        let symbol_count =
+            self.extract_rust_symbols(conn, content, file_node_id, repo_id, relative_path)?;
+        Ok((symbol_count, symbol_count + import_count))
+    }
+
+    fn parse_json_yaml_file(
+        &mut self,
+        content: &str,
+        file_node_id: &str,
+        repo_id: i64,
+        relative_path: &str,
+        conn: &rusqlite::Connection,
+    ) -> Result<(usize, usize), String> {
+        let import_count =
+            self.extract_json_yaml_refs(conn, content, file_node_id, repo_id, relative_path)?;
+        Ok((0, import_count))
+    }
+
+    fn upsert_line_symbol(
+        &self,
+        conn: &rusqlite::Connection,
+        file_node_id: &str,
+        repo_id: i64,
+        relative_path: &str,
+        line_idx: usize,
+        name: &str,
+        kind: &str,
+    ) -> Result<(), String> {
+        let symbol_id = format!("{file_node_id}:symbol:{name}");
+        let range = Some(crate::code_knowledge_graph::types::GraphRange {
+            start: crate::code_knowledge_graph::types::GraphPosition {
+                line: line_idx,
+                column: 0,
+            },
+            end: crate::code_knowledge_graph::types::GraphPosition {
+                line: line_idx + 1,
+                column: 0,
+            },
+        });
+        graph_storage::upsert_node(
+            conn,
+            &symbol_id,
+            "symbol",
+            Some(kind),
+            name,
+            relative_path,
+            repo_id,
+            range,
+            None,
+        )?;
+        graph_storage::upsert_edge(
+            conn,
+            &format!("{file_node_id}:contains:{symbol_id}"),
+            file_node_id,
+            &symbol_id,
+            "contains",
+        )?;
+        Ok(())
+    }
+
+    fn parse_kotlin_file(
+        &mut self,
+        content: &str,
+        file_node_id: &str,
+        repo_id: i64,
+        relative_path: &str,
+        conn: &rusqlite::Connection,
+    ) -> Result<(usize, usize), String> {
+        let import_count =
+            self.extract_java_imports(conn, content, file_node_id, repo_id, relative_path)?;
+        let symbol_count =
+            self.extract_kotlin_symbols(conn, content, file_node_id, repo_id, relative_path)?;
+        Ok((symbol_count, symbol_count + import_count))
+    }
+
+    fn extract_kotlin_symbols(
+        &self,
+        conn: &rusqlite::Connection,
+        content: &str,
+        file_node_id: &str,
+        repo_id: i64,
+        relative_path: &str,
+    ) -> Result<usize, String> {
+        let mut count = 0;
+        for (line_idx, line) in content.lines().enumerate() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("//") {
+                continue;
+            }
+            let sym = KOTLIN_DATA_CLASS
+                .captures(trimmed)
+                .and_then(|c| c.get(1).map(|m| (m.as_str().to_string(), "class".to_string())))
+                .or_else(|| {
+                    KOTLIN_ENUM_CLASS.captures(trimmed).and_then(|c| {
+                        c.get(1).map(|m| (m.as_str().to_string(), "enum".to_string()))
+                    })
+                })
+                .or_else(|| {
+                    KOTLIN_OBJECT.captures(trimmed).and_then(|c| {
+                        c.get(1).map(|m| (m.as_str().to_string(), "object".to_string()))
+                    })
+                })
+                .or_else(|| {
+                    KOTLIN_FUN.captures(trimmed).and_then(|c| {
+                        c.get(1)
+                            .map(|m| (m.as_str().to_string(), "function".to_string()))
+                    })
+                })
+                .or_else(|| {
+                    KOTLIN_INTERFACE.captures(trimmed).and_then(|c| {
+                        c.get(1)
+                            .map(|m| (m.as_str().to_string(), "interface".to_string()))
+                    })
+                })
+                .or_else(|| {
+                    KOTLIN_CLASS.captures(trimmed).and_then(|c| {
+                        c.get(1).map(|m| (m.as_str().to_string(), "class".to_string()))
+                    })
+                });
+            let Some((name, kind)) = sym else {
+                continue;
+            };
+            self.upsert_line_symbol(
+                conn,
+                file_node_id,
+                repo_id,
+                relative_path,
+                line_idx,
+                &name,
+                &kind,
+            )?;
+            count += 1;
+        }
+        Ok(count)
+    }
+
+    fn parse_python_file(
+        &mut self,
+        content: &str,
+        file_node_id: &str,
+        repo_id: i64,
+        relative_path: &str,
+        conn: &rusqlite::Connection,
+    ) -> Result<(usize, usize), String> {
+        let import_count =
+            self.extract_python_imports(conn, content, file_node_id, repo_id, relative_path)?;
+        let symbol_count =
+            self.extract_python_symbols(conn, content, file_node_id, repo_id, relative_path)?;
+        Ok((symbol_count, symbol_count + import_count))
+    }
+
+    fn extract_python_imports(
+        &self,
+        conn: &rusqlite::Connection,
+        content: &str,
+        file_node_id: &str,
+        repo_id: i64,
+        _relative_path: &str,
+    ) -> Result<usize, String> {
+        let mut count = 0;
+        for cap in PYTHON_FROM.captures_iter(content) {
+            let m = cap.get(1).map(|x| x.as_str()).unwrap_or("");
+            if m.starts_with('.') {
+                continue;
+            }
+            let resolved = format!("{}.py", m.replace('.', "/"));
+            count += self.add_import_edge(conn, file_node_id, repo_id, &resolved)?;
+        }
+        for cap in PYTHON_IMPORT_LINE.captures_iter(content) {
+            let tail = cap.get(1).map(|x| x.as_str()).unwrap_or("").trim();
+            if tail.starts_with('(') {
+                continue;
+            }
+            for part in tail.split(',') {
+                let p = part.trim().split_whitespace().next().unwrap_or("");
+                if p.is_empty() || p == "(" || p.starts_with('.') {
+                    continue;
+                }
+                let resolved = format!("{}.py", p.replace('.', "/"));
+                count += self.add_import_edge(conn, file_node_id, repo_id, &resolved)?;
+            }
+        }
+        Ok(count)
+    }
+
+    fn extract_python_symbols(
+        &self,
+        conn: &rusqlite::Connection,
+        content: &str,
+        file_node_id: &str,
+        repo_id: i64,
+        relative_path: &str,
+    ) -> Result<usize, String> {
+        let mut count = 0;
+        for (line_idx, line) in content.lines().enumerate() {
+            let trimmed = line.trim();
+            if trimmed.starts_with('#') {
+                continue;
+            }
+            let sym = PYTHON_CLASS
+                .captures(trimmed)
+                .and_then(|c| c.get(1).map(|m| (m.as_str().to_string(), "class".to_string())))
+                .or_else(|| {
+                    PYTHON_DEF
+                        .captures(trimmed)
+                        .and_then(|c| c.get(1).map(|m| (m.as_str().to_string(), "function".to_string())))
+                });
+            let Some((name, kind)) = sym else {
+                continue;
+            };
+            self.upsert_line_symbol(
+                conn,
+                file_node_id,
+                repo_id,
+                relative_path,
+                line_idx,
+                &name,
+                &kind,
+            )?;
+            count += 1;
+        }
+        Ok(count)
+    }
+
+    fn parse_go_file(
+        &mut self,
+        content: &str,
+        file_node_id: &str,
+        repo_id: i64,
+        relative_path: &str,
+        conn: &rusqlite::Connection,
+    ) -> Result<(usize, usize), String> {
+        let mut import_count = 0usize;
+        let file_dir = relative_path.rsplit('/').nth(1).unwrap_or("");
+        for cap in GO_IMPORT_QUOTED.captures_iter(content) {
+            let p = cap.get(1).map(|m| m.as_str()).unwrap_or("");
+            if !p.starts_with('.') {
+                continue;
+            }
+            let resolved = resolve_import_path(file_dir, p, relative_path);
+            import_count += self.add_import_edge(conn, file_node_id, repo_id, &resolved)?;
+        }
+        let mut sym = 0usize;
+        for (line_idx, line) in content.lines().enumerate() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("//") {
+                continue;
+            }
+            let Some(c) = GO_FUNC.captures(trimmed) else {
+                continue;
+            };
+            let Some(name) = c.get(1).map(|m| m.as_str()) else {
+                continue;
+            };
+            self.upsert_line_symbol(
+                conn,
+                file_node_id,
+                repo_id,
+                relative_path,
+                line_idx,
+                name,
+                "function",
+            )?;
+            sym += 1;
+        }
+        Ok((sym, sym + import_count))
+    }
+
+    fn parse_csharp_file(
+        &mut self,
+        content: &str,
+        file_node_id: &str,
+        repo_id: i64,
+        relative_path: &str,
+        conn: &rusqlite::Connection,
+    ) -> Result<(usize, usize), String> {
+        let mut count = 0usize;
+        for (line_idx, line) in content.lines().enumerate() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("//") {
+                continue;
+            }
+            let Some(c) = CS_TYPE_LINE.captures(trimmed) else {
+                continue;
+            };
+            let Some(name) = c.get(1).map(|m| m.as_str()) else {
+                continue;
+            };
+            self.upsert_line_symbol(
+                conn,
+                file_node_id,
+                repo_id,
+                relative_path,
+                line_idx,
+                name,
+                "class",
+            )?;
+            count += 1;
+        }
+        Ok((count, count))
+    }
+
+    fn parse_ruby_file(
+        &mut self,
+        content: &str,
+        file_node_id: &str,
+        repo_id: i64,
+        relative_path: &str,
+        conn: &rusqlite::Connection,
+    ) -> Result<(usize, usize), String> {
+        let mut import_count = 0usize;
+        let file_dir = relative_path.rsplit('/').nth(1).unwrap_or("");
+        for cap in RUBY_REQUIRE.captures_iter(content) {
+            let p = cap.get(1).map(|m| m.as_str()).unwrap_or("");
+            if p.starts_with('/') || p.contains(':') {
+                continue;
+            }
+            let resolved = resolve_import_path(file_dir, p, relative_path);
+            import_count += self.add_import_edge(conn, file_node_id, repo_id, &resolved)?;
+        }
+        let mut sym = 0usize;
+        for (line_idx, line) in content.lines().enumerate() {
+            let trimmed = line.trim();
+            if trimmed.starts_with('#') {
+                continue;
+            }
+            let Some(c) = RUBY_CLASS_MOD.captures(trimmed) else {
+                continue;
+            };
+            let kind = c.get(1).map(|m| m.as_str()).unwrap_or("class");
+            let Some(name) = c.get(2).map(|m| m.as_str()) else {
+                continue;
+            };
+            self.upsert_line_symbol(
+                conn,
+                file_node_id,
+                repo_id,
+                relative_path,
+                line_idx,
+                name,
+                kind,
+            )?;
+            sym += 1;
+        }
+        Ok((sym, sym + import_count))
+    }
+
+    fn parse_php_file(
+        &mut self,
+        content: &str,
+        file_node_id: &str,
+        repo_id: i64,
+        relative_path: &str,
+        conn: &rusqlite::Connection,
+    ) -> Result<(usize, usize), String> {
+        let mut import_count = 0usize;
+        for cap in PHP_USE.captures_iter(content) {
+            let q = cap.get(1).map(|m| m.as_str()).unwrap_or("");
+            let Some(resolved) = php_qualified_to_path(q) else {
+                continue;
+            };
+            import_count += self.add_import_edge(conn, file_node_id, repo_id, &resolved)?;
+        }
+        let mut sym = 0usize;
+        for (line_idx, line) in content.lines().enumerate() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("//") {
+                continue;
+            }
+            let sym_info = PHP_CLASS_LIKE
+                .captures(trimmed)
+                .and_then(|c| c.get(1).map(|m| (m.as_str().to_string(), "class".to_string())))
+                .or_else(|| {
+                    PHP_FUNCTION.captures(trimmed).and_then(|c| {
+                        c.get(1)
+                            .map(|m| (m.as_str().to_string(), "function".to_string()))
+                    })
+                });
+            let Some((name, kind)) = sym_info else {
+                continue;
+            };
+            self.upsert_line_symbol(
+                conn,
+                file_node_id,
+                repo_id,
+                relative_path,
+                line_idx,
+                &name,
+                &kind,
+            )?;
+            sym += 1;
+        }
+        Ok((sym, sym + import_count))
+    }
+
+    fn parse_swift_file(
+        &mut self,
+        content: &str,
+        file_node_id: &str,
+        repo_id: i64,
+        relative_path: &str,
+        conn: &rusqlite::Connection,
+    ) -> Result<(usize, usize), String> {
+        let mut sym = 0usize;
+        for (line_idx, line) in content.lines().enumerate() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("//") {
+                continue;
+            }
+            let sym_info = SWIFT_TYPE
+                .captures(trimmed)
+                .and_then(|c| c.get(1).map(|m| (m.as_str().to_string(), "class".to_string())))
+                .or_else(|| {
+                    SWIFT_FUNC.captures(trimmed).and_then(|c| {
+                        c.get(1)
+                            .map(|m| (m.as_str().to_string(), "function".to_string()))
+                    })
+                });
+            let Some((name, kind)) = sym_info else {
+                continue;
+            };
+            self.upsert_line_symbol(
+                conn,
+                file_node_id,
+                repo_id,
+                relative_path,
+                line_idx,
+                &name,
+                &kind,
+            )?;
+            sym += 1;
+        }
+        Ok((sym, sym))
+    }
+
+    fn parse_dart_file(
+        &mut self,
+        content: &str,
+        file_node_id: &str,
+        repo_id: i64,
+        relative_path: &str,
+        conn: &rusqlite::Connection,
+    ) -> Result<(usize, usize), String> {
+        let mut import_count = 0usize;
+        let file_dir = relative_path.rsplit('/').nth(1).unwrap_or("");
+        for cap in DART_IMPORT_EXPORT.captures_iter(content) {
+            let p = cap.get(1).map(|m| m.as_str()).unwrap_or("");
+            if p.starts_with("dart:") || p.starts_with("package:") {
+                continue;
+            }
+            if !p.starts_with('.') && !p.contains('/') {
+                continue;
+            }
+            let resolved = resolve_import_path(file_dir, p, relative_path);
+            import_count += self.add_import_edge(conn, file_node_id, repo_id, &resolved)?;
+        }
+        let mut sym = 0usize;
+        for (line_idx, line) in content.lines().enumerate() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("//") {
+                continue;
+            }
+            let Some(c) = DART_CLASS_MIXIN.captures(trimmed) else {
+                continue;
+            };
+            let Some(name) = c.get(1).map(|m| m.as_str()) else {
+                continue;
+            };
+            self.upsert_line_symbol(
+                conn,
+                file_node_id,
+                repo_id,
+                relative_path,
+                line_idx,
+                name,
+                "class",
+            )?;
+            sym += 1;
+        }
+        Ok((sym, sym + import_count))
+    }
+
+    fn parse_cpp_family_file(
+        &mut self,
+        content: &str,
+        file_node_id: &str,
+        repo_id: i64,
+        relative_path: &str,
+        conn: &rusqlite::Connection,
+    ) -> Result<(usize, usize), String> {
+        let mut import_count = 0usize;
+        let file_dir = relative_path.rsplit('/').nth(1).unwrap_or("");
+        for cap in CPP_INCLUDE_LOCAL.captures_iter(content) {
+            let p = cap.get(1).map(|m| m.as_str()).unwrap_or("");
+            let resolved = resolve_import_path(file_dir, p, relative_path);
+            import_count += self.add_import_edge(conn, file_node_id, repo_id, &resolved)?;
+        }
+        Ok((0, import_count))
+    }
+
+    fn parse_properties_file(
+        &mut self,
+        content: &str,
+        file_node_id: &str,
+        repo_id: i64,
+        relative_path: &str,
+        conn: &rusqlite::Connection,
+    ) -> Result<(usize, usize), String> {
+        let mut count = 0usize;
+        let mut seen = HashSet::<String>::new();
+        for cap in SPRING_CONFIG_IMPORT_PROP.captures_iter(content) {
+            let raw_line = cap.get(1).map(|m| m.as_str()).unwrap_or("");
+            for part in raw_line.split(',') {
+                let tok = part.trim();
+                if tok.is_empty() {
+                    continue;
+                }
+                let Some(target) = spring_resolve_config_import_token(relative_path, tok) else {
+                    continue;
+                };
+                if !seen.insert(target.clone()) {
+                    continue;
+                }
+                count += self.add_import_edge(conn, file_node_id, repo_id, &target)?;
+            }
+        }
+        Ok((0, count))
+    }
+
+    fn parse_xml_file(
+        &mut self,
+        content: &str,
+        file_node_id: &str,
+        repo_id: i64,
+        relative_path: &str,
+        conn: &rusqlite::Connection,
+    ) -> Result<(usize, usize), String> {
+        let mut count = 0usize;
+        let parent = file_parent_dir(relative_path);
+        for cap in MAVEN_MODULE.captures_iter(content) {
+            let modname = cap.get(1).map(|m| m.as_str().trim()).unwrap_or("");
+            if modname.is_empty() {
+                continue;
+            }
+            let sub = path_join(&parent, modname);
+            let target = path_join(&sub, "pom.xml");
+            count += self.add_import_edge(conn, file_node_id, repo_id, &target)?;
+        }
+        for cap in XML_SPRING_IMPORT.captures_iter(content) {
+            let raw = cap.get(1).map(|m| m.as_str()).unwrap_or("");
+            let Some(resolved) = spring_resolve_config_import_token(relative_path, raw) else {
+                continue;
+            };
+            count += self.add_import_edge(conn, file_node_id, repo_id, &resolved)?;
+        }
+        Ok((0, count))
+    }
+
+    fn parse_gradle_file(
+        &mut self,
+        content: &str,
+        file_node_id: &str,
+        repo_id: i64,
+        relative_path: &str,
+        conn: &rusqlite::Connection,
+    ) -> Result<(usize, usize), String> {
+        let mut count = 0usize;
+        let file_dir = relative_path.rsplit('/').nth(1).unwrap_or("");
+        let parent = file_parent_dir(relative_path);
+        for cap in GRADLE_APPLY_FROM.captures_iter(content) {
+            let raw = cap
+                .get(1)
+                .or_else(|| cap.get(2))
+                .map(|m| m.as_str())
+                .unwrap_or("")
+                .trim();
+            if raw.is_empty() {
+                continue;
+            }
+            let resolved = if raw.starts_with('.') {
+                resolve_import_path(file_dir, raw, relative_path)
+            } else {
+                path_join(&parent, raw.trim_start_matches('/'))
+            };
+            count += self.add_import_edge(conn, file_node_id, repo_id, &resolved)?;
+        }
+        Ok((0, count))
+    }
+
+    fn extract_rust_imports(
+        &self,
+        conn: &rusqlite::Connection,
+        content: &str,
+        file_node_id: &str,
+        repo_id: i64,
+        relative_path: &str,
+    ) -> Result<usize, String> {
+        let mut count = 0;
+
+        for cap in RUST_MOD_SEMI.captures_iter(content) {
+            let Some(name) = cap.get(1).map(|m| m.as_str()) else {
+                continue;
+            };
+            let resolved = rust_mod_child_rs_path(relative_path, name);
+            count += self.add_import_edge(conn, file_node_id, repo_id, &resolved)?;
+        }
+
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("//") {
+                continue;
+            }
+            let Some(after_use) = rust_after_use_keyword(trimmed) else {
+                continue;
+            };
+            let head = rust_use_head_path(after_use);
+            let head = rust_strip_use_alias(head);
+            if head.contains("::*") {
+                continue;
+            }
+            if let Some((root, mut segs)) = parse_rust_use_prefix_path(head) {
+                rust_trim_use_path_type_suffix(&mut segs);
+                if segs.is_empty() {
+                    continue;
+                }
+                let resolved_opt = match root {
+                    RustUseRoot::Crate => rust_crate_src_dir(relative_path)
+                        .and_then(|src| rust_chunks_to_rs_path_under(&src, &segs)),
+                    RustUseRoot::Super => rust_super_module_base(relative_path)
+                        .and_then(|parent| rust_chunks_to_rs_path_under(&parent, &segs)),
+                };
+                let Some(resolved) = resolved_opt else {
+                    continue;
+                };
+                count += self.add_import_edge(conn, file_node_id, repo_id, &resolved)?;
+            }
+        }
+
+        Ok(count)
+    }
+
+    fn extract_rust_symbols(
         &self,
         conn: &rusqlite::Connection,
         content: &str,
@@ -38,15 +1009,264 @@ impl Parser {
 
         for (line_idx, line) in content.lines().enumerate() {
             let trimmed = line.trim();
+            if trimmed.starts_with("//") {
+                continue;
+            }
 
-            // export function foo( / export const foo = / function foo(
-            // export class Foo / class Foo {
-            // export interface Foo / interface Foo {
-            // const foo = () => / const foo = function(
+            let sym = RUST_FN_LINE
+                .captures(trimmed)
+                .and_then(|c| c.get(1).map(|m| (m.as_str().to_string(), "function".to_string())))
+                .or_else(|| {
+                    RUST_STRUCT_LINE.captures(trimmed).and_then(|c| {
+                        c.get(1)
+                            .map(|m| (m.as_str().to_string(), "struct".to_string()))
+                    })
+                })
+                .or_else(|| {
+                    RUST_ENUM_LINE.captures(trimmed).and_then(|c| {
+                        c.get(1).map(|m| (m.as_str().to_string(), "enum".to_string()))
+                    })
+                })
+                .or_else(|| {
+                    RUST_TRAIT_LINE.captures(trimmed).and_then(|c| {
+                        c.get(1).map(|m| (m.as_str().to_string(), "trait".to_string()))
+                    })
+                })
+                .or_else(|| {
+                    RUST_TYPE_LINE.captures(trimmed).and_then(|c| {
+                        c.get(1).map(|m| (m.as_str().to_string(), "type".to_string()))
+                    })
+                })
+                .or_else(|| {
+                    RUST_MOD_INLINE.captures(trimmed).and_then(|c| {
+                        c.get(1).map(|m| (m.as_str().to_string(), "mod".to_string()))
+                    })
+                });
+
+            let Some((name, kind)) = sym else {
+                continue;
+            };
+
+            let symbol_id = format!("{file_node_id}:symbol:{name}");
+            let range = Some(crate::code_knowledge_graph::types::GraphRange {
+                start: crate::code_knowledge_graph::types::GraphPosition {
+                    line: line_idx,
+                    column: 0,
+                },
+                end: crate::code_knowledge_graph::types::GraphPosition {
+                    line: line_idx + 1,
+                    column: 0,
+                },
+            });
+
+            graph_storage::upsert_node(
+                conn,
+                &symbol_id,
+                "symbol",
+                Some(&kind),
+                &name,
+                relative_path,
+                repo_id,
+                range,
+                None,
+            )?;
+
+            graph_storage::upsert_edge(
+                conn,
+                &format!("{file_node_id}:contains:{symbol_id}"),
+                file_node_id,
+                &symbol_id,
+                "contains",
+            )?;
+
+            count += 1;
+        }
+
+        Ok(count)
+    }
+
+    fn extract_json_yaml_refs(
+        &self,
+        conn: &rusqlite::Connection,
+        content: &str,
+        file_node_id: &str,
+        repo_id: i64,
+        relative_path: &str,
+    ) -> Result<usize, String> {
+        let mut count = 0;
+        let file_dir = relative_path.rsplit('/').nth(1).unwrap_or("");
+
+        let mut seen = std::collections::HashSet::<String>::new();
+
+        for cap in REF_DOLLAR_QUOTED.captures_iter(content) {
+            let Some(raw) = cap.get(1).map(|m| m.as_str()) else {
+                continue;
+            };
+            let path = ref_strip_fragment(raw);
+            if !ref_is_file_like(path) {
+                continue;
+            }
+            if !seen.insert(path.to_string()) {
+                continue;
+            }
+            let resolved = resolve_import_path(file_dir, path, relative_path);
+            count += self.add_import_edge(conn, file_node_id, repo_id, &resolved)?;
+        }
+
+        for cap in REF_YAML_UNQUOTED.captures_iter(content) {
+            let Some(raw) = cap.get(1).map(|m| m.as_str()) else {
+                continue;
+            };
+            let path = ref_strip_fragment(raw);
+            if !ref_is_file_like(path) {
+                continue;
+            }
+            if !seen.insert(path.to_string()) {
+                continue;
+            }
+            let resolved = resolve_import_path(file_dir, path, relative_path);
+            count += self.add_import_edge(conn, file_node_id, repo_id, &resolved)?;
+        }
+
+        Ok(count)
+    }
+
+    fn add_import_edge(
+        &self,
+        conn: &rusqlite::Connection,
+        file_node_id: &str,
+        repo_id: i64,
+        resolved: &str,
+    ) -> Result<usize, String> {
+        let import_id = format!("{file_node_id}:imports:{resolved}");
+        let target_id = super::indexer::make_file_node_id(repo_id, resolved);
+        graph_storage::upsert_edge(conn, &import_id, file_node_id, &target_id, "imports")?;
+        Ok(1)
+    }
+
+    fn extract_java_imports(
+        &self,
+        conn: &rusqlite::Connection,
+        content: &str,
+        file_node_id: &str,
+        repo_id: i64,
+        _relative_path: &str,
+    ) -> Result<usize, String> {
+        let mut count = 0;
+
+        for cap in JAVA_IMPORT.captures_iter(content) {
+            let Some(q) = cap.get(1).map(|m| m.as_str()) else {
+                continue;
+            };
+            if q.ends_with(".*") || q.ends_with('.') {
+                continue;
+            }
+            let Some(resolved) = java_qualified_to_relative_path(q) else {
+                continue;
+            };
+            if is_bare_java_module(q) {
+                continue;
+            }
+
+            let import_id = format!("{file_node_id}:imports:{resolved}");
+            let target_id = super::indexer::make_file_node_id(repo_id, &resolved);
+
+            graph_storage::upsert_edge(
+                conn,
+                &import_id,
+                file_node_id,
+                &target_id,
+                "imports",
+            )?;
+            count += 1;
+        }
+
+        Ok(count)
+    }
+
+    fn extract_java_symbols(
+        &self,
+        conn: &rusqlite::Connection,
+        content: &str,
+        file_node_id: &str,
+        repo_id: i64,
+        relative_path: &str,
+    ) -> Result<usize, String> {
+        let mut count = 0;
+
+        for (line_idx, line) in content.lines().enumerate() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("//") {
+                continue;
+            }
+
+            let Some(caps) = JAVA_TYPE_DECL.captures(line) else {
+                continue;
+            };
+            let Some(kind_m) = caps.get(1) else {
+                continue;
+            };
+            let Some(name_m) = caps.get(2) else {
+                continue;
+            };
+            let kind = kind_m.as_str().to_string();
+            let name = name_m.as_str().to_string();
+
+            let symbol_id = format!("{file_node_id}:symbol:{name}");
+            let range = Some(crate::code_knowledge_graph::types::GraphRange {
+                start: crate::code_knowledge_graph::types::GraphPosition {
+                    line: line_idx,
+                    column: 0,
+                },
+                end: crate::code_knowledge_graph::types::GraphPosition {
+                    line: line_idx + 1,
+                    column: 0,
+                },
+            });
+
+            graph_storage::upsert_node(
+                conn,
+                &symbol_id,
+                "symbol",
+                Some(&kind),
+                &name,
+                relative_path,
+                repo_id,
+                range,
+                None,
+            )?;
+
+            graph_storage::upsert_edge(
+                conn,
+                &format!("{file_node_id}:contains:{symbol_id}"),
+                file_node_id,
+                &symbol_id,
+                "contains",
+            )?;
+
+            count += 1;
+        }
+
+        Ok(count)
+    }
+
+    fn extract_symbols_regex(
+        &self,
+        conn: &rusqlite::Connection,
+        content: &str,
+        file_node_id: &str,
+        repo_id: i64,
+        relative_path: &str,
+        line_offset: usize,
+    ) -> Result<usize, String> {
+        let mut count = 0;
+
+        for (line_idx, line) in content.lines().enumerate() {
+            let trimmed = line.trim();
+            let global_line = line_idx + line_offset;
 
             let mut symbol_info = None;
 
-            // Function declarations
             if trimmed.starts_with("export function ")
                 || trimmed.starts_with("export async function ")
             {
@@ -56,7 +1276,6 @@ impl Parser {
             } else if (trimmed.starts_with("export const ") || trimmed.starts_with("export let "))
                 && (trimmed.contains(" = (") || trimmed.contains(" = function"))
             {
-                // export const foo = (...) =>  or  export const foo = function(
                 symbol_info = extract_const_name(trimmed);
             } else if trimmed.starts_with("export class ") || trimmed.starts_with("class ") {
                 symbol_info = extract_symbol_name_after_keyword(trimmed, "class");
@@ -68,11 +1287,11 @@ impl Parser {
                 let symbol_id = format!("{file_node_id}:symbol:{name}");
                 let range = Some(crate::code_knowledge_graph::types::GraphRange {
                     start: crate::code_knowledge_graph::types::GraphPosition {
-                        line: line_idx,
+                        line: global_line,
                         column: 0,
                     },
                     end: crate::code_knowledge_graph::types::GraphPosition {
-                        line: line_idx + 1,
+                        line: global_line + 1,
                         column: 0,
                     },
                 });
@@ -89,7 +1308,6 @@ impl Parser {
                     None,
                 )?;
 
-                // file contains symbol edge
                 graph_storage::upsert_edge(
                     conn,
                     &format!("{file_node_id}:contains:{symbol_id}"),
@@ -125,7 +1343,6 @@ impl Parser {
 
             let mut import_path = None;
 
-            // Match: ... from '...'  or  ... from "..."
             if let Some(from_pos) = trimmed.find("from ") {
                 let after_from = &trimmed[from_pos + 5..];
                 if let Some(p) = extract_first_quoted_string(after_from) {
@@ -133,7 +1350,6 @@ impl Parser {
                 }
             }
 
-            // Side-effect import: import 'path'
             if import_path.is_none() {
                 if let Some(p) = extract_first_quoted_string(trimmed) {
                     if !p.contains(' ') && !p.starts_with("type") && !p.starts_with("interface") {
@@ -147,7 +1363,7 @@ impl Parser {
                     continue;
                 }
 
-                let resolved = resolve_import_path(file_dir, &import_path);
+                let resolved = resolve_import_path(file_dir, &import_path, relative_path);
                 let import_id = format!("{file_node_id}:imports:{resolved}");
                 let target_id = super::indexer::make_file_node_id(repo_id, &resolved);
 
@@ -166,9 +1382,297 @@ impl Parser {
     }
 }
 
+enum RustUseRoot {
+    Crate,
+    Super,
+}
+
+fn path_join(dir: &str, rel: &str) -> String {
+    if dir.is_empty() {
+        rel.to_string()
+    } else {
+        format!("{dir}/{rel}")
+    }
+}
+
+fn file_parent_dir(relative_path: &str) -> String {
+    relative_path
+        .replace('\\', "/")
+        .rsplit_once('/')
+        .map(|(a, _)| a.to_string())
+        .unwrap_or_default()
+}
+
+fn maven_resources_prefix(relative_path: &str) -> Option<String> {
+    let p = relative_path.replace('\\', "/");
+    if let Some(i) = p.find("/src/main/resources/") {
+        Some(p[..i + "/src/main/resources".len()].to_string())
+    } else if let Some(i) = p.find("/src/test/resources/") {
+        Some(p[..i + "/src/test/resources".len()].to_string())
+    } else {
+        None
+    }
+}
+
+fn spring_strip_resource_value(s: &str) -> String {
+    let mut t = s.trim().to_string();
+    const PFX: &[&str] = &["optional:", "file:", "classpath*:", "classpath:"];
+    for _ in 0..4 {
+        let lower = t.to_ascii_lowercase();
+        let mut matched = false;
+        for p in PFX {
+            if lower.starts_with(p) {
+                t = t[p.len()..].trim().to_string();
+                matched = true;
+                break;
+            }
+        }
+        if !matched {
+            break;
+        }
+    }
+    t.trim_matches(|c| c == '"' || c == '\'').trim().to_string()
+}
+
+fn spring_resolve_config_import_token(relative_path: &str, raw_tok: &str) -> Option<String> {
+    let l = raw_tok.trim().to_ascii_lowercase();
+    let parent = file_parent_dir(relative_path);
+    let file_dir = relative_path.rsplit('/').nth(1).unwrap_or("");
+    if l.contains("classpath:") || l.contains("classpath*:") {
+        let stripped = spring_strip_resource_value(raw_tok);
+        let rest = stripped.trim_start_matches('/');
+        if let Some(prefix) = maven_resources_prefix(relative_path) {
+            return Some(path_join(&prefix, rest));
+        }
+        return Some(path_join(&parent, rest));
+    }
+    if l.contains("://") && !l.starts_with("file:") {
+        return None;
+    }
+    let path_part = spring_strip_resource_value(raw_tok);
+    if path_part.is_empty() {
+        return None;
+    }
+    if path_part.starts_with("./") || path_part.starts_with("../") || path_part.starts_with('.') {
+        return Some(resolve_import_path(file_dir, &path_part, relative_path));
+    }
+    if path_part.contains('/') && !path_part.contains(':') {
+        return Some(path_join(&parent, path_part.trim_start_matches('/')));
+    }
+    None
+}
+
+fn php_qualified_to_path(q: &str) -> Option<String> {
+    let parts: Vec<&str> = q.split('\\').filter(|s| !s.is_empty()).collect();
+    if parts.is_empty() {
+        return None;
+    }
+    let mut segs = parts;
+    if let Some(last) = segs.last() {
+        if last.chars().next().map(|c| c.is_lowercase()).unwrap_or(false) {
+            segs.pop();
+        }
+    }
+    if segs.is_empty() {
+        return None;
+    }
+    Some(format!("{}.php", segs.join("/")))
+}
+
+fn rust_child_module_base(relative_path: &str) -> String {
+    let path = relative_path.replace('\\', "/");
+    let (dir, file) = match path.rsplit_once('/') {
+        Some((d, f)) => (d, f),
+        None => ("", path.as_str()),
+    };
+    if file == "lib.rs" || file == "main.rs" {
+        dir.to_string()
+    } else if file == "mod.rs" {
+        dir.to_string()
+    } else {
+        let stem = file.strip_suffix(".rs").unwrap_or(file);
+        if dir.is_empty() {
+            stem.to_string()
+        } else {
+            path_join(dir, stem)
+        }
+    }
+}
+
+fn rust_super_module_base(relative_path: &str) -> Option<String> {
+    let b = rust_child_module_base(relative_path);
+    b.rsplit_once('/')
+        .map(|(p, _)| p.to_string())
+        .filter(|s| !s.is_empty())
+}
+
+fn rust_crate_src_dir(relative_path: &str) -> Option<String> {
+    let p = relative_path.replace('\\', "/");
+    if let Some(pos) = p.find("/src/") {
+        Some(path_join(&p[..pos], "src"))
+    } else if p.starts_with("src/") {
+        Some("src".to_string())
+    } else {
+        None
+    }
+}
+
+fn rust_mod_child_rs_path(relative_path: &str, mod_name: &str) -> String {
+    let base = rust_child_module_base(relative_path);
+    path_join(&base, &format!("{mod_name}.rs"))
+}
+
+fn rust_after_use_keyword(line: &str) -> Option<&str> {
+    let t = line.trim();
+    t.find("use ").map(|pos| t[pos + 4..].trim_start())
+}
+
+fn rust_use_head_path(s: &str) -> &str {
+    let s = s.trim();
+    let end = s.find('{').unwrap_or(s.len());
+    s[..end].split(';').next().unwrap_or(s).trim()
+}
+
+fn rust_strip_use_alias(s: &str) -> &str {
+    s.split(" as ").next().unwrap_or(s).trim()
+}
+
+fn parse_rust_use_prefix_path(s: &str) -> Option<(RustUseRoot, Vec<&str>)> {
+    let s = s.trim();
+    if let Some(rest) = s.strip_prefix("crate::") {
+        Some((RustUseRoot::Crate, rust_path_segments(rest)))
+    } else if let Some(rest) = s.strip_prefix("super::") {
+        Some((RustUseRoot::Super, rust_path_segments(rest)))
+    } else {
+        None
+    }
+}
+
+fn rust_path_segments(s: &str) -> Vec<&str> {
+    s.split("::")
+        .map(str::trim)
+        .filter(|p| {
+            !p.is_empty()
+                && *p != "self"
+                && *p != "crate"
+                && *p != "*"
+        })
+        .collect()
+}
+
+fn rust_trim_use_path_type_suffix(segments: &mut Vec<&str>) {
+    if segments.len() >= 2 {
+        if let Some(last) = segments.last() {
+            if last
+                .chars()
+                .next()
+                .map(|c| c.is_uppercase())
+                .unwrap_or(false)
+            {
+                segments.pop();
+            }
+        }
+    }
+}
+
+fn rust_chunks_to_rs_path_under(dir_base: &str, chunks: &[&str]) -> Option<String> {
+    if chunks.is_empty() {
+        return None;
+    }
+    Some(path_join(dir_base, &format!("{}.rs", chunks.join("/"))))
+}
+
+fn ref_strip_fragment(s: &str) -> &str {
+    s.split('#').next().unwrap_or(s).trim()
+}
+
+fn ref_is_file_like(s: &str) -> bool {
+    let t = s.trim();
+    if t.is_empty() || t.starts_with('#') {
+        return false;
+    }
+    if t.contains("://") {
+        return false;
+    }
+    t.starts_with("./")
+        || t.starts_with("../")
+        || t.starts_with('.')
+        || t.contains('/')
+        || t.ends_with(".yaml")
+        || t.ends_with(".yml")
+        || t.ends_with(".json")
+        || t.ends_with(".rs")
+        || t.ends_with(".xml")
+        || t.ends_with(".properties")
+        || t.ends_with(".gradle")
+        || t.ends_with(".py")
+        || t.ends_with(".php")
+        || t.ends_with(".kt")
+        || t.ends_with(".kts")
+        || t.ends_with(".cs")
+        || t.ends_with(".go")
+        || t.ends_with(".swift")
+        || t.ends_with(".dart")
+}
+
+fn byte_offset_to_line_number(content: &str, byte_idx: usize) -> usize {
+    let end = byte_idx.min(content.len());
+    content[..end].chars().filter(|&c| c == '\n').count()
+}
+
+/// Maps `com.foo.Bar` or `com.foo.Bar.Inner` to a repo-relative `com/foo/Bar.java` path.
+fn java_qualified_to_relative_path(qualified: &str) -> Option<String> {
+    if qualified.is_empty() || qualified.contains('*') {
+        return None;
+    }
+    let mut parts: Vec<&str> = qualified.split('.').collect();
+    if parts.is_empty() {
+        return None;
+    }
+
+    if let Some(last) = parts.last() {
+        if last
+            .chars()
+            .next()
+            .map(|c| c.is_lowercase())
+            .unwrap_or(false)
+        {
+            parts.pop();
+        }
+    }
+
+    while parts.len() >= 2 {
+        let last = parts[parts.len() - 1];
+        let prev = parts[parts.len() - 2];
+        let last_uc = last
+            .chars()
+            .next()
+            .map(|c| c.is_uppercase())
+            .unwrap_or(false);
+        let prev_uc = prev
+            .chars()
+            .next()
+            .map(|c| c.is_uppercase())
+            .unwrap_or(false);
+        if last_uc && prev_uc {
+            parts.pop();
+        } else {
+            break;
+        }
+    }
+
+    if parts.is_empty() {
+        return None;
+    }
+    Some(format!("{}.java", parts.join("/")))
+}
+
+/// Skip JDK and other unqualified single-segment imports (none exist as file paths).
+fn is_bare_java_module(qualified: &str) -> bool {
+    !qualified.contains('.')
+}
+
 fn extract_symbol_name_after_keyword(line: &str, keyword: &str) -> Option<(String, String)> {
-    // e.g. "export function foo(" → "foo", "function"
-    // e.g. "export class Foo {" → "Foo", "class"
     let after_keyword = line.split(keyword).nth(1)?;
     let trimmed = after_keyword.trim_start();
     let name: String = trimmed
@@ -183,7 +1687,6 @@ fn extract_symbol_name_after_keyword(line: &str, keyword: &str) -> Option<(Strin
 }
 
 fn extract_const_name(line: &str) -> Option<(String, String)> {
-    // e.g. "export const foo = (" → "foo"
     let after_const = line.split("const ").nth(1)?;
     let after_const = after_const.split("let ").last()?;
     let name: String = after_const
@@ -210,7 +1713,122 @@ fn is_bare_module(path: &str) -> bool {
     !path.starts_with('.') && !path.starts_with('/')
 }
 
-fn resolve_import_path(current_dir: &str, import_path: &str) -> String {
+fn importer_default_extension(relative_path: &str) -> &'static str {
+    let norm = relative_path.replace('\\', "/");
+    if norm.ends_with(".gradle.kts") {
+        return "gradle";
+    }
+    let ext = relative_path
+        .rsplit_once('.')
+        .map(|(_, e)| e)
+        .unwrap_or("");
+    if ext.eq_ignore_ascii_case("vue") {
+        "vue"
+    } else if ext.eq_ignore_ascii_case("java") {
+        "java"
+    } else if ext.eq_ignore_ascii_case("yaml") || ext.eq_ignore_ascii_case("yml") {
+        "yaml"
+    } else if ext.eq_ignore_ascii_case("json") {
+        "json"
+    } else if ext.eq_ignore_ascii_case("rs") {
+        "rs"
+    } else if ext.eq_ignore_ascii_case("py") {
+        "py"
+    } else if ext.eq_ignore_ascii_case("go") {
+        "go"
+    } else if ext.eq_ignore_ascii_case("cs") {
+        "cs"
+    } else if ext.eq_ignore_ascii_case("kt") || ext.eq_ignore_ascii_case("kts") {
+        "kt"
+    } else if ext.eq_ignore_ascii_case("swift") {
+        "swift"
+    } else if ext.eq_ignore_ascii_case("dart") {
+        "dart"
+    } else if ext.eq_ignore_ascii_case("php")
+        || ext.eq_ignore_ascii_case("phtml")
+        || ext.eq_ignore_ascii_case("php3")
+        || ext.eq_ignore_ascii_case("php4")
+        || ext.eq_ignore_ascii_case("php5")
+        || ext.eq_ignore_ascii_case("php8")
+    {
+        "php"
+    } else if ext.eq_ignore_ascii_case("properties") {
+        "properties"
+    } else if ext.eq_ignore_ascii_case("xml") {
+        "xml"
+    } else if ext.eq_ignore_ascii_case("gradle") {
+        "gradle"
+    } else if ext.eq_ignore_ascii_case("c")
+        || ext.eq_ignore_ascii_case("h")
+        || ext.eq_ignore_ascii_case("cc")
+        || ext.eq_ignore_ascii_case("cpp")
+        || ext.eq_ignore_ascii_case("cxx")
+        || ext.eq_ignore_ascii_case("hh")
+        || ext.eq_ignore_ascii_case("hpp")
+        || ext.eq_ignore_ascii_case("hxx")
+    {
+        "h"
+    } else if ext.eq_ignore_ascii_case("js") || ext.eq_ignore_ascii_case("jsx") {
+        "js"
+    } else {
+        "ts"
+    }
+}
+
+fn has_known_module_suffix(path: &str) -> bool {
+    path.ends_with(".ts")
+        || path.ends_with(".tsx")
+        || path.ends_with(".js")
+        || path.ends_with(".jsx")
+        || path.ends_with(".mjs")
+        || path.ends_with(".cjs")
+        || path.ends_with(".mts")
+        || path.ends_with(".cts")
+        || path.ends_with(".vue")
+        || path.ends_with(".java")
+        || path.ends_with(".rs")
+        || path.ends_with(".yaml")
+        || path.ends_with(".yml")
+        || path.ends_with(".json")
+        || path.ends_with(".py")
+        || path.ends_with(".go")
+        || path.ends_with(".cs")
+        || path.ends_with(".kt")
+        || path.ends_with(".kts")
+        || path.ends_with(".swift")
+        || path.ends_with(".dart")
+        || path.ends_with(".php")
+        || path.ends_with(".phtml")
+        || path.ends_with(".xml")
+        || path.ends_with(".properties")
+        || path.ends_with(".gradle")
+        || path.ends_with(".c")
+        || path.ends_with(".h")
+        || path.ends_with(".cc")
+        || path.ends_with(".cpp")
+        || path.ends_with(".cxx")
+        || path.ends_with(".hh")
+        || path.ends_with(".hpp")
+        || path.ends_with(".hxx")
+        || path.ends_with("/index.ts")
+        || path.ends_with("/index.tsx")
+        || path.ends_with("/index.js")
+        || path.ends_with("/index.jsx")
+        || path.ends_with("/index.mjs")
+        || path.ends_with("/index.cjs")
+        || path.ends_with("/index.vue")
+        || path.ends_with("/index.yaml")
+        || path.ends_with("/index.yml")
+        || path.ends_with("/index.json")
+        || path.ends_with("/index.py")
+        || path.ends_with("/index.go")
+        || path.ends_with("/index.cs")
+        || path.ends_with("/index.kt")
+        || path.ends_with("/index.php")
+        || path.ends_with("/index.xml")
+}
+
+fn resolve_import_path(current_dir: &str, import_path: &str, relative_path: &str) -> String {
     if import_path.starts_with('.') {
         let mut parts: Vec<&str> = if !current_dir.is_empty() {
             current_dir.split('/').collect()
@@ -220,24 +1838,83 @@ fn resolve_import_path(current_dir: &str, import_path: &str) -> String {
 
         for component in import_path.split('/') {
             match component {
-                ".." => { parts.pop(); }
+                ".." => {
+                    parts.pop();
+                }
                 "." => {}
                 name => parts.push(name),
             }
         }
 
         let mut resolved = parts.join("/");
-        if !resolved.ends_with(".ts")
-            && !resolved.ends_with(".tsx")
-            && !resolved.ends_with(".js")
-            && !resolved.ends_with(".jsx")
-            && !resolved.ends_with("/index.ts")
-            && !resolved.ends_with("/index.tsx")
-        {
-            resolved = format!("{resolved}.ts");
+        if !has_known_module_suffix(&resolved) {
+            let ext = importer_default_extension(relative_path);
+            resolved = format!("{resolved}.{ext}");
         }
         resolved
     } else {
         import_path.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn java_qualified_to_path_simple() {
+        assert_eq!(
+            java_qualified_to_relative_path("java.util.List"),
+            Some("java/util/List.java".into())
+        );
+    }
+
+    #[test]
+    fn java_qualified_static_method_trailing_segment() {
+        assert_eq!(
+            java_qualified_to_relative_path("java.util.Collections.emptyList"),
+            Some("java/util/Collections.java".into())
+        );
+    }
+
+    #[test]
+    fn java_qualified_inner_class_segments() {
+        assert_eq!(
+            java_qualified_to_relative_path("java.util.Map.Entry"),
+            Some("java/util/Map.java".into())
+        );
+    }
+
+    #[test]
+    fn java_wildcard_import_none() {
+        assert_eq!(java_qualified_to_relative_path("java.util.*"), None);
+    }
+
+    #[test]
+    fn byte_offset_line_counts_leading_newlines_only() {
+        let s = "a\nb\nc";
+        assert_eq!(byte_offset_to_line_number(s, 0), 0);
+        assert_eq!(byte_offset_to_line_number(s, 2), 1);
+        assert_eq!(byte_offset_to_line_number(s, 4), 2);
+    }
+
+    #[test]
+    fn php_qualified_to_path_controller() {
+        assert_eq!(
+            php_qualified_to_path(r"App\Http\Controllers\FooController"),
+            Some("App/Http/Controllers/FooController.php".into())
+        );
+    }
+
+    #[test]
+    fn spring_classpath_resolves_under_maven_resources() {
+        let p = spring_resolve_config_import_token(
+            "svc/src/main/resources/application.properties",
+            "classpath:config/extra.yml",
+        );
+        assert_eq!(
+            p.as_deref(),
+            Some("svc/src/main/resources/config/extra.yml")
+        );
     }
 }

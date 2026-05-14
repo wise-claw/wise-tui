@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  CodeGraphSubgraphHopDepth,
   CodeGraphSubgraphRequest,
   CodeGraphSubgraphResponse,
   CodeGraphReindexRequest,
@@ -48,8 +49,8 @@ export async function getCodeGraphMultiSubgraph(
   repositoryIds: number[],
   options?: {
     focusNodeId?: string;
-    /** 不传或 `undefined`：不限制跳数；`1`–`3`：限制 BFS 深度 */
-    hop?: 1 | 2 | 3;
+    /** 不传或 `undefined`：不限制跳数；`1`–`10`：限制 BFS 深度 */
+    hop?: CodeGraphSubgraphHopDepth;
     includeCrossRepoEdges?: boolean;
   },
 ): Promise<CodeGraphSubgraphResponse> {

@@ -1,5 +1,6 @@
 pub mod types;
 pub mod storage;
+pub mod index_extensions;
 pub mod indexer;
 pub mod tree_sitter_parser;
 pub mod subgraph;
@@ -27,6 +28,7 @@ pub fn get_code_graph_subgraph(
         req.focus_node_id.as_deref(),
         req.hop,
         req.node_type_filter.as_ref().map(|f| f.as_slice()),
+        req.direction,
     )
 }
 
@@ -335,6 +337,7 @@ pub fn get_code_graph_multi_subgraph(
             *repo_id,
             focus_node_id.as_deref(),
             hop_opt,
+            None,
             None,
         )?;
         max_total_edges += result.meta.total_edge_hint.unwrap_or(0);

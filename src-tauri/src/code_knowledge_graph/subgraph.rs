@@ -1,7 +1,9 @@
 use std::collections::HashSet;
 use rusqlite::OptionalExtension;
 
-use crate::code_knowledge_graph::types::{CodeGraphSubgraphResponse, GraphEdge, GraphMeta, GraphNode, GraphPosition, GraphRange};
+use crate::code_knowledge_graph::types::{
+    CodeGraphSubgraphDirection, CodeGraphSubgraphResponse, GraphEdge, GraphMeta, GraphNode, GraphPosition, GraphRange,
+};
 
 pub fn query_subgraph(
     conn: &rusqlite::Connection,
@@ -9,12 +11,14 @@ pub fn query_subgraph(
     focus_node_id: Option<&str>,
     hop: Option<u8>,
     node_type_filter: Option<&[String]>,
+    direction: Option<CodeGraphSubgraphDirection>,
 ) -> Result<CodeGraphSubgraphResponse, String> {
+    let dir = direction.unwrap_or(CodeGraphSubgraphDirection::Both);
     // `None` = 不限制深度，展开从焦点可达的全部子图（仍受 MAX_NODES 截断）
     let hop_cap: u32 = match hop {
         None => u32::MAX,
         Some(0) => 1,
-        Some(h) => (h as u32).clamp(1, 3),
+        Some(h) => (h as u32).clamp(1, 10),
     };
 
     let total_edge_hint: i64 = conn
@@ -48,51 +52,55 @@ pub fn query_subgraph(
         }
         visited_nodes.insert(node_id.clone());
 
-        // Collect outgoing edges
-        let edges = conn
-            .prepare(
-                "SELECT e.id, e.source_id, e.target_id FROM graph_edges e WHERE e.source_id = ?1",
-            )
-            .map_err(|e| e.to_string())?
-            .query_map(rusqlite::params![&node_id], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                ))
-            })
-            .map_err(|e| e.to_string())?
-            .filter_map(|r| r.ok())
-            .collect::<Vec<_>>();
+        if matches!(dir, CodeGraphSubgraphDirection::Both | CodeGraphSubgraphDirection::Downstream) {
+            // Collect outgoing edges
+            let edges = conn
+                .prepare(
+                    "SELECT e.id, e.source_id, e.target_id FROM graph_edges e WHERE e.source_id = ?1",
+                )
+                .map_err(|e| e.to_string())?
+                .query_map(rusqlite::params![&node_id], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                })
+                .map_err(|e| e.to_string())?
+                .filter_map(|r| r.ok())
+                .collect::<Vec<_>>();
 
-        for (edge_id, _source, target) in &edges {
-            visited_edges.insert(edge_id.clone());
-            if !visited_nodes.contains(target) {
-                queue.push((target.clone(), current_hop.saturating_add(1)));
+            for (edge_id, _source, target) in &edges {
+                visited_edges.insert(edge_id.clone());
+                if !visited_nodes.contains(target) {
+                    queue.push((target.clone(), current_hop.saturating_add(1)));
+                }
             }
         }
 
-        // Collect incoming edges
-        let edges = conn
-            .prepare(
-                "SELECT e.id, e.source_id, e.target_id FROM graph_edges e WHERE e.target_id = ?1",
-            )
-            .map_err(|e| e.to_string())?
-            .query_map(rusqlite::params![&node_id], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                ))
-            })
-            .map_err(|e| e.to_string())?
-            .filter_map(|r| r.ok())
-            .collect::<Vec<_>>();
+        if matches!(dir, CodeGraphSubgraphDirection::Both | CodeGraphSubgraphDirection::Upstream) {
+            // Collect incoming edges
+            let edges = conn
+                .prepare(
+                    "SELECT e.id, e.source_id, e.target_id FROM graph_edges e WHERE e.target_id = ?1",
+                )
+                .map_err(|e| e.to_string())?
+                .query_map(rusqlite::params![&node_id], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                })
+                .map_err(|e| e.to_string())?
+                .filter_map(|r| r.ok())
+                .collect::<Vec<_>>();
 
-        for (edge_id, source, _target) in &edges {
-            visited_edges.insert(edge_id.clone());
-            if !visited_nodes.contains(source) {
-                queue.push((source.clone(), current_hop.saturating_add(1)));
+            for (edge_id, source, _target) in &edges {
+                visited_edges.insert(edge_id.clone());
+                if !visited_nodes.contains(source) {
+                    queue.push((source.clone(), current_hop.saturating_add(1)));
+                }
             }
         }
     }

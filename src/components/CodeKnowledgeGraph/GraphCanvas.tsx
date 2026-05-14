@@ -1,5 +1,15 @@
 import type { GraphNode, CodeGraphSubgraphResponse } from "../../types/codeKnowledgeGraph";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  forwardRef,
+  memo,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   ZoomInOutlined,
   ZoomOutOutlined,
@@ -13,20 +23,56 @@ import { useCodeGraphSigma } from "../../hooks/useCodeGraphSigma";
 import { codeSubgraphToGraphology } from "../../utils/codeGraphSigmaAdapter";
 import "./CodeKnowledgeGraphPanel.css";
 
-interface GraphCanvasProps {
+export interface GraphCanvasHandle {
+  focusNodeById(nodeId: string): void;
+}
+
+export interface GraphCanvasProps {
   data: CodeGraphSubgraphResponse | null;
   onNodeClick?: (node: GraphNode) => void;
   /** Mirrors GitNexus: clearing canvas selection updates app state */
   onStageClick?: () => void;
   /** Current inspector / app selection — drives Focus control and sync after `setGraph` */
   selectedNode?: GraphNode | null;
+  /** 与工具栏子图跳数文案一致（如「3 跳」「全部」） */
+  subgraphHopLabel?: string;
+  /** 以当前选中节点为焦点，仅沿入边按当前跳数展开子图 */
+  onSubgraphRollUp?: () => void;
+  /** 以当前选中节点为焦点，仅沿出边按当前跳数展开子图 */
+  onSubgraphDrillDown?: () => void;
 }
 
-export function GraphCanvas({ data, onNodeClick, onStageClick, selectedNode }: GraphCanvasProps) {
+function graphCanvasPropsEqual(prev: GraphCanvasProps, next: GraphCanvasProps): boolean {
+  return (
+    prev.data === next.data &&
+    prev.selectedNode?.id === next.selectedNode?.id &&
+    prev.onNodeClick === next.onNodeClick &&
+    prev.onStageClick === next.onStageClick &&
+    prev.subgraphHopLabel === next.subgraphHopLabel &&
+    prev.onSubgraphRollUp === next.onSubgraphRollUp &&
+    prev.onSubgraphDrillDown === next.onSubgraphDrillDown
+  );
+}
+
+const GraphCanvasInner = forwardRef<GraphCanvasHandle, GraphCanvasProps>(function GraphCanvasInner(
+  {
+    data,
+    onNodeClick,
+    onStageClick,
+    selectedNode,
+    subgraphHopLabel = "当前范围",
+    onSubgraphRollUp,
+    onSubgraphDrillDown,
+  },
+  ref,
+) {
   const nodeById = useMemo(() => {
     if (!data) return new Map<string, GraphNode>();
     return new Map(data.nodes.map((n) => [n.id, n]));
   }, [data]);
+
+  const nodeByIdRef = useRef(nodeById);
+  nodeByIdRef.current = nodeById;
 
   const handleNodeClick = useCallback(
     (nodeId: string) => {
@@ -38,8 +84,19 @@ export function GraphCanvas({ data, onNodeClick, onStageClick, selectedNode }: G
 
   const [hoveredLabel, setHoveredLabel] = useState<string | null>(null);
 
+  const hoverNodeIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    hoverNodeIdRef.current = null;
+    setHoveredLabel(null);
+  }, [data]);
+
   const handleNodeHover = useCallback(
     (nodeId: string | null) => {
+      if (hoverNodeIdRef.current === nodeId) {
+        return;
+      }
+      hoverNodeIdRef.current = nodeId;
       if (!nodeId || !data) {
         setHoveredLabel(null);
         return;
@@ -69,6 +126,17 @@ export function GraphCanvas({ data, onNodeClick, onStageClick, selectedNode }: G
     onNodeHover: handleNodeHover,
     onStageClick,
   });
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      focusNodeById: (nodeId: string) => {
+        if (!nodeByIdRef.current.has(nodeId)) return;
+        focusNode(nodeId);
+      },
+    }),
+    [focusNode],
+  );
 
   useEffect(() => {
     if (!sigmaReady || !data || data.nodes.length === 0) return;
@@ -118,6 +186,26 @@ export function GraphCanvas({ data, onNodeClick, onStageClick, selectedNode }: G
           <span className="app-graph-selection-dot" />
           <span className="app-graph-hover-chip-text">{selectedNode.label}</span>
           <span className="app-graph-selection-kind">({selectedNode.kind})</span>
+          {onSubgraphRollUp && onSubgraphDrillDown && (
+            <div className="app-graph-selection-nav-group">
+              <button
+                type="button"
+                className="app-graph-selection-nav"
+                title={`上卷：以当前节点为焦点，仅沿入边展开 ${subgraphHopLabel}（与工具栏「范围」一致）`}
+                onClick={onSubgraphRollUp}
+              >
+                上卷
+              </button>
+              <button
+                type="button"
+                className="app-graph-selection-nav"
+                title={`下钻：以当前节点为焦点，仅沿出边展开 ${subgraphHopLabel}（与工具栏「范围」一致）`}
+                onClick={onSubgraphDrillDown}
+              >
+                下钻
+              </button>
+            </div>
+          )}
           <button type="button" className="app-graph-selection-clear" onClick={handleClearSelection}>
             清除
           </button>
@@ -169,7 +257,9 @@ export function GraphCanvas({ data, onNodeClick, onStageClick, selectedNode }: G
       )}
     </div>
   );
-}
+});
+
+export const GraphCanvas = memo(GraphCanvasInner, graphCanvasPropsEqual);
 
 function ControlBtn({
   children,

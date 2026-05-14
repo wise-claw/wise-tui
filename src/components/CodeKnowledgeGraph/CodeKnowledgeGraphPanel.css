@@ -18,6 +18,13 @@
   margin-bottom: 8px;
 }
 
+.app-code-graph-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
 .app-code-graph-subgraph-toolbar {
   flex-shrink: 0;
   display: flex;
@@ -29,9 +36,125 @@
   background: var(--ant-color-bg-container);
 }
 
+.app-code-graph-subgraph-toolbar--header {
+  flex: 1 1 280px;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.app-code-graph-subgraph-toolbar-spacer {
+  flex: 1;
+  min-width: 8px;
+}
+
+.app-code-graph-hop-select {
+  min-width: 108px;
+}
+
+.app-code-graph-node-search {
+  min-width: 200px !important;
+  max-width: 360px;
+  flex: 1 1 220px;
+}
+
+.app-code-graph-search-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.25;
+  max-width: 420px;
+  overflow: hidden;
+}
+
+.app-code-graph-search-option-title {
+  font-size: 13px;
+  color: var(--ant-color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-code-graph-search-option-meta {
+  font-size: 11px;
+  color: var(--ant-color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .app-code-graph-subgraph-toolbar-label {
   font-size: 12px;
   white-space: nowrap;
+}
+
+/* 图谱侧栏：紧凑详情 + 与 Descriptions 对齐的密度 */
+.app-code-graph-inspector {
+  padding: 10px 12px;
+  font-size: 12px;
+}
+
+.app-code-graph-inspector--empty {
+  padding: 20px 12px;
+  text-align: center;
+}
+
+.app-code-graph-inspector-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.app-code-graph-inspector-icon {
+  font-size: 16px;
+  color: var(--ant-color-primary);
+  margin-top: 1px;
+  flex-shrink: 0;
+}
+
+.app-code-graph-inspector-title-block {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.app-code-graph-inspector-title {
+  font-size: 13px;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.app-code-graph-inspector-kind-tag {
+  margin-inline-end: 0 !important;
+}
+
+.app-code-graph-inspector-open-btn {
+  margin-bottom: 8px;
+}
+
+.app-code-graph-inspector-desc {
+  margin-bottom: 0;
+}
+
+.app-code-graph-inspector-desc .ant-descriptions-view > table {
+  table-layout: fixed;
+}
+
+.app-code-graph-inspector-id {
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.app-code-graph-inspector-expand-link {
+  margin-top: 6px;
+  padding: 0;
+  height: auto;
+  font-size: 12px;
 }
 
 .app-code-graph-content {
@@ -43,6 +166,17 @@
   justify-content: flex-start;
   overflow: hidden;
   padding: 0;
+}
+
+/** 占满内容区剩余高度，将 Spin 置于正中（初始加载 / 子图加载） */
+.app-code-graph-centered-loading {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
 }
 
 /* 空状态 / 加载仍居中，不占满图谱时的留白 */
@@ -145,6 +279,29 @@
 .app-graph-selection-kind {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.45);
+}
+
+.app-graph-selection-nav-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 2px;
+}
+
+.app-graph-selection-nav {
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: #e4e4ed;
+  font-size: 12px;
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  pointer-events: auto;
+  white-space: nowrap;
+}
+
+.app-graph-selection-nav:hover {
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .app-graph-selection-dot {

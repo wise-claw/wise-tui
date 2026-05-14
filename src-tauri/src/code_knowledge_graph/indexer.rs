@@ -5,7 +5,7 @@ use crate::code_knowledge_graph::storage as graph_storage;
 use crate::code_knowledge_graph::tree_sitter_parser;
 
 pub const IGNORED_DIRS: &[&str] = &[".git", "node_modules", "dist", "build", ".trellis", ".claude", "target", "__pycache__"];
-pub const SUPPORTED_EXTENSIONS: &[&str] = &["ts", "tsx", "js", "jsx"];
+pub use super::index_extensions::SUPPORTED_EXTENSIONS;
 
 pub struct IndexResult {
     pub total_nodes: usize,

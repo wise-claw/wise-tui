@@ -1,5 +1,15 @@
 use serde::{Deserialize, Serialize};
 
+/// 子图 BFS 沿边的方向：双向（默认）、仅沿入边（上卷）、仅沿出边（下钻）。
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum CodeGraphSubgraphDirection {
+    #[default]
+    Both,
+    Upstream,
+    Downstream,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodeGraphSubgraphRequest {
@@ -10,6 +20,8 @@ pub struct CodeGraphSubgraphRequest {
     pub hop: Option<u8>,
     #[serde(default)]
     pub node_type_filter: Option<Vec<String>>,
+    #[serde(default)]
+    pub direction: Option<CodeGraphSubgraphDirection>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
