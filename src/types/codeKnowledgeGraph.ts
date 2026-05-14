@@ -51,7 +51,7 @@ export interface GraphMeta {
   errors?: ParseError[];
 }
 
-/** 子图 BFS 深度上限（与后端 `subgraph::query_subgraph` 一致，1–10） */
+/** 子图层数选项（与后端一致：1 层仅焦点，L 层含 outward 代价 ≤ L−1） */
 export type CodeGraphSubgraphHopDepth = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
 
 /** 与后端 `CodeGraphSubgraphDirection` 一致：双向、仅入边（上卷）、仅出边（下钻） */
@@ -68,7 +68,7 @@ export interface CodeGraphNodeSearchRequest {
 export interface CodeGraphSubgraphRequest {
   repositoryId: number;
   focusNodeId?: string;
-  /** 省略或 `undefined`：不限制跳数，展开焦点可达的全部子图；`1`–`10`：限制 BFS 深度 */
+  /** 省略或 `undefined`：不限制层数，展开焦点可达的全部子图；`1`–`10`：子图层数（1 层仅焦点） */
   hop?: CodeGraphSubgraphHopDepth;
   nodeTypeFilter?: string[];
   /** 省略：双向 BFS；`upstream` / `downstream` 仅沿入边或出边扩展 */

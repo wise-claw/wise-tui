@@ -12,7 +12,7 @@ export type SubgraphHopScope = "all" | CodeGraphSubgraphHopDepth;
 export const HOP_SELECT_OPTIONS: { label: string; value: SubgraphHopScope }[] = [
   { label: "全部", value: "all" },
   ...([1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const).map((n) => ({
-    label: `${n} 跳`,
+    label: `${n} 层`,
     value: n,
   })),
 ];
@@ -24,7 +24,7 @@ interface Props {
   selectedNode: GraphNode | null;
   onSelectNode: (node: GraphNode) => void;
   onStageClick: () => void;
-  /** 与工具栏「范围」一致，用于浮层按钮提示 */
+  /** 与工具栏「范围」一致，用于浮层按钮提示（层数） */
   subgraphHopLabel: string;
   onSubgraphRollUp: () => void;
   onSubgraphDrillDown: () => void;

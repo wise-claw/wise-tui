@@ -8,6 +8,7 @@ import {
 import { Modal, Popover, Tooltip } from "antd";
 import type { MouseEvent, ReactNode } from "react";
 import { useCallback, useMemo, useState } from "react";
+import { CodeGraphAssociationIcon } from "./CodeGraphAssociationIcon";
 
 export interface CodeGraphRepositoryMenuItem {
   id: number;
@@ -21,6 +22,10 @@ interface Props {
   activeRepositoryId: number | null;
   /** 当前选中仓库是否已建立图谱索引（仅影响触发器上的状态点） */
   activeRepositoryIndexed?: boolean;
+  /**
+   * 当主画布为「多仓合并子图」时，用于触发器主文案（如 `(a + b)`），避免仍显示单仓名导致误以为未切换。
+   */
+  graphScopeTriggerLabel?: string | null;
   onSelectRepository?: (repoId: number) => void;
   /** 为指定仓库提交图谱重建（可与当前选中仓库不同） */
   onReindexRepository?: (repoId: number) => void | Promise<void>;
@@ -28,6 +33,12 @@ interface Props {
   onRemoveRepository?: (repoId: number) => void | Promise<void>;
   /** 与侧栏「添加游离仓库」一致：选目录并注册 */
   onOpenAddRepository?: () => void | Promise<void>;
+  /** 当前多仓合并范围展示，如 (vocs-web + crewAI)；为 null 时不显示 */
+  associationScopeDisplay?: string | null;
+  /** 点击后关闭菜单并刷新主区，查看该范围内的多仓合并图谱 */
+  onViewMergedGraph?: () => void;
+  /** 未就绪时禁用（如当前仓未索引） */
+  associationScopeDisabled?: boolean;
   disabled?: boolean;
 }
 
@@ -35,10 +46,14 @@ export function CodeGraphRepositoryPopover({
   repositories,
   activeRepositoryId,
   activeRepositoryIndexed = false,
+  graphScopeTriggerLabel = null,
   onSelectRepository,
   onReindexRepository,
   onRemoveRepository,
   onOpenAddRepository,
+  associationScopeDisplay = null,
+  onViewMergedGraph,
+  associationScopeDisabled = false,
   disabled = false,
 }: Props) {
   const [open, setOpen] = useState(false);
@@ -48,7 +63,8 @@ export function CodeGraphRepositoryPopover({
     [repositories, activeRepositoryId],
   );
 
-  const triggerLabel = activeRepo?.name ?? "选择仓库";
+  const triggerLabel =
+    graphScopeTriggerLabel?.trim() || activeRepo?.name || "选择仓库";
 
   const close = useCallback(() => setOpen(false), []);
 
@@ -152,6 +168,32 @@ export function CodeGraphRepositoryPopover({
           );
         })}
       </ul>
+      {associationScopeDisplay && onViewMergedGraph ? (
+        <button
+          type="button"
+          className={`app-code-graph-repo-dropdown-assoc-row${associationScopeDisabled ? " app-code-graph-repo-dropdown-assoc-row--disabled" : ""}`}
+          disabled={associationScopeDisabled}
+          title={
+            associationScopeDisabled
+              ? "请先完成当前仓库图谱索引"
+              : "查看多仓库合并图谱（按当前关联范围刷新画布）"
+          }
+          aria-label={`查看多仓合并图谱 ${associationScopeDisplay}`}
+          onMouseDown={(e) => {
+            // 避免 Popover 在 mousedown 阶段抢焦点导致 click 未触发（Ant Design 下拉内按钮常见坑）
+            e.preventDefault();
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (associationScopeDisabled) return;
+            onViewMergedGraph();
+            close();
+          }}
+        >
+          <CodeGraphAssociationIcon className="app-code-graph-repo-dropdown-assoc-icon" aria-hidden />
+          <span className="app-code-graph-repo-dropdown-assoc-label">{associationScopeDisplay}</span>
+        </button>
+      ) : null}
       {onOpenAddRepository ? (
         <button type="button" className="app-code-graph-repo-dropdown-footer" onClick={handleAdd}>
           <BulbOutlined className="app-code-graph-repo-dropdown-footer-icon" aria-hidden />

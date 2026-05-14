@@ -34,24 +34,12 @@ export interface GraphCanvasProps {
   onStageClick?: () => void;
   /** Current inspector / app selection — drives Focus control and sync after `setGraph` */
   selectedNode?: GraphNode | null;
-  /** 与工具栏子图跳数文案一致（如「3 跳」「全部」） */
+  /** 与工具栏子图层数文案一致（如「3 层」「全部」） */
   subgraphHopLabel?: string;
-  /** 以当前选中节点为焦点，仅沿入边按当前跳数展开子图 */
+  /** 以当前选中节点为焦点，仅沿入边按当前层数展开子图 */
   onSubgraphRollUp?: () => void;
-  /** 以当前选中节点为焦点，仅沿出边按当前跳数展开子图 */
+  /** 以当前选中节点为焦点，仅沿出边按当前层数展开子图 */
   onSubgraphDrillDown?: () => void;
-}
-
-function graphCanvasPropsEqual(prev: GraphCanvasProps, next: GraphCanvasProps): boolean {
-  return (
-    prev.data === next.data &&
-    prev.selectedNode?.id === next.selectedNode?.id &&
-    prev.onNodeClick === next.onNodeClick &&
-    prev.onStageClick === next.onStageClick &&
-    prev.subgraphHopLabel === next.subgraphHopLabel &&
-    prev.onSubgraphRollUp === next.onSubgraphRollUp &&
-    prev.onSubgraphDrillDown === next.onSubgraphDrillDown
-  );
 }
 
 const GraphCanvasInner = forwardRef<GraphCanvasHandle, GraphCanvasProps>(function GraphCanvasInner(
@@ -82,31 +70,6 @@ const GraphCanvasInner = forwardRef<GraphCanvasHandle, GraphCanvasProps>(functio
     [nodeById, onNodeClick],
   );
 
-  const [hoveredLabel, setHoveredLabel] = useState<string | null>(null);
-
-  const hoverNodeIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    hoverNodeIdRef.current = null;
-    setHoveredLabel(null);
-  }, [data]);
-
-  const handleNodeHover = useCallback(
-    (nodeId: string | null) => {
-      if (hoverNodeIdRef.current === nodeId) {
-        return;
-      }
-      hoverNodeIdRef.current = nodeId;
-      if (!nodeId || !data) {
-        setHoveredLabel(null);
-        return;
-      }
-      const node = nodeById.get(nodeId);
-      setHoveredLabel(node?.label ?? null);
-    },
-    [data, nodeById],
-  );
-
   const {
     containerRef,
     sigmaRef,
@@ -123,7 +86,6 @@ const GraphCanvasInner = forwardRef<GraphCanvasHandle, GraphCanvasProps>(functio
     setSelectedNode: setSigmaSelectedNode,
   } = useCodeGraphSigma({
     onNodeClick: handleNodeClick,
-    onNodeHover: handleNodeHover,
     onStageClick,
   });
 
@@ -174,12 +136,6 @@ const GraphCanvasInner = forwardRef<GraphCanvasHandle, GraphCanvasProps>(functio
       <div className="app-graph-canvas-gradient" aria-hidden />
 
       <div ref={containerRef} className="sigma-container app-graph-sigma-host" />
-
-      {hoveredLabel && !sigmaSelectedId && (
-        <div className="app-graph-hover-chip">
-          <span className="app-graph-hover-chip-text">{hoveredLabel}</span>
-        </div>
-      )}
 
       {sigmaSelectedId && selectedNode && (
         <div className="app-graph-selection-chip">
@@ -259,7 +215,8 @@ const GraphCanvasInner = forwardRef<GraphCanvasHandle, GraphCanvasProps>(functio
   );
 });
 
-export const GraphCanvas = memo(GraphCanvasInner, graphCanvasPropsEqual);
+/** 默认浅比较：`data` 每次子图请求均为新引用：勿再用仅 `prev.data === next.data` 的自定义 equal，否则范围切换后可能不触发 `setGraph`。 */
+export const GraphCanvas = memo(GraphCanvasInner);
 
 function ControlBtn({
   children,

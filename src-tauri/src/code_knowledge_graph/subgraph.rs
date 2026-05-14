@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet, VecDeque};
 use rusqlite::OptionalExtension;
 
 use crate::code_knowledge_graph::types::{
@@ -14,11 +14,15 @@ pub fn query_subgraph(
     direction: Option<CodeGraphSubgraphDirection>,
 ) -> Result<CodeGraphSubgraphResponse, String> {
     let dir = direction.unwrap_or(CodeGraphSubgraphDirection::Both);
-    // `None` = 不限制深度，展开从焦点可达的全部子图（仍受 MAX_NODES 截断）
+    // `hop`（1–10）：用户选择的「层数」——1 层仅含焦点；L 层含焦点及 hop 代价 ≤ L−1 的可达节点
+    //（`contains` 不增加代价，与既有 Maven 目录语义一致）。
+    // 内部 BFS 仅在 `current_hop < hop_cap` 时扩展，故 `hop_cap = layers − 1`（焦点层为 0）。
     let hop_cap: u32 = match hop {
         None => u32::MAX,
-        Some(0) => 1,
-        Some(h) => (h as u32).clamp(1, 10),
+        Some(layers) => {
+            let layers = (layers as u32).clamp(1, 10);
+            layers.saturating_sub(1)
+        }
     };
 
     let total_edge_hint: i64 = conn
@@ -36,27 +40,29 @@ pub fn query_subgraph(
         _ => format!("{repo_id}:repo:root"),
     };
 
-    // BFS to collect subgraph
-    let mut visited_nodes: HashSet<String> = HashSet::new();
+    // BFS（FIFO）+ 每节点最小 hop；`contains` 不增加 hop。
+    // 旧实现用 `Vec::pop`（LIFO）且 `visited` 挡住更优路径，在混合 `contains` 与依赖边时可能截断错误。
+    let mut min_hop: HashMap<String, u32> = HashMap::new();
+    let mut collected: HashSet<String> = HashSet::new();
     let mut visited_edges: HashSet<String> = HashSet::new();
-    let mut queue: Vec<(String, u32)> = vec![(focus_id.clone(), 0)];
+    let mut deque: VecDeque<(String, u32)> = VecDeque::new();
 
-    while let Some((node_id, current_hop)) = queue.pop() {
-        if current_hop >= hop_cap {
-            visited_nodes.insert(node_id);
+    min_hop.insert(focus_id.clone(), 0);
+    deque.push_back((focus_id.clone(), 0));
+
+    while let Some((node_id, hop)) = deque.pop_front() {
+        if min_hop.get(&node_id).copied() != Some(hop) {
             continue;
         }
-
-        if visited_nodes.contains(&node_id) && current_hop > 0 {
+        collected.insert(node_id.clone());
+        if hop >= hop_cap {
             continue;
         }
-        visited_nodes.insert(node_id.clone());
 
         if matches!(dir, CodeGraphSubgraphDirection::Both | CodeGraphSubgraphDirection::Downstream) {
-            // Collect outgoing edges
             let edges = conn
                 .prepare(
-                    "SELECT e.id, e.source_id, e.target_id FROM graph_edges e WHERE e.source_id = ?1",
+                    "SELECT e.id, e.source_id, e.target_id, e.kind FROM graph_edges e WHERE e.source_id = ?1",
                 )
                 .map_err(|e| e.to_string())?
                 .query_map(rusqlite::params![&node_id], |row| {
@@ -64,25 +70,31 @@ pub fn query_subgraph(
                         row.get::<_, String>(0)?,
                         row.get::<_, String>(1)?,
                         row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
                     ))
                 })
                 .map_err(|e| e.to_string())?
                 .filter_map(|r| r.ok())
                 .collect::<Vec<_>>();
 
-            for (edge_id, _source, target) in &edges {
+            for (edge_id, _source, target, kind) in &edges {
                 visited_edges.insert(edge_id.clone());
-                if !visited_nodes.contains(target) {
-                    queue.push((target.clone(), current_hop.saturating_add(1)));
+                let next_hop = hop_after_edge(kind, hop);
+                let improve = match min_hop.get(target) {
+                    None => true,
+                    Some(&old) => next_hop < old,
+                };
+                if improve {
+                    min_hop.insert(target.clone(), next_hop);
+                    deque.push_back((target.clone(), next_hop));
                 }
             }
         }
 
         if matches!(dir, CodeGraphSubgraphDirection::Both | CodeGraphSubgraphDirection::Upstream) {
-            // Collect incoming edges
             let edges = conn
                 .prepare(
-                    "SELECT e.id, e.source_id, e.target_id FROM graph_edges e WHERE e.target_id = ?1",
+                    "SELECT e.id, e.source_id, e.target_id, e.kind FROM graph_edges e WHERE e.target_id = ?1",
                 )
                 .map_err(|e| e.to_string())?
                 .query_map(rusqlite::params![&node_id], |row| {
@@ -90,23 +102,30 @@ pub fn query_subgraph(
                         row.get::<_, String>(0)?,
                         row.get::<_, String>(1)?,
                         row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
                     ))
                 })
                 .map_err(|e| e.to_string())?
                 .filter_map(|r| r.ok())
                 .collect::<Vec<_>>();
 
-            for (edge_id, source, _target) in &edges {
+            for (edge_id, source, _target, kind) in &edges {
                 visited_edges.insert(edge_id.clone());
-                if !visited_nodes.contains(source) {
-                    queue.push((source.clone(), current_hop.saturating_add(1)));
+                let next_hop = hop_after_edge(kind, hop);
+                let improve = match min_hop.get(source) {
+                    None => true,
+                    Some(&old) => next_hop < old,
+                };
+                if improve {
+                    min_hop.insert(source.clone(), next_hop);
+                    deque.push_back((source.clone(), next_hop));
                 }
             }
         }
     }
 
     // Fetch full node data
-    let nodes = fetch_nodes(conn, &visited_nodes)?;
+    let nodes = fetch_nodes(conn, &collected)?;
 
     // Fetch full edge data
     let edges = fetch_edges_data(conn, &visited_edges)?;
@@ -155,6 +174,141 @@ pub fn query_subgraph(
             errors: None,
         },
     })
+}
+
+#[inline]
+fn hop_after_edge(edge_kind: &str, current_hop: u32) -> u32 {
+    if edge_kind == "contains" {
+        current_hop
+    } else {
+        current_hop.saturating_add(1)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{hop_after_edge, query_subgraph};
+    use crate::code_knowledge_graph::types::CodeGraphSubgraphDirection;
+    use rusqlite::Connection;
+    use std::collections::HashSet;
+
+    #[test]
+    fn contains_edges_do_not_consume_hop_budget() {
+        assert_eq!(hop_after_edge("contains", 2), 2);
+        assert_eq!(hop_after_edge("imports", 2), 3);
+    }
+
+    #[test]
+    fn one_graph_layer_is_focus_only() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE graph_nodes (
+              id TEXT PRIMARY KEY, kind TEXT NOT NULL, symbol_kind TEXT, label TEXT NOT NULL,
+              path TEXT NOT NULL, repo_id INTEGER NOT NULL,
+              range_start_line INTEGER, range_start_col INTEGER, range_end_line INTEGER, range_end_col INTEGER,
+              content_hash TEXT, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now'))
+            );
+            CREATE TABLE graph_edges (
+              id TEXT PRIMARY KEY, source_id TEXT NOT NULL, target_id TEXT NOT NULL, kind TEXT NOT NULL,
+              props TEXT DEFAULT '{}', created_at TEXT DEFAULT (datetime('now'))
+            );
+            CREATE TABLE graph_index_meta (
+              repo_id INTEGER PRIMARY KEY, index_version TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'idle',
+              error TEXT, total_nodes INTEGER DEFAULT 0, total_edges INTEGER DEFAULT 0, progress INTEGER DEFAULT 0,
+              updated_at TEXT DEFAULT (datetime('now'))
+            );
+            INSERT INTO graph_index_meta (repo_id, index_version, status) VALUES (1, 't', 'done');
+            INSERT INTO graph_nodes (id, kind, label, path, repo_id) VALUES
+              ('1:A', 'symbol', 'A', 'A', 1), ('1:B', 'symbol', 'B', 'B', 1);
+            INSERT INTO graph_edges (id, source_id, target_id, kind) VALUES
+              ('e1', '1:A', '1:B', 'imports');",
+        )
+        .unwrap();
+        let out = query_subgraph(
+            &conn,
+            1,
+            Some("1:A"),
+            Some(1),
+            None,
+            Some(CodeGraphSubgraphDirection::Downstream),
+        )
+        .unwrap();
+        let ids: std::collections::HashSet<_> = out.nodes.iter().map(|n| n.id.as_str()).collect();
+        assert_eq!(ids, HashSet::from(["1:A"]));
+    }
+
+    /// 先经 `imports` 到达 D 时 hop=2；经 `contains` 再 `imports` 可达 hop=1。
+    /// 旧实现用 visited 挡住更优 hop，会导致 D 的子节点在 hop 预算内不可见。
+    #[test]
+    fn subgraph_prefers_lower_hop_when_revisiting_node() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE graph_nodes (
+              id TEXT PRIMARY KEY,
+              kind TEXT NOT NULL,
+              symbol_kind TEXT,
+              label TEXT NOT NULL,
+              path TEXT NOT NULL,
+              repo_id INTEGER NOT NULL,
+              range_start_line INTEGER,
+              range_start_col INTEGER,
+              range_end_line INTEGER,
+              range_end_col INTEGER,
+              content_hash TEXT,
+              created_at TEXT DEFAULT (datetime('now')),
+              updated_at TEXT DEFAULT (datetime('now'))
+            );
+            CREATE TABLE graph_edges (
+              id TEXT PRIMARY KEY,
+              source_id TEXT NOT NULL,
+              target_id TEXT NOT NULL,
+              kind TEXT NOT NULL,
+              props TEXT DEFAULT '{}',
+              created_at TEXT DEFAULT (datetime('now'))
+            );
+            CREATE TABLE graph_index_meta (
+              repo_id INTEGER PRIMARY KEY,
+              index_version TEXT NOT NULL,
+              status TEXT NOT NULL DEFAULT 'idle',
+              error TEXT,
+              total_nodes INTEGER DEFAULT 0,
+              total_edges INTEGER DEFAULT 0,
+              progress INTEGER DEFAULT 0,
+              updated_at TEXT DEFAULT (datetime('now'))
+            );
+            INSERT INTO graph_index_meta (repo_id, index_version, status)
+            VALUES (1, 't', 'done');
+            INSERT INTO graph_nodes (id, kind, label, path, repo_id) VALUES
+              ('1:A', 'symbol', 'A', 'A', 1),
+              ('1:B', 'symbol', 'B', 'B', 1),
+              ('1:C', 'symbol', 'C', 'C', 1),
+              ('1:D', 'symbol', 'D', 'D', 1),
+              ('1:E', 'symbol', 'E', 'E', 1);
+            INSERT INTO graph_edges (id, source_id, target_id, kind) VALUES
+              ('e1', '1:A', '1:B', 'imports'),
+              ('e2', '1:A', '1:C', 'contains'),
+              ('e3', '1:B', '1:D', 'imports'),
+              ('e4', '1:C', '1:D', 'imports'),
+              ('e5', '1:D', '1:E', 'imports');",
+        )
+        .unwrap();
+
+        let out = query_subgraph(
+            &conn,
+            1,
+            Some("1:A"),
+            Some(3),
+            None,
+            Some(CodeGraphSubgraphDirection::Downstream),
+        )
+        .unwrap();
+        let ids: std::collections::HashSet<_> = out.nodes.iter().map(|n| n.id.as_str()).collect();
+        assert!(
+            ids.contains("1:E"),
+            "expected cheaper path A-contains-C-imports-D-imports-E within 3 layers (hop_cap=2); got {:?}",
+            ids
+        );
+    }
 }
 
 fn fetch_nodes(conn: &rusqlite::Connection, ids: &HashSet<String>) -> Result<Vec<GraphNode>, String> {

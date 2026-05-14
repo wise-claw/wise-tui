@@ -288,33 +288,9 @@ export function useCodeGraphSigma(options: UseCodeGraphSigmaOptions = {}): UseCo
         edgeProgramClasses: {
           curved: EdgeCurveProgram,
         },
-        defaultDrawNodeHover: (context, data, settings) => {
-          const label = data.label;
-          if (!label) return;
-          const size = settings.labelSize || 11;
-          const font = settings.labelFont || "JetBrains Mono, monospace";
-          const weight = settings.labelWeight || "500";
-          context.font = `${weight} ${size}px ${font}`;
-          const textWidth = context.measureText(label).width;
+        // 仅描边高亮：不在画布上再画一遍标签（与 Sigma 自带 label 叠双框，且会触发整图观感「跳」）
+        defaultDrawNodeHover: (context, data) => {
           const nodeSize = data.size || 8;
-          const x = data.x;
-          const y = data.y - nodeSize - 10;
-          const paddingX = 8;
-          const paddingY = 5;
-          const height = size + paddingY * 2;
-          const width = textWidth + paddingX * 2;
-          const radius = 4;
-          context.fillStyle = "#12121c";
-          context.beginPath();
-          context.roundRect(x - width / 2, y - height / 2, width, height, radius);
-          context.fill();
-          context.strokeStyle = data.color || "#6366f1";
-          context.lineWidth = 2;
-          context.stroke();
-          context.fillStyle = "#f5f5f7";
-          context.textAlign = "center";
-          context.textBaseline = "middle";
-          context.fillText(label, x, y);
           context.beginPath();
           context.arc(data.x, data.y, nodeSize + 4, 0, Math.PI * 2);
           context.strokeStyle = data.color || "#6366f1";

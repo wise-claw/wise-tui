@@ -1,3 +1,6 @@
+use std::collections::HashSet;
+use std::path::Path;
+
 use sha2::{Digest, Sha256};
 use walkdir::WalkDir;
 
@@ -6,6 +9,35 @@ use crate::code_knowledge_graph::tree_sitter_parser;
 
 pub const IGNORED_DIRS: &[&str] = &[".git", "node_modules", "dist", "build", ".trellis", ".claude", "target", "__pycache__"];
 pub use super::index_extensions::SUPPORTED_EXTENSIONS;
+
+/// All repo-relative paths (forward slashes) for extensions we index — used for TS/JS import resolution
+/// against the real file set (GitNexus `tryResolveWithExtensions` parity).
+pub(crate) fn collect_supported_repo_relative_paths(repo_root: &Path) -> Result<HashSet<String>, String> {
+    let mut out = HashSet::new();
+    for entry in WalkDir::new(repo_root).into_iter().filter_entry(|e| {
+        e.file_name()
+            .to_str()
+            .map(|s| !IGNORED_DIRS.contains(&s))
+            .unwrap_or(false)
+    }) {
+        let entry = entry.map_err(|e| e.to_string())?;
+        if !entry.path().is_file() {
+            continue;
+        }
+        let ext = entry.path().extension().and_then(|e| e.to_str()).unwrap_or("");
+        if !SUPPORTED_EXTENSIONS.contains(&ext) {
+            continue;
+        }
+        let relative = entry
+            .path()
+            .strip_prefix(repo_root)
+            .map_err(|e| e.to_string())?
+            .to_string_lossy()
+            .replace('\\', "/");
+        out.insert(relative);
+    }
+    Ok(out)
+}
 
 pub struct IndexResult {
     pub total_nodes: usize,
@@ -20,29 +52,43 @@ pub fn index_repository(
     conn: &rusqlite::Connection,
     repo_path: &str,
     repo_id: i64,
+    repo_root_label: &str,
 ) -> Result<IndexResult, String> {
     // Resolve to absolute, canonicalized path
     let repo_path = std::path::Path::new(repo_path)
         .canonicalize()
         .map_err(|e| format!("Cannot resolve repository path '{}': {}", repo_path, e))?;
     let repo_path_str = repo_path.to_string_lossy().to_string();
-    eprintln!("[code-graph] indexing repo: repo_id={}, resolved_path={}", repo_id, repo_path_str);
-
-    // Verify it's a directory
     if !repo_path.is_dir() {
         return Err(format!("Repository path '{}' is not a directory", repo_path_str));
     }
+
+    eprintln!("[code-graph] indexing repo: repo_id={}, resolved_path={}", repo_id, repo_path_str);
+
+    let repo_files = collect_supported_repo_relative_paths(&repo_path)?;
+    let tsconfig_paths = crate::code_knowledge_graph::tsconfig_paths::load_tsconfig_paths(&repo_path);
+    let mut ts_parser = tree_sitter_parser::Parser::with_index_context(repo_files, tsconfig_paths);
 
     // Clear existing graph data for this repo
     graph_storage::delete_edges_for_repo(conn, repo_id)?;
 
     let repo_node_id = format!("{repo_id}:repo:root");
+    let repo_root_label = repo_root_label.trim();
+    let repo_root_label = if repo_root_label.is_empty() {
+        repo_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("repository")
+    } else {
+        repo_root_label
+    };
+
     graph_storage::upsert_node(
         conn,
         &repo_node_id,
         "repo",
         None,
-        "repo",
+        repo_root_label,
         "/",
         repo_id,
         None,
@@ -78,7 +124,6 @@ pub fn index_repository(
     let mut total_edges = 0;
     let mut errors = Vec::new();
 
-    let mut ts_parser = tree_sitter_parser::Parser::new();
     let mut files_found = 0usize;
     let mut files_indexed = 0usize;
     let mut files_skipped = 0usize;
@@ -154,7 +199,7 @@ pub fn index_repository(
             &relative,
             repo_id,
             range,
-            None,
+            Some(&content_hash),
         )?;
         total_nodes += 1;
 

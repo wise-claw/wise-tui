@@ -56,7 +56,7 @@
   min-width: 8px;
 }
 
-/* 跳数选择：原 min 108px，整体收窄 30px */
+/* 层数选择：原 min 108px，整体收窄 30px */
 .app-code-graph-hop-select.ant-select {
   width: 78px;
   min-width: 78px !important;
@@ -183,6 +183,22 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
+.app-code-graph-split-with-overlay {
+  position: relative;
+  flex: 1;
+  align-self: stretch;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-code-graph-split-with-overlay > .app-code-graph-graph-root--split {
+  flex: 1;
+  min-height: 0;
+}
+
 /* 图谱 + 可拖动分隔条 + 右侧栏（默认图谱约 2/3） */
 .app-code-graph-graph-root--split {
   display: grid;
@@ -192,6 +208,18 @@
   width: 100%;
   min-width: 0;
   min-height: 0;
+}
+
+/** 已有子图时切换层数：保持 Sigma 挂载，仅遮罩提示刷新（避免整图卸载导致不更新或闪烁） */
+.app-code-graph-refresh-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.22);
+  pointer-events: auto;
 }
 
 .app-code-graph-chart-wrap {
@@ -699,6 +727,48 @@
   background: var(--ant-color-error-bg);
 }
 
+/* 仓库菜单内：查看多仓合并图谱入口（列表与「分析新仓库」之间） */
+.app-code-graph-repo-dropdown-assoc-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  border-top: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-bg-elevated);
+  color: var(--ant-color-text);
+  font-size: 12px;
+  line-height: 1.35;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s ease;
+}
+
+.app-code-graph-repo-dropdown-assoc-row:hover:not(:disabled):not(.app-code-graph-repo-dropdown-assoc-row--disabled) {
+  background: var(--ant-color-fill-tertiary);
+}
+
+.app-code-graph-repo-dropdown-assoc-row--disabled,
+.app-code-graph-repo-dropdown-assoc-row:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.app-code-graph-repo-dropdown-assoc-icon {
+  flex-shrink: 0;
+  font-size: 14px;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-code-graph-repo-dropdown-assoc-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
 .app-code-graph-repo-dropdown-footer {
   display: flex;
   align-items: center;
@@ -782,4 +852,139 @@
 .app-code-graph-repo-trigger-caret {
   font-size: 10px;
   color: var(--ant-color-text-tertiary);
+}
+
+/* ── 关联检索 Popover：与仓库触发器同高、浅色主题 ─────────────────────────── */
+
+.app-code-graph-assoc-popover-root .ant-popover-container {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+.app-code-graph-assoc-popover-root .ant-popover-inner {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.app-code-graph-assoc-dropdown {
+  min-width: 240px;
+  max-width: 320px;
+  border-radius: 6px;
+  border: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-bg-elevated);
+  box-shadow: var(--ant-box-shadow-secondary, 0 6px 16px 0 rgba(0, 0, 0, 0.08));
+  overflow: hidden;
+}
+
+.app-code-graph-assoc-dropdown-header {
+  padding: 8px 10px 4px;
+}
+
+.app-code-graph-assoc-dropdown-title {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.app-code-graph-assoc-dropdown-desc {
+  margin: 4px 0 0 !important;
+  font-size: 11px;
+  line-height: 1.4 !important;
+}
+
+.app-code-graph-assoc-mode {
+  display: block;
+  padding: 4px 10px 6px;
+}
+
+.app-code-graph-assoc-mode .ant-radio-wrapper {
+  font-size: 12px;
+}
+
+.app-code-graph-assoc-check-wrap {
+  padding: 0 10px 8px;
+  border-top: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-code-graph-assoc-check-all.ant-checkbox-wrapper {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 6px 0 4px;
+  font-size: 12px;
+}
+
+.app-code-graph-assoc-check-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 2px 0 4px;
+}
+
+.app-code-graph-assoc-check-list .ant-checkbox-wrapper {
+  font-size: 12px;
+  margin-inline-start: 0;
+}
+
+.app-code-graph-assoc-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 6px 10px 8px;
+  border-top: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-bg-elevated);
+}
+
+.app-code-graph-assoc-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid var(--ant-color-border);
+  background: var(--ant-color-bg-container);
+  color: var(--ant-color-text);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  cursor: pointer;
+  max-width: 220px;
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+.app-code-graph-assoc-trigger:hover:not(:disabled) {
+  border-color: var(--ant-color-primary-hover);
+}
+
+.app-code-graph-assoc-trigger--open {
+  border-color: var(--ant-color-primary);
+  box-shadow: 0 0 0 1px var(--ant-color-primary-bg);
+}
+
+.app-code-graph-assoc-trigger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.app-code-graph-assoc-trigger-icon {
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-code-graph-assoc-trigger-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

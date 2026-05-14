@@ -321,6 +321,7 @@ pub fn run() {
             dingtalk_stream_gateway::dingtalk_stream_gateway_is_running,
             code_knowledge_graph::get_code_graph_subgraph,
             code_knowledge_graph::trigger_code_graph_reindex,
+            code_knowledge_graph::trigger_code_graph_association_build,
             code_knowledge_graph::get_code_graph_index_status,
             code_knowledge_graph::import_code_graph_openapi,
             code_knowledge_graph::bridge_code_graph_http,

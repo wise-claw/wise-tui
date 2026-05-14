@@ -25,6 +25,11 @@ export async function triggerCodeGraphReindex(
   return invoke<string>("trigger_code_graph_reindex", { req });
 }
 
+/** 多仓：依次索引、OpenAPI/合成路由、HTTP 桥接（后台任务，完成后发 `code-graph-association-build-complete`） */
+export async function triggerCodeGraphAssociationBuild(repositoryIds: number[]): Promise<string> {
+  return invoke<string>("trigger_code_graph_association_build", { repositoryIds });
+}
+
 export async function getCodeGraphIndexStatus(
   repositoryId: number,
 ): Promise<CodeGraphIndexStatusResponse> {
@@ -55,7 +60,7 @@ export async function getCodeGraphMultiSubgraph(
   repositoryIds: number[],
   options?: {
     focusNodeId?: string;
-    /** 不传或 `undefined`：不限制跳数；`1`–`10`：限制 BFS 深度 */
+/** 不传或 `undefined`：不限制层数；`1`–`10`：子图「层数」（1 层仅焦点，L 层含 outward 代价 ≤ L−1 的节点，`contains` 不增代价） */
     hop?: CodeGraphSubgraphHopDepth;
     includeCrossRepoEdges?: boolean;
   },

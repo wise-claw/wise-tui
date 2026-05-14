@@ -16,8 +16,10 @@ static JAVA_IMPORT: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 static JAVA_TYPE_DECL: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?m)(?<!\.)\b(class|interface|enum|record)\s+([A-Za-z_]\w*)\b")
-        .expect("java type decl regex")
+    Regex::new(
+        r"(?m)(?<!\.)(?:(?:public|private|protected|abstract|final|static|sealed|strictfp)\s+)*\b(class|interface|enum|record)\s+([A-Za-z_]\w*)\b",
+    )
+    .expect("java type decl regex")
 });
 
 static RUST_MOD_SEMI: LazyLock<Regex> = LazyLock::new(|| {
@@ -159,9 +161,13 @@ static CPP_INCLUDE_LOCAL: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"(?m)#include\s+"([^"]+)""#).expect("cpp local include")
 });
 
+/// Aggregator POM `<module>` entries: allow optional XML prefix, multiline / CDATA body (`[^<]` misses those).
 static MAVEN_MODULE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?m)<module>\s*([^<]+?)\s*</module>").expect("maven module")
+    Regex::new(r"(?is)<(?:[\w.-]+:)?module\b[^>]*>(.*?)</(?:[\w.-]+:)?module\s*>").expect("maven module")
 });
+
+static XML_COMMENT: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?s)<!--.*?-->").expect("xml comment strip"));
 
 static XML_SPRING_IMPORT: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"(?m)<import\s+[^>]*\bresource\s*=\s*["']([^"']+)["']"#).expect("xml spring import")
@@ -205,15 +211,34 @@ static KOTLIN_FUN: LazyLock<Regex> = LazyLock::new(|| {
         .expect("kotlin fun")
 });
 
-pub struct Parser;
+pub struct Parser {
+    repo_files: HashSet<String>,
+    tsconfig_paths: Option<crate::code_knowledge_graph::tsconfig_paths::TsconfigPaths>,
+}
 
 impl Parser {
+    /// 无索引上下文（仅启发式路径）；保留供测试或将来复用。
+    #[allow(dead_code)]
     pub fn new() -> Self {
-        Parser
+        Self {
+            repo_files: HashSet::new(),
+            tsconfig_paths: None,
+        }
+    }
+
+    /// Index-time parser: TS/JS imports use the indexed file set + optional `tsconfig` paths (GitNexus parity).
+    pub fn with_index_context(
+        repo_files: HashSet<String>,
+        tsconfig_paths: Option<crate::code_knowledge_graph::tsconfig_paths::TsconfigPaths>,
+    ) -> Self {
+        Self {
+            repo_files,
+            tsconfig_paths,
+        }
     }
 
     /// GitNexus-style edges: `File --defines--> symbol`; optional `Type --has_method/has_property--> member`.
-    fn commit_code_symbol(
+    pub(crate) fn commit_code_symbol(
         &self,
         conn: &rusqlite::Connection,
         file_node_id: &str,
@@ -368,8 +393,23 @@ impl Parser {
     ) -> Result<(usize, usize), String> {
         let import_count =
             self.extract_imports(conn, content, file_node_id, repo_id, relative_path)?;
-        let symbol_count =
-            self.extract_symbols_regex(conn, content, file_node_id, repo_id, relative_path, 0)?;
+        let ext = relative_path
+            .rsplit_once('.')
+            .map(|(_, e)| e.to_ascii_lowercase())
+            .unwrap_or_default();
+        let symbol_count = match crate::code_knowledge_graph::ts_js_tree_extract::extract_ts_js_symbols_tree_sitter(
+            self,
+            conn,
+            content,
+            file_node_id,
+            repo_id,
+            relative_path,
+            ext.as_str(),
+        ) {
+            Ok(Some(n)) => n,
+            Ok(None) => self.extract_symbols_regex(conn, content, file_node_id, repo_id, relative_path, 0)?,
+            Err(e) => return Err(e),
+        };
         Ok((symbol_count, symbol_count + import_count))
     }
 
@@ -395,14 +435,27 @@ impl Parser {
             let line_offset = byte_offset_to_line_number(content, inner_m.start());
             import_count +=
                 self.extract_imports(conn, inner, file_node_id, repo_id, relative_path)?;
-            symbol_count += self.extract_symbols_regex(
+            let inner_syms = match crate::code_knowledge_graph::ts_js_tree_extract::extract_ts_js_symbols_tree_sitter(
+                self,
                 conn,
                 inner,
                 file_node_id,
                 repo_id,
                 relative_path,
-                line_offset,
-            )?;
+                "ts",
+            ) {
+                Ok(Some(n)) => n,
+                Ok(None) => self.extract_symbols_regex(
+                    conn,
+                    inner,
+                    file_node_id,
+                    repo_id,
+                    relative_path,
+                    line_offset,
+                )?,
+                Err(e) => return Err(e),
+            };
+            symbol_count += inner_syms;
         }
 
         Ok((symbol_count, symbol_count + import_count))
@@ -418,8 +471,18 @@ impl Parser {
     ) -> Result<(usize, usize), String> {
         let import_count =
             self.extract_java_imports(conn, content, file_node_id, repo_id, relative_path)?;
-        let symbol_count =
-            self.extract_java_symbols(conn, content, file_node_id, repo_id, relative_path)?;
+        let symbol_count = match crate::code_knowledge_graph::java_tree_extract::extract_java_symbols_tree_sitter(
+            self,
+            conn,
+            content,
+            file_node_id,
+            repo_id,
+            relative_path,
+        ) {
+            Ok(Some(n)) => n,
+            Ok(None) => self.extract_java_symbols(conn, content, file_node_id, repo_id, relative_path)?,
+            Err(e) => return Err(e),
+        };
         Ok((symbol_count, symbol_count + import_count))
     }
 
@@ -955,12 +1018,8 @@ impl Parser {
     ) -> Result<(usize, usize), String> {
         let mut count = 0usize;
         let parent = file_parent_dir(relative_path);
-        for cap in MAVEN_MODULE.captures_iter(content) {
-            let modname = cap.get(1).map(|m| m.as_str().trim()).unwrap_or("");
-            if modname.is_empty() {
-                continue;
-            }
-            let sub = path_join(&parent, modname);
+        for modname in collect_maven_module_rel_paths(content) {
+            let sub = path_join(&parent, &modname);
             let target = path_join(&sub, "pom.xml");
             count += self.add_import_edge(conn, file_node_id, repo_id, &target)?;
         }
@@ -1496,9 +1555,13 @@ impl Parser {
             }
 
             if let Some(import_path) = import_path {
-                let Some(resolved) =
-                    resolve_ts_js_import_to_repo_relative(file_dir, &import_path, relative_path)
-                else {
+                let Some(resolved) = resolve_ts_js_import_to_repo_relative(
+                    file_dir,
+                    &import_path,
+                    relative_path,
+                    self.tsconfig_paths.as_ref(),
+                    &self.repo_files,
+                ) else {
                     continue;
                 };
                 let import_id = format!("{file_node_id}:imports:{resolved}");
@@ -1531,6 +1594,10 @@ fn gitnexus_style_symbol_kind(raw: &str) -> String {
         "mod" => "Module".to_string(),
         "method" => "Method".to_string(),
         "property" => "Property".to_string(),
+        "const" => "Constant".to_string(),
+        "variable" => "Variable".to_string(),
+        "annotation" => "Annotation".to_string(),
+        "constructor" => "Constructor".to_string(),
         "record" => "Class".to_string(),
         "object" => "Class".to_string(),
         "module" => "Module".to_string(),
@@ -1592,6 +1659,42 @@ fn file_parent_dir(relative_path: &str) -> String {
         .rsplit_once('/')
         .map(|(a, _)| a.to_string())
         .unwrap_or_default()
+}
+
+fn strip_xml_comments(s: &str) -> String {
+    XML_COMMENT.replace_all(s, "").to_string()
+}
+
+fn normalize_maven_module_inner(inner: &str) -> String {
+    let t = inner.trim();
+    if let Some(rest) = t.strip_prefix("<![CDATA[") {
+        if let Some(end) = rest.find("]]>") {
+            return rest[..end]
+                .trim()
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ");
+        }
+    }
+    t.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Relative submodule directory paths from `<modules>` (aggregator POM), deduplicated in document order.
+fn collect_maven_module_rel_paths(content: &str) -> Vec<String> {
+    let clean = strip_xml_comments(content);
+    let mut out = Vec::new();
+    let mut seen = HashSet::<String>::new();
+    for cap in MAVEN_MODULE.captures_iter(&clean) {
+        let inner = cap.get(1).map(|m| m.as_str()).unwrap_or("");
+        let p = normalize_maven_module_inner(inner);
+        if p.is_empty() {
+            continue;
+        }
+        if seen.insert(p.clone()) {
+            out.push(p);
+        }
+    }
+    out
 }
 
 fn maven_resources_prefix(relative_path: &str) -> Option<String> {
@@ -1904,40 +2007,6 @@ fn is_bare_module(path: &str) -> bool {
     !path.starts_with('.') && !path.starts_with('/')
 }
 
-/// 将 TS/JS/Vue `<script>` 中的模块说明符解析为**仓库内**相对路径。
-/// - `./`、`../`：相对当前文件目录。
-/// - `@/`、`~/`：按常见 Vite/Vue CLI 约定映射到 `src/` 下（与 `node_modules` 无关）。
-/// - 裸 npm 包（如 `vue`、`photoswipe/lightbox`）：`None`（仓库不索引 `node_modules`，不建边）。
-fn resolve_ts_js_import_to_repo_relative(
-    file_dir: &str,
-    import_path: &str,
-    current_file: &str,
-) -> Option<String> {
-    let p = import_path.trim();
-    if p.is_empty() {
-        return None;
-    }
-    if p.starts_with("./") || p.starts_with("../") {
-        return Some(resolve_import_path(file_dir, p, current_file));
-    }
-    if let Some(tail) = p.strip_prefix("@/").or_else(|| p.strip_prefix("~/")) {
-        let tail = tail.trim_start_matches('/');
-        if tail.is_empty() {
-            return None;
-        }
-        let mut resolved = format!("src/{tail}");
-        if !has_known_module_suffix(&resolved) {
-            let ext = importer_default_extension(current_file);
-            resolved = format!("{resolved}.{ext}");
-        }
-        return Some(resolved);
-    }
-    if is_bare_module(p) {
-        return None;
-    }
-    Some(resolve_import_path(file_dir, p, current_file))
-}
-
 fn importer_default_extension(relative_path: &str) -> &'static str {
     let norm = relative_path.replace('\\', "/");
     if norm.ends_with(".gradle.kts") {
@@ -2082,6 +2151,159 @@ fn resolve_import_path(current_dir: &str, import_path: &str, relative_path: &str
     }
 }
 
+/// GitNexus `import-resolvers/utils.ts` — extension probe order for TS/JS (+ Vue / index barrels).
+const TS_JS_REPO_RESOLVE_EXTENSIONS: &[&str] = &[
+    "",
+    ".tsx",
+    ".ts",
+    ".mts",
+    ".cts",
+    ".jsx",
+    ".js",
+    ".mjs",
+    ".cjs",
+    ".vue",
+    "/index.tsx",
+    "/index.ts",
+    "/index.jsx",
+    "/index.js",
+];
+
+fn join_relative_ts_import_parts(file_dir: &str, import_path: &str) -> String {
+    let mut parts: Vec<&str> = if !file_dir.is_empty() {
+        file_dir.split('/').collect()
+    } else {
+        vec![]
+    };
+    for component in import_path.split('/') {
+        match component {
+            ".." => {
+                parts.pop();
+            }
+            "." => {}
+            name => parts.push(name),
+        }
+    }
+    parts.join("/")
+}
+
+fn normalize_posix_path(path: &str) -> String {
+    let norm = path.replace('\\', "/");
+    let mut stack: Vec<&str> = Vec::new();
+    for part in norm.split('/').filter(|s| !s.is_empty() && *s != ".") {
+        if part == ".." {
+            stack.pop();
+        } else {
+            stack.push(part);
+        }
+    }
+    stack.join("/")
+}
+
+fn strip_js_family_extension_stem(path: &str) -> Option<String> {
+    path.strip_suffix(".jsx")
+        .or_else(|| path.strip_suffix(".js"))
+        .or_else(|| path.strip_suffix(".mjs"))
+        .or_else(|| path.strip_suffix(".cjs"))
+        .map(|s| s.to_string())
+}
+
+fn try_resolve_ts_js_in_repo(base: &str, repo_files: &HashSet<String>) -> Option<String> {
+    if repo_files.is_empty() {
+        return None;
+    }
+    let norm = normalize_posix_path(base);
+    for ext in TS_JS_REPO_RESOLVE_EXTENSIONS {
+        let candidate = format!("{norm}{ext}");
+        if repo_files.contains(&candidate) {
+            return Some(candidate);
+        }
+    }
+    if let Some(stripped) = strip_js_family_extension_stem(&norm) {
+        for ext in TS_JS_REPO_RESOLVE_EXTENSIONS {
+            let candidate = format!("{stripped}{ext}");
+            if repo_files.contains(&candidate) {
+                return Some(candidate);
+            }
+        }
+    }
+    None
+}
+
+/// TS/JS/Vue `<script>` 模块路径 → 仓库相对路径；与 GitNexus `loadTsconfigPaths` + `resolveImportPath` 行为对齐。
+fn resolve_ts_js_import_to_repo_relative(
+    file_dir: &str,
+    import_path: &str,
+    current_file: &str,
+    tsconfig_paths: Option<&crate::code_knowledge_graph::tsconfig_paths::TsconfigPaths>,
+    repo_files: &HashSet<String>,
+) -> Option<String> {
+    let p = import_path.trim();
+    if p.is_empty() {
+        return None;
+    }
+
+    if p.starts_with("./") || p.starts_with("../") {
+        let joined = join_relative_ts_import_parts(file_dir, p);
+        let norm = normalize_posix_path(&joined);
+        if let Some(hit) = try_resolve_ts_js_in_repo(&norm, repo_files) {
+            return Some(hit);
+        }
+        let legacy = resolve_import_path(file_dir, p, current_file);
+        let norm_legacy = normalize_posix_path(&legacy);
+        if let Some(hit) = try_resolve_ts_js_in_repo(&norm_legacy, repo_files) {
+            return Some(hit);
+        }
+        return Some(legacy);
+    }
+
+    if let Some(ts) = tsconfig_paths {
+        if let Some(rewritten) =
+            crate::code_knowledge_graph::tsconfig_paths::rewrite_tsconfig_import(ts, p)
+        {
+            let norm = normalize_posix_path(&rewritten);
+            if let Some(hit) = try_resolve_ts_js_in_repo(&norm, repo_files) {
+                return Some(hit);
+            }
+            let mut guess = norm.clone();
+            if !has_known_module_suffix(&guess) {
+                let ext = importer_default_extension(current_file);
+                guess = format!("{guess}.{ext}");
+            }
+            let guess_norm = normalize_posix_path(&guess);
+            if let Some(hit) = try_resolve_ts_js_in_repo(&guess_norm, repo_files) {
+                return Some(hit);
+            }
+            return Some(guess);
+        }
+    }
+
+    if let Some(tail) = p.strip_prefix("@/").or_else(|| p.strip_prefix("~/")) {
+        let tail = tail.trim_start_matches('/');
+        if tail.is_empty() {
+            return None;
+        }
+        let stem = normalize_posix_path(&format!("src/{tail}"));
+        if let Some(hit) = try_resolve_ts_js_in_repo(&stem, repo_files) {
+            return Some(hit);
+        }
+        let mut guess = stem.clone();
+        if !has_known_module_suffix(&guess) {
+            let ext = importer_default_extension(current_file);
+            guess = format!("{guess}.{ext}");
+        }
+        if let Some(hit) = try_resolve_ts_js_in_repo(&normalize_posix_path(&guess), repo_files) {
+            return Some(hit);
+        }
+        return Some(guess);
+    }
+
+    if is_bare_module(p) {
+        return None;
+    }
+    Some(resolve_import_path(file_dir, p, current_file))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2132,6 +2354,44 @@ mod tests {
     }
 
     #[test]
+    fn maven_pom_modules_multiline_cdata_and_prefix() {
+        let pom = r#"<?xml version="1.0"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modules>
+    <module>
+      api
+    </module>
+    <module><![CDATA[  billing-svc  ]]></module>
+    <m:module xmlns:m="http://maven.apache.org/POM/4.0.0">legacy</m:module>
+  </modules>
+</project>"#;
+        let mods = collect_maven_module_rel_paths(pom);
+        assert_eq!(mods, vec!["api", "billing-svc", "legacy"]);
+    }
+
+    #[test]
+    fn maven_pom_modules_ignores_modules_in_xml_comments() {
+        let pom = r#"<project>
+  <!-- <module>ghost</module> -->
+  <modules>
+    <module>real</module>
+  </modules>
+</project>"#;
+        let mods = collect_maven_module_rel_paths(pom);
+        assert_eq!(mods, vec!["real"]);
+    }
+
+    #[test]
+    fn maven_pom_modules_multiline_plain_text() {
+        let pom = r#"<modules>
+    <module>
+      billing-svc
+    </module>
+  </modules>"#;
+        let mods = collect_maven_module_rel_paths(pom);
+        assert_eq!(mods, vec!["billing-svc"]);
+    }
+    #[test]
     fn spring_classpath_resolves_under_maven_resources() {
         let p = spring_resolve_config_import_token(
             "svc/src/main/resources/application.properties",
@@ -2146,14 +2406,22 @@ mod tests {
     #[test]
     fn ts_js_import_bare_npm_none() {
         assert_eq!(
-            resolve_ts_js_import_to_repo_relative("components", "vue", "src/components/X.vue"),
+            resolve_ts_js_import_to_repo_relative(
+                "components",
+                "vue",
+                "src/components/X.vue",
+                None,
+                &HashSet::new()
+            ),
             None
         );
         assert_eq!(
             resolve_ts_js_import_to_repo_relative(
                 "components",
                 "photoswipe/lightbox",
-                "src/components/X.vue"
+                "src/components/X.vue",
+                None,
+                &HashSet::new()
             ),
             None
         );
@@ -2165,7 +2433,9 @@ mod tests {
             resolve_ts_js_import_to_repo_relative(
                 "components",
                 "@/utils/foo",
-                "src/components/X.vue"
+                "src/components/X.vue",
+                None,
+                &HashSet::new()
             )
             .as_deref(),
             Some("src/utils/foo.vue")
@@ -2174,7 +2444,9 @@ mod tests {
             resolve_ts_js_import_to_repo_relative(
                 "components",
                 "~/api/bar",
-                "src/components/X.ts"
+                "src/components/X.ts",
+                None,
+                &HashSet::new()
             )
             .as_deref(),
             Some("src/api/bar.ts")
@@ -2187,10 +2459,30 @@ mod tests {
             resolve_ts_js_import_to_repo_relative(
                 "components/foo",
                 "../bar/baz",
-                "src/components/foo/X.vue"
+                "src/components/foo/X.vue",
+                None,
+                &HashSet::new()
             )
             .as_deref(),
             Some("components/bar/baz.vue")
         );
+    }
+
+    #[test]
+    fn ts_js_import_tsconfig_hits_existing_file() {
+        let ts = crate::code_knowledge_graph::tsconfig_paths::TsconfigPaths {
+            base_url: ".".into(),
+            aliases: vec![("@/".into(), "src/".into())],
+        };
+        let mut files = HashSet::new();
+        files.insert("src/utils/theme.ts".to_string());
+        let r = resolve_ts_js_import_to_repo_relative(
+            "src",
+            "@/utils/theme",
+            "src/App.vue",
+            Some(&ts),
+            &files,
+        );
+        assert_eq!(r.as_deref(), Some("src/utils/theme.ts"));
     }
 }

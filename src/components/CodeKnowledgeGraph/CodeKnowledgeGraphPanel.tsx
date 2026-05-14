@@ -8,8 +8,10 @@ import { Alert, Button, Empty, message, Progress, Select, Space, Spin, Tag, Typo
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getCodeGraphIndexStatus,
+  getCodeGraphMultiSubgraph,
   getCodeGraphSubgraph,
   searchCodeGraphNodes,
+  triggerCodeGraphAssociationBuild,
   triggerCodeGraphReindex,
 } from "../../services/codeKnowledgeGraph";
 import { filterGraphNodesForSearch } from "../../utils/codeGraphNodeSearch";
@@ -31,6 +33,10 @@ import {
   HOP_SELECT_OPTIONS,
   type SubgraphHopScope,
 } from "./CodeKnowledgeGraphChartColumn";
+import {
+  CodeGraphAssociationPopover,
+  type AssociationGraphConfig,
+} from "./CodeGraphAssociationPopover";
 import { CodeGraphRepositoryPopover } from "./CodeGraphRepositoryPopover";
 import { InspectorPanel } from "./InspectorPanel";
 import "./CodeKnowledgeGraphPanel.css";
@@ -68,6 +74,15 @@ const GRAPH_PANE_MIN_GRAPH_PX = 220;
 const GRAPH_PANE_MIN_RIGHT_PX = 200;
 const SPLITTER_WIDTH_PX = 6;
 
+function normalizeSubgraphHopScope(v: unknown): SubgraphHopScope {
+  if (v === "all") return "all";
+  const n =
+    typeof v === "string" ? Number.parseInt(String(v).trim(), 10) : typeof v === "number" ? v : NaN;
+  if (!Number.isFinite(n)) return 3;
+  const clamped = Math.min(10, Math.max(1, Math.floor(Number(n))));
+  return clamped as SubgraphHopScope;
+}
+
 export function CodeKnowledgeGraphPanel({
   repositoryId,
   repositories,
@@ -86,8 +101,13 @@ export function CodeKnowledgeGraphPanel({
   const [subgraphFocusId, setSubgraphFocusId] = useState<string | undefined>(undefined);
   /** `undefined`：双向子图 */
   const [subgraphDirection, setSubgraphDirection] = useState<CodeGraphSubgraphDirection | undefined>(undefined);
-  /** 上卷/下钻与当前状态相同时仍须重拉子图（按工具栏跳数），递增以触发 effect */
+  /** 上卷/下钻与当前状态相同时仍须重拉子图（按工具栏层数），递增以触发 effect */
   const [subgraphRefreshKey, setSubgraphRefreshKey] = useState(0);
+  /** 多仓合并范围：候选来自 `searchRepositoryIds` 或仅当前仓 */
+  const [associationConfig, setAssociationConfig] = useState<AssociationGraphConfig>({
+    mode: "all",
+    customRepositoryIds: [],
+  });
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [subgraphLoading, setSubgraphLoading] = useState(false);
   const [indexError, setIndexError] = useState<string | null>(null);
@@ -164,6 +184,34 @@ export function CodeKnowledgeGraphPanel({
     });
     unsubs.push(errorUnsub);
 
+    const assocOk = listen("code-graph-association-build-complete", (event: any) => {
+      const raw = event.payload?.repositoryIds;
+      const ids: number[] = Array.isArray(raw)
+        ? raw.filter((x: unknown) => typeof x === "number" && Number.isFinite(x))
+        : [];
+      if (repositoryId != null && ids.includes(repositoryId)) {
+        setIndexError(null);
+        void fetchStatus();
+        setSubgraphRefreshKey((k) => k + 1);
+      }
+      if (ids.length >= 2) {
+        message.success("多仓关联图谱构建完成");
+      }
+    });
+    unsubs.push(assocOk);
+
+    const assocErr = listen("code-graph-association-build-error", (event: any) => {
+      message.error(String(event.payload?.error ?? "多仓关联构建失败"));
+      const raw = event.payload?.repositoryIds;
+      const ids: number[] = Array.isArray(raw)
+        ? raw.filter((x: unknown) => typeof x === "number" && Number.isFinite(x))
+        : [];
+      if (repositoryId != null && ids.includes(repositoryId)) {
+        void fetchStatus();
+      }
+    });
+    unsubs.push(assocErr);
+
     return () => {
       unsubs.forEach((p) => p.then((fn) => fn()));
     };
@@ -203,6 +251,7 @@ export function CodeKnowledgeGraphPanel({
     setSubgraphSearchInput("");
     setSubgraphSearchDebounced("");
     setSearchRemoteHits([]);
+    setAssociationConfig({ mode: "all", customRepositoryIds: [] });
   }, [repositoryId]);
 
   useEffect(() => {
@@ -211,6 +260,53 @@ export function CodeKnowledgeGraphPanel({
     }, SUBGRAPH_SEARCH_DEBOUNCE_MS);
     return () => window.clearTimeout(t);
   }, [subgraphSearchInput]);
+
+  const associationCandidateIds = useMemo(() => {
+    const fromProp =
+      searchRepositoryIdsProp?.filter((id) => typeof id === "number" && Number.isFinite(id)) ?? [];
+    const base =
+      fromProp.length > 0
+        ? fromProp
+        : repositoryId != null
+          ? [repositoryId]
+          : [];
+    return [...new Set(base)].slice(0, 20);
+  }, [searchRepositoryIdsProp, repositoryId]);
+
+  const resolvedGraphRepoIds = useMemo(() => {
+    if (associationCandidateIds.length === 0) {
+      return repositoryId != null ? [repositoryId] : [];
+    }
+    if (associationCandidateIds.length === 1) {
+      return associationCandidateIds;
+    }
+    if (associationConfig.mode === "all") {
+      return [...associationCandidateIds];
+    }
+    const picked = associationConfig.customRepositoryIds.filter((id) =>
+      associationCandidateIds.includes(id),
+    );
+    if (picked.length === 0 && repositoryId != null) {
+      return [repositoryId];
+    }
+    return [...new Set(picked)].slice(0, 20);
+  }, [associationCandidateIds, associationConfig, repositoryId]);
+
+  /** 仓库菜单内多仓入口文案，如 (vocs-web + crewAI) */
+  const associationScopeDisplay = useMemo(() => {
+    const ids = resolvedGraphRepoIds;
+    const repos = repositories ?? [];
+    if (ids.length < 2) return null;
+    const names = ids
+      .map((id) => repos.find((r) => r.id === id)?.name)
+      .filter((n): n is string => Boolean(n));
+    if (names.length < 2) return null;
+    const maxInline = 4;
+    if (names.length <= maxInline) {
+      return `(${names.join(" + ")})`;
+    }
+    return `(${names.slice(0, 3).join(" + ")} + …共${names.length}仓)`;
+  }, [resolvedGraphRepoIds, repositories]);
 
   useEffect(() => {
     if (!repositoryId) {
@@ -222,18 +318,33 @@ export function CodeKnowledgeGraphPanel({
       return;
     }
 
+    const uniqueIds = [...new Set(resolvedGraphRepoIds)].filter((id) => Number.isFinite(id)) as number[];
+    const targetIds = uniqueIds.length > 0 ? uniqueIds : [repositoryId];
+
     let cancelled = false;
     setSubgraphLoading(true);
 
-    (async () => {
+    void (async () => {
       try {
-        const req: CodeGraphSubgraphRequest = { repositoryId };
-        if (subgraphFocusId) req.focusNodeId = subgraphFocusId;
-        if (subgraphHopScope !== "all") req.hop = subgraphHopScope;
-        if (subgraphDirection) req.direction = subgraphDirection;
-        const raw = await getCodeGraphSubgraph(req);
-        if (cancelled) return;
-        setSubgraphData(parseCodeGraphSubgraphResponse(raw));
+        if (targetIds.length === 1) {
+          const rid = targetIds[0];
+          const req: CodeGraphSubgraphRequest = { repositoryId: rid };
+          if (subgraphFocusId) req.focusNodeId = subgraphFocusId;
+          if (subgraphHopScope !== "all") req.hop = subgraphHopScope;
+          if (subgraphDirection) req.direction = subgraphDirection;
+          const raw = await getCodeGraphSubgraph(req);
+          if (cancelled) return;
+          setSubgraphData(parseCodeGraphSubgraphResponse(raw));
+        } else {
+          const hopArg = subgraphHopScope === "all" ? undefined : subgraphHopScope;
+          const raw = await getCodeGraphMultiSubgraph(targetIds, {
+            focusNodeId: subgraphFocusId,
+            hop: hopArg,
+            includeCrossRepoEdges: true,
+          });
+          if (cancelled) return;
+          setSubgraphData(parseCodeGraphSubgraphResponse(raw));
+        }
       } catch {
         if (!cancelled) setSubgraphData(null);
       } finally {
@@ -249,23 +360,12 @@ export function CodeKnowledgeGraphPanel({
     repositoryId,
     indexStatus?.status,
     indexStatus?.repositoryId,
+    resolvedGraphRepoIds,
     subgraphFocusId,
     subgraphHopScope,
     subgraphDirection,
     subgraphRefreshKey,
   ]);
-
-  const effectiveSearchRepoIds = useMemo(() => {
-    const fromProp =
-      searchRepositoryIdsProp?.filter((id) => typeof id === "number" && Number.isFinite(id)) ?? [];
-    const base =
-      fromProp.length > 0
-        ? fromProp
-        : repositoryId != null
-          ? [repositoryId]
-          : [];
-    return [...new Set(base)].slice(0, 20);
-  }, [searchRepositoryIdsProp, repositoryId]);
 
   useEffect(() => {
     if (subgraphSearchDebounced.length < SUBGRAPH_SEARCH_MIN_QUERY_LEN) {
@@ -273,7 +373,7 @@ export function CodeKnowledgeGraphPanel({
       setSearchRemoteLoading(false);
       return;
     }
-    if (!repositoryId || effectiveSearchRepoIds.length === 0) {
+    if (!repositoryId || resolvedGraphRepoIds.length === 0) {
       setSearchRemoteHits([]);
       setSearchRemoteLoading(false);
       return;
@@ -290,7 +390,7 @@ export function CodeKnowledgeGraphPanel({
     void (async () => {
       try {
         const raw = await searchCodeGraphNodes({
-          repositoryIds: effectiveSearchRepoIds,
+          repositoryIds: resolvedGraphRepoIds,
           query: subgraphSearchDebounced,
           limit: 120,
         });
@@ -315,7 +415,7 @@ export function CodeKnowledgeGraphPanel({
     };
   }, [
     subgraphSearchDebounced,
-    effectiveSearchRepoIds,
+    resolvedGraphRepoIds,
     repositoryId,
     indexStatus?.status,
     indexStatus?.repositoryId,
@@ -366,6 +466,27 @@ export function CodeKnowledgeGraphPanel({
     },
     [repositoryId, handleReindex, repositories],
   );
+
+  const handleAssociationBuild = useCallback(async (ids: number[]) => {
+    if (ids.length < 2) return;
+    try {
+      await triggerCodeGraphAssociationBuild(ids);
+      message.info("已在后台开始多仓关联构建（各仓索引、OpenAPI/合成路由、HTTP 桥接），请稍候。");
+    } catch {
+      message.error("提交多仓关联构建失败");
+    }
+  }, []);
+
+  /** 仓库菜单内「合并图谱」入口：清空画布并强制重拉当前关联范围内的多仓子图 */
+  const handleViewMergedGraphFromRepoMenu = useCallback(() => {
+    if (resolvedGraphRepoIds.length < 2) return;
+    setSelectedNode(null);
+    setSubgraphFocusId(undefined);
+    setSubgraphDirection(undefined);
+    setSubgraphHopScope(3);
+    setSubgraphData(null);
+    setSubgraphRefreshKey((k) => k + 1);
+  }, [resolvedGraphRepoIds]);
 
   const handleNodeClick = useCallback((node: GraphNode) => {
     setSelectedNode(node);
@@ -438,7 +559,7 @@ export function CodeKnowledgeGraphPanel({
     if (subgraphSearchDebounced.length < SUBGRAPH_SEARCH_MIN_QUERY_LEN) return [];
     return searchRemoteHits.map((node) => {
       const repoLabel =
-        effectiveSearchRepoIds.length > 1
+        resolvedGraphRepoIds.length > 1
           ? (repositories?.find((r) => r.id === node.repoId)?.name ?? `仓库 ${node.repoId}`)
           : "";
       return {
@@ -457,7 +578,7 @@ export function CodeKnowledgeGraphPanel({
   }, [
     searchRemoteHits,
     subgraphSearchDebounced,
-    effectiveSearchRepoIds.length,
+    resolvedGraphRepoIds.length,
     repositories,
   ]);
 
@@ -503,15 +624,29 @@ export function CodeKnowledgeGraphPanel({
   }, []);
 
   const renderIndexedBody = () => {
-    if (subgraphLoading) {
+    if (!subgraphData?.nodes.length && subgraphLoading) {
       return (
         <div className="app-code-graph-centered-loading">
           <Spin tip="加载子图中..." />
         </div>
       );
     }
-    if (subgraphData && subgraphData.nodes.length > 0) {
+    if (!subgraphData?.nodes.length && !subgraphLoading) {
       return (
+        <Empty
+          description="子图为空，当前仓库可能无已索引的源码或配置（与 GitNexus 语言扩展对齐，含 Spring Boot 常用文件）"
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+        />
+      );
+    }
+    const data = subgraphData!;
+    return (
+      <div className="app-code-graph-split-with-overlay">
+        {subgraphLoading && (
+          <div className="app-code-graph-refresh-overlay" aria-busy="true" aria-live="polite">
+            <Spin tip="按新范围加载子图…" />
+          </div>
+        )}
         <div
           ref={splitLayoutRef}
           className="app-code-graph-graph-root app-code-graph-graph-root--split"
@@ -522,7 +657,7 @@ export function CodeKnowledgeGraphPanel({
           <div className="app-code-graph-chart-wrap">
             <CodeKnowledgeGraphChartColumn
               ref={chartColumnRef}
-              subgraphData={subgraphData}
+              subgraphData={data}
               selectedNode={selectedNode}
               onSelectNode={handleNodeClick}
               onStageClick={handleStageClearSelection}
@@ -552,13 +687,7 @@ export function CodeKnowledgeGraphPanel({
             />
           </div>
         </div>
-      );
-    }
-    return (
-      <Empty
-        description="子图为空，当前仓库可能无已索引的源码或配置（与 GitNexus 语言扩展对齐，含 Spring Boot 常用文件）"
-        image={Empty.PRESENTED_IMAGE_SIMPLE}
-      />
+      </div>
     );
   };
 
@@ -568,7 +697,7 @@ export function CodeKnowledgeGraphPanel({
   );
 
   const subgraphHopLabel = useMemo(
-    () => (subgraphHopScope === "all" ? "全部" : `${subgraphHopScope} 跳`),
+    () => (subgraphHopScope === "all" ? "全部" : `${subgraphHopScope} 层`),
     [subgraphHopScope],
   );
 
@@ -614,14 +743,34 @@ export function CodeKnowledgeGraphPanel({
                 repositories={repositories}
                 activeRepositoryId={repositoryId}
                 activeRepositoryIndexed={isIndexed && indexStatus?.repositoryId === repositoryId}
+                graphScopeTriggerLabel={
+                  resolvedGraphRepoIds.length > 1
+                    ? associationScopeDisplay ?? `多仓库（${resolvedGraphRepoIds.length}）`
+                    : null
+                }
                 onSelectRepository={onSelectRepository}
                 onReindexRepository={handleReindexRepository}
                 onRemoveRepository={onRemoveRepository}
                 onOpenAddRepository={onOpenAddRepository}
+                associationScopeDisplay={associationScopeDisplay}
+                onViewMergedGraph={
+                  associationScopeDisplay ? handleViewMergedGraphFromRepoMenu : undefined
+                }
+                associationScopeDisabled={!isIndexed}
               />
             ) : currentRepo ? (
               <Tag>{currentRepo.name}</Tag>
             ) : null}
+            <CodeGraphAssociationPopover
+              repositories={repositories ?? []}
+              candidateRepositoryIds={associationCandidateIds}
+              activeRepositoryId={repositoryId}
+              value={associationConfig}
+              onChange={setAssociationConfig}
+              onApplied={() => setSubgraphRefreshKey((k) => k + 1)}
+              onAssociationBuild={handleAssociationBuild}
+              disabled={!isIndexed}
+            />
           </div>
           <Space>
             {indexStatus?.indexVersion && (
@@ -646,7 +795,7 @@ export function CodeKnowledgeGraphPanel({
           </Space>
         </div>
         <div className="app-code-graph-header-actions">
-          {isIndexed && repositoryId && !subgraphLoading && (
+          {isIndexed && repositoryId && (
             <div className="app-code-graph-subgraph-toolbar app-code-graph-subgraph-toolbar--header">
               <Typography.Text type="secondary" className="app-code-graph-subgraph-toolbar-label">
                 范围
@@ -656,10 +805,10 @@ export function CodeKnowledgeGraphPanel({
                 className="app-code-graph-hop-select"
                 popupMatchSelectWidth={false}
                 value={subgraphHopScope}
-                onChange={setSubgraphHopScope}
+                onChange={(v) => setSubgraphHopScope(normalizeSubgraphHopScope(v))}
                 options={HOP_SELECT_OPTIONS}
-                aria-label="子图跳数"
-                disabled={!hasData}
+                aria-label="子图层数"
+                disabled={!hasData || subgraphLoading}
               />
               <Select
                 showSearch
@@ -667,7 +816,7 @@ export function CodeKnowledgeGraphPanel({
                 className="app-code-graph-node-search app-code-graph-node-search--header"
                 size="small"
                 placeholder={
-                  effectiveSearchRepoIds.length > 1
+                  resolvedGraphRepoIds.length > 1
                     ? "搜索已索引节点（多仓库：名称 / 路径）"
                     : "搜索已索引节点（名称 / 路径）"
                 }
@@ -681,6 +830,7 @@ export function CodeKnowledgeGraphPanel({
                   setSubgraphSearchDebounced("");
                 }}
                 options={subgraphSearchOptions}
+                disabled={!hasData || subgraphLoading}
                 notFoundContent={
                   searchRemoteLoading ? (
                     <span style={{ padding: "0 8px" }}>搜索中…</span>
