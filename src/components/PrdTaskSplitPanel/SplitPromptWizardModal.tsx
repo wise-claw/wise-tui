@@ -66,7 +66,7 @@ export function SplitPromptWizardModal({
     <Modal
       title="需求"
       open={open}
-      maskClosable={!parsing && !starting}
+      mask={{ closable: !parsing && !starting }}
       onCancel={() => {
         if (starting || optimizingSlot) return;
         if (parsing && step === "runtime") return;
@@ -140,7 +140,7 @@ export function SplitPromptWizardModal({
       {step === "prompts"
         ? (
           <Spin spinning={loading}>
-            <Space direction="vertical" size={12} style={{ width: "100%" }}>
+            <Space orientation="vertical" size={12} style={{ width: "100%" }}>
               <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
                 第 1 步：编辑阶段 1/2 的系统提示词；点击「开始拆分」后在同弹窗第 2 步查看执行日志与会话信息。「保存提示词」将写入仓库级覆盖。
               </Typography.Paragraph>

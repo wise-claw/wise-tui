@@ -158,7 +158,7 @@ export function TaskResultPanel({
   onGenerateExecutableTasks,
 }: Props) {
   return (
-    <Space direction="vertical" size={12} className="app-prd-task-panel__full-width app-prd-task-panel__stack">
+    <Space orientation="vertical" size={12} className="app-prd-task-panel__full-width app-prd-task-panel__stack">
       {splitError ? <Typography.Text type="danger">{splitError}</Typography.Text> : null}
       {mappingFallbackStats?.hasFallback ? (
         <Typography.Text type={mappingFallbackStats.allFallback ? "warning" : "secondary"}>

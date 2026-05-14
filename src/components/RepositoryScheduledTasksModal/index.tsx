@@ -294,7 +294,7 @@ export function RepositoryScheduledTasksModal({
         if (!row.lastExecutedAt) return <span className="app-scheduled-tasks-modal__mono-muted">—</span>;
         const ok = row.lastExecuteOk !== false;
         return (
-          <Space size={4} direction="vertical" style={{ lineHeight: 1.2 }}>
+          <Space size={4} orientation="vertical" style={{ lineHeight: 1.2 }}>
             <Typography.Text type={ok ? "secondary" : "danger"} style={{ fontSize: 11 }}>
               {new Date(row.lastExecutedAt).toLocaleString("zh-CN", { hour12: false, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
             </Typography.Text>
@@ -332,7 +332,7 @@ export function RepositoryScheduledTasksModal({
         destroyOnHidden
         className="app-scheduled-tasks-modal"
         title={(
-          <Space direction="vertical" size={0}>
+          <Space orientation="vertical" size={0}>
             <Typography.Text strong>定时任务</Typography.Text>
           </Space>
         )}

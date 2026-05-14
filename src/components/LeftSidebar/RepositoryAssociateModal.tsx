@@ -54,7 +54,7 @@ export function RepositoryAssociateModal({
       cancelText="取消"
       width={400}
     >
-      <Space direction="vertical" size={8} style={{ width: "100%" }}>
+      <Space orientation="vertical" size={8} style={{ width: "100%" }}>
         <div>
           <div className="app-add-repo-field-label">角标与自定义角色标签</div>
           <Select

@@ -107,10 +107,10 @@ export function PrdSplitWizardModal({
       destroyOnHidden
       width="min(1100px, 92vw)"
       footer={null}
-      maskClosable={false}
+      mask={{ closable: false }}
       title="需求拆分 · Trellis Artifact Pipeline"
     >
-      <Space direction="vertical" size={16} style={{ width: "100%" }}>
+      <Space orientation="vertical" size={16} style={{ width: "100%" }}>
         <ProjectPicker
           eligibleProjects={eligibleProjects}
           selectedId={state.project?.id ?? null}

@@ -333,7 +333,7 @@ function ClusterTasksPanel({
   };
 
   return (
-    <Space direction="vertical" size={8} style={{ width: "100%" }}>
+    <Space orientation="vertical" size={8} style={{ width: "100%" }}>
       <Space wrap>
         <Button size="small" icon={<PlusOutlined />} onClick={addManualTask}>
           新增任务
@@ -625,7 +625,7 @@ function ListEditor({
 }) {
   const [draft, setDraft] = useState("");
   return (
-    <Space direction="vertical" size={4} style={{ width: "100%" }}>
+    <Space orientation="vertical" size={4} style={{ width: "100%" }}>
       {items.map((item, idx) => (
         <Space key={idx} style={{ width: "100%" }}>
           <Input
@@ -790,7 +790,7 @@ function AnchorViewerModal({
         </Space>
       }
     >
-      <Space direction="vertical" size={8} style={{ width: "100%" }}>
+      <Space orientation="vertical" size={8} style={{ width: "100%" }}>
         <AnchorEditToolbar
           focusedTask={focusedTask}
           isEdited={isFocusedEdited}

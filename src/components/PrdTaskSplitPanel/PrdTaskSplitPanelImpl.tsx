@@ -277,7 +277,7 @@ export function PrdTaskSplitPanel({
         onCancel={() => setRequirementNameModalOpen(false)}
         onConfirm={() => void handleConfirmRequirementNameModal()}
       />
-      <Space direction="vertical" size={4} className="app-prd-task-panel__stack">
+      <Space orientation="vertical" size={4} className="app-prd-task-panel__stack">
         <ProjectScopeHeader
           projects={projects}
           repositories={repositories}

@@ -295,7 +295,7 @@ export function WorkflowConfigModal({
     >
       <div className="app-workflow-config-layout">
         <div className="app-workflow-config-sidebar">
-          <Space direction="vertical" size={10} className="app-workflow-config-sidebar-space">
+          <Space orientation="vertical" size={10} className="app-workflow-config-sidebar-space">
             <div className="app-workflow-config-sidebar-header">
               <Typography.Text strong>团队列表</Typography.Text>
               <Button
@@ -339,7 +339,7 @@ export function WorkflowConfigModal({
                     onClick={() => startEditingTemplate(row)}
                     className={`app-workflow-config-team-card${active ? " app-workflow-config-team-card--active" : ""}`}
                   >
-                    <Space direction="vertical" size={6} className="app-workflow-config-team-card-inner">
+                    <Space orientation="vertical" size={6} className="app-workflow-config-team-card-inner">
                       <div className="app-workflow-config-team-card-title-row">
                         <Typography.Text strong ellipsis className="app-workflow-config-team-card-title">
                           {row.name}
@@ -383,7 +383,7 @@ export function WorkflowConfigModal({
           </Space>
         </div>
 
-        <Space direction="vertical" size={12} className="app-workflow-config-editor">
+        <Space orientation="vertical" size={12} className="app-workflow-config-editor">
           <Form
             form={form}
             layout="inline"

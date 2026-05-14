@@ -112,7 +112,7 @@ export function RequirementInputCard({
       bodyStyle={{ padding: "0 0 16px 0" }}
     >
       <Space
-        direction="vertical"
+        orientation="vertical"
         size={10}
         className="app-prd-task-panel__full-width app-prd-task-panel__requirement-content"
       >

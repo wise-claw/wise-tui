@@ -3030,7 +3030,7 @@ export function ClaudeChat({
                 title={TASK_COMPLETION_MODAL_HINT}
                 placement="bottomLeft"
                 mouseEnterDelay={0.35}
-                overlayInnerStyle={{ maxWidth: 420 }}
+                styles={{ container: { maxWidth: 420 } }}
               >
                 <button type="button" className="app-task-completion-modal__title-help" aria-label="说明">
                   <QuestionCircleOutlined />
@@ -3936,7 +3936,7 @@ export function ClaudeChat({
                                 description="将执行 git worktree remove --force，并删除该 worktree 对应的工作区目录。"
                                 okText="确定"
                                 cancelText="取消"
-                                overlayInnerStyle={{ width: "min(92vw, 300px)", maxWidth: "min(92vw, 300px)" }}
+                                styles={{ container: { width: "min(92vw, 300px)", maxWidth: "min(92vw, 300px)" } }}
                                 onConfirm={() => void handleGitWorktreeRemove(w.path)}
                               >
                                 <Button

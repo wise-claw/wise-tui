@@ -74,7 +74,7 @@ export function WorkflowNodeEditModal({
         <div className="app-workflow-node-edit-form__field-header">
           <span className="app-workflow-node-edit-form__field-title app-workflow-node-edit-form__field-title--with-hint">
             阶段任务依据（可选）
-            <Tooltip placement="topLeft" overlayInnerStyle={{ maxWidth: 400 }} title="从当前流程图中各阶段已配置的「阶段成果」中选择一项或多项；保存后随团队派发写入 Claude Code 会话，置于「阶段任务」正文之前（多项之间以分隔线隔开）。每条派发为「【阶段任务依据】成果「名称」」并附上该成果标准原文。">
+            <Tooltip placement="topLeft" styles={{ container: { maxWidth: 400 } }} title="从当前流程图中各阶段已配置的「阶段成果」中选择一项或多项；保存后随团队派发写入 Claude Code 会话，置于「阶段任务」正文之前（多项之间以分隔线隔开）。每条派发为「【阶段任务依据】成果「名称」」并附上该成果标准原文。">
               <QuestionCircleOutlined className="app-workflow-node-edit-form__field-hint-icon" aria-label="阶段任务依据说明" />
             </Tooltip>
           </span>
@@ -122,14 +122,14 @@ export function WorkflowNodeEditModal({
         <div className="app-workflow-node-edit-form__field-header">
           <span className="app-workflow-node-edit-form__field-title app-workflow-node-edit-form__field-title--with-hint">
             阶段成果（可选）
-            <Tooltip placement="topLeft" overlayInnerStyle={{ maxWidth: 400 }} title="每条包含「名称」与「要求」：名称简要标识该成果项；要求用 Markdown 编写。若有配置，会与阶段任务一并作为强约束发往该阶段的 Claude Code 会话；模型处理完任务后须在回复末尾输出约定的 JSON 阶段成果报告（详见派发全文中的格式说明）。">
+            <Tooltip placement="topLeft" styles={{ container: { maxWidth: 400 } }} title="每条包含「名称」与「要求」：名称简要标识该成果项；要求用 Markdown 编写。若有配置，会与阶段任务一并作为强约束发往该阶段的 Claude Code 会话；模型处理完任务后须在回复末尾输出约定的 JSON 阶段成果报告（详见派发全文中的格式说明）。">
               <QuestionCircleOutlined className="app-workflow-node-edit-form__field-hint-icon" aria-label="阶段成果说明" />
             </Tooltip>
           </span>
         </div>
         <Form.List name="stageSuccessCriteria">
           {(fields, { add, remove }) => (
-            <Space direction="vertical" size={12} style={{ width: "100%" }}>
+            <Space orientation="vertical" size={12} style={{ width: "100%" }}>
               {fields.map((field) => (
                 <div key={field.key} className="app-workflow-node-edit-form__milkdown-block">
                   <div className="app-workflow-node-edit-form__field-header">

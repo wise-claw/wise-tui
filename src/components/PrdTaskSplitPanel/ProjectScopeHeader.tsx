@@ -283,7 +283,7 @@ export function ProjectScopeHeader({
                     }
                   >
                     <span className="app-prd-task-panel__header-repo-tag-wrap">
-                      <Tag className="app-prd-task-panel__header-repo-tag app-prd-task-panel__header-repo-tag--interactive" bordered={false}>
+                      <Tag className="app-prd-task-panel__header-repo-tag app-prd-task-panel__header-repo-tag--interactive" variant="filled">
                         {item.label}
                       </Tag>
                       {item.hasMainOwner ? (
@@ -299,7 +299,7 @@ export function ProjectScopeHeader({
                   </Popover>
                 ))}
                 {headerProjectName && headerRepositoryTagItems.length === 0 ? (
-                  <Tag className="app-prd-task-panel__header-repo-tag" bordered={false}>
+                  <Tag className="app-prd-task-panel__header-repo-tag" variant="filled">
                     暂无仓库
                   </Tag>
                 ) : null}

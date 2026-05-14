@@ -47,7 +47,7 @@ export function ProjectNameModals({
         okText="创建"
         footer={(_, { OkBtn }) => <OkBtn />}
       >
-        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+        <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
           <Input
             value={projectNameInput}
             onChange={(event) => onProjectNameInputChange(event.target.value)}

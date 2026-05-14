@@ -38,7 +38,7 @@ export function TaskApiSpecEditor({ value, draftedTask, onChange }: Props) {
         </Typography.Text>
       ) : null}
       <Typography.Text type="secondary">接口协议（结构化）</Typography.Text>
-      <Space direction="vertical" size={6} style={{ width: "100%", marginTop: 6 }}>
+      <Space orientation="vertical" size={6} style={{ width: "100%", marginTop: 6 }}>
         <Space>
           <Button
             size="small"

@@ -369,7 +369,7 @@ export function DiffMode({
                 okButtonProps={{ danger: true }}
                 placement="bottomRight"
                 getPopupContainer={() => document.body}
-                overlayInnerStyle={{ width: 300 }}
+                styles={{ container: { width: 300 } }}
                 disabled={loading.stageAll || loading.unstageAll || loading.discardAll}
                 onConfirm={onDiscardAll}
               >

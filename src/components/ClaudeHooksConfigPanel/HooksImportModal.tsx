@@ -98,10 +98,10 @@ export function HooksImportModal({
             </Button>
             {importReport ? (
               <>
-                <Tag bordered={false} color={importReport.validCount > 0 ? "success" : "default"}>
+                <Tag variant="filled" color={importReport.validCount > 0 ? "success" : "default"}>
                   可导入: {importReport.validCount}
                 </Tag>
-                <Tag bordered={false} color={importReport.invalidCount > 0 ? "warning" : "default"}>
+                <Tag variant="filled" color={importReport.invalidCount > 0 ? "warning" : "default"}>
                   无效: {importReport.invalidCount}
                 </Tag>
               </>
@@ -111,10 +111,10 @@ export function HooksImportModal({
         {importDryRun ? (
           <Form.Item label="Dry-run 影响">
             <Space size={8}>
-              <Tag bordered={false} color="success">
+              <Tag variant="filled" color="success">
                 预计新增: {importDryRun.addCount}
               </Tag>
-              <Tag bordered={false} color={importDryRun.deleteCount > 0 ? "warning" : "default"}>
+              <Tag variant="filled" color={importDryRun.deleteCount > 0 ? "warning" : "default"}>
                 预计删除: {importDryRun.deleteCount}
               </Tag>
             </Space>

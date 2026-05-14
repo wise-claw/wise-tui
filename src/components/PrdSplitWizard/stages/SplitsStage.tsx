@@ -76,7 +76,7 @@ export function SplitsStage({ api }: Props) {
       />
 
       {hasBaseline ? (
-        <Space direction="vertical" size={4}>
+        <Space orientation="vertical" size={4}>
           <Checkbox
             checked={state.reuseExistingParents}
             onChange={(e) => api.setReuseExistingParents(e.target.checked)}
@@ -110,7 +110,7 @@ export function SplitsStage({ api }: Props) {
         ) : null}
       </Space>
 
-      <Space direction="vertical" size={8} style={{ width: "100%" }}>
+      <Space orientation="vertical" size={8} style={{ width: "100%" }}>
         {state.plan?.clusters.map((cluster) => {
           const run = state.clusterRuns[cluster.id];
           const diff = state.diffByCluster[cluster.id];

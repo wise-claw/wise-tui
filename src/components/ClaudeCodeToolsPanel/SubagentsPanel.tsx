@@ -612,7 +612,7 @@ export function SubagentsPanel({ repositoryPath, active, listSearch = "", onBind
         confirmLoading={creating}
         destroyOnHidden
       >
-        <Space direction="vertical" size={8} style={{ width: "100%" }}>
+        <Space orientation="vertical" size={8} style={{ width: "100%" }}>
           <Select
             value={newScope}
             onChange={(v) => setNewScope(v)}
@@ -718,7 +718,7 @@ export function SubagentsPanel({ repositoryPath, active, listSearch = "", onBind
             <Spin size="small" />
           </div>
         ) : (
-          <Space direction="vertical" size={8} style={{ width: "100%" }}>
+          <Space orientation="vertical" size={8} style={{ width: "100%" }}>
             <Space style={{ width: "100%", justifyContent: "space-between" }}>
               <Typography.Text type="secondary">支持字段化编辑与 Raw 双模式。</Typography.Text>
               <Radio.Group
@@ -734,7 +734,7 @@ export function SubagentsPanel({ repositoryPath, active, listSearch = "", onBind
               />
             </Space>
             {editMode === "form" ? (
-              <Space direction="vertical" size={8} style={{ width: "100%" }}>
+              <Space orientation="vertical" size={8} style={{ width: "100%" }}>
                 <Input value={editing?.name} disabled />
                 <Input
                   value={editDescription}

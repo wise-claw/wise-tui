@@ -389,7 +389,7 @@ export function PromptsPanel({
 
   return (
     <Layout.Content className="app-prd-task-panel app-prompts-panel--compact">
-      <Space direction="vertical" size={8} className="app-prd-task-panel__stack">
+      <Space orientation="vertical" size={8} className="app-prd-task-panel__stack">
         <div className="app-prompts-panel__page-head">
           <span className="app-prompts-panel__page-title">提示词</span>
           <Button type="text" size="small" icon={<CloseOutlined />} onClick={onClose} aria-label="关闭" />
@@ -408,7 +408,7 @@ export function PromptsPanel({
             <Col xs={24} className="app-prd-task-panel__col app-prompts-panel__main-col">
               <Spin spinning={loading}>
                 <Card size="small" className="app-prompts-panel__main-card" title={null}>
-                  <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                  <Space orientation="vertical" size={8} style={{ width: "100%" }}>
                     <div className="app-prompts-panel__card-toolbar">
                       <div className="app-prompts-panel__card-toolbar-tree">
                         <TreeSelect
@@ -443,7 +443,7 @@ export function PromptsPanel({
                       </div>
                     </div>
                     {scope ? (
-                    <Space direction="vertical" size={8} style={{ width: "100%" }} className="app-prompts-panel__body-stack">
+                    <Space orientation="vertical" size={8} style={{ width: "100%" }} className="app-prompts-panel__body-stack">
                       <Typography.Paragraph type="secondary" className="app-prompts-panel__lead">
                         用途对应不同调用位置；列表切换用途，自定义可删；项目为仓库默认，仓库覆盖同名用途。正文在 Milkdown
                         中直接编辑；可用「{SPLIT_PROMPT_COMBINED_HEADINGS.system}」等独占一行标题分三层落盘，无标题则整段写入用户模板层。
@@ -517,7 +517,7 @@ export function PromptsPanel({
                           </Card>
                         </Col>
                         <Col xs={24} md={19} lg={19} xl={19} className="app-prompts-panel__editor-col">
-                            <Space direction="vertical" size={6} style={{ width: "100%" }}>
+                            <Space orientation="vertical" size={6} style={{ width: "100%" }}>
                             <Space align="center" wrap size={4}>
                               <Typography.Text className="app-prompts-panel__inline-label">本层</Typography.Text>
                               <Switch
@@ -535,12 +535,12 @@ export function PromptsPanel({
                                 占位符
                               </Typography.Text>
                               {SPLIT_PROMPT_STANDARD_VARIABLES.map((v) => (
-                                <Tag key={v} bordered={false} className="app-prompts-panel__ph-tag">
+                                <Tag key={v} variant="filled" className="app-prompts-panel__ph-tag">
                                   {`{${v}}`}
                                 </Tag>
                               ))}
                             </Space>
-                            <Space direction="vertical" size={4} style={{ width: "100%" }}>
+                            <Space orientation="vertical" size={4} style={{ width: "100%" }}>
                               <Typography.Text strong className="app-prompts-panel__section-label">
                                 模板 id / 版本
                               </Typography.Text>
@@ -596,7 +596,7 @@ export function PromptsPanel({
         okText="添加"
         destroyOnHidden
       >
-        <Space direction="vertical" style={{ width: "100%" }} size="small">
+        <Space orientation="vertical" style={{ width: "100%" }} size="small">
           <Typography.Paragraph type="secondary" className="app-prompts-panel__modal-hint">
             名称将写入「{SPLIT_PROMPT_COMBINED_HEADINGS.system}」一节开头的 <code>## 标题</code>
             ；用途 id 由系统随机生成（p + 32 位十六进制）。
