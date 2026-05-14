@@ -61,14 +61,27 @@ pub fn trigger_code_graph_reindex(
 
         match conn_result {
             Ok(result) => {
+                eprintln!("[code-graph] index complete: repo_id={}, nodes={}, edges={}, files_found={}, files_indexed={}, files_skipped={}",
+                    repo_id, result.total_nodes, result.total_edges,
+                    result.files_found, result.files_indexed, result.files_skipped);
                 let _ = app.emit("code-graph-index-complete", serde_json::json!({
                     "repositoryId": repo_id,
                     "totalNodes": result.total_nodes,
                     "totalEdges": result.total_edges,
                     "errors": result.errors,
+                    "filesFound": result.files_found,
+                    "filesIndexed": result.files_indexed,
+                    "filesSkipped": result.files_skipped,
                 }));
             }
             Err(e) => {
+                eprintln!("[code-graph] index failed: repo_id={}, error={}", repo_id, e);
+                // Update DB status so frontend polling sees the error
+                if let Ok(conn) = rusqlite::Connection::open(&db_path) {
+                    let _ = crate::code_knowledge_graph::storage::update_index_meta(
+                        &conn, repo_id, "", "error", Some(&e), 0, 0, None,
+                    );
+                }
                 let _ = app.emit("code-graph-index-error", serde_json::json!({
                     "repositoryId": repo_id,
                     "error": e,

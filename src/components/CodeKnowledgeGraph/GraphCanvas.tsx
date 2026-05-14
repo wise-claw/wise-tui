@@ -1,143 +1,203 @@
-import { useEffect, useRef, useState } from "react";
 import type { GraphNode, CodeGraphSubgraphResponse } from "../../types/codeKnowledgeGraph";
-import { WebGLRenderer } from "./WebGLRenderer";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  ZoomInOutlined,
+  ZoomOutOutlined,
+  ArrowsAltOutlined,
+  AimOutlined,
+  RollbackOutlined,
+  PlayCircleOutlined,
+  PauseCircleOutlined,
+} from "@ant-design/icons";
+import { useCodeGraphSigma } from "../../hooks/useCodeGraphSigma";
+import { codeSubgraphToGraphology } from "../../utils/codeGraphSigmaAdapter";
+import "./CodeKnowledgeGraphPanel.css";
 
 interface GraphCanvasProps {
   data: CodeGraphSubgraphResponse | null;
   onNodeClick?: (node: GraphNode) => void;
+  /** Mirrors GitNexus: clearing canvas selection updates app state */
+  onStageClick?: () => void;
+  /** Current inspector / app selection — drives Focus control and sync after `setGraph` */
+  selectedNode?: GraphNode | null;
 }
 
-// Auto-enable WebGL when edges exceed this threshold
-const WEBGL_EDGE_THRESHOLD = 500;
+export function GraphCanvas({ data, onNodeClick, onStageClick, selectedNode }: GraphCanvasProps) {
+  const nodeById = useMemo(() => {
+    if (!data) return new Map<string, GraphNode>();
+    return new Map(data.nodes.map((n) => [n.id, n]));
+  }, [data]);
 
-export function GraphCanvas({ data, onNodeClick }: GraphCanvasProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const rendererRef = useRef<WebGLRenderer | null>(null);
-  const workerRef = useRef<Worker | null>(null);
-  const positionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
-  const animFrameRef = useRef<number>(0);
+  const handleNodeClick = useCallback(
+    (nodeId: string) => {
+      const node = nodeById.get(nodeId);
+      if (node) onNodeClick?.(node);
+    },
+    [nodeById, onNodeClick],
+  );
 
-  const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
-  const [hoveredNode, setHoveredNode] = useState<GraphNode | null>(null);
-  const [layoutReady, setLayoutReady] = useState(false);
+  const [hoveredLabel, setHoveredLabel] = useState<string | null>(null);
 
-  // Container resize
-  useEffect(() => {
-    if (!containerRef.current) return;
-    const el = containerRef.current;
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const w = Math.floor(entry.contentRect.width);
-        const h = Math.floor(entry.contentRect.height);
-        if (w > 0 && h > 0) setDimensions({ width: w, height: h });
+  const handleNodeHover = useCallback(
+    (nodeId: string | null) => {
+      if (!nodeId || !data) {
+        setHoveredLabel(null);
+        return;
       }
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
+      const node = nodeById.get(nodeId);
+      setHoveredLabel(node?.label ?? null);
+    },
+    [data, nodeById],
+  );
 
-  // Create worker and compute layout when data changes
+  const {
+    containerRef,
+    sigmaRef,
+    sigmaReady,
+    setGraph,
+    zoomIn,
+    zoomOut,
+    resetZoom,
+    focusNode,
+    isLayoutRunning,
+    startLayout,
+    stopLayout,
+    selectedNode: sigmaSelectedId,
+    setSelectedNode: setSigmaSelectedNode,
+  } = useCodeGraphSigma({
+    onNodeClick: handleNodeClick,
+    onNodeHover: handleNodeHover,
+    onStageClick,
+  });
+
   useEffect(() => {
-    if (!data?.nodes || data.nodes.length === 0) {
-      positionsRef.current.clear();
-      setLayoutReady(false);
-      return;
-    }
+    if (!sigmaReady || !data || data.nodes.length === 0) return;
+    const g = codeSubgraphToGraphology(data);
+    setGraph(g);
+  }, [sigmaReady, data, setGraph]);
 
-    // Create worker from the TS file via Blob URL
-    if (workerRef.current) workerRef.current.terminate();
-
-    const worker = new Worker(new URL("./layoutWorker.ts", import.meta.url), { type: "module" });
-    workerRef.current = worker;
-
-    worker.onmessage = (e: MessageEvent) => {
-      const { positions } = e.data;
-      const posMap = new Map<string, { x: number; y: number }>();
-      for (const p of positions) {
-        posMap.set(p.id, { x: p.x, y: p.y });
-      }
-      positionsRef.current = posMap;
-      setLayoutReady(true);
-    };
-
-    worker.postMessage({
-      nodes: data.nodes.map((n) => ({ id: n.id })),
-      edges: data.edges.map((e) => ({ source: e.source, target: e.target })),
-      width: dimensions.width,
-      height: dimensions.height,
-    });
-
-    return () => {
-      worker.terminate();
-      workerRef.current = null;
-    };
-  }, [data, dimensions]);
-
-  // Initialize renderer when dimensions are ready
   useEffect(() => {
-    if (!canvasRef.current) return;
-    if (rendererRef.current) rendererRef.current.dispose();
+    if (selectedNode) setSigmaSelectedNode(selectedNode.id);
+    else setSigmaSelectedNode(null);
+  }, [selectedNode, setSigmaSelectedNode]);
 
-    try {
-      rendererRef.current = new WebGLRenderer({
-        canvas: canvasRef.current,
-        width: dimensions.width,
-        height: dimensions.height,
-        onNodeHover: (node) => setHoveredNode(node),
-        onNodeClick,
-      });
-    } catch {
-      // WebGL not supported — fallback handled below
-    }
+  const handleFocusSelected = useCallback(() => {
+    if (selectedNode) focusNode(selectedNode.id);
+  }, [selectedNode, focusNode]);
 
-    return () => {
-      rendererRef.current?.dispose();
-      rendererRef.current = null;
-    };
-  }, [dimensions.width, dimensions.height, onNodeClick]);
+  const handleClearSelection = useCallback(() => {
+    onStageClick?.();
+    setSigmaSelectedNode(null);
+    resetZoom();
+  }, [onStageClick, setSigmaSelectedNode, resetZoom]);
 
-  // Render loop
   useEffect(() => {
-    if (!layoutReady || !rendererRef.current || !data) return;
+    const sigma = sigmaRef.current;
+    if (!sigma || !sigmaReady) return;
+    const onResize = () => sigma.resize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [sigmaRef, sigmaReady]);
 
-    rendererRef.current.resize(dimensions.width, dimensions.height);
-
-    const loop = () => {
-      if (rendererRef.current && positionsRef.current.size > 0) {
-        const zoomLevel = rendererRef.current.getZoomLevel();
-        rendererRef.current.render(data.nodes, data.edges, positionsRef.current, zoomLevel);
-      }
-      animFrameRef.current = requestAnimationFrame(loop);
-    };
-    animFrameRef.current = requestAnimationFrame(loop);
-
-    return () => {
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    };
-  }, [layoutReady, data, dimensions]);
-
-  // Resize renderer when container changes
-  useEffect(() => {
-    rendererRef.current?.resize(dimensions.width, dimensions.height);
-  }, [dimensions]);
-
-  if (!data || data.nodes.length === 0) {
-    return null;
-  }
-
-  const useWebgl = data.edges.length > WEBGL_EDGE_THRESHOLD;
+  if (!data || data.nodes.length === 0) return null;
 
   return (
-    <div ref={containerRef} style={{ width: "100%", height: "100%", position: "relative" }}>
-      <canvas
-        ref={canvasRef}
-        style={{ width: "100%", height: "100%", display: "block", cursor: hoveredNode ? "pointer" : "grab" }}
-      />
-      <div style={{ position: "absolute", bottom: 8, left: 8, fontSize: 11, opacity: 0.6 }}>
-        {useWebgl ? "WebGL" : "Canvas"} · 滚轮缩放 · 拖拽平移 · 点击节点查看详情
-        {!layoutReady && " · 计算布局中..."}
+    <div className="app-graph-canvas-root">
+      <div className="app-graph-canvas-gradient" aria-hidden />
+
+      <div ref={containerRef} className="sigma-container app-graph-sigma-host" />
+
+      {hoveredLabel && !sigmaSelectedId && (
+        <div className="app-graph-hover-chip">
+          <span className="app-graph-hover-chip-text">{hoveredLabel}</span>
+        </div>
+      )}
+
+      {sigmaSelectedId && selectedNode && (
+        <div className="app-graph-selection-chip">
+          <span className="app-graph-selection-dot" />
+          <span className="app-graph-hover-chip-text">{selectedNode.label}</span>
+          <span className="app-graph-selection-kind">({selectedNode.kind})</span>
+          <button type="button" className="app-graph-selection-clear" onClick={handleClearSelection}>
+            清除
+          </button>
+        </div>
+      )}
+
+      <div className="app-graph-controls">
+        <ControlBtn onClick={zoomIn} title="放大">
+          <ZoomInOutlined />
+        </ControlBtn>
+        <ControlBtn onClick={zoomOut} title="缩小">
+          <ZoomOutOutlined />
+        </ControlBtn>
+        <ControlBtn onClick={resetZoom} title="适应屏幕">
+          <ArrowsAltOutlined />
+        </ControlBtn>
+
+        <div className="app-graph-controls-divider" />
+
+        {selectedNode && (
+          <ControlBtn onClick={handleFocusSelected} title="聚焦选中节点" accent>
+            <AimOutlined />
+          </ControlBtn>
+        )}
+
+        {sigmaSelectedId && (
+          <ControlBtn onClick={handleClearSelection} title="清除选中">
+            <RollbackOutlined />
+          </ControlBtn>
+        )}
+
+        <div className="app-graph-controls-divider" />
+
+        <ControlBtn
+          onClick={isLayoutRunning ? stopLayout : startLayout}
+          title={isLayoutRunning ? "停止布局" : "重新布局"}
+          accent={isLayoutRunning}
+          pulse={isLayoutRunning}
+        >
+          {isLayoutRunning ? <PauseCircleOutlined /> : <PlayCircleOutlined />}
+        </ControlBtn>
       </div>
+
+      {isLayoutRunning && (
+        <div className="app-graph-layout-toast">
+          <span className="app-graph-layout-dot" />
+          <span className="app-graph-layout-text">布局优化中…</span>
+        </div>
+      )}
     </div>
+  );
+}
+
+function ControlBtn({
+  children,
+  onClick,
+  title,
+  accent,
+  pulse,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+  title: string;
+  accent?: boolean;
+  pulse?: boolean;
+}) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button
+      type="button"
+      className={`app-graph-control-btn${accent ? " app-graph-control-btn--accent" : ""}${pulse ? " app-graph-control-btn--pulse" : ""}`}
+      style={{
+        opacity: hovered ? 1 : 0.92,
+      }}
+      title={title}
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      {children}
+    </button>
   );
 }

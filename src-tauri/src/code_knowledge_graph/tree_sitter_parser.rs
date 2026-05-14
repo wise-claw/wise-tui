@@ -15,36 +15,7 @@ impl Parser {
         relative_path: &str,
         conn: &rusqlite::Connection,
     ) -> Result<(usize, usize), String> {
-        let label = relative_path
-            .split('/')
-            .last()
-            .unwrap_or(relative_path)
-            .to_string();
-
-        // Add file node
-        let line_count = content.lines().count();
-        let range = Some(crate::code_knowledge_graph::types::GraphRange {
-            start: crate::code_knowledge_graph::types::GraphPosition {
-                line: 0,
-                column: 0,
-            },
-            end: crate::code_knowledge_graph::types::GraphPosition {
-                line: line_count,
-                column: 0,
-            },
-        });
-
-        graph_storage::upsert_node(
-            conn,
-            file_node_id,
-            "file",
-            None,
-            &label,
-            relative_path,
-            repo_id,
-            range,
-            None,
-        )?;
+        // File node is already created by index_repository — just extract symbols/imports
 
         // Extract imports via regex-based parsing
         let import_count = self.extract_imports(conn, content, file_node_id, repo_id, relative_path)?;
@@ -52,7 +23,7 @@ impl Parser {
         // Extract basic symbols (function/class declarations) via regex
         let symbol_count = self.extract_symbols_regex(conn, content, file_node_id, repo_id, relative_path)?;
 
-        Ok((1 + symbol_count, symbol_count + import_count))
+        Ok((symbol_count, symbol_count + import_count))
     }
 
     fn extract_symbols_regex(

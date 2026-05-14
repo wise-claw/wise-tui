@@ -24,15 +24,235 @@
 }
 
 .app-code-graph-content {
+  flex: 1 1 0%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  overflow: hidden;
+  padding: 0;
+}
+
+/* 空状态 / 加载仍居中，不占满图谱时的留白 */
+.app-code-graph-content > .ant-spin-nested-loading,
+.app-code-graph-content > .ant-empty {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: auto;
   padding: 24px;
+  min-height: 0;
 }
 
 .app-code-graph-empty-state {
   text-align: center;
   max-width: 400px;
+}
+
+/* Indexing progress animation */
+@keyframes code-graph-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.app-code-graph-indexing-status {
+  animation: code-graph-pulse 2s ease-in-out infinite;
+}
+
+/* GitNexus-style Sigma host + chrome */
+.app-graph-canvas-root {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #0a0a10;
+  overflow: hidden;
+}
+
+.app-graph-canvas-gradient {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(124, 58, 237, 0.03) 0%, transparent 70%),
+    linear-gradient(to bottom, #06060a, #0a0a10);
+}
+
+.sigma-container.app-graph-sigma-host {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  cursor: grab;
+}
+
+.sigma-container.app-graph-sigma-host:active {
+  cursor: grabbing;
+}
+
+.sigma-container.app-graph-sigma-host canvas {
+  outline: none;
+  display: block;
+}
+
+.app-graph-hover-chip,
+.app-graph-selection-chip {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(24, 24, 32, 0.95);
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-graph-selection-chip {
+  pointer-events: auto;
+  border-color: rgba(24, 144, 255, 0.35);
+  background: rgba(24, 144, 255, 0.12);
+}
+
+.app-graph-hover-chip-text {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 13px;
+  color: #e4e4ed;
+}
+
+.app-graph-selection-kind {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.app-graph-selection-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #1890ff;
+  animation: app-graph-pulse-dot 1.2s ease-in-out infinite;
+}
+
+.app-graph-selection-clear {
+  margin-left: 4px;
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: #e4e4ed;
+  font-size: 12px;
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.app-graph-selection-clear:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.app-graph-controls {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.app-graph-controls-divider {
+  height: 1px;
+  margin: 4px 0;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.app-graph-control-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(24, 24, 32, 0.95);
+  color: #a1a1aa;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+  cursor: pointer;
+}
+
+.app-graph-control-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f4f4f5;
+}
+
+.app-graph-control-btn--accent {
+  border-color: rgba(24, 144, 255, 0.35);
+  background: rgba(24, 144, 255, 0.15);
+  color: #69b1ff;
+}
+
+.app-graph-control-btn--pulse {
+  animation: app-graph-pulse-btn 1.5s ease-in-out infinite;
+}
+
+.app-graph-layout-toast {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(82, 196, 26, 0.35);
+  background: rgba(82, 196, 26, 0.12);
+  backdrop-filter: blur(8px);
+}
+
+.app-graph-layout-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #73d13d;
+  animation: app-graph-pulse-dot 1s ease-in-out infinite;
+}
+
+.app-graph-layout-text {
+  font-size: 12px;
+  font-weight: 500;
+  color: #95de64;
+}
+
+@keyframes app-graph-pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(0.92);
+  }
+}
+
+@keyframes app-graph-pulse-btn {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(24, 144, 255, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 12px 2px rgba(24, 144, 255, 0.2);
+  }
 }

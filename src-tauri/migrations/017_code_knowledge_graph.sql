@@ -35,5 +35,6 @@ CREATE TABLE IF NOT EXISTS graph_index_meta (
   error TEXT,
   total_nodes INTEGER DEFAULT 0,
   total_edges INTEGER DEFAULT 0,
+  progress INTEGER DEFAULT 0,
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

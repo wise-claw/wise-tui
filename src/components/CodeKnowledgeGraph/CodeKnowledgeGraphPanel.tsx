@@ -1,8 +1,9 @@
+import { listen } from "@tauri-apps/api/event";
 import {
   PlayCircleOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
-import { Button, Empty, Select, Space, Spin, Tag, Typography } from "antd";
+import { Alert, Button, Empty, Progress, Select, Space, Spin, Tag, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getCodeGraphIndexStatus,
@@ -35,6 +36,7 @@ export function CodeKnowledgeGraphPanel({ repositoryId, repositories, onSelectRe
   const [subgraphData, setSubgraphData] = useState<CodeGraphSubgraphResponse | null>(null);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [subgraphLoading, setSubgraphLoading] = useState(false);
+  const [indexError, setIndexError] = useState<string | null>(null);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -65,6 +67,12 @@ export function CodeKnowledgeGraphPanel({ repositoryId, repositories, onSelectRe
           clearInterval(pollRef.current);
           pollRef.current = null;
         }
+      } else if (status.status === "error") {
+        setIndexError(status.error ?? "索引失败");
+        if (pollRef.current) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+        }
       } else if (status.status === "indexing") {
         // Start polling for index completion
         if (!pollRef.current) {
@@ -79,6 +87,37 @@ export function CodeKnowledgeGraphPanel({ repositoryId, repositories, onSelectRe
       setLoading(false);
     }
   }, [repositoryId]);
+
+  // Listen for index events from the spawned Rust task
+  useEffect(() => {
+    const unsubs: Promise<() => void>[] = [];
+
+    const completeUnsub = listen("code-graph-index-complete", (event: any) => {
+      if (event.payload?.repositoryId === repositoryId) {
+        setIndexError(null);
+        void fetchStatus();
+      }
+    });
+    unsubs.push(completeUnsub);
+
+    const errorUnsub = listen("code-graph-index-error", (event: any) => {
+      if (event.payload?.repositoryId === repositoryId) {
+        setIndexError(event.payload.error ?? "索引失败");
+        if (repositoryId) {
+          setIndexStatus({ status: "error", repositoryId, progress: 0 });
+        }
+        if (pollRef.current) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+        }
+      }
+    });
+    unsubs.push(errorUnsub);
+
+    return () => {
+      unsubs.forEach((p) => p.then((fn) => fn()));
+    };
+  }, [repositoryId, fetchStatus]);
 
   useEffect(() => {
     void fetchStatus();
@@ -106,7 +145,8 @@ export function CodeKnowledgeGraphPanel({ repositoryId, repositories, onSelectRe
     setSelectedNode(null);
     try {
       await triggerCodeGraphReindex({ repositoryId });
-      setIndexStatus({ status: "indexing", repositoryId });
+      setIndexStatus({ status: "indexing", repositoryId, progress: 1 });
+      setIndexError(null);
     } catch {
       // Show error in status
     } finally {
@@ -152,9 +192,32 @@ export function CodeKnowledgeGraphPanel({ repositoryId, repositories, onSelectRe
     }
     if (subgraphData && subgraphData.nodes.length > 0) {
       return (
-        <div style={{ display: "flex", height: "100%", width: "100%" }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <GraphCanvas data={subgraphData} onNodeClick={handleNodeClick} />
+        <div
+          className="app-code-graph-graph-root"
+          style={{
+            display: "flex",
+            flex: 1,
+            alignSelf: "stretch",
+            width: "100%",
+            minWidth: 0,
+            minHeight: 0,
+          }}
+        >
+          <div
+            style={{
+              flex: 1,
+              minWidth: 0,
+              minHeight: 0,
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
+            <GraphCanvas
+              data={subgraphData}
+              onNodeClick={handleNodeClick}
+              onStageClick={() => setSelectedNode(null)}
+              selectedNode={selectedNode}
+            />
           </div>
           <div style={{ width: 280, borderLeft: "1px solid var(--ant-color-border)", overflow: "auto" }}>
             <InspectorPanel
@@ -226,6 +289,7 @@ export function CodeKnowledgeGraphPanel({ repositoryId, repositories, onSelectRe
             )}
             {isIndexed && <Tag color="green">已索引</Tag>}
             {isIndexing && <Tag color="orange">索引中...</Tag>}
+            {indexError && <Tag color="red">索引失败</Tag>}
             {hasData && (
               <Tag>{subgraphData!.nodes.length} 节点 · {subgraphData!.edges.length} 边</Tag>
             )}
@@ -267,21 +331,51 @@ export function CodeKnowledgeGraphPanel({ repositoryId, repositories, onSelectRe
               />
             )}
           </Empty>
+        ) : indexError ? (
+          <div style={{ maxWidth: 480, padding: 24 }}>
+            <Alert
+              type="error"
+              message="索引失败"
+              description={indexError}
+              showIcon
+              style={{ marginBottom: 16 }}
+            />
+            <Button type="primary" onClick={handleReindex} disabled={reindexing}>
+              重试
+            </Button>
+          </div>
         ) : !isIndexed ? (
-          <Empty
-            description={
-              isIndexing
-                ? "正在索引代码，请稍候..."
-                : `尚未建立知识图谱索引，点击上方「开始索引」为 ${currentRepo?.name ?? "该仓库"} 建立索引`
-            }
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-          >
-            {!isIndexing && (
+          isIndexing ? (
+            <div style={{ textAlign: "center", maxWidth: 320, padding: 24 }}>
+              <div style={{ marginBottom: 16 }}>
+                <Spin size="large" />
+              </div>
+              <Progress
+                type="circle"
+                percent={indexStatus?.progress ?? 0}
+                size={120}
+                format={(percent) => (
+                  <span style={{ fontSize: 20 }}>
+                    {percent ?? 0}%
+                  </span>
+                )}
+              />
+              <Typography.Text type="secondary" style={{ marginTop: 16, display: "block" }}>
+                正在为 {currentRepo?.name ?? "该仓库"} 建立索引...
+              </Typography.Text>
+            </div>
+          ) : (
+            <Empty
+              description={
+                `尚未建立知识图谱索引，点击上方「开始索引」为 ${currentRepo?.name ?? "该仓库"} 建立索引`
+              }
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+            >
               <Button type="primary" onClick={handleReindex} disabled={reindexing}>
                 开始索引
               </Button>
-            )}
-          </Empty>
+            </Empty>
+          )
         ) : (
           graphContent
         )}

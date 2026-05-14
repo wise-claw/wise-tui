@@ -104,7 +104,8 @@ body {
 }
 
 .app-mcp-hub-overlay > .app-mcp-hub-root,
-.app-skills-hub-overlay > .app-skills-hub-root {
+.app-skills-hub-overlay > .app-skills-hub-root,
+.app-code-graph-overlay > .app-code-graph-panel {
   flex: 1 1 0%;
   min-height: 0;
 }

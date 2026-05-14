@@ -90,15 +90,16 @@ pub fn update_index_meta(
     error: Option<&str>,
     total_nodes: usize,
     total_edges: usize,
+    progress: Option<u8>,
 ) -> Result<(), String> {
     conn.execute(
-        "INSERT INTO graph_index_meta (repo_id, index_version, status, error, total_nodes, total_edges)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+        "INSERT INTO graph_index_meta (repo_id, index_version, status, error, total_nodes, total_edges, progress)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
          ON CONFLICT(repo_id) DO UPDATE SET
            index_version=excluded.index_version, status=excluded.status,
            error=excluded.error, total_nodes=excluded.total_nodes,
-           total_edges=excluded.total_edges, updated_at=datetime('now')",
-        params![repo_id, index_version, status, error, total_nodes, total_edges],
+           total_edges=excluded.total_edges, progress=COALESCE(excluded.progress, graph_index_meta.progress), updated_at=datetime('now')",
+        params![repo_id, index_version, status, error, total_nodes, total_edges, progress],
     )
     .map_err(|e| e.to_string())?;
     Ok(())
@@ -108,22 +109,22 @@ pub fn get_index_status(
     conn: &rusqlite::Connection,
     repo_id: i64,
 ) -> Result<crate::code_knowledge_graph::types::CodeGraphIndexStatusResponse, String> {
-    let row: Option<(String, String, Option<String>, i64, i64)> = conn
+    let row: Option<(String, String, Option<String>, i64, i64, i64)> = conn
         .query_row(
-            "SELECT status, index_version, error, total_nodes, total_edges
+            "SELECT status, index_version, error, total_nodes, total_edges, progress
              FROM graph_index_meta WHERE repo_id = ?1",
             params![repo_id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?)),
         )
         .optional()
         .map_err(|e| e.to_string())?;
 
     match row {
-        Some((status, index_version, error, _total_nodes, _total_edges)) => {
+        Some((status, index_version, error, _total_nodes, _total_edges, progress)) => {
             Ok(crate::code_knowledge_graph::types::CodeGraphIndexStatusResponse {
                 status,
                 repository_id: repo_id,
-                progress: Some(100),
+                progress: Some(progress as u8),
                 index_version: Some(index_version),
                 error,
             })

@@ -207,6 +207,7 @@ impl WiseDb {
         conn.execute_batch("PRAGMA foreign_keys = ON;")
             .map_err(|e| e.to_string())?;
         run_migrations(&conn)?;
+        ensure_graph_index_meta_progress_column(&conn)?;
         Ok(Self(Mutex::new(conn)))
     }
 
@@ -1729,6 +1730,25 @@ fn run_migrations(conn: &Connection) -> Result<(), String> {
         }
     }
 
+    Ok(())
+}
+
+/// Best-effort: ensure `graph_index_meta` has a `progress` column.
+/// Handles databases created by earlier versions of migration 017 that
+/// lacked this column.
+fn ensure_graph_index_meta_progress_column(conn: &Connection) -> Result<(), String> {
+    let missing = conn
+        .query_row(
+            "SELECT COUNT(*) = 0 FROM pragma_table_info('graph_index_meta') WHERE name = 'progress'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(false);
+    if missing {
+        let _ = conn.execute_batch(
+            "ALTER TABLE graph_index_meta ADD COLUMN progress INTEGER DEFAULT 0;",
+        );
+    }
     Ok(())
 }
 
