@@ -173,6 +173,9 @@ export async function openWorkspaceIn(
     appName?: string;
     command?: string;
     args?: string[];
+    /** 与 VS Code / Cursor CLI `-g` 一致：1-based 行、列；仅对 `code`/`cursor`/`codium` 命令生效 */
+    gotoLine?: number;
+    gotoColumn?: number;
   },
 ): Promise<void> {
   return invoke("open_workspace_in", {
@@ -180,5 +183,7 @@ export async function openWorkspaceIn(
     appName: options.appName ?? null,
     command: options.command ?? null,
     args: options.args ?? [],
+    gotoLine: options.gotoLine ?? null,
+    gotoColumn: options.gotoColumn ?? null,
   });
 }

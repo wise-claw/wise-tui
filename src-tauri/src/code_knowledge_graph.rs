@@ -4,12 +4,13 @@ pub mod index_extensions;
 pub mod indexer;
 pub mod tree_sitter_parser;
 pub mod subgraph;
+pub mod search;
 pub mod openapi_parser;
 pub mod synthetic_openapi;
 
 use types::{
     CodeGraphSubgraphRequest, CodeGraphSubgraphResponse,
-    CodeGraphReindexRequest, CodeGraphIndexStatusResponse,
+    CodeGraphNodeSearchRequest, CodeGraphReindexRequest, CodeGraphIndexStatusResponse,
 };
 use crate::wise_db::WiseDb;
 use tauri::Emitter;
@@ -30,6 +31,17 @@ pub fn get_code_graph_subgraph(
         req.node_type_filter.as_ref().map(|f| f.as_slice()),
         req.direction,
     )
+}
+
+/// Search indexed nodes across one or more repositories (full `graph_nodes` scan per repo, not the visible subgraph).
+#[tauri::command]
+pub fn search_code_graph_nodes(
+    state: tauri::State<WiseDb>,
+    req: CodeGraphNodeSearchRequest,
+) -> Result<Vec<types::GraphNode>, String> {
+    let conn = state.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+    let lim = req.limit.unwrap_or(80).min(200).max(1) as usize;
+    search::search_graph_nodes(&conn, &req.repository_ids, &req.query, lim)
 }
 
 /// Trigger reindexing of a repository's knowledge graph.

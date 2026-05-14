@@ -1,7 +1,7 @@
 import { listen } from "@tauri-apps/api/event";
 import {
+  CloseOutlined,
   PlayCircleOutlined,
-  ReloadOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
 import { Alert, Button, Empty, Progress, Select, Space, Spin, Tag, Typography } from "antd";
@@ -9,10 +9,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getCodeGraphIndexStatus,
   getCodeGraphSubgraph,
+  searchCodeGraphNodes,
   triggerCodeGraphReindex,
 } from "../../services/codeKnowledgeGraph";
 import { filterGraphNodesForSearch } from "../../utils/codeGraphNodeSearch";
-import { parseCodeGraphSubgraphResponse } from "../../utils/codeKnowledgeGraphResponse";
+import {
+  parseCodeGraphNodeSearchResponse,
+  parseCodeGraphSubgraphResponse,
+} from "../../utils/codeKnowledgeGraphResponse";
 import type {
   CodeGraphIndexStatusResponse,
   CodeGraphSubgraphDirection,
@@ -20,6 +24,7 @@ import type {
   CodeGraphSubgraphResponse,
   GraphNode,
 } from "../../types/codeKnowledgeGraph";
+import { CodeGraphSourcePreview } from "./CodeGraphSourcePreview";
 import {
   CodeKnowledgeGraphChartColumn,
   type CodeKnowledgeGraphChartColumnHandle,
@@ -38,18 +43,29 @@ interface RepositoryInfo {
 interface Props {
   repositoryId: number | null;
   repositories?: RepositoryInfo[];
+  /** 全库搜索覆盖的仓库；省略时仅搜索当前 `repositoryId` */
+  searchRepositoryIds?: number[];
   onSelectRepository?: (repoId: number) => void;
   onClose?: () => void;
-  /** 在仓库内置编辑器（Monaco）中打开相对路径 */
+  /** 侧栏「在编辑器中打开」：非 Monaco 类型或预览失败时使用 */
   onOpenRepositoryFile?: (relativePath: string) => void;
 }
 
 const SUBGRAPH_SEARCH_DEBOUNCE_MS = 220;
 const SUBGRAPH_SEARCH_MIN_QUERY_LEN = 1;
 
+/** 图谱默认占主区域宽度约 2/3（与 GitNexus 主画布比例接近） */
+const GRAPH_PANE_DEFAULT_PCT = 200 / 3;
+const GRAPH_PANE_MIN_PCT = 22;
+const GRAPH_PANE_MAX_PCT = 88;
+const GRAPH_PANE_MIN_GRAPH_PX = 220;
+const GRAPH_PANE_MIN_RIGHT_PX = 200;
+const SPLITTER_WIDTH_PX = 6;
+
 export function CodeKnowledgeGraphPanel({
   repositoryId,
   repositories,
+  searchRepositoryIds: searchRepositoryIdsProp,
   onSelectRepository,
   onClose,
   onOpenRepositoryFile,
@@ -60,16 +76,24 @@ export function CodeKnowledgeGraphPanel({
   const [subgraphData, setSubgraphData] = useState<CodeGraphSubgraphResponse | null>(null);
   const [subgraphHopScope, setSubgraphHopScope] = useState<SubgraphHopScope>(3);
   const [subgraphFocusId, setSubgraphFocusId] = useState<string | undefined>(undefined);
-  /** `undefined`：双向子图；侧栏「展开子图」会清回双向 */
+  /** `undefined`：双向子图 */
   const [subgraphDirection, setSubgraphDirection] = useState<CodeGraphSubgraphDirection | undefined>(undefined);
+  /** 上卷/下钻与当前状态相同时仍须重拉子图（按工具栏跳数），递增以触发 effect */
+  const [subgraphRefreshKey, setSubgraphRefreshKey] = useState(0);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [subgraphLoading, setSubgraphLoading] = useState(false);
   const [indexError, setIndexError] = useState<string | null>(null);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const chartColumnRef = useRef<CodeKnowledgeGraphChartColumnHandle | null>(null);
+  const splitLayoutRef = useRef<HTMLDivElement | null>(null);
+  /** 图谱列占 split 区域宽度的百分比（右侧为剩余 + 中间 6px 分隔条） */
+  const [graphPanePercent, setGraphPanePercent] = useState(GRAPH_PANE_DEFAULT_PCT);
   const [subgraphSearchInput, setSubgraphSearchInput] = useState("");
   const [subgraphSearchDebounced, setSubgraphSearchDebounced] = useState("");
+  const [searchRemoteHits, setSearchRemoteHits] = useState<GraphNode[]>([]);
+  const [searchRemoteLoading, setSearchRemoteLoading] = useState(false);
+  const pendingCrossRepoSearchPickRef = useRef<GraphNode | null>(null);
 
   const fetchStatus = useCallback(async () => {
     if (!repositoryId) {
@@ -151,8 +175,10 @@ export function CodeKnowledgeGraphPanel({
     setSubgraphFocusId(undefined);
     setSubgraphHopScope(3);
     setSubgraphDirection(undefined);
+    setSubgraphRefreshKey(0);
     setSelectedNode(null);
     setSubgraphData(null);
+    setGraphPanePercent(GRAPH_PANE_DEFAULT_PCT);
   }, [repositoryId]);
 
   useEffect(() => {
@@ -200,7 +226,15 @@ export function CodeKnowledgeGraphPanel({
       cancelled = true;
       setSubgraphLoading(false);
     };
-  }, [repositoryId, indexStatus?.status, indexStatus?.repositoryId, subgraphFocusId, subgraphHopScope, subgraphDirection]);
+  }, [
+    repositoryId,
+    indexStatus?.status,
+    indexStatus?.repositoryId,
+    subgraphFocusId,
+    subgraphHopScope,
+    subgraphDirection,
+    subgraphRefreshKey,
+  ]);
 
   useEffect(() => {
     if (!onClose) return;
@@ -219,6 +253,7 @@ export function CodeKnowledgeGraphPanel({
     setSubgraphFocusId(undefined);
     setSubgraphHopScope(3);
     setSubgraphDirection(undefined);
+    setSubgraphRefreshKey(0);
     try {
       await triggerCodeGraphReindex({ repositoryId });
       setIndexStatus({ status: "indexing", repositoryId, progress: 1 });
@@ -238,23 +273,64 @@ export function CodeKnowledgeGraphPanel({
     setSelectedNode(null);
   }, []);
 
-  const handleNodeExpand = useCallback((node: GraphNode) => {
-    setSubgraphFocusId(node.id);
-    setSubgraphDirection(undefined);
-    setSelectedNode(node);
-  }, []);
-
   const handleSubgraphRollUp = useCallback(() => {
     if (!selectedNode) return;
     setSubgraphFocusId(selectedNode.id);
     setSubgraphDirection("upstream");
+    setSubgraphRefreshKey((k) => k + 1);
   }, [selectedNode]);
 
   const handleSubgraphDrillDown = useCallback(() => {
     if (!selectedNode) return;
     setSubgraphFocusId(selectedNode.id);
     setSubgraphDirection("downstream");
+    setSubgraphRefreshKey((k) => k + 1);
   }, [selectedNode]);
+
+  const handleGraphSplitPointerDown = useCallback(
+    (e: import("react").PointerEvent<HTMLDivElement>) => {
+      if (e.button !== 0) return;
+      const root = splitLayoutRef.current;
+      const handle = e.currentTarget;
+      if (!root) return;
+      e.preventDefault();
+      handle.setPointerCapture(e.pointerId);
+      const rect = root.getBoundingClientRect();
+      const w = rect.width;
+      if (w <= SPLITTER_WIDTH_PX + GRAPH_PANE_MIN_GRAPH_PX + GRAPH_PANE_MIN_RIGHT_PX) {
+        handle.releasePointerCapture(e.pointerId);
+        return;
+      }
+      const maxPct = Math.max(
+        GRAPH_PANE_MIN_PCT,
+        ((w - SPLITTER_WIDTH_PX - GRAPH_PANE_MIN_RIGHT_PX) / w) * 100,
+      );
+      const minPct = Math.min(GRAPH_PANE_MAX_PCT, (GRAPH_PANE_MIN_GRAPH_PX / w) * 100);
+      const lo = Math.min(minPct, maxPct);
+      const hi = Math.max(minPct, maxPct);
+      const startX = e.clientX;
+      const startPct = graphPanePercent;
+
+      const clampPct = (pct: number) => Math.min(hi, Math.max(lo, pct));
+
+      const onMove = (ev: PointerEvent) => {
+        const deltaPct = ((ev.clientX - startX) / w) * 100;
+        setGraphPanePercent(clampPct(startPct + deltaPct));
+      };
+      const onUp = (ev: PointerEvent) => {
+        if (handle.hasPointerCapture(ev.pointerId)) {
+          handle.releasePointerCapture(ev.pointerId);
+        }
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onUp);
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onUp);
+    },
+    [graphPanePercent],
+  );
 
   const subgraphSearchOptions = useMemo(() => {
     if (!subgraphData?.nodes.length) return [];
@@ -308,33 +384,40 @@ export function CodeKnowledgeGraphPanel({
     if (subgraphData && subgraphData.nodes.length > 0) {
       return (
         <div
-          className="app-code-graph-graph-root"
+          ref={splitLayoutRef}
+          className="app-code-graph-graph-root app-code-graph-graph-root--split"
           style={{
-            display: "flex",
-            flex: 1,
-            alignSelf: "stretch",
-            width: "100%",
-            minWidth: 0,
-            minHeight: 0,
+            gridTemplateColumns: `${graphPanePercent}% ${SPLITTER_WIDTH_PX}px minmax(${GRAPH_PANE_MIN_RIGHT_PX}px, 1fr)`,
           }}
         >
-          <CodeKnowledgeGraphChartColumn
-            ref={chartColumnRef}
-            subgraphData={subgraphData}
-            selectedNode={selectedNode}
-            onSelectNode={handleNodeClick}
-            onStageClick={handleStageClearSelection}
-            subgraphHopLabel={subgraphHopLabel}
-            onSubgraphRollUp={handleSubgraphRollUp}
-            onSubgraphDrillDown={handleSubgraphDrillDown}
-          />
-          <div style={{ width: 280, borderLeft: "1px solid var(--ant-color-border)", overflow: "auto" }}>
-            <InspectorPanel
-              node={selectedNode}
-              onNodeExpand={handleNodeExpand}
-              onOpenRepositoryFile={onOpenRepositoryFile}
-              repositoryId={repositoryId}
+          <div className="app-code-graph-chart-wrap">
+            <CodeKnowledgeGraphChartColumn
+              ref={chartColumnRef}
+              subgraphData={subgraphData}
+              selectedNode={selectedNode}
+              onSelectNode={handleNodeClick}
+              onStageClick={handleStageClearSelection}
+              subgraphHopLabel={subgraphHopLabel}
+              onSubgraphRollUp={handleSubgraphRollUp}
+              onSubgraphDrillDown={handleSubgraphDrillDown}
             />
+          </div>
+          <div
+            className="app-code-graph-splitter"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="拖动调整图谱与侧栏宽度"
+            onPointerDown={handleGraphSplitPointerDown}
+          />
+          <div className="app-code-graph-right-column">
+            <div className="app-code-graph-right-column-meta">
+              <InspectorPanel
+                node={selectedNode}
+                repositoryPath={currentRepo?.path}
+                onOpenRepositoryFile={onOpenRepositoryFile}
+              />
+            </div>
+            <CodeGraphSourcePreview repositoryPath={currentRepo?.path} selectedNode={selectedNode} />
           </div>
         </div>
       );
@@ -414,23 +497,15 @@ export function CodeKnowledgeGraphPanel({
               <Button
                 type="text"
                 size="small"
-                icon={<ReloadOutlined />}
+                icon={<CloseOutlined />}
+                aria-label="关闭代码图谱"
+                title="关闭"
                 onClick={onClose}
               />
             )}
           </Space>
         </div>
         <div className="app-code-graph-header-actions">
-          <Button
-            type="primary"
-            size="small"
-            icon={reindexing ? <Spin size="small" /> : <PlayCircleOutlined />}
-            onClick={handleReindex}
-            disabled={!repositoryId || reindexing}
-            loading={reindexing}
-          >
-            {isIndexed ? "重建索引" : "开始索引"}
-          </Button>
           {isIndexed && hasData && !subgraphLoading && subgraphData && (
             <div className="app-code-graph-subgraph-toolbar app-code-graph-subgraph-toolbar--header">
               <Typography.Text type="secondary" className="app-code-graph-subgraph-toolbar-label">
@@ -445,11 +520,10 @@ export function CodeKnowledgeGraphPanel({
                 options={HOP_SELECT_OPTIONS}
                 aria-label="子图跳数"
               />
-              <div className="app-code-graph-subgraph-toolbar-spacer" aria-hidden />
               <Select
                 showSearch
                 allowClear
-                className="app-code-graph-node-search"
+                className="app-code-graph-node-search app-code-graph-node-search--header"
                 size="small"
                 placeholder="搜索节点（名称 / 路径）"
                 suffixIcon={<SearchOutlined />}
@@ -472,6 +546,16 @@ export function CodeKnowledgeGraphPanel({
               />
             </div>
           )}
+          <Button
+            type="primary"
+            size="small"
+            icon={reindexing ? <Spin size="small" /> : <PlayCircleOutlined />}
+            onClick={handleReindex}
+            disabled={!repositoryId || reindexing}
+            loading={reindexing}
+          >
+            {isIndexed ? "重建索引" : "开始索引"}
+          </Button>
         </div>
       </header>
       <div className="app-code-graph-content">

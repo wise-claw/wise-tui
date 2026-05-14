@@ -46,6 +46,9 @@ const NODE_SIZES: Record<GraphNodeKind, number> = {
 
 const EDGE_STYLES: Record<GraphEdgeKind, { color: string; sizeMultiplier: number }> = {
   contains: { color: "#2d5a3d", sizeMultiplier: 0.4 },
+  defines: { color: "#276749", sizeMultiplier: 0.45 },
+  has_method: { color: "#2c5282", sizeMultiplier: 0.48 },
+  has_property: { color: "#553c9a", sizeMultiplier: 0.48 },
   imports: { color: "#1d4ed8", sizeMultiplier: 0.6 },
   calls: { color: "#7c3aed", sizeMultiplier: 0.8 },
   implements: { color: "#be185d", sizeMultiplier: 0.9 },
@@ -94,14 +97,31 @@ export function codeSubgraphToGraphology(d: CodeGraphSubgraphResponse): Graph<Co
   const nodeCount = d.nodes.length;
   const nodeMap = new Map(d.nodes.map((n) => [n.id, n]));
 
-  const parentToChildren = new Map<string, string[]>();
-  const childToParent = new Map<string, string>();
+  /** Structural layout: GitNexus-style priority — HAS_METHOD/HAS_PROPERTY > DEFINES > CONTAINS. */
+  const childLayout = new Map<string, { parent: string; priority: number }>();
+  const considerLayoutParent = (child: string, parent: string, priority: number) => {
+    const cur = childLayout.get(child);
+    if (!cur || priority > cur.priority) {
+      childLayout.set(child, { parent, priority });
+    }
+  };
 
   for (const e of d.edges) {
-    if (e.kind !== "contains") continue;
-    if (!parentToChildren.has(e.source)) parentToChildren.set(e.source, []);
-    parentToChildren.get(e.source)!.push(e.target);
-    childToParent.set(e.target, e.source);
+    if (e.kind === "has_method" || e.kind === "has_property") {
+      considerLayoutParent(e.target, e.source, 3);
+    } else if (e.kind === "defines") {
+      considerLayoutParent(e.target, e.source, 2);
+    } else if (e.kind === "contains") {
+      considerLayoutParent(e.target, e.source, 1);
+    }
+  }
+
+  const parentToChildren = new Map<string, string[]>();
+  const childToParent = new Map<string, string>();
+  for (const [child, { parent }] of childLayout) {
+    childToParent.set(child, parent);
+    if (!parentToChildren.has(parent)) parentToChildren.set(parent, []);
+    parentToChildren.get(parent)!.push(child);
   }
 
   const structuralKinds = new Set<GraphNodeKind>(["repo", "folder"]);

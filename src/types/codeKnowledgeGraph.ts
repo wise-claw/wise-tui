@@ -1,5 +1,15 @@
 export type GraphNodeKind = "repo" | "folder" | "file" | "symbol" | "api_operation" | "schema";
-export type GraphEdgeKind = "contains" | "imports" | "calls" | "implements" | "frontend_invokes_api" | "backend_serves_api" | "cross_repo";
+export type GraphEdgeKind =
+  | "contains"
+  | "defines"
+  | "has_method"
+  | "has_property"
+  | "imports"
+  | "calls"
+  | "implements"
+  | "frontend_invokes_api"
+  | "backend_serves_api"
+  | "cross_repo";
 
 export interface GraphPosition {
   line: number;
@@ -46,6 +56,14 @@ export type CodeGraphSubgraphHopDepth = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
 
 /** 与后端 `CodeGraphSubgraphDirection` 一致：双向、仅入边（上卷）、仅出边（下钻） */
 export type CodeGraphSubgraphDirection = "both" | "upstream" | "downstream";
+
+/** 全库节点搜索（SQLite `graph_nodes`，非当前子图内存过滤） */
+export interface CodeGraphNodeSearchRequest {
+  repositoryIds: number[];
+  query: string;
+  /** 默认 80，最大 200 */
+  limit?: number;
+}
 
 export interface CodeGraphSubgraphRequest {
   repositoryId: number;

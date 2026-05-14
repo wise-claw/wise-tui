@@ -1,16 +1,22 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  CodeGraphNodeSearchRequest,
   CodeGraphSubgraphHopDepth,
   CodeGraphSubgraphRequest,
   CodeGraphSubgraphResponse,
   CodeGraphReindexRequest,
   CodeGraphIndexStatusResponse,
+  GraphNode,
 } from "../types/codeKnowledgeGraph";
 
 export async function getCodeGraphSubgraph(
   req: CodeGraphSubgraphRequest,
 ): Promise<CodeGraphSubgraphResponse> {
   return invoke<CodeGraphSubgraphResponse>("get_code_graph_subgraph", { req });
+}
+
+export async function searchCodeGraphNodes(req: CodeGraphNodeSearchRequest): Promise<GraphNode[]> {
+  return invoke<GraphNode[]>("search_code_graph_nodes", { req });
 }
 
 export async function triggerCodeGraphReindex(

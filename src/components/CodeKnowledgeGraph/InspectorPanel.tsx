@@ -1,14 +1,16 @@
 import { CodeOutlined, FileOutlined, FolderOpenOutlined, GlobalOutlined } from "@ant-design/icons";
 import { Button, Descriptions, Tag, Typography } from "antd";
+import { openCodeGraphNodeInIde } from "../../services/openCodeGraphNodeInIde";
 import type { GraphNode } from "../../types/codeKnowledgeGraph";
+import { isMonacoSupportedFilePath } from "../../utils/repositoryFilePreview";
 
-const { Text } = Typography;
+const { Text, Link } = Typography;
 
 interface InspectorPanelProps {
   node: GraphNode | null;
-  onNodeExpand?: (node: GraphNode) => void;
+  /** 仓库根目录绝对路径，用于「IDE 中打开」 */
+  repositoryPath?: string | null;
   onOpenRepositoryFile?: (relativePath: string) => void;
-  repositoryId: number | null;
 }
 
 const KIND_ICONS: Record<string, typeof FileOutlined> = {
@@ -29,7 +31,21 @@ const KIND_LABELS: Record<string, string> = {
   schema: "模型",
 };
 
-export function InspectorPanel({ node, onNodeExpand, onOpenRepositoryFile, repositoryId }: InspectorPanelProps) {
+/** GitNexus-style `symbolKind` (Class, Method, Property, …) → 中文 */
+const SYMBOL_KIND_LABELS: Record<string, string> = {
+  Class: "类",
+  Interface: "接口",
+  Function: "函数",
+  Method: "方法",
+  Property: "属性",
+  Struct: "结构体",
+  Enum: "枚举",
+  Trait: "Trait",
+  TypeAlias: "类型别名",
+  Module: "模块",
+};
+
+export function InspectorPanel({ node, repositoryPath, onOpenRepositoryFile }: InspectorPanelProps) {
   if (!node) {
     return (
       <div className="app-code-graph-inspector app-code-graph-inspector--empty">
@@ -58,7 +74,7 @@ export function InspectorPanel({ node, onNodeExpand, onOpenRepositoryFile, repos
         </div>
       </div>
 
-      {node.kind === "file" && onOpenRepositoryFile ? (
+      {node.kind === "file" && onOpenRepositoryFile && !isMonacoSupportedFilePath(node.path) ? (
         <Button
           type="primary"
           size="small"
@@ -76,7 +92,14 @@ export function InspectorPanel({ node, onNodeExpand, onOpenRepositoryFile, repos
         size="small"
         bordered
         styles={{
-          label: { width: 52, padding: "4px 8px", fontSize: 12 },
+          label: {
+            width: 88,
+            minWidth: 88,
+            maxWidth: 88,
+            padding: "4px 10px",
+            fontSize: 12,
+            whiteSpace: "nowrap",
+          },
           content: { padding: "4px 8px", fontSize: 12, wordBreak: "break-all" },
         }}
       >
@@ -85,17 +108,29 @@ export function InspectorPanel({ node, onNodeExpand, onOpenRepositoryFile, repos
             {node.id}
           </Text>
         </Descriptions.Item>
-        <Descriptions.Item label="路径">{node.path}</Descriptions.Item>
+        <Descriptions.Item label="路径">
+          <div className="app-code-graph-inspector-path-row">
+            <Text copyable={{ text: node.path }} className="app-code-graph-inspector-path-text">
+              {node.path}
+            </Text>
+            {repositoryPath ? (
+              <Link
+                className="app-code-graph-inspector-ide-link"
+                onClick={() => void openCodeGraphNodeInIde(repositoryPath, node)}
+              >
+                IDE 中打开
+              </Link>
+            ) : null}
+          </div>
+        </Descriptions.Item>
         <Descriptions.Item label="仓库">{node.repoId}</Descriptions.Item>
-        {node.symbolKind ? <Descriptions.Item label="符号">{node.symbolKind}</Descriptions.Item> : null}
+        {node.symbolKind ? (
+          <Descriptions.Item label="符号">
+            {SYMBOL_KIND_LABELS[node.symbolKind] ?? node.symbolKind}
+          </Descriptions.Item>
+        ) : null}
         {lineRangeLabel ? <Descriptions.Item label="行号">{lineRangeLabel}</Descriptions.Item> : null}
       </Descriptions>
-
-      {onNodeExpand && repositoryId && node.kind !== "repo" ? (
-        <Button type="link" size="small" className="app-code-graph-inspector-expand-link" onClick={() => onNodeExpand(node)}>
-          展开子图（1-hop）
-        </Button>
-      ) : null}
     </div>
   );
 }

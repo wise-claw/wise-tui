@@ -326,6 +326,7 @@ pub fn run() {
             code_knowledge_graph::bridge_code_graph_http,
             code_knowledge_graph::extract_code_graph_synthetic_routes,
             code_knowledge_graph::get_code_graph_multi_subgraph,
+            code_knowledge_graph::search_code_graph_nodes,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

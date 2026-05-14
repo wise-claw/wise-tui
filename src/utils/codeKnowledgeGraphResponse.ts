@@ -7,7 +7,18 @@ import type {
 } from "../types/codeKnowledgeGraph";
 
 const VALID_NODE_KINDS = new Set(["repo", "folder", "file", "symbol", "api_operation", "schema"]);
-const VALID_EDGE_KINDS = new Set(["contains", "imports", "calls", "implements", "frontend_invokes_api", "backend_serves_api", "cross_repo"]);
+const VALID_EDGE_KINDS = new Set([
+  "contains",
+  "defines",
+  "has_method",
+  "has_property",
+  "imports",
+  "calls",
+  "implements",
+  "frontend_invokes_api",
+  "backend_serves_api",
+  "cross_repo",
+]);
 const VALID_INDEX_STATUSES = new Set(["idle", "indexing", "done", "error"]);
 
 function isValidGraphNode(node: unknown): node is GraphNode {
@@ -44,6 +55,20 @@ function isValidGraphMeta(meta: unknown): meta is GraphMeta {
     && (m.totalEdgeHint === undefined || typeof m.totalEdgeHint === "number")
     && (m.errors === undefined || Array.isArray(m.errors))
   );
+}
+
+export function parseCodeGraphNodeSearchResponse(raw: unknown): GraphNode[] {
+  if (!Array.isArray(raw)) {
+    throw new TypeError("Invalid node search response: expected array");
+  }
+  const nodes: GraphNode[] = [];
+  for (const n of raw) {
+    if (!isValidGraphNode(n)) {
+      throw new TypeError(`Invalid node search response: invalid node: ${JSON.stringify(n)}`);
+    }
+    nodes.push(n);
+  }
+  return nodes;
 }
 
 export function parseCodeGraphSubgraphResponse(

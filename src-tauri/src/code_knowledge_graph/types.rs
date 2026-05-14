@@ -91,6 +91,15 @@ pub struct ParseError {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CodeGraphNodeSearchRequest {
+    pub repository_ids: Vec<i64>,
+    pub query: String,
+    #[serde(default)]
+    pub limit: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CodeGraphReindexRequest {
     pub repository_id: i64,
 }

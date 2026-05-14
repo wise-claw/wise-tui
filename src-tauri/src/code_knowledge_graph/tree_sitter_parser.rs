@@ -125,6 +125,28 @@ static SWIFT_FUNC: LazyLock<Regex> = LazyLock::new(|| {
         .expect("swift func")
 });
 
+/// TypeScript / TSX — align with GitNexus `DEFINES` / `HAS_METHOD` / `HAS_PROPERTY` extraction.
+static TS_EXPORT_CLASS_OR_INTERFACE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^\s*export\s+(?:default\s+)?(?:abstract\s+)?(class|interface)\s+([A-Za-z_][\w]*)\b")
+        .expect("ts export class/interface")
+});
+static TS_PLAIN_CLASS_OR_INTERFACE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^\s*(?:declare\s+)?(?:abstract\s+)?(class|interface)\s+([A-Za-z_][\w]*)\b")
+        .expect("ts plain class/interface")
+});
+static TS_MEMBER_METHOD_LINE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^\s*(?:@[\w.]+\s+)*(?:public|private|protected|static|async|override|readonly|declare|abstract|\s)*\s*(\w+)\s*\(")
+        .expect("ts member method line")
+});
+static TS_MEMBER_PROPERTY_LINE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^\s*(?:@[\w.]+\s+)*(?:public|private|protected|readonly|static|\s)*\s*(\w+)(\?)?\s*:\s*\S")
+        .expect("ts member property line")
+});
+static TS_INTERFACE_METHOD_LINE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^\s*(\w+)\s*\([^)]*\)\s*:")
+        .expect("ts interface method line")
+});
+
 static DART_IMPORT_EXPORT: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"(?m)^\s*(?:import|export)\s+['"]([^'"]+)['"]"#).expect("dart import export")
 });
@@ -188,6 +210,61 @@ pub struct Parser;
 impl Parser {
     pub fn new() -> Self {
         Parser
+    }
+
+    /// GitNexus-style edges: `File --defines--> symbol`; optional `Type --has_method/has_property--> member`.
+    fn commit_code_symbol(
+        &self,
+        conn: &rusqlite::Connection,
+        file_node_id: &str,
+        repo_id: i64,
+        relative_path: &str,
+        label: &str,
+        raw_kind: &str,
+        symbol_id: &str,
+        line_idx: usize,
+        enclosing_type_symbol_id: Option<&str>,
+        member_edge_kind: Option<&str>,
+    ) -> Result<(), String> {
+        let sk = gitnexus_style_symbol_kind(raw_kind);
+        let range = Some(crate::code_knowledge_graph::types::GraphRange {
+            start: crate::code_knowledge_graph::types::GraphPosition {
+                line: line_idx,
+                column: 0,
+            },
+            end: crate::code_knowledge_graph::types::GraphPosition {
+                line: line_idx + 1,
+                column: 0,
+            },
+        });
+        graph_storage::upsert_node(
+            conn,
+            symbol_id,
+            "symbol",
+            Some(sk.as_str()),
+            label,
+            relative_path,
+            repo_id,
+            range,
+            None,
+        )?;
+        graph_storage::upsert_edge(
+            conn,
+            &format!("{file_node_id}:defines:{symbol_id}"),
+            file_node_id,
+            symbol_id,
+            "defines",
+        )?;
+        if let (Some(enc), Some(rel)) = (enclosing_type_symbol_id, member_edge_kind) {
+            graph_storage::upsert_edge(
+                conn,
+                &format!("{enc}:{rel}:{symbol_id}"),
+                enc,
+                symbol_id,
+                rel,
+            )?;
+        }
+        Ok(())
     }
 
     pub fn parse_file(
@@ -385,35 +462,18 @@ impl Parser {
         kind: &str,
     ) -> Result<(), String> {
         let symbol_id = format!("{file_node_id}:symbol:{name}");
-        let range = Some(crate::code_knowledge_graph::types::GraphRange {
-            start: crate::code_knowledge_graph::types::GraphPosition {
-                line: line_idx,
-                column: 0,
-            },
-            end: crate::code_knowledge_graph::types::GraphPosition {
-                line: line_idx + 1,
-                column: 0,
-            },
-        });
-        graph_storage::upsert_node(
+        self.commit_code_symbol(
             conn,
-            &symbol_id,
-            "symbol",
-            Some(kind),
-            name,
-            relative_path,
-            repo_id,
-            range,
-            None,
-        )?;
-        graph_storage::upsert_edge(
-            conn,
-            &format!("{file_node_id}:contains:{symbol_id}"),
             file_node_id,
+            repo_id,
+            relative_path,
+            name,
+            kind,
             &symbol_id,
-            "contains",
-        )?;
-        Ok(())
+            line_idx,
+            None,
+            None,
+        )
     }
 
     fn parse_kotlin_file(
@@ -1048,37 +1108,18 @@ impl Parser {
             };
 
             let symbol_id = format!("{file_node_id}:symbol:{name}");
-            let range = Some(crate::code_knowledge_graph::types::GraphRange {
-                start: crate::code_knowledge_graph::types::GraphPosition {
-                    line: line_idx,
-                    column: 0,
-                },
-                end: crate::code_knowledge_graph::types::GraphPosition {
-                    line: line_idx + 1,
-                    column: 0,
-                },
-            });
-
-            graph_storage::upsert_node(
+            self.commit_code_symbol(
                 conn,
-                &symbol_id,
-                "symbol",
-                Some(&kind),
-                &name,
-                relative_path,
+                file_node_id,
                 repo_id,
-                range,
+                relative_path,
+                &name,
+                &kind,
+                &symbol_id,
+                line_idx,
+                None,
                 None,
             )?;
-
-            graph_storage::upsert_edge(
-                conn,
-                &format!("{file_node_id}:contains:{symbol_id}"),
-                file_node_id,
-                &symbol_id,
-                "contains",
-            )?;
-
             count += 1;
         }
 
@@ -1213,37 +1254,18 @@ impl Parser {
             let name = name_m.as_str().to_string();
 
             let symbol_id = format!("{file_node_id}:symbol:{name}");
-            let range = Some(crate::code_knowledge_graph::types::GraphRange {
-                start: crate::code_knowledge_graph::types::GraphPosition {
-                    line: line_idx,
-                    column: 0,
-                },
-                end: crate::code_knowledge_graph::types::GraphPosition {
-                    line: line_idx + 1,
-                    column: 0,
-                },
-            });
-
-            graph_storage::upsert_node(
+            self.commit_code_symbol(
                 conn,
-                &symbol_id,
-                "symbol",
-                Some(&kind),
-                &name,
-                relative_path,
+                file_node_id,
                 repo_id,
-                range,
+                relative_path,
+                &name,
+                &kind,
+                &symbol_id,
+                line_idx,
+                None,
                 None,
             )?;
-
-            graph_storage::upsert_edge(
-                conn,
-                &format!("{file_node_id}:contains:{symbol_id}"),
-                file_node_id,
-                &symbol_id,
-                "contains",
-            )?;
-
             count += 1;
         }
 
@@ -1259,65 +1281,180 @@ impl Parser {
         relative_path: &str,
         line_offset: usize,
     ) -> Result<usize, String> {
-        let mut count = 0;
+        let mut count = 0usize;
+        let mut balance: i32 = 0;
+        let mut stack: Vec<(String, i32, bool)> = Vec::new();
+        let mut pending_type: Option<(String, String)> = None;
 
         for (line_idx, line) in content.lines().enumerate() {
             let trimmed = line.trim();
             let global_line = line_idx + line_offset;
+            let work = strip_js_line_comment(line);
+            let bal_start = balance;
+
+            let head = TS_EXPORT_CLASS_OR_INTERFACE
+                .captures(trimmed)
+                .and_then(|c| Some((c.get(1)?.as_str().to_string(), c.get(2)?.as_str().to_string())))
+                .or_else(|| {
+                    TS_PLAIN_CLASS_OR_INTERFACE.captures(trimmed).and_then(|c| {
+                        Some((c.get(1)?.as_str().to_string(), c.get(2)?.as_str().to_string()))
+                    })
+                });
+
+            if head.is_none() {
+                if let Some((k, n)) = pending_type.take() {
+                    if work.contains('{') {
+                        let delta = naive_brace_delta(work);
+                        balance += delta;
+                        stack.push((n.clone(), balance, k == "interface"));
+                        pop_scope_stack(&mut stack, balance);
+                        continue;
+                    }
+                    pending_type = Some((k, n));
+                }
+            } else {
+                pending_type = None;
+            }
+
+            if let Some((k, n)) = head {
+                let type_symbol_id = format!("{file_node_id}:symbol:{n}");
+                self.commit_code_symbol(
+                    conn,
+                    file_node_id,
+                    repo_id,
+                    relative_path,
+                    &n,
+                    &k,
+                    &type_symbol_id,
+                    global_line,
+                    None,
+                    None,
+                )?;
+                count += 1;
+                if work.contains('{') {
+                    let delta = naive_brace_delta(work);
+                    balance += delta;
+                    stack.push((n.clone(), balance, k == "interface"));
+                } else {
+                    pending_type = Some((k, n));
+                }
+                pop_scope_stack(&mut stack, balance);
+                continue;
+            }
+
+            if let Some((type_name, entry_bal, is_iface)) = stack.last() {
+                if bal_start >= *entry_bal {
+                    let enc_id = format!("{file_node_id}:symbol:{type_name}");
+                    let mut member_hit = false;
+                    if *is_iface {
+                        if let Some(c) = TS_INTERFACE_METHOD_LINE.captures(trimmed) {
+                            if let Some(m) = c.get(1) {
+                                let mname = m.as_str();
+                                if !ts_reserved_method_name(mname) {
+                                    let mid = format!("{file_node_id}:symbol:{type_name}::{mname}");
+                                    self.commit_code_symbol(
+                                        conn,
+                                        file_node_id,
+                                        repo_id,
+                                        relative_path,
+                                        mname,
+                                        "method",
+                                        &mid,
+                                        global_line,
+                                        Some(enc_id.as_str()),
+                                        Some("has_method"),
+                                    )?;
+                                    count += 1;
+                                    member_hit = true;
+                                }
+                            }
+                        }
+                    }
+                    if !member_hit {
+                        if let Some(c) = TS_MEMBER_METHOD_LINE.captures(trimmed) {
+                            if let Some(m) = c.get(1) {
+                                let mname = m.as_str();
+                                if !ts_reserved_method_name(mname) {
+                                    let mid = format!("{file_node_id}:symbol:{type_name}::{mname}");
+                                    self.commit_code_symbol(
+                                        conn,
+                                        file_node_id,
+                                        repo_id,
+                                        relative_path,
+                                        mname,
+                                        "method",
+                                        &mid,
+                                        global_line,
+                                        Some(enc_id.as_str()),
+                                        Some("has_method"),
+                                    )?;
+                                    count += 1;
+                                    member_hit = true;
+                                }
+                            }
+                        }
+                    }
+                    if !member_hit {
+                        if let Some(c) = TS_MEMBER_PROPERTY_LINE.captures(trimmed) {
+                            if let Some(p) = c.get(1) {
+                                let pname = p.as_str();
+                                if !ts_reserved_method_name(pname) {
+                                    let pid = format!("{file_node_id}:symbol:{type_name}::{pname}");
+                                    self.commit_code_symbol(
+                                        conn,
+                                        file_node_id,
+                                        repo_id,
+                                        relative_path,
+                                        pname,
+                                        "property",
+                                        &pid,
+                                        global_line,
+                                        Some(enc_id.as_str()),
+                                        Some("has_property"),
+                                    )?;
+                                    count += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
             let mut symbol_info = None;
-
-            if trimmed.starts_with("export function ")
-                || trimmed.starts_with("export async function ")
-            {
-                symbol_info = extract_symbol_name_after_keyword(trimmed, "function");
-            } else if trimmed.starts_with("function ") {
-                symbol_info = extract_symbol_name_after_keyword(trimmed, "function");
-            } else if (trimmed.starts_with("export const ") || trimmed.starts_with("export let "))
-                && (trimmed.contains(" = (") || trimmed.contains(" = function"))
-            {
-                symbol_info = extract_const_name(trimmed);
-            } else if trimmed.starts_with("export class ") || trimmed.starts_with("class ") {
-                symbol_info = extract_symbol_name_after_keyword(trimmed, "class");
-            } else if trimmed.starts_with("export interface ") || trimmed.starts_with("interface ") {
-                symbol_info = extract_symbol_name_after_keyword(trimmed, "interface");
+            if stack.is_empty() && pending_type.is_none() {
+                if trimmed.starts_with("export function ")
+                    || trimmed.starts_with("export async function ")
+                {
+                    symbol_info = extract_symbol_name_after_keyword(trimmed, "function");
+                } else if trimmed.starts_with("function ") {
+                    symbol_info = extract_symbol_name_after_keyword(trimmed, "function");
+                } else if (trimmed.starts_with("export const ") || trimmed.starts_with("export let "))
+                    && (trimmed.contains(" = (") || trimmed.contains(" = function"))
+                {
+                    symbol_info = extract_const_name(trimmed);
+                }
             }
 
             if let Some((name, kind)) = symbol_info {
                 let symbol_id = format!("{file_node_id}:symbol:{name}");
-                let range = Some(crate::code_knowledge_graph::types::GraphRange {
-                    start: crate::code_knowledge_graph::types::GraphPosition {
-                        line: global_line,
-                        column: 0,
-                    },
-                    end: crate::code_knowledge_graph::types::GraphPosition {
-                        line: global_line + 1,
-                        column: 0,
-                    },
-                });
-
-                graph_storage::upsert_node(
+                self.commit_code_symbol(
                     conn,
-                    &symbol_id,
-                    "symbol",
-                    Some(&kind),
-                    &name,
-                    relative_path,
+                    file_node_id,
                     repo_id,
-                    range,
+                    relative_path,
+                    &name,
+                    &kind,
+                    &symbol_id,
+                    global_line,
+                    None,
                     None,
                 )?;
-
-                graph_storage::upsert_edge(
-                    conn,
-                    &format!("{file_node_id}:contains:{symbol_id}"),
-                    file_node_id,
-                    &symbol_id,
-                    "contains",
-                )?;
-
                 count += 1;
             }
+
+            let delta = naive_brace_delta(work);
+            balance += delta;
+            pop_scope_stack(&mut stack, balance);
         }
 
         Ok(count)
@@ -1379,6 +1516,60 @@ impl Parser {
         }
 
         Ok(count)
+    }
+}
+
+fn gitnexus_style_symbol_kind(raw: &str) -> String {
+    match raw {
+        "function" => "Function".to_string(),
+        "class" => "Class".to_string(),
+        "interface" => "Interface".to_string(),
+        "struct" => "Struct".to_string(),
+        "enum" => "Enum".to_string(),
+        "trait" => "Trait".to_string(),
+        "type" => "TypeAlias".to_string(),
+        "mod" => "Module".to_string(),
+        "method" => "Method".to_string(),
+        "property" => "Property".to_string(),
+        "record" => "Class".to_string(),
+        "object" => "Class".to_string(),
+        "module" => "Module".to_string(),
+        _ => {
+            let mut ch = raw.chars();
+            match ch.next() {
+                None => raw.to_string(),
+                Some(f) => f.to_uppercase().chain(ch).collect(),
+            }
+        }
+    }
+}
+
+fn strip_js_line_comment(line: &str) -> &str {
+    line.split("//").next().unwrap_or(line).trim_end()
+}
+
+fn naive_brace_delta(line: &str) -> i32 {
+    let s = strip_js_line_comment(line);
+    let opens = s.chars().filter(|&c| c == '{').count() as i32;
+    let closes = s.chars().filter(|&c| c == '}').count() as i32;
+    opens - closes
+}
+
+fn ts_reserved_method_name(name: &str) -> bool {
+    matches!(
+        name,
+        "if" | "for" | "while" | "switch" | "catch" | "function" | "return" | "with" | "new"
+            | "case" | "typeof" | "throw" | "try" | "else" | "import" | "export" | "do" | "super"
+    )
+}
+
+fn pop_scope_stack(stack: &mut Vec<(String, i32, bool)>, balance: i32) {
+    while let Some((_, entry_bal, _)) = stack.last() {
+        if balance < *entry_bal {
+            stack.pop();
+        } else {
+            break;
+        }
     }
 }
 

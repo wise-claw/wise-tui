@@ -120,6 +120,19 @@ fn macos_open_with_named_app(path: &Path, app_name: &str, args: &[String]) -> Re
     })
 }
 
+fn is_vscode_family_cli(cmd: &str) -> bool {
+    let base = Path::new(cmd)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or(cmd)
+        .trim_end_matches(".exe")
+        .trim_end_matches(".cmd")
+        .trim_end_matches(".AppImage")
+        .to_ascii_lowercase();
+    matches!(base.as_str(), "code" | "cursor" | "codium")
+}
+
+#[allow(unused_variables)] // goto_* 仅在 command 且 code 系 CLI 分支使用
 #[tauri::command]
 pub(crate) fn open_workspace_in(
     app: tauri::AppHandle,
@@ -127,6 +140,8 @@ pub(crate) fn open_workspace_in(
     app_name: Option<String>,
     command: Option<String>,
     args: Vec<String>,
+    goto_line: Option<u32>,
+    goto_column: Option<u32>,
 ) -> Result<(), String> {
     let path_buf = std::path::PathBuf::from(&path);
     if !path_buf.exists() {
@@ -166,6 +181,28 @@ pub(crate) fn open_workspace_in(
     }
 
     if let Some(cmd) = command {
+        if goto_line.is_some() && is_vscode_family_cli(&cmd) {
+            let line = goto_line.unwrap().max(1);
+            let col = goto_column.unwrap_or(1).max(1);
+            let abs = fs::canonicalize(&path_buf).unwrap_or_else(|_| path_buf.clone());
+            let goto_arg = format!("{}:{}:{}", abs.to_string_lossy(), line, col);
+            let out = std::process::Command::new(&cmd)
+                .arg("-g")
+                .arg(&goto_arg)
+                .args(args)
+                .output()
+                .map_err(|e| format!("Failed to run command {}: {}", cmd, e))?;
+            if !out.status.success() {
+                let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                return Err(if err.is_empty() {
+                    format!("命令「{}」执行失败（退出码 {:?}）", cmd, out.status.code())
+                } else {
+                    format!("命令「{}」失败：{}", cmd, err)
+                });
+            }
+            return Ok(());
+        }
+
         let out = std::process::Command::new(&cmd)
             .arg(&path_buf)
             .args(&args)

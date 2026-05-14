@@ -8,11 +8,11 @@ const validResponse = {
   nodes: [
     { id: "1:repo:root", kind: "repo", label: "repo", path: "/", repoId: 1 },
     { id: "1:file:abc", kind: "file", label: "index.ts", path: "src/index.ts", repoId: 1 },
-    { id: "1:file:abc:symbol:foo", kind: "symbol", symbolKind: "function", label: "foo", path: "src/index.ts", repoId: 1 },
+    { id: "1:file:abc:symbol:foo", kind: "symbol", symbolKind: "Function", label: "foo", path: "src/index.ts", repoId: 1 },
   ],
   edges: [
     { id: "e1", source: "1:repo:root", target: "1:file:abc", kind: "contains" },
-    { id: "e2", source: "1:file:abc", target: "1:file:abc:symbol:foo", kind: "contains" },
+    { id: "e2", source: "1:file:abc", target: "1:file:abc:symbol:foo", kind: "defines" },
   ],
   meta: { truncated: false, indexVersion: "v1", totalEdgeHint: 2 },
 };

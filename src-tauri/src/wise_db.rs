@@ -33,6 +33,7 @@ const MIGRATION_014: &str = include_str!("../migrations/014_project_repository_d
 const MIGRATION_015: &str = include_str!("../migrations/015_project_prd_scope.sql");
 const MIGRATION_016: &str = include_str!("../migrations/016_project_trellis_root.sql");
 const MIGRATION_017: &str = include_str!("../migrations/017_code_knowledge_graph.sql");
+const MIGRATION_018: &str = include_str!("../migrations/018_code_knowledge_graph_relax_checks.sql");
 const PLATFORM_SPLIT_PROMPT_SEED_JSON: &str =
     include_str!("../migrations/005_platform_split_prompt_seed.json");
 
@@ -114,6 +115,10 @@ const MIGRATIONS: &[Migration] = &[
     Migration {
         name: "017_code_knowledge_graph",
         action: MigrationAction::Sql(MIGRATION_017),
+    },
+    Migration {
+        name: "018_code_knowledge_graph_relax_checks",
+        action: MigrationAction::Sql(MIGRATION_018),
     },
 ];
 
@@ -1829,6 +1834,7 @@ mod tests {
                 "015_project_prd_scope",
                 "016_project_trellis_root",
                 "017_code_knowledge_graph",
+                "018_code_knowledge_graph_relax_checks",
             ]
         );
     }

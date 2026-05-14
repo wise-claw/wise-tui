@@ -37,11 +37,18 @@
 }
 
 .app-code-graph-subgraph-toolbar--header {
-  flex: 1 1 280px;
+  flex: 0 1 auto;
   min-width: 0;
   padding: 0;
   border: none;
   background: transparent;
+}
+
+.app-code-graph-node-search--header {
+  flex: 0 0 auto !important;
+  width: 220px;
+  min-width: 180px !important;
+  max-width: 280px;
 }
 
 .app-code-graph-subgraph-toolbar-spacer {
@@ -141,6 +148,29 @@
   margin-bottom: 0;
 }
 
+.app-code-graph-inspector-desc .ant-descriptions-item-label {
+  white-space: nowrap !important;
+}
+
+.app-code-graph-inspector-path-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px 10px;
+}
+
+.app-code-graph-inspector-path-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  word-break: break-all;
+}
+
+.app-code-graph-inspector-ide-link {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
 .app-code-graph-inspector-desc .ant-descriptions-view > table {
   table-layout: fixed;
 }
@@ -150,11 +180,100 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
-.app-code-graph-inspector-expand-link {
-  margin-top: 6px;
-  padding: 0;
-  height: auto;
-  font-size: 12px;
+/* 图谱 + 可拖动分隔条 + 右侧栏（默认图谱约 2/3） */
+.app-code-graph-graph-root--split {
+  display: grid;
+  align-items: stretch;
+  flex: 1;
+  align-self: stretch;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.app-code-graph-chart-wrap {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-code-graph-splitter {
+  z-index: 3;
+  cursor: col-resize;
+  touch-action: none;
+  background: var(--ant-color-border);
+  box-sizing: border-box;
+}
+
+.app-code-graph-splitter:hover {
+  background: var(--ant-color-primary);
+}
+
+.app-code-graph-splitter:active {
+  background: var(--ant-color-primary-hover);
+}
+
+/* 右侧：详情 + 内嵌 Monaco 源码 */
+.app-code-graph-right-column {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-left: none;
+  background: var(--ant-color-bg-container);
+}
+
+.app-code-graph-right-column-meta {
+  flex: 0 1 auto;
+  max-height: 42%;
+  min-height: 0;
+  overflow: auto;
+  border-bottom: 1px solid var(--ant-color-border);
+}
+
+.app-code-graph-source-preview {
+  flex: 1 1 0;
+  min-height: 140px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.app-code-graph-source-preview--empty {
+  flex: 1 1 0;
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  text-align: center;
+}
+
+.app-code-graph-source-preview-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.06);
+  pointer-events: none;
+}
+
+.app-code-graph-source-preview-monaco {
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+}
+
+.app-code-graph-source-preview-monaco,
+.app-code-graph-source-preview-monaco .monaco-editor {
+  min-height: 0 !important;
 }
 
 .app-code-graph-content {
