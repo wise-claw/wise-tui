@@ -33,6 +33,7 @@ export interface CanvasNodeItem {
   stageTaskBasisRef?: string;
   acceptanceEnabled?: boolean;
   acceptanceCriteria?: string;
+  passthroughData?: Record<string, unknown>;
 }
 
 export interface CanvasEdgeItem {
@@ -135,10 +136,24 @@ export function workflowGraphToCanvasSnapshot(graph: WorkflowGraph | null | unde
   if (!graph || graph.nodes.length === 0) return createDefaultCanvasSnapshot();
   const nodes: CanvasNodeItem[] = graph.nodes.map((node, index) => {
     if (node.type === "start") {
-      return { id: node.id, kind: "start", title: node.data.label || "开始", x: node.position.x, y: node.position.y };
+      return {
+        id: node.id,
+        kind: "start",
+        title: node.data.label || "开始",
+        x: node.position.x,
+        y: node.position.y,
+        passthroughData: omitGraphNodeMappedData(node.data, "start"),
+      };
     }
     if (node.type === "end") {
-      return { id: node.id, kind: "end", title: node.data.label || "结束", x: node.position.x, y: node.position.y };
+      return {
+        id: node.id,
+        kind: "end",
+        title: node.data.label || "结束",
+        x: node.position.x,
+        y: node.position.y,
+        passthroughData: omitGraphNodeMappedData(node.data, "end"),
+      };
     }
     const key = typeof node.data.materialKey === "string" && MATERIALS[node.data.materialKey] ? node.data.materialKey : "employee";
     return {
@@ -153,6 +168,7 @@ export function workflowGraphToCanvasSnapshot(graph: WorkflowGraph | null | unde
       stageTaskBasisRefs: normalizeStageTaskBasisRefsFromNodeData(node.data as WorkflowGraphNodeData),
       acceptanceEnabled: typeof node.data.conditionElsePrompt === "string" ? node.data.conditionElsePrompt === "acceptance_enabled" : false,
       acceptanceCriteria: typeof node.data.conditionIfPrompt === "string" && node.data.conditionIfPrompt !== "rollback" ? node.data.conditionIfPrompt : "",
+      passthroughData: omitGraphNodeMappedData(node.data, "material"),
       x: node.position.x,
       y: node.position.y,
     };
@@ -191,6 +207,25 @@ export function workflowGraphToCanvasSnapshot(graph: WorkflowGraph | null | unde
     };
   });
   return normalizeCanvasSnapshot({ nodes, edges });
+}
+
+function omitGraphNodeMappedData(
+  data: WorkflowGraphNodeData,
+  kind: CanvasNodeItem["kind"],
+): Record<string, unknown> | undefined {
+  const out: Record<string, unknown> = { ...data };
+  delete out.label;
+  if (kind === "material") {
+    delete out.materialKey;
+    delete out.employeePrompt;
+    delete out.employeeId;
+    delete out.conditionIfPrompt;
+    delete out.conditionElsePrompt;
+    delete out.stageSuccessCriteria;
+    delete out.stageTaskBasisRefs;
+    delete out.stageTaskBasisRef;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 export function getMaterialNodeStyle(theme: MaterialTheme) {
@@ -376,7 +411,7 @@ export function createGraphNodeFromSnapshotNode(node: CanvasNodeItem, employeeNa
       width: FLOW_NODE_WIDTH,
       height: FLOW_NODE_HEIGHT,
       shape: "rect",
-      data: { kind: node.kind, title: node.title },
+      data: { kind: node.kind, title: node.title, passthroughData: node.passthroughData },
       attrs: {
         body: {
           fill: node.kind === "start" ? "#E6F4FF" : "#FFF1F0",
@@ -405,6 +440,7 @@ export function createGraphNodeFromSnapshotNode(node: CanvasNodeItem, employeeNa
     shape: "wise-material-card",
     data: {
       kind: "material",
+      passthroughData: node.passthroughData,
       title,
       materialKey: material.key,
       theme,

@@ -1,5 +1,4 @@
 import type { MutableRefObject } from "react";
-import { PushpinOutlined } from "@ant-design/icons";
 import { Dropdown, Tooltip, Typography } from "antd";
 import type { MenuProps } from "antd";
 import type { ReconcileProjectMode } from "../../constants/reconcileProjectMode";
@@ -196,16 +195,19 @@ export function ProjectRepositoryList({
 
 function ProjectRequirementAction({ onOpen }: { onOpen: () => void }) {
   return (
-    <Tooltip title="需求" mouseEnterDelay={0.3}>
-      <span
-        className="app-repository-action app-repository-action--task"
+    <Tooltip title="打开需求" mouseEnterDelay={0.3}>
+      <button
+        type="button"
+        className="app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--requirement"
+        aria-label="打开需求"
         onClick={(e) => {
           e.stopPropagation();
           onOpen();
         }}
       >
         <RequirementIcon />
-      </span>
+        <span className="app-repository-action-label">需求</span>
+      </button>
     </Tooltip>
   );
 }
@@ -349,43 +351,37 @@ function ProjectRow({
           <ProjectIcon />
         </span>
         <span className="app-repository-name">{project.name}</span>
-        <Tooltip title={isPinned ? "取消置顶" : "置顶"} mouseEnterDelay={0.35}>
-          <span
-            className={`app-repository-action app-repository-action--pin${isPinned ? " app-repository-action--pin-active" : ""}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              onTogglePinProject(project.id);
+        <div className="app-repository-row-actions">
+          <ProjectRequirementAction onOpen={() => onCreateProjectTask(project, "split")} />
+          <Dropdown
+            rootClassName="app-sidebar-more-menu-dropdown"
+            menu={{
+              className: "app-sidebar-more-menu-inner",
+              items: projectMoreItems,
+              onClick: ({ key }) => {
+                if (key === "pin") onTogglePinProject(project.id);
+                if (key === "rename") onRenameProject(project);
+                if (key === "reconcile-repos") void Promise.resolve(onReconcileProject?.(project.id, "repos_only"));
+                if (key === "reconcile-repos-graphs") {
+                  void Promise.resolve(onReconcileProject?.(project.id, "repos_and_graphs"));
+                }
+                if (key === "prompts") onOpenPromptsProject?.(project);
+                if (key === "delete") onDeleteProject(project);
+              },
             }}
-            role="button"
-            aria-label={isPinned ? "取消置顶" : "置顶"}
+            trigger={["click"]}
+            placement="bottomRight"
           >
-            <PushpinOutlined />
-          </span>
-        </Tooltip>
-        <Dropdown
-          rootClassName="app-sidebar-more-menu-dropdown"
-          menu={{
-            className: "app-sidebar-more-menu-inner",
-            items: projectMoreItems,
-            onClick: ({ key }) => {
-              if (key === "pin") onTogglePinProject(project.id);
-              if (key === "rename") onRenameProject(project);
-              if (key === "reconcile-repos") void Promise.resolve(onReconcileProject?.(project.id, "repos_only"));
-              if (key === "reconcile-repos-graphs") {
-                void Promise.resolve(onReconcileProject?.(project.id, "repos_and_graphs"));
-              }
-              if (key === "prompts") onOpenPromptsProject?.(project);
-              if (key === "delete") onDeleteProject(project);
-            },
-          }}
-          trigger={["click"]}
-          placement="bottomRight"
-        >
-          <span className="app-repository-action" onClick={(e) => e.stopPropagation()}>
-            <MoreIcon />
-          </span>
-        </Dropdown>
-        <ProjectRequirementAction onOpen={() => onCreateProjectTask(project, "split")} />
+            <button
+              type="button"
+              className="app-repository-action app-repository-action--more"
+              aria-label="项目更多操作"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MoreIcon />
+            </button>
+          </Dropdown>
+        </div>
       </div>
 
       {expanded && (

@@ -232,6 +232,42 @@ describe("reducer · back-to-input", () => {
     expect(next.clusterPlanEdits).toEqual(emptyClusterPlanEdits());
     expect(next.editsByCluster).toEqual({});
     expect(next.writeResults).toEqual([]);
+    expect(next.workflowGraphResult).toBeNull();
+  });
+});
+
+describe("reducer · workflow graph result", () => {
+  test("begin-write clears stale workflow graph result", () => {
+    const state: WizardState = {
+      ...emptyWizardState(),
+      stage: "review",
+      workflowGraphResult: {
+        workflowId: "wf-old",
+        workflowName: "Old",
+        status: "draft",
+        nodeCount: 3,
+        edgeCount: 2,
+      },
+    };
+    const next = reducer(state, { type: "begin-write" });
+    expect(next.stage).toBe("writing");
+    expect(next.workflowGraphResult).toBeNull();
+  });
+
+  test("stores workflow graph result for done UI", () => {
+    const state = emptyWizardState();
+    const next = reducer(state, {
+      type: "set-workflow-graph-result",
+      result: {
+        workflowId: "wf-1",
+        workflowName: "PRD Split · Wise",
+        status: "draft",
+        nodeCount: 4,
+        edgeCount: 3,
+      },
+    });
+    expect(next.workflowGraphResult?.workflowId).toBe("wf-1");
+    expect(next.workflowGraphResult?.status).toBe("draft");
   });
 });
 

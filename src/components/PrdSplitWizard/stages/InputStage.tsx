@@ -4,7 +4,6 @@ import {
   Button,
   Card,
   Checkbox,
-  Input,
   List,
   Modal,
   Space,
@@ -22,6 +21,7 @@ import {
   readLegacyRun,
   type LegacyRunSummary,
 } from "../../../services/prdSplit/legacyRunsImport";
+import { PrdMarkdownEditor, type PrdImageBucket } from "../components/PrdMarkdownEditor";
 
 interface Props {
   api: UseSplitWizardStateApi;
@@ -39,6 +39,21 @@ export function InputStage({ api }: Props) {
     }
     return groups;
   }, [state.repositories]);
+
+  const imageBucket = useMemo<PrdImageBucket | null>(() => {
+    const firstSelectedId = state.selectedRepositoryIds[0];
+    const repo = firstSelectedId != null
+      ? state.repositories.find((r) => r.id === firstSelectedId)
+      : state.repositories[0];
+    if (!repo && !state.project) return null;
+    return {
+      repositoryPath: repo?.path ?? state.project?.rootPath ?? "",
+      repositoryName: repo?.name ?? null,
+      repositoryId: repo?.id ?? null,
+      projectName: state.project?.name ?? null,
+      projectId: state.project?.id ?? null,
+    };
+  }, [state.repositories, state.selectedRepositoryIds, state.project]);
 
   const projectTagLabel = state.project ? `${state.project.name}` : "（未选择项目）";
 
@@ -103,12 +118,12 @@ export function InputStage({ api }: Props) {
           </Tooltip>
         }
       >
-        <Input.TextArea
+        <PrdMarkdownEditor
           value={state.prdMarkdown}
-          onChange={(e) => api.setPrdMarkdown(e.target.value)}
-          placeholder="粘贴 PRD 全文。建议包含「## 功能需求 / ## 非功能需求 / ## 验收标准」三段。"
-          autoSize={{ minRows: 10, maxRows: 24 }}
-          spellCheck={false}
+          onChange={api.setPrdMarkdown}
+          imageBucket={imageBucket}
+          floatingToolbar
+          minHeight={320}
         />
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
           {state.prdMarkdown.length} 字符

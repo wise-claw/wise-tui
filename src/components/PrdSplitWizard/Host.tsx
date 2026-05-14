@@ -3,9 +3,9 @@
  *
  * 设计：
  * - 一个 FAB 按钮永久挂在右下角（z-index 高，但避开主交互区）。
- * - 监听 `window` 自定义事件 `open-prd-split-wizard`，允许 AppImpl 等其他组件通过
- *   `window.dispatchEvent(new CustomEvent("open-prd-split-wizard", { detail: { projectId } }))`
- *   触发打开（detail.projectId 可指定初始项目）。
+ * - 监听 `window` 自定义事件 `wise:open-prd-split-wizard`，允许 AppImpl 等其他组件通过
+ *   `window.dispatchEvent(new CustomEvent(WORKFLOW_UI_EVENT_OPEN_PRD_SPLIT_WIZARD, { detail: { projectId } }))`
+ *   触发打开（detail.projectId / repositoryId 可指定初始目标）。
  * - 项目 + 仓库列表通过 Tauri 现场拉取，不在父组件存储——避免与现有 App state 耦合。
  */
 
@@ -16,16 +16,17 @@ import { loadRepositories } from "../../services/repository";
 import { listProjects } from "../../services/projectState";
 import { PrdSplitWizardModal } from "./PrdSplitWizardModal";
 import type { ProjectItem, Repository } from "../../types";
+import {
+  WORKFLOW_UI_EVENT_OPEN_PRD_SPLIT_WIZARD,
+  type OpenPrdSplitWizardDetail,
+} from "../../constants/workflowUiEvents";
 
-export const OPEN_PRD_SPLIT_WIZARD_EVENT = "open-prd-split-wizard";
-
-export interface OpenPrdSplitWizardEventDetail {
-  projectId?: string | null;
-  repositoryId?: number | null;
-}
+export const OPEN_PRD_SPLIT_WIZARD_EVENT = WORKFLOW_UI_EVENT_OPEN_PRD_SPLIT_WIZARD;
+export type OpenPrdSplitWizardEventDetail = OpenPrdSplitWizardDetail;
 
 export function PrdSplitWizardHost() {
   const [open, setOpen] = useState(false);
+  const [modalKey, setModalKey] = useState(0);
   const [initialProjectId, setInitialProjectId] = useState<string | null>(null);
   const [initialRepositoryId, setInitialRepositoryId] = useState<number | null>(null);
   const [projects, setProjects] = useState<ProjectItem[]>([]);
@@ -50,6 +51,7 @@ export function PrdSplitWizardHost() {
       const detail = (e as CustomEvent<OpenPrdSplitWizardEventDetail>).detail;
       setInitialProjectId(detail?.projectId ?? null);
       setInitialRepositoryId(detail?.repositoryId ?? null);
+      setModalKey((current) => current + 1);
       setOpen(true);
       void refresh();
     }
@@ -60,6 +62,7 @@ export function PrdSplitWizardHost() {
   const onFabClick = useCallback(() => {
     setInitialProjectId(null);
     setInitialRepositoryId(null);
+    setModalKey((current) => current + 1);
     setOpen(true);
     void refresh();
   }, [refresh]);
@@ -83,6 +86,7 @@ export function PrdSplitWizardHost() {
         />
       </Tooltip>
       <PrdSplitWizardModal
+        key={modalKey}
         open={open}
         onClose={() => setOpen(false)}
         projects={projects}

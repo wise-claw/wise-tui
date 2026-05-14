@@ -5,6 +5,7 @@ import {
   memo,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   type ComponentProps,
   type MouseEvent as ReactMouseEvent,
@@ -30,6 +31,7 @@ import type * as PromptsPanelModule from "./PromptsPanel";
 import type * as RightPanelModule from "./RightPanel";
 import type * as WorkflowConfigModalModule from "./WorkflowConfigModal";
 import { useRepositoryFileEditor } from "../hooks/useRepositoryFileEditor";
+import type { OpenRepositoryFileDetail } from "../constants/workflowUiEvents";
 
 const RightPanel = lazy(() => import("./RightPanel").then((module) => ({ default: module.RightPanel })));
 const PrdTaskSplitPanel = lazy(() =>
@@ -243,6 +245,7 @@ export interface AppWorkspaceLayoutProps {
   mainLayoutContentRef: RefObject<HTMLElement | null>;
   mainLayoutLeftWidthPx: number;
   mainLayoutRightWidthPx: number;
+  repositoryFileOpenRequest?: OpenRepositoryFileDetail | null;
   leftSidebarProps: LeftSidebarProps;
   promptsPanelProps: PromptsPanelProps;
   claudeSessionsProps: ClaudeSessionsProps;
@@ -258,6 +261,7 @@ export interface AppWorkspaceLayoutProps {
   onToggleCompactLayoutMode: () => void;
   onLeftWidthChange: (widthPx: number) => void;
   onRightWidthChange: (widthPx: number) => void;
+  onConsumeRepositoryFileOpenRequest: () => void;
 }
 
 function PanelLoadingFallback() {
@@ -285,6 +289,7 @@ export function AppWorkspaceLayout({
   mainLayoutContentRef,
   mainLayoutLeftWidthPx,
   mainLayoutRightWidthPx,
+  repositoryFileOpenRequest,
   leftSidebarProps,
   promptsPanelProps,
   claudeSessionsProps,
@@ -300,6 +305,7 @@ export function AppWorkspaceLayout({
   onToggleCompactLayoutMode,
   onLeftWidthChange,
   onRightWidthChange,
+  onConsumeRepositoryFileOpenRequest,
 }: AppWorkspaceLayoutProps) {
   const algorithm = dark ? theme.darkAlgorithm : theme.defaultAlgorithm;
   const {
@@ -362,6 +368,16 @@ export function AppWorkspaceLayout({
     ],
   );
   const editorPanelNode = useMemo(() => <ConnectedRepositoryFileEditorPanel dark={dark} />, [dark]);
+
+  useEffect(() => {
+    const request = repositoryFileOpenRequest;
+    const repositoryPath = activeRepositoryPath?.trim() ?? "";
+    const targetPath = request?.repositoryPath?.trim() ?? "";
+    if (!request || !targetPath || !repositoryPath) return;
+    if (repositoryPath !== targetPath) return;
+    openRepositoryFile(request.relativePath, { line: request.line ?? null });
+    onConsumeRepositoryFileOpenRequest();
+  }, [activeRepositoryPath, onConsumeRepositoryFileOpenRequest, openRepositoryFile, repositoryFileOpenRequest]);
 
   return (
     <RepositoryFileEditorOpenFileContext.Provider value={openRepositoryFile}>

@@ -26,6 +26,7 @@ export interface FileEditorTab {
   content: string;
   originalContent: string;
   loading: boolean;
+  focusLine?: number | null;
   /** Displayed with Monaco diff when present. */
   diffOriginal?: string;
   /** Git changes source; staged diffs are read-only. */
@@ -148,7 +149,7 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
   }, []);
 
   const loadEditorFile = useCallback(
-    async (relativePath: string) => {
+    async (relativePath: string, options?: { line?: number | null }) => {
       if (!repositoryPath) {
         message.warning("请先选择仓库");
         return;
@@ -160,6 +161,13 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
 
       const existing = fileEditorTabsRef.current.find((t) => t.relativePath === relativePath);
       if (existing && !existing.loading && existing.diffOriginal === undefined) {
+        if (options?.line != null) {
+          setFileEditorTabs((prev) =>
+            prev.map((tab) =>
+              tab.relativePath === relativePath ? { ...tab, focusLine: options.line ?? null } : tab,
+            ),
+          );
+        }
         setFileEditorActivePath(relativePath);
         return;
       }
@@ -171,6 +179,7 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
           content: "",
           originalContent: "",
           loading: true,
+          focusLine: options?.line ?? null,
         };
         if (i >= 0) {
           const next = [...prev];
@@ -186,7 +195,13 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
         setFileEditorTabs((prev) =>
           prev.map((t) =>
             t.relativePath === relativePath
-              ? { relativePath, content: body, originalContent: body, loading: false }
+              ? {
+                  relativePath,
+                  content: body,
+                  originalContent: body,
+                  loading: false,
+                  focusLine: options?.line ?? t.focusLine ?? null,
+                }
               : t,
           ),
         );
@@ -256,6 +271,7 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
                   content: right,
                   originalContent: right,
                   loading: false,
+                  focusLine: null,
                   diffOriginal: left,
                   gitDiffSection: section,
                 }
@@ -290,7 +306,7 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
         void loadGitDiffFile(relativePath, opts.fromGitChanges);
         return;
       }
-      void loadEditorFile(relativePath);
+      void loadEditorFile(relativePath, { line: opts?.line ?? null });
     },
     [loadEditorFile, loadGitDiffFile, openRepositoryBinaryPreview],
   );

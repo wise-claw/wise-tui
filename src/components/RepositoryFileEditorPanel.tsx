@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, type MouseEvent } from "rea
 import { CloseOutlined } from "@ant-design/icons";
 import { Button, Spin } from "antd";
 import type * as Monaco from "monaco-editor";
+import type { editor as MonacoEditorNamespace } from "monaco-editor";
 import { GitDiffMonacoPane } from "./GitDiffMonacoPane";
 import type { FileEditorTab } from "../hooks/useRepositoryFileEditor";
 import { monacoLanguageFromRepositoryPath } from "../utils/repositoryFilePreview";
@@ -42,6 +43,8 @@ export function RepositoryFileEditorPanel({
   onTabContentChange,
 }: Props) {
   const monacoRef = useRef<typeof Monaco | null>(null);
+  const editorRef = useRef<MonacoEditorNamespace.IStandaloneCodeEditor | null>(null);
+  const lastAppliedFocusRef = useRef<string | null>(null);
   const activeTab = tabs.find((tab) => tab.relativePath === activePath) ?? null;
   const activeLanguage = monacoLanguageFromRepositoryPath(activeTab?.relativePath ?? null);
   const activeEditorPath =
@@ -67,6 +70,32 @@ export function RepositoryFileEditorPanel({
       sourceFiles: activeTypeScriptSources,
     });
   }, [activeTab, activeTypeScriptSources, repositoryPath]);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor || !activeTab || activeTab.loading || activeTab.diffOriginal !== undefined) {
+      return;
+    }
+    const line = normalizeEditorLine(activeTab.focusLine);
+    if (line == null) return;
+    const focusKey = `${activeTab.relativePath}:${line}`;
+    if (lastAppliedFocusRef.current === focusKey) return;
+    const lineCount = Math.max(1, editor.getModel()?.getLineCount() ?? 1);
+    const targetLine = Math.min(Math.max(1, line), lineCount);
+    window.requestAnimationFrame(() => {
+      editor.setPosition({ lineNumber: targetLine, column: 1 });
+      const lineMaxColumn = Math.max(1, editor.getModel()?.getLineMaxColumn(targetLine) ?? 1);
+      editor.setSelection({
+        startLineNumber: targetLine,
+        startColumn: 1,
+        endLineNumber: targetLine,
+        endColumn: lineMaxColumn,
+      });
+      editor.revealLineInCenter(targetLine);
+      editor.focus();
+      lastAppliedFocusRef.current = focusKey;
+    });
+  }, [activeTab?.relativePath, activeTab?.loading, activeTab?.diffOriginal, activeTab?.focusLine]);
 
   return (
     <div className="app-file-editor-panel">
@@ -161,7 +190,8 @@ export function RepositoryFileEditorPanel({
                   beforeMount={(monaco) => {
                     configureWiseMonacoTypeScript(monaco);
                   }}
-                  onMount={(_editor, monaco) => {
+                  onMount={(editor, monaco) => {
+                    editorRef.current = editor;
                     monacoRef.current = monaco;
                     if (repositoryPath && isTypeScriptLikeRepositoryPath(activeTab.relativePath)) {
                       void syncMonacoRepositoryTypeScriptModels({
@@ -192,4 +222,10 @@ export function RepositoryFileEditorPanel({
       </div>
     </div>
   );
+}
+
+function normalizeEditorLine(value: number | null | undefined): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  const line = Math.floor(value);
+  return line > 0 ? line : null;
 }

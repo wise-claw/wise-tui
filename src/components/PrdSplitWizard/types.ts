@@ -6,7 +6,7 @@
  *                                                    ↘ error → 回到对应 stage
  */
 
-import type { PrdDocument, SplitResult, TaskAnchorDescriptor, TaskItem, TaskRole, TaskSplitContext } from "../../types";
+import type { PrdDocument, SplitResult, TaskAnchorDescriptor, TaskItem, TaskRole, TaskSplitContext, WorkflowGraph } from "../../types";
 import type { ClusterPlan, ClusterPlanItem, PlannerRepo } from "../../services/prdSplit/clusterPlanner";
 import type { RequirementsIndexV2 } from "../../services/prdSplit/requirementsIndexVersion";
 import type {
@@ -44,7 +44,22 @@ export interface WizardWriteResult {
   clusterId: string;
   parentTaskName: string;
   childTaskNames: string[];
+  childTasks: Array<{
+    sourceTaskId: string;
+    taskName: string;
+    taskPath: string;
+  }>;
   warnings: string[];
+  error?: string;
+}
+
+export interface WizardWorkflowGraphResult {
+  workflowId: string;
+  workflowName: string;
+  status: "draft" | "published";
+  nodeCount: number;
+  edgeCount: number;
+  graph?: WorkflowGraph;
   error?: string;
 }
 
@@ -101,6 +116,8 @@ export interface WizardState {
   context: TaskSplitContext | null;
   /** 写入 Trellis 后的结果汇总。 */
   writeResults: WizardWriteResult[];
+  /** 写入 Trellis 后自动生成的 workflow graph / dispatch plan。 */
+  workflowGraphResult: WizardWorkflowGraphResult | null;
   /** 顶层错误（非 cluster 局部）。 */
   globalError: string | null;
   /** 项目中已有的 PRD-split 父任务（按 clusterId 索引）；null 表示尚未扫描或扫描失败。 */
@@ -130,6 +147,7 @@ export function emptyWizardState(): WizardState {
     clusterRuns: {},
     context: null,
     writeResults: [],
+    workflowGraphResult: null,
     globalError: null,
     existingParents: null,
     diffByCluster: {},

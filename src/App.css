@@ -1883,6 +1883,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
 
 .app-repository-name {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1916,13 +1917,30 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 3px;
+  padding: 0;
+  border: none;
   color: var(--ant-color-text-tertiary);
+  background: transparent;
   flex-shrink: 0;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.15s, color 0.15s;
   border-radius: 4px;
   cursor: pointer;
+}
+
+.app-left-sidebar .app-repository-row-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.app-left-sidebar .app-repository-row-actions .app-repository-action {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* 置顶图标与行内其他操作一致：默认隐藏，悬停项目行时再显示（含已置顶态配色） */
@@ -1933,6 +1951,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
 .app-repository-action svg {
   width: 13px;
   height: 13px;
+  flex-shrink: 0;
 }
 
 .app-repository-action:hover {
@@ -1944,6 +1963,48 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
   width: 18px;
   height: 18px;
   color: var(--ant-color-text-secondary);
+}
+
+.app-repository-action--primary {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.app-repository-action--labeled {
+  width: auto;
+  min-width: 0;
+  padding: 0 7px;
+  height: 20px;
+}
+
+.app-repository-action--requirement {
+  width: auto;
+  max-width: 56px;
+  min-width: 48px;
+  color: var(--ant-color-primary);
+  background: var(--ant-color-primary-bg);
+}
+
+.app-repository-action--chat {
+  width: auto;
+  max-width: 56px;
+  min-width: 48px;
+  color: var(--ant-color-text-secondary);
+  background: var(--ant-color-fill-secondary);
+}
+
+.app-repository-action--chat:hover {
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-content);
+}
+
+.app-repository-action-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1;
 }
 
 .app-repository-action--task:hover {

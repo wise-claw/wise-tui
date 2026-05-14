@@ -47,10 +47,12 @@ export interface WriteClusterTasksInput {
 export interface WriteClusterTasksOutput {
   parentTaskName: string;
   childTaskNames: string[];
+  childTasks: MaterializedChildTaskRef[];
   warnings: string[];
 }
 
 interface RustChildTaskPayload {
+  sourceTaskId: string;
   title: string;
   slug: string;
   prdMarkdown: string;
@@ -71,6 +73,12 @@ interface RustMaterializePayload {
   cluster: ClusterRef;
   childTasks: RustChildTaskPayload[];
   claudeSplitMapping: PrdStoredClaudeSplitMapping | null;
+}
+
+export interface MaterializedChildTaskRef {
+  sourceTaskId: string;
+  taskName: string;
+  taskPath: string;
 }
 
 export async function createParentTask(input: CreateParentTaskInput): Promise<CreateParentTaskOutput> {
@@ -140,6 +148,7 @@ function projectChildTask(task: TaskItem, cluster: ClusterRef): RustChildTaskPay
   const designMarkdown = task.designMarkdown?.trim();
   const implementMarkdown = task.implementMarkdown?.trim();
   return {
+    sourceTaskId: task.id,
     title: task.title,
     slug: deriveSlug(task.title, task.id),
     prdMarkdown: renderChildPrd(task, cluster),

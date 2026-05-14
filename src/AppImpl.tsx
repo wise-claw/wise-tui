@@ -31,7 +31,15 @@ import { wiseMascotShow } from "./services/wiseMascot";
 import { getTaskTemplate, setTaskTemplate } from "./services/projectState";
 import { ensureCrepeToolbarTitleHintsInstalled } from "./utils/crepeToolbarTitles";
 import {
+  WORKFLOW_UI_EVENT_OPEN_PRD_SPLIT_WIZARD,
+  WORKFLOW_UI_EVENT_OPEN_REPOSITORY_FILE,
   WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL,
+  WORKFLOW_UI_EVENT_OPEN_WORKFLOW_CONFIG,
+  WORKFLOW_UI_EVENT_WORKFLOW_GRAPH_CHANGED,
+  type OpenPrdSplitWizardDetail,
+  type OpenRepositoryFileDetail,
+  type OpenWorkflowConfigDetail,
+  type WorkflowGraphChangedDetail,
 } from "./constants/workflowUiEvents";
 import { listEmployeeTaskCounts, listEmployees, createEmployee, updateEmployee, deleteEmployee, moveEmployeeDisplayOrder } from "./services/employees";
 import { deleteWorkflowTemplate, listWorkflowTemplates, saveWorkflowTemplate } from "./services/workflowTemplates";
@@ -152,6 +160,7 @@ export default function App() {
   const [workflowConfigOpen, setWorkflowConfigOpen] = useState(false);
   /** 非空：从需求面板打开团队配置，保存模板后自动关联到该项目。 */
   const [workflowConfigPrdProjectId, setWorkflowConfigPrdProjectId] = useState<string | null>(null);
+  const [workflowConfigInitialWorkflowId, setWorkflowConfigInitialWorkflowId] = useState<string | null>(null);
   /** workflowId -> [projectId, ...] map，用于 WorkflowConfigModal 中展示已关联项目。 */
   const [workflowProjectIdsMap, setWorkflowProjectIdsMap] = useState<Record<string, string[]>>({});
   const [employeeLoading, setEmployeeLoading] = useState(false);
@@ -815,7 +824,39 @@ export default function App() {
     }
     return undefined;
   }, [activeProject?.repositoryIds]);
+  const [repositoryFileOpenRequest, setRepositoryFileOpenRequest] = useState<OpenRepositoryFileDetail | null>(null);
+  const openRepositoryFileByEvent = useCallback((detail: OpenRepositoryFileDetail) => {
+    const relativePath = detail.relativePath.trim();
+    if (!relativePath) return;
+    const repoPath = detail.repositoryPath?.trim() ?? "";
+    const repo = detail.repositoryId != null
+      ? repositories.find((item) => item.id === detail.repositoryId) ?? null
+      : repoPath
+        ? repositories.find((item) => item.path === repoPath) ?? null
+        : null;
+    if (!repo) {
+      message.warning("未找到代码锚点对应的仓库");
+      return;
+    }
+    setActiveRepositoryWithOwner(repo.id);
+    setRepositoryFileOpenRequest({
+      repositoryId: repo.id,
+      repositoryPath: repo.path,
+      relativePath,
+      line: detail.line ?? null,
+    });
+  }, [repositories, setActiveRepositoryWithOwner]);
   const workspaceMode = useWorkspaceMode({ activeProjectId, projects });
+  const openPrdSplitWizard = useCallback((detail: OpenPrdSplitWizardDetail) => {
+    setSearchOpen(false);
+    setPromptsMode(false);
+    setMcpHubMode(false);
+    setSkillsHubMode(false);
+    setCodeKnowledgeGraphMode(false);
+    setCcWfStudioMode(false);
+    setTaskSplitMode(false);
+    window.dispatchEvent(new CustomEvent(WORKFLOW_UI_EVENT_OPEN_PRD_SPLIT_WIZARD, { detail }));
+  }, []);
   const composerProjectRoleTagOptions = useMemo(() => {
     if (!shouldHideEmployeeUi(activeProject)) {
       return [];
@@ -1103,6 +1144,7 @@ export default function App() {
 
   const openWorkflowConfigFromSidebar = useCallback(() => {
     setWorkflowConfigPrdProjectId(null);
+    setWorkflowConfigInitialWorkflowId(null);
     setWorkflowConfigOpen(true);
   }, []);
 
@@ -1118,6 +1160,7 @@ export default function App() {
       return;
     }
     setWorkflowConfigPrdProjectId(pid);
+    setWorkflowConfigInitialWorkflowId(null);
     setWorkflowConfigOpen(true);
   }, [activeProjectId, projects]);
 
@@ -1323,9 +1366,7 @@ export default function App() {
       return;
     }
     if (mode === "split") {
-      setSearchOpen(false);
-      setPromptsMode(false);
-      setTaskSplitMode(true);
+      openPrdSplitWizard({ repositoryId: repository.id });
       return;
     }
     // 默认模式（split prompt 执行）保持 per-repo 语义：repo 维度的任务拆分依赖 repo.path 上下文
@@ -1363,9 +1404,7 @@ export default function App() {
       return;
     }
     if (mode === "split") {
-      setSearchOpen(false);
-      setPromptsMode(false);
-      setTaskSplitMode(true);
+      openPrdSplitWizard({ projectId: project.id });
       return;
     }
     const sessionId = await createSession(anchor.path, anchor.displayName);
@@ -1447,19 +1486,71 @@ export default function App() {
 
   useEffect(() => {
     function handleOpenTaskSplitPanel() {
-      setSearchOpen(false);
-      setPromptsMode(false);
-      setMcpHubMode(false);
-      setSkillsHubMode(false);
-      setCodeKnowledgeGraphMode(false);
-      setCcWfStudioMode(false);
-      setTaskSplitMode(true);
+      openPrdSplitWizard(
+        activeProjectId
+          ? { projectId: activeProjectId }
+          : activeRepositoryId != null
+            ? { repositoryId: activeRepositoryId }
+            : {},
+      );
     }
     window.addEventListener(WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL, handleOpenTaskSplitPanel as EventListener);
     return () => {
       window.removeEventListener(WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL, handleOpenTaskSplitPanel as EventListener);
     };
-  }, []);
+  }, [activeProjectId, activeRepositoryId, openPrdSplitWizard]);
+
+  useEffect(() => {
+    function handleWorkflowConfigEvent(event: Event) {
+      const detail = (event as CustomEvent<OpenWorkflowConfigDetail>).detail;
+      const workflowId = detail?.workflowId?.trim() ?? "";
+      const projectId = detail?.projectId?.trim() ?? "";
+      setSearchOpen(false);
+      setPromptsMode(false);
+      setMcpHubMode(false);
+      setSkillsHubMode(false);
+      setTaskSplitMode(false);
+      setWorkflowConfigPrdProjectId(projectId || null);
+      setWorkflowConfigInitialWorkflowId(workflowId || null);
+      setWorkflowConfigOpen(true);
+    }
+    function handleWorkflowGraphChanged(event: Event) {
+      const detail = (event as CustomEvent<WorkflowGraphChangedDetail>).detail;
+      const workflowId = detail?.workflowId?.trim();
+      if (!workflowId) return;
+      void (async () => {
+        try {
+          const [templates, graphItem] = await Promise.all([
+            listWorkflowTemplates(),
+            getWorkflowGraph({ workflowId }),
+          ]);
+          setWorkflowTemplates(templates);
+          if (graphItem?.graph) {
+            setWorkflowGraphsByWorkflowId((prev) => ({ ...prev, [workflowId]: graphItem.graph }));
+            setWorkflowGraphStatusByWorkflowId((prev) => ({
+              ...prev,
+              [workflowId]: graphItem.status,
+            }));
+          }
+        } catch (error) {
+          console.error("Failed to refresh workflow graph after external change:", error);
+        }
+      })();
+    }
+    function handleOpenRepositoryFileEvent(event: Event) {
+      const detail = (event as CustomEvent<OpenRepositoryFileDetail>).detail;
+      if (!detail) return;
+      openRepositoryFileByEvent(detail);
+    }
+    window.addEventListener(WORKFLOW_UI_EVENT_OPEN_WORKFLOW_CONFIG, handleWorkflowConfigEvent as EventListener);
+    window.addEventListener(WORKFLOW_UI_EVENT_WORKFLOW_GRAPH_CHANGED, handleWorkflowGraphChanged as EventListener);
+    window.addEventListener(WORKFLOW_UI_EVENT_OPEN_REPOSITORY_FILE, handleOpenRepositoryFileEvent as EventListener);
+    return () => {
+      window.removeEventListener(WORKFLOW_UI_EVENT_OPEN_WORKFLOW_CONFIG, handleWorkflowConfigEvent as EventListener);
+      window.removeEventListener(WORKFLOW_UI_EVENT_WORKFLOW_GRAPH_CHANGED, handleWorkflowGraphChanged as EventListener);
+      window.removeEventListener(WORKFLOW_UI_EVENT_OPEN_REPOSITORY_FILE, handleOpenRepositoryFileEvent as EventListener);
+    };
+  }, [openRepositoryFileByEvent]);
 
   handleStopEmployeeMonitorRef.current = (employeeId: string) => {
     const normalizedEmployeeId = employeeId.trim().toLowerCase();
@@ -1545,6 +1636,8 @@ export default function App() {
       mainLayoutContentRef={mainLayoutContentRef}
       mainLayoutLeftWidthPx={mainLayoutLeftWidthPx}
       mainLayoutRightWidthPx={mainLayoutRightWidthPx}
+      repositoryFileOpenRequest={repositoryFileOpenRequest}
+      onConsumeRepositoryFileOpenRequest={() => setRepositoryFileOpenRequest(null)}
       onToggleCompactLayoutMode={handleToggleCompactLayoutMode}
       onLeftWidthChange={setMainLayoutLeftWidthPx}
       onRightWidthChange={setMainLayoutRightWidthPx}
@@ -1963,6 +2056,7 @@ export default function App() {
               onClose: () => {
                 setWorkflowConfigOpen(false);
                 setWorkflowConfigPrdProjectId(null);
+                setWorkflowConfigInitialWorkflowId(null);
               },
               onSaveTemplate: async (input) => {
                 setWorkflowLoading(true);
@@ -2017,6 +2111,7 @@ export default function App() {
                   setWorkflowLoading(false);
                 }
               },
+              initialWorkflowId: workflowConfigInitialWorkflowId,
             }
           : null
       }

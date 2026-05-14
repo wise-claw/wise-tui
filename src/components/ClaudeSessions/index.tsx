@@ -61,6 +61,56 @@ function shouldSkipRunErrorMonitorSend(dedupKey: string, now: number): boolean {
   return false;
 }
 
+interface SessionEmptyStateProps {
+  title: string;
+  hint: string;
+  primaryAction?: {
+    label: string;
+    onClick: () => void;
+  };
+  secondaryAction?: {
+    label: string;
+    onClick: () => void;
+  };
+}
+
+function SessionEmptyState({
+  title,
+  hint,
+  primaryAction,
+  secondaryAction,
+}: SessionEmptyStateProps) {
+  return (
+    <div className="app-claude-session-empty">
+      <Empty
+        className="app-claude-session-empty__content"
+        image={Empty.PRESENTED_IMAGE_SIMPLE}
+        description={
+          <span className="app-claude-session-empty__copy">
+            <span className="app-claude-session-empty__title">{title}</span>
+            <span className="app-claude-session-empty__hint">{hint}</span>
+          </span>
+        }
+      >
+        {primaryAction || secondaryAction ? (
+          <div className="app-claude-session-empty__actions">
+            {primaryAction ? (
+              <Button type="primary" onClick={primaryAction.onClick}>
+                {primaryAction.label}
+              </Button>
+            ) : null}
+            {secondaryAction ? (
+              <Button onClick={secondaryAction.onClick}>
+                {secondaryAction.label}
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+      </Empty>
+    </div>
+  );
+}
+
 /** 仅从终端输出识别本机 dev 地址：localhost / 127.0.0.1 / 0.0.0.0 / IPv4 / 方括号 IPv6，不匹配任意域名。 */
 const RUN_LOG_URL_REGEX =
   /(https?:\/\/(?:(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)?|\[[0-9a-fA-F:]+\](?::\d+)?|(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?)(?:\/[^\s]*)?)/i;
@@ -1039,6 +1089,21 @@ export function ClaudeSessions({
     [workflowTasks, secondarySession?.id],
   );
 
+  const handleCreateActiveRepositorySession = useCallback(() => {
+    if (!activeRepository) {
+      return;
+    }
+    onNewSession(activeRepository);
+  }, [activeRepository, onNewSession]);
+
+  const handleCreateSecondarySession = useCallback(() => {
+    const repo = dualPaneSecondaryRepository ?? activeRepository;
+    if (!repo || !onNewSecondarySession) {
+      return;
+    }
+    onNewSecondarySession(repo);
+  }, [activeRepository, dualPaneSecondaryRepository, onNewSecondarySession]);
+
   const handleSwitchToSession = useCallback(
     (sessionId: string, options?: { collapseSessionNotificationPanel?: boolean }) => {
       if (options?.collapseSessionNotificationPanel) {
@@ -1102,9 +1167,11 @@ export function ClaudeSessions({
 
       {/* Session Tabs - 会话标签栏 */}
       {!activeRepository ? (
-        <div className="app-claude-session-empty">
-          <Empty description="请先在左侧选择一个仓库" />
-        </div>
+        <SessionEmptyState
+          title="先选择一个工作对象"
+          hint="从左侧选择项目或仓库后，这里会显示对应的 Claude 会话。"
+          primaryAction={onSearch ? { label: "搜索项目或仓库", onClick: onSearch } : undefined}
+        />
       ) : activeSession ? (
         dualPaneEnabled ? (
           <div className="app-claude-sessions__dual-panes">
@@ -1119,12 +1186,7 @@ export function ClaudeSessions({
                   pendingCollapseNotificationForSessionId === activeSession.id
                 }
                 onSwitchSession={handleSwitchToSession}
-                onCreateNewSession={() => {
-                  if (!activeRepository) {
-                    return;
-                  }
-                  onNewSession(activeRepository);
-                }}
+                onCreateNewSession={handleCreateActiveRepositorySession}
                 onSend={onSendMessage}
                 onExecute={onExecuteSession}
                 onSessionModelChange={(model) => onUpdateSessionModel(activeSession.id, model)}
@@ -1178,13 +1240,7 @@ export function ClaudeSessions({
                     pendingCollapseNotificationForSessionId === secondarySession.id
                   }
                   onSwitchSession={handleSwitchToSession}
-                  onCreateNewSession={() => {
-                    const repo = dualPaneSecondaryRepository ?? activeRepository;
-                    if (!repo || !onNewSecondarySession) {
-                      return;
-                    }
-                    onNewSecondarySession(repo);
-                  }}
+                  onCreateNewSession={handleCreateSecondarySession}
                   onSend={onSendMessage}
                   onExecute={onExecuteSession}
                   onSessionModelChange={(model) => onUpdateSessionModel(secondarySession.id, model)}
@@ -1235,23 +1291,15 @@ export function ClaudeSessions({
                   }
                 />
               ) : (
-                <div className="app-claude-session-empty">
-                  <Empty
-                    description="右侧主会话尚未就绪，请稍候或点击下方按钮重试"
-                    image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  >
-                    {onNewSecondarySession && (dualPaneSecondaryRepository ?? activeRepository) ? (
-                      <Button
-                        type="primary"
-                        onClick={() =>
-                          onNewSecondarySession(dualPaneSecondaryRepository ?? activeRepository!)
-                        }
-                      >
-                        新建右侧主会话
-                      </Button>
-                    ) : null}
-                  </Empty>
-                </div>
+                <SessionEmptyState
+                  title="右侧主会话尚未就绪"
+                  hint="当前右侧窗格没有可用会话，可以为选中的仓库重新创建一个主会话。"
+                  primaryAction={
+                    onNewSecondarySession && (dualPaneSecondaryRepository ?? activeRepository)
+                      ? { label: "新建右侧主会话", onClick: handleCreateSecondarySession }
+                      : undefined
+                  }
+                />
               )}
             </div>
           </div>
@@ -1266,12 +1314,7 @@ export function ClaudeSessions({
               pendingCollapseNotificationForSessionId === activeSession.id
             }
             onSwitchSession={handleSwitchToSession}
-            onCreateNewSession={() => {
-              if (!activeRepository) {
-                return;
-              }
-              onNewSession(activeRepository);
-            }}
+            onCreateNewSession={handleCreateActiveRepositorySession}
             onSend={onSendMessage}
             onExecute={onExecuteSession}
             onSessionModelChange={(model) => onUpdateSessionModel(activeSession.id, model)}
@@ -1313,9 +1356,12 @@ export function ClaudeSessions({
           />
         )
       ) : (
-        <div className="app-claude-session-empty">
-          <Empty description="选择一个会话开始对话" />
-        </div>
+        <SessionEmptyState
+          title="当前仓库还没有可用会话"
+          hint="新建会话后可以直接开始对话；已有历史会话会在恢复后出现在这里。"
+          primaryAction={{ label: "新建会话", onClick: handleCreateActiveRepositorySession }}
+          secondaryAction={onSearch ? { label: "切换工作对象", onClick: onSearch } : undefined}
+        />
       )}
 
       {/* Terminal Panel：按需加载 xterm，避免进入会话页即拉取 terminal-vendor */}

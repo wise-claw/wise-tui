@@ -1,7 +1,10 @@
 import type { GitFileStatus } from "../../types";
 
 /** Passed when opening a file from the Git changes list so the editor can show the built-in diff. */
-export type GitPanelOpenFileOptions = { fromGitChanges: "staged" | "unstaged" };
+export type GitPanelOpenFileOptions = {
+  fromGitChanges?: "staged" | "unstaged";
+  line?: number | null;
+};
 
 export interface FileTreeNode {
   name: string;

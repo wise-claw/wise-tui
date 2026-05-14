@@ -57,6 +57,7 @@ interface Props {
   onDeleteTemplate: (workflowId: string) => Promise<void>;
   repositoryPath?: string | null;
   selectableEmployeeIds?: string[];
+  initialWorkflowId?: string | null;
 }
 
 
@@ -75,6 +76,7 @@ export function WorkflowConfigModal({
   onDeleteTemplate,
   repositoryPath,
   selectableEmployeeIds = [],
+  initialWorkflowId = null,
 }: Props) {
   const [form] = Form.useForm();
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
@@ -100,6 +102,17 @@ export function WorkflowConfigModal({
     }
     return Array.from(grouped.entries());
   }, [validationErrors]);
+
+  useEffect(() => {
+    if (!open) return;
+    const workflowId = initialWorkflowId?.trim() ?? "";
+    if (!workflowId) return;
+    if (editingTemplateId === workflowId) return;
+    const template = templates.find((item) => item.id === workflowId);
+    if (template) {
+      void startEditingTemplate(template);
+    }
+  }, [open, initialWorkflowId, templates, editingTemplateId]);
 
   const statusFilterOptions = useMemo(
     () => [

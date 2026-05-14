@@ -103,17 +103,17 @@ export function ClusterPlanStage({ api }: Props) {
       <Alert
         type="info"
         showIcon
-        message="第 2 步 · 审阅 Cluster 划分"
+        message="第 2 步 · 审阅任务分组"
         description={
           isRepoMode ? (
             <Typography.Paragraph style={{ margin: 0 }}>
-              单仓模式：所有 requirement 归到唯一一个 cluster，将被独立派发给 <code>trellis-splitter</code>。
-              下方可调整 requirement 标签或重命名 cluster；多 cluster 编辑能力在多仓项目模式下启用。
+              单仓模式：所有 requirement 会归到唯一一个任务分组，并独立生成任务。
+              下方可以调整 requirement、重命名分组；多分组编辑只在多仓项目模式下启用。
             </Typography.Paragraph>
           ) : (
             <Typography.Paragraph style={{ margin: 0 }}>
-              每个 cluster 将被独立派发给 <code>trellis-splitter</code> 子代理，并行执行。子任务的归属仓位由 cluster 的 primary repo 决定。
-              点击 requirement 标签可把它<strong>移到其他 cluster</strong>；点击 cluster 标题旁的编辑按钮可<strong>重命名</strong>；底部「+ 新建 cluster」可<strong>手工新建</strong>。
+              每个任务分组会单独生成任务，并行执行。子任务归属由分组的主仓决定。
+              点击 requirement 标签可把它<strong>移到其他分组</strong>；点击分组标题旁的编辑按钮可<strong>重命名</strong>；底部「+ 新建分组」可<strong>手工新建</strong>。
             </Typography.Paragraph>
           )
         }
@@ -127,9 +127,9 @@ export function ClusterPlanStage({ api }: Props) {
         </Tooltip>
         {hasBaseline ? (
           <Space size={4}>
-            <Tag color="success">unchanged · {unchangedCount}</Tag>
-            <Tag color="warning">dirty · {dirtyCount}</Tag>
-            <Tag color="blue">new · {newCount}</Tag>
+            <Tag color="success">可沿用 · {unchangedCount}</Tag>
+            <Tag color="warning">有变化 · {dirtyCount}</Tag>
+            <Tag color="blue">新建 · {newCount}</Tag>
           </Space>
         ) : (
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
@@ -137,15 +137,15 @@ export function ClusterPlanStage({ api }: Props) {
           </Typography.Text>
         )}
         {hasPlanEdits ? (
-          <Tooltip title="把 cluster 编辑（reassign / 重命名 / 手工新建）全部清空，回到算法默认 plan">
+          <Tooltip title="把任务分组编辑（移动 / 重命名 / 手工新建）全部清空，回到默认方案">
             <Button
               size="small"
               danger
               icon={<UndoOutlined />}
               onClick={() => {
                 Modal.confirm({
-                  title: "清空 cluster 编辑？",
-                  content: "已 reassign 的 requirement / 已重命名 / 手工新建 cluster 都会被还原；任务编辑不动。",
+                  title: "清空任务分组编辑？",
+                  content: "已移动的 requirement、已重命名的分组、手工新建的分组都会还原；任务编辑不受影响。",
                   okText: "清空",
                   cancelText: "取消",
                   onOk: () => api.resetClusterPlanEdits(),
@@ -170,7 +170,7 @@ export function ClusterPlanStage({ api }: Props) {
           description={
             <Typography.Text>
               这些 requirement 在多个仓位上都有强匹配信号：{plan.diagnostics.crossRepoRequirements.join(", ")}。
-              可点击 requirement 标签手动移到合适的 cluster。
+              可点击 requirement 标签手动移到合适的分组。
             </Typography.Text>
           }
         />
@@ -198,11 +198,11 @@ export function ClusterPlanStage({ api }: Props) {
           onClick={() => setManualModalOpen(true)}
           disabled={isDispatching || isRepoMode}
         >
-          新建 cluster
+          新建分组
         </Button>
         {isRepoMode ? (
           <Typography.Text type="secondary" style={{ marginInlineStart: 8, fontSize: 12 }}>
-            单仓模式下不支持新建额外 cluster
+            单仓模式下不支持新建额外分组
           </Typography.Text>
         ) : null}
       </div>
@@ -274,7 +274,7 @@ function ClusterCard({
       <Typography.Paragraph style={{ margin: 0 }}>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>需求 id：</Typography.Text>{" "}
         {cluster.requirementIds.length === 0 ? (
-          <Typography.Text type="secondary" italic>（空 cluster — 可从其他 cluster 移入 requirement）</Typography.Text>
+          <Typography.Text type="secondary" italic>（空分组，可从其他分组移入 requirement）</Typography.Text>
         ) : null}
         {cluster.requirementIds.map((reqId) => (
           <RequirementTag
@@ -290,7 +290,7 @@ function ClusterCard({
       </Typography.Paragraph>
       {cluster.dependencyClusterIds.length > 0 ? (
         <Typography.Paragraph style={{ margin: 0, marginBlockStart: 4 }}>
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>依赖 cluster：</Typography.Text>{" "}
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>依赖分组：</Typography.Text>{" "}
           {cluster.dependencyClusterIds.map((d) => (
             <Tag key={d} icon={<ArrowRightOutlined />}>
               {d}
@@ -302,7 +302,7 @@ function ClusterCard({
       {diff && diff.kind === "dirty" ? <DirtyReasons diff={diff} /> : null}
       {diff && diff.kind === "unchanged" ? (
         <Typography.Paragraph type="secondary" style={{ margin: 0, marginBlockStart: 4, fontSize: 12 }}>
-          已存在父任务：<code>{diff.existingParent.parentTaskName}</code>，本次输入未引入变化。
+          已有父任务：<code>{diff.existingParent.parentTaskName}</code>，这次输入没有新变化。
         </Typography.Paragraph>
       ) : null}
     </Card>
@@ -342,7 +342,7 @@ function RequirementTag({
     }
     Modal.confirm({
       title: "确认移动",
-      content: `cluster ${affected.join(", ")} 已有人工任务编辑，移动会一并丢弃这些编辑。继续？`,
+      content: `分组 ${affected.join(", ")} 已有人工任务编辑，移动会一并丢弃这些编辑。继续？`,
       okText: "丢弃并移动",
       okType: "danger",
       cancelText: "取消",
@@ -367,7 +367,7 @@ function RequirementTag({
             key: "__undo__",
             label: (
               <span>
-                <UndoOutlined /> 撤销移动（回到算法默认）
+                <UndoOutlined /> 撤销移动（回到默认分组）
               </span>
             ),
             onClick: () => {
@@ -451,7 +451,7 @@ function ClusterTitleEditor({
     <Space size={2}>
       <Typography.Text strong>{title}</Typography.Text>
       {renamed ? <Tag color="warning">已改名</Tag> : null}
-      <Tooltip title={disabled ? "派发中暂不可编辑" : "重命名 cluster（仅影响 UI 显示，不改父任务 slug）"}>
+      <Tooltip title={disabled ? "生成中暂不可编辑" : "重命名分组（只影响界面显示，不改父任务 slug）"}>
         <Button
           size="small"
           type="text"
@@ -519,7 +519,7 @@ function ManualClusterModal({
         form.resetFields();
         onClose();
       }}
-      title="新建 cluster"
+      title="新建分组"
       okText="新建"
       cancelText="取消"
       onOk={() => form.submit()}
@@ -536,22 +536,22 @@ function ManualClusterModal({
       >
         <Form.Item
           name="title"
-          label="标题"
-          rules={[{ required: true, message: "请输入 cluster 标题" }, { whitespace: true }]}
+          label="分组标题"
+          rules={[{ required: true, message: "请输入分组标题" }, { whitespace: true }]}
         >
           <Input placeholder="例：前端 · 主题切换专项" maxLength={64} />
         </Form.Item>
         <Form.Item
           name="primaryRepoId"
-          label="primary 仓位（决定子任务归属）"
-          rules={[{ required: true, message: "请选择 primary 仓位" }]}
+          label="主仓（决定子任务归属）"
+          rules={[{ required: true, message: "请选择主仓" }]}
         >
           <Select<number>
             options={selectedRepos.map((r) => ({
               value: r.id,
               label: `${r.name}（${labelOfRepoType(r.type)}）`,
             }))}
-            placeholder="选择 primary 仓位"
+            placeholder="选择主仓"
           />
         </Form.Item>
         <Form.Item name="extraRepoIds" label="额外参与仓位（可选）">
@@ -565,7 +565,7 @@ function ManualClusterModal({
           />
         </Form.Item>
         <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBlock: 0 }}>
-          新建的 cluster 初始 requirementIds 为空。可在 cluster 卡上点击其他 cluster 的 requirement 标签把它移过来。
+          新建的分组初始 requirementIds 为空。可在分组卡上点击其他分组的 requirement 标签把它移过来。
         </Typography.Paragraph>
       </Form>
     </Modal>
@@ -574,9 +574,9 @@ function ManualClusterModal({
 
 function DiffBadge({ diff }: { diff: ClusterDiffStatus | undefined }) {
   if (!diff) return null;
-  if (diff.kind === "new") return <Tag color="blue">new</Tag>;
-  if (diff.kind === "unchanged") return <Tag color="success">unchanged</Tag>;
-  return <Tag color="warning">dirty · {diff.reasons.length} 项</Tag>;
+  if (diff.kind === "new") return <Tag color="blue">新建</Tag>;
+  if (diff.kind === "unchanged") return <Tag color="success">可沿用</Tag>;
+  return <Tag color="warning">有变化 · {diff.reasons.length} 项</Tag>;
 }
 
 function DirtyReasons({

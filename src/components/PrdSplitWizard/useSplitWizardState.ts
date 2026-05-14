@@ -23,6 +23,7 @@ import type {
   ProjectRef,
   TaskEditPatch,
   WizardState,
+  WizardWorkflowGraphResult,
   WizardWriteResult,
 } from "./types";
 import { emptyWizardState } from "./types";
@@ -60,6 +61,7 @@ export type Action =
   | { type: "go-to-review" }
   | { type: "begin-write" }
   | { type: "add-write-result"; result: WizardWriteResult }
+  | { type: "set-workflow-graph-result"; result: WizardWorkflowGraphResult | null }
   | { type: "finish-write" }
   | { type: "fail-write"; error: string }
   | { type: "set-global-error"; error: string | null }
@@ -106,6 +108,7 @@ export function reducer(state: WizardState, action: Action): WizardState {
         globalError: null,
         editsByCluster: {},
         writeResults: [],
+        workflowGraphResult: null,
       };
     }
     case "set-existing-parents": {
@@ -277,9 +280,11 @@ export function reducer(state: WizardState, action: Action): WizardState {
     case "go-to-review":
       return { ...state, stage: "review", globalError: null };
     case "begin-write":
-      return { ...state, stage: "writing", writeResults: [], globalError: null };
+      return { ...state, stage: "writing", writeResults: [], workflowGraphResult: null, globalError: null };
     case "add-write-result":
       return { ...state, writeResults: [...state.writeResults, action.result] };
+    case "set-workflow-graph-result":
+      return { ...state, workflowGraphResult: action.result };
     case "finish-write":
       return { ...state, stage: "done" };
     case "fail-write":
@@ -300,6 +305,7 @@ export function reducer(state: WizardState, action: Action): WizardState {
         diffByCluster: {},
         editsByCluster: {},
         writeResults: [],
+        workflowGraphResult: null,
         globalError: null,
       };
     case "back-to-plan":
@@ -441,6 +447,7 @@ export interface UseSplitWizardStateApi {
   goToReview(): void;
   beginWrite(): void;
   addWriteResult(result: WizardWriteResult): void;
+  setWorkflowGraphResult(result: WizardWorkflowGraphResult | null): void;
   finishWrite(): void;
   failWrite(error: string): void;
   setGlobalError(error: string | null): void;
@@ -546,6 +553,7 @@ export function useSplitWizardState(): UseSplitWizardStateApi {
       goToReview: () => dispatch({ type: "go-to-review" }),
       beginWrite: () => dispatch({ type: "begin-write" }),
       addWriteResult: (result) => dispatch({ type: "add-write-result", result }),
+      setWorkflowGraphResult: (result) => dispatch({ type: "set-workflow-graph-result", result }),
       finishWrite: () => dispatch({ type: "finish-write" }),
       failWrite: (error) => dispatch({ type: "fail-write", error }),
       setGlobalError: (error) => dispatch({ type: "set-global-error", error }),

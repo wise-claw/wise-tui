@@ -43,6 +43,7 @@ pub(crate) struct CreateParentTaskOutput {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ChildTaskPayload {
+    source_task_id: String,
     title: String,
     slug: String,
     prd_markdown: String,
@@ -92,9 +93,18 @@ pub(crate) struct MaterializeTasksInput {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct MaterializedChildTaskOutput {
+    source_task_id: String,
+    task_name: String,
+    task_path: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct MaterializeTasksOutput {
     parent_task_name: String,
     child_task_names: Vec<String>,
+    child_tasks: Vec<MaterializedChildTaskOutput>,
     warnings: Vec<String>,
 }
 
@@ -170,6 +180,7 @@ pub(crate) async fn prd_split_materialize_tasks(
     }
 
     let mut child_task_names = Vec::with_capacity(input.child_tasks.len());
+    let mut child_tasks = Vec::with_capacity(input.child_tasks.len());
     let mut warnings: Vec<String> = Vec::new();
 
     for child in &input.child_tasks {
@@ -242,6 +253,11 @@ pub(crate) async fn prd_split_materialize_tasks(
         }
 
         child_task_names.push(child_name);
+        child_tasks.push(MaterializedChildTaskOutput {
+            source_task_id: child.source_task_id.clone(),
+            task_name: child_task_names.last().cloned().unwrap_or_default(),
+            task_path: child_path.to_string_lossy().to_string(),
+        });
     }
 
     // Persist the captured claude split mapping into parent task.json meta.
@@ -261,6 +277,7 @@ pub(crate) async fn prd_split_materialize_tasks(
     Ok(MaterializeTasksOutput {
         parent_task_name: input.parent_task_name,
         child_task_names,
+        child_tasks,
         warnings,
     })
 }

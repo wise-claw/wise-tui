@@ -12,14 +12,16 @@ import {
   repositoryToPrdSplitTarget,
   type PrdSplitTargetKind,
 } from "./targetModel";
+import { WORKFLOW_UI_EVENT_OPEN_WORKFLOW_CONFIG } from "../../constants/workflowUiEvents";
+import { PrdTraceMap } from "./PrdTraceMap";
 
 const STEP_KEYS = ["input", "plan", "dispatch", "review"] as const;
 type StepKey = (typeof STEP_KEYS)[number];
 const STEP_TITLES: Record<StepKey, string> = {
   input: "PRD",
-  plan: "Cluster",
-  dispatch: "派发",
-  review: "Review",
+  plan: "任务分组",
+  dispatch: "生成任务",
+  review: "审阅任务",
 };
 
 export interface PrdSplitWizardModalProps {
@@ -147,7 +149,7 @@ export function PrdSplitWizardModal({
         Modal.confirm({
           title: "回到 PRD 编辑？",
           icon: <ExclamationCircleOutlined />,
-          content: "会清空 cluster 编辑 / splitter 输出 / 任务编辑（PRD 文本保留）。",
+          content: "会清空任务分组调整、已生成的任务和任务编辑；PRD 文本会保留。",
           okText: "确认回到 PRD",
           cancelText: "取消",
           onOk: () => api.backToInput(),
@@ -180,7 +182,7 @@ export function PrdSplitWizardModal({
       width="min(1100px, 92vw)"
       footer={null}
       mask={{ closable: false }}
-      title="需求拆分 · Trellis Artifact Pipeline"
+      title="PRD 拆分 · 任务生成"
     >
       <Space orientation="vertical" size={16} style={{ width: "100%" }}>
         <TargetPicker
@@ -225,7 +227,11 @@ export function PrdSplitWizardModal({
             <Result
               status="success"
               title="Trellis 任务已落盘完成"
-              subTitle={`共写入 ${state.writeResults.reduce((sum, r) => sum + r.childTaskNames.length, 0)} 个子任务（跨 ${state.writeResults.length} 个 cluster 父任务）`}
+              subTitle={
+                state.workflowGraphResult && !state.workflowGraphResult.error
+                  ? `共写入 ${state.writeResults.reduce((sum, r) => sum + r.childTaskNames.length, 0)} 个子任务（跨 ${state.writeResults.length} 个父任务分组），并生成 ${state.workflowGraphResult.nodeCount} 节点 / ${state.workflowGraphResult.edgeCount} 边的执行编排草稿`
+                  : `共写入 ${state.writeResults.reduce((sum, r) => sum + r.childTaskNames.length, 0)} 个子任务（跨 ${state.writeResults.length} 个父任务分组）`
+              }
               extra={[
                 <Button key="close" onClick={onClose} type="primary">
                   关闭
@@ -233,8 +239,26 @@ export function PrdSplitWizardModal({
                 <Button key="again" onClick={() => api.backToInput()}>
                   再拆一个 PRD
                 </Button>,
+                state.workflowGraphResult && !state.workflowGraphResult.error ? (
+                  <Button
+                    key="workflow"
+                    onClick={() => {
+                      window.dispatchEvent(new CustomEvent(WORKFLOW_UI_EVENT_OPEN_WORKFLOW_CONFIG, {
+                        detail: {
+                          workflowId: state.workflowGraphResult?.workflowId,
+                          projectId: state.context?.mode === "project" ? state.project?.id : undefined,
+                        },
+                      }));
+                      onClose();
+                    }}
+                  >
+                    打开执行编排
+                  </Button>
+                ) : null,
               ]}
-            />
+            >
+              {state.workflowGraphResult?.graph ? <PrdTraceMap graph={state.workflowGraphResult.graph} /> : null}
+            </Result>
           ) : null}
         </div>
 
@@ -245,7 +269,7 @@ export function PrdSplitWizardModal({
           <Space>
             {state.stage === "input" ? (
               <Button type="primary" onClick={onNextFromInput} disabled={!state.project}>
-                下一步：规划 cluster
+                下一步：划分任务分组
               </Button>
             ) : null}
             {state.stage === "plan" ? (
@@ -306,7 +330,7 @@ function TargetPicker({
           onChange={(e) => onTargetKindChange(e.target.value as PrdSplitTargetKind)}
         >
           <Radio.Button value="project">项目（含多/单仓）</Radio.Button>
-          <Radio.Button value="repository">单仓库（含游离）</Radio.Button>
+          <Radio.Button value="repository">单个仓库（独立仓）</Radio.Button>
         </Radio.Group>
       </Space>
       {targetKind === "project" ? (
