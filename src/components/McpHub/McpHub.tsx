@@ -144,16 +144,16 @@ export function McpHub({ repositoryPath, onClose }: Props) {
                   <div className="app-mcp-hub-card-name-row">
                     <span className="app-mcp-hub-card-name">{item.name}</span>
                     {item.pluginRef ? (
-                      <Tag bordered={false} className="app-mcp-hub-card-tag">
+                      <Tag variant="filled" className="app-mcp-hub-card-tag">
                         {item.pluginRef}
                       </Tag>
                     ) : null}
                     {item.runtimeStatus === "connected" ? (
-                      <Tag bordered={false} color="success" className="app-mcp-hub-card-tag">
+                      <Tag variant="filled" color="success" className="app-mcp-hub-card-tag">
                         已连通
                       </Tag>
                     ) : item.runtimeStatus === "failed" ? (
-                      <Tag bordered={false} color="error" className="app-mcp-hub-card-tag">
+                      <Tag variant="filled" color="error" className="app-mcp-hub-card-tag">
                         失败
                       </Tag>
                     ) : null}

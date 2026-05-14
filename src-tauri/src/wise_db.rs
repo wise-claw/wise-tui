@@ -32,6 +32,7 @@ const MIGRATION_013: &str = include_str!("../migrations/013_project_icon_badge.s
 const MIGRATION_014: &str = include_str!("../migrations/014_project_repository_display_order.sql");
 const MIGRATION_015: &str = include_str!("../migrations/015_project_prd_scope.sql");
 const MIGRATION_016: &str = include_str!("../migrations/016_project_trellis_root.sql");
+const MIGRATION_017: &str = include_str!("../migrations/017_code_knowledge_graph.sql");
 const PLATFORM_SPLIT_PROMPT_SEED_JSON: &str =
     include_str!("../migrations/005_platform_split_prompt_seed.json");
 
@@ -109,6 +110,10 @@ const MIGRATIONS: &[Migration] = &[
     Migration {
         name: "016_project_trellis_root",
         action: MigrationAction::Sql(MIGRATION_016),
+    },
+    Migration {
+        name: "017_code_knowledge_graph",
+        action: MigrationAction::Sql(MIGRATION_017),
     },
 ];
 
@@ -202,6 +207,7 @@ impl WiseDb {
         conn.execute_batch("PRAGMA foreign_keys = ON;")
             .map_err(|e| e.to_string())?;
         run_migrations(&conn)?;
+        ensure_graph_index_meta_progress_column(&conn)?;
         Ok(Self(Mutex::new(conn)))
     }
 
@@ -1727,6 +1733,25 @@ fn run_migrations(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
+/// Best-effort: ensure `graph_index_meta` has a `progress` column.
+/// Handles databases created by earlier versions of migration 017 that
+/// lacked this column.
+fn ensure_graph_index_meta_progress_column(conn: &Connection) -> Result<(), String> {
+    let missing = conn
+        .query_row(
+            "SELECT COUNT(*) = 0 FROM pragma_table_info('graph_index_meta') WHERE name = 'progress'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(false);
+    if missing {
+        let _ = conn.execute_batch(
+            "ALTER TABLE graph_index_meta ADD COLUMN progress INTEGER DEFAULT 0;",
+        );
+    }
+    Ok(())
+}
+
 fn migration_applied(conn: &Connection, name: &str) -> Result<bool, String> {
     let count: i64 = conn
         .query_row(
@@ -1802,6 +1827,8 @@ mod tests {
                 "013_project_icon_badge",
                 "014_project_repository_display_order",
                 "015_project_prd_scope",
+                "016_project_trellis_root",
+                "017_code_knowledge_graph",
             ]
         );
     }

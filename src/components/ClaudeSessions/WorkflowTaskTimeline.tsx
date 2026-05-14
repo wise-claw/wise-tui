@@ -277,7 +277,7 @@ export function WorkflowTaskTimeline({
             const latestEventText = latestEvent ? formatEventLabel(latestEvent) : "";
             return (
               <List.Item>
-                <Space direction="vertical" style={{ width: "100%" }}>
+                <Space orientation="vertical" style={{ width: "100%" }}>
                   <Space>
                     <Typography.Text strong>{task.title}</Typography.Text>
                     <Tag>{task.status}</Tag>
@@ -313,7 +313,7 @@ export function WorkflowTaskTimeline({
                     </Button>
                   </Space>
                   {events.length > 0 && (
-                    <Space direction="vertical" size={2}>
+                    <Space orientation="vertical" size={2}>
                       <Space size={6}>
                         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                           最近事件（点击可定位阶段）：
@@ -372,7 +372,7 @@ export function WorkflowTaskTimeline({
                     </Space>
                   )}
                   {runtimeSnapshots.length > 0 && (
-                    <Space direction="vertical" size={2}>
+                    <Space orientation="vertical" size={2}>
                       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                         流转快照（最近3次）：
                       </Typography.Text>
@@ -381,7 +381,7 @@ export function WorkflowTaskTimeline({
                           ? `派发 -> ${item.toNodeName ?? item.toNodeId ?? "未知节点"}`
                           : `决策 ${item.decision === "pass" ? "通过" : "驳回"}`;
                         return (
-                          <Space key={item.id} direction="vertical" size={0}>
+                          <Space key={item.id} orientation="vertical" size={0}>
                             <Typography.Text style={{ fontSize: 12 }}>{head}</Typography.Text>
                             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                               输入：{item.inputPreview}

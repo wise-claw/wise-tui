@@ -1,0 +1,329 @@
+/**
+ * Splitter dispatch — 把一个 cluster 的输入装包 + 派给 `trellis-splitter` subagent。
+ *
+ * 责任分布：
+ *   - TS 这层做：组装 bundle、组装 prompt（含强制的 `Active task:` 前缀）、调用 Tauri 命令、
+ *     把 raw 输出喂给本地 normalizer (`normalizeClaudeSplitOutputToSplitResult`)。
+ *   - Rust 这层做：写 bundle 到 `~/.wise/prd-runs/<runId>/`、spawn `claude`、抓 stdout、
+ *     提取 JSON、回传。
+ *
+ * 这层不做：cluster planning（见 `clusterPlanner`）、Trellis 落盘（见 `trellisWriter`）。
+ */
+
+import { invoke } from "@tauri-apps/api/core";
+import type {
+  PrdDocument,
+  SplitResult,
+  TaskSplitContext,
+} from "../../types";
+import { buildSplitRequestPayload } from "../buildSplitRequestPayload";
+import {
+  normalizeClaudeSplitOutputToSplitResult,
+  validateClaudeSplitPayloadStrict,
+  type ClaudeSplitStrictValidationIssue,
+} from "../claudeSplitOutputNormalize";
+import type { ClusterPlanItem } from "./clusterPlanner";
+import type { RequirementsIndexV2 } from "./requirementsIndexVersion";
+
+export interface DispatchClusterInput {
+  projectRootPath: string;
+  /** 父任务相对路径（`.trellis/tasks/MM-DD-...`），用于 prompt 第一行 `Active task:`。 */
+  parentTaskPath: string;
+  cluster: ClusterPlanItem;
+  /** 原始 PRD 文档（含全文）；本函数会按 cluster 的 requirementIds 切片喂给 splitter。 */
+  prd: PrdDocument;
+  /** Cluster 关联的 requirements-index v2 全量（splitter 校验需要）。 */
+  requirementsIndex: RequirementsIndexV2;
+  /** 拆分上下文（仓库标识、policy 等），用于 normalizer 与 buildSplitRequestPayload。 */
+  context: TaskSplitContext | null;
+  model?: string | null;
+  timeoutMs?: number | null;
+}
+
+export interface DispatchClusterRawOutput {
+  runId: string;
+  runDir: string;
+  exitCode: number;
+  durationMs: number;
+  stdoutPath: string;
+  stderrPath: string;
+  rawResultPath: string;
+  rawOutput: unknown;
+  stdoutTruncatedPreview: string;
+}
+
+export interface DispatchClusterResult {
+  raw: DispatchClusterRawOutput;
+  normalized: SplitResult | null;
+  validationIssues: ClaudeSplitStrictValidationIssue[];
+  errors: string[];
+}
+
+export async function dispatchClusterSplit(input: DispatchClusterInput): Promise<DispatchClusterResult> {
+  const errors: string[] = [];
+
+  // 1. 用 cluster 视角的 PRD 子集 + cluster 元数据装配 bundle。
+  const clusterRequirementIds = new Set(input.cluster.requirementIds);
+  const clusterFilteredPrd: PrdDocument = filterPrdToClusterRequirements(
+    input.prd,
+    input.requirementsIndex,
+    clusterRequirementIds,
+  );
+
+  const clusterPayload = buildClusterMetaJson(input.cluster);
+  const outputSchema = OUTPUT_SCHEMA_JSON;
+  const payload = buildSplitRequestPayload({
+    prd: clusterFilteredPrd,
+    context: input.context,
+    outputSchemaJson: outputSchema,
+  });
+  if (!payload.ok) {
+    return {
+      raw: emptyRaw(),
+      normalized: null,
+      validationIssues: [],
+      errors: [`bundle 装配失败: ${payload.reason}`],
+    };
+  }
+
+  // 注入 cluster.json + 用本任务专用的 requirements-index v2（含 version/bodyHash）。
+  const bundle: Record<string, string> = {
+    ...payload.bundle,
+    "cluster.json": clusterPayload,
+    "requirements-index.json": JSON.stringify(input.requirementsIndex, null, 2),
+  };
+
+  const prompt = composeSplitterPrompt({
+    parentTaskPath: input.parentTaskPath,
+    cluster: input.cluster,
+    bundleFileNames: Object.keys(bundle),
+  });
+
+  // 2. Tauri dispatch.
+  let raw: DispatchClusterRawOutput;
+  try {
+    raw = await invoke<DispatchClusterRawOutput>("prd_split_dispatch_cluster", {
+      input: {
+        projectRootPath: input.projectRootPath,
+        parentTaskPath: input.parentTaskPath,
+        clusterId: input.cluster.id,
+        bundle,
+        prompt,
+        model: input.model ?? null,
+        timeoutMs: input.timeoutMs ?? null,
+      },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      raw: emptyRaw(),
+      normalized: null,
+      validationIssues: [],
+      errors: [`dispatch 命令失败: ${message}`],
+    };
+  }
+
+  if (raw.exitCode !== 0) {
+    errors.push(`Claude 退出码非零 (${raw.exitCode})`);
+  }
+
+  // 3. 校验 + 归一。
+  if (raw.rawOutput == null) {
+    return {
+      raw,
+      normalized: null,
+      validationIssues: [],
+      errors: [
+        ...errors,
+        "Claude 输出未包含可解析的 JSON 对象（见 stdout 预览或 run_dir 排错）",
+      ],
+    };
+  }
+
+  const validation = validateClaudeSplitPayloadStrict({
+    payload: raw.rawOutput,
+    source: input.prd,
+  });
+  if (!validation.ok) {
+    return {
+      raw,
+      normalized: null,
+      validationIssues: validation.issues,
+      errors: [...errors, `输出未通过 strict 校验（${validation.issues.length} 条 issue）`],
+    };
+  }
+
+  const normalized = normalizeClaudeSplitOutputToSplitResult({
+    payload: raw.rawOutput,
+    source: input.prd,
+    context: input.context,
+  });
+
+  return {
+    raw,
+    normalized,
+    validationIssues: [],
+    errors,
+  };
+}
+
+// ── prompt 装配 ──
+
+export function composeSplitterPrompt(input: {
+  parentTaskPath: string;
+  cluster: ClusterPlanItem;
+  bundleFileNames: string[];
+}): string {
+  const lines: string[] = [];
+  lines.push(`Active task: ${input.parentTaskPath}`);
+  lines.push("");
+  lines.push("你是 `trellis-splitter` 子代理。本次只对一个 cluster 做 PRD 拆分，产物**仅**输出一个 JSON 对象到 stdout（不要 Markdown 围栏，不要解释文字）。");
+  lines.push("");
+  lines.push("详细规则见 `.trellis/spec/guides/trellis-splitter-prompt.md`。");
+  lines.push("");
+  lines.push("## Cluster meta");
+  lines.push(`- id: \`${input.cluster.id}\``);
+  lines.push(`- title: ${input.cluster.title}`);
+  lines.push(`- primaryRepositoryId: ${input.cluster.primaryRepositoryId ?? "null"}`);
+  lines.push(`- repositoryIds: ${JSON.stringify(input.cluster.repositoryIds)}`);
+  lines.push(`- requirementIds: ${JSON.stringify(input.cluster.requirementIds)}`);
+  lines.push("");
+  lines.push("## Input bundle (在本次 run 目录内)");
+  for (const name of input.bundleFileNames) {
+    lines.push(`- \`${name}\``);
+  }
+  lines.push("");
+  lines.push("## 强约束（违反一条即认为产出无效）");
+  lines.push("1. 输出 schema 严格遵守 `OUTPUT_SCHEMA.json`，并通过本地 `validateClaudeSplitPayloadStrict`。");
+  lines.push("2. 每个 task 必须含 ≥1 个 `sourceRequirementIds`，且每个 id 必须在 `requirements-index.json` 中存在；不得编造。");
+  lines.push("3. `taskAnchors` 的 `contextBefore`/`contextAfter` 至少一段可追溯到 `sourceRequirementIds` 对应的原文。");
+  lines.push("4. `executionStatus = \"executable\"` 时 `missingPrerequisites` 为空；否则非空。");
+  lines.push("5. `clusterId` 必须等于本 cluster 的 id；`repoTarget` 缺省由本地兜底。");
+  lines.push("6. 仅输出一个顶层 JSON 对象，不要前后附加任何文字。");
+  lines.push("");
+  lines.push("现在产出 JSON。");
+  return lines.join("\n");
+}
+
+function buildClusterMetaJson(cluster: ClusterPlanItem): string {
+  return JSON.stringify(
+    {
+      id: cluster.id,
+      title: cluster.title,
+      primaryRepositoryId: cluster.primaryRepositoryId,
+      repositoryIds: cluster.repositoryIds,
+      requirementIds: cluster.requirementIds,
+      dependencyClusterIds: cluster.dependencyClusterIds,
+    },
+    null,
+    2,
+  );
+}
+
+/** 把全量 PRD 收窄到只含 cluster 关联的 requirements；其他段落保留以利上下文。 */
+function filterPrdToClusterRequirements(
+  prd: PrdDocument,
+  index: RequirementsIndexV2,
+  clusterRequirementIds: Set<string>,
+): PrdDocument {
+  if (clusterRequirementIds.size === 0) return prd;
+  const wantedTexts = new Set<string>();
+  for (const entry of index.requirements) {
+    if (clusterRequirementIds.has(entry.id)) {
+      wantedTexts.add(entry.content.trim());
+    }
+  }
+  if (wantedTexts.size === 0) return prd;
+  return {
+    ...prd,
+    functional: prd.functional.filter((t) => wantedTexts.has(t.trim())),
+    nonFunctional: prd.nonFunctional.filter((t) => wantedTexts.has(t.trim())),
+    acceptance: prd.acceptance.filter((t) => wantedTexts.has(t.trim())),
+  };
+}
+
+function emptyRaw(): DispatchClusterRawOutput {
+  return {
+    runId: "",
+    runDir: "",
+    exitCode: -1,
+    durationMs: 0,
+    stdoutPath: "",
+    stderrPath: "",
+    rawResultPath: "",
+    rawOutput: null,
+    stdoutTruncatedPreview: "",
+  };
+}
+
+const OUTPUT_SCHEMA_JSON = JSON.stringify(
+  {
+    type: "object",
+    required: ["tasks"],
+    properties: {
+      tasks: {
+        type: "array",
+        minItems: 1,
+        items: {
+          type: "object",
+          required: [
+            "id",
+            "title",
+            "description",
+            "role",
+            "executionStatus",
+            "subtasks",
+            "dod",
+            "sourceRequirementIds",
+            "taskAnchors",
+          ],
+          properties: {
+            id: { type: "string" },
+            title: { type: "string" },
+            description: { type: "string" },
+            role: { enum: ["frontend", "backend", "document"] },
+            executionStatus: { enum: ["executable", "not_executable"] },
+            missingPrerequisites: { type: "array", items: { type: "string" } },
+            subtasks: { type: "array", minItems: 1, items: { type: "string" } },
+            dod: { type: "array", minItems: 1, items: { type: "string" } },
+            dependencies: { type: "array", items: { type: "string" } },
+            sourceRequirementIds: { type: "array", minItems: 1, items: { type: "string" } },
+            taskAnchors: {
+              type: "object",
+              required: ["from", "to", "textHash"],
+              properties: {
+                from: { type: "integer", minimum: 0 },
+                to: { type: "integer", minimum: 1 },
+                textHash: { type: "string", minLength: 1 },
+                contextBefore: { type: "string" },
+                contextAfter: { type: "string" },
+              },
+            },
+            clusterId: { type: "string" },
+            repoTarget: { type: ["integer", "null"] },
+          },
+        },
+      },
+      claudeSplitMapping: {
+        type: "object",
+        properties: {
+          version: { const: 1 },
+          taskRequirementLinks: {
+            type: "array",
+            items: {
+              type: "object",
+              required: ["taskId", "requirementIds"],
+              properties: {
+                taskId: { type: "string" },
+                requirementIds: { type: "array", items: { type: "string" } },
+                rationale: { type: "string" },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+  null,
+  2,
+);

@@ -39,7 +39,6 @@ import {
 import type {
   ClaudeComposerExecuteBubbleOptions,
   ClaudeSession,
-  GitStatusResponse,
   GitWorktreeEntry,
   TodoItem,
   QuestionRequest,
@@ -82,7 +81,6 @@ import {
 } from "../../services/pendingTaskQueueStore";
 import {
   getRepositoryBaseDisplayName,
-  stripRedundantRepoBracketPrefix,
 } from "../../utils/sessionRepositoryDisplay";
 import {
   extractNotificationScrollKeyword,
@@ -108,14 +106,30 @@ import {
 import { pickSessionForRepositorySidebarSelect } from "../../utils/claudeSessionSelection";
 import { buildOmcBatchTaskIntentOneLiner } from "../../utils/omcBatchTaskIntentOneLiner";
 import {
-  messageTextLooksLikeOmcDispatch,
-  parseOmcSlashCommandFromUserText,
-} from "../../utils/omcUserMessageText";
-import {
   resolveRepositoryMainSessionId,
   resolveMainOwnerAgentNameForRepositoryPath,
 } from "../../utils/repositoryMainSessionBinding";
 import { getAppSetting, setAppSetting } from "../../services/appSettingsStore";
+import {
+  buildAiCommitSummary,
+  buildTaskExecutionPrompt,
+  countSessionUnreadNotifications,
+  extractEmployeeNameFromBracketPreview,
+  extractOmcCommandFromUserPrompt,
+  formatShortQuestionTime,
+  formatTaskRoleLabel,
+  formatWorktreeBranchLabel,
+  formatWorktreePathRelative,
+  getLatestDispatchedTeamName,
+  getLatestUserPlainText,
+  getSessionPreview,
+  notificationConversationInSessionInboxScope,
+  notificationRowInSessionInboxScope,
+  normalizeSplitTaskListFlowStatus,
+  sessionRepoPathKey,
+  splitTaskListBinaryLabel,
+} from "./claudeChatHelpers";
+import { getSessionUpdatedAt, groupSessionsByDay } from "./sessionGrouping";
 import {
   SESSION_NOTIFICATION_UI_EVENT_OPEN_PANEL,
   WORKFLOW_UI_EVENT_FOCUS_TASK_TOOL,
@@ -143,139 +157,6 @@ import type {
   WorkflowTaskItem,
   WorkflowTemplateItem,
 } from "../../types";
-
-function formatWorktreeBranchLabel(branch: string | null): string {
-  if (!branch?.trim()) return "（detached）";
-  return branch.replace(/^refs\/heads\//, "");
-}
-
-function sessionRepoPathKey(p: string): string {
-  return p.trim().replace(/\\/g, "/").replace(/\/$/, "");
-}
-
-function formatWorktreePathRelative(repoPath: string, worktreePath: string): string {
-  const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/$/, "");
-  const r = norm(repoPath);
-  const w = norm(worktreePath);
-  if (w.startsWith(`${r}/`)) return w.slice(r.length + 1);
-  return worktreePath;
-}
-
-function sameLogicalClaudeSession(a: ClaudeSession, b: ClaudeSession): boolean {
-  if (a.id === b.id) {
-    return true;
-  }
-  const ac = a.claudeSessionId?.trim();
-  const bc = b.claudeSessionId?.trim();
-  if (ac && (ac === b.id || (bc && ac === bc))) {
-    return true;
-  }
-  if (bc && (bc === a.id || (ac && bc === ac))) {
-    return true;
-  }
-  return false;
-}
-
-function buildTaskExecutionPrompt(task: TaskItem): string {
-  const lines = [
-    `请执行以下任务：${task.title || task.id}`,
-    "",
-    `任务ID：${task.id}`,
-    `角色：${formatTaskRoleLabel(task.role)}`,
-    `规模：${task.size}`,
-    `预估工期：${task.estimateDays} 天`,
-  ];
-  if (task.description.trim()) {
-    lines.push("", "任务描述：", task.description.trim());
-  }
-  if (task.dod.length > 0) {
-    lines.push("", "验收标准：");
-    for (const item of task.dod) {
-      if (item.trim()) {
-        lines.push(`- ${item.trim()}`);
-      }
-    }
-  }
-  return lines.join("\n");
-}
-
-/** 「可执行任务」仅展示「未完成 / 已完成」：持久化与展示统一为 todo | done。 */
-function normalizeSplitTaskListFlowStatus(status: TaskFlowStatus | undefined): "todo" | "done" | undefined {
-  if (status === undefined) return undefined;
-  if (status === "done") return "done";
-  return "todo";
-}
-
-function splitTaskListBinaryLabel(status: TaskFlowStatus | undefined): string {
-  return status === "done" ? "已完成" : "未完成";
-}
-
-/** 拆分任务 `role` 展示与下发提示词用中文标签（数据层仍为英文枚举）。 */
-function formatTaskRoleLabel(role: string | undefined): string {
-  const r = (role ?? "").trim().toLowerCase();
-  if (r === "frontend") return "前端";
-  if (r === "backend") return "后端";
-  if (r === "document") return "文档";
-  if (r === "fullstack" || r === "full-stack") return "全栈";
-  if (r === "devops") return "运维";
-  if (r === "mobile") return "移动端";
-  if (r === "design" || r === "designer") return "设计";
-  return (role ?? "").trim() || "未指定";
-}
-
-/** 通知 `conversationId` 是否归属当前标签会话（含临时 id 与磁盘 Claude id 合并后的别名）。 */
-function notificationInboxConversationMatchesSession(
-  conversationId: string,
-  sess: ClaudeSession,
-  allSessions: ClaudeSession[],
-): boolean {
-  const c = conversationId.trim();
-  if (!c) return false;
-  if (c === sess.id) return true;
-  const claude = sess.claudeSessionId?.trim();
-  if (claude && c === claude) return true;
-  const owner = allSessions.find((s) => s.id === c || (s.claudeSessionId?.trim() && s.claudeSessionId.trim() === c));
-  if (!owner) return false;
-  return sameLogicalClaudeSession(owner, sess);
-}
-
-/** 仅按 `conversationId` 判断是否属于当前会话所在仓库的通知面板范围（不含已读判断）。 */
-function notificationConversationInSessionInboxScope(
-  conversationId: string,
-  sess: ClaudeSession,
-  allSessions: ClaudeSession[],
-): boolean {
-  const c = conversationId.trim();
-  if (!c) return false;
-  const owner = allSessions.find((s) => s.id === c || (s.claudeSessionId?.trim() && s.claudeSessionId.trim() === c));
-  if (owner) {
-    return owner.repositoryPath === sess.repositoryPath;
-  }
-  return notificationInboxConversationMatchesSession(c, sess, allSessions);
-}
-
-/**
- * 会话内通知面板：展示「当前仓库」下任意标签产生的未读（主会话 / 员工 / 团队子标签），
- * 以便员工执行完成等写入的通知在同仓其他标签上也能出现；无法在 `sessions` 中解析时退化为仅当前标签 id 匹配。
- */
-function notificationRowInSessionInboxScope(
-  row: WiseInboundMessageRow,
-  sess: ClaudeSession,
-  allSessions: ClaudeSession[],
-): boolean {
-  if (row.readAt) {
-    return false;
-  }
-  return notificationConversationInSessionInboxScope(row.conversationId, sess, allSessions);
-}
-
-function countSessionUnreadNotifications(
-  rows: WiseInboundMessageRow[],
-  sess: ClaudeSession,
-  allSessions: ClaudeSession[],
-): number {
-  return rows.filter((r) => notificationRowInSessionInboxScope(r, sess, allSessions)).length;
-}
 
 function isWorkflowTraceEnabled(): boolean {
   if (typeof window === "undefined") return false;
@@ -3149,7 +3030,7 @@ export function ClaudeChat({
                 title={TASK_COMPLETION_MODAL_HINT}
                 placement="bottomLeft"
                 mouseEnterDelay={0.35}
-                overlayInnerStyle={{ maxWidth: 420 }}
+                styles={{ container: { maxWidth: 420 } }}
               >
                 <button type="button" className="app-task-completion-modal__title-help" aria-label="说明">
                   <QuestionCircleOutlined />
@@ -3165,7 +3046,7 @@ export function ClaudeChat({
             </Button>
           }
           width={Math.min(960, typeof window !== "undefined" ? window.innerWidth - 48 : 960)}
-          destroyOnClose
+          destroyOnHidden
           className="app-task-completion-modal"
         >
           <div className="app-task-completion-modal__toolbar">
@@ -3260,10 +3141,10 @@ export function ClaudeChat({
             : "可执行任务"
         }
         placement="right"
-        width={traceDrawerWidth}
+        size={traceDrawerWidth}
         open={taskListDrawerOpen}
         onClose={() => setTaskListDrawerOpen(false)}
-        destroyOnClose={false}
+        destroyOnHidden={false}
         classNames={{ body: "app-claude-task-list-drawer-body" }}
         styles={{
           body: {
@@ -3586,10 +3467,10 @@ export function ClaudeChat({
       <Drawer
         title="会话跟踪"
         placement="right"
-        width={traceDrawerWidth}
+        size={traceDrawerWidth}
         open={sessionTraceDrawerOpen}
         onClose={() => setSessionTraceDrawerOpen(false)}
-        destroyOnClose={false}
+        destroyOnHidden={false}
         styles={{ body: { padding: 12, overflow: "auto" } }}
       >
         <div className="app-claude-session-trace-list">
@@ -4055,7 +3936,7 @@ export function ClaudeChat({
                                 description="将执行 git worktree remove --force，并删除该 worktree 对应的工作区目录。"
                                 okText="确定"
                                 cancelText="取消"
-                                overlayInnerStyle={{ width: "min(92vw, 300px)", maxWidth: "min(92vw, 300px)" }}
+                                styles={{ container: { width: "min(92vw, 300px)", maxWidth: "min(92vw, 300px)" } }}
                                 onConfirm={() => void handleGitWorktreeRemove(w.path)}
                               >
                                 <Button
@@ -4211,177 +4092,6 @@ function resolveSessionOwnerInfo(input: {
     typeLabel: "主会话",
     name: "",
   };
-}
-
-/** 通知 / 磁盘预览常见前缀 `[仓库/员工:姓名]`，在 repositoryName 已被覆盖时兜底识别员工。 */
-function extractEmployeeNameFromBracketPreview(preview: string | undefined): string | null {
-  if (!preview?.trim()) {
-    return null;
-  }
-  const marker = "员工:";
-  const open = preview.indexOf("[");
-  const close = preview.indexOf("]", open + 1);
-  if (open < 0 || close <= open) {
-    return null;
-  }
-  const inner = preview.slice(open + 1, close);
-  const idx = inner.lastIndexOf(marker);
-  if (idx < 0) {
-    return null;
-  }
-  const value = inner.slice(idx + marker.length).trim();
-  return value || null;
-}
-
-function getLatestUserPlainText(session: ClaudeSession): string {
-  for (let i = session.messages.length - 1; i >= 0; i -= 1) {
-    const msg = session.messages[i];
-    if (msg.role !== "user") {
-      continue;
-    }
-    const fromParts =
-      msg.parts
-        ?.filter((part): part is { type: "text"; text: string } => part.type === "text" && typeof part.text === "string")
-        .map((part) => part.text.trim())
-        .filter(Boolean)
-        .join("\n\n") ?? "";
-    if (fromParts) {
-      return fromParts;
-    }
-    const fromContent = msg.content.trim();
-    if (fromContent) {
-      return fromContent;
-    }
-  }
-  return "";
-}
-
-function extractOmcCommandFromUserPrompt(session: ClaudeSession): string | null {
-  const latestUserText = getLatestUserPlainText(session);
-  if (!latestUserText) return null;
-  if (!messageTextLooksLikeOmcDispatch(latestUserText)) return null;
-  return parseOmcSlashCommandFromUserText(latestUserText) ?? "/autopilot";
-}
-
-function getLatestDispatchedTeamName(session: ClaudeSession): string | null {
-  for (let i = session.messages.length - 1; i >= 0; i -= 1) {
-    const msg = session.messages[i];
-    if (msg.role !== "system") {
-      continue;
-    }
-    const systemText =
-      msg.parts
-        ?.filter((part): part is { type: "text"; text: string } => part.type === "text" && typeof part.text === "string")
-        .map((part) => part.text)
-        .join("\n") || msg.content;
-    if (!systemText.includes("任务分发记录") || !systemText.includes("类型：团队流程")) {
-      continue;
-    }
-    const targetLine = systemText
-      .split("\n")
-      .map((line) => line.trim())
-      .find((line) => line.startsWith("- 目标："));
-    if (!targetLine) {
-      continue;
-    }
-    const teamName = targetLine.replace("- 目标：", "").trim();
-    if (teamName) {
-      return teamName;
-    }
-  }
-  return null;
-}
-
-interface SessionGroup {
-  key: string;
-  label: string;
-  items: ClaudeSession[];
-}
-
-function groupSessionsByDay(sessions: ClaudeSession[]): SessionGroup[] {
-  const now = Date.now();
-  const oneDay = 24 * 60 * 60 * 1000;
-  const groups = new Map<string, SessionGroup>();
-  for (const item of sessions) {
-    const dayStart = getDayStart(getSessionUpdatedAt(item));
-    const diffDays = Math.floor((getDayStart(now) - dayStart) / oneDay);
-    const label = diffDays <= 0 ? "Today" : diffDays === 1 ? "Yesterday" : "Previous 7 days";
-    const key = diffDays <= 0 ? "today" : diffDays === 1 ? "yesterday" : "previous";
-    const group = groups.get(key);
-    if (group) {
-      group.items.push(item);
-      continue;
-    }
-    groups.set(key, {
-      key,
-      label,
-      items: [item],
-    });
-  }
-  return ["today", "yesterday", "previous"]
-    .map((key) => groups.get(key))
-    .filter((item): item is SessionGroup => Boolean(item));
-}
-
-function getSessionUpdatedAt(session: ClaudeSession): number {
-  const lastTimestamp = session.messages[session.messages.length - 1]?.timestamp;
-  return typeof lastTimestamp === "number" ? lastTimestamp : session.createdAt;
-}
-
-function getDayStart(timestamp: number): number {
-  const date = new Date(timestamp);
-  date.setHours(0, 0, 0, 0);
-  return date.getTime();
-}
-
-function getSessionPreview(session: ClaudeSession): string {
-  const repo = session.repositoryName ?? "";
-  const firstUserMsg = session.messages.find((m) => m.role === "user");
-  if (firstUserMsg) {
-    const line = truncateSingleLine(stripRedundantRepoBracketPrefix(firstUserMsg.content, repo), 28);
-    if (line.trim()) {
-      return line;
-    }
-  }
-  const fromDisk = session.diskPreview?.trim();
-  if (fromDisk) {
-    const line = truncateSingleLine(stripRedundantRepoBracketPrefix(fromDisk, repo), 28);
-    if (line.trim()) {
-      return line;
-    }
-  }
-  return "新会话";
-}
-
-function buildAiCommitSummary(status: GitStatusResponse): string {
-  const changedFiles = [...status.staged, ...status.unstaged];
-  const uniqueFiles = Array.from(new Set(changedFiles.map((item) => item.path))).slice(0, 5);
-  const fileSummary = uniqueFiles.length > 0 ? `涉及文件：${uniqueFiles.join("、")}` : "涉及文件：当前无改动文件";
-  const totalChanged = changedFiles.length;
-  const scopeText = totalChanged > 0 ? `本次改动覆盖 ${totalChanged} 个文件` : "本次改动较小";
-  return [
-    `${scopeText}，优化会话与界面交互体验。`,
-    fileSummary,
-    `变更统计：+${Math.max(0, status.additions || 0)} / -${Math.max(0, status.deletions || 0)}。`,
-  ].join("\n");
-}
-
-function truncateSingleLine(value: string, maxLength: number): string {
-  const singleLine = value.replace(/\s+/g, " ").trim();
-  return singleLine.length > maxLength ? `${singleLine.slice(0, maxLength)}...` : singleLine;
-}
-
-function formatShortQuestionTime(ms: number): string {
-  try {
-    return new Date(ms).toLocaleString("zh-CN", {
-      month: "numeric",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return "";
-  }
 }
 
 function ClockIcon() {

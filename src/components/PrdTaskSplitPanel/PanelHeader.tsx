@@ -30,12 +30,12 @@ export function PanelHeader({
               </Typography.Text>
             ) : null}
             {repositoryTagItems.map((item) => (
-              <Tag key={item.key} className="app-prd-task-panel__header-repo-tag" bordered={false}>
+              <Tag key={item.key} className="app-prd-task-panel__header-repo-tag" variant="filled">
                 {item.label}
               </Tag>
             ))}
             {projectName && repositoryTagItems.length === 0 ? (
-              <Tag className="app-prd-task-panel__header-repo-tag" bordered={false}>
+              <Tag className="app-prd-task-panel__header-repo-tag" variant="filled">
                 暂无仓库
               </Tag>
             ) : null}

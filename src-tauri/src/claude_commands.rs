@@ -12,6 +12,7 @@ pub(crate) mod attachments;
 pub(crate) mod disk_sessions;
 pub(crate) mod mcp;
 pub(crate) mod prd_split;
+pub(crate) mod prd_split_pipeline;
 pub(crate) mod project_skills;
 pub(crate) mod shared;
 pub(crate) mod subagents;

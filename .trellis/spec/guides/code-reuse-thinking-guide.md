@@ -84,6 +84,21 @@ When you've made similar changes to multiple files:
 
 ---
 
+## Component Split Reuse
+
+When splitting a large component, preserve the existing public entry point.
+Callers should keep importing from the feature barrel or existing component
+file, while new internal modules stay private to the feature folder.
+
+- Move shared logic once, then import it from the old and new locations as
+  needed.
+- Do not make callers cross-import `Feature/InternalPart` just because the file
+  now exists.
+- Promote logic to `src/utils`, `src/hooks`, or `src/services` only when another
+  feature truly needs it.
+
+---
+
 ## Gotcha: Asymmetric Mechanisms Producing Same Output
 
 **Problem**: When two different mechanisms must produce the same file set (e.g., recursive directory copy for init vs. manual `files.set()` for update), structural changes (renaming, moving, adding subdirectories) only propagate through the automatic mechanism. The manual one silently drifts.

@@ -163,7 +163,7 @@ export function ClaudeConfigDirPanel() {
         onChange={(e) => handleChoiceChange(e.target.value as ChoiceKey)}
         className="app-claude-config-dir-panel__choices"
       >
-        <Space direction="vertical" size={8} style={{ width: "100%" }}>
+        <Space orientation="vertical" size={8} style={{ width: "100%" }}>
           {CLAUDE_USER_CONFIG_DIR_PRESETS.map((preset) => (
             <Radio key={preset.key} value={preset.key} className="app-claude-config-dir-panel__choice">
               <div className="app-claude-config-dir-panel__choice-body">

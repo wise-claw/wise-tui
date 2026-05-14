@@ -64,6 +64,10 @@ Use the smallest layer that can own the behavior cleanly:
 - `src/components/<Feature>/index.tsx` for a component with local view logic.
 - `src/components/<Feature>/index.css` for feature-specific styles.
 - `src/components/<Feature>/<Part>.tsx` for meaningful subcomponents.
+- `src/components/<Feature>/<domainLogic>.ts` for pure feature-local logic.
+- `src/components/<Feature>/use<Thing>.ts` for feature-local state orchestration.
+- `src/components/<Feature>/<domainLogic>.test.ts` for tests around extracted
+  pure logic.
 - `src/hooks/use<Thing>.ts` when stateful behavior is reused or would make a component too large.
 - `src/services/<domain>.ts` for IPC wrappers or domain service functions.
 - `src/services/<domain>/` when the service becomes a small subsystem.
@@ -107,6 +111,10 @@ Examples:
 
 Avoid cross-importing between unrelated feature component directories. Extract
 shared UI or logic to `components/`, `hooks/`, `services/`, or `utils/`.
+
+Within a feature folder, internal modules may import each other, but unrelated
+features should import only the public feature entry unless a shared module has
+been promoted to a higher layer.
 
 ---
 

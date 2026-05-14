@@ -25,7 +25,7 @@ export function TaskAnchorPopoverBody({ task, activeResult, anchorResolvedInEdit
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
     >
-      <Space direction="vertical" size={10} style={{ width: "100%" }}>
+      <Space orientation="vertical" size={10} style={{ width: "100%" }}>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
           任务 id：<Typography.Text code>{task.id}</Typography.Text>
           {anchorResolvedInEditor ? " · 已在需求侧解析到锚点" : ""}

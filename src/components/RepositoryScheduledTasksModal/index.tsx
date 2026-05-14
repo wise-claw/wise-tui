@@ -294,7 +294,7 @@ export function RepositoryScheduledTasksModal({
         if (!row.lastExecutedAt) return <span className="app-scheduled-tasks-modal__mono-muted">—</span>;
         const ok = row.lastExecuteOk !== false;
         return (
-          <Space size={4} direction="vertical" style={{ lineHeight: 1.2 }}>
+          <Space size={4} orientation="vertical" style={{ lineHeight: 1.2 }}>
             <Typography.Text type={ok ? "secondary" : "danger"} style={{ fontSize: 11 }}>
               {new Date(row.lastExecutedAt).toLocaleString("zh-CN", { hour12: false, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
             </Typography.Text>
@@ -329,10 +329,10 @@ export function RepositoryScheduledTasksModal({
         onCancel={onClose}
         footer={null}
         width={Math.min(920, typeof window !== "undefined" ? window.innerWidth - 40 : 920)}
-        destroyOnClose
+        destroyOnHidden
         className="app-scheduled-tasks-modal"
         title={(
-          <Space direction="vertical" size={0}>
+          <Space orientation="vertical" size={0}>
             <Typography.Text strong>定时任务</Typography.Text>
           </Space>
         )}
@@ -361,13 +361,13 @@ export function RepositoryScheduledTasksModal({
       <Drawer
         title={tasks.some((t) => t.id === editing?.id) ? "编辑定时任务" : "新建定时任务"}
         placement="right"
-        width={Math.min(560, typeof window !== "undefined" ? window.innerWidth - 24 : 560)}
+        size={Math.min(560, typeof window !== "undefined" ? window.innerWidth - 24 : 560)}
         open={drawerOpen}
         onClose={() => {
           setDrawerOpen(false);
           setEditing(null);
         }}
-        destroyOnClose={false}
+        destroyOnHidden={false}
         className="app-scheduled-tasks-drawer"
         extra={(
           <Space>

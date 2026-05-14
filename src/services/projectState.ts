@@ -7,11 +7,12 @@ export async function listProjects(): Promise<ProjectItem[]> {
   return invoke<ProjectItem[]>("list_projects");
 }
 
-export async function createProject(name: string): Promise<ProjectItem> {
+export async function createProject(name: string, rootPath?: string | null): Promise<ProjectItem> {
   return invoke<ProjectItem>("create_project", {
     name,
     iconDisplayName: null,
     iconColor: null,
+    rootPath: rootPath ?? null,
   });
 }
 
@@ -23,8 +24,8 @@ export async function deleteProject(projectId: string): Promise<void> {
   return invoke("delete_project", { projectId });
 }
 
-export async function addRepositoryToProject(projectId: string, repositoryId: number): Promise<void> {
-  return invoke("add_repository_to_project", { projectId, repositoryId });
+export async function addRepositoryToProject(projectId: string, repositoryId: number): Promise<ProjectItem> {
+  return invoke<ProjectItem>("add_repository_to_project", { projectId, repositoryId });
 }
 
 export async function reorderProjectRepositoriesInProject(
@@ -47,6 +48,10 @@ export async function getActiveProjectId(): Promise<string | null> {
 
 export async function setActiveProjectId(projectId: string | null): Promise<void> {
   return invoke("set_active_project_id", { projectId });
+}
+
+export async function resolveProjectRootFromRepository(repositoryPath: string): Promise<string | null> {
+  return invoke<string | null>("resolve_project_root_from_repository", { repositoryPath });
 }
 
 export async function getTaskTemplate(key: TaskTemplateKey): Promise<string | null> {

@@ -1,8 +1,8 @@
 use crate::{
     app_state_commands, claude_code_usage, claude_commands, claude_config_dir, cua_driver,
     dingtalk_enterprise_bot, dingtalk_stream_gateway, git_commands, prd_url_fetch,
-    repository_files, skills_sh, system_resource, trellis_bridge, wise_db, wise_mascot, wise_push,
-    workspace_commands,
+    repository_files, skills_sh, system_resource, trellis_bootstrap, trellis_bridge, wise_db, wise_mascot, wise_push,
+    workspace_commands, code_knowledge_graph
 };
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
@@ -124,6 +124,7 @@ pub fn run() {
             app_state_commands::update_project_main_agent,
             app_state_commands::delete_project,
             app_state_commands::add_repository_to_project,
+            app_state_commands::resolve_project_root_from_repository,
             app_state_commands::reorder_project_repositories,
             app_state_commands::remove_repository_from_project,
             app_state_commands::get_active_project_id,
@@ -217,6 +218,7 @@ pub fn run() {
             repository_files::create_repository_file,
             repository_files::create_repository_directory,
             repository_files::delete_repository_entry,
+            trellis_bootstrap::bootstrap_trellis_if_missing,
             trellis_bridge::trellis_list_tasks,
             trellis_bridge::trellis_read_task,
             trellis_bridge::trellis_write_prd,
@@ -288,6 +290,13 @@ pub fn run() {
             claude_commands::attachments::append_wise_relative_file,
             claude_commands::attachments::read_wise_relative_file,
             claude_commands::prd_split::run_prd_split_claude,
+            claude_commands::prd_split_pipeline::prd_split_create_parent_task,
+            claude_commands::prd_split_pipeline::prd_split_materialize_tasks,
+            claude_commands::prd_split_pipeline::prd_split_dispatch_cluster,
+            claude_commands::prd_split_pipeline::prd_split_scan_project_parents,
+            claude_commands::prd_split_pipeline::prd_split_mark_children_status,
+            claude_commands::prd_split_pipeline::prd_split_list_legacy_runs,
+            claude_commands::prd_split_pipeline::prd_split_read_legacy_run,
             claude_commands::attachments::capture_screenshot,
             app_state_commands::load_session_tabs,
             app_state_commands::save_session_tabs,
@@ -310,6 +319,13 @@ pub fn run() {
             dingtalk_stream_gateway::dingtalk_stream_gateway_start,
             dingtalk_stream_gateway::dingtalk_stream_gateway_stop,
             dingtalk_stream_gateway::dingtalk_stream_gateway_is_running,
+            code_knowledge_graph::get_code_graph_subgraph,
+            code_knowledge_graph::trigger_code_graph_reindex,
+            code_knowledge_graph::get_code_graph_index_status,
+            code_knowledge_graph::import_code_graph_openapi,
+            code_knowledge_graph::bridge_code_graph_http,
+            code_knowledge_graph::extract_code_graph_synthetic_routes,
+            code_knowledge_graph::get_code_graph_multi_subgraph,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
