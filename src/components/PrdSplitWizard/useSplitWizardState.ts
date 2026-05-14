@@ -4,13 +4,20 @@
 
 import { useCallback, useMemo, useReducer } from "react";
 import type { TaskSplitContext } from "../../types";
-import type { ClusterPlan, PlannerRepo } from "../../services/prdSplit/clusterPlanner";
+import type { ClusterPlan, ClusterPlanItem, PlannerRepo } from "../../services/prdSplit/clusterPlanner";
 import { planClusters } from "../../services/prdSplit/clusterPlanner";
 import type { RequirementsIndexV2 } from "../../services/prdSplit/requirementsIndexVersion";
 import { upgradeRequirementsIndex } from "../../services/prdSplit/requirementsIndexVersion";
 import { buildRequirementsIndex } from "../../services/prdRequirementIndex";
 import { prdDocumentFromMarkdownFragment } from "../../services/prdNormalizer";
+import {
+  indexParentsByClusterId,
+  scanProjectParents,
+  type ExistingParentRef,
+} from "../../services/prdSplit/existingParentScanner";
+import { computeDirtyClusters } from "../../services/prdSplit/diffReplay";
 import type {
+  ClusterDiffStatus,
   ClusterRunState,
   ProjectRef,
   WizardState,
@@ -24,6 +31,9 @@ type Action =
   | { type: "set-selected-repos"; ids: number[] }
   | { type: "set-prd-markdown"; markdown: string }
   | { type: "go-to-plan"; plan: ClusterPlan; prd: ReturnType<typeof prdDocumentFromMarkdownFragment>; index: RequirementsIndexV2 }
+  | { type: "set-existing-parents"; existing: Map<string, ExistingParentRef> | null; diffByCluster: Record<string, ClusterDiffStatus> }
+  | { type: "set-reuse-existing-parents"; value: boolean }
+  | { type: "set-dispatch-only-dirty"; value: boolean }
   | { type: "go-to-dispatch" }
   | { type: "set-cluster-run"; clusterId: string; run: ClusterRunState }
   | { type: "patch-cluster-run"; clusterId: string; patch: Partial<ClusterRunState> }
@@ -63,8 +73,26 @@ function reducer(state: WizardState, action: Action): WizardState {
         clusterRuns: Object.fromEntries(
           action.plan.clusters.map((c) => [c.id, makeIdleRun(c.id)]),
         ),
+        existingParents: null,
+        diffByCluster: {},
         globalError: null,
       };
+    case "set-existing-parents": {
+      // 默认开关：若存在 unchanged cluster，开启 only-dirty；若有任何 existingParent，开启 reuse。
+      const hasUnchanged = Object.values(action.diffByCluster).some((d) => d.kind === "unchanged");
+      const hasExisting = (action.existing?.size ?? 0) > 0;
+      return {
+        ...state,
+        existingParents: action.existing,
+        diffByCluster: action.diffByCluster,
+        reuseExistingParents: state.reuseExistingParents && hasExisting,
+        dispatchOnlyDirty: state.dispatchOnlyDirty && hasUnchanged,
+      };
+    }
+    case "set-reuse-existing-parents":
+      return { ...state, reuseExistingParents: action.value };
+    case "set-dispatch-only-dirty":
+      return { ...state, dispatchOnlyDirty: action.value };
     case "go-to-dispatch":
       return { ...state, stage: "dispatch", globalError: null };
     case "set-cluster-run":
@@ -115,6 +143,10 @@ export interface UseSplitWizardStateApi {
   setPrdMarkdown(markdown: string): void;
   /** 解析 PRD → 构建 requirements-index v2 → 用 selectedRepositoryIds 派生 ClusterPlan，并跳到 plan 阶段。 */
   parseAndPlan(options?: { maxRequirementsPerCluster?: number }): { ok: true } | { ok: false; reason: string };
+  /** 在 plan 阶段调用：扫描项目下已有父任务并算每个 cluster 的 diff 状态。 */
+  refreshExistingParents(): Promise<void>;
+  setReuseExistingParents(value: boolean): void;
+  setDispatchOnlyDirty(value: boolean): void;
   goToDispatch(): void;
   setClusterRun(clusterId: string, run: ClusterRunState): void;
   patchClusterRun(clusterId: string, patch: Partial<ClusterRunState>): void;
@@ -159,6 +191,26 @@ export function useSplitWizardState(): UseSplitWizardStateApi {
     [state.prdMarkdown, state.repositories, state.selectedRepositoryIds],
   );
 
+  const refreshExistingParents = useCallback<UseSplitWizardStateApi["refreshExistingParents"]>(
+    async () => {
+      if (!state.project || !state.plan || !state.requirementsIndex) return;
+      try {
+        const scanned = await scanProjectParents(state.project.rootPath);
+        const indexed = indexParentsByClusterId(scanned);
+        const diffByCluster = computeDiffByCluster(
+          state.plan.clusters,
+          state.requirementsIndex,
+          indexed,
+        );
+        dispatch({ type: "set-existing-parents", existing: indexed, diffByCluster });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        dispatch({ type: "set-global-error", error: `扫描历史父任务失败：${message}` });
+      }
+    },
+    [state.project, state.plan, state.requirementsIndex],
+  );
+
   return useMemo<UseSplitWizardStateApi>(
     () => ({
       state,
@@ -174,6 +226,9 @@ export function useSplitWizardState(): UseSplitWizardStateApi {
       setSelectedRepos: (ids) => dispatch({ type: "set-selected-repos", ids }),
       setPrdMarkdown: (markdown) => dispatch({ type: "set-prd-markdown", markdown }),
       parseAndPlan,
+      refreshExistingParents,
+      setReuseExistingParents: (value) => dispatch({ type: "set-reuse-existing-parents", value }),
+      setDispatchOnlyDirty: (value) => dispatch({ type: "set-dispatch-only-dirty", value }),
       goToDispatch: () => dispatch({ type: "go-to-dispatch" }),
       setClusterRun: (clusterId, run) => dispatch({ type: "set-cluster-run", clusterId, run }),
       patchClusterRun: (clusterId, patch) => dispatch({ type: "patch-cluster-run", clusterId, patch }),
@@ -187,6 +242,49 @@ export function useSplitWizardState(): UseSplitWizardStateApi {
       backToPlan: () => dispatch({ type: "back-to-plan" }),
       backToDispatch: () => dispatch({ type: "back-to-dispatch" }),
     }),
-    [state, parseAndPlan],
+    [state, parseAndPlan, refreshExistingParents],
   );
+}
+
+/** 计算每个 cluster 与历史基线（同 clusterId 的父任务的 requirements-index）的 diff 状态。 */
+function computeDiffByCluster(
+  clusters: ClusterPlanItem[],
+  newIndex: RequirementsIndexV2,
+  existingParents: Map<string, ExistingParentRef>,
+): Record<string, ClusterDiffStatus> {
+  const out: Record<string, ClusterDiffStatus> = {};
+  for (const cluster of clusters) {
+    const existing = existingParents.get(cluster.id);
+    if (!existing || !existing.requirementsIndex) {
+      out[cluster.id] = { kind: "new" };
+      continue;
+    }
+    const diff = computeDirtyClusters({
+      oldIndex: existing.requirementsIndex,
+      newIndex,
+      existingPlan: {
+        clusters: [
+          {
+            id: cluster.id,
+            title: cluster.title,
+            primaryRepositoryId: cluster.primaryRepositoryId,
+            repositoryIds: cluster.repositoryIds,
+            requirementIds: cluster.requirementIds,
+            dependencyClusterIds: cluster.dependencyClusterIds,
+          },
+        ],
+        diagnostics: { requirementsCoverage: { covered: [], orphan: [] }, crossRepoRequirements: [] },
+      },
+    });
+    if (diff.dirtyClusterIds.length === 0) {
+      out[cluster.id] = { kind: "unchanged", existingParent: existing };
+    } else {
+      out[cluster.id] = {
+        kind: "dirty",
+        existingParent: existing,
+        reasons: diff.reasonsByCluster[cluster.id] ?? [],
+      };
+    }
+  }
+  return out;
 }

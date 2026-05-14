@@ -1,7 +1,9 @@
-import { Alert, Card, Empty, Space, Tag, Typography } from "antd";
-import { ArrowRightOutlined } from "@ant-design/icons";
+import { useEffect } from "react";
+import { Alert, Button, Card, Empty, Space, Tag, Tooltip, Typography } from "antd";
+import { ArrowRightOutlined, ReloadOutlined } from "@ant-design/icons";
 import type { ClusterPlanItem } from "../../../services/prdSplit/clusterPlanner";
 import type { UseSplitWizardStateApi } from "../useSplitWizardState";
+import type { ClusterDiffStatus } from "../types";
 
 interface Props {
   api: UseSplitWizardStateApi;
@@ -10,6 +12,13 @@ interface Props {
 export function ClusterPlanStage({ api }: Props) {
   const { state } = api;
   const plan = state.plan;
+
+  // 进入 plan 阶段后自动扫描历史父任务，构建 diff。
+  useEffect(() => {
+    if (state.plan && state.existingParents === null) {
+      void api.refreshExistingParents();
+    }
+  }, [state.plan, state.existingParents, api]);
 
   if (!plan) {
     return (
@@ -28,6 +37,11 @@ export function ClusterPlanStage({ api }: Props) {
     );
   }
 
+  const dirtyCount = Object.values(state.diffByCluster).filter((d) => d.kind === "dirty").length;
+  const unchangedCount = Object.values(state.diffByCluster).filter((d) => d.kind === "unchanged").length;
+  const newCount = Object.values(state.diffByCluster).filter((d) => d.kind === "new").length;
+  const hasBaseline = (state.existingParents?.size ?? 0) > 0;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <Alert
@@ -40,6 +54,25 @@ export function ClusterPlanStage({ api }: Props) {
           </Typography.Paragraph>
         }
       />
+
+      <Space size={8} wrap>
+        <Tooltip title="重新扫描项目下已有父任务，重算 diff">
+          <Button size="small" icon={<ReloadOutlined />} onClick={() => void api.refreshExistingParents()}>
+            重扫历史父任务
+          </Button>
+        </Tooltip>
+        {hasBaseline ? (
+          <Space size={4}>
+            <Tag color="success">unchanged · {unchangedCount}</Tag>
+            <Tag color="warning">dirty · {dirtyCount}</Tag>
+            <Tag color="blue">new · {newCount}</Tag>
+          </Space>
+        ) : (
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            未发现历史父任务（首拆）
+          </Typography.Text>
+        )}
+      </Space>
 
       {plan.diagnostics.crossRepoRequirements.length > 0 ? (
         <Alert
@@ -56,7 +89,11 @@ export function ClusterPlanStage({ api }: Props) {
 
       <Space direction="vertical" size={12} style={{ width: "100%" }}>
         {plan.clusters.map((cluster) => (
-          <ClusterCard key={cluster.id} cluster={cluster} />
+          <ClusterCard
+            key={cluster.id}
+            cluster={cluster}
+            diff={state.diffByCluster[cluster.id]}
+          />
         ))}
       </Space>
 
@@ -71,7 +108,13 @@ export function ClusterPlanStage({ api }: Props) {
   );
 }
 
-function ClusterCard({ cluster }: { cluster: ClusterPlanItem }) {
+function ClusterCard({
+  cluster,
+  diff,
+}: {
+  cluster: ClusterPlanItem;
+  diff?: ClusterDiffStatus;
+}) {
   return (
     <Card
       size="small"
@@ -79,6 +122,7 @@ function ClusterCard({ cluster }: { cluster: ClusterPlanItem }) {
         <Space>
           <Typography.Text code>{cluster.id}</Typography.Text>
           <Typography.Text strong>{cluster.title}</Typography.Text>
+          <DiffBadge diff={diff} />
         </Space>
       }
       extra={
@@ -110,6 +154,51 @@ function ClusterCard({ cluster }: { cluster: ClusterPlanItem }) {
           ))}
         </Typography.Paragraph>
       ) : null}
+
+      {diff && diff.kind === "dirty" ? <DirtyReasons diff={diff} /> : null}
+      {diff && diff.kind === "unchanged" ? (
+        <Typography.Paragraph type="secondary" style={{ margin: 0, marginBlockStart: 4, fontSize: 12 }}>
+          已存在父任务：<code>{diff.existingParent.parentTaskName}</code>，本次输入未引入变化。
+        </Typography.Paragraph>
+      ) : null}
     </Card>
   );
+}
+
+function DiffBadge({ diff }: { diff: ClusterDiffStatus | undefined }) {
+  if (!diff) return null;
+  if (diff.kind === "new") return <Tag color="blue">new</Tag>;
+  if (diff.kind === "unchanged") return <Tag color="success">unchanged</Tag>;
+  return <Tag color="warning">dirty · {diff.reasons.length} 项</Tag>;
+}
+
+function DirtyReasons({
+  diff,
+}: {
+  diff: Extract<ClusterDiffStatus, { kind: "dirty" }>;
+}) {
+  return (
+    <div style={{ marginBlockStart: 6 }}>
+      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+        与 <code>{diff.existingParent.parentTaskName}</code> 相比的变化：
+      </Typography.Text>
+      <ul style={{ paddingInlineStart: 18, marginBlock: 4 }}>
+        {diff.reasons.map((reason, idx) => (
+          <li key={idx} style={{ fontSize: 12 }}>
+            {renderReason(reason)}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function renderReason(
+  reason: Extract<ClusterDiffStatus, { kind: "dirty" }>["reasons"][number],
+): string {
+  if (reason.kind === "requirement_body_changed") {
+    return `修改 ${reason.id}（${reason.oldHash.slice(0, 8)} → ${reason.newHash.slice(0, 8)}）`;
+  }
+  if (reason.kind === "requirement_added") return `新增 ${reason.id}`;
+  return `删除 ${reason.id}`;
 }

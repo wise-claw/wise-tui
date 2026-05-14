@@ -234,6 +234,79 @@ pub(crate) async fn prd_split_materialize_tasks(
     })
 }
 
+// ── Stage 3: scan project for existing PRD-split parent tasks ──
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ScannedParentTask {
+    parent_task_name: String,
+    parent_task_path: String,
+    cluster_id: String,
+    primary_repository_id: Option<i64>,
+    requirements_index_json: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ScanProjectParentsOutput {
+    parents: Vec<ScannedParentTask>,
+}
+
+#[tauri::command]
+pub(crate) async fn prd_split_scan_project_parents(
+    project_root_path: String,
+) -> Result<ScanProjectParentsOutput, String> {
+    let project_root = validate_project_root(&project_root_path)?;
+    let tasks_dir = project_root.join(".trellis").join("tasks");
+    if !tasks_dir.is_dir() {
+        return Ok(ScanProjectParentsOutput { parents: vec![] });
+    }
+    let mut parents: Vec<ScannedParentTask> = Vec::new();
+    let entries = fs::read_dir(&tasks_dir)
+        .map_err(|e| format!("读取 .trellis/tasks 失败: {e}"))?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(n) => n.to_string(),
+            None => continue,
+        };
+        // archive/ 等非任务目录跳过。
+        if name == "archive" {
+            continue;
+        }
+        let task_json_path = path.join("task.json");
+        if !task_json_path.is_file() {
+            continue;
+        }
+        let raw = match fs::read_to_string(&task_json_path) {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+        let value: Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let cluster_id = match value.get("clusterId").and_then(|v| v.as_str()) {
+            Some(s) if !s.is_empty() => s.to_string(),
+            _ => continue,
+        };
+        let primary_repository_id = value.get("repositoryId").and_then(|v| v.as_i64());
+        let index_path = path.join("requirements-index.json");
+        let requirements_index_json = fs::read_to_string(&index_path).ok();
+        parents.push(ScannedParentTask {
+            parent_task_name: name,
+            parent_task_path: path.to_string_lossy().to_string(),
+            cluster_id,
+            primary_repository_id,
+            requirements_index_json,
+        });
+    }
+    Ok(ScanProjectParentsOutput { parents })
+}
+
 // ── helpers ──
 
 fn validate_project_root(raw: &str) -> Result<PathBuf, String> {

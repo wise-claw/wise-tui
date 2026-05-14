@@ -13,6 +13,8 @@ import type {
   ClaudeSplitStrictValidationIssue,
 } from "../../services/claudeSplitOutputNormalize";
 import type { DispatchClusterRawOutput } from "../../services/prdSplit/splitterDispatch";
+import type { ExistingParentRef } from "../../services/prdSplit/existingParentScanner";
+import type { DiffReason } from "../../services/prdSplit/diffReplay";
 
 export type WizardStage = "input" | "plan" | "dispatch" | "review" | "writing" | "done";
 
@@ -27,7 +29,7 @@ export interface ClusterRunState {
   clusterId: string;
   parentTaskName: string | null;
   parentTaskPath: string | null;
-  status: "idle" | "creating-parent" | "dispatching" | "succeeded" | "failed";
+  status: "idle" | "skipped-clean" | "creating-parent" | "dispatching" | "succeeded" | "failed";
   raw?: DispatchClusterRawOutput;
   normalized?: SplitResult;
   validationIssues?: ClaudeSplitStrictValidationIssue[];
@@ -43,6 +45,12 @@ export interface WizardWriteResult {
   warnings: string[];
   error?: string;
 }
+
+/** 单个 cluster 相对历史基线的 diff 状态。 */
+export type ClusterDiffStatus =
+  | { kind: "new" }
+  | { kind: "unchanged"; existingParent: ExistingParentRef }
+  | { kind: "dirty"; existingParent: ExistingParentRef; reasons: DiffReason[] };
 
 export interface WizardState {
   stage: WizardStage;
@@ -68,6 +76,14 @@ export interface WizardState {
   writeResults: WizardWriteResult[];
   /** 顶层错误（非 cluster 局部）。 */
   globalError: string | null;
+  /** 项目中已有的 PRD-split 父任务（按 clusterId 索引）；null 表示尚未扫描或扫描失败。 */
+  existingParents: Map<string, ExistingParentRef> | null;
+  /** 按 clusterId 索引的 diff 状态；plan 阶段计算。 */
+  diffByCluster: Record<string, ClusterDiffStatus>;
+  /** dispatch 行为开关：复用历史父任务（默认 true 当 existingParents 非空）。 */
+  reuseExistingParents: boolean;
+  /** dispatch 行为开关：跳过 unchanged cluster（默认 true 当存在 unchanged）。 */
+  dispatchOnlyDirty: boolean;
 }
 
 export function emptyWizardState(): WizardState {
@@ -84,6 +100,10 @@ export function emptyWizardState(): WizardState {
     context: null,
     writeResults: [],
     globalError: null,
+    existingParents: null,
+    diffByCluster: {},
+    reuseExistingParents: true,
+    dispatchOnlyDirty: true,
   };
 }
 
