@@ -13,6 +13,7 @@ import {
   createProject,
   deleteProject,
   listProjects,
+  resolveProjectRootFromRepository,
   removeRepositoryFromProject,
   reorderProjectRepositoriesInProject,
   setActiveProjectId as persistActiveProjectId,
@@ -30,6 +31,7 @@ import {
   WORKSPACE_LAST_SESSION_REPO_ID_STORAGE_KEY,
   resolveStartupSelection,
 } from "../utils/startupRepoSelection";
+import { resolveProjectCreationSeedRepository } from "../utils/projectCreationContext";
 
 const LEGACY_APP_SETTING_KEY_PROJECTS = "wise.projects.v1";
 
@@ -82,12 +84,23 @@ export function useRepositoryList() {
               for (const legacy of parsed.projects ?? []) {
                 const name = legacy.name?.trim();
                 if (!name) continue;
-                const created = await createProject(name);
+                const firstRepoId = (legacy.repositoryIds ?? []).find((repositoryId) =>
+                  validRepositoryIds.has(repositoryId),
+                );
+                const firstRepo = firstRepoId
+                  ? repositoryList.find((repo) => repo.id === firstRepoId) ?? null
+                  : null;
+                const resolvedRoot = firstRepo
+                  ? await resolveProjectRootFromRepository(firstRepo.path)
+                  : null;
+                const created = await createProject(name, resolvedRoot);
                 idMap.set(legacy.id, created.id);
+                let currentProject = created;
                 for (const repositoryId of legacy.repositoryIds ?? []) {
                   if (!validRepositoryIds.has(repositoryId)) continue;
-                  await addRepositoryToProject(created.id, repositoryId);
+                  currentProject = await addRepositoryToProject(created.id, repositoryId);
                 }
+                projectList = projectList.concat(currentProject);
               }
               projectList = await listProjects();
               await deleteAppSetting(LEGACY_APP_SETTING_KEY_PROJECTS);
@@ -169,12 +182,23 @@ export function useRepositoryList() {
   const handleCreateProject = useCallback(async (name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    const nextProject = await createProject(trimmed);
+    const seedRepository = resolveProjectCreationSeedRepository({
+      activeRepositoryId,
+      projects,
+      repositories,
+    });
+    const rootPath = seedRepository
+      ? await resolveProjectRootFromRepository(seedRepository.path)
+      : null;
+    const createdProject = await createProject(trimmed, rootPath);
+    const nextProject = seedRepository
+      ? await addRepositoryToProject(createdProject.id, seedRepository.id)
+      : createdProject;
     setProjects((prev) => [...prev, nextProject]);
     setActiveProjectId(nextProject.id);
     await persistActiveProjectId(nextProject.id);
-    setActiveRepositoryId(null);
-  }, []);
+    setActiveRepositoryId(seedRepository?.id ?? null);
+  }, [activeRepositoryId, projects, repositories]);
 
   const handleUpdateProject = useCallback(async (projectId: string, name: string) => {
     const trimmed = name.trim();
@@ -259,19 +283,8 @@ export function useRepositoryList() {
       setRepositories((prev) => [...prev, repository as Repository]);
     }
     const repositoryId = repository.id;
-    await addRepositoryToProject(projectId, repositoryId);
-    setProjects((prev) => {
-      const next = prev.map((project) => {
-        if (project.id !== projectId) return project;
-        if (project.repositoryIds.includes(repositoryId)) return project;
-        return {
-          ...project,
-          repositoryIds: [...project.repositoryIds, repositoryId],
-          updatedAt: Date.now(),
-        };
-      });
-      return next;
-    });
+    const updatedProject = await addRepositoryToProject(projectId, repositoryId);
+    setProjects((prev) => prev.map((project) => (project.id === projectId ? updatedProject : project)));
     setActiveProjectId(projectId);
     void persistActiveProjectId(projectId);
     setActiveRepositoryId(repositoryId);
@@ -308,21 +321,16 @@ export function useRepositoryList() {
     async (repositoryId: number, projectName: string) => {
       const trimmed = projectName.trim();
       if (!trimmed) return;
-      const createdProject = await createProject(trimmed);
-      await addRepositoryToProject(createdProject.id, repositoryId);
-      const merged: ProjectItem = {
-        ...createdProject,
-        repositoryIds: createdProject.repositoryIds.includes(repositoryId)
-          ? createdProject.repositoryIds
-          : [...createdProject.repositoryIds, repositoryId],
-        updatedAt: Date.now(),
-      };
-      setProjects((prev) => [...prev, merged]);
-      setActiveProjectId(createdProject.id);
+      const repository = repositories.find((item) => item.id === repositoryId) ?? null;
+      const rootPath = repository ? await resolveProjectRootFromRepository(repository.path) : null;
+      const createdProject = await createProject(trimmed, rootPath);
+      const updatedProject = await addRepositoryToProject(createdProject.id, repositoryId);
+      setProjects((prev) => [...prev, updatedProject]);
+      setActiveProjectId(updatedProject.id);
       setActiveRepositoryId(repositoryId);
-      void persistActiveProjectId(createdProject.id);
+      void persistActiveProjectId(updatedProject.id);
     },
-    [],
+    [repositories],
   );
 
   /**
@@ -352,18 +360,8 @@ export function useRepositoryList() {
         selectProjectAndRepository(projectId, repositoryId);
         return "already_in_project";
       }
-      await addRepositoryToProject(projectId, repositoryId);
-      setProjects((prev) =>
-        prev.map((proj) => {
-          if (proj.id !== projectId) return proj;
-          if (proj.repositoryIds.includes(repositoryId)) return proj;
-          return {
-            ...proj,
-            repositoryIds: [...proj.repositoryIds, repositoryId],
-            updatedAt: Date.now(),
-          };
-        }),
-      );
+      const updatedProject = await addRepositoryToProject(projectId, repositoryId);
+      setProjects((prev) => prev.map((proj) => (proj.id === projectId ? updatedProject : proj)));
       selectProjectAndRepository(projectId, repositoryId);
       return "added";
     },

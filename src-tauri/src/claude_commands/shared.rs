@@ -39,3 +39,31 @@ pub(crate) fn canonicalize_existing_project_dir(project_path: Option<&str>) -> O
     }
     fs::canonicalize(root).ok()
 }
+
+/// 从任意仓库路径向上回溯，找到最近一个启用了 Trellis 的项目根。
+///
+/// 这样 nested repo 也能把 rootPath 锚定到真正持有 `.trellis/scripts/task.py` 的父目录。
+pub(crate) fn find_trellis_project_root_from_path(repo_path: &str) -> Option<PathBuf> {
+    let raw = repo_path.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    let root = PathBuf::from(raw);
+    if !root.is_absolute() {
+        return None;
+    }
+    let canon = fs::canonicalize(&root).ok()?;
+    let mut current = Some(canon.as_path());
+    while let Some(dir) = current {
+        if dir
+            .join(".trellis")
+            .join("scripts")
+            .join("task.py")
+            .is_file()
+        {
+            return Some(dir.to_path_buf());
+        }
+        current = dir.parent();
+    }
+    None
+}

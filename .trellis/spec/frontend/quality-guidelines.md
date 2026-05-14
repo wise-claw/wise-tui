@@ -98,6 +98,9 @@ the test runner for those files.
 - `Project.sddMode: ProjectSddMode` — `"wise_trellis" | "project_owned"`.
 - `Project.mainAgent?: string | null` — reserved for the main-session full-stack dispatch flow.
 - `Repository.roleTags?: string[]` — multi-tag routing taxonomy; legacy `repositoryType` is read-deprecated.
+- `createProject(name, rootPath?) -> ProjectItem` — optional `rootPath` is path context; Rust resolves it to the nearest Trellis root before persistence.
+- `addRepositoryToProject(projectId, repositoryId) -> ProjectItem` — returns the authoritative updated project, including any backend-derived `rootPath`.
+- `resolveProjectRootFromRepository(repositoryPath) -> string | null` — service wrapper for probing a selected repo path before project creation.
 - `ExecuteTaskInput.executionMetadata?: TrellisExecutionMetadata`
 - `OmcWorkflowAdapter.execute(...).executionMetadata?: TrellisExecutionMetadata`
 - `WorkflowInvocationStreamDetail.ownerKind?: "repository"`
@@ -110,6 +113,9 @@ the test runner for those files.
 
 - SDD ownership lives on `Project`, not on `Repository`. Use `getEffectiveRepoSddMode(repo, projects)` to compute the effective mode; never read `repo.sddMode` directly in new code.
 - `.trellis/` always sits at `<project.rootPath>/.trellis/`. Repository paths are independent — a repo may sit inside, outside, or anywhere relative to `rootPath`.
+- `Project.rootPath` is backend-authoritative. Frontend flows may pass repository path context, but must consume the `ProjectItem` returned by `createProject`, `addRepositoryToProject`, or `listProjects`; do not locally synthesize `rootPath` or append `repositoryIds` after linking.
+- Creating a project while a floating repository is selected should promote that repository as the project seed, pass its path as root-detection context, and keep it selected under the new project.
+- `PrdSplitWizard` eligibility is a consumer of `Project.rootPath`, not an owner of root detection. If a project has a repository whose ancestor contains `.trellis/scripts/task.py`, the list/add/create project flows should have already backfilled `rootPath` before the wizard filters eligible projects.
 - Repository identity is `ownerKind: "repository"` plus `ownerRepositoryId`; do not encode repositories as `EmployeeItem`.
 - `Repository.roleTags` is the routing taxonomy (e.g. `["frontend", "test"]`). It is read via `getRoleTags(repo)` which falls back to `[repositoryType]` for legacy rows.
 - `repositoryType` is read-deprecated and kept as the single-tag fallback. Do not write new logic that pivots on it.
@@ -127,17 +133,23 @@ the test runner for those files.
 - Missing `subagentType` -> display `trellis-implement` only as a UI fallback, not as owner identity.
 - Project `sddMode = "wise_trellis"` with no invocations -> render every member repo as idle.
 - Repo not present in any project -> consult `repo.sddMode` for legacy back-compat; coerce `"off"` to `project_owned`.
+- `resolveProjectRootFromRepository` returns `null` when the path is empty, relative, missing on disk, or has no Trellis ancestor; project creation/linking still succeeds but leaves `rootPath` empty.
+- `addRepositoryToProject` must be treated as a state replacement, not a void mutation; ignoring its return can leave the UI with stale `rootPath`.
 
 ### 5. Good/Base/Bad Cases
 
 - Good: project with `sddMode: "wise_trellis"` shows all its repo members as idle, then `trellis-implement` appears underneath the targeted member during execution.
+- Good: selected floating repo `/work/wise/frontend` with `/work/wise/.trellis/scripts/task.py` exists -> new project stores `rootPath: "/work/wise"` and links the repo in one flow.
 - Base: non-Trellis employee/team workflows continue to dispatch through `EmployeeItem.agentType` when the owning project is `project_owned`.
+- Base: name-only project creation with no selected floating repo creates an empty project with no `rootPath`; a later repository link can backfill it.
 - Bad: `employeeId: "trellis-check"` in a workflow assignee, because that makes a child subagent look like a team member.
 - Bad: writing to `repo.sddMode` after migration; new code must write `Project.sddMode`.
+- Bad: locally doing `{ ...project, repositoryIds: [...project.repositoryIds, repositoryId] }` after linking because it drops backend root-path derivation.
 
 ### 6. Tests Required
 
 - Helper tests assert `getRoleTags` fallback and `getEffectiveRepoSddMode` precedence (project > legacy repo > default).
+- Helper tests assert selected floating repositories are the only project-creation seed; already-owned repos must not silently seed another project.
 - Adapter/engine tests assert metadata reaches workflow events and Claude stream UI params.
 - Store/persistence tests assert repository attribution survives snapshot updates and local persistence.
 - Monitor overview tests assert project `wise_trellis` repos render as idle members and project `project_owned` hides them even when the legacy repo field disagrees.
@@ -153,6 +165,12 @@ if (repo.sddMode === "wise_trellis") { ... }
 
 // Workflow assignee using a Trellis subagent name as employeeId
 assignees: [{ employeeId: "trellis-implement", requiredCount: 1, isRequired: true }]
+
+// Local UI mutation after linking a repo to a project
+await addRepositoryToProject(projectId, repositoryId);
+setProjects((prev) => prev.map((p) =>
+  p.id === projectId ? { ...p, repositoryIds: [...p.repositoryIds, repositoryId] } : p
+));
 ```
 
 #### Correct
@@ -168,6 +186,9 @@ executionMetadata: {
   stage: "implement",
   subagentType: "trellis-implement",
 }
+
+const updatedProject = await addRepositoryToProject(projectId, repositoryId);
+setProjects((prev) => prev.map((p) => (p.id === projectId ? updatedProject : p)));
 ```
 
 ---

@@ -1,3 +1,4 @@
+use crate::claude_commands::shared::find_trellis_project_root_from_path;
 use crate::wise_paths::{
     wise_legacy_projects_json, wise_repositories_json, wise_tabs_json, write_file_atomic,
 };
@@ -538,6 +539,21 @@ fn map_projects(rows: Vec<wise_db::WiseProjectRow>) -> Vec<StoredProject> {
     rows.into_iter().map(map_project_row).collect()
 }
 
+fn resolve_project_root_from_repo_ids(
+    repository_ids: &[i64],
+    repositories: &[StoredRepository],
+) -> Option<PathBuf> {
+    for repo_id in repository_ids {
+        let Some(repo) = repositories.iter().find(|r| r.id == *repo_id) else {
+            continue;
+        };
+        if let Some(root) = find_trellis_project_root_from_path(&repo.path) {
+            return Some(root);
+        }
+    }
+    None
+}
+
 /// 路径 X 一次性回填：项目首次升级到 root_path / main_agent 时，从首个成员仓库派生默认值。
 /// 仅在字段为空且首个仓库存在时写回；幂等。
 fn backfill_project_trellis_fields(
@@ -558,9 +574,13 @@ fn backfill_project_trellis_fields(
         let Some(repo) = repositories.iter().find(|r| r.id == repo_id) else {
             continue;
         };
-        if row.root_path.is_empty() && !repo.path.trim().is_empty() {
-            db.update_project_root_path(&row.id, repo.path.trim(), now_ms)?;
-            changed = true;
+        if row.root_path.is_empty() {
+            if let Some(root) =
+                resolve_project_root_from_repo_ids(&row.repository_ids, &repositories)
+            {
+                db.update_project_root_path(&row.id, &root.to_string_lossy(), now_ms)?;
+                changed = true;
+            }
         }
         if row.main_agent.is_none() {
             if let Some(name) = repo.main_owner_agent_name.as_deref() {
@@ -595,6 +615,7 @@ pub(crate) fn create_project(
     name: String,
     icon_display_name: Option<String>,
     icon_color: Option<String>,
+    root_path: Option<String>,
 ) -> Result<StoredProject, String> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
@@ -617,6 +638,16 @@ pub(crate) fn create_project(
         icon_color_sql.as_deref(),
         now_ms,
     )?;
+    if let Some(candidate_path) = root_path
+        .as_ref()
+        .map(String::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        if let Some(root) = find_trellis_project_root_from_path(candidate_path) {
+            db.update_project_root_path(&id, &root.to_string_lossy(), now_ms)?;
+        }
+    }
     let rows = db.list_projects()?;
     let row = rows
         .into_iter()
@@ -763,15 +794,43 @@ pub(crate) fn delete_project(
 
 #[tauri::command]
 pub(crate) fn add_repository_to_project(
+    app: tauri::AppHandle,
     db: tauri::State<'_, wise_db::WiseDb>,
     project_id: String,
     repository_id: i64,
-) -> Result<(), String> {
+) -> Result<StoredProject, String> {
     let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|e| e.to_string())?
         .as_millis() as i64;
-    db.add_repository_to_project(&project_id, repository_id, now_ms)
+    db.add_repository_to_project(&project_id, repository_id, now_ms)?;
+    let rows = db.list_projects()?;
+    let project = rows
+        .into_iter()
+        .find(|item| item.id == project_id)
+        .ok_or_else(|| "项目未找到".to_string())?;
+    if project.root_path.is_empty() {
+        let repositories = load_repositories(&app);
+        if let Some(root) =
+            resolve_project_root_from_repo_ids(&project.repository_ids, &repositories)
+        {
+            db.update_project_root_path(&project_id, &root.to_string_lossy(), now_ms)?;
+        }
+    }
+    let rows = db.list_projects()?;
+    let row = rows
+        .into_iter()
+        .find(|item| item.id == project_id)
+        .ok_or_else(|| "项目未找到".to_string())?;
+    Ok(map_project_row(row))
+}
+
+#[tauri::command]
+pub(crate) fn resolve_project_root_from_repository(
+    repository_path: String,
+) -> Result<Option<String>, String> {
+    Ok(find_trellis_project_root_from_path(&repository_path)
+        .map(|p| p.to_string_lossy().to_string()))
 }
 
 #[tauri::command]

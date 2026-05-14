@@ -124,6 +124,7 @@ pub fn run() {
             app_state_commands::update_project_main_agent,
             app_state_commands::delete_project,
             app_state_commands::add_repository_to_project,
+            app_state_commands::resolve_project_root_from_repository,
             app_state_commands::reorder_project_repositories,
             app_state_commands::remove_repository_from_project,
             app_state_commands::get_active_project_id,
