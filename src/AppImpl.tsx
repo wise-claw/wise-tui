@@ -806,6 +806,13 @@ export default function App() {
     () => (activeProjectId ? projects.find((p) => p.id === activeProjectId) ?? null : null),
     [activeProjectId, projects],
   );
+  /** 代码图谱全库搜索：有项目时用项目内全部仓库，否则由面板退化为当前仓库 */
+  const codeGraphSearchRepositoryIds = useMemo(() => {
+    if (activeProject?.repositoryIds?.length) {
+      return activeProject.repositoryIds;
+    }
+    return undefined;
+  }, [activeProject?.repositoryIds]);
   const workspaceMode = useWorkspaceMode({ activeProjectId, projects });
   const composerProjectRoleTagOptions = useMemo(() => {
     if (!shouldHideEmployeeUi(activeProject)) {
@@ -1732,6 +1739,7 @@ export default function App() {
       codeKnowledgeGraphProps={{
         repositoryId: activeRepository?.id ?? null,
         repositories: repositories.map((r) => ({ id: r.id, name: r.name, path: r.path })),
+        searchRepositoryIds: codeGraphSearchRepositoryIds,
         onSelectRepository: setActiveRepositoryId,
         onClose: () => setCodeKnowledgeGraphMode(false),
       }}

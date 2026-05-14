@@ -56,8 +56,11 @@
   min-width: 8px;
 }
 
-.app-code-graph-hop-select {
-  min-width: 108px;
+/* 跳数选择：原 min 108px，整体收窄 30px */
+.app-code-graph-hop-select.ant-select {
+  width: 78px;
+  min-width: 78px !important;
+  max-width: 78px;
 }
 
 .app-code-graph-node-search {

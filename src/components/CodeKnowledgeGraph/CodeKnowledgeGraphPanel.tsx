@@ -172,6 +172,19 @@ export function CodeKnowledgeGraphPanel({
   }, [fetchStatus]);
 
   useEffect(() => {
+    const pending = pendingCrossRepoSearchPickRef.current;
+    if (pending && pending.repoId === repositoryId) {
+      pendingCrossRepoSearchPickRef.current = null;
+      setSubgraphFocusId(pending.id);
+      setSubgraphDirection(undefined);
+      setSubgraphRefreshKey((k) => k + 1);
+      setSelectedNode(pending);
+      return;
+    }
+    if (pending) {
+      pendingCrossRepoSearchPickRef.current = null;
+    }
+
     setSubgraphFocusId(undefined);
     setSubgraphHopScope(3);
     setSubgraphDirection(undefined);
@@ -179,6 +192,9 @@ export function CodeKnowledgeGraphPanel({
     setSelectedNode(null);
     setSubgraphData(null);
     setGraphPanePercent(GRAPH_PANE_DEFAULT_PCT);
+    setSubgraphSearchInput("");
+    setSubgraphSearchDebounced("");
+    setSearchRemoteHits([]);
   }, [repositoryId]);
 
   useEffect(() => {
@@ -187,11 +203,6 @@ export function CodeKnowledgeGraphPanel({
     }, SUBGRAPH_SEARCH_DEBOUNCE_MS);
     return () => window.clearTimeout(t);
   }, [subgraphSearchInput]);
-
-  useEffect(() => {
-    setSubgraphSearchInput("");
-    setSubgraphSearchDebounced("");
-  }, [subgraphData]);
 
   useEffect(() => {
     if (!repositoryId) {
@@ -234,6 +245,72 @@ export function CodeKnowledgeGraphPanel({
     subgraphHopScope,
     subgraphDirection,
     subgraphRefreshKey,
+  ]);
+
+  const effectiveSearchRepoIds = useMemo(() => {
+    const fromProp =
+      searchRepositoryIdsProp?.filter((id) => typeof id === "number" && Number.isFinite(id)) ?? [];
+    const base =
+      fromProp.length > 0
+        ? fromProp
+        : repositoryId != null
+          ? [repositoryId]
+          : [];
+    return [...new Set(base)].slice(0, 20);
+  }, [searchRepositoryIdsProp, repositoryId]);
+
+  useEffect(() => {
+    if (subgraphSearchDebounced.length < SUBGRAPH_SEARCH_MIN_QUERY_LEN) {
+      setSearchRemoteHits([]);
+      setSearchRemoteLoading(false);
+      return;
+    }
+    if (!repositoryId || effectiveSearchRepoIds.length === 0) {
+      setSearchRemoteHits([]);
+      setSearchRemoteLoading(false);
+      return;
+    }
+    if (indexStatus?.status !== "done" || indexStatus.repositoryId !== repositoryId) {
+      setSearchRemoteHits([]);
+      setSearchRemoteLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setSearchRemoteLoading(true);
+
+    void (async () => {
+      try {
+        const raw = await searchCodeGraphNodes({
+          repositoryIds: effectiveSearchRepoIds,
+          query: subgraphSearchDebounced,
+          limit: 120,
+        });
+        const parsed = parseCodeGraphNodeSearchResponse(raw);
+        const ranked = filterGraphNodesForSearch(parsed, subgraphSearchDebounced, 100);
+        if (!cancelled) {
+          setSearchRemoteHits(ranked);
+        }
+      } catch {
+        if (!cancelled) {
+          setSearchRemoteHits([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setSearchRemoteLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    subgraphSearchDebounced,
+    effectiveSearchRepoIds,
+    repositoryId,
+    indexStatus?.status,
+    indexStatus?.repositoryId,
   ]);
 
   useEffect(() => {
@@ -333,35 +410,62 @@ export function CodeKnowledgeGraphPanel({
   );
 
   const subgraphSearchOptions = useMemo(() => {
-    if (!subgraphData?.nodes.length) return [];
     if (subgraphSearchDebounced.length < SUBGRAPH_SEARCH_MIN_QUERY_LEN) return [];
-    return filterGraphNodesForSearch(subgraphData.nodes, subgraphSearchDebounced).map((node) => ({
-      value: node.id,
-      label: (
-        <div className="app-code-graph-search-option">
-          <span className="app-code-graph-search-option-title">{node.label}</span>
-          <span className="app-code-graph-search-option-meta">
-            {node.kind} · {node.path}
-          </span>
-        </div>
-      ),
-    }));
-  }, [subgraphData?.nodes, subgraphSearchDebounced]);
+    return searchRemoteHits.map((node) => {
+      const repoLabel =
+        effectiveSearchRepoIds.length > 1
+          ? (repositories?.find((r) => r.id === node.repoId)?.name ?? `仓库 ${node.repoId}`)
+          : "";
+      return {
+        value: node.id,
+        label: (
+          <div className="app-code-graph-search-option">
+            <span className="app-code-graph-search-option-title">{node.label}</span>
+            <span className="app-code-graph-search-option-meta">
+              {repoLabel ? `${repoLabel} · ` : ""}
+              {node.kind} · {node.path}
+            </span>
+          </div>
+        ),
+      };
+    });
+  }, [
+    searchRemoteHits,
+    subgraphSearchDebounced,
+    effectiveSearchRepoIds.length,
+    repositories,
+  ]);
 
   const handleSubgraphSearchPick = useCallback(
     (nodeId: string) => {
-      if (!subgraphData?.nodes.length) return;
-      const node = subgraphData.nodes.find((x) => x.id === nodeId);
+      const node =
+        searchRemoteHits.find((x) => x.id === nodeId) ?? subgraphData?.nodes.find((x) => x.id === nodeId);
       if (!node) return;
-      handleNodeClick(node);
+
       setSubgraphSearchInput("");
       setSubgraphSearchDebounced("");
-      requestAnimationFrame(() => {
-        chartColumnRef.current?.focusNodeById(nodeId);
-      });
+
+      if (node.repoId !== repositoryId) {
+        pendingCrossRepoSearchPickRef.current = node;
+        onSelectRepository?.(node.repoId);
+      } else {
+        setSelectedNode(node);
+        setSubgraphFocusId(node.id);
+        setSubgraphDirection(undefined);
+        setSubgraphRefreshKey((k) => k + 1);
+      }
     },
-    [subgraphData, handleNodeClick],
+    [searchRemoteHits, subgraphData, repositoryId, onSelectRepository],
   );
+
+  useEffect(() => {
+    if (subgraphLoading || !selectedNode || !subgraphData?.nodes.length) return;
+    if (!subgraphData.nodes.some((n) => n.id === selectedNode.id)) return;
+    const id = selectedNode.id;
+    requestAnimationFrame(() => {
+      chartColumnRef.current?.focusNodeById(id);
+    });
+  }, [subgraphLoading, subgraphData, selectedNode]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -506,7 +610,7 @@ export function CodeKnowledgeGraphPanel({
           </Space>
         </div>
         <div className="app-code-graph-header-actions">
-          {isIndexed && hasData && !subgraphLoading && subgraphData && (
+          {isIndexed && repositoryId && !subgraphLoading && (
             <div className="app-code-graph-subgraph-toolbar app-code-graph-subgraph-toolbar--header">
               <Typography.Text type="secondary" className="app-code-graph-subgraph-toolbar-label">
                 范围
@@ -519,13 +623,18 @@ export function CodeKnowledgeGraphPanel({
                 onChange={setSubgraphHopScope}
                 options={HOP_SELECT_OPTIONS}
                 aria-label="子图跳数"
+                disabled={!hasData}
               />
               <Select
                 showSearch
                 allowClear
                 className="app-code-graph-node-search app-code-graph-node-search--header"
                 size="small"
-                placeholder="搜索节点（名称 / 路径）"
+                placeholder={
+                  effectiveSearchRepoIds.length > 1
+                    ? "搜索已索引节点（多仓库：名称 / 路径）"
+                    : "搜索已索引节点（名称 / 路径）"
+                }
                 suffixIcon={<SearchOutlined />}
                 filterOption={false}
                 searchValue={subgraphSearchInput}
@@ -537,12 +646,16 @@ export function CodeKnowledgeGraphPanel({
                 }}
                 options={subgraphSearchOptions}
                 notFoundContent={
-                  subgraphSearchDebounced.length < SUBGRAPH_SEARCH_MIN_QUERY_LEN
-                    ? `至少输入 ${SUBGRAPH_SEARCH_MIN_QUERY_LEN} 个字符`
-                    : "无匹配节点"
+                  searchRemoteLoading ? (
+                    <span style={{ padding: "0 8px" }}>搜索中…</span>
+                  ) : subgraphSearchDebounced.length < SUBGRAPH_SEARCH_MIN_QUERY_LEN ? (
+                    `至少输入 ${SUBGRAPH_SEARCH_MIN_QUERY_LEN} 个字符`
+                  ) : (
+                    "无匹配节点"
+                  )
                 }
                 listHeight={320}
-                virtual={subgraphData.nodes.length > 120}
+                virtual={subgraphSearchOptions.length > 120}
               />
             </div>
           )}

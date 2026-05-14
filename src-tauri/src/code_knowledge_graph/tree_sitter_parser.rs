@@ -1496,11 +1496,11 @@ impl Parser {
             }
 
             if let Some(import_path) = import_path {
-                if is_bare_module(&import_path) {
+                let Some(resolved) =
+                    resolve_ts_js_import_to_repo_relative(file_dir, &import_path, relative_path)
+                else {
                     continue;
-                }
-
-                let resolved = resolve_import_path(file_dir, &import_path, relative_path);
+                };
                 let import_id = format!("{file_node_id}:imports:{resolved}");
                 let target_id = super::indexer::make_file_node_id(repo_id, &resolved);
 
@@ -1904,6 +1904,40 @@ fn is_bare_module(path: &str) -> bool {
     !path.starts_with('.') && !path.starts_with('/')
 }
 
+/// 将 TS/JS/Vue `<script>` 中的模块说明符解析为**仓库内**相对路径。
+/// - `./`、`../`：相对当前文件目录。
+/// - `@/`、`~/`：按常见 Vite/Vue CLI 约定映射到 `src/` 下（与 `node_modules` 无关）。
+/// - 裸 npm 包（如 `vue`、`photoswipe/lightbox`）：`None`（仓库不索引 `node_modules`，不建边）。
+fn resolve_ts_js_import_to_repo_relative(
+    file_dir: &str,
+    import_path: &str,
+    current_file: &str,
+) -> Option<String> {
+    let p = import_path.trim();
+    if p.is_empty() {
+        return None;
+    }
+    if p.starts_with("./") || p.starts_with("../") {
+        return Some(resolve_import_path(file_dir, p, current_file));
+    }
+    if let Some(tail) = p.strip_prefix("@/").or_else(|| p.strip_prefix("~/")) {
+        let tail = tail.trim_start_matches('/');
+        if tail.is_empty() {
+            return None;
+        }
+        let mut resolved = format!("src/{tail}");
+        if !has_known_module_suffix(&resolved) {
+            let ext = importer_default_extension(current_file);
+            resolved = format!("{resolved}.{ext}");
+        }
+        return Some(resolved);
+    }
+    if is_bare_module(p) {
+        return None;
+    }
+    Some(resolve_import_path(file_dir, p, current_file))
+}
+
 fn importer_default_extension(relative_path: &str) -> &'static str {
     let norm = relative_path.replace('\\', "/");
     if norm.ends_with(".gradle.kts") {
@@ -2106,6 +2140,57 @@ mod tests {
         assert_eq!(
             p.as_deref(),
             Some("svc/src/main/resources/config/extra.yml")
+        );
+    }
+
+    #[test]
+    fn ts_js_import_bare_npm_none() {
+        assert_eq!(
+            resolve_ts_js_import_to_repo_relative("components", "vue", "src/components/X.vue"),
+            None
+        );
+        assert_eq!(
+            resolve_ts_js_import_to_repo_relative(
+                "components",
+                "photoswipe/lightbox",
+                "src/components/X.vue"
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn ts_js_import_at_alias_to_src() {
+        assert_eq!(
+            resolve_ts_js_import_to_repo_relative(
+                "components",
+                "@/utils/foo",
+                "src/components/X.vue"
+            )
+            .as_deref(),
+            Some("src/utils/foo.vue")
+        );
+        assert_eq!(
+            resolve_ts_js_import_to_repo_relative(
+                "components",
+                "~/api/bar",
+                "src/components/X.ts"
+            )
+            .as_deref(),
+            Some("src/api/bar.ts")
+        );
+    }
+
+    #[test]
+    fn ts_js_import_relative_resolves() {
+        assert_eq!(
+            resolve_ts_js_import_to_repo_relative(
+                "components/foo",
+                "../bar/baz",
+                "src/components/foo/X.vue"
+            )
+            .as_deref(),
+            Some("components/bar/baz.vue")
         );
     }
 }
