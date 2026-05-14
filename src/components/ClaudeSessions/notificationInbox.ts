@@ -2,6 +2,7 @@ import type { ClaudeSession } from "../../types";
 import {
   notificationConversationInSessionInboxScope,
   notificationInboxConversationMatchesSession,
+  type NotificationInboxRow,
   notificationRowInSessionInboxScope,
   countSessionUnreadNotifications,
 } from "./claudeChatHelpers";
@@ -14,7 +15,7 @@ export {
 };
 
 export function sessionNotificationInboxCount(
-  rows: Array<{ conversationId: string; readAt?: string | number | null }>,
+  rows: NotificationInboxRow[],
   sess: ClaudeSession,
   allSessions: ClaudeSession[],
 ): number {

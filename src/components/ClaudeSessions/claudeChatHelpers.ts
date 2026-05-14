@@ -5,6 +5,11 @@ import {
   parseOmcSlashCommandFromUserText,
 } from "../../utils/omcUserMessageText";
 
+export type NotificationInboxRow = {
+  conversationId: string;
+  readAt?: unknown;
+};
+
 export function formatWorktreeBranchLabel(branch: string | null): string {
   if (!branch?.trim()) return "（detached）";
   return branch.replace(/^refs\/heads\//, "");
@@ -77,7 +82,7 @@ export function splitTaskListBinaryLabel(status: TaskFlowStatus | undefined): st
 }
 
 export function countSessionUnreadNotifications(
-  rows: Array<{ conversationId: string; readAt?: string | number | null }>,
+  rows: NotificationInboxRow[],
   sess: ClaudeSession,
   allSessions: ClaudeSession[],
 ): number {
@@ -114,7 +119,7 @@ export function notificationConversationInSessionInboxScope(
 }
 
 export function notificationRowInSessionInboxScope(
-  row: { conversationId: string; readAt?: string | number | null },
+  row: NotificationInboxRow,
   sess: ClaudeSession,
   allSessions: ClaudeSession[],
 ): boolean {
