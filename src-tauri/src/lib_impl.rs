@@ -2,7 +2,7 @@ use crate::{
     app_state_commands, claude_code_usage, claude_commands, claude_config_dir, cua_driver,
     dingtalk_enterprise_bot, dingtalk_stream_gateway, git_commands, prd_url_fetch,
     repository_files, skills_sh, system_resource, trellis_bridge, wise_db, wise_mascot, wise_push,
-    workspace_commands,
+    workspace_commands, code_knowledge_graph,
 };
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
@@ -318,6 +318,13 @@ pub fn run() {
             dingtalk_stream_gateway::dingtalk_stream_gateway_start,
             dingtalk_stream_gateway::dingtalk_stream_gateway_stop,
             dingtalk_stream_gateway::dingtalk_stream_gateway_is_running,
+            code_knowledge_graph::get_code_graph_subgraph,
+            code_knowledge_graph::trigger_code_graph_reindex,
+            code_knowledge_graph::get_code_graph_index_status,
+            code_knowledge_graph::import_code_graph_openapi,
+            code_knowledge_graph::bridge_code_graph_http,
+            code_knowledge_graph::extract_code_graph_synthetic_routes,
+            code_knowledge_graph::get_code_graph_multi_subgraph,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -76,6 +76,8 @@ export function LeftSidebar({
   onOpenMcpHub,
   skillsNavActive = false,
   onOpenSkillsHub,
+  codeKnowledgeGraphNavActive = false,
+  onOpenCodeKnowledgeGraph,
   activeRepositoryPath,
   activeRepositoryName,
   onOpenActiveRepositoryFile,
@@ -207,6 +209,8 @@ export function LeftSidebar({
         onOpenMcpHub={onOpenMcpHub}
         skillsNavActive={skillsNavActive}
         onOpenSkillsHub={onOpenSkillsHub}
+        codeKnowledgeGraphNavActive={codeKnowledgeGraphNavActive}
+        onOpenCodeKnowledgeGraph={onOpenCodeKnowledgeGraph}
       />
 
       <div className="app-left-sidebar-project-and-files">

@@ -128,6 +128,7 @@ export default function App() {
   const [mcpHubMode, setMcpHubMode] = useState(false);
   /** 左栏技能：在主区+右栏之上叠层展示 skills.sh（不盖左栏，非全屏居中 Modal）。 */
   const [skillsHubMode, setSkillsHubMode] = useState(false);
+  const [codeKnowledgeGraphMode, setCodeKnowledgeGraphMode] = useState(false);
   const [promptsOpenContext, setPromptsOpenContext] = useState<PromptsOpenContext | null>(null);
   const [repositorySplitTemplate, setRepositorySplitTemplate] = useState("");
   const [projectSplitTemplate, setProjectSplitTemplate] = useState("");
@@ -1501,6 +1502,7 @@ export default function App() {
       taskPanelMode={taskPanelMode}
       mcpHubMode={mcpHubMode}
       skillsHubMode={skillsHubMode}
+      codeKnowledgeGraphMode={codeKnowledgeGraphMode}
       compactLayoutMode={compactLayoutMode}
       effectiveRightCollapsed={effectiveRightCollapsed}
       mainLayoutContentRef={mainLayoutContentRef}
@@ -1519,13 +1521,22 @@ export default function App() {
         onOpenMcpHub: () => {
           setPromptsMode(false);
           setSkillsHubMode(false);
+          setCodeKnowledgeGraphMode(false);
           setMcpHubMode(true);
         },
         skillsNavActive: skillsHubMode,
         onOpenSkillsHub: () => {
           setPromptsMode(false);
           setMcpHubMode(false);
+          setCodeKnowledgeGraphMode(false);
           setSkillsHubMode(true);
+        },
+        codeKnowledgeGraphNavActive: codeKnowledgeGraphMode,
+        onOpenCodeKnowledgeGraph: () => {
+          setPromptsMode(false);
+          setMcpHubMode(false);
+          setSkillsHubMode(false);
+          setCodeKnowledgeGraphMode(true);
         },
         onProjectSelect: handleProjectSelectLeavingMcpHub,
         onCreateProject: handleCreateProject,
@@ -1717,6 +1728,12 @@ export default function App() {
       skillsHubProps={{
         repositoryPath: activeRepository?.path ?? null,
         onClose: () => setSkillsHubMode(false),
+      }}
+      codeKnowledgeGraphProps={{
+        repositoryId: activeRepository?.id ?? null,
+        repositories: repositories.map((r) => ({ id: r.id, name: r.name, path: r.path })),
+        onSelectRepository: setActiveRepositoryId,
+        onClose: () => setCodeKnowledgeGraphMode(false),
       }}
       prdTaskSplitPanelProps={{
         onClose: () => setTaskSplitMode(false),

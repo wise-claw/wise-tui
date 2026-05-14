@@ -24,6 +24,7 @@ import { ProgressMonitorDrawer } from "./ProgressMonitorDrawer";
 import { RepositoryFileEditorPanel } from "./RepositoryFileEditorPanel";
 import { RepositoryFilePreviewModal } from "./RepositoryFilePreviewModal";
 import { SkillsHub } from "./SkillsHub";
+import { CodeKnowledgeGraphPanel } from "./CodeKnowledgeGraph";
 import type * as PrdTaskSplitPanelModule from "./PrdTaskSplitPanel";
 import type * as PromptsPanelModule from "./PromptsPanel";
 import type * as RightPanelModule from "./RightPanel";
@@ -214,6 +215,7 @@ export interface AppWorkspaceLayoutProps {
   taskPanelMode: boolean;
   mcpHubMode: boolean;
   skillsHubMode: boolean;
+  codeKnowledgeGraphMode: boolean;
   compactLayoutMode: boolean;
   effectiveRightCollapsed: boolean;
   mainLayoutContentRef: RefObject<HTMLElement | null>;
@@ -226,6 +228,7 @@ export interface AppWorkspaceLayoutProps {
   commandPaletteProps: ComponentProps<typeof CommandPalette>;
   mcpHubProps: ComponentProps<typeof McpHub>;
   skillsHubProps: ComponentProps<typeof SkillsHub>;
+  codeKnowledgeGraphProps: ComponentProps<typeof CodeKnowledgeGraphPanel>;
   prdTaskSplitPanelProps: PrdTaskSplitPanelProps;
   progressMonitorDrawerProps: ComponentProps<typeof ProgressMonitorDrawer>;
   employeeConfigModalProps: ComponentProps<typeof EmployeeConfigModal> | null;
@@ -251,6 +254,7 @@ export function AppWorkspaceLayout({
   taskSplitMode,
   mcpHubMode,
   skillsHubMode,
+  codeKnowledgeGraphMode,
   compactLayoutMode,
   effectiveRightCollapsed,
   mainLayoutContentRef,
@@ -263,6 +267,7 @@ export function AppWorkspaceLayout({
   commandPaletteProps,
   mcpHubProps,
   skillsHubProps,
+  codeKnowledgeGraphProps,
   prdTaskSplitPanelProps,
   progressMonitorDrawerProps,
   employeeConfigModalProps,
@@ -397,6 +402,11 @@ export function AppWorkspaceLayout({
                     {skillsHubMode ? (
                       <div className="app-skills-hub-overlay" role="region" aria-label="skills.sh 技能目录">
                         <SkillsHub {...skillsHubProps} />
+                      </div>
+                    ) : null}
+                    {codeKnowledgeGraphMode ? (
+                      <div className="app-code-graph-overlay" role="region" aria-label="代码知识图谱">
+                        <CodeKnowledgeGraphPanel {...codeKnowledgeGraphProps} />
                       </div>
                     ) : null}
                     {taskSplitMode ? (

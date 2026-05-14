@@ -94,6 +94,19 @@ export function SkillsNavIcon() {
   );
 }
 
+export function CodeKnowledgeGraphNavIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <circle cx="4" cy="4" r="1.5" stroke="currentColor" strokeWidth="1.2" />
+      <circle cx="12" cy="5" r="1.5" stroke="currentColor" strokeWidth="1.2" />
+      <circle cx="8" cy="12" r="1.5" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M5.3 5.1l5.4-.2" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M4.8 5.4l2.4 5.2" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M11.2 6.4l-2.4 4.2" stroke="currentColor" strokeWidth="1.2" />
+    </svg>
+  );
+}
+
 export function IconCompactLayout() {
   return (
     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>

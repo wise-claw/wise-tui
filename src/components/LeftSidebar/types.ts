@@ -68,6 +68,8 @@ export interface LeftSidebarProps {
   onOpenMcpHub?: () => void;
   skillsNavActive?: boolean;
   onOpenSkillsHub?: () => void;
+  codeKnowledgeGraphNavActive?: boolean;
+  onOpenCodeKnowledgeGraph?: () => void;
   activeRepositoryPath?: string;
   activeRepositoryName?: string;
   onOpenActiveRepositoryFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
