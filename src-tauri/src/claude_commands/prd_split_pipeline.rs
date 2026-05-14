@@ -307,6 +307,103 @@ pub(crate) async fn prd_split_scan_project_parents(
     Ok(ScanProjectParentsOutput { parents })
 }
 
+// ── Stage 3 (A5): mark dirty cluster's existing children as needing review ──
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct MarkChildrenStatusInput {
+    project_root_path: String,
+    parent_task_name: String,
+    /// 期望的新 status；目前仅支持 "planning"（语义为 pending_review）。
+    new_status: String,
+    /// 跳过的子任务目录名（最近一次 dispatch 新建的，无需回退）。
+    #[serde(default)]
+    exclude_child_names: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct MarkChildrenStatusOutput {
+    updated_child_names: Vec<String>,
+    skipped: Vec<String>,
+}
+
+#[tauri::command]
+pub(crate) async fn prd_split_mark_children_status(
+    input: MarkChildrenStatusInput,
+) -> Result<MarkChildrenStatusOutput, String> {
+    if input.new_status != "planning" {
+        return Err(format!(
+            "目前仅允许 new_status=planning（收到 {}）",
+            input.new_status
+        ));
+    }
+    let project_root = validate_project_root(&input.project_root_path)?;
+    let parent_dir = project_root
+        .join(".trellis")
+        .join("tasks")
+        .join(&input.parent_task_name);
+    let parent_task_json = parent_dir.join("task.json");
+    if !parent_task_json.is_file() {
+        return Err(format!(
+            "父任务 task.json 不存在: {}",
+            parent_task_json.to_string_lossy()
+        ));
+    }
+    let raw = fs::read_to_string(&parent_task_json)
+        .map_err(|e| format!("读父任务 task.json 失败: {e}"))?;
+    let parent_value: Value =
+        serde_json::from_str(&raw).map_err(|e| format!("解析父任务 task.json 失败: {e}"))?;
+    let children = parent_value
+        .get("children")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    let exclude: std::collections::HashSet<&str> = input
+        .exclude_child_names
+        .iter()
+        .map(String::as_str)
+        .collect();
+
+    let mut updated: Vec<String> = Vec::new();
+    let mut skipped: Vec<String> = Vec::new();
+    for child in children {
+        let name = match child.as_str() {
+            Some(s) => s.to_string(),
+            None => continue,
+        };
+        if exclude.contains(name.as_str()) {
+            skipped.push(name);
+            continue;
+        }
+        let child_dir = project_root.join(".trellis").join("tasks").join(&name);
+        if !child_dir.is_dir() {
+            skipped.push(name);
+            continue;
+        }
+        match patch_task_json(&child_dir, |task| {
+            task["status"] = json!("planning");
+            let meta = task
+                .get_mut("meta")
+                .and_then(|m| m.as_object_mut())
+                .ok_or_else(|| "task.json meta 字段缺失".to_string())?;
+            meta.insert(
+                "pendingReviewMarkedAtMs".to_string(),
+                json!(unix_ms_now() as u64),
+            );
+            Ok(())
+        }) {
+            Ok(()) => updated.push(name),
+            Err(_) => skipped.push(name),
+        }
+    }
+    Ok(MarkChildrenStatusOutput {
+        updated_child_names: updated,
+        skipped,
+    })
+}
+
 // ── helpers ──
 
 fn validate_project_root(raw: &str) -> Result<PathBuf, String> {

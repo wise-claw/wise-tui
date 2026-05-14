@@ -10,7 +10,7 @@ import { useCallback, useMemo, useState } from "react";
 import type { UseSplitWizardStateApi } from "../useSplitWizardState";
 import type { ClusterDiffStatus, ClusterRunState } from "../types";
 import { dispatchClusterSplit } from "../../../services/prdSplit/splitterDispatch";
-import { createParentTask, renderParentPrd } from "../../../services/prdSplit/trellisWriter";
+import { createParentTask, markChildrenPlanning, renderParentPrd } from "../../../services/prdSplit/trellisWriter";
 import type { ClusterPlanItem } from "../../../services/prdSplit/clusterPlanner";
 
 interface Props {
@@ -174,6 +174,28 @@ async function runCluster(
       parentTaskPath,
       status: "dispatching",
     });
+    // A5: dirty cluster 重派时把旧子任务回退到 planning（待复核），不删任务、不动 git。
+    if (diff && diff.kind === "dirty") {
+      try {
+        const result = await markChildrenPlanning({
+          projectRootPath: state.project!.rootPath,
+          parentTaskName,
+        });
+        if (result.updatedChildNames.length > 0) {
+          api.patchClusterRun(cluster.id, {
+            errors: [
+              `[info] 已把 ${result.updatedChildNames.length} 个旧子任务回退到 planning（pending_review）：${result.updatedChildNames.join(", ")}`,
+            ],
+          });
+        }
+      } catch (err) {
+        // 失败不阻塞 dispatch；仅记录。
+        const message = err instanceof Error ? err.message : String(err);
+        api.patchClusterRun(cluster.id, {
+          errors: [`标 pending_review 失败（继续派发）：${message}`],
+        });
+      }
+    }
   } else {
     try {
       const parentMarkdown = renderParentPrd(state.prdMarkdown, {

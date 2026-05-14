@@ -90,6 +90,34 @@ export async function writeClusterTasks(input: WriteClusterTasksInput): Promise<
   return invoke<WriteClusterTasksOutput>("prd_split_materialize_tasks", { input: payload });
 }
 
+export interface MarkChildrenPlanningInput {
+  projectRootPath: string;
+  parentTaskName: string;
+  excludeChildNames?: string[];
+}
+
+export interface MarkChildrenPlanningOutput {
+  updatedChildNames: string[];
+  skipped: string[];
+}
+
+/**
+ * 把父任务的所有现有子任务 `task.json.status` 改回 `"planning"`（语义为 pending_review）。
+ * 用于 dirty cluster 重派前把基线之外的旧子任务回退到「待复核」。
+ */
+export async function markChildrenPlanning(
+  input: MarkChildrenPlanningInput,
+): Promise<MarkChildrenPlanningOutput> {
+  return invoke<MarkChildrenPlanningOutput>("prd_split_mark_children_status", {
+    input: {
+      projectRootPath: input.projectRootPath,
+      parentTaskName: input.parentTaskName,
+      newStatus: "planning",
+      excludeChildNames: input.excludeChildNames ?? [],
+    },
+  });
+}
+
 /** 纯函数：把 `WriteClusterTasksInput` 投影成 Rust 端的写盘 payload。 */
 export function buildMaterializePayload(input: WriteClusterTasksInput): RustMaterializePayload {
   return {
