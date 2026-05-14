@@ -37,7 +37,7 @@ export function ProjectTeamPopoverContent({
         <Typography.Text type="secondary">尚未配置团队</Typography.Text>
       ) : (
         <div style={{ maxHeight: 280, overflowY: "auto" }}>
-          <Space direction="vertical" size={6} style={{ width: "100%" }}>
+          <Space orientation="vertical" size={6} style={{ width: "100%" }}>
             {workflowIds.map((id) => {
               const workflow = workflowTemplates.find((item) => item.id === id);
               return (
@@ -85,7 +85,7 @@ export function RepositoryScopePopoverContent({
       {linkedToRepo.length === 0 ? (
         <Typography.Text type="secondary">暂无（员工配置里未勾选本仓库）</Typography.Text>
       ) : (
-        <Space direction="vertical" size={6} style={{ width: "100%" }}>
+        <Space orientation="vertical" size={6} style={{ width: "100%" }}>
           {linkedToRepo.map((employee) => {
             const isMainOwner = Boolean(mainAgent && employee.agentType?.trim() === mainAgent);
             return (
@@ -186,7 +186,7 @@ export function ProjectEmployeePopoverContent({
         <>
           {employeeIds.length > 0 ? (
             <div style={{ maxHeight: 180, overflowY: "auto" }}>
-              <Space direction="vertical" size={4} style={{ width: "100%" }}>
+              <Space orientation="vertical" size={4} style={{ width: "100%" }}>
                 {employeeIds.map((id) => {
                   const employee = employeesForScope.find((item) => item.id === id) ?? employees.find((item) => item.id === id);
                   const projectRepoIds = projectForHeader?.repositoryIds ?? [];
@@ -224,7 +224,7 @@ export function ProjectEmployeePopoverContent({
           ) : null}
           {mainOwnerUnmatchedGaps.length > 0 ? (
             <div style={{ marginTop: employeeIds.length > 0 ? 6 : 0 }}>
-              <Space direction="vertical" size={4} style={{ width: "100%" }}>
+              <Space orientation="vertical" size={4} style={{ width: "100%" }}>
                 {mainOwnerUnmatchedGaps.map((gap) => (
                   <div
                     key={`owner-gap-${gap.repositoryId}`}

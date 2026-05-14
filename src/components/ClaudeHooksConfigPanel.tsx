@@ -442,16 +442,16 @@ export function ClaudeHooksConfigPanel({
       </div>
       <div className="app-hooks-stats-bar">
         <button type="button" className="app-hooks-stats-btn" onClick={() => scrollToScope("user")}>
-          <Tag bordered={false}>user: {filterStats.user}</Tag>
+          <Tag variant="filled">user: {filterStats.user}</Tag>
         </button>
         <button type="button" className="app-hooks-stats-btn" onClick={() => scrollToScope("project")}>
-          <Tag bordered={false}>project: {filterStats.project}</Tag>
+          <Tag variant="filled">project: {filterStats.project}</Tag>
         </button>
         <button type="button" className="app-hooks-stats-btn" onClick={() => scrollToScope("local")}>
-          <Tag bordered={false}>local: {filterStats.local}</Tag>
+          <Tag variant="filled">local: {filterStats.local}</Tag>
         </button>
         <button type="button" className="app-hooks-stats-btn" onClick={() => scrollToScope("omc")}>
-          <Tag bordered={false}>omc: {filterStats.omc}</Tag>
+          <Tag variant="filled">omc: {filterStats.omc}</Tag>
         </button>
       </div>
       {loading ? (

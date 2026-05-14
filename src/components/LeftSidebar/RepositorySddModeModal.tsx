@@ -36,7 +36,7 @@ export function RepositorySddModeModal({
       cancelText="取消"
       width={460}
     >
-      <Space direction="vertical" size={10} style={{ width: "100%" }}>
+      <Space orientation="vertical" size={10} style={{ width: "100%" }}>
         <Typography.Text strong>
           {repository ? repositoryFolderBasename(repository) : ""}
         </Typography.Text>

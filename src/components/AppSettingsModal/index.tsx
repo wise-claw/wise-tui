@@ -42,7 +42,7 @@ export function AppSettingsModal({ open, onClose, initialTab = "dingtalk" }: Pro
       onCancel={handleClose}
       footer={null}
       closable={false}
-      maskClosable
+      mask={{ closable: true }}
       keyboard
       centered={false}
       width="100%"

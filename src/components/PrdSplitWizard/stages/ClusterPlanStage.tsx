@@ -87,7 +87,7 @@ export function ClusterPlanStage({ api }: Props) {
         />
       ) : null}
 
-      <Space direction="vertical" size={12} style={{ width: "100%" }}>
+      <Space orientation="vertical" size={12} style={{ width: "100%" }}>
         {plan.clusters.map((cluster) => (
           <ClusterCard
             key={cluster.id}

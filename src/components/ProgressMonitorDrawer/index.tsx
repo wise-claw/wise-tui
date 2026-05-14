@@ -861,7 +861,7 @@ export function ProgressMonitorDrawer({
 
   return (
     <>
-    <Drawer title={title} open={open} onClose={onClose} width={480} destroyOnClose>
+    <Drawer title={title} open={open} onClose={onClose} size={480} destroyOnHidden>
       {target?.type === "employee" && employeeItem ? (
         <div className="app-monitor-drawer">
           <div className="app-monitor-drawer__section">

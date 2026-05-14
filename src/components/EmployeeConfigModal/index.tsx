@@ -268,7 +268,7 @@ export function EmployeeConfigModal({
       destroyOnHidden
       rootClassName="app-employee-config-modal-root"
     >
-      <Space direction="vertical" size={10} className="app-employee-config-modal">
+      <Space orientation="vertical" size={10} className="app-employee-config-modal">
         <Form
           form={form}
           layout="inline"

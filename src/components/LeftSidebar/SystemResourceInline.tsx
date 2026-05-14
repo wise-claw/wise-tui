@@ -112,8 +112,8 @@ export function SystemResourceInline({
         open={drawerOpen}
         onClose={onCloseDrawer}
         placement="right"
-        destroyOnClose
-        width={drawerWidth}
+        destroyOnHidden
+        size={drawerWidth}
         classNames={{ body: "app-monitor-panel__history-session-drawer-body" }}
         extra={
           liveDrawerSession ? (

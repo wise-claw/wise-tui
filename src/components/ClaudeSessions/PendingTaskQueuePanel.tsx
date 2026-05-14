@@ -252,7 +252,7 @@ export function PendingTaskQueuePanel({
         onOk={saveEdit}
         onCancel={() => setEditing(null)}
         okText="保存"
-        destroyOnClose
+        destroyOnHidden
         width={560}
       >
         <div className="app-pending-task-queue-edit">

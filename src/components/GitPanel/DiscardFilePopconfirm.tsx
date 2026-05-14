@@ -35,7 +35,7 @@ export function DiscardFilePopconfirm({
       okButtonProps={{ danger: true }}
       placement="top"
       getPopupContainer={() => document.body}
-      overlayInnerStyle={{ width: 300 }}
+      styles={{ container: { width: 300 } }}
       onConfirm={onConfirm}
     >
       {children}

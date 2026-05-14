@@ -3030,7 +3030,7 @@ export function ClaudeChat({
                 title={TASK_COMPLETION_MODAL_HINT}
                 placement="bottomLeft"
                 mouseEnterDelay={0.35}
-                overlayInnerStyle={{ maxWidth: 420 }}
+                styles={{ container: { maxWidth: 420 } }}
               >
                 <button type="button" className="app-task-completion-modal__title-help" aria-label="说明">
                   <QuestionCircleOutlined />
@@ -3046,7 +3046,7 @@ export function ClaudeChat({
             </Button>
           }
           width={Math.min(960, typeof window !== "undefined" ? window.innerWidth - 48 : 960)}
-          destroyOnClose
+          destroyOnHidden
           className="app-task-completion-modal"
         >
           <div className="app-task-completion-modal__toolbar">
@@ -3141,10 +3141,10 @@ export function ClaudeChat({
             : "可执行任务"
         }
         placement="right"
-        width={traceDrawerWidth}
+        size={traceDrawerWidth}
         open={taskListDrawerOpen}
         onClose={() => setTaskListDrawerOpen(false)}
-        destroyOnClose={false}
+        destroyOnHidden={false}
         classNames={{ body: "app-claude-task-list-drawer-body" }}
         styles={{
           body: {
@@ -3467,10 +3467,10 @@ export function ClaudeChat({
       <Drawer
         title="会话跟踪"
         placement="right"
-        width={traceDrawerWidth}
+        size={traceDrawerWidth}
         open={sessionTraceDrawerOpen}
         onClose={() => setSessionTraceDrawerOpen(false)}
-        destroyOnClose={false}
+        destroyOnHidden={false}
         styles={{ body: { padding: 12, overflow: "auto" } }}
       >
         <div className="app-claude-session-trace-list">
@@ -3936,7 +3936,7 @@ export function ClaudeChat({
                                 description="将执行 git worktree remove --force，并删除该 worktree 对应的工作区目录。"
                                 okText="确定"
                                 cancelText="取消"
-                                overlayInnerStyle={{ width: "min(92vw, 300px)", maxWidth: "min(92vw, 300px)" }}
+                                styles={{ container: { width: "min(92vw, 300px)", maxWidth: "min(92vw, 300px)" } }}
                                 onConfirm={() => void handleGitWorktreeRemove(w.path)}
                               >
                                 <Button

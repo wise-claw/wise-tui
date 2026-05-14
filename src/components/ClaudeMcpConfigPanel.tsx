@@ -37,13 +37,13 @@ function McpSection({ title, hint, items, readOnly = false, onDelete, onToggleEn
                     <div className="app-mcp-item-name-row">
                       <span className="app-mcp-item-name-text">{item.name}</span>
                       {item.pluginRef ? (
-                        <Tag bordered={false} className="app-mcp-runtime-tag" title="Claude Code 插件标识">
+                        <Tag variant="filled" className="app-mcp-runtime-tag" title="Claude Code 插件标识">
                           {item.pluginRef}
                         </Tag>
                       ) : null}
                       {item.runtimeStatus === "connected" ? (
                         <Tag
-                          bordered={false}
+                          variant="filled"
                           color="success"
                           className="app-mcp-runtime-tag"
                           title="来自本机 claude mcp list 健康检查"
@@ -52,7 +52,7 @@ function McpSection({ title, hint, items, readOnly = false, onDelete, onToggleEn
                         </Tag>
                       ) : item.runtimeStatus === "failed" ? (
                         <Tag
-                          bordered={false}
+                          variant="filled"
                           color="error"
                           className="app-mcp-runtime-tag"
                           title="来自本机 claude mcp list；可用 claude --debug 查看日志"

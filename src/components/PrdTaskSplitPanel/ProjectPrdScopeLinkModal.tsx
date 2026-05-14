@@ -27,7 +27,7 @@ export function ProjectPrdScopeLinkModal({
       title={kind === "employee" ? "关联已有员工" : "关联已有团队"}
       open={open}
       onCancel={onCancel}
-      destroyOnClose
+      destroyOnHidden
       okText="关联"
       cancelText="取消"
       confirmLoading={saving}

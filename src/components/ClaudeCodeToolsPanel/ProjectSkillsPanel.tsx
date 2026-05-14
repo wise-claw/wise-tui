@@ -861,7 +861,7 @@ export function ProjectSkillsPanel({ repositoryPath, active, listSearch = "", on
           ) : null
         }
         placement="right"
-        width="min(980px, 100vw)"
+        size="min(980px, 100vw)"
         open={editingName !== null}
         onClose={requestCloseEditor}
         destroyOnHidden

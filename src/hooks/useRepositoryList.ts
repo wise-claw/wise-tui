@@ -19,6 +19,7 @@ import {
   setActiveProjectId as persistActiveProjectId,
   updateProjectName,
 } from "../services/projectState";
+import { bootstrapTrellisIfMissing } from "../services/trellisBootstrap";
 import { deleteAppSetting, getAppSetting, setAppSetting } from "../services/appSettingsStore";
 import { normalizeRepositoryPathKey } from "../utils/repositoryMainSessionBinding";
 import { selectFloatingRepositories } from "../utils/floatingRepositories";
@@ -179,14 +180,25 @@ export function useRepositoryList() {
     [projects, repositories],
   );
 
-  const handleCreateProject = useCallback(async (name: string) => {
+  const handleCreateProject = useCallback(async (
+    name: string,
+    options?: { embedTrellis?: boolean },
+  ) => {
     const trimmed = name.trim();
     if (!trimmed) return;
+    const embedTrellis = options?.embedTrellis !== false;
     const seedRepository = resolveProjectCreationSeedRepository({
       activeRepositoryId,
       projects,
       repositories,
     });
+    if (embedTrellis && seedRepository) {
+      try {
+        await bootstrapTrellisIfMissing(seedRepository.path);
+      } catch (err: unknown) {
+        throw err instanceof Error ? err : new Error(String(err));
+      }
+    }
     const rootPath = seedRepository
       ? await resolveProjectRootFromRepository(seedRepository.path)
       : null;

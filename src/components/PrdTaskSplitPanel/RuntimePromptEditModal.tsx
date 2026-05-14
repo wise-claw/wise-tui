@@ -80,7 +80,7 @@ export function RuntimePromptEditModal({
       <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
         这里展示并编辑拆分执行时实际使用的阶段提示词（仓库级覆盖）。当前仅编辑系统提示词正文。
       </Typography.Paragraph>
-      <Space direction="vertical" size={10} style={{ width: "100%" }}>
+      <Space orientation="vertical" size={10} style={{ width: "100%" }}>
         <Segmented
           size="small"
           value={slot}

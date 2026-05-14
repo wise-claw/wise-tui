@@ -678,7 +678,7 @@ export function BackgroundInvocationDock({ session }: Props) {
       <Drawer
         title={drawerTitle}
         placement="right"
-        width={Math.min(720, typeof window !== "undefined" ? window.innerWidth - 24 : 720)}
+        size={Math.min(720, typeof window !== "undefined" ? window.innerWidth - 24 : 720)}
         open={drawerOpen}
         onClose={() => {
           setDrawerOpen(false);

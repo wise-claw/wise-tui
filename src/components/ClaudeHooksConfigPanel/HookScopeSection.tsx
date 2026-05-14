@@ -108,7 +108,7 @@ export function HookScopeSection({
                     className="app-hooks-event-help-icon"
                     text={EVENT_HELP_TEXT[eventName] ?? "该事件说明暂未配置。"}
                   />
-                  <Tag className="app-hooks-event-tag" bordered={false}>
+                  <Tag className="app-hooks-event-tag" variant="filled">
                     {groupsForEvent(eventName).reduce((acc, g) => acc + g.hooks.length, 0)} 条
                   </Tag>
                 </span>
@@ -117,7 +117,7 @@ export function HookScopeSection({
                 {groupsForEvent(eventName).map((group) => (
                   <div key={group.id} className="app-hooks-group-item">
                     <div className="app-hooks-group-head">
-                      <Tag bordered={false}>{group.matcher?.trim() || "*"}</Tag>
+                      <Tag variant="filled">{group.matcher?.trim() || "*"}</Tag>
                       {!readOnly ? (
                         <Button
                           type="text"
@@ -136,7 +136,7 @@ export function HookScopeSection({
                             <span className="app-hooks-handler-summary">{handlerSummary(h)}</span>
                           </div>
                           <div className="app-hooks-handler-head">
-                            <Tag color="blue" bordered={false}>
+                            <Tag color="blue" variant="filled">
                               {h.type}
                             </Tag>
                             {!readOnly ? (

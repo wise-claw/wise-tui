@@ -397,10 +397,10 @@ export function OmcDirectBatchInvocationDetailDrawer({
     <Drawer
       title={<span className="app-omc-direct-batch-inv-detail__drawer-title-text">{title}</span>}
       placement="right"
-      width={width}
+      size={width}
       open={open}
       onClose={onClose}
-      destroyOnClose={false}
+      destroyOnHidden={false}
       classNames={{
         header: "app-omc-direct-batch-inv-detail-drawer-header",
         body: "app-omc-direct-batch-inv-detail-drawer-body",
