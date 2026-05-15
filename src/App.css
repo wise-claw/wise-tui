@@ -103,6 +103,16 @@ body {
   box-shadow: inset 1px 0 0 var(--ant-color-border-secondary);
 }
 
+.app-code-graph-overlay > .app-code-graph-lazy-fallback {
+  flex: 1 1 0%;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* CC Workflow Studio：同上，且建立包含块，使内层 Radix/Antd fixed 蒙层相对本区而非整窗（勿盖左侧栏） */
 .wise-cc-wf-studio-overlay {
   position: absolute;

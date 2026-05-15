@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { listen } from "@tauri-apps/api/event";
 import { Modal, message } from "antd";
@@ -1479,22 +1479,34 @@ export default function App() {
         message.warning("未找到该仓库");
         return;
       }
-      setMcpHubMode(false);
-      setSkillsHubMode(false);
-      setCcWfStudioMode(false);
-      setPromptsMode(false);
-      setTaskSplitMode(false);
-      setSearchOpen(false);
-      if (opts.projectId != null) {
-        setActiveProjectId(opts.projectId);
-      }
-      handleSidebarRepositorySelectLeavingMcpHub(opts.repositoryId);
-      setCodeGraphSuppressIdleAutoReindex(true);
-      setCodeGraphLockToEntryRepository(opts.graphEntryFrom === "repository");
-      setCodeGraphDefaultProjectMultiRepo(opts.graphEntryFrom === "project");
-      setCodeKnowledgeGraphMode(true);
+      /** 双 rAF：先让右键菜单关闭并完成一帧绘制，再跑会话切换 / 挂载图谱，避免主线程长时间卡住。 */
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setPromptsMode(false);
+          setSearchOpen(false);
+          if (opts.projectId != null) {
+            setActiveProjectId(opts.projectId);
+          }
+          const alreadyOnRepo = opts.repositoryId === activeRepositoryId;
+          if (alreadyOnRepo) {
+            setMcpHubMode(false);
+            setSkillsHubMode(false);
+            setCcWfStudioMode(false);
+            setTaskSplitMode(false);
+            setMissionControlMode(false);
+          } else {
+            handleSidebarRepositorySelectLeavingMcpHub(opts.repositoryId);
+          }
+          startTransition(() => {
+            setCodeGraphSuppressIdleAutoReindex(true);
+            setCodeGraphLockToEntryRepository(opts.graphEntryFrom === "repository");
+            setCodeGraphDefaultProjectMultiRepo(opts.graphEntryFrom === "project");
+            setCodeKnowledgeGraphMode(true);
+          });
+        });
+      });
     },
-    [repositories, handleSidebarRepositorySelectLeavingMcpHub, setActiveProjectId],
+    [repositories, activeRepositoryId, handleSidebarRepositorySelectLeavingMcpHub, setActiveProjectId],
   );
 
   const handleCodeGraphGenerateRepositoryIds = useCallback(
