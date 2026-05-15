@@ -2,6 +2,8 @@ pub mod types;
 pub mod storage;
 pub mod index_extensions;
 pub mod indexer;
+mod index_cancel;
+mod gitnexus_cli_index;
 pub mod tsconfig_paths;
 pub mod tree_sitter_parser;
 pub(crate) mod ts_js_tree_extract;
@@ -17,6 +19,7 @@ use std::path::{Path, PathBuf};
 use types::{
     CodeGraphSubgraphRequest, CodeGraphSubgraphResponse,
     CodeGraphNodeSearchRequest, CodeGraphReindexRequest, CodeGraphIndexStatusResponse,
+    CancelCodeGraphReindexOutcome,
 };
 use crate::wise_db::WiseDb;
 use tauri::Emitter;
@@ -57,42 +60,51 @@ pub fn search_code_graph_nodes(
 /// Trigger reindexing of a repository's knowledge graph.
 #[tauri::command]
 pub fn trigger_code_graph_reindex(
-    _state: tauri::State<WiseDb>,
+    state: tauri::State<WiseDb>,
     req: CodeGraphReindexRequest,
     app: tauri::AppHandle,
 ) -> Result<String, String> {
-    let repo_path = lookup_repository_path(req.repository_id)?;
     let repo_id = req.repository_id;
+    let repo_path = lookup_repository_path(repo_id)?;
+    let repo_label = match lookup_repository_meta(repo_id) {
+        Ok((_, _, label)) => label,
+        Err(e) => return Err(e),
+    };
+    let db_path = crate::wise_paths::wise_dir()
+        .map(|d| d.join("wise.db"))
+        .map_err(|e| format!("无法定位 Wise 数据目录：{}", e))?;
+
+    {
+        let conn = state.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        storage::update_index_meta(&conn, repo_id, "", "indexing", None, 0, 0, Some(1), None)?;
+    }
+
+    // 与 DB `indexing` 同步登记；若放在异步任务后半段，早期失败会留下「僵尸 indexing」且「暂停」无效。
+    let cancel_flag = index_cancel::begin_session(repo_id);
 
     tauri::async_runtime::spawn(async move {
-        let repo_path = repo_path;
         let app = app;
+        let cancel_flag = cancel_flag;
 
-        let db_path = match crate::wise_paths::wise_dir() {
-            Ok(d) => d.join("wise.db"),
-            Err(e) => {
-                let _ = app.emit("code-graph-index-error", serde_json::json!({
-                    "repositoryId": repo_id,
-                    "error": format!("Cannot find db path: {}", e),
-                }));
-                return;
-            }
-        };
+        let db_path_for_blocking = db_path.clone();
+        let cancel_for_index = std::sync::Arc::clone(&cancel_flag);
+        let conn_result = tokio::task::spawn_blocking(move || {
+            rusqlite::Connection::open(&db_path_for_blocking)
+                .map_err(|e| e.to_string())
+                .and_then(|conn| {
+                    indexer::index_repository(
+                        &conn,
+                        &repo_path,
+                        repo_id,
+                        &repo_label,
+                        Some(cancel_for_index),
+                    )
+                })
+        })
+        .await
+        .unwrap_or_else(|e| Err(format!("索引任务 join 失败: {}", e)));
 
-        let repo_label = match lookup_repository_meta(repo_id) {
-            Ok((_, _, label)) => label,
-            Err(e) => {
-                let _ = app.emit("code-graph-index-error", serde_json::json!({
-                    "repositoryId": repo_id,
-                    "error": e,
-                }));
-                return;
-            }
-        };
-
-        let conn_result = rusqlite::Connection::open(&db_path)
-            .map_err(|e| e.to_string())
-            .and_then(|conn| indexer::index_repository(&conn, &repo_path, repo_id, &repo_label));
+        index_cancel::end_session(repo_id, &cancel_flag);
 
         match conn_result {
             Ok(result) => {
@@ -114,7 +126,7 @@ pub fn trigger_code_graph_reindex(
                 // Update DB status so frontend polling sees the error
                 if let Ok(conn) = rusqlite::Connection::open(&db_path) {
                     let _ = crate::code_knowledge_graph::storage::update_index_meta(
-                        &conn, repo_id, "", "error", Some(&e), 0, 0, None,
+                        &conn, repo_id, "", "error", Some(&e), 0, 0, None, None,
                     );
                 }
                 let _ = app.emit("code-graph-index-error", serde_json::json!({
@@ -126,6 +138,54 @@ pub fn trigger_code_graph_reindex(
     });
 
     Ok("Indexing started".to_string())
+}
+
+/// 停止当前仓库正在进行的代码图谱检索（终止 GitNexus 子进程并尽快结束后台任务）。
+/// 若 DB 仍为 `indexing` 但进程内已无会话（僵尸状态），则写入错误元数据并返回 `clearedStaleIndexingStatus`。
+#[tauri::command]
+pub fn cancel_code_graph_reindex(
+    state: tauri::State<WiseDb>,
+    repository_id: i64,
+    app: tauri::AppHandle,
+) -> Result<CancelCodeGraphReindexOutcome, String> {
+    let signalled = index_cancel::request_cancel(repository_id);
+    if signalled {
+        return Ok(CancelCodeGraphReindexOutcome {
+            signalled_running_task: true,
+            cleared_stale_indexing_status: false,
+        });
+    }
+
+    let conn = state.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+    let st = storage::get_index_status(&conn, repository_id)?;
+    if st.status == "indexing" {
+        let msg = index_cancel::INDEX_STALE_ORPHAN_MSG.to_string();
+        storage::update_index_meta(
+            &conn,
+            repository_id,
+            "",
+            "error",
+            Some(&msg),
+            0,
+            0,
+            None,
+            None,
+        )?;
+        drop(conn);
+        let _ = app.emit("code-graph-index-error", serde_json::json!({
+            "repositoryId": repository_id,
+            "error": msg,
+        }));
+        return Ok(CancelCodeGraphReindexOutcome {
+            signalled_running_task: false,
+            cleared_stale_indexing_status: true,
+        });
+    }
+
+    Ok(CancelCodeGraphReindexOutcome {
+        signalled_running_task: false,
+        cleared_stale_indexing_status: false,
+    })
 }
 
 fn compute_repository_graph_label(repo_path: &str, name: Option<&str>) -> String {
@@ -414,6 +474,16 @@ pub fn get_code_graph_index_status(
     storage::get_index_status(&conn, repository_id)
 }
 
+/// 清空某仓库的代码图谱持久化数据（节点、边、索引元数据）。用于排除旧索引/异常中断残留；清空后需重新检索。
+#[tauri::command]
+pub fn clear_code_graph_index(
+    state: tauri::State<WiseDb>,
+    repository_id: i64,
+) -> Result<(), String> {
+    let conn = state.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+    storage::clear_repository_graph_index(&conn, repository_id)
+}
+
 /// Import an OpenAPI file and generate api_operation nodes.
 #[tauri::command]
 pub fn import_code_graph_openapi(
@@ -495,7 +565,23 @@ pub fn trigger_code_graph_association_build(
                     return;
                 }
             };
-            match indexer::index_repository(&conn, &repo_path, repo_id, &repo_label) {
+            let db_path_cl = db_path.clone();
+            let index_res = tokio::task::spawn_blocking(move || {
+                let c = rusqlite::Connection::open(&db_path_cl).map_err(|e| e.to_string())?;
+                match indexer::index_repository(&c, &repo_path, repo_id, &repo_label, None) {
+                    Ok(r) => Ok(r),
+                    Err(e) => {
+                        let _ = storage::update_index_meta(
+                            &c, repo_id, "", "error", Some(&e), 0, 0, None, None,
+                        );
+                        Err(e)
+                    }
+                }
+            })
+            .await
+            .unwrap_or_else(|e| Err(format!("索引任务 join 失败: {}", e)));
+
+            match index_res {
                 Ok(r) => {
                     eprintln!(
                         "[code-graph] association index: repo_id={}, nodes={}, edges={}",
@@ -513,7 +599,6 @@ pub fn trigger_code_graph_association_build(
                 }
                 Err(e) => {
                     eprintln!("[code-graph] association index failed: repo_id={}, error={}", repo_id, e);
-                    let _ = storage::update_index_meta(&conn, repo_id, "", "error", Some(&e), 0, 0, None);
                     let _ = app.emit("code-graph-index-error", serde_json::json!({
                         "repositoryId": repo_id,
                         "error": e,

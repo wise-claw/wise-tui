@@ -215,6 +215,7 @@ mod tests {
             CREATE TABLE graph_index_meta (
               repo_id INTEGER PRIMARY KEY, index_version TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'idle',
               error TEXT, total_nodes INTEGER DEFAULT 0, total_edges INTEGER DEFAULT 0, progress INTEGER DEFAULT 0,
+              indexing_current_file TEXT,
               updated_at TEXT DEFAULT (datetime('now'))
             );
             INSERT INTO graph_index_meta (repo_id, index_version, status) VALUES (1, 't', 'done');
@@ -274,6 +275,7 @@ mod tests {
               total_nodes INTEGER DEFAULT 0,
               total_edges INTEGER DEFAULT 0,
               progress INTEGER DEFAULT 0,
+              indexing_current_file TEXT,
               updated_at TEXT DEFAULT (datetime('now'))
             );
             INSERT INTO graph_index_meta (repo_id, index_version, status)

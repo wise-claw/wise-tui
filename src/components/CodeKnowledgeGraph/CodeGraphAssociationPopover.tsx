@@ -40,9 +40,9 @@ interface Props {
   activeRepositoryId: number | null;
   value: AssociationGraphConfig;
   onChange: (next: AssociationGraphConfig) => void;
-  /** 每次「应用并构建」后触发；参数为解析后的参与仓库 id（与画布子图范围一致） */
+  /** 每次「重建关联索引」后触发；参数为解析后的参与仓库 id（与画布子图范围一致） */
   onApplied?: (scopeRepositoryIds: number[]) => void;
-  /** 多仓（≥2）：提交后台「索引 + OpenAPI/合成路由 + HTTP 桥接」构建任务 */
+  /** 多仓（≥2）：提交后台「各仓索引重建 + OpenAPI 发现/合成路由 + 前后端 HTTP 桥接」任务 */
   onAssociationBuild?: (repositoryIds: number[]) => void | Promise<void>;
   disabled?: boolean;
 }
@@ -150,9 +150,8 @@ export function CodeGraphAssociationPopover({
           关联检索
         </Typography.Text>
         <Typography.Paragraph type="secondary" className="app-code-graph-assoc-dropdown-desc">
-          选择参与合并的仓库。点击「应用并构建」将在后台依次为所选仓库重建代码图谱索引；对非前端仓尝试自动发现
-          OpenAPI 描述文件（若无则尝试从代码提取合成路由）；再对标记为前端与后端的仓库配对执行 OpenAPI HTTP
-          桥接。全部完成后将刷新多仓合并子图。
+          选择参与合并的仓库。点击「重建关联索引」后，将在后台依次为所选仓库重建代码图谱索引；对非前端仓尝试自动发现
+          OpenAPI 描述文件（若无则尝试从代码提取合成路由）；再对标记为前端与后端的仓库配对，通过 OpenAPI 将接口桥接起来。全部完成后将刷新多仓合并子图。
         </Typography.Paragraph>
       </div>
       <Radio.Group
@@ -207,7 +206,7 @@ export function CodeGraphAssociationPopover({
           取消
         </Button>
         <Button type="primary" size="small" onClick={apply}>
-          应用并构建
+          重建关联索引
         </Button>
       </div>
     </div>
@@ -234,7 +233,7 @@ export function CodeGraphAssociationPopover({
         disabled={!canUse}
         title={
           canUse
-            ? "关联检索：选择范围后点「应用并构建」以重建索引并通过 OpenAPI 生成多仓关联图谱"
+            ? "关联检索：选择范围后点「重建关联索引」以重建多仓索引并通过 OpenAPI 桥接接口"
             : "当前仅有一个候选仓库，无法关联检索"
         }
         aria-label="关联检索"

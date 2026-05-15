@@ -1,3 +1,6 @@
+//! 保留供后续可选「本地解析」或测试；当前主索引路径已改为 GitNexus CLI + Kuzu 导入。
+#![allow(dead_code)]
+
 //! TypeScript / JavaScript / TSX symbol + calls extraction via tree-sitter，对齐 GitNexus
 //! `gitnexus/src/core/ingestion/tree-sitter-queries.ts`（definitions + call / new 核心模式）。
 
@@ -378,12 +381,17 @@ fn try_add_ts_js_call_edge(
     target_repo_path: &str,
     tag: &str,
     dedup: &mut HashSet<String>,
+    missing_target_ids: &mut HashSet<String>,
 ) -> Result<usize, String> {
     if !graph_storage::graph_node_exists(conn, source_id)? {
         return Ok(0);
     }
     let tid = indexer::make_file_node_id(repo_id, target_repo_path);
+    if missing_target_ids.contains(&tid) {
+        return Ok(0);
+    }
     if !graph_storage::graph_node_exists(conn, &tid)? {
+        missing_target_ids.insert(tid);
         return Ok(0);
     }
     let eid = format!("{source_id}:calls:{tid}:{tag}");
@@ -425,6 +433,7 @@ pub(crate) fn extract_ts_js_calls_tree_sitter(
     let names = query.capture_names();
     let mut cursor = QueryCursor::new();
     let mut dedup = HashSet::<String>::new();
+    let mut missing_target_ids = HashSet::<String>::new();
     let mut total = 0usize;
 
     let mut matches = cursor.matches(query, root, source);
@@ -461,6 +470,7 @@ pub(crate) fn extract_ts_js_calls_tree_sitter(
                         relative_path,
                         &tag,
                         &mut dedup,
+                        &mut missing_target_ids,
                     )?;
                 }
                 "super" => {
@@ -476,7 +486,15 @@ pub(crate) fn extract_ts_js_calls_tree_sitter(
                         continue;
                     };
                     let tag = format!("super:{}:{}", anchor.start_byte(), anchor.end_byte());
-                    total += try_add_ts_js_call_edge(conn, repo_id, &src, &path, &tag, &mut dedup)?;
+                    total += try_add_ts_js_call_edge(
+                        conn,
+                        repo_id,
+                        &src,
+                        &path,
+                        &tag,
+                        &mut dedup,
+                        &mut missing_target_ids,
+                    )?;
                 }
                 "identifier" => {
                     let Ok(recv_txt) = rn.utf8_text(source) else {
@@ -486,7 +504,15 @@ pub(crate) fn extract_ts_js_calls_tree_sitter(
                         continue;
                     };
                     let tag = format!("mem:{}:{}", anchor.start_byte(), anchor.end_byte());
-                    total += try_add_ts_js_call_edge(conn, repo_id, &src, path, &tag, &mut dedup)?;
+                    total += try_add_ts_js_call_edge(
+                        conn,
+                        repo_id,
+                        &src,
+                        path,
+                        &tag,
+                        &mut dedup,
+                        &mut missing_target_ids,
+                    )?;
                 }
                 _ => {}
             }
@@ -505,7 +531,15 @@ pub(crate) fn extract_ts_js_calls_tree_sitter(
                 continue;
             };
             let tag = format!("fn:{}:{}", anchor.start_byte(), anchor.end_byte());
-            total += try_add_ts_js_call_edge(conn, repo_id, &src, path, &tag, &mut dedup)?;
+            total += try_add_ts_js_call_edge(
+                conn,
+                repo_id,
+                &src,
+                path,
+                &tag,
+                &mut dedup,
+                &mut missing_target_ids,
+            )?;
         }
     }
 
