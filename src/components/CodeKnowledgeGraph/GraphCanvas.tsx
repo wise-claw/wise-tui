@@ -10,6 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import Graph from "graphology";
 import {
   ZoomInOutlined,
   ZoomOutOutlined,
@@ -101,7 +102,11 @@ const GraphCanvasInner = forwardRef<GraphCanvasHandle, GraphCanvasProps>(functio
   );
 
   useEffect(() => {
-    if (!sigmaReady || !data || data.nodes.length === 0) return;
+    if (!sigmaReady) return;
+    if (!data || data.nodes.length === 0) {
+      setGraph(new Graph());
+      return;
+    }
     const g = codeSubgraphToGraphology(data);
     setGraph(g);
   }, [sigmaReady, data, setGraph]);

@@ -322,11 +322,20 @@
 .app-code-graph-centered-loading {
   flex: 1;
   min-height: 0;
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 24px;
+}
+
+.app-code-graph-indexing-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  max-width: 360px;
 }
 
 /* 空状态 / 加载仍居中，不占满图谱时的留白 */
@@ -731,6 +740,7 @@
 .app-code-graph-repo-dropdown-assoc-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   width: 100%;
   padding: 6px 10px;
@@ -743,6 +753,29 @@
   cursor: pointer;
   text-align: left;
   transition: background 0.12s ease;
+}
+
+.app-code-graph-repo-dropdown-assoc-row-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.app-code-graph-repo-dropdown-assoc-row--active {
+  background: var(--ant-control-item-bg-active);
+}
+
+.app-code-graph-repo-dropdown-assoc-row--active:hover:not(:disabled):not(.app-code-graph-repo-dropdown-assoc-row--disabled) {
+  background: var(--ant-control-item-bg-active);
+}
+
+.app-code-graph-repo-dropdown-assoc-row--active .app-code-graph-repo-dropdown-assoc-icon {
+  color: var(--ant-color-primary);
+}
+
+.app-code-graph-repo-dropdown-assoc-row--active .app-code-graph-repo-dropdown-assoc-label {
+  font-weight: 500;
 }
 
 .app-code-graph-repo-dropdown-assoc-row:hover:not(:disabled):not(.app-code-graph-repo-dropdown-assoc-row--disabled) {

@@ -37,7 +37,7 @@ import {
   CodeGraphAssociationPopover,
   type AssociationGraphConfig,
 } from "./CodeGraphAssociationPopover";
-import { CodeGraphRepositoryPopover } from "./CodeGraphRepositoryPopover";
+import { CodeGraphRepositoryPopover, type CodeGraphRepoDropdownSelection } from "./CodeGraphRepositoryPopover";
 import { InspectorPanel } from "./InspectorPanel";
 import "./CodeKnowledgeGraphPanel.css";
 
@@ -108,6 +108,9 @@ export function CodeKnowledgeGraphPanel({
     mode: "all",
     customRepositoryIds: [],
   });
+  /** 仓库下拉：active 标在仓库行还是底部关联合并行 */
+  const [repoDropdownSelection, setRepoDropdownSelection] =
+    useState<CodeGraphRepoDropdownSelection>("repository");
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [subgraphLoading, setSubgraphLoading] = useState(false);
   const [indexError, setIndexError] = useState<string | null>(null);
@@ -252,6 +255,7 @@ export function CodeKnowledgeGraphPanel({
     setSubgraphSearchDebounced("");
     setSearchRemoteHits([]);
     setAssociationConfig({ mode: "all", customRepositoryIds: [] });
+    setRepoDropdownSelection("repository");
   }, [repositoryId]);
 
   useEffect(() => {
@@ -307,6 +311,20 @@ export function CodeKnowledgeGraphPanel({
     }
     return `(${names.slice(0, 3).join(" + ")} + …共${names.length}仓)`;
   }, [resolvedGraphRepoIds, repositories]);
+
+  useEffect(() => {
+    if (resolvedGraphRepoIds.length < 2) {
+      setRepoDropdownSelection("repository");
+    }
+  }, [resolvedGraphRepoIds.length]);
+
+  const handleRepoMenuPickRepository = useCallback(
+    (repoId: number) => {
+      setRepoDropdownSelection("repository");
+      onSelectRepository?.(repoId);
+    },
+    [onSelectRepository],
+  );
 
   useEffect(() => {
     if (!repositoryId) {
@@ -480,6 +498,7 @@ export function CodeKnowledgeGraphPanel({
   /** 仓库菜单内「合并图谱」入口：清空画布并强制重拉当前关联范围内的多仓子图 */
   const handleViewMergedGraphFromRepoMenu = useCallback(() => {
     if (resolvedGraphRepoIds.length < 2) return;
+    setRepoDropdownSelection("association");
     setSelectedNode(null);
     setSubgraphFocusId(undefined);
     setSubgraphDirection(undefined);
@@ -487,6 +506,15 @@ export function CodeKnowledgeGraphPanel({
     setSubgraphData(null);
     setSubgraphRefreshKey((k) => k + 1);
   }, [resolvedGraphRepoIds]);
+
+  const handleAssociationApplied = useCallback((scopeRepositoryIds: number[]) => {
+    if (scopeRepositoryIds.length >= 2) {
+      setRepoDropdownSelection("association");
+    } else {
+      setRepoDropdownSelection("repository");
+    }
+    setSubgraphRefreshKey((k) => k + 1);
+  }, []);
 
   const handleNodeClick = useCallback((node: GraphNode) => {
     setSelectedNode(node);
@@ -498,6 +526,9 @@ export function CodeKnowledgeGraphPanel({
 
   const handleSubgraphRollUp = useCallback(() => {
     if (!selectedNode) return;
+    // 清空画布与旧子图数据，再按「上卷」逻辑重拉；避免 Sigma 仍显示上一段子图节点
+    setSubgraphData(null);
+    setSubgraphLoading(true);
     setSubgraphFocusId(selectedNode.id);
     setSubgraphDirection("upstream");
     setSubgraphRefreshKey((k) => k + 1);
@@ -505,6 +536,8 @@ export function CodeKnowledgeGraphPanel({
 
   const handleSubgraphDrillDown = useCallback(() => {
     if (!selectedNode) return;
+    setSubgraphData(null);
+    setSubgraphLoading(true);
     setSubgraphFocusId(selectedNode.id);
     setSubgraphDirection("downstream");
     setSubgraphRefreshKey((k) => k + 1);
@@ -743,12 +776,13 @@ export function CodeKnowledgeGraphPanel({
                 repositories={repositories}
                 activeRepositoryId={repositoryId}
                 activeRepositoryIndexed={isIndexed && indexStatus?.repositoryId === repositoryId}
+                menuSelection={repoDropdownSelection}
                 graphScopeTriggerLabel={
-                  resolvedGraphRepoIds.length > 1
+                  repoDropdownSelection === "association" && resolvedGraphRepoIds.length > 1
                     ? associationScopeDisplay ?? `多仓库（${resolvedGraphRepoIds.length}）`
                     : null
                 }
-                onSelectRepository={onSelectRepository}
+                onSelectRepository={handleRepoMenuPickRepository}
                 onReindexRepository={handleReindexRepository}
                 onRemoveRepository={onRemoveRepository}
                 onOpenAddRepository={onOpenAddRepository}
@@ -767,7 +801,7 @@ export function CodeKnowledgeGraphPanel({
               activeRepositoryId={repositoryId}
               value={associationConfig}
               onChange={setAssociationConfig}
-              onApplied={() => setSubgraphRefreshKey((k) => k + 1)}
+              onApplied={handleAssociationApplied}
               onAssociationBuild={handleAssociationBuild}
               disabled={!isIndexed}
             />
@@ -878,23 +912,23 @@ export function CodeKnowledgeGraphPanel({
           </div>
         ) : !isIndexed ? (
           isIndexing ? (
-            <div style={{ textAlign: "center", maxWidth: 320, padding: 24 }}>
-              <div style={{ marginBottom: 16 }}>
+            <div className="app-code-graph-centered-loading">
+              <div className="app-code-graph-indexing-inner">
                 <Spin size="large" />
+                <Progress
+                  type="circle"
+                  percent={indexStatus?.progress ?? 0}
+                  size={120}
+                  format={(percent) => (
+                    <span style={{ fontSize: 20 }}>
+                      {percent ?? 0}%
+                    </span>
+                  )}
+                />
+                <Typography.Text type="secondary" style={{ textAlign: "center" }}>
+                  正在为 {currentRepo?.name ?? "该仓库"} 建立索引...
+                </Typography.Text>
               </div>
-              <Progress
-                type="circle"
-                percent={indexStatus?.progress ?? 0}
-                size={120}
-                format={(percent) => (
-                  <span style={{ fontSize: 20 }}>
-                    {percent ?? 0}%
-                  </span>
-                )}
-              />
-              <Typography.Text type="secondary" style={{ marginTop: 16, display: "block" }}>
-                正在为 {currentRepo?.name ?? "该仓库"} 建立索引...
-              </Typography.Text>
             </div>
           ) : (
             <Empty

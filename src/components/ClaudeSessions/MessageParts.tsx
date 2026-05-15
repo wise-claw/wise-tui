@@ -124,7 +124,7 @@ function pickInputString(input: Record<string, unknown>, keys: string[], maxLen 
   return "";
 }
 
-function getToolDisplayInfo(part: ToolUsePart): { label: string; subtitle: string } {
+export function getToolDisplayInfo(part: ToolUsePart): { label: string; subtitle: string } {
   const input = part.input as Record<string, unknown>;
   const n = part.name.trim();
   if (!n && (part.output?.trim() || part.error?.trim())) {
