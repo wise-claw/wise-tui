@@ -2,6 +2,7 @@ import type { MutableRefObject } from "react";
 import { PushpinOutlined } from "@ant-design/icons";
 import { Dropdown, Tooltip, Typography } from "antd";
 import type { MenuProps } from "antd";
+import type { ReconcileProjectMode } from "../../constants/reconcileProjectMode";
 import type { ProjectItem, Repository, TaskMode } from "../../types";
 import { resolveWorkspaceMode } from "../../utils/workspaceMode";
 import {
@@ -30,7 +31,7 @@ interface ProjectRepositoryListProps {
   onRepositorySelect: (id: number | null) => void;
   onCreateProjectClick: () => void;
   onAddFloatingRepositoryClick?: () => void;
-  onAddRepositoryToProjectClick: (projectId: string) => void;
+  onReconcileProject?: (projectId: string, mode: ReconcileProjectMode) => void | Promise<void>;
   onToggleProjectExpand: (projectId: string) => void;
   onTogglePinProject: (projectId: string) => void;
   onRenameProject: (project: ProjectItem) => void;
@@ -69,7 +70,7 @@ export function ProjectRepositoryList({
   onRepositorySelect,
   onCreateProjectClick,
   onAddFloatingRepositoryClick,
-  onAddRepositoryToProjectClick,
+  onReconcileProject,
   onToggleProjectExpand,
   onTogglePinProject,
   onRenameProject,
@@ -167,7 +168,7 @@ export function ProjectRepositoryList({
             onOpenPromptsProject={onOpenPromptsProject}
             onCreateProjectTask={onCreateProjectTask}
             onCreateRepositoryTask={onCreateRepositoryTask}
-            onAddRepositoryToProjectClick={onAddRepositoryToProjectClick}
+            onReconcileProject={onReconcileProject}
             onOpenInFinder={onOpenInFinder}
             openRepositoryInPreferredEditor={openRepositoryInPreferredEditor}
             onOpenPromptsRepository={onOpenPromptsRepository}
@@ -227,7 +228,7 @@ interface ProjectRowProps {
   onOpenPromptsProject?: (project: ProjectItem) => void;
   onCreateProjectTask: (project: ProjectItem, mode: TaskMode) => void;
   onCreateRepositoryTask: (repository: Repository, mode: TaskMode) => void;
-  onAddRepositoryToProjectClick: (projectId: string) => void;
+  onReconcileProject?: (projectId: string, mode: ReconcileProjectMode) => void | Promise<void>;
   onOpenInFinder: (repository: Repository) => void;
   openRepositoryInPreferredEditor: (repository: Repository) => void;
   onOpenPromptsRepository?: (project: ProjectItem, repository: Repository) => void;
@@ -260,7 +261,7 @@ function ProjectRow({
   onOpenPromptsProject,
   onCreateProjectTask,
   onCreateRepositoryTask,
-  onAddRepositoryToProjectClick,
+  onReconcileProject,
   onOpenInFinder,
   openRepositoryInPreferredEditor,
   onOpenPromptsRepository,
@@ -277,7 +278,18 @@ function ProjectRow({
   const projectMoreItems: MenuProps["items"] = [
     { key: "pin", label: isPinned ? "取消置顶" : "置顶" },
     { key: "rename", label: "重命名项目" },
-    { key: "add-repo", label: "关联仓库" },
+    ...(onReconcileProject
+      ? ([
+          {
+            key: "reconcile-submenu",
+            label: "重新初始化项目",
+            children: [
+              { key: "reconcile-repos", label: "仅同步仓库" },
+              { key: "reconcile-repos-graphs", label: "同步并重绘流程图（草稿）" },
+            ],
+          },
+        ] satisfies MenuProps["items"])
+      : []),
     { key: "prompts", label: "提示词" },
     { type: "divider" },
     { key: "delete", label: <span style={{ color: "var(--ant-color-error)" }}>删除项目</span> },
@@ -358,7 +370,10 @@ function ProjectRow({
             onClick: ({ key }) => {
               if (key === "pin") onTogglePinProject(project.id);
               if (key === "rename") onRenameProject(project);
-              if (key === "add-repo") onAddRepositoryToProjectClick(project.id);
+              if (key === "reconcile-repos") void Promise.resolve(onReconcileProject?.(project.id, "repos_only"));
+              if (key === "reconcile-repos-graphs") {
+                void Promise.resolve(onReconcileProject?.(project.id, "repos_and_graphs"));
+              }
               if (key === "prompts") onOpenPromptsProject?.(project);
               if (key === "delete") onDeleteProject(project);
             },
@@ -371,23 +386,15 @@ function ProjectRow({
           </span>
         </Dropdown>
         <ProjectRequirementAction onOpen={() => onCreateProjectTask(project, "split")} />
-        <span
-          className="app-repository-action app-repository-action--plus"
-          onClick={(e) => {
-            e.stopPropagation();
-            onAddRepositoryToProjectClick(project.id);
-          }}
-          title="关联仓库"
-        >
-          <PlusIcon />
-        </span>
       </div>
 
       {expanded && (
         <div className="app-repository-sessions">
           {projectRepos.length === 0 ? (
-            <div className="app-session-item" onClick={() => onAddRepositoryToProjectClick(project.id)}>
-              <span className="app-session-item-name">点击关联仓库</span>
+            <div className="app-session-item" style={{ cursor: "default" }}>
+              <span className="app-session-item-name">
+                在根目录下拉取仓库后，用项目菜单「重新初始化项目」→「仅同步仓库」或「同步并重绘流程图」
+              </span>
             </div>
           ) : (
             <ProjectRepositoryRows

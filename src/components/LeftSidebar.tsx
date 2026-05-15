@@ -5,6 +5,7 @@ import { repositoryFolderBasename } from "../utils/repositoryType";
 import { AppSettingsModal } from "./AppSettingsModal";
 import { MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths";
 import { cancelClaudeExecution } from "../services/claude";
+import { pickFolder } from "../services/repository";
 import {
   OPEN_WORKSPACE_ERROR,
   openWorkspaceWithStoredPreference,
@@ -47,7 +48,7 @@ export function LeftSidebar({
   onDeleteProject,
   pinnedProjectIds,
   onTogglePinProject,
-  onAddRepositoryToProject,
+  onReconcileProject,
   onAddFloatingRepository,
   onPromoteFloatingRepositoryToProject,
   floatingRepositories = [],
@@ -104,6 +105,8 @@ export function LeftSidebar({
     [message],
   );
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
+  const [createProjectRootPath, setCreateProjectRootPath] = useState("");
+  const [createProjectSubmitting, setCreateProjectSubmitting] = useState(false);
   const [embedTrellisForNewProject, setEmbedTrellisForNewProject] = useState(true);
   const [projectNameInput, setProjectNameInput] = useState("");
   const [editProject, setEditProject] = useState<ProjectItem | null>(null);
@@ -126,7 +129,6 @@ export function LeftSidebar({
     onReloadFullDiskTranscript,
   });
   const repositoryAssociateModal = useRepositoryAssociateModalController({
-    onAddRepositoryToProject,
     onAddFloatingRepository,
   });
   const repositorySddModeModal = useRepositorySddModeModalController({
@@ -148,12 +150,26 @@ export function LeftSidebar({
       message.warning("项目名称不能为空");
       return;
     }
+    if (!createProjectRootPath.trim()) {
+      message.warning("请先选择项目根目录");
+      return;
+    }
+    if (createProjectSubmitting) return;
+    setCreateProjectSubmitting(true);
     try {
-      await Promise.resolve(onCreateProject(name, { embedTrellis: embedTrellisForNewProject }));
+      await Promise.resolve(
+        onCreateProject(name, {
+          embedTrellis: embedTrellisForNewProject,
+          rootPath: createProjectRootPath.trim(),
+        }),
+      );
       setProjectNameInput("");
+      setCreateProjectRootPath("");
       setCreateProjectOpen(false);
     } catch (e: unknown) {
       message.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCreateProjectSubmitting(false);
     }
   }
 
@@ -238,13 +254,14 @@ export function LeftSidebar({
           onRepositorySelect={onRepositorySelect}
           onCreateProjectClick={() => {
             setProjectNameInput("");
+            setCreateProjectRootPath("");
             setEmbedTrellisForNewProject(true);
             setCreateProjectOpen(true);
           }}
           onAddFloatingRepositoryClick={
             onAddFloatingRepository ? repositoryAssociateModal.openAddFloatingRepositoryModal : undefined
           }
-          onAddRepositoryToProjectClick={repositoryAssociateModal.openAddRepositoryModal}
+          onReconcileProject={onReconcileProject}
           onToggleProjectExpand={projectRepositoryState.toggleProjectExpand}
           onTogglePinProject={onTogglePinProject}
           onRenameProject={(project) => {
@@ -277,16 +294,7 @@ export function LeftSidebar({
                 }
               : undefined
           }
-          onJoinFloatingRepository={
-            onMoveRepositoryToProject
-              ? (repo, projectId) => {
-                  void Promise.resolve(onMoveRepositoryToProject(projectId, repo.id)).catch((err: unknown) => {
-                    message.error("加入项目失败");
-                    console.error(err);
-                  });
-                }
-              : undefined
-          }
+          onJoinFloatingRepository={undefined}
           onRemoveFloatingRepository={(repo) => {
             if (!onRemoveRepository) return;
             modal.confirm({
@@ -300,7 +308,7 @@ export function LeftSidebar({
           }}
           onDetachRepositoryFromProject={onDetachRepositoryFromProject}
           onReorderRepositoriesInProject={onReorderRepositoriesInProject}
-          onMoveRepositoryToProject={onMoveRepositoryToProject}
+          onMoveRepositoryToProject={undefined}
           onMoveRepositoryToProjectWithExpand={projectRepositoryState.moveRepositoryWithExpand}
           onProjectDropTargetChange={projectRepositoryState.setProjectDropTargetId}
           onClearRepoSidebarDrag={projectRepositoryState.clearRepoSidebarDrag}
@@ -365,14 +373,22 @@ export function LeftSidebar({
 
       <ProjectNameModals
         createOpen={createProjectOpen}
+        createProjectRootPath={createProjectRootPath}
+        createSubmitLoading={createProjectSubmitting}
+        onPickCreateProjectRoot={async () => {
+          const picked = await pickFolder();
+          if (picked) setCreateProjectRootPath(picked);
+        }}
         embedTrellisForNewProject={embedTrellisForNewProject}
         onEmbedTrellisForNewProjectChange={setEmbedTrellisForNewProject}
         editProject={editProject}
         projectNameInput={projectNameInput}
         onProjectNameInputChange={setProjectNameInput}
         onCancelCreate={() => {
+          if (createProjectSubmitting) return;
           setCreateProjectOpen(false);
           setProjectNameInput("");
+          setCreateProjectRootPath("");
         }}
         onCancelEdit={() => {
           setEditProject(null);
