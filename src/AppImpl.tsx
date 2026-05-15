@@ -211,6 +211,8 @@ export default function App() {
   /** 左栏技能：在主区+右栏之上叠层展示 skills.sh（不盖左栏，非全屏居中 Modal）。 */
   const [skillsHubMode, setSkillsHubMode] = useState(false);
   const [codeKnowledgeGraphMode, setCodeKnowledgeGraphMode] = useState(false);
+  /** 侧栏「查看检索」打开时为 true：图谱面板不在 idle 时自动 `triggerCodeGraphReindex`；顶栏入口为 false。 */
+  const [codeGraphSuppressIdleAutoReindex, setCodeGraphSuppressIdleAutoReindex] = useState(false);
   const [promptsOpenContext, setPromptsOpenContext] = useState<PromptsOpenContext | null>(null);
   const [repositorySplitTemplate, setRepositorySplitTemplate] = useState("");
   const [projectSplitTemplate, setProjectSplitTemplate] = useState("");
@@ -1422,6 +1424,7 @@ export default function App() {
         setActiveProjectId(opts.projectId);
       }
       handleSidebarRepositorySelectLeavingMcpHub(opts.repositoryId);
+      setCodeGraphSuppressIdleAutoReindex(true);
       setCodeKnowledgeGraphMode(true);
     },
     [repositories, handleSidebarRepositorySelectLeavingMcpHub, setActiveProjectId],
@@ -1865,6 +1868,7 @@ export default function App() {
           setMcpHubMode(false);
           setSkillsHubMode(false);
           setCcWfStudioMode(false);
+          setCodeGraphSuppressIdleAutoReindex(false);
           setCodeKnowledgeGraphMode(true);
         },
         workflowStudioNavActive: ccWfStudioMode,
@@ -2123,12 +2127,16 @@ export default function App() {
         })),
         searchRepositoryIds: codeGraphSearchRepositoryIds,
         onSelectRepository: setActiveRepositoryWithOwner,
-        onClose: () => setCodeKnowledgeGraphMode(false),
+        onClose: () => {
+          setCodeKnowledgeGraphMode(false);
+          setCodeGraphSuppressIdleAutoReindex(false);
+        },
         onRemoveRepository: async (repoId) => {
           const repo = repositories.find((r) => r.id === repoId);
           if (repo) await handleRemoveRepository(repo);
         },
         onOpenAddRepository: () => void handleAddFloatingRepository("frontend"),
+        suppressIdleAutoReindex: codeGraphSuppressIdleAutoReindex,
       }}
       prdTaskSplitPanelProps={{
         onClose: () => setTaskSplitMode(false),

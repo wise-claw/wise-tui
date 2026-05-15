@@ -67,6 +67,11 @@ interface Props {
   onRemoveRepository?: (repositoryId: number) => void | Promise<void>;
   /** 添加游离仓库（Popover 底栏「分析新仓库」） */
   onOpenAddRepository?: () => void | Promise<void>;
+  /**
+   * 为 true 时：当前仓 `idle` 也不会自动触发 `triggerCodeGraphReindex`。
+   * 用于侧栏「查看检索」仅打开面板，由用户点击「开始检索」。
+   */
+  suppressIdleAutoReindex?: boolean;
 }
 
 const SUBGRAPH_SEARCH_DEBOUNCE_MS = 220;
@@ -104,6 +109,7 @@ export function CodeKnowledgeGraphPanel({
   onOpenRepositoryFile,
   onRemoveRepository,
   onOpenAddRepository,
+  suppressIdleAutoReindex = false,
 }: Props) {
   const [indexStatus, setIndexStatus] = useState<CodeGraphIndexStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -257,8 +263,9 @@ export function CodeKnowledgeGraphPanel({
     };
   }, [fetchStatus]);
 
-  /** 打开图谱且当前仓从未建索引（idle）时自动开始检索，无需再点「开始检索」。用户清空索引后不会自动重建。 */
+  /** 打开图谱且当前仓从未建索引（idle）时自动开始检索（顶栏入口）；侧栏「查看检索」经 `suppressIdleAutoReindex` 关闭。清空索引后不会自动重建。 */
   useEffect(() => {
+    if (suppressIdleAutoReindex) return;
     if (loading || repositoryId == null || !indexStatus) return;
     if (indexStatus.repositoryId !== repositoryId) return;
     if (indexStatus.status !== "idle") return;
@@ -298,7 +305,7 @@ export function CodeKnowledgeGraphPanel({
     return () => {
       cancelled = true;
     };
-  }, [loading, repositoryId, indexStatus, fetchStatus]);
+  }, [suppressIdleAutoReindex, loading, repositoryId, indexStatus, fetchStatus]);
 
   useEffect(() => {
     const pending = pendingCrossRepoSearchPickRef.current;
@@ -1116,15 +1123,15 @@ export function CodeKnowledgeGraphPanel({
             image={Empty.PRESENTED_IMAGE_SIMPLE}
           />
         ) : indexError ? (
-          <div style={{ maxWidth: 480, padding: 24 }}>
+          <div className="app-code-graph-index-error-wrap">
             <Alert
               type="error"
+              className="app-code-graph-index-error-alert"
               message="检索失败"
               description={indexError}
               showIcon
-              style={{ marginBottom: 16 }}
             />
-            <Button type="primary" onClick={() => void handleReindex()}>
+            <Button type="primary" size="small" onClick={() => void handleReindex()}>
               重试
             </Button>
           </div>

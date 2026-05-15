@@ -445,6 +445,39 @@
   padding: 0;
 }
 
+/* 检索失败：比默认 Alert 更紧凑 */
+.app-code-graph-index-error-wrap {
+  max-width: min(520px, 94vw);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.app-code-graph-index-error-alert.ant-alert {
+  width: 100%;
+  padding: 6px 10px;
+  margin: 0;
+}
+
+.app-code-graph-index-error-alert .ant-alert-icon {
+  margin-inline-end: 8px;
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+.app-code-graph-index-error-alert .ant-alert-message {
+  margin-bottom: 2px;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.app-code-graph-index-error-alert .ant-alert-description {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 /** 占满内容区剩余高度，将 Spin 置于正中（初始加载 / 子图加载） */
 .app-code-graph-centered-loading {
   flex: 1;
