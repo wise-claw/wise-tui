@@ -627,7 +627,7 @@ export function CodeKnowledgeGraphPanel({
     if (!subgraphData?.nodes.length && subgraphLoading) {
       return (
         <div className="app-code-graph-centered-loading">
-          <Spin tip="加载子图中..." />
+          <Spin description="加载子图中..." />
         </div>
       );
     }
@@ -644,7 +644,7 @@ export function CodeKnowledgeGraphPanel({
       <div className="app-code-graph-split-with-overlay">
         {subgraphLoading && (
           <div className="app-code-graph-refresh-overlay" aria-busy="true" aria-live="polite">
-            <Spin tip="按新范围加载子图…" />
+            <Spin description="按新范围加载子图…" />
           </div>
         )}
         <div
@@ -719,7 +719,7 @@ export function CodeKnowledgeGraphPanel({
         </header>
         <div className="app-code-graph-content">
           <div className="app-code-graph-centered-loading">
-            <Spin tip="加载中..." />
+            <Spin description="加载中..." />
           </div>
         </div>
       </div>

@@ -7,11 +7,15 @@ use crate::{
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
 
+/// 系统菜单「功能 → 打开 WebView 控制台…」项 id（与 `on_menu_event` 匹配）。
+#[cfg(desktop)]
+const MENU_ID_OPEN_WEBVIEW_DEVTOOLS: &str = "wise/open-webview-devtools";
+
 // ── App Entry ──
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -104,7 +108,35 @@ pub fn run() {
             // 非 macOS 沿用平台默认行为（Windows / Linux 通常希望关闭即退出）。
             #[cfg(not(target_os = "macos"))]
             let _ = (window, event);
-        })
+        });
+
+    #[cfg(desktop)]
+    let builder = {
+        use tauri::menu::{Menu, MenuItem, Submenu};
+        builder
+            .menu(|app| {
+                let menu = Menu::default(app)?;
+                let open_console = MenuItem::with_id(
+                    app,
+                    MENU_ID_OPEN_WEBVIEW_DEVTOOLS,
+                    "打开 WebView 控制台…",
+                    true,
+                    None::<&str>,
+                )?;
+                let utilities = Submenu::with_items(app, "功能", true, &[&open_console])?;
+                menu.append(&utilities)?;
+                Ok(menu)
+            })
+            .on_menu_event(|app, event| {
+                if event.id() == MENU_ID_OPEN_WEBVIEW_DEVTOOLS {
+                    if let Some(win) = app.get_webview_window("main") {
+                        win.open_devtools();
+                    }
+                }
+            })
+    };
+
+    builder
         .invoke_handler(tauri::generate_handler![
             app_state_commands::greet,
             app_state_commands::list_repositories,

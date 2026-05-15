@@ -54,7 +54,7 @@ export function ProjectNameModals({
         okText="创建"
         confirmLoading={createSubmitLoading}
         closable={!createSubmitLoading}
-        maskClosable={!createSubmitLoading}
+        mask={{ closable: !createSubmitLoading }}
         keyboard={!createSubmitLoading}
         footer={(_, { OkBtn }) => <OkBtn />}
       >
