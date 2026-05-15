@@ -822,6 +822,12 @@ export interface TaskItem {
   splitListWorkflowId?: string;
   /** 若该任务由「生成可执行任务」创建，则记录其来源拆分任务 id。 */
   splitSourceTaskId?: string;
+  /** Trellis 任务分类：lightweight 仅需 prd；complex 需 design + implement。缺省视为 lightweight。 */
+  classification?: "lightweight" | "complex";
+  /** 当 classification = complex 时，splitter 产出的 design.md 内容。 */
+  designMarkdown?: string;
+  /** 当 classification = complex 时，splitter 产出的 implement.md 内容。 */
+  implementMarkdown?: string;
 }
 
 /** Claude / 快照 `split-mapping.json` 中的任务与需求 id 映射（需求 id 须来自 requirements-index）。 */

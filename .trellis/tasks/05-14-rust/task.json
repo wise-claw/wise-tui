@@ -1,0 +1,40 @@
+{
+  "assignee": "xuning",
+  "base_branch": "main",
+  "branch": null,
+  "children": [],
+  "clusterId": "cluster-manual-frontend-1778725724139-1",
+  "commit": null,
+  "completedAt": null,
+  "createdAt": "2026-05-14",
+  "creator": "xuning",
+  "description": "Source requirements: req-functional-1",
+  "dev_type": "backend",
+  "id": "rust",
+  "meta": {
+    "childDependencies": [],
+    "sourceRequirementIds": [
+      "req-functional-1"
+    ],
+    "taskAnchors": {
+      "contextAfter": "\n\n前端ui增加背景色切换\n",
+      "contextBefore": "# 选中片段\n来源：markdown\n\n## 功能需求\n\n### 1\n\n# 选中片段\n来源：markdown\n\n## 功能需求\n\n### 1\n\n",
+      "from": 72,
+      "textHash": "2d68e0008c1bb638",
+      "to": 85
+    }
+  },
+  "name": "rust",
+  "notes": "",
+  "package": null,
+  "parent": "05-14-cluster-manual-frontend-1778725724139-1",
+  "pr_url": null,
+  "priority": "P2",
+  "relatedFiles": [],
+  "repositoryId": 1778725724139,
+  "scope": null,
+  "status": "planning",
+  "subtasks": [],
+  "title": "明确并优化后端 Rust 调用逻辑",
+  "worktree_path": null
+}

@@ -37,7 +37,37 @@ export interface CcWfStudioEnterExecutionWatchDetail {
   repositoryPath: string;
 }
 export const WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL = "wise:open-task-split-panel";
+export const WORKFLOW_UI_EVENT_OPEN_PRD_SPLIT_WIZARD = "wise:open-prd-split-wizard";
+export const WORKFLOW_UI_EVENT_OPEN_MISSION_CONTROL = "wise:open-mission-control";
 export const WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED = "wise:split-todo-count-updated";
+export const WORKFLOW_UI_EVENT_OPEN_WORKFLOW_CONFIG = "wise:open-workflow-config";
+export const WORKFLOW_UI_EVENT_WORKFLOW_GRAPH_CHANGED = "wise:workflow-graph-changed";
+export const WORKFLOW_UI_EVENT_OPEN_REPOSITORY_FILE = "wise:open-repository-file";
+
+export interface OpenPrdSplitWizardDetail {
+  projectId?: string | null;
+  repositoryId?: number | null;
+}
+
+export type OpenMissionControlDetail = OpenPrdSplitWizardDetail;
+
+export interface OpenWorkflowConfigDetail {
+  workflowId?: string;
+  projectId?: string;
+}
+
+export interface WorkflowGraphChangedDetail {
+  workflowId: string;
+  status?: string;
+  projectId?: string;
+}
+
+export interface OpenRepositoryFileDetail {
+  repositoryId?: number | null;
+  repositoryPath?: string | null;
+  relativePath: string;
+  line?: number | null;
+}
 
 export const WORKFLOW_UI_EVENT_OMC_BATCH_RUNTIME_CHANGED = "wise:omc-batch-runtime-changed";
 

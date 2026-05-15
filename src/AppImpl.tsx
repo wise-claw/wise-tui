@@ -33,7 +33,16 @@ import { wiseMascotShow } from "./services/wiseMascot";
 import { getTaskTemplate, setTaskTemplate } from "./services/projectState";
 import { ensureCrepeToolbarTitleHintsInstalled } from "./utils/crepeToolbarTitles";
 import {
+  WORKFLOW_UI_EVENT_OPEN_PRD_SPLIT_WIZARD,
+  WORKFLOW_UI_EVENT_OPEN_MISSION_CONTROL,
+  WORKFLOW_UI_EVENT_OPEN_REPOSITORY_FILE,
   WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL,
+  WORKFLOW_UI_EVENT_OPEN_WORKFLOW_CONFIG,
+  WORKFLOW_UI_EVENT_WORKFLOW_GRAPH_CHANGED,
+  type OpenMissionControlDetail,
+  type OpenRepositoryFileDetail,
+  type OpenWorkflowConfigDetail,
+  type WorkflowGraphChangedDetail,
 } from "./constants/workflowUiEvents";
 import { listEmployeeTaskCounts, listEmployees, createEmployee, updateEmployee, deleteEmployee, moveEmployeeDisplayOrder } from "./services/employees";
 import { deleteWorkflowTemplate, listWorkflowTemplates, saveWorkflowTemplate } from "./services/workflowTemplates";
@@ -212,6 +221,8 @@ export default function App() {
   const [codeKnowledgeGraphMode, setCodeKnowledgeGraphMode] = useState(false);
   /** 侧栏「查看检索」打开时为 true：图谱面板不在 idle 时自动 `triggerCodeGraphReindex`；顶栏入口为 false。 */
   const [codeGraphSuppressIdleAutoReindex, setCodeGraphSuppressIdleAutoReindex] = useState(false);
+  const [missionControlMode, setMissionControlMode] = useState(false);
+  const [missionControlInitialTarget, setMissionControlInitialTarget] = useState<OpenMissionControlDetail | null>(null);
   const [promptsOpenContext, setPromptsOpenContext] = useState<PromptsOpenContext | null>(null);
   const [repositorySplitTemplate, setRepositorySplitTemplate] = useState("");
   const [projectSplitTemplate, setProjectSplitTemplate] = useState("");
@@ -233,6 +244,7 @@ export default function App() {
   const [workflowConfigOpen, setWorkflowConfigOpen] = useState(false);
   /** 非空：从需求面板打开团队配置，保存模板后自动关联到该项目。 */
   const [workflowConfigPrdProjectId, setWorkflowConfigPrdProjectId] = useState<string | null>(null);
+  const [workflowConfigInitialWorkflowId, setWorkflowConfigInitialWorkflowId] = useState<string | null>(null);
   /** workflowId -> [projectId, ...] map，用于 WorkflowConfigModal 中展示已关联项目。 */
   const [workflowProjectIdsMap, setWorkflowProjectIdsMap] = useState<Record<string, string[]>>({});
   const [employeeLoading, setEmployeeLoading] = useState(false);
@@ -942,7 +954,41 @@ export default function App() {
     }
     return undefined;
   }, [activeProject?.repositoryIds]);
+  const [repositoryFileOpenRequest, setRepositoryFileOpenRequest] = useState<OpenRepositoryFileDetail | null>(null);
+  const openRepositoryFileByEvent = useCallback((detail: OpenRepositoryFileDetail) => {
+    const relativePath = detail.relativePath.trim();
+    if (!relativePath) return;
+    const repoPath = detail.repositoryPath?.trim() ?? "";
+    const repo = detail.repositoryId != null
+      ? repositories.find((item) => item.id === detail.repositoryId) ?? null
+      : repoPath
+        ? repositories.find((item) => item.path === repoPath) ?? null
+        : null;
+    if (!repo) {
+      message.warning("未找到代码锚点对应的仓库");
+      return;
+    }
+    setActiveRepositoryWithOwner(repo.id);
+    setRepositoryFileOpenRequest({
+      repositoryId: repo.id,
+      repositoryPath: repo.path,
+      relativePath,
+      line: detail.line ?? null,
+    });
+  }, [repositories, setActiveRepositoryWithOwner]);
   const workspaceMode = useWorkspaceMode({ activeProjectId, projects });
+  const openMissionControl = useCallback((detail: OpenMissionControlDetail) => {
+    setSearchOpen(false);
+    setPromptsMode(false);
+    setMcpHubMode(false);
+    setSkillsHubMode(false);
+    setCodeKnowledgeGraphMode(false);
+    setCcWfStudioMode(false);
+    setTaskSplitMode(false);
+    setMissionControlInitialTarget(detail);
+    setMissionControlMode(true);
+  }, []);
+  const openPrdSplitWizard = openMissionControl;
   const composerProjectRoleTagOptions = useMemo(() => {
     if (!shouldHideEmployeeUi(activeProject)) {
       return [];
@@ -1230,6 +1276,7 @@ export default function App() {
 
   const openWorkflowConfigFromSidebar = useCallback(() => {
     setWorkflowConfigPrdProjectId(null);
+    setWorkflowConfigInitialWorkflowId(null);
     setWorkflowConfigOpen(true);
   }, []);
 
@@ -1245,6 +1292,7 @@ export default function App() {
       return;
     }
     setWorkflowConfigPrdProjectId(pid);
+    setWorkflowConfigInitialWorkflowId(null);
     setWorkflowConfigOpen(true);
   }, [activeProjectId, projects]);
 
@@ -1400,6 +1448,7 @@ export default function App() {
       setSkillsHubMode(false);
       setCcWfStudioMode(false);
       setTaskSplitMode(false);
+      setMissionControlMode(false);
       handleSidebarRepositorySelect(repositoryId);
     },
     [handleSidebarRepositorySelect],
@@ -1573,6 +1622,7 @@ export default function App() {
       setMcpHubMode(false);
       setSkillsHubMode(false);
       setCcWfStudioMode(false);
+      setMissionControlMode(false);
       const project = projects.find((p) => p.id === projectId) ?? null;
       const firstRepoId = project?.repositoryIds[0] ?? null;
       // 进项目即开主会话：通过 handleSidebarRepositorySelect 统一路由
@@ -1593,6 +1643,7 @@ export default function App() {
       setMcpHubMode(false);
       setSkillsHubMode(false);
       setCcWfStudioMode(false);
+      setMissionControlMode(false);
       jumpToSessionWithRepository(sessionId);
     },
     [jumpToSessionWithRepository],
@@ -1613,9 +1664,7 @@ export default function App() {
       return;
     }
     if (mode === "split") {
-      setSearchOpen(false);
-      setPromptsMode(false);
-      setTaskSplitMode(true);
+      openPrdSplitWizard({ repositoryId: repository.id });
       return;
     }
     // 默认模式（split prompt 执行）保持 per-repo 语义：repo 维度的任务拆分依赖 repo.path 上下文
@@ -1653,9 +1702,7 @@ export default function App() {
       return;
     }
     if (mode === "split") {
-      setSearchOpen(false);
-      setPromptsMode(false);
-      setTaskSplitMode(true);
+      openPrdSplitWizard({ projectId: project.id });
       return;
     }
     const sessionId = await createSession(anchor.path, anchor.displayName);
@@ -1737,19 +1784,80 @@ export default function App() {
 
   useEffect(() => {
     function handleOpenTaskSplitPanel() {
+      openMissionControl(
+        activeProjectId
+          ? { projectId: activeProjectId }
+          : activeRepositoryId != null
+            ? { repositoryId: activeRepositoryId }
+            : {},
+      );
+    }
+    window.addEventListener(WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL, handleOpenTaskSplitPanel as EventListener);
+    window.addEventListener(WORKFLOW_UI_EVENT_OPEN_PRD_SPLIT_WIZARD, handleOpenMissionControlEvent as EventListener);
+    window.addEventListener(WORKFLOW_UI_EVENT_OPEN_MISSION_CONTROL, handleOpenMissionControlEvent as EventListener);
+    return () => {
+      window.removeEventListener(WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL, handleOpenTaskSplitPanel as EventListener);
+      window.removeEventListener(WORKFLOW_UI_EVENT_OPEN_PRD_SPLIT_WIZARD, handleOpenMissionControlEvent as EventListener);
+      window.removeEventListener(WORKFLOW_UI_EVENT_OPEN_MISSION_CONTROL, handleOpenMissionControlEvent as EventListener);
+    };
+    function handleOpenMissionControlEvent(event: Event) {
+      const detail = (event as CustomEvent<OpenMissionControlDetail>).detail ?? {};
+      openMissionControl(detail);
+    }
+  }, [activeProjectId, activeRepositoryId, openMissionControl]);
+
+  useEffect(() => {
+    function handleWorkflowConfigEvent(event: Event) {
+      const detail = (event as CustomEvent<OpenWorkflowConfigDetail>).detail;
+      const workflowId = detail?.workflowId?.trim() ?? "";
+      const projectId = detail?.projectId?.trim() ?? "";
       setSearchOpen(false);
       setPromptsMode(false);
       setMcpHubMode(false);
       setSkillsHubMode(false);
-      setCodeKnowledgeGraphMode(false);
-      setCcWfStudioMode(false);
-      setTaskSplitMode(true);
+      setTaskSplitMode(false);
+      setMissionControlMode(false);
+      setWorkflowConfigPrdProjectId(projectId || null);
+      setWorkflowConfigInitialWorkflowId(workflowId || null);
+      setWorkflowConfigOpen(true);
     }
-    window.addEventListener(WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL, handleOpenTaskSplitPanel as EventListener);
+    function handleWorkflowGraphChanged(event: Event) {
+      const detail = (event as CustomEvent<WorkflowGraphChangedDetail>).detail;
+      const workflowId = detail?.workflowId?.trim();
+      if (!workflowId) return;
+      void (async () => {
+        try {
+          const [templates, graphItem] = await Promise.all([
+            listWorkflowTemplates(),
+            getWorkflowGraph({ workflowId }),
+          ]);
+          setWorkflowTemplates(templates);
+          if (graphItem?.graph) {
+            setWorkflowGraphsByWorkflowId((prev) => ({ ...prev, [workflowId]: graphItem.graph }));
+            setWorkflowGraphStatusByWorkflowId((prev) => ({
+              ...prev,
+              [workflowId]: graphItem.status,
+            }));
+          }
+        } catch (error) {
+          console.error("Failed to refresh workflow graph after external change:", error);
+        }
+      })();
+    }
+    function handleOpenRepositoryFileEvent(event: Event) {
+      const detail = (event as CustomEvent<OpenRepositoryFileDetail>).detail;
+      if (!detail) return;
+      openRepositoryFileByEvent(detail);
+    }
+    window.addEventListener(WORKFLOW_UI_EVENT_OPEN_WORKFLOW_CONFIG, handleWorkflowConfigEvent as EventListener);
+    window.addEventListener(WORKFLOW_UI_EVENT_WORKFLOW_GRAPH_CHANGED, handleWorkflowGraphChanged as EventListener);
+    window.addEventListener(WORKFLOW_UI_EVENT_OPEN_REPOSITORY_FILE, handleOpenRepositoryFileEvent as EventListener);
     return () => {
-      window.removeEventListener(WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL, handleOpenTaskSplitPanel as EventListener);
+      window.removeEventListener(WORKFLOW_UI_EVENT_OPEN_WORKFLOW_CONFIG, handleWorkflowConfigEvent as EventListener);
+      window.removeEventListener(WORKFLOW_UI_EVENT_WORKFLOW_GRAPH_CHANGED, handleWorkflowGraphChanged as EventListener);
+      window.removeEventListener(WORKFLOW_UI_EVENT_OPEN_REPOSITORY_FILE, handleOpenRepositoryFileEvent as EventListener);
     };
-  }, []);
+  }, [openRepositoryFileByEvent]);
 
   handleStopEmployeeMonitorRef.current = (employeeId: string) => {
     const normalizedEmployeeId = employeeId.trim().toLowerCase();
@@ -1830,11 +1938,14 @@ export default function App() {
       ccWfStudioMode={ccWfStudioMode}
       ccWfStudioSessionPath={ccWfStudioSessionPath}
       onCloseCcWorkflowStudio={onCloseCcWorkflowStudio}
+      missionControlMode={missionControlMode}
       compactLayoutMode={compactLayoutMode}
       effectiveRightCollapsed={effectiveRightCollapsed}
       mainLayoutContentRef={mainLayoutContentRef}
       mainLayoutLeftWidthPx={mainLayoutLeftWidthPx}
       mainLayoutRightWidthPx={mainLayoutRightWidthPx}
+      repositoryFileOpenRequest={repositoryFileOpenRequest}
+      onConsumeRepositoryFileOpenRequest={() => setRepositoryFileOpenRequest(null)}
       onToggleCompactLayoutMode={handleToggleCompactLayoutMode}
       onLeftWidthChange={setMainLayoutLeftWidthPx}
       onRightWidthChange={setMainLayoutRightWidthPx}
@@ -1850,6 +1961,7 @@ export default function App() {
           setSkillsHubMode(false);
           setCodeKnowledgeGraphMode(false);
           setCcWfStudioMode(false);
+          setMissionControlMode(false);
           setMcpHubMode(true);
         },
         skillsNavActive: skillsHubMode,
@@ -1858,6 +1970,7 @@ export default function App() {
           setMcpHubMode(false);
           setCodeKnowledgeGraphMode(false);
           setCcWfStudioMode(false);
+          setMissionControlMode(false);
           setSkillsHubMode(true);
         },
         codeKnowledgeGraphNavActive: codeKnowledgeGraphMode,
@@ -1867,6 +1980,7 @@ export default function App() {
           setSkillsHubMode(false);
           setCcWfStudioMode(false);
           setCodeGraphSuppressIdleAutoReindex(false);
+          setMissionControlMode(false);
           setCodeKnowledgeGraphMode(true);
         },
         workflowStudioNavActive: ccWfStudioMode,
@@ -2136,6 +2250,13 @@ export default function App() {
         onOpenAddRepository: () => void handleAddFloatingRepository("frontend"),
         suppressIdleAutoReindex: codeGraphSuppressIdleAutoReindex,
       }}
+      missionControlProps={{
+        projects,
+        repositories,
+        sessions,
+        initialTarget: missionControlInitialTarget,
+        onClose: () => setMissionControlMode(false),
+      }}
       prdTaskSplitPanelProps={{
         onClose: () => setTaskSplitMode(false),
         projects,
@@ -2288,6 +2409,7 @@ export default function App() {
               onClose: () => {
                 setWorkflowConfigOpen(false);
                 setWorkflowConfigPrdProjectId(null);
+                setWorkflowConfigInitialWorkflowId(null);
               },
               onSaveTemplate: async (input) => {
                 setWorkflowLoading(true);
@@ -2342,6 +2464,7 @@ export default function App() {
                   setWorkflowLoading(false);
                 }
               },
+              initialWorkflowId: workflowConfigInitialWorkflowId,
             }
           : null
       }

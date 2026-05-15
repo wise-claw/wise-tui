@@ -327,6 +327,7 @@ pub fn run() {
             claude_commands::prd_split_pipeline::prd_split_create_parent_task,
             claude_commands::prd_split_pipeline::prd_split_materialize_tasks,
             claude_commands::prd_split_pipeline::prd_split_dispatch_cluster,
+            claude_commands::prd_split_pipeline::prd_split_dispatch_cluster_background,
             claude_commands::prd_split_pipeline::prd_split_scan_project_parents,
             claude_commands::prd_split_pipeline::prd_split_mark_children_status,
             claude_commands::prd_split_pipeline::prd_split_list_legacy_runs,

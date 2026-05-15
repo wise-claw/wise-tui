@@ -9,10 +9,26 @@ export function canvasSnapshotToWorkflowGraph(snapshot: CanvasSnapshot, fallback
   return {
     nodes: normalizedSnapshot.nodes.map((node) => {
       if (node.kind === "start") {
-        return { id: node.id, type: "start", position: { x: node.x, y: node.y }, data: { label: node.title || "开始" } };
+        return {
+          id: node.id,
+          type: "start",
+          position: { x: node.x, y: node.y },
+          data: {
+            ...node.passthroughData,
+            label: node.title || "开始",
+          },
+        };
       }
       if (node.kind === "end") {
-        return { id: node.id, type: "end", position: { x: node.x, y: node.y }, data: { label: node.title || "结束" } };
+        return {
+          id: node.id,
+          type: "end",
+          position: { x: node.x, y: node.y },
+          data: {
+            ...node.passthroughData,
+            label: node.title || "结束",
+          },
+        };
       }
       const stageSuccess = normalizeWorkflowStageOutcomeCriteria(node.stageSuccessCriteria);
       const basisRefs = normalizeStageTaskBasisRefsFromNodeData({
@@ -25,6 +41,7 @@ export function canvasSnapshotToWorkflowGraph(snapshot: CanvasSnapshot, fallback
         type: "approval",
         position: { x: node.x, y: node.y },
         data: {
+          ...node.passthroughData,
           label: node.title || "审批节点",
           employeeId: node.employeeId || fallbackEmployeeId,
           employeePrompt: node.stageTask || "",

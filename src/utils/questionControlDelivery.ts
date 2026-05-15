@@ -17,7 +17,7 @@ export function isQuestionStdinUnavailableError(message: string): boolean {
  * - 会话已不在 running/connecting（complete 后 Dock 仍可见）
  */
 export function shouldDeliverQuestionViaResume(
-  lifecycle: ControlRequestLifecycle | undefined,
+  lifecycle: ControlRequestLifecycle | null | undefined,
   session: ClaudeSession | undefined,
 ): boolean {
   const status = lifecycle?.status;

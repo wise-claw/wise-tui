@@ -19,6 +19,11 @@ function makeSnapshot(): CanvasSnapshot {
         stageTaskBasisRefs: ["task-0::0"],
         acceptanceEnabled: true,
         acceptanceCriteria: "approved",
+        passthroughData: {
+          source: "prd-split-wizard",
+          sourceRequirementIds: ["req-1"],
+          taskTrace: { sourceTaskId: "task-1" },
+        },
       },
       { id: "end", kind: "end", title: "结束", x: 240, y: 0 },
     ],
@@ -36,6 +41,9 @@ describe("workflowGraphMapping", () => {
     expect(approval?.data.conditionIfPrompt).toBe("approved");
     expect(approval?.data.conditionElsePrompt).toBe("acceptance_enabled");
     expect(approval?.data.stageTaskBasisRefs).toEqual(["task-0::0"]);
+    expect(approval?.data.source).toBe("prd-split-wizard");
+    expect(approval?.data.sourceRequirementIds).toEqual(["req-1"]);
+    expect(approval?.data.taskTrace).toEqual({ sourceTaskId: "task-1" });
     expect(graph.edges[0]).toMatchObject({
       id: "edge-1",
       source: "start",

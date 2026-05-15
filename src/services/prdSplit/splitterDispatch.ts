@@ -50,6 +50,7 @@ export interface DispatchClusterRawOutput {
   rawResultPath: string;
   rawOutput: unknown;
   stdoutTruncatedPreview: string;
+  claudeSessionId?: string | null;
 }
 
 export interface DispatchClusterResult {
@@ -58,6 +59,8 @@ export interface DispatchClusterResult {
   validationIssues: ClaudeSplitStrictValidationIssue[];
   errors: string[];
 }
+
+const DEFAULT_SPLITTER_TIMEOUT_MS = 600_000;
 
 export async function dispatchClusterSplit(input: DispatchClusterInput): Promise<DispatchClusterResult> {
   const errors: string[] = [];
@@ -110,7 +113,7 @@ export async function dispatchClusterSplit(input: DispatchClusterInput): Promise
         bundle,
         prompt,
         model: input.model ?? null,
-        timeoutMs: input.timeoutMs ?? null,
+        timeoutMs: input.timeoutMs ?? DEFAULT_SPLITTER_TIMEOUT_MS,
       },
     });
   } catch (err) {
@@ -142,7 +145,7 @@ export async function dispatchClusterSplit(input: DispatchClusterInput): Promise
 
   const validation = validateClaudeSplitPayloadStrict({
     payload: raw.rawOutput,
-    source: input.prd,
+    source: clusterFilteredPrd,
   });
   if (!validation.ok) {
     return {
@@ -155,7 +158,7 @@ export async function dispatchClusterSplit(input: DispatchClusterInput): Promise
 
   const normalized = normalizeClaudeSplitOutputToSplitResult({
     payload: raw.rawOutput,
-    source: input.prd,
+    source: clusterFilteredPrd,
     context: input.context,
   });
 
@@ -177,9 +180,10 @@ export function composeSplitterPrompt(input: {
   const lines: string[] = [];
   lines.push(`Active task: ${input.parentTaskPath}`);
   lines.push("");
-  lines.push("你是 `trellis-splitter` 子代理。本次只对一个 cluster 做 PRD 拆分，产物**仅**输出一个 JSON 对象到 stdout（不要 Markdown 围栏，不要解释文字）。");
+  lines.push("You are the `trellis-splitter` sub-agent. Split exactly one cluster into tasks.");
+  lines.push("Output a single JSON object to stdout — no markdown fences, no explanatory text.");
   lines.push("");
-  lines.push("详细规则见 `.trellis/spec/guides/trellis-splitter-prompt.md`。");
+  lines.push("See `.trellis/spec/guides/trellis-splitter-prompt.md` for the full protocol.");
   lines.push("");
   lines.push("## Cluster meta");
   lines.push(`- id: \`${input.cluster.id}\``);
@@ -188,20 +192,28 @@ export function composeSplitterPrompt(input: {
   lines.push(`- repositoryIds: ${JSON.stringify(input.cluster.repositoryIds)}`);
   lines.push(`- requirementIds: ${JSON.stringify(input.cluster.requirementIds)}`);
   lines.push("");
-  lines.push("## Input bundle (在本次 run 目录内)");
+  lines.push("## Input bundle (files in the run directory)");
   for (const name of input.bundleFileNames) {
     lines.push(`- \`${name}\``);
   }
   lines.push("");
-  lines.push("## 强约束（违反一条即认为产出无效）");
-  lines.push("1. 输出 schema 严格遵守 `OUTPUT_SCHEMA.json`，并通过本地 `validateClaudeSplitPayloadStrict`。");
-  lines.push("2. 每个 task 必须含 ≥1 个 `sourceRequirementIds`，且每个 id 必须在 `requirements-index.json` 中存在；不得编造。");
-  lines.push("3. `taskAnchors` 的 `contextBefore`/`contextAfter` 至少一段可追溯到 `sourceRequirementIds` 对应的原文。");
-  lines.push("4. `executionStatus = \"executable\"` 时 `missingPrerequisites` 为空；否则非空。");
-  lines.push("5. `clusterId` 必须等于本 cluster 的 id；`repoTarget` 缺省由本地兜底。");
-  lines.push("6. 仅输出一个顶层 JSON 对象，不要前后附加任何文字。");
+  lines.push("## Hard constraints (violating any of these invalidates the output)");
+  lines.push("1. Output schema: see `OUTPUT_SCHEMA.json` in the input bundle. The output must pass `validateClaudeSplitPayloadStrict`.");
+  lines.push("2. Every task must include >=1 `sourceRequirementIds`, each existing in `requirements-index.json`. Do not fabricate IDs.");
+  lines.push("3. For `taskAnchors`, at least one of `contextBefore`/`contextAfter` must be traceable to the source requirement text.");
+  lines.push("4. When `executionStatus = \"executable\"`, `missingPrerequisites` must be empty; otherwise non-empty.");
+  lines.push("5. `clusterId` must equal this cluster's id. `repoTarget` defaults are handled locally.");
+  lines.push("6. Output exactly one top-level JSON object. No surrounding text.");
   lines.push("");
-  lines.push("现在产出 JSON。");
+  lines.push("## Classification & design output");
+  lines.push("- `classification` is one of:");
+  lines.push("  - `\"lightweight\"`: single role, single repo, subtasks <= 3 and dod <= 3. `designMarkdown` / `implementMarkdown` may be omitted.");
+  lines.push("  - `\"complex\"`: any of the above not met. **Must** provide non-empty `designMarkdown` and `implementMarkdown`.");
+  lines.push("- `designMarkdown` suggested sections: `## Architecture` / `## Data Contract` / `## Compatibility` / `## Risks`.");
+  lines.push("- `implementMarkdown` suggested sections: `## Ordered Steps` / `## Validation Commands` / `## Rollback Points`.");
+  lines.push("- Do not use triple-backtick code fences inside markdown strings. Use 4-space indent or inline backticks to avoid breaking JSON escaping.");
+  lines.push("");
+  lines.push("Now produce the JSON.");
   return lines.join("\n");
 }
 
@@ -253,6 +265,7 @@ function emptyRaw(): DispatchClusterRawOutput {
     rawResultPath: "",
     rawOutput: null,
     stdoutTruncatedPreview: "",
+    claudeSessionId: null,
   };
 }
 
@@ -301,6 +314,9 @@ const OUTPUT_SCHEMA_JSON = JSON.stringify(
             },
             clusterId: { type: "string" },
             repoTarget: { type: ["integer", "null"] },
+            classification: { enum: ["lightweight", "complex"] },
+            designMarkdown: { type: "string" },
+            implementMarkdown: { type: "string" },
           },
         },
       },

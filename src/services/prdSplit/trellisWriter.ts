@@ -47,10 +47,12 @@ export interface WriteClusterTasksInput {
 export interface WriteClusterTasksOutput {
   parentTaskName: string;
   childTaskNames: string[];
+  childTasks: MaterializedChildTaskRef[];
   warnings: string[];
 }
 
 interface RustChildTaskPayload {
+  sourceTaskId: string;
   title: string;
   slug: string;
   prdMarkdown: string;
@@ -60,6 +62,9 @@ interface RustChildTaskPayload {
   dependencies: string[];
   sourceRequirementIds: string[];
   taskAnchors: TaskAnchorDescriptor | null;
+  classification: "lightweight" | "complex";
+  designMarkdown: string | null;
+  implementMarkdown: string | null;
 }
 
 interface RustMaterializePayload {
@@ -68,6 +73,12 @@ interface RustMaterializePayload {
   cluster: ClusterRef;
   childTasks: RustChildTaskPayload[];
   claudeSplitMapping: PrdStoredClaudeSplitMapping | null;
+}
+
+export interface MaterializedChildTaskRef {
+  sourceTaskId: string;
+  taskName: string;
+  taskPath: string;
 }
 
 export async function createParentTask(input: CreateParentTaskInput): Promise<CreateParentTaskOutput> {
@@ -132,7 +143,12 @@ export function buildMaterializePayload(input: WriteClusterTasksInput): RustMate
 }
 
 function projectChildTask(task: TaskItem, cluster: ClusterRef): RustChildTaskPayload {
+  const classification: "lightweight" | "complex" =
+    task.classification === "complex" ? "complex" : "lightweight";
+  const designMarkdown = task.designMarkdown?.trim();
+  const implementMarkdown = task.implementMarkdown?.trim();
   return {
+    sourceTaskId: task.id,
     title: task.title,
     slug: deriveSlug(task.title, task.id),
     prdMarkdown: renderChildPrd(task, cluster),
@@ -142,6 +158,9 @@ function projectChildTask(task: TaskItem, cluster: ClusterRef): RustChildTaskPay
     dependencies: [...task.dependencies],
     sourceRequirementIds: [...task.sourceRequirementIds],
     taskAnchors: task.taskAnchors ?? null,
+    classification,
+    designMarkdown: designMarkdown && designMarkdown.length > 0 ? designMarkdown : null,
+    implementMarkdown: implementMarkdown && implementMarkdown.length > 0 ? implementMarkdown : null,
   };
 }
 

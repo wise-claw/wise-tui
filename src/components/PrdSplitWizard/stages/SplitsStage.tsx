@@ -9,6 +9,7 @@ import {
 import { useCallback, useMemo, useState } from "react";
 import type { UseSplitWizardStateApi } from "../useSplitWizardState";
 import type { ClusterDiffStatus, ClusterRunState } from "../types";
+import { buildClusterDispatchContext } from "../../../services/prdSplit/clusterDispatchContext";
 import { dispatchClusterSplit } from "../../../services/prdSplit/splitterDispatch";
 import { createParentTask, markChildrenPlanning, renderParentPrd } from "../../../services/prdSplit/trellisWriter";
 import type { ClusterPlanItem } from "../../../services/prdSplit/clusterPlanner";
@@ -22,6 +23,7 @@ export function SplitsStage({ api }: Props) {
   const [dispatching, setDispatching] = useState(false);
 
   const clusters = state.plan?.clusters ?? [];
+  const isRepoMode = state.context?.mode === "repository";
   const hasBaseline = (state.existingParents?.size ?? 0) > 0;
   const unchangedCount = useMemo(
     () => clusters.filter((c) => state.diffByCluster[c.id]?.kind === "unchanged").length,
@@ -66,14 +68,23 @@ export function SplitsStage({ api }: Props) {
       <Alert
         type="info"
         showIcon
-        message="第 3 步 · 派发 splitter 子代理"
+        message="第 3 步 · 生成任务"
         description={
-          <Typography.Paragraph style={{ margin: 0 }}>
-            点击「派发」按钮后，每个待派的 cluster 会并行起一个短命 <code>trellis-splitter</code> 子代理，输入 bundle 落盘到
-            <code> ~/.wise/prd-runs/</code>，原始输出 + normalizer 结果汇总在下方卡片里。
-          </Typography.Paragraph>
+          isRepoMode ? (
+            <Typography.Paragraph style={{ margin: 0 }}>
+              单仓模式会生成 1 组任务；输入包会落盘到 <code> ~/.wise/prd-runs/</code>，原始输出和校验结果会汇总在下方。
+            </Typography.Paragraph>
+          ) : (
+            <Typography.Paragraph style={{ margin: 0 }}>
+              点击「生成任务」后，每个待处理分组会并行生成任务；输入包落盘到 <code> ~/.wise/prd-runs/</code>，原始输出和校验结果会汇总在下方。
+            </Typography.Paragraph>
+          )
         }
       />
+
+      {state.globalError ? (
+        <Alert type="error" showIcon message="生成失败" description={state.globalError} />
+      ) : null}
 
       {hasBaseline ? (
         <Space orientation="vertical" size={4}>
@@ -81,14 +92,14 @@ export function SplitsStage({ api }: Props) {
             checked={state.reuseExistingParents}
             onChange={(e) => api.setReuseExistingParents(e.target.checked)}
           >
-            复用历史父任务（dirty / unchanged cluster 用已有的 <code>.trellis/tasks/&lt;父&gt;/</code>，不再重建）
+            复用历史父任务（有变化和无变化的分组都沿用已有的 <code>.trellis/tasks/&lt;父&gt;/</code>）
           </Checkbox>
           <Checkbox
             checked={state.dispatchOnlyDirty}
             onChange={(e) => api.setDispatchOnlyDirty(e.target.checked)}
             disabled={unchangedCount === 0}
           >
-            仅派发 dirty / new cluster（跳过 {unchangedCount} 个 unchanged）
+            只处理有变化的分组（跳过 {unchangedCount} 个无变化分组）
           </Checkbox>
         </Space>
       ) : null}
@@ -101,11 +112,11 @@ export function SplitsStage({ api }: Props) {
           loading={dispatching}
           onClick={runAll}
         >
-          {dispatching ? "派发中…" : allDone ? "重新派发" : "派发"}
+          {dispatching ? "生成中…" : allDone ? "重新生成" : "生成任务"}
         </Button>
         {allDone ? (
           <Button onClick={() => api.goToReview()} disabled={!anyReadyForReview}>
-            进入 Review
+            进入审阅
           </Button>
         ) : null}
       </Space>
@@ -230,6 +241,7 @@ async function runCluster(
         errors: [`创建父任务失败: ${message}`],
         endedAt: Date.now(),
       });
+      api.setGlobalError(`创建父任务失败：${message}`);
       return;
     }
   }
@@ -241,7 +253,11 @@ async function runCluster(
       cluster,
       prd: state.prd!,
       requirementsIndex: state.requirementsIndex!,
-      context: state.context,
+      context: buildClusterDispatchContext({
+        baseContext: state.context,
+        cluster,
+        repositories: state.repositories,
+      }),
     });
     const status: ClusterRunState["status"] =
       result.normalized && result.errors.length === 0 ? "succeeded" : "failed";
@@ -253,13 +269,14 @@ async function runCluster(
       errors: result.errors,
       endedAt: Date.now(),
     });
-  } catch (err) {
+    } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     api.patchClusterRun(cluster.id, {
       status: "failed",
-      errors: [`splitter 派发失败: ${message}`],
+      errors: [`任务生成失败: ${message}`],
       endedAt: Date.now(),
     });
+    api.setGlobalError(`任务生成失败：${message}`);
   }
 }
 
@@ -305,19 +322,19 @@ function ClusterRunCard({
       ) : null}
       {run?.status === "succeeded" ? (
         <Typography.Text>
-          产出 <Typography.Text strong>{taskCount}</Typography.Text> 个子任务（已通过 strict 校验，等待落盘）。
+          产出 <Typography.Text strong>{taskCount}</Typography.Text> 个子任务（已通过校验，等待落盘）。
         </Typography.Text>
       ) : null}
       {run?.status === "skipped-clean" ? (
         <Typography.Text type="secondary">
-          unchanged — 跳过本次派发，使用已有父任务 <code>{run.parentTaskName}</code> 的历史子任务进入 Review。
+          无变化 - 跳过本次处理，直接使用已有父任务 <code>{run.parentTaskName}</code> 的历史子任务进入审阅。
         </Typography.Text>
       ) : null}
       {issues.length > 0 ? (
         <Alert
           type="error"
           showIcon
-          message={`输出未通过 strict 校验（${issues.length} 条 issue）`}
+          message={`输出未通过校验（${issues.length} 条问题）`}
           description={
             <ul style={{ paddingInlineStart: 18, marginBlock: 0 }}>
               {issues.slice(0, 5).map((iss, idx) => (
@@ -325,7 +342,7 @@ function ClusterRunCard({
                   <Typography.Text code>{iss.path}</Typography.Text>: {iss.message}
                 </li>
               ))}
-              {issues.length > 5 ? <li>…共 {issues.length} 条，详见 run_dir。</li> : null}
+              {issues.length > 5 ? <li>…共 {issues.length} 条，详见运行目录。</li> : null}
             </ul>
           }
         />
@@ -354,7 +371,7 @@ function renderStatusTag(status: ClusterRunState["status"]) {
     case "creating-parent":
       return <Tag icon={<LoadingOutlined />} color="processing">建父任务</Tag>;
     case "dispatching":
-      return <Tag icon={<LoadingOutlined />} color="processing">派发中</Tag>;
+      return <Tag icon={<LoadingOutlined />} color="processing">生成中</Tag>;
     case "succeeded":
       return <Tag icon={<CheckCircleTwoTone twoToneColor="#52c41a" />} color="success">完成</Tag>;
     case "failed":
@@ -367,7 +384,7 @@ function renderStatusTag(status: ClusterRunState["status"]) {
 }
 
 function renderDiffBadge(diff: ClusterDiffStatus) {
-  if (diff.kind === "new") return <Tag color="blue">new</Tag>;
-  if (diff.kind === "unchanged") return <Tag color="success">unchanged</Tag>;
-  return <Tag color="warning">dirty · {diff.reasons.length}</Tag>;
+  if (diff.kind === "new") return <Tag color="blue">新建</Tag>;
+  if (diff.kind === "unchanged") return <Tag color="success">可沿用</Tag>;
+  return <Tag color="warning">有变化 · {diff.reasons.length}</Tag>;
 }

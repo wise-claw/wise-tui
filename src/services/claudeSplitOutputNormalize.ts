@@ -298,6 +298,29 @@ export function validateClaudeSplitPayloadStrict(input: {
         });
       }
     }
+    const classification = asString(rawTask.classification);
+    if (classification != null && classification !== "lightweight" && classification !== "complex") {
+      issues.push({
+        path: `${path}.classification`,
+        message: `${taskId} 的 classification 必须是 lightweight 或 complex（收到 ${classification}）`,
+      });
+    }
+    if (classification === "complex") {
+      const designMarkdown = (asString(rawTask.designMarkdown ?? rawTask.design_markdown) ?? "").trim();
+      const implementMarkdown = (asString(rawTask.implementMarkdown ?? rawTask.implement_markdown) ?? "").trim();
+      if (designMarkdown.length === 0) {
+        issues.push({
+          path: `${path}.designMarkdown`,
+          message: `${taskId} classification=complex 时 designMarkdown 不能为空`,
+        });
+      }
+      if (implementMarkdown.length === 0) {
+        issues.push({
+          path: `${path}.implementMarkdown`,
+          message: `${taskId} classification=complex 时 implementMarkdown 不能为空`,
+        });
+      }
+    }
   });
   return { ok: issues.length === 0, issues };
 }
@@ -344,6 +367,11 @@ function normalizeRawTask(
   const sourceRequirementIds = [...new Set([...explicitReqIds, ...inferredReqIds])].filter((id0) => validReqIds.has(id0));
   const size = estimateSize(subtasks, dod);
   const rawAnchorDescriptor = parseTaskAnchorDescriptor(rawTask.taskAnchors ?? rawTask.task_anchors);
+  const classificationRaw = asString(rawTask.classification);
+  const classification: "lightweight" | "complex" =
+    classificationRaw === "complex" ? "complex" : "lightweight";
+  const designMarkdown = asString(rawTask.designMarkdown ?? rawTask.design_markdown) ?? "";
+  const implementMarkdown = asString(rawTask.implementMarkdown ?? rawTask.implement_markdown) ?? "";
 
   return {
     id,
@@ -360,6 +388,9 @@ function normalizeRawTask(
     executionStatus: normalizeExecutionStatus(rawTask.executionStatus ?? rawTask.status),
     executionStatusManual: false,
     flowStatus: normalizeFlowStatus(rawTask.flowStatus ?? rawTask.taskStatus),
+    classification,
+    designMarkdown: designMarkdown.trim().length > 0 ? designMarkdown : undefined,
+    implementMarkdown: implementMarkdown.trim().length > 0 ? implementMarkdown : undefined,
     ordinal,
     rawDeps,
     rawAnchorDescriptor,
@@ -440,6 +471,9 @@ export function normalizeClaudeSplitOutputToSplitResult(input: {
       executionStatus: "not_executable",
       executionStatusManual: false,
       flowStatus: normalizeFlowStatus((task as { flowStatus?: unknown }).flowStatus),
+      classification: task.classification,
+      designMarkdown: task.designMarkdown,
+      implementMarkdown: task.implementMarkdown,
     };
   });
 

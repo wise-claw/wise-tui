@@ -19,6 +19,7 @@ import {
   DeleteOutlined,
   EditOutlined,
   FileSearchOutlined,
+  NodeIndexOutlined,
   PlusOutlined,
   SafetyCertificateOutlined,
   UndoOutlined,
@@ -28,6 +29,7 @@ import type { UseSplitWizardStateApi } from "../useSplitWizardState";
 import type { ClusterEditState, ClusterRunState } from "../types";
 import { writeClusterTasks } from "../../../services/prdSplit/trellisWriter";
 import { dispatchClusterVerifier } from "../../../services/prdSplit/verifierDispatch";
+import { buildClusterDispatchContext } from "../../../services/prdSplit/clusterDispatchContext";
 import {
   buildClusterPrdMarkdown,
   buildHighlightSegments,
@@ -42,6 +44,14 @@ import type { ClusterPlanItem } from "../../../services/prdSplit/clusterPlanner"
 import type { PrdDocument, TaskAnchorDescriptor, TaskItem, TaskRole } from "../../../types";
 import type { RequirementsIndexV2 } from "../../../services/prdSplit/requirementsIndexVersion";
 import { applyEditsToSplitResult, applyTaskEdits, isEditedTask, isManualTask } from "../taskEdits";
+import {
+  buildPrdSplitWorkflowArtifacts,
+  type PrdSplitWorkflowClusterInput,
+} from "../../../services/prdSplit/workflowGraphFromSplit";
+import { saveWorkflowGraph } from "../../../services/workflowGraphs";
+import { saveWorkflowTemplate } from "../../../services/workflowTemplates";
+import { addProjectPrdWorkflow } from "../../../services/projectPrdScope";
+import { WORKFLOW_UI_EVENT_WORKFLOW_GRAPH_CHANGED } from "../../../constants/workflowUiEvents";
 
 interface Props {
   api: UseSplitWizardStateApi;
@@ -62,12 +72,14 @@ export function ReviewStage({ api }: Props) {
   const succeededClusters = clusters.filter(
     (c) => state.clusterRuns[c.id]?.status === "succeeded",
   );
+  const isRepoMode = state.context?.mode === "repository";
 
   const writeAll = async () => {
     if (!state.project) return;
     setWriting(true);
     api.beginWrite();
     try {
+      const graphInputs: PrdSplitWorkflowClusterInput[] = [];
       for (const cluster of succeededClusters) {
         const run = state.clusterRuns[cluster.id];
         if (!run?.normalized || !run.parentTaskName) {
@@ -75,6 +87,7 @@ export function ReviewStage({ api }: Props) {
             clusterId: cluster.id,
             parentTaskName: run?.parentTaskName ?? "",
             childTaskNames: [],
+            childTasks: [],
             warnings: [],
             error: "缺少 normalized 拆分结果或父任务名（无法落盘）",
           });
@@ -99,7 +112,22 @@ export function ReviewStage({ api }: Props) {
             clusterId: cluster.id,
             parentTaskName: out.parentTaskName,
             childTaskNames: out.childTaskNames,
+            childTasks: out.childTasks,
             warnings: out.warnings,
+          });
+          graphInputs.push({
+            cluster,
+            parentTaskName: out.parentTaskName,
+            childTasks: out.childTasks,
+            tasks: effective.splitTasks.map((task) => ({
+              sourceTaskId: task.id,
+              title: task.title,
+              role: task.role,
+              dependencies: task.dependencies,
+              sourceRequirementIds: task.sourceRequirementIds,
+              sourceRefs: task.sourceRefs,
+              taskAnchors: task.taskAnchors,
+            })),
           });
         } catch (err) {
           const m = err instanceof Error ? err.message : String(err);
@@ -107,11 +135,13 @@ export function ReviewStage({ api }: Props) {
             clusterId: cluster.id,
             parentTaskName: run.parentTaskName,
             childTaskNames: [],
+            childTasks: [],
             warnings: [],
             error: m,
           });
         }
       }
+      await persistWorkflowGraph(graphInputs);
       api.finishWrite();
       message.success("Trellis 任务已落盘完成");
     } catch (err) {
@@ -121,11 +151,67 @@ export function ReviewStage({ api }: Props) {
     }
   };
 
+  const persistWorkflowGraph = async (clustersForGraph: PrdSplitWorkflowClusterInput[]) => {
+    if (!state.project || clustersForGraph.length === 0) return;
+    try {
+      const artifacts = buildPrdSplitWorkflowArtifacts({
+        projectId: state.project.id,
+        projectName: state.project.name,
+        projectRootPath: state.project.rootPath,
+        requirementsIndex: state.requirementsIndex,
+        clusters: clustersForGraph,
+      });
+      const savedTemplate = await saveWorkflowTemplate({
+        workflowId: artifacts.workflowId,
+        name: artifacts.name,
+        isDefault: false,
+        stages: artifacts.stages,
+        projectIds: state.context?.mode === "project" ? [state.project.id] : [],
+      });
+      const savedGraph = await saveWorkflowGraph({
+        workflowId: savedTemplate.id,
+        graph: artifacts.graph,
+        status: "draft",
+      });
+      if (state.context?.mode === "project") {
+        await addProjectPrdWorkflow(state.project.id, savedTemplate.id);
+      }
+      api.setWorkflowGraphResult({
+        workflowId: savedTemplate.id,
+        workflowName: savedTemplate.name,
+        status: "draft",
+        nodeCount: savedGraph.graph.nodes.length,
+        edgeCount: savedGraph.graph.edges.length,
+        graph: savedGraph.graph,
+      });
+      window.dispatchEvent(
+        new CustomEvent(WORKFLOW_UI_EVENT_WORKFLOW_GRAPH_CHANGED, {
+          detail: {
+            workflowId: savedTemplate.id,
+            status: savedGraph.status,
+            projectId: state.context?.mode === "project" ? state.project.id : undefined,
+          },
+        }),
+      );
+    } catch (err) {
+      const m = err instanceof Error ? err.message : String(err);
+      api.setWorkflowGraphResult({
+        workflowId: "",
+        workflowName: "PRD Split workflow",
+        status: "draft",
+        nodeCount: 0,
+        edgeCount: 0,
+        error: m,
+      });
+      message.warning(`Trellis 任务已写入，但 workflow graph 保存失败：${m}`);
+    }
+  };
+
   const runVerifier = async (cluster: ClusterPlanItem) => {
     if (!state.project || !state.prd || !state.requirementsIndex) return;
     const run = state.clusterRuns[cluster.id];
     if (!run?.parentTaskPath) {
-      message.warning("没有父任务路径，无法派 verifier");
+      message.warning("没有父任务路径，无法继续修复");
       return;
     }
     setVerifyingClusterId(cluster.id);
@@ -136,7 +222,11 @@ export function ReviewStage({ api }: Props) {
         cluster,
         prd: state.prd,
         requirementsIndex: state.requirementsIndex,
-        context: state.context,
+        context: buildClusterDispatchContext({
+          baseContext: state.context,
+          cluster,
+          repositories: state.repositories,
+        }),
         previousOutput: run.raw?.rawOutput ?? null,
         validationIssues: run.validationIssues ?? [],
       });
@@ -176,13 +266,21 @@ export function ReviewStage({ api }: Props) {
       <Alert
         type="info"
         showIcon
-        message="第 4 步 · Review 与人工编排"
+        message="第 4 步 · 审阅与手工调整"
         description={
-          <Typography.Paragraph style={{ margin: 0 }}>
-            可在此编辑任务（标题 / 描述 / 角色 / 子项 / DoD / 溯源 requirement）、新增手工任务、删除冗余任务；
-            点「PRD 锚点」查看任务在原文的位置；validation 未通过的 cluster 可派遣 verifier 二次修复；
-            最后「落盘到 Trellis」会把（编辑后的）所有成功 cluster 子任务写到 <code>.trellis/tasks/&lt;parent&gt;/&lt;child&gt;/</code>。
-          </Typography.Paragraph>
+          isRepoMode ? (
+            <Typography.Paragraph style={{ margin: 0 }}>
+              单仓模式：在此审阅并编辑本仓库的任务（标题 / 描述 / 角色 / 子项 / DoD / 溯源 requirement）；
+              点「PRD 锚点」查看任务在原文的位置；有问题时可以继续修复；
+              最后「落盘到 Trellis」会把任务写到该仓库的 <code>.trellis/tasks/</code>。
+            </Typography.Paragraph>
+          ) : (
+            <Typography.Paragraph style={{ margin: 0 }}>
+              可在此编辑任务（标题 / 描述 / 角色 / 子项 / DoD / 溯源 requirement）、新增手工任务、删除冗余任务；
+              点「PRD 锚点」查看任务在原文的位置；有问题的分组可以继续修复；
+              最后「落盘到 Trellis」会把（编辑后的）所有成功分组子任务写到 <code>.trellis/tasks/&lt;parent&gt;/&lt;child&gt;/</code>。
+            </Typography.Paragraph>
+          )
         }
       />
 
@@ -194,12 +292,33 @@ export function ReviewStage({ api }: Props) {
           disabled={succeededClusters.length === 0}
           onClick={writeAll}
         >
-          落盘到 Trellis（{succeededClusters.length} 个 cluster）
+          {isRepoMode
+            ? "落盘到 Trellis"
+            : `落盘到 Trellis（${succeededClusters.length} 个分组）`}
         </Button>
       </Space>
 
       {state.globalError ? (
         <Alert type="error" showIcon message="落盘出现错误" description={state.globalError} />
+      ) : null}
+
+      {state.workflowGraphResult ? (
+        state.workflowGraphResult.error ? (
+          <Alert
+            type="warning"
+            showIcon
+            message="执行编排未保存"
+            description={state.workflowGraphResult.error}
+          />
+        ) : (
+          <Alert
+            type="success"
+            showIcon
+            icon={<NodeIndexOutlined />}
+            message={`已生成执行编排草稿：${state.workflowGraphResult.workflowName}`}
+            description={`${state.workflowGraphResult.nodeCount} 个节点 · ${state.workflowGraphResult.edgeCount} 条边 · 补执行人后发布`}
+          />
+        )
       ) : null}
 
       <Collapse
@@ -223,7 +342,7 @@ export function ReviewStage({ api }: Props) {
                 {run?.status === "succeeded" ? (
                   <Tag color="success">{effectiveTasks.length} tasks</Tag>
                 ) : run?.status === "skipped-clean" ? (
-                  <Tag>跳过（unchanged）</Tag>
+                  <Tag>跳过（无变化）</Tag>
                 ) : (
                   <Tag color="error">未产出</Tag>
                 )}
@@ -231,7 +350,7 @@ export function ReviewStage({ api }: Props) {
                 {manualCount > 0 ? <Tag color="blue">新增 {manualCount}</Tag> : null}
                 {deletedCount > 0 ? <Tag color="red">已删 {deletedCount}</Tag> : null}
                 {(run?.validationIssues?.length ?? 0) > 0 ? (
-                  <Tag color="error">issue × {run!.validationIssues!.length}</Tag>
+                  <Tag color="error">问题 × {run!.validationIssues!.length}</Tag>
                 ) : null}
                 {writeResult ? (
                   writeResult.error ? (
@@ -303,7 +422,7 @@ function ClusterTasksPanel({
   if (!run || !run.normalized) {
     return (
       <Typography.Text type="warning">
-        未拿到 normalized 拆分结果（unchanged 跳过 / 失败请回到派发阶段）。
+        未拿到拆分结果（无变化跳过 / 失败请回到生成阶段）。
       </Typography.Text>
     );
   }
@@ -342,7 +461,7 @@ function ClusterTasksPanel({
           锚点速览（高亮所有任务）
         </Button>
         {hasIssues ? (
-          <Tooltip title="派遣 trellis-verifier 子代理，基于现有 issue 列表自动修复输出">
+          <Tooltip title="基于现有问题列表自动修复输出">
             <Button
               size="small"
               type="primary"
@@ -351,7 +470,7 @@ function ClusterTasksPanel({
               loading={verifying}
               onClick={onRunVerifier}
             >
-              派遣 verifier（{run.validationIssues!.length} 条 issue）
+              继续修复（{run.validationIssues!.length} 条问题）
             </Button>
           </Tooltip>
         ) : null}
@@ -362,13 +481,13 @@ function ClusterTasksPanel({
             icon={<UndoOutlined />}
             onClick={() => api.discardClusterEdits(cluster.id)}
           >
-            放弃本 cluster 编辑
+            放弃本分组编辑
           </Button>
         ) : null}
       </Space>
 
       {writeResult?.error ? (
-        <Alert type="error" message="本 cluster 落盘失败" description={writeResult.error} />
+        <Alert type="error" message="本分组落盘失败" description={writeResult.error} />
       ) : null}
       {writeResult?.warnings.length ? (
         <Alert type="warning" message="落盘警告" description={writeResult.warnings.join("; ")} />

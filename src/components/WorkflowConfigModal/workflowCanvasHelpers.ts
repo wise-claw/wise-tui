@@ -106,6 +106,7 @@ export function canvasNodeItemFromX6Node(node: X6Node): CanvasNodeItem {
     ...(basisRefsNormalized.length > 0 ? { stageTaskBasisRefs: basisRefsNormalized } : {}),
     acceptanceEnabled: raw.acceptanceEnabled ?? false,
     acceptanceCriteria: raw.acceptanceCriteria || "",
+    passthroughData: raw.passthroughData,
   };
 }
 
@@ -152,6 +153,7 @@ export function snapshotFromWorkflowGraph(graph: Graph): CanvasSnapshot {
       ...(mergedRefs.length > 0 ? { stageTaskBasisRefs: mergedRefs } : {}),
       acceptanceEnabled: Boolean(data.acceptanceEnabled),
       acceptanceCriteria: (data.acceptanceCriteria as string | undefined) ?? "",
+      passthroughData: data.passthroughData as Record<string, unknown> | undefined,
       x: pos.x,
       y: pos.y,
     };

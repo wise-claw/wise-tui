@@ -1,5 +1,7 @@
-import { describe, expect, test } from "bun:test";
-import { composeSplitterPrompt } from "./splitterDispatch";
+import { describe, expect, mock, test } from "bun:test";
+import type { PrdDocument, TaskSplitContext } from "../../types";
+import type { RequirementsIndexV2 } from "./requirementsIndexVersion";
+import { composeSplitterPrompt, dispatchClusterSplit, type DispatchClusterRawOutput } from "./splitterDispatch";
 
 const cluster = {
   id: "cluster-fe-1",
@@ -30,6 +32,94 @@ describe("composeSplitterPrompt", () => {
     expect(prompt).toContain("primaryRepositoryId: 7");
     expect(prompt).toContain("- `prd.md`");
     expect(prompt).toContain("- `OUTPUT_SCHEMA.json`");
-    expect(prompt).toContain("仅输出一个顶层 JSON 对象");
+    expect(prompt).toContain("exactly one top-level JSON object");
+  });
+});
+
+describe("dispatchClusterSplit", () => {
+  test("validates splitter output against the cluster PRD slice", async () => {
+    const raw: DispatchClusterRawOutput = {
+      runId: "run-1",
+      runDir: "/tmp/run-1",
+      exitCode: 0,
+      durationMs: 1,
+      stdoutPath: "/tmp/run-1/claude.stdout.log",
+      stderrPath: "/tmp/run-1/claude.stderr.log",
+      rawResultPath: "/tmp/run-1/split-result.raw.json",
+      claudeSessionId: "sid-1",
+      stdoutTruncatedPreview: "",
+      rawOutput: {
+        tasks: [
+          {
+            id: "task-1",
+            title: "Implement selected requirement",
+            description: "Implement the cluster-scoped requirement.",
+            role: "frontend",
+            executionStatus: "executable",
+            missingPrerequisites: [],
+            subtasks: ["Build the UI"],
+            dod: ["The selected requirement is implemented"],
+            dependencies: [],
+            sourceRequirementIds: ["req-functional-1"],
+            taskAnchors: {
+              from: 0,
+              to: 18,
+              textHash: "hash",
+              contextBefore: "Build selected UI",
+              contextAfter: "Build selected UI",
+            },
+            clusterId: "cluster-fe-1",
+          },
+        ],
+      },
+    };
+    const invoke = mock(async () => raw);
+    mock.module("@tauri-apps/api/core", () => ({ invoke }));
+
+    const prd: PrdDocument = {
+      title: "Feature",
+      sourceType: "manual",
+      sourceRef: null,
+      background: [],
+      goals: [],
+      scenarios: [],
+      functional: ["Build selected UI", "Build unrelated backend"],
+      nonFunctional: [],
+      acceptance: [],
+    };
+    const requirementsIndex: RequirementsIndexV2 = {
+      schemaVersion: 2,
+      version: "v1",
+      requirements: [
+        { id: "req-functional-1", content: "Build selected UI", bodyHash: "aaaaaaaaaaaaaaaa" },
+        { id: "req-functional-2", content: "Build unrelated backend", bodyHash: "bbbbbbbbbbbbbbbb" },
+      ],
+    };
+    const context: TaskSplitContext = {
+      mode: "repository",
+      repositoryId: 1,
+      repositoryName: "web",
+      repositoryPath: "/repo/web",
+      repositoryType: "frontend",
+    };
+
+    const result = await dispatchClusterSplit({
+      projectRootPath: "/repo",
+      parentTaskPath: ".trellis/tasks/parent",
+      cluster,
+      prd,
+      requirementsIndex,
+      context,
+    });
+
+    expect(result.errors).toEqual([]);
+    expect(result.validationIssues).toEqual([]);
+    expect(result.normalized?.splitTasks[0]?.sourceRequirementIds).toEqual(["req-functional-1"]);
+    expect(result.raw.claudeSessionId).toBe("sid-1");
+    expect(invoke.mock.calls[0]?.[1]).toMatchObject({
+      input: {
+        timeoutMs: 600_000,
+      },
+    });
   });
 });

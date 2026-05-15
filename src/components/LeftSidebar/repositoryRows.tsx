@@ -47,16 +47,19 @@ export function reorderRepositoryIdsForDrop(
 
 export function RepositoryConversationAction({ onOpen }: { onOpen: () => void }) {
   return (
-    <Tooltip title="对话" mouseEnterDelay={0.3}>
-      <span
-        className="app-repository-action app-repository-action--task"
+    <Tooltip title="打开仓库对话" mouseEnterDelay={0.3}>
+      <button
+        type="button"
+        className="app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--labeled app-repository-action--chat"
+        aria-label="打开对话"
         onClick={(e) => {
           e.stopPropagation();
           onOpen();
         }}
       >
         <ChatIcon />
-      </span>
+        <span className="app-repository-action-label">对话</span>
+      </button>
     </Tooltip>
   );
 }
@@ -137,7 +140,10 @@ export function RepositoryRow({
     >
       <div
         className={`app-repository-item app-repository-item--repo${isActiveRepository ? " app-repository-item--repo-active" : ""}`}
-        onClick={() => onRepositorySelect(repository.id)}
+        onClick={(e) => {
+          if ((e.target as HTMLElement | null)?.closest(".app-repository-row-actions")) return;
+          onRepositorySelect(repository.id);
+        }}
       >
         {repositoryReorder?.dragHandleEnabled ? (
           <span
@@ -168,32 +174,42 @@ export function RepositoryRow({
           ) : null}
         </span>
         <span className="app-repository-name">{repositoryFolderBasename(repository)}</span>
-        <Dropdown
-          rootClassName="app-sidebar-more-menu-dropdown"
-          menu={{
-            className: "app-sidebar-more-menu-inner",
-            items: moreItems,
-            onClick: ({ key }) => {
-              if (key === "finder") onOpenInFinder(repository);
-              if (key === "editor") onOpenRepositoryInEditor(repository);
-              if (key === "main-owner") onOpenRepositoryMainOwner?.(repository);
-              if (key === "detach") onDetachFromProject(project.id, repository.id);
-              if (key === "prompts") onOpenPromptsRepository?.(project, repository);
-              if (key === "sdd-mode") onConfigureSddMode?.(repository);
-              if (key === "code-graph-generate-repo") void Promise.resolve(onCodeGraphGenerateRepository?.(repository));
-              if (key === "code-graph-view-repo") onCodeGraphViewRepositoryInProject?.(project, repository);
-            },
-          }}
-          trigger={["click"]}
-          placement="bottomRight"
+        <div
+          className="app-repository-row-actions"
+          onClick={(e) => e.stopPropagation()}
         >
-          <span className="app-repository-action" onClick={(e) => e.stopPropagation()}>
-            <MoreIcon />
-          </span>
-        </Dropdown>
-        {hideChatAction ? null : (
-          <RepositoryConversationAction onOpen={() => onOpenTaskMode(repository, "chat")} />
-        )}
+          {hideChatAction ? null : (
+            <RepositoryConversationAction onOpen={() => onOpenTaskMode(repository, "chat")} />
+          )}
+          <Dropdown
+            rootClassName="app-sidebar-more-menu-dropdown"
+            menu={{
+              className: "app-sidebar-more-menu-inner",
+              items: moreItems,
+              onClick: ({ key }) => {
+                if (key === "finder") onOpenInFinder(repository);
+                if (key === "editor") onOpenRepositoryInEditor(repository);
+                if (key === "main-owner") onOpenRepositoryMainOwner?.(repository);
+                if (key === "detach") onDetachFromProject(project.id, repository.id);
+                if (key === "prompts") onOpenPromptsRepository?.(project, repository);
+                if (key === "sdd-mode") onConfigureSddMode?.(repository);
+                if (key === "code-graph-generate-repo") void Promise.resolve(onCodeGraphGenerateRepository?.(repository));
+                if (key === "code-graph-view-repo") onCodeGraphViewRepositoryInProject?.(project, repository);
+              },
+            }}
+            trigger={["click"]}
+            placement="bottomRight"
+          >
+            <button
+              type="button"
+              className="app-repository-action app-repository-action--more"
+              aria-label="仓库更多操作"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MoreIcon />
+            </button>
+          </Dropdown>
+        </div>
       </div>
     </div>
   );
@@ -273,7 +289,10 @@ export function FloatingRepositoryRow({
     <div className="app-repository-row">
       <div
         className={`app-repository-item app-repository-item--repo${isActiveRepository ? " app-repository-item--repo-active" : ""}`}
-        onClick={() => onRepositorySelect(repository.id)}
+        onClick={(e) => {
+          if ((e.target as HTMLElement | null)?.closest(".app-repository-row-actions")) return;
+          onRepositorySelect(repository.id);
+        }}
       >
         <span className="app-repository-icon-wrap">
           <span className="app-repository-icon app-repository-icon--folder">
@@ -290,34 +309,44 @@ export function FloatingRepositoryRow({
           ) : null}
         </span>
         <span className="app-repository-name">{repositoryFolderBasename(repository)}</span>
-        <Dropdown
-          rootClassName="app-sidebar-more-menu-dropdown"
-          menu={{
-            className: "app-sidebar-more-menu-inner",
-            items: moreItems,
-            onClick: ({ key }) => {
-              if (key === "finder") onOpenInFinder(repository);
-              if (key === "editor") onOpenRepositoryInEditor(repository);
-              if (key === "main-owner") onOpenRepositoryMainOwner?.(repository);
-              if (key === "sdd-mode") onConfigureSddMode?.(repository);
-              if (key === "code-graph-generate-repo") void Promise.resolve(onCodeGraphGenerateRepository?.(repository));
-              if (key === "code-graph-view-repo") onCodeGraphViewFloatingRepository?.(repository);
-              if (key === "promote") onPromoteToNewProject?.(repository);
-              if (typeof key === "string" && key.startsWith("join-")) {
-                const projectId = key.slice("join-".length);
-                onJoinExistingProject?.(repository, projectId);
-              }
-              if (key === "remove") onRemove(repository);
-            },
-          }}
-          trigger={["click"]}
-          placement="bottomRight"
+        <div
+          className="app-repository-row-actions"
+          onClick={(e) => e.stopPropagation()}
         >
-          <span className="app-repository-action" onClick={(e) => e.stopPropagation()}>
-            <MoreIcon />
-          </span>
-        </Dropdown>
-        <RepositoryConversationAction onOpen={() => onOpenTaskMode(repository, "chat")} />
+          <RepositoryConversationAction onOpen={() => onOpenTaskMode(repository, "chat")} />
+          <Dropdown
+            rootClassName="app-sidebar-more-menu-dropdown"
+            menu={{
+              className: "app-sidebar-more-menu-inner",
+              items: moreItems,
+              onClick: ({ key }) => {
+                if (key === "finder") onOpenInFinder(repository);
+                if (key === "editor") onOpenRepositoryInEditor(repository);
+                if (key === "main-owner") onOpenRepositoryMainOwner?.(repository);
+                if (key === "sdd-mode") onConfigureSddMode?.(repository);
+                if (key === "code-graph-generate-repo") void Promise.resolve(onCodeGraphGenerateRepository?.(repository));
+                if (key === "code-graph-view-repo") onCodeGraphViewFloatingRepository?.(repository);
+                if (key === "promote") onPromoteToNewProject?.(repository);
+                if (typeof key === "string" && key.startsWith("join-")) {
+                  const projectId = key.slice("join-".length);
+                  onJoinExistingProject?.(repository, projectId);
+                }
+                if (key === "remove") onRemove(repository);
+              },
+            }}
+            trigger={["click"]}
+            placement="bottomRight"
+          >
+            <button
+              type="button"
+              className="app-repository-action app-repository-action--more"
+              aria-label="仓库更多操作"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MoreIcon />
+            </button>
+          </Dropdown>
+        </div>
       </div>
     </div>
   );

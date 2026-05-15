@@ -5,6 +5,7 @@ import {
   memo,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   type ComponentProps,
   type MouseEvent as ReactMouseEvent,
@@ -26,14 +27,19 @@ import { RepositoryFilePreviewModal } from "./RepositoryFilePreviewModal";
 import { SkillsHub } from "./SkillsHub";
 import { CodeKnowledgeGraphPanel } from "./CodeKnowledgeGraph";
 import type * as PrdTaskSplitPanelModule from "./PrdTaskSplitPanel";
+import type * as MissionControlModule from "./MissionControl";
 import type * as PromptsPanelModule from "./PromptsPanel";
 import type * as RightPanelModule from "./RightPanel";
 import type * as WorkflowConfigModalModule from "./WorkflowConfigModal";
 import { useRepositoryFileEditor } from "../hooks/useRepositoryFileEditor";
+import type { OpenRepositoryFileDetail } from "../constants/workflowUiEvents";
 
 const RightPanel = lazy(() => import("./RightPanel").then((module) => ({ default: module.RightPanel })));
 const PrdTaskSplitPanel = lazy(() =>
   import("./PrdTaskSplitPanel").then((module) => ({ default: module.PrdTaskSplitPanel })),
+);
+const MissionControl = lazy(() =>
+  import("./MissionControl").then((module) => ({ default: module.MissionControl })),
 );
 const PromptsPanel = lazy(() => import("./PromptsPanel").then((module) => ({ default: module.PromptsPanel })));
 const WorkflowConfigModal = lazy(() =>
@@ -60,6 +66,7 @@ type LeftSidebarProps = Omit<
   | "onOpenActiveRepositoryFile"
 >;
 type PrdTaskSplitPanelProps = ComponentProps<typeof PrdTaskSplitPanelModule.PrdTaskSplitPanel>;
+type MissionControlProps = ComponentProps<typeof MissionControlModule.MissionControl>;
 type PromptsPanelProps = ComponentProps<typeof PromptsPanelModule.PromptsPanel>;
 type RightPanelProps = Omit<ComponentProps<typeof RightPanelModule.RightPanel>, "onOpenFile">;
 type WorkflowConfigModalProps = ComponentProps<typeof WorkflowConfigModalModule.WorkflowConfigModal>;
@@ -238,11 +245,13 @@ export interface AppWorkspaceLayoutProps {
   ccWfStudioMode: boolean;
   ccWfStudioSessionPath: string | null;
   onCloseCcWorkflowStudio: () => void;
+  missionControlMode: boolean;
   compactLayoutMode: boolean;
   effectiveRightCollapsed: boolean;
   mainLayoutContentRef: RefObject<HTMLElement | null>;
   mainLayoutLeftWidthPx: number;
   mainLayoutRightWidthPx: number;
+  repositoryFileOpenRequest?: OpenRepositoryFileDetail | null;
   leftSidebarProps: LeftSidebarProps;
   promptsPanelProps: PromptsPanelProps;
   claudeSessionsProps: ClaudeSessionsProps;
@@ -251,6 +260,7 @@ export interface AppWorkspaceLayoutProps {
   mcpHubProps: ComponentProps<typeof McpHub>;
   skillsHubProps: ComponentProps<typeof SkillsHub>;
   codeKnowledgeGraphProps: ComponentProps<typeof CodeKnowledgeGraphPanel>;
+  missionControlProps: MissionControlProps;
   prdTaskSplitPanelProps: PrdTaskSplitPanelProps;
   progressMonitorDrawerProps: ComponentProps<typeof ProgressMonitorDrawer>;
   employeeConfigModalProps: ComponentProps<typeof EmployeeConfigModal> | null;
@@ -258,6 +268,7 @@ export interface AppWorkspaceLayoutProps {
   onToggleCompactLayoutMode: () => void;
   onLeftWidthChange: (widthPx: number) => void;
   onRightWidthChange: (widthPx: number) => void;
+  onConsumeRepositoryFileOpenRequest: () => void;
 }
 
 function PanelLoadingFallback() {
@@ -280,11 +291,13 @@ export function AppWorkspaceLayout({
   ccWfStudioMode,
   ccWfStudioSessionPath,
   onCloseCcWorkflowStudio,
+  missionControlMode,
   compactLayoutMode,
   effectiveRightCollapsed,
   mainLayoutContentRef,
   mainLayoutLeftWidthPx,
   mainLayoutRightWidthPx,
+  repositoryFileOpenRequest,
   leftSidebarProps,
   promptsPanelProps,
   claudeSessionsProps,
@@ -293,6 +306,7 @@ export function AppWorkspaceLayout({
   mcpHubProps,
   skillsHubProps,
   codeKnowledgeGraphProps,
+  missionControlProps,
   prdTaskSplitPanelProps,
   progressMonitorDrawerProps,
   employeeConfigModalProps,
@@ -300,6 +314,7 @@ export function AppWorkspaceLayout({
   onToggleCompactLayoutMode,
   onLeftWidthChange,
   onRightWidthChange,
+  onConsumeRepositoryFileOpenRequest,
 }: AppWorkspaceLayoutProps) {
   const algorithm = dark ? theme.darkAlgorithm : theme.defaultAlgorithm;
   const {
@@ -363,6 +378,16 @@ export function AppWorkspaceLayout({
   );
   const editorPanelNode = useMemo(() => <ConnectedRepositoryFileEditorPanel dark={dark} />, [dark]);
 
+  useEffect(() => {
+    const request = repositoryFileOpenRequest;
+    const repositoryPath = activeRepositoryPath?.trim() ?? "";
+    const targetPath = request?.repositoryPath?.trim() ?? "";
+    if (!request || !targetPath || !repositoryPath) return;
+    if (repositoryPath !== targetPath) return;
+    openRepositoryFile(request.relativePath, { line: request.line ?? null });
+    onConsumeRepositoryFileOpenRequest();
+  }, [activeRepositoryPath, onConsumeRepositoryFileOpenRequest, openRepositoryFile, repositoryFileOpenRequest]);
+
   return (
     <RepositoryFileEditorOpenFileContext.Provider value={openRepositoryFile}>
       <RepositoryFileEditorVisibilityContext.Provider value={editorVisible}>
@@ -389,7 +414,7 @@ export function AppWorkspaceLayout({
                   leftSidebarProps={leftSidebarProps}
                 />
 
-                {!promptsMode && !collapsed ? (
+                {!promptsMode && !missionControlMode && !collapsed ? (
                   <MainLayoutResizeHandle
                     variant="left"
                     startWidthPx={mainLayoutLeftWidthPx}
@@ -397,7 +422,13 @@ export function AppWorkspaceLayout({
                   />
                 ) : null}
 
-                {promptsMode ? (
+                {missionControlMode ? (
+                  <div className="app-full-width-main">
+                    <Suspense fallback={<PanelLoadingFallback />}>
+                      <MissionControl {...missionControlProps} />
+                    </Suspense>
+                  </div>
+                ) : promptsMode ? (
                   <div className="app-full-width-main">
                     <Suspense fallback={<PanelLoadingFallback />}>
                       <PromptsPanel {...promptsPanelProps} />
