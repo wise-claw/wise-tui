@@ -40,8 +40,8 @@ interface Props {
   activeRepositoryId: number | null;
   value: AssociationGraphConfig;
   onChange: (next: AssociationGraphConfig) => void;
-  /** 每次「应用并构建」后触发，用于在配置未变时仍刷新子图 */
-  onApplied?: () => void;
+  /** 每次「应用并构建」后触发；参数为解析后的参与仓库 id（与画布子图范围一致） */
+  onApplied?: (scopeRepositoryIds: number[]) => void;
   /** 多仓（≥2）：提交后台「索引 + OpenAPI/合成路由 + HTTP 桥接」构建任务 */
   onAssociationBuild?: (repositoryIds: number[]) => void | Promise<void>;
   disabled?: boolean;
@@ -108,7 +108,7 @@ export function CodeGraphAssociationPopover({
     if (scopeIds.length >= 2) {
       void onAssociationBuild?.(scopeIds);
     }
-    onApplied?.();
+    onApplied?.(scopeIds);
     setOpen(false);
   }, [
     draftMode,

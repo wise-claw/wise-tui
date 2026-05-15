@@ -36,6 +36,17 @@ pub fn upsert_node(
     Ok(())
 }
 
+pub fn graph_node_exists(conn: &rusqlite::Connection, id: &str) -> Result<bool, String> {
+    let n: i64 = conn
+        .query_row(
+            "SELECT COUNT(1) FROM graph_nodes WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(n > 0)
+}
+
 pub fn upsert_edge(
     conn: &rusqlite::Connection,
     id: &str,

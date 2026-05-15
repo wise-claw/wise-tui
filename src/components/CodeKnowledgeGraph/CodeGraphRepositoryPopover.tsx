@@ -17,15 +17,20 @@ export interface CodeGraphRepositoryMenuItem {
   repositoryType?: "frontend" | "backend" | "document";
 }
 
+/** 仓库下拉内：最近选中的是「某一仓库」还是「关联合并项」 */
+export type CodeGraphRepoDropdownSelection = "repository" | "association";
+
 interface Props {
   repositories: CodeGraphRepositoryMenuItem[];
   activeRepositoryId: number | null;
   /** 当前选中仓库是否已建立图谱索引（仅影响触发器上的状态点） */
   activeRepositoryIndexed?: boolean;
   /**
-   * 当主画布为「多仓合并子图」时，用于触发器主文案（如 `(a + b)`），避免仍显示单仓名导致误以为未切换。
+   * 选中「关联合并」时用于触发器主文案（如 `(a + b)`）；选中单仓时应为 null，触发器显示当前仓名。
    */
   graphScopeTriggerLabel?: string | null;
+  /** 与 `active` 标签一致：选中仓库行 vs 选中底部关联合并行 */
+  menuSelection?: CodeGraphRepoDropdownSelection;
   onSelectRepository?: (repoId: number) => void;
   /** 为指定仓库提交图谱重建（可与当前选中仓库不同） */
   onReindexRepository?: (repoId: number) => void | Promise<void>;
@@ -47,6 +52,7 @@ export function CodeGraphRepositoryPopover({
   activeRepositoryId,
   activeRepositoryIndexed = false,
   graphScopeTriggerLabel = null,
+  menuSelection = "repository",
   onSelectRepository,
   onReindexRepository,
   onRemoveRepository,
@@ -112,7 +118,7 @@ export function CodeGraphRepositoryPopover({
       <div className="app-code-graph-repo-dropdown-header">REPOSITORIES</div>
       <ul className="app-code-graph-repo-dropdown-list">
         {repositories.map((repo) => {
-          const isActive = repo.id === activeRepositoryId;
+          const isActive = menuSelection === "repository" && repo.id === activeRepositoryId;
           return (
             <li key={repo.id} className="app-code-graph-repo-dropdown-li">
               <button
@@ -171,7 +177,7 @@ export function CodeGraphRepositoryPopover({
       {associationScopeDisplay && onViewMergedGraph ? (
         <button
           type="button"
-          className={`app-code-graph-repo-dropdown-assoc-row${associationScopeDisabled ? " app-code-graph-repo-dropdown-assoc-row--disabled" : ""}`}
+          className={`app-code-graph-repo-dropdown-assoc-row${associationScopeDisabled ? " app-code-graph-repo-dropdown-assoc-row--disabled" : ""}${menuSelection === "association" && !associationScopeDisabled ? " app-code-graph-repo-dropdown-assoc-row--active" : ""}`}
           disabled={associationScopeDisabled}
           title={
             associationScopeDisabled
@@ -179,6 +185,7 @@ export function CodeGraphRepositoryPopover({
               : "查看多仓库合并图谱（按当前关联范围刷新画布）"
           }
           aria-label={`查看多仓合并图谱 ${associationScopeDisplay}`}
+          aria-current={menuSelection === "association" && !associationScopeDisabled ? "true" : undefined}
           onMouseDown={(e) => {
             // 避免 Popover 在 mousedown 阶段抢焦点导致 click 未触发（Ant Design 下拉内按钮常见坑）
             e.preventDefault();
@@ -190,8 +197,13 @@ export function CodeGraphRepositoryPopover({
             close();
           }}
         >
-          <CodeGraphAssociationIcon className="app-code-graph-repo-dropdown-assoc-icon" aria-hidden />
-          <span className="app-code-graph-repo-dropdown-assoc-label">{associationScopeDisplay}</span>
+          <span className="app-code-graph-repo-dropdown-assoc-row-main">
+            <CodeGraphAssociationIcon className="app-code-graph-repo-dropdown-assoc-icon" aria-hidden />
+            <span className="app-code-graph-repo-dropdown-assoc-label">{associationScopeDisplay}</span>
+          </span>
+          {menuSelection === "association" && !associationScopeDisabled ? (
+            <span className="app-code-graph-repo-dropdown-active-pill">active</span>
+          ) : null}
         </button>
       ) : null}
       {onOpenAddRepository ? (

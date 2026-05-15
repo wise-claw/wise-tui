@@ -6,6 +6,8 @@ export type GraphEdgeKind =
   | "has_property"
   | "imports"
   | "calls"
+  | "writes"
+  | "extends"
   | "implements"
   | "frontend_invokes_api"
   | "backend_serves_api"

@@ -47,6 +47,7 @@ import type {
 import type { ControlRequestStatus } from "../../notifications";
 import { StreamingReplyHint } from "./Markdown";
 import { ClaudeChatMessageRow } from "./ClaudeChatMessageRow";
+import { ClaudeSessionTrajectoryDrawer } from "./ClaudeSessionTrajectoryDrawer";
 import { ComposerRegion, type DualPaneComposerRepositoryPickerProps } from "../ClaudeChatInput";
 import { gitCommit, gitPull, gitPush, gitStage, gitStatus, gitWorktreeList, gitWorktreeRemove } from "../../services/git";
 import { openInFinder } from "../../services/repository";
@@ -1248,6 +1249,7 @@ export function ClaudeChat({
   const [pushSummaryPhase, setPushSummaryPhase] = useState<string>("");
   const [pushSubmitting, setPushSubmitting] = useState(false);
   const [gitWorktreePopoverOpen, setGitWorktreePopoverOpen] = useState(false);
+  const [workTrajectoryDrawerOpen, setWorkTrajectoryDrawerOpen] = useState(false);
   const [linkedWorktrees, setLinkedWorktrees] = useState<GitWorktreeEntry[]>([]);
   const [gitWorktreeLoading, setGitWorktreeLoading] = useState(false);
   const [gitWorktreeRemovingPath, setGitWorktreeRemovingPath] = useState<string | null>(null);
@@ -3555,6 +3557,15 @@ export function ClaudeChat({
         </div>
       </Drawer>
 
+      <ClaudeSessionTrajectoryDrawer
+        open={workTrajectoryDrawerOpen}
+        onClose={() => setWorkTrajectoryDrawerOpen(false)}
+        messages={session.messages}
+        repositoryPath={session.repositoryPath}
+        claudeSessionId={session.claudeSessionId}
+        diskTranscriptPartial={session.diskTranscriptPartial}
+      />
+
       {/* Messages */}
       {!hideMessages && (
         <div ref={messagesScrollRef} className="app-claude-messages">
@@ -3877,8 +3888,20 @@ export function ClaudeChat({
               </button>
             </Popover>
           </div>
-          {session.repositoryPath ? (
-            <div className="app-session-quick-actions__group app-session-quick-actions__group--right">
+          <div className="app-session-quick-actions__group app-session-quick-actions__group--right">
+            <Tooltip
+              title="按消息顺序查看用户、Claude、思考与工具在各轮中的分布（泳道时间线）"
+              mouseEnterDelay={0.35}
+            >
+              <button
+                type="button"
+                className="app-followup-review-btn"
+                onClick={() => setWorkTrajectoryDrawerOpen(true)}
+              >
+                <span className="app-followup-review-btn__label">工作轨迹</span>
+              </button>
+            </Tooltip>
+            {session.repositoryPath ? (
               <Popover
                 trigger="click"
                 placement="topRight"
@@ -3974,8 +3997,8 @@ export function ClaudeChat({
                   ) : null}
                 </button>
               </Popover>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
         </div>
       </div>
 

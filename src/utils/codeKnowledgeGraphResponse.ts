@@ -14,6 +14,8 @@ const VALID_EDGE_KINDS = new Set([
   "has_property",
   "imports",
   "calls",
+  "writes",
+  "extends",
   "implements",
   "frontend_invokes_api",
   "backend_serves_api",

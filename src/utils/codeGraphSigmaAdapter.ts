@@ -51,6 +51,8 @@ const EDGE_STYLES: Record<GraphEdgeKind, { color: string; sizeMultiplier: number
   has_property: { color: "#553c9a", sizeMultiplier: 0.48 },
   imports: { color: "#1d4ed8", sizeMultiplier: 0.6 },
   calls: { color: "#7c3aed", sizeMultiplier: 0.8 },
+  writes: { color: "#b45309", sizeMultiplier: 0.72 },
+  extends: { color: "#c2410c", sizeMultiplier: 0.85 },
   implements: { color: "#be185d", sizeMultiplier: 0.9 },
   frontend_invokes_api: { color: "#722ed1", sizeMultiplier: 0.7 },
   backend_serves_api: { color: "#13c2c2", sizeMultiplier: 0.7 },

@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
 use regex::Regex;
@@ -20,6 +20,10 @@ static JAVA_TYPE_DECL: LazyLock<Regex> = LazyLock::new(|| {
         r"(?m)(?<!\.)(?:(?:public|private|protected|abstract|final|static|sealed|strictfp)\s+)*\b(class|interface|enum|record)\s+([A-Za-z_]\w*)\b",
     )
     .expect("java type decl regex")
+});
+
+static JAVA_PACKAGE_DECL: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^\s*package\s+([\w.]+)\s*;").expect("java package decl regex")
 });
 
 static RUST_MOD_SEMI: LazyLock<Regex> = LazyLock::new(|| {
@@ -393,6 +397,7 @@ impl Parser {
     ) -> Result<(usize, usize), String> {
         let import_count =
             self.extract_imports(conn, content, file_node_id, repo_id, relative_path)?;
+        let import_bindings = self.collect_ts_js_import_bindings(content, relative_path);
         let ext = relative_path
             .rsplit_once('.')
             .map(|(_, e)| e.to_ascii_lowercase())
@@ -410,7 +415,16 @@ impl Parser {
             Ok(None) => self.extract_symbols_regex(conn, content, file_node_id, repo_id, relative_path, 0)?,
             Err(e) => return Err(e),
         };
-        Ok((symbol_count, symbol_count + import_count))
+        let call_edges = crate::code_knowledge_graph::ts_js_tree_extract::extract_ts_js_calls_tree_sitter(
+            conn,
+            content,
+            file_node_id,
+            repo_id,
+            relative_path,
+            ext.as_str(),
+            &import_bindings,
+        )?;
+        Ok((symbol_count, symbol_count + import_count + call_edges))
     }
 
     fn parse_vue_file(
@@ -423,6 +437,7 @@ impl Parser {
     ) -> Result<(usize, usize), String> {
         let mut symbol_count = 0usize;
         let mut import_count = 0usize;
+        let mut call_count = 0usize;
 
         for cap in VUE_SCRIPT_INNER.captures_iter(content) {
             let Some(inner_m) = cap.get(1) else {
@@ -435,6 +450,7 @@ impl Parser {
             let line_offset = byte_offset_to_line_number(content, inner_m.start());
             import_count +=
                 self.extract_imports(conn, inner, file_node_id, repo_id, relative_path)?;
+            let import_bindings = self.collect_ts_js_import_bindings(inner, relative_path);
             let inner_syms = match crate::code_knowledge_graph::ts_js_tree_extract::extract_ts_js_symbols_tree_sitter(
                 self,
                 conn,
@@ -456,9 +472,18 @@ impl Parser {
                 Err(e) => return Err(e),
             };
             symbol_count += inner_syms;
+            call_count += crate::code_knowledge_graph::ts_js_tree_extract::extract_ts_js_calls_tree_sitter(
+                conn,
+                inner,
+                file_node_id,
+                repo_id,
+                relative_path,
+                "ts",
+                &import_bindings,
+            )?;
         }
 
-        Ok((symbol_count, symbol_count + import_count))
+        Ok((symbol_count, symbol_count + import_count + call_count))
     }
 
     fn parse_java_file(
@@ -469,8 +494,30 @@ impl Parser {
         relative_path: &str,
         conn: &rusqlite::Connection,
     ) -> Result<(usize, usize), String> {
-        let import_count =
-            self.extract_java_imports(conn, content, file_node_id, repo_id, relative_path)?;
+        let package = java_package_declaration(content);
+        let mut import_dedup = HashSet::new();
+        let mut import_simple_map = HashMap::new();
+        let mut import_count =
+            crate::code_knowledge_graph::java_tree_extract::extract_java_imports_tree_sitter(
+                self,
+                conn,
+                content,
+                file_node_id,
+                repo_id,
+                &mut import_dedup,
+                &mut import_simple_map,
+            )?;
+        import_count += self.extract_java_imports(
+            conn,
+            content,
+            file_node_id,
+            repo_id,
+            relative_path,
+            &mut import_dedup,
+            true,
+            true,
+            &mut import_simple_map,
+        )?;
         let symbol_count = match crate::code_knowledge_graph::java_tree_extract::extract_java_symbols_tree_sitter(
             self,
             conn,
@@ -483,7 +530,17 @@ impl Parser {
             Ok(None) => self.extract_java_symbols(conn, content, file_node_id, repo_id, relative_path)?,
             Err(e) => return Err(e),
         };
-        Ok((symbol_count, symbol_count + import_count))
+        crate::code_knowledge_graph::java_tree_extract::prime_java_lang_imports(&mut import_simple_map);
+        let hx = crate::code_knowledge_graph::java_tree_extract::extract_java_calls_and_heritage(
+            conn,
+            content,
+            file_node_id,
+            repo_id,
+            relative_path,
+            package.as_deref(),
+            &import_simple_map,
+        )?;
+        Ok((symbol_count, symbol_count + import_count + hx))
     }
 
     fn parse_rust_file(
@@ -547,8 +604,19 @@ impl Parser {
         relative_path: &str,
         conn: &rusqlite::Connection,
     ) -> Result<(usize, usize), String> {
-        let import_count =
-            self.extract_java_imports(conn, content, file_node_id, repo_id, relative_path)?;
+        let mut import_dedup = HashSet::new();
+        let mut import_simple_map = HashMap::new();
+        let import_count = self.extract_java_imports(
+            conn,
+            content,
+            file_node_id,
+            repo_id,
+            relative_path,
+            &mut import_dedup,
+            false,
+            false,
+            &mut import_simple_map,
+        )?;
         let symbol_count =
             self.extract_kotlin_symbols(conn, content, file_node_id, repo_id, relative_path)?;
         Ok((symbol_count, symbol_count + import_count))
@@ -1231,7 +1299,7 @@ impl Parser {
         Ok(count)
     }
 
-    fn add_import_edge(
+    pub(crate) fn add_import_edge(
         &self,
         conn: &rusqlite::Connection,
         file_node_id: &str,
@@ -1251,6 +1319,10 @@ impl Parser {
         file_node_id: &str,
         repo_id: i64,
         _relative_path: &str,
+        dedup: &mut HashSet<String>,
+        use_dedup: bool,
+        populate_import_simple_map: bool,
+        import_simple_map: &mut HashMap<String, String>,
     ) -> Result<usize, String> {
         let mut count = 0;
 
@@ -1267,18 +1339,17 @@ impl Parser {
             if is_bare_java_module(q) {
                 continue;
             }
-
-            let import_id = format!("{file_node_id}:imports:{resolved}");
-            let target_id = super::indexer::make_file_node_id(repo_id, &resolved);
-
-            graph_storage::upsert_edge(
-                conn,
-                &import_id,
-                file_node_id,
-                &target_id,
-                "imports",
-            )?;
-            count += 1;
+            if populate_import_simple_map {
+                crate::code_knowledge_graph::java_tree_extract::record_java_import_simple_name(
+                    q,
+                    &resolved,
+                    import_simple_map,
+                );
+            }
+            if use_dedup && !dedup.insert(resolved.clone()) {
+                continue;
+            }
+            count += self.add_import_edge(conn, file_node_id, repo_id, &resolved)?;
         }
 
         Ok(count)
@@ -1580,7 +1651,132 @@ impl Parser {
 
         Ok(count)
     }
+
+    /// 单行 / 简单 `import` / `export … from` 绑定名 → 已解析的仓库相对路径（供 TS/JS `calls` 对齐 GitNexus）。
+    pub(crate) fn collect_ts_js_import_bindings(
+        &self,
+        content: &str,
+        relative_path: &str,
+    ) -> HashMap<String, String> {
+        let mut map = HashMap::new();
+        let file_dir = file_parent_dir(relative_path);
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with("//") {
+                continue;
+            }
+            if trimmed.starts_with("import type ") || trimmed.starts_with("export type ") {
+                continue;
+            }
+
+            let mut import_path = None;
+            if let Some(from_pos) = trimmed.find("from ") {
+                let after_from = &trimmed[from_pos + 5..];
+                if let Some(p) = extract_first_quoted_string(after_from) {
+                    import_path = Some(p);
+                }
+            }
+            if import_path.is_none() {
+                if let Some(p) = extract_first_quoted_string(trimmed) {
+                    if !p.contains(' ') && !p.starts_with("type") && !p.starts_with("interface") {
+                        import_path = Some(p);
+                    }
+                }
+            }
+            let Some(import_path) = import_path else {
+                continue;
+            };
+            let Some(resolved) = resolve_ts_js_import_to_repo_relative(
+                &file_dir,
+                &import_path,
+                relative_path,
+                self.tsconfig_paths.as_ref(),
+                &self.repo_files,
+            ) else {
+                continue;
+            };
+
+            if let Some(c) = TS_IMPORT_STAR_AS.captures(trimmed) {
+                if let Some(m) = c.get(1) {
+                    map.insert(m.as_str().to_string(), resolved.clone());
+                }
+                continue;
+            }
+            if let Some(c) = TS_IMPORT_DEFAULT_AND_NAMED.captures(trimmed) {
+                if let Some(m) = c.get(1) {
+                    map.insert(m.as_str().to_string(), resolved.clone());
+                }
+                if let Some(inner) = c.get(2).map(|x| x.as_str()) {
+                    for name in parse_ts_js_named_import_spec_list(inner) {
+                        map.insert(name, resolved.clone());
+                    }
+                }
+                continue;
+            }
+            if let Some(c) = TS_IMPORT_BRACE_ONLY.captures(trimmed) {
+                if let Some(inner) = c.get(1).map(|x| x.as_str()) {
+                    for name in parse_ts_js_named_import_spec_list(inner) {
+                        map.insert(name, resolved.clone());
+                    }
+                }
+                continue;
+            }
+            if let Some(c) = TS_IMPORT_DEFAULT_FROM.captures(trimmed) {
+                if let Some(m) = c.get(1) {
+                    map.insert(m.as_str().to_string(), resolved.clone());
+                }
+                continue;
+            }
+            if let Some(c) = TS_EXPORT_BRACE_FROM.captures(trimmed) {
+                if let Some(inner) = c.get(1).map(|x| x.as_str()) {
+                    for name in parse_ts_js_named_import_spec_list(inner) {
+                        map.insert(name, resolved.clone());
+                    }
+                }
+            }
+        }
+        map
+    }
 }
+
+fn parse_ts_js_named_import_spec_list(inner: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for part in inner.split(',') {
+        let part = part.trim();
+        if part.is_empty() {
+            continue;
+        }
+        if part.starts_with("type ") {
+            continue;
+        }
+        let local = if let Some(i) = part.rfind(" as ") {
+            part[i + 4..].trim()
+        } else {
+            part
+        };
+        let local = local.trim();
+        if local.is_empty() || local == "type" {
+            continue;
+        }
+        out.push(local.to_string());
+    }
+    out
+}
+
+static TS_IMPORT_STAR_AS: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^\s*import\s+\*\s+as\s+([\w$]+)\s+from\s+").expect("ts import * as")
+});
+static TS_IMPORT_DEFAULT_AND_NAMED: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^\s*import\s+([\w$]+)\s*,\s*\{([^}]*)\}\s+from\s+").expect("ts import default+named")
+});
+static TS_IMPORT_BRACE_ONLY: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^\s*import\s*\{([^}]*)\}\s+from\s+").expect("ts import brace"));
+static TS_IMPORT_DEFAULT_FROM: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^\s*import\s+(?!type)([\w$]+)\s+from\s+").expect("ts import default from")
+});
+static TS_EXPORT_BRACE_FROM: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^\s*export\s*\{([^}]*)\}\s+from\s+").expect("ts export brace from")
+});
 
 fn gitnexus_style_symbol_kind(raw: &str) -> String {
     match raw {
@@ -1914,8 +2110,15 @@ fn byte_offset_to_line_number(content: &str, byte_idx: usize) -> usize {
     content[..end].chars().filter(|&c| c == '\n').count()
 }
 
+/// `package com.example.foo;` → `Some("com.example.foo")`
+pub(crate) fn java_package_declaration(content: &str) -> Option<String> {
+    JAVA_PACKAGE_DECL
+        .captures(content)
+        .and_then(|c| c.get(1).map(|m| m.as_str().to_string()))
+}
+
 /// Maps `com.foo.Bar` or `com.foo.Bar.Inner` to a repo-relative `com/foo/Bar.java` path.
-fn java_qualified_to_relative_path(qualified: &str) -> Option<String> {
+pub(crate) fn java_qualified_to_relative_path(qualified: &str) -> Option<String> {
     if qualified.is_empty() || qualified.contains('*') {
         return None;
     }
@@ -1962,7 +2165,7 @@ fn java_qualified_to_relative_path(qualified: &str) -> Option<String> {
 }
 
 /// Skip JDK and other unqualified single-segment imports (none exist as file paths).
-fn is_bare_java_module(qualified: &str) -> bool {
+pub(crate) fn is_bare_java_module(qualified: &str) -> bool {
     !qualified.contains('.')
 }
 
