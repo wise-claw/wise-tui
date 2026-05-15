@@ -371,6 +371,11 @@ export function AppWorkspaceLayout({
             locale={zhCN}
             theme={{
               algorithm,
+              /** 代码图谱等叠层局部 z-index 较高，避免 Message 被盖住看不见 */
+              components: {
+                Message: { zIndexPopup: 20000 },
+                Notification: { zIndexPopup: 20000 },
+              },
             }}
           >
             <AntdApp>

@@ -120,10 +120,7 @@ import {
   listProjectPrdEmployeeIds,
   listWorkflowProjectIds,
 } from "./services/projectPrdScope";
-import {
-  CODE_GRAPH_INDEX_CANCELLED_MSG,
-  CODE_GRAPH_INDEX_STALE_ORPHAN_MSG,
-} from "./types/codeKnowledgeGraph";
+import { isCodeGraphIndexBenignUserAbortError } from "./types/codeKnowledgeGraph";
 
 // ── 侧栏「图谱操作 → 生成检索」：等后台索引事件后再弹窗汇总 ──
 
@@ -142,7 +139,9 @@ function presentSidebarCodeGraphReindexModal(repositories: Repository[], outcome
   if (outcomes.length === 0) return;
   const repoLabel = (id: number) => repositories.find((r) => r.id === id)?.name ?? `仓库 #${id}`;
   const ok = outcomes.filter((o): o is Extract<SidebarReindexOutcome, { kind: "ok" }> => o.kind === "ok");
-  const bad = outcomes.filter((o) => o.kind === "err" && !o.benign);
+  const bad = outcomes.filter(
+    (o): o is Extract<SidebarReindexOutcome, { kind: "err" }> => o.kind === "err" && !o.benign,
+  );
   const benignErrs = outcomes.filter((o) => o.kind === "err" && o.benign);
 
   if (ok.length === 0 && bad.length === 0) {
@@ -1475,8 +1474,7 @@ export default function App() {
         if (!Number.isFinite(id) || !batch.pending.has(id)) return;
         batch.pending.delete(id);
         const errMsg = String((event.payload as { error?: unknown } | undefined)?.error ?? "索引失败");
-        const benign =
-          errMsg === CODE_GRAPH_INDEX_CANCELLED_MSG || errMsg === CODE_GRAPH_INDEX_STALE_ORPHAN_MSG;
+        const benign = isCodeGraphIndexBenignUserAbortError(errMsg);
         batch.outcomes.push({ kind: "err", repositoryId: id, error: errMsg, benign });
         maybeFinish();
       });
@@ -1492,8 +1490,8 @@ export default function App() {
         await Promise.all(valid.map((repositoryId) => triggerCodeGraphReindex({ repositoryId })));
         message.info(
           valid.length > 1
-            ? `已在后台开始 ${valid.length} 个仓库的代码图谱检索，完成后将弹出结果。`
-            : "已在后台开始代码图谱检索，完成后将弹出结果。",
+            ? `已开始后台检索 ${valid.length} 个代码仓库（GitNexus analyze + 图谱导入），完成后将自动刷新。`
+            : "已开始后台检索代码仓库（GitNexus analyze + 图谱导入），完成后将自动刷新。",
         );
       } catch (e) {
         disposeSidebarCodeGraphReindexBatch();
@@ -1560,7 +1558,7 @@ export default function App() {
 
       try {
         await triggerCodeGraphAssociationBuild(valid);
-        message.info("已在后台为项目下仓库同步 GitNexus 仓库组，完成后将弹出结果。");
+        message.info("已开始后台同步 GitNexus 仓库组（多仓），完成后将自动刷新。");
       } catch (e) {
         disposeSidebarCodeGraphAssocBatch();
         console.warn("[sidebar] triggerCodeGraphAssociationBuild (project) failed", e);

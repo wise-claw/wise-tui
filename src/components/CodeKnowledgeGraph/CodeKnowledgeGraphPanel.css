@@ -58,9 +58,9 @@
 
 /* hop 选择：原 min 108px，整体收窄 30px */
 .app-code-graph-hop-select.ant-select {
-  width: 78px;
-  min-width: 78px !important;
-  max-width: 78px;
+  width: 98px;
+  min-width: 98px !important;
+  max-width: 98px;
 }
 
 .app-code-graph-node-search {
@@ -94,10 +94,10 @@
   word-break: break-all;
 }
 
-/* 节点搜索下拉：宽于输入框，选项可多行以完整展示路径 */
+/* 节点搜索下拉：宽度与画布区域适配 */
 .app-code-graph-node-search-dropdown {
-  min-width: min(960px, calc(100vw - 32px)) !important;
-  max-width: min(960px, calc(100vw - 32px));
+  min-width: min(560px, calc(100vw - 32px)) !important;
+  max-width: min(560px, calc(100vw - 32px));
 }
 
 .app-code-graph-node-search-dropdown .ant-select-item {

@@ -97,6 +97,17 @@ export const CODE_GRAPH_INDEX_CANCELLED_MSG = "检索已取消" as const;
 export const CODE_GRAPH_INDEX_STALE_ORPHAN_MSG =
   "索引未在进程中运行（可能已异常退出或应用重启）。请重新点击「开始检索」。" as const;
 
+/** 用户暂停/取消或清除僵尸 indexing；后端可能把「检索已取消」接在其它错误文案之后 */
+export function isCodeGraphIndexBenignUserAbortError(error: string | null | undefined): boolean {
+  if (error == null || error === "") return false;
+  const s = String(error);
+  const t = s.trim();
+  if (t === CODE_GRAPH_INDEX_CANCELLED_MSG || t === CODE_GRAPH_INDEX_STALE_ORPHAN_MSG) return true;
+  if (s.includes(CODE_GRAPH_INDEX_CANCELLED_MSG)) return true;
+  if (s.includes(CODE_GRAPH_INDEX_STALE_ORPHAN_MSG)) return true;
+  return false;
+}
+
 export interface CancelCodeGraphReindexOutcome {
   signalledRunningTask: boolean;
   clearedStaleIndexingStatus: boolean;

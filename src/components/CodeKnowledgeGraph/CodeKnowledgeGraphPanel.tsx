@@ -6,7 +6,7 @@ import {
   PlayCircleOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
-import { Alert, Button, Empty, message, Modal, Progress, Select, Space, Spin, Tag, Typography } from "antd";
+import { Alert, App, Button, Empty, Modal, Progress, Select, Space, Spin, Tag, Tooltip, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   clearCodeGraphIndex,
@@ -31,7 +31,7 @@ import type {
   CodeGraphSubgraphResponse,
   GraphNode,
 } from "../../types/codeKnowledgeGraph";
-import { CODE_GRAPH_INDEX_CANCELLED_MSG, CODE_GRAPH_INDEX_STALE_ORPHAN_MSG } from "../../types/codeKnowledgeGraph";
+import { isCodeGraphIndexBenignUserAbortError } from "../../types/codeKnowledgeGraph";
 import { CodeGraphSourcePreview } from "./CodeGraphSourcePreview";
 import {
   CodeKnowledgeGraphChartColumn,
@@ -111,6 +111,7 @@ export function CodeKnowledgeGraphPanel({
   onOpenAddRepository,
   suppressIdleAutoReindex = false,
 }: Props) {
+  const { message } = App.useApp();
   const [indexStatus, setIndexStatus] = useState<CodeGraphIndexStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [subgraphData, setSubgraphData] = useState<CodeGraphSubgraphResponse | null>(null);
@@ -161,10 +162,7 @@ export function CodeKnowledgeGraphPanel({
           pollRef.current = null;
         }
       } else if (status.status === "error") {
-        if (
-          status.error === CODE_GRAPH_INDEX_CANCELLED_MSG ||
-          status.error === CODE_GRAPH_INDEX_STALE_ORPHAN_MSG
-        ) {
+        if (isCodeGraphIndexBenignUserAbortError(status.error)) {
           setIndexError(null);
         } else {
           setIndexError(status.error ?? "索引失败");
@@ -203,7 +201,7 @@ export function CodeKnowledgeGraphPanel({
     const errorUnsub = listen("code-graph-index-error", (event: any) => {
       if (event.payload?.repositoryId === repositoryId) {
         const errMsg = String(event.payload.error ?? "索引失败");
-        if (errMsg === CODE_GRAPH_INDEX_CANCELLED_MSG || errMsg === CODE_GRAPH_INDEX_STALE_ORPHAN_MSG) {
+        if (isCodeGraphIndexBenignUserAbortError(errMsg)) {
           setIndexError(null);
           void fetchStatus();
         } else {
@@ -290,7 +288,9 @@ export function CodeKnowledgeGraphPanel({
       try {
         await triggerCodeGraphReindex({ repositoryId });
         if (!cancelled) {
-          message.info("已为当前仓库自动开始检索（GitNexus CLI 分析），完成后将自动刷新。");
+          message.info(
+            "已为当前仓库自动开始后台检索（GitNexus analyze + 图谱导入），完成后将自动刷新。",
+          );
           void fetchStatus();
         }
       } catch (e) {
@@ -547,7 +547,6 @@ export function CodeKnowledgeGraphPanel({
     try {
       suppressIdleAutoReindexForRepoIdRef.current = null;
       await triggerCodeGraphReindex({ repositoryId });
-      message.info("已开始后台检索代码仓库（GitNexus analyze + 图谱导入），完成后将自动刷新。");
       void fetchStatus();
     } catch (e) {
       console.warn("[code-graph] triggerCodeGraphReindex failed", e);
@@ -557,8 +556,11 @@ export function CodeKnowledgeGraphPanel({
 
   const handlePauseReindex = useCallback(async () => {
     if (!repositoryId) return;
+    const msgKey = "code-graph-pause-reindex";
+    message.loading({ content: "正在停止检索…", key: msgKey, duration: 0 });
     try {
       const o = await cancelCodeGraphReindex(repositoryId);
+      message.destroy(msgKey);
       if (o.signalledRunningTask) {
         message.success("已请求停止检索，请稍候…");
       } else if (o.clearedStaleIndexingStatus) {
@@ -568,10 +570,11 @@ export function CodeKnowledgeGraphPanel({
         message.warning("当前没有可停止的检索任务（可能已结束或未开始）。");
       }
     } catch (e) {
+      message.destroy(msgKey);
       console.warn("[code-graph] cancelCodeGraphReindex failed", e);
       message.error("停止检索失败");
     }
-  }, [repositoryId, fetchStatus]);
+  }, [repositoryId, fetchStatus, message]);
 
   const handleClearGraphIndex = useCallback(() => {
     if (!repositoryId) return;
@@ -595,7 +598,6 @@ export function CodeKnowledgeGraphPanel({
           setSubgraphData(null);
           setSelectedNode(null);
           setSubgraphRefreshKey((k) => k + 1);
-          message.success("已清空索引");
           void fetchStatus();
         } catch (e) {
           console.warn("[code-graph] clearCodeGraphIndex failed", e);
@@ -622,8 +624,8 @@ export function CodeKnowledgeGraphPanel({
         await triggerCodeGraphReindex({ repositoryId: targetId });
         message.info(
           targetId === repositoryId
-            ? "已开始后台检索当前仓库，完成后将自动刷新。"
-            : "已开始后台检索所选仓库，完成后可在仓库菜单中切换查看。",
+            ? "已开始后台检索代码仓库（GitNexus analyze + 图谱导入），完成后将自动刷新。"
+            : "已开始后台检索所选代码仓库（GitNexus analyze + 图谱导入），完成后可切换查看。",
         );
         void fetchStatus();
       } catch (e) {
@@ -638,7 +640,7 @@ export function CodeKnowledgeGraphPanel({
     if (ids.length < 2) return;
     try {
       await triggerCodeGraphAssociationBuild(ids);
-      message.info("已在后台同步 GitNexus 仓库组（create / add / sync），请稍候。");
+      message.info("已在后台同步 GitNexus 仓库组（create / add / sync），完成后将自动刷新。");
     } catch {
       message.error("提交仓库组同步失败");
     }
@@ -1093,14 +1095,27 @@ export function CodeKnowledgeGraphPanel({
             >
               清空索引
             </Button>
-            <Button
-              size="small"
-              icon={<PauseCircleOutlined />}
-              onClick={() => void handlePauseReindex()}
-              disabled={!repositoryId || !isIndexing || indexStatus?.repositoryId !== repositoryId}
+            <Tooltip
+              title={
+                !repositoryId
+                  ? "请先选择仓库"
+                  : !isIndexing
+                    ? "当前没有正在进行的检索任务"
+                    : indexStatus?.repositoryId !== repositoryId
+                      ? `正在索引其他仓库（#${indexStatus?.repositoryId}），请稍候`
+                      : ""
+              }
+              placement="top"
             >
-              暂停检索
-            </Button>
+              <Button
+                size="small"
+                icon={<PauseCircleOutlined />}
+                onClick={() => void handlePauseReindex()}
+                disabled={!repositoryId || !isIndexing || indexStatus?.repositoryId !== repositoryId}
+              >
+                暂停检索
+              </Button>
+            </Tooltip>
             <Button
               type="primary"
               size="small"
@@ -1139,11 +1154,11 @@ export function CodeKnowledgeGraphPanel({
           isIndexing ? (
             <div className="app-code-graph-centered-loading">
               <div className="app-code-graph-indexing-inner">
-                <Spin size="large" />
                 <Progress
                   type="circle"
                   percent={indexStatus?.progress ?? 0}
                   size={120}
+                  status="active"
                   format={(percent) => (
                     <span style={{ fontSize: 20 }}>
                       {percent ?? 0}%
