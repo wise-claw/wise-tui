@@ -149,10 +149,13 @@ export function CodeGraphRepositoryPopover({
         okText: "退出",
         okType: "danger",
         cancelText: "取消",
-        onOk: () => onDismissAssociationScope(),
+        onOk: () => {
+          void onDismissAssociationScope?.();
+          close();
+        },
       });
     },
-    [onDismissAssociationScope],
+    [onDismissAssociationScope, close],
   );
 
   const dropdown: ReactNode = (
@@ -260,7 +263,7 @@ export function CodeGraphRepositoryPopover({
               <span className="app-code-graph-repo-dropdown-active-pill">active</span>
             ) : null}
             {onReindexAssociationScope && associationIds.length >= 2 ? (
-              <Tooltip title="重建关联索引（多仓）">
+              <Tooltip title="重新检索关联图谱">
                 <span
                   role="button"
                   tabIndex={0}
@@ -282,7 +285,7 @@ export function CodeGraphRepositoryPopover({
               </Tooltip>
             ) : null}
             {onDismissAssociationScope ? (
-              <Tooltip title="退出多仓合并视图">
+              <Tooltip title="删除关联范围">
                 <span
                   role="button"
                   tabIndex={0}

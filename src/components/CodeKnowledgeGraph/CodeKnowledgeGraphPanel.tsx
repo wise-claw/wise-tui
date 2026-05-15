@@ -674,6 +674,15 @@ export function CodeKnowledgeGraphPanel({
     setSubgraphRefreshKey((k) => k + 1);
   }, [associationScopeRepoIds]);
 
+  /** 退出仓库菜单中的多仓合并视图：范围缩为仅当前仓库（不调用移除仓库） */
+  const handleDismissAssociationScope = useCallback(() => {
+    if (repositoryId == null) return;
+    setAssociationConfig({ mode: "custom", customRepositoryIds: [repositoryId] });
+    setRepoDropdownSelection("repository");
+    setSubgraphRefreshKey((k) => k + 1);
+    message.success("已退出多仓合并视图");
+  }, [repositoryId]);
+
   const handleAssociationApplied = useCallback((scopeRepositoryIds: number[]) => {
     if (scopeRepositoryIds.length >= 2) {
       setRepoDropdownSelection("association");
@@ -957,6 +966,17 @@ export function CodeKnowledgeGraphPanel({
                 associationScopeDisplay={associationScopeDisplay}
                 onViewMergedGraph={
                   associationScopeDisplay ? handleViewMergedGraphFromRepoMenu : undefined
+                }
+                associationScopeRepositoryIds={
+                  associationScopeRepoIds.length >= 2 ? associationScopeRepoIds : undefined
+                }
+                onReindexAssociationScope={
+                  associationScopeRepoIds.length >= 2
+                    ? (ids) => void handleAssociationBuild(ids)
+                    : undefined
+                }
+                onDismissAssociationScope={
+                  associationScopeRepoIds.length >= 2 ? handleDismissAssociationScope : undefined
                 }
                 associationScopeDisabled={!isIndexed}
               />

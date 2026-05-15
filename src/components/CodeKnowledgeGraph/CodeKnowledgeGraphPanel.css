@@ -736,18 +736,63 @@
   background: var(--ant-color-error-bg);
 }
 
+.app-code-graph-repo-dropdown-icon-btn--disabled {
+  pointer-events: none;
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 /* 仓库菜单内：查看多仓合并图谱入口（列表与「分析新仓库」之间） */
-.app-code-graph-repo-dropdown-assoc-row {
+.app-code-graph-repo-dropdown-assoc-wrap {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
   width: 100%;
-  padding: 6px 10px;
-  border: none;
   border-top: 1px solid var(--ant-color-border-secondary);
   background: var(--ant-color-bg-elevated);
   color: var(--ant-color-text);
+  transition: background 0.12s ease;
+}
+
+.app-code-graph-repo-dropdown-assoc-wrap--active {
+  background: var(--ant-control-item-bg-active);
+}
+
+.app-code-graph-repo-dropdown-assoc-wrap--active:hover:not(.app-code-graph-repo-dropdown-assoc-wrap--disabled) {
+  background: var(--ant-control-item-bg-active);
+}
+
+.app-code-graph-repo-dropdown-assoc-wrap--active .app-code-graph-repo-dropdown-assoc-icon {
+  color: var(--ant-color-primary);
+}
+
+.app-code-graph-repo-dropdown-assoc-wrap--active .app-code-graph-repo-dropdown-assoc-label {
+  font-weight: 500;
+}
+
+.app-code-graph-repo-dropdown-assoc-wrap:hover:not(.app-code-graph-repo-dropdown-assoc-wrap--disabled) {
+  background: var(--ant-color-fill-tertiary);
+}
+
+.app-code-graph-repo-dropdown-assoc-wrap--active:hover:not(.app-code-graph-repo-dropdown-assoc-wrap--disabled) {
+  background: var(--ant-control-item-bg-active);
+}
+
+.app-code-graph-repo-dropdown-assoc-wrap--disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.app-code-graph-repo-dropdown-assoc-row {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  color: inherit;
   font-size: 12px;
   line-height: 1.35;
   cursor: pointer;
@@ -762,30 +807,9 @@
   min-width: 0;
 }
 
-.app-code-graph-repo-dropdown-assoc-row--active {
-  background: var(--ant-control-item-bg-active);
-}
-
-.app-code-graph-repo-dropdown-assoc-row--active:hover:not(:disabled):not(.app-code-graph-repo-dropdown-assoc-row--disabled) {
-  background: var(--ant-control-item-bg-active);
-}
-
-.app-code-graph-repo-dropdown-assoc-row--active .app-code-graph-repo-dropdown-assoc-icon {
-  color: var(--ant-color-primary);
-}
-
-.app-code-graph-repo-dropdown-assoc-row--active .app-code-graph-repo-dropdown-assoc-label {
-  font-weight: 500;
-}
-
-.app-code-graph-repo-dropdown-assoc-row:hover:not(:disabled):not(.app-code-graph-repo-dropdown-assoc-row--disabled) {
-  background: var(--ant-color-fill-tertiary);
-}
-
-.app-code-graph-repo-dropdown-assoc-row--disabled,
-.app-code-graph-repo-dropdown-assoc-row:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
+.app-code-graph-repo-dropdown-assoc-row-actions {
+  flex-shrink: 0;
+  padding-right: 6px;
 }
 
 .app-code-graph-repo-dropdown-assoc-icon {
