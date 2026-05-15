@@ -107,6 +107,7 @@ import {
   extractRuntimeSnapshotsFromEvents,
 } from "./services/workflowGraphHelpers";
 import { useMainLayoutModes } from "./hooks/useMainLayoutModes";
+import type { ReconcileProjectMode } from "./constants/reconcileProjectMode";
 import { useDingTalkAutomationInbound } from "./hooks/useDingTalkAutomationInbound";
 import { useOmcRuntime } from "./hooks/useOmcRuntime";
 import { useWorkflowTeamAutomation } from "./hooks/useWorkflowTeamAutomation";
@@ -210,7 +211,6 @@ export default function App() {
     handleCreateProject,
     handleUpdateProject,
     handleDeleteProject,
-    handleAddRepositoryToProject,
     handleAddRepositoryPathToProject,
     handleAddFloatingRepository,
     handlePromoteFloatingRepositoryToProject,
@@ -218,7 +218,7 @@ export default function App() {
     handleRemoveRepository,
     handleUpdateRepositorySddMode,
     handleReorderRepositoriesInProject,
-    handleMoveRepositoryToProject,
+    handleReconcileProjectWorkspace,
     handleUpdateRepositoryMainOwnerAgent,
     pinnedProjectIds,
     togglePinProject,
@@ -1551,15 +1551,38 @@ export default function App() {
         onDeleteProject: handleDeleteProject,
         pinnedProjectIds,
         onTogglePinProject: togglePinProject,
-        onAddRepositoryToProject: handleAddRepositoryToProject,
         onAddFloatingRepository: handleAddFloatingRepository,
+        onReconcileProject: async (projectId, mode: ReconcileProjectMode) => {
+          try {
+            const r = await handleReconcileProjectWorkspace(projectId, mode);
+            const added = r.addedRepositoryPaths.length;
+            const graphs =
+              "refreshedWorkflowCount" in r && typeof r.refreshedWorkflowCount === "number"
+                ? r.refreshedWorkflowCount
+                : 0;
+            if (mode === "repos_only") {
+              message.success(
+                added > 0 ? `已同步：新登记 ${added} 个仓库（未修改流程图）` : "已同步：未发现新的 Git 仓库",
+              );
+              return;
+            }
+            message.success(
+              graphs > 0
+                ? `已同步：新登记 ${added} 个仓库，已按模板重绘 ${graphs} 个团队流程图（草稿）`
+                : added > 0
+                  ? `已同步：新登记 ${added} 个仓库（无关联工作流或无可重绘阶段）`
+                  : "已同步：未发现新的 Git 仓库",
+            );
+          } catch (e) {
+            message.error(e instanceof Error ? e.message : String(e));
+          }
+        },
         onPromoteFloatingRepositoryToProject: handlePromoteFloatingRepositoryToProject,
         floatingRepositories,
         onRemoveRepository: handleRemoveRepository,
         onDetachRepositoryFromProject: handleDetachRepositoryFromProject,
         onUpdateRepositorySddMode: handleUpdateRepositorySddMode,
         onReorderRepositoriesInProject: handleReorderRepositoriesInProject,
-        onMoveRepositoryToProject: handleMoveRepositoryToProject,
         onRepositorySelect: handleSidebarRepositorySelectLeavingMcpHub,
         onOpenInFinder: handleOpenInFinder,
         onCreateProjectTask: handleCreateProjectTask,

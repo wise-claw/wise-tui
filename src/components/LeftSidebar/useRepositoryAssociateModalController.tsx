@@ -21,7 +21,7 @@ import {
 import { buildAddRepositoryOptions } from "./RepositoryAssociateModal";
 
 interface UseRepositoryAssociateModalControllerInput {
-  onAddRepositoryToProject: (
+  onAddRepositoryToProject?: (
     projectId: string,
     repositoryType: Repository["repositoryType"],
     options?: AddRepositoryOptions,
@@ -195,8 +195,14 @@ export function useRepositoryAssociateModalController({
       void onAddFloatingRepository(repositoryType, options);
       return;
     }
+    if (!pendingProjectId) return;
+    if (!onAddRepositoryToProject) {
+      message.warning("当前环境未启用「关联到项目」");
+      close();
+      return;
+    }
     setPendingProjectId(null);
-    void onAddRepositoryToProject(pendingProjectId as string, repositoryType, options);
+    void onAddRepositoryToProject(pendingProjectId, repositoryType, options);
   }, [
     associateSelectValue,
     floatingMode,

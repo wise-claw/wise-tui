@@ -1380,6 +1380,19 @@ impl WiseDb {
         Ok(())
     }
 
+    /// 仍关联到任意项目的成员记录数（用于删除项目后判断是否应从全局仓库列表移除）。
+    pub fn count_repository_project_links(&self, repository_id: i64) -> Result<i64, String> {
+        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let n: i64 = g
+            .query_row(
+                "SELECT COUNT(*) FROM project_repositories WHERE repository_id = ?1",
+                params![repository_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| e.to_string())?;
+        Ok(n)
+    }
+
     pub fn get_setting(&self, key: &str) -> Result<Option<String>, String> {
         let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
         let mut stmt = g

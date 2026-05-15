@@ -28,6 +28,15 @@ export async function addRepositoryToProject(projectId: string, repositoryId: nu
   return invoke<ProjectItem>("add_repository_to_project", { projectId, repositoryId });
 }
 
+export interface ReconcileProjectWorkspaceResult {
+  project: ProjectItem;
+  addedRepositoryPaths: string[];
+}
+
+export async function reconcileProjectWorkspace(projectId: string): Promise<ReconcileProjectWorkspaceResult> {
+  return invoke<ReconcileProjectWorkspaceResult>("reconcile_project_workspace", { projectId });
+}
+
 export async function reorderProjectRepositoriesInProject(
   projectId: string,
   repositoryIds: number[],

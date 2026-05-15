@@ -8,6 +8,7 @@ import type {
   SddMode,
   TaskMode,
 } from "../../types";
+import type { ReconcileProjectMode } from "../../constants/reconcileProjectMode";
 import type { GitPanelOpenFileOptions } from "../GitPanel";
 import type { TaskCardsNavProps } from "../TaskCardsNav";
 
@@ -24,16 +25,15 @@ export interface LeftSidebarProps {
   repositories: Repository[];
   activeRepositoryId: number | null;
   onProjectSelect: (projectId: string) => void;
-  onCreateProject: (name: string, options?: { embedTrellis?: boolean }) => void | Promise<void>;
+  onCreateProject: (
+    name: string,
+    options?: { embedTrellis?: boolean; rootPath?: string | null },
+  ) => void | Promise<void>;
   onUpdateProject: (projectId: string, name: string) => void;
   onDeleteProject: (projectId: string) => void;
   pinnedProjectIds: string[];
   onTogglePinProject: (projectId: string) => void;
-  onAddRepositoryToProject: (
-    projectId: string,
-    repositoryType: Repository["repositoryType"],
-    options?: AddRepositoryOptions,
-  ) => void;
+  onReconcileProject?: (projectId: string, mode: ReconcileProjectMode) => void | Promise<void>;
   onAddFloatingRepository?: (
     repositoryType: Repository["repositoryType"],
     options?: AddRepositoryOptions,

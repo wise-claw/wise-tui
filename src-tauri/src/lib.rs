@@ -10,6 +10,7 @@ mod git_commands;
 mod lib_impl;
 mod prd_materialize;
 mod prd_url_fetch;
+mod project_workspace_paths;
 mod repository_files;
 mod skills_sh;
 mod subagents_parser;

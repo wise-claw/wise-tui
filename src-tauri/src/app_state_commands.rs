@@ -1,4 +1,5 @@
 use crate::claude_commands::shared::find_trellis_project_root_from_path;
+use crate::project_workspace_paths::{assert_repo_dir_under_project_root, canonicalize_existing_dir};
 use crate::wise_paths::{
     wise_legacy_projects_json, wise_repositories_json, wise_tabs_json, write_file_atomic,
 };
@@ -8,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use tauri::Manager;
+use walkdir::WalkDir;
 use uuid::Uuid;
 
 pub(crate) mod settings_commands;
@@ -342,8 +344,15 @@ pub(crate) fn create_repository_from_path(
         .map(|s| s.to_string());
 
     let existing = load_repositories(&app);
-    if existing.iter().any(|p| p.path == folder_path) {
-        return Err("此路径的仓库已存在".into());
+    let candidate = canonicalize_existing_dir(&folder_path)?;
+    for p in &existing {
+        if let Ok(ep) = canonicalize_existing_dir(&p.path) {
+            if ep == candidate {
+                return Err("此路径的仓库已存在".into());
+            }
+        } else if p.path == folder_path {
+            return Err("此路径的仓库已存在".into());
+        }
     }
 
     let now = std::time::SystemTime::now()
@@ -520,6 +529,16 @@ pub(crate) fn remove_repository(app: tauri::AppHandle, id: i64) -> Result<(), St
     save_repositories(&app, &repositories)
 }
 
+fn remove_repository_global_impl(
+    app: &tauri::AppHandle,
+    db: &wise_db::WiseDb,
+    id: i64,
+) -> Result<(), String> {
+    remove_repository(app.clone(), id)?;
+    db.remove_repository_from_all_projects(id)?;
+    Ok(())
+}
+
 fn map_project_row(row: wise_db::WiseProjectRow) -> StoredProject {
     StoredProject {
         id: row.id,
@@ -644,9 +663,8 @@ pub(crate) fn create_project(
         .map(str::trim)
         .filter(|s| !s.is_empty())
     {
-        if let Some(root) = find_trellis_project_root_from_path(candidate_path) {
-            db.update_project_root_path(&id, &root.to_string_lossy(), now_ms)?;
-        }
+        let canon = canonicalize_existing_dir(candidate_path)?;
+        db.update_project_root_path(&id, &canon.to_string_lossy(), now_ms)?;
     }
     let rows = db.list_projects()?;
     let row = rows
@@ -781,15 +799,167 @@ pub(crate) fn update_project_main_agent(
 
 #[tauri::command]
 pub(crate) fn delete_project(
+    app: tauri::AppHandle,
     db: tauri::State<'_, wise_db::WiseDb>,
     project_id: String,
 ) -> Result<(), String> {
-    db.delete_project(&project_id)?;
+    let pid = project_id.trim();
+    if pid.is_empty() {
+        return Err("项目 id 无效".into());
+    }
+    let rows = db.list_projects()?;
+    let member_ids = rows
+        .iter()
+        .find(|p| p.id == pid)
+        .ok_or_else(|| "项目未找到".to_string())?
+        .repository_ids
+        .clone();
+    db.delete_project(pid)?;
     let active = db.get_setting("active_project_id")?;
-    if active.as_deref() == Some(project_id.as_str()) {
+    if active.as_deref() == Some(pid) {
         db.delete_setting("active_project_id")?;
     }
+    for rid in member_ids {
+        if db.count_repository_project_links(rid)? == 0 {
+            remove_repository_global_impl(&app, &db, rid)?;
+        }
+    }
     Ok(())
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ReconcileProjectWorkspaceResult {
+    pub project: StoredProject,
+    pub added_repository_paths: Vec<String>,
+}
+
+#[tauri::command]
+pub(crate) fn reconcile_project_workspace(
+    app: tauri::AppHandle,
+    db: tauri::State<'_, wise_db::WiseDb>,
+    project_id: String,
+) -> Result<ReconcileProjectWorkspaceResult, String> {
+    let rows = db.list_projects()?;
+    let project_row = rows
+        .into_iter()
+        .find(|p| p.id == project_id)
+        .ok_or_else(|| "项目未找到".to_string())?;
+    let root_trim = project_row.root_path.trim();
+    if root_trim.is_empty() {
+        return Err("项目未配置根目录，无法同步".to_string());
+    }
+    let root_canon = canonicalize_existing_dir(root_trim)?;
+
+    const MAX_DEPTH: usize = 12;
+    const SKIP_NAMES: &[&str] = &[
+        "node_modules",
+        "target",
+        ".cargo",
+        "dist",
+        "build",
+        ".cache",
+        "venv",
+        "__pycache__",
+        ".pnpm-store",
+    ];
+
+    let mut discovered: Vec<PathBuf> = Vec::new();
+    let walker = WalkDir::new(&root_canon)
+        .max_depth(MAX_DEPTH)
+        .follow_links(false)
+        .into_iter()
+        .filter_entry(|e| {
+            if e.depth() == 0 {
+                return true;
+            }
+            let name = e.file_name().to_string_lossy();
+            !SKIP_NAMES.contains(&name.as_ref())
+        });
+    for entry in walker {
+        let entry = entry.map_err(|e| e.to_string())?;
+        if !entry.file_type().is_dir() {
+            continue;
+        }
+        let dir = entry.path();
+        if !dir.join(".git").exists() {
+            continue;
+        }
+        discovered.push(dir.to_path_buf());
+    }
+
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_millis() as i64;
+
+    let mut added_paths: Vec<String> = Vec::new();
+    let mut current_member_ids: std::collections::HashSet<i64> =
+        project_row.repository_ids.iter().copied().collect();
+
+    for repo_dir in discovered {
+        let repo_canon = match canonicalize_existing_dir(&repo_dir.to_string_lossy()) {
+            Ok(p) => p,
+            Err(_) => continue,
+        };
+        if assert_repo_dir_under_project_root(&root_canon, &repo_canon).is_err() {
+            continue;
+        }
+        let repo_path_str = repo_canon.to_string_lossy().to_string();
+
+        let mut repositories = load_repositories(&app);
+        let existing_id = repositories.iter().find_map(|r| {
+            canonicalize_existing_dir(&r.path)
+                .ok()
+                .filter(|p| *p == repo_canon)
+                .map(|_| r.id)
+        });
+
+        if let Some(rid) = existing_id {
+            if current_member_ids.contains(&rid) {
+                continue;
+            }
+            db.add_repository_to_project(&project_id, rid, now_ms)?;
+            current_member_ids.insert(rid);
+            added_paths.push(repo_path_str);
+            continue;
+        }
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| e.to_string())?
+            .as_millis() as i64;
+        let folder_label = repository_folder_label_from_path(&repo_path_str);
+        let new_repo = StoredRepository {
+            id: now,
+            name: folder_label,
+            path: repo_path_str.clone(),
+            role_tags: vec!["frontend".to_string()],
+            repository_type: "frontend".to_string(),
+            icon_color: None,
+            icon_display_name: None,
+            main_owner_agent_name: None,
+            branch: git_commands::get_git_branch(&repo_path_str),
+            created_at: now.to_string(),
+            updated_at: now.to_string(),
+            sdd_mode: None,
+        };
+        repositories.push(new_repo);
+        save_repositories(&app, &repositories)?;
+        db.add_repository_to_project(&project_id, now, now_ms)?;
+        current_member_ids.insert(now);
+        added_paths.push(repo_path_str);
+    }
+
+    let rows = db.list_projects()?;
+    let row = rows
+        .into_iter()
+        .find(|item| item.id == project_id)
+        .ok_or_else(|| "项目未找到".to_string())?;
+    Ok(ReconcileProjectWorkspaceResult {
+        project: map_project_row(row),
+        added_repository_paths: added_paths,
+    })
 }
 
 #[tauri::command]
@@ -799,6 +969,23 @@ pub(crate) fn add_repository_to_project(
     project_id: String,
     repository_id: i64,
 ) -> Result<StoredProject, String> {
+    let rows = db.list_projects()?;
+    let project_row = rows
+        .into_iter()
+        .find(|item| item.id == project_id)
+        .ok_or_else(|| "项目未找到".to_string())?;
+    let root_trim = project_row.root_path.trim();
+    if !root_trim.is_empty() {
+        let root_canon = canonicalize_existing_dir(root_trim)?;
+        let repositories = load_repositories(&app);
+        let repo = repositories
+            .iter()
+            .find(|r| r.id == repository_id)
+            .ok_or_else(|| "仓库未找到".to_string())?;
+        let repo_canon = canonicalize_existing_dir(&repo.path)?;
+        assert_repo_dir_under_project_root(&root_canon, &repo_canon)?;
+    }
+
     let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|e| e.to_string())?
@@ -865,9 +1052,7 @@ pub(crate) fn remove_repository_global(
     db: tauri::State<'_, wise_db::WiseDb>,
     id: i64,
 ) -> Result<(), String> {
-    remove_repository(app, id)?;
-    db.remove_repository_from_all_projects(id)?;
-    Ok(())
+    remove_repository_global_impl(&app, &db, id)
 }
 
 #[tauri::command]

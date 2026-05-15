@@ -1,10 +1,26 @@
 //! 在已有仓库根目录执行 `trellis init`，供 Wise「新建项目」可选内置 Trellis 脚手架。
+//!
+//! 优先使用本机 `trellis` CLI；若未安装则回退为 `npx --yes @mindfoldhq/trellis@latest init -y`（需 Node / npm）。
 
 use crate::claude_commands::{claude_path_search_prefixes, merge_path_env};
 use crate::claude_commands::shared::find_trellis_project_root_from_path;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+/// npm 包名：与全局 `trellis` CLI 等价入口，供 `npx` 在未全局安装时使用。
+const TRELLIS_NPX_PACKAGE: &str = "@mindfoldhq/trellis@latest";
+
+fn npx_program() -> &'static str {
+    #[cfg(windows)]
+    {
+        "npx.cmd"
+    }
+    #[cfg(not(windows))]
+    {
+        "npx"
+    }
+}
 
 fn validate_repository_root_for_bootstrap(path: &str) -> Result<PathBuf, String> {
     let trimmed = path.trim();
@@ -64,10 +80,10 @@ fn trellis_binary_candidates() -> Vec<PathBuf> {
     out
 }
 
-fn find_trellis_cli_binary() -> Result<String, String> {
+fn find_trellis_cli_binary() -> Option<String> {
     for c in trellis_binary_candidates() {
         if c.is_file() {
-            return Ok(c.to_string_lossy().to_string());
+            return Some(c.to_string_lossy().to_string());
         }
     }
 
@@ -87,7 +103,7 @@ fn find_trellis_cli_binary() -> Result<String, String> {
                     .trim()
                     .to_string();
                 if !line.is_empty() && Path::new(&line).exists() {
-                    return Ok(line);
+                    return Some(line);
                 }
             }
         }
@@ -104,20 +120,16 @@ fn find_trellis_cli_binary() -> Result<String, String> {
             if output.status.success() {
                 let p = String::from_utf8_lossy(&output.stdout).trim().to_string();
                 if !p.is_empty() && Path::new(&p).is_file() {
-                    return Ok(p);
+                    return Some(p);
                 }
             }
         }
         if let Some(p) = try_trellis_from_login_shell() {
-            return Ok(p);
+            return Some(p);
         }
     }
 
-    Err(
-        "未找到 trellis 可执行文件。请安装 Trellis CLI 并加入 PATH（参见 https://trellis.dev/docs/install/）；\
-从 .app 启动时若仍找不到，请确认 trellis 位于 /opt/homebrew/bin、/usr/local/bin 或 nvm/fnm 的 node bin 目录。"
-            .to_string(),
-    )
+    None
 }
 
 /// 若 `repository_path` 及其祖先尚无 `.trellis/scripts/task.py`，则在仓库根执行 `trellis init -y`。
@@ -128,26 +140,51 @@ pub fn bootstrap_trellis_if_missing(repository_path: String) -> Result<(), Strin
     if find_trellis_project_root_from_path(&canon_str).is_some() {
         return Ok(());
     }
-    let trellis_bin = find_trellis_cli_binary()?;
     let path_merged = merge_path_env(&claude_path_search_prefixes());
     let home = dirs::home_dir()
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_default();
-    let out = Command::new(&trellis_bin)
-        .args(["init", "-y"])
-        .current_dir(&canon)
-        .env("PATH", &path_merged)
-        .env("HOME", &home)
-        .stdin(std::process::Stdio::null())
-        .output()
-        .map_err(|e| format!("无法启动 trellis: {e}"))?;
+    let trellis_cli = find_trellis_cli_binary();
+    let via_npx = trellis_cli.is_none();
+    let out = match &trellis_cli {
+        Some(bin) => Command::new(bin)
+            .args(["init", "-y"])
+            .current_dir(&canon)
+            .env("PATH", &path_merged)
+            .env("HOME", &home)
+            .stdin(std::process::Stdio::null())
+            .output()
+            .map_err(|e| format!("无法启动 trellis: {e}")),
+        None => Command::new(npx_program())
+            .arg("--yes")
+            .arg(TRELLIS_NPX_PACKAGE)
+            .args(["init", "-y"])
+            .current_dir(&canon)
+            .env("PATH", &path_merged)
+            .env("HOME", &home)
+            .env("npm_config_yes", "true")
+            .stdin(std::process::Stdio::null())
+            .output()
+            .map_err(|e| {
+                format!(
+                    "未找到本机 trellis，且无法启动 npx（{e}）。请安装 Node.js/npm，\
+                    或安装 Trellis CLI 并加入 PATH（参见 https://trellis.dev/docs/install/）；\
+                    从 .app 启动时可将 trellis / npx 置于 /opt/homebrew/bin、/usr/local/bin 或 nvm/fnm 的 node bin 目录。"
+                )
+            }),
+    }?;
     if out.status.success() {
         return Ok(());
     }
     let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
     let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    let label = if via_npx {
+        format!("npx {TRELLIS_NPX_PACKAGE}")
+    } else {
+        "trellis".to_string()
+    };
     Err(format!(
-        "trellis init 失败（退出码 {:?}）\n{}\n{}",
+        "{label} init 失败（退出码 {:?}）\n{}\n{}",
         out.status.code(),
         stderr,
         stdout

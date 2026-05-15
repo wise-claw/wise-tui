@@ -13,6 +13,7 @@ import {
   createProject,
   deleteProject,
   listProjects,
+  reconcileProjectWorkspace,
   resolveProjectRootFromRepository,
   removeRepositoryFromProject,
   reorderProjectRepositoriesInProject,
@@ -20,6 +21,7 @@ import {
   updateProjectName,
 } from "../services/projectState";
 import { bootstrapTrellisIfMissing } from "../services/trellisBootstrap";
+import { regenerateProjectWorkflowGraphsFromTemplates } from "../services/rebuildProjectWorkflowGraphs";
 import { deleteAppSetting, getAppSetting, setAppSetting } from "../services/appSettingsStore";
 import { normalizeRepositoryPathKey } from "../utils/repositoryMainSessionBinding";
 import { selectFloatingRepositories } from "../utils/floatingRepositories";
@@ -32,7 +34,9 @@ import {
   WORKSPACE_LAST_SESSION_REPO_ID_STORAGE_KEY,
   resolveStartupSelection,
 } from "../utils/startupRepoSelection";
+import type { ReconcileProjectMode } from "../constants/reconcileProjectMode";
 import { resolveProjectCreationSeedRepository } from "../utils/projectCreationContext";
+import { isRepositoryPathUnderProjectRoot } from "../utils/projectRootPathPolicy";
 
 const LEGACY_APP_SETTING_KEY_PROJECTS = "wise.projects.v1";
 
@@ -182,35 +186,53 @@ export function useRepositoryList() {
 
   const handleCreateProject = useCallback(async (
     name: string,
-    options?: { embedTrellis?: boolean },
+    options?: { embedTrellis?: boolean; rootPath?: string | null },
   ) => {
     const trimmed = name.trim();
     if (!trimmed) return;
+    const rootPathRaw = options?.rootPath?.trim();
+    if (!rootPathRaw) {
+      throw new Error("请先选择项目根目录");
+    }
     const embedTrellis = options?.embedTrellis !== false;
+    if (embedTrellis) {
+      try {
+        await bootstrapTrellisIfMissing(rootPathRaw);
+      } catch (err: unknown) {
+        throw err instanceof Error ? err : new Error(String(err));
+      }
+    }
+    const createdProject = await createProject(trimmed, rootPathRaw);
     const seedRepository = resolveProjectCreationSeedRepository({
       activeRepositoryId,
       projects,
       repositories,
     });
-    if (embedTrellis && seedRepository) {
-      try {
-        await bootstrapTrellisIfMissing(seedRepository.path);
-      } catch (err: unknown) {
-        throw err instanceof Error ? err : new Error(String(err));
-      }
+    let nextProject = createdProject;
+    if (
+      seedRepository &&
+      isRepositoryPathUnderProjectRoot(rootPathRaw, seedRepository.path)
+    ) {
+      nextProject = await addRepositoryToProject(createdProject.id, seedRepository.id);
     }
-    const rootPath = seedRepository
-      ? await resolveProjectRootFromRepository(seedRepository.path)
-      : null;
-    const createdProject = await createProject(trimmed, rootPath);
-    const nextProject = seedRepository
-      ? await addRepositoryToProject(createdProject.id, seedRepository.id)
-      : createdProject;
-    setProjects((prev) => [...prev, nextProject]);
-    setActiveProjectId(nextProject.id);
-    await persistActiveProjectId(nextProject.id);
-    setActiveRepositoryId(seedRepository?.id ?? null);
-  }, [activeRepositoryId, projects, repositories]);
+    try {
+      await reconcileProjectWorkspace(nextProject.id);
+    } catch (err) {
+      console.error("reconcile_project_workspace after create", err);
+    }
+    const [repositoryList, dbProjects] = await Promise.all([loadRepositories(), listProjects()]);
+    setRepositories(repositoryList);
+    setProjects(sortProjectsByPinOrder(dbProjects, pinnedProjectIds));
+    const refreshed = dbProjects.find((p) => p.id === nextProject.id) ?? nextProject;
+    setActiveProjectId(refreshed.id);
+    await persistActiveProjectId(refreshed.id);
+    const memberIds = refreshed.repositoryIds;
+    const preferredRepoId =
+      seedRepository && memberIds.includes(seedRepository.id)
+        ? seedRepository.id
+        : memberIds[0] ?? null;
+    setActiveRepositoryId(preferredRepoId);
+  }, [activeRepositoryId, projects, repositories, pinnedProjectIds]);
 
   const handleUpdateProject = useCallback(async (projectId: string, name: string) => {
     const trimmed = name.trim();
@@ -225,19 +247,27 @@ export function useRepositoryList() {
     if (nextPins.length !== pinnedProjectIds.length) {
       void setAppSetting(PINNED_PROJECT_IDS_STORAGE_KEY, JSON.stringify(nextPins));
     }
-    setPinnedProjectIds(nextPins);
     const nextProjects = sortProjectsByPinOrder(
       projects.filter((project) => project.id !== projectId),
       nextPins,
     );
-    setProjects(nextProjects);
+    const repositoryList = await loadRepositories();
+    const validIds = new Set(repositoryList.map((r) => r.id));
     const nextActive = activeProjectId === projectId ? (nextProjects[0]?.id ?? null) : activeProjectId;
+    const nextActiveProj = nextActive ? (nextProjects.find((project) => project.id === nextActive) ?? null) : null;
+    const nextRepoId =
+      activeRepositoryId != null &&
+      validIds.has(activeRepositoryId) &&
+      (!nextActiveProj || nextActiveProj.repositoryIds.includes(activeRepositoryId))
+        ? activeRepositoryId
+        : nextActiveProj?.repositoryIds[0] ?? null;
+    setPinnedProjectIds(nextPins);
+    setProjects(nextProjects);
+    setRepositories(repositoryList);
     setActiveProjectId(nextActive);
-    setActiveRepositoryId(
-      nextProjects.find((project) => project.id === nextActive)?.repositoryIds[0] ?? null,
-    );
+    setActiveRepositoryId(nextRepoId);
     void persistActiveProjectId(nextActive);
-  }, [activeProjectId, projects, pinnedProjectIds]);
+  }, [activeProjectId, activeRepositoryId, projects, pinnedProjectIds]);
 
   const handleSelectProject = useCallback((projectId: string) => {
     setActiveProjectId(projectId);
@@ -334,8 +364,10 @@ export function useRepositoryList() {
       const trimmed = projectName.trim();
       if (!trimmed) return;
       const repository = repositories.find((item) => item.id === repositoryId) ?? null;
-      const rootPath = repository ? await resolveProjectRootFromRepository(repository.path) : null;
-      const createdProject = await createProject(trimmed, rootPath);
+      const createdProject = await createProject(
+        trimmed,
+        repository?.path.trim() ? repository.path : null,
+      );
       const updatedProject = await addRepositoryToProject(createdProject.id, repositoryId);
       setProjects((prev) => [...prev, updatedProject]);
       setActiveProjectId(updatedProject.id);
@@ -456,6 +488,25 @@ export function useRepositoryList() {
     [projects, pinnedProjectIds, selectProjectAndRepository],
   );
 
+  const handleReconcileProjectWorkspace = useCallback(
+    async (projectId: string, mode: ReconcileProjectMode = "repos_and_graphs") => {
+      const result = await reconcileProjectWorkspace(projectId);
+      let refreshedWorkflowCount = 0;
+      if (mode === "repos_and_graphs") {
+        try {
+          refreshedWorkflowCount = await regenerateProjectWorkflowGraphsFromTemplates(projectId);
+        } catch (err) {
+          console.error("regenerateProjectWorkflowGraphsFromTemplates", err);
+        }
+      }
+      const [repositoryList, dbProjects] = await Promise.all([loadRepositories(), listProjects()]);
+      setRepositories(repositoryList);
+      setProjects(sortProjectsByPinOrder(dbProjects, pinnedProjectIds));
+      return { ...result, refreshedWorkflowCount };
+    },
+    [pinnedProjectIds],
+  );
+
   return {
     repositories,
     projects,
@@ -482,6 +533,7 @@ export function useRepositoryList() {
     handleUpdateRepositorySddMode,
     handleReorderRepositoriesInProject,
     handleMoveRepositoryToProject,
+    handleReconcileProjectWorkspace,
     handleUpdateRepositoryMainOwnerAgent,
     togglePinProject,
   };
