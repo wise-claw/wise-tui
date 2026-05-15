@@ -88,7 +88,7 @@ describe("resolveDispatchClaudeSession", () => {
     expect(match?.reason).toBe("claude-session-id");
   });
 
-  test("falls back to splitter prompt fingerprint", () => {
+  test("does not match old splitter prompt without run identity", () => {
     const oldRun = session({
       id: "tab-old",
       messages: [
@@ -113,8 +113,7 @@ describe("resolveDispatchClaudeSession", () => {
       detail: detail(),
     });
 
-    expect(match?.session.id).toBe("tab-old");
-    expect(match?.reason).toBe("prompt");
+    expect(match).toBeNull();
   });
 
   test("matches disk-only history rows by run directory preview", () => {
@@ -150,6 +149,113 @@ describe("resolveDispatchClaudeSession", () => {
     expect(match?.reason).toBe("prompt");
   });
 
+  test("does not fall back to an older prompt match when current run has a different session id", () => {
+    const oldRun = session({
+      id: "tab-old",
+      claudeSessionId: "old-sid",
+      messages: [
+        {
+          id: 1,
+          role: "user",
+          content: [
+            "Active task: .trellis/tasks/05-15-parent",
+            "",
+            "You are the `trellis-splitter` sub-agent.",
+            "- id: `cluster-fe-1`",
+          ].join("\n"),
+          parts: [],
+          timestamp: 200,
+        },
+      ],
+      createdAt: 200,
+    });
+    const match = resolveDispatchClaudeSession({
+      sessions: [oldRun],
+      detail: detail({
+        technical: {
+          ...detail().technical,
+          dispatchRaw: {
+            runId: "split-cluster-fe-1-new",
+            runDir: "/Users/me/.wise/prd-runs/split-cluster-fe-1-new",
+            exitCode: 0,
+            durationMs: 10,
+            stdoutPath: "",
+            stderrPath: "",
+            rawResultPath: "",
+            rawOutput: null,
+            stdoutTruncatedPreview: "",
+            claudeSessionId: "new-sid",
+          },
+        } satisfies TaskDetailVM["technical"],
+      }),
+      repoPath: "/tmp/wise",
+    });
+
+    expect(match).toBeNull();
+  });
+
+  test("requires run directory for prompt fallback when dispatch raw has one", () => {
+    const previousSameCluster = session({
+      id: "tab-old",
+      messages: [
+        {
+          id: 1,
+          role: "user",
+          content: [
+            "Active task: .trellis/tasks/05-15-parent",
+            "",
+            "Run directory: `/Users/me/.wise/prd-runs/split-cluster-fe-1-old`",
+            "- id: `cluster-fe-1`",
+          ].join("\n"),
+          parts: [],
+          timestamp: 200,
+        },
+      ],
+      createdAt: 200,
+    });
+    const currentSameCluster = session({
+      id: "tab-new",
+      messages: [
+        {
+          id: 1,
+          role: "user",
+          content: [
+            "Active task: .trellis/tasks/05-15-parent",
+            "",
+            "Run directory: `/Users/me/.wise/prd-runs/split-cluster-fe-1-new`",
+            "- id: `cluster-fe-1`",
+          ].join("\n"),
+          parts: [],
+          timestamp: 300,
+        },
+      ],
+      createdAt: 300,
+    });
+    const match = resolveDispatchClaudeSession({
+      sessions: [previousSameCluster, currentSameCluster],
+      detail: detail({
+        technical: {
+          ...detail().technical,
+          dispatchRaw: {
+            runId: "split-cluster-fe-1-new",
+            runDir: "/Users/me/.wise/prd-runs/split-cluster-fe-1-new",
+            exitCode: 0,
+            durationMs: 10,
+            stdoutPath: "",
+            stderrPath: "",
+            rawResultPath: "",
+            rawOutput: null,
+            stdoutTruncatedPreview: "",
+            claudeSessionId: null,
+          },
+        } satisfies TaskDetailVM["technical"],
+      }),
+      repoPath: "/tmp/wise",
+    });
+
+    expect(match?.session.id).toBe("tab-new");
+  });
+
   test("uses dispatch needles to verify loaded disk transcript", () => {
     const d = detail({
       technical: {
@@ -179,6 +285,10 @@ describe("resolveDispatchClaudeSession", () => {
       },
     ]);
 
-    expect(textMatchesDispatchNeedles(transcriptText, needles)).toBe(true);
+    expect(textMatchesDispatchNeedles(transcriptText, needles)).toBe(false);
+    expect(textMatchesDispatchNeedles(
+      `${transcriptText}\nRun directory: \`/Users/me/.wise/prd-runs/split-cluster-fe-1-1\``,
+      needles,
+    )).toBe(true);
   });
 });

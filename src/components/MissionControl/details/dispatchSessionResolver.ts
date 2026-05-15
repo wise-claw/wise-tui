@@ -16,8 +16,8 @@ const MIN_PROMPT_MATCH_SCORE = 1000;
 
 /**
  * Resolve the Claude Code transcript that produced a Mission Control task.
- * Newer runs persist `claudeSessionId`; prompt matching keeps older in-memory
- * runs reviewable when the backend did not capture the session id.
+ * Newer runs persist `claudeSessionId`; run-directory matching keeps older
+ * in-memory runs reviewable when the backend did not capture the session id.
  */
 export function resolveDispatchClaudeSession(input: {
   sessions: readonly ClaudeSession[];
@@ -31,6 +31,9 @@ export function resolveDispatchClaudeSession(input: {
   const byClaudeId = resolveByClaudeSessionId(sessions, raw);
   if (byClaudeId) {
     return { session: byClaudeId, reason: "claude-session-id" };
+  }
+  if (raw?.claudeSessionId?.trim()) {
+    return null;
   }
 
   const byPrompt = resolveByPromptFingerprint(sessions, detail, raw, repoPath);
@@ -58,11 +61,14 @@ function resolveByPromptFingerprint(
 ): ClaudeSession | null {
   const needles = buildWeightedDispatchSessionNeedles({ detail, raw, repoPath });
   if (needles.length === 0) return null;
+  const requiredRunIdentities = findRunIdentityNeedles(needles.map((needle) => needle.text));
+  if (requiredRunIdentities.length === 0) return null;
 
   const candidates = sessions
     .map((session) => {
       const promptText = sessionToSearchText(session);
       if (!promptText) return null;
+      if (!containsAnyNormalized(promptText, requiredRunIdentities)) return null;
       const score = scoreDispatchTextMatch(promptText, needles);
       if (score < MIN_PROMPT_MATCH_SCORE) return null;
       const repositoryBonus = repositoryPathMatches(session.repositoryPath, repoPath) ? 50 : 0;
@@ -91,6 +97,8 @@ export function messagesToSearchText(messages: ClaudeMessage[]): string {
 }
 
 export function textMatchesDispatchNeedles(text: string, needles: readonly string[]): boolean {
+  const requiredRunIdentities = findRunIdentityNeedles(needles);
+  if (requiredRunIdentities.length === 0 || !containsAnyNormalized(text, requiredRunIdentities)) return false;
   const weighted = needles.map((needle) => ({ text: needle, weight: 1 }));
   return scoreDispatchTextMatch(text, weighted) > 0;
 }
@@ -113,6 +121,7 @@ function buildWeightedDispatchSessionNeedles(input: {
 
   return [
     weighted(raw?.runDir, 5000),
+    weighted(raw?.runId, 5000),
     weighted(parentTaskPath, 3500),
     weighted(parentTaskRelativePath, 2500),
     weighted(parentTaskName, 2000),
@@ -172,6 +181,21 @@ function normalizePath(value: string | null | undefined): string {
 
 function normalizeSearchText(value: string): string {
   return value.trim().toLowerCase();
+}
+
+function containsNormalized(text: string, needle: string): boolean {
+  return normalizeSearchText(text).includes(normalizeSearchText(needle));
+}
+
+function containsAnyNormalized(text: string, needles: readonly string[]): boolean {
+  return needles.some((needle) => containsNormalized(text, needle));
+}
+
+function findRunIdentityNeedles(needles: readonly string[]): string[] {
+  return needles.filter((needle) => {
+    const normalized = normalizeSearchText(needle);
+    return normalized.includes("/prd-runs/") || normalized.includes("\\prd-runs\\") || normalized.startsWith("split-");
+  });
 }
 
 function uniqueNeedles(values: string[]): string[] {

@@ -75,6 +75,12 @@ export function useSplitterStream(): { progress: ClusterProgressMap; stdout: Clu
       }
     };
 
+    const resetClusterOutput = (clusterId: string) => {
+      startedRef.current.delete(clusterId);
+      linesRef.current.set(clusterId, []);
+      setStdout((prev) => ({ ...prev, [clusterId]: [] }));
+    };
+
     listen<SplitterOutputEvent>("splitter-output", (event) => {
       const { clusterId, line, timestampMs } = event.payload;
       if (!startedRef.current.has(clusterId)) {
@@ -91,6 +97,9 @@ export function useSplitterStream(): { progress: ClusterProgressMap; stdout: Clu
 
     listen<SplitterProgressEvent>("splitter-progress", (event) => {
       const { clusterId, kind, message, progressPercent } = event.payload;
+      if (kind === "started") {
+        resetClusterOutput(clusterId);
+      }
       applyProgress(clusterId, {
         status: kind === "completed" ? "succeeded" : kind === "error" ? "failed" : "running",
         progressPercent,
