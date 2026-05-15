@@ -27,6 +27,7 @@ import { RepositoryFilePreviewModal } from "./RepositoryFilePreviewModal";
 import { SkillsHub } from "./SkillsHub";
 import { CodeKnowledgeGraphPanel } from "./CodeKnowledgeGraph";
 import type * as PrdTaskSplitPanelModule from "./PrdTaskSplitPanel";
+import type * as MissionControlModule from "./MissionControl";
 import type * as PromptsPanelModule from "./PromptsPanel";
 import type * as RightPanelModule from "./RightPanel";
 import type * as WorkflowConfigModalModule from "./WorkflowConfigModal";
@@ -36,6 +37,9 @@ import type { OpenRepositoryFileDetail } from "../constants/workflowUiEvents";
 const RightPanel = lazy(() => import("./RightPanel").then((module) => ({ default: module.RightPanel })));
 const PrdTaskSplitPanel = lazy(() =>
   import("./PrdTaskSplitPanel").then((module) => ({ default: module.PrdTaskSplitPanel })),
+);
+const MissionControl = lazy(() =>
+  import("./MissionControl").then((module) => ({ default: module.MissionControl })),
 );
 const PromptsPanel = lazy(() => import("./PromptsPanel").then((module) => ({ default: module.PromptsPanel })));
 const WorkflowConfigModal = lazy(() =>
@@ -62,6 +66,7 @@ type LeftSidebarProps = Omit<
   | "onOpenActiveRepositoryFile"
 >;
 type PrdTaskSplitPanelProps = ComponentProps<typeof PrdTaskSplitPanelModule.PrdTaskSplitPanel>;
+type MissionControlProps = ComponentProps<typeof MissionControlModule.MissionControl>;
 type PromptsPanelProps = ComponentProps<typeof PromptsPanelModule.PromptsPanel>;
 type RightPanelProps = Omit<ComponentProps<typeof RightPanelModule.RightPanel>, "onOpenFile">;
 type WorkflowConfigModalProps = ComponentProps<typeof WorkflowConfigModalModule.WorkflowConfigModal>;
@@ -240,6 +245,7 @@ export interface AppWorkspaceLayoutProps {
   ccWfStudioMode: boolean;
   ccWfStudioSessionPath: string | null;
   onCloseCcWorkflowStudio: () => void;
+  missionControlMode: boolean;
   compactLayoutMode: boolean;
   effectiveRightCollapsed: boolean;
   mainLayoutContentRef: RefObject<HTMLElement | null>;
@@ -254,6 +260,7 @@ export interface AppWorkspaceLayoutProps {
   mcpHubProps: ComponentProps<typeof McpHub>;
   skillsHubProps: ComponentProps<typeof SkillsHub>;
   codeKnowledgeGraphProps: ComponentProps<typeof CodeKnowledgeGraphPanel>;
+  missionControlProps: MissionControlProps;
   prdTaskSplitPanelProps: PrdTaskSplitPanelProps;
   progressMonitorDrawerProps: ComponentProps<typeof ProgressMonitorDrawer>;
   employeeConfigModalProps: ComponentProps<typeof EmployeeConfigModal> | null;
@@ -284,6 +291,7 @@ export function AppWorkspaceLayout({
   ccWfStudioMode,
   ccWfStudioSessionPath,
   onCloseCcWorkflowStudio,
+  missionControlMode,
   compactLayoutMode,
   effectiveRightCollapsed,
   mainLayoutContentRef,
@@ -298,6 +306,7 @@ export function AppWorkspaceLayout({
   mcpHubProps,
   skillsHubProps,
   codeKnowledgeGraphProps,
+  missionControlProps,
   prdTaskSplitPanelProps,
   progressMonitorDrawerProps,
   employeeConfigModalProps,
@@ -400,7 +409,7 @@ export function AppWorkspaceLayout({
                   leftSidebarProps={leftSidebarProps}
                 />
 
-                {!promptsMode && !collapsed ? (
+                {!promptsMode && !missionControlMode && !collapsed ? (
                   <MainLayoutResizeHandle
                     variant="left"
                     startWidthPx={mainLayoutLeftWidthPx}
@@ -408,7 +417,13 @@ export function AppWorkspaceLayout({
                   />
                 ) : null}
 
-                {promptsMode ? (
+                {missionControlMode ? (
+                  <div className="app-full-width-main">
+                    <Suspense fallback={<PanelLoadingFallback />}>
+                      <MissionControl {...missionControlProps} />
+                    </Suspense>
+                  </div>
+                ) : promptsMode ? (
                   <div className="app-full-width-main">
                     <Suspense fallback={<PanelLoadingFallback />}>
                       <PromptsPanel {...promptsPanelProps} />

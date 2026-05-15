@@ -38,6 +38,7 @@ export interface CcWfStudioEnterExecutionWatchDetail {
 }
 export const WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL = "wise:open-task-split-panel";
 export const WORKFLOW_UI_EVENT_OPEN_PRD_SPLIT_WIZARD = "wise:open-prd-split-wizard";
+export const WORKFLOW_UI_EVENT_OPEN_MISSION_CONTROL = "wise:open-mission-control";
 export const WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED = "wise:split-todo-count-updated";
 export const WORKFLOW_UI_EVENT_OPEN_WORKFLOW_CONFIG = "wise:open-workflow-config";
 export const WORKFLOW_UI_EVENT_WORKFLOW_GRAPH_CHANGED = "wise:workflow-graph-changed";
@@ -47,6 +48,8 @@ export interface OpenPrdSplitWizardDetail {
   projectId?: string | null;
   repositoryId?: number | null;
 }
+
+export type OpenMissionControlDetail = OpenPrdSplitWizardDetail;
 
 export interface OpenWorkflowConfigDetail {
   workflowId?: string;

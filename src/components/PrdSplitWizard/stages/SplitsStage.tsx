@@ -9,6 +9,7 @@ import {
 import { useCallback, useMemo, useState } from "react";
 import type { UseSplitWizardStateApi } from "../useSplitWizardState";
 import type { ClusterDiffStatus, ClusterRunState } from "../types";
+import { buildClusterDispatchContext } from "../../../services/prdSplit/clusterDispatchContext";
 import { dispatchClusterSplit } from "../../../services/prdSplit/splitterDispatch";
 import { createParentTask, markChildrenPlanning, renderParentPrd } from "../../../services/prdSplit/trellisWriter";
 import type { ClusterPlanItem } from "../../../services/prdSplit/clusterPlanner";
@@ -252,7 +253,11 @@ async function runCluster(
       cluster,
       prd: state.prd!,
       requirementsIndex: state.requirementsIndex!,
-      context: state.context,
+      context: buildClusterDispatchContext({
+        baseContext: state.context,
+        cluster,
+        repositories: state.repositories,
+      }),
     });
     const status: ClusterRunState["status"] =
       result.normalized && result.errors.length === 0 ? "succeeded" : "failed";

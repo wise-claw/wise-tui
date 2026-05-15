@@ -29,6 +29,7 @@ import type { UseSplitWizardStateApi } from "../useSplitWizardState";
 import type { ClusterEditState, ClusterRunState } from "../types";
 import { writeClusterTasks } from "../../../services/prdSplit/trellisWriter";
 import { dispatchClusterVerifier } from "../../../services/prdSplit/verifierDispatch";
+import { buildClusterDispatchContext } from "../../../services/prdSplit/clusterDispatchContext";
 import {
   buildClusterPrdMarkdown,
   buildHighlightSegments,
@@ -221,7 +222,11 @@ export function ReviewStage({ api }: Props) {
         cluster,
         prd: state.prd,
         requirementsIndex: state.requirementsIndex,
-        context: state.context,
+        context: buildClusterDispatchContext({
+          baseContext: state.context,
+          cluster,
+          repositories: state.repositories,
+        }),
         previousOutput: run.raw?.rawOutput ?? null,
         validationIssues: run.validationIssues ?? [],
       });

@@ -9,13 +9,14 @@
 
 use super::{claude_path_search_prefixes, find_claude_binary, merge_path_env, trim_model_cli_arg};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
-use tokio::io::AsyncReadExt;
+use tauri::Emitter;
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -115,14 +116,8 @@ pub(crate) async fn prd_split_create_parent_task(
     let project_root = validate_project_root(&input.project_root_path)?;
     let slug = derive_slug(&input.title, &input.cluster_id);
 
-    let rel_path = run_task_py_create(
-        &project_root,
-        &input.title,
-        &slug,
-        &input.description,
-        None,
-    )
-    .await?;
+    let rel_path =
+        run_task_py_create(&project_root, &input.title, &slug, &input.description, None).await?;
     let parent_task_path = project_root.join(&rel_path);
     let parent_task_name = parent_task_path
         .file_name()
@@ -188,7 +183,10 @@ pub(crate) async fn prd_split_materialize_tasks(
             &project_root,
             &child.title,
             &child.slug,
-            &format!("Source requirements: {}", child.source_requirement_ids.join(", ")),
+            &format!(
+                "Source requirements: {}",
+                child.source_requirement_ids.join(", ")
+            ),
             Some(&input.parent_task_name),
         )
         .await?;
@@ -310,8 +308,7 @@ pub(crate) async fn prd_split_scan_project_parents(
         return Ok(ScanProjectParentsOutput { parents: vec![] });
     }
     let mut parents: Vec<ScannedParentTask> = Vec::new();
-    let entries = fs::read_dir(&tasks_dir)
-        .map_err(|e| format!("读取 .trellis/tasks 失败: {e}"))?;
+    let entries = fs::read_dir(&tasks_dir).map_err(|e| format!("读取 .trellis/tasks 失败: {e}"))?;
     for entry in entries.flatten() {
         let path = entry.path();
         if !path.is_dir() {
@@ -489,7 +486,11 @@ pub(crate) async fn prd_split_list_legacy_runs() -> Result<ListLegacyRunsOutput,
         if !path.is_dir() {
             continue;
         }
-        let run_id = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
+        let run_id = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("")
+            .to_string();
         if run_id.is_empty() {
             continue;
         }
@@ -512,7 +513,10 @@ pub(crate) async fn prd_split_list_legacy_runs() -> Result<ListLegacyRunsOutput,
             fs::read_to_string(&split_path)
                 .ok()
                 .and_then(|s| serde_json::from_str::<Value>(&s).ok())
-                .and_then(|v| v.get("tasks").and_then(|t| t.as_array().map(|a| a.len() as u32)))
+                .and_then(|v| {
+                    v.get("tasks")
+                        .and_then(|t| t.as_array().map(|a| a.len() as u32))
+                })
                 .unwrap_or(0)
         } else {
             0
@@ -618,7 +622,10 @@ async fn run_task_py_create(
     description: &str,
     parent: Option<&str>,
 ) -> Result<String, String> {
-    let task_py = project_root.join(".trellis").join("scripts").join("task.py");
+    let task_py = project_root
+        .join(".trellis")
+        .join("scripts")
+        .join("task.py");
     let mut cmd = tokio::process::Command::new("python3");
     cmd.current_dir(project_root);
     cmd.arg(task_py).arg("create").arg(title);
@@ -637,9 +644,7 @@ async fn run_task_py_create(
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
 
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| format!("启动 task.py 失败: {e}"))?;
+    let mut child = cmd.spawn().map_err(|e| format!("启动 task.py 失败: {e}"))?;
     let mut stdout_buf = Vec::new();
     let mut stderr_buf = Vec::new();
     if let Some(mut s) = child.stdout.take() {
@@ -663,10 +668,7 @@ async fn run_task_py_create(
         ));
     }
     if stdout.is_empty() {
-        return Err(format!(
-            "task.py create 未输出任务路径。stderr: {}",
-            stderr
-        ));
+        return Err(format!("task.py create 未输出任务路径。stderr: {}", stderr));
     }
     // stdout is the relative task directory printed last (.trellis/tasks/MM-DD-slug).
     let rel = stdout
@@ -691,8 +693,8 @@ where
         value["meta"] = json!({});
     }
     mutator(&mut value)?;
-    let serialized = serde_json::to_string_pretty(&value)
-        .map_err(|e| format!("序列化 task.json 失败: {e}"))?;
+    let serialized =
+        serde_json::to_string_pretty(&value).map_err(|e| format!("序列化 task.json 失败: {e}"))?;
     fs::write(&path, format!("{serialized}\n"))
         .map_err(|e| format!("写 {} 失败: {e}", path.to_string_lossy()))?;
     Ok(())
@@ -757,16 +759,29 @@ pub(crate) struct DispatchClusterOutput {
     raw_result_path: String,
     raw_output: Option<Value>,
     stdout_truncated_preview: String,
+    claude_session_id: Option<String>,
 }
 
 #[tauri::command]
 pub(crate) async fn prd_split_dispatch_cluster(
+    app: tauri::AppHandle,
     input: DispatchClusterInput,
 ) -> Result<DispatchClusterOutput, String> {
+    dispatch_cluster_impl(app, input, false, None).await
+}
+
+/// Shared implementation for both foreground and background dispatch.
+async fn dispatch_cluster_impl(
+    app: tauri::AppHandle,
+    input: DispatchClusterInput,
+    is_background: bool,
+    run_override: Option<(String, PathBuf)>,
+) -> Result<DispatchClusterOutput, String> {
     let project_root = validate_project_root(&input.project_root_path)?;
-    // active task 校验：用相对路径或目录名都接受，避免前后端拼路径差异。
     if input.parent_task_path.trim().is_empty() {
-        return Err("parent_task_path 不能为空（splitter 调度协议要求 Active task 前缀）".to_string());
+        return Err(
+            "parent_task_path 不能为空（splitter 调度协议要求 Active task 前缀）".to_string(),
+        );
     }
 
     let runs_base = crate::wise_dir()
@@ -774,18 +789,20 @@ pub(crate) async fn prd_split_dispatch_cluster(
         .join("prd-runs");
     fs::create_dir_all(&runs_base).map_err(|e| format!("创建 ~/.wise/prd-runs 失败: {e}"))?;
 
-    let run_id = format!(
-        "split-{}-{}",
-        sanitize_for_filename(&input.cluster_id),
-        unix_ms_now()
-    );
-    let run_dir = runs_base.join(&run_id);
+    let (run_id, run_dir) = run_override.unwrap_or_else(|| {
+        let run_id = format!(
+            "split-{}-{}",
+            sanitize_for_filename(&input.cluster_id),
+            unix_ms_now()
+        );
+        let run_dir = runs_base.join(&run_id);
+        (run_id, run_dir)
+    });
     fs::create_dir_all(&run_dir)
         .map_err(|e| format!("创建 run_dir 失败 ({}): {e}", run_dir.to_string_lossy()))?;
 
-    // 写入 bundle 文件（前端组装好的输入包：prd.md / requirements-index.json / cluster.json / ...）。
+    // 写入 bundle 文件。
     for (name, content) in &input.bundle {
-        // 防御性：禁止路径穿越。
         let candidate = run_dir.join(name);
         let parent_canon = run_dir
             .canonicalize()
@@ -804,17 +821,18 @@ pub(crate) async fn prd_split_dispatch_cluster(
         if !candidate_parent_canon.starts_with(&parent_canon) {
             return Err(format!("bundle 文件名越界: {name}"));
         }
-        fs::write(&candidate, content)
-            .map_err(|e| format!("写 bundle {name} 失败: {e}"))?;
+        fs::write(&candidate, content).map_err(|e| format!("写 bundle {name} 失败: {e}"))?;
     }
 
-    // 持久化 prompt 与项目根，便于 ops 排错。
-    fs::write(run_dir.join("prompt.md"), &input.prompt)
+    let effective_prompt = inject_run_dir_into_prompt(&input.prompt, &run_dir);
+
+    fs::write(run_dir.join("prompt.md"), &effective_prompt)
         .map_err(|e| format!("写 prompt.md 失败: {e}"))?;
     fs::write(
         run_dir.join("dispatch.meta.json"),
         serde_json::to_string_pretty(&json!({
             "projectRootPath": project_root.to_string_lossy(),
+            "runDir": run_dir.to_string_lossy(),
             "parentTaskPath": input.parent_task_path,
             "clusterId": input.cluster_id,
             "model": input.model,
@@ -828,10 +846,19 @@ pub(crate) async fn prd_split_dispatch_cluster(
     let stderr_path = run_dir.join("claude.stderr.log");
     let raw_result_path = run_dir.join("split-result.raw.json");
 
+    let cluster_id = input.cluster_id.clone();
+    let _ = app.emit(
+        "splitter-progress",
+        json!({ "clusterId": &cluster_id, "kind": "started", "message": "Claude 启动中…", "progressPercent": 5 }),
+    );
+
     let claude_path = find_claude_binary()?;
     let mut cmd = tokio::process::Command::new(&claude_path);
     cmd.current_dir(&project_root);
-    cmd.arg("-p").arg(&input.prompt);
+    cmd.arg("--bare");
+    cmd.arg("-p").arg(&effective_prompt);
+    cmd.arg("--output-format").arg("stream-json");
+    cmd.arg("--verbose");
     cmd.arg("--permission-mode").arg("bypassPermissions");
     if let Some(m) = input.model.as_deref().and_then(trim_model_cli_arg) {
         cmd.arg("--model").arg(m);
@@ -849,10 +876,8 @@ pub(crate) async fn prd_split_dispatch_cluster(
     cmd.stderr(Stdio::piped());
 
     let started = std::time::Instant::now();
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| format!("启动 Claude 失败: {e}"))?;
-    let mut stdout = child
+    let mut child = cmd.spawn().map_err(|e| format!("启动 Claude 失败: {e}"))?;
+    let stdout = child
         .stdout
         .take()
         .ok_or_else(|| "无法获取 Claude stdout".to_string())?;
@@ -861,50 +886,161 @@ pub(crate) async fn prd_split_dispatch_cluster(
         .take()
         .ok_or_else(|| "无法获取 Claude stderr".to_string())?;
 
+    // Stream stdout line by line, emitting Tauri events.
+    let cluster_for_stdout = cluster_id.clone();
+    let app_for_stdout = app.clone();
     let stdout_task = tokio::spawn(async move {
-        let mut buf = Vec::new();
-        let _ = stdout.read_to_end(&mut buf).await;
-        buf
+        let mut reader = BufReader::new(stdout).lines();
+        let mut full = String::new();
+        let mut line_count = 0u64;
+        let mut last_idle_emit_ms = 0u128;
+        loop {
+            let line_timeout = tokio::time::sleep(Duration::from_secs(30));
+            tokio::select! {
+                result = reader.next_line() => {
+                    match result {
+                        Ok(Some(line)) => {
+                            line_count += 1;
+                            full.push_str(&line);
+                            full.push('\n');
+                            let ts = unix_ms_now();
+                            let _ = app_for_stdout.emit(
+                                "splitter-output",
+                                json!({ "clusterId": &cluster_for_stdout, "line": &line, "timestampMs": ts }),
+                            );
+                            // Progress: 20-80% based on line count estimate.
+                            let pct = 20u64.saturating_add(line_count.min(60)).min(80);
+                            if line_count <= 60 && line_count % 10 == 0 {
+                                let _ = app_for_stdout.emit(
+                                    "splitter-progress",
+                                    json!({ "clusterId": &cluster_for_stdout, "kind": "stdout-line", "message": "生成任务中…", "progressPercent": pct }),
+                                );
+                            }
+                            if line.trim_start().starts_with('{') {
+                                let _ = app_for_stdout.emit(
+                                    "splitter-progress",
+                                    json!({ "clusterId": &cluster_for_stdout, "kind": "json-detected", "message": "校验结果中…", "progressPercent": 80 }),
+                                );
+                            }
+                        }
+                        Ok(None) => break,
+                        Err(_) => break,
+                    }
+                }
+                _ = line_timeout => {
+                    // Claude often spends longer than 30s thinking before the final JSON. Report
+                    // liveness, but keep the pipe open so the eventual result is not discarded.
+                    let now = unix_ms_now();
+                    if now.saturating_sub(last_idle_emit_ms) >= 30_000 {
+                        last_idle_emit_ms = now;
+                        let _ = app_for_stdout.emit(
+                            "splitter-progress",
+                            json!({ "clusterId": &cluster_for_stdout, "kind": "stdout-idle", "message": "等待 Claude 输出…", "progressPercent": 60 }),
+                        );
+                    }
+                }
+            }
+        }
+        full
     });
+
     let stderr_task = tokio::spawn(async move {
         let mut buf = Vec::new();
         let _ = stderr.read_to_end(&mut buf).await;
         buf
     });
 
-    let timeout_ms = input.timeout_ms.unwrap_or(180_000).max(1_000);
+    let timeout_ms = input.timeout_ms.unwrap_or(600_000).max(1_000);
     let wait = tokio::time::timeout(Duration::from_millis(timeout_ms), child.wait()).await;
-    let status_result = match wait {
-        Ok(s) => s.map_err(|e| format!("Claude 进程等待失败: {e}"))?,
+    let (status_result, timed_out) = match wait {
+        Ok(s) => (
+            Some(s.map_err(|e| format!("Claude 进程等待失败: {e}"))?),
+            false,
+        ),
         Err(_) => {
-            let _ = child.start_kill();
-            return Err(format!("Claude 超时 ({} ms)", timeout_ms));
+            let _ = child.kill().await;
+            let _ = child.wait().await;
+            let _ = app.emit(
+                "splitter-progress",
+                json!({ "clusterId": &cluster_id, "kind": "error", "message": "Claude 超时", "progressPercent": 0 }),
+            );
+            (None, true)
         }
     };
 
-    let stdout_buf = stdout_task.await.unwrap_or_default();
+    let stdout_text = stdout_task.await.unwrap_or_default();
     let stderr_buf = stderr_task.await.unwrap_or_default();
-    fs::write(&stdout_path, &stdout_buf).ok();
-    fs::write(&stderr_path, &stderr_buf).ok();
-
-    let stdout_text = String::from_utf8_lossy(&stdout_buf).to_string();
-    let raw_output = extract_json_object(&stdout_text);
+    let mut stderr_text = String::from_utf8_lossy(&stderr_buf).to_string();
+    if timed_out {
+        if !stderr_text.ends_with('\n') && !stderr_text.is_empty() {
+            stderr_text.push('\n');
+        }
+        stderr_text.push_str(&format!("Claude timed out after {} ms\n", timeout_ms));
+    }
+    fs::write(&stdout_path, &stdout_text).ok();
+    fs::write(&stderr_path, &stderr_text).ok();
+    let claude_session_id = extract_claude_session_id_from_stdout(&stdout_text);
+    let raw_output = extract_split_payload_from_stdout(&stdout_text);
     if let Some(parsed) = raw_output.as_ref() {
-        let pretty = serde_json::to_string_pretty(parsed)
-            .unwrap_or_else(|_| stdout_text.clone());
+        let pretty = serde_json::to_string_pretty(parsed).unwrap_or_else(|_| stdout_text.clone());
         fs::write(&raw_result_path, &pretty).ok();
     } else {
         fs::write(&raw_result_path, &stdout_text).ok();
     }
 
     let duration_ms = started.elapsed().as_millis() as u64;
-    let exit_code = status_result.code().unwrap_or(-1);
-
-    let stdout_truncated_preview = if stdout_text.len() > 4096 {
-        format!("{}…", &stdout_text[..4096])
+    let exit_code = if timed_out {
+        124
     } else {
-        stdout_text
+        status_result
+            .as_ref()
+            .and_then(|status| status.code())
+            .unwrap_or(-1)
     };
+
+    let success = exit_code == 0 && raw_output.is_some();
+    let _ = app.emit(
+        "splitter-progress",
+        json!({
+            "clusterId": &cluster_id,
+            "kind": if success { "completed" } else { "error" },
+            "message": if success { "完成" } else { "失败" },
+            "progressPercent": if success { 100 } else { 0 },
+        }),
+    );
+    let _ = app.emit(
+        "splitter-complete",
+        json!({
+            "clusterId": &cluster_id,
+            "status": if success { "succeeded" } else { "failed" },
+            "runDir": run_dir.to_string_lossy(),
+            "durationMs": duration_ms,
+        }),
+    );
+
+    // Write run-result.json for background recovery.
+    let _ = fs::write(
+        run_dir.join("run-result.json"),
+        serde_json::to_string_pretty(&json!({
+            "runId": &run_id,
+            "status": if success { "succeeded" } else { "failed" },
+            "exitCode": exit_code,
+            "durationMs": duration_ms,
+            "clusterId": &cluster_id,
+            "claudeSessionId": &claude_session_id,
+            "stdoutPath": stdout_path.to_string_lossy(),
+            "stderrPath": stderr_path.to_string_lossy(),
+            "rawResultPath": raw_result_path.to_string_lossy(),
+            "error": if timed_out { Some(format!("Claude 超时 ({} ms)", timeout_ms)) } else { None },
+        }))
+        .unwrap_or_default(),
+    );
+
+    let stdout_truncated_preview = truncate_utf8(&stdout_text, 4096);
+
+    if is_background {
+        // Background: emit completion and return. The caller (tokio::spawn) doesn't need the Result.
+    }
 
     Ok(DispatchClusterOutput {
         run_id,
@@ -916,6 +1052,69 @@ pub(crate) async fn prd_split_dispatch_cluster(
         raw_result_path: raw_result_path.to_string_lossy().to_string(),
         raw_output,
         stdout_truncated_preview,
+        claude_session_id,
+    })
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct BackgroundRunToken {
+    run_id: String,
+    run_dir: String,
+}
+
+#[tauri::command]
+pub(crate) async fn prd_split_dispatch_cluster_background(
+    app: tauri::AppHandle,
+    input: DispatchClusterInput,
+) -> Result<BackgroundRunToken, String> {
+    let runs_base = crate::wise_dir()
+        .map_err(|e| format!("解析 ~/.wise 失败: {e}"))?
+        .join("prd-runs");
+    fs::create_dir_all(&runs_base).map_err(|e| format!("创建 ~/.wise/prd-runs 失败: {e}"))?;
+
+    let run_id = format!(
+        "split-{}-{}",
+        sanitize_for_filename(&input.cluster_id),
+        unix_ms_now()
+    );
+    let run_dir = runs_base.join(&run_id);
+    fs::create_dir_all(&run_dir)
+        .map_err(|e| format!("创建 run_dir 失败 ({}): {e}", run_dir.to_string_lossy()))?;
+
+    let run_dir_str = run_dir.to_string_lossy().to_string();
+    let app_clone = app.clone();
+
+    let run_id_for_task = run_id.clone();
+    let run_dir_for_task = run_dir.clone();
+
+    tokio::spawn(async move {
+        match dispatch_cluster_impl(
+            app_clone,
+            input,
+            true,
+            Some((run_id_for_task.clone(), run_dir_for_task.clone())),
+        )
+        .await
+        {
+            Ok(_) => {}
+            Err(e) => {
+                let _ = fs::write(
+                    run_dir_for_task.join("run-result.json"),
+                    serde_json::to_string_pretty(&json!({
+                        "runId": run_id_for_task,
+                        "status": "failed",
+                        "error": e,
+                    }))
+                    .unwrap_or_default(),
+                );
+            }
+        }
+    });
+
+    Ok(BackgroundRunToken {
+        run_id,
+        run_dir: run_dir_str,
     })
 }
 
@@ -945,6 +1144,142 @@ fn unix_ms_now() -> u128 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis())
         .unwrap_or(0)
+}
+
+fn inject_run_dir_into_prompt(prompt: &str, run_dir: &Path) -> String {
+    let run_dir_str = run_dir.to_string_lossy();
+    if prompt.contains(run_dir_str.as_ref()) {
+        return prompt.to_string();
+    }
+    let protocol = format!(
+        "Run directory: `{}`\nRead all input bundle files from this absolute directory before producing JSON.",
+        run_dir_str
+    );
+    match prompt.split_once('\n') {
+        Some((first, rest)) => format!("{first}\n\n{protocol}\n{rest}"),
+        None => format!("{prompt}\n\n{protocol}"),
+    }
+}
+
+fn truncate_utf8(text: &str, max_chars: usize) -> String {
+    let mut out = String::new();
+    for (idx, ch) in text.chars().enumerate() {
+        if idx >= max_chars {
+            out.push('…');
+            return out;
+        }
+        out.push(ch);
+    }
+    out
+}
+
+fn extract_claude_session_id_from_stdout(stdout: &str) -> Option<String> {
+    for line in stdout.lines() {
+        let trimmed = line.trim();
+        if !trimmed.starts_with('{') {
+            continue;
+        }
+        let Ok(value) = serde_json::from_str::<Value>(trimmed) else {
+            continue;
+        };
+        if value.get("type").and_then(|v| v.as_str()) != Some("system")
+            || value.get("subtype").and_then(|v| v.as_str()) != Some("init")
+        {
+            continue;
+        }
+        let sid = value
+            .get("session_id")
+            .or_else(|| value.get("sessionId"))
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())?;
+        return Some(sid.to_string());
+    }
+    None
+}
+
+fn is_split_payload(value: &Value) -> bool {
+    value.is_object() && value.get("tasks").is_some()
+}
+
+fn extract_split_payload_from_json_value(value: &Value) -> Option<Value> {
+    if is_split_payload(value) {
+        return Some(value.clone());
+    }
+    if value.get("type").and_then(|v| v.as_str()) == Some("result") {
+        for key in ["result", "output"] {
+            let Some(raw) = value.get(key) else {
+                continue;
+            };
+            if is_split_payload(raw) {
+                return Some(raw.clone());
+            }
+            if let Some(text) = raw.as_str() {
+                if let Some(parsed) = extract_json_object(text).filter(is_split_payload) {
+                    return Some(parsed);
+                }
+            }
+        }
+    }
+    if value.get("type").and_then(|v| v.as_str()) == Some("assistant") {
+        let blocks = value
+            .get("message")
+            .and_then(|m| m.get("content"))
+            .and_then(|content| content.as_array());
+        if let Some(blocks) = blocks {
+            for block in blocks {
+                let text = block
+                    .get("text")
+                    .and_then(|v| v.as_str())
+                    .or_else(|| block.get("thinking").and_then(|v| v.as_str()));
+                if let Some(text) = text {
+                    if let Some(parsed) = extract_json_object(text).filter(is_split_payload) {
+                        return Some(parsed);
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+fn extract_split_payload_from_stdout(stdout: &str) -> Option<Value> {
+    let mut assistant_text = String::new();
+    for line in stdout.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if let Ok(value) = serde_json::from_str::<Value>(trimmed) {
+            if let Some(payload) = extract_split_payload_from_json_value(&value) {
+                return Some(payload);
+            }
+            if value.get("type").and_then(|v| v.as_str()) == Some("assistant") {
+                if let Some(blocks) = value
+                    .get("message")
+                    .and_then(|m| m.get("content"))
+                    .and_then(|content| content.as_array())
+                {
+                    for block in blocks {
+                        if block.get("type").and_then(|v| v.as_str()) != Some("text") {
+                            continue;
+                        }
+                        if let Some(text) = block.get("text").and_then(|v| v.as_str()) {
+                            assistant_text.push_str(text);
+                            assistant_text.push('\n');
+                        }
+                    }
+                }
+            }
+            continue;
+        }
+        if let Some(parsed) = extract_json_object(trimmed).filter(is_split_payload) {
+            return Some(parsed);
+        }
+    }
+    extract_json_object(&assistant_text)
+        .or_else(|| extract_json_object(stdout))
+        .filter(is_split_payload)
 }
 
 /// 从 Claude stdout 文本中提取首个 `{` 起始的合法 JSON 对象。Claude 可能在 JSON 前后
@@ -1057,5 +1392,34 @@ mod tests {
     fn extract_json_object_returns_none_on_garbage() {
         assert!(extract_json_object("no json here").is_none());
         assert!(extract_json_object("{ unbalanced").is_none());
+    }
+
+    #[test]
+    fn inject_run_dir_preserves_active_task_first_line() {
+        let prompt = "Active task: .trellis/tasks/parent\n\nNow produce JSON.";
+        let out = inject_run_dir_into_prompt(prompt, Path::new("/tmp/wise-run"));
+        assert!(out.starts_with("Active task: .trellis/tasks/parent\n"));
+        assert!(out.contains("Run directory: `/tmp/wise-run`"));
+    }
+
+    #[test]
+    fn extract_split_payload_reads_stream_json_result() {
+        let stdout = concat!(
+            r#"{"type":"system","subtype":"init","session_id":"sid-1"}"#,
+            "\n",
+            r#"{"type":"result","result":"{\"tasks\":[{\"id\":\"t1\"}]}"}"#,
+            "\n"
+        );
+        let out = extract_split_payload_from_stdout(stdout).unwrap();
+        assert_eq!(out["tasks"].as_array().unwrap().len(), 1);
+        assert_eq!(
+            extract_claude_session_id_from_stdout(stdout).as_deref(),
+            Some("sid-1")
+        );
+    }
+
+    #[test]
+    fn truncate_utf8_does_not_split_multibyte_chars() {
+        assert_eq!(truncate_utf8("中文abc", 3), "中文a…");
     }
 }

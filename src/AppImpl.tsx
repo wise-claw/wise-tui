@@ -32,11 +32,12 @@ import { getTaskTemplate, setTaskTemplate } from "./services/projectState";
 import { ensureCrepeToolbarTitleHintsInstalled } from "./utils/crepeToolbarTitles";
 import {
   WORKFLOW_UI_EVENT_OPEN_PRD_SPLIT_WIZARD,
+  WORKFLOW_UI_EVENT_OPEN_MISSION_CONTROL,
   WORKFLOW_UI_EVENT_OPEN_REPOSITORY_FILE,
   WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL,
   WORKFLOW_UI_EVENT_OPEN_WORKFLOW_CONFIG,
   WORKFLOW_UI_EVENT_WORKFLOW_GRAPH_CHANGED,
-  type OpenPrdSplitWizardDetail,
+  type OpenMissionControlDetail,
   type OpenRepositoryFileDetail,
   type OpenWorkflowConfigDetail,
   type WorkflowGraphChangedDetail,
@@ -139,6 +140,8 @@ export default function App() {
   /** 左栏技能：在主区+右栏之上叠层展示 skills.sh（不盖左栏，非全屏居中 Modal）。 */
   const [skillsHubMode, setSkillsHubMode] = useState(false);
   const [codeKnowledgeGraphMode, setCodeKnowledgeGraphMode] = useState(false);
+  const [missionControlMode, setMissionControlMode] = useState(false);
+  const [missionControlInitialTarget, setMissionControlInitialTarget] = useState<OpenMissionControlDetail | null>(null);
   const [promptsOpenContext, setPromptsOpenContext] = useState<PromptsOpenContext | null>(null);
   const [repositorySplitTemplate, setRepositorySplitTemplate] = useState("");
   const [projectSplitTemplate, setProjectSplitTemplate] = useState("");
@@ -847,7 +850,7 @@ export default function App() {
     });
   }, [repositories, setActiveRepositoryWithOwner]);
   const workspaceMode = useWorkspaceMode({ activeProjectId, projects });
-  const openPrdSplitWizard = useCallback((detail: OpenPrdSplitWizardDetail) => {
+  const openMissionControl = useCallback((detail: OpenMissionControlDetail) => {
     setSearchOpen(false);
     setPromptsMode(false);
     setMcpHubMode(false);
@@ -855,8 +858,10 @@ export default function App() {
     setCodeKnowledgeGraphMode(false);
     setCcWfStudioMode(false);
     setTaskSplitMode(false);
-    window.dispatchEvent(new CustomEvent(WORKFLOW_UI_EVENT_OPEN_PRD_SPLIT_WIZARD, { detail }));
+    setMissionControlInitialTarget(detail);
+    setMissionControlMode(true);
   }, []);
+  const openPrdSplitWizard = openMissionControl;
   const composerProjectRoleTagOptions = useMemo(() => {
     if (!shouldHideEmployeeUi(activeProject)) {
       return [];
@@ -1316,6 +1321,7 @@ export default function App() {
       setSkillsHubMode(false);
       setCcWfStudioMode(false);
       setTaskSplitMode(false);
+      setMissionControlMode(false);
       handleSidebarRepositorySelect(repositoryId);
     },
     [handleSidebarRepositorySelect],
@@ -1326,6 +1332,7 @@ export default function App() {
       setMcpHubMode(false);
       setSkillsHubMode(false);
       setCcWfStudioMode(false);
+      setMissionControlMode(false);
       const project = projects.find((p) => p.id === projectId) ?? null;
       const firstRepoId = project?.repositoryIds[0] ?? null;
       // 进项目即开主会话：通过 handleSidebarRepositorySelect 统一路由
@@ -1346,6 +1353,7 @@ export default function App() {
       setMcpHubMode(false);
       setSkillsHubMode(false);
       setCcWfStudioMode(false);
+      setMissionControlMode(false);
       jumpToSessionWithRepository(sessionId);
     },
     [jumpToSessionWithRepository],
@@ -1486,7 +1494,7 @@ export default function App() {
 
   useEffect(() => {
     function handleOpenTaskSplitPanel() {
-      openPrdSplitWizard(
+      openMissionControl(
         activeProjectId
           ? { projectId: activeProjectId }
           : activeRepositoryId != null
@@ -1495,10 +1503,18 @@ export default function App() {
       );
     }
     window.addEventListener(WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL, handleOpenTaskSplitPanel as EventListener);
+    window.addEventListener(WORKFLOW_UI_EVENT_OPEN_PRD_SPLIT_WIZARD, handleOpenMissionControlEvent as EventListener);
+    window.addEventListener(WORKFLOW_UI_EVENT_OPEN_MISSION_CONTROL, handleOpenMissionControlEvent as EventListener);
     return () => {
       window.removeEventListener(WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL, handleOpenTaskSplitPanel as EventListener);
+      window.removeEventListener(WORKFLOW_UI_EVENT_OPEN_PRD_SPLIT_WIZARD, handleOpenMissionControlEvent as EventListener);
+      window.removeEventListener(WORKFLOW_UI_EVENT_OPEN_MISSION_CONTROL, handleOpenMissionControlEvent as EventListener);
     };
-  }, [activeProjectId, activeRepositoryId, openPrdSplitWizard]);
+    function handleOpenMissionControlEvent(event: Event) {
+      const detail = (event as CustomEvent<OpenMissionControlDetail>).detail ?? {};
+      openMissionControl(detail);
+    }
+  }, [activeProjectId, activeRepositoryId, openMissionControl]);
 
   useEffect(() => {
     function handleWorkflowConfigEvent(event: Event) {
@@ -1510,6 +1526,7 @@ export default function App() {
       setMcpHubMode(false);
       setSkillsHubMode(false);
       setTaskSplitMode(false);
+      setMissionControlMode(false);
       setWorkflowConfigPrdProjectId(projectId || null);
       setWorkflowConfigInitialWorkflowId(workflowId || null);
       setWorkflowConfigOpen(true);
@@ -1631,6 +1648,7 @@ export default function App() {
       ccWfStudioMode={ccWfStudioMode}
       ccWfStudioSessionPath={ccWfStudioSessionPath}
       onCloseCcWorkflowStudio={onCloseCcWorkflowStudio}
+      missionControlMode={missionControlMode}
       compactLayoutMode={compactLayoutMode}
       effectiveRightCollapsed={effectiveRightCollapsed}
       mainLayoutContentRef={mainLayoutContentRef}
@@ -1653,6 +1671,7 @@ export default function App() {
           setSkillsHubMode(false);
           setCodeKnowledgeGraphMode(false);
           setCcWfStudioMode(false);
+          setMissionControlMode(false);
           setMcpHubMode(true);
         },
         skillsNavActive: skillsHubMode,
@@ -1661,6 +1680,7 @@ export default function App() {
           setMcpHubMode(false);
           setCodeKnowledgeGraphMode(false);
           setCcWfStudioMode(false);
+          setMissionControlMode(false);
           setSkillsHubMode(true);
         },
         codeKnowledgeGraphNavActive: codeKnowledgeGraphMode,
@@ -1669,6 +1689,7 @@ export default function App() {
           setMcpHubMode(false);
           setSkillsHubMode(false);
           setCcWfStudioMode(false);
+          setMissionControlMode(false);
           setCodeKnowledgeGraphMode(true);
         },
         workflowStudioNavActive: ccWfStudioMode,
@@ -1903,6 +1924,13 @@ export default function App() {
           if (repo) await handleRemoveRepository(repo);
         },
         onOpenAddRepository: () => void handleAddFloatingRepository("frontend"),
+      }}
+      missionControlProps={{
+        projects,
+        repositories,
+        sessions,
+        initialTarget: missionControlInitialTarget,
+        onClose: () => setMissionControlMode(false),
       }}
       prdTaskSplitPanelProps={{
         onClose: () => setTaskSplitMode(false),
