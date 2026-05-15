@@ -87,7 +87,7 @@ body {
   align-self: stretch;
 }
 
-/* MCP / skills.sh：叠在主内容+右栏之上（非全视口居中 Modal） */
+/* MCP / skills.sh / 代码图谱：叠在主内容+右栏之上 */
 .app-mcp-hub-overlay,
 .app-skills-hub-overlay,
 .app-code-graph-overlay {
@@ -103,11 +103,111 @@ body {
   box-shadow: inset 1px 0 0 var(--ant-color-border-secondary);
 }
 
+/* CC Workflow Studio：同上，且建立包含块，使内层 Radix/Antd fixed 蒙层相对本区而非整窗（勿盖左侧栏） */
+.wise-cc-wf-studio-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--ant-color-bg-layout);
+  box-shadow: inset 1px 0 0 var(--ant-color-border-secondary);
+  transform: translateZ(0);
+}
+
+/* 关闭叠层后保留 Webview/MCP 桥：移出视口，避免卸载导致 get_current_workflow 断连 */
+.wise-cc-wf-studio-background-host {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+}
+
 .app-mcp-hub-overlay > .app-mcp-hub-root,
 .app-skills-hub-overlay > .app-skills-hub-root,
-.app-code-graph-overlay > .app-code-graph-panel {
+.app-code-graph-overlay > .app-code-graph-panel,
+.wise-cc-wf-studio-overlay > .wise-cc-wf-studio-overlay-body {
   flex: 1 1 0%;
   min-height: 0;
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* 工作流工作室：填满主区+右栏叠层（勿用 100vh/100vw，否则会按视口溢出裁切） */
+.wise-cc-wf-studio-root {
+  flex: 1 1 0%;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.wise-cc-wf-studio-root > .wise-cc-wf-studio-loading {
+  flex: 1 1 0%;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  color: var(--ant-color-text-secondary);
+}
+
+.wise-cc-wf-studio-shell-wrap {
+  position: relative;
+  flex: 1 1 0%;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Radix Portal 挂载点：铺满 shell，不拦截指针（由子层恢复） */
+.wise-cc-wf-studio-radix-portal-host {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10050;
+}
+
+/* Portal 根节点须恢复 pointer-events，否则 Radix Dialog 打开即 focus-outside dismiss */
+.wise-cc-wf-studio-radix-portal-host > * {
+  pointer-events: auto;
+}
+
+.wise-cc-wf-studio-shell-main {
+  flex: 1 1 0%;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  /* vendor `App` / WorkflowEditor 的直接父级：暗底与模拟 VS Code 变量一致，不修改工作流内部节点样式 */
+  background-color: var(--vscode-editor-background, #1f1f1f);
+}
+
+.wise-cc-wf-studio-overlay-toolbar {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-bg-container);
 }
 
 /* 需求拆分（PRD）：叠在中栏+右栏之上，不盖左侧栏 */
@@ -388,7 +488,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
   cursor: grab;
 }
 
-/* ── 左栏 MCP / 技能 入口（位于「项目」标题上方） ── */
+/* ── 左栏 MCP / 技能 / 工作流 / 图谱 入口（位于「项目」标题上方） ── */
 .app-left-sidebar-top-nav-stack {
   display: flex;
   flex-direction: column;
@@ -402,6 +502,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
 
 .app-left-sidebar-mcp-nav,
 .app-left-sidebar-skills-nav,
+.app-left-sidebar-workflow-nav,
 .app-left-sidebar-graph-nav {
   display: flex;
   align-items: center;
@@ -422,6 +523,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
 
 .app-left-sidebar-mcp-nav:hover,
 .app-left-sidebar-skills-nav:hover,
+.app-left-sidebar-workflow-nav:hover,
 .app-left-sidebar-graph-nav:hover {
   background: var(--ant-color-fill-tertiary);
   color: var(--ant-color-text);
@@ -429,6 +531,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
 
 .app-left-sidebar-mcp-nav--active,
 .app-left-sidebar-skills-nav--active,
+.app-left-sidebar-workflow-nav--active,
 .app-left-sidebar-graph-nav--active {
   /* 与当前仓库行一致：菜单式浅蓝底 + 正文色字，仅图标用主色点缀 */
   background: var(--ant-control-item-bg-active);
@@ -438,6 +541,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
 
 .app-left-sidebar-mcp-nav--active:hover,
 .app-left-sidebar-skills-nav--active:hover,
+.app-left-sidebar-workflow-nav--active:hover,
 .app-left-sidebar-graph-nav--active:hover {
   background: var(--ant-control-item-bg-active);
   color: var(--ant-color-text);
@@ -445,6 +549,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
 
 .app-left-sidebar-mcp-nav-icon,
 .app-left-sidebar-skills-nav-icon,
+.app-left-sidebar-workflow-nav-icon,
 .app-left-sidebar-graph-nav-icon {
   display: flex;
   align-items: center;
@@ -457,12 +562,14 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
 
 .app-left-sidebar-mcp-nav--active .app-left-sidebar-mcp-nav-icon,
 .app-left-sidebar-skills-nav--active .app-left-sidebar-skills-nav-icon,
+.app-left-sidebar-workflow-nav--active .app-left-sidebar-workflow-nav-icon,
 .app-left-sidebar-graph-nav--active .app-left-sidebar-graph-nav-icon {
   color: var(--ant-color-primary);
 }
 
 .app-left-sidebar-mcp-nav-icon svg,
 .app-left-sidebar-skills-nav-icon svg,
+.app-left-sidebar-workflow-nav-icon svg,
 .app-left-sidebar-graph-nav-icon svg {
   display: block;
   width: 14px;
@@ -472,6 +579,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
 
 .app-left-sidebar-mcp-nav-label,
 .app-left-sidebar-skills-nav-label,
+.app-left-sidebar-workflow-nav-label,
 .app-left-sidebar-graph-nav-label {
   flex: 1;
   min-width: 0;

@@ -1,7 +1,13 @@
 import { Tooltip } from "antd";
 import { ClaudeCodeUsageHeaderBtn } from "../ClaudeCodeUsagePopover";
 import { IconSettings } from "../icons/IconSettings";
-import { CodeKnowledgeGraphNavIcon, IconCompactLayout, McpNavIcon, SkillsNavIcon } from "./SidebarIcons";
+import {
+  CodeKnowledgeGraphNavIcon,
+  IconCompactLayout,
+  McpNavIcon,
+  SkillsNavIcon,
+  WorkflowStudioNavIcon,
+} from "./SidebarIcons";
 
 interface LeftSidebarTopbarProps {
   compactLayoutMode: boolean;
@@ -58,6 +64,8 @@ interface LeftSidebarTopNavStackProps {
   onOpenMcpHub?: () => void;
   skillsNavActive: boolean;
   onOpenSkillsHub?: () => void;
+  workflowStudioNavActive?: boolean;
+  onOpenWorkflowStudio?: () => void;
   codeKnowledgeGraphNavActive?: boolean;
   onOpenCodeKnowledgeGraph?: () => void;
 }
@@ -67,10 +75,12 @@ export function LeftSidebarTopNavStack({
   onOpenMcpHub,
   skillsNavActive,
   onOpenSkillsHub,
+  workflowStudioNavActive = false,
+  onOpenWorkflowStudio,
   codeKnowledgeGraphNavActive = false,
   onOpenCodeKnowledgeGraph,
 }: LeftSidebarTopNavStackProps) {
-  if (!onOpenMcpHub && !onOpenSkillsHub && !onOpenCodeKnowledgeGraph) {
+  if (!onOpenMcpHub && !onOpenSkillsHub && !onOpenWorkflowStudio && !onOpenCodeKnowledgeGraph) {
     return null;
   }
 
@@ -98,6 +108,19 @@ export function LeftSidebarTopNavStack({
             <SkillsNavIcon />
           </span>
           <span className="app-left-sidebar-skills-nav-label">技能</span>
+        </button>
+      ) : null}
+      {onOpenWorkflowStudio ? (
+        <button
+          type="button"
+          className={`app-left-sidebar-workflow-nav${workflowStudioNavActive ? " app-left-sidebar-workflow-nav--active" : ""}`}
+          aria-label="打开 Claude Code 工作流编排"
+          onClick={onOpenWorkflowStudio}
+        >
+          <span className="app-left-sidebar-workflow-nav-icon" aria-hidden>
+            <WorkflowStudioNavIcon />
+          </span>
+          <span className="app-left-sidebar-workflow-nav-label">工作流</span>
         </button>
       ) : null}
       {onOpenCodeKnowledgeGraph ? (

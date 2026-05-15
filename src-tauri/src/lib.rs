@@ -2,6 +2,8 @@ mod app_state_commands;
 mod claude_code_usage;
 mod claude_commands;
 mod claude_config_dir;
+mod cc_workflow_studio;
+mod cc_wf_studio_mcp_bridge;
 mod code_knowledge_graph;
 mod cua_driver;
 mod dingtalk_enterprise_bot;

@@ -39,6 +39,9 @@ const PromptsPanel = lazy(() => import("./PromptsPanel").then((module) => ({ def
 const WorkflowConfigModal = lazy(() =>
   import("./WorkflowConfigModal").then((module) => ({ default: module.WorkflowConfigModal })),
 );
+const WiseCcWorkflowStudioPanel = lazy(() =>
+  import("../features/cc-wf-studio/WiseCcWorkflowStudioPanel").then((m) => ({ default: m.WiseCcWorkflowStudioPanel })),
+);
 const MemoLeftSidebar = memo(LeftSidebar);
 const MemoClaudeSessions = memo(ClaudeSessions);
 const MemoRightPanel = memo(RightPanel);
@@ -232,6 +235,9 @@ export interface AppWorkspaceLayoutProps {
   mcpHubMode: boolean;
   skillsHubMode: boolean;
   codeKnowledgeGraphMode: boolean;
+  ccWfStudioMode: boolean;
+  ccWfStudioSessionPath: string | null;
+  onCloseCcWorkflowStudio: () => void;
   compactLayoutMode: boolean;
   effectiveRightCollapsed: boolean;
   mainLayoutContentRef: RefObject<HTMLElement | null>;
@@ -271,6 +277,9 @@ export function AppWorkspaceLayout({
   mcpHubMode,
   skillsHubMode,
   codeKnowledgeGraphMode,
+  ccWfStudioMode,
+  ccWfStudioSessionPath,
+  onCloseCcWorkflowStudio,
   compactLayoutMode,
   effectiveRightCollapsed,
   mainLayoutContentRef,
@@ -424,6 +433,15 @@ export function AppWorkspaceLayout({
                       <div className="app-code-graph-overlay" role="region" aria-label="代码知识图谱">
                         <ConnectedCodeKnowledgeGraphPanel codeKnowledgeGraphProps={codeKnowledgeGraphProps} />
                       </div>
+                    ) : null}
+                    {ccWfStudioSessionPath ? (
+                      <Suspense fallback={null}>
+                        <WiseCcWorkflowStudioPanel
+                          repositoryPath={ccWfStudioSessionPath}
+                          overlayVisible={ccWfStudioMode}
+                          onClose={onCloseCcWorkflowStudio}
+                        />
+                      </Suspense>
                     ) : null}
                     {taskSplitMode ? (
                       <div className="app-task-split-overlay" role="dialog" aria-label="需求管理">

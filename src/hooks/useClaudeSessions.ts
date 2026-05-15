@@ -30,6 +30,10 @@ import {
 } from "../constants/claudeMessageListWindow";
 import { wiseNotificationIngest } from "../services/wiseMascot";
 import {
+  isQuestionStdinUnavailableError,
+  shouldDeliverQuestionViaResume,
+} from "../utils/questionControlDelivery";
+import {
   buildPermissionStdinLine,
   buildQuestionStdinLine,
   ingestClaudeStreamLineForHub,
@@ -1392,48 +1396,67 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   }, []);
 
   // ── Dock handlers ──
+  const deliverQuestionAnswerViaResume = useCallback(
+    async (
+      ownerSessionId: string,
+      qr: QuestionRequest,
+      answers: string[],
+      customAnswer?: string,
+    ): Promise<boolean> => {
+      const session = sessionsRef.current.find(
+        (s) => s.id === ownerSessionId || s.claudeSessionId === ownerSessionId,
+      );
+      const tabSession = sessionsRef.current.find(
+        (s) => s.id === ownerSessionId || s.claudeSessionId === ownerSessionId,
+      );
+      if (!tabSession) {
+        message.warning("找不到对应会话标签，无法以 resume 接续。");
+        return false;
+      }
+      const fallback = buildQuestionFallbackUserPrompt(qr, answers, customAnswer);
+      try {
+        const sendPromise = sendMessageToSession(ownerSessionId, fallback);
+        void syncSessionStatusesWithHostRegistry();
+        await sendPromise;
+        notificationHub.clearQuestion(ownerSessionId);
+        message.success("已把你的选择作为新用户消息发出，并以 resume 重启该会话子进程。");
+        if (session) {
+          const facade = getWorkflowFacade();
+          const workflowRunId = (await ensureWorkflowRunId(session)) ?? `session:${session.id}`;
+          await facade.respondQuestion({
+            workflowRunId,
+            sessionId: session.id,
+            requestId: qr.id,
+            answers,
+            customAnswer,
+          });
+        }
+        void syncSessionStatusesWithHostRegistry();
+        return true;
+      } catch (e2) {
+        message.error(e2 instanceof Error ? e2.message : String(e2));
+        return false;
+      }
+    },
+    [ensureWorkflowRunId, sendMessageToSession, syncSessionStatusesWithHostRegistry],
+  );
+
   const respondToQuestion = useCallback(
     async (sessionId: string, answers: string[], customAnswer?: string) => {
       const qr = notificationHub.getDockSlice(sessionId).questionRequest;
       if (!qr) return;
       const qrLife = notificationHub.getRequestLifecycle(qr.id);
-      if (qrLife?.status === "expired") {
-        // 超时/单轮 complete 后的「重新提交」：不再写 stdin，把你的选择作为一条用户消息走 resume 重启子进程（同 claudeSessionId）
-        const ownerSessionId = notificationHub.findRequestSessionId(qr.id) ?? sessionId;
-        const session = sessionsRef.current.find(
-          (s) => s.id === ownerSessionId || s.claudeSessionId === ownerSessionId,
-        );
-        const tabSession = sessionsRef.current.find((s) => s.id === ownerSessionId);
-        if (!tabSession) {
-          message.warning("找不到对应会话标签，无法以 resume 接续。");
-          return;
-        }
-        const fallback = buildQuestionFallbackUserPrompt(qr, answers, customAnswer);
-        try {
-          const sendPromise = sendMessageToSession(ownerSessionId, fallback);
-          void syncSessionStatusesWithHostRegistry();
-          await sendPromise;
-          notificationHub.clearQuestion(ownerSessionId);
-          message.success("已把你的选择作为新用户消息发出，并以 resume 重启该会话子进程。");
-          if (session) {
-            const facade = getWorkflowFacade();
-            const workflowRunId = (await ensureWorkflowRunId(session)) ?? `session:${session.id}`;
-            await facade.respondQuestion({
-              workflowRunId,
-              sessionId: session.id,
-              requestId: qr.id,
-              answers,
-              customAnswer,
-            });
-          }
-          void syncSessionStatusesWithHostRegistry();
-        } catch (e2) {
-          message.error(e2 instanceof Error ? e2.message : String(e2));
-        }
+      const ownerSessionId = notificationHub.findRequestSessionId(qr.id) ?? sessionId;
+      const session = sessionsRef.current.find(
+        (s) => s.id === ownerSessionId || s.claudeSessionId === ownerSessionId,
+      );
+
+      // 子进程已结束、stdin 已回收，或上次 stdin 失败：首次点击即走 resume，避免先报错再点「重新提交」。
+      if (shouldDeliverQuestionViaResume(qrLife, session)) {
+        await deliverQuestionAnswerViaResume(ownerSessionId, qr, answers, customAnswer);
         return;
       }
-      const ownerSessionId = notificationHub.findRequestSessionId(qr.id) ?? sessionId;
-      const session = sessionsRef.current.find((s) => s.id === ownerSessionId || s.claudeSessionId === ownerSessionId);
+
       const targetSessionId = session?.claudeSessionId ?? session?.id ?? ownerSessionId;
       try {
         await submitClaudeStdinLine(buildQuestionStdinLine(qr.id, answers, customAnswer, qr), targetSessionId);
@@ -1442,33 +1465,9 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         void syncSessionStatusesWithHostRegistry();
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
-        if (/没有可写 stdin|未指定目标会话/.test(msg)) {
-          const fallback = buildQuestionFallbackUserPrompt(qr, answers, customAnswer);
+        if (isQuestionStdinUnavailableError(msg)) {
           notificationHub.invalidateControlRequestsForSession(ownerSessionId, msg);
-          const tabSession = sessionsRef.current.find((s) => s.id === ownerSessionId);
-          if (!tabSession) {
-            message.warning("找不到对应会话标签，请手动发一条消息说明你的选择。");
-            return;
-          }
-          try {
-            const sendPromise = sendMessageToSession(ownerSessionId, fallback);
-            void syncSessionStatusesWithHostRegistry();
-            await sendPromise;
-            if (session) {
-              const facade = getWorkflowFacade();
-              const workflowRunId = (await ensureWorkflowRunId(session)) ?? `session:${session.id}`;
-              await facade.respondQuestion({
-                workflowRunId,
-                sessionId: session.id,
-                requestId: qr.id,
-                answers,
-                customAnswer,
-              });
-            }
-            void syncSessionStatusesWithHostRegistry();
-          } catch (e2) {
-            message.error(e2 instanceof Error ? e2.message : String(e2));
-          }
+          await deliverQuestionAnswerViaResume(ownerSessionId, qr, answers, customAnswer);
         } else {
           notificationHub.markRequestFailed(qr.id, msg);
         }
@@ -1486,7 +1485,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         });
       }
     },
-    [ensureWorkflowRunId, sendMessageToSession, syncSessionStatusesWithHostRegistry],
+    [deliverQuestionAnswerViaResume, ensureWorkflowRunId, syncSessionStatusesWithHostRegistry],
   );
 
   const dismissQuestion = useCallback(

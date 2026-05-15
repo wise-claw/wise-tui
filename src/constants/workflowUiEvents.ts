@@ -1,6 +1,41 @@
 export const WORKFLOW_UI_EVENT_FOCUS_TASK_TOOL = "wise:focus-task-tool";
 
 export const WORKFLOW_UI_EVENT_APPLY_STARTER_PROMPT = "wise:apply-starter-prompt";
+
+/** CC Workflow Studio AI 编辑一键启动：在 Wise 当前仓库的 Claude 会话中执行 slash skill */
+export const WORKFLOW_UI_EVENT_CC_WF_STUDIO_LAUNCH_AI_EDITING = "wise:cc-wf-studio-launch-ai-editing";
+
+export interface CcWfStudioLaunchAiEditingDetail {
+  repositoryPath: string;
+  provider: string;
+}
+
+/** CC Workflow Studio MCP 后台会话结束（显式 Stop 或切换仓库） */
+export const WORKFLOW_UI_EVENT_CC_WF_STUDIO_MCP_SESSION_ENDED = "wise:cc-wf-studio-mcp-session-ended";
+
+/** MCP apply_workflow 需要用户确认时，请求宿主展开 Workflow Studio 叠层（后台宿主不可见会导致确认框被立即拒绝） */
+export const WORKFLOW_UI_EVENT_CC_WF_STUDIO_SHOW_OVERLAY = "wise:cc-wf-studio-show-overlay";
+
+export interface CcWfStudioShowOverlayDetail {
+  repositoryPath: string;
+}
+
+/** CC Workflow Studio「运行」：已在仓库写入 Slash Command，请求向当前仓库的 Claude Code 会话发送 `/<workflow>` */
+export const WORKFLOW_UI_EVENT_CC_WF_STUDIO_RUN_IN_CLAUDE_SESSION = "wise:cc-wf-studio-run-in-claude-session";
+
+export interface CcWfStudioRunInClaudeSessionDetail {
+  repositoryPath: string;
+  /** 例如 `/my-workflow`，与 `.claude/commands/` 下文件名一致 */
+  slashCommand: string;
+}
+
+/** 会话内运行 CC Workflow Studio 工作流时，请求宿主展开叠层并切到可展示执行动画的画布视图 */
+export const WORKFLOW_UI_EVENT_CC_WF_STUDIO_ENTER_EXECUTION_WATCH =
+  "wise:cc-wf-studio-enter-execution-watch";
+
+export interface CcWfStudioEnterExecutionWatchDetail {
+  repositoryPath: string;
+}
 export const WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL = "wise:open-task-split-panel";
 export const WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED = "wise:split-todo-count-updated";
 

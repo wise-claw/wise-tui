@@ -1,0 +1,946 @@
+/**
+ * Claude Code Workflow Studio - Webview Translation Keys
+ */
+
+export interface WebviewTranslationKeys {
+  // Common
+  loading: string;
+  description: string;
+  optional: string;
+  cancel: string;
+  'common.close': string;
+  'common.cancel': string;
+  'loading.importWorkflow': string;
+  'loading.openWorkflow': string;
+
+  // Overview mode
+  'overview.label': string;
+  'overview.loading': string;
+  'overview.parseError': string;
+  'overview.openInEditor': string;
+  'overview.versionBefore': string;
+  'overview.versionAfter': string;
+  'overview.emptyState.title': string;
+  'overview.emptyState.description': string;
+
+  // Toolbar
+  'toolbar.workflowNamePlaceholder': string;
+  'toolbar.save': string;
+  'toolbar.saving': string;
+  'toolbar.export': string;
+  'toolbar.export.tooltip': string;
+  'toolbar.exporting': string;
+  'toolbar.refineWithAI': string;
+  'toolbar.selectWorkflow': string;
+  'toolbar.load': string;
+  'toolbar.loading': string;
+  'toolbar.refreshList': string;
+
+  // Toolbar view mode (Edit / Overview)
+  'toolbar.viewMode.switchToOverview': string;
+  'toolbar.viewMode.switchToEdit': string;
+
+  // Toolbar interaction mode
+  'toolbar.interactionMode.panButton': string;
+  'toolbar.interactionMode.rangeSelectionButton': string;
+  'toolbar.interactionMode.switchToPan': string;
+  'toolbar.interactionMode.switchToSelection': string;
+  'toolbar.edgeAnimation.enable': string;
+  'toolbar.edgeAnimation.disable': string;
+  'toolbar.highlight.enable': string;
+  'toolbar.highlight.disable': string;
+  'toolbar.highlight.confirmDisable.title': string;
+  'toolbar.highlight.confirmDisable.message': string;
+  'toolbar.highlight.confirmDisable.confirm': string;
+  'toolbar.highlight.confirmDisable.cancel': string;
+  'toolbar.undo': string;
+  'toolbar.redo': string;
+  'toolbar.scrollMode.switchToClassic': string;
+  'toolbar.scrollMode.switchToFreehand': string;
+
+  // Toolbar minimap toggle
+  'toolbar.minimapToggle.hidden': string;
+  'toolbar.minimapToggle.auto': string;
+  'toolbar.minimapToggle.always': string;
+
+  // Toolbar errors
+  'toolbar.error.workflowNameRequired': string;
+  'toolbar.error.workflowNameInvalid': string;
+  'toolbar.error.workflowNameRequiredForExport': string;
+  'toolbar.error.selectWorkflowToLoad': string;
+  'toolbar.error.validationFailed': string;
+  'toolbar.error.missingEndNode': string;
+  'toolbar.error.noActiveWorkflow': string;
+  'toolbar.error.invalidWorkflowFile': string;
+  'toolbar.generateNameWithAI': string;
+  'toolbar.error.nameGenerationFailed': string;
+
+  // Toolbar slash command group
+  'toolbar.run': string;
+  'toolbar.running': string;
+
+  // Toolbar slash command options dropdown
+  'toolbar.slashCommandOptions.frontmatterReferenceUrl': string;
+
+  // Toolbar hooks configuration dropdown
+  'hooks.title': string;
+  'hooks.preToolUse': string;
+  'hooks.postToolUse': string;
+  'hooks.stop': string;
+  'hooks.addEntry': string;
+  'hooks.removeEntry': string;
+  'hooks.matcher.description': string;
+  'hooks.once.description': string;
+  'hooks.validation.commandRequired': string;
+  'hooks.validation.commandTooLong': string;
+  'hooks.validation.matcherRequired': string;
+
+  // Argument Hint configuration
+  'argumentHint.example': string;
+  'argumentHint.exampleAdd': string;
+  'argumentHint.exampleRemove': string;
+  'argumentHint.exampleList': string;
+
+  // Toolbar more actions dropdown
+  'toolbar.moreActions': string;
+  'toolbar.help': string;
+  'toolbar.whatsNew': string;
+
+  // What's New dialog
+  'whatsNew.title': string;
+  'whatsNew.viewAllReleases': string;
+  'whatsNew.showBadge': string;
+
+  // Copilot Execution Mode
+  'copilot.mode.tooltip': string;
+  'copilot.mode.cli': string;
+  'copilot.mode.vscode': string;
+
+  // Node Palette
+  'palette.title': string;
+  'palette.basicNodes': string;
+  'palette.specialNodes': string;
+  'palette.controlFlow': string;
+  'palette.layout': string;
+  'palette.quickStart': string;
+
+  // Node types
+  'node.prompt.title': string;
+  'node.prompt.description': string;
+  'node.subAgent.title': string;
+  'node.subAgent.description': string;
+  'node.end.title': string;
+  'node.end.description': string;
+  'node.branch.title': string;
+  'node.branch.description': string;
+  'node.branch.deprecationNotice': string;
+  'node.ifElse.title': string;
+  'node.ifElse.description': string;
+  'node.switch.title': string;
+  'node.switch.description': string;
+  'node.askUserQuestion.title': string;
+  'node.askUserQuestion.description': string;
+  'node.skill.title': string;
+  'node.skill.description': string;
+
+  // Group Node
+  'node.group.title': string;
+  'node.group.description': string;
+  'property.group.members': string;
+  'property.group.empty': string;
+
+  // Codex Node (Feature: 518-codex-agent-node)
+  'node.codex.title': string;
+  'node.codex.description': string;
+  'node.codex.untitled': string;
+  'node.codex.aiGenerated': string;
+
+  // Codex Dialog (Feature: 518-codex-agent-node)
+  'codex.title': string;
+  'codex.description': string;
+  'codex.nameLabel': string;
+  'codex.namePlaceholder': string;
+  'codex.promptModeLabel': string;
+  'codex.promptMode.fixed': string;
+  'codex.promptMode.aiGenerated': string;
+  'codex.promptMode.aiGeneratedHelp': string;
+  'codex.promptLabel': string;
+  'codex.promptPlaceholder': string;
+  'codex.promptGuidanceLabel': string;
+  'codex.promptGuidancePlaceholder': string;
+  'codex.modelLabel': string;
+  'codex.model.custom': string;
+  'codex.customModelPlaceholder': string;
+  'codex.reasoningEffortLabel': string;
+  'codex.reasoningEffort.low': string;
+  'codex.reasoningEffort.medium': string;
+  'codex.reasoningEffort.high': string;
+  'codex.sandboxLabel': string;
+  'codex.sandbox.readOnly': string;
+  'codex.sandbox.workspaceWrite': string;
+  'codex.sandbox.dangerFullAccess': string;
+  'codex.sandboxHelp': string;
+  'codex.sandboxDefaultHelp': string;
+  'codex.advancedOptions': string;
+  'codex.skipGitRepoCheckWarning': string;
+  'codex.createButton': string;
+  'codex.cancelButton': string;
+  'codex.error.nameRequired': string;
+  'codex.error.nameTooLong': string;
+  'codex.error.nameInvalidPattern': string;
+  'codex.error.promptRequired': string;
+  'codex.error.promptTooLong': string;
+  'codex.error.modelRequired': string;
+  'codex.nameHelp': string;
+
+  // SubAgentFlow Node (Feature: 089-subworkflow)
+  'node.subAgentFlow.title': string;
+  'node.subAgentFlow.description': string;
+  'node.subAgentFlow.linked': string;
+  'node.subAgentFlow.notLinked': string;
+  'node.subAgentFlow.untitled': string;
+  'node.subAgentFlow.subAgentFlowNotFound': string;
+  'node.subAgentFlow.selectSubAgentFlow': string;
+
+  // SubAgentFlow Panel (Feature: 089-subworkflow)
+  'subAgentFlow.panel.title': string;
+  'subAgentFlow.create': string;
+  'subAgentFlow.delete': string;
+  'subAgentFlow.mainWorkflow': string;
+  'subAgentFlow.empty': string;
+  'subAgentFlow.default.name': string;
+  'subAgentFlow.editing': string;
+  'subAgentFlow.edit': string;
+  'subAgentFlow.clickToEdit': string;
+  'subAgentFlow.namePlaceholder': string;
+  'subAgentFlow.dialog.close': string;
+  'subAgentFlow.dialog.submit': string;
+  'subAgentFlow.dialog.cancel': string;
+  'subAgentFlow.generateNameWithAI': string;
+
+  // SubAgentFlow AI Edit
+  'subAgentFlow.aiEdit.title': string;
+  'subAgentFlow.aiEdit.toggleButton': string;
+
+  // SubAgentFlow validation errors
+  'error.subAgentFlow.nameRequired': string;
+  'error.subAgentFlow.nameTooLong': string;
+  'error.subAgentFlow.invalidName': string;
+
+  // Quick start instructions
+  'palette.nestedNotAllowed': string;
+  'palette.instruction.addNode': string;
+  'palette.instruction.dragNode': string;
+  'palette.instruction.connectNodes': string;
+  'palette.instruction.editProperties': string;
+
+  // Property Panel
+  'property.title': string;
+  'property.showInOverview': string;
+
+  // Common property labels
+  'property.nodeName': string;
+  'property.nodeName.placeholder': string;
+  'property.nodeName.help': string;
+  'property.description': string;
+  'property.prompt': string;
+  'property.model': string;
+  'property.label': string;
+  'property.label.placeholder': string;
+  'property.evaluationTarget': string;
+  'property.evaluationTarget.placeholder': string;
+  'property.evaluationTarget.help': string;
+
+  // Start/End node descriptions
+  'property.startNodeDescription': string;
+  'property.endNodeDescription': string;
+  'property.unknownNodeType': string;
+
+  // Sub-Agent properties
+  'property.tools': string;
+  'property.tools.placeholder': string;
+  'property.tools.help': string;
+  'property.memory': string;
+  'property.memory.referenceUrl': string;
+  'properties.subAgent.color': string;
+  'properties.subAgent.colorPlaceholder': string;
+  'properties.subAgent.colorNone': string;
+  'properties.subAgent.colorHelp': string;
+
+  // Skill properties
+  'property.skillPath': string;
+  'property.scope': string;
+  'property.scope.user': string;
+  'property.scope.project': string;
+  'property.scope.local': string;
+  // Legacy key for backward compatibility
+  'property.scope.personal': string;
+  'property.validationStatus': string;
+  'property.validationStatus.valid': string;
+  'property.validationStatus.missing': string;
+  'property.validationStatus.invalid': string;
+  'property.validationStatus.valid.tooltip': string;
+  'property.validationStatus.missing.tooltip': string;
+  'property.validationStatus.invalid.tooltip': string;
+  'property.allowedTools': string;
+
+  // AskUserQuestion properties
+  'property.questionText': string;
+  'property.multiSelect': string;
+  'property.multiSelect.enabled': string;
+  'property.multiSelect.disabled': string;
+  'property.aiSuggestions': string;
+  'property.aiSuggestions.enabled': string;
+  'property.aiSuggestions.disabled': string;
+  'property.options': string;
+  'property.optionsCount': string;
+  'property.optionNumber': string;
+  'property.addOption': string;
+  'property.remove': string;
+  'property.optionLabel.placeholder': string;
+  'property.optionDescription.placeholder': string;
+
+  // Prompt properties
+  'property.prompt.label': string;
+  'property.prompt.placeholder': string;
+  'property.prompt.help': string;
+  'property.detectedVariables': string;
+  'property.variablesSubstituted': string;
+
+  // Branch properties
+  'property.branchType': string;
+  'property.conditional': string;
+  'property.switch': string;
+  'property.branchType.conditional.help': string;
+  'property.branchType.switch.help': string;
+  'property.branches': string;
+  'property.branchesCount': string;
+  'property.branchNumber': string;
+  'property.addBranch': string;
+  'property.branchLabel': string;
+  'property.branchLabel.placeholder': string;
+  'property.branchCondition': string;
+  'property.branchCondition.placeholder': string;
+  'property.minimumBranches': string;
+
+  // Default node labels
+  'default.newSubAgent': string;
+  'default.enterPrompt': string;
+  'default.newQuestion': string;
+  'default.option': string;
+  'default.firstOption': string;
+  'default.secondOption': string;
+  'default.newOption': string;
+  'default.newPrompt': string;
+  'default.prompt': string;
+  'default.branchTrue': string;
+  'default.branchTrueCondition': string;
+  'default.branchFalse': string;
+  'default.branchFalseCondition': string;
+  'default.case1': string;
+  'default.case1Condition': string;
+  'default.case2': string;
+  'default.case2Condition': string;
+  'default.defaultBranch': string;
+  'default.defaultBranchCondition': string;
+  'default.conditionPrefix': string;
+  'default.conditionSuffix': string;
+
+  // Tour
+  'tour.welcome': string;
+  'tour.canvas': string;
+  'tour.propertyPanel': string;
+  'tour.nodePalette': string;
+  'tour.toolbarActions': string;
+  'tour.refineWithAI': string;
+  'tour.finish': string;
+
+  // Tour buttons
+  'tour.button.back': string;
+  'tour.button.close': string;
+  'tour.button.finish': string;
+  'tour.button.next': string;
+  'tour.button.skip': string;
+  'tour.button.minimize': string;
+  'tour.button.resume': string;
+
+  // Delete Confirmation Dialog
+  'dialog.deleteNode.title': string;
+  'dialog.deleteNode.message': string;
+  'dialog.deleteNode.confirm': string;
+  'dialog.deleteNode.cancel': string;
+
+  // Load Workflow Confirmation Dialog (when opening from preview with unsaved changes)
+  'dialog.loadWorkflow.title': string;
+  'dialog.loadWorkflow.message': string;
+  'dialog.loadWorkflow.confirm': string;
+  'dialog.loadWorkflow.cancel': string;
+
+  // Diff Preview Dialog (MCP apply_workflow)
+  'dialog.diffPreview.title': string;
+  'dialog.diffPreview.description': string;
+  'dialog.diffPreview.newWorkflow': string;
+  'dialog.diffPreview.nameChange': string;
+  'dialog.diffPreview.nodes': string;
+  'dialog.diffPreview.connections': string;
+  'dialog.diffPreview.connectionsAdded': string;
+  'dialog.diffPreview.connectionsRemoved': string;
+  'dialog.diffPreview.noChanges': string;
+  'dialog.diffPreview.agentDescription': string;
+  'dialog.diffPreview.filesToCreate': string;
+  'dialog.diffPreview.accept': string;
+  'dialog.diffPreview.reject': string;
+  'dialog.diffPreview.revisionConflict': string;
+  'dialog.diffPreview.applyAnyway': string;
+  'dialog.diffPreview.retryWithLatest': string;
+  'dialog.diffPreview.previewOverview': string;
+  'dialog.diffPreview.closeOverview': string;
+
+  // Reset Workflow Confirmation Dialog
+  'toolbar.resetWorkflow': string;
+  'toolbar.focusMode': string;
+  'dialog.resetWorkflow.title': string;
+  'dialog.resetWorkflow.message': string;
+  'dialog.resetWorkflow.confirm': string;
+
+  // Skill Browser Dialog
+  'skill.browser.title': string;
+  'skill.browser.description': string;
+  'skill.browser.selectSkill': string;
+  'skill.browser.browseSkills': string;
+  'skill.browser.userTab': string;
+  'skill.browser.projectTab': string;
+  'skill.browser.localTab': string;
+  // Scope descriptions for beginners
+  'skill.browser.userDescription': string;
+  'skill.browser.projectDescription': string;
+  'skill.browser.localDescription': string;
+  'skill.browser.filterPlaceholder': string;
+  // Legacy key for backward compatibility
+  'skill.browser.personalTab': string;
+  'skill.browser.noSkills': string;
+  'skill.browser.loading': string;
+  'skill.browser.selectButton': string;
+  'skill.browser.cancelButton': string;
+  'skill.browser.skillName': string;
+  'skill.browser.skillDescription': string;
+  'skill.browser.skillPath': string;
+  'skill.browser.validationStatus': string;
+
+  // Skill Browser Settings Step
+  'skill.browser.configureButton': string;
+  'skill.browser.addButton': string;
+  'skill.browser.backToList': string;
+
+  // Skill Browser Actions
+  'skill.action.refresh': string;
+  'skill.refreshing': string;
+
+  // Skill Browser Errors
+  'skill.error.loadFailed': string;
+  'skill.error.noSelection': string;
+  'skill.error.unknown': string;
+  'skill.error.refreshFailed': string;
+
+  // Skill Creation Dialog
+  'skill.creation.title': string;
+  'skill.creation.description': string;
+  'skill.creation.nameLabel': string;
+  'skill.creation.nameHint': string;
+  'skill.creation.descriptionLabel': string;
+  'skill.creation.descriptionPlaceholder': string;
+  'skill.creation.instructionsLabel': string;
+  'skill.creation.instructionsPlaceholder': string;
+  'skill.creation.instructionsHint': string;
+  'skill.creation.allowedToolsLabel': string;
+  'skill.creation.allowedToolsHint': string;
+  'skill.creation.scopeLabel': string;
+  'skill.creation.scopeUser': string;
+  'skill.creation.scopeProject': string;
+  // Legacy key for backward compatibility
+  'skill.creation.scopePersonal': string;
+  'skill.creation.cancelButton': string;
+  'skill.creation.createButton': string;
+  'skill.creation.creatingButton': string;
+  'skill.creation.error.unknown': string;
+
+  // Skill Execution Mode
+  'property.skill.executionMode': string;
+  'property.skill.executionMode.execute': string;
+  'property.skill.executionMode.load': string;
+  'property.skill.executionMode.execute.description': string;
+  'property.skill.executionMode.load.description': string;
+  'property.skill.executionPrompt': string;
+  'property.skill.executionPrompt.placeholder': string;
+
+  // Skill Edit Dialog
+  'skill.editDialog.title': string;
+  'skill.editDialog.saveButton': string;
+  'skill.editDialog.cancelButton': string;
+
+  // Skill Validation Errors
+  'skill.validation.nameRequired': string;
+  'skill.validation.nameTooLong': string;
+  'skill.validation.nameInvalidFormat': string;
+  'skill.validation.descriptionRequired': string;
+  'skill.validation.descriptionTooLong': string;
+  'skill.validation.instructionsRequired': string;
+  'skill.validation.scopeRequired': string;
+
+  // Workflow Refinement (001-ai-workflow-refinement)
+  'refinement.toolbar.refineButton': string;
+  'refinement.toolbar.refineButton.tooltip': string;
+
+  // Refinement Chat Panel
+  'refinement.title': string;
+  'refinement.inputPlaceholder': string;
+  'refinement.sendButton': string;
+  'refinement.processing': string;
+  'refinement.aiProcessing': string;
+  'refinement.iterationCounter': string;
+  'refinement.iterationCounter.tooltip': string;
+  'refinement.warning.title': string;
+  'refinement.warning.message': string;
+  'refinement.chat.title': string;
+  'refinement.chat.description': string;
+  'refinement.chat.inputPlaceholder': string;
+  'refinement.chat.sendButton': string;
+  'refinement.chat.sendButton.shortcut': string;
+  'refinement.chat.sendButton.shortcutMac': string;
+  'refinement.chat.cancelButton': string;
+  'refinement.chat.closeButton': string;
+  'refinement.cancelButton': string;
+  'refinement.chat.clearButton': string;
+  'refinement.chat.clearButton.tooltip': string;
+  'refinement.chat.useSkillsCheckbox': string;
+  'refinement.chat.useCodexNodesCheckbox': string;
+
+  // Timeout selector
+  'refinement.timeout.label': string;
+  'refinement.timeout.ariaLabel': string;
+
+  // Model selector
+  'refinement.model.label': string;
+
+  // Provider selector
+  'refinement.provider.label': string;
+
+  // Settings dropdown
+  'refinement.settings.title': string;
+
+  'refinement.chat.claudeMdTip': string;
+  'refinement.chat.refining': string;
+  'refinement.chat.progressTime': string;
+  'refinement.chat.characterCount': string;
+  'refinement.chat.iterationCounter': string;
+  'refinement.chat.iterationWarning': string;
+  'refinement.chat.iterationLimitReached': string;
+  'refinement.chat.noMessages': string;
+  'refinement.chat.userMessageLabel': string;
+  'refinement.chat.aiMessageLabel': string;
+  'refinement.chat.success': string;
+  'refinement.chat.changesSummary': string;
+
+  // Refinement Success Messages
+  'refinement.success.defaultMessage': string;
+
+  // Refinement Session Status
+  'refinement.session.warningDialog.title': string;
+  'refinement.session.warningDialog.message': string;
+  'refinement.session.warningDialog.ok': string;
+
+  // Refinement Errors
+  'refinement.error.emptyMessage': string;
+  'refinement.error.messageTooLong': string;
+  'refinement.error.commandNotFound': string;
+  'refinement.error.modelNotSupported': string;
+  'refinement.error.copilotNotAvailable': string;
+  'refinement.error.timeout': string;
+  'refinement.error.parseError': string;
+  'refinement.error.validationError': string;
+  'refinement.error.prohibitedNodeType': string;
+  'refinement.error.iterationLimitReached': string;
+  'refinement.error.unknown': string;
+
+  // Refinement Error Display (Phase 3.8)
+  'refinement.error.retryButton': string;
+
+  // Processing Overlay (Phase 3.10)
+  'refinement.processingOverlay': string;
+
+  // Clear Conversation Confirmation
+  'refinement.clearDialog.title': string;
+  'refinement.clearDialog.message': string;
+  'refinement.clearDialog.confirm': string;
+  'refinement.clearDialog.cancel': string;
+
+  // Initial instructional message (Phase 3.12)
+  'refinement.initialMessage.description': string;
+  // Provider-specific notes
+  'refinement.initialMessage.noteClaudeCode': string;
+  'refinement.initialMessage.noteCodex': string;
+  'refinement.initialMessage.noteCopilot': string;
+
+  // MCP Node (Feature: 001-mcp-node)
+  'node.mcp.title': string;
+  'node.mcp.description': string;
+
+  // MCP Server List
+  'mcp.loading.servers': string;
+  'mcp.error.serverLoadFailed': string;
+  'mcp.empty.servers': string;
+  'mcp.empty.servers.hint': string;
+
+  // MCP Tool List
+  'mcp.loading.tools': string;
+  'mcp.error.toolLoadFailed': string;
+  'mcp.empty.tools': string;
+
+  // MCP Cache Actions
+  'mcp.action.refresh': string;
+  'mcp.refreshing': string;
+  'mcp.error.refreshFailed': string;
+
+  // MCP Tool Search
+  'mcp.search.placeholder': string;
+  'mcp.search.noResults': string;
+  'mcp.search.serverPlaceholder': string;
+  'mcp.search.noServers': string;
+  'mcp.browse.servers': string;
+
+  // MCP Node Dialog
+  'mcp.dialog.title': string;
+  'mcp.dialog.selectServer': string;
+  'mcp.dialog.selectTool': string;
+  'mcp.dialog.addButton': string;
+  'mcp.dialog.cancelButton': string;
+  'mcp.dialog.nextButton': string;
+  'mcp.dialog.backButton': string;
+  'mcp.dialog.saveButton': string;
+  'mcp.dialog.error.noServerSelected': string;
+  'mcp.dialog.error.noToolSelected': string;
+  'mcp.dialog.error.incompleteWizard': string;
+  'mcp.dialog.error.cannotProceed': string;
+  'mcp.dialog.error.invalidMode': string;
+
+  // MCP Property Panel
+  'property.mcp.serverId': string;
+  'property.mcp.toolName': string;
+  'property.mcp.toolDescription': string;
+  'property.mcp.parameters': string;
+  'property.mcp.parameterValues': string;
+  'property.mcp.parameterCount': string;
+  'property.mcp.editParameters': string;
+  'property.mcp.edit.manualParameterConfig': string;
+  'property.mcp.edit.aiParameterConfig': string;
+  'property.mcp.edit.aiToolSelection': string;
+  'property.mcp.taskDescription': string;
+  'property.mcp.parameterDescription': string;
+  'property.mcp.configuredValues': string;
+  'property.mcp.infoNote': string;
+
+  // MCP Parameter Form
+  'mcp.parameter.formTitle': string;
+  'mcp.parameter.noParameters': string;
+  'mcp.parameter.selectOption': string;
+  'mcp.parameter.enterValue': string;
+  'mcp.parameter.minLength': string;
+  'mcp.parameter.maxLength': string;
+  'mcp.parameter.pattern': string;
+  'mcp.parameter.minimum': string;
+  'mcp.parameter.maximum': string;
+  'mcp.parameter.default': string;
+  'mcp.parameter.addItem': string;
+  'mcp.parameter.add': string;
+  'mcp.parameter.remove': string;
+  'mcp.parameter.arrayCount': string;
+  'mcp.parameter.jsonFormat': string;
+  'mcp.parameter.jsonInvalid': string;
+  'mcp.parameter.objectInvalid': string;
+  'mcp.parameter.unsupportedType': string;
+  'mcp.parameter.validationErrors': string;
+
+  // MCP Edit Dialog
+  'mcp.editDialog.title': string;
+  'mcp.editDialog.saveButton': string;
+  'mcp.editDialog.cancelButton': string;
+  'mcp.editDialog.loading': string;
+  'mcp.editDialog.error.schemaLoadFailed': string;
+
+  // MCP Natural Language Mode (Feature: 001-mcp-natural-language-mode)
+
+  // Mode Selection
+  'mcp.modeSelection.title': string;
+  'mcp.modeSelection.subtitle': string;
+  'mcp.modeSelection.manualParameterConfig.title': string;
+  'mcp.modeSelection.manualParameterConfig.description': string;
+  'mcp.modeSelection.aiParameterConfig.title': string;
+  'mcp.modeSelection.aiParameterConfig.description': string;
+  'mcp.modeSelection.aiToolSelection.title': string;
+  'mcp.modeSelection.aiToolSelection.description': string;
+
+  // Parameter Detailed Config Step
+  'mcp.parameterDetailedConfig.title': string;
+
+  // Natural Language Input
+  'mcp.naturalLanguage.paramDescription.label': string;
+  'mcp.naturalLanguage.paramDescription.placeholder': string;
+  'mcp.naturalLanguage.taskDescription.label': string;
+  'mcp.naturalLanguage.taskDescription.placeholder': string;
+
+  // Mode Switch Warnings
+  'mcp.modeSwitch.warning.title': string;
+  'mcp.modeSwitch.warning.message': string;
+  'mcp.modeSwitch.warning.continueButton': string;
+  'mcp.modeSwitch.warning.cancelButton': string;
+  'mcp.modeSwitch.dataPreserved': string;
+  'mcp.modeSwitch.canRevert': string;
+
+  // Validation Errors
+  'mcp.error.paramDescRequired': string;
+  'mcp.error.taskDescRequired': string;
+  'mcp.error.noToolsAvailable': string;
+  'mcp.error.toolListOutdated': string;
+  'mcp.error.modeConfigMissing': string;
+  'mcp.error.invalidModeConfig': string;
+
+  // Mode Indicator Tooltips
+  'mcp.mode.detailed.tooltip': string;
+  'mcp.mode.naturalLanguageParam.tooltip': string;
+  'mcp.mode.fullNaturalLanguage.tooltip': string;
+
+  // Slack Integration
+  'slack.connect': string;
+  'slack.disconnect': string;
+  'slack.connecting': string;
+  'slack.connected': string;
+  'slack.notConnected': string;
+
+  // Slack Share
+  'slack.share.button': string;
+  'slack.share.title': string;
+  'slack.share.selectChannel': string;
+  'slack.share.selectChannelPlaceholder': string;
+  'slack.share.sharing': string;
+  'slack.share.failed': string;
+
+  // Slack Description AI Generation
+  'slack.description.generateFailed': string;
+
+  // Slack Connect
+  'slack.connect.button': string;
+  'slack.connect.connecting': string;
+  'slack.connect.description': string;
+  'slack.connect.success': string;
+  'slack.connect.failed': string;
+
+  // Slack Reconnect
+  'slack.reconnect.button': string;
+  'slack.reconnect.reconnecting': string;
+  'slack.reconnect.description': string;
+  'slack.reconnect.success': string;
+  'slack.reconnect.failed': string;
+
+  // Slack Import
+  'slack.import.title': string;
+  'slack.import.importing': string;
+  'slack.import.success': string;
+  'slack.import.failed': string;
+  'slack.import.confirmOverwrite': string;
+
+  // Slack Search
+  'slack.search.title': string;
+  'slack.search.placeholder': string;
+  'slack.search.searching': string;
+  'slack.search.noResults': string;
+
+  // Slack Scopes - reasons why each scope is required
+  'slack.scopes.chatWrite.reason': string;
+  'slack.scopes.filesRead.reason': string;
+  'slack.scopes.filesWrite.reason': string;
+  'slack.scopes.channelsRead.reason': string;
+  'slack.scopes.groupsRead.reason': string;
+
+  // Slack Errors
+  'slack.error.channelNotFound': string;
+  'slack.error.noChannels': string;
+  'slack.error.noWorkspaces': string;
+  'slack.error.notInChannel': string;
+  'slack.error.networkError': string;
+  'slack.error.rateLimited': string;
+  'slack.error.invalidAuth': string;
+  'slack.error.missingScope': string;
+  'slack.error.fileTooLarge': string;
+  'slack.error.invalidFileType': string;
+  'slack.error.internalError': string;
+  'slack.error.notAuthed': string;
+  'slack.error.invalidCode': string;
+  'slack.error.badClientSecret': string;
+  'slack.error.invalidGrantType': string;
+  'slack.error.accountInactive': string;
+  'slack.error.invalidQuery': string;
+  'slack.error.msgTooLong': string;
+  'slack.error.workspaceNotConnected': string;
+  'slack.error.unknownError': string;
+  'slack.error.unknownApiError': string;
+
+  // Slack Connection Dialog
+  'slack.connect.title': string;
+  'slack.connect.tab.oauth': string;
+  'slack.connect.tab.manual': string;
+
+  // Slack OAuth
+  'slack.oauth.description': string;
+  'slack.oauth.termsOfService': string;
+  'slack.oauth.privacyPolicy': string;
+  'slack.oauth.supportPage': string;
+  'slack.oauth.connectButton': string;
+  'slack.oauth.status.initiated': string;
+  'slack.oauth.status.polling': string;
+  'slack.oauth.status.waitingHint': string;
+  'slack.oauth.cancelled': string;
+  'slack.oauth.reviewNotice.message': string;
+
+  // Slack Manual Token
+  'slack.manualToken.title': string;
+  'slack.manualToken.description': string;
+  'slack.manualToken.howToGet.title': string;
+  'slack.manualToken.howToGet.step1': string;
+  'slack.manualToken.howToGet.step2': string;
+  'slack.manualToken.howToGet.step3': string;
+  'slack.manualToken.howToGet.step4': string;
+  'slack.manualToken.security.title': string;
+  'slack.manualToken.security.notice': string;
+  'slack.manualToken.security.storage': string;
+  'slack.manualToken.security.transmission': string;
+  'slack.manualToken.security.deletion': string;
+  'slack.manualToken.security.sharing': string;
+  'slack.manualToken.userToken.label': string;
+  'slack.manualToken.error.tokenRequired': string;
+  'slack.manualToken.error.invalidTokenFormat': string;
+  'slack.manualToken.error.userTokenRequired': string;
+  'slack.manualToken.error.invalidUserTokenFormat': string;
+  'slack.manualToken.connecting': string;
+  'slack.manualToken.connect': string;
+  'slack.manualToken.deleteButton': string;
+  'slack.manualToken.deleteConfirm.title': string;
+  'slack.manualToken.deleteConfirm.message': string;
+  'slack.manualToken.deleteConfirm.confirm': string;
+  'slack.manualToken.deleteConfirm.cancel': string;
+
+  // Sensitive Data Warning
+  'slack.sensitiveData.warning.title': string;
+  'slack.sensitiveData.warning.message': string;
+  'slack.sensitiveData.warning.continue': string;
+  'slack.sensitiveData.warning.cancel': string;
+
+  // Slack Import Connection Required Dialog
+  'slack.import.connectionRequired.title': string;
+  'slack.import.connectionRequired.message': string;
+  'slack.import.connectionRequired.workspaceInfo': string;
+  'slack.import.connectionRequired.connectButton': string;
+
+  // Edit in VSCode Editor
+  'editor.openInEditor': string;
+  'editor.openInEditor.tooltip': string;
+
+  // Workflow Settings / Memo Panel
+  'workflow.settings.title': string;
+  'workflow.settings.description.label': string;
+  'workflow.settings.description.placeholder': string;
+  'workflow.settings.generateWithAI': string;
+
+  // MCP Server Section
+  'mcpSection.description.line1': string;
+  'mcpSection.description.line2': string;
+  'mcpSection.reviewBeforeApply': string;
+
+  // Description Panel (Canvas)
+  'description.panel.title': string;
+  'description.panel.show': string;
+  'description.panel.hide': string;
+
+  // Sub-Agent Creation Dialog (Feature: 636 - Use Existing Agent)
+  'subAgent.dialog.title': string;
+  'subAgent.dialog.createNew': string;
+  'subAgent.dialog.createNew.description': string;
+  'subAgent.dialog.useExisting': string;
+  'subAgent.dialog.useExisting.description': string;
+  'subAgent.dialog.selectCommand': string;
+  'subAgent.dialog.userTab': string;
+  'subAgent.dialog.projectTab': string;
+  'subAgent.dialog.filterPlaceholder': string;
+  'subAgent.dialog.noCommands': string;
+  'subAgent.dialog.loading': string;
+  'subAgent.dialog.addButton': string;
+  'subAgent.dialog.cancelButton': string;
+  'subAgent.dialog.backButton': string;
+  'subAgent.dialog.loadFailed': string;
+  'subAgent.dialog.description': string;
+  'subAgent.dialog.selectSubAgent': string;
+  'subAgent.dialog.browseSubAgents': string;
+  'subAgent.dialog.userDescription': string;
+  'subAgent.dialog.projectDescription': string;
+  'subAgent.dialog.localDescription': string;
+  'subAgent.property.linkedCommand': string;
+
+  // Sub-Agent Form Dialog (Create New)
+  'subAgent.form.title': string;
+  'subAgent.form.description': string;
+  'subAgent.form.agentTypeLabel': string;
+  'subAgent.form.agentType.claudeCode': string;
+  'subAgent.form.agentType.other': string;
+  'subAgent.form.descriptionLabel': string;
+  'subAgent.form.descriptionPlaceholder': string;
+  'subAgent.form.agentDefinitionLabel': string;
+  'subAgent.form.agentDefinitionPlaceholder': string;
+  'subAgent.form.promptLabel': string;
+  'subAgent.form.promptPlaceholder': string;
+  'subAgent.form.modelLabel': string;
+  'subAgent.form.toolsLabel': string;
+  'subAgent.form.toolsHint': string;
+  'subAgent.form.memoryLabel': string;
+  'subAgent.form.memoryNone': string;
+  'subAgent.form.cancelButton': string;
+  'subAgent.form.createButton': string;
+  'subAgent.form.editTitle': string;
+  'subAgent.form.saveButton': string;
+  'subAgent.property.editButton': string;
+  'subAgent.form.error.descriptionRequired': string;
+  'subAgent.form.error.agentDefinitionRequired': string;
+  'subAgent.form.error.promptRequired': string;
+
+  // Sub-Agent Built-in Presets
+  'subAgent.dialog.builtInTab': string;
+  'subAgent.dialog.builtInDescription': string;
+  'subAgent.builtIn.controlledByPreset': string;
+  'subAgent.builtIn.generalPurpose.description': string;
+  'subAgent.builtIn.generalPurpose.defaultAgentDefinition': string;
+  'subAgent.builtIn.generalPurpose.defaultPrompt': string;
+  'subAgent.builtIn.explore.description': string;
+  'subAgent.builtIn.explore.defaultAgentDefinition': string;
+  'subAgent.builtIn.explore.defaultPrompt': string;
+  'subAgent.builtIn.plan.description': string;
+  'subAgent.builtIn.plan.defaultAgentDefinition': string;
+  'subAgent.builtIn.plan.defaultPrompt': string;
+
+  // Claude API Upload Dialog
+  'claudeApi.description': string;
+
+  // Commentary AI
+  'commentary.toggle': string;
+  'commentary.waiting': string;
+  'commentary.inactive': string;
+  'commentary.providerSelect': string;
+
+  // Sample Workflows
+  'toolbar.sampleWorkflows': string;
+  'sample.dialog.title': string;
+  'sample.dialog.description': string;
+  'sample.dialog.nodeCount': string;
+  'sample.dialog.loadButton': string;
+  'sample.githubIssuePlanning.name': string;
+  'sample.githubIssuePlanning.description': string;
+  'sample.dailyDevFlowWithWorktree.name': string;
+  'sample.dailyDevFlowWithWorktree.description': string;
+}

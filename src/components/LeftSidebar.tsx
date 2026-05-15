@@ -79,6 +79,8 @@ export function LeftSidebar({
   onOpenSkillsHub,
   codeKnowledgeGraphNavActive = false,
   onOpenCodeKnowledgeGraph,
+  workflowStudioNavActive = false,
+  onOpenWorkflowStudio,
   activeRepositoryPath,
   activeRepositoryName,
   onOpenActiveRepositoryFile,
@@ -230,6 +232,8 @@ export function LeftSidebar({
         onOpenMcpHub={onOpenMcpHub}
         skillsNavActive={skillsNavActive}
         onOpenSkillsHub={onOpenSkillsHub}
+        workflowStudioNavActive={workflowStudioNavActive}
+        onOpenWorkflowStudio={onOpenWorkflowStudio}
         codeKnowledgeGraphNavActive={codeKnowledgeGraphNavActive}
         onOpenCodeKnowledgeGraph={onOpenCodeKnowledgeGraph}
       />

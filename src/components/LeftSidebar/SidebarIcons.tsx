@@ -107,6 +107,18 @@ export function CodeKnowledgeGraphNavIcon() {
   );
 }
 
+/** 左栏「工作流」入口：与 Claude Code 团队编排画布语义一致 */
+export function WorkflowStudioNavIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <rect x="2" y="2.5" width="4.5" height="3" rx="0.6" stroke="currentColor" strokeWidth="1.15" />
+      <rect x="9.5" y="2.5" width="4.5" height="3" rx="0.6" stroke="currentColor" strokeWidth="1.15" />
+      <rect x="5.75" y="10.5" width="4.5" height="3" rx="0.6" stroke="currentColor" strokeWidth="1.15" />
+      <path d="M4.25 5.6v2.2h3.5v2.1M11.75 5.6v2.2h-3.5v2.1" stroke="currentColor" strokeWidth="1.15" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function IconCompactLayout() {
   return (
     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>

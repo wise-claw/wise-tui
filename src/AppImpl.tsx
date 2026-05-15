@@ -21,6 +21,7 @@ import {
   repositoryTypeChineseLabel,
 } from "./utils/repositoryType";
 import { useRepositoryList } from "./hooks/useRepositoryList";
+import { useCcWorkflowStudioWorkspace } from "./hooks/useCcWorkflowStudioWorkspace";
 import { useClaudeSessions, type ClaudeTurnCompletePayload } from "./hooks/useClaudeSessions";
 import { openInFinder } from "./services/repository";
 import { AppWorkspaceLayout } from "./components/AppWorkspaceLayout";
@@ -353,6 +354,7 @@ export default function App() {
     executeSession,
     appendSystemMessage,
     appendUserMessage,
+    sendMessageToSession,
     closeSession,
     deleteSession,
     switchSession,
@@ -973,6 +975,24 @@ export default function App() {
 
   const activeRepository = repositories.find((p) => p.id === activeRepositoryId);
 
+  const {
+    ccWfStudioMode,
+    setCcWfStudioMode,
+    ccWfStudioSessionPath,
+    onCloseCcWorkflowStudio,
+    openWorkflowStudio,
+  } = useCcWorkflowStudioWorkspace({
+    sendMessageToSession,
+    switchSession,
+    sessionsLatestRef,
+    activeSessionIdLatestRef,
+    setPromptsMode,
+    setMcpHubMode,
+    setSkillsHubMode,
+    setCodeKnowledgeGraphMode,
+    activeRepositoryPath: activeRepository?.path,
+  });
+
   const workflowModalRepositoryPath = useMemo(() => {
     const fromProject = workflowConfigPrdProjectId?.trim();
     if (fromProject) {
@@ -1251,6 +1271,7 @@ export default function App() {
     (repositoryId: number | null) => {
       setMcpHubMode(false);
       setSkillsHubMode(false);
+      setCcWfStudioMode(false);
       setTaskSplitMode(false);
       handleSidebarRepositorySelect(repositoryId);
     },
@@ -1261,6 +1282,7 @@ export default function App() {
     (projectId: string) => {
       setMcpHubMode(false);
       setSkillsHubMode(false);
+      setCcWfStudioMode(false);
       const project = projects.find((p) => p.id === projectId) ?? null;
       const firstRepoId = project?.repositoryIds[0] ?? null;
       // 进项目即开主会话：通过 handleSidebarRepositorySelect 统一路由
@@ -1280,6 +1302,7 @@ export default function App() {
     (sessionId: string) => {
       setMcpHubMode(false);
       setSkillsHubMode(false);
+      setCcWfStudioMode(false);
       jumpToSessionWithRepository(sessionId);
     },
     [jumpToSessionWithRepository],
@@ -1367,6 +1390,7 @@ export default function App() {
   function handleOpenPromptsForProject(project: ProjectItem) {
     setMcpHubMode(false);
     setSkillsHubMode(false);
+    setCcWfStudioMode(false);
     setPromptsOpenContext({ project });
     setActiveProjectId(project.id);
     setSearchOpen(false);
@@ -1377,6 +1401,7 @@ export default function App() {
   function handleOpenPromptsForRepository(project: ProjectItem, repository: Repository) {
     setMcpHubMode(false);
     setSkillsHubMode(false);
+    setCcWfStudioMode(false);
     setPromptsOpenContext({ project, repository });
     setActiveProjectId(project.id);
     setActiveRepositoryId(repository.id);
@@ -1426,6 +1451,8 @@ export default function App() {
       setPromptsMode(false);
       setMcpHubMode(false);
       setSkillsHubMode(false);
+      setCodeKnowledgeGraphMode(false);
+      setCcWfStudioMode(false);
       setTaskSplitMode(true);
     }
     window.addEventListener(WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL, handleOpenTaskSplitPanel as EventListener);
@@ -1510,6 +1537,9 @@ export default function App() {
       mcpHubMode={mcpHubMode}
       skillsHubMode={skillsHubMode}
       codeKnowledgeGraphMode={codeKnowledgeGraphMode}
+      ccWfStudioMode={ccWfStudioMode}
+      ccWfStudioSessionPath={ccWfStudioSessionPath}
+      onCloseCcWorkflowStudio={onCloseCcWorkflowStudio}
       compactLayoutMode={compactLayoutMode}
       effectiveRightCollapsed={effectiveRightCollapsed}
       mainLayoutContentRef={mainLayoutContentRef}
@@ -1529,6 +1559,7 @@ export default function App() {
           setPromptsMode(false);
           setSkillsHubMode(false);
           setCodeKnowledgeGraphMode(false);
+          setCcWfStudioMode(false);
           setMcpHubMode(true);
         },
         skillsNavActive: skillsHubMode,
@@ -1536,6 +1567,7 @@ export default function App() {
           setPromptsMode(false);
           setMcpHubMode(false);
           setCodeKnowledgeGraphMode(false);
+          setCcWfStudioMode(false);
           setSkillsHubMode(true);
         },
         codeKnowledgeGraphNavActive: codeKnowledgeGraphMode,
@@ -1543,8 +1575,11 @@ export default function App() {
           setPromptsMode(false);
           setMcpHubMode(false);
           setSkillsHubMode(false);
+          setCcWfStudioMode(false);
           setCodeKnowledgeGraphMode(true);
         },
+        workflowStudioNavActive: ccWfStudioMode,
+        onOpenWorkflowStudio: openWorkflowStudio,
         onProjectSelect: handleProjectSelectLeavingMcpHub,
         onCreateProject: handleCreateProject,
         onUpdateProject: handleUpdateProject,

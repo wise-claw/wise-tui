@@ -70,6 +70,8 @@ export interface LeftSidebarProps {
   onOpenSkillsHub?: () => void;
   codeKnowledgeGraphNavActive?: boolean;
   onOpenCodeKnowledgeGraph?: () => void;
+  workflowStudioNavActive?: boolean;
+  onOpenWorkflowStudio?: () => void;
   activeRepositoryPath?: string;
   activeRepositoryName?: string;
   onOpenActiveRepositoryFile?: (path: string, options?: GitPanelOpenFileOptions) => void;

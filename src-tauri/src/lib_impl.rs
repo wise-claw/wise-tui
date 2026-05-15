@@ -1,8 +1,8 @@
 use crate::{
-    app_state_commands, claude_code_usage, claude_commands, claude_config_dir, cua_driver,
-    dingtalk_enterprise_bot, dingtalk_stream_gateway, git_commands, prd_url_fetch,
+    app_state_commands, cc_wf_studio_mcp_bridge, cc_workflow_studio, claude_code_usage, claude_commands, claude_config_dir,
+    code_knowledge_graph, cua_driver, dingtalk_enterprise_bot, dingtalk_stream_gateway, git_commands, prd_url_fetch,
     repository_files, skills_sh, system_resource, trellis_bootstrap, trellis_bridge, wise_db, wise_mascot, wise_push,
-    workspace_commands, code_knowledge_graph
+    workspace_commands,
 };
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
@@ -21,6 +21,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
+            cc_wf_studio_mcp_bridge::kill_stale_cc_wf_studio_mcp_listeners(6282);
             use keyboard_types::{Code, Modifiers};
             use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
             let screenshot_shortcut = Shortcut::new(None, Code::F3);
@@ -361,6 +362,17 @@ pub fn run() {
             code_knowledge_graph::extract_code_graph_synthetic_routes,
             code_knowledge_graph::get_code_graph_multi_subgraph,
             code_knowledge_graph::search_code_graph_nodes,
+            cc_workflow_studio::list_cc_workflow_studio_workflows,
+            cc_workflow_studio::read_cc_workflow_studio_workflow,
+            cc_workflow_studio::write_cc_workflow_studio_workflow,
+            cc_workflow_studio::read_cc_workflow_studio_import_file,
+            cc_workflow_studio::write_cc_wf_studio_ai_editing_skill,
+            cc_wf_studio_mcp_bridge::cc_wf_studio_mcp_bridge_status,
+            cc_wf_studio_mcp_bridge::cc_wf_studio_mcp_bridge_resolve,
+            cc_wf_studio_mcp_bridge::cc_wf_studio_mcp_set_review_before_apply,
+            cc_wf_studio_mcp_bridge::start_cc_wf_studio_mcp_bridge,
+            cc_wf_studio_mcp_bridge::ensure_cc_workflow_studio_project_mcp,
+            cc_wf_studio_mcp_bridge::stop_cc_wf_studio_mcp_bridge,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

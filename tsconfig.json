@@ -18,7 +18,13 @@
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["src/features/cc-wf-studio/vendor/shared/*"],
+      "@cc-workflow-studio-core": ["src/cc-workflow-studio-core"],
+      "@cc-workflow-studio-core/*": ["src/cc-workflow-studio-core/*"]
+    }
   },
   "include": ["src"],
   "exclude": ["src/**/*.test.ts", "src/**/*.spec.ts"],
