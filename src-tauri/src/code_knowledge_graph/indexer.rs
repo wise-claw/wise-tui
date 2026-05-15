@@ -1,43 +1,22 @@
-use std::collections::HashSet;
 use std::path::Path;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 
 use sha2::{Digest, Sha256};
-use walkdir::WalkDir;
 
 use crate::code_knowledge_graph::storage as graph_storage;
-use crate::code_knowledge_graph::tree_sitter_parser;
 
-pub const IGNORED_DIRS: &[&str] = &[".git", "node_modules", "dist", "build", ".trellis", ".claude", "target", "__pycache__"];
+pub const IGNORED_DIRS: &[&str] = &[
+    ".git",
+    "node_modules",
+    "dist",
+    "build",
+    ".trellis",
+    ".claude",
+    "target",
+    "__pycache__",
+];
 pub use super::index_extensions::SUPPORTED_EXTENSIONS;
-
-/// All repo-relative paths (forward slashes) for extensions we index — used for TS/JS import resolution
-/// against the real file set (GitNexus `tryResolveWithExtensions` parity).
-pub(crate) fn collect_supported_repo_relative_paths(repo_root: &Path) -> Result<HashSet<String>, String> {
-    let mut out = HashSet::new();
-    for entry in WalkDir::new(repo_root).into_iter().filter_entry(|e| {
-        e.file_name()
-            .to_str()
-            .map(|s| !IGNORED_DIRS.contains(&s))
-            .unwrap_or(false)
-    }) {
-        let entry = entry.map_err(|e| e.to_string())?;
-        if !entry.path().is_file() {
-            continue;
-        }
-        let ext = entry.path().extension().and_then(|e| e.to_str()).unwrap_or("");
-        if !SUPPORTED_EXTENSIONS.contains(&ext) {
-            continue;
-        }
-        let relative = entry
-            .path()
-            .strip_prefix(repo_root)
-            .map_err(|e| e.to_string())?
-            .to_string_lossy()
-            .replace('\\', "/");
-        out.insert(relative);
-    }
-    Ok(out)
-}
 
 pub struct IndexResult {
     pub total_nodes: usize,
@@ -48,209 +27,21 @@ pub struct IndexResult {
     pub files_skipped: usize,
 }
 
+/// 全仓索引：调用 **GitNexus CLI** `gitnexus analyze`，再从 `.gitnexus/kuzu` 导入 Wise SQLite。
 pub fn index_repository(
     conn: &rusqlite::Connection,
     repo_path: &str,
     repo_id: i64,
     repo_root_label: &str,
+    cancel: Option<Arc<AtomicBool>>,
 ) -> Result<IndexResult, String> {
-    // Resolve to absolute, canonicalized path
-    let repo_path = std::path::Path::new(repo_path)
-        .canonicalize()
-        .map_err(|e| format!("Cannot resolve repository path '{}': {}", repo_path, e))?;
-    let repo_path_str = repo_path.to_string_lossy().to_string();
-    if !repo_path.is_dir() {
-        return Err(format!("Repository path '{}' is not a directory", repo_path_str));
-    }
-
-    eprintln!("[code-graph] indexing repo: repo_id={}, resolved_path={}", repo_id, repo_path_str);
-
-    let repo_files = collect_supported_repo_relative_paths(&repo_path)?;
-    let tsconfig_paths = crate::code_knowledge_graph::tsconfig_paths::load_tsconfig_paths(&repo_path);
-    let mut ts_parser = tree_sitter_parser::Parser::with_index_context(repo_files, tsconfig_paths);
-
-    // Clear existing graph data for this repo
-    graph_storage::delete_edges_for_repo(conn, repo_id)?;
-
-    let repo_node_id = format!("{repo_id}:repo:root");
-    let repo_root_label = repo_root_label.trim();
-    let repo_root_label = if repo_root_label.is_empty() {
-        repo_path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("repository")
-    } else {
-        repo_root_label
-    };
-
-    graph_storage::upsert_node(
+    crate::code_knowledge_graph::gitnexus_cli_index::index_repository(
         conn,
-        &repo_node_id,
-        "repo",
-        None,
+        Path::new(repo_path),
+        repo_id,
         repo_root_label,
-        "/",
-        repo_id,
-        None,
-        None,
-    )?;
-
-    // Pre-count total matching files for progress tracking
-    let total_matching_files = WalkDir::new(&repo_path)
-        .into_iter()
-        .filter_entry(|e| {
-            e.file_name()
-                .to_str()
-                .map(|s| !IGNORED_DIRS.contains(&s))
-                .unwrap_or(false)
-        })
-        .filter_map(|e| e.ok())
-        .filter(|e| {
-            e.path().is_file()
-                && e.path()
-                    .extension()
-                    .and_then(|ext| ext.to_str())
-                    .map(|ext| SUPPORTED_EXTENSIONS.contains(&ext))
-                    .unwrap_or(false)
-        })
-        .count();
-
-    if total_matching_files > 0 {
-        let initial_pct = (1.0 / total_matching_files as f64 * 100.0).min(1.0) as u8;
-        graph_storage::update_index_meta(conn, repo_id, "", "indexing", None, 1, 0, Some(initial_pct.max(1)))?;
-    }
-
-    let mut total_nodes = 1;
-    let mut total_edges = 0;
-    let mut errors = Vec::new();
-
-    let mut files_found = 0usize;
-    let mut files_indexed = 0usize;
-    let mut files_skipped = 0usize;
-
-    for entry in WalkDir::new(&repo_path)
-        .into_iter()
-        .filter_entry(|e| {
-            e.file_name()
-                .to_str()
-                .map(|s| !IGNORED_DIRS.contains(&s))
-                .unwrap_or(false)
-        })
-    {
-        let entry = entry.map_err(|e| e.to_string())?;
-        let path = entry.path();
-
-        if !path.is_file() {
-            continue;
-        }
-
-        files_found += 1;
-        let ext = path
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("");
-        if !SUPPORTED_EXTENSIONS.contains(&ext) {
-            files_skipped += 1;
-            continue;
-        }
-        files_indexed += 1;
-
-        let relative = path
-            .strip_prefix(&repo_path)
-            .unwrap_or(path)
-            .to_string_lossy()
-            .to_string();
-
-        // Compute content hash for incremental indexing
-        let content = std::fs::read_to_string(path).unwrap_or_default();
-        let content_hash = compute_hash(&content);
-        let file_node_id = make_file_node_id(repo_id, &relative);
-
-        // Skip if content unchanged
-        if let Some(existing_hash) = graph_storage::get_node_content_hash(conn, &file_node_id)? {
-            if existing_hash == content_hash {
-                continue;
-            }
-        }
-
-        // Create file node BEFORE add_folder_hierarchy (edges reference it)
-        let line_count = content.lines().count();
-        let range = Some(crate::code_knowledge_graph::types::GraphRange {
-            start: crate::code_knowledge_graph::types::GraphPosition {
-                line: 0,
-                column: 0,
-            },
-            end: crate::code_knowledge_graph::types::GraphPosition {
-                line: line_count,
-                column: 0,
-            },
-        });
-        let label = relative
-            .split('/')
-            .last()
-            .unwrap_or(&relative)
-            .to_string();
-        graph_storage::upsert_node(
-            conn,
-            &file_node_id,
-            "file",
-            None,
-            &label,
-            &relative,
-            repo_id,
-            range,
-            Some(&content_hash),
-        )?;
-        total_nodes += 1;
-
-        // Add folder nodes and contains edges for path segments
-        let folder_count = add_folder_hierarchy(conn, repo_id, &relative, &repo_node_id)?;
-        total_nodes += folder_count;
-        total_edges += folder_count;
-
-        // Parse file content and extract symbols/imports
-        match ts_parser.parse_file(&content, &file_node_id, repo_id, &relative, conn) {
-            Ok((nodes, edges)) => {
-                total_nodes += nodes;
-                total_edges += edges;
-            }
-            Err(msg) => {
-                errors.push(crate::code_knowledge_graph::types::ParseError {
-                    file: relative,
-                    message: msg,
-                });
-            }
-        }
-
-        // Update progress after each file
-        if total_matching_files > 0 {
-            let pct = ((files_indexed as f64 / total_matching_files as f64) * 100.0).min(99.0) as u8;
-            if pct > 0 {
-                let _ = graph_storage::update_index_meta(conn, repo_id, "", "indexing", None, 1, 0, Some(pct));
-            }
-        }
-    }
-
-    let index_version = chrono::Utc::now().format("%Y%m%d%H%M%S").to_string();
-    graph_storage::update_index_meta(
-        conn,
-        repo_id,
-        &index_version,
-        "done",
-        None,
-        total_nodes,
-        total_edges,
-        Some(100),
-    )?;
-
-    Ok(IndexResult {
-        total_nodes,
-        total_edges,
-        errors,
-        files_found,
-        files_indexed,
-        files_skipped,
-    })
+        cancel,
+    )
 }
 
 pub fn compute_hash(content: &str) -> String {
@@ -266,7 +57,13 @@ pub fn make_file_node_id(repo_id: i64, relative_path: &str) -> String {
     format!("{repo_id}:file:{hash}")
 }
 
-fn add_folder_hierarchy(
+pub(crate) fn folder_node_id_for_repo_path(repo_id: i64, current_path: &str) -> String {
+    let normalized = current_path.replace('\\', "/");
+    let folder_hash = compute_hash(&format!("{repo_id}:folder:{normalized}"));
+    format!("{repo_id}:folder:{folder_hash}")
+}
+
+pub(crate) fn add_folder_hierarchy(
     conn: &rusqlite::Connection,
     repo_id: i64,
     relative_path: &str,
@@ -288,8 +85,7 @@ fn add_folder_hierarchy(
         }
         current_path.push_str(part);
 
-        let folder_hash = compute_hash(&format!("{repo_id}:folder:{current_path}"));
-        let folder_node_id = format!("{repo_id}:folder:{folder_hash}");
+        let folder_node_id = folder_node_id_for_repo_path(repo_id, &current_path);
 
         graph_storage::upsert_node(
             conn,
@@ -315,7 +111,6 @@ fn add_folder_hierarchy(
         folder_count += 1;
     }
 
-    // Add file -> parent folder contains edge
     let file_node_id = make_file_node_id(repo_id, relative_path);
     graph_storage::upsert_edge(
         conn,

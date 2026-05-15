@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  CancelCodeGraphReindexOutcome,
   CodeGraphNodeSearchRequest,
   CodeGraphSubgraphHopDepth,
   CodeGraphSubgraphRequest,
@@ -25,6 +26,13 @@ export async function triggerCodeGraphReindex(
   return invoke<string>("trigger_code_graph_reindex", { req });
 }
 
+/** 停止当前仓库正在进行的代码图谱检索；若仅有僵尸 `indexing` 状态也会清除并返回 `clearedStaleIndexingStatus`。 */
+export async function cancelCodeGraphReindex(
+  repositoryId: number,
+): Promise<CancelCodeGraphReindexOutcome> {
+  return invoke<CancelCodeGraphReindexOutcome>("cancel_code_graph_reindex", { repositoryId });
+}
+
 /** 多仓：依次索引、OpenAPI/合成路由、HTTP 桥接（后台任务，完成后发 `code-graph-association-build-complete`） */
 export async function triggerCodeGraphAssociationBuild(repositoryIds: number[]): Promise<string> {
   return invoke<string>("trigger_code_graph_association_build", { repositoryIds });
@@ -34,6 +42,11 @@ export async function getCodeGraphIndexStatus(
   repositoryId: number,
 ): Promise<CodeGraphIndexStatusResponse> {
   return invoke<CodeGraphIndexStatusResponse>("get_code_graph_index_status", { repositoryId });
+}
+
+/** 删除该仓图谱节点、边与 `graph_index_meta`（不含磁盘上的仓库源码）。 */
+export async function clearCodeGraphIndex(repositoryId: number): Promise<void> {
+  return invoke<void>("clear_code_graph_index", { repositoryId });
 }
 
 export async function importCodeGraphOpenapi(

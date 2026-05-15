@@ -1,5 +1,5 @@
 //! File extensions indexed for the code knowledge graph.
-//! Aligned with GitNexus `gitnexus-shared` `EXTENSION_MAP` plus Spring Boot / build extras.
+//! Matches `gitnexus-shared` `EXTENSION_MAP` (`language-detection.ts`).
 
 pub const SUPPORTED_EXTENSIONS: &[&str] = &[
     "c",
@@ -16,7 +16,6 @@ pub const SUPPORTED_EXTENSIONS: &[&str] = &[
     "dart",
     "gemspec",
     "go",
-    "gradle",
     "h",
     "hh",
     "hpp",
@@ -24,7 +23,6 @@ pub const SUPPORTED_EXTENSIONS: &[&str] = &[
     "java",
     "js",
     "jsx",
-    "json",
     "kt",
     "kts",
     "mjs",
@@ -34,7 +32,6 @@ pub const SUPPORTED_EXTENSIONS: &[&str] = &[
     "php4",
     "php5",
     "php8",
-    "properties",
     "phtml",
     "py",
     "rake",
@@ -44,7 +41,4 @@ pub const SUPPORTED_EXTENSIONS: &[&str] = &[
     "ts",
     "tsx",
     "vue",
-    "xml",
-    "yaml",
-    "yml",
 ];

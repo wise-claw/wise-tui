@@ -1,3 +1,6 @@
+//! 保留供后续可选「本地解析」或测试；当前主索引路径已改为 GitNexus CLI + Kuzu 导入。
+#![allow(dead_code)]
+
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
@@ -59,16 +62,6 @@ static RUST_TYPE_LINE: LazyLock<Regex> = LazyLock::new(|| {
 static RUST_MOD_INLINE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^\s*(?:pub\s+)?mod\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\{")
         .expect("rust mod inline regex")
-});
-
-/// JSON `"$ref": "..."` and YAML `$ref: "..."` / `'...'`
-static REF_DOLLAR_QUOTED: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?m)['"]?\$ref['"]?\s*:\s*["']([^"']+)["']"#).expect("ref $ref quoted regex")
-});
-
-/// OpenAPI-style unquoted `$ref: ./file.yaml` (avoids lines already using quotes)
-static REF_YAML_UNQUOTED: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?m)^\s*\$ref\s*:\s*([^'\s#][^\s#]*)").expect("ref yaml unquoted regex")
 });
 
 static PYTHON_FROM: LazyLock<Regex> = LazyLock::new(|| {
@@ -163,29 +156,6 @@ static DART_CLASS_MIXIN: LazyLock<Regex> = LazyLock::new(|| {
 
 static CPP_INCLUDE_LOCAL: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"(?m)#include\s+"([^"]+)""#).expect("cpp local include")
-});
-
-/// Aggregator POM `<module>` entries: allow optional XML prefix, multiline / CDATA body (`[^<]` misses those).
-static MAVEN_MODULE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?is)<(?:[\w.-]+:)?module\b[^>]*>(.*?)</(?:[\w.-]+:)?module\s*>").expect("maven module")
-});
-
-static XML_COMMENT: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?s)<!--.*?-->").expect("xml comment strip"));
-
-static XML_SPRING_IMPORT: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?m)<import\s+[^>]*\bresource\s*=\s*["']([^"']+)["']"#).expect("xml spring import")
-});
-
-static SPRING_CONFIG_IMPORT_PROP: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?m)(?:^|\n)\s*spring\.config\.import\s*=\s*([^\n#]+)").expect("spring.config.import")
-});
-
-static GRADLE_APPLY_FROM: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
-        r#"(?m)(?:apply\s*\(\s*from\s*=\s*["']([^'"]+)["']\)|apply\s+from\s*:\s*['"]([^'"]+)['"])"#,
-    )
-    .expect("gradle apply from")
 });
 
 static KOTLIN_DATA_CLASS: LazyLock<Regex> = LazyLock::new(|| {
@@ -308,25 +278,14 @@ impl Parser {
             .rsplit_once('.')
             .map(|(_, e)| e)
             .unwrap_or("");
-        let norm_path = relative_path.replace('\\', "/");
-
         if ext.eq_ignore_ascii_case("vue") {
             self.parse_vue_file(content, file_node_id, repo_id, relative_path, conn)
         } else if ext.eq_ignore_ascii_case("java") {
             self.parse_java_file(content, file_node_id, repo_id, relative_path, conn)
         } else if ext.eq_ignore_ascii_case("kt") || ext.eq_ignore_ascii_case("kts") {
-            if norm_path.ends_with(".gradle.kts") {
-                self.parse_gradle_file(content, file_node_id, repo_id, relative_path, conn)
-            } else {
-                self.parse_kotlin_file(content, file_node_id, repo_id, relative_path, conn)
-            }
+            self.parse_kotlin_file(content, file_node_id, repo_id, relative_path, conn)
         } else if ext.eq_ignore_ascii_case("rs") {
             self.parse_rust_file(content, file_node_id, repo_id, relative_path, conn)
-        } else if ext.eq_ignore_ascii_case("yaml")
-            || ext.eq_ignore_ascii_case("yml")
-            || ext.eq_ignore_ascii_case("json")
-        {
-            self.parse_json_yaml_file(content, file_node_id, repo_id, relative_path, conn)
         } else if ext.eq_ignore_ascii_case("py") {
             self.parse_python_file(content, file_node_id, repo_id, relative_path, conn)
         } else if ext.eq_ignore_ascii_case("go") {
@@ -360,12 +319,6 @@ impl Parser {
             || ext.eq_ignore_ascii_case("hxx")
         {
             self.parse_cpp_family_file(content, file_node_id, repo_id, relative_path, conn)
-        } else if ext.eq_ignore_ascii_case("properties") {
-            self.parse_properties_file(content, file_node_id, repo_id, relative_path, conn)
-        } else if ext.eq_ignore_ascii_case("xml") {
-            self.parse_xml_file(content, file_node_id, repo_id, relative_path, conn)
-        } else if ext.eq_ignore_ascii_case("gradle") {
-            self.parse_gradle_file(content, file_node_id, repo_id, relative_path, conn)
         } else if ext.eq_ignore_ascii_case("cbl")
             || ext.eq_ignore_ascii_case("cob")
             || ext.eq_ignore_ascii_case("cpy")
@@ -556,19 +509,6 @@ impl Parser {
         let symbol_count =
             self.extract_rust_symbols(conn, content, file_node_id, repo_id, relative_path)?;
         Ok((symbol_count, symbol_count + import_count))
-    }
-
-    fn parse_json_yaml_file(
-        &mut self,
-        content: &str,
-        file_node_id: &str,
-        repo_id: i64,
-        relative_path: &str,
-        conn: &rusqlite::Connection,
-    ) -> Result<(usize, usize), String> {
-        let import_count =
-            self.extract_json_yaml_refs(conn, content, file_node_id, repo_id, relative_path)?;
-        Ok((0, import_count))
     }
 
     fn upsert_line_symbol(
@@ -1047,91 +987,6 @@ impl Parser {
         Ok((0, import_count))
     }
 
-    fn parse_properties_file(
-        &mut self,
-        content: &str,
-        file_node_id: &str,
-        repo_id: i64,
-        relative_path: &str,
-        conn: &rusqlite::Connection,
-    ) -> Result<(usize, usize), String> {
-        let mut count = 0usize;
-        let mut seen = HashSet::<String>::new();
-        for cap in SPRING_CONFIG_IMPORT_PROP.captures_iter(content) {
-            let raw_line = cap.get(1).map(|m| m.as_str()).unwrap_or("");
-            for part in raw_line.split(',') {
-                let tok = part.trim();
-                if tok.is_empty() {
-                    continue;
-                }
-                let Some(target) = spring_resolve_config_import_token(relative_path, tok) else {
-                    continue;
-                };
-                if !seen.insert(target.clone()) {
-                    continue;
-                }
-                count += self.add_import_edge(conn, file_node_id, repo_id, &target)?;
-            }
-        }
-        Ok((0, count))
-    }
-
-    fn parse_xml_file(
-        &mut self,
-        content: &str,
-        file_node_id: &str,
-        repo_id: i64,
-        relative_path: &str,
-        conn: &rusqlite::Connection,
-    ) -> Result<(usize, usize), String> {
-        let mut count = 0usize;
-        let parent = file_parent_dir(relative_path);
-        for modname in collect_maven_module_rel_paths(content) {
-            let sub = path_join(&parent, &modname);
-            let target = path_join(&sub, "pom.xml");
-            count += self.add_import_edge(conn, file_node_id, repo_id, &target)?;
-        }
-        for cap in XML_SPRING_IMPORT.captures_iter(content) {
-            let raw = cap.get(1).map(|m| m.as_str()).unwrap_or("");
-            let Some(resolved) = spring_resolve_config_import_token(relative_path, raw) else {
-                continue;
-            };
-            count += self.add_import_edge(conn, file_node_id, repo_id, &resolved)?;
-        }
-        Ok((0, count))
-    }
-
-    fn parse_gradle_file(
-        &mut self,
-        content: &str,
-        file_node_id: &str,
-        repo_id: i64,
-        relative_path: &str,
-        conn: &rusqlite::Connection,
-    ) -> Result<(usize, usize), String> {
-        let mut count = 0usize;
-        let file_dir = relative_path.rsplit('/').nth(1).unwrap_or("");
-        let parent = file_parent_dir(relative_path);
-        for cap in GRADLE_APPLY_FROM.captures_iter(content) {
-            let raw = cap
-                .get(1)
-                .or_else(|| cap.get(2))
-                .map(|m| m.as_str())
-                .unwrap_or("")
-                .trim();
-            if raw.is_empty() {
-                continue;
-            }
-            let resolved = if raw.starts_with('.') {
-                resolve_import_path(file_dir, raw, relative_path)
-            } else {
-                path_join(&parent, raw.trim_start_matches('/'))
-            };
-            count += self.add_import_edge(conn, file_node_id, repo_id, &resolved)?;
-        }
-        Ok((0, count))
-    }
-
     fn extract_rust_imports(
         &self,
         conn: &rusqlite::Connection,
@@ -1248,52 +1103,6 @@ impl Parser {
                 None,
             )?;
             count += 1;
-        }
-
-        Ok(count)
-    }
-
-    fn extract_json_yaml_refs(
-        &self,
-        conn: &rusqlite::Connection,
-        content: &str,
-        file_node_id: &str,
-        repo_id: i64,
-        relative_path: &str,
-    ) -> Result<usize, String> {
-        let mut count = 0;
-        let file_dir = relative_path.rsplit('/').nth(1).unwrap_or("");
-
-        let mut seen = std::collections::HashSet::<String>::new();
-
-        for cap in REF_DOLLAR_QUOTED.captures_iter(content) {
-            let Some(raw) = cap.get(1).map(|m| m.as_str()) else {
-                continue;
-            };
-            let path = ref_strip_fragment(raw);
-            if !ref_is_file_like(path) {
-                continue;
-            }
-            if !seen.insert(path.to_string()) {
-                continue;
-            }
-            let resolved = resolve_import_path(file_dir, path, relative_path);
-            count += self.add_import_edge(conn, file_node_id, repo_id, &resolved)?;
-        }
-
-        for cap in REF_YAML_UNQUOTED.captures_iter(content) {
-            let Some(raw) = cap.get(1).map(|m| m.as_str()) else {
-                continue;
-            };
-            let path = ref_strip_fragment(raw);
-            if !ref_is_file_like(path) {
-                continue;
-            }
-            if !seen.insert(path.to_string()) {
-                continue;
-            }
-            let resolved = resolve_import_path(file_dir, path, relative_path);
-            count += self.add_import_edge(conn, file_node_id, repo_id, &resolved)?;
         }
 
         Ok(count)
@@ -1857,101 +1666,6 @@ fn file_parent_dir(relative_path: &str) -> String {
         .unwrap_or_default()
 }
 
-fn strip_xml_comments(s: &str) -> String {
-    XML_COMMENT.replace_all(s, "").to_string()
-}
-
-fn normalize_maven_module_inner(inner: &str) -> String {
-    let t = inner.trim();
-    if let Some(rest) = t.strip_prefix("<![CDATA[") {
-        if let Some(end) = rest.find("]]>") {
-            return rest[..end]
-                .trim()
-                .split_whitespace()
-                .collect::<Vec<_>>()
-                .join(" ");
-        }
-    }
-    t.split_whitespace().collect::<Vec<_>>().join(" ")
-}
-
-/// Relative submodule directory paths from `<modules>` (aggregator POM), deduplicated in document order.
-fn collect_maven_module_rel_paths(content: &str) -> Vec<String> {
-    let clean = strip_xml_comments(content);
-    let mut out = Vec::new();
-    let mut seen = HashSet::<String>::new();
-    for cap in MAVEN_MODULE.captures_iter(&clean) {
-        let inner = cap.get(1).map(|m| m.as_str()).unwrap_or("");
-        let p = normalize_maven_module_inner(inner);
-        if p.is_empty() {
-            continue;
-        }
-        if seen.insert(p.clone()) {
-            out.push(p);
-        }
-    }
-    out
-}
-
-fn maven_resources_prefix(relative_path: &str) -> Option<String> {
-    let p = relative_path.replace('\\', "/");
-    if let Some(i) = p.find("/src/main/resources/") {
-        Some(p[..i + "/src/main/resources".len()].to_string())
-    } else if let Some(i) = p.find("/src/test/resources/") {
-        Some(p[..i + "/src/test/resources".len()].to_string())
-    } else {
-        None
-    }
-}
-
-fn spring_strip_resource_value(s: &str) -> String {
-    let mut t = s.trim().to_string();
-    const PFX: &[&str] = &["optional:", "file:", "classpath*:", "classpath:"];
-    for _ in 0..4 {
-        let lower = t.to_ascii_lowercase();
-        let mut matched = false;
-        for p in PFX {
-            if lower.starts_with(p) {
-                t = t[p.len()..].trim().to_string();
-                matched = true;
-                break;
-            }
-        }
-        if !matched {
-            break;
-        }
-    }
-    t.trim_matches(|c| c == '"' || c == '\'').trim().to_string()
-}
-
-fn spring_resolve_config_import_token(relative_path: &str, raw_tok: &str) -> Option<String> {
-    let l = raw_tok.trim().to_ascii_lowercase();
-    let parent = file_parent_dir(relative_path);
-    let file_dir = relative_path.rsplit('/').nth(1).unwrap_or("");
-    if l.contains("classpath:") || l.contains("classpath*:") {
-        let stripped = spring_strip_resource_value(raw_tok);
-        let rest = stripped.trim_start_matches('/');
-        if let Some(prefix) = maven_resources_prefix(relative_path) {
-            return Some(path_join(&prefix, rest));
-        }
-        return Some(path_join(&parent, rest));
-    }
-    if l.contains("://") && !l.starts_with("file:") {
-        return None;
-    }
-    let path_part = spring_strip_resource_value(raw_tok);
-    if path_part.is_empty() {
-        return None;
-    }
-    if path_part.starts_with("./") || path_part.starts_with("../") || path_part.starts_with('.') {
-        return Some(resolve_import_path(file_dir, &path_part, relative_path));
-    }
-    if path_part.contains('/') && !path_part.contains(':') {
-        return Some(path_join(&parent, path_part.trim_start_matches('/')));
-    }
-    None
-}
-
 fn php_qualified_to_path(q: &str) -> Option<String> {
     let parts: Vec<&str> = q.split('\\').filter(|s| !s.is_empty()).collect();
     if parts.is_empty() {
@@ -2070,39 +1784,6 @@ fn rust_chunks_to_rs_path_under(dir_base: &str, chunks: &[&str]) -> Option<Strin
         return None;
     }
     Some(path_join(dir_base, &format!("{}.rs", chunks.join("/"))))
-}
-
-fn ref_strip_fragment(s: &str) -> &str {
-    s.split('#').next().unwrap_or(s).trim()
-}
-
-fn ref_is_file_like(s: &str) -> bool {
-    let t = s.trim();
-    if t.is_empty() || t.starts_with('#') {
-        return false;
-    }
-    if t.contains("://") {
-        return false;
-    }
-    t.starts_with("./")
-        || t.starts_with("../")
-        || t.starts_with('.')
-        || t.contains('/')
-        || t.ends_with(".yaml")
-        || t.ends_with(".yml")
-        || t.ends_with(".json")
-        || t.ends_with(".rs")
-        || t.ends_with(".xml")
-        || t.ends_with(".properties")
-        || t.ends_with(".gradle")
-        || t.ends_with(".py")
-        || t.ends_with(".php")
-        || t.ends_with(".kt")
-        || t.ends_with(".kts")
-        || t.ends_with(".cs")
-        || t.ends_with(".go")
-        || t.ends_with(".swift")
-        || t.ends_with(".dart")
 }
 
 fn byte_offset_to_line_number(content: &str, byte_idx: usize) -> usize {
@@ -2557,56 +2238,6 @@ mod tests {
     }
 
     #[test]
-    fn maven_pom_modules_multiline_cdata_and_prefix() {
-        let pom = r#"<?xml version="1.0"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0">
-  <modules>
-    <module>
-      api
-    </module>
-    <module><![CDATA[  billing-svc  ]]></module>
-    <m:module xmlns:m="http://maven.apache.org/POM/4.0.0">legacy</m:module>
-  </modules>
-</project>"#;
-        let mods = collect_maven_module_rel_paths(pom);
-        assert_eq!(mods, vec!["api", "billing-svc", "legacy"]);
-    }
-
-    #[test]
-    fn maven_pom_modules_ignores_modules_in_xml_comments() {
-        let pom = r#"<project>
-  <!-- <module>ghost</module> -->
-  <modules>
-    <module>real</module>
-  </modules>
-</project>"#;
-        let mods = collect_maven_module_rel_paths(pom);
-        assert_eq!(mods, vec!["real"]);
-    }
-
-    #[test]
-    fn maven_pom_modules_multiline_plain_text() {
-        let pom = r#"<modules>
-    <module>
-      billing-svc
-    </module>
-  </modules>"#;
-        let mods = collect_maven_module_rel_paths(pom);
-        assert_eq!(mods, vec!["billing-svc"]);
-    }
-    #[test]
-    fn spring_classpath_resolves_under_maven_resources() {
-        let p = spring_resolve_config_import_token(
-            "svc/src/main/resources/application.properties",
-            "classpath:config/extra.yml",
-        );
-        assert_eq!(
-            p.as_deref(),
-            Some("svc/src/main/resources/config/extra.yml")
-        );
-    }
-
-    #[test]
     fn ts_js_import_bare_npm_none() {
         assert_eq!(
             resolve_ts_js_import_to_repo_relative(
@@ -2675,7 +2306,11 @@ mod tests {
     fn ts_js_import_tsconfig_hits_existing_file() {
         let ts = crate::code_knowledge_graph::tsconfig_paths::TsconfigPaths {
             base_url: ".".into(),
-            aliases: vec![("@/".into(), "src/".into())],
+            aliases: vec![(
+                "@/".into(),
+                "src/".into(),
+                crate::code_knowledge_graph::tsconfig_paths::TsconfigPathAliasKind::GlobPrefix,
+            )],
         };
         let mut files = HashSet::new();
         files.insert("src/utils/theme.ts".to_string());

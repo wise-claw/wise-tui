@@ -1,12 +1,16 @@
 import { listen } from "@tauri-apps/api/event";
 import {
   CloseOutlined,
+  DeleteOutlined,
+  PauseCircleOutlined,
   PlayCircleOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
-import { Alert, Button, Empty, message, Progress, Select, Space, Spin, Tag, Typography } from "antd";
+import { Alert, Button, Empty, message, Modal, Progress, Select, Space, Spin, Tag, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  clearCodeGraphIndex,
+  cancelCodeGraphReindex,
   getCodeGraphIndexStatus,
   getCodeGraphMultiSubgraph,
   getCodeGraphSubgraph,
@@ -26,6 +30,7 @@ import type {
   CodeGraphSubgraphResponse,
   GraphNode,
 } from "../../types/codeKnowledgeGraph";
+import { CODE_GRAPH_INDEX_CANCELLED_MSG, CODE_GRAPH_INDEX_STALE_ORPHAN_MSG } from "../../types/codeKnowledgeGraph";
 import { CodeGraphSourcePreview } from "./CodeGraphSourcePreview";
 import {
   CodeKnowledgeGraphChartColumn,
@@ -74,6 +79,9 @@ const GRAPH_PANE_MIN_GRAPH_PX = 220;
 const GRAPH_PANE_MIN_RIGHT_PX = 200;
 const SPLITTER_WIDTH_PX = 6;
 
+/** 防止 React StrictMode / 重复 effect 在短时间内对同一仓触发两次 `triggerCodeGraphReindex`。 */
+const AUTO_REINDEX_DEBOUNCE_MS = 2000;
+
 function normalizeSubgraphHopScope(v: unknown): SubgraphHopScope {
   if (v === "all") return "all";
   const n =
@@ -95,7 +103,6 @@ export function CodeKnowledgeGraphPanel({
 }: Props) {
   const [indexStatus, setIndexStatus] = useState<CodeGraphIndexStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [reindexing, setReindexing] = useState(false);
   const [subgraphData, setSubgraphData] = useState<CodeGraphSubgraphResponse | null>(null);
   const [subgraphHopScope, setSubgraphHopScope] = useState<SubgraphHopScope>(3);
   const [subgraphFocusId, setSubgraphFocusId] = useState<string | undefined>(undefined);
@@ -125,6 +132,7 @@ export function CodeKnowledgeGraphPanel({
   const [searchRemoteHits, setSearchRemoteHits] = useState<GraphNode[]>([]);
   const [searchRemoteLoading, setSearchRemoteLoading] = useState(false);
   const pendingCrossRepoSearchPickRef = useRef<GraphNode | null>(null);
+  const lastAutoReindexTriggerRef = useRef<{ repositoryId: number; at: number } | null>(null);
 
   const fetchStatus = useCallback(async () => {
     if (!repositoryId) {
@@ -141,7 +149,14 @@ export function CodeKnowledgeGraphPanel({
           pollRef.current = null;
         }
       } else if (status.status === "error") {
-        setIndexError(status.error ?? "索引失败");
+        if (
+          status.error === CODE_GRAPH_INDEX_CANCELLED_MSG ||
+          status.error === CODE_GRAPH_INDEX_STALE_ORPHAN_MSG
+        ) {
+          setIndexError(null);
+        } else {
+          setIndexError(status.error ?? "索引失败");
+        }
         if (pollRef.current) {
           clearInterval(pollRef.current);
           pollRef.current = null;
@@ -151,11 +166,11 @@ export function CodeKnowledgeGraphPanel({
         if (!pollRef.current) {
           pollRef.current = setInterval(() => {
             void fetchStatus();
-          }, 2000);
+          }, 1500);
         }
       }
-    } catch {
-      // Ignore fetch errors
+    } catch (e) {
+      console.warn("[code-graph] getCodeGraphIndexStatus failed", e);
     } finally {
       setLoading(false);
     }
@@ -175,9 +190,15 @@ export function CodeKnowledgeGraphPanel({
 
     const errorUnsub = listen("code-graph-index-error", (event: any) => {
       if (event.payload?.repositoryId === repositoryId) {
-        setIndexError(event.payload.error ?? "索引失败");
-        if (repositoryId) {
-          setIndexStatus({ status: "error", repositoryId, progress: 0 });
+        const errMsg = String(event.payload.error ?? "索引失败");
+        if (errMsg === CODE_GRAPH_INDEX_CANCELLED_MSG || errMsg === CODE_GRAPH_INDEX_STALE_ORPHAN_MSG) {
+          setIndexError(null);
+          void fetchStatus();
+        } else {
+          setIndexError(errMsg);
+          if (repositoryId) {
+            setIndexStatus({ status: "error", repositoryId, progress: 0 });
+          }
         }
         if (pollRef.current) {
           clearInterval(pollRef.current);
@@ -229,6 +250,46 @@ export function CodeKnowledgeGraphPanel({
       }
     };
   }, [fetchStatus]);
+
+  /** 打开图谱且当前仓从未建索引（idle）时自动开始检索，无需再点「开始检索」。 */
+  useEffect(() => {
+    if (loading || repositoryId == null || !indexStatus) return;
+    if (indexStatus.repositoryId !== repositoryId) return;
+    if (indexStatus.status !== "idle") return;
+
+    const now = Date.now();
+    const prev = lastAutoReindexTriggerRef.current;
+    if (
+      prev != null &&
+      prev.repositoryId === repositoryId &&
+      now - prev.at < AUTO_REINDEX_DEBOUNCE_MS
+    ) {
+      return;
+    }
+    lastAutoReindexTriggerRef.current = { repositoryId, at: now };
+
+    let cancelled = false;
+    void (async () => {
+      setIndexError(null);
+      try {
+        await triggerCodeGraphReindex({ repositoryId });
+        if (!cancelled) {
+          message.info("已为当前仓库自动开始检索（GitNexus CLI 分析），完成后将自动刷新。");
+          void fetchStatus();
+        }
+      } catch (e) {
+        lastAutoReindexTriggerRef.current = null;
+        if (!cancelled) {
+          console.warn("[code-graph] auto triggerCodeGraphReindex failed", e);
+          message.error("自动开始检索失败，请点击「开始检索」重试。");
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loading, repositoryId, indexStatus, fetchStatus]);
 
   useEffect(() => {
     const pending = pendingCrossRepoSearchPickRef.current;
@@ -450,39 +511,94 @@ export function CodeKnowledgeGraphPanel({
 
   const handleReindex = useCallback(async () => {
     if (!repositoryId) return;
-    setReindexing(true);
-    setSubgraphData(null);
-    setSelectedNode(null);
-    setSubgraphFocusId(undefined);
-    setSubgraphHopScope(3);
-    setSubgraphDirection(undefined);
-    setSubgraphRefreshKey(0);
+    if (indexStatus?.status === "indexing" && indexStatus.repositoryId === repositoryId) {
+      message.info("检索已在进行中，请稍候。");
+      return;
+    }
+    setIndexError(null);
     try {
       await triggerCodeGraphReindex({ repositoryId });
-      setIndexStatus({ status: "indexing", repositoryId, progress: 1 });
-      setIndexError(null);
-    } catch {
-      // Show error in status
-    } finally {
-      setReindexing(false);
+      message.info("已开始后台检索代码仓库（GitNexus analyze + 图谱导入），完成后将自动刷新。");
+      void fetchStatus();
+    } catch (e) {
+      console.warn("[code-graph] triggerCodeGraphReindex failed", e);
+      message.error("提交检索失败");
     }
-  }, [repositoryId]);
+  }, [repositoryId, indexStatus?.status, indexStatus?.repositoryId, fetchStatus]);
+
+  const handlePauseReindex = useCallback(async () => {
+    if (!repositoryId) return;
+    try {
+      const o = await cancelCodeGraphReindex(repositoryId);
+      if (o.signalledRunningTask) {
+        message.success("已请求停止检索，请稍候…");
+      } else if (o.clearedStaleIndexingStatus) {
+        message.warning("界面卡在「检索中」但任务已不在运行，已清除该状态。请重新点击「开始检索」。");
+        void fetchStatus();
+      } else {
+        message.warning("当前没有可停止的检索任务（可能已结束或未开始）。");
+      }
+    } catch (e) {
+      console.warn("[code-graph] cancelCodeGraphReindex failed", e);
+      message.error("停止检索失败");
+    }
+  }, [repositoryId, fetchStatus]);
+
+  const handleClearGraphIndex = useCallback(() => {
+    if (!repositoryId) return;
+    if (indexStatus?.status === "indexing" && indexStatus.repositoryId === repositoryId) {
+      message.warning("检索进行中时无法清空索引，请稍候结束后再试。");
+      return;
+    }
+    Modal.confirm({
+      title: "清空该仓库的代码图谱索引？",
+      content:
+        "将删除本地数据库中该仓库的图谱节点、边与索引进度（不含磁盘上的源码）。可用于排除旧版索引或异常中断后的残留。清空后需重新检索。",
+      okText: "清空",
+      okType: "danger",
+      cancelText: "取消",
+      onOk: async () => {
+        try {
+          await clearCodeGraphIndex(repositoryId);
+          lastAutoReindexTriggerRef.current = null;
+          setIndexError(null);
+          setSubgraphData(null);
+          setSelectedNode(null);
+          setSubgraphRefreshKey((k) => k + 1);
+          message.success("已清空索引");
+          void fetchStatus();
+        } catch (e) {
+          console.warn("[code-graph] clearCodeGraphIndex failed", e);
+          message.error("清空索引失败");
+        }
+      },
+    });
+  }, [repositoryId, indexStatus?.status, indexStatus?.repositoryId, fetchStatus]);
 
   const handleReindexRepository = useCallback(
     async (targetId: number) => {
-      if (targetId === repositoryId) {
-        await handleReindex();
+      if (
+        indexStatus?.status === "indexing" &&
+        indexStatus.repositoryId === targetId
+      ) {
+        message.info("该仓库检索已在进行中。");
         return;
       }
+      setIndexError(null);
       try {
         await triggerCodeGraphReindex({ repositoryId: targetId });
-        const name = repositories?.find((r) => r.id === targetId)?.name ?? String(targetId);
-        message.success(`已为「${name}」提交重建索引`);
-      } catch {
-        message.error("提交索引失败");
+        message.info(
+          targetId === repositoryId
+            ? "已开始后台检索当前仓库，完成后将自动刷新。"
+            : "已开始后台检索所选仓库，完成后可在仓库菜单中切换查看。",
+        );
+        void fetchStatus();
+      } catch (e) {
+        console.warn("[code-graph] triggerCodeGraphReindex (repo menu) failed", e);
+        message.error("提交检索失败");
       }
     },
-    [repositoryId, handleReindex, repositories],
+    [repositoryId, indexStatus?.status, indexStatus?.repositoryId, fetchStatus],
   );
 
   const handleAssociationBuild = useCallback(async (ids: number[]) => {
@@ -667,7 +783,7 @@ export function CodeKnowledgeGraphPanel({
     if (!subgraphData?.nodes.length && !subgraphLoading) {
       return (
         <Empty
-          description="子图为空，当前仓库可能无已索引的源码或配置（与 GitNexus 语言扩展对齐，含 Spring Boot 常用文件）"
+          description="子图为空，当前仓库可能无已索引的源码（索引范围与 GitNexus 仓库语言扩展一致）"
           image={Empty.PRESENTED_IMAGE_SIMPLE}
         />
       );
@@ -810,9 +926,9 @@ export function CodeKnowledgeGraphPanel({
             {indexStatus?.indexVersion && (
               <Tag color="blue">v{indexStatus.indexVersion}</Tag>
             )}
-            {isIndexed && <Tag color="green">已索引</Tag>}
-            {isIndexing && <Tag color="orange">索引中...</Tag>}
-            {indexError && <Tag color="red">索引失败</Tag>}
+            {isIndexed && <Tag color="green">已检索</Tag>}
+            {isIndexing && <Tag color="orange">检索中...</Tag>}
+            {indexError && <Tag color="red">检索失败</Tag>}
             {hasData && (
               <Tag>{subgraphData!.nodes.length} 节点 · {subgraphData!.edges.length} 边</Tag>
             )}
@@ -879,34 +995,55 @@ export function CodeKnowledgeGraphPanel({
               />
             </div>
           )}
-          <Button
-            type="primary"
-            size="small"
-            icon={reindexing ? <Spin size="small" /> : <PlayCircleOutlined />}
-            onClick={handleReindex}
-            disabled={!repositoryId || reindexing}
-            loading={reindexing}
-          >
-            {isIndexed ? "重建索引" : "开始索引"}
-          </Button>
+          <Space size={8} wrap>
+            <Button
+              danger
+              size="small"
+              icon={<DeleteOutlined />}
+              disabled={!repositoryId || (isIndexing && indexStatus?.repositoryId === repositoryId)}
+              onClick={handleClearGraphIndex}
+            >
+              清空索引
+            </Button>
+            <Button
+              size="small"
+              icon={<PauseCircleOutlined />}
+              onClick={() => void handlePauseReindex()}
+              disabled={!repositoryId || !isIndexing || indexStatus?.repositoryId !== repositoryId}
+            >
+              暂停检索
+            </Button>
+            <Button
+              type="primary"
+              size="small"
+              icon={<PlayCircleOutlined />}
+              onClick={() => void handleReindex()}
+              disabled={
+                !repositoryId ||
+                (isIndexing && indexStatus?.repositoryId === repositoryId)
+              }
+            >
+              {isIndexed ? "重新检索" : "开始检索"}
+            </Button>
+          </Space>
         </div>
       </header>
       <div className="app-code-graph-content">
         {!repositoryId ? (
           <Empty
-            description="请从上方仓库菜单选择要索引的仓库"
+            description="请从上方仓库菜单选择要检索的仓库"
             image={Empty.PRESENTED_IMAGE_SIMPLE}
           />
         ) : indexError ? (
           <div style={{ maxWidth: 480, padding: 24 }}>
             <Alert
               type="error"
-              message="索引失败"
+              message="检索失败"
               description={indexError}
               showIcon
               style={{ marginBottom: 16 }}
             />
-            <Button type="primary" onClick={handleReindex} disabled={reindexing}>
+            <Button type="primary" onClick={() => void handleReindex()}>
               重试
             </Button>
           </div>
@@ -926,19 +1063,49 @@ export function CodeKnowledgeGraphPanel({
                   )}
                 />
                 <Typography.Text type="secondary" style={{ textAlign: "center" }}>
-                  正在为 {currentRepo?.name ?? "该仓库"} 建立索引...
+                  正在为 {currentRepo?.name ?? "该仓库"} 运行 GitNexus 分析…
                 </Typography.Text>
+                {indexStatus &&
+                typeof indexStatus.indexingFilesTotal === "number" &&
+                indexStatus.indexingFilesTotal > 0 ? (
+                  <div style={{ marginTop: 6, textAlign: "center", maxWidth: "min(92vw, 720px)" }}>
+                    <Space size={8} wrap align="start" style={{ justifyContent: "center" }}>
+                      <Typography.Text type="secondary">
+                        已扫描源文件 {indexStatus.indexingFilesDone ?? 0} / {indexStatus.indexingFilesTotal}
+                      </Typography.Text>
+                      {indexStatus.indexingCurrentFile ? (
+                        <>
+                          <Typography.Text type="secondary">·</Typography.Text>
+                          <Typography.Text
+                            copyable={{ text: indexStatus.indexingCurrentFile }}
+                            code
+                            ellipsis={{ tooltip: indexStatus.indexingCurrentFile }}
+                            style={{ maxWidth: "min(80vw, 520px)", textAlign: "left" }}
+                          >
+                            {indexStatus.indexingCurrentFile}
+                          </Typography.Text>
+                        </>
+                      ) : null}
+                    </Space>
+                  </div>
+                ) : null}
+                <Typography.Paragraph
+                  type="secondary"
+                  style={{ textAlign: "center", maxWidth: 360, marginTop: 8, marginBottom: 0, fontSize: 12 }}
+                >
+                  大仓库单文件解析可能很慢；若路径长时间不变，说明正卡在该文件的读取或解析。可点上方「暂停检索」随时停止，或关闭面板稍候后再点「重新检索」重试。
+                </Typography.Paragraph>
               </div>
             </div>
           ) : (
             <Empty
               description={
-                `尚未建立知识图谱索引，点击上方「开始索引」为 ${currentRepo?.name ?? "该仓库"} 建立索引`
+                `尚未建立知识图谱，点击上方「开始检索」为 ${currentRepo?.name ?? "该仓库"} 进行全仓分析`
               }
               image={Empty.PRESENTED_IMAGE_SIMPLE}
             >
-              <Button type="primary" onClick={handleReindex} disabled={reindexing}>
-                开始索引
+              <Button type="primary" onClick={() => void handleReindex()}>
+                开始检索
               </Button>
             </Empty>
           )

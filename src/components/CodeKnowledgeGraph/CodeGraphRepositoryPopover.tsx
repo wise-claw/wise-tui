@@ -135,7 +135,7 @@ export function CodeGraphRepositoryPopover({
                     <span className="app-code-graph-repo-dropdown-active-pill">active</span>
                   ) : null}
                   {onReindexRepository ? (
-                    <Tooltip title="重建图谱索引">
+                    <Tooltip title="重新检索代码图谱">
                       <span
                         role="button"
                         tabIndex={0}

@@ -106,6 +106,13 @@ pub struct CodeGraphReindexRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CancelCodeGraphReindexOutcome {
+    pub signalled_running_task: bool,
+    pub cleared_stale_indexing_status: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CodeGraphIndexStatusResponse {
     pub status: String,
     pub repository_id: i64,
@@ -115,4 +122,12 @@ pub struct CodeGraphIndexStatusResponse {
     pub index_version: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// 仅 `status == "indexing"`：`graph_index_meta` 中 `total_nodes`/`total_edges` 复用为已扫描源文件数 / 预估可索引源文件总数。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub indexing_files_done: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub indexing_files_total: Option<i64>,
+    /// 仅 `status == "indexing"`：当前正在读取/解析的仓库内相对路径（单文件可能很慢）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub indexing_current_file: Option<String>,
 }

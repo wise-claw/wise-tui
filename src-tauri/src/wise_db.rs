@@ -34,6 +34,7 @@ const MIGRATION_015: &str = include_str!("../migrations/015_project_prd_scope.sq
 const MIGRATION_016: &str = include_str!("../migrations/016_project_trellis_root.sql");
 const MIGRATION_017: &str = include_str!("../migrations/017_code_knowledge_graph.sql");
 const MIGRATION_018: &str = include_str!("../migrations/018_code_knowledge_graph_relax_checks.sql");
+const MIGRATION_019: &str = include_str!("../migrations/019_code_knowledge_graph_indexing_current_file.sql");
 const PLATFORM_SPLIT_PROMPT_SEED_JSON: &str =
     include_str!("../migrations/005_platform_split_prompt_seed.json");
 
@@ -119,6 +120,10 @@ const MIGRATIONS: &[Migration] = &[
     Migration {
         name: "018_code_knowledge_graph_relax_checks",
         action: MigrationAction::Sql(MIGRATION_018),
+    },
+    Migration {
+        name: "019_code_knowledge_graph_indexing_current_file",
+        action: MigrationAction::Sql(MIGRATION_019),
     },
 ];
 
@@ -213,6 +218,7 @@ impl WiseDb {
             .map_err(|e| e.to_string())?;
         run_migrations(&conn)?;
         ensure_graph_index_meta_progress_column(&conn)?;
+        ensure_graph_index_meta_indexing_current_file_column(&conn)?;
         Ok(Self(Mutex::new(conn)))
     }
 
@@ -1770,6 +1776,22 @@ fn ensure_graph_index_meta_progress_column(conn: &Connection) -> Result<(), Stri
     Ok(())
 }
 
+fn ensure_graph_index_meta_indexing_current_file_column(conn: &Connection) -> Result<(), String> {
+    let missing = conn
+        .query_row(
+            "SELECT COUNT(*) = 0 FROM pragma_table_info('graph_index_meta') WHERE name = 'indexing_current_file'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(false);
+    if missing {
+        let _ = conn.execute_batch(
+            "ALTER TABLE graph_index_meta ADD COLUMN indexing_current_file TEXT;",
+        );
+    }
+    Ok(())
+}
+
 fn migration_applied(conn: &Connection, name: &str) -> Result<bool, String> {
     let count: i64 = conn
         .query_row(
@@ -1848,6 +1870,7 @@ mod tests {
                 "016_project_trellis_root",
                 "017_code_knowledge_graph",
                 "018_code_knowledge_graph_relax_checks",
+                "019_code_knowledge_graph_indexing_current_file",
             ]
         );
     }

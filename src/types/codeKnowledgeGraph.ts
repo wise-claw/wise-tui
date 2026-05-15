@@ -87,10 +87,27 @@ export interface CodeGraphReindexRequest {
   repositoryId: number;
 }
 
+/** 与后端 `index_cancel::INDEX_CANCELLED_MSG` 一致：用户主动停止 */
+export const CODE_GRAPH_INDEX_CANCELLED_MSG = "检索已取消" as const;
+
+/** 与后端 `index_cancel::INDEX_STALE_ORPHAN_MSG` 一致：僵尸 indexing 被「暂停」清除 */
+export const CODE_GRAPH_INDEX_STALE_ORPHAN_MSG =
+  "索引未在进程中运行（可能已异常退出或应用重启）。请重新点击「开始检索」。" as const;
+
+export interface CancelCodeGraphReindexOutcome {
+  signalledRunningTask: boolean;
+  clearedStaleIndexingStatus: boolean;
+}
+
 export interface CodeGraphIndexStatusResponse {
   status: "idle" | "indexing" | "done" | "error";
   repositoryId: number;
   progress?: number;
   indexVersion?: string;
   error?: string;
+  /** 仅 indexing：后端复用 meta 列表示已扫描源文件数 / 预估可索引源文件总数 */
+  indexingFilesDone?: number;
+  indexingFilesTotal?: number;
+  /** 仅 indexing：当前正在读取/解析的仓库内相对路径 */
+  indexingCurrentFile?: string;
 }

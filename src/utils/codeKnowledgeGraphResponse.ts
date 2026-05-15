@@ -132,5 +132,8 @@ export function parseCodeGraphIndexStatusResponse(
     progress: typeof resp.progress === "number" ? resp.progress : undefined,
     indexVersion: typeof resp.indexVersion === "string" ? resp.indexVersion : undefined,
     error: typeof resp.error === "string" ? resp.error : undefined,
+    indexingFilesDone: typeof resp.indexingFilesDone === "number" ? resp.indexingFilesDone : undefined,
+    indexingFilesTotal: typeof resp.indexingFilesTotal === "number" ? resp.indexingFilesTotal : undefined,
+    indexingCurrentFile: typeof resp.indexingCurrentFile === "string" ? resp.indexingCurrentFile : undefined,
   };
 }

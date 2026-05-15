@@ -100,6 +100,32 @@ describe("parseCodeGraphIndexStatusResponse", () => {
     expect(result.status).toBe("idle");
     expect(result.progress).toBeUndefined();
     expect(result.indexVersion).toBeUndefined();
+    expect(result.indexingFilesDone).toBeUndefined();
+    expect(result.indexingFilesTotal).toBeUndefined();
+  });
+
+  test("accepts indexing with file scan counters", () => {
+    const result = parseCodeGraphIndexStatusResponse({
+      status: "indexing",
+      repositoryId: 2,
+      progress: 3,
+      indexingFilesDone: 120,
+      indexingFilesTotal: 4000,
+    });
+    expect(result.indexingFilesDone).toBe(120);
+    expect(result.indexingFilesTotal).toBe(4000);
+  });
+
+  test("accepts indexing current file hint", () => {
+    const result = parseCodeGraphIndexStatusResponse({
+      status: "indexing",
+      repositoryId: 1,
+      progress: 1,
+      indexingFilesDone: 3,
+      indexingFilesTotal: 475,
+      indexingCurrentFile: "src/foo/bar.tsx",
+    });
+    expect(result.indexingCurrentFile).toBe("src/foo/bar.tsx");
   });
 
   test("rejects invalid status", () => {

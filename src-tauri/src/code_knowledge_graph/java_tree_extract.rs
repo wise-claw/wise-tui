@@ -1,3 +1,6 @@
+//! 保留供后续可选「本地解析」或测试；当前主索引路径已改为 GitNexus CLI + Kuzu 导入。
+#![allow(dead_code)]
+
 //! Java symbol + import + calls + heritage extraction via tree-sitter-java, aligned with GitNexus
 //! `gitnexus/src/core/ingestion/tree-sitter-queries.ts` (`JAVA_QUERIES`).
 
