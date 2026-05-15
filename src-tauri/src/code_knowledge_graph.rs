@@ -454,7 +454,7 @@ fn sync_gitnexus_group_for_repo_ids(repo_ids: &[i64]) -> serde_json::Value {
             }
         };
         let root = Path::new(&repo_path);
-        let reg = match gitnexus_group::resolve_registry_name(root) {
+        let reg = match gitnexus_group::resolve_registry_name_or_analyze(root) {
             Ok(r) => r,
             Err(e) => {
                 return serde_json::json!({
@@ -532,7 +532,7 @@ pub fn bridge_code_graph_http(
     bridge_code_graph_http_conn(&conn, frontend_repo_id, backend_repo_id)
 }
 
-/// 多仓关联：仅同步 GitNexus 官方 **仓库组**（`group create` / `add` / `sync`），不触发 Wise 各仓代码索引。
+/// 多仓关联：同步 GitNexus **仓库组**（`group create` / `add` / `sync`）。对尚未出现在 `gitnexus list` 的仓会先自动执行 `gitnexus analyze . --force` 再登记；不写入 Wise 各仓 SQLite 图谱。
 #[tauri::command]
 pub fn trigger_code_graph_association_build(
     _state: tauri::State<WiseDb>,

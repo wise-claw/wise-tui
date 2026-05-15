@@ -1,4 +1,4 @@
-import { Button, Checkbox, Popover, Radio, Space, Typography } from "antd";
+import { Button, Checkbox, Popover, Radio, Space, Tooltip, Typography } from "antd";
 import type { CheckboxChangeEvent } from "antd/es/checkbox";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CodeGraphRepositoryMenuItem } from "./CodeGraphRepositoryPopover";
@@ -44,7 +44,10 @@ interface Props {
   onApplied?: (scopeRepositoryIds: number[]) => void;
   /** 多仓（≥2）：后台仅执行 GitNexus 官方仓库组（create / add / sync） */
   onAssociationBuild?: (repositoryIds: number[]) => void | Promise<void>;
-  disabled?: boolean;
+  /**
+   * 为 true 时仍可打开面板选择「全部仓库 / 自选」，但不会调用 `onAssociationBuild`（需先完成当前仓图谱检索）。
+   */
+  syncDisabled?: boolean;
 }
 
 function labelForTrigger(
@@ -73,7 +76,7 @@ export function CodeGraphAssociationPopover({
   onChange,
   onApplied,
   onAssociationBuild,
-  disabled = false,
+  syncDisabled = false,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [draftMode, setDraftMode] = useState<AssociationGraphMode>(value.mode);
@@ -84,7 +87,7 @@ export function CodeGraphAssociationPopover({
     return repositories.filter((r) => set.has(r.id));
   }, [repositories, candidateRepositoryIds]);
 
-  const canUse = candidates.length > 1 && !disabled;
+  const canUse = candidates.length > 1;
 
   useEffect(() => {
     if (!open) return;
@@ -105,7 +108,7 @@ export function CodeGraphAssociationPopover({
     }
     onChange(next);
     const scopeIds = resolveAssociationRepositoryIds(next, candidateRepositoryIds, activeRepositoryId);
-    if (scopeIds.length >= 2) {
+    if (!syncDisabled && scopeIds.length >= 2) {
       void onAssociationBuild?.(scopeIds);
     }
     onApplied?.(scopeIds);
@@ -118,6 +121,7 @@ export function CodeGraphAssociationPopover({
     onChange,
     onApplied,
     onAssociationBuild,
+    syncDisabled,
   ]);
 
   const toggleRepo = useCallback(
@@ -207,9 +211,17 @@ export function CodeGraphAssociationPopover({
           <Button size="small" onClick={() => setOpen(false)}>
             取消
           </Button>
-          <Button type="primary" size="small" onClick={apply}>
-            同步仓库组
-          </Button>
+          {syncDisabled ? (
+            <Tooltip title="请先完成当前仓库的代码图谱检索（「开始检索」成功）后，再同步 GitNexus 仓库组。">
+              <Button type="primary" size="small" onClick={apply}>
+                确定
+              </Button>
+            </Tooltip>
+          ) : (
+            <Button type="primary" size="small" onClick={apply}>
+              同步仓库组
+            </Button>
+          )}
         </Space>
       </div>
     </div>
@@ -228,16 +240,18 @@ export function CodeGraphAssociationPopover({
       placement="bottomLeft"
       content={body}
       rootClassName="app-code-graph-assoc-popover-root"
-      getPopupContainer={(trigger) => trigger.closest(".app-code-graph-panel") ?? document.body}
+      getPopupContainer={() => document.body}
     >
       <button
         type="button"
         className={`app-code-graph-assoc-trigger${open && canUse ? " app-code-graph-assoc-trigger--open" : ""}`}
         disabled={!canUse}
         title={
-          canUse
-            ? "关联检索：选择范围后点击「同步仓库组」"
-            : "当前仅有一个候选仓库，无法关联检索"
+          !canUse
+            ? "当前仅有一个候选仓库，无法关联检索"
+            : syncDisabled
+              ? "可先选择关联范围；完成本仓库检索后，再在面板内同步 GitNexus 仓库组。"
+              : "关联检索：选择范围后点击「同步仓库组」"
         }
         aria-label="关联检索"
         aria-expanded={open && canUse}

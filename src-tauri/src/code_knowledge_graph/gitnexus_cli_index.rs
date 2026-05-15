@@ -358,6 +358,11 @@ fn run_gitnexus_analyze(repo_root: &Path, cancel: Option<&Arc<AtomicBool>>) -> R
     Ok(())
 }
 
+/// 在仓库根执行 `gitnexus analyze . --force`，使该仓可被 `gitnexus list` 解析（多仓仓库组 `group add` 前置）。
+pub fn run_gitnexus_analyze_repo_root(repo_root: &Path) -> Result<(), String> {
+    run_gitnexus_analyze(repo_root, None)
+}
+
 /// 传给 `gitnexus cypher -r`：使用 **canonical 绝对路径**（GitNexus `resolveRepoFromCache` 支持按路径精确匹配），
 /// 比仅用目录名更稳，避免多仓 / 显示名与文件夹名不一致时选错仓或解析失败。
 fn gitnexus_cypher_repo_arg(repo_path: &Path) -> String {

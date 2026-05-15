@@ -2,7 +2,6 @@ import { Tooltip } from "antd";
 import { ClaudeCodeUsageHeaderBtn } from "../ClaudeCodeUsagePopover";
 import { IconSettings } from "../icons/IconSettings";
 import {
-  CodeKnowledgeGraphNavIcon,
   IconCompactLayout,
   McpNavIcon,
   SkillsNavIcon,
@@ -66,8 +65,6 @@ interface LeftSidebarTopNavStackProps {
   onOpenSkillsHub?: () => void;
   workflowStudioNavActive?: boolean;
   onOpenWorkflowStudio?: () => void;
-  codeKnowledgeGraphNavActive?: boolean;
-  onOpenCodeKnowledgeGraph?: () => void;
 }
 
 export function LeftSidebarTopNavStack({
@@ -77,10 +74,8 @@ export function LeftSidebarTopNavStack({
   onOpenSkillsHub,
   workflowStudioNavActive = false,
   onOpenWorkflowStudio,
-  codeKnowledgeGraphNavActive = false,
-  onOpenCodeKnowledgeGraph,
 }: LeftSidebarTopNavStackProps) {
-  if (!onOpenMcpHub && !onOpenSkillsHub && !onOpenWorkflowStudio && !onOpenCodeKnowledgeGraph) {
+  if (!onOpenMcpHub && !onOpenSkillsHub && !onOpenWorkflowStudio) {
     return null;
   }
 
@@ -121,18 +116,6 @@ export function LeftSidebarTopNavStack({
             <WorkflowStudioNavIcon />
           </span>
           <span className="app-left-sidebar-workflow-nav-label">工作流</span>
-        </button>
-      ) : null}
-      {onOpenCodeKnowledgeGraph ? (
-        <button
-          type="button"
-          className={`app-left-sidebar-graph-nav${codeKnowledgeGraphNavActive ? " app-left-sidebar-graph-nav--active" : ""}`}
-          onClick={onOpenCodeKnowledgeGraph}
-        >
-          <span className="app-left-sidebar-graph-nav-icon" aria-hidden>
-            <CodeKnowledgeGraphNavIcon />
-          </span>
-          <span className="app-left-sidebar-graph-nav-label">图谱</span>
         </button>
       ) : null}
     </div>

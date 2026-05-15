@@ -8,7 +8,9 @@ use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
 
-use super::gitnexus_cli_index::{command_output_with_timeout, gitnexus_executable};
+use super::gitnexus_cli_index::{
+    command_output_with_timeout, gitnexus_executable, run_gitnexus_analyze_repo_root,
+};
 
 const GROUP_SYNC_TIMEOUT: Duration = Duration::from_secs(900);
 const LIST_TIMEOUT: Duration = Duration::from_secs(120);
@@ -111,6 +113,28 @@ pub fn resolve_registry_name(repo_root: &Path) -> Result<String, String> {
         "未在 gitnexus list 中找到已索引仓库 {}。请先在仓库根目录执行 gitnexus analyze。",
         needle
     ))
+}
+
+/// 与 [`resolve_registry_name`] 相同；若仓尚未出现在 `gitnexus list` 中，会先执行一次 `gitnexus analyze . --force` 再重试解析（用于「生成项目级索引」等多仓仓库组同步）。
+pub fn resolve_registry_name_or_analyze(repo_root: &Path) -> Result<String, String> {
+    match resolve_registry_name(repo_root) {
+        Ok(n) => Ok(n),
+        Err(e0) => {
+            eprintln!(
+                "[code-graph] GitNexus list miss for {}; running gitnexus analyze --force …\n{}",
+                repo_root.display(),
+                e0.trim()
+            );
+            run_gitnexus_analyze_repo_root(repo_root)?;
+            resolve_registry_name(repo_root).map_err(|e1| {
+                format!(
+                    "{}；已自动执行 gitnexus analyze 后仍失败：{}",
+                    e0.trim(),
+                    e1.trim()
+                )
+            })
+        }
+    }
 }
 
 fn validate_group_name(name: &str) -> Result<(), String> {

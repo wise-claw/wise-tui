@@ -221,6 +221,10 @@ export default function App() {
   const [codeKnowledgeGraphMode, setCodeKnowledgeGraphMode] = useState(false);
   /** 侧栏「查看检索」打开时为 true：图谱面板不在 idle 时自动 `triggerCodeGraphReindex`；顶栏入口为 false。 */
   const [codeGraphSuppressIdleAutoReindex, setCodeGraphSuppressIdleAutoReindex] = useState(false);
+  /** 侧栏仓库/项目「图谱操作 → 查看检索」进入时为 true：仅当前仓 UI，不打开仓库下拉、不显示「全部仓库」关联入口。 */
+  const [codeGraphLockToEntryRepository, setCodeGraphLockToEntryRepository] = useState(false);
+  /** 侧栏项目「查看检索」进入时为 true：代码图谱默认多仓关联合并视图（候选 ≥2 时）。 */
+  const [codeGraphDefaultProjectMultiRepo, setCodeGraphDefaultProjectMultiRepo] = useState(false);
   const [missionControlMode, setMissionControlMode] = useState(false);
   const [missionControlInitialTarget, setMissionControlInitialTarget] = useState<OpenMissionControlDetail | null>(null);
   const [promptsOpenContext, setPromptsOpenContext] = useState<PromptsOpenContext | null>(null);
@@ -947,6 +951,14 @@ export default function App() {
     () => (activeProjectId ? projects.find((p) => p.id === activeProjectId) ?? null : null),
     [activeProjectId, projects],
   );
+
+  useEffect(() => {
+    if (!codeKnowledgeGraphMode) {
+      setCodeGraphLockToEntryRepository(false);
+      setCodeGraphDefaultProjectMultiRepo(false);
+    }
+  }, [codeKnowledgeGraphMode]);
+
   /** 代码图谱全库搜索：有项目时用项目内全部仓库，否则由面板退化为当前仓库 */
   const codeGraphSearchRepositoryIds = useMemo(() => {
     if (activeProject?.repositoryIds?.length) {
@@ -1456,7 +1468,12 @@ export default function App() {
 
   /** 侧栏「图谱操作 → 查看检索」：与顶栏图谱入口一致，先收敛其它 Hub 再打开覆盖层。 */
   const openCodeKnowledgeGraphAfterRepositorySelect = useCallback(
-    (opts: { projectId: string | null; repositoryId: number }) => {
+    (opts: {
+      projectId: string | null;
+      repositoryId: number;
+      /** `repository`：从单个仓库菜单进入，图谱 UI 锁定为当前仓；`project`：从项目菜单进入，保留多仓关联能力 */
+      graphEntryFrom?: "project" | "repository";
+    }) => {
       const repo = repositories.find((r) => r.id === opts.repositoryId);
       if (!repo) {
         message.warning("未找到该仓库");
@@ -1473,6 +1490,8 @@ export default function App() {
       }
       handleSidebarRepositorySelectLeavingMcpHub(opts.repositoryId);
       setCodeGraphSuppressIdleAutoReindex(true);
+      setCodeGraphLockToEntryRepository(opts.graphEntryFrom === "repository");
+      setCodeGraphDefaultProjectMultiRepo(opts.graphEntryFrom === "project");
       setCodeKnowledgeGraphMode(true);
     },
     [repositories, handleSidebarRepositorySelectLeavingMcpHub, setActiveProjectId],
@@ -1551,7 +1570,7 @@ export default function App() {
     [repositories, disposeSidebarCodeGraphReindexBatch],
   );
 
-  /** 项目级：多仓走 GitNexus 官方仓库组一次同步；单仓仍走本机代码图谱检索。 */
+  /** 项目级：多仓时并行启动各仓代码图谱检索（写入 Wise）与 GitNexus 仓库组同步；单仓仍仅走本机检索。 */
   const handleCodeGraphGenerateProject = useCallback(
     async (project: ProjectItem) => {
       const valid = project.repositoryIds.filter((id) => repositories.some((r) => r.id === id));
@@ -1563,6 +1582,8 @@ export default function App() {
         await handleCodeGraphGenerateRepositoryIds([valid[0]!]);
         return;
       }
+
+      void handleCodeGraphGenerateRepositoryIds(valid);
 
       disposeSidebarCodeGraphAssocBatch();
       const expectedKey = [...valid].sort((a, b) => a - b).join(",");
@@ -1585,7 +1606,7 @@ export default function App() {
           .join("、");
         Modal.success({
           title: "多仓仓库组同步已完成",
-          content: `已同步项目下仓库：${names}。可在代码图谱中查看多仓合并子图。`,
+          content: `已为项目内仓库同步 GitNexus 仓库组：${names}。各仓代码图谱检索已在后台进行，全部完成后即可在「代码图谱」中查看节点与子图。`,
         });
       });
 
@@ -1607,7 +1628,9 @@ export default function App() {
 
       try {
         await triggerCodeGraphAssociationBuild(valid);
-        message.info("已开始后台同步 GitNexus 仓库组（多仓），完成后将自动刷新。");
+        message.info(
+          "已开始：① 各仓代码图谱后台检索（写入 Wise）；② GitNexus 多仓仓库组同步。检索全部完成后在代码图谱中即可浏览。",
+        );
       } catch (e) {
         disposeSidebarCodeGraphAssocBatch();
         console.warn("[sidebar] triggerCodeGraphAssociationBuild (project) failed", e);
@@ -1973,16 +1996,6 @@ export default function App() {
           setMissionControlMode(false);
           setSkillsHubMode(true);
         },
-        codeKnowledgeGraphNavActive: codeKnowledgeGraphMode,
-        onOpenCodeKnowledgeGraph: () => {
-          setPromptsMode(false);
-          setMcpHubMode(false);
-          setSkillsHubMode(false);
-          setCcWfStudioMode(false);
-          setCodeGraphSuppressIdleAutoReindex(false);
-          setMissionControlMode(false);
-          setCodeKnowledgeGraphMode(true);
-        },
         workflowStudioNavActive: ccWfStudioMode,
         onOpenWorkflowStudio: openWorkflowStudio,
         onProjectSelect: handleProjectSelectLeavingMcpHub,
@@ -2061,6 +2074,7 @@ export default function App() {
           openCodeKnowledgeGraphAfterRepositorySelect({
             projectId: project.id,
             repositoryId: firstRepoId,
+            graphEntryFrom: "project",
           });
         },
         onCodeGraphGenerateRepository: (repository) => {
@@ -2070,12 +2084,14 @@ export default function App() {
           openCodeKnowledgeGraphAfterRepositorySelect({
             projectId: project.id,
             repositoryId: repository.id,
+            graphEntryFrom: "repository",
           });
         },
         onCodeGraphViewFloatingRepository: (repository) => {
           openCodeKnowledgeGraphAfterRepositorySelect({
             projectId: null,
             repositoryId: repository.id,
+            graphEntryFrom: "repository",
           });
         },
       }}
@@ -2237,7 +2253,9 @@ export default function App() {
           path: r.path,
           repositoryType: r.repositoryType,
         })),
-        searchRepositoryIds: codeGraphSearchRepositoryIds,
+        searchRepositoryIds: codeGraphLockToEntryRepository ? undefined : codeGraphSearchRepositoryIds,
+        lockToEntryRepository: codeGraphLockToEntryRepository,
+        defaultProjectMultiRepoAssociation: codeGraphDefaultProjectMultiRepo,
         onSelectRepository: setActiveRepositoryWithOwner,
         onClose: () => {
           setCodeKnowledgeGraphMode(false);

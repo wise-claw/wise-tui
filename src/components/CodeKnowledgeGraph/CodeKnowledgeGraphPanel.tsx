@@ -72,6 +72,15 @@ interface Props {
    * 用于侧栏「查看检索」仅打开面板，由用户点击「开始检索」。
    */
   suppressIdleAutoReindex?: boolean;
+  /**
+   * 侧栏「图谱操作 → 查看检索」进入时为 true：标题旁仅展示当前仓名（不可点选切换），
+   * 并隐藏「全部仓库」关联检索入口；子图与搜索范围仅限本仓库。
+   */
+  lockToEntryRepository?: boolean;
+  /**
+   * 侧栏项目「图谱操作 → 查看检索」进入时为 true：若项目内候选仓库 ≥2，默认选中多仓关联合并视图（与仓库下拉底部「(a + b)」一致）。
+   */
+  defaultProjectMultiRepoAssociation?: boolean;
 }
 
 const SUBGRAPH_SEARCH_DEBOUNCE_MS = 220;
@@ -110,6 +119,8 @@ export function CodeKnowledgeGraphPanel({
   onRemoveRepository,
   onOpenAddRepository,
   suppressIdleAutoReindex = false,
+  lockToEntryRepository = false,
+  defaultProjectMultiRepoAssociation = false,
 }: Props) {
   const { message } = App.useApp();
   const [indexStatus, setIndexStatus] = useState<CodeGraphIndexStatusResponse | null>(null);
@@ -136,6 +147,10 @@ export function CodeKnowledgeGraphPanel({
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const chartColumnRef = useRef<CodeKnowledgeGraphChartColumnHandle | null>(null);
   const splitLayoutRef = useRef<HTMLDivElement | null>(null);
+  /** 项目入口默认多仓视图：每种候选集合只自动切换一次 */
+  const projectMultiRepoDefaultKeyRef = useRef<string | null>(null);
+  /** 区分「首次进入」与侧栏切换活跃仓：后者应回到单仓下拉视图 */
+  const prevRepositoryIdForDropdownRef = useRef<number | null>(null);
   /** 图谱列占 split 区域宽度的百分比（右侧为剩余 + 中间 6px 分隔条） */
   const [graphPanePercent, setGraphPanePercent] = useState(GRAPH_PANE_DEFAULT_PCT);
   const [subgraphSearchInput, setSubgraphSearchInput] = useState("");
@@ -332,8 +347,26 @@ export function CodeKnowledgeGraphPanel({
     setSubgraphSearchDebounced("");
     setSearchRemoteHits([]);
     setAssociationConfig({ mode: "all", customRepositoryIds: [] });
-    setRepoDropdownSelection("repository");
+    /** 不在此强制 `repository`：项目「查看检索」入口需保留多仓关联合并，见 `defaultProjectMultiRepoAssociation` 与 `prevRepositoryIdForDropdownRef`。 */
   }, [repositoryId]);
+
+  useEffect(() => {
+    if (repositoryId == null) {
+      prevRepositoryIdForDropdownRef.current = null;
+      return;
+    }
+    const prev = prevRepositoryIdForDropdownRef.current;
+    if (prev !== null && prev !== repositoryId) {
+      setRepoDropdownSelection("repository");
+    }
+    prevRepositoryIdForDropdownRef.current = repositoryId;
+  }, [repositoryId]);
+
+  useEffect(() => {
+    if (!lockToEntryRepository) return;
+    setAssociationConfig({ mode: "all", customRepositoryIds: [] });
+    setRepoDropdownSelection("repository");
+  }, [lockToEntryRepository]);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -343,6 +376,9 @@ export function CodeKnowledgeGraphPanel({
   }, [subgraphSearchInput]);
 
   const associationCandidateIds = useMemo(() => {
+    if (lockToEntryRepository && repositoryId != null) {
+      return [repositoryId];
+    }
     const fromProp =
       searchRepositoryIdsProp?.filter((id) => typeof id === "number" && Number.isFinite(id)) ?? [];
     const base =
@@ -352,7 +388,12 @@ export function CodeKnowledgeGraphPanel({
           ? [repositoryId]
           : [];
     return [...new Set(base)].slice(0, 20);
-  }, [searchRepositoryIdsProp, repositoryId]);
+  }, [lockToEntryRepository, searchRepositoryIdsProp, repositoryId]);
+
+  const associationCandidatesKey = useMemo(
+    () => [...associationCandidateIds].sort((a, b) => a - b).join(","),
+    [associationCandidateIds],
+  );
 
   const associationScopeRepoIds = useMemo(() => {
     if (associationCandidateIds.length === 0) {
@@ -403,6 +444,31 @@ export function CodeKnowledgeGraphPanel({
       setRepoDropdownSelection("repository");
     }
   }, [associationScopeRepoIds.length]);
+
+  useEffect(() => {
+    if (!defaultProjectMultiRepoAssociation) {
+      projectMultiRepoDefaultKeyRef.current = null;
+      return;
+    }
+    if (lockToEntryRepository) return;
+    if (associationCandidateIds.length < 2) return;
+    if (projectMultiRepoDefaultKeyRef.current === associationCandidatesKey) return;
+    projectMultiRepoDefaultKeyRef.current = associationCandidatesKey;
+    setAssociationConfig({ mode: "all", customRepositoryIds: [] });
+    setRepoDropdownSelection("association");
+    setSelectedNode(null);
+    setSubgraphFocusId(undefined);
+    setSubgraphDirection(undefined);
+    setSubgraphRefreshKey((k) => k + 1);
+    return () => {
+      projectMultiRepoDefaultKeyRef.current = null;
+    };
+  }, [
+    defaultProjectMultiRepoAssociation,
+    lockToEntryRepository,
+    associationCandidateIds.length,
+    associationCandidatesKey,
+  ]);
 
   const handleRepoMenuPickRepository = useCallback(
     (repoId: number) => {
@@ -556,25 +622,15 @@ export function CodeKnowledgeGraphPanel({
 
   const handlePauseReindex = useCallback(async () => {
     if (!repositoryId) return;
-    const msgKey = "code-graph-pause-reindex";
-    message.loading({ content: "正在停止检索…", key: msgKey, duration: 0 });
     try {
       const o = await cancelCodeGraphReindex(repositoryId);
-      message.destroy(msgKey);
-      if (o.signalledRunningTask) {
-        message.success("已请求停止检索，请稍候…");
-      } else if (o.clearedStaleIndexingStatus) {
-        message.warning("界面卡在「检索中」但任务已不在运行，已清除该状态。请重新点击「开始检索」。");
+      if (o.clearedStaleIndexingStatus) {
         void fetchStatus();
-      } else {
-        message.warning("当前没有可停止的检索任务（可能已结束或未开始）。");
       }
     } catch (e) {
-      message.destroy(msgKey);
       console.warn("[code-graph] cancelCodeGraphReindex failed", e);
-      message.error("停止检索失败");
     }
-  }, [repositoryId, fetchStatus, message]);
+  }, [repositoryId, fetchStatus]);
 
   const handleClearGraphIndex = useCallback(() => {
     if (!repositoryId) return;
@@ -959,7 +1015,9 @@ export function CodeKnowledgeGraphPanel({
             <Typography.Title level={5} style={{ margin: 0 }}>
               代码图谱
             </Typography.Title>
-            {repositories && repositories.length > 0 && onSelectRepository ? (
+            {lockToEntryRepository ? (
+              <Tag>{currentRepo?.name ?? (repositoryId != null ? `仓库 #${repositoryId}` : "当前仓库")}</Tag>
+            ) : repositories && repositories.length > 0 && onSelectRepository ? (
               <CodeGraphRepositoryPopover
                 repositories={repositories}
                 activeRepositoryId={repositoryId}
@@ -994,16 +1052,18 @@ export function CodeKnowledgeGraphPanel({
             ) : currentRepo ? (
               <Tag>{currentRepo.name}</Tag>
             ) : null}
-            <CodeGraphAssociationPopover
-              repositories={repositories ?? []}
-              candidateRepositoryIds={associationCandidateIds}
-              activeRepositoryId={repositoryId}
-              value={associationConfig}
-              onChange={setAssociationConfig}
-              onApplied={handleAssociationApplied}
-              onAssociationBuild={handleAssociationBuild}
-              disabled={!isIndexed}
-            />
+            {!lockToEntryRepository ? (
+              <CodeGraphAssociationPopover
+                repositories={repositories ?? []}
+                candidateRepositoryIds={associationCandidateIds}
+                activeRepositoryId={repositoryId}
+                value={associationConfig}
+                onChange={setAssociationConfig}
+                onApplied={handleAssociationApplied}
+                onAssociationBuild={handleAssociationBuild}
+                syncDisabled={!isIndexed}
+              />
+            ) : null}
           </div>
           <Space>
             {indexStatus?.indexVersion && (

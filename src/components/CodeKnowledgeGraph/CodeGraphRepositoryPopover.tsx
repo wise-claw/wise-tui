@@ -50,6 +50,8 @@ interface Props {
   onDismissAssociationScope?: () => void | Promise<void>;
   /** 未就绪时禁用（如当前仓未索引） */
   associationScopeDisabled?: boolean;
+  /** 为 true 时不列出各仓库行，仅展示底部多仓关联项（如从多仓项目进入图谱） */
+  hideRepositoryList?: boolean;
   disabled?: boolean;
 }
 
@@ -69,6 +71,7 @@ export function CodeGraphRepositoryPopover({
   onReindexAssociationScope,
   onDismissAssociationScope,
   associationScopeDisabled = false,
+  hideRepositoryList = false,
   disabled = false,
 }: Props) {
   const [open, setOpen] = useState(false);
@@ -160,65 +163,69 @@ export function CodeGraphRepositoryPopover({
 
   const dropdown: ReactNode = (
     <div className="app-code-graph-repo-dropdown" role="menu" onClick={(ev) => ev.stopPropagation()}>
-      <div className="app-code-graph-repo-dropdown-header">REPOSITORIES</div>
-      <ul className="app-code-graph-repo-dropdown-list">
-        {repositories.map((repo) => {
-          const isActive = menuSelection === "repository" && repo.id === activeRepositoryId;
-          return (
-            <li key={repo.id} className="app-code-graph-repo-dropdown-li">
-              <button
-                type="button"
-                className={`app-code-graph-repo-dropdown-row${isActive ? " app-code-graph-repo-dropdown-row--active" : ""}`}
-                onClick={() => handlePick(repo.id)}
-              >
-                <span className="app-code-graph-repo-dropdown-row-main">
-                  <FolderOutlined className="app-code-graph-repo-icon" aria-hidden />
-                  <span className="app-code-graph-repo-dropdown-name">{repo.name}</span>
-                </span>
-                <span className="app-code-graph-repo-dropdown-row-actions">
-                  {isActive ? (
-                    <span className="app-code-graph-repo-dropdown-active-pill">active</span>
-                  ) : null}
-                  {onReindexRepository ? (
-                    <Tooltip title="重新检索代码图谱">
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        className="app-code-graph-repo-dropdown-icon-btn"
-                        onClick={(e) => handleReindex(e, repo.id)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            handleReindex(e as unknown as MouseEvent, repo.id);
-                          }
-                        }}
-                      >
-                        <ReloadOutlined />
-                      </span>
-                    </Tooltip>
-                  ) : null}
-                  {onRemoveRepository ? (
-                    <Tooltip title="从 Wise 移除">
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        className="app-code-graph-repo-dropdown-icon-btn app-code-graph-repo-dropdown-icon-btn--danger"
-                        onClick={(e) => handleRemove(e, repo)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            handleRemove(e as unknown as MouseEvent, repo);
-                          }
-                        }}
-                      >
-                        <DeleteOutlined />
-                      </span>
-                    </Tooltip>
-                  ) : null}
-                </span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+      <div className="app-code-graph-repo-dropdown-header">
+        {hideRepositoryList ? "关联范围" : "REPOSITORIES"}
+      </div>
+      {!hideRepositoryList ? (
+        <ul className="app-code-graph-repo-dropdown-list">
+          {repositories.map((repo) => {
+            const isActive = menuSelection === "repository" && repo.id === activeRepositoryId;
+            return (
+              <li key={repo.id} className="app-code-graph-repo-dropdown-li">
+                <button
+                  type="button"
+                  className={`app-code-graph-repo-dropdown-row${isActive ? " app-code-graph-repo-dropdown-row--active" : ""}`}
+                  onClick={() => handlePick(repo.id)}
+                >
+                  <span className="app-code-graph-repo-dropdown-row-main">
+                    <FolderOutlined className="app-code-graph-repo-icon" aria-hidden />
+                    <span className="app-code-graph-repo-dropdown-name">{repo.name}</span>
+                  </span>
+                  <span className="app-code-graph-repo-dropdown-row-actions">
+                    {isActive ? (
+                      <span className="app-code-graph-repo-dropdown-active-pill">active</span>
+                    ) : null}
+                    {onReindexRepository ? (
+                      <Tooltip title="重新检索代码图谱">
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          className="app-code-graph-repo-dropdown-icon-btn"
+                          onClick={(e) => handleReindex(e, repo.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              handleReindex(e as unknown as MouseEvent, repo.id);
+                            }
+                          }}
+                        >
+                          <ReloadOutlined />
+                        </span>
+                      </Tooltip>
+                    ) : null}
+                    {onRemoveRepository ? (
+                      <Tooltip title="从 Wise 移除">
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          className="app-code-graph-repo-dropdown-icon-btn app-code-graph-repo-dropdown-icon-btn--danger"
+                          onClick={(e) => handleRemove(e, repo)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              handleRemove(e as unknown as MouseEvent, repo);
+                            }
+                          }}
+                        >
+                          <DeleteOutlined />
+                        </span>
+                      </Tooltip>
+                    ) : null}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
       {associationScopeDisplay && onViewMergedGraph ? (
         <div
           className={`app-code-graph-repo-dropdown-assoc-wrap${associationScopeDisabled ? " app-code-graph-repo-dropdown-assoc-wrap--disabled" : ""}${menuSelection === "association" && !associationScopeDisabled ? " app-code-graph-repo-dropdown-assoc-wrap--active" : ""}`}
@@ -318,7 +325,12 @@ export function CodeGraphRepositoryPopover({
     </div>
   );
 
-  const canInteract = Boolean(onSelectRepository) && repositories.length > 0 && !disabled;
+  const hasAssociationMenu = Boolean(associationScopeDisplay && onViewMergedGraph);
+  const canInteract =
+    !disabled &&
+    repositories.length > 0 &&
+    ((!hideRepositoryList && Boolean(onSelectRepository)) ||
+      (hideRepositoryList && (hasAssociationMenu || Boolean(onOpenAddRepository))));
 
   return (
     <Popover
@@ -331,7 +343,8 @@ export function CodeGraphRepositoryPopover({
       placement="bottomLeft"
       content={dropdown}
       rootClassName="app-code-graph-repo-popover-root"
-      getPopupContainer={(trigger) => trigger.closest(".app-code-graph-panel") ?? document.body}
+      /** 勿挂到 `.app-code-graph-panel`：该容器 `overflow:hidden` 会裁掉浮层，表现为点击下拉无反应 */
+      getPopupContainer={() => document.body}
     >
       <button
         type="button"
@@ -339,7 +352,7 @@ export function CodeGraphRepositoryPopover({
         disabled={!canInteract}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label="选择仓库"
+        aria-label={hideRepositoryList ? "多仓关联范围" : "选择仓库"}
       >
         <span
           className={`app-code-graph-repo-trigger-dot${activeRepositoryIndexed ? " app-code-graph-repo-trigger-dot--ok" : ""}`}

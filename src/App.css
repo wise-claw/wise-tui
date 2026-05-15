@@ -488,7 +488,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
   cursor: grab;
 }
 
-/* ── 左栏 MCP / 技能 / 工作流 / 图谱 入口（位于「项目」标题上方） ── */
+/* ── 左栏 MCP / 技能 / 工作流 入口（位于「项目」标题上方） ── */
 .app-left-sidebar-top-nav-stack {
   display: flex;
   flex-direction: column;
@@ -502,8 +502,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
 
 .app-left-sidebar-mcp-nav,
 .app-left-sidebar-skills-nav,
-.app-left-sidebar-workflow-nav,
-.app-left-sidebar-graph-nav {
+.app-left-sidebar-workflow-nav {
   display: flex;
   align-items: center;
   gap: 2px;
@@ -523,16 +522,14 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
 
 .app-left-sidebar-mcp-nav:hover,
 .app-left-sidebar-skills-nav:hover,
-.app-left-sidebar-workflow-nav:hover,
-.app-left-sidebar-graph-nav:hover {
+.app-left-sidebar-workflow-nav:hover {
   background: var(--ant-color-fill-tertiary);
   color: var(--ant-color-text);
 }
 
 .app-left-sidebar-mcp-nav--active,
 .app-left-sidebar-skills-nav--active,
-.app-left-sidebar-workflow-nav--active,
-.app-left-sidebar-graph-nav--active {
+.app-left-sidebar-workflow-nav--active {
   /* 与当前仓库行一致：菜单式浅蓝底 + 正文色字，仅图标用主色点缀 */
   background: var(--ant-control-item-bg-active);
   color: var(--ant-color-text);
@@ -541,16 +538,14 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
 
 .app-left-sidebar-mcp-nav--active:hover,
 .app-left-sidebar-skills-nav--active:hover,
-.app-left-sidebar-workflow-nav--active:hover,
-.app-left-sidebar-graph-nav--active:hover {
+.app-left-sidebar-workflow-nav--active:hover {
   background: var(--ant-control-item-bg-active);
   color: var(--ant-color-text);
 }
 
 .app-left-sidebar-mcp-nav-icon,
 .app-left-sidebar-skills-nav-icon,
-.app-left-sidebar-workflow-nav-icon,
-.app-left-sidebar-graph-nav-icon {
+.app-left-sidebar-workflow-nav-icon {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -562,15 +557,13 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
 
 .app-left-sidebar-mcp-nav--active .app-left-sidebar-mcp-nav-icon,
 .app-left-sidebar-skills-nav--active .app-left-sidebar-skills-nav-icon,
-.app-left-sidebar-workflow-nav--active .app-left-sidebar-workflow-nav-icon,
-.app-left-sidebar-graph-nav--active .app-left-sidebar-graph-nav-icon {
+.app-left-sidebar-workflow-nav--active .app-left-sidebar-workflow-nav-icon {
   color: var(--ant-color-primary);
 }
 
 .app-left-sidebar-mcp-nav-icon svg,
 .app-left-sidebar-skills-nav-icon svg,
-.app-left-sidebar-workflow-nav-icon svg,
-.app-left-sidebar-graph-nav-icon svg {
+.app-left-sidebar-workflow-nav-icon svg {
   display: block;
   width: 14px;
   height: 14px;
@@ -579,8 +572,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
 
 .app-left-sidebar-mcp-nav-label,
 .app-left-sidebar-skills-nav-label,
-.app-left-sidebar-workflow-nav-label,
-.app-left-sidebar-graph-nav-label {
+.app-left-sidebar-workflow-nav-label {
   flex: 1;
   min-width: 0;
 }
