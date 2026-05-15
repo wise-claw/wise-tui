@@ -59,15 +59,18 @@ export function ProjectNameModals({
         footer={(_, { OkBtn }) => <OkBtn />}
       >
         <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
-          <Input
-            value={projectNameInput}
-            onChange={(event) => onProjectNameInputChange(event.target.value)}
-            placeholder="请输入项目名称"
-            onPressEnter={() => {
-              if (!createSubmitLoading) void onSubmitCreate();
-            }}
-            disabled={createSubmitLoading}
-          />
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <Typography.Text type="secondary">项目名称</Typography.Text>
+            <Input
+              value={projectNameInput}
+              onChange={(event) => onProjectNameInputChange(event.target.value)}
+              placeholder="请输入项目名称"
+              onPressEnter={() => {
+                if (!createSubmitLoading) void onSubmitCreate();
+              }}
+              disabled={createSubmitLoading}
+            />
+          </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <Typography.Text type="secondary">项目根目录</Typography.Text>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
