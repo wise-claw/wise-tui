@@ -44,6 +44,8 @@ interface Props {
   onApplied?: (scopeRepositoryIds: number[]) => void;
   /** 多仓（≥2）：提交后台「各仓索引重建 + OpenAPI 发现/合成路由 + 前后端 HTTP 桥接」任务 */
   onAssociationBuild?: (repositoryIds: number[]) => void | Promise<void>;
+  /** 多仓（≥2）：仅 OpenAPI / 合成路由 + HTTP 桥接（不重建各仓 GitNexus 索引） */
+  onOpenapiBridge?: (repositoryIds: number[]) => void | Promise<void>;
   disabled?: boolean;
 }
 
@@ -73,6 +75,7 @@ export function CodeGraphAssociationPopover({
   onChange,
   onApplied,
   onAssociationBuild,
+  onOpenapiBridge,
   disabled = false,
 }: Props) {
   const [open, setOpen] = useState(false);
@@ -120,6 +123,35 @@ export function CodeGraphAssociationPopover({
     onAssociationBuild,
   ]);
 
+  const applyOpenapiOnly = useCallback(() => {
+    const next: AssociationGraphConfig =
+      draftMode === "all"
+        ? { mode: "all", customRepositoryIds: [] }
+        : {
+            mode: "custom",
+            customRepositoryIds: [...new Set(draftCustom)].filter((id) => candidateRepositoryIds.includes(id)),
+          };
+    if (next.mode === "custom" && next.customRepositoryIds.length === 0 && activeRepositoryId != null) {
+      next.customRepositoryIds = [activeRepositoryId];
+    }
+    onChange(next);
+    const scopeIds = resolveAssociationRepositoryIds(next, candidateRepositoryIds, activeRepositoryId);
+    if (scopeIds.length < 2) {
+      return;
+    }
+    void onOpenapiBridge?.(scopeIds);
+    onApplied?.(scopeIds);
+    setOpen(false);
+  }, [
+    draftMode,
+    draftCustom,
+    candidateRepositoryIds,
+    activeRepositoryId,
+    onChange,
+    onApplied,
+    onOpenapiBridge,
+  ]);
+
   const toggleRepo = useCallback(
     (repoId: number, checked: boolean) => {
       setDraftCustom((prev) => {
@@ -150,8 +182,8 @@ export function CodeGraphAssociationPopover({
           关联检索
         </Typography.Text>
         <Typography.Paragraph type="secondary" className="app-code-graph-assoc-dropdown-desc">
-          选择参与合并的仓库。点击「重建关联索引」后，将在后台依次为所选仓库重建代码图谱索引；对非前端仓尝试自动发现
-          OpenAPI 描述文件（若无则尝试从代码提取合成路由）；再对标记为前端与后端的仓库配对，通过 OpenAPI 将接口桥接起来。全部完成后将刷新多仓合并子图。
+          选择参与合并的仓库。「重建关联索引」会依次为各仓重建 GitNexus 代码图谱，再导入 OpenAPI / 合成路由并做前后端 HTTP 桥接。「仅
+          OpenAPI 桥接」在已有代码索引基础上刷新接口描述与跨仓调用边，耗时更短。全部完成后将刷新多仓合并子图。
         </Typography.Paragraph>
       </div>
       <Radio.Group
@@ -202,12 +234,17 @@ export function CodeGraphAssociationPopover({
         </div>
       ) : null}
       <div className="app-code-graph-assoc-actions">
-        <Button size="small" onClick={() => setOpen(false)}>
-          取消
-        </Button>
-        <Button type="primary" size="small" onClick={apply}>
-          重建关联索引
-        </Button>
+        <Space wrap>
+          <Button size="small" onClick={() => setOpen(false)}>
+            取消
+          </Button>
+          <Button size="small" disabled={!onOpenapiBridge} onClick={applyOpenapiOnly}>
+            仅 OpenAPI 桥接
+          </Button>
+          <Button type="primary" size="small" onClick={apply}>
+            重建关联索引
+          </Button>
+        </Space>
       </div>
     </div>
   );
@@ -233,7 +270,7 @@ export function CodeGraphAssociationPopover({
         disabled={!canUse}
         title={
           canUse
-            ? "关联检索：选择范围后点「重建关联索引」以重建多仓索引并通过 OpenAPI 桥接接口"
+            ? "关联检索：选择范围后「重建关联索引」或「仅 OpenAPI 桥接」以扩展多仓图谱"
             : "当前仅有一个候选仓库，无法关联检索"
         }
         aria-label="关联检索"

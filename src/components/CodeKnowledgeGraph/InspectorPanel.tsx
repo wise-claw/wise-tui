@@ -10,6 +10,8 @@ interface InspectorPanelProps {
   node: GraphNode | null;
   /** 仓库根目录绝对路径，用于「IDE 中打开」 */
   repositoryPath?: string | null;
+  /** 多仓合并时用于把 `repoId` 显示为仓库名称 */
+  repositorySummaries?: { id: number; name: string }[];
   onOpenRepositoryFile?: (relativePath: string) => void;
 }
 
@@ -45,7 +47,12 @@ const SYMBOL_KIND_LABELS: Record<string, string> = {
   Module: "模块",
 };
 
-export function InspectorPanel({ node, repositoryPath, onOpenRepositoryFile }: InspectorPanelProps) {
+export function InspectorPanel({
+  node,
+  repositoryPath,
+  repositorySummaries,
+  onOpenRepositoryFile,
+}: InspectorPanelProps) {
   if (!node) {
     return (
       <div className="app-code-graph-inspector app-code-graph-inspector--empty">
@@ -59,6 +66,9 @@ export function InspectorPanel({ node, repositoryPath, onOpenRepositoryFile }: I
     node.range != null
       ? `${node.range.start.line + 1}–${node.range.end.line + 1}`
       : null;
+
+  const repoName = repositorySummaries?.find((r) => r.id === node.repoId)?.name;
+  const repoDisplay = repoName != null ? `${repoName}（#${node.repoId}）` : String(node.repoId);
 
   return (
     <div className="app-code-graph-inspector">
@@ -123,7 +133,7 @@ export function InspectorPanel({ node, repositoryPath, onOpenRepositoryFile }: I
             ) : null}
           </div>
         </Descriptions.Item>
-        <Descriptions.Item label="仓库">{node.repoId}</Descriptions.Item>
+        <Descriptions.Item label="仓库">{repoDisplay}</Descriptions.Item>
         {node.symbolKind ? (
           <Descriptions.Item label="符号">
             {SYMBOL_KIND_LABELS[node.symbolKind] ?? node.symbolKind}

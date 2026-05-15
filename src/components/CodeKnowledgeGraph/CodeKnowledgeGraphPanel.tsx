@@ -16,6 +16,7 @@ import {
   getCodeGraphSubgraph,
   searchCodeGraphNodes,
   triggerCodeGraphAssociationBuild,
+  triggerCodeGraphOpenapiBridge,
   triggerCodeGraphReindex,
 } from "../../services/codeKnowledgeGraph";
 import { filterGraphNodesForSearch } from "../../utils/codeGraphNodeSearch";
@@ -236,6 +237,34 @@ export function CodeKnowledgeGraphPanel({
     });
     unsubs.push(assocErr);
 
+    const bridgeOk = listen("code-graph-openapi-bridge-complete", (event: any) => {
+      const raw = event.payload?.repositoryIds;
+      const ids: number[] = Array.isArray(raw)
+        ? raw.filter((x: unknown) => typeof x === "number" && Number.isFinite(x))
+        : [];
+      if (repositoryId != null && ids.includes(repositoryId)) {
+        setIndexError(null);
+        void fetchStatus();
+        setSubgraphRefreshKey((k) => k + 1);
+      }
+      if (ids.length >= 2) {
+        message.success("OpenAPI 桥接完成，多仓合并子图已更新");
+      }
+    });
+    unsubs.push(bridgeOk);
+
+    const bridgeErr = listen("code-graph-openapi-bridge-error", (event: any) => {
+      message.error(String(event.payload?.error ?? "OpenAPI 桥接失败"));
+      const raw = event.payload?.repositoryIds;
+      const ids: number[] = Array.isArray(raw)
+        ? raw.filter((x: unknown) => typeof x === "number" && Number.isFinite(x))
+        : [];
+      if (repositoryId != null && ids.includes(repositoryId)) {
+        void fetchStatus();
+      }
+    });
+    unsubs.push(bridgeErr);
+
     return () => {
       unsubs.forEach((p) => p.then((fn) => fn()));
     };
@@ -338,7 +367,7 @@ export function CodeKnowledgeGraphPanel({
     return [...new Set(base)].slice(0, 20);
   }, [searchRepositoryIdsProp, repositoryId]);
 
-  const resolvedGraphRepoIds = useMemo(() => {
+  const associationScopeRepoIds = useMemo(() => {
     if (associationCandidateIds.length === 0) {
       return repositoryId != null ? [repositoryId] : [];
     }
@@ -357,9 +386,18 @@ export function CodeKnowledgeGraphPanel({
     return [...new Set(picked)].slice(0, 20);
   }, [associationCandidateIds, associationConfig, repositoryId]);
 
-  /** 仓库菜单内多仓入口文案，如 (vocs-web + crewAI) */
+  /** 子图与节点搜索实际查询的仓库：仓库菜单为「单仓 active」时仅当前仓；选中底部「关联合并」时用关联范围 */
+  const subgraphRepositoryIds = useMemo(() => {
+    if (repositoryId == null) return [];
+    if (repoDropdownSelection === "repository") {
+      return [repositoryId];
+    }
+    return associationScopeRepoIds;
+  }, [repoDropdownSelection, repositoryId, associationScopeRepoIds]);
+
+  /** 仓库菜单内多仓入口文案，如 (vocs-web + crewAI) — 来自关联配置，与当前画布是否多仓无关 */
   const associationScopeDisplay = useMemo(() => {
-    const ids = resolvedGraphRepoIds;
+    const ids = associationScopeRepoIds;
     const repos = repositories ?? [];
     if (ids.length < 2) return null;
     const names = ids
@@ -371,13 +409,13 @@ export function CodeKnowledgeGraphPanel({
       return `(${names.join(" + ")})`;
     }
     return `(${names.slice(0, 3).join(" + ")} + …共${names.length}仓)`;
-  }, [resolvedGraphRepoIds, repositories]);
+  }, [associationScopeRepoIds, repositories]);
 
   useEffect(() => {
-    if (resolvedGraphRepoIds.length < 2) {
+    if (associationScopeRepoIds.length < 2) {
       setRepoDropdownSelection("repository");
     }
-  }, [resolvedGraphRepoIds.length]);
+  }, [associationScopeRepoIds.length]);
 
   const handleRepoMenuPickRepository = useCallback(
     (repoId: number) => {
@@ -397,7 +435,7 @@ export function CodeKnowledgeGraphPanel({
       return;
     }
 
-    const uniqueIds = [...new Set(resolvedGraphRepoIds)].filter((id) => Number.isFinite(id)) as number[];
+    const uniqueIds = [...new Set(subgraphRepositoryIds)].filter((id) => Number.isFinite(id)) as number[];
     const targetIds = uniqueIds.length > 0 ? uniqueIds : [repositoryId];
 
     let cancelled = false;
@@ -439,7 +477,7 @@ export function CodeKnowledgeGraphPanel({
     repositoryId,
     indexStatus?.status,
     indexStatus?.repositoryId,
-    resolvedGraphRepoIds,
+    subgraphRepositoryIds,
     subgraphFocusId,
     subgraphHopScope,
     subgraphDirection,
@@ -452,7 +490,7 @@ export function CodeKnowledgeGraphPanel({
       setSearchRemoteLoading(false);
       return;
     }
-    if (!repositoryId || resolvedGraphRepoIds.length === 0) {
+    if (!repositoryId || subgraphRepositoryIds.length === 0) {
       setSearchRemoteHits([]);
       setSearchRemoteLoading(false);
       return;
@@ -469,7 +507,7 @@ export function CodeKnowledgeGraphPanel({
     void (async () => {
       try {
         const raw = await searchCodeGraphNodes({
-          repositoryIds: resolvedGraphRepoIds,
+          repositoryIds: subgraphRepositoryIds,
           query: subgraphSearchDebounced,
           limit: 120,
         });
@@ -494,7 +532,7 @@ export function CodeKnowledgeGraphPanel({
     };
   }, [
     subgraphSearchDebounced,
-    resolvedGraphRepoIds,
+    subgraphRepositoryIds,
     repositoryId,
     indexStatus?.status,
     indexStatus?.repositoryId,
@@ -611,9 +649,22 @@ export function CodeKnowledgeGraphPanel({
     }
   }, []);
 
+  const handleOpenapiBridge = useCallback(async (ids: number[]) => {
+    if (ids.length < 2) return;
+    try {
+      await triggerCodeGraphOpenapiBridge(ids);
+      message.info(
+        "已在后台执行 OpenAPI / 合成路由与前后端桥接（不重建 GitNexus 代码索引），完成后将刷新多仓合并子图。",
+      );
+    } catch (e) {
+      console.warn("[code-graph] triggerCodeGraphOpenapiBridge failed", e);
+      message.error("提交 OpenAPI 桥接失败");
+    }
+  }, []);
+
   /** 仓库菜单内「合并图谱」入口：清空画布并强制重拉当前关联范围内的多仓子图 */
   const handleViewMergedGraphFromRepoMenu = useCallback(() => {
-    if (resolvedGraphRepoIds.length < 2) return;
+    if (associationScopeRepoIds.length < 2) return;
     setRepoDropdownSelection("association");
     setSelectedNode(null);
     setSubgraphFocusId(undefined);
@@ -621,7 +672,7 @@ export function CodeKnowledgeGraphPanel({
     setSubgraphHopScope(3);
     setSubgraphData(null);
     setSubgraphRefreshKey((k) => k + 1);
-  }, [resolvedGraphRepoIds]);
+  }, [associationScopeRepoIds]);
 
   const handleAssociationApplied = useCallback((scopeRepositoryIds: number[]) => {
     if (scopeRepositoryIds.length >= 2) {
@@ -708,7 +759,7 @@ export function CodeKnowledgeGraphPanel({
     if (subgraphSearchDebounced.length < SUBGRAPH_SEARCH_MIN_QUERY_LEN) return [];
     return searchRemoteHits.map((node) => {
       const repoLabel =
-        resolvedGraphRepoIds.length > 1
+        subgraphRepositoryIds.length > 1
           ? (repositories?.find((r) => r.id === node.repoId)?.name ?? `仓库 ${node.repoId}`)
           : "";
       return {
@@ -727,7 +778,7 @@ export function CodeKnowledgeGraphPanel({
   }, [
     searchRemoteHits,
     subgraphSearchDebounced,
-    resolvedGraphRepoIds.length,
+    subgraphRepositoryIds.length,
     repositories,
   ]);
 
@@ -827,6 +878,7 @@ export function CodeKnowledgeGraphPanel({
               <InspectorPanel
                 node={selectedNode}
                 repositoryPath={repositoryPathForSelectedGraphNode}
+                repositorySummaries={repositories?.map((r) => ({ id: r.id, name: r.name }))}
                 onOpenRepositoryFile={onOpenRepositoryFile}
               />
             </div>
@@ -894,8 +946,8 @@ export function CodeKnowledgeGraphPanel({
                 activeRepositoryIndexed={isIndexed && indexStatus?.repositoryId === repositoryId}
                 menuSelection={repoDropdownSelection}
                 graphScopeTriggerLabel={
-                  repoDropdownSelection === "association" && resolvedGraphRepoIds.length > 1
-                    ? associationScopeDisplay ?? `多仓库（${resolvedGraphRepoIds.length}）`
+                  repoDropdownSelection === "association" && associationScopeRepoIds.length > 1
+                    ? associationScopeDisplay ?? `多仓库（${associationScopeRepoIds.length}）`
                     : null
                 }
                 onSelectRepository={handleRepoMenuPickRepository}
@@ -919,6 +971,7 @@ export function CodeKnowledgeGraphPanel({
               onChange={setAssociationConfig}
               onApplied={handleAssociationApplied}
               onAssociationBuild={handleAssociationBuild}
+              onOpenapiBridge={handleOpenapiBridge}
               disabled={!isIndexed}
             />
           </div>
@@ -966,7 +1019,7 @@ export function CodeKnowledgeGraphPanel({
                 className="app-code-graph-node-search app-code-graph-node-search--header"
                 size="small"
                 placeholder={
-                  resolvedGraphRepoIds.length > 1
+                  subgraphRepositoryIds.length > 1
                     ? "搜索已索引节点（多仓库：名称 / 路径）"
                     : "搜索已索引节点（名称 / 路径）"
                 }

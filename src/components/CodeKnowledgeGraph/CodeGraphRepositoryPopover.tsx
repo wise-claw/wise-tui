@@ -42,6 +42,12 @@ interface Props {
   associationScopeDisplay?: string | null;
   /** 点击后关闭菜单并刷新主区，查看该范围内的多仓合并图谱 */
   onViewMergedGraph?: () => void;
+  /** 当前合并范围对应的仓库 id（长度 ≥2 时与 `associationScopeDisplay` 一致） */
+  associationScopeRepositoryIds?: number[];
+  /** 对当前合并范围触发「重建关联索引」（与侧栏关联检索一致） */
+  onReindexAssociationScope?: (repositoryIds: number[]) => void | Promise<void>;
+  /** 退出多仓合并视图，将关联范围重置为仅当前仓库（不移除 Wise 中的仓库） */
+  onDismissAssociationScope?: () => void | Promise<void>;
   /** 未就绪时禁用（如当前仓未索引） */
   associationScopeDisabled?: boolean;
   disabled?: boolean;
@@ -59,6 +65,9 @@ export function CodeGraphRepositoryPopover({
   onOpenAddRepository,
   associationScopeDisplay = null,
   onViewMergedGraph,
+  associationScopeRepositoryIds,
+  onReindexAssociationScope,
+  onDismissAssociationScope,
   associationScopeDisabled = false,
   disabled = false,
 }: Props) {
@@ -112,6 +121,39 @@ export function CodeGraphRepositoryPopover({
     close();
     void onOpenAddRepository?.();
   }, [onOpenAddRepository, close]);
+
+  const associationIds = useMemo(() => {
+    const raw = associationScopeRepositoryIds ?? [];
+    return [...new Set(raw.filter((id) => typeof id === "number" && Number.isFinite(id)))];
+  }, [associationScopeRepositoryIds]);
+
+  const handleReindexAssociation = useCallback(
+    (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (associationIds.length < 2) return;
+      void onReindexAssociationScope?.(associationIds);
+    },
+    [associationIds, onReindexAssociationScope],
+  );
+
+  const handleDismissAssociation = useCallback(
+    (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!onDismissAssociationScope) return;
+      Modal.confirm({
+        title: "退出多仓合并视图？",
+        content:
+          "将把关联图谱范围重置为仅当前仓库，并切换到单仓视图。不会从 Wise 移除任何仓库。",
+        okText: "退出",
+        okType: "danger",
+        cancelText: "取消",
+        onOk: () => onDismissAssociationScope(),
+      });
+    },
+    [onDismissAssociationScope],
+  );
 
   const dropdown: ReactNode = (
     <div className="app-code-graph-repo-dropdown" role="menu" onClick={(ev) => ev.stopPropagation()}>
@@ -175,36 +217,94 @@ export function CodeGraphRepositoryPopover({
         })}
       </ul>
       {associationScopeDisplay && onViewMergedGraph ? (
-        <button
-          type="button"
-          className={`app-code-graph-repo-dropdown-assoc-row${associationScopeDisabled ? " app-code-graph-repo-dropdown-assoc-row--disabled" : ""}${menuSelection === "association" && !associationScopeDisabled ? " app-code-graph-repo-dropdown-assoc-row--active" : ""}`}
-          disabled={associationScopeDisabled}
-          title={
-            associationScopeDisabled
-              ? "请先完成当前仓库图谱索引"
-              : "查看多仓库合并图谱（按当前关联范围刷新画布）"
-          }
-          aria-label={`查看多仓合并图谱 ${associationScopeDisplay}`}
-          aria-current={menuSelection === "association" && !associationScopeDisabled ? "true" : undefined}
-          onMouseDown={(e) => {
-            // 避免 Popover 在 mousedown 阶段抢焦点导致 click 未触发（Ant Design 下拉内按钮常见坑）
-            e.preventDefault();
-          }}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (associationScopeDisabled) return;
-            onViewMergedGraph();
-            close();
-          }}
+        <div
+          className={`app-code-graph-repo-dropdown-assoc-wrap${associationScopeDisabled ? " app-code-graph-repo-dropdown-assoc-wrap--disabled" : ""}${menuSelection === "association" && !associationScopeDisabled ? " app-code-graph-repo-dropdown-assoc-wrap--active" : ""}`}
         >
-          <span className="app-code-graph-repo-dropdown-assoc-row-main">
-            <CodeGraphAssociationIcon className="app-code-graph-repo-dropdown-assoc-icon" aria-hidden />
-            <span className="app-code-graph-repo-dropdown-assoc-label">{associationScopeDisplay}</span>
+          <button
+            type="button"
+            className="app-code-graph-repo-dropdown-assoc-row"
+            disabled={associationScopeDisabled}
+            title={
+              associationScopeDisabled
+                ? "请先完成当前仓库图谱索引"
+                : "查看多仓库合并图谱（按当前关联范围刷新画布）"
+            }
+            aria-label={`查看多仓合并图谱 ${associationScopeDisplay}`}
+            aria-current={menuSelection === "association" && !associationScopeDisabled ? "true" : undefined}
+            onMouseDown={(e) => {
+              // 避免 Popover 在 mousedown 阶段抢焦点导致 click 未触发（Ant Design 下拉内按钮常见坑）
+              e.preventDefault();
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (associationScopeDisabled) return;
+              onViewMergedGraph();
+              close();
+            }}
+          >
+            <span className="app-code-graph-repo-dropdown-assoc-row-main">
+              <CodeGraphAssociationIcon className="app-code-graph-repo-dropdown-assoc-icon" aria-hidden />
+              <span className="app-code-graph-repo-dropdown-assoc-label">{associationScopeDisplay}</span>
+            </span>
+          </button>
+          <span
+            className="app-code-graph-repo-dropdown-row-actions app-code-graph-repo-dropdown-assoc-row-actions"
+            role="presentation"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {menuSelection === "association" && !associationScopeDisabled ? (
+              <span className="app-code-graph-repo-dropdown-active-pill">active</span>
+            ) : null}
+            {onReindexAssociationScope && associationIds.length >= 2 ? (
+              <Tooltip title="重建关联索引（多仓）">
+                <span
+                  role="button"
+                  tabIndex={0}
+                  className={`app-code-graph-repo-dropdown-icon-btn${associationScopeDisabled ? " app-code-graph-repo-dropdown-icon-btn--disabled" : ""}`}
+                  aria-disabled={associationScopeDisabled}
+                  onClick={(e) => {
+                    if (associationScopeDisabled) return;
+                    handleReindexAssociation(e);
+                  }}
+                  onKeyDown={(e) => {
+                    if (associationScopeDisabled) return;
+                    if (e.key === "Enter" || e.key === " ") {
+                      handleReindexAssociation(e as unknown as MouseEvent);
+                    }
+                  }}
+                >
+                  <ReloadOutlined />
+                </span>
+              </Tooltip>
+            ) : null}
+            {onDismissAssociationScope ? (
+              <Tooltip title="退出多仓合并视图">
+                <span
+                  role="button"
+                  tabIndex={0}
+                  className={`app-code-graph-repo-dropdown-icon-btn app-code-graph-repo-dropdown-icon-btn--danger${associationScopeDisabled ? " app-code-graph-repo-dropdown-icon-btn--disabled" : ""}`}
+                  aria-disabled={associationScopeDisabled}
+                  onClick={(e) => {
+                    if (associationScopeDisabled) return;
+                    handleDismissAssociation(e);
+                  }}
+                  onKeyDown={(e) => {
+                    if (associationScopeDisabled) return;
+                    if (e.key === "Enter" || e.key === " ") {
+                      handleDismissAssociation(e as unknown as MouseEvent);
+                    }
+                  }}
+                >
+                  <DeleteOutlined />
+                </span>
+              </Tooltip>
+            ) : null}
           </span>
-          {menuSelection === "association" && !associationScopeDisabled ? (
-            <span className="app-code-graph-repo-dropdown-active-pill">active</span>
-          ) : null}
-        </button>
+        </div>
       ) : null}
       {onOpenAddRepository ? (
         <button type="button" className="app-code-graph-repo-dropdown-footer" onClick={handleAdd}>

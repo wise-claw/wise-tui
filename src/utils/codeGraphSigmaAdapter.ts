@@ -62,6 +62,20 @@ const EDGE_STYLES: Record<GraphEdgeKind, { color: string; sizeMultiplier: number
 const DEFAULT_NODE_COLOR = "#9ca3af";
 const DEFAULT_EDGE_COLOR = "#4a4a5a";
 
+const REPO_HUES = [210, 130, 280, 32, 168, 340];
+
+function nodeColorForGraphology(node: GraphNode, sortedRepoIds: number[]): string {
+  if (sortedRepoIds.length <= 1 || node.kind === "repo" || node.kind === "folder") {
+    return NODE_COLORS[node.kind] ?? DEFAULT_NODE_COLOR;
+  }
+  const idx = sortedRepoIds.indexOf(node.repoId);
+  const slot = idx >= 0 ? idx : 0;
+  const h = (REPO_HUES[slot % REPO_HUES.length] + (node.repoId % 7) * 3) % 360;
+  const sat = node.kind === "api_operation" ? 62 : node.kind === "symbol" ? 52 : 48;
+  const light = node.kind === "symbol" ? 54 : 50;
+  return `hsl(${h}, ${sat}%, ${light}%)`;
+}
+
 const getScaledNodeSize = (baseSize: number, nodeCount: number): number => {
   if (nodeCount > 50000) return Math.max(1, baseSize * 0.4);
   if (nodeCount > 20000) return Math.max(1.5, baseSize * 0.5);
@@ -98,6 +112,7 @@ export function codeSubgraphToGraphology(d: CodeGraphSubgraphResponse): Graph<Co
   const graph = new Graph<CodeGraphSigmaNodeAttrs, CodeGraphSigmaEdgeAttrs>();
   const nodeCount = d.nodes.length;
   const nodeMap = new Map(d.nodes.map((n) => [n.id, n]));
+  const sortedRepoIds = [...new Set(d.nodes.map((n) => n.repoId))].sort((a, b) => a - b);
 
   /** Structural layout: GitNexus-style priority — HAS_METHOD/HAS_PROPERTY > DEFINES > CONTAINS. */
   const childLayout = new Map<string, { parent: string; priority: number }>();
@@ -151,7 +166,7 @@ export function codeSubgraphToGraphology(d: CodeGraphSubgraphResponse): Graph<Co
       x,
       y,
       size: scaledSize,
-      color: NODE_COLORS[node.kind] ?? DEFAULT_NODE_COLOR,
+      color: nodeColorForGraphology(node, sortedRepoIds),
       label: labelText(node),
       nodeKind: node.kind,
       path: node.path,
@@ -187,7 +202,7 @@ export function codeSubgraphToGraphology(d: CodeGraphSubgraphResponse): Graph<Co
       x,
       y,
       size: scaledSize,
-      color: NODE_COLORS[node.kind] ?? DEFAULT_NODE_COLOR,
+      color: nodeColorForGraphology(node, sortedRepoIds),
       label: labelText(node),
       nodeKind: node.kind,
       path: node.path,

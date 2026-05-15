@@ -464,6 +464,77 @@ fn bridge_code_graph_http_conn(
     }))
 }
 
+/// 在代码图谱索引已完成的前提下：为非前端仓导入 OpenAPI（或合成路由），并对所有 前端×后端 配对执行 HTTP → `api_operation` 桥接，扩展 GitNexus 导入的图谱。
+fn openapi_import_and_http_bridges_for_repo_set(
+    conn: &rusqlite::Connection,
+    repo_ids: &[i64],
+) -> Result<serde_json::Value, String> {
+    let mut openapi_backends = 0usize;
+    let mut synthetic_backends = 0usize;
+    let mut bridge_pairs = 0usize;
+    let mut frontend_invokes_edges: i64 = 0;
+
+    for &repo_id in repo_ids {
+        let (repo_path, ref_kind, _) = match lookup_repository_meta(repo_id) {
+            Ok(x) => x,
+            Err(_) => continue,
+        };
+        if ref_kind.as_deref() == Some("frontend") {
+            continue;
+        }
+        let root = Path::new(&repo_path);
+        if let Some(spec) = find_openapi_spec(root) {
+            let spec_str = spec.to_string_lossy();
+            import_openapi_at_path(conn, repo_id, &spec_str)?;
+            openapi_backends += 1;
+        } else if ref_kind.as_deref() != Some("document") {
+            let routes = synthetic_openapi::extract_routes_from_repo(&repo_path, repo_id)?;
+            synthetic_openapi::ingest_synthetic_routes(conn, repo_id, &routes)?;
+            synthetic_backends += 1;
+        }
+    }
+
+    let mut fronts = Vec::new();
+    let mut backs = Vec::new();
+    for &repo_id in repo_ids {
+        let (_, ref_kind, _) = match lookup_repository_meta(repo_id) {
+            Ok(x) => x,
+            Err(_) => continue,
+        };
+        match ref_kind.as_deref() {
+            Some("frontend") => fronts.push(repo_id),
+            Some("backend") => backs.push(repo_id),
+            _ => {}
+        }
+    }
+    for &f in &fronts {
+        for &b in &backs {
+            if f == b {
+                continue;
+            }
+            bridge_pairs += 1;
+            match bridge_code_graph_http_conn(conn, f, b) {
+                Ok(v) => {
+                    frontend_invokes_edges += v
+                        .get("edges")
+                        .and_then(|x| x.as_i64().or_else(|| x.as_u64().map(|u| u as i64)))
+                        .unwrap_or(0);
+                }
+                Err(e) => {
+                    eprintln!("[code-graph] bridge {} -> {} failed: {}", f, b, e);
+                }
+            }
+        }
+    }
+
+    Ok(serde_json::json!({
+        "openapiBackendsRefreshed": openapi_backends,
+        "syntheticBackendsRefreshed": synthetic_backends,
+        "bridgePairs": bridge_pairs,
+        "frontendInvokesEdges": frontend_invokes_edges,
+    }))
+}
+
 /// Get the current indexing status for a repository.
 #[tauri::command]
 pub fn get_code_graph_index_status(
@@ -612,70 +683,19 @@ pub fn trigger_code_graph_association_build(
             }
         }
 
-        for &repo_id in &ids_spawn {
-            let (repo_path, ref_kind, _) = match lookup_repository_meta(repo_id) {
-                Ok(x) => x,
-                Err(_) => continue,
-            };
-            if ref_kind.as_deref() == Some("frontend") {
-                continue;
+        match openapi_import_and_http_bridges_for_repo_set(&conn, &ids_spawn) {
+            Ok(summary) => {
+                eprintln!(
+                    "[code-graph] association openapi/bridge summary: {}",
+                    summary
+                );
             }
-            let root = Path::new(&repo_path);
-            if let Some(spec) = find_openapi_spec(root) {
-                let spec_str = spec.to_string_lossy();
-                if let Err(e) = import_openapi_at_path(&conn, repo_id, &spec_str) {
-                    eprintln!(
-                        "[code-graph] association OpenAPI import failed: repo_id={}, error={}",
-                        repo_id, e
-                    );
-                    let _ = app.emit("code-graph-association-build-error", serde_json::json!({
-                        "repositoryIds": ids_spawn,
-                        "error": format!("OpenAPI 导入失败 (仓库 {}): {}", repo_id, e),
-                    }));
-                    return;
-                }
-            } else if ref_kind.as_deref() != Some("document") {
-                let routes = match synthetic_openapi::extract_routes_from_repo(&repo_path, repo_id) {
-                    Ok(r) => r,
-                    Err(e) => {
-                        let _ = app.emit("code-graph-association-build-error", serde_json::json!({
-                            "repositoryIds": ids_spawn,
-                            "error": format!("合成路由扫描失败 (仓库 {}): {}", repo_id, e),
-                        }));
-                        return;
-                    }
-                };
-                if let Err(e) = synthetic_openapi::ingest_synthetic_routes(&conn, repo_id, &routes) {
-                    let _ = app.emit("code-graph-association-build-error", serde_json::json!({
-                        "repositoryIds": ids_spawn,
-                        "error": format!("合成路由写入失败 (仓库 {}): {}", repo_id, e),
-                    }));
-                    return;
-                }
-            }
-        }
-
-        let mut fronts = Vec::new();
-        let mut backs = Vec::new();
-        for &repo_id in &ids_spawn {
-            let (_, ref_kind, _) = match lookup_repository_meta(repo_id) {
-                Ok(x) => x,
-                Err(_) => continue,
-            };
-            match ref_kind.as_deref() {
-                Some("frontend") => fronts.push(repo_id),
-                Some("backend") => backs.push(repo_id),
-                _ => {}
-            }
-        }
-        for &f in &fronts {
-            for &b in &backs {
-                if f == b {
-                    continue;
-                }
-                if let Err(e) = bridge_code_graph_http_conn(&conn, f, b) {
-                    eprintln!("[code-graph] association bridge {} -> {} failed: {}", f, b, e);
-                }
+            Err(e) => {
+                let _ = app.emit("code-graph-association-build-error", serde_json::json!({
+                    "repositoryIds": ids_spawn,
+                    "error": e,
+                }));
+                return;
             }
         }
 
@@ -685,6 +705,88 @@ pub fn trigger_code_graph_association_build(
     });
 
     Ok("Association build started".to_string())
+}
+
+/// 多仓 **仅** OpenAPI / 合成路由导入 + 前后端 HTTP 桥接（不重建 GitNexus 代码索引）。用于在已有图谱上扩展 `api_operation` 与 `frontend_invokes_api`。
+#[tauri::command]
+pub fn trigger_code_graph_openapi_bridge(
+    _state: tauri::State<WiseDb>,
+    repository_ids: Vec<i64>,
+    app: tauri::AppHandle,
+) -> Result<String, String> {
+    if repository_ids.len() < 2 {
+        return Err("请至少选择 2 个仓库。".to_string());
+    }
+    if repository_ids.len() > 20 {
+        return Err("repositoryIds must have at most 20 entries".to_string());
+    }
+    let ids_spawn: Vec<i64> = {
+        let mut seen = std::collections::HashSet::new();
+        let mut out = Vec::new();
+        for id in repository_ids {
+            if seen.insert(id) {
+                out.push(id);
+            }
+        }
+        out
+    };
+
+    let mut has_frontend = false;
+    let mut has_backend = false;
+    for &id in &ids_spawn {
+        if let Ok((_, ref_kind, _)) = lookup_repository_meta(id) {
+            match ref_kind.as_deref() {
+                Some("frontend") => has_frontend = true,
+                Some("backend") => has_backend = true,
+                _ => {}
+            }
+        }
+    }
+    if !has_frontend || !has_backend {
+        return Err(
+            "OpenAPI 桥接需要至少一个「前端」与一个「后端」仓库（在仓库元数据的 repositoryType 中标记）。"
+                .to_string(),
+        );
+    }
+
+    tauri::async_runtime::spawn(async move {
+        let db_path = match crate::wise_paths::wise_dir() {
+            Ok(d) => d.join("wise.db"),
+            Err(e) => {
+                let _ = app.emit("code-graph-openapi-bridge-error", serde_json::json!({
+                    "repositoryIds": ids_spawn,
+                    "error": format!("Cannot find db path: {}", e),
+                }));
+                return;
+            }
+        };
+
+        let ids_for_blocking = ids_spawn.clone();
+        let bridge_result = tokio::task::spawn_blocking(move || {
+            let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
+            openapi_import_and_http_bridges_for_repo_set(&conn, &ids_for_blocking)
+        })
+        .await
+        .unwrap_or_else(|e| Err(format!("OpenAPI 桥接任务 join 失败: {}", e)));
+
+        match bridge_result {
+            Ok(summary) => {
+                let _ = app.emit("code-graph-openapi-bridge-complete", serde_json::json!({
+                    "repositoryIds": ids_spawn,
+                    "summary": summary,
+                }));
+            }
+            Err(e) => {
+                eprintln!("[code-graph] openapi bridge failed: {}", e);
+                let _ = app.emit("code-graph-openapi-bridge-error", serde_json::json!({
+                    "repositoryIds": ids_spawn,
+                    "error": e,
+                }));
+            }
+        }
+    });
+
+    Ok("OpenAPI bridge started".to_string())
 }
 
 /// Extract routes from a backend repository and generate synthetic api_operation nodes.

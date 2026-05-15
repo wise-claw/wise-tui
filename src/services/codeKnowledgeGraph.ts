@@ -33,6 +33,11 @@ export async function cancelCodeGraphReindex(
   return invoke<CancelCodeGraphReindexOutcome>("cancel_code_graph_reindex", { repositoryId });
 }
 
+/** 多仓：仅 OpenAPI / 合成路由 + 前后端 HTTP 桥接（不重建 GitNexus 索引）；完成后发 `code-graph-openapi-bridge-complete` */
+export async function triggerCodeGraphOpenapiBridge(repositoryIds: number[]): Promise<string> {
+  return invoke<string>("trigger_code_graph_openapi_bridge", { repositoryIds });
+}
+
 /** 多仓：依次索引、OpenAPI/合成路由、HTTP 桥接（后台任务，完成后发 `code-graph-association-build-complete`） */
 export async function triggerCodeGraphAssociationBuild(repositoryIds: number[]): Promise<string> {
   return invoke<string>("trigger_code_graph_association_build", { repositoryIds });
