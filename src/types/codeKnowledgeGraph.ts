@@ -53,8 +53,11 @@ export interface GraphMeta {
   errors?: ParseError[];
 }
 
-/** 子图层数选项（与后端一致：1 层仅焦点，L 层含 outward 代价 ≤ L−1） */
+/** 子图 hop 深度选项（与后端 `hop` 一致：L 表示至多 L 条计代价 outward 边；`contains` 不增代价） */
 export type CodeGraphSubgraphHopDepth = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+
+/** 工具栏「全部」或具体 hop 上限（与代码图谱 UI 一致） */
+export type CodeGraphSubgraphHopScope = "all" | CodeGraphSubgraphHopDepth;
 
 /** 与后端 `CodeGraphSubgraphDirection` 一致：双向、仅入边（上卷）、仅出边（下钻） */
 export type CodeGraphSubgraphDirection = "both" | "upstream" | "downstream";
@@ -70,7 +73,7 @@ export interface CodeGraphNodeSearchRequest {
 export interface CodeGraphSubgraphRequest {
   repositoryId: number;
   focusNodeId?: string;
-  /** 省略或 `undefined`：不限制层数，展开焦点可达的全部子图；`1`–`10`：子图层数（1 层仅焦点） */
+  /** 省略或 `undefined`：不限制 hop，展开焦点可达的全部子图；`1`–`10`：子图 hop 上限（焦点 + 至多 L 条计代价 outward 边，`contains` 不增代价） */
   hop?: CodeGraphSubgraphHopDepth;
   nodeTypeFilter?: string[];
   /** 省略：双向 BFS；`upstream` / `downstream` 仅沿入边或出边扩展 */

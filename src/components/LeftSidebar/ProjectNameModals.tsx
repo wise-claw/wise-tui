@@ -90,7 +90,7 @@ export function ProjectNameModals({
               </Typography.Text>
             </div>
             <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-              所选目录为工作区根；后续可在其下放置多个 Git 仓库，并通过项目菜单「重新初始化项目」同步到 Wise。
+              所选目录为工作区根；后续可在其下放置多个 Git 仓库，并通过项目菜单「重新初始化」同步到 Wise。
             </Typography.Paragraph>
           </div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>

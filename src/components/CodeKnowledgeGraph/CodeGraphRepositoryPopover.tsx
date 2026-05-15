@@ -44,7 +44,7 @@ interface Props {
   onViewMergedGraph?: () => void;
   /** 当前合并范围对应的仓库 id（长度 ≥2 时与 `associationScopeDisplay` 一致） */
   associationScopeRepositoryIds?: number[];
-  /** 对当前合并范围触发「重建关联索引」（与侧栏关联检索一致） */
+  /** 对当前合并范围触发「同步仓库组」（与侧栏关联检索一致） */
   onReindexAssociationScope?: (repositoryIds: number[]) => void | Promise<void>;
   /** 退出多仓合并视图，将关联范围重置为仅当前仓库（不移除 Wise 中的仓库） */
   onDismissAssociationScope?: () => void | Promise<void>;
@@ -263,7 +263,7 @@ export function CodeGraphRepositoryPopover({
               <span className="app-code-graph-repo-dropdown-active-pill">active</span>
             ) : null}
             {onReindexAssociationScope && associationIds.length >= 2 ? (
-              <Tooltip title="重新检索关联图谱">
+              <Tooltip title="同步 GitNexus 仓库组">
                 <span
                   role="button"
                   tabIndex={0}

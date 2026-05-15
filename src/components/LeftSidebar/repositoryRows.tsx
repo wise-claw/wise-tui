@@ -73,6 +73,8 @@ export function RepositoryRow({
   onOpenPromptsRepository,
   onOpenRepositoryMainOwner,
   onConfigureSddMode,
+  onCodeGraphGenerateRepository,
+  onCodeGraphViewRepositoryInProject,
   repositoryReorder,
   hideChatAction = false,
 }: {
@@ -87,6 +89,8 @@ export function RepositoryRow({
   onOpenPromptsRepository?: (project: ProjectItem, repository: Repository) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
   onConfigureSddMode?: (repository: Repository) => void;
+  onCodeGraphGenerateRepository?: (repository: Repository) => void | Promise<void>;
+  onCodeGraphViewRepositoryInProject?: (project: ProjectItem, repository: Repository) => void;
   repositoryReorder?: RepositoryReorderUi;
   hideChatAction?: boolean;
 }) {
@@ -97,6 +101,19 @@ export function RepositoryRow({
     ...(onOpenRepositoryMainOwner ? [{ key: "main-owner", label: "配置Owner" }] satisfies MenuProps["items"] : []),
     { key: "prompts", label: "提示词" },
     { key: "sdd-mode", label: "SDD 模式" },
+    ...(onCodeGraphGenerateRepository && onCodeGraphViewRepositoryInProject
+      ? ([
+          {
+            key: "code-graph-submenu",
+            label: "图谱操作",
+            popupClassName: "app-sidebar-more-menu-submenu",
+            children: [
+              { key: "code-graph-generate-repo", label: "生成检索" },
+              { key: "code-graph-view-repo", label: "查看检索" },
+            ],
+          },
+        ] satisfies MenuProps["items"])
+      : []),
     { type: "divider" },
     { key: "detach", label: "移出项目", danger: true },
   ];
@@ -163,6 +180,8 @@ export function RepositoryRow({
               if (key === "detach") onDetachFromProject(project.id, repository.id);
               if (key === "prompts") onOpenPromptsRepository?.(project, repository);
               if (key === "sdd-mode") onConfigureSddMode?.(repository);
+              if (key === "code-graph-generate-repo") void Promise.resolve(onCodeGraphGenerateRepository?.(repository));
+              if (key === "code-graph-view-repo") onCodeGraphViewRepositoryInProject?.(project, repository);
             },
           }}
           trigger={["click"]}
@@ -190,6 +209,8 @@ export function FloatingRepositoryRow({
   onOpenRepositoryInEditor,
   onOpenRepositoryMainOwner,
   onConfigureSddMode,
+  onCodeGraphGenerateRepository,
+  onCodeGraphViewFloatingRepository,
   onPromoteToNewProject,
   onJoinExistingProject,
   onRemove,
@@ -203,6 +224,8 @@ export function FloatingRepositoryRow({
   onOpenRepositoryInEditor: (repository: Repository) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
   onConfigureSddMode?: (repository: Repository) => void;
+  onCodeGraphGenerateRepository?: (repository: Repository) => void | Promise<void>;
+  onCodeGraphViewFloatingRepository?: (repository: Repository) => void;
   onPromoteToNewProject?: (repository: Repository) => void;
   onJoinExistingProject?: (repository: Repository, projectId: string) => void;
   onRemove: (repository: Repository) => void;
@@ -217,10 +240,30 @@ export function FloatingRepositoryRow({
     { key: "editor", label: repositoryEditorOpenMenuLabel() },
     ...(onOpenRepositoryMainOwner ? [{ key: "main-owner", label: "主 Owner 智能体…" }] satisfies MenuProps["items"] : []),
     { key: "sdd-mode", label: "SDD 模式" },
+    ...(onCodeGraphGenerateRepository && onCodeGraphViewFloatingRepository
+      ? ([
+          {
+            key: "code-graph-submenu",
+            label: "图谱操作",
+            popupClassName: "app-sidebar-more-menu-submenu",
+            children: [
+              { key: "code-graph-generate-repo", label: "生成检索" },
+              { key: "code-graph-view-repo", label: "查看检索" },
+            ],
+          },
+        ] satisfies MenuProps["items"])
+      : []),
     { type: "divider" },
     ...(onPromoteToNewProject ? [{ key: "promote", label: "升格为新项目…" }] satisfies MenuProps["items"] : []),
     ...(onJoinExistingProject && joinChildren.length > 0
-      ? [{ key: "join", label: "加入现有项目", children: joinChildren }] satisfies MenuProps["items"]
+      ? ([
+          {
+            key: "join",
+            label: "加入现有项目",
+            popupClassName: "app-sidebar-more-menu-submenu",
+            children: joinChildren,
+          },
+        ] satisfies MenuProps["items"])
       : []),
     { type: "divider" },
     { key: "remove", label: "移除仓库", danger: true },
@@ -257,6 +300,8 @@ export function FloatingRepositoryRow({
               if (key === "editor") onOpenRepositoryInEditor(repository);
               if (key === "main-owner") onOpenRepositoryMainOwner?.(repository);
               if (key === "sdd-mode") onConfigureSddMode?.(repository);
+              if (key === "code-graph-generate-repo") void Promise.resolve(onCodeGraphGenerateRepository?.(repository));
+              if (key === "code-graph-view-repo") onCodeGraphViewFloatingRepository?.(repository);
               if (key === "promote") onPromoteToNewProject?.(repository);
               if (typeof key === "string" && key.startsWith("join-")) {
                 const projectId = key.slice("join-".length);
@@ -292,6 +337,8 @@ export function ProjectRepositoryRows({
   onReorderRepositoriesInProject,
   onMoveRepositoryToProject,
   onConfigureSddMode,
+  onCodeGraphGenerateRepository,
+  onCodeGraphViewRepositoryInProject,
   repoSidebarDragRef,
   onRepoSidebarDragEnd,
   hideChatAction = false,
@@ -309,6 +356,8 @@ export function ProjectRepositoryRows({
   onReorderRepositoriesInProject?: (projectId: string, repositoryIds: number[]) => void | Promise<void>;
   onMoveRepositoryToProject?: (targetProjectId: string, repositoryId: number) => void | Promise<void>;
   onConfigureSddMode?: (repository: Repository) => void;
+  onCodeGraphGenerateRepository?: (repository: Repository) => void | Promise<void>;
+  onCodeGraphViewRepositoryInProject?: (project: ProjectItem, repository: Repository) => void;
   repoSidebarDragRef: React.MutableRefObject<{ sourceProjectId: string; repositoryId: number } | null>;
   onRepoSidebarDragEnd: () => void;
   hideChatAction?: boolean;
@@ -355,6 +404,8 @@ export function ProjectRepositoryRows({
             onOpenPromptsRepository={onOpenPromptsRepository}
             onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
             onConfigureSddMode={onConfigureSddMode}
+            onCodeGraphGenerateRepository={onCodeGraphGenerateRepository}
+            onCodeGraphViewRepositoryInProject={onCodeGraphViewRepositoryInProject}
             repositoryReorder={reorderUi}
             hideChatAction={hideChatAction}
           />

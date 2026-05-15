@@ -1982,14 +1982,14 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
 
 /* 侧栏「更多」：项目行与仓库行共用（略低于 Ant 默认 32px，但比极简模式更易读、易点） */
 .app-sidebar-more-menu-dropdown .ant-dropdown-menu.app-sidebar-more-menu-inner {
-  padding: 4px;
+  padding: 4px 12px;
   border-radius: 8px;
   box-shadow: var(--ant-box-shadow-secondary);
   min-width: 0;
+  overflow: visible;
 }
 
-.app-sidebar-more-menu-dropdown .app-sidebar-more-menu-inner .ant-dropdown-menu-item,
-.app-sidebar-more-menu-dropdown .app-sidebar-more-menu-inner .ant-dropdown-menu-submenu-title {
+.app-sidebar-more-menu-dropdown .app-sidebar-more-menu-inner .ant-dropdown-menu-item {
   padding: 0 6px;
   margin-inline: 0;
   border-radius: 6px;
@@ -2000,7 +2000,42 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
   gap: 4px;
 }
 
-.app-sidebar-more-menu-dropdown .app-sidebar-more-menu-inner .ant-dropdown-menu-title-content {
+/*
+ * 子菜单标题不要用 `padding: 0 6px` 简写：会覆盖 Ant Design vertical 菜单为箭头注入的
+ * padding-inline-end，箭头会被裁切或挤到可视区外。左侧与 item 对齐，右侧单独加宽。
+ */
+.app-sidebar-more-menu-dropdown .app-sidebar-more-menu-inner .ant-dropdown-menu-submenu-title {
+  padding-block: 0;
+  padding-inline-start: 6px;
+  padding-inline-end: 22px;
+  margin-inline: 0;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.2;
+  min-height: 24px !important;
+  height: auto !important;
+  gap: 4px;
+  display: flex !important;
+  align-items: center !important;
+  overflow: visible !important;
+  column-gap: 6px;
+}
+
+.app-sidebar-more-menu-dropdown .app-sidebar-more-menu-inner .ant-dropdown-menu-submenu-title > .ant-dropdown-menu-title-content {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-sidebar-more-menu-dropdown .app-sidebar-more-menu-inner .ant-dropdown-menu-submenu-title .ant-dropdown-menu-submenu-expand-icon,
+.app-sidebar-more-menu-dropdown .app-sidebar-more-menu-inner .ant-dropdown-menu-submenu-title .ant-dropdown-menu-submenu-arrow,
+.app-sidebar-more-menu-dropdown .app-sidebar-more-menu-inner .ant-dropdown-menu-submenu-title > .anticon:last-child {
+  flex-shrink: 0;
+  margin-inline-start: auto;
+}
+
+.app-sidebar-more-menu-dropdown .app-sidebar-more-menu-inner .ant-dropdown-menu-item > .ant-dropdown-menu-title-content {
   flex: 1 1 auto;
   min-height: 0;
 }
@@ -2012,6 +2047,37 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
 
 .app-sidebar-more-menu-dropdown .app-sidebar-more-menu-inner .ant-dropdown-menu-item-divider {
   margin: 4px 0;
+}
+
+/* 侧栏「更多」里 hover 展开的二级菜单（如「重新初始化」「加入现有项目」）
+   浮层 class 为 ant-dropdown-menu-submenu-popup，不是 ant-dropdown-menu-popup */
+.app-sidebar-more-menu-submenu .ant-dropdown-menu {
+  padding: 4px;
+  border-radius: 8px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.app-sidebar-more-menu-submenu .ant-dropdown-menu-item {
+  padding: 0 6px;
+  margin-inline: 0;
+  border-radius: 6px;
+  font-size: 12px !important;
+  line-height: 1.2 !important;
+  min-height: 24px !important;
+  height: auto !important;
+  gap: 4px;
+}
+
+.app-sidebar-more-menu-submenu .ant-dropdown-menu-title-content {
+  min-height: 0;
+  font-size: 12px !important;
+  line-height: 1.2 !important;
+}
+
+.app-sidebar-more-menu-submenu .ant-dropdown-menu-item .ant-dropdown-menu-title-content {
+  font-size: 12px !important;
+  line-height: 1.2 !important;
 }
 
 .app-repository-more-item {

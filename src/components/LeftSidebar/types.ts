@@ -34,6 +34,16 @@ export interface LeftSidebarProps {
   pinnedProjectIds: string[];
   onTogglePinProject: (projectId: string) => void;
   onReconcileProject?: (projectId: string, mode: ReconcileProjectMode) => void | Promise<void>;
+  /** 项目菜单「图谱操作 → 生成项目级索引」：多仓走 GitNexus 仓库组一次同步；单仓走本机检索 */
+  onCodeGraphGenerateProject?: (project: ProjectItem) => void | Promise<void>;
+  /** 项目菜单「图谱操作 → 查看检索」：打开代码图谱覆盖层（多仓时以当前项目为搜索范围） */
+  onCodeGraphViewProject?: (project: ProjectItem) => void;
+  /** 仓库菜单「图谱操作 → 生成检索」 */
+  onCodeGraphGenerateRepository?: (repository: Repository) => void | Promise<void>;
+  /** 项目内仓库「图谱操作 → 查看检索」 */
+  onCodeGraphViewRepositoryInProject?: (project: ProjectItem, repository: Repository) => void;
+  /** 游离仓库「图谱操作 → 查看检索」 */
+  onCodeGraphViewFloatingRepository?: (repository: Repository) => void;
   onAddFloatingRepository?: (
     repositoryType: Repository["repositoryType"],
     options?: AddRepositoryOptions,

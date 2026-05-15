@@ -115,6 +115,58 @@ pub fn ingest_openapi(
     Ok((nodes_added, edges_added))
 }
 
+/// Strip `${BASE}`-style segments and map simple `${id}` path params to `{id}` for OpenAPI matching.
+fn collapse_ts_template_url(raw: &str) -> String {
+    let re = match regex::Regex::new(r"\$\{([^}]+)\}") {
+        Ok(r) => r,
+        Err(_) => return raw.to_string(),
+    };
+    let mut out = String::new();
+    let mut last = 0usize;
+    for cap in re.captures_iter(raw) {
+        let whole = cap.get(0).unwrap();
+        out.push_str(&raw[last..whole.start()]);
+        let inner = cap.get(1).map(|g| g.as_str().trim()).unwrap_or("");
+        out.push_str(&ts_interpolation_to_path_fragment(inner));
+        last = whole.end();
+    }
+    out.push_str(&raw[last..]);
+    let out = if out.contains("://") {
+        out
+    } else {
+        regex::Regex::new("//+")
+            .map(|r| r.replace_all(&out, "/").to_string())
+            .unwrap_or(out)
+    };
+    out
+}
+
+/// `${import.meta.env.VITE_*}` / `${BASE}` → empty; `${userId}` → `{userId}`.
+fn ts_interpolation_to_path_fragment(inner: &str) -> String {
+    if inner.is_empty() {
+        return String::new();
+    }
+    if inner.contains('.') || inner.contains('(') || inner.contains('[') || inner.contains(' ') {
+        return String::new();
+    }
+    let has_alpha = inner.chars().any(|c| c.is_ascii_alphabetic());
+    if has_alpha && inner.chars().all(|c| !c.is_ascii_alphabetic() || c.is_ascii_uppercase()) {
+        return String::new();
+    }
+    let lower = inner.to_ascii_lowercase();
+    if matches!(
+        lower.as_str(),
+        "baseurl" | "base_url" | "apiprefix" | "api_prefix" | "prefix" | "root"
+    ) {
+        return String::new();
+    }
+    let ident = regex::Regex::new(r"^[a-zA-Z_][a-zA-Z0-9_]*$").ok();
+    if ident.as_ref().is_some_and(|re| re.is_match(inner)) {
+        return format!("{{{inner}}}");
+    }
+    String::new()
+}
+
 /// Parse TypeScript/JavaScript source for HTTP client calls (fetch, axios, ofetch).
 /// Returns (method, url_template, line) tuples.
 pub fn extract_http_calls(content: &str) -> Vec<(String, String, usize)> {
@@ -136,6 +188,21 @@ pub fn extract_http_calls(content: &str) -> Vec<(String, String, usize)> {
         }
     }
 
+    // Pattern: fetch(`URL`) — template literal (same collapse rules as axios).
+    if let Ok(re) = regex::Regex::new(r#"fetch\s*\(\s*`([^`]+)`"#) {
+        let caps: Vec<_> = re.captures_iter(content).collect();
+        for cap in caps {
+            let raw_url = cap.get(1).map(|m| m.as_str()).unwrap_or("");
+            let url = collapse_ts_template_url(raw_url);
+            if url.is_empty() {
+                continue;
+            }
+            let method = "GET".to_string();
+            let line = content[..cap.get(0).unwrap().start()].matches('\n').count() + 1;
+            calls.push((method, url, line));
+        }
+    }
+
     // Pattern: axios.get/post/put/delete('URL')
     if let Ok(re) = regex::Regex::new(r#"axios\.(get|post|put|patch|delete)\s*\(\s*['"]([^'"]+)['"]"#) {
         let caps: Vec<_> = re.captures_iter(content).collect();
@@ -147,7 +214,91 @@ pub fn extract_http_calls(content: &str) -> Vec<(String, String, usize)> {
         }
     }
 
+    // Pattern: axios.get/post/put/delete(`URL`) — template literal + `${BASE}/path`
+    if let Ok(re) = regex::Regex::new(r#"axios\.(get|post|put|patch|delete)\s*\(\s*`([^`]+)`"#) {
+        let caps: Vec<_> = re.captures_iter(content).collect();
+        for cap in caps {
+            let method_raw = cap.get(1).map(|m| m.as_str()).unwrap_or("").to_uppercase();
+            let raw_url = cap.get(2).map(|m| m.as_str()).unwrap_or("");
+            let url = collapse_ts_template_url(raw_url);
+            if url.is_empty() {
+                continue;
+            }
+            let line = content[..cap.get(0).unwrap().start()].matches('\n').count() + 1;
+            calls.push((method_raw, url, line));
+        }
+    }
+
     calls
+}
+
+#[cfg(test)]
+mod extract_http_tests {
+    use super::extract_http_calls;
+    use super::collapse_ts_template_url;
+
+    #[test]
+    fn axios_get_template_with_base_constant() {
+        let src = r#"export function getReportByDate(reportDate, reportType) {
+  return axios.get(`${BASE}/api/daily-report`, { params: { reportDate, reportType } })
+}"#;
+        let calls = extract_http_calls(src);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0, "GET");
+        assert_eq!(calls[0].1, "/api/daily-report");
+    }
+
+    #[test]
+    fn axios_get_template_path_param() {
+        let src = r#"axios.get(`${API}/users/${userId}/posts`)"#;
+        let calls = extract_http_calls(src);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].1, "/users/{userId}/posts");
+    }
+
+    #[test]
+    fn collapse_strips_import_meta_env() {
+        let u = collapse_ts_template_url(r"${import.meta.env.VITE_APP_BASE_API}/api/foo");
+        assert_eq!(u, "/api/foo");
+    }
+}
+
+/// Split persisted `api_operation` node `label` into HTTP method and path.
+/// OpenAPI uses `GET /path`; legacy synthetic used `GET /path (synthetic)`.
+pub fn split_api_operation_label(label: &str) -> Option<(String, String)> {
+    let trimmed = label.trim();
+    let without_suffix = trimmed
+        .strip_suffix(" (synthetic)")
+        .unwrap_or(trimmed)
+        .trim();
+    let (method, path) = without_suffix.split_once(char::is_whitespace)?;
+    let method = method.trim().to_uppercase();
+    let path = path.trim();
+    if method.is_empty() || path.is_empty() {
+        return None;
+    }
+    Some((method, path.to_string()))
+}
+
+#[cfg(test)]
+mod label_tests {
+    use super::split_api_operation_label;
+
+    #[test]
+    fn split_label_legacy_synthetic_suffix() {
+        assert_eq!(
+            split_api_operation_label("GET /api/foo (synthetic)"),
+            Some(("GET".into(), "/api/foo".into()))
+        );
+    }
+
+    #[test]
+    fn split_label_openapi_shape() {
+        assert_eq!(
+            split_api_operation_label("GET /api/foo"),
+            Some(("GET".into(), "/api/foo".into()))
+        );
+    }
 }
 
 /// Normalize a path template for matching.

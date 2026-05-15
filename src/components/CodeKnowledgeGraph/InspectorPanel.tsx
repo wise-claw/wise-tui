@@ -1,13 +1,20 @@
 import { CodeOutlined, FileOutlined, FolderOpenOutlined, GlobalOutlined } from "@ant-design/icons";
-import { Button, Descriptions, Tag, Typography } from "antd";
+import { Button, Descriptions, List, Tag, Typography } from "antd";
 import { openCodeGraphNodeInIde } from "../../services/openCodeGraphNodeInIde";
 import type { GraphNode } from "../../types/codeKnowledgeGraph";
+import type { CodeGraphNeighborEntry } from "../../utils/codeGraphSelectedNeighbors";
 import { isMonacoSupportedFilePath } from "../../utils/repositoryFilePreview";
 
 const { Text, Link } = Typography;
 
 interface InspectorPanelProps {
   node: GraphNode | null;
+  /** 当前子图中与选中点直接相连的邻接点（由边推导） */
+  relatedNeighbors?: CodeGraphNeighborEntry[];
+  /** 邻接点总数（可能大于 `relatedNeighbors.length`，因列表截断） */
+  relatedNeighborTotal?: number;
+  /** 点击右侧关联点：与画布选中共逻辑 */
+  onSelectRelatedNode?: (node: GraphNode) => void;
   /** 仓库根目录绝对路径，用于「IDE 中打开」 */
   repositoryPath?: string | null;
   /** 多仓合并时用于把 `repoId` 显示为仓库名称 */
@@ -49,6 +56,9 @@ const SYMBOL_KIND_LABELS: Record<string, string> = {
 
 export function InspectorPanel({
   node,
+  relatedNeighbors = [],
+  relatedNeighborTotal,
+  onSelectRelatedNode,
   repositoryPath,
   repositorySummaries,
   onOpenRepositoryFile,
@@ -141,6 +151,68 @@ export function InspectorPanel({
         ) : null}
         {lineRangeLabel ? <Descriptions.Item label="行号">{lineRangeLabel}</Descriptions.Item> : null}
       </Descriptions>
+
+      <div className="app-code-graph-inspector-neighbors">
+        <Text strong className="app-code-graph-inspector-neighbors-title">
+          关联点
+        </Text>
+        {relatedNeighbors.length === 0 ? (
+          <Text type="secondary" className="app-code-graph-inspector-neighbors-empty">
+            当前子图中无直接相连的节点
+          </Text>
+        ) : (
+          <>
+            <List
+              className="app-code-graph-inspector-neighbors-list"
+              size="small"
+              split={false}
+              rowKey={(entry) => entry.node.id}
+              dataSource={relatedNeighbors}
+              renderItem={(entry) => {
+                const NIcon = KIND_ICONS[entry.node.kind] ?? FileOutlined;
+                const kindLabel = KIND_LABELS[entry.node.kind] ?? entry.node.kind;
+                return (
+                  <List.Item className="app-code-graph-inspector-neighbor-item">
+                    <button
+                      type="button"
+                      className="app-code-graph-inspector-neighbor-hit"
+                      disabled={!onSelectRelatedNode}
+                      onClick={() => onSelectRelatedNode?.(entry.node)}
+                    >
+                      <NIcon className="app-code-graph-inspector-neighbor-icon" />
+                      <div className="app-code-graph-inspector-neighbor-body">
+                        <div className="app-code-graph-inspector-neighbor-title-row">
+                          <Text ellipsis className="app-code-graph-inspector-neighbor-label">
+                            {entry.node.label}
+                          </Text>
+                          <Tag className="app-code-graph-inspector-neighbor-kind-tag" color="default">
+                            {kindLabel}
+                          </Tag>
+                        </div>
+                        <Text type="secondary" ellipsis className="app-code-graph-inspector-neighbor-path">
+                          {entry.node.path}
+                        </Text>
+                        <div className="app-code-graph-inspector-neighbor-relations">
+                          {entry.relations.map((rel) => (
+                            <Tag key={rel} bordered={false} className="app-code-graph-inspector-neighbor-rel-tag">
+                              {rel}
+                            </Tag>
+                          ))}
+                        </div>
+                      </div>
+                    </button>
+                  </List.Item>
+                );
+              }}
+            />
+            {relatedNeighborTotal != null && relatedNeighborTotal > relatedNeighbors.length ? (
+              <Text type="secondary" className="app-code-graph-inspector-neighbors-more">
+                还有 {relatedNeighborTotal - relatedNeighbors.length} 个关联点未列出
+              </Text>
+            ) : null}
+          </>
+        )}
+      </div>
     </div>
   );
 }

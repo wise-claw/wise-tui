@@ -49,6 +49,11 @@ export function LeftSidebar({
   pinnedProjectIds,
   onTogglePinProject,
   onReconcileProject,
+  onCodeGraphGenerateProject,
+  onCodeGraphViewProject,
+  onCodeGraphGenerateRepository,
+  onCodeGraphViewRepositoryInProject,
+  onCodeGraphViewFloatingRepository,
   onAddFloatingRepository,
   onPromoteFloatingRepositoryToProject,
   floatingRepositories = [],
@@ -266,6 +271,11 @@ export function LeftSidebar({
             onAddFloatingRepository ? repositoryAssociateModal.openAddFloatingRepositoryModal : undefined
           }
           onReconcileProject={onReconcileProject}
+          onCodeGraphGenerateProject={onCodeGraphGenerateProject}
+          onCodeGraphViewProject={onCodeGraphViewProject}
+          onCodeGraphGenerateRepository={onCodeGraphGenerateRepository}
+          onCodeGraphViewRepositoryInProject={onCodeGraphViewRepositoryInProject}
+          onCodeGraphViewFloatingRepository={onCodeGraphViewFloatingRepository}
           onToggleProjectExpand={projectRepositoryState.toggleProjectExpand}
           onTogglePinProject={onTogglePinProject}
           onRenameProject={(project) => {

@@ -6,7 +6,7 @@ import { workflowGraphFromTemplateStages } from "../utils/rebuildWorkflowGraphFr
 
 /**
  * 将项目关联的各工作流模板，按当前阶段/指派重建为默认线性流程图并写入 DB（草稿）。
- * 用于「重新初始化项目」后使画布与模板阶段对齐；不修改模板阶段表本身。
+ * 用于「重新初始化」后使画布与模板阶段对齐；不修改模板阶段表本身。
  */
 export async function regenerateProjectWorkflowGraphsFromTemplates(projectId: string): Promise<number> {
   const [workflowIds, templates, employees] = await Promise.all([
