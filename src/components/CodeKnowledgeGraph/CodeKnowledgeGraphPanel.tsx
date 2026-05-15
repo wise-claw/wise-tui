@@ -198,13 +198,13 @@ export function CodeKnowledgeGraphPanel({
         setSubgraphRefreshKey((k) => k + 1);
       }
       if (ids.length >= 2) {
-        message.success("多仓关联图谱构建完成");
+        message.success("重建关联索引完成，多仓合并子图已更新");
       }
     });
     unsubs.push(assocOk);
 
     const assocErr = listen("code-graph-association-build-error", (event: any) => {
-      message.error(String(event.payload?.error ?? "多仓关联构建失败"));
+      message.error(String(event.payload?.error ?? "重建关联索引失败"));
       const raw = event.payload?.repositoryIds;
       const ids: number[] = Array.isArray(raw)
         ? raw.filter((x: unknown) => typeof x === "number" && Number.isFinite(x))
@@ -489,9 +489,9 @@ export function CodeKnowledgeGraphPanel({
     if (ids.length < 2) return;
     try {
       await triggerCodeGraphAssociationBuild(ids);
-      message.info("已在后台开始多仓关联构建（各仓索引、OpenAPI/合成路由、HTTP 桥接），请稍候。");
+      message.info("已在后台开始重建关联索引（多仓代码图谱、OpenAPI 发现/合成路由、前后端接口桥接），请稍候。");
     } catch {
-      message.error("提交多仓关联构建失败");
+      message.error("提交重建关联索引失败");
     }
   }, []);
 
