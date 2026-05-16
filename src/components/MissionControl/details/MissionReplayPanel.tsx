@@ -30,6 +30,11 @@ function eventIcon(eventType: string) {
   return <ClockCircleOutlined style={{ color: "var(--mission-dim)" }} />;
 }
 
+function getPayloadSessionId(entry: MissionReplayEntry): string | null {
+  const sessionId = entry.payload.sessionId;
+  return typeof sessionId === "string" && sessionId.trim() ? sessionId.trim() : null;
+}
+
 export function MissionReplayPanel({ missionId }: MissionReplayPanelProps) {
   const [entries, setEntries] = useState<MissionReplayEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -66,24 +71,28 @@ export function MissionReplayPanel({ missionId }: MissionReplayPanelProps) {
           <Timeline
             items={entries.slice(-30).reverse().map((entry) => ({
               dot: eventIcon(entry.entryType),
-              children: (
-                <div className="mission-replay-entry">
-                  <span className="mission-replay-entry__type">
-                    {entry.title}
-                  </span>
-                  <span className="mission-replay-entry__time">
-                    {new Date(entry.timestamp).toLocaleTimeString("zh-CN")}
-                  </span>
-                  {entry.summary ? (
-                    <Typography.Text
-                      type="secondary"
-                      style={{ fontSize: 11, display: "block" }}
-                    >
-                      {entry.summary}
-                    </Typography.Text>
-                  ) : null}
-                </div>
-              ),
+              children: (() => {
+                const sessionId = getPayloadSessionId(entry);
+                return (
+                  <div className="mission-replay-entry">
+                    <span className="mission-replay-entry__type">
+                      {entry.title}
+                    </span>
+                    <span className="mission-replay-entry__time">
+                      {new Date(entry.timestamp).toLocaleTimeString("zh-CN")}
+                    </span>
+                    {sessionId ? <Tag style={{ fontSize: 10 }}>session:{sessionId}</Tag> : null}
+                    {entry.summary ? (
+                      <Typography.Text
+                        type="secondary"
+                        style={{ fontSize: 11, display: "block" }}
+                      >
+                        {entry.summary}
+                      </Typography.Text>
+                    ) : null}
+                  </div>
+                );
+              })(),
             }))}
           />
         </div>

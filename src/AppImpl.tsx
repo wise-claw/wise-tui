@@ -126,6 +126,7 @@ import {
   addProjectPrdWorkflow,
   listWorkflowProjectIds,
 } from "./services/projectPrdScope";
+import { ensureSessionBoundToActiveMission } from "./services/mission/sessionBinding";
 
 // ── App ──
 
@@ -816,6 +817,31 @@ export default function App() {
     () => (activeProjectId ? projects.find((p) => p.id === activeProjectId) ?? null : null),
     [activeProjectId, projects],
   );
+  const missionSessionBindingKeyRef = useRef("");
+  useEffect(() => {
+    const session = activeSessionId ? sessionsLatestRef.current.find((item) => item.id === activeSessionId) : null;
+    const rootPath = activeProject?.rootPath?.trim() || session?.repositoryPath?.trim() || null;
+    if (!session || !activeProject?.id || !rootPath) return;
+    const key = `${session.id}:${activeProject.id}:${rootPath}`;
+    if (missionSessionBindingKeyRef.current === key) return;
+    missionSessionBindingKeyRef.current = key;
+    void ensureSessionBoundToActiveMission({
+      sessionId: session.id,
+      projectId: activeProject.id,
+      rootPath,
+    })
+      .then((result) => {
+        if (!result.mission && missionSessionBindingKeyRef.current === key) {
+          missionSessionBindingKeyRef.current = "";
+        }
+      })
+      .catch((error) => {
+        if (missionSessionBindingKeyRef.current === key) {
+          missionSessionBindingKeyRef.current = "";
+        }
+        console.debug("ensureSessionBoundToActiveMission failed:", error);
+      });
+  }, [activeProject?.id, activeProject?.rootPath, activeSessionId, sessions]);
   /** 代码图谱全库搜索：有项目时用项目内全部仓库，否则由面板退化为当前仓库 */
   const codeGraphSearchRepositoryIds = useMemo(() => {
     if (activeProject?.repositoryIds?.length) {
@@ -1743,6 +1769,10 @@ export default function App() {
         onRespondToQuestion: respondToQuestion,
         onDismissQuestion: dismissQuestion,
         onRespondToPermission: respondToPermission,
+        missionContext: {
+          projectId: activeProjectId,
+          rootPath: activeProject?.rootPath ?? activeRepository?.path ?? null,
+        },
         onClearTodos: clearTodos,
         onClearFollowups: clearFollowups,
         onClearRevertItems: clearRevertItems,

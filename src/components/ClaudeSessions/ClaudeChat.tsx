@@ -273,6 +273,10 @@ interface Props {
   onReloadFullDiskTranscript?: (sessionId: string) => void | Promise<void>;
   /** 双栏右侧主会话：输入框底栏仓库选择（由父级仅在右侧注入） */
   dualPaneRepositoryPicker?: DualPaneComposerRepositoryPickerProps;
+  missionContext?: {
+    projectId?: string | null;
+    rootPath?: string | null;
+  };
 }
 
 interface SessionSendTraceEntry {
@@ -414,6 +418,7 @@ export function ClaudeChat({
   onAddWorktreeRepositoryToProject,
   onReloadFullDiskTranscript,
   dualPaneRepositoryPicker,
+  missionContext,
 }: Props) {
   const chatRootRef = useRef<HTMLDivElement>(null);
   const composerTrayRef = useRef<HTMLDivElement>(null);
@@ -4051,6 +4056,7 @@ export function ClaudeChat({
             setSessionSendTraces((prev) => [traceItem, ...prev].slice(0, 50));
           }}
           dualPaneRepositoryPicker={dualPaneRepositoryPicker}
+          missionContext={missionContext}
         />
 
       </div>

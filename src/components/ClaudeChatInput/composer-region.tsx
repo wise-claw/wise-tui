@@ -62,6 +62,7 @@ import {
 } from "../../services/globalScreenshotHotkey";
 import { wiseMainWindowFocus } from "../../services/wiseMascot";
 import { gitCheckoutBranch, gitCheckoutDetached, gitCreateBranch, gitListBranches, gitStatus } from "../../services/git";
+import { recordMissionComposerMessage } from "./missionMentionHook";
 import type { ControlRequestStatus } from "../../notifications";
 import type { QuestionDockTabSpec } from "../../hooks/useQuestionDockTabs";
 import { WORKFLOW_UI_EVENT_APPLY_STARTER_PROMPT } from "../../constants/workflowUiEvents";
@@ -141,6 +142,10 @@ interface ComposerInnerProps {
   pendingExecutionTaskCount?: number;
   /** 双栏右侧：截屏按钮右侧展示仓库选择 */
   dualPaneRepositoryPicker?: DualPaneComposerRepositoryPickerProps;
+  missionContext?: {
+    projectId?: string | null;
+    rootPath?: string | null;
+  };
 }
 
 interface LastSentComposerDraft {
@@ -344,6 +349,7 @@ function ComposerInner({
   employeesForDispatchRoute,
   pendingExecutionTaskCount = 0,
   dualPaneRepositoryPicker,
+  missionContext,
 }: ComposerInnerProps) {
   /** 含题卡/待办/底栏等整块输入 chrome，用于 Esc 命中判定（仅 shellRef 会漏掉模型选择、停止等） */
   const composerEscapeRootRef = useRef<HTMLDivElement>(null);
@@ -687,6 +693,17 @@ function ComposerInner({
   triggerRef.current = trigger;
   const hasComposerPayloadRef = useRef(hasComposerPayload);
   hasComposerPayloadRef.current = hasComposerPayload;
+  const recordMissionMessage = useCallback(
+    (text: string) => {
+      void recordMissionComposerMessage({
+        sessionId: session.id,
+        projectId: missionContext?.projectId ?? null,
+        rootPath: missionContext?.rootPath ?? session.repositoryPath,
+        text,
+      }).catch((error) => console.debug("recordMissionComposerMessage failed:", error));
+    },
+    [missionContext?.projectId, missionContext?.rootPath, session.id, session.repositoryPath],
+  );
 
   const tryComposerEscapeRef = useRef<(target: EventTarget | null) => boolean>(() => false);
   tryComposerEscapeRef.current = (target: EventTarget | null) => {
@@ -847,6 +864,7 @@ function ComposerInner({
           outboundText: dispatchPromptText,
           nodes: sendFlowNodes,
         });
+        recordMissionMessage(logicalSnap);
         postSendEscUndoRef.current = rollbackDraft;
         return;
       }
@@ -952,6 +970,7 @@ function ComposerInner({
             outboundText: dispatchPromptText,
             nodes: sendFlowNodes,
           });
+          recordMissionMessage(logicalSnap);
           lastSentDraftRef.current = null;
           postSendEscUndoRef.current = rollbackDraft;
           return;
@@ -968,6 +987,7 @@ function ComposerInner({
         outboundText: dispatchPromptText,
         nodes: sendFlowNodes,
       });
+      recordMissionMessage(logicalSnap);
       lastSentDraftRef.current = null;
       postSendEscUndoRef.current = rollbackDraft;
       onExecute(session.id, dispatchPromptText, consumePending, dispatchTargetForExecute);
@@ -993,6 +1013,7 @@ function ComposerInner({
       teamMentions,
       employeesForDispatchRoute,
       draftBucketKey,
+      recordMissionMessage,
     ],
   );
 
@@ -1882,6 +1903,10 @@ export interface ComposerRegionProps {
   /** 草稿持久化桶（与主输入区分）；见 `PromptProvider` */
   draftBucketKey?: string;
   dualPaneRepositoryPicker?: DualPaneComposerRepositoryPickerProps;
+  missionContext?: {
+    projectId?: string | null;
+    rootPath?: string | null;
+  };
 }
 
 export function ComposerRegion({ session, draftBucketKey, ...rest }: ComposerRegionProps) {

@@ -957,6 +957,10 @@ interface Props {
   onAddWorktreeRepositoryToProject?: (worktreePath: string) => void | Promise<void>;
   /** 从磁盘加载完整 jsonl 覆盖指定标签消息（尾部懒加载后补齐） */
   onReloadFullDiskTranscript?: (sessionId: string) => void | Promise<void>;
+  missionContext?: {
+    projectId?: string | null;
+    rootPath?: string | null;
+  };
 }
 
 export function ClaudeSessions({
@@ -1023,6 +1027,7 @@ export function ClaudeSessions({
   omcBatchPipelineActive = false,
   onAddWorktreeRepositoryToProject,
   onReloadFullDiskTranscript,
+  missionContext,
 }: Props) {
   const sessions = useMemo(
     () =>
@@ -1225,6 +1230,7 @@ export function ClaudeSessions({
                 omcBatchPipelineActive={omcBatchPipelineActive}
                 onAddWorktreeRepositoryToProject={onAddWorktreeRepositoryToProject}
                 onReloadFullDiskTranscript={onReloadFullDiskTranscript}
+                missionContext={missionContext}
               />
             </div>
             <div className="app-claude-sessions__dual-divider" aria-hidden />
@@ -1289,6 +1295,7 @@ export function ClaudeSessions({
                         }
                       : undefined
                   }
+                  missionContext={missionContext}
                 />
               ) : (
                 <SessionEmptyState
@@ -1353,6 +1360,7 @@ export function ClaudeSessions({
             omcBatchPipelineActive={omcBatchPipelineActive}
             onAddWorktreeRepositoryToProject={onAddWorktreeRepositoryToProject}
             onReloadFullDiskTranscript={onReloadFullDiskTranscript}
+            missionContext={missionContext}
           />
         )
       ) : (
