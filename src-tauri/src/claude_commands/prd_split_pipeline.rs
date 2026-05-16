@@ -471,6 +471,27 @@ pub(crate) struct ListLegacyRunsOutput {
     runs: Vec<LegacyRunSummary>,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ActiveRunRow {
+    run_id: String,
+    cluster_id: String,
+    run_dir: String,
+    started_at_ms: u64,
+    status: String,
+    exit_code: Option<i32>,
+    stdout_tail: String,
+    stderr_tail: String,
+    has_run_result: bool,
+    project_root_path: String,
+    mission_id: Option<String>,
+    parent_task_path: Option<String>,
+    stdout_path: String,
+    stderr_path: String,
+    raw_result_path: String,
+    error: Option<String>,
+}
+
 #[tauri::command]
 pub(crate) async fn prd_split_list_legacy_runs() -> Result<ListLegacyRunsOutput, String> {
     let base = crate::wise_dir()
@@ -535,6 +556,17 @@ pub(crate) async fn prd_split_list_legacy_runs() -> Result<ListLegacyRunsOutput,
     }
     runs.sort_by(|a, b| b.created_at_ms.cmp(&a.created_at_ms));
     Ok(ListLegacyRunsOutput { runs })
+}
+
+#[tauri::command]
+pub(crate) async fn prd_split_list_active_runs() -> Result<Vec<ActiveRunRow>, String> {
+    let base = crate::wise_dir()
+        .map_err(|e| format!("解析 ~/.wise 失败: {e}"))?
+        .join("prd-runs");
+    if !base.is_dir() {
+        return Ok(vec![]);
+    }
+    list_active_prd_runs_in_dir(&base, unix_ms_now() as u64)
 }
 
 fn read_repo_context(run_dir: &Path) -> (Option<i64>, Option<String>) {
@@ -831,7 +863,8 @@ pub(crate) async fn prd_split_retry_run(
             .filter(|s| !s.is_empty())
             .map(ToString::to_string)
     });
-    let prompt = fs::read_to_string(&prompt_path).map_err(|e| format!("读取 prompt.md 失败: {e}"))?;
+    let prompt =
+        fs::read_to_string(&prompt_path).map_err(|e| format!("读取 prompt.md 失败: {e}"))?;
     let bundle = read_retry_bundle(&old_run_dir)?;
 
     let new_run_id = format!(
@@ -843,8 +876,12 @@ pub(crate) async fn prd_split_retry_run(
         .map_err(|e| format!("解析 ~/.wise 失败: {e}"))?
         .join("prd-runs")
         .join(&new_run_id);
-    fs::create_dir_all(&new_run_dir)
-        .map_err(|e| format!("创建 retry run_dir 失败 ({}): {e}", new_run_dir.to_string_lossy()))?;
+    fs::create_dir_all(&new_run_dir).map_err(|e| {
+        format!(
+            "创建 retry run_dir 失败 ({}): {e}",
+            new_run_dir.to_string_lossy()
+        )
+    })?;
     patch_json_file(old_run_dir.join("run-result.json"), |value| {
         value["superseded_by"] = json!(new_run_id);
         Ok(())
@@ -852,12 +889,23 @@ pub(crate) async fn prd_split_retry_run(
     patch_json_file(new_run_dir.join("dispatch.meta.json"), |value| {
         value["retriedFrom"] = json!(old_run_id);
         value["retriedFromRunDir"] = json!(old_run_dir.to_string_lossy());
-        if let Some(mission_id) = input.mission_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        if let Some(mission_id) = input
+            .mission_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
             value["missionId"] = json!(mission_id);
         }
         Ok(())
     })?;
-    record_retry_event(&db, &input.mission_id, &old_run_id, &new_run_id, &requested_cluster_id);
+    record_retry_event(
+        &db,
+        &input.mission_id,
+        &old_run_id,
+        &new_run_id,
+        &requested_cluster_id,
+    );
 
     let app_clone = app.clone();
     let run_id_for_task = new_run_id.clone();
@@ -1361,9 +1409,15 @@ fn read_json_file(path: &Path, label: &str) -> Result<Value, String> {
     serde_json::from_str(&raw).map_err(|e| format!("解析 {label} 失败: {e}"))
 }
 
-fn patch_json_file(path: PathBuf, patch: impl FnOnce(&mut Value) -> Result<(), String>) -> Result<(), String> {
+fn patch_json_file(
+    path: PathBuf,
+    patch: impl FnOnce(&mut Value) -> Result<(), String>,
+) -> Result<(), String> {
     let mut value = if path.is_file() {
-        read_json_file(&path, path.file_name().and_then(|n| n.to_str()).unwrap_or("json"))?
+        read_json_file(
+            &path,
+            path.file_name().and_then(|n| n.to_str()).unwrap_or("json"),
+        )?
     } else {
         json!({})
     };
@@ -1385,6 +1439,128 @@ fn read_existing_retry_metadata(run_dir: &Path) -> Result<Option<Value>, String>
     }
     let value = read_json_file(&path, "dispatch.meta.json")?;
     Ok(Some(value))
+}
+
+fn list_active_prd_runs_in_dir(base: &Path, now_ms: u64) -> Result<Vec<ActiveRunRow>, String> {
+    if !base.is_dir() {
+        return Ok(vec![]);
+    }
+    let mut rows = Vec::new();
+    let entries = fs::read_dir(base).map_err(|e| format!("读 prd-runs 失败: {e}"))?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        if let Some(row) = active_prd_run_row_from_dir(&path, now_ms) {
+            rows.push(row);
+        }
+    }
+    rows.sort_by(|a, b| b.started_at_ms.cmp(&a.started_at_ms));
+    Ok(rows)
+}
+
+fn active_prd_run_row_from_dir(run_dir: &Path, now_ms: u64) -> Option<ActiveRunRow> {
+    let run_id = run_dir.file_name().and_then(|n| n.to_str())?.to_string();
+    if run_id.trim().is_empty() {
+        return None;
+    }
+    let meta = read_json_file(&run_dir.join("dispatch.meta.json"), "dispatch.meta.json").ok()?;
+    let cluster_id =
+        json_string(&meta, "clusterId").or_else(|| json_string(&meta, "cluster_id"))?;
+    let project_root_path = json_string(&meta, "projectRootPath")
+        .or_else(|| json_string(&meta, "project_root_path"))
+        .unwrap_or_default();
+    let parent_task_path =
+        json_string(&meta, "parentTaskPath").or_else(|| json_string(&meta, "parent_task_path"));
+    let mission_id = json_string(&meta, "missionId").or_else(|| json_string(&meta, "mission_id"));
+    let started_at_ms = json_u64(&meta, "startedAtMs")
+        .or_else(|| json_u64(&meta, "startedAt"))
+        .or_else(|| path_timestamp_ms(run_dir))
+        .unwrap_or(0);
+
+    let result_path = run_dir.join("run-result.json");
+    let has_run_result = result_path.is_file();
+    let result = if has_run_result {
+        read_json_file(&result_path, "run-result.json").ok()
+    } else {
+        None
+    };
+
+    let stdout_path = result
+        .as_ref()
+        .and_then(|v| json_string(v, "stdoutPath"))
+        .unwrap_or_else(|| {
+            run_dir
+                .join("claude.stdout.log")
+                .to_string_lossy()
+                .to_string()
+        });
+    let stderr_path = result
+        .as_ref()
+        .and_then(|v| json_string(v, "stderrPath"))
+        .unwrap_or_else(|| {
+            run_dir
+                .join("claude.stderr.log")
+                .to_string_lossy()
+                .to_string()
+        });
+    let raw_result_path = result
+        .as_ref()
+        .and_then(|v| json_string(v, "rawResultPath"))
+        .unwrap_or_else(|| {
+            run_dir
+                .join("split-result.raw.json")
+                .to_string_lossy()
+                .to_string()
+        });
+    let exit_code = result.as_ref().and_then(|v| json_i32(v, "exitCode"));
+    let stale_without_result = !has_run_result && now_ms.saturating_sub(started_at_ms) > 90_000;
+    let status = if let Some(result) = result.as_ref() {
+        match json_string(result, "status").as_deref() {
+            Some("succeeded") => "succeeded",
+            Some("failed") => "failed",
+            Some("running") => "running",
+            _ if exit_code == Some(0) => "succeeded",
+            _ => "failed",
+        }
+    } else if stale_without_result {
+        "failed"
+    } else {
+        "running"
+    };
+    let error = result
+        .as_ref()
+        .and_then(|v| json_string(v, "error"))
+        .or_else(|| {
+            if stale_without_result {
+                Some(
+                    "No run-result.json after 90s; run is stale and can be retried from runDir"
+                        .to_string(),
+                )
+            } else {
+                None
+            }
+        });
+
+    Some(ActiveRunRow {
+        run_id,
+        cluster_id,
+        run_dir: run_dir.to_string_lossy().to_string(),
+        started_at_ms,
+        status: status.to_string(),
+        exit_code,
+        stdout_tail: read_text_tail(Path::new(&stdout_path), 4096),
+        stderr_tail: read_text_tail(Path::new(&stderr_path), 4096),
+        has_run_result,
+        project_root_path,
+        mission_id,
+        parent_task_path,
+        stdout_path,
+        stderr_path,
+        raw_result_path,
+        error,
+    })
 }
 
 fn load_retry_dispatch_meta(run_dir: &Path, requested_cluster_id: &str) -> Result<Value, String> {
@@ -1411,7 +1587,8 @@ fn load_retry_dispatch_meta(run_dir: &Path, requested_cluster_id: &str) -> Resul
 }
 
 fn merge_object_fields(target: &mut Value, existing: Value) {
-    let (Some(target_obj), Some(existing_obj)) = (target.as_object_mut(), existing.as_object()) else {
+    let (Some(target_obj), Some(existing_obj)) = (target.as_object_mut(), existing.as_object())
+    else {
         return;
     };
     for key in ["retriedFrom", "retriedFromRunDir", "missionId"] {
@@ -1421,6 +1598,48 @@ fn merge_object_fields(target: &mut Value, existing: Value) {
     }
 }
 
+fn json_string(value: &Value, key: &str) -> Option<String> {
+    value
+        .get(key)
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string)
+}
+
+fn json_u64(value: &Value, key: &str) -> Option<u64> {
+    value.get(key).and_then(|v| v.as_u64())
+}
+
+fn json_i32(value: &Value, key: &str) -> Option<i32> {
+    value
+        .get(key)
+        .and_then(|v| v.as_i64())
+        .and_then(|n| i32::try_from(n).ok())
+}
+
+fn path_timestamp_ms(path: &Path) -> Option<u64> {
+    let metadata = fs::metadata(path).ok()?;
+    metadata
+        .created()
+        .or_else(|_| metadata.modified())
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as u64)
+}
+
+fn read_text_tail(path: &Path, max_chars: usize) -> String {
+    let Ok(text) = fs::read_to_string(path) else {
+        return String::new();
+    };
+    if text.chars().count() <= max_chars {
+        return text;
+    }
+    let mut chars = text.chars().rev().take(max_chars).collect::<Vec<_>>();
+    chars.reverse();
+    chars.into_iter().collect()
+}
+
 fn record_retry_event(
     db: &tauri::State<'_, crate::wise_db::WiseDb>,
     mission_id: &Option<String>,
@@ -1428,7 +1647,11 @@ fn record_retry_event(
     new_run_id: &str,
     cluster_id: &str,
 ) {
-    let Some(mission_id) = mission_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) else {
+    let Some(mission_id) = mission_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    else {
         return;
     };
     let Ok(g) = db.0.lock() else {
@@ -1725,6 +1948,81 @@ mod tests {
     }
 
     #[test]
+    fn prd_split_list_active_runs_classifies_succeeded_failed_and_running() {
+        let temp = test_temp_dir();
+        fs::create_dir_all(&temp).unwrap();
+        write_active_run_fixture(
+            &temp,
+            "split-cluster-fe-1",
+            r#"{"clusterId":"cluster-fe","projectRootPath":"/repo","parentTaskPath":".trellis/tasks/parent","missionId":"mission-1","startedAtMs":1000}"#,
+            Some(
+                r#"{"runId":"split-cluster-fe-1","status":"succeeded","exitCode":0,"stdoutPath":"/tmp/out.log","stderrPath":"/tmp/err.log","rawResultPath":"/tmp/raw.json"}"#,
+            ),
+        );
+        write_active_run_fixture(
+            &temp,
+            "split-cluster-api-1",
+            r#"{"clusterId":"cluster-api","projectRootPath":"/repo","startedAtMs":2000}"#,
+            Some(
+                r#"{"runId":"split-cluster-api-1","status":"failed","exitCode":2,"error":"bad output"}"#,
+            ),
+        );
+        write_active_run_fixture(
+            &temp,
+            "split-cluster-docs-1",
+            r#"{"clusterId":"cluster-docs","projectRootPath":"/repo","startedAtMs":3000}"#,
+            None,
+        );
+
+        let rows = list_active_prd_runs_in_dir(&temp, 10_000).unwrap();
+
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0].run_id, "split-cluster-docs-1");
+        assert_eq!(rows[0].status, "running");
+        assert!(!rows[0].has_run_result);
+        let succeeded = rows
+            .iter()
+            .find(|row| row.cluster_id == "cluster-fe")
+            .unwrap();
+        assert_eq!(succeeded.status, "succeeded");
+        assert_eq!(succeeded.exit_code, Some(0));
+        assert_eq!(succeeded.mission_id.as_deref(), Some("mission-1"));
+        let failed = rows
+            .iter()
+            .find(|row| row.cluster_id == "cluster-api")
+            .unwrap();
+        assert_eq!(failed.status, "failed");
+        assert_eq!(failed.exit_code, Some(2));
+        assert_eq!(failed.error.as_deref(), Some("bad output"));
+        let _ = fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn prd_split_list_active_runs_marks_missing_result_as_stale_after_90s() {
+        let temp = test_temp_dir();
+        fs::create_dir_all(&temp).unwrap();
+        let run_dir = write_active_run_fixture(
+            &temp,
+            "split-cluster-stale-1",
+            r#"{"clusterId":"cluster-stale","projectRootPath":"/repo","startedAtMs":1000}"#,
+            None,
+        );
+        fs::write(run_dir.join("claude.stderr.log"), "late failure").unwrap();
+
+        let rows = list_active_prd_runs_in_dir(&temp, 92_000).unwrap();
+
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].status, "failed");
+        assert_eq!(rows[0].stderr_tail, "late failure");
+        assert!(rows[0]
+            .error
+            .as_deref()
+            .unwrap_or("")
+            .contains("No run-result.json"));
+        let _ = fs::remove_dir_all(&temp);
+    }
+
+    #[test]
     fn extract_json_object_handles_clean_json() {
         let out = extract_json_object(r#"{"tasks":[{"id":"t1"}]}"#).unwrap();
         assert!(out.get("tasks").is_some());
@@ -1781,5 +2079,21 @@ mod tests {
 
     fn test_temp_dir() -> PathBuf {
         std::env::temp_dir().join(format!("wise-retry-test-{}", uuid::Uuid::new_v4().simple()))
+    }
+
+    fn write_active_run_fixture(
+        base: &Path,
+        run_id: &str,
+        meta: &str,
+        result: Option<&str>,
+    ) -> PathBuf {
+        let run_dir = base.join(run_id);
+        fs::create_dir_all(&run_dir).unwrap();
+        fs::write(run_dir.join("dispatch.meta.json"), meta).unwrap();
+        fs::write(run_dir.join("claude.stdout.log"), "stdout").unwrap();
+        if let Some(result) = result {
+            fs::write(run_dir.join("run-result.json"), result).unwrap();
+        }
+        run_dir
     }
 }

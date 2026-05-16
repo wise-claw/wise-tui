@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { invoke } from "@tauri-apps/api/core";
+import {
+  listActivePrdRuns,
+  type ActivePrdRunRow,
+} from "../../../services/prdSplit/activeRuns";
 
 interface SplitterCompleteEvent {
   clusterId: string;
@@ -14,41 +17,39 @@ export interface BackgroundRunState {
   clusterId: string;
   status: "running" | "succeeded" | "failed";
   runDir: string;
-  startedAt: number;
+  startedAtMs: number;
+  exitCode: number | null;
+  stdoutTail: string;
+  stderrTail: string;
+  hasRunResult: boolean;
+  projectRootPath: string;
+  missionId: string | null;
+  parentTaskPath: string | null;
+  stdoutPath: string;
+  stderrPath: string;
+  rawResultPath: string;
+  error: string | null;
 }
+
+export type { ActivePrdRunRow };
 
 export function useMissionRunStore() {
   const [backgroundRuns, setBackgroundRuns] = useState<Record<string, BackgroundRunState>>({});
 
-  // On mount, scan ~/.wise/prd-runs/ for incomplete runs via the existing list command.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const result = await invoke<{ runs: Array<{ run_id: string; run_dir: string; created_at_ms: number; has_split_result: boolean }> }>(
-          "prd_split_list_legacy_runs",
-        );
-        const runs: Record<string, BackgroundRunState> = {};
-        for (const run of result.runs) {
-          if (!run.has_split_result) {
-            runs[run.run_id] = {
-              runId: run.run_id,
-              clusterId: run.run_id,
-              status: "running",
-              runDir: run.run_dir,
-              startedAt: run.created_at_ms,
-            };
-          }
-        }
+        const rows = await listActivePrdRuns();
+        const runs = reduceBackgroundRuns(rows);
         if (!cancelled) setBackgroundRuns(runs);
       } catch {
-        // Non-critical — run scanning is best-effort.
+        // Non-critical: Mission Control can still receive live events after mount.
       }
     })();
     return () => { cancelled = true; };
   }, []);
 
-  // Listen for completion events from background tasks.
   useEffect(() => {
     const unlisteners: UnlistenFn[] = [];
     listen<SplitterCompleteEvent>("splitter-complete", (event) => {
@@ -57,7 +58,12 @@ export function useMissionRunStore() {
         const next = { ...prev };
         for (const [id, run] of Object.entries(next)) {
           if (run.clusterId === clusterId) {
-            next[id] = { ...run, status };
+            next[id] = {
+              ...run,
+              status,
+              hasRunResult: true,
+              error: status === "failed" ? run.error ?? "Splitter run failed" : null,
+            };
           }
         }
         return next;
@@ -70,4 +76,34 @@ export function useMissionRunStore() {
   }, []);
 
   return { backgroundRuns };
+}
+
+export function reduceBackgroundRuns(rows: ActivePrdRunRow[]): Record<string, BackgroundRunState> {
+  const runs: Record<string, BackgroundRunState> = {};
+  for (const row of rows) {
+    if (!row.runId || !row.clusterId) continue;
+    runs[row.runId] = {
+      runId: row.runId,
+      clusterId: row.clusterId,
+      status: normalizeStatus(row.status),
+      runDir: row.runDir,
+      startedAtMs: row.startedAtMs,
+      exitCode: typeof row.exitCode === "number" ? row.exitCode : null,
+      stdoutTail: row.stdoutTail ?? "",
+      stderrTail: row.stderrTail ?? "",
+      hasRunResult: Boolean(row.hasRunResult),
+      projectRootPath: row.projectRootPath ?? "",
+      missionId: row.missionId ?? null,
+      parentTaskPath: row.parentTaskPath ?? null,
+      stdoutPath: row.stdoutPath ?? "",
+      stderrPath: row.stderrPath ?? "",
+      rawResultPath: row.rawResultPath ?? "",
+      error: row.error ?? null,
+    };
+  }
+  return runs;
+}
+
+function normalizeStatus(status: ActivePrdRunRow["status"] | string): BackgroundRunState["status"] {
+  return status === "succeeded" || status === "failed" ? status : "running";
 }

@@ -16,11 +16,18 @@ import { LegacyRunsModal } from "./setup/LegacyRunsModal";
 import { useMissionPresenter } from "./useMissionPresenter";
 import { useMissionLedger } from "./useMissionLedger";
 import { getMissionSnapshot } from "../../services/missionControlBackend";
-import { runMissionClusters, runSingleCluster, writeMissionToTrellis } from "./actions/runMissionActions";
+import {
+  retryClusterFromRunDir,
+  runMissionClusters,
+  runSingleCluster,
+  writeMissionToTrellis,
+} from "./actions/runMissionActions";
 import { recordMissionPlanningMutation } from "../../services/missionControlBackend";
 import { useAgentAssignments } from "../../hooks/useAgentAssignments";
 import { useSplitterStream } from "./actions/splitterStreamListener";
+import { useMissionRunStore, type BackgroundRunState } from "./actions/useMissionRunStore";
 import type { MissionPrimaryCta } from "./presenter/types";
+import type { ClusterRunState } from "../PrdSplitWizard/types";
 import "./index.css";
 
 export interface MissionControlInitialTarget {
@@ -45,7 +52,8 @@ export function MissionControl({
 }: MissionControlProps) {
   const api = useSplitWizardState();
   const { message } = AntdApp.useApp();
-  const { stdout } = useSplitterStream();
+  const { progress, stdout } = useSplitterStream();
+  const { backgroundRuns } = useMissionRunStore();
   const projectId = api.state.project?.id ?? null;
   const { activeMission } = useMissionLedger({ projectId });
   const { assignments: missionAssignments } = useAgentAssignments({
@@ -143,6 +151,26 @@ export function MissionControl({
 
   useEffect(() => {
     const activeClusterIds = new Set(api.state.plan?.clusters.map((cluster) => cluster.id) ?? []);
+    if (activeClusterIds.size === 0) return;
+    const latestRuns = Object.values(backgroundRuns).sort((a, b) => b.startedAtMs - a.startedAtMs);
+    const seenClusterIds = new Set<string>();
+    for (const run of latestRuns) {
+      if (!activeClusterIds.has(run.clusterId)) continue;
+      if (seenClusterIds.has(run.clusterId)) continue;
+      seenClusterIds.add(run.clusterId);
+      const current = api.state.clusterRuns[run.clusterId];
+      if (!current) continue;
+      if (current.raw?.runId && (current.startedAt ?? 0) > run.startedAtMs) continue;
+      const recovered = backgroundRunToClusterRun(run, current);
+      if (clusterRunRecoveryKey(current) === clusterRunRecoveryKey(recovered)) {
+        continue;
+      }
+      api.setClusterRun(run.clusterId, recovered);
+    }
+  }, [api, api.state.clusterRuns, api.state.plan?.clusters, backgroundRuns]);
+
+  useEffect(() => {
+    const activeClusterIds = new Set(api.state.plan?.clusters.map((cluster) => cluster.id) ?? []);
     for (const assignment of missionAssignments) {
       if (assignment.status !== "stale" || !assignment.clusterId || !activeClusterIds.has(assignment.clusterId)) {
         continue;
@@ -168,6 +196,36 @@ export function MissionControl({
       });
     }
   }, [api, api.state.clusterRuns, api.state.plan?.clusters, missionAssignments]);
+
+  useEffect(() => {
+    for (const [clusterId, clusterProgress] of Object.entries(progress)) {
+      const run = api.state.clusterRuns[clusterId];
+      if (!run) continue;
+      if (run.raw && run.endedAt) {
+        continue;
+      }
+      const nextStatus =
+        clusterProgress.status === "succeeded" ? "succeeded"
+        : clusterProgress.status === "failed" ? "failed"
+        : clusterProgress.status === "running" ? "dispatching"
+        : clusterProgress.status === "skipped" ? "skipped-clean"
+        : run.status;
+      if (run.status === nextStatus && run.progress === clusterProgress) {
+        continue;
+      }
+      api.patchClusterRun(clusterId, {
+        status: nextStatus,
+        progress: clusterProgress,
+        errors: clusterProgress.error?.summary
+          ? uniqueMessages([...run.errors, clusterProgress.error.summary])
+          : run.errors,
+        endedAt:
+          clusterProgress.status === "succeeded" || clusterProgress.status === "failed"
+            ? run.endedAt ?? Date.now()
+            : run.endedAt,
+      });
+    }
+  }, [api, api.state.clusterRuns, progress]);
 
   const handlePrimaryCta = useCallback(
     async (cta: MissionPrimaryCta) => {
@@ -292,6 +350,18 @@ export function MissionControl({
       setBusy(true);
       try {
         await runSingleCluster(cluster, api.state, api, api.state.activeMissionId);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [api],
+  );
+
+  const handleRetryClusterFromRunDir = useCallback(
+    async (runId: string, clusterId: string) => {
+      setBusy(true);
+      try {
+        await retryClusterFromRunDir(runId, clusterId, api.state, api, api.state.activeMissionId);
       } finally {
         setBusy(false);
       }
@@ -446,6 +516,7 @@ export function MissionControl({
           return id;
         }}
         onOpenPrdAnchor={() => setPrdAnchorOpen(true)}
+        onRetryFromRunDir={handleRetryClusterFromRunDir}
       />
       <LegacyRunsModal
         open={legacyImportOpen}
@@ -464,6 +535,64 @@ export function MissionControl({
       />
     </div>
   );
+}
+
+function backgroundRunToClusterRun(run: BackgroundRunState, current: ClusterRunState): ClusterRunState {
+  const status: ClusterRunState["status"] =
+    run.status === "succeeded" ? "succeeded"
+    : run.status === "failed" ? "failed"
+    : "dispatching";
+  const errorSummary = run.error
+    || (run.status === "failed" ? "PRD split run failed or became stale before Mission Control reopened" : null);
+  return {
+    ...current,
+    clusterId: run.clusterId,
+    parentTaskPath: current.parentTaskPath ?? run.parentTaskPath,
+    status,
+    raw: {
+      runId: run.runId,
+      runDir: run.runDir,
+      exitCode: run.exitCode ?? (run.status === "failed" ? -1 : 0),
+      durationMs: 0,
+      stdoutPath: run.stdoutPath,
+      stderrPath: run.stderrPath,
+      rawResultPath: run.rawResultPath,
+      rawOutput: null,
+      stdoutTruncatedPreview: run.stdoutTail,
+      claudeSessionId: null,
+    },
+    errors: errorSummary ? uniqueMessages([...current.errors, errorSummary]) : current.errors,
+    startedAt: current.startedAt ?? run.startedAtMs,
+    endedAt: run.status === "running" ? current.endedAt : current.endedAt ?? Date.now(),
+    progress: {
+      status: run.status === "running" ? "running" : run.status,
+      progressPercent: run.status === "succeeded" ? 100 : run.status === "running" ? 50 : 0,
+      stageLabel:
+        run.status === "succeeded" ? "后台拆分已完成"
+        : run.status === "failed" ? "后台拆分失败，可从 runDir 重试"
+        : "后台拆分运行中…",
+      elapsedMs: Math.max(0, Date.now() - run.startedAtMs),
+      error: errorSummary
+        ? {
+          summary: errorSummary,
+          exitCode: run.exitCode,
+          stdoutPath: run.stdoutPath,
+          stderrPath: run.stderrPath,
+        }
+        : null,
+    },
+  };
+}
+
+function clusterRunRecoveryKey(run: ClusterRunState): string {
+  return JSON.stringify({
+    status: run.status,
+    rawRunId: run.raw?.runId ?? null,
+    rawRunDir: run.raw?.runDir ?? null,
+    startedAt: run.startedAt ?? null,
+    endedAt: run.endedAt ?? null,
+    error: run.progress?.error?.summary ?? null,
+  });
 }
 
 function uniqueMessages(messages: string[]): string[] {
