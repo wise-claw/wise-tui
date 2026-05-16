@@ -5,11 +5,14 @@ import {
 import { COPY } from "../copy";
 import type { EngineeringDetailsVM } from "../presenter/types";
 import { ClusterDetailsCard } from "./ClusterDetailsCard";
+import { WorkflowGraphPanel } from "./WorkflowGraphPanel";
 
 interface EngineeringDrawerProps {
   open: boolean;
   details: EngineeringDetailsVM;
   projectId: string | null;
+  rootPath?: string | null;
+  selectedSpecFilePath?: string | null;
   reuseExistingParents: boolean;
   dispatchOnlyDirty: boolean;
   onReuseExistingParentsChange: (value: boolean) => void;
@@ -22,6 +25,8 @@ export function EngineeringDrawer({
   open,
   details,
   projectId,
+  rootPath,
+  selectedSpecFilePath,
   reuseExistingParents,
   dispatchOnlyDirty,
   onReuseExistingParentsChange,
@@ -52,6 +57,18 @@ export function EngineeringDrawer({
                   ))
                 )}
               </Space>
+            ),
+          },
+          {
+            key: "workflow",
+            label: "Workflow",
+            children: (
+              <WorkflowGraphPanel
+                projectId={projectId}
+                rootPath={rootPath}
+                selectedFilePath={selectedSpecFilePath}
+                enabled={open}
+              />
             ),
           },
           {

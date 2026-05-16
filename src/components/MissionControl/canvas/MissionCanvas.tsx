@@ -38,6 +38,7 @@ interface MissionCanvasProps {
   onBackToOverview?: () => void;
   onOpenLegacyImport: () => void;
   missionId?: string | null;
+  onSpecRevisionSelect?: (filePath: string | null) => void;
 }
 
 export function MissionCanvas({
@@ -59,6 +60,7 @@ export function MissionCanvas({
   onBackToOverview,
   onOpenLegacyImport,
   missionId,
+  onSpecRevisionSelect,
 }: MissionCanvasProps) {
   const isDrafting = viewModel.phase === "drafting";
   const hasRequirements = viewModel.requirementTree.length > 0;
@@ -205,7 +207,7 @@ export function MissionCanvas({
         />
         <AgentOwnershipGraph graph={agentGraph} />
         <RuntimeEventFeed rootPath={projectRootPath} projectId={api.state.project?.id ?? null} />
-        <SpecRevisionTimeline rootPath={projectRootPath} />
+        <SpecRevisionTimeline rootPath={projectRootPath} onSelectFilePath={onSpecRevisionSelect} />
         <OnboardingChecklist rootPath={projectRootPath} />
         <WorkspaceSnapshotViewer rootPath={projectRootPath} />
         <MissionReplayPanel missionId={missionId ?? null} />

@@ -19,8 +19,8 @@
 
 ## Acceptance
 
-- [ ] EngineeringDrawer 出现 "Workflow" tab，渲染当前项目的 phase / step 列表。
-- [ ] validation_issues 显示为 badge。
-- [ ] 选中 spec revision 时对应 step 高亮。
-- [ ] command 失败时显示空状态与重试按钮，不崩溃。
-- [ ] `bun test src/components/MissionControl/engineering` + `bunx tsc --noEmit` 通过。
+- [x] EngineeringDrawer 出现 "Workflow" tab，渲染当前项目的 phase / step 列表。
+- [x] validation_issues 显示为 badge。
+- [x] 选中 spec revision 时对应 step 高亮。
+- [x] command 失败时显示空状态与重试按钮，不崩溃。
+- [x] `bun test src/components/MissionControl/engineering` + `bunx tsc --noEmit` 通过。

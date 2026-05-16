@@ -867,6 +867,64 @@
   word-break: break-word;
 }
 
+/* ── Workflow graph panel ── */
+
+.mission-workflow-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mission-workflow-panel__header,
+.mission-workflow-panel__platforms {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.mission-workflow-panel__path.ant-typography {
+  margin: 2px 0 0;
+  color: var(--mission-muted);
+  font-size: 11px;
+}
+
+.mission-workflow-panel__loading,
+.mission-workflow-panel__empty {
+  padding: 18px;
+  text-align: center;
+}
+
+.mission-workflow-panel__steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mission-workflow-step {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid var(--mission-border);
+  border-radius: 8px;
+  background: var(--mission-surface);
+}
+
+.mission-workflow-step--highlighted {
+  border-color: var(--mission-accent-border);
+  background: var(--mission-accent-soft);
+  box-shadow: 0 0 0 1px var(--mission-accent-border);
+}
+
+.mission-workflow-step__main {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
 /* ── Agent summary (legacy) ── */
 
 .mission-agent-summary {

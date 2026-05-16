@@ -103,6 +103,16 @@ mock.module("../../../services/missionControlBackend", () => ({
   upsertMissionAgentAssignment,
 }));
 mock.module("../../../services/trellisRuntime", () => ({
+  compileTrellisWorkflow: mock(async () => ({
+    projectId: "p1",
+    rootPath: "/repo",
+    workflowPath: "/repo/.trellis/workflow.md",
+    phases: [],
+    workflowStates: [],
+    platformBlocks: [],
+    validationIssues: [],
+    compiledAt: 1,
+  })),
   trellisAgentHeartbeat,
   trellisRuntimeRecordEventSafe,
   trellisRuntimeUpsertAgentRunSafe,

@@ -90,6 +90,7 @@ export function MissionControl({
   const [legacyImportOpen, setLegacyImportOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [workspaceMode, setWorkspaceMode] = useState<"overview" | "editor">("overview");
+  const [selectedSpecFilePath, setSelectedSpecFilePath] = useState<string | null>(null);
   const appliedInitialKeyRef = useRef<string | null>(null);
 
   const initialKey = useMemo(
@@ -462,11 +463,14 @@ export function MissionControl({
         onBackToOverview={handleBackToOverview}
         onOpenLegacyImport={() => setLegacyImportOpen(true)}
         missionId={activeMission?.missionId ?? null}
+        onSpecRevisionSelect={setSelectedSpecFilePath}
       />
       <EngineeringDrawer
         open={engineeringOpen}
         details={viewModel.engineering}
         projectId={api.state.context?.mode === "project" ? api.state.project?.id ?? null : null}
+        rootPath={api.state.project?.rootPath ?? null}
+        selectedSpecFilePath={selectedSpecFilePath}
         reuseExistingParents={api.state.reuseExistingParents}
         dispatchOnlyDirty={api.state.dispatchOnlyDirty}
         onReuseExistingParentsChange={api.setReuseExistingParents}

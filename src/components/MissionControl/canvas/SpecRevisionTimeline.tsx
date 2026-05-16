@@ -10,14 +10,22 @@ interface SpecRevisionTimelineProps {
   rootPath?: string | null;
   filePath?: string | null;
   limit?: number;
+  onSelectFilePath?: (filePath: string | null) => void;
 }
 
-export function SpecRevisionTimeline({ rootPath, filePath, limit = 20 }: SpecRevisionTimelineProps) {
+export function SpecRevisionTimeline({
+  rootPath,
+  filePath,
+  limit = 20,
+  onSelectFilePath,
+}: SpecRevisionTimelineProps) {
   const [revisions, setRevisions] = useState<TrellisSpecRevision[]>([]);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<TrellisSpecRevision | null>(null);
 
   useEffect(() => {
+    setSelected(null);
+    onSelectFilePath?.(null);
     if (!rootPath) { setRevisions([]); return; }
     let cancelled = false;
     setLoading(true);
@@ -26,7 +34,7 @@ export function SpecRevisionTimeline({ rootPath, filePath, limit = 20 }: SpecRev
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [rootPath, filePath, limit]);
+  }, [rootPath, filePath, limit, onSelectFilePath]);
 
   if (!rootPath) return null;
 
@@ -57,7 +65,11 @@ export function SpecRevisionTimeline({ rootPath, filePath, limit = 20 }: SpecRev
                   <button
                     type="button"
                     className={`spec-timeline-entry ${selected?.revisionId === rev.revisionId ? "spec-timeline-entry--active" : ""}`}
-                    onClick={() => setSelected(selected?.revisionId === rev.revisionId ? null : rev)}
+                    onClick={() => {
+                      const next = selected?.revisionId === rev.revisionId ? null : rev;
+                      setSelected(next);
+                      onSelectFilePath?.(next?.filePath ?? null);
+                    }}
                   >
                     <div className="spec-timeline-entry__head">
                       <span className="spec-timeline-entry__file">{rev.filePath.split("/").pop()}</span>
