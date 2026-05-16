@@ -252,7 +252,7 @@ export function MissionControl({
       if (!cluster) return;
       setBusy(true);
       try {
-        await runSingleCluster(cluster, api.state, api);
+        await runSingleCluster(cluster, api.state, api, api.state.activeMissionId);
       } finally {
         setBusy(false);
       }

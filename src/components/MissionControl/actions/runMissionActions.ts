@@ -22,6 +22,11 @@ import {
   type MissionSnapshotRecord,
 } from "../../../services/missionControlBackend";
 import { WORKFLOW_UI_EVENT_WORKFLOW_GRAPH_CHANGED } from "../../../constants/workflowUiEvents";
+import {
+  trellisRuntimeRecordEventSafe,
+  trellisRuntimeUpsertAgentRunSafe,
+  type TrellisAgentRunInput,
+} from "../../../services/trellisRuntime";
 import { applyEditsToSplitResult } from "../../PrdSplitWizard/taskEdits";
 import type { UseSplitWizardStateApi } from "../../PrdSplitWizard/useSplitWizardState";
 import type { ClusterRunState, WizardWorkflowGraphResult, WizardWriteResult } from "../../PrdSplitWizard/types";
@@ -36,6 +41,7 @@ export async function runMissionClusters(api: UseSplitWizardStateApi): Promise<v
   }, undefined, {
     stage: "dispatch",
   });
+  api.setActiveMissionId(mission?.missionId ?? null);
   const settled = await Promise.allSettled(
     state.plan.clusters.map((cluster) => runSingleCluster(cluster, state, api, mission?.missionId)),
   );
@@ -51,6 +57,7 @@ export async function runMissionClusters(api: UseSplitWizardStateApi): Promise<v
   }, mission?.missionId, {
     stage: "review",
     clusterRuns: completedRuns,
+    activeMissionId: mission?.missionId ?? null,
   });
 }
 
@@ -89,18 +96,29 @@ export async function runSingleCluster(
   };
   api.setClusterRun(cluster.id, runStart);
   const assignmentId = missionId ? missionAssignmentId(missionId, cluster.id, "splitter") : null;
+  const repositoryPath = resolveClusterRepositoryPath(cluster, state.repositories);
+  const assignmentMetadata = {
+    clusterTitle: cluster.title,
+    requirementIds: cluster.requirementIds,
+  };
   await upsertMissionAgentAssignmentSafe(missionId, {
     assignmentId,
+    agentRunId: assignmentId,
     clusterId: cluster.id,
     repositoryId: cluster.primaryRepositoryId,
-    repositoryPath: resolveClusterRepositoryPath(cluster, state.repositories),
+    repositoryPath,
     agentType: "trellis-splitter",
     stage: "split",
     status: "running",
-    metadata: {
-      clusterTitle: cluster.title,
-      requirementIds: cluster.requirementIds,
-    },
+    metadata: assignmentMetadata,
+  });
+  await upsertSplitterAgentRunSafe(missionId, state, {
+    agentRunId: assignmentId,
+    cluster,
+    repositoryPath,
+    status: "running",
+    metadata: assignmentMetadata,
+    startedAt: runStart.startedAt,
   });
   await appendMissionEventSafe(missionId, "mission.cluster.dispatch_started", {
     clusterId: cluster.id,
@@ -178,6 +196,26 @@ export async function runSingleCluster(
         error: errorMessage,
         phase: "create-parent",
       });
+      await upsertSplitterAgentRunSafe(missionId, state, {
+        agentRunId: assignmentId,
+        cluster,
+        repositoryPath,
+        status: "failed",
+        taskPath: null,
+        metadata: {
+          ...assignmentMetadata,
+          error: errorMessage,
+          phase: "create-parent",
+        },
+        startedAt: runStart.startedAt,
+        completedAt: failedRun.endedAt,
+      });
+      await recordSplitterTerminalRuntimeEventSafe(missionId, state, assignmentId, {
+        clusterId: cluster.id,
+        status: "failed",
+        error: errorMessage,
+        phase: "create-parent",
+      });
       await appendMissionEventSafe(missionId, "mission.cluster.failed", {
         clusterId: cluster.id,
         error: errorMessage,
@@ -224,18 +262,45 @@ export async function runSingleCluster(
       endedAt: Date.now(),
     };
     api.patchClusterRun(cluster.id, finalRun);
+    const terminalStatus = result.normalized && result.errors.length === 0 ? "succeeded" : "failed";
+    const terminalMetadata = {
+      ...assignmentMetadata,
+      clusterId: cluster.id,
+      status: terminalStatus,
+      parentTaskName,
+      parentTaskPath,
+      taskCount: result.normalized?.splitTasks.length ?? 0,
+      validationIssueCount: result.validationIssues.length,
+      errorCount: result.errors.length,
+      exitCode: result.raw?.exitCode ?? null,
+      stdoutPath: result.raw?.stdoutPath ?? null,
+      stderrPath: result.raw?.stderrPath ?? null,
+      runDir: result.raw?.runDir ?? null,
+      rawResultPath: result.raw?.rawResultPath ?? null,
+    };
     await completeMissionAgentAssignmentSafe(
       assignmentId,
-      result.normalized && result.errors.length === 0 ? "succeeded" : "failed",
+      terminalStatus,
       {
-        clusterId: cluster.id,
-        parentTaskName,
-        parentTaskPath,
-        taskCount: result.normalized?.splitTasks.length ?? 0,
-        validationIssueCount: result.validationIssues.length,
-        errorCount: result.errors.length,
+        clusterId: terminalMetadata.clusterId,
+        parentTaskName: terminalMetadata.parentTaskName,
+        parentTaskPath: terminalMetadata.parentTaskPath,
+        taskCount: terminalMetadata.taskCount,
+        validationIssueCount: terminalMetadata.validationIssueCount,
+        errorCount: terminalMetadata.errorCount,
       },
     );
+    await upsertSplitterAgentRunSafe(missionId, state, {
+      agentRunId: assignmentId,
+      cluster,
+      repositoryPath,
+      status: terminalStatus,
+      taskPath: parentTaskPath,
+      metadata: terminalMetadata,
+      startedAt: runStart.startedAt,
+      completedAt: finalRun.endedAt,
+    });
+    await recordSplitterTerminalRuntimeEventSafe(missionId, state, assignmentId, terminalMetadata);
     await appendMissionEventSafe(missionId, "mission.cluster.dispatch_completed", {
       clusterId: cluster.id,
       parentTaskName,
@@ -260,6 +325,31 @@ export async function runSingleCluster(
     api.patchClusterRun(cluster.id, failedRun);
     await completeMissionAgentAssignmentSafe(assignmentId, "failed", {
       clusterId: cluster.id,
+      error: errorMessage,
+      phase: "dispatch",
+    });
+    await upsertSplitterAgentRunSafe(missionId, state, {
+      agentRunId: assignmentId,
+      cluster,
+      repositoryPath,
+      status: "failed",
+      taskPath: parentTaskPath,
+      metadata: {
+        ...assignmentMetadata,
+        clusterId: cluster.id,
+        parentTaskName,
+        parentTaskPath,
+        error: errorMessage,
+        phase: "dispatch",
+      },
+      startedAt: runStart.startedAt,
+      completedAt: failedRun.endedAt,
+    });
+    await recordSplitterTerminalRuntimeEventSafe(missionId, state, assignmentId, {
+      clusterId: cluster.id,
+      parentTaskName,
+      parentTaskPath,
+      status: "failed",
       error: errorMessage,
       phase: "dispatch",
     });
@@ -549,6 +639,7 @@ function buildMissionSnapshot(
     clusterPlanEdits: state.clusterPlanEdits,
     selectedRepositoryIds: state.selectedRepositoryIds,
     clusterRuns: state.clusterRuns,
+    activeMissionId: state.activeMissionId,
     context: state.context,
     writeResults: state.writeResults,
     workflowGraphResult: state.workflowGraphResult,
@@ -606,10 +697,72 @@ async function appendMissionEventSafe(
   }
 }
 
+async function upsertSplitterAgentRunSafe(
+  missionId: string | null | undefined,
+  state: UseSplitWizardStateApi["state"],
+  input: {
+    agentRunId: string | null;
+    cluster: ClusterPlanItem;
+    repositoryPath: string | null;
+    status: string;
+    taskPath?: string | null;
+    metadata: Record<string, unknown>;
+    startedAt?: number;
+    completedAt?: number;
+  },
+): Promise<void> {
+  if (!missionId || !input.agentRunId || !state.project) return;
+  const payload: TrellisAgentRunInput = {
+    agentRunId: input.agentRunId,
+    projectId: state.project.id,
+    rootPath: state.project.rootPath,
+    taskPath: input.taskPath ?? null,
+    repositoryId: input.cluster.primaryRepositoryId,
+    repositoryPath: input.repositoryPath,
+    agentType: "trellis-splitter",
+    stage: "split",
+    status: input.status,
+    startedAt: input.startedAt ?? null,
+    metadata: {
+      missionId,
+      clusterId: input.cluster.id,
+      ...input.metadata,
+    },
+  };
+  if (input.completedAt != null) {
+    payload.lastHeartbeatAt = input.completedAt;
+    payload.metadata = { ...payload.metadata, completedAt: input.completedAt };
+  }
+  await trellisRuntimeUpsertAgentRunSafe(missionId, payload);
+}
+
+async function recordSplitterTerminalRuntimeEventSafe(
+  missionId: string | null | undefined,
+  state: UseSplitWizardStateApi["state"],
+  agentRunId: string | null,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  if (!missionId || !agentRunId || !state.project) return;
+  await trellisRuntimeRecordEventSafe({
+    projectId: state.project.id,
+    rootPath: state.project.rootPath,
+    eventKind: "trellis.agent.completed",
+    platform: "wise",
+    actor: "trellis-splitter",
+    correlationId: agentRunId,
+    payload: {
+      missionId,
+      agentRunId,
+      ...payload,
+    },
+  });
+}
+
 async function upsertMissionAgentAssignmentSafe(
   missionId: string | null | undefined,
   input: {
     assignmentId: string | null;
+    agentRunId?: string | null;
     clusterId: string;
     repositoryId: number | null;
     repositoryPath: string | null;
@@ -623,6 +776,7 @@ async function upsertMissionAgentAssignmentSafe(
   try {
     await upsertMissionAgentAssignment({
       assignmentId: input.assignmentId,
+      agentRunId: input.agentRunId ?? input.assignmentId,
       missionId,
       clusterId: input.clusterId,
       repositoryId: input.repositoryId,

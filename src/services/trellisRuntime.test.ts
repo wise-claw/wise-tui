@@ -10,7 +10,7 @@ describe("trellisRuntime service", () => {
   });
 
   test("wraps runtime event record and list commands", async () => {
-    const { listTrellisRuntimeEvents, recordTrellisRuntimeEvent } = await import("./trellisRuntime");
+    const { listTrellisRuntimeEvents, recordTrellisRuntimeEvent, trellisRuntimeRecordEventSafe } = await import("./trellisRuntime");
 
     await recordTrellisRuntimeEvent({
       projectId: "p1",
@@ -22,6 +22,18 @@ describe("trellisRuntime service", () => {
       projectId: "p1",
       eventKind: "trellis.hook.completed",
       limit: 20,
+    });
+    await trellisRuntimeRecordEventSafe({
+      projectId: "p1",
+      rootPath: "/work/project",
+      eventKind: "trellis.agent.completed",
+      correlationId: "a1",
+      payload: { status: "succeeded" },
+    });
+    await trellisRuntimeRecordEventSafe({
+      rootPath: "",
+      eventKind: "trellis.agent.completed",
+      payload: {},
     });
 
     expect(invoke).toHaveBeenCalledWith("trellis_runtime_record_event", {
@@ -39,6 +51,16 @@ describe("trellisRuntime service", () => {
         limit: 20,
       },
     });
+    expect(invoke).toHaveBeenCalledWith("trellis_runtime_record_event", {
+      input: {
+        projectId: "p1",
+        rootPath: "/work/project",
+        eventKind: "trellis.agent.completed",
+        correlationId: "a1",
+        payload: { status: "succeeded" },
+      },
+    });
+    expect(invoke).toHaveBeenCalledTimes(3);
   });
 
   test("wraps workflow, lifecycle, agent, spec, onboarding, replay, and snapshot commands", async () => {
@@ -52,6 +74,7 @@ describe("trellisRuntime service", () => {
       listTrellisSpecRevisions,
       recordTrellisSpecRevision,
       runTrellisTaskLifecycle,
+      trellisRuntimeUpsertAgentRunSafe,
       upsertTrellisAgentRun,
     } = await import("./trellisRuntime");
 
@@ -62,6 +85,19 @@ describe("trellisRuntime service", () => {
       projectId: "p1",
       rootPath: "/work/project",
       agentType: "trellis-implement",
+      status: "running",
+    });
+    await trellisRuntimeUpsertAgentRunSafe("m1", {
+      agentRunId: "a2",
+      projectId: "p1",
+      rootPath: "/work/project",
+      agentType: "trellis-splitter",
+      status: "succeeded",
+    });
+    await trellisRuntimeUpsertAgentRunSafe(null, {
+      agentRunId: "a3",
+      rootPath: "/work/project",
+      agentType: "trellis-splitter",
       status: "running",
     });
     await getTrellisAgentOwnershipGraph({ projectId: "p1", includeCompleted: false });
@@ -90,6 +126,15 @@ describe("trellisRuntime service", () => {
         rootPath: "/work/project",
         agentType: "trellis-implement",
         status: "running",
+      },
+    });
+    expect(invoke).toHaveBeenCalledWith("trellis_runtime_upsert_agent_run", {
+      input: {
+        agentRunId: "a2",
+        projectId: "p1",
+        rootPath: "/work/project",
+        agentType: "trellis-splitter",
+        status: "succeeded",
       },
     });
     expect(invoke).toHaveBeenCalledWith("trellis_runtime_get_agent_ownership_graph", {

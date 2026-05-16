@@ -236,6 +236,28 @@ describe("reducer · back-to-input", () => {
   });
 });
 
+describe("reducer · active mission id", () => {
+  test("stores and clears the active Mission id independently of PRD state", () => {
+    let state = reducer(emptyWizardState(), { type: "set-active-mission-id", missionId: "mission-1" });
+    expect(state.activeMissionId).toBe("mission-1");
+
+    state = reducer(state, { type: "set-active-mission-id", missionId: null });
+    expect(state.activeMissionId).toBeNull();
+  });
+
+  test("reset clears the active Mission id", () => {
+    const state = reducer(emptyWizardState(), { type: "set-active-mission-id", missionId: "mission-1" });
+    const next = reducer(state, {
+      type: "reset",
+      project: { id: "p", name: "P", rootPath: "/tmp/p" },
+      repositories: [],
+      selectedRepositoryIds: [],
+      context: null,
+    });
+    expect(next.activeMissionId).toBeNull();
+  });
+});
+
 describe("reducer · workflow graph result", () => {
   test("begin-write clears stale workflow graph result", () => {
     const state: WizardState = {

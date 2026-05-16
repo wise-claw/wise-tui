@@ -307,6 +307,18 @@ export function recordTrellisRuntimeEvent(
   return invoke<TrellisRuntimeEvent>("trellis_runtime_record_event", { input });
 }
 
+export async function trellisRuntimeRecordEventSafe(
+  input: TrellisRuntimeRecordEventInput | null | undefined,
+): Promise<TrellisRuntimeEvent | null> {
+  if (!input?.rootPath?.trim() || !input.eventKind?.trim()) return null;
+  try {
+    return await recordTrellisRuntimeEvent(input);
+  } catch (error) {
+    console.warn("[trellisRuntime] failed to record runtime event", error);
+    return null;
+  }
+}
+
 export function listTrellisRuntimeEvents(
   input: TrellisRuntimeListEventsInput,
 ): Promise<TrellisRuntimeEvent[]> {
@@ -329,6 +341,21 @@ export function runTrellisTaskLifecycle(
 
 export function upsertTrellisAgentRun(input: TrellisAgentRunInput): Promise<TrellisAgentRun> {
   return invoke<TrellisAgentRun>("trellis_runtime_upsert_agent_run", { input });
+}
+
+export async function trellisRuntimeUpsertAgentRunSafe(
+  missionId: string | null | undefined,
+  input: TrellisAgentRunInput | null | undefined,
+): Promise<TrellisAgentRun | null> {
+  if (!missionId?.trim() || !input?.rootPath?.trim() || !input.agentRunId?.trim() || !input.agentType?.trim()) {
+    return null;
+  }
+  try {
+    return await upsertTrellisAgentRun(input);
+  } catch (error) {
+    console.warn("[trellisRuntime] failed to upsert agent run", error);
+    return null;
+  }
 }
 
 export function getTrellisAgentOwnershipGraph(

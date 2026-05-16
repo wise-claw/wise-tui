@@ -40,6 +40,7 @@ import {
 
 export type Action =
   | { type: "reset"; project: ProjectRef | null; repositories: PlannerRepo[]; selectedRepositoryIds: number[]; context: TaskSplitContext | null }
+  | { type: "set-active-mission-id"; missionId: string | null }
   | { type: "set-project"; project: ProjectRef | null; repositories: PlannerRepo[] }
   | { type: "set-selected-repos"; ids: number[] }
   | { type: "set-prd-markdown"; markdown: string }
@@ -85,6 +86,8 @@ export function reducer(state: WizardState, action: Action): WizardState {
         selectedRepositoryIds: action.selectedRepositoryIds,
         context: action.context,
       };
+    case "set-active-mission-id":
+      return { ...state, activeMissionId: action.missionId };
     case "set-project":
       return { ...state, project: action.project, repositories: action.repositories, selectedRepositoryIds: action.repositories.map((r) => r.id) };
     case "set-selected-repos":
@@ -424,6 +427,7 @@ export function resolveWizardPlannerOptions(
 export interface UseSplitWizardStateApi {
   state: WizardState;
   reset(project: ProjectRef | null, repositories: PlannerRepo[], context: TaskSplitContext | null): void;
+  setActiveMissionId(missionId: string | null): void;
   setProject(project: ProjectRef | null, repositories: PlannerRepo[]): void;
   setSelectedRepos(ids: number[]): void;
   setPrdMarkdown(markdown: string): void;
@@ -565,6 +569,7 @@ export function useSplitWizardState(): UseSplitWizardStateApi {
           selectedRepositoryIds: repositories.map((r) => r.id),
           context,
         }),
+      setActiveMissionId: (missionId) => dispatch({ type: "set-active-mission-id", missionId }),
       setProject: (project, repositories) => dispatch({ type: "set-project", project, repositories }),
       setSelectedRepos: (ids) => dispatch({ type: "set-selected-repos", ids }),
       setPrdMarkdown: (markdown) => dispatch({ type: "set-prd-markdown", markdown }),
