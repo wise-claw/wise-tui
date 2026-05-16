@@ -47,6 +47,7 @@ export interface PrdMarkdownEditorProps {
   onResolvedTaskAnchorIdsChange?: (taskIds: string[]) => void;
   onTaskAnchorRangesChange?: (ranges: Record<string, AnchorRange>) => void;
   onToolbarSplitSelection?: () => void;
+  blockEdit?: boolean;
   /** 仅控制外层容器的最小高度；不会写入 markdown。 */
   minHeight?: number;
 }
@@ -94,6 +95,7 @@ export const PrdMarkdownEditor = forwardRef<MilkdownEditorHandle, PrdMarkdownEdi
       onResolvedTaskAnchorIdsChange,
       onTaskAnchorRangesChange,
       onToolbarSplitSelection,
+      blockEdit = true,
       minHeight,
     } = props;
 
@@ -184,6 +186,7 @@ export const PrdMarkdownEditor = forwardRef<MilkdownEditorHandle, PrdMarkdownEdi
           onResolvedTaskAnchorIdsChange={onResolvedTaskAnchorIdsChange}
           onTaskAnchorRangesChange={onTaskAnchorRangesChange}
           onToolbarSplitSelection={onToolbarSplitSelection}
+          blockEdit={blockEdit}
         />
       </div>
     );

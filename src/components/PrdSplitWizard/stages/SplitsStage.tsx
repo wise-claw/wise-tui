@@ -280,6 +280,20 @@ async function runCluster(
       validationIssues: result.validationIssues,
       errors: result.errors,
       endedAt: Date.now(),
+      progress: {
+        status: status === "succeeded" ? "succeeded" : "failed",
+        progressPercent: status === "succeeded" ? 100 : 0,
+        stageLabel: status === "succeeded" ? "完成" : result.errors[0] ?? "失败",
+        elapsedMs: Date.now() - (runStart.startedAt ?? Date.now()),
+        error: status === "succeeded"
+          ? null
+          : {
+            summary: result.errors[0] ?? "任务生成失败",
+            exitCode: result.raw?.exitCode ?? null,
+            stdoutPath: result.raw?.stdoutPath ?? "",
+            stderrPath: result.raw?.stderrPath ?? "",
+          },
+      },
     });
     } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

@@ -33,6 +33,7 @@ export interface TrellisRequirementWorkspaceInput {
   projectRootPath?: string | null;
   projectRepositoryPaths?: string[];
   floatingRepositoryPaths?: string[];
+  includeArchived?: boolean;
 }
 
 export interface TrellisRequirementWorkspaceSource {
@@ -44,6 +45,7 @@ export interface TrellisRequirementWorkspaceSource {
 }
 
 export interface TrellisRequirementTaskRow extends TrellisTaskSummary {
+  archived: boolean;
   rootPath: string;
   sourceKind: "project" | "projectRepository" | "floatingRepository" | string;
   repositoryId: number | null;
@@ -56,6 +58,7 @@ export interface TrellisRequirementPrdRow {
   dir: string;
   title: string;
   status: string;
+  archived: boolean;
   parent?: string | null;
   rootPath: string;
   sourceKind: "project" | "projectRepository" | "floatingRepository" | string;
@@ -84,6 +87,7 @@ export async function listTrellisRequirementWorkspace(
       projectRootPath: input.projectRootPath ?? null,
       projectRepositoryPaths: input.projectRepositoryPaths ?? [],
       floatingRepositoryPaths: input.floatingRepositoryPaths ?? [],
+      includeArchived: input.includeArchived ?? true,
     },
   });
 }
@@ -113,6 +117,7 @@ export function buildProjectRequirementWorkspaceInput(input: {
     projectRootPath: input.project.rootPath ?? null,
     projectRepositoryPaths,
     floatingRepositoryPaths,
+    includeArchived: true,
   };
 }
 

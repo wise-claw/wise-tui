@@ -71,6 +71,7 @@ describe("trellisRuntime service", () => {
       getTrellisAgentOwnershipGraph,
       getTrellisOnboardingState,
       getTrellisReplay,
+      ingestExternalClaudeCliSessions,
       listTrellisSpecRevisions,
       recordTrellisSpecRevision,
       runTrellisTaskLifecycle,
@@ -114,6 +115,12 @@ describe("trellisRuntime service", () => {
     await getTrellisReplay({ projectId: "p1", taskPath: ".trellis/tasks/05-16-task" });
     await captureTrellisWorkspaceSnapshot({ projectId: "p1", rootPath: "/work/project", source: "manual" });
     await diffTrellisWorkspaceSnapshots({ beforeSnapshotId: "s1", afterSnapshotId: "s2" });
+    await ingestExternalClaudeCliSessions({
+      projectId: "p1",
+      rootPath: "/work/project",
+      missionId: "m1",
+      maxSessions: 5,
+    });
 
     expect(invoke).toHaveBeenCalledWith("trellis_runtime_compile_workflow", {
       input: { projectId: "p1", rootPath: "/work/project" },
@@ -167,6 +174,14 @@ describe("trellisRuntime service", () => {
     });
     expect(invoke).toHaveBeenCalledWith("trellis_runtime_diff_workspace_snapshots", {
       input: { beforeSnapshotId: "s1", afterSnapshotId: "s2" },
+    });
+    expect(invoke).toHaveBeenCalledWith("ingest_external_claude_cli_sessions", {
+      input: {
+        projectId: "p1",
+        rootPath: "/work/project",
+        missionId: "m1",
+        maxSessions: 5,
+      },
     });
   });
 });

@@ -39,6 +39,24 @@ describe("composeSplitterPrompt", () => {
     expect(prompt).toContain("- `OUTPUT_SCHEMA.json`");
     expect(prompt).toContain("exactly one top-level JSON object");
   });
+
+  test("embeds bundle contents and forbids tool calls", () => {
+    const prompt = composeSplitterPrompt({
+      parentTaskPath: ".trellis/tasks/05-13-parent",
+      cluster,
+      bundleFileNames: ["prd.md", "cluster.json"],
+      bundle: {
+        "prd.md": "# Feature\n\nBuild selected UI",
+        "cluster.json": JSON.stringify({ id: "cluster-fe-1" }),
+      },
+    });
+
+    expect(prompt).toContain("Do not call tools");
+    expect(prompt).toContain("## Embedded input bundle");
+    expect(prompt).toContain("### prd.md");
+    expect(prompt).toContain("# Feature");
+    expect(prompt).toContain("final assistant response must be the JSON object itself");
+  });
 });
 
 describe("dispatchClusterSplit", () => {
@@ -174,7 +192,6 @@ describe("dispatchClusterSplit", () => {
     expect(result.errors.join("\n")).toContain("stdout: /tmp/run-2/claude.stdout.log");
   });
 });
-
 
 describe("retryClusterFromRunDir", () => {
   test("wraps the retry Tauri command", async () => {

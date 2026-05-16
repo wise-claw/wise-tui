@@ -33,4 +33,23 @@ describe("composeVerifierPrompt", () => {
     expect(prompt).toContain("`previous-output.json`");
     expect(prompt).toContain("task-<n>-v2");
   });
+
+  test("embeds bundle contents and forbids tool calls", () => {
+    const prompt = composeVerifierPrompt({
+      parentTaskPath: ".trellis/tasks/05-13-parent",
+      cluster,
+      issueCount: 1,
+      bundleFileNames: ["validation-issues.json", "previous-output.json"],
+      bundle: {
+        "validation-issues.json": JSON.stringify([{ path: "$.tasks", message: "bad" }]),
+        "previous-output.json": JSON.stringify({ tasks: [] }),
+      },
+    });
+
+    expect(prompt).toContain("不要调用工具");
+    expect(prompt).toContain("## Embedded input bundle");
+    expect(prompt).toContain("### validation-issues.json");
+    expect(prompt).toContain("previous-output.json");
+    expect(prompt).toContain("最终回复必须是 JSON 对象本身");
+  });
 });

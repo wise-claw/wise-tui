@@ -129,12 +129,28 @@ export interface TeamMonitorItem {
 
 export interface RepositoryMemberMonitorSubagentItem {
   invocationKey: string;
+  sessionId?: string;
+  rootPath?: string;
+  repositoryPath?: string;
   taskId?: string;
   taskTitle?: string;
   stage?: string;
   subagentType: string;
-  status: "running" | "completed" | "failed";
+  status: "running" | "stale" | "completed" | "failed";
   attempt?: number;
+  source?: string;
+  currentFile?: string;
+  promptExcerpt?: string;
+  outputExcerpt?: string;
+  toolUseId?: string;
+  toolName?: string;
+  model?: string;
+  startedAt?: number;
+  completedAt?: number;
+  lastHeartbeatAt?: number;
+  lineCount?: number;
+  errCount?: number;
+  success?: boolean;
   previewText: string;
   updatedAt: number;
 }

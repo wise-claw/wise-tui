@@ -1,6 +1,0 @@
-{"file":".trellis/spec/frontend/index.md","reason":"Frontend layer spec index for the new helper and AppImpl wiring."}
-{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Project-Owned Trellis Execution Metadata contract (§3) — main session anchoring policy will be added here."}
-{"file":".trellis/spec/frontend/type-safety.md","reason":"Discriminated-union avoidance: keep ClaudeSession shape, derive isProjectRooted via path comparison."}
-{"file":".trellis/spec/frontend/state-management.md","reason":"Session state updates — ensure repo lookups against project-rooted sessions handle undefined gracefully."}
-{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Verify the anchor decision flows through AppImpl → useClaudeSessions → bindRepositoryMainSession consistently."}
-{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Reuse existing repositoryFolderBasename and helper patterns; avoid duplicating session-creation logic."}

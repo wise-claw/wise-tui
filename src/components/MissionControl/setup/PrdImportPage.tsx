@@ -106,7 +106,7 @@ export function PrdImportPage({
         <div className="prd-import-tabs__spacer" />
         <button
           type="button"
-          className="prd-import-submit"
+          className="mission-btn-primary"
           disabled={!canSubmit}
           onClick={onSubmit}
         >
@@ -126,6 +126,7 @@ export function PrdImportPage({
               onChange={onMarkdownChange}
               imageBucket={imageBucket}
               floatingToolbar
+              blockEdit={false}
               minHeight={520}
             />
             <Typography.Text type="secondary" className="prd-import-char-count">
@@ -190,7 +191,7 @@ export function PrdImportPage({
               />
               <button
                 type="button"
-                className="prd-import-url__fetch-btn"
+                className="mission-btn-primary"
                 disabled={!urlInput.trim() || urlFetching}
                 onClick={handleFetchUrl}
               >

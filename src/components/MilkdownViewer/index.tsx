@@ -179,6 +179,8 @@ interface MilkdownEditorProps extends Props {
   onTaskAnchorRangesChange?: (ranges: Record<string, AnchorRange>) => void;
   /** 选中文本时出现在 Crepe 浮动工具栏末尾；由宿主实现（如「拆分选中」）。 */
   onToolbarSplitSelection?: () => void;
+  /** Disable Crepe block edit/slash provider for views that unmount immediately after submit. */
+  blockEdit?: boolean;
 }
 
 export interface MilkdownEditorHandle {
@@ -382,6 +384,7 @@ export const MilkdownEditor = forwardRef<MilkdownEditorHandle, MilkdownEditorPro
   onResolvedTaskAnchorIdsChange,
   onTaskAnchorRangesChange,
   onToolbarSplitSelection,
+  blockEdit = true,
 }, ref) => {
   const [instanceKey, setInstanceKey] = useState(0);
   const lastInternalTextRef = useRef(text);
@@ -505,10 +508,14 @@ export const MilkdownEditor = forwardRef<MilkdownEditorHandle, MilkdownEditorPro
     let cancelled = false;
     const initialText = initialTextRef.current;
 
+    const crepeFeatures = {
+      ...(floatingToolbar ? {} : { [CrepeFeature.Toolbar]: false }),
+      ...(blockEdit ? {} : { [CrepeFeature.BlockEdit]: false }),
+    };
     const crepe = new Crepe({
       root,
       defaultValue: initialText.trim().length > 0 ? initialText : MILKDOWN_EMPTY_DOCUMENT_MARKDOWN,
-      ...(floatingToolbar ? {} : { features: { [CrepeFeature.Toolbar]: false } }),
+      features: crepeFeatures,
       featureConfigs: enableWiseToolbarSplit
         ? {
             [CrepeFeature.Toolbar]: {
@@ -563,6 +570,7 @@ export const MilkdownEditor = forwardRef<MilkdownEditorHandle, MilkdownEditorPro
     };
   }, [
     enableWiseToolbarSplit,
+    blockEdit,
     floatingToolbar,
     instanceKey,
     taskRequirementFocusPlugin,

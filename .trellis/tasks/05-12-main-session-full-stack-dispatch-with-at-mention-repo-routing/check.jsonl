@@ -1,4 +1,0 @@
-{"file":".trellis/spec/frontend/index.md","reason":"Frontend spec index for verification expectations."}
-{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Verify §3 contract: no new repo.sddMode reads; shouldHideEmployeeUi is the canonical gate."}
-{"file":".trellis/spec/frontend/type-safety.md","reason":"Confirm AtMention types, discriminated union for interception result, no any."}
-{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Verify dispatch flow is single-direction, no orphan promises, errors surfaced via toast."}

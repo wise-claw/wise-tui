@@ -12,7 +12,7 @@ import type {
   SplitResult,
   TaskSplitContext,
 } from "../../types";
-import { buildSplitRequestPayload } from "../buildSplitRequestPayload";
+import { buildSplitRequestPayload, type ClaudeInputBundleFiles } from "../buildSplitRequestPayload";
 import {
   normalizeClaudeSplitOutputToSplitResult,
   validateClaudeSplitPayloadStrict,
@@ -80,6 +80,7 @@ export async function dispatchClusterVerifier(input: DispatchVerifierInput): Pro
     cluster: input.cluster,
     issueCount: input.validationIssues.length,
     bundleFileNames: Object.keys(bundle),
+    bundle,
   });
 
   let raw: DispatchClusterRawOutput;
@@ -111,7 +112,7 @@ export async function dispatchClusterVerifier(input: DispatchVerifierInput): Pro
       raw,
       normalized: null,
       validationIssues: [],
-      errors: [...errors, "verifier 输出未包含可解析的 JSON 对象"],
+      errors: [...errors, formatMissingJsonError(raw)],
     };
   }
 
@@ -147,11 +148,13 @@ export function composeVerifierPrompt(input: {
   cluster: ClusterPlanItem;
   issueCount: number;
   bundleFileNames: string[];
+  bundle?: ClaudeInputBundleFiles;
 }): string {
   const lines: string[] = [];
   lines.push(`Active task: ${input.parentTaskPath}`);
   lines.push("");
   lines.push("你是 `trellis-verifier` 子代理。上一轮 `trellis-splitter` 的输出未通过本地 strict 校验；请基于 `previous-output.json` 与 `validation-issues.json` 给出**修正版** JSON，仅输出一个顶层 JSON 对象，不要 Markdown 围栏，不要解释文字。");
+  lines.push("不要调用工具。完整输入 bundle 已内嵌在下方，直接使用。");
   lines.push("");
   lines.push("详细规则见 `.trellis/spec/guides/trellis-verifier-prompt.md`。");
   lines.push("");
@@ -165,6 +168,20 @@ export function composeVerifierPrompt(input: {
   lines.push("");
   lines.push("## Input bundle");
   for (const name of input.bundleFileNames) lines.push(`- \`${name}\``);
+  if (input.bundle) {
+    lines.push("");
+    lines.push("## Embedded input bundle");
+    lines.push("Use these exact file contents. Do not read them again with tools.");
+    for (const name of input.bundleFileNames) {
+      const content = input.bundle[name];
+      if (content == null) continue;
+      lines.push("");
+      lines.push(`### ${name}`);
+      lines.push("~~~");
+      lines.push(content);
+      lines.push("~~~");
+    }
+  }
   lines.push("");
   lines.push("## 强约束");
   lines.push("1. 输出 schema 同 splitter；通过 `validateClaudeSplitPayloadStrict`。");
@@ -173,9 +190,20 @@ export function composeVerifierPrompt(input: {
   lines.push("4. 尽量保留 previous-output 的 task id；新任务用 `task-<n>-v2`。");
   lines.push("5. 不可解的 issue → 把对应 task 标 `executionStatus: not_executable`，并在 missingPrerequisites 写清原因。");
   lines.push("6. 仅输出一个顶层 JSON 对象。");
+  lines.push("7. 最终回复必须是 JSON 对象本身，以 `{` 开头，以 `}` 结尾。");
   lines.push("");
   lines.push("现在产出修正后的 JSON。");
   return lines.join("\n");
+}
+
+function formatMissingJsonError(raw: DispatchClusterRawOutput): string {
+  const parts = [
+    "verifier 输出未包含可解析的 splitter JSON 对象。",
+    raw.runDir ? `runDir: ${raw.runDir}` : null,
+    raw.stdoutPath ? `stdout: ${raw.stdoutPath}` : null,
+    raw.rawResultPath ? `raw: ${raw.rawResultPath}` : null,
+  ].filter((part): part is string => Boolean(part));
+  return parts.join(" ");
 }
 
 function emptyRaw(): DispatchClusterRawOutput {

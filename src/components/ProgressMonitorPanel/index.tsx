@@ -1,10 +1,11 @@
-import { Empty, InputNumber, Popover, Tag, Tooltip, Typography } from "antd";
+import { Descriptions, Drawer, Empty, InputNumber, Popover, Tag, Tooltip, Typography } from "antd";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type {
   ClaudeSession,
   EmployeeMonitorItem,
   MonitorDrawerTarget,
   RepositoryMemberMonitorItem,
+  RepositoryMemberMonitorSubagentItem,
   TeamMonitorItem,
 } from "../../types";
 import type { WorkflowInvocationStreamDetail } from "../../constants/workflowUiEvents";
@@ -113,6 +114,11 @@ interface TeamHistorySessionRow {
 interface HistorySessionRow {
   session: ClaudeSession;
   employeeName?: string;
+}
+
+interface RepositorySubagentDetailTarget {
+  repository: RepositoryMemberMonitorItem;
+  subagent: RepositoryMemberMonitorSubagentItem;
 }
 
 interface HistorySessionPopoverContentProps {
@@ -390,6 +396,150 @@ function repositoryTypeLabel(value: RepositoryMemberMonitorItem["repositoryType"
   return value;
 }
 
+function subagentStatusLabel(status: RepositoryMemberMonitorSubagentItem["status"]): string {
+  if (status === "running") return "运行中";
+  if (status === "stale") return "疑似断连";
+  if (status === "failed") return "失败";
+  return "完成";
+}
+
+function subagentStatusTagColor(status: RepositoryMemberMonitorSubagentItem["status"]): string {
+  if (status === "running") return "processing";
+  if (status === "stale") return "warning";
+  if (status === "failed") return "error";
+  return "success";
+}
+
+function formatMonitorTimestamp(value: number | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "—";
+  return new Date(value).toLocaleString("zh-CN", { hour12: false });
+}
+
+function compactId(value: string | undefined): string {
+  const normalized = value?.trim() ?? "";
+  if (!normalized) return "—";
+  if (normalized.length <= 18) return normalized;
+  return `${normalized.slice(0, 8)}…${normalized.slice(-6)}`;
+}
+
+function RepositorySubagentDetailDrawer({
+  target,
+  onClose,
+}: {
+  target: RepositorySubagentDetailTarget | null;
+  onClose: () => void;
+}) {
+  const width = Math.min(560, typeof window !== "undefined" ? window.innerWidth - 40 : 560);
+  const subagent = target?.subagent ?? null;
+  const repository = target?.repository ?? null;
+  return (
+    <Drawer
+      title={subagent ? `${subagent.subagentType} · 执行记录` : "子进程执行记录"}
+      placement="right"
+      size={width}
+      open={target !== null}
+      onClose={onClose}
+      destroyOnHidden
+      classNames={{ body: "app-monitor-panel__subagent-detail-drawer-body" }}
+      extra={subagent ? <Tag color={subagentStatusTagColor(subagent.status)}>{subagentStatusLabel(subagent.status)}</Tag> : null}
+    >
+      {!subagent || !repository ? (
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="无子进程记录" />
+      ) : (
+        <div className="app-monitor-panel__subagent-detail">
+          <Descriptions column={1} size="small" bordered>
+            <Descriptions.Item label="仓库">{repository.repositoryName}</Descriptions.Item>
+            <Descriptions.Item label="仓库路径">
+              <Typography.Text code copyable>
+                {subagent.repositoryPath ?? repository.repositoryPath}
+              </Typography.Text>
+            </Descriptions.Item>
+            <Descriptions.Item label="rootPath">
+              <Typography.Text code copyable>
+                {subagent.rootPath ?? "—"}
+              </Typography.Text>
+            </Descriptions.Item>
+            <Descriptions.Item label="子进程 id">
+              <Typography.Text code copyable={{ text: subagent.invocationKey }}>
+                {compactId(subagent.invocationKey)}
+              </Typography.Text>
+            </Descriptions.Item>
+            {subagent.sessionId ? (
+              <Descriptions.Item label="会话 id">
+                <Typography.Text code copyable={{ text: subagent.sessionId }}>
+                  {compactId(subagent.sessionId)}
+                </Typography.Text>
+              </Descriptions.Item>
+            ) : null}
+            {subagent.toolUseId ? (
+              <Descriptions.Item label="tool_use id">
+                <Typography.Text code copyable={{ text: subagent.toolUseId }}>
+                  {compactId(subagent.toolUseId)}
+                </Typography.Text>
+              </Descriptions.Item>
+            ) : null}
+            {subagent.toolName ? <Descriptions.Item label="工具">{subagent.toolName}</Descriptions.Item> : null}
+            {subagent.model ? <Descriptions.Item label="模型">{subagent.model}</Descriptions.Item> : null}
+            {subagent.stage ? <Descriptions.Item label="阶段">{subagent.stage}</Descriptions.Item> : null}
+            {subagent.taskId ? (
+              <Descriptions.Item label="任务 id">
+                <Typography.Text code>{subagent.taskId}</Typography.Text>
+              </Descriptions.Item>
+            ) : null}
+            {subagent.taskTitle ? <Descriptions.Item label="任务标题">{subagent.taskTitle}</Descriptions.Item> : null}
+            {subagent.currentFile ? (
+              <Descriptions.Item label="当前文件">
+                <Typography.Text code copyable>
+                  {subagent.currentFile}
+                </Typography.Text>
+              </Descriptions.Item>
+            ) : null}
+            <Descriptions.Item label="来源">{subagent.source ?? "—"}</Descriptions.Item>
+            <Descriptions.Item label="开始时间">{formatMonitorTimestamp(subagent.startedAt)}</Descriptions.Item>
+            <Descriptions.Item label="更新时间">{formatMonitorTimestamp(subagent.updatedAt)}</Descriptions.Item>
+            <Descriptions.Item label="心跳时间">{formatMonitorTimestamp(subagent.lastHeartbeatAt)}</Descriptions.Item>
+            <Descriptions.Item label="结束时间">{formatMonitorTimestamp(subagent.completedAt)}</Descriptions.Item>
+            {typeof subagent.lineCount === "number" ? <Descriptions.Item label="stdout 行数">{subagent.lineCount}</Descriptions.Item> : null}
+            {typeof subagent.errCount === "number" ? <Descriptions.Item label="stderr 行数">{subagent.errCount}</Descriptions.Item> : null}
+            {typeof subagent.success === "boolean" ? (
+              <Descriptions.Item label="退出结果">{subagent.success ? "成功" : "失败"}</Descriptions.Item>
+            ) : null}
+          </Descriptions>
+
+          <div className="app-monitor-panel__subagent-detail-section">
+            <Typography.Text strong className="app-monitor-panel__subagent-detail-section-title">
+              记录摘要
+            </Typography.Text>
+            <pre className="app-monitor-panel__subagent-detail-pre">{subagent.previewText || "—"}</pre>
+          </div>
+
+          <div className="app-monitor-panel__subagent-detail-section">
+            <Typography.Text strong className="app-monitor-panel__subagent-detail-section-title">
+              派发 Prompt
+            </Typography.Text>
+            {subagent.promptExcerpt?.trim() ? (
+              <pre className="app-monitor-panel__subagent-detail-pre">{subagent.promptExcerpt}</pre>
+            ) : (
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未记录 prompt 摘要" />
+            )}
+          </div>
+
+          <div className="app-monitor-panel__subagent-detail-section">
+            <Typography.Text strong className="app-monitor-panel__subagent-detail-section-title">
+              输出摘要
+            </Typography.Text>
+            {subagent.outputExcerpt?.trim() ? (
+              <pre className="app-monitor-panel__subagent-detail-pre">{subagent.outputExcerpt}</pre>
+            ) : (
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未记录输出摘要" />
+            )}
+          </div>
+        </div>
+      )}
+    </Drawer>
+  );
+}
+
 function memberTooltipContent(memberNames?: string[]) {
   if (!memberNames || memberNames.length === 0) {
     return "暂无团队成员";
@@ -516,6 +666,7 @@ export function ProgressMonitorPanel({
   const [teamHistoryEmployeeFilter, setTeamHistoryEmployeeFilter] = useState<string>("all");
   const [historyMessagesSessionId, setHistoryMessagesSessionId] = useState<string | null>(null);
   const [omcDirectBatchDetailSnapshot, setOmcDirectBatchDetailSnapshot] = useState<WorkflowInvocationStreamDetail | null>(null);
+  const [repositorySubagentDetailTarget, setRepositorySubagentDetailTarget] = useState<RepositorySubagentDetailTarget | null>(null);
 
   const omcDirectBatchInvocationsLive = useSyncExternalStore(
     subscribeOmcDirectBatchInvocations,
@@ -606,6 +757,13 @@ export function ProgressMonitorPanel({
 
   function closeHistoryMessagesDrawer() {
     setHistoryMessagesSessionId(null);
+  }
+
+  function openRepositorySubagentDetail(
+    repository: RepositoryMemberMonitorItem,
+    subagent: RepositoryMemberMonitorSubagentItem,
+  ) {
+    setRepositorySubagentDetailTarget({ repository, subagent });
   }
 
   const handleOmcBatchInvocationSelect = useCallback(
@@ -813,16 +971,25 @@ export function ProgressMonitorPanel({
               </div>
               <div className="app-monitor-panel__subagent-tree" aria-label={`${item.repositoryName} Trellis 子进程`}>
                 {item.subagents.slice(0, 3).map((subagent) => (
-                  <div key={subagent.invocationKey} className="app-monitor-panel__subagent-row">
+                  <button
+                    key={subagent.invocationKey}
+                    type="button"
+                    className="app-monitor-panel__subagent-row app-monitor-panel__subagent-row--clickable"
+                    title={subagent.previewText}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      openRepositorySubagentDetail(item, subagent);
+                    }}
+                  >
                     <span className="app-monitor-panel__subagent-branch" aria-hidden />
                     <span className="app-monitor-panel__subagent-main">
                       <span className="app-monitor-panel__subagent-name">{subagent.subagentType}</span>
                       {subagent.stage ? <span className="app-monitor-panel__subagent-stage">{subagent.stage}</span> : null}
                     </span>
                     <span className={`app-monitor-panel__subagent-status app-monitor-panel__subagent-status--${subagent.status}`}>
-                      {subagent.status === "running" ? "运行中" : subagent.status === "failed" ? "失败" : "完成"}
+                      {subagentStatusLabel(subagent.status)}
                     </span>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
@@ -839,7 +1006,7 @@ export function ProgressMonitorPanel({
                 Mission Agent
               </Typography.Text>
               <Typography.Text className="app-monitor-panel__meta">
-                {agentAssignments.length} 运行中
+                {agentAssignments.length} 活跃
               </Typography.Text>
             </div>
           </div>
@@ -849,7 +1016,9 @@ export function ProgressMonitorPanel({
                 <span className="app-monitor-panel__item-name-wrap">
                   <span className="app-monitor-panel__item-name">{a.agentType}</span>
                   <span className="app-monitor-panel__repo-type">{a.stage}</span>
-                  <span className="app-monitor-panel__status app-monitor-panel__status--in_progress">运行中</span>
+                  <span className="app-monitor-panel__status app-monitor-panel__status--in_progress">
+                    {a.status === "stale" ? "疑似断连" : "运行中"}
+                  </span>
                 </span>
                 <span className="app-monitor-panel__item-actions">
                   {a.clusterId ? (
@@ -1011,6 +1180,11 @@ export function ProgressMonitorPanel({
         sessions={sessions}
         onClose={() => setOmcDirectBatchDetailSnapshot(null)}
         onOpenInMainSessionBackground={onOpenOmcBatchInvocationDetail ? handleOmcBatchInvocationSelect : undefined}
+      />
+
+      <RepositorySubagentDetailDrawer
+        target={repositorySubagentDetailTarget}
+        onClose={() => setRepositorySubagentDetailTarget(null)}
       />
     </div>
   );

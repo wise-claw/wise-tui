@@ -46,6 +46,7 @@ describe("buildProjectRequirementWorkspaceInput", () => {
       projectRootPath: "/work/project",
       projectRepositoryPaths: ["/work/project/web", "/work/project/api"],
       floatingRepositoryPaths: ["/work/floating"],
+      includeArchived: true,
     });
   });
 });

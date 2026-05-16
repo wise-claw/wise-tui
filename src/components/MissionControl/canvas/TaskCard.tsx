@@ -147,7 +147,7 @@ export function TaskCard({ task, onSelect, onHover, onRemoveDependency, onRetryC
           {task.status === "blocked" && onRetryCluster ? (
             <button
               type="button"
-              className="mission-agent-btn mission-agent-btn--retry"
+              className="mission-btn-retry"
               title="重新派发此集群"
               onClick={(e) => {
                 e.stopPropagation();

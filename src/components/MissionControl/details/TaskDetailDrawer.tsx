@@ -174,7 +174,7 @@ export function TaskDetailDrawer({
 
         {showDispatchSession && dispatchSession ? (
           <>
-            {detail.status === "blocked" || detail.technical.dispatchRaw || dispatchProgressError ? (
+            {detail.status === "blocked" || detail.technical.dispatchRaw ? (
               <FailureEvidenceBlock
                 raw={detail.technical.dispatchRaw}
                 error={dispatchError}

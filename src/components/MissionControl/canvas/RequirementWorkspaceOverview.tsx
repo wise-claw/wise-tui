@@ -5,6 +5,7 @@ import {
   FolderOutlined,
   RightOutlined,
   HistoryOutlined,
+  InboxOutlined,
 } from "@ant-design/icons";
 import { useMemo, useState } from "react";
 import type {
@@ -35,7 +36,8 @@ export function RequirementWorkspaceOverview({
   onOpenLegacyImport,
   onNewPrd,
 }: RequirementWorkspaceOverviewProps) {
-  const { snapshot, loading } = useRequirementWorkspace({ project, projects, repositories });
+  const [archiveFilter, setArchiveFilter] = useState<"active" | "all" | "archived">("active");
+  const { snapshot, loading } = useRequirementWorkspace({ project, projects, repositories, includeArchived: true });
   const [repoFilter, setRepoFilter] = useState<number | null>(null);
   const repoById = useMemo(
     () => new Map(repositories.map((r) => [r.id, r])),
@@ -59,26 +61,38 @@ export function RequirementWorkspaceOverview({
     return <EmptyWorkspace onNewPrd={onNewPrd} onOpenLegacyImport={onOpenLegacyImport} />;
   }
 
-  const prdChildTasks = buildPrdChildTaskMap(snapshot.prds, snapshot.tasks);
+  const visiblePrds = filterArchiveRows(snapshot.prds, archiveFilter);
+  const visibleTasks = filterArchiveRows(snapshot.tasks, archiveFilter);
+  const visibleSnapshot: TrellisRequirementWorkspaceSnapshot = {
+    sources: snapshot.sources,
+    prds: visiblePrds,
+    tasks: visibleTasks,
+  };
+  const prdChildTasks = buildPrdChildTaskMap(visiblePrds, visibleTasks);
   const filteredPrds = repoFilter != null
-    ? snapshot.prds.filter((p) => p.repositoryId === repoFilter)
-    : snapshot.prds;
+    ? visiblePrds.filter((p) => p.repositoryId === repoFilter)
+    : visiblePrds;
 
   return (
     <div className="mission-workspace-overview">
       <WorkspaceSummary
-        snapshot={snapshot}
+        snapshot={visibleSnapshot}
         repoById={repoById}
         repoFilter={repoFilter}
         onRepoFilter={setRepoFilter}
+        archiveCounts={{
+          active: snapshot.prds.filter((prd) => !prd.archived).length,
+          archived: snapshot.prds.filter((prd) => prd.archived).length,
+        }}
       />
       <div className="mission-workspace-toolbar">
-        <button type="button" className="mission-workspace-new-btn" onClick={onNewPrd}>
+        <button type="button" className="mission-btn-secondary" onClick={onNewPrd}>
           + 新建 PRD
         </button>
-        <button type="button" className="mission-workspace-legacy-btn" onClick={onOpenLegacyImport}>
+        <button type="button" className="mission-btn-secondary" onClick={onOpenLegacyImport}>
           <HistoryOutlined /> 历史导入
         </button>
+        <SegmentedArchiveFilter value={archiveFilter} onChange={setArchiveFilter} />
         {repoFilter != null ? (
           <span className="mission-workspace-toolbar__filter-hint">
             正在筛选：{repoById.get(repoFilter)?.name ?? `仓库 ${repoFilter}`}
@@ -86,17 +100,26 @@ export function RequirementWorkspaceOverview({
           </span>
         ) : null}
       </div>
-      <div className="mission-workspace-grid">
-        {filteredPrds.map((prd) => (
-          <PrdMissionCard
-            key={prd.taskId}
-            prd={prd}
-            childTasks={prdChildTasks.get(prd.taskId) ?? []}
-            repoById={repoById}
-            onLoadPrd={onLoadPrd}
+      {filteredPrds.length === 0 ? (
+        <div className="mission-workspace-empty-state">
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={archiveFilter === "archived" ? "暂无已归档 PRD" : "当前筛选下没有 PRD"}
           />
-        ))}
-      </div>
+        </div>
+      ) : (
+        <div className="mission-workspace-grid">
+          {filteredPrds.map((prd) => (
+            <PrdMissionCard
+              key={prd.taskId}
+              prd={prd}
+              childTasks={prdChildTasks.get(prd.taskId) ?? []}
+              repoById={repoById}
+              onLoadPrd={onLoadPrd}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -114,12 +137,12 @@ function EmptyWorkspace({
         image={Empty.PRESENTED_IMAGE_SIMPLE}
         description="当前项目尚未创建任何 PRD"
       >
-        <button type="button" className="mission-workspace-new-btn" onClick={onNewPrd}>
+        <button type="button" className="mission-btn-secondary" onClick={onNewPrd}>
           + 新建 PRD
         </button>
         <button
           type="button"
-          className="mission-workspace-legacy-btn"
+          className="mission-btn-secondary"
           style={{ marginLeft: 10 }}
           onClick={onOpenLegacyImport}
         >
@@ -135,11 +158,13 @@ function WorkspaceSummary({
   repoById,
   repoFilter,
   onRepoFilter,
+  archiveCounts,
 }: {
   snapshot: TrellisRequirementWorkspaceSnapshot;
   repoById: Map<number, Repository>;
   repoFilter: number | null;
   onRepoFilter: (repoId: number | null) => void;
+  archiveCounts: { active: number; archived: number };
 }) {
   const totalTasks = snapshot.tasks.length;
   const totalPrds = snapshot.prds.length;
@@ -166,6 +191,13 @@ function WorkspaceSummary({
               {Math.round((completedTasks / totalTasks) * 100)}%
             </span>
             <span className="mission-workspace-summary__label">完成率</span>
+          </div>
+        ) : null}
+        {archiveCounts.archived > 0 ? (
+          <div className="mission-workspace-summary__stat">
+            <InboxOutlined />
+            <span className="mission-workspace-summary__value">{archiveCounts.archived}</span>
+            <span className="mission-workspace-summary__label">归档</span>
           </div>
         ) : null}
         {/* Repo filter pills */}
@@ -198,6 +230,44 @@ function WorkspaceSummary({
       </div>
     </div>
   );
+}
+
+function SegmentedArchiveFilter({
+  value,
+  onChange,
+}: {
+  value: "active" | "all" | "archived";
+  onChange: (value: "active" | "all" | "archived") => void;
+}) {
+  const options: Array<{ value: "active" | "all" | "archived"; label: string }> = [
+    { value: "active", label: "活跃" },
+    { value: "all", label: "全部" },
+    { value: "archived", label: "已归档" },
+  ];
+  return (
+    <div className="mission-workspace-archive-filter" role="group" aria-label="PRD archive filter">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          className={`mission-workspace-archive-filter__btn ${
+            value === option.value ? "mission-workspace-archive-filter__btn--active" : ""
+          }`}
+          onClick={() => onChange(option.value)}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function filterArchiveRows<T extends { archived: boolean }>(
+  rows: T[],
+  filter: "active" | "all" | "archived",
+): T[] {
+  if (filter === "all") return rows;
+  return rows.filter((row) => filter === "archived" ? row.archived : !row.archived);
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -235,7 +305,7 @@ function PrdMissionCard({
     : undefined;
 
   return (
-    <div className="mission-prd-card">
+    <div className={`mission-prd-card ${prd.archived ? "mission-prd-card--archived" : ""}`}>
       <div className="mission-prd-card__header">
         <span className="mission-prd-card__status-dot" data-status={prd.status} />
         <Typography.Text className="mission-prd-card__title" strong>
@@ -244,6 +314,11 @@ function PrdMissionCard({
         <Tag color={STATUS_COLOR[prd.status] ?? "default"} style={{ fontSize: 10, fontWeight: 700 }}>
           {prd.status}
         </Tag>
+        {prd.archived ? (
+          <Tag icon={<InboxOutlined />} color="default" style={{ fontSize: 10, fontWeight: 700, margin: 0 }}>
+            archived
+          </Tag>
+        ) : null}
         {repo ? (
           <Tag icon={<FolderOutlined />} color="blue" style={{ fontSize: 10, fontWeight: 700, margin: 0 }}>
             {repo.name}

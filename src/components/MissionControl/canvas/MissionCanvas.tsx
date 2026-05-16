@@ -62,6 +62,7 @@ export function MissionCanvas({
 }: MissionCanvasProps) {
   const isDrafting = viewModel.phase === "drafting";
   const hasRequirements = viewModel.requirementTree.length > 0;
+  const projectRootPath = api.state.project?.rootPath;
 
   const imageBucket = useMemo<PrdImageBucket | null>(() => {
     const repo = api.state.repositories[0];
@@ -74,6 +75,13 @@ export function MissionCanvas({
       projectId: api.state.project?.id ?? null,
     };
   }, [api.state.project, api.state.repositories]);
+
+  const { agentGraph } = useTrellisRuntime({
+    projectId: api.state.project?.id ?? null,
+    rootPath: projectRootPath ?? undefined,
+    missionId: missionId ?? null,
+    enabled: Boolean(projectRootPath) && !isDrafting,
+  });
 
   if (isDrafting && !hasRequirements) {
     const hasTarget = Boolean(api.state.project);
@@ -164,12 +172,6 @@ export function MissionCanvas({
       </main>
     );
   }
-
-  const projectRootPath = api.state.project?.rootPath;
-  const { agentGraph } = useTrellisRuntime({
-    rootPath: projectRootPath ?? undefined,
-    enabled: Boolean(projectRootPath),
-  });
 
   const hasAgentActivity = Object.keys(viewModel.runState.clusters).length > 0;
 

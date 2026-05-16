@@ -1,9 +1,9 @@
 use crate::{
     app_state_commands, cc_wf_studio_mcp_bridge, cc_workflow_studio, claude_code_usage,
-    claude_commands, claude_config_dir, code_knowledge_graph, cua_driver, dingtalk_enterprise_bot,
-    dingtalk_stream_gateway, git_commands, mission_control, prd_url_fetch, repository_files,
-    skills_sh, system_resource, trellis_bootstrap, trellis_bridge, trellis_runtime, wise_db,
-    wise_mascot, wise_push, workspace_commands,
+    claude_commands, claude_config_dir, claude_external_ingest, code_knowledge_graph, cua_driver,
+    dingtalk_enterprise_bot, dingtalk_stream_gateway, git_commands, mission_control, prd_url_fetch,
+    repository_files, skills_sh, system_resource, trellis_bootstrap, trellis_bridge,
+    trellis_runtime, wise_db, wise_mascot, wise_push, workspace_commands,
 };
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
@@ -300,6 +300,7 @@ pub fn run() {
             trellis_runtime::trellis_runtime_get_replay,
             trellis_runtime::trellis_runtime_capture_workspace_snapshot,
             trellis_runtime::trellis_runtime_diff_workspace_snapshots,
+            claude_external_ingest::ingest_external_claude_cli_sessions,
             claude_commands::terminal::terminal_open,
             claude_commands::terminal::terminal_write,
             claude_commands::terminal::terminal_resize,

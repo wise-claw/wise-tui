@@ -16,6 +16,7 @@ import type {
   SplitResult,
   TaskSplitContext,
 } from "../../types";
+import type { ClaudeInputBundleFiles } from "../buildSplitRequestPayload";
 import { buildSplitRequestPayload } from "../buildSplitRequestPayload";
 import {
   normalizeClaudeSplitOutputToSplitResult,
@@ -114,6 +115,7 @@ export async function dispatchClusterSplit(input: DispatchClusterInput): Promise
     parentTaskPath: input.parentTaskPath,
     cluster: input.cluster,
     bundleFileNames: Object.keys(bundle),
+    bundle,
   });
 
   // 2. Tauri dispatch.
@@ -204,12 +206,14 @@ export function composeSplitterPrompt(input: {
   parentTaskPath: string;
   cluster: ClusterPlanItem;
   bundleFileNames: string[];
+  bundle?: ClaudeInputBundleFiles;
 }): string {
   const lines: string[] = [];
   lines.push(`Active task: ${input.parentTaskPath}`);
   lines.push("");
   lines.push("You are the `trellis-splitter` sub-agent. Split exactly one cluster into tasks.");
   lines.push("Output a single JSON object to stdout — no markdown fences, no explanatory text.");
+  lines.push("Do not call tools. The complete input bundle is embedded below; use it directly.");
   lines.push("");
   lines.push("See `.trellis/spec/guides/trellis-splitter-prompt.md` for the full protocol.");
   lines.push("");
@@ -224,6 +228,20 @@ export function composeSplitterPrompt(input: {
   for (const name of input.bundleFileNames) {
     lines.push(`- \`${name}\``);
   }
+  if (input.bundle) {
+    lines.push("");
+    lines.push("## Embedded input bundle");
+    lines.push("Use these exact file contents. Do not read them again with tools.");
+    for (const name of input.bundleFileNames) {
+      const content = input.bundle[name];
+      if (content == null) continue;
+      lines.push("");
+      lines.push(`### ${name}`);
+      lines.push("~~~");
+      lines.push(content);
+      lines.push("~~~");
+    }
+  }
   lines.push("");
   lines.push("## Hard constraints (violating any of these invalidates the output)");
   lines.push("1. Output schema: see `OUTPUT_SCHEMA.json` in the input bundle. The output must pass `validateClaudeSplitPayloadStrict`.");
@@ -232,6 +250,7 @@ export function composeSplitterPrompt(input: {
   lines.push("4. When `executionStatus = \"executable\"`, `missingPrerequisites` must be empty; otherwise non-empty.");
   lines.push("5. `clusterId` must equal this cluster's id. `repoTarget` defaults are handled locally.");
   lines.push("6. Output exactly one top-level JSON object. No surrounding text.");
+  lines.push("7. The final assistant response must be the JSON object itself, starting with `{` and ending with `}`.");
   lines.push("");
   lines.push("## Classification & design output");
   lines.push("- `classification` is one of:");

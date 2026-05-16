@@ -1,5 +1,0 @@
-{"file":".trellis/spec/frontend/index.md","reason":"Frontend layer spec index for verification expectations."}
-{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Verify Repository-Owned Trellis §3 contract is updated to project-level SDD ownership and roleTags plurality."}
-{"file":".trellis/spec/frontend/type-safety.md","reason":"Confirm no new any types, helper functions have explicit return types, SddMode narrowing is exhaustive."}
-{"file":".trellis/spec/tauri/index.md","reason":"Confirm migration is registered, commands handle errors with documented error codes, no broadened capability scope."}
-{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Verify data flows correctly across SQLite → Rust → TS → React without mid-layer drift."}

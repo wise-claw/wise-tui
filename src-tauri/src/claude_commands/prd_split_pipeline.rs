@@ -863,8 +863,7 @@ pub(crate) async fn prd_split_retry_run(
             .filter(|s| !s.is_empty())
             .map(ToString::to_string)
     });
-    let prompt =
-        fs::read_to_string(&prompt_path).map_err(|e| format!("读取 prompt.md 失败: {e}"))?;
+    let prompt = fs::read_to_string(&prompt_path).map_err(|e| format!("读取 prompt.md 失败: {e}"))?;
     let bundle = read_retry_bundle(&old_run_dir)?;
 
     let new_run_id = format!(
@@ -876,12 +875,8 @@ pub(crate) async fn prd_split_retry_run(
         .map_err(|e| format!("解析 ~/.wise 失败: {e}"))?
         .join("prd-runs")
         .join(&new_run_id);
-    fs::create_dir_all(&new_run_dir).map_err(|e| {
-        format!(
-            "创建 retry run_dir 失败 ({}): {e}",
-            new_run_dir.to_string_lossy()
-        )
-    })?;
+    fs::create_dir_all(&new_run_dir)
+        .map_err(|e| format!("创建 retry run_dir 失败 ({}): {e}", new_run_dir.to_string_lossy()))?;
     patch_json_file(old_run_dir.join("run-result.json"), |value| {
         value["superseded_by"] = json!(new_run_id);
         Ok(())
@@ -889,23 +884,12 @@ pub(crate) async fn prd_split_retry_run(
     patch_json_file(new_run_dir.join("dispatch.meta.json"), |value| {
         value["retriedFrom"] = json!(old_run_id);
         value["retriedFromRunDir"] = json!(old_run_dir.to_string_lossy());
-        if let Some(mission_id) = input
-            .mission_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-        {
+        if let Some(mission_id) = input.mission_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
             value["missionId"] = json!(mission_id);
         }
         Ok(())
     })?;
-    record_retry_event(
-        &db,
-        &input.mission_id,
-        &old_run_id,
-        &new_run_id,
-        &requested_cluster_id,
-    );
+    record_retry_event(&db, &input.mission_id, &old_run_id, &new_run_id, &requested_cluster_id);
 
     let app_clone = app.clone();
     let run_id_for_task = new_run_id.clone();
@@ -1040,6 +1024,7 @@ async fn dispatch_cluster_impl(
     cmd.arg("-p").arg(&effective_prompt);
     cmd.arg("--output-format").arg("stream-json");
     cmd.arg("--verbose");
+    cmd.arg("--tools").arg("");
     cmd.arg("--permission-mode").arg("bypassPermissions");
     if let Some(m) = input.model.as_deref().and_then(trim_model_cli_arg) {
         cmd.arg("--model").arg(m);
@@ -1409,15 +1394,9 @@ fn read_json_file(path: &Path, label: &str) -> Result<Value, String> {
     serde_json::from_str(&raw).map_err(|e| format!("解析 {label} 失败: {e}"))
 }
 
-fn patch_json_file(
-    path: PathBuf,
-    patch: impl FnOnce(&mut Value) -> Result<(), String>,
-) -> Result<(), String> {
+fn patch_json_file(path: PathBuf, patch: impl FnOnce(&mut Value) -> Result<(), String>) -> Result<(), String> {
     let mut value = if path.is_file() {
-        read_json_file(
-            &path,
-            path.file_name().and_then(|n| n.to_str()).unwrap_or("json"),
-        )?
+        read_json_file(&path, path.file_name().and_then(|n| n.to_str()).unwrap_or("json"))?
     } else {
         json!({})
     };
@@ -1587,8 +1566,7 @@ fn load_retry_dispatch_meta(run_dir: &Path, requested_cluster_id: &str) -> Resul
 }
 
 fn merge_object_fields(target: &mut Value, existing: Value) {
-    let (Some(target_obj), Some(existing_obj)) = (target.as_object_mut(), existing.as_object())
-    else {
+    let (Some(target_obj), Some(existing_obj)) = (target.as_object_mut(), existing.as_object()) else {
         return;
     };
     for key in ["retriedFrom", "retriedFromRunDir", "missionId"] {
@@ -1647,11 +1625,7 @@ fn record_retry_event(
     new_run_id: &str,
     cluster_id: &str,
 ) {
-    let Some(mission_id) = mission_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    else {
+    let Some(mission_id) = mission_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) else {
         return;
     };
     let Ok(g) = db.0.lock() else {
@@ -1779,6 +1753,121 @@ fn extract_split_payload_from_json_value(value: &Value) -> Option<Value> {
             }
         }
     }
+    if value.get("type").and_then(|v| v.as_str()) == Some("user") {
+        let blocks = value
+            .get("message")
+            .and_then(|m| m.get("content"))
+            .and_then(|content| content.as_array());
+        if let Some(blocks) = blocks {
+            for block in blocks {
+                if block.get("type").and_then(|v| v.as_str()) != Some("tool_result") {
+                    continue;
+                }
+                if let Some(parsed) =
+                    block.get("content").and_then(extract_split_payload_from_content_value)
+                {
+                    return Some(parsed);
+                }
+            }
+        }
+        if let Some(parsed) = value
+            .get("tool_use_result")
+            .and_then(extract_split_payload_from_content_value)
+        {
+            return Some(parsed);
+        }
+    }
+    None
+}
+
+fn extract_split_payload_from_content_value(value: &Value) -> Option<Value> {
+    if is_split_payload(value) {
+        return Some(value.clone());
+    }
+    if let Some(text) = value.as_str() {
+        return extract_split_payload_from_text(text);
+    }
+    if let Some(items) = value.as_array() {
+        for item in items {
+            if let Some(parsed) = extract_split_payload_from_json_value(item) {
+                return Some(parsed);
+            }
+            for key in ["text", "content", "stdout", "output", "result"] {
+                if let Some(parsed) = item
+                    .get(key)
+                    .and_then(extract_split_payload_from_content_value)
+                {
+                    return Some(parsed);
+                }
+            }
+        }
+    }
+    if value.is_object() {
+        for key in ["stdout", "output", "result", "content", "text"] {
+            if let Some(parsed) = value
+                .get(key)
+                .and_then(extract_split_payload_from_content_value)
+            {
+                return Some(parsed);
+            }
+        }
+    }
+    None
+}
+
+fn extract_split_payload_from_text(text: &str) -> Option<Value> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Ok(value) = serde_json::from_str::<Value>(trimmed) {
+        if let Some(payload) = extract_split_payload_from_json_value(&value) {
+            return Some(payload);
+        }
+    }
+
+    let bytes = trimmed.as_bytes();
+    let mut start = None;
+    let mut depth = 0i32;
+    let mut in_string = false;
+    let mut escape = false;
+    for (idx, &byte) in bytes.iter().enumerate() {
+        let c = byte as char;
+        if in_string {
+            if escape {
+                escape = false;
+            } else if c == '\\' {
+                escape = true;
+            } else if c == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+        match c {
+            '"' => in_string = true,
+            '{' => {
+                if depth == 0 {
+                    start = Some(idx);
+                }
+                depth += 1;
+            }
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    if let Some(s) = start {
+                        let slice = &trimmed[s..=idx];
+                        if let Ok(value) = serde_json::from_str::<Value>(slice) {
+                            if let Some(payload) = extract_split_payload_from_json_value(&value) {
+                                return Some(payload);
+                            }
+                        }
+                        start = None;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
     None
 }
 
@@ -1812,13 +1901,12 @@ fn extract_split_payload_from_stdout(stdout: &str) -> Option<Value> {
             }
             continue;
         }
-        if let Some(parsed) = extract_json_object(trimmed).filter(is_split_payload) {
+        if let Some(parsed) = extract_split_payload_from_text(trimmed) {
             return Some(parsed);
         }
     }
-    extract_json_object(&assistant_text)
-        .or_else(|| extract_json_object(stdout))
-        .filter(is_split_payload)
+    extract_split_payload_from_text(&assistant_text)
+        .or_else(|| extract_split_payload_from_text(stdout))
 }
 
 /// 从 Claude stdout 文本中提取首个 `{` 起始的合法 JSON 对象。Claude 可能在 JSON 前后
@@ -2070,6 +2158,30 @@ mod tests {
             extract_claude_session_id_from_stdout(stdout).as_deref(),
             Some("sid-1")
         );
+    }
+
+    #[test]
+    fn extract_split_payload_reads_tool_result_stdout() {
+        let stdout = concat!(
+            r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"call_1","name":"Bash","input":{"command":"python build.py"}}]}}"#,
+            "\n",
+            r#"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"call_1","content":"=== Validation passed ===\n{\"tasks\":[{\"id\":\"t1\"}]}\n"}]}}"#,
+            "\n",
+            r#"{"type":"result","result":"Validation passed. Outputting the final JSON:"}"#,
+            "\n"
+        );
+        let out = extract_split_payload_from_stdout(stdout).unwrap();
+        assert_eq!(out["tasks"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn extract_split_payload_skips_non_payload_objects_before_tool_result_json() {
+        let stdout = concat!(
+            r#"{"type":"user","message":{"content":[{"type":"tool_result","content":"log {\"status\":\"ok\"}\n{\"tasks\":[{\"id\":\"t1\"},{\"id\":\"t2\"}]}\n"}]}}"#,
+            "\n"
+        );
+        let out = extract_split_payload_from_stdout(stdout).unwrap();
+        assert_eq!(out["tasks"].as_array().unwrap().len(), 2);
     }
 
     #[test]

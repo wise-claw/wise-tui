@@ -22,6 +22,11 @@ import {
   getRepositoryMemberInvocationsSnapshot,
   subscribeRepositoryMemberInvocations,
 } from "../stores/repositoryMemberInvocationsStore";
+import {
+  getTrellisAgentOwnershipGraph,
+  ingestExternalClaudeCliSessions,
+  type TrellisAgentRun,
+} from "../services/trellisRuntime";
 import { sanitizeOmcDirectBatchPreviewLineForList } from "../utils/claudeInvocationText";
 import { isOmcDirectBatchInvocationRunning } from "../utils/omcDirectBatchInvocationDisplay";
 import { omcWorkerRepositoryBoundNameMatchers } from "../utils/omcMonitorEmployeeSession";
@@ -43,7 +48,7 @@ import type {
   WorkflowTaskItem,
   WorkflowTemplateItem,
 } from "../types";
-import { getEffectiveRepoSddMode } from "../utils/projectRepositoryRoles";
+import { getEffectiveRepoSddMode, getProjectSddMode } from "../utils/projectRepositoryRoles";
 
 interface UseMonitorOverviewInput {
   employees: EmployeeItem[];
@@ -194,10 +199,179 @@ function repositoryMemberSubagentStatus(
   return success === false ? "failed" : "completed";
 }
 
+function isActiveRepositoryMemberSubagent(status: RepositoryMemberMonitorSubagentItem["status"]): boolean {
+  return status === "running" || status === "stale";
+}
+
+function normalizeMonitorPath(path: string | null | undefined): string {
+  const normalized = (path ?? "").trim().replace(/\\/g, "/").replace(/\/+$/g, "");
+  return normalized === "" ? "" : normalized;
+}
+
+function pathContainsOrEquals(parent: string, child: string): boolean {
+  if (!parent || !child) return false;
+  return child === parent || child.startsWith(`${parent}/`);
+}
+
+function metadataString(value: Record<string, unknown>, key: string): string {
+  const raw = value[key];
+  return typeof raw === "string" ? raw.trim() : "";
+}
+
+function agentRunMonitorStatus(status: string): RepositoryMemberMonitorSubagentItem["status"] {
+  const normalized = status.trim().toLowerCase();
+  if (normalized === "stale") return "stale";
+  if (normalized === "failed" || normalized === "error" || normalized === "errored" || normalized === "rejected") {
+    return "failed";
+  }
+  if (
+    normalized === "succeeded" ||
+    normalized === "success" ||
+    normalized === "completed" ||
+    normalized === "complete" ||
+    normalized === "cancelled" ||
+    normalized === "canceled"
+  ) {
+    return "completed";
+  }
+  return "running";
+}
+
+function agentRunPreviewText(run: TrellisAgentRun): string {
+  const meta = run.metadata ?? {};
+  const previewSource =
+    metadataString(meta, "description") ||
+    metadataString(meta, "promptExcerpt") ||
+    metadataString(meta, "outputExcerpt") ||
+    run.currentFile?.trim() ||
+    run.taskId?.trim() ||
+    run.agentType.trim() ||
+    "Trellis subagent";
+  return truncateText(previewSource, 72);
+}
+
+function agentRunSearchText(run: TrellisAgentRun): string {
+  const meta = run.metadata ?? {};
+  return [
+    run.repositoryPath,
+    run.rootPath,
+    run.taskPath,
+    run.taskId,
+    run.agentType,
+    run.stage,
+    run.currentFile,
+    metadataString(meta, "description"),
+    metadataString(meta, "promptExcerpt"),
+    metadataString(meta, "outputExcerpt"),
+  ]
+    .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    .join("\n")
+    .toLowerCase();
+}
+
+function resolveAgentRunRepository(
+  run: TrellisAgentRun,
+  repositories: readonly Repository[],
+  projects: ReadonlyArray<ProjectItem>,
+): Repository | null {
+  const project = run.projectId ? projects.find((item) => item.id === run.projectId) : undefined;
+  const projectRepositoryIds = new Set(project?.repositoryIds ?? []);
+  const candidates = projectRepositoryIds.size > 0
+    ? repositories.filter((repo) => projectRepositoryIds.has(repo.id))
+    : repositories;
+  if (typeof run.repositoryId === "number" && Number.isFinite(run.repositoryId)) {
+    const byId = candidates.find((repo) => repo.id === run.repositoryId) ?? repositories.find((repo) => repo.id === run.repositoryId);
+    if (byId) return byId;
+  }
+
+  const runPath = normalizeMonitorPath(run.repositoryPath ?? run.rootPath);
+  const candidatesWithPath = candidates
+    .map((repo) => ({ repo, path: normalizeMonitorPath(repo.path) }))
+    .filter((item) => item.path.length > 0);
+
+  const exact = candidatesWithPath.find((item) => item.path === runPath);
+  if (exact) return exact.repo;
+
+  const containing = candidatesWithPath
+    .filter((item) => pathContainsOrEquals(item.path, runPath))
+    .sort((a, b) => b.path.length - a.path.length)[0];
+  if (containing) return containing.repo;
+
+  const searchText = agentRunSearchText(run);
+  const byPromptPath = candidatesWithPath.find((item) => searchText.includes(item.path.toLowerCase()));
+  if (byPromptPath) return byPromptPath.repo;
+
+  const byPromptName = candidatesWithPath.find((item) => {
+    const name = item.repo.name.trim().toLowerCase();
+    return name.length > 0 && searchText.includes(name);
+  });
+  if (byPromptName) return byPromptName.repo;
+
+  const children = candidatesWithPath.filter((item) => pathContainsOrEquals(runPath, item.path));
+  return children.length === 1 ? children[0]!.repo : null;
+}
+
+function buildTrellisRuntimeMonitorTargets(
+  repositories: readonly Repository[],
+  projects: ReadonlyArray<ProjectItem>,
+): Array<{ projectId: string | null; rootPath: string }> {
+  const out = new Map<string, { projectId: string | null; rootPath: string }>();
+  const repoIdsCoveredByProjectRoot = new Set<number>();
+  for (const project of projects) {
+    if (getProjectSddMode(project) !== "wise_trellis") continue;
+    const rootPath = normalizeMonitorPath(project.rootPath);
+    if (!rootPath) continue;
+    out.set(`${project.id}\n${rootPath}`, { projectId: project.id, rootPath });
+    for (const repoId of project.repositoryIds) {
+      repoIdsCoveredByProjectRoot.add(repoId);
+    }
+  }
+  for (const repo of repositories) {
+    if (repoIdsCoveredByProjectRoot.has(repo.id)) continue;
+    if (getEffectiveRepoSddMode(repo, projects) !== "wise_trellis") continue;
+    const rootPath = normalizeMonitorPath(repo.path);
+    if (!rootPath) continue;
+    out.set(`legacy-repo:${repo.id}\n${rootPath}`, { projectId: null, rootPath });
+  }
+  return Array.from(out.values()).sort((a, b) => a.rootPath.localeCompare(b.rootPath));
+}
+
+function digestTrellisAgentRuns(runs: readonly TrellisAgentRun[]): string {
+  return runs
+    .map((run) =>
+      [
+        run.agentRunId,
+        run.projectId ?? "",
+        run.rootPath,
+        run.repositoryId ?? "",
+        run.repositoryPath ?? "",
+        run.agentType,
+        run.stage ?? "",
+        run.status,
+        run.taskId ?? "",
+        run.updatedAt,
+        run.completedAt ?? "",
+      ].join("\t"),
+    )
+    .join("\n");
+}
+
+function dedupeTrellisAgentRuns(runs: readonly TrellisAgentRun[]): TrellisAgentRun[] {
+  const byId = new Map<string, TrellisAgentRun>();
+  for (const run of runs) {
+    const previous = byId.get(run.agentRunId);
+    if (!previous || run.updatedAt >= previous.updatedAt) {
+      byId.set(run.agentRunId, run);
+    }
+  }
+  return Array.from(byId.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
 export function buildRepositoryMemberMonitorItems(
   repositories: Repository[],
   invocations: readonly WorkflowInvocationStreamDetail[],
   projects: ReadonlyArray<ProjectItem> = [],
+  externalAgentRuns: readonly TrellisAgentRun[] = [],
 ): RepositoryMemberMonitorItem[] {
   const reposById = new Map(repositories.map((repo) => [repo.id, repo] as const));
   const itemsByRepositoryId = new Map<number, RepositoryMemberMonitorItem>();
@@ -233,12 +407,19 @@ export function buildRepositoryMemberMonitorItems(
     const previewSource = inv.previewLine?.trim() || inv.taskTitle?.trim() || inv.taskId?.trim() || "Trellis subagent";
     const subagent: RepositoryMemberMonitorSubagentItem = {
       invocationKey: inv.invocationKey,
+      sessionId: inv.sessionId,
+      repositoryPath,
       ...(inv.taskId?.trim() ? { taskId: inv.taskId.trim() } : {}),
       ...(inv.taskTitle?.trim() ? { taskTitle: inv.taskTitle.trim() } : {}),
       ...(inv.stage?.trim() ? { stage: inv.stage.trim() } : {}),
       subagentType: inv.subagentType?.trim() || "trellis-implement",
       status,
       ...(typeof inv.attempt === "number" ? { attempt: inv.attempt } : {}),
+      source: inv.omcInvocationSource ?? "workflow-invocation",
+      promptExcerpt: inv.dispatchPrompt?.trim(),
+      lineCount: inv.lineCount,
+      errCount: inv.errCount,
+      success: inv.success,
       previewText: truncateText(previewSource, 72),
       updatedAt: now,
     };
@@ -249,17 +430,59 @@ export function buildRepositoryMemberMonitorItems(
         repositoryName,
         repositoryPath,
         repositoryType,
-        status: status === "running" ? "in_progress" : "idle",
+        status: isActiveRepositoryMemberSubagent(status) ? "in_progress" : "idle",
         previewText: subagent.previewText,
-        activeSubagentCount: status === "running" ? 1 : 0,
+        activeSubagentCount: isActiveRepositoryMemberSubagent(status) ? 1 : 0,
         subagents: [subagent],
         updatedAt: subagent.updatedAt,
       });
       continue;
     }
     const subagents = [...current.subagents, subagent].sort((a, b) => b.updatedAt - a.updatedAt);
-    const activeSubagentCount = subagents.filter((item) => item.status === "running").length;
+    const activeSubagentCount = subagents.filter((item) => isActiveRepositoryMemberSubagent(item.status)).length;
     itemsByRepositoryId.set(repositoryId, {
+      ...current,
+      status: activeSubagentCount > 0 ? "in_progress" : "idle",
+      previewText: subagents[0]?.previewText ?? current.previewText,
+      activeSubagentCount,
+      subagents,
+      updatedAt: Math.max(current.updatedAt, subagent.updatedAt),
+    });
+  }
+
+  for (const run of externalAgentRuns) {
+    const repo = resolveAgentRunRepository(run, repositories, projects);
+    if (!repo) continue;
+    const current = itemsByRepositoryId.get(repo.id);
+    if (!current) continue;
+    const status = agentRunMonitorStatus(run.status);
+    const description = metadataString(run.metadata ?? {}, "description");
+    const subagent: RepositoryMemberMonitorSubagentItem = {
+      invocationKey: run.agentRunId,
+      ...(run.sessionId?.trim() ? { sessionId: run.sessionId.trim() } : {}),
+      rootPath: run.rootPath,
+      ...(run.repositoryPath?.trim() ? { repositoryPath: run.repositoryPath.trim() } : {}),
+      ...(run.taskId?.trim() ? { taskId: run.taskId.trim() } : {}),
+      ...(description ? { taskTitle: description } : {}),
+      ...(run.stage?.trim() ? { stage: run.stage.trim() } : {}),
+      subagentType: run.agentType.trim() || "trellis-implement",
+      status,
+      source: metadataString(run.metadata ?? {}, "source") || "trellis-runtime",
+      ...(run.currentFile?.trim() ? { currentFile: run.currentFile.trim() } : {}),
+      promptExcerpt: metadataString(run.metadata ?? {}, "promptExcerpt") || undefined,
+      outputExcerpt: metadataString(run.metadata ?? {}, "outputExcerpt") || undefined,
+      toolUseId: metadataString(run.metadata ?? {}, "toolUseId") || undefined,
+      toolName: metadataString(run.metadata ?? {}, "toolName") || undefined,
+      model: metadataString(run.metadata ?? {}, "model") || undefined,
+      startedAt: run.startedAt,
+      completedAt: run.completedAt ?? undefined,
+      lastHeartbeatAt: run.lastHeartbeatAt,
+      previewText: agentRunPreviewText(run),
+      updatedAt: run.updatedAt,
+    };
+    const subagents = [...current.subagents, subagent].sort((a, b) => b.updatedAt - a.updatedAt);
+    const activeSubagentCount = subagents.filter((item) => isActiveRepositoryMemberSubagent(item.status)).length;
+    itemsByRepositoryId.set(repo.id, {
       ...current,
       status: activeSubagentCount > 0 ? "in_progress" : "idle",
       previewText: subagents[0]?.previewText ?? current.previewText,
@@ -475,6 +698,16 @@ export function useMonitorOverview({
   const [registryRunningClaudeSessionIds, setRegistryRunningClaudeSessionIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
+  const [externalTrellisAgentRuns, setExternalTrellisAgentRuns] = useState<TrellisAgentRun[]>([]);
+
+  const trellisRuntimeMonitorTargets = useMemo(
+    () => buildTrellisRuntimeMonitorTargets(repositories, projects),
+    [repositories, projects],
+  );
+  const trellisRuntimeMonitorTargetKey = useMemo(
+    () => trellisRuntimeMonitorTargets.map((target) => `${target.projectId ?? ""}\n${target.rootPath}`).join("\n---\n"),
+    [trellisRuntimeMonitorTargets],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -518,6 +751,63 @@ export function useMonitorOverview({
       }
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    let lastDigest = "";
+    const POLL_INTERVAL_MS = 8000;
+
+    const refresh = async () => {
+      const targets = trellisRuntimeMonitorTargets;
+      if (targets.length === 0) {
+        lastDigest = "";
+        setExternalTrellisAgentRuns((prev) => (prev.length === 0 ? prev : []));
+        return;
+      }
+      const batches = await Promise.all(
+        targets.map(async (target) => {
+          const ingested = await ingestExternalClaudeCliSessions({
+            projectId: target.projectId,
+            rootPath: target.rootPath,
+            maxSessions: 16,
+            tailLines: 1_600,
+          }).catch(() => null);
+          const effectiveRootPath = ingested?.rootPath ?? target.rootPath;
+          const graph = await getTrellisAgentOwnershipGraph({
+            projectId: target.projectId,
+            rootPath: effectiveRootPath,
+            includeCompleted: true,
+          }).catch(() => null);
+          return graph?.runs ?? [];
+        }),
+      );
+      if (cancelled) return;
+      const runs = dedupeTrellisAgentRuns(batches.flat());
+      const digest = digestTrellisAgentRuns(runs);
+      if (digest === lastDigest) return;
+      lastDigest = digest;
+      setExternalTrellisAgentRuns(runs);
+    };
+
+    void refresh();
+    const timer = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      void refresh();
+    }, POLL_INTERVAL_MS);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibilityChange);
+    }
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+      }
+    };
+  }, [trellisRuntimeMonitorTargetKey, trellisRuntimeMonitorTargets]);
 
   const directBatchInvocationsSnap = useSyncExternalStore(
     subscribeOmcDirectBatchInvocations,
@@ -689,6 +979,7 @@ export function useMonitorOverview({
       repositories,
       [...directBatchInvocationsSnap, ...repositoryMemberInvocationsSnap],
       projects,
+      externalTrellisAgentRuns,
     );
     const omcMonitorItem: EmployeeMonitorItem = (() => {
       if (!hasOmcActivity) {
@@ -973,6 +1264,7 @@ export function useMonitorOverview({
     omcBatchRuntime,
     directBatchInvocationsSnap,
     repositoryMemberInvocationsSnap,
+    externalTrellisAgentRuns,
     registryRunningClaudeSessionIds,
   ]);
 }

@@ -112,6 +112,59 @@
   gap: 6px;
 }
 
+/* ═══════════════════════════════════════════════
+   Unified Button System
+   ═══════════════════════════════════════════════ */
+
+/* ── Primary: filled accent, white text ── */
+.mission-btn-primary {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 26px;
+  border: 1px solid var(--mission-accent, #1677ff); border-radius: 10px;
+  background: var(--mission-accent, #1677ff); color: #fff;
+  font: inherit; font-size: 14px; font-weight: 700;
+  cursor: pointer;
+  transition: box-shadow 160ms ease, opacity 120ms ease;
+}
+.mission-btn-primary:hover  { box-shadow: 0 0 20px var(--mission-accent-glow); }
+.mission-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Secondary: ghost outline ── */
+.mission-btn-secondary {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 8px 20px;
+  border: 1px solid var(--mission-border); border-radius: 999px;
+  background: var(--mission-surface); color: var(--mission-muted);
+  font: inherit; font-size: 13px; font-weight: 600;
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+}
+.mission-btn-secondary:hover  { border-color: var(--mission-border-strong); color: var(--mission-text); }
+.mission-btn-secondary:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── Secondary active: filled accent, white text (overrides ghost + hover) ── */
+.mission-btn-secondary--active,
+.mission-btn-secondary--active:hover,
+.mission-btn-secondary--active:focus {
+  border-color: var(--mission-accent, #1677ff);
+  border-width: 2px;
+  color: var(--mission-accent, #1677ff);
+  background: var(--mission-accent-soft);
+  font-weight: 700;
+}
+
+/* ── Retry: small warning pill ── */
+.mission-btn-retry {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 8px;
+  border: 1px solid var(--mission-warning-border); border-radius: 999px;
+  background: var(--mission-warning-soft); color: var(--mission-warning);
+  font: inherit; font-size: 10px; font-weight: 700;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.mission-btn-retry:hover { border-color: var(--mission-warning); }
+
 .mission-header__actions .ant-btn-primary {
   font-weight: 700;
   box-shadow: 0 0 12px var(--mission-accent-glow);
@@ -945,29 +998,8 @@
   flex: 1 1 0%;
 }
 
-.prd-import-submit {
-  display: inline-flex;
-  align-items: center;
-  padding: 9px 28px;
-  border: none;
-  border-radius: 10px;
-  background: var(--mission-accent);
-  color: #fff;
-  font: inherit;
-  font-size: 15px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: box-shadow 160ms ease, opacity 120ms ease;
-}
 
-.prd-import-submit:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
 
-.prd-import-submit:not(:disabled):hover {
-  box-shadow: 0 0 20px var(--mission-accent-glow);
-}
 
 /* ── Body ── */
 
@@ -1090,26 +1122,7 @@
   flex: 1 1 0%;
 }
 
-.prd-import-url__fetch-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 20px;
-  border: none;
-  border-radius: 10px;
-  background: var(--mission-accent);
-  color: #fff;
-  font: inherit;
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: opacity 120ms ease;
-}
 
-.prd-import-url__fetch-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
 
 .prd-import-url__result {
   display: flex;
@@ -1329,23 +1342,7 @@
   flex-shrink: 0;
 }
 
-.mission-column__reassign-btn {
-  padding: 2px 12px;
-  border: 1px solid var(--mission-accent-border);
-  border-radius: 6px;
-  background: var(--mission-accent-soft);
-  color: var(--mission-accent);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-  flex-shrink: 0;
-}
 
-.mission-column__reassign-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
 
 .mission-tree-node__count {
   display: inline-flex;
@@ -1730,37 +1727,9 @@
   font-weight: 700;
 }
 
-.mission-agent-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 2px 8px;
-  border: 1px solid var(--mission-border);
-  border-radius: 999px;
-  background: var(--mission-surface);
-  color: var(--mission-text);
-  font: inherit;
-  font-size: 10px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease;
-}
 
-.mission-agent-btn:hover {
-  background: var(--mission-surface-soft);
-  border-color: var(--mission-border-strong);
-}
 
-.mission-agent-btn--retry {
-  border-color: var(--mission-warning-border);
-  background: var(--mission-warning-soft);
-  color: var(--mission-warning);
-}
 
-.mission-agent-btn--retry:hover {
-  border-color: var(--mission-warning);
-  background: var(--mission-warning-soft);
-}
 
 /* ── Requirement links on card ── */
 
@@ -1941,6 +1910,54 @@
   color: var(--mission-muted);
   font-size: 13px;
   line-height: 1.6;
+}
+
+.mission-failure-evidence {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--mission-error-border, rgba(255, 77, 79, 0.35));
+  border-radius: 8px;
+  background: var(--mission-error-soft, rgba(255, 77, 79, 0.08));
+}
+
+.mission-failure-evidence__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.mission-failure-evidence__summary.ant-typography {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.mission-failure-evidence__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mission-failure-evidence__row {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr) 28px 28px;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.mission-failure-evidence__label {
+  color: var(--mission-muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.mission-failure-evidence__value {
+  min-width: 0;
+  font-size: 11px;
 }
 
 .mission-evidence-section {
@@ -2893,28 +2910,7 @@
 
 /* ── New PRD button ── */
 
-.mission-workspace-new-btn,
-.mission-workspace-legacy-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 8px 20px;
-  border: 1px solid var(--mission-border);
-  border-radius: 999px;
-  background: var(--mission-surface);
-  color: var(--mission-muted);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: border-color 120ms ease, color 120ms ease;
-}
 
-.mission-workspace-new-btn:hover,
-.mission-workspace-legacy-btn:hover {
-  border-color: var(--mission-border-strong);
-  color: var(--mission-text);
-}
 
 .mission-workspace-footer {
   display: none;

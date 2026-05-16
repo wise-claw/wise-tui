@@ -72,7 +72,7 @@ export function RequirementsTree({
           />
           <button
             type="button"
-            className="mission-column__reassign-btn"
+            className="mission-btn-primary" style={{padding: "2px 12px", fontSize: 11}}
             disabled={!reassignId}
             onClick={() => {
               const selected = tree.find((n) => n.isHighlighted);

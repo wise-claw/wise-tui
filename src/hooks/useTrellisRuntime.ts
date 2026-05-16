@@ -4,6 +4,7 @@ import {
   listTrellisRuntimeEvents,
   getTrellisOnboardingState,
   getTrellisReplay,
+  ingestExternalClaudeCliSessions,
   type TrellisAgentOwnershipGraph,
   type TrellisRuntimeEvent,
   type TrellisOnboardingState,
@@ -15,11 +16,12 @@ export function useTrellisRuntime(options: {
   projectId?: string | null;
   rootPath?: string | null;
   sessionId?: string | null;
+  missionId?: string | null;
   taskPath?: string | null;
   pollIntervalMs?: number;
   enabled?: boolean;
 } = {}) {
-  const { projectId, rootPath, sessionId, taskPath, pollIntervalMs = 8_000, enabled = true } = options;
+  const { projectId, rootPath, sessionId, missionId, taskPath, pollIntervalMs = 8_000, enabled = true } = options;
 
   const [agentGraph, setAgentGraph] = useState<TrellisAgentOwnershipGraph | null>(null);
   const [events, setEvents] = useState<TrellisRuntimeEvent[]>([]);
@@ -39,10 +41,20 @@ export function useTrellisRuntime(options: {
     const fetch = async () => {
       if (cancelled) return;
       setLoading(true);
+      const ingested = await ingestExternalClaudeCliSessions({
+        projectId,
+        rootPath: rootPath ?? "",
+        missionId,
+        sessionIds: sessionId ? [sessionId] : null,
+        maxSessions: sessionId ? 1 : 12,
+        tailLines: 1_600,
+      }).catch(() => null);
+      if (cancelled) return;
+      const effectiveRootPath = ingested?.rootPath ?? rootPath;
       const [graph, evts] = await Promise.all([
-        getTrellisAgentOwnershipGraph({ projectId, rootPath, sessionId, taskPath })
+        getTrellisAgentOwnershipGraph({ projectId, rootPath: effectiveRootPath, sessionId, taskPath })
           .catch(() => null),
-        listTrellisRuntimeEvents({ projectId, rootPath, sessionId, taskPath, limit: 50 })
+        listTrellisRuntimeEvents({ projectId, rootPath: effectiveRootPath, sessionId, taskPath, limit: 50 })
           .catch(() => [] as TrellisRuntimeEvent[]),
       ]);
       if (!cancelled) {
@@ -55,7 +67,7 @@ export function useTrellisRuntime(options: {
     fetch();
     const timer = setInterval(fetch, pollIntervalMs);
     return () => { cancelled = true; clearInterval(timer); };
-  }, [projectId, rootPath, sessionId, taskPath, pollIntervalMs, enabled]);
+  }, [projectId, rootPath, sessionId, missionId, taskPath, pollIntervalMs, enabled]);
 
   // Onboarding — fetch once on mount
   useEffect(() => {

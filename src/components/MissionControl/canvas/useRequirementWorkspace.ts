@@ -4,7 +4,8 @@ import type {
   TrellisRequirementPrdRow,
   TrellisRequirementTaskRow,
 } from "../../../services/trellisTaskBridge";
-import { listProjectRequirementWorkspace } from "../../../services/trellisTaskBridge";
+import { listTrellisRequirementWorkspace } from "../../../services/trellisTaskBridge";
+import { buildProjectRequirementWorkspaceInput } from "../../../services/trellisTaskBridge";
 import type { ProjectItem, Repository } from "../../../types";
 import type { ProjectRef } from "../../PrdSplitWizard/types";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
@@ -13,6 +14,7 @@ interface UseRequirementWorkspaceInput {
   project: ProjectItem | ProjectRef | null;
   projects: ProjectItem[];
   repositories: Repository[];
+  includeArchived?: boolean;
 }
 
 export function useRequirementWorkspace(input: UseRequirementWorkspaceInput) {
@@ -33,6 +35,11 @@ export function useRequirementWorkspace(input: UseRequirementWorkspaceInput) {
       ? input.projects.find((p) => p.id === projectId) ?? null
       : null;
 
+    if (!fullProject) {
+      setSnapshot(null);
+      return;
+    }
+
     let cancelled = false;
     const unlisteners: UnlistenFn[] = [];
 
@@ -41,10 +48,14 @@ export function useRequirementWorkspace(input: UseRequirementWorkspaceInput) {
       if (isInitial) setLoading(true);
       const cur = inputRef.current;
       try {
-        const result = await listProjectRequirementWorkspace({
-          project: fullProject ?? (cur.project as ProjectItem),
+        const wsInput = buildProjectRequirementWorkspaceInput({
+          project: fullProject,
           projects: cur.projects,
           repositories: cur.repositories,
+        });
+        const result = await listTrellisRequirementWorkspace({
+          ...wsInput,
+          includeArchived: cur.includeArchived ?? false,
         });
         if (!cancelled) setSnapshot(result);
       } catch {
@@ -54,34 +65,26 @@ export function useRequirementWorkspace(input: UseRequirementWorkspaceInput) {
       }
     };
 
-    // Initial fetch
     fetch(true);
 
-    // React to Trellis changes from multiple sources:
-    //   1. Rust backend emits on task lifecycle / agent run / spec revision
-    //   2. ClaudeChat dispatches after agent turns that produce Trellis output
-    //   3. Repo worktree changes may indicate new task files
     const eventNames = [
       "trellis-runtime-event",
       "wise:split-todo-count-updated",
       "wise:repo-worktrees-may-have-changed",
     ];
     for (const name of eventNames) {
-      listen<unknown>(name, () => {
-        fetch(false);
-      }).then((fn) => unlisteners.push(fn));
+      listen<unknown>(name, () => { fetch(false); }).then((fn) => unlisteners.push(fn));
     }
 
     return () => {
       cancelled = true;
       for (const fn of unlisteners) fn();
     };
-  }, [input.project?.id, input.projects, input.repositories]);
+  }, [input.project?.id, input.projects, input.repositories, input.includeArchived]);
 
   return { snapshot, loading };
 }
 
-/** Build a lookup map: taskId → tasks that belong to it (children) */
 export function buildTaskChildrenMap(
   tasks: TrellisRequirementTaskRow[],
 ): Map<string, TrellisRequirementTaskRow[]> {
@@ -97,7 +100,6 @@ export function buildTaskChildrenMap(
   return map;
 }
 
-/** Build lookup: prd taskId → its direct child tasks */
 export function buildPrdChildTaskMap(
   prds: TrellisRequirementPrdRow[],
   tasks: TrellisRequirementTaskRow[],

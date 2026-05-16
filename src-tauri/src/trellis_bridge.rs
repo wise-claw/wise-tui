@@ -58,6 +58,8 @@ pub struct TrellisRequirementWorkspaceInput {
     pub project_repository_paths: Vec<String>,
     #[serde(default)]
     pub floating_repository_paths: Vec<String>,
+    #[serde(default)]
+    pub include_archived: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -77,6 +79,7 @@ pub struct TrellisRequirementTaskRow {
     pub dir: String,
     pub title: String,
     pub status: String,
+    pub archived: bool,
     pub has_prd: bool,
     pub has_research: bool,
     pub created_at: Option<String>,
@@ -95,6 +98,7 @@ pub struct TrellisRequirementPrdRow {
     pub dir: String,
     pub title: String,
     pub status: String,
+    pub archived: bool,
     pub parent: Option<String>,
     pub root_path: String,
     pub source_kind: String,
@@ -304,18 +308,23 @@ fn should_enter_task_scan_dir(entry: &walkdir::DirEntry) -> bool {
     name != "archive" && !name.starts_with('.')
 }
 
-fn discover_task_dirs(tasks_root: &Path) -> Vec<DiscoveredTaskDir> {
+fn discover_task_dirs(tasks_root: &Path, include_archived: bool) -> Vec<DiscoveredTaskDir> {
     let mut rows = Vec::new();
     if !tasks_root.is_dir() {
         return rows;
     }
 
-    for entry in WalkDir::new(tasks_root)
+    let walker = WalkDir::new(tasks_root)
         .min_depth(1)
-        .follow_links(false)
-        .into_iter()
-        .filter_entry(should_enter_task_scan_dir)
-        .flatten()
+        .follow_links(false);
+
+    let entries: Box<dyn Iterator<Item = walkdir::Result<walkdir::DirEntry>>> = if include_archived {
+        Box::new(walker.into_iter())
+    } else {
+        Box::new(walker.into_iter().filter_entry(should_enter_task_scan_dir))
+    };
+
+    for entry in entries.flatten()
     {
         if !entry.file_type().is_dir() {
             continue;
@@ -336,6 +345,17 @@ fn discover_task_dirs(tasks_root: &Path) -> Vec<DiscoveredTaskDir> {
 
     rows.sort_by(|a, b| a.task_id.cmp(&b.task_id).then_with(|| a.dir.cmp(&b.dir)));
     rows
+}
+
+fn is_archived_task_dir(tasks_root: &Path, dir: &Path, status: &str) -> bool {
+    if status == "archived" {
+        return true;
+    }
+    dir.strip_prefix(tasks_root)
+        .ok()
+        .and_then(|relative| relative.components().next())
+        .map(|component| component.as_os_str() == "archive")
+        .unwrap_or(false)
 }
 
 #[tauri::command]
@@ -425,13 +445,14 @@ pub fn trellis_list_requirement_workspace(
 
         let mut source_task_count = 0_u32;
         let mut source_prd_count = 0_u32;
-        for discovered in discover_task_dirs(&tasks_root) {
+        for discovered in discover_task_dirs(&tasks_root, input.include_archived) {
             let name = discovered.task_id;
             let dir = discovered.dir;
             let task_json_raw = fs::read_to_string(dir.join("task.json")).unwrap_or_default();
             let task_json: Value = serde_json::from_str(&task_json_raw).unwrap_or(Value::Null);
             let title = read_task_title(&task_json, &name);
             let status = read_task_status(&task_json);
+            let archived = is_archived_task_dir(&tasks_root, &dir, &status);
             let created_at = read_task_created_at(&task_json);
             let parent = read_task_parent(&task_json);
             let repository_id = read_task_repository_id(&task_json);
@@ -447,6 +468,7 @@ pub fn trellis_list_requirement_workspace(
                 dir: dir.to_string_lossy().into_owned(),
                 title: title.clone(),
                 status: status.clone(),
+                archived,
                 has_prd,
                 has_research,
                 created_at,
@@ -470,6 +492,7 @@ pub fn trellis_list_requirement_workspace(
                     dir: dir.to_string_lossy().into_owned(),
                     title,
                     status,
+                    archived,
                     parent,
                     root_path: root.to_string_lossy().into_owned(),
                     source_kind: source_kind.clone(),
@@ -868,9 +891,19 @@ mod tests {
             Some("# Old"),
         );
 
-        let tasks = discover_task_dirs(&root.join(".trellis/tasks"));
+        let tasks = discover_task_dirs(&root.join(".trellis/tasks"), false);
         let ids: Vec<String> = tasks.into_iter().map(|task| task.task_id).collect();
         assert_eq!(ids, vec!["05-14-child", "05-14-parent"]);
+
+        let tasks_with_archive = discover_task_dirs(&root.join(".trellis/tasks"), true);
+        let ids_with_archive: Vec<String> = tasks_with_archive
+            .into_iter()
+            .map(|task| task.task_id)
+            .collect();
+        assert_eq!(
+            ids_with_archive,
+            vec!["05-14-child", "05-14-old", "05-14-parent"]
+        );
 
         fs::remove_dir_all(root).expect("test dir should be removed");
     }
@@ -920,17 +953,25 @@ mod tests {
             r#"{"title":"Floating","status":"in_progress"}"#,
             Some("# Floating"),
         );
+        write_task(
+            &project,
+            "archive/2026-05/05-13-archived",
+            r#"{"title":"Archived","status":"completed"}"#,
+            Some("# Archived"),
+        );
 
         let snapshot = trellis_list_requirement_workspace(TrellisRequirementWorkspaceInput {
             project_root_path: Some(project.to_string_lossy().into_owned()),
             project_repository_paths: vec![linked_repo.to_string_lossy().into_owned()],
             floating_repository_paths: vec![floating_repo.to_string_lossy().into_owned()],
+            include_archived: false,
         })
         .expect("workspace should scan");
 
         assert_eq!(snapshot.sources.len(), 3);
         assert_eq!(snapshot.tasks.len(), 3);
         assert_eq!(snapshot.prds.len(), 3);
+        assert!(snapshot.tasks.iter().all(|task| !task.archived));
         let task_ids: Vec<&str> = snapshot
             .tasks
             .iter()
@@ -968,6 +1009,26 @@ mod tests {
             .expect("floating source should be present");
         assert_eq!(floating_source.task_count, 1);
         assert_eq!(floating_source.prd_count, 1);
+
+        let with_archive = trellis_list_requirement_workspace(TrellisRequirementWorkspaceInput {
+            project_root_path: Some(project.to_string_lossy().into_owned()),
+            project_repository_paths: vec![linked_repo.to_string_lossy().into_owned()],
+            floating_repository_paths: vec![floating_repo.to_string_lossy().into_owned()],
+            include_archived: true,
+        })
+        .expect("workspace should scan archived tasks");
+        let archived = with_archive
+            .tasks
+            .iter()
+            .find(|task| task.task_id == "05-13-archived")
+            .expect("archived task should be present");
+        assert!(archived.archived);
+        let archived_prd = with_archive
+            .prds
+            .iter()
+            .find(|prd| prd.task_id == "05-13-archived")
+            .expect("archived prd should be present");
+        assert!(archived_prd.archived);
 
         fs::remove_dir_all(base).expect("test dir should be removed");
     }

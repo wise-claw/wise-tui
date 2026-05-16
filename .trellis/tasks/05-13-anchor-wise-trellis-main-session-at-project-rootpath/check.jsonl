@@ -1,4 +1,0 @@
-{"file":".trellis/spec/frontend/index.md","reason":"Frontend layer spec index for verification expectations."}
-{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Verify §3 adds the project-rooted main session note and the contract is internally consistent."}
-{"file":".trellis/spec/frontend/type-safety.md","reason":"Confirm no `any` types in the new helper; explicit return types on all public functions."}
-{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Confirm anchor flows from helper → AppImpl → useClaudeSessions without mid-layer drift."}

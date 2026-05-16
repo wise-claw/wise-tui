@@ -1,7 +1,0 @@
-{"file":".trellis/spec/frontend/index.md","reason":"Frontend layer spec index — entry point for type/service/hook conventions touched by this task."}
-{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Repository-Owned Trellis Execution Metadata contract (§3) is the spec this task evolves from repo-level to project-level."}
-{"file":".trellis/spec/frontend/type-safety.md","reason":"Type contracts for new Project / Repository fields and the narrowed SddMode enum without unsafe casts."}
-{"file":".trellis/spec/frontend/state-management.md","reason":"Persistence and reducer patterns for project/repo state updates after schema migration."}
-{"file":".trellis/spec/tauri/index.md","reason":"Tauri layer spec for SQLite migrations, Rust command shape, and IPC boundary validation."}
-{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Cross-layer data flow from SQLite migration → StoredProject → Project type → service wrapper → hook consumer."}
-{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Apply existing migration / command / serde-default patterns instead of inventing new ones."}

@@ -301,6 +301,38 @@ export interface TrellisWorkspaceSnapshotDiff {
   unchanged: TrellisWorkspaceSnapshotDiffRow[];
 }
 
+export interface ClaudeExternalIngestInput {
+  projectId?: string | null;
+  rootPath: string;
+  missionId?: string | null;
+  sessionIds?: string[] | null;
+  tailLines?: number | null;
+  maxSessions?: number | null;
+  staleAfterMs?: number | null;
+}
+
+export interface ClaudeExternalSessionIngestSummary {
+  sessionId: string;
+  updatedAt: number;
+  lineCount: number;
+  hookEventCount: number;
+  agentRunCount: number;
+  runtimeEventCount: number;
+  assignmentCount: number;
+  status: string;
+}
+
+export interface ClaudeExternalIngestResult {
+  projectId?: string | null;
+  rootPath: string;
+  missionId?: string | null;
+  scannedSessionCount: number;
+  runtimeEventCount: number;
+  agentRunCount: number;
+  assignmentCount: number;
+  sessions: ClaudeExternalSessionIngestSummary[];
+}
+
 export function recordTrellisRuntimeEvent(
   input: TrellisRuntimeRecordEventInput,
 ): Promise<TrellisRuntimeEvent> {
@@ -403,4 +435,10 @@ export function diffTrellisWorkspaceSnapshots(input: {
   afterSnapshotId: string;
 }): Promise<TrellisWorkspaceSnapshotDiff> {
   return invoke<TrellisWorkspaceSnapshotDiff>("trellis_runtime_diff_workspace_snapshots", { input });
+}
+
+export function ingestExternalClaudeCliSessions(
+  input: ClaudeExternalIngestInput,
+): Promise<ClaudeExternalIngestResult> {
+  return invoke<ClaudeExternalIngestResult>("ingest_external_claude_cli_sessions", { input });
 }
