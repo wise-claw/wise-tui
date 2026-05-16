@@ -50,6 +50,7 @@ function detail(overrides: Partial<TaskDetailVM> = {}): TaskDetailVM {
       taskName: null,
       taskPath: null,
       dispatchRaw: null,
+      dispatchError: null,
       validationIssues: [],
       deletedTaskIds: [],
       isManual: false,

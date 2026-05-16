@@ -1,7 +1,12 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { PrdDocument, TaskSplitContext } from "../../types";
 import type { RequirementsIndexV2 } from "./requirementsIndexVersion";
-import { composeSplitterPrompt, dispatchClusterSplit, type DispatchClusterRawOutput } from "./splitterDispatch";
+import {
+  composeSplitterPrompt,
+  dispatchClusterSplit,
+  retryClusterFromRunDir,
+  type DispatchClusterRawOutput,
+} from "./splitterDispatch";
 
 const cluster = {
   id: "cluster-fe-1",
@@ -119,6 +124,79 @@ describe("dispatchClusterSplit", () => {
     expect(invoke.mock.calls[0]?.[1]).toMatchObject({
       input: {
         timeoutMs: 0,
+      },
+    });
+  });
+
+  test("reports run artifact paths when Claude output has no JSON payload", async () => {
+    const raw: DispatchClusterRawOutput = {
+      runId: "run-2",
+      runDir: "/tmp/run-2",
+      exitCode: 0,
+      durationMs: 1,
+      stdoutPath: "/tmp/run-2/claude.stdout.log",
+      stderrPath: "/tmp/run-2/claude.stderr.log",
+      rawResultPath: "/tmp/run-2/split-result.raw.json",
+      claudeSessionId: "sid-2",
+      stdoutTruncatedPreview: "Validation passed. Outputting the final JSON:",
+      rawOutput: null,
+    };
+    const invoke = mock(async () => raw);
+    mock.module("@tauri-apps/api/core", () => ({ invoke }));
+
+    const result = await dispatchClusterSplit({
+      projectRootPath: "/repo",
+      parentTaskPath: ".trellis/tasks/parent",
+      cluster,
+      prd: {
+        title: "Feature",
+        sourceType: "manual",
+        sourceRef: null,
+        background: [],
+        goals: [],
+        scenarios: [],
+        functional: ["Build selected UI"],
+        nonFunctional: [],
+        acceptance: [],
+      },
+      requirementsIndex: {
+        schemaVersion: 2,
+        version: "v1",
+        requirements: [
+          { id: "req-functional-1", content: "Build selected UI", bodyHash: "aaaaaaaaaaaaaaaa" },
+        ],
+      },
+      context: null,
+    });
+
+    expect(result.normalized).toBeNull();
+    expect(result.errors.join("\n")).toContain("runDir: /tmp/run-2");
+    expect(result.errors.join("\n")).toContain("stdout: /tmp/run-2/claude.stdout.log");
+  });
+});
+
+
+describe("retryClusterFromRunDir", () => {
+  test("wraps the retry Tauri command", async () => {
+    const invoke = mock(async () => ({ newRunId: "run-2", newRunDir: "/tmp/run-2" }));
+    mock.module("@tauri-apps/api/core", () => ({ invoke }));
+
+    const result = await retryClusterFromRunDir({
+      runId: "run-1",
+      projectRootPath: "/repo",
+      missionId: "mission-1",
+      clusterId: "cluster-fe-1",
+      model: "sonnet",
+    });
+
+    expect(result).toEqual({ newRunId: "run-2", newRunDir: "/tmp/run-2" });
+    expect(invoke).toHaveBeenCalledWith("prd_split_retry_run", {
+      input: {
+        runId: "run-1",
+        projectRootPath: "/repo",
+        missionId: "mission-1",
+        clusterId: "cluster-fe-1",
+        model: "sonnet",
       },
     });
   });

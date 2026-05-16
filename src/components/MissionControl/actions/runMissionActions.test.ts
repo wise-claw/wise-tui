@@ -30,6 +30,10 @@ const dispatchClusterSplit = mock(async () => ({
   validationIssues: [],
   errors: [],
 }));
+const retryClusterFromRunDir = mock(async () => ({
+  newRunId: "run-2",
+  newRunDir: "/tmp/run-2",
+}));
 const createParentTask = mock(async () => ({
   parentTaskName: "05-16-parent",
   parentTaskPath: ".trellis/tasks/05-16-parent",
@@ -83,6 +87,7 @@ mock.module("antd/lib/index.js", () => ({
 }));
 mock.module("../../../services/prdSplit/splitterDispatch", () => ({
   dispatchClusterSplit,
+  retryClusterFromRunDir,
 }));
 mock.module("../../../services/prdSplit/trellisWriter", () => ({
   createParentTask,
@@ -211,6 +216,7 @@ describe("runMissionActions · runtime ledger parity", () => {
       createOrResumeMission,
       createParentTask,
       dispatchClusterSplit,
+      retryClusterFromRunDir,
       markChildrenPlanning,
       renderParentPrd,
       trellisAgentHeartbeat,
@@ -289,6 +295,68 @@ describe("runMissionActions · runtime ledger parity", () => {
     expect(upsertMissionAgentAssignment).not.toHaveBeenCalled();
     expect(trellisRuntimeUpsertAgentRunSafe).not.toHaveBeenCalled();
     expect(trellisRuntimeRecordEventSafe).not.toHaveBeenCalled();
+  });
+
+  test("retryClusterFromRunDir invokes run-dir retry command and records retry metadata", async () => {
+    const { retryClusterFromRunDir: retryAction } = await import("./runMissionActions");
+    const state = makeState({
+      activeMissionId: "mission-p1-hash",
+      clusterRuns: {
+        "cluster-fe": {
+          clusterId: "cluster-fe",
+          parentTaskName: "05-16-parent",
+          parentTaskPath: ".trellis/tasks/05-16-parent",
+          status: "failed",
+          errors: ["Claude failed"],
+          raw: {
+            runId: "run-1",
+            runDir: "/tmp/run-1",
+            exitCode: 1,
+            durationMs: 10,
+            stdoutPath: "/tmp/run-1/claude.stdout.log",
+            stderrPath: "/tmp/run-1/claude.stderr.log",
+            rawResultPath: "/tmp/run-1/split-result.raw.json",
+            rawOutput: null,
+            stdoutTruncatedPreview: "",
+            claudeSessionId: null,
+          },
+        },
+      },
+    });
+    const api = makeApi(state);
+
+    await retryAction("run-1", "cluster-fe", state, api, state.activeMissionId);
+
+    expect(retryClusterFromRunDir).toHaveBeenCalledWith({
+      runId: "run-1",
+      projectRootPath: "/repo",
+      missionId: "mission-p1-hash",
+      clusterId: "cluster-fe",
+    });
+    expect(appendMissionEvent).toHaveBeenCalledWith(expect.objectContaining({
+      eventType: "mission.cluster.retried",
+      payload: expect.objectContaining({
+        oldRunId: "run-1",
+        newRunId: "run-2",
+        newRunDir: "/tmp/run-2",
+      }),
+    }));
+    expect(trellisRuntimeUpsertAgentRunSafe).toHaveBeenCalledWith(
+      "mission-p1-hash",
+      expect.objectContaining({
+        agentRunId: "mission-p1-hash-cluster-fe-splitter-retry",
+        status: "running",
+        taskPath: ".trellis/tasks/05-16-parent",
+        metadata: expect.objectContaining({
+          retryFromRunId: "run-1",
+          newRunId: "run-2",
+          newRunDir: "/tmp/run-2",
+        }),
+      }),
+    );
+    expect(state.clusterRuns["cluster-fe"].raw?.runId).toBe("run-2");
+    expect(state.clusterRuns["cluster-fe"].raw?.stdoutPath).toBe("/tmp/run-2/claude.stdout.log");
+    expect(state.clusterRuns["cluster-fe"].progress?.stageLabel).toContain("run-2");
   });
 
   test("runSingleCluster sends heartbeat while splitter dispatch is pending", async () => {

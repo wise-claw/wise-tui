@@ -13,6 +13,9 @@ interface SplitterProgressEvent {
   kind: string;
   message: string;
   progressPercent: number;
+  exitCode?: number | null;
+  stdoutPath?: string | null;
+  stderrPath?: string | null;
 }
 
 export interface ClusterProgressMap {
@@ -96,14 +99,26 @@ export function useSplitterStream(): { progress: ClusterProgressMap; stdout: Clu
     }).then((fn) => unlisteners.push(fn));
 
     listen<SplitterProgressEvent>("splitter-progress", (event) => {
-      const { clusterId, kind, message, progressPercent } = event.payload;
+      const { clusterId, kind, message, progressPercent, exitCode, stdoutPath, stderrPath } = event.payload;
       if (kind === "started") {
         resetClusterOutput(clusterId);
       }
+      const status =
+        kind === "completed" ? "succeeded"
+        : kind === "error" ? "failed"
+        : "running";
       applyProgress(clusterId, {
-        status: kind === "completed" ? "succeeded" : kind === "error" ? "failed" : "running",
+        status,
         progressPercent,
         stageLabel: message,
+        error: status === "failed"
+          ? {
+            summary: message || "拆分失败",
+            exitCode: typeof exitCode === "number" ? exitCode : null,
+            stdoutPath: stdoutPath ?? "",
+            stderrPath: stderrPath ?? "",
+          }
+          : null,
       });
     }).then((fn) => unlisteners.push(fn));
 

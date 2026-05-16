@@ -10,6 +10,7 @@ import { buildDispatchSessionNeedles, resolveDispatchClaudeSession } from "./dis
 import { TraceabilityPanel } from "./TraceabilityPanel";
 import { EngineeringFoldout } from "./EngineeringFoldout";
 import { TaskEditorInline } from "./TaskEditorInline";
+import { FailureEvidenceBlock } from "./FailureEvidenceBlock";
 
 interface TaskDetailDrawerProps {
   open: boolean;
@@ -27,6 +28,7 @@ interface TaskDetailDrawerProps {
   onRestoreTask: (clusterId: string, taskId: string) => void;
   onAddTask: (clusterId: string, sourceRequirementIds: string[]) => string | null;
   onOpenPrdAnchor: () => void;
+  onRetryFromRunDir?: (runId: string, clusterId: string) => void;
 }
 
 export function TaskDetailDrawer({
@@ -45,6 +47,7 @@ export function TaskDetailDrawer({
   onRestoreTask,
   onAddTask,
   onOpenPrdAnchor,
+  onRetryFromRunDir,
 }: TaskDetailDrawerProps) {
   const isPlaceholder = detail
     ? detail.subtasks.length === 0 && detail.dod.length === 0 && detail.role === null
@@ -72,6 +75,22 @@ export function TaskDetailDrawer({
         : dispatchSessionNeedles,
   });
   const dispatchErrorText = detail?.status === "blocked" ? detail.description.trim() : "";
+  const dispatchProgressError = detail?.technical.dispatchError ?? null;
+  const dispatchError = detail?.technical.dispatchRaw || dispatchProgressError || detail?.status === "blocked"
+    ? detail?.technical.dispatchRaw
+      ? {
+        summary: dispatchErrorText || "Dispatch failed",
+        exitCode: detail.technical.dispatchRaw.exitCode,
+        stdoutPath: detail.technical.dispatchRaw.stdoutPath,
+        stderrPath: detail.technical.dispatchRaw.stderrPath,
+      }
+      : {
+        summary: dispatchProgressError?.summary || dispatchErrorText || "Dispatch failed",
+        exitCode: dispatchProgressError?.exitCode ?? null,
+        stdoutPath: dispatchProgressError?.stdoutPath ?? "",
+        stderrPath: dispatchProgressError?.stderrPath ?? "",
+      }
+    : null;
 
   const dispatchSession = useMemo(() => {
     if (!detail || !showDispatchSession) return null;
@@ -154,13 +173,23 @@ export function TaskDetailDrawer({
         </div>
 
         {showDispatchSession && dispatchSession ? (
-          <div className="mission-dispatch-session">
-            <ClaudeSessionMessagesColumn
-              session={dispatchSession}
-              showAllMessages
-              scrollContainerRef={scrollRef}
-            />
-          </div>
+          <>
+            {detail.status === "blocked" || detail.technical.dispatchRaw || dispatchProgressError ? (
+              <FailureEvidenceBlock
+                raw={detail.technical.dispatchRaw}
+                error={dispatchError}
+                clusterId={detail.clusterId}
+                onRetryFromRunDir={onRetryFromRunDir}
+              />
+            ) : null}
+            <div className="mission-dispatch-session">
+              <ClaudeSessionMessagesColumn
+                session={dispatchSession}
+                showAllMessages
+                scrollContainerRef={scrollRef}
+              />
+            </div>
+          </>
         ) : (
           <>
             {/* Source requirements */}

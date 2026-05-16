@@ -60,6 +60,19 @@ export interface DispatchClusterResult {
   errors: string[];
 }
 
+export interface RetryClusterFromRunDirInput {
+  runId: string;
+  projectRootPath: string;
+  missionId?: string | null;
+  clusterId: string;
+  model?: string | null;
+}
+
+export interface RetryClusterFromRunDirOutput {
+  newRunId: string;
+  newRunDir: string;
+}
+
 /** 0 = 无超时，子代理应自行结束或报错 */
 const DEFAULT_SPLITTER_TIMEOUT_MS = 0;
 
@@ -139,7 +152,7 @@ export async function dispatchClusterSplit(input: DispatchClusterInput): Promise
       validationIssues: [],
       errors: [
         ...errors,
-        "Claude 输出未包含可解析的 JSON 对象（见 stdout 预览或 run_dir 排错）",
+        formatMissingJsonError(raw),
       ],
     };
   }
@@ -169,6 +182,20 @@ export async function dispatchClusterSplit(input: DispatchClusterInput): Promise
     validationIssues: [],
     errors,
   };
+}
+
+export async function retryClusterFromRunDir(
+  input: RetryClusterFromRunDirInput,
+): Promise<RetryClusterFromRunDirOutput> {
+  return invoke<RetryClusterFromRunDirOutput>("prd_split_retry_run", {
+    input: {
+      runId: input.runId,
+      projectRootPath: input.projectRootPath,
+      missionId: input.missionId ?? null,
+      clusterId: input.clusterId,
+      model: input.model ?? null,
+    },
+  });
 }
 
 // ── prompt 装配 ──
@@ -216,6 +243,16 @@ export function composeSplitterPrompt(input: {
   lines.push("");
   lines.push("Now produce the JSON.");
   return lines.join("\n");
+}
+
+function formatMissingJsonError(raw: DispatchClusterRawOutput): string {
+  const parts = [
+    "Claude 输出未包含可解析的 splitter JSON 对象。",
+    raw.runDir ? `runDir: ${raw.runDir}` : null,
+    raw.stdoutPath ? `stdout: ${raw.stdoutPath}` : null,
+    raw.rawResultPath ? `raw: ${raw.rawResultPath}` : null,
+  ].filter((part): part is string => Boolean(part));
+  return parts.join(" ");
 }
 
 function buildClusterMetaJson(cluster: ClusterPlanItem): string {

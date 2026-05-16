@@ -130,6 +130,7 @@ export interface TaskDetailVM {
     taskName: string | null;
     taskPath: string | null;
     dispatchRaw: DispatchClusterRawOutput | null;
+    dispatchError: ClusterError | null;
     validationIssues: Array<{ path: string; message: string }>;
     deletedTaskIds: string[];
     isManual: boolean;

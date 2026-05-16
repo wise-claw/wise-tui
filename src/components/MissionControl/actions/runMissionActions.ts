@@ -3,6 +3,7 @@ import type { ClusterPlanItem } from "../../../services/prdSplit/clusterPlanner"
 import { buildClusterDispatchContext } from "../../../services/prdSplit/clusterDispatchContext";
 import {
   dispatchClusterSplit,
+  retryClusterFromRunDir as retryClusterRunFromDir,
   type DispatchClusterResult,
 } from "../../../services/prdSplit/splitterDispatch";
 import { createParentTask, markChildrenPlanning, renderParentPrd, writeClusterTasks } from "../../../services/prdSplit/trellisWriter";
@@ -401,6 +402,171 @@ export async function runSingleCluster(
     });
     api.setGlobalError(`任务生成失败：${errorMessage}`);
     return failedRun;
+  } finally {
+    stopHeartbeat();
+  }
+}
+
+export async function retryClusterFromRunDir(
+  runId: string,
+  clusterId: string,
+  state: UseSplitWizardStateApi["state"],
+  api: UseSplitWizardStateApi,
+  missionId?: string | null,
+): Promise<void> {
+  if (!state.project) return;
+  const cluster = state.plan?.clusters.find((candidate) => candidate.id === clusterId) ?? null;
+  if (!cluster) {
+    api.setGlobalError(`找不到任务分组：${clusterId}`);
+    return;
+  }
+  const currentRun = state.clusterRuns[clusterId];
+  const startedAt = Date.now();
+  const assignmentId = missionId ? missionAssignmentId(missionId, clusterId, "splitter-retry") : null;
+  const repositoryPath = resolveClusterRepositoryPath(cluster, state.repositories);
+  const retryRun: ClusterRunState = {
+    clusterId,
+    parentTaskName: currentRun?.parentTaskName ?? null,
+    parentTaskPath: currentRun?.parentTaskPath ?? null,
+    status: "dispatching",
+    errors: [`Retrying from runDir: ${runId}`],
+    startedAt,
+    progress: {
+      status: "running",
+      progressPercent: 5,
+      stageLabel: "从 runDir 重试中…",
+      elapsedMs: 0,
+      error: null,
+    },
+  };
+  api.patchClusterRun(clusterId, retryRun);
+  await upsertMissionAgentAssignmentSafe(missionId, {
+    assignmentId,
+    agentRunId: assignmentId,
+    clusterId,
+    repositoryId: cluster.primaryRepositoryId,
+    repositoryPath,
+    agentType: "trellis-splitter",
+    stage: "split",
+    status: "running",
+    metadata: {
+      clusterTitle: cluster.title,
+      retryFromRunId: runId,
+      requirementIds: cluster.requirementIds,
+    },
+  });
+  await upsertSplitterAgentRunSafe(missionId, state, {
+    agentRunId: assignmentId,
+    cluster,
+    repositoryPath,
+    status: "running",
+    taskPath: currentRun?.parentTaskPath ?? null,
+    metadata: {
+      retryFromRunId: runId,
+      clusterTitle: cluster.title,
+      requirementIds: cluster.requirementIds,
+    },
+    startedAt,
+  });
+  await appendMissionEventSafe(missionId, "mission.cluster.retry_started", {
+    clusterId,
+    runId,
+  });
+
+  const stopHeartbeat = startSplitterHeartbeat(assignmentId);
+  try {
+    const output = await retryClusterRunFromDir({
+      runId,
+      projectRootPath: state.project.rootPath,
+      missionId: missionId ?? null,
+      clusterId,
+    });
+    api.patchClusterRun(clusterId, {
+      raw: {
+        runId: output.newRunId,
+        runDir: output.newRunDir,
+        exitCode: 0,
+        durationMs: 0,
+        stdoutPath: `${output.newRunDir}/claude.stdout.log`,
+        stderrPath: `${output.newRunDir}/claude.stderr.log`,
+        rawResultPath: `${output.newRunDir}/split-result.raw.json`,
+        rawOutput: null,
+        stdoutTruncatedPreview: "",
+        claudeSessionId: null,
+      },
+      errors: [],
+      progress: {
+        status: "running",
+        progressPercent: 10,
+        stageLabel: `重试运行已启动：${output.newRunId}`,
+        elapsedMs: Date.now() - startedAt,
+        error: null,
+      },
+    });
+    await appendMissionEventSafe(missionId, "mission.cluster.retried", {
+      clusterId,
+      oldRunId: runId,
+      newRunId: output.newRunId,
+      newRunDir: output.newRunDir,
+    });
+    await upsertSplitterAgentRunSafe(missionId, state, {
+      agentRunId: assignmentId,
+      cluster,
+      repositoryPath,
+      status: "running",
+      taskPath: currentRun?.parentTaskPath ?? null,
+      metadata: {
+        retryFromRunId: runId,
+        newRunId: output.newRunId,
+        newRunDir: output.newRunDir,
+      },
+      startedAt,
+    });
+  } catch (error) {
+    const messageText = error instanceof Error ? error.message : String(error);
+    const endedAt = Date.now();
+    api.patchClusterRun(clusterId, {
+      status: "failed",
+      errors: [`从 runDir 重试失败: ${messageText}`],
+      endedAt,
+      progress: {
+        status: "failed",
+        progressPercent: 0,
+        stageLabel: messageText,
+        elapsedMs: endedAt - startedAt,
+        error: {
+          summary: messageText,
+          exitCode: null,
+          stdoutPath: currentRun?.raw?.stdoutPath ?? currentRun?.progress?.error?.stdoutPath ?? "",
+          stderrPath: currentRun?.raw?.stderrPath ?? currentRun?.progress?.error?.stderrPath ?? "",
+        },
+      },
+    });
+    await completeMissionAgentAssignmentSafe(assignmentId, "failed", {
+      clusterId,
+      retryFromRunId: runId,
+      error: messageText,
+    });
+    await upsertSplitterAgentRunSafe(missionId, state, {
+      agentRunId: assignmentId,
+      cluster,
+      repositoryPath,
+      status: "failed",
+      taskPath: currentRun?.parentTaskPath ?? null,
+      metadata: {
+        retryFromRunId: runId,
+        error: messageText,
+      },
+      startedAt,
+      completedAt: endedAt,
+    });
+    await recordSplitterTerminalRuntimeEventSafe(missionId, state, assignmentId, {
+      clusterId,
+      status: "failed",
+      retryFromRunId: runId,
+      error: messageText,
+    });
+    api.setGlobalError(`从 runDir 重试失败：${messageText}`);
   } finally {
     stopHeartbeat();
   }

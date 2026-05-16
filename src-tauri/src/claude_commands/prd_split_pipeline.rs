@@ -747,6 +747,18 @@ pub(crate) struct DispatchClusterInput {
     timeout_ms: Option<u64>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RetryRunInput {
+    run_id: String,
+    project_root_path: String,
+    #[serde(default)]
+    mission_id: Option<String>,
+    cluster_id: String,
+    #[serde(default)]
+    model: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DispatchClusterOutput {
@@ -762,12 +774,130 @@ pub(crate) struct DispatchClusterOutput {
     claude_session_id: Option<String>,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RetryRunOutput {
+    new_run_id: String,
+    new_run_dir: String,
+}
+
 #[tauri::command]
 pub(crate) async fn prd_split_dispatch_cluster(
     app: tauri::AppHandle,
     input: DispatchClusterInput,
 ) -> Result<DispatchClusterOutput, String> {
     dispatch_cluster_impl(app, input, false, None).await
+}
+
+#[tauri::command]
+pub(crate) async fn prd_split_retry_run(
+    app: tauri::AppHandle,
+    db: tauri::State<'_, crate::wise_db::WiseDb>,
+    input: RetryRunInput,
+) -> Result<RetryRunOutput, String> {
+    let project_root = validate_project_root(&input.project_root_path)?;
+    let old_run_id = required(input.run_id, "runId")?;
+    let requested_cluster_id = required(input.cluster_id, "clusterId")?;
+    let old_run_dir = resolve_prd_run_dir(&old_run_id)?;
+    let meta_path = old_run_dir.join("dispatch.meta.json");
+    let prompt_path = old_run_dir.join("prompt.md");
+    if !meta_path.is_file() {
+        return Err(format!(
+            "dispatch.meta.json 缺失，无法从 runDir 重试: {}",
+            old_run_dir.to_string_lossy()
+        ));
+    }
+    if !prompt_path.is_file() {
+        return Err(format!(
+            "prompt.md 缺失，无法从 runDir 重试: {}",
+            old_run_dir.to_string_lossy()
+        ));
+    }
+
+    let meta = load_retry_dispatch_meta(&old_run_dir, &requested_cluster_id)?;
+
+    let parent_task_path = meta
+        .get("parentTaskPath")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| "dispatch.meta.json 缺少 parentTaskPath".to_string())?
+        .to_string();
+    let timeout_ms = meta.get("timeoutMs").and_then(|v| v.as_u64());
+    let model = input.model.or_else(|| {
+        meta.get("model")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(ToString::to_string)
+    });
+    let prompt = fs::read_to_string(&prompt_path).map_err(|e| format!("读取 prompt.md 失败: {e}"))?;
+    let bundle = read_retry_bundle(&old_run_dir)?;
+
+    let new_run_id = format!(
+        "split-{}-{}",
+        sanitize_for_filename(&requested_cluster_id),
+        unix_ms_now()
+    );
+    let new_run_dir = crate::wise_dir()
+        .map_err(|e| format!("解析 ~/.wise 失败: {e}"))?
+        .join("prd-runs")
+        .join(&new_run_id);
+    fs::create_dir_all(&new_run_dir)
+        .map_err(|e| format!("创建 retry run_dir 失败 ({}): {e}", new_run_dir.to_string_lossy()))?;
+    patch_json_file(old_run_dir.join("run-result.json"), |value| {
+        value["superseded_by"] = json!(new_run_id);
+        Ok(())
+    })?;
+    patch_json_file(new_run_dir.join("dispatch.meta.json"), |value| {
+        value["retriedFrom"] = json!(old_run_id);
+        value["retriedFromRunDir"] = json!(old_run_dir.to_string_lossy());
+        if let Some(mission_id) = input.mission_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            value["missionId"] = json!(mission_id);
+        }
+        Ok(())
+    })?;
+    record_retry_event(&db, &input.mission_id, &old_run_id, &new_run_id, &requested_cluster_id);
+
+    let app_clone = app.clone();
+    let run_id_for_task = new_run_id.clone();
+    let run_dir_for_task = new_run_dir.clone();
+    tokio::spawn(async move {
+        match dispatch_cluster_impl(
+            app_clone,
+            DispatchClusterInput {
+                project_root_path: project_root.to_string_lossy().to_string(),
+                parent_task_path,
+                cluster_id: requested_cluster_id,
+                bundle,
+                prompt,
+                model,
+                timeout_ms,
+            },
+            true,
+            Some((run_id_for_task.clone(), run_dir_for_task.clone())),
+        )
+        .await
+        {
+            Ok(_) => {}
+            Err(e) => {
+                let _ = fs::write(
+                    run_dir_for_task.join("run-result.json"),
+                    serde_json::to_string_pretty(&json!({
+                        "runId": run_id_for_task,
+                        "status": "failed",
+                        "error": e,
+                    }))
+                    .unwrap_or_default(),
+                );
+            }
+        }
+    });
+
+    Ok(RetryRunOutput {
+        new_run_id,
+        new_run_dir: new_run_dir.to_string_lossy().to_string(),
+    })
 }
 
 /// Shared implementation for both foreground and background dispatch.
@@ -828,17 +958,20 @@ async fn dispatch_cluster_impl(
 
     fs::write(run_dir.join("prompt.md"), &effective_prompt)
         .map_err(|e| format!("写 prompt.md 失败: {e}"))?;
+    let mut meta = json!({
+        "projectRootPath": project_root.to_string_lossy(),
+        "runDir": run_dir.to_string_lossy(),
+        "parentTaskPath": input.parent_task_path,
+        "clusterId": input.cluster_id,
+        "model": input.model,
+        "timeoutMs": input.timeout_ms,
+    });
+    if let Some(existing) = read_existing_retry_metadata(&run_dir)? {
+        merge_object_fields(&mut meta, existing);
+    }
     fs::write(
         run_dir.join("dispatch.meta.json"),
-        serde_json::to_string_pretty(&json!({
-            "projectRootPath": project_root.to_string_lossy(),
-            "runDir": run_dir.to_string_lossy(),
-            "parentTaskPath": input.parent_task_path,
-            "clusterId": input.cluster_id,
-            "model": input.model,
-            "timeoutMs": input.timeout_ms,
-        }))
-        .unwrap_or_else(|_| "{}".to_string()),
+        serde_json::to_string_pretty(&meta).unwrap_or_else(|_| "{}".to_string()),
     )
     .map_err(|e| format!("写 dispatch.meta.json 失败: {e}"))?;
 
@@ -1011,13 +1144,23 @@ async fn dispatch_cluster_impl(
     };
 
     let success = exit_code == 0 && raw_output.is_some();
+    let final_error_message = if timed_out {
+        "Claude 超时".to_string()
+    } else if raw_output.is_none() {
+        "Claude 输出未包含可解析的 splitter JSON".to_string()
+    } else {
+        "失败".to_string()
+    };
     let _ = app.emit(
         "splitter-progress",
         json!({
             "clusterId": &cluster_id,
             "kind": if success { "completed" } else { "error" },
-            "message": if success { "完成" } else { "失败" },
+            "message": if success { "完成" } else { final_error_message.as_str() },
             "progressPercent": if success { 100 } else { 0 },
+            "exitCode": exit_code,
+            "stdoutPath": stdout_path.to_string_lossy(),
+            "stderrPath": stderr_path.to_string_lossy(),
         }),
     );
     let _ = app.emit(
@@ -1043,7 +1186,13 @@ async fn dispatch_cluster_impl(
             "stdoutPath": stdout_path.to_string_lossy(),
             "stderrPath": stderr_path.to_string_lossy(),
             "rawResultPath": raw_result_path.to_string_lossy(),
-            "error": if timed_out { Some(format!("Claude 超时 ({:?} ms)", timeout_ms)) } else { None },
+            "error": if timed_out {
+                Some(format!("Claude 超时 ({:?} ms)", timeout_ms))
+            } else if raw_output.is_none() {
+                Some("Claude 输出未包含可解析的 splitter JSON".to_string())
+            } else {
+                None
+            },
         }))
         .unwrap_or_default(),
     );
@@ -1149,6 +1298,161 @@ fn sanitize_for_filename(input: &str) -> String {
         out.push_str("cluster");
     }
     out
+}
+
+fn required(value: String, field: &str) -> Result<String, String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(format!("{field} 不能为空"));
+    }
+    Ok(trimmed.to_string())
+}
+
+fn resolve_prd_run_dir(run_id: &str) -> Result<PathBuf, String> {
+    if run_id.contains('/') || run_id.contains('\\') || run_id.contains("..") {
+        return Err("runId 非法".to_string());
+    }
+    let runs_base = crate::wise_dir()
+        .map_err(|e| format!("解析 ~/.wise 失败: {e}"))?
+        .join("prd-runs");
+    let run_dir = runs_base.join(run_id);
+    if !run_dir.is_dir() {
+        return Err(format!("runDir 不存在: {}", run_dir.to_string_lossy()));
+    }
+    Ok(run_dir)
+}
+
+fn read_retry_bundle(run_dir: &Path) -> Result<HashMap<String, String>, String> {
+    let mut bundle = HashMap::new();
+    let entries = fs::read_dir(run_dir)
+        .map_err(|e| format!("读取 runDir 失败 ({}): {e}", run_dir.to_string_lossy()))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("读取 runDir 条目失败: {e}"))?;
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if matches!(
+            name,
+            "prompt.md"
+                | "dispatch.meta.json"
+                | "run-result.json"
+                | "claude.stdout.log"
+                | "claude.stderr.log"
+                | "split-result.raw.json"
+        ) {
+            continue;
+        }
+        if name.contains('/') || name.contains('\\') || name.contains("..") {
+            continue;
+        }
+        let content =
+            fs::read_to_string(&path).map_err(|e| format!("读取 bundle {name} 失败: {e}"))?;
+        bundle.insert(name.to_string(), content);
+    }
+    Ok(bundle)
+}
+
+fn read_json_file(path: &Path, label: &str) -> Result<Value, String> {
+    let raw = fs::read_to_string(path).map_err(|e| format!("读取 {label} 失败: {e}"))?;
+    serde_json::from_str(&raw).map_err(|e| format!("解析 {label} 失败: {e}"))
+}
+
+fn patch_json_file(path: PathBuf, patch: impl FnOnce(&mut Value) -> Result<(), String>) -> Result<(), String> {
+    let mut value = if path.is_file() {
+        read_json_file(&path, path.file_name().and_then(|n| n.to_str()).unwrap_or("json"))?
+    } else {
+        json!({})
+    };
+    if !value.is_object() {
+        value = json!({});
+    }
+    patch(&mut value)?;
+    fs::write(
+        &path,
+        serde_json::to_string_pretty(&value).unwrap_or_else(|_| "{}".to_string()),
+    )
+    .map_err(|e| format!("写 {} 失败: {e}", path.to_string_lossy()))
+}
+
+fn read_existing_retry_metadata(run_dir: &Path) -> Result<Option<Value>, String> {
+    let path = run_dir.join("dispatch.meta.json");
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let value = read_json_file(&path, "dispatch.meta.json")?;
+    Ok(Some(value))
+}
+
+fn load_retry_dispatch_meta(run_dir: &Path, requested_cluster_id: &str) -> Result<Value, String> {
+    let meta_path = run_dir.join("dispatch.meta.json");
+    if !meta_path.is_file() {
+        return Err(format!(
+            "dispatch.meta.json 缺失，无法从 runDir 重试: {}",
+            run_dir.to_string_lossy()
+        ));
+    }
+    let meta = read_json_file(&meta_path, "dispatch.meta.json")?;
+    let old_cluster_id = meta
+        .get("clusterId")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| "dispatch.meta.json 缺少 clusterId".to_string())?;
+    if old_cluster_id != requested_cluster_id {
+        return Err(format!(
+            "clusterId 不匹配：runDir 属于 {old_cluster_id}，请求重试 {requested_cluster_id}"
+        ));
+    }
+    Ok(meta)
+}
+
+fn merge_object_fields(target: &mut Value, existing: Value) {
+    let (Some(target_obj), Some(existing_obj)) = (target.as_object_mut(), existing.as_object()) else {
+        return;
+    };
+    for key in ["retriedFrom", "retriedFromRunDir", "missionId"] {
+        if let Some(value) = existing_obj.get(key) {
+            target_obj.insert(key.to_string(), value.clone());
+        }
+    }
+}
+
+fn record_retry_event(
+    db: &tauri::State<'_, crate::wise_db::WiseDb>,
+    mission_id: &Option<String>,
+    old_run_id: &str,
+    new_run_id: &str,
+    cluster_id: &str,
+) {
+    let Some(mission_id) = mission_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) else {
+        return;
+    };
+    let Ok(g) = db.0.lock() else {
+        return;
+    };
+    let event_id = format!("mission_event_{}", uuid::Uuid::new_v4().simple());
+    let payload = serde_json::to_string(&json!({
+        "oldRunId": old_run_id,
+        "newRunId": new_run_id,
+        "clusterId": cluster_id,
+    }))
+    .unwrap_or_else(|_| "{}".to_string());
+    let _ = g.execute(
+        "INSERT OR IGNORE INTO mission_events (event_id, mission_id, event_type, timestamp, actor, payload_json)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        rusqlite::params![
+            event_id,
+            mission_id,
+            "mission.cluster.retried",
+            unix_ms_now() as i64,
+            "wise",
+            payload
+        ],
+    );
 }
 
 fn unix_ms_now() -> u128 {
@@ -1381,6 +1685,46 @@ mod tests {
     }
 
     #[test]
+    fn retry_metadata_reports_missing_dispatch_meta() {
+        let temp = test_temp_dir();
+        fs::create_dir_all(&temp).unwrap();
+        let result = load_retry_dispatch_meta(&temp, "cluster-fe");
+        assert!(result.unwrap_err().contains("dispatch.meta.json 缺失"));
+        let _ = fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn retry_metadata_rejects_cluster_mismatch() {
+        let temp = test_temp_dir();
+        fs::create_dir_all(&temp).unwrap();
+        fs::write(
+            temp.join("dispatch.meta.json"),
+            r#"{"clusterId":"cluster-backend","parentTaskPath":".trellis/tasks/parent"}"#,
+        )
+        .unwrap();
+        let result = load_retry_dispatch_meta(&temp, "cluster-fe");
+        assert!(result.unwrap_err().contains("clusterId 不匹配"));
+        let _ = fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn patch_json_file_writes_superseded_by() {
+        let temp = test_temp_dir();
+        fs::create_dir_all(&temp).unwrap();
+        let path = temp.join("run-result.json");
+        fs::write(&path, r#"{"runId":"run-1","status":"failed"}"#).unwrap();
+        patch_json_file(path.clone(), |value| {
+            value["superseded_by"] = json!("run-2");
+            Ok(())
+        })
+        .unwrap();
+        let patched = read_json_file(&path, "run-result.json").unwrap();
+        assert_eq!(patched["runId"], "run-1");
+        assert_eq!(patched["superseded_by"], "run-2");
+        let _ = fs::remove_dir_all(&temp);
+    }
+
+    #[test]
     fn extract_json_object_handles_clean_json() {
         let out = extract_json_object(r#"{"tasks":[{"id":"t1"}]}"#).unwrap();
         assert!(out.get("tasks").is_some());
@@ -1433,5 +1777,9 @@ mod tests {
     #[test]
     fn truncate_utf8_does_not_split_multibyte_chars() {
         assert_eq!(truncate_utf8("中文abc", 3), "中文a…");
+    }
+
+    fn test_temp_dir() -> PathBuf {
+        std::env::temp_dir().join(format!("wise-retry-test-{}", uuid::Uuid::new_v4().simple()))
     }
 }
