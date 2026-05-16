@@ -15,8 +15,7 @@ pub fn canonicalize_existing_dir(path: &str) -> Result<PathBuf, String> {
     if !p.is_dir() {
         return Err("所选路径不是目录".to_string());
     }
-    p.canonicalize()
-        .map_err(|e| format!("无法解析路径: {}", e))
+    p.canonicalize().map_err(|e| format!("无法解析路径: {}", e))
 }
 
 /// `root` 与 `repo` 均需为 [`canonicalize_existing_dir`] 的输出。
@@ -27,10 +26,7 @@ pub fn assert_repo_dir_under_project_root(root: &Path, repo: &Path) -> Result<()
     if repo.starts_with(root) {
         return Ok(());
     }
-    Err(format!(
-        "仓库不在项目根目录下：{}",
-        repo.to_string_lossy()
-    ))
+    Err(format!("仓库不在项目根目录下：{}", repo.to_string_lossy()))
 }
 
 #[cfg(test)]

@@ -29,6 +29,7 @@ function mergePatch(task: TaskItem, patch: TaskEditPatch | undefined): TaskItem 
     role: patch.role ?? task.role,
     subtasks: patch.subtasks ?? task.subtasks,
     dod: patch.dod ?? task.dod,
+    dependencies: patch.dependencies ?? task.dependencies,
     sourceRequirementIds: patch.sourceRequirementIds ?? task.sourceRequirementIds,
     taskAnchors: patch.taskAnchors ?? task.taskAnchors,
   };

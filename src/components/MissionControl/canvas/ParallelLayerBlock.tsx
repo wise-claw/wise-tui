@@ -24,7 +24,7 @@ export function ParallelLayerBlock({ layer, onSelectTask }: ParallelLayerBlockPr
       </div>
       <div className="mission-layer__tasks">
         {layer.tasks.map((task) => (
-          <TaskCard key={task.id} task={task} onSelect={onSelectTask} />
+          <TaskCard key={task.id} task={task} onSelect={onSelectTask} onHover={() => {}} onRetryCluster={undefined} />
         ))}
       </div>
     </div>

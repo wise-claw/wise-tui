@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { ProjectItem, Repository } from "../types";
+import { selectFloatingRepositories } from "../utils/floatingRepositories";
 
 export interface TrellisTaskSummary {
   taskId: string;
@@ -27,8 +29,91 @@ export interface TrellisResearchFile {
   modifiedAt?: number;
 }
 
+export interface TrellisRequirementWorkspaceInput {
+  projectRootPath?: string | null;
+  projectRepositoryPaths?: string[];
+  floatingRepositoryPaths?: string[];
+}
+
+export interface TrellisRequirementWorkspaceSource {
+  sourceId: string;
+  sourceKind: "project" | "projectRepository" | "floatingRepository" | string;
+  rootPath: string;
+  taskCount: number;
+  prdCount: number;
+}
+
+export interface TrellisRequirementTaskRow extends TrellisTaskSummary {
+  rootPath: string;
+  sourceKind: "project" | "projectRepository" | "floatingRepository" | string;
+  repositoryId: number | null;
+  clusterId: string | null;
+  sourceRequirementIds: string[];
+}
+
+export interface TrellisRequirementPrdRow {
+  taskId: string;
+  dir: string;
+  title: string;
+  status: string;
+  parent?: string | null;
+  rootPath: string;
+  sourceKind: "project" | "projectRepository" | "floatingRepository" | string;
+  repositoryId: number | null;
+  clusterId: string | null;
+  requirementsIndexJson: string | null;
+  prdMarkdown: string;
+  childTaskIds: string[];
+}
+
+export interface TrellisRequirementWorkspaceSnapshot {
+  sources: TrellisRequirementWorkspaceSource[];
+  prds: TrellisRequirementPrdRow[];
+  tasks: TrellisRequirementTaskRow[];
+}
+
 export async function listTrellisTasks(repoPath: string): Promise<TrellisTaskSummary[]> {
   return invoke<TrellisTaskSummary[]>("trellis_list_tasks", { repoPath });
+}
+
+export async function listTrellisRequirementWorkspace(
+  input: TrellisRequirementWorkspaceInput,
+): Promise<TrellisRequirementWorkspaceSnapshot> {
+  return invoke<TrellisRequirementWorkspaceSnapshot>("trellis_list_requirement_workspace", {
+    input: {
+      projectRootPath: input.projectRootPath ?? null,
+      projectRepositoryPaths: input.projectRepositoryPaths ?? [],
+      floatingRepositoryPaths: input.floatingRepositoryPaths ?? [],
+    },
+  });
+}
+
+export async function listProjectRequirementWorkspace(input: {
+  project: ProjectItem;
+  projects: ProjectItem[];
+  repositories: Repository[];
+}): Promise<TrellisRequirementWorkspaceSnapshot> {
+  return listTrellisRequirementWorkspace(buildProjectRequirementWorkspaceInput(input));
+}
+
+export function buildProjectRequirementWorkspaceInput(input: {
+  project: ProjectItem;
+  projects: ProjectItem[];
+  repositories: Repository[];
+}): TrellisRequirementWorkspaceInput {
+  const repositoryById = new Map(input.repositories.map((repository) => [repository.id, repository]));
+  const projectRepositoryPaths = input.project.repositoryIds
+    .map((id) => repositoryById.get(id)?.path?.trim() ?? "")
+    .filter(Boolean);
+  const floatingRepositoryPaths = selectFloatingRepositories(input.projects, input.repositories)
+    .map((repository) => repository.path.trim())
+    .filter(Boolean);
+
+  return {
+    projectRootPath: input.project.rootPath ?? null,
+    projectRepositoryPaths,
+    floatingRepositoryPaths,
+  };
 }
 
 export async function readTrellisTask(

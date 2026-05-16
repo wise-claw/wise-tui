@@ -1,3 +1,46 @@
+/* ═══════════════════════════════════════════════
+   Global Mission / SDD design tokens
+   ═══════════════════════════════════════════════ */
+:root {
+  --mission-bg: var(--ant-color-bg-layout);
+  --mission-surface: var(--ant-color-bg-container);
+  --mission-surface-elevated: var(--ant-color-bg-elevated);
+  --mission-surface-muted: var(--ant-color-fill-quaternary);
+  --mission-surface-soft: var(--ant-color-fill-tertiary);
+  --mission-surface-strong: var(--ant-color-fill-content);
+  --mission-border: var(--ant-color-border-secondary);
+  --mission-border-strong: var(--ant-color-border);
+  --mission-text: var(--ant-color-text);
+  --mission-muted: var(--ant-color-text-secondary);
+  --mission-dim: var(--ant-color-text-tertiary);
+  --mission-accent: var(--ant-color-primary);
+  --mission-accent-text: var(--ant-color-primary-text);
+  --mission-accent-soft: var(--ant-color-primary-bg);
+  --mission-accent-border: var(--ant-color-primary-border);
+  --mission-accent-glow: color-mix(in srgb, var(--ant-color-primary) 40%, transparent);
+  --mission-info: var(--ant-color-info);
+  --mission-info-soft: var(--ant-color-info-bg);
+  --mission-info-border: var(--ant-color-info-border);
+  --mission-success: var(--ant-color-success);
+  --mission-success-soft: var(--ant-color-success-bg);
+  --mission-success-border: var(--ant-color-success-border);
+  --mission-warning: var(--ant-color-warning);
+  --mission-warning-soft: var(--ant-color-warning-bg);
+  --mission-warning-border: var(--ant-color-warning-border);
+  --mission-error: var(--ant-color-error);
+  --mission-error-soft: var(--ant-color-error-bg);
+  --mission-error-border: var(--ant-color-error-border);
+  --mission-shadow: 0 8px 22px color-mix(in srgb, var(--ant-color-text) 7%, transparent);
+  --mission-shadow-soft: 0 2px 10px color-mix(in srgb, var(--ant-color-text) 5%, transparent);
+  --mission-glow: 0 0 16px var(--mission-accent-glow), 0 0 2px var(--mission-accent-border);
+}
+
+/* ── Keyframes ── */
+@keyframes mission-pulse-active {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.35); box-shadow: 0 0 8px var(--mission-info); }
+}
+
 html,
 body {
   height: 100%;

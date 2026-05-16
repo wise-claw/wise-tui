@@ -163,12 +163,12 @@ export function PrdSplitWizardModal({
     [api, currentStepIndex],
   );
 
-  const onNextFromInput = useCallback(() => {
+  const onNextFromInput = useCallback(async () => {
     if (!state.project) {
       api.setGlobalError("请先选择目标项目");
       return;
     }
-    const result = api.parseAndPlan();
+    const result = await api.parseAndPlan();
     if (!result.ok) {
       api.setGlobalError(result.reason);
     }

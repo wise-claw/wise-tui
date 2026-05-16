@@ -1,7 +1,9 @@
-import { Empty, Tree, Tag, Typography } from "antd";
+import { useState } from "react";
+import { Empty, Tree, Tag, Typography, Select } from "antd";
 import {
   FileTextOutlined,
   CheckCircleOutlined,
+  SwapOutlined,
 } from "@ant-design/icons";
 import type { RequirementTreeNodeVM } from "../presenter/types";
 import { COPY } from "../copy";
@@ -9,11 +11,20 @@ import { COPY } from "../copy";
 interface RequirementsTreeProps {
   tree: RequirementTreeNodeVM[];
   onSelect: (id: string) => void;
+  onHover: (id: string | null) => void;
   onMoveRequirement: (requirementId: string, targetTaskGroupId: string) => void;
+  targetClusters?: Array<{ id: string; title: string }>;
 }
 
-export function RequirementsTree({ tree, onSelect }: RequirementsTreeProps) {
-  const treeData = tree.map(toTreeNode);
+export function RequirementsTree({
+  tree,
+  onSelect,
+  onHover,
+  onMoveRequirement,
+  targetClusters = [],
+}: RequirementsTreeProps) {
+  const [reassignId, setReassignId] = useState<string | null>(null);
+  const treeData = tree.map((node) => toTreeNode(node, onHover));
 
   return (
     <section className="mission-column mission-column--tree">
@@ -43,13 +54,48 @@ export function RequirementsTree({ tree, onSelect }: RequirementsTreeProps) {
           />
         )}
       </div>
+
+      {/* Requirement reassign — pick target cluster */}
+      {targetClusters.length > 1 ? (
+        <div className="mission-column__reassign">
+          <SwapOutlined style={{ color: "var(--mission-dim)", fontSize: 12 }} />
+          <Select
+            size="small"
+            style={{ flex: 1, minWidth: 0 }}
+            placeholder="选择目标集群以重新分配…"
+            value={reassignId}
+            onChange={(val) => {
+              setReassignId(val ?? null);
+            }}
+            options={targetClusters.map((c) => ({ value: c.id, label: c.title }))}
+            allowClear
+          />
+          <button
+            type="button"
+            className="mission-column__reassign-btn"
+            disabled={!reassignId}
+            onClick={() => {
+              const selected = tree.find((n) => n.isHighlighted);
+              if (selected && reassignId) {
+                onMoveRequirement(selected.id, reassignId);
+                setReassignId(null);
+              }
+            }}
+          >
+            移动
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }
 
 const PRIORITY_COLORS: Record<string, string> = { P0: "red", P1: "orange", P2: "default" };
 
-function toTreeNode(node: RequirementTreeNodeVM): any {
+function toTreeNode(
+  node: RequirementTreeNodeVM,
+  onHover: (id: string | null) => void,
+): any {
   const donePercent =
     node.taskCount > 0 ? Math.round((node.completedTaskCount / node.taskCount) * 100) : 0;
   const doneIcon =
@@ -60,7 +106,11 @@ function toTreeNode(node: RequirementTreeNodeVM): any {
   return {
     key: node.id,
     title: (
-      <span className={`mission-tree-node ${node.isHighlighted ? "mission-tree-node--highlighted" : ""}`}>
+      <span
+        className={`mission-tree-node ${node.isHighlighted ? "mission-tree-node--highlighted" : ""}`}
+        onMouseEnter={() => onHover(node.id)}
+        onMouseLeave={() => onHover(null)}
+      >
         <Typography.Text
           className="mission-tree-node__label"
           strong={node.isHighlighted}
@@ -68,6 +118,9 @@ function toTreeNode(node: RequirementTreeNodeVM): any {
           {node.label}
         </Typography.Text>
         <span className="mission-tree-node__meta">
+          <Typography.Text className="mission-tree-node__id" type="secondary">
+            {node.machineId}
+          </Typography.Text>
           {node.priority ? (
             <Tag color={PRIORITY_COLORS[node.priority]} style={{ fontSize: 10, lineHeight: "16px", margin: 0 }}>
               {node.priority}
@@ -80,6 +133,6 @@ function toTreeNode(node: RequirementTreeNodeVM): any {
       </span>
     ),
     icon: doneIcon,
-    children: node.children?.map(toTreeNode),
+    children: node.children?.map((child) => toTreeNode(child, onHover)),
   };
 }

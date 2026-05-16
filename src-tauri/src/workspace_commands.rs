@@ -127,7 +127,8 @@ fn is_skipped_binary_extension(path: &Path) -> bool {
     };
     matches!(
         ext.to_ascii_lowercase().as_str(),
-        "png" | "jpg"
+        "png"
+            | "jpg"
             | "jpeg"
             | "gif"
             | "webp"
@@ -161,7 +162,11 @@ fn is_skipped_binary_extension(path: &Path) -> bool {
 }
 
 /// 在目录下 BFS 找第一个「像源码」的普通文件，供 `code 仓库 -g 文件:1:1` 在整仓上下文中打开并靠近该目录。
-fn first_source_like_file_under(dir: &Path, max_dirs_visited: usize, max_file_checks: usize) -> Option<PathBuf> {
+fn first_source_like_file_under(
+    dir: &Path,
+    max_dirs_visited: usize,
+    max_file_checks: usize,
+) -> Option<PathBuf> {
     let mut queue: VecDeque<PathBuf> = VecDeque::new();
     queue.push_back(dir.to_path_buf());
     let mut dirs_visited = 0usize;
@@ -264,8 +269,7 @@ pub(crate) fn open_workspace_in(
 
         if let Some(cmd) = command.clone() {
             if is_vscode_family_cli(&cmd) {
-                let goto_file =
-                    first_source_like_file_under(&folder_abs, 500, 4000);
+                let goto_file = first_source_like_file_under(&folder_abs, 500, 4000);
                 if let Some(f) = goto_file {
                     let f_c = fs::canonicalize(&f).unwrap_or_else(|_| f);
                     let goto_arg = format!("{}:1:1", f_c.to_string_lossy());

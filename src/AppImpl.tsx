@@ -124,14 +124,12 @@ import { useWorkflowTeamAutomation } from "./hooks/useWorkflowTeamAutomation";
 import { useWorkspaceMode } from "./hooks/useWorkspaceMode";
 import {
   addProjectPrdWorkflow,
-  listProjectPrdEmployeeIds,
   listWorkflowProjectIds,
 } from "./services/projectPrdScope";
 
 // ── App ──
 
 export default function App() {
-  const [taskSplitMode, setTaskSplitMode] = useState(false);
   /** 任务面板：在主区+右栏之上叠层展示任务列表（不盖左栏）。 */
   const [taskPanelMode] = useState(false);
   const [promptsMode, setPromptsMode] = useState(false);
@@ -518,7 +516,6 @@ export default function App() {
     (sessionId: string) => {
       const sid = sessionId.trim();
       if (!sid) return;
-      setTaskSplitMode(false);
       if (isOmcBatchHistoryStubSessionId(sid)) {
         const anchor = parseOmcBatchHistoryStubAnchorSessionId(sid);
         if (anchor) {
@@ -556,7 +553,6 @@ export default function App() {
       repositories,
       repositoryMainSessionBindings,
       setActiveRepositoryWithOwner,
-      setTaskSplitMode,
       switchSession,
     ],
   );
@@ -857,11 +853,9 @@ export default function App() {
     setSkillsHubMode(false);
     setCodeKnowledgeGraphMode(false);
     setCcWfStudioMode(false);
-    setTaskSplitMode(false);
     setMissionControlInitialTarget(detail);
     setMissionControlMode(true);
   }, []);
-  const openPrdSplitWizard = openMissionControl;
   const composerProjectRoleTagOptions = useMemo(() => {
     if (!shouldHideEmployeeUi(activeProject)) {
       return [];
@@ -1106,34 +1100,6 @@ export default function App() {
     };
   }, [workflowConfigOpen, workflowTemplates]);
 
-  const openEmployeeConfigForProject = useCallback(async () => {
-    const pid = activeProjectId?.trim() ?? "";
-    if (!pid) {
-      message.warning("请先在侧栏选择项目");
-      return;
-    }
-    const proj = projects.find((p) => p.id === pid);
-    const repoIds = proj?.repositoryIds ?? [];
-    if (repoIds.length === 0) {
-      message.warning("该项目下暂无仓库，请先在侧栏为项目关联仓库后再新增员工");
-      return;
-    }
-    setEmployeeConfigPrdProjectId(pid);
-    setEmployeeConfigRepositoryOwnerScopeOnly(false);
-    setEmployeeConfigInitialCreateEmployeeName(null);
-    setEmployeeConfigDefaultRepositoryIds([...repoIds]);
-    let prdEmployeeIds: string[] = [];
-    try {
-      prdEmployeeIds = await listProjectPrdEmployeeIds(pid);
-    } catch (error) {
-      console.error("Failed to list project PRD employee ids:", error);
-    }
-    setEmployeeConfigPrdVisibleEmployeeIds(prdEmployeeIds);
-    const firstRepo = repositories.find((r) => r.id === repoIds[0]);
-    await loadEmployeeAgentTypeOptionsFromRepositoryPath(firstRepo?.path ?? null);
-    setEmployeeConfigOpen(true);
-  }, [activeProjectId, projects, repositories, loadEmployeeAgentTypeOptionsFromRepositoryPath]);
-
   const openEmployeeConfigForRepositoryOwner = useCallback(
     async (repository: Repository) => {
       setEmployeeConfigRepositoryOwnerScopeOnly(true);
@@ -1152,22 +1118,6 @@ export default function App() {
     setWorkflowConfigInitialWorkflowId(null);
     setWorkflowConfigOpen(true);
   }, []);
-
-  const openWorkflowConfigForProject = useCallback(() => {
-    const pid = activeProjectId?.trim() ?? "";
-    if (!pid) {
-      message.warning("请先在侧栏选择项目");
-      return;
-    }
-    const proj = projects.find((p) => p.id === pid);
-    if (!proj?.repositoryIds?.length) {
-      message.warning("该项目下暂无仓库，请先在侧栏为项目关联仓库后再管理团队");
-      return;
-    }
-    setWorkflowConfigPrdProjectId(pid);
-    setWorkflowConfigInitialWorkflowId(null);
-    setWorkflowConfigOpen(true);
-  }, [activeProjectId, projects]);
 
   const {
     compactLayoutMode,
@@ -1320,7 +1270,6 @@ export default function App() {
       setMcpHubMode(false);
       setSkillsHubMode(false);
       setCcWfStudioMode(false);
-      setTaskSplitMode(false);
       setMissionControlMode(false);
       handleSidebarRepositorySelect(repositoryId);
     },
@@ -1368,13 +1317,12 @@ export default function App() {
       repositories,
     });
     if (mode === "chat") {
-      setTaskSplitMode(false);
       const id = await createSession(target.path, target.displayName);
       bindRepositoryMainSession(target.path, id);
       return;
     }
     if (mode === "split") {
-      openPrdSplitWizard({ repositoryId: repository.id });
+      openMissionControl({ repositoryId: repository.id });
       return;
     }
     // 默认模式（split prompt 执行）保持 per-repo 语义：repo 维度的任务拆分依赖 repo.path 上下文
@@ -1412,7 +1360,7 @@ export default function App() {
       return;
     }
     if (mode === "split") {
-      openPrdSplitWizard({ projectId: project.id });
+      openMissionControl({ projectId: project.id });
       return;
     }
     const sessionId = await createSession(anchor.path, anchor.displayName);
@@ -1441,7 +1389,6 @@ export default function App() {
     setPromptsOpenContext({ project });
     setActiveProjectId(project.id);
     setSearchOpen(false);
-    setTaskSplitMode(false);
     setPromptsMode(true);
   }
 
@@ -1453,7 +1400,6 @@ export default function App() {
     setActiveProjectId(project.id);
     setActiveRepositoryId(repository.id);
     setSearchOpen(false);
-    setTaskSplitMode(false);
     setPromptsMode(true);
   }
 
@@ -1525,7 +1471,6 @@ export default function App() {
       setPromptsMode(false);
       setMcpHubMode(false);
       setSkillsHubMode(false);
-      setTaskSplitMode(false);
       setMissionControlMode(false);
       setWorkflowConfigPrdProjectId(projectId || null);
       setWorkflowConfigInitialWorkflowId(workflowId || null);
@@ -1640,7 +1585,6 @@ export default function App() {
       dark={dark}
       collapsed={collapsed}
       promptsMode={promptsMode}
-      taskSplitMode={taskSplitMode}
       taskPanelMode={taskPanelMode}
       mcpHubMode={mcpHubMode}
       skillsHubMode={skillsHubMode}
@@ -1839,6 +1783,7 @@ export default function App() {
       rightPanelProps={{
         dark,
         collapsed: effectiveRightCollapsed,
+        projectId: activeProjectId,
         siderWidth: mainLayoutRightWidthPx,
         repositoryPath: activeRepository?.path,
         repositoryName: activeRepository?.name,
@@ -1931,17 +1876,6 @@ export default function App() {
         sessions,
         initialTarget: missionControlInitialTarget,
         onClose: () => setMissionControlMode(false),
-      }}
-      prdTaskSplitPanelProps={{
-        onClose: () => setTaskSplitMode(false),
-        projects,
-        repositories,
-        activeProjectId,
-        activeRepositoryId,
-        employees,
-        workflowTemplates,
-        onOpenEmployeeConfigForProject: () => void openEmployeeConfigForProject(),
-        onOpenWorkflowConfigForProject: openWorkflowConfigForProject,
       }}
       progressMonitorDrawerProps={{
         open: monitorDrawerTarget != null,

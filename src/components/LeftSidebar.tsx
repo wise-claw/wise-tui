@@ -30,6 +30,8 @@ import { useProjectRepositorySidebarState } from "./LeftSidebar/useProjectReposi
 import { useRepositoryAssociateModalController } from "./LeftSidebar/useRepositoryAssociateModalController";
 import { useRepositorySddModeModalController } from "./LeftSidebar/useRepositorySddModeModalController";
 import { useSystemResourceSessions } from "./LeftSidebar/useSystemResourceSessions";
+import { AgentAssignmentsPanel } from "./LeftSidebar/AgentAssignmentsPanel";
+import { MissionIndicator } from "./LeftSidebar/MissionIndicator";
 import "./GitPanel/index.css";
 
 export function LeftSidebar({
@@ -439,6 +441,8 @@ export function LeftSidebar({
         onSubmit={() => void repositorySddModeModal.submit()}
       />
       <AppSettingsModal open={appSettingsOpen} onClose={() => setAppSettingsOpen(false)} />
+      <MissionIndicator projectId={activeProjectId} />
+      <AgentAssignmentsPanel projectId={activeProjectId} />
     </Layout.Sider>
   );
 }

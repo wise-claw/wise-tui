@@ -26,7 +26,6 @@ import { RepositoryFileEditorPanel } from "./RepositoryFileEditorPanel";
 import { RepositoryFilePreviewModal } from "./RepositoryFilePreviewModal";
 import { SkillsHub } from "./SkillsHub";
 import { CodeKnowledgeGraphPanel } from "./CodeKnowledgeGraph";
-import type * as PrdTaskSplitPanelModule from "./PrdTaskSplitPanel";
 import type * as MissionControlModule from "./MissionControl";
 import type * as PromptsPanelModule from "./PromptsPanel";
 import type * as RightPanelModule from "./RightPanel";
@@ -35,9 +34,6 @@ import { useRepositoryFileEditor } from "../hooks/useRepositoryFileEditor";
 import type { OpenRepositoryFileDetail } from "../constants/workflowUiEvents";
 
 const RightPanel = lazy(() => import("./RightPanel").then((module) => ({ default: module.RightPanel })));
-const PrdTaskSplitPanel = lazy(() =>
-  import("./PrdTaskSplitPanel").then((module) => ({ default: module.PrdTaskSplitPanel })),
-);
 const MissionControl = lazy(() =>
   import("./MissionControl").then((module) => ({ default: module.MissionControl })),
 );
@@ -65,7 +61,6 @@ type LeftSidebarProps = Omit<
   | "onToggleCompactLayoutMode"
   | "onOpenActiveRepositoryFile"
 >;
-type PrdTaskSplitPanelProps = ComponentProps<typeof PrdTaskSplitPanelModule.PrdTaskSplitPanel>;
 type MissionControlProps = ComponentProps<typeof MissionControlModule.MissionControl>;
 type PromptsPanelProps = ComponentProps<typeof PromptsPanelModule.PromptsPanel>;
 type RightPanelProps = Omit<ComponentProps<typeof RightPanelModule.RightPanel>, "onOpenFile">;
@@ -237,7 +232,6 @@ export interface AppWorkspaceLayoutProps {
   dark: boolean;
   collapsed: boolean;
   promptsMode: boolean;
-  taskSplitMode: boolean;
   taskPanelMode: boolean;
   mcpHubMode: boolean;
   skillsHubMode: boolean;
@@ -261,7 +255,6 @@ export interface AppWorkspaceLayoutProps {
   skillsHubProps: ComponentProps<typeof SkillsHub>;
   codeKnowledgeGraphProps: ComponentProps<typeof CodeKnowledgeGraphPanel>;
   missionControlProps: MissionControlProps;
-  prdTaskSplitPanelProps: PrdTaskSplitPanelProps;
   progressMonitorDrawerProps: ComponentProps<typeof ProgressMonitorDrawer>;
   employeeConfigModalProps: ComponentProps<typeof EmployeeConfigModal> | null;
   workflowConfigModalProps: WorkflowConfigModalProps | null;
@@ -284,7 +277,6 @@ export function AppWorkspaceLayout({
   dark,
   collapsed,
   promptsMode,
-  taskSplitMode,
   mcpHubMode,
   skillsHubMode,
   codeKnowledgeGraphMode,
@@ -307,7 +299,6 @@ export function AppWorkspaceLayout({
   skillsHubProps,
   codeKnowledgeGraphProps,
   missionControlProps,
-  prdTaskSplitPanelProps,
   progressMonitorDrawerProps,
   employeeConfigModalProps,
   workflowConfigModalProps,
@@ -473,13 +464,6 @@ export function AppWorkspaceLayout({
                           onClose={onCloseCcWorkflowStudio}
                         />
                       </Suspense>
-                    ) : null}
-                    {taskSplitMode ? (
-                      <div className="app-task-split-overlay" role="dialog" aria-label="需求管理">
-                        <Suspense fallback={<PanelLoadingFallback />}>
-                          <PrdTaskSplitPanel {...prdTaskSplitPanelProps} />
-                        </Suspense>
-                      </div>
                     ) : null}
                   </div>
                 )}

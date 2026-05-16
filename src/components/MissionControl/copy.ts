@@ -2,17 +2,17 @@ import type { MissionPhase, TaskUserStatus } from "./presenter/types";
 import type { TaskRole } from "../../types";
 
 export const PHASE_LABEL: Record<MissionPhase, string> = {
-  drafting: "编辑需求",
+  drafting: "PRD 编写",
   planning: "需求分析",
-  executing: "执行中",
+  executing: "任务派发",
   verifying: "任务确认",
-  done: "已完成",
+  done: "编排完成",
 };
 
 export const USER_STATUS_LABEL: Record<TaskUserStatus, string> = {
-  queued: "等待中",
+  queued: "就绪",
   preparing: "准备中",
-  running: "进行中",
+  running: "执行中",
   completed: "已完成",
   blocked: "阻塞",
 };
@@ -24,45 +24,45 @@ export const ROLE_LABEL: Record<TaskRole, string> = {
 };
 
 export const COPY = {
-  titleFallback: "新需求",
-  emptyTarget: "未关联仓库",
+  titleFallback: "未命名任务",
+  emptyTarget: "未选定目标",
   primaryCta: {
     openSetup: "编写需求",
-    parsePrd: "分析需求",
-    generateTasks: "拆分任务",
-    writeTrellis: "保存任务",
-    writing: "保存中…",
-    openWorkflow: "查看执行编排",
+    parsePrd: "解析需求",
+    generateTasks: "派发子代理",
+    writeTrellis: "写入 Trellis",
+    writing: "写入中…",
+    openWorkflow: "启动工作流",
   },
   header: {
-    engineering: "技术详情",
-    restart: "重新开始",
+    engineering: "工程视图",
+    restart: "重新编辑",
     close: "关闭",
   },
   columns: {
-    requirements: "需求列表",
+    requirements: "需求中枢",
     graph: "任务编排",
   },
   engineeringDrawer: {
-    title: "技术详情",
-    clustersHeading: "任务分组",
-    graphHeading: "工作流",
+    title: "工程详情",
+    clustersHeading: "任务集群",
+    graphHeading: "执行图谱",
   },
   inlinePrd: {
     title: "编写 PRD",
-    hint: "在此粘贴或编写产品需求文档，支持 Markdown 格式。",
-    submit: "分析需求",
-    importLegacy: "从历史导入",
+    hint: "粘贴或撰写产品需求文档。支持 Markdown，以 # 标题分隔需求条目。",
+    submit: "解析需求",
+    importLegacy: "导入历史",
     charCount: (n: number) => `${n} 字符`,
   },
   /** @deprecated Legacy setup drawer — replaced by inline PRD editor */
   setupDrawer: {
-    title: "起草使命",
-    submit: "确认 PRD，进入规划",
+    title: "任务配置",
+    submit: "确认并继续",
     targetProject: "目标项目",
     targetRepository: "目标仓库",
-    participatingRepos: "参与仓位",
+    participatingRepos: "关联仓库",
     prdEditor: "PRD",
-    importLegacy: "从历史 PRD 导入",
+    importLegacy: "从历史导入",
   },
 };

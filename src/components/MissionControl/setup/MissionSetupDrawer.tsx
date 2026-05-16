@@ -70,12 +70,12 @@ export function MissionSetupDrawer({
     const target = repositoryToPrdSplitTarget(repository);
     api.reset(target.project, target.repositories, target.context);
   };
-  const submit = () => {
+  const submit = async () => {
     if (!state.project) {
       api.setGlobalError("请先选择目标");
       return;
     }
-    const result = api.parseAndPlan();
+    const result = await api.parseAndPlan();
     if (!result.ok) {
       api.setGlobalError(result.reason);
       return;

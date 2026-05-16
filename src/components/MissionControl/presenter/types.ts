@@ -54,6 +54,7 @@ export interface AgentRunChip {
 export interface RequirementTreeNodeVM {
   id: string;
   label: string;
+  machineId: string;
   taskCount: number;
   completedTaskCount: number;
   priority: "P0" | "P1" | "P2" | null;
@@ -66,6 +67,7 @@ export interface RequirementTreeNodeVM {
 export interface SwimlaneVM {
   id: string;
   label: string;
+  groupLabel: string;
   isParallel: boolean;
   isBottleneck: boolean;
   tasks: TaskCardVM[];
@@ -86,11 +88,15 @@ export interface TaskCardVM {
   agentStatus: AgentRunChip | null;
   clusterId: string;
   dependencyTaskIds: string[];
+  editableDependencyTaskIds: string[];
+  dependencyLabels: Array<{ taskId: string; title: string; satisfied: boolean }>;
   sourceRequirementIds: string[];
   isHighlighted: boolean;
   isDimmed: boolean;
   isSelected: boolean;
   isPlaceholder: boolean;
+  isManual: boolean;
+  isEdited: boolean;
   executionState: null;
   evidence: null;
 }
@@ -194,6 +200,9 @@ export type TaskEvidenceVM = TaskDetailVM;
 export interface MissionSelectionInput {
   requirementId: string | null;
   taskId: string | null;
+  /** Hover state — independent from click selection, enables bi-directional highlighting */
+  hoverRequirementId?: string | null;
+  hoverTaskId?: string | null;
 }
 
 export interface MissionSelection extends MissionSelectionInput {

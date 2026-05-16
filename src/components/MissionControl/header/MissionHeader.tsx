@@ -1,11 +1,13 @@
-import { Button, Space, Steps, Typography } from "antd";
+import { Button, Space, Typography } from "antd";
 import { ThunderboltOutlined, EditOutlined, SettingOutlined } from "@ant-design/icons";
 import type { MissionPrimaryCta, MissionViewModel } from "../presenter/types";
-import { MissionAgentSummary } from "./MissionAgentSummary";
+import { MissionStatusBar } from "./MissionStatusBar";
+import type { MissionSnapshotRecord } from "../../../services/missionControlBackend";
 
 interface MissionHeaderProps {
   viewModel: MissionViewModel;
   busy: boolean;
+  activeMission?: MissionSnapshotRecord | null;
   onPrimaryCta: (cta: MissionPrimaryCta) => void;
   onRestart: () => void;
   onOpenEngineering: () => void;
@@ -14,11 +16,11 @@ interface MissionHeaderProps {
 export function MissionHeader({
   viewModel,
   busy,
+  activeMission,
   onPrimaryCta,
   onRestart,
   onOpenEngineering,
 }: MissionHeaderProps) {
-  const currentStep = viewModel.phaseStrip.findIndex((s) => s.status === "current");
   const isDrafting = viewModel.phase === "drafting";
   // In drafting phase, the inline editor provides its own submit button.
   const showCta = !isDrafting;
@@ -35,22 +37,15 @@ export function MissionHeader({
         <Typography.Text className="mission-header__subtitle">{viewModel.subtitle}</Typography.Text>
       </div>
 
-      <Steps
-        className="mission-header__stepper"
-        size="small"
-        current={currentStep >= 0 ? currentStep : 0}
-        items={viewModel.phaseStrip.map((s) => ({
-          title: s.label,
-          status: s.status === "done" ? "finish" : s.status === "current" ? "process" : "wait",
-        }))}
+      <MissionStatusBar
+        missionId={activeMission?.missionId ?? null}
+        runState={viewModel.runState}
       />
-
-      <MissionAgentSummary runState={viewModel.runState} />
 
       <Space size={8} className="mission-header__actions">
         {!isDrafting && (
           <Button type="text" size="small" icon={<EditOutlined />} onClick={onRestart}>
-            编辑 PRD
+            PRD 列表
           </Button>
         )}
         <Button

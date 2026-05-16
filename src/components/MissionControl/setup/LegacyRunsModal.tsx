@@ -1,5 +1,13 @@
-import { Alert, Button, List, Modal, Space, Spin, Tag, Typography, message } from "antd";
-import { useEffect, useState } from "react";
+import { Empty, Input, Spin, Tag, Typography, message } from "antd";
+import {
+  SearchOutlined,
+  HistoryOutlined,
+  FileTextOutlined,
+  ApartmentOutlined,
+  ClockCircleOutlined,
+  InboxOutlined,
+} from "@ant-design/icons";
+import { useEffect, useMemo, useState } from "react";
 import {
   listLegacyRuns,
   readLegacyRun,
@@ -17,12 +25,14 @@ export function LegacyRunsModal({ open, onClose, onPick }: LegacyRunsModalProps)
   const [runs, setRuns] = useState<LegacyRunSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [picking, setPicking] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setSearch("");
     listLegacyRuns()
       .then((list) => {
         if (!cancelled) setRuns(list);
@@ -37,6 +47,17 @@ export function LegacyRunsModal({ open, onClose, onPick }: LegacyRunsModalProps)
       cancelled = true;
     };
   }, [open]);
+
+  const filtered = useMemo(() => {
+    const s = search.trim().toLowerCase();
+    if (!s) return runs;
+    return runs.filter(
+      (r) =>
+        r.prdPreview.toLowerCase().includes(s) ||
+        r.runId.toLowerCase().includes(s) ||
+        (r.repositoryName ?? "").toLowerCase().includes(s),
+    );
+  }, [runs, search]);
 
   const handlePick = async (summary: LegacyRunSummary) => {
     setPicking(summary.runId);
@@ -54,39 +75,122 @@ export function LegacyRunsModal({ open, onClose, onPick }: LegacyRunsModalProps)
     }
   };
 
+  if (!open) return null;
+
   return (
-    <Modal open={open} onCancel={onClose} footer={null} width="min(900px, 92vw)" title="历史 PRD 记录">
-      {error ? <Alert type="error" showIcon message="读取失败" description={error} /> : null}
-      {loading ? <Spin /> : null}
-      <List
-        dataSource={runs}
-        renderItem={(item) => (
-          <List.Item
-            actions={[
-              <Button
-                key="pick"
-                type="primary"
-                size="small"
-                loading={picking === item.runId}
-                onClick={() => handlePick(item)}
-              >
-                导入
-              </Button>,
-            ]}
-          >
-            <List.Item.Meta
-              title={
-                <Space>
-                  <Typography.Text code>{item.runId.slice(0, 8)}…</Typography.Text>
-                  <Tag>{new Date(item.createdAtMs).toLocaleString()}</Tag>
-                  {item.hasSplitResult ? <Tag color="success">{item.taskCount} 个任务</Tag> : <Tag>仅 PRD</Tag>}
-                </Space>
-              }
-              description={item.prdPreview || "无预览"}
+    <div className="mission-legacy-overlay" onClick={onClose}>
+      <div className="mission-legacy-panel" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="mission-legacy-header">
+          <div className="mission-legacy-header__left">
+            <HistoryOutlined />
+            <Typography.Text className="mission-legacy-header__title" strong>
+              历史 PRD
+            </Typography.Text>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {runs.length} 条记录
+            </Typography.Text>
+          </div>
+          <button type="button" className="mission-legacy-close" onClick={onClose}>
+            ✕
+          </button>
+        </div>
+
+        {/* Search */}
+        <div className="mission-legacy-search">
+          <Input
+            prefix={<SearchOutlined />}
+            placeholder="搜索 PRD 内容、Run ID 或仓库名…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            allowClear
+            size="small"
+          />
+        </div>
+
+        {/* Content */}
+        <div className="mission-legacy-scroll">
+          {error ? (
+            <div className="mission-legacy-error">{error}</div>
+          ) : loading ? (
+            <div className="mission-legacy-loading">
+              <Spin size="small" />
+            </div>
+          ) : filtered.length === 0 ? (
+            <Empty
+              image={<InboxOutlined style={{ fontSize: 48, color: "var(--mission-dim)" }} />}
+              description={search ? "无匹配记录" : "暂无历史 PRD 记录"}
             />
-          </List.Item>
-        )}
-      />
-    </Modal>
+          ) : (
+            <div className="mission-legacy-grid">
+              {filtered.map((item) => (
+                <button
+                  key={item.runId}
+                  type="button"
+                  className="mission-legacy-card"
+                  onClick={() => handlePick(item)}
+                  disabled={picking === item.runId}
+                >
+                  <div className="mission-legacy-card__top">
+                    <span className="mission-legacy-card__runid">{item.runId.slice(0, 12)}</span>
+                    <span className="mission-legacy-card__date">
+                      <ClockCircleOutlined />
+                      {formatRelativeDate(item.createdAtMs)}
+                    </span>
+                  </div>
+
+                  <Typography.Paragraph
+                    className="mission-legacy-card__preview"
+                    type="secondary"
+                    ellipsis={{ rows: 3 }}
+                  >
+                    {item.prdPreview || "无预览"}
+                  </Typography.Paragraph>
+
+                  <div className="mission-legacy-card__meta">
+                    {item.repositoryName ? (
+                      <Tag icon={<FileTextOutlined />} style={{ fontSize: 10, margin: 0 }}>
+                        {item.repositoryName}
+                      </Tag>
+                    ) : null}
+                    {item.hasSplitResult ? (
+                      <Tag
+                        icon={<ApartmentOutlined />}
+                        color="success"
+                        style={{ fontSize: 10, margin: 0 }}
+                      >
+                        {item.taskCount} 个任务
+                      </Tag>
+                    ) : (
+                      <Tag style={{ fontSize: 10, margin: 0 }}>仅 PRD</Tag>
+                    )}
+                  </div>
+
+                  {picking === item.runId ? (
+                    <div className="mission-legacy-card__loading">
+                      <Spin size="small" />
+                    </div>
+                  ) : (
+                    <span className="mission-legacy-card__action">导入此 PRD →</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
+}
+
+function formatRelativeDate(ms: number): string {
+  const diff = Date.now() - ms;
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return "刚刚";
+  if (mins < 60) return `${mins} 分钟前`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} 小时前`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days} 天前`;
+  return new Date(ms).toLocaleDateString("zh-CN");
 }

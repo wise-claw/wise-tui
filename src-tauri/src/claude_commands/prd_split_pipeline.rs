@@ -9,7 +9,7 @@
 
 use super::{claude_path_search_prefixes, find_claude_binary, merge_path_env, trim_model_cli_arg};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -950,32 +950,44 @@ async fn dispatch_cluster_impl(
         buf
     });
 
-    let timeout_ms = input.timeout_ms.unwrap_or(600_000).max(1_000);
-    let wait = tokio::time::timeout(Duration::from_millis(timeout_ms), child.wait()).await;
-    let (status_result, timed_out) = match wait {
-        Ok(s) => (
-            Some(s.map_err(|e| format!("Claude 进程等待失败: {e}"))?),
-            false,
-        ),
-        Err(_) => {
-            let _ = child.kill().await;
-            let _ = child.wait().await;
-            let _ = app.emit(
-                "splitter-progress",
-                json!({ "clusterId": &cluster_id, "kind": "error", "message": "Claude 超时", "progressPercent": 0 }),
-            );
-            (None, true)
+    let timeout_ms = input.timeout_ms.filter(|&t| t > 0);
+    let (status_result, timed_out) = if let Some(ms) = timeout_ms {
+        let wait = tokio::time::timeout(Duration::from_millis(ms.max(1_000)), child.wait()).await;
+        match wait {
+            Ok(s) => (
+                Some(s.map_err(|e| format!("Claude 进程等待失败: {e}"))?),
+                false,
+            ),
+            Err(_) => {
+                let _ = child.kill().await;
+                let _ = child.wait().await;
+                (None, true)
+            }
         }
+    } else {
+        // No timeout — wait indefinitely
+        let s = child
+            .wait()
+            .await
+            .map_err(|e| format!("Claude 进程等待失败: {e}"))?;
+        (Some(s), false)
     };
 
     let stdout_text = stdout_task.await.unwrap_or_default();
     let stderr_buf = stderr_task.await.unwrap_or_default();
     let mut stderr_text = String::from_utf8_lossy(&stderr_buf).to_string();
     if timed_out {
+        let _ = app.emit(
+            "splitter-progress",
+            json!({ "clusterId": &cluster_id, "kind": "error", "message": "Claude 超时", "progressPercent": 0 }),
+        );
         if !stderr_text.ends_with('\n') && !stderr_text.is_empty() {
             stderr_text.push('\n');
         }
-        stderr_text.push_str(&format!("Claude timed out after {} ms\n", timeout_ms));
+        stderr_text.push_str(&format!(
+            "Claude timed out after {} ms\n",
+            timeout_ms.unwrap_or(0)
+        ));
     }
     fs::write(&stdout_path, &stdout_text).ok();
     fs::write(&stderr_path, &stderr_text).ok();
@@ -1031,7 +1043,7 @@ async fn dispatch_cluster_impl(
             "stdoutPath": stdout_path.to_string_lossy(),
             "stderrPath": stderr_path.to_string_lossy(),
             "rawResultPath": raw_result_path.to_string_lossy(),
-            "error": if timed_out { Some(format!("Claude 超时 ({} ms)", timeout_ms)) } else { None },
+            "error": if timed_out { Some(format!("Claude 超时 ({:?} ms)", timeout_ms)) } else { None },
         }))
         .unwrap_or_default(),
     );

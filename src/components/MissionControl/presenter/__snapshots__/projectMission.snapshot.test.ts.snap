@@ -11,7 +11,7 @@ exports[`projectMission snapshots drafting state 1`] = `
   "phaseStrip": [
     {
       "key": "drafting",
-      "label": "编辑需求",
+      "label": "PRD 编写",
       "status": "current",
     },
     {
@@ -26,7 +26,7 @@ exports[`projectMission snapshots drafting state 1`] = `
     },
     {
       "key": "done",
-      "label": "已完成",
+      "label": "编排完成",
       "status": "todo",
     },
   ],
@@ -36,7 +36,7 @@ exports[`projectMission snapshots drafting state 1`] = `
   },
   "project": {
     "id": null,
-    "name": "未关联仓库",
+    "name": "未选定目标",
     "rootPath": "",
   },
   "requirements": [],
@@ -52,7 +52,7 @@ exports[`projectMission snapshots drafting state 1`] = `
     "taskId": null,
   },
   "subtitle": "项目使命 · 等待 PRD",
-  "title": "新需求",
+  "title": "未命名任务",
 }
 `;
 
@@ -129,7 +129,7 @@ exports[`projectMission snapshots planning state with dependency layers 1`] = `
   "phaseStrip": [
     {
       "key": "drafting",
-      "label": "编辑需求",
+      "label": "PRD 编写",
       "status": "done",
     },
     {
@@ -144,14 +144,14 @@ exports[`projectMission snapshots planning state with dependency layers 1`] = `
     },
     {
       "key": "done",
-      "label": "已完成",
+      "label": "编排完成",
       "status": "todo",
     },
   ],
   "primaryCta": {
     "disabled": false,
     "kind": "generate-tasks",
-    "label": "拆分任务",
+    "label": "派发子代理",
   },
   "project": {
     "id": "p",
@@ -238,7 +238,7 @@ exports[`projectMission snapshots verifying state with selected evidence 1`] = `
   "phaseStrip": [
     {
       "key": "drafting",
-      "label": "编辑需求",
+      "label": "PRD 编写",
       "status": "done",
     },
     {
@@ -253,14 +253,14 @@ exports[`projectMission snapshots verifying state with selected evidence 1`] = `
     },
     {
       "key": "done",
-      "label": "已完成",
+      "label": "编排完成",
       "status": "todo",
     },
   ],
   "primaryCta": {
     "disabled": false,
     "kind": "write-trellis",
-    "label": "保存任务",
+    "label": "写入 Trellis",
   },
   "project": {
     "id": "p",
@@ -361,7 +361,7 @@ exports[`projectMission snapshots done state with workflow graph 1`] = `
   "phaseStrip": [
     {
       "key": "drafting",
-      "label": "编辑需求",
+      "label": "PRD 编写",
       "status": "done",
     },
     {
@@ -376,14 +376,14 @@ exports[`projectMission snapshots done state with workflow graph 1`] = `
     },
     {
       "key": "done",
-      "label": "已完成",
+      "label": "编排完成",
       "status": "current",
     },
   ],
   "primaryCta": {
     "disabled": false,
     "kind": "open-workflow",
-    "label": "查看执行编排",
+    "label": "启动工作流",
     "workflowId": "wf-1",
   },
   "project": {

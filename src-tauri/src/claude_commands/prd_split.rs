@@ -90,7 +90,7 @@ pub(crate) async fn run_prd_split_claude(
 ) -> Result<PrdSplitClaudeRunResult, String> {
     let run_dir = normalize_split_run_dir(&run_dir)?;
     let run_id = parse_run_id_from_dir(&run_dir);
-    let timeout_ms = timeout_ms.unwrap_or(120_000).max(1_000);
+    let timeout_ms = timeout_ms.filter(|&t| t > 0);
 
     let stdout_path = run_dir.join("claude.stdout.log");
     let stderr_path = run_dir.join("claude.stderr.log");
@@ -140,12 +140,19 @@ pub(crate) async fn run_prd_split_claude(
         buf
     });
 
-    let wait_result = tokio::time::timeout(Duration::from_millis(timeout_ms), child.wait()).await;
-    let timed_out = wait_result.is_err();
-    if timed_out {
-        let _ = child.kill().await;
-        let _ = child.wait().await;
-    }
+    let (status_result, timed_out) = if let Some(ms) = timeout_ms {
+        let wait = tokio::time::timeout(Duration::from_millis(ms.max(1_000)), child.wait()).await;
+        match wait {
+            Ok(s) => (s.ok(), false),
+            Err(_) => {
+                let _ = child.kill().await;
+                let _ = child.wait().await;
+                (None, true)
+            }
+        }
+    } else {
+        (child.wait().await.ok(), false)
+    };
 
     let stdout_bytes = stdout_task
         .await
@@ -168,16 +175,10 @@ pub(crate) async fn run_prd_split_claude(
         (
             "failed",
             10,
-            format!(
-                "# split run failed\n\n- reason: timeout\n- timeoutMs: {timeout_ms}\n- runId: {run_id}\n"
-            ),
+            format!("# split run failed\n\n- reason: timeout\n- runId: {run_id}\n"),
         )
     } else {
-        let cli_status_ok = wait_result
-            .ok()
-            .and_then(|r| r.ok())
-            .map(|s| s.success())
-            .unwrap_or(false);
+        let cli_status_ok = status_result.map(|s| s.success()).unwrap_or(false);
         if !cli_status_ok {
             (
                 "failed",
@@ -226,4 +227,91 @@ pub(crate) async fn run_prd_split_claude(
         raw_result_path: raw_result_path.to_string_lossy().to_string(),
         notes_path: Some(notes_path.to_string_lossy().to_string()),
     })
+}
+
+/// 轻量 Claude 调用：入参 prompt，出参 stdout 纯文本。
+/// 用于快速分类/分析任务，不走文件持久化。
+#[tauri::command]
+pub(crate) async fn run_claude_quick(
+    project_path: String,
+    prompt: String,
+    timeout_ms: Option<u64>,
+) -> Result<String, String> {
+    let timeout_ms = timeout_ms.filter(|&t| t > 0);
+    let claude_path = find_claude_binary()?;
+    let mut cmd = tokio::process::Command::new(&claude_path);
+    cmd.current_dir(&project_path);
+    cmd.arg("--bare");
+    cmd.arg("-p").arg(&prompt);
+    cmd.arg("--output-format").arg("text");
+    cmd.arg("--permission-mode").arg("bypassPermissions");
+    cmd.env(
+        "HOME",
+        dirs::home_dir()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default(),
+    );
+    cmd.env("PATH", merge_path_env(&claude_path_search_prefixes()));
+    cmd.stdin(std::process::Stdio::null());
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::piped());
+
+    let mut child = cmd.spawn().map_err(|e| format!("启动 Claude 失败: {e}"))?;
+    let mut stdout_reader = child.stdout.take().ok_or("无法获取 stdout")?;
+    let mut stderr_reader = child.stderr.take().ok_or("无法获取 stderr")?;
+
+    let stdout_handle = tokio::spawn(async move {
+        let mut buf = Vec::new();
+        let _ = tokio::io::AsyncReadExt::read_to_end(&mut stdout_reader, &mut buf).await;
+        buf
+    });
+    let stderr_handle = tokio::spawn(async move {
+        let mut buf = Vec::new();
+        let _ = tokio::io::AsyncReadExt::read_to_end(&mut stderr_reader, &mut buf).await;
+        buf
+    });
+
+    let (status_result, timed_out) = if let Some(ms) = timeout_ms {
+        let wait = tokio::time::timeout(
+            std::time::Duration::from_millis(ms.max(5_000)),
+            child.wait(),
+        )
+        .await;
+        match wait {
+            Ok(s) => (s.ok(), false),
+            Err(_) => {
+                let _ = child.kill().await;
+                let _ = child.wait().await;
+                (None, true)
+            }
+        }
+    } else {
+        (child.wait().await.ok(), false)
+    };
+
+    if timed_out {
+        return Err("Claude 调用超时".to_string());
+    }
+
+    let stdout_bytes = stdout_handle
+        .await
+        .map_err(|e| format!("读取 stdout 失败: {e}"))?;
+    let stderr_bytes = stderr_handle
+        .await
+        .map_err(|e| format!("读取 stderr 失败: {e}"))?;
+    let stdout_text = String::from_utf8_lossy(&stdout_bytes).to_string();
+    let stderr_text = String::from_utf8_lossy(&stderr_bytes).to_string();
+
+    let exit_ok = status_result.map(|s| s.success()).unwrap_or(false);
+    if !exit_ok {
+        return Err(format!("Claude 退出异常。stderr: {}", stderr_text));
+    }
+
+    Ok(stdout_text.trim().to_string())
+}
+
+/// 读取本地文本文件内容，用于导入 PRD
+#[tauri::command]
+pub(crate) fn read_local_text_file(path: String) -> Result<String, String> {
+    std::fs::read_to_string(&path).map_err(|e| format!("读取文件失败: {e}"))
 }

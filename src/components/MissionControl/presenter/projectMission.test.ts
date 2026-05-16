@@ -159,6 +159,159 @@ describe("projectMission", () => {
     expect(vm.selectedTaskEvidence?.codeAnchors[0]).toMatchObject({ filePath: "src/App.tsx", line: 1 });
   });
 
+  test("hover task highlights its source requirement without replacing click selection", () => {
+    const c = cluster();
+    const vm = projectMission({
+      state: state({
+        stage: "dispatch",
+        project: { id: "p", name: "P", rootPath: "/tmp" },
+        repositories: [{ id: 1, name: "web", path: "/tmp/web", type: "frontend" }],
+        selectedRepositoryIds: [1],
+        prd,
+        requirementsIndex: index,
+        plan: plan([c]),
+        clusterRuns: {
+          "c-a": {
+            clusterId: "c-a",
+            parentTaskName: "parent",
+            parentTaskPath: "/tmp/.trellis/tasks/parent",
+            status: "succeeded",
+            normalized: split([task()]),
+            errors: [],
+          },
+        },
+      }),
+      selection: { requirementId: null, taskId: null, hoverTaskId: "T-1" },
+      repositories: [repo],
+    });
+
+    expect(vm.selection.hoverTaskId).toBe("T-1");
+    expect(vm.selection.highlightedTaskIds.has("T-1")).toBe(true);
+    expect(vm.requirementTree[0].isHighlighted).toBe(true);
+  });
+
+  test("hover and click selections both contribute to highlighted tasks", () => {
+    const vm = projectMission({
+      state: state({
+        stage: "dispatch",
+        project: { id: "p", name: "P", rootPath: "/tmp" },
+        repositories: [{ id: 1, name: "web", path: "/tmp/web", type: "frontend" }],
+        selectedRepositoryIds: [1],
+        prd,
+        requirementsIndex: {
+          ...index,
+          requirements: [
+            { id: "REQ-1", content: "One", bodyHash: "aaaaaaaaaaaaaaaa" },
+            { id: "REQ-2", content: "Two", bodyHash: "bbbbbbbbbbbbbbbb" },
+          ],
+        },
+        plan: plan([cluster({ requirementIds: ["REQ-1", "REQ-2"] })]),
+        clusterRuns: {
+          "c-a": {
+            clusterId: "c-a",
+            parentTaskName: "parent",
+            parentTaskPath: "/tmp/.trellis/tasks/parent",
+            status: "succeeded",
+            normalized: split([
+              task({ id: "T-1", sourceRequirementIds: ["REQ-1"] }),
+              task({ id: "T-2", sourceRequirementIds: ["REQ-2"] }),
+            ]),
+            errors: [],
+          },
+        },
+      }),
+      selection: { requirementId: "REQ-1", taskId: null, hoverRequirementId: "REQ-2" },
+      repositories: [repo],
+    });
+
+    expect([...vm.selection.highlightedTaskIds].sort()).toEqual(["T-1", "T-2"]);
+  });
+
+  test("separates editable task dependencies from derived cluster dependencies", () => {
+    const first = cluster({
+      id: "c-a",
+      title: "First",
+      requirementIds: ["REQ-1"],
+    });
+    const second = cluster({
+      id: "c-b",
+      title: "Second",
+      requirementIds: ["REQ-1"],
+      dependencyClusterIds: ["c-a"],
+    });
+    const vm = projectMission({
+      state: state({
+        stage: "dispatch",
+        project: { id: "p", name: "P", rootPath: "/tmp" },
+        repositories: [{ id: 1, name: "web", path: "/tmp/web", type: "frontend" }],
+        selectedRepositoryIds: [1],
+        prd,
+        requirementsIndex: index,
+        plan: plan([first, second]),
+        clusterRuns: {
+          "c-a": {
+            clusterId: "c-a",
+            parentTaskName: "parent-a",
+            parentTaskPath: "/tmp/.trellis/tasks/parent-a",
+            status: "succeeded",
+            normalized: split([task({ id: "T-1", title: "A" })]),
+            errors: [],
+          },
+          "c-b": {
+            clusterId: "c-b",
+            parentTaskName: "parent-b",
+            parentTaskPath: "/tmp/.trellis/tasks/parent-b",
+            status: "succeeded",
+            normalized: split([task({ id: "T-2", title: "B", dependencies: ["T-1"] })]),
+            errors: [],
+          },
+        },
+      }),
+      selection: { requirementId: null, taskId: null },
+      repositories: [repo],
+    });
+
+    const secondTask = vm.taskSwimlane.flatMap((lane) => lane.tasks).find((item) => item.id === "T-2");
+    expect(secondTask?.dependencyTaskIds).toEqual(["T-1"]);
+    expect(secondTask?.editableDependencyTaskIds).toEqual(["T-1"]);
+
+    const clusterOnlyVm = projectMission({
+      state: state({
+        stage: "dispatch",
+        project: { id: "p", name: "P", rootPath: "/tmp" },
+        repositories: [{ id: 1, name: "web", path: "/tmp/web", type: "frontend" }],
+        selectedRepositoryIds: [1],
+        prd,
+        requirementsIndex: index,
+        plan: plan([first, second]),
+        clusterRuns: {
+          "c-a": {
+            clusterId: "c-a",
+            parentTaskName: "parent-a",
+            parentTaskPath: "/tmp/.trellis/tasks/parent-a",
+            status: "succeeded",
+            normalized: split([task({ id: "T-1", title: "A" })]),
+            errors: [],
+          },
+          "c-b": {
+            clusterId: "c-b",
+            parentTaskName: "parent-b",
+            parentTaskPath: "/tmp/.trellis/tasks/parent-b",
+            status: "succeeded",
+            normalized: split([task({ id: "T-2", title: "B", dependencies: [] })]),
+            errors: [],
+          },
+        },
+      }),
+      selection: { requirementId: null, taskId: null },
+      repositories: [repo],
+    });
+
+    const clusterOnlyTask = clusterOnlyVm.taskSwimlane.flatMap((lane) => lane.tasks).find((item) => item.id === "T-2");
+    expect(clusterOnlyTask?.dependencyTaskIds).toEqual(["T-1"]);
+    expect(clusterOnlyTask?.editableDependencyTaskIds).toEqual([]);
+  });
+
   test("done state points at workflow", () => {
     const vm = projectMission({
       state: state({

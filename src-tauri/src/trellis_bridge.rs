@@ -2,8 +2,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use walkdir::WalkDir;
 
 const MAX_PRD_BYTES: usize = 256 * 1024;
 const TRUNCATION_MARKER: &str = "\n\n<!-- truncated: original exceeded 256 KB -->\n";
@@ -47,6 +48,75 @@ pub struct TrellisResearchFileRow {
     pub name: String,
     pub size_bytes: u64,
     pub modified_at: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrellisRequirementWorkspaceInput {
+    pub project_root_path: Option<String>,
+    #[serde(default)]
+    pub project_repository_paths: Vec<String>,
+    #[serde(default)]
+    pub floating_repository_paths: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrellisRequirementWorkspaceSource {
+    pub source_id: String,
+    pub source_kind: String,
+    pub root_path: String,
+    pub task_count: u32,
+    pub prd_count: u32,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrellisRequirementTaskRow {
+    pub task_id: String,
+    pub dir: String,
+    pub title: String,
+    pub status: String,
+    pub has_prd: bool,
+    pub has_research: bool,
+    pub created_at: Option<String>,
+    pub parent: Option<String>,
+    pub root_path: String,
+    pub source_kind: String,
+    pub repository_id: Option<i64>,
+    pub cluster_id: Option<String>,
+    pub source_requirement_ids: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrellisRequirementPrdRow {
+    pub task_id: String,
+    pub dir: String,
+    pub title: String,
+    pub status: String,
+    pub parent: Option<String>,
+    pub root_path: String,
+    pub source_kind: String,
+    pub repository_id: Option<i64>,
+    pub cluster_id: Option<String>,
+    pub requirements_index_json: Option<String>,
+    pub prd_markdown: String,
+    pub child_task_ids: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrellisRequirementWorkspaceSnapshot {
+    pub sources: Vec<TrellisRequirementWorkspaceSource>,
+    pub prds: Vec<TrellisRequirementPrdRow>,
+    pub tasks: Vec<TrellisRequirementTaskRow>,
+}
+
+#[derive(Debug)]
+struct DiscoveredTaskDir {
+    task_id: String,
+    dir: PathBuf,
 }
 
 fn validate_simple_slug(value: &str, field: &str) -> Result<(), String> {
@@ -154,6 +224,65 @@ fn read_task_created_at(task_json: &Value) -> Option<String> {
         .map(str::to_string)
 }
 
+fn read_string_array_field(task_json: &Value, field: &str) -> Vec<String> {
+    task_json
+        .get(field)
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn read_task_children(task_json: &Value) -> Vec<String> {
+    let mut out = Vec::new();
+    for field in ["children", "subtasks"] {
+        for child in read_string_array_field(task_json, field) {
+            if !out.contains(&child) {
+                out.push(child);
+            }
+        }
+    }
+    out
+}
+
+fn read_task_repository_id(task_json: &Value) -> Option<i64> {
+    task_json.get("repositoryId").and_then(Value::as_i64)
+}
+
+fn read_task_cluster_id(task_json: &Value) -> Option<String> {
+    task_json
+        .get("clusterId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+}
+
+fn read_source_requirement_ids(task_json: &Value) -> Vec<String> {
+    task_json
+        .get("meta")
+        .and_then(Value::as_object)
+        .and_then(|meta| meta.get("sourceRequirementIds"))
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 fn truncate_prd(raw: String) -> String {
     if raw.len() <= MAX_PRD_BYTES {
         return raw;
@@ -165,6 +294,48 @@ fn truncate_prd(raw: String) -> String {
     let mut truncated = raw[..cut].to_string();
     truncated.push_str(TRUNCATION_MARKER);
     truncated
+}
+
+fn should_enter_task_scan_dir(entry: &walkdir::DirEntry) -> bool {
+    if entry.depth() == 0 {
+        return true;
+    }
+    let name = entry.file_name().to_string_lossy();
+    name != "archive" && !name.starts_with('.')
+}
+
+fn discover_task_dirs(tasks_root: &Path) -> Vec<DiscoveredTaskDir> {
+    let mut rows = Vec::new();
+    if !tasks_root.is_dir() {
+        return rows;
+    }
+
+    for entry in WalkDir::new(tasks_root)
+        .min_depth(1)
+        .follow_links(false)
+        .into_iter()
+        .filter_entry(should_enter_task_scan_dir)
+        .flatten()
+    {
+        if !entry.file_type().is_dir() {
+            continue;
+        }
+        let task_id = entry.file_name().to_string_lossy().into_owned();
+        if validate_task_id(&task_id).is_err() {
+            continue;
+        }
+        let dir = entry.path();
+        if !dir.join("task.json").is_file() {
+            continue;
+        }
+        rows.push(DiscoveredTaskDir {
+            task_id,
+            dir: dir.to_path_buf(),
+        });
+    }
+
+    rows.sort_by(|a, b| a.task_id.cmp(&b.task_id).then_with(|| a.dir.cmp(&b.dir)));
+    rows
 }
 
 #[tauri::command]
@@ -211,6 +382,153 @@ pub fn trellis_list_tasks(repo_path: String) -> Result<Vec<TrellisTaskSummaryRow
     }
     rows.sort_by(|a, b| a.task_id.cmp(&b.task_id));
     Ok(rows)
+}
+
+#[tauri::command]
+pub fn trellis_list_requirement_workspace(
+    input: TrellisRequirementWorkspaceInput,
+) -> Result<TrellisRequirementWorkspaceSnapshot, String> {
+    let mut scan_roots: Vec<(String, PathBuf)> = Vec::new();
+    let mut seen = std::collections::HashSet::<PathBuf>::new();
+
+    if let Some(project_root) = input
+        .project_root_path
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        push_scan_root(&mut scan_roots, &mut seen, "project", project_root)?;
+    }
+    for path in input.project_repository_paths {
+        push_scan_root(&mut scan_roots, &mut seen, "projectRepository", &path)?;
+    }
+    for path in input.floating_repository_paths {
+        push_scan_root(&mut scan_roots, &mut seen, "floatingRepository", &path)?;
+    }
+
+    let mut sources = Vec::new();
+    let mut prds = Vec::new();
+    let mut tasks = Vec::new();
+
+    for (source_kind, root) in scan_roots {
+        let tasks_root = root.join(".trellis").join("tasks");
+        if !tasks_root.is_dir() {
+            sources.push(TrellisRequirementWorkspaceSource {
+                source_id: format!("{}:{}", source_kind, root.to_string_lossy()),
+                source_kind,
+                root_path: root.to_string_lossy().into_owned(),
+                task_count: 0,
+                prd_count: 0,
+            });
+            continue;
+        }
+
+        let mut source_task_count = 0_u32;
+        let mut source_prd_count = 0_u32;
+        for discovered in discover_task_dirs(&tasks_root) {
+            let name = discovered.task_id;
+            let dir = discovered.dir;
+            let task_json_raw = fs::read_to_string(dir.join("task.json")).unwrap_or_default();
+            let task_json: Value = serde_json::from_str(&task_json_raw).unwrap_or(Value::Null);
+            let title = read_task_title(&task_json, &name);
+            let status = read_task_status(&task_json);
+            let created_at = read_task_created_at(&task_json);
+            let parent = read_task_parent(&task_json);
+            let repository_id = read_task_repository_id(&task_json);
+            let cluster_id = read_task_cluster_id(&task_json);
+            let source_requirement_ids = read_source_requirement_ids(&task_json);
+            let has_prd = dir.join("prd.md").is_file();
+            let has_research = dir.join("research").is_dir();
+            let child_task_ids = read_task_children(&task_json);
+
+            source_task_count += 1;
+            tasks.push(TrellisRequirementTaskRow {
+                task_id: name.clone(),
+                dir: dir.to_string_lossy().into_owned(),
+                title: title.clone(),
+                status: status.clone(),
+                has_prd,
+                has_research,
+                created_at,
+                parent: parent.clone(),
+                root_path: root.to_string_lossy().into_owned(),
+                source_kind: source_kind.clone(),
+                repository_id,
+                cluster_id: cluster_id.clone(),
+                source_requirement_ids,
+            });
+
+            if has_prd {
+                source_prd_count += 1;
+                let prd_markdown = truncate_prd(
+                    fs::read_to_string(dir.join("prd.md")).map_err(|e| e.to_string())?,
+                );
+                let requirements_index_json =
+                    fs::read_to_string(dir.join("requirements-index.json")).ok();
+                prds.push(TrellisRequirementPrdRow {
+                    task_id: name,
+                    dir: dir.to_string_lossy().into_owned(),
+                    title,
+                    status,
+                    parent,
+                    root_path: root.to_string_lossy().into_owned(),
+                    source_kind: source_kind.clone(),
+                    repository_id,
+                    cluster_id,
+                    requirements_index_json,
+                    prd_markdown,
+                    child_task_ids,
+                });
+            }
+        }
+
+        sources.push(TrellisRequirementWorkspaceSource {
+            source_id: format!("{}:{}", source_kind, root.to_string_lossy()),
+            source_kind,
+            root_path: root.to_string_lossy().into_owned(),
+            task_count: source_task_count,
+            prd_count: source_prd_count,
+        });
+    }
+
+    prds.sort_by(|a, b| b.task_id.cmp(&a.task_id));
+    tasks.sort_by(|a, b| b.task_id.cmp(&a.task_id));
+
+    Ok(TrellisRequirementWorkspaceSnapshot {
+        sources,
+        prds,
+        tasks,
+    })
+}
+
+fn push_scan_root(
+    out: &mut Vec<(String, PathBuf)>,
+    seen: &mut std::collections::HashSet<PathBuf>,
+    source_kind: &str,
+    raw: &str,
+) -> Result<(), String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+    let path = PathBuf::from(trimmed);
+    if !path.is_absolute() {
+        return Err(format!(
+            "WF_INVALID_INPUT: {source_kind} path must be absolute"
+        ));
+    }
+    let canon = path
+        .canonicalize()
+        .map_err(|e| format!("WF_INVALID_INPUT: {source_kind} path not found: {e}"))?;
+    if !canon.is_dir() {
+        return Err(format!(
+            "WF_INVALID_INPUT: {source_kind} path must be a directory"
+        ));
+    }
+    if seen.insert(canon.clone()) {
+        out.push((source_kind.to_string(), canon));
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -310,7 +628,9 @@ pub fn trellis_list_research(
         if !ft.is_file() {
             continue;
         }
-        let Ok(metadata) = entry.metadata() else { continue };
+        let Ok(metadata) = entry.metadata() else {
+            continue;
+        };
         let modified_at = metadata
             .modified()
             .ok()
@@ -474,6 +794,23 @@ pub fn trellis_write_spec_index(
 mod tests {
     use super::*;
 
+    fn unique_test_dir(name: &str) -> PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system time should be after epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("wise-trellis-bridge-{name}-{nanos}"))
+    }
+
+    fn write_task(root: &Path, rel: &str, task_json: &str, prd: Option<&str>) {
+        let dir = root.join(".trellis").join("tasks").join(rel);
+        fs::create_dir_all(&dir).expect("task dir should be created");
+        fs::write(dir.join("task.json"), task_json).expect("task json should be written");
+        if let Some(markdown) = prd {
+            fs::write(dir.join("prd.md"), markdown).expect("prd should be written");
+        }
+    }
+
     #[test]
     fn validate_task_id_accepts_valid_slugs() {
         assert!(validate_task_id("05-11-foo").is_ok());
@@ -505,5 +842,133 @@ mod tests {
         let t = truncate_prd(big);
         assert!(t.ends_with(TRUNCATION_MARKER));
         assert!(t.len() < MAX_PRD_BYTES + TRUNCATION_MARKER.len() + 1);
+    }
+
+    #[test]
+    fn discover_task_dirs_includes_nested_children_and_skips_archive() {
+        let root = unique_test_dir("discover-nested");
+        fs::create_dir_all(root.join(".trellis/tasks/archive/2026-05/05-14-old"))
+            .expect("archive should be created");
+        write_task(
+            &root,
+            "05-14-parent",
+            r#"{"title":"Parent","status":"planning","children":["05-14-child"]}"#,
+            Some("# Parent"),
+        );
+        write_task(
+            &root,
+            "05-14-parent/05-14-child",
+            r#"{"title":"Child","status":"planning","parent":"05-14-parent"}"#,
+            Some("# Child"),
+        );
+        write_task(
+            &root,
+            "archive/2026-05/05-14-old",
+            r#"{"title":"Old","status":"completed"}"#,
+            Some("# Old"),
+        );
+
+        let tasks = discover_task_dirs(&root.join(".trellis/tasks"));
+        let ids: Vec<String> = tasks.into_iter().map(|task| task.task_id).collect();
+        assert_eq!(ids, vec!["05-14-child", "05-14-parent"]);
+
+        fs::remove_dir_all(root).expect("test dir should be removed");
+    }
+
+    #[test]
+    fn requirement_workspace_scans_project_and_floating_repository_tasks() {
+        let base = unique_test_dir("workspace");
+        let project = base.join("project");
+        let linked_repo = base.join("linked-repo");
+        let floating_repo = base.join("floating-repo");
+        fs::create_dir_all(&linked_repo).expect("linked repo should be created");
+
+        write_task(
+            &project,
+            "05-14-parent",
+            r#"{
+              "title":"Parent",
+              "status":"planning",
+              "children":["05-14-child"],
+              "subtasks":["legacy-child"],
+              "repositoryId":7,
+              "clusterId":"cluster-web"
+            }"#,
+            Some("# Parent"),
+        );
+        fs::write(
+            project.join(".trellis/tasks/05-14-parent/requirements-index.json"),
+            r#"{"requirements":[]}"#,
+        )
+        .expect("requirements index should be written");
+        write_task(
+            &project,
+            "05-14-parent/05-14-child",
+            r#"{
+              "title":"Child",
+              "status":"planning",
+              "parent":"05-14-parent",
+              "repositoryId":7,
+              "clusterId":"cluster-web",
+              "meta":{"sourceRequirementIds":["REQ-1"]}
+            }"#,
+            Some("# Child"),
+        );
+        write_task(
+            &floating_repo,
+            "05-15-floating",
+            r#"{"title":"Floating","status":"in_progress"}"#,
+            Some("# Floating"),
+        );
+
+        let snapshot = trellis_list_requirement_workspace(TrellisRequirementWorkspaceInput {
+            project_root_path: Some(project.to_string_lossy().into_owned()),
+            project_repository_paths: vec![linked_repo.to_string_lossy().into_owned()],
+            floating_repository_paths: vec![floating_repo.to_string_lossy().into_owned()],
+        })
+        .expect("workspace should scan");
+
+        assert_eq!(snapshot.sources.len(), 3);
+        assert_eq!(snapshot.tasks.len(), 3);
+        assert_eq!(snapshot.prds.len(), 3);
+        let task_ids: Vec<&str> = snapshot
+            .tasks
+            .iter()
+            .map(|task| task.task_id.as_str())
+            .collect();
+        assert!(task_ids.contains(&"05-14-parent"));
+        assert!(task_ids.contains(&"05-14-child"));
+        assert!(task_ids.contains(&"05-15-floating"));
+
+        let parent = snapshot
+            .prds
+            .iter()
+            .find(|prd| prd.task_id == "05-14-parent")
+            .expect("parent prd should be present");
+        assert_eq!(parent.child_task_ids, vec!["05-14-child", "legacy-child"]);
+        assert_eq!(parent.repository_id, Some(7));
+        assert_eq!(parent.cluster_id.as_deref(), Some("cluster-web"));
+        assert_eq!(
+            parent.requirements_index_json.as_deref(),
+            Some(r#"{"requirements":[]}"#),
+        );
+
+        let child = snapshot
+            .tasks
+            .iter()
+            .find(|task| task.task_id == "05-14-child")
+            .expect("child task should be present");
+        assert_eq!(child.parent.as_deref(), Some("05-14-parent"));
+        assert_eq!(child.source_requirement_ids, vec!["REQ-1"]);
+
+        let floating_source = snapshot
+            .sources
+            .iter()
+            .find(|source| source.source_kind == "floatingRepository")
+            .expect("floating source should be present");
+        assert_eq!(floating_source.task_count, 1);
+        assert_eq!(floating_source.prd_count, 1);
+
+        fs::remove_dir_all(base).expect("test dir should be removed");
     }
 }

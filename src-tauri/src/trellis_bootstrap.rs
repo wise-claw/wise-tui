@@ -2,8 +2,8 @@
 //!
 //! 优先使用本机 `trellis` CLI；若未安装则回退为 `npx --yes @mindfoldhq/trellis@latest init -y`（需 Node / npm）。
 
-use crate::claude_commands::{claude_path_search_prefixes, merge_path_env};
 use crate::claude_commands::shared::find_trellis_project_root_from_path;
+use crate::claude_commands::{claude_path_search_prefixes, merge_path_env};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;

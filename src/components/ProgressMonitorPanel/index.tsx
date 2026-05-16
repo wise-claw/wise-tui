@@ -31,6 +31,7 @@ import { OmcDirectBatchInvocationDetailDrawer } from "./OmcDirectBatchInvocation
 import { MonitorHistorySessionTranscriptDrawer } from "./MonitorHistorySessionTranscriptDrawer";
 import { getSessionPreview } from "./historySessionDrawerChrome";
 
+import { useAgentAssignments } from "../../hooks/useAgentAssignments";
 import "./index.css";
 
 export {
@@ -101,6 +102,7 @@ interface Props {
    * 若仅传节流后的 `sessions`，会出现抽屉先显示旧快照里的正文、下一帧同步到已回收内存后的空数组，表现为消息突然消失。
    */
   transcriptSourceSessions?: ClaudeSession[];
+  projectId?: string | null;
 }
 
 interface TeamHistorySessionRow {
@@ -503,7 +505,10 @@ export function ProgressMonitorPanel({
   onCancelOmcDirectBatchInvocation,
   onReloadFullDiskTranscript,
   transcriptSourceSessions,
+  projectId,
 }: Props) {
+  const { running: agentAssignments } = useAgentAssignments({ projectId, enabled: Boolean(projectId) });
+
   const [employeeHistoryPopoverId, setEmployeeHistoryPopoverId] = useState<string | null>(null);
   const [teamHistoryPopoverId, setTeamHistoryPopoverId] = useState<string | null>(null);
   const [employeeHistorySearch, setEmployeeHistorySearch] = useState("");
@@ -820,6 +825,55 @@ export function ProgressMonitorPanel({
                   </div>
                 ))}
               </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {agentAssignments.length > 0 ? (
+        <div className="app-monitor-panel__section">
+          <div className="app-monitor-panel__section-head">
+            <div className="app-monitor-panel__section-title-wrap">
+              <Typography.Text className="app-monitor-panel__section-title">
+                <span className="app-monitor-panel__section-icon"><RepositoryMiniIcon /></span>
+                Mission Agent
+              </Typography.Text>
+              <Typography.Text className="app-monitor-panel__meta">
+                {agentAssignments.length} 运行中
+              </Typography.Text>
+            </div>
+          </div>
+          {agentAssignments.map((a) => (
+            <div key={a.assignmentId} className="app-monitor-panel__item app-monitor-panel__item--readonly">
+              <div className="app-monitor-panel__item-row">
+                <span className="app-monitor-panel__item-name-wrap">
+                  <span className="app-monitor-panel__item-name">{a.agentType}</span>
+                  <span className="app-monitor-panel__repo-type">{a.stage}</span>
+                  <span className="app-monitor-panel__status app-monitor-panel__status--in_progress">运行中</span>
+                </span>
+                <span className="app-monitor-panel__item-actions">
+                  {a.clusterId ? (
+                    <span className="app-monitor-panel__result-pill">{a.clusterId}</span>
+                  ) : null}
+                  {a.currentFile ? (
+                    <span className="app-monitor-panel__result-pill" title={a.currentFile}>
+                      {a.currentFile.split("/").pop()}
+                    </span>
+                  ) : null}
+                </span>
+              </div>
+              {a.repositoryPath ? (
+                <div className="app-monitor-panel__subagent-tree">
+                  <div className="app-monitor-panel__subagent-row">
+                    <span className="app-monitor-panel__subagent-branch" aria-hidden />
+                    <span className="app-monitor-panel__subagent-main">
+                      <span className="app-monitor-panel__subagent-name">
+                        {(a.repositoryPath ?? "").split("/").pop()}
+                      </span>
+                    </span>
+                  </div>
+                </div>
+              ) : null}
             </div>
           ))}
         </div>

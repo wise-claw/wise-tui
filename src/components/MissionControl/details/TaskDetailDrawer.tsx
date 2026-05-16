@@ -7,7 +7,7 @@ import { ClaudeSessionMessagesColumn } from "../../ClaudeSessions/ClaudeSessionM
 import { buildDispatchSession } from "./buildDispatchSession";
 import { useDispatchTranscript } from "./useDispatchTranscript";
 import { buildDispatchSessionNeedles, resolveDispatchClaudeSession } from "./dispatchSessionResolver";
-import { AnchorSection } from "./AnchorSection";
+import { TraceabilityPanel } from "./TraceabilityPanel";
 import { EngineeringFoldout } from "./EngineeringFoldout";
 import { TaskEditorInline } from "./TaskEditorInline";
 
@@ -175,7 +175,7 @@ export function TaskDetailDrawer({
             </section>
 
             {/* PRD & code anchors */}
-            <AnchorSection evidence={detail} onOpenPrdAnchor={onOpenPrdAnchor} />
+            <TraceabilityPanel detail={detail} onOpenPrdAnchor={onOpenPrdAnchor} />
 
             {/* Task editor */}
             <TaskEditorInline

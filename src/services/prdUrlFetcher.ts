@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { validatePrdUrl } from "./prdSource";
 
-interface FetchPrdFromUrlResponse {
+export interface FetchPrdFromUrlResponse {
   title: string | null;
   content: string;
   sourceUrl: string;

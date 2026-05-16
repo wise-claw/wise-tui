@@ -59,6 +59,7 @@ interface Props {
   }) => void;
   onCancelOmcDirectBatchInvocation?: (invocationKey: string) => void;
   onReloadFullDiskTranscript?: (sessionKey: string) => void | Promise<void>;
+  projectId?: string | null;
 }
 
 export function RightPanel({
@@ -87,6 +88,7 @@ export function RightPanel({
   onOpenOmcBatchInvocationDetail,
   onCancelOmcDirectBatchInvocation,
   onReloadFullDiskTranscript,
+  projectId,
 }: Props) {
   const [claudeToolsSectionCollapsed, setClaudeToolsSectionCollapsed] = useState(readClaudeToolsCollapsedFromStorage);
 
@@ -136,6 +138,7 @@ export function RightPanel({
                 onCancelOmcDirectBatchInvocation={onCancelOmcDirectBatchInvocation}
                 onReloadFullDiskTranscript={onReloadFullDiskTranscript}
                 transcriptSourceSessions={transcriptSessions}
+                projectId={projectId}
               />
             </div>
           ) : null}

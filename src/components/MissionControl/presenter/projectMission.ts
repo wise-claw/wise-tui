@@ -2,7 +2,7 @@ import type { ClusterPlanItem } from "../../../services/prdSplit/clusterPlanner"
 import type { RequirementsIndexV2 } from "../../../services/prdSplit/requirementsIndexVersion";
 import type { ProjectItem, Repository, TaskAnchorDescriptor, TaskItem } from "../../../types";
 import { applyTaskEdits, isEditedTask, isManualTask } from "../../PrdSplitWizard/taskEdits";
-import type { ClusterRunState, WizardState, WizardWriteResult } from "../../PrdSplitWizard/types";
+import type { ClusterEditState, ClusterRunState, WizardState, WizardWriteResult } from "../../PrdSplitWizard/types";
 import { COPY, PHASE_LABEL, ROLE_LABEL } from "../copy";
 import { toUserStatus, userStatusLabel } from "./statusModel";
 import type {
@@ -49,6 +49,8 @@ export function projectMission(input: ProjectMissionInput): MissionViewModel {
   const selection: MissionSelection = {
     requirementId: input.selection.requirementId,
     taskId: input.selection.taskId,
+    hoverRequirementId: input.selection.hoverRequirementId ?? null,
+    hoverTaskId: input.selection.hoverTaskId ?? null,
     highlightedTaskIds,
   };
   const taskCards = buildTaskCards({
@@ -56,6 +58,8 @@ export function projectMission(input: ProjectMissionInput): MissionViewModel {
     repositories,
     selection,
     dependencyTaskIdsByTaskId,
+    requirementsIndex: state.requirementsIndex,
+    editsByCluster: state.editsByCluster,
   });
   const requirements = buildRequirementCards(state.requirementsIndex, projectedTasks, selection);
   const requirementTree = buildRequirementTree(state.requirementsIndex, projectedTasks, selection);
@@ -258,20 +262,30 @@ function deriveHighlightedTaskIds(
   dependencyTaskIdsByTaskId: Map<string, string[]>,
 ): Set<string> {
   const highlighted = new Set<string>();
-  if (selection.requirementId) {
+  const activeRequirementIds = unique([
+    selection.requirementId,
+    selection.hoverRequirementId ?? null,
+  ].filter((id): id is string => Boolean(id)));
+  const activeTaskIds = unique([
+    selection.taskId,
+    selection.hoverTaskId ?? null,
+  ].filter((id): id is string => Boolean(id)));
+
+  for (const reqId of activeRequirementIds) {
     for (const item of projectedTasks) {
-      if (item.task.sourceRequirementIds.includes(selection.requirementId)) {
+      if (item.task.sourceRequirementIds.includes(reqId)) {
         highlighted.add(item.task.id);
       }
     }
   }
-  if (selection.taskId) {
-    highlighted.add(selection.taskId);
-    for (const depId of dependencyTaskIdsByTaskId.get(selection.taskId) ?? []) {
+
+  for (const taskId of activeTaskIds) {
+    highlighted.add(taskId);
+    for (const depId of dependencyTaskIdsByTaskId.get(taskId) ?? []) {
       highlighted.add(depId);
     }
-    for (const [taskId, deps] of dependencyTaskIdsByTaskId) {
-      if (deps.includes(selection.taskId)) highlighted.add(taskId);
+    for (const [tid, deps] of dependencyTaskIdsByTaskId) {
+      if (deps.includes(taskId)) highlighted.add(tid);
     }
   }
   return highlighted;
@@ -328,9 +342,31 @@ function buildTaskCards(input: {
   repositories: Repository[];
   selection: MissionSelection;
   dependencyTaskIdsByTaskId: Map<string, string[]>;
+  requirementsIndex: RequirementsIndexV2 | null;
+  editsByCluster: Record<string, ClusterEditState>;
 }): TaskCardVM[] {
   const repoById = new Map(input.repositories.map((repo) => [repo.id, repo]));
-  const hasSelection = Boolean(input.selection.requirementId || input.selection.taskId);
+  const hasSelection = Boolean(
+    input.selection.requirementId ||
+    input.selection.taskId ||
+    input.selection.hoverRequirementId ||
+    input.selection.hoverTaskId,
+  );
+
+  // Build dependency reference: taskId → { title, status }
+  const depRef = new Map<string, { title: string; completed: boolean }>();
+  for (const item of input.projectedTasks) {
+    const depStatus = toUserStatus({
+      run: item.run,
+      writeResult: item.writeResult,
+      validationIssueCount: item.run?.validationIssues?.length ?? 0,
+    });
+    depRef.set(item.task.id, {
+      title: item.task.title,
+      completed: depStatus === "completed",
+    });
+  }
+
   return input.projectedTasks.map((item) => {
     const status = toUserStatus({
       run: item.run,
@@ -341,6 +377,16 @@ function buildTaskCards(input: {
       ? null
       : repoById.get(item.cluster.primaryRepositoryId) ?? null;
     const isHighlighted = input.selection.highlightedTaskIds.has(item.task.id);
+    const depIds = input.dependencyTaskIdsByTaskId.get(item.task.id) ?? [];
+    const dependencyLabels = depIds.map((depId) => {
+      const ref = depRef.get(depId);
+      return {
+        taskId: depId,
+        title: ref?.title ?? depId,
+        satisfied: ref?.completed ?? false,
+      };
+    });
+
     return {
       id: item.task.id,
       title: item.task.title,
@@ -355,15 +401,19 @@ function buildTaskCards(input: {
         : userStatusLabel(status),
       repositoryLabel: repo ? `${ROLE_LABEL[repo.repositoryType]} · ${repo.name}` : null,
       codeAnchorPreview: item.task.sourceRefs[0] ?? null,
-      prdAnchorTags: derivePrdAnchorTags(item, null),
+      prdAnchorTags: derivePrdAnchorTags(item, input.requirementsIndex),
       agentStatus: deriveAgentChip(item),
       clusterId: item.cluster.id,
-      dependencyTaskIds: input.dependencyTaskIdsByTaskId.get(item.task.id) ?? [],
+      dependencyTaskIds: depIds,
+      editableDependencyTaskIds: item.task.dependencies.filter((id) => depIds.includes(id)),
+      dependencyLabels,
       sourceRequirementIds: item.task.sourceRequirementIds,
       isHighlighted,
       isDimmed: hasSelection && !isHighlighted,
       isSelected: input.selection.taskId === item.task.id,
       isPlaceholder: item.isPlaceholder,
+      isManual: isManualTask(item.task, input.editsByCluster[item.cluster.id]),
+      isEdited: isEditedTask(item.task, input.editsByCluster[item.cluster.id]),
       executionState: null,
       evidence: null,
     };
@@ -392,6 +442,21 @@ function buildRequirementTree(
     }
   }
 
+  const activeTaskReqIds = new Set(
+    unique([selection.taskId, selection.hoverTaskId ?? null].filter((id): id is string => Boolean(id)))
+      .flatMap((taskId) =>
+        projectedTasks.find((item) => item.task.id === taskId)?.task.sourceRequirementIds ?? [],
+      ),
+  );
+
+  function isReqHighlighted(entryId: string): boolean {
+    return (
+      selection.requirementId === entryId ||
+      selection.hoverRequirementId === entryId ||
+      activeTaskReqIds.has(entryId)
+    );
+  }
+
   // Check for hierarchical index support
   const hierarchical = entries.some((e) => (e as any).parentId);
 
@@ -407,11 +472,12 @@ function buildRequirementTree(
       const children = byParent.get(parentId) ?? [];
       return children.map((entry) => ({
         id: entry.id,
-        label: `${entry.id} ${truncate(entry.content.replace(/^#+\s*/, ""), 48)}`,
+        label: truncate(entry.content.replace(/^#+\s*/, ""), 52),
+        machineId: entry.id,
         taskCount: taskCountByReq.get(entry.id) ?? 0,
         completedTaskCount: completedByReq.get(entry.id) ?? 0,
         priority: deriveRequirementPriority(entry.id, projectedTasks),
-        isHighlighted: selection.requirementId === entry.id,
+        isHighlighted: isReqHighlighted(entry.id),
         children: buildNodes(entry.id),
       }));
     };
@@ -420,11 +486,12 @@ function buildRequirementTree(
 
   return entries.map((entry) => ({
     id: entry.id,
-    label: `${entry.id} ${truncate(entry.content.replace(/^#+\s*/, ""), 48)}`,
+    label: truncate(entry.content.replace(/^#+\s*/, ""), 52),
+    machineId: entry.id,
     taskCount: taskCountByReq.get(entry.id) ?? 0,
     completedTaskCount: completedByReq.get(entry.id) ?? 0,
     priority: deriveRequirementPriority(entry.id, projectedTasks),
-    isHighlighted: selection.requirementId === entry.id,
+    isHighlighted: isReqHighlighted(entry.id),
   }));
 }
 
@@ -445,6 +512,7 @@ function buildTaskSwimlane(clusters: ClusterPlanItem[], taskCards: TaskCardVM[])
   const clusterLayer = assignClusterLayers(clusters);
   const maxLayer = Math.max(0, ...Array.from(clusterLayer.values()));
   const swimlanes: SwimlaneVM[] = [];
+  let parallelGroupIndex = 0;
   for (let layerIndex = 0; layerIndex <= maxLayer; layerIndex += 1) {
     const layerClusters = clusters.filter((cluster) => clusterLayer.get(cluster.id) === layerIndex);
     const tasks = layerClusters.flatMap((cluster) =>
@@ -452,11 +520,15 @@ function buildTaskSwimlane(clusters: ClusterPlanItem[], taskCards: TaskCardVM[])
     );
     if (tasks.length === 0) continue;
     const hasBlocked = tasks.some((task) => task.status === "blocked");
-    const parallelLabel = tasks.length > 1 ? `可并行 · ${tasks.length} 个任务` : `阶段 ${layerIndex + 1}`;
+    const isParallel = tasks.length > 1;
+    if (isParallel) parallelGroupIndex += 1;
+    const groupLabel = isParallel ? `并行组 ${String.fromCharCode(64 + parallelGroupIndex)}` : "";
+    const parallelLabel = isParallel ? `⚡ ${groupLabel} · ${tasks.length} 个任务` : `阶段 ${layerIndex + 1}`;
     swimlanes.push({
       id: `swimlane-${layerIndex + 1}`,
       label: parallelLabel,
-      isParallel: tasks.length > 1,
+      groupLabel,
+      isParallel,
       isBottleneck: hasBlocked,
       tasks,
     });

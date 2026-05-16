@@ -36,13 +36,13 @@ export function PrdSplitWizardHost() {
   }, []);
 
   return (
-    <Tooltip title="需求拆分 · Mission Control" placement="left">
+    <Tooltip title="需求拆解 · 任务编排驾驶舱" placement="left">
       <Button
         style={FAB_STYLE}
         icon={<PartitionOutlined />}
         onClick={onFabClick}
       >
-        需求拆分
+        PRD 拆解
       </Button>
     </Tooltip>
   );

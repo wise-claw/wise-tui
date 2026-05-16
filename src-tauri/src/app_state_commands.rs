@@ -1,5 +1,7 @@
 use crate::claude_commands::shared::find_trellis_project_root_from_path;
-use crate::project_workspace_paths::{assert_repo_dir_under_project_root, canonicalize_existing_dir};
+use crate::project_workspace_paths::{
+    assert_repo_dir_under_project_root, canonicalize_existing_dir,
+};
 use crate::wise_paths::{
     wise_legacy_projects_json, wise_repositories_json, wise_tabs_json, write_file_atomic,
 };
@@ -9,8 +11,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use tauri::Manager;
-use walkdir::WalkDir;
 use uuid::Uuid;
+use walkdir::WalkDir;
 
 pub(crate) mod settings_commands;
 pub(crate) mod workflow_graph_commands;

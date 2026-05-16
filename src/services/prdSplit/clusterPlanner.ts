@@ -31,6 +31,8 @@ export interface PlannerKnownDependency {
 
 export interface PlannerOptions {
   maxRequirementsPerCluster?: number;
+  /** requirementId → repoId，AI 生成的仓库分配，存在时跳过关键词匹配 */
+  repoAssignments?: Record<string, number>;
 }
 
 export interface ClusterPlanItem {
@@ -75,6 +77,7 @@ export function planClusters(input: {
 }): ClusterPlan {
   const maxPerCluster =
     input.options?.maxRequirementsPerCluster ?? DEFAULT_MAX_REQUIREMENTS_PER_CLUSTER;
+  const assignments = input.options?.repoAssignments;
 
   if (input.requirements.length === 0) {
     return emptyPlan();
@@ -84,11 +87,58 @@ export function planClusters(input: {
     return planOrphanOnly(input.requirements);
   }
 
+  // AI 分配优先于关键词匹配
+  if (assignments && Object.keys(assignments).length > 0) {
+    return planWithAssignments(input.repositories, input.requirements, assignments, maxPerCluster);
+  }
+
   if (input.repositories.length === 1) {
     return planSingleRepo(input.repositories[0], input.requirements, maxPerCluster);
   }
 
   return planMultiRepo(input, maxPerCluster);
+}
+
+function planWithAssignments(
+  repos: PlannerRepo[],
+  requirements: PlannerRequirement[],
+  assignments: Record<string, number>,
+  maxPerCluster: number,
+): ClusterPlan {
+  const repoById = new Map(repos.map((r) => [r.id, r]));
+  const buckets = new Map<number, string[]>();
+  for (const repo of repos) buckets.set(repo.id, []);
+
+  for (const req of requirements) {
+    const repoId = assignments[req.id];
+    if (repoId != null && repoById.has(repoId)) {
+      appendRequirement(buckets, repoId, req.id);
+    } else {
+      // 回退到关键词匹配
+      const scored = scoreRequirement(req, repos);
+      const top = scored[0];
+      const target = top && top.score > 0 ? top.repoId : pickFallbackRepoId(repos);
+      appendRequirement(buckets, target, req.id);
+    }
+  }
+
+  const clusters: ClusterPlanItem[] = [];
+  for (const repo of repos) {
+    const reqIds = buckets.get(repo.id) ?? [];
+    if (reqIds.length === 0) continue;
+    const chunks = splitBySize(reqIds, maxPerCluster);
+    chunks.forEach((chunk, idx) => {
+      clusters.push(buildCluster(repo, idx, chunk, chunks.length));
+    });
+  }
+
+  return {
+    clusters,
+    diagnostics: {
+      requirementsCoverage: { covered: requirements.map((r) => r.id), orphan: [] },
+      crossRepoRequirements: [],
+    },
+  };
 }
 
 function emptyPlan(): ClusterPlan {

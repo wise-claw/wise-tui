@@ -3,6 +3,7 @@
  */
 
 import { useCallback, useMemo, useReducer } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import type { TaskSplitContext } from "../../types";
 import type { ClusterPlan, ClusterPlanItem, PlannerRepo } from "../../services/prdSplit/clusterPlanner";
 import { planClusters } from "../../services/prdSplit/clusterPlanner";
@@ -12,7 +13,7 @@ import { buildRequirementsIndex } from "../../services/prdRequirementIndex";
 import { prdDocumentFromMarkdownFragment } from "../../services/prdNormalizer";
 import {
   indexParentsByClusterId,
-  scanProjectParents,
+  scanProjectParentsAcrossRoots,
   type ExistingParentRef,
 } from "../../services/prdSplit/existingParentScanner";
 import { computeDirtyClusters } from "../../services/prdSplit/diffReplay";
@@ -427,7 +428,7 @@ export interface UseSplitWizardStateApi {
   setSelectedRepos(ids: number[]): void;
   setPrdMarkdown(markdown: string): void;
   /** 解析 PRD → 构建 requirements-index v2 → 用 selectedRepositoryIds 派生 ClusterPlan，并跳到 plan 阶段。 */
-  parseAndPlan(options?: { maxRequirementsPerCluster?: number }): { ok: true } | { ok: false; reason: string };
+  parseAndPlan(options?: { maxRequirementsPerCluster?: number }): Promise<{ ok: true } | { ok: false; reason: string }>;
   /** 在 plan 阶段调用：扫描项目下已有父任务并算每个 cluster 的 diff 状态。 */
   refreshExistingParents(): Promise<void>;
   setReuseExistingParents(value: boolean): void;
@@ -465,7 +466,7 @@ export function useSplitWizardState(): UseSplitWizardStateApi {
   const [state, dispatch] = useReducer(reducer, emptyWizardState());
 
   const parseAndPlan = useCallback<UseSplitWizardStateApi["parseAndPlan"]>(
-    (options) => {
+    async (options) => {
       const markdown = state.prdMarkdown.trim();
       if (!markdown) return { ok: false, reason: "请粘贴 PRD Markdown 后再继续。" };
       const prd = prdDocumentFromMarkdownFragment(markdown);
@@ -480,26 +481,64 @@ export function useSplitWizardState(): UseSplitWizardStateApi {
       const repos = state.selectedRepositoryIds.length === 0
         ? state.repositories
         : state.repositories.filter((r) => state.selectedRepositoryIds.includes(r.id));
+
+      // 多仓库时用 AI 判断每条需求归属哪个仓库
+      let repoAssignments: Record<string, number> | undefined;
+      if (repos.length > 1 && state.project?.rootPath) {
+        try {
+          const reposInfo = repos.map((r) => ({ id: r.id, name: r.name, type: r.type }));
+          const prompt = [
+            "你是需求-仓库分类器。根据需求描述，将每条需求分配到最合适的仓库。",
+            "",
+            "仓库列表：",
+            JSON.stringify(reposInfo),
+            "",
+            "需求列表：",
+            JSON.stringify(upgraded.requirements.map((r) => ({
+              id: r.id,
+              content: r.content.replace(/\s+/g, " ").trim().slice(0, 200),
+            }))),
+            "",
+            "输出纯 JSON 对象，键为需求 ID，值为仓库 ID。不要任何解释或 Markdown。",
+            `示例：${JSON.stringify({ [upgraded.requirements[0]?.id ?? "REQ-01"]: repos[0].id })}`,
+          ].join("\n");
+
+          const stdout = await invoke<string>("run_claude_quick", {
+            projectPath: state.project.rootPath,
+            prompt,
+            timeoutMs: 60_000,
+          });
+          const parsed = JSON.parse(stdout);
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+            repoAssignments = parsed as Record<string, number>;
+          }
+        } catch {
+          // AI 分类失败时回退到关键词匹配，静默处理
+        }
+      }
+
       const plan = planClusters({
         repositories: repos,
         requirements: upgraded.requirements.map((r) => ({ id: r.id, content: r.content })),
-        options: resolveWizardPlannerOptions(
-          repos.length,
-          upgraded.requirements.length,
-          options,
-        ),
+        options: {
+          ...resolveWizardPlannerOptions(repos.length, upgraded.requirements.length, options),
+          repoAssignments,
+        },
       });
       dispatch({ type: "go-to-plan", plan, prd, index: upgraded });
       return { ok: true };
     },
-    [state.prdMarkdown, state.repositories, state.selectedRepositoryIds],
+    [state.prdMarkdown, state.repositories, state.selectedRepositoryIds, state.project?.rootPath],
   );
 
   const refreshExistingParents = useCallback<UseSplitWizardStateApi["refreshExistingParents"]>(
     async () => {
       if (!state.project || !state.plan || !state.requirementsIndex) return;
       try {
-        const scanned = await scanProjectParents(state.project.rootPath);
+        const scanned = await scanProjectParentsAcrossRoots([
+          state.project.rootPath,
+          ...state.repositories.map((repo) => repo.path),
+        ]);
         const indexed = indexParentsByClusterId(scanned);
         const diffByCluster = computeDiffByCluster(
           state.plan.clusters,

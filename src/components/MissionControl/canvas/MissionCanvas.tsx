@@ -1,23 +1,43 @@
 import { Button, Card, Select, Space, Typography } from "antd";
-import { HistoryOutlined, FileTextOutlined } from "@ant-design/icons";
 import { useMemo } from "react";
 import type { ProjectItem, Repository } from "../../../types";
 import type { MissionViewModel } from "../presenter/types";
 import type { UseSplitWizardStateApi } from "../../PrdSplitWizard/useSplitWizardState";
-import { PrdMarkdownEditor, type PrdImageBucket } from "../../PrdSplitWizard/components/PrdMarkdownEditor";
+import type { PrdImageBucket } from "../../PrdSplitWizard/components/PrdMarkdownEditor";
 import { projectToPrdSplitTarget, repositoryToPrdSplitTarget } from "../../PrdSplitWizard/targetModel";
-import { COPY } from "../copy";
+import { PrdImportPage } from "../setup/PrdImportPage";
 import { RequirementsTree } from "./RequirementsTree";
 import { TaskSwimlane } from "./TaskSwimlane";
+import { AgentExecutionPanel } from "./AgentExecutionPanel";
+import { RequirementWorkspaceOverview } from "./RequirementWorkspaceOverview";
+import { MissionReplayPanel } from "../details/MissionReplayPanel";
+import { AgentOwnershipGraph } from "./AgentOwnershipGraph";
+import { RuntimeEventFeed } from "./RuntimeEventFeed";
+import { SpecRevisionTimeline } from "./SpecRevisionTimeline";
+import { OnboardingChecklist } from "./OnboardingChecklist";
+import { WorkspaceSnapshotViewer } from "./WorkspaceSnapshotViewer";
+import { RequirementTracePanel } from "../details/RequirementTracePanel";
+import { useTrellisRuntime } from "../../../hooks/useTrellisRuntime";
 
 interface MissionCanvasProps {
   viewModel: MissionViewModel;
   api: UseSplitWizardStateApi;
   projects: ProjectItem[];
   repositories: Repository[];
+  stdoutMap: Record<string, string[]>;
   onSelectRequirement: (requirementId: string) => void;
   onSelectTask: (taskId: string) => void;
+  onHoverRequirement: (requirementId: string | null) => void;
+  onHoverTask: (taskId: string | null) => void;
+  onMoveRequirement: (requirementId: string, targetClusterId: string) => void;
+  onRemoveDependency?: (taskId: string, depTaskId: string) => void;
+  onRetryCluster?: (clusterId: string) => void;
+  workspaceMode?: "overview" | "editor";
+  onLoadPrd?: (markdown: string) => void;
+  onNewPrd?: () => void;
+  onBackToOverview?: () => void;
   onOpenLegacyImport: () => void;
+  missionId?: string | null;
 }
 
 export function MissionCanvas({
@@ -25,9 +45,20 @@ export function MissionCanvas({
   api,
   projects,
   repositories,
+  stdoutMap,
   onSelectRequirement,
   onSelectTask,
+  onHoverRequirement,
+  onHoverTask,
+  onMoveRequirement,
+  onRemoveDependency,
+  onRetryCluster,
+  workspaceMode = "editor",
+  onLoadPrd,
+  onNewPrd,
+  onBackToOverview,
   onOpenLegacyImport,
+  missionId,
 }: MissionCanvasProps) {
   const isDrafting = viewModel.phase === "drafting";
   const hasRequirements = viewModel.requirementTree.length > 0;
@@ -46,7 +77,24 @@ export function MissionCanvas({
 
   if (isDrafting && !hasRequirements) {
     const hasTarget = Boolean(api.state.project);
-    const canSubmit = api.state.prdMarkdown.trim().length > 0 && hasTarget;
+
+    // Show workspace overview when entering from a project and in overview mode
+    if (hasTarget && workspaceMode === "overview" && api.state.project) {
+      return (
+        <main className="mission-canvas mission-canvas--drafting">
+          <div className="mission-drafting-layout">
+            <RequirementWorkspaceOverview
+              project={api.state.project}
+              projects={projects}
+              repositories={repositories}
+              onLoadPrd={onLoadPrd ?? (() => {})}
+              onOpenLegacyImport={onOpenLegacyImport}
+              onNewPrd={onNewPrd ?? (() => {})}
+            />
+          </div>
+        </main>
+      );
+    }
 
     const eligibleProjects = projects.filter((p) => (p.rootPath ?? "").trim().length > 0);
     const eligibleRepos = repositories.filter((r) => (r.path ?? "").trim().length > 0);
@@ -91,64 +139,75 @@ export function MissionCanvas({
               </Space>
             </Card>
           )}
-          <Card
-            className="mission-drafting-card"
-            title={
-              <Space>
-                <FileTextOutlined />
-                <span>{COPY.inlinePrd.title}</span>
-              </Space>
-            }
-            extra={
-              <Space>
-                <Button icon={<HistoryOutlined />} size="small" onClick={onOpenLegacyImport}>
-                  {COPY.inlinePrd.importLegacy}
-                </Button>
-                <Button
-                  type="primary"
-                  size="small"
-                  disabled={!canSubmit}
-                  onClick={() => {
-                    const result = api.parseAndPlan();
-                    if (!result.ok) api.setGlobalError(result.reason);
-                  }}
-                >
-                  {COPY.inlinePrd.submit}
-                </Button>
-              </Space>
-            }
-          >
-            <Typography.Paragraph type="secondary" style={{ marginBottom: 12, fontSize: 13 }}>
-              {COPY.inlinePrd.hint}
-            </Typography.Paragraph>
-            <PrdMarkdownEditor
-              value={api.state.prdMarkdown}
-              onChange={api.setPrdMarkdown}
-              imageBucket={imageBucket}
-              floatingToolbar
-              minHeight={420}
-            />
-            <Typography.Text type="secondary" style={{ display: "block", marginTop: 8, fontSize: 12 }}>
-              {COPY.inlinePrd.charCount(api.state.prdMarkdown.length)}
-            </Typography.Text>
-          </Card>
+          {hasTarget ? (
+            <>
+              {workspaceMode === "editor" && api.state.project ? (
+                <div className="prd-import-back-row">
+                  <Button size="small" onClick={onBackToOverview}>
+                    返回 PRD 列表
+                  </Button>
+                </div>
+              ) : null}
+              <PrdImportPage
+                markdown={api.state.prdMarkdown}
+                imageBucket={imageBucket}
+                onMarkdownChange={api.setPrdMarkdown}
+                onSubmit={async () => {
+                  const result = await api.parseAndPlan();
+                  if (!result.ok) api.setGlobalError(result.reason);
+                }}
+                onOpenLegacyImport={onOpenLegacyImport}
+              />
+            </>
+          ) : null}
         </div>
       </main>
     );
   }
+
+  const projectRootPath = api.state.project?.rootPath;
+  const { agentGraph } = useTrellisRuntime({
+    rootPath: projectRootPath ?? undefined,
+    enabled: Boolean(projectRootPath),
+  });
+
+  const hasAgentActivity = Object.keys(viewModel.runState.clusters).length > 0;
 
   return (
     <main className="mission-canvas">
       <RequirementsTree
         tree={viewModel.requirementTree}
         onSelect={onSelectRequirement}
-        onMoveRequirement={() => {}}
+        onHover={onHoverRequirement}
+        onMoveRequirement={onMoveRequirement}
+        targetClusters={(api.state.plan?.clusters ?? []).map((c) => ({ id: c.id, title: c.title }))}
       />
-      <TaskSwimlane
-        swimlane={viewModel.taskSwimlane}
-        hasHighlightedPath={viewModel.selection.highlightedTaskIds.size > 0}
-        onSelectTask={onSelectTask}
-      />
+      <div className="mission-canvas__orchestration">
+        <TaskSwimlane
+          swimlane={viewModel.taskSwimlane}
+          hasHighlightedPath={viewModel.selection.highlightedTaskIds.size > 0}
+          onSelectTask={onSelectTask}
+          onHoverTask={onHoverTask}
+          onRemoveDependency={onRemoveDependency}
+          onRetryCluster={onRetryCluster}
+        />
+        {hasAgentActivity ? (
+          <AgentExecutionPanel
+            runState={viewModel.runState}
+            stdoutMap={stdoutMap}
+          />
+        ) : null}
+        <RequirementTracePanel
+          missionId={missionId ?? null}
+          requirementId={viewModel.selection.requirementId}
+        />
+        <AgentOwnershipGraph graph={agentGraph} />
+        <RuntimeEventFeed rootPath={projectRootPath} projectId={api.state.project?.id ?? null} />
+        <SpecRevisionTimeline rootPath={projectRootPath} />
+        <OnboardingChecklist rootPath={projectRootPath} />
+        <WorkspaceSnapshotViewer rootPath={projectRootPath} />
+        <MissionReplayPanel missionId={missionId ?? null} />
+      </div>
     </main>
   );
 }

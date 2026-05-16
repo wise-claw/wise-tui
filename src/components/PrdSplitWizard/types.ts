@@ -76,6 +76,7 @@ export interface TaskEditPatch {
   role?: TaskRole;
   subtasks?: string[];
   dod?: string[];
+  dependencies?: string[];
   sourceRequirementIds?: string[];
   /** 锚点编辑：用户在 PRD 视图中重选 / 微调后的 from/to/textHash/context。 */
   taskAnchors?: TaskAnchorDescriptor;

@@ -34,7 +34,11 @@ const MIGRATION_015: &str = include_str!("../migrations/015_project_prd_scope.sq
 const MIGRATION_016: &str = include_str!("../migrations/016_project_trellis_root.sql");
 const MIGRATION_017: &str = include_str!("../migrations/017_code_knowledge_graph.sql");
 const MIGRATION_018: &str = include_str!("../migrations/018_code_knowledge_graph_relax_checks.sql");
-const MIGRATION_019: &str = include_str!("../migrations/019_code_knowledge_graph_indexing_current_file.sql");
+const MIGRATION_019: &str =
+    include_str!("../migrations/019_code_knowledge_graph_indexing_current_file.sql");
+const MIGRATION_020: &str = include_str!("../migrations/020_mission_control.sql");
+const MIGRATION_021: &str = include_str!("../migrations/021_mission_control_planning_evidence.sql");
+const MIGRATION_022: &str = include_str!("../migrations/022_trellis_runtime.sql");
 const PLATFORM_SPLIT_PROMPT_SEED_JSON: &str =
     include_str!("../migrations/005_platform_split_prompt_seed.json");
 
@@ -124,6 +128,18 @@ const MIGRATIONS: &[Migration] = &[
     Migration {
         name: "019_code_knowledge_graph_indexing_current_file",
         action: MigrationAction::Sql(MIGRATION_019),
+    },
+    Migration {
+        name: "020_mission_control",
+        action: MigrationAction::Sql(MIGRATION_020),
+    },
+    Migration {
+        name: "021_mission_control_planning_evidence",
+        action: MigrationAction::Sql(MIGRATION_021),
+    },
+    Migration {
+        name: "022_trellis_runtime",
+        action: MigrationAction::Sql(MIGRATION_022),
     },
 ];
 
@@ -1163,12 +1179,19 @@ impl WiseDb {
         Ok(out)
     }
 
-    pub fn add_project_prd_employee(&self, project_id: &str, employee_id: &str, now_ms: i64) -> Result<(), String> {
+    pub fn add_project_prd_employee(
+        &self,
+        project_id: &str,
+        employee_id: &str,
+        now_ms: i64,
+    ) -> Result<(), String> {
         let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
         let exists: i64 = g
-            .query_row("SELECT COUNT(*) FROM projects WHERE id = ?1", params![project_id], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT COUNT(*) FROM projects WHERE id = ?1",
+                params![project_id],
+                |row| row.get(0),
+            )
             .map_err(|e| e.to_string())?;
         if exists == 0 {
             return Err("项目未找到".into());
@@ -1196,7 +1219,12 @@ impl WiseDb {
         Ok(())
     }
 
-    pub fn remove_project_prd_employee(&self, project_id: &str, employee_id: &str, now_ms: i64) -> Result<(), String> {
+    pub fn remove_project_prd_employee(
+        &self,
+        project_id: &str,
+        employee_id: &str,
+        now_ms: i64,
+    ) -> Result<(), String> {
         let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
         g.execute(
             "DELETE FROM project_prd_employees WHERE project_id = ?1 AND employee_id = ?2",
@@ -1211,12 +1239,19 @@ impl WiseDb {
         Ok(())
     }
 
-    pub fn add_project_prd_workflow(&self, project_id: &str, workflow_id: &str, now_ms: i64) -> Result<(), String> {
+    pub fn add_project_prd_workflow(
+        &self,
+        project_id: &str,
+        workflow_id: &str,
+        now_ms: i64,
+    ) -> Result<(), String> {
         let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
         let exists: i64 = g
-            .query_row("SELECT COUNT(*) FROM projects WHERE id = ?1", params![project_id], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT COUNT(*) FROM projects WHERE id = ?1",
+                params![project_id],
+                |row| row.get(0),
+            )
             .map_err(|e| e.to_string())?;
         if exists == 0 {
             return Err("项目未找到".into());
@@ -1244,7 +1279,12 @@ impl WiseDb {
         Ok(())
     }
 
-    pub fn remove_project_prd_workflow(&self, project_id: &str, workflow_id: &str, now_ms: i64) -> Result<(), String> {
+    pub fn remove_project_prd_workflow(
+        &self,
+        project_id: &str,
+        workflow_id: &str,
+        now_ms: i64,
+    ) -> Result<(), String> {
         let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
         g.execute(
             "DELETE FROM project_prd_workflows WHERE project_id = ?1 AND workflow_id = ?2",
@@ -1769,9 +1809,8 @@ fn ensure_graph_index_meta_progress_column(conn: &Connection) -> Result<(), Stri
         )
         .unwrap_or(false);
     if missing {
-        let _ = conn.execute_batch(
-            "ALTER TABLE graph_index_meta ADD COLUMN progress INTEGER DEFAULT 0;",
-        );
+        let _ = conn
+            .execute_batch("ALTER TABLE graph_index_meta ADD COLUMN progress INTEGER DEFAULT 0;");
     }
     Ok(())
 }
@@ -1785,9 +1824,8 @@ fn ensure_graph_index_meta_indexing_current_file_column(conn: &Connection) -> Re
         )
         .unwrap_or(false);
     if missing {
-        let _ = conn.execute_batch(
-            "ALTER TABLE graph_index_meta ADD COLUMN indexing_current_file TEXT;",
-        );
+        let _ = conn
+            .execute_batch("ALTER TABLE graph_index_meta ADD COLUMN indexing_current_file TEXT;");
     }
     Ok(())
 }
@@ -1871,6 +1909,9 @@ mod tests {
                 "017_code_knowledge_graph",
                 "018_code_knowledge_graph_relax_checks",
                 "019_code_knowledge_graph_indexing_current_file",
+                "020_mission_control",
+                "021_mission_control_planning_evidence",
+                "022_trellis_runtime",
             ]
         );
     }
@@ -1917,5 +1958,55 @@ mod tests {
             )
             .expect("seed setting exists");
         serde_json::from_str::<serde_json::Value>(&value).expect("seed setting is valid JSON");
+    }
+
+    #[test]
+    fn run_migrations_creates_mission_control_tables() {
+        let conn = Connection::open_in_memory().expect("in-memory sqlite opens");
+
+        run_migrations(&conn).expect("migrations succeed");
+
+        for table in [
+            "mission_runs",
+            "mission_events",
+            "mission_agent_assignments",
+            "mission_reassign_previews",
+            "mission_session_bindings",
+            "mission_instructions",
+            "mission_agent_commands",
+            "mission_evidence",
+        ] {
+            let count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                    params![table],
+                    |row| row.get(0),
+                )
+                .expect("sqlite_master query succeeds");
+            assert_eq!(count, 1, "{table} table exists");
+        }
+    }
+
+    #[test]
+    fn run_migrations_creates_trellis_runtime_tables() {
+        let conn = Connection::open_in_memory().expect("in-memory sqlite opens");
+
+        run_migrations(&conn).expect("migrations succeed");
+
+        for table in [
+            "trellis_runtime_events",
+            "trellis_agent_runs",
+            "trellis_spec_revisions",
+            "trellis_workspace_snapshots",
+        ] {
+            let count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                    params![table],
+                    |row| row.get(0),
+                )
+                .expect("sqlite_master query succeeds");
+            assert_eq!(count, 1, "{table} table exists");
+        }
     }
 }
