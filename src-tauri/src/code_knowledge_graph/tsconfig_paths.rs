@@ -100,7 +100,11 @@ pub fn load_tsconfig_paths(repo_root: &Path) -> Option<TsconfigPaths> {
             .trim_start_matches("./")
             .trim_end_matches('/')
             .to_string();
-        let base_url = if base_url.is_empty() { ".".into() } else { base_url };
+        let base_url = if base_url.is_empty() {
+            ".".into()
+        } else {
+            base_url
+        };
 
         let mut aliases: Vec<(String, String, TsconfigPathAliasKind)> = Vec::new();
         for (pattern, targets_val) in paths_obj {
@@ -160,7 +164,11 @@ mod tests {
     fn rewrite_matches_gitnexus_style_join() {
         let ts = TsconfigPaths {
             base_url: ".".into(),
-            aliases: vec![("@/".into(), "src/".into(), TsconfigPathAliasKind::GlobPrefix)],
+            aliases: vec![(
+                "@/".into(),
+                "src/".into(),
+                TsconfigPathAliasKind::GlobPrefix,
+            )],
         };
         assert_eq!(
             rewrite_tsconfig_import(&ts, "@/utils/theme").as_deref(),
@@ -178,7 +186,10 @@ mod tests {
                 TsconfigPathAliasKind::Exact,
             )],
         };
-        assert_eq!(rewrite_tsconfig_import(&ts, "vite-plugin-compression"), None);
+        assert_eq!(
+            rewrite_tsconfig_import(&ts, "vite-plugin-compression"),
+            None
+        );
         assert_eq!(
             rewrite_tsconfig_import(&ts, "vite").as_deref(),
             Some("shim/vite")
@@ -189,7 +200,11 @@ mod tests {
     fn glob_prefix_requires_slash_boundary() {
         let ts = TsconfigPaths {
             base_url: ".".into(),
-            aliases: vec![("@/".into(), "src/".into(), TsconfigPathAliasKind::GlobPrefix)],
+            aliases: vec![(
+                "@/".into(),
+                "src/".into(),
+                TsconfigPathAliasKind::GlobPrefix,
+            )],
         };
         assert_eq!(rewrite_tsconfig_import(&ts, "@vite/client"), None);
         assert_eq!(

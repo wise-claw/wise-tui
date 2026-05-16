@@ -35,9 +35,12 @@ fn compiled_queries() -> Result<&'static CompiledQueries, String> {
         let ts_lang: Language = tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into();
         let tsx_lang: Language = tree_sitter_typescript::LANGUAGE_TSX.into();
         let js_lang: Language = tree_sitter_javascript::LANGUAGE.into();
-        let ts = Query::new(&ts_lang, TS_QUERY_SRC).map_err(|e| format!("TS query compile: {e}"))?;
-        let tsx = Query::new(&tsx_lang, TS_QUERY_SRC).map_err(|e| format!("TSX query compile: {e}"))?;
-        let js = Query::new(&js_lang, JS_QUERY_SRC).map_err(|e| format!("JS query compile: {e}"))?;
+        let ts =
+            Query::new(&ts_lang, TS_QUERY_SRC).map_err(|e| format!("TS query compile: {e}"))?;
+        let tsx =
+            Query::new(&tsx_lang, TS_QUERY_SRC).map_err(|e| format!("TSX query compile: {e}"))?;
+        let js =
+            Query::new(&js_lang, JS_QUERY_SRC).map_err(|e| format!("JS query compile: {e}"))?;
         Ok(CompiledQueries { ts, tsx, js })
     })
     .as_ref()
@@ -57,7 +60,8 @@ fn compiled_call_queries() -> Result<&'static CompiledCallQueries, String> {
         let tsx_lang: Language = tree_sitter_typescript::LANGUAGE_TSX.into();
         let js_lang: Language = tree_sitter_javascript::LANGUAGE.into();
         let ts = Query::new(&ts_lang, TS_CALLS_SRC).map_err(|e| format!("TS calls query: {e}"))?;
-        let tsx = Query::new(&tsx_lang, TS_CALLS_SRC).map_err(|e| format!("TSX calls query: {e}"))?;
+        let tsx =
+            Query::new(&tsx_lang, TS_CALLS_SRC).map_err(|e| format!("TSX calls query: {e}"))?;
         let js = Query::new(&js_lang, JS_CALLS_SRC).map_err(|e| format!("JS calls query: {e}"))?;
         Ok(CompiledCallQueries { ts, tsx, js })
     })
@@ -77,19 +81,21 @@ fn compiled_local_names_queries() -> Result<&'static CompiledLocalNamesQueries, 
         let ts_lang: Language = tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into();
         let tsx_lang: Language = tree_sitter_typescript::LANGUAGE_TSX.into();
         let js_lang: Language = tree_sitter_javascript::LANGUAGE.into();
-        let ts =
-            Query::new(&ts_lang, TS_JS_LOCAL_NAMES_SRC).map_err(|e| format!("local names TS: {e}"))?;
-        let tsx =
-            Query::new(&tsx_lang, TS_JS_LOCAL_NAMES_SRC).map_err(|e| format!("local names TSX: {e}"))?;
-        let js =
-            Query::new(&js_lang, TS_JS_LOCAL_NAMES_SRC).map_err(|e| format!("local names JS: {e}"))?;
+        let ts = Query::new(&ts_lang, TS_JS_LOCAL_NAMES_SRC)
+            .map_err(|e| format!("local names TS: {e}"))?;
+        let tsx = Query::new(&tsx_lang, TS_JS_LOCAL_NAMES_SRC)
+            .map_err(|e| format!("local names TSX: {e}"))?;
+        let js = Query::new(&js_lang, TS_JS_LOCAL_NAMES_SRC)
+            .map_err(|e| format!("local names JS: {e}"))?;
         Ok(CompiledLocalNamesQueries { ts, tsx, js })
     })
     .as_ref()
     .map_err(|e| e.clone())
 }
 
-fn language_and_local_names_query_for_ext(ext_lower: &str) -> Result<(Language, &'static Query), String> {
+fn language_and_local_names_query_for_ext(
+    ext_lower: &str,
+) -> Result<(Language, &'static Query), String> {
     let q = compiled_local_names_queries()?;
     Ok(match ext_lower {
         "tsx" | "jsx" => (tree_sitter_typescript::LANGUAGE_TSX.into(), &q.tsx),
@@ -139,19 +145,21 @@ fn compiled_local_class_queries() -> Result<&'static CompiledLocalClassQueries, 
         let ts_lang: Language = tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into();
         let tsx_lang: Language = tree_sitter_typescript::LANGUAGE_TSX.into();
         let js_lang: Language = tree_sitter_javascript::LANGUAGE.into();
-        let ts =
-            Query::new(&ts_lang, TS_JS_LOCAL_CLASSES_TS_SRC).map_err(|e| format!("local class TS: {e}"))?;
-        let tsx =
-            Query::new(&tsx_lang, TS_JS_LOCAL_CLASSES_TS_SRC).map_err(|e| format!("local class TSX: {e}"))?;
-        let js =
-            Query::new(&js_lang, TS_JS_LOCAL_CLASSES_JS_SRC).map_err(|e| format!("local class JS: {e}"))?;
+        let ts = Query::new(&ts_lang, TS_JS_LOCAL_CLASSES_TS_SRC)
+            .map_err(|e| format!("local class TS: {e}"))?;
+        let tsx = Query::new(&tsx_lang, TS_JS_LOCAL_CLASSES_TS_SRC)
+            .map_err(|e| format!("local class TSX: {e}"))?;
+        let js = Query::new(&js_lang, TS_JS_LOCAL_CLASSES_JS_SRC)
+            .map_err(|e| format!("local class JS: {e}"))?;
         Ok(CompiledLocalClassQueries { ts, tsx, js })
     })
     .as_ref()
     .map_err(|e| e.clone())
 }
 
-fn language_and_local_class_query_for_ext(ext_lower: &str) -> Result<(Language, &'static Query), String> {
+fn language_and_local_class_query_for_ext(
+    ext_lower: &str,
+) -> Result<(Language, &'static Query), String> {
     let q = compiled_local_class_queries()?;
     Ok(match ext_lower {
         "tsx" | "jsx" => (tree_sitter_typescript::LANGUAGE_TSX.into(), &q.tsx),
@@ -199,7 +207,10 @@ fn peel_parenthesized_expression(mut n: tree_sitter::Node<'_>) -> tree_sitter::N
     n
 }
 
-fn expression_to_extends_import_lookup_key(expr: tree_sitter::Node<'_>, source: &[u8]) -> Option<String> {
+fn expression_to_extends_import_lookup_key(
+    expr: tree_sitter::Node<'_>,
+    source: &[u8],
+) -> Option<String> {
     let n = peel_parenthesized_expression(expr);
     match n.kind() {
         "identifier" | "type_identifier" => n.utf8_text(source).ok().map(|s| s.to_string()),
@@ -232,7 +243,10 @@ fn ts_extends_clause_first_base_key(ext: tree_sitter::Node<'_>, source: &[u8]) -
     None
 }
 
-fn class_heritage_extends_base_key(heritage: tree_sitter::Node<'_>, source: &[u8]) -> Option<String> {
+fn class_heritage_extends_base_key(
+    heritage: tree_sitter::Node<'_>,
+    source: &[u8],
+) -> Option<String> {
     for i in 0..heritage.named_child_count() {
         let ch = heritage.named_child(i)?;
         if ch.kind() == "extends_clause" {
@@ -265,10 +279,7 @@ fn enclosing_class_extends_import_lookup_key(
     let mut cur = anchor;
     loop {
         let p = cur.parent()?;
-        if matches!(
-            p.kind(),
-            "class_declaration" | "abstract_class_declaration"
-        ) {
+        if matches!(p.kind(), "class_declaration" | "abstract_class_declaration") {
             let heritage = class_declaration_heritage(p)?;
             return class_heritage_extends_base_key(heritage, source);
         }
@@ -474,7 +485,8 @@ pub(crate) fn extract_ts_js_calls_tree_sitter(
                     )?;
                 }
                 "super" => {
-                    let Some(base_key) = enclosing_class_extends_import_lookup_key(anchor, source) else {
+                    let Some(base_key) = enclosing_class_extends_import_lookup_key(anchor, source)
+                    else {
                         continue;
                     };
                     let Some(path) = resolve_extends_base_repo_path(

@@ -9,13 +9,11 @@ use regex::Regex;
 use crate::code_knowledge_graph::storage as graph_storage;
 
 static VUE_SCRIPT_INNER: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?si)<script\b[^>]*>([\s\S]*?)</script>")
-        .expect("vue <script> inner regex")
+    Regex::new(r"(?si)<script\b[^>]*>([\s\S]*?)</script>").expect("vue <script> inner regex")
 });
 
 static JAVA_IMPORT: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?m)^\s*import\s+(?:static\s+)?([\w$.]+)\s*;")
-        .expect("java import regex")
+    Regex::new(r"(?m)^\s*import\s+(?:static\s+)?([\w$.]+)\s*;").expect("java import regex")
 });
 
 static JAVA_TYPE_DECL: LazyLock<Regex> = LazyLock::new(|| {
@@ -68,25 +66,20 @@ static PYTHON_FROM: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?m)^\s*from\s+([\w.]+)\s+import\s+").expect("python from import")
 });
 
-static PYTHON_IMPORT_LINE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?m)^\s*import\s+(.+)$").expect("python import line")
-});
+static PYTHON_IMPORT_LINE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?m)^\s*import\s+(.+)$").expect("python import line"));
 
-static PYTHON_CLASS: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^\s*class\s+(\w+)").expect("python class")
-});
+static PYTHON_CLASS: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^\s*class\s+(\w+)").expect("python class"));
 
-static PYTHON_DEF: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^\s*(?:async\s+)?def\s+(\w+)\s*\(").expect("python def")
-});
+static PYTHON_DEF: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^\s*(?:async\s+)?def\s+(\w+)\s*\(").expect("python def"));
 
-static GO_IMPORT_QUOTED: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?m)import\s+"([^"]+)""#).expect("go import quoted")
-});
+static GO_IMPORT_QUOTED: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"(?m)import\s+"([^"]+)""#).expect("go import quoted"));
 
-static GO_FUNC: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?m)^func\s+(?:\([^)]*\)\s+)?(\w+)\s*\(").expect("go func")
-});
+static GO_FUNC: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?m)^func\s+(?:\([^)]*\)\s+)?(\w+)\s*\(").expect("go func"));
 
 static CS_TYPE_LINE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?m)^\s*(?:public|internal|private|protected|file|abstract|sealed|static|partial|readonly|unsafe|\s)*\s*(?:ref\s+struct|record\s+struct|record|class|interface|struct|enum)\s+(\w+)\b")
@@ -97,13 +90,11 @@ static RUBY_REQUIRE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"(?m)require(?:_relative)?\s+['"]([^'"]+)['"]"#).expect("ruby require")
 });
 
-static RUBY_CLASS_MOD: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^\s*(class|module)\s+(\w+)").expect("ruby class module")
-});
+static RUBY_CLASS_MOD: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^\s*(class|module)\s+(\w+)").expect("ruby class module"));
 
-static PHP_USE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?m)^\s*use\s+([\w\\]+)\s*;").expect("php use")
-});
+static PHP_USE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?m)^\s*use\s+([\w\\]+)\s*;").expect("php use"));
 
 static PHP_CLASS_LIKE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?m)^\s*(?:abstract\s+|final\s+)?(?:class|interface|trait)\s+(\w+)\b")
@@ -126,8 +117,10 @@ static SWIFT_FUNC: LazyLock<Regex> = LazyLock::new(|| {
 
 /// TypeScript / TSX — align with GitNexus `DEFINES` / `HAS_METHOD` / `HAS_PROPERTY` extraction.
 static TS_EXPORT_CLASS_OR_INTERFACE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?m)^\s*export\s+(?:default\s+)?(?:abstract\s+)?(class|interface)\s+([A-Za-z_][\w]*)\b")
-        .expect("ts export class/interface")
+    Regex::new(
+        r"(?m)^\s*export\s+(?:default\s+)?(?:abstract\s+)?(class|interface)\s+([A-Za-z_][\w]*)\b",
+    )
+    .expect("ts export class/interface")
 });
 static TS_PLAIN_CLASS_OR_INTERFACE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?m)^\s*(?:declare\s+)?(?:abstract\s+)?(class|interface)\s+([A-Za-z_][\w]*)\b")
@@ -142,8 +135,7 @@ static TS_MEMBER_PROPERTY_LINE: LazyLock<Regex> = LazyLock::new(|| {
         .expect("ts member property line")
 });
 static TS_INTERFACE_METHOD_LINE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?m)^\s*(\w+)\s*\([^)]*\)\s*:")
-        .expect("ts interface method line")
+    Regex::new(r"(?m)^\s*(\w+)\s*\([^)]*\)\s*:").expect("ts interface method line")
 });
 
 static DART_IMPORT_EXPORT: LazyLock<Regex> = LazyLock::new(|| {
@@ -154,9 +146,8 @@ static DART_CLASS_MIXIN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?m)^\s*(?:abstract\s+)?(?:class|mixin|extension)\s+(\w+)\b").expect("dart class")
 });
 
-static CPP_INCLUDE_LOCAL: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?m)#include\s+"([^"]+)""#).expect("cpp local include")
-});
+static CPP_INCLUDE_LOCAL: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"(?m)#include\s+"([^"]+)""#).expect("cpp local include"));
 
 static KOTLIN_DATA_CLASS: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?m)^\s*(?:public\s+|internal\s+|private\s+|protected\s+)?data\s+class\s+(\w+)\b")
@@ -173,11 +164,13 @@ static KOTLIN_INTERFACE: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 static KOTLIN_OBJECT: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?m)^\s*(?:public\s+|internal\s+|private\s+)?object\s+(\w+)\b").expect("kotlin object")
+    Regex::new(r"(?m)^\s*(?:public\s+|internal\s+|private\s+)?object\s+(\w+)\b")
+        .expect("kotlin object")
 });
 
 static KOTLIN_ENUM_CLASS: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?m)^\s*(?:public\s+|internal\s+)?enum\s+class\s+(\w+)\b").expect("kotlin enum class")
+    Regex::new(r"(?m)^\s*(?:public\s+|internal\s+)?enum\s+class\s+(\w+)\b")
+        .expect("kotlin enum class")
 });
 
 static KOTLIN_FUN: LazyLock<Regex> = LazyLock::new(|| {
@@ -274,10 +267,7 @@ impl Parser {
         relative_path: &str,
         conn: &rusqlite::Connection,
     ) -> Result<(usize, usize), String> {
-        let ext = relative_path
-            .rsplit_once('.')
-            .map(|(_, e)| e)
-            .unwrap_or("");
+        let ext = relative_path.rsplit_once('.').map(|(_, e)| e).unwrap_or("");
         if ext.eq_ignore_ascii_case("vue") {
             self.parse_vue_file(content, file_node_id, repo_id, relative_path, conn)
         } else if ext.eq_ignore_ascii_case("java") {
@@ -355,28 +345,37 @@ impl Parser {
             .rsplit_once('.')
             .map(|(_, e)| e.to_ascii_lowercase())
             .unwrap_or_default();
-        let symbol_count = match crate::code_knowledge_graph::ts_js_tree_extract::extract_ts_js_symbols_tree_sitter(
-            self,
-            conn,
-            content,
-            file_node_id,
-            repo_id,
-            relative_path,
-            ext.as_str(),
-        ) {
-            Ok(Some(n)) => n,
-            Ok(None) => self.extract_symbols_regex(conn, content, file_node_id, repo_id, relative_path, 0)?,
-            Err(e) => return Err(e),
-        };
-        let call_edges = crate::code_knowledge_graph::ts_js_tree_extract::extract_ts_js_calls_tree_sitter(
-            conn,
-            content,
-            file_node_id,
-            repo_id,
-            relative_path,
-            ext.as_str(),
-            &import_bindings,
-        )?;
+        let symbol_count =
+            match crate::code_knowledge_graph::ts_js_tree_extract::extract_ts_js_symbols_tree_sitter(
+                self,
+                conn,
+                content,
+                file_node_id,
+                repo_id,
+                relative_path,
+                ext.as_str(),
+            ) {
+                Ok(Some(n)) => n,
+                Ok(None) => self.extract_symbols_regex(
+                    conn,
+                    content,
+                    file_node_id,
+                    repo_id,
+                    relative_path,
+                    0,
+                )?,
+                Err(e) => return Err(e),
+            };
+        let call_edges =
+            crate::code_knowledge_graph::ts_js_tree_extract::extract_ts_js_calls_tree_sitter(
+                conn,
+                content,
+                file_node_id,
+                repo_id,
+                relative_path,
+                ext.as_str(),
+                &import_bindings,
+            )?;
         Ok((symbol_count, symbol_count + import_count + call_edges))
     }
 
@@ -425,15 +424,16 @@ impl Parser {
                 Err(e) => return Err(e),
             };
             symbol_count += inner_syms;
-            call_count += crate::code_knowledge_graph::ts_js_tree_extract::extract_ts_js_calls_tree_sitter(
-                conn,
-                inner,
-                file_node_id,
-                repo_id,
-                relative_path,
-                "ts",
-                &import_bindings,
-            )?;
+            call_count +=
+                crate::code_knowledge_graph::ts_js_tree_extract::extract_ts_js_calls_tree_sitter(
+                    conn,
+                    inner,
+                    file_node_id,
+                    repo_id,
+                    relative_path,
+                    "ts",
+                    &import_bindings,
+                )?;
         }
 
         Ok((symbol_count, symbol_count + import_count + call_count))
@@ -471,19 +471,24 @@ impl Parser {
             true,
             &mut import_simple_map,
         )?;
-        let symbol_count = match crate::code_knowledge_graph::java_tree_extract::extract_java_symbols_tree_sitter(
-            self,
-            conn,
-            content,
-            file_node_id,
-            repo_id,
-            relative_path,
-        ) {
-            Ok(Some(n)) => n,
-            Ok(None) => self.extract_java_symbols(conn, content, file_node_id, repo_id, relative_path)?,
-            Err(e) => return Err(e),
-        };
-        crate::code_knowledge_graph::java_tree_extract::prime_java_lang_imports(&mut import_simple_map);
+        let symbol_count =
+            match crate::code_knowledge_graph::java_tree_extract::extract_java_symbols_tree_sitter(
+                self,
+                conn,
+                content,
+                file_node_id,
+                repo_id,
+                relative_path,
+            ) {
+                Ok(Some(n)) => n,
+                Ok(None) => {
+                    self.extract_java_symbols(conn, content, file_node_id, repo_id, relative_path)?
+                }
+                Err(e) => return Err(e),
+            };
+        crate::code_knowledge_graph::java_tree_extract::prime_java_lang_imports(
+            &mut import_simple_map,
+        );
         let hx = crate::code_knowledge_graph::java_tree_extract::extract_java_calls_and_heritage(
             conn,
             content,
@@ -578,15 +583,20 @@ impl Parser {
             }
             let sym = KOTLIN_DATA_CLASS
                 .captures(trimmed)
-                .and_then(|c| c.get(1).map(|m| (m.as_str().to_string(), "class".to_string())))
+                .and_then(|c| {
+                    c.get(1)
+                        .map(|m| (m.as_str().to_string(), "class".to_string()))
+                })
                 .or_else(|| {
                     KOTLIN_ENUM_CLASS.captures(trimmed).and_then(|c| {
-                        c.get(1).map(|m| (m.as_str().to_string(), "enum".to_string()))
+                        c.get(1)
+                            .map(|m| (m.as_str().to_string(), "enum".to_string()))
                     })
                 })
                 .or_else(|| {
                     KOTLIN_OBJECT.captures(trimmed).and_then(|c| {
-                        c.get(1).map(|m| (m.as_str().to_string(), "object".to_string()))
+                        c.get(1)
+                            .map(|m| (m.as_str().to_string(), "object".to_string()))
                     })
                 })
                 .or_else(|| {
@@ -603,7 +613,8 @@ impl Parser {
                 })
                 .or_else(|| {
                     KOTLIN_CLASS.captures(trimmed).and_then(|c| {
-                        c.get(1).map(|m| (m.as_str().to_string(), "class".to_string()))
+                        c.get(1)
+                            .map(|m| (m.as_str().to_string(), "class".to_string()))
                     })
                 });
             let Some((name, kind)) = sym else {
@@ -688,11 +699,15 @@ impl Parser {
             }
             let sym = PYTHON_CLASS
                 .captures(trimmed)
-                .and_then(|c| c.get(1).map(|m| (m.as_str().to_string(), "class".to_string())))
+                .and_then(|c| {
+                    c.get(1)
+                        .map(|m| (m.as_str().to_string(), "class".to_string()))
+                })
                 .or_else(|| {
-                    PYTHON_DEF
-                        .captures(trimmed)
-                        .and_then(|c| c.get(1).map(|m| (m.as_str().to_string(), "function".to_string())))
+                    PYTHON_DEF.captures(trimmed).and_then(|c| {
+                        c.get(1)
+                            .map(|m| (m.as_str().to_string(), "function".to_string()))
+                    })
                 });
             let Some((name, kind)) = sym else {
                 continue;
@@ -858,7 +873,10 @@ impl Parser {
             }
             let sym_info = PHP_CLASS_LIKE
                 .captures(trimmed)
-                .and_then(|c| c.get(1).map(|m| (m.as_str().to_string(), "class".to_string())))
+                .and_then(|c| {
+                    c.get(1)
+                        .map(|m| (m.as_str().to_string(), "class".to_string()))
+                })
                 .or_else(|| {
                     PHP_FUNCTION.captures(trimmed).and_then(|c| {
                         c.get(1)
@@ -898,7 +916,10 @@ impl Parser {
             }
             let sym_info = SWIFT_TYPE
                 .captures(trimmed)
-                .and_then(|c| c.get(1).map(|m| (m.as_str().to_string(), "class".to_string())))
+                .and_then(|c| {
+                    c.get(1)
+                        .map(|m| (m.as_str().to_string(), "class".to_string()))
+                })
                 .or_else(|| {
                     SWIFT_FUNC.captures(trimmed).and_then(|c| {
                         c.get(1)
@@ -1057,7 +1078,10 @@ impl Parser {
 
             let sym = RUST_FN_LINE
                 .captures(trimmed)
-                .and_then(|c| c.get(1).map(|m| (m.as_str().to_string(), "function".to_string())))
+                .and_then(|c| {
+                    c.get(1)
+                        .map(|m| (m.as_str().to_string(), "function".to_string()))
+                })
                 .or_else(|| {
                     RUST_STRUCT_LINE.captures(trimmed).and_then(|c| {
                         c.get(1)
@@ -1066,22 +1090,26 @@ impl Parser {
                 })
                 .or_else(|| {
                     RUST_ENUM_LINE.captures(trimmed).and_then(|c| {
-                        c.get(1).map(|m| (m.as_str().to_string(), "enum".to_string()))
+                        c.get(1)
+                            .map(|m| (m.as_str().to_string(), "enum".to_string()))
                     })
                 })
                 .or_else(|| {
                     RUST_TRAIT_LINE.captures(trimmed).and_then(|c| {
-                        c.get(1).map(|m| (m.as_str().to_string(), "trait".to_string()))
+                        c.get(1)
+                            .map(|m| (m.as_str().to_string(), "trait".to_string()))
                     })
                 })
                 .or_else(|| {
                     RUST_TYPE_LINE.captures(trimmed).and_then(|c| {
-                        c.get(1).map(|m| (m.as_str().to_string(), "type".to_string()))
+                        c.get(1)
+                            .map(|m| (m.as_str().to_string(), "type".to_string()))
                     })
                 })
                 .or_else(|| {
                     RUST_MOD_INLINE.captures(trimmed).and_then(|c| {
-                        c.get(1).map(|m| (m.as_str().to_string(), "mod".to_string()))
+                        c.get(1)
+                            .map(|m| (m.as_str().to_string(), "mod".to_string()))
                     })
                 });
 
@@ -1233,10 +1261,18 @@ impl Parser {
 
             let head = TS_EXPORT_CLASS_OR_INTERFACE
                 .captures(trimmed)
-                .and_then(|c| Some((c.get(1)?.as_str().to_string(), c.get(2)?.as_str().to_string())))
+                .and_then(|c| {
+                    Some((
+                        c.get(1)?.as_str().to_string(),
+                        c.get(2)?.as_str().to_string(),
+                    ))
+                })
                 .or_else(|| {
                     TS_PLAIN_CLASS_OR_INTERFACE.captures(trimmed).and_then(|c| {
-                        Some((c.get(1)?.as_str().to_string(), c.get(2)?.as_str().to_string()))
+                        Some((
+                            c.get(1)?.as_str().to_string(),
+                            c.get(2)?.as_str().to_string(),
+                        ))
                     })
                 });
 
@@ -1367,7 +1403,8 @@ impl Parser {
                     symbol_info = extract_symbol_name_after_keyword(trimmed, "function");
                 } else if trimmed.starts_with("function ") {
                     symbol_info = extract_symbol_name_after_keyword(trimmed, "function");
-                } else if (trimmed.starts_with("export const ") || trimmed.starts_with("export let "))
+                } else if (trimmed.starts_with("export const ")
+                    || trimmed.starts_with("export let "))
                     && (trimmed.contains(" = (") || trimmed.contains(" = function"))
                 {
                     symbol_info = extract_const_name(trimmed);
@@ -1447,13 +1484,7 @@ impl Parser {
                 let import_id = format!("{file_node_id}:imports:{resolved}");
                 let target_id = super::indexer::make_file_node_id(repo_id, &resolved);
 
-                graph_storage::upsert_edge(
-                    conn,
-                    &import_id,
-                    file_node_id,
-                    &target_id,
-                    "imports",
-                )?;
+                graph_storage::upsert_edge(conn, &import_id, file_node_id, &target_id, "imports")?;
                 count += 1;
             }
         }
@@ -1576,7 +1607,8 @@ static TS_IMPORT_STAR_AS: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^\s*import\s+\*\s+as\s+([\w$]+)\s+from\s+").expect("ts import * as")
 });
 static TS_IMPORT_DEFAULT_AND_NAMED: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^\s*import\s+([\w$]+)\s*,\s*\{([^}]*)\}\s+from\s+").expect("ts import default+named")
+    Regex::new(r"^\s*import\s+([\w$]+)\s*,\s*\{([^}]*)\}\s+from\s+")
+        .expect("ts import default+named")
 });
 static TS_IMPORT_BRACE_ONLY: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^\s*import\s*\{([^}]*)\}\s+from\s+").expect("ts import brace"));
@@ -1630,8 +1662,23 @@ fn naive_brace_delta(line: &str) -> i32 {
 fn ts_reserved_method_name(name: &str) -> bool {
     matches!(
         name,
-        "if" | "for" | "while" | "switch" | "catch" | "function" | "return" | "with" | "new"
-            | "case" | "typeof" | "throw" | "try" | "else" | "import" | "export" | "do" | "super"
+        "if" | "for"
+            | "while"
+            | "switch"
+            | "catch"
+            | "function"
+            | "return"
+            | "with"
+            | "new"
+            | "case"
+            | "typeof"
+            | "throw"
+            | "try"
+            | "else"
+            | "import"
+            | "export"
+            | "do"
+            | "super"
     )
 }
 
@@ -1673,7 +1720,12 @@ fn php_qualified_to_path(q: &str) -> Option<String> {
     }
     let mut segs = parts;
     if let Some(last) = segs.last() {
-        if last.chars().next().map(|c| c.is_lowercase()).unwrap_or(false) {
+        if last
+            .chars()
+            .next()
+            .map(|c| c.is_lowercase())
+            .unwrap_or(false)
+        {
             segs.pop();
         }
     }
@@ -1755,12 +1807,7 @@ fn parse_rust_use_prefix_path(s: &str) -> Option<(RustUseRoot, Vec<&str>)> {
 fn rust_path_segments(s: &str) -> Vec<&str> {
     s.split("::")
         .map(str::trim)
-        .filter(|p| {
-            !p.is_empty()
-                && *p != "self"
-                && *p != "crate"
-                && *p != "*"
-        })
+        .filter(|p| !p.is_empty() && *p != "self" && *p != "crate" && *p != "*")
         .collect()
 }
 
@@ -1896,10 +1943,7 @@ fn importer_default_extension(relative_path: &str) -> &'static str {
     if norm.ends_with(".gradle.kts") {
         return "gradle";
     }
-    let ext = relative_path
-        .rsplit_once('.')
-        .map(|(_, e)| e)
-        .unwrap_or("");
+    let ext = relative_path.rsplit_once('.').map(|(_, e)| e).unwrap_or("");
     if ext.eq_ignore_ascii_case("vue") {
         "vue"
     } else if ext.eq_ignore_ascii_case("java") {

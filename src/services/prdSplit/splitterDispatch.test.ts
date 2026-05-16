@@ -118,7 +118,7 @@ describe("dispatchClusterSplit", () => {
     expect(result.raw.claudeSessionId).toBe("sid-1");
     expect(invoke.mock.calls[0]?.[1]).toMatchObject({
       input: {
-        timeoutMs: 600_000,
+        timeoutMs: 0,
       },
     });
   });

@@ -30,6 +30,19 @@ export async function scanProjectParents(projectRootPath: string): Promise<Scann
   return out.parents;
 }
 
+export async function scanProjectParentsAcrossRoots(rootPaths: string[]): Promise<ScannedParentTask[]> {
+  return collectProjectParentsAcrossRoots(rootPaths, scanProjectParents);
+}
+
+export async function collectProjectParentsAcrossRoots(
+  rootPaths: string[],
+  scan: (rootPath: string) => Promise<ScannedParentTask[]>,
+): Promise<ScannedParentTask[]> {
+  const unique = [...new Set(rootPaths.map((path) => path.trim()).filter(Boolean))];
+  const settled = await Promise.allSettled(unique.map((rootPath) => scan(rootPath)));
+  return settled.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+}
+
 /** 按 clusterId 索引；同 clusterId 多次出现时保留 parentTaskName 最大者（按名称的 MM-DD 前缀粗略排序）。 */
 export function indexParentsByClusterId(
   parents: ScannedParentTask[],

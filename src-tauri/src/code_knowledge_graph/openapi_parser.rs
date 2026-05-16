@@ -42,13 +42,16 @@ pub fn parse_openapi(content: &str) -> Result<Vec<ApiOperation>, String> {
         for method in &methods {
             if let Some(op_value) = path_map.get(serde_yaml::Value::String(method.to_string())) {
                 let op = op_value.as_mapping().unwrap();
-                let operation_id = op.get(&serde_yaml::Value::String("operationId".into()))
+                let operation_id = op
+                    .get(&serde_yaml::Value::String("operationId".into()))
                     .and_then(|v| v.as_str())
                     .map(String::from);
-                let summary = op.get(&serde_yaml::Value::String("summary".into()))
+                let summary = op
+                    .get(&serde_yaml::Value::String("summary".into()))
                     .and_then(|v| v.as_str())
                     .map(String::from);
-                let tags = op.get(&serde_yaml::Value::String("tags".into()))
+                let tags = op
+                    .get(&serde_yaml::Value::String("tags".into()))
                     .and_then(|v| v.as_sequence())
                     .map(|seq| {
                         seq.iter()
@@ -137,7 +140,9 @@ pub fn extract_http_calls(content: &str) -> Vec<(String, String, usize)> {
     }
 
     // Pattern: axios.get/post/put/delete('URL')
-    if let Ok(re) = regex::Regex::new(r#"axios\.(get|post|put|patch|delete)\s*\(\s*['"]([^'"]+)['"]"#) {
+    if let Ok(re) =
+        regex::Regex::new(r#"axios\.(get|post|put|patch|delete)\s*\(\s*['"]([^'"]+)['"]"#)
+    {
         let caps: Vec<_> = re.captures_iter(content).collect();
         for cap in caps {
             let method_raw = cap.get(1).map(|m| m.as_str()).unwrap_or("").to_uppercase();
@@ -165,7 +170,11 @@ pub fn normalize_path(path: &str) -> String {
 pub fn match_http_to_api(
     method: &str,
     call_url: &str,
-    operations: &[(String /* operation_id */, String /* method */, String /* normalized_path */)],
+    operations: &[(
+        String, /* operation_id */
+        String, /* method */
+        String, /* normalized_path */
+    )],
 ) -> Vec<String> {
     let call_normalized = normalize_path(call_url);
     let mut matches = Vec::new();

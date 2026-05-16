@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { indexParentsByClusterId, type ScannedParentTask } from "./existingParentScanner";
+import {
+  collectProjectParentsAcrossRoots,
+  indexParentsByClusterId,
+  type ScannedParentTask,
+} from "./existingParentScanner";
 
 const sample = (overrides: Partial<ScannedParentTask> = {}): ScannedParentTask => ({
   parentTaskName: "05-13-fe-foo",
@@ -39,5 +43,17 @@ describe("indexParentsByClusterId", () => {
   test("tolerates corrupted requirements-index json", () => {
     const m = indexParentsByClusterId([sample({ requirementsIndexJson: "not json" })]);
     expect(m.get("cluster-frontend-1")?.requirementsIndex).toBeNull();
+  });
+
+  test("scans unique roots and ignores failed roots", async () => {
+    const calls: string[] = [];
+    const out = await collectProjectParentsAcrossRoots(["/project", "/project", " /repo ", "/bad"], async (rootPath) => {
+      calls.push(rootPath);
+      if (rootPath === "/bad") throw new Error("missing trellis");
+      return [sample({ parentTaskName: rootPath.slice(1) })];
+    });
+
+    expect(calls).toEqual(["/project", "/repo", "/bad"]);
+    expect(out.map((item) => item.parentTaskName)).toEqual(["project", "repo"]);
   });
 });

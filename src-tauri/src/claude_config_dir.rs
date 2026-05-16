@@ -176,7 +176,10 @@ mod tests {
         assert_eq!(plain, PathBuf::from("/tmp/foo"));
         if let Some(home) = dirs::home_dir() {
             assert_eq!(expand_tilde("~").unwrap(), home);
-            assert_eq!(expand_tilde("~/.codefuse/engine/cc").unwrap(), home.join(".codefuse/engine/cc"));
+            assert_eq!(
+                expand_tilde("~/.codefuse/engine/cc").unwrap(),
+                home.join(".codefuse/engine/cc")
+            );
         }
     }
 
@@ -189,7 +192,11 @@ mod tests {
         let json_default = user_claude_root_json();
         assert!(json_default.ends_with(".claude.json"));
 
-        let alt = dirs::home_dir().unwrap().join(".codefuse").join("engine").join("cc");
+        let alt = dirs::home_dir()
+            .unwrap()
+            .join(".codefuse")
+            .join("engine")
+            .join("cc");
         update_cache(Some(alt.clone()));
         let json_alt = user_claude_root_json();
         assert_eq!(json_alt, alt.parent().unwrap().join("cc.json"));

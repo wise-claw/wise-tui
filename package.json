@@ -25,6 +25,7 @@
     "@milkdown/react": "^7.20.0",
     "@milkdown/theme-nord": "^7.20.0",
     "@milkdown/utils": "^7.20.0",
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "@monaco-editor/react": "^4.7.0",
     "@radix-ui/react-collapsible": "^1.1.12",
     "@radix-ui/react-dialog": "^1.1.15",
@@ -37,6 +38,7 @@
     "@sigma/edge-curve": "^3.1.0",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2.7.0",
+    "@tauri-apps/plugin-fs": "^2.5.1",
     "@tauri-apps/plugin-opener": "^2",
     "@vscode/codicons": "^0.0.45",
     "@xterm/addon-fit": "^0.11.0",
@@ -61,10 +63,9 @@
     "remark-gfm": "^4.0.1",
     "sigma": "^3.0.3",
     "tslib": "^2.8.1",
+    "zod": "^3.24.2",
     "zundo": "^2.3.0",
-    "zustand": "^5.0.13",
-    "@modelcontextprotocol/sdk": "^1.26.0",
-    "zod": "^3.24.2"
+    "zustand": "^5.0.13"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

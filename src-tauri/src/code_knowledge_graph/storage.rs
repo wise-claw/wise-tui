@@ -24,7 +24,12 @@ pub fn upsert_node(
            range_end_line=excluded.range_end_line, range_end_col=excluded.range_end_col,
            content_hash=excluded.content_hash, updated_at=datetime('now')",
         params![
-            id, kind, symbol_kind, label, path, repo_id,
+            id,
+            kind,
+            symbol_kind,
+            label,
+            path,
+            repo_id,
             range.as_ref().map(|r| r.start.line as i64),
             range.as_ref().map(|r| r.start.column as i64),
             range.as_ref().map(|r| r.end.line as i64),
@@ -96,7 +101,10 @@ pub fn delete_edges_for_repo(conn: &rusqlite::Connection, repo_id: i64) -> Resul
 }
 
 /// 删除该仓在 `graph_nodes` / `graph_edges` 中的全部数据，并移除 `graph_index_meta` 行（下次 `get_index_status` 为 idle）。
-pub fn clear_repository_graph_index(conn: &rusqlite::Connection, repo_id: i64) -> Result<(), String> {
+pub fn clear_repository_graph_index(
+    conn: &rusqlite::Connection,
+    repo_id: i64,
+) -> Result<(), String> {
     delete_edges_for_repo(conn, repo_id)?;
     conn.execute(
         "DELETE FROM graph_index_meta WHERE repo_id = ?1",
@@ -160,7 +168,15 @@ pub fn get_index_status(
     conn: &rusqlite::Connection,
     repo_id: i64,
 ) -> Result<crate::code_knowledge_graph::types::CodeGraphIndexStatusResponse, String> {
-    let row: Option<(String, String, Option<String>, i64, i64, i64, Option<String>)> = conn
+    let row: Option<(
+        String,
+        String,
+        Option<String>,
+        i64,
+        i64,
+        i64,
+        Option<String>,
+    )> = conn
         .query_row(
             "SELECT status, index_version, error, total_nodes, total_edges, progress,
                     indexing_current_file
@@ -202,26 +218,30 @@ pub fn get_index_status(
             } else {
                 None
             };
-            Ok(crate::code_knowledge_graph::types::CodeGraphIndexStatusResponse {
-                status,
-                repository_id: repo_id,
-                progress: Some(progress as u8),
-                index_version: Some(index_version),
-                error,
-                indexing_files_done: ifd,
-                indexing_files_total: ift,
-                indexing_current_file: icf,
-            })
+            Ok(
+                crate::code_knowledge_graph::types::CodeGraphIndexStatusResponse {
+                    status,
+                    repository_id: repo_id,
+                    progress: Some(progress as u8),
+                    index_version: Some(index_version),
+                    error,
+                    indexing_files_done: ifd,
+                    indexing_files_total: ift,
+                    indexing_current_file: icf,
+                },
+            )
         }
-        None => Ok(crate::code_knowledge_graph::types::CodeGraphIndexStatusResponse {
-            status: "idle".to_string(),
-            repository_id: repo_id,
-            progress: None,
-            index_version: None,
-            error: None,
-            indexing_files_done: None,
-            indexing_files_total: None,
-            indexing_current_file: None,
-        }),
+        None => Ok(
+            crate::code_knowledge_graph::types::CodeGraphIndexStatusResponse {
+                status: "idle".to_string(),
+                repository_id: repo_id,
+                progress: None,
+                index_version: None,
+                error: None,
+                indexing_files_done: None,
+                indexing_files_total: None,
+                indexing_current_file: None,
+            },
+        ),
     }
 }

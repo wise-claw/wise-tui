@@ -60,7 +60,8 @@ export interface DispatchClusterResult {
   errors: string[];
 }
 
-const DEFAULT_SPLITTER_TIMEOUT_MS = 600_000;
+/** 0 = 无超时，子代理应自行结束或报错 */
+const DEFAULT_SPLITTER_TIMEOUT_MS = 0;
 
 export async function dispatchClusterSplit(input: DispatchClusterInput): Promise<DispatchClusterResult> {
   const errors: string[] = [];

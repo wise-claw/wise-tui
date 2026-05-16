@@ -17,9 +17,7 @@ fn escape_like_fragment(s: &str) -> String {
     out
 }
 
-fn map_node_row(
-    row: &rusqlite::Row<'_>,
-) -> Result<GraphNode, rusqlite::Error> {
+fn map_node_row(row: &rusqlite::Row<'_>) -> Result<GraphNode, rusqlite::Error> {
     let id: String = row.get(0)?;
     let kind: String = row.get(1)?;
     let symbol_kind: Option<String> = row.get(2)?;
@@ -76,7 +74,8 @@ pub fn search_graph_nodes(
     }
 
     let lim = limit.clamp(1, 200);
-    let per_repo_cap: i64 = ((lim as i64 + repository_ids.len() as i64 - 1) / repository_ids.len() as i64)
+    let per_repo_cap: i64 = ((lim as i64 + repository_ids.len() as i64 - 1)
+        / repository_ids.len() as i64)
         .clamp(15, 120);
 
     let pat = format!("%{}%", escape_like_fragment(needle));
@@ -116,11 +115,8 @@ pub fn search_graph_nodes(
     merged.sort_by(|a, b| {
         let sa = score_node(&needle_lc, a);
         let sb = score_node(&needle_lc, b);
-        sb.cmp(&sa).then_with(|| {
-            a.label
-                .to_lowercase()
-                .cmp(&b.label.to_lowercase())
-        })
+        sb.cmp(&sa)
+            .then_with(|| a.label.to_lowercase().cmp(&b.label.to_lowercase()))
     });
 
     merged.truncate(lim);

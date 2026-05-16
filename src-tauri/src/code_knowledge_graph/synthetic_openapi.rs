@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
-use crate::code_knowledge_graph::storage as graph_storage;
 use crate::code_knowledge_graph::indexer;
 use crate::code_knowledge_graph::openapi_parser;
+use crate::code_knowledge_graph::storage as graph_storage;
 
 /// Extract route definitions from backend code patterns.
 /// Supports Express, Fastify, Koa, and similar frameworks.
@@ -31,12 +31,21 @@ pub fn extract_routes_from_repo(
         })
         .flatten()
     {
-        if !entry.path().is_file() { continue; }
-        let ext = entry.path().extension().and_then(|e| e.to_str()).unwrap_or("");
-        if !indexer::SUPPORTED_EXTENSIONS.contains(&ext) { continue; }
+        if !entry.path().is_file() {
+            continue;
+        }
+        let ext = entry
+            .path()
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("");
+        if !indexer::SUPPORTED_EXTENSIONS.contains(&ext) {
+            continue;
+        }
 
         let content = std::fs::read_to_string(entry.path()).unwrap_or_default();
-        let relative = entry.path()
+        let relative = entry
+            .path()
             .strip_prefix(repo_path)
             .unwrap_or(entry.path())
             .to_string_lossy()
@@ -51,20 +60,29 @@ pub fn extract_routes_from_repo(
                 let path = cap.get(2).map(|m| m.as_str()).unwrap_or("").to_string();
                 let line = content[..cap.get(0).unwrap().start()].matches('\n').count() + 1;
                 routes.push(ExtractedRoute {
-                    method, path, file_path: relative.clone(), line, handler_name: None,
+                    method,
+                    path,
+                    file_path: relative.clone(),
+                    line,
+                    handler_name: None,
                 });
             }
         }
 
         // Next.js: export async function GET/POST (app router)
-        if let Ok(re) = regex::Regex::new(r#"export\s+(?:async\s+)?function\s+(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s*\("#) {
+        if let Ok(re) = regex::Regex::new(
+            r#"export\s+(?:async\s+)?function\s+(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s*\("#,
+        ) {
             for cap in re.captures_iter(&content) {
                 let method = cap.get(1).map(|m| m.as_str()).unwrap_or("").to_uppercase();
                 // Derive path from file path (app/api/users/route.ts -> /api/users)
                 let path = derive_nextjs_path(&relative);
                 let line = content[..cap.get(0).unwrap().start()].matches('\n').count() + 1;
                 routes.push(ExtractedRoute {
-                    method: method.clone(), path, file_path: relative.clone(), line,
+                    method: method.clone(),
+                    path,
+                    file_path: relative.clone(),
+                    line,
                     handler_name: Some(method),
                 });
             }
@@ -79,7 +97,11 @@ pub fn extract_routes_from_repo(
                 let path = cap.get(2).map(|m| m.as_str()).unwrap_or("").to_string();
                 let line = content[..cap.get(0).unwrap().start()].matches('\n').count() + 1;
                 routes.push(ExtractedRoute {
-                    method, path, file_path: relative.clone(), line, handler_name: None,
+                    method,
+                    path,
+                    file_path: relative.clone(),
+                    line,
+                    handler_name: None,
                 });
             }
         }
@@ -94,10 +116,16 @@ pub fn extract_routes_from_repo(
                     let methods_str = cap.get(2).map(|m| m.as_str()).unwrap_or("GET");
                     let line = content[..cap.get(0).unwrap().start()].matches('\n').count() + 1;
                     for method in methods_str.split(',') {
-                        let m = method.trim().trim_matches(|c| c == '\'' || c == '"').to_uppercase();
+                        let m = method
+                            .trim()
+                            .trim_matches(|c| c == '\'' || c == '"')
+                            .to_uppercase();
                         if !m.is_empty() {
                             routes.push(ExtractedRoute {
-                                method: m, path: path.clone(), file_path: relative.clone(), line,
+                                method: m,
+                                path: path.clone(),
+                                file_path: relative.clone(),
+                                line,
                                 handler_name: None,
                             });
                         }
@@ -172,7 +200,13 @@ pub fn ingest_synthetic_routes(
         // Create backend_serves_api edge from the file to the api_operation
         let file_node_id = indexer::make_file_node_id(repo_id, &route.file_path);
         let edge_id = format!("{file_node_id}:serves:{node_id}");
-        graph_storage::upsert_edge(conn, &edge_id, &file_node_id, &node_id, "backend_serves_api")?;
+        graph_storage::upsert_edge(
+            conn,
+            &edge_id,
+            &file_node_id,
+            &node_id,
+            "backend_serves_api",
+        )?;
         edges_added += 1;
     }
 

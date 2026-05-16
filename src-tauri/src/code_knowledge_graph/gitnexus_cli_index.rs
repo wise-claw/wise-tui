@@ -148,9 +148,10 @@ fn run_gitnexus_cypher(
     let exe = gitnexus_executable();
     let timeout = env_timeout_secs("GITNEXUS_CYPHER_TIMEOUT_SEC", 180);
     let mut cmd = Command::new(&exe);
-    cmd.current_dir(repo_root).args(["cypher", query, "-r", repo_name]);
-    let output =
-        command_output_with_timeout(cmd, timeout, cancel).map_err(|e| format!("无法执行 gitnexus cypher：{e}"))?;
+    cmd.current_dir(repo_root)
+        .args(["cypher", query, "-r", repo_name]);
+    let output = command_output_with_timeout(cmd, timeout, cancel)
+        .map_err(|e| format!("无法执行 gitnexus cypher：{e}"))?;
 
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
     if !output.status.success() {
@@ -161,8 +162,8 @@ fn run_gitnexus_cypher(
         ));
     }
 
-    let parsed: GitnexusCypherCliOutput =
-        serde_json::from_str(&stderr).map_err(|e| format!("解析 gitnexus cypher 输出 JSON 失败：{e}\n{stderr}"))?;
+    let parsed: GitnexusCypherCliOutput = serde_json::from_str(&stderr)
+        .map_err(|e| format!("解析 gitnexus cypher 输出 JSON 失败：{e}\n{stderr}"))?;
     if let Some(err) = parsed.error.clone() {
         return Err(format!("gitnexus cypher 返回错误：{err}"));
     }
@@ -335,9 +336,13 @@ pub fn index_repository(
     repo_root_label: &str,
     cancel: Option<Arc<AtomicBool>>,
 ) -> Result<IndexResult, String> {
-    let repo_path = repo_path
-        .canonicalize()
-        .map_err(|e| format!("Cannot resolve repository path '{}': {}", repo_path.display(), e))?;
+    let repo_path = repo_path.canonicalize().map_err(|e| {
+        format!(
+            "Cannot resolve repository path '{}': {}",
+            repo_path.display(),
+            e
+        )
+    })?;
     if !repo_path.is_dir() {
         return Err(format!(
             "Repository path '{}' is not a directory",
@@ -557,10 +562,7 @@ pub fn index_repository(
 
     // --- Symbols ---
     for label in GITNEXUS_SYMBOL_TABLES {
-        let q_base = format!(
-            "{} ORDER BY n.filePath, n.id",
-            symbol_table_cypher(label)
-        );
+        let q_base = format!("{} ORDER BY n.filePath, n.id", symbol_table_cypher(label));
         let rows = match cypher_batched_rows(
             &repo_path,
             &gn_repo_arg,
@@ -599,13 +601,12 @@ pub fn index_repository(
                     line: start,
                     column: 0,
                 },
-                end: GraphPosition { line: end, column: 0 },
+                end: GraphPosition {
+                    line: end,
+                    column: 0,
+                },
             });
-            let label_text = if name.is_empty() {
-                gn_id.clone()
-            } else {
-                name
-            };
+            let label_text = if name.is_empty() { gn_id.clone() } else { name };
             graph_storage::upsert_node(
                 conn,
                 &sym_wise,

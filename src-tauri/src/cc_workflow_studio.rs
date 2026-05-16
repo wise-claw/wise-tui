@@ -103,7 +103,8 @@ pub fn list_cc_workflow_studio_workflows(
             .map(iso_from_system_time)
             .unwrap_or_else(|| Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
 
-        let content = fs::read_to_string(&path).map_err(|e| format!("读取 {file_name} 失败: {e}"))?;
+        let content =
+            fs::read_to_string(&path).map_err(|e| format!("读取 {file_name} 失败: {e}"))?;
         let val: Value = serde_json::from_str(&content).unwrap_or(Value::Null);
         let name = val
             .get("name")
@@ -185,7 +186,11 @@ fn ai_editing_skill_relative_path(provider: &str) -> Result<&'static str, String
     }
 }
 
-fn write_project_relative_text_file(base: &Path, relative_path: &str, contents: &str) -> Result<(), String> {
+fn write_project_relative_text_file(
+    base: &Path,
+    relative_path: &str,
+    contents: &str,
+) -> Result<(), String> {
     let rel = relative_path.trim().trim_start_matches('/');
     if rel.is_empty() || rel.contains("..") {
         return Err("相对路径无效".into());
@@ -194,9 +199,7 @@ fn write_project_relative_text_file(base: &Path, relative_path: &str, contents: 
         .canonicalize()
         .map_err(|e| format!("解析仓库路径失败: {e}"))?;
     let full = base_canon.join(rel);
-    let parent = full
-        .parent()
-        .ok_or_else(|| "无效文件路径".to_string())?;
+    let parent = full.parent().ok_or_else(|| "无效文件路径".to_string())?;
     fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {e}"))?;
     let parent_canon = parent
         .canonicalize()

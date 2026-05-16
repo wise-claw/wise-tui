@@ -37,7 +37,8 @@ fn compiled_java_import_query() -> Result<&'static Query, String> {
     static CELL: OnceLock<Result<Query, String>> = OnceLock::new();
     CELL.get_or_init(|| {
         let lang: Language = tree_sitter_java::LANGUAGE.into();
-        Query::new(&lang, JAVA_IMPORT_QUERY_SRC).map_err(|e| format!("Java import query compile: {e}"))
+        Query::new(&lang, JAVA_IMPORT_QUERY_SRC)
+            .map_err(|e| format!("Java import query compile: {e}"))
     })
     .as_ref()
     .map_err(|e| e.clone())
@@ -47,7 +48,8 @@ fn compiled_java_calls_query() -> Result<&'static Query, String> {
     static CELL: OnceLock<Result<Query, String>> = OnceLock::new();
     CELL.get_or_init(|| {
         let lang: Language = tree_sitter_java::LANGUAGE.into();
-        Query::new(&lang, JAVA_CALLS_QUERY_SRC).map_err(|e| format!("Java calls query compile: {e}"))
+        Query::new(&lang, JAVA_CALLS_QUERY_SRC)
+            .map_err(|e| format!("Java calls query compile: {e}"))
     })
     .as_ref()
     .map_err(|e| e.clone())
@@ -57,7 +59,8 @@ fn compiled_java_heritage_query() -> Result<&'static Query, String> {
     static CELL: OnceLock<Result<Query, String>> = OnceLock::new();
     CELL.get_or_init(|| {
         let lang: Language = tree_sitter_java::LANGUAGE.into();
-        Query::new(&lang, JAVA_HERITAGE_QUERY_SRC).map_err(|e| format!("Java heritage query compile: {e}"))
+        Query::new(&lang, JAVA_HERITAGE_QUERY_SRC)
+            .map_err(|e| format!("Java heritage query compile: {e}"))
     })
     .as_ref()
     .map_err(|e| e.clone())
@@ -67,7 +70,8 @@ fn compiled_java_assignment_query() -> Result<&'static Query, String> {
     static CELL: OnceLock<Result<Query, String>> = OnceLock::new();
     CELL.get_or_init(|| {
         let lang: Language = tree_sitter_java::LANGUAGE.into();
-        Query::new(&lang, JAVA_ASSIGN_QUERY_SRC).map_err(|e| format!("Java assignment query compile: {e}"))
+        Query::new(&lang, JAVA_ASSIGN_QUERY_SRC)
+            .map_err(|e| format!("Java assignment query compile: {e}"))
     })
     .as_ref()
     .map_err(|e| e.clone())
@@ -118,7 +122,10 @@ fn enclosing_java_method_or_ctor_symbol_id(
             let type_id = enclosing_java_type_symbol_id(file_node_id, p, source)?;
             return Some(format!("{type_id}::{name}"));
         }
-        if matches!(p.kind(), "constructor_declaration" | "compact_constructor_declaration") {
+        if matches!(
+            p.kind(),
+            "constructor_declaration" | "compact_constructor_declaration"
+        ) {
             let type_id = enclosing_java_type_symbol_id(file_node_id, p, source)?;
             return Some(format!("{}::<init>@{}", type_id, p.start_byte()));
         }
@@ -299,13 +306,19 @@ pub(crate) fn extract_java_symbols_tree_sitter(
         }
 
         let (enclosing_id, member_edge): (Option<String>, Option<&'static str>) = match kind {
-            "method" | "property" => match enclosing_java_type_symbol_id(file_node_id, anchor, source) {
-                Some(enc) => {
-                    let edge = if kind == "method" { "has_method" } else { "has_property" };
-                    (Some(enc), Some(edge))
+            "method" | "property" => {
+                match enclosing_java_type_symbol_id(file_node_id, anchor, source) {
+                    Some(enc) => {
+                        let edge = if kind == "method" {
+                            "has_method"
+                        } else {
+                            "has_property"
+                        };
+                        (Some(enc), Some(edge))
+                    }
+                    None => (None, None),
                 }
-                None => (None, None),
-            },
+            }
             "constructor" => match enclosing_java_type_symbol_id(file_node_id, anchor, source) {
                 Some(enc) => (Some(enc), Some("has_method")),
                 None => (None, None),
@@ -325,7 +338,11 @@ pub(crate) fn extract_java_symbols_tree_sitter(
             }
         };
 
-        let commit_label = if kind == "constructor" { "<init>" } else { label };
+        let commit_label = if kind == "constructor" {
+            "<init>"
+        } else {
+            label
+        };
 
         graph.commit_code_symbol(
             conn,
@@ -347,9 +364,15 @@ pub(crate) fn extract_java_symbols_tree_sitter(
 
 fn java_type_node_approx_fqcn(node: tree_sitter::Node<'_>, source: &[u8]) -> Option<String> {
     match node.kind() {
-        "type_identifier" | "void_type" | "integral_type" | "floating_point_type" | "boolean_type" => {
-            node.utf8_text(source).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
-        }
+        "type_identifier"
+        | "void_type"
+        | "integral_type"
+        | "floating_point_type"
+        | "boolean_type" => node
+            .utf8_text(source)
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty()),
         "scoped_type_identifier" => node
             .utf8_text(source)
             .ok()
@@ -440,7 +463,8 @@ pub(crate) fn prime_java_lang_imports(map: &mut HashMap<String, String>) {
         ("Cloneable", "java/lang/Cloneable.java"),
     ];
     for (k, v) in PAIRS {
-        map.entry((*k).to_string()).or_insert_with(|| (*v).to_string());
+        map.entry((*k).to_string())
+            .or_insert_with(|| (*v).to_string());
     }
 }
 
@@ -568,7 +592,8 @@ pub(crate) fn extract_java_calls_and_heritage(
         let source_symbol = format!("{file_node_id}:symbol:{cname}");
         if let Some(tn) = extends_ty {
             if let Some(fq) = java_type_node_approx_fqcn(tn, source) {
-                if let Some(path) = resolve_java_type_ref_to_repo_path(&fq, pkg, import_simple_map) {
+                if let Some(path) = resolve_java_type_ref_to_repo_path(&fq, pkg, import_simple_map)
+                {
                     let tag = format!("ext:{}:{}", tn.start_byte(), tn.end_byte());
                     total += try_add_java_graph_edge(
                         conn,
@@ -584,7 +609,8 @@ pub(crate) fn extract_java_calls_and_heritage(
         }
         if let Some(tn) = impl_ty {
             if let Some(fq) = java_type_node_approx_fqcn(tn, source) {
-                if let Some(path) = resolve_java_type_ref_to_repo_path(&fq, pkg, import_simple_map) {
+                if let Some(path) = resolve_java_type_ref_to_repo_path(&fq, pkg, import_simple_map)
+                {
                     let tag = format!("impl:{}:{}", tn.start_byte(), tn.end_byte());
                     total += try_add_java_graph_edge(
                         conn,
@@ -630,10 +656,13 @@ pub(crate) fn extract_java_calls_and_heritage(
             };
             let anchor = root_n.unwrap_or(unq);
             if let Some(fq) = java_type_node_approx_fqcn(nt, source) {
-                if let Some(path) = resolve_java_type_ref_to_repo_path(&fq, pkg, import_simple_map) {
+                if let Some(path) = resolve_java_type_ref_to_repo_path(&fq, pkg, import_simple_map)
+                {
                     let src = call_source(anchor);
                     let tag = format!("new:{}:{}", anchor.start_byte(), anchor.end_byte());
-                    total += try_add_java_graph_edge(conn, repo_id, &src, &path, "calls", &tag, &mut dedup)?;
+                    total += try_add_java_graph_edge(
+                        conn, repo_id, &src, &path, "calls", &tag, &mut dedup,
+                    )?;
                 }
             }
             continue;
@@ -655,7 +684,9 @@ pub(crate) fn extract_java_calls_and_heritage(
                 };
                 if let Some(path) = path_opt {
                     let tag = format!("mref:{}:{}", mr.start_byte(), mr.end_byte());
-                    total += try_add_java_graph_edge(conn, repo_id, &src, &path, "calls", &tag, &mut dedup)?;
+                    total += try_add_java_graph_edge(
+                        conn, repo_id, &src, &path, "calls", &tag, &mut dedup,
+                    )?;
                 }
             }
             continue;
@@ -690,7 +721,8 @@ pub(crate) fn extract_java_calls_and_heritage(
                 anchor.end_byte(),
                 relative_path.replace('/', "_")
             );
-            total += try_add_java_graph_edge(conn, repo_id, &src, &path, "calls", &tag, &mut dedup)?;
+            total +=
+                try_add_java_graph_edge(conn, repo_id, &src, &path, "calls", &tag, &mut dedup)?;
         }
     }
 
@@ -721,12 +753,23 @@ pub(crate) fn extract_java_calls_and_heritage(
         let Some(path) = (if rv.kind() == "super" {
             enclosing_java_class_superclass_repo_path(anchor, pkg, import_simple_map, source)
         } else {
-            resolve_java_expression_as_repo_relative_path(rv, relative_path, pkg, import_simple_map, source)
+            resolve_java_expression_as_repo_relative_path(
+                rv,
+                relative_path,
+                pkg,
+                import_simple_map,
+                source,
+            )
         }) else {
             continue;
         };
         let src = call_source(anchor);
-        let tag = format!("w:{}:{}:{}", prop_name, anchor.start_byte(), anchor.end_byte());
+        let tag = format!(
+            "w:{}:{}:{}",
+            prop_name,
+            anchor.start_byte(),
+            anchor.end_byte()
+        );
         total += try_add_java_graph_edge(conn, repo_id, &src, &path, "writes", &tag, &mut dedup)?;
     }
 

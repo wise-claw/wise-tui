@@ -42,7 +42,9 @@ struct InvokeBody {
 
 fn is_tcp_port_open(port: u16) -> bool {
     TcpStream::connect_timeout(
-        &format!("127.0.0.1:{port}").parse().expect("valid localhost addr"),
+        &format!("127.0.0.1:{port}")
+            .parse()
+            .expect("valid localhost addr"),
         Duration::from_millis(250),
     )
     .is_ok()
@@ -78,7 +80,9 @@ pub(crate) fn kill_stale_cc_wf_studio_mcp_listeners(port: u16) {
 }
 
 fn bridge_is_healthy(inner: &BridgeInner) -> bool {
-    is_mcp_child_running(inner) && is_tcp_port_open(inner.bridge_port) && is_tcp_port_open(inner.mcp_port)
+    is_mcp_child_running(inner)
+        && is_tcp_port_open(inner.bridge_port)
+        && is_tcp_port_open(inner.mcp_port)
 }
 
 fn find_headers_body_split(buf: &[u8]) -> Option<usize> {
@@ -157,7 +161,12 @@ fn list_agents_for_repo(repo: &str, include_content: bool) -> Result<Value, Stri
         }
     }
 
-    push_dir(&home.join(".claude/agents"), "user", include_content, &mut commands);
+    push_dir(
+        &home.join(".claude/agents"),
+        "user",
+        include_content,
+        &mut commands,
+    );
     let rp = repo.trim();
     if !rp.is_empty() {
         push_dir(
@@ -168,7 +177,10 @@ fn list_agents_for_repo(repo: &str, include_content: bool) -> Result<Value, Stri
         );
     }
 
-    let user_count = commands.iter().filter(|c| c.get("scope") == Some(&json!("user"))).count();
+    let user_count = commands
+        .iter()
+        .filter(|c| c.get("scope") == Some(&json!("user")))
+        .count();
     let project_count = commands.len() - user_count;
 
     Ok(json!({
@@ -231,7 +243,10 @@ async fn handle_bridge_connection(
         }
     };
 
-    let review = *inner.review_before_apply.lock().unwrap_or_else(|e| e.into_inner());
+    let review = *inner
+        .review_before_apply
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
 
     let result: Result<Value, String> = match wire.op.as_str() {
         "list_available_agents" => {
@@ -248,7 +263,11 @@ async fn handle_bridge_connection(
             list_agents_for_repo(repo, include)
         }
         "highlight_group_node" => {
-            let gid = wire.payload.get("groupNodeId").cloned().unwrap_or(Value::Null);
+            let gid = wire
+                .payload
+                .get("groupNodeId")
+                .cloned()
+                .unwrap_or(Value::Null);
             let _ = app.emit(
                 "cc-wf-studio-mcp-invoke",
                 json!({
@@ -366,7 +385,10 @@ fn resolve_schema_toon_path(app: &AppHandle) -> Option<String> {
     let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../scripts/cc-workflow-studio-mcp/resources/workflow-schema.toon");
     if dev.is_file() {
-        return dev.canonicalize().ok().map(|p| p.to_string_lossy().to_string());
+        return dev
+            .canonicalize()
+            .ok()
+            .map(|p| p.to_string_lossy().to_string());
     }
     let res = app
         .path()
@@ -386,15 +408,16 @@ fn write_claude_project_mcp_json(project_path: &str, mcp_port: u16) -> Result<()
     let path = PathBuf::from(project_path.trim()).join(".mcp.json");
     let url = format!("http://127.0.0.1:{mcp_port}/mcp");
     let mut config: Value = if path.is_file() {
-        let raw = std::fs::read_to_string(&path).map_err(|e| format!("读取 .mcp.json 失败: {e}"))?;
+        let raw =
+            std::fs::read_to_string(&path).map_err(|e| format!("读取 .mcp.json 失败: {e}"))?;
         serde_json::from_str(&raw).unwrap_or_else(|_| json!({}))
     } else {
         json!({})
     };
-    let obj = config.as_object_mut().ok_or_else(|| ".mcp.json 根须为对象".to_string())?;
-    let servers = obj
-        .entry("mcpServers")
-        .or_insert_with(|| json!({}));
+    let obj = config
+        .as_object_mut()
+        .ok_or_else(|| ".mcp.json 根须为对象".to_string())?;
+    let servers = obj.entry("mcpServers").or_insert_with(|| json!({}));
     let servers_obj = servers
         .as_object_mut()
         .ok_or_else(|| "mcpServers 须为对象".to_string())?;
@@ -491,7 +514,10 @@ pub fn cc_wf_studio_mcp_bridge_status() -> Result<CcWfStudioMcpBridgeStatus, Str
 pub fn cc_wf_studio_mcp_set_review_before_apply(value: bool) -> Result<(), String> {
     let g = bridge_cell().lock().map_err(|_| "bridge lock poisoned")?;
     let inner = g.as_ref().ok_or_else(|| "MCP 桥未启动".to_string())?;
-    *inner.review_before_apply.lock().map_err(|_| "lock poisoned")? = value;
+    *inner
+        .review_before_apply
+        .lock()
+        .map_err(|_| "lock poisoned")? = value;
     Ok(())
 }
 
@@ -610,11 +636,12 @@ pub async fn start_cc_wf_studio_mcp_bridge(
             kill_stale_cc_wf_studio_mcp_listeners(mcp_port);
             let mut g = bridge_cell().lock().map_err(|_| "bridge lock poisoned")?;
             *g = None;
-            return Err(
-                "MCP HTTP 子进程启动后立即退出（6282 端口可能被占用）。请重试。".into(),
-            );
+            return Err("MCP HTTP 子进程启动后立即退出（6282 端口可能被占用）。请重试。".into());
         }
-        let mut guard = inner.mcp_child.lock().map_err(|_| "mcp_child lock poisoned")?;
+        let mut guard = inner
+            .mcp_child
+            .lock()
+            .map_err(|_| "mcp_child lock poisoned")?;
         *guard = Some(child);
     }
 
