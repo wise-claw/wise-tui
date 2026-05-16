@@ -51,6 +51,11 @@ export function LeftSidebar({
   pinnedProjectIds,
   onTogglePinProject,
   onReconcileProject,
+  onCodeGraphGenerateProject,
+  onCodeGraphViewProject,
+  onCodeGraphGenerateRepository,
+  onCodeGraphViewRepositoryInProject,
+  onCodeGraphViewFloatingRepository,
   onAddFloatingRepository,
   onPromoteFloatingRepositoryToProject,
   floatingRepositories = [],
@@ -79,8 +84,6 @@ export function LeftSidebar({
   onOpenMcpHub,
   skillsNavActive = false,
   onOpenSkillsHub,
-  codeKnowledgeGraphNavActive = false,
-  onOpenCodeKnowledgeGraph,
   workflowStudioNavActive = false,
   onOpenWorkflowStudio,
   activeRepositoryPath,
@@ -236,8 +239,6 @@ export function LeftSidebar({
         onOpenSkillsHub={onOpenSkillsHub}
         workflowStudioNavActive={workflowStudioNavActive}
         onOpenWorkflowStudio={onOpenWorkflowStudio}
-        codeKnowledgeGraphNavActive={codeKnowledgeGraphNavActive}
-        onOpenCodeKnowledgeGraph={onOpenCodeKnowledgeGraph}
       />
 
       <div
@@ -268,6 +269,11 @@ export function LeftSidebar({
             onAddFloatingRepository ? repositoryAssociateModal.openAddFloatingRepositoryModal : undefined
           }
           onReconcileProject={onReconcileProject}
+          onCodeGraphGenerateProject={onCodeGraphGenerateProject}
+          onCodeGraphViewProject={onCodeGraphViewProject}
+          onCodeGraphGenerateRepository={onCodeGraphGenerateRepository}
+          onCodeGraphViewRepositoryInProject={onCodeGraphViewRepositoryInProject}
+          onCodeGraphViewFloatingRepository={onCodeGraphViewFloatingRepository}
           onToggleProjectExpand={projectRepositoryState.toggleProjectExpand}
           onTogglePinProject={onTogglePinProject}
           onRenameProject={(project) => {

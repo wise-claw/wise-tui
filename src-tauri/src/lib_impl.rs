@@ -401,7 +401,6 @@ pub fn run() {
             code_knowledge_graph::trigger_code_graph_reindex,
             code_knowledge_graph::cancel_code_graph_reindex,
             code_knowledge_graph::trigger_code_graph_association_build,
-            code_knowledge_graph::trigger_code_graph_openapi_bridge,
             code_knowledge_graph::get_code_graph_index_status,
             code_knowledge_graph::clear_code_graph_index,
             code_knowledge_graph::import_code_graph_openapi,

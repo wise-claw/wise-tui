@@ -6,6 +6,7 @@ import forceAtlas2 from "graphology-layout-forceatlas2";
 import noverlap from "graphology-layout-noverlap";
 import EdgeCurveProgram from "@sigma/edge-curve";
 import type { CodeGraphSigmaEdgeAttrs, CodeGraphSigmaNodeAttrs } from "../utils/codeGraphSigmaAdapter";
+import { assignLayeredLayoutFromRoot, applyHopNeighborhoodMask } from "../utils/codeGraphLayerLayout";
 
 const hexToRgb = (hex: string): { r: number; g: number; b: number } => {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -123,11 +124,19 @@ function getSyncFa2Iterations(n: number): number {
   return Math.min(680, 480 + Math.floor(n / 6));
 }
 
+export type CodeGraphSigmaSetGraphLayoutOpts = {
+  /** 非空：跳过力导向，自上而下按 hop 距离排布（与有限 hop 子图配合） */
+  layeredRootId?: string | null;
+};
+
 export interface UseCodeGraphSigmaReturn {
   containerRef: RefObject<HTMLDivElement | null>;
   sigmaRef: RefObject<Sigma | null>;
   sigmaReady: boolean;
-  setGraph: (graph: Graph<CodeGraphSigmaNodeAttrs, CodeGraphSigmaEdgeAttrs>) => void;
+  setGraph: (
+    graph: Graph<CodeGraphSigmaNodeAttrs, CodeGraphSigmaEdgeAttrs>,
+    layout?: CodeGraphSigmaSetGraphLayoutOpts,
+  ) => void;
   zoomIn: () => void;
   zoomOut: () => void;
   resetZoom: () => void;
@@ -138,6 +147,8 @@ export interface UseCodeGraphSigmaReturn {
   selectedNode: string | null;
   setSelectedNode: (nodeId: string | null) => void;
   refresh: () => void;
+  /** 按选中点与 hop 上限隐藏邻域外节点（`hopLimit === "all"` 或 `centerId` 为空则全部显示） */
+  applyNeighborhoodHopMask: (centerId: string | null, hopLimit: number | "all") => void;
 }
 
 export function useCodeGraphSigma(options: UseCodeGraphSigmaOptions = {}): UseCodeGraphSigmaReturn {
@@ -147,8 +158,20 @@ export function useCodeGraphSigma(options: UseCodeGraphSigmaOptions = {}): UseCo
   const layoutRef = useRef<FA2Layout | null>(null);
   const selectedNodeRef = useRef<string | null>(null);
   const layoutTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** 推迟执行的同步 FA2：换图或新布局时递增，过期回调直接丢弃 */
+  const syncFa2EpochRef = useRef(0);
+  const deferredSyncFa2RafRef = useRef<{ raf0: number; raf1: number } | null>(null);
   const optionsRef = useRef(options);
   optionsRef.current = options;
+
+  const cancelDeferredSyncFa2 = useCallback(() => {
+    const h = deferredSyncFa2RafRef.current;
+    if (h) {
+      cancelAnimationFrame(h.raf0);
+      cancelAnimationFrame(h.raf1);
+      deferredSyncFa2RafRef.current = null;
+    }
+  }, []);
 
   const [isLayoutRunning, setIsLayoutRunning] = useState(false);
   const [selectedNode, setSelectedNodeState] = useState<string | null>(null);
@@ -169,6 +192,8 @@ export function useCodeGraphSigma(options: UseCodeGraphSigmaOptions = {}): UseCo
   const runLayout = useCallback((graph: Graph<CodeGraphSigmaNodeAttrs, CodeGraphSigmaEdgeAttrs>) => {
     const nodeCount = graph.order;
     if (nodeCount === 0) return;
+
+    cancelDeferredSyncFa2();
 
     if (layoutRef.current) {
       layoutRef.current.kill();
@@ -192,10 +217,32 @@ export function useCodeGraphSigma(options: UseCodeGraphSigmaOptions = {}): UseCo
         };
       }
       const iterations = getSyncFa2Iterations(nodeCount);
-      forceAtlas2.assign(graph, { iterations, settings });
-      noverlap.assign(graph, NOVERLAP_SETTINGS);
-      sigmaRef.current?.refresh();
-      setIsLayoutRunning(false);
+      const epoch = ++syncFa2EpochRef.current;
+      const applySyncFa2 = () => {
+        if (syncFa2EpochRef.current !== epoch) return;
+        if (graphRef.current !== graph) return;
+        forceAtlas2.assign(graph, { iterations, settings });
+        noverlap.assign(graph, NOVERLAP_SETTINGS);
+        sigmaRef.current?.refresh();
+        setIsLayoutRunning(false);
+      };
+
+      /**
+       * 中等规模子图上一笔同步 FA2 会长时间占满主线程，点击「查看检索」后菜单/过渡帧来不及绘制。
+       * 双 rAF 让浏览器先提交一帧，再跑 assign；换图时由 epoch / graphRef 丢弃过期任务。
+       */
+      const DEFER_SYNC_FA2_MIN_NODES = 120;
+      if (nodeCount >= DEFER_SYNC_FA2_MIN_NODES) {
+        setIsLayoutRunning(true);
+        const handles = { raf0: 0, raf1: 0 };
+        handles.raf0 = requestAnimationFrame(() => {
+          handles.raf1 = requestAnimationFrame(applySyncFa2);
+        });
+        deferredSyncFa2RafRef.current = handles;
+        return;
+      }
+
+      applySyncFa2();
       return;
     }
 
@@ -215,10 +262,13 @@ export function useCodeGraphSigma(options: UseCodeGraphSigmaOptions = {}): UseCo
         setIsLayoutRunning(false);
       }
     }, duration);
-  }, []);
+  }, [cancelDeferredSyncFa2]);
 
   const setGraphInternal = useCallback(
-    (newGraph: Graph<CodeGraphSigmaNodeAttrs, CodeGraphSigmaEdgeAttrs>) => {
+    (
+      newGraph: Graph<CodeGraphSigmaNodeAttrs, CodeGraphSigmaEdgeAttrs>,
+      layout?: CodeGraphSigmaSetGraphLayoutOpts,
+    ) => {
       const sigma = sigmaRef.current;
       if (!sigma) return;
 
@@ -230,11 +280,29 @@ export function useCodeGraphSigma(options: UseCodeGraphSigmaOptions = {}): UseCo
         clearTimeout(layoutTimeoutRef.current);
         layoutTimeoutRef.current = null;
       }
+      cancelDeferredSyncFa2();
+
+      lastLayeredRootRef.current = null;
+
+      const rootId = layout?.layeredRootId;
+      const useLayered =
+        typeof rootId === "string" &&
+        rootId.length > 0 &&
+        newGraph.hasNode(rootId) &&
+        assignLayeredLayoutFromRoot(newGraph, rootId);
 
       graphRef.current = newGraph;
       sigma.setGraph(newGraph);
       selectedNodeRef.current = null;
       setSelectedNodeState(null);
+
+      if (useLayered) {
+        lastLayeredRootRef.current = rootId;
+        setIsLayoutRunning(false);
+        sigma.refresh();
+        sigma.getCamera().setState({ x: 0.5, y: 0.5, ratio: 1, angle: 0 });
+        return;
+      }
 
       runLayout(newGraph);
       // 与布局后的节点坐标、归一化范围对齐；否则相机会按旧 extent 解释，随后 process 再跑会「跳走」
@@ -242,21 +310,50 @@ export function useCodeGraphSigma(options: UseCodeGraphSigmaOptions = {}): UseCo
       // 不用 animatedReset：500ms 与 focus 的 animate 叠在一起，且收尾会拉回默认视角
       sigma.getCamera().setState({ x: 0.5, y: 0.5, ratio: 1, angle: 0 });
     },
-    [runLayout],
+    [runLayout, cancelDeferredSyncFa2],
   );
 
   const pendingGraphRef = useRef<Graph<CodeGraphSigmaNodeAttrs, CodeGraphSigmaEdgeAttrs> | null>(null);
+  const pendingLayoutOptsRef = useRef<CodeGraphSigmaSetGraphLayoutOpts | null>(null);
+  const lastLayeredRootRef = useRef<string | null>(null);
 
   const setGraphOrQueue = useCallback(
-    (newGraph: Graph<CodeGraphSigmaNodeAttrs, CodeGraphSigmaEdgeAttrs>) => {
+    (
+      newGraph: Graph<CodeGraphSigmaNodeAttrs, CodeGraphSigmaEdgeAttrs>,
+      layout?: CodeGraphSigmaSetGraphLayoutOpts,
+    ) => {
       if (!sigmaRef.current) {
         pendingGraphRef.current = newGraph;
+        pendingLayoutOptsRef.current = layout ?? null;
         return;
       }
-      setGraphInternal(newGraph);
+      setGraphInternal(newGraph, layout);
     },
     [setGraphInternal],
   );
+
+  /** 将节点移到视口中心，不改变当前缩放（工具栏「聚焦」仍用 {@link focusNode} 拉近） */
+  const centerViewportOnNode = useCallback((nodeId: string) => {
+    const sigma = sigmaRef.current;
+    const g = graphRef.current;
+    if (!sigma || !g || !g.hasNode(nodeId)) return;
+
+    const sigmaWithDisplay = sigma as Sigma & {
+      getNodeDisplayData?: (id: string) => { x?: number; y?: number } | undefined;
+    };
+    let display = sigmaWithDisplay.getNodeDisplayData?.(nodeId);
+    if (display == null || typeof display.x !== "number" || typeof display.y !== "number") {
+      sigma.refresh();
+      display = sigmaWithDisplay.getNodeDisplayData?.(nodeId);
+    }
+    if (display == null || typeof display.x !== "number" || typeof display.y !== "number") {
+      return;
+    }
+
+    const cam = sigma.getCamera();
+    const { ratio, angle } = cam.getState();
+    cam.animate({ x: display.x, y: display.y, ratio, angle }, { duration: 320 });
+  }, []);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -332,6 +429,9 @@ export function useCodeGraphSigma(options: UseCodeGraphSigmaOptions = {}): UseCo
           return res;
         },
         edgeReducer: (edge, data) => {
+          if (data.hidden) {
+            return { ...data, hidden: true };
+          }
           const currentSelected = selectedNodeRef.current;
           const g = graphRef.current;
           if (!g) return data;
@@ -359,6 +459,7 @@ export function useCodeGraphSigma(options: UseCodeGraphSigmaOptions = {}): UseCo
       sigma.on("clickNode", ({ node }) => {
         setSelectedNode(node);
         optionsRef.current.onNodeClick?.(node);
+        centerViewportOnNode(node);
       });
 
       sigma.on("clickStage", () => {
@@ -384,12 +485,26 @@ export function useCodeGraphSigma(options: UseCodeGraphSigmaOptions = {}): UseCo
 
       if (pendingGraphRef.current) {
         const pending = pendingGraphRef.current;
+        const lo = pendingLayoutOptsRef.current;
         pendingGraphRef.current = null;
+        pendingLayoutOptsRef.current = null;
+        const rootId = lo?.layeredRootId;
+        const useLayered =
+          typeof rootId === "string" &&
+          rootId.length > 0 &&
+          pending.hasNode(rootId) &&
+          assignLayeredLayoutFromRoot(pending, rootId);
         graphRef.current = pending;
         sigma.setGraph(pending);
         selectedNodeRef.current = null;
         setSelectedNodeState(null);
-        runLayout(pending);
+        if (useLayered) {
+          lastLayeredRootRef.current = rootId;
+          setIsLayoutRunning(false);
+        } else {
+          lastLayeredRootRef.current = null;
+          runLayout(pending);
+        }
         sigma.refresh();
         sigma.getCamera().setState({ x: 0.5, y: 0.5, ratio: 1, angle: 0 });
       }
@@ -414,15 +529,17 @@ export function useCodeGraphSigma(options: UseCodeGraphSigmaOptions = {}): UseCo
         clearTimeout(layoutTimeoutRef.current);
         layoutTimeoutRef.current = null;
       }
+      cancelDeferredSyncFa2();
       layoutRef.current?.kill();
       layoutRef.current = null;
       sigmaRef.current?.kill();
       sigmaRef.current = null;
       graphRef.current = null;
       pendingGraphRef.current = null;
+      pendingLayoutOptsRef.current = null;
       setSigmaReady(false);
     };
-  }, [runLayout, setSelectedNode]);
+  }, [runLayout, setSelectedNode, centerViewportOnNode, cancelDeferredSyncFa2]);
 
   const focusNode = useCallback((nodeId: string) => {
     const sigma = sigmaRef.current;
@@ -464,10 +581,19 @@ export function useCodeGraphSigma(options: UseCodeGraphSigmaOptions = {}): UseCo
   const startLayout = useCallback(() => {
     const g = graphRef.current;
     if (!g || g.order === 0) return;
+    const root = lastLayeredRootRef.current;
+    if (root && g.hasNode(root)) {
+      assignLayeredLayoutFromRoot(g, root);
+      sigmaRef.current?.refresh();
+      setIsLayoutRunning(false);
+      return;
+    }
     runLayout(g);
   }, [runLayout]);
 
   const stopLayout = useCallback(() => {
+    cancelDeferredSyncFa2();
+    syncFa2EpochRef.current += 1;
     if (layoutTimeoutRef.current) {
       clearTimeout(layoutTimeoutRef.current);
       layoutTimeoutRef.current = null;
@@ -480,11 +606,18 @@ export function useCodeGraphSigma(options: UseCodeGraphSigmaOptions = {}): UseCo
         noverlap.assign(g, NOVERLAP_SETTINGS);
         sigmaRef.current?.refresh();
       }
-      setIsLayoutRunning(false);
     }
-  }, []);
+    setIsLayoutRunning(false);
+  }, [cancelDeferredSyncFa2]);
 
   const refresh = useCallback(() => {
+    sigmaRef.current?.refresh();
+  }, []);
+
+  const applyNeighborhoodHopMask = useCallback((centerId: string | null, hopLimit: number | "all") => {
+    const g = graphRef.current;
+    if (!g || g.order === 0) return;
+    applyHopNeighborhoodMask(g, centerId, hopLimit);
     sigmaRef.current?.refresh();
   }, []);
 
@@ -503,5 +636,6 @@ export function useCodeGraphSigma(options: UseCodeGraphSigmaOptions = {}): UseCo
     selectedNode,
     setSelectedNode,
     refresh,
+    applyNeighborhoodHopMask,
   };
 }

@@ -33,12 +33,7 @@ export async function cancelCodeGraphReindex(
   return invoke<CancelCodeGraphReindexOutcome>("cancel_code_graph_reindex", { repositoryId });
 }
 
-/** 多仓：仅 OpenAPI / 合成路由 + 前后端 HTTP 桥接（不重建 GitNexus 索引）；完成后发 `code-graph-openapi-bridge-complete` */
-export async function triggerCodeGraphOpenapiBridge(repositoryIds: number[]): Promise<string> {
-  return invoke<string>("trigger_code_graph_openapi_bridge", { repositoryIds });
-}
-
-/** 多仓：依次索引、OpenAPI/合成路由、HTTP 桥接（后台任务，完成后发 `code-graph-association-build-complete`） */
+/** 多仓：仅同步 GitNexus 官方仓库组（`trigger_code_graph_association_build`）；完成后发 `code-graph-association-build-complete` */
 export async function triggerCodeGraphAssociationBuild(repositoryIds: number[]): Promise<string> {
   return invoke<string>("trigger_code_graph_association_build", { repositoryIds });
 }
@@ -78,7 +73,7 @@ export async function getCodeGraphMultiSubgraph(
   repositoryIds: number[],
   options?: {
     focusNodeId?: string;
-/** 不传或 `undefined`：不限制层数；`1`–`10`：子图「层数」（1 层仅焦点，L 层含 outward 代价 ≤ L−1 的节点，`contains` 不增代价） */
+/** 不传或 `undefined`：不限制 hop；`1`–`10`：子图 hop 上限（焦点 + 至多 L 条计代价 outward 边，`contains` 不增代价） */
     hop?: CodeGraphSubgraphHopDepth;
     includeCrossRepoEdges?: boolean;
   },

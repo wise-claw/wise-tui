@@ -1,5 +1,5 @@
 //! 通过 **GitNexus CLI**：`gitnexus analyze` 建立索引后，用 **`gitnexus cypher`** 查询 Kuzu 图谱
-//! 并写入 `wise.db`（解析 CLI 输出到 **stderr** 的 JSON 里的 `markdown` 表格，避免在 Tauri 二进制中静态链接 Kuzu/cxx）。
+//! 并写入 `wise.db`（解析 CLI 输出的 JSON 里的 `markdown` 表格：优先 **stderr**，兼容部分版本将 JSON 写到 **stdout**，避免在 Tauri 二进制中静态链接 Kuzu/cxx）。
 //!
 //! 环境变量 `GITNEXUS_BIN` 可覆盖默认可执行名 `gitnexus`（需在 `PATH` 中）。
 
@@ -21,7 +21,7 @@ use crate::code_knowledge_graph::indexer::{self, IndexResult};
 use crate::code_knowledge_graph::storage as graph_storage;
 use crate::code_knowledge_graph::types::{GraphPosition, GraphRange, ParseError};
 
-fn gitnexus_executable() -> PathBuf {
+pub(crate) fn gitnexus_executable() -> PathBuf {
     std::env::var_os("GITNEXUS_BIN")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("gitnexus"))
@@ -51,7 +51,7 @@ fn env_timeout_secs(var: &str, default_secs: u64) -> Duration {
 }
 
 /// 避免 `Command::output()` 在 GitNexus 挂起时无限阻塞；超时或取消后 kill 子进程。
-fn command_output_with_timeout(
+pub(crate) fn command_output_with_timeout(
     mut cmd: Command,
     timeout: Duration,
     cancel: Option<&Arc<AtomicBool>>,
@@ -148,22 +148,58 @@ fn run_gitnexus_cypher(
     let exe = gitnexus_executable();
     let timeout = env_timeout_secs("GITNEXUS_CYPHER_TIMEOUT_SEC", 180);
     let mut cmd = Command::new(&exe);
-    cmd.current_dir(repo_root)
-        .args(["cypher", query, "-r", repo_name]);
-    let output = command_output_with_timeout(cmd, timeout, cancel)
-        .map_err(|e| format!("无法执行 gitnexus cypher：{e}"))?;
+    cmd.current_dir(repo_root).args(["cypher", query, "-r", repo_name]);
+    let output =
+        command_output_with_timeout(cmd, timeout, cancel).map_err(|e| format!("无法执行 gitnexus cypher：{e}"))?;
 
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
     if !output.status.success() {
+        let combined = if stderr.is_empty() {
+            stdout.clone()
+        } else if stdout.is_empty() {
+            stderr.clone()
+        } else {
+            format!("{stderr}\n{stdout}")
+        };
         return Err(format!(
             "gitnexus cypher 失败（exit {:?}）：{}",
             output.status.code(),
-            stderr
+            combined
         ));
     }
 
-    let parsed: GitnexusCypherCliOutput = serde_json::from_str(&stderr)
-        .map_err(|e| format!("解析 gitnexus cypher 输出 JSON 失败：{e}\n{stderr}"))?;
+    let parsed: GitnexusCypherCliOutput = match serde_json::from_str::<GitnexusCypherCliOutput>(&stderr) {
+        Ok(p) => p,
+        Err(e_stderr) => match serde_json::from_str::<GitnexusCypherCliOutput>(&stdout) {
+            Ok(p) => p,
+            Err(e_stdout) => {
+                if stderr.is_empty() && stdout.is_empty() {
+                    return Err(
+                        "解析 gitnexus cypher 输出 JSON 失败：成功退出但 stdout/stderr 均为空，无法读取结果。"
+                            .to_string(),
+                    );
+                }
+                let prev = |s: &str, n: usize| -> String {
+                    let t: String = s.chars().take(n).collect();
+                    if s.chars().count() > n {
+                        format!("{t}…")
+                    } else {
+                        t
+                    }
+                };
+                return Err(format!(
+                    "解析 gitnexus cypher 输出 JSON 失败：stderr: {e_stderr}；stdout: {e_stdout}\n\
+                     stderr(len={}, preview): {}\n\
+                     stdout(len={}, preview): {}",
+                    stderr.len(),
+                    prev(&stderr, 400),
+                    stdout.len(),
+                    prev(&stdout, 400),
+                ));
+            }
+        },
+    };
     if let Some(err) = parsed.error.clone() {
         return Err(format!("gitnexus cypher 返回错误：{err}"));
     }
@@ -304,7 +340,7 @@ fn run_gitnexus_analyze(repo_root: &Path, cancel: Option<&Arc<AtomicBool>>) -> R
     cmd.current_dir(repo_root).args(["analyze", ".", "--force"]);
     let output = command_output_with_timeout(cmd, timeout, cancel).map_err(|e| {
         format!(
-            "无法启动或执行 GitNexus CLI {:?}：{}。请安装 npm 包 gitnexus 并保证在 PATH 中，或设置 GITNEXUS_BIN。",
+            "无法启动或执行 GitNexus CLI {:?}：{}。请安装 GitNexus：终端执行 `npm install -g gitnexus`（勿在包名后加 `@` 版本号），并保证在 PATH 中；或设置 GITNEXUS_BIN。也可在仓库内使用 `npx gitnexus …`（同样不要写 `@版本`）。",
             exe, e
         )
     })?;
@@ -322,6 +358,11 @@ fn run_gitnexus_analyze(repo_root: &Path, cancel: Option<&Arc<AtomicBool>>) -> R
     Ok(())
 }
 
+/// 在仓库根执行 `gitnexus analyze . --force`，使该仓可被 `gitnexus list` 解析（多仓仓库组 `group add` 前置）。
+pub fn run_gitnexus_analyze_repo_root(repo_root: &Path) -> Result<(), String> {
+    run_gitnexus_analyze(repo_root, None)
+}
+
 /// 传给 `gitnexus cypher -r`：使用 **canonical 绝对路径**（GitNexus `resolveRepoFromCache` 支持按路径精确匹配），
 /// 比仅用目录名更稳，避免多仓 / 显示名与文件夹名不一致时选错仓或解析失败。
 fn gitnexus_cypher_repo_arg(repo_path: &Path) -> String {
@@ -336,13 +377,9 @@ pub fn index_repository(
     repo_root_label: &str,
     cancel: Option<Arc<AtomicBool>>,
 ) -> Result<IndexResult, String> {
-    let repo_path = repo_path.canonicalize().map_err(|e| {
-        format!(
-            "Cannot resolve repository path '{}': {}",
-            repo_path.display(),
-            e
-        )
-    })?;
+    let repo_path = repo_path
+        .canonicalize()
+        .map_err(|e| format!("Cannot resolve repository path '{}': {}", repo_path.display(), e))?;
     if !repo_path.is_dir() {
         return Err(format!(
             "Repository path '{}' is not a directory",
@@ -562,7 +599,10 @@ pub fn index_repository(
 
     // --- Symbols ---
     for label in GITNEXUS_SYMBOL_TABLES {
-        let q_base = format!("{} ORDER BY n.filePath, n.id", symbol_table_cypher(label));
+        let q_base = format!(
+            "{} ORDER BY n.filePath, n.id",
+            symbol_table_cypher(label)
+        );
         let rows = match cypher_batched_rows(
             &repo_path,
             &gn_repo_arg,
@@ -601,12 +641,13 @@ pub fn index_repository(
                     line: start,
                     column: 0,
                 },
-                end: GraphPosition {
-                    line: end,
-                    column: 0,
-                },
+                end: GraphPosition { line: end, column: 0 },
             });
-            let label_text = if name.is_empty() { gn_id.clone() } else { name };
+            let label_text = if name.is_empty() {
+                gn_id.clone()
+            } else {
+                name
+            };
             graph_storage::upsert_node(
                 conn,
                 &sym_wise,

@@ -1,27 +1,29 @@
-mod gitnexus_cli_index;
-mod index_cancel;
+pub mod types;
+pub mod storage;
 pub mod index_extensions;
 pub mod indexer;
-pub(crate) mod java_tree_extract;
-pub mod openapi_parser;
-pub mod search;
-pub mod storage;
-pub mod subgraph;
-pub mod synthetic_openapi;
+mod index_cancel;
+mod gitnexus_cli_index;
+mod gitnexus_group;
+pub mod tsconfig_paths;
 pub mod tree_sitter_parser;
 pub(crate) mod ts_js_tree_extract;
-pub mod tsconfig_paths;
-pub mod types;
+pub(crate) mod java_tree_extract;
+pub mod subgraph;
+pub mod search;
+pub mod openapi_parser;
+pub mod synthetic_openapi;
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
+use types::{
+    CodeGraphSubgraphRequest, CodeGraphSubgraphResponse,
+    CodeGraphNodeSearchRequest, CodeGraphReindexRequest, CodeGraphIndexStatusResponse,
+    CancelCodeGraphReindexOutcome,
+};
 use crate::wise_db::WiseDb;
 use tauri::Emitter;
-use types::{
-    CancelCodeGraphReindexOutcome, CodeGraphIndexStatusResponse, CodeGraphNodeSearchRequest,
-    CodeGraphReindexRequest, CodeGraphSubgraphRequest, CodeGraphSubgraphResponse,
-};
 
 /// Query a subgraph from a repository's knowledge graph.
 #[tauri::command]
@@ -110,45 +112,28 @@ pub fn trigger_code_graph_reindex(
                 eprintln!("[code-graph] index complete: repo_id={}, nodes={}, edges={}, files_found={}, files_indexed={}, files_skipped={}",
                     repo_id, result.total_nodes, result.total_edges,
                     result.files_found, result.files_indexed, result.files_skipped);
-                let _ = app.emit(
-                    "code-graph-index-complete",
-                    serde_json::json!({
-                        "repositoryId": repo_id,
-                        "totalNodes": result.total_nodes,
-                        "totalEdges": result.total_edges,
-                        "errors": result.errors,
-                        "filesFound": result.files_found,
-                        "filesIndexed": result.files_indexed,
-                        "filesSkipped": result.files_skipped,
-                    }),
-                );
+                let _ = app.emit("code-graph-index-complete", serde_json::json!({
+                    "repositoryId": repo_id,
+                    "totalNodes": result.total_nodes,
+                    "totalEdges": result.total_edges,
+                    "errors": result.errors,
+                    "filesFound": result.files_found,
+                    "filesIndexed": result.files_indexed,
+                    "filesSkipped": result.files_skipped,
+                }));
             }
             Err(e) => {
-                eprintln!(
-                    "[code-graph] index failed: repo_id={}, error={}",
-                    repo_id, e
-                );
+                eprintln!("[code-graph] index failed: repo_id={}, error={}", repo_id, e);
                 // Update DB status so frontend polling sees the error
                 if let Ok(conn) = rusqlite::Connection::open(&db_path) {
                     let _ = crate::code_knowledge_graph::storage::update_index_meta(
-                        &conn,
-                        repo_id,
-                        "",
-                        "error",
-                        Some(&e),
-                        0,
-                        0,
-                        None,
-                        None,
+                        &conn, repo_id, "", "error", Some(&e), 0, 0, None, None,
                     );
                 }
-                let _ = app.emit(
-                    "code-graph-index-error",
-                    serde_json::json!({
-                        "repositoryId": repo_id,
-                        "error": e,
-                    }),
-                );
+                let _ = app.emit("code-graph-index-error", serde_json::json!({
+                    "repositoryId": repo_id,
+                    "error": e,
+                }));
             }
         }
     });
@@ -188,13 +173,10 @@ pub fn cancel_code_graph_reindex(
             None,
         )?;
         drop(conn);
-        let _ = app.emit(
-            "code-graph-index-error",
-            serde_json::json!({
-                "repositoryId": repository_id,
-                "error": msg,
-            }),
-        );
+        let _ = app.emit("code-graph-index-error", serde_json::json!({
+            "repositoryId": repository_id,
+            "error": msg,
+        }));
         return Ok(CancelCodeGraphReindexOutcome {
             signalled_running_task: false,
             cleared_stale_indexing_status: true,
@@ -230,8 +212,7 @@ fn load_repository_graph_labels_map() -> Result<HashMap<i64, String>, String> {
     }
 
     let contents = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    let repos: Vec<serde_json::Value> =
-        serde_json::from_str(&contents).map_err(|e| e.to_string())?;
+    let repos: Vec<serde_json::Value> = serde_json::from_str(&contents).map_err(|e| e.to_string())?;
 
     let mut m = HashMap::new();
     for repo in &repos {
@@ -268,8 +249,7 @@ fn lookup_repository_meta(repo_id: i64) -> Result<(String, Option<String>, Strin
     }
 
     let contents = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    let repos: Vec<serde_json::Value> =
-        serde_json::from_str(&contents).map_err(|e| e.to_string())?;
+    let repos: Vec<serde_json::Value> = serde_json::from_str(&contents).map_err(|e| e.to_string())?;
 
     for repo in &repos {
         if repo.get("id").and_then(|v| v.as_i64()) == Some(repo_id) {
@@ -296,33 +276,6 @@ fn lookup_repository_path(repo_id: i64) -> Result<String, String> {
     lookup_repository_meta(repo_id).map(|(p, _, _)| p)
 }
 
-/// 在仓库根及常见子目录查找 OpenAPI / Swagger 描述文件。
-fn find_openapi_spec(repo_root: &Path) -> Option<PathBuf> {
-    const ROOT_NAMES: &[&str] = &[
-        "openapi.yaml",
-        "openapi.yml",
-        "openapi.json",
-        "swagger.yaml",
-        "swagger.yml",
-        "swagger.json",
-    ];
-    for name in ROOT_NAMES {
-        let p = repo_root.join(name);
-        if p.is_file() {
-            return Some(p);
-        }
-    }
-    for sub in ["docs", "doc", "api"] {
-        for name in ["openapi.yaml", "openapi.yml", "openapi.json"] {
-            let p = repo_root.join(sub).join(name);
-            if p.is_file() {
-                return Some(p);
-            }
-        }
-    }
-    None
-}
-
 fn import_openapi_at_path(
     conn: &rusqlite::Connection,
     repository_id: i64,
@@ -339,11 +292,7 @@ fn import_openapi_at_path(
         .iter()
         .map(|op| {
             let id = openapi_parser::make_api_operation_id(repository_id, &op.method, &op.path);
-            (
-                id,
-                op.method.clone(),
-                openapi_parser::normalize_path(&op.path),
-            )
+            (id, op.method.clone(), openapi_parser::normalize_path(&op.path))
         })
         .collect();
 
@@ -362,11 +311,7 @@ fn import_openapi_at_path(
         if !entry.path().is_file() {
             continue;
         }
-        let ext = entry
-            .path()
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("");
+        let ext = entry.path().extension().and_then(|e| e.to_str()).unwrap_or("");
         if !indexer::SUPPORTED_EXTENSIONS.contains(&ext) {
             continue;
         }
@@ -380,9 +325,7 @@ fn import_openapi_at_path(
             .to_string();
         let file_node_id = indexer::make_file_node_id(repository_id, &relative);
 
-        if let Ok(re) =
-            regex::Regex::new(r#"\w+\.(get|post|put|patch|delete)\s*\(\s*['"]([^'"]+)['"]"#)
-        {
+        if let Ok(re) = regex::Regex::new(r#"\w+\.(get|post|put|patch|delete)\s*\(\s*['"]([^'"]+)['"]"#) {
             for cap in re.captures_iter(&file_content) {
                 let method = cap.get(1).map(|m| m.as_str()).unwrap_or("").to_uppercase();
                 let path = cap.get(2).map(|m| m.as_str()).unwrap_or("").to_string();
@@ -394,13 +337,7 @@ fn import_openapi_at_path(
                             || openapi_parser::template_matches(&normalized, op_path))
                     {
                         let edge_id = format!("{file_node_id}:serves:{op_id}");
-                        let _ = storage::upsert_edge(
-                            conn,
-                            &edge_id,
-                            &file_node_id,
-                            op_id,
-                            "backend_serves_api",
-                        );
+                        let _ = storage::upsert_edge(conn, &edge_id, &file_node_id, op_id, "backend_serves_api");
                         backend_edges += 1;
                         break;
                     }
@@ -421,7 +358,9 @@ fn bridge_code_graph_http_conn(
     backend_repo_id: i64,
 ) -> Result<serde_json::Value, String> {
     let api_ops = conn
-        .prepare("SELECT id, label FROM graph_nodes WHERE repo_id = ?1 AND kind = 'api_operation'")
+        .prepare(
+            "SELECT id, label FROM graph_nodes WHERE repo_id = ?1 AND kind = 'api_operation'",
+        )
         .map_err(|e| e.to_string())?
         .query_map(rusqlite::params![backend_repo_id], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
@@ -433,16 +372,9 @@ fn bridge_code_graph_http_conn(
     let api_operations: Vec<(String, String, String)> = api_ops
         .iter()
         .filter_map(|(id, label)| {
-            let parts: Vec<&str> = label.splitn(2, ' ').collect();
-            if parts.len() == 2 {
-                Some((
-                    id.clone(),
-                    parts[0].to_string(),
-                    openapi_parser::normalize_path(parts[1]),
-                ))
-            } else {
-                None
-            }
+            openapi_parser::split_api_operation_label(label).map(|(m, p)| {
+                (id.clone(), m, openapi_parser::normalize_path(&p))
+            })
         })
         .collect();
 
@@ -469,11 +401,7 @@ fn bridge_code_graph_http_conn(
         if !entry.path().is_file() {
             continue;
         }
-        let ext = entry
-            .path()
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("");
+        let ext = entry.path().extension().and_then(|e| e.to_str()).unwrap_or("");
         if !indexer::SUPPORTED_EXTENSIONS.contains(&ext) {
             continue;
         }
@@ -497,12 +425,7 @@ fn bridge_code_graph_http_conn(
             .map(|(method, url, line)| (file_node_id.clone(), method, url, line))
             .collect();
 
-        let edges = openapi_parser::create_invoke_edges(
-            conn,
-            frontend_repo_id,
-            &http_calls,
-            &api_operations,
-        )?;
+        let edges = openapi_parser::create_invoke_edges(conn, frontend_repo_id, &http_calls, &api_operations)?;
         total_edges += edges;
     }
 
@@ -512,75 +435,58 @@ fn bridge_code_graph_http_conn(
     }))
 }
 
-/// 在代码图谱索引已完成的前提下：为非前端仓导入 OpenAPI（或合成路由），并对所有 前端×后端 配对执行 HTTP → `api_operation` 桥接，扩展 GitNexus 导入的图谱。
-fn openapi_import_and_http_bridges_for_repo_set(
-    conn: &rusqlite::Connection,
-    repo_ids: &[i64],
-) -> Result<serde_json::Value, String> {
-    let mut openapi_backends = 0usize;
-    let mut synthetic_backends = 0usize;
-    let mut bridge_pairs = 0usize;
-    let mut frontend_invokes_edges: i64 = 0;
-
-    for &repo_id in repo_ids {
-        let (repo_path, ref_kind, _) = match lookup_repository_meta(repo_id) {
+/// 多仓：按 GitNexus **repository group**（`group create` / `add` / `sync`）登记并同步跨仓合约；失败时返回带 `error` 的 JSON。
+fn sync_gitnexus_group_for_repo_ids(repo_ids: &[i64]) -> serde_json::Value {
+    if repo_ids.len() < 2 {
+        return serde_json::json!({
+            "skipped": true,
+            "reason": "少于 2 个仓库"
+        });
+    }
+    let group_name = gitnexus_group::stable_wise_group_name(repo_ids);
+    let mut members: Vec<(String, String)> = Vec::new();
+    let mut seen_reg = std::collections::HashSet::<String>::new();
+    for &id in repo_ids {
+        let (repo_path, ref_kind, _) = match lookup_repository_meta(id) {
             Ok(x) => x,
-            Err(_) => continue,
+            Err(e) => {
+                return serde_json::json!({ "error": format!("lookup repository {}: {}", id, e) });
+            }
         };
-        if ref_kind.as_deref() == Some("frontend") {
+        let root = Path::new(&repo_path);
+        let reg = match gitnexus_group::resolve_registry_name_or_analyze(root) {
+            Ok(r) => r,
+            Err(e) => {
+                return serde_json::json!({
+                    "error": format!("仓库 id {}（{}）：{}", id, repo_path, e)
+                });
+            }
+        };
+        if !seen_reg.insert(reg.clone()) {
             continue;
         }
-        let root = Path::new(&repo_path);
-        if let Some(spec) = find_openapi_spec(root) {
-            let spec_str = spec.to_string_lossy();
-            import_openapi_at_path(conn, repo_id, &spec_str)?;
-            openapi_backends += 1;
-        } else if ref_kind.as_deref() != Some("document") {
-            let routes = synthetic_openapi::extract_routes_from_repo(&repo_path, repo_id)?;
-            synthetic_openapi::ingest_synthetic_routes(conn, repo_id, &routes)?;
-            synthetic_backends += 1;
-        }
-    }
-
-    let mut fronts = Vec::new();
-    let mut backs = Vec::new();
-    for &repo_id in repo_ids {
-        let (_, ref_kind, _) = match lookup_repository_meta(repo_id) {
-            Ok(x) => x,
-            Err(_) => continue,
+        let prefix = match ref_kind.as_deref() {
+            Some("frontend") => "frontend",
+            Some("backend") => "backend",
+            Some("document") => "document",
+            _ => "service",
         };
-        match ref_kind.as_deref() {
-            Some("frontend") => fronts.push(repo_id),
-            Some("backend") => backs.push(repo_id),
-            _ => {}
-        }
+        let gp = format!("{}/{}", prefix, reg);
+        members.push((gp, reg));
     }
-    for &f in &fronts {
-        for &b in &backs {
-            if f == b {
-                continue;
-            }
-            bridge_pairs += 1;
-            match bridge_code_graph_http_conn(conn, f, b) {
-                Ok(v) => {
-                    frontend_invokes_edges += v
-                        .get("edges")
-                        .and_then(|x| x.as_i64().or_else(|| x.as_u64().map(|u| u as i64)))
-                        .unwrap_or(0);
-                }
-                Err(e) => {
-                    eprintln!("[code-graph] bridge {} -> {} failed: {}", f, b, e);
-                }
-            }
-        }
+    if members.len() < 2 {
+        return serde_json::json!({
+            "skipped": true,
+            "reason": "可解析的 GitNexus registry 少于 2 个（请对各仓执行 gitnexus analyze）"
+        });
     }
-
-    Ok(serde_json::json!({
-        "openapiBackendsRefreshed": openapi_backends,
-        "syntheticBackendsRefreshed": synthetic_backends,
-        "bridgePairs": bridge_pairs,
-        "frontendInvokesEdges": frontend_invokes_edges,
-    }))
+    match gitnexus_group::recreate_and_sync_repository_group(&group_name, &members) {
+        Ok(v) => v,
+        Err(e) => serde_json::json!({
+            "groupName": group_name,
+            "error": e,
+        }),
+    }
 }
 
 /// Get the current indexing status for a repository.
@@ -626,7 +532,7 @@ pub fn bridge_code_graph_http(
     bridge_code_graph_http_conn(&conn, frontend_repo_id, backend_repo_id)
 }
 
-/// 多仓关联构建：依次为所选仓库重建代码图谱索引；非前端仓库尝试自动发现 OpenAPI 并导入（否则对非「文档」仓尝试合成路由）；最后对 `repositoryType` 为前端×后端的配对执行 HTTP 桥接。
+/// 多仓关联：同步 GitNexus **仓库组**（`group create` / `add` / `sync`）。对尚未出现在 `gitnexus list` 的仓会先自动执行 `gitnexus analyze . --force` 再登记；不写入 Wise 各仓 SQLite 图谱。
 #[tauri::command]
 pub fn trigger_code_graph_association_build(
     _state: tauri::State<WiseDb>,
@@ -651,234 +557,52 @@ pub fn trigger_code_graph_association_build(
     };
 
     tauri::async_runtime::spawn(async move {
-        let db_path = match crate::wise_paths::wise_dir() {
-            Ok(d) => d.join("wise.db"),
-            Err(e) => {
-                let _ = app.emit(
-                    "code-graph-association-build-error",
-                    serde_json::json!({
-                        "repositoryIds": ids_spawn,
-                        "error": format!("Cannot find db path: {}", e),
-                    }),
-                );
-                return;
-            }
-        };
-
-        let conn = match rusqlite::Connection::open(&db_path) {
-            Ok(c) => c,
-            Err(e) => {
-                let _ = app.emit(
-                    "code-graph-association-build-error",
-                    serde_json::json!({
-                        "repositoryIds": ids_spawn,
-                        "error": e.to_string(),
-                    }),
-                );
-                return;
-            }
-        };
-
-        for &repo_id in &ids_spawn {
-            let (repo_path, _, repo_label) = match lookup_repository_meta(repo_id) {
-                Ok(x) => x,
-                Err(e) => {
-                    let _ = app.emit(
-                        "code-graph-association-build-error",
-                        serde_json::json!({
-                            "repositoryIds": ids_spawn,
-                            "error": e,
-                        }),
-                    );
-                    return;
-                }
-            };
-            let db_path_cl = db_path.clone();
-            let index_res = tokio::task::spawn_blocking(move || {
-                let c = rusqlite::Connection::open(&db_path_cl).map_err(|e| e.to_string())?;
-                match indexer::index_repository(&c, &repo_path, repo_id, &repo_label, None) {
-                    Ok(r) => Ok(r),
-                    Err(e) => {
-                        let _ = storage::update_index_meta(
-                            &c,
-                            repo_id,
-                            "",
-                            "error",
-                            Some(&e),
-                            0,
-                            0,
-                            None,
-                            None,
-                        );
-                        Err(e)
-                    }
-                }
-            })
-            .await
-            .unwrap_or_else(|e| Err(format!("索引任务 join 失败: {}", e)));
-
-            match index_res {
-                Ok(r) => {
-                    eprintln!(
-                        "[code-graph] association index: repo_id={}, nodes={}, edges={}",
-                        repo_id, r.total_nodes, r.total_edges
-                    );
-                    let _ = app.emit(
-                        "code-graph-index-complete",
-                        serde_json::json!({
-                            "repositoryId": repo_id,
-                            "totalNodes": r.total_nodes,
-                            "totalEdges": r.total_edges,
-                            "errors": r.errors,
-                            "filesFound": r.files_found,
-                            "filesIndexed": r.files_indexed,
-                            "filesSkipped": r.files_skipped,
-                        }),
-                    );
-                }
-                Err(e) => {
-                    eprintln!(
-                        "[code-graph] association index failed: repo_id={}, error={}",
-                        repo_id, e
-                    );
-                    let _ = app.emit(
-                        "code-graph-index-error",
-                        serde_json::json!({
-                            "repositoryId": repo_id,
-                            "error": e,
-                        }),
-                    );
-                    let _ = app.emit(
-                        "code-graph-association-build-error",
-                        serde_json::json!({
-                            "repositoryIds": ids_spawn,
-                            "error": format!("索引仓库 {} 失败: {}", repo_id, e),
-                        }),
-                    );
-                    return;
-                }
-            }
-        }
-
-        match openapi_import_and_http_bridges_for_repo_set(&conn, &ids_spawn) {
-            Ok(summary) => {
-                eprintln!(
-                    "[code-graph] association openapi/bridge summary: {}",
-                    summary
-                );
-            }
-            Err(e) => {
-                let _ = app.emit(
-                    "code-graph-association-build-error",
-                    serde_json::json!({
-                        "repositoryIds": ids_spawn,
-                        "error": e,
-                    }),
-                );
-                return;
-            }
-        }
-
-        let _ = app.emit(
-            "code-graph-association-build-complete",
+        let gitnexus_group_sync = tokio::task::spawn_blocking({
+            let ids = ids_spawn.clone();
+            move || sync_gitnexus_group_for_repo_ids(&ids)
+        })
+        .await
+        .unwrap_or_else(|e| {
             serde_json::json!({
+                "error": format!("GitNexus 仓库组任务 join 失败: {}", e),
+            })
+        });
+
+        if let Some(err) = gitnexus_group_sync.get("error") {
+            let err_str = err
+                .as_str()
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| err.to_string());
+            eprintln!("[code-graph] GitNexus repository group sync: {}", err_str);
+            let _ = app.emit("code-graph-association-build-error", serde_json::json!({
                 "repositoryIds": ids_spawn,
-            }),
-        );
+                "error": err_str,
+            }));
+            return;
+        }
+
+        if gitnexus_group_sync.get("skipped").and_then(|v| v.as_bool()) == Some(true) {
+            eprintln!(
+                "[code-graph] GitNexus repository group skipped: {}",
+                gitnexus_group_sync
+                    .get("reason")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+            );
+        } else {
+            eprintln!(
+                "[code-graph] association gitnexus repository group: {}",
+                gitnexus_group_sync
+            );
+        }
+
+        let _ = app.emit("code-graph-association-build-complete", serde_json::json!({
+            "repositoryIds": ids_spawn,
+            "gitnexusRepositoryGroup": gitnexus_group_sync,
+        }));
     });
 
     Ok("Association build started".to_string())
-}
-
-/// 多仓 **仅** OpenAPI / 合成路由导入 + 前后端 HTTP 桥接（不重建 GitNexus 代码索引）。用于在已有图谱上扩展 `api_operation` 与 `frontend_invokes_api`。
-#[tauri::command]
-pub fn trigger_code_graph_openapi_bridge(
-    _state: tauri::State<WiseDb>,
-    repository_ids: Vec<i64>,
-    app: tauri::AppHandle,
-) -> Result<String, String> {
-    if repository_ids.len() < 2 {
-        return Err("请至少选择 2 个仓库。".to_string());
-    }
-    if repository_ids.len() > 20 {
-        return Err("repositoryIds must have at most 20 entries".to_string());
-    }
-    let ids_spawn: Vec<i64> = {
-        let mut seen = std::collections::HashSet::new();
-        let mut out = Vec::new();
-        for id in repository_ids {
-            if seen.insert(id) {
-                out.push(id);
-            }
-        }
-        out
-    };
-
-    let mut has_frontend = false;
-    let mut has_backend = false;
-    for &id in &ids_spawn {
-        if let Ok((_, ref_kind, _)) = lookup_repository_meta(id) {
-            match ref_kind.as_deref() {
-                Some("frontend") => has_frontend = true,
-                Some("backend") => has_backend = true,
-                _ => {}
-            }
-        }
-    }
-    if !has_frontend || !has_backend {
-        return Err(
-            "OpenAPI 桥接需要至少一个「前端」与一个「后端」仓库（在仓库元数据的 repositoryType 中标记）。"
-                .to_string(),
-        );
-    }
-
-    tauri::async_runtime::spawn(async move {
-        let db_path = match crate::wise_paths::wise_dir() {
-            Ok(d) => d.join("wise.db"),
-            Err(e) => {
-                let _ = app.emit(
-                    "code-graph-openapi-bridge-error",
-                    serde_json::json!({
-                        "repositoryIds": ids_spawn,
-                        "error": format!("Cannot find db path: {}", e),
-                    }),
-                );
-                return;
-            }
-        };
-
-        let ids_for_blocking = ids_spawn.clone();
-        let bridge_result = tokio::task::spawn_blocking(move || {
-            let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
-            openapi_import_and_http_bridges_for_repo_set(&conn, &ids_for_blocking)
-        })
-        .await
-        .unwrap_or_else(|e| Err(format!("OpenAPI 桥接任务 join 失败: {}", e)));
-
-        match bridge_result {
-            Ok(summary) => {
-                let _ = app.emit(
-                    "code-graph-openapi-bridge-complete",
-                    serde_json::json!({
-                        "repositoryIds": ids_spawn,
-                        "summary": summary,
-                    }),
-                );
-            }
-            Err(e) => {
-                eprintln!("[code-graph] openapi bridge failed: {}", e);
-                let _ = app.emit(
-                    "code-graph-openapi-bridge-error",
-                    serde_json::json!({
-                        "repositoryIds": ids_spawn,
-                        "error": e,
-                    }),
-                );
-            }
-        }
-    });
-
-    Ok("OpenAPI bridge started".to_string())
 }
 
 /// Extract routes from a backend repository and generate synthetic api_operation nodes.
@@ -904,10 +628,7 @@ pub fn extract_code_graph_synthetic_routes(
 /// 多仓合并子图时，全局 `focus_node_id` 仅适用于「节点 ID 首段 `repo_id`」与该次查询的仓库一致的子图。
 /// 否则对该仓传入 `None`，使 `query_subgraph` 从 `{repo_id}:repo:root` 展开，避免把其它仓的焦点误用于本仓
 /// （否则 BFS 起点不在本仓图中，该仓子图几乎为空，表现为「前端仓没有解析出来」）。
-fn focus_node_id_for_merged_repo_query<'a>(
-    repo_id: i64,
-    focus_node_id: Option<&'a str>,
-) -> Option<&'a str> {
+fn focus_node_id_for_merged_repo_query<'a>(repo_id: i64, focus_node_id: Option<&'a str>) -> Option<&'a str> {
     let id = focus_node_id.filter(|s| !s.is_empty())?;
     let leading_repo = id
         .split_once(':')
@@ -946,10 +667,15 @@ pub fn get_code_graph_multi_subgraph(
     let mut max_total_edges = 0;
 
     for repo_id in &repository_ids {
-        let focus_for_repo =
-            focus_node_id_for_merged_repo_query(*repo_id, focus_node_id.as_deref());
-        let result =
-            subgraph::query_subgraph(&conn, *repo_id, focus_for_repo, hop_opt, None, None)?;
+        let focus_for_repo = focus_node_id_for_merged_repo_query(*repo_id, focus_node_id.as_deref());
+        let result = subgraph::query_subgraph(
+            &conn,
+            *repo_id,
+            focus_for_repo,
+            hop_opt,
+            None,
+            None,
+        )?;
         max_total_edges += result.meta.total_edge_hint.unwrap_or(0);
 
         for n in result.nodes {
@@ -966,9 +692,7 @@ pub fn get_code_graph_multi_subgraph(
     if include_cross_repo_edges.unwrap_or(false) {
         for repo_id in &repository_ids {
             for other_id in &repository_ids {
-                if repo_id == other_id {
-                    continue;
-                }
+                if repo_id == other_id { continue; }
                 if let Ok(mut stmt) = conn.prepare(
                     "SELECT e.id, e.source_id, e.target_id, e.kind, e.props
                      FROM graph_edges e
@@ -976,17 +700,18 @@ pub fn get_code_graph_multi_subgraph(
                      JOIN graph_nodes t ON e.target_id = t.id
                      WHERE s.repo_id = ?1 AND t.repo_id = ?2",
                 ) {
-                    if let Ok(rows) = stmt.query_map(rusqlite::params![repo_id, other_id], |row| {
-                        Ok(types::GraphEdge {
-                            id: row.get(0)?,
-                            source: row.get(1)?,
-                            target: row.get(2)?,
-                            kind: row.get(3)?,
-                            props: row
-                                .get::<_, Option<String>>(4)?
-                                .and_then(|s| serde_json::from_str(&s).ok()),
-                        })
-                    }) {
+                    if let Ok(rows) = stmt.query_map(
+                        rusqlite::params![repo_id, other_id],
+                        |row| {
+                            Ok(types::GraphEdge {
+                                id: row.get(0)?,
+                                source: row.get(1)?,
+                                target: row.get(2)?,
+                                kind: row.get(3)?,
+                                props: row.get::<_, Option<String>>(4)?.and_then(|s| serde_json::from_str(&s).ok()),
+                            })
+                        },
+                    ) {
                         for row in rows.filter_map(|r| r.ok()) {
                             all_edges.push(row);
                         }
@@ -1047,9 +772,6 @@ mod merged_subgraph_focus_tests {
     fn empty_or_malformed_focus_falls_back_to_root_via_none() {
         assert_eq!(focus_node_id_for_merged_repo_query(5, None), None);
         assert_eq!(focus_node_id_for_merged_repo_query(5, Some("")), None);
-        assert_eq!(
-            focus_node_id_for_merged_repo_query(5, Some("nocolon")),
-            None
-        );
+        assert_eq!(focus_node_id_for_merged_repo_query(5, Some("nocolon")), None);
     }
 }

@@ -15,15 +15,12 @@ pub fn query_subgraph(
     direction: Option<CodeGraphSubgraphDirection>,
 ) -> Result<CodeGraphSubgraphResponse, String> {
     let dir = direction.unwrap_or(CodeGraphSubgraphDirection::Both);
-    // `hop`（1–10）：用户选择的「层数」——1 层仅含焦点；L 层含焦点及 hop 代价 ≤ L−1 的可达节点
-    //（`contains` 不增加代价，与既有 Maven 目录语义一致）。
-    // 内部 BFS 仅在 `current_hop < hop_cap` 时扩展，故 `hop_cap = layers − 1`（焦点层为 0）。
+    // `hop`（1–10）：用户「L hop」——含焦点及 outward hop 代价 < L 的可达节点（即从焦点至多向外走 L 条「计代价」边；
+    // `contains` 不增加代价，与既有目录/包含语义一致）。
+    // 内部 BFS 在 `current_hop < hop_cap` 时继续扩展，取 `hop_cap = L`：焦点 hop=0，最远可从 hop=L−1 的节点再发出一条计代价边。
     let hop_cap: u32 = match hop {
         None => u32::MAX,
-        Some(layers) => {
-            let layers = (layers as u32).clamp(1, 10);
-            layers.saturating_sub(1)
-        }
+        Some(layers) => (layers as u32).clamp(1, 10),
     };
 
     let total_edge_hint: i64 = conn
@@ -206,7 +203,7 @@ mod tests {
     }
 
     #[test]
-    fn one_graph_layer_is_focus_only() {
+    fn one_graph_layer_includes_immediate_neighbors() {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(
             "CREATE TABLE graph_nodes (
@@ -242,7 +239,7 @@ mod tests {
         )
         .unwrap();
         let ids: std::collections::HashSet<_> = out.nodes.iter().map(|n| n.id.as_str()).collect();
-        assert_eq!(ids, HashSet::from(["1:A"]));
+        assert_eq!(ids, HashSet::from(["1:A", "1:B"]));
     }
 
     /// 先经 `imports` 到达 D 时 hop=2；经 `contains` 再 `imports` 可达 hop=1。
@@ -314,7 +311,7 @@ mod tests {
         let ids: std::collections::HashSet<_> = out.nodes.iter().map(|n| n.id.as_str()).collect();
         assert!(
             ids.contains("1:E"),
-            "expected cheaper path A-contains-C-imports-D-imports-E within 3 layers (hop_cap=2); got {:?}",
+            "expected cheaper path A-contains-C-imports-D-imports-E within hop_cap=3; got {:?}",
             ids
         );
     }

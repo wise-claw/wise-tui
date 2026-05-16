@@ -1,4 +1,4 @@
-import type { GraphNode, CodeGraphSubgraphResponse } from "../../types/codeKnowledgeGraph";
+import type { GraphNode, CodeGraphSubgraphResponse, CodeGraphSubgraphHopScope } from "../../types/codeKnowledgeGraph";
 import {
   forwardRef,
   memo,
@@ -35,12 +35,21 @@ export interface GraphCanvasProps {
   onStageClick?: () => void;
   /** Current inspector / app selection — drives Focus control and sync after `setGraph` */
   selectedNode?: GraphNode | null;
-  /** 与工具栏子图层数文案一致（如「3 层」「全部」） */
+  /** 与工具栏 hop 文案一致（如「hop 3」「全部」） */
   subgraphHopLabel?: string;
-  /** 以当前选中节点为焦点，仅沿入边按当前层数展开子图 */
+  /** 以当前选中节点为焦点，仅沿入边按当前 hop 展开子图 */
   onSubgraphRollUp?: () => void;
-  /** 以当前选中节点为焦点，仅沿出边按当前层数展开子图 */
+  /** 以当前选中节点为焦点，仅沿出边按当前 hop 展开子图 */
   onSubgraphDrillDown?: () => void;
+  /**
+   * 有限 hop（非「全部」）时：以此节点为父自上而下排布；优先 `selectedNode`，否则用子图焦点 id。
+   * 若不在当前 `data` 内则回退力导向。
+   */
+  layeredLayoutRootId?: string | null;
+  /**
+   * 与工具栏 hop 一致：为有限值且已选中节点时，仅保留以选中点为心、双向 hop 代价 ≤ 该值的子图，其余节点与边隐藏。
+   */
+  visibilityHopLimit?: CodeGraphSubgraphHopScope;
 }
 
 const GraphCanvasInner = forwardRef<GraphCanvasHandle, GraphCanvasProps>(function GraphCanvasInner(
@@ -49,9 +58,11 @@ const GraphCanvasInner = forwardRef<GraphCanvasHandle, GraphCanvasProps>(functio
     onNodeClick,
     onStageClick,
     selectedNode,
-    subgraphHopLabel = "当前范围",
+    subgraphHopLabel = "当前 hop",
     onSubgraphRollUp,
     onSubgraphDrillDown,
+    layeredLayoutRootId = null,
+    visibilityHopLimit = "all",
   },
   ref,
 ) {
@@ -85,6 +96,7 @@ const GraphCanvasInner = forwardRef<GraphCanvasHandle, GraphCanvasProps>(functio
     stopLayout,
     selectedNode: sigmaSelectedId,
     setSelectedNode: setSigmaSelectedNode,
+    applyNeighborhoodHopMask,
   } = useCodeGraphSigma({
     onNodeClick: handleNodeClick,
     onStageClick,
@@ -101,6 +113,11 @@ const GraphCanvasInner = forwardRef<GraphCanvasHandle, GraphCanvasProps>(functio
     [focusNode],
   );
 
+  const layeredRootForLayout = useMemo(() => {
+    if (!layeredLayoutRootId || !data?.nodes.length) return null;
+    return data.nodes.some((n) => n.id === layeredLayoutRootId) ? layeredLayoutRootId : null;
+  }, [layeredLayoutRootId, data]);
+
   useEffect(() => {
     if (!sigmaReady) return;
     if (!data || data.nodes.length === 0) {
@@ -108,8 +125,29 @@ const GraphCanvasInner = forwardRef<GraphCanvasHandle, GraphCanvasProps>(functio
       return;
     }
     const g = codeSubgraphToGraphology(data);
-    setGraph(g);
-  }, [sigmaReady, data, setGraph]);
+    setGraph(g, layeredRootForLayout ? { layeredRootId: layeredRootForLayout } : undefined);
+  }, [sigmaReady, data, layeredRootForLayout, setGraph]);
+
+  useEffect(() => {
+    if (!sigmaReady) return;
+    if (!data?.nodes.length) {
+      applyNeighborhoodHopMask(null, "all");
+      return;
+    }
+    const limit = visibilityHopLimit ?? "all";
+    if (limit === "all" || !selectedNode) {
+      applyNeighborhoodHopMask(null, "all");
+    } else {
+      applyNeighborhoodHopMask(selectedNode.id, limit);
+    }
+  }, [
+    sigmaReady,
+    data,
+    selectedNode?.id,
+    selectedNode,
+    visibilityHopLimit,
+    applyNeighborhoodHopMask,
+  ]);
 
   useEffect(() => {
     if (selectedNode) setSigmaSelectedNode(selectedNode.id);
@@ -152,7 +190,7 @@ const GraphCanvasInner = forwardRef<GraphCanvasHandle, GraphCanvasProps>(functio
               <button
                 type="button"
                 className="app-graph-selection-nav"
-                title={`上卷：以当前节点为焦点，仅沿入边展开 ${subgraphHopLabel}（与工具栏「范围」一致）`}
+                title={`上卷：以当前节点为焦点，仅沿入边展开 ${subgraphHopLabel}（与工具栏 hop 一致）`}
                 onClick={onSubgraphRollUp}
               >
                 上卷
@@ -160,7 +198,7 @@ const GraphCanvasInner = forwardRef<GraphCanvasHandle, GraphCanvasProps>(functio
               <button
                 type="button"
                 className="app-graph-selection-nav"
-                title={`下钻：以当前节点为焦点，仅沿出边展开 ${subgraphHopLabel}（与工具栏「范围」一致）`}
+                title={`下钻：以当前节点为焦点，仅沿出边展开 ${subgraphHopLabel}（与工具栏 hop 一致）`}
                 onClick={onSubgraphDrillDown}
               >
                 下钻
@@ -220,7 +258,7 @@ const GraphCanvasInner = forwardRef<GraphCanvasHandle, GraphCanvasProps>(functio
   );
 });
 
-/** 默认浅比较：`data` 每次子图请求均为新引用：勿再用仅 `prev.data === next.data` 的自定义 equal，否则范围切换后可能不触发 `setGraph`。 */
+/** 默认浅比较：`data` 每次子图请求均为新引用：勿再用仅 `prev.data === next.data` 的自定义 equal，否则 hop 切换后可能不触发 `setGraph`。 */
 export const GraphCanvas = memo(GraphCanvasInner);
 
 function ControlBtn({

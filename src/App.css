@@ -146,6 +146,16 @@ body {
   box-shadow: inset 1px 0 0 var(--ant-color-border-secondary);
 }
 
+.app-code-graph-overlay > .app-code-graph-lazy-fallback {
+  flex: 1 1 0%;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* CC Workflow Studio：同上，且建立包含块，使内层 Radix/Antd fixed 蒙层相对本区而非整窗（勿盖左侧栏） */
 .wise-cc-wf-studio-overlay {
   position: absolute;
@@ -531,7 +541,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
   cursor: grab;
 }
 
-/* ── 左栏 MCP / 技能 / 工作流 / 图谱 入口（位于「项目」标题上方） ── */
+/* ── 左栏 MCP / 技能 / 工作流 入口（位于「项目」标题上方） ── */
 .app-left-sidebar-top-nav-stack {
   display: flex;
   flex-direction: column;
@@ -545,8 +555,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
 
 .app-left-sidebar-mcp-nav,
 .app-left-sidebar-skills-nav,
-.app-left-sidebar-workflow-nav,
-.app-left-sidebar-graph-nav {
+.app-left-sidebar-workflow-nav {
   display: flex;
   align-items: center;
   gap: 2px;
@@ -566,16 +575,14 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
 
 .app-left-sidebar-mcp-nav:hover,
 .app-left-sidebar-skills-nav:hover,
-.app-left-sidebar-workflow-nav:hover,
-.app-left-sidebar-graph-nav:hover {
+.app-left-sidebar-workflow-nav:hover {
   background: var(--ant-color-fill-tertiary);
   color: var(--ant-color-text);
 }
 
 .app-left-sidebar-mcp-nav--active,
 .app-left-sidebar-skills-nav--active,
-.app-left-sidebar-workflow-nav--active,
-.app-left-sidebar-graph-nav--active {
+.app-left-sidebar-workflow-nav--active {
   /* 与当前仓库行一致：菜单式浅蓝底 + 正文色字，仅图标用主色点缀 */
   background: var(--ant-control-item-bg-active);
   color: var(--ant-color-text);
@@ -584,16 +591,14 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
 
 .app-left-sidebar-mcp-nav--active:hover,
 .app-left-sidebar-skills-nav--active:hover,
-.app-left-sidebar-workflow-nav--active:hover,
-.app-left-sidebar-graph-nav--active:hover {
+.app-left-sidebar-workflow-nav--active:hover {
   background: var(--ant-control-item-bg-active);
   color: var(--ant-color-text);
 }
 
 .app-left-sidebar-mcp-nav-icon,
 .app-left-sidebar-skills-nav-icon,
-.app-left-sidebar-workflow-nav-icon,
-.app-left-sidebar-graph-nav-icon {
+.app-left-sidebar-workflow-nav-icon {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -605,15 +610,13 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
 
 .app-left-sidebar-mcp-nav--active .app-left-sidebar-mcp-nav-icon,
 .app-left-sidebar-skills-nav--active .app-left-sidebar-skills-nav-icon,
-.app-left-sidebar-workflow-nav--active .app-left-sidebar-workflow-nav-icon,
-.app-left-sidebar-graph-nav--active .app-left-sidebar-graph-nav-icon {
+.app-left-sidebar-workflow-nav--active .app-left-sidebar-workflow-nav-icon {
   color: var(--ant-color-primary);
 }
 
 .app-left-sidebar-mcp-nav-icon svg,
 .app-left-sidebar-skills-nav-icon svg,
-.app-left-sidebar-workflow-nav-icon svg,
-.app-left-sidebar-graph-nav-icon svg {
+.app-left-sidebar-workflow-nav-icon svg {
   display: block;
   width: 14px;
   height: 14px;
@@ -622,8 +625,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
 
 .app-left-sidebar-mcp-nav-label,
 .app-left-sidebar-skills-nav-label,
-.app-left-sidebar-workflow-nav-label,
-.app-left-sidebar-graph-nav-label {
+.app-left-sidebar-workflow-nav-label {
   flex: 1;
   min-width: 0;
 }
@@ -2086,14 +2088,14 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
 
 /* 侧栏「更多」：项目行与仓库行共用（略低于 Ant 默认 32px，但比极简模式更易读、易点） */
 .app-sidebar-more-menu-dropdown .ant-dropdown-menu.app-sidebar-more-menu-inner {
-  padding: 4px;
+  padding: 4px 12px;
   border-radius: 8px;
   box-shadow: var(--ant-box-shadow-secondary);
   min-width: 0;
+  overflow: visible;
 }
 
-.app-sidebar-more-menu-dropdown .app-sidebar-more-menu-inner .ant-dropdown-menu-item,
-.app-sidebar-more-menu-dropdown .app-sidebar-more-menu-inner .ant-dropdown-menu-submenu-title {
+.app-sidebar-more-menu-dropdown .app-sidebar-more-menu-inner .ant-dropdown-menu-item {
   padding: 0 6px;
   margin-inline: 0;
   border-radius: 6px;
@@ -2104,7 +2106,42 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
   gap: 4px;
 }
 
-.app-sidebar-more-menu-dropdown .app-sidebar-more-menu-inner .ant-dropdown-menu-title-content {
+/*
+ * 子菜单标题不要用 `padding: 0 6px` 简写：会覆盖 Ant Design vertical 菜单为箭头注入的
+ * padding-inline-end，箭头会被裁切或挤到可视区外。左侧与 item 对齐，右侧单独加宽。
+ */
+.app-sidebar-more-menu-dropdown .app-sidebar-more-menu-inner .ant-dropdown-menu-submenu-title {
+  padding-block: 0;
+  padding-inline-start: 6px;
+  padding-inline-end: 22px;
+  margin-inline: 0;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.2;
+  min-height: 24px !important;
+  height: auto !important;
+  gap: 4px;
+  display: flex !important;
+  align-items: center !important;
+  overflow: visible !important;
+  column-gap: 6px;
+}
+
+.app-sidebar-more-menu-dropdown .app-sidebar-more-menu-inner .ant-dropdown-menu-submenu-title > .ant-dropdown-menu-title-content {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-sidebar-more-menu-dropdown .app-sidebar-more-menu-inner .ant-dropdown-menu-submenu-title .ant-dropdown-menu-submenu-expand-icon,
+.app-sidebar-more-menu-dropdown .app-sidebar-more-menu-inner .ant-dropdown-menu-submenu-title .ant-dropdown-menu-submenu-arrow,
+.app-sidebar-more-menu-dropdown .app-sidebar-more-menu-inner .ant-dropdown-menu-submenu-title > .anticon:last-child {
+  flex-shrink: 0;
+  margin-inline-start: auto;
+}
+
+.app-sidebar-more-menu-dropdown .app-sidebar-more-menu-inner .ant-dropdown-menu-item > .ant-dropdown-menu-title-content {
   flex: 1 1 auto;
   min-height: 0;
 }
@@ -2116,6 +2153,37 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
 
 .app-sidebar-more-menu-dropdown .app-sidebar-more-menu-inner .ant-dropdown-menu-item-divider {
   margin: 4px 0;
+}
+
+/* 侧栏「更多」里 hover 展开的二级菜单（如「重新初始化」「加入现有项目」）
+   浮层 class 为 ant-dropdown-menu-submenu-popup，不是 ant-dropdown-menu-popup */
+.app-sidebar-more-menu-submenu .ant-dropdown-menu {
+  padding: 4px;
+  border-radius: 8px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.app-sidebar-more-menu-submenu .ant-dropdown-menu-item {
+  padding: 0 6px;
+  margin-inline: 0;
+  border-radius: 6px;
+  font-size: 12px !important;
+  line-height: 1.2 !important;
+  min-height: 24px !important;
+  height: auto !important;
+  gap: 4px;
+}
+
+.app-sidebar-more-menu-submenu .ant-dropdown-menu-title-content {
+  min-height: 0;
+  font-size: 12px !important;
+  line-height: 1.2 !important;
+}
+
+.app-sidebar-more-menu-submenu .ant-dropdown-menu-item .ant-dropdown-menu-title-content {
+  font-size: 12px !important;
+  line-height: 1.2 !important;
 }
 
 .app-repository-more-item {

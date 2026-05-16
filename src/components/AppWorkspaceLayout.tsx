@@ -5,7 +5,6 @@ import {
   memo,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   type ComponentProps,
   type MouseEvent as ReactMouseEvent,
@@ -27,15 +26,18 @@ import { RepositoryFilePreviewModal } from "./RepositoryFilePreviewModal";
 import { SkillsHub } from "./SkillsHub";
 import { CodeKnowledgeGraphPanel } from "./CodeKnowledgeGraph";
 import type * as MissionControlModule from "./MissionControl";
+import type * as PrdTaskSplitPanelModule from "./PrdTaskSplitPanel";
 import type * as PromptsPanelModule from "./PromptsPanel";
 import type * as RightPanelModule from "./RightPanel";
 import type * as WorkflowConfigModalModule from "./WorkflowConfigModal";
 import { useRepositoryFileEditor } from "../hooks/useRepositoryFileEditor";
-import type { OpenRepositoryFileDetail } from "../constants/workflowUiEvents";
 
 const RightPanel = lazy(() => import("./RightPanel").then((module) => ({ default: module.RightPanel })));
 const MissionControl = lazy(() =>
   import("./MissionControl").then((module) => ({ default: module.MissionControl })),
+);
+const PrdTaskSplitPanel = lazy(() =>
+  import("./PrdTaskSplitPanel").then((module) => ({ default: module.PrdTaskSplitPanel })),
 );
 const PromptsPanel = lazy(() => import("./PromptsPanel").then((module) => ({ default: module.PromptsPanel })));
 const WorkflowConfigModal = lazy(() =>
@@ -44,6 +46,10 @@ const WorkflowConfigModal = lazy(() =>
 const WiseCcWorkflowStudioPanel = lazy(() =>
   import("../features/cc-wf-studio/WiseCcWorkflowStudioPanel").then((m) => ({ default: m.WiseCcWorkflowStudioPanel })),
 );
+const LazyCodeKnowledgeGraphPanel = lazy(() =>
+  import("./CodeKnowledgeGraph").then((m) => ({ default: m.CodeKnowledgeGraphPanel })),
+);
+type CodeKnowledgeGraphPanelProps = ComponentProps<typeof LazyCodeKnowledgeGraphPanel>;
 const MemoLeftSidebar = memo(LeftSidebar);
 const MemoClaudeSessions = memo(ClaudeSessions);
 const MemoRightPanel = memo(RightPanel);
@@ -62,6 +68,7 @@ type LeftSidebarProps = Omit<
   | "onOpenActiveRepositoryFile"
 >;
 type MissionControlProps = ComponentProps<typeof MissionControlModule.MissionControl>;
+type PrdTaskSplitPanelProps = ComponentProps<typeof PrdTaskSplitPanelModule.PrdTaskSplitPanel>;
 type PromptsPanelProps = ComponentProps<typeof PromptsPanelModule.PromptsPanel>;
 type RightPanelProps = Omit<ComponentProps<typeof RightPanelModule.RightPanel>, "onOpenFile">;
 type WorkflowConfigModalProps = ComponentProps<typeof WorkflowConfigModalModule.WorkflowConfigModal>;
@@ -171,11 +178,11 @@ const ConnectedRightPanel = memo(function ConnectedRightPanel({
 const ConnectedCodeKnowledgeGraphPanel = memo(function ConnectedCodeKnowledgeGraphPanel({
   codeKnowledgeGraphProps,
 }: {
-  codeKnowledgeGraphProps: ComponentProps<typeof CodeKnowledgeGraphPanel>;
+  codeKnowledgeGraphProps: CodeKnowledgeGraphPanelProps;
 }) {
   const openRepositoryFile = useRepositoryFileEditorOpenFile();
   return (
-    <CodeKnowledgeGraphPanel
+    <LazyCodeKnowledgeGraphPanel
       {...codeKnowledgeGraphProps}
       onOpenRepositoryFile={(relativePath) => {
         openRepositoryFile(relativePath);
@@ -239,13 +246,11 @@ export interface AppWorkspaceLayoutProps {
   ccWfStudioMode: boolean;
   ccWfStudioSessionPath: string | null;
   onCloseCcWorkflowStudio: () => void;
-  missionControlMode: boolean;
   compactLayoutMode: boolean;
   effectiveRightCollapsed: boolean;
   mainLayoutContentRef: RefObject<HTMLElement | null>;
   mainLayoutLeftWidthPx: number;
   mainLayoutRightWidthPx: number;
-  repositoryFileOpenRequest?: OpenRepositoryFileDetail | null;
   leftSidebarProps: LeftSidebarProps;
   promptsPanelProps: PromptsPanelProps;
   claudeSessionsProps: ClaudeSessionsProps;
@@ -253,15 +258,15 @@ export interface AppWorkspaceLayoutProps {
   commandPaletteProps: ComponentProps<typeof CommandPalette>;
   mcpHubProps: ComponentProps<typeof McpHub>;
   skillsHubProps: ComponentProps<typeof SkillsHub>;
-  codeKnowledgeGraphProps: ComponentProps<typeof CodeKnowledgeGraphPanel>;
+  codeKnowledgeGraphProps: CodeKnowledgeGraphPanelProps;
   missionControlProps: MissionControlProps;
+  prdTaskSplitPanelProps: PrdTaskSplitPanelProps;
   progressMonitorDrawerProps: ComponentProps<typeof ProgressMonitorDrawer>;
   employeeConfigModalProps: ComponentProps<typeof EmployeeConfigModal> | null;
   workflowConfigModalProps: WorkflowConfigModalProps | null;
   onToggleCompactLayoutMode: () => void;
   onLeftWidthChange: (widthPx: number) => void;
   onRightWidthChange: (widthPx: number) => void;
-  onConsumeRepositoryFileOpenRequest: () => void;
 }
 
 function PanelLoadingFallback() {
@@ -283,13 +288,11 @@ export function AppWorkspaceLayout({
   ccWfStudioMode,
   ccWfStudioSessionPath,
   onCloseCcWorkflowStudio,
-  missionControlMode,
   compactLayoutMode,
   effectiveRightCollapsed,
   mainLayoutContentRef,
   mainLayoutLeftWidthPx,
   mainLayoutRightWidthPx,
-  repositoryFileOpenRequest,
   leftSidebarProps,
   promptsPanelProps,
   claudeSessionsProps,
@@ -299,13 +302,13 @@ export function AppWorkspaceLayout({
   skillsHubProps,
   codeKnowledgeGraphProps,
   missionControlProps,
+  prdTaskSplitPanelProps,
   progressMonitorDrawerProps,
   employeeConfigModalProps,
   workflowConfigModalProps,
   onToggleCompactLayoutMode,
   onLeftWidthChange,
   onRightWidthChange,
-  onConsumeRepositoryFileOpenRequest,
 }: AppWorkspaceLayoutProps) {
   const algorithm = dark ? theme.darkAlgorithm : theme.defaultAlgorithm;
   const {
@@ -369,16 +372,6 @@ export function AppWorkspaceLayout({
   );
   const editorPanelNode = useMemo(() => <ConnectedRepositoryFileEditorPanel dark={dark} />, [dark]);
 
-  useEffect(() => {
-    const request = repositoryFileOpenRequest;
-    const repositoryPath = activeRepositoryPath?.trim() ?? "";
-    const targetPath = request?.repositoryPath?.trim() ?? "";
-    if (!request || !targetPath || !repositoryPath) return;
-    if (repositoryPath !== targetPath) return;
-    openRepositoryFile(request.relativePath, { line: request.line ?? null });
-    onConsumeRepositoryFileOpenRequest();
-  }, [activeRepositoryPath, onConsumeRepositoryFileOpenRequest, openRepositoryFile, repositoryFileOpenRequest]);
-
   return (
     <RepositoryFileEditorOpenFileContext.Provider value={openRepositoryFile}>
       <RepositoryFileEditorVisibilityContext.Provider value={editorVisible}>
@@ -387,6 +380,11 @@ export function AppWorkspaceLayout({
             locale={zhCN}
             theme={{
               algorithm,
+              /** 代码图谱等叠层局部 z-index 较高，避免 Message 被盖住看不见 */
+              components: {
+                Message: { zIndexPopup: 20000 },
+                Notification: { zIndexPopup: 20000 },
+              },
             }}
           >
             <AntdApp>
@@ -400,7 +398,7 @@ export function AppWorkspaceLayout({
                   leftSidebarProps={leftSidebarProps}
                 />
 
-                {!promptsMode && !missionControlMode && !collapsed ? (
+                {!promptsMode && !collapsed ? (
                   <MainLayoutResizeHandle
                     variant="left"
                     startWidthPx={mainLayoutLeftWidthPx}
@@ -408,13 +406,7 @@ export function AppWorkspaceLayout({
                   />
                 ) : null}
 
-                {missionControlMode ? (
-                  <div className="app-full-width-main">
-                    <Suspense fallback={<PanelLoadingFallback />}>
-                      <MissionControl {...missionControlProps} />
-                    </Suspense>
-                  </div>
-                ) : promptsMode ? (
+                {promptsMode ? (
                   <div className="app-full-width-main">
                     <Suspense fallback={<PanelLoadingFallback />}>
                       <PromptsPanel {...promptsPanelProps} />
@@ -453,7 +445,15 @@ export function AppWorkspaceLayout({
                     ) : null}
                     {codeKnowledgeGraphMode ? (
                       <div className="app-code-graph-overlay" role="region" aria-label="代码知识图谱">
-                        <ConnectedCodeKnowledgeGraphPanel codeKnowledgeGraphProps={codeKnowledgeGraphProps} />
+                        <Suspense
+                          fallback={
+                            <div className="app-code-graph-lazy-fallback" aria-busy="true" aria-live="polite">
+                              <Spin size="large" />
+                            </div>
+                          }
+                        >
+                          <ConnectedCodeKnowledgeGraphPanel codeKnowledgeGraphProps={codeKnowledgeGraphProps} />
+                        </Suspense>
                       </div>
                     ) : null}
                     {ccWfStudioSessionPath ? (

@@ -31,6 +31,11 @@ interface ProjectRepositoryListProps {
   onCreateProjectClick: () => void;
   onAddFloatingRepositoryClick?: () => void;
   onReconcileProject?: (projectId: string, mode: ReconcileProjectMode) => void | Promise<void>;
+  onCodeGraphGenerateProject?: (project: ProjectItem) => void | Promise<void>;
+  onCodeGraphViewProject?: (project: ProjectItem) => void;
+  onCodeGraphGenerateRepository?: (repository: Repository) => void | Promise<void>;
+  onCodeGraphViewRepositoryInProject?: (project: ProjectItem, repository: Repository) => void;
+  onCodeGraphViewFloatingRepository?: (repository: Repository) => void;
   onToggleProjectExpand: (projectId: string) => void;
   onTogglePinProject: (projectId: string) => void;
   onRenameProject: (project: ProjectItem) => void;
@@ -70,6 +75,11 @@ export function ProjectRepositoryList({
   onCreateProjectClick,
   onAddFloatingRepositoryClick,
   onReconcileProject,
+  onCodeGraphGenerateProject,
+  onCodeGraphViewProject,
+  onCodeGraphGenerateRepository,
+  onCodeGraphViewRepositoryInProject,
+  onCodeGraphViewFloatingRepository,
   onToggleProjectExpand,
   onTogglePinProject,
   onRenameProject,
@@ -138,6 +148,8 @@ export function ProjectRepositoryList({
                 onOpenRepositoryInEditor={openRepositoryInPreferredEditor}
                 onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
                 onConfigureSddMode={onConfigureRepositorySddMode}
+                onCodeGraphGenerateRepository={onCodeGraphGenerateRepository}
+                onCodeGraphViewFloatingRepository={onCodeGraphViewFloatingRepository}
                 onPromoteToNewProject={onPromoteFloatingRepository}
                 onJoinExistingProject={onJoinFloatingRepository}
                 onRemove={onRemoveFloatingRepository}
@@ -168,6 +180,10 @@ export function ProjectRepositoryList({
             onCreateProjectTask={onCreateProjectTask}
             onCreateRepositoryTask={onCreateRepositoryTask}
             onReconcileProject={onReconcileProject}
+            onCodeGraphGenerateProject={onCodeGraphGenerateProject}
+            onCodeGraphViewProject={onCodeGraphViewProject}
+            onCodeGraphGenerateRepository={onCodeGraphGenerateRepository}
+            onCodeGraphViewRepositoryInProject={onCodeGraphViewRepositoryInProject}
             onOpenInFinder={onOpenInFinder}
             openRepositoryInPreferredEditor={openRepositoryInPreferredEditor}
             onOpenPromptsRepository={onOpenPromptsRepository}
@@ -231,6 +247,10 @@ interface ProjectRowProps {
   onCreateProjectTask: (project: ProjectItem, mode: TaskMode) => void;
   onCreateRepositoryTask: (repository: Repository, mode: TaskMode) => void;
   onReconcileProject?: (projectId: string, mode: ReconcileProjectMode) => void | Promise<void>;
+  onCodeGraphGenerateProject?: (project: ProjectItem) => void | Promise<void>;
+  onCodeGraphViewProject?: (project: ProjectItem) => void;
+  onCodeGraphGenerateRepository?: (repository: Repository) => void | Promise<void>;
+  onCodeGraphViewRepositoryInProject?: (project: ProjectItem, repository: Repository) => void;
   onOpenInFinder: (repository: Repository) => void;
   openRepositoryInPreferredEditor: (repository: Repository) => void;
   onOpenPromptsRepository?: (project: ProjectItem, repository: Repository) => void;
@@ -264,6 +284,10 @@ function ProjectRow({
   onCreateProjectTask,
   onCreateRepositoryTask,
   onReconcileProject,
+  onCodeGraphGenerateProject,
+  onCodeGraphViewProject,
+  onCodeGraphGenerateRepository,
+  onCodeGraphViewRepositoryInProject,
   onOpenInFinder,
   openRepositoryInPreferredEditor,
   onOpenPromptsRepository,
@@ -284,10 +308,24 @@ function ProjectRow({
       ? ([
           {
             key: "reconcile-submenu",
-            label: "重新初始化项目",
+            label: "重新初始化",
+            popupClassName: "app-sidebar-more-menu-submenu",
             children: [
               { key: "reconcile-repos", label: "仅同步仓库" },
               { key: "reconcile-repos-graphs", label: "同步并重绘流程图（草稿）" },
+            ],
+          },
+        ] satisfies MenuProps["items"])
+      : []),
+    ...(onCodeGraphGenerateProject && onCodeGraphViewProject
+      ? ([
+          {
+            key: "code-graph-submenu",
+            label: "图谱操作",
+            popupClassName: "app-sidebar-more-menu-submenu",
+            children: [
+              { key: "code-graph-generate-project", label: "生成项目级索引" },
+              { key: "code-graph-view-project", label: "查看检索" },
             ],
           },
         ] satisfies MenuProps["items"])
@@ -336,7 +374,10 @@ function ProjectRow({
     >
       <div
         className={`app-repository-item app-repository-item--project${isActiveProject ? " app-repository-item--project-active" : ""}`}
-        onClick={() => onProjectSelect(project.id)}
+        onClick={(e) => {
+          if ((e.target as HTMLElement | null)?.closest(".app-repository-row-actions")) return;
+          onProjectSelect(project.id);
+        }}
       >
         <span
           className="app-repository-expand"
@@ -365,6 +406,8 @@ function ProjectRow({
                 if (key === "reconcile-repos-graphs") {
                   void Promise.resolve(onReconcileProject?.(project.id, "repos_and_graphs"));
                 }
+                if (key === "code-graph-generate-project") void Promise.resolve(onCodeGraphGenerateProject?.(project));
+                if (key === "code-graph-view-project") onCodeGraphViewProject?.(project);
                 if (key === "prompts") onOpenPromptsProject?.(project);
                 if (key === "delete") onDeleteProject(project);
               },
@@ -389,7 +432,7 @@ function ProjectRow({
           {projectRepos.length === 0 ? (
             <div className="app-session-item" style={{ cursor: "default" }}>
               <span className="app-session-item-name">
-                在根目录下拉取仓库后，用项目菜单「重新初始化项目」→「仅同步仓库」或「同步并重绘流程图」
+                在根目录下拉取仓库后，用项目菜单「重新初始化」→「仅同步仓库」或「同步并重绘流程图」
               </span>
             </div>
           ) : (
@@ -407,6 +450,8 @@ function ProjectRow({
               onReorderRepositoriesInProject={onReorderRepositoriesInProject}
               onMoveRepositoryToProject={onMoveRepositoryToProjectWithExpand}
               onConfigureSddMode={onConfigureRepositorySddMode}
+              onCodeGraphGenerateRepository={onCodeGraphGenerateRepository}
+              onCodeGraphViewRepositoryInProject={onCodeGraphViewRepositoryInProject}
               repoSidebarDragRef={repoSidebarDragRef}
               onRepoSidebarDragEnd={onClearRepoSidebarDrag}
               hideChatAction={

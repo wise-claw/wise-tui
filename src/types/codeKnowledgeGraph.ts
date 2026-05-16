@@ -53,8 +53,11 @@ export interface GraphMeta {
   errors?: ParseError[];
 }
 
-/** 子图层数选项（与后端一致：1 层仅焦点，L 层含 outward 代价 ≤ L−1） */
+/** 子图 hop 深度选项（与后端 `hop` 一致：L 表示至多 L 条计代价 outward 边；`contains` 不增代价） */
 export type CodeGraphSubgraphHopDepth = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+
+/** 工具栏「全部」或具体 hop 上限（与代码图谱 UI 一致） */
+export type CodeGraphSubgraphHopScope = "all" | CodeGraphSubgraphHopDepth;
 
 /** 与后端 `CodeGraphSubgraphDirection` 一致：双向、仅入边（上卷）、仅出边（下钻） */
 export type CodeGraphSubgraphDirection = "both" | "upstream" | "downstream";
@@ -70,7 +73,7 @@ export interface CodeGraphNodeSearchRequest {
 export interface CodeGraphSubgraphRequest {
   repositoryId: number;
   focusNodeId?: string;
-  /** 省略或 `undefined`：不限制层数，展开焦点可达的全部子图；`1`–`10`：子图层数（1 层仅焦点） */
+  /** 省略或 `undefined`：不限制 hop，展开焦点可达的全部子图；`1`–`10`：子图 hop 上限（焦点 + 至多 L 条计代价 outward 边，`contains` 不增代价） */
   hop?: CodeGraphSubgraphHopDepth;
   nodeTypeFilter?: string[];
   /** 省略：双向 BFS；`upstream` / `downstream` 仅沿入边或出边扩展 */
@@ -93,6 +96,17 @@ export const CODE_GRAPH_INDEX_CANCELLED_MSG = "检索已取消" as const;
 /** 与后端 `index_cancel::INDEX_STALE_ORPHAN_MSG` 一致：僵尸 indexing 被「暂停」清除 */
 export const CODE_GRAPH_INDEX_STALE_ORPHAN_MSG =
   "索引未在进程中运行（可能已异常退出或应用重启）。请重新点击「开始检索」。" as const;
+
+/** 用户暂停/取消或清除僵尸 indexing；后端可能把「检索已取消」接在其它错误文案之后 */
+export function isCodeGraphIndexBenignUserAbortError(error: string | null | undefined): boolean {
+  if (error == null || error === "") return false;
+  const s = String(error);
+  const t = s.trim();
+  if (t === CODE_GRAPH_INDEX_CANCELLED_MSG || t === CODE_GRAPH_INDEX_STALE_ORPHAN_MSG) return true;
+  if (s.includes(CODE_GRAPH_INDEX_CANCELLED_MSG)) return true;
+  if (s.includes(CODE_GRAPH_INDEX_STALE_ORPHAN_MSG)) return true;
+  return false;
+}
 
 export interface CancelCodeGraphReindexOutcome {
   signalledRunningTask: boolean;

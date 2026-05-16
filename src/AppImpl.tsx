@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { message } from "antd";
+import { listen } from "@tauri-apps/api/event";
+import { Modal, message } from "antd";
 import type {
   ClaudeSession,
   EmployeeItem,
@@ -24,6 +25,7 @@ import { useRepositoryList } from "./hooks/useRepositoryList";
 import { useCcWorkflowStudioWorkspace } from "./hooks/useCcWorkflowStudioWorkspace";
 import { useClaudeSessions, type ClaudeTurnCompletePayload } from "./hooks/useClaudeSessions";
 import { openInFinder } from "./services/repository";
+import { triggerCodeGraphAssociationBuild, triggerCodeGraphReindex } from "./services/codeKnowledgeGraph";
 import { AppWorkspaceLayout } from "./components/AppWorkspaceLayout";
 import type { PromptsOpenContext } from "./components/PromptsPanel";
 import { reloadAppWindow } from "./services/window";
@@ -127,6 +129,83 @@ import {
   listWorkflowProjectIds,
 } from "./services/projectPrdScope";
 import { ensureSessionBoundToActiveMission } from "./services/mission/sessionBinding";
+import { isCodeGraphIndexBenignUserAbortError } from "./types/codeKnowledgeGraph";
+
+// ── 侧栏「图谱操作 → 生成检索」：等后台索引事件后再弹窗汇总 ──
+
+type SidebarReindexOutcome =
+  | { kind: "ok"; repositoryId: number; totalNodes: number; totalEdges: number }
+  | { kind: "err"; repositoryId: number; error: string; benign: boolean };
+
+type SidebarReindexBatchState = {
+  pending: Set<number>;
+  outcomes: SidebarReindexOutcome[];
+  unlistenComplete: () => void;
+  unlistenError: () => void;
+};
+
+function presentSidebarCodeGraphReindexModal(repositories: Repository[], outcomes: SidebarReindexOutcome[]): void {
+  if (outcomes.length === 0) return;
+  const repoLabel = (id: number) => repositories.find((r) => r.id === id)?.name ?? `仓库 #${id}`;
+  const ok = outcomes.filter((o): o is Extract<SidebarReindexOutcome, { kind: "ok" }> => o.kind === "ok");
+  const bad = outcomes.filter(
+    (o): o is Extract<SidebarReindexOutcome, { kind: "err" }> => o.kind === "err" && !o.benign,
+  );
+  const benignErrs = outcomes.filter((o) => o.kind === "err" && o.benign);
+
+  if (ok.length === 0 && bad.length === 0) {
+    Modal.info({
+      title: "代码图谱检索",
+      content: "检索已结束（已取消或状态已重置）。",
+    });
+    return;
+  }
+
+  if (bad.length === 0) {
+    let body = ok
+      .map(
+        (o) =>
+          `「${repoLabel(o.repositoryId)}」节点 ${o.totalNodes.toLocaleString()}，边 ${o.totalEdges.toLocaleString()}`,
+      )
+      .join("\n");
+    if (benignErrs.length > 0) {
+      body += `\n\n${benignErrs.map((o) => `「${repoLabel(o.repositoryId)}」已取消或状态已重置`).join("\n")}`;
+    }
+    Modal.success({
+      title: ok.length > 1 ? "代码图谱检索已全部完成" : "代码图谱检索已完成",
+      content: <div style={{ whiteSpace: "pre-line" }}>{body}</div>,
+    });
+    return;
+  }
+
+  const okPart =
+    ok.length > 0
+      ? `成功（${ok.length}）\n${ok
+          .map(
+            (o) =>
+              `「${repoLabel(o.repositoryId)}」节点 ${o.totalNodes.toLocaleString()}，边 ${o.totalEdges.toLocaleString()}`,
+          )
+          .join("\n")}`
+      : "";
+  const badPart = `失败（${bad.length}）\n${bad.map((o) => `「${repoLabel(o.repositoryId)}」${o.error}`).join("\n")}`;
+  const benignPart =
+    benignErrs.length > 0
+      ? `\n\n已取消或已重置（${benignErrs.length}）\n${benignErrs.map((o) => `「${repoLabel(o.repositoryId)}」`).join("\n")}`
+      : "";
+  const content = [okPart, badPart, benignPart].filter((s) => s.length > 0).join("\n\n");
+
+  if (ok.length > 0) {
+    Modal.warning({
+      title: "代码图谱检索部分完成",
+      content: <div style={{ whiteSpace: "pre-line" }}>{content}</div>,
+    });
+  } else {
+    Modal.error({
+      title: "代码图谱检索失败",
+      content: <div style={{ whiteSpace: "pre-line" }}>{content}</div>,
+    });
+  }
+}
 
 // ── App ──
 
@@ -139,6 +218,12 @@ export default function App() {
   /** 左栏技能：在主区+右栏之上叠层展示 skills.sh（不盖左栏，非全屏居中 Modal）。 */
   const [skillsHubMode, setSkillsHubMode] = useState(false);
   const [codeKnowledgeGraphMode, setCodeKnowledgeGraphMode] = useState(false);
+  /** 侧栏「查看检索」打开时为 true：图谱面板不在 idle 时自动 `triggerCodeGraphReindex`；顶栏入口为 false。 */
+  const [codeGraphSuppressIdleAutoReindex, setCodeGraphSuppressIdleAutoReindex] = useState(false);
+  /** 侧栏仓库/项目「图谱操作 → 查看检索」进入时为 true：仅当前仓 UI，不打开仓库下拉、不显示「全部仓库」关联入口。 */
+  const [codeGraphLockToEntryRepository, setCodeGraphLockToEntryRepository] = useState(false);
+  /** 侧栏项目「查看检索」进入时为 true：代码图谱默认多仓关联合并视图（候选 ≥2 时）。 */
+  const [codeGraphDefaultProjectMultiRepo, setCodeGraphDefaultProjectMultiRepo] = useState(false);
   const [missionControlMode, setMissionControlMode] = useState(false);
   const [missionControlInitialTarget, setMissionControlInitialTarget] = useState<OpenMissionControlDetail | null>(null);
   const [promptsOpenContext, setPromptsOpenContext] = useState<PromptsOpenContext | null>(null);
@@ -236,6 +321,52 @@ export default function App() {
     togglePinProject,
     floatingRepositories,
   } = useRepositoryList();
+
+  const sidebarCodeGraphReindexBatchRef = useRef<SidebarReindexBatchState | null>(null);
+  const disposeSidebarCodeGraphReindexBatch = useCallback(() => {
+    const b = sidebarCodeGraphReindexBatchRef.current;
+    if (!b) return;
+    try {
+      b.unlistenComplete();
+    } catch {
+      /* noop */
+    }
+    try {
+      b.unlistenError();
+    } catch {
+      /* noop */
+    }
+    sidebarCodeGraphReindexBatchRef.current = null;
+  }, []);
+
+  type SidebarAssocBatchState = {
+    expectedKey: string;
+    unlistenOk: () => void;
+    unlistenErr: () => void;
+  };
+  const sidebarCodeGraphAssocBatchRef = useRef<SidebarAssocBatchState | null>(null);
+  const disposeSidebarCodeGraphAssocBatch = useCallback(() => {
+    const b = sidebarCodeGraphAssocBatchRef.current;
+    if (!b) return;
+    try {
+      b.unlistenOk();
+    } catch {
+      /* noop */
+    }
+    try {
+      b.unlistenErr();
+    } catch {
+      /* noop */
+    }
+    sidebarCodeGraphAssocBatchRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      disposeSidebarCodeGraphReindexBatch();
+      disposeSidebarCodeGraphAssocBatch();
+    };
+  }, [disposeSidebarCodeGraphReindexBatch, disposeSidebarCodeGraphAssocBatch]);
 
   const [repositoryMainSessionBindings, setRepositoryMainSessionBindings] = useState<Record<string, string>>({});
   /** 从侧栏仓库打开员工配置：与需求面板相同的 Owner 表格式，但不写 project_prd。 */
@@ -842,6 +973,13 @@ export default function App() {
         console.debug("ensureSessionBoundToActiveMission failed:", error);
       });
   }, [activeProject?.id, activeProject?.rootPath, activeSessionId, sessions]);
+
+  useEffect(() => {
+    if (!codeKnowledgeGraphMode) {
+      setCodeGraphLockToEntryRepository(false);
+      setCodeGraphDefaultProjectMultiRepo(false);
+    }
+  }, [codeKnowledgeGraphMode]);
   /** 代码图谱全库搜索：有项目时用项目内全部仓库，否则由面板退化为当前仓库 */
   const codeGraphSearchRepositoryIds = useMemo(() => {
     if (activeProject?.repositoryIds?.length) {
@@ -1302,6 +1440,192 @@ export default function App() {
     [handleSidebarRepositorySelect],
   );
 
+  /** 侧栏「图谱操作 → 查看检索」：与顶栏图谱入口一致，先收敛其它 Hub 再打开覆盖层。 */
+  const openCodeKnowledgeGraphAfterRepositorySelect = useCallback(
+    (opts: {
+      projectId: string | null;
+      repositoryId: number;
+      /** `repository`：从单个仓库菜单进入，图谱 UI 锁定为当前仓；`project`：从项目菜单进入，保留多仓关联能力 */
+      graphEntryFrom?: "project" | "repository";
+    }) => {
+      const repo = repositories.find((r) => r.id === opts.repositoryId);
+      if (!repo) {
+        message.warning("未找到该仓库");
+        return;
+      }
+      /** 双 rAF：先让右键菜单关闭并完成一帧绘制，再跑会话切换 / 挂载图谱，避免主线程长时间卡住。 */
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setPromptsMode(false);
+          setSearchOpen(false);
+          if (opts.projectId != null) {
+            setActiveProjectId(opts.projectId);
+          }
+          const alreadyOnRepo = opts.repositoryId === activeRepositoryId;
+          if (alreadyOnRepo) {
+            setMcpHubMode(false);
+            setSkillsHubMode(false);
+            setCcWfStudioMode(false);
+            setTaskSplitMode(false);
+            setMissionControlMode(false);
+          } else {
+            handleSidebarRepositorySelectLeavingMcpHub(opts.repositoryId);
+          }
+          startTransition(() => {
+            setCodeGraphSuppressIdleAutoReindex(true);
+            setCodeGraphLockToEntryRepository(opts.graphEntryFrom === "repository");
+            setCodeGraphDefaultProjectMultiRepo(opts.graphEntryFrom === "project");
+            setCodeKnowledgeGraphMode(true);
+          });
+        });
+      });
+    },
+    [repositories, activeRepositoryId, handleSidebarRepositorySelectLeavingMcpHub, setActiveProjectId],
+  );
+
+  const handleCodeGraphGenerateRepositoryIds = useCallback(
+    async (repositoryIds: number[]) => {
+      const valid = repositoryIds.filter((id) => repositories.some((r) => r.id === id));
+      if (valid.length === 0) {
+        message.warning("没有可检索的仓库");
+        return;
+      }
+
+      disposeSidebarCodeGraphReindexBatch();
+
+      const pending = new Set(valid);
+      const outcomes: SidebarReindexOutcome[] = [];
+
+      const maybeFinish = () => {
+        const batch = sidebarCodeGraphReindexBatchRef.current;
+        if (!batch || batch.pending.size > 0) return;
+        const snapshot = [...batch.outcomes];
+        disposeSidebarCodeGraphReindexBatch();
+        presentSidebarCodeGraphReindexModal(repositories, snapshot);
+      };
+
+      const unlistenComplete = await listen("code-graph-index-complete", (event) => {
+        const batch = sidebarCodeGraphReindexBatchRef.current;
+        if (!batch) return;
+        const idRaw = (event.payload as { repositoryId?: unknown } | undefined)?.repositoryId;
+        const id = typeof idRaw === "number" && Number.isFinite(idRaw) ? idRaw : Number.NaN;
+        if (!Number.isFinite(id) || !batch.pending.has(id)) return;
+        batch.pending.delete(id);
+        const p = event.payload as { totalNodes?: unknown; totalEdges?: unknown };
+        const totalNodes =
+          typeof p.totalNodes === "number" && Number.isFinite(p.totalNodes) ? p.totalNodes : 0;
+        const totalEdges =
+          typeof p.totalEdges === "number" && Number.isFinite(p.totalEdges) ? p.totalEdges : 0;
+        batch.outcomes.push({ kind: "ok", repositoryId: id, totalNodes, totalEdges });
+        maybeFinish();
+      });
+
+      const unlistenError = await listen("code-graph-index-error", (event) => {
+        const batch = sidebarCodeGraphReindexBatchRef.current;
+        if (!batch) return;
+        const idRaw = (event.payload as { repositoryId?: unknown } | undefined)?.repositoryId;
+        const id = typeof idRaw === "number" && Number.isFinite(idRaw) ? idRaw : Number.NaN;
+        if (!Number.isFinite(id) || !batch.pending.has(id)) return;
+        batch.pending.delete(id);
+        const errMsg = String((event.payload as { error?: unknown } | undefined)?.error ?? "索引失败");
+        const benign = isCodeGraphIndexBenignUserAbortError(errMsg);
+        batch.outcomes.push({ kind: "err", repositoryId: id, error: errMsg, benign });
+        maybeFinish();
+      });
+
+      sidebarCodeGraphReindexBatchRef.current = {
+        pending,
+        outcomes,
+        unlistenComplete,
+        unlistenError,
+      };
+
+      try {
+        await Promise.all(valid.map((repositoryId) => triggerCodeGraphReindex({ repositoryId })));
+        message.info(
+          valid.length > 1
+            ? `已开始后台检索 ${valid.length} 个代码仓库（GitNexus analyze + 图谱导入），完成后将自动刷新。`
+            : "已开始后台检索代码仓库（GitNexus analyze + 图谱导入），完成后将自动刷新。",
+        );
+      } catch (e) {
+        disposeSidebarCodeGraphReindexBatch();
+        console.warn("[sidebar] triggerCodeGraphReindex failed", e);
+        message.error("提交代码图谱检索失败");
+      }
+    },
+    [repositories, disposeSidebarCodeGraphReindexBatch],
+  );
+
+  /** 项目级：多仓时并行启动各仓代码图谱检索（写入 Wise）与 GitNexus 仓库组同步；单仓仍仅走本机检索。 */
+  const handleCodeGraphGenerateProject = useCallback(
+    async (project: ProjectItem) => {
+      const valid = project.repositoryIds.filter((id) => repositories.some((r) => r.id === id));
+      if (valid.length === 0) {
+        message.warning("没有可检索的仓库");
+        return;
+      }
+      if (valid.length === 1) {
+        await handleCodeGraphGenerateRepositoryIds([valid[0]!]);
+        return;
+      }
+
+      void handleCodeGraphGenerateRepositoryIds(valid);
+
+      disposeSidebarCodeGraphAssocBatch();
+      const expectedKey = [...valid].sort((a, b) => a - b).join(",");
+      const idsMatchPayload = (raw: unknown) => {
+        const ids = Array.isArray(raw)
+          ? raw.filter((x): x is number => typeof x === "number" && Number.isFinite(x))
+          : [];
+        if (ids.length === 0) return false;
+        return [...ids].sort((a, b) => a - b).join(",") === expectedKey;
+      };
+
+      const unlistenOk = await listen("code-graph-association-build-complete", (ev) => {
+        const batch = sidebarCodeGraphAssocBatchRef.current;
+        if (!batch || batch.expectedKey !== expectedKey) return;
+        const raw = (ev.payload as { repositoryIds?: unknown } | undefined)?.repositoryIds;
+        if (!idsMatchPayload(raw)) return;
+        disposeSidebarCodeGraphAssocBatch();
+        const names = valid
+          .map((id) => repositories.find((r) => r.id === id)?.name ?? `#${id}`)
+          .join("、");
+        Modal.success({
+          title: "多仓仓库组同步已完成",
+          content: `已为项目内仓库同步 GitNexus 仓库组：${names}。各仓代码图谱检索已在后台进行，全部完成后即可在「代码图谱」中查看节点与子图。`,
+        });
+      });
+
+      const unlistenErr = await listen("code-graph-association-build-error", (ev) => {
+        const batch = sidebarCodeGraphAssocBatchRef.current;
+        if (!batch || batch.expectedKey !== expectedKey) return;
+        const raw = (ev.payload as { repositoryIds?: unknown } | undefined)?.repositoryIds;
+        if (raw !== undefined && !idsMatchPayload(raw)) return;
+        disposeSidebarCodeGraphAssocBatch();
+        const err = String((ev.payload as { error?: unknown } | undefined)?.error ?? "同步失败");
+        Modal.error({ title: "GitNexus 仓库组同步失败", content: err });
+      });
+
+      sidebarCodeGraphAssocBatchRef.current = {
+        expectedKey,
+        unlistenOk,
+        unlistenErr,
+      };
+
+      try {
+        await triggerCodeGraphAssociationBuild(valid);
+        message.info(
+          "已开始：① 各仓代码图谱后台检索（写入 Wise）；② GitNexus 多仓仓库组同步。检索全部完成后在代码图谱中即可浏览。",
+        );
+      } catch (e) {
+        disposeSidebarCodeGraphAssocBatch();
+        console.warn("[sidebar] triggerCodeGraphAssociationBuild (project) failed", e);
+        message.error("提交 GitNexus 仓库组同步失败");
+      }
+    },
+    [repositories, handleCodeGraphGenerateRepositoryIds, disposeSidebarCodeGraphAssocBatch],
+  );
+
   const handleProjectSelectLeavingMcpHub = useCallback(
     (projectId: string) => {
       setMcpHubMode(false);
@@ -1653,15 +1977,6 @@ export default function App() {
           setMissionControlMode(false);
           setSkillsHubMode(true);
         },
-        codeKnowledgeGraphNavActive: codeKnowledgeGraphMode,
-        onOpenCodeKnowledgeGraph: () => {
-          setPromptsMode(false);
-          setMcpHubMode(false);
-          setSkillsHubMode(false);
-          setCcWfStudioMode(false);
-          setMissionControlMode(false);
-          setCodeKnowledgeGraphMode(true);
-        },
         workflowStudioNavActive: ccWfStudioMode,
         onOpenWorkflowStudio: openWorkflowStudio,
         onProjectSelect: handleProjectSelectLeavingMcpHub,
@@ -1727,6 +2042,39 @@ export default function App() {
         onReloadFullDiskTranscript: reloadFullDiskTranscript,
         activeRepositoryPath: activeRepository?.path,
         activeRepositoryName: activeRepository?.name,
+        onCodeGraphGenerateProject: (project) => {
+          void handleCodeGraphGenerateProject(project);
+        },
+        onCodeGraphViewProject: (project) => {
+          const firstRepoId =
+            project.repositoryIds.find((id) => repositories.some((r) => r.id === id)) ?? null;
+          if (firstRepoId == null) {
+            message.warning("该项目下暂无仓库");
+            return;
+          }
+          openCodeKnowledgeGraphAfterRepositorySelect({
+            projectId: project.id,
+            repositoryId: firstRepoId,
+            graphEntryFrom: "project",
+          });
+        },
+        onCodeGraphGenerateRepository: (repository) => {
+          void handleCodeGraphGenerateRepositoryIds([repository.id]);
+        },
+        onCodeGraphViewRepositoryInProject: (project, repository) => {
+          openCodeKnowledgeGraphAfterRepositorySelect({
+            projectId: project.id,
+            repositoryId: repository.id,
+            graphEntryFrom: "repository",
+          });
+        },
+        onCodeGraphViewFloatingRepository: (repository) => {
+          openCodeKnowledgeGraphAfterRepositorySelect({
+            projectId: null,
+            repositoryId: repository.id,
+            graphEntryFrom: "repository",
+          });
+        },
       }}
       promptsPanelProps={{
         onClose: () => {
@@ -1891,14 +2239,20 @@ export default function App() {
           path: r.path,
           repositoryType: r.repositoryType,
         })),
-        searchRepositoryIds: codeGraphSearchRepositoryIds,
+        searchRepositoryIds: codeGraphLockToEntryRepository ? undefined : codeGraphSearchRepositoryIds,
+        lockToEntryRepository: codeGraphLockToEntryRepository,
+        defaultProjectMultiRepoAssociation: codeGraphDefaultProjectMultiRepo,
         onSelectRepository: setActiveRepositoryWithOwner,
-        onClose: () => setCodeKnowledgeGraphMode(false),
+        onClose: () => {
+          setCodeKnowledgeGraphMode(false);
+          setCodeGraphSuppressIdleAutoReindex(false);
+        },
         onRemoveRepository: async (repoId) => {
           const repo = repositories.find((r) => r.id === repoId);
           if (repo) await handleRemoveRepository(repo);
         },
         onOpenAddRepository: () => void handleAddFloatingRepository("frontend"),
+        suppressIdleAutoReindex: codeGraphSuppressIdleAutoReindex,
       }}
       missionControlProps={{
         projects,
