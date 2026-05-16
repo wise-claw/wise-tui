@@ -224,6 +224,7 @@ export default function App() {
   const [codeGraphLockToEntryRepository, setCodeGraphLockToEntryRepository] = useState(false);
   /** 侧栏项目「查看检索」进入时为 true：代码图谱默认多仓关联合并视图（候选 ≥2 时）。 */
   const [codeGraphDefaultProjectMultiRepo, setCodeGraphDefaultProjectMultiRepo] = useState(false);
+  const [taskSplitMode, setTaskSplitMode] = useState(false);
   const [missionControlMode, setMissionControlMode] = useState(false);
   const [missionControlInitialTarget, setMissionControlInitialTarget] = useState<OpenMissionControlDetail | null>(null);
   const [promptsOpenContext, setPromptsOpenContext] = useState<PromptsOpenContext | null>(null);

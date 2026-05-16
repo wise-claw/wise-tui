@@ -5,6 +5,7 @@ import {
   memo,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   type ComponentProps,
   type MouseEvent as ReactMouseEvent,
@@ -24,12 +25,12 @@ import { ProgressMonitorDrawer } from "./ProgressMonitorDrawer";
 import { RepositoryFileEditorPanel } from "./RepositoryFileEditorPanel";
 import { RepositoryFilePreviewModal } from "./RepositoryFilePreviewModal";
 import { SkillsHub } from "./SkillsHub";
-import { CodeKnowledgeGraphPanel } from "./CodeKnowledgeGraph";
 import type * as MissionControlModule from "./MissionControl";
 import type * as PrdTaskSplitPanelModule from "./PrdTaskSplitPanel";
 import type * as PromptsPanelModule from "./PromptsPanel";
 import type * as RightPanelModule from "./RightPanel";
 import type * as WorkflowConfigModalModule from "./WorkflowConfigModal";
+import type { OpenRepositoryFileDetail } from "../constants/workflowUiEvents";
 import { useRepositoryFileEditor } from "../hooks/useRepositoryFileEditor";
 
 const RightPanel = lazy(() => import("./RightPanel").then((module) => ({ default: module.RightPanel })));
@@ -240,6 +241,7 @@ export interface AppWorkspaceLayoutProps {
   collapsed: boolean;
   promptsMode: boolean;
   taskPanelMode: boolean;
+  missionControlMode: boolean;
   mcpHubMode: boolean;
   skillsHubMode: boolean;
   codeKnowledgeGraphMode: boolean;
@@ -260,13 +262,15 @@ export interface AppWorkspaceLayoutProps {
   skillsHubProps: ComponentProps<typeof SkillsHub>;
   codeKnowledgeGraphProps: CodeKnowledgeGraphPanelProps;
   missionControlProps: MissionControlProps;
-  prdTaskSplitPanelProps: PrdTaskSplitPanelProps;
+  prdTaskSplitPanelProps?: PrdTaskSplitPanelProps;
   progressMonitorDrawerProps: ComponentProps<typeof ProgressMonitorDrawer>;
   employeeConfigModalProps: ComponentProps<typeof EmployeeConfigModal> | null;
   workflowConfigModalProps: WorkflowConfigModalProps | null;
   onToggleCompactLayoutMode: () => void;
   onLeftWidthChange: (widthPx: number) => void;
   onRightWidthChange: (widthPx: number) => void;
+  onConsumeRepositoryFileOpenRequest: () => void;
+  repositoryFileOpenRequest?: OpenRepositoryFileDetail | null;
 }
 
 function PanelLoadingFallback() {
@@ -281,6 +285,8 @@ export function AppWorkspaceLayout({
   activeRepositoryPath,
   dark,
   collapsed,
+  taskPanelMode,
+  missionControlMode,
   promptsMode,
   mcpHubMode,
   skillsHubMode,
@@ -309,6 +315,8 @@ export function AppWorkspaceLayout({
   onToggleCompactLayoutMode,
   onLeftWidthChange,
   onRightWidthChange,
+  onConsumeRepositoryFileOpenRequest,
+  repositoryFileOpenRequest,
 }: AppWorkspaceLayoutProps) {
   const algorithm = dark ? theme.darkAlgorithm : theme.defaultAlgorithm;
   const {
@@ -372,6 +380,16 @@ export function AppWorkspaceLayout({
   );
   const editorPanelNode = useMemo(() => <ConnectedRepositoryFileEditorPanel dark={dark} />, [dark]);
 
+  useEffect(() => {
+    const request = repositoryFileOpenRequest;
+    const repositoryPath = activeRepositoryPath?.trim() ?? "";
+    const targetPath = request?.repositoryPath?.trim() ?? "";
+    if (!request || !targetPath || !repositoryPath) return;
+    if (repositoryPath !== targetPath) return;
+    openRepositoryFile(request.relativePath, { line: request.line ?? null });
+    onConsumeRepositoryFileOpenRequest();
+  }, [activeRepositoryPath, onConsumeRepositoryFileOpenRequest, openRepositoryFile, repositoryFileOpenRequest]);
+
   return (
     <RepositoryFileEditorOpenFileContext.Provider value={openRepositoryFile}>
       <RepositoryFileEditorVisibilityContext.Provider value={editorVisible}>
@@ -398,7 +416,7 @@ export function AppWorkspaceLayout({
                   leftSidebarProps={leftSidebarProps}
                 />
 
-                {!promptsMode && !collapsed ? (
+                {!promptsMode && !missionControlMode && !collapsed ? (
                   <MainLayoutResizeHandle
                     variant="left"
                     startWidthPx={mainLayoutLeftWidthPx}
@@ -406,7 +424,13 @@ export function AppWorkspaceLayout({
                   />
                 ) : null}
 
-                {promptsMode ? (
+                {missionControlMode ? (
+                  <div className="app-full-width-main">
+                    <Suspense fallback={<PanelLoadingFallback />}>
+                      <MissionControl {...missionControlProps} />
+                    </Suspense>
+                  </div>
+                ) : promptsMode ? (
                   <div className="app-full-width-main">
                     <Suspense fallback={<PanelLoadingFallback />}>
                       <PromptsPanel {...promptsPanelProps} />
