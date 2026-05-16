@@ -12,9 +12,10 @@ import type { MissionRunState } from "../presenter/types";
 interface MissionStatusBarProps {
   missionId: string | null;
   runState: MissionRunState;
+  resplitCount?: number;
 }
 
-export function MissionStatusBar({ missionId, runState }: MissionStatusBarProps) {
+export function MissionStatusBar({ missionId, runState, resplitCount = 0 }: MissionStatusBarProps) {
   const { running, queued } = useAgentAssignments({
     missionId,
     enabled: Boolean(missionId),
@@ -51,6 +52,7 @@ export function MissionStatusBar({ missionId, runState }: MissionStatusBarProps)
         >
           {phaseLabel}
         </Tag>
+        {resplitCount > 0 ? <Tag color="warning">{resplitCount} 组需重拆</Tag> : null}
       </div>
       <div className="mission-status-bar__agents">
         {activeRunning.length > 0 ? (

@@ -14,7 +14,7 @@ export interface MissionTargetVM {
 export type MissionPrimaryCta =
   | { kind: "open-setup"; label: string }
   | { kind: "parse-prd"; label: string; disabled: boolean }
-  | { kind: "generate-tasks"; label: string; disabled: boolean }
+  | { kind: "generate-tasks"; label: string; disabled: boolean; disabledReason?: string | null }
   | { kind: "write-trellis"; label: string; disabled: boolean }
   | { kind: "open-workflow"; label: string; workflowId: string | null; disabled: boolean };
 
@@ -71,6 +71,7 @@ export interface SwimlaneVM {
   groupLabel: string;
   isParallel: boolean;
   isBottleneck: boolean;
+  needsResplit: boolean;
   tasks: TaskCardVM[];
 }
 
@@ -98,6 +99,7 @@ export interface TaskCardVM {
   isPlaceholder: boolean;
   isManual: boolean;
   isEdited: boolean;
+  clusterNeedsResplit: boolean;
   executionState: null;
   evidence: null;
 }
@@ -175,6 +177,10 @@ export interface MissionViewModel {
   engineering: EngineeringDetailsVM;
   // Real-time state
   runState: MissionRunState;
+  resplit: {
+    clusterIds: string[];
+    count: number;
+  };
 }
 
 // ── Legacy / backward-compat types ──

@@ -204,6 +204,8 @@ function makeApi(state = makeState()): UseSplitWizardStateApi {
     addManualCluster: mock(() => {}),
     renameCluster: mock(() => {}),
     resetClusterPlanEdits: mock(() => {}),
+    markClusterNeedsResplit: mock(() => {}),
+    clearClusterNeedsResplit: mock(() => {}),
   };
 }
 

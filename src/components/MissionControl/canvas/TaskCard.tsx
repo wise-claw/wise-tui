@@ -79,6 +79,9 @@ export function TaskCard({ task, onSelect, onHover, onRemoveDependency, onRetryC
         {task.repositoryLabel ? (
           <Tag style={{ fontSize: 10, lineHeight: "16px" }}>{task.repositoryLabel}</Tag>
         ) : null}
+        {task.clusterNeedsResplit ? (
+          <Tag color="warning" style={{ fontSize: 10, lineHeight: "16px" }}>需重拆</Tag>
+        ) : null}
       </span>
 
       {/* PRD anchors */}

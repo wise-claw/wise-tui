@@ -292,6 +292,9 @@ export async function runSingleCluster(
       },
     };
     api.patchClusterRun(cluster.id, finalRun);
+    if (finalRun.status === "succeeded") {
+      api.clearClusterNeedsResplit(cluster.id);
+    }
     const terminalStatus = result.normalized && result.errors.length === 0 ? "succeeded" : "failed";
     const terminalMetadata = {
       ...assignmentMetadata,
@@ -855,6 +858,7 @@ function buildMissionSnapshot(
     diffByCluster: state.diffByCluster,
     reuseExistingParents: state.reuseExistingParents,
     dispatchOnlyDirty: state.dispatchOnlyDirty,
+    clusterNeedsResplit: state.clusterNeedsResplit,
     editsByCluster: state.editsByCluster,
     ...patch,
   };

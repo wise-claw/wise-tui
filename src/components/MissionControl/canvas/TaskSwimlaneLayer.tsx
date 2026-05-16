@@ -29,6 +29,7 @@ export function TaskSwimlaneLayer({ lane, onSelectTask, onHoverTask, onRemoveDep
         ) : null}
         <span className="mission-swimlane-layer__label">{lane.label}</span>
         {lane.isBottleneck ? <Tag color="red">瓶颈</Tag> : null}
+        {lane.needsResplit ? <Tag color="warning">需重新拆分</Tag> : null}
       </div>
       <div className="mission-swimlane-layer__cards">
         {lane.tasks.map((task) => (

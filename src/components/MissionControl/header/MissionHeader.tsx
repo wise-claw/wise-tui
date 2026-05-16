@@ -1,4 +1,4 @@
-import { Button, Space, Typography } from "antd";
+import { Button, Space, Tooltip, Typography } from "antd";
 import { ThunderboltOutlined, EditOutlined, SettingOutlined } from "@ant-design/icons";
 import type { MissionPrimaryCta, MissionViewModel } from "../presenter/types";
 import { MissionStatusBar } from "./MissionStatusBar";
@@ -11,6 +11,7 @@ interface MissionHeaderProps {
   onPrimaryCta: (cta: MissionPrimaryCta) => void;
   onRestart: () => void;
   onOpenEngineering: () => void;
+  onClearResplitFlags?: () => void;
 }
 
 export function MissionHeader({
@@ -20,6 +21,7 @@ export function MissionHeader({
   onPrimaryCta,
   onRestart,
   onOpenEngineering,
+  onClearResplitFlags,
 }: MissionHeaderProps) {
   const isDrafting = viewModel.phase === "drafting";
   // In drafting phase, the inline editor provides its own submit button.
@@ -40,6 +42,7 @@ export function MissionHeader({
       <MissionStatusBar
         missionId={activeMission?.missionId ?? null}
         runState={viewModel.runState}
+        resplitCount={viewModel.resplit.count}
       />
 
       <Space size={8} className="mission-header__actions">
@@ -54,16 +57,31 @@ export function MissionHeader({
           icon={<SettingOutlined />}
           onClick={onOpenEngineering}
         />
+        {viewModel.resplit.count > 0 && onClearResplitFlags ? (
+          <Tooltip title="保留当前拆分结果，允许继续生成任务">
+            <Button size="small" onClick={onClearResplitFlags}>
+              忽略重拆标记
+            </Button>
+          </Tooltip>
+        ) : null}
         {showCta && (
-          <Button
-            type="primary"
-            icon={<ThunderboltOutlined />}
-            loading={busy}
-            disabled={"disabled" in viewModel.primaryCta ? viewModel.primaryCta.disabled : false}
-            onClick={() => onPrimaryCta(viewModel.primaryCta)}
+          <Tooltip
+            title={
+              "disabledReason" in viewModel.primaryCta
+                ? viewModel.primaryCta.disabledReason ?? undefined
+                : undefined
+            }
           >
-            {viewModel.primaryCta.label}
-          </Button>
+            <Button
+              type="primary"
+              icon={<ThunderboltOutlined />}
+              loading={busy}
+              disabled={"disabled" in viewModel.primaryCta ? viewModel.primaryCta.disabled : false}
+              onClick={() => onPrimaryCta(viewModel.primaryCta)}
+            >
+              {viewModel.primaryCta.label}
+            </Button>
+          </Tooltip>
         )}
       </Space>
     </header>

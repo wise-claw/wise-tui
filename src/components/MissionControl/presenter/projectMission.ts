@@ -70,6 +70,7 @@ export function projectMission(input: ProjectMissionInput): MissionViewModel {
     dependencyTaskIdsByTaskId,
     requirementsIndex: state.requirementsIndex,
     editsByCluster: state.editsByCluster,
+    clusterNeedsResplit: state.clusterNeedsResplit,
     agentAssignments: input.agentAssignments ?? [],
   });
   const requirements = buildRequirementCards(state.requirementsIndex, projectedTasks, selection);
@@ -104,7 +105,7 @@ export function projectMission(input: ProjectMissionInput): MissionViewModel {
     },
     requirements,
     requirementTree,
-    taskSwimlane: buildTaskSwimlane(state.plan?.clusters ?? [], taskCards),
+    taskSwimlane: buildTaskSwimlane(state.plan?.clusters ?? [], taskCards, state.clusterNeedsResplit),
     taskGraph: {
       layers: buildLayers(state.plan?.clusters ?? [], taskCards),
     },
@@ -113,6 +114,12 @@ export function projectMission(input: ProjectMissionInput): MissionViewModel {
     selectedTaskDetail: selectedTaskEvidence,
     engineering: buildEngineeringDetails(state, repositories),
     runState: deriveRunState(state),
+    resplit: {
+      clusterIds: Object.entries(state.clusterNeedsResplit)
+        .filter(([, needsResplit]) => needsResplit)
+        .map(([clusterId]) => clusterId),
+      count: countClustersNeedingResplit(state),
+    },
   };
 }
 
@@ -163,6 +170,7 @@ function buildPhaseStrip(current: MissionPhase): MissionViewModel["phaseStrip"] 
 }
 
 function derivePrimaryCta(state: WizardState, phase: MissionPhase): MissionViewModel["primaryCta"] {
+  const resplitClusterCount = countClustersNeedingResplit(state);
   if (phase === "drafting") {
     if (state.prdMarkdown.trim() && state.project) {
       return { kind: "parse-prd", label: COPY.primaryCta.parsePrd, disabled: false };
@@ -184,10 +192,24 @@ function derivePrimaryCta(state: WizardState, phase: MissionPhase): MissionViewM
         disabled: !hasWritableCluster(state),
       };
     }
-    return { kind: "generate-tasks", label: COPY.primaryCta.generateTasks, disabled: !state.plan };
+    return {
+      kind: "generate-tasks",
+      label: COPY.primaryCta.generateTasks,
+      disabled: !state.plan || resplitClusterCount > 0,
+      ...(resplitClusterCount > 0
+        ? { disabledReason: `${resplitClusterCount} 个分组需要重新拆分或忽略` }
+        : {}),
+    };
   }
   if (phase === "planning") {
-    return { kind: "generate-tasks", label: COPY.primaryCta.generateTasks, disabled: !state.plan };
+    return {
+      kind: "generate-tasks",
+      label: COPY.primaryCta.generateTasks,
+      disabled: !state.plan || resplitClusterCount > 0,
+      ...(resplitClusterCount > 0
+        ? { disabledReason: `${resplitClusterCount} 个分组需要重新拆分或忽略` }
+        : {}),
+    };
   }
   if (phase === "verifying") {
     return {
@@ -206,6 +228,10 @@ function derivePrimaryCta(state: WizardState, phase: MissionPhase): MissionViewM
 
 function hasWritableCluster(state: WizardState): boolean {
   return Object.values(state.clusterRuns).some((run) => run.status === "succeeded" && run.normalized);
+}
+
+function countClustersNeedingResplit(state: WizardState): number {
+  return Object.values(state.clusterNeedsResplit).filter(Boolean).length;
 }
 
 function projectTasks(state: WizardState): InternalTaskProjection[] {
@@ -389,6 +415,7 @@ function buildTaskCards(input: {
   dependencyTaskIdsByTaskId: Map<string, string[]>;
   requirementsIndex: RequirementsIndexV2 | null;
   editsByCluster: Record<string, ClusterEditState>;
+  clusterNeedsResplit: Record<string, boolean>;
   agentAssignments: MissionAgentProjection[];
 }): TaskCardVM[] {
   const repoById = new Map(input.repositories.map((repo) => [repo.id, repo]));
@@ -461,6 +488,7 @@ function buildTaskCards(input: {
       prdAnchorTags: derivePrdAnchorTags(item, input.requirementsIndex),
       agentStatus: deriveAgentChip(item, assignment),
       clusterId: item.cluster.id,
+      clusterNeedsResplit: Boolean(input.clusterNeedsResplit[item.cluster.id]),
       dependencyTaskIds: depIds,
       editableDependencyTaskIds: item.task.dependencies.filter((id) => depIds.includes(id)),
       dependencyLabels,
@@ -565,7 +593,11 @@ function deriveRequirementPriority(
 
 // ── Task swimlane (new) ──
 
-function buildTaskSwimlane(clusters: ClusterPlanItem[], taskCards: TaskCardVM[]): SwimlaneVM[] {
+function buildTaskSwimlane(
+  clusters: ClusterPlanItem[],
+  taskCards: TaskCardVM[],
+  clusterNeedsResplit: Record<string, boolean>,
+): SwimlaneVM[] {
   const clusterLayer = assignClusterLayers(clusters);
   const maxLayer = Math.max(0, ...Array.from(clusterLayer.values()));
   const swimlanes: SwimlaneVM[] = [];
@@ -587,6 +619,7 @@ function buildTaskSwimlane(clusters: ClusterPlanItem[], taskCards: TaskCardVM[])
       groupLabel,
       isParallel,
       isBottleneck: hasBlocked,
+      needsResplit: layerClusters.some((cluster) => Boolean(clusterNeedsResplit[cluster.id])),
       tasks,
     });
   }

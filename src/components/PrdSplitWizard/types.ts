@@ -145,6 +145,8 @@ export interface WizardState {
   reuseExistingParents: boolean;
   /** dispatch 行为开关：跳过 unchanged cluster（默认 true 当存在 unchanged）。 */
   dispatchOnlyDirty: boolean;
+  /** Clusters invalidated by requirement reassignment and requiring explicit resplit or ignore. */
+  clusterNeedsResplit: Record<string, boolean>;
   /** Review 阶段的人工编辑；按 clusterId 隔离。 */
   editsByCluster: Record<string, ClusterEditState>;
 }
@@ -171,6 +173,7 @@ export function emptyWizardState(): WizardState {
     diffByCluster: {},
     reuseExistingParents: true,
     dispatchOnlyDirty: true,
+    clusterNeedsResplit: {},
     editsByCluster: {},
   };
 }

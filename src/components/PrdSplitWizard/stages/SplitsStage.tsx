@@ -23,6 +23,10 @@ export function SplitsStage({ api }: Props) {
   const [dispatching, setDispatching] = useState(false);
 
   const clusters = state.plan?.clusters ?? [];
+  const resplitClusterIds = useMemo(
+    () => Object.entries(state.clusterNeedsResplit).filter(([, needsResplit]) => needsResplit).map(([id]) => id),
+    [state.clusterNeedsResplit],
+  );
   const isRepoMode = state.context?.mode === "repository";
   const hasBaseline = (state.existingParents?.size ?? 0) > 0;
   const unchangedCount = useMemo(
@@ -85,6 +89,14 @@ export function SplitsStage({ api }: Props) {
       {state.globalError ? (
         <Alert type="error" showIcon message="生成失败" description={state.globalError} />
       ) : null}
+      {resplitClusterIds.length > 0 ? (
+        <Alert
+          type="warning"
+          showIcon
+          message="需求归属已调整，部分分组需要重新拆分"
+          description={`请先处理 ${resplitClusterIds.join(", ")}，或在 Mission Control 中忽略该标记后再生成任务。`}
+        />
+      ) : null}
 
       {hasBaseline ? (
         <Space orientation="vertical" size={4}>
@@ -108,7 +120,7 @@ export function SplitsStage({ api }: Props) {
         <Button
           type="primary"
           icon={<PlayCircleOutlined />}
-          disabled={dispatching}
+          disabled={dispatching || resplitClusterIds.length > 0}
           loading={dispatching}
           onClick={runAll}
         >

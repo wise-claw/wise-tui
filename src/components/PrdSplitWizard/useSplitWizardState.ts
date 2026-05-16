@@ -74,6 +74,8 @@ export type Action =
   | { type: "undo-reassign"; requirementId: string }
   | { type: "add-manual-cluster"; cluster: ClusterPlanItem }
   | { type: "rename-cluster"; clusterId: string; title: string }
+  | { type: "mark-cluster-needs-resplit"; clusterId: string }
+  | { type: "clear-cluster-needs-resplit"; clusterId: string }
   | { type: "reset-cluster-plan-edits" };
 
 export function reducer(state: WizardState, action: Action): WizardState {
@@ -109,6 +111,7 @@ export function reducer(state: WizardState, action: Action): WizardState {
         ),
         existingParents: null,
         diffByCluster: {},
+        clusterNeedsResplit: {},
         globalError: null,
         editsByCluster: {},
         writeResults: [],
@@ -307,6 +310,7 @@ export function reducer(state: WizardState, action: Action): WizardState {
         clusterRuns: {},
         existingParents: null,
         diffByCluster: {},
+        clusterNeedsResplit: {},
         editsByCluster: {},
         writeResults: [],
         workflowGraphResult: null,
@@ -374,9 +378,22 @@ export function reducer(state: WizardState, action: Action): WizardState {
       const nextEdits = { ...state.clusterPlanEdits, titleOverrides: nextOverrides };
       return withDerivedPlan({ ...state, clusterPlanEdits: nextEdits });
     }
+    case "mark-cluster-needs-resplit":
+      return {
+        ...state,
+        clusterNeedsResplit: { ...state.clusterNeedsResplit, [action.clusterId]: true },
+      };
+    case "clear-cluster-needs-resplit": {
+      const { [action.clusterId]: _, ...rest } = state.clusterNeedsResplit;
+      return { ...state, clusterNeedsResplit: rest };
+    }
     case "reset-cluster-plan-edits": {
       if (!state.basePlan) return state;
-      return withDerivedPlan({ ...state, clusterPlanEdits: emptyClusterPlanEdits() });
+      return withDerivedPlan({
+        ...state,
+        clusterPlanEdits: emptyClusterPlanEdits(),
+        clusterNeedsResplit: {},
+      });
     }
     default:
       return state;
@@ -463,6 +480,8 @@ export interface UseSplitWizardStateApi {
   undoReassign(requirementId: string): void;
   addManualCluster(cluster: ClusterPlanItem): void;
   renameCluster(clusterId: string, title: string): void;
+  markClusterNeedsResplit(clusterId: string): void;
+  clearClusterNeedsResplit(clusterId: string): void;
   resetClusterPlanEdits(): void;
 }
 
@@ -609,6 +628,8 @@ export function useSplitWizardState(): UseSplitWizardStateApi {
       undoReassign: (requirementId) => dispatch({ type: "undo-reassign", requirementId }),
       addManualCluster: (cluster) => dispatch({ type: "add-manual-cluster", cluster }),
       renameCluster: (clusterId, title) => dispatch({ type: "rename-cluster", clusterId, title }),
+      markClusterNeedsResplit: (clusterId) => dispatch({ type: "mark-cluster-needs-resplit", clusterId }),
+      clearClusterNeedsResplit: (clusterId) => dispatch({ type: "clear-cluster-needs-resplit", clusterId }),
       resetClusterPlanEdits: () => dispatch({ type: "reset-cluster-plan-edits" }),
     }),
     [state, parseAndPlan, refreshExistingParents],

@@ -23,6 +23,10 @@ import {
   writeMissionToTrellis,
 } from "./actions/runMissionActions";
 import { recordMissionPlanningMutation } from "../../services/missionControlBackend";
+import {
+  moveRequirementWithImpactPreview,
+  reassignRequirementFlowDeps,
+} from "./actions/reassignRequirementFlow";
 import { useAgentAssignments } from "../../hooks/useAgentAssignments";
 import { useSplitterStream } from "./actions/splitterStreamListener";
 import { useMissionRunStore, type BackgroundRunState } from "./actions/useMissionRunStore";
@@ -238,6 +242,12 @@ export function MissionControl({
         return;
       }
       if (cta.kind === "generate-tasks") {
+        if (cta.disabled) {
+          if (cta.disabledReason) {
+            message.warning(cta.disabledReason);
+          }
+          return;
+        }
         api.goToDispatch();
         setBusy(true);
         try {
@@ -331,10 +341,29 @@ export function MissionControl({
     setWorkspaceMode("editor");
   }, []);
 
+  const handleClearResplitFlags = useCallback(() => {
+    for (const clusterId of viewModel.resplit.clusterIds) {
+      api.clearClusterNeedsResplit(clusterId);
+    }
+    message.info("已忽略重拆标记，可继续生成任务");
+  }, [api, message, viewModel.resplit.clusterIds]);
+
   const handleMoveRequirement = useCallback(
     (requirementId: string, targetClusterId: string) => {
-      api.reassignRequirement(requirementId, targetClusterId);
-      message.success("需求已重新分配");
+      void moveRequirementWithImpactPreview(
+        {
+          api,
+          missionId: api.state.activeMissionId,
+          requirementId,
+          targetClusterId,
+        },
+        {
+          ...reassignRequirementFlowDeps,
+          confirm: Modal.confirm,
+          success: message.success,
+          error: message.error,
+        },
+      );
     },
     [api, message],
   );
@@ -398,6 +427,7 @@ export function MissionControl({
         onPrimaryCta={handlePrimaryCta}
         onRestart={handleRestart}
         onOpenEngineering={() => setEngineeringOpen(true)}
+        onClearResplitFlags={handleClearResplitFlags}
       />
       <Button
         className="mission-close-btn"

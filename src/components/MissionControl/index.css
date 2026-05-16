@@ -260,6 +260,34 @@
   color: var(--mission-dim);
 }
 
+.mission-reassign-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 560px;
+}
+
+.mission-reassign-preview__stats {
+  padding: 8px;
+  border: 1px solid var(--mission-border);
+  border-radius: 8px;
+  background: var(--mission-surface-muted);
+}
+
+.mission-reassign-preview__section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mission-reassign-preview__tags,
+.mission-reassign-preview__agent-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
 /* ── Agent Ownership Graph ── */
 
 .ownership-graph {

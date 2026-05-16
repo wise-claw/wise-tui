@@ -1,4 +1,4 @@
-import { Empty } from "antd";
+import { Empty, Tag } from "antd";
 import { ApartmentOutlined } from "@ant-design/icons";
 import { COPY } from "../copy";
 import type { SwimlaneVM } from "../presenter/types";
@@ -28,6 +28,9 @@ export function TaskSwimlane({ swimlane, hasHighlightedPath, onSelectTask, onHov
         </span>
         <span className="mission-column__hint">
           {parallelCount > 0 ? `${parallelCount} 组可并行` : `${taskCount} 个任务`}
+          {swimlane.some((lane) => lane.needsResplit) ? (
+            <Tag color="warning" style={{ marginInlineStart: 8 }}>需重拆</Tag>
+          ) : null}
         </span>
       </div>
       <div className="mission-column__scroll mission-column__scroll--swimlane">
