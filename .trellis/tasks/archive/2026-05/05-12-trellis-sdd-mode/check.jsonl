@@ -1,0 +1,4 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend quality gate commands and layer ownership for verification."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Review checklist for workflow orchestration and UI changes."}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Strict TypeScript contract review for repository-member metadata."}
+{"file":".trellis/spec/guides/commit-hygiene.md","reason":"Ensure commit scope excludes unrelated task/runtime files."}

@@ -1,0 +1,10 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Verify all changes follow layered structure; routing helper + entry-point wiring + UI hide rules slot into the documented surfaces."}
+{"file":".trellis/spec/frontend/state-management.md","reason":"Verify workspaceMode is the only routing gate; no duplicate sources of truth; activeProjectId/activeRepositoryId reset paths consistent across multi_repo / single_repo / floating."}
+{"file":".trellis/spec/frontend/hook-guidelines.md","reason":"Verify useWorkspaceMode usage is pure-derived; new helper has no side effects; useCallback dep arrays exhaustive."}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Verify discriminated union exhaustiveness in switch / narrowing; no `any` / unchecked casts at the boundary."}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Verify LeftSidebar / ClaudeSessions changes do not introduce direct invoke calls; all IPC goes through services."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Verify §3 hide-rule precedent extended consistently to repo-row chat icon hide and sessions panel filter."}
+{"file":".trellis/spec/tauri/ipc-guidelines.md","reason":"Confirm no new IPC command was added."}
+{"file":".trellis/spec/tauri/persistence-and-migrations.md","reason":"Confirm no new migration added; legacy per-repo session rows untouched."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Verify single-direction layering preserved; helper layer feeds AppImpl orchestration only."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Verify resolveProjectMainSessionAnchor / bindRepositoryMainSession / pickSessionForRepositorySidebarSelect reused; no parallel anchor or binding logic introduced."}

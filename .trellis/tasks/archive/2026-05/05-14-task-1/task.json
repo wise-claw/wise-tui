@@ -1,0 +1,40 @@
+{
+  "assignee": "xuning",
+  "base_branch": "main",
+  "branch": null,
+  "children": [],
+  "clusterId": "cluster-manual-frontend-1778725724139-1",
+  "commit": null,
+  "completedAt": "2026-05-16",
+  "createdAt": "2026-05-14",
+  "creator": "xuning",
+  "description": "Source requirements: req-functional-1",
+  "dev_type": "frontend",
+  "id": "task-1",
+  "meta": {
+    "childDependencies": [],
+    "sourceRequirementIds": [
+      "req-functional-1"
+    ],
+    "taskAnchors": {
+      "contextAfter": "\n",
+      "contextBefore": "来源：markdown\n\n## 功能需求\n\n### 1\n\n# 选中片段\n来源：markdown\n\n## 功能需求\n\n### 1\n\n优化后端的rust调用逻辑\n\n",
+      "from": 87,
+      "textHash": "621a793387bb2218",
+      "to": 98
+    }
+  },
+  "name": "task-1",
+  "notes": "",
+  "package": null,
+  "parent": null,
+  "pr_url": null,
+  "priority": "P2",
+  "relatedFiles": [],
+  "repositoryId": 1778725724139,
+  "scope": null,
+  "status": "completed",
+  "subtasks": [],
+  "title": "增加前端背景色切换能力",
+  "worktree_path": null
+}
