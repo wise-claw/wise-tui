@@ -103,15 +103,16 @@ export function MissionControl({
     if (!activeMission?.missionId || !api.state.project) return;
     if (activeMission.stage === "done" || activeMission.stage === "input") return;
     const missionId = activeMission.missionId;
+    const isFreshOpen = Boolean(initialTarget?.projectId) || initialTarget?.repositoryId != null;
     getMissionSnapshot(missionId)
       .then((snapshot) => {
         if (!snapshot?.snapshot) return;
         const s = snapshot.snapshot as Record<string, unknown>;
-        // Recover PRD markdown if available
         if (typeof s.prdMarkdown === "string" && s.prdMarkdown.trim()) {
           api.setPrdMarkdown(s.prdMarkdown);
-          setWorkspaceMode("editor");
-          // Auto-parse if there was a plan
+          if (!isFreshOpen) {
+            setWorkspaceMode("editor");
+          }
           if (typeof s.requirementsIndex === "object" && s.requirementsIndex != null) {
             api.parseAndPlan();
           }
