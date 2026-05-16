@@ -51,6 +51,23 @@ describe("missionControlBackend service", () => {
     });
   });
 
+  test("defaults assignment stale threshold to 90 seconds", async () => {
+    const { listMissionAgentAssignments } = await import("./missionControlBackend");
+
+    await listMissionAgentAssignments({
+      missionId: "m1",
+      includeCompleted: false,
+    });
+
+    expect(invoke).toHaveBeenCalledWith("mission_list_agent_assignments", {
+      input: {
+        missionId: "m1",
+        includeCompleted: false,
+        staleAfterMs: 90_000,
+      },
+    });
+  });
+
   test("wraps requirement reassignment preview and commit commands", async () => {
     const { commitRequirementReassign, previewRequirementReassign } = await import(
       "./missionControlBackend"

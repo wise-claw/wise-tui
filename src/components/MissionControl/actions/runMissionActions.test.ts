@@ -67,7 +67,20 @@ const createOrResumeMission = mock(async () => ({
 }));
 const trellisRuntimeUpsertAgentRunSafe = mock(async () => ({}));
 const trellisRuntimeRecordEventSafe = mock(async () => ({}));
+const trellisAgentHeartbeat = mock(async () => true);
 
+mock.module("antd", () => ({
+  message: {
+    success: mock(() => {}),
+    warning: mock(() => {}),
+  },
+}));
+mock.module("antd/lib/index.js", () => ({
+  message: {
+    success: mock(() => {}),
+    warning: mock(() => {}),
+  },
+}));
 mock.module("../../../services/prdSplit/splitterDispatch", () => ({
   dispatchClusterSplit,
 }));
@@ -85,6 +98,7 @@ mock.module("../../../services/missionControlBackend", () => ({
   upsertMissionAgentAssignment,
 }));
 mock.module("../../../services/trellisRuntime", () => ({
+  trellisAgentHeartbeat,
   trellisRuntimeRecordEventSafe,
   trellisRuntimeUpsertAgentRunSafe,
 }));
@@ -199,6 +213,7 @@ describe("runMissionActions · runtime ledger parity", () => {
       dispatchClusterSplit,
       markChildrenPlanning,
       renderParentPrd,
+      trellisAgentHeartbeat,
       trellisRuntimeRecordEventSafe,
       trellisRuntimeUpsertAgentRunSafe,
       upsertMissionAgentAssignment,
@@ -274,5 +289,73 @@ describe("runMissionActions · runtime ledger parity", () => {
     expect(upsertMissionAgentAssignment).not.toHaveBeenCalled();
     expect(trellisRuntimeUpsertAgentRunSafe).not.toHaveBeenCalled();
     expect(trellisRuntimeRecordEventSafe).not.toHaveBeenCalled();
+  });
+
+  test("runSingleCluster sends heartbeat while splitter dispatch is pending", async () => {
+    const { runSingleCluster } = await import("./runMissionActions");
+    const state = makeState({ activeMissionId: "mission-p1-hash" });
+    const api = makeApi(state);
+    let finishDispatch!: () => void;
+    dispatchClusterSplit.mockImplementationOnce(async () => {
+      await new Promise<void>((resolve) => {
+        finishDispatch = resolve;
+      });
+      return {
+        raw: {
+          runId: "run-1",
+          runDir: "/tmp/run-1",
+          exitCode: 0,
+          durationMs: 10,
+          stdoutPath: "/tmp/run-1/claude.stdout.log",
+          stderrPath: "/tmp/run-1/claude.stderr.log",
+          rawResultPath: "/tmp/run-1/split-result.raw.json",
+          rawOutput: { tasks: [] },
+          stdoutTruncatedPreview: "",
+          claudeSessionId: "claude-session-1",
+        },
+        normalized: {
+          source: null,
+          context: null,
+          splitTasks: [],
+          executableTasks: [],
+          criticalPath: [],
+          parallelGroups: [],
+          unmetPreconditions: [],
+        },
+        validationIssues: [],
+        errors: [],
+      };
+    });
+
+    const originalSetInterval = globalThis.setInterval;
+    const originalClearInterval = globalThis.clearInterval;
+    let intervalCallback: (() => void) | null = null;
+    let cleared = false;
+    globalThis.setInterval = ((callback: TimerHandler, delay?: number) => {
+      expect(delay).toBe(30_000);
+      intervalCallback = typeof callback === "function" ? callback as () => void : () => {};
+      return 123 as unknown as ReturnType<typeof setInterval>;
+    }) as typeof setInterval;
+    globalThis.clearInterval = ((timerId?: number) => {
+      expect(timerId).toBe(123);
+      cleared = true;
+    }) as typeof clearInterval;
+
+    try {
+      const running = runSingleCluster(state.plan!.clusters[0], state, api, state.activeMissionId);
+      for (let i = 0; i < 10 && !intervalCallback; i += 1) {
+        await Promise.resolve();
+      }
+      expect(intervalCallback).not.toBeNull();
+      intervalCallback?.();
+      await Promise.resolve();
+      expect(trellisAgentHeartbeat).toHaveBeenCalledWith("mission-p1-hash-cluster-fe-splitter");
+      finishDispatch();
+      await running;
+      expect(cleared).toBe(true);
+    } finally {
+      globalThis.setInterval = originalSetInterval;
+      globalThis.clearInterval = originalClearInterval;
+    }
   });
 });

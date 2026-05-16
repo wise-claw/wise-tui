@@ -343,6 +343,10 @@ export function upsertTrellisAgentRun(input: TrellisAgentRunInput): Promise<Trel
   return invoke<TrellisAgentRun>("trellis_runtime_upsert_agent_run", { input });
 }
 
+export function trellisAgentHeartbeat(agentRunId: string): Promise<boolean> {
+  return invoke<boolean>("trellis_agent_heartbeat", { agentRunId });
+}
+
 export async function trellisRuntimeUpsertAgentRunSafe(
   missionId: string | null | undefined,
   input: TrellisAgentRunInput | null | undefined,

@@ -31,13 +31,27 @@ export interface ClusterRunState {
   clusterId: string;
   parentTaskName: string | null;
   parentTaskPath: string | null;
-  status: "idle" | "skipped-clean" | "creating-parent" | "dispatching" | "succeeded" | "failed";
+  status: "idle" | "skipped-clean" | "creating-parent" | "dispatching" | "succeeded" | "failed" | "stale";
   raw?: DispatchClusterRawOutput;
   normalized?: SplitResult;
   validationIssues?: ClaudeSplitStrictValidationIssue[];
   errors: string[];
   startedAt?: number;
   endedAt?: number;
+  progress?: ClusterRunProgressSnapshot;
+}
+
+export interface ClusterRunProgressSnapshot {
+  status: "queued" | "running" | "succeeded" | "failed" | "skipped";
+  progressPercent: number;
+  stageLabel: string;
+  elapsedMs: number;
+  error: {
+    summary: string;
+    exitCode: number | null;
+    stdoutPath: string;
+    stderrPath: string;
+  } | null;
 }
 
 export interface WizardWriteResult {

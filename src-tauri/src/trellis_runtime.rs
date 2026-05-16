@@ -4,12 +4,12 @@ use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::Emitter;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tauri::{Emitter, Manager};
 use uuid::Uuid;
 use walkdir::WalkDir;
 
@@ -17,6 +17,10 @@ const TRELLIS_RUNTIME_EVENT: &str = "trellis-runtime-event";
 const MAX_COMMAND_OUTPUT_BYTES: usize = 16 * 1024;
 const MAX_SPEC_CONTENT_BYTES: usize = 512 * 1024;
 const SNAPSHOT_PREVIEW_BYTES: usize = 512;
+const AGENT_HEARTBEAT_THROTTLE_MS: i64 = 5_000;
+const AGENT_STALE_AFTER_MS: i64 = 90_000;
+const AGENT_STALE_EVENT_THROTTLE_MS: i64 = 60_000;
+const AGENT_STALE_SCANNER_INTERVAL_SECS: u64 = 30;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -612,6 +616,15 @@ pub(crate) fn trellis_runtime_upsert_agent_run(
     )?;
     let _ = app.emit(TRELLIS_RUNTIME_EVENT, &event);
     read_agent_run(&db, &agent_run_id)?.ok_or_else(|| "Trellis agent run 未找到".to_string())
+}
+
+#[tauri::command]
+pub(crate) fn trellis_agent_heartbeat(
+    app: tauri::AppHandle,
+    db: tauri::State<'_, wise_db::WiseDb>,
+    agent_run_id: String,
+) -> Result<bool, String> {
+    heartbeat_agent_run(Some(&app), &db, &agent_run_id, unix_now_ms())
 }
 
 #[tauri::command]
@@ -1331,6 +1344,207 @@ fn list_agent_runs(
         out.push(row.map_err(|e| e.to_string())?);
     }
     Ok(out)
+}
+
+fn heartbeat_agent_run(
+    app: Option<&tauri::AppHandle>,
+    db: &wise_db::WiseDb,
+    agent_run_id: &str,
+    now: i64,
+) -> Result<bool, String> {
+    let agent_run_id = required(agent_run_id.to_string(), "agentRunId")?;
+    let row = {
+        let g = db.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let updated = g
+            .execute(
+                "UPDATE trellis_agent_runs
+                 SET last_heartbeat_at = ?1,
+                     updated_at = ?1,
+                     status = CASE WHEN status = 'stale' THEN 'running' ELSE status END
+                 WHERE agent_run_id = ?2
+                   AND status IN ('running','stale')
+                   AND (?1 - last_heartbeat_at) >= ?3",
+                params![now, agent_run_id, AGENT_HEARTBEAT_THROTTLE_MS],
+            )
+            .map_err(|e| e.to_string())?;
+        if updated == 0 {
+            return Ok(false);
+        }
+        g.execute(
+            "UPDATE mission_agent_assignments
+             SET last_heartbeat_at = ?1,
+                 updated_at = ?1,
+                 status = CASE WHEN status = 'stale' THEN 'running' ELSE status END
+             WHERE agent_run_id = ?2
+               AND status NOT IN ('succeeded','failed','cancelled','completed')",
+            params![now, agent_run_id],
+        )
+        .map_err(|e| e.to_string())?;
+        g.query_row(
+            agent_run_select("WHERE agent_run_id = ?1").as_str(),
+            params![agent_run_id],
+            agent_run_from_row,
+        )
+        .optional()
+        .map_err(|e| e.to_string())?
+    };
+    let Some(row) = row else {
+        return Ok(false);
+    };
+    let event = insert_runtime_event(
+        db,
+        TrellisRuntimeRecordEventInput {
+            event_id: None,
+            project_id: row.project_id.clone(),
+            root_path: row.root_path.clone(),
+            session_id: row.session_id.clone(),
+            task_path: row.task_path.clone(),
+            task_id: row.task_id.clone(),
+            event_kind: "trellis.agent.heartbeat".to_string(),
+            platform: Some("wise".to_string()),
+            actor: Some(row.agent_type.clone()),
+            correlation_id: Some(row.agent_run_id.clone()),
+            parent_event_id: None,
+            payload: Some(json!({
+                "agentRunId": row.agent_run_id,
+                "status": row.status,
+                "lastHeartbeatAt": row.last_heartbeat_at,
+            })),
+            created_at: Some(now),
+        },
+    )?;
+    if let Some(app) = app {
+        let _ = app.emit(TRELLIS_RUNTIME_EVENT, &event);
+    }
+    Ok(true)
+}
+
+pub(crate) fn spawn_stale_scanner(app: tauri::AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        let mut last_emit_by_agent = HashMap::<String, i64>::new();
+        loop {
+            tokio::time::sleep(Duration::from_secs(AGENT_STALE_SCANNER_INTERVAL_SECS)).await;
+            if let Err(error) = scan_stale_agent_runs(&app, &mut last_emit_by_agent) {
+                eprintln!("[trellis_runtime] stale scanner failed: {error}");
+            }
+        }
+    });
+}
+
+fn scan_stale_agent_runs(
+    app: &tauri::AppHandle,
+    last_emit_by_agent: &mut HashMap<String, i64>,
+) -> Result<usize, String> {
+    let Some(db) = app.try_state::<wise_db::WiseDb>() else {
+        return Ok(0);
+    };
+    mark_stale_agent_runs(
+        Some(app),
+        &db,
+        unix_now_ms(),
+        AGENT_STALE_AFTER_MS,
+        AGENT_STALE_EVENT_THROTTLE_MS,
+        last_emit_by_agent,
+    )
+}
+
+fn mark_stale_agent_runs(
+    app: Option<&tauri::AppHandle>,
+    db: &wise_db::WiseDb,
+    now: i64,
+    stale_after_ms: i64,
+    event_throttle_ms: i64,
+    last_emit_by_agent: &mut HashMap<String, i64>,
+) -> Result<usize, String> {
+    if stale_after_ms <= 0 {
+        return Ok(0);
+    }
+    let stale_rows = {
+        let g = db.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let mut stmt = g
+            .prepare(
+                agent_run_select(
+                    "WHERE status = 'running'
+                       AND (?1 - last_heartbeat_at) > ?2
+                     ORDER BY last_heartbeat_at ASC",
+                )
+                .as_str(),
+            )
+            .map_err(|e| e.to_string())?;
+        let mapped = stmt
+            .query_map(params![now, stale_after_ms], agent_run_from_row)
+            .map_err(|e| e.to_string())?;
+        let mut rows = Vec::new();
+        for row in mapped {
+            rows.push(row.map_err(|e| e.to_string())?);
+        }
+        rows
+    };
+    let mut marked = 0usize;
+    for row in stale_rows {
+        let updated = {
+            let g = db.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+            let updated = g
+                .execute(
+                    "UPDATE trellis_agent_runs
+                     SET status = 'stale', updated_at = ?1
+                     WHERE agent_run_id = ?2 AND status = 'running'",
+                    params![now, row.agent_run_id],
+                )
+                .map_err(|e| e.to_string())?;
+            if updated > 0 {
+                g.execute(
+                    "UPDATE mission_agent_assignments
+                     SET status = 'stale', updated_at = ?1
+                     WHERE agent_run_id = ?2
+                       AND status NOT IN ('succeeded','failed','cancelled','completed')",
+                    params![now, row.agent_run_id],
+                )
+                .map_err(|e| e.to_string())?;
+            }
+            updated
+        };
+        if updated == 0 {
+            continue;
+        }
+        marked += 1;
+        let last_emit = last_emit_by_agent
+            .get(&row.agent_run_id)
+            .copied()
+            .unwrap_or(0);
+        if now.saturating_sub(last_emit) < event_throttle_ms {
+            continue;
+        }
+        last_emit_by_agent.insert(row.agent_run_id.clone(), now);
+        let event = insert_runtime_event(
+            db,
+            TrellisRuntimeRecordEventInput {
+                event_id: None,
+                project_id: row.project_id.clone(),
+                root_path: row.root_path.clone(),
+                session_id: row.session_id.clone(),
+                task_path: row.task_path.clone(),
+                task_id: row.task_id.clone(),
+                event_kind: "trellis.agent.stale".to_string(),
+                platform: Some("wise".to_string()),
+                actor: Some(row.agent_type.clone()),
+                correlation_id: Some(row.agent_run_id.clone()),
+                parent_event_id: None,
+                payload: Some(json!({
+                    "agentRunId": row.agent_run_id,
+                    "agentType": row.agent_type,
+                    "stage": row.stage,
+                    "lastHeartbeatAt": row.last_heartbeat_at,
+                    "staleAfterMs": stale_after_ms,
+                })),
+                created_at: Some(now),
+            },
+        )?;
+        if let Some(app) = app {
+            let _ = app.emit(TRELLIS_RUNTIME_EVENT, &event);
+        }
+    }
+    Ok(marked)
 }
 
 fn agent_run_select(where_clause: &str) -> String {
@@ -2160,4 +2374,189 @@ Text.
             .expect("apply runtime migration");
         wise_db::WiseDb(Mutex::new(conn))
     }
+
+    fn mission_runtime_test_db() -> wise_db::WiseDb {
+        let conn = Connection::open_in_memory().expect("open in-memory sqlite");
+        conn.execute_batch(include_str!("../migrations/020_mission_control.sql"))
+            .expect("apply mission_control migration");
+        conn.execute_batch(include_str!("../migrations/021_mission_control_planning_evidence.sql"))
+            .expect("apply mission_control planning evidence migration");
+        conn.execute_batch(include_str!("../migrations/022_trellis_runtime.sql"))
+            .expect("apply runtime migration");
+        wise_db::WiseDb(Mutex::new(conn))
+    }
+
+    fn seed_running_agent_run(db: &wise_db::WiseDb, agent_run_id: &str, started_at: i64) {
+        fs::create_dir_all("/tmp/wise-test-root").expect("create test root");
+        let g = db.0.lock().expect("lock db");
+        g.execute(
+            "INSERT INTO mission_runs (
+               mission_id, root_path, title, stage, status, snapshot_json, created_at, updated_at
+             )
+             VALUES ('mission-test', ?1, 'Mission', 'dispatch', 'running', '{}', ?2, ?2)
+             ON CONFLICT(mission_id) DO NOTHING",
+            params!["/tmp/wise-test-root", started_at],
+        )
+        .expect("seed mission row");
+        g.execute(
+            "INSERT INTO trellis_agent_runs (
+               agent_run_id, project_id, root_path, session_id, task_path, task_id, repository_id,
+               repository_path, agent_type, stage, status, current_file, started_at, updated_at,
+               completed_at, last_heartbeat_at, metadata_json
+             )
+             VALUES (?1, NULL, ?2, NULL, NULL, NULL, NULL, NULL, 'trellis-splitter', 'split',
+                     'running', NULL, ?3, ?3, NULL, ?3, '{}')",
+            params![agent_run_id, "/tmp/wise-test-root", started_at],
+        )
+        .expect("seed trellis_agent_runs row");
+        g.execute(
+            "INSERT INTO mission_agent_assignments (
+               assignment_id, mission_id, agent_run_id, agent_type, stage, status, started_at,
+               updated_at, last_heartbeat_at, metadata_json
+             )
+             VALUES (?1, 'mission-test', ?1, 'trellis-splitter', 'split', 'running', ?2, ?2, ?2, '{}')",
+            params![agent_run_id, started_at],
+        )
+        .expect("seed mission_agent_assignments row");
+    }
+
+    fn read_heartbeat_status(db: &wise_db::WiseDb, agent_run_id: &str) -> (i64, String) {
+        let g = db.0.lock().expect("lock db");
+        g.query_row(
+            "SELECT last_heartbeat_at, status FROM trellis_agent_runs WHERE agent_run_id = ?1",
+            params![agent_run_id],
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
+        )
+        .expect("read heartbeat row")
+    }
+
+    fn read_assignment_heartbeat_status(db: &wise_db::WiseDb, agent_run_id: &str) -> (i64, String) {
+        let g = db.0.lock().expect("lock db");
+        g.query_row(
+            "SELECT last_heartbeat_at, status FROM mission_agent_assignments WHERE agent_run_id = ?1",
+            params![agent_run_id],
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
+        )
+        .expect("read assignment heartbeat row")
+    }
+
+    fn count_events(db: &wise_db::WiseDb, event_kind: &str) -> i64 {
+        let g = db.0.lock().expect("lock db");
+        g.query_row(
+            "SELECT COUNT(*) FROM trellis_runtime_events WHERE event_kind = ?1",
+            params![event_kind],
+            |row| row.get::<_, i64>(0),
+        )
+        .expect("count events")
+    }
+
+    #[test]
+    fn heartbeat_throttle_rejects_calls_within_window() {
+        let db = mission_runtime_test_db();
+        let agent_run_id = "agent-heartbeat-1";
+        let now = 10_000_000_i64;
+        seed_running_agent_run(&db, agent_run_id, now);
+
+        assert!(
+            heartbeat_agent_run(None, &db, agent_run_id, now + 6_000).expect("first heartbeat"),
+            "first call past throttle should update",
+        );
+        assert!(
+            !heartbeat_agent_run(None, &db, agent_run_id, now + 8_000).expect("second heartbeat"),
+            "within 5s window: must not update",
+        );
+        assert!(
+            heartbeat_agent_run(None, &db, agent_run_id, now + 11_000).expect("third heartbeat"),
+            "5s past first: must update",
+        );
+
+        let (last_heartbeat_at, status) = read_heartbeat_status(&db, agent_run_id);
+        assert_eq!(last_heartbeat_at, now + 11_000);
+        assert_eq!(status, "running");
+        let (assignment_heartbeat_at, assignment_status) = read_assignment_heartbeat_status(&db, agent_run_id);
+        assert_eq!(assignment_heartbeat_at, now + 11_000);
+        assert_eq!(assignment_status, "running");
+        assert_eq!(count_events(&db, "trellis.agent.heartbeat"), 2);
+    }
+
+    #[test]
+    fn heartbeat_revives_stale_status() {
+        let db = mission_runtime_test_db();
+        let agent_run_id = "agent-heartbeat-revive";
+        let now = 20_000_000_i64;
+        seed_running_agent_run(&db, agent_run_id, now);
+        {
+            let g = db.0.lock().expect("lock");
+            g.execute(
+                "UPDATE trellis_agent_runs SET status = 'stale' WHERE agent_run_id = ?1",
+                params![agent_run_id],
+            )
+            .expect("force stale");
+        }
+        assert!(heartbeat_agent_run(None, &db, agent_run_id, now + 10_000).expect("revive heartbeat"));
+        let (_, status) = read_heartbeat_status(&db, agent_run_id);
+        assert_eq!(status, "running");
+        let (_, assignment_status) = read_assignment_heartbeat_status(&db, agent_run_id);
+        assert_eq!(assignment_status, "running");
+    }
+
+    #[test]
+    fn stale_scanner_promotes_running_agent_past_threshold() {
+        let db = mission_runtime_test_db();
+        let agent_run_id = "agent-stale-1";
+        let started_at = 30_000_000_i64;
+        seed_running_agent_run(&db, agent_run_id, started_at);
+        let now = started_at + AGENT_STALE_AFTER_MS + 1_000;
+        let mut last_emit_by_agent = HashMap::new();
+
+        let marked = mark_stale_agent_runs(
+            None,
+            &db,
+            now,
+            AGENT_STALE_AFTER_MS,
+            AGENT_STALE_EVENT_THROTTLE_MS,
+            &mut last_emit_by_agent,
+        )
+        .expect("mark stale");
+        assert_eq!(marked, 1, "stale row should be marked");
+
+        let (_, status) = read_heartbeat_status(&db, agent_run_id);
+        assert_eq!(status, "stale");
+        let (_, assignment_status) = read_assignment_heartbeat_status(&db, agent_run_id);
+        assert_eq!(assignment_status, "stale");
+        assert_eq!(count_events(&db, "trellis.agent.stale"), 1);
+
+        let marked_again = mark_stale_agent_runs(
+            None,
+            &db,
+            now + 1_000,
+            AGENT_STALE_AFTER_MS,
+            AGENT_STALE_EVENT_THROTTLE_MS,
+            &mut last_emit_by_agent,
+        )
+        .expect("mark stale again");
+        assert_eq!(marked_again, 0, "after promotion the row no longer qualifies for stale scan");
+    }
+
+    #[test]
+    fn stale_scanner_skips_recent_agents() {
+        let db = mission_runtime_test_db();
+        let agent_run_id = "agent-fresh";
+        let started_at = 40_000_000_i64;
+        seed_running_agent_run(&db, agent_run_id, started_at);
+        let now = started_at + 1_000;
+        let mut last_emit_by_agent = HashMap::new();
+        let marked = mark_stale_agent_runs(
+            None,
+            &db,
+            now,
+            AGENT_STALE_AFTER_MS,
+            AGENT_STALE_EVENT_THROTTLE_MS,
+            &mut last_emit_by_agent,
+        )
+        .expect("mark stale");
+        assert_eq!(marked, 0);
+        assert_eq!(count_events(&db, "trellis.agent.stale"), 0);
+    }
+
 }

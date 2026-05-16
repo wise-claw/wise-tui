@@ -17,6 +17,7 @@ import type {
   RequirementCardVM,
   RequirementTreeNodeVM,
   SwimlaneVM,
+  ClusterRunProgress,
   TaskCardVM,
   TaskDetailVM,
 } from "./types";
@@ -26,6 +27,7 @@ interface ProjectMissionInput {
   selection: MissionSelectionInput;
   repositories: Repository[];
   projects?: ProjectItem[];
+  agentAssignments?: MissionAgentProjection[];
 }
 
 interface InternalTaskProjection {
@@ -34,6 +36,14 @@ interface InternalTaskProjection {
   run: ClusterRunState | undefined;
   writeResult: WizardWriteResult | undefined;
   isPlaceholder: boolean;
+}
+
+interface MissionAgentProjection {
+  clusterId?: string | null;
+  agentType: string;
+  stage: string;
+  status: string;
+  lastHeartbeatAt?: number | null;
 }
 
 export function projectMission(input: ProjectMissionInput): MissionViewModel {
@@ -60,6 +70,7 @@ export function projectMission(input: ProjectMissionInput): MissionViewModel {
     dependencyTaskIdsByTaskId,
     requirementsIndex: state.requirementsIndex,
     editsByCluster: state.editsByCluster,
+    agentAssignments: input.agentAssignments ?? [],
   });
   const requirements = buildRequirementCards(state.requirementsIndex, projectedTasks, selection);
   const requirementTree = buildRequirementTree(state.requirementsIndex, projectedTasks, selection);
@@ -113,7 +124,8 @@ export function toMissionPhase(state: WizardState): MissionPhase {
     const allDone = runs.length > 0 && runs.every((run) =>
       run.status === "succeeded" ||
       run.status === "failed" ||
-      run.status === "skipped-clean"
+      run.status === "skipped-clean" ||
+      run.status === "stale"
     );
     return allDone ? "verifying" : "planning";
   }
@@ -162,7 +174,8 @@ function derivePrimaryCta(state: WizardState, phase: MissionPhase): MissionViewM
     const allDone = runs.length > 0 && runs.every((run) =>
       run.status === "succeeded" ||
       run.status === "failed" ||
-      run.status === "skipped-clean"
+      run.status === "skipped-clean" ||
+      run.status === "stale"
     );
     if (allDone) {
       return {
@@ -315,22 +328,54 @@ function derivePrdAnchorTags(
   });
 }
 
-function deriveAgentChip(item: InternalTaskProjection): AgentRunChip | null {
+function deriveAgentChip(
+  item: InternalTaskProjection,
+  assignment: MissionAgentProjection | null,
+): AgentRunChip | null {
+  if (assignment) {
+    if (assignment.status === "stale") {
+      return {
+        agentName: assignment.agentType,
+        status: "stale",
+        stageLabel: assignment.stage || "stale",
+        lastHeartbeatAt: assignment.lastHeartbeatAt ?? null,
+      };
+    }
+    if (assignment.status === "running") {
+      return {
+        agentName: assignment.agentType,
+        status: "running",
+        stageLabel: assignment.stage || "running",
+        lastHeartbeatAt: assignment.lastHeartbeatAt ?? null,
+      };
+    }
+    if (assignment.status === "queued") {
+      return {
+        agentName: assignment.agentType,
+        status: "queued",
+        stageLabel: assignment.stage || "queued",
+        lastHeartbeatAt: assignment.lastHeartbeatAt ?? null,
+      };
+    }
+  }
   if (!item.run) return null;
   if (item.run.status === "dispatching") {
-    return { agentName: "trellis-splitter", status: "running", stageLabel: "generating" };
+    return { agentName: "trellis-splitter", status: "running", stageLabel: "generating", lastHeartbeatAt: null };
   }
   if (item.run.status === "succeeded") {
-    return { agentName: "trellis-splitter", status: "done", stageLabel: "done" };
+    return { agentName: "trellis-splitter", status: "done", stageLabel: "done", lastHeartbeatAt: null };
   }
   if (item.run.status === "skipped-clean") {
-    return { agentName: "trellis-splitter", status: "done", stageLabel: "skipped" };
+    return { agentName: "trellis-splitter", status: "done", stageLabel: "skipped", lastHeartbeatAt: null };
   }
   if (item.run.status === "failed") {
-    return { agentName: "trellis-splitter", status: "blocked", stageLabel: "failed" };
+    return { agentName: "trellis-splitter", status: "blocked", stageLabel: "failed", lastHeartbeatAt: null };
+  }
+  if (item.run.status === "stale") {
+    return { agentName: "trellis-splitter", status: "stale", stageLabel: "stale", lastHeartbeatAt: null };
   }
   if (item.run.status === "creating-parent") {
-    return { agentName: "trellis-splitter", status: "queued", stageLabel: "preparing" };
+    return { agentName: "trellis-splitter", status: "queued", stageLabel: "preparing", lastHeartbeatAt: null };
   }
   return null;
 }
@@ -344,8 +389,17 @@ function buildTaskCards(input: {
   dependencyTaskIdsByTaskId: Map<string, string[]>;
   requirementsIndex: RequirementsIndexV2 | null;
   editsByCluster: Record<string, ClusterEditState>;
+  agentAssignments: MissionAgentProjection[];
 }): TaskCardVM[] {
   const repoById = new Map(input.repositories.map((repo) => [repo.id, repo]));
+  const assignmentByClusterId = new Map<string, MissionAgentProjection>();
+  for (const assignment of input.agentAssignments) {
+    if (!assignment.clusterId) continue;
+    const current = assignmentByClusterId.get(assignment.clusterId);
+    if (!current || (assignment.lastHeartbeatAt ?? 0) > (current.lastHeartbeatAt ?? 0)) {
+      assignmentByClusterId.set(assignment.clusterId, assignment);
+    }
+  }
   const hasSelection = Boolean(
     input.selection.requirementId ||
     input.selection.taskId ||
@@ -373,6 +427,8 @@ function buildTaskCards(input: {
       writeResult: item.writeResult,
       validationIssueCount: item.run?.validationIssues?.length ?? 0,
     });
+    const assignment = assignmentByClusterId.get(item.cluster.id) ?? null;
+    const effectiveStatus = assignment?.status === "stale" ? "stale" : status;
     const repo = item.cluster.primaryRepositoryId == null
       ? null
       : repoById.get(item.cluster.primaryRepositoryId) ?? null;
@@ -392,17 +448,18 @@ function buildTaskCards(input: {
       title: item.task.title,
       role: item.isPlaceholder ? null : item.task.role,
       priority: derivePriority(item),
-      status,
+      status: effectiveStatus,
       statusLabel: item.isPlaceholder
-        ? item.run?.status === "dispatching" ? "生成中…"
+        ? effectiveStatus === "stale" ? "疑似断连"
+        : item.run?.status === "dispatching" ? "生成中…"
         : item.run?.status === "creating-parent" ? "准备中…"
         : item.run?.status === "failed" ? "生成失败"
         : "等待生成"
-        : userStatusLabel(status),
+        : userStatusLabel(effectiveStatus),
       repositoryLabel: repo ? `${ROLE_LABEL[repo.repositoryType]} · ${repo.name}` : null,
       codeAnchorPreview: item.task.sourceRefs[0] ?? null,
       prdAnchorTags: derivePrdAnchorTags(item, input.requirementsIndex),
-      agentStatus: deriveAgentChip(item),
+      agentStatus: deriveAgentChip(item, assignment),
       clusterId: item.cluster.id,
       dependencyTaskIds: depIds,
       editableDependencyTaskIds: item.task.dependencies.filter((id) => depIds.includes(id)),
@@ -519,7 +576,7 @@ function buildTaskSwimlane(clusters: ClusterPlanItem[], taskCards: TaskCardVM[])
       taskCards.filter((task) => task.clusterId === cluster.id),
     );
     if (tasks.length === 0) continue;
-    const hasBlocked = tasks.some((task) => task.status === "blocked");
+    const hasBlocked = tasks.some((task) => task.status === "blocked" || task.status === "stale");
     const isParallel = tasks.length > 1;
     if (isParallel) parallelGroupIndex += 1;
     const groupLabel = isParallel ? `并行组 ${String.fromCharCode(64 + parallelGroupIndex)}` : "";
@@ -539,18 +596,22 @@ function buildTaskSwimlane(clusters: ClusterPlanItem[], taskCards: TaskCardVM[])
 // ── Run state derivation ──
 
 function deriveRunState(state: WizardState): MissionRunState {
-  const clusters: Record<string, import("./types").ClusterRunProgress> = {};
+  const clusters: Record<string, ClusterRunProgress> = {};
   for (const [id, run] of Object.entries(state.clusterRuns)) {
+    if (run.progress) {
+      clusters[id] = run.progress;
+      continue;
+    }
     const pct =
       run.status === "succeeded" || run.status === "skipped-clean" ? 100
-      : run.status === "failed" ? 0
+      : run.status === "failed" || run.status === "stale" ? 0
       : run.status === "dispatching" ? 50
       : run.status === "creating-parent" ? 10
       : 0;
     clusters[id] = {
       status:
         run.status === "succeeded" || run.status === "skipped-clean" ? "succeeded"
-        : run.status === "failed" ? "failed"
+        : run.status === "failed" || run.status === "stale" ? "failed"
         : run.status === "dispatching" ? "running"
         : "queued",
       progressPercent: pct,
@@ -558,6 +619,7 @@ function deriveRunState(state: WizardState): MissionRunState {
         run.status === "creating-parent" ? "创建父任务中…"
         : run.status === "dispatching" ? "子代理生成中…"
         : run.status === "succeeded" ? "完成"
+        : run.status === "stale" ? "疑似断连"
         : run.status === "failed" ? "失败"
         : "等待中",
       elapsedMs: run.startedAt ? Date.now() - run.startedAt : 0,
@@ -568,7 +630,7 @@ function deriveRunState(state: WizardState): MissionRunState {
   }
   const runs = Object.values(state.clusterRuns);
   const allDone = runs.length > 0 && runs.every(
-    (r) => r.status === "succeeded" || r.status === "failed" || r.status === "skipped-clean",
+    (r) => r.status === "succeeded" || r.status === "failed" || r.status === "skipped-clean" || r.status === "stale",
   );
   return {
     phase: state.stage === "done" ? "done"
@@ -619,7 +681,7 @@ function buildLayers(clusters: ClusterPlanItem[], taskCards: TaskCardVM[]): Para
     const layerClusters = clusters.filter((cluster) => clusterLayer.get(cluster.id) === layerIndex);
     const tasks = layerClusters.flatMap((cluster) => taskCards.filter((task) => task.clusterId === cluster.id));
     if (tasks.length === 0) continue;
-    const hasBlocked = tasks.some((task) => task.status === "blocked");
+    const hasBlocked = tasks.some((task) => task.status === "blocked" || task.status === "stale");
     layers.push({
       id: `layer-${layerIndex + 1}`,
       index: layerIndex + 1,

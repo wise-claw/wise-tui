@@ -64,7 +64,7 @@ export function useAgentAssignments(options: UseAgentAssignmentsOptions = {}) {
     };
   }, [projectId, missionId, includeCompleted, pollIntervalMs, enabled]);
 
-  const running = assignments.filter((a) => a.status === "running");
+  const running = assignments.filter((a) => a.status === "running" || a.status === "stale");
   const queued = assignments.filter((a) => a.status === "queued");
   const completed = assignments.filter(
     (a) => a.status === "completed" || a.status === "succeeded",

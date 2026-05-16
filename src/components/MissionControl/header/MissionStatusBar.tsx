@@ -4,6 +4,7 @@ import {
   ClockCircleOutlined,
   CheckCircleOutlined,
   SyncOutlined,
+  DisconnectOutlined,
 } from "@ant-design/icons";
 import { useAgentAssignments } from "../../../hooks/useAgentAssignments";
 import type { MissionRunState } from "../presenter/types";
@@ -19,6 +20,8 @@ export function MissionStatusBar({ missionId, runState }: MissionStatusBarProps)
     enabled: Boolean(missionId),
     pollIntervalMs: 5_000,
   });
+  const stale = running.filter((assignment) => assignment.status === "stale");
+  const activeRunning = running.filter((assignment) => assignment.status !== "stale");
 
   const phaseLabel =
     runState.phase === "idle" ? "就绪"
@@ -50,9 +53,14 @@ export function MissionStatusBar({ missionId, runState }: MissionStatusBarProps)
         </Tag>
       </div>
       <div className="mission-status-bar__agents">
-        {running.length > 0 ? (
+        {activeRunning.length > 0 ? (
           <Tag color="processing" style={{ fontSize: 11 }}>
-            {running.length} 运行中
+            {activeRunning.length} 运行中
+          </Tag>
+        ) : null}
+        {stale.length > 0 ? (
+          <Tag color="warning" style={{ fontSize: 11 }}>
+            {stale.length} 疑似断连
           </Tag>
         ) : null}
         {queued.length > 0 ? (
@@ -60,9 +68,10 @@ export function MissionStatusBar({ missionId, runState }: MissionStatusBarProps)
         ) : null}
         {running.map((a) => (
           <span key={a.assignmentId} className="mission-status-bar__agent-pill">
-            <span className="mission-status-bar__agent-dot" data-status="running" />
+            <span className="mission-status-bar__agent-dot" data-status={a.status === "stale" ? "stale" : "running"} />
             <span>{a.agentType}</span>
             <span className="mission-status-bar__agent-stage">· {a.stage}</span>
+            {a.status === "stale" ? <DisconnectOutlined style={{ fontSize: 10 }} /> : null}
             {a.currentFile ? (
               <span className="mission-status-bar__agent-file" title={a.currentFile}>
                 {a.currentFile.split("/").pop()}

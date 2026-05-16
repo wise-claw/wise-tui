@@ -15,6 +15,7 @@ export const USER_STATUS_LABEL: Record<TaskUserStatus, string> = {
   running: "执行中",
   completed: "已完成",
   blocked: "阻塞",
+  stale: "疑似断连",
 };
 
 export const ROLE_LABEL: Record<TaskRole, string> = {

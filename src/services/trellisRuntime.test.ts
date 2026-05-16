@@ -74,6 +74,7 @@ describe("trellisRuntime service", () => {
       listTrellisSpecRevisions,
       recordTrellisSpecRevision,
       runTrellisTaskLifecycle,
+      trellisAgentHeartbeat,
       trellisRuntimeUpsertAgentRunSafe,
       upsertTrellisAgentRun,
     } = await import("./trellisRuntime");
@@ -87,6 +88,7 @@ describe("trellisRuntime service", () => {
       agentType: "trellis-implement",
       status: "running",
     });
+    await trellisAgentHeartbeat("a1");
     await trellisRuntimeUpsertAgentRunSafe("m1", {
       agentRunId: "a2",
       projectId: "p1",
@@ -127,6 +129,9 @@ describe("trellisRuntime service", () => {
         agentType: "trellis-implement",
         status: "running",
       },
+    });
+    expect(invoke).toHaveBeenCalledWith("trellis_agent_heartbeat", {
+      agentRunId: "a1",
     });
     expect(invoke).toHaveBeenCalledWith("trellis_runtime_upsert_agent_run", {
       input: {

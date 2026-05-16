@@ -10,6 +10,7 @@ export function toUserStatus(input: {
   if (input.validationIssueCount && input.validationIssueCount > 0) return "blocked";
   if (input.writeResult?.error) return "blocked";
   const status = input.run?.status ?? "idle";
+  if (status === "stale") return "stale";
   if (status === "failed") return "blocked";
   if (status === "creating-parent") return "preparing";
   if (status === "dispatching") return "running";

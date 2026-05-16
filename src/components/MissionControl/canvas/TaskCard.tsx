@@ -1,5 +1,5 @@
 import { LinkOutlined } from "@ant-design/icons";
-import { Tag } from "antd";
+import { Tag, Tooltip } from "antd";
 import type { TaskCardVM } from "../presenter/types";
 import { ROLE_LABEL } from "../copy";
 
@@ -12,6 +12,20 @@ interface TaskCardProps {
 }
 
 const PRIORITY_COLORS: Record<string, string> = { P0: "red", P1: "orange", P2: "default" };
+
+function agentTagColor(status: NonNullable<TaskCardVM["agentStatus"]>["status"]): string {
+  if (status === "running") return "processing";
+  if (status === "done") return "success";
+  if (status === "blocked") return "error";
+  if (status === "stale") return "warning";
+  return "default";
+}
+
+function heartbeatTooltip(lastHeartbeatAt: number | null): string {
+  if (!lastHeartbeatAt) return "上次心跳未知";
+  const seconds = Math.max(0, Math.round((Date.now() - lastHeartbeatAt) / 1000));
+  return `上次心跳 ${seconds} 秒前`;
+}
 
 export function TaskCard({ task, onSelect, onHover, onRemoveDependency, onRetryCluster }: TaskCardProps) {
   const hasDeps = task.dependencyLabels.length > 0;
@@ -116,12 +130,16 @@ export function TaskCard({ task, onSelect, onHover, onRemoveDependency, onRetryC
       {task.agentStatus || task.status === "blocked" ? (
         <span className="mission-task-card__controls">
           {task.agentStatus ? (
-            <Tag
-              color={task.agentStatus.status === "running" ? "processing" : task.agentStatus.status === "done" ? "success" : task.agentStatus.status === "blocked" ? "error" : "default"}
-              style={{ fontSize: 10, lineHeight: "16px" }}
+            <Tooltip
+              title={task.agentStatus.status === "stale" ? heartbeatTooltip(task.agentStatus.lastHeartbeatAt) : undefined}
             >
-              {task.agentStatus.agentName} · {task.agentStatus.stageLabel}
-            </Tag>
+              <Tag
+                color={agentTagColor(task.agentStatus.status)}
+                style={{ fontSize: 10, lineHeight: "16px" }}
+              >
+                {task.agentStatus.agentName} · {task.agentStatus.stageLabel}
+              </Tag>
+            </Tooltip>
           ) : null}
           {task.status === "blocked" && onRetryCluster ? (
             <button

@@ -18,6 +18,7 @@ import { useMissionLedger } from "./useMissionLedger";
 import { getMissionSnapshot } from "../../services/missionControlBackend";
 import { runMissionClusters, runSingleCluster, writeMissionToTrellis } from "./actions/runMissionActions";
 import { recordMissionPlanningMutation } from "../../services/missionControlBackend";
+import { useAgentAssignments } from "../../hooks/useAgentAssignments";
 import { useSplitterStream } from "./actions/splitterStreamListener";
 import type { MissionPrimaryCta } from "./presenter/types";
 import "./index.css";
@@ -44,10 +45,20 @@ export function MissionControl({
 }: MissionControlProps) {
   const api = useSplitWizardState();
   const { message } = AntdApp.useApp();
-  const { viewModel, setSelection } = useMissionPresenter({ api, projects, repositories });
   const { stdout } = useSplitterStream();
   const projectId = api.state.project?.id ?? null;
   const { activeMission } = useMissionLedger({ projectId });
+  const { assignments: missionAssignments } = useAgentAssignments({
+    missionId: activeMission?.missionId ?? null,
+    includeCompleted: false,
+    enabled: Boolean(activeMission?.missionId),
+  });
+  const { viewModel, setSelection } = useMissionPresenter({
+    api,
+    projects,
+    repositories,
+    agentAssignments: missionAssignments,
+  });
 
   // #6 Record planning mutations to Mission ledger
   const recordMutation = useCallback(
@@ -129,6 +140,34 @@ export function MissionControl({
       void api.refreshExistingParents();
     }
   }, [api, api.state.existingParents, api.state.stage]);
+
+  useEffect(() => {
+    const activeClusterIds = new Set(api.state.plan?.clusters.map((cluster) => cluster.id) ?? []);
+    for (const assignment of missionAssignments) {
+      if (assignment.status !== "stale" || !assignment.clusterId || !activeClusterIds.has(assignment.clusterId)) {
+        continue;
+      }
+      const run = api.state.clusterRuns[assignment.clusterId];
+      if (!run || run.endedAt || run.status === "stale") continue;
+      api.patchClusterRun(assignment.clusterId, {
+        status: "stale",
+        errors: uniqueMessages([...run.errors, "子代理心跳超时，任务疑似断连"]),
+        endedAt: Date.now(),
+        progress: {
+          status: "failed",
+          progressPercent: 0,
+          stageLabel: "疑似断连",
+          elapsedMs: Date.now() - (run.startedAt ?? Date.now()),
+          error: {
+            summary: "子代理心跳超时，任务疑似断连",
+            exitCode: null,
+            stdoutPath: "",
+            stderrPath: "",
+          },
+        },
+      });
+    }
+  }, [api, api.state.clusterRuns, api.state.plan?.clusters, missionAssignments]);
 
   const handlePrimaryCta = useCallback(
     async (cta: MissionPrimaryCta) => {
@@ -425,4 +464,8 @@ export function MissionControl({
       />
     </div>
   );
+}
+
+function uniqueMessages(messages: string[]): string[] {
+  return [...new Set(messages.filter((message) => message.trim().length > 0))];
 }

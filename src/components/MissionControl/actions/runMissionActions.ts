@@ -23,6 +23,7 @@ import {
 } from "../../../services/missionControlBackend";
 import { WORKFLOW_UI_EVENT_WORKFLOW_GRAPH_CHANGED } from "../../../constants/workflowUiEvents";
 import {
+  trellisAgentHeartbeat,
   trellisRuntimeRecordEventSafe,
   trellisRuntimeUpsertAgentRunSafe,
   type TrellisAgentRunInput,
@@ -32,6 +33,7 @@ import type { UseSplitWizardStateApi } from "../../PrdSplitWizard/useSplitWizard
 import type { ClusterRunState, WizardWorkflowGraphResult, WizardWriteResult } from "../../PrdSplitWizard/types";
 
 const MISSION_SCHEMA_VERSION = 1;
+const SPLITTER_HEARTBEAT_INTERVAL_MS = 30_000;
 
 export async function runMissionClusters(api: UseSplitWizardStateApi): Promise<void> {
   const { state } = api;
@@ -190,6 +192,18 @@ export async function runSingleCluster(
         status: "failed",
         errors: [`创建父任务失败: ${errorMessage}`],
         endedAt: Date.now(),
+        progress: {
+          status: "failed",
+          progressPercent: 0,
+          stageLabel: errorMessage,
+          elapsedMs: Date.now() - (runStart.startedAt ?? Date.now()),
+          error: {
+            summary: errorMessage,
+            exitCode: null,
+            stdoutPath: "",
+            stderrPath: "",
+          },
+        },
       };
       await completeMissionAgentAssignmentSafe(assignmentId, "failed", {
         clusterId: cluster.id,
@@ -226,6 +240,7 @@ export async function runSingleCluster(
     }
   }
 
+  const stopHeartbeat = startSplitterHeartbeat(assignmentId);
   try {
     const result = await dispatchWithRetry(cluster.id, async (attempt) => {
       if (attempt > 0) {
@@ -260,6 +275,20 @@ export async function runSingleCluster(
       validationIssues: result.validationIssues,
       errors: result.errors,
       endedAt: Date.now(),
+      progress: {
+        status: result.normalized && result.errors.length === 0 ? "succeeded" : "failed",
+        progressPercent: result.normalized && result.errors.length === 0 ? 100 : 0,
+        stageLabel: result.normalized && result.errors.length === 0 ? "完成" : result.errors[0] ?? "失败",
+        elapsedMs: Date.now() - (runStart.startedAt ?? Date.now()),
+        error: result.normalized && result.errors.length === 0
+          ? null
+          : {
+            summary: result.errors[0] ?? "任务生成失败",
+            exitCode: result.raw?.exitCode ?? null,
+            stdoutPath: result.raw?.stdoutPath ?? "",
+            stderrPath: result.raw?.stderrPath ?? "",
+          },
+      },
     };
     api.patchClusterRun(cluster.id, finalRun);
     const terminalStatus = result.normalized && result.errors.length === 0 ? "succeeded" : "failed";
@@ -321,6 +350,18 @@ export async function runSingleCluster(
       status: "failed",
       errors: [`任务生成失败: ${errorMessage}`],
       endedAt: Date.now(),
+      progress: {
+        status: "failed",
+        progressPercent: 0,
+        stageLabel: errorMessage,
+        elapsedMs: Date.now() - (runStart.startedAt ?? Date.now()),
+        error: {
+          summary: errorMessage,
+          exitCode: null,
+          stdoutPath: "",
+          stderrPath: "",
+        },
+      },
     };
     api.patchClusterRun(cluster.id, failedRun);
     await completeMissionAgentAssignmentSafe(assignmentId, "failed", {
@@ -360,6 +401,8 @@ export async function runSingleCluster(
     });
     api.setGlobalError(`任务生成失败：${errorMessage}`);
     return failedRun;
+  } finally {
+    stopHeartbeat();
   }
 }
 
@@ -734,6 +777,16 @@ async function upsertSplitterAgentRunSafe(
     payload.metadata = { ...payload.metadata, completedAt: input.completedAt };
   }
   await trellisRuntimeUpsertAgentRunSafe(missionId, payload);
+}
+
+function startSplitterHeartbeat(agentRunId: string | null): () => void {
+  if (!agentRunId) return () => {};
+  const timer = globalThis.setInterval(() => {
+    trellisAgentHeartbeat(agentRunId).catch((error) => {
+      console.warn("[MissionControl] splitter heartbeat failed", error);
+    });
+  }, SPLITTER_HEARTBEAT_INTERVAL_MS);
+  return () => globalThis.clearInterval(timer);
 }
 
 async function recordSplitterTerminalRuntimeEventSafe(

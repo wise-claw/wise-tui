@@ -315,7 +315,11 @@ export function completeMissionAgentAssignment(
 export function listMissionAgentAssignments(
   input: MissionListAssignmentsInput,
 ): Promise<MissionAgentAssignment[]> {
-  return invoke<MissionAgentAssignment[]>("mission_list_agent_assignments", { input });
+  const normalized: MissionListAssignmentsInput = {
+    ...input,
+    staleAfterMs: input.staleAfterMs ?? 90_000,
+  };
+  return invoke<MissionAgentAssignment[]>("mission_list_agent_assignments", { input: normalized });
 }
 
 export function previewRequirementReassign(input: {

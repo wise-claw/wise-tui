@@ -75,6 +75,7 @@ pub fn run() {
             wise_mascot::restore_mascot_on_launch(app.handle(), &wise_db)?;
             claude_config_dir::init_from_db(&wise_db);
             app.manage(wise_db);
+            trellis_runtime::spawn_stale_scanner(app.handle().clone());
 
             #[cfg(target_os = "macos")]
             if let Some(w) = app.handle().get_webview_window("mascot") {
@@ -292,6 +293,7 @@ pub fn run() {
             trellis_runtime::trellis_runtime_run_task_lifecycle,
             trellis_runtime::trellis_runtime_upsert_agent_run,
             trellis_runtime::trellis_runtime_get_agent_ownership_graph,
+            trellis_runtime::trellis_agent_heartbeat,
             trellis_runtime::trellis_runtime_record_spec_revision,
             trellis_runtime::trellis_runtime_list_spec_revisions,
             trellis_runtime::trellis_runtime_get_onboarding_state,

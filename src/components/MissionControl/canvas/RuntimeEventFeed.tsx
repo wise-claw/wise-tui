@@ -7,6 +7,7 @@ import {
   BranchesOutlined,
   FileTextOutlined,
   SettingOutlined,
+  WarningOutlined,
 } from "@ant-design/icons";
 import {
   listTrellisRuntimeEvents,
@@ -29,6 +30,7 @@ const KIND_ICON: Record<string, React.ReactNode> = {
 };
 
 function kindIcon(kind: string) {
+  if (kind === "trellis.agent.stale") return <WarningOutlined />;
   for (const [key, icon] of Object.entries(KIND_ICON)) {
     if (kind.includes(key)) return icon;
   }
@@ -42,6 +44,8 @@ function kindLabel(kind: string): string {
   if (kind.includes("task.complete")) return "完成任务";
   if (kind.includes("agent.start")) return "Agent 启动";
   if (kind.includes("agent.complete")) return "Agent 完成";
+  if (kind.includes("agent.stale")) return "Agent 断连";
+  if (kind.includes("agent.heartbeat")) return "Agent 心跳";
   if (kind.includes("spec")) return "Spec 变更";
   if (kind.includes("workflow")) return "Workflow";
   return kind.replace("trellis.", "").replace("runtime.", "");
@@ -84,7 +88,10 @@ export function RuntimeEventFeed({ rootPath, projectId, limit = 30 }: RuntimeEve
         ) : (
           <div className="runtime-feed__list">
             {events.map((ev) => (
-              <div key={ev.eventId} className="runtime-event">
+              <div
+                key={ev.eventId}
+                className={`runtime-event ${ev.eventKind === "trellis.agent.stale" ? "runtime-event--stale" : ""}`}
+              >
                 <span className="runtime-event__icon">{kindIcon(ev.eventKind)}</span>
                 <div className="runtime-event__body">
                   <div className="runtime-event__head">

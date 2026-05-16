@@ -7,6 +7,7 @@ import {
   ClockCircleOutlined,
   CloseCircleOutlined,
   SendOutlined,
+  DisconnectOutlined,
 } from "@ant-design/icons";
 import { useAgentAssignments } from "../../hooks/useAgentAssignments";
 import {
@@ -122,6 +123,8 @@ function AgentAssignmentRow({ assignment, onInject }: { assignment: MissionAgent
   const statusIcon =
     assignment.status === "running" ? (
       <SyncOutlined spin style={{ fontSize: 10, color: "var(--mission-info)" }} />
+    ) : assignment.status === "stale" ? (
+      <DisconnectOutlined style={{ fontSize: 10, color: "var(--mission-warning)" }} />
     ) : assignment.status === "completed" || assignment.status === "succeeded" ? (
       <CheckCircleOutlined style={{ fontSize: 10, color: "var(--mission-success)" }} />
     ) : assignment.status === "failed" ? (
@@ -151,6 +154,7 @@ function AgentAssignmentRow({ assignment, onInject }: { assignment: MissionAgent
           {assignment.clusterId ? <div><strong>Cluster：</strong>{assignment.clusterId}</div> : null}
           <div><strong>状态：</strong>{assignment.status}</div>
           <div><strong>启动：</strong>{new Date(assignment.startedAt).toLocaleTimeString("zh-CN")}</div>
+          <div><strong>心跳：</strong>{new Date(assignment.lastHeartbeatAt).toLocaleTimeString("zh-CN")}</div>
           {onInject ? (
             <button type="button" style={{ marginTop: 8, padding: "2px 10px", border: "1px solid var(--mission-accent-border)", borderRadius: 999, background: "var(--mission-accent-soft)", color: "var(--mission-accent)", cursor: "pointer", fontSize: 11, fontWeight: 600 }} onClick={onInject}>
               注入指令

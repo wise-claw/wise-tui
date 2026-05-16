@@ -159,6 +159,43 @@ describe("projectMission", () => {
     expect(vm.selectedTaskEvidence?.codeAnchors[0]).toMatchObject({ filePath: "src/App.tsx", line: 1 });
   });
 
+  test("run state prefers streamed splitter progress over static dispatch fallback", () => {
+    const c = cluster();
+    const vm = projectMission({
+      state: state({
+        stage: "dispatch",
+        project: { id: "p", name: "P", rootPath: "/tmp" },
+        repositories: [{ id: 1, name: "web", path: "/tmp/web", type: "frontend" }],
+        selectedRepositoryIds: [1],
+        prd,
+        requirementsIndex: index,
+        plan: plan([c]),
+        clusterRuns: {
+          "c-a": {
+            clusterId: "c-a",
+            parentTaskName: "parent",
+            parentTaskPath: "/tmp/.trellis/tasks/parent",
+            status: "dispatching",
+            errors: [],
+            startedAt: 100,
+            progress: {
+              status: "running",
+              progressPercent: 80,
+              stageLabel: "校验结果中…",
+              elapsedMs: 2500,
+              error: null,
+            },
+          },
+        },
+      }),
+      selection: { requirementId: null, taskId: null },
+      repositories: [repo],
+    });
+
+    expect(vm.runState.clusters["c-a"].progressPercent).toBe(80);
+    expect(vm.runState.clusters["c-a"].stageLabel).toBe("校验结果中…");
+  });
+
   test("hover task highlights its source requirement without replacing click selection", () => {
     const c = cluster();
     const vm = projectMission({
@@ -329,5 +366,47 @@ describe("projectMission", () => {
     });
     expect(vm.phase).toBe("done");
     expect(vm.primaryCta).toMatchObject({ kind: "open-workflow", workflowId: "wf-1" });
+  });
+
+  test("stale assignment marks related task card as stale", () => {
+    const c = cluster();
+    const vm = projectMission({
+      state: state({
+        stage: "dispatch",
+        project: { id: "p", name: "P", rootPath: "/tmp" },
+        repositories: [{ id: 1, name: "web", path: "/tmp/web", type: "frontend" }],
+        selectedRepositoryIds: [1],
+        prd,
+        requirementsIndex: index,
+        plan: plan([c]),
+        clusterRuns: {
+          "c-a": {
+            clusterId: "c-a",
+            parentTaskName: "parent",
+            parentTaskPath: "/tmp/.trellis/tasks/parent",
+            status: "dispatching",
+            normalized: split([task()]),
+            errors: [],
+          },
+        },
+      }),
+      selection: { requirementId: null, taskId: null },
+      repositories: [repo],
+      agentAssignments: [{
+        clusterId: "c-a",
+        agentType: "trellis-splitter",
+        stage: "split",
+        status: "stale",
+        lastHeartbeatAt: 123,
+      }],
+    });
+
+    const card = vm.taskSwimlane.flatMap((lane) => lane.tasks)[0];
+    expect(card.status).toBe("stale");
+    expect(card.agentStatus).toMatchObject({
+      agentName: "trellis-splitter",
+      status: "stale",
+      lastHeartbeatAt: 123,
+    });
   });
 });
