@@ -1,28 +1,40 @@
 import { Tooltip } from "antd";
 import { ClaudeCodeUsageHeaderBtn } from "../ClaudeCodeUsagePopover";
 import { IconSettings } from "../icons/IconSettings";
-import {
-  IconCompactLayout,
-  McpNavIcon,
-  SkillsNavIcon,
-  WorkflowStudioNavIcon,
-} from "./SidebarIcons";
+import { IconCompactLayout } from "./SidebarIcons";
 
 interface LeftSidebarTopbarProps {
   compactLayoutMode: boolean;
   onToggleCompactLayoutMode?: () => void;
+  authorDisabled?: boolean;
+  authorTooltip?: string;
+  onOpenAuthor: () => void;
   onOpenSettings: () => void;
 }
 
 export function LeftSidebarTopbar({
   compactLayoutMode,
   onToggleCompactLayoutMode,
+  authorDisabled = false,
+  authorTooltip = "Author：Workspace、Agents、Workflows、MCP、Skills、Hooks、Prompts、Trellis Spec",
+  onOpenAuthor,
   onOpenSettings,
 }: LeftSidebarTopbarProps) {
   return (
     <div className="app-left-sidebar-topbar">
       <div className="app-left-sidebar-topbar-drag app-logo-draggable" data-tauri-drag-region aria-hidden />
       <div className="app-left-sidebar-topbar-actions">
+        <Tooltip title={authorDisabled ? authorTooltip : "Author：配置 Workspace、Agents、Workflows、MCP、Skills、Hooks、Prompts、Trellis Spec"} mouseEnterDelay={0.35}>
+          <button
+            type="button"
+            className="app-left-sidebar-compact-btn"
+            aria-label="打开 Author"
+            disabled={authorDisabled}
+            onClick={onOpenAuthor}
+          >
+            <IconSettings />
+          </button>
+        </Tooltip>
         <Tooltip title="设置：钉钉机器人、快捷键、Claude 沙箱与权限" mouseEnterDelay={0.35}>
           <button
             type="button"
@@ -54,70 +66,6 @@ export function LeftSidebarTopbar({
         ) : null}
         <ClaudeCodeUsageHeaderBtn />
       </div>
-    </div>
-  );
-}
-
-interface LeftSidebarTopNavStackProps {
-  mcpNavActive: boolean;
-  onOpenMcpHub?: () => void;
-  skillsNavActive: boolean;
-  onOpenSkillsHub?: () => void;
-  workflowStudioNavActive?: boolean;
-  onOpenWorkflowStudio?: () => void;
-}
-
-export function LeftSidebarTopNavStack({
-  mcpNavActive,
-  onOpenMcpHub,
-  skillsNavActive,
-  onOpenSkillsHub,
-  workflowStudioNavActive = false,
-  onOpenWorkflowStudio,
-}: LeftSidebarTopNavStackProps) {
-  if (!onOpenMcpHub && !onOpenSkillsHub && !onOpenWorkflowStudio) {
-    return null;
-  }
-
-  return (
-    <div className="app-left-sidebar-top-nav-stack">
-      {onOpenMcpHub ? (
-        <button
-          type="button"
-          className={`app-left-sidebar-mcp-nav${mcpNavActive ? " app-left-sidebar-mcp-nav--active" : ""}`}
-          onClick={onOpenMcpHub}
-        >
-          <span className="app-left-sidebar-mcp-nav-icon" aria-hidden>
-            <McpNavIcon />
-          </span>
-          <span className="app-left-sidebar-mcp-nav-label">MCP</span>
-        </button>
-      ) : null}
-      {onOpenSkillsHub ? (
-        <button
-          type="button"
-          className={`app-left-sidebar-skills-nav${skillsNavActive ? " app-left-sidebar-skills-nav--active" : ""}`}
-          onClick={onOpenSkillsHub}
-        >
-          <span className="app-left-sidebar-skills-nav-icon" aria-hidden>
-            <SkillsNavIcon />
-          </span>
-          <span className="app-left-sidebar-skills-nav-label">技能</span>
-        </button>
-      ) : null}
-      {onOpenWorkflowStudio ? (
-        <button
-          type="button"
-          className={`app-left-sidebar-workflow-nav${workflowStudioNavActive ? " app-left-sidebar-workflow-nav--active" : ""}`}
-          aria-label="打开 Claude Code 工作流编排"
-          onClick={onOpenWorkflowStudio}
-        >
-          <span className="app-left-sidebar-workflow-nav-icon" aria-hidden>
-            <WorkflowStudioNavIcon />
-          </span>
-          <span className="app-left-sidebar-workflow-nav-label">工作流</span>
-        </button>
-      ) : null}
     </div>
   );
 }

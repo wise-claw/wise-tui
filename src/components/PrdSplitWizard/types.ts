@@ -31,7 +31,7 @@ export interface ClusterRunState {
   clusterId: string;
   parentTaskName: string | null;
   parentTaskPath: string | null;
-  status: "idle" | "skipped-clean" | "creating-parent" | "dispatching" | "succeeded" | "failed" | "stale";
+  status: "idle" | "skipped-clean" | "creating-parent" | "dispatching" | "succeeded" | "failed" | "cancelled" | "stale";
   raw?: DispatchClusterRawOutput;
   normalized?: SplitResult;
   validationIssues?: ClaudeSplitStrictValidationIssue[];
@@ -42,7 +42,7 @@ export interface ClusterRunState {
 }
 
 export interface ClusterRunProgressSnapshot {
-  status: "queued" | "running" | "succeeded" | "failed" | "skipped";
+  status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "skipped";
   progressPercent: number;
   stageLabel: string;
   elapsedMs: number;

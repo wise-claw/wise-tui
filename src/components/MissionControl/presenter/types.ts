@@ -3,7 +3,7 @@ import type { DispatchClusterRawOutput } from "../../../services/prdSplit/splitt
 
 export type MissionPhase = "drafting" | "planning" | "executing" | "verifying" | "done";
 
-export type TaskUserStatus = "queued" | "preparing" | "running" | "completed" | "blocked" | "stale";
+export type TaskUserStatus = "queued" | "preparing" | "running" | "completed" | "blocked" | "cancelled" | "stale";
 
 export interface MissionTargetVM {
   id: string | null;
@@ -27,7 +27,7 @@ export interface MissionRunState {
 }
 
 export interface ClusterRunProgress {
-  status: "queued" | "running" | "succeeded" | "failed" | "skipped";
+  status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "skipped";
   progressPercent: number;
   stageLabel: string;
   elapsedMs: number;
@@ -45,7 +45,7 @@ export interface ClusterError {
 
 export interface AgentRunChip {
   agentName: string;
-  status: "queued" | "running" | "done" | "blocked" | "stale";
+  status: "queued" | "running" | "done" | "blocked" | "cancelled" | "stale";
   stageLabel: string;
   lastHeartbeatAt: number | null;
 }

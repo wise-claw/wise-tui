@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
   listActivePrdRuns,
@@ -7,7 +7,8 @@ import {
 
 interface SplitterCompleteEvent {
   clusterId: string;
-  status: "succeeded" | "failed";
+  status: "succeeded" | "failed" | "cancelled";
+  runId?: string;
   runDir: string;
   durationMs: number;
 }
@@ -15,7 +16,7 @@ interface SplitterCompleteEvent {
 export interface BackgroundRunState {
   runId: string;
   clusterId: string;
-  status: "running" | "succeeded" | "failed";
+  status: "running" | "succeeded" | "failed" | "cancelled";
   runDir: string;
   startedAtMs: number;
   exitCode: number | null;
@@ -36,33 +37,38 @@ export type { ActivePrdRunRow };
 export function useMissionRunStore() {
   const [backgroundRuns, setBackgroundRuns] = useState<Record<string, BackgroundRunState>>({});
 
+  const refreshBackgroundRuns = useCallback(async () => {
+    const rows = await listActivePrdRuns();
+    setBackgroundRuns(reduceBackgroundRuns(rows));
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      try {
-        const rows = await listActivePrdRuns();
-        const runs = reduceBackgroundRuns(rows);
-        if (!cancelled) setBackgroundRuns(runs);
-      } catch {
-        // Non-critical: Mission Control can still receive live events after mount.
-      }
-    })();
+    refreshBackgroundRuns().catch(() => {
+      if (cancelled) return;
+      // Non-critical: Mission Control can still receive live events after mount.
+    });
     return () => { cancelled = true; };
-  }, []);
+  }, [refreshBackgroundRuns]);
 
   useEffect(() => {
     const unlisteners: UnlistenFn[] = [];
     listen<SplitterCompleteEvent>("splitter-complete", (event) => {
-      const { clusterId, status } = event.payload;
+      const { clusterId, runId, status } = event.payload;
       setBackgroundRuns((prev) => {
         const next = { ...prev };
         for (const [id, run] of Object.entries(next)) {
-          if (run.clusterId === clusterId) {
+          if ((runId && run.runId === runId) || (!runId && run.clusterId === clusterId)) {
             next[id] = {
               ...run,
               status,
               hasRunResult: true,
-              error: status === "failed" ? run.error ?? "Splitter run failed" : null,
+              error:
+                status === "failed"
+                  ? run.error ?? "Splitter run failed"
+                  : status === "cancelled"
+                    ? run.error ?? "Splitter run cancelled"
+                    : null,
             };
           }
         }
@@ -75,7 +81,7 @@ export function useMissionRunStore() {
     };
   }, []);
 
-  return { backgroundRuns };
+  return { backgroundRuns, refreshBackgroundRuns };
 }
 
 export function reduceBackgroundRuns(rows: ActivePrdRunRow[]): Record<string, BackgroundRunState> {
@@ -105,5 +111,5 @@ export function reduceBackgroundRuns(rows: ActivePrdRunRow[]): Record<string, Ba
 }
 
 function normalizeStatus(status: ActivePrdRunRow["status"] | string): BackgroundRunState["status"] {
-  return status === "succeeded" || status === "failed" ? status : "running";
+  return status === "succeeded" || status === "failed" || status === "cancelled" ? status : "running";
 }

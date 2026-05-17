@@ -15,6 +15,7 @@ export const USER_STATUS_LABEL: Record<TaskUserStatus, string> = {
   running: "执行中",
   completed: "已完成",
   blocked: "阻塞",
+  cancelled: "已中断",
   stale: "疑似断连",
 };
 
@@ -45,9 +46,10 @@ export const COPY = {
     graph: "任务编排",
   },
   engineeringDrawer: {
-    title: "工程详情",
-    clustersHeading: "任务集群",
-    graphHeading: "执行图谱",
+    title: "需求拆分诊断",
+    clustersHeading: "任务分组诊断",
+    graphHeading: "Legacy workflow graph",
+    diagnosticsHeading: "诊断",
   },
   inlinePrd: {
     title: "编写 PRD",

@@ -290,6 +290,7 @@ interface TopbarProps {
   onToggleRightPanel?: () => void;
   onToggleTerminal?: () => void;
   onSearch?: () => void;
+  onBackToCockpit?: () => void;
   collapsed?: boolean;
   rightCollapsed?: boolean;
   terminalCollapsed?: boolean;
@@ -306,6 +307,7 @@ function Topbar({
   onToggleRightPanel,
   onToggleTerminal,
   onSearch,
+  onBackToCockpit,
   collapsed,
   rightCollapsed,
   terminalCollapsed,
@@ -631,6 +633,13 @@ function Topbar({
     <div className="app-chat-topbar">
       <div className="app-chat-topbar-drag-region" data-tauri-drag-region>
         <div className={`app-chat-topbar-left ${collapsed ? "app-chat-topbar-left--collapsed" : ""}`}>
+          {onBackToCockpit && (
+            <TopbarBtn
+              icon={<IconCollapseSidebar collapsed={false} />}
+              label="返回 Cockpit"
+              onClick={onBackToCockpit}
+            />
+          )}
           {onToggleSidebar && (
             <TopbarBtn
               icon={<IconCollapseSidebar collapsed={collapsed ?? false} />}
@@ -900,6 +909,7 @@ interface Props {
   onToggleRightPanel?: () => void;
   onToggleTerminal?: () => void;
   onSearch?: () => void;
+  onBackToCockpit?: () => void;
   collapsed?: boolean;
   rightCollapsed?: boolean;
   terminalCollapsed?: boolean;
@@ -997,6 +1007,7 @@ export function ClaudeSessions({
   onToggleRightPanel,
   onToggleTerminal,
   onSearch,
+  onBackToCockpit,
   collapsed,
   rightCollapsed,
   terminalCollapsed,
@@ -1162,6 +1173,7 @@ export function ClaudeSessions({
         onToggleRightPanel={onToggleRightPanel}
         onToggleTerminal={onToggleTerminal}
         onSearch={onSearch}
+        onBackToCockpit={onBackToCockpit}
         collapsed={collapsed}
         rightCollapsed={rightCollapsed}
         terminalCollapsed={terminalCollapsed}

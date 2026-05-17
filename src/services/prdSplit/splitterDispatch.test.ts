@@ -3,6 +3,7 @@ import type { PrdDocument, TaskSplitContext } from "../../types";
 import type { RequirementsIndexV2 } from "./requirementsIndexVersion";
 import {
   composeSplitterPrompt,
+  cancelClusterRun,
   dispatchClusterSplit,
   retryClusterFromRunDir,
   type DispatchClusterRawOutput,
@@ -214,6 +215,30 @@ describe("retryClusterFromRunDir", () => {
         missionId: "mission-1",
         clusterId: "cluster-fe-1",
         model: "sonnet",
+      },
+    });
+  });
+});
+
+describe("cancelClusterRun", () => {
+  test("wraps the cancel Tauri command", async () => {
+    const output = {
+      runId: "run-1",
+      runDir: "/tmp/run-1",
+      clusterId: "cluster-fe-1",
+      signalledRunningProcess: true,
+      wroteRunResult: true,
+      alreadyFinished: false,
+    };
+    const invoke = mock(async () => output);
+    mock.module("@tauri-apps/api/core", () => ({ invoke }));
+
+    const result = await cancelClusterRun({ runId: "run-1" });
+
+    expect(result).toEqual(output);
+    expect(invoke).toHaveBeenCalledWith("prd_split_cancel_run", {
+      input: {
+        runId: "run-1",
       },
     });
   });

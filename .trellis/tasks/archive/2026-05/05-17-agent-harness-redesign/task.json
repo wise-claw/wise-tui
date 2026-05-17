@@ -1,0 +1,31 @@
+{
+  "id": "agent-harness-redesign",
+  "name": "agent-harness-redesign",
+  "title": "Agent Harness 重构总览（编排锚点）",
+  "description": "",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "xuning",
+  "assignee": "xuning",
+  "createdAt": "2026-05-17",
+  "completedAt": "2026-05-17",
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "05-17-view-mode-state-machine",
+    "05-17-cockpit-default-main",
+    "05-17-author-domain-entry",
+    "05-17-workspace-standalone-rename"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

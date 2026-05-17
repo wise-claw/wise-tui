@@ -23,10 +23,19 @@ import {
 } from "./utils/repositoryType";
 import { useRepositoryList } from "./hooks/useRepositoryList";
 import { useCcWorkflowStudioWorkspace } from "./hooks/useCcWorkflowStudioWorkspace";
+import {
+  authorView,
+  cockpitView,
+  codeGraphInspectTool,
+  inspectView,
+  useViewMode,
+} from "./hooks/useViewMode";
+import type { AuthorPane } from "./types/viewMode";
 import { useClaudeSessions, type ClaudeTurnCompletePayload } from "./hooks/useClaudeSessions";
 import { openInFinder } from "./services/repository";
 import { triggerCodeGraphAssociationBuild, triggerCodeGraphReindex } from "./services/codeKnowledgeGraph";
 import { AppWorkspaceLayout } from "./components/AppWorkspaceLayout";
+import { readAuthorPaneFromSettings, readAuthorPaneFromStorage } from "./components/AuthorPanel";
 import type { PromptsOpenContext } from "./components/PromptsPanel";
 import { reloadAppWindow } from "./services/window";
 import { wiseMascotShow } from "./services/wiseMascot";
@@ -210,22 +219,35 @@ function presentSidebarCodeGraphReindexModal(repositories: Repository[], outcome
 // ── App ──
 
 export default function App() {
-  /** 任务面板：在主区+右栏之上叠层展示任务列表（不盖左栏）。 */
-  const [taskPanelMode] = useState(false);
-  const [promptsMode, setPromptsMode] = useState(false);
-  /** 左栏 MCP：在主区+右栏之上叠层展示（与技能目录相同，不盖左栏）。 */
-  const [mcpHubMode, setMcpHubMode] = useState(false);
-  /** 左栏技能：在主区+右栏之上叠层展示 skills.sh（不盖左栏，非全屏居中 Modal）。 */
-  const [skillsHubMode, setSkillsHubMode] = useState(false);
-  const [codeKnowledgeGraphMode, setCodeKnowledgeGraphMode] = useState(false);
+  /**
+   * 顶层 View 状态机（参见 .trellis/spec/guides/agent-harness-architecture.md §3）。
+   *
+   * 取代历史上的 6 个互斥布尔（promptsMode / mcpHubMode / skillsHubMode /
+   * missionControlMode / codeKnowledgeGraphMode / ccWfStudioMode）。
+   * P0 通过 `viewMode.legacy.*` 提供过渡期兼容；P1 后 AppWorkspaceLayout 自身
+   * 从 `viewMode` 派生这些布尔，AppImpl 不再依赖 legacy 别名。
+   */
+  const viewMode = useViewMode();
   /** 侧栏「查看检索」打开时为 true：图谱面板不在 idle 时自动 `triggerCodeGraphReindex`；顶栏入口为 false。 */
-  const [codeGraphSuppressIdleAutoReindex, setCodeGraphSuppressIdleAutoReindex] = useState(false);
+  const codeGraphSuppressIdleAutoReindex =
+    viewMode.view.kind === "inspect" && viewMode.view.tool.kind === "code-graph"
+      ? viewMode.view.tool.suppressIdleAutoReindex
+      : false;
   /** 侧栏仓库/项目「图谱操作 → 查看检索」进入时为 true：仅当前仓 UI，不打开仓库下拉、不显示「全部仓库」关联入口。 */
-  const [codeGraphLockToEntryRepository, setCodeGraphLockToEntryRepository] = useState(false);
+  const codeGraphLockToEntryRepository =
+    viewMode.view.kind === "inspect" && viewMode.view.tool.kind === "code-graph"
+      ? viewMode.view.tool.lockToEntryRepository
+      : false;
   /** 侧栏项目「查看检索」进入时为 true：代码图谱默认多仓关联合并视图（候选 ≥2 时）。 */
-  const [codeGraphDefaultProjectMultiRepo, setCodeGraphDefaultProjectMultiRepo] = useState(false);
-  const [missionControlMode, setMissionControlMode] = useState(false);
+  const codeGraphDefaultProjectMultiRepo =
+    viewMode.view.kind === "inspect" && viewMode.view.tool.kind === "code-graph"
+      ? viewMode.view.tool.defaultProjectMultiRepo
+      : false;
+  const [lastAuthorPane, setLastAuthorPane] = useState(() => readAuthorPaneFromStorage());
   const [missionControlInitialTarget, setMissionControlInitialTarget] = useState<OpenMissionControlDetail | null>(null);
+  const [authorTrellisProjectId, setAuthorTrellisProjectId] = useState<string | null>(null);
+  const [workspaceCreateRequest, setWorkspaceCreateRequest] = useState(0);
+  const [standaloneRepoAddRequest, setStandaloneRepoAddRequest] = useState(0);
   const [promptsOpenContext, setPromptsOpenContext] = useState<PromptsOpenContext | null>(null);
   const [repositorySplitTemplate, setRepositorySplitTemplate] = useState("");
   const [projectSplitTemplate, setProjectSplitTemplate] = useState("");
@@ -237,18 +259,46 @@ export default function App() {
   /** null: right pane follows the sidebar repository; non-null: right main session is pinned to this repository id. */
   const [dualPaneSecondaryRepositoryId, setDualPaneSecondaryRepositoryId] = useState<number | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [employeeConfigOpen, setEmployeeConfigOpen] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void readAuthorPaneFromSettings(lastAuthorPane).then((pane) => {
+      if (cancelled) return;
+      setLastAuthorPane(pane);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const enterAuthorPane = useCallback(
+    (pane: AuthorPane) => {
+      setSearchOpen(false);
+      setLastAuthorPane(pane);
+      viewMode.enter(authorView(pane));
+    },
+    [viewMode],
+  );
+
+  const handleAuthorPaneChange = useCallback(
+    (pane: AuthorPane) => {
+      setLastAuthorPane(pane);
+      viewMode.enter(authorView(pane));
+    },
+    [viewMode],
+  );
+  const authorPane: AuthorPane = viewMode.view.kind === "author" ? viewMode.view.pane : lastAuthorPane;
+  const authorWorkflowPaneActive = viewMode.view.kind === "author" && viewMode.view.pane === "workflows";
   const [employeeConfigDefaultRepositoryIds, setEmployeeConfigDefaultRepositoryIds] = useState<number[]>([]);
-  /** 非空：从需求面板打开员工配置，新建成功后自动关联到该项目。 */
+  /** 非空：从需求面板打开员工配置，新建成功后自动关联到该 Workspace。 */
   const [employeeConfigPrdProjectId, setEmployeeConfigPrdProjectId] = useState<string | null>(null);
-  /** 从需求面板打开员工配置时拉取，用于表格「始终显示」项目显式关联的员工 id。 */
+  /** 从需求面板打开员工配置时拉取，用于表格「始终显示」Workspace 显式关联的员工 id。 */
   const [employeeConfigPrdVisibleEmployeeIds, setEmployeeConfigPrdVisibleEmployeeIds] = useState<string[]>([]);
   const [employeeAgentTypeOptions, setEmployeeAgentTypeOptions] = useState<string[]>(["executor"]);
-  const [workflowConfigOpen, setWorkflowConfigOpen] = useState(false);
-  /** 非空：从需求面板打开团队配置，保存模板后自动关联到该项目。 */
+  /** 非空：从需求面板打开团队配置，保存模板后自动关联到该 Workspace。 */
   const [workflowConfigPrdProjectId, setWorkflowConfigPrdProjectId] = useState<string | null>(null);
   const [workflowConfigInitialWorkflowId, setWorkflowConfigInitialWorkflowId] = useState<string | null>(null);
-  /** workflowId -> [projectId, ...] map，用于 WorkflowConfigModal 中展示已关联项目。 */
+  /** workflowId -> [projectId, ...] map，用于 WorkflowConfigModal 中展示已关联 Workspace。 */
   const [workflowProjectIdsMap, setWorkflowProjectIdsMap] = useState<Record<string, string[]>>({});
   const [employeeLoading, setEmployeeLoading] = useState(false);
   const [workflowLoading, setWorkflowLoading] = useState(false);
@@ -320,6 +370,7 @@ export default function App() {
     pinnedProjectIds,
     togglePinProject,
     floatingRepositories,
+    standaloneRepos,
   } = useRepositoryList();
 
   const sidebarCodeGraphReindexBatchRef = useRef<SidebarReindexBatchState | null>(null);
@@ -948,6 +999,14 @@ export default function App() {
     () => (activeProjectId ? projects.find((p) => p.id === activeProjectId) ?? null : null),
     [activeProjectId, projects],
   );
+  const authorTrellisProject = useMemo(
+    () => (
+      authorTrellisProjectId
+        ? projects.find((project) => project.id === authorTrellisProjectId) ?? null
+        : null
+    ),
+    [authorTrellisProjectId, projects],
+  );
   const missionSessionBindingKeyRef = useRef("");
   useEffect(() => {
     const session = activeSessionId ? sessionsLatestRef.current.find((item) => item.id === activeSessionId) : null;
@@ -974,13 +1033,6 @@ export default function App() {
       });
   }, [activeProject?.id, activeProject?.rootPath, activeSessionId, sessions]);
 
-  useEffect(() => {
-    if (!codeKnowledgeGraphMode) {
-      setCodeGraphLockToEntryRepository(false);
-      setCodeGraphDefaultProjectMultiRepo(false);
-    }
-  }, [codeKnowledgeGraphMode]);
-  /** 代码图谱全库搜索：有项目时用项目内全部仓库，否则由面板退化为当前仓库 */
   const codeGraphSearchRepositoryIds = useMemo(() => {
     if (activeProject?.repositoryIds?.length) {
       return activeProject.repositoryIds;
@@ -1008,18 +1060,15 @@ export default function App() {
       relativePath,
       line: detail.line ?? null,
     });
-  }, [repositories, setActiveRepositoryWithOwner]);
+    // 打开文件 → 进入 chat 子模式（文件编辑器在 chat 主区下方）
+    viewMode.enter({ kind: "chat" });
+  }, [repositories, setActiveRepositoryWithOwner, viewMode]);
   const workspaceMode = useWorkspaceMode({ activeProjectId, projects });
   const openMissionControl = useCallback((detail: OpenMissionControlDetail) => {
     setSearchOpen(false);
-    setPromptsMode(false);
-    setMcpHubMode(false);
-    setSkillsHubMode(false);
-    setCodeKnowledgeGraphMode(false);
-    setCcWfStudioMode(false);
     setMissionControlInitialTarget(detail);
-    setMissionControlMode(true);
-  }, []);
+    viewMode.enter(cockpitView());
+  }, [viewMode]);
   const composerProjectRoleTagOptions = useMemo(() => {
     if (!shouldHideEmployeeUi(activeProject)) {
       return [];
@@ -1180,20 +1229,14 @@ export default function App() {
   const activeRepository = repositories.find((p) => p.id === activeRepositoryId);
 
   const {
-    ccWfStudioMode,
-    setCcWfStudioMode,
     ccWfStudioSessionPath,
     onCloseCcWorkflowStudio,
-    openWorkflowStudio,
   } = useCcWorkflowStudioWorkspace({
     sendMessageToSession,
     switchSession,
     sessionsLatestRef,
     activeSessionIdLatestRef,
-    setPromptsMode,
-    setMcpHubMode,
-    setSkillsHubMode,
-    setCodeKnowledgeGraphMode,
+    viewMode,
     activeRepositoryPath: activeRepository?.path,
   });
 
@@ -1209,6 +1252,14 @@ export default function App() {
     }
     return activeRepository?.path ?? null;
   }, [workflowConfigPrdProjectId, projects, repositories, activeRepository?.path]);
+
+  const enterAuthorAgents = useCallback(() => {
+    enterAuthorPane("agents");
+  }, [enterAuthorPane]);
+
+  const enterAuthorWorkflows = useCallback(() => {
+    enterAuthorPane("workflows");
+  }, [enterAuthorPane]);
 
   const loadEmployeeAgentTypeOptionsFromRepositoryPath = useCallback(async (repositoryPath: string | null) => {
     try {
@@ -1234,12 +1285,12 @@ export default function App() {
     setEmployeeConfigInitialCreateEmployeeName(null);
     setEmployeeConfigDefaultRepositoryIds(activeRepositoryId ? [activeRepositoryId] : []);
     await loadEmployeeAgentTypeOptionsFromRepositoryPath(activeRepository?.path ?? null);
-    setEmployeeConfigOpen(true);
-  }, [activeRepositoryId, activeRepository?.path, loadEmployeeAgentTypeOptionsFromRepositoryPath]);
+    enterAuthorAgents();
+  }, [activeRepositoryId, activeRepository?.path, enterAuthorAgents, loadEmployeeAgentTypeOptionsFromRepositoryPath]);
 
-  /** WorkflowConfigModal 打开且 templates 就绪时，加载所有 workflow -> projectIds 映射 */
+  /** Author / Workflows 打开且 templates 就绪时，加载所有 workflow -> projectIds 映射 */
   useEffect(() => {
-    if (!workflowConfigOpen || workflowTemplates.length === 0) {
+    if (!authorWorkflowPaneActive || workflowTemplates.length === 0) {
       setWorkflowProjectIdsMap({});
       return;
     }
@@ -1262,7 +1313,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [workflowConfigOpen, workflowTemplates]);
+  }, [authorWorkflowPaneActive, workflowTemplates]);
 
   const openEmployeeConfigForRepositoryOwner = useCallback(
     async (repository: Repository) => {
@@ -1272,16 +1323,16 @@ export default function App() {
       setEmployeeConfigPrdVisibleEmployeeIds([]);
       setEmployeeConfigDefaultRepositoryIds([repository.id]);
       await loadEmployeeAgentTypeOptionsFromRepositoryPath(repository.path);
-      setEmployeeConfigOpen(true);
+      enterAuthorAgents();
     },
-    [loadEmployeeAgentTypeOptionsFromRepositoryPath],
+    [enterAuthorAgents, loadEmployeeAgentTypeOptionsFromRepositoryPath],
   );
 
   const openWorkflowConfigFromSidebar = useCallback(() => {
     setWorkflowConfigPrdProjectId(null);
     setWorkflowConfigInitialWorkflowId(null);
-    setWorkflowConfigOpen(true);
-  }, []);
+    enterAuthorWorkflows();
+  }, [enterAuthorWorkflows]);
 
   const {
     compactLayoutMode,
@@ -1315,16 +1366,16 @@ export default function App() {
   const handleAddWorktreeRepositoryToProject = useCallback(
     async (worktreePath: string) => {
       if (!activeProjectId) {
-        message.warning("请先在侧栏选择或创建一个项目");
+        message.warning("请先在侧栏选择或创建一个 Workspace");
         return;
       }
       const repositoryType = activeRepository?.repositoryType ?? "frontend";
       try {
         const result = await handleAddRepositoryPathToProject(activeProjectId, worktreePath, repositoryType);
         if (result === "already_in_project") {
-          message.info("该 worktree 目录已在当前项目中");
+          message.info("该 worktree 目录已在当前 Workspace 中");
         } else {
-          message.success("已将 worktree 目录加入当前项目");
+          message.success("已将 worktree 目录加入当前 Workspace");
         }
       } catch (error) {
         message.error(error instanceof Error ? error.message : String(error));
@@ -1421,23 +1472,43 @@ export default function App() {
     if (!repositories.some((r) => r.id === activeRepositoryId)) return;
     startupFirstProjectRepoSessionAppliedRef.current = true;
     handleSidebarRepositorySelect(activeRepositoryId);
+    // P1: Standalone Repo 启动时自动进 chat（宪法 §6：Standalone Repo 不进 cockpit）
+    const ownerProject = projects.find((p) => p.repositoryIds.includes(activeRepositoryId));
+    if (!ownerProject) {
+      viewMode.enter({ kind: "chat" });
+    }
   }, [
     activeRepositoryId,
     handleSidebarRepositorySelect,
+    projects,
     repositories,
     repositoryListLoading,
     tabsHydrated,
+    viewMode,
   ]);
 
   const handleSidebarRepositorySelectLeavingMcpHub = useCallback(
     (repositoryId: number | null) => {
-      setMcpHubMode(false);
-      setSkillsHubMode(false);
-      setCcWfStudioMode(false);
-      setMissionControlMode(false);
+      if (repositoryId == null) {
+        // 清空选中 → 回到 cockpit 主屏
+        if (!viewMode.isCockpit) viewMode.back();
+        handleSidebarRepositorySelect(repositoryId);
+        return;
+      }
+      // Standalone Repo（不属于任何 project）→ 进 chat 子模式
+      // Workspace 内仓库 → 保持 cockpit（宪法 §6）
+      const ownerProject = projects.find((p) => p.repositoryIds.includes(repositoryId));
+      if (!ownerProject) {
+        // Standalone Repo: 进入 chat
+        viewMode.enter({ kind: "chat" });
+      } else if (viewMode.isAuthor || viewMode.isInspect) {
+        // 从 author/inspect 回到 cockpit
+        viewMode.back();
+      }
+      // cockpit 模式下选 Workspace 内仓库：保持 cockpit 不动
       handleSidebarRepositorySelect(repositoryId);
     },
-    [handleSidebarRepositorySelect],
+    [handleSidebarRepositorySelect, projects, viewMode],
   );
 
   /** 侧栏「图谱操作 → 查看检索」：与顶栏图谱入口一致，先收敛其它 Hub 再打开覆盖层。 */
@@ -1456,26 +1527,24 @@ export default function App() {
       /** 双 rAF：先让右键菜单关闭并完成一帧绘制，再跑会话切换 / 挂载图谱，避免主线程长时间卡住。 */
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          setPromptsMode(false);
           setSearchOpen(false);
           if (opts.projectId != null) {
             setActiveProjectId(opts.projectId);
           }
           const alreadyOnRepo = opts.repositoryId === activeRepositoryId;
-          if (alreadyOnRepo) {
-            setMcpHubMode(false);
-            setSkillsHubMode(false);
-            setCcWfStudioMode(false);
-            setTaskSplitMode(false);
-            setMissionControlMode(false);
-          } else {
+          if (!alreadyOnRepo) {
             handleSidebarRepositorySelectLeavingMcpHub(opts.repositoryId);
           }
           startTransition(() => {
-            setCodeGraphSuppressIdleAutoReindex(true);
-            setCodeGraphLockToEntryRepository(opts.graphEntryFrom === "repository");
-            setCodeGraphDefaultProjectMultiRepo(opts.graphEntryFrom === "project");
-            setCodeKnowledgeGraphMode(true);
+            viewMode.enter(
+              inspectView(
+                codeGraphInspectTool({
+                  suppressIdleAutoReindex: true,
+                  lockToEntryRepository: opts.graphEntryFrom === "repository",
+                  defaultProjectMultiRepo: opts.graphEntryFrom === "project",
+                }),
+              ),
+            );
           });
         });
       });
@@ -1592,7 +1661,7 @@ export default function App() {
           .join("、");
         Modal.success({
           title: "多仓仓库组同步已完成",
-          content: `已为项目内仓库同步 GitNexus 仓库组：${names}。各仓代码图谱检索已在后台进行，全部完成后即可在「代码图谱」中查看节点与子图。`,
+          content: `已为 Workspace 内仓库同步 GitNexus 仓库组：${names}。各仓代码图谱检索已在后台进行，全部完成后即可在「代码图谱」中查看节点与子图。`,
         });
       });
 
@@ -1628,10 +1697,10 @@ export default function App() {
 
   const handleProjectSelectLeavingMcpHub = useCallback(
     (projectId: string) => {
-      setMcpHubMode(false);
-      setSkillsHubMode(false);
-      setCcWfStudioMode(false);
-      setMissionControlMode(false);
+      // 选 Workspace → 回到 cockpit（如果在 author/inspect 则退出）
+      if (viewMode.isAuthor || viewMode.isInspect) {
+        viewMode.back();
+      }
       const project = projects.find((p) => p.id === projectId) ?? null;
       const firstRepoId = project?.repositoryIds[0] ?? null;
       // 进项目即开主会话：通过 handleSidebarRepositorySelect 统一路由
@@ -1644,18 +1713,16 @@ export default function App() {
         setActiveProjectId(projectId);
       }
     },
-    [handleSidebarRepositorySelect, projects, setActiveProjectId],
+    [handleSidebarRepositorySelect, projects, setActiveProjectId, viewMode],
   );
 
   const jumpToSessionLeavingMcpHub = useCallback(
     (sessionId: string) => {
-      setMcpHubMode(false);
-      setSkillsHubMode(false);
-      setCcWfStudioMode(false);
-      setMissionControlMode(false);
+      // 跳转到具体会话 → 进 chat 子模式
+      viewMode.enter({ kind: "chat" });
       jumpToSessionWithRepository(sessionId);
     },
-    [jumpToSessionWithRepository],
+    [jumpToSessionWithRepository, viewMode],
   );
 
   async function handleCreateRepositoryTask(repository: Repository, mode: TaskMode) {
@@ -1693,12 +1760,12 @@ export default function App() {
       .map((id) => byId.get(id))
       .filter((repo): repo is Repository => Boolean(repo));
     if (repos.length === 0) {
-      message.warning("该项目下暂无仓库，请先关联仓库");
+      message.warning("该 Workspace 下暂无仓库，请先关联仓库");
       return;
     }
     const anchor = resolveProjectMainSessionAnchor(project, repositories);
     if (!anchor.path) {
-      message.warning("该项目缺少根目录，请先在项目设置中配置 rootPath");
+      message.warning("该 Workspace 缺少根目录，请先在 Author / Workspaces 中配置 rootPath");
       return;
     }
     const primaryRepo = repos[0];
@@ -1726,6 +1793,70 @@ export default function App() {
     );
   }
 
+  async function openProjectMainSession(project: ProjectItem): Promise<string | null> {
+    const byId = new Map(repositories.map((repo) => [repo.id, repo]));
+    const repos = project.repositoryIds
+      .map((id) => byId.get(id))
+      .filter((repo): repo is Repository => Boolean(repo));
+    const anchor = resolveProjectMainSessionAnchor(project, repositories);
+    if (!anchor.path) {
+      message.warning("该 Workspace 缺少根目录，请先配置 rootPath");
+      return null;
+    }
+    setAuthorTrellisProjectId(null);
+    // 打开项目主会话 → 进入 chat 子模式
+    viewMode.enter({ kind: "chat" });
+    setActiveProjectId(project.id);
+    if (repos[0]) {
+      setActiveRepositoryId(repos[0].id);
+    }
+
+    const mainOwnerPick = resolveMainOwnerAgentNameForRepositoryPath(repositories, anchor.path);
+    const boundId = resolveRepositoryMainSessionId(
+      anchor.path,
+      repositoryMainSessionBindings,
+      sessions,
+      mainOwnerPick,
+    );
+    if (boundId) {
+      switchSession(boundId);
+      return boundId;
+    }
+    const latestForProject = pickSessionForRepositorySidebarSelect(
+      sessions,
+      anchor.path,
+      loadSessionOwnerHints(),
+      { mainOwnerAgentName: mainOwnerPick },
+    );
+    if (latestForProject) {
+      bindRepositoryMainSession(anchor.path, latestForProject.id);
+      switchSession(latestForProject.id);
+      return latestForProject.id;
+    }
+    const id = await createSession(anchor.path, anchor.displayName);
+    bindRepositoryMainSession(anchor.path, id);
+    return id;
+  }
+
+  async function handleRequestSpecAgentUpdate(project: ProjectItem, area: string) {
+    const sessionId = await openProjectMainSession(project);
+    if (!sessionId) return;
+    const areaPath = `.trellis/spec/${area}/index.md`;
+    executeSession(
+      sessionId,
+      [
+        `Update the Trellis spec area: ${area}`,
+        "",
+        `Project: ${project.name}`,
+        `Spec index: ${areaPath}`,
+        "",
+        "Read the current project code and the existing spec documents before editing.",
+        "Update the spec through the project workspace, keep the change focused, and report what changed and why.",
+        "Do not make unrelated product or UI changes.",
+      ].join("\n"),
+    );
+  }
+
   function handleOpenInFinder(repository: Repository) {
     openInFinder(repository.path).catch((err) => {
       console.error("Failed to open in finder:", err);
@@ -1733,24 +1864,16 @@ export default function App() {
   }
 
   function handleOpenPromptsForProject(project: ProjectItem) {
-    setMcpHubMode(false);
-    setSkillsHubMode(false);
-    setCcWfStudioMode(false);
     setPromptsOpenContext({ project });
     setActiveProjectId(project.id);
-    setSearchOpen(false);
-    setPromptsMode(true);
+    enterAuthorPane("prompts");
   }
 
   function handleOpenPromptsForRepository(project: ProjectItem, repository: Repository) {
-    setMcpHubMode(false);
-    setSkillsHubMode(false);
-    setCcWfStudioMode(false);
     setPromptsOpenContext({ project, repository });
     setActiveProjectId(project.id);
     setActiveRepositoryId(repository.id);
-    setSearchOpen(false);
-    setPromptsMode(true);
+    enterAuthorPane("prompts");
   }
 
   async function refreshWorkflowTemplates() {
@@ -1817,14 +1940,9 @@ export default function App() {
       const detail = (event as CustomEvent<OpenWorkflowConfigDetail>).detail;
       const workflowId = detail?.workflowId?.trim() ?? "";
       const projectId = detail?.projectId?.trim() ?? "";
-      setSearchOpen(false);
-      setPromptsMode(false);
-      setMcpHubMode(false);
-      setSkillsHubMode(false);
-      setMissionControlMode(false);
       setWorkflowConfigPrdProjectId(projectId || null);
       setWorkflowConfigInitialWorkflowId(workflowId || null);
-      setWorkflowConfigOpen(true);
+      enterAuthorPane("workflows");
     }
     function handleWorkflowGraphChanged(event: Event) {
       const detail = (event as CustomEvent<WorkflowGraphChangedDetail>).detail;
@@ -1862,7 +1980,7 @@ export default function App() {
       window.removeEventListener(WORKFLOW_UI_EVENT_WORKFLOW_GRAPH_CHANGED, handleWorkflowGraphChanged as EventListener);
       window.removeEventListener(WORKFLOW_UI_EVENT_OPEN_REPOSITORY_FILE, handleOpenRepositoryFileEvent as EventListener);
     };
-  }, [openRepositoryFileByEvent]);
+  }, [enterAuthorPane, openRepositoryFileByEvent]);
 
   handleStopEmployeeMonitorRef.current = (employeeId: string) => {
     const normalizedEmployeeId = employeeId.trim().toLowerCase();
@@ -1934,15 +2052,9 @@ export default function App() {
     <AppWorkspaceLayout
       dark={dark}
       collapsed={collapsed}
-      promptsMode={promptsMode}
-      taskPanelMode={taskPanelMode}
-      mcpHubMode={mcpHubMode}
-      skillsHubMode={skillsHubMode}
-      codeKnowledgeGraphMode={codeKnowledgeGraphMode}
-      ccWfStudioMode={ccWfStudioMode}
+      viewMode={viewMode.view}
       ccWfStudioSessionPath={ccWfStudioSessionPath}
       onCloseCcWorkflowStudio={onCloseCcWorkflowStudio}
-      missionControlMode={missionControlMode}
       compactLayoutMode={compactLayoutMode}
       effectiveRightCollapsed={effectiveRightCollapsed}
       mainLayoutContentRef={mainLayoutContentRef}
@@ -1959,26 +2071,17 @@ export default function App() {
         activeProjectId,
         repositories,
         activeRepositoryId,
-        mcpNavActive: mcpHubMode,
-        onOpenMcpHub: () => {
-          setPromptsMode(false);
-          setSkillsHubMode(false);
-          setCodeKnowledgeGraphMode(false);
-          setCcWfStudioMode(false);
-          setMissionControlMode(false);
-          setMcpHubMode(true);
+        authorDisabled: !activeProjectId && activeRepositoryId != null,
+        authorDisabledTooltip: "Standalone Repo 不支持 Author 配置；升格为 Workspace 后启用",
+        onOpenAuthor: () => {
+          if (!activeProjectId && activeRepositoryId != null) {
+            message.warning("Standalone Repo 不支持 Author 配置；升格为 Workspace 后启用");
+            return;
+          }
+          enterAuthorPane(lastAuthorPane);
         },
-        skillsNavActive: skillsHubMode,
-        onOpenSkillsHub: () => {
-          setPromptsMode(false);
-          setMcpHubMode(false);
-          setCodeKnowledgeGraphMode(false);
-          setCcWfStudioMode(false);
-          setMissionControlMode(false);
-          setSkillsHubMode(true);
-        },
-        workflowStudioNavActive: ccWfStudioMode,
-        onOpenWorkflowStudio: openWorkflowStudio,
+        workspaceCreateRequest,
+        standaloneRepoAddRequest,
         onProjectSelect: handleProjectSelectLeavingMcpHub,
         onCreateProject: handleCreateProject,
         onUpdateProject: handleUpdateProject,
@@ -2022,6 +2125,10 @@ export default function App() {
         onCreateProjectTask: handleCreateProjectTask,
         onCreateRepositoryTask: handleCreateRepositoryTask,
         onOpenPromptsProject: handleOpenPromptsForProject,
+        onOpenProjectTrellis: (project) => {
+          setAuthorTrellisProjectId(project.id);
+          enterAuthorPane("trellis-spec");
+        },
         onOpenPromptsRepository: handleOpenPromptsForRepository,
         onOpenRepositoryMainOwner: (repository) => {
           void openEmployeeConfigForRepositoryOwner(repository);
@@ -2049,7 +2156,7 @@ export default function App() {
           const firstRepoId =
             project.repositoryIds.find((id) => repositories.some((r) => r.id === id)) ?? null;
           if (firstRepoId == null) {
-            message.warning("该项目下暂无仓库");
+            message.warning("该 Workspace 下暂无仓库");
             return;
           }
           openCodeKnowledgeGraphAfterRepositorySelect({
@@ -2076,10 +2183,204 @@ export default function App() {
           });
         },
       }}
+      authorPanelProps={{
+        pane: authorPane,
+        onPaneChange: handleAuthorPaneChange,
+        onBack: viewMode.back,
+        workspacesTabProps: {
+          workspaces: projects,
+          standaloneRepos,
+          activeWorkspaceId: activeProjectId,
+          activeRepositoryId,
+          onCreateWorkspace: () => {
+            setWorkspaceCreateRequest((value) => value + 1);
+          },
+          onAddStandaloneRepo: () => {
+            setStandaloneRepoAddRequest((value) => value + 1);
+          },
+          onSelectWorkspace: handleProjectSelectLeavingMcpHub,
+          onSelectStandaloneRepo: (repositoryId) => handleSidebarRepositorySelectLeavingMcpHub(repositoryId),
+        },
+        employeeConfigProps: {
+          open: true,
+          loading: employeeLoading,
+          employees,
+          workflowTemplates,
+          workflowGraphsByWorkflowId,
+          repositories,
+          projects,
+          agentTypeOptions: employeeAgentTypeOptions,
+          defaultRepositoryIds: employeeConfigDefaultRepositoryIds,
+          hideEmployeesAssociatedOnlyWithDefaultRepositories:
+            Boolean(employeeConfigPrdProjectId?.trim()) || employeeConfigRepositoryOwnerScopeOnly,
+          alwaysShowEmployeeIds: employeeConfigPrdVisibleEmployeeIds,
+          repositoryOwnerScopeOnly: employeeConfigRepositoryOwnerScopeOnly,
+          initialCreateEmployeeName: employeeConfigInitialCreateEmployeeName,
+          singleProjectScopeId: employeeConfigPrdProjectId?.trim() || null,
+          onClose: viewMode.back,
+          onCreate: async (input) => {
+            setEmployeeLoading(true);
+            try {
+              const linkPid = employeeConfigPrdProjectId?.trim() ?? "";
+              const created = await createEmployee({
+                name: input.name,
+                agentType: input.agentType,
+                enabled: input.enabled,
+                repositoryIds: input.repositoryIds,
+                projectIds: linkPid ? [linkPid] : [],
+              });
+              if (linkPid) {
+                setEmployeeConfigPrdVisibleEmployeeIds((prev) =>
+                  prev.includes(created.id) ? prev : [...prev, created.id],
+                );
+              }
+              if (input.ownerRepositoryId != null) {
+                try {
+                  const ownerRepo = repositories.find((r) => r.id === input.ownerRepositoryId);
+                  if (ownerRepo) {
+                    await handlePersistRepositoryMainOwnerAgent(ownerRepo, created.agentType.trim());
+                  } else {
+                    await handleUpdateRepositoryMainOwnerAgent(input.ownerRepositoryId, created.agentType.trim());
+                  }
+                } catch (err) {
+                  message.error(`员工已创建，但设置仓库失败：${toUiErrorMessage(err)}`);
+                }
+              }
+              await refreshEmployeeData();
+            } finally {
+              setEmployeeLoading(false);
+            }
+          },
+          onUpdate: async (input) => {
+            setEmployeeLoading(true);
+            try {
+              await updateEmployee({
+                ...input,
+                projectIds: input.projectIds,
+              });
+              await refreshEmployeeData();
+            } finally {
+              setEmployeeLoading(false);
+            }
+          },
+          onDelete: async (employeeId) => {
+            setEmployeeLoading(true);
+            try {
+              const row = employees.find((e) => e.id === employeeId);
+              await deleteEmployee(employeeId);
+              const agent = row?.agentType?.trim();
+              if (agent && row?.repositoryIds?.length) {
+                for (const rid of row.repositoryIds) {
+                  const r = repositories.find((x) => x.id === rid);
+                  if (r?.mainOwnerAgentName?.trim() === agent) {
+                    try {
+                      await handlePersistRepositoryMainOwnerAgent(r, null);
+                    } catch {
+                      /* ignore per-repo clear errors */
+                    }
+                  }
+                }
+              }
+              setEmployeeConfigPrdVisibleEmployeeIds((prev) => prev.filter((id) => id !== employeeId));
+              await refreshEmployeeData();
+            } finally {
+              setEmployeeLoading(false);
+            }
+          },
+        },
+        workflowConfigProps: {
+          open: true,
+          loading: workflowLoading,
+          employees,
+          repositoryPath: workflowModalRepositoryPath,
+          templates: workflowTemplates,
+          projects,
+          workflowProjectIds: workflowProjectIdsMap,
+          selectableEmployeeIds: selectableWorkflowEmployeeIds,
+          onClose: viewMode.back,
+          onSaveTemplate: async (input) => {
+            setWorkflowLoading(true);
+            try {
+              const savedTemplate = await saveWorkflowTemplate(input);
+              await refreshWorkflowTemplates();
+              const linkPid = workflowConfigPrdProjectId?.trim() ?? "";
+              if (linkPid) {
+                try {
+                  await addProjectPrdWorkflow(linkPid, savedTemplate.id);
+                  message.success("已关联到当前 Workspace");
+                } catch (err) {
+                  message.error(`模板已保存，但关联到 Workspace 失败：${toUiErrorMessage(err)}`);
+                }
+              }
+              return savedTemplate;
+            } finally {
+              setWorkflowLoading(false);
+            }
+          },
+          onLoadGraphItem: async (workflowId) => {
+            return getWorkflowGraph({ workflowId });
+          },
+          onSaveGraph: async (input) => {
+            const savedGraph = await saveWorkflowGraph({
+              workflowId: input.workflowId,
+              graph: input.graph,
+              status: input.status,
+            });
+            setWorkflowGraphsByWorkflowId((prev) => ({
+              ...prev,
+              [input.workflowId]: savedGraph.graph,
+            }));
+            setWorkflowGraphStatusByWorkflowId((prev) => ({
+              ...prev,
+              [input.workflowId]: savedGraph.status,
+            }));
+          },
+          onValidateGraph: async (graph) => {
+            return validateWorkflowGraph({ graph });
+          },
+          onDeleteTemplate: async (workflowId) => {
+            setWorkflowLoading(true);
+            try {
+              await deleteWorkflowTemplate(workflowId);
+              await refreshWorkflowTemplates();
+              message.success("团队已删除");
+            } catch (error) {
+              const messageText = toUiErrorMessage(error);
+              message.error(`删除团队失败：${messageText}`);
+            } finally {
+              setWorkflowLoading(false);
+            }
+          },
+          initialWorkflowId: workflowConfigInitialWorkflowId,
+        },
+        mcpHubProps: {
+          repositoryPath: activeRepository?.path ?? null,
+        },
+        skillsHubProps: {
+          repositoryPath: activeRepository?.path ?? null,
+        },
+        promptsPanelProps: {
+          onClose: viewMode.back,
+          projects,
+          repositories,
+          activeProjectId,
+          activeRepositoryId,
+          openContext: promptsOpenContext,
+          repositoryListLoading,
+        },
+        trellisSpecProps: {
+          open: true,
+          project: authorTrellisProject ?? activeProject,
+          onOpenProjectSession: (project) => void openProjectMainSession(project),
+          onRequestSpecAgentUpdate: handleRequestSpecAgentUpdate,
+        },
+        repositoryPath: activeRepository?.path ?? null,
+        workflowStudioAction: undefined,
+      }}
       promptsPanelProps={{
         onClose: () => {
           setPromptsOpenContext(null);
-          setPromptsMode(false);
+          viewMode.back();
         },
         projects,
         repositories,
@@ -2136,6 +2437,7 @@ export default function App() {
         onToggleRightPanel: handleToggleRightPanel,
         onToggleTerminal: () => setTerminalCollapsed((c) => !c),
         onSearch: () => setSearchOpen(true),
+        onBackToCockpit: () => viewMode.back(),
         collapsed,
         rightCollapsed: effectiveRightCollapsed,
         terminalCollapsed,
@@ -2158,7 +2460,7 @@ export default function App() {
         resolveTaskListOmcInvokeConcurrency,
         onDecideWorkflowTask: handleDecideWorkflowTask,
       }}
-      rightPanelProps={{
+      chatInspectorProps={{
         dark,
         collapsed: effectiveRightCollapsed,
         projectId: activeProjectId,
@@ -2218,6 +2520,19 @@ export default function App() {
         onReloadFullDiskTranscript: reloadFullDiskTranscript,
         hideEmployeeUi: shouldHideEmployeeUi(activeProject),
       }}
+      cockpitInspectorProps={{
+        dark,
+        collapsed: effectiveRightCollapsed,
+        siderWidth: mainLayoutRightWidthPx,
+        activeProject,
+        activeRepository: activeRepository ?? null,
+        employeeMonitorItems,
+      }}
+      cockpitEmpty={projects.length === 0 && floatingRepositories.length === 0}
+      cockpitOnboardingProps={{
+        onCreateWorkspace: () => setWorkspaceCreateRequest((value) => value + 1),
+        onImportStandaloneRepo: () => setStandaloneRepoAddRequest((value) => value + 1),
+      }}
       commandPaletteProps={{
         open: searchOpen,
         onClose: () => setSearchOpen(false),
@@ -2225,11 +2540,11 @@ export default function App() {
       }}
       mcpHubProps={{
         repositoryPath: activeRepository?.path ?? null,
-        onClose: () => setMcpHubMode(false),
+        onClose: () => viewMode.back(),
       }}
       skillsHubProps={{
         repositoryPath: activeRepository?.path ?? null,
-        onClose: () => setSkillsHubMode(false),
+        onClose: () => viewMode.back(),
       }}
       codeKnowledgeGraphProps={{
         repositoryId: activeRepository?.id ?? null,
@@ -2244,8 +2559,7 @@ export default function App() {
         defaultProjectMultiRepoAssociation: codeGraphDefaultProjectMultiRepo,
         onSelectRepository: setActiveRepositoryWithOwner,
         onClose: () => {
-          setCodeKnowledgeGraphMode(false);
-          setCodeGraphSuppressIdleAutoReindex(false);
+          viewMode.back();
         },
         onRemoveRepository: async (repoId) => {
           const repo = repositories.find((r) => r.id === repoId);
@@ -2258,8 +2572,11 @@ export default function App() {
         projects,
         repositories,
         sessions,
-        initialTarget: missionControlInitialTarget,
-        onClose: () => setMissionControlMode(false),
+        // P1 §5.1: 显式 initialTarget > 当前选中项目 > null
+        initialTarget:
+          missionControlInitialTarget ??
+          (activeProjectId ? { projectId: activeProjectId } : null),
+        onClose: () => viewMode.enter({ kind: "chat" }),
       }}
       progressMonitorDrawerProps={{
         open: monitorDrawerTarget != null,
@@ -2291,176 +2608,6 @@ export default function App() {
           setMonitorDrawerTarget({ type: "task", taskId });
         },
       }}
-      employeeConfigModalProps={
-        employeeConfigOpen
-          ? {
-              open: employeeConfigOpen,
-              loading: employeeLoading,
-              employees,
-              workflowTemplates,
-              workflowGraphsByWorkflowId,
-              repositories,
-              projects,
-              agentTypeOptions: employeeAgentTypeOptions,
-              defaultRepositoryIds: employeeConfigDefaultRepositoryIds,
-              hideEmployeesAssociatedOnlyWithDefaultRepositories:
-                Boolean(employeeConfigPrdProjectId?.trim()) || employeeConfigRepositoryOwnerScopeOnly,
-              alwaysShowEmployeeIds: employeeConfigPrdVisibleEmployeeIds,
-              repositoryOwnerScopeOnly: employeeConfigRepositoryOwnerScopeOnly,
-              initialCreateEmployeeName: employeeConfigInitialCreateEmployeeName,
-              singleProjectScopeId: employeeConfigPrdProjectId?.trim() || null,
-              onClose: () => {
-                setEmployeeConfigOpen(false);
-                setEmployeeConfigPrdProjectId(null);
-                setEmployeeConfigPrdVisibleEmployeeIds([]);
-                setEmployeeConfigRepositoryOwnerScopeOnly(false);
-                setEmployeeConfigInitialCreateEmployeeName(null);
-              },
-              onCreate: async (input) => {
-                setEmployeeLoading(true);
-                try {
-                  const linkPid = employeeConfigPrdProjectId?.trim() ?? "";
-                  const created = await createEmployee({
-                    name: input.name,
-                    agentType: input.agentType,
-                    enabled: input.enabled,
-                    repositoryIds: input.repositoryIds,
-                    projectIds: linkPid ? [linkPid] : [],
-                  });
-                  if (linkPid) {
-                    setEmployeeConfigPrdVisibleEmployeeIds((prev) =>
-                      prev.includes(created.id) ? prev : [...prev, created.id],
-                    );
-                  }
-                  if (input.ownerRepositoryId != null) {
-                    try {
-                      const ownerRepo = repositories.find((r) => r.id === input.ownerRepositoryId);
-                      if (ownerRepo) {
-                        await handlePersistRepositoryMainOwnerAgent(ownerRepo, created.agentType.trim());
-                      } else {
-                        await handleUpdateRepositoryMainOwnerAgent(input.ownerRepositoryId, created.agentType.trim());
-                      }
-                    } catch (err) {
-                      message.error(`员工已创建，但设置仓库失败：${toUiErrorMessage(err)}`);
-                    }
-                  }
-                  await refreshEmployeeData();
-                } finally {
-                  setEmployeeLoading(false);
-                }
-              },
-              onUpdate: async (input) => {
-                setEmployeeLoading(true);
-                try {
-                  await updateEmployee({
-                    ...input,
-                    projectIds: input.projectIds,
-                  });
-                  await refreshEmployeeData();
-                } finally {
-                  setEmployeeLoading(false);
-                }
-              },
-              onDelete: async (employeeId) => {
-                setEmployeeLoading(true);
-                try {
-                  const row = employees.find((e) => e.id === employeeId);
-                  await deleteEmployee(employeeId);
-                  const agent = row?.agentType?.trim();
-                  if (agent && row?.repositoryIds?.length) {
-                    for (const rid of row.repositoryIds) {
-                      const r = repositories.find((x) => x.id === rid);
-                      if (r?.mainOwnerAgentName?.trim() === agent) {
-                        try {
-                          await handlePersistRepositoryMainOwnerAgent(r, null);
-                        } catch {
-                          /* ignore per-repo clear errors */
-                        }
-                      }
-                    }
-                  }
-                  setEmployeeConfigPrdVisibleEmployeeIds((prev) => prev.filter((id) => id !== employeeId));
-                  await refreshEmployeeData();
-                } finally {
-                  setEmployeeLoading(false);
-                }
-              },
-            }
-          : null
-      }
-      workflowConfigModalProps={
-        workflowConfigOpen
-          ? {
-              open: workflowConfigOpen,
-              loading: workflowLoading,
-              employees,
-              repositoryPath: workflowModalRepositoryPath,
-              templates: workflowTemplates,
-              projects,
-              workflowProjectIds: workflowProjectIdsMap,
-              selectableEmployeeIds: selectableWorkflowEmployeeIds,
-              onClose: () => {
-                setWorkflowConfigOpen(false);
-                setWorkflowConfigPrdProjectId(null);
-                setWorkflowConfigInitialWorkflowId(null);
-              },
-              onSaveTemplate: async (input) => {
-                setWorkflowLoading(true);
-                try {
-                  const savedTemplate = await saveWorkflowTemplate(input);
-                  await refreshWorkflowTemplates();
-                  const linkPid = workflowConfigPrdProjectId?.trim() ?? "";
-                  if (linkPid) {
-                    try {
-                      await addProjectPrdWorkflow(linkPid, savedTemplate.id);
-                      message.success("已关联到当前项目");
-                    } catch (err) {
-                      message.error(`模板已保存，但关联到项目失败：${toUiErrorMessage(err)}`);
-                    }
-                  }
-                  return savedTemplate;
-                } finally {
-                  setWorkflowLoading(false);
-                }
-              },
-              onLoadGraphItem: async (workflowId) => {
-                return getWorkflowGraph({ workflowId });
-              },
-              onSaveGraph: async (input) => {
-                const savedGraph = await saveWorkflowGraph({
-                  workflowId: input.workflowId,
-                  graph: input.graph,
-                  status: input.status,
-                });
-                setWorkflowGraphsByWorkflowId((prev) => ({
-                  ...prev,
-                  [input.workflowId]: savedGraph.graph,
-                }));
-                setWorkflowGraphStatusByWorkflowId((prev) => ({
-                  ...prev,
-                  [input.workflowId]: savedGraph.status,
-                }));
-              },
-              onValidateGraph: async (graph) => {
-                return validateWorkflowGraph({ graph });
-              },
-              onDeleteTemplate: async (workflowId) => {
-                setWorkflowLoading(true);
-                try {
-                  await deleteWorkflowTemplate(workflowId);
-                  await refreshWorkflowTemplates();
-                  message.success("团队已删除");
-                } catch (error) {
-                  const messageText = toUiErrorMessage(error);
-                  message.error(`删除团队失败：${messageText}`);
-                } finally {
-                  setWorkflowLoading(false);
-                }
-              },
-              initialWorkflowId: workflowConfigInitialWorkflowId,
-            }
-          : null
-      }
     />
     </>
   );

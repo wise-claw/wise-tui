@@ -37,6 +37,7 @@ type GraphStatus = "published" | "draft" | "unknown" | "none";
 
 interface Props {
   open: boolean;
+  inline?: boolean;
   loading: boolean;
   employees: EmployeeItem[];
   templates: WorkflowTemplateItem[];
@@ -63,6 +64,7 @@ interface Props {
 
 export function WorkflowConfigModal({
   open,
+  inline = false,
   loading,
   employees,
   templates,
@@ -296,17 +298,8 @@ export function WorkflowConfigModal({
     }
   }
 
-  return (
-    <Modal
-      title="团队配置"
-      open={open}
-      onCancel={onClose}
-      footer={null}
-      width={1080}
-      className="app-workflow-config-modal"
-      destroyOnHidden
-    >
-      <div className="app-workflow-config-layout">
+  const content = (
+    <div className="app-workflow-config-layout">
         <div className="app-workflow-config-sidebar">
           <Space orientation="vertical" size={10} className="app-workflow-config-sidebar-space">
             <div className="app-workflow-config-sidebar-header">
@@ -411,11 +404,11 @@ export function WorkflowConfigModal({
                 <Switch checkedChildren="默认" unCheckedChildren="非默认" />
               </Form.Item>
               {projects && projects.length > 0 && (
-                <Form.Item label="所属项目">
+                <Form.Item label="所属 Workspace">
                   <Select
                     mode="multiple"
                     allowClear
-                    placeholder="所属项目"
+                    placeholder="所属 Workspace"
                     maxTagCount="responsive"
                     value={editingProjectIds}
                     onChange={(value: string[]) => setEditingProjectIds(value)}
@@ -491,7 +484,25 @@ export function WorkflowConfigModal({
           </div>
 
         </Space>
-      </div>
+    </div>
+  );
+
+  if (inline) {
+    if (!open) return null;
+    return <div className="app-workflow-config-inline-root">{content}</div>;
+  }
+
+  return (
+    <Modal
+      title="团队配置"
+      open={open}
+      onCancel={onClose}
+      footer={null}
+      width={1080}
+      className="app-workflow-config-modal"
+      destroyOnHidden
+    >
+      {content}
     </Modal>
   );
 }

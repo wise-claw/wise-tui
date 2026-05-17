@@ -74,6 +74,19 @@ export interface RetryClusterFromRunDirOutput {
   newRunDir: string;
 }
 
+export interface CancelClusterRunInput {
+  runId: string;
+}
+
+export interface CancelClusterRunOutput {
+  runId: string;
+  runDir: string;
+  clusterId: string;
+  signalledRunningProcess: boolean;
+  wroteRunResult: boolean;
+  alreadyFinished: boolean;
+}
+
 /** 0 = 无超时，子代理应自行结束或报错 */
 const DEFAULT_SPLITTER_TIMEOUT_MS = 0;
 
@@ -196,6 +209,14 @@ export async function retryClusterFromRunDir(
       missionId: input.missionId ?? null,
       clusterId: input.clusterId,
       model: input.model ?? null,
+    },
+  });
+}
+
+export async function cancelClusterRun(input: CancelClusterRunInput): Promise<CancelClusterRunOutput> {
+  return invoke<CancelClusterRunOutput>("prd_split_cancel_run", {
+    input: {
+      runId: input.runId,
     },
   });
 }

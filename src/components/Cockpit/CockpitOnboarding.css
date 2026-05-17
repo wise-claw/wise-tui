@@ -1,0 +1,74 @@
+.cockpit-onboarding {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+  padding: 48px 24px;
+  background: var(--ant-color-bg-layout);
+  overflow: auto;
+}
+
+.cockpit-onboarding-hero {
+  text-align: center;
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.cockpit-onboarding-hero-icon {
+  font-size: 48px;
+  color: var(--ant-color-primary);
+}
+
+.cockpit-onboarding-hero-title {
+  margin: 0 !important;
+}
+
+.cockpit-onboarding-hero-subtitle {
+  margin: 0 !important;
+  font-size: 14px;
+}
+
+.cockpit-onboarding-cards {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  justify-content: center;
+}
+
+.cockpit-onboarding-cards > .ant-space-item {
+  display: flex;
+}
+
+.cockpit-onboarding-card {
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+}
+
+.cockpit-onboarding-card .ant-card-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  height: 100%;
+}
+
+.cockpit-onboarding-card .ant-card-body > .ant-typography {
+  margin-bottom: 0 !important;
+}
+
+.cockpit-onboarding-card-icon {
+  font-size: 32px;
+  color: var(--ant-color-primary);
+  margin-bottom: 4px;
+}
+
+.cockpit-onboarding-tip {
+  font-size: 12px;
+}

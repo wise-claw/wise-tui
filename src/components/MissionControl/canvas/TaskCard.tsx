@@ -9,6 +9,7 @@ interface TaskCardProps {
   onHover: (taskId: string | null) => void;
   onRemoveDependency?: (taskId: string, depTaskId: string) => void;
   onRetryCluster?: (clusterId: string) => void;
+  onCancelCluster?: (clusterId: string) => void;
 }
 
 const PRIORITY_COLORS: Record<string, string> = { P0: "red", P1: "orange", P2: "default" };
@@ -17,6 +18,7 @@ function agentTagColor(status: NonNullable<TaskCardVM["agentStatus"]>["status"])
   if (status === "running") return "processing";
   if (status === "done") return "success";
   if (status === "blocked") return "error";
+  if (status === "cancelled") return "warning";
   if (status === "stale") return "warning";
   return "default";
 }
@@ -27,7 +29,7 @@ function heartbeatTooltip(lastHeartbeatAt: number | null): string {
   return `上次心跳 ${seconds} 秒前`;
 }
 
-export function TaskCard({ task, onSelect, onHover, onRemoveDependency, onRetryCluster }: TaskCardProps) {
+export function TaskCard({ task, onSelect, onHover, onRemoveDependency, onRetryCluster, onCancelCluster }: TaskCardProps) {
   const hasDeps = task.dependencyLabels.length > 0;
   const blockedDeps = task.dependencyLabels.filter((d) => !d.satisfied);
   const satisfiedDeps = task.dependencyLabels.filter((d) => d.satisfied);
@@ -155,6 +157,19 @@ export function TaskCard({ task, onSelect, onHover, onRemoveDependency, onRetryC
               }}
             >
               🔄 重试
+            </button>
+          ) : null}
+          {task.agentStatus?.status === "running" && onCancelCluster ? (
+            <button
+              type="button"
+              className="mission-btn-stop"
+              title="中断此子代理"
+              onClick={(e) => {
+                e.stopPropagation();
+                onCancelCluster(task.clusterId);
+              }}
+            >
+              Stop
             </button>
           ) : null}
         </span>

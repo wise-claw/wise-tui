@@ -183,6 +183,7 @@ export function useRepositoryList() {
     () => selectFloatingRepositories(projects, repositories),
     [projects, repositories],
   );
+  const standaloneRepos = floatingRepositories;
 
   const handleCreateProject = useCallback(async (
     name: string,
@@ -192,7 +193,7 @@ export function useRepositoryList() {
     if (!trimmed) return;
     const rootPathRaw = options?.rootPath?.trim();
     if (!rootPathRaw) {
-      throw new Error("请先选择项目根目录");
+      throw new Error("请先选择 Workspace 根目录");
     }
     const embedTrellis = options?.embedTrellis !== false;
     if (embedTrellis) {
@@ -296,10 +297,10 @@ export function useRepositoryList() {
   }, []);
 
   /**
-   * 选中 repo 并把 activeProjectId 同步到其 owner project（游离 repo 时清空）。
+   * 选中 repo 并把 activeProjectId 同步到其 owner project（Standalone Repo 时清空）。
    *
    * 取代散落在 AppImpl 的 `ownerProject ? selectProjectAndRepository : setActiveRepositoryId`
-   * 模式，避免选中游离 repo 时残留 stale activeProjectId 污染右侧面板。
+   * 模式，避免选中 Standalone Repo 时残留 stale activeProjectId 污染右侧面板。
    */
   const setActiveRepositoryWithOwner = useCallback(
     (repositoryId: number) => {
@@ -333,7 +334,7 @@ export function useRepositoryList() {
   }, [repositories]);
 
   /**
-   * 创建不属于任何 project 的游离仓库；选目录后立即在侧栏顶层平铺显示，
+   * 创建不属于任何 project 的 Standalone Repo；选目录后立即在侧栏顶层平铺显示，
    * 同时清空 activeProjectId 避免右侧面板残留 stale 项目上下文。
    */
   const handleAddFloatingRepository = useCallback(
@@ -356,7 +357,7 @@ export function useRepositoryList() {
   );
 
   /**
-   * 将游离 repo 升格为新项目：创建项目 → 关联 repo → 切换到该项目卡。
+   * 将 Standalone Repo 升格为 Workspace：创建 project 记录 → 关联 repo → 切换到该 Workspace 卡。
    * repo 一旦关联即从游离区出栈（M:N 关联表更新，前端派生自动反映）。
    */
   const handlePromoteFloatingRepositoryToProject = useCallback(
@@ -515,6 +516,7 @@ export function useRepositoryList() {
     activeProjectId,
     projectRepositories,
     floatingRepositories,
+    standaloneRepos,
     activeRepositoryId,
     loading,
     setActiveRepositoryId,

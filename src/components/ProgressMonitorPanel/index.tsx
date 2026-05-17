@@ -1,6 +1,7 @@
-import { Descriptions, Drawer, Empty, InputNumber, Popover, Tag, Tooltip, Typography } from "antd";
+import { Collapse, Descriptions, Drawer, Empty, InputNumber, Popover, Tag, Tooltip, Typography } from "antd";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type {
+  ClaudeMessage,
   ClaudeSession,
   EmployeeMonitorItem,
   MonitorDrawerTarget,
@@ -31,6 +32,7 @@ import { sanitizeOmcDirectBatchPreviewLineForList } from "../../utils/claudeInvo
 import { OmcDirectBatchInvocationDetailDrawer } from "./OmcDirectBatchInvocationDetailDrawer";
 import { MonitorHistorySessionTranscriptDrawer } from "./MonitorHistorySessionTranscriptDrawer";
 import { getSessionPreview } from "./historySessionDrawerChrome";
+import { ClaudeSessionMessagesColumn } from "../ClaudeSessions/ClaudeSessionMessagesColumn";
 
 import { useAgentAssignments } from "../../hooks/useAgentAssignments";
 import "./index.css";
@@ -119,6 +121,73 @@ interface HistorySessionRow {
 interface RepositorySubagentDetailTarget {
   repository: RepositoryMemberMonitorItem;
   subagent: RepositoryMemberMonitorSubagentItem;
+}
+
+function findSubagentSession(
+  sessions: readonly ClaudeSession[],
+  subagent: RepositoryMemberMonitorSubagentItem,
+): ClaudeSession | null {
+  const sessionId = subagent.sessionId?.trim();
+  if (!sessionId) return null;
+  return sessions.find((session) => session.id === sessionId || session.claudeSessionId === sessionId) ?? null;
+}
+
+function subagentSessionStatus(status: RepositoryMemberMonitorSubagentItem["status"]): ClaudeSession["status"] {
+  if (status === "running" || status === "stale") return "running";
+  if (status === "failed") return "error";
+  if (status === "cancelled") return "cancelled";
+  return "completed";
+}
+
+function textMessage(
+  id: number,
+  role: ClaudeMessage["role"],
+  content: string,
+  timestamp: number,
+): ClaudeMessage {
+  return {
+    id,
+    role,
+    content,
+    parts: [{ type: "text", text: content }],
+    timestamp,
+  };
+}
+
+function buildSyntheticSubagentSession(
+  repository: RepositoryMemberMonitorItem,
+  subagent: RepositoryMemberMonitorSubagentItem,
+): ClaudeSession {
+  const now = Date.now();
+  const startedAt = subagent.startedAt ?? Math.max(0, subagent.updatedAt - 1000);
+  const prompt = subagent.promptExcerpt?.trim()
+    || subagent.taskTitle?.trim()
+    || subagent.previewText.trim()
+    || `${subagent.subagentType} ${subagent.stage ?? ""}`.trim();
+  const output = subagent.outputExcerpt?.trim()
+    || (subagent.previewText.trim() && subagent.previewText.trim() !== prompt ? subagent.previewText.trim() : "")
+    || (subagent.status === "running" || subagent.status === "stale" ? "等待子代理输出..." : "未记录输出正文");
+  const statusLine = [
+    subagentStatusLabel(subagent.status),
+    subagent.stage ? `stage: ${subagent.stage}` : "",
+    subagent.taskId ? `task: ${subagent.taskId}` : "",
+  ].filter(Boolean).join(" · ");
+
+  return {
+    id: `repository-subagent-${subagent.invocationKey}`,
+    claudeSessionId: subagent.sessionId?.trim() || null,
+    repositoryPath: subagent.repositoryPath ?? repository.repositoryPath,
+    repositoryName: repository.repositoryName,
+    model: subagent.model ?? "",
+    status: subagentSessionStatus(subagent.status),
+    createdAt: startedAt || now,
+    pendingPrompt: "",
+    messages: [
+      textMessage(1, "system", `${subagent.subagentType} · ${statusLine}`, startedAt || now - 1000),
+      textMessage(2, "user", prompt || "子代理执行记录", startedAt || now - 500),
+      textMessage(3, "assistant", output, subagent.completedAt ?? subagent.updatedAt ?? now),
+    ],
+  };
 }
 
 interface HistorySessionPopoverContentProps {
@@ -399,6 +468,8 @@ function repositoryTypeLabel(value: RepositoryMemberMonitorItem["repositoryType"
 function subagentStatusLabel(status: RepositoryMemberMonitorSubagentItem["status"]): string {
   if (status === "running") return "运行中";
   if (status === "stale") return "疑似断连";
+  if (status === "reclaimed") return "已回收";
+  if (status === "cancelled") return "已中断";
   if (status === "failed") return "失败";
   return "完成";
 }
@@ -406,6 +477,8 @@ function subagentStatusLabel(status: RepositoryMemberMonitorSubagentItem["status
 function subagentStatusTagColor(status: RepositoryMemberMonitorSubagentItem["status"]): string {
   if (status === "running") return "processing";
   if (status === "stale") return "warning";
+  if (status === "reclaimed") return "default";
+  if (status === "cancelled") return "default";
   if (status === "failed") return "error";
   return "success";
 }
@@ -424,14 +497,44 @@ function compactId(value: string | undefined): string {
 
 function RepositorySubagentDetailDrawer({
   target,
+  sessions,
+  onReloadFullDiskTranscript,
   onClose,
 }: {
   target: RepositorySubagentDetailTarget | null;
+  sessions: readonly ClaudeSession[];
+  onReloadFullDiskTranscript?: (sessionKey: string) => void | Promise<void>;
   onClose: () => void;
 }) {
-  const width = Math.min(560, typeof window !== "undefined" ? window.innerWidth - 40 : 560);
+  const width = Math.min(760, typeof window !== "undefined" ? window.innerWidth - 40 : 760);
   const subagent = target?.subagent ?? null;
   const repository = target?.repository ?? null;
+  const matchedSession = subagent ? findSubagentSession(sessions, subagent) : null;
+  const transcriptSession = repository && subagent
+    ? matchedSession && matchedSession.messages.length > 0
+      ? matchedSession
+      : buildSyntheticSubagentSession(repository, subagent)
+    : null;
+
+  const matchedSessionId = matchedSession?.id ?? null;
+  const matchedSessionMessagesLen = matchedSession?.messages.length ?? 0;
+  const matchedSessionStatus = matchedSession?.status;
+  const matchedClaudeSessionId = matchedSession?.claudeSessionId?.trim() ?? "";
+  useEffect(() => {
+    if (!target || !onReloadFullDiskTranscript || !matchedSessionId) return;
+    if (matchedSessionMessagesLen > 0) return;
+    if (matchedSessionStatus === "running" || matchedSessionStatus === "connecting") return;
+    if (!matchedClaudeSessionId) return;
+    void onReloadFullDiskTranscript(matchedSessionId);
+  }, [
+    target,
+    onReloadFullDiskTranscript,
+    matchedSessionId,
+    matchedSessionMessagesLen,
+    matchedSessionStatus,
+    matchedClaudeSessionId,
+  ]);
+
   return (
     <Drawer
       title={subagent ? `${subagent.subagentType} · 执行记录` : "子进程执行记录"}
@@ -447,93 +550,98 @@ function RepositorySubagentDetailDrawer({
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="无子进程记录" />
       ) : (
         <div className="app-monitor-panel__subagent-detail">
-          <Descriptions column={1} size="small" bordered>
-            <Descriptions.Item label="仓库">{repository.repositoryName}</Descriptions.Item>
-            <Descriptions.Item label="仓库路径">
-              <Typography.Text code copyable>
-                {subagent.repositoryPath ?? repository.repositoryPath}
-              </Typography.Text>
-            </Descriptions.Item>
-            <Descriptions.Item label="rootPath">
-              <Typography.Text code copyable>
-                {subagent.rootPath ?? "—"}
-              </Typography.Text>
-            </Descriptions.Item>
-            <Descriptions.Item label="子进程 id">
-              <Typography.Text code copyable={{ text: subagent.invocationKey }}>
-                {compactId(subagent.invocationKey)}
-              </Typography.Text>
-            </Descriptions.Item>
-            {subagent.sessionId ? (
-              <Descriptions.Item label="会话 id">
-                <Typography.Text code copyable={{ text: subagent.sessionId }}>
-                  {compactId(subagent.sessionId)}
-                </Typography.Text>
-              </Descriptions.Item>
-            ) : null}
-            {subagent.toolUseId ? (
-              <Descriptions.Item label="tool_use id">
-                <Typography.Text code copyable={{ text: subagent.toolUseId }}>
-                  {compactId(subagent.toolUseId)}
-                </Typography.Text>
-              </Descriptions.Item>
-            ) : null}
-            {subagent.toolName ? <Descriptions.Item label="工具">{subagent.toolName}</Descriptions.Item> : null}
-            {subagent.model ? <Descriptions.Item label="模型">{subagent.model}</Descriptions.Item> : null}
-            {subagent.stage ? <Descriptions.Item label="阶段">{subagent.stage}</Descriptions.Item> : null}
-            {subagent.taskId ? (
-              <Descriptions.Item label="任务 id">
-                <Typography.Text code>{subagent.taskId}</Typography.Text>
-              </Descriptions.Item>
-            ) : null}
-            {subagent.taskTitle ? <Descriptions.Item label="任务标题">{subagent.taskTitle}</Descriptions.Item> : null}
-            {subagent.currentFile ? (
-              <Descriptions.Item label="当前文件">
-                <Typography.Text code copyable>
-                  {subagent.currentFile}
-                </Typography.Text>
-              </Descriptions.Item>
-            ) : null}
-            <Descriptions.Item label="来源">{subagent.source ?? "—"}</Descriptions.Item>
-            <Descriptions.Item label="开始时间">{formatMonitorTimestamp(subagent.startedAt)}</Descriptions.Item>
-            <Descriptions.Item label="更新时间">{formatMonitorTimestamp(subagent.updatedAt)}</Descriptions.Item>
-            <Descriptions.Item label="心跳时间">{formatMonitorTimestamp(subagent.lastHeartbeatAt)}</Descriptions.Item>
-            <Descriptions.Item label="结束时间">{formatMonitorTimestamp(subagent.completedAt)}</Descriptions.Item>
-            {typeof subagent.lineCount === "number" ? <Descriptions.Item label="stdout 行数">{subagent.lineCount}</Descriptions.Item> : null}
-            {typeof subagent.errCount === "number" ? <Descriptions.Item label="stderr 行数">{subagent.errCount}</Descriptions.Item> : null}
-            {typeof subagent.success === "boolean" ? (
-              <Descriptions.Item label="退出结果">{subagent.success ? "成功" : "失败"}</Descriptions.Item>
-            ) : null}
-          </Descriptions>
-
-          <div className="app-monitor-panel__subagent-detail-section">
-            <Typography.Text strong className="app-monitor-panel__subagent-detail-section-title">
-              记录摘要
+          {subagent.status === "reclaimed" ? (
+            <Typography.Text type="secondary" className="app-monitor-panel__subagent-detail-hint">
+              该记录已从宿主进程表回收，不再计入运行中；下方保留最近一次 transcript 或回收摘要用于复盘。
             </Typography.Text>
-            <pre className="app-monitor-panel__subagent-detail-pre">{subagent.previewText || "—"}</pre>
-          </div>
-
-          <div className="app-monitor-panel__subagent-detail-section">
-            <Typography.Text strong className="app-monitor-panel__subagent-detail-section-title">
-              派发 Prompt
-            </Typography.Text>
-            {subagent.promptExcerpt?.trim() ? (
-              <pre className="app-monitor-panel__subagent-detail-pre">{subagent.promptExcerpt}</pre>
+          ) : null}
+          <div className="app-monitor-panel__subagent-detail-session">
+            {transcriptSession ? (
+              <ClaudeSessionMessagesColumn session={transcriptSession} showAllMessages />
             ) : (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未记录 prompt 摘要" />
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未找到可展示的执行记录" />
             )}
           </div>
 
-          <div className="app-monitor-panel__subagent-detail-section">
-            <Typography.Text strong className="app-monitor-panel__subagent-detail-section-title">
-              输出摘要
-            </Typography.Text>
-            {subagent.outputExcerpt?.trim() ? (
-              <pre className="app-monitor-panel__subagent-detail-pre">{subagent.outputExcerpt}</pre>
-            ) : (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未记录输出摘要" />
-            )}
-          </div>
+          <Collapse
+            size="small"
+            ghost
+            items={[
+              {
+                key: "metadata",
+                label: "元数据",
+                children: (
+                  <>
+                    <Descriptions column={1} size="small" bordered>
+                      <Descriptions.Item label="仓库">{repository.repositoryName}</Descriptions.Item>
+                      <Descriptions.Item label="仓库路径">
+                        <Typography.Text code copyable>
+                          {subagent.repositoryPath ?? repository.repositoryPath}
+                        </Typography.Text>
+                      </Descriptions.Item>
+                      <Descriptions.Item label="rootPath">
+                        <Typography.Text code copyable>
+                          {subagent.rootPath ?? "—"}
+                        </Typography.Text>
+                      </Descriptions.Item>
+                      <Descriptions.Item label="子进程 id">
+                        <Typography.Text code copyable={{ text: subagent.invocationKey }}>
+                          {compactId(subagent.invocationKey)}
+                        </Typography.Text>
+                      </Descriptions.Item>
+                      {subagent.sessionId ? (
+                        <Descriptions.Item label="会话 id">
+                          <Typography.Text code copyable={{ text: subagent.sessionId }}>
+                            {compactId(subagent.sessionId)}
+                          </Typography.Text>
+                        </Descriptions.Item>
+                      ) : null}
+                      {subagent.toolUseId ? (
+                        <Descriptions.Item label="tool_use id">
+                          <Typography.Text code copyable={{ text: subagent.toolUseId }}>
+                            {compactId(subagent.toolUseId)}
+                          </Typography.Text>
+                        </Descriptions.Item>
+                      ) : null}
+                      {subagent.toolName ? <Descriptions.Item label="工具">{subagent.toolName}</Descriptions.Item> : null}
+                      {subagent.model ? <Descriptions.Item label="模型">{subagent.model}</Descriptions.Item> : null}
+                      {subagent.stage ? <Descriptions.Item label="阶段">{subagent.stage}</Descriptions.Item> : null}
+                      {subagent.taskId ? (
+                        <Descriptions.Item label="任务 id">
+                          <Typography.Text code>{subagent.taskId}</Typography.Text>
+                        </Descriptions.Item>
+                      ) : null}
+                      {subagent.taskTitle ? <Descriptions.Item label="任务标题">{subagent.taskTitle}</Descriptions.Item> : null}
+                      {subagent.currentFile ? (
+                        <Descriptions.Item label="当前文件">
+                          <Typography.Text code copyable>
+                            {subagent.currentFile}
+                          </Typography.Text>
+                        </Descriptions.Item>
+                      ) : null}
+                      <Descriptions.Item label="来源">{subagent.source ?? "—"}</Descriptions.Item>
+                      <Descriptions.Item label="开始时间">{formatMonitorTimestamp(subagent.startedAt)}</Descriptions.Item>
+                      <Descriptions.Item label="更新时间">{formatMonitorTimestamp(subagent.updatedAt)}</Descriptions.Item>
+                      <Descriptions.Item label="心跳时间">{formatMonitorTimestamp(subagent.lastHeartbeatAt)}</Descriptions.Item>
+                      <Descriptions.Item label="结束时间">{formatMonitorTimestamp(subagent.completedAt)}</Descriptions.Item>
+                      {typeof subagent.lineCount === "number" ? <Descriptions.Item label="stdout 行数">{subagent.lineCount}</Descriptions.Item> : null}
+                      {typeof subagent.errCount === "number" ? <Descriptions.Item label="stderr 行数">{subagent.errCount}</Descriptions.Item> : null}
+                      {typeof subagent.success === "boolean" ? (
+                        <Descriptions.Item label="退出结果">{subagent.success ? "成功" : "失败"}</Descriptions.Item>
+                      ) : null}
+                    </Descriptions>
+
+                    <div className="app-monitor-panel__subagent-detail-section">
+                      <Typography.Text strong className="app-monitor-panel__subagent-detail-section-title">
+                        记录摘要
+                      </Typography.Text>
+                      <pre className="app-monitor-panel__subagent-detail-pre">{subagent.previewText || "—"}</pre>
+                    </div>
+                  </>
+                ),
+              },
+            ]}
+          />
         </div>
       )}
     </Drawer>
@@ -1184,6 +1292,8 @@ export function ProgressMonitorPanel({
 
       <RepositorySubagentDetailDrawer
         target={repositorySubagentDetailTarget}
+        sessions={sessionsForHistoryTranscript}
+        onReloadFullDiskTranscript={onReloadFullDiskTranscript}
         onClose={() => setRepositorySubagentDetailTarget(null)}
       />
     </div>

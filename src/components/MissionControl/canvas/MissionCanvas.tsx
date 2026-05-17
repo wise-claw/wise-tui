@@ -11,13 +11,7 @@ import { TaskSwimlane } from "./TaskSwimlane";
 import { AgentExecutionPanel } from "./AgentExecutionPanel";
 import { RequirementWorkspaceOverview } from "./RequirementWorkspaceOverview";
 import { MissionReplayPanel } from "../details/MissionReplayPanel";
-import { AgentOwnershipGraph } from "./AgentOwnershipGraph";
-import { RuntimeEventFeed } from "./RuntimeEventFeed";
-import { SpecRevisionTimeline } from "./SpecRevisionTimeline";
-import { OnboardingChecklist } from "./OnboardingChecklist";
-import { WorkspaceSnapshotViewer } from "./WorkspaceSnapshotViewer";
 import { RequirementTracePanel } from "../details/RequirementTracePanel";
-import { useTrellisRuntime } from "../../../hooks/useTrellisRuntime";
 
 interface MissionCanvasProps {
   viewModel: MissionViewModel;
@@ -32,13 +26,13 @@ interface MissionCanvasProps {
   onMoveRequirement: (requirementId: string, targetClusterId: string) => void;
   onRemoveDependency?: (taskId: string, depTaskId: string) => void;
   onRetryCluster?: (clusterId: string) => void;
+  onCancelCluster?: (clusterId: string) => void;
   workspaceMode?: "overview" | "editor";
   onLoadPrd?: (markdown: string) => void;
   onNewPrd?: () => void;
   onBackToOverview?: () => void;
   onOpenLegacyImport: () => void;
   missionId?: string | null;
-  onSpecRevisionSelect?: (filePath: string | null) => void;
 }
 
 export function MissionCanvas({
@@ -54,17 +48,16 @@ export function MissionCanvas({
   onMoveRequirement,
   onRemoveDependency,
   onRetryCluster,
+  onCancelCluster,
   workspaceMode = "editor",
   onLoadPrd,
   onNewPrd,
   onBackToOverview,
   onOpenLegacyImport,
   missionId,
-  onSpecRevisionSelect,
 }: MissionCanvasProps) {
   const isDrafting = viewModel.phase === "drafting";
   const hasRequirements = viewModel.requirementTree.length > 0;
-  const projectRootPath = api.state.project?.rootPath;
 
   const imageBucket = useMemo<PrdImageBucket | null>(() => {
     const repo = api.state.repositories[0];
@@ -77,13 +70,6 @@ export function MissionCanvas({
       projectId: api.state.project?.id ?? null,
     };
   }, [api.state.project, api.state.repositories]);
-
-  const { agentGraph } = useTrellisRuntime({
-    projectId: api.state.project?.id ?? null,
-    rootPath: projectRootPath ?? undefined,
-    missionId: missionId ?? null,
-    enabled: Boolean(projectRootPath) && !isDrafting,
-  });
 
   if (isDrafting && !hasRequirements) {
     const hasTarget = Boolean(api.state.project);
@@ -194,22 +180,19 @@ export function MissionCanvas({
           onHoverTask={onHoverTask}
           onRemoveDependency={onRemoveDependency}
           onRetryCluster={onRetryCluster}
+          onCancelCluster={onCancelCluster}
         />
         {hasAgentActivity ? (
           <AgentExecutionPanel
             runState={viewModel.runState}
             stdoutMap={stdoutMap}
+            onCancelCluster={onCancelCluster}
           />
         ) : null}
         <RequirementTracePanel
           missionId={missionId ?? null}
           requirementId={viewModel.selection.requirementId}
         />
-        <AgentOwnershipGraph graph={agentGraph} />
-        <RuntimeEventFeed rootPath={projectRootPath} projectId={api.state.project?.id ?? null} />
-        <SpecRevisionTimeline rootPath={projectRootPath} onSelectFilePath={onSpecRevisionSelect} />
-        <OnboardingChecklist rootPath={projectRootPath} />
-        <WorkspaceSnapshotViewer rootPath={projectRootPath} />
         <MissionReplayPanel missionId={missionId ?? null} />
       </div>
     </main>
