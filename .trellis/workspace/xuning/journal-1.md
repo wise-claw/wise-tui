@@ -118,3 +118,37 @@ Completed roleTag options in the composer at-mention popover for wise_trellis pr
 ### Next Steps
 
 - None - task complete
+
+
+## Session 4: P3 Author entry and P5 Workspace naming
+
+**Date**: 2026-05-17
+**Task**: P3 Author entry and P5 Workspace naming
+**Branch**: `main`
+
+### Summary
+
+Unified Author configuration into a single tabbed entry, moved reusable Author surfaces inline, persisted the last Author pane through settings, and aligned visible Workspace / Standalone Repo naming for sidebar and Author flows.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f8658f0` | (see git log) |
+| `fb78625` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
