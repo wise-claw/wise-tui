@@ -152,3 +152,36 @@ Unified Author configuration into a single tabbed entry, moved reusable Author s
 ### Next Steps
 
 - None - task complete
+
+
+## Session 5: P0 ViewMode + P1 Cockpit default + Agent Harness umbrella
+
+**Date**: 2026-05-17
+**Task**: P0 ViewMode + P1 Cockpit default + Agent Harness umbrella
+**Branch**: `main`
+
+### Summary
+
+Closed P0 (ViewMode discriminated union — already wired to DEFAULT cockpit) and P1 in one session: built Inspector router that dispatches by ViewMode.kind (ChatInspector for chat/inspect, CockpitInspector for cockpit, null for author); added CockpitOnboarding empty-state guide; renamed RightPanel.tsx to a re-export shim with content moved to Inspector/ChatInspector.tsx. AppWorkspaceLayout now derives 6 legacy view booleans from viewMode internally; AppImpl stopped destructuring viewMode.legacy.*. MissionControl initialTarget falls back to activeProjectId so a freshly created Workspace lands on EmptyWorkspace guidance. Final: bun test 565 pass / 0 fail; bunx tsc --noEmit 0 errors. Net code change across the changeset: 224 deletions vs 126 insertions = 98 net lines deleted, with the bulk coming from RightPanel.tsx shrinking 172 → 11 lines. AppImpl.tsx stayed roughly flat (PRD's −80 line target wasn't met because P1 added cockpit/inspector/onboarding props, but the PRD's structural goal — no setXxxMode calls, mutually exclusive view modes — was already met by P0). The Agent Harness umbrella task closes with all four children (P0/P1/P3/P5) archived.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `53a44a5` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
