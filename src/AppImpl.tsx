@@ -1067,7 +1067,8 @@ export default function App() {
       relativePath,
       line: detail.line ?? null,
     });
-    viewMode.back();
+    // 打开文件 → 进入 chat 子模式（文件编辑器在 chat 主区下方）
+    viewMode.enter({ kind: "chat" });
   }, [repositories, setActiveRepositoryWithOwner, viewMode]);
   const workspaceMode = useWorkspaceMode({ activeProjectId, projects });
   const openMissionControl = useCallback((detail: OpenMissionControlDetail) => {
@@ -1478,24 +1479,43 @@ export default function App() {
     if (!repositories.some((r) => r.id === activeRepositoryId)) return;
     startupFirstProjectRepoSessionAppliedRef.current = true;
     handleSidebarRepositorySelect(activeRepositoryId);
+    // P1: Standalone Repo 启动时自动进 chat（宪法 §6：Standalone Repo 不进 cockpit）
+    const ownerProject = projects.find((p) => p.repositoryIds.includes(activeRepositoryId));
+    if (!ownerProject) {
+      viewMode.enter({ kind: "chat" });
+    }
   }, [
     activeRepositoryId,
     handleSidebarRepositorySelect,
+    projects,
     repositories,
     repositoryListLoading,
     tabsHydrated,
+    viewMode,
   ]);
 
   const handleSidebarRepositorySelectLeavingMcpHub = useCallback(
     (repositoryId: number | null) => {
-      // Leave any author/cockpit/inspect view; chat is the implicit destination
-      // for repository selection (same semantics as historical 4-setter clear).
-      if (!viewMode.isChat) {
+      if (repositoryId == null) {
+        // 清空选中 → 回到 cockpit 主屏
+        if (!viewMode.isCockpit) viewMode.back();
+        handleSidebarRepositorySelect(repositoryId);
+        return;
+      }
+      // Standalone Repo（不属于任何 project）→ 进 chat 子模式
+      // Workspace 内仓库 → 保持 cockpit（宪法 §6）
+      const ownerProject = projects.find((p) => p.repositoryIds.includes(repositoryId));
+      if (!ownerProject) {
+        // Standalone Repo: 进入 chat
+        viewMode.enter({ kind: "chat" });
+      } else if (viewMode.isAuthor || viewMode.isInspect) {
+        // 从 author/inspect 回到 cockpit
         viewMode.back();
       }
+      // cockpit 模式下选 Workspace 内仓库：保持 cockpit 不动
       handleSidebarRepositorySelect(repositoryId);
     },
-    [handleSidebarRepositorySelect, viewMode],
+    [handleSidebarRepositorySelect, projects, viewMode],
   );
 
   /** 侧栏「图谱操作 → 查看检索」：与顶栏图谱入口一致，先收敛其它 Hub 再打开覆盖层。 */
@@ -1684,7 +1704,8 @@ export default function App() {
 
   const handleProjectSelectLeavingMcpHub = useCallback(
     (projectId: string) => {
-      if (!viewMode.isChat) {
+      // 选 Workspace → 回到 cockpit（如果在 author/inspect 则退出）
+      if (viewMode.isAuthor || viewMode.isInspect) {
         viewMode.back();
       }
       const project = projects.find((p) => p.id === projectId) ?? null;
@@ -1704,9 +1725,8 @@ export default function App() {
 
   const jumpToSessionLeavingMcpHub = useCallback(
     (sessionId: string) => {
-      if (!viewMode.isChat) {
-        viewMode.back();
-      }
+      // 跳转到具体会话 → 进 chat 子模式
+      viewMode.enter({ kind: "chat" });
       jumpToSessionWithRepository(sessionId);
     },
     [jumpToSessionWithRepository, viewMode],
@@ -1791,9 +1811,8 @@ export default function App() {
       return null;
     }
     setAuthorTrellisProjectId(null);
-    if (!viewMode.isChat) {
-      viewMode.back();
-    }
+    // 打开项目主会话 → 进入 chat 子模式
+    viewMode.enter({ kind: "chat" });
     setActiveProjectId(project.id);
     if (repos[0]) {
       setActiveRepositoryId(repos[0].id);
@@ -2553,7 +2572,7 @@ export default function App() {
         repositories,
         sessions,
         initialTarget: missionControlInitialTarget,
-        onClose: () => viewMode.back(),
+        onClose: () => viewMode.enter({ kind: "chat" }),
       }}
       progressMonitorDrawerProps={{
         open: monitorDrawerTarget != null,

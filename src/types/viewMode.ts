@@ -55,5 +55,5 @@ export interface InspectWorkflowStudio {
   kind: "workflow-studio";
 }
 
-/** 默认 View（应用启动 / `back()` 回退兜底）。 */
-export const DEFAULT_VIEW_MODE: ViewMode = { kind: "chat" };
+/** 默认 View（应用启动 / `back()` 回退兜底）。P1: Cockpit 是主屏。 */
+export const DEFAULT_VIEW_MODE: ViewMode = { kind: "cockpit" };
