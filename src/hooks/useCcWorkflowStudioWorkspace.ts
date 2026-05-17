@@ -13,27 +13,35 @@ import {
   type CcWfStudioShowOverlayDetail,
 } from "../constants/workflowUiEvents";
 import { isWiseSupportedAiEditingProvider, wiseAiEditingSlashPrompt } from "../services/ccWfStudioAiEditingLaunch";
+import type { UseViewModeApi } from "./useViewMode";
+import { inspectView } from "./useViewMode";
 
 export interface UseCcWorkflowStudioWorkspaceParams {
   sendMessageToSession: (sessionId: string, text: string) => void | Promise<void>;
   switchSession: (sessionId: string) => void;
   sessionsLatestRef: RefObject<ClaudeSession[]>;
   activeSessionIdLatestRef: RefObject<string | null | undefined>;
-  setPromptsMode: (v: boolean) => void;
-  setMcpHubMode: (v: boolean) => void;
-  setSkillsHubMode: (v: boolean) => void;
-  setCodeKnowledgeGraphMode: (v: boolean) => void;
+  /**
+   * 顶层 ViewMode 状态机（参见 .trellis/spec/guides/agent-harness-architecture.md §3）。
+   * Workflow Studio 是 inspect 域的一种 tool，进入它时调用 `viewMode.enter(inspectView({ kind: "workflow-studio" }))`，
+   * 退出时调用 `viewMode.back()`。
+   */
+  viewMode: UseViewModeApi;
   /** 侧栏当前仓库 path；用于预加载与「打开工作流工作室」 */
   activeRepositoryPath: string | undefined;
 }
 
 export function useCcWorkflowStudioWorkspace(p: UseCcWorkflowStudioWorkspaceParams) {
-  const [ccWfStudioMode, setCcWfStudioMode] = useState(false);
+  /**
+   * Workflow Studio session path 是 view 状态之外的辅助 state——
+   * 它跟随 inspect/workflow-studio 进入而被设置，但 P1 不重新设计它，
+   * 维持原有 useState 行为以最小化 P0 改动面。
+   */
   const [ccWfStudioSessionPath, setCcWfStudioSessionPath] = useState<string | null>(null);
 
   const onCloseCcWorkflowStudio = useCallback(() => {
-    setCcWfStudioMode(false);
-  }, []);
+    p.viewMode.back();
+  }, [p.viewMode]);
 
   const openWorkflowStudio = useCallback(() => {
     const path = p.activeRepositoryPath?.trim() ?? "";
@@ -41,19 +49,9 @@ export function useCcWorkflowStudioWorkspace(p: UseCcWorkflowStudioWorkspacePara
       message.warning("请先在侧栏选择仓库");
       return;
     }
-    p.setPromptsMode(false);
-    p.setMcpHubMode(false);
-    p.setSkillsHubMode(false);
-    p.setCodeKnowledgeGraphMode(false);
     setCcWfStudioSessionPath(path);
-    setCcWfStudioMode(true);
-  }, [
-    p.activeRepositoryPath,
-    p.setCodeKnowledgeGraphMode,
-    p.setMcpHubMode,
-    p.setPromptsMode,
-    p.setSkillsHubMode,
-  ]);
+    p.viewMode.enter(inspectView({ kind: "workflow-studio" }));
+  }, [p.activeRepositoryPath, p.viewMode]);
 
   useEffect(() => {
     function onCcWfStudioLaunchAiEditing(event: Event) {
@@ -83,7 +81,10 @@ export function useCcWorkflowStudioWorkspace(p: UseCcWorkflowStudioWorkspacePara
       void (async () => {
         try {
           await p.sendMessageToSession(session.id, wiseAiEditingSlashPrompt(provider));
-          setCcWfStudioMode(false);
+          // AI editing prompt sent — leave the workflow studio overlay
+          if (p.viewMode.legacy.ccWfStudioMode) {
+            p.viewMode.back();
+          }
         } catch {
           // sendMessageToSession 已将失败写入会话
         }
@@ -101,11 +102,7 @@ export function useCcWorkflowStudioWorkspace(p: UseCcWorkflowStudioWorkspacePara
         return;
       }
       setCcWfStudioSessionPath(repositoryPath);
-      setCcWfStudioMode(true);
-      p.setPromptsMode(false);
-      p.setMcpHubMode(false);
-      p.setSkillsHubMode(false);
-      p.setCodeKnowledgeGraphMode(false);
+      p.viewMode.enter(inspectView({ kind: "workflow-studio" }));
     }
 
     function onCcWfStudioRunInClaudeSession(event: Event) {
@@ -133,11 +130,7 @@ export function useCcWorkflowStudioWorkspace(p: UseCcWorkflowStudioWorkspacePara
         p.switchSession(session.id);
       }
 
-      p.setPromptsMode(false);
-      p.setMcpHubMode(false);
-      p.setSkillsHubMode(false);
-      p.setCodeKnowledgeGraphMode(false);
-      setCcWfStudioMode(true);
+      p.viewMode.enter(inspectView({ kind: "workflow-studio" }));
       window.dispatchEvent(
         new CustomEvent<CcWfStudioEnterExecutionWatchDetail>(
           WORKFLOW_UI_EVENT_CC_WF_STUDIO_ENTER_EXECUTION_WATCH,
@@ -191,10 +184,7 @@ export function useCcWorkflowStudioWorkspace(p: UseCcWorkflowStudioWorkspacePara
   }, [
     p.sendMessageToSession,
     p.switchSession,
-    p.setPromptsMode,
-    p.setMcpHubMode,
-    p.setSkillsHubMode,
-    p.setCodeKnowledgeGraphMode,
+    p.viewMode,
     p.sessionsLatestRef,
     p.activeSessionIdLatestRef,
   ]);
@@ -229,8 +219,6 @@ export function useCcWorkflowStudioWorkspace(p: UseCcWorkflowStudioWorkspacePara
   }, [p.activeRepositoryPath]);
 
   return {
-    ccWfStudioMode,
-    setCcWfStudioMode,
     ccWfStudioSessionPath,
     setCcWfStudioSessionPath,
     onCloseCcWorkflowStudio,

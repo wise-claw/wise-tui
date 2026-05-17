@@ -23,6 +23,13 @@ import {
 } from "./utils/repositoryType";
 import { useRepositoryList } from "./hooks/useRepositoryList";
 import { useCcWorkflowStudioWorkspace } from "./hooks/useCcWorkflowStudioWorkspace";
+import {
+  authorView,
+  cockpitView,
+  codeGraphInspectTool,
+  inspectView,
+  useViewMode,
+} from "./hooks/useViewMode";
 import { useClaudeSessions, type ClaudeTurnCompletePayload } from "./hooks/useClaudeSessions";
 import { openInFinder } from "./services/repository";
 import { triggerCodeGraphAssociationBuild, triggerCodeGraphReindex } from "./services/codeKnowledgeGraph";
@@ -211,19 +218,40 @@ function presentSidebarCodeGraphReindexModal(repositories: Repository[], outcome
 // ── App ──
 
 export default function App() {
-  const [promptsMode, setPromptsMode] = useState(false);
-  /** 左栏 MCP：在主区+右栏之上叠层展示（与技能目录相同，不盖左栏）。 */
-  const [mcpHubMode, setMcpHubMode] = useState(false);
-  /** 左栏技能：在主区+右栏之上叠层展示 skills.sh（不盖左栏，非全屏居中 Modal）。 */
-  const [skillsHubMode, setSkillsHubMode] = useState(false);
-  const [codeKnowledgeGraphMode, setCodeKnowledgeGraphMode] = useState(false);
+  /**
+   * 顶层 ViewMode 状态机（参见 .trellis/spec/guides/agent-harness-architecture.md §3）。
+   *
+   * 取代历史上的 6 个互斥布尔（promptsMode / mcpHubMode / skillsHubMode /
+   * missionControlMode / codeKnowledgeGraphMode / ccWfStudioMode）。每开一个
+   * 视图都要在 8+ 个 callback 中调 5 次 setXxxMode(false) 的坏味在 P0 收口。
+   *
+   * P0 仅替换状态结构、不改任何视觉行为。各历史名经由 `viewMode.legacy.*`
+   * 暴露给 layout / sidebar nav，行为完全等价。
+   */
+  const viewMode = useViewMode();
+  const {
+    promptsMode,
+    mcpHubMode,
+    skillsHubMode,
+    missionControlMode,
+    codeKnowledgeGraphMode,
+    ccWfStudioMode,
+  } = viewMode.legacy;
   /** 侧栏「查看检索」打开时为 true：图谱面板不在 idle 时自动 `triggerCodeGraphReindex`；顶栏入口为 false。 */
-  const [codeGraphSuppressIdleAutoReindex, setCodeGraphSuppressIdleAutoReindex] = useState(false);
+  const codeGraphSuppressIdleAutoReindex =
+    viewMode.view.kind === "inspect" && viewMode.view.tool.kind === "code-graph"
+      ? viewMode.view.tool.suppressIdleAutoReindex
+      : false;
   /** 侧栏仓库/项目「图谱操作 → 查看检索」进入时为 true：仅当前仓 UI，不打开仓库下拉、不显示「全部仓库」关联入口。 */
-  const [codeGraphLockToEntryRepository, setCodeGraphLockToEntryRepository] = useState(false);
+  const codeGraphLockToEntryRepository =
+    viewMode.view.kind === "inspect" && viewMode.view.tool.kind === "code-graph"
+      ? viewMode.view.tool.lockToEntryRepository
+      : false;
   /** 侧栏项目「查看检索」进入时为 true：代码图谱默认多仓关联合并视图（候选 ≥2 时）。 */
-  const [codeGraphDefaultProjectMultiRepo, setCodeGraphDefaultProjectMultiRepo] = useState(false);
-  const [missionControlMode, setMissionControlMode] = useState(false);
+  const codeGraphDefaultProjectMultiRepo =
+    viewMode.view.kind === "inspect" && viewMode.view.tool.kind === "code-graph"
+      ? viewMode.view.tool.defaultProjectMultiRepo
+      : false;
   const [missionControlInitialTarget, setMissionControlInitialTarget] = useState<OpenMissionControlDetail | null>(null);
   const [projectTrellisCenterProjectId, setProjectTrellisCenterProjectId] = useState<string | null>(null);
   const [promptsOpenContext, setPromptsOpenContext] = useState<PromptsOpenContext | null>(null);
@@ -982,12 +1010,8 @@ export default function App() {
       });
   }, [activeProject?.id, activeProject?.rootPath, activeSessionId, sessions]);
 
-  useEffect(() => {
-    if (!codeKnowledgeGraphMode) {
-      setCodeGraphLockToEntryRepository(false);
-      setCodeGraphDefaultProjectMultiRepo(false);
-    }
-  }, [codeKnowledgeGraphMode]);
+  // P0 ViewMode 状态机已通过 inspect/code-graph 离开 → flags 自动清零，无需手动 reset。
+  // (历史代码在这里同步两个 codeGraph flag，新结构下离开 inspect 即整个 tool 出栈。)
   /** 代码图谱全库搜索：有项目时用项目内全部仓库，否则由面板退化为当前仓库 */
   const codeGraphSearchRepositoryIds = useMemo(() => {
     if (activeProject?.repositoryIds?.length) {
@@ -1016,24 +1040,15 @@ export default function App() {
       relativePath,
       line: detail.line ?? null,
     });
-    setMissionControlMode(false);
-    setPromptsMode(false);
-    setMcpHubMode(false);
-    setSkillsHubMode(false);
-    setCodeKnowledgeGraphMode(false);
-    setCcWfStudioMode(false);
-  }, [repositories, setActiveRepositoryWithOwner]);
+    // 收到开文件请求时，离开当前所有叠层 / 全屏视图回到默认 chat。
+    viewMode.back();
+  }, [repositories, setActiveRepositoryWithOwner, viewMode]);
   const workspaceMode = useWorkspaceMode({ activeProjectId, projects });
   const openMissionControl = useCallback((detail: OpenMissionControlDetail) => {
     setSearchOpen(false);
-    setPromptsMode(false);
-    setMcpHubMode(false);
-    setSkillsHubMode(false);
-    setCodeKnowledgeGraphMode(false);
-    setCcWfStudioMode(false);
     setMissionControlInitialTarget(detail);
-    setMissionControlMode(true);
-  }, []);
+    viewMode.enter(cockpitView());
+  }, [viewMode]);
   const composerProjectRoleTagOptions = useMemo(() => {
     if (!shouldHideEmployeeUi(activeProject)) {
       return [];
@@ -1194,8 +1209,6 @@ export default function App() {
   const activeRepository = repositories.find((p) => p.id === activeRepositoryId);
 
   const {
-    ccWfStudioMode,
-    setCcWfStudioMode,
     ccWfStudioSessionPath,
     onCloseCcWorkflowStudio,
     openWorkflowStudio,
@@ -1204,10 +1217,7 @@ export default function App() {
     switchSession,
     sessionsLatestRef,
     activeSessionIdLatestRef,
-    setPromptsMode,
-    setMcpHubMode,
-    setSkillsHubMode,
-    setCodeKnowledgeGraphMode,
+    viewMode,
     activeRepositoryPath: activeRepository?.path,
   });
 
@@ -1445,13 +1455,11 @@ export default function App() {
 
   const handleSidebarRepositorySelectLeavingMcpHub = useCallback(
     (repositoryId: number | null) => {
-      setMcpHubMode(false);
-      setSkillsHubMode(false);
-      setCcWfStudioMode(false);
-      setMissionControlMode(false);
+      // 离开所有叠层 / 全屏视图，回到默认 chat。
+      viewMode.back();
       handleSidebarRepositorySelect(repositoryId);
     },
-    [handleSidebarRepositorySelect],
+    [handleSidebarRepositorySelect, viewMode],
   );
 
   /** 侧栏「图谱操作 → 查看检索」：与顶栏图谱入口一致，先收敛其它 Hub 再打开覆盖层。 */
@@ -1470,30 +1478,31 @@ export default function App() {
       /** 双 rAF：先让右键菜单关闭并完成一帧绘制，再跑会话切换 / 挂载图谱，避免主线程长时间卡住。 */
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          setPromptsMode(false);
           setSearchOpen(false);
           if (opts.projectId != null) {
             setActiveProjectId(opts.projectId);
           }
           const alreadyOnRepo = opts.repositoryId === activeRepositoryId;
-          if (alreadyOnRepo) {
-            setMcpHubMode(false);
-            setSkillsHubMode(false);
-            setCcWfStudioMode(false);
-            setMissionControlMode(false);
-          } else {
-            handleSidebarRepositorySelectLeavingMcpHub(opts.repositoryId);
+          if (!alreadyOnRepo) {
+            handleSidebarRepositorySelect(opts.repositoryId);
           }
           startTransition(() => {
-            setCodeGraphSuppressIdleAutoReindex(true);
-            setCodeGraphLockToEntryRepository(opts.graphEntryFrom === "repository");
-            setCodeGraphDefaultProjectMultiRepo(opts.graphEntryFrom === "project");
-            setCodeKnowledgeGraphMode(true);
+            // 进入 inspect/code-graph：suppressIdleAutoReindex=true 标记是从侧栏进入，
+            // lockToEntryRepository / defaultProjectMultiRepo 由 graphEntryFrom 决定。
+            viewMode.enter(
+              inspectView(
+                codeGraphInspectTool({
+                  suppressIdleAutoReindex: true,
+                  lockToEntryRepository: opts.graphEntryFrom === "repository",
+                  defaultProjectMultiRepo: opts.graphEntryFrom === "project",
+                }),
+              ),
+            );
           });
         });
       });
     },
-    [repositories, activeRepositoryId, handleSidebarRepositorySelectLeavingMcpHub, setActiveProjectId],
+    [repositories, activeRepositoryId, handleSidebarRepositorySelect, setActiveProjectId, viewMode],
   );
 
   const handleCodeGraphGenerateRepositoryIds = useCallback(
@@ -1641,10 +1650,8 @@ export default function App() {
 
   const handleProjectSelectLeavingMcpHub = useCallback(
     (projectId: string) => {
-      setMcpHubMode(false);
-      setSkillsHubMode(false);
-      setCcWfStudioMode(false);
-      setMissionControlMode(false);
+      // 离开所有叠层 / 全屏视图，回到默认 chat。
+      viewMode.back();
       const project = projects.find((p) => p.id === projectId) ?? null;
       const firstRepoId = project?.repositoryIds[0] ?? null;
       // 进项目即开主会话：通过 handleSidebarRepositorySelect 统一路由
@@ -1657,18 +1664,16 @@ export default function App() {
         setActiveProjectId(projectId);
       }
     },
-    [handleSidebarRepositorySelect, projects, setActiveProjectId],
+    [handleSidebarRepositorySelect, projects, setActiveProjectId, viewMode],
   );
 
   const jumpToSessionLeavingMcpHub = useCallback(
     (sessionId: string) => {
-      setMcpHubMode(false);
-      setSkillsHubMode(false);
-      setCcWfStudioMode(false);
-      setMissionControlMode(false);
+      // 离开所有叠层 / 全屏视图，回到默认 chat。
+      viewMode.back();
       jumpToSessionWithRepository(sessionId);
     },
-    [jumpToSessionWithRepository],
+    [jumpToSessionWithRepository, viewMode],
   );
 
   async function handleCreateRepositoryTask(repository: Repository, mode: TaskMode) {
@@ -1750,12 +1755,8 @@ export default function App() {
       return null;
     }
     setProjectTrellisCenterProjectId(null);
-    setMissionControlMode(false);
-    setPromptsMode(false);
-    setMcpHubMode(false);
-    setSkillsHubMode(false);
-    setCodeKnowledgeGraphMode(false);
-    setCcWfStudioMode(false);
+    // 离开所有叠层 / 全屏视图，回到默认 chat。
+    viewMode.back();
     setActiveProjectId(project.id);
     if (repos[0]) {
       setActiveRepositoryId(repos[0].id);
@@ -1814,24 +1815,19 @@ export default function App() {
   }
 
   function handleOpenPromptsForProject(project: ProjectItem) {
-    setMcpHubMode(false);
-    setSkillsHubMode(false);
-    setCcWfStudioMode(false);
     setPromptsOpenContext({ project });
     setActiveProjectId(project.id);
     setSearchOpen(false);
-    setPromptsMode(true);
+    // 进 prompts 全屏视图（author 域）—— P3 之前 prompts 仍是独立全屏，所以仍走 author/prompts。
+    viewMode.enter(authorView("prompts"));
   }
 
   function handleOpenPromptsForRepository(project: ProjectItem, repository: Repository) {
-    setMcpHubMode(false);
-    setSkillsHubMode(false);
-    setCcWfStudioMode(false);
     setPromptsOpenContext({ project, repository });
     setActiveProjectId(project.id);
     setActiveRepositoryId(repository.id);
     setSearchOpen(false);
-    setPromptsMode(true);
+    viewMode.enter(authorView("prompts"));
   }
 
   async function refreshWorkflowTemplates() {
@@ -1899,10 +1895,8 @@ export default function App() {
       const workflowId = detail?.workflowId?.trim() ?? "";
       const projectId = detail?.projectId?.trim() ?? "";
       setSearchOpen(false);
-      setPromptsMode(false);
-      setMcpHubMode(false);
-      setSkillsHubMode(false);
-      setMissionControlMode(false);
+      // 离开所有叠层 / 全屏视图。
+      viewMode.back();
       setWorkflowConfigPrdProjectId(projectId || null);
       setWorkflowConfigInitialWorkflowId(workflowId || null);
       setWorkflowConfigOpen(true);
@@ -1943,7 +1937,7 @@ export default function App() {
       window.removeEventListener(WORKFLOW_UI_EVENT_WORKFLOW_GRAPH_CHANGED, handleWorkflowGraphChanged as EventListener);
       window.removeEventListener(WORKFLOW_UI_EVENT_OPEN_REPOSITORY_FILE, handleOpenRepositoryFileEvent as EventListener);
     };
-  }, [openRepositoryFileByEvent]);
+  }, [openRepositoryFileByEvent, viewMode]);
 
   handleStopEmployeeMonitorRef.current = (employeeId: string) => {
     const normalizedEmployeeId = employeeId.trim().toLowerCase();
@@ -2041,21 +2035,11 @@ export default function App() {
         activeRepositoryId,
         mcpNavActive: mcpHubMode,
         onOpenMcpHub: () => {
-          setPromptsMode(false);
-          setSkillsHubMode(false);
-          setCodeKnowledgeGraphMode(false);
-          setCcWfStudioMode(false);
-          setMissionControlMode(false);
-          setMcpHubMode(true);
+          viewMode.enter(authorView("mcp"));
         },
         skillsNavActive: skillsHubMode,
         onOpenSkillsHub: () => {
-          setPromptsMode(false);
-          setMcpHubMode(false);
-          setCodeKnowledgeGraphMode(false);
-          setCcWfStudioMode(false);
-          setMissionControlMode(false);
-          setSkillsHubMode(true);
+          viewMode.enter(authorView("skills"));
         },
         workflowStudioNavActive: ccWfStudioMode,
         onOpenWorkflowStudio: openWorkflowStudio,
@@ -2162,7 +2146,7 @@ export default function App() {
       promptsPanelProps={{
         onClose: () => {
           setPromptsOpenContext(null);
-          setPromptsMode(false);
+          viewMode.back();
         },
         projects,
         repositories,
@@ -2308,11 +2292,11 @@ export default function App() {
       }}
       mcpHubProps={{
         repositoryPath: activeRepository?.path ?? null,
-        onClose: () => setMcpHubMode(false),
+        onClose: () => viewMode.back(),
       }}
       skillsHubProps={{
         repositoryPath: activeRepository?.path ?? null,
-        onClose: () => setSkillsHubMode(false),
+        onClose: () => viewMode.back(),
       }}
       codeKnowledgeGraphProps={{
         repositoryId: activeRepository?.id ?? null,
@@ -2327,8 +2311,8 @@ export default function App() {
         defaultProjectMultiRepoAssociation: codeGraphDefaultProjectMultiRepo,
         onSelectRepository: setActiveRepositoryWithOwner,
         onClose: () => {
-          setCodeKnowledgeGraphMode(false);
-          setCodeGraphSuppressIdleAutoReindex(false);
+          // 离开 inspect/code-graph，自动清三个 codeGraph flag。
+          viewMode.back();
         },
         onRemoveRepository: async (repoId) => {
           const repo = repositories.find((r) => r.id === repoId);
@@ -2342,7 +2326,7 @@ export default function App() {
         repositories,
         sessions,
         initialTarget: missionControlInitialTarget,
-        onClose: () => setMissionControlMode(false),
+        onClose: () => viewMode.back(),
       }}
       progressMonitorDrawerProps={{
         open: monitorDrawerTarget != null,

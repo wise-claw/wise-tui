@@ -3,7 +3,7 @@
   "name": "view-mode-state-machine",
   "title": "P0 ViewMode 状态机：6 个 mode 布尔合并为 discriminated union",
   "description": "",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
