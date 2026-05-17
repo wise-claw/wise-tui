@@ -224,17 +224,10 @@ export default function App() {
    *
    * 取代历史上的 6 个互斥布尔（promptsMode / mcpHubMode / skillsHubMode /
    * missionControlMode / codeKnowledgeGraphMode / ccWfStudioMode）。
-   * 历史名经由 `viewMode.legacy.*` 暴露给 layout / sidebar nav，行为完全等价。
+   * P0 通过 `viewMode.legacy.*` 提供过渡期兼容；P1 后 AppWorkspaceLayout 自身
+   * 从 `viewMode` 派生这些布尔，AppImpl 不再依赖 legacy 别名。
    */
   const viewMode = useViewMode();
-  const {
-    promptsMode,
-    mcpHubMode,
-    skillsHubMode,
-    missionControlMode,
-    codeKnowledgeGraphMode,
-    ccWfStudioMode,
-  } = viewMode.legacy;
   /** 侧栏「查看检索」打开时为 true：图谱面板不在 idle 时自动 `triggerCodeGraphReindex`；顶栏入口为 false。 */
   const codeGraphSuppressIdleAutoReindex =
     viewMode.view.kind === "inspect" && viewMode.view.tool.kind === "code-graph"
@@ -2059,15 +2052,9 @@ export default function App() {
     <AppWorkspaceLayout
       dark={dark}
       collapsed={collapsed}
-      promptsMode={promptsMode}
-      authorMode={viewMode.isAuthor}
-      mcpHubMode={mcpHubMode}
-      skillsHubMode={skillsHubMode}
-      codeKnowledgeGraphMode={codeKnowledgeGraphMode}
-      ccWfStudioMode={ccWfStudioMode}
+      viewMode={viewMode.view}
       ccWfStudioSessionPath={ccWfStudioSessionPath}
       onCloseCcWorkflowStudio={onCloseCcWorkflowStudio}
-      missionControlMode={missionControlMode}
       compactLayoutMode={compactLayoutMode}
       effectiveRightCollapsed={effectiveRightCollapsed}
       mainLayoutContentRef={mainLayoutContentRef}
@@ -2450,6 +2437,7 @@ export default function App() {
         onToggleRightPanel: handleToggleRightPanel,
         onToggleTerminal: () => setTerminalCollapsed((c) => !c),
         onSearch: () => setSearchOpen(true),
+        onBackToCockpit: () => viewMode.back(),
         collapsed,
         rightCollapsed: effectiveRightCollapsed,
         terminalCollapsed,
@@ -2472,7 +2460,7 @@ export default function App() {
         resolveTaskListOmcInvokeConcurrency,
         onDecideWorkflowTask: handleDecideWorkflowTask,
       }}
-      rightPanelProps={{
+      chatInspectorProps={{
         dark,
         collapsed: effectiveRightCollapsed,
         projectId: activeProjectId,
@@ -2532,6 +2520,19 @@ export default function App() {
         onReloadFullDiskTranscript: reloadFullDiskTranscript,
         hideEmployeeUi: shouldHideEmployeeUi(activeProject),
       }}
+      cockpitInspectorProps={{
+        dark,
+        collapsed: effectiveRightCollapsed,
+        siderWidth: mainLayoutRightWidthPx,
+        activeProject,
+        activeRepository: activeRepository ?? null,
+        employeeMonitorItems,
+      }}
+      cockpitEmpty={projects.length === 0 && floatingRepositories.length === 0}
+      cockpitOnboardingProps={{
+        onCreateWorkspace: () => setWorkspaceCreateRequest((value) => value + 1),
+        onImportStandaloneRepo: () => setStandaloneRepoAddRequest((value) => value + 1),
+      }}
       commandPaletteProps={{
         open: searchOpen,
         onClose: () => setSearchOpen(false),
@@ -2571,7 +2572,10 @@ export default function App() {
         projects,
         repositories,
         sessions,
-        initialTarget: missionControlInitialTarget,
+        // P1 §5.1: 显式 initialTarget > 当前选中项目 > null
+        initialTarget:
+          missionControlInitialTarget ??
+          (activeProjectId ? { projectId: activeProjectId } : null),
         onClose: () => viewMode.enter({ kind: "chat" }),
       }}
       progressMonitorDrawerProps={{
