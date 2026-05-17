@@ -184,7 +184,7 @@ export function mountCcWfStudioWiseHost(
             type: "SAVE_SUCCESS",
             requestId,
             payload: {
-              filePath: `${repositoryPath}/.vscode/workflows/${workflow.name}.json`,
+              filePath: `${repositoryPath}/.wise/workflows/${workflow.name}.json`,
               timestamp: new Date().toISOString(),
             },
           });
@@ -440,7 +440,7 @@ export function mountCcWfStudioWiseHost(
               type: "EXPORT_SUCCESS",
               payload: {
                 exportedFiles: [
-                  `.vscode/workflows/${workflow.name}.json`,
+                  `.wise/workflows/${workflow.name}.json`,
                   `.claude/commands/${workflow.name}.md`,
                 ],
                 timestamp: new Date().toISOString(),

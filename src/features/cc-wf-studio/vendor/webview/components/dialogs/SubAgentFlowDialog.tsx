@@ -112,7 +112,7 @@ const SubAgentFlowDialogContent: React.FC<SubAgentFlowDialogProps> = ({ isOpen, 
     onConnect,
     interactionMode,
     scrollMode,
-    highlightedGroupNodeId,
+    highlightedNodeId,
     activeSubAgentFlowId,
     subAgentFlows,
     updateSubAgentFlow,
@@ -163,10 +163,14 @@ const SubAgentFlowDialogContent: React.FC<SubAgentFlowDialogProps> = ({ isOpen, 
 
   // Animate edges based on selection and highlight state
   const animatedEdges = useMemo(() => {
+    // Highlight-driven animation: supports any node type
     let highlightChildIds: Set<string> | null = null;
-    if (highlightedGroupNodeId != null) {
+    const highlightedNode = highlightedNodeId != null ? nodes.find((n) => n.id === highlightedNodeId) : null;
+    const isGroupNode = highlightedNode?.type === 'group';
+
+    if (isGroupNode && highlightedNodeId != null) {
       highlightChildIds = new Set(
-        nodes.filter((n) => n.parentId === highlightedGroupNodeId).map((n) => n.id)
+        nodes.filter((n) => n.parentId === highlightedNodeId).map((n) => n.id)
       );
     }
 
@@ -180,17 +184,20 @@ const SubAgentFlowDialogContent: React.FC<SubAgentFlowDialogProps> = ({ isOpen, 
       }
     }
 
-    const hasHighlight = highlightedGroupNodeId != null;
+    const hasHighlight = highlightedNodeId != null;
     const hasSelection = isEdgeAnimationEnabled && localSelectedNodeId != null;
     if (!hasHighlight && !hasSelection) return edges;
 
     return edges.map((edge) => {
       const isHighlightAnimated =
         hasHighlight &&
-        (edge.source === highlightedGroupNodeId ||
-          edge.target === highlightedGroupNodeId ||
-          (highlightChildIds != null &&
-            (highlightChildIds.has(edge.source) || highlightChildIds.has(edge.target))));
+        (isGroupNode
+          ? edge.source === highlightedNodeId ||
+            edge.target === highlightedNodeId ||
+            (highlightChildIds != null &&
+              (highlightChildIds.has(edge.source) || highlightChildIds.has(edge.target)))
+          : edge.source === highlightedNodeId || edge.target === highlightedNodeId
+        );
 
       const isSelectionAnimated =
         hasSelection &&
@@ -202,7 +209,7 @@ const SubAgentFlowDialogContent: React.FC<SubAgentFlowDialogProps> = ({ isOpen, 
 
       return { ...edge, animated: isHighlightAnimated || isSelectionAnimated };
     });
-  }, [edges, nodes, localSelectedNodeId, highlightedGroupNodeId, isEdgeAnimationEnabled]);
+  }, [edges, nodes, localSelectedNodeId, highlightedNodeId, isEdgeAnimationEnabled]);
   const [isLocalPropertyOverlayOpen, setIsLocalPropertyOverlayOpen] = useState(false);
   const [isLocalRefinementPanelOpen, setIsLocalRefinementPanelOpen] = useState(false);
 

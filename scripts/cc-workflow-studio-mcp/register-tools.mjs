@@ -324,9 +324,9 @@ export function registerMcpTools(server, manager) {
 
   server.tool(
     "highlight_group_node",
-    "Highlight a group node on the CC Workflow Studio canvas.",
+    "Highlight a node on the CC Workflow Studio canvas during workflow execution. Supports any node type (group, subAgent, prompt, skill, mcp, codex, etc.). Call before executing each node to show visual progress.",
     {
-      groupNodeId: z.string().describe("Group node id; empty string clears highlight"),
+      groupNodeId: z.string().describe("Node id; empty string clears highlight"),
     },
     async ({ groupNodeId }) => {
       try {
@@ -336,7 +336,7 @@ export function registerMcpTools(server, manager) {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ success: true, highlightedGroupNodeId: effectiveId }),
+              text: JSON.stringify({ success: true, highlightedNodeId: effectiveId }),
             },
           ],
         };

@@ -682,28 +682,29 @@ export function generateExecutionInstructions(
   );
   sections.push('');
 
-  // Group Node Execution Tracking (skipped when highlight is disabled)
+  // Node Execution Tracking (skipped when highlight is disabled)
   const highlightEnabled = options.highlightEnabled !== false;
-  const groupNodes = nodes.filter((n) => (n.type as string) === 'group');
-  if (groupNodes.length > 0 && highlightEnabled) {
-    sections.push('### Group Node Execution Tracking');
+  const executableNodeTypes = ['subAgent', 'prompt', 'skill', 'mcp', 'codex', 'group', 'subAgentFlow'];
+  const executableNodes = nodes.filter((n) => executableNodeTypes.includes(n.type as string));
+  if (executableNodes.length > 0 && highlightEnabled) {
+    sections.push('### Node Execution Tracking');
     sections.push('');
     sections.push(
-      'This workflow contains group nodes. Before executing nodes within each group, call the `highlight_group_node` MCP tool on the `cc-workflow-studio` server to visually highlight the active group on the canvas.'
+      'Before executing each node, call the `highlight_group_node` MCP tool on the `cc-workflow-studio` server to visually highlight the active node on the canvas. This helps track workflow progress visually.'
     );
     sections.push('');
-    sections.push('| Group ID | Label |');
-    sections.push('|----------|-------|');
-    for (const group of groupNodes) {
-      const groupLabel =
-        ('data' in group && group.data && 'label' in group.data
-          ? (group.data as { label: string }).label
-          : group.name) || 'Group';
-      const escapeCell = (v: string) => v.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
-      sections.push(`| ${escapeCell(group.id)} | ${escapeCell(groupLabel)} |`);
+    sections.push('| Node ID | Type | Label |');
+    sections.push('|---------|------|-------|');
+    const escapeCell = (v: string) => v.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
+    for (const node of executableNodes) {
+      const nodeLabel =
+        ('data' in node && node.data && 'label' in node.data
+          ? (node.data as { label: string }).label
+          : node.name) || node.type || 'Node';
+      sections.push(`| ${escapeCell(node.id)} | ${escapeCell(node.type as string)} | ${escapeCell(nodeLabel)} |`);
     }
     sections.push('');
-    sections.push('Call example: `highlight_group_node({ groupNodeId: "<group-id>" })`');
+    sections.push('Call example: `highlight_group_node({ groupNodeId: "<node-id>" })`');
     sections.push('');
     sections.push(
       'When the workflow completes, call `highlight_group_node({ groupNodeId: "" })` to clear the highlight.'

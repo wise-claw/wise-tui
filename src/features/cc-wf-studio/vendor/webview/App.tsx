@@ -12,6 +12,7 @@ import type {
   ErrorPayload,
   GetCurrentWorkflowRequestPayload,
   HighlightGroupNodePayload,
+  HighlightNodePayload,
   ImportWorkflowFromSlackPayload,
   InitialStatePayload,
   McpServerStatusPayload,
@@ -196,7 +197,7 @@ const App: React.FC = () => {
   } | null>(null);
   const [overviewIsHistoricalVersion, setOverviewIsHistoricalVersion] = useState<boolean>(false);
   // True when View was opened via the workflow-preview-editor-provider (i.e.
-  // the user opened a `.vscode/workflows/*.json` from git history / diff /
+  // the user opened a `.wise/workflows/*.json` from git history / diff /
   // file explorer). In that case there is no live canvas to go back to,
   // so navigation buttons (Back-to-canvas, per-section Edit) are hidden.
   const [overviewIsExternal, setOverviewIsExternal] = useState<boolean>(false);
@@ -497,11 +498,21 @@ const App: React.FC = () => {
         const payload = message.payload as McpServerStatusPayload;
         useWorkflowStore.getState().setMcpServerStatus(payload.running, payload.port);
       } else if (message.type === 'HIGHLIGHT_GROUP_NODE') {
-        // MCP Server highlighting a group node during execution
+        // MCP Server highlighting a node during execution
+        // Supports any node type (groupNodeId field name kept for backward compatibility)
         const payload = message.payload as HighlightGroupNodePayload;
+        const nodeId = payload.groupNodeId;
         // Always allow clearing (null), but only set highlight when enabled
-        if (payload.groupNodeId === null || useWorkflowStore.getState().isHighlightEnabled) {
-          useWorkflowStore.getState().setHighlightedGroupNodeId(payload.groupNodeId);
+        if (nodeId === null || useWorkflowStore.getState().isHighlightEnabled) {
+          useWorkflowStore.getState().setHighlightedNodeId(nodeId);
+        }
+      } else if (message.type === 'HIGHLIGHT_NODE') {
+        // MCP Server highlighting a node during execution (new type)
+        const payload = message.payload as HighlightNodePayload;
+        const nodeId = payload.nodeId;
+        // Always allow clearing (null), but only set highlight when enabled
+        if (nodeId === null || useWorkflowStore.getState().isHighlightEnabled) {
+          useWorkflowStore.getState().setHighlightedNodeId(nodeId);
         }
       } else if (message.type === 'WISE_ENTER_EXECUTION_WATCH') {
         // Wise：会话内运行工作流时保持叠层并回到画布，以便 highlight_group_node 边动画可见

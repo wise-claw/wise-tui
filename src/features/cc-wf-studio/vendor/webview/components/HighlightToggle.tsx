@@ -19,24 +19,24 @@ import { ConfirmDialog } from './dialogs/ConfirmDialog';
 
 export const HighlightToggle: React.FC = () => {
   const { t } = useTranslation();
-  const { isHighlightEnabled, toggleHighlightEnabled, highlightedGroupNodeId } = useWorkflowStore();
+  const { isHighlightEnabled, toggleHighlightEnabled, highlightedNodeId } = useWorkflowStore();
   const { isHovered, triggerProps, contentProps } = usePopoverHover();
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
   const handleDisableHighlight = () => {
-    if (isHighlightEnabled && highlightedGroupNodeId) {
+    if (isHighlightEnabled && highlightedNodeId) {
       setShowConfirmDialog(true);
     } else {
       toggleHighlightEnabled();
     }
   };
 
-  const highlightBorder = highlightedGroupNodeId
+  const highlightBorder = highlightedNodeId
     ? '1px solid rgba(79, 195, 247, 0.6)'
     : '1px solid var(--vscode-panel-border)';
-  const highlightShadow = highlightedGroupNodeId ? '0 0 8px rgba(79, 195, 247, 0.4)' : 'none';
+  const highlightShadow = highlightedNodeId ? '0 0 8px rgba(79, 195, 247, 0.4)' : 'none';
   const highlightAnimation =
-    highlightedGroupNodeId && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    highlightedNodeId && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
       ? 'highlight-btn-pulse 1.5s ease-in-out infinite'
       : 'none';
 

@@ -58,7 +58,7 @@ ${exec}
 
 ## Source file
 
-Canonical workflow JSON: \`.vscode/workflows/${workflow.name}.json\`
+Canonical workflow JSON: \`.wise/workflows/${workflow.name}.json\`
 
 When the canvas changes in Wise CC Workflow Studio, use the \`cc-workflow-studio\` MCP server (\`get_current_workflow\` / \`apply_workflow\`) to stay aligned before executing steps that depend on the latest node data.
 `;
