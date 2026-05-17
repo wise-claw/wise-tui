@@ -404,11 +404,11 @@ export function WorkflowConfigModal({
                 <Switch checkedChildren="默认" unCheckedChildren="非默认" />
               </Form.Item>
               {projects && projects.length > 0 && (
-                <Form.Item label="所属项目">
+                <Form.Item label="所属 Workspace">
                   <Select
                     mode="multiple"
                     allowClear
-                    placeholder="所属项目"
+                    placeholder="所属 Workspace"
                     maxTagCount="responsive"
                     value={editingProjectIds}
                     onChange={(value: string[]) => setEditingProjectIds(value)}

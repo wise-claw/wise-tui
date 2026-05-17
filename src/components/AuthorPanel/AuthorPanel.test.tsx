@@ -56,7 +56,12 @@ mock.module("../ClaudeHooksConfigPanel", () => ({
   ),
 }));
 
-const { AuthorPanel } = await import("./AuthorPanel");
+mock.module("../../services/appSettingsStore", () => ({
+  getAppSetting: mock(async () => null),
+  setAppSetting: mock(async () => undefined),
+}));
+
+const { AuthorPanel, writeAuthorPaneToStorage } = await import("./AuthorPanel");
 
 const workspace = {
   id: "w1",
@@ -167,6 +172,20 @@ describe("AuthorPanel", () => {
     for (const label of ["Workspaces", "Agents", "Workflows", "MCP", "Skills", "Hooks", "Prompts", "Trellis Spec"]) {
       expect(html).toContain(label);
     }
+  });
+
+  test("pane change and back callbacks remain shell-owned", () => {
+    const { props, onPaneChange, onBack } = buildProps();
+    props.onPaneChange("agents");
+    props.onBack();
+    expect(onPaneChange).toHaveBeenCalledWith("agents");
+    expect(onBack).toHaveBeenCalled();
+  });
+
+  test("persists the last Author pane through the settings store", async () => {
+    const { setAppSetting } = await import("../../services/appSettingsStore");
+    writeAuthorPaneToStorage("skills");
+    expect(setAppSetting).toHaveBeenCalledWith("wise.author.lastPane", "skills");
   });
 
   test("agents pane mounts EmployeeConfigModal and forwards defaultRepositoryIds", () => {

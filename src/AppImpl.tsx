@@ -35,7 +35,7 @@ import { useClaudeSessions, type ClaudeTurnCompletePayload } from "./hooks/useCl
 import { openInFinder } from "./services/repository";
 import { triggerCodeGraphAssociationBuild, triggerCodeGraphReindex } from "./services/codeKnowledgeGraph";
 import { AppWorkspaceLayout } from "./components/AppWorkspaceLayout";
-import { readAuthorPaneFromStorage } from "./components/AuthorPanel";
+import { readAuthorPaneFromSettings, readAuthorPaneFromStorage } from "./components/AuthorPanel";
 import type { PromptsOpenContext } from "./components/PromptsPanel";
 import { reloadAppWindow } from "./services/window";
 import { wiseMascotShow } from "./services/wiseMascot";
@@ -267,6 +267,17 @@ export default function App() {
   const [dualPaneSecondaryRepositoryId, setDualPaneSecondaryRepositoryId] = useState<number | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
 
+  useEffect(() => {
+    let cancelled = false;
+    void readAuthorPaneFromSettings(lastAuthorPane).then((pane) => {
+      if (cancelled) return;
+      setLastAuthorPane(pane);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const enterAuthorPane = useCallback(
     (pane: AuthorPane) => {
       setSearchOpen(false);
@@ -286,15 +297,15 @@ export default function App() {
   const authorPane: AuthorPane = viewMode.view.kind === "author" ? viewMode.view.pane : lastAuthorPane;
   const authorWorkflowPaneActive = viewMode.view.kind === "author" && viewMode.view.pane === "workflows";
   const [employeeConfigDefaultRepositoryIds, setEmployeeConfigDefaultRepositoryIds] = useState<number[]>([]);
-  /** 非空：从需求面板打开员工配置，新建成功后自动关联到该项目。 */
+  /** 非空：从需求面板打开员工配置，新建成功后自动关联到该 Workspace。 */
   const [employeeConfigPrdProjectId, setEmployeeConfigPrdProjectId] = useState<string | null>(null);
-  /** 从需求面板打开员工配置时拉取，用于表格「始终显示」项目显式关联的员工 id。 */
+  /** 从需求面板打开员工配置时拉取，用于表格「始终显示」Workspace 显式关联的员工 id。 */
   const [employeeConfigPrdVisibleEmployeeIds, setEmployeeConfigPrdVisibleEmployeeIds] = useState<string[]>([]);
   const [employeeAgentTypeOptions, setEmployeeAgentTypeOptions] = useState<string[]>(["executor"]);
-  /** 非空：从需求面板打开团队配置，保存模板后自动关联到该项目。 */
+  /** 非空：从需求面板打开团队配置，保存模板后自动关联到该 Workspace。 */
   const [workflowConfigPrdProjectId, setWorkflowConfigPrdProjectId] = useState<string | null>(null);
   const [workflowConfigInitialWorkflowId, setWorkflowConfigInitialWorkflowId] = useState<string | null>(null);
-  /** workflowId -> [projectId, ...] map，用于 WorkflowConfigModal 中展示已关联项目。 */
+  /** workflowId -> [projectId, ...] map，用于 WorkflowConfigModal 中展示已关联 Workspace。 */
   const [workflowProjectIdsMap, setWorkflowProjectIdsMap] = useState<Record<string, string[]>>({});
   const [employeeLoading, setEmployeeLoading] = useState(false);
   const [workflowLoading, setWorkflowLoading] = useState(false);
@@ -1361,16 +1372,16 @@ export default function App() {
   const handleAddWorktreeRepositoryToProject = useCallback(
     async (worktreePath: string) => {
       if (!activeProjectId) {
-        message.warning("请先在侧栏选择或创建一个项目");
+        message.warning("请先在侧栏选择或创建一个 Workspace");
         return;
       }
       const repositoryType = activeRepository?.repositoryType ?? "frontend";
       try {
         const result = await handleAddRepositoryPathToProject(activeProjectId, worktreePath, repositoryType);
         if (result === "already_in_project") {
-          message.info("该 worktree 目录已在当前项目中");
+          message.info("该 worktree 目录已在当前 Workspace 中");
         } else {
-          message.success("已将 worktree 目录加入当前项目");
+          message.success("已将 worktree 目录加入当前 Workspace");
         }
       } catch (error) {
         message.error(error instanceof Error ? error.message : String(error));
@@ -1637,7 +1648,7 @@ export default function App() {
           .join("、");
         Modal.success({
           title: "多仓仓库组同步已完成",
-          content: `已为项目内仓库同步 GitNexus 仓库组：${names}。各仓代码图谱检索已在后台进行，全部完成后即可在「代码图谱」中查看节点与子图。`,
+          content: `已为 Workspace 内仓库同步 GitNexus 仓库组：${names}。各仓代码图谱检索已在后台进行，全部完成后即可在「代码图谱」中查看节点与子图。`,
         });
       });
 
@@ -2290,9 +2301,9 @@ export default function App() {
               if (linkPid) {
                 try {
                   await addProjectPrdWorkflow(linkPid, savedTemplate.id);
-                  message.success("已关联到当前项目");
+                  message.success("已关联到当前 Workspace");
                 } catch (err) {
-                  message.error(`模板已保存，但关联到项目失败：${toUiErrorMessage(err)}`);
+                  message.error(`模板已保存，但关联到 Workspace 失败：${toUiErrorMessage(err)}`);
                 }
               }
               return savedTemplate;

@@ -8,6 +8,7 @@ import { ProjectTrellisCenter } from "../ProjectTrellisCenter";
 import { PromptsPanel } from "../PromptsPanel";
 import { SkillsHub } from "../SkillsHub";
 import { WorkflowConfigModal } from "../WorkflowConfigModal";
+import { getAppSetting, setAppSetting } from "../../services/appSettingsStore";
 import { AUTHOR_TAB_STORAGE_KEY, AUTHOR_TABS, isAuthorPane, type AuthorPane } from "./AuthorPanelTabs";
 import { WorkspacesTab } from "./tabs/WorkspacesTab";
 import "./index.css";
@@ -41,9 +42,18 @@ export function readAuthorPaneFromStorage(fallback: AuthorPane = "workspaces"): 
   return isAuthorPane(raw) ? raw : fallback;
 }
 
+export async function readAuthorPaneFromSettings(fallback: AuthorPane = "workspaces"): Promise<AuthorPane> {
+  const raw = (await getAppSetting(AUTHOR_TAB_STORAGE_KEY))?.trim() ?? "";
+  return isAuthorPane(raw) ? raw : readAuthorPaneFromStorage(fallback);
+}
+
 export function writeAuthorPaneToStorage(pane: AuthorPane): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(AUTHOR_TAB_STORAGE_KEY, pane);
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(AUTHOR_TAB_STORAGE_KEY, pane);
+  }
+  void setAppSetting(AUTHOR_TAB_STORAGE_KEY, pane).catch(() => {
+    /* Last Author tab is a UI convenience; keep local fallback if settings write fails. */
+  });
 }
 
 export function AuthorPanel({

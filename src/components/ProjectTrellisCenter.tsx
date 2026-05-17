@@ -35,7 +35,7 @@ export function ProjectTrellisCenter({
   });
 
   const title = useMemo(
-    () => (project ? `项目 Trellis · ${project.name}` : "项目 Trellis"),
+    () => (project ? `Workspace Trellis · ${project.name}` : "Workspace Trellis"),
     [project],
   );
 
@@ -43,9 +43,9 @@ export function ProjectTrellisCenter({
     <>
       <div className="project-trellis-center__summary">
         <div className="project-trellis-center__summary-main">
-          <Typography.Text strong>Trellis / SDD 项目治理</Typography.Text>
+          <Typography.Text strong>Trellis / SDD Workspace Governance</Typography.Text>
           <Typography.Text type="secondary">
-            这里管理项目规范、工作流、运行事件和快照；需求拆分只负责从 PRD 推进到任务和证据。
+            这里管理 Workspace 规范、工作流、运行事件和快照；需求拆分只负责从 PRD 推进到任务和证据。
           </Typography.Text>
         </div>
         <Space size={6} wrap>
