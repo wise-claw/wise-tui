@@ -188,7 +188,7 @@ export function useRepositoryAssociateModalController({
     const options = buildAddRepositoryOptions({ iconDisplayName, iconColor, sddMode });
     if (floatingMode) {
       if (!onAddFloatingRepository) {
-        message.warning("当前环境未启用「添加游离仓库」入口");
+        message.warning("当前环境未启用「添加 Standalone Repo」入口");
         return;
       }
       setFloatingMode(false);
@@ -197,7 +197,7 @@ export function useRepositoryAssociateModalController({
     }
     if (!pendingProjectId) return;
     if (!onAddRepositoryToProject) {
-      message.warning("当前环境未启用「关联到项目」");
+      message.warning("当前环境未启用「加入 Workspace」");
       close();
       return;
     }

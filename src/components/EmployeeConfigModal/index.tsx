@@ -28,6 +28,7 @@ function isRepoOwnerGapRow(row: EmployeeConfigTableRow): row is RepoOwnerGapTabl
 
 interface Props {
   open: boolean;
+  inline?: boolean;
   loading: boolean;
   employees: EmployeeItem[];
   workflowTemplates: WorkflowTemplateItem[];
@@ -70,6 +71,7 @@ interface Props {
 
 export function EmployeeConfigModal({
   open,
+  inline = false,
   loading,
   employees,
   workflowTemplates,
@@ -258,17 +260,8 @@ export function EmployeeConfigModal({
     });
   }
 
-  return (
-    <Modal
-      title="员工配置"
-      open={open}
-      onCancel={onClose}
-      footer={null}
-      width={projectOwnerPickMode ? 850 : 780}
-      destroyOnHidden
-      rootClassName="app-employee-config-modal-root"
-    >
-      <Space orientation="vertical" size={10} className="app-employee-config-modal">
+  const content = (
+    <Space orientation="vertical" size={10} className="app-employee-config-modal">
         <Form
           form={form}
           layout="inline"
@@ -539,7 +532,25 @@ export function EmployeeConfigModal({
             从侧栏仓库打开：新建时默认员工名称为该仓库目录名；保存后会自动勾选本仓库并写入仓库主 Owner，表格中「Owner 标识」列与项目需求面板规则一致。
           </Typography.Text>
         ) : null}
-      </Space>
+    </Space>
+  );
+
+  if (inline) {
+    if (!open) return null;
+    return <div className="app-employee-config-inline-root">{content}</div>;
+  }
+
+  return (
+    <Modal
+      title="员工配置"
+      open={open}
+      onCancel={onClose}
+      footer={null}
+      width={projectOwnerPickMode ? 850 : 780}
+      destroyOnHidden
+      rootClassName="app-employee-config-modal-root"
+    >
+      {content}
     </Modal>
   );
 }

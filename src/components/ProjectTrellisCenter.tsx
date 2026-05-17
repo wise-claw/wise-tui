@@ -12,14 +12,16 @@ import { SpecLibraryPanel } from "./MissionControl/engineering/SpecLibraryPanel"
 
 interface ProjectTrellisCenterProps {
   open: boolean;
+  inline?: boolean;
   project: ProjectItem | null;
-  onClose: () => void;
+  onClose?: () => void;
   onOpenProjectSession?: (project: ProjectItem) => void | Promise<void>;
   onRequestSpecAgentUpdate?: (project: ProjectItem, area: string) => void | Promise<void>;
 }
 
 export function ProjectTrellisCenter({
   open,
+  inline = false,
   project,
   onClose,
   onOpenProjectSession,
@@ -37,8 +39,8 @@ export function ProjectTrellisCenter({
     [project],
   );
 
-  return (
-    <Drawer open={open} onClose={onClose} width={940} title={title}>
+  const content = (
+    <>
       <div className="project-trellis-center__summary">
         <div className="project-trellis-center__summary-main">
           <Typography.Text strong>Trellis / SDD 项目治理</Typography.Text>
@@ -103,6 +105,21 @@ export function ProjectTrellisCenter({
           },
         ]}
       />
+    </>
+  );
+
+  if (inline) {
+    if (!open) return null;
+    return (
+      <div className="project-trellis-center__inline" aria-label={title}>
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <Drawer open={open} onClose={onClose} width={940} title={title}>
+      {content}
     </Drawer>
   );
 }

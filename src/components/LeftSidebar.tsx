@@ -12,10 +12,7 @@ import {
 } from "../services/openWorkspaceWithPreference";
 import { TaskCardsNav } from "./TaskCardsNav";
 import { ActiveRepositoryFilesPanel } from "./LeftSidebar/ActiveRepositoryFilesPanel";
-import {
-  LeftSidebarTopbar,
-  LeftSidebarTopNavStack,
-} from "./LeftSidebar/LeftSidebarTopbar";
+import { LeftSidebarTopbar } from "./LeftSidebar/LeftSidebarTopbar";
 import { ProjectRepositoryList } from "./LeftSidebar/ProjectRepositoryList";
 import {
   readLeftFilesExplorerCollapsedFromStorage,
@@ -44,6 +41,11 @@ export function LeftSidebar({
   activeProjectId,
   repositories,
   activeRepositoryId,
+  authorDisabled,
+  authorDisabledTooltip,
+  onOpenAuthor,
+  workspaceCreateRequest,
+  standaloneRepoAddRequest,
   onProjectSelect,
   onCreateProject,
   onUpdateProject,
@@ -81,12 +83,6 @@ export function LeftSidebar({
   onCancelSessionFromMonitor,
   onOpenTaskDetailFromMonitor,
   onReloadFullDiskTranscript,
-  mcpNavActive = false,
-  onOpenMcpHub,
-  skillsNavActive = false,
-  onOpenSkillsHub,
-  workflowStudioNavActive = false,
-  onOpenWorkflowStudio,
   activeRepositoryPath,
   activeRepositoryName,
   onOpenActiveRepositoryFile,
@@ -139,6 +135,7 @@ export function LeftSidebar({
   const repositoryAssociateModal = useRepositoryAssociateModalController({
     onAddFloatingRepository,
   });
+  const { openAddFloatingRepositoryModal } = repositoryAssociateModal;
   const repositorySddModeModal = useRepositorySddModeModalController({
     onUpdateRepositorySddMode,
   });
@@ -152,14 +149,27 @@ export function LeftSidebar({
     setRepositoryFileTreeSearch("");
   }, [activeRepositoryPath]);
 
+  useEffect(() => {
+    if (!workspaceCreateRequest) return;
+    setProjectNameInput("");
+    setCreateProjectRootPath("");
+    setEmbedTrellisForNewProject(true);
+    setCreateProjectOpen(true);
+  }, [workspaceCreateRequest]);
+
+  useEffect(() => {
+    if (!standaloneRepoAddRequest || !onAddFloatingRepository) return;
+    openAddFloatingRepositoryModal();
+  }, [onAddFloatingRepository, openAddFloatingRepositoryModal, standaloneRepoAddRequest]);
+
   async function submitCreateProject() {
     const name = projectNameInput.trim();
     if (!name) {
-      message.warning("项目名称不能为空");
+      message.warning("Workspace 名称不能为空");
       return;
     }
     if (!createProjectRootPath.trim()) {
-      message.warning("请先选择项目根目录");
+      message.warning("请先选择 Workspace 根目录");
       return;
     }
     if (createProjectSubmitting) return;
@@ -185,7 +195,7 @@ export function LeftSidebar({
     if (!editProject) return;
     const name = projectNameInput.trim();
     if (!name) {
-      message.warning("项目名称不能为空");
+      message.warning("Workspace 名称不能为空");
       return;
     }
     onUpdateProject(editProject.id, name);
@@ -197,11 +207,11 @@ export function LeftSidebar({
     if (!promotingFloatingRepo) return;
     const trimmed = promotingFloatingRepoName.trim();
     if (!trimmed) {
-      message.warning("请输入项目名");
+      message.warning("请输入 Workspace 名称");
       return;
     }
     if (!onPromoteFloatingRepositoryToProject) {
-      message.warning("当前环境未启用「升格为新项目」");
+      message.warning("当前环境未启用「升格为 Workspace」");
       return;
     }
     const repoId = promotingFloatingRepo.id;
@@ -209,7 +219,7 @@ export function LeftSidebar({
     setPromotingFloatingRepoName("");
     void Promise.resolve(onPromoteFloatingRepositoryToProject(repoId, trimmed)).catch(
       (err: unknown) => {
-        message.error("升格为新项目失败");
+        message.error("升格为 Workspace 失败");
         console.error(err);
       },
     );
@@ -226,21 +236,15 @@ export function LeftSidebar({
       <LeftSidebarTopbar
         compactLayoutMode={compactLayoutMode}
         onToggleCompactLayoutMode={onToggleCompactLayoutMode}
+        authorDisabled={authorDisabled}
+        authorTooltip={authorDisabledTooltip}
+        onOpenAuthor={onOpenAuthor}
         onOpenSettings={() => setAppSettingsOpen(true)}
       />
 
       {taskCardsNavProps ? (
         <TaskCardsNav {...taskCardsNavProps} />
       ) : null}
-
-      <LeftSidebarTopNavStack
-        mcpNavActive={mcpNavActive}
-        onOpenMcpHub={onOpenMcpHub}
-        skillsNavActive={skillsNavActive}
-        onOpenSkillsHub={onOpenSkillsHub}
-        workflowStudioNavActive={workflowStudioNavActive}
-        onOpenWorkflowStudio={onOpenWorkflowStudio}
-      />
 
       <div
         className="app-left-sidebar-project-and-files"
@@ -267,7 +271,7 @@ export function LeftSidebar({
             setCreateProjectOpen(true);
           }}
           onAddFloatingRepositoryClick={
-            onAddFloatingRepository ? repositoryAssociateModal.openAddFloatingRepositoryModal : undefined
+            onAddFloatingRepository ? openAddFloatingRepositoryModal : undefined
           }
           onReconcileProject={onReconcileProject}
           onCodeGraphGenerateProject={onCodeGraphGenerateProject}
@@ -284,7 +288,7 @@ export function LeftSidebar({
           onDeleteProject={(project) => {
             modal.confirm({
               title: "确认删除项目？",
-              content: `项目「${project.name}」将被删除，但仓库本身不会被移除。`,
+              content: `Workspace「${project.name}」将被删除，但仓库本身不会被移除。`,
               okText: "删除",
               okType: "danger",
               cancelText: "取消",
@@ -312,8 +316,8 @@ export function LeftSidebar({
           onRemoveFloatingRepository={(repo) => {
             if (!onRemoveRepository) return;
             modal.confirm({
-              title: "确认移除游离仓库？",
-              content: `仓库「${repositoryFolderBasename(repo)}」将从 Wise 列表移除（不会删除磁盘文件，也不会动 .trellis）。`,
+              title: "确认移除 Standalone Repo？",
+              content: `Standalone Repo「${repositoryFolderBasename(repo)}」将从 Wise 列表移除（不会删除磁盘文件，也不会动 .trellis）。`,
               okText: "移除",
               okType: "danger",
               cancelText: "取消",

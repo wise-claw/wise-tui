@@ -3,6 +3,17 @@
   padding-bottom: 12px;
 }
 
+.app-workflow-config-inline-root {
+  width: 100%;
+  min-width: 0;
+}
+
+.app-workflow-config-inline-root .app-workflow-config-layout {
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+}
+
 .app-workflow-config-layout {
   display: flex;
   gap: 14px;

@@ -14,9 +14,9 @@ import {
 } from "react";
 import { App as AntdApp, ConfigProvider, Layout, Spin, theme } from "antd";
 import zhCN from "antd/locale/zh_CN";
+import { AuthorPanel } from "./AuthorPanel";
 import { ClaudeSessions } from "./ClaudeSessions";
 import { CommandPalette } from "./CommandPalette";
-import { EmployeeConfigModal } from "./EmployeeConfigModal";
 import type { GitPanelOpenFileOptions } from "./GitPanel";
 import { LeftSidebar } from "./LeftSidebar";
 import { MainLayoutResizeHandle } from "./MainLayoutResizeHandle";
@@ -28,7 +28,6 @@ import { SkillsHub } from "./SkillsHub";
 import type * as MissionControlModule from "./MissionControl";
 import type * as PromptsPanelModule from "./PromptsPanel";
 import type * as RightPanelModule from "./RightPanel";
-import type * as WorkflowConfigModalModule from "./WorkflowConfigModal";
 import type { OpenRepositoryFileDetail } from "../constants/workflowUiEvents";
 import { useRepositoryFileEditor } from "../hooks/useRepositoryFileEditor";
 
@@ -37,9 +36,6 @@ const MissionControl = lazy(() =>
   import("./MissionControl").then((module) => ({ default: module.MissionControl })),
 );
 const PromptsPanel = lazy(() => import("./PromptsPanel").then((module) => ({ default: module.PromptsPanel })));
-const WorkflowConfigModal = lazy(() =>
-  import("./WorkflowConfigModal").then((module) => ({ default: module.WorkflowConfigModal })),
-);
 const WiseCcWorkflowStudioPanel = lazy(() =>
   import("../features/cc-wf-studio/WiseCcWorkflowStudioPanel").then((m) => ({ default: m.WiseCcWorkflowStudioPanel })),
 );
@@ -64,10 +60,10 @@ type LeftSidebarProps = Omit<
   | "onToggleCompactLayoutMode"
   | "onOpenActiveRepositoryFile"
 >;
+type AuthorPanelProps = ComponentProps<typeof AuthorPanel>;
 type MissionControlProps = ComponentProps<typeof MissionControlModule.MissionControl>;
 type PromptsPanelProps = ComponentProps<typeof PromptsPanelModule.PromptsPanel>;
 type RightPanelProps = Omit<ComponentProps<typeof RightPanelModule.RightPanel>, "onOpenFile">;
-type WorkflowConfigModalProps = ComponentProps<typeof WorkflowConfigModalModule.WorkflowConfigModal>;
 
 type OpenRepositoryFileHandler = (path: string, options?: GitPanelOpenFileOptions) => void;
 
@@ -235,6 +231,7 @@ export interface AppWorkspaceLayoutProps {
   dark: boolean;
   collapsed: boolean;
   promptsMode: boolean;
+  authorMode: boolean;
   missionControlMode: boolean;
   mcpHubMode: boolean;
   skillsHubMode: boolean;
@@ -248,6 +245,7 @@ export interface AppWorkspaceLayoutProps {
   mainLayoutLeftWidthPx: number;
   mainLayoutRightWidthPx: number;
   leftSidebarProps: LeftSidebarProps;
+  authorPanelProps: AuthorPanelProps;
   promptsPanelProps: PromptsPanelProps;
   claudeSessionsProps: ClaudeSessionsProps;
   rightPanelProps: RightPanelProps;
@@ -257,8 +255,6 @@ export interface AppWorkspaceLayoutProps {
   codeKnowledgeGraphProps: CodeKnowledgeGraphPanelProps;
   missionControlProps: MissionControlProps;
   progressMonitorDrawerProps: ComponentProps<typeof ProgressMonitorDrawer>;
-  employeeConfigModalProps: ComponentProps<typeof EmployeeConfigModal> | null;
-  workflowConfigModalProps: WorkflowConfigModalProps | null;
   onToggleCompactLayoutMode: () => void;
   onLeftWidthChange: (widthPx: number) => void;
   onRightWidthChange: (widthPx: number) => void;
@@ -280,6 +276,7 @@ export function AppWorkspaceLayout({
   collapsed,
   missionControlMode,
   promptsMode,
+  authorMode,
   mcpHubMode,
   skillsHubMode,
   codeKnowledgeGraphMode,
@@ -292,6 +289,7 @@ export function AppWorkspaceLayout({
   mainLayoutLeftWidthPx,
   mainLayoutRightWidthPx,
   leftSidebarProps,
+  authorPanelProps,
   promptsPanelProps,
   claudeSessionsProps,
   rightPanelProps,
@@ -301,8 +299,6 @@ export function AppWorkspaceLayout({
   codeKnowledgeGraphProps,
   missionControlProps,
   progressMonitorDrawerProps,
-  employeeConfigModalProps,
-  workflowConfigModalProps,
   onToggleCompactLayoutMode,
   onLeftWidthChange,
   onRightWidthChange,
@@ -407,7 +403,7 @@ export function AppWorkspaceLayout({
                   leftSidebarProps={leftSidebarProps}
                 />
 
-                {!promptsMode && !missionControlMode && !collapsed ? (
+                {!promptsMode && !missionControlMode && !authorMode && !collapsed ? (
                   <MainLayoutResizeHandle
                     variant="left"
                     startWidthPx={mainLayoutLeftWidthPx}
@@ -420,6 +416,10 @@ export function AppWorkspaceLayout({
                     <Suspense fallback={<PanelLoadingFallback />}>
                       <MissionControl {...missionControlProps} />
                     </Suspense>
+                  </div>
+                ) : authorMode ? (
+                  <div className="app-full-width-main">
+                    <AuthorPanel {...authorPanelProps} />
                   </div>
                 ) : promptsMode ? (
                   <div className="app-full-width-main">
@@ -488,12 +488,6 @@ export function AppWorkspaceLayout({
 
               <ProgressMonitorDrawer {...progressMonitorDrawerProps} />
 
-              {employeeConfigModalProps ? <EmployeeConfigModal {...employeeConfigModalProps} /> : null}
-              {workflowConfigModalProps ? (
-                <Suspense fallback={null}>
-                  <WorkflowConfigModal {...workflowConfigModalProps} />
-                </Suspense>
-              ) : null}
             </AntdApp>
           </ConfigProvider>
         </RepositoryFileEditorPanelContext.Provider>

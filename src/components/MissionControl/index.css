@@ -2363,6 +2363,10 @@
   background: var(--mission-surface-muted);
 }
 
+.project-trellis-center__inline {
+  min-width: 0;
+}
+
 .project-trellis-center__summary-main {
   display: flex;
   flex-direction: column;

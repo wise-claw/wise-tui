@@ -24,6 +24,11 @@ export interface LeftSidebarProps {
   activeProjectId: string | null;
   repositories: Repository[];
   activeRepositoryId: number | null;
+  authorDisabled?: boolean;
+  authorDisabledTooltip?: string;
+  onOpenAuthor: () => void;
+  workspaceCreateRequest?: number;
+  standaloneRepoAddRequest?: number;
   onProjectSelect: (projectId: string) => void;
   onCreateProject: (
     name: string,
@@ -34,15 +39,15 @@ export interface LeftSidebarProps {
   pinnedProjectIds: string[];
   onTogglePinProject: (projectId: string) => void;
   onReconcileProject?: (projectId: string, mode: ReconcileProjectMode) => void | Promise<void>;
-  /** 项目菜单「图谱操作 → 生成项目级索引」：多仓时并行启动各仓代码图谱检索 + GitNexus 仓库组同步；单仓仅本机检索 */
+  /** Workspace 菜单「图谱操作 → 生成 Workspace 索引」：多仓时并行启动各仓代码图谱检索 + GitNexus 仓库组同步；单仓仅本机检索 */
   onCodeGraphGenerateProject?: (project: ProjectItem) => void | Promise<void>;
-  /** 项目菜单「图谱操作 → 查看检索」：打开代码图谱覆盖层（多仓时以当前项目为搜索范围） */
+  /** Workspace 菜单「图谱操作 → 查看检索」：打开代码图谱覆盖层（多仓时以当前 Workspace 为搜索范围） */
   onCodeGraphViewProject?: (project: ProjectItem) => void;
   /** 仓库菜单「图谱操作 → 生成检索」 */
   onCodeGraphGenerateRepository?: (repository: Repository) => void | Promise<void>;
-  /** 项目内仓库「图谱操作 → 查看检索」 */
+  /** Workspace 内仓库「图谱操作 → 查看检索」 */
   onCodeGraphViewRepositoryInProject?: (project: ProjectItem, repository: Repository) => void;
-  /** 游离仓库「图谱操作 → 查看检索」 */
+  /** Standalone Repo「图谱操作 → 查看检索」 */
   onCodeGraphViewFloatingRepository?: (repository: Repository) => void;
   onAddFloatingRepository?: (
     repositoryType: Repository["repositoryType"],
@@ -75,12 +80,6 @@ export interface LeftSidebarProps {
   onCancelSessionFromMonitor?: (sessionId: string) => void;
   onOpenTaskDetailFromMonitor?: (taskId: string) => void;
   onReloadFullDiskTranscript?: (sessionKey: string) => void | Promise<void>;
-  mcpNavActive?: boolean;
-  onOpenMcpHub?: () => void;
-  skillsNavActive?: boolean;
-  onOpenSkillsHub?: () => void;
-  workflowStudioNavActive?: boolean;
-  onOpenWorkflowStudio?: () => void;
   activeRepositoryPath?: string;
   activeRepositoryName?: string;
   onOpenActiveRepositoryFile?: (path: string, options?: GitPanelOpenFileOptions) => void;

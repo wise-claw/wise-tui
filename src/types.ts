@@ -29,7 +29,7 @@ export interface Repository {
 /** Legacy 仓库级 SDD 模式（仍保留 `auto`/`off` 以兼容旧数据）。新逻辑请使用 `ProjectSddMode`。 */
 export type SddMode = "auto" | "wise_trellis" | "project_owned" | "off";
 
-/** 项目级 SDD 模式（路径 X 引入）。两值：wise 接管 `.trellis/`，或交给用户自有 SDD 工具。 */
+/** Workspace 级 SDD 模式（路径 X 引入）。两值：wise 接管 `.trellis/`，或交给用户自有 SDD 工具。 */
 export type ProjectSddMode = "wise_trellis" | "project_owned";
 
 /** 「关联仓库」弹窗确认后、选择目录并创建条目时传入的展示选项。 */
@@ -59,9 +59,9 @@ export interface ProjectItem {
   repositoryIds: number[];
   createdAt: number;
   updatedAt: number;
-  /** 项目根目录绝对路径；持有 `.trellis/`。空字符串视为尚未配置。 */
+  /** Workspace 根目录绝对路径；持有 `.trellis/`。空字符串视为尚未配置。 */
   rootPath?: string;
-  /** 项目级 SDD 模式；新项目默认 `wise_trellis`。 */
+  /** Workspace 级 SDD 模式；新 Workspace 默认 `wise_trellis`。 */
   sddMode?: ProjectSddMode;
   /** 主会话 Agent；为路径 Y 主会话派发预留。 */
   mainAgent?: string | null;
@@ -69,6 +69,11 @@ export interface ProjectItem {
   iconDisplayName?: string | null;
   iconColor?: string | null;
 }
+
+export type Workspace = ProjectItem;
+export type WorkspaceId = ProjectItem["id"];
+export type StandaloneRepo = Repository;
+export type StandaloneRepoId = Repository["id"];
 
 export interface EmployeeItem {
   id: string;
