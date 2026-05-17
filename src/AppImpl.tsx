@@ -27,6 +27,7 @@ import { useClaudeSessions, type ClaudeTurnCompletePayload } from "./hooks/useCl
 import { openInFinder } from "./services/repository";
 import { triggerCodeGraphAssociationBuild, triggerCodeGraphReindex } from "./services/codeKnowledgeGraph";
 import { AppWorkspaceLayout } from "./components/AppWorkspaceLayout";
+import { ProjectTrellisCenter } from "./components/ProjectTrellisCenter";
 import type { PromptsOpenContext } from "./components/PromptsPanel";
 import { reloadAppWindow } from "./services/window";
 import { wiseMascotShow } from "./services/wiseMascot";
@@ -210,8 +211,6 @@ function presentSidebarCodeGraphReindexModal(repositories: Repository[], outcome
 // ── App ──
 
 export default function App() {
-  /** 任务面板：在主区+右栏之上叠层展示任务列表（不盖左栏）。 */
-  const [taskPanelMode] = useState(false);
   const [promptsMode, setPromptsMode] = useState(false);
   /** 左栏 MCP：在主区+右栏之上叠层展示（与技能目录相同，不盖左栏）。 */
   const [mcpHubMode, setMcpHubMode] = useState(false);
@@ -224,9 +223,9 @@ export default function App() {
   const [codeGraphLockToEntryRepository, setCodeGraphLockToEntryRepository] = useState(false);
   /** 侧栏项目「查看检索」进入时为 true：代码图谱默认多仓关联合并视图（候选 ≥2 时）。 */
   const [codeGraphDefaultProjectMultiRepo, setCodeGraphDefaultProjectMultiRepo] = useState(false);
-  const [taskSplitMode, setTaskSplitMode] = useState(false);
   const [missionControlMode, setMissionControlMode] = useState(false);
   const [missionControlInitialTarget, setMissionControlInitialTarget] = useState<OpenMissionControlDetail | null>(null);
+  const [projectTrellisCenterProjectId, setProjectTrellisCenterProjectId] = useState<string | null>(null);
   const [promptsOpenContext, setPromptsOpenContext] = useState<PromptsOpenContext | null>(null);
   const [repositorySplitTemplate, setRepositorySplitTemplate] = useState("");
   const [projectSplitTemplate, setProjectSplitTemplate] = useState("");
@@ -949,6 +948,14 @@ export default function App() {
     () => (activeProjectId ? projects.find((p) => p.id === activeProjectId) ?? null : null),
     [activeProjectId, projects],
   );
+  const projectTrellisCenterProject = useMemo(
+    () => (
+      projectTrellisCenterProjectId
+        ? projects.find((project) => project.id === projectTrellisCenterProjectId) ?? null
+        : null
+    ),
+    [projectTrellisCenterProjectId, projects],
+  );
   const missionSessionBindingKeyRef = useRef("");
   useEffect(() => {
     const session = activeSessionId ? sessionsLatestRef.current.find((item) => item.id === activeSessionId) : null;
@@ -1009,6 +1016,12 @@ export default function App() {
       relativePath,
       line: detail.line ?? null,
     });
+    setMissionControlMode(false);
+    setPromptsMode(false);
+    setMcpHubMode(false);
+    setSkillsHubMode(false);
+    setCodeKnowledgeGraphMode(false);
+    setCcWfStudioMode(false);
   }, [repositories, setActiveRepositoryWithOwner]);
   const workspaceMode = useWorkspaceMode({ activeProjectId, projects });
   const openMissionControl = useCallback((detail: OpenMissionControlDetail) => {
@@ -1467,7 +1480,6 @@ export default function App() {
             setMcpHubMode(false);
             setSkillsHubMode(false);
             setCcWfStudioMode(false);
-            setTaskSplitMode(false);
             setMissionControlMode(false);
           } else {
             handleSidebarRepositorySelectLeavingMcpHub(opts.repositoryId);
@@ -1727,6 +1739,74 @@ export default function App() {
     );
   }
 
+  async function openProjectMainSession(project: ProjectItem): Promise<string | null> {
+    const byId = new Map(repositories.map((repo) => [repo.id, repo]));
+    const repos = project.repositoryIds
+      .map((id) => byId.get(id))
+      .filter((repo): repo is Repository => Boolean(repo));
+    const anchor = resolveProjectMainSessionAnchor(project, repositories);
+    if (!anchor.path) {
+      message.warning("该项目缺少根目录，请先配置 rootPath");
+      return null;
+    }
+    setProjectTrellisCenterProjectId(null);
+    setMissionControlMode(false);
+    setPromptsMode(false);
+    setMcpHubMode(false);
+    setSkillsHubMode(false);
+    setCodeKnowledgeGraphMode(false);
+    setCcWfStudioMode(false);
+    setActiveProjectId(project.id);
+    if (repos[0]) {
+      setActiveRepositoryId(repos[0].id);
+    }
+
+    const mainOwnerPick = resolveMainOwnerAgentNameForRepositoryPath(repositories, anchor.path);
+    const boundId = resolveRepositoryMainSessionId(
+      anchor.path,
+      repositoryMainSessionBindings,
+      sessions,
+      mainOwnerPick,
+    );
+    if (boundId) {
+      switchSession(boundId);
+      return boundId;
+    }
+    const latestForProject = pickSessionForRepositorySidebarSelect(
+      sessions,
+      anchor.path,
+      loadSessionOwnerHints(),
+      { mainOwnerAgentName: mainOwnerPick },
+    );
+    if (latestForProject) {
+      bindRepositoryMainSession(anchor.path, latestForProject.id);
+      switchSession(latestForProject.id);
+      return latestForProject.id;
+    }
+    const id = await createSession(anchor.path, anchor.displayName);
+    bindRepositoryMainSession(anchor.path, id);
+    return id;
+  }
+
+  async function handleRequestSpecAgentUpdate(project: ProjectItem, area: string) {
+    const sessionId = await openProjectMainSession(project);
+    if (!sessionId) return;
+    const areaPath = `.trellis/spec/${area}/index.md`;
+    executeSession(
+      sessionId,
+      [
+        `Update the Trellis spec area: ${area}`,
+        "",
+        `Project: ${project.name}`,
+        `Spec index: ${areaPath}`,
+        "",
+        "Read the current project code and the existing spec documents before editing.",
+        "Update the spec through the project workspace, keep the change focused, and report what changed and why.",
+        "Do not make unrelated product or UI changes.",
+      ].join("\n"),
+    );
+  }
+
   function handleOpenInFinder(repository: Repository) {
     openInFinder(repository.path).catch((err) => {
       console.error("Failed to open in finder:", err);
@@ -1936,7 +2016,6 @@ export default function App() {
       dark={dark}
       collapsed={collapsed}
       promptsMode={promptsMode}
-      taskPanelMode={taskPanelMode}
       mcpHubMode={mcpHubMode}
       skillsHubMode={skillsHubMode}
       codeKnowledgeGraphMode={codeKnowledgeGraphMode}
@@ -2023,6 +2102,9 @@ export default function App() {
         onCreateProjectTask: handleCreateProjectTask,
         onCreateRepositoryTask: handleCreateRepositoryTask,
         onOpenPromptsProject: handleOpenPromptsForProject,
+        onOpenProjectTrellis: (project) => {
+          setProjectTrellisCenterProjectId(project.id);
+        },
         onOpenPromptsRepository: handleOpenPromptsForRepository,
         onOpenRepositoryMainOwner: (repository) => {
           void openEmployeeConfigForRepositoryOwner(repository);
@@ -2462,6 +2544,13 @@ export default function App() {
             }
           : null
       }
+    />
+    <ProjectTrellisCenter
+      open={projectTrellisCenterProject != null}
+      project={projectTrellisCenterProject}
+      onClose={() => setProjectTrellisCenterProjectId(null)}
+      onOpenProjectSession={(project) => void openProjectMainSession(project)}
+      onRequestSpecAgentUpdate={handleRequestSpecAgentUpdate}
     />
     </>
   );

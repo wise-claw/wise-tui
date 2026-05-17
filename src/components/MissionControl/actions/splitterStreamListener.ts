@@ -105,13 +105,14 @@ export function useSplitterStream(): { progress: ClusterProgressMap; stdout: Clu
       }
       const status =
         kind === "completed" ? "succeeded"
+        : kind === "cancelled" ? "cancelled"
         : kind === "error" ? "failed"
         : "running";
       applyProgress(clusterId, {
         status,
         progressPercent,
         stageLabel: message,
-        error: status === "failed"
+        error: status === "failed" || status === "cancelled"
           ? {
             summary: message || "拆分失败",
             exitCode: typeof exitCode === "number" ? exitCode : null,

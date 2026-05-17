@@ -2,6 +2,7 @@ import { message } from "antd";
 import type { ClusterPlanItem } from "../../../services/prdSplit/clusterPlanner";
 import { buildClusterDispatchContext } from "../../../services/prdSplit/clusterDispatchContext";
 import {
+  cancelClusterRun,
   dispatchClusterSplit,
   retryClusterFromRunDir as retryClusterRunFromDir,
   type DispatchClusterResult,
@@ -242,8 +243,12 @@ export async function runSingleCluster(
   }
 
   const stopHeartbeat = startSplitterHeartbeat(assignmentId);
+  const isCancelledDuringDispatch = () => api.state.clusterRuns[cluster.id]?.status === "cancelled";
   try {
     const result = await dispatchWithRetry(cluster.id, async (attempt) => {
+      if (isCancelledDuringDispatch()) {
+        throw new Error("PRD split run cancelled by user");
+      }
       if (attempt > 0) {
         const delay = Math.min(5_000 * Math.pow(2, attempt - 1), 30_000);
         api.patchClusterRun(cluster.id, {
@@ -265,6 +270,9 @@ export async function runSingleCluster(
         }),
       });
     });
+    if (isCancelledDuringDispatch()) {
+      return api.state.clusterRuns[cluster.id] ?? null;
+    }
 
     const finalRun: ClusterRunState = {
       ...runStart,
@@ -349,6 +357,61 @@ export async function runSingleCluster(
     return finalRun;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
+    if (api.state.clusterRuns[cluster.id]?.status === "cancelled" || /cancelled/i.test(errorMessage)) {
+      const endedAt = Date.now();
+      const cancelledRun: ClusterRunState = {
+        ...(api.state.clusterRuns[cluster.id] ?? runStart),
+        status: "cancelled",
+        errors: uniqueMessages([...(api.state.clusterRuns[cluster.id]?.errors ?? runStart.errors), "PRD split run cancelled by user"]),
+        endedAt,
+        progress: {
+          status: "cancelled",
+          progressPercent: 0,
+          stageLabel: "已中断",
+          elapsedMs: endedAt - (runStart.startedAt ?? endedAt),
+          error: {
+            summary: "PRD split run cancelled by user",
+            exitCode: 130,
+            stdoutPath: api.state.clusterRuns[cluster.id]?.raw?.stdoutPath ?? "",
+            stderrPath: api.state.clusterRuns[cluster.id]?.raw?.stderrPath ?? "",
+          },
+        },
+      };
+      api.patchClusterRun(cluster.id, cancelledRun);
+      await completeMissionAgentAssignmentSafe(assignmentId, "cancelled", {
+        clusterId: cluster.id,
+        phase: "dispatch",
+        reason: "user_cancelled",
+      });
+      await upsertSplitterAgentRunSafe(missionId, state, {
+        agentRunId: assignmentId,
+        cluster,
+        repositoryPath,
+        status: "cancelled",
+        taskPath: parentTaskPath,
+        metadata: {
+          ...assignmentMetadata,
+          clusterId: cluster.id,
+          parentTaskName,
+          parentTaskPath,
+          reason: "user_cancelled",
+        },
+        startedAt: runStart.startedAt,
+        completedAt: endedAt,
+      });
+      await recordSplitterTerminalRuntimeEventSafe(missionId, state, assignmentId, {
+        clusterId: cluster.id,
+        parentTaskName,
+        parentTaskPath,
+        status: "cancelled",
+        reason: "user_cancelled",
+      });
+      await appendMissionEventSafe(missionId, "mission.cluster.cancelled", {
+        clusterId: cluster.id,
+        phase: "dispatch",
+      });
+      return cancelledRun;
+    }
     const failedRun: ClusterRunState = {
       ...runStart,
       status: "failed",
@@ -572,6 +635,113 @@ export async function retryClusterFromRunDir(
     api.setGlobalError(`从 runDir 重试失败：${messageText}`);
   } finally {
     stopHeartbeat();
+  }
+}
+
+export async function cancelClusterDispatch(
+  runId: string,
+  clusterId: string,
+  state: UseSplitWizardStateApi["state"],
+  api: UseSplitWizardStateApi,
+  missionId?: string | null,
+): Promise<void> {
+  const currentRun = state.clusterRuns[clusterId];
+  const startedAt = currentRun?.startedAt ?? Date.now();
+  const endedAt = Date.now();
+  try {
+    const output = await cancelClusterRun({ runId });
+    const runDir = output.runDir || currentRun?.raw?.runDir || "";
+    const stdoutPath = currentRun?.raw?.stdoutPath || (runDir ? `${runDir}/claude.stdout.log` : "");
+    const stderrPath = currentRun?.raw?.stderrPath || (runDir ? `${runDir}/claude.stderr.log` : "");
+    const rawResultPath = currentRun?.raw?.rawResultPath || (runDir ? `${runDir}/split-result.raw.json` : "");
+    const cancelMessage = output.signalledRunningProcess
+      ? "PRD split run cancelled by user"
+      : output.alreadyFinished
+        ? "PRD split run already finished before cancel request"
+        : "PRD split run was not registered; marked cancelled for recovery";
+    if (output.alreadyFinished && !output.signalledRunningProcess) {
+      await appendMissionEventSafe(missionId, "mission.cluster.cancel_ignored", {
+        clusterId,
+        runId: output.runId,
+        runDir,
+        reason: "already_finished",
+      });
+      api.setGlobalError("子代理已经结束，未覆盖已有运行结果；正在刷新后台状态。");
+      return;
+    }
+    api.patchClusterRun(clusterId, {
+      status: "cancelled",
+      endedAt,
+      raw: {
+        runId: output.runId,
+        runDir,
+        exitCode: 130,
+        durationMs: 0,
+        stdoutPath,
+        stderrPath,
+        rawResultPath,
+        rawOutput: null,
+        stdoutTruncatedPreview: currentRun?.raw?.stdoutTruncatedPreview ?? "",
+        claudeSessionId: currentRun?.raw?.claudeSessionId ?? null,
+      },
+      errors: uniqueMessages([...(currentRun?.errors ?? []), cancelMessage]),
+      progress: {
+        status: "cancelled",
+        progressPercent: 0,
+        stageLabel: "已中断",
+        elapsedMs: endedAt - startedAt,
+        error: {
+          summary: cancelMessage,
+          exitCode: 130,
+          stdoutPath,
+          stderrPath,
+        },
+      },
+    });
+
+    const cluster = state.plan?.clusters.find((candidate) => candidate.id === clusterId) ?? null;
+    const assignmentId = missionId ? missionAssignmentId(missionId, clusterId, "splitter") : null;
+    await completeMissionAgentAssignmentSafe(assignmentId, "cancelled", {
+      clusterId,
+      runId: output.runId,
+      runDir,
+      reason: "user_cancelled",
+      signalledRunningProcess: output.signalledRunningProcess,
+    });
+    if (cluster) {
+      await upsertSplitterAgentRunSafe(missionId, state, {
+        agentRunId: assignmentId,
+        cluster,
+        repositoryPath: resolveClusterRepositoryPath(cluster, state.repositories),
+        status: "cancelled",
+        taskPath: currentRun?.parentTaskPath ?? null,
+        metadata: {
+          clusterId,
+          runId: output.runId,
+          runDir,
+          reason: "user_cancelled",
+          signalledRunningProcess: output.signalledRunningProcess,
+        },
+        startedAt,
+        completedAt: endedAt,
+      });
+    }
+    await recordSplitterTerminalRuntimeEventSafe(missionId, state, assignmentId, {
+      clusterId,
+      status: "cancelled",
+      runId: output.runId,
+      runDir,
+      reason: "user_cancelled",
+    });
+    await appendMissionEventSafe(missionId, "mission.cluster.cancelled", {
+      clusterId,
+      runId: output.runId,
+      runDir,
+      signalledRunningProcess: output.signalledRunningProcess,
+    });
+  } catch (error) {
+    const messageText = error instanceof Error ? error.message : String(error);
+    api.setGlobalError(`中断子代理失败：${messageText}`);
   }
 }
 
@@ -882,6 +1052,10 @@ function normalizeId(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "mission";
 }
 
+function uniqueMessages(messages: string[]): string[] {
+  return [...new Set(messages.filter((message) => message.trim().length > 0))];
+}
+
 async function sha256Hex(value: string): Promise<string> {
   if (!globalThis.crypto?.subtle) {
     return buildMissionId("hash", value);
@@ -966,10 +1140,11 @@ async function recordSplitterTerminalRuntimeEventSafe(
   payload: Record<string, unknown>,
 ): Promise<void> {
   if (!missionId || !agentRunId || !state.project) return;
+  const eventKind = payload.status === "cancelled" ? "trellis.agent.cancelled" : "trellis.agent.completed";
   await trellisRuntimeRecordEventSafe({
     projectId: state.project.id,
     rootPath: state.project.rootPath,
-    eventKind: "trellis.agent.completed",
+    eventKind,
     platform: "wise",
     actor: "trellis-splitter",
     correlationId: agentRunId,

@@ -26,7 +26,6 @@ import { RepositoryFileEditorPanel } from "./RepositoryFileEditorPanel";
 import { RepositoryFilePreviewModal } from "./RepositoryFilePreviewModal";
 import { SkillsHub } from "./SkillsHub";
 import type * as MissionControlModule from "./MissionControl";
-import type * as PrdTaskSplitPanelModule from "./PrdTaskSplitPanel";
 import type * as PromptsPanelModule from "./PromptsPanel";
 import type * as RightPanelModule from "./RightPanel";
 import type * as WorkflowConfigModalModule from "./WorkflowConfigModal";
@@ -36,9 +35,6 @@ import { useRepositoryFileEditor } from "../hooks/useRepositoryFileEditor";
 const RightPanel = lazy(() => import("./RightPanel").then((module) => ({ default: module.RightPanel })));
 const MissionControl = lazy(() =>
   import("./MissionControl").then((module) => ({ default: module.MissionControl })),
-);
-const PrdTaskSplitPanel = lazy(() =>
-  import("./PrdTaskSplitPanel").then((module) => ({ default: module.PrdTaskSplitPanel })),
 );
 const PromptsPanel = lazy(() => import("./PromptsPanel").then((module) => ({ default: module.PromptsPanel })));
 const WorkflowConfigModal = lazy(() =>
@@ -69,7 +65,6 @@ type LeftSidebarProps = Omit<
   | "onOpenActiveRepositoryFile"
 >;
 type MissionControlProps = ComponentProps<typeof MissionControlModule.MissionControl>;
-type PrdTaskSplitPanelProps = ComponentProps<typeof PrdTaskSplitPanelModule.PrdTaskSplitPanel>;
 type PromptsPanelProps = ComponentProps<typeof PromptsPanelModule.PromptsPanel>;
 type RightPanelProps = Omit<ComponentProps<typeof RightPanelModule.RightPanel>, "onOpenFile">;
 type WorkflowConfigModalProps = ComponentProps<typeof WorkflowConfigModalModule.WorkflowConfigModal>;
@@ -240,7 +235,6 @@ export interface AppWorkspaceLayoutProps {
   dark: boolean;
   collapsed: boolean;
   promptsMode: boolean;
-  taskPanelMode: boolean;
   missionControlMode: boolean;
   mcpHubMode: boolean;
   skillsHubMode: boolean;
@@ -262,7 +256,6 @@ export interface AppWorkspaceLayoutProps {
   skillsHubProps: ComponentProps<typeof SkillsHub>;
   codeKnowledgeGraphProps: CodeKnowledgeGraphPanelProps;
   missionControlProps: MissionControlProps;
-  prdTaskSplitPanelProps?: PrdTaskSplitPanelProps;
   progressMonitorDrawerProps: ComponentProps<typeof ProgressMonitorDrawer>;
   employeeConfigModalProps: ComponentProps<typeof EmployeeConfigModal> | null;
   workflowConfigModalProps: WorkflowConfigModalProps | null;
@@ -285,7 +278,6 @@ export function AppWorkspaceLayout({
   activeRepositoryPath,
   dark,
   collapsed,
-  taskPanelMode,
   missionControlMode,
   promptsMode,
   mcpHubMode,
@@ -308,7 +300,6 @@ export function AppWorkspaceLayout({
   skillsHubProps,
   codeKnowledgeGraphProps,
   missionControlProps,
-  prdTaskSplitPanelProps,
   progressMonitorDrawerProps,
   employeeConfigModalProps,
   workflowConfigModalProps,

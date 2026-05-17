@@ -36,6 +36,10 @@ describe("toUserStatus", () => {
     expect(toUserStatus({ run: run("succeeded"), writeResult: { clusterId: "c-a", parentTaskName: "p", childTaskNames: [], childTasks: [], warnings: [], error: "x" } })).toBe("blocked");
   });
 
+  test("maps cancelled runs to cancelled", () => {
+    expect(toUserStatus({ run: run("cancelled") })).toBe("cancelled");
+  });
+
   test("maps stale runs to stale", () => {
     expect(toUserStatus({ run: run("stale") })).toBe("stale");
   });

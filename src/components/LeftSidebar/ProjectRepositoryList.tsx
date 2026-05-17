@@ -10,6 +10,7 @@ import {
   PlusIcon,
   ProjectIcon,
   RequirementIcon,
+  TrellisIcon,
 } from "./SidebarIcons";
 import {
   FloatingRepositoryRow,
@@ -41,6 +42,7 @@ interface ProjectRepositoryListProps {
   onRenameProject: (project: ProjectItem) => void;
   onDeleteProject: (project: ProjectItem) => void;
   onOpenPromptsProject?: (project: ProjectItem) => void;
+  onOpenProjectTrellis?: (project: ProjectItem) => void;
   onCreateProjectTask: (project: ProjectItem, mode: TaskMode) => void;
   onCreateRepositoryTask: (repository: Repository, mode: TaskMode) => void;
   onOpenInFinder: (repository: Repository) => void;
@@ -85,6 +87,7 @@ export function ProjectRepositoryList({
   onRenameProject,
   onDeleteProject,
   onOpenPromptsProject,
+  onOpenProjectTrellis,
   onCreateProjectTask,
   onCreateRepositoryTask,
   onOpenInFinder,
@@ -177,6 +180,7 @@ export function ProjectRepositoryList({
             onRenameProject={onRenameProject}
             onDeleteProject={onDeleteProject}
             onOpenPromptsProject={onOpenPromptsProject}
+            onOpenProjectTrellis={onOpenProjectTrellis}
             onCreateProjectTask={onCreateProjectTask}
             onCreateRepositoryTask={onCreateRepositoryTask}
             onReconcileProject={onReconcileProject}
@@ -228,6 +232,25 @@ function ProjectRequirementAction({ onOpen }: { onOpen: () => void }) {
   );
 }
 
+function ProjectTrellisAction({ onOpen }: { onOpen: () => void }) {
+  return (
+    <Tooltip title="项目 Trellis" mouseEnterDelay={0.3}>
+      <button
+        type="button"
+        className="app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--trellis"
+        aria-label="项目 Trellis"
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpen();
+        }}
+      >
+        <TrellisIcon />
+        <span className="app-repository-action-label">Trellis</span>
+      </button>
+    </Tooltip>
+  );
+}
+
 interface ProjectRowProps {
   project: ProjectItem;
   projectRepos: Repository[];
@@ -244,6 +267,7 @@ interface ProjectRowProps {
   onRenameProject: (project: ProjectItem) => void;
   onDeleteProject: (project: ProjectItem) => void;
   onOpenPromptsProject?: (project: ProjectItem) => void;
+  onOpenProjectTrellis?: (project: ProjectItem) => void;
   onCreateProjectTask: (project: ProjectItem, mode: TaskMode) => void;
   onCreateRepositoryTask: (repository: Repository, mode: TaskMode) => void;
   onReconcileProject?: (projectId: string, mode: ReconcileProjectMode) => void | Promise<void>;
@@ -281,6 +305,7 @@ function ProjectRow({
   onRenameProject,
   onDeleteProject,
   onOpenPromptsProject,
+  onOpenProjectTrellis,
   onCreateProjectTask,
   onCreateRepositoryTask,
   onReconcileProject,
@@ -393,6 +418,9 @@ function ProjectRow({
         </span>
         <span className="app-repository-name">{project.name}</span>
         <div className="app-repository-row-actions">
+          {onOpenProjectTrellis ? (
+            <ProjectTrellisAction onOpen={() => onOpenProjectTrellis(project)} />
+          ) : null}
           <ProjectRequirementAction onOpen={() => onCreateProjectTask(project, "split")} />
           <Dropdown
             rootClassName="app-sidebar-more-menu-dropdown"

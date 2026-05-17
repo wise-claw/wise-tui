@@ -136,7 +136,7 @@ export interface RepositoryMemberMonitorSubagentItem {
   taskTitle?: string;
   stage?: string;
   subagentType: string;
-  status: "running" | "stale" | "completed" | "failed";
+  status: "running" | "stale" | "completed" | "failed" | "cancelled" | "reclaimed";
   attempt?: number;
   source?: string;
   currentFile?: string;

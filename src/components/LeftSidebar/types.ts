@@ -63,6 +63,7 @@ export interface LeftSidebarProps {
   onCreateProjectTask: (project: ProjectItem, mode: TaskMode) => void;
   onCreateRepositoryTask: (repository: Repository, mode: TaskMode) => void;
   onOpenPromptsProject?: (project: ProjectItem) => void;
+  onOpenProjectTrellis?: (project: ProjectItem) => void;
   onOpenPromptsRepository?: (project: ProjectItem, repository: Repository) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
   sessions: ClaudeSession[];

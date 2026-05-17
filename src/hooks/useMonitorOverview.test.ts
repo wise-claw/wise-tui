@@ -240,6 +240,7 @@ describe("buildRepositoryMemberMonitorItems", () => {
       [
         agentRun({
           agentRunId: "external-rooted",
+          sessionId: "session-rooted",
           projectId: "p1",
           rootPath: "/work/wise",
           repositoryPath: "/work/wise",
@@ -252,6 +253,7 @@ describe("buildRepositoryMemberMonitorItems", () => {
           updatedAt: 400,
         }),
       ],
+      new Set(["session-rooted"]),
     );
 
     const backend = items.find((item) => item.repositoryId === 2);
@@ -267,7 +269,103 @@ describe("buildRepositoryMemberMonitorItems", () => {
     });
   });
 
-  test("treats completed and failed external runs as inactive history rows", () => {
+  test("reclaims external Claude CLI runs that are no longer in the host process registry", () => {
+    const items = buildRepositoryMemberMonitorItems(
+      [repo({ id: 1, path: "/work/wise", sddMode: "wise_trellis" })],
+      [],
+      [],
+      [
+        agentRun({
+          agentRunId: "external-stopped",
+          sessionId: "stopped-session",
+          rootPath: "/work/wise",
+          repositoryPath: "/work/wise",
+          agentType: "claude-cli",
+          stage: "main-session",
+          status: "stale",
+          metadata: { source: "external-claude-cli", kind: "main-session" },
+          updatedAt: 500,
+        }),
+      ],
+      new Set(),
+    );
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      status: "idle",
+      activeSubagentCount: 0,
+    });
+    expect(items[0]?.subagents[0]).toMatchObject({
+      invocationKey: "external-stopped",
+      status: "reclaimed",
+    });
+  });
+
+  test("gives fresh external Claude CLI running rows a short registry bootstrap grace window", () => {
+    const items = buildRepositoryMemberMonitorItems(
+      [repo({ id: 1, path: "/work/wise", sddMode: "wise_trellis" })],
+      [],
+      [],
+      [
+        agentRun({
+          agentRunId: "external-fresh",
+          sessionId: "fresh-session",
+          rootPath: "/work/wise",
+          repositoryPath: "/work/wise",
+          agentType: "claude-cli",
+          stage: "main-session",
+          status: "running",
+          metadata: { source: "external-claude-cli", kind: "main-session" },
+          updatedAt: Date.now(),
+        }),
+      ],
+      new Set(),
+    );
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      status: "in_progress",
+      activeSubagentCount: 1,
+    });
+    expect(items[0]?.subagents[0]).toMatchObject({
+      invocationKey: "external-fresh",
+      status: "running",
+    });
+  });
+
+  test("keeps external Claude CLI runs active while the host process registry still owns the session", () => {
+    const items = buildRepositoryMemberMonitorItems(
+      [repo({ id: 1, path: "/work/wise", sddMode: "wise_trellis" })],
+      [],
+      [],
+      [
+        agentRun({
+          agentRunId: "external-running",
+          sessionId: "running-session",
+          rootPath: "/work/wise",
+          repositoryPath: "/work/wise",
+          agentType: "claude-cli",
+          stage: "main-session",
+          status: "stale",
+          metadata: { source: "external-claude-cli", kind: "main-session" },
+          updatedAt: 500,
+        }),
+      ],
+      new Set(["running-session"]),
+    );
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      status: "in_progress",
+      activeSubagentCount: 1,
+    });
+    expect(items[0]?.subagents[0]).toMatchObject({
+      invocationKey: "external-running",
+      status: "stale",
+    });
+  });
+
+  test("treats terminal external runs as inactive history rows", () => {
     const items = buildRepositoryMemberMonitorItems(
       [repo({ id: 1, path: "/work/wise", sddMode: "wise_trellis" })],
       [],
@@ -289,6 +387,14 @@ describe("buildRepositoryMemberMonitorItems", () => {
           status: "failed",
           updatedAt: 200,
         }),
+        agentRun({
+          agentRunId: "external-cancelled",
+          rootPath: "/work/wise",
+          repositoryPath: "/work/wise",
+          agentType: "trellis-implement",
+          status: "cancelled",
+          updatedAt: 100,
+        }),
       ],
     );
 
@@ -297,6 +403,6 @@ describe("buildRepositoryMemberMonitorItems", () => {
       status: "idle",
       activeSubagentCount: 0,
     });
-    expect(items[0]?.subagents.map((item) => item.status)).toEqual(["completed", "failed"]);
+    expect(items[0]?.subagents.map((item) => item.status)).toEqual(["completed", "failed", "cancelled"]);
   });
 });

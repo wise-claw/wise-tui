@@ -77,6 +77,8 @@ interface UseMonitorOverviewResult {
   lookup: MonitorLookup;
 }
 
+const EXTERNAL_CLAUDE_CLI_REGISTRY_GRACE_MS = 30_000;
+
 function truncateText(text: string, max = 60): string {
   const normalized = text.replace(/\s+/g, " ").trim();
   if (!normalized) return "暂无会话";
@@ -218,8 +220,23 @@ function metadataString(value: Record<string, unknown>, key: string): string {
   return typeof raw === "string" ? raw.trim() : "";
 }
 
-function agentRunMonitorStatus(status: string): RepositoryMemberMonitorSubagentItem["status"] {
-  const normalized = status.trim().toLowerCase();
+function externalAgentRunMonitorStatus(
+  run: TrellisAgentRun,
+  registryRunningClaudeSessionIds: ReadonlySet<string>,
+): RepositoryMemberMonitorSubagentItem["status"] {
+  const source = metadataString(run.metadata ?? {}, "source");
+  const normalized = run.status.trim().toLowerCase();
+  const sessionId = run.sessionId?.trim();
+  const registryOwnsSession = Boolean(sessionId && registryRunningClaudeSessionIds.has(sessionId));
+  const transcriptAgeMs = Math.max(0, Date.now() - Math.max(run.lastHeartbeatAt, run.updatedAt));
+  if (
+    source === "external-claude-cli" &&
+    (normalized === "running" || normalized === "stale") &&
+    !registryOwnsSession &&
+    (normalized === "stale" || transcriptAgeMs > EXTERNAL_CLAUDE_CLI_REGISTRY_GRACE_MS)
+  ) {
+    return "reclaimed";
+  }
   if (normalized === "stale") return "stale";
   if (normalized === "failed" || normalized === "error" || normalized === "errored" || normalized === "rejected") {
     return "failed";
@@ -228,12 +245,11 @@ function agentRunMonitorStatus(status: string): RepositoryMemberMonitorSubagentI
     normalized === "succeeded" ||
     normalized === "success" ||
     normalized === "completed" ||
-    normalized === "complete" ||
-    normalized === "cancelled" ||
-    normalized === "canceled"
+    normalized === "complete"
   ) {
     return "completed";
   }
+  if (normalized === "cancelled" || normalized === "canceled") return "cancelled";
   return "running";
 }
 
@@ -372,6 +388,7 @@ export function buildRepositoryMemberMonitorItems(
   invocations: readonly WorkflowInvocationStreamDetail[],
   projects: ReadonlyArray<ProjectItem> = [],
   externalAgentRuns: readonly TrellisAgentRun[] = [],
+  registryRunningClaudeSessionIds: ReadonlySet<string> = new Set(),
 ): RepositoryMemberMonitorItem[] {
   const reposById = new Map(repositories.map((repo) => [repo.id, repo] as const));
   const itemsByRepositoryId = new Map<number, RepositoryMemberMonitorItem>();
@@ -455,7 +472,7 @@ export function buildRepositoryMemberMonitorItems(
     if (!repo) continue;
     const current = itemsByRepositoryId.get(repo.id);
     if (!current) continue;
-    const status = agentRunMonitorStatus(run.status);
+    const status = externalAgentRunMonitorStatus(run, registryRunningClaudeSessionIds);
     const description = metadataString(run.metadata ?? {}, "description");
     const subagent: RepositoryMemberMonitorSubagentItem = {
       invocationKey: run.agentRunId,
@@ -980,6 +997,7 @@ export function useMonitorOverview({
       [...directBatchInvocationsSnap, ...repositoryMemberInvocationsSnap],
       projects,
       externalTrellisAgentRuns,
+      registryRunningClaudeSessionIds,
     );
     const omcMonitorItem: EmployeeMonitorItem = (() => {
       if (!hasOmcActivity) {

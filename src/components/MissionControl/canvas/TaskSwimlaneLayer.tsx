@@ -9,9 +9,10 @@ interface TaskSwimlaneLayerProps {
   onHoverTask: (taskId: string | null) => void;
   onRemoveDependency?: (taskId: string, depTaskId: string) => void;
   onRetryCluster?: (clusterId: string) => void;
+  onCancelCluster?: (clusterId: string) => void;
 }
 
-export function TaskSwimlaneLayer({ lane, onSelectTask, onHoverTask, onRemoveDependency, onRetryCluster }: TaskSwimlaneLayerProps) {
+export function TaskSwimlaneLayer({ lane, onSelectTask, onHoverTask, onRemoveDependency, onRetryCluster, onCancelCluster }: TaskSwimlaneLayerProps) {
   const layerClass = [
     "mission-swimlane-layer",
     lane.isParallel ? "mission-swimlane-layer--parallel" : "",
@@ -33,7 +34,7 @@ export function TaskSwimlaneLayer({ lane, onSelectTask, onHoverTask, onRemoveDep
       </div>
       <div className="mission-swimlane-layer__cards">
         {lane.tasks.map((task) => (
-          <TaskCard key={task.id} task={task} onSelect={onSelectTask} onHover={onHoverTask} onRemoveDependency={onRemoveDependency} onRetryCluster={onRetryCluster} />
+          <TaskCard key={task.id} task={task} onSelect={onSelectTask} onHover={onHoverTask} onRemoveDependency={onRemoveDependency} onRetryCluster={onRetryCluster} onCancelCluster={onCancelCluster} />
         ))}
       </div>
     </div>

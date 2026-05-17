@@ -34,6 +34,14 @@ const retryClusterFromRunDir = mock(async () => ({
   newRunId: "run-2",
   newRunDir: "/tmp/run-2",
 }));
+const cancelClusterRun = mock(async () => ({
+  runId: "run-1",
+  runDir: "/tmp/run-1",
+  clusterId: "cluster-fe",
+  signalledRunningProcess: true,
+  wroteRunResult: true,
+  alreadyFinished: false,
+}));
 const createParentTask = mock(async () => ({
   parentTaskName: "05-16-parent",
   parentTaskPath: ".trellis/tasks/05-16-parent",
@@ -86,6 +94,7 @@ mock.module("antd/lib/index.js", () => ({
   },
 }));
 mock.module("../../../services/prdSplit/splitterDispatch", () => ({
+  cancelClusterRun,
   dispatchClusterSplit,
   retryClusterFromRunDir,
 }));
@@ -224,6 +233,7 @@ describe("runMissionActions · runtime ledger parity", () => {
     for (const fn of [
       appendMissionEvent,
       attachMissionToSession,
+      cancelClusterRun,
       completeMissionAgentAssignment,
       createOrResumeMission,
       createParentTask,
@@ -238,6 +248,14 @@ describe("runMissionActions · runtime ledger parity", () => {
     ]) {
       fn.mockClear();
     }
+    cancelClusterRun.mockResolvedValue({
+      runId: "run-1",
+      runDir: "/tmp/run-1",
+      clusterId: "cluster-fe",
+      signalledRunningProcess: true,
+      wroteRunResult: true,
+      alreadyFinished: false,
+    });
   });
 
   test("runMissionClusters stores active mission id before dispatching clusters", async () => {
@@ -369,6 +387,106 @@ describe("runMissionActions · runtime ledger parity", () => {
     expect(state.clusterRuns["cluster-fe"].raw?.runId).toBe("run-2");
     expect(state.clusterRuns["cluster-fe"].raw?.stdoutPath).toBe("/tmp/run-2/claude.stdout.log");
     expect(state.clusterRuns["cluster-fe"].progress?.stageLabel).toContain("run-2");
+  });
+
+  test("cancelClusterDispatch stops the splitter run and marks ledger state cancelled", async () => {
+    const { cancelClusterDispatch } = await import("./runMissionActions");
+    const state = makeState({
+      activeMissionId: "mission-p1-hash",
+      clusterRuns: {
+        "cluster-fe": {
+          clusterId: "cluster-fe",
+          parentTaskName: "05-16-parent",
+          parentTaskPath: ".trellis/tasks/05-16-parent",
+          status: "dispatching",
+          errors: [],
+          startedAt: 100,
+          raw: {
+            runId: "run-1",
+            runDir: "/tmp/run-1",
+            exitCode: 0,
+            durationMs: 0,
+            stdoutPath: "/tmp/run-1/claude.stdout.log",
+            stderrPath: "/tmp/run-1/claude.stderr.log",
+            rawResultPath: "/tmp/run-1/split-result.raw.json",
+            rawOutput: null,
+            stdoutTruncatedPreview: "",
+            claudeSessionId: null,
+          },
+        },
+      },
+    });
+    const api = makeApi(state);
+
+    await cancelClusterDispatch("run-1", "cluster-fe", state, api, state.activeMissionId);
+
+    expect(cancelClusterRun).toHaveBeenCalledWith({ runId: "run-1" });
+    expect(state.clusterRuns["cluster-fe"]).toMatchObject({
+      status: "cancelled",
+      raw: {
+        runId: "run-1",
+        exitCode: 130,
+      },
+      progress: {
+        status: "cancelled",
+        stageLabel: "已中断",
+      },
+    });
+    expect(completeMissionAgentAssignment).toHaveBeenCalledWith(expect.objectContaining({
+      assignmentId: "mission-p1-hash-cluster-fe-splitter",
+      status: "cancelled",
+    }));
+    expect(trellisRuntimeRecordEventSafe).toHaveBeenCalledWith(expect.objectContaining({
+      eventKind: "trellis.agent.cancelled",
+      correlationId: "mission-p1-hash-cluster-fe-splitter",
+    }));
+    expect(appendMissionEvent).toHaveBeenCalledWith(expect.objectContaining({
+      eventType: "mission.cluster.cancelled",
+      payload: expect.objectContaining({
+        runId: "run-1",
+        signalledRunningProcess: true,
+      }),
+    }));
+  });
+
+  test("cancelClusterDispatch does not overwrite a run that already finished before cancellation", async () => {
+    const { cancelClusterDispatch } = await import("./runMissionActions");
+    cancelClusterRun.mockResolvedValueOnce({
+      runId: "run-1",
+      runDir: "/tmp/run-1",
+      clusterId: "cluster-fe",
+      signalledRunningProcess: false,
+      wroteRunResult: false,
+      alreadyFinished: true,
+    });
+    const state = makeState({
+      activeMissionId: "mission-p1-hash",
+      clusterRuns: {
+        "cluster-fe": {
+          clusterId: "cluster-fe",
+          parentTaskName: "05-16-parent",
+          parentTaskPath: ".trellis/tasks/05-16-parent",
+          status: "succeeded",
+          errors: [],
+          startedAt: 100,
+          endedAt: 200,
+        },
+      },
+    });
+    const api = makeApi(state);
+
+    await cancelClusterDispatch("run-1", "cluster-fe", state, api, state.activeMissionId);
+
+    expect(state.clusterRuns["cluster-fe"].status).toBe("succeeded");
+    expect(completeMissionAgentAssignment).not.toHaveBeenCalled();
+    expect(trellisRuntimeRecordEventSafe).not.toHaveBeenCalled();
+    expect(appendMissionEvent).toHaveBeenCalledWith(expect.objectContaining({
+      eventType: "mission.cluster.cancel_ignored",
+      payload: expect.objectContaining({
+        reason: "already_finished",
+      }),
+    }));
+    expect(api.setGlobalError).toHaveBeenCalledWith("子代理已经结束，未覆盖已有运行结果；正在刷新后台状态。");
   });
 
   test("runSingleCluster sends heartbeat while splitter dispatch is pending", async () => {

@@ -62,4 +62,22 @@ describe("useMissionRunStore", () => {
     expect(Object.keys(runs)).toEqual(["run-ok"]);
     expect(runs["run-ok"].clusterId).toBe("cluster-ok");
   });
+
+  test("preserves cancelled runs for retry and evidence recovery", () => {
+    const runs = reduceBackgroundRuns([
+      row({
+        status: "cancelled",
+        exitCode: 130,
+        hasRunResult: true,
+        error: "PRD split run cancelled by user",
+      }),
+    ]);
+
+    expect(runs["run-1"]).toMatchObject({
+      status: "cancelled",
+      exitCode: 130,
+      hasRunResult: true,
+      error: "PRD split run cancelled by user",
+    });
+  });
 });

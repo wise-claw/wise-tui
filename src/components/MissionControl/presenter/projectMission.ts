@@ -397,6 +397,9 @@ function deriveAgentChip(
   if (item.run.status === "failed") {
     return { agentName: "trellis-splitter", status: "blocked", stageLabel: "failed", lastHeartbeatAt: null };
   }
+  if (item.run.status === "cancelled") {
+    return { agentName: "trellis-splitter", status: "cancelled", stageLabel: "cancelled", lastHeartbeatAt: null };
+  }
   if (item.run.status === "stale") {
     return { agentName: "trellis-splitter", status: "stale", stageLabel: "stale", lastHeartbeatAt: null };
   }
@@ -480,6 +483,7 @@ function buildTaskCards(input: {
         ? effectiveStatus === "stale" ? "疑似断连"
         : item.run?.status === "dispatching" ? "生成中…"
         : item.run?.status === "creating-parent" ? "准备中…"
+        : item.run?.status === "cancelled" ? "已中断"
         : item.run?.status === "failed" ? "生成失败"
         : "等待生成"
         : userStatusLabel(effectiveStatus),
@@ -637,13 +641,14 @@ function deriveRunState(state: WizardState): MissionRunState {
     }
     const pct =
       run.status === "succeeded" || run.status === "skipped-clean" ? 100
-      : run.status === "failed" || run.status === "stale" ? 0
+      : run.status === "failed" || run.status === "cancelled" || run.status === "stale" ? 0
       : run.status === "dispatching" ? 50
       : run.status === "creating-parent" ? 10
       : 0;
     clusters[id] = {
       status:
         run.status === "succeeded" || run.status === "skipped-clean" ? "succeeded"
+        : run.status === "cancelled" ? "cancelled"
         : run.status === "failed" || run.status === "stale" ? "failed"
         : run.status === "dispatching" ? "running"
         : "queued",
@@ -652,6 +657,7 @@ function deriveRunState(state: WizardState): MissionRunState {
         run.status === "creating-parent" ? "创建父任务中…"
         : run.status === "dispatching" ? "子代理生成中…"
         : run.status === "succeeded" ? "完成"
+        : run.status === "cancelled" ? "已中断"
         : run.status === "stale" ? "疑似断连"
         : run.status === "failed" ? "失败"
         : "等待中",
@@ -663,7 +669,7 @@ function deriveRunState(state: WizardState): MissionRunState {
   }
   const runs = Object.values(state.clusterRuns);
   const allDone = runs.length > 0 && runs.every(
-    (r) => r.status === "succeeded" || r.status === "failed" || r.status === "skipped-clean" || r.status === "stale",
+    (r) => r.status === "succeeded" || r.status === "failed" || r.status === "cancelled" || r.status === "skipped-clean" || r.status === "stale",
   );
   return {
     phase: state.stage === "done" ? "done"

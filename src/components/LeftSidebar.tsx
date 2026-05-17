@@ -69,6 +69,7 @@ export function LeftSidebar({
   onCreateProjectTask,
   onCreateRepositoryTask,
   onOpenPromptsProject,
+  onOpenProjectTrellis,
   onOpenPromptsRepository,
   onOpenRepositoryMainOwner,
   sessions,
@@ -291,6 +292,7 @@ export function LeftSidebar({
             });
           }}
           onOpenPromptsProject={onOpenPromptsProject}
+          onOpenProjectTrellis={onOpenProjectTrellis}
           onCreateProjectTask={onCreateProjectTask}
           onCreateRepositoryTask={onCreateRepositoryTask}
           onOpenInFinder={onOpenInFinder}

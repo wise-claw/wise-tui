@@ -2030,6 +2030,14 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
   background: var(--ant-color-primary-bg);
 }
 
+.app-repository-action--trellis {
+  width: auto;
+  max-width: 68px;
+  min-width: 58px;
+  color: var(--ant-color-success);
+  background: color-mix(in srgb, var(--ant-color-success) 12%, transparent);
+}
+
 .app-repository-action--chat {
   width: auto;
   max-width: 56px;

@@ -5,7 +5,7 @@ export interface ActivePrdRunRow {
   clusterId: string;
   runDir: string;
   startedAtMs: number;
-  status: "running" | "succeeded" | "failed";
+  status: "running" | "succeeded" | "failed" | "cancelled";
   exitCode: number | null;
   stdoutTail: string;
   stderrTail: string;

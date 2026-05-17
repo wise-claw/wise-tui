@@ -539,28 +539,62 @@
   color: var(--ant-color-warning);
 }
 
+.app-monitor-panel__subagent-status--reclaimed,
+.app-monitor-panel__subagent-status--cancelled {
+  color: var(--ant-color-text-tertiary);
+}
+
 .app-monitor-panel__subagent-status--failed {
   color: var(--ant-color-error);
 }
 
 .app-monitor-panel__subagent-detail-drawer-body {
-  padding: 12px;
+  padding: 0;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
 }
 
 .app-monitor-panel__subagent-detail {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  min-height: 0;
 }
 
 .app-monitor-panel__subagent-detail-section {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  margin-top: 10px;
 }
 
 .app-monitor-panel__subagent-detail-section-title {
   font-size: 12px;
+}
+
+.app-monitor-panel__subagent-detail-hint {
+  display: block;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-fill-quaternary);
+  font-size: 12px;
+}
+
+.app-monitor-panel__subagent-detail-session {
+  min-height: 0;
+  max-height: min(calc(100vh - 214px), 680px);
+  overflow-y: auto;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-bg-container);
+}
+
+.app-monitor-panel__subagent-detail-session .app-claude-session-messages-column .app-claude-messages {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.app-monitor-panel__subagent-detail .ant-collapse {
+  padding: 4px 12px 12px;
 }
 
 .app-monitor-panel__subagent-detail-pre {
