@@ -264,6 +264,20 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
     };
 
     loadSnapshot(value);
+
+    const resizeGraph = () => {
+      const el = graphContainerRef.current;
+      if (!el) return;
+      const width = el.clientWidth;
+      const height = el.clientHeight;
+      if (width > 0 && height > 0) {
+        graph.resize(width, height);
+      }
+    };
+    resizeGraph();
+    const resizeObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(resizeGraph) : null;
+    resizeObserver?.observe(graphContainerRef.current);
+
     const handleChange = () => {
       if (!syncingRef.current) emitSnapshot();
     };
@@ -360,6 +374,7 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
     });
 
     return () => {
+      resizeObserver?.disconnect();
       graph.dispose();
       graphRef.current = null;
     };

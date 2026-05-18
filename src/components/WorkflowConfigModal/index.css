@@ -1,20 +1,129 @@
+/* 全屏团队配置（Ant Modal 根上挂 `rootClassName`） */
+.app-workflow-config-modal-root.ant-modal-root .ant-modal-wrap {
+  padding: 0;
+  overflow: hidden;
+  height: 100dvh;
+  max-height: 100dvh;
+  display: flex;
+  align-items: stretch;
+}
+
+.app-workflow-config-modal-root .ant-modal-wrap > * {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-workflow-config-modal-root .ant-modal {
+  top: 0;
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-width: 100%;
+  width: 100% !important;
+  height: 100%;
+  max-height: 100%;
+  padding: 0;
+  padding-bottom: 0;
+  margin: 0 !important;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-workflow-config-modal-root .ant-modal > div:first-child {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-workflow-config-modal-root .ant-modal .ant-modal-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  max-height: none;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.app-workflow-config-modal-root .ant-modal .ant-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+@supports not (height: 100dvh) {
+  .app-workflow-config-modal-root.ant-modal-root .ant-modal-wrap {
+    height: 100vh;
+    max-height: 100vh;
+  }
+}
+
+.app-workflow-config-modal-root .ant-modal .ant-modal-header {
+  margin-bottom: 0;
+  padding: 12px 16px 8px;
+}
+
 .app-workflow-config-modal .ant-modal-body {
-  padding-top: 10px;
-  padding-bottom: 12px;
+  padding: 8px 16px 10px;
 }
 
 .app-workflow-config-layout {
   display: flex;
   gap: 14px;
-  min-height: 560px;
-  max-height: 72vh;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .app-workflow-config-sidebar {
   width: 220px;
+  flex: none;
   padding-right: 12px;
   border-right: 1px solid var(--ant-color-border-secondary);
   overflow: auto;
+  min-height: 0;
+  transition: width 0.2s ease;
+}
+
+.app-workflow-config-sidebar--collapsed {
+  width: 44px;
+  padding-right: 0;
+  overflow: hidden;
+}
+
+.app-workflow-config-sidebar-collapsed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.app-workflow-config-sidebar-collapsed-active {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ant-color-primary);
+  background: var(--ant-color-primary-bg);
+  border: 1px solid var(--ant-color-primary-border);
+}
+
+.app-workflow-config-sidebar-header-actions {
+  flex: none;
 }
 
 .app-workflow-config-sidebar-space {
@@ -108,21 +217,54 @@
 .app-workflow-config-editor {
   flex: 1;
   min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.app-workflow-config-stage-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-workflow-config-editor-form,
+.app-workflow-config-validation-alert {
+  flex: none;
 }
 
 .app-workflow-config-editor-form {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  row-gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  row-gap: 4px;
 }
 
 .app-workflow-config-editor-form-left {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
+  flex: none;
+}
+
+.app-workflow-config-editor-form .ant-form-item-label {
+  padding: 0;
+}
+
+.app-workflow-config-editor-form .ant-form-item-label > label {
+  font-size: 12px;
+  height: 24px;
+}
+
+.app-workflow-config-editor-form .ant-form-item .ant-select,
+.app-workflow-config-editor-form .ant-form-item .ant-input {
+  font-size: 12px;
 }
 
 .app-workflow-config-editor-form-actions {
@@ -130,7 +272,8 @@
   align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
+  flex: none;
   margin-left: auto;
 }
 
@@ -144,7 +287,19 @@
 }
 
 .app-workflow-config-name-input {
-  width: 196px;
+  width: 168px;
+}
+
+.app-workflow-config-editor-form .ant-form-item:has(.app-workflow-config-name-input) {
+  margin-inline-end: 0;
+}
+
+.app-workflow-config-editor-form .ant-select {
+  min-width: 120px;
+}
+
+.app-workflow-config-project-select {
+  min-width: 220px;
 }
 
 .app-workflow-config-error-group {
@@ -178,8 +333,11 @@
 }
 
 .app-workflow-config-stage-tip {
-  display: block;
-  margin-bottom: 6px;
+  flex: 1 1 160px;
+  min-width: 0;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .app-workflow-x6 {
@@ -189,6 +347,17 @@
   overflow: hidden;
   height: 420px;
   background: var(--ant-color-bg-container);
+}
+
+.app-workflow-config-modal-root .app-workflow-x6 {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+}
+
+.app-workflow-config-modal-root .app-workflow-x6__canvas {
+  min-height: 0;
+  height: 100%;
 }
 
 .app-workflow-x6__materials {

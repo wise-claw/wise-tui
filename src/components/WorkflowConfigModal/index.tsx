@@ -1,3 +1,4 @@
+import { MenuFoldOutlined, MenuUnfoldOutlined, PlusOutlined } from "@ant-design/icons";
 import {
   Alert,
   Button,
@@ -11,6 +12,7 @@ import {
   Space,
   Switch,
   Tag,
+  Tooltip,
   Typography,
   message,
 } from "antd";
@@ -87,6 +89,7 @@ export function WorkflowConfigModal({
   const [graphStatusByWorkflowId, setGraphStatusByWorkflowId] = useState<Record<string, string>>({});
   const [teamKeyword, setTeamKeyword] = useState("");
   const [statusFilter, setStatusFilter] = useState<GraphStatus | "all">("all");
+  const [teamListCollapsed, setTeamListCollapsed] = useState(false);
 
   const editingTemplate = useMemo(
     () => templates.find((item) => item.id === editingTemplateId) ?? null,
@@ -102,6 +105,11 @@ export function WorkflowConfigModal({
     }
     return Array.from(grouped.entries());
   }, [validationErrors]);
+
+  useEffect(() => {
+    if (open) return;
+    setTeamListCollapsed(false);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -302,23 +310,77 @@ export function WorkflowConfigModal({
       open={open}
       onCancel={onClose}
       footer={null}
-      width={1080}
+      centered={false}
+      width="100%"
+      rootClassName="app-workflow-config-modal-root"
       className="app-workflow-config-modal"
       destroyOnHidden
+      styles={{
+        body: {
+          flex: 1,
+          minHeight: 0,
+          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
+        },
+      }}
     >
       <div className="app-workflow-config-layout">
-        <div className="app-workflow-config-sidebar">
+        <aside
+          className={`app-workflow-config-sidebar${teamListCollapsed ? " app-workflow-config-sidebar--collapsed" : ""}`}
+          aria-label="团队列表"
+        >
+          {teamListCollapsed ? (
+            <div className="app-workflow-config-sidebar-collapsed">
+              <Tooltip title="展开团队列表" placement="right">
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<MenuUnfoldOutlined />}
+                  aria-label="展开团队列表"
+                  onClick={() => setTeamListCollapsed(false)}
+                />
+              </Tooltip>
+              <Tooltip title="新建团队" placement="right">
+                <Button
+                  size="small"
+                  type={!editingTemplateId ? "primary" : "default"}
+                  icon={<PlusOutlined />}
+                  aria-label="新建团队"
+                  onClick={resetEditor}
+                />
+              </Tooltip>
+              {editingTemplate ? (
+                <Tooltip title={editingTemplate.name} placement="right">
+                  <span className="app-workflow-config-sidebar-collapsed-active" aria-hidden>
+                    {editingTemplate.name.slice(0, 1)}
+                  </span>
+                </Tooltip>
+              ) : null}
+            </div>
+          ) : (
           <Space orientation="vertical" size={10} className="app-workflow-config-sidebar-space">
             <div className="app-workflow-config-sidebar-header">
               <Typography.Text strong>团队列表</Typography.Text>
-              <Button
-                size="small"
-                type={!editingTemplateId ? "primary" : "default"}
-                onClick={resetEditor}
-                className="app-workflow-config-create-btn"
-              >
-                新建团队
-              </Button>
+              <Space size={4} className="app-workflow-config-sidebar-header-actions">
+                <Button
+                  size="small"
+                  type={!editingTemplateId ? "primary" : "default"}
+                  onClick={resetEditor}
+                  className="app-workflow-config-create-btn"
+                >
+                  新建团队
+                </Button>
+                <Tooltip title="收起团队列表">
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<MenuFoldOutlined />}
+                    aria-label="收起团队列表"
+                    onClick={() => setTeamListCollapsed(true)}
+                  />
+                </Tooltip>
+              </Space>
             </div>
             <div className="app-workflow-config-filter-row">
               <Input.Search
@@ -394,11 +456,13 @@ export function WorkflowConfigModal({
               })
             )}
           </Space>
-        </div>
+          )}
+        </aside>
 
-        <Space orientation="vertical" size={12} className="app-workflow-config-editor">
+        <div className="app-workflow-config-editor">
           <Form
             form={form}
+            size="small"
             layout="inline"
             initialValues={{ name: "", isDefault: false }}
             className="app-workflow-config-editor-form"
@@ -411,8 +475,9 @@ export function WorkflowConfigModal({
                 <Switch checkedChildren="默认" unCheckedChildren="非默认" />
               </Form.Item>
               {projects && projects.length > 0 && (
-                <Form.Item label="所属项目">
+                <Form.Item label="项目" colon={false}>
                   <Select
+                    className="app-workflow-config-project-select"
                     mode="multiple"
                     allowClear
                     placeholder="所属项目"
@@ -427,6 +492,9 @@ export function WorkflowConfigModal({
                 </Form.Item>
               )}
             </div>
+            <Typography.Text type="secondary" ellipsis className="app-workflow-config-stage-tip">
+              流程编排：左侧物料、右侧画布；拖拽节点调序，连线定义执行流
+            </Typography.Text>
             <div className="app-workflow-config-editor-form-actions">
               <Form.Item>
                 <Button size="small" type="primary" loading={loading} onClick={() => void handleSave()}>
@@ -477,9 +545,6 @@ export function WorkflowConfigModal({
           )}
 
           <div className="app-workflow-config-stage-panel">
-            <Typography.Text type="secondary" className="app-workflow-config-stage-tip">
-              流程编排（左侧物料，右侧画布）；节点拖拽可调整顺序，连线定义执行流。
-            </Typography.Text>
             <WorkflowCanvasEditorImpl
               key={editingTemplateId ?? "new-team-workflow"}
               value={canvasSnapshot}
@@ -490,7 +555,7 @@ export function WorkflowConfigModal({
             />
           </div>
 
-        </Space>
+        </div>
       </div>
     </Modal>
   );
