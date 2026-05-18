@@ -21,6 +21,7 @@ These guides help you **ask the right questions before coding**.
 
 | Guide | Purpose | When to Use |
 |-------|---------|-------------|
+| [Agent Harness Architecture](./agent-harness-architecture.md) | Wise 产品宪法：Loop / 三域 / ViewMode / Trellis-Mission 双写 / Workspace 命名 | **必读** · 任何 UI、状态机、面板、Mission/Trellis 桥接相关改动前先看 |
 | [Code Reuse Thinking Guide](./code-reuse-thinking-guide.md) | Identify patterns and reduce duplication | When you notice repeated patterns |
 | [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md) | Think through data flow across layers | Features spanning multiple layers |
 | [Commit Hygiene](./commit-hygiene.md) | Keep commits scoped and reviewable | Before committing Trellis, docs, frontend, or Tauri changes |

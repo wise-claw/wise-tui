@@ -1,0 +1,113 @@
+/* CockpitInspector：复用 .app-right-panel 的 Sider 容器样式（位于 App.css），
+   仅追加 cockpit 专属内部布局。 */
+
+.app-cockpit-inspector .app-right-panel-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.app-cockpit-inspector-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.app-cockpit-inspector-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.app-cockpit-inspector-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.app-cockpit-inspector-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.app-cockpit-inspector-agents {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.app-cockpit-inspector-agent-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.app-cockpit-inspector-agent-status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ant-color-fill-secondary);
+  margin-top: 6px;
+  flex: 0 0 auto;
+}
+
+.app-cockpit-inspector-agent-status--running {
+  background: var(--ant-color-success);
+  box-shadow: 0 0 0 2px var(--ant-color-success-bg);
+}
+
+.app-cockpit-inspector-agent-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.app-cockpit-inspector-agent-meta > .ant-typography-ellipsis,
+.app-cockpit-inspector-agent-meta > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-cockpit-inspector-agent-idle-group {
+  margin-top: 4px;
+}
+
+.app-cockpit-inspector-agent-idle-group > summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--ant-color-text-secondary);
+  padding: 2px 0;
+}
+
+.app-cockpit-inspector-git {
+  flex: 1 1 auto;
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-cockpit-inspector-git-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.app-cockpit-inspector-git-body > .app-git-panel {
+  flex: 1 1 0;
+  min-height: 0;
+}

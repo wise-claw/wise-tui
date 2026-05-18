@@ -2199,11 +2199,22 @@ export interface StartMcpServerPayload {
 }
 
 /**
- * Highlight group node payload (Extension → Webview)
- * Sent by MCP tool to highlight the currently executing group node on canvas
+ * Highlight node payload (Extension → Webview)
+ * Sent by MCP tool to highlight the currently executing node on canvas
+ * Supports any node type (group, subAgent, prompt, skill, mcp, codex, etc.)
+ * @deprecated Use HighlightNodePayload instead
  */
 export interface HighlightGroupNodePayload {
   groupNodeId: string | null;
+}
+
+/**
+ * Highlight node payload (Extension → Webview)
+ * Sent by MCP tool to highlight the currently executing node on canvas
+ * Supports any node type (group, subAgent, prompt, skill, mcp, codex, etc.)
+ */
+export interface HighlightNodePayload {
+  nodeId: string | null;
 }
 
 /**

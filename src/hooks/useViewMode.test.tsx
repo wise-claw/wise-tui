@@ -1,0 +1,193 @@
+import { describe, expect, test } from "bun:test";
+import { act, create } from "react-test-renderer";
+import { useLayoutEffect } from "react";
+import {
+  authorView,
+  cockpitView,
+  codeGraphInspectTool,
+  inspectView,
+  useViewMode,
+  type UseViewModeApi,
+} from "./useViewMode";
+
+/**
+ * Bridge component that exposes a hook's return value to the test scope by
+ * stashing it through a callback. Mirrors `useMissionPresenter.test.tsx`
+ * conventions used elsewhere in the repo.
+ */
+function ProbeViewMode({ onValue }: { onValue: (api: UseViewModeApi) => void }) {
+  const api = useViewMode();
+  useLayoutEffect(() => {
+    onValue(api);
+  });
+  return null;
+}
+
+function renderProbe() {
+  let latest: UseViewModeApi | null = null;
+  const onValue = (api: UseViewModeApi) => {
+    latest = api;
+  };
+  let renderer: ReturnType<typeof create>;
+  act(() => {
+    renderer = create(<ProbeViewMode onValue={onValue} />);
+  });
+  if (!latest) {
+    throw new Error("ProbeViewMode never received a value");
+  }
+  return {
+    get api() {
+      if (!latest) throw new Error("api not ready");
+      return latest;
+    },
+    unmount: () => renderer.unmount(),
+  };
+}
+
+describe("useViewMode", () => {
+  test("default view is cockpit (P1: cockpit is the home screen)", () => {
+    const probe = renderProbe();
+    expect(probe.api.view).toEqual({ kind: "cockpit" });
+    expect(probe.api.isCockpit).toBe(true);
+    expect(probe.api.legacy.missionControlMode).toBe(true);
+    probe.unmount();
+  });
+
+  test("enter cockpit then back returns to cockpit (cockpit is the default home)", () => {
+    const probe = renderProbe();
+    act(() => {
+      probe.api.enter(cockpitView("m1"));
+    });
+    expect(probe.api.view).toEqual({ kind: "cockpit", missionId: "m1" });
+    expect(probe.api.isCockpit).toBe(true);
+    expect(probe.api.legacy.missionControlMode).toBe(true);
+
+    act(() => {
+      probe.api.back();
+    });
+    // back() always returns to DEFAULT_VIEW_MODE which is cockpit (P1)
+    expect(probe.api.view).toEqual({ kind: "cockpit" });
+    probe.unmount();
+  });
+
+  test("legacy flags are mutually exclusive across all view kinds", () => {
+    const probe = renderProbe();
+    const allModes = [
+      cockpitView(),
+      authorView("prompts"),
+      authorView("mcp"),
+      authorView("skills"),
+      inspectView(codeGraphInspectTool()),
+      inspectView({ kind: "workflow-studio" }),
+    ];
+    for (const mode of allModes) {
+      act(() => {
+        probe.api.enter(mode);
+      });
+      const trueCount = Object.values(probe.api.legacy).filter(Boolean).length;
+      expect(trueCount).toBe(1);
+    }
+    probe.unmount();
+  });
+
+  test("author panes that are not prompts/mcp/skills do not raise any legacy flag", () => {
+    const probe = renderProbe();
+    for (const pane of ["workspaces", "agents", "workflows", "hooks", "trellis-spec"] as const) {
+      act(() => {
+        probe.api.enter(authorView(pane));
+      });
+      expect(probe.api.isAuthor).toBe(true);
+      expect(probe.api.view).toEqual({ kind: "author", pane });
+      const trueCount = Object.values(probe.api.legacy).filter(Boolean).length;
+      expect(trueCount).toBe(0);
+    }
+    probe.unmount();
+  });
+
+  test("enter author/skills then author/prompts overrides previous pane", () => {
+    const probe = renderProbe();
+    act(() => {
+      probe.api.enter(authorView("skills"));
+    });
+    expect(probe.api.legacy.skillsHubMode).toBe(true);
+    act(() => {
+      probe.api.enter(authorView("prompts"));
+    });
+    expect(probe.api.legacy.skillsHubMode).toBe(false);
+    expect(probe.api.legacy.promptsMode).toBe(true);
+    probe.unmount();
+  });
+
+  test("patch only merges within the same kind", () => {
+    const probe = renderProbe();
+    // Default is cockpit; patching cockpit should merge
+    act(() => {
+      probe.api.patch({ kind: "cockpit", missionId: "foo" });
+    });
+    expect(probe.api.view).toEqual({ kind: "cockpit", missionId: "foo" });
+
+    // Switch to chat; patching cockpit should have no effect
+    act(() => {
+      probe.api.enter({ kind: "chat" });
+    });
+    act(() => {
+      probe.api.patch({ kind: "cockpit", missionId: "bar" });
+    });
+    expect(probe.api.view).toEqual({ kind: "chat" });
+
+    // Back to cockpit; patch merges again
+    act(() => {
+      probe.api.enter(cockpitView());
+    });
+    act(() => {
+      probe.api.patch({ kind: "cockpit", missionId: "m42" });
+    });
+    expect(probe.api.view).toEqual({ kind: "cockpit", missionId: "m42" });
+    probe.unmount();
+  });
+
+  test("patch on inspect/code-graph shallow-merges flags", () => {
+    const probe = renderProbe();
+    act(() => {
+      probe.api.enter(inspectView(codeGraphInspectTool()));
+    });
+    act(() => {
+      probe.api.patch({
+        kind: "inspect",
+        tool: { kind: "code-graph", suppressIdleAutoReindex: true },
+      });
+    });
+    expect(probe.api.view).toEqual({
+      kind: "inspect",
+      tool: {
+        kind: "code-graph",
+        suppressIdleAutoReindex: true,
+        lockToEntryRepository: false,
+        defaultProjectMultiRepo: false,
+      },
+    });
+    probe.unmount();
+  });
+
+  test("entering one mode clears any other previously-active legacy flag", () => {
+    const probe = renderProbe();
+    act(() => {
+      probe.api.enter(
+        inspectView(
+          codeGraphInspectTool({
+            lockToEntryRepository: true,
+            defaultProjectMultiRepo: true,
+          }),
+        ),
+      );
+    });
+    expect(probe.api.legacy.codeKnowledgeGraphMode).toBe(true);
+
+    act(() => {
+      probe.api.enter(cockpitView());
+    });
+    expect(probe.api.legacy.codeKnowledgeGraphMode).toBe(false);
+    expect(probe.api.legacy.missionControlMode).toBe(true);
+    probe.unmount();
+  });
+});

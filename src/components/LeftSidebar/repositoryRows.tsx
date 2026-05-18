@@ -2,7 +2,7 @@ import { useState } from "react";
 import { UserOutlined } from "@ant-design/icons";
 import { App as AntdApp, Dropdown, Tooltip } from "antd";
 import type { MenuProps } from "antd";
-import type { ProjectItem, Repository, TaskMode } from "../../types";
+import type { Repository, StandaloneRepo, TaskMode, Workspace } from "../../types";
 import { DEFAULT_OPEN_APP_ID, DEFAULT_OPEN_APP_TARGETS } from "../OpenAppMenu/constants";
 import { getOpenAppPreferenceSync } from "../../services/openAppPreference";
 import { repositoryFolderBasename } from "../../utils/repositoryType";
@@ -81,7 +81,7 @@ export function RepositoryRow({
   repositoryReorder,
   hideChatAction = false,
 }: {
-  project: ProjectItem;
+  project: Workspace;
   repository: Repository;
   isActiveRepository: boolean;
   onRepositorySelect: (id: number | null) => void;
@@ -89,11 +89,11 @@ export function RepositoryRow({
   onDetachFromProject: (projectId: string, repositoryId: number) => void;
   onOpenInFinder: (repository: Repository) => void;
   onOpenRepositoryInEditor: (repository: Repository) => void;
-  onOpenPromptsRepository?: (project: ProjectItem, repository: Repository) => void;
+  onOpenPromptsRepository?: (project: Workspace, repository: Repository) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
   onConfigureSddMode?: (repository: Repository) => void;
   onCodeGraphGenerateRepository?: (repository: Repository) => void | Promise<void>;
-  onCodeGraphViewRepositoryInProject?: (project: ProjectItem, repository: Repository) => void;
+  onCodeGraphViewRepositoryInProject?: (project: Workspace, repository: Repository) => void;
   repositoryReorder?: RepositoryReorderUi;
   hideChatAction?: boolean;
 }) {
@@ -118,7 +118,7 @@ export function RepositoryRow({
         ] satisfies MenuProps["items"])
       : []),
     { type: "divider" },
-    { key: "detach", label: "移出项目", danger: true },
+    { key: "detach", label: "移出 Workspace", danger: true },
   ];
 
   const dropRowClass =
@@ -152,9 +152,9 @@ export function RepositoryRow({
             onDragStart={repositoryReorder.onDragStartHandle}
             onDragEnd={repositoryReorder.onDragEndHandle}
             onClick={(e) => e.stopPropagation()}
-            title="拖动排序 / 拖入其它项目"
+            title="拖动排序 / 拖入其它 Workspace"
             role="button"
-            aria-label="拖动排序或拖入其它项目"
+            aria-label="拖动排序或拖入其它 Workspace"
           >
             <RepoDragHandleIcon />
           </span>
@@ -231,9 +231,9 @@ export function FloatingRepositoryRow({
   onJoinExistingProject,
   onRemove,
 }: {
-  repository: Repository;
+  repository: StandaloneRepo;
   isActiveRepository: boolean;
-  joinableProjects: ProjectItem[];
+  joinableProjects: Workspace[];
   onRepositorySelect: (id: number | null) => void;
   onOpenTaskMode: (repository: Repository, mode: TaskMode) => void;
   onOpenInFinder: (repository: Repository) => void;
@@ -242,9 +242,9 @@ export function FloatingRepositoryRow({
   onConfigureSddMode?: (repository: Repository) => void;
   onCodeGraphGenerateRepository?: (repository: Repository) => void | Promise<void>;
   onCodeGraphViewFloatingRepository?: (repository: Repository) => void;
-  onPromoteToNewProject?: (repository: Repository) => void;
-  onJoinExistingProject?: (repository: Repository, projectId: string) => void;
-  onRemove: (repository: Repository) => void;
+  onPromoteToNewProject?: (repository: StandaloneRepo) => void;
+  onJoinExistingProject?: (repository: StandaloneRepo, projectId: string) => void;
+  onRemove: (repository: StandaloneRepo) => void;
 }) {
   const hasMainOwner = Boolean(repository.mainOwnerAgentName?.trim());
   const joinChildren: MenuProps["items"] = joinableProjects.map((project) => ({
@@ -270,12 +270,12 @@ export function FloatingRepositoryRow({
         ] satisfies MenuProps["items"])
       : []),
     { type: "divider" },
-    ...(onPromoteToNewProject ? [{ key: "promote", label: "升格为新项目…" }] satisfies MenuProps["items"] : []),
+    ...(onPromoteToNewProject ? [{ key: "promote", label: "升格为 Workspace…" }] satisfies MenuProps["items"] : []),
     ...(onJoinExistingProject && joinChildren.length > 0
       ? ([
           {
             key: "join",
-            label: "加入现有项目",
+            label: "加入 Workspace",
             popupClassName: "app-sidebar-more-menu-submenu",
             children: joinChildren,
           },
@@ -372,7 +372,7 @@ export function ProjectRepositoryRows({
   onRepoSidebarDragEnd,
   hideChatAction = false,
 }: {
-  project: ProjectItem;
+  project: Workspace;
   projectRepos: Repository[];
   activeRepositoryId: number | null;
   onRepositorySelect: (id: number | null) => void;
@@ -380,13 +380,13 @@ export function ProjectRepositoryRows({
   onDetachRepositoryFromProject: (projectId: string, repositoryId: number) => void;
   onOpenInFinder: (repository: Repository) => void;
   openRepositoryInPreferredEditor: (repository: Repository) => void;
-  onOpenPromptsRepository?: (project: ProjectItem, repository: Repository) => void;
+  onOpenPromptsRepository?: (project: Workspace, repository: Repository) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
   onReorderRepositoriesInProject?: (projectId: string, repositoryIds: number[]) => void | Promise<void>;
   onMoveRepositoryToProject?: (targetProjectId: string, repositoryId: number) => void | Promise<void>;
   onConfigureSddMode?: (repository: Repository) => void;
   onCodeGraphGenerateRepository?: (repository: Repository) => void | Promise<void>;
-  onCodeGraphViewRepositoryInProject?: (project: ProjectItem, repository: Repository) => void;
+  onCodeGraphViewRepositoryInProject?: (project: Workspace, repository: Repository) => void;
   repoSidebarDragRef: React.MutableRefObject<{ sourceProjectId: string; repositoryId: number } | null>;
   onRepoSidebarDragEnd: () => void;
   hideChatAction?: boolean;
@@ -459,7 +459,7 @@ function buildRepositoryReorderUi({
   onMoveRepositoryToProject,
   messageError,
 }: {
-  project: ProjectItem;
+  project: Workspace;
   projectRepos: Repository[];
   repository: Repository;
   rowReorderEnabled: boolean;
@@ -541,7 +541,7 @@ function buildRepositoryReorderUi({
       }
       if (dragged.sourceProjectId !== project.id && onMoveRepositoryToProject) {
         void Promise.resolve(onMoveRepositoryToProject(project.id, dragged.repositoryId)).catch((err: unknown) => {
-          messageError("移动仓库到项目失败");
+          messageError("移动仓库到 Workspace 失败");
           console.error(err);
         });
       }

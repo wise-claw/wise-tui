@@ -13,9 +13,10 @@ interface TaskSwimlaneProps {
   onHoverTask: (taskId: string | null) => void;
   onRemoveDependency?: (taskId: string, depTaskId: string) => void;
   onRetryCluster?: (clusterId: string) => void;
+  onCancelCluster?: (clusterId: string) => void;
 }
 
-export function TaskSwimlane({ swimlane, hasHighlightedPath, onSelectTask, onHoverTask, onRemoveDependency, onRetryCluster }: TaskSwimlaneProps) {
+export function TaskSwimlane({ swimlane, hasHighlightedPath, onSelectTask, onHoverTask, onRemoveDependency, onRetryCluster, onCancelCluster }: TaskSwimlaneProps) {
   const taskCount = swimlane.reduce((sum, lane) => sum + lane.tasks.length, 0);
   const parallelCount = swimlane.filter((lane) => lane.isParallel).length;
 
@@ -40,7 +41,7 @@ export function TaskSwimlane({ swimlane, hasHighlightedPath, onSelectTask, onHov
           swimlane.map((lane, index) => (
             <div key={lane.id} className="mission-swimlane-wrap">
               {index > 0 ? <DependencyConnector active={hasHighlightedPath} /> : null}
-              <TaskSwimlaneLayer lane={lane} onSelectTask={onSelectTask} onHoverTask={onHoverTask} onRemoveDependency={onRemoveDependency} onRetryCluster={onRetryCluster} />
+              <TaskSwimlaneLayer lane={lane} onSelectTask={onSelectTask} onHoverTask={onHoverTask} onRemoveDependency={onRemoveDependency} onRetryCluster={onRetryCluster} onCancelCluster={onCancelCluster} />
             </div>
           ))
         )}

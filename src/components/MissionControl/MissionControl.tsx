@@ -1,5 +1,5 @@
 import { Alert, App as AntdApp, Button, Modal } from "antd";
-import { CloseOutlined } from "@ant-design/icons";
+import { MessageOutlined } from "@ant-design/icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ClaudeSession, ProjectItem, Repository } from "../../types";
 import {
@@ -17,6 +17,7 @@ import { useMissionPresenter } from "./useMissionPresenter";
 import { useMissionLedger } from "./useMissionLedger";
 import { getMissionSnapshot } from "../../services/missionControlBackend";
 import {
+  cancelClusterDispatch,
   retryClusterFromRunDir,
   runMissionClusters,
   runSingleCluster,
@@ -57,7 +58,7 @@ export function MissionControl({
   const api = useSplitWizardState();
   const { message } = AntdApp.useApp();
   const { progress, stdout } = useSplitterStream();
-  const { backgroundRuns } = useMissionRunStore();
+  const { backgroundRuns, refreshBackgroundRuns } = useMissionRunStore();
   const projectId = api.state.project?.id ?? null;
   const { activeMission } = useMissionLedger({ projectId });
   const { assignments: missionAssignments } = useAgentAssignments({
@@ -71,6 +72,7 @@ export function MissionControl({
     repositories,
     agentAssignments: missionAssignments,
   });
+  const projectRootPath = api.state.project?.rootPath ?? null;
 
   // #6 Record planning mutations to Mission ledger
   const recordMutation = useCallback(
@@ -90,7 +92,6 @@ export function MissionControl({
   const [legacyImportOpen, setLegacyImportOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [workspaceMode, setWorkspaceMode] = useState<"overview" | "editor">("overview");
-  const [selectedSpecFilePath, setSelectedSpecFilePath] = useState<string | null>(null);
   const appliedInitialKeyRef = useRef<string | null>(null);
 
   const initialKey = useMemo(
@@ -182,7 +183,18 @@ export function MissionControl({
         continue;
       }
       const run = api.state.clusterRuns[assignment.clusterId];
-      if (!run || run.endedAt || run.status === "stale") continue;
+      const stillRunningOnDisk = Object.values(backgroundRuns).some(
+        (backgroundRun) => backgroundRun.clusterId === assignment.clusterId && backgroundRun.status === "running",
+      );
+      if (
+        !run ||
+        run.endedAt ||
+        run.status === "stale" ||
+        run.status === "cancelled" ||
+        stillRunningOnDisk
+      ) {
+        continue;
+      }
       api.patchClusterRun(assignment.clusterId, {
         status: "stale",
         errors: uniqueMessages([...run.errors, "子代理心跳超时，任务疑似断连"]),
@@ -201,7 +213,7 @@ export function MissionControl({
         },
       });
     }
-  }, [api, api.state.clusterRuns, api.state.plan?.clusters, missionAssignments]);
+  }, [api, api.state.clusterRuns, api.state.plan?.clusters, backgroundRuns, missionAssignments]);
 
   useEffect(() => {
     for (const [clusterId, clusterProgress] of Object.entries(progress)) {
@@ -213,6 +225,7 @@ export function MissionControl({
       const nextStatus =
         clusterProgress.status === "succeeded" ? "succeeded"
         : clusterProgress.status === "failed" ? "failed"
+        : clusterProgress.status === "cancelled" ? "cancelled"
         : clusterProgress.status === "running" ? "dispatching"
         : clusterProgress.status === "skipped" ? "skipped-clean"
         : run.status;
@@ -227,6 +240,7 @@ export function MissionControl({
           : run.errors,
         endedAt:
           clusterProgress.status === "succeeded" || clusterProgress.status === "failed"
+            || clusterProgress.status === "cancelled"
             ? run.endedAt ?? Date.now()
             : run.endedAt,
       });
@@ -400,6 +414,20 @@ export function MissionControl({
     [api],
   );
 
+  const handleCancelCluster = useCallback(
+    async (clusterId: string) => {
+      const run = api.state.clusterRuns[clusterId];
+      const runId = run?.raw?.runId;
+      if (!runId) {
+        message.warning("尚未拿到 runId，无法中断该子代理");
+        return;
+      }
+      await cancelClusterDispatch(runId, clusterId, api.state, api, api.state.activeMissionId);
+      await refreshBackgroundRuns();
+    },
+    [api, message, refreshBackgroundRuns],
+  );
+
   const handleCloseTaskDetail = useCallback(() => {
     setDetailDrawerOpen(false);
     setSelection((current) => current.taskId ? { ...current, taskId: null } : current);
@@ -428,15 +456,18 @@ export function MissionControl({
         activeMission={activeMission}
         onPrimaryCta={handlePrimaryCta}
         onRestart={handleRestart}
-        onOpenEngineering={() => setEngineeringOpen(true)}
+        onOpenDiagnostics={() => setEngineeringOpen(true)}
         onClearResplitFlags={handleClearResplitFlags}
       />
       <Button
         className="mission-close-btn"
         type="text"
-        icon={<CloseOutlined />}
+        icon={<MessageOutlined />}
         onClick={onClose}
-      />
+        aria-label="沉浸对话"
+      >
+        沉浸对话
+      </Button>
       {api.state.globalError ? (
         <Alert className="mission-global-error" type="error" showIcon message={api.state.globalError} />
       ) : null}
@@ -458,20 +489,19 @@ export function MissionControl({
         onMoveRequirement={handleMoveRequirement}
         onRemoveDependency={handleRemoveDependency}
         onRetryCluster={handleRetryCluster}
+        onCancelCluster={handleCancelCluster}
         workspaceMode={workspaceMode}
         onLoadPrd={handleLoadPrd}
         onNewPrd={handleNewPrd}
         onBackToOverview={handleBackToOverview}
         onOpenLegacyImport={() => setLegacyImportOpen(true)}
         missionId={activeMission?.missionId ?? null}
-        onSpecRevisionSelect={setSelectedSpecFilePath}
       />
       <EngineeringDrawer
         open={engineeringOpen}
         details={viewModel.engineering}
         projectId={api.state.context?.mode === "project" ? api.state.project?.id ?? null : null}
-        rootPath={api.state.project?.rootPath ?? null}
-        selectedSpecFilePath={selectedSpecFilePath}
+        rootPath={projectRootPath}
         reuseExistingParents={api.state.reuseExistingParents}
         dispatchOnlyDirty={api.state.dispatchOnlyDirty}
         onReuseExistingParentsChange={api.setReuseExistingParents}
@@ -576,9 +606,12 @@ function backgroundRunToClusterRun(run: BackgroundRunState, current: ClusterRunS
   const status: ClusterRunState["status"] =
     run.status === "succeeded" ? "succeeded"
     : run.status === "failed" ? "failed"
+    : run.status === "cancelled" ? "cancelled"
     : "dispatching";
   const errorSummary = run.error
-    || (run.status === "failed" ? "PRD split run failed or became stale before Mission Control reopened" : null);
+    || (run.status === "failed" ? "PRD split run failed or became stale before Mission Control reopened"
+      : run.status === "cancelled" ? "PRD split run cancelled by user"
+      : null);
   return {
     ...current,
     clusterId: run.clusterId,
@@ -605,6 +638,7 @@ function backgroundRunToClusterRun(run: BackgroundRunState, current: ClusterRunS
       stageLabel:
         run.status === "succeeded" ? "后台拆分已完成"
         : run.status === "failed" ? "后台拆分失败，可从 runDir 重试"
+        : run.status === "cancelled" ? "后台拆分已中断，可从 runDir 重试"
         : "后台拆分运行中…",
       elapsedMs: Math.max(0, Date.now() - run.startedAtMs),
       error: errorSummary

@@ -46,7 +46,7 @@ export function RepositoryAssociateModal({
 }: RepositoryAssociateModalProps) {
   return (
     <Modal
-      title={floatingMode ? "添加游离仓库" : "关联仓库"}
+      title={floatingMode ? "添加 Standalone Repo" : "关联仓库"}
       open={open}
       onCancel={onCancel}
       onOk={onSubmit}

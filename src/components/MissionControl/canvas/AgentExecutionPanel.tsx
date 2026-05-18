@@ -5,15 +5,17 @@ import {
   CloseCircleOutlined,
   ClockCircleOutlined,
   CodeOutlined,
+  StopOutlined,
 } from "@ant-design/icons";
 import type { MissionRunState } from "../presenter/types";
 
 interface AgentExecutionPanelProps {
   runState: MissionRunState;
   stdoutMap: Record<string, string[]>;
+  onCancelCluster?: (clusterId: string) => void;
 }
 
-export function AgentExecutionPanel({ runState, stdoutMap }: AgentExecutionPanelProps) {
+export function AgentExecutionPanel({ runState, stdoutMap, onCancelCluster }: AgentExecutionPanelProps) {
   const entries = Object.values(runState.clusters);
   if (entries.length === 0) return null;
 
@@ -37,7 +39,7 @@ export function AgentExecutionPanel({ runState, stdoutMap }: AgentExecutionPanel
       </div>
 
       <div className="mission-agent-panel__list">
-        {entries.map((entry) => {
+        {Object.entries(runState.clusters).map(([clusterId, entry]) => {
           const statusIcon =
             entry.status === "running" ? <LoadingOutlined spin /> :
             entry.status === "succeeded" ? <CheckCircleOutlined /> :
@@ -49,12 +51,10 @@ export function AgentExecutionPanel({ runState, stdoutMap }: AgentExecutionPanel
             entry.status === "succeeded" ? "success" :
             entry.status === "failed" ? "error" : "default";
 
-          const outLines = stdoutMap[Object.keys(runState.clusters).find(
-            (k) => runState.clusters[k] === entry,
-          ) ?? ""] ?? [];
+          const outLines = stdoutMap[clusterId] ?? [];
 
           return (
-            <div key={entry.stageLabel} className="mission-agent-panel__row">
+            <div key={clusterId} className="mission-agent-panel__row">
               <div className="mission-agent-panel__row-head">
                 <span className="mission-agent-panel__row-icon">{statusIcon}</span>
                 <Typography.Text className="mission-agent-panel__row-label" strong>
@@ -67,6 +67,18 @@ export function AgentExecutionPanel({ runState, stdoutMap }: AgentExecutionPanel
                   <Typography.Text type="secondary" style={{ fontSize: 10 }}>
                     {(entry.elapsedMs / 1000).toFixed(1)}s
                   </Typography.Text>
+                ) : null}
+                {entry.status === "running" && onCancelCluster ? (
+                  <button
+                    type="button"
+                    className="mission-agent-panel__stop"
+                    title="中断此子代理"
+                    aria-label="中断此子代理"
+                    onClick={() => onCancelCluster(clusterId)}
+                  >
+                    <StopOutlined />
+                    Stop
+                  </button>
                 ) : null}
               </div>
               {entry.status === "running" ? (

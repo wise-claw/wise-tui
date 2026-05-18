@@ -17,8 +17,8 @@ export interface GroupNodeData {
 
 export const GroupNodeComponent: React.FC<NodeProps<GroupNodeData>> = ({ id, data, selected }) => {
   const label = data.label || 'Group';
-  const highlightedGroupNodeId = useWorkflowStore((s) => s.highlightedGroupNodeId);
-  const isHighlighted = highlightedGroupNodeId === id;
+  const highlightedNodeId = useWorkflowStore((s) => s.highlightedNodeId);
+  const isHighlighted = highlightedNodeId === id;
 
   const borderColor = isHighlighted
     ? 'var(--vscode-focusBorder)'

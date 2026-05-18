@@ -76,8 +76,8 @@ interface WorkflowStore {
    *  request. Used by the Overview mode "Edit on canvas" links. */
   requestedFocusNodeId: string | null;
 
-  // Group Node Highlight State (for MCP execution tracking)
-  highlightedGroupNodeId: string | null;
+  // Node Highlight State (for execution tracking - supports any node type)
+  highlightedNodeId: string | null;
   isHighlightEnabled: boolean;
 
   // MCP Server Status
@@ -124,8 +124,8 @@ interface WorkflowStore {
   removeHookEntry: (hookType: HookType, entryIndex: number) => void;
   updateHookEntry: (hookType: HookType, entryIndex: number, entry: Partial<HookEntry>) => void;
 
-  // Group Node Highlight
-  setHighlightedGroupNodeId: (id: string | null) => void;
+  // Node Highlight
+  setHighlightedNodeId: (id: string | null) => void;
   toggleHighlightEnabled: () => void;
 
   // MCP Server Status
@@ -350,7 +350,7 @@ export const useWorkflowStore = create<WorkflowStore>()(
       },
       lastAddedNodeId: null,
       requestedFocusNodeId: null,
-      highlightedGroupNodeId: null,
+      highlightedNodeId: null,
       isHighlightEnabled: true,
       mcpServerRunning: false,
       mcpServerPort: null,
@@ -679,14 +679,14 @@ export const useWorkflowStore = create<WorkflowStore>()(
         set({ requestedFocusNodeId: null });
       },
 
-      setHighlightedGroupNodeId: (id: string | null) => {
-        set({ highlightedGroupNodeId: id });
+      setHighlightedNodeId: (id: string | null) => {
+        set({ highlightedNodeId: id });
       },
 
       toggleHighlightEnabled: () => {
         const current = get().isHighlightEnabled;
         if (current) {
-          set({ isHighlightEnabled: false, highlightedGroupNodeId: null });
+          set({ isHighlightEnabled: false, highlightedNodeId: null });
         } else {
           set({ isHighlightEnabled: true });
         }
@@ -801,7 +801,7 @@ export const useWorkflowStore = create<WorkflowStore>()(
           nodes: [DEFAULT_START_NODE, DEFAULT_END_NODE],
           edges: [],
           selectedNodeId: null,
-          highlightedGroupNodeId: null,
+          highlightedNodeId: null,
           workflowDescription: '', // Reset description
           slashCommandOptions: {
             context: 'default',
@@ -864,7 +864,7 @@ export const useWorkflowStore = create<WorkflowStore>()(
           nodes: newNodes,
           edges: newEdges,
           selectedNodeId: firstSelectableNode?.id || null,
-          highlightedGroupNodeId: null,
+          highlightedNodeId: null,
           activeWorkflow: workflow,
           subAgentFlows: workflow.subAgentFlows || [],
         });
@@ -905,7 +905,7 @@ export const useWorkflowStore = create<WorkflowStore>()(
         set({
           nodes: newNodes,
           edges: newEdges,
-          highlightedGroupNodeId: null,
+          highlightedNodeId: null,
           activeWorkflow: workflow,
           subAgentFlows: workflow.subAgentFlows || [],
         });
@@ -944,7 +944,7 @@ export const useWorkflowStore = create<WorkflowStore>()(
         set({
           nodes: newNodes,
           edges: newEdges,
-          highlightedGroupNodeId: null,
+          highlightedNodeId: null,
           activeWorkflow: workflow,
           subAgentFlows: workflow.subAgentFlows || [],
         });

@@ -11,6 +11,7 @@ export function toUserStatus(input: {
   if (input.writeResult?.error) return "blocked";
   const status = input.run?.status ?? "idle";
   if (status === "stale") return "stale";
+  if (status === "cancelled") return "cancelled";
   if (status === "failed") return "blocked";
   if (status === "creating-parent") return "preparing";
   if (status === "dispatching") return "running";

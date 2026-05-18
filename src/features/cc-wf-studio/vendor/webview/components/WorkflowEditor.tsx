@@ -139,7 +139,7 @@ export const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
     interactionMode,
     scrollMode,
     onNodeDragStop,
-    highlightedGroupNodeId,
+    highlightedNodeId,
     minimapDisplayMode,
     isMinimapShown,
     setMinimapShown,
@@ -155,10 +155,15 @@ export const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
   // Highlight-driven animation is always active (runtime status indicator)
   const animatedEdges = useMemo(() => {
     // Highlight-driven animation: always active (runtime status indicator)
+    // Supports any node type - highlights input/output edges for non-group nodes
+    // For group nodes: also animates edges connected to child nodes
     let highlightChildIds: Set<string> | null = null;
-    if (highlightedGroupNodeId != null) {
+    const highlightedNode = highlightedNodeId != null ? nodes.find((n) => n.id === highlightedNodeId) : null;
+    const isGroupNode = highlightedNode?.type === 'group';
+
+    if (isGroupNode && highlightedNodeId != null) {
       highlightChildIds = new Set(
-        nodes.filter((n) => n.parentId === highlightedGroupNodeId).map((n) => n.id)
+        nodes.filter((n) => n.parentId === highlightedNodeId).map((n) => n.id)
       );
     }
 
@@ -173,7 +178,7 @@ export const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
       }
     }
 
-    const hasHighlight = highlightedGroupNodeId != null;
+    const hasHighlight = highlightedNodeId != null;
     const hasSelection = isEdgeAnimationEnabled && selectedNodeId != null;
     const hasSelectedEdge = isEdgeAnimationEnabled && edges.some((e) => e.selected);
     if (!hasHighlight && !hasSelection && !hasSelectedEdge) return edges;
@@ -181,10 +186,15 @@ export const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
     return edges.map((edge) => {
       const isHighlightAnimated =
         hasHighlight &&
-        (edge.source === highlightedGroupNodeId ||
-          edge.target === highlightedGroupNodeId ||
-          (highlightChildIds != null &&
-            (highlightChildIds.has(edge.source) || highlightChildIds.has(edge.target))));
+        (isGroupNode
+          // Group node: animate edges connected to group or its children
+          ? edge.source === highlightedNodeId ||
+            edge.target === highlightedNodeId ||
+            (highlightChildIds != null &&
+              (highlightChildIds.has(edge.source) || highlightChildIds.has(edge.target)))
+          // Non-group node: animate only input/output edges
+          : edge.source === highlightedNodeId || edge.target === highlightedNodeId
+        );
 
       const isSelectionAnimated =
         (isEdgeAnimationEnabled && edge.selected) ||
@@ -196,7 +206,7 @@ export const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
 
       return { ...edge, animated: isHighlightAnimated || isSelectionAnimated };
     });
-  }, [edges, nodes, selectedNodeId, highlightedGroupNodeId, isEdgeAnimationEnabled]);
+  }, [edges, nodes, selectedNodeId, highlightedNodeId, isEdgeAnimationEnabled]);
 
   /**
    * 接続制約の検証

@@ -2,7 +2,7 @@ import type { MutableRefObject } from "react";
 import { Dropdown, Tooltip, Typography } from "antd";
 import type { MenuProps } from "antd";
 import type { ReconcileProjectMode } from "../../constants/reconcileProjectMode";
-import type { ProjectItem, Repository, TaskMode } from "../../types";
+import type { Repository, StandaloneRepo, TaskMode, Workspace } from "../../types";
 import { resolveWorkspaceMode } from "../../utils/workspaceMode";
 import {
   ExpandIcon,
@@ -10,6 +10,7 @@ import {
   PlusIcon,
   ProjectIcon,
   RequirementIcon,
+  TrellisIcon,
 } from "./SidebarIcons";
 import {
   FloatingRepositoryRow,
@@ -17,40 +18,41 @@ import {
 } from "./repositoryRows";
 
 interface ProjectRepositoryListProps {
-  projects: ProjectItem[];
+  projects: Workspace[];
   repositoriesById: Map<number, Repository>;
-  floatingRepositories: Repository[];
+  floatingRepositories: StandaloneRepo[];
   activeProjectId: string | null;
   activeRepositoryId: number | null;
   pinnedProjectIds: string[];
   expandedProjects: Set<string>;
   projectDropTargetId: string | null;
   repoSidebarDragRef: MutableRefObject<{ sourceProjectId: string; repositoryId: number } | null>;
-  onProjectSelect: (projectId: string) => void;
+  onProjectSelect: (projectId: Workspace["id"]) => void;
   onRepositorySelect: (id: number | null) => void;
   onCreateProjectClick: () => void;
   onAddFloatingRepositoryClick?: () => void;
   onReconcileProject?: (projectId: string, mode: ReconcileProjectMode) => void | Promise<void>;
-  onCodeGraphGenerateProject?: (project: ProjectItem) => void | Promise<void>;
-  onCodeGraphViewProject?: (project: ProjectItem) => void;
+  onCodeGraphGenerateProject?: (project: Workspace) => void | Promise<void>;
+  onCodeGraphViewProject?: (project: Workspace) => void;
   onCodeGraphGenerateRepository?: (repository: Repository) => void | Promise<void>;
-  onCodeGraphViewRepositoryInProject?: (project: ProjectItem, repository: Repository) => void;
+  onCodeGraphViewRepositoryInProject?: (project: Workspace, repository: Repository) => void;
   onCodeGraphViewFloatingRepository?: (repository: Repository) => void;
   onToggleProjectExpand: (projectId: string) => void;
   onTogglePinProject: (projectId: string) => void;
-  onRenameProject: (project: ProjectItem) => void;
-  onDeleteProject: (project: ProjectItem) => void;
-  onOpenPromptsProject?: (project: ProjectItem) => void;
-  onCreateProjectTask: (project: ProjectItem, mode: TaskMode) => void;
+  onRenameProject: (project: Workspace) => void;
+  onDeleteProject: (project: Workspace) => void;
+  onOpenPromptsProject?: (project: Workspace) => void;
+  onOpenProjectTrellis?: (project: Workspace) => void;
+  onCreateProjectTask: (project: Workspace, mode: TaskMode) => void;
   onCreateRepositoryTask: (repository: Repository, mode: TaskMode) => void;
   onOpenInFinder: (repository: Repository) => void;
   openRepositoryInPreferredEditor: (repository: Repository) => void;
-  onOpenPromptsRepository?: (project: ProjectItem, repository: Repository) => void;
+  onOpenPromptsRepository?: (project: Workspace, repository: Repository) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
   onConfigureRepositorySddMode?: (repository: Repository) => void;
-  onPromoteFloatingRepository?: (repository: Repository) => void;
-  onJoinFloatingRepository?: (repository: Repository, projectId: string) => void;
-  onRemoveFloatingRepository: (repository: Repository) => void;
+  onPromoteFloatingRepository?: (repository: StandaloneRepo) => void;
+  onJoinFloatingRepository?: (repository: StandaloneRepo, projectId: string) => void;
+  onRemoveFloatingRepository: (repository: StandaloneRepo) => void;
   onDetachRepositoryFromProject: (projectId: string, repositoryId: number) => void;
   onReorderRepositoriesInProject?: (projectId: string, repositoryIds: number[]) => void | Promise<void>;
   onMoveRepositoryToProject?: (targetProjectId: string, repositoryId: number) => void | Promise<void>;
@@ -85,6 +87,7 @@ export function ProjectRepositoryList({
   onRenameProject,
   onDeleteProject,
   onOpenPromptsProject,
+  onOpenProjectTrellis,
   onCreateProjectTask,
   onCreateRepositoryTask,
   onOpenInFinder,
@@ -107,24 +110,24 @@ export function ProjectRepositoryList({
     <>
       <div className="app-repository-header">
         <Typography.Text className="app-repository-header-title">
-          项目
+          Workspace
         </Typography.Text>
         <div className="app-repository-header-actions">
           {onAddFloatingRepositoryClick ? (
-            <Tooltip title="添加游离仓库（不绑定项目）" mouseEnterDelay={0.3}>
+            <Tooltip title="添加 Standalone Repo（不绑定 Workspace）" mouseEnterDelay={0.3}>
               <button
                 className="app-repository-header-btn"
-                aria-label="添加游离仓库"
+                aria-label="添加 Standalone Repo"
                 onClick={onAddFloatingRepositoryClick}
               >
                 <PlusIcon />
               </button>
             </Tooltip>
           ) : null}
-          <Tooltip title="新建项目" mouseEnterDelay={0.3}>
+          <Tooltip title="新建 Workspace" mouseEnterDelay={0.3}>
             <button
               className="app-repository-header-btn"
-              aria-label="新建项目"
+              aria-label="新建 Workspace"
               onClick={onCreateProjectClick}
             >
               <ProjectIcon />
@@ -135,7 +138,7 @@ export function ProjectRepositoryList({
 
       <div className="app-repository-list">
         {floatingRepositories.length > 0 ? (
-          <div className="app-repository-floating-group" aria-label="游离仓库">
+          <div className="app-repository-floating-group" aria-label="Standalone Repo">
             {floatingRepositories.map((repository) => (
               <FloatingRepositoryRow
                 key={repository.id}
@@ -177,6 +180,7 @@ export function ProjectRepositoryList({
             onRenameProject={onRenameProject}
             onDeleteProject={onDeleteProject}
             onOpenPromptsProject={onOpenPromptsProject}
+            onOpenProjectTrellis={onOpenProjectTrellis}
             onCreateProjectTask={onCreateProjectTask}
             onCreateRepositoryTask={onCreateRepositoryTask}
             onReconcileProject={onReconcileProject}
@@ -201,7 +205,7 @@ export function ProjectRepositoryList({
         {projects.length === 0 && floatingRepositories.length === 0 && (
           <div className="app-repository-item app-repository-item--add" onClick={onCreateProjectClick}>
             <span className="app-repository-add-icon"><PlusIcon /></span>
-            <span className="app-repository-add-text">新建项目</span>
+            <span className="app-repository-add-text">新建 Workspace</span>
           </div>
         )}
       </div>
@@ -228,8 +232,27 @@ function ProjectRequirementAction({ onOpen }: { onOpen: () => void }) {
   );
 }
 
+function ProjectTrellisAction({ onOpen }: { onOpen: () => void }) {
+  return (
+    <Tooltip title="Workspace Trellis" mouseEnterDelay={0.3}>
+      <button
+        type="button"
+        className="app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--trellis"
+        aria-label="Workspace Trellis"
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpen();
+        }}
+      >
+        <TrellisIcon />
+        <span className="app-repository-action-label">Trellis</span>
+      </button>
+    </Tooltip>
+  );
+}
+
 interface ProjectRowProps {
-  project: ProjectItem;
+  project: Workspace;
   projectRepos: Repository[];
   isActiveProject: boolean;
   activeRepositoryId: number | null;
@@ -237,23 +260,24 @@ interface ProjectRowProps {
   expanded: boolean;
   projectDropTargetId: string | null;
   repoSidebarDragRef: MutableRefObject<{ sourceProjectId: string; repositoryId: number } | null>;
-  onProjectSelect: (projectId: string) => void;
+  onProjectSelect: (projectId: Workspace["id"]) => void;
   onRepositorySelect: (id: number | null) => void;
   onToggleProjectExpand: (projectId: string) => void;
   onTogglePinProject: (projectId: string) => void;
-  onRenameProject: (project: ProjectItem) => void;
-  onDeleteProject: (project: ProjectItem) => void;
-  onOpenPromptsProject?: (project: ProjectItem) => void;
-  onCreateProjectTask: (project: ProjectItem, mode: TaskMode) => void;
+  onRenameProject: (project: Workspace) => void;
+  onDeleteProject: (project: Workspace) => void;
+  onOpenPromptsProject?: (project: Workspace) => void;
+  onOpenProjectTrellis?: (project: Workspace) => void;
+  onCreateProjectTask: (project: Workspace, mode: TaskMode) => void;
   onCreateRepositoryTask: (repository: Repository, mode: TaskMode) => void;
   onReconcileProject?: (projectId: string, mode: ReconcileProjectMode) => void | Promise<void>;
-  onCodeGraphGenerateProject?: (project: ProjectItem) => void | Promise<void>;
-  onCodeGraphViewProject?: (project: ProjectItem) => void;
+  onCodeGraphGenerateProject?: (project: Workspace) => void | Promise<void>;
+  onCodeGraphViewProject?: (project: Workspace) => void;
   onCodeGraphGenerateRepository?: (repository: Repository) => void | Promise<void>;
-  onCodeGraphViewRepositoryInProject?: (project: ProjectItem, repository: Repository) => void;
+  onCodeGraphViewRepositoryInProject?: (project: Workspace, repository: Repository) => void;
   onOpenInFinder: (repository: Repository) => void;
   openRepositoryInPreferredEditor: (repository: Repository) => void;
-  onOpenPromptsRepository?: (project: ProjectItem, repository: Repository) => void;
+  onOpenPromptsRepository?: (project: Workspace, repository: Repository) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
   onConfigureRepositorySddMode?: (repository: Repository) => void;
   onDetachRepositoryFromProject: (projectId: string, repositoryId: number) => void;
@@ -281,6 +305,7 @@ function ProjectRow({
   onRenameProject,
   onDeleteProject,
   onOpenPromptsProject,
+  onOpenProjectTrellis,
   onCreateProjectTask,
   onCreateRepositoryTask,
   onReconcileProject,
@@ -303,7 +328,7 @@ function ProjectRow({
 }: ProjectRowProps) {
   const projectMoreItems: MenuProps["items"] = [
     { key: "pin", label: isPinned ? "取消置顶" : "置顶" },
-    { key: "rename", label: "重命名项目" },
+    { key: "rename", label: "重命名 Workspace" },
     ...(onReconcileProject
       ? ([
           {
@@ -324,7 +349,7 @@ function ProjectRow({
             label: "图谱操作",
             popupClassName: "app-sidebar-more-menu-submenu",
             children: [
-              { key: "code-graph-generate-project", label: "生成项目级索引" },
+              { key: "code-graph-generate-project", label: "生成 Workspace 索引" },
               { key: "code-graph-view-project", label: "查看检索" },
             ],
           },
@@ -332,7 +357,7 @@ function ProjectRow({
       : []),
     { key: "prompts", label: "提示词" },
     { type: "divider" },
-    { key: "delete", label: <span style={{ color: "var(--ant-color-error)" }}>删除项目</span> },
+    { key: "delete", label: <span style={{ color: "var(--ant-color-error)" }}>删除 Workspace</span> },
   ];
 
   return (
@@ -366,7 +391,7 @@ function ProjectRow({
               onClearRepoSidebarDrag();
               if (!dragged || dragged.sourceProjectId === project.id) return;
               void onMoveRepositoryToProjectWithExpand(project.id, dragged.repositoryId).catch((err: unknown) => {
-                onMoveRepositoryError("移动仓库到项目失败", err);
+                onMoveRepositoryError("移动仓库到 Workspace 失败", err);
               });
             }
           : undefined
@@ -393,6 +418,9 @@ function ProjectRow({
         </span>
         <span className="app-repository-name">{project.name}</span>
         <div className="app-repository-row-actions">
+          {onOpenProjectTrellis ? (
+            <ProjectTrellisAction onOpen={() => onOpenProjectTrellis(project)} />
+          ) : null}
           <ProjectRequirementAction onOpen={() => onCreateProjectTask(project, "split")} />
           <Dropdown
             rootClassName="app-sidebar-more-menu-dropdown"
@@ -418,7 +446,7 @@ function ProjectRow({
             <button
               type="button"
               className="app-repository-action app-repository-action--more"
-              aria-label="项目更多操作"
+              aria-label="Workspace 更多操作"
               onClick={(e) => e.stopPropagation()}
             >
               <MoreIcon />
@@ -432,7 +460,7 @@ function ProjectRow({
           {projectRepos.length === 0 ? (
             <div className="app-session-item" style={{ cursor: "default" }}>
               <span className="app-session-item-name">
-                在根目录下拉取仓库后，用项目菜单「重新初始化」→「仅同步仓库」或「同步并重绘流程图」
+                在根目录下拉取仓库后，用 Workspace 菜单「重新初始化」→「仅同步仓库」或「同步并重绘流程图」
               </span>
             </div>
           ) : (

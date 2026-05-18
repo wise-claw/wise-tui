@@ -1,4 +1,4 @@
-//! CC Workflow Studio (cc-wf-studio) — 仓库内 `.vscode/workflows/*.json` 的列表与读写。
+//! CC Workflow Studio (cc-wf-studio) — 仓库内 `.wise/workflows/*.json` 的列表与读写。
 //! 供前端嵌入上游 Webview 时使用；路径严格限制在 workflows 目录下。
 
 use chrono::{DateTime, Utc};
@@ -7,7 +7,7 @@ use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const WORKFLOWS_REL: &str = ".vscode/workflows";
+const WORKFLOWS_REL: &str = ".wise/workflows";
 const MAX_WORKFLOW_JSON_BYTES: u64 = 8 * 1024 * 1024;
 
 fn canonical_project_base(project_path: &str) -> Result<PathBuf, String> {
@@ -73,7 +73,7 @@ fn iso_from_system_time(st: std::time::SystemTime) -> String {
     dt.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
 
-/// 列出 `.vscode/workflows` 下全部 `*.json` 工作流元数据。
+/// 列出 `.wise/workflows` 下全部 `*.json` 工作流元数据。
 #[tauri::command]
 pub fn list_cc_workflow_studio_workflows(
     project_path: String,
@@ -230,7 +230,7 @@ pub fn write_cc_wf_studio_ai_editing_skill(
     write_project_relative_text_file(&base, rel, TEMPLATE)
 }
 
-/// 写入工作流 JSON（覆盖），上限 8MB；自动创建 `.vscode/workflows`。
+/// 写入工作流 JSON（覆盖），上限 8MB；自动创建 `.wise/workflows`。
 #[tauri::command]
 pub fn write_cc_workflow_studio_workflow(
     project_path: String,

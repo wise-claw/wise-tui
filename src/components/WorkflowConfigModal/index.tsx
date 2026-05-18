@@ -39,6 +39,7 @@ type GraphStatus = "published" | "draft" | "unknown" | "none";
 
 interface Props {
   open: boolean;
+  inline?: boolean;
   loading: boolean;
   employees: EmployeeItem[];
   templates: WorkflowTemplateItem[];
@@ -65,6 +66,7 @@ interface Props {
 
 export function WorkflowConfigModal({
   open,
+  inline = false,
   loading,
   employees,
   templates,
@@ -304,61 +306,9 @@ export function WorkflowConfigModal({
     }
   }
 
-  return (
-    <Modal
-      title="团队配置"
-      open={open}
-      onCancel={onClose}
-      footer={null}
-      centered={false}
-      width="100%"
-      rootClassName="app-workflow-config-modal-root"
-      className="app-workflow-config-modal"
-      destroyOnHidden
-      styles={{
-        body: {
-          flex: 1,
-          minHeight: 0,
-          overflow: "hidden",
-          display: "flex",
-          flexDirection: "column",
-        },
-      }}
-    >
-      <div className="app-workflow-config-layout">
-        <aside
-          className={`app-workflow-config-sidebar${teamListCollapsed ? " app-workflow-config-sidebar--collapsed" : ""}`}
-          aria-label="团队列表"
-        >
-          {teamListCollapsed ? (
-            <div className="app-workflow-config-sidebar-collapsed">
-              <Tooltip title="展开团队列表" placement="right">
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<MenuUnfoldOutlined />}
-                  aria-label="展开团队列表"
-                  onClick={() => setTeamListCollapsed(false)}
-                />
-              </Tooltip>
-              <Tooltip title="新建团队" placement="right">
-                <Button
-                  size="small"
-                  type={!editingTemplateId ? "primary" : "default"}
-                  icon={<PlusOutlined />}
-                  aria-label="新建团队"
-                  onClick={resetEditor}
-                />
-              </Tooltip>
-              {editingTemplate ? (
-                <Tooltip title={editingTemplate.name} placement="right">
-                  <span className="app-workflow-config-sidebar-collapsed-active" aria-hidden>
-                    {editingTemplate.name.slice(0, 1)}
-                  </span>
-                </Tooltip>
-              ) : null}
-            </div>
-          ) : (
+  const content = (
+    <div className="app-workflow-config-layout">
+        <div className="app-workflow-config-sidebar">
           <Space orientation="vertical" size={10} className="app-workflow-config-sidebar-space">
             <div className="app-workflow-config-sidebar-header">
               <Typography.Text strong>团队列表</Typography.Text>
@@ -475,12 +425,12 @@ export function WorkflowConfigModal({
                 <Switch checkedChildren="默认" unCheckedChildren="非默认" />
               </Form.Item>
               {projects && projects.length > 0 && (
-                <Form.Item label="项目" colon={false}>
+                <Form.Item label="所属 Workspace">
                   <Select
                     className="app-workflow-config-project-select"
                     mode="multiple"
                     allowClear
-                    placeholder="所属项目"
+                    placeholder="所属 Workspace"
                     maxTagCount="responsive"
                     value={editingProjectIds}
                     onChange={(value: string[]) => setEditingProjectIds(value)}
@@ -555,8 +505,26 @@ export function WorkflowConfigModal({
             />
           </div>
 
-        </div>
-      </div>
+        </Space>
+    </div>
+  );
+
+  if (inline) {
+    if (!open) return null;
+    return <div className="app-workflow-config-inline-root">{content}</div>;
+  }
+
+  return (
+    <Modal
+      title="团队配置"
+      open={open}
+      onCancel={onClose}
+      footer={null}
+      width={1080}
+      className="app-workflow-config-modal"
+      destroyOnHidden
+    >
+      {content}
     </Modal>
   );
 }

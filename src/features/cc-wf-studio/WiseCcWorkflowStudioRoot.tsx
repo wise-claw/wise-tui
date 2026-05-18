@@ -89,6 +89,7 @@ export function WiseCcWorkflowStudioRoot({ repositoryPath }: WiseCcWorkflowStudi
           } else if (kind === "apply_workflow_from_mcp") {
             handleApplyWorkflowFromMcp(rp, p.payload as Record<string, unknown>);
           } else if (kind === "highlight_group_node") {
+            // Supports any node type (groupNodeId field name kept for backward compatibility)
             emitExtensionToWebviewMessage({
               type: "HIGHLIGHT_GROUP_NODE",
               payload: p.payload as Record<string, unknown>,

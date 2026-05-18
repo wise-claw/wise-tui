@@ -184,7 +184,7 @@ function RegistryOrphanSessionDetails({
             <Typography.Text strong>模型</Typography.Text> {info.model.trim() || "—"}
           </Typography.Paragraph>
           <Typography.Paragraph copyable={{ text: info.project_path }}>
-            <Typography.Text strong>项目路径</Typography.Text>{" "}
+            <Typography.Text strong>Workspace Path</Typography.Text>{" "}
             {info.project_path.trim() || "—"}
           </Typography.Paragraph>
         </>

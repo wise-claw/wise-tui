@@ -28,6 +28,7 @@ function isRepoOwnerGapRow(row: EmployeeConfigTableRow): row is RepoOwnerGapTabl
 
 interface Props {
   open: boolean;
+  inline?: boolean;
   loading: boolean;
   employees: EmployeeItem[];
   workflowTemplates: WorkflowTemplateItem[];
@@ -37,21 +38,21 @@ interface Props {
   agentTypeOptions: string[];
   defaultRepositoryIds?: number[];
   /**
-   * 为 true 时（例如从需求面板按项目打开）：表格中隐藏「关联仓库全部属于 defaultRepositoryIds」的员工
-   *（典型为各仓下创建的配置）；`alwaysShowEmployeeIds` 中的 id 仍会显示（如项目需求面板显式关联的成员）。
+   * 为 true 时（例如从需求面板按 Workspace 打开）：表格中隐藏「关联仓库全部属于 defaultRepositoryIds」的员工
+   *（典型为各仓下创建的配置）；`alwaysShowEmployeeIds` 中的 id 仍会显示（如 Workspace 需求面板显式关联的成员）。
    */
   hideEmployeesAssociatedOnlyWithDefaultRepositories?: boolean;
   /** 在启用上一项过滤时，始终保留在表格中的员工 id（如 project_prd 关联）。 */
   alwaysShowEmployeeIds?: string[];
   /**
    * 从侧栏「仓库」打开：与需求面板相同展示 Owner 列与「仓库」表单项，但不关联 project_prd。
-   * 须与 `hideEmployeesAssociatedOnlyWithDefaultRepositories` 同时为 true 以启用项目级表格过滤与 Owner UI。
+   * 须与 `hideEmployeesAssociatedOnlyWithDefaultRepositories` 同时为 true 以启用 Workspace 级表格过滤与 Owner UI。
    */
   repositoryOwnerScopeOnly?: boolean;
   /** 新建员工时默认「员工名称」（侧栏仓库流程下为仓库目录名）。 */
   initialCreateEmployeeName?: string | null;
   /**
-   * 从项目上下文打开时传入单一项目 id：自动归属该项目且隐藏「所属项目」字段，避免用户误操作。
+   * 从 Workspace 上下文打开时传入单一 project id：自动归属该 Workspace 且隐藏「所属 Workspace」字段，避免用户误操作。
    */
   singleProjectScopeId?: string | null;
   onClose: () => void;
@@ -70,6 +71,7 @@ interface Props {
 
 export function EmployeeConfigModal({
   open,
+  inline = false,
   loading,
   employees,
   workflowTemplates,
@@ -102,7 +104,7 @@ export function EmployeeConfigModal({
     return merged.map((value) => ({ value, label: value }));
   }, [agentTypeOptions, employees]);
   const hideRepositorySelector = defaultRepositoryIds.length > 0;
-  /** 项目需求面板或侧栏仓库：展示 Owner 列与「仓库」表单项 */
+  /** Workspace 需求面板或侧栏仓库：展示 Owner 列与「仓库」表单项 */
   const projectOwnerPickMode =
     defaultRepositoryIds.length > 0 &&
     (hideEmployeesAssociatedOnlyWithDefaultRepositories || repositoryOwnerScopeOnly);
@@ -258,17 +260,8 @@ export function EmployeeConfigModal({
     });
   }
 
-  return (
-    <Modal
-      title="员工配置"
-      open={open}
-      onCancel={onClose}
-      footer={null}
-      width={projectOwnerPickMode ? 850 : 780}
-      destroyOnHidden
-      rootClassName="app-employee-config-modal-root"
-    >
-      <Space orientation="vertical" size={10} className="app-employee-config-modal">
+  const content = (
+    <Space orientation="vertical" size={10} className="app-employee-config-modal">
         <Form
           form={form}
           layout="inline"
@@ -339,7 +332,7 @@ export function EmployeeConfigModal({
             ) : null}
             {projects && projects.length > 0 && !repositoryOwnerScopeOnly && !singleProjectScopeId ? (
               <div className="app-employee-config-field">
-                <div className="app-employee-config-field-label">所属项目</div>
+                <div className="app-employee-config-field-label">所属 Workspace</div>
                 <Form.Item
                   name="projectIds"
                   className="app-employee-config-item app-employee-config-item--projects"
@@ -347,7 +340,7 @@ export function EmployeeConfigModal({
                   <Select
                     mode="multiple"
                     allowClear
-                    placeholder="所属项目"
+                    placeholder="所属 Workspace"
                     maxTagCount="responsive"
                     options={projects.map((p) => ({
                       value: p.id,
@@ -531,15 +524,33 @@ export function EmployeeConfigModal({
         {hideEmployeesAssociatedOnlyWithDefaultRepositories && defaultRepositoryIds.length > 0
         && !repositoryOwnerScopeOnly ? (
           <Typography.Text type="secondary" className="app-employee-config-footnote">
-            已从本表隐藏「仅关联当前项目内仓库」的员工（一般为各仓侧创建的配置）；项目需求面板显式关联的成员、以及在本项目内仓上配置为主 Owner 的员工仍会显示。若某仓仅在仓库侧配置了主 Owner、且尚未与任何员工关联，将以「仅仓库」行展示。在侧栏进入单个仓库打开员工配置可查看与编辑全部员工。
+            已从本表隐藏「仅关联当前 Workspace 内仓库」的员工（一般为各仓侧创建的配置）；Workspace 需求面板显式关联的成员、以及在本 Workspace 内仓上配置为主 Owner 的员工仍会显示。若某仓仅在仓库侧配置了主 Owner、且尚未与任何员工关联，将以「仅仓库」行展示。在侧栏进入单个仓库打开员工配置可查看与编辑全部员工。
           </Typography.Text>
         ) : null}
         {repositoryOwnerScopeOnly && defaultRepositoryIds.length > 0 ? (
           <Typography.Text type="secondary" className="app-employee-config-footnote">
-            从侧栏仓库打开：新建时默认员工名称为该仓库目录名；保存后会自动勾选本仓库并写入仓库主 Owner，表格中「Owner 标识」列与项目需求面板规则一致。
+            从侧栏仓库打开：新建时默认员工名称为该仓库目录名；保存后会自动勾选本仓库并写入仓库主 Owner，表格中「Owner 标识」列与 Workspace 需求面板规则一致。
           </Typography.Text>
         ) : null}
-      </Space>
+    </Space>
+  );
+
+  if (inline) {
+    if (!open) return null;
+    return <div className="app-employee-config-inline-root">{content}</div>;
+  }
+
+  return (
+    <Modal
+      title="员工配置"
+      open={open}
+      onCancel={onClose}
+      footer={null}
+      width={projectOwnerPickMode ? 850 : 780}
+      destroyOnHidden
+      rootClassName="app-employee-config-modal-root"
+    >
+      {content}
     </Modal>
   );
 }

@@ -13,10 +13,24 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
+use std::process::{Command as StdCommand, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 use tauri::Emitter;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
+
+#[derive(Clone)]
+struct ActiveSplitterRun {
+    pid: u32,
+    cancelled: Arc<AtomicBool>,
+}
+
+static ACTIVE_SPLITTER_RUNS: OnceLock<Mutex<HashMap<String, ActiveSplitterRun>>> = OnceLock::new();
+
+fn active_splitter_runs() -> &'static Mutex<HashMap<String, ActiveSplitterRun>> {
+    ACTIVE_SPLITTER_RUNS.get_or_init(|| Mutex::new(HashMap::new()))
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -791,6 +805,12 @@ pub(crate) struct RetryRunInput {
     model: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CancelRunInput {
+    run_id: String,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DispatchClusterOutput {
@@ -811,6 +831,17 @@ pub(crate) struct DispatchClusterOutput {
 pub(crate) struct RetryRunOutput {
     new_run_id: String,
     new_run_dir: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CancelRunOutput {
+    run_id: String,
+    run_dir: String,
+    cluster_id: String,
+    signalled_running_process: bool,
+    wrote_run_result: bool,
+    already_finished: bool,
 }
 
 #[tauri::command]
@@ -863,7 +894,8 @@ pub(crate) async fn prd_split_retry_run(
             .filter(|s| !s.is_empty())
             .map(ToString::to_string)
     });
-    let prompt = fs::read_to_string(&prompt_path).map_err(|e| format!("读取 prompt.md 失败: {e}"))?;
+    let prompt =
+        fs::read_to_string(&prompt_path).map_err(|e| format!("读取 prompt.md 失败: {e}"))?;
     let bundle = read_retry_bundle(&old_run_dir)?;
 
     let new_run_id = format!(
@@ -875,8 +907,12 @@ pub(crate) async fn prd_split_retry_run(
         .map_err(|e| format!("解析 ~/.wise 失败: {e}"))?
         .join("prd-runs")
         .join(&new_run_id);
-    fs::create_dir_all(&new_run_dir)
-        .map_err(|e| format!("创建 retry run_dir 失败 ({}): {e}", new_run_dir.to_string_lossy()))?;
+    fs::create_dir_all(&new_run_dir).map_err(|e| {
+        format!(
+            "创建 retry run_dir 失败 ({}): {e}",
+            new_run_dir.to_string_lossy()
+        )
+    })?;
     patch_json_file(old_run_dir.join("run-result.json"), |value| {
         value["superseded_by"] = json!(new_run_id);
         Ok(())
@@ -884,12 +920,23 @@ pub(crate) async fn prd_split_retry_run(
     patch_json_file(new_run_dir.join("dispatch.meta.json"), |value| {
         value["retriedFrom"] = json!(old_run_id);
         value["retriedFromRunDir"] = json!(old_run_dir.to_string_lossy());
-        if let Some(mission_id) = input.mission_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        if let Some(mission_id) = input
+            .mission_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
             value["missionId"] = json!(mission_id);
         }
         Ok(())
     })?;
-    record_retry_event(&db, &input.mission_id, &old_run_id, &new_run_id, &requested_cluster_id);
+    record_retry_event(
+        &db,
+        &input.mission_id,
+        &old_run_id,
+        &new_run_id,
+        &requested_cluster_id,
+    );
 
     let app_clone = app.clone();
     let run_id_for_task = new_run_id.clone();
@@ -929,6 +976,108 @@ pub(crate) async fn prd_split_retry_run(
     Ok(RetryRunOutput {
         new_run_id,
         new_run_dir: new_run_dir.to_string_lossy().to_string(),
+    })
+}
+
+#[tauri::command]
+pub(crate) async fn prd_split_cancel_run(
+    app: tauri::AppHandle,
+    input: CancelRunInput,
+) -> Result<CancelRunOutput, String> {
+    let run_id = required(input.run_id, "runId")?;
+    let run_dir = resolve_prd_run_dir(&run_id)?;
+    let meta = read_json_file(&run_dir.join("dispatch.meta.json"), "dispatch.meta.json").ok();
+    let cluster_id = meta
+        .as_ref()
+        .and_then(|value| json_string(value, "clusterId"))
+        .unwrap_or_else(|| infer_cluster_id_from_run_id(&run_id));
+    let result_path = run_dir.join("run-result.json");
+    let already_finished = result_path.is_file()
+        && read_json_file(&result_path, "run-result.json")
+            .ok()
+            .and_then(|value| json_string(&value, "status"))
+            .map(|status| status != "running")
+            .unwrap_or(true);
+
+    let active = {
+        let mut map = active_splitter_runs()
+            .lock()
+            .map_err(|_| "splitter run registry lock poisoned".to_string())?;
+        map.remove(&run_id)
+    };
+    let signalled_running_process = active.is_some();
+    if let Some(active_run) = active.as_ref() {
+        active_run.cancelled.store(true, Ordering::SeqCst);
+        terminate_process(active_run.pid);
+    }
+
+    let stdout_path = run_dir.join("claude.stdout.log");
+    let stderr_path = run_dir.join("claude.stderr.log");
+    let raw_result_path = run_dir.join("split-result.raw.json");
+    let now = unix_ms_now();
+    let error = if signalled_running_process {
+        "PRD split run cancelled by user"
+    } else if already_finished {
+        "PRD split run had already finished before cancel was requested"
+    } else {
+        "PRD split run was not registered in this app process; marked cancelled for recovery"
+    };
+    let wrote_run_result = if already_finished && !signalled_running_process {
+        false
+    } else {
+        fs::write(
+            run_dir.join("run-result.json"),
+            serde_json::to_string_pretty(&json!({
+                "runId": &run_id,
+                "status": "cancelled",
+                "exitCode": 130,
+                "durationMs": 0,
+                "clusterId": &cluster_id,
+                "stdoutPath": stdout_path.to_string_lossy(),
+                "stderrPath": stderr_path.to_string_lossy(),
+                "rawResultPath": raw_result_path.to_string_lossy(),
+                "error": error,
+                "cancelledAtMs": now,
+            }))
+            .unwrap_or_default(),
+        )
+        .is_ok()
+    };
+
+    if let Some(active_run) = active {
+        cleanup_active_splitter_run(&run_id, &active_run.cancelled);
+    }
+
+    let _ = app.emit(
+        "splitter-progress",
+        json!({
+            "clusterId": &cluster_id,
+            "kind": "cancelled",
+            "message": "已中断",
+            "progressPercent": 0,
+            "exitCode": 130,
+            "stdoutPath": stdout_path.to_string_lossy(),
+            "stderrPath": stderr_path.to_string_lossy(),
+        }),
+    );
+    let _ = app.emit(
+        "splitter-complete",
+        json!({
+            "clusterId": &cluster_id,
+            "status": "cancelled",
+            "runId": &run_id,
+            "runDir": run_dir.to_string_lossy(),
+            "durationMs": 0,
+        }),
+    );
+
+    Ok(CancelRunOutput {
+        run_id,
+        run_dir: run_dir.to_string_lossy().to_string(),
+        cluster_id,
+        signalled_running_process,
+        wrote_run_result,
+        already_finished,
     })
 }
 
@@ -997,6 +1146,7 @@ async fn dispatch_cluster_impl(
         "clusterId": input.cluster_id,
         "model": input.model,
         "timeoutMs": input.timeout_ms,
+        "startedAtMs": unix_ms_now() as u64,
     });
     if let Some(existing) = read_existing_retry_metadata(&run_dir)? {
         merge_object_fields(&mut meta, existing);
@@ -1043,6 +1193,17 @@ async fn dispatch_cluster_impl(
 
     let started = std::time::Instant::now();
     let mut child = cmd.spawn().map_err(|e| format!("启动 Claude 失败: {e}"))?;
+    let pid = child.id();
+    let cancel_flag = Arc::new(AtomicBool::new(false));
+    if let Some(pid) = pid {
+        register_active_splitter_run(
+            &run_id,
+            ActiveSplitterRun {
+                pid,
+                cancelled: Arc::clone(&cancel_flag),
+            },
+        )?;
+    }
     let stdout = child
         .stdout
         .take()
@@ -1138,11 +1299,22 @@ async fn dispatch_cluster_impl(
             .map_err(|e| format!("Claude 进程等待失败: {e}"))?;
         (Some(s), false)
     };
+    cleanup_active_splitter_run(&run_id, &cancel_flag);
+    let cancelled = cancel_flag.load(Ordering::SeqCst);
 
     let stdout_text = stdout_task.await.unwrap_or_default();
     let stderr_buf = stderr_task.await.unwrap_or_default();
     let mut stderr_text = String::from_utf8_lossy(&stderr_buf).to_string();
-    if timed_out {
+    if cancelled {
+        let _ = app.emit(
+            "splitter-progress",
+            json!({ "clusterId": &cluster_id, "kind": "cancelled", "message": "已中断", "progressPercent": 0 }),
+        );
+        if !stderr_text.ends_with('\n') && !stderr_text.is_empty() {
+            stderr_text.push('\n');
+        }
+        stderr_text.push_str("Claude cancelled by user\n");
+    } else if timed_out {
         let _ = app.emit(
             "splitter-progress",
             json!({ "clusterId": &cluster_id, "kind": "error", "message": "Claude 超时", "progressPercent": 0 }),
@@ -1167,7 +1339,9 @@ async fn dispatch_cluster_impl(
     }
 
     let duration_ms = started.elapsed().as_millis() as u64;
-    let exit_code = if timed_out {
+    let exit_code = if cancelled {
+        130
+    } else if timed_out {
         124
     } else {
         status_result
@@ -1176,8 +1350,17 @@ async fn dispatch_cluster_impl(
             .unwrap_or(-1)
     };
 
-    let success = exit_code == 0 && raw_output.is_some();
-    let final_error_message = if timed_out {
+    let success = !cancelled && exit_code == 0 && raw_output.is_some();
+    let final_status = if success {
+        "succeeded"
+    } else if cancelled {
+        "cancelled"
+    } else {
+        "failed"
+    };
+    let final_error_message = if cancelled {
+        "已中断".to_string()
+    } else if timed_out {
         "Claude 超时".to_string()
     } else if raw_output.is_none() {
         "Claude 输出未包含可解析的 splitter JSON".to_string()
@@ -1188,7 +1371,7 @@ async fn dispatch_cluster_impl(
         "splitter-progress",
         json!({
             "clusterId": &cluster_id,
-            "kind": if success { "completed" } else { "error" },
+            "kind": if success { "completed" } else if cancelled { "cancelled" } else { "error" },
             "message": if success { "完成" } else { final_error_message.as_str() },
             "progressPercent": if success { 100 } else { 0 },
             "exitCode": exit_code,
@@ -1200,7 +1383,8 @@ async fn dispatch_cluster_impl(
         "splitter-complete",
         json!({
             "clusterId": &cluster_id,
-            "status": if success { "succeeded" } else { "failed" },
+            "status": final_status,
+            "runId": &run_id,
             "runDir": run_dir.to_string_lossy(),
             "durationMs": duration_ms,
         }),
@@ -1211,7 +1395,7 @@ async fn dispatch_cluster_impl(
         run_dir.join("run-result.json"),
         serde_json::to_string_pretty(&json!({
             "runId": &run_id,
-            "status": if success { "succeeded" } else { "failed" },
+            "status": final_status,
             "exitCode": exit_code,
             "durationMs": duration_ms,
             "clusterId": &cluster_id,
@@ -1219,7 +1403,9 @@ async fn dispatch_cluster_impl(
             "stdoutPath": stdout_path.to_string_lossy(),
             "stderrPath": stderr_path.to_string_lossy(),
             "rawResultPath": raw_result_path.to_string_lossy(),
-            "error": if timed_out {
+            "error": if cancelled {
+                Some("PRD split run cancelled by user".to_string())
+            } else if timed_out {
                 Some(format!("Claude 超时 ({:?} ms)", timeout_ms))
             } else if raw_output.is_none() {
                 Some("Claude 输出未包含可解析的 splitter JSON".to_string())
@@ -1355,6 +1541,75 @@ fn resolve_prd_run_dir(run_id: &str) -> Result<PathBuf, String> {
     Ok(run_dir)
 }
 
+fn infer_cluster_id_from_run_id(run_id: &str) -> String {
+    run_id
+        .strip_prefix("split-")
+        .and_then(|tail| {
+            tail.rsplit_once('-')
+                .map(|(cluster, _)| cluster.to_string())
+        })
+        .filter(|cluster| !cluster.trim().is_empty())
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+fn register_active_splitter_run(run_id: &str, run: ActiveSplitterRun) -> Result<(), String> {
+    let mut map = active_splitter_runs()
+        .lock()
+        .map_err(|_| "splitter run registry lock poisoned".to_string())?;
+    map.insert(run_id.to_string(), run);
+    Ok(())
+}
+
+fn cleanup_active_splitter_run(run_id: &str, cancel_flag: &Arc<AtomicBool>) {
+    let Ok(mut map) = active_splitter_runs().lock() else {
+        return;
+    };
+    let should_remove = map
+        .get(run_id)
+        .map(|run| Arc::ptr_eq(&run.cancelled, cancel_flag))
+        .unwrap_or(false);
+    if should_remove {
+        map.remove(run_id);
+    }
+}
+
+fn active_splitter_run_snapshot(run_id: &str) -> Option<ActiveSplitterRun> {
+    active_splitter_runs()
+        .lock()
+        .ok()
+        .and_then(|map| map.get(run_id).cloned())
+}
+
+fn is_active_splitter_run(run_id: &str) -> bool {
+    active_splitter_run_snapshot(run_id).is_some()
+}
+
+#[cfg(unix)]
+fn terminate_process(pid: u32) {
+    let _ = StdCommand::new("kill")
+        .arg("-TERM")
+        .arg(pid.to_string())
+        .status();
+    let _pid = pid;
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(1200)).await;
+        let _ = StdCommand::new("kill")
+            .arg("-KILL")
+            .arg(_pid.to_string())
+            .status();
+    });
+}
+
+#[cfg(windows)]
+fn terminate_process(pid: u32) {
+    let _ = StdCommand::new("taskkill")
+        .arg("/PID")
+        .arg(pid.to_string())
+        .arg("/T")
+        .arg("/F")
+        .status();
+}
+
 fn read_retry_bundle(run_dir: &Path) -> Result<HashMap<String, String>, String> {
     let mut bundle = HashMap::new();
     let entries = fs::read_dir(run_dir)
@@ -1394,9 +1649,15 @@ fn read_json_file(path: &Path, label: &str) -> Result<Value, String> {
     serde_json::from_str(&raw).map_err(|e| format!("解析 {label} 失败: {e}"))
 }
 
-fn patch_json_file(path: PathBuf, patch: impl FnOnce(&mut Value) -> Result<(), String>) -> Result<(), String> {
+fn patch_json_file(
+    path: PathBuf,
+    patch: impl FnOnce(&mut Value) -> Result<(), String>,
+) -> Result<(), String> {
     let mut value = if path.is_file() {
-        read_json_file(&path, path.file_name().and_then(|n| n.to_str()).unwrap_or("json"))?
+        read_json_file(
+            &path,
+            path.file_name().and_then(|n| n.to_str()).unwrap_or("json"),
+        )?
     } else {
         json!({})
     };
@@ -1494,15 +1755,20 @@ fn active_prd_run_row_from_dir(run_dir: &Path, now_ms: u64) -> Option<ActiveRunR
                 .to_string()
         });
     let exit_code = result.as_ref().and_then(|v| json_i32(v, "exitCode"));
-    let stale_without_result = !has_run_result && now_ms.saturating_sub(started_at_ms) > 90_000;
+    let running_in_process = !has_run_result && is_active_splitter_run(&run_id);
+    let stale_without_result =
+        !has_run_result && !running_in_process && now_ms.saturating_sub(started_at_ms) > 90_000;
     let status = if let Some(result) = result.as_ref() {
         match json_string(result, "status").as_deref() {
             Some("succeeded") => "succeeded",
             Some("failed") => "failed",
+            Some("cancelled") | Some("canceled") => "cancelled",
             Some("running") => "running",
             _ if exit_code == Some(0) => "succeeded",
             _ => "failed",
         }
+    } else if running_in_process {
+        "running"
     } else if stale_without_result {
         "failed"
     } else {
@@ -1566,7 +1832,8 @@ fn load_retry_dispatch_meta(run_dir: &Path, requested_cluster_id: &str) -> Resul
 }
 
 fn merge_object_fields(target: &mut Value, existing: Value) {
-    let (Some(target_obj), Some(existing_obj)) = (target.as_object_mut(), existing.as_object()) else {
+    let (Some(target_obj), Some(existing_obj)) = (target.as_object_mut(), existing.as_object())
+    else {
         return;
     };
     for key in ["retriedFrom", "retriedFromRunDir", "missionId"] {
@@ -1625,7 +1892,11 @@ fn record_retry_event(
     new_run_id: &str,
     cluster_id: &str,
 ) {
-    let Some(mission_id) = mission_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) else {
+    let Some(mission_id) = mission_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    else {
         return;
     };
     let Ok(g) = db.0.lock() else {
@@ -1763,8 +2034,9 @@ fn extract_split_payload_from_json_value(value: &Value) -> Option<Value> {
                 if block.get("type").and_then(|v| v.as_str()) != Some("tool_result") {
                     continue;
                 }
-                if let Some(parsed) =
-                    block.get("content").and_then(extract_split_payload_from_content_value)
+                if let Some(parsed) = block
+                    .get("content")
+                    .and_then(extract_split_payload_from_content_value)
                 {
                     return Some(parsed);
                 }
@@ -2036,6 +2308,15 @@ mod tests {
     }
 
     #[test]
+    fn infer_cluster_id_from_run_id_strips_timestamp_suffix() {
+        assert_eq!(
+            infer_cluster_id_from_run_id("split-cluster-fe-1712345678901"),
+            "cluster-fe"
+        );
+        assert_eq!(infer_cluster_id_from_run_id("bad"), "unknown");
+    }
+
+    #[test]
     fn prd_split_list_active_runs_classifies_succeeded_failed_and_running() {
         let temp = test_temp_dir();
         fs::create_dir_all(&temp).unwrap();
@@ -2107,6 +2388,28 @@ mod tests {
             .as_deref()
             .unwrap_or("")
             .contains("No run-result.json"));
+        let _ = fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn prd_split_list_active_runs_classifies_cancelled_result() {
+        let temp = test_temp_dir();
+        fs::create_dir_all(&temp).unwrap();
+        write_active_run_fixture(
+            &temp,
+            "split-cluster-cancelled-1",
+            r#"{"clusterId":"cluster-cancelled","projectRootPath":"/repo","startedAtMs":1000}"#,
+            Some(
+                r#"{"runId":"split-cluster-cancelled-1","status":"cancelled","exitCode":130,"error":"PRD split run cancelled by user"}"#,
+            ),
+        );
+
+        let rows = list_active_prd_runs_in_dir(&temp, 10_000).unwrap();
+
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].status, "cancelled");
+        assert_eq!(rows[0].exit_code, Some(130));
+        assert!(rows[0].error.as_deref().unwrap_or("").contains("cancelled"));
         let _ = fs::remove_dir_all(&temp);
     }
 
