@@ -10,7 +10,7 @@ export interface AssistantHeaderProps {
   onBackToHub: () => void;
   /** 返回主会话;助手不抢占主会话优先级。 */
   onOpenChat: () => void;
-  /** 打开助手设置 Drawer(Stage 4 接入)。 */
+  /** 打开助手设置 Drawer。 */
   onOpenSettings?: () => void;
 }
 
@@ -66,12 +66,11 @@ export function AssistantHeader({
           对话
         </Button>
       </Tooltip>
-      <Tooltip title="助手设置(Stage 4 启用)">
+      <Tooltip title="助手设置">
         <Button
           size="small"
           type="text"
           icon={<SettingOutlined />}
-          disabled={!onOpenSettings}
           onClick={onOpenSettings}
           aria-label="助手设置"
         />

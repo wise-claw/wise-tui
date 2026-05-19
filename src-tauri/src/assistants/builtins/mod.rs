@@ -4,7 +4,9 @@
 //! layers / 默认 Trellis workflow / 默认 skills / 默认 MCPs / 工具表均编译期内嵌。
 //! 用户的覆盖通过 `assistant_overrides` 表追加。
 
+pub mod ppt_deck;
 pub mod prd_split;
+pub mod word_doc;
 
 use serde::Serialize;
 
@@ -70,7 +72,7 @@ pub struct BuiltinAssistantBundle {
 }
 
 const fn registry() -> &'static [&'static BuiltinAssistantBundle] {
-    &[&prd_split::BUNDLE]
+    &[&prd_split::BUNDLE, &word_doc::BUNDLE, &ppt_deck::BUNDLE]
 }
 
 pub fn list() -> &'static [&'static BuiltinAssistantBundle] {
@@ -91,6 +93,8 @@ mod tests {
     #[test]
     fn registry_contains_prd_split() {
         assert!(find("builtin:prd-split").is_some());
+        assert!(find("builtin:word-doc").is_some());
+        assert!(find("builtin:ppt-deck").is_some());
         assert!(find("builtin:nonexistent").is_none());
     }
 
@@ -103,6 +107,28 @@ mod tests {
         assert!(b.default_skills.is_empty());
         assert!(!b.default_workflows.is_empty());
         assert_eq!(b.default_workflows[0].id, "trellis:requirement-intake");
-        assert_eq!(b.default_prompt_layers.prd_task_split.template_id, "prdTaskSplit");
+        assert_eq!(
+            b.default_prompt_layers.prd_task_split.template_id,
+            "prdTaskSplit"
+        );
+    }
+
+    #[test]
+    fn office_assistant_bundles_are_skill_backed() {
+        let word = find("builtin:word-doc").unwrap();
+        assert_eq!(word.name, "Word 文档助手");
+        assert!(word.default_workflows.is_empty());
+        assert_eq!(word.default_skills.len(), 1);
+        assert_eq!(word.default_skills[0].id, "officecli-docx");
+        assert!(word.default_skills[0]
+            .source_path
+            .contains("officecli-docx"));
+
+        let ppt = find("builtin:ppt-deck").unwrap();
+        assert_eq!(ppt.name, "PPT 演示助手");
+        assert!(ppt.default_workflows.is_empty());
+        assert_eq!(ppt.default_skills.len(), 1);
+        assert_eq!(ppt.default_skills[0].id, "officecli-pptx");
+        assert!(ppt.default_skills[0].source_path.contains("officecli-pptx"));
     }
 }

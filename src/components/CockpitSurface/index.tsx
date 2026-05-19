@@ -9,6 +9,7 @@ import {
 } from "./AssistantConversationView";
 import { AssistantHeader } from "./AssistantHeader";
 import { AssistantHub } from "./AssistantHub";
+import { AssistantSettingsDrawer } from "./AssistantSettingsDrawer";
 import "./index.css";
 
 type CockpitSubMode =
@@ -47,6 +48,7 @@ export function CockpitSurface({
       : { kind: "hub" },
   );
   const [assistants, setAssistants] = useState<AssistantEntry[] | null>(null);
+  const [settingsAssistantId, setSettingsAssistantId] = useState<string | null>(null);
 
   // 拉一次助手列表用于 Header 渲染;失败不致命(Header 退化为简标题)。
   useEffect(() => {
@@ -77,6 +79,10 @@ export function CockpitSurface({
     if (subMode.kind !== "conversation") return null;
     return assistants?.find((a) => a.id === subMode.assistantId) ?? null;
   }, [assistants, subMode]);
+  const settingsAssistant = useMemo(() => {
+    if (!settingsAssistantId) return null;
+    return assistants?.find((a) => a.id === settingsAssistantId) ?? null;
+  }, [assistants, settingsAssistantId]);
 
   const handleSelectAssistant = useCallback((assistantId: string) => {
     setSubMode({ kind: "conversation", assistantId });
@@ -84,6 +90,18 @@ export function CockpitSurface({
 
   const handleBackToHub = useCallback(() => {
     setSubMode({ kind: "hub" });
+  }, []);
+
+  const handleOpenSettings = useCallback((assistantId: string) => {
+    setSettingsAssistantId(assistantId);
+  }, []);
+
+  const handleOpenActiveSettings = useCallback(() => {
+    if (activeAssistant) setSettingsAssistantId(activeAssistant.id);
+  }, [activeAssistant]);
+
+  const handleCloseSettings = useCallback(() => {
+    setSettingsAssistantId(null);
   }, []);
 
   return (
@@ -94,6 +112,7 @@ export function CockpitSurface({
         showBackToHub={subMode.kind === "conversation"}
         onBackToHub={handleBackToHub}
         onOpenChat={prdTaskSplitPanelProps.onClose}
+        onOpenSettings={activeAssistant ? handleOpenActiveSettings : undefined}
       />
       <div className="cockpit-surface__body">
         {subMode.kind === "hub" ? (
@@ -102,14 +121,25 @@ export function CockpitSurface({
             activeProjectName={activeProjectName}
             onOpenChat={prdTaskSplitPanelProps.onClose}
             onSelectAssistant={handleSelectAssistant}
+            onOpenAssistantSettings={handleOpenSettings}
           />
         ) : (
           <AssistantConversationView
+            assistantId={subMode.assistantId}
+            assistant={activeAssistant}
             missionControlProps={missionControlProps}
             prdTaskSplitPanelProps={prdTaskSplitPanelProps}
+            onOpenSettings={handleOpenActiveSettings}
           />
         )}
       </div>
+      <AssistantSettingsDrawer
+        open={settingsAssistantId !== null}
+        assistant={settingsAssistant}
+        activeProjectId={activeProjectId}
+        activeProjectName={activeProjectName}
+        onClose={handleCloseSettings}
+      />
     </div>
   );
 }

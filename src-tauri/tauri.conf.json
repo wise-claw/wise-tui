@@ -57,7 +57,9 @@
       "../scripts/cc-workflow-studio-mcp/http-server.mjs",
       "../scripts/cc-workflow-studio-mcp/wise-bridge.mjs",
       "../scripts/cc-workflow-studio-mcp/register-tools.mjs",
-      "../scripts/cc-workflow-studio-mcp/resources/workflow-schema.toon"
+      "../scripts/cc-workflow-studio-mcp/resources/workflow-schema.toon",
+      "resources/skills/officecli-docx/SKILL.md",
+      "resources/skills/officecli-pptx/SKILL.md"
     ],
     "macOS": {
       "minimumSystemVersion": "12.0",

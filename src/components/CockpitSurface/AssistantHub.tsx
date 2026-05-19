@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { App as AntdApp, Button, Dropdown, Empty, Spin, Tag } from "antd";
+import { App as AntdApp, Button, Empty, Spin, Tag } from "antd";
 import { CloseOutlined, SettingOutlined } from "@ant-design/icons";
-import type { MenuProps } from "antd";
 import { listAssistants } from "../../services/assistants";
 import type { AssistantEntry } from "../../types/assistant";
-import { DEFAULT_PRD_SPLIT_ASSISTANT_ID } from "../../services/assistantPromptLayers";
 import "./index.css";
 
 export interface AssistantHubProps {
@@ -12,6 +10,7 @@ export interface AssistantHubProps {
   activeProjectId: string | null;
   activeProjectName: string | null;
   onSelectAssistant: (assistantId: string) => void;
+  onOpenAssistantSettings: (assistantId: string) => void;
   onOpenChat: () => void;
 }
 
@@ -23,6 +22,7 @@ export function AssistantHub({
   activeProjectId,
   activeProjectName,
   onSelectAssistant,
+  onOpenAssistantSettings,
   onOpenChat,
 }: AssistantHubProps) {
   const { message } = AntdApp.useApp();
@@ -50,12 +50,12 @@ export function AssistantHub({
     };
   }, [message]);
 
-  const builtinPrdSplit = useMemo(
-    () => assistants?.find((a) => a.id === DEFAULT_PRD_SPLIT_ASSISTANT_ID),
+  const builtinAssistants = useMemo(
+    () => assistants?.filter((a) => a.source === "builtin") ?? [],
     [assistants],
   );
   const otherAssistants = useMemo(
-    () => assistants?.filter((a) => a.id !== DEFAULT_PRD_SPLIT_ASSISTANT_ID) ?? [],
+    () => assistants?.filter((a) => a.source !== "builtin") ?? [],
     [assistants],
   );
 
@@ -89,17 +89,20 @@ export function AssistantHub({
         </p>
       </header>
 
-      {builtinPrdSplit ? (
+      {builtinAssistants.length > 0 ? (
         <section className="cockpit-hub__section">
           <h2 className="cockpit-hub__section-title">Wise 内置</h2>
           <div className="cockpit-hub__grid">
-            <AssistantCard
-              assistant={builtinPrdSplit}
-              disabled={false}
-              disabledHint={activeProjectId ? undefined : "未选择工作区时会先进入助手空态"}
-              onSelect={() => onSelectAssistant(builtinPrdSplit.id)}
-              settingsItems={buildPrdSplitSettingsItems()}
-            />
+            {builtinAssistants.map((assistant) => (
+              <AssistantCard
+                key={assistant.id}
+                assistant={assistant}
+                disabled={false}
+                disabledHint={activeProjectId ? undefined : "未选择工作区时会先进入助手空态"}
+                onSelect={() => onSelectAssistant(assistant.id)}
+                onOpenSettings={() => onOpenAssistantSettings(assistant.id)}
+              />
+            ))}
           </div>
         </section>
       ) : null}
@@ -113,6 +116,7 @@ export function AssistantHub({
                 key={a.id}
                 assistant={a}
                 onSelect={() => onSelectAssistant(a.id)}
+                onOpenSettings={() => onOpenAssistantSettings(a.id)}
               />
             ))}
           </div>
@@ -131,10 +135,10 @@ interface AssistantCardProps {
   disabled?: boolean;
   disabledHint?: string;
   onSelect: () => void;
-  settingsItems?: MenuProps["items"];
+  onOpenSettings: () => void;
 }
 
-function AssistantCard({ assistant, disabled, disabledHint, onSelect, settingsItems }: AssistantCardProps) {
+function AssistantCard({ assistant, disabled, disabledHint, onSelect, onOpenSettings }: AssistantCardProps) {
   const workflows = assistant.defaultWorkflows ?? [];
   const skills = assistant.defaultSkills ?? [];
   const mcps = assistant.defaultMcps ?? [];
@@ -160,17 +164,17 @@ function AssistantCard({ assistant, disabled, disabledHint, onSelect, settingsIt
         <div className="cockpit-hub__card-capabilities" aria-label={`${assistant.name} 默认能力`}>
           {workflows.slice(0, 4).map((workflow) => (
             <Tag key={workflow.id} color="blue">
-              {workflow.label}
+              流程 · {workflow.label}
             </Tag>
           ))}
           {skills.slice(0, 4).map((skill) => (
-            <Tag key={skill.id}>
-              {skill.label}
+            <Tag key={skill.id} color="purple">
+              Skill · {skill.label}
             </Tag>
           ))}
           {mcps.slice(0, 3).map((mcp) => (
             <Tag key={mcp.id} color="green">
-              {mcp.label}
+              MCP · {mcp.label}
             </Tag>
           ))}
         </div>
@@ -178,13 +182,15 @@ function AssistantCard({ assistant, disabled, disabledHint, onSelect, settingsIt
       <div className="cockpit-hub__card-foot">
         <span className="cockpit-hub__card-engine">{assistant.engineId}</span>
         <div className="cockpit-hub__card-actions">
-          {settingsItems ? (
-            <Dropdown menu={{ items: settingsItems }} trigger={["click"]} placement="bottomRight">
-              <Button size="small" type="text" icon={<SettingOutlined />} aria-label="配置助手能力">
-                配置
-              </Button>
-            </Dropdown>
-          ) : null}
+          <Button
+            size="small"
+            type="text"
+            icon={<SettingOutlined />}
+            aria-label={`${assistant.name} 设置`}
+            onClick={onOpenSettings}
+          >
+            设置
+          </Button>
           <Button
             size="small"
             type="primary"
@@ -198,26 +204,6 @@ function AssistantCard({ assistant, disabled, disabledHint, onSelect, settingsIt
       </div>
     </article>
   );
-}
-
-function buildPrdSplitSettingsItems(): MenuProps["items"] {
-  return [
-    {
-      key: "workflow",
-      label: "内置编排：Trellis 需求拆分工作流",
-      disabled: true,
-    },
-    {
-      key: "mcps",
-      label: "MCP Harness：在助手工作台选择",
-      disabled: true,
-    },
-    {
-      key: "prompts",
-      label: "Prompt 编辑：拆分阶段提示词",
-      disabled: true,
-    },
-  ];
 }
 
 function labelForSource(source: AssistantEntry["source"]): string {

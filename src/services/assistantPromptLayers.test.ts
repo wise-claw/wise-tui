@@ -6,10 +6,13 @@ mock.module("@tauri-apps/api/core", () => ({
 
 import { invoke } from "@tauri-apps/api/core";
 import {
+  buildAssistantEngineeringJson,
   buildAssistantRuntimeBundleJson,
   DEFAULT_PRD_SPLIT_ASSISTANT_ID,
+  parseAssistantEngineeringPreferences,
   parseAssistantRuntimeBundle,
   pickAssistantPromptSlotPartial,
+  resetAssistantRuntimeOverrides,
   resolveAssistantRuntime,
   saveAssistantRuntimeOverrides,
   type AssistantResolvedRuntime,
@@ -103,6 +106,29 @@ describe("assistantPromptLayers", () => {
     ]);
   });
 
+  test("resetAssistantRuntimeOverrides resets selected sections", async () => {
+    (invoke as unknown as { mockImplementation: (fn: () => unknown) => void }).mockImplementation(
+      () => Promise.resolve(undefined),
+    );
+
+    await resetAssistantRuntimeOverrides({
+      assistantId: "builtin:word-doc",
+      scope: "assistant",
+      sections: ["skills", "engineering"],
+    });
+
+    expect((invoke as unknown as { mock: { calls: unknown[][] } }).mock.calls.at(-1)).toEqual([
+      "assistants_reset_overrides",
+      {
+        args: {
+          assistantId: "builtin:word-doc",
+          scope: "assistant",
+          sections: ["skills", "engineering"],
+        },
+      },
+    ]);
+  });
+
   test("pickAssistantPromptSlotPartial returns slot from v2 bundle", () => {
     const runtime: AssistantResolvedRuntime = {
       assistantId: "builtin:prd-split",
@@ -178,5 +204,26 @@ describe("assistantPromptLayers", () => {
         },
       ],
     });
+  });
+
+  test("engineering preference helpers validate and normalize json", () => {
+    const parsed = parseAssistantEngineeringPreferences(JSON.stringify({
+      reuseExistingParents: true,
+      dispatchOnlyDirty: false,
+      formatProfile: "  公司报告模板  ",
+      ignored: "x",
+    }));
+
+    expect(parsed).toEqual({
+      reuseExistingParents: true,
+      dispatchOnlyDirty: false,
+      formatProfile: "  公司报告模板  ",
+    });
+    expect(JSON.parse(buildAssistantEngineeringJson(parsed))).toEqual({
+      reuseExistingParents: true,
+      dispatchOnlyDirty: false,
+      formatProfile: "公司报告模板",
+    });
+    expect(parseAssistantEngineeringPreferences("not-json")).toEqual({});
   });
 });
