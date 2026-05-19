@@ -401,6 +401,48 @@ body {
   height: 100%;
 }
 
+.app-left-sidebar.app-left-sidebar--parked.ant-layout-sider {
+  flex: 0 0 0 !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  overflow: hidden;
+  transition: none !important;
+}
+
+.app-left-sidebar.app-left-sidebar--parked .ant-layout-sider-children {
+  visibility: hidden;
+}
+
+.app-workspace-main {
+  position: relative;
+  display: flex;
+  flex: 1 1 0%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.app-workspace-layer--parked {
+  display: none !important;
+}
+
+.app-author-workspace-layer,
+.app-prompts-workspace-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
+
+.app-author-config-sider--parked.ant-layout-sider {
+  flex: 0 0 0 !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  overflow: hidden;
+  transition: none !important;
+  pointer-events: none;
+}
+
 .app-left-sidebar-topbar {
   flex-shrink: 0;
   box-sizing: border-box;

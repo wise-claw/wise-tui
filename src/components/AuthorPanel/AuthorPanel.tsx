@@ -1,7 +1,6 @@
 import { Button, Empty, Input, Space, Spin } from "antd";
 import {
   DeploymentUnitOutlined,
-  LeftOutlined,
   PlusOutlined,
   ReloadOutlined,
   SearchOutlined,
@@ -26,13 +25,7 @@ import { SkillsHub } from "../SkillsHub";
 import { WorkflowConfigModal } from "../WorkflowConfigModal";
 import { getAppSetting, setAppSetting } from "../../services/appSettingsStore";
 import { DEFAULT_AUTHOR_PANE } from "../../types/viewMode";
-import {
-  AUTHOR_TAB_GROUPS,
-  AUTHOR_TAB_STORAGE_KEY,
-  AUTHOR_TABS,
-  isAuthorPane,
-  type AuthorPane,
-} from "./AuthorPanelTabs";
+import { AUTHOR_TAB_STORAGE_KEY, AUTHOR_TABS, isAuthorPane, type AuthorPane } from "./AuthorPanelTabs";
 import { WorkspacesTab } from "./tabs/WorkspacesTab";
 import "./index.css";
 
@@ -83,8 +76,8 @@ export function writeAuthorPaneToStorage(pane: AuthorPane): void {
 
 export function AuthorPanel({
   pane,
-  onPaneChange,
-  onBack,
+  onPaneChange: _onPaneChange,
+  onBack: _onBack,
   workspacesTabProps,
   employeeConfigProps,
   workflowConfigProps,
@@ -224,41 +217,22 @@ export function AuthorPanel({
   return (
     <SettingsViewModeProvider value="page">
       <div className="author-panel">
-        <div className="author-panel__split">
-          <nav className="author-panel__nav" aria-label="工作台配置导航">
-            <Button type="text" className="author-panel__back" icon={<LeftOutlined />} onClick={onBack}>
-              返回
-            </Button>
-            {AUTHOR_TAB_GROUPS.map((group) => (
-              <div className="author-panel-nav-group" key={group.title}>
-                <div className="author-panel-nav-group__title">{group.title}</div>
-                {group.items.map((tab) => (
-                  <button
-                    key={tab.key}
-                    type="button"
-                    className={`author-panel-nav-item${tab.key === pane ? " author-panel-nav-item--active" : ""}`}
-                    onClick={() => onPaneChange(tab.key)}
-                    title={tab.description}
-                  >
-                    <span className="author-panel-nav-item__icon" aria-hidden>
-                      {tab.icon}
-                    </span>
-                    <span className="author-panel-nav-item__label">{tab.label}</span>
-                  </button>
-                ))}
-              </div>
-            ))}
-          </nav>
-          <main className="author-panel__main" aria-label={activeTab.label}>
-            <h1 className="author-panel__title">{activeTab.label}</h1>
-            {activeTab.description ? (
-              <p className="author-panel__subtitle">{activeTab.description}</p>
-            ) : null}
-            <div className="author-panel__scroll">
-              {content ?? <Spin size="small" />}
-            </div>
-          </main>
-        </div>
+        <main
+          className={`author-panel__main${pane === "workspaces" ? " author-panel__main--workspaces-head" : ""}`}
+          aria-label={activeTab.label}
+        >
+          {pane !== "workspaces" ? (
+            <>
+              <h1 className="author-panel__title">{activeTab.label}</h1>
+              {activeTab.description ? (
+                <p className="author-panel__subtitle">{activeTab.description}</p>
+              ) : null}
+            </>
+          ) : null}
+          <div className="author-panel__scroll">
+            {content ?? <Spin size="small" />}
+          </div>
+        </main>
       </div>
     </SettingsViewModeProvider>
   );

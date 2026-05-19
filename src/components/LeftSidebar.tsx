@@ -32,6 +32,7 @@ import "./GitPanel/index.css";
 export function LeftSidebar({
   dark,
   collapsed,
+  parked = false,
   siderWidth = MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX,
   compactLayoutMode = false,
   onToggleCompactLayoutMode,
@@ -231,7 +232,7 @@ export function LeftSidebar({
       width={siderWidth}
       collapsedWidth={0}
       collapsed={collapsed}
-      className="app-left-sidebar"
+      className={`app-left-sidebar${parked ? " app-left-sidebar--parked" : ""}`}
       theme={dark ? "dark" : "light"}
     >
       <LeftSidebarTopbar

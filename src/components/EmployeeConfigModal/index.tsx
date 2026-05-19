@@ -380,6 +380,47 @@ export function EmployeeConfigModal({
                   : ""
             }`}
           >
+            {projects && projects.length > 0 && !repositoryOwnerScopeOnly && !singleProjectScopeId ? (
+              <div className="app-employee-config-field">
+                <div className="app-employee-config-field-label">所属 Workspace</div>
+                <Form.Item
+                  name="projectIds"
+                  className="app-employee-config-item app-employee-config-item--projects"
+                >
+                  <Select
+                    mode="multiple"
+                    allowClear
+                    placeholder="所属 Workspace"
+                    maxTagCount="responsive"
+                    options={projects.map((p) => ({
+                      value: p.id,
+                      label: p.name,
+                    }))}
+                  />
+                </Form.Item>
+              </div>
+            ) : null}
+            {(!hideRepositorySelector || repositoryOwnerScopeOnly) ? (
+              <div className="app-employee-config-field">
+                <div className="app-employee-config-field-label">关联仓库</div>
+                <Form.Item
+                  name="repositoryIds"
+                  className="app-employee-config-item app-employee-config-item--repositories"
+                >
+                  <Select
+                    mode="multiple"
+                    allowClear={repositoryOwnerScopeOnly ? false : true}
+                    placeholder="关联仓库"
+                    maxTagCount="responsive"
+                    disabled={repositoryOwnerScopeOnly}
+                    options={repositories.map((repository) => ({
+                      value: repository.id,
+                      label: repositoryFolderBasename(repository),
+                    }))}
+                  />
+                </Form.Item>
+              </div>
+            ) : null}
             <div className="app-employee-config-field">
               <div className="app-employee-config-field-label">角色名称</div>
               <Form.Item
@@ -406,47 +447,12 @@ export function EmployeeConfigModal({
                 />
               </Form.Item>
             </div>
-            {(!hideRepositorySelector || repositoryOwnerScopeOnly) ? (
-              <div className="app-employee-config-field">
-                <div className="app-employee-config-field-label">关联仓库</div>
-                <Form.Item
-                  name="repositoryIds"
-                  className="app-employee-config-item app-employee-config-item--repositories"
-                >
-                  <Select
-                    mode="multiple"
-                    allowClear={repositoryOwnerScopeOnly ? false : true}
-                    placeholder="关联仓库"
-                    maxTagCount="responsive"
-                    disabled={repositoryOwnerScopeOnly}
-                    options={repositories.map((repository) => ({
-                      value: repository.id,
-                      label: repositoryFolderBasename(repository),
-                    }))}
-                  />
-                </Form.Item>
-              </div>
-            ) : null}
-            {projects && projects.length > 0 && !repositoryOwnerScopeOnly && !singleProjectScopeId ? (
-              <div className="app-employee-config-field">
-                <div className="app-employee-config-field-label">所属 Workspace</div>
-                <Form.Item
-                  name="projectIds"
-                  className="app-employee-config-item app-employee-config-item--projects"
-                >
-                  <Select
-                    mode="multiple"
-                    allowClear
-                    placeholder="所属 Workspace"
-                    maxTagCount="responsive"
-                    options={projects.map((p) => ({
-                      value: p.id,
-                      label: p.name,
-                    }))}
-                  />
-                </Form.Item>
-              </div>
-            ) : null}
+            <div className="app-employee-config-actions">
+              <Button size="small" type="primary" loading={loading} onClick={() => void handleSubmit()}>
+                {editingEmployee ? "保存角色" : "新增角色"}
+              </Button>
+              {editingEmployee ? <Button size="small" onClick={handleCreateClick}>取消编辑</Button> : null}
+            </div>
             {projectOwnerPickMode && !editingEmployee && !singleOwnerRepositoryId ? (
               <div className="app-employee-config-field">
                 <div className="app-employee-config-field-label" title="作为该仓唯一主 Owner 的新角色将关联此仓库">
@@ -476,12 +482,6 @@ export function EmployeeConfigModal({
                 </Form.Item>
               </div>
             ) : null}
-            <div className="app-employee-config-actions">
-              <Button size="small" type="primary" loading={loading} onClick={() => void handleSubmit()}>
-                {editingEmployee ? "保存角色" : "新增角色"}
-              </Button>
-              {editingEmployee ? <Button size="small" onClick={handleCreateClick}>取消编辑</Button> : null}
-            </div>
           </div>
         </Form>
         <Table<EmployeeConfigTableRow>
@@ -489,7 +489,6 @@ export function EmployeeConfigModal({
           loading={loading}
           dataSource={tableDataSource}
           pagination={false}
-          size="small"
           className="app-employee-config-table"
           columns={[
             {
@@ -586,7 +585,7 @@ export function EmployeeConfigModal({
                   );
                 }
                 return (
-                  <Space size={6}>
+                  <Space size={8}>
                     <Button
                       size="small"
                       onClick={() => {

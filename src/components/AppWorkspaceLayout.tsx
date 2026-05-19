@@ -7,6 +7,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useState,
   type ComponentProps,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
@@ -14,7 +15,8 @@ import {
 } from "react";
 import { App as AntdApp, ConfigProvider, Layout, Spin, theme } from "antd";
 import zhCN from "antd/locale/zh_CN";
-import { AuthorPanel } from "./AuthorPanel";
+import { AuthorPanel } from "./AuthorPanel/AuthorPanel";
+import { AuthorPanelNav } from "./AuthorPanel/AuthorPanelNav";
 import { ClaudeSessions } from "./ClaudeSessions";
 import { CockpitOnboarding, type CockpitOnboardingProps } from "./Cockpit";
 import { CommandPalette } from "./CommandPalette";
@@ -115,6 +117,7 @@ interface ConnectedLeftSidebarProps {
   dark: boolean;
   leftSidebarProps: LeftSidebarProps;
   onToggleCompactLayoutMode: () => void;
+  parked: boolean;
   siderWidth: number;
 }
 
@@ -124,6 +127,7 @@ const ConnectedLeftSidebar = memo(function ConnectedLeftSidebar({
   dark,
   leftSidebarProps,
   onToggleCompactLayoutMode,
+  parked,
   siderWidth,
 }: ConnectedLeftSidebarProps) {
   const openRepositoryFile = useRepositoryFileEditorOpenFile();
@@ -132,6 +136,7 @@ const ConnectedLeftSidebar = memo(function ConnectedLeftSidebar({
       {...leftSidebarProps}
       dark={dark}
       collapsed={collapsed}
+      parked={parked}
       siderWidth={siderWidth}
       compactLayoutMode={compactLayoutMode}
       onToggleCompactLayoutMode={onToggleCompactLayoutMode}
@@ -376,6 +381,11 @@ export function AppWorkspaceLayout({
   const ccWfStudioMode =
     viewMode.kind === "inspect" && viewMode.tool.kind === "workflow-studio";
   const rightInspectorHidden = effectiveRightCollapsed || missionControlMode;
+  const [authorShellMounted, setAuthorShellMounted] = useState(authorMode);
+
+  useEffect(() => {
+    if (authorMode) setAuthorShellMounted(true);
+  }, [authorMode]);
 
   const {
     closeFileEditorPanel,
@@ -468,13 +478,25 @@ export function AppWorkspaceLayout({
                 <ConnectedLeftSidebar
                   dark={dark}
                   collapsed={collapsed}
+                  parked={authorMode}
                   siderWidth={mainLayoutLeftWidthPx}
                   compactLayoutMode={compactLayoutMode}
                   onToggleCompactLayoutMode={onToggleCompactLayoutMode}
                   leftSidebarProps={leftSidebarProps}
                 />
+                {authorShellMounted ? (
+                  <AuthorPanelNav
+                    dark={dark}
+                    collapsed={collapsed}
+                    parked={!authorMode}
+                    siderWidth={mainLayoutLeftWidthPx}
+                    pane={authorPanelProps.pane}
+                    onPaneChange={authorPanelProps.onPaneChange}
+                    onBack={authorPanelProps.onBack}
+                  />
+                ) : null}
 
-                {!promptsMode && !authorMode && !collapsed ? (
+                {!promptsMode && !collapsed ? (
                   <MainLayoutResizeHandle
                     variant="left"
                     startWidthPx={mainLayoutLeftWidthPx}
@@ -482,21 +504,10 @@ export function AppWorkspaceLayout({
                   />
                 ) : null}
 
-                {authorMode ? (
-                  <div className="app-full-width-main">
-                    <ConnectedAuthorPanel
-                      activeRepositoryPath={activeRepositoryPath}
-                      authorPanelProps={authorPanelProps}
-                    />
-                  </div>
-                ) : promptsMode ? (
-                  <div className="app-full-width-main">
-                    <Suspense fallback={<PanelLoadingFallback />}>
-                      <PromptsPanel {...promptsPanelProps} />
-                    </Suspense>
-                  </div>
-                ) : (
-                  <div className="app-main-chat-with-right-pane">
+                <div className="app-workspace-main">
+                  <div
+                    className={`app-main-chat-with-right-pane${authorMode ? " app-workspace-layer--parked" : ""}`}
+                  >
                     {missionControlMode ? (
                       <Layout.Content ref={mainLayoutContentRef} className="app-main-layout-content">
                         {cockpitEmpty ? (
@@ -574,7 +585,28 @@ export function AppWorkspaceLayout({
                       </Suspense>
                     ) : null}
                   </div>
-                )}
+
+                  {authorShellMounted ? (
+                    <div
+                      className={`app-full-width-main app-author-workspace-layer${!authorMode || promptsMode ? " app-workspace-layer--parked" : ""}`}
+                    >
+                      <ConnectedAuthorPanel
+                        activeRepositoryPath={activeRepositoryPath}
+                        authorPanelProps={authorPanelProps}
+                      />
+                    </div>
+                  ) : null}
+
+                  {authorShellMounted ? (
+                    <div
+                      className={`app-full-width-main app-prompts-workspace-layer${!promptsMode ? " app-workspace-layer--parked" : ""}`}
+                    >
+                      <Suspense fallback={<PanelLoadingFallback />}>
+                        <PromptsPanel {...promptsPanelProps} />
+                      </Suspense>
+                    </div>
+                  ) : null}
+                </div>
               </Layout>
 
               <ConnectedRepositoryFilePreviewModal />

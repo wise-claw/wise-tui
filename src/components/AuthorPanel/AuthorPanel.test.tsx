@@ -195,10 +195,16 @@ mock.module("../../services/agentRegistry", () => ({
 }));
 
 const { AuthorPanel, writeAuthorPaneToStorage } = await import("./AuthorPanel");
+const { AuthorPanelNav } = await import("./AuthorPanelNav");
 
 function renderAuthorPanel(props: Parameters<typeof AuthorPanel>[0]): string {
   return renderToStaticMarkup(
     <AntApp>
+      <AuthorPanelNav
+        pane={props.pane}
+        onPaneChange={props.onPaneChange}
+        onBack={props.onBack}
+      />
       <AuthorPanel {...props} />
     </AntApp>,
   );

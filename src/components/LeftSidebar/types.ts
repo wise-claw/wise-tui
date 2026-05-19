@@ -16,6 +16,8 @@ import type { AuthorPane } from "../../types/viewMode";
 export interface LeftSidebarProps {
   dark: boolean;
   collapsed: boolean;
+  /** 工作台配置打开时暂挂左栏（保持挂载、宽度归零，避免返回时重挂载卡顿）。 */
+  parked?: boolean;
   /** Left `Sider` width in pixels. Defaults to `MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX`. */
   siderWidth?: number;
   /** Compact window mode: collapses the right rail and shrinks the main window. */

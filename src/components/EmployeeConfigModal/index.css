@@ -37,7 +37,6 @@
   border: 1px solid var(--ant-color-border-secondary);
   border-radius: 8px;
   background: var(--ant-color-bg-container);
-  box-shadow: inset 3px 0 0 var(--ant-color-primary);
 }
 
 .app-employee-config-hero__eyebrow {
@@ -221,6 +220,7 @@
 }
 
 .app-employee-config-form {
+  --app-employee-config-control-height: 28px;
   width: 100%;
   padding: 6px;
   border: 1px solid var(--ant-color-border-secondary);
@@ -229,77 +229,70 @@
 }
 
 .app-employee-config-row {
-  display: grid;
-  grid-template-columns: 140px 152px 1fr auto;
-  gap: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
   align-items: center;
-}
-
-.app-employee-config-row--compact {
-  grid-template-columns: 140px 156px 1fr auto;
-}
-
-.app-employee-config-row--project-owner {
-  grid-template-columns: 148px 148px minmax(220px, 1.2fr) minmax(220px, 1.6fr) auto;
-  gap: 8px;
 }
 
 .app-employee-config-form--project-owner .app-employee-config-item--name .ant-input {
   width: 100%;
-  max-width: 200px;
 }
 
 .app-employee-config-form--project-owner .app-employee-config-item--agent .ant-select {
   width: 100%;
-  max-width: 200px;
 }
 
 .app-employee-config-item--owner-repo .ant-select {
   width: 100%;
-  min-width: 120px;
-  height: 28px;
+  min-width: 168px;
+  height: var(--app-employee-config-control-height);
 }
 
 .app-employee-config-item--owner-repo .ant-select-single:not(.ant-select-customize-input) .ant-select-selector {
-  height: 30px !important;
-  min-height: 30px !important;
+  height: var(--app-employee-config-control-height) !important;
+  min-height: var(--app-employee-config-control-height) !important;
   box-sizing: border-box;
 }
 
 .app-employee-config-item--owner-repo .ant-select-single .ant-select-selector .ant-select-selection-item,
 .app-employee-config-item--owner-repo .ant-select-single .ant-select-selector .ant-select-selection-placeholder {
-  line-height: 28px !important;
+  line-height: calc(var(--app-employee-config-control-height) - 2px) !important;
 }
 
 .app-employee-config-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
-  margin-left: 6px;
+  gap: 6px;
   white-space: nowrap;
-  flex-shrink: 0;
+  flex: 0 0 auto;
+}
+
+.app-employee-config-actions .ant-btn-sm {
+  height: var(--app-employee-config-control-height);
+  padding-inline: 10px;
+  font-size: 12px;
+  line-height: 1;
 }
 
 .app-employee-config-form .ant-form-item {
   margin-bottom: 0;
   margin-right: 0;
-  flex: 1;
 }
 
 .app-employee-config-field {
   display: flex;
   align-items: center;
   gap: 4px;
-  min-width: 0;
+  flex: 0 1 auto;
 }
 
 .app-employee-config-field-label {
   color: var(--ant-color-text-secondary);
   font-size: 11px;
   font-weight: 500;
-  height: 28px;
-  line-height: 28px;
+  height: var(--app-employee-config-control-height);
+  line-height: var(--app-employee-config-control-height);
   white-space: nowrap;
   flex: 0 0 auto;
   position: relative;
@@ -307,75 +300,125 @@
 }
 
 .app-employee-config-item {
+  flex: 0 1 auto;
   min-width: 0;
 }
 
 .app-employee-config-item--name .ant-input {
-  width: 140px;
-  height: 30px !important;
-  line-height: 28px !important;
+  width: 160px;
+  min-width: 140px;
+  height: var(--app-employee-config-control-height) !important;
+  line-height: calc(var(--app-employee-config-control-height) - 2px) !important;
   box-sizing: border-box;
   font-size: 12px;
+  padding-inline: 8px;
 }
 
 .app-employee-config-item--agent .ant-select {
-  height: 28px;
+  width: 148px;
+  min-width: 128px;
+  height: var(--app-employee-config-control-height);
 }
 
 .app-employee-config-item--agent .ant-select-single:not(.ant-select-customize-input) .ant-select-selector {
-  height: 30px !important;
-  min-height: 30px !important;
+  height: var(--app-employee-config-control-height) !important;
+  min-height: var(--app-employee-config-control-height) !important;
   box-sizing: border-box;
 }
 
 .app-employee-config-item--agent .ant-select-single .ant-select-selector .ant-select-selection-item,
 .app-employee-config-item--agent .ant-select-single .ant-select-selector .ant-select-selection-placeholder {
-  line-height: 28px !important;
+  line-height: calc(var(--app-employee-config-control-height) - 2px) !important;
   font-size: 12px;
 }
 
 .app-employee-config-item--repositories .ant-select {
-  width: 100%;
+  width: 192px;
+  min-width: 168px;
 }
 
 .app-employee-config-item--projects .ant-select {
-  width: 100%;
-  min-width: 150px;
+  width: 192px;
+  min-width: 168px;
 }
 
-.app-employee-config-row .ant-input-affix-wrapper,
-.app-employee-config-row .ant-btn-sm {
-  height: 28px;
+.app-employee-config-row .ant-input-affix-wrapper {
+  height: var(--app-employee-config-control-height);
   font-size: 12px;
   padding-inline: 8px;
 }
 
+.app-employee-config-row .ant-input-affix-wrapper .ant-input {
+  font-size: 12px;
+}
+
 .app-employee-config-row .ant-select-single:not(.ant-select-customize-input) .ant-select-selector {
   align-items: center;
+  padding-inline: 8px !important;
 }
 
 .app-employee-config-row .ant-select-single .ant-select-selector .ant-select-selection-item,
 .app-employee-config-row .ant-select-single .ant-select-selector .ant-select-selection-placeholder {
-  line-height: 26px;
+  line-height: calc(var(--app-employee-config-control-height) - 2px);
   font-size: 12px;
 }
 
-.app-employee-config-table.ant-table-wrapper .ant-table.ant-table-small .ant-table-thead > tr > th {
-  padding: 5px 8px;
+.app-employee-config-row .ant-select-multiple .ant-select-selector {
+  min-height: var(--app-employee-config-control-height) !important;
+  padding-inline: 6px !important;
+  padding-block: 2px !important;
+}
+
+.app-employee-config-row .ant-select-multiple .ant-select-selection-overflow-item-suffix {
+  min-height: calc(var(--app-employee-config-control-height) - 4px);
+}
+
+.app-employee-config-row .ant-select-multiple .ant-select-selection-item {
+  height: 20px;
+  line-height: 18px;
+  margin-top: 1px;
+  margin-bottom: 1px;
   font-size: 12px;
+  padding-inline: 6px;
+}
+
+.app-employee-config-table.ant-table-wrapper {
+  margin-top: 2px;
+}
+
+.app-employee-config-table .ant-btn-sm {
+  height: 28px;
+  padding-inline: 10px;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.app-employee-config-table.ant-table-wrapper .ant-table .ant-table-thead > tr > th {
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 500;
   white-space: nowrap;
 }
 
-.app-employee-config-table.ant-table-wrapper .ant-table.ant-table-small .ant-table-tbody > tr > td {
-  padding: 4px 8px;
-  font-size: 12px;
+.app-employee-config-table.ant-table-wrapper .ant-table .ant-table-tbody > tr > td {
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  vertical-align: middle;
 }
 
 .app-employee-config-owner-tag.ant-tag {
   margin-inline-end: 0;
   line-height: 18px;
-  padding: 0 5px;
+  padding: 0 6px;
   font-size: 11px;
+}
+
+.app-employee-config-table .ant-tag {
+  margin-inline-end: 0;
+  line-height: 20px;
+  padding: 0 7px;
+  font-size: 12px;
 }
 
 .app-employee-config-footnote {
@@ -407,16 +450,23 @@
 
   .app-employee-config-row,
   .app-employee-config-row--project-owner {
-    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .app-employee-config-field {
+    flex: 1 1 100%;
   }
 
   .app-employee-config-item--name .ant-input,
-  .app-employee-config-item--agent .ant-select {
+  .app-employee-config-item--agent .ant-select,
+  .app-employee-config-item--repositories .ant-select,
+  .app-employee-config-item--projects .ant-select,
+  .app-employee-config-item--owner-repo .ant-select {
     width: 100%;
   }
 
   .app-employee-config-actions {
-    margin-left: 0;
+    width: 100%;
   }
 }
 
