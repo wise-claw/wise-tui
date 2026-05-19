@@ -1,6 +1,7 @@
 .author-panel-page {
   min-width: 0;
-  max-width: 920px;
+  width: 100%;
+  max-width: none;
 }
 
 .author-panel-page__head {
@@ -35,6 +36,12 @@
   font-size: 13px;
 }
 
+.author-panel-page__icon svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
 .author-panel-page__title {
   margin: 0;
   font-size: 1.125rem;
@@ -58,6 +65,26 @@
   font-size: 13px;
   line-height: 1.45;
   color: var(--ant-color-text-secondary);
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+.author-panel-page--stacked-toolbar .author-panel-page__subrow {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.author-panel-page--stacked-toolbar .author-panel-page__subtitle {
+  flex: none;
+  width: 100%;
+  max-width: none;
+}
+
+.author-panel-page--stacked-toolbar .author-panel-page__toolbar {
+  width: 100%;
+  justify-content: flex-start;
 }
 
 .author-panel-page__actions,

@@ -22,8 +22,14 @@ import {
   isPdfFilePath,
   isRepositoryBinaryPreviewPath,
 } from "../../utils/repositoryFilePreview";
-import { AuthorPanelPageShell } from "../AuthorPanel/AuthorPanelPageShell";
-import { HubDot, HubTag } from "../HubCard";
+import {
+  AuthorPanelEmptyShell,
+  AuthorPanelHubTab,
+  AuthorPanelHubTabs,
+  AuthorPanelListShell,
+  AuthorPanelPageShell,
+} from "../AuthorPanel/AuthorPanelPageShell";
+import { HubItem, HubItems, HubTag } from "../HubCard";
 import "./index.css";
 
 interface ArtifactsPanelProps {
@@ -109,6 +115,10 @@ function artifactFor(path: string): ArtifactFile {
   return { path, kind: "代码", lane: "code", tone: "primary", icon: <CodeOutlined /> };
 }
 
+function fileBaseName(path: string): string {
+  return path.split("/").pop() ?? path;
+}
+
 export function ArtifactsPanel({ repositories, activeRepositoryId, onOpenRepositoryFile }: ArtifactsPanelProps) {
   const [selectedRepositoryId, setSelectedRepositoryId] = useState<number | null>(activeRepositoryId);
   const [selectedLane, setSelectedLane] = useState<PreviewLaneKey>("all");
@@ -178,12 +188,21 @@ export function ArtifactsPanel({ repositories, activeRepositoryId, onOpenReposit
 
   const activeLane = PREVIEW_LANES.find((lane) => lane.key === selectedLane) ?? PREVIEW_LANES[0];
 
+  const emptyDescription = !selectedRepository
+    ? "请先在右上角选择仓库"
+    : query.trim()
+      ? `没有匹配「${query.trim()}」的可打开产物`
+      : visibleArtifacts.length === 0 && repositoryArtifacts.length > 0
+        ? `${activeLane.title} 分类下暂无产物，试试切换筛选`
+        : "当前仓库暂无可预览的产物文件";
+
   return (
     <AuthorPanelPageShell
       className="app-artifacts-panel"
       icon={<FileSearchOutlined />}
       title="产物检查台"
-      subtitle="Markdown、Diff、图片、PDF、Office"
+      subtitle="浏览并打开仓库内的 Markdown、Diff、图片、PDF、Office 等可预览产物"
+      toolbarLayout="stacked"
       actions={
         <>
           <Select
@@ -210,63 +229,60 @@ export function ArtifactsPanel({ repositories, activeRepositoryId, onOpenReposit
           </Button>
         </>
       }
+      toolbar={
+        <AuthorPanelHubTabs aria-label="产物类型筛选">
+          {PREVIEW_LANES.map((lane) => (
+            <AuthorPanelHubTab
+              key={lane.key}
+              active={selectedLane === lane.key}
+              label={lane.title}
+              count={laneCounts.get(lane.key) ?? 0}
+              onClick={() => setSelectedLane(lane.key)}
+            />
+          ))}
+        </AuthorPanelHubTabs>
+      }
     >
-      <div className="app-artifacts-panel__lanes">
-        {PREVIEW_LANES.map((lane) => (
-          <button
-            key={lane.key}
-            type="button"
-            className={`app-artifacts-lane app-artifacts-lane--chip${selectedLane === lane.key ? " app-artifacts-lane--selected" : ""}`}
-            onClick={() => setSelectedLane(lane.key)}
-          >
-            <span className="app-artifacts-lane__icon" aria-hidden>
-              {lane.icon}
-            </span>
-            <span>{lane.title}</span>
-            <strong>{laneCounts.get(lane.key) ?? 0}</strong>
-          </button>
-        ))}
-      </div>
-
-      <div className="app-artifacts-panel__body">
-        <div className="app-artifacts-panel__body-head">
+      {selectedRepository && repositoryArtifacts.length > 0 ? (
+        <div className="app-artifacts-panel__status" aria-live="polite">
+          <span className="app-artifacts-panel__status-repo">{selectedRepository.name || selectedRepository.path}</span>
           <span>
-            <HubDot tone={visibleArtifacts.length > 0 ? "on" : "off"} />
-            {activeLane.title} · {visibleArtifacts.length} 个结果
+            {activeLane.title} · {visibleArtifacts.length}
+            {query.trim() ? ` / ${matchedArtifacts.length} 匹配` : ` / ${repositoryArtifacts.length} 可预览`}
           </span>
         </div>
-        {loading && visibleArtifacts.length === 0 ? (
-          <div className="app-artifacts-panel__loading">
-            <Spin size="small" />
-          </div>
-        ) : !selectedRepository ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="请选择仓库" />
-        ) : visibleArtifacts.length === 0 ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无匹配的可打开产物" />
-        ) : (
-          <div className="app-artifacts-file-list">
-            {visibleArtifacts.map((artifact) => (
-              <button
-                key={artifact.path}
-                type="button"
-                className="app-artifacts-file-row"
-                onClick={() => onOpenRepositoryFile(selectedRepository, artifact.path)}
-              >
-                <span className="app-artifacts-file-row__icon" aria-hidden>
-                  {artifact.icon}
-                </span>
-                <span className="app-artifacts-file-row__main">
-                  <strong>{artifact.path.split("/").pop() ?? artifact.path}</strong>
-                  <small>{artifact.path}</small>
-                </span>
-                <span className="app-artifacts-file-row__meta">
-                  <HubTag tone={artifact.tone}>{artifact.kind}</HubTag>
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      ) : null}
+
+      {loading && visibleArtifacts.length === 0 && selectedRepository ? (
+        <div className="author-panel-page__loading">
+          <Spin size="small" />
+        </div>
+      ) : !selectedRepository || visibleArtifacts.length === 0 ? (
+        <AuthorPanelEmptyShell>
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={emptyDescription} />
+        </AuthorPanelEmptyShell>
+      ) : (
+        <AuthorPanelListShell>
+          <HubItems>
+            {visibleArtifacts.map((artifact) => {
+              const name = fileBaseName(artifact.path);
+              return (
+                <HubItem
+                  key={artifact.path}
+                  avatarText={name}
+                  title={name}
+                  path={artifact.path}
+                  tags={<HubTag tone={artifact.tone}>{artifact.kind}</HubTag>}
+                  onClick={() => {
+                    if (!selectedRepository) return;
+                    onOpenRepositoryFile(selectedRepository, artifact.path);
+                  }}
+                />
+              );
+            })}
+          </HubItems>
+        </AuthorPanelListShell>
+      )}
     </AuthorPanelPageShell>
   );
 }

@@ -8,6 +8,8 @@ export interface AuthorPanelPageShellProps {
   subtitle?: string;
   actions?: ReactNode;
   toolbar?: ReactNode;
+  /** 筛选 pill 较多时置于副标题下方整行，避免与副标题横排挤压 */
+  toolbarLayout?: "subrow" | "stacked";
   children?: ReactNode;
   className?: string;
 }
@@ -19,10 +21,17 @@ export function AuthorPanelPageShell({
   subtitle,
   actions,
   toolbar,
+  toolbarLayout = "subrow",
   children,
   className,
 }: AuthorPanelPageShellProps) {
-  const rootClass = ["author-panel-page", className].filter(Boolean).join(" ");
+  const rootClass = [
+    "author-panel-page",
+    toolbar && toolbarLayout === "stacked" ? "author-panel-page--stacked-toolbar" : "",
+    className,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div className={rootClass} id={id}>

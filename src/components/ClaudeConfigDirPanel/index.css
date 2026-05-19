@@ -1,14 +1,8 @@
 .app-claude-config-dir-panel {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
   max-width: 920px;
-}
-
-.app-claude-config-dir-panel__hero,
-.app-claude-config-dir-panel__section,
-.app-claude-config-dir-panel__intro {
-  margin: 0;
 }
 
 .app-claude-config-dir-panel__hero,
@@ -16,11 +10,11 @@
 .app-claude-config-dir-panel__current {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 14px 16px;
+  gap: 8px;
+  padding: 10px 12px;
   background: var(--ant-color-bg-container);
   border: 1px solid var(--ant-color-border-secondary);
-  border-radius: var(--ant-border-radius, 8px);
+  border-radius: 8px;
 }
 
 .app-claude-config-dir-panel__hero {
@@ -104,7 +98,7 @@
 }
 
 .app-claude-config-dir-panel__current {
-  gap: 10px;
+  gap: 8px;
   background: var(--ant-color-fill-quaternary);
 }
 
@@ -113,7 +107,7 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
 }
 
 .app-claude-config-dir-panel__section-head {
@@ -121,9 +115,15 @@
   gap: 2px;
 }
 
+.app-claude-config-dir-panel__section-head .ant-typography-secondary {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .app-claude-config-dir-panel__current-name {
   display: block;
-  font-size: 15px;
+  font-size: 14px;
+  line-height: 1.35;
 }
 
 .app-claude-config-dir-panel__current-tags {
@@ -134,10 +134,19 @@
   gap: 4px;
 }
 
+.app-claude-config-dir-panel__current-tags .ant-tag {
+  margin-inline-end: 0;
+  padding-inline: 5px;
+  font-size: 10px;
+  line-height: 16px;
+}
+
 .app-claude-config-dir-panel__current-path {
   display: block;
   max-width: 100%;
-  padding: 8px 10px;
+  padding: 6px 8px;
+  font-size: 12px;
+  line-height: 1.45;
   overflow-wrap: anywhere;
   background: var(--ant-color-bg-container);
   border: 1px solid var(--ant-color-border-secondary);
@@ -145,7 +154,8 @@
 }
 
 .app-claude-config-dir-panel__current-default {
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .app-claude-config-dir-panel__choices {
@@ -156,36 +166,41 @@
   display: flex;
   align-items: flex-start;
   width: 100%;
-  padding: 8px 10px;
+  padding: 6px 8px;
   border: 1px solid var(--ant-color-border-secondary);
   border-radius: 6px;
   background: var(--ant-color-fill-quaternary);
 }
 
 .app-claude-config-dir-panel__choice .ant-radio {
-  margin-top: 2px;
+  margin-top: 1px;
 }
 
 .app-claude-config-dir-panel__choice .ant-radio + span {
-  padding-inline-start: 8px;
+  padding-inline-start: 6px;
   width: 100%;
 }
 
 .app-claude-config-dir-panel__choice-body {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   width: 100%;
 }
 
+.app-claude-config-dir-panel__choice-body .ant-typography-strong {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
 .app-claude-config-dir-panel__choice-desc {
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .app-claude-config-dir-panel__custom-input {
   width: 100%;
-  margin-top: 2px;
+  margin-top: 4px;
 }
 
 .app-claude-config-dir-panel__scope-grid {
@@ -225,20 +240,37 @@
 
 .app-claude-config-dir-panel__hint {
   margin: 0;
+  padding: 8px 10px;
+}
+
+.app-claude-config-dir-panel__hint .ant-alert-message {
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+
+.app-claude-config-dir-panel__hint .ant-alert-description {
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .app-claude-config-dir-panel__hint-list {
   margin: 0;
-  padding-inline-start: 18px;
+  padding-inline-start: 16px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .app-claude-config-dir-panel__actions {
   display: flex;
   flex-wrap: wrap;
-  margin-top: 4px;
+  margin-top: 0;
+}
+
+.app-claude-config-dir-panel__actions .ant-btn-sm {
+  height: 28px;
+  padding-inline: 10px;
+  font-size: 12px;
 }
 
 .app-agent-registry-section {
