@@ -117,7 +117,7 @@ export function TaskDetailDrawer({
         title="任务详情"
         open={open}
         onClose={onClose}
-        width={560}
+        size={560}
         push
         rootClassName="mission-task-detail-drawer"
         classNames={{ body: "mission-task-detail-drawer__body" }}
@@ -142,7 +142,7 @@ export function TaskDetailDrawer({
       title={detail.title}
       open={open}
       onClose={onClose}
-      width={560}
+      size={560}
       push
       rootClassName="mission-task-detail-drawer"
       classNames={{ body: bodyClassName }}

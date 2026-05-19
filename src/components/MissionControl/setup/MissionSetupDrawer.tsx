@@ -1,4 +1,5 @@
-import { Alert, Button, Checkbox, Drawer, List, Modal, Space, Spin, Tag, Typography, message } from "antd";
+import { Alert, Button, Checkbox, Drawer, Modal, Space, Spin, Tag, Typography, message } from "antd";
+import { List } from "../../ui/AppList";
 import { HistoryOutlined } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import type { ProjectItem, Repository } from "../../../types";
@@ -86,7 +87,7 @@ export function MissionSetupDrawer({
     <Drawer
       open={open}
       onClose={onClose}
-      width={620}
+      size={620}
       title={COPY.setupDrawer.title}
       extra={
         <Space>

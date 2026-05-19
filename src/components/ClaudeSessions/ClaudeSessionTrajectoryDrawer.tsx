@@ -117,7 +117,7 @@ export function ClaudeSessionTrajectoryDrawer({
       <Drawer
         title="工作轨迹 · 序列视图"
         placement="right"
-        width={800}
+        size={800}
         destroyOnClose
         open={open}
         onClose={onClose}
@@ -171,7 +171,7 @@ export function ClaudeSessionTrajectoryDrawer({
       <Drawer
         title={subagentInfo ? `子代理 · ${subagentInfo.label}` : "子代理"}
         placement="right"
-        width={520}
+        size={520}
         open={subagentOpen}
         onClose={() => {
           setSubagentOpen(false);

@@ -1,4 +1,5 @@
-import { Button, Empty, Input, List, Modal, Select, Space, Tag, Typography } from "antd";
+import { Button, Empty, Input, Modal, Select, Space, Tag, Typography } from "antd";
+import { List } from "../ui/AppList";
 import { useEffect, useMemo, useState } from "react";
 import type {
   EmployeeItem,

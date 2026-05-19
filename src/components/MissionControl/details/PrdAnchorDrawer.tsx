@@ -84,7 +84,7 @@ export function PrdAnchorDrawer({
     <Drawer
       open={open}
       onClose={onClose}
-      width="min(880px, 92vw)"
+      size="min(880px, 92vw)"
       title={
         <Space>
           <Typography.Text>PRD 锚点</Typography.Text>

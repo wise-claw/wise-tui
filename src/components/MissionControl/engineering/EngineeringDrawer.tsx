@@ -33,7 +33,7 @@ export function EngineeringDrawer({
   onClose,
 }: EngineeringDrawerProps) {
   return (
-    <Drawer open={open} onClose={onClose} width={760} title={COPY.engineeringDrawer.title}>
+    <Drawer open={open} onClose={onClose} size={760} title={COPY.engineeringDrawer.title}>
       <Tabs
         items={[
           {

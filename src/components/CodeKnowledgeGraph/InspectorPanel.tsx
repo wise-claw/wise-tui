@@ -1,5 +1,6 @@
 import { CodeOutlined, FileOutlined, FolderOpenOutlined, GlobalOutlined } from "@ant-design/icons";
-import { Button, Descriptions, List, Tag, Typography } from "antd";
+import { Button, Descriptions, Tag, Typography } from "antd";
+import { List } from "../ui/AppList";
 import { openCodeGraphNodeInIde } from "../../services/openCodeGraphNodeInIde";
 import type { GraphNode } from "../../types/codeKnowledgeGraph";
 import type { CodeGraphNeighborEntry } from "../../utils/codeGraphSelectedNeighbors";

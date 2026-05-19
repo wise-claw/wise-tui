@@ -395,7 +395,7 @@ export function ProjectTrellisCenter({
   }
 
   return (
-    <Drawer open={open} onClose={onClose} width={1040} title={title}>
+    <Drawer open={open} onClose={onClose} size={1040} title={title}>
       {content}
     </Drawer>
   );

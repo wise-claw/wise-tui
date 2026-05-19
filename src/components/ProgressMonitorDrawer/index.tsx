@@ -1,4 +1,5 @@
-import { Button, Drawer, Empty, List, Space, Tag, Tooltip, Typography, message } from "antd";
+import { Button, Drawer, Empty, Space, Tag, Tooltip, Typography, message } from "antd";
+import { List } from "../ui/AppList";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import type {
   ClaudeSession,

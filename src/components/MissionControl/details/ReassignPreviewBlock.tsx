@@ -1,4 +1,5 @@
-import { Alert, Descriptions, List, Tag, Typography } from "antd";
+import { Alert, Descriptions, Tag, Typography } from "antd";
+import { List } from "../../ui/AppList";
 import type { MissionReassignPreview } from "../../../services/missionControlBackend";
 
 interface ReassignPreviewBlockProps {

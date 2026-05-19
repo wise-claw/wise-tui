@@ -10,7 +10,6 @@ import {
   Col,
   Input,
   Layout,
-  List,
   Modal,
   Row,
   Space,
@@ -21,6 +20,7 @@ import {
   TreeSelect,
   Typography,
 } from "antd";
+import { List } from "../ui/AppList";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ProjectItem, Repository } from "../../types";
 import {

@@ -4,7 +4,6 @@ import {
   Button,
   Card,
   Checkbox,
-  List,
   Modal,
   Space,
   Tag,
@@ -12,6 +11,7 @@ import {
   Typography,
   message,
 } from "antd";
+import { List } from "../../ui/AppList";
 import { HistoryOutlined } from "@ant-design/icons";
 import type { PlannerRepo } from "../../../services/prdSplit/clusterPlanner";
 import { repositoryTypeChineseLabel } from "../../../utils/repositoryType";
