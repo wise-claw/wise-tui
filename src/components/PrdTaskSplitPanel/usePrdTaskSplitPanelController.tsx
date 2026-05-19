@@ -237,6 +237,7 @@ export function usePrdTaskSplitPanelController({
   const [confirmSavingTaskId, setConfirmSavingTaskId] = useState<string | null>(null);
   const [generatingExecutableTaskId, setGeneratingExecutableTaskId] = useState<string | null>(null);
   const [executionFanoutSnapshot, setExecutionFanoutSnapshot] = useState<ExecutionFanoutSnapshot | null>(null);
+  const [materializedExecutionResult, setMaterializedExecutionResult] = useState<WriteClusterTasksOutput | null>(null);
   const [runtimePromptModalOpen, setRuntimePromptModalOpen] = useState(false);
   const [runtimePromptLoading, setRuntimePromptLoading] = useState(false);
   const [runtimePromptSaving, setRuntimePromptSaving] = useState(false);
@@ -1930,6 +1931,8 @@ export function usePrdTaskSplitPanelController({
 
   function resetRequirementTaskView() {
     setActiveResult(null);
+    setMaterializedExecutionResult(null);
+    setExecutionFanoutSnapshot(null);
     setSelectedTaskId(null);
     setSelectedAnchorTaskId(null);
     setSplitError(null);
@@ -2613,7 +2616,10 @@ export function usePrdTaskSplitPanelController({
       return false;
     }
     try {
+      setMaterializedExecutionResult(null);
+      setExecutionFanoutSnapshot(null);
       const { output: out, projectRootPath } = await materializeSplitTasksToWorkspaceTrellis(sourceTasks);
+      setMaterializedExecutionResult(out);
       const initialSnapshot: ExecutionFanoutSnapshot = {
         status: "running",
         workflowRunId: null,
@@ -2882,6 +2888,7 @@ export function usePrdTaskSplitPanelController({
     confirmSavingTaskId,
     displayExecutionStatus,
     executionFanoutSnapshot,
+    materializedExecutionResult,
     filteredTasks,
     focusTaskWithFilterSync,
     generatingExecutableTaskId,
