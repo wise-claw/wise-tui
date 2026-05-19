@@ -51,6 +51,14 @@ export interface OpenPrdSplitWizardDetail {
 
 export type OpenMissionControlDetail = OpenPrdSplitWizardDetail;
 
+export interface SplitTodoCountUpdatedDetail {
+  source?: "wise" | "trellis";
+  openTaskDrawer?: boolean;
+  projectId?: string | null;
+  parentTaskName?: string | null;
+  childTaskNames?: string[];
+}
+
 export interface OpenWorkflowConfigDetail {
   workflowId?: string;
   projectId?: string;

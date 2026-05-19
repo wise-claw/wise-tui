@@ -1,4 +1,4 @@
-import { DeleteOutlined } from "@ant-design/icons";
+import { CheckOutlined, DeleteOutlined, DownOutlined, UpOutlined } from "@ant-design/icons";
 import { Button, Popover, Tooltip } from "antd";
 import { Suspense, lazy } from "react";
 import type { ReactNode } from "react";
@@ -28,6 +28,7 @@ interface Props {
   savingTaskId: string | null;
   confirmSavingTaskId: string | null;
   closingMotionActive: boolean;
+  expanded: boolean;
   taskUnmetLines: string[];
   taskExecutableCheckResult: string;
   unmetCollapsed: boolean;
@@ -37,6 +38,7 @@ interface Props {
   taskAiPopoverContent: ReactNode;
   taskAnchorPopoverContent: ReactNode;
   onSelect: () => void;
+  onToggleExpanded: () => void;
   onLocateAnchor: () => void;
   onDelete: () => void;
   onPendingContentChange: (markdown: string) => void;
@@ -64,6 +66,7 @@ export function TaskCard({
   savingTaskId,
   confirmSavingTaskId,
   closingMotionActive,
+  expanded,
   taskUnmetLines,
   taskExecutableCheckResult,
   unmetCollapsed,
@@ -73,6 +76,7 @@ export function TaskCard({
   taskAiPopoverContent,
   taskAnchorPopoverContent,
   onSelect,
+  onToggleExpanded,
   onLocateAnchor,
   onDelete,
   onPendingContentChange,
@@ -92,16 +96,56 @@ export function TaskCard({
   const isConfirmSaving = confirmSavingTaskId === task.id;
   const hasUnmet = taskUnmetLines.length > 0;
   const hasCheckResult = taskExecutableCheckResult.trim().length > 0;
+  const statusLabel = isExecutable ? "已确认" : hasUnmet ? "待补充" : "待确认";
 
   return (
     <div
       key={task.id}
       data-task-id={task.id}
-      className={`app-prd-task-panel__task-list-item ${selected ? "is-active" : ""}`}
+      className={[
+        "app-prd-task-panel__task-list-item",
+        selected ? "is-active" : "",
+        expanded ? "is-expanded" : "is-collapsed",
+        isExecutable ? "is-executable" : "",
+      ].filter(Boolean).join(" ")}
       tabIndex={0}
       onClick={onSelect}
     >
-      <div className="app-prd-task-panel__task-card-head">
+      <button
+        type="button"
+        className="app-prd-task-panel__task-card-summary"
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelect();
+          onToggleExpanded();
+        }}
+      >
+        <span className="app-prd-task-panel__task-card-state-icon">
+          {isExecutable ? <CheckOutlined /> : anchorLabelFromTaskId(task.id)}
+        </span>
+        <span className="app-prd-task-panel__task-card-summary-main">
+          <strong>{task.title}</strong>
+          {expanded ? null : (
+            <small>{draftedTask.description.trim() || draftedTask.subtasks[0] || "暂无任务内容"}</small>
+          )}
+        </span>
+        <span className="app-prd-task-panel__task-card-summary-side">
+          <span className={`app-prd-task-panel__task-role-tag ${taskRoleTagModifierClass(task.role)}`}>
+            {taskRoleChineseLabel(task.role)}
+          </span>
+          <span className={[
+            "app-prd-task-panel__task-status-pill",
+            isExecutable ? "is-confirmed" : hasUnmet ? "is-warning" : "",
+          ].filter(Boolean).join(" ")}
+          >
+            {statusLabel}
+          </span>
+          {expanded ? <UpOutlined /> : <DownOutlined />}
+        </span>
+      </button>
+      {expanded ? (
+        <>
+          <div className="app-prd-task-panel__task-card-head">
         <div className="app-prd-task-panel__task-card-meta-row">
           <Button
             type="text"
@@ -136,7 +180,7 @@ export function TaskCard({
           />
         </div>
       </div>
-      <div
+          <div
         className="app-prd-task-panel__task-card-editor is-editing"
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
@@ -149,14 +193,14 @@ export function TaskCard({
           />
         </Suspense>
       </div>
-      {showApiSpec ? (
+          {showApiSpec ? (
         <TaskApiSpecEditor
           value={pendingApiSpec ?? draftedTask.apiSpec}
           draftedTask={draftedTask}
           onChange={onPendingApiSpecChange}
         />
       ) : null}
-      <div
+          <div
         className="app-prd-task-panel__task-card-footer"
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
@@ -346,6 +390,8 @@ export function TaskCard({
           </div>
         ) : null}
       </div>
+        </>
+      ) : null}
     </div>
   );
 }

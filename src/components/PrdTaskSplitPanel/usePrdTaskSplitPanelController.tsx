@@ -121,6 +121,7 @@ import type {
 } from "./types";
 import { useSplitRuntimePanel } from "./useSplitRuntimePanel";
 import { summarizeSplitQuality } from "./splitExecutionQuality";
+import { moveTaskInExecutionPlan, type ExecutionPlanMoveDirection } from "./executionPlanAdjustments";
 
 export interface PrdTaskSplitPanelControllerInput {
   onClose: () => void;
@@ -2652,6 +2653,24 @@ export function usePrdTaskSplitPanelController({
     }
   }
 
+  async function handleMoveTaskInExecutionPlan(taskId: string, direction: ExecutionPlanMoveDirection) {
+    if (!activeResult) return;
+    const out = moveTaskInExecutionPlan(activeResult, taskId, direction);
+    if (!out) {
+      message.info("当前任务无法继续移动。");
+      return;
+    }
+    try {
+      await savePrdTaskSplitResult(out);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      message.error(`编排调整保存失败：${msg}`);
+      return;
+    }
+    setActiveResult(out);
+    message.success("编排已更新。");
+  }
+
   async function handleGenerateExecutableForSplitTask(taskId: string) {
     if (!activeResult || activeResult.splitTasks.length === 0) return;
     const task = activeResult.splitTasks.find((t) => t.id === taskId);
@@ -2826,6 +2845,7 @@ export function usePrdTaskSplitPanelController({
     handleGenerateExecutableTasks,
     handleImportLegacyPrd,
     handleImportPrdFile,
+    handleMoveTaskInExecutionPlan,
     handleParse,
     handleOpenRuntimePromptModal,
     handleOpenSplitPromptAdjustModal,

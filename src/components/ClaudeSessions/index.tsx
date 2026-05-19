@@ -1197,6 +1197,7 @@ export function ClaudeSessions({
                 sessions={sessions}
                 repositories={repositories}
                 activeRepository={activeRepository}
+                activeProject={activeProject}
                 initialNotificationPanelCollapsed={
                   pendingCollapseNotificationForSessionId === activeSession.id
                 }
@@ -1252,6 +1253,7 @@ export function ClaudeSessions({
                   sessions={sessions}
                   repositories={repositories}
                   activeRepository={dualPaneSecondaryRepository ?? activeRepository}
+                  activeProject={activeProject}
                   initialNotificationPanelCollapsed={
                     pendingCollapseNotificationForSessionId === secondarySession.id
                   }
@@ -1327,6 +1329,7 @@ export function ClaudeSessions({
             sessions={sessions}
             repositories={repositories}
             activeRepository={activeRepository}
+            activeProject={activeProject}
             initialNotificationPanelCollapsed={
               pendingCollapseNotificationForSessionId === activeSession.id
             }

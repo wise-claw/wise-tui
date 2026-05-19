@@ -153,4 +153,30 @@ describe("normalizeClaudeSplitOutputToSplitResult · classification", () => {
     expect(result.splitTasks[0].designMarkdown).toBe("## Architecture\nfoo");
     expect(result.splitTasks[0].implementMarkdown).toBe("## Steps\n1. bar");
   });
+
+  test("preserves dependency rationale after task id remap", () => {
+    const result = normalizeClaudeSplitOutputToSplitResult({
+      payload: {
+        tasks: [
+          baseValidTask({ id: "auth-api", title: "Auth API", role: "backend" }),
+          baseValidTask({
+            id: "auth-ui",
+            title: "Auth UI",
+            dependencies: ["auth-api"],
+            dependencyRationale: {
+              "auth-api": "UI must call the auth API contract first.",
+              missing: "ignored",
+            },
+          }),
+        ],
+      },
+      source: PRD,
+      context: null,
+    });
+
+    expect(result.splitTasks[1].dependencies).toEqual(["task-1"]);
+    expect(result.splitTasks[1].dependencyRationale).toEqual({
+      "task-1": "UI must call the auth API contract first.",
+    });
+  });
 });

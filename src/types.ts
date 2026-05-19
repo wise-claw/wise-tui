@@ -841,6 +841,8 @@ export interface TaskItem {
   size: TaskSize;
   estimateDays: number;
   dependencies: string[];
+  /** 依赖分析依据：key 为 dependency task id，value 说明为什么必须等待该任务。 */
+  dependencyRationale?: Record<string, string>;
   sourceRefs: string[];
   sourceRequirementIds: string[];
   subtasks: string[];

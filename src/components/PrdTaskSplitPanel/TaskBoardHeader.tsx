@@ -47,7 +47,7 @@ export function TaskBoardHeader({
     <div className="app-prd-task-panel__task-title-row">
       <div className="app-prd-task-panel__task-title-row-main">
         <span>
-          拆分任务
+          候选任务
           <Typography.Text type="secondary">（{filteredTasksCount}）</Typography.Text>
         </span>
         {unmetTaskIds.length > 0 ? (

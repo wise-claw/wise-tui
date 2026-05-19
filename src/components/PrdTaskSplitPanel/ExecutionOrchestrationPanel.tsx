@@ -1,4 +1,4 @@
-import { ApartmentOutlined, BranchesOutlined, DatabaseOutlined } from "@ant-design/icons";
+import { ApartmentOutlined, BranchesOutlined, CheckCircleOutlined, DeploymentUnitOutlined, FolderOpenOutlined } from "@ant-design/icons";
 import { useMemo } from "react";
 import type { ReactNode } from "react";
 import type { SplitResult, TaskRole } from "../../types";
@@ -6,7 +6,6 @@ import { taskRoleChineseLabel, taskRoleTagModifierClass } from "../../utils/repo
 import {
   buildExecutionOrchestrationModel,
   type AgentDispatchOrchestrationItem,
-  type RequirementOrchestrationItem,
   type TaskOrchestrationItem,
 } from "./executionOrchestrationModel";
 
@@ -14,30 +13,43 @@ interface Props {
   result: SplitResult;
   selectedTaskId: string | null;
   onSelectTask: (taskId: string) => void;
+  onMoveTask: (taskId: string, direction: "earlier" | "later") => void;
 }
 
 export function ExecutionOrchestrationPanel({
   result,
   selectedTaskId,
   onSelectTask,
+  onMoveTask,
 }: Props) {
   const model = useMemo(() => buildExecutionOrchestrationModel(result), [result]);
   return (
     <div className="app-prd-task-panel__orchestration">
       <section className="app-prd-task-panel__orchestration-column app-prd-task-panel__orchestration-column--requirements">
-        <OrchestrationColumnTitle icon={<DatabaseOutlined />} title="PRD 需求" />
-        <div className="app-prd-task-panel__orchestration-requirements">
-          {model.requirements.map((requirement) => (
-            <RequirementNode key={requirement.id} requirement={requirement} />
-          ))}
+        <OrchestrationColumnTitle icon={<DeploymentUnitOutlined />} title="编排层" />
+        <div className="app-prd-task-panel__orchestration-handoff">
+          <div className="app-prd-task-panel__orchestration-handoff-card">
+            <strong>任务清单 → 执行图 DAG</strong>
+            <span>{model.tasks.length} 个任务 · {model.parallelGroups.length} 个执行波次</span>
+          </div>
+          <div className="app-prd-task-panel__orchestration-handoff-steps">
+            <HandoffStep active label="① PRD 拆分：候选任务清单" />
+            <HandoffStep active={model.tasks.length > 0} label="② 依赖分析：自动生成 DAG" />
+            <HandoffStep active={model.tasks.length > 0} label="③ 编排确认：调整波次/依赖" />
+            <HandoffStep label="④ Fan-out 执行：按波次派发" />
+          </div>
+          <div className="app-prd-task-panel__orchestration-handoff-card app-prd-task-panel__orchestration-handoff-card--trellis">
+            <strong><FolderOpenOutlined /> .trellis/tasks/</strong>
+            <span>确认落盘后写入 task 目录与 agent 上下文</span>
+          </div>
         </div>
       </section>
 
       <section className="app-prd-task-panel__orchestration-column app-prd-task-panel__orchestration-column--tasks">
         <div className="app-prd-task-panel__orchestration-center-head">
-          <OrchestrationColumnTitle icon={<ApartmentOutlined />} title="任务集群" />
+          <OrchestrationColumnTitle icon={<ApartmentOutlined />} title="② 依赖分析 · 执行波次" />
           <span>
-            {model.tasks.length} 个任务 · {model.parallelGroups.length} 组并行
+            {model.tasks.length} 个任务 · {model.parallelGroups.length} 波次
           </span>
         </div>
         <div className="app-prd-task-panel__orchestration-groups">
@@ -69,13 +81,39 @@ export function ExecutionOrchestrationPanel({
       </section>
 
       <section className="app-prd-task-panel__orchestration-column app-prd-task-panel__orchestration-column--agents">
-        <OrchestrationColumnTitle icon={<BranchesOutlined />} title="派发 / 子代理" />
-        <div className="app-prd-task-panel__orchestration-agents">
+        <OrchestrationColumnTitle icon={<BranchesOutlined />} title="④ Fan-out 执行计划" />
+        <div className="app-prd-task-panel__orchestration-fanout">
+          {model.parallelGroups.map((group, index) => (
+            <FanoutWave
+              key={group.id}
+              index={index}
+              group={group}
+              canMoveEarlier={index > 0}
+              canMoveLater={index < model.parallelGroups.length - 1 || group.tasks.length > 1}
+              onSelectTask={onSelectTask}
+              onMoveTask={onMoveTask}
+            />
+          ))}
+        </div>
+        <div className="app-prd-task-panel__orchestration-agent-summary">
           {model.agents.map((agent) => (
             <AgentCard key={agent.id} agent={agent} onSelectTask={onSelectTask} />
           ))}
         </div>
       </section>
+    </div>
+  );
+}
+
+function HandoffStep({ active, label }: { active?: boolean; label: string }) {
+  return (
+    <div className={[
+      "app-prd-task-panel__orchestration-handoff-step",
+      active ? "is-active" : "",
+    ].filter(Boolean).join(" ")}
+    >
+      <CheckCircleOutlined />
+      <span>{label}</span>
     </div>
   );
 }
@@ -92,21 +130,6 @@ function OrchestrationColumnTitle({
       <span>{icon}</span>
       <strong>{title}</strong>
     </div>
-  );
-}
-
-function RequirementNode({ requirement }: { requirement: RequirementOrchestrationItem }) {
-  return (
-    <article className={[
-      "app-prd-task-panel__orchestration-req",
-      requirement.taskIds.length > 0 ? "has-tasks" : "",
-    ].filter(Boolean).join(" ")}
-    >
-      <span>{requirement.label}</span>
-      <strong>{requirement.title}</strong>
-      <p>{requirement.content}</p>
-      <small>{requirement.priority}</small>
-    </article>
   );
 }
 
@@ -144,6 +167,58 @@ function TaskNode({
         {task.blockedBy.length > 0 ? `等待 ${task.blockedBy.join("/")}` : task.statusLabel}
       </span>
     </button>
+  );
+}
+
+function FanoutWave({
+  index,
+  group,
+  canMoveEarlier,
+  canMoveLater,
+  onSelectTask,
+  onMoveTask,
+}: {
+  index: number;
+  group: { id: string; title: string; tasks: TaskOrchestrationItem[] };
+  canMoveEarlier: boolean;
+  canMoveLater: boolean;
+  onSelectTask: (taskId: string) => void;
+  onMoveTask: (taskId: string, direction: "earlier" | "later") => void;
+}) {
+  return (
+    <article className="app-prd-task-panel__orchestration-wave">
+      <div className="app-prd-task-panel__orchestration-wave-head">
+        <strong>波次 {index + 1}</strong>
+        <span>{group.tasks.length > 1 ? `${group.tasks.length} 个并行子代理` : "串行收口节点"}</span>
+      </div>
+      <div className="app-prd-task-panel__orchestration-wave-runs">
+        {group.tasks.map((task, taskIndex) => (
+          <div key={task.id} className="app-prd-task-panel__orchestration-wave-run">
+            <button type="button" onClick={() => onSelectTask(task.id)}>
+              <span>{`agent-${String.fromCharCode(65 + index * 4 + taskIndex)}`}</span>
+              <strong>{task.id}</strong>
+              <small>{task.title}</small>
+            </button>
+            <div className="app-prd-task-panel__orchestration-wave-actions">
+              <button
+                type="button"
+                disabled={!canMoveEarlier}
+                onClick={() => onMoveTask(task.id, "earlier")}
+              >
+                前移
+              </button>
+              <button
+                type="button"
+                disabled={!canMoveLater}
+                onClick={() => onMoveTask(task.id, "later")}
+              >
+                后移
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </article>
   );
 }
 

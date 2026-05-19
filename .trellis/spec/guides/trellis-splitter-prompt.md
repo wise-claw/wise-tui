@@ -43,6 +43,9 @@ prompt 第一行**必须**是：`Active task: <parent_task_path>`（workflow.md 
       "subtasks": ["..."],
       "dod": ["..."],
       "dependencies": ["task-2"],
+      "dependencyRationale": {
+        "task-2": "当前任务需要 task-2 先完成，因为 ..."
+      },
       "sourceRequirementIds": ["req-functional-1", "req-acceptance-3"],
       "taskAnchors": {
         "from": 100, "to": 250,
@@ -74,6 +77,9 @@ prompt 第一行**必须**是：`Active task: <parent_task_path>`（workflow.md 
 - `taskAnchors` 必须是对象，`from >= 0`、`to > from`、`textHash` 非空；
   `contextBefore` / `contextAfter` 至少一段能追溯到 `sourceRequirementIds` 对应的原文。
 - `clusterId` 等于入参；`repoTarget` 缺省时由本地 normalizer 兜底为 cluster.primaryRepositoryId。
+- `dependencies` 是初始 DAG 边；凡是写入 `dependencies` 的 task id，必须在
+  `dependencyRationale` 中给出简短依据。依据应引用 taskAnchors、sourceRefs、文件路径、接口契约、
+  requirement 先后关系或前后端协作关系中的至少一种。
 
 ## 4. 行为约束
 
@@ -112,6 +118,7 @@ normalizer 会执行：
 - 规范化 task id 为 `task-1`, `task-2`, ... 顺序。
 - 去重 `sourceRequirementIds`。
 - 裁剪非法依赖（自引用、引用不存在的 task id）。
+- 保留合法 `dependencyRationale`，并在依赖被裁剪或重映射时同步清理 / 重映射。
 - 校验锚点能否回溯到 requirement 原文。
 
 因此 subagent 不需要内部刻意编号或去重 — 只要保证字段集合**完整且诚实**即可。

@@ -1,5 +1,5 @@
 import { Col, Layout, Row, Space, Spin } from "antd";
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import type { ProjectItem, Repository } from "../../types";
 import { savePrdTaskSplitResult } from "../../services/prdTaskSplitStore";
 import { sameStringArray } from "../../utils/anchorStability";
@@ -12,6 +12,8 @@ import {
   TASK_SPLIT_CLOSE_ANIMATION_MS,
   usePrdTaskSplitPanelController,
 } from "./usePrdTaskSplitPanelController";
+
+type SplitWorkspaceLayout = "review" | "focused";
 
 export interface PrdTaskSplitPanelProps {
   onClose: () => void;
@@ -28,6 +30,7 @@ export function PrdTaskSplitPanel({
   activeProjectId,
   activeRepositoryId,
 }: PrdTaskSplitPanelProps) {
+  const [workspaceLayout, setWorkspaceLayout] = useState<SplitWorkspaceLayout>("review");
   const {
     activeResult,
     assistantHistoryLoading,
@@ -60,6 +63,7 @@ export function PrdTaskSplitPanel({
     handleGenerateExecutableTasks,
     handleImportLegacyPrd,
     handleImportPrdFile,
+    handleMoveTaskInExecutionPlan,
     handleParse,
     handleOptimizeRuntimePromptDraft,
     handleOptimizeTaskContent,
@@ -71,9 +75,7 @@ export function PrdTaskSplitPanel({
     handleSaveTaskDraft,
     handleSplitSelection,
     handleUserPersistPrdDraft,
-    hasConfirmedTasks,
     hasInput,
-    hasUnconfirmedTasks,
     inputError,
     inputValue,
     latestAnchorRangePersistResultRef,
@@ -221,8 +223,14 @@ export function PrdTaskSplitPanel({
         onConfirm={() => void handleConfirmRequirementNameModal()}
       />
       <Space orientation="vertical" size={4} className="app-prd-task-panel__stack">
-        <Row gutter={12} className="app-prd-task-panel__columns">
-          <Col span={12} className="app-prd-task-panel__col">
+        <Row
+          gutter={12}
+          className={[
+            "app-prd-task-panel__columns",
+            workspaceLayout === "focused" ? "app-prd-task-panel__columns--task-focus" : "",
+          ].filter(Boolean).join(" ")}
+        >
+          <Col span={12} className="app-prd-task-panel__col app-prd-task-panel__col--requirements">
             <RequirementInputCard
               inputValue={inputValue}
               inputError={inputError}
@@ -288,7 +296,7 @@ export function PrdTaskSplitPanel({
               onAssistantMcpsChange={handleAssistantMcpsChange}
             />
           </Col>
-          <Col span={12} className="app-prd-task-panel__col">
+          <Col span={12} className="app-prd-task-panel__col app-prd-task-panel__col--tasks">
             <TaskResultPanel
               splitError={splitError}
               mappingFallbackStats={mappingFallbackStats}
@@ -310,8 +318,6 @@ export function PrdTaskSplitPanel({
               taskRoleFilterOptions={taskRoleFilterOptions}
               showRoleFilterTabs={showRoleFilterTabs}
               canGenerateExecutableTasks={canGenerateExecutableTasks}
-              hasConfirmedTasks={hasConfirmedTasks}
-              hasUnconfirmedTasks={hasUnconfirmedTasks}
               closingMotionActive={Boolean(closingToTaskListMotion)}
               selectedTaskId={selectedTaskId}
               resolvedTaskAnchorIds={resolvedTaskAnchorIds}
@@ -439,6 +445,8 @@ export function PrdTaskSplitPanel({
                 }));
               }}
               onGenerateExecutableTasks={() => void handleGenerateExecutableTasks()}
+              onMoveTaskInExecutionPlan={(taskId, direction) => void handleMoveTaskInExecutionPlan(taskId, direction)}
+              onWorkspaceLayoutChange={setWorkspaceLayout}
               onCloseRuntime={() => setSplitRuntimeVisible(false)}
               onRetryStage={(phase) => { void handleRetrySplitStage(phase); }}
               onShowRuntime={() => setSplitRuntimeVisible(true)}

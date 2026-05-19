@@ -68,6 +68,10 @@ import {
   type OmcBatchTemplateId,
 } from "../../constants/omcBatchTemplates";
 import { loadPrdTaskSplitResult, savePrdTaskSplitResult } from "../../services/prdTaskSplitStore";
+import {
+  listProjectRequirementWorkspace,
+  type TrellisRequirementTaskRow,
+} from "../../services/trellisTaskBridge";
 import { refreshSplitResultDerivedFields } from "../../services/taskSplitter";
 import {
   wiseNotificationListRecent,
@@ -138,6 +142,7 @@ import {
   WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL,
   WORKFLOW_UI_EVENT_REPO_WORKTREES_MAY_HAVE_CHANGED,
   WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED,
+  type SplitTodoCountUpdatedDetail,
   type RepoWorktreesMayHaveChangedDetail,
   type WorkflowOmcBatchRuntimeDetail,
 } from "../../constants/workflowUiEvents";
@@ -151,6 +156,7 @@ import { isOmcDirectBatchInvocationRunning } from "../../utils/omcDirectBatchInv
 import type {
   EmployeeItem,
   PendingExecutionTask,
+  ProjectItem,
   Repository,
   TaskItem,
   TaskFlowStatus,
@@ -273,6 +279,7 @@ interface Props {
   onReloadFullDiskTranscript?: (sessionId: string) => void | Promise<void>;
   /** 双栏右侧主会话：输入框底栏仓库选择（由父级仅在右侧注入） */
   dualPaneRepositoryPicker?: DualPaneComposerRepositoryPickerProps;
+  activeProject?: ProjectItem | null;
   missionContext?: {
     projectId?: string | null;
     rootPath?: string | null;
@@ -357,6 +364,46 @@ const SHOW_SESSION_TASK_COMPLETION_FEATURE = false;
 const TASK_COMPLETION_MODAL_HINT =
   "以下为当前仓库内各标签会话（主会话、员工独立会话、团队流程会话）的 Claude Code 运行状态与上下文概况，便于核对是否均已执行完毕。各标签上的发送节点明细请在对应标签打开「会话跟踪」查看。";
 
+function normalizeTrellisPath(path: string): string {
+  return path.trim().replace(/\\/g, "/").replace(/\/$/, "");
+}
+
+function getTrellisTaskRelativePath(task: TrellisRequirementTaskRow): string {
+  const dir = normalizeTrellisPath(task.dir);
+  const root = normalizeTrellisPath(task.rootPath);
+  if (root && dir.startsWith(`${root}/`)) return dir.slice(root.length + 1);
+  const marker = "/.trellis/tasks/";
+  const markerIndex = dir.indexOf(marker);
+  if (markerIndex >= 0) return dir.slice(markerIndex + 1);
+  return dir || `.trellis/tasks/${task.taskId}`;
+}
+
+function buildTrellisTaskExecutionPrompt(task: TrellisRequirementTaskRow): string {
+  const taskPath = getTrellisTaskRelativePath(task);
+  const lines = [
+    `Active task: ${taskPath}`,
+    "",
+    "请基于该 Workspace Trellis 任务继续执行。",
+    "",
+    `任务ID：${task.taskId}`,
+    `标题：${task.title || "(未命名任务)"}`,
+    `状态：${task.status || "unknown"}`,
+  ];
+  if (task.parent?.trim()) lines.push(`父任务：${task.parent.trim()}`);
+  if (task.clusterId?.trim()) lines.push(`分片：${task.clusterId.trim()}`);
+  if (task.sourceRequirementIds.length > 0) {
+    lines.push(`关联需求：${task.sourceRequirementIds.join(", ")}`);
+  }
+  lines.push("", "请先读取任务目录中的 task.json / prd.md / design.md / implement.md（如存在），再按项目 AGENTS.md 与 .trellis/spec 继续实现、验证并更新任务状态。");
+  return lines.join("\n");
+}
+
+function isRunnableTrellisRequirementTask(task: TrellisRequirementTaskRow): boolean {
+  if (task.archived || !task.parent?.trim()) return false;
+  const status = task.status.trim().toLowerCase();
+  return status !== "completed" && status !== "rejected" && status !== "archived";
+}
+
 function getSessionTraceStorageKey(sessionId: string, repositoryPath?: string): string {
   return `wise:claude:session-send-traces:${repositoryPath ?? ""}:${sessionId}`;
 }
@@ -419,6 +466,7 @@ export function ClaudeChat({
   onReloadFullDiskTranscript,
   dualPaneRepositoryPicker,
   missionContext,
+  activeProject,
 }: Props) {
   const chatRootRef = useRef<HTMLDivElement>(null);
   const composerTrayRef = useRef<HTMLDivElement>(null);
@@ -552,11 +600,18 @@ export function ClaudeChat({
   const omcBatchUserAbortRef = useRef(false);
   const omcBatchInFlightRef = useRef(false);
   const [splitTodoTasks, setSplitTodoTasks] = useState<TaskItem[]>([]);
+  const [trellisTasks, setTrellisTasks] = useState<TrellisRequirementTaskRow[]>([]);
+  const [trellisTasksLoading, setTrellisTasksLoading] = useState(false);
   /** 「可执行任务」角标：仅统计未完成（todo）条数 */
   const splitIncompleteTaskCount = useMemo(
     () => splitTodoTasks.filter((task) => task.flowStatus === "todo").length,
     [splitTodoTasks],
   );
+  const visibleTrellisTasks = useMemo(
+    () => trellisTasks.filter(isRunnableTrellisRequirementTask),
+    [trellisTasks],
+  );
+  const taskDrawerCount = splitIncompleteTaskCount + visibleTrellisTasks.length;
   const showPendingTaskQueue = pendingTasks.length > 0;
 
   const syncSplitTaskList = useCallback(async () => {
@@ -603,6 +658,53 @@ export function ClaudeChat({
       window.removeEventListener(WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED, handleSplitTodoCountUpdated as EventListener);
     };
   }, [session.id, session.repositoryPath]);
+
+  const syncTrellisTaskList = useCallback(async () => {
+    const project = activeProject;
+    const rootPath = project?.rootPath?.trim();
+    if (!project || !rootPath) {
+      setTrellisTasks([]);
+      setTrellisTasksLoading(false);
+      return;
+    }
+    setTrellisTasksLoading(true);
+    try {
+      const snapshot = await listProjectRequirementWorkspace({
+        project,
+        projects: [project],
+        repositories,
+      });
+      setTrellisTasks(snapshot.tasks.filter((task) => task.sourceKind === "project"));
+    } catch (err) {
+      console.warn("syncTrellisTaskList failed:", err);
+      setTrellisTasks([]);
+    } finally {
+      setTrellisTasksLoading(false);
+    }
+  }, [activeProject, repositories]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const sync = async () => {
+      if (cancelled) return;
+      await syncTrellisTaskList();
+    };
+    void sync();
+    const handleSplitTodoCountUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<SplitTodoCountUpdatedDetail>).detail;
+      void syncTrellisTaskList().then(() => {
+        if (detail?.source === "trellis" && detail.openTaskDrawer) {
+          setTaskListStatusFilter("all");
+          setTaskListDrawerOpen(true);
+        }
+      });
+    };
+    window.addEventListener(WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED, handleSplitTodoCountUpdated as EventListener);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED, handleSplitTodoCountUpdated as EventListener);
+    };
+  }, [syncTrellisTaskList]);
 
   useEffect(() => {
     const valid = new Set(splitTodoTasks.map((task) => task.id));
@@ -2497,6 +2599,11 @@ export function ClaudeChat({
     void message.success(`任务 ${task.id} 已在主会话开始执行（仍为未完成，完成后请标记已完成）。`);
   }, [onExecute, session.id]);
 
+  const handleRunTrellisTaskInMainSession = useCallback(async (task: TrellisRequirementTaskRow) => {
+    onExecute(session.id, buildTrellisTaskExecutionPrompt(task));
+    void message.success(`Trellis 任务 ${task.taskId} 已发送到主会话。`);
+  }, [onExecute, session.id]);
+
   const handleRunTaskByEmployee = useCallback(async (task: TaskItem) => {
     const employeeName = task.splitListEmployeeName?.trim();
     if (!employeeName) {
@@ -2982,7 +3089,7 @@ export function ClaudeChat({
                   type="button"
                   className={[
                     "app-claude-session-tool-btn app-claude-session-tool-btn--task-list",
-                    splitIncompleteTaskCount > 0 ? "app-claude-session-tool-btn--task-list--badged" : "",
+                    taskDrawerCount > 0 ? "app-claude-session-tool-btn--task-list--badged" : "",
                   ]
                     .filter(Boolean)
                     .join(" ")}
@@ -2993,10 +3100,10 @@ export function ClaudeChat({
                   }}
                 >
                   <UnorderedListOutlined />
-                  <span className="app-claude-session-tool-btn__text">可执行任务</span>
-                  {splitIncompleteTaskCount > 0 ? (
-                    <span className="app-claude-session-tool-btn__badge" aria-label={`未完成可执行任务数量 ${splitIncompleteTaskCount}`}>
-                      {splitIncompleteTaskCount}
+                  <span className="app-claude-session-tool-btn__text">任务</span>
+                  {taskDrawerCount > 0 ? (
+                    <span className="app-claude-session-tool-btn__badge" aria-label={`可执行任务与 Trellis 任务数量 ${taskDrawerCount}`}>
+                      {taskDrawerCount}
                     </span>
                   ) : null}
                 </button>
@@ -3143,9 +3250,9 @@ export function ClaudeChat({
 
       <Drawer
         title={
-          splitIncompleteTaskCount > 0
-            ? `可执行任务（未完成 ${splitIncompleteTaskCount}）`
-            : "可执行任务"
+          taskDrawerCount > 0
+            ? `任务（Wise ${splitIncompleteTaskCount} · Trellis ${visibleTrellisTasks.length}）`
+            : "任务"
         }
         placement="right"
         size={traceDrawerWidth}
@@ -3164,12 +3271,17 @@ export function ClaudeChat({
         }}
       >
         <div className="app-claude-task-list-drawer-inner">
-        {splitTodoTasks.length === 0 ? (
+        {splitTodoTasks.length === 0 && visibleTrellisTasks.length === 0 ? (
           <div className="app-claude-task-list-empty">
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无可执行任务" />
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description={trellisTasksLoading ? "正在读取 Workspace Trellis 任务" : "暂无任务"}
+            />
           </div>
         ) : (
           <div className="app-claude-task-list">
+            {splitTodoTasks.length > 0 ? (
+            <>
             <div className="app-claude-task-list__batch-bar">
               <label className="app-claude-task-list__batch-check">
                 <span>筛选</span>
@@ -3466,6 +3578,99 @@ export function ClaudeChat({
                 </div>
               );
             })}
+            </>
+            ) : null}
+            {visibleTrellisTasks.length > 0 ? (
+              <div className="app-claude-task-list__section" aria-label="Workspace Trellis 任务">
+                <div className="app-claude-task-list__section-head">
+                  <div>
+                    <div className="app-claude-task-list__section-title">Workspace Trellis</div>
+                    <div className="app-claude-task-list__section-subtitle">
+                      已落盘到 {activeProject?.rootPath?.trim() || "当前工作区"} 的可继续执行任务
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="app-claude-task-list__batch-action-btn"
+                    disabled={trellisTasksLoading}
+                    onClick={() => {
+                      void syncTrellisTaskList();
+                    }}
+                  >
+                    刷新
+                  </button>
+                </div>
+                {visibleTrellisTasks.map((task) => {
+                  const taskPath = getTrellisTaskRelativePath(task);
+                  return (
+                    <div
+                      key={`${task.rootPath}:${task.dir}`}
+                      className="app-claude-task-list__item app-claude-task-list__item--trellis"
+                      data-task-id={task.taskId}
+                    >
+                      <div className="app-claude-task-list__body">
+                        <div className="app-claude-task-list__left">
+                          <div className="app-claude-task-list__title-row">
+                            <span className="app-claude-task-list__id">{task.taskId}</span>
+                            <span className="app-claude-task-list__title">{task.title || "(未命名任务)"}</span>
+                            <Popover
+                              trigger="click"
+                              placement="leftTop"
+                              overlayClassName="app-claude-task-list__detail-popover"
+                              content={(
+                                <div className="app-claude-task-list__detail-content">
+                                  <div className="app-claude-task-list__content-block">
+                                    <div className="app-claude-task-list__content-title">任务路径</div>
+                                    <div className="app-claude-task-list__content-text">{taskPath}</div>
+                                  </div>
+                                  <div className="app-claude-task-list__content-block">
+                                    <div className="app-claude-task-list__content-title">来源需求</div>
+                                    {task.sourceRequirementIds.length > 0 ? (
+                                      <div className="app-claude-task-list__dependency-list">
+                                        {task.sourceRequirementIds.map((item) => (
+                                          <span key={`${task.taskId}_req_${item}`} className="app-claude-task-list__dependency-tag">
+                                            {item}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <div className="app-claude-task-list__content-empty">暂无来源需求映射</div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            >
+                              <button type="button" className="app-claude-task-list__action-btn app-claude-task-list__detail-btn">
+                                详情
+                              </button>
+                            </Popover>
+                          </div>
+                          <div className="app-claude-task-list__meta">
+                            <span className="app-claude-task-list__status">状态：{task.status || "unknown"}</span>
+                            {task.parent?.trim() ? <span>父任务：{task.parent.trim()}</span> : null}
+                            {task.clusterId?.trim() ? <span>分片：{task.clusterId.trim()}</span> : null}
+                            <span>路径：{taskPath}</span>
+                          </div>
+                          <div className="app-claude-task-list__actions">
+                            <div className="app-claude-task-list__action-group">
+                              <button
+                                type="button"
+                                className="app-claude-task-list__action-btn app-claude-task-list__action-btn--primary"
+                                onClick={() => {
+                                  void handleRunTrellisTaskInMainSession(task);
+                                }}
+                              >
+                                主会话执行
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
           </div>
         )}
         </div>

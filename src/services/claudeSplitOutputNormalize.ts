@@ -197,6 +197,35 @@ function parseTaskAnchorDescriptor(raw: unknown): TaskAnchorDescriptor | undefin
   return out;
 }
 
+function parseDependencyRationale(raw: unknown): Record<string, string> {
+  if (!isRecord(raw)) return {};
+  const out: Record<string, string> = {};
+  for (const [taskId, rationale] of Object.entries(raw)) {
+    const key = taskId.trim();
+    const value = asString(rationale)?.trim();
+    if (!key || !value) continue;
+    out[key] = value;
+  }
+  return out;
+}
+
+function remapDependencyRationale(
+  raw: Record<string, string>,
+  idRemap: Map<string, string>,
+  dependencies: string[],
+): Record<string, string> | undefined {
+  const dependencySet = new Set(dependencies);
+  const out: Record<string, string> = {};
+  for (const [rawTaskId, rationale] of Object.entries(raw)) {
+    const canonical = idRemap.get(rawTaskId) ?? rawTaskId;
+    if (!dependencySet.has(canonical)) continue;
+    const value = rationale.trim();
+    if (!value) continue;
+    out[canonical] = value;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 export function validateClaudeSplitPayloadStrict(input: {
   payload: unknown;
   source: PrdDocument;
@@ -328,6 +357,7 @@ export function validateClaudeSplitPayloadStrict(input: {
 type RawTaskWithMeta = TaskItem & {
   ordinal: number;
   rawDeps: string[];
+  rawDependencyRationale: Record<string, string>;
   rawAnchorDescriptor?: TaskAnchorDescriptor;
 };
 
@@ -349,6 +379,7 @@ function normalizeRawTask(
   );
   const role = normalizeRole(rawTask.role ?? rawTask.repo_type, fallbackRole);
   const rawDeps = asStringArray(rawTask.dependencies ?? rawTask.depends_on);
+  const rawDependencyRationale = parseDependencyRationale(rawTask.dependencyRationale ?? rawTask.dependency_rationale);
   const subtasks = asStringArray(rawTask.subtasks ?? rawTask.deliverables);
   const dod = asStringArray(rawTask.dod ?? rawTask.acceptance_criteria);
   const sourceRefs = asStringArray(rawTask.sourceRefs);
@@ -393,6 +424,7 @@ function normalizeRawTask(
     implementMarkdown: implementMarkdown.trim().length > 0 ? implementMarkdown : undefined,
     ordinal,
     rawDeps,
+    rawDependencyRationale,
     rawAnchorDescriptor,
   };
 }
@@ -455,6 +487,7 @@ export function normalizeClaudeSplitOutputToSplitResult(input: {
   const tasks: TaskItem[] = prepared.map((task) => {
     const dependencies = [...new Set(task.rawDeps.map((d) => idRemap.get(d) ?? d))]
       .filter((dep) => dep !== task.id && used.has(dep));
+    const dependencyRationale = remapDependencyRationale(task.rawDependencyRationale, idRemap, dependencies);
     return {
       id: task.id,
       title: task.title,
@@ -463,6 +496,7 @@ export function normalizeClaudeSplitOutputToSplitResult(input: {
       size: task.size,
       estimateDays: task.estimateDays,
       dependencies,
+      dependencyRationale,
       sourceRefs: [...new Set(task.sourceRefs)],
       sourceRequirementIds: [...new Set(task.sourceRequirementIds)],
       subtasks: [...new Set(task.subtasks)],
