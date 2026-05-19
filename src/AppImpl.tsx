@@ -48,10 +48,12 @@ import {
   WORKFLOW_UI_EVENT_OPEN_REPOSITORY_FILE,
   WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL,
   WORKFLOW_UI_EVENT_OPEN_WORKFLOW_CONFIG,
+  WORKFLOW_UI_EVENT_RUN_ASSISTANT_BRIEF,
   WORKFLOW_UI_EVENT_WORKFLOW_GRAPH_CHANGED,
   type OpenMissionControlDetail,
   type OpenRepositoryFileDetail,
   type OpenWorkflowConfigDetail,
+  type RunAssistantBriefDetail,
   type WorkflowGraphChangedDetail,
 } from "./constants/workflowUiEvents";
 import { listEmployeeTaskCounts, listEmployees, createEmployee, updateEmployee, deleteEmployee, moveEmployeeDisplayOrder } from "./services/employees";
@@ -1890,6 +1892,68 @@ export default function App() {
     );
   }
 
+  const handleRunAssistantBrief = useCallback(async (detail: RunAssistantBriefDetail) => {
+    const prompt = detail.prompt.trim();
+    if (!prompt) {
+      message.warning("助手执行内容为空");
+      return;
+    }
+    const project = detail.projectId
+      ? projects.find((item) => item.id === detail.projectId) ?? null
+      : activeProjectId
+        ? projects.find((item) => item.id === activeProjectId) ?? null
+        : null;
+
+    let sessionId: string | null = null;
+    if (project) {
+      sessionId = await openProjectMainSession(project);
+    } else if (activeRepository) {
+      const ownerProject = projects.find((item) => item.repositoryIds.includes(activeRepository.id)) ?? null;
+      const target = resolveSidebarSelectionTarget({
+        repository: activeRepository,
+        ownerProject,
+        repositories,
+      });
+      viewMode.enter({ kind: "chat" });
+      setActiveRepositoryWithOwner(activeRepository.id);
+      const mainOwnerPick = resolveMainOwnerAgentNameForRepositoryPath(repositories, target.path);
+      sessionId = resolveRepositoryMainSessionId(
+        target.path,
+        repositoryMainSessionBindings,
+        sessions,
+        mainOwnerPick,
+      );
+      if (sessionId) {
+        switchSession(sessionId);
+      } else {
+        sessionId = await createSession(target.path, target.displayName);
+        bindRepositoryMainSession(target.path, sessionId);
+      }
+    }
+
+    if (!sessionId) {
+      message.warning("请先选择一个 Workspace 或仓库，再派发助手任务");
+      return;
+    }
+    const started = executeSession(sessionId, prompt);
+    if (started === false) return;
+    message.success(`${detail.assistantName || "助手"}任务已派发到 Claude。`);
+  }, [
+    activeProjectId,
+    activeRepository,
+    bindRepositoryMainSession,
+    createSession,
+    executeSession,
+    openProjectMainSession,
+    projects,
+    repositories,
+    repositoryMainSessionBindings,
+    sessions,
+    setActiveRepositoryWithOwner,
+    switchSession,
+    viewMode,
+  ]);
+
   function handleOpenInFinder(repository: Repository) {
     openInFinder(repository.path).catch((err) => {
       console.error("Failed to open in finder:", err);
@@ -1954,19 +2018,29 @@ export default function App() {
             : {},
       );
     }
+    function handleRunAssistantBriefEvent(event: Event) {
+      const detail = (event as CustomEvent<RunAssistantBriefDetail>).detail;
+      if (!detail || typeof detail.prompt !== "string") {
+        message.warning("助手派发事件缺少执行内容");
+        return;
+      }
+      void handleRunAssistantBrief(detail);
+    }
     window.addEventListener(WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL, handleOpenTaskSplitPanel as EventListener);
     window.addEventListener(WORKFLOW_UI_EVENT_OPEN_PRD_SPLIT_WIZARD, handleOpenMissionControlEvent as EventListener);
     window.addEventListener(WORKFLOW_UI_EVENT_OPEN_MISSION_CONTROL, handleOpenMissionControlEvent as EventListener);
+    window.addEventListener(WORKFLOW_UI_EVENT_RUN_ASSISTANT_BRIEF, handleRunAssistantBriefEvent as EventListener);
     return () => {
       window.removeEventListener(WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL, handleOpenTaskSplitPanel as EventListener);
       window.removeEventListener(WORKFLOW_UI_EVENT_OPEN_PRD_SPLIT_WIZARD, handleOpenMissionControlEvent as EventListener);
       window.removeEventListener(WORKFLOW_UI_EVENT_OPEN_MISSION_CONTROL, handleOpenMissionControlEvent as EventListener);
+      window.removeEventListener(WORKFLOW_UI_EVENT_RUN_ASSISTANT_BRIEF, handleRunAssistantBriefEvent as EventListener);
     };
     function handleOpenMissionControlEvent(event: Event) {
       const detail = (event as CustomEvent<OpenMissionControlDetail>).detail ?? {};
       openMissionControl(detail);
     }
-  }, [activeProjectId, activeRepositoryId, openMissionControl]);
+  }, [activeProjectId, activeRepositoryId, handleRunAssistantBrief, openMissionControl]);
 
   useEffect(() => {
     function handleWorkflowConfigEvent(event: Event) {

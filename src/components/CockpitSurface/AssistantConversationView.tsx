@@ -3,6 +3,10 @@ import { App as AntdApp, Button, Empty, Input, Spin, Tag, Typography } from "ant
 import { CopyOutlined, SettingOutlined } from "@ant-design/icons";
 import type { ComponentProps } from "react";
 import {
+  WORKFLOW_UI_EVENT_RUN_ASSISTANT_BRIEF,
+  type RunAssistantBriefDetail,
+} from "../../constants/workflowUiEvents";
+import {
   DEFAULT_PRD_SPLIT_ASSISTANT_ID,
   parseAssistantEngineeringPreferences,
   parseAssistantRuntimeBundle,
@@ -157,6 +161,23 @@ function ArtifactAssistantWorkspace({
     }
   };
 
+  const handleRunBrief = () => {
+    if (!request.trim()) {
+      message.warning("请先填写要创建或编辑的产物需求。");
+      return;
+    }
+    window.dispatchEvent(
+      new CustomEvent<RunAssistantBriefDetail>(WORKFLOW_UI_EVENT_RUN_ASSISTANT_BRIEF, {
+        detail: {
+          assistantId: assistant.id,
+          assistantName: assistant.name,
+          prompt: executionBrief,
+          projectId: activeProjectId,
+        },
+      }),
+    );
+  };
+
   return (
     <div className="assistant-artifact-workspace">
       <section className="assistant-artifact-workspace__panel">
@@ -211,9 +232,14 @@ function ArtifactAssistantWorkspace({
               基于当前助手运行态生成,包含启用 Skill、MCP 和格式偏好。
             </Typography.Text>
           </div>
-          <Button type="primary" icon={<CopyOutlined />} onClick={() => void handleCopyBrief()}>
-            复制 Brief
-          </Button>
+          <div className="assistant-artifact-workspace__brief-actions">
+            <Button icon={<CopyOutlined />} onClick={() => void handleCopyBrief()}>
+              复制 Brief
+            </Button>
+            <Button type="primary" onClick={handleRunBrief}>
+              派发到 Claude
+            </Button>
+          </div>
         </div>
         <Input.TextArea
           value={request}

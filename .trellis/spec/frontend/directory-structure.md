@@ -168,7 +168,9 @@ cross-panel event wiring.
   may render non-PRD builtin assistants. Keep executable brief construction in
   `src/components/CockpitSurface/assistantArtifactBrief.ts` and derive enabled
   Skills/MCP from resolved assistant runtime, not from static card metadata
-  alone.
+  alone. Dispatch from this workspace goes through
+  `WORKFLOW_UI_EVENT_RUN_ASSISTANT_BRIEF`; App-level orchestration owns Claude
+  session selection/creation and execution.
 - Thin IPC service: `src/services/repository.ts`.
 - Runtime stream hook: `src/hooks/useClaudeSessions.ts`.
 - Pure tested domain logic: `src/services/workflow/engine.ts`.

@@ -180,7 +180,9 @@ if project.root_path.is_empty() {
 - Non-PRD builtin assistants are skill-backed artifact assistants. Their
   frontend workspace must read `assistants_resolve_runtime` before execution so
   project-scope disabled/custom Skill refs and `engineering.formatProfile`
-  affect the generated task brief.
+  affect the generated task brief. The brief is dispatched through the frontend
+  host into the selected Workspace/repository Claude session; assistant
+  components must not call Claude IPC directly.
 
 ### 4. Validation & Error Matrix
 
