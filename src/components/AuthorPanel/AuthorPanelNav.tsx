@@ -57,6 +57,8 @@ export const AuthorPanelNav = memo(function AuthorPanelNav({
             type="button"
             className="author-panel-nav-item author-panel-nav-item--back"
             onClick={handleBack}
+            title="关闭工作台配置"
+            aria-label="关闭工作台配置"
           >
             <span className="author-panel-nav-item__icon" aria-hidden>
               <LeftOutlined />

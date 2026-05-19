@@ -16,9 +16,8 @@ import {
  * 本 hook 用一个 discriminated union 替代之，保证：
  *   1. 编译期模式互斥：只有一个 `kind` 同时活跃，TS 无法表达"两个 mode 都为 true"。
  *   2. 切换语义集中：调用方写 `enter({ kind: "cockpit" })`，不再操心其他视图。
- *   3. `back` 优先回到上一个视图（栈深度 1）；历史为空时回到默认 cockpit。
- *      这保证「Author 里点 Back」能回到打开 Author 之前的视图（chat / 某个
- *      mission cockpit / inspect tool），而不是默认 cockpit 主页。
+ *   3. `back` 优先回到上一个视图（栈深度 1）；历史为空时回到默认 chat。
+ *      Author 内切换 Tab 不压栈，因此「返回」一次即关闭整个工作台配置。
  */
 
 type ViewModeAction =
@@ -52,6 +51,10 @@ function viewModeReducer(prev: ViewModeState, action: ViewModeAction): ViewModeS
     case "enter": {
       // 跳到自身视为 no-op（不污染历史）。
       if (viewsEqual(prev.current, action.mode)) return prev;
+      // 工作台配置内换 Tab：只改 pane，不把上一 Tab 压入历史。
+      if (prev.current.kind === "author" && action.mode.kind === "author") {
+        return { current: action.mode, prev: prev.prev };
+      }
       return { current: action.mode, prev: prev.current };
     }
     case "back": {

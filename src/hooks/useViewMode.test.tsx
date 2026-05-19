@@ -103,6 +103,26 @@ describe("useViewMode", () => {
     probe.unmount();
   });
 
+  test("switching author panes does not stack history; back exits author once", () => {
+    const probe = renderProbe();
+    act(() => {
+      probe.api.enter(cockpitView("m1"));
+    });
+    act(() => {
+      probe.api.enter(authorView("agents"));
+    });
+    act(() => {
+      probe.api.enter(authorView("assistants"));
+    });
+    expect(probe.api.view).toEqual({ kind: "author", pane: "assistants" });
+
+    act(() => {
+      probe.api.back();
+    });
+    expect(probe.api.view).toEqual({ kind: "cockpit", missionId: "m1" });
+    probe.unmount();
+  });
+
   test("enter author/skills then author/prompts overrides previous pane", () => {
     const probe = renderProbe();
     act(() => {
