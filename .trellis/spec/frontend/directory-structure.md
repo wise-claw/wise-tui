@@ -28,23 +28,36 @@ src/
 ├── main.tsx                         # Main window React entry
 ├── mascot.tsx                       # Mascot window React entry
 ├── App.tsx                          # Desktop workspace shell and cross-panel coordination
+├── AppImpl.tsx                      # Workspace implementation surface invoked by App.tsx
 ├── App.css                          # App-shell styles
+├── mascot.css                       # Mascot window styles
+├── bootstrapDompurifyForTauriAssets.ts  # DOMPurify bootstrap for asset:// resources
+├── vite-env.d.ts                    # Vite ambient types
 ├── components/                      # Feature and shared UI components
 │   ├── ClaudeSessions/
 │   ├── WorkflowConfigModal/
 │   ├── PrdTaskSplitPanel/
+│   ├── Cockpit/
+│   ├── MissionControl/
 │   └── ...
 ├── hooks/                           # Reusable stateful orchestration hooks
 │   ├── useClaudeSessions.ts
 │   ├── useRepositoryList.ts
+│   ├── useViewMode.ts
 │   └── ...
-├── services/                        # IPC wrappers, domain services, pure workflow logic
+├── services/                        # IPC wrappers, domain services, pure logic
 │   ├── claude.ts
 │   ├── repository.ts
 │   ├── workflow/
+│   ├── prdSplit/
+│   ├── mission/
+│   ├── trellis/
 │   └── workflowGraphRuntime.ts
+├── features/                        # Larger feature integrations
+│   └── cc-wf-studio/                #   cc-workflow-studio host integration
+├── cc-workflow-studio-core/         # Pure workflow definition and prompt generation
 ├── stores/                          # Small external subscription stores
-├── notifications/                   # Notification domain modules
+├── notifications/                   # Notification hub, ingest, shared types
 ├── constants/                       # Shared constants and event names
 ├── types/                           # Domain type modules
 ├── types.ts                         # Legacy shared cross-domain types
@@ -78,6 +91,11 @@ Examples:
 - `src/components/ClaudeSessions/` groups the session timeline, message rows,
   docks, and status surfaces for Claude execution.
 - `src/services/workflow/` contains engine, replay, facade, event store, and adapters.
+- `src/services/prdSplit/` contains the PRD split planning, dispatch, and
+  Trellis writer pipeline plus their unit tests.
+- `src/features/cc-wf-studio/` hosts the cc-workflow-studio integration
+  surface, while `src/cc-workflow-studio-core/` holds the pure workflow
+  definition and prompt generation logic.
 - `src/hooks/useClaudeSessions.ts` coordinates process execution, event streams,
   session tabs, and transient runtime state.
 - `src/services/repository.ts` keeps repository IPC calls away from components.

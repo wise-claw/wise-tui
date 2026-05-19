@@ -560,23 +560,8 @@ fn map_projects(rows: Vec<wise_db::WiseProjectRow>) -> Vec<StoredProject> {
     rows.into_iter().map(map_project_row).collect()
 }
 
-fn resolve_project_root_from_repo_ids(
-    repository_ids: &[i64],
-    repositories: &[StoredRepository],
-) -> Option<PathBuf> {
-    for repo_id in repository_ids {
-        let Some(repo) = repositories.iter().find(|r| r.id == *repo_id) else {
-            continue;
-        };
-        if let Some(root) = find_trellis_project_root_from_path(&repo.path) {
-            return Some(root);
-        }
-    }
-    None
-}
-
-/// 路径 X 一次性回填：项目首次升级到 root_path / main_agent 时，从首个成员仓库派生默认值。
-/// 仅在字段为空且首个仓库存在时写回；幂等。
+/// 旧项目首次升级时只补齐主会话 Agent。Workspace rootPath 必须由用户显式选择，
+/// 不能从成员 repo 的 `.trellis` 反推，否则 Workspace 会误读 repo 级 spec。
 fn backfill_project_trellis_fields(
     app: &tauri::AppHandle,
     db: &wise_db::WiseDb,
@@ -595,14 +580,6 @@ fn backfill_project_trellis_fields(
         let Some(repo) = repositories.iter().find(|r| r.id == repo_id) else {
             continue;
         };
-        if row.root_path.is_empty() {
-            if let Some(root) =
-                resolve_project_root_from_repo_ids(&row.repository_ids, &repositories)
-            {
-                db.update_project_root_path(&row.id, &root.to_string_lossy(), now_ms)?;
-                changed = true;
-            }
-        }
         if row.main_agent.is_none() {
             if let Some(name) = repo.main_owner_agent_name.as_deref() {
                 let trimmed = name.trim();
@@ -966,46 +943,15 @@ pub(crate) fn reconcile_project_workspace(
 
 #[tauri::command]
 pub(crate) fn add_repository_to_project(
-    app: tauri::AppHandle,
     db: tauri::State<'_, wise_db::WiseDb>,
     project_id: String,
     repository_id: i64,
 ) -> Result<StoredProject, String> {
-    let rows = db.list_projects()?;
-    let project_row = rows
-        .into_iter()
-        .find(|item| item.id == project_id)
-        .ok_or_else(|| "项目未找到".to_string())?;
-    let root_trim = project_row.root_path.trim();
-    if !root_trim.is_empty() {
-        let root_canon = canonicalize_existing_dir(root_trim)?;
-        let repositories = load_repositories(&app);
-        let repo = repositories
-            .iter()
-            .find(|r| r.id == repository_id)
-            .ok_or_else(|| "仓库未找到".to_string())?;
-        let repo_canon = canonicalize_existing_dir(&repo.path)?;
-        assert_repo_dir_under_project_root(&root_canon, &repo_canon)?;
-    }
-
     let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|e| e.to_string())?
         .as_millis() as i64;
     db.add_repository_to_project(&project_id, repository_id, now_ms)?;
-    let rows = db.list_projects()?;
-    let project = rows
-        .into_iter()
-        .find(|item| item.id == project_id)
-        .ok_or_else(|| "项目未找到".to_string())?;
-    if project.root_path.is_empty() {
-        let repositories = load_repositories(&app);
-        if let Some(root) =
-            resolve_project_root_from_repo_ids(&project.repository_ids, &repositories)
-        {
-            db.update_project_root_path(&project_id, &root.to_string_lossy(), now_ms)?;
-        }
-    }
     let rows = db.list_projects()?;
     let row = rows
         .into_iter()

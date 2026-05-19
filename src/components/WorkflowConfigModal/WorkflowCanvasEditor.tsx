@@ -109,7 +109,7 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
     if (base.some((opt) => opt.value === selectedId)) return base;
 
     const emp = employees.find((item) => item.id === selectedId);
-    const name = emp?.name ?? employeeNameById[selectedId] ?? `员工（${selectedId.slice(0, 8)}…）`;
+    const name = emp?.name ?? employeeNameById[selectedId] ?? `角色（${selectedId.slice(0, 8)}…）`;
     const labelSuffix = emp && !emp.enabled ? "（已禁用）" : "";
     return [{ value: selectedId, label: `${name}${labelSuffix}` }, ...base];
   }, [employees, selectableEmployeeIdSet, occupiedEmployeeIds, editingNode?.employeeId, employeeNameById]);
@@ -441,7 +441,7 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
     const positionY = y ?? 60 + Math.floor(existing / 2) * 120;
     graph.addNode(
       createGraphNodeFromSnapshotNode(
-        { id, kind: "material", title: material.key === "employee" ? "开发阶段" : material.title, materialKey: material.key, theme: material.theme, x: positionX, y: positionY },
+        { id, kind: "material", title: material.key === "employee" ? "智能体阶段" : material.title, materialKey: material.key, theme: material.theme, x: positionX, y: positionY },
         employeeNameByIdRef.current,
       ),
     );

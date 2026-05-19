@@ -89,7 +89,7 @@ Wise 是一个 **Trellis-native 的研发自动驾驶舱（Agent Harness）**，
 |------|--------|
 | Repositories & Projects | Workspace / Standalone Repo 的注册（见 §6） |
 | Agents | 员工配置（原 EmployeeConfigModal）|
-| Workflows | 团队工作流模板（原 WorkflowConfigModal + Workflow Studio）|
+| Delegation Protocol | 委派协议模板（原 WorkflowConfigModal + Workflow Studio）|
 | MCP | MCP 服务器列表与启用 |
 | Skills | 项目/全局 skills.sh 目录 |
 | Hooks | Claude/IDE hook 编排 |
@@ -97,6 +97,36 @@ Wise 是一个 **Trellis-native 的研发自动驾驶舱（Agent Harness）**，
 | Trellis Spec | `.trellis/spec/` 编辑器（新） |
 
 **全部进同一个 Author 入口**（齿轮 / 项目设置），内部用 Tab 区分。**不允许**每加一项就在顶栏多一个图标。
+
+**AionUi 产品化借鉴规则**：
+
+1. Wise 可以为 Hub / Channel / Automation / Artifact / Delegation Protocol 演进修改前端和后端。
+2. 既有后端能力不删除；需要“合并入口”时，采用迁移、包装、聚合、重命名展示，不移除命令、数据和集成路径。
+3. Author 域每个菜单必须回答“它在 AI 工作台闭环里负责什么”：供给生态、运行自动化、远程入口、产物检查、工作区契约或执行引擎。
+4. 单平台配置（如钉钉）不应成为长期顶级入口；应并入平台无关的 Channel / Remote Access 工作台，再由卡片或折叠区承载具体平台。
+
+**配置中心菜单审视表**：
+
+| 菜单 | 工作台职责 | AionUi 借鉴方向 | Wise 交互方向 |
+|------|------------|----------------|---------------|
+| Hub 市场 | 生态总入口 | Agent Hub / 扩展市场 | 一屏展示扩展、助手、技能、MCP、执行引擎、远程入口、自动化、产物检查台，并可跳转到具体管理页 |
+| 工作区 | Workspace 契约 | 项目入口集中化 | Workspace / Standalone Repo 注册、升格、绑定 Trellis 根目录；避免把项目级设置散在侧栏 |
+| 智能体角色 | Agent 供给 | Local / Remote Agent tabs | Agent 角色、执行引擎、助手模板要有清晰来源和状态，后续支持模板市场 |
+| 委派协议 | 任务委派协议 | 多 Agent 协作 | 流程模板、画布、阶段分派、异步邮箱和进度看板逐步合并 |
+| 提示词模板 | Loop 语义契约 | 助手配置页 | PRD 拆分、会话提示词、平台默认提示词按作用域集中编辑 |
+| Trellis 规范 | Spec 反哺 | 技能/规范生态 | `.trellis/spec/` 和反哺动作是一等配置，不作为隐藏文件编辑器 |
+| 扩展市场 | 插件安装态 | Extension marketplace | 本地/远程索引、安装/更新/重试、贡献能力、SRI 校验逐步补齐 |
+| 助手模板 | 可复用角色 | Assistant presets | 内置、自定义、扩展助手统一列表，后续做对话级启用 |
+| 技能市场 | Skills 供给 | 三层技能模型 | 项目、用户、扩展技能统一管理，后续做技能包安装和启停 |
+| MCP 工具 | 工具协议 | Tools / MCP settings | 推荐项、已安装项、扩展贡献 MCP 和连接测试集中 |
+| 执行引擎 | Agent runtime | Local / Remote agents | Claude、Codex、自定义命令检测、健康检查、默认执行策略 |
+| 定时自动化 | 24/7 工作台 | Cron + Agent session | 仓库 Cron 先收敛，后续升级为 Mission / Claude Session 级计划任务 |
+| 远程入口 | 多平台远程控制 | Channels | 钉钉、飞书、企微、Telegram 都落到统一通道协议，禁止继续新增单平台顶级菜单 |
+| 产物检查台 | Evidence / artifact review | 文件预览工作区 | Markdown、Diff、图片、HTML、PDF、Office 统一预览，多标签和 Git 回溯后续补齐 |
+| Claude 运行目录 | 引擎环境 | System settings | 配置目录、settings.json、agents、hooks 的运行环境集中展示 |
+| Hook 规则 | 工具链触发器 | Tools settings | Hook 搜索、导入、启停和作用域清晰化 |
+| 快捷键 | 桌面效率 | System / About | 只保留为运行辅助页，不再和核心配置争主入口 |
+| Claude 沙箱 | 权限边界 | System / Tools | 沙箱、权限、隔离策略集中说明；后续接权限批准流 |
 
 ### 2.3 Inspector 域 —— "我要临时看一个透镜"
 
@@ -124,10 +154,10 @@ Wise 是一个 **Trellis-native 的研发自动驾驶舱（Agent Harness）**，
 ```ts
 // src/types/viewMode.ts
 export type ViewMode =
+  | { kind: "chat" }
+  // 默认主屏：主会话 / 当前仓库工作流
   | { kind: "cockpit"; missionId?: string }
-  // 默认主屏：Mission 全貌 + 上下文 Inspector
-  | { kind: "chat"; sessionId: string }
-  // 沉浸对话子模式（从 Cockpit 展开）
+  // 助手 / Mission 工作台（从左栏显式进入）
   | { kind: "author"; pane: AuthorPane }
   // 配置域（齿轮入口；内部 Tab 切换）
   | { kind: "inspect"; tool: InspectTool };
@@ -160,11 +190,28 @@ export type InspectTool =
 
 **实施位置**：`src/hooks/useViewMode.ts`（新）+ `src/components/ViewModeRouter.tsx`（新），从 `AppImpl.tsx` 抽出 600+ 行模式管理代码。
 
+### 3.1 CockpitSubMode（cockpit 内部状态，不挂 ViewMode union）
+
+`cockpit` 内部由 `CockpitSurface` 维护一个**组件级**子状态，不抬升到 ViewMode union（避免破坏 §3 的 4-kind 约束）：
+
+```ts
+// 仅在 src/components/CockpitSurface 内部使用
+type CockpitSubMode =
+  | { kind: "hub" }
+  | { kind: "conversation"; assistantId: string };
+```
+
+- `hub`：默认空态，渲染 **AssistantHub**（内置助手卡片 + 自建助手卡片 + 最近对话）。
+- `conversation`：进入助手工作台。当前内置需求助手渲染 `AssistantHeader + PrdTaskSplitPanel`，左侧是 PRD 输入 / 导入 / Skills / MCP / 拆分配置，右侧在运行中展示 Claude subagent 过程，完成后展示拆分任务并可“重看过程”。
+- 切换由 `CockpitSurface` 内 `useState` 管理，挂载策略见 `agent-harness-architecture` 引用文档（task `05-18-assistant-hub-builtin-prd-split`）。
+
+**等价旧组件**：`MissionControl.tsx` 仍保留为兼容内核；新助手入口优先复用 `PrdTaskSplitPanel`，避免把助手页扩成新的 ChatPane / ArtifactPane 产品。
+
 ---
 
-## 4. 默认主屏：Cockpit（不是 Chat）
+## 4. 默认主屏：Chat 优先，助手显式进入
 
-> **当前问题**：默认主屏是 ClaudeSessions（聊天），Mission Control 是要点开的全屏 Modal。这是 Wise 看起来像 "Claude Code 套壳" 的根本原因。
+> **2026-05-18 修订**：助手 Hub 不应比主会话优先级更高。应用默认仍进入主会话；用户从左栏“助手”显式进入 CockpitSurface。助手页必须提供“返回对话”入口。
 
 ### 4.1 Cockpit 三栏
 
@@ -206,6 +253,16 @@ export type InspectTool =
 ### 4.3 Chat 退化为子模式
 
 从 Cockpit 任意位置可以一键展开 "Chat 沉浸"：临时让某个会话占满中央 + 右栏，左栏 Workspace 树保留。**不是删掉 Chat 能力，是把它从默认主屏降级**。
+
+### 4.4 Cockpit 默认空态 = AssistantHub（2026-05-18 修订）
+
+> 修订动因：`MissionControl.tsx` 全屏壳被删除；Cockpit 主屏在没有 active mission 时不再渲染"Mission 概览空态"，改为渲染 **AssistantHub**（AionUI 风格的助手卡片网格 + 最近对话区 + AionUI 风格输入条）。
+
+- 进入 Cockpit 且无 active mission → AssistantHub。
+- 选择助手卡片或最近对话 → 切到 conversation 子态（见 §3.1）。
+- conversation 子态内：`AssistantHeader + PrdTaskSplitPanel`。需求助手左侧承载 PRD 与资源选择，右侧承载运行过程 / 拆分任务结果。
+- 助手工作台不显示右侧 Cockpit Inspector；`Mission 概览 / Git Diff / 子代理活动` 等透镜只在需要时作为后续 Inspector 入口打开，避免压缩需求拆分主工作区。
+- §4.1 三栏的"中央 Mission 主画布"语义保持不变，只是其默认空态从"Mission 概览"换成 AssistantHub。
 
 ---
 
@@ -272,7 +329,8 @@ mission_runs.workflow_snapshot_id  -> trellis_workflow_snapshots.id
 1. **Standalone Repo 只跑 Chat 模式**。能用 Claude Code、git、文件编辑、code graph，但 Mission Control / Workflow / Author 域功能默认隐藏。
 2. **Workspace 才是 Wise 的"主菜"**。Trellis 默认嵌入，Mission Control 是它的主屏。
 3. **Standalone Repo 可以"升格"为 Workspace**（已有 `handlePromoteFloatingRepositoryToProject`），升格意味着接入 Trellis。
-4. UI 不必立刻改名，但所有新写的代码、文档、注释统一用 Workspace / Standalone Repo。
+4. **Workspace rootPath 是 Trellis/运行时根，不是成员仓库的物理边界**。手动关联仓库允许任意磁盘路径；`重新初始化` 只自动扫描 rootPath 下的 Git 仓库。
+5. UI 不必立刻改名，但所有新写的代码、文档、注释统一用 Workspace / Standalone Repo。
 
 ---
 
@@ -287,12 +345,13 @@ mission_runs.workflow_snapshot_id  -> trellis_workflow_snapshots.id
 - 不改任何 UI 视觉，只改状态结构
 - 验收：AppImpl.tsx 净减 200+ 行，所有现有路径行为不变
 
-### P1 · Cockpit 取代默认主屏 `[2 周]`
+### P1 · 助手工作台显式入口 `[2 周]`
 
-- 启动时默认进入 Cockpit（即 Mission 主画布）
-- Chat 降级为子模式
+- 启动时默认进入 Chat 主会话
+- 左栏“助手”显式进入 CockpitSurface / AssistantHub
+- 助手 Header 和 Hub 都提供“返回对话”
 - 右栏 RightPanel 拆为 Inspector，按 ViewMode 上下文驱动
-- 验收：新用户打开 Wise 第一眼看到的不是聊天
+- 验收：主会话不被助手抢占，需求助手打开后进入 PRD 拆分工作台
 
 ### P2 · 挂载 useMissionRunStore（来自 05-16 F3） `[配合 P1]`
 
@@ -302,9 +361,14 @@ mission_runs.workflow_snapshot_id  -> trellis_workflow_snapshots.id
 
 ### P3 · Author 域统一入口 `[1 周]`
 
-- 顶栏齿轮 → Author Drawer（Tab 化）：Repositories / Agents / Workflows / MCP / Skills / Hooks / Prompts / Trellis Spec
+- 顶栏齿轮 → Author Drawer（Tab 化）：Repositories / Agents / Workflows / MCP / Skills / Hooks / Trellis Spec
 - 移除 LeftSidebar 顶部的 LeftSidebarTopNavStack
 - 验收：侧栏只有 Workspace 树，导航集中在顶栏
+
+> 2026-05-18 修订：`Prompts` 与 `Trellis Spec` 两个 Tab 已从 Author Drawer 移除。
+> - 提示词工坊（含 PRD 拆分提示词的项目层 / 仓库层 / 助手层覆盖）合并到 `AssistantSettingsDrawer` 的 `Prompts` Tab，按 scope 切换；存储统一到 `assistant_overrides` 表。
+> - Trellis 规范库拆为两处：`AssistantSettingsDrawer` 的 `Specs` Tab（可写）+ `InspectTool { kind: "spec-library" }`（只读速览）。
+> - 因此 Author Drawer 当前 Tab 集合为：Workspaces / Agents / Workflows / MCP / Skills / Hooks（外加生态与运行设置组的若干 Tab）。`AuthorPane` union 中 `prompts` 与 `trellis-spec` 已下线。
 
 ### P4 · Trellis ↔ Mission 双写补全 `[2 周，含 05-16 F1/F4/F7]`
 
@@ -337,6 +401,13 @@ mission_runs.workflow_snapshot_id  -> trellis_workflow_snapshots.id
 | 2026-05-17 | Author 域统一入口（齿轮 + Tab） | Operator / Author 时空错开，主屏只服务跑 Loop |
 | 2026-05-17 | Trellis 与 Mission 共享 agent_run_id | 把 Trellis 工作流契约和 Mission 运行时实例钉成一回事 |
 | 2026-05-17 | 项目 → Workspace；游离仓库 → Standalone Repo | 让两类用户的入口和心智一目了然 |
+| 2026-05-18 | Cockpit 默认空态改为 AssistantHub；MissionControl.tsx 全屏壳删除 | PRD 拆分流程从"项目 FAB 触发的全屏黑盒"反转为助手宿主，对齐 AionUI 心智 |
+| 2026-05-18 | Cockpit 内部新增 CockpitSubMode（hub/conversation），不挂 ViewMode union | 保留 §3 的 4-kind 约束；助手切换是组件级状态 |
+| 2026-05-18 | D13 收敛：需求助手 conversation 先复用 `PrdTaskSplitPanel`，不实现独立 ChatPane / ArtifactPane | 先完成 AionUI 式助手壳与 Wise 现有需求拆分能力集成，避免一次性重写对话系统 |
+| 2026-05-18 | 需求助手右侧运行过程化：运行中展示 Claude subagent 日志，完成后展示拆分任务并可重看过程 | 匹配“先看过程，结果生成后看任务”的助手工作台心智 |
+| 2026-05-18 | 提示词覆盖统一到 `assistant_overrides(assistant_id, scope)` | 助手层 / 项目层 / 仓库层共用一表，删除 Author/prompts |
+| 2026-05-18 | ProjectTrellisCenter 解体：Runtime/Workflow/SpecTimeline 降为 InspectTool；SpecLibrary 进 AssistantSettingsDrawer + InspectTool | Author 配置 Tab 不再混入运行态/观察态，符合 §2 三域分层 |
+| 2026-05-18 | 三张审计表加 `assistant_id` 列，旧行 NULL = 前助手时代；mission_runs 加 task_dir | 不回填，UI 兜底显示"早期版本" |
 
 ---
 

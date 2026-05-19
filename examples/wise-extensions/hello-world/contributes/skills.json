@@ -1,0 +1,7 @@
+[
+  {
+    "name": "say-hello",
+    "description": "Print a friendly greeting from the extension's own markdown body.",
+    "file": "contributes/skill.md"
+  }
+]

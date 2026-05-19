@@ -39,6 +39,14 @@ const MIGRATION_019: &str =
 const MIGRATION_020: &str = include_str!("../migrations/020_mission_control.sql");
 const MIGRATION_021: &str = include_str!("../migrations/021_mission_control_planning_evidence.sql");
 const MIGRATION_022: &str = include_str!("../migrations/022_trellis_runtime.sql");
+const MIGRATION_023: &str = include_str!("../migrations/023_agent_custom.sql");
+const MIGRATION_024: &str = include_str!("../migrations/024_skills_external_path.sql");
+const MIGRATION_025: &str = include_str!("../migrations/025_mcp_server.sql");
+const MIGRATION_026: &str = include_str!("../migrations/026_assistant_custom.sql");
+const MIGRATION_027: &str = include_str!("../migrations/027_assistant_id.sql");
+const MIGRATION_028: &str = include_str!("../migrations/028_assistant_overrides.sql");
+const MIGRATION_029: &str =
+    include_str!("../migrations/029_migrate_prompt_layers_into_assistant_overrides.sql");
 const PLATFORM_SPLIT_PROMPT_SEED_JSON: &str =
     include_str!("../migrations/005_platform_split_prompt_seed.json");
 
@@ -140,6 +148,34 @@ const MIGRATIONS: &[Migration] = &[
     Migration {
         name: "022_trellis_runtime",
         action: MigrationAction::Sql(MIGRATION_022),
+    },
+    Migration {
+        name: "023_agent_custom",
+        action: MigrationAction::Sql(MIGRATION_023),
+    },
+    Migration {
+        name: "024_skills_external_path",
+        action: MigrationAction::Sql(MIGRATION_024),
+    },
+    Migration {
+        name: "025_mcp_server",
+        action: MigrationAction::Sql(MIGRATION_025),
+    },
+    Migration {
+        name: "026_assistant_custom",
+        action: MigrationAction::Sql(MIGRATION_026),
+    },
+    Migration {
+        name: "027_assistant_id",
+        action: MigrationAction::Sql(MIGRATION_027),
+    },
+    Migration {
+        name: "028_assistant_overrides",
+        action: MigrationAction::Sql(MIGRATION_028),
+    },
+    Migration {
+        name: "029_migrate_prompt_layers_into_assistant_overrides",
+        action: MigrationAction::Sql(MIGRATION_029),
     },
 ];
 
@@ -1872,7 +1908,7 @@ fn seed_platform_split_prompt_default(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
-fn unix_now_ms() -> i64 {
+pub(crate) fn unix_now_ms() -> i64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1912,6 +1948,13 @@ mod tests {
                 "020_mission_control",
                 "021_mission_control_planning_evidence",
                 "022_trellis_runtime",
+                "023_agent_custom",
+                "024_skills_external_path",
+                "025_mcp_server",
+                "026_assistant_custom",
+                "027_assistant_id",
+                "028_assistant_overrides",
+                "029_migrate_prompt_layers_into_assistant_overrides",
             ]
         );
     }

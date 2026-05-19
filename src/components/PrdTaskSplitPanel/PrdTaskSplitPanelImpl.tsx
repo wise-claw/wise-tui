@@ -1,17 +1,10 @@
 import { Col, Layout, Row, Space, Spin } from "antd";
 import { Suspense } from "react";
-import type {
-  EmployeeItem,
-  ProjectItem,
-  Repository,
-  WorkflowTemplateItem,
-} from "../../types";
+import type { ProjectItem, Repository } from "../../types";
 import { savePrdTaskSplitResult } from "../../services/prdTaskSplitStore";
 import { sameStringArray } from "../../utils/anchorStability";
 import { RequirementNameModal } from "./RequirementNameModal";
 import { RuntimePromptEditModal } from "./RuntimePromptEditModal";
-import { SplitPromptWizardModal } from "./SplitPromptWizardModal";
-import { ProjectScopeHeader } from "./ProjectScopeHeader";
 import { RequirementInputCard } from "./RequirementInputCard";
 import { TaskResultPanel } from "./TaskResultPanel";
 import { reconcileResolvedAnchorRanges } from "./anchorReconcile";
@@ -26,12 +19,6 @@ export interface PrdTaskSplitPanelProps {
   repositories: Repository[];
   activeProjectId: string | null;
   activeRepositoryId: number | null;
-  employees: EmployeeItem[];
-  workflowTemplates: WorkflowTemplateItem[];
-  /** 与侧栏仓库一致：打开全局「员工」配置（新建后自动关联当前项目）。 */
-  onOpenEmployeeConfigForProject?: () => void;
-  /** 与侧栏仓库一致：打开全局「团队」配置（保存模板后自动关联当前项目）。 */
-  onOpenWorkflowConfigForProject?: () => void;
 }
 
 export function PrdTaskSplitPanel({
@@ -40,15 +27,15 @@ export function PrdTaskSplitPanel({
   repositories,
   activeProjectId,
   activeRepositoryId,
-  employees,
-  workflowTemplates,
-  onOpenEmployeeConfigForProject,
-  onOpenWorkflowConfigForProject,
 }: PrdTaskSplitPanelProps) {
   const {
-    activeRequirement,
-    activeRequirementId,
     activeResult,
+    assistantHistoryLoading,
+    assistantHistoryOptions,
+    assistantMcpOptions,
+    assistantRuntimeLoading,
+    assistantWorkflowOptions,
+    assistantSelectedMcpIds,
     anchorRangePersistTimerRef,
     canGenerateExecutableTasks,
     cardUnmetPointsForTask,
@@ -62,29 +49,27 @@ export function PrdTaskSplitPanel({
     getTaskAiInput,
     getTaskAiMode,
     handleAddTask,
+    handleAssistantMcpsChange,
     handleCheckTaskExecutable,
     handleClearAllTasks,
     handleConfirmAllTasks,
     handleConfirmRequirementNameModal,
     handleConfirmTaskAdjustment,
-    handleDeleteActiveRequirement,
     handleDeleteTask,
     handleGenerateExecutableForSplitTask,
     handleGenerateExecutableTasks,
-    handleOpenSplitPromptAdjustModal,
+    handleImportLegacyPrd,
+    handleImportPrdFile,
+    handleParse,
     handleOptimizeRuntimePromptDraft,
-    handleOptimizeSplitPromptDraft,
     handleOptimizeTaskContent,
     handlePasteImage,
-    handlePinActiveRequirement,
     handleResetRuntimePromptToDefault,
     handleRetrySplitStage,
     handleSaveOptimizedTaskContent,
     handleSaveRuntimePromptDraft,
-    handleSaveSplitPromptAdjustDrafts,
     handleSaveTaskDraft,
     handleSplitSelection,
-    handleStartSplitFromAdjustModal,
     handleUserPersistPrdDraft,
     hasConfirmedTasks,
     hasInput,
@@ -92,8 +77,6 @@ export function PrdTaskSplitPanel({
     inputError,
     inputValue,
     latestAnchorRangePersistResultRef,
-    linkedProject,
-    linkedRepository,
     linkedRepositoryId,
     mappingFallbackStats,
     message,
@@ -105,7 +88,6 @@ export function PrdTaskSplitPanel({
     pickRequirementIdForTask,
     promptActionItems,
     requirementEditorShellRef,
-    requirementHistoryById,
     requirementNameInput,
     requirementNameModalMode,
     requirementNameModalOpen,
@@ -129,7 +111,6 @@ export function PrdTaskSplitPanel({
     setPendingTaskApiSpecById,
     setPendingTaskContentById,
     setRequirementNameInput,
-    setRequirementNameModalMode,
     setRequirementNameModalOpen,
     setResolvedTaskAnchorIds,
     setRuntimePromptModalOpen,
@@ -137,10 +118,7 @@ export function PrdTaskSplitPanel({
     setRuntimePromptSlot,
     setSelectedAnchorTaskId,
     setSelectedTaskId,
-    setSplitPromptAdjustDraftBySlot,
-    setSplitPromptAdjustModalOpen,
     setSplitRuntimeVisible,
-    setSplitWizardStep,
     setTaskAiInputById,
     setTaskAiOptimizedContentById,
     setTaskAiPopoverMode,
@@ -152,21 +130,12 @@ export function PrdTaskSplitPanel({
     setTaskUnmetCollapsedById,
     showRoleFilterTabs,
     showUrlAnchorHint,
-    sortedRequirementHistory,
     splitError,
-    splitPromptAdjustDraftBySlot,
-    splitPromptAdjustLoading,
-    splitPromptAdjustModalOpen,
-    splitPromptAdjustSaving,
     splitPromptAdjustStarting,
-    splitPromptOptimizingSlot,
     splitQualityStats,
     splitRuntimeListRef,
     splitRuntimeLogs,
-    splitRuntimeRef,
     splitRuntimeVisible,
-    splitWizardStep,
-    switchToRequirement,
     panelRootRef,
     openTaskAiPopover,
     taskAiActionLoadingById,
@@ -224,32 +193,6 @@ export function PrdTaskSplitPanel({
           }
           : undefined}
       >
-      <SplitPromptWizardModal
-        open={splitPromptAdjustModalOpen}
-        step={splitWizardStep}
-        parsing={parsing}
-        starting={splitPromptAdjustStarting}
-        saving={splitPromptAdjustSaving}
-        optimizingSlot={splitPromptOptimizingSlot}
-        loading={splitPromptAdjustLoading}
-        draftBySlot={splitPromptAdjustDraftBySlot}
-        runtimeLogs={splitRuntimeLogs}
-        runtimeListRef={splitRuntimeListRef}
-        retryingPhase={retryingPhase}
-        onStepChange={setSplitWizardStep}
-        onClose={() => {
-          setSplitPromptAdjustModalOpen(false);
-          setSplitWizardStep("prompts");
-          setSplitRuntimeVisible(false);
-        }}
-        onDraftChange={(slot, markdown) => {
-          setSplitPromptAdjustDraftBySlot((prev) => ({ ...prev, [slot]: markdown }));
-        }}
-        onSavePrompts={() => void handleSaveSplitPromptAdjustDrafts()}
-        onStartSplit={() => void handleStartSplitFromAdjustModal()}
-        onOptimize={(slot) => void handleOptimizeSplitPromptDraft(slot)}
-        onRetryStage={(phase) => { void handleRetrySplitStage(phase); }}
-      />
       <RuntimePromptEditModal
         open={runtimePromptModalOpen}
         linkedRepositoryId={linkedRepositoryId}
@@ -278,27 +221,9 @@ export function PrdTaskSplitPanel({
         onConfirm={() => void handleConfirmRequirementNameModal()}
       />
       <Space orientation="vertical" size={4} className="app-prd-task-panel__stack">
-        <ProjectScopeHeader
-          projects={projects}
-          repositories={repositories}
-          employees={employees}
-          workflowTemplates={workflowTemplates}
-          activeProjectId={activeProjectId}
-          linkedProject={linkedProject}
-          linkedRepositoryId={linkedRepositoryId}
-          linkedRepository={linkedRepository}
-          closingActive={Boolean(closingToTaskListMotion?.active)}
-          onClose={onClose}
-          onOpenEmployeeConfigForProject={onOpenEmployeeConfigForProject}
-          onOpenWorkflowConfigForProject={onOpenWorkflowConfigForProject}
-        />
-
         <Row gutter={12} className="app-prd-task-panel__columns">
           <Col span={12} className="app-prd-task-panel__col">
             <RequirementInputCard
-              activeRequirementId={activeRequirementId}
-              activeRequirement={activeRequirement ?? null}
-              options={sortedRequirementHistory}
               inputValue={inputValue}
               inputError={inputError}
               showUrlAnchorHint={showUrlAnchorHint}
@@ -306,29 +231,18 @@ export function PrdTaskSplitPanel({
               parsing={parsing}
               splitStarting={splitPromptAdjustStarting}
               promptActionItems={promptActionItems}
+              assistantRuntimeLoading={assistantRuntimeLoading}
+              assistantWorkflowOptions={assistantWorkflowOptions}
+              assistantMcpOptions={assistantMcpOptions}
+              assistantSelectedMcpIds={assistantSelectedMcpIds}
+              assistantHistoryOptions={assistantHistoryOptions}
+              assistantHistoryLoading={assistantHistoryLoading}
               editorRef={milkdownEditorRef}
               editorShellRef={requirementEditorShellRef}
               taskAnchors={milkdownTaskAnchors}
               selectedAnchorTaskId={selectedAnchorTaskId}
               filteredTaskCount={filteredTasks.length}
-              splitRuntimeVisible={splitRuntimeVisible}
-              splitRuntimeRef={splitRuntimeRef}
-              splitRuntimeListRef={splitRuntimeListRef}
-              splitRuntimeLogs={splitRuntimeLogs}
-              retryingPhase={retryingPhase}
               onInputChange={setInputValue}
-              onPickRequirement={(value) => {
-                const picked = requirementHistoryById.get(value);
-                if (!picked) return;
-                switchToRequirement(picked);
-              }}
-              onPinRequirement={() => handlePinActiveRequirement()}
-              onCreateRequirement={() => {
-                setRequirementNameModalMode("create");
-                setRequirementNameInput("");
-                setRequirementNameModalOpen(true);
-              }}
-              onDeleteRequirement={() => handleDeleteActiveRequirement()}
               onPasteImage={(e) => void handlePasteImage(e)}
               onSplitSelection={() => void handleSplitSelection()}
               onResolvedTaskAnchorIdsChange={(taskIds) => {
@@ -367,10 +281,11 @@ export function PrdTaskSplitPanel({
               onTaskAnchorMarkerClick={(taskId) => {
                 focusTaskWithFilterSync(taskId);
               }}
-              onCloseRuntimePanel={() => setSplitRuntimeVisible(false)}
-              onRetryStage={(phase) => { void handleRetrySplitStage(phase); }}
               onSaveDraft={() => void handleUserPersistPrdDraft()}
-              onStartSplit={() => void handleOpenSplitPromptAdjustModal()}
+              onStartSplit={() => void handleParse()}
+              onImportPrdFile={() => void handleImportPrdFile()}
+              onImportLegacyPrd={(summary) => void handleImportLegacyPrd(summary)}
+              onAssistantMcpsChange={handleAssistantMcpsChange}
             />
           </Col>
           <Col span={12} className="app-prd-task-panel__col">
@@ -380,6 +295,11 @@ export function PrdTaskSplitPanel({
               splitQualityStats={splitQualityStats}
               taskHostRef={taskSplitHostRef}
               filteredTasks={filteredTasks}
+              runtimeVisible={splitRuntimeVisible}
+              runtimeLogs={splitRuntimeLogs}
+              runtimeListRef={splitRuntimeListRef}
+              retryingPhase={retryingPhase}
+              parsing={parsing}
               unmetTaskIds={unmetTaskIds}
               unmetMenuItems={unmetPreconditionsMenuItems}
               confirmSavingTaskId={confirmSavingTaskId}
@@ -519,6 +439,9 @@ export function PrdTaskSplitPanel({
                 }));
               }}
               onGenerateExecutableTasks={() => void handleGenerateExecutableTasks()}
+              onCloseRuntime={() => setSplitRuntimeVisible(false)}
+              onRetryStage={(phase) => { void handleRetrySplitStage(phase); }}
+              onShowRuntime={() => setSplitRuntimeVisible(true)}
             />
           </Col>
         </Row>

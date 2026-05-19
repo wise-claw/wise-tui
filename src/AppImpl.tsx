@@ -31,11 +31,13 @@ import {
   useViewMode,
 } from "./hooks/useViewMode";
 import type { AuthorPane } from "./types/viewMode";
+import { DEFAULT_AUTHOR_PANE, WORKSPACE_SCOPED_AUTHOR_PANES } from "./types/viewMode";
 import { useClaudeSessions, type ClaudeTurnCompletePayload } from "./hooks/useClaudeSessions";
 import { openInFinder } from "./services/repository";
 import { triggerCodeGraphProjectSearch, triggerCodeGraphReindex } from "./services/codeKnowledgeGraph";
 import { AppWorkspaceLayout } from "./components/AppWorkspaceLayout";
 import { readAuthorPaneFromSettings, readAuthorPaneFromStorage } from "./components/AuthorPanel";
+import { ProjectTrellisCenter } from "./components/ProjectTrellisCenter";
 import type { PromptsOpenContext } from "./components/PromptsPanel";
 import { reloadAppWindow } from "./services/window";
 import { wiseMascotShow } from "./services/wiseMascot";
@@ -245,7 +247,9 @@ export default function App() {
       : false;
   const [lastAuthorPane, setLastAuthorPane] = useState(() => readAuthorPaneFromStorage());
   const [missionControlInitialTarget, setMissionControlInitialTarget] = useState<OpenMissionControlDetail | null>(null);
+  const [missionControlOpenRequestKey, setMissionControlOpenRequestKey] = useState(0);
   const [authorTrellisProjectId, setAuthorTrellisProjectId] = useState<string | null>(null);
+  const [workspaceTrellisProjectId, setWorkspaceTrellisProjectId] = useState<string | null>(null);
   const [workspaceCreateRequest, setWorkspaceCreateRequest] = useState(0);
   const [standaloneRepoAddRequest, setStandaloneRepoAddRequest] = useState(0);
   const [promptsOpenContext, setPromptsOpenContext] = useState<PromptsOpenContext | null>(null);
@@ -358,6 +362,7 @@ export default function App() {
     handleCreateProject,
     handleUpdateProject,
     handleDeleteProject,
+    handleAddRepositoryToProject,
     handleAddRepositoryPathToProject,
     handleAddFloatingRepository,
     handlePromoteFloatingRepositoryToProject,
@@ -1007,6 +1012,14 @@ export default function App() {
     ),
     [authorTrellisProjectId, projects],
   );
+  const workspaceTrellisProject = useMemo(
+    () => (
+      workspaceTrellisProjectId
+        ? projects.find((project) => project.id === workspaceTrellisProjectId) ?? null
+        : null
+    ),
+    [projects, workspaceTrellisProjectId],
+  );
   const missionSessionBindingKeyRef = useRef("");
   useEffect(() => {
     const session = activeSessionId ? sessionsLatestRef.current.find((item) => item.id === activeSessionId) : null;
@@ -1067,6 +1080,13 @@ export default function App() {
   const openMissionControl = useCallback((detail: OpenMissionControlDetail) => {
     setSearchOpen(false);
     setMissionControlInitialTarget(detail);
+    setMissionControlOpenRequestKey((value) => value + 1);
+    viewMode.enter(cockpitView());
+  }, [viewMode]);
+  const openDefaultAssistant = useCallback(() => {
+    setSearchOpen(false);
+    setMissionControlInitialTarget(null);
+    setMissionControlOpenRequestKey((value) => value + 1);
     viewMode.enter(cockpitView());
   }, [viewMode]);
   const composerProjectRoleTagOptions = useMemo(() => {
@@ -1768,7 +1788,7 @@ export default function App() {
     }
     const anchor = resolveProjectMainSessionAnchor(project, repositories);
     if (!anchor.path) {
-      message.warning("该 Workspace 缺少根目录，请先在 Author / Workspaces 中配置 rootPath");
+      message.warning("该 Workspace 缺少根目录，请先在工作台配置 / Workspaces 中配置 rootPath");
       return;
     }
     const primaryRepo = repos[0];
@@ -2075,14 +2095,21 @@ export default function App() {
         repositories,
         activeRepositoryId,
         authorDisabled: !activeProjectId && activeRepositoryId != null,
-        authorDisabledTooltip: "Standalone Repo 不支持 Author 配置；升格为 Workspace 后启用",
-        onOpenAuthor: () => {
-          if (!activeProjectId && activeRepositoryId != null) {
-            message.warning("Standalone Repo 不支持 Author 配置；升格为 Workspace 后启用");
+        authorDisabledTooltip: "Standalone Repo 不支持工作台配置；升格为 Workspace 后启用",
+        onOpenAuthor: (pane) => {
+          const targetPane = pane ?? DEFAULT_AUTHOR_PANE;
+          if (
+            !activeProjectId &&
+            activeRepositoryId != null &&
+            WORKSPACE_SCOPED_AUTHOR_PANES.has(targetPane)
+          ) {
+            message.warning("Standalone Repo 不支持工作台配置；升格为 Workspace 后启用");
             return;
           }
-          enterAuthorPane(lastAuthorPane);
+          enterAuthorPane(targetPane);
         },
+        assistantHubActive: viewMode.view.kind === "cockpit",
+        onOpenAssistantHub: openDefaultAssistant,
         workspaceCreateRequest,
         standaloneRepoAddRequest,
         onProjectSelect: handleProjectSelectLeavingMcpHub,
@@ -2092,6 +2119,7 @@ export default function App() {
         pinnedProjectIds,
         onTogglePinProject: togglePinProject,
         onAddFloatingRepository: handleAddFloatingRepository,
+        onAddRepositoryToProject: handleAddRepositoryToProject,
         onReconcileProject: async (projectId, mode: ReconcileProjectMode) => {
           try {
             const r = await handleReconcileProjectWorkspace(projectId, mode);
@@ -2129,8 +2157,7 @@ export default function App() {
         onCreateRepositoryTask: handleCreateRepositoryTask,
         onOpenPromptsProject: handleOpenPromptsForProject,
         onOpenProjectTrellis: (project) => {
-          setAuthorTrellisProjectId(project.id);
-          enterAuthorPane("trellis-spec");
+          setWorkspaceTrellisProjectId(project.id);
         },
         onOpenPromptsRepository: handleOpenPromptsForRepository,
         onOpenRepositoryMainOwner: (repository) => {
@@ -2374,10 +2401,32 @@ export default function App() {
         trellisSpecProps: {
           open: true,
           project: authorTrellisProject ?? activeProject,
+          repositories,
           onOpenProjectSession: (project) => void openProjectMainSession(project),
           onRequestSpecAgentUpdate: handleRequestSpecAgentUpdate,
         },
         repositoryPath: activeRepository?.path ?? null,
+        automationPanelProps: {
+          repositories,
+          activeRepositoryId,
+          employees,
+          workflowTemplates,
+          workflowGraphsByWorkflowId,
+        },
+        artifactsPanelProps: {
+          repositories,
+          activeRepositoryId,
+          onOpenRepositoryFile: (repository, relativePath) => {
+            if (repository.id !== activeRepositoryId) {
+              setActiveRepositoryWithOwner(repository.id);
+            }
+            setRepositoryFileOpenRequest({
+              repositoryPath: repository.path,
+              relativePath,
+              line: null,
+            });
+          },
+        },
         workflowStudioAction: undefined,
       }}
       promptsPanelProps={{
@@ -2536,6 +2585,12 @@ export default function App() {
         onCreateWorkspace: () => setWorkspaceCreateRequest((value) => value + 1),
         onImportStandaloneRepo: () => setStandaloneRepoAddRequest((value) => value + 1),
       }}
+      cockpitSurfaceActiveProjectId={activeProjectId ?? null}
+      cockpitSurfaceActiveProjectName={activeProject?.name ?? null}
+      cockpitSurfaceHasInitialTarget={Boolean(
+        missionControlInitialTarget?.projectId || missionControlInitialTarget?.repositoryId,
+      )}
+      cockpitSurfaceOpenRequestKey={missionControlOpenRequestKey}
       commandPaletteProps={{
         open: searchOpen,
         onClose: () => setSearchOpen(false),
@@ -2581,6 +2636,13 @@ export default function App() {
           (activeProjectId ? { projectId: activeProjectId } : null),
         onClose: () => viewMode.enter({ kind: "chat" }),
       }}
+      prdTaskSplitPanelProps={{
+        projects,
+        repositories,
+        activeProjectId,
+        activeRepositoryId,
+        onClose: () => viewMode.enter({ kind: "chat" }),
+      }}
       progressMonitorDrawerProps={{
         open: monitorDrawerTarget != null,
         target: monitorDrawerTarget,
@@ -2611,6 +2673,14 @@ export default function App() {
           setMonitorDrawerTarget({ type: "task", taskId });
         },
       }}
+    />
+    <ProjectTrellisCenter
+      open={Boolean(workspaceTrellisProject)}
+      project={workspaceTrellisProject}
+      repositories={repositories}
+      onClose={() => setWorkspaceTrellisProjectId(null)}
+      onOpenProjectSession={(project) => void openProjectMainSession(project)}
+      onRequestSpecAgentUpdate={handleRequestSpecAgentUpdate}
     />
     </>
   );

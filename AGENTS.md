@@ -20,10 +20,16 @@ Managed by Trellis. Edits outside this block are preserved; edits inside may be 
 
 <!-- TRELLIS:END -->
 
+## Wise Product Evolution Rule
+
+Wise is being productized toward an AionUi-style AI workbench. Backend changes are allowed when they support that direction, but existing backend capabilities must not be deleted. Prefer migrating, merging, or wrapping existing functionality into clearer Hub / Channel / Automation / Artifact surfaces instead of removing commands, data, or integration paths.
+
+Every configuration-center menu must be reviewed as a product surface, not preserved as a legacy interaction. For each menu, decide how it should support the AI workbench loop, local/remote Agent supply, scheduled automation, artifact review, channel access, or runtime control. Chinese labels are preferred for built-in UI. Single-platform controls must be folded into neutral Channel or Hub surfaces instead of becoming permanent top-level entries.
+
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **wise** (19874 symbols, 34879 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **wise** (21132 symbols, 37599 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 

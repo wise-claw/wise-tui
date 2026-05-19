@@ -1,5 +1,4 @@
-import { Alert, App as AntdApp, Button, Modal } from "antd";
-import { MessageOutlined } from "@ant-design/icons";
+import { Alert, App as AntdApp, Modal } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ClaudeSession, ProjectItem, Repository } from "../../types";
 import {
@@ -457,17 +456,9 @@ export function MissionControl({
         onPrimaryCta={handlePrimaryCta}
         onRestart={handleRestart}
         onOpenDiagnostics={() => setEngineeringOpen(true)}
+        onOpenChat={onClose}
         onClearResplitFlags={handleClearResplitFlags}
       />
-      <Button
-        className="mission-close-btn"
-        type="text"
-        icon={<MessageOutlined />}
-        onClick={onClose}
-        aria-label="沉浸对话"
-      >
-        沉浸对话
-      </Button>
       {api.state.globalError ? (
         <Alert className="mission-global-error" type="error" showIcon message={api.state.globalError} />
       ) : null}

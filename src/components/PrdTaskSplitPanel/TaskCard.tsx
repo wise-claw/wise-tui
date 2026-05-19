@@ -183,8 +183,8 @@ export function TaskCard({
             <Tooltip
               title={
                 isExecutable
-                  ? "根据当前拆分任务生成一条可执行任务（写入可执行任务列表）"
-                  : "请先点击「任务合理，确认」或消除缺口后再生成"
+                  ? "将当前拆分任务写入 Workspace Trellis"
+                  : "请先点击「任务合理，确认」或消除缺口后再落盘"
               }
             >
               <span className="app-prd-task-panel__task-generate-exec-footer-wrap">
@@ -201,7 +201,7 @@ export function TaskCard({
                   }
                   onClick={onGenerateExecutable}
                 >
-                  生成可执行任务
+                  落盘到 Trellis
                 </Button>
               </span>
             </Tooltip>

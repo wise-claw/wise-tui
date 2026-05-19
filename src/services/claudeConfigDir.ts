@@ -20,13 +20,13 @@ export const CLAUDE_USER_CONFIG_DIR_PRESETS: ReadonlyArray<{ key: "default" | "c
     key: "default",
     rawValue: null,
     label: "~/.claude（默认）",
-    description: "官方 Claude Code 的本机配置目录。",
+    description: "官方 Claude Code 的本机用户级引擎环境。",
   },
   {
     key: "codefuse",
     rawValue: "~/.codefuse/engine/cc",
     label: "~/.codefuse/engine/cc",
-    description: "CodeFuse Engine CC 同源版本的配置目录。",
+    description: "CodeFuse Engine CC 同源版本的用户级引擎环境。",
   },
 ];
 

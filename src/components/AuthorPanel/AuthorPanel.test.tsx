@@ -1,10 +1,11 @@
 import { describe, expect, mock, test } from "bun:test";
+import { App as AntApp } from "antd";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AuthorPane } from "../../types/viewMode";
 
 /**
- * AuthorPanel composes 7 heavy children (EmployeeConfigModal, WorkflowConfigModal,
- * McpHub, SkillsHub, PromptsPanel, ProjectTrellisCenter, ClaudeHooksConfigPanel),
+ * AuthorPanel composes heavy children (EmployeeConfigModal, WorkflowConfigModal,
+ * McpHub, SkillsHub, ClaudeHooksConfigPanel, and settings center panels),
  * each of which transitively pulls in Tauri commands, antd Modals, etc.
  *
  * We mock just those children with lightweight stubs so the test can assert
@@ -32,36 +33,176 @@ mock.module("../WorkflowConfigModal", () => ({
   ),
 }));
 
-mock.module("../McpHub", () => ({
-  McpHub: () => <section data-stub="mcp">MCP Hub</section>,
-}));
-
-mock.module("../SkillsHub", () => ({
-  SkillsHub: () => <section data-stub="skills">Skills Hub</section>,
-}));
-
-mock.module("../PromptsPanel", () => ({
-  PromptsPanel: () => <section data-stub="prompts">Prompts Panel</section>,
-}));
-
-mock.module("../ProjectTrellisCenter", () => ({
-  ProjectTrellisCenter: ({ project }: { project?: { name?: string } | null }) => (
-    <section data-stub="trellis">Trellis:{project?.name ?? ""}</section>
-  ),
-}));
-
 mock.module("../ClaudeHooksConfigPanel", () => ({
   ClaudeHooksConfigPanel: ({ listSearch }: { listSearch?: string }) => (
     <section data-stub="hooks">Hooks:{listSearch ?? ""}</section>
   ),
 }));
 
+mock.module("../PromptMilkdownField", () => ({
+  PromptMilkdownField: ({ label, hint }: { label: string; hint?: string }) => (
+    <section data-stub="prompt-editor">
+      {label}
+      {hint ?? ""}
+    </section>
+  ),
+}));
+
+mock.module("../../services/splitPromptLayersStore", () => ({
+  loadPlatformSplitPromptLayers: mock(async () => null),
+  clearProjectSplitPromptLayers: mock(async () => undefined),
+  clearRepositorySplitPromptLayers: mock(async () => undefined),
+  loadProjectSplitPromptLayers: mock(async () => null),
+  loadRepositorySplitPromptLayers: mock(async () => null),
+  saveProjectSplitPromptLayers: mock(async () => undefined),
+  saveRepositorySplitPromptLayers: mock(async () => undefined),
+}));
+
+mock.module("../../hooks/useTrellisRuntime", () => ({
+  useTrellisRuntime: ({ enabled }: { enabled?: boolean } = {}) => ({
+    agentGraph: enabled
+      ? {
+          nodes: [{ id: "agent-a", nodeType: "agent", label: "Agent A", metadata: {} }],
+          edges: [{ id: "edge-a", source: "agent-a", target: "task-a", edgeType: "owns", metadata: {} }],
+          runs: [],
+        }
+      : null,
+  }),
+}));
+
+mock.module("../MissionControl/canvas/AgentOwnershipGraph", () => ({
+  AgentOwnershipGraph: () => <section data-stub="ownership-graph">所有权图</section>,
+}));
+
+mock.module("../MissionControl/canvas/RuntimeEventFeed", () => ({
+  RuntimeEventFeed: () => <section data-stub="runtime-feed">运行事件</section>,
+}));
+
+mock.module("../MissionControl/canvas/SpecRevisionTimeline", () => ({
+  SpecRevisionTimeline: () => <section data-stub="spec-revisions">修订记录</section>,
+}));
+
+mock.module("../MissionControl/canvas/OnboardingChecklist", () => ({
+  OnboardingChecklist: () => <section data-stub="onboarding">健康检查</section>,
+}));
+
+mock.module("../MissionControl/canvas/WorkspaceSnapshotViewer", () => ({
+  WorkspaceSnapshotViewer: () => <section data-stub="snapshots">工作区快照</section>,
+}));
+
+mock.module("../MissionControl/engineering/WorkflowGraphPanel", () => ({
+  WorkflowGraphPanel: () => <section data-stub="workflow-graph">工作流图</section>,
+}));
+
+mock.module("../MissionControl/engineering/SpecLibraryPanel", () => ({
+  SpecLibraryPanel: () => <section data-stub="spec-library">规范库面板</section>,
+}));
+
 mock.module("../../services/appSettingsStore", () => ({
   getAppSetting: mock(async () => null),
+  getAppSettingJson: mock(async () => null),
   setAppSetting: mock(async () => undefined),
+  setAppSettingJson: mock(async () => undefined),
+  deleteAppSetting: mock(async () => undefined),
+}));
+
+mock.module("../../services/repositoryScheduledClaudeTasksStore", () => ({
+  readRepositoryScheduledClaudeTasks: mock(async () => []),
+  writeRepositoryScheduledClaudeTasks: mock(async () => undefined),
+  patchRepositoryScheduledClaudeTask: mock(async () => []),
+  initialLastScheduledSlotForCron: mock(() => undefined),
+}));
+
+mock.module("../RepositoryScheduledTasksModal", () => ({
+  RepositoryScheduledTasksModal: ({ repositoryPath }: { repositoryPath: string }) => (
+    <section data-stub="scheduled-tasks-modal">Scheduled:{repositoryPath}</section>
+  ),
+}));
+
+mock.module("../DingTalkEnterpriseBotPopoverBody", () => ({
+  DingTalkEnterpriseBotPopoverBody: () => <section data-stub="dingtalk-config">DingTalk</section>,
+}));
+
+mock.module("../../services/dingtalkEnterpriseBot", () => ({
+  loadDingTalkEnterpriseBotConfig: mock(async () => null),
+}));
+
+mock.module("../../services/dingtalkStreamGateway", () => ({
+  dingtalkStreamGatewayIsRunning: mock(async () => false),
+  dingtalkStreamGatewayStart: mock(async () => undefined),
+  dingtalkStreamGatewayStop: mock(async () => undefined),
+}));
+
+mock.module("../../services/repositoryFiles", () => ({
+  searchRepositoryFiles: mock(async () => []),
+  listRepositoryExplorerEntries: mock(async () => []),
+}));
+
+mock.module("@tauri-apps/plugin-opener", () => ({
+  openPath: mock(async () => undefined),
+}));
+
+mock.module("@tauri-apps/api/path", () => ({
+  homeDir: mock(async () => "/Users/test"),
+}));
+
+const claudeConfigInfo = {
+  rawValue: null,
+  resolvedPath: "/Users/test/.claude",
+  defaultResolvedPath: "/Users/test/.claude",
+  isDefault: true,
+  exists: true,
+};
+
+mock.module("../ClaudeConfigDirPanel/useClaudeConfigDir", () => ({
+  useClaudeConfigDir: () => ({
+    info: claudeConfigInfo,
+    loading: false,
+    saving: false,
+    refresh: mock(async () => undefined),
+    save: mock(async () => claudeConfigInfo),
+    reset: mock(async () => undefined),
+  }),
+}));
+
+mock.module("../ClaudeConfigDirPanel/useClaudeConfigDirChoice", () => ({
+  useClaudeConfigDirChoice: () => ({
+    state: { choice: "default", customDraft: "" },
+    setChoice: mock(() => undefined),
+    setCustomDraft: mock(() => undefined),
+    dirty: false,
+    resolveValueToSave: mock(() => null),
+    syncToInfo: mock(() => undefined),
+  }),
+}));
+
+mock.module("../../services/agentRegistry", () => ({
+  deleteCustomAgent: mock(async () => undefined),
+  listAgents: mock(async () => []),
+  refreshAgents: mock(async () => []),
+  saveCustomAgent: mock(async () => ({
+    id: "custom:test",
+    name: "Test Agent",
+    kind: "custom",
+    available: true,
+    backend: "custom",
+    command: "test-agent",
+    args: [],
+    env: {},
+    detectedAt: "2026-05-17T00:00:00.000Z",
+  })),
+  testCustomAgent: mock(async () => ({ ok: true, resolvedPath: "/usr/local/bin/test-agent" })),
 }));
 
 const { AuthorPanel, writeAuthorPaneToStorage } = await import("./AuthorPanel");
+
+function renderAuthorPanel(props: Parameters<typeof AuthorPanel>[0]): string {
+  return renderToStaticMarkup(
+    <AntApp>
+      <AuthorPanel {...props} />
+    </AntApp>,
+  );
+}
 
 const workspace = {
   id: "w1",
@@ -160,16 +301,46 @@ function buildProps(
       project: workspace,
     },
     repositoryPath: "/repo",
+    automationPanelProps: {
+      repositories: [repo],
+      activeRepositoryId: repo.id,
+      employees: [],
+      workflowTemplates: [],
+      workflowGraphsByWorkflowId: {},
+    },
+    artifactsPanelProps: {
+      repositories: [repo],
+      activeRepositoryId: repo.id,
+      onOpenRepositoryFile: mock(() => {}),
+    },
     ...overrides,
   };
   return { props, onPaneChange, onBack };
 }
 
 describe("AuthorPanel", () => {
-  test("renders eight tab labels", () => {
+  test("renders configuration center tab labels", () => {
     const { props } = buildProps();
-    const html = renderToStaticMarkup(<AuthorPanel {...props} />);
-    for (const label of ["Workspaces", "Agents", "Workflows", "MCP", "Skills", "Hooks", "Prompts", "Trellis Spec"]) {
+    const html = renderAuthorPanel(props);
+    for (const label of [
+      "工作区",
+      "智能体角色",
+      "委派协议",
+      "MCP 工具",
+      "技能市场",
+      "触发器规则",
+      "提示词工坊",
+      "Trellis 规范",
+      "引擎环境",
+      "扩展市场",
+      "助手模板",
+      "执行引擎",
+      "定时自动化",
+      "产物检查台",
+      "远程入口",
+      "快捷键",
+      "Claude 沙箱",
+    ]) {
       expect(html).toContain(label);
     }
   });
@@ -188,48 +359,78 @@ describe("AuthorPanel", () => {
     expect(setAppSetting).toHaveBeenCalledWith("wise.author.lastPane", "skills");
   });
 
+  test("workspaces pane renders the workspace list", () => {
+    const { props } = buildProps({ pane: "workspaces" });
+    const html = renderAuthorPanel(props);
+    expect(html).toContain("Wise");
+  });
+
   test("agents pane mounts EmployeeConfigModal and forwards defaultRepositoryIds", () => {
     const { props } = buildProps({ pane: "agents" });
-    const html = renderToStaticMarkup(<AuthorPanel {...props} />);
+    const html = renderAuthorPanel(props);
     expect(html).toContain('data-stub="agents"');
     expect(html).toContain("agents:2");
   });
 
   test("trellis-spec pane mounts ProjectTrellisCenter with the workspace", () => {
     const { props } = buildProps({ pane: "trellis-spec" });
-    const html = renderToStaticMarkup(<AuthorPanel {...props} />);
-    expect(html).toContain('data-stub="trellis"');
-    expect(html).toContain("Trellis:Wise");
+    const html = renderAuthorPanel(props);
+    expect(html).toContain("Wise");
   });
 
   test("workflows pane mounts WorkflowConfigModal with the initial workflow id", () => {
     const { props } = buildProps({ pane: "workflows" });
-    const html = renderToStaticMarkup(<AuthorPanel {...props} />);
+    const html = renderAuthorPanel(props);
     expect(html).toContain('data-stub="workflows"');
     expect(html).toContain("workflows:wf");
   });
 
   test("hooks pane mounts ClaudeHooksConfigPanel", () => {
     const { props } = buildProps({ pane: "hooks" });
-    const html = renderToStaticMarkup(<AuthorPanel {...props} />);
+    const html = renderAuthorPanel(props);
+    expect(html).toContain("新增触发器");
     expect(html).toContain('data-stub="hooks"');
   });
 
   test("mcp pane mounts McpHub", () => {
     const { props } = buildProps({ pane: "mcp" });
-    const html = renderToStaticMarkup(<AuthorPanel {...props} />);
-    expect(html).toContain('data-stub="mcp"');
+    const html = renderAuthorPanel(props);
+    expect(html).toContain("MCP");
   });
 
   test("skills pane mounts SkillsHub", () => {
     const { props } = buildProps({ pane: "skills" });
-    const html = renderToStaticMarkup(<AuthorPanel {...props} />);
-    expect(html).toContain('data-stub="skills"');
+    const html = renderAuthorPanel(props);
+    expect(html).toContain("技能");
   });
 
   test("prompts pane mounts PromptsPanel", () => {
     const { props } = buildProps({ pane: "prompts" });
-    const html = renderToStaticMarkup(<AuthorPanel {...props} />);
-    expect(html).toContain('data-stub="prompts"');
+    const html = renderAuthorPanel(props);
+    expect(html).toContain("提示词");
+  });
+
+  test("application setting panes mount inside configuration center", () => {
+    for (const pane of [
+      "claude-config",
+      "assistants",
+      "engine-registry",
+      "shortcuts",
+      "sandbox",
+      "extensions",
+      "automation",
+      "channels",
+      "artifacts",
+    ] as const) {
+      const { props } = buildProps({ pane });
+      renderAuthorPanel(props);
+    }
+
+    const channelsHtml = renderAuthorPanel(buildProps({ pane: "channels" }).props);
+    expect(channelsHtml).toContain("渠道配置");
+    expect(channelsHtml).toContain('data-stub="dingtalk-config"');
+
+    const automationHtml = renderAuthorPanel(buildProps({ pane: "automation" }).props);
+    expect(automationHtml).toContain('data-stub="scheduled-tasks-modal"');
   });
 });

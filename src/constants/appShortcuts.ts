@@ -15,7 +15,7 @@ export const APP_SHORTCUT_GROUPS: AppShortcutGroup[] = [
     rows: [
       {
         keys: "F3",
-        description: "截取屏幕，将图片插入最近操作过的会话输入框。",
+        description: "桌面截图，并把图片投递到最近操作过的会话输入框。",
       },
       {
         keys: "⌥Z · Alt+Z",
@@ -23,7 +23,7 @@ export const APP_SHORTCUT_GROUPS: AppShortcutGroup[] = [
       },
       {
         keys: "⌥S · Alt+S",
-        description: "置顶主窗口，并切换小窗口模式（收起右侧栏、固定窗口尺寸）。",
+        description: "置顶主窗口，并切换小窗口模式（收起右栏、固定窗口尺寸）。",
       },
       {
         keys: "⌥K · Alt+K",
@@ -48,7 +48,7 @@ export const APP_SHORTCUT_GROUPS: AppShortcutGroup[] = [
       },
       {
         keys: "⌘⇧M · Ctrl+Shift+M",
-        description: "显示 Wise 吉祥物浮窗。",
+        description: "显示 Wise 浮窗助手。",
       },
       {
         keys: "⌘R · Ctrl+R",

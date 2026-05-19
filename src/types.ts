@@ -734,6 +734,10 @@ export interface ClaudeProjectSkill {
   pluginCacheRelPath?: string | null;
   /** 插件包根目录绝对路径，用于在编辑器中打开 skills 子目录 */
   pluginCacheRoot?: string | null;
+  /** 三级来源标记：builtin（plugins/cache 下的插件 skill）、custom（用户自定义）、extension（wise 扩展贡献）。 */
+  source?: "builtin" | "custom" | "extension";
+  /** 该 skill 条目是否是符号链接（用于 wise 内的 import-symlink 识别）。 */
+  isSymlink?: boolean;
 }
 
 /** One node under a skill directory (relative path uses `/`). */

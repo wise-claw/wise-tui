@@ -16,12 +16,9 @@ import {
  * 本 hook 用一个 discriminated union 替代之，保证：
  *   1. 编译期模式互斥：只有一个 `kind` 同时活跃，TS 无法表达"两个 mode 都为 true"。
  *   2. 切换语义集中：调用方写 `enter({ kind: "cockpit" })`，不再操心其他视图。
- *   3. 历史行为等价：`enter` 直接覆盖（与历史 `setXxxMode(true) + 其他全 false` 等价）；
- *      `back` 退到默认 `chat`（与历史 `setXxxMode(false)` 路径等价，因为历史代码里
- *      所有"离开当前视图"的 callback 都会让其它 5 个布尔为 false）。
- *
- * P0 不维护视图历史栈。如果未来需要从 inspect 关闭后回到上一个 cockpit/author，
- * 在本 hook 内加 stack，调用方接口不变。
+ *   3. `back` 优先回到上一个视图（栈深度 1）；历史为空时回到默认 cockpit。
+ *      这保证「Author 里点 Back」能回到打开 Author 之前的视图（chat / 某个
+ *      mission cockpit / inspect tool），而不是默认 cockpit 主页。
  */
 
 type ViewModeAction =
@@ -37,24 +34,48 @@ type ViewModePatch =
   | { kind: "cockpit"; missionId?: string }
   | { kind: "inspect"; tool: Partial<InspectCodeGraph> & { kind: "code-graph" } };
 
-function viewModeReducer(prev: ViewMode, action: ViewModeAction): ViewMode {
+interface ViewModeState {
+  current: ViewMode;
+  /** 上一视图（深度 1 历史栈）。null 表示无历史。 */
+  prev: ViewMode | null;
+}
+
+function viewsEqual(a: ViewMode, b: ViewMode): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === "author" && b.kind === "author") return a.pane === b.pane;
+  if (a.kind === "cockpit" && b.kind === "cockpit") return a.missionId === b.missionId;
+  return true;
+}
+
+function viewModeReducer(prev: ViewModeState, action: ViewModeAction): ViewModeState {
   switch (action.type) {
-    case "enter":
-      return action.mode;
-    case "back":
-      return DEFAULT_VIEW_MODE;
+    case "enter": {
+      // 跳到自身视为 no-op（不污染历史）。
+      if (viewsEqual(prev.current, action.mode)) return prev;
+      return { current: action.mode, prev: prev.current };
+    }
+    case "back": {
+      // 有上一视图就回到它；否则退回默认 cockpit 主页。
+      if (prev.prev) return { current: prev.prev, prev: null };
+      if (viewsEqual(prev.current, DEFAULT_VIEW_MODE)) return prev;
+      return { current: DEFAULT_VIEW_MODE, prev: null };
+    }
     case "patch": {
-      if (prev.kind !== action.partial.kind) return prev;
-      if (action.partial.kind === "cockpit" && prev.kind === "cockpit") {
-        return { ...prev, ...action.partial };
+      const view = prev.current;
+      if (view.kind !== action.partial.kind) return prev;
+      if (action.partial.kind === "cockpit" && view.kind === "cockpit") {
+        return { ...prev, current: { ...view, ...action.partial } };
       }
       if (
         action.partial.kind === "inspect" &&
-        prev.kind === "inspect" &&
-        prev.tool.kind === "code-graph" &&
+        view.kind === "inspect" &&
+        view.tool.kind === "code-graph" &&
         action.partial.tool.kind === "code-graph"
       ) {
-        return { ...prev, tool: { ...prev.tool, ...action.partial.tool } };
+        return {
+          ...prev,
+          current: { ...view, tool: { ...view.tool, ...action.partial.tool } },
+        };
       }
       return prev;
     }
@@ -88,7 +109,8 @@ export interface UseViewModeApi {
 }
 
 export function useViewMode(initial: ViewMode = DEFAULT_VIEW_MODE): UseViewModeApi {
-  const [view, dispatch] = useReducer(viewModeReducer, initial);
+  const [state, dispatch] = useReducer(viewModeReducer, { current: initial, prev: null });
+  const view = state.current;
 
   const enter = useCallback((mode: ViewMode) => {
     dispatch({ type: "enter", mode });

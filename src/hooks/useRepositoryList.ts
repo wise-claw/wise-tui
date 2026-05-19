@@ -36,7 +36,6 @@ import {
 } from "../utils/startupRepoSelection";
 import type { ReconcileProjectMode } from "../constants/reconcileProjectMode";
 import { resolveProjectCreationSeedRepository } from "../utils/projectCreationContext";
-import { isRepositoryPathUnderProjectRoot } from "../utils/projectRootPathPolicy";
 
 const LEGACY_APP_SETTING_KEY_PROJECTS = "wise.projects.v1";
 
@@ -210,10 +209,7 @@ export function useRepositoryList() {
       repositories,
     });
     let nextProject = createdProject;
-    if (
-      seedRepository &&
-      isRepositoryPathUnderProjectRoot(rootPathRaw, seedRepository.path)
-    ) {
+    if (seedRepository) {
       nextProject = await addRepositoryToProject(createdProject.id, seedRepository.id);
     }
     try {

@@ -11,6 +11,10 @@ import {
   loadRepositorySplitPromptLayers,
 } from "./splitPromptLayersStore";
 import { parsePromptStorageRaw, PROMPT_SLOT_PRD_TASK_SPLIT } from "./splitPromptBundle";
+import {
+  DEFAULT_PRD_SPLIT_ASSISTANT_ID,
+  resolveAssistantRuntime,
+} from "./assistantPromptLayers";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -92,18 +96,29 @@ export function mergeSplitPromptLayers(
   };
 }
 
-/** 合并后的分层稿（不折叠）：仓库节点用项目+仓库；仅项目节点只用项目覆盖。 */
+/** 合并后的分层稿（不折叠）：assistant 层(含项目/仓库 override)叠在平台默认上。
+ *
+ * 数据来源(2026-05-18 修订,migration 029 把旧 app_settings 行搬入 assistant_overrides):
+ *   - 平台默认 = 前端硬编码 `DEFAULT_SPLIT_PROMPT_*_LAYERS`(参与占位符替换);
+ *   - 助手层 / 项目层 / 仓库层 = `assistants_resolve_runtime` 一次性返回 merge 后的 prompt bundle。
+ *
+ * `assistantId` 默认 `builtin:prd-split`,等价旧行为(项目/仓库覆盖关联到内置助手)。
+ */
 export async function resolveMergedSplitPromptLayers(
   projectId: string | null,
   repositoryId: number | null,
   slotId: string = PROMPT_SLOT_PRD_TASK_SPLIT,
+  assistantId: string = DEFAULT_PRD_SPLIT_ASSISTANT_ID,
 ): Promise<SplitPromptTemplateLayers> {
   try {
     const defaultLayers = getDefaultSplitPromptLayersBySlot(slotId);
-    const [platformRaw, projectRaw, repoRaw] = await Promise.all([
+    const [platformRaw, runtime] = await Promise.all([
       loadPlatformSplitPromptLayers(),
-      projectId ? loadProjectSplitPromptLayers(projectId) : Promise.resolve(null),
-      repositoryId != null ? loadRepositorySplitPromptLayers(repositoryId) : Promise.resolve(null),
+      resolveAssistantRuntime({
+        assistantId,
+        projectId,
+        repositoryId,
+      }).catch(() => null),
     ]);
     const platformMap = parsePromptStorageRaw(platformRaw);
     const platformDbPartial = platformMap[slotId] ?? null;
@@ -113,15 +128,29 @@ export async function resolveMergedSplitPromptLayers(
       null,
     );
 
-    const projectMap = parsePromptStorageRaw(projectRaw);
-    const repoMap = parsePromptStorageRaw(repoRaw);
-    const project = projectMap[slotId] ?? null;
-    const repo = repositoryId != null ? (repoMap[slotId] ?? null) : null;
-    return mergeSplitPromptLayers(
-      platformLayers,
-      project,
-      repositoryId != null ? repo : null,
-    );
+    if (!runtime) {
+      // 退化:沿用旧路径(读 app_settings)。
+      const [projectRaw, repoRaw] = await Promise.all([
+        projectId ? loadProjectSplitPromptLayers(projectId) : Promise.resolve(null),
+        repositoryId != null
+          ? loadRepositorySplitPromptLayers(repositoryId)
+          : Promise.resolve(null),
+      ]);
+      const projectMap = parsePromptStorageRaw(projectRaw);
+      const repoMap = parsePromptStorageRaw(repoRaw);
+      return mergeSplitPromptLayers(
+        platformLayers,
+        projectMap[slotId] ?? null,
+        repositoryId != null ? (repoMap[slotId] ?? null) : null,
+      );
+    }
+
+    const assistantMap = parsePromptStorageRaw(runtime.promptBundleJson);
+    const assistantSlot = assistantMap[slotId] ?? null;
+    // assistants_resolve_runtime 已合并 assistant + project + repository 三层;
+    // 这里再叠到平台默认上,字段非空者覆盖平台默认。第三参数填 null 是因为
+    // 项目/仓库已经被 Rust 端合并进 assistantSlot 了。
+    return mergeSplitPromptLayers(platformLayers, assistantSlot, null);
   } catch {
     return { ...getDefaultSplitPromptLayersBySlot(slotId) };
   }
@@ -132,9 +161,15 @@ export async function resolveEffectiveSplitPromptTemplate(
   projectId: string | null,
   repositoryId: number | null,
   slotId: string = PROMPT_SLOT_PRD_TASK_SPLIT,
+  assistantId: string = DEFAULT_PRD_SPLIT_ASSISTANT_ID,
 ): Promise<SplitPromptTemplate> {
   try {
-    const merged = await resolveMergedSplitPromptLayers(projectId, repositoryId, slotId);
+    const merged = await resolveMergedSplitPromptLayers(
+      projectId,
+      repositoryId,
+      slotId,
+      assistantId,
+    );
     return splitPromptLayersToFlatTemplate(merged);
   } catch {
     return splitPromptLayersToFlatTemplate(getDefaultSplitPromptLayersBySlot(slotId));

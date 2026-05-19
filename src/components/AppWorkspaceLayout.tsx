@@ -28,14 +28,16 @@ import { RepositoryFileEditorPanel } from "./RepositoryFileEditorPanel";
 import { RepositoryFilePreviewModal } from "./RepositoryFilePreviewModal";
 import { SkillsHub } from "./SkillsHub";
 import type * as MissionControlModule from "./MissionControl";
+import type * as PrdTaskSplitPanelModule from "./PrdTaskSplitPanel";
 import type * as PromptsPanelModule from "./PromptsPanel";
+import type { Repository } from "../types";
 import type { ViewMode } from "../types/viewMode";
 import type { OpenRepositoryFileDetail } from "../constants/workflowUiEvents";
 import { useRepositoryFileEditor } from "../hooks/useRepositoryFileEditor";
 
 const Inspector = lazy(() => import("./Inspector").then((module) => ({ default: module.Inspector })));
-const MissionControl = lazy(() =>
-  import("./MissionControl").then((module) => ({ default: module.MissionControl })),
+const CockpitSurface = lazy(() =>
+  import("./CockpitSurface").then((module) => ({ default: module.CockpitSurface })),
 );
 const PromptsPanel = lazy(() => import("./PromptsPanel").then((module) => ({ default: module.PromptsPanel })));
 const WiseCcWorkflowStudioPanel = lazy(() =>
@@ -64,6 +66,7 @@ type LeftSidebarProps = Omit<
 >;
 type AuthorPanelProps = ComponentProps<typeof AuthorPanel>;
 type MissionControlProps = ComponentProps<typeof MissionControlModule.MissionControl>;
+type PrdTaskSplitPanelProps = ComponentProps<typeof PrdTaskSplitPanelModule.PrdTaskSplitPanel>;
 type PromptsPanelProps = ComponentProps<typeof PromptsPanelModule.PromptsPanel>;
 type RightPanelProps = Omit<ChatInspectorProps, "onOpenFile">;
 type InspectorCockpitProps = Omit<CockpitInspectorProps, "onOpenFile">;
@@ -239,6 +242,33 @@ const ConnectedRepositoryFilePreviewModal = memo(function ConnectedRepositoryFil
   return <RepositoryFilePreviewModal preview={preview} onClose={onClosePreview} />;
 });
 
+const ConnectedAuthorPanel = memo(function ConnectedAuthorPanel({
+  activeRepositoryPath,
+  authorPanelProps,
+}: {
+  activeRepositoryPath: string | null | undefined;
+  authorPanelProps: AuthorPanelProps;
+}) {
+  const openRepositoryFile = useRepositoryFileEditorOpenFile();
+  return (
+    <AuthorPanel
+      {...authorPanelProps}
+      artifactsPanelProps={{
+        ...authorPanelProps.artifactsPanelProps,
+        onOpenRepositoryFile: (repository: Repository, relativePath: string) => {
+          const currentPath = activeRepositoryPath?.trim() ?? "";
+          const targetPath = repository.path.trim();
+          if (targetPath && currentPath === targetPath) {
+            openRepositoryFile(relativePath);
+            return;
+          }
+          authorPanelProps.artifactsPanelProps.onOpenRepositoryFile(repository, relativePath);
+        },
+      }}
+    />
+  );
+});
+
 export interface AppWorkspaceLayoutProps {
   activeRepositoryPath: string | null | undefined;
   dark: boolean;
@@ -263,11 +293,19 @@ export interface AppWorkspaceLayoutProps {
   /** Cockpit 主屏空态：用户没有任何 Workspace / Standalone Repo 时引导创建。 */
   cockpitEmpty: boolean;
   cockpitOnboardingProps: CockpitOnboardingProps;
+  /** Cockpit hub/conversation 子状态决策(Stage 3 Wave A 引入)。 */
+  cockpitSurfaceActiveProjectId: string | null;
+  cockpitSurfaceActiveProjectName: string | null;
+  /** 显式 FAB 入口已触发 → 直接进入 conversation 子态,跳过 hub。 */
+  cockpitSurfaceHasInitialTarget: boolean;
+  /** 显式打开助手/需求拆分入口的递增信号。 */
+  cockpitSurfaceOpenRequestKey: number;
   commandPaletteProps: ComponentProps<typeof CommandPalette>;
   mcpHubProps: ComponentProps<typeof McpHub>;
   skillsHubProps: ComponentProps<typeof SkillsHub>;
   codeKnowledgeGraphProps: CodeKnowledgeGraphPanelProps;
   missionControlProps: MissionControlProps;
+  prdTaskSplitPanelProps: PrdTaskSplitPanelProps;
   progressMonitorDrawerProps: ComponentProps<typeof ProgressMonitorDrawer>;
   onToggleCompactLayoutMode: () => void;
   onLeftWidthChange: (widthPx: number) => void;
@@ -304,11 +342,16 @@ export function AppWorkspaceLayout({
   cockpitInspectorProps,
   cockpitEmpty,
   cockpitOnboardingProps,
+  cockpitSurfaceActiveProjectId,
+  cockpitSurfaceActiveProjectName,
+  cockpitSurfaceHasInitialTarget,
+  cockpitSurfaceOpenRequestKey,
   commandPaletteProps,
   mcpHubProps,
   skillsHubProps,
   codeKnowledgeGraphProps,
   missionControlProps,
+  prdTaskSplitPanelProps,
   progressMonitorDrawerProps,
   onToggleCompactLayoutMode,
   onLeftWidthChange,
@@ -332,6 +375,7 @@ export function AppWorkspaceLayout({
     viewMode.kind === "inspect" && viewMode.tool.kind === "code-graph";
   const ccWfStudioMode =
     viewMode.kind === "inspect" && viewMode.tool.kind === "workflow-studio";
+  const rightInspectorHidden = effectiveRightCollapsed || missionControlMode;
 
   const {
     closeFileEditorPanel,
@@ -440,7 +484,10 @@ export function AppWorkspaceLayout({
 
                 {authorMode ? (
                   <div className="app-full-width-main">
-                    <AuthorPanel {...authorPanelProps} />
+                    <ConnectedAuthorPanel
+                      activeRepositoryPath={activeRepositoryPath}
+                      authorPanelProps={authorPanelProps}
+                    />
                   </div>
                 ) : promptsMode ? (
                   <div className="app-full-width-main">
@@ -456,7 +503,14 @@ export function AppWorkspaceLayout({
                           <CockpitOnboarding {...cockpitOnboardingProps} />
                         ) : (
                           <Suspense fallback={<PanelLoadingFallback />}>
-                            <MissionControl {...missionControlProps} />
+                            <CockpitSurface
+                              activeProjectId={cockpitSurfaceActiveProjectId}
+                              activeProjectName={cockpitSurfaceActiveProjectName}
+                              hasInitialTarget={cockpitSurfaceHasInitialTarget}
+                              openRequestKey={cockpitSurfaceOpenRequestKey}
+                              missionControlProps={missionControlProps}
+                              prdTaskSplitPanelProps={prdTaskSplitPanelProps}
+                            />
                           </Suspense>
                         )}
                       </Layout.Content>
@@ -468,7 +522,7 @@ export function AppWorkspaceLayout({
                       />
                     )}
 
-                    {!effectiveRightCollapsed ? (
+                    {!rightInspectorHidden ? (
                       <MainLayoutResizeHandle
                         variant="right"
                         startWidthPx={mainLayoutRightWidthPx}
@@ -476,13 +530,15 @@ export function AppWorkspaceLayout({
                       />
                     ) : null}
 
-                    <Suspense fallback={null}>
-                      <ConnectedInspector
-                        viewMode={viewMode}
-                        chatInspectorProps={chatInspectorProps}
-                        cockpitInspectorProps={cockpitInspectorProps}
-                      />
-                    </Suspense>
+                    {!rightInspectorHidden ? (
+                      <Suspense fallback={null}>
+                        <ConnectedInspector
+                          viewMode={viewMode}
+                          chatInspectorProps={chatInspectorProps}
+                          cockpitInspectorProps={cockpitInspectorProps}
+                        />
+                      </Suspense>
+                    ) : null}
 
                     <CommandPalette {...commandPaletteProps} />
                     {mcpHubMode ? (

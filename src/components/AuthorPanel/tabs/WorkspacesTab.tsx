@@ -1,5 +1,5 @@
-import { Button, Empty, Space, Tag, Tooltip, Typography } from "antd";
-import { PlusOutlined } from "@ant-design/icons";
+import { FolderOpenOutlined, PlusOutlined } from "@ant-design/icons";
+import { Button, Empty, Space, Tag, Tooltip } from "antd";
 import type { StandaloneRepo, Workspace } from "../../../types";
 import { repositoryFolderBasename } from "../../../utils/repositoryType";
 
@@ -28,33 +28,27 @@ export function WorkspacesTab({
 
   return (
     <div className="author-panel-workspaces">
-      <div className="author-panel-section-header">
-        <div>
-          <Typography.Title level={5}>Workspace Registry</Typography.Title>
-          <Typography.Text type="secondary">
-            Workspace is the Trellis and Mission scope. Standalone Repo stays lightweight for Chat, Git, files, and code graph.
-          </Typography.Text>
-        </div>
-        <Space size={8}>
-          <Tooltip title="Add a single repository without Trellis or Author governance">
+      <div className="author-panel-workspaces__toolbar">
+        <Space size={8} wrap>
+          <Tooltip title="添加一个不接入 Trellis / Mission 的轻量仓库">
             <Button size="small" onClick={onAddStandaloneRepo} disabled={!onAddStandaloneRepo}>
-              Add Standalone Repo
+              添加单仓
             </Button>
           </Tooltip>
           <Button size="small" type="primary" icon={<PlusOutlined />} onClick={onCreateWorkspace}>
-            New Workspace
+            新建工作区
           </Button>
         </Space>
       </div>
 
       {!hasItems ? (
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No Workspace or Standalone Repo registered yet" />
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有工作区或单仓，请先新建工作区或添加单仓" />
       ) : (
         <div className="author-panel-workspaces__grid">
           <section className="author-panel-workspaces__column">
-            <div className="author-panel-workspaces__column-title">Workspaces</div>
+            <div className="author-panel-workspaces__column-title">工作区</div>
             {workspaces.length === 0 ? (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No Workspace" />
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无工作区" />
             ) : (
               <div className="author-panel-workspaces__list">
                 {workspaces.map((workspace) => (
@@ -67,12 +61,12 @@ export function WorkspacesTab({
                     <span className="author-panel-workspace-row__main">
                       <span className="author-panel-workspace-row__name">{workspace.name}</span>
                       <span className="author-panel-workspace-row__meta">
-                        {workspace.repositoryIds.length} repo{workspace.repositoryIds.length === 1 ? "" : "s"}
+                        {workspace.repositoryIds.length} 个仓库
+                        {workspace.rootPath ? ` · ${workspace.rootPath}` : " · 未绑定 Trellis 根目录"}
                       </span>
                     </span>
                     <span className="author-panel-workspace-row__tags">
-                      <Tag color={workspace.rootPath ? "success" : "warning"}>{workspace.rootPath ? "root ready" : "no root"}</Tag>
-                      <Tag>{workspace.sddMode ?? "wise_trellis"}</Tag>
+                      <Tag color={workspace.rootPath ? "success" : "warning"}>{workspace.rootPath ? "根目录就绪" : "待绑定"}</Tag>
                     </span>
                   </button>
                 ))}
@@ -81,9 +75,9 @@ export function WorkspacesTab({
           </section>
 
           <section className="author-panel-workspaces__column">
-            <div className="author-panel-workspaces__column-title">Standalone Repos</div>
+            <div className="author-panel-workspaces__column-title">单仓入口</div>
             {standaloneRepos.length === 0 ? (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No Standalone Repo" />
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无单仓入口" />
             ) : (
               <div className="author-panel-workspaces__list">
                 {standaloneRepos.map((repo) => (
@@ -97,7 +91,9 @@ export function WorkspacesTab({
                       <span className="author-panel-workspace-row__name">{repositoryFolderBasename(repo)}</span>
                       <span className="author-panel-workspace-row__meta">{repo.path}</span>
                     </span>
-                    <Tag>chat only</Tag>
+                    <span className="author-panel-workspace-row__tags">
+                      <Tag icon={<FolderOpenOutlined />}>单仓会话</Tag>
+                    </span>
                   </button>
                 ))}
               </div>

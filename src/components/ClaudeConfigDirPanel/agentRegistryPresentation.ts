@@ -1,0 +1,90 @@
+import { isAgentKind, type DetectedAgent } from "../../types/detectedAgent";
+
+export type AgentRegistryFilter = "all" | "available" | "custom" | "errors";
+
+export function deriveAgentRegistryStats(agents: DetectedAgent[]) {
+  const available = agents.filter((agent) => agent.available).length;
+  const custom = agents.filter((agent) => agent.kind === "custom").length;
+  return {
+    total: agents.length,
+    available,
+    custom,
+    builtin: agents.length - custom,
+    unavailable: agents.length - available,
+  };
+}
+
+export function filterAgents(
+  agents: DetectedAgent[],
+  filter: AgentRegistryFilter,
+  query: string,
+): DetectedAgent[] {
+  const normalizedQuery = query.trim().toLowerCase();
+  return agents.filter((agent) => {
+    if (filter === "available" && !agent.available) return false;
+    if (filter === "custom" && agent.kind !== "custom") return false;
+    if (filter === "errors" && agent.available) return false;
+    if (!normalizedQuery) return true;
+    return buildAgentSearchText(agent).includes(normalizedQuery);
+  });
+}
+
+export function getEmptyDescription(filter: AgentRegistryFilter, query: string): string {
+  if (query.trim()) return "没有匹配的执行引擎";
+  if (filter === "available") return "当前没有可用执行引擎，请重新探测或新增自定义命令";
+  if (filter === "custom") return "还没有自定义执行入口";
+  if (filter === "errors") return "没有异常执行引擎";
+  return "暂未探测到执行引擎";
+}
+
+export function getAgentKindLabel(kind: DetectedAgent["kind"]): string {
+  switch (kind) {
+    case "claude":
+      return "Claude";
+    case "codex":
+      return "Codex";
+    case "gemini":
+      return "Gemini";
+    case "custom":
+      return "自定义";
+  }
+}
+
+export function getAgentPathLabel(agent: DetectedAgent): string {
+  if (agent.binaryPath) return agent.binaryPath;
+  if (isAgentKind(agent, "custom")) return agent.command;
+  return agent.failureReason ?? "未找到命令路径";
+}
+
+export function describeAgentRuntime(agent: DetectedAgent): string {
+  if (isAgentKind(agent, "custom")) {
+    const args = agent.args.length === 0 ? "无默认参数" : `${agent.args.length} 个默认参数`;
+    const env = Object.keys(agent.env).length;
+    return `自定义命令 · ${args} · ${env} 个环境变量`;
+  }
+  return `自动探测 · ${agent.command} · ${agent.available ? "可参与团队协作 / 定时自动化调度" : "等待本机命令就绪"}`;
+}
+
+export function formatDetectedAt(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "未记录";
+  return date.toLocaleString("zh-CN", { hour12: false });
+}
+
+function buildAgentSearchText(agent: DetectedAgent): string {
+  const customText = isAgentKind(agent, "custom")
+    ? [agent.command, agent.args.join(" "), Object.keys(agent.env).join(" ")]
+    : [agent.command];
+  return [
+    agent.id,
+    agent.name,
+    agent.kind,
+    agent.backend,
+    agent.binaryPath,
+    agent.failureReason,
+    ...customText,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}

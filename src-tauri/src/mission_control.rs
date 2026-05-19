@@ -27,6 +27,10 @@ pub(crate) struct MissionSnapshotRow {
     snapshot: Value,
     created_at: i64,
     updated_at: i64,
+    #[serde(default)]
+    assistant_id: Option<String>,
+    #[serde(default)]
+    task_dir: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,6 +66,8 @@ pub(crate) struct MissionAgentAssignmentRow {
     completed_at: Option<i64>,
     last_heartbeat_at: i64,
     metadata: Value,
+    #[serde(default)]
+    assistant_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -76,6 +82,10 @@ pub(crate) struct MissionCreateOrResumeInput {
     stage: String,
     status: String,
     snapshot: Value,
+    #[serde(default)]
+    assistant_id: Option<String>,
+    #[serde(default)]
+    task_dir: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -109,6 +119,8 @@ pub(crate) struct MissionUpsertAgentAssignmentInput {
     started_at: Option<i64>,
     last_heartbeat_at: Option<i64>,
     metadata: Option<Value>,
+    #[serde(default)]
+    assistant_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -454,9 +466,9 @@ pub(crate) fn mission_create_or_resume(
         g.execute(
             "INSERT INTO mission_runs (
                mission_id, project_id, project_name, root_path, prd_hash, title, stage, status,
-               snapshot_json, created_at, updated_at
+               snapshot_json, created_at, updated_at, assistant_id, task_dir
              )
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10, ?11, ?12)
              ON CONFLICT(mission_id) DO UPDATE SET
                project_id = excluded.project_id,
                project_name = excluded.project_name,
@@ -466,7 +478,9 @@ pub(crate) fn mission_create_or_resume(
                stage = excluded.stage,
                status = excluded.status,
                snapshot_json = excluded.snapshot_json,
-               updated_at = excluded.updated_at",
+               updated_at = excluded.updated_at,
+               assistant_id = COALESCE(excluded.assistant_id, mission_runs.assistant_id),
+               task_dir = COALESCE(excluded.task_dir, mission_runs.task_dir)",
             params![
                 mission_id,
                 normalize_optional(input.project_id),
@@ -477,7 +491,9 @@ pub(crate) fn mission_create_or_resume(
                 stage,
                 status,
                 snapshot_json,
-                now
+                now,
+                normalize_optional(input.assistant_id),
+                normalize_optional(input.task_dir),
             ],
         )
         .map_err(|e| e.to_string())?;
@@ -510,7 +526,7 @@ pub(crate) fn mission_list_recent(
             let mut stmt = g
                 .prepare(
                     "SELECT mission_id, project_id, project_name, root_path, prd_hash, title, stage,
-                            status, snapshot_json, created_at, updated_at
+                            status, snapshot_json, created_at, updated_at, assistant_id, task_dir
                      FROM mission_runs
                      WHERE project_id = ?1
                      ORDER BY updated_at DESC
@@ -528,7 +544,7 @@ pub(crate) fn mission_list_recent(
             let mut stmt = g
                 .prepare(
                     "SELECT mission_id, project_id, project_name, root_path, prd_hash, title, stage,
-                            status, snapshot_json, created_at, updated_at
+                            status, snapshot_json, created_at, updated_at, assistant_id, task_dir
                      FROM mission_runs
                      WHERE root_path = ?1
                      ORDER BY updated_at DESC
@@ -546,7 +562,7 @@ pub(crate) fn mission_list_recent(
             let mut stmt = g
                 .prepare(
                     "SELECT mission_id, project_id, project_name, root_path, prd_hash, title, stage,
-                            status, snapshot_json, created_at, updated_at
+                            status, snapshot_json, created_at, updated_at, assistant_id, task_dir
                      FROM mission_runs
                      ORDER BY updated_at DESC
                      LIMIT ?1",
@@ -668,9 +684,9 @@ pub(crate) fn mission_upsert_agent_assignment(
             "INSERT INTO mission_agent_assignments (
                assignment_id, mission_id, agent_run_id, project_id, task_id, cluster_id, repository_id,
                repository_path, agent_type, employee_id, stage, status, current_file, session_id,
-               started_at, updated_at, completed_at, last_heartbeat_at, metadata_json
+               started_at, updated_at, completed_at, last_heartbeat_at, metadata_json, assistant_id
              )
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, NULL, ?17, ?18)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, NULL, ?17, ?18, ?19)
              ON CONFLICT(assignment_id) DO UPDATE SET
                agent_run_id = excluded.agent_run_id,
                project_id = excluded.project_id,
@@ -687,7 +703,8 @@ pub(crate) fn mission_upsert_agent_assignment(
                updated_at = excluded.updated_at,
                completed_at = CASE WHEN excluded.status IN ('succeeded','failed','cancelled','completed') THEN excluded.updated_at ELSE mission_agent_assignments.completed_at END,
                last_heartbeat_at = excluded.last_heartbeat_at,
-               metadata_json = excluded.metadata_json",
+               metadata_json = excluded.metadata_json,
+               assistant_id = COALESCE(excluded.assistant_id, mission_agent_assignments.assistant_id)",
             params![
                 assignment_id,
                 mission_id,
@@ -706,7 +723,8 @@ pub(crate) fn mission_upsert_agent_assignment(
                 started_at,
                 now,
                 heartbeat,
-                metadata_json
+                metadata_json,
+                normalize_optional(input.assistant_id),
             ],
         )
         .map_err(|e| e.to_string())?;
@@ -890,7 +908,7 @@ pub(crate) fn mission_commit_requirement_reassign(
     let snapshot_row = g
         .query_row(
             "SELECT mission_id, project_id, project_name, root_path, prd_hash, title, stage,
-                    status, snapshot_json, created_at, updated_at
+                    status, snapshot_json, created_at, updated_at, assistant_id, task_dir
              FROM mission_runs
              WHERE mission_id = ?1",
             params![mission_id],
@@ -1412,7 +1430,7 @@ fn read_mission_snapshot(
     let g = db.0.lock().map_err(|_| "db lock poisoned".to_string())?;
     g.query_row(
         "SELECT mission_id, project_id, project_name, root_path, prd_hash, title, stage,
-                status, snapshot_json, created_at, updated_at
+                status, snapshot_json, created_at, updated_at, assistant_id, task_dir
          FROM mission_runs
          WHERE mission_id = ?1",
         params![mission_id],
@@ -1796,6 +1814,8 @@ fn mission_snapshot_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Missio
         snapshot,
         created_at: row.get(9)?,
         updated_at: row.get(10)?,
+        assistant_id: row.get(11).ok(),
+        task_dir: row.get(12).ok(),
     })
 }
 
@@ -1835,6 +1855,7 @@ fn assignment_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MissionAgent
         completed_at: row.get(16)?,
         last_heartbeat_at: row.get(17)?,
         metadata,
+        assistant_id: row.get(19).ok(),
     })
 }
 
@@ -1843,7 +1864,7 @@ fn assignment_select_sql(where_clause: &str) -> String {
         "SELECT assignment_id, mission_id, agent_run_id, project_id, task_id, cluster_id,
                 repository_id, repository_path, agent_type, employee_id, stage, status,
                 current_file, session_id, started_at, updated_at, completed_at,
-                last_heartbeat_at, metadata_json
+                last_heartbeat_at, metadata_json, assistant_id
          FROM mission_agent_assignments {where_clause}"
     )
 }
@@ -2814,6 +2835,7 @@ mod tests {
             completed_at: None,
             last_heartbeat_at: 2,
             metadata: json!({}),
+            assistant_id: None,
         }];
 
         let trace = build_requirement_trace(&snapshot, &assignments, "m1", "REQ-1");

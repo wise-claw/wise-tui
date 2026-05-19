@@ -881,7 +881,7 @@ export function ProgressMonitorDrawer({
               ) : null}
               {employeeItem.executionSource === "workflow" ? (
                 <Tag color="purple" className="app-monitor-drawer__source-tag">
-                  团队流程执行
+                  委派协议执行
                 </Tag>
               ) : null}
               <span>{employeeById.get(employeeItem.employeeId)?.agentType ?? "未知类型"}</span>
@@ -994,7 +994,7 @@ export function ProgressMonitorDrawer({
             <div className="app-monitor-drawer__section app-monitor-drawer__section--workflow-graph">
               <Typography.Text type="secondary">流程进度</Typography.Text>
               <Typography.Paragraph type="secondary" style={{ marginBottom: 8, fontSize: 11 }}>
-                与团队工作流编排视图一致：橙色描边为当前节点，流动线段表示最近一次派发沿有向边推进。悬停任务类节点可查看派发/返回摘要；已绑定 Wise 会话时可点击查看消息抽屉。
+                与委派协议画布一致：橙色描边为当前节点，流动线段表示最近一次派发沿有向边推进。悬停任务类节点可查看派发/返回摘要；已绑定 Wise 会话时可点击查看消息抽屉。
               </Typography.Paragraph>
               <WorkflowProgressGraphCanvas
                 workflowGraph={teamWorkflowGraph}
@@ -1124,7 +1124,7 @@ export function ProgressMonitorDrawer({
             <div className="app-monitor-drawer__section app-monitor-drawer__section--workflow-graph">
               <Typography.Text type="secondary">流程进度</Typography.Text>
               <Typography.Paragraph type="secondary" style={{ marginBottom: 8, fontSize: 11 }}>
-                与团队工作流编排视图一致：橙色描边为当前节点，流动线段表示最近一次派发沿有向边推进。悬停任务类节点可查看派发/返回摘要；已绑定 Wise 会话时可点击查看消息抽屉。
+                与委派协议画布一致：橙色描边为当前节点，流动线段表示最近一次派发沿有向边推进。悬停任务类节点可查看派发/返回摘要；已绑定 Wise 会话时可点击查看消息抽屉。
               </Typography.Paragraph>
               <WorkflowProgressGraphCanvas
                 workflowGraph={selectedTaskWorkflowGraph}

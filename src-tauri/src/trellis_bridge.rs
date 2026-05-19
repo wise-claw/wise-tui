@@ -714,6 +714,25 @@ pub struct TrellisSpecIndexRow {
     pub size_bytes: u64,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrellisSpecFileRow {
+    pub relative_path: String,
+    pub content: String,
+    pub size_bytes: u64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrellisSpecTreeNode {
+    pub name: String,
+    pub relative_path: String,
+    pub node_type: String,
+    pub size_bytes: Option<u64>,
+    pub modified_at: Option<u64>,
+    pub children: Vec<TrellisSpecTreeNode>,
+}
+
 fn trellis_spec_root_path(repo_path: &str) -> Result<PathBuf, String> {
     if repo_path.trim().is_empty() {
         return Err("WF_INVALID_INPUT: empty repoPath".into());
@@ -726,6 +745,60 @@ fn trellis_spec_root_path(repo_path: &str) -> Result<PathBuf, String> {
         .canonicalize()
         .map_err(|e| format!("WF_INVALID_INPUT: repo not found: {e}"))?;
     Ok(repo_canon.join(".trellis").join("spec"))
+}
+
+fn canon_trellis_spec_root(repo_path: &str) -> Result<PathBuf, String> {
+    let spec_root = trellis_spec_root_path(repo_path)?;
+    if !spec_root.is_dir() {
+        return Err("WF_INVALID_INPUT: .trellis/spec/ missing".into());
+    }
+    spec_root
+        .canonicalize()
+        .map_err(|e| format!("WF_INVALID_INPUT: spec root canon failed: {e}"))
+}
+
+fn resolve_spec_markdown_file(spec_root: &Path, relative_path: &str) -> Result<PathBuf, String> {
+    let trimmed = relative_path.trim();
+    if trimmed.is_empty() {
+        return Err("WF_INVALID_INPUT: empty relativePath".into());
+    }
+    if trimmed == "." || trimmed.starts_with('.') || trimmed.contains("..") {
+        return Err("WF_INVALID_INPUT: relativePath escapes .trellis/spec/".into());
+    }
+    let raw = PathBuf::from(trimmed);
+    if raw.is_absolute() {
+        return Err("WF_INVALID_INPUT: relativePath must be relative".into());
+    }
+    if raw.components().any(|component| {
+        matches!(
+            component,
+            std::path::Component::ParentDir
+                | std::path::Component::RootDir
+                | std::path::Component::Prefix(_)
+        )
+    }) {
+        return Err("WF_INVALID_INPUT: relativePath has illegal components".into());
+    }
+    if raw.extension().and_then(|value| value.to_str()) != Some("md") {
+        return Err("WF_INVALID_INPUT: only Markdown spec files are editable".into());
+    }
+    let candidate = spec_root.join(raw);
+    let parent = candidate
+        .parent()
+        .ok_or_else(|| "WF_INVALID_INPUT: spec file has no parent".to_string())?;
+    if !parent.is_dir() {
+        return Err("WF_INVALID_INPUT: spec parent directory missing".into());
+    }
+    let parent_canon = parent
+        .canonicalize()
+        .map_err(|e| format!("WF_INVALID_INPUT: spec parent canon failed: {e}"))?;
+    if !parent_canon.starts_with(spec_root) {
+        return Err("WF_INVALID_INPUT: spec file escapes .trellis/spec/".into());
+    }
+    let file_name = candidate
+        .file_name()
+        .ok_or_else(|| "WF_INVALID_INPUT: spec file missing name".to_string())?;
+    Ok(parent_canon.join(file_name))
 }
 
 #[tauri::command]
@@ -770,6 +843,100 @@ pub fn trellis_list_spec_areas(repo_path: String) -> Result<Vec<TrellisSpecAreaR
     Ok(rows)
 }
 
+fn modified_secs(metadata: &fs::Metadata) -> Option<u64> {
+    metadata
+        .modified()
+        .ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| duration.as_secs())
+}
+
+fn build_spec_tree_node(
+    spec_root: &Path,
+    path: &Path,
+    depth: usize,
+) -> Result<Option<TrellisSpecTreeNode>, String> {
+    const MAX_SPEC_TREE_DEPTH: usize = 8;
+    if depth > MAX_SPEC_TREE_DEPTH {
+        return Ok(None);
+    }
+    let metadata = fs::metadata(path).map_err(|e| e.to_string())?;
+    let name = path
+        .file_name()
+        .map(|value| value.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "spec".to_string());
+    if name.starts_with('.') {
+        return Ok(None);
+    }
+    let relative_path = path
+        .strip_prefix(spec_root)
+        .ok()
+        .map(|relative| relative.to_string_lossy().replace('\\', "/"))
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| ".".to_string());
+    if metadata.is_file() {
+        if path.extension().and_then(|value| value.to_str()) != Some("md") {
+            return Ok(None);
+        }
+        return Ok(Some(TrellisSpecTreeNode {
+            name,
+            relative_path,
+            node_type: "file".to_string(),
+            size_bytes: Some(metadata.len()),
+            modified_at: modified_secs(&metadata),
+            children: Vec::new(),
+        }));
+    }
+    if !metadata.is_dir() {
+        return Ok(None);
+    }
+    let mut children = Vec::new();
+    let entries = fs::read_dir(path).map_err(|e| e.to_string())?;
+    for entry in entries.flatten() {
+        if let Some(child) = build_spec_tree_node(spec_root, &entry.path(), depth + 1)? {
+            children.push(child);
+        }
+    }
+    children.sort_by(|a, b| {
+        let a_dir = a.node_type == "directory";
+        let b_dir = b.node_type == "directory";
+        b_dir
+            .cmp(&a_dir)
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
+    Ok(Some(TrellisSpecTreeNode {
+        name,
+        relative_path,
+        node_type: "directory".to_string(),
+        size_bytes: None,
+        modified_at: modified_secs(&metadata),
+        children,
+    }))
+}
+
+#[tauri::command]
+pub fn trellis_list_spec_tree(repo_path: String) -> Result<Vec<TrellisSpecTreeNode>, String> {
+    let spec_root = trellis_spec_root_path(&repo_path)?;
+    if !spec_root.is_dir() {
+        return Ok(Vec::new());
+    }
+    let entries = fs::read_dir(&spec_root).map_err(|e| e.to_string())?;
+    let mut roots = Vec::new();
+    for entry in entries.flatten() {
+        if let Some(node) = build_spec_tree_node(&spec_root, &entry.path(), 1)? {
+            roots.push(node);
+        }
+    }
+    roots.sort_by(|a, b| {
+        let a_dir = a.node_type == "directory";
+        let b_dir = b.node_type == "directory";
+        b_dir
+            .cmp(&a_dir)
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
+    Ok(roots)
+}
+
 #[tauri::command]
 pub fn trellis_read_spec_index(
     repo_path: String,
@@ -811,6 +978,47 @@ pub fn trellis_write_spec_index(
     let area_dir = spec_root.join(&area);
     fs::create_dir_all(&area_dir).map_err(|e| e.to_string())?;
     atomic_write(&area_dir.join("index.md"), content.as_bytes())
+}
+
+#[tauri::command]
+pub fn trellis_read_spec_file(
+    repo_path: String,
+    relative_path: String,
+) -> Result<TrellisSpecFileRow, String> {
+    let spec_root = canon_trellis_spec_root(&repo_path)?;
+    let file_path = resolve_spec_markdown_file(&spec_root, &relative_path)?;
+    if !file_path.is_file() {
+        return Err("WF_INVALID_INPUT: spec file missing".into());
+    }
+    let raw = fs::read_to_string(&file_path).map_err(|e| e.to_string())?;
+    let size_bytes = raw.len() as u64;
+    let content = truncate_prd(raw);
+    let relative_path = file_path
+        .strip_prefix(&spec_root)
+        .map_err(|_| "WF_INVALID_INPUT: spec file escapes .trellis/spec/".to_string())?
+        .to_string_lossy()
+        .replace('\\', "/");
+    Ok(TrellisSpecFileRow {
+        relative_path,
+        content,
+        size_bytes,
+    })
+}
+
+#[tauri::command]
+pub fn trellis_write_spec_file(
+    repo_path: String,
+    relative_path: String,
+    content: String,
+) -> Result<(), String> {
+    if content.len() > MAX_PRD_BYTES {
+        return Err(format!(
+            "WF_INVALID_INPUT: content exceeds {MAX_PRD_BYTES} bytes",
+        ));
+    }
+    let spec_root = canon_trellis_spec_root(&repo_path)?;
+    let file_path = resolve_spec_markdown_file(&spec_root, &relative_path)?;
+    atomic_write(&file_path, content.as_bytes())
 }
 
 #[cfg(test)]

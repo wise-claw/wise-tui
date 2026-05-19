@@ -14,7 +14,8 @@
  *   - `inspect`  → 叠层（在底层 view 之上，左栏保留）
  *
  * `author` 统一渲染为全屏 AuthorPanel，内部 Tab 承载 Workspace /
- * Agents / Workflows / MCP / Skills / Hooks / Prompts / Trellis Spec。
+ * Agents / Workflows / MCP / Skills / Hooks / Prompts / Trellis Spec /
+ * 应用级设置。
  */
 export type ViewMode =
   | { kind: "chat" }
@@ -30,7 +31,29 @@ export type AuthorPane =
   | "skills"
   | "hooks"
   | "prompts"
-  | "trellis-spec";
+  | "trellis-spec"
+  | "claude-config"
+  | "extensions"
+  | "assistants"
+  | "engine-registry"
+  | "channels"
+  | "automation"
+  | "artifacts"
+  | "shortcuts"
+  | "sandbox";
+
+export const DEFAULT_AUTHOR_PANE: AuthorPane = "workspaces";
+
+export const WORKSPACE_SCOPED_AUTHOR_PANES: ReadonlySet<AuthorPane> = new Set([
+  "workspaces",
+  "agents",
+  "workflows",
+  "mcp",
+  "skills",
+  "hooks",
+  "prompts",
+  "trellis-spec",
+]);
 
 /**
  * Inspect 工具枚举。
@@ -55,5 +78,5 @@ export interface InspectWorkflowStudio {
   kind: "workflow-studio";
 }
 
-/** 默认 View（应用启动 / `back()` 回退兜底）。P1: Cockpit 是主屏。 */
-export const DEFAULT_VIEW_MODE: ViewMode = { kind: "cockpit" };
+/** 默认 View（应用启动 / `back()` 回退兜底）。主会话优先，助手从左栏显式进入。 */
+export const DEFAULT_VIEW_MODE: ViewMode = { kind: "chat" };

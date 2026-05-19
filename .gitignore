@@ -11,7 +11,7 @@ lerna-debug.log*
 package-lock.json
 pnpm-lock.yaml
 yarn.lock
-
+AionUi-main
 node_modules
 dist
 dist-ssr
@@ -22,6 +22,7 @@ dist-ssr
 !.vscode/extensions.json
 !.vscode/settings.json
 .idea
+.history/
 .DS_Store
 *.suo
 *.ntvs*

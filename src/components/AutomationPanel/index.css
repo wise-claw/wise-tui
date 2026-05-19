@@ -1,0 +1,557 @@
+.app-automation-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.app-automation-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 10px;
+  background: var(--ant-color-bg-container);
+}
+
+.app-automation-panel__eyebrow {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--ant-color-primary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.app-automation-panel__title.ant-typography {
+  margin: 0;
+  font-size: 20px;
+}
+
+.app-automation-panel__subtitle.ant-typography {
+  max-width: 800px;
+  margin: 8px 0 0;
+  color: var(--ant-color-text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.app-automation-panel__stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.app-automation-panel__stats > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
+}
+
+.app-automation-panel__stats span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+}
+
+.app-automation-panel__stats strong {
+  color: var(--ant-color-text);
+  font-size: 15px;
+}
+
+.app-automation-panel__loop {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.app-automation-panel__control-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.app-automation-control-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  min-height: 126px;
+  padding: 12px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
+}
+
+.app-automation-control-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.app-automation-control-card__head > span:first-child {
+  min-width: 0;
+}
+
+.app-automation-control-card__title,
+.app-automation-control-card__eyebrow,
+.app-automation-control-card__detail,
+.app-automation-control-card__status,
+.app-automation-control-card__metric span {
+  display: block;
+}
+
+.app-automation-control-card__title {
+  overflow: hidden;
+  color: var(--ant-color-text);
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-automation-control-card__eyebrow {
+  margin-top: 2px;
+  color: var(--ant-color-text-tertiary);
+  font-size: 10px;
+}
+
+.app-automation-control-card__metric {
+  flex: none;
+  min-width: 56px;
+  padding: 3px 6px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 6px;
+  background: var(--ant-color-fill-quaternary);
+  text-align: right;
+}
+
+.app-automation-control-card__metric strong {
+  color: var(--ant-color-text);
+  font-size: 15px;
+  line-height: 1.1;
+}
+
+.app-automation-control-card__metric span {
+  color: var(--ant-color-text-tertiary);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.app-automation-control-card__detail {
+  color: var(--ant-color-text-secondary);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.app-automation-control-card__status {
+  width: max-content;
+  max-width: 100%;
+  margin-top: auto;
+  padding: 1px 7px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 4px;
+  color: var(--ant-color-text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.app-automation-control-card--ready .app-automation-control-card__status {
+  border-color: var(--ant-color-success-border);
+  background: var(--ant-color-success-bg);
+  color: var(--ant-color-success);
+}
+
+.app-automation-control-card--warn .app-automation-control-card__status {
+  border-color: var(--ant-color-warning-border);
+  background: var(--ant-color-warning-bg);
+  color: var(--ant-color-warning);
+}
+
+.app-automation-loop-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  min-height: 116px;
+  padding: 12px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
+}
+
+.app-automation-loop-step__icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: var(--ant-color-primary-bg);
+  color: var(--ant-color-primary);
+  font-size: 16px;
+}
+
+.app-automation-loop-step__body {
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.app-automation-loop-step__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.app-automation-loop-step__head strong {
+  overflow: hidden;
+  color: var(--ant-color-text);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-automation-loop-step__description {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.app-automation-panel__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
+}
+
+.app-automation-panel__repo-select {
+  width: min(360px, 100%);
+}
+
+.app-automation-console {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.42fr) minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+}
+
+.app-automation-console__repos {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.app-automation-repo-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  min-height: 132px;
+  padding: 12px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
+  color: var(--ant-color-text);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
+}
+
+.app-automation-repo-card:hover,
+.app-automation-repo-card--selected {
+  border-color: var(--ant-color-primary-border);
+  background: var(--ant-color-primary-bg);
+}
+
+.app-automation-repo-card:hover {
+  transform: translateY(-1px);
+}
+
+.app-automation-repo-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.app-automation-repo-card__top strong {
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-automation-repo-card__path {
+  display: block;
+  overflow: hidden;
+  color: var(--ant-color-text-tertiary);
+  font-family: var(--ant-font-family-code, ui-monospace, monospace);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-automation-repo-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 10px;
+  margin-top: auto;
+  color: var(--ant-color-text-secondary);
+  font-size: 11px;
+}
+
+.app-automation-repo-card__meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.app-automation-repo-card__failed {
+  color: var(--ant-color-warning);
+}
+
+.app-automation-console__detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  min-height: 360px;
+  padding: 14px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 10px;
+  background: var(--ant-color-bg-container);
+}
+
+.app-automation-console__detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-automation-console__detail-head .ant-typography {
+  margin: 0;
+}
+
+.app-automation-console__eyebrow {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--ant-color-primary);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.app-automation-console__pipeline {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.app-automation-console__pipeline > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-automation-console__pipeline-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--ant-color-primary-bg);
+  color: var(--ant-color-primary);
+}
+
+.app-automation-console__pipeline strong {
+  color: var(--ant-color-text);
+  font-size: 13px;
+}
+
+.app-automation-console__pipeline small {
+  overflow: hidden;
+  color: var(--ant-color-text-tertiary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-automation-console__boundary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.app-automation-console__boundary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-automation-console__boundary strong {
+  color: var(--ant-color-text);
+  font-size: 12px;
+}
+
+.app-automation-console__boundary span {
+  color: var(--ant-color-text-secondary);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.app-automation-task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.app-automation-task-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
+  color: var(--ant-color-text);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.app-automation-task-row:hover {
+  border-color: var(--ant-color-primary-border);
+  background: var(--ant-color-primary-bg);
+}
+
+.app-automation-task-row__main {
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.app-automation-task-row__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-automation-task-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  color: var(--ant-color-text-tertiary);
+  font-size: 11px;
+}
+
+.app-automation-task-row__meta code {
+  color: var(--ant-color-text-secondary);
+  font-family: var(--ant-font-family-code, ui-monospace, monospace);
+}
+
+.app-automation-panel__roadmap {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.app-automation-panel__roadmap > div {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 10px 12px;
+  border: 1px dashed var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary);
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+}
+
+@media (max-width: 1160px) {
+  .app-automation-panel__loop,
+  .app-automation-panel__control-grid,
+  .app-automation-console,
+  .app-automation-console__boundary,
+  .app-automation-panel__roadmap {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .app-automation-console__detail {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 860px) {
+  .app-automation-panel__header,
+  .app-automation-panel__toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .app-automation-panel__stats,
+  .app-automation-panel__loop,
+  .app-automation-panel__control-grid,
+  .app-automation-console,
+  .app-automation-console__pipeline,
+  .app-automation-console__boundary,
+  .app-automation-panel__roadmap {
+    grid-template-columns: 1fr;
+  }
+
+  .app-automation-console__detail-head {
+    flex-direction: column;
+  }
+}

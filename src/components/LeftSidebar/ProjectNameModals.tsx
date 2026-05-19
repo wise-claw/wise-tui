@@ -90,7 +90,7 @@ export function ProjectNameModals({
               </Typography.Text>
             </div>
             <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-              所选目录为 Workspace 根；后续可在其下放置多个 Git 仓库，并通过 Workspace 菜单「重新初始化」同步到 Wise。
+              Workspace 根目录只承载 Trellis；代码仓库通过「关联仓库」添加。
             </Typography.Paragraph>
           </div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>

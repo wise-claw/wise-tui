@@ -50,11 +50,11 @@
 .mission-header {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(260px, auto) auto;
-  gap: 16px;
+  grid-template-columns: minmax(180px, 1fr) minmax(220px, auto) minmax(0, auto);
+  gap: 12px;
   align-items: center;
-  min-height: 68px;
-  padding: 8px 20px;
+  min-height: 64px;
+  padding: 8px 14px 8px 18px;
   border-bottom: 1px solid var(--mission-border);
   background: var(--mission-surface);
 }
@@ -108,8 +108,20 @@
 .mission-header__actions {
   justify-content: flex-end;
   align-items: center;
-  flex-wrap: nowrap;
+  min-width: 0;
+  flex-wrap: wrap;
   gap: 6px;
+}
+
+.mission-header__actions .ant-space-item {
+  min-width: 0;
+}
+
+.mission-header__actions .ant-btn {
+  max-width: 132px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ── Context switchboard ── */
@@ -229,22 +241,6 @@
 
 .mission-header__actions .ant-btn-primary:hover {
   box-shadow: 0 0 24px var(--mission-accent-glow);
-}
-
-/* ── Close button ── */
-
-.mission-close-btn {
-  position: absolute;
-  top: 10px;
-  right: 14px;
-  z-index: 10;
-  color: var(--mission-dim);
-  font-size: 16px;
-}
-
-.mission-close-btn:hover {
-  color: var(--mission-text);
-  background: var(--mission-surface-soft);
 }
 
 /* ── Mission Status Bar ── */
@@ -2352,38 +2348,6 @@
   font-size: 12px;
 }
 
-.project-trellis-center__summary {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--mission-border);
-  border-radius: 8px;
-  background: var(--mission-surface-muted);
-}
-
-.project-trellis-center__inline {
-  min-width: 0;
-}
-
-.project-trellis-center__summary-main {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.project-trellis-center__root {
-  overflow: hidden;
-  color: var(--mission-dim);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.project-trellis-center__runtime,
 .mission-engineering-list {
   display: flex;
   flex-direction: column;
@@ -3607,5 +3571,18 @@
   }
   .mission-column--tree {
     display: none;
+  }
+  .mission-spec-library__header,
+  .mission-spec-library__editor-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .mission-spec-library__body {
+    grid-template-columns: 1fr;
+  }
+  .mission-spec-library__areas {
+    max-height: 180px;
+    border-right: 0;
+    border-bottom: 1px solid var(--mission-border);
   }
 }

@@ -41,6 +41,8 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "std"
 rayon = "1.10"
 git2 = "0.20"
 notify = "7.0"
+semver = "1"
+async-trait = "0.1"
 portable-pty = "0.9"
 uuid = { version = "1", features = ["v4"] }
 tokio = { version = "1", features = ["full"] }
@@ -62,3 +64,6 @@ tree-sitter-typescript = "0.23"
 tree-sitter-javascript = "0.23"
 streaming-iterator = "0.1"
 tree-sitter-java = "0.23"
+
+[dev-dependencies]
+tempfile = "3"

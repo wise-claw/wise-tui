@@ -27,6 +27,7 @@ struct ActiveSplitterRun {
 }
 
 static ACTIVE_SPLITTER_RUNS: OnceLock<Mutex<HashMap<String, ActiveSplitterRun>>> = OnceLock::new();
+const DEFAULT_TASK_ASSIGNEE: &str = "wise";
 
 fn active_splitter_runs() -> &'static Mutex<HashMap<String, ActiveSplitterRun>> {
     ACTIVE_SPLITTER_RUNS.get_or_init(|| Mutex::new(HashMap::new()))
@@ -661,6 +662,36 @@ fn validate_project_root(raw: &str) -> Result<PathBuf, String> {
     Ok(p)
 }
 
+fn validate_execution_root(raw: Option<&str>) -> Result<Option<PathBuf>, String> {
+    let Some(raw) = raw.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok(None);
+    };
+    let p = PathBuf::from(raw);
+    if !p.is_absolute() {
+        return Err("execution_root_path 必须是绝对路径".to_string());
+    }
+    if !p.is_dir() {
+        return Err(format!(
+            "execution_root_path 不存在或不是目录: {}",
+            p.to_string_lossy()
+        ));
+    }
+    Ok(Some(p))
+}
+
+fn resolve_task_assignee(project_root: &Path) -> String {
+    let developer_file = project_root.join(".trellis").join(".developer");
+    let Ok(content) = fs::read_to_string(developer_file) else {
+        return DEFAULT_TASK_ASSIGNEE.to_string();
+    };
+    content
+        .lines()
+        .find_map(|line| line.strip_prefix("name=").map(str::trim))
+        .filter(|name| !name.is_empty())
+        .map(ToString::to_string)
+        .unwrap_or_else(|| DEFAULT_TASK_ASSIGNEE.to_string())
+}
+
 async fn run_task_py_create(
     project_root: &Path,
     title: &str,
@@ -676,6 +707,8 @@ async fn run_task_py_create(
     cmd.current_dir(project_root);
     cmd.arg(task_py).arg("create").arg(title);
     cmd.arg("--slug").arg(slug);
+    let assignee = resolve_task_assignee(project_root);
+    cmd.arg("--assignee").arg(&assignee);
     if !description.trim().is_empty() {
         cmd.arg("--description").arg(description);
     }
@@ -783,6 +816,8 @@ fn slugify(input: &str) -> String {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DispatchClusterInput {
     project_root_path: String,
+    #[serde(default)]
+    execution_root_path: Option<String>,
     parent_task_path: String,
     cluster_id: String,
     bundle: HashMap<String, String>,
@@ -946,6 +981,10 @@ pub(crate) async fn prd_split_retry_run(
             app_clone,
             DispatchClusterInput {
                 project_root_path: project_root.to_string_lossy().to_string(),
+                execution_root_path: meta
+                    .get("executionRootPath")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string),
                 parent_task_path,
                 cluster_id: requested_cluster_id,
                 bundle,
@@ -1089,6 +1128,7 @@ async fn dispatch_cluster_impl(
     run_override: Option<(String, PathBuf)>,
 ) -> Result<DispatchClusterOutput, String> {
     let project_root = validate_project_root(&input.project_root_path)?;
+    let execution_root = validate_execution_root(input.execution_root_path.as_deref())?;
     if input.parent_task_path.trim().is_empty() {
         return Err(
             "parent_task_path 不能为空（splitter 调度协议要求 Active task 前缀）".to_string(),
@@ -1136,11 +1176,14 @@ async fn dispatch_cluster_impl(
     }
 
     let effective_prompt = inject_run_dir_into_prompt(&input.prompt, &run_dir);
+    let effective_prompt =
+        inject_execution_root_into_prompt(&effective_prompt, execution_root.as_deref());
 
     fs::write(run_dir.join("prompt.md"), &effective_prompt)
         .map_err(|e| format!("写 prompt.md 失败: {e}"))?;
     let mut meta = json!({
         "projectRootPath": project_root.to_string_lossy(),
+        "executionRootPath": execution_root.as_ref().map(|p| p.to_string_lossy().to_string()),
         "runDir": run_dir.to_string_lossy(),
         "parentTaskPath": input.parent_task_path,
         "clusterId": input.cluster_id,
@@ -1170,11 +1213,14 @@ async fn dispatch_cluster_impl(
     let claude_path = find_claude_binary()?;
     let mut cmd = tokio::process::Command::new(&claude_path);
     cmd.current_dir(&project_root);
-    cmd.arg("--bare");
     cmd.arg("-p").arg(&effective_prompt);
+    cmd.arg("--agent").arg("trellis-splitter");
     cmd.arg("--output-format").arg("stream-json");
     cmd.arg("--verbose");
-    cmd.arg("--tools").arg("");
+    cmd.arg("--tools").arg("Read,Glob,Grep");
+    if let Some(root) = execution_root.as_ref() {
+        cmd.arg("--add-dir").arg(root);
+    }
     cmd.arg("--permission-mode").arg("bypassPermissions");
     if let Some(m) = input.model.as_deref().and_then(trim_model_cli_arg) {
         cmd.arg("--model").arg(m);
@@ -1945,6 +1991,24 @@ fn inject_run_dir_into_prompt(prompt: &str, run_dir: &Path) -> String {
     }
 }
 
+fn inject_execution_root_into_prompt(prompt: &str, execution_root: Option<&Path>) -> String {
+    let Some(execution_root) = execution_root else {
+        return prompt.to_string();
+    };
+    let execution_root_str = execution_root.to_string_lossy();
+    if prompt.contains(execution_root_str.as_ref()) {
+        return prompt.to_string();
+    }
+    let protocol = format!(
+        "Execution repository: `{}`\nTreat this repository as the splitter's code-reading scope. Workspace Trellis files stay under the Active task path.",
+        execution_root_str
+    );
+    match prompt.split_once('\n') {
+        Some((first, rest)) => format!("{first}\n\n{protocol}\n{rest}"),
+        None => format!("{prompt}\n\n{protocol}"),
+    }
+}
+
 fn truncate_utf8(text: &str, max_chars: usize) -> String {
     let mut out = String::new();
     for (idx, ch) in text.chars().enumerate() {
@@ -2445,6 +2509,35 @@ mod tests {
         let out = inject_run_dir_into_prompt(prompt, Path::new("/tmp/wise-run"));
         assert!(out.starts_with("Active task: .trellis/tasks/parent\n"));
         assert!(out.contains("Run directory: `/tmp/wise-run`"));
+    }
+
+    #[test]
+    fn inject_execution_root_preserves_active_task_first_line() {
+        let prompt = "Active task: .trellis/tasks/parent\n\nNow produce JSON.";
+        let out = inject_execution_root_into_prompt(prompt, Some(Path::new("/repo/web")));
+        assert!(out.starts_with("Active task: .trellis/tasks/parent\n"));
+        assert!(out.contains("Execution repository: `/repo/web`"));
+    }
+
+    #[test]
+    fn resolve_task_assignee_defaults_without_developer_file() {
+        let temp = test_temp_dir();
+        fs::create_dir_all(temp.join(".trellis")).unwrap();
+        assert_eq!(resolve_task_assignee(&temp), "wise");
+        let _ = fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn resolve_task_assignee_reads_developer_name() {
+        let temp = test_temp_dir();
+        fs::create_dir_all(temp.join(".trellis")).unwrap();
+        fs::write(
+            temp.join(".trellis").join(".developer"),
+            "name=xuning\ninitialized_at=2026-05-19T00:00:00\n",
+        )
+        .unwrap();
+        assert_eq!(resolve_task_assignee(&temp), "xuning");
+        let _ = fs::remove_dir_all(&temp);
     }
 
     #[test]

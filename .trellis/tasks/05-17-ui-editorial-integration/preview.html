@@ -1,0 +1,1560 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>wise · UI preview (AionUi-aligned)</title>
+    <style>
+      /* ─────────────────────────────────────────────────────────
+         tokens — aligned with AntD defaults + AionUi semantic layer
+         ───────────────────────────────────────────────────────── */
+      :root {
+        /* surface */
+        --bg-page: #f5f5f5;          /* outer modal mask area */
+        --bg-base: #ffffff;          /* card / surface */
+        --bg-fill-1: #f7f8fa;        /* hover surface */
+        --bg-fill-2: #f2f3f5;        /* nested fill */
+        --bg-fill-3: #e5e6eb;
+
+        /* text — Arco-style ramp 1..4 */
+        --text-1: #1d2129;           /* title */
+        --text-2: #4e5969;           /* body */
+        --text-3: #86909c;           /* secondary */
+        --text-4: #c9cdd4;           /* placeholder / disabled */
+
+        /* border — Arco-style 1..3 */
+        --border-1: #e5e6eb;
+        --border-2: #c9cdd4;
+        --border-3: #86909c;
+
+        /* AntD-aligned semantic */
+        --primary: #165dff;          /* AntD/Arco-aligned blue */
+        --primary-1: #e8f3ff;
+        --primary-light: rgba(22, 93, 255, 0.08);
+        --success: #00b42a;
+        --warning: #ff7d00;
+        --danger: #f53f3f;
+        --info: #722ed1;
+
+        /* radii (AntD-ish) */
+        --r-2: 2px;
+        --r-4: 4px;
+        --r-6: 6px;
+        --r-8: 8px;
+        --r-12: 12px;
+        --r-16: 16px;
+
+        /* shadows */
+        --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.03);
+        --shadow-md: 0 4px 10px rgba(0, 0, 0, 0.04);
+
+        /* type */
+        --font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC",
+          "Helvetica Neue", "Microsoft YaHei", "Source Han Sans CN",
+          sans-serif;
+        --font-mono: "SF Mono", "JetBrains Mono", ui-monospace, Menlo,
+          Consolas, monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        background: var(--bg-page);
+        color: var(--text-1);
+        font-family: var(--font-sans);
+        font-size: 14px;
+        line-height: 1.5715;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ─────────────────────────────────────────────────────────
+         settings modal shell (AionUi-style)
+         ───────────────────────────────────────────────────────── */
+      .modal {
+        max-width: 1180px;
+        margin: 24px auto;
+        background: var(--bg-base);
+        border-radius: var(--r-16);
+        box-shadow: var(--shadow-md);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        height: calc(100vh - 48px);
+        min-height: 720px;
+      }
+
+      .modal__title-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 24px;
+        border-bottom: 1px solid var(--border-1);
+      }
+      .modal__title {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text-1);
+      }
+      .modal__close {
+        font-size: 14px;
+        color: var(--text-3);
+        background: none;
+        border: 0;
+        cursor: pointer;
+        padding: 4px 8px;
+      }
+      .modal__close:hover {
+        color: var(--text-1);
+      }
+
+      .modal__body {
+        flex: 1;
+        display: flex;
+        min-height: 0;
+      }
+
+      /* left nav — 200px (AionUi SIDEBAR_WIDTH) */
+      .nav {
+        width: 200px;
+        flex-shrink: 0;
+        border-right: 1px solid var(--border-1);
+        padding: 16px 8px;
+        overflow-y: auto;
+      }
+      .nav__group {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-3);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        padding: 8px 12px 4px;
+      }
+      .nav__item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 12px;
+        border-radius: var(--r-6);
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-2);
+        transition: background-color 120ms;
+      }
+      .nav__item:hover {
+        background: var(--bg-fill-1);
+        color: var(--text-1);
+      }
+      .nav__item--active {
+        background: var(--primary-light);
+        color: var(--primary);
+      }
+      .nav__icon {
+        width: 16px;
+        height: 16px;
+        flex-shrink: 0;
+      }
+      .nav__count {
+        margin-left: auto;
+        font-size: 11px;
+        color: var(--text-3);
+        font-family: var(--font-mono);
+      }
+
+      /* right scroll area */
+      .pane {
+        flex: 1;
+        min-width: 0;
+        overflow-y: auto;
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      /* ─────────────────────────────────────────────────────────
+         hub card (AionUi pattern)
+         ───────────────────────────────────────────────────────── */
+      .hub {
+        background: var(--bg-base);
+        border: 1px solid var(--border-1);
+        border-radius: var(--r-16);
+        padding: 24px 32px;
+        position: relative;
+        overflow: hidden;
+        box-shadow: var(--shadow-sm);
+      }
+
+      .hub__head {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .hub__title-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      .hub__title {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--text-1);
+      }
+      .hub__title-icon {
+        width: 24px;
+        height: 24px;
+        border-radius: var(--r-6);
+        background: var(--primary-light);
+        color: var(--primary);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .hub__title-pill {
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--primary);
+        background: var(--primary-light);
+        border-radius: 100px;
+        padding: 2px 10px;
+        margin-left: 4px;
+      }
+
+      .hub__actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      /* search */
+      .search {
+        position: relative;
+        width: 240px;
+      }
+      .search input {
+        width: 100%;
+        background: var(--bg-fill-1);
+        border: 1px solid var(--border-1);
+        border-radius: var(--r-8);
+        padding: 7px 12px 7px 32px;
+        font-size: 13px;
+        font-family: var(--font-sans);
+        color: var(--text-1);
+        outline: none;
+        transition: all 120ms;
+      }
+      .search input:focus,
+      .search input:hover {
+        background: var(--bg-base);
+        border-color: var(--primary);
+      }
+      .search input::placeholder {
+        color: var(--text-3);
+      }
+      .search__icon {
+        position: absolute;
+        left: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-3);
+        font-size: 14px;
+        pointer-events: none;
+      }
+
+      /* btns */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-family: var(--font-sans);
+        font-size: 13px;
+        font-weight: 500;
+        padding: 6px 14px;
+        border-radius: var(--r-8);
+        border: 1px solid var(--border-1);
+        background: var(--bg-base);
+        color: var(--text-1);
+        cursor: pointer;
+        transition: all 120ms;
+        line-height: 1.4;
+        white-space: nowrap;
+      }
+      .btn:hover {
+        background: var(--bg-fill-1);
+        border-color: var(--border-2);
+      }
+      .btn--primary {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: #fff;
+      }
+      .btn--primary:hover {
+        background: #0c4cdd;
+        border-color: #0c4cdd;
+      }
+      .btn--ghost {
+        border-color: transparent;
+        background: transparent;
+        color: var(--text-2);
+      }
+      .btn--ghost:hover {
+        background: var(--bg-fill-1);
+        color: var(--text-1);
+      }
+      .btn--danger:hover {
+        color: var(--danger);
+        border-color: var(--danger);
+      }
+      .btn--sm {
+        padding: 3px 10px;
+        font-size: 12px;
+        border-radius: var(--r-6);
+      }
+
+      /* tabs (pill style, AionUi) */
+      .tabs {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+      }
+      .tab {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 16px;
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-2);
+        background: var(--bg-base);
+        border: 1px solid var(--border-1);
+        border-radius: 100px;
+        cursor: pointer;
+        transition: all 150ms;
+      }
+      .tab:hover {
+        background: var(--bg-fill-1);
+        color: var(--text-1);
+      }
+      .tab--active {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: #fff;
+      }
+      .tab__count {
+        padding: 1px 6px;
+        border-radius: 100px;
+        font-size: 11px;
+        background: var(--bg-fill-2);
+        color: var(--text-3);
+      }
+      .tab--active .tab__count {
+        background: rgba(255, 255, 255, 0.2);
+        color: #fff;
+      }
+
+      /* meta row */
+      .hub__meta {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--text-3);
+        font-family: var(--font-mono);
+        padding-top: 4px;
+        border-top: 1px dashed var(--border-1);
+        margin-top: 4px;
+      }
+      .hub__meta strong {
+        color: var(--text-2);
+        font-weight: 500;
+      }
+
+      /* ─────────────────────────────────────────────────────────
+         item rows (cards in the AionUi list)
+         ───────────────────────────────────────────────────────── */
+      .items {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-top: 16px;
+      }
+      .item {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 14px 16px;
+        background: var(--bg-base);
+        border: 1px solid transparent;
+        border-radius: var(--r-12);
+        transition: all 150ms;
+        cursor: default;
+      }
+      .item:hover {
+        background: var(--bg-fill-1);
+        border-color: var(--border-1);
+        box-shadow: var(--shadow-sm);
+      }
+      .item--highlight {
+        border-color: var(--primary);
+        background: var(--primary-1);
+      }
+
+      .avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: var(--r-8);
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 16px;
+        color: #fff;
+        text-transform: uppercase;
+      }
+
+      .item__body {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .item__title-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .item__title {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-1);
+      }
+      .item__author {
+        font-size: 12px;
+        color: var(--text-3);
+      }
+      .item__author::before {
+        content: "·";
+        margin-right: 6px;
+      }
+      .item__desc {
+        font-size: 13px;
+        color: var(--text-2);
+        line-height: 1.5;
+        margin: 0;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .item__path {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--text-3);
+        margin-top: 2px;
+      }
+
+      .item__actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 0;
+      }
+
+      /* tags (AntD compact pills) */
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 1px 8px;
+        font-size: 11px;
+        font-weight: 500;
+        border-radius: var(--r-4);
+        line-height: 1.5;
+        font-family: var(--font-sans);
+      }
+      .tag--default {
+        background: var(--bg-fill-2);
+        color: var(--text-2);
+        border: 1px solid var(--border-1);
+      }
+      .tag--blue {
+        background: var(--primary-1);
+        color: var(--primary);
+        border: 1px solid rgba(22, 93, 255, 0.2);
+      }
+      .tag--green {
+        background: #e8ffea;
+        color: var(--success);
+        border: 1px solid rgba(0, 180, 42, 0.2);
+      }
+      .tag--orange {
+        background: #fff3e8;
+        color: var(--warning);
+        border: 1px solid rgba(255, 125, 0, 0.2);
+      }
+      .tag--purple {
+        background: #f5e8ff;
+        color: var(--info);
+        border: 1px solid rgba(114, 46, 209, 0.2);
+      }
+      .tag--mono {
+        font-family: var(--font-mono);
+      }
+
+      /* status dot */
+      .dot {
+        display: inline-block;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+      }
+      .dot--on { background: var(--success); }
+      .dot--warn { background: var(--warning); }
+      .dot--off { background: var(--text-4); }
+
+      /* ─────────────────────────────────────────────────────────
+         skills hub: external browse split
+         ───────────────────────────────────────────────────────── */
+      .split {
+        display: grid;
+        grid-template-columns: 280px 1fr;
+        gap: 16px;
+        margin-top: 16px;
+      }
+      .split__paths {
+        background: var(--bg-fill-1);
+        border-radius: var(--r-12);
+        padding: 12px;
+        align-self: start;
+      }
+      .pathlist {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .pathlist__item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        border-radius: var(--r-6);
+        cursor: pointer;
+        font-size: 12px;
+        color: var(--text-2);
+        transition: background 120ms;
+      }
+      .pathlist__item:hover { background: var(--bg-base); }
+      .pathlist__item--active {
+        background: var(--primary-light);
+        color: var(--primary);
+      }
+      .pathlist__path {
+        flex: 1;
+        font-family: var(--font-mono);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .pathlist__count {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--text-3);
+      }
+      .pathlist__item--active .pathlist__count { color: var(--primary); }
+      .pathlist__item--missing { color: var(--text-4); cursor: default; }
+      .pathlist__add {
+        display: flex;
+        gap: 6px;
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px dashed var(--border-1);
+      }
+      .pathlist__add input {
+        flex: 1;
+        font-size: 12px;
+        font-family: var(--font-sans);
+        padding: 5px 8px;
+        border: 1px solid var(--border-1);
+        border-radius: var(--r-6);
+        background: var(--bg-base);
+        outline: none;
+      }
+      .pathlist__add input:focus { border-color: var(--primary); }
+
+      /* ─────────────────────────────────────────────────────────
+         mcp drawer (right-side editor)
+         ───────────────────────────────────────────────────────── */
+      .mcp-split {
+        display: grid;
+        grid-template-columns: 1fr 360px;
+        gap: 16px;
+        margin-top: 16px;
+      }
+      .drawer {
+        background: var(--bg-fill-1);
+        border-radius: var(--r-12);
+        padding: 16px;
+        align-self: start;
+      }
+      .drawer__head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid var(--border-1);
+      }
+      .drawer__title { font-size: 14px; font-weight: 600; }
+      .form-row { margin-bottom: 12px; }
+      .form-row > label {
+        display: block;
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--text-3);
+        margin-bottom: 4px;
+      }
+      .input {
+        width: 100%;
+        padding: 6px 10px;
+        font-size: 12px;
+        font-family: var(--font-mono);
+        background: var(--bg-base);
+        border: 1px solid var(--border-1);
+        border-radius: var(--r-6);
+        outline: none;
+        color: var(--text-1);
+      }
+      .input:focus { border-color: var(--primary); }
+      .input--readonly { background: var(--bg-fill-2); color: var(--text-3); }
+      .input--multi { min-height: 60px; line-height: 1.6; white-space: pre-wrap; }
+
+      .seg {
+        display: inline-flex;
+        background: var(--bg-base);
+        border: 1px solid var(--border-1);
+        border-radius: var(--r-6);
+        padding: 2px;
+        gap: 2px;
+        flex-wrap: wrap;
+      }
+      .seg__opt {
+        font-size: 12px;
+        font-weight: 500;
+        padding: 4px 10px;
+        border: 0;
+        border-radius: var(--r-4);
+        background: transparent;
+        color: var(--text-2);
+        cursor: pointer;
+      }
+      .seg__opt--active {
+        background: var(--primary);
+        color: #fff;
+      }
+
+      .kv {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        font-size: 11px;
+        font-family: var(--font-mono);
+      }
+      .kv td {
+        padding: 4px 8px;
+        border: 1px solid var(--border-1);
+      }
+      .kv td:first-child { background: var(--bg-fill-2); width: 40%; }
+      .kv__placeholder { color: var(--text-4); font-style: italic; }
+
+      .test-result {
+        margin-top: 12px;
+        padding: 10px 12px;
+        background: var(--bg-base);
+        border: 1px solid var(--border-1);
+        border-left: 3px solid var(--success);
+        border-radius: var(--r-6);
+      }
+      .test-result__head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--text-1);
+      }
+      .test-result__tools {
+        margin: 6px 0 0;
+        padding-left: 0;
+        list-style: none;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--text-2);
+        column-count: 2;
+      }
+      .test-result__tools li::before {
+        content: "·";
+        margin-right: 4px;
+        color: var(--text-3);
+      }
+      .test-result__note {
+        margin: 8px 0 0;
+        font-size: 11px;
+        color: var(--text-3);
+      }
+
+      .drawer__footer {
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+        padding-top: 12px;
+        margin-top: 12px;
+        border-top: 1px solid var(--border-1);
+      }
+
+      /* ─────────────────────────────────────────────────────────
+         agent switch card (in-conversation variant)
+         ───────────────────────────────────────────────────────── */
+      .switchcard {
+        margin-top: 16px;
+        background: var(--bg-base);
+        border: 1px solid var(--border-1);
+        border-radius: var(--r-12);
+        padding: 14px 16px;
+        box-shadow: var(--shadow-sm);
+      }
+      .switchcard__head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+      }
+      .switchcard__label {
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--text-3);
+      }
+      .switchcard__hint {
+        font-size: 11px;
+        color: var(--text-3);
+      }
+      .switchcard__row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .switchcard__active {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 12px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--primary);
+        background: var(--primary-light);
+        border-radius: 100px;
+      }
+      .switchcard__sep {
+        color: var(--text-3);
+        margin: 0 4px;
+        font-size: 12px;
+      }
+      .switchcard__opt {
+        padding: 5px 12px;
+        font-size: 13px;
+        font-weight: 500;
+        background: var(--bg-base);
+        border: 1px solid var(--border-1);
+        border-radius: 100px;
+        cursor: pointer;
+        color: var(--text-1);
+      }
+      .switchcard__opt:hover {
+        border-color: var(--primary);
+        color: var(--primary);
+      }
+      .switchcard__opt--off {
+        color: var(--text-4);
+        cursor: not-allowed;
+      }
+      .switchcard__opt--off:hover {
+        border-color: var(--border-1);
+        color: var(--text-4);
+      }
+
+      /* ─────────────────────────────────────────────────────────
+         empty state
+         ───────────────────────────────────────────────────────── */
+      .empty {
+        text-align: center;
+        padding: 40px 20px;
+        color: var(--text-3);
+        background: var(--bg-fill-1);
+        border-radius: var(--r-12);
+        border: 1px dashed var(--border-1);
+        font-size: 13px;
+      }
+      .empty strong {
+        display: block;
+        margin-bottom: 4px;
+        color: var(--text-2);
+        font-size: 14px;
+      }
+
+      /* page-entry */
+      @keyframes rise {
+        from { opacity: 0; transform: translateY(6px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .hub { animation: rise 240ms ease-out backwards; }
+      .hub:nth-of-type(2) { animation-delay: 60ms; }
+      .hub:nth-of-type(3) { animation-delay: 120ms; }
+      .hub:nth-of-type(4) { animation-delay: 180ms; }
+
+      /* small icons (inline svg via mask, simplified) */
+      .ico {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        flex-shrink: 0;
+        line-height: 1;
+        font-size: 14px;
+      }
+
+      /* hub header bottom rule */
+      .hub__divider {
+        margin: 16px 0 0;
+        border: 0;
+        border-top: 1px solid var(--border-1);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="modal" role="dialog" aria-label="wise settings">
+      <!-- ────────────────────── title bar ────────────────────── -->
+      <div class="modal__title-bar">
+        <span class="modal__title">设置</span>
+        <button class="modal__close" type="button">✕</button>
+      </div>
+
+      <div class="modal__body">
+        <!-- ────────────────────── left nav ────────────────────── -->
+        <aside class="nav" aria-label="settings nav">
+          <div class="nav__group">通用</div>
+          <div class="nav__item">
+            <span class="ico">⚙</span><span>常规</span>
+          </div>
+          <div class="nav__item">
+            <span class="ico">🎨</span><span>外观</span>
+          </div>
+
+          <div class="nav__group" style="margin-top: 16px">能力</div>
+          <div class="nav__item nav__item--active" data-target="extensions">
+            <span class="ico">🧩</span><span>扩展</span>
+            <span class="nav__count">12</span>
+          </div>
+          <div class="nav__item" data-target="skills">
+            <span class="ico">⚡</span><span>技能</span>
+            <span class="nav__count">24</span>
+          </div>
+          <div class="nav__item" data-target="mcp">
+            <span class="ico">🔌</span><span>MCP 服务器</span>
+            <span class="nav__count">05</span>
+          </div>
+          <div class="nav__item" data-target="agents">
+            <span class="ico">🤖</span><span>执行引擎</span>
+            <span class="nav__count">04</span>
+          </div>
+
+          <div class="nav__group" style="margin-top: 16px">集成</div>
+          <div class="nav__item">
+            <span class="ico">📋</span><span>Claude Code</span>
+          </div>
+          <div class="nav__item">
+            <span class="ico">💬</span><span>钉钉</span>
+          </div>
+        </aside>
+
+        <!-- ────────────────────── right pane ────────────────────── -->
+        <main class="pane">
+          <!-- ─────── extensions ─────── -->
+          <section class="hub" id="extensions">
+            <div class="hub__head">
+              <div class="hub__title-row">
+                <div class="hub__title">
+                  <span class="hub__title-icon">扩</span>
+                  扩展管理
+                  <span class="hub__title-pill">v0.1</span>
+                </div>
+                <div class="hub__actions">
+                  <div class="search">
+                    <span class="search__icon">⌕</span>
+                    <input type="text" placeholder="搜索扩展…" />
+                  </div>
+                  <button class="btn">
+                    <span class="ico">↻</span>重新加载
+                  </button>
+                  <button class="btn btn--primary">
+                    <span class="ico">＋</span>从路径安装
+                  </button>
+                </div>
+              </div>
+
+              <div class="tabs">
+                <button class="tab tab--active">
+                  已安装<span class="tab__count">12</span>
+                </button>
+                <button class="tab">
+                  浏览<span class="tab__count">∞</span>
+                </button>
+                <button class="tab">
+                  已禁用<span class="tab__count">03</span>
+                </button>
+                <button class="tab">
+                  待更新<span class="tab__count">02</span>
+                </button>
+              </div>
+
+              <div class="hub__meta">
+                <span><strong>~/.wise/extensions</strong></span>
+                <span>·</span>
+                <span>上次扫描 14:32:07 · 2026·05·17</span>
+              </div>
+            </div>
+
+            <div class="items">
+              <div class="item item--highlight">
+                <span class="avatar" style="background: #165dff">H</span>
+                <div class="item__body">
+                  <div class="item__title-row">
+                    <span class="item__title">hello-world</span>
+                    <span class="tag tag--mono tag--default">v0.1.0</span>
+                    <span class="tag tag--green"><span class="dot dot--on"></span>启用</span>
+                    <span class="item__author">wise contributors</span>
+                  </div>
+                  <p class="item__desc">
+                    参考扩展。演示 v1 manifest 支持的全部 contribute 类型 ——
+                    skills / themes / settings declarations，是新作者的起点。
+                  </p>
+                  <div style="display: flex; gap: 6px; margin-top: 6px">
+                    <span class="tag tag--default tag--mono">skill·1</span>
+                    <span class="tag tag--default tag--mono">theme·1</span>
+                    <span class="tag tag--default tag--mono">setting·1</span>
+                  </div>
+                </div>
+                <div class="item__actions">
+                  <button class="btn btn--sm btn--ghost">详情</button>
+                  <button class="btn btn--sm btn--ghost btn--danger">禁用</button>
+                </div>
+              </div>
+
+              <div class="item">
+                <span class="avatar" style="background: #722ed1">T</span>
+                <div class="item__body">
+                  <div class="item__title-row">
+                    <span class="item__title">trellis-helpers</span>
+                    <span class="tag tag--mono tag--default">v0.4.2 → 0.5.0</span>
+                    <span class="tag tag--orange">可更新</span>
+                    <span class="item__author">@x · 4 contributes</span>
+                  </div>
+                  <p class="item__desc">
+                    Trellis 工作流的 CLI 快捷指令与 prompt 脚手架。新增 3 个
+                    skill、1 个 settings declaration，附一个适合深夜的主题。
+                  </p>
+                  <div style="display: flex; gap: 6px; margin-top: 6px">
+                    <span class="tag tag--default tag--mono">skill·3</span>
+                    <span class="tag tag--default tag--mono">setting·1</span>
+                    <span class="tag tag--default tag--mono">theme·1</span>
+                  </div>
+                </div>
+                <div class="item__actions">
+                  <button class="btn btn--sm btn--primary">更新</button>
+                  <button class="btn btn--sm btn--ghost">详情</button>
+                </div>
+              </div>
+
+              <div class="item">
+                <span class="avatar" style="background: #f5319d">W</span>
+                <div class="item__body">
+                  <div class="item__title-row">
+                    <span class="item__title">workshop-themes</span>
+                    <span class="tag tag--mono tag--default">v1.2.0</span>
+                    <span class="tag tag--green"><span class="dot dot--on"></span>启用</span>
+                    <span class="item__author">community · curated</span>
+                  </div>
+                  <p class="item__desc">
+                    六组由独立字体设计师定制的精致配色方案，每组提供明暗两种
+                    变体。
+                  </p>
+                  <div style="display: flex; gap: 6px; margin-top: 6px">
+                    <span class="tag tag--default tag--mono">theme·6</span>
+                  </div>
+                </div>
+                <div class="item__actions">
+                  <button class="btn btn--sm btn--ghost">详情</button>
+                  <button class="btn btn--sm btn--ghost btn--danger">禁用</button>
+                </div>
+              </div>
+
+              <div class="item">
+                <span class="avatar" style="background: #f77234">R</span>
+                <div class="item__body">
+                  <div class="item__title-row">
+                    <span class="item__title">research-toolbox</span>
+                    <span class="tag tag--mono tag--default">v0.7.1 → 0.7.4</span>
+                    <span class="tag tag--orange">可更新</span>
+                    <span class="tag tag--purple">需要 fs 权限</span>
+                  </div>
+                  <p class="item__desc">
+                    扩展会话面板：引文采集、文献笔记导出。读取
+                    <span class="item__path" style="display: inline">~/Documents/notes</span>。
+                  </p>
+                </div>
+                <div class="item__actions">
+                  <button class="btn btn--sm btn--primary">更新</button>
+                  <button class="btn btn--sm btn--ghost">详情</button>
+                </div>
+              </div>
+
+              <div class="item">
+                <span class="avatar" style="background: #86909c">L</span>
+                <div class="item__body">
+                  <div class="item__title-row">
+                    <span class="item__title">legacy-stub</span>
+                    <span class="tag tag--mono tag--default">v0.1.5</span>
+                    <span class="tag tag--default"><span class="dot dot--off"></span>已禁用</span>
+                    <span class="item__author">archived 2026·04·30</span>
+                  </div>
+                  <p class="item__desc">
+                    用户已于 2026·04·30 禁用。保留以便参照；如不再需要可移除。
+                  </p>
+                </div>
+                <div class="item__actions">
+                  <button class="btn btn--sm btn--ghost">启用</button>
+                  <button class="btn btn--sm btn--ghost btn--danger">移除</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ─────── skills ─────── -->
+          <section class="hub" id="skills">
+            <div class="hub__head">
+              <div class="hub__title-row">
+                <div class="hub__title">
+                  <span class="hub__title-icon" style="background: #e8ffea; color: #00b42a">技</span>
+                  技能管理
+                  <span class="hub__title-pill" style="background: #e8ffea; color: #00b42a">三级来源</span>
+                </div>
+                <div class="hub__actions">
+                  <div class="search">
+                    <span class="search__icon">⌕</span>
+                    <input type="text" placeholder="搜索技能…" />
+                  </div>
+                  <button class="btn">
+                    <span class="ico">↻</span>刷新
+                  </button>
+                  <button class="btn btn--primary">
+                    <span class="ico">＋</span>添加路径
+                  </button>
+                </div>
+              </div>
+
+              <div class="tabs">
+                <button class="tab tab--active">
+                  我的<span class="tab__count">21</span>
+                </button>
+                <button class="tab">
+                  扩展贡献<span class="tab__count">03</span>
+                </button>
+                <button class="tab">
+                  skills.sh 注册表<span class="tab__count">∞</span>
+                </button>
+                <button class="tab">
+                  外部目录<span class="tab__count">04</span>
+                </button>
+              </div>
+
+              <div class="hub__meta">
+                <span><strong>~/.wise/skills</strong></span>
+                <span>·</span>
+                <span>builtin 14 · custom 07 · extension 03</span>
+              </div>
+            </div>
+
+            <div class="items">
+              <div class="item">
+                <span class="avatar" style="background: #14c9c9">P</span>
+                <div class="item__body">
+                  <div class="item__title-row">
+                    <span class="item__title">prd-task-splitter</span>
+                    <span class="tag tag--blue">custom</span>
+                    <span class="tag tag--default tag--mono">symlink</span>
+                  </div>
+                  <p class="item__desc">从 ~/.claude/skills 链接而来。wise 将其视为本地技能，原始目录保持不变。</p>
+                  <p class="item__path">~/.wise/skills/prd-task-splitter → ~/.claude/skills/prd-task-splitter</p>
+                </div>
+                <div class="item__actions">
+                  <button class="btn btn--sm btn--ghost">在 Finder 中打开</button>
+                  <button class="btn btn--sm btn--ghost btn--danger">移除</button>
+                </div>
+              </div>
+
+              <div class="item">
+                <span class="avatar" style="background: #00b42a">V</span>
+                <div class="item__body">
+                  <div class="item__title-row">
+                    <span class="item__title">vue-best-practices</span>
+                    <span class="tag tag--default">builtin</span>
+                    <span class="item__author">claude plugin · cache</span>
+                  </div>
+                  <p class="item__desc">由 Claude 自带，wise 无法删除。仅作为索引展示，让你知道架上都有什么。</p>
+                  <p class="item__path">~/.claude/plugins/cache/vue-skills/skills/vue-best-practices</p>
+                </div>
+                <div class="item__actions">
+                  <button class="btn btn--sm btn--ghost">在 Finder 中打开</button>
+                </div>
+              </div>
+
+              <div class="item">
+                <span class="avatar" style="background: #722ed1">S</span>
+                <div class="item__body">
+                  <div class="item__title-row">
+                    <span class="item__title">say-hello</span>
+                    <span class="tag tag--purple">extension</span>
+                    <span class="item__author">via hello-world ext.</span>
+                  </div>
+                  <p class="item__desc">
+                    由扩展贡献。移除该扩展将同时移除此技能；只读。
+                  </p>
+                </div>
+                <div class="item__actions">
+                  <button class="btn btn--sm btn--ghost">查看扩展</button>
+                </div>
+              </div>
+
+              <div class="item">
+                <span class="avatar" style="background: #165dff">T</span>
+                <div class="item__body">
+                  <div class="item__title-row">
+                    <span class="item__title">technical-writer</span>
+                    <span class="tag tag--blue">custom</span>
+                    <span class="tag tag--default tag--mono">copied</span>
+                  </div>
+                  <p class="item__desc">一次性导入并本地编辑过；与上游断开链接，修改保留在 wise 内部。</p>
+                </div>
+                <div class="item__actions">
+                  <button class="btn btn--sm btn--ghost">在 Finder 中打开</button>
+                  <button class="btn btn--sm btn--ghost btn--danger">移除</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- external browse split — only shows when "外部目录" tab is active -->
+            <div class="split">
+              <aside class="split__paths">
+                <div style="font-size: 11px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.04em; padding: 4px 10px 8px;">
+                  外部目录
+                </div>
+                <ul class="pathlist">
+                  <li class="pathlist__item pathlist__item--active">
+                    <span class="pathlist__path">~/.claude/skills</span>
+                    <span class="pathlist__count">12</span>
+                  </li>
+                  <li class="pathlist__item">
+                    <span class="pathlist__path">~/.codex/skills</span>
+                    <span class="pathlist__count">04</span>
+                  </li>
+                  <li class="pathlist__item pathlist__item--missing">
+                    <span class="pathlist__path">~/.gemini/skills</span>
+                    <span class="pathlist__count">—</span>
+                  </li>
+                  <li class="pathlist__item">
+                    <span class="pathlist__path">~/Workspace/team-skills</span>
+                    <span class="pathlist__count">06</span>
+                  </li>
+                </ul>
+                <div class="pathlist__add">
+                  <input type="text" placeholder="添加目录…" />
+                  <button class="btn btn--sm btn--primary">添加</button>
+                </div>
+              </aside>
+
+              <div>
+                <div style="font-size: 12px; color: var(--text-3); margin-bottom: 8px; padding: 0 4px;">
+                  ~/.claude/skills · 12 项
+                </div>
+                <div class="items" style="margin-top: 0">
+                  <div class="item">
+                    <span class="avatar" style="background: #f77234">P</span>
+                    <div class="item__body">
+                      <div class="item__title-row">
+                        <span class="item__title">postgres-table-design</span>
+                      </div>
+                      <p class="item__path">/Users/x/.claude/skills/postgres-table-design</p>
+                    </div>
+                    <div class="item__actions">
+                      <button class="btn btn--sm btn--primary">复制</button>
+                      <button class="btn btn--sm">链接</button>
+                    </div>
+                  </div>
+                  <div class="item">
+                    <span class="avatar" style="background: #f5319d">F</span>
+                    <div class="item__body">
+                      <div class="item__title-row">
+                        <span class="item__title">find-skills</span>
+                      </div>
+                      <p class="item__path">/Users/x/.claude/skills/find-skills</p>
+                    </div>
+                    <div class="item__actions">
+                      <button class="btn btn--sm btn--primary">复制</button>
+                      <button class="btn btn--sm">链接</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ─────── mcp ─────── -->
+          <section class="hub" id="mcp">
+            <div class="hub__head">
+              <div class="hub__title-row">
+                <div class="hub__title">
+                  <span class="hub__title-icon" style="background: #f5e8ff; color: #722ed1">M</span>
+                  MCP 服务器
+                  <span class="hub__title-pill" style="background: #f5e8ff; color: #722ed1">中性目录</span>
+                </div>
+                <div class="hub__actions">
+                  <button class="btn">
+                    <span class="ico">↻</span>测试全部
+                  </button>
+                  <button class="btn btn--primary">
+                    <span class="ico">＋</span>新增服务器
+                  </button>
+                </div>
+              </div>
+
+              <div class="tabs">
+                <button class="tab tab--active">全部<span class="tab__count">05</span></button>
+                <button class="tab">User<span class="tab__count">04</span></button>
+                <button class="tab">Builtin<span class="tab__count">00</span></button>
+                <button class="tab">Extension<span class="tab__count">01</span></button>
+              </div>
+
+              <div class="hub__meta">
+                <span><strong>~/.wise/wise.db · mcp_server</strong></span>
+                <span>·</span>
+                <span>独立于 Claude 自有 MCP 配置</span>
+                <a href="#" style="margin-left: auto; color: var(--primary); font-size: 12px; text-decoration: none">Claude 自有 MCP →</a>
+              </div>
+            </div>
+
+            <div class="mcp-split">
+              <div class="items" style="margin-top: 16px">
+                <div class="item item--highlight">
+                  <span class="avatar" style="background: #14c9c9">F</span>
+                  <div class="item__body">
+                    <div class="item__title-row">
+                      <span class="item__title">filesystem</span>
+                      <span class="tag tag--default tag--mono">stdio</span>
+                      <span class="tag tag--green"><span class="dot dot--on"></span>启用</span>
+                      <span class="item__author">user</span>
+                    </div>
+                    <p class="item__path">npx @modelcontextprotocol/server-filesystem ~/Documents</p>
+                  </div>
+                  <div class="item__actions">
+                    <button class="btn btn--sm btn--ghost">测试</button>
+                    <button class="btn btn--sm btn--ghost">编辑</button>
+                  </div>
+                </div>
+
+                <div class="item">
+                  <span class="avatar" style="background: #1d2129">G</span>
+                  <div class="item__body">
+                    <div class="item__title-row">
+                      <span class="item__title">github</span>
+                      <span class="tag tag--default tag--mono">http</span>
+                      <span class="tag tag--orange">需要登录</span>
+                      <span class="item__author">user</span>
+                    </div>
+                    <p class="item__path">https://api.githubcopilot.com/mcp/</p>
+                  </div>
+                  <div class="item__actions">
+                    <button class="btn btn--sm btn--primary">登录</button>
+                    <button class="btn btn--sm btn--ghost">编辑</button>
+                  </div>
+                </div>
+
+                <div class="item">
+                  <span class="avatar" style="background: #722ed1">T</span>
+                  <div class="item__body">
+                    <div class="item__title-row">
+                      <span class="item__title">team-coordination</span>
+                      <span class="tag tag--default tag--mono">streamable_http</span>
+                      <span class="tag tag--purple">extension</span>
+                      <span class="item__author">via trellis-helpers</span>
+                    </div>
+                    <p class="item__path">https://team.example.com/mcp/stream</p>
+                  </div>
+                  <div class="item__actions">
+                    <button class="btn btn--sm btn--ghost">测试</button>
+                  </div>
+                </div>
+
+                <div class="item">
+                  <span class="avatar" style="background: #86909c">P</span>
+                  <div class="item__body">
+                    <div class="item__title-row">
+                      <span class="item__title">postgres-readonly</span>
+                      <span class="tag tag--default tag--mono">stdio</span>
+                      <span class="tag tag--default"><span class="dot dot--off"></span>已禁用</span>
+                      <span class="item__author">user</span>
+                    </div>
+                    <p class="item__path">uvx mcp-server-postgres --read-only</p>
+                  </div>
+                  <div class="item__actions">
+                    <button class="btn btn--sm btn--ghost">启用</button>
+                    <button class="btn btn--sm btn--ghost">编辑</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- inline drawer mockup -->
+              <aside class="drawer">
+                <div class="drawer__head">
+                  <span class="drawer__title">编辑 · filesystem</span>
+                  <span style="font-size: 11px; color: var(--text-3)">M01</span>
+                </div>
+
+                <div class="form-row">
+                  <label>名称</label>
+                  <div class="input input--readonly">filesystem</div>
+                </div>
+
+                <div class="form-row">
+                  <label>传输</label>
+                  <div class="seg">
+                    <button class="seg__opt seg__opt--active">stdio</button>
+                    <button class="seg__opt">sse</button>
+                    <button class="seg__opt">http</button>
+                    <button class="seg__opt">streamable</button>
+                  </div>
+                </div>
+
+                <div class="form-row">
+                  <label>命令</label>
+                  <div class="input">npx</div>
+                </div>
+
+                <div class="form-row">
+                  <label>参数</label>
+                  <div class="input input--multi">@modelcontextprotocol/server-filesystem
+~/Documents</div>
+                </div>
+
+                <div class="form-row">
+                  <label>环境变量</label>
+                  <table class="kv">
+                    <tbody>
+                      <tr><td>NODE_ENV</td><td>production</td></tr>
+                      <tr><td><span class="kv__placeholder">key…</span></td><td><span class="kv__placeholder">value…</span></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div class="test-result">
+                  <div class="test-result__head">
+                    <span class="dot dot--on"></span>
+                    <span style="font-family: var(--font-mono)">结构校验通过 · 4 tools</span>
+                  </div>
+                  <ul class="test-result__tools">
+                    <li>read_file</li>
+                    <li>list_directory</li>
+                    <li>search_files</li>
+                    <li>get_file_info</li>
+                  </ul>
+                  <p class="test-result__note">结构校验，实际探测在后续版本</p>
+                </div>
+
+                <div class="drawer__footer">
+                  <button class="btn btn--sm btn--ghost btn--danger">删除</button>
+                  <button class="btn btn--sm">测试</button>
+                  <button class="btn btn--sm btn--primary">保存</button>
+                </div>
+              </aside>
+            </div>
+          </section>
+
+          <!-- ─────── agents ─────── -->
+          <section class="hub" id="agents">
+            <div class="hub__head">
+              <div class="hub__title-row">
+                <div class="hub__title">
+                  <span class="hub__title-icon" style="background: #fff3e8; color: #ff7d00">引</span>
+                  执行引擎
+                  <span class="hub__title-pill" style="background: #fff3e8; color: #ff7d00">本机检测</span>
+                </div>
+                <div class="hub__actions">
+                  <button class="btn">
+                    <span class="ico">↻</span>重新检测
+                  </button>
+                  <button class="btn btn--primary">
+                    <span class="ico">＋</span>添加自定义
+                  </button>
+                </div>
+              </div>
+
+              <div class="tabs">
+                <button class="tab tab--active">全部<span class="tab__count">04</span></button>
+                <button class="tab">可用<span class="tab__count">03</span></button>
+                <button class="tab">自定义<span class="tab__count">01</span></button>
+              </div>
+            </div>
+
+            <div class="items">
+              <div class="item item--highlight">
+                <span class="avatar" style="background: #1d2129">C</span>
+                <div class="item__body">
+                  <div class="item__title-row">
+                    <span class="item__title">claude</span>
+                    <span class="tag tag--blue">活动中</span>
+                    <span class="tag tag--green"><span class="dot dot--on"></span>可用</span>
+                    <span class="item__author">built-in CLI</span>
+                  </div>
+                  <p class="item__path">/Users/x/.claude/local/claude · 2s ago</p>
+                </div>
+                <div class="item__actions">
+                  <button class="btn btn--sm btn--ghost">测试</button>
+                </div>
+              </div>
+
+              <div class="item">
+                <span class="avatar" style="background: #00b42a">C</span>
+                <div class="item__body">
+                  <div class="item__title-row">
+                    <span class="item__title">codex</span>
+                    <span class="tag tag--green"><span class="dot dot--on"></span>可用</span>
+                    <span class="item__author">built-in CLI</span>
+                  </div>
+                  <p class="item__path">/opt/homebrew/bin/codex · 2s ago</p>
+                </div>
+                <div class="item__actions">
+                  <button class="btn btn--sm">切换为活动</button>
+                  <button class="btn btn--sm btn--ghost">测试</button>
+                </div>
+              </div>
+
+              <div class="item">
+                <span class="avatar" style="background: #c9cdd4">G</span>
+                <div class="item__body">
+                  <div class="item__title-row">
+                    <span class="item__title">gemini</span>
+                    <span class="tag tag--default"><span class="dot dot--off"></span>不可用</span>
+                    <span class="item__author">built-in CLI</span>
+                  </div>
+                  <p class="item__path" style="color: var(--danger)">binary not found on PATH · 2s ago</p>
+                </div>
+                <div class="item__actions">
+                  <button class="btn btn--sm btn--ghost">重试</button>
+                </div>
+              </div>
+
+              <div class="item">
+                <span class="avatar" style="background: #f5319d">M</span>
+                <div class="item__body">
+                  <div class="item__title-row">
+                    <span class="item__title">my-local-llm</span>
+                    <span class="tag tag--blue">custom</span>
+                    <span class="tag tag--green"><span class="dot dot--on"></span>可用</span>
+                  </div>
+                  <p class="item__desc">指向本机的 llamafile，离线起草用，不连接云端。</p>
+                  <p class="item__path">/usr/local/bin/llm</p>
+                </div>
+                <div class="item__actions">
+                  <button class="btn btn--sm">切换为活动</button>
+                  <button class="btn btn--sm btn--ghost">编辑</button>
+                  <button class="btn btn--sm btn--ghost btn--danger">删除</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- in-conversation switch card -->
+            <div class="switchcard">
+              <div class="switchcard__head">
+                <span class="switchcard__label">会话内切换</span>
+                <span class="switchcard__hint">仅在当前对话生效</span>
+              </div>
+              <div class="switchcard__row">
+                <span class="switchcard__active">
+                  <span class="dot dot--on"></span>claude
+                </span>
+                <span class="switchcard__sep">→</span>
+                <button class="switchcard__opt">codex</button>
+                <button class="switchcard__opt">my-local-llm</button>
+                <button class="switchcard__opt switchcard__opt--off">gemini · 不可用</button>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <script>
+      // nav scroll-into-view
+      document.querySelectorAll(".nav__item[data-target]").forEach((n) => {
+        n.addEventListener("click", () => {
+          document.querySelectorAll(".nav__item--active").forEach((x) =>
+            x.classList.remove("nav__item--active"),
+          );
+          n.classList.add("nav__item--active");
+          const t = document.getElementById(n.dataset.target);
+          if (t) t.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      });
+
+      // tab toggle within a tabs group
+      document.querySelectorAll(".tabs").forEach((g) => {
+        g.querySelectorAll(".tab").forEach((t) => {
+          t.addEventListener("click", () => {
+            g.querySelectorAll(".tab--active").forEach((x) =>
+              x.classList.remove("tab--active"),
+            );
+            t.classList.add("tab--active");
+          });
+        });
+      });
+
+      // segmented toggle
+      document.querySelectorAll(".seg").forEach((g) => {
+        g.querySelectorAll(".seg__opt").forEach((o) => {
+          o.addEventListener("click", () => {
+            g.querySelectorAll(".seg__opt--active").forEach((x) =>
+              x.classList.remove("seg__opt--active"),
+            );
+            o.classList.add("seg__opt--active");
+          });
+        });
+      });
+    </script>
+  </body>
+</html>

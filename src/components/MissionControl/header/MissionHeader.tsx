@@ -1,5 +1,5 @@
 import { Button, Space, Tooltip, Typography } from "antd";
-import { ThunderboltOutlined, EditOutlined, ToolOutlined } from "@ant-design/icons";
+import { ThunderboltOutlined, EditOutlined, MessageOutlined, ToolOutlined } from "@ant-design/icons";
 import type { MissionPrimaryCta, MissionViewModel } from "../presenter/types";
 import { MissionStatusBar } from "./MissionStatusBar";
 import type { MissionSnapshotRecord } from "../../../services/missionControlBackend";
@@ -11,6 +11,7 @@ interface MissionHeaderProps {
   onPrimaryCta: (cta: MissionPrimaryCta) => void;
   onRestart: () => void;
   onOpenDiagnostics: () => void;
+  onOpenChat: () => void;
   onClearResplitFlags?: () => void;
 }
 
@@ -21,6 +22,7 @@ export function MissionHeader({
   onPrimaryCta,
   onRestart,
   onOpenDiagnostics,
+  onOpenChat,
   onClearResplitFlags,
 }: MissionHeaderProps) {
   const isDrafting = viewModel.phase === "drafting";
@@ -58,6 +60,14 @@ export function MissionHeader({
           onClick={onOpenDiagnostics}
         >
           诊断
+        </Button>
+        <Button
+          type="text"
+          size="small"
+          icon={<MessageOutlined />}
+          onClick={onOpenChat}
+        >
+          沉浸对话
         </Button>
         {viewModel.resplit.count > 0 && onClearResplitFlags ? (
           <Tooltip title="保留当前拆分结果，允许继续生成任务">

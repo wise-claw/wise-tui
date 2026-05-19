@@ -1,33 +1,70 @@
 import {
   ApartmentOutlined,
   ApiOutlined,
+  AppstoreAddOutlined,
   BranchesOutlined,
   CodeOutlined,
+  FieldTimeOutlined,
   FileTextOutlined,
+  FileSearchOutlined,
   FolderOpenOutlined,
+  GatewayOutlined,
   RobotOutlined,
+  ThunderboltOutlined,
   ToolOutlined,
+  UserOutlined,
 } from "@ant-design/icons";
 import type { ReactNode } from "react";
 import type { AuthorPane } from "../../types/viewMode";
+import { IconClaudeSandboxHelp } from "../icons/IconClaudeSandboxHelp";
+import { IconKeyboardShortcuts } from "../icons/IconKeyboardShortcuts";
 
 export interface AuthorTabDefinition {
   key: AuthorPane;
   label: string;
+  description: string;
   icon: ReactNode;
 }
 
 export const AUTHOR_TAB_STORAGE_KEY = "wise.author.lastPane";
 
+export const AUTHOR_TAB_GROUPS: Array<{ title: string; items: AuthorTabDefinition[] }> = [
+  {
+    title: "工作台",
+    items: [
+      { key: "workspaces", label: "工作区", description: "项目、仓库和 Trellis 根目录", icon: <FolderOpenOutlined /> },
+      { key: "agents", label: "智能体角色", description: "角色供给、职责和默认仓库", icon: <RobotOutlined /> },
+      { key: "workflows", label: "委派协议", description: "阶段派发、验收和委派画布", icon: <BranchesOutlined /> },
+      { key: "prompts", label: "提示词工坊", description: "需求拆分、会话提示词和作用域覆盖", icon: <FileTextOutlined /> },
+      { key: "trellis-spec", label: "Trellis 规范", description: "项目规范、技能和反哺", icon: <CodeOutlined /> },
+    ],
+  },
+  {
+    title: "生态",
+    items: [
+      { key: "extensions", label: "扩展市场", description: "本地扩展、远程索引和贡献能力", icon: <AppstoreAddOutlined /> },
+      { key: "assistants", label: "助手模板", description: "角色模板、模型和系统提示词", icon: <UserOutlined /> },
+      { key: "skills", label: "技能市场", description: "skills.sh、外部目录和扩展技能", icon: <ToolOutlined /> },
+      { key: "mcp", label: "MCP 工具", description: "服务器、推荐项和扩展工具协议", icon: <ApiOutlined /> },
+      { key: "engine-registry", label: "执行引擎", description: "Claude、Codex 和自定义命令", icon: <ThunderboltOutlined /> },
+    ],
+  },
+  {
+    title: "运行设置",
+    items: [
+      { key: "automation", label: "定时自动化", description: "Cron、Mission 和会话续跑", icon: <FieldTimeOutlined /> },
+      { key: "channels", label: "远程入口", description: "钉钉、飞书、企微和 Telegram", icon: <GatewayOutlined /> },
+      { key: "artifacts", label: "产物检查台", description: "Markdown、Diff、图片、PDF、Office", icon: <FileSearchOutlined /> },
+      { key: "claude-config", label: "引擎环境", description: "用户级配置、settings 和 agents", icon: <FolderOpenOutlined /> },
+      { key: "hooks", label: "触发器规则", description: "工具链事件、权限和自动化", icon: <ApartmentOutlined /> },
+      { key: "shortcuts", label: "快捷键", description: "桌面操作和窗口控制", icon: <IconKeyboardShortcuts /> },
+      { key: "sandbox", label: "Claude 沙箱", description: "权限、隔离和运行说明", icon: <IconClaudeSandboxHelp /> },
+    ],
+  },
+];
+
 export const AUTHOR_TABS: AuthorTabDefinition[] = [
-  { key: "workspaces", label: "Workspaces", icon: <FolderOpenOutlined /> },
-  { key: "agents", label: "Agents", icon: <RobotOutlined /> },
-  { key: "workflows", label: "Workflows", icon: <BranchesOutlined /> },
-  { key: "mcp", label: "MCP", icon: <ApiOutlined /> },
-  { key: "skills", label: "Skills", icon: <ToolOutlined /> },
-  { key: "hooks", label: "Hooks", icon: <ApartmentOutlined /> },
-  { key: "prompts", label: "Prompts", icon: <FileTextOutlined /> },
-  { key: "trellis-spec", label: "Trellis Spec", icon: <CodeOutlined /> },
+  ...AUTHOR_TAB_GROUPS.flatMap((group) => group.items),
 ];
 
 export function isAuthorPane(value: string): value is AuthorPane {

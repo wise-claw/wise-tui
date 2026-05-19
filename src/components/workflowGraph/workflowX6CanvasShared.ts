@@ -115,9 +115,9 @@ export const MATERIALS: Record<string, MaterialItem> = {
   },
   employee: {
     key: "employee",
-    iconText: "EMP",
-    title: "员工",
-    desc: "指派员工执行阶段任务。",
+    iconText: "AGT",
+    title: "Agent",
+    desc: "指派角色执行阶段任务。",
     inputPlaceholder: "输入阶段任务",
     theme: "green",
   },

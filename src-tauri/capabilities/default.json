@@ -11,6 +11,8 @@
       "identifier": "opener:allow-open-path",
       "allow": [
         { "path": "$HOME/.wise/prd-runs/**" },
+        { "path": "$HOME/.wise/extensions/**" },
+        { "path": "$HOME/.wise/extensions" },
         { "path": "$HOME/.trellis/**" }
       ]
     },

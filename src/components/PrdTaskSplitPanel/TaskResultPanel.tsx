@@ -1,4 +1,5 @@
-import { Button, Card, Space, Typography } from "antd";
+import { CloseOutlined, HistoryOutlined } from "@ant-design/icons";
+import { Button, Card, Space, Spin, Typography } from "antd";
 import type { MenuProps } from "antd";
 import type { ReactNode, RefObject } from "react";
 import type { SplitResult, TaskApiSpec, TaskExecutionStatus, TaskItem } from "../../types";
@@ -7,7 +8,13 @@ import { TaskAnchorPopoverBody } from "./TaskAnchorPopoverBody";
 import { TaskBoardHeader } from "./TaskBoardHeader";
 import { TaskCard } from "./TaskCard";
 import { SplitQualityStrip } from "./SplitQualityStrip";
-import type { SplitQualitySummary, TaskRoleFilter } from "./types";
+import { SplitRuntimeMessages } from "./SplitRuntimeMessages";
+import type {
+  SplitQualitySummary,
+  SplitRetryPhase,
+  SplitRuntimeLogItem,
+  TaskRoleFilter,
+} from "./types";
 import type { TaskAiMode, TaskConfirmFilter } from "./helpers";
 import { taskToMarkdown } from "./helpers";
 
@@ -34,6 +41,11 @@ interface Props {
   splitQualityStats: SplitQualityStats | null;
   taskHostRef: RefObject<HTMLDivElement | null>;
   filteredTasks: TaskItem[];
+  runtimeVisible: boolean;
+  runtimeLogs: SplitRuntimeLogItem[];
+  runtimeListRef: RefObject<HTMLDivElement | null>;
+  retryingPhase: SplitRetryPhase | null;
+  parsing: boolean;
   unmetTaskIds: string[];
   unmetMenuItems: MenuProps["items"];
   confirmSavingTaskId: string | null;
@@ -91,6 +103,9 @@ interface Props {
   onToggleUnmet: (taskId: string, collapsed: boolean) => void;
   onToggleCheck: (taskId: string, collapsed: boolean) => void;
   onGenerateExecutableTasks: () => void;
+  onCloseRuntime: () => void;
+  onRetryStage: (phase: SplitRetryPhase) => void;
+  onShowRuntime: () => void;
 }
 
 export function TaskResultPanel({
@@ -99,6 +114,11 @@ export function TaskResultPanel({
   splitQualityStats,
   taskHostRef,
   filteredTasks,
+  runtimeVisible,
+  runtimeLogs,
+  runtimeListRef,
+  retryingPhase,
+  parsing,
   unmetTaskIds,
   unmetMenuItems,
   confirmSavingTaskId,
@@ -156,7 +176,11 @@ export function TaskResultPanel({
   onToggleUnmet,
   onToggleCheck,
   onGenerateExecutableTasks,
+  onCloseRuntime,
+  onRetryStage,
+  onShowRuntime,
 }: Props) {
+  const showRuntime = runtimeVisible && (parsing || filteredTasks.length === 0 || runtimeLogs.length > 0);
   return (
     <Space orientation="vertical" size={12} className="app-prd-task-panel__full-width app-prd-task-panel__stack">
       {splitError ? <Typography.Text type="danger">{splitError}</Typography.Text> : null}
@@ -190,66 +214,100 @@ export function TaskResultPanel({
               onTaskRoleFilterChange={onTaskRoleFilterChange}
             />
           )}
+          extra={runtimeLogs.length > 0 && filteredTasks.length > 0 ? (
+            <Button
+              size="small"
+              type="text"
+              icon={<HistoryOutlined />}
+              onClick={onShowRuntime}
+            >
+              重看过程
+            </Button>
+          ) : null}
           className="app-prd-task-panel__result-card app-prd-task-panel__task-card"
           bodyStyle={{ padding: 0 }}
         >
           <div className="app-prd-task-panel__task-split-layout">
             <div className="app-prd-task-panel__task-upper">
-              <div className="app-prd-task-panel__task-list">
-                {filteredTasks.length === 0 ? (
-                  <div className="app-prd-task-panel__task-list-empty">
-                    <Typography.Text type="secondary">暂未拆分任务</Typography.Text>
-                  </div>
-                ) : (
-                  filteredTasks.map((task) => (
-                    <TaskResultCard
-                      key={task.id}
-                      task={task}
-                      activeResult={activeResult}
-                      selected={selectedTaskId === task.id}
-                      canDelete={(activeResult?.splitTasks.length ?? 0) > 1}
-                      closingMotionActive={closingMotionActive}
-                      resolvedTaskAnchorIds={resolvedTaskAnchorIds}
-                      pendingContent={pendingTaskContentById[task.id]}
-                      pendingApiSpec={pendingTaskApiSpecById[task.id]}
-                      taskExecutableCheckResult={taskExecutableCheckResultById[task.id] ?? ""}
-                      unmetCollapsed={taskUnmetCollapsedById[task.id] ?? false}
-                      checkCollapsed={taskCheckCollapsedById[task.id] ?? false}
-                      optimizedText={taskAiOptimizedContentById[task.id] ?? ""}
-                      optimizedReady={taskAiOptimizedReadyById[task.id] ?? false}
-                      actionLoading={!!taskAiActionLoadingById[task.id]}
-                      savingOptimized={taskAiSavingTaskId === task.id}
-                      anchorPopoverOpen={taskAnchorPopoverTaskId === task.id}
-                      aiPopoverMode={taskAiPopoverTaskId === task.id ? taskAiPopoverMode : null}
-                      generatingExecutableTaskId={generatingExecutableTaskId}
-                      savingTaskId={savingTaskId}
-                      confirmSavingTaskId={confirmSavingTaskId}
-                      getTaskAiMode={getTaskAiMode}
-                      getTaskAiInput={getTaskAiInput}
-                      getDraftedTask={getDraftedTask}
-                      displayExecutionStatus={displayExecutionStatus}
-                      cardUnmetPointsForTask={cardUnmetPointsForTask}
-                      onTaskAiInputChange={onTaskAiInputChange}
-                      onTaskAiOptimizedTextChange={onTaskAiOptimizedTextChange}
-                      onTaskAiClose={onTaskAiClose}
-                      onTaskAiSubmit={onTaskAiSubmit}
-                      onSaveOptimizedTask={onSaveOptimizedTask}
-                      onSelectTask={onSelectTask}
-                      onLocateAnchor={onLocateAnchor}
-                      onDeleteTask={onDeleteTask}
-                      onPendingContentChange={onPendingContentChange}
-                      onPendingApiSpecChange={onPendingApiSpecChange}
-                      onAnchorPopoverChange={onAnchorPopoverChange}
-                      onAiPopoverChange={onAiPopoverChange}
-                      onGenerateExecutableForTask={onGenerateExecutableForTask}
-                      onSaveTaskDraft={onSaveTaskDraft}
-                      onConfirmTaskAdjustment={onConfirmTaskAdjustment}
-                      onToggleUnmet={onToggleUnmet}
-                      onToggleCheck={onToggleCheck}
+              {showRuntime ? (
+                <div className="app-prd-task-panel__result-runtime">
+                  <div className="app-prd-task-panel__split-runtime-head">
+                    <Space size={8} align="center" className="app-prd-task-panel__split-runtime-head-title">
+                      <Typography.Text strong>Claude Code 运行过程</Typography.Text>
+                      {parsing ? <Spin size="small" aria-label="拆分进行中" /> : null}
+                    </Space>
+                    <Button
+                      size="small"
+                      type="text"
+                      icon={<CloseOutlined />}
+                      onClick={onCloseRuntime}
+                      aria-label="关闭处理信息面板"
                     />
-                  ))
-                )}
-              </div>
+                  </div>
+                  <SplitRuntimeMessages
+                    logs={runtimeLogs}
+                    listRef={runtimeListRef}
+                    retryingPhase={retryingPhase}
+                    onRetryStage={onRetryStage}
+                  />
+                </div>
+              ) : (
+                <div className="app-prd-task-panel__task-list">
+                  {filteredTasks.length === 0 ? (
+                    <div className="app-prd-task-panel__task-list-empty">
+                      <Typography.Text type="secondary">暂未拆分任务</Typography.Text>
+                    </div>
+                  ) : (
+                    filteredTasks.map((task) => (
+                      <TaskResultCard
+                        key={task.id}
+                        task={task}
+                        activeResult={activeResult}
+                        selected={selectedTaskId === task.id}
+                        canDelete={(activeResult?.splitTasks.length ?? 0) > 1}
+                        closingMotionActive={closingMotionActive}
+                        resolvedTaskAnchorIds={resolvedTaskAnchorIds}
+                        pendingContent={pendingTaskContentById[task.id]}
+                        pendingApiSpec={pendingTaskApiSpecById[task.id]}
+                        taskExecutableCheckResult={taskExecutableCheckResultById[task.id] ?? ""}
+                        unmetCollapsed={taskUnmetCollapsedById[task.id] ?? false}
+                        checkCollapsed={taskCheckCollapsedById[task.id] ?? false}
+                        optimizedText={taskAiOptimizedContentById[task.id] ?? ""}
+                        optimizedReady={taskAiOptimizedReadyById[task.id] ?? false}
+                        actionLoading={!!taskAiActionLoadingById[task.id]}
+                        savingOptimized={taskAiSavingTaskId === task.id}
+                        anchorPopoverOpen={taskAnchorPopoverTaskId === task.id}
+                        aiPopoverMode={taskAiPopoverTaskId === task.id ? taskAiPopoverMode : null}
+                        generatingExecutableTaskId={generatingExecutableTaskId}
+                        savingTaskId={savingTaskId}
+                        confirmSavingTaskId={confirmSavingTaskId}
+                        getTaskAiMode={getTaskAiMode}
+                        getTaskAiInput={getTaskAiInput}
+                        getDraftedTask={getDraftedTask}
+                        displayExecutionStatus={displayExecutionStatus}
+                        cardUnmetPointsForTask={cardUnmetPointsForTask}
+                        onTaskAiInputChange={onTaskAiInputChange}
+                        onTaskAiOptimizedTextChange={onTaskAiOptimizedTextChange}
+                        onTaskAiClose={onTaskAiClose}
+                        onTaskAiSubmit={onTaskAiSubmit}
+                        onSaveOptimizedTask={onSaveOptimizedTask}
+                        onSelectTask={onSelectTask}
+                        onLocateAnchor={onLocateAnchor}
+                        onDeleteTask={onDeleteTask}
+                        onPendingContentChange={onPendingContentChange}
+                        onPendingApiSpecChange={onPendingApiSpecChange}
+                        onAnchorPopoverChange={onAnchorPopoverChange}
+                        onAiPopoverChange={onAiPopoverChange}
+                        onGenerateExecutableForTask={onGenerateExecutableForTask}
+                        onSaveTaskDraft={onSaveTaskDraft}
+                        onConfirmTaskAdjustment={onConfirmTaskAdjustment}
+                        onToggleUnmet={onToggleUnmet}
+                        onToggleCheck={onToggleCheck}
+                      />
+                    ))
+                  )}
+                </div>
+              )}
             </div>
             <div className="app-prd-task-panel__task-lower">
               <Button
@@ -265,10 +323,10 @@ export function TaskResultPanel({
                 disabled={!canGenerateExecutableTasks || closingMotionActive}
               >
                 {!hasConfirmedTasks
-                  ? "生成可执行任务（已确认 0）"
+                  ? "落盘到 Trellis（已确认 0）"
                   : hasUnconfirmedTasks
-                    ? `生成可执行任务（未确认 ${taskConfirmCounts.unconfirmedCount}）`
-                    : "生成可执行任务（可执行）"}
+                    ? `落盘到 Trellis（未确认 ${taskConfirmCounts.unconfirmedCount}）`
+                    : "落盘到 Trellis"}
               </Button>
             </div>
           </div>

@@ -31,6 +31,7 @@ interface ProjectRepositoryListProps {
   onRepositorySelect: (id: number | null) => void;
   onCreateProjectClick: () => void;
   onAddFloatingRepositoryClick?: () => void;
+  onAddRepositoryToProjectClick?: (projectId: Workspace["id"]) => void;
   onReconcileProject?: (projectId: string, mode: ReconcileProjectMode) => void | Promise<void>;
   onCodeGraphGenerateProject?: (project: Workspace) => void | Promise<void>;
   onCodeGraphViewProject?: (project: Workspace) => void;
@@ -76,6 +77,7 @@ export function ProjectRepositoryList({
   onRepositorySelect,
   onCreateProjectClick,
   onAddFloatingRepositoryClick,
+  onAddRepositoryToProjectClick,
   onReconcileProject,
   onCodeGraphGenerateProject,
   onCodeGraphViewProject,
@@ -181,6 +183,7 @@ export function ProjectRepositoryList({
             onDeleteProject={onDeleteProject}
             onOpenPromptsProject={onOpenPromptsProject}
             onOpenProjectTrellis={onOpenProjectTrellis}
+            onAddRepositoryToProject={onAddRepositoryToProjectClick}
             onCreateProjectTask={onCreateProjectTask}
             onCreateRepositoryTask={onCreateRepositoryTask}
             onReconcileProject={onReconcileProject}
@@ -268,6 +271,7 @@ interface ProjectRowProps {
   onDeleteProject: (project: Workspace) => void;
   onOpenPromptsProject?: (project: Workspace) => void;
   onOpenProjectTrellis?: (project: Workspace) => void;
+  onAddRepositoryToProject?: (projectId: Workspace["id"]) => void;
   onCreateProjectTask: (project: Workspace, mode: TaskMode) => void;
   onCreateRepositoryTask: (repository: Repository, mode: TaskMode) => void;
   onReconcileProject?: (projectId: string, mode: ReconcileProjectMode) => void | Promise<void>;
@@ -306,6 +310,7 @@ function ProjectRow({
   onDeleteProject,
   onOpenPromptsProject,
   onOpenProjectTrellis,
+  onAddRepositoryToProject,
   onCreateProjectTask,
   onCreateRepositoryTask,
   onReconcileProject,
@@ -329,6 +334,9 @@ function ProjectRow({
   const projectMoreItems: MenuProps["items"] = [
     { key: "pin", label: isPinned ? "取消置顶" : "置顶" },
     { key: "rename", label: "重命名 Workspace" },
+    ...(onAddRepositoryToProject
+      ? [{ key: "add-repository", label: "关联仓库…" }] satisfies MenuProps["items"]
+      : []),
     ...(onReconcileProject
       ? ([
           {
@@ -430,6 +438,7 @@ function ProjectRow({
               onClick: ({ key }) => {
                 if (key === "pin") onTogglePinProject(project.id);
                 if (key === "rename") onRenameProject(project);
+                if (key === "add-repository") onAddRepositoryToProject?.(project.id);
                 if (key === "reconcile-repos") void Promise.resolve(onReconcileProject?.(project.id, "repos_only"));
                 if (key === "reconcile-repos-graphs") {
                   void Promise.resolve(onReconcileProject?.(project.id, "repos_and_graphs"));
@@ -458,11 +467,19 @@ function ProjectRow({
       {expanded && (
         <div className="app-repository-sessions">
           {projectRepos.length === 0 ? (
-            <div className="app-session-item" style={{ cursor: "default" }}>
-              <span className="app-session-item-name">
-                在根目录下拉取仓库后，用 Workspace 菜单「重新初始化」→「仅同步仓库」或「同步并重绘流程图」
+            <button
+              type="button"
+              className="app-session-item app-session-item--empty-action"
+              onClick={() => onAddRepositoryToProject?.(project.id)}
+              disabled={!onAddRepositoryToProject}
+            >
+              <span className="app-repository-add-icon" aria-hidden>
+                <PlusIcon />
               </span>
-            </div>
+              <span className="app-session-item-name">
+                关联仓库
+              </span>
+            </button>
           ) : (
             <ProjectRepositoryRows
               project={project}

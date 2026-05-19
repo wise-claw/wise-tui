@@ -1,0 +1,8 @@
+{
+  "id": "hello-warm",
+  "name": "Hello Warm",
+  "tokens": {
+    "--hello-accent": "#A3B59A",
+    "--hello-bg": "#F8F5F0"
+  }
+}

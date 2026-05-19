@@ -1,4 +1,4 @@
-/* 员工配置弹窗：紧凑布局（rootClassName 挂在 Modal 根节点） */
+/* 智能体角色弹窗：紧凑布局（rootClassName 挂在 Modal 根节点） */
 .app-employee-config-modal-root .ant-modal-header {
   padding: 8px 12px;
   margin-bottom: 0;
@@ -25,6 +25,199 @@
 .app-employee-config-inline-root {
   width: 100%;
   min-width: 0;
+}
+
+.app-employee-config-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
+  box-shadow: inset 3px 0 0 var(--ant-color-primary);
+}
+
+.app-employee-config-hero__eyebrow {
+  display: block;
+  color: var(--ant-color-text-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+
+.app-employee-config-hero__title.ant-typography {
+  margin: 2px 0 0 !important;
+  color: var(--ant-color-text);
+  font-size: 16px !important;
+  line-height: 1.35 !important;
+}
+
+.app-employee-config-hero__subtitle.ant-typography {
+  max-width: 620px;
+  margin: 4px 0 0 !important;
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.app-employee-config-hero__meter {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 92px;
+  min-height: 58px;
+  padding-left: 12px;
+  border-left: 1px solid var(--ant-color-border-secondary);
+  text-align: right;
+}
+
+.app-employee-config-hero__meter strong {
+  color: var(--ant-color-text);
+  font-size: 18px;
+  line-height: 1.15;
+}
+
+.app-employee-config-hero__meter span {
+  margin-top: 4px;
+  color: var(--ant-color-text-tertiary);
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.app-employee-config-summary,
+.app-employee-config-map {
+  display: grid;
+  width: 100%;
+  gap: 8px;
+}
+
+.app-employee-config-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.app-employee-config-map {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.app-employee-config-metric,
+.app-employee-config-supply {
+  display: grid;
+  min-width: 0;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
+}
+
+.app-employee-config-metric {
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-height: 54px;
+  padding: 8px 10px;
+}
+
+.app-employee-config-metric__icon,
+.app-employee-config-supply__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ant-color-primary);
+}
+
+.app-employee-config-metric__icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--ant-color-primary-bg);
+  font-size: 15px;
+}
+
+.app-employee-config-metric > span:last-child,
+.app-employee-config-supply > span:last-child {
+  min-width: 0;
+}
+
+.app-employee-config-metric strong,
+.app-employee-config-metric small,
+.app-employee-config-supply strong,
+.app-employee-config-supply small {
+  display: block;
+  min-width: 0;
+}
+
+.app-employee-config-metric strong {
+  color: var(--ant-color-text);
+  font-size: 16px;
+  line-height: 1.15;
+}
+
+.app-employee-config-metric small {
+  margin-top: 3px;
+  color: var(--ant-color-text-secondary);
+  font-size: 11px;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.app-employee-config-metric--danger {
+  border-color: var(--ant-color-error-border);
+  background: var(--ant-color-error-bg);
+}
+
+.app-employee-config-metric--danger .app-employee-config-metric__icon {
+  color: var(--ant-color-error);
+  background: var(--ant-color-error-bg-hover);
+}
+
+.app-employee-config-supply {
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 8px;
+  min-height: 82px;
+  padding: 10px;
+}
+
+.app-employee-config-supply__icon {
+  width: 28px;
+  height: 28px;
+  margin-top: 1px;
+  border-radius: 6px;
+  background: var(--ant-color-fill-tertiary);
+  font-size: 15px;
+}
+
+.app-employee-config-supply strong {
+  color: var(--ant-color-text);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.app-employee-config-supply__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+
+.app-employee-config-supply__head .ant-tag {
+  flex-shrink: 0;
+  margin-inline-end: 0;
+  padding-inline: 5px;
+  font-size: 10px;
+  line-height: 16px;
+}
+
+.app-employee-config-supply small {
+  margin-top: 4px;
+  color: var(--ant-color-text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .app-employee-config-form {
@@ -170,6 +363,7 @@
 .app-employee-config-table.ant-table-wrapper .ant-table.ant-table-small .ant-table-thead > tr > th {
   padding: 5px 8px;
   font-size: 12px;
+  white-space: nowrap;
 }
 
 .app-employee-config-table.ant-table-wrapper .ant-table.ant-table-small .ant-table-tbody > tr > td {
@@ -191,6 +385,26 @@
 }
 
 @media (max-width: 960px) {
+  .app-employee-config-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .app-employee-config-hero__meter {
+    min-height: auto;
+    padding: 8px 0 0;
+    border-top: 1px solid var(--ant-color-border-secondary);
+    border-left: 0;
+    text-align: left;
+  }
+
+  .app-employee-config-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .app-employee-config-map {
+    grid-template-columns: 1fr;
+  }
+
   .app-employee-config-row,
   .app-employee-config-row--project-owner {
     grid-template-columns: 1fr;
@@ -203,5 +417,15 @@
 
   .app-employee-config-actions {
     margin-left: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .app-employee-config-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .app-employee-config-metric small {
+    white-space: normal;
   }
 }

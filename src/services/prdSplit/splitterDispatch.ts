@@ -28,6 +28,8 @@ import type { RequirementsIndexV2 } from "./requirementsIndexVersion";
 
 export interface DispatchClusterInput {
   projectRootPath: string;
+  /** Cluster 主仓库路径。Workspace root 负责 Trellis/agent 发现；该目录作为 subagent 代码读取范围。 */
+  executionRootPath?: string | null;
   /** 父任务相对路径（`.trellis/tasks/MM-DD-...`），用于 prompt 第一行 `Active task:`。 */
   parentTaskPath: string;
   cluster: ClusterPlanItem;
@@ -127,6 +129,7 @@ export async function dispatchClusterSplit(input: DispatchClusterInput): Promise
   const prompt = composeSplitterPrompt({
     parentTaskPath: input.parentTaskPath,
     cluster: input.cluster,
+    executionRootPath: input.executionRootPath ?? input.context?.repositoryPath ?? null,
     bundleFileNames: Object.keys(bundle),
     bundle,
   });
@@ -137,6 +140,7 @@ export async function dispatchClusterSplit(input: DispatchClusterInput): Promise
     raw = await invoke<DispatchClusterRawOutput>("prd_split_dispatch_cluster", {
       input: {
         projectRootPath: input.projectRootPath,
+        executionRootPath: input.executionRootPath ?? input.context?.repositoryPath ?? null,
         parentTaskPath: input.parentTaskPath,
         clusterId: input.cluster.id,
         bundle,
@@ -226,6 +230,7 @@ export async function cancelClusterRun(input: CancelClusterRunInput): Promise<Ca
 export function composeSplitterPrompt(input: {
   parentTaskPath: string;
   cluster: ClusterPlanItem;
+  executionRootPath?: string | null;
   bundleFileNames: string[];
   bundle?: ClaudeInputBundleFiles;
 }): string {
@@ -244,6 +249,9 @@ export function composeSplitterPrompt(input: {
   lines.push(`- primaryRepositoryId: ${input.cluster.primaryRepositoryId ?? "null"}`);
   lines.push(`- repositoryIds: ${JSON.stringify(input.cluster.repositoryIds)}`);
   lines.push(`- requirementIds: ${JSON.stringify(input.cluster.requirementIds)}`);
+  if (input.executionRootPath?.trim()) {
+    lines.push(`- executionRootPath: ${input.executionRootPath.trim()}`);
+  }
   lines.push("");
   lines.push("## Input bundle (files in the run directory)");
   for (const name of input.bundleFileNames) {

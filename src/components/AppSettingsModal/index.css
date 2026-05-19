@@ -84,6 +84,9 @@
   padding: 10px 12px 6px;
   border-bottom: 1px solid var(--ant-color-border-secondary);
   background: var(--ant-color-bg-container);
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .app-settings-modal__back.ant-btn {
@@ -97,6 +100,11 @@
 
 .app-settings-modal__back.ant-btn:hover {
   color: var(--ant-color-text);
+}
+
+.app-settings-modal__topbar-title {
+  color: var(--ant-color-text-tertiary);
+  font-size: 12px;
 }
 
 .app-settings-modal__split {
@@ -170,6 +178,19 @@
   min-width: 0;
 }
 
+.app-settings-modal__nav-extbadge {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--ant-color-fill-quaternary);
+  color: var(--ant-color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+
 .app-settings-modal__main {
   flex: 1;
   min-width: 0;
@@ -202,12 +223,54 @@
   max-width: 720px;
 }
 
-.app-settings-modal__pane .app-dingtalk-ebot-popover {
-  max-width: 100%;
+.app-settings-modal__compat-alert {
+  max-width: 920px;
+  margin-bottom: 14px;
 }
 
-.app-settings-modal__pane--sandbox .app-claude-sandbox-help {
-  max-width: none;
+.app-settings-modal__pane--wide {
+  max-width: 1080px;
+}
+
+.app-settings-modal__moved {
+  max-width: 920px;
+  padding: 14px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
+}
+
+.app-settings-modal__moved h2 {
+  margin: 0 0 6px;
+  color: var(--ant-color-text);
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+.app-settings-modal__moved p {
+  margin: 0;
+  color: var(--ant-color-text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.app-settings-modal__moved-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.app-settings-modal__moved-grid span {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary);
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 640px) {
@@ -220,5 +283,9 @@
 
   .app-settings-modal__split {
     flex-direction: column;
+  }
+
+  .app-settings-modal__moved-grid {
+    grid-template-columns: 1fr;
   }
 }

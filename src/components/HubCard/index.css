@@ -1,0 +1,390 @@
+/* ─────────────────────────────────────────────────────────
+   HubCard — shared visual primitives for settings hub panels.
+   Matches the AppSettingsModal preview demo. AntD-aligned;
+   palette pulls from Ant CSS variables so dark theme inherits.
+   ───────────────────────────────────────────────────────── */
+
+.app-hub {
+  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  padding: 20px 24px;
+  position: relative;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  margin-bottom: 16px;
+}
+
+.app-hub__head {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.app-hub__title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.app-hub__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+  flex-shrink: 0;
+}
+
+.app-hub__title-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: var(--ant-color-primary-bg);
+  color: var(--ant-color-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.app-hub__title-pill {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ant-color-primary);
+  background: var(--ant-color-primary-bg);
+  border-radius: 100px;
+  padding: 1px 8px;
+  margin-left: 4px;
+}
+
+.app-hub__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.app-hub__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ant-color-text-tertiary);
+  font-family: var(--ant-font-family-code, ui-monospace, monospace);
+  padding-top: 6px;
+  border-top: 1px dashed var(--ant-color-border-secondary);
+  flex-wrap: wrap;
+}
+
+.app-hub__meta strong {
+  color: var(--ant-color-text-secondary);
+  font-weight: 500;
+}
+
+.app-hub__error {
+  margin-top: 8px;
+}
+
+/* items list */
+.app-hub__items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 14px;
+}
+
+.app-hub__item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  background: var(--ant-color-bg-container);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  transition: background 150ms, border-color 150ms;
+}
+
+.app-hub__item:hover {
+  background: var(--ant-color-fill-quaternary);
+  border-color: var(--ant-color-border-secondary);
+}
+
+.app-hub__item--active {
+  border-color: var(--ant-color-primary-border);
+  background: var(--ant-color-primary-bg);
+}
+
+.app-hub__avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 15px;
+  color: #fff;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+.app-hub__item-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.app-hub__item-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.app-hub__item-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+}
+
+.app-hub__item-author {
+  font-size: 12px;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-hub__item-author::before {
+  content: "·";
+  margin-right: 6px;
+}
+
+.app-hub__item-desc {
+  font-size: 12.5px;
+  color: var(--ant-color-text-secondary);
+  line-height: 1.5;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.app-hub__item-path {
+  font-family: var(--ant-font-family-code, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
+  margin: 2px 0 0;
+  word-break: break-all;
+}
+
+.app-hub__item-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* tags */
+.app-hub__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 4px;
+  line-height: 1.55;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.app-hub__tag--default {
+  background: var(--ant-color-fill-tertiary);
+  color: var(--ant-color-text-secondary);
+  border-color: var(--ant-color-border-secondary);
+}
+
+.app-hub__tag--primary {
+  background: var(--ant-color-primary-bg);
+  color: var(--ant-color-primary);
+  border-color: var(--ant-color-primary-border);
+}
+
+.app-hub__tag--success {
+  background: var(--ant-color-success-bg);
+  color: var(--ant-color-success);
+  border-color: var(--ant-color-success-border);
+}
+
+.app-hub__tag--warning {
+  background: var(--ant-color-warning-bg);
+  color: var(--ant-color-warning);
+  border-color: var(--ant-color-warning-border);
+}
+
+.app-hub__tag--danger {
+  background: var(--ant-color-error-bg);
+  color: var(--ant-color-error);
+  border-color: var(--ant-color-error-border);
+}
+
+.app-hub__tag--purple {
+  background: rgba(114, 46, 209, 0.1);
+  color: #722ed1;
+  border-color: rgba(114, 46, 209, 0.25);
+}
+
+.app-hub__tag--mono {
+  font-family: var(--ant-font-family-code, ui-monospace, monospace);
+}
+
+/* status dot */
+.app-hub__dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.app-hub__dot--on { background: var(--ant-color-success); }
+.app-hub__dot--warn { background: var(--ant-color-warning); }
+.app-hub__dot--off { background: var(--ant-color-text-quaternary); }
+
+.app-hub__empty {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--ant-color-text-tertiary);
+  background: var(--ant-color-fill-quaternary);
+  border-radius: 8px;
+  border: 1px dashed var(--ant-color-border-secondary);
+  font-size: 13px;
+  margin-top: 14px;
+}
+
+.app-hub__empty strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--ant-color-text-secondary);
+  font-size: 14px;
+}
+
+.app-hub-loop {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.app-hub-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  min-height: 108px;
+  padding: 12px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
+}
+
+.app-hub-step__icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: var(--ant-color-primary-bg);
+  color: var(--ant-color-primary);
+  font-size: 16px;
+}
+
+.app-hub-step__body {
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.app-hub-step__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.app-hub-step__head strong {
+  overflow: hidden;
+  color: var(--ant-color-text);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-hub-step__description {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.app-hub-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.app-hub-summary > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 9px 11px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-hub-summary span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+}
+
+.app-hub-summary strong {
+  color: var(--ant-color-text);
+  font-size: 14px;
+}
+
+@media (max-width: 1160px) {
+  .app-hub-loop,
+  .app-hub-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .app-hub-loop,
+  .app-hub-summary {
+    grid-template-columns: 1fr;
+  }
+}

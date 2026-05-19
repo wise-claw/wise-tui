@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 2,
+  "version": "5d807d126535ba08",
+  "requirements": [
+    {
+      "id": "req-functional-1",
+      "content": "# Observable Trellis Runtime Backend\n\n## Goal\n\nTBD.\n\n## Requirements\n\n* TBD\n\n## Acceptance Criteria\n\n* [ ] TBD\n\n## Notes\n\n* Keep `prd.md` focused on requirements, constraints, and acceptance criteria.\n\n* Lightweight tasks can remain PRD-only.\n\n* For complex tasks, add `design.md` for technical design and `implement.md` for execution planning before `task.py start`.",
+      "bodyHash": "1c8a3b0f2e53b44f"
+    }
+  ]
+}

@@ -103,6 +103,9 @@ body {
   flex: 1 1 0%;
   min-height: 0;
   min-width: 0;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--ant-color-bg-layout) 96%, var(--ant-color-primary) 4%), var(--ant-color-bg-layout) 180px),
+    var(--ant-color-bg-layout);
 }
 
 /* 主内容区：必须是 ant-layout-content，才能在 has-sider 下获得 width:0 + flex:auto，避免双栏时主区按内容宽度溢出盖住右侧栏 */
@@ -128,6 +131,7 @@ body {
   min-width: 0;
   min-height: 0;
   align-self: stretch;
+  background: var(--ant-color-bg-layout);
 }
 
 /* MCP / skills.sh / 代码图谱：叠在主内容+右栏之上 */
@@ -378,8 +382,10 @@ body {
 .app-left-sidebar {
   display: flex;
   flex-direction: column;
-  background: var(--ant-color-fill-quaternary);
-  border-right: 1px solid var(--ant-color-border-secondary);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--ant-color-bg-container) 94%, var(--ant-color-primary) 6%), var(--ant-color-bg-container) 120px),
+    var(--ant-color-bg-container);
+  border-right: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 82%, transparent);
   overflow: hidden;
   transition: width 0.2s ease;
   position: relative;
@@ -395,26 +401,46 @@ body {
   height: 100%;
 }
 
-/* 与中栏 .app-chat-topbar（上下 4px + 约 28px 控件）顶缘对齐；浅色下为白底，深色用 token */
 .app-left-sidebar-topbar {
   flex-shrink: 0;
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 0;
-  min-height: 36px;
-  padding: 4px 10px;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 8px;
   user-select: none;
-  background: var(--ant-color-bg-container);
-  border-bottom: 1px solid var(--ant-color-border-secondary);
+  background: transparent;
+  border-bottom: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 74%, transparent);
 }
 
-.app-left-sidebar-topbar-drag {
+.app-left-sidebar-topbar-brand {
   flex: 1 1 0;
   min-width: 0;
-  min-height: 28px;
+  min-height: 30px;
   align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  overflow: hidden;
+}
+
+.app-left-sidebar-topbar-mark {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 760;
+  letter-spacing: 0;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--ant-color-primary) 88%, #111 12%), color-mix(in srgb, var(--ant-color-success) 58%, var(--ant-color-primary) 42%));
+  box-shadow: 0 7px 18px color-mix(in srgb, var(--ant-color-primary) 22%, transparent);
 }
 
 .app-left-sidebar-topbar-actions {
@@ -425,24 +451,26 @@ body {
 }
 
 .app-left-sidebar-compact-btn {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 80%, transparent);
   color: var(--ant-color-text-tertiary);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.15s;
   -webkit-app-region: no-drag;
 }
 
 .app-left-sidebar-compact-btn:hover {
-  background: var(--ant-color-fill-content);
+  background: var(--ant-color-fill-secondary);
+  border-color: var(--ant-color-border-secondary);
   color: var(--ant-color-text);
+  transform: translateY(-1px);
 }
 
 .app-left-sidebar-compact-btn:disabled {
@@ -458,6 +486,8 @@ body {
 
 .app-left-sidebar-compact-btn--active {
   color: var(--ant-color-primary);
+  background: var(--ant-color-primary-bg);
+  border-color: var(--ant-color-primary-border);
 }
 
 .app-left-sidebar-compact-btn svg {
@@ -465,7 +495,7 @@ body {
   height: 16px;
 }
 
-/* 左栏：钉钉企业机器人 Popover — 总高度 500px，标题固定，仅正文区纵向滚动 */
+/* 左栏：远程入口钉钉配置 Popover — 总高度 500px，标题固定，仅正文区纵向滚动 */
 .app-left-sidebar-dingtalk-ebot-popover .ant-popover-inner {
   height: 500px;
   max-height: min(500px, calc(100vh - 48px));
@@ -545,7 +575,11 @@ body {
 }
 
 html.app-host-macos-chrome .app-left-sidebar-topbar {
-  padding-left: max(84px, calc(env(titlebar-area-x, 0px) + env(titlebar-area-width, 0px) + 12px));
+  padding-left: max(84px, calc(env(titlebar-area-x, 0px) + env(titlebar-area-width, 0px) + 8px));
+}
+
+html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
+  display: none;
 }
 
 .app-logo-draggable {
@@ -557,14 +591,19 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 8px 0;
+  min-height: 28px;
+  padding: 0 10px;
 }
 
 .app-repository-header-title {
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0;
   color: var(--ant-color-text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-repository-header-actions {
@@ -574,14 +613,14 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
 }
 
 .app-repository-header-btn {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: 7px;
   background: transparent;
   color: var(--ant-color-text-tertiary);
   cursor: pointer;
@@ -599,8 +638,8 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
 }
 
 .app-repository-header-btn svg {
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   display: block;
 }
 
@@ -1527,6 +1566,8 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  gap: 6px;
+  padding: 8px 0 0;
 }
 
 .app-left-sidebar-project-and-files > .app-repository-header {
@@ -1539,7 +1580,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
   align-self: stretch;
   max-height: min(50%, 360px);
   min-height: 0;
-  padding: 0 6px 0;
+  padding: 0 8px 0;
   overflow-y: auto;
 }
 
@@ -1553,10 +1594,12 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
 .app-left-sidebar-files-explorer {
   display: flex;
   flex-direction: column;
-  border-top: 1px solid var(--ant-color-border-secondary);
-  margin-top: 2px;
+  border-top: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 70%, transparent);
+  margin: 0 8px 8px;
+  border-radius: 8px;
   overflow: hidden;
   background: var(--ant-color-bg-container);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ant-color-border-secondary) 38%, transparent);
   min-height: 0;
 }
 
@@ -1582,7 +1625,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
 
 .app-left-sidebar-files-explorer-search {
   flex-shrink: 0;
-  padding: 0 6px 0;
+  padding: 6px 6px 4px;
 }
 
 .app-left-sidebar-files-explorer-search .ant-input-affix-wrapper {
@@ -1615,13 +1658,66 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
 
 /* 仅左栏：与 ProjectList 组件中的 .app-repository-list 区分，避免全局 flex 互相覆盖 */
 .app-left-sidebar .app-repository-list {
-  padding: 2px 6px 12px;
+  padding: 2px 8px 12px;
+}
+
+.app-left-sidebar-assistant-entry {
+  flex: 0 0 auto;
+  padding: 0 8px 4px;
+}
+
+.app-left-sidebar-assistant-button {
+  width: 100%;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ant-color-text);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.app-left-sidebar-assistant-button:hover {
+  background: var(--ant-color-fill-secondary);
+  border-color: var(--ant-color-border-secondary);
+}
+
+.app-left-sidebar-assistant-button--active {
+  background: var(--ant-color-primary-bg);
+  border-color: var(--ant-color-primary-border);
+  color: var(--ant-color-primary-text);
+}
+
+.app-left-sidebar-assistant-button__icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.app-left-sidebar-assistant-button__label {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 600;
 }
 
 .app-left-sidebar-system-inline {
   flex-shrink: 0;
   border-top: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 60%, transparent);
-  padding: 6px 6px;
+  padding: 7px 10px;
   font-size: 12px;
   line-height: 1.4;
   color: var(--ant-color-text-tertiary);
@@ -1629,8 +1725,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  /* 浅色下为白底卡片；深色下为 Ant 容器表面色 */
-  background: var(--ant-color-bg-container);
+  background: color-mix(in srgb, var(--ant-color-bg-container) 86%, var(--ant-color-bg-layout) 14%);
 }
 
 .app-left-sidebar-system-inline__count-trigger {
@@ -2177,11 +2272,15 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
   display: flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
   padding: 6px 10px;
+  border: none;
   border-radius: 6px;
   cursor: pointer;
   font-size: 12px;
+  text-align: left;
   color: var(--ant-color-text-secondary);
+  background: transparent;
   transition: background 0.15s, color 0.15s;
   position: relative;
 }
@@ -2194,6 +2293,21 @@ html.app-host-macos-chrome .app-left-sidebar-topbar {
 .app-session-item.active {
   background: var(--ant-color-fill);
   color: var(--ant-color-text);
+}
+
+.app-session-item:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.app-session-item--empty-action {
+  border: 1px dashed var(--ant-color-border);
+  color: var(--ant-color-text);
+}
+
+.app-session-item--empty-action:hover:not(:disabled) {
+  border-color: var(--ant-color-primary);
+  color: var(--ant-color-primary);
 }
 
 .app-session-item-name {

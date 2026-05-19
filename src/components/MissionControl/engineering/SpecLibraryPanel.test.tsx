@@ -83,6 +83,12 @@ describe("SpecLibraryPanel", () => {
     expect(listTrellisSpecAreas).toHaveBeenCalledWith("/repo");
     expect(readTrellisSpecIndex).toHaveBeenCalledWith("/repo", "frontend");
     const output = JSON.stringify(renderer!.toJSON());
+    expect(output).toContain("规范库");
+    expect(output).toContain("2");
+    expect(output).toContain("个规范区");
+    expect(output).toContain("4");
+    expect(output).toContain("个文档");
+    expect(output).toContain("index 就绪");
     expect(output).toContain("frontend");
     expect(output).toContain("# Frontend");
   });

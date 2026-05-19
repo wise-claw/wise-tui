@@ -1,8 +1,12 @@
-import { CloseOutlined, DeleteOutlined, PlusOutlined, SaveOutlined } from "@ant-design/icons";
+import {
+  CloseOutlined,
+  DeleteOutlined,
+  PlusOutlined,
+  SaveOutlined,
+} from "@ant-design/icons";
 import {
   App as AntdApp,
   Button,
-  Card,
   Col,
   Input,
   Layout,
@@ -151,7 +155,14 @@ export function PromptsPanel({
     return [...fromDb, seed];
   }, [repositories, openContext]);
 
-  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+  const [selectedKeys, setSelectedKeys] = useState<string[]>(() =>
+    initialTreeSelection(
+      projects ?? (openContext?.project ? [openContext.project] : undefined),
+      activeProjectId,
+      activeRepositoryId,
+      openContext,
+    ),
+  );
   const [loading, setLoading] = useState(false);
   const [activeSlotId, setActiveSlotId] = useState<string>(PROMPT_SLOT_PRD_TASK_SPLIT);
   const [bundleLayers, setBundleLayers] = useState<Record<string, SplitPromptTemplateLayers>>({});
@@ -243,6 +254,27 @@ export function PromptsPanel({
   const slotIdList = useMemo(() => collectPromptSlotIds(bundleLayers), [bundleLayers]);
 
   const milkdownScopeKey = scope ? scopeStorageKey(scope) : "none";
+  const selectedProject = useMemo(() => {
+    if (!scope) return null;
+    return projectList.find((project) => project.id === scope.projectId) ?? null;
+  }, [projectList, scope]);
+  const selectedRepository = useMemo(() => {
+    if (!scope || scope.kind !== "repository") return null;
+    return repositoryList.find((repository) => repository.id === scope.repositoryId) ?? null;
+  }, [repositoryList, scope]);
+  const enabledSlotCount = useMemo(
+    () => slotIdList.filter((slotId) => {
+      const layers = slotId === activeSlotId ? draft : bundleLayers[slotId];
+      return layers?.enabled ?? true;
+    }).length,
+    [activeSlotId, bundleLayers, draft, slotIdList],
+  );
+  const scopeLabel = scope
+    ? scope.kind === "repository"
+      ? selectedRepository?.name ?? `仓库 #${scope.repositoryId}`
+      : selectedProject?.name ?? "项目"
+    : "未选择";
+  const scopeTypeLabel = scope?.kind === "repository" ? "仓库覆盖" : scope?.kind === "project" ? "项目默认" : "未选择";
 
   function purposeLabelForSlot(slotId: string): string {
     const partial = slotId === activeSlotId ? draft : bundleLayers[slotId];
@@ -390,8 +422,10 @@ export function PromptsPanel({
   return (
     <Layout.Content className="app-prd-task-panel app-prompts-panel--compact">
       <Space orientation="vertical" size={8} className="app-prd-task-panel__stack">
-        <div className="app-prompts-panel__page-head">
-          <span className="app-prompts-panel__page-title">提示词</span>
+        <div className="app-prompts-panel__scope-bar" aria-label="当前提示词作用域">
+          <span>{scopeLabel}</span>
+          <span>{scopeTypeLabel}</span>
+          <span>{enabledSlotCount}/{slotIdList.length} 启用</span>
           <Button type="text" size="small" icon={<CloseOutlined />} onClick={onClose} aria-label="关闭" />
         </div>
 
@@ -407,7 +441,7 @@ export function PromptsPanel({
           <Row gutter={12} className="app-prd-task-panel__columns app-prompts-panel__row">
             <Col xs={24} className="app-prd-task-panel__col app-prompts-panel__main-col">
               <Spin spinning={loading}>
-                <Card size="small" className="app-prompts-panel__main-card" title={null}>
+                <div className="app-prompts-panel__main-card">
                   <Space orientation="vertical" size={8} style={{ width: "100%" }}>
                     <div className="app-prompts-panel__card-toolbar">
                       <div className="app-prompts-panel__card-toolbar-tree">
@@ -443,145 +477,157 @@ export function PromptsPanel({
                       </div>
                     </div>
                     {scope ? (
-                    <Space orientation="vertical" size={8} style={{ width: "100%" }} className="app-prompts-panel__body-stack">
-                      <Typography.Paragraph type="secondary" className="app-prompts-panel__lead">
-                        用途对应不同调用位置；列表切换用途，自定义可删；项目为仓库默认，仓库覆盖同名用途。正文在 Milkdown
-                        中直接编辑；可用「{SPLIT_PROMPT_COMBINED_HEADINGS.system}」等独占一行标题分三层落盘，无标题则整段写入用户模板层。
-                      </Typography.Paragraph>
+                      <Space
+                        orientation="vertical"
+                        size={8}
+                        style={{ width: "100%" }}
+                        className="app-prompts-panel__body-stack"
+                      >
+                        <div className="app-prompts-panel__contract">
+                          <Typography.Text strong>提示词契约</Typography.Text>
+                          <Typography.Text type="secondary">
+                            用途决定调用位置；项目默认会被仓库同名用途覆盖。正文直接编辑；
+                            可用「{SPLIT_PROMPT_COMBINED_HEADINGS.system}」等独占一行标题分层落盘，无标题则写入用户模板层。
+                          </Typography.Text>
+                        </div>
 
-                      <Row gutter={12} className="app-prompts-panel__editor-row">
-                        <Col xs={24} md={5} lg={5} xl={5} className="app-prompts-panel__slot-col">
-                          <Card size="small" title="用途" className="app-prompts-panel__slot-list-card">
-                            <Button
-                              type="dashed"
-                              block
-                              size="small"
-                              icon={<PlusOutlined />}
-                              style={{ marginBottom: 6 }}
-                              onClick={handleOpenAddSlot}
-                            >
-                              新建
-                            </Button>
-                            <List
-                              size="small"
-                              bordered
-                              dataSource={slotIdList}
-                              locale={{ emptyText: "暂无用途" }}
-                              className="app-prompts-panel__slot-list"
-                              renderItem={(slotId) => {
-                                const active = slotId === activeSlotId;
-                                const deletable = !isBuiltinPromptSlot(slotId);
-                                return (
-                                  <List.Item
-                                    className={
-                                      active
-                                        ? "app-prompts-panel__slot-item app-prompts-panel__slot-item--active"
-                                        : "app-prompts-panel__slot-item"
-                                    }
-                                    onClick={() => handleSlotChange(slotId)}
-                                    actions={
-                                      deletable
-                                        ? [
-                                            <Button
-                                              key="del"
-                                              type="text"
-                                              danger
-                                              size="small"
-                                              icon={<DeleteOutlined />}
-                                              aria-label={`删除用途 ${slotId}`}
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleDeleteSlot(slotId);
-                                              }}
-                                            />,
-                                          ]
-                                        : []
-                                    }
-                                  >
-                                    <List.Item.Meta
-                                      title={
-                                        <Typography.Text ellipsis strong={active}>
-                                          {purposeLabelForSlot(slotId)}
-                                        </Typography.Text>
+                        <Row gutter={12} className="app-prompts-panel__editor-row">
+                          <Col xs={24} md={5} lg={5} xl={5} className="app-prompts-panel__slot-col">
+                            <section className="app-prompts-panel__slot-list-card" aria-label="提示词用途">
+                              <div className="app-prompts-panel__slot-list-head">
+                                <Typography.Text strong>调用用途</Typography.Text>
+                                <Typography.Text type="secondary">{slotIdList.length} 个</Typography.Text>
+                              </div>
+                              <Button
+                                type="dashed"
+                                block
+                                size="small"
+                                icon={<PlusOutlined />}
+                                style={{ marginBottom: 6 }}
+                                onClick={handleOpenAddSlot}
+                              >
+                                新建用途
+                              </Button>
+                              <List
+                                size="small"
+                                bordered
+                                dataSource={slotIdList}
+                                locale={{ emptyText: "暂无用途" }}
+                                className="app-prompts-panel__slot-list"
+                                renderItem={(slotId) => {
+                                  const active = slotId === activeSlotId;
+                                  const deletable = !isBuiltinPromptSlot(slotId);
+                                  return (
+                                    <List.Item
+                                      className={
+                                        active
+                                          ? "app-prompts-panel__slot-item app-prompts-panel__slot-item--active"
+                                          : "app-prompts-panel__slot-item"
                                       }
-                                      description={
-                                        <Typography.Text type="secondary" ellipsis style={{ fontSize: 12 }}>
-                                          {slotId}
-                                        </Typography.Text>
+                                      onClick={() => handleSlotChange(slotId)}
+                                      actions={
+                                        deletable
+                                          ? [
+                                              <Button
+                                                key="del"
+                                                type="text"
+                                                danger
+                                                size="small"
+                                                icon={<DeleteOutlined />}
+                                                aria-label={`删除用途 ${slotId}`}
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleDeleteSlot(slotId);
+                                                }}
+                                              />,
+                                            ]
+                                          : []
                                       }
-                                    />
-                                  </List.Item>
-                                );
-                              }}
-                            />
-                          </Card>
-                        </Col>
-                        <Col xs={24} md={19} lg={19} xl={19} className="app-prompts-panel__editor-col">
+                                    >
+                                      <List.Item.Meta
+                                        title={
+                                          <Typography.Text ellipsis strong={active}>
+                                            {purposeLabelForSlot(slotId)}
+                                          </Typography.Text>
+                                        }
+                                        description={
+                                          <Typography.Text type="secondary" ellipsis style={{ fontSize: 12 }}>
+                                            {slotId}
+                                          </Typography.Text>
+                                        }
+                                      />
+                                    </List.Item>
+                                  );
+                                }}
+                              />
+                            </section>
+                          </Col>
+                          <Col xs={24} md={19} lg={19} xl={19} className="app-prompts-panel__editor-col">
                             <Space orientation="vertical" size={6} style={{ width: "100%" }}>
-                            <Space align="center" wrap size={4}>
-                              <Typography.Text className="app-prompts-panel__inline-label">本层</Typography.Text>
-                              <Switch
-                                checked={draft.enabled}
-                                onChange={(v) => setDraft((d) => ({ ...d, enabled: v }))}
-                              />
-                              {!draft.enabled && (
-                                <Typography.Text type="secondary" className="app-prompts-panel__hint-inline">
-                                  关闭则回退平台默认
-                                </Typography.Text>
-                              )}
-                            </Space>
-                            <Space wrap size={[4, 4]}>
-                              <Typography.Text type="secondary" className="app-prompts-panel__inline-label">
-                                占位符
-                              </Typography.Text>
-                              {SPLIT_PROMPT_STANDARD_VARIABLES.map((v) => (
-                                <Tag key={v} variant="filled" className="app-prompts-panel__ph-tag">
-                                  {`{${v}}`}
-                                </Tag>
-                              ))}
-                            </Space>
-                            <Space orientation="vertical" size={4} style={{ width: "100%" }}>
-                              <Typography.Text strong className="app-prompts-panel__section-label">
-                                模板 id / 版本
-                              </Typography.Text>
-                              <Space wrap size={6} style={{ width: "100%" }}>
-                                <Input
-                                  size="small"
-                                  style={{ minWidth: 160, flex: 1, maxWidth: 280 }}
-                                  placeholder="templateId"
-                                  value={draft.templateId}
-                                  onChange={(e) => setDraft((d) => ({ ...d, templateId: e.target.value }))}
+                              <Space align="center" wrap size={4}>
+                                <Typography.Text className="app-prompts-panel__inline-label">本层</Typography.Text>
+                                <Switch
+                                  checked={draft.enabled}
+                                  onChange={(v) => setDraft((d) => ({ ...d, enabled: v }))}
                                 />
-                                <Input
-                                  size="small"
-                                  style={{ width: 88 }}
-                                  placeholder="version"
-                                  value={draft.version}
-                                  onChange={(e) => setDraft((d) => ({ ...d, version: e.target.value }))}
-                                />
+                                {!draft.enabled && (
+                                  <Typography.Text type="secondary" className="app-prompts-panel__hint-inline">
+                                    关闭则回退平台默认
+                                  </Typography.Text>
+                                )}
                               </Space>
-                            </Space>
+                              <Space wrap size={[4, 4]}>
+                                <Typography.Text type="secondary" className="app-prompts-panel__inline-label">
+                                  占位符
+                                </Typography.Text>
+                                {SPLIT_PROMPT_STANDARD_VARIABLES.map((v) => (
+                                  <Tag key={v} variant="filled" className="app-prompts-panel__ph-tag">
+                                    {`{${v}}`}
+                                  </Tag>
+                                ))}
+                              </Space>
+                              <Space orientation="vertical" size={4} style={{ width: "100%" }}>
+                                <Typography.Text strong className="app-prompts-panel__section-label">
+                                  模板编号 / 版本
+                                </Typography.Text>
+                                <Space wrap size={6} style={{ width: "100%" }}>
+                                  <Input
+                                    size="small"
+                                    style={{ minWidth: 160, flex: 1, maxWidth: 280 }}
+                                    placeholder="templateId"
+                                    value={draft.templateId}
+                                    onChange={(e) => setDraft((d) => ({ ...d, templateId: e.target.value }))}
+                                  />
+                                  <Input
+                                    size="small"
+                                    style={{ width: 88 }}
+                                    placeholder="version"
+                                    value={draft.version}
+                                    onChange={(e) => setDraft((d) => ({ ...d, version: e.target.value }))}
+                                  />
+                                </Space>
+                              </Space>
 
-                            <div className="app-prompts-panel__combined-editor">
-                              <PromptMilkdownField
-                                instanceKey={`${milkdownScopeKey}-${activeSlotId}-combined`}
-                                label="正文"
-                                hint={`须含 {PRD_MARKDOWN} 等占位符（用户模板段）；可选章节标题：${SPLIT_PROMPT_COMBINED_HEADINGS.system} / ${SPLIT_PROMPT_COMBINED_HEADINGS.strategy} / ${SPLIT_PROMPT_COMBINED_HEADINGS.user}（独占一行）`}
-                                value={splitPromptLayersToCombinedMarkdown(draft)}
-                                onChange={(md) =>
-                                  setDraft((d) => ({ ...d, ...combinedMarkdownToSplitPromptBodies(md) }))
-                                }
-                              />
-                            </div>
-                          </Space>
-                        </Col>
-                      </Row>
-                    </Space>
+                              <div className="app-prompts-panel__combined-editor">
+                                <PromptMilkdownField
+                                  instanceKey={`${milkdownScopeKey}-${activeSlotId}-combined`}
+                                  label="提示词正文"
+                                  hint={`须含 {PRD_MARKDOWN} 等占位符（用户模板段）；可选章节标题：${SPLIT_PROMPT_COMBINED_HEADINGS.system} / ${SPLIT_PROMPT_COMBINED_HEADINGS.strategy} / ${SPLIT_PROMPT_COMBINED_HEADINGS.user}（独占一行）`}
+                                  value={splitPromptLayersToCombinedMarkdown(draft)}
+                                  onChange={(md) =>
+                                    setDraft((d) => ({ ...d, ...combinedMarkdownToSplitPromptBodies(md) }))
+                                  }
+                                />
+                              </div>
+                            </Space>
+                          </Col>
+                        </Row>
+                      </Space>
                     ) : (
                       <Typography.Text type="secondary">请在下拉中选择项目或仓库。</Typography.Text>
                     )}
                   </Space>
-                </Card>
+                </div>
               </Spin>
             </Col>
           </Row>
@@ -589,7 +635,7 @@ export function PromptsPanel({
       </Space>
 
       <Modal
-        title="添加用途"
+        title="新建提示词用途"
         open={addSlotOpen}
         onOk={handleConfirmAddSlot}
         onCancel={() => setAddSlotOpen(false)}

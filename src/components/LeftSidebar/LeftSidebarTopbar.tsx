@@ -2,45 +2,37 @@ import { Tooltip } from "antd";
 import { ClaudeCodeUsageHeaderBtn } from "../ClaudeCodeUsagePopover";
 import { IconSettings } from "../icons/IconSettings";
 import { IconCompactLayout } from "./SidebarIcons";
+import type { AuthorPane } from "../../types/viewMode";
 
 interface LeftSidebarTopbarProps {
   compactLayoutMode: boolean;
   onToggleCompactLayoutMode?: () => void;
   authorDisabled?: boolean;
   authorTooltip?: string;
-  onOpenAuthor: () => void;
-  onOpenSettings: () => void;
+  onOpenAuthor: (pane?: AuthorPane) => void;
 }
 
 export function LeftSidebarTopbar({
   compactLayoutMode,
   onToggleCompactLayoutMode,
   authorDisabled = false,
-  authorTooltip = "Author：Workspace、Agents、Workflows、MCP、Skills、Hooks、Prompts、Trellis Spec",
+  authorTooltip = "Standalone Repo 不支持工作台配置；升格为 Workspace 后启用",
   onOpenAuthor,
-  onOpenSettings,
 }: LeftSidebarTopbarProps) {
   return (
     <div className="app-left-sidebar-topbar">
-      <div className="app-left-sidebar-topbar-drag app-logo-draggable" data-tauri-drag-region aria-hidden />
+      <div className="app-left-sidebar-topbar-brand app-logo-draggable" data-tauri-drag-region>
+        <span className="app-left-sidebar-topbar-mark" aria-hidden>
+          W
+        </span>
+      </div>
       <div className="app-left-sidebar-topbar-actions">
-        <Tooltip title={authorDisabled ? authorTooltip : "Author：配置 Workspace、Agents、Workflows、MCP、Skills、Hooks、Prompts、Trellis Spec"} mouseEnterDelay={0.35}>
+        <Tooltip title={authorDisabled ? authorTooltip : "工作台配置"} mouseEnterDelay={0.35}>
           <button
             type="button"
             className="app-left-sidebar-compact-btn"
-            aria-label="打开 Author"
-            disabled={authorDisabled}
-            onClick={onOpenAuthor}
-          >
-            <IconSettings />
-          </button>
-        </Tooltip>
-        <Tooltip title="设置：钉钉机器人、快捷键、Claude 沙箱与权限" mouseEnterDelay={0.35}>
-          <button
-            type="button"
-            className="app-left-sidebar-compact-btn"
-            aria-label="打开设置"
-            onClick={onOpenSettings}
+            aria-label="打开工作台配置"
+            onClick={() => onOpenAuthor()}
           >
             <IconSettings />
           </button>

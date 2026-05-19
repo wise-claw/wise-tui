@@ -1,0 +1,60 @@
+{
+  "name": "hello-world",
+  "version": "0.1.0",
+  "apiVersion": "1",
+  "engines": { "wise": "*" },
+  "description": "Reference extension that exercises every contribute type wise's v1 supports.",
+  "author": "wise contributors",
+  "lifecycle": {
+    "onActivate": { "script": "lifecycle/on-activate.mjs" }
+  },
+  "permissions": {
+    "storage": false,
+    "network": false,
+    "shell": false,
+    "filesystem": "extension-only",
+    "clipboard": false
+  },
+  "contributes": {
+    "skills": "$file:contributes/skills.json",
+    "themes": "$file:contributes/themes.json",
+    "mcpServers": [
+      {
+        "name": "hello-world-greeter",
+        "description": "Demo MCP server contributed by hello-world. Read-only in wise.",
+        "transport": {
+          "type": "stdio",
+          "command": "node",
+          "args": ["lifecycle/on-activate.mjs"]
+        },
+        "defaultEnabled": false
+      }
+    ],
+    "settingsDeclarations": [
+      {
+        "id": "greeting-text",
+        "label": "Greeting text",
+        "description": "Override the greeting shown on the dashboard.",
+        "kind": "string"
+      }
+    ],
+    "settingsTabs": [
+      {
+        "id": "hello-guide",
+        "label": "Hello World 指南",
+        "body": "contributes/hello-guide.md",
+        "position": { "anchor": "dingtalk", "placement": "before" }
+      }
+    ],
+    "assistants": [
+      {
+        "id": "drafter",
+        "name": "Drafter",
+        "description": "Outlines first, prose later. Helpful for structured writing tasks.",
+        "engineId": "claude",
+        "systemPrompt": "contributes/drafter.md",
+        "avatarColor": "#722ED1"
+      }
+    ]
+  }
+}

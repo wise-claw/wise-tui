@@ -40,6 +40,11 @@ Rules:
 
 Migrations live in `src-tauri/migrations/` and are included from Rust.
 
+The current numeric range is `001_init.sql` through `022_trellis_runtime.sql`,
+plus the JSON seed `005_platform_split_prompt_seed.json`. The include list and
+runner live in `src-tauri/src/wise_db.rs`; new files must be wired in there as
+well as added to disk.
+
 Rules:
 
 - Add new migrations with the next numeric prefix.

@@ -1,15 +1,38 @@
 import { Button, Empty, Input, Space, Spin, Typography } from "antd";
-import { ArrowLeftOutlined, SearchOutlined } from "@ant-design/icons";
-import { useEffect, useMemo, useState, type ComponentProps, type ReactNode } from "react";
-import { ClaudeHooksConfigPanel } from "../ClaudeHooksConfigPanel";
+import {
+  ArrowLeftOutlined,
+  DeploymentUnitOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+  SearchOutlined,
+} from "@ant-design/icons";
+import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import { AppShortcutsPopoverBody } from "../AppShortcutsPopoverBody";
+import { ArtifactsPanel } from "../ArtifactsPanel";
+import { AssistantsPanel } from "../AssistantsPanel";
+import { AutomationPanel } from "../AutomationPanel";
+import { ChannelsPanel } from "../ChannelsPanel";
+import { ClaudeHooksConfigPanel, type ClaudeHooksConfigPanelHandle } from "../ClaudeHooksConfigPanel";
+import { ClaudeConfigDirPanel } from "../ClaudeConfigDirPanel";
+import { AgentRegistrySection } from "../ClaudeConfigDirPanel/AgentRegistrySection";
+import { ClaudeSandboxHelpPopoverBody } from "../ClaudeSandboxHelpPopoverBody";
 import { EmployeeConfigModal } from "../EmployeeConfigModal";
+import { ExtensionsPanel } from "../ExtensionsPanel";
 import { McpHub } from "../McpHub";
 import { ProjectTrellisCenter } from "../ProjectTrellisCenter";
 import { PromptsPanel } from "../PromptsPanel";
+import { SettingsViewModeProvider } from "../SettingsView";
 import { SkillsHub } from "../SkillsHub";
 import { WorkflowConfigModal } from "../WorkflowConfigModal";
 import { getAppSetting, setAppSetting } from "../../services/appSettingsStore";
-import { AUTHOR_TAB_STORAGE_KEY, AUTHOR_TABS, isAuthorPane, type AuthorPane } from "./AuthorPanelTabs";
+import { DEFAULT_AUTHOR_PANE } from "../../types/viewMode";
+import {
+  AUTHOR_TAB_GROUPS,
+  AUTHOR_TAB_STORAGE_KEY,
+  AUTHOR_TABS,
+  isAuthorPane,
+  type AuthorPane,
+} from "./AuthorPanelTabs";
 import { WorkspacesTab } from "./tabs/WorkspacesTab";
 import "./index.css";
 
@@ -33,16 +56,18 @@ export interface AuthorPanelProps {
   promptsPanelProps: PromptsPanelProps;
   trellisSpecProps: ProjectTrellisCenterProps;
   repositoryPath?: string | null;
+  automationPanelProps: ComponentProps<typeof AutomationPanel>;
+  artifactsPanelProps: ComponentProps<typeof ArtifactsPanel>;
   workflowStudioAction?: ReactNode;
 }
 
-export function readAuthorPaneFromStorage(fallback: AuthorPane = "workspaces"): AuthorPane {
+export function readAuthorPaneFromStorage(fallback: AuthorPane = DEFAULT_AUTHOR_PANE): AuthorPane {
   if (typeof window === "undefined") return fallback;
   const raw = window.localStorage.getItem(AUTHOR_TAB_STORAGE_KEY)?.trim() ?? "";
   return isAuthorPane(raw) ? raw : fallback;
 }
 
-export async function readAuthorPaneFromSettings(fallback: AuthorPane = "workspaces"): Promise<AuthorPane> {
+export async function readAuthorPaneFromSettings(fallback: AuthorPane = DEFAULT_AUTHOR_PANE): Promise<AuthorPane> {
   const raw = (await getAppSetting(AUTHOR_TAB_STORAGE_KEY))?.trim() ?? "";
   return isAuthorPane(raw) ? raw : readAuthorPaneFromStorage(fallback);
 }
@@ -68,10 +93,16 @@ export function AuthorPanel({
   promptsPanelProps,
   trellisSpecProps,
   repositoryPath,
+  automationPanelProps,
+  artifactsPanelProps,
   workflowStudioAction,
 }: AuthorPanelProps) {
   const [hooksSearch, setHooksSearch] = useState("");
+  const hooksPanelRef = useRef<ClaudeHooksConfigPanelHandle | null>(null);
   const activeTab = AUTHOR_TABS.find((item) => item.key === pane) ?? AUTHOR_TABS[0];
+  const activeGroupTitle =
+    AUTHOR_TAB_GROUPS.find((group) => group.items.some((item) => item.key === activeTab.key))?.title ?? "工作台";
+  const hooksRepositoryPath = repositoryPath?.trim() || undefined;
 
   useEffect(() => {
     writeAuthorPaneToStorage(pane);
@@ -85,7 +116,7 @@ export function AuthorPanel({
         return employeeConfigProps ? (
           <EmployeeConfigModal {...employeeConfigProps} open inline />
         ) : (
-          <AuthorUnavailable label="Agents" />
+          <AuthorUnavailable label="智能体角色" />
         );
       case "workflows":
         return workflowConfigProps ? (
@@ -96,7 +127,7 @@ export function AuthorPanel({
             <WorkflowConfigModal {...workflowConfigProps} open inline />
           </div>
         ) : (
-          <AuthorUnavailable label="Workflows" />
+          <AuthorUnavailable label="委派协议" />
         );
       case "mcp":
         return <McpHub {...mcpHubProps} onClose={undefined} />;
@@ -105,27 +136,48 @@ export function AuthorPanel({
       case "hooks":
         return (
           <div className="author-panel-hooks">
-            <div className="author-panel-section-header author-panel-section-header--compact">
-              <div>
-                <Typography.Title level={5}>Hooks</Typography.Title>
-                <Typography.Text type="secondary">
-                  Manage Claude hook scopes for the current repository context.
-                </Typography.Text>
-              </div>
-              <Input
-                allowClear
-                size="small"
-                className="author-panel-hooks__search"
-                prefix={<SearchOutlined />}
-                placeholder="Search event, matcher, handler"
-                value={hooksSearch}
-                onChange={(event) => setHooksSearch(event.target.value)}
-              />
+            <div className="author-panel-hooks-toolbar">
+              <Space size={8} wrap className="author-panel-hooks-toolbar__actions">
+                <Input
+                  allowClear
+                  size="small"
+                  className="author-panel-hooks__search"
+                  prefix={<SearchOutlined />}
+                  placeholder="搜索事件、匹配器或处理器"
+                  value={hooksSearch}
+                  onChange={(event) => setHooksSearch(event.target.value)}
+                />
+                <Button
+                  size="small"
+                  icon={<ReloadOutlined />}
+                  onClick={() => void hooksPanelRef.current?.refresh()}
+                >
+                  刷新
+                </Button>
+                <Button
+                  size="small"
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  onClick={() => hooksPanelRef.current?.openCreateModal()}
+                >
+                  新增触发器
+                </Button>
+                <Button
+                  size="small"
+                  icon={<DeploymentUnitOutlined />}
+                  onClick={() => window.dispatchEvent(new CustomEvent("wise:open-hooks-flow"))}
+                >
+                  事件流程
+                </Button>
+              </Space>
             </div>
             <ClaudeHooksConfigPanel
-              repositoryPath={repositoryPath?.trim() || undefined}
+              repositoryPath={hooksRepositoryPath}
               active
               listSearch={hooksSearch}
+              onBindActions={(actions) => {
+                hooksPanelRef.current = actions;
+              }}
             />
           </div>
         );
@@ -133,12 +185,33 @@ export function AuthorPanel({
         return <PromptsPanel {...promptsPanelProps} />;
       case "trellis-spec":
         return <ProjectTrellisCenter {...trellisSpecProps} open inline onClose={undefined} />;
+      case "claude-config":
+        return <ClaudeConfigDirPanel />;
+      case "extensions":
+        return <ExtensionsPanel />;
+      case "assistants":
+        return <AssistantsPanel />;
+      case "engine-registry":
+        return <AgentRegistrySection />;
+      case "automation":
+        return <AutomationPanel {...automationPanelProps} />;
+      case "artifacts":
+        return <ArtifactsPanel {...artifactsPanelProps} />;
+      case "channels":
+        return <ChannelsPanel />;
+      case "shortcuts":
+        return <AppShortcutsPopoverBody density="default" />;
+      case "sandbox":
+        return <ClaudeSandboxHelpPopoverBody />;
       default:
-        return <AuthorUnavailable label="Author" />;
+        return <AuthorUnavailable label="工作台配置" />;
     }
   }, [
+    automationPanelProps,
+    artifactsPanelProps,
     employeeConfigProps,
     hooksSearch,
+    hooksRepositoryPath,
     mcpHubProps,
     pane,
     promptsPanelProps,
@@ -151,47 +224,57 @@ export function AuthorPanel({
   ]);
 
   return (
-    <div className="author-panel">
-      <header className="author-panel__header">
-        <Space size={8}>
-          <Button size="small" icon={<ArrowLeftOutlined />} onClick={onBack}>
-            Back
-          </Button>
-          <div>
-            <Typography.Title level={4}>Author</Typography.Title>
-            <Typography.Text type="secondary">
-              Configure the contracts that future Mission runs depend on.
-            </Typography.Text>
-          </div>
-        </Space>
-        <Typography.Text type="secondary" className="author-panel__active-label">
-          {activeTab.label}
-        </Typography.Text>
-      </header>
-      <div className="author-panel__body">
-        <nav className="author-panel__tabs" aria-label="Author navigation">
-          {AUTHOR_TABS.map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              className={`author-panel-tab${tab.key === pane ? " author-panel-tab--active" : ""}`}
-              onClick={() => onPaneChange(tab.key)}
-            >
-              <span className="author-panel-tab__icon" aria-hidden>
-                {tab.icon}
-              </span>
-              <span className="author-panel-tab__label">{tab.label}</span>
-            </button>
-          ))}
-        </nav>
-        <main className="author-panel__content" aria-label={activeTab.label}>
-          {content ?? <Spin size="small" />}
-        </main>
+    <SettingsViewModeProvider value="page">
+      <div className="author-panel">
+        <header className="author-panel__header">
+          <Space size={8}>
+            <Button size="small" icon={<ArrowLeftOutlined />} onClick={onBack}>
+              返回
+            </Button>
+            <div>
+              <Typography.Title level={4}>{activeTab.label}</Typography.Title>
+              <Typography.Text type="secondary">
+                {activeTab.description}
+              </Typography.Text>
+            </div>
+          </Space>
+          <Typography.Text type="secondary" className="author-panel__active-label">
+            工作台配置 / {activeGroupTitle}
+          </Typography.Text>
+        </header>
+        <div className="author-panel__body">
+          <nav className="author-panel__tabs" aria-label="工作台配置导航">
+            {AUTHOR_TAB_GROUPS.map((group) => (
+              <div className="author-panel-tab-group" key={group.title}>
+                <div className="author-panel-tab-group__title">{group.title}</div>
+                {group.items.map((tab) => (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    className={`author-panel-tab${tab.key === pane ? " author-panel-tab--active" : ""}`}
+                    onClick={() => onPaneChange(tab.key)}
+                  >
+                    <span className="author-panel-tab__icon" aria-hidden>
+                      {tab.icon}
+                    </span>
+                    <span className="author-panel-tab__text">
+                      <span className="author-panel-tab__label">{tab.label}</span>
+                      <span className="author-panel-tab__description">{tab.description}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ))}
+          </nav>
+          <main className="author-panel__content" aria-label={activeTab.label}>
+            {content ?? <Spin size="small" />}
+          </main>
+        </div>
       </div>
-    </div>
+    </SettingsViewModeProvider>
   );
 }
 
 function AuthorUnavailable({ label }: { label: string }) {
-  return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={`${label} is not available in this context`} />;
+  return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={`${label} 在当前上下文不可用`} />;
 }

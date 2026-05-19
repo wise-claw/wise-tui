@@ -1,0 +1,115 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { listAssistants } from "../../services/assistants";
+import type { AssistantEntry } from "../../types/assistant";
+import { DEFAULT_PRD_SPLIT_ASSISTANT_ID } from "../../services/assistantPromptLayers";
+import {
+  AssistantConversationView,
+  type AssistantConversationMissionControlProps,
+  type AssistantConversationPrdTaskSplitPanelProps,
+} from "./AssistantConversationView";
+import { AssistantHeader } from "./AssistantHeader";
+import { AssistantHub } from "./AssistantHub";
+import "./index.css";
+
+type CockpitSubMode =
+  | { kind: "hub" }
+  | { kind: "conversation"; assistantId: string };
+
+export interface CockpitSurfaceProps {
+  /** 当前选定的工作区 id;影响 hub 是否启用 PRD-split 助手以及对话 header 显示。 */
+  activeProjectId: string | null;
+  activeProjectName: string | null;
+  /** 是否携带显式入口(项目 FAB / 仓库 FAB)。携带时直接进入对话子态。 */
+  hasInitialTarget: boolean;
+  /** 显式打开助手入口的递增信号;用于同一 cockpit 实例内重复打开。 */
+  openRequestKey: number;
+  /** 透传给现有 MissionControl 内核(Wave B 拆为 ChatPane / ArtifactPane)。 */
+  missionControlProps: AssistantConversationMissionControlProps;
+  /** 透传给现有 PRD 拆分面板,作为需求助手主工作台。 */
+  prdTaskSplitPanelProps: AssistantConversationPrdTaskSplitPanelProps;
+}
+
+/**
+ * Cockpit 主屏壳(D1):管理 `cockpitSubMode` 在 `hub` ↔ `conversation`
+ * 之间切换。不引入新 ViewMode kind(宪法 §3 4-kind 约束)。
+ */
+export function CockpitSurface({
+  activeProjectId,
+  activeProjectName,
+  hasInitialTarget,
+  openRequestKey,
+  missionControlProps,
+  prdTaskSplitPanelProps,
+}: CockpitSurfaceProps) {
+  const [subMode, setSubMode] = useState<CockpitSubMode>(() =>
+    hasInitialTarget
+      ? { kind: "conversation", assistantId: DEFAULT_PRD_SPLIT_ASSISTANT_ID }
+      : { kind: "hub" },
+  );
+  const [assistants, setAssistants] = useState<AssistantEntry[] | null>(null);
+
+  // 拉一次助手列表用于 Header 渲染;失败不致命(Header 退化为简标题)。
+  useEffect(() => {
+    let cancelled = false;
+    listAssistants()
+      .then((rows) => {
+        if (!cancelled) setAssistants(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setAssistants([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 显式入口变更(项目 FAB / 仓库 FAB / 左栏助手)时切换子态。
+  useEffect(() => {
+    if (openRequestKey <= 0) return;
+    setSubMode(
+      hasInitialTarget
+        ? { kind: "conversation", assistantId: DEFAULT_PRD_SPLIT_ASSISTANT_ID }
+        : { kind: "hub" },
+    );
+  }, [hasInitialTarget, openRequestKey]);
+
+  const activeAssistant = useMemo(() => {
+    if (subMode.kind !== "conversation") return null;
+    return assistants?.find((a) => a.id === subMode.assistantId) ?? null;
+  }, [assistants, subMode]);
+
+  const handleSelectAssistant = useCallback((assistantId: string) => {
+    setSubMode({ kind: "conversation", assistantId });
+  }, []);
+
+  const handleBackToHub = useCallback(() => {
+    setSubMode({ kind: "hub" });
+  }, []);
+
+  return (
+    <div className="cockpit-surface">
+      <AssistantHeader
+        assistant={activeAssistant}
+        activeProjectName={activeProjectName}
+        showBackToHub={subMode.kind === "conversation"}
+        onBackToHub={handleBackToHub}
+        onOpenChat={prdTaskSplitPanelProps.onClose}
+      />
+      <div className="cockpit-surface__body">
+        {subMode.kind === "hub" ? (
+          <AssistantHub
+            activeProjectId={activeProjectId}
+            activeProjectName={activeProjectName}
+            onOpenChat={prdTaskSplitPanelProps.onClose}
+            onSelectAssistant={handleSelectAssistant}
+          />
+        ) : (
+          <AssistantConversationView
+            missionControlProps={missionControlProps}
+            prdTaskSplitPanelProps={prdTaskSplitPanelProps}
+          />
+        )}
+      </div>
+    </div>
+  );
+}

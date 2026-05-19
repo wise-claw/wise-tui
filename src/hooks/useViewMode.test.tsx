@@ -45,15 +45,15 @@ function renderProbe() {
 }
 
 describe("useViewMode", () => {
-  test("default view is cockpit (P1: cockpit is the home screen)", () => {
+  test("default view is chat because the main conversation has priority", () => {
     const probe = renderProbe();
-    expect(probe.api.view).toEqual({ kind: "cockpit" });
-    expect(probe.api.isCockpit).toBe(true);
-    expect(probe.api.legacy.missionControlMode).toBe(true);
+    expect(probe.api.view).toEqual({ kind: "chat" });
+    expect(probe.api.isChat).toBe(true);
+    expect(probe.api.legacy.missionControlMode).toBe(false);
     probe.unmount();
   });
 
-  test("enter cockpit then back returns to cockpit (cockpit is the default home)", () => {
+  test("enter cockpit then back returns to chat", () => {
     const probe = renderProbe();
     act(() => {
       probe.api.enter(cockpitView("m1"));
@@ -65,8 +65,7 @@ describe("useViewMode", () => {
     act(() => {
       probe.api.back();
     });
-    // back() always returns to DEFAULT_VIEW_MODE which is cockpit (P1)
-    expect(probe.api.view).toEqual({ kind: "cockpit" });
+    expect(probe.api.view).toEqual({ kind: "chat" });
     probe.unmount();
   });
 
@@ -120,7 +119,9 @@ describe("useViewMode", () => {
 
   test("patch only merges within the same kind", () => {
     const probe = renderProbe();
-    // Default is cockpit; patching cockpit should merge
+    act(() => {
+      probe.api.enter(cockpitView());
+    });
     act(() => {
       probe.api.patch({ kind: "cockpit", missionId: "foo" });
     });

@@ -1,0 +1,582 @@
+.project-trellis-center {
+  min-width: 0;
+  color: var(--mission-text);
+}
+
+.project-trellis-center__inline {
+  min-width: 0;
+}
+
+.project-trellis-center__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  margin-bottom: 8px;
+}
+
+.project-trellis-center__root {
+  max-width: min(560px, 52vw);
+  overflow: hidden;
+  color: var(--mission-dim);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-trellis-center__tabs .ant-tabs-nav {
+  margin-bottom: 10px;
+}
+
+.project-trellis-center__root-alert {
+  margin-bottom: 10px;
+}
+
+.project-trellis-center__loading,
+.project-trellis-center__empty {
+  padding: 28px;
+  text-align: center;
+}
+
+.project-trellis-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.project-trellis-panel-head .ant-typography {
+  margin: 0;
+}
+
+.project-trellis-spec,
+.project-trellis-workflow,
+.project-trellis-runtime,
+.project-trellis-center__runtime {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.project-trellis-spec__body {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+  gap: 10px;
+  align-items: stretch;
+  min-height: min(650px, calc(100vh - 260px));
+}
+
+.project-trellis-spec__tree,
+.project-trellis-spec__editor,
+.project-trellis-workflow__graph,
+.project-trellis-workflow__platforms,
+.project-trellis-runtime__hero,
+.project-trellis-runtime__checks,
+.project-trellis-runtime__event-list {
+  border: 1px solid var(--mission-border);
+  border-radius: 8px;
+  background: var(--mission-surface);
+}
+
+.project-trellis-spec__tree {
+  min-height: 0;
+  padding: 8px;
+  overflow: auto;
+}
+
+.project-trellis-spec__tree .ant-tree {
+  background: transparent;
+  font-size: 12px;
+}
+
+.project-trellis-spec__tree .ant-tree-treenode {
+  width: 100%;
+  min-height: 28px;
+  padding: 0 0 3px;
+}
+
+.project-trellis-spec__tree .ant-tree-node-content-wrapper {
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 2px 6px;
+  overflow: hidden;
+  border-radius: 6px;
+}
+
+.project-trellis-spec__tree .ant-tree-title {
+  display: block;
+  min-width: 0;
+}
+
+.project-trellis-spec__tree .ant-tree-switcher {
+  flex: 0 0 20px;
+  width: 20px;
+  align-self: flex-start;
+  line-height: 28px;
+}
+
+.project-trellis-spec-tree-node {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  width: 100%;
+  height: 24px;
+  gap: 7px;
+  overflow: hidden;
+}
+
+.project-trellis-spec-tree-node > .anticon {
+  flex: 0 0 auto;
+  color: var(--mission-dim);
+  font-size: 13px;
+}
+
+.project-trellis-spec-tree-node__name {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  color: var(--mission-text);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-trellis-spec__editor {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.project-trellis-spec__editor-head {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--mission-border);
+  background: var(--mission-surface-soft);
+}
+
+.project-trellis-spec__editor-head > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 3px;
+}
+
+.project-trellis-spec__editor-head .ant-typography {
+  margin: 0;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-trellis-spec__markdown-editor.ant-input {
+  flex: 1 1 auto;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--mission-surface) 96%, var(--mission-accent) 4%);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.58;
+  resize: none;
+}
+
+.project-trellis-spec__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--mission-border);
+  border-radius: 8px;
+  background: var(--mission-surface);
+}
+
+.project-trellis-workflow__graph {
+  display: flex;
+  flex-direction: column;
+  min-height: min(720px, calc(100vh - 190px));
+  padding: 0;
+  overflow: hidden;
+}
+
+.project-trellis-flow {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background:
+    linear-gradient(var(--mission-surface-soft), var(--mission-surface-soft)) padding-box,
+    radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--mission-text) 14%, transparent) 1px, transparent 0) border-box;
+  background-size: auto, 18px 18px;
+}
+
+.project-trellis-flow__phasebar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.project-trellis-flow-phase {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--mission-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--mission-surface) 92%, var(--mission-accent) 8%);
+  color: var(--mission-text);
+  font-size: 12px;
+}
+
+.project-trellis-flow-phase strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-trellis-flow-phase span {
+  flex: 0 0 auto;
+  color: var(--mission-dim);
+  font-size: 11px;
+}
+
+.project-trellis-flow-lane {
+  width: 100%;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--mission-border) 82%, var(--mission-accent) 18%);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--mission-surface) 90%, transparent);
+}
+
+.project-trellis-flow-lane__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 22px;
+  margin-bottom: 8px;
+}
+
+.project-trellis-flow-lane__head .ant-typography {
+  margin: 0;
+  font-size: 12px;
+}
+
+.project-trellis-flow-lane__track {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  align-items: stretch;
+}
+
+.project-trellis-flow-lane__step {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.project-trellis-flow-lane__step:last-child {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.project-trellis-flow-card {
+  display: flex;
+  min-width: 0;
+  min-height: 172px;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid var(--mission-border);
+  border-radius: 8px;
+  background: var(--mission-surface);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+}
+
+.project-trellis-flow-card--active {
+  border-color: var(--mission-accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--mission-accent) 30%, transparent);
+}
+
+.project-trellis-flow-card__top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.project-trellis-flow-card__top > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.project-trellis-flow-card__top .ant-typography {
+  margin: 0;
+  overflow: hidden;
+  color: var(--mission-text);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-trellis-flow-card__top span {
+  overflow: hidden;
+  color: var(--mission-dim);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-trellis-flow-card__desc.ant-typography {
+  min-height: 42px;
+  margin: 0;
+  color: var(--mission-text);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.project-trellis-flow-card__status {
+  display: flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 4px 7px;
+  border-radius: 6px;
+  background: var(--mission-surface-soft);
+  color: var(--mission-dim);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+}
+
+.project-trellis-flow-card__status span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-trellis-flow-card__files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: auto;
+}
+
+.project-trellis-flow-card__files .ant-tag {
+  max-width: 100%;
+  margin-inline-end: 0;
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+}
+
+.project-trellis-flow-arrow {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--mission-border);
+  border-radius: 50%;
+  background: var(--mission-surface);
+  color: var(--mission-accent);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.project-trellis-flow-connector {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+}
+
+.project-trellis-flow-connector span {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--mission-border);
+  border-radius: 50%;
+  background: var(--mission-surface);
+  color: var(--mission-accent);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.project-trellis-workflow__platforms {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.project-trellis-workflow__path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+}
+
+.project-trellis-runtime__hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 16px;
+}
+
+.project-trellis-runtime__hero .ant-typography {
+  margin: 0;
+}
+
+.project-trellis-runtime__hero .ant-typography-secondary {
+  display: block;
+  margin-top: 4px;
+  max-width: 640px;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.project-trellis-runtime__metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.project-trellis-runtime-metric {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 8px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--mission-border);
+  border-radius: 8px;
+  background: var(--mission-surface);
+}
+
+.project-trellis-runtime-metric > span {
+  grid-row: 1 / span 2;
+  color: var(--mission-accent);
+  font-size: 18px;
+}
+
+.project-trellis-runtime-metric small {
+  color: var(--mission-muted);
+  font-size: 11px;
+}
+
+.project-trellis-runtime-metric strong {
+  overflow: hidden;
+  color: var(--mission-text);
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-trellis-runtime__checks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+}
+
+.project-trellis-runtime-check {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 9px;
+  border-radius: 7px;
+  background: var(--mission-surface-soft);
+}
+
+.project-trellis-runtime-check > .anticon {
+  margin-top: 2px;
+  color: var(--mission-success);
+}
+
+.project-trellis-runtime-check--fail > .anticon {
+  color: var(--mission-error);
+}
+
+.project-trellis-runtime-check .ant-typography {
+  display: block;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.project-trellis-runtime__event-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+}
+
+.project-trellis-runtime-event {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px;
+  border-radius: 7px;
+  background: var(--mission-surface-soft);
+}
+
+.project-trellis-runtime-event > .anticon {
+  margin-top: 2px;
+  color: var(--mission-accent);
+}
+
+.project-trellis-runtime-event .ant-typography {
+  display: block;
+  margin: 0;
+  font-size: 12px;
+}
+
+@media (max-width: 1200px) {
+}
+
+@media (max-width: 800px) {
+  .project-trellis-center__toolbar {
+    justify-content: flex-start;
+  }
+  .project-trellis-center__root {
+    max-width: 100%;
+  }
+  .project-trellis-spec__body {
+    grid-template-columns: 1fr;
+  }
+  .project-trellis-spec__tree {
+    height: 220px;
+  }
+  .project-trellis-spec__editor {
+    height: 460px;
+  }
+  .project-trellis-spec__footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

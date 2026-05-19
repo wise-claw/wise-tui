@@ -3,28 +3,14 @@ import type { MenuProps } from "antd";
 import { lazy } from "react";
 import type { ClipboardEvent, RefObject } from "react";
 import type { MilkdownEditorHandle, MilkdownTaskAnchor } from "../MilkdownViewer";
+import type { AssistantBundleItem } from "../../services/assistantPromptLayers";
+import type { AssistantWorkflowRef } from "../../types/assistant";
+import type { LegacyRunSummary } from "../../services/prdSplit/legacyRunsImport";
 import { RequirementBoardActions } from "./RequirementBoardActions";
-import { RequirementBoardHeader } from "./RequirementBoardHeader";
-import { InlineRuntimePanel } from "./InlineRuntimePanel";
-import type { SplitRetryPhase, SplitRuntimeLogItem } from "./types";
 
 const MilkdownEditor = lazy(() => import("../MilkdownViewer").then((module) => ({ default: module.MilkdownEditor })));
 
-interface RequirementOption {
-  id: string;
-  requirementDisplayName: string;
-  isPinned?: boolean;
-}
-
-interface ActiveRequirementSummary {
-  requirementDisplayName: string;
-  isPinned?: boolean;
-}
-
 interface Props {
-  activeRequirementId: string | null;
-  activeRequirement: ActiveRequirementSummary | null;
-  options: RequirementOption[];
   inputValue: string;
   inputError: string | null;
   showUrlAnchorHint: boolean;
@@ -32,36 +18,31 @@ interface Props {
   parsing: boolean;
   splitStarting: boolean;
   promptActionItems: MenuProps["items"];
+  assistantRuntimeLoading: boolean;
+  assistantWorkflowOptions: AssistantWorkflowRef[];
+  assistantMcpOptions: AssistantBundleItem[];
+  assistantSelectedMcpIds: string[];
+  assistantHistoryOptions: LegacyRunSummary[];
+  assistantHistoryLoading: boolean;
   editorRef: RefObject<MilkdownEditorHandle | null>;
   editorShellRef: RefObject<HTMLDivElement | null>;
   taskAnchors: MilkdownTaskAnchor[] | undefined;
   selectedAnchorTaskId: string | null;
   filteredTaskCount: number;
-  splitRuntimeVisible: boolean;
-  splitRuntimeRef: RefObject<HTMLDivElement | null>;
-  splitRuntimeListRef: RefObject<HTMLDivElement | null>;
-  splitRuntimeLogs: SplitRuntimeLogItem[];
-  retryingPhase: SplitRetryPhase | null;
   onInputChange: (value: string) => void;
-  onPickRequirement: (value: string) => void;
-  onPinRequirement: () => void;
-  onCreateRequirement: () => void;
-  onDeleteRequirement: () => void;
   onPasteImage: (event: ClipboardEvent<HTMLDivElement>) => void;
   onSplitSelection: () => void;
   onResolvedTaskAnchorIdsChange: (taskIds: string[]) => void;
   onTaskAnchorRangesChange: (ranges: Record<string, { from: number; to: number }>) => void;
   onTaskAnchorMarkerClick: (taskId: string) => void;
-  onCloseRuntimePanel: () => void;
-  onRetryStage: (phase: SplitRetryPhase) => void;
   onSaveDraft: () => void;
   onStartSplit: () => void;
+  onImportPrdFile: () => void;
+  onImportLegacyPrd: (summary: LegacyRunSummary) => void;
+  onAssistantMcpsChange: (ids: string[]) => void;
 }
 
 export function RequirementInputCard({
-  activeRequirementId,
-  activeRequirement,
-  options,
   inputValue,
   inputError,
   showUrlAnchorHint,
@@ -69,45 +50,33 @@ export function RequirementInputCard({
   parsing,
   splitStarting,
   promptActionItems,
+  assistantRuntimeLoading,
+  assistantWorkflowOptions,
+  assistantMcpOptions,
+  assistantSelectedMcpIds,
+  assistantHistoryOptions,
+  assistantHistoryLoading,
   editorRef,
   editorShellRef,
   taskAnchors,
   selectedAnchorTaskId,
   filteredTaskCount,
-  splitRuntimeVisible,
-  splitRuntimeRef,
-  splitRuntimeListRef,
-  splitRuntimeLogs,
-  retryingPhase,
   onInputChange,
-  onPickRequirement,
-  onPinRequirement,
-  onCreateRequirement,
-  onDeleteRequirement,
   onPasteImage,
   onSplitSelection,
   onResolvedTaskAnchorIdsChange,
   onTaskAnchorRangesChange,
   onTaskAnchorMarkerClick,
-  onCloseRuntimePanel,
-  onRetryStage,
   onSaveDraft,
   onStartSplit,
+  onImportPrdFile,
+  onImportLegacyPrd,
+  onAssistantMcpsChange,
 }: Props) {
   return (
     <Card
       size="small"
-      title={(
-        <RequirementBoardHeader
-          activeRequirementId={activeRequirementId}
-          activeRequirement={activeRequirement}
-          options={options}
-          onPick={onPickRequirement}
-          onPin={onPinRequirement}
-          onCreate={onCreateRequirement}
-          onDelete={onDeleteRequirement}
-        />
-      )}
+      title={<span className="app-prd-task-panel__assistant-input-title">PRD 输入</span>}
       className="app-prd-task-panel__left-card"
       bodyStyle={{ padding: "0 0 16px 0" }}
     >
@@ -133,16 +102,6 @@ export function RequirementInputCard({
             onTaskAnchorRangesChange={onTaskAnchorRangesChange}
             onTaskAnchorMarkerClick={onTaskAnchorMarkerClick}
           />
-          <InlineRuntimePanel
-            visible={splitRuntimeVisible}
-            parsing={parsing}
-            containerRef={splitRuntimeRef}
-            listRef={splitRuntimeListRef}
-            logs={splitRuntimeLogs}
-            retryingPhase={retryingPhase}
-            onClose={onCloseRuntimePanel}
-            onRetryStage={onRetryStage}
-          />
         </div>
         {inputError ? <Typography.Text type="danger">{inputError}</Typography.Text> : null}
         {showUrlAnchorHint ? (
@@ -155,8 +114,17 @@ export function RequirementInputCard({
           parsing={parsing}
           splitStarting={splitStarting}
           promptActionItems={promptActionItems}
+          assistantRuntimeLoading={assistantRuntimeLoading}
+          assistantWorkflowOptions={assistantWorkflowOptions}
+          assistantMcpOptions={assistantMcpOptions}
+          assistantSelectedMcpIds={assistantSelectedMcpIds}
+          assistantHistoryOptions={assistantHistoryOptions}
+          assistantHistoryLoading={assistantHistoryLoading}
           onSaveDraft={onSaveDraft}
           onStartSplit={onStartSplit}
+          onImportPrdFile={onImportPrdFile}
+          onImportLegacyPrd={onImportLegacyPrd}
+          onAssistantMcpsChange={onAssistantMcpsChange}
         />
       </Space>
     </Card>

@@ -4,6 +4,22 @@
 
 ---
 
+## Quick Reference
+
+`agent-harness-architecture.md` is the **product constitution**. Update it
+**before** changing any of:
+
+- Top-level layout (Cockpit / Chat / Author / Inspector domains).
+- The `ViewMode` discriminated union or the hooks/components driving it.
+- The Trellis ↔ Mission double-write contract (`mission_*` tables vs
+  `trellis_agent_runs` / `trellis_runtime_events` / `trellis_spec_revisions`).
+- Workspace vs Standalone Repo product semantics.
+
+If your change does not touch any of those, scan the matching topical guide
+below instead.
+
+---
+
 ## Why Thinking Guides?
 
 **Most bugs and tech debt come from "didn't think of that"**, not from lack of skill:

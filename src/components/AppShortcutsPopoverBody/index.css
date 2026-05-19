@@ -1,8 +1,117 @@
-/* 与全局 `.app-shortcuts-popover__*` 配合：Popover 内更紧凑 */
+.app-shortcuts-popover {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.app-shortcuts-popover__intro.ant-typography {
+  margin: 0;
+}
+
+.app-shortcuts-popover__scope-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.app-shortcuts-popover__scope-strip span {
+  min-width: 0;
+  min-height: 78px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-shortcuts-popover__scope-strip strong {
+  color: var(--ant-color-text);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.app-shortcuts-popover__scope-strip em,
+.app-shortcuts-popover__scope-strip small {
+  display: block;
+  min-width: 0;
+}
+
+.app-shortcuts-popover__scope-strip em {
+  color: var(--ant-color-primary);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.app-shortcuts-popover__scope-strip small {
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.app-shortcuts-popover__groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.app-shortcuts-popover__group {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
+}
+
 .app-shortcuts-popover--compact .app-shortcuts-popover__intro {
   font-size: 11px;
   line-height: 1.45;
   margin-bottom: 8px;
+}
+
+.app-shortcuts-popover--compact .app-shortcuts-popover__scope-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.app-shortcuts-popover--compact .app-shortcuts-popover__scope-strip span {
+  min-height: 20px;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  padding-inline: 6px;
+  border-radius: 999px;
+  font-size: 10px;
+}
+
+.app-shortcuts-popover--compact .app-shortcuts-popover__scope-strip strong {
+  font-size: 10px;
+}
+
+.app-shortcuts-popover--compact .app-shortcuts-popover__scope-strip em {
+  margin-left: 2px;
+  font-size: 10px;
+}
+
+.app-shortcuts-popover--compact .app-shortcuts-popover__scope-strip small {
+  display: none;
+}
+
+.app-shortcuts-popover--compact .app-shortcuts-popover__groups {
+  display: block;
+}
+
+.app-shortcuts-popover--compact .app-shortcuts-popover__group {
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .app-shortcuts-popover--compact .app-shortcuts-popover__group + .app-shortcuts-popover__group {
@@ -33,4 +142,50 @@
 
 .app-shortcuts-popover--compact .app-shortcuts-popover__desc {
   color: var(--ant-color-text-secondary);
+}
+
+.app-shortcuts-popover--page .app-shortcuts-popover__intro {
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.app-shortcuts-popover--page .app-shortcuts-popover__section-title {
+  margin-bottom: 8px;
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.app-shortcuts-popover--page .app-shortcuts-popover__row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(120px, auto) minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 8px 0;
+  border-top: 1px solid var(--ant-color-border-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.app-shortcuts-popover--page .app-shortcuts-popover__kbd {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.app-shortcuts-popover--page .app-shortcuts-popover__desc {
+  min-width: 0;
+  color: var(--ant-color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .app-shortcuts-popover__scope-strip,
+  .app-shortcuts-popover__groups {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shortcuts-popover--page .app-shortcuts-popover__row {
+    grid-template-columns: 1fr;
+  }
 }

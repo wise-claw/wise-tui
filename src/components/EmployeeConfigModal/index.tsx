@@ -1,5 +1,13 @@
+import {
+  BranchesOutlined,
+  CheckCircleOutlined,
+  CrownOutlined,
+  ExclamationCircleOutlined,
+  TeamOutlined,
+  ThunderboltOutlined,
+} from "@ant-design/icons";
 import { App, Button, Form, Input, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Typography } from "antd";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { EmployeeItem, Repository, WorkflowGraph, WorkflowTemplateItem } from "../../types";
 import { collectTeamMemberEmployeeIds } from "../../utils/collectTeamMemberEmployeeIds";
 import { repositoryFolderBasename } from "../../utils/repositoryType";
@@ -38,18 +46,18 @@ interface Props {
   agentTypeOptions: string[];
   defaultRepositoryIds?: number[];
   /**
-   * 为 true 时（例如从需求面板按 Workspace 打开）：表格中隐藏「关联仓库全部属于 defaultRepositoryIds」的员工
+   * 为 true 时（例如从需求面板按 Workspace 打开）：表格中隐藏「关联仓库全部属于 defaultRepositoryIds」的角色
    *（典型为各仓下创建的配置）；`alwaysShowEmployeeIds` 中的 id 仍会显示（如 Workspace 需求面板显式关联的成员）。
    */
   hideEmployeesAssociatedOnlyWithDefaultRepositories?: boolean;
-  /** 在启用上一项过滤时，始终保留在表格中的员工 id（如 project_prd 关联）。 */
+  /** 在启用上一项过滤时，始终保留在表格中的角色 id（如 project_prd 关联）。 */
   alwaysShowEmployeeIds?: string[];
   /**
    * 从侧栏「仓库」打开：与需求面板相同展示 Owner 列与「仓库」表单项，但不关联 project_prd。
    * 须与 `hideEmployeesAssociatedOnlyWithDefaultRepositories` 同时为 true 以启用 Workspace 级表格过滤与 Owner UI。
    */
   repositoryOwnerScopeOnly?: boolean;
-  /** 新建员工时默认「员工名称」（侧栏仓库流程下为仓库目录名）。 */
+  /** 新建角色时默认「角色名称」（侧栏仓库流程下为仓库目录名）。 */
   initialCreateEmployeeName?: string | null;
   /**
    * 从 Workspace 上下文打开时传入单一 project id：自动归属该 Workspace 且隐藏「所属 Workspace」字段，避免用户误操作。
@@ -62,7 +70,7 @@ interface Props {
     enabled: boolean;
     repositoryIds: number[];
     projectIds?: string[];
-    /** 创建后把该仓 `mainOwnerAgentName` 设为员工的 `agentType` */
+    /** 创建后把该仓 `mainOwnerAgentName` 设为角色的 `agentType` */
     ownerRepositoryId?: number | null;
   }) => Promise<void>;
   onUpdate: (input: { employeeId: string; name: string; agentType: string; enabled: boolean; repositoryIds: number[]; projectIds?: string[] }) => Promise<void>;
@@ -160,6 +168,37 @@ export function EmployeeConfigModal({
         agentName: g.agentName,
       }));
   }, [projectOwnerPickMode, repositories, employees, defaultRepositoryIds]);
+
+  const scopedRepositoryIds = useMemo(
+    () => (defaultRepositoryIds.length > 0 ? defaultRepositoryIds : repositories.map((repository) => repository.id)),
+    [defaultRepositoryIds, repositories],
+  );
+  const scopedRepositoryIdSet = useMemo(() => new Set(scopedRepositoryIds), [scopedRepositoryIds]);
+  const scopedRepositories = useMemo(
+    () => repositories.filter((repository) => scopedRepositoryIdSet.has(repository.id)),
+    [repositories, scopedRepositoryIdSet],
+  );
+  const enabledEmployees = useMemo(
+    () => employees.filter((employee) => employee.enabled),
+    [employees],
+  );
+  const activeTeamMemberCount = useMemo(
+    () => enabledEmployees.filter((employee) => teamEmployeeIds.has(employee.id)).length,
+    [enabledEmployees, teamEmployeeIds],
+  );
+  const scopedOwnerGapCount = useMemo(
+    () => listRepositoryMainOwnerDisplayGaps(scopedRepositories, employees).length,
+    [scopedRepositories, employees],
+  );
+  const scopedOwnerConfiguredCount = useMemo(
+    () => scopedRepositories.filter((repository) => repository.mainOwnerAgentName?.trim()).length,
+    [scopedRepositories],
+  );
+  const workflowStageCount = useMemo(
+    () => workflowTemplates.reduce((total, template) => total + template.stages.length, 0),
+    [workflowTemplates],
+  );
+  const disabledEmployeeCount = employees.length - enabledEmployees.length;
 
   const tableDataSource = useMemo(
     (): EmployeeConfigTableRow[] => [...tableEmployees, ...repoOwnerGapRows],
@@ -262,6 +301,64 @@ export function EmployeeConfigModal({
 
   const content = (
     <Space orientation="vertical" size={10} className="app-employee-config-modal">
+        <section className="app-employee-config-hero" aria-label="智能体角色控制台">
+          <div>
+            <Typography.Text className="app-employee-config-hero__eyebrow">
+              智能体角色供给
+            </Typography.Text>
+            <Typography.Title level={4} className="app-employee-config-hero__title">
+              智能体角色控制台
+            </Typography.Title>
+            <Typography.Paragraph className="app-employee-config-hero__subtitle">
+              集中管理可被负责人委派的智能体角色、仓库主 Owner 和委派协议成员。原有员工配置能力保留，
+              但统一收敛成角色供给层。
+            </Typography.Paragraph>
+          </div>
+          <div className="app-employee-config-hero__meter">
+            <strong>{enabledEmployees.length}/{employees.length}</strong>
+            <span>可用角色</span>
+          </div>
+        </section>
+
+        <div className="app-employee-config-summary" aria-label="智能体角色状态">
+          <TeamRoleMetric icon={<TeamOutlined />} label="启用角色" value={enabledEmployees.length} />
+          <TeamRoleMetric icon={<BranchesOutlined />} label="参与委派协议" value={activeTeamMemberCount} />
+          <TeamRoleMetric icon={<CrownOutlined />} label="仓库 Owner" value={scopedOwnerConfiguredCount} />
+          <TeamRoleMetric
+            icon={scopedOwnerGapCount > 0 || disabledEmployeeCount > 0 ? <ExclamationCircleOutlined /> : <CheckCircleOutlined />}
+            label="待处理项"
+            value={scopedOwnerGapCount + disabledEmployeeCount}
+            tone={scopedOwnerGapCount > 0 || disabledEmployeeCount > 0 ? "danger" : "default"}
+          />
+        </div>
+
+        <div className="app-employee-config-map" aria-label="智能体角色供给闭环">
+          <TeamRoleSupplyItem
+            icon={<TeamOutlined />}
+            title="角色供给"
+            status="可编辑"
+            description={`${employees.length} 个角色集中管理；名称、启用态、关联仓库和 Workspace 归属保留原有配置能力`}
+          />
+          <TeamRoleSupplyItem
+            icon={<ThunderboltOutlined />}
+            title="执行引擎"
+            status="已绑定"
+            description={`${agentTypeOptions.length} 个可选智能体名称；角色通过智能体名称绑定 Claude、Codex 或自定义命令`}
+          />
+          <TeamRoleSupplyItem
+            icon={<CrownOutlined />}
+            title="共享工作区"
+            status="Owner"
+            description={`${scopedRepositories.length} 个仓库在当前作用域内；Owner 决定默认主执行角色，缺口会显式标出`}
+          />
+          <TeamRoleSupplyItem
+            icon={<BranchesOutlined />}
+            title="委派分发"
+            status="协议驱动"
+            description={`${workflowTemplates.length} 个模板 · ${workflowStageCount} 个阶段；委派协议负责把阶段派发给角色`}
+          />
+        </div>
+
         <Form
           form={form}
           layout="inline"
@@ -284,13 +381,13 @@ export function EmployeeConfigModal({
             }`}
           >
             <div className="app-employee-config-field">
-              <div className="app-employee-config-field-label">员工名称</div>
+              <div className="app-employee-config-field-label">角色名称</div>
               <Form.Item
                 name="name"
-                rules={[{ required: true, message: "请输入员工名称" }]}
+                rules={[{ required: true, message: "请输入角色名称" }]}
                 className="app-employee-config-item app-employee-config-item--name"
               >
-                <Input placeholder="员工名称" allowClear />
+                <Input placeholder="Agent 角色名称" allowClear />
               </Form.Item>
             </div>
             <div className="app-employee-config-field">
@@ -352,7 +449,7 @@ export function EmployeeConfigModal({
             ) : null}
             {projectOwnerPickMode && !editingEmployee && !singleOwnerRepositoryId ? (
               <div className="app-employee-config-field">
-                <div className="app-employee-config-field-label" title="作为该仓唯一主 Owner 的新员工将关联此仓库">
+                <div className="app-employee-config-field-label" title="作为该仓唯一主 Owner 的新角色将关联此仓库">
                   仓库
                 </div>
                 <Form.Item
@@ -381,7 +478,7 @@ export function EmployeeConfigModal({
             ) : null}
             <div className="app-employee-config-actions">
               <Button size="small" type="primary" loading={loading} onClick={() => void handleSubmit()}>
-                {editingEmployee ? "保存编辑" : "新增员工"}
+                {editingEmployee ? "保存角色" : "新增角色"}
               </Button>
               {editingEmployee ? <Button size="small" onClick={handleCreateClick}>取消编辑</Button> : null}
             </div>
@@ -396,7 +493,7 @@ export function EmployeeConfigModal({
           className="app-employee-config-table"
           columns={[
             {
-              title: "姓名",
+              title: "角色",
               key: "name",
               render: (_, row) => {
                 if (isRepoOwnerGapRow(row)) {
@@ -445,11 +542,11 @@ export function EmployeeConfigModal({
                 ]
               : []),
             {
-              title: "团队成员",
+              title: "编排状态",
               key: "teamMember",
               render: (_, row) => {
                 if (isRepoOwnerGapRow(row)) return "—";
-                return teamEmployeeIds.has(row.id) ? <Tag color="processing">是</Tag> : <Tag>否</Tag>;
+                return teamEmployeeIds.has(row.id) ? <Tag color="processing">已编排</Tag> : <Tag>待编排</Tag>;
               },
             },
             {
@@ -483,8 +580,8 @@ export function EmployeeConfigModal({
               render: (_, row) => {
                 if (isRepoOwnerGapRow(row)) {
                   return (
-                    <Typography.Text type="secondary" style={{ fontSize: 11 }} ellipsis={{ tooltip: "在侧栏进入单个仓库后打开员工配置，可为员工关联仓库" }}>
-                      在单仓员工配置中关联仓库
+                    <Typography.Text type="secondary" style={{ fontSize: 11 }} ellipsis={{ tooltip: "在侧栏进入单个仓库后打开智能体角色，可为角色关联仓库" }}>
+                      在单仓智能体角色中关联仓库
                     </Typography.Text>
                   );
                 }
@@ -506,7 +603,7 @@ export function EmployeeConfigModal({
                       编辑
                     </Button>
                     <Popconfirm
-                      title="确认删除该员工？"
+                      title="确认删除该角色？"
                       onConfirm={() => onDelete(row.id)}
                       okText="删除"
                       cancelText="取消"
@@ -524,12 +621,12 @@ export function EmployeeConfigModal({
         {hideEmployeesAssociatedOnlyWithDefaultRepositories && defaultRepositoryIds.length > 0
         && !repositoryOwnerScopeOnly ? (
           <Typography.Text type="secondary" className="app-employee-config-footnote">
-            已从本表隐藏「仅关联当前 Workspace 内仓库」的员工（一般为各仓侧创建的配置）；Workspace 需求面板显式关联的成员、以及在本 Workspace 内仓上配置为主 Owner 的员工仍会显示。若某仓仅在仓库侧配置了主 Owner、且尚未与任何员工关联，将以「仅仓库」行展示。在侧栏进入单个仓库打开员工配置可查看与编辑全部员工。
+            已从本表隐藏「仅关联当前 Workspace 内仓库」的角色（一般为各仓侧创建的配置）；Workspace 需求面板显式关联的成员、以及在本 Workspace 内仓上配置为主 Owner 的角色仍会显示。若某仓仅在仓库侧配置了主 Owner、且尚未与任何角色关联，将以「仅仓库」行展示。在侧栏进入单个仓库打开智能体角色可查看与编辑全部角色。
           </Typography.Text>
         ) : null}
         {repositoryOwnerScopeOnly && defaultRepositoryIds.length > 0 ? (
           <Typography.Text type="secondary" className="app-employee-config-footnote">
-            从侧栏仓库打开：新建时默认员工名称为该仓库目录名；保存后会自动勾选本仓库并写入仓库主 Owner，表格中「Owner 标识」列与 Workspace 需求面板规则一致。
+            从侧栏仓库打开：新建时默认角色名称为该仓库目录名；保存后会自动勾选本仓库并写入仓库主 Owner，表格中「Owner 标识」列与 Workspace 需求面板规则一致。
           </Typography.Text>
         ) : null}
     </Space>
@@ -542,7 +639,7 @@ export function EmployeeConfigModal({
 
   return (
     <Modal
-      title="员工配置"
+      title="智能体角色"
       open={open}
       onCancel={onClose}
       footer={null}
@@ -552,5 +649,50 @@ export function EmployeeConfigModal({
     >
       {content}
     </Modal>
+  );
+}
+
+interface TeamRoleMetricProps {
+  icon: ReactNode;
+  label: string;
+  value: number;
+  tone?: "default" | "danger";
+}
+
+function TeamRoleMetric({ icon, label, value, tone = "default" }: TeamRoleMetricProps) {
+  return (
+    <div className={`app-employee-config-metric${tone === "danger" ? " app-employee-config-metric--danger" : ""}`}>
+      <span className="app-employee-config-metric__icon" aria-hidden>
+        {icon}
+      </span>
+      <span>
+        <strong>{value}</strong>
+        <small>{label}</small>
+      </span>
+    </div>
+  );
+}
+
+interface TeamRoleSupplyItemProps {
+  icon: ReactNode;
+  title: string;
+  status: string;
+  description: string;
+}
+
+function TeamRoleSupplyItem({ icon, title, status, description }: TeamRoleSupplyItemProps) {
+  return (
+    <div className="app-employee-config-supply">
+      <span className="app-employee-config-supply__icon" aria-hidden>
+        {icon}
+      </span>
+      <span>
+        <span className="app-employee-config-supply__head">
+          <strong>{title}</strong>
+          <Tag color="processing">{status}</Tag>
+        </span>
+        <small>{description}</small>
+      </span>
+    </div>
   );
 }

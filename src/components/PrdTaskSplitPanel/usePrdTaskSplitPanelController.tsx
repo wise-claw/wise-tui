@@ -1,6 +1,8 @@
 import { SettingOutlined } from "@ant-design/icons";
 import { App as AntdApp, Modal } from "antd";
 import type { MenuProps } from "antd";
+import { open } from "@tauri-apps/plugin-dialog";
+import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   PrdDocument,
@@ -14,10 +16,8 @@ import type {
   TaskSize,
   TaskSplitContext,
 } from "../../types";
-import {
-  defaultTaskRoleForRepositoryType,
-  repositoryFolderBasename,
-} from "../../utils/repositoryType";
+import type { AssistantWorkflowRef } from "../../types/assistant";
+import { defaultTaskRoleForRepositoryType } from "../../utils/repositoryType";
 import { usePrdInput } from "../../hooks/usePrdInput";
 import type { MilkdownEditorHandle, MilkdownTaskAnchor } from "../MilkdownViewer";
 import { fetchPrdFromUrl } from "../../services/prdUrlFetcher";
@@ -37,18 +37,11 @@ import {
 } from "../../services/prdTaskSplitStore";
 import { allSplitResultTaskItems } from "../../services/splitResultModel";
 import {
-  appendWiseRelativeFile,
   materializePrdSnapshot,
-  readProjectRelativeFile,
   readSnapshotFile,
 } from "../../services/materializePrdSnapshot";
-import { buildSplitRequestPayload, logSplitInputPrepareBundle } from "../../services/buildSplitRequestPayload";
+import { logSplitInputPrepareBundle } from "../../services/buildSplitRequestPayload";
 import { listPrdRequirementIndexEntries } from "../../services/prdRequirementIndex";
-import {
-  extractSplitMappingFromClaudeOutput,
-  mergeSplitMappingPayloadsIntoSplitResult,
-  parseSplitMappingJson,
-} from "../../services/splitMappingMerge";
 import { parsePrdInput } from "../../services/prdSource";
 import { savePrdPastedImage } from "../../services/savePrdPastedImage";
 import { validateSplitResult } from "../../services/taskSplitValidator";
@@ -57,17 +50,23 @@ import {
   PROMPT_SLOT_PRD_TASK_SPLIT_PHASE2,
   parsePromptStorageRaw,
 } from "../../services/splitPromptBundle";
-import {
-  normalizeClaudeSplitOutputToSplitResult,
-  validateClaudeSplitPayloadStrict,
-} from "../../services/claudeSplitOutputNormalize";
 import { prdDocumentToSplitMarkdown } from "../../services/prdDocumentMarkdown";
 import { resolveEffectiveSplitPromptTemplate } from "../../services/resolveSplitPromptLayers";
 import {
-  buildSplitPhase1PromptMessage,
-  buildSplitPhase2PromptMessage,
-  renderSplitPromptTemplate,
-} from "../../services/splitPromptTemplate";
+  buildAssistantRuntimeBundleJson,
+  DEFAULT_PRD_SPLIT_ASSISTANT_ID,
+  parseAssistantRuntimeBundle,
+  resolveAssistantRuntime,
+  saveAssistantRuntimeOverrides,
+  type AssistantBundleItem,
+} from "../../services/assistantPromptLayers";
+import { listMcpServers } from "../../services/mcp";
+import { listAssistants } from "../../services/assistants";
+import {
+  listLegacyRuns,
+  readLegacyRun,
+  type LegacyRunSummary,
+} from "../../services/prdSplit/legacyRunsImport";
 import {
   buildRepoAwarePromptSection,
   buildSyntheticSplitResultForRepoPrompt,
@@ -77,49 +76,45 @@ import {
   loadRepositorySplitPromptLayers,
   saveRepositorySplitPromptLayers,
 } from "../../services/splitPromptLayersStore";
-import { explainClaudeSplitExitCode, runPrdSplitClaude } from "../../services/claudeSplitExecutor";
+import { buildRequirementsIndexJsonForSnapshot } from "../../services/prdRequirementIndex";
+import {
+  createParentTask,
+  renderParentPrd,
+  writeClusterTasks,
+  type ClusterRef,
+} from "../../services/prdSplit/trellisWriter";
+import { runPrdSplitSubagentWorkflow } from "../../services/prdSplit/subagentWorkflow";
+import { runPrdSplitClaude } from "../../services/claudeSplitExecutor";
 import {
   TASK_AI_DEFAULT_PROMPT_BY_MODE,
   anchorLabelFromTaskId,
-  buildExecutableTaskCopiesFromSplitSources,
   buildSelectionAnchorTextHash,
-  buildSnapshotAbsoluteDisplayPath,
-  clipRuntimeLogText,
   createRequirementHistoryId,
   defaultTaskConfirmFilterByTasks,
   dirnameFromAbsolutePath,
   estimateDaysFromSize,
-  formatClaudeRuntimeSessionInfo,
   includesLoosely,
-  mergeSplitResultsByAppend,
-  parseClaudeRuntimeSessionInfo,
   parseTaskMarkdownDraft,
   parseTaskNumericOrdinal,
   pickMostRelevantRequirementId,
-  remapAnchorRangeFromMarkdownToVisible,
-  remapSplitResultAnchorOffsetsFromMarkdown,
   sameApiSpec,
   stripEmbeddedTaskAnchorsFromRequirementMarkdown,
-  stripRequirementsIndexSection,
-  stripSectionByHeading,
   taskToMarkdown,
   toErrorMessage,
   type TaskAiMode,
   type TaskConfirmFilter,
 } from "./helpers";
 import { sameStringArray } from "../../utils/anchorStability";
-import { WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED } from "../../constants/workflowUiEvents";
 import type {
   RequirementEntry,
   RequirementNameModalMode,
-  SplitApplyMode,
   SplitPromptDraftBySlot,
   SplitQualitySummary,
   SplitWizardStep,
   TaskRoleFilter,
 } from "./types";
 import { useSplitRuntimePanel } from "./useSplitRuntimePanel";
-import { inspectTaskAnchorFormatIssues, summarizeSplitQuality } from "./splitExecutionQuality";
+import { summarizeSplitQuality } from "./splitExecutionQuality";
 
 export interface PrdTaskSplitPanelControllerInput {
   onClose: () => void;
@@ -132,28 +127,29 @@ export interface PrdTaskSplitPanelControllerInput {
 const TASK_LIST_BUTTON_SELECTOR = '[data-ui-anchor="session-task-list-btn"]';
 export const TASK_SPLIT_CLOSE_ANIMATION_MS = 420;
 
-const FALLBACK_CLAUDE_SPLIT_SYSTEM_INSTRUCTION = [
-  "硬性要求：",
-  "- 输出必须从第一字节开始就是 JSON 对象，禁止 markdown 代码围栏、解释文字、前后缀。",
-  "- 字段名与枚举必须严格遵循 OUTPUT_SCHEMA.json。",
-  "- 若信息不足，必须在缺口字段中显式说明，不得猜测补全。",
-].join("\n");
-
-const FALLBACK_CLAUDE_SPLIT_OUTPUT_SCHEMA_JSON = JSON.stringify({
-  version: 1,
-  type: "object",
-  required: ["version", "tasks"],
-  properties: {
-    version: { type: "integer" },
-    tasks: { type: "array" },
-  },
-}, null, 2);
-
 function scrollToTaskCard(taskId: string) {
   window.requestAnimationFrame(() => {
     const el = document.querySelector<HTMLElement>(`[data-task-id="${taskId}"]`);
     el?.scrollIntoView({ behavior: "smooth", block: "center" });
   });
+}
+
+function mergeAssistantBundleItems(items: AssistantBundleItem[]): AssistantBundleItem[] {
+  const map = new Map<string, AssistantBundleItem>();
+  for (const item of items) {
+    const id = item.id.trim();
+    const label = item.label.trim();
+    if (!id || !label) continue;
+    if (!map.has(id)) {
+      map.set(id, {
+        id,
+        label,
+        origin: item.origin ?? null,
+        sourcePath: item.sourcePath,
+      });
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
 }
 
 export function usePrdTaskSplitPanelController({
@@ -218,6 +214,12 @@ export function usePrdTaskSplitPanelController({
   const [requirementNameInput, setRequirementNameInput] = useState("");
   const [requirementNameSaving, setRequirementNameSaving] = useState(false);
   const [requirementHistory, setRequirementHistory] = useState<PrdRequirementHistoryItem[]>([]);
+  const [assistantRuntimeLoading, setAssistantRuntimeLoading] = useState(false);
+  const [assistantWorkflowOptions, setAssistantWorkflowOptions] = useState<AssistantWorkflowRef[]>([]);
+  const [assistantMcpOptions, setAssistantMcpOptions] = useState<AssistantBundleItem[]>([]);
+  const [assistantSelectedMcpIds, setAssistantSelectedMcpIds] = useState<string[]>([]);
+  const [assistantHistoryOptions, setAssistantHistoryOptions] = useState<LegacyRunSummary[]>([]);
+  const [assistantHistoryLoading, setAssistantHistoryLoading] = useState(false);
   const [activeRequirementId, setActiveRequirementId] = useState<string | null>(null);
   const [splitError, setSplitError] = useState<string | null>(null);
   const [splitQualitySummary, setSplitQualitySummary] = useState<SplitQualitySummary | null>(null);
@@ -252,7 +254,6 @@ export function usePrdTaskSplitPanelController({
     splitRuntimeLogs,
     splitRuntimeRef,
     splitRuntimeVisible,
-    splitStageRetryHandlersRef,
   } = useSplitRuntimePanel({
     requirementEditorShellRef,
     splitPromptAdjustModalOpen,
@@ -342,15 +343,86 @@ export function usePrdTaskSplitPanelController({
     () => (linkedRepositoryId ? repositoriesById.get(linkedRepositoryId) ?? null : null),
     [linkedRepositoryId, repositoriesById],
   );
-  const localSpecRepositoryPath = useMemo(() => {
-    const byName = repositories.find(
-      (repo) => repositoryFolderBasename(repo).trim().toLowerCase() === "wise",
-    );
-    if (byName?.path?.trim()) return byName.path;
-    const byTail = repositories.find((repo) => /\/wise$/.test(repo.path.trim()));
-    if (byTail?.path?.trim()) return byTail.path;
-    return null;
-  }, [repositories]);
+  useEffect(() => {
+    let cancelled = false;
+    setAssistantRuntimeLoading(true);
+    void (async () => {
+      try {
+        const [runtime, mcps] = await Promise.all([
+          resolveAssistantRuntime({
+            assistantId: DEFAULT_PRD_SPLIT_ASSISTANT_ID,
+            projectId: linkedProjectId,
+            repositoryId: linkedRepositoryId,
+          }),
+          listMcpServers(),
+        ]);
+        if (cancelled) return;
+        const runtimeMcps = parseAssistantRuntimeBundle(runtime.mcpBundleJson);
+        const mcpOptions = mergeAssistantBundleItems([
+          ...runtimeMcps.custom,
+          ...mcps.map((mcp) => ({
+            id: `mcp:${mcp.id}`,
+            label: mcp.name,
+            origin: mcp.source,
+          })),
+        ]);
+        setAssistantMcpOptions(mcpOptions);
+        setAssistantSelectedMcpIds(
+          runtimeMcps.custom
+            .filter((item) => !runtimeMcps.disabled.includes(item.id))
+            .map((item) => item.id),
+        );
+      } catch (err) {
+        if (!cancelled) {
+          const msg = err instanceof Error ? err.message : String(err);
+          message.warning(`加载助手资源失败：${msg}`);
+        }
+      } finally {
+        if (!cancelled) setAssistantRuntimeLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [linkedProjectId, linkedRepositoryId, message]);
+  useEffect(() => {
+    let cancelled = false;
+    void listAssistants()
+      .then((rows) => {
+        if (cancelled) return;
+        const prdSplit = rows.find((row) => row.id === DEFAULT_PRD_SPLIT_ASSISTANT_ID);
+        setAssistantWorkflowOptions(prdSplit?.defaultWorkflows ?? []);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          const msg = err instanceof Error ? err.message : String(err);
+          message.warning(`加载内置 Trellis 编排失败：${msg}`);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [message]);
+  useEffect(() => {
+    let cancelled = false;
+    setAssistantHistoryLoading(true);
+    listLegacyRuns()
+      .then((rows) => {
+        if (!cancelled) setAssistantHistoryOptions(rows);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          const msg = err instanceof Error ? err.message : String(err);
+          message.warning(`加载历史 PRD 失败：${msg}`);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setAssistantHistoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [message]);
   const requirementEntries = useMemo<RequirementEntry[]>(() => {
     if (!activeResult) return [];
     return listPrdRequirementIndexEntries(activeResult.source).map((e) => ({
@@ -948,431 +1020,11 @@ export function usePrdTaskSplitPanelController({
     }
   }, [activeResult, inputValue, isUrlInputMode, milkdownTaskAnchors, originalInputValue, setInputValue]);
 
-  async function runClaudeSplitExecution(
-    doc: PrdDocument,
-    splitContext: TaskSplitContext,
-    sceneLabel: string,
-    rawMarkdownForClaude: string,
-    applyMode: SplitApplyMode = "replace",
-    promptDraftOverrides?: SplitPromptDraftBySlot,
-    splitExecutionOptions?: { closeSplitWizardOnTwoStageSuccess?: boolean },
-  ): Promise<void> {
-    setSplitQualitySummary(null);
-    const repositoryPath = linkedRepository?.path ?? splitContext.repositoryPath ?? null;
-    if (!repositoryPath) {
-      appendSplitRuntimeLog("error", "未关联仓库，已跳过 Claude 执行。");
-      return;
-    }
-    appendSplitRuntimeLog("system", `仓库：${repositoryPath}`);
-
-    const readSplitSpecPreferLocal = async (relativePath: string): Promise<string> => {
-      const localPath = localSpecRepositoryPath?.trim();
-      if (localPath && localPath !== repositoryPath) {
-        return readProjectRelativeFile(localPath, relativePath)
-          .catch(() => readProjectRelativeFile(repositoryPath, relativePath));
-      }
-      return readProjectRelativeFile(repositoryPath, relativePath);
-    };
-    const [systemInstruction, outputSchemaJson] = await Promise.all([
-      readSplitSpecPreferLocal(".task/claude-split-system-instruction.v1.md")
-        .catch(() => FALLBACK_CLAUDE_SPLIT_SYSTEM_INSTRUCTION),
-      readSplitSpecPreferLocal(".task/claude-split-output.schema.json")
-        .catch(() => readSplitSpecPreferLocal(".task/task-split-output-schema.json"))
-        .catch(() => FALLBACK_CLAUDE_SPLIT_OUTPUT_SCHEMA_JSON),
-    ]);
-    appendSplitRuntimeLog("system", "已就绪 system 指令与输出 schema。");
-
-    const payload = buildSplitRequestPayload({
-      prd: doc,
-      context: splitContext,
-      outputSchemaJson,
-    });
-    if (!payload.ok) {
-      appendSplitRuntimeLog("error", `输入准备失败：${payload.reason}`);
-      throw new Error(`输入准备失败：${payload.reason}`);
-    }
-    appendSplitRuntimeLog("system", "输入包文件：repo-context.json, OUTPUT_SCHEMA.json");
-
-    const prdMarkdown = rawMarkdownForClaude.trim() || (payload.bundle["prd.md"] ?? "");
-    const requirementsIndexJson = payload.bundle["requirements-index.json"] ?? null;
-    const snap = await materializePrdSnapshot(
-      repositoryPath,
-      prdMarkdown,
-      null,
-      null,
-      requirementsIndexJson,
-      {
-        policyId: splitContext.splitPolicyId ?? null,
-        policyFeatures: splitContext.splitPolicyFeatures ?? null,
-        routerRationale: splitContext.splitPolicyRationale ?? null,
-      },
-    );
-
-    const runDir = dirnameFromAbsolutePath(snap.prdRelativePath);
-    appendSplitRuntimeLog("system", `runId=${snap.runId}，目录=${runDir}`);
-    const wiseRunRelativeBase = `prd-runs/${snap.runId}`;
-    await appendWiseRelativeFile(`${wiseRunRelativeBase}/repo-context.json`, payload.bundle["repo-context.json"] ?? "");
-    await appendWiseRelativeFile(`${wiseRunRelativeBase}/OUTPUT_SCHEMA.json`, outputSchemaJson);
-
-    const repoContextContent = payload.bundle["repo-context.json"] ?? "";
-    const requirementsIndexContent = payload.bundle["requirements-index.json"] ?? "{}";
-    const prdContentForPrompt = rawMarkdownForClaude.trim() || prdMarkdown.trim();
-    const promptProjectId = linkedProjectId ?? null;
-    const promptRepositoryId = contextMode === "project" ? null : (linkedRepositoryId ?? null);
-    const buildAssociatedPrompt = (rendered: ReturnType<typeof renderSplitPromptTemplate>): string => {
-      const renderedUserWithoutReq = rendered.ok ? stripRequirementsIndexSection(rendered.renderedUser) : "";
-      const renderedSystemPrompt = rendered.ok ? rendered.renderedSystem.trim() : "";
-      const renderedTemplatePrompt = rendered.ok
-        ? stripSectionByHeading(stripSectionByHeading(renderedUserWithoutReq, "PRD（Markdown）"), "输出 schema 引用")
-        : "";
-      return renderedSystemPrompt || renderedTemplatePrompt.trim() || computeDefaultRepoAwarePromptMarkdown().trim();
-    };
-    const baseRenderVars = {
-      PRD_MARKDOWN: prdContentForPrompt,
-      REQUIREMENTS_INDEX_JSON: requirementsIndexContent.trim() || "{}",
-      REPO_CONTEXT_JSON: repoContextContent.trim() || "{}",
-      OUTPUT_SCHEMA_REF: outputSchemaJson.trim(),
-    };
-    const [phase1Template, phase2Template] = await Promise.all([
-      resolveEffectiveSplitPromptTemplate(promptProjectId, promptRepositoryId, PROMPT_SLOT_PRD_TASK_SPLIT_PHASE1),
-      resolveEffectiveSplitPromptTemplate(promptProjectId, promptRepositoryId, PROMPT_SLOT_PRD_TASK_SPLIT_PHASE2),
-    ]);
-    const phase1Override = promptDraftOverrides?.[PROMPT_SLOT_PRD_TASK_SPLIT_PHASE1]?.trim();
-    const phase2Override = promptDraftOverrides?.[PROMPT_SLOT_PRD_TASK_SPLIT_PHASE2]?.trim();
-    const phase1TemplateForRun = phase1Override ? { ...phase1Template, systemBody: phase1Override } : phase1Template;
-    const phase2TemplateForRun = phase2Override ? { ...phase2Template, systemBody: phase2Override } : phase2Template;
-    const phase1AssociatedPrompt = buildAssociatedPrompt(renderSplitPromptTemplate(phase1TemplateForRun, baseRenderVars));
-    const phase2AssociatedPrompt = buildAssociatedPrompt(renderSplitPromptTemplate(phase2TemplateForRun, baseRenderVars));
-    const assembledPhase1Message = buildSplitPhase1PromptMessage({
-      systemInstruction,
-      associatedPromptMarkdown: phase1AssociatedPrompt,
-      prdMarkdown: prdContentForPrompt,
-      repoContextJson: repoContextContent.trim(),
-    });
-    appendSplitRuntimeLog("user", assembledPhase1Message);
-
-    const stdoutPath = `${runDir}/claude.stdout.log`;
-    const stderrPath = `${runDir}/claude.stderr.log`;
-    let stdoutCursor = 0;
-    let stderrCursor = 0;
-    const announcedSessionIds = new Set<string>();
-    let readingRuntimeLog = false;
-    const readRuntimeLogDelta = async (final: boolean): Promise<void> => {
-      if (readingRuntimeLog && !final) return;
-      readingRuntimeLog = true;
-      try {
-        const [stdoutText, stderrText] = await Promise.all([
-          readSnapshotFile(stdoutPath).catch(() => ""),
-          readSnapshotFile(stderrPath).catch(() => ""),
-        ]);
-        if (stdoutText.length > stdoutCursor) {
-          const delta = stdoutText.slice(stdoutCursor);
-          stdoutCursor = stdoutText.length;
-          for (const rawLine of delta.split(/\r?\n/)) {
-            const session = parseClaudeRuntimeSessionInfo(rawLine);
-            if (!session) continue;
-            if (announcedSessionIds.has(session.sessionId)) continue;
-            announcedSessionIds.add(session.sessionId);
-            appendSplitRuntimeLog("system", formatClaudeRuntimeSessionInfo(session));
-          }
-          const clipped = clipRuntimeLogText(delta);
-          if (clipped) appendSplitRuntimeLog("assistant", `Claude stdout\n${clipped}`);
-        }
-        if (stderrText.length > stderrCursor) {
-          const delta = stderrText.slice(stderrCursor);
-          stderrCursor = stderrText.length;
-          const clipped = clipRuntimeLogText(delta);
-          if (clipped) appendSplitRuntimeLog("system", `Claude stderr\n${clipped}`);
-        }
-      } finally {
-        readingRuntimeLog = false;
-      }
-    };
-    const getRuntimePollIntervalMs = (): number => (document.visibilityState === "visible" ? 700 : 2000);
-    let pollTimer: number | null = null;
-    const scheduleRuntimePoll = () => {
-      pollTimer = window.setTimeout(() => {
-        void readRuntimeLogDelta(false);
-        scheduleRuntimePoll();
-      }, getRuntimePollIntervalMs());
-    };
-    scheduleRuntimePoll();
-    const parseAndMergeClaudePayload = async (
-      parsed: unknown,
-      payloadLog: string,
-    ): Promise<{
-      normalized: SplitResult;
-      anchorFormatIssueCount: number;
-      arrayAnchorTaskIds: string[];
-      emptyHashTaskIds: string[];
-      strictIssues: string[];
-      quality: SplitQualitySummary;
-    }> => {
-      appendSplitRuntimeLog("assistant", clipRuntimeLogText(payloadLog));
-      const anchorInspection = inspectTaskAnchorFormatIssues(parsed);
-      const strictValidation = validateClaudeSplitPayloadStrict({ payload: parsed, source: doc });
-      let normalized = normalizeClaudeSplitOutputToSplitResult({
-        payload: parsed,
-        source: doc,
-        context: splitContext,
-      });
-      const stdoutFull = await readSnapshotFile(stdoutPath).catch(() => "");
-      const sidecarText = await readSnapshotFile(`${runDir}/split-mapping.json`).catch(() => "");
-      const mappingPayloads = [];
-      const fromSidecar = parseSplitMappingJson(sidecarText.trim());
-      if (fromSidecar) mappingPayloads.push(fromSidecar);
-      const fromStdoutBlocks = extractSplitMappingFromClaudeOutput(stdoutFull);
-      if (
-        fromStdoutBlocks
-        && JSON.stringify(fromStdoutBlocks) !== JSON.stringify(fromSidecar ?? null)
-      ) {
-        mappingPayloads.push(fromStdoutBlocks);
-      }
-      if (mappingPayloads.length > 0) {
-        normalized = mergeSplitMappingPayloadsIntoSplitResult(normalized, mappingPayloads, {
-          capturedAtMs: Date.now(),
-          runId: snap.runId,
-        });
-        appendSplitRuntimeLog(
-          "system",
-          `已合并附加映射 ${mappingPayloads.length} 份（split-mapping.json 或 stdout 内 \`\`\`json 块）。`,
-        );
-      }
-      normalized = remapSplitResultAnchorOffsetsFromMarkdown(prdContentForPrompt, normalized);
-      const quality = summarizeSplitQuality(doc, normalized);
-      const mappingRate = quality.totalTasks > 0
-        ? `${quality.mappedTaskCount}/${quality.totalTasks}`
-        : "0/0";
-      const traceRate = quality.totalTasks > 0
-        ? `${quality.traceableTaskCount}/${quality.totalTasks}`
-        : "0/0";
-      appendSplitRuntimeLog(
-        "system",
-        `质量统计：映射覆盖 ${mappingRate}；锚点可追溯 ${traceRate}${quality.untraceableTaskIds.length > 0 ? `；不可追溯任务：${quality.untraceableTaskIds.join(", ")}` : ""}`,
-      );
-      return {
-        normalized,
-        anchorFormatIssueCount: anchorInspection.issueCount,
-        arrayAnchorTaskIds: anchorInspection.arrayAnchorTaskIds,
-        emptyHashTaskIds: anchorInspection.emptyHashTaskIds,
-        strictIssues: strictValidation.issues.map((item) => `${item.path}: ${item.message}`),
-        quality,
-      };
-    };
-    const INITIAL_SPLIT_TIMEOUT_MS = 120_000;
-    let latestPhase1Raw = "";
-    let latestPhase1Parsed: {
-      version?: unknown;
-      tasks?: unknown;
-      criticalPath?: unknown;
-      parallelGroups?: unknown;
-      unmetPreconditions?: unknown;
-    } | null = null;
-    let latestPhase1Tasks: unknown[] = [];
-
-    const finalizeTwoStageResult = async (phase2Raw: string): Promise<void> => {
-      if (!latestPhase1Parsed || latestPhase1Tasks.length === 0) {
-        throw new Error("缺少阶段1任务上下文，无法合并阶段2结果。");
-      }
-      const phase2Parsed = JSON.parse(phase2Raw) as {
-        taskMappings?: Array<{
-          taskId?: unknown;
-          sourceRequirementIds?: unknown;
-          taskAnchors?: unknown;
-          task_anchors?: unknown;
-        }>;
-      };
-      const mappingByTaskId = new Map<string, {
-        sourceRequirementIds: string[];
-        taskAnchors: unknown;
-      }>();
-      for (const item of phase2Parsed.taskMappings ?? []) {
-        if (!item || typeof item !== "object") continue;
-        const taskId = typeof item.taskId === "string" ? item.taskId.trim() : "";
-        if (!taskId) continue;
-        const sourceRequirementIds = Array.isArray(item.sourceRequirementIds)
-          ? item.sourceRequirementIds.filter((id): id is string => typeof id === "string" && id.trim().length > 0)
-          : [];
-        mappingByTaskId.set(taskId, {
-          sourceRequirementIds,
-          taskAnchors: item.taskAnchors ?? item.task_anchors,
-        });
-      }
-      const mergedPayload = {
-        version: typeof latestPhase1Parsed.version === "number" ? latestPhase1Parsed.version : 1,
-        tasks: latestPhase1Tasks.map((rawTask) => {
-          const taskObj = (rawTask && typeof rawTask === "object") ? (rawTask as Record<string, unknown>) : {};
-          const taskId = typeof taskObj.id === "string" ? taskObj.id.trim() : "";
-          const mapped = mappingByTaskId.get(taskId);
-          const remappedAnchors = remapAnchorRangeFromMarkdownToVisible(
-            prdContentForPrompt,
-            (mapped?.taskAnchors && typeof mapped.taskAnchors === "object")
-              ? (mapped.taskAnchors as {
-                from: number;
-                to: number;
-                textHash: string;
-                contextBefore: string;
-                contextAfter: string;
-              })
-              : undefined,
-          );
-          return {
-            ...taskObj,
-            sourceRequirementIds: mapped?.sourceRequirementIds ?? [],
-            taskAnchors: remappedAnchors ?? mapped?.taskAnchors ?? null,
-          };
-        }),
-        criticalPath: latestPhase1Parsed.criticalPath,
-        parallelGroups: latestPhase1Parsed.parallelGroups,
-        unmetPreconditions: latestPhase1Parsed.unmetPreconditions,
-      };
-      const mergedRaw = JSON.stringify(mergedPayload, null, 2);
-      await appendWiseRelativeFile(`${wiseRunRelativeBase}/claude.result.two-stage.json`, mergedRaw);
-      let normalized = (await parseAndMergeClaudePayload(
-        mergedPayload,
-        [
-          "=== phase1.raw ===",
-          latestPhase1Raw,
-          "",
-          "=== phase2.raw ===",
-          phase2Raw,
-          "",
-          "=== merged.raw ===",
-          mergedRaw,
-        ].join("\n"),
-      )).normalized;
-      const quality = summarizeSplitQuality(doc, normalized);
-      setSplitQualitySummary(quality);
-      appendSplitRuntimeLog(
-        "system",
-        `双阶段完成：阶段1任务=${latestPhase1Tasks.length}，阶段2映射=${mappingByTaskId.size}，可追溯锚点=${quality.traceableTaskCount}/${quality.totalTasks}`,
-      );
-      let nextResult = applyMode === "append" && activeResult
-        ? mergeSplitResultsByAppend(activeResult, normalized)
-        : syncTaskAnchorTextsFromRequirements(normalized);
-      console.groupCollapsed(
-        `[Wise 拆分结果] ${sceneLabel} · runId=${snap.runId} · tasks=${normalized.splitTasks.length}`,
-      );
-      console.info("normalized split result", normalized);
-      console.info("final split result", nextResult);
-      console.info("tasks", nextResult.splitTasks);
-      console.info("taskAnchorDescriptors", nextResult.taskAnchorDescriptors ?? null);
-      console.info("claudeSplitMapping", nextResult.claudeSplitMapping ?? null);
-      console.groupEnd();
-      try {
-        await savePrdTaskSplitResult(nextResult);
-      } catch (persistErr) {
-        const msg = persistErr instanceof Error ? persistErr.message : String(persistErr);
-        appendSplitRuntimeLog("error", `拆分结果保存失败：${msg}`);
-        throw new Error(`拆分结果保存失败：${msg}`);
-      }
-      setActiveResult(nextResult);
-      const firstTaskId = nextResult.splitTasks[0]?.id ?? null;
-      setSelectedTaskId(firstTaskId);
-      appendSplitRuntimeLog(
-        "system",
-        applyMode === "append"
-          ? `Claude 输出已增量合并并保存（当前共 ${nextResult.splitTasks.length} 个任务），右侧可执行任务与左侧锚点已刷新。`
-          : `Claude 输出已解析并保存（共 ${nextResult.splitTasks.length} 个任务），右侧可执行任务与左侧锚点已刷新。`,
-      );
-    };
-
-    const runPhase1Only = async (): Promise<void> => {
-      appendSplitRuntimeLog("user", assembledPhase1Message);
-      appendSplitRuntimeLog("system", "开始执行阶段1：需求拆分。");
-      const phase1Run = await runPrdSplitClaude({
-        projectPath: repositoryPath,
-        runDir,
-        prompt: assembledPhase1Message,
-        timeoutMs: INITIAL_SPLIT_TIMEOUT_MS,
-      });
-      await readRuntimeLogDelta(true);
-      const phase1CodeText = explainClaudeSplitExitCode(phase1Run.exitCode);
-      if (phase1Run.exitCode !== 0) {
-        appendSplitRuntimeLog("error", `阶段1执行失败：${phase1CodeText}`, { retryPhase: "phase1" });
-        throw new Error(`阶段1执行失败：${phase1CodeText}`);
-      }
-      const phase1Raw = await readSnapshotFile(phase1Run.rawResultPath);
-      appendSplitRuntimeLog("assistant", clipRuntimeLogText(phase1Raw));
-      const phase1Parsed = JSON.parse(phase1Raw) as {
-        version?: unknown;
-        tasks?: unknown;
-        criticalPath?: unknown;
-        parallelGroups?: unknown;
-        unmetPreconditions?: unknown;
-      };
-      const phase1Tasks = Array.isArray(phase1Parsed.tasks) ? phase1Parsed.tasks : [];
-      if (phase1Tasks.length === 0) {
-        appendSplitRuntimeLog("error", "阶段1未产出有效 tasks，无法继续阶段2映射。", { retryPhase: "phase1" });
-        throw new Error("阶段1未产出有效 tasks，无法继续阶段2映射。");
-      }
-      latestPhase1Raw = phase1Raw;
-      latestPhase1Parsed = phase1Parsed;
-      latestPhase1Tasks = phase1Tasks;
-      appendSplitRuntimeLog("system", `阶段1成功：产出任务 ${phase1Tasks.length} 条。`);
-    };
-
-    const runPhase2Only = async (): Promise<void> => {
-      if (!latestPhase1Parsed || latestPhase1Tasks.length === 0) {
-        appendSplitRuntimeLog("error", "缺少阶段1产物，无法重试阶段2。", { retryPhase: "phase1" });
-        throw new Error("缺少阶段1产物，无法重试阶段2。");
-      }
-      const assembledPhase2Message = buildSplitPhase2PromptMessage({
-        systemInstruction,
-        associatedPromptMarkdown: phase2AssociatedPrompt,
-        phase1Tasks: latestPhase1Tasks,
-        prdMarkdown: prdContentForPrompt,
-        requirementsIndexJson: requirementsIndexContent.trim(),
-      });
-      appendSplitRuntimeLog("user", assembledPhase2Message);
-      appendSplitRuntimeLog("system", "开始执行阶段2：任务溯源与锚点标注。");
-      const phase2Run = await runPrdSplitClaude({
-        projectPath: repositoryPath,
-        runDir,
-        prompt: assembledPhase2Message,
-        timeoutMs: INITIAL_SPLIT_TIMEOUT_MS,
-      });
-      const phase2CodeText = explainClaudeSplitExitCode(phase2Run.exitCode);
-      await readRuntimeLogDelta(true);
-      if (phase2Run.exitCode !== 0) {
-        appendSplitRuntimeLog("error", `阶段2执行失败：${phase2CodeText}`, { retryPhase: "phase2" });
-        throw new Error(`阶段2执行失败：${phase2CodeText}`);
-      }
-      const phase2Raw = await readSnapshotFile(phase2Run.rawResultPath);
-      appendSplitRuntimeLog("assistant", clipRuntimeLogText(phase2Raw));
-      await finalizeTwoStageResult(phase2Raw);
-    };
-
-    splitStageRetryHandlersRef.current = {
-      phase1: runPhase1Only,
-      phase2: runPhase2Only,
-    };
-
-    try {
-      await runPhase1Only();
-      await runPhase2Only();
-      message.success(
-        `${sceneLabel}：Claude 双阶段执行完成，raw=${buildSnapshotAbsoluteDisplayPath(`${runDir}/split-result.raw.json`)}`,
-      );
-      if (splitExecutionOptions?.closeSplitWizardOnTwoStageSuccess) {
-        setSplitPromptAdjustModalOpen(false);
-        setSplitWizardStep("prompts");
-        setSplitRuntimeVisible(false);
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      message.warning(`${sceneLabel}：${msg}`);
-    } finally {
-      if (pollTimer != null) {
-        window.clearTimeout(pollTimer);
-      }
-    }
-  }
-
   async function handleParse(
     promptDraftOverrides?: SplitPromptDraftBySlot,
     options?: { splitRuntimeInModal?: boolean },
   ) {
+    void promptDraftOverrides;
     const meta = parse();
     if (!meta) return;
     const splitRuntimeInModal = options?.splitRuntimeInModal === true;
@@ -1401,17 +1053,66 @@ export function usePrdTaskSplitPanelController({
       const splitContext = buildPolicyAwareContext();
       logSplitInputPrepareBundle(doc, splitContext, "主编辑器 · 拆分");
       try {
-        await runClaudeSplitExecution(
-          doc,
-          splitContext,
-          "主编辑器拆分",
-          splitSourceInput,
-          "replace",
-          promptDraftOverrides,
-          splitRuntimeInModal ? { closeSplitWizardOnTwoStageSuccess: true } : undefined,
+        const rootPath = linkedProject?.rootPath?.trim();
+        if (!linkedProject || !rootPath) {
+          throw new Error("当前需求助手必须关联到带 rootPath 的 Workspace，才能派发 trellis-splitter。");
+        }
+        const prdMarkdown = splitSourceInput.trim() || prdDocumentToSplitMarkdown(doc);
+        const out = await runPrdSplitSubagentWorkflow({
+          project: linkedProject,
+          repositories,
+          prd: doc,
+          prdMarkdown,
+          context: splitContext,
+          onEvent: (event) => {
+            if (event.type === "plan") {
+              appendSplitRuntimeLog(
+                "system",
+                `已规划 ${event.plan.clusters.length} 个 trellis-splitter 分组，requirements=${event.requirementsIndex.requirements.length}。`,
+              );
+            }
+            if (event.type === "cluster-start") {
+              appendSplitRuntimeLog("system", `派发 trellis-splitter：${event.cluster.title}（${event.cluster.id}）。`);
+            }
+            if (event.type === "parent-created") {
+              appendSplitRuntimeLog(
+                "system",
+                `父任务已创建：${event.parentTaskPath}。`,
+              );
+            }
+            if (event.type === "cluster-complete") {
+              const taskCount = event.result.normalized?.splitTasks.length ?? 0;
+              appendSplitRuntimeLog(
+                event.result.errors.length === 0 ? "assistant" : "error",
+                [
+                  `trellis-splitter 完成：${event.cluster.id}，任务 ${taskCount} 个。`,
+                  event.result.raw.runDir ? `runDir=${event.result.raw.runDir}` : "",
+                  event.result.raw.claudeSessionId ? `session_id=${event.result.raw.claudeSessionId}` : "",
+                  event.result.errors.length > 0 ? `errors=${event.result.errors.join("；")}` : "",
+                ].filter(Boolean).join("\n"),
+              );
+            }
+          },
+        });
+        const nextResult = syncTaskAnchorTextsFromRequirements(out.result);
+        setSplitQualitySummary(summarizeSplitQuality(doc, nextResult));
+        await savePrdTaskSplitResult(nextResult);
+        setActiveResult(nextResult);
+        setSelectedTaskId(nextResult.splitTasks[0]?.id ?? null);
+        appendSplitRuntimeLog(
+          "system",
+          `trellis-splitter 拆分完成并保存（共 ${nextResult.splitTasks.length} 个任务），右侧任务列表已刷新。`,
         );
+        message.success(`需求拆分完成：${nextResult.splitTasks.length} 个任务`);
+        if (splitRuntimeInModal) {
+          setSplitPromptAdjustModalOpen(false);
+          setSplitWizardStep("prompts");
+          setSplitRuntimeVisible(false);
+        } else {
+          setSplitRuntimeVisible(false);
+        }
       } catch (e) {
-        const msg = toErrorMessage(e, "Claude 执行失败");
+        const msg = toErrorMessage(e, "trellis-splitter 执行失败");
         message.warning(`主编辑器拆分：${msg}`);
       }
     } catch (err) {
@@ -2281,6 +1982,73 @@ export function usePrdTaskSplitPanelController({
     await persistRequirementHistory(nextHistory, activeRequirementId, true);
   }
 
+  async function handleImportPrdFile() {
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [{ name: "Markdown", extensions: ["md", "markdown", "txt"] }],
+      });
+      if (typeof selected !== "string" || !selected.trim()) return;
+      const content = await invoke<string>("read_local_text_file", { path: selected });
+      if (!content.trim()) {
+        message.warning("导入文件为空。");
+        return;
+      }
+      setInputValue(content);
+      resetRequirementTaskView();
+      message.success("已导入 PRD 文件。");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      message.error(`导入 PRD 失败：${msg}`);
+    }
+  }
+
+  async function handleImportLegacyPrd(summary: LegacyRunSummary) {
+    try {
+      const detail = await readLegacyRun(summary.runId);
+      if (!detail.prdMarkdown.trim()) {
+        message.warning("该历史记录没有可导入的 PRD 内容。");
+        return;
+      }
+      setInputValue(detail.prdMarkdown);
+      resetRequirementTaskView();
+      message.success("已导入历史 PRD。");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      message.error(`导入历史 PRD 失败：${msg}`);
+    }
+  }
+
+  async function persistAssistantResourceSelection(input: {
+    selectedIds: string[];
+    options: AssistantBundleItem[];
+  }) {
+    const selected = new Set(input.selectedIds);
+    const bundle = {
+      disabled: input.options.filter((item) => !selected.has(item.id)).map((item) => item.id),
+      custom: input.options,
+    };
+    try {
+      await saveAssistantRuntimeOverrides({
+        assistantId: DEFAULT_PRD_SPLIT_ASSISTANT_ID,
+        scope: "assistant",
+        patch: { mcpBundleJson: buildAssistantRuntimeBundleJson(bundle) },
+      });
+      message.success("已更新助手 MCP。");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      message.error(`保存助手资源失败：${msg}`);
+    }
+  }
+
+  function handleAssistantMcpsChange(nextIds: string[]) {
+    setAssistantSelectedMcpIds(nextIds);
+    void persistAssistantResourceSelection({
+      selectedIds: nextIds,
+      options: assistantMcpOptions,
+    });
+  }
+
   function switchToRequirement(record: PrdRequirementHistoryItem) {
     setActiveRequirementId(record.id);
     setRequirementDisplayName(record.requirementDisplayName);
@@ -2692,21 +2460,13 @@ export function usePrdTaskSplitPanelController({
       message.info("当前没有可用于生成的已确认拆分任务。");
       return;
     }
-    const generatedTasks = buildExecutableTaskCopiesFromSplitSources(activeResult, sourceTasks);
-    const out = refreshSplitResultDerivedFields({
-      ...activeResult,
-      executableTasks: [...activeResult.executableTasks, ...generatedTasks],
-    });
     try {
-      await savePrdTaskSplitResult(out);
-      setActiveResult(out);
-      window.dispatchEvent(new CustomEvent(WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED, {
-        detail: { todoCount: generatedTasks.length },
-      }));
+      const out = await materializeSplitTasksToWorkspaceTrellis(sourceTasks);
+      message.success(`已落盘到 Workspace Trellis：${out.parentTaskName}（${out.childTaskNames.length} 个子任务）`);
       closePanelToTaskListButton();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      message.error(`生成可执行任务失败：${msg}`);
+      message.error(`落盘到 Trellis 失败：${msg}`);
     }
   }
 
@@ -2721,23 +2481,53 @@ export function usePrdTaskSplitPanelController({
     }
     setGeneratingExecutableTaskId(taskId);
     try {
-      const generatedTasks = buildExecutableTaskCopiesFromSplitSources(activeResult, [task]);
-      const out = refreshSplitResultDerivedFields({
-        ...activeResult,
-        executableTasks: [...activeResult.executableTasks, ...generatedTasks],
-      });
-      await savePrdTaskSplitResult(out);
-      setActiveResult(out);
-      window.dispatchEvent(new CustomEvent(WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED, {
-        detail: { todoCount: generatedTasks.length },
-      }));
-      message.success("已为该任务生成可执行任务。");
+      const out = await materializeSplitTasksToWorkspaceTrellis([task]);
+      message.success(`已落盘到 Workspace Trellis：${out.childTaskNames[0] ?? out.parentTaskName}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      message.error(`生成可执行任务失败：${msg}`);
+      message.error(`落盘到 Trellis 失败：${msg}`);
     } finally {
       setGeneratingExecutableTaskId(null);
     }
+  }
+
+  async function materializeSplitTasksToWorkspaceTrellis(sourceTasks: TaskItem[]) {
+    if (!activeResult) {
+      throw new Error("缺少拆分结果。");
+    }
+    const targetProject = linkedProject;
+    const rootPath = targetProject?.rootPath?.trim();
+    if (!targetProject || !rootPath) {
+      throw new Error("当前需求助手必须关联到带 rootPath 的 Workspace，才能写入 Workspace Trellis。");
+    }
+    const repositoryIds = targetProject.repositoryIds.filter((id) => repositoriesById.has(id));
+    const cluster: ClusterRef = {
+      id: `requirements-${Date.now().toString(36)}`,
+      title: `${activeResult.source.title || "需求拆分"} · 复核后执行`,
+      primaryRepositoryId: linkedRepositoryId ?? repositoryIds[0] ?? null,
+      repositoryIds,
+    };
+    const sourceIds = new Set(sourceTasks.map((task) => task.id));
+    const normalized = refreshSplitResultDerivedFields({
+      ...activeResult,
+      splitTasks: activeResult.splitTasks.filter((task) => sourceIds.has(task.id)),
+      executableTasks: [],
+    });
+    const prdMarkdown = prdDocumentToSplitMarkdown(activeResult.source);
+    const parent = await createParentTask({
+      projectRootPath: rootPath,
+      cluster,
+      prdMarkdown: renderParentPrd(prdMarkdown, cluster),
+      requirementsIndexJson: buildRequirementsIndexJsonForSnapshot(activeResult.source),
+      description: `Wise 需求助手复核后执行：${sourceTasks.length} 个拆分任务`,
+    });
+    return writeClusterTasks({
+      projectRootPath: rootPath,
+      parentTaskName: parent.parentTaskName,
+      cluster,
+      normalized,
+      prdSource: activeResult.source,
+    });
   }
 
   async function handleAddTask() {
@@ -2814,6 +2604,12 @@ export function usePrdTaskSplitPanelController({
     activeRequirement,
     activeRequirementId,
     activeResult,
+    assistantMcpOptions,
+    assistantHistoryLoading,
+    assistantHistoryOptions,
+    assistantRuntimeLoading,
+    assistantSelectedMcpIds,
+    assistantWorkflowOptions,
     anchorRangePersistTimerRef,
     canGenerateExecutableTasks,
     cardUnmetPointsForTask,
@@ -2827,6 +2623,7 @@ export function usePrdTaskSplitPanelController({
     getTaskAiInput,
     getTaskAiMode,
     handleAddTask,
+    handleAssistantMcpsChange,
     handleCheckTaskExecutable,
     handleClearAllTasks,
     handleConfirmAllTasks,
@@ -2836,6 +2633,9 @@ export function usePrdTaskSplitPanelController({
     handleDeleteTask,
     handleGenerateExecutableForSplitTask,
     handleGenerateExecutableTasks,
+    handleImportLegacyPrd,
+    handleImportPrdFile,
+    handleParse,
     handleOpenRuntimePromptModal,
     handleOpenSplitPromptAdjustModal,
     handleOptimizeRuntimePromptDraft,

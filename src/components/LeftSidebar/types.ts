@@ -11,6 +11,7 @@ import type {
 import type { ReconcileProjectMode } from "../../constants/reconcileProjectMode";
 import type { GitPanelOpenFileOptions } from "../GitPanel";
 import type { TaskCardsNavProps } from "../TaskCardsNav";
+import type { AuthorPane } from "../../types/viewMode";
 
 export interface LeftSidebarProps {
   dark: boolean;
@@ -26,7 +27,9 @@ export interface LeftSidebarProps {
   activeRepositoryId: number | null;
   authorDisabled?: boolean;
   authorDisabledTooltip?: string;
-  onOpenAuthor: () => void;
+  onOpenAuthor: (pane?: AuthorPane) => void;
+  assistantHubActive?: boolean;
+  onOpenAssistantHub?: () => void;
   workspaceCreateRequest?: number;
   standaloneRepoAddRequest?: number;
   onProjectSelect: (projectId: string) => void;
@@ -50,6 +53,11 @@ export interface LeftSidebarProps {
   /** Standalone Repo「图谱操作 → 查看检索」 */
   onCodeGraphViewFloatingRepository?: (repository: Repository) => void;
   onAddFloatingRepository?: (
+    repositoryType: Repository["repositoryType"],
+    options?: AddRepositoryOptions,
+  ) => void;
+  onAddRepositoryToProject?: (
+    projectId: string,
     repositoryType: Repository["repositoryType"],
     options?: AddRepositoryOptions,
   ) => void;

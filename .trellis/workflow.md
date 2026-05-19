@@ -155,6 +155,24 @@ Phase 3: Finish  → verify, update spec, commit, and wrap up
 - Complex task: ask whether you may create a Trellis task and enter planning. If the user says no, do not do broad inline implementation; explain, clarify scope, or suggest a smaller split.
 - User approval to create a task is not approval to start implementation. Planning still happens first.
 
+### Wise Requirement Assistant Sandbox
+
+Wise ships a Trellis-native requirement assistant before normal task creation.
+This is a product workflow stage, not a Claude `CLAUDE.md` or `.claude/skills`
+injection path.
+
+The assistant sandbox runs before `.trellis/tasks/<task>/` is committed:
+
+1. Intake: normalize manual PRD input, imported PRDs, historical runs, and user conversation notes.
+2. Split: create reviewable candidate tasks without dispatching implementation agents.
+3. Anchor mapping: map each candidate task back to exact PRD source text or mark the anchor unresolved.
+4. Human review: allow edits to PRD text, tasks, dependencies, anchors, and acceptance criteria.
+5. Handoff: only after explicit final execution, create or update Trellis task artifacts and enter the splitter dispatch pipeline.
+
+The sandbox may use MCP harness context, but its core behavior is owned by the
+Wise/Trellis workflow. Prompt text is configurable wording, not the authority
+that enables the workflow.
+
 ### Planning Artifacts
 
 - `prd.md` — requirements, constraints, and acceptance criteria. Do not put technical design or execution checklists here.

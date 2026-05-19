@@ -264,6 +264,10 @@ pub(crate) struct ClaudeProjectSkill {
     plugin_cache_rel_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     plugin_cache_root: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source: Option<crate::skills::source::SkillSource>,
+    #[serde(skip_serializing_if = "std::ops::Not::not", default)]
+    is_symlink: bool,
 }
 
 fn list_claude_skills_under_dir(skills_dir: &Path) -> Result<Vec<ClaudeProjectSkill>, String> {
@@ -282,6 +286,9 @@ fn list_claude_skills_under_dir(skills_dir: &Path) -> Result<Vec<ClaudeProjectSk
         }
         let (has_skill_md, description) = read_claude_skill_entry(&entry.path());
         let file_count = count_skill_files_recursive(&entry.path());
+        let path = entry.path();
+        let (skill_source, _) = crate::skills::source::classify(&path);
+        let is_symlink = crate::skills::source::is_symlink(&path);
         out.push(ClaudeProjectSkill {
             name,
             has_skill_md,
@@ -289,6 +296,8 @@ fn list_claude_skills_under_dir(skills_dir: &Path) -> Result<Vec<ClaudeProjectSk
             file_count,
             plugin_cache_rel_path: None,
             plugin_cache_root: None,
+            source: Some(skill_source),
+            is_symlink,
         });
     }
     out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
@@ -330,6 +339,8 @@ pub(crate) fn list_claude_plugin_cache_skills() -> Result<Vec<ClaudeProjectSkill
             let (has_skill_md, description) = read_claude_skill_entry(&entry.path());
             let file_count = count_skill_files_recursive(&entry.path());
             let root_str = root.to_string_lossy().to_string();
+            let path = entry.path();
+            let is_symlink = crate::skills::source::is_symlink(&path);
             out.push(ClaudeProjectSkill {
                 name,
                 has_skill_md,
@@ -337,6 +348,8 @@ pub(crate) fn list_claude_plugin_cache_skills() -> Result<Vec<ClaudeProjectSkill
                 file_count,
                 plugin_cache_rel_path: Some(plugin_rel.clone()),
                 plugin_cache_root: Some(root_str),
+                source: Some(crate::skills::source::SkillSource::Builtin),
+                is_symlink,
             });
         }
     }

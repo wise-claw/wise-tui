@@ -156,14 +156,14 @@ export function SpecLibraryPanel({
         <div className="mission-spec-library__title">
           <BookOutlined />
           <div>
-            <Typography.Text strong>Spec Library</Typography.Text>
+            <Typography.Text strong>规范库</Typography.Text>
             <Typography.Text type="secondary">
               项目级 .trellis/spec 规范入口；建议让项目会话里的 Agent 更新，手写保存仅用于小修正。
             </Typography.Text>
           </div>
         </div>
         <Space size={6} wrap>
-          <Tag>{areas.length} areas</Tag>
+          <Tag>{areas.length} 个规范区</Tag>
           {onOpenProjectSession ? (
             <Button size="small" onClick={() => void onOpenProjectSession()}>
               打开项目会话
@@ -190,7 +190,7 @@ export function SpecLibraryPanel({
         />
       ) : (
         <div className="mission-spec-library__body">
-          <aside className="mission-spec-library__areas" aria-label="Spec areas">
+          <aside className="mission-spec-library__areas" aria-label="规范区">
             {areas.map((area) => (
               <button
                 key={area.area}
@@ -202,7 +202,7 @@ export function SpecLibraryPanel({
               >
                 <span className="mission-spec-library-area__name">{area.area}</span>
                 <span className="mission-spec-library-area__meta">
-                  {area.mdFileCount} md · {area.hasIndex ? "index ready" : "no index"}
+                  {area.mdFileCount} 个文档 · {area.hasIndex ? "index 就绪" : "缺少 index"}
                 </span>
               </button>
             ))}
@@ -212,10 +212,10 @@ export function SpecLibraryPanel({
             <div className="mission-spec-library__editor-head">
               <Space size={6} wrap>
                 <Typography.Text strong>{selectedArea ? `${selectedArea}/index.md` : "index.md"}</Typography.Text>
-                {selectedMeta ? <Tag>{selectedMeta.mdFileCount} docs</Tag> : null}
-                {selectedMeta?.hasIndex ? <Tag color="success">tracked</Tag> : <Tag color="warning">new index</Tag>}
-                {dirty ? <Tag color="processing">unsaved</Tag> : null}
-                {savedAt ? <Tag color="success">saved {new Date(savedAt).toLocaleTimeString("zh-CN")}</Tag> : null}
+                {selectedMeta ? <Tag>{selectedMeta.mdFileCount} 个文档</Tag> : null}
+                {selectedMeta?.hasIndex ? <Tag color="success">已纳入</Tag> : <Tag color="warning">新建 index</Tag>}
+                {dirty ? <Tag color="processing">未保存</Tag> : null}
+                {savedAt ? <Tag color="success">已保存 {new Date(savedAt).toLocaleTimeString("zh-CN")}</Tag> : null}
               </Space>
               <Space size={6} wrap>
                 {onRequestAgentUpdate ? (
@@ -250,7 +250,7 @@ export function SpecLibraryPanel({
                 className="mission-spec-library__textarea"
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
-                placeholder="Write the spec index for this area..."
+                placeholder="编写此规范区的 index.md..."
                 autoSize={false}
               />
             )}

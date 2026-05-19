@@ -74,7 +74,7 @@ export function WorkflowNodeEditModal({
         <div className="app-workflow-node-edit-form__field-header">
           <span className="app-workflow-node-edit-form__field-title app-workflow-node-edit-form__field-title--with-hint">
             阶段任务依据（可选）
-            <Tooltip placement="topLeft" styles={{ container: { maxWidth: 400 } }} title="从当前流程图中各阶段已配置的「阶段成果」中选择一项或多项；保存后随团队派发写入 Claude Code 会话，置于「阶段任务」正文之前（多项之间以分隔线隔开）。每条派发为「【阶段任务依据】成果「名称」」并附上该成果标准原文。">
+            <Tooltip placement="topLeft" styles={{ container: { maxWidth: 400 } }} title="从当前委派画布中各阶段已配置的「阶段成果」中选择一项或多项；保存后随协议派发写入 Claude Code 会话，置于「阶段任务」正文之前（多项之间以分隔线隔开）。每条派发为「【阶段任务依据】成果「名称」」并附上该成果标准原文。">
               <QuestionCircleOutlined className="app-workflow-node-edit-form__field-hint-icon" aria-label="阶段任务依据说明" />
             </Tooltip>
           </span>
@@ -87,7 +87,7 @@ export function WorkflowNodeEditModal({
             showSearch
             optionFilterProp="label"
             maxTagCount="responsive"
-            placeholder={stageTaskBasisSelectOptions.length === 0 ? "请先在部分阶段配置「阶段成果」" : "选择团队内已有成果（可多选）…"}
+            placeholder={stageTaskBasisSelectOptions.length === 0 ? "请先在部分阶段配置「阶段成果」" : "选择协议内已有成果（可多选）…"}
             options={stageTaskBasisSelectOptions}
             disabled={stageTaskBasisSelectOptions.length === 0}
           />
@@ -116,8 +116,8 @@ export function WorkflowNodeEditModal({
             </div>
           </div>
         </Form.Item>
-        <Form.Item label="执行员工" name="employeeId" rules={[{ required: true, message: "请选择执行员工" }]}>
-          <Select size="small" allowClear showSearch options={employeeOptions} placeholder="请选择员工" />
+        <Form.Item label="执行智能体角色" name="employeeId" rules={[{ required: true, message: "请选择执行智能体角色" }]}>
+          <Select size="small" allowClear showSearch options={employeeOptions} placeholder="请选择智能体角色" />
         </Form.Item>
         <div className="app-workflow-node-edit-form__field-header">
           <span className="app-workflow-node-edit-form__field-title app-workflow-node-edit-form__field-title--with-hint">

@@ -1,0 +1,15 @@
+{"file": ".trellis/spec/guides/agent-harness-architecture.md", "reason": "产品宪法:必须读 §2 三域分层 / §3 ViewMode 状态机 / §4 Cockpit 主屏 / §5 Trellis ↔ Mission 双写契约 / §6 Workspace vs Standalone Repo;本任务在阶段 0 改 §3/§4/§7/§8。"}
+{"file": ".trellis/spec/guides/trellis-splitter-prompt.md", "reason": "splitter 子代理协议;助手层默认 prompt(`builtin:prd-split` 的 default_prompt_layers)与本协议保持一致。"}
+{"file": ".trellis/spec/guides/trellis-verifier-prompt.md", "reason": "verifier 子代理协议;同上。"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "前后端跨层一致性:本任务横跨 SQLite 迁移 → Tauri 命令 → 前端 service → React 组件,每步都要按本指南做契约对齐。"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "本任务大量复用既有代码(MissionControl / ClaudeStream / SplitPromptLayers / EngineeringDrawer / LegacyRunsModal / PromptsPanel);写新组件前必须按指南判定能否复用。"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端规范总目录,包含组件 / hook / 状态 / 类型 / 质量 / 目录结构子条目。"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "新增 CockpitSurface / AssistantHub / AssistantConversationView / AssistantSettingsDrawer 等组件需遵守。"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "新增 useAssistantConversation / useCockpitSubMode 等 hook 时遵守。"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "cockpitSubMode / mission ↔ conversation 1:1 / artifact 状态由 hook 管理,需对齐项目状态管理约定。"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "BuiltinAssistantBundle / AssistantOverridesPatch / IntentFence 解析等 TS 类型必须严格;不允许 any。"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "新增 src/components/CockpitSurface / Inspectors / src/services/assistantPromptLayers / intentFence / assistantOverrides 的目录归位。"}
+{"file": ".trellis/spec/tauri/index.md", "reason": "Tauri 后端规范总目录;本任务有 IPC 与持久化变更。"}
+{"file": ".trellis/spec/tauri/ipc-guidelines.md", "reason": "新增 assistants_get_overrides / save / reset 与 mission_record_chat_event 等命令需遵守命名 / Result / camelCase 约定。"}
+{"file": ".trellis/spec/tauri/security-and-filesystem.md", "reason": "新增 read_task_artifact / write_task_artifact 命令对 .trellis/tasks 目录的写入要在 capabilities allowlist 与路径校验中受控。"}
+{"file": ".trellis/spec/tauri/persistence-and-migrations.md", "reason": "027/028 两条迁移要遵守约定:idempotent / 兼容存量 / 升级 include list / WiseDb migration 风格。"}

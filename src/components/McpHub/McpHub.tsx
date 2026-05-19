@@ -1,12 +1,21 @@
-import { CloseOutlined, DeleteOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
+import {
+  CloseOutlined,
+  DeleteOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+  SearchOutlined,
+} from "@ant-design/icons";
 import { Badge, Button, Empty, Input, Spin, Switch, Tabs, Tag, Tooltip, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useClaudeMcpList } from "../../hooks/useClaudeMcpList";
 import { computerUseMcpLikelyRegistered, getCuaDriverStatus, type CuaDriverStatus } from "../../services/cuaDriver";
+import { getExtensionMcpServers } from "../../services/extensions";
+import type { ResolvedMcpServer } from "../../types/extension";
 import { ClaudeMcpAddServerModal } from "../ClaudeMcp/ClaudeMcpAddServerModal";
 import { flattenMcpItemsForHub } from "../ClaudeMcp/claudeMcpListModel";
 import { ComputerUseMcpSection } from "../ComputerUseMcpSection";
 import "../ClaudeMcpLayout.css";
+import "../HubCard/index.css";
 import "./McpHub.css";
 
 interface Props {
@@ -20,6 +29,20 @@ export function McpHub({ repositoryPath, onClose }: Props) {
   const [addOpen, setAddOpen] = useState(false);
   const [cuaDriverStatus, setCuaDriverStatus] = useState<CuaDriverStatus | null>(null);
   const [activeTab, setActiveTab] = useState<string>("installed");
+  const [extServers, setExtServers] = useState<ResolvedMcpServer[]>([]);
+  const [extLoading, setExtLoading] = useState(false);
+
+  const refreshExtServers = useCallback(async () => {
+    setExtLoading(true);
+    try {
+      const next = await getExtensionMcpServers();
+      setExtServers(next);
+    } catch {
+      // silent — extension subsystem may be uninitialized; not fatal
+    } finally {
+      setExtLoading(false);
+    }
+  }, []);
 
   const {
     mcpData,
@@ -44,11 +67,13 @@ export function McpHub({ repositoryPath, onClose }: Props) {
   const refreshAll = useCallback(async () => {
     await refreshMcp();
     setCuaDriverStatus(await getCuaDriverStatus());
-  }, [refreshMcp]);
+    await refreshExtServers();
+  }, [refreshMcp, refreshExtServers]);
 
   useEffect(() => {
     void getCuaDriverStatus().then(setCuaDriverStatus);
-  }, []);
+    void refreshExtServers();
+  }, [refreshExtServers]);
 
   useEffect(() => {
     if (!onClose) return;
@@ -78,7 +103,7 @@ export function McpHub({ repositoryPath, onClose }: Props) {
         <header className="app-mcp-hub-header">
           <div className="app-mcp-hub-header-top">
             <Typography.Title level={5} className="app-mcp-hub-title">
-              MCP
+              MCP 工具市场
             </Typography.Title>
             {onClose ? (
               <Tooltip title="关闭" mouseEnterDelay={0.35}>
@@ -115,6 +140,15 @@ export function McpHub({ repositoryPath, onClose }: Props) {
       </span>
     ) : (
       "未安装"
+    );
+
+  const extensionTabLabel =
+    extServers.length > 0 ? (
+      <span>
+        来自扩展 <Badge count={extServers.length} size="small" style={{ marginLeft: 4 }} />
+      </span>
+    ) : (
+      "来自扩展"
     );
 
   const installedPanel =
@@ -211,12 +245,65 @@ export function McpHub({ repositoryPath, onClose }: Props) {
     </div>
   );
 
+  const extensionPanel = extLoading && extServers.length === 0 ? (
+    <div className="app-mcp-hub-loading">
+      <Spin size="small" />
+    </div>
+  ) : extServers.length === 0 ? (
+    <Empty
+      className="app-mcp-hub-empty"
+      description="暂无扩展贡献的 MCP 服务器。安装一个声明 contributes.mcpServers 的扩展即可在此显示。"
+      image={Empty.PRESENTED_IMAGE_SIMPLE}
+    />
+  ) : (
+    <div className="app-mcp-hub-grid">
+      {extServers.map((s) => {
+        const command = s.transport.type === "stdio"
+          ? [s.transport.command ?? "", ...(s.transport.args ?? [])].filter(Boolean).join(" ")
+          : s.transport.url ?? "";
+        return (
+          <article key={s.id} className="app-mcp-hub-card">
+            <div className="app-mcp-hub-card-top">
+              <span className="app-mcp-hub-card-avatar" aria-hidden>
+                {s.name.slice(0, 1).toUpperCase()}
+              </span>
+              <div className="app-mcp-hub-card-headline">
+                <div className="app-mcp-hub-card-name-row">
+                  <span className="app-mcp-hub-card-name">{s.name}</span>
+                  <Tag color="purple" style={{ marginLeft: 4 }}>
+                    {s.transport.type}
+                  </Tag>
+                  <Tag color="default">来自扩展 {s.extension}</Tag>
+                </div>
+                <div className="app-mcp-hub-card-scope">扩展贡献 · 只读</div>
+              </div>
+            </div>
+            <div className="app-mcp-hub-card-command" title={command}>
+              {command || "—"}
+            </div>
+            {s.description ? (
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "var(--ant-color-text-secondary)",
+                  marginTop: 4,
+                }}
+              >
+                {s.description}
+              </div>
+            ) : null}
+          </article>
+        );
+      })}
+    </div>
+  );
+
   return (
     <div className="app-mcp-hub-root">
       <header className="app-mcp-hub-header">
         <div className="app-mcp-hub-header-top">
           <Typography.Title level={5} className="app-mcp-hub-title">
-            MCP
+            MCP 工具市场
           </Typography.Title>
           {onClose ? (
             <Tooltip title="关闭" mouseEnterDelay={0.35}>
@@ -231,9 +318,6 @@ export function McpHub({ repositoryPath, onClose }: Props) {
             </Tooltip>
           ) : null}
         </div>
-        <Typography.Paragraph type="secondary" className="app-mcp-hub-subtitle">
-          「已安装」为 Claude Code 已配置的 MCP；「未安装」为可一键补齐的推荐项（如 cua-driver）。
-        </Typography.Paragraph>
         <div className="app-mcp-hub-toolbar">
           <Input
             allowClear
@@ -261,6 +345,7 @@ export function McpHub({ repositoryPath, onClose }: Props) {
         items={[
           { key: "installed", label: installedTabLabel, children: installedPanel },
           { key: "pending", label: pendingTabLabel, children: pendingPanel },
+          { key: "extension", label: extensionTabLabel, children: extensionPanel },
         ]}
       />
 

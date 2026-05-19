@@ -1,8 +1,8 @@
+import { RobotOutlined } from "@ant-design/icons";
 import { App as AntdApp, Layout } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import type { ProjectItem, Repository } from "../types";
 import { repositoryFolderBasename } from "../utils/repositoryType";
-import { AppSettingsModal } from "./AppSettingsModal";
 import { MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths";
 import { cancelClaudeExecution } from "../services/claude";
 import { pickFolder } from "../services/repository";
@@ -42,6 +42,8 @@ export function LeftSidebar({
   authorDisabled,
   authorDisabledTooltip,
   onOpenAuthor,
+  assistantHubActive = false,
+  onOpenAssistantHub,
   workspaceCreateRequest,
   standaloneRepoAddRequest,
   onProjectSelect,
@@ -57,6 +59,7 @@ export function LeftSidebar({
   onCodeGraphViewRepositoryInProject,
   onCodeGraphViewFloatingRepository,
   onAddFloatingRepository,
+  onAddRepositoryToProject,
   onPromoteFloatingRepositoryToProject,
   floatingRepositories = [],
   onRemoveRepository,
@@ -115,7 +118,6 @@ export function LeftSidebar({
   /** 待升格为新项目的游离 repo（菜单触发后弹出输入项目名 modal）。 */
   const [promotingFloatingRepo, setPromotingFloatingRepo] = useState<Repository | null>(null);
   const [promotingFloatingRepoName, setPromotingFloatingRepoName] = useState("");
-  const [appSettingsOpen, setAppSettingsOpen] = useState(false);
   const [repositoryFileTreeSearch, setRepositoryFileTreeSearch] = useState("");
   const [filesExplorerSectionCollapsed, setFilesExplorerSectionCollapsed] = useState(
     readLeftFilesExplorerCollapsedFromStorage,
@@ -131,9 +133,10 @@ export function LeftSidebar({
     onReloadFullDiskTranscript,
   });
   const repositoryAssociateModal = useRepositoryAssociateModalController({
+    onAddRepositoryToProject,
     onAddFloatingRepository,
   });
-  const { openAddFloatingRepositoryModal } = repositoryAssociateModal;
+  const { openAddFloatingRepositoryModal, openAddRepositoryModal } = repositoryAssociateModal;
   const repositorySddModeModal = useRepositorySddModeModalController({
     onUpdateRepositorySddMode,
   });
@@ -237,7 +240,6 @@ export function LeftSidebar({
         authorDisabled={authorDisabled}
         authorTooltip={authorDisabledTooltip}
         onOpenAuthor={onOpenAuthor}
-        onOpenSettings={() => setAppSettingsOpen(true)}
       />
 
       {taskCardsNavProps ? (
@@ -270,6 +272,9 @@ export function LeftSidebar({
           }}
           onAddFloatingRepositoryClick={
             onAddFloatingRepository ? openAddFloatingRepositoryModal : undefined
+          }
+          onAddRepositoryToProjectClick={
+            onAddRepositoryToProject ? openAddRepositoryModal : undefined
           }
           onReconcileProject={onReconcileProject}
           onCodeGraphGenerateProject={onCodeGraphGenerateProject}
@@ -333,6 +338,22 @@ export function LeftSidebar({
             console.error(err);
           }}
         />
+
+        {onOpenAssistantHub ? (
+          <div className="app-left-sidebar-assistant-entry">
+            <button
+              type="button"
+              className={`app-left-sidebar-assistant-button${assistantHubActive ? " app-left-sidebar-assistant-button--active" : ""}`}
+              onClick={onOpenAssistantHub}
+              aria-label="打开助手"
+            >
+              <span className="app-left-sidebar-assistant-button__icon" aria-hidden>
+                <RobotOutlined />
+              </span>
+              <span className="app-left-sidebar-assistant-button__label">助手</span>
+            </button>
+          </div>
+        ) : null}
 
         {activeRepositoryPath ? (
           <ActiveRepositoryFilesPanel
@@ -451,7 +472,6 @@ export function LeftSidebar({
         onCancel={repositorySddModeModal.cancel}
         onSubmit={() => void repositorySddModeModal.submit()}
       />
-      <AppSettingsModal open={appSettingsOpen} onClose={() => setAppSettingsOpen(false)} />
     </Layout.Sider>
   );
 }
