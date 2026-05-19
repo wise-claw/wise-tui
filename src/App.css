@@ -2154,14 +2154,19 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 .app-left-sidebar .app-repository-row-actions .app-repository-action {
   opacity: 1;
   pointer-events: auto;
-  width: 16px;
-  height: 16px;
-  min-width: 16px;
-  max-width: 16px;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  max-width: 18px;
 }
 
 .app-left-sidebar .app-repository-row-actions .app-repository-action--requirement,
-.app-left-sidebar .app-repository-row-actions .app-repository-action--executable-tasks,
+.app-left-sidebar .app-repository-row-actions .app-repository-action--executable-tasks {
+  width: 20px;
+  min-width: 20px;
+  max-width: 20px;
+}
+
 .app-left-sidebar .app-repository-row-actions .app-repository-action--trellis,
 .app-left-sidebar .app-repository-row-actions .app-repository-action--code-graph,
 .app-left-sidebar .app-repository-row-actions .app-repository-action--chat,
