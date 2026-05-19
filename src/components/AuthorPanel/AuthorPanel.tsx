@@ -1,7 +1,7 @@
-import { Button, Empty, Input, Space, Spin, Typography } from "antd";
+import { Button, Empty, Input, Space, Spin } from "antd";
 import {
-  ArrowLeftOutlined,
   DeploymentUnitOutlined,
+  LeftOutlined,
   PlusOutlined,
   ReloadOutlined,
   SearchOutlined,
@@ -100,8 +100,6 @@ export function AuthorPanel({
   const [hooksSearch, setHooksSearch] = useState("");
   const hooksPanelRef = useRef<ClaudeHooksConfigPanelHandle | null>(null);
   const activeTab = AUTHOR_TABS.find((item) => item.key === pane) ?? AUTHOR_TABS[0];
-  const activeGroupTitle =
-    AUTHOR_TAB_GROUPS.find((group) => group.items.some((item) => item.key === activeTab.key))?.title ?? "工作台";
   const hooksRepositoryPath = repositoryPath?.trim() || undefined;
 
   useEffect(() => {
@@ -226,48 +224,39 @@ export function AuthorPanel({
   return (
     <SettingsViewModeProvider value="page">
       <div className="author-panel">
-        <header className="author-panel__header">
-          <Space size={8}>
-            <Button size="small" icon={<ArrowLeftOutlined />} onClick={onBack}>
+        <div className="author-panel__split">
+          <nav className="author-panel__nav" aria-label="工作台配置导航">
+            <Button type="text" className="author-panel__back" icon={<LeftOutlined />} onClick={onBack}>
               返回
             </Button>
-            <div>
-              <Typography.Title level={4}>{activeTab.label}</Typography.Title>
-              <Typography.Text type="secondary">
-                {activeTab.description}
-              </Typography.Text>
-            </div>
-          </Space>
-          <Typography.Text type="secondary" className="author-panel__active-label">
-            工作台配置 / {activeGroupTitle}
-          </Typography.Text>
-        </header>
-        <div className="author-panel__body">
-          <nav className="author-panel__tabs" aria-label="工作台配置导航">
             {AUTHOR_TAB_GROUPS.map((group) => (
-              <div className="author-panel-tab-group" key={group.title}>
-                <div className="author-panel-tab-group__title">{group.title}</div>
+              <div className="author-panel-nav-group" key={group.title}>
+                <div className="author-panel-nav-group__title">{group.title}</div>
                 {group.items.map((tab) => (
                   <button
                     key={tab.key}
                     type="button"
-                    className={`author-panel-tab${tab.key === pane ? " author-panel-tab--active" : ""}`}
+                    className={`author-panel-nav-item${tab.key === pane ? " author-panel-nav-item--active" : ""}`}
                     onClick={() => onPaneChange(tab.key)}
+                    title={tab.description}
                   >
-                    <span className="author-panel-tab__icon" aria-hidden>
+                    <span className="author-panel-nav-item__icon" aria-hidden>
                       {tab.icon}
                     </span>
-                    <span className="author-panel-tab__text">
-                      <span className="author-panel-tab__label">{tab.label}</span>
-                      <span className="author-panel-tab__description">{tab.description}</span>
-                    </span>
+                    <span className="author-panel-nav-item__label">{tab.label}</span>
                   </button>
                 ))}
               </div>
             ))}
           </nav>
-          <main className="author-panel__content" aria-label={activeTab.label}>
-            {content ?? <Spin size="small" />}
+          <main className="author-panel__main" aria-label={activeTab.label}>
+            <h1 className="author-panel__title">{activeTab.label}</h1>
+            {activeTab.description ? (
+              <p className="author-panel__subtitle">{activeTab.description}</p>
+            ) : null}
+            <div className="author-panel__scroll">
+              {content ?? <Spin size="small" />}
+            </div>
           </main>
         </div>
       </div>

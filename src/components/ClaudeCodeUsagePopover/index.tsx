@@ -288,7 +288,7 @@ export function ClaudeCodeUsageHeaderBtn() {
       }
     >
       <Tooltip title="Claude Code 用量（本机 JSONL，对齐 ccusage）" mouseEnterDelay={0.35}>
-        <button type="button" className="app-cc-usage-header-btn" aria-label="Claude Code 用量统计">
+        <button type="button" className="app-left-sidebar-topbar-btn" aria-label="Claude Code 用量统计">
           <IconClaudeUsage />
         </button>
       </Tooltip>

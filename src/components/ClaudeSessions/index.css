@@ -105,7 +105,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 2px;
+  box-sizing: border-box;
+  min-height: var(--app-column-topbar-min-height);
+  height: var(--app-column-topbar-min-height);
+  padding: var(--app-column-topbar-padding-y) 2px;
   background: var(--ant-color-bg-container);
   border-bottom: 1px solid var(--ant-color-border-secondary);
   flex-shrink: 0;

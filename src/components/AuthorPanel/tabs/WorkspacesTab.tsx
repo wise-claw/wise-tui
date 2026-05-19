@@ -44,62 +44,68 @@ export function WorkspacesTab({
       {!hasItems ? (
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有工作区或单仓，请先新建工作区或添加单仓" />
       ) : (
-        <div className="author-panel-workspaces__grid">
-          <section className="author-panel-workspaces__column">
-            <div className="author-panel-workspaces__column-title">工作区</div>
-            {workspaces.length === 0 ? (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无工作区" />
-            ) : (
-              <div className="author-panel-workspaces__list">
-                {workspaces.map((workspace) => (
-                  <button
-                    key={workspace.id}
-                    type="button"
-                    className={`author-panel-workspace-row${workspace.id === activeWorkspaceId ? " author-panel-workspace-row--active" : ""}`}
-                    onClick={() => onSelectWorkspace(workspace.id)}
-                  >
-                    <span className="author-panel-workspace-row__main">
-                      <span className="author-panel-workspace-row__name">{workspace.name}</span>
-                      <span className="author-panel-workspace-row__meta">
-                        {workspace.repositoryIds.length} 个仓库
-                        {workspace.rootPath ? ` · ${workspace.rootPath}` : " · 未绑定 Trellis 根目录"}
+        <>
+          <section className="author-panel-workspaces__section">
+            <h3 className="author-panel-workspaces__section-label">工作区</h3>
+            <div className="author-panel-workspaces__card">
+              {workspaces.length === 0 ? (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无工作区" />
+              ) : (
+                <div className="author-panel-workspaces__list">
+                  {workspaces.map((workspace) => (
+                    <button
+                      key={workspace.id}
+                      type="button"
+                      className={`author-panel-workspace-row${workspace.id === activeWorkspaceId ? " author-panel-workspace-row--active" : ""}`}
+                      onClick={() => onSelectWorkspace(workspace.id)}
+                    >
+                      <span className="author-panel-workspace-row__main">
+                        <span className="author-panel-workspace-row__name">{workspace.name}</span>
+                        <span className="author-panel-workspace-row__meta">
+                          {workspace.repositoryIds.length} 个仓库
+                          {workspace.rootPath ? ` · ${workspace.rootPath}` : " · 未绑定 Trellis 根目录"}
+                        </span>
                       </span>
-                    </span>
-                    <span className="author-panel-workspace-row__tags">
-                      <Tag color={workspace.rootPath ? "success" : "warning"}>{workspace.rootPath ? "根目录就绪" : "待绑定"}</Tag>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
+                      <span className="author-panel-workspace-row__tags">
+                        <Tag color={workspace.rootPath ? "success" : "warning"}>
+                          {workspace.rootPath ? "根目录就绪" : "待绑定"}
+                        </Tag>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </section>
 
-          <section className="author-panel-workspaces__column">
-            <div className="author-panel-workspaces__column-title">单仓入口</div>
-            {standaloneRepos.length === 0 ? (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无单仓入口" />
-            ) : (
-              <div className="author-panel-workspaces__list">
-                {standaloneRepos.map((repo) => (
-                  <button
-                    key={repo.id}
-                    type="button"
-                    className={`author-panel-workspace-row${repo.id === activeRepositoryId && !activeWorkspaceId ? " author-panel-workspace-row--active" : ""}`}
-                    onClick={() => onSelectStandaloneRepo(repo.id)}
-                  >
-                    <span className="author-panel-workspace-row__main">
-                      <span className="author-panel-workspace-row__name">{repositoryFolderBasename(repo)}</span>
-                      <span className="author-panel-workspace-row__meta">{repo.path}</span>
-                    </span>
-                    <span className="author-panel-workspace-row__tags">
-                      <Tag icon={<FolderOpenOutlined />}>单仓会话</Tag>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
+          <section className="author-panel-workspaces__section">
+            <h3 className="author-panel-workspaces__section-label">单仓入口</h3>
+            <div className="author-panel-workspaces__card">
+              {standaloneRepos.length === 0 ? (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无单仓入口" />
+              ) : (
+                <div className="author-panel-workspaces__list">
+                  {standaloneRepos.map((repo) => (
+                    <button
+                      key={repo.id}
+                      type="button"
+                      className={`author-panel-workspace-row${repo.id === activeRepositoryId && !activeWorkspaceId ? " author-panel-workspace-row--active" : ""}`}
+                      onClick={() => onSelectStandaloneRepo(repo.id)}
+                    >
+                      <span className="author-panel-workspace-row__main">
+                        <span className="author-panel-workspace-row__name">{repositoryFolderBasename(repo)}</span>
+                        <span className="author-panel-workspace-row__meta">{repo.path}</span>
+                      </span>
+                      <span className="author-panel-workspace-row__tags">
+                        <Tag icon={<FolderOpenOutlined />}>单仓会话</Tag>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </section>
-        </div>
+        </>
       )}
     </div>
   );

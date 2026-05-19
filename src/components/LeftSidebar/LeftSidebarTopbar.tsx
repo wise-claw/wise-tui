@@ -30,8 +30,9 @@ export function LeftSidebarTopbar({
         <Tooltip title={authorDisabled ? authorTooltip : "工作台配置"} mouseEnterDelay={0.35}>
           <button
             type="button"
-            className="app-left-sidebar-compact-btn"
+            className="app-left-sidebar-topbar-btn"
             aria-label="打开工作台配置"
+            disabled={authorDisabled}
             onClick={() => onOpenAuthor()}
           >
             <IconSettings />
@@ -48,7 +49,7 @@ export function LeftSidebarTopbar({
           >
             <button
               type="button"
-              className={`app-left-sidebar-compact-btn${compactLayoutMode ? " app-left-sidebar-compact-btn--active" : ""}`}
+              className={`app-left-sidebar-topbar-btn${compactLayoutMode ? " app-left-sidebar-topbar-btn--active" : ""}`}
               aria-label={compactLayoutMode ? "退出小窗口模式" : "小窗口模式"}
               onClick={onToggleCompactLayoutMode}
             >
