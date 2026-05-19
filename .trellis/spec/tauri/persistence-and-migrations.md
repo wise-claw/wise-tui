@@ -156,6 +156,10 @@ if project.root_path.is_empty() {
   -> ResolvedRuntime`
 - `assistant_overrides.skill_bundle_json` and `mcp_bundle_json` use
   `{ disabled: string[], custom: [{ id, label, origin?, sourcePath? }] }`.
+- Frontend skill mounting uses `skills_detect_external_paths()` and
+  `skills_scan_path(path)` to choose existing local skills, then persists the
+  selected skill as a full `custom` bundle item through
+  `assistants_save_overrides`.
 
 ### 3. Contracts
 
@@ -170,6 +174,9 @@ if project.root_path.is_empty() {
 - Runtime merge order remains builtin defaults -> assistant scope -> project
   scope -> repository scope. Bundle JSON object fields replace at the top
   level; callers that save overrides must send the complete intended bundle.
+- Assistant settings UI may add/remove non-builtin skill refs, but builtin skill
+  refs are only disabled/enabled. Removing a builtin by deleting it from
+  `custom` is a bug because builtin refs come from the Rust bundle.
 
 ### 4. Validation & Error Matrix
 
@@ -204,6 +211,8 @@ if project.root_path.is_empty() {
   skill refs and that disabled/custom override payloads survive resolution.
 - Frontend service tests assert `assistants_reset_overrides` and bundle JSON
   builders wrap payloads under `args`.
+- Frontend pure helper tests assert scanned skill -> bundle candidate
+  conversion, dedupe on add, remove behavior, and search filtering.
 
 ### 7. Wrong vs Correct
 

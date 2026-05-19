@@ -315,6 +315,16 @@
   justify-content: center;
 }
 
+.assistant-settings-drawer__loading--compact {
+  min-height: 72px;
+}
+
+.assistant-settings-drawer__skills {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .assistant-settings-drawer__bundle-list {
   display: flex;
   flex-direction: column;
@@ -330,6 +340,11 @@
   border: 1px solid var(--ant-color-border-secondary);
   border-radius: 8px;
   background: var(--ant-color-bg-container);
+}
+
+.assistant-settings-drawer__bundle-item .ant-btn {
+  padding-inline: 0;
+  flex-shrink: 0;
 }
 
 .assistant-settings-drawer__bundle-copy {
@@ -353,6 +368,45 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.assistant-settings-drawer__skill-pool {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px dashed var(--ant-color-border);
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.assistant-settings-drawer__section-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.assistant-settings-drawer__candidate-list {
+  max-height: 260px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.assistant-settings-drawer__candidate {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
+}
+
+.assistant-settings-drawer__candidate .ant-btn {
+  flex-shrink: 0;
 }
 
 .assistant-settings-drawer__prefs {

@@ -6,6 +6,7 @@ import {
   Drawer,
   Empty,
   Input,
+  Select,
   Segmented,
   Spin,
   Switch,
@@ -25,7 +26,19 @@ import {
   type AssistantEngineeringPreferences,
   type AssistantRuntimeBundle,
 } from "../../services/assistantPromptLayers";
+import {
+  detectExternalSkillPaths,
+  scanSkillPath,
+  type DetectedExternalPath,
+} from "../../services/skills";
 import type { AssistantBundleRef, AssistantEntry } from "../../types/assistant";
+import {
+  addSkillMount,
+  filterSkillMountCandidates,
+  removeSkillMount,
+  scannedSkillToMountCandidate,
+  type SkillMountCandidate,
+} from "./assistantSkillMount";
 
 type SettingsScope = "assistant" | "project";
 type CheckboxSelectionValue = string | number | boolean;
@@ -65,6 +78,12 @@ export function AssistantSettingsDrawer({
   const [scope, setScope] = useState<SettingsScope>("assistant");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [skillPoolLoading, setSkillPoolLoading] = useState(false);
+  const [skillScanLoading, setSkillScanLoading] = useState(false);
+  const [skillPaths, setSkillPaths] = useState<DetectedExternalPath[]>([]);
+  const [selectedSkillPath, setSelectedSkillPath] = useState<string | null>(null);
+  const [skillCandidates, setSkillCandidates] = useState<SkillMountCandidate[]>([]);
+  const [skillQuery, setSkillQuery] = useState("");
   const [draft, setDraft] = useState<SettingsDraft>(EMPTY_DRAFT);
 
   const effectiveScope = scope === "project" && activeProjectId
@@ -74,6 +93,7 @@ export function AssistantSettingsDrawer({
   useEffect(() => {
     if (!open) return;
     setScope("assistant");
+    setSkillQuery("");
   }, [open, assistant?.id]);
 
   useEffect(() => {
@@ -105,6 +125,62 @@ export function AssistantSettingsDrawer({
       cancelled = true;
     };
   }, [activeProjectId, assistant, message, open, scope]);
+
+  useEffect(() => {
+    if (!open || !assistant) return;
+    let cancelled = false;
+    setSkillPoolLoading(true);
+    detectExternalSkillPaths()
+      .then((paths) => {
+        if (cancelled) return;
+        const existing = paths.filter((path) => path.exists && path.count > 0);
+        setSkillPaths(existing);
+        setSelectedSkillPath((current) =>
+          current && existing.some((path) => path.path === current)
+            ? current
+            : existing[0]?.path ?? null,
+        );
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          message.error(`读取技能目录失败：${err instanceof Error ? err.message : String(err)}`);
+          setSkillPaths([]);
+          setSelectedSkillPath(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSkillPoolLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [assistant, message, open]);
+
+  useEffect(() => {
+    if (!open || !selectedSkillPath) {
+      setSkillCandidates([]);
+      return;
+    }
+    let cancelled = false;
+    setSkillScanLoading(true);
+    scanSkillPath(selectedSkillPath)
+      .then((skills) => {
+        if (cancelled) return;
+        setSkillCandidates(skills.filter((skill) => skill.hasSkillMd).map(scannedSkillToMountCandidate));
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          message.error(`扫描技能目录失败：${err instanceof Error ? err.message : String(err)}`);
+          setSkillCandidates([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSkillScanLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [message, open, selectedSkillPath]);
 
   const skillOptions = useMemo(
     () => toBundleItems(assistant?.defaultSkills ?? [], draft.skills.custom),
@@ -192,6 +268,24 @@ export function AssistantSettingsDrawer({
   const selectedMcps = mcpOptions
     .filter((item) => !draft.mcps.disabled.includes(item.id))
     .map((item) => item.id);
+  const filteredSkillCandidates = useMemo(
+    () => filterSkillMountCandidates(skillCandidates, skillQuery),
+    [skillCandidates, skillQuery],
+  );
+
+  const handleMountSkill = useCallback((candidate: SkillMountCandidate) => {
+    setDraft((prev) => ({
+      ...prev,
+      skills: addSkillMount(prev.skills, candidate),
+    }));
+  }, []);
+
+  const handleRemoveMountedSkill = useCallback((skillId: string) => {
+    setDraft((prev) => ({
+      ...prev,
+      skills: removeSkillMount(prev.skills, skillId),
+    }));
+  }, []);
 
   return (
     <Drawer
@@ -259,11 +353,21 @@ export function AssistantSettingsDrawer({
                   key: "skills",
                   label: "Skills",
                   children: (
-                    <BundleSelector
-                      emptyText="这个助手还没有内置 Skill，可从技能市场挂载后在这里管理。"
+                    <SkillSettingsPanel
                       items={skillOptions}
                       selectedIds={selectedSkills}
-                      onChange={handleSkillSelection}
+                      onSelectionChange={handleSkillSelection}
+                      onRemoveMountedSkill={handleRemoveMountedSkill}
+                      skillPaths={skillPaths}
+                      selectedSkillPath={selectedSkillPath}
+                      onSelectSkillPath={setSelectedSkillPath}
+                      skillPoolLoading={skillPoolLoading}
+                      skillScanLoading={skillScanLoading}
+                      candidates={filteredSkillCandidates}
+                      mountedSkillIds={new Set(skillOptions.map((item) => item.id))}
+                      query={skillQuery}
+                      onQueryChange={setSkillQuery}
+                      onMountSkill={handleMountSkill}
                     />
                   ),
                 },
@@ -298,14 +402,118 @@ export function AssistantSettingsDrawer({
   );
 }
 
+interface SkillSettingsPanelProps {
+  items: AssistantBundleItem[];
+  selectedIds: string[];
+  onSelectionChange: (selectedIds: CheckboxSelectionValue[]) => void;
+  onRemoveMountedSkill: (skillId: string) => void;
+  skillPaths: DetectedExternalPath[];
+  selectedSkillPath: string | null;
+  onSelectSkillPath: (path: string | null) => void;
+  skillPoolLoading: boolean;
+  skillScanLoading: boolean;
+  candidates: SkillMountCandidate[];
+  mountedSkillIds: Set<string>;
+  query: string;
+  onQueryChange: (query: string) => void;
+  onMountSkill: (candidate: SkillMountCandidate) => void;
+}
+
+function SkillSettingsPanel({
+  items,
+  selectedIds,
+  onSelectionChange,
+  onRemoveMountedSkill,
+  skillPaths,
+  selectedSkillPath,
+  onSelectSkillPath,
+  skillPoolLoading,
+  skillScanLoading,
+  candidates,
+  mountedSkillIds,
+  query,
+  onQueryChange,
+  onMountSkill,
+}: SkillSettingsPanelProps) {
+  return (
+    <div className="assistant-settings-drawer__skills">
+      <BundleSelector
+        emptyText="这个助手还没有内置或挂载 Skill。可从下方技能池添加。"
+        items={items}
+        selectedIds={selectedIds}
+        onChange={onSelectionChange}
+        onRemoveMountedSkill={onRemoveMountedSkill}
+      />
+      <div className="assistant-settings-drawer__skill-pool">
+        <div className="assistant-settings-drawer__section-head">
+          <Typography.Text strong>添加 Skill</Typography.Text>
+          <Typography.Text type="secondary">从本机 skills 目录选择后，保存到当前作用域。</Typography.Text>
+        </div>
+        <Select
+          size="small"
+          value={selectedSkillPath ?? undefined}
+          placeholder={skillPoolLoading ? "读取技能目录..." : "选择技能目录"}
+          loading={skillPoolLoading}
+          onChange={(value) => onSelectSkillPath(value)}
+          options={skillPaths.map((path) => ({
+            value: path.path,
+            label: `${path.path} · ${path.count}`,
+          }))}
+        />
+        <Input.Search
+          size="small"
+          allowClear
+          value={query}
+          onChange={(event) => onQueryChange(event.target.value)}
+          placeholder="搜索 skill 名称或路径"
+        />
+        {skillScanLoading ? (
+          <div className="assistant-settings-drawer__loading assistant-settings-drawer__loading--compact">
+            <Spin size="small" />
+          </div>
+        ) : selectedSkillPath && candidates.length > 0 ? (
+          <div className="assistant-settings-drawer__candidate-list">
+            {candidates.slice(0, 24).map((candidate) => {
+              const mounted = mountedSkillIds.has(candidate.id);
+              return (
+                <div key={`${candidate.sourcePath}:${candidate.id}`} className="assistant-settings-drawer__candidate">
+                  <span className="assistant-settings-drawer__bundle-copy">
+                    <span className="assistant-settings-drawer__bundle-label">{candidate.label}</span>
+                    <span className="assistant-settings-drawer__bundle-path">{candidate.sourcePath}</span>
+                  </span>
+                  <Tag>{originLabel(candidate.origin)}</Tag>
+                  <Button
+                    size="small"
+                    type={mounted ? "default" : "primary"}
+                    disabled={mounted}
+                    onClick={() => onMountSkill(candidate)}
+                  >
+                    {mounted ? "已挂载" : "挂载"}
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={selectedSkillPath ? "该目录没有可挂载 Skill" : "没有可用技能目录"}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 interface BundleSelectorProps {
   items: AssistantBundleItem[];
   selectedIds: string[];
   emptyText: string;
   onChange: (selectedIds: CheckboxSelectionValue[]) => void;
+  onRemoveMountedSkill?: (skillId: string) => void;
 }
 
-function BundleSelector({ items, selectedIds, emptyText, onChange }: BundleSelectorProps) {
+function BundleSelector({ items, selectedIds, emptyText, onChange, onRemoveMountedSkill }: BundleSelectorProps) {
   if (items.length === 0) {
     return <Empty description={emptyText} image={Empty.PRESENTED_IMAGE_SIMPLE} />;
   }
@@ -322,6 +530,11 @@ function BundleSelector({ items, selectedIds, emptyText, onChange }: BundleSelec
             ) : null}
           </span>
           {item.origin ? <Tag>{originLabel(item.origin)}</Tag> : null}
+          {item.origin !== "builtin" && onRemoveMountedSkill ? (
+            <Button size="small" type="link" danger onClick={() => onRemoveMountedSkill(item.id)}>
+              移除
+            </Button>
+          ) : null}
         </label>
       ))}
     </Checkbox.Group>

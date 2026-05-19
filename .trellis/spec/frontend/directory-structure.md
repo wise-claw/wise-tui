@@ -159,7 +159,11 @@ cross-panel event wiring.
   and `src/components/ProjectList/index.css`.
 - Assistant Hub settings: `src/components/CockpitSurface/AssistantSettingsDrawer.tsx`
   calls `src/services/assistantPromptLayers.ts` for runtime resolution and
-  override persistence. Components must not call assistant override IPC directly.
+  override persistence, and uses `src/services/skills.ts` to scan existing
+  skills directories before adding mounted skill refs to the assistant bundle.
+  Keep scan-to-bundle pure helpers in
+  `src/components/CockpitSurface/assistantSkillMount.ts` with focused tests.
+  Components must not call assistant override IPC directly.
 - Thin IPC service: `src/services/repository.ts`.
 - Runtime stream hook: `src/hooks/useClaudeSessions.ts`.
 - Pure tested domain logic: `src/services/workflow/engine.ts`.
