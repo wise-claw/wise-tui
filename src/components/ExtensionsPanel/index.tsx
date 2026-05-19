@@ -1,15 +1,22 @@
 import {
+  AppstoreAddOutlined,
   DownOutlined,
   FolderOpenOutlined,
   ReloadOutlined,
   RightOutlined,
   SearchOutlined,
-  ToolOutlined,
 } from "@ant-design/icons";
-import { App, Button, Empty, Input, Spin, Switch } from "antd";
+import { App, Button, Empty, Input, Space, Spin, Switch } from "antd";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { HubCard, HubDot, HubItem, HubItems, HubTag } from "../HubCard";
+import {
+  AuthorPanelEmptyShell,
+  AuthorPanelHubTab,
+  AuthorPanelHubTabs,
+  AuthorPanelListShell,
+  AuthorPanelPageShell,
+} from "../AuthorPanel/AuthorPanelPageShell";
+import { HubDot, HubItem, HubItems, HubTag } from "../HubCard";
 import {
   listExtensions,
   reloadExtensions,
@@ -26,6 +33,7 @@ import {
   getExtensionSkills,
   getExtensionThemes,
 } from "../../services/extensions";
+import "./index.css";
 
 interface ContributeCounts {
   skills: number;
@@ -134,9 +142,6 @@ export function ExtensionsPanel() {
 
   const handleOpenExtensionsDir = useCallback(async () => {
     try {
-      // Resolve home dir via the existing skills service helper which already
-      // exposes the wise home discovery; for the extensions dir we simply
-      // ask the OS to open the literal path under $HOME.
       const home = await import("@tauri-apps/api/path").then((m) => m.homeDir());
       await openPath(`${home}/.wise/extensions`);
     } catch (e) {
@@ -174,40 +179,23 @@ export function ExtensionsPanel() {
     [enriched],
   );
 
-  const TabBtn = ({
-    value,
-    label,
-    count,
-  }: {
-    value: typeof scope;
-    label: string;
-    count: number;
-  }) => (
-    <button
-      type="button"
-      className={`app-hub-tab${scope === value ? " app-hub-tab--active" : ""}`}
-      onClick={() => setScope(value)}
-    >
-      {label}
-      <span className="app-hub-tab__count">{count}</span>
-    </button>
-  );
-
   return (
-    <HubCard
+    <AuthorPanelPageShell
+      className="app-extensions-panel"
       id="extensions"
-      icon={<ToolOutlined />}
+      icon={<AppstoreAddOutlined />}
       title="扩展市场"
+      subtitle="本地扩展、远程索引和贡献能力"
       actions={
-        <>
+        <Space size={8} wrap>
           <Input
             size="small"
             allowClear
-            prefix={<SearchOutlined style={{ color: "var(--ant-color-text-tertiary)" }} />}
+            className="app-extensions-panel__search"
+            prefix={<SearchOutlined />}
             placeholder="搜索扩展…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            style={{ width: 220 }}
           />
           <Button
             size="small"
@@ -224,162 +212,181 @@ export function ExtensionsPanel() {
           >
             打开目录
           </Button>
-        </>
+        </Space>
+      }
+      toolbar={
+        <AuthorPanelHubTabs aria-label="扩展筛选">
+          <AuthorPanelHubTab
+            active={scope === "installed"}
+            label="已安装"
+            count={counts.installed}
+            onClick={() => setScope("installed")}
+          />
+          <AuthorPanelHubTab
+            active={scope === "disabled"}
+            label="已禁用"
+            count={counts.disabled}
+            onClick={() => setScope("disabled")}
+          />
+          <AuthorPanelHubTab
+            active={scope === "errors"}
+            label="异常"
+            count={counts.errors}
+            onClick={() => setScope("errors")}
+          />
+        </AuthorPanelHubTabs>
       }
     >
-      <div className="app-hub-tabs" role="tablist" aria-label="扩展筛选">
-        <TabBtn value="installed" label="已安装" count={counts.installed} />
-        <TabBtn value="disabled" label="已禁用" count={counts.disabled} />
-        <TabBtn value="errors" label="异常" count={counts.errors} />
-      </div>
-
-      {loading && enriched.length === 0 ? (
-        <div style={{ textAlign: "center", padding: 32 }}>
-          <Spin size="small" />
-        </div>
-      ) : filtered.length === 0 ? (
-        <Empty
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description={
-            scope === "installed"
-              ? "暂无扩展。把 wise-extension.json 目录放入 ~/.wise/extensions/ 后点重新扫描。"
-              : scope === "disabled"
-                ? "没有禁用的扩展"
-                : "没有异常的扩展"
-          }
-          style={{ margin: "24px 0" }}
-        />
-      ) : (
-        <HubItems>
-          {filtered.map((ext) => {
-            const tone: "success" | "danger" | "default" = ext.error
-              ? "danger"
-              : ext.enabled
-                ? "success"
-                : "default";
-            const dot: "on" | "warn" | "off" = ext.error
-              ? "warn"
-              : ext.enabled
-                ? "on"
-                : "off";
-            const statusLabel = ext.error
-              ? "异常"
-              : ext.enabled
-                ? "启用"
-                : "已禁用";
-            const isOpen = expanded.has(ext.name);
-            const extSkills = skills.filter((s) => s.extension === ext.name);
-            const extThemes = themes.filter((t) => t.extension === ext.name);
-            const extDecls = decls.filter((d) => d.extension === ext.name);
-            const hasContributes = extSkills.length + extThemes.length + extDecls.length > 0;
-            return (
-              <div key={ext.name}>
-                <HubItem
-                  avatarText={ext.name || "·"}
-                  title={ext.name}
-                  tags={
-                    <>
-                      {ext.version ? <HubTag mono>v{ext.version}</HubTag> : null}
-                      <HubTag tone={tone}>
-                        <HubDot tone={dot} /> {statusLabel}
-                      </HubTag>
-                      {ext.contributes.skills > 0 ? (
-                        <HubTag mono>技能·{ext.contributes.skills}</HubTag>
-                      ) : null}
-                      {ext.contributes.themes > 0 ? (
-                        <HubTag mono>主题·{ext.contributes.themes}</HubTag>
-                      ) : null}
-                      {ext.contributes.settings > 0 ? (
-                        <HubTag mono>设置·{ext.contributes.settings}</HubTag>
-                      ) : null}
-                    </>
-                  }
-                  description={
-                    ext.error ? (
-                      <span style={{ color: "var(--ant-color-error)" }}>{ext.error}</span>
-                    ) : (
-                      ext.description || "—"
-                    )
-                  }
-                  actions={
-                    <>
-                      {hasContributes ? (
-                        <Button
-                          size="small"
-                          type="text"
-                          icon={isOpen ? <DownOutlined /> : <RightOutlined />}
-                          onClick={() => toggleExpanded(ext.name)}
-                          aria-label={isOpen ? "折叠贡献" : "展开贡献"}
-                        />
-                      ) : null}
-                      <Switch
-                        size="small"
-                        checked={ext.enabled}
-                        loading={busy === ext.name}
-                        disabled={Boolean(ext.error)}
-                        onChange={(checked) => void handleToggle(ext.name, checked)}
-                      />
-                    </>
-                  }
-                />
-                {isOpen && hasContributes ? (
-                  <div className="app-ext-contributes">
-                    {extSkills.length > 0 ? (
-                      <div className="app-ext-contributes__group">
-                        <div className="app-ext-contributes__label">
-                          技能 · {extSkills.length}
-                        </div>
-                        <ul className="app-ext-contributes__list">
-                          {extSkills.map((s) => (
-                            <li key={s.id}>
-                              <span className="app-ext-contributes__name">{s.name}</span>
-                              <span className="app-ext-contributes__desc">{s.description}</span>
-                              <span className="app-ext-contributes__path">{s.location}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-                    {extThemes.length > 0 ? (
-                      <div className="app-ext-contributes__group">
-                        <div className="app-ext-contributes__label">
-                          主题 · {extThemes.length}
-                        </div>
-                        <ul className="app-ext-contributes__list">
-                          {extThemes.map((t) => (
-                            <li key={t.id}>
-                              <span className="app-ext-contributes__name">{t.name}</span>
-                              <span className="app-ext-contributes__path">{t.location}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-                    {extDecls.length > 0 ? (
-                      <div className="app-ext-contributes__group">
-                        <div className="app-ext-contributes__label">
-                          设置项 · {extDecls.length}
-                        </div>
-                        <ul className="app-ext-contributes__list">
-                          {extDecls.map((d) => (
-                            <li key={d.id}>
-                              <span className="app-ext-contributes__name">{d.label}</span>
-                              <span className="app-ext-contributes__desc">
-                                {d.description ?? "—"}
-                              </span>
-                              <span className="app-ext-contributes__path">{d.kind}</span>
-                            </li>
-                          ))}
-                        </ul>
+        {loading && enriched.length === 0 ? (
+          <div className="author-panel-page__loading">
+            <Spin size="small" />
+          </div>
+        ) : filtered.length === 0 ? (
+          <AuthorPanelEmptyShell>
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description={
+                scope === "installed"
+                  ? "暂无扩展。把 wise-extension.json 目录放入 ~/.wise/extensions/ 后点重新扫描。"
+                  : scope === "disabled"
+                    ? "没有禁用的扩展"
+                    : "没有异常的扩展"
+              }
+            />
+          </AuthorPanelEmptyShell>
+        ) : (
+          <AuthorPanelListShell>
+            <HubItems>
+              {filtered.map((ext) => {
+                const tone: "success" | "danger" | "default" = ext.error
+                  ? "danger"
+                  : ext.enabled
+                    ? "success"
+                    : "default";
+                const dot: "on" | "warn" | "off" = ext.error
+                  ? "warn"
+                  : ext.enabled
+                    ? "on"
+                    : "off";
+                const statusLabel = ext.error
+                  ? "异常"
+                  : ext.enabled
+                    ? "启用"
+                    : "已禁用";
+                const isOpen = expanded.has(ext.name);
+                const extSkills = skills.filter((s) => s.extension === ext.name);
+                const extThemes = themes.filter((t) => t.extension === ext.name);
+                const extDecls = decls.filter((d) => d.extension === ext.name);
+                const hasContributes = extSkills.length + extThemes.length + extDecls.length > 0;
+                return (
+                  <div key={ext.name}>
+                    <HubItem
+                      avatarText={ext.name || "·"}
+                      title={ext.name}
+                      tags={
+                        <>
+                          {ext.version ? <HubTag mono>v{ext.version}</HubTag> : null}
+                          <HubTag tone={tone}>
+                            <HubDot tone={dot} /> {statusLabel}
+                          </HubTag>
+                          {ext.contributes.skills > 0 ? (
+                            <HubTag mono>技能·{ext.contributes.skills}</HubTag>
+                          ) : null}
+                          {ext.contributes.themes > 0 ? (
+                            <HubTag mono>主题·{ext.contributes.themes}</HubTag>
+                          ) : null}
+                          {ext.contributes.settings > 0 ? (
+                            <HubTag mono>设置·{ext.contributes.settings}</HubTag>
+                          ) : null}
+                        </>
+                      }
+                      description={
+                        ext.error ? (
+                          <span style={{ color: "var(--ant-color-error)" }}>{ext.error}</span>
+                        ) : (
+                          ext.description || "—"
+                        )
+                      }
+                      actions={
+                        <>
+                          {hasContributes ? (
+                            <Button
+                              size="small"
+                              type="text"
+                              icon={isOpen ? <DownOutlined /> : <RightOutlined />}
+                              onClick={() => toggleExpanded(ext.name)}
+                              aria-label={isOpen ? "折叠贡献" : "展开贡献"}
+                            />
+                          ) : null}
+                          <Switch
+                            size="small"
+                            checked={ext.enabled}
+                            loading={busy === ext.name}
+                            disabled={Boolean(ext.error)}
+                            onChange={(checked) => void handleToggle(ext.name, checked)}
+                          />
+                        </>
+                      }
+                    />
+                    {isOpen && hasContributes ? (
+                      <div className="app-ext-contributes">
+                        {extSkills.length > 0 ? (
+                          <div className="app-ext-contributes__group">
+                            <div className="app-ext-contributes__label">
+                              技能 · {extSkills.length}
+                            </div>
+                            <ul className="app-ext-contributes__list">
+                              {extSkills.map((s) => (
+                                <li key={s.id}>
+                                  <span className="app-ext-contributes__name">{s.name}</span>
+                                  <span className="app-ext-contributes__desc">{s.description}</span>
+                                  <span className="app-ext-contributes__path">{s.location}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                        {extThemes.length > 0 ? (
+                          <div className="app-ext-contributes__group">
+                            <div className="app-ext-contributes__label">
+                              主题 · {extThemes.length}
+                            </div>
+                            <ul className="app-ext-contributes__list">
+                              {extThemes.map((t) => (
+                                <li key={t.id}>
+                                  <span className="app-ext-contributes__name">{t.name}</span>
+                                  <span className="app-ext-contributes__path">{t.location}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                        {extDecls.length > 0 ? (
+                          <div className="app-ext-contributes__group">
+                            <div className="app-ext-contributes__label">
+                              设置项 · {extDecls.length}
+                            </div>
+                            <ul className="app-ext-contributes__list">
+                              {extDecls.map((d) => (
+                                <li key={d.id}>
+                                  <span className="app-ext-contributes__name">{d.label}</span>
+                                  <span className="app-ext-contributes__desc">
+                                    {d.description ?? "—"}
+                                  </span>
+                                  <span className="app-ext-contributes__path">{d.kind}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
                       </div>
                     ) : null}
                   </div>
-                ) : null}
-              </div>
-            );
-          })}
-        </HubItems>
-      )}
-    </HubCard>
+                );
+              })}
+            </HubItems>
+          </AuthorPanelListShell>
+        )}
+    </AuthorPanelPageShell>
   );
 }

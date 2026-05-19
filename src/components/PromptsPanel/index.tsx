@@ -66,7 +66,8 @@ export interface PromptsOpenContext {
 }
 
 interface Props {
-  onClose: () => void;
+  /** 工作台内由侧栏「返回」退出，不传则不展示关闭按钮。 */
+  onClose?: () => void;
   projects?: ProjectItem[] | null;
   repositories?: Repository[] | null;
   activeProjectId: string | null;
@@ -429,16 +430,18 @@ export function PromptsPanel({
             <span>{scopeTypeLabel}</span>
             <span>{enabledSlotCount}/{slotIdList.length} 启用</span>
           </div>
-          <Tooltip title="关闭" mouseEnterDelay={0.35}>
-            <Button
-              type="text"
-              size="small"
-              className="app-prompts-panel__close-btn"
-              icon={<CloseOutlined />}
-              onClick={onClose}
-              aria-label="关闭"
-            />
-          </Tooltip>
+          {onClose ? (
+            <Tooltip title="关闭" mouseEnterDelay={0.35}>
+              <Button
+                type="text"
+                size="small"
+                className="app-prompts-panel__close-btn"
+                icon={<CloseOutlined />}
+                onClick={onClose}
+                aria-label="关闭"
+              />
+            </Tooltip>
+          ) : null}
         </div>
 
         {showLoadingShell ? (

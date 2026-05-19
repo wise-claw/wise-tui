@@ -66,7 +66,7 @@ export function InspectorPanel({
   if (!node) {
     return (
       <div className="app-code-graph-inspector app-code-graph-inspector--empty">
-        <Text type="secondary">点击图谱中的节点查看详情</Text>
+        <Text type="secondary">搜索节点定位后，在此查看详情与直接邻接关系；也可点击图谱中的节点。</Text>
       </div>
     );
   }

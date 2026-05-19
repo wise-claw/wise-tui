@@ -3,6 +3,7 @@ import {
   EditOutlined,
   PlusOutlined,
   ReloadOutlined,
+  UserOutlined,
 } from "@ant-design/icons";
 import { App, Button, Drawer, Empty, Form, Input, Modal, Select, Spin } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -14,7 +15,14 @@ import {
 } from "../../services/assistants";
 import type { DetectedAgent } from "../../types/detectedAgent";
 import type { AssistantEntry, CustomAssistantInput } from "../../types/assistant";
-import { HubCard, HubDot, HubItem, HubItems, HubTag, avatarColorFor } from "../HubCard";
+import {
+  AuthorPanelEmptyShell,
+  AuthorPanelHubTab,
+  AuthorPanelHubTabs,
+  AuthorPanelListShell,
+  AuthorPanelPageShell,
+} from "../AuthorPanel/AuthorPanelPageShell";
+import { HubDot, HubItem, HubItems, HubTag, avatarColorFor } from "../HubCard";
 import {
   buildAgentEngineIndex,
   resolveAssistantEngineBinding,
@@ -153,17 +161,6 @@ export function AssistantsPanel() {
     [message, fetchAll],
   );
 
-  const TabBtn = ({ value, label, count }: { value: Filter; label: string; count: number }) => (
-    <button
-      type="button"
-      className={`app-hub-tab${filter === value ? " app-hub-tab--active" : ""}`}
-      onClick={() => setFilter(value)}
-    >
-      {label}
-      <span className="app-hub-tab__count">{count}</span>
-    </button>
-  );
-
   const engineOptions = useMemo(() => {
     const builtins = ["claude", "codex", "gemini"];
     const customAgents = agents.filter((a) => a.kind === "custom");
@@ -182,10 +179,12 @@ export function AssistantsPanel() {
 
   return (
     <>
-      <HubCard
+      <AuthorPanelPageShell
+        className="app-assistants-panel"
         id="assistants"
-        icon={<span>助</span>}
+        icon={<UserOutlined />}
         title="助手模板"
+        subtitle="角色模板、模型和系统提示词"
         actions={
           <>
             <Button size="small" icon={<ReloadOutlined />} onClick={() => void fetchAll()}>
@@ -196,25 +195,45 @@ export function AssistantsPanel() {
             </Button>
           </>
         }
+        toolbar={
+          <AuthorPanelHubTabs aria-label="助手筛选">
+            <AuthorPanelHubTab
+              active={filter === "all"}
+              label="全部"
+              count={counts.total}
+              onClick={() => setFilter("all")}
+            />
+            <AuthorPanelHubTab
+              active={filter === "builtin"}
+              label="内置"
+              count={counts.builtin}
+              onClick={() => setFilter("builtin")}
+            />
+            <AuthorPanelHubTab
+              active={filter === "custom"}
+              label="自定义"
+              count={counts.custom}
+              onClick={() => setFilter("custom")}
+            />
+            <AuthorPanelHubTab
+              active={filter === "extension"}
+              label="扩展贡献"
+              count={counts.extension}
+              onClick={() => setFilter("extension")}
+            />
+          </AuthorPanelHubTabs>
+        }
       >
-        <div className="app-hub-tabs" role="tablist">
-          <TabBtn value="all" label="全部" count={counts.total} />
-          <TabBtn value="builtin" label="内置" count={counts.builtin} />
-          <TabBtn value="custom" label="自定义" count={counts.custom} />
-          <TabBtn value="extension" label="扩展贡献" count={counts.extension} />
-        </div>
-
         {loading && list.length === 0 ? (
-          <div style={{ textAlign: "center", padding: 32 }}>
+          <div className="author-panel-page__loading">
             <Spin size="small" />
           </div>
         ) : filtered.length === 0 ? (
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description="此类别暂无助手"
-            style={{ margin: "24px 0" }}
-          />
+          <AuthorPanelEmptyShell>
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="此类别暂无助手" />
+          </AuthorPanelEmptyShell>
         ) : (
+          <AuthorPanelListShell>
           <HubItems>
             {filtered.map((a) => {
               const tone =
@@ -270,8 +289,9 @@ export function AssistantsPanel() {
               );
             })}
           </HubItems>
+          </AuthorPanelListShell>
         )}
-      </HubCard>
+      </AuthorPanelPageShell>
 
       <Drawer
         title={editor.row ? `编辑模板 · ${editor.row.name}` : "新增模板"}

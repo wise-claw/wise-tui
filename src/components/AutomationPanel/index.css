@@ -253,16 +253,16 @@
 }
 
 .app-automation-console {
-  display: grid;
-  grid-template-columns: minmax(260px, 0.42fr) minmax(0, 1fr);
-  gap: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   min-width: 0;
 }
 
 .app-automation-console__repos {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
   min-width: 0;
 }
 
@@ -523,14 +523,10 @@
 @media (max-width: 1160px) {
   .app-automation-panel__loop,
   .app-automation-panel__control-grid,
-  .app-automation-console,
+  .app-automation-console__repos,
   .app-automation-console__boundary,
   .app-automation-panel__roadmap {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .app-automation-console__detail {
-    grid-column: 1 / -1;
   }
 }
 
@@ -544,7 +540,7 @@
   .app-automation-panel__stats,
   .app-automation-panel__loop,
   .app-automation-panel__control-grid,
-  .app-automation-console,
+  .app-automation-console__repos,
   .app-automation-console__pipeline,
   .app-automation-console__boundary,
   .app-automation-panel__roadmap {

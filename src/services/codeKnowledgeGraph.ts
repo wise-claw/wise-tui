@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   CancelCodeGraphReindexOutcome,
   CodeGraphNodeSearchRequest,
+  CodeGraphSubgraphDirection,
   CodeGraphSubgraphHopDepth,
   CodeGraphSubgraphRequest,
   CodeGraphSubgraphResponse,
@@ -91,6 +92,7 @@ export async function getCodeGraphMultiSubgraph(
 /** 不传或 `undefined`：不限制 hop；`1`–`10`：子图 hop 上限（焦点 + 至多 L 条计代价 outward 边，`contains` 不增代价） */
     hop?: CodeGraphSubgraphHopDepth;
     includeCrossRepoEdges?: boolean;
+    direction?: CodeGraphSubgraphDirection;
   },
 ): Promise<CodeGraphSubgraphResponse> {
   return invoke("get_code_graph_multi_subgraph", {
@@ -98,5 +100,6 @@ export async function getCodeGraphMultiSubgraph(
     focusNodeId: options?.focusNodeId,
     hop: options?.hop,
     includeCrossRepoEdges: options?.includeCrossRepoEdges,
+    direction: options?.direction,
   });
 }

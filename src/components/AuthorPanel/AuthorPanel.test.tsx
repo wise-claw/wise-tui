@@ -294,7 +294,6 @@ function buildProps(
     mcpHubProps: { repositoryPath: "/repo" },
     skillsHubProps: { repositoryPath: "/repo" },
     promptsPanelProps: {
-      onClose: mock(() => {}),
       projects: [workspace],
       repositories: [repo],
       activeProjectId: "w1",
@@ -433,7 +432,7 @@ describe("AuthorPanel", () => {
     }
 
     const channelsHtml = renderAuthorPanel(buildProps({ pane: "channels" }).props);
-    expect(channelsHtml).toContain("渠道配置");
+    expect(channelsHtml).toContain("远程入口");
     expect(channelsHtml).toContain('data-stub="dingtalk-config"');
 
     const automationHtml = renderAuthorPanel(buildProps({ pane: "automation" }).props);

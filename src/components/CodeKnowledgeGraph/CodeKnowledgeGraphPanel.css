@@ -46,9 +46,37 @@
 
 .app-code-graph-node-search--header {
   flex: 0 0 auto !important;
-  width: 220px;
-  min-width: 180px !important;
-  max-width: 280px;
+  width: 280px;
+  min-width: 220px !important;
+  max-width: 420px;
+}
+
+.app-code-graph-focus-landing {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.app-code-graph-focus-landing-search {
+  width: min(100%, 520px);
+}
+
+.app-code-graph-focus-landing-search .app-code-graph-node-search {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+}
+
+.app-code-graph-focus-bar {
+  flex-shrink: 0;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--ant-color-border);
+  background: var(--ant-color-bg-container);
 }
 
 .app-code-graph-subgraph-toolbar-spacer {

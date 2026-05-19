@@ -1,16 +1,12 @@
 use crate::{
-    app_state_commands, assistants, cc_wf_studio_mcp_bridge, cc_workflow_studio, claude_code_usage,
+    app_state_commands, cc_wf_studio_mcp_bridge, cc_workflow_studio, claude_code_usage,
     claude_commands, claude_config_dir, claude_external_ingest, code_knowledge_graph, cua_driver,
-    dingtalk_enterprise_bot, dingtalk_stream_gateway, extensions, git_commands, mcp,
-    mission_control, prd_url_fetch, repository_files, skills, skills_sh, system_resource,
-    task_artifact, trellis_bootstrap, trellis_bridge, trellis_runtime, wise_db, wise_mascot,
-    wise_push, workspace_commands,
+    dingtalk_enterprise_bot, dingtalk_stream_gateway, git_commands, mission_control, prd_url_fetch,
+    repository_files, skills_sh, system_resource, trellis_bootstrap, trellis_bridge,
+    trellis_runtime, wise_db, wise_mascot, wise_push, workspace_commands,
 };
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
-
-#[path = "agent_registry.rs"]
-mod agent_registry;
 
 /// 系统菜单「功能 → 打开 WebView 控制台…」项 id（与 `on_menu_event` 匹配）。
 #[cfg(desktop)]
@@ -79,13 +75,6 @@ pub fn run() {
             wise_mascot::restore_mascot_on_launch(app.handle(), &wise_db)?;
             claude_config_dir::init_from_db(&wise_db);
             app.manage(wise_db);
-            app.manage(agent_registry::AgentRegistry::new());
-            let extensions_registry = extensions::ExtensionRegistry::new();
-            let extensions_home = dirs::home_dir().map(|h| h.join(".wise"));
-            if let Err(e) = extensions_registry.initialize(extensions_home, &[]) {
-                eprintln!("[extensions] initialize failed: {e}");
-            }
-            app.manage(extensions_registry);
             trellis_runtime::spawn_stale_scanner(app.handle().clone());
 
             #[cfg(target_os = "macos")]
@@ -231,49 +220,6 @@ pub fn run() {
             app_state_commands::workflow_run_commands::append_workflow_event,
             app_state_commands::workflow_run_commands::migrate_workflow_session_tab_references,
             app_state_commands::workflow_run_commands::list_workflow_events,
-            agent_registry::agent_registry_list,
-            agent_registry::agent_registry_refresh,
-            agent_registry::agent_registry_get,
-            agent_registry::agent_registry_test_custom,
-            agent_registry::agent_registry_save_custom,
-            agent_registry::agent_registry_delete_custom,
-            extensions::commands::extensions_list,
-            extensions::commands::extensions_get_skills,
-            extensions::commands::extensions_get_themes,
-            extensions::commands::extensions_get_settings_declarations,
-            extensions::commands::extensions_get_mcp_servers,
-            extensions::commands::extensions_get_settings_tabs,
-            extensions::commands::extensions_read_settings_tab_body,
-            extensions::commands::extensions_set_enabled,
-            extensions::commands::extensions_get_permissions,
-            extensions::commands::extensions_reload,
-            skills::commands::skills_detect_external_paths,
-            skills::commands::skills_scan_path,
-            skills::commands::skills_add_external_path,
-            skills::commands::skills_remove_external_path,
-            skills::commands::skills_list_external_paths,
-            skills::commands::skills_import_copy,
-            skills::commands::skills_import_symlink,
-            skills::commands::skills_delete_imported,
-            skills::commands::skills_export_symlink,
-            skills::commands::skills_wise_home,
-            mcp::commands::mcp_list_servers,
-            mcp::commands::mcp_save_server,
-            mcp::commands::mcp_delete_server,
-            mcp::commands::mcp_test_connection,
-            mcp::commands::mcp_supported_transports,
-            assistants::commands::assistants_list,
-            assistants::commands::assistants_save_custom,
-            assistants::commands::assistants_delete_custom,
-            assistants::commands::assistants_get_system_prompt,
-            assistants::commands::assistants_get_overrides,
-            assistants::commands::assistants_list_overrides,
-            assistants::commands::assistants_save_overrides,
-            assistants::commands::assistants_reset_overrides,
-            assistants::commands::assistants_resolve_runtime,
-            task_artifact::read_task_artifact,
-            task_artifact::write_task_artifact,
-            task_artifact::mission_create_with_task,
             mission_control::mission_create_or_resume,
             mission_control::mission_get_snapshot,
             mission_control::mission_list_recent,
@@ -339,10 +285,7 @@ pub fn run() {
             trellis_bridge::trellis_list_research,
             trellis_bridge::trellis_detect_sdd_signals,
             trellis_bridge::trellis_list_spec_areas,
-            trellis_bridge::trellis_list_spec_tree,
-            trellis_bridge::trellis_read_spec_file,
             trellis_bridge::trellis_read_spec_index,
-            trellis_bridge::trellis_write_spec_file,
             trellis_bridge::trellis_write_spec_index,
             trellis_runtime::trellis_runtime_record_event,
             trellis_runtime::trellis_runtime_list_events,

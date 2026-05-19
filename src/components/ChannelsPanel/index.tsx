@@ -3,10 +3,12 @@ import {
   CheckCircleOutlined,
   CloudServerOutlined,
   DingdingOutlined,
+  GatewayOutlined,
   MessageOutlined,
   SendOutlined,
 } from "@ant-design/icons";
 import { Collapse, Empty, Switch, Typography } from "antd";
+import { AuthorPanelListShell, AuthorPanelPageShell } from "../AuthorPanel/AuthorPanelPageShell";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { DingTalkEnterpriseBotPopoverBody } from "../DingTalkEnterpriseBotPopoverBody";
 import { loadDingTalkEnterpriseBotConfig } from "../../services/dingtalkEnterpriseBot";
@@ -120,6 +122,7 @@ export function ChannelsPanel() {
           ),
           extra: (
             <Switch
+              size="small"
               checked={enabled}
               loading={channel.key === "dingtalk" ? streamBusy : false}
               disabled={!canToggle}
@@ -139,28 +142,26 @@ export function ChannelsPanel() {
   );
 
   return (
-    <section className="app-channels-panel" aria-label="远程入口">
-      <header className="app-channels-panel__header">
-        <Typography.Title level={4} className="app-channels-panel__title">
-          渠道配置
-        </Typography.Title>
-        <Typography.Paragraph className="app-channels-panel__subtitle">
-          连接钉钉、飞书、企业微信、Telegram，在即时通讯软件中与 Wise 交互。
-        </Typography.Paragraph>
-        <ol className="app-channels-panel__steps">
-          <li>
-            <span className="app-channels-panel__step-index">1</span>
-            <CheckCircleOutlined />
-            <span>选择一个渠道并完成凭据配置。</span>
-          </li>
-          <li>
-            <span className="app-channels-panel__step-index">2</span>
-            <CheckCircleOutlined />
-            <span>启用该渠道后，即可开始与 Wise 交互。</span>
-          </li>
-        </ol>
-      </header>
+    <AuthorPanelPageShell
+      className="app-channels-panel"
+      icon={<GatewayOutlined />}
+      title="远程入口"
+      subtitle="钉钉、飞书、企微和 Telegram"
+    >
+      <ol className="app-channels-panel__steps">
+        <li>
+          <span className="app-channels-panel__step-index">1</span>
+          <CheckCircleOutlined />
+          <span>选择一个渠道并完成凭据配置。</span>
+        </li>
+        <li>
+          <span className="app-channels-panel__step-index">2</span>
+          <CheckCircleOutlined />
+          <span>启用该渠道后，即可开始与 Wise 交互。</span>
+        </li>
+      </ol>
 
+      <AuthorPanelListShell className="app-channels-panel__list-shell">
       <Collapse
         accordion
         bordered={false}
@@ -173,7 +174,8 @@ export function ChannelsPanel() {
         items={items}
         className="app-channels-panel__list"
       />
-    </section>
+      </AuthorPanelListShell>
+    </AuthorPanelPageShell>
   );
 }
 

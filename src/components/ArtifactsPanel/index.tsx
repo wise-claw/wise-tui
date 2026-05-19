@@ -22,6 +22,7 @@ import {
   isPdfFilePath,
   isRepositoryBinaryPreviewPath,
 } from "../../utils/repositoryFilePreview";
+import { AuthorPanelPageShell } from "../AuthorPanel/AuthorPanelPageShell";
 import { HubDot, HubTag } from "../HubCard";
 import "./index.css";
 
@@ -178,32 +179,38 @@ export function ArtifactsPanel({ repositories, activeRepositoryId, onOpenReposit
   const activeLane = PREVIEW_LANES.find((lane) => lane.key === selectedLane) ?? PREVIEW_LANES[0];
 
   return (
-    <section className="app-artifacts-panel" aria-label="产物检查台">
-      <div className="app-artifacts-panel__toolbar">
-        <Select
-          className="app-artifacts-panel__repo-select"
-          size="small"
-          placeholder="选择仓库"
-          value={selectedRepositoryId ?? undefined}
-          options={repositoryOptions}
-          onChange={(value) => setSelectedRepositoryId(value)}
-          showSearch
-          optionFilterProp="label"
-        />
-        <Input
-          className="app-artifacts-panel__search"
-          size="small"
-          allowClear
-          prefix={<FileSearchOutlined />}
-          placeholder="搜索文件名"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-        />
-        <Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={() => void refresh()}>
-          刷新
-        </Button>
-      </div>
-
+    <AuthorPanelPageShell
+      className="app-artifacts-panel"
+      icon={<FileSearchOutlined />}
+      title="产物检查台"
+      subtitle="Markdown、Diff、图片、PDF、Office"
+      actions={
+        <>
+          <Select
+            className="app-artifacts-panel__repo-select"
+            size="small"
+            placeholder="选择仓库"
+            value={selectedRepositoryId ?? undefined}
+            options={repositoryOptions}
+            onChange={(value) => setSelectedRepositoryId(value)}
+            showSearch
+            optionFilterProp="label"
+          />
+          <Input
+            className="app-artifacts-panel__search"
+            size="small"
+            allowClear
+            prefix={<FileSearchOutlined />}
+            placeholder="搜索文件名"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          <Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={() => void refresh()}>
+            刷新
+          </Button>
+        </>
+      }
+    >
       <div className="app-artifacts-panel__lanes">
         {PREVIEW_LANES.map((lane) => (
           <button
@@ -260,6 +267,6 @@ export function ArtifactsPanel({ repositories, activeRepositoryId, onOpenReposit
           </div>
         )}
       </div>
-    </section>
+    </AuthorPanelPageShell>
   );
 }

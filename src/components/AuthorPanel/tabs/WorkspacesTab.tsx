@@ -2,6 +2,7 @@ import { FolderOpenOutlined, PlusOutlined } from "@ant-design/icons";
 import { Button, Empty, Space, Tag, Tooltip } from "antd";
 import type { StandaloneRepo, Workspace } from "../../../types";
 import { repositoryFolderBasename } from "../../../utils/repositoryType";
+import { AuthorPanelPageShell } from "../AuthorPanelPageShell";
 
 interface WorkspacesTabProps {
   workspaces: Workspace[];
@@ -27,24 +28,24 @@ export function WorkspacesTab({
   const hasItems = workspaces.length > 0 || standaloneRepos.length > 0;
 
   return (
-    <div className="author-panel-workspaces">
-      <header className="author-panel-workspaces__page-head">
-        <div className="author-panel-workspaces__page-head-row">
-          <h1 className="author-panel-workspaces__page-title">工作区</h1>
-          <Space size={8} wrap className="author-panel-workspaces__page-actions">
-            <Tooltip title="添加一个不接入 Trellis / Mission 的轻量仓库">
-              <Button size="small" onClick={onAddStandaloneRepo} disabled={!onAddStandaloneRepo}>
-                添加单仓
-              </Button>
-            </Tooltip>
-            <Button size="small" type="primary" icon={<PlusOutlined />} onClick={onCreateWorkspace}>
-              新建工作区
+    <AuthorPanelPageShell
+      className="author-panel-workspaces"
+      icon={<FolderOpenOutlined />}
+      title="工作区"
+      subtitle="项目、仓库和 Trellis 根目录"
+      actions={
+        <Space size={8} wrap>
+          <Tooltip title="添加一个不接入 Trellis / Mission 的轻量仓库">
+            <Button size="small" onClick={onAddStandaloneRepo} disabled={!onAddStandaloneRepo}>
+              添加单仓
             </Button>
-          </Space>
-        </div>
-        <p className="author-panel-workspaces__page-subtitle">项目、仓库和 Trellis 根目录</p>
-      </header>
-
+          </Tooltip>
+          <Button size="small" type="primary" icon={<PlusOutlined />} onClick={onCreateWorkspace}>
+            新建工作区
+          </Button>
+        </Space>
+      }
+    >
       {!hasItems ? (
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有工作区或单仓，请先新建工作区或添加单仓" />
       ) : (
@@ -111,6 +112,6 @@ export function WorkspacesTab({
           </section>
         </>
       )}
-    </div>
+    </AuthorPanelPageShell>
   );
 }

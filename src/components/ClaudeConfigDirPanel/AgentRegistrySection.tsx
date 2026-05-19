@@ -28,6 +28,13 @@ import {
   getEmptyDescription,
   type AgentRegistryFilter,
 } from "./agentRegistryPresentation";
+import {
+  AuthorPanelEmptyShell,
+  AuthorPanelHubTab,
+  AuthorPanelHubTabs,
+  AuthorPanelListShell,
+  AuthorPanelPageShell,
+} from "../AuthorPanel/AuthorPanelPageShell";
 import "./index.css";
 
 interface CustomAgentFormValues {
@@ -178,9 +185,13 @@ export function AgentRegistrySection() {
   const filteredAgents = useMemo(() => filterAgents(agents, filter, query), [agents, filter, query]);
 
   return (
-    <section className="app-agent-registry-section" aria-label="执行引擎">
-      <div className="app-agent-registry-section__toolbar">
-        <Space size={8} wrap className="app-agent-registry-section__actions">
+    <AuthorPanelPageShell
+      className="app-agent-registry-section"
+      icon={<ThunderboltOutlined />}
+      title="执行引擎"
+      subtitle="Claude、Codex 和自定义命令"
+      actions={
+        <Space size={8} wrap>
           <Input
             allowClear
             size="small"
@@ -197,38 +208,41 @@ export function AgentRegistrySection() {
             重新探测
           </Button>
         </Space>
-      </div>
-
-      <div className="app-agent-registry-section__filters" role="tablist" aria-label="执行引擎筛选">
-        <AgentRegistryFilterButton
-          active={filter === "all"}
-          count={stats.total}
-          label="全部"
-          onClick={() => setFilter("all")}
-        />
-        <AgentRegistryFilterButton
-          active={filter === "available"}
-          count={stats.available}
-          label="可用"
-          onClick={() => setFilter("available")}
-        />
-        <AgentRegistryFilterButton
-          active={filter === "custom"}
-          count={stats.custom}
-          label="自定义"
-          onClick={() => setFilter("custom")}
-        />
-        <AgentRegistryFilterButton
-          active={filter === "errors"}
-          count={stats.unavailable}
-          label="异常"
-          onClick={() => setFilter("errors")}
-        />
-      </div>
-
-      <div className="app-agent-registry-section__list" aria-busy={loading}>
+      }
+      toolbar={
+        <AuthorPanelHubTabs aria-label="执行引擎筛选">
+          <AuthorPanelHubTab
+            active={filter === "all"}
+            label="全部"
+            count={stats.total}
+            onClick={() => setFilter("all")}
+          />
+          <AuthorPanelHubTab
+            active={filter === "available"}
+            label="可用"
+            count={stats.available}
+            onClick={() => setFilter("available")}
+          />
+          <AuthorPanelHubTab
+            active={filter === "custom"}
+            label="自定义"
+            count={stats.custom}
+            onClick={() => setFilter("custom")}
+          />
+          <AuthorPanelHubTab
+            active={filter === "errors"}
+            label="异常"
+            count={stats.unavailable}
+            onClick={() => setFilter("errors")}
+          />
+        </AuthorPanelHubTabs>
+      }
+    >
+      <AuthorPanelListShell className="app-agent-registry-section__list" aria-busy={loading}>
         {filteredAgents.length === 0 && !loading ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={getEmptyDescription(filter, query)} />
+          <AuthorPanelEmptyShell>
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={getEmptyDescription(filter, query)} />
+          </AuthorPanelEmptyShell>
         ) : (
           filteredAgents.map((agent) => (
             <AgentRegistryRow
@@ -240,7 +254,7 @@ export function AgentRegistrySection() {
             />
           ))
         )}
-      </div>
+      </AuthorPanelListShell>
 
       <Modal
         title={editingAgent ? "编辑自定义执行引擎" : "新增自定义执行引擎"}
@@ -299,7 +313,7 @@ export function AgentRegistrySection() {
           />
         ) : null}
       </Modal>
-    </section>
+    </AuthorPanelPageShell>
   );
 }
 

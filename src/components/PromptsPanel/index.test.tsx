@@ -42,7 +42,27 @@ const repository = {
 };
 
 describe("PromptsPanel", () => {
-  test("renders prompt scope and editor", () => {
+  test("renders prompt scope and editor without close button by default", () => {
+    const html = renderToStaticMarkup(
+      <AntApp>
+        <PromptsPanel
+          projects={[project]}
+          repositories={[repository]}
+          activeProjectId={project.id}
+          activeRepositoryId={repository.id}
+          openContext={{ project, repository }}
+        />
+      </AntApp>,
+    );
+
+    expect(html).toContain("当前提示词作用域");
+    expect(html).not.toContain('aria-label="关闭"');
+    expect(html).toContain("调用用途");
+    expect(html).toContain("新建用途");
+    expect(html).toContain("提示词契约");
+  });
+
+  test("renders close button when onClose is provided", () => {
     const html = renderToStaticMarkup(
       <AntApp>
         <PromptsPanel
@@ -56,10 +76,6 @@ describe("PromptsPanel", () => {
       </AntApp>,
     );
 
-    expect(html).toContain("当前提示词作用域");
     expect(html).toContain('aria-label="关闭"');
-    expect(html).toContain("调用用途");
-    expect(html).toContain("新建用途");
-    expect(html).toContain("提示词契约");
   });
 });

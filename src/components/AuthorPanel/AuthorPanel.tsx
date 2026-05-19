@@ -26,8 +26,23 @@ import { WorkflowConfigModal } from "../WorkflowConfigModal";
 import { getAppSetting, setAppSetting } from "../../services/appSettingsStore";
 import { DEFAULT_AUTHOR_PANE } from "../../types/viewMode";
 import { AUTHOR_TAB_STORAGE_KEY, AUTHOR_TABS, isAuthorPane, type AuthorPane } from "./AuthorPanelTabs";
+import { AuthorPanelPageShell } from "./AuthorPanelPageShell";
 import { WorkspacesTab } from "./tabs/WorkspacesTab";
 import "./index.css";
+
+const PANELS_WITH_OWN_SHELL = new Set<AuthorPane>([
+  "workspaces",
+  "extensions",
+  "assistants",
+  "mcp",
+  "skills",
+  "hooks",
+  "workflows",
+  "channels",
+  "automation",
+  "artifacts",
+  "engine-registry",
+]);
 
 type EmployeeConfigProps = ComponentProps<typeof EmployeeConfigModal>;
 type WorkflowConfigProps = ComponentProps<typeof WorkflowConfigModal>;
@@ -111,12 +126,16 @@ export function AuthorPanel({
         );
       case "workflows":
         return workflowConfigProps ? (
-          <div className="author-panel-workflows">
-            {workflowStudioAction ? (
-              <div className="author-panel-workflows__action">{workflowStudioAction}</div>
-            ) : null}
-            <WorkflowConfigModal {...workflowConfigProps} open inline />
-          </div>
+          <AuthorPanelPageShell
+            icon={activeTab.icon}
+            title={activeTab.label}
+            subtitle={activeTab.description}
+            actions={workflowStudioAction}
+          >
+            <div className="author-panel-workflows">
+              <WorkflowConfigModal {...workflowConfigProps} open inline />
+            </div>
+          </AuthorPanelPageShell>
         ) : (
           <AuthorUnavailable label="委派协议" />
         );
@@ -126,9 +145,12 @@ export function AuthorPanel({
         return <SkillsHub {...skillsHubProps} onClose={undefined} />;
       case "hooks":
         return (
-          <div className="author-panel-hooks">
-            <div className="author-panel-hooks-toolbar">
-              <Space size={8} wrap className="author-panel-hooks-toolbar__actions">
+          <AuthorPanelPageShell
+            icon={activeTab.icon}
+            title={activeTab.label}
+            subtitle={activeTab.description}
+            actions={
+              <Space size={8} wrap>
                 <Input
                   allowClear
                   size="small"
@@ -161,16 +183,19 @@ export function AuthorPanel({
                   事件流程
                 </Button>
               </Space>
+            }
+          >
+            <div className="author-panel-hooks">
+              <ClaudeHooksConfigPanel
+                repositoryPath={hooksRepositoryPath}
+                active
+                listSearch={hooksSearch}
+                onBindActions={(actions) => {
+                  hooksPanelRef.current = actions;
+                }}
+              />
             </div>
-            <ClaudeHooksConfigPanel
-              repositoryPath={hooksRepositoryPath}
-              active
-              listSearch={hooksSearch}
-              onBindActions={(actions) => {
-                hooksPanelRef.current = actions;
-              }}
-            />
-          </div>
+          </AuthorPanelPageShell>
         );
       case "prompts":
         return <PromptsPanel {...promptsPanelProps} />;
@@ -185,9 +210,17 @@ export function AuthorPanel({
       case "engine-registry":
         return <AgentRegistrySection />;
       case "automation":
-        return <AutomationPanel {...automationPanelProps} />;
+        return automationPanelProps ? (
+          <AutomationPanel {...automationPanelProps} />
+        ) : (
+          <AuthorUnavailable label="定时自动化" />
+        );
       case "artifacts":
-        return <ArtifactsPanel {...artifactsPanelProps} />;
+        return artifactsPanelProps ? (
+          <ArtifactsPanel {...artifactsPanelProps} />
+        ) : (
+          <AuthorUnavailable label="产物检查台" />
+        );
       case "channels":
         return <ChannelsPanel />;
       case "shortcuts":
@@ -198,6 +231,9 @@ export function AuthorPanel({
         return <AuthorUnavailable label="工作台配置" />;
     }
   }, [
+    activeTab.description,
+    activeTab.icon,
+    activeTab.label,
     automationPanelProps,
     artifactsPanelProps,
     employeeConfigProps,
@@ -214,23 +250,28 @@ export function AuthorPanel({
     workspacesTabProps,
   ]);
 
+  const wrappedContent =
+    content && !PANELS_WITH_OWN_SHELL.has(pane) ? (
+      <AuthorPanelPageShell
+        icon={activeTab.icon}
+        title={activeTab.label}
+        subtitle={activeTab.description}
+      >
+        {content}
+      </AuthorPanelPageShell>
+    ) : (
+      content
+    );
+
   return (
     <SettingsViewModeProvider value="page">
       <div className="author-panel">
         <main
-          className={`author-panel__main${pane === "workspaces" ? " author-panel__main--workspaces-head" : ""}`}
+          className="author-panel__main author-panel__main--inline-page-head"
           aria-label={activeTab.label}
         >
-          {pane !== "workspaces" ? (
-            <>
-              <h1 className="author-panel__title">{activeTab.label}</h1>
-              {activeTab.description ? (
-                <p className="author-panel__subtitle">{activeTab.description}</p>
-              ) : null}
-            </>
-          ) : null}
           <div className="author-panel__scroll">
-            {content ?? <Spin size="small" />}
+            {wrappedContent ?? <Spin size="small" />}
           </div>
         </main>
       </div>

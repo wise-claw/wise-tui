@@ -1,6 +1,7 @@
 import {
   CheckCircleOutlined,
   ClockCircleOutlined,
+  FieldTimeOutlined,
   PlayCircleOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
@@ -8,6 +9,7 @@ import { Button, Empty, Select, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { EmployeeItem, Repository, RepositoryScheduledClaudeTask, WorkflowGraph, WorkflowTemplateItem } from "../../types";
 import { readRepositoryScheduledClaudeTasks } from "../../services/repositoryScheduledClaudeTasksStore";
+import { AuthorPanelPageShell } from "../AuthorPanel/AuthorPanelPageShell";
 import { HubDot, HubTag } from "../HubCard";
 import { RepositoryScheduledTasksModal } from "../RepositoryScheduledTasksModal";
 import "./index.css";
@@ -115,8 +117,13 @@ export function AutomationPanel({
   }).slice(0, 5);
 
   return (
-    <section className="app-automation-panel" aria-label="定时自动化">
-      <div className="app-automation-panel__toolbar">
+    <AuthorPanelPageShell
+      className="app-automation-panel"
+      icon={<FieldTimeOutlined />}
+      title="定时自动化"
+      subtitle="Cron、Mission 和会话续跑"
+      actions={
+        <>
         <Select
           className="app-automation-panel__repo-select"
           size="small"
@@ -139,8 +146,9 @@ export function AutomationPanel({
         >
           管理当前仓库定时任务
         </Button>
-      </div>
-
+        </>
+      }
+    >
       {visibleSummaries.length === 0 ? (
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无可配置仓库" />
       ) : (
@@ -253,6 +261,6 @@ export function AutomationPanel({
           workflowGraphsByWorkflowId={workflowGraphsByWorkflowId}
         />
       ) : null}
-    </section>
+    </AuthorPanelPageShell>
   );
 }

@@ -4,6 +4,7 @@ import {
   LinkOutlined,
   ReloadOutlined,
   SearchOutlined,
+  ToolOutlined,
 } from "@ant-design/icons";
 import { App, Alert, Button, Empty, Input, Segmented, Spin, Tag, Tooltip, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -28,6 +29,7 @@ import {
   type SkillsInstallScope,
   type SkillsShSkillEntry,
 } from "../../services/skillsSh";
+import { AuthorPanelPageShell } from "../AuthorPanel/AuthorPanelPageShell";
 import "./SkillsHub.css";
 
 interface Props {
@@ -44,6 +46,7 @@ function formatInstalls(n: number): string {
 type HubMode = "registry" | "external" | "extension";
 
 export function SkillsHub({ repositoryPath, onClose }: Props) {
+  const embeddedInAuthor = !onClose;
   const { message } = App.useApp();
   const [hubMode, setHubMode] = useState<HubMode>("registry");
   const [installScope, setInstallScope] = useState<SkillsInstallScope>("project");
@@ -323,26 +326,28 @@ export function SkillsHub({ repositoryPath, onClose }: Props) {
     [externalPaths],
   );
 
-  return (
+  const hubInner = (
     <div className="app-skills-hub-root">
       <header className="app-skills-hub-header">
-        <div className="app-skills-hub-header-top">
-          <Typography.Title level={5} className="app-skills-hub-title">
-            技能市场
-          </Typography.Title>
-          {onClose ? (
-            <Tooltip title="关闭" mouseEnterDelay={0.35}>
-              <Button
-                type="text"
-                size="small"
-                className="app-skills-hub-close-btn"
-                icon={<CloseOutlined />}
-                aria-label="关闭"
-                onClick={onClose}
-              />
-            </Tooltip>
-          ) : null}
-        </div>
+        {!embeddedInAuthor ? (
+          <div className="app-skills-hub-header-top">
+            <Typography.Title level={5} className="app-skills-hub-title">
+              技能市场
+            </Typography.Title>
+            {onClose ? (
+              <Tooltip title="关闭" mouseEnterDelay={0.35}>
+                <Button
+                  type="text"
+                  size="small"
+                  className="app-skills-hub-close-btn"
+                  icon={<CloseOutlined />}
+                  aria-label="关闭"
+                  onClick={onClose}
+                />
+              </Tooltip>
+            ) : null}
+          </div>
+        ) : null}
         <Segmented<HubMode>
           size="small"
           value={hubMode}
@@ -521,6 +526,20 @@ export function SkillsHub({ repositoryPath, onClose }: Props) {
       )}
     </div>
   );
+
+  if (embeddedInAuthor) {
+    return (
+      <AuthorPanelPageShell
+        icon={<ToolOutlined />}
+        title="技能市场"
+        subtitle="skills.sh、外部目录和扩展技能"
+      >
+        {hubInner}
+      </AuthorPanelPageShell>
+    );
+  }
+
+  return hubInner;
 }
 
 interface ExtensionContributedSkillsProps {

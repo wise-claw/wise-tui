@@ -1,4 +1,5 @@
 import {
+  ApiOutlined,
   CloseOutlined,
   DeleteOutlined,
   PlusOutlined,
@@ -13,6 +14,7 @@ import { getExtensionMcpServers } from "../../services/extensions";
 import type { ResolvedMcpServer } from "../../types/extension";
 import { ClaudeMcpAddServerModal } from "../ClaudeMcp/ClaudeMcpAddServerModal";
 import { flattenMcpItemsForHub } from "../ClaudeMcp/claudeMcpListModel";
+import { AuthorPanelPageShell } from "../AuthorPanel/AuthorPanelPageShell";
 import { ComputerUseMcpSection } from "../ComputerUseMcpSection";
 import "../ClaudeMcpLayout.css";
 import "../HubCard/index.css";
@@ -25,6 +27,7 @@ interface Props {
 }
 
 export function McpHub({ repositoryPath, onClose }: Props) {
+  const embeddedInAuthor = !onClose;
   const [hubSearch, setHubSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [cuaDriverStatus, setCuaDriverStatus] = useState<CuaDriverStatus | null>(null);
@@ -298,6 +301,75 @@ export function McpHub({ repositoryPath, onClose }: Props) {
     </div>
   );
 
+  const headerActions = (
+    <>
+      <Input
+        allowClear
+        size="small"
+        prefix={<SearchOutlined />}
+        placeholder="搜索已安装…"
+        value={hubSearch}
+        onChange={(e) => setHubSearch(e.target.value)}
+        className="app-mcp-hub-search"
+      />
+      <Button size="small" icon={<ReloadOutlined />} loading={mcpRefreshing} onClick={() => void refreshAll()}>
+        刷新
+      </Button>
+      <Button size="small" type="primary" icon={<PlusOutlined />} onClick={() => setAddOpen(true)}>
+        添加
+      </Button>
+      {onClose ? (
+        <Tooltip title="关闭" mouseEnterDelay={0.35}>
+          <Button
+            type="text"
+            size="small"
+            className="app-mcp-hub-close-btn"
+            icon={<CloseOutlined />}
+            aria-label="关闭"
+            onClick={onClose}
+          />
+        </Tooltip>
+      ) : null}
+    </>
+  );
+
+  const hubBody = (
+    <>
+      <Tabs
+        activeKey={activeTab}
+        onChange={setActiveTab}
+        size="small"
+        className="app-mcp-hub-tabs"
+        items={[
+          { key: "installed", label: installedTabLabel, children: installedPanel },
+          { key: "pending", label: pendingTabLabel, children: pendingPanel },
+          { key: "extension", label: extensionTabLabel, children: extensionPanel },
+        ]}
+      />
+
+      <ClaudeMcpAddServerModal
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        repositoryPath={repositoryPath}
+        onAdded={() => void refreshAll()}
+      />
+    </>
+  );
+
+  if (embeddedInAuthor) {
+    return (
+      <AuthorPanelPageShell
+        className="app-mcp-hub-root"
+        icon={<ApiOutlined />}
+        title="MCP 工具"
+        subtitle="服务器、推荐项和扩展工具协议"
+        actions={headerActions}
+      >
+        {hubBody}
+      </AuthorPanelPageShell>
+    );
+  }
+
   return (
     <div className="app-mcp-hub-root">
       <header className="app-mcp-hub-header">
@@ -318,43 +390,9 @@ export function McpHub({ repositoryPath, onClose }: Props) {
             </Tooltip>
           ) : null}
         </div>
-        <div className="app-mcp-hub-toolbar">
-          <Input
-            allowClear
-            size="small"
-            prefix={<SearchOutlined />}
-            placeholder="搜索已安装…"
-            value={hubSearch}
-            onChange={(e) => setHubSearch(e.target.value)}
-            className="app-mcp-hub-search"
-          />
-          <Button size="small" icon={<ReloadOutlined />} loading={mcpRefreshing} onClick={() => void refreshAll()}>
-            刷新
-          </Button>
-          <Button size="small" type="primary" icon={<PlusOutlined />} onClick={() => setAddOpen(true)}>
-            添加
-          </Button>
-        </div>
+        <div className="app-mcp-hub-toolbar">{headerActions}</div>
       </header>
-
-      <Tabs
-        activeKey={activeTab}
-        onChange={setActiveTab}
-        size="small"
-        className="app-mcp-hub-tabs"
-        items={[
-          { key: "installed", label: installedTabLabel, children: installedPanel },
-          { key: "pending", label: pendingTabLabel, children: pendingPanel },
-          { key: "extension", label: extensionTabLabel, children: extensionPanel },
-        ]}
-      />
-
-      <ClaudeMcpAddServerModal
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
-        repositoryPath={repositoryPath}
-        onAdded={() => void refreshAll()}
-      />
+      {hubBody}
     </div>
   );
 }

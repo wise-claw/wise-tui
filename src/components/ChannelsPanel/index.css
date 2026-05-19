@@ -1,65 +1,65 @@
+.app-channels-panel.author-panel-page .author-panel-page__head {
+  padding: 12px 0 6px;
+}
+
+.app-channels-panel.author-panel-page .author-panel-page__subtitle {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .app-channels-panel {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
   min-width: 0;
-}
-
-.app-channels-panel__header {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 18px 20px;
-  border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 10px;
-  background: var(--ant-color-bg-container);
-}
-
-.app-channels-panel__title.ant-typography {
-  margin: 0;
-  font-size: 18px;
-}
-
-.app-channels-panel__subtitle.ant-typography {
-  margin: 0;
-  color: var(--ant-color-text-secondary);
-  font-size: 13px;
-  line-height: 1.6;
 }
 
 .app-channels-panel__steps {
   display: flex;
   flex-wrap: wrap;
-  gap: 18px;
-  margin: 4px 0 0;
-  padding: 0;
+  gap: 10px 16px;
+  margin: 0;
+  padding: 8px 10px;
   list-style: none;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary);
 }
 
 .app-channels-panel__steps li {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   color: var(--ant-color-text-secondary);
-  font-size: 12.5px;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .app-channels-panel__step-index {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: var(--ant-color-fill-secondary);
   color: var(--ant-color-text);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
 }
 
+.app-channels-panel__steps .anticon-check-circle {
+  font-size: 12px;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-channels-panel__list-shell.author-panel-page__list-shell {
+  padding: 0;
+}
+
 .app-channels-panel__list.ant-collapse {
-  border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 10px;
+  border: none;
+  border-radius: 8px;
   background: var(--ant-color-bg-container);
 }
 
@@ -73,17 +73,26 @@
 
 .app-channels-panel__list.ant-collapse > .ant-collapse-item > .ant-collapse-header {
   align-items: center;
-  padding: 14px 18px;
+  min-height: 0;
+  padding: 8px 12px;
+}
+
+.app-channels-panel__list.ant-collapse > .ant-collapse-item > .ant-collapse-header .ant-collapse-expand-icon {
+  padding-inline-end: 8px;
 }
 
 .app-channels-panel__list.ant-collapse > .ant-collapse-item > .ant-collapse-header .ant-collapse-extra {
-  margin-left: auto;
+  margin-left: 8px;
+}
+
+.app-channels-panel__list.ant-collapse .ant-collapse-content > .ant-collapse-content-box {
+  padding: 0;
 }
 
 .app-channels-panel__row {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -91,37 +100,41 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
   background: var(--ant-color-fill-quaternary);
   color: var(--ant-color-primary);
-  font-size: 14px;
+  font-size: 12px;
 }
 
 .app-channels-panel__row-title {
   color: var(--ant-color-text);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
+  line-height: 1.3;
 }
 
 .app-channels-panel__row-tag {
-  padding: 1px 6px;
+  padding: 0 5px;
   border: 1px solid var(--ant-color-border-secondary);
   border-radius: 4px;
   color: var(--ant-color-text-tertiary);
-  font-size: 11px;
+  font-size: 10px;
+  line-height: 16px;
 }
 
 .app-channels-panel__body {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 0 18px 16px;
+  gap: 8px;
+  padding: 0 12px 10px;
 }
 
 .app-channels-panel__hint {
   display: block;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .app-channels-panel .app-dingtalk-ebot-popover {
@@ -129,10 +142,14 @@
 }
 
 .app-channels-panel .app-dingtalk-ebot-popover__json-sample {
-  max-height: 260px;
+  max-height: 220px;
 }
 
 .app-channels-panel__placeholder {
   margin: 0;
-  padding: 18px;
+  padding: 12px;
+}
+
+.app-channels-panel__placeholder .ant-empty-description {
+  font-size: 12px;
 }
