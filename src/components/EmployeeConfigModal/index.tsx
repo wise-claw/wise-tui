@@ -60,7 +60,7 @@ interface Props {
   /** 新建角色时默认「角色名称」（侧栏仓库流程下为仓库目录名）。 */
   initialCreateEmployeeName?: string | null;
   /**
-   * 从 Workspace 上下文打开时传入单一 project id：自动归属该 Workspace 且隐藏「所属 Workspace」字段，避免用户误操作。
+   * 从 Workspace 上下文打开时传入单一 project id：自动归属该 Workspace 且隐藏「所属工作区」字段，避免用户误操作。
    */
   singleProjectScopeId?: string | null;
   onClose: () => void;
@@ -337,7 +337,7 @@ export function EmployeeConfigModal({
             icon={<TeamOutlined />}
             title="角色供给"
             status="可编辑"
-            description={`${employees.length} 个角色集中管理；名称、启用态、关联仓库和 Workspace 归属保留原有配置能力`}
+            description={`${employees.length} 个角色集中管理；名称、启用态、关联仓库和工作区归属保留原有配置能力`}
           />
           <TeamRoleSupplyItem
             icon={<ThunderboltOutlined />}
@@ -382,7 +382,7 @@ export function EmployeeConfigModal({
           >
             {projects && projects.length > 0 && !repositoryOwnerScopeOnly && !singleProjectScopeId ? (
               <div className="app-employee-config-field">
-                <div className="app-employee-config-field-label">所属 Workspace</div>
+                <div className="app-employee-config-field-label">所属工作区</div>
                 <Form.Item
                   name="projectIds"
                   className="app-employee-config-item app-employee-config-item--projects"
@@ -390,7 +390,7 @@ export function EmployeeConfigModal({
                   <Select
                     mode="multiple"
                     allowClear
-                    placeholder="所属 Workspace"
+                    placeholder="所属工作区"
                     maxTagCount="responsive"
                     options={projects.map((p) => ({
                       value: p.id,

@@ -46,15 +46,15 @@ export function CockpitOnboarding({
           className="cockpit-onboarding-card"
           hoverable
           onClick={onCreateWorkspace}
-          aria-label="创建 Workspace"
+          aria-label="创建工作区"
         >
           <AppstoreAddOutlined className="cockpit-onboarding-card-icon" aria-hidden />
-          <Title level={4}>创建 Workspace</Title>
+          <Title level={4}>创建工作区</Title>
           <Paragraph type="secondary">
             将多个仓库组成一个项目级工作区，支持 Mission 拆解 / Trellis 规范 / 多 Agent 协作。
           </Paragraph>
           <Button type="primary" icon={<AppstoreAddOutlined />}>
-            新建 Workspace
+            新建工作区
           </Button>
         </Card>
 
@@ -62,10 +62,10 @@ export function CockpitOnboarding({
           className="cockpit-onboarding-card"
           hoverable
           onClick={onImportStandaloneRepo}
-          aria-label="导入 Standalone Repo"
+          aria-label="导入单仓"
         >
           <FolderAddOutlined className="cockpit-onboarding-card-icon" aria-hidden />
-          <Title level={4}>导入 Standalone Repo</Title>
+          <Title level={4}>导入单仓</Title>
           <Paragraph type="secondary">
             登记单个本地仓库，直接进入 Claude Code 对话；适合临时 / 试验性工作。
           </Paragraph>

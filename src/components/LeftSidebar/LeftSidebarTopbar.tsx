@@ -16,7 +16,7 @@ export function LeftSidebarTopbar({
   compactLayoutMode,
   onToggleCompactLayoutMode,
   authorDisabled = false,
-  authorTooltip = "Standalone Repo 不支持工作台配置；升格为 Workspace 后启用",
+  authorTooltip = "单仓不支持工作台配置；升格为工作区后启用",
   onOpenAuthor,
 }: LeftSidebarTopbarProps) {
   return (

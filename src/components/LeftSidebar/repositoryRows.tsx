@@ -190,7 +190,9 @@ export function RepositoryRow({
   codeGraphIndexed = false,
   scheduledTasksTotalCount = 0,
   scheduledTasksEnabledCount = 0,
+  requirementUnsplitCount = 0,
   onOpenScheduledTasks,
+  onOpenRequirements,
 }: {
   project: Workspace;
   repository: Repository;
@@ -210,7 +212,9 @@ export function RepositoryRow({
   codeGraphIndexed?: boolean;
   scheduledTasksTotalCount?: number;
   scheduledTasksEnabledCount?: number;
+  requirementUnsplitCount?: number;
   onOpenScheduledTasks?: (repository: Repository) => void;
+  onOpenRequirements?: (repository: Repository) => void;
 }) {
   const moreItems: MenuProps["items"] = [
     { key: "finder", label: "Finder打开" },
@@ -221,6 +225,9 @@ export function RepositoryRow({
     { key: "sdd-mode", label: "SDD 模式" },
     ...(onOpenScheduledTasks
       ? [{ key: "scheduled-tasks", label: "定时任务" }] satisfies MenuProps["items"]
+      : []),
+    ...(onOpenRequirements
+      ? [{ key: "requirements", label: "需求" }] satisfies MenuProps["items"]
       : []),
     ...(onCodeGraphGenerateRepository && onCodeGraphViewRepositoryInProject
       ? ([
@@ -236,7 +243,7 @@ export function RepositoryRow({
         ] satisfies MenuProps["items"])
       : []),
     { type: "divider" },
-    { key: "detach", label: "移出 Workspace", danger: true },
+    { key: "detach", label: "移出工作区", danger: true },
   ];
 
   const dropRowClass =
@@ -270,9 +277,9 @@ export function RepositoryRow({
             onDragStart={repositoryReorder.onDragStartHandle}
             onDragEnd={repositoryReorder.onDragEndHandle}
             onClick={(e) => e.stopPropagation()}
-            title="拖动排序 / 拖入其它 Workspace"
+            title="拖动排序 / 拖入其它工作区"
             role="button"
-            aria-label="拖动排序或拖入其它 Workspace"
+            aria-label="拖动排序或拖入其它工作区"
           >
             <RepoDragHandleIcon />
           </span>
@@ -311,6 +318,12 @@ export function RepositoryRow({
               onOpen={() => onOpenScheduledTasks(repository)}
             />
           ) : null}
+          {onOpenRequirements ? (
+            <SidebarRequirementAction
+              unsplitCount={requirementUnsplitCount}
+              onOpen={() => onOpenRequirements(repository)}
+            />
+          ) : null}
           <Dropdown
             rootClassName="app-sidebar-more-menu-dropdown"
             menu={{
@@ -324,6 +337,7 @@ export function RepositoryRow({
                 if (key === "prompts") onOpenPromptsRepository?.(project, repository);
                 if (key === "sdd-mode") onConfigureSddMode?.(repository);
                 if (key === "scheduled-tasks") onOpenScheduledTasks?.(repository);
+                if (key === "requirements") onOpenRequirements?.(repository);
                 if (key === "code-graph-generate-repo") void Promise.resolve(onCodeGraphGenerateRepository?.(repository));
                 if (key === "code-graph-view-repo") onCodeGraphViewRepositoryInProject?.(project, repository);
               },
@@ -364,7 +378,9 @@ export function FloatingRepositoryRow({
   codeGraphIndexed = false,
   scheduledTasksTotalCount = 0,
   scheduledTasksEnabledCount = 0,
+  requirementUnsplitCount = 0,
   onOpenScheduledTasks,
+  onOpenRequirements,
 }: {
   repository: StandaloneRepo;
   isActiveRepository: boolean;
@@ -383,7 +399,9 @@ export function FloatingRepositoryRow({
   codeGraphIndexed?: boolean;
   scheduledTasksTotalCount?: number;
   scheduledTasksEnabledCount?: number;
+  requirementUnsplitCount?: number;
   onOpenScheduledTasks?: (repository: Repository) => void;
+  onOpenRequirements?: (repository: Repository) => void;
 }) {
   const hasMainOwner = Boolean(repository.mainOwnerAgentName?.trim());
   const joinChildren: MenuProps["items"] = joinableProjects.map((project) => ({
@@ -397,6 +415,9 @@ export function FloatingRepositoryRow({
     { key: "sdd-mode", label: "SDD 模式" },
     ...(onOpenScheduledTasks
       ? [{ key: "scheduled-tasks", label: "定时任务" }] satisfies MenuProps["items"]
+      : []),
+    ...(onOpenRequirements
+      ? [{ key: "requirements", label: "需求" }] satisfies MenuProps["items"]
       : []),
     ...(onCodeGraphGenerateRepository && onCodeGraphViewFloatingRepository
       ? ([
@@ -412,12 +433,12 @@ export function FloatingRepositoryRow({
         ] satisfies MenuProps["items"])
       : []),
     { type: "divider" },
-    ...(onPromoteToNewProject ? [{ key: "promote", label: "升格为 Workspace…" }] satisfies MenuProps["items"] : []),
+    ...(onPromoteToNewProject ? [{ key: "promote", label: "升格为工作区…" }] satisfies MenuProps["items"] : []),
     ...(onJoinExistingProject && joinChildren.length > 0
       ? ([
           {
             key: "join",
-            label: "加入 Workspace",
+            label: "加入工作区",
             popupClassName: "app-sidebar-more-menu-submenu",
             children: joinChildren,
           },
@@ -466,6 +487,12 @@ export function FloatingRepositoryRow({
               onOpen={() => onOpenScheduledTasks(repository)}
             />
           ) : null}
+          {onOpenRequirements ? (
+            <SidebarRequirementAction
+              unsplitCount={requirementUnsplitCount}
+              onOpen={() => onOpenRequirements(repository)}
+            />
+          ) : null}
           <Dropdown
             rootClassName="app-sidebar-more-menu-dropdown"
             menu={{
@@ -477,6 +504,7 @@ export function FloatingRepositoryRow({
                 if (key === "main-owner") onOpenRepositoryMainOwner?.(repository);
                 if (key === "sdd-mode") onConfigureSddMode?.(repository);
                 if (key === "scheduled-tasks") onOpenScheduledTasks?.(repository);
+                if (key === "requirements") onOpenRequirements?.(repository);
                 if (key === "code-graph-generate-repo") void Promise.resolve(onCodeGraphGenerateRepository?.(repository));
                 if (key === "code-graph-view-repo") onCodeGraphViewFloatingRepository?.(repository);
                 if (key === "promote") onPromoteToNewProject?.(repository);
@@ -526,7 +554,9 @@ export function ProjectRepositoryRows({
   hideChatAction = false,
   codeGraphIndexStatusByRepoId = {},
   scheduledTasksByRepoId = {},
+  requirementUnsplitByRepoId = {},
   onOpenScheduledTasks,
+  onOpenRepositoryRequirements,
 }: {
   project: Workspace;
   projectRepos: Repository[];
@@ -548,7 +578,9 @@ export function ProjectRepositoryRows({
   hideChatAction?: boolean;
   codeGraphIndexStatusByRepoId?: Record<number, SidebarCodeGraphIndexStatus>;
   scheduledTasksByRepoId?: Record<number, { total: number; enabled: number }>;
+  requirementUnsplitByRepoId?: Record<number, number>;
   onOpenScheduledTasks?: (repository: Repository) => void;
+  onOpenRepositoryRequirements?: (repository: Repository) => void;
 }) {
   const { message } = AntdApp.useApp();
   const [dropHint, setDropHint] = useState<{ anchorRepositoryId: number; placement: "before" | "after" } | null>(
@@ -599,7 +631,9 @@ export function ProjectRepositoryRows({
             codeGraphIndexed={codeGraphIndexStatusByRepoId[repository.id] === "done"}
             scheduledTasksTotalCount={scheduledTasksByRepoId[repository.id]?.total ?? 0}
             scheduledTasksEnabledCount={scheduledTasksByRepoId[repository.id]?.enabled ?? 0}
+            requirementUnsplitCount={requirementUnsplitByRepoId[repository.id] ?? 0}
             onOpenScheduledTasks={onOpenScheduledTasks}
+            onOpenRequirements={onOpenRepositoryRequirements}
           />
         );
       })}
@@ -704,7 +738,7 @@ function buildRepositoryReorderUi({
       }
       if (dragged.sourceProjectId !== project.id && onMoveRepositoryToProject) {
         void Promise.resolve(onMoveRepositoryToProject(project.id, dragged.repositoryId)).catch((err: unknown) => {
-          messageError("移动仓库到 Workspace 失败");
+          messageError("移动仓库到工作区失败");
           console.error(err);
         });
       }

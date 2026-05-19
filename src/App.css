@@ -1620,12 +1620,29 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  gap: 6px;
-  padding: 8px 0 0;
+  gap: 4px;
+  padding: 4px 0 0;
 }
 
 .app-left-sidebar-project-and-files > .app-repository-header {
   flex-shrink: 0;
+  min-height: 22px;
+  padding: 0 8px;
+}
+
+.app-left-sidebar-project-and-files > .app-repository-header .app-repository-header-title {
+  line-height: 1.2;
+}
+
+.app-left-sidebar-project-and-files > .app-repository-header .app-repository-header-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+}
+
+.app-left-sidebar-project-and-files > .app-repository-header .app-repository-header-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 /* 项目列表按内容高度，不撑满空白；多项目时封顶并内部滚动，剩余高度给文件树 */
@@ -1876,7 +1893,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 .app-repository-item--project {
-  gap: 3px;
+  gap: 2px;
   min-height: 26px;
   padding: 2px 4px 2px 0;
 }
@@ -1890,9 +1907,17 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 .app-repository-item--project .app-repository-name {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-weight: 500;
+}
+
+.app-repository-item--project .app-repository-pin {
+  margin-left: auto;
 }
 
 .app-repository-meta {
@@ -1917,7 +1942,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 .app-left-sidebar .app-repository-row-actions--project {
-  gap: 1px;
+  gap: 0;
 }
 
 .app-left-sidebar .app-repository-item--project .app-repository-action--project-quick {
@@ -2120,13 +2145,32 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 0;
   flex-shrink: 0;
 }
 
 .app-left-sidebar .app-repository-row-actions .app-repository-action {
   opacity: 1;
   pointer-events: auto;
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  max-width: 16px;
+}
+
+.app-left-sidebar .app-repository-row-actions .app-repository-action--requirement,
+.app-left-sidebar .app-repository-row-actions .app-repository-action--trellis,
+.app-left-sidebar .app-repository-row-actions .app-repository-action--code-graph,
+.app-left-sidebar .app-repository-row-actions .app-repository-action--chat,
+.app-left-sidebar .app-repository-row-actions .app-repository-action--scheduled-tasks {
+  width: 16px;
+  min-width: 16px;
+  max-width: 16px;
+}
+
+/* 图标外包 Tooltip，用子项相邻叠紧间距 */
+.app-left-sidebar .app-repository-row-actions > * + * {
+  margin-left: -2px;
 }
 
 /* 置顶图标与行内其他操作一致：默认隐藏，悬停项目行时再显示（含已置顶态配色） */
@@ -2240,6 +2284,33 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   text-align: center;
   box-shadow: 0 0 0 1px var(--ant-color-bg-layout);
   pointer-events: none;
+}
+
+.app-repository-action-count-badge--requirement {
+  background: var(--ant-color-warning);
+}
+
+.app-left-sidebar .app-repository-item--project .app-repository-action--project-quick.app-repository-action--requirement {
+  color: var(--ant-color-text-tertiary);
+  background: transparent;
+}
+
+.app-left-sidebar .app-repository-item--project .app-repository-action--project-quick.app-repository-action--requirement:hover {
+  color: var(--ant-color-primary);
+  background: var(--ant-color-primary-bg);
+}
+
+.app-repository-action--requirement {
+  width: 18px;
+  min-width: 18px;
+  max-width: 18px;
+  color: var(--ant-color-primary);
+  background: transparent;
+}
+
+.app-repository-action--requirement:hover {
+  color: var(--ant-color-primary);
+  background: var(--ant-color-primary-bg);
 }
 
 .app-repository-action--chat {

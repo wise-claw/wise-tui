@@ -47,7 +47,7 @@ export function ProjectNameModals({
   return (
     <>
       <Modal
-        title="新建 Workspace"
+        title="新建工作区"
         open={createOpen}
         onCancel={onCancelCreate}
         onOk={onSubmitCreate}
@@ -60,11 +60,11 @@ export function ProjectNameModals({
       >
         <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <Typography.Text type="secondary">Workspace 名称</Typography.Text>
+            <Typography.Text type="secondary">工作区名称</Typography.Text>
             <Input
               value={projectNameInput}
               onChange={(event) => onProjectNameInputChange(event.target.value)}
-              placeholder="请输入 Workspace 名称"
+              placeholder="请输入工作区名称"
               onPressEnter={() => {
                 if (!createSubmitLoading) void onSubmitCreate();
               }}
@@ -72,7 +72,7 @@ export function ProjectNameModals({
             />
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <Typography.Text type="secondary">Workspace 根目录</Typography.Text>
+            <Typography.Text type="secondary">工作区根目录</Typography.Text>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <Button
                 type="default"
@@ -90,7 +90,7 @@ export function ProjectNameModals({
               </Typography.Text>
             </div>
             <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-              Workspace 根目录只承载 Trellis；代码仓库通过「关联仓库」添加。
+              工作区根目录只承载 Trellis；代码仓库通过「关联仓库」添加。
             </Typography.Paragraph>
           </div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
@@ -102,14 +102,14 @@ export function ProjectNameModals({
             />
           </div>
           <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-            开启后，将在<strong>所选 Workspace 根目录</strong>下检测并执行 <Typography.Text code>trellis init -y</Typography.Text>
+            开启后，将在<strong>所选工作区根目录</strong>下检测并执行 <Typography.Text code>trellis init -y</Typography.Text>
             （已存在 <Typography.Text code>.trellis/scripts/task.py</Typography.Text> 时自动跳过）。
           </Typography.Paragraph>
         </Space>
       </Modal>
 
       <Modal
-        title="重命名 Workspace"
+        title="重命名工作区"
         open={Boolean(editProject)}
         onCancel={onCancelEdit}
         onOk={onSubmitEdit}
@@ -119,7 +119,7 @@ export function ProjectNameModals({
         <Input
           value={projectNameInput}
           onChange={(event) => onProjectNameInputChange(event.target.value)}
-          placeholder="请输入新的 Workspace 名称"
+          placeholder="请输入新的工作区名称"
           onPressEnter={onSubmitEdit}
         />
       </Modal>
@@ -127,19 +127,19 @@ export function ProjectNameModals({
       <Modal
         title={
           promotingRepository
-            ? `升格 Standalone Repo「${repositoryFolderBasename(promotingRepository)}」为 Workspace`
-            : "升格为 Workspace"
+            ? `升格单仓「${repositoryFolderBasename(promotingRepository)}」为工作区`
+            : "升格为工作区"
         }
         open={Boolean(promotingRepository)}
         onCancel={onCancelPromote}
         onOk={onSubmitPromote}
-        okText="创建 Workspace 并加入"
+        okText="创建工作区并加入"
         cancelText="取消"
       >
         <Input
           value={promotingRepositoryName}
           onChange={(event) => onPromotingRepositoryNameChange(event.target.value)}
-          placeholder="请输入新 Workspace 名称"
+          placeholder="请输入新工作区名称"
           onPressEnter={onSubmitPromote}
           autoFocus
         />

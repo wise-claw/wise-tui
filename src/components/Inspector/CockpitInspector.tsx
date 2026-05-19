@@ -74,7 +74,7 @@ export function CockpitInspector({
             {activeProject ? (
               <>
                 <div className="app-cockpit-inspector-row">
-                  <Text type="secondary">Workspace</Text>
+                  <Text type="secondary">工作区</Text>
                   <Text>{activeProject.name}</Text>
                 </div>
                 <div className="app-cockpit-inspector-row">
@@ -83,7 +83,7 @@ export function CockpitInspector({
                 </div>
               </>
             ) : (
-              <Text type="secondary">未选中 Workspace</Text>
+              <Text type="secondary">未选中工作区</Text>
             )}
           </div>
         </section>

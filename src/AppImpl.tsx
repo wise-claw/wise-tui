@@ -1381,16 +1381,16 @@ export default function App() {
   const handleAddWorktreeRepositoryToProject = useCallback(
     async (worktreePath: string) => {
       if (!activeProjectId) {
-        message.warning("请先在侧栏选择或创建一个 Workspace");
+        message.warning("请先在侧栏选择或创建一个工作区");
         return;
       }
       const repositoryType = activeRepository?.repositoryType ?? "frontend";
       try {
         const result = await handleAddRepositoryPathToProject(activeProjectId, worktreePath, repositoryType);
         if (result === "already_in_project") {
-          message.info("该 worktree 目录已在当前 Workspace 中");
+          message.info("该 worktree 目录已在当前工作区中");
         } else {
-          message.success("已将 worktree 目录加入当前 Workspace");
+          message.success("已将 worktree 目录加入当前工作区");
         }
       } catch (error) {
         message.error(error instanceof Error ? error.message : String(error));
@@ -1678,8 +1678,8 @@ export default function App() {
           title: "多仓检索已完成",
           content:
             typeof bridgeEdges === "number" && bridgeEdges > 0
-              ? `已为 Workspace 内仓库 ${names} 完成索引与 GitNexus 仓库组同步，并关联 ${bridgeEdges} 条前后端 API 调用。`
-              : `已为 Workspace 内仓库 ${names} 完成索引与 GitNexus 仓库组同步。可在「代码图谱」中查看多仓子图。`,
+              ? `已为工作区内仓库 ${names} 完成索引与 GitNexus 仓库组同步，并关联 ${bridgeEdges} 条前后端 API 调用。`
+              : `已为工作区内仓库 ${names} 完成索引与 GitNexus 仓库组同步。可在「代码图谱」中查看多仓子图。`,
         });
       });
 
@@ -1778,12 +1778,12 @@ export default function App() {
       .map((id) => byId.get(id))
       .filter((repo): repo is Repository => Boolean(repo));
     if (repos.length === 0) {
-      message.warning("该 Workspace 下暂无仓库，请先关联仓库");
+      message.warning("该工作区下暂无仓库，请先关联仓库");
       return;
     }
     const anchor = resolveProjectMainSessionAnchor(project, repositories);
     if (!anchor.path) {
-      message.warning("该 Workspace 缺少根目录，请先在 Author / Workspaces 中配置 rootPath");
+      message.warning("该工作区缺少根目录，请先在配置中心 / 工作区中配置 rootPath");
       return;
     }
     const primaryRepo = repos[0];
@@ -1818,7 +1818,7 @@ export default function App() {
       .filter((repo): repo is Repository => Boolean(repo));
     const anchor = resolveProjectMainSessionAnchor(project, repositories);
     if (!anchor.path) {
-      message.warning("该 Workspace 缺少根目录，请先配置 rootPath");
+      message.warning("该工作区缺少根目录，请先配置 rootPath");
       return null;
     }
     setAuthorTrellisProjectId(null);
@@ -2090,10 +2090,10 @@ export default function App() {
         repositories,
         activeRepositoryId,
         authorDisabled: !activeProjectId && activeRepositoryId != null,
-        authorDisabledTooltip: "Standalone Repo 不支持 Author 配置；升格为 Workspace 后启用",
+        authorDisabledTooltip: "单仓不支持工作台配置；升格为工作区后启用",
         onOpenAuthor: () => {
           if (!activeProjectId && activeRepositoryId != null) {
-            message.warning("Standalone Repo 不支持 Author 配置；升格为 Workspace 后启用");
+            message.warning("单仓不支持工作台配置；升格为工作区后启用");
             return;
           }
           enterAuthorPane(lastAuthorPane);
@@ -2179,7 +2179,7 @@ export default function App() {
           const firstRepoId =
             project.repositoryIds.find((id) => repositories.some((r) => r.id === id)) ?? null;
           if (firstRepoId == null) {
-            message.warning("该 Workspace 下暂无仓库");
+            message.warning("该工作区下暂无仓库");
             return;
           }
           openCodeKnowledgeGraphAfterRepositorySelect({
@@ -2330,9 +2330,9 @@ export default function App() {
               if (linkPid) {
                 try {
                   await addProjectPrdWorkflow(linkPid, savedTemplate.id);
-                  message.success("已关联到当前 Workspace");
+                  message.success("已关联到当前工作区");
                 } catch (err) {
-                  message.error(`模板已保存，但关联到 Workspace 失败：${toUiErrorMessage(err)}`);
+                  message.error(`模板已保存，但关联到工作区失败：${toUiErrorMessage(err)}`);
                 }
               }
               return savedTemplate;

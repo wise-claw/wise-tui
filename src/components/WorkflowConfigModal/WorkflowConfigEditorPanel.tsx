@@ -63,12 +63,12 @@ export function WorkflowConfigEditorPanel({
             <Switch checkedChildren="默认" unCheckedChildren="非默认" />
           </Form.Item>
           {projects && projects.length > 0 ? (
-            <Form.Item label="所属 Workspace" colon={false}>
+            <Form.Item label="所属工作区" colon={false}>
               <Select
                 className="app-workflow-config-project-select"
                 mode="multiple"
                 allowClear
-                placeholder="所属 Workspace"
+                placeholder="所属工作区"
                 maxTagCount="responsive"
                 value={editingProjectIds}
                 onChange={(value: string[]) => setEditingProjectIds(value)}
