@@ -1,5 +1,6 @@
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { safeUnlistenPromise } from "../../utils/safeTauriUnlisten";
 import { Button, Dropdown, Empty, Space, Spin, Tag, message } from "antd";
 import { DownOutlined, FileTextOutlined, HistoryOutlined } from "@ant-design/icons";
 import {
@@ -180,7 +181,7 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
         clearTimeout(watcherRefreshTimer.current);
         watcherRefreshTimer.current = null;
       }
-      void unlisten.then((fn) => fn());
+      safeUnlistenPromise(unlisten);
       void stopGitWatcher().catch(() => { });
     };
   }, [repositoryPath, mode, loadStatus, loadLog]);

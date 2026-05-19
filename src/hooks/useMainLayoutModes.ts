@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { safeUnlisten, safeUnlistenPromise } from "../utils/safeTauriUnlisten";
 import { message } from "antd";
 import type { ClaudeSession, Repository } from "../types";
 import {
@@ -303,7 +304,7 @@ export function useMainLayoutModes({
     })
       .then((fn) => {
         if (!cancelled) unlistenCompact = fn;
-        else fn();
+        else safeUnlisten(fn);
       })
       .catch(() => {
         /* non-Tauri / event unavailable */
@@ -313,15 +314,15 @@ export function useMainLayoutModes({
     })
       .then((fn) => {
         if (!cancelled) unlistenDual = fn;
-        else fn();
+        else safeUnlisten(fn);
       })
       .catch(() => {
         /* non-Tauri / event unavailable */
       });
     return () => {
       cancelled = true;
-      unlistenCompact?.();
-      unlistenDual?.();
+      safeUnlisten(unlistenCompact);
+      safeUnlisten(unlistenDual);
     };
   }, []);
 

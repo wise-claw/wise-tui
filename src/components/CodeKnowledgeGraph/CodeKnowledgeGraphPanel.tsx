@@ -1,4 +1,5 @@
 import { listen } from "@tauri-apps/api/event";
+import { safeUnlistenPromise } from "../../utils/safeTauriUnlisten";
 import {
   CloseOutlined,
   DeleteOutlined,
@@ -415,7 +416,7 @@ export function CodeKnowledgeGraphPanel({
     unsubs.push(projectErr);
 
     return () => {
-      unsubs.forEach((p) => p.then((fn) => fn()));
+      unsubs.forEach((p) => safeUnlistenPromise(p));
     };
   }, [repositoryId, fetchStatus]);
 

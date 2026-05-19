@@ -1,6 +1,7 @@
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { listen } from "@tauri-apps/api/event";
+import { safeUnlisten } from "./utils/safeTauriUnlisten";
 import { Modal, message } from "antd";
 import type {
   ClaudeSession,
@@ -245,6 +246,7 @@ export default function App() {
       : false;
   const [lastAuthorPane, setLastAuthorPane] = useState(() => readAuthorPaneFromStorage());
   const [missionControlInitialTarget, setMissionControlInitialTarget] = useState<OpenMissionControlDetail | null>(null);
+  const [missionControlOpenRequestKey, setMissionControlOpenRequestKey] = useState(0);
   const [authorTrellisProjectId, setAuthorTrellisProjectId] = useState<string | null>(null);
   const [workspaceCreateRequest, setWorkspaceCreateRequest] = useState(0);
   const [standaloneRepoAddRequest, setStandaloneRepoAddRequest] = useState(0);
@@ -378,12 +380,12 @@ export default function App() {
     const b = sidebarCodeGraphReindexBatchRef.current;
     if (!b) return;
     try {
-      b.unlistenComplete();
+      safeUnlisten(b.unlistenComplete);
     } catch {
       /* noop */
     }
     try {
-      b.unlistenError();
+      safeUnlisten(b.unlistenError);
     } catch {
       /* noop */
     }
@@ -400,12 +402,12 @@ export default function App() {
     const b = sidebarCodeGraphAssocBatchRef.current;
     if (!b) return;
     try {
-      b.unlistenOk();
+      safeUnlisten(b.unlistenOk);
     } catch {
       /* noop */
     }
     try {
-      b.unlistenErr();
+      safeUnlisten(b.unlistenErr);
     } catch {
       /* noop */
     }
@@ -1067,6 +1069,13 @@ export default function App() {
   const openMissionControl = useCallback((detail: OpenMissionControlDetail) => {
     setSearchOpen(false);
     setMissionControlInitialTarget(detail);
+    setMissionControlOpenRequestKey((value) => value + 1);
+    viewMode.enter(cockpitView());
+  }, [viewMode]);
+  const openDefaultAssistant = useCallback(() => {
+    setSearchOpen(false);
+    setMissionControlInitialTarget(null);
+    setMissionControlOpenRequestKey((value) => value + 1);
     viewMode.enter(cockpitView());
   }, [viewMode]);
   const composerProjectRoleTagOptions = useMemo(() => {
@@ -2083,6 +2092,8 @@ export default function App() {
           }
           enterAuthorPane(lastAuthorPane);
         },
+        assistantHubActive: viewMode.view.kind === "cockpit",
+        onOpenAssistantHub: openDefaultAssistant,
         workspaceCreateRequest,
         standaloneRepoAddRequest,
         onProjectSelect: handleProjectSelectLeavingMcpHub,
@@ -2549,6 +2560,12 @@ export default function App() {
         onCreateWorkspace: () => setWorkspaceCreateRequest((value) => value + 1),
         onImportStandaloneRepo: () => setStandaloneRepoAddRequest((value) => value + 1),
       }}
+      cockpitSurfaceActiveProjectId={activeProjectId ?? null}
+      cockpitSurfaceActiveProjectName={activeProject?.name ?? null}
+      cockpitSurfaceHasInitialTarget={Boolean(
+        missionControlInitialTarget?.projectId || missionControlInitialTarget?.repositoryId,
+      )}
+      cockpitSurfaceOpenRequestKey={missionControlOpenRequestKey}
       commandPaletteProps={{
         open: searchOpen,
         onClose: () => setSearchOpen(false),
@@ -2592,6 +2609,13 @@ export default function App() {
         initialTarget:
           missionControlInitialTarget ??
           (activeProjectId ? { projectId: activeProjectId } : null),
+        onClose: () => viewMode.enter({ kind: "chat" }),
+      }}
+      prdTaskSplitPanelProps={{
+        projects,
+        repositories,
+        activeProjectId,
+        activeRepositoryId,
         onClose: () => viewMode.enter({ kind: "chat" }),
       }}
       progressMonitorDrawerProps={{

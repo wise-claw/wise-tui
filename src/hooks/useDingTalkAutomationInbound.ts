@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { safeUnlisten } from "../utils/safeTauriUnlisten";
 import { message } from "antd";
 import type { ClaudeSession, ProjectItem, Repository } from "../types";
 import { WISE_DINGTALK_AUTOMATION_V1_EVENT } from "../constants/dingtalkWiseAutomation";
@@ -436,7 +437,7 @@ export function useDingTalkAutomationInbound({
       enqueueInbound(ev.payload);
     }).then((u) => {
       if (cancelled) {
-        u();
+        safeUnlisten(u);
         return;
       }
       unlisten = u;
@@ -444,7 +445,7 @@ export function useDingTalkAutomationInbound({
 
     return () => {
       cancelled = true;
-      unlisten?.();
+      safeUnlisten(unlisten);
     };
   }, [clearPendingAndResolveInboundJob]);
 

@@ -9,6 +9,7 @@ import {
 } from "react";
 import { Button, Drawer, message, Space, Tabs, Typography } from "antd";
 import { listen } from "@tauri-apps/api/event";
+import { safeUnlisten } from "../../utils/safeTauriUnlisten";
 import type { ClaudeSession } from "../../types";
 import {
   assemblePartsFromStdoutLines,
@@ -134,11 +135,7 @@ export function BackgroundInvocationDock({ session }: Props) {
       const list = unsubsByKeyRef.current[invocationKey];
       if (list) {
         for (const u of list) {
-          try {
-            u();
-          } catch {
-            /* noop */
-          }
+          safeUnlisten(u);
         }
         delete unsubsByKeyRef.current[invocationKey];
       }

@@ -7,6 +7,7 @@ import {
 } from "react";
 import { message } from "antd";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
+import { safeUnlisten } from "../utils/safeTauriUnlisten";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type {
   ClaudeComposerExecuteBubbleOptions,
@@ -85,9 +86,9 @@ async function attachClaudeInvocationStream(
   const cleanup = () => {
     if (cleaned) return;
     cleaned = true;
-    uo();
-    ue();
-    uc();
+    safeUnlisten(uo);
+    safeUnlisten(ue);
+    safeUnlisten(uc);
     onCleaned?.();
   };
   const [uo0, ue0, uc0] = await Promise.all([
@@ -585,7 +586,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         document.removeEventListener("visibilitychange", onVisibility);
       }
       unlistenHub?.();
-      void unlistenFocus?.();
+      safeUnlisten(unlistenFocus);
     };
   }, [flushBlockingDesktopIfHidden]);
 
@@ -722,7 +723,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       // React StrictMode 下 effect 可能先 cleanup 再拿到 listen 结果；
       // 这里兜底立即反注册，避免同一事件被重复消费。
       if (cancelled) {
-        u();
+        safeUnlisten(u);
         return;
       }
       unlisteners.push(u);
@@ -832,7 +833,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       streamRuntimeRef.current = null;
       // 勿在此处 detach invocation：React StrictMode 会先卸载再挂载，会误断用户进行中的流式。
       // invocation 监听由 `closeSession` 与单轮 `onCleaned` 释放。
-      unlisteners.forEach((u) => u());
+      unlisteners.forEach((u) => safeUnlisten(u));
     };
   }, [migrateClaudeInvocationTabId, reloadTranscriptFromDisk]);
 

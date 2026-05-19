@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { safeUnlisten, ensureTauriEventUnlistenPatched } from "./utils/safeTauriUnlisten";
+
+ensureTauriEventUnlistenPatched();
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   wiseMainWindowFocus,
@@ -63,7 +66,7 @@ function MascotApp() {
       if (toastTimer.current) clearTimeout(toastTimer.current);
       if (moveTimer.current) clearTimeout(moveTimer.current);
       for (const u of unsubsRef.current) {
-        u();
+        safeUnlisten(u);
       }
       unsubsRef.current = [];
     };

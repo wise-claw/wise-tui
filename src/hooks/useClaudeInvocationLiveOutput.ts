@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { safeUnlisten } from "../utils/safeTauriUnlisten";
 import {
   DIRECT_BATCH_INVOCATION_STDERR_RETENTION_LINES,
   DIRECT_BATCH_INVOCATION_STDOUT_RETENTION_LINES,
@@ -112,9 +113,9 @@ export function useClaudeInvocationLiveOutput(
           }),
         ]);
         if (cancelled) {
-          uo();
-          ue();
-          uc();
+          safeUnlisten(uo);
+          safeUnlisten(ue);
+          safeUnlisten(uc);
           return;
         }
         unsubs.push(uo, ue, uc);
@@ -130,7 +131,7 @@ export function useClaudeInvocationLiveOutput(
         rafRef.current = null;
       }
       for (const u of unsubs) {
-        u();
+        safeUnlisten(u);
       }
       stdoutRef.current = [];
       stderrRef.current = [];

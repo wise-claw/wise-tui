@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { safeUnlisten } from "../utils/safeTauriUnlisten";
 import { DIRECT_BATCH_INVOCATION_STDOUT_RETENTION_LINES } from "../constants/directBatchInvocationLog";
 import {
   extractInitSessionIdFromInvocationStdoutLines,
@@ -522,9 +523,9 @@ export async function executeClaudeCodeAndWait(params: {
     if (isDirectBatchStream) {
       directBatchInvocationRingByKey.delete(invocationKey);
     }
-    unlistenOutput();
-    unlistenError();
-    unlistenComplete();
+    safeUnlisten(unlistenOutput);
+    safeUnlisten(unlistenError);
+    safeUnlisten(unlistenComplete);
   }
 }
 

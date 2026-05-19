@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { safeUnlisten } from "../../../utils/safeTauriUnlisten";
 import type { ClusterRunProgress } from "../presenter/types";
 
 interface SplitterOutputEvent {
@@ -125,7 +126,7 @@ export function useSplitterStream(): { progress: ClusterProgressMap; stdout: Clu
 
     return () => {
       if (frameRef.current != null) cancelAnimationFrame(frameRef.current);
-      for (const fn of unlisteners) fn();
+      for (const fn of unlisteners) safeUnlisten(fn);
     };
   }, []);
 

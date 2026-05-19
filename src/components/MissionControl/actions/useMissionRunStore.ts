@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { safeUnlisten } from "../../../utils/safeTauriUnlisten";
 import {
   listActivePrdRuns,
   type ActivePrdRunRow,
@@ -77,7 +78,7 @@ export function useMissionRunStore() {
     }).then((fn) => unlisteners.push(fn));
 
     return () => {
-      for (const fn of unlisteners) fn();
+      for (const fn of unlisteners) safeUnlisten(fn);
     };
   }, []);
 

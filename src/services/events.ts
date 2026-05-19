@@ -1,4 +1,5 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { safeUnlisten } from "../utils/safeTauriUnlisten";
 
 // ── Event Hub ──
 
@@ -43,7 +44,7 @@ function createEventHub<T>(event: string) {
       };
     },
     teardown(): void {
-      unlisten?.();
+      safeUnlisten(unlisten);
       unlisten = null;
       setupPromise = null;
       listeners.clear();

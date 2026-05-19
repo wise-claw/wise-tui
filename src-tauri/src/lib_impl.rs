@@ -1,7 +1,7 @@
 use crate::{
     agent_registry, app_state_commands, assistants, cc_wf_studio_mcp_bridge, cc_workflow_studio,
     claude_code_usage, claude_commands, claude_config_dir, claude_external_ingest, code_knowledge_graph,
-    cua_driver, dingtalk_enterprise_bot, dingtalk_stream_gateway, extensions, git_commands, mission_control,
+    cua_driver, dingtalk_enterprise_bot, dingtalk_stream_gateway, extensions, git_commands, mission_control, mcp,
     prd_url_fetch, repository_files, skills, skills_sh, system_resource, trellis_bootstrap, trellis_bridge,
     trellis_runtime, wise_db, wise_mascot, wise_paths, wise_push, workspace_commands,
 };
@@ -464,6 +464,11 @@ pub fn run() {
             agent_registry::agent_registry_test_custom,
             agent_registry::agent_registry_save_custom,
             agent_registry::agent_registry_delete_custom,
+            mcp::commands::mcp_list_servers,
+            mcp::commands::mcp_save_server,
+            mcp::commands::mcp_delete_server,
+            mcp::commands::mcp_test_connection,
+            mcp::commands::mcp_supported_transports,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

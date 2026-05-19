@@ -2,6 +2,7 @@ import { ReloadOutlined } from "@ant-design/icons";
 import { Button, Empty, Space, Spin } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { safeUnlisten } from "../../utils/safeTauriUnlisten";
 import type { ClaudeSession } from "../../types";
 import {
   wiseMascotShow,
@@ -63,7 +64,7 @@ export function NotificationInboxPanel({
       });
     })();
     return () => {
-      void unlisten?.();
+      safeUnlisten(unlisten);
     };
   }, [active, load]);
 

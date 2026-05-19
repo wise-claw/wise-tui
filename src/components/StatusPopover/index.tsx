@@ -1,6 +1,7 @@
 import { Popover } from "antd";
 import { useEffect, useState } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { safeUnlisten } from "../../utils/safeTauriUnlisten";
 import type { ClaudeSession } from "../../types";
 import { wiseNotificationUnreadTotal } from "../../services/wiseMascot";
 import { NotificationInboxPanel } from "./NotificationInboxPanel";
@@ -19,7 +20,7 @@ function useWiseUnreadBadge(): number {
       });
     })();
     return () => {
-      void unlisten?.();
+      safeUnlisten(unlisten);
     };
   }, []);
   return n;

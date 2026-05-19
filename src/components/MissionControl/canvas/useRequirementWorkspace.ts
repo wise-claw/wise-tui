@@ -9,6 +9,7 @@ import { buildProjectRequirementWorkspaceInput } from "../../../services/trellis
 import type { ProjectItem, Repository } from "../../../types";
 import type { ProjectRef } from "../../PrdSplitWizard/types";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { safeUnlisten } from "../../../utils/safeTauriUnlisten";
 
 interface UseRequirementWorkspaceInput {
   project: ProjectItem | ProjectRef | null;
@@ -78,7 +79,7 @@ export function useRequirementWorkspace(input: UseRequirementWorkspaceInput) {
 
     return () => {
       cancelled = true;
-      for (const fn of unlisteners) fn();
+      for (const fn of unlisteners) safeUnlisten(fn);
     };
   }, [input.project?.id, input.projects, input.repositories, input.includeArchived]);
 

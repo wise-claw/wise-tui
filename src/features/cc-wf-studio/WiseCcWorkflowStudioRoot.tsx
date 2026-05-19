@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { safeUnlisten } from "../../utils/safeTauriUnlisten";
 import { mountCcWfStudioWiseHost } from "./ccWfStudioWiseHost";
 import { wiseCcWfStudioWiseHostDeps } from "./wiseCcWfStudioHostDeps";
 import { WiseCcWorkflowStudioShell } from "./WiseCcWorkflowStudioShell";
@@ -99,7 +100,7 @@ export function WiseCcWorkflowStudioRoot({ repositoryPath }: WiseCcWorkflowStudi
         if (!cancelled) {
           unlisten = u;
         } else {
-          u();
+          safeUnlisten(u);
         }
       } catch (e) {
         console.error("[cc-wf-studio] MCP invoke listener failed", e);
@@ -114,7 +115,7 @@ export function WiseCcWorkflowStudioRoot({ repositoryPath }: WiseCcWorkflowStudi
 
     return () => {
       cancelled = true;
-      unlisten?.();
+      safeUnlisten(unlisten);
     };
   }, [repositoryPath]);
 

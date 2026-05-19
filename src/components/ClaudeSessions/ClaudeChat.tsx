@@ -80,6 +80,7 @@ import {
   type WiseInboundMessageRow,
 } from "../../services/wiseMascot";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { safeUnlisten } from "../../utils/safeTauriUnlisten";
 import {
   readDeferredSendNext,
   writeDeferredSendNext,
@@ -2132,7 +2133,7 @@ export function ClaudeChat({
       });
     })();
     return () => {
-      void unlisten?.();
+      safeUnlisten(unlisten);
     };
   }, [loadNotificationRows]);
 
