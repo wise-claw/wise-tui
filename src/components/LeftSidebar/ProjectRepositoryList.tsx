@@ -1,6 +1,5 @@
 import type { MutableRefObject } from "react";
 import { Dropdown, Tooltip, Typography } from "antd";
-import type { MenuProps } from "antd";
 import type { ReconcileProjectMode } from "../../constants/reconcileProjectMode";
 import type { Repository, StandaloneRepo, TaskMode, Workspace } from "../../types";
 import type { SidebarCodeGraphIndexStatus } from "./useSidebarCodeGraphIndexMap";
@@ -10,6 +9,7 @@ import {
   type SidebarScheduledTasksSummary,
 } from "./useSidebarScheduledTasksMap";
 import { resolveWorkspaceMode } from "../../utils/workspaceMode";
+import { buildProjectMoreMenuItems } from "./sidebarMoreMenuItems";
 import {
   ExpandIcon,
   MoreIcon,
@@ -396,49 +396,15 @@ function ProjectRow({
   );
   const projectRequirementUnsplitCount = requirementUnsplitByProjectId[project.id] ?? 0;
   const projectExecutableTaskCount = executableTasksByProjectId[project.id] ?? 0;
-  const projectMoreItems: MenuProps["items"] = [
-    { key: "pin", label: isPinned ? "取消置顶" : "置顶" },
-    { key: "rename", label: "重命名 Workspace" },
-    ...(onAddRepositoryToProject
-      ? [{ key: "add-repository", label: "关联仓库" }] satisfies MenuProps["items"]
-      : []),
-    ...(onOpenScheduledTasksForProject
-      ? [{ key: "scheduled-tasks", label: "定时任务" }] satisfies MenuProps["items"]
-      : []),
-    { key: "requirements", label: "需求" },
-    ...(onOpenExecutableTasksForProject
-      ? [{ key: "executable-tasks", label: "可执行任务" }] satisfies MenuProps["items"]
-      : []),
-    ...(onReconcileProject
-      ? ([
-          {
-            key: "reconcile-submenu",
-            label: "重新初始化",
-            popupClassName: "app-sidebar-more-menu-submenu",
-            children: [
-              { key: "reconcile-repos", label: "仅同步仓库" },
-              { key: "reconcile-repos-graphs", label: "同步并重绘流程图（草稿）" },
-            ],
-          },
-        ] satisfies MenuProps["items"])
-      : []),
-    ...(onCodeGraphGenerateProject && onCodeGraphViewProject
-      ? ([
-          {
-            key: "code-graph-submenu",
-            label: "图谱操作",
-            popupClassName: "app-sidebar-more-menu-submenu",
-            children: [
-              { key: "code-graph-generate-project", label: "生成 Workspace 索引" },
-              { key: "code-graph-view-project", label: "查看检索" },
-            ],
-          },
-        ] satisfies MenuProps["items"])
-      : []),
-    { key: "prompts", label: "提示词" },
-    { type: "divider" },
-    { key: "delete", label: <span style={{ color: "var(--ant-color-error)" }}>删除 Workspace</span> },
-  ];
+  const projectMoreItems = buildProjectMoreMenuItems({
+    isPinned,
+    onAddRepositoryToProject: Boolean(onAddRepositoryToProject),
+    onOpenScheduledTasksForProject: Boolean(onOpenScheduledTasksForProject),
+    onOpenExecutableTasksForProject: Boolean(onOpenExecutableTasksForProject),
+    onReconcileProject: Boolean(onReconcileProject),
+    onCodeGraphGenerateProject: Boolean(onCodeGraphGenerateProject),
+    onCodeGraphViewProject: Boolean(onCodeGraphViewProject),
+  });
 
   return (
     <div

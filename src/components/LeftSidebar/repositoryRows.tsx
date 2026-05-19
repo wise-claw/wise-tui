@@ -1,22 +1,9 @@
 import { useState } from "react";
 import { UserOutlined } from "@ant-design/icons";
 import { App as AntdApp, Dropdown, Tooltip } from "antd";
-import type { MenuProps } from "antd";
 import type { Repository, StandaloneRepo, TaskMode, Workspace } from "../../types";
 import type { SidebarCodeGraphIndexStatus } from "./useSidebarCodeGraphIndexMap";
-import { DEFAULT_OPEN_APP_ID, DEFAULT_OPEN_APP_TARGETS } from "../OpenAppMenu/constants";
-import { getOpenAppPreferenceSync } from "../../services/openAppPreference";
 import { repositoryFolderBasename } from "../../utils/repositoryType";
-import {
-  ChatIcon,
-  CodeGraphIcon,
-  ExecutableTasksIcon,
-  MoreIcon,
-  RepositoryTypeIcon,
-  RepoDragHandleIcon,
-  ScheduledTasksIcon,
-  RequirementIcon,
-} from "./SidebarIcons";
 
 export interface RepositoryReorderUi {
   dragHandleEnabled: boolean;
@@ -30,11 +17,22 @@ export interface RepositoryReorderUi {
   onDropRow: (e: React.DragEvent) => void;
 }
 
-export function repositoryEditorOpenMenuLabel(): string {
-  const id = getOpenAppPreferenceSync().trim() || DEFAULT_OPEN_APP_ID;
-  const target = DEFAULT_OPEN_APP_TARGETS.find((item) => item.id === id) ?? DEFAULT_OPEN_APP_TARGETS[0];
-  return target ? `在 ${target.label} 中打开` : "编辑器打开";
-}
+import {
+  buildFloatingRepositoryMoreMenuItems,
+  buildProjectRepositoryMoreMenuItems,
+} from "./sidebarMoreMenuItems";
+import {
+  ChatIcon,
+  CodeGraphIcon,
+  ExecutableTasksIcon,
+  MoreIcon,
+  RepositoryTypeIcon,
+  RepoDragHandleIcon,
+  ScheduledTasksIcon,
+  RequirementIcon,
+} from "./SidebarIcons";
+
+export { repositoryEditorOpenMenuLabel } from "./sidebarMoreMenuItems";
 
 export function reorderRepositoryIdsForDrop(
   ordered: readonly number[],
@@ -256,38 +254,16 @@ export function RepositoryRow({
   onOpenRequirements?: (repository: Repository) => void;
   onOpenExecutableTasks?: (repository: Repository) => void;
 }) {
-  const moreItems: MenuProps["items"] = [
-    { key: "finder", label: "Finder打开" },
-    { key: "editor", label: repositoryEditorOpenMenuLabel() },
-    { type: "divider" },
-    ...(onOpenRepositoryMainOwner ? [{ key: "main-owner", label: "配置Owner" }] satisfies MenuProps["items"] : []),
-    { key: "prompts", label: "提示词" },
-    { key: "sdd-mode", label: "SDD 模式" },
-    ...(onOpenScheduledTasks
-      ? [{ key: "scheduled-tasks", label: "定时任务" }] satisfies MenuProps["items"]
-      : []),
-    ...(onOpenRequirements
-      ? [{ key: "requirements", label: "需求" }] satisfies MenuProps["items"]
-      : []),
-    ...(onOpenExecutableTasks
-      ? [{ key: "executable-tasks", label: "可执行任务" }] satisfies MenuProps["items"]
-      : []),
-    ...(onCodeGraphGenerateRepository && onCodeGraphViewRepositoryInProject
-      ? ([
-          {
-            key: "code-graph-submenu",
-            label: "图谱操作",
-            popupClassName: "app-sidebar-more-menu-submenu",
-            children: [
-              { key: "code-graph-generate-repo", label: "生成检索" },
-              { key: "code-graph-view-repo", label: "查看检索" },
-            ],
-          },
-        ] satisfies MenuProps["items"])
-      : []),
-    { type: "divider" },
-    { key: "detach", label: "移出 Workspace", danger: true },
-  ];
+  const moreItems = buildProjectRepositoryMoreMenuItems({
+    onOpenRepositoryMainOwner: Boolean(onOpenRepositoryMainOwner),
+    onOpenPromptsRepository: Boolean(onOpenPromptsRepository),
+    onConfigureSddMode: Boolean(onConfigureSddMode),
+    onOpenScheduledTasks: Boolean(onOpenScheduledTasks),
+    onOpenRequirements: Boolean(onOpenRequirements),
+    onOpenExecutableTasks: Boolean(onOpenExecutableTasks),
+    onCodeGraphGenerateRepository: Boolean(onCodeGraphGenerateRepository),
+    onCodeGraphViewRepositoryInProject: Boolean(onCodeGraphViewRepositoryInProject),
+  });
 
   const dropRowClass =
     repositoryReorder?.rowReorderEnabled && repositoryReorder.dropHint?.anchorRepositoryId === repository.id
@@ -354,17 +330,17 @@ export function RepositoryRow({
               onOpen={() => onCodeGraphViewRepositoryInProject(project, repository)}
             />
           ) : null}
+          {onOpenRequirements ? (
+            <SidebarRequirementAction
+              unsplitCount={requirementUnsplitCount}
+              onOpen={() => onOpenRequirements(repository)}
+            />
+          ) : null}
           {onOpenScheduledTasks ? (
             <SidebarScheduledTasksAction
               totalCount={scheduledTasksTotalCount}
               enabledCount={scheduledTasksEnabledCount}
               onOpen={() => onOpenScheduledTasks(repository)}
-            />
-          ) : null}
-          {onOpenRequirements ? (
-            <SidebarRequirementAction
-              unsplitCount={requirementUnsplitCount}
-              onOpen={() => onOpenRequirements(repository)}
             />
           ) : null}
           {onOpenExecutableTasks ? (
@@ -458,52 +434,18 @@ export function FloatingRepositoryRow({
   onOpenExecutableTasks?: (repository: Repository) => void;
 }) {
   const hasMainOwner = Boolean(repository.mainOwnerAgentName?.trim());
-  const joinChildren: MenuProps["items"] = joinableProjects.map((project) => ({
-    key: `join-${project.id}`,
-    label: project.name,
-  }));
-  const moreItems: MenuProps["items"] = [
-    { key: "finder", label: "Finder打开" },
-    { key: "editor", label: repositoryEditorOpenMenuLabel() },
-    ...(onOpenRepositoryMainOwner ? [{ key: "main-owner", label: "主 Owner 智能体…" }] satisfies MenuProps["items"] : []),
-    { key: "sdd-mode", label: "SDD 模式" },
-    ...(onOpenScheduledTasks
-      ? [{ key: "scheduled-tasks", label: "定时任务" }] satisfies MenuProps["items"]
-      : []),
-    ...(onOpenRequirements
-      ? [{ key: "requirements", label: "需求" }] satisfies MenuProps["items"]
-      : []),
-    ...(onOpenExecutableTasks
-      ? [{ key: "executable-tasks", label: "可执行任务" }] satisfies MenuProps["items"]
-      : []),
-    ...(onCodeGraphGenerateRepository && onCodeGraphViewFloatingRepository
-      ? ([
-          {
-            key: "code-graph-submenu",
-            label: "图谱操作",
-            popupClassName: "app-sidebar-more-menu-submenu",
-            children: [
-              { key: "code-graph-generate-repo", label: "生成检索" },
-              { key: "code-graph-view-repo", label: "查看检索" },
-            ],
-          },
-        ] satisfies MenuProps["items"])
-      : []),
-    { type: "divider" },
-    ...(onPromoteToNewProject ? [{ key: "promote", label: "升格为 Workspace…" }] satisfies MenuProps["items"] : []),
-    ...(onJoinExistingProject && joinChildren.length > 0
-      ? ([
-          {
-            key: "join",
-            label: "加入 Workspace",
-            popupClassName: "app-sidebar-more-menu-submenu",
-            children: joinChildren,
-          },
-        ] satisfies MenuProps["items"])
-      : []),
-    { type: "divider" },
-    { key: "remove", label: "移除仓库", danger: true },
-  ];
+  const moreItems = buildFloatingRepositoryMoreMenuItems({
+    joinableProjects,
+    onOpenRepositoryMainOwner: Boolean(onOpenRepositoryMainOwner),
+    onConfigureSddMode: Boolean(onConfigureSddMode),
+    onOpenScheduledTasks: Boolean(onOpenScheduledTasks),
+    onOpenRequirements: Boolean(onOpenRequirements),
+    onOpenExecutableTasks: Boolean(onOpenExecutableTasks),
+    onCodeGraphGenerateRepository: Boolean(onCodeGraphGenerateRepository),
+    onCodeGraphViewFloatingRepository: Boolean(onCodeGraphViewFloatingRepository),
+    onPromoteToNewProject: Boolean(onPromoteToNewProject),
+    onJoinExistingProject: Boolean(onJoinExistingProject),
+  });
 
   return (
     <div className="app-repository-row">
@@ -537,17 +479,17 @@ export function FloatingRepositoryRow({
           {codeGraphIndexed && onCodeGraphViewFloatingRepository ? (
             <RepositoryCodeGraphAction onOpen={() => onCodeGraphViewFloatingRepository(repository)} />
           ) : null}
+          {onOpenRequirements ? (
+            <SidebarRequirementAction
+              unsplitCount={requirementUnsplitCount}
+              onOpen={() => onOpenRequirements(repository)}
+            />
+          ) : null}
           {onOpenScheduledTasks ? (
             <SidebarScheduledTasksAction
               totalCount={scheduledTasksTotalCount}
               enabledCount={scheduledTasksEnabledCount}
               onOpen={() => onOpenScheduledTasks(repository)}
-            />
-          ) : null}
-          {onOpenRequirements ? (
-            <SidebarRequirementAction
-              unsplitCount={requirementUnsplitCount}
-              onOpen={() => onOpenRequirements(repository)}
             />
           ) : null}
           {onOpenExecutableTasks ? (

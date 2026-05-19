@@ -2490,6 +2490,23 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   margin: 4px 0;
 }
 
+.app-sidebar-more-menu-dropdown .app-sidebar-more-menu-inner .ant-dropdown-menu-item-group-title {
+  padding: 6px 6px 2px;
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 500;
+  color: var(--ant-color-text-tertiary);
+  letter-spacing: 0.02em;
+}
+
+.app-sidebar-more-menu-dropdown .app-sidebar-more-menu-inner .ant-dropdown-menu-item-group-list {
+  margin: 0;
+}
+
+.app-sidebar-more-menu-dropdown .app-sidebar-more-menu-inner .ant-dropdown-menu-item-group:not(:first-child) {
+  margin-top: 2px;
+}
+
 /* 侧栏「更多」里 hover 展开的二级菜单（如「重新初始化」「加入现有项目」）
    浮层 class 为 ant-dropdown-menu-submenu-popup，不是 ant-dropdown-menu-popup */
 .app-sidebar-more-menu-submenu .ant-dropdown-menu {
