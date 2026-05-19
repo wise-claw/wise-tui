@@ -254,6 +254,85 @@
   - **后端不动**:`task_artifact.rs / mission_create_with_task / read_task_artifact / write_task_artifact / assistant_overrides / runtime_resolver` 全部保留;migration 027/028/029 全部保留。Stage 4 可能用,且无负担。
   - `AssistantConversationView` 改为渲染 `<MissionControl>` 或 `<PrdTaskSplitPanel>` 的薄封装(单栏)。
 
+## Decisions(D14 修订,2026-05-19 锁定 —— 拆分清单与执行图之间必须有编排层)
+
+> 用户指出核心缺口:PRD 拆分产出的是"任务清单",而 fan-out 执行需要的是"执行图(DAG)"。缺少依赖分析与编排确认层时,执行器只能把任务串行丢给主会话。
+
+- **D14 ① 新增一等编排阶段**。
+  - PRD-split 主链路改为:`PRD 拆分 → 依赖分析(DAG) → 编排确认 → Fan-out 执行 → Trellis 落盘/执行记录`。
+  - "任务清单"不是执行输入;只有经过依赖分析生成的 `ExecutionPlan.waves[]` 才是执行输入。
+
+- **D14 ② 依赖分析输出 ExecutionPlan**。
+  - 数据语义:
+    ```ts
+    interface ExecutionPlan {
+      waves: Array<{
+        index: number;
+        taskIds: string[];
+        dependsOn: string[];
+      }>;
+    }
+    ```
+  - 初版来源复用 `TaskItem.dependencies` + 现有 `parallelGroups` / `buildParallelGroups` 拓扑分层。
+  - 后续增强可由编排 agent 基于 `taskAnchors`、`sourceRefs`、文件路径、命名依赖、repo role 推断依赖,再回写 `TaskItem.dependencies`。
+
+- **D14 ③ UI 改为"编排确认",不是单纯"执行编排预览"**。
+  - `PrdTaskSplitPanel` 右侧第二视图展示完整四步:`① PRD 拆分 / ② 依赖分析 / ③ 编排确认 / ④ Fan-out 执行`。
+  - 中栏展示 wave-based DAG 分层;右栏展示按波次 fan-out 的 agent 派发计划。
+  - 后续交互只需要支持"合并到当前波次 / 移到下一波次 / 调整依赖",不做复杂 DAG 画布编辑。
+
+- **D14 ④ 落盘按钮语义收紧**。
+  - "落盘到 Trellis"应发生在编排确认之后,写入 task 目录时同步写入/保留依赖与 wave 信息。
+  - 后续执行器按 wave fan-out:启动 wave N 的所有子代理,全部完成后触发 wave N+1。
+
+## Decisions(D15 修订,2026-05-19 锁定 —— 需求拆分阶段也必须 fan-out)
+
+> 用户确认:需求拆分阶段派发子代理也应该走 Claude Code fan-out。它和执行阶段 fan-out 是两层不同语义。
+
+- **D15 ① 拆分 fan-out 是生成候选任务的并行层**。
+  - 链路:`PRD → cluster planner → 多个 trellis-splitter 子代理并行 → verifier/merge → 候选任务清单`。
+  - 每个 splitter 子代理只负责一个 cluster / repo / domain slice,输出结构化 JSON。
+  - 拆分 fan-out 的产物是候选任务、requirement 映射、task anchors、初始 dependencies、dependencyRationale。
+
+- **D15 ② 编排 fan-out 是分析执行图的并行层**。
+  - 链路:`候选任务清单 → dependency/orchestration reviewers → DAG/waves → 人工确认`。
+  - 它消费 splitter 输出的初始 dependencies 与 dependencyRationale,必要时补充/修正 DAG。
+
+- **D15 ③ 执行 fan-out 是落盘后的运行层**。
+  - 链路:`确认后的 waves → wave[0] 多子代理并行执行 → 全部完成 → wave[1] ...`。
+  - 这层不消费平铺任务清单,只消费确认后的 ExecutionPlan/waves。
+
+- **D15 ④ UI 文案收口**。
+  - 拆分运行态从"子代理对话流"改为"拆分 fan-out 运行图"。
+  - 运行阶段展示:`Cluster fan-out 拆分 → Verifier 合并校验 → 交给编排层生成 DAG`。
+
+## Decisions(D16 修订,2026-05-19 锁定 —— 编排阶段全屏承载执行确认)
+
+> 用户修订:进入第二步"编排确认"后,左侧 PRD 框可以丝滑收起,候选任务/执行图占据全屏。既然编排阶段已经是强确认工作区,落盘执行不再需要 modal 承载。
+
+- **D16 ① 编排确认阶段收起 PRD 面板**。
+  - 用户从"候选任务复核"切到"编排确认"后,左侧 PRD 输入/锚点面板横向收起,右侧候选任务与执行图占据全宽。
+  - 切回"候选任务复核"时 PRD 面板原位展开,保留编辑器状态与锚点联动。
+  - 收起/展开是布局过渡,不是卸载组件。
+
+- **D16 ② 落盘执行回到编排页主动作**。
+  - "落盘执行"不再打开 modal;它在编排确认全屏状态中作为第三步主动作直接触发。
+  - 编排页本身展示 wave/DAG、fan-out 派发计划与任务调整操作,承担执行前确认。
+
+- **D16 ③ 开始执行后任务列表切换为运行队列**。
+  - 执行前右侧列表 = 候选任务,可编辑、删除、确认、调整波次。
+  - 点击"落盘执行"后,右侧列表 = Mission Runtime 执行队列,展示 wave、subagent、状态、依赖和操作入口。
+  - 候选任务编辑不再作为主视图,只能通过"返回编排/返回编辑"显式回退。
+
+- **D16 ④ 删除/扭转任务按状态收敛**。
+  - 未开始任务:允许删除、改派、调整波次。
+  - 运行中任务:不允许删除,只能查看日志、暂停后续波次或等待完成。
+  - 已完成任务:不允许删除执行事实,只能查看产物、重跑、回滚或标记废弃。
+
+- **D16 ⑤ 仓库成员区域展示 fan-out subagent 状态**。
+  - 右侧"我的团队/仓库成员"应展示执行 fan-out 派发出的 subagent 实时状态。
+  - 任务队列是执行图视角;仓库成员是 agent 供给/运行视角。两者展示同一批运行事实,不是两套任务。
+
 ## 修订后的核心 Loop
 
 ```

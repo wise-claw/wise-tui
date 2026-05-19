@@ -35,6 +35,7 @@
 - 拆分(splitter)CTA = LLM `start_splitter` 工具调用,等价 `task.py start`(D12)。
 - 三个新 InspectTool:`runtime-events / workflow-graph / spec-timeline / spec-library`(E7)。
 - 事件重命名 `WORKFLOW_UI_EVENT_OPEN_ASSISTANT`,无兼容 shim(E4)。
+- **D14 编排层**:PRD 拆分后先生成/确认 `ExecutionPlan`(DAG waves),再进入 fan-out 执行与 Trellis 落盘。
 
 **不做**:
 - 不重写 `splitterDispatch / verifierDispatch / clusterPlanner / trellisWriter` 运行时。
@@ -258,6 +259,133 @@ export type InspectTool =
 `ViewModeRouter` 增加 4 个 case;`AssistantHeader` 提供 4 个入口按钮。
 
 `ProjectTrellisCenter` 整体删除;其内部组件按用途拆出:
+
+## 8. D14 编排层:Task List → Execution DAG → Fan-out
+
+### 8.1 数据语义
+
+`SplitResult.splitTasks` 是候选任务清单,不是执行输入。执行输入是从任务依赖推导出的 `ExecutionPlan`:
+
+```ts
+interface ExecutionPlan {
+  waves: Array<{
+    index: number;
+    taskIds: string[];
+    dependsOn: string[];
+  }>;
+}
+```
+
+初版不新增持久字段,复用:
+
+- `TaskItem.dependencies`:任务级 DAG 边。
+- `SplitResult.parallelGroups`:由 `buildParallelGroups` / `refreshSplitResultDerivedFields` 计算出的 wave 分层。
+- `workflowGraphFromSplit.buildDependencyLayers`:落盘后生成 workflow graph 的同构分层。
+
+### 8.2 依赖分析
+
+现状已有拓扑分层能力,但 UI 语义不够明确。短期实现:
+
+1. 拆分完成后基于 `TaskItem.dependencies` 自动构造 `parallelGroups`。
+2. 编排确认视图展示 wave-based DAG。
+3. 用户确认后再落盘到 `.trellis/tasks/`。
+
+增强路径:
+
+- 编排 agent 读取 `taskAnchors`、`sourceRefs`、文件路径、任务标题、role、repo 信息。
+- 自动推断缺失依赖并回写 `TaskItem.dependencies`。
+- 所有依赖变化都必须重跑 `validateTaskDependencies` 与 `buildParallelGroups`。
+
+### 8.3 Fan-out 执行
+
+执行器不应消费平铺 task list。执行顺序:
+
+1. 启动 `waves[0].taskIds` 的所有子代理。
+2. 等待同波次全部 terminal。
+3. 启动下一波次。
+4. 任一任务失败时,阻塞依赖它的后续波次并暴露重试入口。
+
+### 8.4 UI 约束
+
+编排 UI 只做必要操作,不做复杂 DAG 画布:
+
+- 展示四步流程:`PRD 拆分 / 依赖分析 / 编排确认 / Fan-out 执行`。
+- 中栏展示每个 wave 的任务卡。
+- 右栏展示 fan-out agent 派发计划。
+- 后续交互只加三类:`合并到当前波次`、`移到下一波次`、`调整依赖`。
+
+## 9. D15 拆分阶段 Claude Code fan-out
+
+拆分阶段本身也是 fan-out,但它的输出不是执行结果,而是候选任务清单与初始 DAG 依据。
+
+### 9.1 三层 fan-out 区分
+
+| 层 | 输入 | 子代理 | 输出 |
+|---|---|---|---|
+| 拆分 fan-out | PRD clusters | `trellis-splitter` | 候选任务 / anchors / 初始 dependencies |
+| 编排 fan-out | 候选任务清单 | dependency reviewers | `ExecutionPlan.waves` |
+| 执行 fan-out | 已确认 waves | implement/check agents | 代码改动 / 验证证据 |
+
+### 9.2 Splitter 输出增强
+
+`trellis-splitter` 的 task 输出增加可选字段:
+
+```ts
+dependencyRationale?: Record<string, string>;
+```
+
+语义:
+
+- key 必须是 `dependencies` 中的 task id。
+- value 说明为什么当前任务必须等待该 task。
+- normalizer 在 task id 重映射 / 依赖裁剪时同步重映射 / 清理 rationale。
+
+### 9.3 运行态 UI
+
+`SplitRuntimeMessages` 展示拆分 fan-out 运行图:
+
+1. `Cluster fan-out 拆分`
+2. `Verifier 合并校验`
+3. `交给编排层生成 DAG`
+
+子代理行以 Cluster 为单位展示 splitter 状态、输出候选任务、校验问题和输出流。
+
+## 10. D16 编排全屏确认与运行队列
+
+### 10.1 布局确认节点
+
+"落盘执行"不再是任务列表内的次级按钮,也不再由 modal 承载。进入编排确认后,父级布局切换为任务全屏:
+
+- `PrdTaskSplitPanelImpl` 维护 `workspaceLayout = "review" | "focused"`。
+- `TaskResultPanel` 在 `resultViewMode === "orchestration"` 或 `executionStarted` 时上报 `focused`。
+- 左侧 `RequirementInputCard` 所在列宽度过渡到 0,透明并禁用指针;组件不卸载,保留编辑器状态。
+- 右侧任务/编排列扩展到 100%,承载 wave/DAG、fan-out 派发计划和落盘执行动作。
+- 所有波次调整仍通过 `moveTaskInExecutionPlan` 修改 `TaskItem.dependencies` 并重算 `parallelGroups`。
+
+### 10.2 任务列表语义切换
+
+`TaskResultPanel` 内部维护执行态:
+
+```ts
+type ResultViewMode = "review" | "orchestration";
+const executionStarted: boolean;
+```
+
+渲染规则:
+
+- `review`:候选任务复核,可编辑、删除、确认、单任务落盘。
+- `orchestration`:执行 DAG 与 fan-out 计划,PRD 面板收起。
+- `executionStarted`:渲染 `ExecutionRuntimeQueue`,候选任务列表隐藏。
+
+### 10.3 运行中任务操作
+
+首版先做前端语义闭环,不接真实执行器:
+
+- wave 1 任务显示 `running`。
+- 后续 wave 显示 `waiting`。
+- "暂停后续波次"、"产物"、"删除/运行中"按钮先以 disabled 方式占位,避免暗示已经支持破坏性运行时操作。
+
+后续接入真实执行器时,状态来源应统一来自 `mission_agent_assignments / trellis_agent_runs / trellis_runtime_events`,并同步到仓库成员监控面板。
 - `OnboardingChecklist / AgentOwnershipGraph / RuntimeEventFeed` → `RuntimeEventsInspector`。
 - `SpecRevisionTimeline / WorkspaceSnapshotViewer` → `SpecTimelineInspector`。
 - `WorkflowGraphPanel` → `WorkflowGraphInspector`。
