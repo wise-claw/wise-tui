@@ -1,13 +1,12 @@
 import { Button, Drawer, Empty, Popover, Space, Tag, Typography } from "antd";
-import type { ClaudeSession, ClaudeSessionInfo } from "../../types";
+import type { ClaudeHostProcess, ClaudeSession, ClaudeSessionInfo } from "../../types";
+import { formatBytes } from "./systemSessions";
 import { ClaudeSessionMessagesColumn } from "../ClaudeSessions/ClaudeSessionMessagesColumn";
 import {
   HistorySessionPopoverContent,
   historySessionStatusLabel,
   historySessionStatusTagColor,
 } from "../ProgressMonitorPanel";
-import { formatBytes } from "./systemSessions";
-
 interface SystemSummary {
   appMemoryBytes: number;
   claudeMemoryBytes: number;
@@ -21,7 +20,8 @@ interface SystemResourceInlineProps {
   searchValue: string;
   onSearchChange: (value: string) => void;
   matchedSessions: ClaudeSession[];
-  runningSessionCount: number;
+  /** 与 `claude:` 内存同源：`ps` 扫描到的 Claude 相关进程数 */
+  claudeProcessCount: number;
   onSelectSession: (sessionId: string) => void;
   drawerTitle: string;
   drawerOpen: boolean;
@@ -30,6 +30,7 @@ interface SystemResourceInlineProps {
   liveDrawerSession?: ClaudeSession;
   drawerRegistryOrphanSid: string | null;
   drawerRegistryOrphanInfo?: ClaudeSessionInfo;
+  drawerHostProcess?: ClaudeHostProcess;
   canStopLiveDrawerSession: boolean;
   onCancelLiveDrawerSession?: (sessionId: string) => void;
   onCancelRegistryOrphanSession: (sid: string) => void;
@@ -44,7 +45,7 @@ export function SystemResourceInline({
   searchValue,
   onSearchChange,
   matchedSessions,
-  runningSessionCount,
+  claudeProcessCount,
   onSelectSession,
   drawerTitle,
   drawerOpen,
@@ -53,6 +54,7 @@ export function SystemResourceInline({
   liveDrawerSession,
   drawerRegistryOrphanSid,
   drawerRegistryOrphanInfo,
+  drawerHostProcess,
   canStopLiveDrawerSession,
   onCancelLiveDrawerSession,
   onCancelRegistryOrphanSession,
@@ -79,7 +81,11 @@ export function SystemResourceInline({
                     onSearchChange={onSearchChange}
                     rows={matchedSessions.map((session) => ({ session }))}
                     emptyDescription={
-                      searchValue.trim() ? "未找到匹配会话" : "暂无运行中的会话"
+                      searchValue.trim()
+                        ? "未找到匹配会话"
+                        : claudeProcessCount > 0
+                          ? "检测到 Claude 进程；点击下方条目查看 PID / 会话 ID"
+                          : "暂无运行中的会话"
                     }
                     onSelectSession={onSelectSession}
                     searchPlaceholder="搜索会话..."
@@ -90,7 +96,7 @@ export function SystemResourceInline({
                   className="app-left-sidebar-system-inline__count-trigger"
                   role="button"
                   tabIndex={0}
-                  aria-label="查看正在运行中的 Claude Code 会话列表"
+                  aria-label="查看 Claude Code 进程与会话列表"
                   onClick={(event) => event.stopPropagation()}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
@@ -100,7 +106,7 @@ export function SystemResourceInline({
                   }}
                 >
                   {"  数量:"}
-                  {runningSessionCount}
+                  {claudeProcessCount}
                 </span>
               </Popover>
             </>
@@ -142,6 +148,19 @@ export function SystemResourceInline({
                 停止
               </Button>
             </Space>
+          ) : drawerHostProcess?.sessionId ? (
+            <Space size="small" wrap align="center">
+              <Tag color="processing">系统进程</Tag>
+              <Button
+                size="small"
+                danger
+                onClick={() => onCancelRegistryOrphanSession(drawerHostProcess.sessionId!)}
+              >
+                停止
+              </Button>
+            </Space>
+          ) : drawerHostProcess ? (
+            <Tag color="default">系统进程</Tag>
           ) : null
         }
       >
@@ -158,11 +177,53 @@ export function SystemResourceInline({
             sid={drawerRegistryOrphanSid}
             info={drawerRegistryOrphanInfo}
           />
+        ) : drawerHostProcess ? (
+          <HostProcessSessionDetails proc={drawerHostProcess} />
         ) : (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未找到该会话" />
         )}
       </Drawer>
     </>
+  );
+}
+
+function HostProcessSessionDetails({ proc }: { proc: ClaudeHostProcess }) {
+  const sid = proc.sessionId?.trim() ?? "";
+  const path = proc.projectPath?.trim() ?? "";
+  const sourceLabel =
+    proc.sessionSource === "lsof_jsonl"
+      ? "打开中的 jsonl（lsof）"
+      : proc.sessionSource === "resume_arg"
+        ? "命令行 -r"
+        : "未能解析";
+  return (
+    <div className="app-monitor-panel__history-session-drawer-scroll">
+      <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
+        该条目来自本机进程扫描（非 Wise 注册表）。若会话由终端启动，可通过会话 ID 终止；仅 PID 无会话 ID 时请在终端确认。
+      </Typography.Paragraph>
+      <Typography.Paragraph>
+        <Typography.Text strong>PID</Typography.Text> {proc.pid}
+        {" · "}
+        <Typography.Text strong>内存</Typography.Text> {formatBytes(proc.memoryBytes)}
+      </Typography.Paragraph>
+      <Typography.Paragraph>
+        <Typography.Text strong>会话 ID 来源</Typography.Text> {sourceLabel}
+      </Typography.Paragraph>
+      {path ? (
+        <Typography.Paragraph copyable={{ text: path }}>
+          <Typography.Text strong>Workspace Path</Typography.Text> {path}
+        </Typography.Paragraph>
+      ) : null}
+      {sid ? (
+        <Typography.Paragraph copyable={{ text: sid }}>
+          <Typography.Text strong>Claude 会话 ID</Typography.Text> {sid}
+        </Typography.Paragraph>
+      ) : (
+        <Typography.Paragraph type="secondary">
+          未从命令行 `-r` 或 jsonl 路径解析到会话 ID（可能为新会话首包前，或非 Claude Code 主进程）。
+        </Typography.Paragraph>
+      )}
+    </div>
   );
 }
 

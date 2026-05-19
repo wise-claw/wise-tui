@@ -358,7 +358,7 @@ export function LeftSidebar({
         searchValue={systemResourceSessions.claudeSystemSessionSearch}
         onSearchChange={systemResourceSessions.setClaudeSystemSessionSearch}
         matchedSessions={systemResourceSessions.matchedSystemInlineSessions}
-        runningSessionCount={systemResourceSessions.systemInlineRunningSessionsCombined.length}
+        claudeProcessCount={systemResourceSessions.systemSummary.claudeProcessCount}
         onSelectSession={(sessionId) => {
           systemResourceSessions.setClaudeCountPopoverOpen(false);
           systemResourceSessions.setClaudeSystemSessionSearch("");
@@ -371,6 +371,7 @@ export function LeftSidebar({
         liveDrawerSession={systemResourceSessions.liveSystemDrawerSession}
         drawerRegistryOrphanSid={systemResourceSessions.drawerRegistryOrphanSid}
         drawerRegistryOrphanInfo={systemResourceSessions.drawerRegistryOrphanInfo}
+        drawerHostProcess={systemResourceSessions.drawerHostProcess}
         canStopLiveDrawerSession={systemResourceSessions.canStopSystemDrawerSession}
         onCancelLiveDrawerSession={onCancelSessionFromMonitor}
         onCancelRegistryOrphanSession={(sid) => {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { ClaudeSession, ClaudeSessionInfo } from "../../types";
+import type { ClaudeHostProcess, ClaudeSession, ClaudeSessionInfo } from "../../types";
 import { listRunningClaudeSessions } from "../../services/claude";
 import { isClaudeSessionRunningInHostOrUi } from "../../services/claudeSessionState";
 import { getSystemResourceSnapshot } from "../../services/systemResource";
@@ -10,7 +10,9 @@ import {
   sessionUpdatedAt,
 } from "../ProgressMonitorPanel";
 import {
+  buildHostClaudeProcessSession,
   buildRegistryOrphanClaudeSession,
+  parseHostProcessDrawerPid,
   parseRegistryOrphanClaudeSid,
 } from "./systemSessions";
 
@@ -31,6 +33,7 @@ export function useSystemResourceSessions({
     appMemoryBytes: 0,
     claudeProcessCount: 0,
     claudeMemoryBytes: 0,
+    claudeProcesses: [] as ClaudeHostProcess[],
   });
   const [systemSummaryError, setSystemSummaryError] = useState(false);
   const [registryRunningClaude, setRegistryRunningClaude] = useState<ClaudeSessionInfo[]>([]);
@@ -50,7 +53,11 @@ export function useSystemResourceSessions({
       ]);
       if (cancelled) return;
       if (snapshotResult.status === "fulfilled") {
-        setSystemSummary(snapshotResult.value);
+        const snap = snapshotResult.value;
+        setSystemSummary({
+          ...snap,
+          claudeProcesses: snap.claudeProcesses ?? [],
+        });
         setSystemSummaryError(false);
       } else {
         setSystemSummaryError(true);
@@ -114,12 +121,39 @@ export function useSystemResourceSessions({
     return out;
   }, [sessions, registryRunningClaude]);
 
+  const hostProcessClaudeSessions = useMemo(() => {
+    const coveredSids = new Set<string>();
+    for (const session of [...runningClaudeCodeSessions, ...registryOrphanClaudeSessions]) {
+      const sid = session.claudeSessionId?.trim();
+      if (sid) coveredSids.add(sid);
+    }
+    for (const info of registryRunningClaude) {
+      const sid = info.session_id.trim();
+      if (sid) coveredSids.add(sid);
+    }
+    const seenPid = new Set<number>();
+    const out: ClaudeSession[] = [];
+    for (const proc of systemSummary.claudeProcesses) {
+      if (!Number.isFinite(proc.pid) || proc.pid <= 0 || seenPid.has(proc.pid)) continue;
+      const sid = proc.sessionId?.trim() ?? "";
+      if (sid && coveredSids.has(sid)) continue;
+      seenPid.add(proc.pid);
+      out.push(buildHostClaudeProcessSession(proc));
+    }
+    return out;
+  }, [
+    systemSummary.claudeProcesses,
+    runningClaudeCodeSessions,
+    registryOrphanClaudeSessions,
+    registryRunningClaude,
+  ]);
+
   const systemInlineRunningSessionsCombined = useMemo(
     () =>
-      [...runningClaudeCodeSessions, ...registryOrphanClaudeSessions].sort(
+      [...runningClaudeCodeSessions, ...registryOrphanClaudeSessions, ...hostProcessClaudeSessions].sort(
         (a, b) => sessionUpdatedAt(b) - sessionUpdatedAt(a),
       ),
-    [runningClaudeCodeSessions, registryOrphanClaudeSessions],
+    [runningClaudeCodeSessions, registryOrphanClaudeSessions, hostProcessClaudeSessions],
   );
 
   const matchedSystemInlineSessions = useMemo(() => {
@@ -145,13 +179,29 @@ export function useSystemResourceSessions({
     [systemSessionDrawerId],
   );
 
+  const drawerHostProcessPid = useMemo(
+    () => (systemSessionDrawerId ? parseHostProcessDrawerPid(systemSessionDrawerId) : null),
+    [systemSessionDrawerId],
+  );
+
+  const drawerHostProcess = useMemo(() => {
+    if (drawerHostProcessPid == null) return undefined;
+    return systemSummary.claudeProcesses.find((item) => item.pid === drawerHostProcessPid);
+  }, [drawerHostProcessPid, systemSummary.claudeProcesses]);
+
   const systemDrawerTranscriptTargetId = liveSystemDrawerSession?.id ?? null;
   const systemDrawerTranscriptMessagesLen = liveSystemDrawerSession?.messages.length ?? 0;
   const systemDrawerTranscriptStatus = liveSystemDrawerSession?.status;
   const systemDrawerTranscriptClaudeId = liveSystemDrawerSession?.claudeSessionId?.trim() ?? "";
 
   useEffect(() => {
-    if (!systemSessionDrawerId || drawerRegistryOrphanSid || !onReloadFullDiskTranscript || !systemDrawerTranscriptTargetId) {
+    if (
+      !systemSessionDrawerId ||
+      drawerRegistryOrphanSid ||
+      drawerHostProcessPid != null ||
+      !onReloadFullDiskTranscript ||
+      !systemDrawerTranscriptTargetId
+    ) {
       return;
     }
     if (systemDrawerTranscriptMessagesLen > 0) return;
@@ -161,6 +211,7 @@ export function useSystemResourceSessions({
   }, [
     systemSessionDrawerId,
     drawerRegistryOrphanSid,
+    drawerHostProcessPid,
     onReloadFullDiskTranscript,
     systemDrawerTranscriptTargetId,
     systemDrawerTranscriptMessagesLen,
@@ -174,6 +225,11 @@ export function useSystemResourceSessions({
   }, [drawerRegistryOrphanSid, registryRunningClaude]);
 
   const systemSessionDrawerTitle = useMemo(() => {
+    if (drawerHostProcess) {
+      const path = drawerHostProcess.projectPath?.trim() ?? "";
+      if (path.length > 0) return path;
+      return `Claude 进程 · PID ${drawerHostProcess.pid}`;
+    }
     if (drawerRegistryOrphanInfo) {
       const path = drawerRegistryOrphanInfo.project_path.trim();
       return path.length > 0 ? path : "Claude 进程（未绑定 Wise 会话）";
@@ -181,7 +237,7 @@ export function useSystemResourceSessions({
     if (!liveSystemDrawerSession) return "会话消息";
     const name = liveSystemDrawerSession.repositoryName?.trim();
     return name && name.length > 0 ? name : getSessionPreview(liveSystemDrawerSession);
-  }, [drawerRegistryOrphanInfo, liveSystemDrawerSession]);
+  }, [drawerHostProcess, drawerRegistryOrphanInfo, liveSystemDrawerSession]);
 
   const canStopSystemDrawerSession =
     Boolean(onCancelSessionFromMonitor) &&
@@ -203,6 +259,8 @@ export function useSystemResourceSessions({
     liveSystemDrawerSession,
     drawerRegistryOrphanSid,
     drawerRegistryOrphanInfo,
+    drawerHostProcessPid,
+    drawerHostProcess,
     systemSessionDrawerTitle,
     canStopSystemDrawerSession,
   };

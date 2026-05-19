@@ -600,12 +600,22 @@ export interface ClaudeSessionInfo {
   started_at: string;
 }
 
+export interface ClaudeHostProcess {
+  pid: number;
+  memoryBytes: number;
+  sessionId: string | null;
+  projectPath: string | null;
+  /** `resume_arg` | `lsof_jsonl` */
+  sessionSource: string | null;
+}
+
 export interface SystemResourceSnapshot {
   systemTotalBytes: number;
   systemUsedBytes: number;
   appMemoryBytes: number;
   claudeProcessCount: number;
   claudeMemoryBytes: number;
+  claudeProcesses: ClaudeHostProcess[];
 }
 
 export type ClaudeConnectionMode = "persistent" | "oneshot";
