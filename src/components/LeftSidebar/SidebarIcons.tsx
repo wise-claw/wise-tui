@@ -63,6 +63,17 @@ export function TrellisIcon() {
   );
 }
 
+export function CodeGraphIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <circle cx="4" cy="4" r="1.35" stroke="currentColor" strokeWidth="1.1" />
+      <circle cx="12" cy="4" r="1.35" stroke="currentColor" strokeWidth="1.1" />
+      <circle cx="8" cy="12" r="1.35" stroke="currentColor" strokeWidth="1.1" />
+      <path d="M5.1 4.8 6.9 11M10.9 4.8 9.1 11M5.35 4h5.3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function ChatIcon() {
   return (
     <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>

@@ -3,6 +3,7 @@ import { Dropdown, Tooltip, Typography } from "antd";
 import type { MenuProps } from "antd";
 import type { ReconcileProjectMode } from "../../constants/reconcileProjectMode";
 import type { Repository, StandaloneRepo, TaskMode, Workspace } from "../../types";
+import type { SidebarCodeGraphIndexStatus } from "./useSidebarCodeGraphIndexMap";
 import { resolveWorkspaceMode } from "../../utils/workspaceMode";
 import {
   ExpandIcon,
@@ -15,6 +16,7 @@ import {
 import {
   FloatingRepositoryRow,
   ProjectRepositoryRows,
+  RepositoryCodeGraphAction,
 } from "./repositoryRows";
 
 interface ProjectRepositoryListProps {
@@ -61,6 +63,7 @@ interface ProjectRepositoryListProps {
   onProjectDropTargetChange: (projectId: string | null | ((cur: string | null) => string | null)) => void;
   onClearRepoSidebarDrag: () => void;
   onMoveRepositoryError: (message: string, err: unknown) => void;
+  codeGraphIndexStatusByRepoId?: Record<number, SidebarCodeGraphIndexStatus>;
 }
 
 export function ProjectRepositoryList({
@@ -107,6 +110,7 @@ export function ProjectRepositoryList({
   onProjectDropTargetChange,
   onClearRepoSidebarDrag,
   onMoveRepositoryError,
+  codeGraphIndexStatusByRepoId = {},
 }: ProjectRepositoryListProps) {
   return (
     <>
@@ -158,6 +162,7 @@ export function ProjectRepositoryList({
                 onPromoteToNewProject={onPromoteFloatingRepository}
                 onJoinExistingProject={onJoinFloatingRepository}
                 onRemove={onRemoveFloatingRepository}
+                codeGraphIndexed={codeGraphIndexStatusByRepoId[repository.id] === "done"}
               />
             ))}
           </div>
@@ -203,6 +208,7 @@ export function ProjectRepositoryList({
             onProjectDropTargetChange={onProjectDropTargetChange}
             onClearRepoSidebarDrag={onClearRepoSidebarDrag}
             onMoveRepositoryError={onMoveRepositoryError}
+            codeGraphIndexStatusByRepoId={codeGraphIndexStatusByRepoId}
           />
         ))}
         {projects.length === 0 && floatingRepositories.length === 0 && (
@@ -229,7 +235,6 @@ function ProjectRequirementAction({ onOpen }: { onOpen: () => void }) {
         }}
       >
         <RequirementIcon />
-        <span className="app-repository-action-label">需求</span>
       </button>
     </Tooltip>
   );
@@ -248,7 +253,6 @@ function ProjectTrellisAction({ onOpen }: { onOpen: () => void }) {
         }}
       >
         <TrellisIcon />
-        <span className="app-repository-action-label">Trellis</span>
       </button>
     </Tooltip>
   );
@@ -291,6 +295,7 @@ interface ProjectRowProps {
   onProjectDropTargetChange: (projectId: string | null | ((cur: string | null) => string | null)) => void;
   onClearRepoSidebarDrag: () => void;
   onMoveRepositoryError: (message: string, err: unknown) => void;
+  codeGraphIndexStatusByRepoId?: Record<number, SidebarCodeGraphIndexStatus>;
 }
 
 function ProjectRow({
@@ -330,7 +335,11 @@ function ProjectRow({
   onProjectDropTargetChange,
   onClearRepoSidebarDrag,
   onMoveRepositoryError,
+  codeGraphIndexStatusByRepoId = {},
 }: ProjectRowProps) {
+  const projectHasCodeGraph = project.repositoryIds.some(
+    (repositoryId) => codeGraphIndexStatusByRepoId[repositoryId] === "done",
+  );
   const projectMoreItems: MenuProps["items"] = [
     { key: "pin", label: isPinned ? "取消置顶" : "置顶" },
     { key: "rename", label: "重命名 Workspace" },
@@ -430,6 +439,9 @@ function ProjectRow({
             <ProjectTrellisAction onOpen={() => onOpenProjectTrellis(project)} />
           ) : null}
           <ProjectRequirementAction onOpen={() => onCreateProjectTask(project, "split")} />
+          {projectHasCodeGraph && onCodeGraphViewProject ? (
+            <RepositoryCodeGraphAction onOpen={() => onCodeGraphViewProject(project)} />
+          ) : null}
           <Dropdown
             rootClassName="app-sidebar-more-menu-dropdown"
             menu={{
@@ -491,6 +503,7 @@ function ProjectRow({
                   projects: [project],
                 }) === "multi_repo"
               }
+              codeGraphIndexStatusByRepoId={codeGraphIndexStatusByRepoId}
             />
           ) : null}
           <button

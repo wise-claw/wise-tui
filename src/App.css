@@ -2094,19 +2094,32 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 .app-repository-action--requirement {
-  width: auto;
-  max-width: 56px;
-  min-width: 48px;
+  width: 18px;
+  min-width: 18px;
+  max-width: 18px;
   color: var(--ant-color-primary);
   background: var(--ant-color-primary-bg);
 }
 
 .app-repository-action--trellis {
-  width: auto;
-  max-width: 68px;
-  min-width: 58px;
+  width: 18px;
+  min-width: 18px;
+  max-width: 18px;
   color: var(--ant-color-success);
   background: color-mix(in srgb, var(--ant-color-success) 12%, transparent);
+}
+
+.app-repository-action--code-graph {
+  width: 18px;
+  min-width: 18px;
+  max-width: 18px;
+  color: var(--ant-color-geekblue);
+  background: color-mix(in srgb, var(--ant-color-geekblue) 14%, transparent);
+}
+
+.app-repository-action--code-graph:hover {
+  color: var(--ant-color-geekblue);
+  background: color-mix(in srgb, var(--ant-color-geekblue) 22%, transparent);
 }
 
 .app-repository-action--chat {

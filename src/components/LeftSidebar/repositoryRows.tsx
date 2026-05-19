@@ -3,11 +3,13 @@ import { UserOutlined } from "@ant-design/icons";
 import { App as AntdApp, Dropdown, Tooltip } from "antd";
 import type { MenuProps } from "antd";
 import type { Repository, StandaloneRepo, TaskMode, Workspace } from "../../types";
+import type { SidebarCodeGraphIndexStatus } from "./useSidebarCodeGraphIndexMap";
 import { DEFAULT_OPEN_APP_ID, DEFAULT_OPEN_APP_TARGETS } from "../OpenAppMenu/constants";
 import { getOpenAppPreferenceSync } from "../../services/openAppPreference";
 import { repositoryFolderBasename } from "../../utils/repositoryType";
 import {
   ChatIcon,
+  CodeGraphIcon,
   MoreIcon,
   RepositoryTypeIcon,
   RepoDragHandleIcon,
@@ -64,6 +66,24 @@ export function RepositoryConversationAction({ onOpen }: { onOpen: () => void })
   );
 }
 
+export function RepositoryCodeGraphAction({ onOpen }: { onOpen: () => void }) {
+  return (
+    <Tooltip title="查看代码图谱" mouseEnterDelay={0.3}>
+      <button
+        type="button"
+        className="app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--code-graph"
+        aria-label="查看代码图谱"
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpen();
+        }}
+      >
+        <CodeGraphIcon />
+      </button>
+    </Tooltip>
+  );
+}
+
 export function RepositoryRow({
   project,
   repository,
@@ -80,6 +100,7 @@ export function RepositoryRow({
   onCodeGraphViewRepositoryInProject,
   repositoryReorder,
   hideChatAction = false,
+  codeGraphIndexed = false,
 }: {
   project: Workspace;
   repository: Repository;
@@ -96,6 +117,7 @@ export function RepositoryRow({
   onCodeGraphViewRepositoryInProject?: (project: Workspace, repository: Repository) => void;
   repositoryReorder?: RepositoryReorderUi;
   hideChatAction?: boolean;
+  codeGraphIndexed?: boolean;
 }) {
   const moreItems: MenuProps["items"] = [
     { key: "finder", label: "Finder打开" },
@@ -181,6 +203,11 @@ export function RepositoryRow({
           {hideChatAction ? null : (
             <RepositoryConversationAction onOpen={() => onOpenTaskMode(repository, "chat")} />
           )}
+          {codeGraphIndexed && onCodeGraphViewRepositoryInProject ? (
+            <RepositoryCodeGraphAction
+              onOpen={() => onCodeGraphViewRepositoryInProject(project, repository)}
+            />
+          ) : null}
           <Dropdown
             rootClassName="app-sidebar-more-menu-dropdown"
             menu={{
@@ -230,6 +257,7 @@ export function FloatingRepositoryRow({
   onPromoteToNewProject,
   onJoinExistingProject,
   onRemove,
+  codeGraphIndexed = false,
 }: {
   repository: StandaloneRepo;
   isActiveRepository: boolean;
@@ -245,6 +273,7 @@ export function FloatingRepositoryRow({
   onPromoteToNewProject?: (repository: StandaloneRepo) => void;
   onJoinExistingProject?: (repository: StandaloneRepo, projectId: string) => void;
   onRemove: (repository: StandaloneRepo) => void;
+  codeGraphIndexed?: boolean;
 }) {
   const hasMainOwner = Boolean(repository.mainOwnerAgentName?.trim());
   const joinChildren: MenuProps["items"] = joinableProjects.map((project) => ({
@@ -314,6 +343,9 @@ export function FloatingRepositoryRow({
           onClick={(e) => e.stopPropagation()}
         >
           <RepositoryConversationAction onOpen={() => onOpenTaskMode(repository, "chat")} />
+          {codeGraphIndexed && onCodeGraphViewFloatingRepository ? (
+            <RepositoryCodeGraphAction onOpen={() => onCodeGraphViewFloatingRepository(repository)} />
+          ) : null}
           <Dropdown
             rootClassName="app-sidebar-more-menu-dropdown"
             menu={{
@@ -371,6 +403,7 @@ export function ProjectRepositoryRows({
   repoSidebarDragRef,
   onRepoSidebarDragEnd,
   hideChatAction = false,
+  codeGraphIndexStatusByRepoId = {},
 }: {
   project: Workspace;
   projectRepos: Repository[];
@@ -390,6 +423,7 @@ export function ProjectRepositoryRows({
   repoSidebarDragRef: React.MutableRefObject<{ sourceProjectId: string; repositoryId: number } | null>;
   onRepoSidebarDragEnd: () => void;
   hideChatAction?: boolean;
+  codeGraphIndexStatusByRepoId?: Record<number, SidebarCodeGraphIndexStatus>;
 }) {
   const { message } = AntdApp.useApp();
   const [dropHint, setDropHint] = useState<{ anchorRepositoryId: number; placement: "before" | "after" } | null>(
@@ -437,6 +471,7 @@ export function ProjectRepositoryRows({
             onCodeGraphViewRepositoryInProject={onCodeGraphViewRepositoryInProject}
             repositoryReorder={reorderUi}
             hideChatAction={hideChatAction}
+            codeGraphIndexed={codeGraphIndexStatusByRepoId[repository.id] === "done"}
           />
         );
       })}
