@@ -1,8 +1,10 @@
 import { CloseOutlined, HistoryOutlined } from "@ant-design/icons";
-import { Button, Card, Space, Spin, Typography } from "antd";
+import { Button, Card, Segmented, Space, Spin, Typography } from "antd";
 import type { MenuProps } from "antd";
+import { useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import type { SplitResult, TaskApiSpec, TaskExecutionStatus, TaskItem } from "../../types";
+import { ExecutionOrchestrationPanel } from "./ExecutionOrchestrationPanel";
 import { TaskAiPopoverContent } from "./TaskAiPopoverContent";
 import { TaskAnchorPopoverBody } from "./TaskAnchorPopoverBody";
 import { TaskBoardHeader } from "./TaskBoardHeader";
@@ -17,6 +19,8 @@ import type {
 } from "./types";
 import type { TaskAiMode, TaskConfirmFilter } from "./helpers";
 import { taskToMarkdown } from "./helpers";
+
+type ResultViewMode = "tasks" | "orchestration";
 
 interface TaskConfirmCounts {
   confirmedCount: number;
@@ -181,6 +185,8 @@ export function TaskResultPanel({
   onShowRuntime,
 }: Props) {
   const showRuntime = runtimeVisible && (parsing || filteredTasks.length === 0 || runtimeLogs.length > 0);
+  const [resultViewMode, setResultViewMode] = useState<ResultViewMode>("tasks");
+  const showOrchestration = resultViewMode === "orchestration" && activeResult && filteredTasks.length > 0 && !showRuntime;
   return (
     <Space orientation="vertical" size={12} className="app-prd-task-panel__full-width app-prd-task-panel__stack">
       {splitError ? <Typography.Text type="danger">{splitError}</Typography.Text> : null}
@@ -214,15 +220,28 @@ export function TaskResultPanel({
               onTaskRoleFilterChange={onTaskRoleFilterChange}
             />
           )}
-          extra={runtimeLogs.length > 0 && filteredTasks.length > 0 ? (
-            <Button
-              size="small"
-              type="text"
-              icon={<HistoryOutlined />}
-              onClick={onShowRuntime}
-            >
-              重看过程
-            </Button>
+          extra={filteredTasks.length > 0 ? (
+            <Space size={8}>
+              <Segmented
+                size="small"
+                value={resultViewMode}
+                onChange={(value) => setResultViewMode(value as ResultViewMode)}
+                options={[
+                  { label: "任务列表", value: "tasks" },
+                  { label: "执行编排", value: "orchestration", disabled: !activeResult },
+                ]}
+              />
+              {runtimeLogs.length > 0 ? (
+                <Button
+                  size="small"
+                  type="text"
+                  icon={<HistoryOutlined />}
+                  onClick={onShowRuntime}
+                >
+                  重看过程
+                </Button>
+              ) : null}
+            </Space>
           ) : null}
           className="app-prd-task-panel__result-card app-prd-task-panel__task-card"
           bodyStyle={{ padding: 0 }}
@@ -251,6 +270,15 @@ export function TaskResultPanel({
                     onRetryStage={onRetryStage}
                   />
                 </div>
+              ) : showOrchestration ? (
+                <ExecutionOrchestrationPanel
+                  result={activeResult}
+                  selectedTaskId={selectedTaskId}
+                  onSelectTask={(taskId) => {
+                    const task = activeResult.splitTasks.find((item) => item.id === taskId);
+                    if (task) onSelectTask(task);
+                  }}
+                />
               ) : (
                 <div className="app-prd-task-panel__task-list">
                   {filteredTasks.length === 0 ? (

@@ -1640,6 +1640,10 @@
   font-weight: 600;
 }
 
+.app-prd-task-panel__task-title-row-tools > .ant-space {
+  min-width: 0;
+}
+
 .app-prd-task-panel__unmet-trigger {
   display: inline-flex;
   align-items: center;
@@ -1812,6 +1816,385 @@
   border: 1px dashed var(--ant-color-border-secondary);
   border-radius: 8px;
   background: var(--ant-color-bg-container);
+}
+
+.app-prd-task-panel__orchestration {
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(180px, 0.75fr) minmax(260px, 1.4fr) minmax(190px, 0.85fr);
+  gap: 10px;
+  overflow: hidden;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  padding: 8px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-prd-task-panel__orchestration-column {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.app-prd-task-panel__orchestration-title,
+.app-prd-task-panel__orchestration-center-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.app-prd-task-panel__orchestration-title {
+  justify-content: flex-start;
+}
+
+.app-prd-task-panel__orchestration-title > span {
+  color: var(--ant-color-text-secondary);
+  font-size: 13px;
+}
+
+.app-prd-task-panel__orchestration-title strong {
+  color: var(--ant-color-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.app-prd-task-panel__orchestration-center-head > span {
+  flex-shrink: 0;
+  color: var(--ant-color-text-tertiary);
+  font-size: 11px;
+}
+
+.app-prd-task-panel__orchestration-requirements,
+.app-prd-task-panel__orchestration-groups,
+.app-prd-task-panel__orchestration-agents {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.app-prd-task-panel__orchestration-req,
+.app-prd-task-panel__orchestration-group,
+.app-prd-task-panel__orchestration-agent {
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
+  min-width: 0;
+}
+
+.app-prd-task-panel__orchestration-req {
+  padding: 10px;
+  display: grid;
+  gap: 5px;
+}
+
+.app-prd-task-panel__orchestration-req.has-tasks {
+  border-color: rgba(22, 119, 255, 0.32);
+}
+
+.app-prd-task-panel__orchestration-req span {
+  color: var(--ant-color-primary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.app-prd-task-panel__orchestration-req strong {
+  color: var(--ant-color-text);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.app-prd-task-panel__orchestration-req p {
+  margin: 0;
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.app-prd-task-panel__orchestration-req small {
+  width: fit-content;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--ant-color-warning-bg);
+  color: var(--ant-color-warning-text);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.app-prd-task-panel__orchestration-group {
+  padding: 8px;
+}
+
+.app-prd-task-panel__orchestration-group + .app-prd-task-panel__orchestration-group {
+  position: relative;
+}
+
+.app-prd-task-panel__orchestration-group + .app-prd-task-panel__orchestration-group::before {
+  content: "";
+  display: block;
+  width: 1px;
+  height: 10px;
+  margin: -9px auto 7px;
+  border-left: 1px dashed var(--ant-color-border);
+}
+
+.app-prd-task-panel__orchestration-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  min-width: 0;
+}
+
+.app-prd-task-panel__orchestration-group-head span {
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.app-prd-task-panel__orchestration-group-head small {
+  color: var(--ant-color-text-tertiary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.app-prd-task-panel__orchestration-task-stack {
+  display: grid;
+  gap: 8px;
+}
+
+.app-prd-task-panel__orchestration-task {
+  appearance: none;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
+  padding: 9px 10px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+
+.app-prd-task-panel__orchestration-task:hover,
+.app-prd-task-panel__orchestration-task.is-active {
+  border-color: rgba(22, 119, 255, 0.5);
+  box-shadow: 0 0 0 1px rgba(22, 119, 255, 0.12);
+}
+
+.app-prd-task-panel__orchestration-task-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ant-color-text-quaternary);
+}
+
+.app-prd-task-panel__orchestration-task--ready .app-prd-task-panel__orchestration-task-dot {
+  background: var(--ant-color-success);
+}
+
+.app-prd-task-panel__orchestration-task--waiting .app-prd-task-panel__orchestration-task-dot {
+  background: var(--ant-color-warning);
+}
+
+.app-prd-task-panel__orchestration-task--blocked .app-prd-task-panel__orchestration-task-dot {
+  background: var(--ant-color-error);
+}
+
+.app-prd-task-panel__orchestration-task-main {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.app-prd-task-panel__orchestration-task-main strong,
+.app-prd-task-panel__orchestration-task-main small,
+.app-prd-task-panel__orchestration-task-trace,
+.app-prd-task-panel__orchestration-task-state {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-prd-task-panel__orchestration-task-main strong {
+  color: var(--ant-color-text);
+  font-size: 13px;
+}
+
+.app-prd-task-panel__orchestration-task-main small,
+.app-prd-task-panel__orchestration-task-trace,
+.app-prd-task-panel__orchestration-task-state {
+  color: var(--ant-color-text-tertiary);
+  font-size: 11px;
+}
+
+.app-prd-task-panel__orchestration-task-trace,
+.app-prd-task-panel__orchestration-task-state {
+  grid-column: 2 / 4;
+}
+
+.app-prd-task-panel__orchestration-progress {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 5px;
+}
+
+.app-prd-task-panel__orchestration-progress > div {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--ant-color-fill-secondary);
+  overflow: hidden;
+}
+
+.app-prd-task-panel__orchestration-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ant-color-success);
+}
+
+.app-prd-task-panel__orchestration-progress p {
+  margin: 0;
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+}
+
+.app-prd-task-panel__orchestration-agent {
+  padding: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.app-prd-task-panel__orchestration-agent-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.app-prd-task-panel__orchestration-agent-icon {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.app-prd-task-panel__orchestration-agent-icon--frontend {
+  color: #0958d9;
+  background: rgba(22, 119, 255, 0.1);
+}
+
+.app-prd-task-panel__orchestration-agent-icon--backend {
+  color: #389e0d;
+  background: rgba(82, 196, 26, 0.12);
+}
+
+.app-prd-task-panel__orchestration-agent-icon--document {
+  color: #531dab;
+  background: rgba(114, 46, 209, 0.1);
+}
+
+.app-prd-task-panel__orchestration-agent-head div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.app-prd-task-panel__orchestration-agent-head strong,
+.app-prd-task-panel__orchestration-agent-head small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-prd-task-panel__orchestration-agent-head strong {
+  color: var(--ant-color-text);
+  font-size: 13px;
+}
+
+.app-prd-task-panel__orchestration-agent-head small {
+  color: var(--ant-color-text-secondary);
+  font-size: 11px;
+}
+
+.app-prd-task-panel__orchestration-agent-runs {
+  display: grid;
+  border-top: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-prd-task-panel__orchestration-agent-runs button {
+  appearance: none;
+  border: 0;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  background: transparent;
+  padding: 8px 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  text-align: left;
+  cursor: pointer;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-prd-task-panel__orchestration-agent-runs button:last-child {
+  border-bottom: 0;
+}
+
+.app-prd-task-panel__orchestration-agent-runs span,
+.app-prd-task-panel__orchestration-agent-runs strong,
+.app-prd-task-panel__orchestration-agent-runs small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.app-prd-task-panel__orchestration-agent-runs strong {
+  color: var(--ant-color-text);
+}
+
+@media (max-width: 1120px) {
+  .app-prd-task-panel__orchestration {
+    grid-template-columns: minmax(180px, 0.8fr) minmax(260px, 1.2fr);
+    overflow-y: auto;
+  }
+
+  .app-prd-task-panel__orchestration-column--agents {
+    grid-column: 1 / -1;
+    min-height: 180px;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-prd-task-panel__orchestration {
+    grid-template-columns: 1fr;
+  }
 }
 
 .app-prd-task-panel__task-card-head {
