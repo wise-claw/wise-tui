@@ -204,7 +204,7 @@ function ArtifactAssistantWorkspace({
           ) : enabledSkills.length > 0 ? (
             enabledSkills.map((skill) => (
               <Tag key={skill.id} color="purple">
-                Skill · {skill.label}
+                内置 Skill · {skill.label}
               </Tag>
             ))
           ) : (
@@ -229,7 +229,7 @@ function ArtifactAssistantWorkspace({
               执行 Brief
             </Typography.Title>
             <Typography.Text type="secondary">
-              基于当前助手运行态生成,包含启用 Skill、MCP 和格式偏好。
+              基于当前助手运行态生成,包含启用 Skill、MCP、格式偏好和产物格式要求。
             </Typography.Text>
           </div>
           <div className="assistant-artifact-workspace__brief-actions">

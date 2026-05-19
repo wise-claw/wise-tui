@@ -1,15 +1,13 @@
 import {
   ApiOutlined,
-  CheckCircleOutlined,
   CloudServerOutlined,
   DingdingOutlined,
-  ExclamationCircleOutlined,
   GatewayOutlined,
   MessageOutlined,
   ReloadOutlined,
   SendOutlined,
 } from "@ant-design/icons";
-import { Button, Collapse, Empty, Space, Switch, Tag, Typography, message } from "antd";
+import { Button, Collapse, Empty, Space, Switch, Tabs, Tag, Typography, message } from "antd";
 import { AuthorPanelListShell, AuthorPanelPageShell } from "../AuthorPanel/AuthorPanelPageShell";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { DingTalkEnterpriseBotPopoverBody } from "../DingTalkEnterpriseBotPopoverBody";
@@ -40,28 +38,28 @@ const CHANNELS: ChannelDefinition[] = [
     title: "飞书",
     icon: <MessageOutlined />,
     available: false,
-    comingSoonHint: "复用同一套通道消息、权限批准和回执模型，敬请期待。",
+    comingSoonHint: "暂未接入",
   },
   {
     key: "wecom",
     title: "企业微信",
     icon: <SendOutlined />,
     available: false,
-    comingSoonHint: "面向企业审批和远程批准，敬请期待。",
+    comingSoonHint: "暂未接入",
   },
   {
     key: "telegram",
     title: "Telegram",
     icon: <ApiOutlined />,
     available: false,
-    comingSoonHint: "面向个人移动端远程控制和任务追踪，敬请期待。",
+    comingSoonHint: "暂未接入",
   },
   {
     key: "websocket",
     title: "通用 WebSocket",
     icon: <CloudServerOutlined />,
     available: false,
-    comingSoonHint: "平台无关入站协议，作为后续扩展平台的统一中继，敬请期待。",
+    comingSoonHint: "暂未接入",
   },
 ];
 
@@ -124,6 +122,13 @@ export function ChannelsPanel() {
       CHANNELS.map((channel) => {
         const enabled = channel.key === "dingtalk" ? streamRunning : false;
         const canToggle = channel.available && (channel.key !== "dingtalk" || dingTalkConfigured);
+        const metaLabel =
+          channel.key === "dingtalk"
+            ? dingtalkRowMeta({
+                configured: dingTalkConfigured,
+                status: streamStatus,
+              })
+            : channel.comingSoonHint ?? "暂未接入";
         return {
           key: channel.key,
           label: (
@@ -131,7 +136,10 @@ export function ChannelsPanel() {
               <span className="app-channels-panel__row-icon" aria-hidden>
                 {channel.icon}
               </span>
-              <span className="app-channels-panel__row-title">{channel.title}</span>
+              <span className="app-channels-panel__row-copy">
+                <span className="app-channels-panel__row-title">{channel.title}</span>
+                <span className="app-channels-panel__row-meta">{metaLabel}</span>
+              </span>
               {!channel.available ? (
                 <span className="app-channels-panel__row-tag">待接入</span>
               ) : null}
@@ -172,30 +180,19 @@ export function ChannelsPanel() {
       title="远程入口"
       subtitle="移动端通知、回执与远程控制"
     >
-      <div className="app-channels-panel__summary">
-        <div className="app-channels-panel__summary-item">
-          <CheckCircleOutlined />
-          <span>{dingTalkConfigured ? "钉钉凭据已配置" : "钉钉凭据未配置"}</span>
-        </div>
-        <div className="app-channels-panel__summary-item">
-          {streamStatus?.lastError ? <ExclamationCircleOutlined /> : <CheckCircleOutlined />}
-          <span>{streamStatus?.lastError ? "最近有网关错误" : "网关状态可诊断"}</span>
-        </div>
-      </div>
-
       <AuthorPanelListShell className="app-channels-panel__list-shell">
-      <Collapse
-        accordion
-        bordered={false}
-        ghost
-        activeKey={activeKey}
-        onChange={(key) => {
-          const next = Array.isArray(key) ? key[0] : key;
-          setActiveKey((next as ChannelKey | undefined) ?? undefined);
-        }}
-        items={items}
-        className="app-channels-panel__list"
-      />
+        <Collapse
+          accordion
+          bordered={false}
+          ghost
+          activeKey={activeKey}
+          onChange={(key) => {
+            const next = Array.isArray(key) ? key[0] : key;
+            setActiveKey((next as ChannelKey | undefined) ?? undefined);
+          }}
+          items={items}
+          className="app-channels-panel__list"
+        />
       </AuthorPanelListShell>
     </AuthorPanelPageShell>
   );
@@ -229,6 +226,18 @@ function phaseLabel(phase?: string | null): string {
   return "未运行";
 }
 
+function dingtalkRowMeta({
+  configured,
+  status,
+}: {
+  configured: boolean;
+  status: DingTalkStreamGatewayStatus | null;
+}): string {
+  const configLabel = configured ? "已配置" : "未配置";
+  const phase = status?.lastError ? "网关异常" : phaseLabel(status?.phase);
+  return `${configLabel} · ${phase}`;
+}
+
 function ChannelBody({
   channel,
   dingTalkConfigured,
@@ -245,7 +254,7 @@ function ChannelBody({
           <div className="app-channels-panel__ops-head">
             <div>
               <Typography.Text strong>钉钉 Stream 网关</Typography.Text>
-              <div className="app-channels-panel__ops-subtitle">接收钉钉消息，执行 Wise，并回发处理结果。</div>
+              <div className="app-channels-panel__ops-subtitle">入站、执行、回执</div>
             </div>
             <Tag color={status.running ? "success" : status.lastError ? "error" : "default"}>
               {phaseLabel(status.phase)}
@@ -289,7 +298,22 @@ function ChannelBody({
             </Typography.Text>
           )}
         </div>
-        <DingTalkEnterpriseBotPopoverBody />
+        <Tabs
+          size="small"
+          className="app-channels-panel__dingtalk-tabs"
+          items={[
+            {
+              key: "config",
+              label: "配置",
+              children: <DingTalkEnterpriseBotPopoverBody compact />,
+            },
+            {
+              key: "debug",
+              label: "联调",
+              children: <DingTalkEnterpriseBotPopoverBody compact initialSection="debug" />,
+            },
+          ]}
+        />
       </div>
     );
   }

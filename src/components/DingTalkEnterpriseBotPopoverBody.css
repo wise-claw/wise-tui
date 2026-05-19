@@ -5,6 +5,23 @@
   max-width: 456px;
 }
 
+.app-dingtalk-ebot-popover--compact {
+  gap: 8px;
+  max-width: none;
+}
+
+.app-dingtalk-ebot-popover--compact .app-dingtalk-ebot-popover__field-guide {
+  display: none;
+}
+
+.app-dingtalk-ebot-popover--compact .app-dingtalk-ebot-popover__section-title {
+  margin-top: 0;
+}
+
+.app-dingtalk-ebot-popover--compact .ant-divider {
+  color: var(--ant-color-text-tertiary);
+}
+
 .app-dingtalk-ebot-popover__field {
   display: flex;
   flex-direction: column;

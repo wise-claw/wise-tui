@@ -3,7 +3,17 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { ChannelsPanel } from "./index";
 
 mock.module("../DingTalkEnterpriseBotPopoverBody", () => ({
-  DingTalkEnterpriseBotPopoverBody: () => <section data-stub="dingtalk-config">钉钉配置表单</section>,
+  DingTalkEnterpriseBotPopoverBody: ({
+    compact,
+    initialSection,
+  }: {
+    compact?: boolean;
+    initialSection?: string;
+  }) => (
+    <section data-stub="dingtalk-config" data-compact={String(Boolean(compact))} data-section={initialSection ?? "config"}>
+      钉钉配置表单
+    </section>
+  ),
 }));
 
 mock.module("../../services/dingtalkEnterpriseBot", () => ({
@@ -39,5 +49,8 @@ describe("ChannelsPanel", () => {
     expect(html).toContain("企业微信");
     expect(html).toContain("Telegram");
     expect(html).toContain('data-stub="dingtalk-config"');
+    expect(html).toContain('data-compact="true"');
+    expect(html).toContain('data-section="config"');
+    expect(html).toContain("联调");
   });
 });

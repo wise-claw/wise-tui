@@ -39,6 +39,7 @@ import {
   scannedSkillToMountCandidate,
   type SkillMountCandidate,
 } from "./assistantSkillMount";
+import { isOfficeAssistantKind, resolveAssistantKind, type AssistantKind } from "./assistantKind";
 
 type SettingsScope = "assistant" | "project";
 type CheckboxSelectionValue = string | number | boolean;
@@ -272,6 +273,10 @@ export function AssistantSettingsDrawer({
     () => filterSkillMountCandidates(skillCandidates, skillQuery),
     [skillCandidates, skillQuery],
   );
+  const assistantKind = useMemo(
+    () => assistant ? resolveAssistantKind(assistant) : "general",
+    [assistant],
+  );
 
   const handleMountSkill = useCallback((candidate: SkillMountCandidate) => {
     setDraft((prev) => ({
@@ -388,6 +393,7 @@ export function AssistantSettingsDrawer({
                   label: "偏好",
                   children: (
                     <EngineeringEditor
+                      assistantKind={assistantKind}
                       value={draft.engineering}
                       onChange={(engineering) => setDraft((prev) => ({ ...prev, engineering }))}
                     />
@@ -542,42 +548,55 @@ function BundleSelector({ items, selectedIds, emptyText, onChange, onRemoveMount
 }
 
 interface EngineeringEditorProps {
+  assistantKind: AssistantKind;
   value: AssistantEngineeringPreferences;
   onChange: (value: AssistantEngineeringPreferences) => void;
 }
 
-function EngineeringEditor({ value, onChange }: EngineeringEditorProps) {
+function EngineeringEditor({ assistantKind, value, onChange }: EngineeringEditorProps) {
+  const officeAssistant = isOfficeAssistantKind(assistantKind);
   return (
     <div className="assistant-settings-drawer__prefs">
-      <label className="assistant-settings-drawer__pref-row">
-        <span>
-          <Typography.Text strong>复用已有父任务</Typography.Text>
-          <Typography.Text type="secondary">适合连续拆分同一份 PRD，避免重复创建父级上下文。</Typography.Text>
-        </span>
-        <Switch
-          size="small"
-          checked={value.reuseExistingParents ?? false}
-          onChange={(checked) => onChange({ ...value, reuseExistingParents: checked })}
-        />
-      </label>
-      <label className="assistant-settings-drawer__pref-row">
-        <span>
-          <Typography.Text strong>只派发脏任务</Typography.Text>
-          <Typography.Text type="secondary">重新落盘执行时优先跳过未变化任务。</Typography.Text>
-        </span>
-        <Switch
-          size="small"
-          checked={value.dispatchOnlyDirty ?? false}
-          onChange={(checked) => onChange({ ...value, dispatchOnlyDirty: checked })}
-        />
-      </label>
+      {officeAssistant ? (
+        <div className="assistant-settings-drawer__pref-note">
+          <Typography.Text strong>Office 产物助手</Typography.Text>
+          <Typography.Text type="secondary">默认读取格式偏好、启用 Skill 和 MCP；不使用 PRD 拆分派发开关。</Typography.Text>
+        </div>
+      ) : (
+        <>
+          <label className="assistant-settings-drawer__pref-row">
+            <span>
+              <Typography.Text strong>复用已有父任务</Typography.Text>
+              <Typography.Text type="secondary">适合连续拆分同一份 PRD，避免重复创建父级上下文。</Typography.Text>
+            </span>
+            <Switch
+              size="small"
+              checked={value.reuseExistingParents ?? false}
+              onChange={(checked) => onChange({ ...value, reuseExistingParents: checked })}
+            />
+          </label>
+          <label className="assistant-settings-drawer__pref-row">
+            <span>
+              <Typography.Text strong>只派发脏任务</Typography.Text>
+              <Typography.Text type="secondary">重新落盘执行时优先跳过未变化任务。</Typography.Text>
+            </span>
+            <Switch
+              size="small"
+              checked={value.dispatchOnlyDirty ?? false}
+              onChange={(checked) => onChange({ ...value, dispatchOnlyDirty: checked })}
+            />
+          </label>
+        </>
+      )}
       <label className="assistant-settings-drawer__format">
-        <Typography.Text strong>格式偏好</Typography.Text>
+        <Typography.Text strong>{officeAssistant ? "格式偏好 / 模板要求" : "格式偏好"}</Typography.Text>
         <Input.TextArea
           value={value.formatProfile ?? ""}
           onChange={(event) => onChange({ ...value, formatProfile: event.target.value })}
-          rows={4}
-          placeholder="例如：Word 默认使用公司报告模板；PPT 使用深色高对比视觉，封面保留客户 Logo 区。"
+          rows={officeAssistant ? 6 : 4}
+          placeholder={officeAssistant
+            ? "例如：Word 默认使用公司报告模板、标题层级和页眉页脚规范；PPT 使用深色高对比视觉、封面保留客户 Logo 区。"
+            : "例如：输出说明需要包含变更摘要、验证结果和风险项。"}
         />
       </label>
     </div>

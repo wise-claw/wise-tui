@@ -27,6 +27,13 @@ function FieldGuide({ children }: { children: ReactNode }) {
   return <div className="app-dingtalk-ebot-popover__field-guide">{children}</div>;
 }
 
+export type DingTalkEnterpriseBotSection = "config" | "debug" | "push" | "docs";
+
+export interface DingTalkEnterpriseBotPopoverBodyProps {
+  compact?: boolean;
+  initialSection?: DingTalkEnterpriseBotSection;
+}
+
 function buildDingTalkAutomationIngestSampleBody(dingTalkUserIdPlaceholder: string): string {
   return JSON.stringify(
     {
@@ -40,7 +47,10 @@ function buildDingTalkAutomationIngestSampleBody(dingTalkUserIdPlaceholder: stri
   );
 }
 
-export function DingTalkEnterpriseBotPopoverBody() {
+export function DingTalkEnterpriseBotPopoverBody({
+  compact = false,
+  initialSection = "config",
+}: DingTalkEnterpriseBotPopoverBodyProps) {
   const loadedRef = useRef<DingTalkEnterpriseBotStoredConfig | null>(null);
   const [appKey, setAppKey] = useState("");
   const [appSecretInput, setAppSecretInput] = useState("");
@@ -219,8 +229,12 @@ export function DingTalkEnterpriseBotPopoverBody() {
     }
   }, []);
 
+  const rootClassName = compact
+    ? "app-dingtalk-ebot-popover app-dingtalk-ebot-popover--compact"
+    : "app-dingtalk-ebot-popover";
+
   if (!hydrated) {
-    return <div className="app-dingtalk-ebot-popover">加载中…</div>;
+    return <div className={rootClassName}>加载中…</div>;
   }
 
   const gatewayJsonSample = `{
@@ -356,68 +370,72 @@ export function DingTalkEnterpriseBotPopoverBody() {
     },
   ];
 
+  const debugBlock = (
+    <div className="app-dingtalk-ebot-popover__advanced-block">
+      <Typography.Text strong className="app-dingtalk-ebot-popover__section-title">
+        调试 JSON
+      </Typography.Text>
+      <Input.TextArea
+        size="small"
+        rows={compact ? 6 : 8}
+        value={debugIngestJson}
+        onChange={(e) => setDebugIngestJson(e.target.value)}
+        className="app-dingtalk-ebot-popover__debug-json"
+      />
+      <Button type="primary" size="small" block loading={loading} onClick={() => void handleSimulateGatewayIngest()}>
+        推送到 Wise
+      </Button>
+      <FieldGuide>
+        字段合法时主窗会聚焦并执行。<Typography.Text code>dingTalkUserId</Typography.Text> 需要和测试发送的 userid 一致。
+      </FieldGuide>
+    </div>
+  );
+
+  const pushBlock = (
+    <div className="app-dingtalk-ebot-popover__advanced-block">
+      <div className="app-dingtalk-ebot-popover__field">
+        <div className="app-dingtalk-ebot-popover__label">WebSocket URL</div>
+        <Input
+          size="small"
+          value={pushWsUrl}
+          onChange={(e) => setPushWsUrl(e.target.value)}
+          placeholder="wss://你的域名/wise-push?user=…"
+        />
+      </div>
+      <div className="app-dingtalk-ebot-popover__field">
+        <div className="app-dingtalk-ebot-popover__label">Authorization Bearer（可选）</div>
+        <Input.Password
+          size="small"
+          value={pushBearerToken}
+          onChange={(e) => setPushBearerToken(e.target.value)}
+          placeholder="可为空"
+          autoComplete="new-password"
+        />
+      </div>
+      <Space wrap className="app-dingtalk-ebot-popover__actions">
+        <Button type="primary" size="small" loading={pushBusy} onClick={() => void handleWisePushConnect()}>
+          开始连接
+        </Button>
+        <Button size="small" loading={pushBusy} onClick={() => void handleWisePushStop()}>
+          停止连接
+        </Button>
+      </Space>
+      <pre className="app-dingtalk-ebot-popover__json-sample">
+        {`{"conversationId":"dingtalk-inbound","messageId":"钉钉消息唯一id","body":"{\\"wiseAutomation\\":\\"dingtalk:v1\\",\\"dingTalkUserId\\":\\"userid\\",\\"prompt\\":\\"用户原文\\"}"}`}
+      </pre>
+    </div>
+  );
+
   const advancedItems = [
     {
       key: "debug",
       label: "联调入站",
-      children: (
-        <div className="app-dingtalk-ebot-popover__advanced-block">
-          <Typography.Text strong className="app-dingtalk-ebot-popover__section-title">
-            调试 JSON
-          </Typography.Text>
-          <Input.TextArea
-            size="small"
-            rows={8}
-            value={debugIngestJson}
-            onChange={(e) => setDebugIngestJson(e.target.value)}
-            className="app-dingtalk-ebot-popover__debug-json"
-          />
-          <Button type="primary" size="small" block loading={loading} onClick={() => void handleSimulateGatewayIngest()}>
-            推送到 Wise
-          </Button>
-          <FieldGuide>
-            字段合法时主窗会聚焦并执行。<Typography.Text code>dingTalkUserId</Typography.Text> 需要和测试发送的 userid 一致。
-          </FieldGuide>
-        </div>
-      ),
+      children: debugBlock,
     },
     {
       key: "push",
       label: "云端中继",
-      children: (
-        <div className="app-dingtalk-ebot-popover__advanced-block">
-          <div className="app-dingtalk-ebot-popover__field">
-            <div className="app-dingtalk-ebot-popover__label">WebSocket URL</div>
-            <Input
-              size="small"
-              value={pushWsUrl}
-              onChange={(e) => setPushWsUrl(e.target.value)}
-              placeholder="wss://你的域名/wise-push?user=…"
-            />
-          </div>
-          <div className="app-dingtalk-ebot-popover__field">
-            <div className="app-dingtalk-ebot-popover__label">Authorization Bearer（可选）</div>
-            <Input.Password
-              size="small"
-              value={pushBearerToken}
-              onChange={(e) => setPushBearerToken(e.target.value)}
-              placeholder="可为空"
-              autoComplete="new-password"
-            />
-          </div>
-          <Space wrap className="app-dingtalk-ebot-popover__actions">
-            <Button type="primary" size="small" loading={pushBusy} onClick={() => void handleWisePushConnect()}>
-              开始连接
-            </Button>
-            <Button size="small" loading={pushBusy} onClick={() => void handleWisePushStop()}>
-              停止连接
-            </Button>
-          </Space>
-          <pre className="app-dingtalk-ebot-popover__json-sample">
-            {`{"conversationId":"dingtalk-inbound","messageId":"钉钉消息唯一id","body":"{\\"wiseAutomation\\":\\"dingtalk:v1\\",\\"dingTalkUserId\\":\\"userid\\",\\"prompt\\":\\"用户原文\\"}"}`}
-          </pre>
-        </div>
-      ),
+      children: pushBlock,
     },
     {
       key: "docs",
@@ -434,8 +452,34 @@ export function DingTalkEnterpriseBotPopoverBody() {
     },
   ];
 
+  if (compact && initialSection !== "config") {
+    return (
+      <div className={rootClassName}>
+        {initialSection === "push" ? (
+          <>
+            <Typography.Text strong className="app-dingtalk-ebot-popover__section-title">
+              云端中继
+            </Typography.Text>
+            {pushBlock}
+          </>
+        ) : (
+          <>
+            <Typography.Text strong className="app-dingtalk-ebot-popover__section-title">
+              联调入站
+            </Typography.Text>
+            {debugBlock}
+            <Divider plain style={{ margin: "8px 0 4px", fontSize: 12 }}>
+              云端中继
+            </Divider>
+            {pushBlock}
+          </>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <div className="app-dingtalk-ebot-popover">
+    <div className={rootClassName}>
       <Typography.Text strong className="app-dingtalk-ebot-popover__section-title">
         凭证与机器人
       </Typography.Text>
@@ -544,10 +588,20 @@ export function DingTalkEnterpriseBotPopoverBody() {
       <Button size="small" type="primary" ghost loading={loading} block onClick={() => void handleSendTest()}>
         发送测试消息
       </Button>
-      <Divider plain style={{ margin: "12px 0 4px", fontSize: 12 }}>
-        高级联调
-      </Divider>
-      <Collapse size="small" bordered={false} className="app-dingtalk-ebot-popover__collapse" items={advancedItems} />
+      {compact ? null : (
+        <>
+          <Divider plain style={{ margin: "12px 0 4px", fontSize: 12 }}>
+            高级联调
+          </Divider>
+          <Collapse
+            size="small"
+            bordered={false}
+            className="app-dingtalk-ebot-popover__collapse"
+            defaultActiveKey={initialSection === "config" ? undefined : [initialSection]}
+            items={advancedItems}
+          />
+        </>
+      )}
     </div>
   );
 }

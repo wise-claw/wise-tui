@@ -426,10 +426,18 @@
 }
 
 .assistant-settings-drawer__pref-row > span,
+.assistant-settings-drawer__pref-note,
 .assistant-settings-drawer__format {
   display: flex;
   flex-direction: column;
   gap: 3px;
+}
+
+.assistant-settings-drawer__pref-note {
+  padding: 9px 10px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary);
 }
 
 .assistant-settings-drawer__format {

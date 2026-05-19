@@ -3,6 +3,7 @@ import { App as AntdApp, Button, Empty, Spin, Tag } from "antd";
 import { CloseOutlined, SettingOutlined } from "@ant-design/icons";
 import { listAssistants } from "../../services/assistants";
 import type { AssistantEntry } from "../../types/assistant";
+import { resolveAssistantKind, type AssistantKind } from "./assistantKind";
 import "./index.css";
 
 export interface AssistantHubProps {
@@ -58,6 +59,26 @@ export function AssistantHub({
     () => assistants?.filter((a) => a.source !== "builtin") ?? [],
     [assistants],
   );
+  const trellisAssistants = useMemo(
+    () => builtinAssistants.filter((assistant) => resolveAssistantKind(assistant) === "trellis-orchestration"),
+    [builtinAssistants],
+  );
+  const builtinSkillAssistants = useMemo(
+    () =>
+      builtinAssistants.filter((assistant) => {
+        const kind = resolveAssistantKind(assistant);
+        return kind === "office-doc" || kind === "office-deck" || kind === "skill-artifact";
+      }),
+    [builtinAssistants],
+  );
+  const builtinGeneralAssistants = useMemo(
+    () =>
+      builtinAssistants.filter((assistant) => {
+        const kind = resolveAssistantKind(assistant);
+        return kind !== "trellis-orchestration" && kind !== "office-doc" && kind !== "office-deck" && kind !== "skill-artifact";
+      }),
+    [builtinAssistants],
+  );
 
   if (loading) {
     return (
@@ -89,16 +110,48 @@ export function AssistantHub({
         </p>
       </header>
 
-      {builtinAssistants.length > 0 ? (
+      {trellisAssistants.length > 0 ? (
         <section className="cockpit-hub__section">
-          <h2 className="cockpit-hub__section-title">Wise 内置</h2>
+          <h2 className="cockpit-hub__section-title">研发编排</h2>
           <div className="cockpit-hub__grid">
-            {builtinAssistants.map((assistant) => (
+            {trellisAssistants.map((assistant) => (
               <AssistantCard
                 key={assistant.id}
                 assistant={assistant}
                 disabled={false}
                 disabledHint={activeProjectId ? undefined : "未选择工作区时会先进入助手空态"}
+                onSelect={() => onSelectAssistant(assistant.id)}
+                onOpenSettings={() => onOpenAssistantSettings(assistant.id)}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {builtinSkillAssistants.length > 0 ? (
+        <section className="cockpit-hub__section">
+          <h2 className="cockpit-hub__section-title">内置 Skill 产物</h2>
+          <div className="cockpit-hub__grid">
+            {builtinSkillAssistants.map((assistant) => (
+              <AssistantCard
+                key={assistant.id}
+                assistant={assistant}
+                onSelect={() => onSelectAssistant(assistant.id)}
+                onOpenSettings={() => onOpenAssistantSettings(assistant.id)}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {builtinGeneralAssistants.length > 0 ? (
+        <section className="cockpit-hub__section">
+          <h2 className="cockpit-hub__section-title">其他内置</h2>
+          <div className="cockpit-hub__grid">
+            {builtinGeneralAssistants.map((assistant) => (
+              <AssistantCard
+                key={assistant.id}
+                assistant={assistant}
                 onSelect={() => onSelectAssistant(assistant.id)}
                 onOpenSettings={() => onOpenAssistantSettings(assistant.id)}
               />
@@ -142,6 +195,7 @@ function AssistantCard({ assistant, disabled, disabledHint, onSelect, onOpenSett
   const workflows = assistant.defaultWorkflows ?? [];
   const skills = assistant.defaultSkills ?? [];
   const mcps = assistant.defaultMcps ?? [];
+  const assistantKind = resolveAssistantKind(assistant);
   return (
     <article className={`cockpit-hub__card${disabled ? " cockpit-hub__card--disabled" : ""}`}>
       <div className="cockpit-hub__card-head">
@@ -154,7 +208,7 @@ function AssistantCard({ assistant, disabled, disabledHint, onSelect, onOpenSett
         </span>
         <div className="cockpit-hub__card-id">
           <h3>{assistant.name}</h3>
-          <span className="cockpit-hub__card-source">{labelForSource(assistant.source)}</span>
+          <span className="cockpit-hub__card-source">{cardSourceLabel(assistant.source, assistantKind)}</span>
         </div>
       </div>
       {assistant.description ? (
@@ -164,12 +218,12 @@ function AssistantCard({ assistant, disabled, disabledHint, onSelect, onOpenSett
         <div className="cockpit-hub__card-capabilities" aria-label={`${assistant.name} 默认能力`}>
           {workflows.slice(0, 4).map((workflow) => (
             <Tag key={workflow.id} color="blue">
-              流程 · {workflow.label}
+              内置编排 · {workflow.label}
             </Tag>
           ))}
           {skills.slice(0, 4).map((skill) => (
             <Tag key={skill.id} color="purple">
-              Skill · {skill.label}
+              内置 Skill · {skill.label}
             </Tag>
           ))}
           {mcps.slice(0, 3).map((mcp) => (
@@ -214,5 +268,19 @@ function labelForSource(source: AssistantEntry["source"]): string {
       return "自定义";
     case "extension":
       return "扩展";
+  }
+}
+
+function cardSourceLabel(source: AssistantEntry["source"], kind: AssistantKind): string {
+  if (source !== "builtin") return labelForSource(source);
+  switch (kind) {
+    case "trellis-orchestration":
+      return "Wise 内置编排";
+    case "office-doc":
+    case "office-deck":
+    case "skill-artifact":
+      return "Wise 内置 Skill";
+    case "general":
+      return "Wise 内置";
   }
 }
