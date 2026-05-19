@@ -3,11 +3,13 @@ import {
   CheckCircleOutlined,
   CloudServerOutlined,
   DingdingOutlined,
+  ExclamationCircleOutlined,
   GatewayOutlined,
   MessageOutlined,
+  ReloadOutlined,
   SendOutlined,
 } from "@ant-design/icons";
-import { Collapse, Empty, Switch, Typography } from "antd";
+import { Button, Collapse, Empty, Space, Switch, Tag, Typography, message } from "antd";
 import { AuthorPanelListShell, AuthorPanelPageShell } from "../AuthorPanel/AuthorPanelPageShell";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { DingTalkEnterpriseBotPopoverBody } from "../DingTalkEnterpriseBotPopoverBody";
@@ -15,7 +17,9 @@ import { loadDingTalkEnterpriseBotConfig } from "../../services/dingtalkEnterpri
 import {
   dingtalkStreamGatewayIsRunning,
   dingtalkStreamGatewayStart,
+  dingtalkStreamGatewayStatus,
   dingtalkStreamGatewayStop,
+  type DingTalkStreamGatewayStatus,
 } from "../../services/dingtalkStreamGateway";
 import "./index.css";
 
@@ -65,17 +69,25 @@ export function ChannelsPanel() {
   const [activeKey, setActiveKey] = useState<ChannelKey | undefined>("dingtalk");
   const [dingTalkConfigured, setDingTalkConfigured] = useState(false);
   const [streamRunning, setStreamRunning] = useState(false);
+  const [streamStatus, setStreamStatus] = useState<DingTalkStreamGatewayStatus | null>(null);
   const [streamBusy, setStreamBusy] = useState(false);
 
   const refreshStatus = useCallback(async () => {
-    const [config, running] = await Promise.all([
+    const [config, status] = await Promise.all([
       loadDingTalkEnterpriseBotConfig().catch(() => null),
-      dingtalkStreamGatewayIsRunning().catch(() => false),
+      dingtalkStreamGatewayStatus().catch(async () => {
+        const running = await dingtalkStreamGatewayIsRunning().catch(() => false);
+        return {
+          running,
+          phase: running ? "connected" : "stopped",
+        } satisfies DingTalkStreamGatewayStatus;
+      }),
     ]);
     setDingTalkConfigured(
       Boolean(config?.appKey?.trim() && config.appSecret?.trim() && config.robotCode?.trim()),
     );
-    setStreamRunning(running);
+    setStreamRunning(status.running);
+    setStreamStatus(status);
   }, []);
 
   useEffect(() => {
@@ -91,10 +103,15 @@ export function ChannelsPanel() {
       try {
         if (next) {
           await dingtalkStreamGatewayStart();
+          void message.success("钉钉远程入口已启动");
         } else {
           await dingtalkStreamGatewayStop();
+          void message.success("钉钉远程入口已停止");
         }
         await refreshStatus();
+      } catch (err) {
+        await refreshStatus();
+        void message.error(err instanceof Error ? err.message : "钉钉远程入口切换失败");
       } finally {
         setStreamBusy(false);
       }
@@ -134,11 +151,18 @@ export function ChannelsPanel() {
             />
           ),
           children: (
-            <ChannelBody channel={channel} dingTalkConfigured={dingTalkConfigured} />
+            <ChannelBody
+              channel={channel}
+              dingTalkConfigured={dingTalkConfigured}
+              streamStatus={channel.key === "dingtalk" ? streamStatus : null}
+              streamBusy={streamBusy}
+              onRefreshStatus={refreshStatus}
+              onToggleDingTalk={handleToggleDingTalk}
+            />
           ),
         };
       }),
-    [dingTalkConfigured, handleToggleDingTalk, streamBusy, streamRunning],
+    [dingTalkConfigured, handleToggleDingTalk, refreshStatus, streamBusy, streamRunning, streamStatus],
   );
 
   return (
@@ -146,20 +170,18 @@ export function ChannelsPanel() {
       className="app-channels-panel"
       icon={<GatewayOutlined />}
       title="远程入口"
-      subtitle="钉钉、飞书、企微和 Telegram"
+      subtitle="移动端通知、回执与远程控制"
     >
-      <ol className="app-channels-panel__steps">
-        <li>
-          <span className="app-channels-panel__step-index">1</span>
+      <div className="app-channels-panel__summary">
+        <div className="app-channels-panel__summary-item">
           <CheckCircleOutlined />
-          <span>选择一个渠道并完成凭据配置。</span>
-        </li>
-        <li>
-          <span className="app-channels-panel__step-index">2</span>
-          <CheckCircleOutlined />
-          <span>启用该渠道后，即可开始与 Wise 交互。</span>
-        </li>
-      </ol>
+          <span>{dingTalkConfigured ? "钉钉凭据已配置" : "钉钉凭据未配置"}</span>
+        </div>
+        <div className="app-channels-panel__summary-item">
+          {streamStatus?.lastError ? <ExclamationCircleOutlined /> : <CheckCircleOutlined />}
+          <span>{streamStatus?.lastError ? "最近有网关错误" : "网关状态可诊断"}</span>
+        </div>
+      </div>
 
       <AuthorPanelListShell className="app-channels-panel__list-shell">
       <Collapse
@@ -182,17 +204,91 @@ export function ChannelsPanel() {
 interface ChannelBodyProps {
   channel: ChannelDefinition;
   dingTalkConfigured: boolean;
+  streamStatus: DingTalkStreamGatewayStatus | null;
+  streamBusy: boolean;
+  onRefreshStatus: () => void | Promise<void>;
+  onToggleDingTalk: (next: boolean) => void | Promise<void>;
 }
 
-function ChannelBody({ channel, dingTalkConfigured }: ChannelBodyProps) {
+function formatStatusTime(value?: string | null): string {
+  if (!value) return "无";
+  const ts = Date.parse(value);
+  if (!Number.isFinite(ts)) return value;
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(ts);
+}
+
+function phaseLabel(phase?: string | null): string {
+  if (phase === "connected") return "已连接";
+  if (phase === "connecting") return "连接中";
+  if (phase === "reconnecting") return "重连中";
+  return "未运行";
+}
+
+function ChannelBody({
+  channel,
+  dingTalkConfigured,
+  streamStatus,
+  streamBusy,
+  onRefreshStatus,
+  onToggleDingTalk,
+}: ChannelBodyProps) {
   if (channel.key === "dingtalk") {
+    const status: DingTalkStreamGatewayStatus = streamStatus ?? { running: false, phase: "stopped" };
     return (
       <div className="app-channels-panel__body">
-        {dingTalkConfigured ? null : (
-          <Typography.Text type="warning" className="app-channels-panel__hint">
-            请先填写企业机器人凭据并保存，才能启用钉钉渠道。
-          </Typography.Text>
-        )}
+        <div className="app-channels-panel__ops">
+          <div className="app-channels-panel__ops-head">
+            <div>
+              <Typography.Text strong>钉钉 Stream 网关</Typography.Text>
+              <div className="app-channels-panel__ops-subtitle">接收钉钉消息，执行 Wise，并回发处理结果。</div>
+            </div>
+            <Tag color={status.running ? "success" : status.lastError ? "error" : "default"}>
+              {phaseLabel(status.phase)}
+            </Tag>
+          </div>
+          <div className="app-channels-panel__metrics">
+            <span>连接：{formatStatusTime(status.connectedAt)}</span>
+            <span>入站：{formatStatusTime(status.lastInboundAt)}</span>
+            <span>错误：{formatStatusTime(status.lastErrorAt)}</span>
+          </div>
+          {status.lastError ? (
+            <Typography.Text type="danger" className="app-channels-panel__error">
+              {status.lastError}
+            </Typography.Text>
+          ) : null}
+          <Space wrap className="app-channels-panel__ops-actions">
+            <Button
+              type="primary"
+              size="small"
+              loading={streamBusy}
+              disabled={!dingTalkConfigured || status.running}
+              onClick={() => void onToggleDingTalk(true)}
+            >
+              启动
+            </Button>
+            <Button
+              size="small"
+              loading={streamBusy}
+              disabled={!status.running}
+              onClick={() => void onToggleDingTalk(false)}
+            >
+              停止
+            </Button>
+            <Button size="small" icon={<ReloadOutlined />} onClick={() => void onRefreshStatus()}>
+              刷新
+            </Button>
+          </Space>
+          {dingTalkConfigured ? null : (
+            <Typography.Text type="warning" className="app-channels-panel__hint">
+              先保存 AppKey / AppSecret / robotCode 后再启动。
+            </Typography.Text>
+          )}
+        </div>
         <DingTalkEnterpriseBotPopoverBody />
       </div>
     );

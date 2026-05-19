@@ -1,4 +1,4 @@
-import { Alert, Button, Collapse, Divider, Input, Space, Typography, message } from "antd";
+import { Button, Collapse, Divider, Input, Space, Typography, message } from "antd";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { openExternalUrl } from "../services/openExternal";
 import {
@@ -9,11 +9,6 @@ import {
   type DingTalkEnterpriseBotStoredConfig,
 } from "../services/dingtalkEnterpriseBot";
 import { WISE_AUTOMATION_MARKER_DINGTALK_V1 } from "../constants/dingtalkWiseAutomation";
-import {
-  dingtalkStreamGatewayIsRunning,
-  dingtalkStreamGatewayStart,
-  dingtalkStreamGatewayStop,
-} from "../services/dingtalkStreamGateway";
 import { wiseNotificationIngest, wisePushStart, wisePushStop } from "../services/wiseMascot";
 import "./DingTalkEnterpriseBotPopoverBody.css";
 
@@ -60,8 +55,6 @@ export function DingTalkEnterpriseBotPopoverBody() {
   const [pushWsUrl, setPushWsUrl] = useState("");
   const [pushBearerToken, setPushBearerToken] = useState("");
   const [pushBusy, setPushBusy] = useState(false);
-  const [streamBusy, setStreamBusy] = useState(false);
-  const [streamRunning, setStreamRunning] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -85,48 +78,6 @@ export function DingTalkEnterpriseBotPopoverBody() {
       return buildDingTalkAutomationIngestSampleBody(uid);
     });
   }, [hydrated, defaultUserId, testUserId]);
-
-  const refreshStreamRunning = useCallback(async () => {
-    try {
-      const r = await dingtalkStreamGatewayIsRunning();
-      setStreamRunning(r);
-    } catch {
-      setStreamRunning(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    void refreshStreamRunning();
-    const id = window.setInterval(() => void refreshStreamRunning(), 2000);
-    return () => window.clearInterval(id);
-  }, [hydrated, refreshStreamRunning]);
-
-  const handleStreamGatewayStart = useCallback(async () => {
-    setStreamBusy(true);
-    try {
-      await dingtalkStreamGatewayStart();
-      message.success("已启动内嵌钉钉 Stream 网关");
-      await refreshStreamRunning();
-    } catch (e) {
-      message.error(e instanceof Error ? e.message : String(e));
-    } finally {
-      setStreamBusy(false);
-    }
-  }, [refreshStreamRunning]);
-
-  const handleStreamGatewayStop = useCallback(async () => {
-    setStreamBusy(true);
-    try {
-      await dingtalkStreamGatewayStop();
-      message.success("已停止内嵌 Stream 网关");
-      await refreshStreamRunning();
-    } catch (e) {
-      message.error(e instanceof Error ? e.message : String(e));
-    } finally {
-      setStreamBusy(false);
-    }
-  }, [refreshStreamRunning]);
 
   const handleSave = useCallback(async () => {
     const secret =
@@ -405,121 +356,86 @@ export function DingTalkEnterpriseBotPopoverBody() {
     },
   ];
 
+  const advancedItems = [
+    {
+      key: "debug",
+      label: "联调入站",
+      children: (
+        <div className="app-dingtalk-ebot-popover__advanced-block">
+          <Typography.Text strong className="app-dingtalk-ebot-popover__section-title">
+            调试 JSON
+          </Typography.Text>
+          <Input.TextArea
+            size="small"
+            rows={8}
+            value={debugIngestJson}
+            onChange={(e) => setDebugIngestJson(e.target.value)}
+            className="app-dingtalk-ebot-popover__debug-json"
+          />
+          <Button type="primary" size="small" block loading={loading} onClick={() => void handleSimulateGatewayIngest()}>
+            推送到 Wise
+          </Button>
+          <FieldGuide>
+            字段合法时主窗会聚焦并执行。<Typography.Text code>dingTalkUserId</Typography.Text> 需要和测试发送的 userid 一致。
+          </FieldGuide>
+        </div>
+      ),
+    },
+    {
+      key: "push",
+      label: "云端中继",
+      children: (
+        <div className="app-dingtalk-ebot-popover__advanced-block">
+          <div className="app-dingtalk-ebot-popover__field">
+            <div className="app-dingtalk-ebot-popover__label">WebSocket URL</div>
+            <Input
+              size="small"
+              value={pushWsUrl}
+              onChange={(e) => setPushWsUrl(e.target.value)}
+              placeholder="wss://你的域名/wise-push?user=…"
+            />
+          </div>
+          <div className="app-dingtalk-ebot-popover__field">
+            <div className="app-dingtalk-ebot-popover__label">Authorization Bearer（可选）</div>
+            <Input.Password
+              size="small"
+              value={pushBearerToken}
+              onChange={(e) => setPushBearerToken(e.target.value)}
+              placeholder="可为空"
+              autoComplete="new-password"
+            />
+          </div>
+          <Space wrap className="app-dingtalk-ebot-popover__actions">
+            <Button type="primary" size="small" loading={pushBusy} onClick={() => void handleWisePushConnect()}>
+              开始连接
+            </Button>
+            <Button size="small" loading={pushBusy} onClick={() => void handleWisePushStop()}>
+              停止连接
+            </Button>
+          </Space>
+          <pre className="app-dingtalk-ebot-popover__json-sample">
+            {`{"conversationId":"dingtalk-inbound","messageId":"钉钉消息唯一id","body":"{\\"wiseAutomation\\":\\"dingtalk:v1\\",\\"dingTalkUserId\\":\\"userid\\",\\"prompt\\":\\"用户原文\\"}"}`}
+          </pre>
+        </div>
+      ),
+    },
+    {
+      key: "docs",
+      label: "配置文档",
+      children: (
+        <>
+          <Collapse size="small" bordered={false} className="app-dingtalk-ebot-popover__collapse" items={guideItems} />
+          <FieldGuide>
+            入站 body 示例：
+            <pre className="app-dingtalk-ebot-popover__json-sample">{gatewayJsonSample}</pre>
+          </FieldGuide>
+        </>
+      ),
+    },
+  ];
+
   return (
     <div className="app-dingtalk-ebot-popover">
-      <Alert
-        type="info"
-        showIcon
-        message="钉钉里的聊天不会自动进 Wise"
-        description={
-          <>
-            除下方<strong>内嵌 Stream 网关</strong>外，钉钉开放平台通常把消息推到<strong>公网服务端</strong>；也可由中间服务组装 JSON 后调用{" "}
-            <Typography.Text code>wise_notification_ingest</Typography.Text> 或通过自建 WebSocket 中继推送。仅保存 AppKey / robotCode
-            不会自动收消息。
-          </>
-        }
-      />
-
-      <Collapse size="small" bordered={false} className="app-dingtalk-ebot-popover__collapse" items={guideItems} defaultActiveKey={["steps"]} />
-
-      <Divider plain style={{ margin: "10px 0", fontSize: 12 }}>
-        内嵌钉钉 Stream 网关（本机直连）
-      </Divider>
-      <Space wrap align="center" className="app-dingtalk-ebot-popover__stream-row">
-        <Button
-          type="primary"
-          size="small"
-          loading={streamBusy}
-          disabled={streamRunning}
-          onClick={() => void handleStreamGatewayStart()}
-        >
-          启动内嵌网关
-        </Button>
-        <Button size="small" loading={streamBusy} disabled={!streamRunning} onClick={() => void handleStreamGatewayStop()}>
-          停止
-        </Button>
-        <Typography.Text type={streamRunning ? "success" : "secondary"} style={{ fontSize: 12 }}>
-          {streamRunning ? "运行中" : "未运行"}
-        </Typography.Text>
-      </Space>
-      <FieldGuide>
-        使用已保存的 <Typography.Text code>AppKey</Typography.Text> / <Typography.Text code>AppSecret</Typography.Text>（与「测试连接」相同）调用钉钉{" "}
-        <Typography.Text code>connections/open</Typography.Text> 并维持 WebSocket；收到<strong>机器人文本</strong>（<Typography.Text code>msgtype=text</Typography.Text>
-        ）、<strong>单聊图片</strong>（<Typography.Text code>msgtype=picture</Typography.Text>）或<strong>图文混排</strong>（<Typography.Text code>msgtype=richText</Typography.Text>，需回调里或侧栏配置中有{" "}
-        <Typography.Text code>robotCode</Typography.Text> 以便拉取文件）后自动走主窗自动化与回发；图片会落盘为{" "}
-        <Typography.Text code>@.wise/composer-attachments/</Typography.Text> 再随指令发给 Claude（网关侧单张二进制上限约 6MB，与钉钉常见大图一致；拉取失败时会以文本说明入站）。请先在开发者后台完成 Stream/机器人相关配置，参见{" "}
-        <Typography.Link onClick={() => void openExternalUrl(DOC_DINGTALK_STREAM_PUSH)}>Stream 推送服务端</Typography.Link>、
-        <Typography.Link onClick={() => void openExternalUrl(DOC_ROBOT_RECEIVE_MESSAGE)}>接收消息</Typography.Link>。单聊无需 @；群内需 @
-        机器人。
-      </FieldGuide>
-
-      <Divider plain style={{ margin: "10px 0", fontSize: 12 }}>
-        可选：连接云端推送（WebSocket）
-      </Divider>
-      <Typography.Text strong className="app-dingtalk-ebot-popover__section-title">
-        与网关使用同一中继地址
-      </Typography.Text>
-      <div className="app-dingtalk-ebot-popover__field">
-        <div className="app-dingtalk-ebot-popover__label">WebSocket URL</div>
-        <Input
-          size="small"
-          value={pushWsUrl}
-          onChange={(e) => setPushWsUrl(e.target.value)}
-          placeholder="wss://你的域名/wise-push?user=…"
-        />
-        <FieldGuide>
-          Wise 作为<strong>客户端</strong>连上你的服务；钉钉 HTTP/Stream 仍只打给你的网关，由网关在验签后向本连接推送文本帧。
-        </FieldGuide>
-      </div>
-      <div className="app-dingtalk-ebot-popover__field">
-        <div className="app-dingtalk-ebot-popover__label">Authorization Bearer（可选）</div>
-        <Input.Password
-          size="small"
-          value={pushBearerToken}
-          onChange={(e) => setPushBearerToken(e.target.value)}
-          placeholder="与 connect_async 请求头一致，可为空"
-          autoComplete="new-password"
-        />
-      </div>
-      <Space wrap className="app-dingtalk-ebot-popover__actions">
-        <Button type="primary" size="small" loading={pushBusy} onClick={() => void handleWisePushConnect()}>
-          开始连接
-        </Button>
-        <Button size="small" loading={pushBusy} onClick={() => void handleWisePushStop()}>
-          停止连接
-        </Button>
-      </Space>
-      <FieldGuide>
-        中继下发的<strong>每一帧</strong>为单行 JSON（camelCase），与 Rust 模块 <Typography.Text code>wise_push</Typography.Text> 中的{" "}
-        <Typography.Text code>PushFrame</Typography.Text> 一致：<Typography.Text code>conversationId</Typography.Text>、
-        <Typography.Text code>body</Typography.Text>、可选 <Typography.Text code>messageId</Typography.Text>。其中 <Typography.Text code>body</Typography.Text>{" "}
-        是「网关入站」自动化对象的<strong>字符串</strong>（内部双引号须按 JSON 转义）。
-      </FieldGuide>
-      <pre className="app-dingtalk-ebot-popover__json-sample">
-        {`{"conversationId":"dingtalk-inbound","messageId":"钉钉消息唯一id","body":"{\\"wiseAutomation\\":\\"dingtalk:v1\\",\\"dingTalkUserId\\":\\"userid\\",\\"prompt\\":\\"用户原文\\"}"}`}
-      </pre>
-
-      <Divider plain style={{ margin: "10px 0" }}>
-        联调：模拟网关入站
-      </Divider>
-      <Typography.Text strong className="app-dingtalk-ebot-popover__section-title">
-        调试 JSON（与网关写入 ingest 的 body 相同）
-      </Typography.Text>
-      <Input.TextArea
-        size="small"
-        rows={10}
-        value={debugIngestJson}
-        onChange={(e) => setDebugIngestJson(e.target.value)}
-        className="app-dingtalk-ebot-popover__debug-json"
-      />
-      <FieldGuide>
-        <Typography.Text code>dingTalkUserId</Typography.Text> 须与下方测试发送所用 userid 一致（且已与机器人建立单聊），否则回发阶段可能失败。
-      </FieldGuide>
-      <Button type="primary" size="small" block loading={loading} onClick={() => void handleSimulateGatewayIngest()}>
-        推送到 Wise（调用 wise_notification_ingest）
-      </Button>
-      <FieldGuide>仅在 Tauri 桌面端有效；浏览器 dev 无 invoke 时会报错。每次点击使用新的 serverMsgId，避免去重导致「无反应」。</FieldGuide>
-
       <Typography.Text strong className="app-dingtalk-ebot-popover__section-title">
         凭证与机器人
       </Typography.Text>
@@ -628,6 +544,10 @@ export function DingTalkEnterpriseBotPopoverBody() {
       <Button size="small" type="primary" ghost loading={loading} block onClick={() => void handleSendTest()}>
         发送测试消息
       </Button>
+      <Divider plain style={{ margin: "12px 0 4px", fontSize: 12 }}>
+        高级联调
+      </Divider>
+      <Collapse size="small" bordered={false} className="app-dingtalk-ebot-popover__collapse" items={advancedItems} />
     </div>
   );
 }

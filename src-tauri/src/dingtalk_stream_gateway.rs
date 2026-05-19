@@ -6,8 +6,10 @@ use std::time::Duration;
 
 use base64::engine::general_purpose::STANDARD as B64_STANDARD;
 use base64::Engine;
+use chrono::{SecondsFormat, Utc};
 use futures_util::{SinkExt, StreamExt};
 use reqwest::Url;
+use serde::Serialize;
 use serde_json::{json, Value};
 use tauri::Manager;
 use tauri::State;
@@ -27,12 +29,52 @@ const MAX_INGEST_IMAGE_BYTES: usize = 6 * 1024 * 1024;
 
 pub struct DingTalkStreamGatewayControl {
     join: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    runtime: Mutex<DingTalkStreamGatewayRuntime>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DingTalkStreamGatewayStatus {
+    pub running: bool,
+    pub phase: String,
+    pub started_at: Option<String>,
+    pub connected_at: Option<String>,
+    pub last_inbound_at: Option<String>,
+    pub last_error_at: Option<String>,
+    pub last_error: Option<String>,
+    pub last_stopped_at: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct DingTalkStreamGatewayRuntime {
+    phase: String,
+    started_at: Option<String>,
+    connected_at: Option<String>,
+    last_inbound_at: Option<String>,
+    last_error_at: Option<String>,
+    last_error: Option<String>,
+    last_stopped_at: Option<String>,
+}
+
+impl Default for DingTalkStreamGatewayRuntime {
+    fn default() -> Self {
+        Self {
+            phase: "stopped".to_string(),
+            started_at: None,
+            connected_at: None,
+            last_inbound_at: None,
+            last_error_at: None,
+            last_error: None,
+            last_stopped_at: None,
+        }
+    }
 }
 
 impl Default for DingTalkStreamGatewayControl {
     fn default() -> Self {
         Self {
             join: Mutex::new(None),
+            runtime: Mutex::new(DingTalkStreamGatewayRuntime::default()),
         }
     }
 }
@@ -42,6 +84,7 @@ impl DingTalkStreamGatewayControl {
         if let Some(h) = self.join.lock().unwrap().take() {
             h.abort();
         }
+        self.mark_stopped();
     }
 
     pub fn is_running(&self) -> bool {
@@ -51,6 +94,68 @@ impl DingTalkStreamGatewayControl {
             .as_ref()
             .is_some_and(|h| !h.is_finished())
     }
+
+    pub fn status(&self) -> DingTalkStreamGatewayStatus {
+        let running = self.is_running();
+        let runtime = self.runtime.lock().unwrap().clone();
+        DingTalkStreamGatewayStatus {
+            running,
+            phase: if running {
+                runtime.phase
+            } else {
+                "stopped".to_string()
+            },
+            started_at: runtime.started_at,
+            connected_at: runtime.connected_at,
+            last_inbound_at: runtime.last_inbound_at,
+            last_error_at: runtime.last_error_at,
+            last_error: runtime.last_error,
+            last_stopped_at: runtime.last_stopped_at,
+        }
+    }
+
+    fn mark_started(&self) {
+        let mut runtime = self.runtime.lock().unwrap();
+        runtime.phase = "connecting".to_string();
+        runtime.started_at = Some(now_rfc3339());
+        runtime.connected_at = None;
+        runtime.last_error_at = None;
+        runtime.last_error = None;
+        runtime.last_stopped_at = None;
+    }
+
+    fn mark_connecting(&self) {
+        self.runtime.lock().unwrap().phase = "connecting".to_string();
+    }
+
+    fn mark_connected(&self) {
+        let mut runtime = self.runtime.lock().unwrap();
+        runtime.phase = "connected".to_string();
+        runtime.connected_at = Some(now_rfc3339());
+        runtime.last_error_at = None;
+        runtime.last_error = None;
+    }
+
+    fn mark_inbound(&self) {
+        self.runtime.lock().unwrap().last_inbound_at = Some(now_rfc3339());
+    }
+
+    fn mark_error(&self, error: &str) {
+        let mut runtime = self.runtime.lock().unwrap();
+        runtime.phase = "reconnecting".to_string();
+        runtime.last_error_at = Some(now_rfc3339());
+        runtime.last_error = Some(error.chars().take(900).collect());
+    }
+
+    fn mark_stopped(&self) {
+        let mut runtime = self.runtime.lock().unwrap();
+        runtime.phase = "stopped".to_string();
+        runtime.last_stopped_at = Some(now_rfc3339());
+    }
+}
+
+fn now_rfc3339() -> String {
+    Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)
 }
 
 fn frame_headers(frame: &Value) -> Option<&serde_json::Map<String, Value>> {
@@ -742,6 +847,9 @@ fn handle_stream_text(app: &tauri::AppHandle, text: &str) -> Result<String, Stri
         ("CALLBACK", "/v1.0/im/bot/messages/get") => {
             let inner =
                 parse_bot_callback_inner(&frame).map_err(|e| format!("机器人回调: {}", e))?;
+            if let Some(control) = app.try_state::<DingTalkStreamGatewayControl>() {
+                control.mark_inbound();
+            }
             let app_handle = app.clone();
             tokio::spawn(async move {
                 ingest_bot_callback_message(app_handle, inner).await;
@@ -768,6 +876,9 @@ async fn one_stream_session(app: &tauri::AppHandle) -> Result<(), String> {
     let (mut ws, _) = connect_async(&ws_str)
         .await
         .map_err(|e| format!("连接钉钉 Stream WebSocket 失败: {}", e))?;
+    if let Some(control) = app.try_state::<DingTalkStreamGatewayControl>() {
+        control.mark_connected();
+    }
 
     loop {
         let incoming = match ws.next().await {
@@ -794,9 +905,17 @@ async fn one_stream_session(app: &tauri::AppHandle) -> Result<(), String> {
 
 async fn gateway_loops(app: tauri::AppHandle) {
     loop {
+        if let Some(control) = app.try_state::<DingTalkStreamGatewayControl>() {
+            control.mark_connecting();
+        }
         match one_stream_session(&app).await {
             Ok(()) => {}
-            Err(e) => eprintln!("dingtalk_stream_gateway: {}", e),
+            Err(e) => {
+                if let Some(control) = app.try_state::<DingTalkStreamGatewayControl>() {
+                    control.mark_error(&e);
+                }
+                eprintln!("dingtalk_stream_gateway: {}", e);
+            }
         }
         tokio::time::sleep(Duration::from_secs(3)).await;
     }
@@ -816,6 +935,7 @@ pub async fn dingtalk_stream_gateway_start(
         }
         *jg = None;
     }
+    control.mark_started();
     let app2 = app.clone();
     let h = tokio::spawn(async move {
         gateway_loops(app2).await;
@@ -837,4 +957,11 @@ pub fn dingtalk_stream_gateway_is_running(
     control: State<'_, DingTalkStreamGatewayControl>,
 ) -> bool {
     control.is_running()
+}
+
+#[tauri::command]
+pub fn dingtalk_stream_gateway_status(
+    control: State<'_, DingTalkStreamGatewayControl>,
+) -> DingTalkStreamGatewayStatus {
+    control.status()
 }

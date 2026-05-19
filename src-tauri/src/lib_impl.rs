@@ -408,6 +408,7 @@ pub fn run() {
             dingtalk_stream_gateway::dingtalk_stream_gateway_start,
             dingtalk_stream_gateway::dingtalk_stream_gateway_stop,
             dingtalk_stream_gateway::dingtalk_stream_gateway_is_running,
+            dingtalk_stream_gateway::dingtalk_stream_gateway_status,
             code_knowledge_graph::get_code_graph_subgraph,
             code_knowledge_graph::trigger_code_graph_reindex,
             code_knowledge_graph::cancel_code_graph_reindex,
