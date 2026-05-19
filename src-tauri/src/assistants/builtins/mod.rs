@@ -84,10 +84,6 @@ pub fn find(assistant_id: &str) -> Option<&'static BuiltinAssistantBundle> {
         .find(|b| b.assistant_id == assistant_id)
 }
 
-pub fn is_builtin(assistant_id: &str) -> bool {
-    find(assistant_id).is_some()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

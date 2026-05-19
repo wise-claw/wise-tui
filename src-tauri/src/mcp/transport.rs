@@ -42,6 +42,8 @@ pub async fn test_transport(server: &McpServer) -> McpConnectionTestResult {
 
 /// Helper that callers can use to surface a synthetic OAuth challenge for
 /// UX rehearsal. Real implementations route through `test_transport`.
+/// Kept for the in-progress engine MCP refactor; no v1 production caller.
+#[allow(dead_code)]
 pub fn synthetic_oauth_challenge(www_authenticate: &str) -> McpConnectionTestResult {
     McpConnectionTestResult::auth_required(www_authenticate.to_string(), AuthMethod::Oauth)
 }

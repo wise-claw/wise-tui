@@ -119,3 +119,9 @@ commands, helper types, or filesystem rules.
 - Adding a command without cancellation or event strategy for long-running work.
 - Forgetting that frontend argument keys must match the Rust command contract.
 - Returning backend-only error detail that is not useful or safe for users.
+
+---
+
+## Dead Code Hygiene
+
+Resolve Rust dead-code warnings deliberately: **delete** when there is no documented near-term consumer (command not in `invoke_handler!`, DTO field never persisted, orphaned helper); **allow** with `#[allow(dead_code)]` plus a one-line WHY comment naming the upcoming consumer when the item is in-progress engine/refactor scaffolding (e.g. `src-tauri/src/mcp/` protocol traits, extension classifier hooks). No allow without a documented consumer.

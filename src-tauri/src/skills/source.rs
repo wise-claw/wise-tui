@@ -86,6 +86,9 @@ pub fn classify(path: &Path) -> (SkillSource, bool) {
 
 /// Variant of [`classify`] that also matches against a slice of known
 /// extension directories. The first matching extension dir wins.
+/// Kept for the in-progress extensions integration; the live registry path
+/// has not been wired through yet.
+#[allow(dead_code)]
 pub fn classify_with_extension_locations(
     path: &Path,
     extension_locations: &[(String, PathBuf)],

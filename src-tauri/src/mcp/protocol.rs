@@ -181,6 +181,10 @@ impl McpConnectionTestResult {
         }
     }
 
+    /// Auth-challenge result. Kept for in-progress engine implementations
+    /// (Claude/Codex/Gemini) that will surface 401/Bearer challenges through
+    /// the shared protocol; no v1 caller yet.
+    #[allow(dead_code)]
     pub fn auth_required(www_authenticate: String, method: AuthMethod) -> Self {
         Self {
             ok: false,
@@ -193,6 +197,9 @@ impl McpConnectionTestResult {
     }
 }
 
+/// Per-server sync outcome surfaced by `McpProtocol::sync_servers`. Scaffolding
+/// for the engine-specific implementations; no v1 Rust consumer yet.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncResult {
@@ -207,6 +214,7 @@ pub struct SyncResult {
 /// no Rust-side trait consumer (the Tauri commands operate on storage
 /// directly), but downstream tasks will plug Claude / Codex / Gemini
 /// implementations against this contract.
+#[allow(dead_code)]
 #[async_trait::async_trait]
 pub trait McpProtocol: Send + Sync {
     fn id(&self) -> &'static str;

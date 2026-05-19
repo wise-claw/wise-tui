@@ -7,10 +7,7 @@ use std::sync::RwLock;
 use serde::Serialize;
 
 use super::loader::{scan_all, LoadedExtension, LoadOutcome};
-use super::manifest::{
-    engine_compatible, McpServerContribution, Permissions, SettingsTabContribution,
-    SettingsTabPosition, TabPlacement,
-};
+use super::manifest::{engine_compatible, Permissions, SettingsTabPosition, TabPlacement};
 use super::state::{load as load_state, save as save_state, ExtensionPersistedEntry, ExtensionPersistedState};
 
 const WISE_VERSION: &str = env!("CARGO_PKG_VERSION");

@@ -43,7 +43,6 @@ pub struct ResolvedRuntime {
 pub enum AssistantSourceTag {
     Builtin,
     Custom,
-    Extension,
     /// 助手 id 不在任何注册表里;返回时退化为通用 PRD 拆分配置(用于旧 mission 的兜底)。
     Legacy,
 }

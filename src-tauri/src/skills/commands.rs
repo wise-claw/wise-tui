@@ -8,8 +8,7 @@ use tauri::State;
 use super::external_paths::{self, ExternalPathRow};
 use super::import::{self, ImportedSkill};
 use super::source::{
-    self, count_skill_subdirs, default_external_paths, home_dir_for_skills, is_symlink,
-    wise_skills_home, SkillSource,
+    self, count_skill_subdirs, default_external_paths, is_symlink, wise_skills_home, SkillSource,
 };
 use crate::wise_db::WiseDb;
 
@@ -192,11 +191,4 @@ pub fn skills_export_symlink(arg: ExportArg) -> Result<(), String> {
 #[tauri::command]
 pub fn skills_wise_home() -> Result<Option<String>, String> {
     Ok(wise_skills_home().map(|p| p.to_string_lossy().to_string()))
-}
-
-/// Probe whether the runtime thinks `~/.wise/skills/` resolves correctly.
-/// Useful for UI diagnostics; not used in normal flows.
-#[tauri::command]
-pub fn skills_resolve_home_diagnostic() -> Result<Option<String>, String> {
-    Ok(home_dir_for_skills().map(|p| p.to_string_lossy().to_string()))
 }

@@ -146,7 +146,6 @@ pub struct MissionCreateWithTaskArgs {
     pub repo_root: String,
     pub project_id: Option<String>,
     pub project_name: Option<String>,
-    pub repository_id: Option<i64>,
     pub title: String,
     pub slug: Option<String>,
     /// Optional initial PRD body to write into `prd.md`. Empty → use a
