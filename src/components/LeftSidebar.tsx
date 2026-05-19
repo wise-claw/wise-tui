@@ -169,7 +169,7 @@ export function LeftSidebar({
       let target: Repository | undefined;
       for (const repositoryId of project.repositoryIds) {
         const repository = repositories.find((item) => item.id === repositoryId);
-        if (repository && (scheduledTasksByRepoId[repositoryId]?.enabled ?? 0) > 0) {
+        if (repository && (scheduledTasksByRepoId[repositoryId]?.total ?? 0) > 0) {
           target = repository;
           break;
         }

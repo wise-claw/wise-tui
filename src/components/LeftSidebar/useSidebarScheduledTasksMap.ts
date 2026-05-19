@@ -14,6 +14,13 @@ export function sumProjectScheduledTasksEnabled(
   return repositoryIds.reduce((sum, id) => sum + (byRepoId[id]?.enabled ?? 0), 0);
 }
 
+export function sumProjectScheduledTasksTotal(
+  repositoryIds: readonly number[],
+  byRepoId: Record<number, SidebarScheduledTasksSummary>,
+): number {
+  return repositoryIds.reduce((sum, id) => sum + (byRepoId[id]?.total ?? 0), 0);
+}
+
 /** 侧栏：按仓库 id 汇总定时任务数量（启用数用于角标）。 */
 export function useSidebarScheduledTasksMap(
   repositories: Pick<Repository, "id" | "path">[],

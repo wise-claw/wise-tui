@@ -6,6 +6,7 @@ import type { Repository, StandaloneRepo, TaskMode, Workspace } from "../../type
 import type { SidebarCodeGraphIndexStatus } from "./useSidebarCodeGraphIndexMap";
 import {
   sumProjectScheduledTasksEnabled,
+  sumProjectScheduledTasksTotal,
   type SidebarScheduledTasksSummary,
 } from "./useSidebarScheduledTasksMap";
 import { resolveWorkspaceMode } from "../../utils/workspaceMode";
@@ -174,6 +175,7 @@ export function ProjectRepositoryList({
                 onJoinExistingProject={onJoinFloatingRepository}
                 onRemove={onRemoveFloatingRepository}
                 codeGraphIndexed={codeGraphIndexStatusByRepoId[repository.id] === "done"}
+                scheduledTasksTotalCount={scheduledTasksByRepoId[repository.id]?.total ?? 0}
                 scheduledTasksEnabledCount={scheduledTasksByRepoId[repository.id]?.enabled ?? 0}
                 onOpenScheduledTasks={onOpenScheduledTasksForRepository}
               />
@@ -366,11 +368,18 @@ function ProjectRow({
     project.repositoryIds,
     scheduledTasksByRepoId,
   );
+  const projectScheduledTasksTotal = sumProjectScheduledTasksTotal(
+    project.repositoryIds,
+    scheduledTasksByRepoId,
+  );
   const projectMoreItems: MenuProps["items"] = [
     { key: "pin", label: isPinned ? "取消置顶" : "置顶" },
     { key: "rename", label: "重命名 Workspace" },
     ...(onAddRepositoryToProject
       ? [{ key: "add-repository", label: "关联仓库" }] satisfies MenuProps["items"]
+      : []),
+    ...(onOpenScheduledTasksForProject
+      ? [{ key: "scheduled-tasks", label: "定时任务" }] satisfies MenuProps["items"]
       : []),
     ...(onReconcileProject
       ? ([
@@ -483,6 +492,7 @@ function ProjectRow({
           {onOpenScheduledTasksForProject ? (
             <SidebarScheduledTasksAction
               variant="project"
+              totalCount={projectScheduledTasksTotal}
               enabledCount={projectScheduledTasksEnabled}
               onOpen={() => onOpenScheduledTasksForProject(project)}
             />
@@ -496,6 +506,7 @@ function ProjectRow({
                 if (key === "pin") onTogglePinProject(project.id);
                 if (key === "rename") onRenameProject(project);
                 if (key === "add-repository") onAddRepositoryToProject?.(project.id);
+                if (key === "scheduled-tasks") onOpenScheduledTasksForProject?.(project);
                 if (key === "reconcile-repos") void Promise.resolve(onReconcileProject?.(project.id, "repos_only"));
                 if (key === "reconcile-repos-graphs") {
                   void Promise.resolve(onReconcileProject?.(project.id, "repos_and_graphs"));

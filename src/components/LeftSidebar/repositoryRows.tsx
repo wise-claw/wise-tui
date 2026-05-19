@@ -14,6 +14,7 @@ import {
   RepositoryTypeIcon,
   RepoDragHandleIcon,
   ScheduledTasksIcon,
+  RequirementIcon,
 } from "./SidebarIcons";
 
 export interface RepositoryReorderUi {
@@ -91,24 +92,34 @@ export function RepositoryCodeGraphAction({
 }
 
 export function SidebarScheduledTasksAction({
+  totalCount,
   enabledCount,
   onOpen,
   variant = "repo",
 }: {
+  totalCount: number;
   enabledCount: number;
   onOpen: () => void;
   variant?: "repo" | "project";
 }) {
-  if (enabledCount <= 0) return null;
+  if (totalCount <= 0) return null;
 
   const badgeLabel = enabledCount > 99 ? "99+" : String(enabledCount);
+  const tooltipTitle =
+    enabledCount > 0
+      ? `${enabledCount} 个激活的定时任务（共 ${totalCount} 个）`
+      : `已配置 ${totalCount} 个定时任务（均未启用）`;
+  const ariaLabel =
+    enabledCount > 0
+      ? `定时任务（${enabledCount} 个激活，共 ${totalCount} 个）`
+      : `定时任务（共 ${totalCount} 个，均未启用）`;
 
   return (
-    <Tooltip title={`${enabledCount} 个激活的定时任务`} mouseEnterDelay={0.3}>
+    <Tooltip title={tooltipTitle} mouseEnterDelay={0.3}>
       <button
         type="button"
         className={`app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--scheduled-tasks${variant === "project" ? " app-repository-action--project-quick" : ""}`}
-        aria-label={`定时任务（${enabledCount} 个激活）`}
+        aria-label={ariaLabel}
         onClick={(e) => {
           e.stopPropagation();
           onOpen();
@@ -116,7 +127,44 @@ export function SidebarScheduledTasksAction({
       >
         <span className="app-repository-action-icon-wrap">
           <ScheduledTasksIcon />
-          <span className="app-repository-action-count-badge">{badgeLabel}</span>
+          {enabledCount > 0 ? (
+            <span className="app-repository-action-count-badge">{badgeLabel}</span>
+          ) : null}
+        </span>
+      </button>
+    </Tooltip>
+  );
+}
+
+export function SidebarRequirementAction({
+  unsplitCount,
+  onOpen,
+  variant = "repo",
+}: {
+  unsplitCount: number;
+  onOpen: () => void;
+  variant?: "repo" | "project";
+}) {
+  if (unsplitCount <= 0) return null;
+
+  const badgeLabel = unsplitCount > 99 ? "99+" : String(unsplitCount);
+
+  return (
+    <Tooltip title={`${unsplitCount} 条需求待拆分`} mouseEnterDelay={0.3}>
+      <button
+        type="button"
+        className={`app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--requirement${variant === "project" ? " app-repository-action--project-quick" : ""}`}
+        aria-label={`需求（${unsplitCount} 条待拆分）`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpen();
+        }}
+      >
+        <span className="app-repository-action-icon-wrap">
+          <RequirementIcon />
+          <span className="app-repository-action-count-badge app-repository-action-count-badge--requirement">
+            {badgeLabel}
+          </span>
         </span>
       </button>
     </Tooltip>
@@ -140,6 +188,7 @@ export function RepositoryRow({
   repositoryReorder,
   hideChatAction = false,
   codeGraphIndexed = false,
+  scheduledTasksTotalCount = 0,
   scheduledTasksEnabledCount = 0,
   onOpenScheduledTasks,
 }: {
@@ -159,6 +208,7 @@ export function RepositoryRow({
   repositoryReorder?: RepositoryReorderUi;
   hideChatAction?: boolean;
   codeGraphIndexed?: boolean;
+  scheduledTasksTotalCount?: number;
   scheduledTasksEnabledCount?: number;
   onOpenScheduledTasks?: (repository: Repository) => void;
 }) {
@@ -169,6 +219,9 @@ export function RepositoryRow({
     ...(onOpenRepositoryMainOwner ? [{ key: "main-owner", label: "配置Owner" }] satisfies MenuProps["items"] : []),
     { key: "prompts", label: "提示词" },
     { key: "sdd-mode", label: "SDD 模式" },
+    ...(onOpenScheduledTasks
+      ? [{ key: "scheduled-tasks", label: "定时任务" }] satisfies MenuProps["items"]
+      : []),
     ...(onCodeGraphGenerateRepository && onCodeGraphViewRepositoryInProject
       ? ([
           {
@@ -253,6 +306,7 @@ export function RepositoryRow({
           ) : null}
           {onOpenScheduledTasks ? (
             <SidebarScheduledTasksAction
+              totalCount={scheduledTasksTotalCount}
               enabledCount={scheduledTasksEnabledCount}
               onOpen={() => onOpenScheduledTasks(repository)}
             />
@@ -269,6 +323,7 @@ export function RepositoryRow({
                 if (key === "detach") onDetachFromProject(project.id, repository.id);
                 if (key === "prompts") onOpenPromptsRepository?.(project, repository);
                 if (key === "sdd-mode") onConfigureSddMode?.(repository);
+                if (key === "scheduled-tasks") onOpenScheduledTasks?.(repository);
                 if (key === "code-graph-generate-repo") void Promise.resolve(onCodeGraphGenerateRepository?.(repository));
                 if (key === "code-graph-view-repo") onCodeGraphViewRepositoryInProject?.(project, repository);
               },
@@ -307,6 +362,7 @@ export function FloatingRepositoryRow({
   onJoinExistingProject,
   onRemove,
   codeGraphIndexed = false,
+  scheduledTasksTotalCount = 0,
   scheduledTasksEnabledCount = 0,
   onOpenScheduledTasks,
 }: {
@@ -325,6 +381,7 @@ export function FloatingRepositoryRow({
   onJoinExistingProject?: (repository: StandaloneRepo, projectId: string) => void;
   onRemove: (repository: StandaloneRepo) => void;
   codeGraphIndexed?: boolean;
+  scheduledTasksTotalCount?: number;
   scheduledTasksEnabledCount?: number;
   onOpenScheduledTasks?: (repository: Repository) => void;
 }) {
@@ -338,6 +395,9 @@ export function FloatingRepositoryRow({
     { key: "editor", label: repositoryEditorOpenMenuLabel() },
     ...(onOpenRepositoryMainOwner ? [{ key: "main-owner", label: "主 Owner 智能体…" }] satisfies MenuProps["items"] : []),
     { key: "sdd-mode", label: "SDD 模式" },
+    ...(onOpenScheduledTasks
+      ? [{ key: "scheduled-tasks", label: "定时任务" }] satisfies MenuProps["items"]
+      : []),
     ...(onCodeGraphGenerateRepository && onCodeGraphViewFloatingRepository
       ? ([
           {
@@ -401,6 +461,7 @@ export function FloatingRepositoryRow({
           ) : null}
           {onOpenScheduledTasks ? (
             <SidebarScheduledTasksAction
+              totalCount={scheduledTasksTotalCount}
               enabledCount={scheduledTasksEnabledCount}
               onOpen={() => onOpenScheduledTasks(repository)}
             />
@@ -415,6 +476,7 @@ export function FloatingRepositoryRow({
                 if (key === "editor") onOpenRepositoryInEditor(repository);
                 if (key === "main-owner") onOpenRepositoryMainOwner?.(repository);
                 if (key === "sdd-mode") onConfigureSddMode?.(repository);
+                if (key === "scheduled-tasks") onOpenScheduledTasks?.(repository);
                 if (key === "code-graph-generate-repo") void Promise.resolve(onCodeGraphGenerateRepository?.(repository));
                 if (key === "code-graph-view-repo") onCodeGraphViewFloatingRepository?.(repository);
                 if (key === "promote") onPromoteToNewProject?.(repository);
@@ -535,6 +597,7 @@ export function ProjectRepositoryRows({
             repositoryReorder={reorderUi}
             hideChatAction={hideChatAction}
             codeGraphIndexed={codeGraphIndexStatusByRepoId[repository.id] === "done"}
+            scheduledTasksTotalCount={scheduledTasksByRepoId[repository.id]?.total ?? 0}
             scheduledTasksEnabledCount={scheduledTasksByRepoId[repository.id]?.enabled ?? 0}
             onOpenScheduledTasks={onOpenScheduledTasks}
           />
