@@ -129,6 +129,9 @@ interface ComposerInnerProps {
   employeeMentions?: Array<{ id: string; name: string }>;
   teamMentions?: Array<{ id: string; name: string }>;
   projectRoleTagOptions?: ReadonlyArray<import("../../utils/projectRoleTagOptions").RoleTagOption>;
+  projectRepositoryMentionOptions?: ReadonlyArray<
+    import("../../utils/projectRoleTagOptions").RepositoryMentionOption
+  >;
   hideEmployeesInAtMode?: boolean;
   onTrackSendFlow?: (entry: {
     sessionId: string;
@@ -344,6 +347,7 @@ function ComposerInner({
   employeeMentions = [],
   teamMentions = [],
   projectRoleTagOptions = [],
+  projectRepositoryMentionOptions = [],
   hideEmployeesInAtMode = false,
   onTrackSendFlow,
   employeesForDispatchRoute,
@@ -1762,7 +1766,7 @@ function ComposerInner({
             <div ref={shellRef} className="app-claude-semi-chat-input-wrap" style={{ width: "100%" }}>
               <AIChatInput
                 ref={aiChatRef}
-                placeholder="@ 员工/团队/文件，/ 命令，Enter 发送，Shift+Enter 换行，Esc 撤销"
+                placeholder="@ 员工/团队/仓库/文件，/ 命令，Enter 发送，Shift+Enter 换行，Esc 撤销"
                 keepSkillAfterSend={false}
                 showUploadButton={false}
                 showUploadFile={false}
@@ -1830,6 +1834,7 @@ function ComposerInner({
         employeeOptions={employeeMentions}
         teamOptions={teamMentions}
         projectRoleTagOptions={projectRoleTagOptions}
+        projectRepositoryMentionOptions={projectRepositoryMentionOptions}
         hideEmployeesInAtMode={hideEmployeesInAtMode}
       />
     </div>
@@ -1890,6 +1895,9 @@ export interface ComposerRegionProps {
   employeeMentions?: Array<{ id: string; name: string }>;
   teamMentions?: Array<{ id: string; name: string }>;
   projectRoleTagOptions?: ReadonlyArray<import("../../utils/projectRoleTagOptions").RoleTagOption>;
+  projectRepositoryMentionOptions?: ReadonlyArray<
+    import("../../utils/projectRoleTagOptions").RepositoryMentionOption
+  >;
   hideEmployeesInAtMode?: boolean;
   onTrackSendFlow?: (entry: {
     sessionId: string;

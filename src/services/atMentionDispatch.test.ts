@@ -5,6 +5,7 @@ import {
   dispatchAtMentionPromptToRepos,
   parseAtMentions,
   planAtMentionDispatch,
+  resolveReposByMention,
   resolveReposByTag,
 } from "./atMentionDispatch";
 
@@ -93,6 +94,12 @@ describe("parseAtMentions", () => {
     const r = parseAtMentions("@frontend   改\n按钮  ");
     expect(r.strippedBody).toBe("改 按钮");
   });
+
+  test("supports wider mention tokens such as repo folder names", () => {
+    const r = parseAtMentions("@vocs-web 改按钮");
+    expect(r.mentions).toEqual([{ tag: "vocs-web", index: 0 }]);
+    expect(r.strippedBody).toBe("改按钮");
+  });
 });
 
 describe("resolveReposByTag", () => {
@@ -127,6 +134,28 @@ describe("resolveReposByTag", () => {
   });
 });
 
+describe("resolveReposByMention", () => {
+  const r1 = repo({ id: 1, path: "/p/vocs-web", name: "vocs-web", roleTags: ["frontend"] });
+  const r2 = repo({ id: 2, path: "/p/hlhb-int", name: "hlhb-int", roleTags: ["backend"] });
+  const p = project({ id: "p", repositoryIds: [1, 2] });
+
+  test("prefers roleTag match over repo name", () => {
+    const byName = repo({ id: 3, path: "/p/frontend", name: "frontend", roleTags: ["api"] });
+    const projectWithBoth = project({ id: "p2", repositoryIds: [1, 3] });
+    expect(resolveReposByMention("frontend", projectWithBoth, [r1, byName]).map((r) => r.id)).toEqual([
+      1,
+    ]);
+  });
+
+  test("matches repo folder basename when roleTag misses", () => {
+    expect(resolveReposByMention("vocs-web", p, [r1, r2]).map((r) => r.id)).toEqual([1]);
+  });
+
+  test("matches repo display name case-insensitively", () => {
+    expect(resolveReposByMention("HLHB-INT", p, [r1, r2]).map((r) => r.id)).toEqual([2]);
+  });
+});
+
 describe("planAtMentionDispatch", () => {
   const r1 = repo({ id: 1, path: "/r1", roleTags: ["frontend"] });
   const r2 = repo({ id: 2, path: "/r2", roleTags: ["backend"] });
@@ -146,6 +175,24 @@ describe("planAtMentionDispatch", () => {
     if (plan.kind === "dispatch") {
       expect(plan.mentionedTags).toEqual(["frontend"]);
       expect(plan.matchedRepos.map((r) => r.id)).toEqual([1]);
+      expect(plan.body).toBe("改按钮");
+    }
+  });
+
+  test("dispatch when mention matches repo folder name", () => {
+    const vocs = repo({ id: 3, path: "/p/vocs-web", name: "vocs-web", roleTags: ["web"] });
+    const plan = planAtMentionDispatch({
+      activeProject: project({
+        id: "p",
+        repositoryIds: [3],
+        sddMode: "wise_trellis",
+      }),
+      repositories: [vocs],
+      prompt: "@vocs-web 改按钮",
+    });
+    expect(plan.kind).toBe("dispatch");
+    if (plan.kind === "dispatch") {
+      expect(plan.matchedRepos.map((r) => r.id)).toEqual([3]);
       expect(plan.body).toBe("改按钮");
     }
   });

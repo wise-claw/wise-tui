@@ -515,6 +515,29 @@ export function buildRepositoryMemberMonitorItems(
   });
 }
 
+/** 右栏「仓库成员」：选中 Workspace 时展示其下全部仓库；仅选中游离仓库时展示该仓库。 */
+export function filterRepositoryMemberMonitorItemsBySelection(
+  items: readonly RepositoryMemberMonitorItem[],
+  input: {
+    activeProjectId: string | null;
+    activeRepositoryId: number | null;
+    projects: ReadonlyArray<ProjectItem>;
+  },
+): RepositoryMemberMonitorItem[] {
+  const { activeProjectId, activeRepositoryId, projects } = input;
+  let allowedIds: readonly number[] = [];
+
+  if (activeProjectId) {
+    allowedIds = projects.find((project) => project.id === activeProjectId)?.repositoryIds ?? [];
+  } else if (activeRepositoryId != null) {
+    allowedIds = [activeRepositoryId];
+  }
+
+  if (allowedIds.length === 0) return [];
+  const allowed = new Set(allowedIds);
+  return items.filter((item) => allowed.has(item.repositoryId));
+}
+
 function extractOmcActiveSignal(task: WorkflowTaskItem, events: WorkflowTaskEventItem[]): OmcActiveExecutionSignal | null {
   if (task.status !== "in_progress") return null;
   let latestRunStageAt = -1;

@@ -1,5 +1,6 @@
 import type { ProjectItem, Repository } from "../types";
 import type { TrellisExecutionMetadata } from "../types/workflow";
+import { repositoryFolderBasename } from "../utils/repositoryType";
 import { getRoleTags } from "../utils/projectRepositoryRoles";
 import { executeClaudeCodeAndWait, type ClaudeInvocationResult } from "./claude";
 import { gitWorktreeAddOmcBatch } from "./git";
@@ -15,7 +16,8 @@ export interface ParseAtMentionsResult {
 }
 
 /**
- * 解析 `@<tag>` 提及。`<tag>` 限 `[A-Za-z0-9_-]+`。`\@tag` 转义成纯文本，不计入 mentions。
+ * 解析 `@<tag>` 提及。`<tag>` 为连续非空白、非分隔符字符（含仓库目录名如 `vocs-web`）。
+ * `\@tag` 转义成纯文本，不计入 mentions。
  *
  * `strippedBody` 是删除合法 @-mention 段后的正文（前后空白合并），用于子代理派发。
  */
@@ -35,7 +37,12 @@ export function parseAtMentions(input: string): ParseAtMentionsResult {
       const isBoundary = i === 0 || /\s/.test(left ?? "") || /[\(\[\{,;:]/.test(left ?? "");
       if (isBoundary) {
         let j = i + 1;
-        while (j < input.length && /[A-Za-z0-9_-]/.test(input[j]!)) j += 1;
+        while (j < input.length) {
+          const chAt = input[j]!;
+          if (/\s/.test(chAt)) break;
+          if (/[@#()[\]{}<>,"'`，。！？；：、]/.test(chAt)) break;
+          j += 1;
+        }
         if (j > i + 1) {
           const tag = input.slice(i + 1, j);
           mentions.push({ tag, index: i });
@@ -70,6 +77,39 @@ export function resolveReposByTag(
     if (tags.includes(needle)) out.push(repo);
   }
   return out;
+}
+
+function repositoryMentionAliases(repo: Repository): string[] {
+  const aliases = new Set<string>();
+  const push = (value: string | null | undefined) => {
+    const normalized = value?.trim().toLowerCase();
+    if (normalized) aliases.add(normalized);
+  };
+  push(repositoryFolderBasename(repo));
+  push(repo.name);
+  return Array.from(aliases);
+}
+
+/**
+ * 在项目成员仓库中查找匹配标签或仓库名的仓库（大小写不敏感）。
+ * 先匹配 roleTag，再匹配目录名 / 展示名。
+ */
+export function resolveReposByMention(
+  tag: string,
+  project: ProjectItem,
+  repositories: ReadonlyArray<Repository>,
+): Repository[] {
+  const byRole = resolveReposByTag(tag, project, repositories);
+  if (byRole.length > 0) return byRole;
+
+  const needle = tag.trim().toLowerCase();
+  if (!needle) return [];
+
+  const memberIds = new Set(project.repositoryIds);
+  return repositories.filter((repo) => {
+    if (!memberIds.has(repo.id)) return false;
+    return repositoryMentionAliases(repo).includes(needle);
+  });
 }
 
 export type AtMentionDispatchPlan =
@@ -113,7 +153,7 @@ export function planAtMentionDispatch(args: {
   }
   const matchedReposById = new Map<number, Repository>();
   for (const tag of mentionedTags) {
-    for (const repo of resolveReposByTag(tag, activeProject, repositories)) {
+    for (const repo of resolveReposByMention(tag, activeProject, repositories)) {
       matchedReposById.set(repo.id, repo);
     }
   }

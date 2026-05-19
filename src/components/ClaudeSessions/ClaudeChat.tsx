@@ -227,6 +227,9 @@ interface Props {
   employees?: EmployeeItem[];
   mentionEmployees?: EmployeeItem[];
   projectRoleTagOptions?: ReadonlyArray<import("../../utils/projectRoleTagOptions").RoleTagOption>;
+  projectRepositoryMentionOptions?: ReadonlyArray<
+    import("../../utils/projectRoleTagOptions").RepositoryMentionOption
+  >;
   hideEmployeesInAtMode?: boolean;
   workflowTasks?: WorkflowTaskItem[];
   taskPendingEmployeesByTaskId?: Record<string, Array<{ employeeId: string; name: string }>>;
@@ -443,6 +446,7 @@ export function ClaudeChat({
   employees = [],
   mentionEmployees = [],
   projectRoleTagOptions = [],
+  projectRepositoryMentionOptions = [],
   hideEmployeesInAtMode = false,
   workflowTasks = [],
   taskPendingEmployeesByTaskId = {},
@@ -4247,6 +4251,7 @@ export function ClaudeChat({
           employeeMentions={mentionEmployees.map((item) => ({ id: item.id, name: item.name }))}
           teamMentions={publishedTeamMentions}
           projectRoleTagOptions={projectRoleTagOptions}
+          projectRepositoryMentionOptions={projectRepositoryMentionOptions}
           hideEmployeesInAtMode={hideEmployeesInAtMode}
           onEnqueueAsPendingTask={(payload) => addTask(payload)}
           onTrackSendFlow={(entry) => {

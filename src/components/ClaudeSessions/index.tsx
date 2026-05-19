@@ -905,6 +905,9 @@ interface Props {
   employees?: EmployeeItem[];
   mentionEmployees?: EmployeeItem[];
   composerProjectRoleTagOptions?: ReadonlyArray<import("../../utils/projectRoleTagOptions").RoleTagOption>;
+  composerProjectRepositoryMentionOptions?: ReadonlyArray<
+    import("../../utils/projectRoleTagOptions").RepositoryMentionOption
+  >;
   composerHideEmployeesInAtMode?: boolean;
   workflowTasks?: WorkflowTaskItem[];
   onDecideWorkflowTask?: (input: {
@@ -1003,6 +1006,7 @@ export function ClaudeSessions({
   employees = [],
   mentionEmployees = [],
   composerProjectRoleTagOptions = [],
+  composerProjectRepositoryMentionOptions = [],
   composerHideEmployeesInAtMode = false,
   workflowTasks = [],
   taskPendingEmployeesByTaskId = {},
@@ -1207,6 +1211,7 @@ export function ClaudeSessions({
                 employees={employees}
                 mentionEmployees={mentionEmployees}
                 projectRoleTagOptions={composerProjectRoleTagOptions}
+                projectRepositoryMentionOptions={composerProjectRepositoryMentionOptions}
                 hideEmployeesInAtMode={composerHideEmployeesInAtMode}
                 workflowTasks={activeSessionWorkflowTasks}
                 taskPendingEmployeesByTaskId={taskPendingEmployeesByTaskId}
@@ -1263,6 +1268,7 @@ export function ClaudeSessions({
                   employees={employees}
                   mentionEmployees={mentionEmployees}
                   projectRoleTagOptions={composerProjectRoleTagOptions}
+                  projectRepositoryMentionOptions={composerProjectRepositoryMentionOptions}
                   hideEmployeesInAtMode={composerHideEmployeesInAtMode}
                   workflowTasks={secondarySessionWorkflowTasks}
                   taskPendingEmployeesByTaskId={taskPendingEmployeesByTaskId}
@@ -1339,6 +1345,7 @@ export function ClaudeSessions({
             employees={employees}
             mentionEmployees={mentionEmployees}
             projectRoleTagOptions={composerProjectRoleTagOptions}
+            projectRepositoryMentionOptions={composerProjectRepositoryMentionOptions}
             hideEmployeesInAtMode={composerHideEmployeesInAtMode}
             workflowTasks={activeSessionWorkflowTasks}
             taskPendingEmployeesByTaskId={taskPendingEmployeesByTaskId}

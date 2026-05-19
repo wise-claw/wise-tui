@@ -434,6 +434,36 @@ body {
   z-index: 2;
 }
 
+/* 工作台配置全屏：左栏为配置 Tab 导航（替换工作区树），主区铺满剩余宽度 */
+.app-main-layout--author .app-workspace-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.app-main-layout--author .app-author-workspace-layer,
+.app-main-layout--author .app-prompts-workspace-layer {
+  position: relative;
+  inset: auto;
+  flex: 1 1 0%;
+  min-width: 0;
+  min-height: 0;
+  z-index: 1;
+}
+
+.app-main-layout--author .app-author-workspace-layer .author-panel {
+  height: 100%;
+}
+
+.app-main-layout--author .app-author-config-sider.ant-layout-sider {
+  flex: none;
+  height: 100%;
+  border-right: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-bg-container);
+}
+
 .app-prompts-workspace-layer .app-prompts-panel__scope-bar {
   margin-right: 2px;
 }

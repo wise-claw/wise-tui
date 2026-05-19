@@ -380,7 +380,8 @@ export function AppWorkspaceLayout({
     viewMode.kind === "inspect" && viewMode.tool.kind === "code-graph";
   const ccWfStudioMode =
     viewMode.kind === "inspect" && viewMode.tool.kind === "workflow-studio";
-  const rightInspectorHidden = effectiveRightCollapsed || missionControlMode;
+  const rightInspectorHidden =
+    effectiveRightCollapsed || missionControlMode || authorMode;
   const [authorShellMounted, setAuthorShellMounted] = useState(authorMode);
   const [cockpitShellMounted, setCockpitShellMounted] = useState(missionControlMode);
 
@@ -479,27 +480,33 @@ export function AppWorkspaceLayout({
             }}
           >
             <AntdApp>
-              <Layout className="app-main-layout" style={{ minWidth: 0, flex: 1, minHeight: 0, height: "100%" }}>
-                <ConnectedLeftSidebar
-                  dark={dark}
-                  collapsed={collapsed}
-                  parked={authorMode}
-                  siderWidth={mainLayoutLeftWidthPx}
-                  compactLayoutMode={compactLayoutMode}
-                  onToggleCompactLayoutMode={onToggleCompactLayoutMode}
-                  leftSidebarProps={leftSidebarProps}
-                />
-                {authorShellMounted ? (
-                  <AuthorPanelNav
+              <Layout
+                className={`app-main-layout${authorMode ? " app-main-layout--author" : ""}`}
+                style={{ minWidth: 0, flex: 1, minHeight: 0, height: "100%" }}
+              >
+                {authorMode ? (
+                  authorShellMounted ? (
+                    <AuthorPanelNav
+                      dark={dark}
+                      collapsed={collapsed}
+                      parked={false}
+                      siderWidth={mainLayoutLeftWidthPx}
+                      pane={authorPanelProps.pane}
+                      onPaneChange={authorPanelProps.onPaneChange}
+                      onBack={authorPanelProps.onBack}
+                    />
+                  ) : null
+                ) : (
+                  <ConnectedLeftSidebar
                     dark={dark}
                     collapsed={collapsed}
-                    parked={!authorMode}
+                    parked={false}
                     siderWidth={mainLayoutLeftWidthPx}
-                    pane={authorPanelProps.pane}
-                    onPaneChange={authorPanelProps.onPaneChange}
-                    onBack={authorPanelProps.onBack}
+                    compactLayoutMode={compactLayoutMode}
+                    onToggleCompactLayoutMode={onToggleCompactLayoutMode}
+                    leftSidebarProps={leftSidebarProps}
                   />
-                ) : null}
+                )}
 
                 {!promptsMode && !collapsed ? (
                   <MainLayoutResizeHandle

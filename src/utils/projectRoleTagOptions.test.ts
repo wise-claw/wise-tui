@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ProjectItem, Repository } from "../types";
-import { buildProjectRoleTagOptions } from "./projectRoleTagOptions";
+import { buildProjectRoleTagOptions, buildProjectRepositoryMentionOptions } from "./projectRoleTagOptions";
 
 function repo(input: Partial<Repository> & Pick<Repository, "id" | "path">): Repository {
   return {
@@ -130,5 +130,37 @@ describe("buildProjectRoleTagOptions", () => {
     expect(opts).toHaveLength(32);
     expect(opts[0]?.tag).toBe("tag-01");
     expect(opts[31]?.tag).toBe("tag-32");
+  });
+});
+
+describe("buildProjectRepositoryMentionOptions", () => {
+  test("lists member repos by folder basename", () => {
+    const p = project({ id: "p", repositoryIds: [1, 2] });
+    const opts = buildProjectRepositoryMentionOptions(p, [
+      repo({ id: 1, path: "/p/vocs-web", name: "vocs-web", roleTags: ["frontend"] }),
+      repo({ id: 2, path: "/p/hlhb-int", name: "hlhb-int", roleTags: ["backend"] }),
+    ]);
+    expect(opts.map((o) => o.mention).sort()).toEqual(["hlhb-int", "vocs-web"]);
+    expect(opts.find((o) => o.mention === "vocs-web")).toEqual({
+      mention: "vocs-web",
+      label: "vocs-web",
+      description: "仓库 · frontend",
+      repositoryId: 1,
+    });
+  });
+
+  test("returns [] when project is null/undefined", () => {
+    expect(buildProjectRepositoryMentionOptions(null, [])).toEqual([]);
+    expect(buildProjectRepositoryMentionOptions(undefined, [])).toEqual([]);
+  });
+
+  test("ignores repos outside project", () => {
+    const p = project({ id: "p", repositoryIds: [1] });
+    const opts = buildProjectRepositoryMentionOptions(p, [
+      repo({ id: 1, path: "/p/a", name: "a" }),
+      repo({ id: 99, path: "/other", name: "other" }),
+    ]);
+    expect(opts).toHaveLength(1);
+    expect(opts[0]?.mention).toBe("a");
   });
 });

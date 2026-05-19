@@ -35,9 +35,10 @@
   width: 100%;
   padding: 12px;
   border: 1px solid var(--ant-color-border-secondary);
+  border-left: 3px solid var(--ant-color-primary);
   border-radius: 8px;
   background: var(--ant-color-bg-container);
-  box-shadow: inset 3px 0 0 var(--ant-color-primary);
+  box-shadow: none;
 }
 
 .app-employee-config-hero__eyebrow {
@@ -111,6 +112,7 @@
   border: 1px solid var(--ant-color-border-secondary);
   border-radius: 8px;
   background: var(--ant-color-bg-container);
+  box-shadow: none;
 }
 
 .app-employee-config-metric {
@@ -227,6 +229,7 @@
   border: 1px solid var(--ant-color-border-secondary);
   border-radius: 6px;
   background: var(--ant-color-bg-container);
+  box-shadow: none;
 }
 
 .app-employee-config-row {
@@ -385,6 +388,11 @@
 
 .app-employee-config-table.ant-table-wrapper {
   margin-top: 2px;
+}
+
+.app-employee-config-table.ant-table-wrapper .ant-table,
+.app-employee-config-table.ant-table-wrapper .ant-table-container {
+  box-shadow: none;
 }
 
 .app-employee-config-table .ant-btn-sm {
