@@ -177,6 +177,10 @@ if project.root_path.is_empty() {
 - Assistant settings UI may add/remove non-builtin skill refs, but builtin skill
   refs are only disabled/enabled. Removing a builtin by deleting it from
   `custom` is a bug because builtin refs come from the Rust bundle.
+- Non-PRD builtin assistants are skill-backed artifact assistants. Their
+  frontend workspace must read `assistants_resolve_runtime` before execution so
+  project-scope disabled/custom Skill refs and `engineering.formatProfile`
+  affect the generated task brief.
 
 ### 4. Validation & Error Matrix
 
@@ -213,6 +217,8 @@ if project.root_path.is_empty() {
   builders wrap payloads under `args`.
 - Frontend pure helper tests assert scanned skill -> bundle candidate
   conversion, dedupe on add, remove behavior, and search filtering.
+- Artifact assistant brief tests assert enabled Skill filtering and that the
+  generated brief carries Workspace, Skill source paths, and format preferences.
 
 ### 7. Wrong vs Correct
 

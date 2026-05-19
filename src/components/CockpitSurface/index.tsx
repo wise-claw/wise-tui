@@ -127,6 +127,8 @@ export function CockpitSurface({
           <AssistantConversationView
             assistantId={subMode.assistantId}
             assistant={activeAssistant}
+            activeProjectId={activeProjectId}
+            activeProjectName={activeProjectName}
             missionControlProps={missionControlProps}
             prdTaskSplitPanelProps={prdTaskSplitPanelProps}
             onOpenSettings={handleOpenActiveSettings}

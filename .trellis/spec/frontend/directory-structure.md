@@ -164,6 +164,11 @@ cross-panel event wiring.
   Keep scan-to-bundle pure helpers in
   `src/components/CockpitSurface/assistantSkillMount.ts` with focused tests.
   Components must not call assistant override IPC directly.
+- Artifact assistant workspace: `src/components/CockpitSurface/AssistantConversationView.tsx`
+  may render non-PRD builtin assistants. Keep executable brief construction in
+  `src/components/CockpitSurface/assistantArtifactBrief.ts` and derive enabled
+  Skills/MCP from resolved assistant runtime, not from static card metadata
+  alone.
 - Thin IPC service: `src/services/repository.ts`.
 - Runtime stream hook: `src/hooks/useClaudeSessions.ts`.
 - Pure tested domain logic: `src/services/workflow/engine.ts`.

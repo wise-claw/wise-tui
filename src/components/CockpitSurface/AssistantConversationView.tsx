@@ -1,9 +1,21 @@
-import { lazy, Suspense } from "react";
-import { Button, Empty, Spin, Tag, Typography } from "antd";
-import { SettingOutlined } from "@ant-design/icons";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { App as AntdApp, Button, Empty, Input, Spin, Tag, Typography } from "antd";
+import { CopyOutlined, SettingOutlined } from "@ant-design/icons";
 import type { ComponentProps } from "react";
-import { DEFAULT_PRD_SPLIT_ASSISTANT_ID } from "../../services/assistantPromptLayers";
+import {
+  DEFAULT_PRD_SPLIT_ASSISTANT_ID,
+  parseAssistantEngineeringPreferences,
+  parseAssistantRuntimeBundle,
+  resolveAssistantRuntime,
+  type AssistantEngineeringPreferences,
+  type AssistantRuntimeBundle,
+} from "../../services/assistantPromptLayers";
 import type { AssistantEntry } from "../../types/assistant";
+import {
+  assistantRefsToBundleItems,
+  buildArtifactAssistantBrief,
+  getEnabledBundleItems,
+} from "./assistantArtifactBrief";
 
 const MissionControl = lazy(() =>
   import("../MissionControl").then((module) => ({ default: module.MissionControl })),
@@ -18,6 +30,8 @@ export type AssistantConversationPrdTaskSplitPanelProps = ComponentProps<typeof 
 export interface AssistantConversationViewProps {
   assistantId: string;
   assistant: AssistantEntry | null;
+  activeProjectId: string | null;
+  activeProjectName: string | null;
   missionControlProps: AssistantConversationMissionControlProps;
   prdTaskSplitPanelProps: AssistantConversationPrdTaskSplitPanelProps;
   onOpenSettings: () => void;
@@ -32,12 +46,21 @@ export interface AssistantConversationViewProps {
 export function AssistantConversationView({
   assistantId,
   assistant,
+  activeProjectId,
+  activeProjectName,
   prdTaskSplitPanelProps,
   onOpenSettings,
 }: AssistantConversationViewProps) {
   if (assistantId !== DEFAULT_PRD_SPLIT_ASSISTANT_ID) {
     if (!assistant) return <ConversationFallback />;
-    return <ArtifactAssistantWorkspace assistant={assistant} onOpenSettings={onOpenSettings} />;
+    return (
+      <ArtifactAssistantWorkspace
+        assistant={assistant}
+        activeProjectId={activeProjectId}
+        activeProjectName={activeProjectName}
+        onOpenSettings={onOpenSettings}
+      />
+    );
   }
   return (
     <Suspense fallback={<ConversationFallback />}>
@@ -56,11 +79,84 @@ function ConversationFallback() {
 
 interface ArtifactAssistantWorkspaceProps {
   assistant: AssistantEntry;
+  activeProjectId: string | null;
+  activeProjectName: string | null;
   onOpenSettings: () => void;
 }
 
-function ArtifactAssistantWorkspace({ assistant, onOpenSettings }: ArtifactAssistantWorkspaceProps) {
-  const skills = assistant.defaultSkills ?? [];
+function ArtifactAssistantWorkspace({
+  assistant,
+  activeProjectId,
+  activeProjectName,
+  onOpenSettings,
+}: ArtifactAssistantWorkspaceProps) {
+  const { message } = AntdApp.useApp();
+  const [loading, setLoading] = useState(false);
+  const [runtimeSkills, setRuntimeSkills] = useState<AssistantRuntimeBundle | null>(null);
+  const [runtimeMcps, setRuntimeMcps] = useState<AssistantRuntimeBundle | null>(null);
+  const [engineering, setEngineering] = useState<AssistantEngineeringPreferences>({});
+  const [request, setRequest] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    resolveAssistantRuntime({
+      assistantId: assistant.id,
+      projectId: activeProjectId,
+    })
+      .then((runtime) => {
+        if (cancelled) return;
+        setRuntimeSkills(parseAssistantRuntimeBundle(runtime.skillBundleJson));
+        setRuntimeMcps(parseAssistantRuntimeBundle(runtime.mcpBundleJson));
+        setEngineering(parseAssistantEngineeringPreferences(runtime.engineeringJson));
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        message.error(`读取助手运行态失败：${err instanceof Error ? err.message : String(err)}`);
+        setRuntimeSkills(null);
+        setRuntimeMcps(null);
+        setEngineering({});
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProjectId, assistant.id, message]);
+
+  const skillBundle = runtimeSkills ?? {
+    disabled: [],
+    custom: assistantRefsToBundleItems(assistant.defaultSkills),
+  };
+  const mcpBundle = runtimeMcps ?? {
+    disabled: [],
+    custom: assistantRefsToBundleItems(assistant.defaultMcps),
+  };
+  const enabledSkills = useMemo(() => getEnabledBundleItems(skillBundle), [skillBundle]);
+  const enabledMcps = useMemo(() => getEnabledBundleItems(mcpBundle), [mcpBundle]);
+  const executionBrief = useMemo(
+    () =>
+      buildArtifactAssistantBrief({
+        assistant,
+        activeProjectName,
+        userRequest: request,
+        engineering,
+        enabledSkills,
+        enabledMcps,
+      }),
+    [activeProjectName, assistant, enabledMcps, enabledSkills, engineering, request],
+  );
+
+  const handleCopyBrief = async () => {
+    try {
+      await navigator.clipboard.writeText(executionBrief);
+      message.success("执行 Brief 已复制，可粘贴到主会话或后续 Artifact 执行面板。");
+    } catch (err) {
+      message.error(`复制失败：${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
   return (
     <div className="assistant-artifact-workspace">
       <section className="assistant-artifact-workspace__panel">
@@ -77,9 +173,15 @@ function ArtifactAssistantWorkspace({ assistant, onOpenSettings }: ArtifactAssis
         <Typography.Paragraph type="secondary" className="assistant-artifact-workspace__description">
           {assistant.description}
         </Typography.Paragraph>
+        <div className="assistant-artifact-workspace__scope">
+          <Typography.Text type="secondary">作用域</Typography.Text>
+          <Typography.Text>{activeProjectName ?? "助手默认"}</Typography.Text>
+        </div>
         <div className="assistant-artifact-workspace__skills">
-          {skills.length > 0 ? (
-            skills.map((skill) => (
+          {loading ? (
+            <Spin size="small" />
+          ) : enabledSkills.length > 0 ? (
+            enabledSkills.map((skill) => (
               <Tag key={skill.id} color="purple">
                 Skill · {skill.label}
               </Tag>
@@ -88,15 +190,48 @@ function ArtifactAssistantWorkspace({ assistant, onOpenSettings }: ArtifactAssis
             <Tag>未挂载默认 Skill</Tag>
           )}
         </div>
-        <Button type="primary" icon={<SettingOutlined />} onClick={onOpenSettings}>
+        {engineering.formatProfile?.trim() ? (
+          <Typography.Paragraph className="assistant-artifact-workspace__format">
+            {engineering.formatProfile.trim()}
+          </Typography.Paragraph>
+        ) : (
+          <Typography.Text type="secondary">未设置格式偏好。</Typography.Text>
+        )}
+        <Button icon={<SettingOutlined />} onClick={onOpenSettings}>
           配置格式、Skills 和 MCP
         </Button>
       </section>
-      <Empty
-        className="assistant-artifact-workspace__empty"
-        image={Empty.PRESENTED_IMAGE_SIMPLE}
-        description="产物型助手的对话与文件预览工作台会接入统一 Artifact 面板；当前先通过设置抽屉管理默认技能和格式偏好。"
-      />
+      <section className="assistant-artifact-workspace__brief">
+        <div className="assistant-artifact-workspace__brief-head">
+          <div>
+            <Typography.Title level={5} className="assistant-artifact-workspace__brief-title">
+              执行 Brief
+            </Typography.Title>
+            <Typography.Text type="secondary">
+              基于当前助手运行态生成,包含启用 Skill、MCP 和格式偏好。
+            </Typography.Text>
+          </div>
+          <Button type="primary" icon={<CopyOutlined />} onClick={() => void handleCopyBrief()}>
+            复制 Brief
+          </Button>
+        </div>
+        <Input.TextArea
+          value={request}
+          onChange={(event) => setRequest(event.target.value)}
+          rows={5}
+          placeholder={assistant.id === "builtin:ppt-deck"
+            ? "例如：根据这份商业计划书做 12 页融资路演 PPT，风格深色高对比，保留数据图表。"
+            : "例如：根据会议纪要生成一份正式项目复盘 Word 报告，包含摘要、问题、行动项和附件清单。"}
+        />
+        <pre className="assistant-artifact-workspace__brief-preview">{executionBrief}</pre>
+        {enabledSkills.length === 0 ? (
+          <Empty
+            className="assistant-artifact-workspace__empty"
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description="当前没有启用 Skill。请先打开设置挂载或启用内置 Skill。"
+          />
+        ) : null}
+      </section>
     </div>
   );
 }
