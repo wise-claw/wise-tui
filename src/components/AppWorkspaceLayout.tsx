@@ -382,10 +382,15 @@ export function AppWorkspaceLayout({
     viewMode.kind === "inspect" && viewMode.tool.kind === "workflow-studio";
   const rightInspectorHidden = effectiveRightCollapsed || missionControlMode;
   const [authorShellMounted, setAuthorShellMounted] = useState(authorMode);
+  const [cockpitShellMounted, setCockpitShellMounted] = useState(missionControlMode);
 
   useEffect(() => {
     if (authorMode) setAuthorShellMounted(true);
   }, [authorMode]);
+
+  useEffect(() => {
+    if (missionControlMode) setCockpitShellMounted(true);
+  }, [missionControlMode]);
 
   const {
     closeFileEditorPanel,
@@ -506,32 +511,15 @@ export function AppWorkspaceLayout({
 
                 <div className="app-workspace-main">
                   <div
-                    className={`app-main-chat-with-right-pane${authorMode ? " app-workspace-layer--parked" : ""}`}
+                    className={`app-main-chat-with-right-pane${
+                      authorMode || missionControlMode ? " app-workspace-layer--parked" : ""
+                    }`}
                   >
-                    {missionControlMode ? (
-                      <Layout.Content ref={mainLayoutContentRef} className="app-main-layout-content">
-                        {cockpitEmpty ? (
-                          <CockpitOnboarding {...cockpitOnboardingProps} />
-                        ) : (
-                          <Suspense fallback={<PanelLoadingFallback />}>
-                            <CockpitSurface
-                              activeProjectId={cockpitSurfaceActiveProjectId}
-                              activeProjectName={cockpitSurfaceActiveProjectName}
-                              hasInitialTarget={cockpitSurfaceHasInitialTarget}
-                              openRequestKey={cockpitSurfaceOpenRequestKey}
-                              missionControlProps={missionControlProps}
-                              prdTaskSplitPanelProps={prdTaskSplitPanelProps}
-                            />
-                          </Suspense>
-                        )}
-                      </Layout.Content>
-                    ) : (
-                      <ConnectedClaudeSessions
-                        claudeSessionsProps={claudeSessionsProps}
-                        mainLayoutContentRef={mainLayoutContentRef}
-                        panelBelowMessages={editorPanelNode}
-                      />
-                    )}
+                    <ConnectedClaudeSessions
+                      claudeSessionsProps={claudeSessionsProps}
+                      mainLayoutContentRef={mainLayoutContentRef}
+                      panelBelowMessages={editorPanelNode}
+                    />
 
                     {!rightInspectorHidden ? (
                       <MainLayoutResizeHandle
@@ -585,6 +573,31 @@ export function AppWorkspaceLayout({
                       </Suspense>
                     ) : null}
                   </div>
+
+                  {cockpitShellMounted ? (
+                    <div
+                      className={`app-full-width-main app-cockpit-workspace-layer${
+                        !missionControlMode ? " app-workspace-layer--parked" : ""
+                      }`}
+                    >
+                      <Layout.Content className="app-main-layout-content">
+                        {cockpitEmpty ? (
+                          <CockpitOnboarding {...cockpitOnboardingProps} />
+                        ) : (
+                          <Suspense fallback={<PanelLoadingFallback />}>
+                            <CockpitSurface
+                              activeProjectId={cockpitSurfaceActiveProjectId}
+                              activeProjectName={cockpitSurfaceActiveProjectName}
+                              hasInitialTarget={cockpitSurfaceHasInitialTarget}
+                              openRequestKey={cockpitSurfaceOpenRequestKey}
+                              missionControlProps={missionControlProps}
+                              prdTaskSplitPanelProps={prdTaskSplitPanelProps}
+                            />
+                          </Suspense>
+                        )}
+                      </Layout.Content>
+                    </div>
+                  ) : null}
 
                   {authorShellMounted ? (
                     <div

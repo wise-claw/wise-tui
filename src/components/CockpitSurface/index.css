@@ -19,63 +19,96 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 24px;
-  padding: 32px 36px;
+  gap: 10px;
+  padding: 10px 12px 16px;
   overflow-y: auto;
+  background: var(--ant-color-bg-layout);
 }
 
 .cockpit-hub__header {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
-.cockpit-hub__header-main {
+.cockpit-hub__header-top {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 8px;
+  min-width: 0;
 }
 
 .cockpit-hub__title {
-  font-size: 22px;
+  font-size: 14px;
   font-weight: 600;
   margin: 0;
+  line-height: 1.2;
+  min-width: 0;
+  flex: 1;
 }
 
 .cockpit-hub__subtitle {
-  font-size: 13px;
-  color: rgba(0, 0, 0, 0.55);
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
   margin: 0;
+  line-height: 1.35;
+}
+
+.cockpit-hub__close-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  color: var(--ant-color-text-tertiary);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.cockpit-hub__close-btn:active {
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-secondary);
+}
+
+.cockpit-hub__close-btn:hover {
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-tertiary);
 }
 
 .cockpit-hub__section {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 6px;
 }
 
 .cockpit-hub__section-title {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 500;
-  color: rgba(0, 0, 0, 0.65);
+  color: var(--ant-color-text-secondary);
   margin: 0;
 }
 
 .cockpit-hub__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
 }
 
 .cockpit-hub__card {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 14px 16px;
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  border-radius: 10px;
-  background: #fff;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -91,19 +124,20 @@
 .cockpit-hub__card-head {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .cockpit-hub__card-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: #fff;
   font-weight: 600;
-  font-size: 14px;
+  font-size: 12px;
+  flex-shrink: 0;
 }
 
 .cockpit-hub__card-id {
@@ -114,24 +148,24 @@
 }
 
 .cockpit-hub__card-id h3 {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   margin: 0;
   line-height: 1.2;
 }
 
 .cockpit-hub__card-source {
-  font-size: 11px;
-  color: rgba(0, 0, 0, 0.45);
+  font-size: 10px;
+  color: var(--ant-color-text-tertiary);
 }
 
 .cockpit-hub__card-desc {
-  font-size: 12px;
-  color: rgba(0, 0, 0, 0.55);
+  font-size: 11px;
+  color: var(--ant-color-text-secondary);
   margin: 0;
-  line-height: 1.5;
+  line-height: 1.4;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -140,37 +174,39 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 4px;
-  min-height: 22px;
+  gap: 3px;
+  min-height: 20px;
 }
 
 .cockpit-hub__card-capabilities .ant-tag {
   margin-inline-end: 0;
-  font-size: 11px;
-  line-height: 18px;
-  border-radius: 4px;
+  font-size: 10px;
+  line-height: 16px;
+  padding-inline: 4px;
+  border-radius: 3px;
 }
 
 .cockpit-hub__card-foot {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
+  margin-top: 2px;
 }
 
 .cockpit-hub__card-engine {
-  font-size: 11px;
+  font-size: 10px;
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  color: rgba(0, 0, 0, 0.45);
-  background: rgba(0, 0, 0, 0.04);
-  padding: 2px 6px;
-  border-radius: 4px;
+  color: var(--ant-color-text-tertiary);
+  background: var(--ant-color-fill-quaternary);
+  padding: 1px 5px;
+  border-radius: 3px;
 }
 
 .cockpit-hub__card-actions {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   flex-shrink: 0;
 }
 

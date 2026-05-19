@@ -1078,6 +1078,11 @@ export default function App() {
     setMissionControlOpenRequestKey((value) => value + 1);
     viewMode.enter(cockpitView());
   }, [viewMode]);
+  const exitCockpit = useCallback(() => {
+    startTransition(() => {
+      viewMode.back();
+    });
+  }, [viewMode]);
   const composerProjectRoleTagOptions = useMemo(() => {
     if (!shouldHideEmployeeUi(activeProject)) {
       return [];
@@ -2609,14 +2614,14 @@ export default function App() {
         initialTarget:
           missionControlInitialTarget ??
           (activeProjectId ? { projectId: activeProjectId } : null),
-        onClose: () => viewMode.enter({ kind: "chat" }),
+        onClose: exitCockpit,
       }}
       prdTaskSplitPanelProps={{
         projects,
         repositories,
         activeProjectId,
         activeRepositoryId,
-        onClose: () => viewMode.enter({ kind: "chat" }),
+        onClose: exitCockpit,
       }}
       progressMonitorDrawerProps={{
         open: monitorDrawerTarget != null,

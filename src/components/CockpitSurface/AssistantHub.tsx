@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { App as AntdApp, Button, Dropdown, Empty, Spin, Tag } from "antd";
-import { MessageOutlined, SettingOutlined } from "@ant-design/icons";
+import { CloseOutlined, SettingOutlined } from "@ant-design/icons";
 import type { MenuProps } from "antd";
 import { listAssistants } from "../../services/assistants";
 import type { AssistantEntry } from "../../types/assistant";
@@ -70,19 +70,23 @@ export function AssistantHub({
   return (
     <div className="cockpit-hub">
       <header className="cockpit-hub__header">
-        <div className="cockpit-hub__header-main">
-          <div>
-            <h1 className="cockpit-hub__title">助手 Hub</h1>
-            <p className="cockpit-hub__subtitle">
-              {activeProjectName
-                ? `当前工作区:${activeProjectName}。选择一个助手开始工作。`
-                : "选择一个助手开始工作。需要拆分 PRD 时建议先在左栏选定一个 Workspace。"}
-            </p>
-          </div>
-          <Button size="small" icon={<MessageOutlined />} onClick={onOpenChat}>
-            返回对话
-          </Button>
+        <div className="cockpit-hub__header-top">
+          <h1 className="cockpit-hub__title">助手 Hub</h1>
+          <button
+            type="button"
+            className="cockpit-hub__close-btn"
+            aria-label="关闭"
+            title="关闭"
+            onClick={onOpenChat}
+          >
+            <CloseOutlined />
+          </button>
         </div>
+        <p className="cockpit-hub__subtitle">
+          {activeProjectName
+            ? `当前工作区：${activeProjectName}。选择一个助手开始工作。`
+            : "选择一个助手开始工作。需要拆分 PRD 时建议先在左栏选定一个 Workspace。"}
+        </p>
       </header>
 
       {builtinPrdSplit ? (
@@ -176,7 +180,7 @@ function AssistantCard({ assistant, disabled, disabledHint, onSelect, settingsIt
         <div className="cockpit-hub__card-actions">
           {settingsItems ? (
             <Dropdown menu={{ items: settingsItems }} trigger={["click"]} placement="bottomRight">
-              <Button size="small" icon={<SettingOutlined />} aria-label="配置助手能力">
+              <Button size="small" type="text" icon={<SettingOutlined />} aria-label="配置助手能力">
                 配置
               </Button>
             </Dropdown>
