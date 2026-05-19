@@ -360,6 +360,7 @@ export default function App() {
     handleCreateProject,
     handleUpdateProject,
     handleDeleteProject,
+    handleAddRepositoryToProject,
     handleAddRepositoryPathToProject,
     handleAddFloatingRepository,
     handlePromoteFloatingRepositoryToProject,
@@ -2108,6 +2109,7 @@ export default function App() {
         pinnedProjectIds,
         onTogglePinProject: togglePinProject,
         onAddFloatingRepository: handleAddFloatingRepository,
+        onAddRepositoryToProject: handleAddRepositoryToProject,
         onReconcileProject: async (projectId, mode: ReconcileProjectMode) => {
           try {
             const r = await handleReconcileProjectWorkspace(projectId, mode);

@@ -466,21 +466,7 @@ function ProjectRow({
 
       {expanded && (
         <div className="app-repository-sessions">
-          {projectRepos.length === 0 ? (
-            <button
-              type="button"
-              className="app-session-item app-session-item--empty-action"
-              onClick={() => onAddRepositoryToProject?.(project.id)}
-              disabled={!onAddRepositoryToProject}
-            >
-              <span className="app-repository-add-icon" aria-hidden>
-                <PlusIcon />
-              </span>
-              <span className="app-session-item-name">
-                关联仓库
-              </span>
-            </button>
-          ) : (
+          {projectRepos.length > 0 ? (
             <ProjectRepositoryRows
               project={project}
               projectRepos={projectRepos}
@@ -506,7 +492,18 @@ function ProjectRow({
                 }) === "multi_repo"
               }
             />
-          )}
+          ) : null}
+          <button
+            type="button"
+            className="app-repository-item app-repository-item--add-repo"
+            onClick={() => onAddRepositoryToProject?.(project.id)}
+            disabled={!onAddRepositoryToProject}
+          >
+            <span className="app-repository-add-icon" aria-hidden>
+              <PlusIcon />
+            </span>
+            <span className="app-repository-name app-repository-name--add">关联仓库</span>
+          </button>
         </div>
       )}
     </div>

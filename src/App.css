@@ -2291,8 +2291,50 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 
 /* ── Session List under Project ── */
 .app-repository-sessions {
-  margin: 0 0 4px;
+  margin: 0 0 2px;
   padding-left: 10px;
+}
+
+.app-repository-item--add-repo {
+  width: calc(100% + 10px);
+  margin-top: 1px;
+  margin-left: -10px;
+  padding-left: 0;
+  padding-right: 0;
+  border: none;
+  justify-content: center;
+  color: var(--ant-color-text-tertiary);
+  cursor: pointer;
+}
+
+.app-repository-item--add-repo .app-repository-add-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.app-repository-item--add-repo .app-repository-add-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+.app-repository-name--add {
+  flex: 0 1 auto;
+  color: var(--ant-color-text-tertiary);
+  font-size: 11px;
+}
+
+.app-repository-item--add-repo:hover:not(:disabled) {
+  background: var(--ant-color-fill-tertiary);
+}
+
+.app-repository-item--add-repo:hover:not(:disabled) .app-repository-name--add,
+.app-repository-item--add-repo:hover:not(:disabled) .app-repository-add-icon {
+  color: var(--ant-color-text-secondary);
+}
+
+.app-repository-item--add-repo:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 
 .app-repository-employees {
@@ -2352,16 +2394,6 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 .app-session-item:disabled {
   cursor: default;
   opacity: 0.72;
-}
-
-.app-session-item--empty-action {
-  border: 1px dashed var(--ant-color-border);
-  color: var(--ant-color-text);
-}
-
-.app-session-item--empty-action:hover:not(:disabled) {
-  border-color: var(--ant-color-primary);
-  color: var(--ant-color-primary);
 }
 
 .app-session-item-name {
