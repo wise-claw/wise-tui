@@ -57,6 +57,7 @@ describe("PromptsPanel", () => {
     );
 
     expect(html).toContain("当前提示词作用域");
+    expect(html).toContain('aria-label="关闭"');
     expect(html).toContain("调用用途");
     expect(html).toContain("新建用途");
     expect(html).toContain("提示词契约");

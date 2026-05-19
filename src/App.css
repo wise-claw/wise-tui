@@ -433,6 +433,10 @@ body {
   z-index: 2;
 }
 
+.app-prompts-workspace-layer .app-prompts-panel__scope-bar {
+  margin-right: 2px;
+}
+
 .app-author-config-sider--parked.ant-layout-sider {
   flex: 0 0 0 !important;
   width: 0 !important;

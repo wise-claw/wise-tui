@@ -70,7 +70,7 @@ describe("WorkflowConfigModal", () => {
     expect(html).toContain("工作区分发");
     expect(html).toContain("协议库");
     expect(html).toContain("新建协议");
-    expect(html).toContain("搜索协议名称");
+    expect(html).toContain("搜索协议");
     expect(html).toContain("委派画布");
     expect(html).toContain("发布协议");
     expect(html).toContain("所属工作区");

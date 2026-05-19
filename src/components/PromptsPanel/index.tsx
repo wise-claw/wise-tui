@@ -17,6 +17,7 @@ import {
   Spin,
   Switch,
   Tag,
+  Tooltip,
   TreeSelect,
   Typography,
 } from "antd";
@@ -423,10 +424,21 @@ export function PromptsPanel({
     <Layout.Content className="app-prd-task-panel app-prompts-panel--compact">
       <Space orientation="vertical" size={8} className="app-prd-task-panel__stack">
         <div className="app-prompts-panel__scope-bar" aria-label="当前提示词作用域">
-          <span>{scopeLabel}</span>
-          <span>{scopeTypeLabel}</span>
-          <span>{enabledSlotCount}/{slotIdList.length} 启用</span>
-          <Button type="text" size="small" icon={<CloseOutlined />} onClick={onClose} aria-label="关闭" />
+          <div className="app-prompts-panel__scope-bar-chips">
+            <span>{scopeLabel}</span>
+            <span>{scopeTypeLabel}</span>
+            <span>{enabledSlotCount}/{slotIdList.length} 启用</span>
+          </div>
+          <Tooltip title="关闭" mouseEnterDelay={0.35}>
+            <Button
+              type="text"
+              size="small"
+              className="app-prompts-panel__close-btn"
+              icon={<CloseOutlined />}
+              onClick={onClose}
+              aria-label="关闭"
+            />
+          </Tooltip>
         </div>
 
         {showLoadingShell ? (

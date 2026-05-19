@@ -9,7 +9,6 @@ import {
 import {
   Alert,
   Button,
-  Card,
   Empty,
   Form,
   Input,
@@ -139,10 +138,6 @@ export function WorkflowConfigModal({
   const stageCount = useMemo(
     () => templates.reduce((total, template) => total + template.stages.length, 0),
     [templates],
-  );
-  const workflowProjectLinkCount = useMemo(
-    () => new Set(Object.values(workflowProjectIds).flat()).size,
-    [workflowProjectIds],
   );
   const canvasStageCount = useMemo(
     () => canvasSnapshot.nodes.filter((node) => node.kind === "material").length,
@@ -411,43 +406,41 @@ export function WorkflowConfigModal({
         ))}
       </div>
 
-      <div className="app-workflow-config-scope-bar" aria-label="当前协议状态">
-        <span>当前画布：{canvasStageCount} 个阶段</span>
-        <span>{canvasFlowEdgeCount} 条连线</span>
-        <span>{canvasAssignedAgentRoleCount} 个已绑定角色</span>
-        <span>{workflowProjectLinkCount} 个工作区已挂接协议</span>
-      </div>
-
       <div className="app-workflow-config-layout">
-        <div className="app-workflow-config-sidebar">
-          <Space orientation="vertical" size={10} className="app-workflow-config-sidebar-space">
-            <div className="app-workflow-config-sidebar-header">
+        <aside className="app-workflow-config-sidebar" aria-label="协议库">
+          <div className="app-workflow-config-sidebar-header">
+            <div className="app-workflow-config-sidebar-heading">
               <Typography.Text strong>协议库</Typography.Text>
-              <Button
-                size="small"
-                type={!editingTemplateId ? "primary" : "default"}
-                onClick={resetEditor}
-                className="app-workflow-config-create-btn"
-              >
-                新建协议
-              </Button>
+              <Typography.Text type="secondary" className="app-workflow-config-sidebar-count">
+                {templates.length}
+              </Typography.Text>
             </div>
-            <div className="app-workflow-config-filter-row">
-              <Input.Search
-                size="small"
-                allowClear
-                placeholder="搜索协议名称"
-                value={teamKeyword}
-                onChange={(event) => setTeamKeyword(event.target.value)}
-              />
-              <Select
-                size="small"
-                value={statusFilter}
-                options={statusFilterOptions}
-                onChange={(value) => setStatusFilter(value)}
-                className="app-workflow-config-filter-status"
-              />
-            </div>
+            <Button
+              size="small"
+              type={!editingTemplateId ? "primary" : "default"}
+              onClick={resetEditor}
+              className="app-workflow-config-create-btn"
+            >
+              新建协议
+            </Button>
+          </div>
+          <div className="app-workflow-config-filter-row">
+            <Input.Search
+              size="small"
+              allowClear
+              placeholder="搜索协议"
+              value={teamKeyword}
+              onChange={(event) => setTeamKeyword(event.target.value)}
+            />
+            <Select
+              size="small"
+              value={statusFilter}
+              options={statusFilterOptions}
+              onChange={(value) => setStatusFilter(value)}
+              className="app-workflow-config-filter-status"
+            />
+          </div>
+          <div className="app-workflow-config-protocol-list">
             {templates.length === 0 ? (
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无委派协议" />
             ) : filteredTemplates.length === 0 ? (
@@ -457,108 +450,136 @@ export function WorkflowConfigModal({
                 const status = graphStatusByWorkflowId[row.id] ?? "none";
                 const active = editingTemplateId === row.id;
                 return (
-                  <Card
+                  <div
                     key={row.id}
-                    size="small"
-                    hoverable
+                    role="button"
+                    tabIndex={0}
+                    className={`app-workflow-config-protocol-item${active ? " app-workflow-config-protocol-item--active" : ""}`}
                     onClick={() => startEditingTemplate(row)}
-                    className={`app-workflow-config-team-card${active ? " app-workflow-config-team-card--active" : ""}`}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        void startEditingTemplate(row);
+                      }
+                    }}
                   >
-                    <Space orientation="vertical" size={6} className="app-workflow-config-team-card-inner">
-                      <div className="app-workflow-config-team-card-title-row">
-                        <Typography.Text strong ellipsis className="app-workflow-config-team-card-title">
-                          {row.name}
-                        </Typography.Text>
-                      </div>
-                      <Typography.Text type="secondary" className="app-workflow-config-team-card-meta">
-                        阶段数：{row.stages.length}
+                    <div className="app-workflow-config-protocol-item__main">
+                      <Typography.Text strong ellipsis className="app-workflow-config-protocol-item__name">
+                        {row.name}
                       </Typography.Text>
-                      <div className="app-workflow-config-team-card-actions">
-                        <Space size={4} className="app-workflow-config-team-card-tags">
-                          {row.isDefault ? <Tag color="gold">默认</Tag> : null}
-                          {status === "published" ? <Tag color="success">已发布</Tag> : null}
-                          {status === "draft" ? <Tag color="processing">草稿</Tag> : null}
-                          {status === "unknown" ? <Tag color="warning">未知</Tag> : null}
-                          {status === "none" ? <Tag>未生成</Tag> : null}
-                        </Space>
-                        <Popconfirm
-                          title="确认删除该协议？"
-                          onConfirm={() => handleDeleteTemplate(row.id)}
-                          okText="删除"
-                          cancelText="取消"
+                      <Typography.Text type="secondary" className="app-workflow-config-protocol-item__meta">
+                        {row.stages.length} 个阶段
+                      </Typography.Text>
+                    </div>
+                    <div className="app-workflow-config-protocol-item__footer">
+                      <Space size={4} wrap className="app-workflow-config-protocol-item__tags">
+                        {row.isDefault ? <Tag color="gold">默认</Tag> : null}
+                        {status === "published" ? <Tag color="success">已发布</Tag> : null}
+                        {status === "draft" ? <Tag color="processing">草稿</Tag> : null}
+                        {status === "unknown" ? <Tag color="warning">未知</Tag> : null}
+                        {status === "none" ? <Tag>未生成</Tag> : null}
+                      </Space>
+                      <Popconfirm
+                        title="确认删除该协议？"
+                        onConfirm={() => handleDeleteTemplate(row.id)}
+                        okText="删除"
+                        cancelText="取消"
+                      >
+                        <Button
+                          size="small"
+                          danger
+                          type="link"
+                          className="app-workflow-config-protocol-item__delete"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                          }}
                         >
-                          <Button
-                            size="small"
-                            danger
-                            type="link"
-                            className="app-workflow-config-team-card-delete"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                            }}
-                          >
-                            删除
-                          </Button>
-                        </Popconfirm>
-                      </div>
-                    </Space>
-                  </Card>
+                          删除
+                        </Button>
+                      </Popconfirm>
+                    </div>
+                  </div>
                 );
               })
             )}
-          </Space>
-        </div>
+          </div>
+        </aside>
 
-        <Space orientation="vertical" size={12} className="app-workflow-config-editor">
-          <Form
-            form={form}
-            layout="inline"
-            initialValues={{ name: "", isDefault: false }}
-            className="app-workflow-config-editor-form"
-          >
-            <div className="app-workflow-config-editor-form-left">
-              <Form.Item name="name">
-                <Input placeholder="协议名称" className="app-workflow-config-name-input" />
-              </Form.Item>
-              <Form.Item name="isDefault" valuePropName="checked">
-                <Switch checkedChildren="默认" unCheckedChildren="非默认" />
-              </Form.Item>
-              {projects && projects.length > 0 && (
-                <Form.Item label="所属工作区">
-                  <Select
-                    mode="multiple"
-                    allowClear
-                    placeholder="所属工作区"
-                    maxTagCount="responsive"
-                    value={editingProjectIds}
-                    onChange={(value: string[]) => setEditingProjectIds(value)}
-                    options={projects.map((p) => ({
-                      value: p.id,
-                      label: p.name,
-                    }))}
-                  />
-                </Form.Item>
-              )}
+        <main className="app-workflow-config-workspace">
+          <header className="app-workflow-config-toolbar">
+            <div className="app-workflow-config-toolbar__head">
+              <div className="app-workflow-config-toolbar__identity">
+                <Typography.Text className="app-workflow-config-toolbar__eyebrow">委派画布</Typography.Text>
+                <Typography.Text strong className="app-workflow-config-toolbar__title">
+                  {editingTemplate ? editingTemplate.name : "新建委派协议"}
+                </Typography.Text>
+              </div>
+              <Space size={6} wrap className="app-workflow-config-toolbar__stats">
+                <Tag icon={<NodeIndexOutlined />}>{canvasStageCount} 阶段</Tag>
+                <Tag icon={<BranchesOutlined />}>{canvasFlowEdgeCount} 连线</Tag>
+                <Tag icon={<TeamOutlined />}>{canvasAssignedAgentRoleCount} 角色</Tag>
+                {currentGraphStatus === "published" ? <Tag color="success">已发布</Tag> : null}
+                {currentGraphStatus === "draft" ? <Tag color="processing">草稿</Tag> : null}
+                {currentGraphStatus === "unknown" ? <Tag color="warning">状态未知</Tag> : null}
+                {currentGraphStatus === "none" ? <Tag>未生成</Tag> : null}
+              </Space>
             </div>
-            <div className="app-workflow-config-editor-form-actions">
-              <Form.Item>
+
+            <Form
+              form={form}
+              layout="inline"
+              initialValues={{ name: "", isDefault: false }}
+              className="app-workflow-config-toolbar__form"
+            >
+              <div className="app-workflow-config-toolbar__fields">
+                <div className="app-workflow-config-toolbar__field">
+                  <span className="app-workflow-config-toolbar__label">协议名称</span>
+                  <Form.Item name="name">
+                    <Input placeholder="输入协议名称" className="app-workflow-config-name-input" />
+                  </Form.Item>
+                </div>
+                <div className="app-workflow-config-toolbar__field app-workflow-config-toolbar__field--switch">
+                  <span className="app-workflow-config-toolbar__label">默认协议</span>
+                  <Form.Item name="isDefault" valuePropName="checked">
+                    <Switch checkedChildren="是" unCheckedChildren="否" />
+                  </Form.Item>
+                </div>
+                {projects && projects.length > 0 ? (
+                  <div className="app-workflow-config-toolbar__field app-workflow-config-toolbar__field--projects">
+                    <span className="app-workflow-config-toolbar__label">所属工作区</span>
+                    <Form.Item>
+                      <Select
+                        mode="multiple"
+                        allowClear
+                        placeholder="选择工作区"
+                        maxTagCount="responsive"
+                        value={editingProjectIds}
+                        onChange={(value: string[]) => setEditingProjectIds(value)}
+                        options={projects.map((p) => ({
+                          value: p.id,
+                          label: p.name,
+                        }))}
+                        className="app-workflow-config-project-select"
+                      />
+                    </Form.Item>
+                  </div>
+                ) : null}
+              </div>
+              <div className="app-workflow-config-toolbar__actions">
                 <Button size="small" type="primary" loading={loading} onClick={() => void handleSave()}>
                   {editingTemplate ? "保存草稿" : "创建草稿"}
                 </Button>
-              </Form.Item>
-              <Form.Item>
                 <Button size="small" loading={loading} onClick={() => void handlePublish()}>
                   发布协议
                 </Button>
-              </Form.Item>
-              {editingTemplate && (
-                <Form.Item>
+                {editingTemplate ? (
                   <Button size="small" onClick={resetEditor}>
                     取消编辑
                   </Button>
-                </Form.Item>
-              )}
-            </div>
-          </Form>
+                ) : null}
+              </div>
+            </Form>
+          </header>
 
           {validationErrors.length > 0 && (
             <Alert
@@ -588,23 +609,7 @@ export function WorkflowConfigModal({
             />
           )}
 
-          <div className="app-workflow-config-stage-panel">
-            <div className="app-workflow-config-stage-header">
-              <div>
-                <Typography.Text className="app-workflow-config-stage-eyebrow">委派画布</Typography.Text>
-                <Typography.Text strong className="app-workflow-config-stage-title">
-                  {editingTemplate ? editingTemplate.name : "新建委派协议"}
-                </Typography.Text>
-              </div>
-              <Space size={6} wrap className="app-workflow-config-stage-tags">
-                <Tag icon={<NodeIndexOutlined />}>{canvasStageCount} 阶段</Tag>
-                <Tag icon={<BranchesOutlined />}>{canvasFlowEdgeCount} 连线</Tag>
-                {currentGraphStatus === "published" ? <Tag color="success">已发布</Tag> : null}
-                {currentGraphStatus === "draft" ? <Tag color="processing">草稿</Tag> : null}
-                {currentGraphStatus === "unknown" ? <Tag color="warning">状态未知</Tag> : null}
-                {currentGraphStatus === "none" ? <Tag>未生成</Tag> : null}
-              </Space>
-            </div>
+          <div className="app-workflow-config-canvas-shell">
             <WorkflowCanvasEditorImpl
               key={editingTemplateId ?? "new-delegation-workflow"}
               value={canvasSnapshot}
@@ -614,8 +619,7 @@ export function WorkflowConfigModal({
               repositoryPath={repositoryPath}
             />
           </div>
-
-        </Space>
+        </main>
       </div>
     </div>
   );
