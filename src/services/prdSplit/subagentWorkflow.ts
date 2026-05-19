@@ -99,7 +99,7 @@ export async function runPrdSplitSubagentWorkflow(
   }
 
   const clusterRuns: PrdSplitSubagentClusterRun[] = [];
-  const normalizedResults: SplitResult[] = [];
+  const normalizedResults: Array<{ clusterId: string; result: SplitResult }> = [];
   for (const cluster of plan.clusters) {
     const executionRootPath = buildClusterExecutionRoot(cluster, plannerRepos);
     input.onEvent?.({ type: "cluster-start", cluster, executionRootPath });
@@ -149,7 +149,7 @@ export async function runPrdSplitSubagentWorkflow(
       result,
     });
     if (result.normalized && result.errors.length === 0) {
-      normalizedResults.push(result.normalized);
+      normalizedResults.push({ clusterId: cluster.id, result: result.normalized });
     }
   }
 
@@ -200,9 +200,10 @@ function buildRequirementsIndexV2(prd: PrdDocument): RequirementsIndexV2 {
 function mergeClusterSplitResults(
   prd: PrdDocument,
   context: TaskSplitContext,
-  results: SplitResult[],
+  clusterResults: { clusterId: string; result: SplitResult }[],
   prdMarkdown: string,
 ): SplitResult {
+  const results = namespaceClusterSplitResults(clusterResults);
   const tasks = results.flatMap((result) => result.splitTasks);
   const anchorDescriptors = Object.assign(
     {},
@@ -236,4 +237,55 @@ function mergeClusterSplitResults(
   return syncTaskAnchorTextsFromRequirements(
     remapSplitResultAnchorOffsetsFromMarkdown(prdMarkdown, merged),
   );
+}
+
+function namespaceClusterSplitResults(
+  clusterResults: { clusterId: string; result: SplitResult }[],
+): SplitResult[] {
+  if (clusterResults.length <= 1) {
+    return clusterResults.map(({ result }) => result);
+  }
+  return clusterResults.map(({ clusterId, result }) => namespaceClusterSplitResult(clusterId, result));
+}
+
+function namespaceClusterSplitResult(clusterId: string, result: SplitResult): SplitResult {
+  const idMap = new Map(result.splitTasks.map((task) => [task.id, namespaceTaskId(clusterId, task.id)]));
+  const remapTaskId = (taskId: string): string => idMap.get(taskId) ?? taskId;
+  const remapRecord = <T>(record: Record<string, T> | undefined): Record<string, T> | undefined => {
+    if (!record) return undefined;
+    const out: Record<string, T> = {};
+    for (const [taskId, value] of Object.entries(record)) {
+      out[remapTaskId(taskId)] = value;
+    }
+    return Object.keys(out).length > 0 ? out : undefined;
+  };
+
+  return {
+    ...result,
+    splitTasks: result.splitTasks.map((task) => ({
+      ...task,
+      id: remapTaskId(task.id),
+      dependencies: task.dependencies.map(remapTaskId),
+    })),
+    taskAnchorDescriptors: remapRecord(result.taskAnchorDescriptors),
+    taskAnchorTexts: remapRecord(result.taskAnchorTexts),
+    taskAnchorPositions: remapRecord(result.taskAnchorPositions),
+    claudeSplitMapping: result.claudeSplitMapping
+      ? {
+        ...result.claudeSplitMapping,
+        taskRequirementLinks: result.claudeSplitMapping.taskRequirementLinks.map((link) => ({
+          ...link,
+          taskId: remapTaskId(link.taskId),
+        })),
+        idRemap: [
+          ...(result.claudeSplitMapping.idRemap ?? []),
+          ...Array.from(idMap.entries()).map(([from, to]) => ({ from, to })),
+        ],
+      }
+      : undefined,
+  };
+}
+
+function namespaceTaskId(clusterId: string, taskId: string): string {
+  return `${clusterId}-${taskId}`;
 }

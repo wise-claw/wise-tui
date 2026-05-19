@@ -19,6 +19,72 @@ const invoke = mock(async (command: string, payload?: unknown) => {
     };
   }).input;
   const clusterId = input?.clusterId ?? "cluster-frontend-1";
+  const requirementId = "req-functional-1";
+  const requirementText = clusterId.includes("backend")
+    ? "backend API"
+    : "web login";
+  const tasks = [
+    {
+      id: "task-1",
+      title: `Task for ${requirementId}`,
+      scope: `Implement ${requirementId}`,
+      type: "feature",
+      description: `Implement ${requirementId}`,
+      role: clusterId.includes("backend") ? "backend" : "frontend",
+      status: "not_executable",
+      executionStatus: "not_executable",
+      depends_on: [],
+      deliverables: ["Build"],
+      acceptance_criteria: ["Done"],
+      test_plan: ["Run focused tests"],
+      missing_prerequisites: ["Needs review"],
+      missingPrerequisites: ["Needs review"],
+      risk_notes: [],
+      subtasks: ["Build"],
+      dod: ["Done"],
+      dependencies: [],
+      sourceRequirementIds: [requirementId],
+      taskAnchors: {
+        from: 0,
+        to: 20,
+        textHash: "hash",
+        contextBefore: requirementText,
+        contextAfter: requirementText,
+      },
+      clusterId,
+    },
+    ...(clusterId.includes("backend")
+      ? [{
+        id: "task-2",
+        title: "Backend contract follow-up",
+        scope: "Wire backend contract",
+        type: "feature",
+        description: "Wire backend contract",
+        role: "backend",
+        status: "not_executable",
+        executionStatus: "not_executable",
+        depends_on: ["task-1"],
+        deliverables: ["Build"],
+        acceptance_criteria: ["Done"],
+        test_plan: ["Run focused tests"],
+        missing_prerequisites: ["Needs review"],
+        missingPrerequisites: ["Needs review"],
+        risk_notes: [],
+        subtasks: ["Build"],
+        dod: ["Done"],
+        dependencies: ["task-1"],
+        sourceRequirementIds: [requirementId],
+        taskAnchors: {
+          from: 0,
+          to: 20,
+          textHash: "hash-2",
+          contextBefore: requirementText,
+          contextAfter: requirementText,
+        },
+        clusterId,
+      }]
+      : []),
+  ];
   const raw: DispatchClusterRawOutput = {
     runId: `run-${clusterId}`,
     runDir: `/tmp/run-${clusterId}`,
@@ -29,34 +95,22 @@ const invoke = mock(async (command: string, payload?: unknown) => {
     rawResultPath: `/tmp/run-${clusterId}/split-result.raw.json`,
     stdoutTruncatedPreview: "",
     rawOutput: {
-      tasks: [
-        {
-          id: "task-1",
-          title: "Task for req-functional-1",
-          description: "Implement req-functional-1",
-          role: "frontend",
-          executionStatus: "not_executable",
-          missingPrerequisites: ["Needs review"],
-          subtasks: ["Build"],
-          dod: ["Done"],
-          dependencies: [],
-          sourceRequirementIds: ["req-functional-1"],
-          taskAnchors: {
-            from: 0,
-            to: 20,
-            textHash: "hash",
-            contextBefore: prd.functional[0] ?? "",
-            contextAfter: prd.functional[0] ?? "",
-          },
-          clusterId,
-        },
-      ],
-      claudeSplitMapping: {
-        version: 1,
-        taskRequirementLinks: [
-          { taskId: "task-1", requirementIds: ["req-functional-1"] },
-        ],
+      repo_type: clusterId.includes("backend") ? "backend" : "frontend",
+      context_summary: {
+        tech_stack: [],
+        key_dirs: [],
+        constraints: [],
+        existing_capabilities: [],
+        unknowns: [],
       },
+      tasks,
+      execution_order: tasks.map((task) => task.id),
+      global_missing_prerequisites: [],
+      assumptions: [],
+      version: 1,
+      taskRequirementLinks: [
+        ...tasks.map((task) => ({ taskId: task.id, requirementIds: [requirementId] })),
+      ],
     },
     claudeSessionId: "sid-1",
   };
@@ -102,6 +156,15 @@ const repositories: Repository[] = [
   },
 ];
 
+const backendRepository: Repository = {
+  id: 2,
+  name: "api",
+  path: "/repos/api",
+  repositoryType: "backend",
+  createdAt: "",
+  updatedAt: "",
+};
+
 describe("runPrdSplitSubagentWorkflow", () => {
   test("starts clean", () => {
     invoke.mockClear();
@@ -140,8 +203,51 @@ describe("runPrdSplitSubagentWorkflow", () => {
       },
     });
     expect(result.result.splitTasks).toHaveLength(1);
+    expect(result.result.splitTasks[0]?.id).toBe("task-1");
     expect(result.result.splitTasks[0]?.sourceRequirementIds).toEqual(["req-functional-1"]);
     expect(events).toEqual(["plan", "cluster-start", "parent-created", "cluster-complete"]);
+  });
+
+  test("namespaces task ids when merging multiple cluster splitter outputs", async () => {
+    invoke.mockClear();
+    const result = await runPrdSplitSubagentWorkflow({
+      project: { ...project, repositoryIds: [1, 2] },
+      repositories: [...repositories, backendRepository],
+      prd: {
+        ...prd,
+        functional: ["Build frontend web login UI", "Build backend API login endpoint"],
+      },
+      prdMarkdown: "# Feature\n\n- Build frontend web login UI\n- Build backend API login endpoint",
+      context: {
+        mode: "project",
+        projectId: project.id,
+        projectName: project.name,
+      },
+    });
+
+    expect(result.result.splitTasks.map((task) => task.id)).toEqual([
+      "cluster-frontend-1-task-1",
+      "cluster-backend-2-task-1",
+      "cluster-backend-2-task-2",
+    ]);
+    expect(result.result.splitTasks[0]?.dependencies).toEqual([]);
+    expect(result.result.splitTasks[1]?.dependencies).toEqual([]);
+    expect(result.result.splitTasks[2]?.dependencies).toEqual(["cluster-backend-2-task-1"]);
+    expect(result.result.claudeSplitMapping?.taskRequirementLinks.map((link) => link.taskId)).toEqual([
+      "cluster-frontend-1-task-1",
+      "cluster-backend-2-task-1",
+      "cluster-backend-2-task-2",
+    ]);
+    expect(Object.keys(result.result.taskAnchorDescriptors ?? {})).toEqual([
+      "cluster-frontend-1-task-1",
+      "cluster-backend-2-task-1",
+      "cluster-backend-2-task-2",
+    ]);
+    expect(Object.keys(result.result.taskAnchorTexts ?? {})).toEqual([
+      "cluster-frontend-1-task-1",
+      "cluster-backend-2-task-1",
+      "cluster-backend-2-task-2",
+    ]);
   });
 
   test("requires a workspace rootPath and at least one associated repository", async () => {

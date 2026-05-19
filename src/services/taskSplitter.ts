@@ -246,31 +246,91 @@ export function migrateStoredSplitResult(result: SplitResult): SplitResult {
     description: sanitizeLegacyGeneratedDescription(task.description ?? ""),
     flowStatus: normalizeFlowStatus(task.flowStatus),
   }));
-  const hasAnyStatus =
-    sanitizedSplit.some((task) => task.executionStatus !== undefined)
-    || sanitizedExec.some((task) => task.executionStatus !== undefined);
-  if (hasAnyStatus) {
-    return refreshSplitResultDerivedFields({
-      ...base,
-      splitTasks: sanitizedSplit,
-      executableTasks: sanitizedExec,
-      taskAnchorDescriptors: mergedAnchorDescriptors,
-      taskAnchorTexts: anchorTexts,
-      taskAnchorPositions: anchorPositions,
-    });
-  }
-  const splitReinit = withInitialExecutionStatuses(base.context, sanitizedSplit);
-  const splitWithAnchors = syncTaskAnchorsIntoTasks(splitReinit, mergedAnchorDescriptors);
-  return {
+  const deduped = dedupeDuplicateStoredTaskIds({
     ...base,
     taskAnchorDescriptors: mergedAnchorDescriptors,
     taskAnchorTexts: anchorTexts,
     taskAnchorPositions: anchorPositions,
-    splitTasks: splitWithAnchors,
+    splitTasks: sanitizedSplit,
     executableTasks: sanitizedExec,
+  });
+  const hasAnyStatus =
+    deduped.splitTasks.some((task) => task.executionStatus !== undefined)
+    || deduped.executableTasks.some((task) => task.executionStatus !== undefined);
+  if (hasAnyStatus) {
+    return refreshSplitResultDerivedFields(deduped);
+  }
+  const splitReinit = withInitialExecutionStatuses(deduped.context, deduped.splitTasks);
+  const splitWithAnchors = syncTaskAnchorsIntoTasks(splitReinit, deduped.taskAnchorDescriptors);
+  return {
+    ...deduped,
+    splitTasks: splitWithAnchors,
+    executableTasks: deduped.executableTasks,
     criticalPath: buildCriticalPath(splitWithAnchors),
     parallelGroups: buildParallelGroups(splitWithAnchors),
-    unmetPreconditions: collectUnmetPreconditions(base.context, splitWithAnchors),
+    unmetPreconditions: collectUnmetPreconditions(deduped.context, splitWithAnchors),
+  };
+}
+
+function dedupeDuplicateStoredTaskIds(result: SplitResult): SplitResult {
+  const counts = new Map<string, number>();
+  for (const task of result.splitTasks) {
+    const id = task.id.trim();
+    if (!id) continue;
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  if (![...counts.values()].some((count) => count > 1)) return result;
+
+  const seen = new Map<string, number>();
+  const firstIdRemap = new Map<string, string>();
+  const splitTasks = result.splitTasks.map((task) => {
+    const originalId = task.id.trim();
+    if (!originalId || (counts.get(originalId) ?? 0) <= 1) {
+      firstIdRemap.set(originalId, originalId);
+      return task;
+    }
+    const occurrence = (seen.get(originalId) ?? 0) + 1;
+    seen.set(originalId, occurrence);
+    const nextId = occurrence === 1 ? originalId : `${originalId}-${occurrence}`;
+    if (!firstIdRemap.has(originalId)) firstIdRemap.set(originalId, nextId);
+    return {
+      ...task,
+      id: nextId,
+      dependencies: task.dependencies.map((dep) => firstIdRemap.get(dep) ?? dep),
+    };
+  });
+  const taskIds = new Set(splitTasks.map((task) => task.id));
+  const remapRef = (taskId: string): string => firstIdRemap.get(taskId) ?? taskId;
+  const remapRecord = <T>(record: Record<string, T> | undefined): Record<string, T> | undefined => {
+    if (!record) return undefined;
+    const out: Record<string, T> = {};
+    for (const [taskId, value] of Object.entries(record)) {
+      const nextId = remapRef(taskId);
+      if (taskIds.has(nextId)) out[nextId] = value;
+    }
+    return Object.keys(out).length > 0 ? out : undefined;
+  };
+
+  return {
+    ...result,
+    splitTasks,
+    executableTasks: result.executableTasks.map((task) => ({
+      ...task,
+      dependencies: task.dependencies.map(remapRef),
+      splitSourceTaskId: task.splitSourceTaskId ? remapRef(task.splitSourceTaskId) : task.splitSourceTaskId,
+    })),
+    taskAnchorDescriptors: remapRecord(result.taskAnchorDescriptors),
+    taskAnchorTexts: remapRecord(result.taskAnchorTexts),
+    taskAnchorPositions: remapRecord(result.taskAnchorPositions),
+    claudeSplitMapping: result.claudeSplitMapping
+      ? {
+        ...result.claudeSplitMapping,
+        taskRequirementLinks: result.claudeSplitMapping.taskRequirementLinks.map((link) => ({
+          ...link,
+          taskId: remapRef(link.taskId),
+        })),
+      }
+      : undefined,
   };
 }
 
