@@ -10,6 +10,7 @@ import { repositoryFolderBasename } from "../../utils/repositoryType";
 import {
   ChatIcon,
   CodeGraphIcon,
+  ExecutableTasksIcon,
   MoreIcon,
   RepositoryTypeIcon,
   RepoDragHandleIcon,
@@ -171,6 +172,41 @@ export function SidebarRequirementAction({
   );
 }
 
+export function SidebarExecutableTasksAction({
+  executableCount,
+  onOpen,
+  variant = "repo",
+}: {
+  executableCount: number;
+  onOpen: () => void;
+  variant?: "repo" | "project";
+}) {
+  if (executableCount <= 0) return null;
+
+  const badgeLabel = executableCount > 99 ? "99+" : String(executableCount);
+
+  return (
+    <Tooltip title={`${executableCount} 个可执行任务`} mouseEnterDelay={0.3}>
+      <button
+        type="button"
+        className={`app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--executable-tasks${variant === "project" ? " app-repository-action--project-quick" : ""}`}
+        aria-label={`可执行任务（${executableCount} 个）`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpen();
+        }}
+      >
+        <span className="app-repository-action-icon-wrap">
+          <ExecutableTasksIcon />
+          <span className="app-repository-action-count-badge app-repository-action-count-badge--executable">
+            {badgeLabel}
+          </span>
+        </span>
+      </button>
+    </Tooltip>
+  );
+}
+
 export function RepositoryRow({
   project,
   repository,
@@ -191,8 +227,10 @@ export function RepositoryRow({
   scheduledTasksTotalCount = 0,
   scheduledTasksEnabledCount = 0,
   requirementUnsplitCount = 0,
+  executableTaskCount = 0,
   onOpenScheduledTasks,
   onOpenRequirements,
+  onOpenExecutableTasks,
 }: {
   project: Workspace;
   repository: Repository;
@@ -213,8 +251,10 @@ export function RepositoryRow({
   scheduledTasksTotalCount?: number;
   scheduledTasksEnabledCount?: number;
   requirementUnsplitCount?: number;
+  executableTaskCount?: number;
   onOpenScheduledTasks?: (repository: Repository) => void;
   onOpenRequirements?: (repository: Repository) => void;
+  onOpenExecutableTasks?: (repository: Repository) => void;
 }) {
   const moreItems: MenuProps["items"] = [
     { key: "finder", label: "Finder打开" },
@@ -228,6 +268,9 @@ export function RepositoryRow({
       : []),
     ...(onOpenRequirements
       ? [{ key: "requirements", label: "需求" }] satisfies MenuProps["items"]
+      : []),
+    ...(onOpenExecutableTasks
+      ? [{ key: "executable-tasks", label: "可执行任务" }] satisfies MenuProps["items"]
       : []),
     ...(onCodeGraphGenerateRepository && onCodeGraphViewRepositoryInProject
       ? ([
@@ -243,7 +286,7 @@ export function RepositoryRow({
         ] satisfies MenuProps["items"])
       : []),
     { type: "divider" },
-    { key: "detach", label: "移出工作区", danger: true },
+    { key: "detach", label: "移出 Workspace", danger: true },
   ];
 
   const dropRowClass =
@@ -277,9 +320,9 @@ export function RepositoryRow({
             onDragStart={repositoryReorder.onDragStartHandle}
             onDragEnd={repositoryReorder.onDragEndHandle}
             onClick={(e) => e.stopPropagation()}
-            title="拖动排序 / 拖入其它工作区"
+            title="拖动排序 / 拖入其它 Workspace"
             role="button"
-            aria-label="拖动排序或拖入其它工作区"
+            aria-label="拖动排序或拖入其它 Workspace"
           >
             <RepoDragHandleIcon />
           </span>
@@ -324,6 +367,12 @@ export function RepositoryRow({
               onOpen={() => onOpenRequirements(repository)}
             />
           ) : null}
+          {onOpenExecutableTasks ? (
+            <SidebarExecutableTasksAction
+              executableCount={executableTaskCount}
+              onOpen={() => onOpenExecutableTasks(repository)}
+            />
+          ) : null}
           <Dropdown
             rootClassName="app-sidebar-more-menu-dropdown"
             menu={{
@@ -338,6 +387,7 @@ export function RepositoryRow({
                 if (key === "sdd-mode") onConfigureSddMode?.(repository);
                 if (key === "scheduled-tasks") onOpenScheduledTasks?.(repository);
                 if (key === "requirements") onOpenRequirements?.(repository);
+                if (key === "executable-tasks") onOpenExecutableTasks?.(repository);
                 if (key === "code-graph-generate-repo") void Promise.resolve(onCodeGraphGenerateRepository?.(repository));
                 if (key === "code-graph-view-repo") onCodeGraphViewRepositoryInProject?.(project, repository);
               },
@@ -379,8 +429,10 @@ export function FloatingRepositoryRow({
   scheduledTasksTotalCount = 0,
   scheduledTasksEnabledCount = 0,
   requirementUnsplitCount = 0,
+  executableTaskCount = 0,
   onOpenScheduledTasks,
   onOpenRequirements,
+  onOpenExecutableTasks,
 }: {
   repository: StandaloneRepo;
   isActiveRepository: boolean;
@@ -400,8 +452,10 @@ export function FloatingRepositoryRow({
   scheduledTasksTotalCount?: number;
   scheduledTasksEnabledCount?: number;
   requirementUnsplitCount?: number;
+  executableTaskCount?: number;
   onOpenScheduledTasks?: (repository: Repository) => void;
   onOpenRequirements?: (repository: Repository) => void;
+  onOpenExecutableTasks?: (repository: Repository) => void;
 }) {
   const hasMainOwner = Boolean(repository.mainOwnerAgentName?.trim());
   const joinChildren: MenuProps["items"] = joinableProjects.map((project) => ({
@@ -419,6 +473,9 @@ export function FloatingRepositoryRow({
     ...(onOpenRequirements
       ? [{ key: "requirements", label: "需求" }] satisfies MenuProps["items"]
       : []),
+    ...(onOpenExecutableTasks
+      ? [{ key: "executable-tasks", label: "可执行任务" }] satisfies MenuProps["items"]
+      : []),
     ...(onCodeGraphGenerateRepository && onCodeGraphViewFloatingRepository
       ? ([
           {
@@ -433,12 +490,12 @@ export function FloatingRepositoryRow({
         ] satisfies MenuProps["items"])
       : []),
     { type: "divider" },
-    ...(onPromoteToNewProject ? [{ key: "promote", label: "升格为工作区…" }] satisfies MenuProps["items"] : []),
+    ...(onPromoteToNewProject ? [{ key: "promote", label: "升格为 Workspace…" }] satisfies MenuProps["items"] : []),
     ...(onJoinExistingProject && joinChildren.length > 0
       ? ([
           {
             key: "join",
-            label: "加入工作区",
+            label: "加入 Workspace",
             popupClassName: "app-sidebar-more-menu-submenu",
             children: joinChildren,
           },
@@ -493,6 +550,12 @@ export function FloatingRepositoryRow({
               onOpen={() => onOpenRequirements(repository)}
             />
           ) : null}
+          {onOpenExecutableTasks ? (
+            <SidebarExecutableTasksAction
+              executableCount={executableTaskCount}
+              onOpen={() => onOpenExecutableTasks(repository)}
+            />
+          ) : null}
           <Dropdown
             rootClassName="app-sidebar-more-menu-dropdown"
             menu={{
@@ -505,6 +568,7 @@ export function FloatingRepositoryRow({
                 if (key === "sdd-mode") onConfigureSddMode?.(repository);
                 if (key === "scheduled-tasks") onOpenScheduledTasks?.(repository);
                 if (key === "requirements") onOpenRequirements?.(repository);
+                if (key === "executable-tasks") onOpenExecutableTasks?.(repository);
                 if (key === "code-graph-generate-repo") void Promise.resolve(onCodeGraphGenerateRepository?.(repository));
                 if (key === "code-graph-view-repo") onCodeGraphViewFloatingRepository?.(repository);
                 if (key === "promote") onPromoteToNewProject?.(repository);
@@ -555,8 +619,10 @@ export function ProjectRepositoryRows({
   codeGraphIndexStatusByRepoId = {},
   scheduledTasksByRepoId = {},
   requirementUnsplitByRepoId = {},
+  executableTasksByRepoId = {},
   onOpenScheduledTasks,
   onOpenRepositoryRequirements,
+  onOpenRepositoryExecutableTasks,
 }: {
   project: Workspace;
   projectRepos: Repository[];
@@ -579,8 +645,10 @@ export function ProjectRepositoryRows({
   codeGraphIndexStatusByRepoId?: Record<number, SidebarCodeGraphIndexStatus>;
   scheduledTasksByRepoId?: Record<number, { total: number; enabled: number }>;
   requirementUnsplitByRepoId?: Record<number, number>;
+  executableTasksByRepoId?: Record<number, number>;
   onOpenScheduledTasks?: (repository: Repository) => void;
   onOpenRepositoryRequirements?: (repository: Repository) => void;
+  onOpenRepositoryExecutableTasks?: (repository: Repository) => void;
 }) {
   const { message } = AntdApp.useApp();
   const [dropHint, setDropHint] = useState<{ anchorRepositoryId: number; placement: "before" | "after" } | null>(
@@ -632,8 +700,10 @@ export function ProjectRepositoryRows({
             scheduledTasksTotalCount={scheduledTasksByRepoId[repository.id]?.total ?? 0}
             scheduledTasksEnabledCount={scheduledTasksByRepoId[repository.id]?.enabled ?? 0}
             requirementUnsplitCount={requirementUnsplitByRepoId[repository.id] ?? 0}
+            executableTaskCount={executableTasksByRepoId[repository.id] ?? 0}
             onOpenScheduledTasks={onOpenScheduledTasks}
             onOpenRequirements={onOpenRepositoryRequirements}
+            onOpenExecutableTasks={onOpenRepositoryExecutableTasks}
           />
         );
       })}
@@ -738,7 +808,7 @@ function buildRepositoryReorderUi({
       }
       if (dragged.sourceProjectId !== project.id && onMoveRepositoryToProject) {
         void Promise.resolve(onMoveRepositoryToProject(project.id, dragged.repositoryId)).catch((err: unknown) => {
-          messageError("移动仓库到工作区失败");
+          messageError("移动仓库到 Workspace 失败");
           console.error(err);
         });
       }

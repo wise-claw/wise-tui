@@ -1667,11 +1667,11 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   display: flex;
   flex-direction: column;
   border-top: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 70%, transparent);
-  margin: 0 8px 8px;
-  border-radius: 8px;
+  margin: 0;
+  border-radius: 0;
   overflow: hidden;
-  background: var(--ant-color-bg-container);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ant-color-border-secondary) 38%, transparent);
+  background: transparent;
+  box-shadow: none;
   min-height: 0;
 }
 
@@ -1895,7 +1895,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 .app-repository-item--project {
   gap: 2px;
   min-height: 26px;
-  padding: 2px 4px 2px 0;
+  padding: 2px 6px 2px 0;
 }
 
 .app-repository-item--project .app-repository-name-block {
@@ -1942,14 +1942,15 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 .app-left-sidebar .app-repository-row-actions--project {
-  gap: 0;
+  gap: 3px;
+  padding-left: 4px;
 }
 
 .app-left-sidebar .app-repository-item--project .app-repository-action--project-quick {
   opacity: 1;
   pointer-events: auto;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   color: var(--ant-color-text-tertiary);
   background: transparent;
 }
@@ -2145,8 +2146,9 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 0;
+  gap: 2px;
   flex-shrink: 0;
+  padding-left: 4px;
 }
 
 .app-left-sidebar .app-repository-row-actions .app-repository-action {
@@ -2159,18 +2161,19 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 .app-left-sidebar .app-repository-row-actions .app-repository-action--requirement,
+.app-left-sidebar .app-repository-row-actions .app-repository-action--executable-tasks,
 .app-left-sidebar .app-repository-row-actions .app-repository-action--trellis,
 .app-left-sidebar .app-repository-row-actions .app-repository-action--code-graph,
 .app-left-sidebar .app-repository-row-actions .app-repository-action--chat,
 .app-left-sidebar .app-repository-row-actions .app-repository-action--scheduled-tasks {
-  width: 16px;
-  min-width: 16px;
-  max-width: 16px;
+  width: 18px;
+  min-width: 18px;
+  max-width: 18px;
 }
 
-/* 图标外包 Tooltip，用子项相邻叠紧间距 */
+/* Tooltip 包裹层不再叠紧，交给 gap 控制间距 */
 .app-left-sidebar .app-repository-row-actions > * + * {
-  margin-left: -2px;
+  margin-left: 0;
 }
 
 /* 置顶图标与行内其他操作一致：默认隐藏，悬停项目行时再显示（含已置顶态配色） */
@@ -2208,11 +2211,19 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 .app-repository-action--requirement {
-  width: 18px;
-  min-width: 18px;
-  max-width: 18px;
+  width: 20px;
+  min-width: 20px;
+  max-width: 20px;
   color: var(--ant-color-primary);
   background: var(--ant-color-primary-bg);
+}
+
+.app-repository-action--executable-tasks {
+  width: 20px;
+  min-width: 20px;
+  max-width: 20px;
+  color: var(--ant-color-primary);
+  background: transparent;
 }
 
 .app-repository-action--trellis {
@@ -2290,6 +2301,10 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   background: var(--ant-color-warning);
 }
 
+.app-repository-action-count-badge--executable {
+  background: var(--ant-color-error);
+}
+
 .app-left-sidebar .app-repository-item--project .app-repository-action--project-quick.app-repository-action--requirement {
   color: var(--ant-color-text-tertiary);
   background: transparent;
@@ -2300,12 +2315,14 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   background: var(--ant-color-primary-bg);
 }
 
-.app-repository-action--requirement {
-  width: 18px;
-  min-width: 18px;
-  max-width: 18px;
-  color: var(--ant-color-primary);
+.app-left-sidebar .app-repository-item--project .app-repository-action--project-quick.app-repository-action--executable-tasks {
+  color: var(--ant-color-text-tertiary);
   background: transparent;
+}
+
+.app-left-sidebar .app-repository-item--project .app-repository-action--project-quick.app-repository-action--executable-tasks:hover {
+  color: var(--ant-color-primary);
+  background: var(--ant-color-primary-bg);
 }
 
 .app-repository-action--requirement:hover {

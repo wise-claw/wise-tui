@@ -30,7 +30,10 @@ import { useRepositorySddModeModalController } from "./LeftSidebar/useRepository
 import { useSidebarCodeGraphIndexMap } from "./LeftSidebar/useSidebarCodeGraphIndexMap";
 import { useSidebarScheduledTasksMap } from "./LeftSidebar/useSidebarScheduledTasksMap";
 import { useSidebarRequirementUnsplitMap } from "./LeftSidebar/useSidebarRequirementUnsplitMap";
+import { useSidebarExecutableTasksMap } from "./LeftSidebar/useSidebarExecutableTasksMap";
 import { useSystemResourceSessions } from "./LeftSidebar/useSystemResourceSessions";
+import { WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED } from "../constants/workflowUiEvents";
+import type { SplitTodoCountUpdatedDetail } from "../constants/workflowUiEvents";
 import "./GitPanel/index.css";
 
 export function LeftSidebar({
@@ -155,6 +158,10 @@ export function LeftSidebar({
     projectUnsplitById: requirementUnsplitByProjectId,
     repositoryUnsplitById: requirementUnsplitByRepoId,
   } = useSidebarRequirementUnsplitMap(projects, repositories);
+  const {
+    projectExecutableById: executableTasksByProjectId,
+    repositoryExecutableById: executableTasksByRepoId,
+  } = useSidebarExecutableTasksMap(projects, repositories, activeProjectId);
   const [scheduledTasksModalRepository, setScheduledTasksModalRepository] = useState<{
     path: string;
     name: string;
@@ -188,6 +195,30 @@ export function LeftSidebar({
     [openScheduledTasksForRepository, repositories, scheduledTasksByRepoId],
   );
 
+  const dispatchOpenExecutableTasksDrawer = useCallback(() => {
+    window.dispatchEvent(
+      new CustomEvent<SplitTodoCountUpdatedDetail>(WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED, {
+        detail: { openTaskDrawer: true, source: "trellis" },
+      }),
+    );
+  }, []);
+
+  const openExecutableTasksForProject = useCallback(
+    async (project: ProjectItem) => {
+      await Promise.resolve(onCreateProjectTask(project, "chat"));
+      dispatchOpenExecutableTasksDrawer();
+    },
+    [dispatchOpenExecutableTasksDrawer, onCreateProjectTask],
+  );
+
+  const openExecutableTasksForRepository = useCallback(
+    async (repository: Repository) => {
+      await Promise.resolve(onCreateRepositoryTask(repository, "chat"));
+      dispatchOpenExecutableTasksDrawer();
+    },
+    [dispatchOpenExecutableTasksDrawer, onCreateRepositoryTask],
+  );
+
   const handleFilesExplorerSectionCollapsedChange = useCallback((next: boolean) => {
     setFilesExplorerSectionCollapsed(next);
     writeLeftFilesExplorerCollapsedToStorage(next);
@@ -213,11 +244,11 @@ export function LeftSidebar({
   async function submitCreateProject() {
     const name = projectNameInput.trim();
     if (!name) {
-      message.warning("工作区名称不能为空");
+      message.warning("Workspace 名称不能为空");
       return;
     }
     if (!createProjectRootPath.trim()) {
-      message.warning("请先选择工作区根目录");
+      message.warning("请先选择 Workspace 根目录");
       return;
     }
     if (createProjectSubmitting) return;
@@ -243,7 +274,7 @@ export function LeftSidebar({
     if (!editProject) return;
     const name = projectNameInput.trim();
     if (!name) {
-      message.warning("工作区名称不能为空");
+      message.warning("Workspace 名称不能为空");
       return;
     }
     onUpdateProject(editProject.id, name);
@@ -255,11 +286,11 @@ export function LeftSidebar({
     if (!promotingFloatingRepo) return;
     const trimmed = promotingFloatingRepoName.trim();
     if (!trimmed) {
-      message.warning("请输入工作区名称");
+      message.warning("请输入 Workspace 名称");
       return;
     }
     if (!onPromoteFloatingRepositoryToProject) {
-      message.warning("当前环境未启用「升格为工作区」");
+      message.warning("当前环境未启用「升格为 Workspace」");
       return;
     }
     const repoId = promotingFloatingRepo.id;
@@ -267,7 +298,7 @@ export function LeftSidebar({
     setPromotingFloatingRepoName("");
     void Promise.resolve(onPromoteFloatingRepositoryToProject(repoId, trimmed)).catch(
       (err: unknown) => {
-        message.error("升格为工作区失败");
+        message.error("升格为 Workspace 失败");
         console.error(err);
       },
     );
@@ -341,7 +372,7 @@ export function LeftSidebar({
           onDeleteProject={(project) => {
             modal.confirm({
               title: "确认删除项目？",
-              content: `工作区「${project.name}」将被删除，但仓库本身不会被移除。`,
+              content: `Workspace「${project.name}」将被删除，但仓库本身不会被移除。`,
               okText: "删除",
               okType: "danger",
               cancelText: "取消",
@@ -369,8 +400,8 @@ export function LeftSidebar({
           onRemoveFloatingRepository={(repo) => {
             if (!onRemoveRepository) return;
             modal.confirm({
-              title: "确认移除单仓？",
-              content: `单仓「${repositoryFolderBasename(repo)}」将从 Wise 列表移除（不会删除磁盘文件，也不会动 .trellis）。`,
+              title: "确认移除 Standalone Repo？",
+              content: `Standalone Repo「${repositoryFolderBasename(repo)}」将从 Wise 列表移除（不会删除磁盘文件，也不会动 .trellis）。`,
               okText: "移除",
               okType: "danger",
               cancelText: "取消",
@@ -390,9 +421,13 @@ export function LeftSidebar({
           scheduledTasksByRepoId={scheduledTasksByRepoId}
           requirementUnsplitByProjectId={requirementUnsplitByProjectId}
           requirementUnsplitByRepoId={requirementUnsplitByRepoId}
+          executableTasksByProjectId={executableTasksByProjectId}
+          executableTasksByRepoId={executableTasksByRepoId}
           onOpenScheduledTasksForRepository={openScheduledTasksForRepository}
           onOpenScheduledTasksForProject={openScheduledTasksForProject}
           onOpenRepositoryRequirements={(repository) => onCreateRepositoryTask(repository, "split")}
+          onOpenExecutableTasksForProject={openExecutableTasksForProject}
+          onOpenExecutableTasksForRepository={openExecutableTasksForRepository}
         />
 
         {activeRepositoryPath ? (

@@ -138,9 +138,14 @@
 .app-chat-topbar-right {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 0;
   min-width: 0;
   flex-shrink: 0;
+}
+
+/* Tooltip / Popover 外包一层，用相邻间距代替 gap */
+.app-chat-topbar-right > * + * {
+  margin-left: 1px;
 }
 
 .app-chat-topbar-left--collapsed {
@@ -246,9 +251,9 @@
 
 .app-topbar-divider {
   width: 1px;
-  height: 18px;
+  height: 14px;
   background: var(--ant-color-border-secondary);
-  margin: 0 4px;
+  margin: 0 2px;
   flex-shrink: 0;
 }
 
@@ -266,41 +271,99 @@
   height: 24px;
   padding: 0;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   background: transparent;
-  color: var(--ant-color-text-secondary);
+  color: var(--ant-color-text-tertiary);
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
   -webkit-app-region: no-drag;
 }
 
-.app-topbar-btn:hover {
+.app-topbar-btn:hover:not(:disabled) {
   background: var(--ant-color-fill-content);
   color: var(--ant-color-text);
 }
 
-.app-topbar-btn:active {
+.app-topbar-btn:active:not(:disabled) {
   background: var(--ant-color-fill);
 }
 
+.app-topbar-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.app-topbar-btn:disabled:hover {
+  background: transparent;
+  color: var(--ant-color-text-tertiary);
+}
+
 .app-topbar-btn svg {
-  width: 16px;
-  height: 16px;
-}
-
-.app-topbar-btn--run {
-  width: 30px;
-  height: 30px;
-}
-
-.app-topbar-btn--run svg {
-  width: 18px;
-  height: 18px;
+  width: 15px;
+  height: 15px;
 }
 
 .app-topbar-btn.active {
   background: var(--ant-color-primary-bg);
   color: var(--ant-color-primary);
+}
+
+.app-topbar-btn.active:hover:not(:disabled) {
+  background: var(--ant-color-primary-bg);
+  color: var(--ant-color-primary);
+}
+
+/* 与搜索、终端等图标按钮同尺寸（不再单独放大） */
+.app-topbar-btn--run {
+  width: 24px;
+  height: 24px;
+}
+
+/* 中栏顶栏：OpenApp 与图标按钮同高、同 hover */
+.app-chat-topbar-right .app-open-app-menu {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.app-chat-topbar-right .app-open-app-btn.ant-btn,
+.app-chat-topbar-right .app-open-app-chevron.ant-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  min-height: 24px;
+  padding: 0 6px;
+  line-height: 1;
+  font-size: 12px;
+  color: var(--ant-color-text-secondary);
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.app-chat-topbar-right .app-open-app-btn {
+  gap: 4px;
+  border-radius: 0;
+  border-right: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-chat-topbar-right .app-open-app-chevron {
+  padding: 0 4px;
+  border-radius: 0;
+}
+
+.app-chat-topbar-right .app-open-app-btn.ant-btn:not(:disabled):hover,
+.app-chat-topbar-right .app-open-app-chevron.ant-btn:not(:disabled):hover {
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-content);
+}
+
+.app-chat-topbar-right .app-open-app-btn-icon {
+  width: 13px;
+  height: 13px;
 }
 
 .app-run-command-popover .ant-popover-inner {

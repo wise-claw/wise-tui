@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { SplitResult, TaskItem } from "../types";
+import { countSplitTodoExecutableTasks } from "../utils/requirementWorkspaceExecutable";
 import { migrateStoredSplitResult } from "./taskSplitter";
 import { normalizeSplitResultTaskLists } from "./splitResultModel";
 
@@ -92,6 +93,22 @@ async function loadRawExecutableStore(): Promise<unknown | null> {
   } catch {
     return null;
   }
+}
+
+/** 统计全局可执行任务表中 flowStatus 为 todo 的条数（与 ClaudeChat 任务抽屉 Wise 部分一致）。 */
+export async function countGlobalSplitTodoExecutableTasks(): Promise<number> {
+  const raw = await loadRawExecutableStore();
+  if (!raw) return 0;
+  if (Array.isArray(raw)) {
+    return countSplitTodoExecutableTasks(raw as TaskItem[]);
+  }
+  if (isScopedExecutableStorePayload(raw)) {
+    return Object.values(raw.executablesByRequirementId).reduce(
+      (sum, tasks) => sum + countSplitTodoExecutableTasks(tasks),
+      0,
+    );
+  }
+  return 0;
 }
 
 export async function loadPrdTaskSplitResult(): Promise<SplitResult | null> {
