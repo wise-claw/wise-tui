@@ -13,6 +13,7 @@ pub mod subgraph;
 pub mod search;
 pub mod openapi_parser;
 pub mod synthetic_openapi;
+mod api_association;
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -357,6 +358,16 @@ fn bridge_code_graph_http_conn(
     frontend_repo_id: i64,
     backend_repo_id: i64,
 ) -> Result<serde_json::Value, String> {
+    bridge_code_graph_http_scoped_conn(conn, frontend_repo_id, backend_repo_id, None)
+}
+
+/// Scan frontend HTTP calls (optionally under `frontend_scan_subdir`, e.g. `src/api`) and link to backend `api_operation` nodes.
+pub(crate) fn bridge_code_graph_http_scoped_conn(
+    conn: &rusqlite::Connection,
+    frontend_repo_id: i64,
+    backend_repo_id: i64,
+    frontend_scan_subdir: Option<&str>,
+) -> Result<serde_json::Value, String> {
     let api_ops = conn
         .prepare(
             "SELECT id, label FROM graph_nodes WHERE repo_id = ?1 AND kind = 'api_operation'",
@@ -386,9 +397,20 @@ fn bridge_code_graph_http_conn(
     }
 
     let frontend_path = lookup_repository_path(frontend_repo_id)?;
+    let scan_root = match frontend_scan_subdir {
+        Some(sub) => {
+            let candidate = Path::new(&frontend_path).join(sub);
+            if candidate.is_dir() {
+                candidate
+            } else {
+                Path::new(&frontend_path).to_path_buf()
+            }
+        }
+        None => Path::new(&frontend_path).to_path_buf(),
+    };
     let mut total_edges = 0;
 
-    for entry in walkdir::WalkDir::new(&frontend_path)
+    for entry in walkdir::WalkDir::new(&scan_root)
         .into_iter()
         .filter_entry(|e| {
             e.file_name()
@@ -418,7 +440,31 @@ fn bridge_code_graph_http_conn(
             .unwrap_or(entry.path())
             .to_string_lossy()
             .to_string();
-        let file_node_id = indexer::make_file_node_id(frontend_repo_id, &relative);
+        let file_node_id = storage::find_node_id_by_path(
+            conn,
+            frontend_repo_id,
+            &relative,
+            Some("file"),
+        )?
+        .unwrap_or_else(|| indexer::make_file_node_id(frontend_repo_id, &relative));
+        if !storage::graph_node_exists(conn, &file_node_id)? {
+            let label = Path::new(&relative)
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or(&relative)
+                .to_string();
+            storage::upsert_node(
+                conn,
+                &file_node_id,
+                "file",
+                None,
+                &label,
+                &relative,
+                frontend_repo_id,
+                None,
+                None,
+            )?;
+        }
 
         let http_calls: Vec<_> = calls
             .into_iter()
@@ -603,6 +649,189 @@ pub fn trigger_code_graph_association_build(
     });
 
     Ok("Association build started".to_string())
+}
+
+fn dedupe_repo_ids(repository_ids: Vec<i64>) -> Result<Vec<i64>, String> {
+    if repository_ids.is_empty() {
+        return Err("repositoryIds must not be empty".to_string());
+    }
+    if repository_ids.len() > 20 {
+        return Err("repositoryIds must have at most 20 entries".to_string());
+    }
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for id in repository_ids {
+        if seen.insert(id) {
+            out.push(id);
+        }
+    }
+    Ok(out)
+}
+
+fn index_repository_blocking(
+    db_path: &Path,
+    repo_id: i64,
+) -> Result<indexer::IndexResult, String> {
+    let repo_path = lookup_repository_path(repo_id)?;
+    let repo_label = lookup_repository_meta(repo_id)?.2;
+    let cancel_flag = index_cancel::begin_session(repo_id);
+    let result = (|| {
+        let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+        storage::update_index_meta(&conn, repo_id, "", "indexing", None, 0, 0, Some(1), None)?;
+        indexer::index_repository(
+            &conn,
+            &repo_path,
+            repo_id,
+            &repo_label,
+            Some(std::sync::Arc::clone(&cancel_flag)),
+        )
+    })();
+    index_cancel::end_session(repo_id, &cancel_flag);
+    result
+}
+
+/// 多仓项目检索：并行索引各仓 → GitNexus 仓库组同步 → 提取后端路由并关联前端 `src/api` HTTP 调用。
+#[tauri::command]
+pub fn trigger_code_graph_project_search(
+    _state: tauri::State<WiseDb>,
+    repository_ids: Vec<i64>,
+    app: tauri::AppHandle,
+) -> Result<String, String> {
+    let ids = dedupe_repo_ids(repository_ids)?;
+    let db_path = crate::wise_paths::wise_dir()
+        .map(|d| d.join("wise.db"))
+        .map_err(|e| format!("无法定位 Wise 数据目录：{}", e))?;
+
+    // Mark all repos indexing immediately so the UI can enter the progress state without waiting
+    // for parallel worker threads to acquire the DB connection.
+    if let Ok(conn) = rusqlite::Connection::open(&db_path) {
+        for &repo_id in &ids {
+            let _ = storage::update_index_meta(
+                &conn, repo_id, "", "indexing", None, 0, 0, Some(1), None,
+            );
+        }
+    }
+
+    let ids_spawn = ids.clone();
+    let db_path_spawn = db_path.clone();
+
+    tauri::async_runtime::spawn(async move {
+        let gitnexus_handle = tokio::task::spawn_blocking({
+            let ids = ids_spawn.clone();
+            move || sync_gitnexus_group_for_repo_ids(&ids)
+        });
+
+        let mut index_results: Vec<(i64, Result<indexer::IndexResult, String>)> = Vec::new();
+        let mut join_handles = Vec::new();
+        for repo_id in ids_spawn.iter().copied() {
+            let db = db_path_spawn.clone();
+            join_handles.push(tokio::task::spawn_blocking(move || {
+                (repo_id, index_repository_blocking(&db, repo_id))
+            }));
+        }
+        for handle in join_handles {
+            match handle.await {
+                Ok(pair) => {
+                    let (repo_id, result) = pair;
+                    if let Ok(ref ok) = result {
+                        let _ = app.emit("code-graph-index-complete", serde_json::json!({
+                            "repositoryId": repo_id,
+                            "totalNodes": ok.total_nodes,
+                            "totalEdges": ok.total_edges,
+                            "errors": ok.errors,
+                            "filesFound": ok.files_found,
+                            "filesIndexed": ok.files_indexed,
+                            "filesSkipped": ok.files_skipped,
+                        }));
+                    } else if let Err(ref e) = result {
+                        if let Ok(conn) = rusqlite::Connection::open(&db_path_spawn) {
+                            let _ = storage::update_index_meta(
+                                &conn, repo_id, "", "error", Some(e), 0, 0, None, None,
+                            );
+                        }
+                        let _ = app.emit("code-graph-index-error", serde_json::json!({
+                            "repositoryId": repo_id,
+                            "error": e,
+                        }));
+                    }
+                    index_results.push((repo_id, result));
+                }
+                Err(e) => {
+                    eprintln!("[code-graph] project search index join failed: {}", e);
+                }
+            }
+        }
+
+        if index_results.iter().any(|(_, r)| r.is_err()) {
+            let err = index_results
+                .iter()
+                .filter_map(|(id, r)| r.as_ref().err().map(|e| format!("repo {}: {}", id, e)))
+                .collect::<Vec<_>>()
+                .join("; ");
+            let _ = app.emit("code-graph-project-search-error", serde_json::json!({
+                "repositoryIds": ids_spawn,
+                "error": err,
+            }));
+            return;
+        }
+
+        let gitnexus_group_sync = gitnexus_handle.await.unwrap_or_else(|e| {
+            serde_json::json!({ "error": format!("GitNexus 仓库组 join 失败: {}", e) })
+        });
+
+        let api_association = tokio::task::spawn_blocking({
+            let ids = ids_spawn.clone();
+            let db = db_path_spawn.clone();
+            move || {
+                let conn = rusqlite::Connection::open(&db).map_err(|e| e.to_string())?;
+                api_association::build_api_associations_conn(
+                    &conn,
+                    &ids,
+                    &|id| lookup_repository_path(id),
+                    &|id| lookup_repository_meta(id),
+                )
+            }
+        })
+        .await
+        .unwrap_or_else(|e| Err(format!("API 关联任务 join 失败: {}", e)));
+
+        match api_association {
+            Ok(api_json) => {
+                eprintln!("[code-graph] project search api association: {}", api_json);
+                let _ = app.emit("code-graph-project-search-complete", serde_json::json!({
+                    "repositoryIds": ids_spawn,
+                    "gitnexusRepositoryGroup": gitnexus_group_sync,
+                    "apiAssociation": api_json,
+                }));
+            }
+            Err(e) => {
+                eprintln!("[code-graph] project search api association failed: {}", e);
+                let _ = app.emit("code-graph-project-search-error", serde_json::json!({
+                    "repositoryIds": ids_spawn,
+                    "error": e,
+                    "gitnexusRepositoryGroup": gitnexus_group_sync,
+                }));
+            }
+        }
+    });
+
+    Ok("Project search started".to_string())
+}
+
+/// Build HTTP API associations between frontend `src/api` and backend controllers for given repos.
+#[tauri::command]
+pub fn build_code_graph_api_associations(
+    state: tauri::State<WiseDb>,
+    repository_ids: Vec<i64>,
+) -> Result<serde_json::Value, String> {
+    let ids = dedupe_repo_ids(repository_ids)?;
+    let conn = state.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+    api_association::build_api_associations_conn(
+        &conn,
+        &ids,
+        &|id| lookup_repository_path(id),
+        &|id| lookup_repository_meta(id),
+    )
 }
 
 /// Extract routes from a backend repository and generate synthetic api_operation nodes.

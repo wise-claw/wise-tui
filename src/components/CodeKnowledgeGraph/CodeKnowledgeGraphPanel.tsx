@@ -16,6 +16,7 @@ import {
   getCodeGraphSubgraph,
   searchCodeGraphNodes,
   triggerCodeGraphAssociationBuild,
+  triggerCodeGraphProjectSearch,
   triggerCodeGraphReindex,
 } from "../../services/codeKnowledgeGraph";
 import { filterGraphNodesForSearch } from "../../utils/codeGraphNodeSearch";
@@ -109,6 +110,40 @@ function normalizeSubgraphHopScope(v: unknown): SubgraphHopScope {
 /** 默认子图 hop：与后端「计代价边」一致，约等于上下各两级（`contains` 不计入 hop） */
 const DEFAULT_CODE_GRAPH_SUBGRAPH_HOP: SubgraphHopScope = 2;
 
+function scopeStatusOf(
+  byId: Record<number, CodeGraphIndexStatusResponse>,
+  id: number,
+): CodeGraphIndexStatusResponse {
+  return byId[id] ?? { status: "idle", repositoryId: id };
+}
+
+function aggregateScopeProgress(
+  ids: number[],
+  byId: Record<number, CodeGraphIndexStatusResponse>,
+): number {
+  if (ids.length === 0) return 0;
+  let sum = 0;
+  for (const id of ids) {
+    const s = scopeStatusOf(byId, id);
+    if (s.status === "done") sum += 100;
+    else if (s.status === "indexing") sum += Math.max(1, s.progress ?? 1);
+  }
+  return Math.round(sum / ids.length);
+}
+
+function repoIndexStatusLabel(status: CodeGraphIndexStatusResponse["status"]): string {
+  switch (status) {
+    case "done":
+      return "已完成";
+    case "indexing":
+      return "索引中";
+    case "error":
+      return "失败";
+    default:
+      return "未开始";
+  }
+}
+
 export function CodeKnowledgeGraphPanel({
   repositoryId,
   repositories,
@@ -161,55 +196,137 @@ export function CodeKnowledgeGraphPanel({
   const lastAutoReindexTriggerRef = useRef<{ repositoryId: number; at: number } | null>(null);
   /** 用户「清空索引」后：该仓处于 idle 时不再自动检索，直至手动「开始检索」或从仓库菜单对该仓触发检索 */
   const suppressIdleAutoReindexForRepoIdRef = useRef<number | null>(null);
+  /** 多仓项目检索（索引 + 仓库组 + API 关联）整段流程进行中 */
+  const [projectSearchActive, setProjectSearchActive] = useState(false);
+  const [scopedIndexByRepoId, setScopedIndexByRepoId] = useState<
+    Record<number, CodeGraphIndexStatusResponse>
+  >({});
+
+  const associationCandidateIds = useMemo(() => {
+    if (lockToEntryRepository && repositoryId != null) {
+      return [repositoryId];
+    }
+    const fromProp =
+      searchRepositoryIdsProp?.filter((id) => typeof id === "number" && Number.isFinite(id)) ?? [];
+    const base =
+      fromProp.length > 0
+        ? fromProp
+        : repositoryId != null
+          ? [repositoryId]
+          : [];
+    return [...new Set(base)].slice(0, 20);
+  }, [lockToEntryRepository, searchRepositoryIdsProp, repositoryId]);
+
+  const associationCandidatesKey = useMemo(
+    () => [...associationCandidateIds].sort((a, b) => a - b).join(","),
+    [associationCandidateIds],
+  );
+
+  const associationScopeRepoIds = useMemo(() => {
+    if (associationCandidateIds.length === 0) {
+      return repositoryId != null ? [repositoryId] : [];
+    }
+    if (associationCandidateIds.length === 1) {
+      return associationCandidateIds;
+    }
+    if (associationConfig.mode === "all") {
+      return [...associationCandidateIds];
+    }
+    const picked = associationConfig.customRepositoryIds.filter((id) =>
+      associationCandidateIds.includes(id),
+    );
+    if (picked.length === 0 && repositoryId != null) {
+      return [repositoryId];
+    }
+    return [...new Set(picked)].slice(0, 20);
+  }, [associationCandidateIds, associationConfig, repositoryId]);
+
+  const indexWatchRepoIds = useMemo(() => {
+    if (associationScopeRepoIds.length >= 2) {
+      if (projectSearchActive || repoDropdownSelection === "association") {
+        return associationScopeRepoIds;
+      }
+    }
+    return repositoryId != null ? [repositoryId] : [];
+  }, [associationScopeRepoIds, projectSearchActive, repoDropdownSelection, repositoryId]);
 
   const fetchStatus = useCallback(async () => {
-    if (!repositoryId) {
+    const ids =
+      indexWatchRepoIds.length > 0
+        ? indexWatchRepoIds
+        : repositoryId != null
+          ? [repositoryId]
+          : [];
+    if (ids.length === 0) {
       setLoading(false);
       return;
     }
     try {
-      const status = await getCodeGraphIndexStatus(repositoryId);
-      setIndexStatus(status);
-
-      if (status.status === "done") {
-        if (pollRef.current) {
-          clearInterval(pollRef.current);
-          pollRef.current = null;
+      const entries = await Promise.all(
+        ids.map(async (id) => [id, await getCodeGraphIndexStatus(id)] as const),
+      );
+      setScopedIndexByRepoId((prev) => {
+        const next = { ...prev };
+        for (const [id, status] of entries) {
+          next[id] = status;
         }
-      } else if (status.status === "error") {
-        if (isCodeGraphIndexBenignUserAbortError(status.error)) {
-          setIndexError(null);
-        } else {
-          setIndexError(status.error ?? "索引失败");
+        return next;
+      });
+      if (repositoryId != null) {
+        const current = entries.find(([id]) => id === repositoryId)?.[1];
+        if (current) {
+          setIndexStatus(current);
+          if (current.status === "error") {
+            if (isCodeGraphIndexBenignUserAbortError(current.error)) {
+              setIndexError(null);
+            } else {
+              setIndexError(current.error ?? "索引失败");
+            }
+          } else if (current.status === "done" || current.status === "indexing") {
+            setIndexError(null);
+          }
         }
-        if (pollRef.current) {
-          clearInterval(pollRef.current);
-          pollRef.current = null;
-        }
-      } else if (status.status === "indexing") {
-        // Start polling for index completion
-        if (!pollRef.current) {
-          pollRef.current = setInterval(() => {
-            void fetchStatus();
-          }, 1500);
-        }
+      }
+      const anyIndexing = entries.some(([, s]) => s.status === "indexing");
+      if (!projectSearchActive && !anyIndexing && pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      } else if ((projectSearchActive || anyIndexing) && !pollRef.current) {
+        pollRef.current = setInterval(() => {
+          void fetchStatus();
+        }, 1500);
       }
     } catch (e) {
       console.warn("[code-graph] getCodeGraphIndexStatus failed", e);
     } finally {
       setLoading(false);
     }
-  }, [repositoryId]);
+  }, [repositoryId, indexWatchRepoIds, projectSearchActive]);
+
+  const markScopeOptimisticIndexing = useCallback(
+    (ids: number[]) => {
+      if (ids.length === 0) return;
+      setScopedIndexByRepoId((prev) => {
+        const next = { ...prev };
+        for (const id of ids) {
+          next[id] = { status: "indexing", repositoryId: id, progress: 1 };
+        }
+        return next;
+      });
+      if (repositoryId != null && ids.includes(repositoryId)) {
+        setIndexStatus({ status: "indexing", repositoryId, progress: 1 });
+      }
+    },
+    [repositoryId],
+  );
 
   // Listen for index events from the spawned Rust task
   useEffect(() => {
     const unsubs: Promise<() => void>[] = [];
 
-    const completeUnsub = listen("code-graph-index-complete", (event: any) => {
-      if (event.payload?.repositoryId === repositoryId) {
-        setIndexError(null);
-        void fetchStatus();
-      }
+    const completeUnsub = listen("code-graph-index-complete", () => {
+      setIndexError(null);
+      void fetchStatus();
     });
     unsubs.push(completeUnsub);
 
@@ -261,6 +378,42 @@ export function CodeKnowledgeGraphPanel({
     });
     unsubs.push(assocErr);
 
+    const projectOk = listen("code-graph-project-search-complete", (event: any) => {
+      setProjectSearchActive(false);
+      const raw = event.payload?.repositoryIds;
+      const ids: number[] = Array.isArray(raw)
+        ? raw.filter((x: unknown) => typeof x === "number" && Number.isFinite(x))
+        : [];
+      if (repositoryId != null && ids.includes(repositoryId)) {
+        setIndexError(null);
+        void fetchStatus();
+        setSubgraphRefreshKey((k) => k + 1);
+      } else if (ids.length >= 2) {
+        void fetchStatus();
+        setSubgraphRefreshKey((k) => k + 1);
+      }
+      const bridgeEdges = event.payload?.apiAssociation?.bridgeEdges;
+      if (typeof bridgeEdges === "number" && bridgeEdges > 0) {
+        message.success(`多仓检索完成，已关联 ${bridgeEdges} 条前后端 API 调用`);
+      } else if (ids.length >= 2) {
+        message.success("多仓检索完成");
+      }
+    });
+    unsubs.push(projectOk);
+
+    const projectErr = listen("code-graph-project-search-error", (event: any) => {
+      setProjectSearchActive(false);
+      message.error(String(event.payload?.error ?? "多仓检索失败"));
+      const raw = event.payload?.repositoryIds;
+      const ids: number[] = Array.isArray(raw)
+        ? raw.filter((x: unknown) => typeof x === "number" && Number.isFinite(x))
+        : [];
+      if (repositoryId != null && ids.includes(repositoryId)) {
+        void fetchStatus();
+      }
+    });
+    unsubs.push(projectErr);
+
     return () => {
       unsubs.forEach((p) => p.then((fn) => fn()));
     };
@@ -301,14 +454,24 @@ export function CodeKnowledgeGraphPanel({
     void (async () => {
       setIndexError(null);
       try {
-        await triggerCodeGraphReindex({ repositoryId });
+        if (associationScopeRepoIds.length >= 2) {
+          setProjectSearchActive(true);
+          markScopeOptimisticIndexing(associationScopeRepoIds);
+          await triggerCodeGraphProjectSearch(associationScopeRepoIds);
+        } else {
+          markScopeOptimisticIndexing([repositoryId]);
+          await triggerCodeGraphReindex({ repositoryId });
+        }
         if (!cancelled) {
           message.info(
-            "已为当前仓库自动开始后台检索（GitNexus analyze + 图谱导入），完成后将自动刷新。",
+            associationScopeRepoIds.length >= 2
+              ? "已自动开始多仓检索（含前后端 API 关联），完成后将自动刷新。"
+              : "已为当前仓库自动开始后台检索（GitNexus analyze + 图谱导入），完成后将自动刷新。",
           );
           void fetchStatus();
         }
       } catch (e) {
+        setProjectSearchActive(false);
         lastAutoReindexTriggerRef.current = null;
         if (!cancelled) {
           console.warn("[code-graph] auto triggerCodeGraphReindex failed", e);
@@ -320,7 +483,7 @@ export function CodeKnowledgeGraphPanel({
     return () => {
       cancelled = true;
     };
-  }, [suppressIdleAutoReindex, loading, repositoryId, indexStatus, fetchStatus]);
+  }, [suppressIdleAutoReindex, loading, repositoryId, indexStatus, fetchStatus, associationScopeRepoIds, markScopeOptimisticIndexing]);
 
   useEffect(() => {
     const pending = pendingCrossRepoSearchPickRef.current;
@@ -374,45 +537,6 @@ export function CodeKnowledgeGraphPanel({
     }, SUBGRAPH_SEARCH_DEBOUNCE_MS);
     return () => window.clearTimeout(t);
   }, [subgraphSearchInput]);
-
-  const associationCandidateIds = useMemo(() => {
-    if (lockToEntryRepository && repositoryId != null) {
-      return [repositoryId];
-    }
-    const fromProp =
-      searchRepositoryIdsProp?.filter((id) => typeof id === "number" && Number.isFinite(id)) ?? [];
-    const base =
-      fromProp.length > 0
-        ? fromProp
-        : repositoryId != null
-          ? [repositoryId]
-          : [];
-    return [...new Set(base)].slice(0, 20);
-  }, [lockToEntryRepository, searchRepositoryIdsProp, repositoryId]);
-
-  const associationCandidatesKey = useMemo(
-    () => [...associationCandidateIds].sort((a, b) => a - b).join(","),
-    [associationCandidateIds],
-  );
-
-  const associationScopeRepoIds = useMemo(() => {
-    if (associationCandidateIds.length === 0) {
-      return repositoryId != null ? [repositoryId] : [];
-    }
-    if (associationCandidateIds.length === 1) {
-      return associationCandidateIds;
-    }
-    if (associationConfig.mode === "all") {
-      return [...associationCandidateIds];
-    }
-    const picked = associationConfig.customRepositoryIds.filter((id) =>
-      associationCandidateIds.includes(id),
-    );
-    if (picked.length === 0 && repositoryId != null) {
-      return [repositoryId];
-    }
-    return [...new Set(picked)].slice(0, 20);
-  }, [associationCandidateIds, associationConfig, repositoryId]);
 
   /** 子图与节点搜索实际查询的仓库：仓库菜单为「单仓 active」时仅当前仓；选中底部「关联合并」时用关联范围 */
   const subgraphRepositoryIds = useMemo(() => {
@@ -483,13 +607,17 @@ export function CodeKnowledgeGraphPanel({
       setSubgraphLoading(false);
       return;
     }
-    if (indexStatus?.status !== "done" || indexStatus.repositoryId !== repositoryId) {
+    const uniqueIds = [...new Set(subgraphRepositoryIds)].filter((id) => Number.isFinite(id)) as number[];
+    const targetIds = uniqueIds.length > 0 ? uniqueIds : [repositoryId];
+    const multiTarget = targetIds.length >= 2;
+    const subgraphIndexReady = multiTarget
+      ? !projectSearchActive &&
+        targetIds.every((id) => scopedIndexByRepoId[id]?.status === "done")
+      : indexStatus?.status === "done" && indexStatus.repositoryId === repositoryId;
+    if (!subgraphIndexReady) {
       setSubgraphLoading(false);
       return;
     }
-
-    const uniqueIds = [...new Set(subgraphRepositoryIds)].filter((id) => Number.isFinite(id)) as number[];
-    const targetIds = uniqueIds.length > 0 ? uniqueIds : [repositoryId];
 
     let cancelled = false;
     setSubgraphLoading(true);
@@ -538,6 +666,8 @@ export function CodeKnowledgeGraphPanel({
     subgraphDirection,
     subgraphRefreshKey,
     selectedNode?.id,
+    projectSearchActive,
+    scopedIndexByRepoId,
   ]);
 
   useEffect(() => {
@@ -551,7 +681,15 @@ export function CodeKnowledgeGraphPanel({
       setSearchRemoteLoading(false);
       return;
     }
-    if (indexStatus?.status !== "done" || indexStatus.repositoryId !== repositoryId) {
+    const searchTargetIds = [...new Set(subgraphRepositoryIds)].filter((id) =>
+      Number.isFinite(id),
+    ) as number[];
+    const multiSearch = searchTargetIds.length >= 2;
+    const searchIndexReady = multiSearch
+      ? !projectSearchActive &&
+        searchTargetIds.every((id) => scopedIndexByRepoId[id]?.status === "done")
+      : indexStatus?.status === "done" && indexStatus.repositoryId === repositoryId;
+    if (!searchIndexReady) {
       setSearchRemoteHits([]);
       setSearchRemoteLoading(false);
       return;
@@ -592,6 +730,8 @@ export function CodeKnowledgeGraphPanel({
     repositoryId,
     indexStatus?.status,
     indexStatus?.repositoryId,
+    projectSearchActive,
+    scopedIndexByRepoId,
   ]);
 
   useEffect(() => {
@@ -605,20 +745,45 @@ export function CodeKnowledgeGraphPanel({
 
   const handleReindex = useCallback(async () => {
     if (!repositoryId) return;
-    if (indexStatus?.status === "indexing" && indexStatus.repositoryId === repositoryId) {
+    const watchIds =
+      associationScopeRepoIds.length >= 2 ? associationScopeRepoIds : [repositoryId];
+    if (
+      projectSearchActive ||
+      watchIds.some((id) => scopedIndexByRepoId[id]?.status === "indexing")
+    ) {
       message.info("检索已在进行中，请稍候。");
       return;
     }
     setIndexError(null);
     try {
       suppressIdleAutoReindexForRepoIdRef.current = null;
-      await triggerCodeGraphReindex({ repositoryId });
+      if (associationScopeRepoIds.length >= 2) {
+        setProjectSearchActive(true);
+        markScopeOptimisticIndexing(associationScopeRepoIds);
+        await triggerCodeGraphProjectSearch(associationScopeRepoIds);
+        message.info(
+          "已开始多仓检索：各仓 GitNexus 分析、GitNexus 仓库组同步，并关联前端 src/api 与后端接口。完成后将自动刷新。",
+        );
+      } else {
+        markScopeOptimisticIndexing([repositoryId]);
+        await triggerCodeGraphReindex({ repositoryId });
+      }
       void fetchStatus();
     } catch (e) {
+      setProjectSearchActive(false);
       console.warn("[code-graph] triggerCodeGraphReindex failed", e);
       message.error("提交检索失败");
     }
-  }, [repositoryId, indexStatus?.status, indexStatus?.repositoryId, fetchStatus]);
+  }, [
+    repositoryId,
+    indexStatus?.status,
+    indexStatus?.repositoryId,
+    fetchStatus,
+    associationScopeRepoIds,
+    scopedIndexByRepoId,
+    projectSearchActive,
+    markScopeOptimisticIndexing,
+  ]);
 
   const handlePauseReindex = useCallback(async () => {
     if (!repositoryId) return;
@@ -1003,8 +1168,36 @@ export function CodeKnowledgeGraphPanel({
     );
   }
 
-  const isIndexed = indexStatus?.status === "done";
-  const isIndexing = indexStatus?.status === "indexing";
+  const indexWatchIds =
+    indexWatchRepoIds.length > 0
+      ? indexWatchRepoIds
+      : repositoryId != null
+        ? [repositoryId]
+        : [];
+  const isMultiScope = indexWatchIds.length >= 2;
+  const scopedStatuses = indexWatchIds.map((id) => scopeStatusOf(scopedIndexByRepoId, id));
+  const isAllDoneInScope =
+    indexWatchIds.length > 0 && scopedStatuses.every((s) => s.status === "done");
+  const isAnyIndexingInScope =
+    projectSearchActive || scopedStatuses.some((s) => s.status === "indexing");
+  const scopeIndexingDone = isMultiScope && isAllDoneInScope && projectSearchActive;
+  const isIndexedForView = isMultiScope ? isAllDoneInScope : indexStatus?.status === "done";
+  const showIndexingUI =
+    projectSearchActive ||
+    (!isIndexedForView &&
+      (isAnyIndexingInScope || indexStatus?.status === "indexing"));
+  const indexingProgress = isMultiScope
+    ? scopeIndexingDone
+      ? 95
+      : aggregateScopeProgress(indexWatchIds, scopedIndexByRepoId)
+    : (indexStatus?.progress ?? 1);
+  const indexingTitle = isMultiScope
+    ? scopeIndexingDone
+      ? `正在为 ${associationScopeDisplay ?? "多仓"} 同步 GitNexus 仓库组并关联前后端 API…`
+      : `正在为 ${associationScopeDisplay ?? "多仓"} 运行 GitNexus 分析…`
+    : `正在为 ${currentRepo?.name ?? "该仓库"} 运行 GitNexus 分析…`;
+  const isIndexed = isIndexedForView;
+  const isIndexing = showIndexingUI;
   const hasData = subgraphData && subgraphData.nodes.length > 0;
 
   return (
@@ -1021,7 +1214,7 @@ export function CodeKnowledgeGraphPanel({
               <CodeGraphRepositoryPopover
                 repositories={repositories}
                 activeRepositoryId={repositoryId}
-                activeRepositoryIndexed={isIndexed && indexStatus?.repositoryId === repositoryId}
+                activeRepositoryIndexed={isIndexed && !showIndexingUI}
                 menuSelection={repoDropdownSelection}
                 graphScopeTriggerLabel={
                   repoDropdownSelection === "association" && associationScopeRepoIds.length > 1
@@ -1150,7 +1343,7 @@ export function CodeKnowledgeGraphPanel({
               danger
               size="small"
               icon={<DeleteOutlined />}
-              disabled={!repositoryId || (isIndexing && indexStatus?.repositoryId === repositoryId)}
+              disabled={!repositoryId || showIndexingUI}
               onClick={handleClearGraphIndex}
             >
               清空索引
@@ -1159,9 +1352,9 @@ export function CodeKnowledgeGraphPanel({
               title={
                 !repositoryId
                   ? "请先选择仓库"
-                  : !isIndexing
+                  : !showIndexingUI
                     ? "当前没有正在进行的检索任务"
-                    : indexStatus?.repositoryId !== repositoryId
+                    : indexStatus?.repositoryId !== repositoryId && !isMultiScope
                       ? `正在索引其他仓库（#${indexStatus?.repositoryId}），请稍候`
                       : ""
               }
@@ -1171,7 +1364,7 @@ export function CodeKnowledgeGraphPanel({
                 size="small"
                 icon={<PauseCircleOutlined />}
                 onClick={() => void handlePauseReindex()}
-                disabled={!repositoryId || !isIndexing || indexStatus?.repositoryId !== repositoryId}
+                disabled={!repositoryId || !showIndexingUI}
               >
                 暂停检索
               </Button>
@@ -1181,10 +1374,7 @@ export function CodeKnowledgeGraphPanel({
               size="small"
               icon={<PlayCircleOutlined />}
               onClick={() => void handleReindex()}
-              disabled={
-                !repositoryId ||
-                (isIndexing && indexStatus?.repositoryId === repositoryId)
-              }
+              disabled={!repositoryId || showIndexingUI}
             >
               {isIndexed ? "重新检索" : "开始检索"}
             </Button>
@@ -1210,13 +1400,12 @@ export function CodeKnowledgeGraphPanel({
               重试
             </Button>
           </div>
-        ) : !isIndexed ? (
-          isIndexing ? (
+        ) : showIndexingUI ? (
             <div className="app-code-graph-centered-loading">
               <div className="app-code-graph-indexing-inner">
                 <Progress
                   type="circle"
-                  percent={indexStatus?.progress ?? 0}
+                  percent={indexingProgress}
                   size={120}
                   status="active"
                   format={(percent) => (
@@ -1226,9 +1415,35 @@ export function CodeKnowledgeGraphPanel({
                   )}
                 />
                 <Typography.Text type="secondary" style={{ textAlign: "center" }}>
-                  正在为 {currentRepo?.name ?? "该仓库"} 运行 GitNexus 分析…
+                  {indexingTitle}
                 </Typography.Text>
-                {indexStatus &&
+                {isMultiScope ? (
+                  <Space size={[8, 8]} wrap style={{ justifyContent: "center", marginTop: 8 }}>
+                    {indexWatchIds.map((id) => {
+                      const repoName =
+                        repositories?.find((r) => r.id === id)?.name ?? `仓库 #${id}`;
+                      const status = scopeStatusOf(scopedIndexByRepoId, id);
+                      const color =
+                        status.status === "done"
+                          ? "green"
+                          : status.status === "indexing"
+                            ? "orange"
+                            : status.status === "error"
+                              ? "red"
+                              : "default";
+                      return (
+                        <Tag key={id} color={color}>
+                          {repoName} · {repoIndexStatusLabel(status.status)}
+                          {status.status === "indexing" && typeof status.progress === "number"
+                            ? ` ${status.progress}%`
+                            : ""}
+                        </Tag>
+                      );
+                    })}
+                  </Space>
+                ) : null}
+                {!isMultiScope &&
+                indexStatus &&
                 typeof indexStatus.indexingFilesTotal === "number" &&
                 indexStatus.indexingFilesTotal > 0 ? (
                   <div style={{ marginTop: 6, textAlign: "center", maxWidth: "min(92vw, 720px)" }}>
@@ -1254,20 +1469,23 @@ export function CodeKnowledgeGraphPanel({
                 ) : null}
                 <Typography.Paragraph
                   type="secondary"
-                  style={{ textAlign: "center", maxWidth: 360, marginTop: 8, marginBottom: 0, fontSize: 12 }}
+                  style={{ textAlign: "center", maxWidth: 420, marginTop: 8, marginBottom: 0, fontSize: 12 }}
                 >
-                  大仓库单文件解析可能很慢；若路径长时间不变，说明正卡在该文件的读取或解析。可点上方「暂停检索」随时停止，或关闭面板稍候后再点「重新检索」重试。
+                  {isMultiScope
+                    ? "多仓检索包含各仓 GitNexus 分析、仓库组同步与前后端 API 关联；完成后将自动展示合并图谱。"
+                    : "大仓库单文件解析可能很慢；若路径长时间不变，说明正卡在该文件的读取或解析。可点上方「暂停检索」随时停止，或关闭面板稍候后再点「重新检索」重试。"}
                 </Typography.Paragraph>
               </div>
             </div>
-          ) : (
+        ) : !isIndexed ? (
             <Empty
               description={
-                `尚未建立知识图谱，点击上方「开始检索」为 ${currentRepo?.name ?? "该仓库"} 进行全仓分析`
+                associationScopeRepoIds.length >= 2
+                  ? `尚未建立知识图谱，点击上方「开始检索」为多仓（${associationScopeDisplay}）建立索引并关联前后端 API`
+                  : `尚未建立知识图谱，点击上方「开始检索」为 ${currentRepo?.name ?? "该仓库"} 进行全仓分析`
               }
               image={Empty.PRESENTED_IMAGE_SIMPLE}
             />
-          )
         ) : (
           renderIndexedBody()
         )}

@@ -1,5 +1,8 @@
 use crate::code_knowledge_graph::storage as graph_storage;
 
+/// Gateway path prefixes on frontend HTTP calls (e.g. Vite proxy `/svc-aqi` → Spring `context-path`).
+pub const DEFAULT_GATEWAY_PREFIXES: &[&str] = &["/svc-aqi", "/svc-external"];
+
 /// Parsed OpenAPI operation.
 #[derive(Debug, Clone)]
 pub struct ApiOperation {
@@ -266,6 +269,27 @@ mod extract_http_tests {
         let u = collapse_ts_template_url(r"${import.meta.env.VITE_APP_BASE_API}/api/foo");
         assert_eq!(u, "/api/foo");
     }
+
+    #[test]
+    fn strip_svc_aqi_gateway_prefix() {
+        use super::strip_gateway_prefix;
+        assert_eq!(
+            strip_gateway_prefix("/svc-aqi/api/wind-rose/stations", &["/svc-aqi"]),
+            "/api/wind-rose/stations"
+        );
+    }
+
+    #[test]
+    fn match_http_call_through_gateway_prefix() {
+        use super::match_http_to_api;
+        let ops = vec![(
+            "op1".into(),
+            "GET".into(),
+            "api/wind-rose/stations".into(),
+        )];
+        let matched = match_http_to_api("GET", "/svc-aqi/api/wind-rose/stations", &ops);
+        assert_eq!(matched, vec!["op1"]);
+    }
 }
 
 /// Split persisted `api_operation` node `label` into HTTP method and path.
@@ -316,6 +340,36 @@ pub fn normalize_path(path: &str) -> String {
     p
 }
 
+/// Strip reverse-proxy / gateway prefixes from frontend HTTP paths before matching backend routes.
+/// Example: `/svc-aqi/api/wind-rose/stations` → `/api/wind-rose/stations`.
+pub fn strip_gateway_prefix(path: &str, prefixes: &[&str]) -> String {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    let with_slash = if trimmed.starts_with('/') {
+        trimmed.to_string()
+    } else {
+        format!("/{trimmed}")
+    };
+    let mut ordered: Vec<&str> = prefixes.to_vec();
+    ordered.sort_by_key(|p| std::cmp::Reverse(p.len()));
+    for prefix in ordered {
+        if with_slash == prefix {
+            return "/".to_string();
+        }
+        if let Some(rest) = with_slash.strip_prefix(prefix) {
+            let stripped = rest.trim_start_matches('/');
+            return if stripped.is_empty() {
+                "/".to_string()
+            } else {
+                format!("/{stripped}")
+            };
+        }
+    }
+    with_slash
+}
+
 /// Match a frontend HTTP call URL against a set of backend API operation templates.
 /// Returns the best matching operation ID(s).
 pub fn match_http_to_api(
@@ -327,7 +381,8 @@ pub fn match_http_to_api(
         String, /* normalized_path */
     )],
 ) -> Vec<String> {
-    let call_normalized = normalize_path(call_url);
+    let stripped = strip_gateway_prefix(call_url, DEFAULT_GATEWAY_PREFIXES);
+    let call_normalized = normalize_path(&stripped);
     let mut matches = Vec::new();
 
     for (op_id, op_method, op_path) in operations {
@@ -386,8 +441,15 @@ pub fn create_invoke_edges(
         let matched = match_http_to_api(method, url, api_operations);
         for op_id in &matched {
             let edge_id = format!("{file_id}:invokes:{op_id}");
-            graph_storage::upsert_edge(conn, &edge_id, file_id, op_id, "frontend_invokes_api")?;
-            edges += 1;
+            if graph_storage::upsert_edge_if_nodes_exist(
+                conn,
+                &edge_id,
+                file_id,
+                op_id,
+                "frontend_invokes_api",
+            )? {
+                edges += 1;
+            }
         }
     }
     Ok(edges)

@@ -41,7 +41,6 @@ pub fn upsert_node(
     Ok(())
 }
 
-#[allow(dead_code)]
 pub fn graph_node_exists(conn: &rusqlite::Connection, id: &str) -> Result<bool, String> {
     let n: i64 = conn
         .query_row(
@@ -51,6 +50,48 @@ pub fn graph_node_exists(conn: &rusqlite::Connection, id: &str) -> Result<bool, 
         )
         .map_err(|e| e.to_string())?;
     Ok(n > 0)
+}
+
+/// Resolve a graph node id for a repo-relative path (prefers indexed `file` nodes).
+pub fn find_node_id_by_path(
+    conn: &rusqlite::Connection,
+    repo_id: i64,
+    path: &str,
+    kind: Option<&str>,
+) -> Result<Option<String>, String> {
+    let normalized = path.replace('\\', "/");
+    let id: Option<String> = if let Some(k) = kind {
+        conn.query_row(
+            "SELECT id FROM graph_nodes WHERE repo_id = ?1 AND path = ?2 AND kind = ?3 LIMIT 1",
+            params![repo_id, normalized, k],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?
+    } else {
+        conn.query_row(
+            "SELECT id FROM graph_nodes WHERE repo_id = ?1 AND path = ?2 LIMIT 1",
+            params![repo_id, normalized],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?
+    };
+    Ok(id)
+}
+
+pub fn upsert_edge_if_nodes_exist(
+    conn: &rusqlite::Connection,
+    id: &str,
+    source_id: &str,
+    target_id: &str,
+    kind: &str,
+) -> Result<bool, String> {
+    if !graph_node_exists(conn, source_id)? || !graph_node_exists(conn, target_id)? {
+        return Ok(false);
+    }
+    upsert_edge(conn, id, source_id, target_id, kind)?;
+    Ok(true)
 }
 
 pub fn upsert_edge(

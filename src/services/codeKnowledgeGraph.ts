@@ -38,6 +38,21 @@ export async function triggerCodeGraphAssociationBuild(repositoryIds: number[]):
   return invoke<string>("trigger_code_graph_association_build", { repositoryIds });
 }
 
+/**
+ * 多仓项目检索：并行索引各仓 → GitNexus 仓库组同步 → 关联前端 `src/api` 与后端接口。
+ * 完成后发 `code-graph-project-search-complete`。
+ */
+export async function triggerCodeGraphProjectSearch(repositoryIds: number[]): Promise<string> {
+  return invoke<string>("trigger_code_graph_project_search", { repositoryIds });
+}
+
+/** 在已索引的多仓之间构建 HTTP API 关联（后端 synthetic routes + frontend_invokes_api）。 */
+export async function buildCodeGraphApiAssociations(
+  repositoryIds: number[],
+): Promise<{ bridgeEdges?: number; syntheticRoutesFound?: number; skipped?: boolean; reason?: string }> {
+  return invoke("build_code_graph_api_associations", { repositoryIds });
+}
+
 export async function getCodeGraphIndexStatus(
   repositoryId: number,
 ): Promise<CodeGraphIndexStatusResponse> {

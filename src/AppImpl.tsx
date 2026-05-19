@@ -33,7 +33,7 @@ import {
 import type { AuthorPane } from "./types/viewMode";
 import { useClaudeSessions, type ClaudeTurnCompletePayload } from "./hooks/useClaudeSessions";
 import { openInFinder } from "./services/repository";
-import { triggerCodeGraphAssociationBuild, triggerCodeGraphReindex } from "./services/codeKnowledgeGraph";
+import { triggerCodeGraphProjectSearch, triggerCodeGraphReindex } from "./services/codeKnowledgeGraph";
 import { AppWorkspaceLayout } from "./components/AppWorkspaceLayout";
 import { readAuthorPaneFromSettings, readAuthorPaneFromStorage } from "./components/AuthorPanel";
 import type { PromptsOpenContext } from "./components/PromptsPanel";
@@ -1625,7 +1625,7 @@ export default function App() {
     [repositories, disposeSidebarCodeGraphReindexBatch],
   );
 
-  /** 项目级：多仓时并行启动各仓代码图谱检索（写入 Wise）与 GitNexus 仓库组同步；单仓仍仅走本机检索。 */
+  /** 项目级：多仓时启动项目检索（各仓索引 + GitNexus 仓库组 + 前后端 API 关联）；单仓仍仅走本机检索。 */
   const handleCodeGraphGenerateProject = useCallback(
     async (project: ProjectItem) => {
       const valid = project.repositoryIds.filter((id) => repositories.some((r) => r.id === id));
@@ -1638,8 +1638,6 @@ export default function App() {
         return;
       }
 
-      void handleCodeGraphGenerateRepositoryIds(valid);
-
       disposeSidebarCodeGraphAssocBatch();
       const expectedKey = [...valid].sort((a, b) => a - b).join(",");
       const idsMatchPayload = (raw: unknown) => {
@@ -1650,7 +1648,7 @@ export default function App() {
         return [...ids].sort((a, b) => a - b).join(",") === expectedKey;
       };
 
-      const unlistenOk = await listen("code-graph-association-build-complete", (ev) => {
+      const unlistenOk = await listen("code-graph-project-search-complete", (ev) => {
         const batch = sidebarCodeGraphAssocBatchRef.current;
         if (!batch || batch.expectedKey !== expectedKey) return;
         const raw = (ev.payload as { repositoryIds?: unknown } | undefined)?.repositoryIds;
@@ -1659,20 +1657,25 @@ export default function App() {
         const names = valid
           .map((id) => repositories.find((r) => r.id === id)?.name ?? `#${id}`)
           .join("、");
+        const bridgeEdges = (ev.payload as { apiAssociation?: { bridgeEdges?: number } } | undefined)
+          ?.apiAssociation?.bridgeEdges;
         Modal.success({
-          title: "多仓仓库组同步已完成",
-          content: `已为 Workspace 内仓库同步 GitNexus 仓库组：${names}。各仓代码图谱检索已在后台进行，全部完成后即可在「代码图谱」中查看节点与子图。`,
+          title: "多仓检索已完成",
+          content:
+            typeof bridgeEdges === "number" && bridgeEdges > 0
+              ? `已为 Workspace 内仓库 ${names} 完成索引与 GitNexus 仓库组同步，并关联 ${bridgeEdges} 条前后端 API 调用。`
+              : `已为 Workspace 内仓库 ${names} 完成索引与 GitNexus 仓库组同步。可在「代码图谱」中查看多仓子图。`,
         });
       });
 
-      const unlistenErr = await listen("code-graph-association-build-error", (ev) => {
+      const unlistenErr = await listen("code-graph-project-search-error", (ev) => {
         const batch = sidebarCodeGraphAssocBatchRef.current;
         if (!batch || batch.expectedKey !== expectedKey) return;
         const raw = (ev.payload as { repositoryIds?: unknown } | undefined)?.repositoryIds;
         if (raw !== undefined && !idsMatchPayload(raw)) return;
         disposeSidebarCodeGraphAssocBatch();
-        const err = String((ev.payload as { error?: unknown } | undefined)?.error ?? "同步失败");
-        Modal.error({ title: "GitNexus 仓库组同步失败", content: err });
+        const err = String((ev.payload as { error?: unknown } | undefined)?.error ?? "检索失败");
+        Modal.error({ title: "多仓检索失败", content: err });
       });
 
       sidebarCodeGraphAssocBatchRef.current = {
@@ -1682,14 +1685,14 @@ export default function App() {
       };
 
       try {
-        await triggerCodeGraphAssociationBuild(valid);
+        await triggerCodeGraphProjectSearch(valid);
         message.info(
-          "已开始：① 各仓代码图谱后台检索（写入 Wise）；② GitNexus 多仓仓库组同步。检索全部完成后在代码图谱中即可浏览。",
+          "已开始多仓检索：各仓 GitNexus 分析、GitNexus 仓库组同步，并关联前端 src/api 与后端接口。",
         );
       } catch (e) {
         disposeSidebarCodeGraphAssocBatch();
-        console.warn("[sidebar] triggerCodeGraphAssociationBuild (project) failed", e);
-        message.error("提交 GitNexus 仓库组同步失败");
+        console.warn("[sidebar] triggerCodeGraphProjectSearch (project) failed", e);
+        message.error("提交多仓检索失败");
       }
     },
     [repositories, handleCodeGraphGenerateRepositoryIds, disposeSidebarCodeGraphAssocBatch],

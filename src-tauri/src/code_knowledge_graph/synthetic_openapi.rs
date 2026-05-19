@@ -203,17 +203,19 @@ pub fn ingest_synthetic_routes(
         )?;
         nodes_added += 1;
 
-        // Create backend_serves_api edge from the file to the api_operation
+        // Link handler file → api_operation when the file node exists (Java repos may
+        // index symbols/folders only without File nodes — skip rather than FK-fail).
         let file_node_id = indexer::make_file_node_id(repo_id, &route.file_path);
         let edge_id = format!("{file_node_id}:serves:{node_id}");
-        graph_storage::upsert_edge(
+        if graph_storage::upsert_edge_if_nodes_exist(
             conn,
             &edge_id,
             &file_node_id,
             &node_id,
             "backend_serves_api",
-        )?;
-        edges_added += 1;
+        )? {
+            edges_added += 1;
+        }
     }
 
     Ok((nodes_added, edges_added))
