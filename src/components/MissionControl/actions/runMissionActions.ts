@@ -16,6 +16,10 @@ import { saveWorkflowGraph } from "../../../services/workflowGraphs";
 import { saveWorkflowTemplate } from "../../../services/workflowTemplates";
 import { addProjectPrdWorkflow } from "../../../services/projectPrdScope";
 import {
+  dispatchWorkspaceTrellisMaterializedFanout,
+  resolveMaterializedFanoutRepositoryTarget,
+} from "../../../services/prdSplit/materializedFanoutBridge";
+import {
   appendMissionEvent,
   attachMissionToSession,
   completeMissionAgentAssignment,
@@ -855,6 +859,16 @@ export async function writeMissionToTrellis(api: UseSplitWizardStateApi): Promis
         };
         writeResults.push(result);
         api.addWriteResult(result);
+        const target = resolveMaterializedFanoutRepositoryTarget(cluster, state.repositories);
+        dispatchWorkspaceTrellisMaterializedFanout({
+          sessionId: `prd-split:${out.parentTaskName}`,
+          projectId: state.project.id,
+          projectRootPath: state.project.rootPath,
+          repositoryPath: target.repositoryPath,
+          sourceTasks: effective.splitTasks,
+          materializedResult: out,
+          repositoryMetadata: target.repositoryMetadata,
+        });
         graphInputs.push({
           cluster,
           parentTaskName: out.parentTaskName,
@@ -893,7 +907,7 @@ export async function writeMissionToTrellis(api: UseSplitWizardStateApi): Promis
       writeResults,
       workflowGraphResult,
     });
-    message.success("Trellis 任务已落盘完成");
+    message.success("Trellis 任务已落盘，正在后台派发实现子代理");
   } catch (error) {
     api.failWrite(error instanceof Error ? error.message : String(error));
     await persistMissionSnapshot(api, "writing", "failed", "mission.write.failed", {

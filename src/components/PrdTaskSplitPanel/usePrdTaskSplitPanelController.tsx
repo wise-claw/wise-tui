@@ -85,10 +85,10 @@ import {
   type WriteClusterTasksOutput,
 } from "../../services/prdSplit/trellisWriter";
 import {
-  runMaterializedSplitTasksFanout,
   type ExecutionFanoutResult,
   type ExecutionFanoutSnapshot,
 } from "../../services/prdSplit/executionFanout";
+import { runWorkspaceTrellisMaterializedFanout } from "../../services/prdSplit/materializedFanoutBridge";
 import { runPrdSplitSubagentWorkflow } from "../../services/prdSplit/subagentWorkflow";
 import type { DispatchClusterResult } from "../../services/prdSplit/splitterDispatch";
 import { runPrdSplitClaude } from "../../services/claudeSplitExecutor";
@@ -114,10 +114,6 @@ import {
   type TaskConfirmFilter,
 } from "./helpers";
 import { sameStringArray } from "../../utils/anchorStability";
-import {
-  WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED,
-  type SplitTodoCountUpdatedDetail,
-} from "../../constants/workflowUiEvents";
 import type {
   RequirementEntry,
   RequirementNameModalMode,
@@ -2630,21 +2626,11 @@ export function usePrdTaskSplitPanelController({
         message: "任务已落盘，准备派发实现子代理。",
       };
       setExecutionFanoutSnapshot(initialSnapshot);
-      window.dispatchEvent(new CustomEvent<SplitTodoCountUpdatedDetail>(WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED, {
-        detail: {
-          source: "trellis",
-          openTaskDrawer: false,
-          projectId: linkedProject?.id ?? null,
-          parentTaskName: out.parentTaskName,
-          childTaskNames: out.childTaskNames,
-          focusParentTaskName: out.parentTaskName,
-          focusChildTaskNames: out.childTaskNames,
-        },
-      }));
       const subagentType = resolveTrellisSubagentForStage("implement") ?? "trellis-implement";
-      const result = await runMaterializedSplitTasksFanout({
+      const result = await runWorkspaceTrellisMaterializedFanout({
         facade: getWorkflowFacade(),
         sessionId: `prd-split:${out.parentTaskName}`,
+        projectId: linkedProject?.id ?? null,
         repositoryPath,
         projectRootPath,
         sourceTasks,
