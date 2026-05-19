@@ -1,9 +1,9 @@
 use crate::{
-    app_state_commands, cc_wf_studio_mcp_bridge, cc_workflow_studio, claude_code_usage,
-    claude_commands, claude_config_dir, claude_external_ingest, code_knowledge_graph, cua_driver,
-    dingtalk_enterprise_bot, dingtalk_stream_gateway, git_commands, mission_control, prd_url_fetch,
-    repository_files, skills_sh, system_resource, trellis_bootstrap, trellis_bridge,
-    trellis_runtime, wise_db, wise_mascot, wise_push, workspace_commands,
+    agent_registry, app_state_commands, assistants, cc_wf_studio_mcp_bridge, cc_workflow_studio,
+    claude_code_usage, claude_commands, claude_config_dir, claude_external_ingest, code_knowledge_graph,
+    cua_driver, dingtalk_enterprise_bot, dingtalk_stream_gateway, extensions, git_commands, mission_control,
+    prd_url_fetch, repository_files, skills, skills_sh, system_resource, trellis_bootstrap, trellis_bridge,
+    trellis_runtime, wise_db, wise_mascot, wise_paths, wise_push, workspace_commands,
 };
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
@@ -75,6 +75,13 @@ pub fn run() {
             wise_mascot::restore_mascot_on_launch(app.handle(), &wise_db)?;
             claude_config_dir::init_from_db(&wise_db);
             app.manage(wise_db);
+            let extension_registry = extensions::ExtensionRegistry::new();
+            let extension_home = wise_paths::wise_dir().ok();
+            extension_registry
+                .initialize(extension_home, &[])
+                .map_err(|e| format!("extension registry init: {e}"))?;
+            app.manage(extension_registry);
+            app.manage(agent_registry::AgentRegistry::new());
             trellis_runtime::spawn_stale_scanner(app.handle().clone());
 
             #[cfg(target_os = "macos")]
@@ -422,6 +429,41 @@ pub fn run() {
             cc_wf_studio_mcp_bridge::start_cc_wf_studio_mcp_bridge,
             cc_wf_studio_mcp_bridge::ensure_cc_workflow_studio_project_mcp,
             cc_wf_studio_mcp_bridge::stop_cc_wf_studio_mcp_bridge,
+            extensions::commands::extensions_list,
+            extensions::commands::extensions_get_skills,
+            extensions::commands::extensions_get_themes,
+            extensions::commands::extensions_get_settings_declarations,
+            extensions::commands::extensions_set_enabled,
+            extensions::commands::extensions_get_permissions,
+            extensions::commands::extensions_reload,
+            extensions::commands::extensions_get_mcp_servers,
+            extensions::commands::extensions_get_settings_tabs,
+            extensions::commands::extensions_read_settings_tab_body,
+            assistants::commands::assistants_list,
+            assistants::commands::assistants_save_custom,
+            assistants::commands::assistants_delete_custom,
+            assistants::commands::assistants_get_system_prompt,
+            assistants::commands::assistants_get_overrides,
+            assistants::commands::assistants_list_overrides,
+            assistants::commands::assistants_save_overrides,
+            assistants::commands::assistants_reset_overrides,
+            assistants::commands::assistants_resolve_runtime,
+            skills::commands::skills_detect_external_paths,
+            skills::commands::skills_scan_path,
+            skills::commands::skills_add_external_path,
+            skills::commands::skills_remove_external_path,
+            skills::commands::skills_list_external_paths,
+            skills::commands::skills_import_copy,
+            skills::commands::skills_import_symlink,
+            skills::commands::skills_delete_imported,
+            skills::commands::skills_export_symlink,
+            skills::commands::skills_wise_home,
+            agent_registry::agent_registry_list,
+            agent_registry::agent_registry_refresh,
+            agent_registry::agent_registry_get,
+            agent_registry::agent_registry_test_custom,
+            agent_registry::agent_registry_save_custom,
+            agent_registry::agent_registry_delete_custom,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

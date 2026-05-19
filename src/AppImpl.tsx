@@ -2454,7 +2454,6 @@ export default function App() {
         onToggleRightPanel: handleToggleRightPanel,
         onToggleTerminal: () => setTerminalCollapsed((c) => !c),
         onSearch: () => setSearchOpen(true),
-        onBackToCockpit: () => viewMode.back(),
         collapsed,
         rightCollapsed: effectiveRightCollapsed,
         terminalCollapsed,
