@@ -82,10 +82,18 @@ import {
   renderParentPrd,
   writeClusterTasks,
   type ClusterRef,
+  type WriteClusterTasksOutput,
 } from "../../services/prdSplit/trellisWriter";
+import {
+  runMaterializedSplitTasksFanout,
+  type ExecutionFanoutResult,
+  type ExecutionFanoutSnapshot,
+} from "../../services/prdSplit/executionFanout";
 import { runPrdSplitSubagentWorkflow } from "../../services/prdSplit/subagentWorkflow";
 import type { DispatchClusterResult } from "../../services/prdSplit/splitterDispatch";
 import { runPrdSplitClaude } from "../../services/claudeSplitExecutor";
+import { getWorkflowFacade } from "../../services/workflow";
+import { resolveTrellisSubagentForStage } from "../../services/workflow/trellisDefaults";
 import {
   TASK_AI_DEFAULT_PROMPT_BY_MODE,
   anchorLabelFromTaskId,
@@ -121,7 +129,17 @@ import type {
 } from "./types";
 import { useSplitRuntimePanel } from "./useSplitRuntimePanel";
 import { summarizeSplitQuality } from "./splitExecutionQuality";
-import { moveTaskInExecutionPlan, type ExecutionPlanMoveDirection } from "./executionPlanAdjustments";
+import {
+  inferLikelyExecutionDependencies,
+  moveTaskInExecutionPlan,
+  moveTaskToExecutionWave,
+  type ExecutionPlanMoveDirection,
+} from "./executionPlanAdjustments";
+import { buildExecutionOrchestrationModel } from "./executionOrchestrationModel";
+
+export interface GenerateExecutableTasksResult extends ExecutionFanoutResult {
+  materializedResult: WriteClusterTasksOutput;
+}
 
 export interface PrdTaskSplitPanelControllerInput {
   onClose: () => void;
@@ -130,9 +148,6 @@ export interface PrdTaskSplitPanelControllerInput {
   activeProjectId: string | null;
   activeRepositoryId: number | null;
 }
-
-const TASK_LIST_BUTTON_SELECTOR = '[data-ui-anchor="session-task-list-btn"]';
-export const TASK_SPLIT_CLOSE_ANIMATION_MS = 420;
 
 function scrollToTaskCard(taskId: string) {
   window.requestAnimationFrame(() => {
@@ -189,7 +204,7 @@ function mergeAssistantBundleItems(items: AssistantBundleItem[]): AssistantBundl
 }
 
 export function usePrdTaskSplitPanelController({
-  onClose,
+  onClose: _onClose,
   projects,
   repositories,
   activeProjectId,
@@ -221,6 +236,7 @@ export function usePrdTaskSplitPanelController({
   const [savingTaskId, setSavingTaskId] = useState<string | null>(null);
   const [confirmSavingTaskId, setConfirmSavingTaskId] = useState<string | null>(null);
   const [generatingExecutableTaskId, setGeneratingExecutableTaskId] = useState<string | null>(null);
+  const [executionFanoutSnapshot, setExecutionFanoutSnapshot] = useState<ExecutionFanoutSnapshot | null>(null);
   const [runtimePromptModalOpen, setRuntimePromptModalOpen] = useState(false);
   const [runtimePromptLoading, setRuntimePromptLoading] = useState(false);
   const [runtimePromptSaving, setRuntimePromptSaving] = useState(false);
@@ -263,19 +279,11 @@ export function usePrdTaskSplitPanelController({
   const [anchorResolveReported, setAnchorResolveReported] = useState(false);
   const [taskRoleFilter, setTaskRoleFilter] = useState<TaskRoleFilter>("all");
   const [taskConfirmFilter, setTaskConfirmFilter] = useState<TaskConfirmFilter>("unconfirmed");
-  const [closingToTaskListMotion, setClosingToTaskListMotion] = useState<{
-    dx: number;
-    dy: number;
-    scale: number;
-    active: boolean;
-  } | null>(null);
   const milkdownEditorRef = useRef<MilkdownEditorHandle | null>(null);
   /** 与 `focusTask` 同步，用于在切换任务时清除需求侧区间高亮（避免依赖闭包中的旧 `selectedTaskId`）。 */
   const selectedTaskIdRef = useRef<string | null>(null);
   const taskSplitHostRef = useRef<HTMLDivElement | null>(null);
   const fixedBannerRef = useRef<HTMLDivElement | null>(null);
-  const panelRootRef = useRef<HTMLElement | null>(null);
-  const closeAnimationTimerRef = useRef<number | null>(null);
   const requirementEditorShellRef = useRef<HTMLDivElement | null>(null);
   const urlAnchorAutoBackfilledRef = useRef(false);
   const anchorRangePersistTimerRef = useRef<number | null>(null);
@@ -301,50 +309,6 @@ export function usePrdTaskSplitPanelController({
     [requirementHistory],
   );
 
-  useEffect(() => {
-    return () => {
-      if (closeAnimationTimerRef.current != null) {
-        window.clearTimeout(closeAnimationTimerRef.current);
-        closeAnimationTimerRef.current = null;
-      }
-    };
-  }, []);
-
-  const closePanelToTaskListButton = useCallback(() => {
-    if (closeAnimationTimerRef.current != null || closingToTaskListMotion?.active) {
-      return;
-    }
-    const panel = panelRootRef.current;
-    const target = document.querySelector<HTMLElement>(TASK_LIST_BUTTON_SELECTOR);
-    if (!panel || !target) {
-      onClose();
-      return;
-    }
-    const panelRect = panel.getBoundingClientRect();
-    const targetRect = target.getBoundingClientRect();
-    if (panelRect.width <= 0 || panelRect.height <= 0) {
-      onClose();
-      return;
-    }
-    const panelCenterX = panelRect.left + panelRect.width / 2;
-    const panelCenterY = panelRect.top + panelRect.height / 2;
-    const targetCenterX = targetRect.left + targetRect.width / 2;
-    const targetCenterY = targetRect.top + targetRect.height / 2;
-    const scaleByWidth = targetRect.width / panelRect.width;
-    const scaleByHeight = targetRect.height / panelRect.height;
-    const scale = Math.max(0.08, Math.min(0.2, Math.min(scaleByWidth, scaleByHeight)));
-    const dx = targetCenterX - panelCenterX;
-    const dy = targetCenterY - panelCenterY;
-    setClosingToTaskListMotion({ dx, dy, scale, active: false });
-    window.requestAnimationFrame(() => {
-      setClosingToTaskListMotion((prev) => (prev ? { ...prev, active: true } : prev));
-    });
-    closeAnimationTimerRef.current = window.setTimeout(() => {
-      closeAnimationTimerRef.current = null;
-      setClosingToTaskListMotion(null);
-      onClose();
-    }, TASK_SPLIT_CLOSE_ANIMATION_MS);
-  }, [closingToTaskListMotion?.active, onClose]);
   const activeRequirement = useMemo(
     () => (activeRequirementId ? requirementHistoryById.get(activeRequirementId) ?? null : null),
     [activeRequirementId, requirementHistoryById],
@@ -2554,13 +2518,13 @@ export function usePrdTaskSplitPanelController({
         : t,
     );
 
-    const out = refreshSplitResultDerivedFields({ ...activeResult, splitTasks: nextTasks });
+    const out = inferLikelyExecutionDependencies(refreshSplitResultDerivedFields({ ...activeResult, splitTasks: nextTasks }));
 
     await persistConfirmedTaskAdjustment(taskId, out, allGaps);
   }
 
   async function handleConfirmAllTasks() {
-    if (!activeResult || activeResult.splitTasks.length === 0) return;
+    if (!activeResult || activeResult.splitTasks.length === 0) return false;
     const mergedTasks = activeResult.splitTasks.map((base) => ({
       ...buildTaskFromDraft(base),
       executionStatusManual: false as const,
@@ -2572,7 +2536,7 @@ export function usePrdTaskSplitPanelController({
       }
       return { ...task, executionStatus: "executable" as const, executionStatusManual: false };
     });
-    const out = refreshSplitResultDerivedFields({ ...activeResult, splitTasks: nextTasks });
+    const out = inferLikelyExecutionDependencies(refreshSplitResultDerivedFields({ ...activeResult, splitTasks: nextTasks }));
     const blockedTaskCount = nextTasks.filter((task) => task.executionStatus !== "executable").length;
     setConfirmSavingTaskId("__all__");
     try {
@@ -2580,7 +2544,7 @@ export function usePrdTaskSplitPanelController({
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       message.error(`一键确认未能写入数据库，请重试：${msg}`);
-      return;
+      return false;
     } finally {
       setConfirmSavingTaskId(null);
     }
@@ -2594,9 +2558,10 @@ export function usePrdTaskSplitPanelController({
     }
     if (blockedTaskCount > 0) {
       message.warning(`已一键确认并写入数据库，其中 ${blockedTaskCount} 条任务仍为不可执行。`);
-      return;
+      return true;
     }
     message.success(`已一键确认并写入数据库（${nextTasks.length} 条任务）。`);
+    return true;
   }
 
   async function handleSaveTaskDraft(taskId: string) {
@@ -2625,31 +2590,90 @@ export function usePrdTaskSplitPanelController({
     message.success("任务已保存。");
   }
 
-  async function handleGenerateExecutableTasks() {
-    if (!activeResult || activeResult.splitTasks.length === 0) return;
+  async function handleGenerateExecutableTasks(): Promise<GenerateExecutableTasksResult | false> {
+    if (!activeResult || activeResult.splitTasks.length === 0) return false;
     const sourceTasks = activeResult.splitTasks.filter((task) => (
       displayExecutionStatus(task) === "executable" && !task.splitSourceTaskId
     ));
     if (sourceTasks.length === 0) {
       message.info("当前没有可用于生成的已确认拆分任务。");
-      return;
+      return false;
+    }
+    return materializeAndFanoutExecutableTasks(sourceTasks, activeResult.parallelGroups);
+  }
+
+  async function materializeAndFanoutExecutableTasks(
+    sourceTasks: TaskItem[],
+    parallelGroups: string[][],
+  ): Promise<GenerateExecutableTasksResult | false> {
+    if (!activeResult) return false;
+    const repositoryPath = linkedRepository?.path?.trim() || activeResult.context?.repositoryPath?.trim() || "";
+    if (!repositoryPath) {
+      message.error("缺少可执行仓库路径，无法自动派发实现子代理。");
+      return false;
     }
     try {
-      const out = await materializeSplitTasksToWorkspaceTrellis(sourceTasks);
-      message.success(`已落盘到 Workspace Trellis：${out.parentTaskName}（${out.childTaskNames.length} 个子任务）`);
+      const { output: out, projectRootPath } = await materializeSplitTasksToWorkspaceTrellis(sourceTasks);
+      const initialSnapshot: ExecutionFanoutSnapshot = {
+        status: "running",
+        workflowRunId: null,
+        totalCount: sourceTasks.length,
+        doneCount: 0,
+        failedCount: 0,
+        waves: [],
+        message: "任务已落盘，准备派发实现子代理。",
+      };
+      setExecutionFanoutSnapshot(initialSnapshot);
       window.dispatchEvent(new CustomEvent<SplitTodoCountUpdatedDetail>(WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED, {
         detail: {
           source: "trellis",
-          openTaskDrawer: true,
+          openTaskDrawer: false,
           projectId: linkedProject?.id ?? null,
           parentTaskName: out.parentTaskName,
           childTaskNames: out.childTaskNames,
+          focusParentTaskName: out.parentTaskName,
+          focusChildTaskNames: out.childTaskNames,
         },
       }));
-      closePanelToTaskListButton();
+      const subagentType = resolveTrellisSubagentForStage("implement") ?? "trellis-implement";
+      const result = await runMaterializedSplitTasksFanout({
+        facade: getWorkflowFacade(),
+        sessionId: `prd-split:${out.parentTaskName}`,
+        repositoryPath,
+        projectRootPath,
+        sourceTasks,
+        materializedResult: out,
+        parallelGroups,
+        subagentType,
+        repositoryMetadata: {
+          ownerRepositoryId: linkedRepository?.id,
+          ownerRepositoryName: linkedRepository?.name,
+          ownerRepositoryPath: repositoryPath,
+          repositoryType: linkedRepository?.repositoryType ?? activeResult.context?.repositoryType ?? undefined,
+        },
+        onSnapshot: setExecutionFanoutSnapshot,
+      });
+      if (result.failedCount > 0) {
+        message.error(`已落盘并派发：成功 ${result.doneCount}，失败 ${result.failedCount}。`);
+      } else {
+        message.success(`已落盘并完成执行 fan-out：${result.doneCount} 个子任务。`);
+      }
+      return result;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      message.error(`落盘到 Trellis 失败：${msg}`);
+      setExecutionFanoutSnapshot((prev) => prev
+        ? { ...prev, status: "failed", message: msg }
+        : {
+          status: "failed",
+          workflowRunId: null,
+          totalCount: sourceTasks.length,
+          doneCount: 0,
+          failedCount: sourceTasks.length,
+          waves: [],
+          message: msg,
+        });
+      message.error(`落盘执行失败：${msg}`);
+      return false;
     }
   }
 
@@ -2660,6 +2684,44 @@ export function usePrdTaskSplitPanelController({
       message.info("当前任务无法继续移动。");
       return;
     }
+    await confirmAndPersistExecutionPlanAdjustment(out, taskId);
+  }
+
+  async function handleMoveTaskToExecutionWave(taskId: string, waveIndex: number) {
+    if (!activeResult) return;
+    const out = moveTaskToExecutionWave(activeResult, taskId, waveIndex);
+    if (!out) {
+      message.info("当前任务无法移动到该波次。");
+      return;
+    }
+    await confirmAndPersistExecutionPlanAdjustment(out, taskId);
+  }
+
+  async function confirmAndPersistExecutionPlanAdjustment(out: SplitResult, taskId: string) {
+    const conflictWarnings = buildExecutionOrchestrationModel(out).conflictWarnings
+      .filter((warning) => warning.relatedTaskIds.includes(taskId));
+    if (conflictWarnings.length > 0) {
+      Modal.confirm({
+        title: "目标波次存在并行冲突",
+        content: (
+          <div className="app-prd-task-panel__confirm-lines">
+            {conflictWarnings.map((warning) => (
+              <p key={warning.id}>{warning.message}</p>
+            ))}
+          </div>
+        ),
+        okText: "确认强行编排",
+        cancelText: "取消拖拽",
+        onOk: async () => {
+          await persistExecutionPlanAdjustment(out);
+        },
+      });
+      return;
+    }
+    await persistExecutionPlanAdjustment(out);
+  }
+
+  async function persistExecutionPlanAdjustment(out: SplitResult) {
     try {
       await savePrdTaskSplitResult(out);
     } catch (err) {
@@ -2682,26 +2744,19 @@ export function usePrdTaskSplitPanelController({
     }
     setGeneratingExecutableTaskId(taskId);
     try {
-      const out = await materializeSplitTasksToWorkspaceTrellis([task]);
-      message.success(`已落盘到 Workspace Trellis：${out.childTaskNames[0] ?? out.parentTaskName}`);
-      window.dispatchEvent(new CustomEvent<SplitTodoCountUpdatedDetail>(WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED, {
-        detail: {
-          source: "trellis",
-          openTaskDrawer: true,
-          projectId: linkedProject?.id ?? null,
-          parentTaskName: out.parentTaskName,
-          childTaskNames: out.childTaskNames,
-        },
-      }));
+      await materializeAndFanoutExecutableTasks([task], [[task.id]]);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      message.error(`落盘到 Trellis 失败：${msg}`);
+      message.error(`落盘执行失败：${msg}`);
     } finally {
       setGeneratingExecutableTaskId(null);
     }
   }
 
-  async function materializeSplitTasksToWorkspaceTrellis(sourceTasks: TaskItem[]) {
+  async function materializeSplitTasksToWorkspaceTrellis(sourceTasks: TaskItem[]): Promise<{
+    output: WriteClusterTasksOutput;
+    projectRootPath: string;
+  }> {
     if (!activeResult) {
       throw new Error("缺少拆分结果。");
     }
@@ -2731,13 +2786,14 @@ export function usePrdTaskSplitPanelController({
       requirementsIndexJson: buildRequirementsIndexJsonForSnapshot(activeResult.source),
       description: `Wise 需求助手复核后执行：${sourceTasks.length} 个拆分任务`,
     });
-    return writeClusterTasks({
+    const output = await writeClusterTasks({
       projectRootPath: rootPath,
       parentTaskName: parent.parentTaskName,
       cluster,
       normalized,
       prdSource: activeResult.source,
     });
+    return { output, projectRootPath: rootPath };
   }
 
   async function handleAddTask() {
@@ -2823,9 +2879,9 @@ export function usePrdTaskSplitPanelController({
     anchorRangePersistTimerRef,
     canGenerateExecutableTasks,
     cardUnmetPointsForTask,
-    closingToTaskListMotion,
     confirmSavingTaskId,
     displayExecutionStatus,
+    executionFanoutSnapshot,
     filteredTasks,
     focusTaskWithFilterSync,
     generatingExecutableTaskId,
@@ -2846,6 +2902,7 @@ export function usePrdTaskSplitPanelController({
     handleImportLegacyPrd,
     handleImportPrdFile,
     handleMoveTaskInExecutionPlan,
+    handleMoveTaskToExecutionWave,
     handleParse,
     handleOpenRuntimePromptModal,
     handleOpenSplitPromptAdjustModal,
@@ -2945,7 +3002,6 @@ export function usePrdTaskSplitPanelController({
     splitRuntimeVisible,
     splitWizardStep,
     switchToRequirement,
-    panelRootRef,
     openTaskAiPopover,
     taskAiActionLoadingById,
     taskAiOptimizedContentById,

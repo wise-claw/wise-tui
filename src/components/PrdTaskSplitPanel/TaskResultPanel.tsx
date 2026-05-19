@@ -12,6 +12,9 @@ import { TaskBoardHeader } from "./TaskBoardHeader";
 import { TaskCard } from "./TaskCard";
 import { SplitQualityStrip } from "./SplitQualityStrip";
 import { SplitRuntimeMessages } from "./SplitRuntimeMessages";
+import type { WriteClusterTasksOutput } from "../../services/prdSplit/trellisWriter";
+import type { ExecutionFanoutSnapshot } from "../../services/prdSplit/executionFanout";
+import type { GenerateExecutableTasksResult } from "./usePrdTaskSplitPanelController";
 import type {
   SplitQualitySummary,
   SplitRetryPhase,
@@ -55,6 +58,7 @@ interface Props {
   unmetTaskIds: string[];
   unmetMenuItems: MenuProps["items"];
   confirmSavingTaskId: string | null;
+  executionFanoutSnapshot: ExecutionFanoutSnapshot | null;
   activeResult: SplitResult | null;
   taskConfirmFilter: TaskConfirmFilter;
   taskConfirmCounts: TaskConfirmCounts;
@@ -79,7 +83,7 @@ interface Props {
   taskAnchorPopoverTaskId: string | null;
   generatingExecutableTaskId: string | null;
   savingTaskId: string | null;
-  onConfirmAll: () => void;
+  onConfirmAll: () => boolean | void | Promise<boolean | void>;
   onAddTask: () => void;
   onClearAllTasks: () => void;
   onTaskConfirmFilterChange: (value: TaskConfirmFilter) => void;
@@ -106,8 +110,9 @@ interface Props {
   onConfirmTaskAdjustment: (taskId: string) => void;
   onToggleUnmet: (taskId: string, collapsed: boolean) => void;
   onToggleCheck: (taskId: string, collapsed: boolean) => void;
-  onGenerateExecutableTasks: () => void;
+  onGenerateExecutableTasks: () => Promise<GenerateExecutableTasksResult | false>;
   onMoveTaskInExecutionPlan: (taskId: string, direction: "earlier" | "later") => void;
+  onMoveTaskToExecutionWave: (taskId: string, waveIndex: number) => void;
   onWorkspaceLayoutChange: (mode: WorkspaceLayoutMode) => void;
   onCloseRuntime: () => void;
   onRetryStage: (phase: SplitRetryPhase) => void;
@@ -128,6 +133,7 @@ export function TaskResultPanel({
   unmetTaskIds,
   unmetMenuItems,
   confirmSavingTaskId,
+  executionFanoutSnapshot,
   activeResult,
   taskConfirmFilter,
   taskConfirmCounts,
@@ -181,6 +187,7 @@ export function TaskResultPanel({
   onToggleCheck,
   onGenerateExecutableTasks,
   onMoveTaskInExecutionPlan,
+  onMoveTaskToExecutionWave,
   onWorkspaceLayoutChange,
   onCloseRuntime,
   onRetryStage,
@@ -189,8 +196,8 @@ export function TaskResultPanel({
   const showRuntime = runtimeVisible && (parsing || filteredTasks.length === 0 || runtimeLogs.length > 0);
   const [resultViewMode, setResultViewMode] = useState<ResultViewMode>("review");
   const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(() => new Set());
-  const [executionStarted, setExecutionStarted] = useState(false);
-  const showExecutionRuntime = executionStarted && activeResult && !showRuntime;
+  const [materializedResult, setMaterializedResult] = useState<WriteClusterTasksOutput | null>(null);
+  const showExecutionRuntime = materializedResult !== null && activeResult && !showRuntime;
   const showOrchestration = resultViewMode === "orchestration" && activeResult && filteredTasks.length > 0 && !showRuntime && !showExecutionRuntime;
   const showTaskList = !showRuntime && !showOrchestration && !showExecutionRuntime;
   useEffect(() => {
@@ -205,6 +212,13 @@ export function TaskResultPanel({
   useEffect(() => {
     onWorkspaceLayoutChange(resultViewMode === "orchestration" || showExecutionRuntime ? "focused" : "review");
   }, [onWorkspaceLayoutChange, resultViewMode, showExecutionRuntime]);
+
+  async function handleConfirmAllAndEnterOrchestration() {
+    const confirmed = await onConfirmAll();
+    if (confirmed === false) return;
+    setResultViewMode("orchestration");
+  }
+
   return (
     <Space orientation="vertical" size={12} className="app-prd-task-panel__full-width app-prd-task-panel__stack">
       {splitError ? <Typography.Text type="danger">{splitError}</Typography.Text> : null}
@@ -231,7 +245,7 @@ export function TaskResultPanel({
               taskRoleFilter={taskRoleFilter}
               taskRoleFilterOptions={taskRoleFilterOptions}
               showRoleFilterTabs={showRoleFilterTabs}
-              onConfirmAll={onConfirmAll}
+              onConfirmAll={handleConfirmAllAndEnterOrchestration}
               onAddTask={onAddTask}
               onClearAllTasks={onClearAllTasks}
               onTaskConfirmFilterChange={onTaskConfirmFilterChange}
@@ -265,9 +279,11 @@ export function TaskResultPanel({
                 totalCount={filteredTasks.length}
                 waveCount={activeResult?.parallelGroups.length ?? 0}
                 onModeChange={setResultViewMode}
-                onStartExecution={() => {
-                  setExecutionStarted(true);
-                  onGenerateExecutableTasks();
+                materialized={materializedResult !== null}
+                onMaterialize={async () => {
+                  const out = await onGenerateExecutableTasks();
+                  if (!out) return;
+                  setMaterializedResult(out.materializedResult);
                 }}
               />
             ) : null}
@@ -305,18 +321,21 @@ export function TaskResultPanel({
                         if (task) onSelectTask(task);
                       }}
                       onMoveTask={onMoveTaskInExecutionPlan}
+                      onMoveTaskToWave={onMoveTaskToExecutionWave}
                     />
                   ) : null}
                   {showExecutionRuntime ? (
                     <ExecutionRuntimeQueue
                       result={activeResult}
+                      materializedResult={materializedResult}
+                      fanoutSnapshot={executionFanoutSnapshot}
                       selectedTaskId={selectedTaskId}
                       onSelectTask={(taskId) => {
                         const task = activeResult.splitTasks.find((item) => item.id === taskId);
                         if (task) onSelectTask(task);
                       }}
                       onBackToPlan={() => {
-                        setExecutionStarted(false);
+                        setMaterializedResult(null);
                         setResultViewMode("orchestration");
                       }}
                     />
@@ -411,8 +430,9 @@ function SplitResultStageRail({
   confirmedCount,
   totalCount,
   waveCount,
+  materialized,
   onModeChange,
-  onStartExecution,
+  onMaterialize,
 }: {
   mode: ResultViewMode;
   canEnterOrchestration: boolean;
@@ -420,8 +440,9 @@ function SplitResultStageRail({
   confirmedCount: number;
   totalCount: number;
   waveCount: number;
+  materialized: boolean;
   onModeChange: (mode: ResultViewMode) => void;
-  onStartExecution: () => void;
+  onMaterialize: () => void;
 }) {
   return (
     <div className="app-prd-task-panel__result-stage-rail" aria-label="需求拆分结果流程">
@@ -453,12 +474,12 @@ function SplitResultStageRail({
       <button
         type="button"
         className="app-prd-task-panel__result-stage app-prd-task-panel__result-stage--execute"
-        disabled={!canGenerateExecutableTasks}
-        onClick={onStartExecution}
+        disabled={!canGenerateExecutableTasks || materialized}
+        onClick={onMaterialize}
       >
         <span>3</span>
         <strong>落盘执行</strong>
-        <small>{canGenerateExecutableTasks ? "写入 Trellis" : "等待确认"}</small>
+        <small>{materialized ? "执行已启动" : canGenerateExecutableTasks ? "写入并派发" : "等待确认"}</small>
       </button>
     </div>
   );

@@ -193,6 +193,79 @@ setProjects((prev) => prev.map((p) => (p.id === projectId ? updatedProject : p))
 
 ---
 
+## Scenario: PRD Split Materialized Execution Fan-out
+
+### 1. Scope / Trigger
+
+- Trigger: PRD split execution crosses the split panel, Trellis task writer, workflow facade, OMC batch runner, Claude invocation adapter, and runtime queue UI.
+- Applies when confirmed split tasks are written to `.trellis/tasks/` and immediately dispatched to `trellis-implement`.
+
+### 2. Signatures
+
+- `WriteClusterTasksOutput.childTasks[]`: `{ sourceTaskId: string; taskName: string; taskPath: string }`
+- `runMaterializedSplitTasksFanout(input) -> ExecutionFanoutResult`
+- `runSplitTasksOmcBatch({ executionMetadataByTaskId?: Record<string, TrellisExecutionMetadata> })`
+- `TrellisExecutionMetadata.activeTaskPath?: string`
+- `SplitTodoCountUpdatedDetail.focusParentTaskName?: string | null`
+- `SplitTodoCountUpdatedDetail.focusChildTaskNames?: string[]`
+
+### 3. Contracts
+
+- Source split task ids are planning ids only. They must be remapped through `WriteClusterTasksOutput.childTasks[].sourceTaskId` before dispatch.
+- Workflow task ids for materialized PRD split execution are the real Trellis task refs, for example `.trellis/tasks/05-19-prd/05-19-api`.
+- Dependency ids must be remapped from source task ids to materialized Trellis refs before `facade.upsertTasks`.
+- `Active task:` in the Claude prompt must use `executionMetadata.activeTaskPath` when present; never pass `task-a`/`task-1` style planning ids as the executable Trellis path.
+- Batch and single-task “落盘执行” entry points must share the same materialize-and-fan-out helper. Single-task execution passes `parallelGroups = [[task.id]]`.
+- Missing `childTasks` mappings are hard failures. Do not silently dispatch fewer tasks than the user confirmed.
+
+### 4. Validation & Error Matrix
+
+- Missing repository path -> show an error and do not write or dispatch.
+- Missing Workspace `rootPath` -> writer throws; UI reports “落盘执行失败”.
+- Missing `sourceTaskId -> taskPath` mapping -> `runMaterializedSplitTasksFanout` throws before `runSplitTasksOmcBatch`.
+- Wave batch returns failures -> mark the wave failed, stop later waves, keep the materialized task focus data visible.
+- Empty executable source task list -> show an info message and do not create a parent task.
+
+### 5. Good/Base/Bad Cases
+
+- Good: two source tasks in two waves produce two `.trellis/tasks/...` workflow task ids; the second wave depends on the first materialized ref.
+- Good: a single task card action writes one child task and immediately dispatches exactly one implement subagent.
+- Base: manual OMC batch execution that does not pass `executionMetadataByTaskId` keeps existing task id behavior.
+- Bad: showing “已落盘到 Workspace Trellis” and closing the panel without calling the workflow runner.
+- Bad: using the source id as `Active task:` because the subagent cannot locate the materialized task directory.
+
+### 6. Tests Required
+
+- Unit test source id to Trellis task ref mapping and dependency remapping.
+- Unit test wave order, workflow run id reuse, and stop-on-failed-wave behavior.
+- Regression test incomplete `childTasks` output rejects before dispatch.
+- Adapter test `activeTaskPath` appears in `Active task:` while workflow bookkeeping may still keep its own task id.
+- Type check after changing workflow metadata or UI event detail fields.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+const { output } = await materializeSplitTasksToWorkspaceTrellis(sourceTasks);
+message.success(`已落盘到 Workspace Trellis：${output.parentTaskName}`);
+```
+
+#### Correct
+
+```ts
+const { output, projectRootPath } = await materializeSplitTasksToWorkspaceTrellis(sourceTasks);
+await runMaterializedSplitTasksFanout({
+  projectRootPath,
+  sourceTasks,
+  materializedResult: output,
+  parallelGroups,
+  onSnapshot: setExecutionFanoutSnapshot,
+});
+```
+
+---
+
 ## Review Checklist
 
 Before considering frontend work done, check:

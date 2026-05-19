@@ -199,6 +199,7 @@ export async function runSplitTasksOmcBatch(params: {
   templateId: OmcBatchTemplateId;
   subagentType?: string;
   executionMetadata?: TrellisExecutionMetadata;
+  executionMetadataByTaskId?: Record<string, TrellisExecutionMetadata>;
   /** 同时执行的 OMC/Claude 调用数，建议与仓库 Claude 并发槽位对齐 */
   concurrency: number;
   /** 若 UI 已持有当前会话绑定的工作流 id，可传入以避免每次 listRuns */
@@ -262,16 +263,18 @@ export async function runSplitTasksOmcBatch(params: {
       const index = cursor;
       cursor += 1;
       const task = queue[index];
+      const perTaskExecutionMetadata = params.executionMetadataByTaskId?.[task.id];
       const result = await runTurnTaskLifecycle({
         facade,
         workflowRunId,
         taskId: task.id,
         templateId,
         subagentType,
-        executionMetadata: executionMetadata
+        executionMetadata: executionMetadata || perTaskExecutionMetadata
           ? {
               ...executionMetadata,
-              taskId: task.id,
+              ...perTaskExecutionMetadata,
+              taskId: perTaskExecutionMetadata?.taskId ?? task.id,
               subagentType: subagentLabel,
             }
           : undefined,

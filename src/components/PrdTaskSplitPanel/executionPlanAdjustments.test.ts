@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { SplitResult, TaskItem } from "../../types";
-import { moveTaskInExecutionPlan } from "./executionPlanAdjustments";
+import {
+  inferLikelyExecutionDependencies,
+  moveTaskInExecutionPlan,
+  moveTaskToExecutionWave,
+} from "./executionPlanAdjustments";
 
 describe("moveTaskInExecutionPlan", () => {
   test("moves a task later by depending on same-wave peers", () => {
@@ -36,6 +40,42 @@ describe("moveTaskInExecutionPlan", () => {
     expect(moveTaskInExecutionPlan(result, "task-1", "earlier")).toBeNull();
     expect(moveTaskInExecutionPlan(result, "task-2", "later")).toBeNull();
   });
+
+  test("moves a task to a dropped wave and unblocks target wave peers", () => {
+    const result = split([
+      task("task-1"),
+      task("task-2", ["task-1"], { "task-1": "T2 waits for T1" }),
+      task("task-3", ["task-1"], { "task-1": "T3 waits for T1" }),
+    ]);
+
+    const next = moveTaskToExecutionWave(result, "task-1", 1);
+
+    expect(next?.splitTasks.find((task) => task.id === "task-1")?.dependencies).toEqual([]);
+    expect(next?.splitTasks.find((task) => task.id === "task-2")?.dependencies).toEqual([]);
+    expect(next?.splitTasks.find((task) => task.id === "task-2")?.dependencyRationale).toBeUndefined();
+    expect(next?.parallelGroups).toEqual([["task-1", "task-2", "task-3"]]);
+  });
+
+  test("moves a task to a serial drop target after the parallel wave", () => {
+    const result = split([task("task-1"), task("task-2"), task("task-3")]);
+
+    const next = moveTaskToExecutionWave(result, "task-1", 1);
+
+    expect(next?.splitTasks.find((task) => task.id === "task-1")?.dependencies).toEqual(["task-2", "task-3"]);
+    expect(next?.parallelGroups).toEqual([["task-2", "task-3"], ["task-1"]]);
+  });
+
+  test("infers JWT request interception after login registration UI", () => {
+    const result = split([
+      task("task-1", [], undefined, "登录注册页面与表单"),
+      task("task-2", [], undefined, "JWT 令牌管理与请求拦截"),
+    ]);
+
+    const next = inferLikelyExecutionDependencies(result);
+
+    expect(next.splitTasks.find((task) => task.id === "task-2")?.dependencies).toEqual(["task-1"]);
+    expect(next.parallelGroups).toEqual([["task-1"], ["task-2"]]);
+  });
 });
 
 function split(tasks: TaskItem[]): SplitResult {
@@ -60,10 +100,15 @@ function split(tasks: TaskItem[]): SplitResult {
   };
 }
 
-function task(id: string, dependencies: string[] = [], dependencyRationale?: Record<string, string>): TaskItem {
+function task(
+  id: string,
+  dependencies: string[] = [],
+  dependencyRationale?: Record<string, string>,
+  title = id,
+): TaskItem {
   return {
     id,
-    title: id,
+    title,
     description: "",
     role: "frontend",
     size: "M",

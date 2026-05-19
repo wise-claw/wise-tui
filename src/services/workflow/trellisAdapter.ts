@@ -36,9 +36,10 @@ export interface TrellisAdapterOptions {
 
 const DEFAULT_TIMEOUT_MS = 300_000;
 
-function resolveStage(subagentType: string | undefined, taskId: string): ResolvedStage {
+function resolveStage(subagentType: string | undefined, taskId: string, activeTaskPath?: string): ResolvedStage {
   const hint = subagentType?.trim() ?? "";
-  const activeTaskLine = `Active task: ${taskId}`;
+  const activeTask = activeTaskPath?.trim() || taskId;
+  const activeTaskLine = `Active task: ${activeTask}`;
   if (hint === "trellis-implement") {
     return {
       hint: "trellis-implement",
@@ -114,7 +115,7 @@ export class TrellisWorkflowAdapter implements OmcWorkflowAdapter {
     attempt: number;
   }): ReturnType<OmcWorkflowAdapter["execute"]> {
     const startedAt = Date.now();
-    const resolved = resolveStage(input.subagentType, input.taskId);
+    const resolved = resolveStage(input.subagentType, input.taskId, input.executionMetadata?.activeTaskPath);
     const executionMetadata = {
       ...(input.executionMetadata ?? {}),
       stage: input.executionMetadata?.stage ?? resolved.artifactStage,

@@ -607,14 +607,30 @@ export function ClaudeChat({
   const [splitTodoTasks, setSplitTodoTasks] = useState<TaskItem[]>([]);
   const [trellisTasks, setTrellisTasks] = useState<TrellisRequirementTaskRow[]>([]);
   const [trellisTasksLoading, setTrellisTasksLoading] = useState(false);
+  const [trellisTaskFocus, setTrellisTaskFocus] = useState<{
+    parentTaskName: string | null;
+    childTaskNames: string[];
+  } | null>(null);
   /** 「可执行任务」角标：仅统计未完成（todo）条数 */
   const splitIncompleteTaskCount = useMemo(
     () => splitTodoTasks.filter((task) => task.flowStatus === "todo").length,
     [splitTodoTasks],
   );
   const visibleTrellisTasks = useMemo(
-    () => trellisTasks.filter(isRunnableTrellisRequirementTask),
-    [trellisTasks],
+    () => {
+      const runnable = trellisTasks.filter(isRunnableTrellisRequirementTask);
+      if (!trellisTaskFocus) return runnable;
+      const parent = trellisTaskFocus.parentTaskName?.trim() ?? "";
+      const children = new Set(trellisTaskFocus.childTaskNames.map((name) => name.trim()).filter(Boolean));
+      const focused = runnable.filter((task) => {
+        const taskId = task.taskId.trim();
+        const parentName = task.parent?.trim() ?? "";
+        if (children.has(taskId)) return true;
+        return parent.length > 0 && parentName === parent;
+      });
+      return focused.length > 0 ? focused : runnable;
+    },
+    [trellisTaskFocus, trellisTasks],
   );
   const taskDrawerCount = splitIncompleteTaskCount + visibleTrellisTasks.length;
   const showPendingTaskQueue = pendingTasks.length > 0;
@@ -699,6 +715,10 @@ export function ClaudeChat({
       const detail = (event as CustomEvent<SplitTodoCountUpdatedDetail>).detail;
       void syncTrellisTaskList().then(() => {
         if (detail?.source === "trellis" && detail.openTaskDrawer) {
+          setTrellisTaskFocus({
+            parentTaskName: detail.focusParentTaskName ?? detail.parentTaskName ?? null,
+            childTaskNames: detail.focusChildTaskNames ?? detail.childTaskNames ?? [],
+          });
           setTaskListStatusFilter("all");
           setTaskListDrawerOpen(true);
         }
@@ -3276,6 +3296,17 @@ export function ClaudeChat({
         }}
       >
         <div className="app-claude-task-list-drawer-inner">
+        {trellisTaskFocus ? (
+          <div className="app-claude-task-list__focus-bar">
+            <span>
+              当前聚焦：{trellisTaskFocus.parentTaskName || "本次落盘任务"}
+              {trellisTaskFocus.childTaskNames.length > 0 ? ` · ${trellisTaskFocus.childTaskNames.length} 个子任务` : ""}
+            </span>
+            <button type="button" onClick={() => setTrellisTaskFocus(null)}>
+              显示全部
+            </button>
+          </div>
+        ) : null}
         {splitTodoTasks.length === 0 && visibleTrellisTasks.length === 0 ? (
           <div className="app-claude-task-list-empty">
             <Empty

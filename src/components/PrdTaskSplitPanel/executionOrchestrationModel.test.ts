@@ -26,9 +26,34 @@ describe("buildExecutionOrchestrationModel", () => {
 
     expect(model.requirements).toHaveLength(1);
     expect(model.requirements[0]?.taskIds).toEqual(["task-1", "task-2"]);
+    expect(model.requirements[0]?.label).toBe("功能需求 1");
+    expect(model.requirements[0]?.title).toBe("用户认证系统");
+    expect(model.tasks.find((item) => item.id === "task-2")?.requirementLabel).toBe("用户认证系统");
     expect(model.parallelGroups.map((group) => group.taskIds)).toEqual([["task-1"], ["task-2"]]);
     expect(model.tasks.find((item) => item.id === "task-2")?.lane).toBe("waiting");
+    expect(model.tasks.find((item) => item.id === "task-1")?.agentName).toBe("API-Agent");
     expect(model.agents.map((agent) => agent.title).sort()).toEqual(["backend-api", "frontend-app"]);
+  });
+
+  test("detects same-wave source file conflicts", () => {
+    const result = split([
+      task({
+        id: "task-1",
+        title: "Update auth state",
+        sourceRefs: ["src/auth.ts:12"],
+      }),
+      task({
+        id: "task-2",
+        title: "Adjust auth guard",
+        sourceRefs: ["src/auth.ts:45"],
+      }),
+    ]);
+
+    const model = buildExecutionOrchestrationModel(result);
+
+    expect(model.conflictWarnings).toHaveLength(1);
+    expect(model.conflictWarnings[0]?.message).toContain("src/auth.ts");
+    expect(model.tasks.find((item) => item.id === "task-1")?.conflictWarnings).toHaveLength(1);
   });
 });
 

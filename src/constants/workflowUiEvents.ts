@@ -57,6 +57,8 @@ export interface SplitTodoCountUpdatedDetail {
   projectId?: string | null;
   parentTaskName?: string | null;
   childTaskNames?: string[];
+  focusParentTaskName?: string | null;
+  focusChildTaskNames?: string[];
 }
 
 export interface OpenWorkflowConfigDetail {

@@ -1757,6 +1757,38 @@
   gap: 8px;
 }
 
+.app-claude-task-list__focus-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--ant-color-primary-border);
+  border-radius: 8px;
+  background: var(--ant-color-primary-bg);
+  color: var(--ant-color-text);
+  font-size: 12px;
+}
+
+.app-claude-task-list__focus-bar span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-claude-task-list__focus-bar button {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--ant-color-primary);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+}
+
 .app-claude-task-list__batch-bar {
   position: sticky;
   top: 0;

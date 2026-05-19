@@ -46,6 +46,16 @@ prompt 第一行**必须**是：`Active task: <parent_task_path>`（workflow.md 
       "dependencyRationale": {
         "task-2": "当前任务需要 task-2 先完成，因为 ..."
       },
+      "sourceRefs": ["src/auth/service.ts:42", "db/migrations/001_auth.sql"],
+      "agentHint": "DBA-Agent",
+      "conflictHints": [
+        {
+          "kind": "file_write_conflict",
+          "resource": "src/auth/service.ts",
+          "withTaskId": "task-3",
+          "rationale": "两个任务都会改同一认证服务入口，强行并行可能产生合并冲突"
+        }
+      ],
       "sourceRequirementIds": ["req-functional-1", "req-acceptance-3"],
       "taskAnchors": {
         "from": 100, "to": 250,
@@ -80,6 +90,12 @@ prompt 第一行**必须**是：`Active task: <parent_task_path>`（workflow.md 
 - `dependencies` 是初始 DAG 边；凡是写入 `dependencies` 的 task id，必须在
   `dependencyRationale` 中给出简短依据。依据应引用 taskAnchors、sourceRefs、文件路径、接口契约、
   requirement 先后关系或前后端协作关系中的至少一种。
+- `sourceRefs` 应列出该任务预计创建 / 修改 / 重点检查的文件或目录；已知行号可写成
+  `path/to/file.ts:42`，未知行号只写路径。不要把 PRD requirement id 塞进 sourceRefs。
+- `agentHint` 应给出具体执行子代理名，而不是笼统的 `trellis-implement`。推荐命名:
+  `DBA-Agent`、`Config-Agent`、`API-Agent`、`Frontend-Coder`、`Docs-Agent`、`Test-Agent`。
+- `conflictHints` 用于提示编排层:若本任务和其它任务可能同时修改同一文件、锁定同一资源、
+  变更同一接口契约或迁移同一 schema,必须列出风险。即便不确定,也应给出保守提示。
 
 ## 4. 行为约束
 
@@ -100,6 +116,18 @@ prompt 第一行**必须**是：`Active task: <parent_task_path>`（workflow.md 
 3. 仍无法决定 → `role: "frontend"`（与 `defaultTaskRoleForRepositoryType` 一致）。
 
 任何情况下不要让 `role` 缺失。
+
+## 5.1 Agent / 资源提示策略
+
+拆分阶段必须为编排阶段准备足够信息:
+
+- 任务标题应能被人类直接理解,避免只写 "实现功能"。
+- `sourceRefs` 是编排冲突检测和右侧状态监控的基础,应尽量具体到文件。
+- 若任务需要新增文件,也要写目标路径或目录,例如 `src/views/Login.vue`、`db/migrations/`。
+- `agentHint` 应按任务真实专业性选择,例如 schema/migration 用 `DBA-Agent`,配置文件用
+  `Config-Agent`,接口/服务用 `API-Agent`,UI 组件用 `Frontend-Coder`。
+- 发现两个任务可能争用同一文件、schema、接口或配置时,用 `conflictHints` 提醒;不要只靠
+  `dependencies` 隐式表达。
 
 ## 6. 锚点策略
 

@@ -18,7 +18,7 @@ interface Props {
   taskRoleFilter: TaskRoleFilter;
   taskRoleFilterOptions: { label: string; value: TaskRoleFilter }[];
   showRoleFilterTabs: boolean;
-  onConfirmAll: () => void;
+  onConfirmAll: () => void | Promise<void>;
   onAddTask: () => void;
   onClearAllTasks: () => void;
   onTaskConfirmFilterChange: (filter: TaskConfirmFilter) => void;

@@ -1639,6 +1639,16 @@
   gap: 2px;
 }
 
+.app-prd-task-panel__confirm-lines {
+  display: grid;
+  gap: 6px;
+}
+
+.app-prd-task-panel__confirm-lines p {
+  margin: 0;
+  line-height: 1.5;
+}
+
 .app-prd-task-panel__deepen-feedback-tags {
   display: flex;
   flex-wrap: wrap;
@@ -2221,7 +2231,15 @@
 }
 
 .app-prd-task-panel__execution-runtime-wave.is-running {
+  border-color: rgba(22, 119, 255, 0.42);
+}
+
+.app-prd-task-panel__execution-runtime-wave.is-succeeded {
   border-color: rgba(82, 196, 26, 0.42);
+}
+
+.app-prd-task-panel__execution-runtime-wave.is-failed {
+  border-color: rgba(255, 77, 79, 0.42);
 }
 
 .app-prd-task-panel__execution-runtime-wave-head {
@@ -2249,7 +2267,15 @@
 }
 
 .app-prd-task-panel__execution-runtime-wave.is-running .app-prd-task-panel__execution-runtime-wave-head > .anticon {
+  color: var(--ant-color-primary);
+}
+
+.app-prd-task-panel__execution-runtime-wave.is-succeeded .app-prd-task-panel__execution-runtime-wave-head > .anticon {
   color: var(--ant-color-success);
+}
+
+.app-prd-task-panel__execution-runtime-wave.is-failed .app-prd-task-panel__execution-runtime-wave-head > .anticon {
+  color: var(--ant-color-error);
 }
 
 .app-prd-task-panel__execution-runtime-task-list {
@@ -2298,8 +2324,18 @@
 }
 
 .app-prd-task-panel__execution-runtime-task.is-running .app-prd-task-panel__execution-runtime-task-icon {
+  color: var(--ant-color-primary);
+  background: var(--ant-color-primary-bg);
+}
+
+.app-prd-task-panel__execution-runtime-task.is-succeeded .app-prd-task-panel__execution-runtime-task-icon {
   color: var(--ant-color-success);
   background: rgba(82, 196, 26, 0.12);
+}
+
+.app-prd-task-panel__execution-runtime-task.is-failed .app-prd-task-panel__execution-runtime-task-icon {
+  color: var(--ant-color-error);
+  background: var(--ant-color-error-bg);
 }
 
 .app-prd-task-panel__execution-runtime-task-main {
@@ -2488,13 +2524,264 @@
   min-height: 0;
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(180px, 0.75fr) minmax(260px, 1.4fr) minmax(190px, 0.85fr);
+  grid-template-columns: minmax(220px, 0.34fr) minmax(0, 1fr) minmax(300px, 0.36fr);
   gap: 10px;
   overflow: hidden;
   border: 1px solid var(--ant-color-border-secondary);
   border-radius: 8px;
   padding: 8px;
   background: var(--ant-color-fill-quaternary);
+}
+
+.app-prd-task-panel__orchestration-requirements-panel,
+.app-prd-task-panel__orchestration-board,
+.app-prd-task-panel__orchestration-dispatch {
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-prd-task-panel__orchestration-panel-head,
+.app-prd-task-panel__orchestration-board-head,
+.app-prd-task-panel__orchestration-dispatch-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-prd-task-panel__orchestration-panel-head strong,
+.app-prd-task-panel__orchestration-board-head div,
+.app-prd-task-panel__orchestration-dispatch-head {
+  min-width: 0;
+}
+
+.app-prd-task-panel__orchestration-board-head div {
+  display: grid;
+  gap: 3px;
+}
+
+.app-prd-task-panel__orchestration-board-head strong,
+.app-prd-task-panel__orchestration-panel-head strong,
+.app-prd-task-panel__orchestration-dispatch-head strong {
+  color: var(--ant-color-text);
+  font-size: 13px;
+}
+
+.app-prd-task-panel__orchestration-panel-head span,
+.app-prd-task-panel__orchestration-board-head span,
+.app-prd-task-panel__orchestration-board-head small,
+.app-prd-task-panel__orchestration-dispatch-head span {
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+}
+
+.app-prd-task-panel__orchestration-board-head small {
+  flex-shrink: 0;
+}
+
+.app-prd-task-panel__orchestration-requirement-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 10px;
+}
+
+.app-prd-task-panel__orchestration-requirement-card {
+  appearance: none;
+  min-width: 0;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-left: 4px solid var(--ant-color-border);
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
+  padding: 12px;
+  display: grid;
+  gap: 9px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.app-prd-task-panel__orchestration-requirement-card.has-tasks {
+  border-left-color: var(--ant-color-primary);
+}
+
+.app-prd-task-panel__orchestration-requirement-card.is-active {
+  border-color: rgba(22, 119, 255, 0.55);
+  border-left-color: var(--ant-color-primary);
+  box-shadow: 0 0 0 1px rgba(22, 119, 255, 0.12);
+}
+
+.app-prd-task-panel__orchestration-requirement-card span {
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.app-prd-task-panel__orchestration-requirement-card strong {
+  color: var(--ant-color-text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.app-prd-task-panel__orchestration-requirement-card small {
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+}
+
+.app-prd-task-panel__orchestration-board-actions {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.app-prd-task-panel__orchestration-summary-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 7px;
+  background: var(--ant-color-fill-quaternary);
+  color: var(--ant-color-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.app-prd-task-panel__orchestration-wave-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  align-content: start;
+  gap: 10px;
+}
+
+.app-prd-task-panel__orchestration-wave-column {
+  min-width: 0;
+  min-height: 170px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-prd-task-panel__orchestration-wave-column:hover {
+  border-color: rgba(22, 119, 255, 0.36);
+}
+
+.app-prd-task-panel__orchestration-wave-column-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-bg-container);
+}
+
+.app-prd-task-panel__orchestration-wave-column-head div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.app-prd-task-panel__orchestration-wave-column-head strong {
+  color: var(--ant-color-text);
+  font-size: 13px;
+}
+
+.app-prd-task-panel__orchestration-wave-column-head span,
+.app-prd-task-panel__orchestration-wave-column-head small {
+  color: var(--ant-color-text-secondary);
+  font-size: 11px;
+}
+
+.app-prd-task-panel__orchestration-wave-column-head small {
+  flex-shrink: 0;
+}
+
+.app-prd-task-panel__orchestration-wave-column--serial-drop {
+  min-height: 120px;
+  border-style: dashed;
+  align-items: center;
+  justify-content: center;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-prd-task-panel__orchestration-wave-column--serial-drop.is-dragging {
+  border-color: var(--ant-color-primary-border);
+  background: var(--ant-color-primary-bg);
+}
+
+.app-prd-task-panel__orchestration-wave-column--serial-drop div {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+}
+
+.app-prd-task-panel__orchestration-wave-column--serial-drop strong {
+  color: var(--ant-color-text-secondary);
+  font-size: 13px;
+}
+
+.app-prd-task-panel__orchestration-wave-column--serial-drop span {
+  font-size: 12px;
+}
+
+.app-prd-task-panel__orchestration-dispatch-waves {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 10px;
+}
+
+.app-prd-task-panel__orchestration-conflict-list {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 8px;
+  padding: 10px 10px 0;
+}
+
+.app-prd-task-panel__orchestration-conflict {
+  min-width: 0;
+  border: 1px solid rgba(255, 77, 79, 0.32);
+  border-radius: 8px;
+  background: var(--ant-color-error-bg);
+  padding: 9px 10px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  color: var(--ant-color-error);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.app-prd-task-panel__orchestration-conflict span {
+  min-width: 0;
 }
 
 .app-prd-task-panel__orchestration-column {
@@ -2717,6 +3004,7 @@
 .app-prd-task-panel__orchestration-task-stack {
   display: grid;
   gap: 8px;
+  padding: 10px;
 }
 
 .app-prd-task-panel__orchestration-task {
@@ -2728,7 +3016,7 @@
   background: var(--ant-color-bg-container);
   padding: 9px 10px;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 8px;
   text-align: left;
@@ -2736,10 +3024,24 @@
   transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
 
+.app-prd-task-panel__orchestration-task[draggable="true"] {
+  cursor: grab;
+}
+
+.app-prd-task-panel__orchestration-task.is-dragging {
+  opacity: 0.48;
+  cursor: grabbing;
+}
+
 .app-prd-task-panel__orchestration-task:hover,
 .app-prd-task-panel__orchestration-task.is-active {
   border-color: rgba(22, 119, 255, 0.5);
   box-shadow: 0 0 0 1px rgba(22, 119, 255, 0.12);
+}
+
+.app-prd-task-panel__orchestration-task-grip {
+  color: var(--ant-color-text-quaternary);
+  font-size: 13px;
 }
 
 .app-prd-task-panel__orchestration-task-dot {
@@ -2770,7 +3072,8 @@
 .app-prd-task-panel__orchestration-task-main strong,
 .app-prd-task-panel__orchestration-task-main small,
 .app-prd-task-panel__orchestration-task-trace,
-.app-prd-task-panel__orchestration-task-state {
+.app-prd-task-panel__orchestration-task-state,
+.app-prd-task-panel__orchestration-task-file {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2783,14 +3086,48 @@
 
 .app-prd-task-panel__orchestration-task-main small,
 .app-prd-task-panel__orchestration-task-trace,
-.app-prd-task-panel__orchestration-task-state {
+.app-prd-task-panel__orchestration-task-state,
+.app-prd-task-panel__orchestration-task-file {
   color: var(--ant-color-text-tertiary);
   font-size: 11px;
 }
 
 .app-prd-task-panel__orchestration-task-trace,
-.app-prd-task-panel__orchestration-task-state {
-  grid-column: 2 / 4;
+.app-prd-task-panel__orchestration-task-state,
+.app-prd-task-panel__orchestration-task-file {
+  grid-column: 3 / 6;
+}
+
+.app-prd-task-panel__orchestration-task-file {
+  color: var(--ant-color-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.app-prd-task-panel__orchestration-task-agent {
+  grid-column: 4 / 6;
+  justify-self: end;
+  max-width: 180px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 6px;
+  background: var(--ant-color-fill-quaternary);
+  padding: 3px 8px;
+  color: var(--ant-color-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.app-prd-task-panel__orchestration-task-conflict {
+  flex-shrink: 0;
+  border-radius: 6px;
+  padding: 2px 6px;
+  background: var(--ant-color-error-bg);
+  color: var(--ant-color-error);
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .app-prd-task-panel__orchestration-progress {
@@ -2841,9 +3178,9 @@
 
 .app-prd-task-panel__orchestration-agent-summary {
   flex: 0 0 auto;
-  max-height: 38%;
+  max-height: 34%;
   border-top: 1px solid var(--ant-color-border-secondary);
-  padding-top: 8px;
+  padding: 10px;
 }
 
 .app-prd-task-panel__orchestration-wave {
@@ -3060,19 +3397,19 @@
 
 @media (max-width: 1120px) {
   .app-prd-task-panel__orchestration {
-    grid-template-columns: minmax(180px, 0.8fr) minmax(260px, 1.2fr);
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(160px, auto) minmax(360px, 1fr) minmax(220px, auto);
     overflow-y: auto;
   }
 
-  .app-prd-task-panel__orchestration-column--agents {
-    grid-column: 1 / -1;
-    min-height: 180px;
+  .app-prd-task-panel__orchestration-dispatch {
+    min-height: 220px;
   }
 }
 
 @media (max-width: 760px) {
-  .app-prd-task-panel__orchestration {
-    grid-template-columns: 1fr;
+  .app-prd-task-panel__orchestration-board-actions {
+    display: none;
   }
 }
 

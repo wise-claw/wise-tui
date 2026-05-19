@@ -361,6 +361,32 @@ dependencyRationale?: Record<string, string>;
 - 左侧 `RequirementInputCard` 所在列宽度过渡到 0,透明并禁用指针;组件不卸载,保留编辑器状态。
 - 右侧任务/编排列扩展到 100%,承载 wave/DAG、fan-out 派发计划和落盘执行动作。
 - 所有波次调整仍通过 `moveTaskInExecutionPlan` 修改 `TaskItem.dependencies` 并重算 `parallelGroups`。
+- 编排页布局为:
+  - 顶部摘要:候选任务数、波次数、最高并行度、子代理槽位。
+  - 主体左侧:wave/DAG 画布,任务卡可拖拽到既有 wave 或固定“串行链路”落点。
+  - wave 命名收敛为首波“并行框”与后续“串行链路 N”,不提供“新 Pool”临时概念;固定“串行链路”落点用于把任务恢复为后置串行步骤。
+  - 主体右侧:fan-out 派发映射,与 wave 一一对应,不再重复承载主要编辑。
+  - 左侧需求栏:展示 requirement 标题与派生 task 数,点击高亮对应 task。
+  - task 卡展示 title、sourceRefs、requirement 来源、agentHint/推导 agent、依赖与冲突标记。
+  - task 卡没有 sourceRefs 时不显示“待声明文件触点”占位;该缺口属于质量/监控提示,不是任务主标题信息。
+  - 右侧状态监控展示 agent pool、冲突提示与 wave → subagent 映射。
+  - 拖拽前先用候选 ExecutionPlan 重跑冲突检测;若目标 wave 出现同文件/资源冲突,必须二次确认后才保存。
+
+### 10.1.1 编排元数据来源
+
+短期 UI 复用现有字段:
+
+- `sourceRequirementIds` + `requirements-index` → 左侧需求标题与 task 关联。
+- `sourceRefs` → 文件触点与同波次文件冲突检测。
+- `dependencies` + `dependencyRationale` → DAG 与依赖说明。
+- `splitListEmployeeName` 或任务内容推导 → 具体 agent 展示。
+- 本地启发式补足常见依赖:JWT/令牌/请求拦截/鉴权守卫类任务默认依赖登录注册页面/认证表单类任务。
+
+长期 splitter 输出契约需要增加:
+
+- `sourceRefs`:预计创建/修改/检查的文件或目录。
+- `agentHint`:具体执行子代理名,例如 `DBA-Agent` / `Config-Agent` / `API-Agent` / `Frontend-Coder`。
+- `conflictHints`:文件锁、schema、接口契约、配置资源等潜在并行冲突。
 
 ### 10.2 任务列表语义切换
 

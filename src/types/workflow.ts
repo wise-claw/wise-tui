@@ -14,6 +14,13 @@ export interface TrellisExecutionMetadata {
   stage?: string;
   subagentType?: string;
   taskId?: string;
+  /** Actual Trellis task directory used in the `Active task:` prompt line. */
+  activeTaskPath?: string;
+  /** Original PRD split task id before materializing into `.trellis/tasks/`. */
+  sourceTaskId?: string;
+  parentTaskName?: string;
+  childTaskName?: string;
+  waveIndex?: number;
 }
 
 export interface WorkflowApiError {

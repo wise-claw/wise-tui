@@ -45,6 +45,40 @@ describe("TrellisWorkflowAdapter", () => {
     expect(capturedRepoPath).toBe("/tmp/wt");
   });
 
+  test("uses activeTaskPath metadata for the Active task prompt while preserving workflow task id", async () => {
+    let capturedPrompt = "";
+    let capturedWorktreeTaskId = "";
+    const adapter = new TrellisWorkflowAdapter({
+      prepareWorktree: async (_repoPath, taskId) => {
+        capturedWorktreeTaskId = taskId;
+        return { worktreePath: "/tmp/wt", branchName: "wise/trellis/test" };
+      },
+      invokeClaude: async (params) => {
+        capturedPrompt = params.prompt;
+        return successInvocation();
+      },
+    });
+
+    const result = await adapter.execute({
+      workflowRunId: "wf-active-path",
+      repositoryPath: "/repo/a",
+      sessionId: "session-active-path",
+      taskId: "task-1",
+      templateId: "trellis",
+      subagentType: "trellis-implement",
+      executionMetadata: {
+        activeTaskPath: ".trellis/tasks/05-19-prd/05-19-child",
+      },
+      attempt: 7,
+    });
+
+    expect(result.status).toBe("succeeded");
+    expect(capturedPrompt.startsWith("Active task: .trellis/tasks/05-19-prd/05-19-child")).toBe(true);
+    expect(capturedWorktreeTaskId).toBe("task-1");
+    expect(result.artifactRefs).toContain("trellis://task/task-1/implement/attempt-7");
+  });
+
+
   test("trellis-check subagent produces a check-stage artifact", async () => {
     const adapter = new TrellisWorkflowAdapter({
       prepareWorktree: fakeWorktree(),

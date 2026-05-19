@@ -8,10 +8,7 @@ import { RuntimePromptEditModal } from "./RuntimePromptEditModal";
 import { RequirementInputCard } from "./RequirementInputCard";
 import { TaskResultPanel } from "./TaskResultPanel";
 import { reconcileResolvedAnchorRanges } from "./anchorReconcile";
-import {
-  TASK_SPLIT_CLOSE_ANIMATION_MS,
-  usePrdTaskSplitPanelController,
-} from "./usePrdTaskSplitPanelController";
+import { usePrdTaskSplitPanelController } from "./usePrdTaskSplitPanelController";
 
 type SplitWorkspaceLayout = "review" | "focused";
 
@@ -42,9 +39,9 @@ export function PrdTaskSplitPanel({
     anchorRangePersistTimerRef,
     canGenerateExecutableTasks,
     cardUnmetPointsForTask,
-    closingToTaskListMotion,
     confirmSavingTaskId,
     displayExecutionStatus,
+    executionFanoutSnapshot,
     filteredTasks,
     focusTaskWithFilterSync,
     generatingExecutableTaskId,
@@ -64,6 +61,7 @@ export function PrdTaskSplitPanel({
     handleImportLegacyPrd,
     handleImportPrdFile,
     handleMoveTaskInExecutionPlan,
+    handleMoveTaskToExecutionWave,
     handleParse,
     handleOptimizeRuntimePromptDraft,
     handleOptimizeTaskContent,
@@ -138,7 +136,6 @@ export function PrdTaskSplitPanel({
     splitRuntimeListRef,
     splitRuntimeLogs,
     splitRuntimeVisible,
-    panelRootRef,
     openTaskAiPopover,
     taskAiActionLoadingById,
     taskAiOptimizedContentById,
@@ -175,25 +172,7 @@ export function PrdTaskSplitPanel({
       }
     >
       <Layout.Content
-        ref={(node) => {
-          panelRootRef.current = node;
-        }}
-        className={[
-          "app-prd-task-panel",
-          closingToTaskListMotion?.active ? "app-prd-task-panel--closing-to-task-list" : "",
-        ].join(" ").trim()}
-        style={closingToTaskListMotion
-          ? {
-            transform: closingToTaskListMotion.active
-              ? `translate3d(${closingToTaskListMotion.dx}px, ${closingToTaskListMotion.dy}px, 0) scale(${closingToTaskListMotion.scale})`
-              : "translate3d(0, 0, 0) scale(1)",
-            opacity: closingToTaskListMotion.active ? 0.14 : 1,
-            transition: `transform ${TASK_SPLIT_CLOSE_ANIMATION_MS}ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity ${TASK_SPLIT_CLOSE_ANIMATION_MS}ms ease`,
-            transformOrigin: "center center",
-            pointerEvents: "none",
-            willChange: "transform, opacity",
-          }
-          : undefined}
+        className="app-prd-task-panel"
       >
       <RuntimePromptEditModal
         open={runtimePromptModalOpen}
@@ -311,6 +290,7 @@ export function PrdTaskSplitPanel({
               unmetTaskIds={unmetTaskIds}
               unmetMenuItems={unmetPreconditionsMenuItems}
               confirmSavingTaskId={confirmSavingTaskId}
+              executionFanoutSnapshot={executionFanoutSnapshot}
               activeResult={activeResult}
               taskConfirmFilter={taskConfirmFilter}
               taskConfirmCounts={taskConfirmCounts}
@@ -318,7 +298,7 @@ export function PrdTaskSplitPanel({
               taskRoleFilterOptions={taskRoleFilterOptions}
               showRoleFilterTabs={showRoleFilterTabs}
               canGenerateExecutableTasks={canGenerateExecutableTasks}
-              closingMotionActive={Boolean(closingToTaskListMotion)}
+              closingMotionActive={false}
               selectedTaskId={selectedTaskId}
               resolvedTaskAnchorIds={resolvedTaskAnchorIds}
               pendingTaskContentById={pendingTaskContentById}
@@ -335,7 +315,7 @@ export function PrdTaskSplitPanel({
               taskAnchorPopoverTaskId={taskAnchorPopoverTaskId}
               generatingExecutableTaskId={generatingExecutableTaskId}
               savingTaskId={savingTaskId}
-              onConfirmAll={() => void handleConfirmAllTasks()}
+              onConfirmAll={handleConfirmAllTasks}
               onAddTask={() => void handleAddTask()}
               onClearAllTasks={() => handleClearAllTasks()}
               onTaskConfirmFilterChange={setTaskConfirmFilter}
@@ -444,8 +424,9 @@ export function PrdTaskSplitPanel({
                   [taskId]: !collapsed,
                 }));
               }}
-              onGenerateExecutableTasks={() => void handleGenerateExecutableTasks()}
+              onGenerateExecutableTasks={handleGenerateExecutableTasks}
               onMoveTaskInExecutionPlan={(taskId, direction) => void handleMoveTaskInExecutionPlan(taskId, direction)}
+              onMoveTaskToExecutionWave={(taskId, waveIndex) => void handleMoveTaskToExecutionWave(taskId, waveIndex)}
               onWorkspaceLayoutChange={setWorkspaceLayout}
               onCloseRuntime={() => setSplitRuntimeVisible(false)}
               onRetryStage={(phase) => { void handleRetrySplitStage(phase); }}
