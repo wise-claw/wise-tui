@@ -74,6 +74,16 @@ export function CodeGraphIcon() {
   );
 }
 
+export function ScheduledTasksIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <circle cx="8" cy="8.5" r="5.25" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M8 5.75v3l2 1.15" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5.5 2.5h5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function ChatIcon() {
   return (
     <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>

@@ -13,6 +13,7 @@ import {
   MoreIcon,
   RepositoryTypeIcon,
   RepoDragHandleIcon,
+  ScheduledTasksIcon,
 } from "./SidebarIcons";
 
 export interface RepositoryReorderUi {
@@ -52,7 +53,7 @@ export function RepositoryConversationAction({ onOpen }: { onOpen: () => void })
     <Tooltip title="打开仓库对话" mouseEnterDelay={0.3}>
       <button
         type="button"
-        className="app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--labeled app-repository-action--chat"
+        className="app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--chat"
         aria-label="打开对话"
         onClick={(e) => {
           e.stopPropagation();
@@ -60,18 +61,23 @@ export function RepositoryConversationAction({ onOpen }: { onOpen: () => void })
         }}
       >
         <ChatIcon />
-        <span className="app-repository-action-label">对话</span>
       </button>
     </Tooltip>
   );
 }
 
-export function RepositoryCodeGraphAction({ onOpen }: { onOpen: () => void }) {
+export function RepositoryCodeGraphAction({
+  onOpen,
+  variant = "repo",
+}: {
+  onOpen: () => void;
+  variant?: "repo" | "project";
+}) {
   return (
     <Tooltip title="查看代码图谱" mouseEnterDelay={0.3}>
       <button
         type="button"
-        className="app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--code-graph"
+        className={`app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--code-graph${variant === "project" ? " app-repository-action--project-quick" : ""}`}
         aria-label="查看代码图谱"
         onClick={(e) => {
           e.stopPropagation();
@@ -79,6 +85,39 @@ export function RepositoryCodeGraphAction({ onOpen }: { onOpen: () => void }) {
         }}
       >
         <CodeGraphIcon />
+      </button>
+    </Tooltip>
+  );
+}
+
+export function SidebarScheduledTasksAction({
+  enabledCount,
+  onOpen,
+  variant = "repo",
+}: {
+  enabledCount: number;
+  onOpen: () => void;
+  variant?: "repo" | "project";
+}) {
+  if (enabledCount <= 0) return null;
+
+  const badgeLabel = enabledCount > 99 ? "99+" : String(enabledCount);
+
+  return (
+    <Tooltip title={`${enabledCount} 个激活的定时任务`} mouseEnterDelay={0.3}>
+      <button
+        type="button"
+        className={`app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--scheduled-tasks${variant === "project" ? " app-repository-action--project-quick" : ""}`}
+        aria-label={`定时任务（${enabledCount} 个激活）`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpen();
+        }}
+      >
+        <span className="app-repository-action-icon-wrap">
+          <ScheduledTasksIcon />
+          <span className="app-repository-action-count-badge">{badgeLabel}</span>
+        </span>
       </button>
     </Tooltip>
   );
@@ -101,6 +140,8 @@ export function RepositoryRow({
   repositoryReorder,
   hideChatAction = false,
   codeGraphIndexed = false,
+  scheduledTasksEnabledCount = 0,
+  onOpenScheduledTasks,
 }: {
   project: Workspace;
   repository: Repository;
@@ -118,6 +159,8 @@ export function RepositoryRow({
   repositoryReorder?: RepositoryReorderUi;
   hideChatAction?: boolean;
   codeGraphIndexed?: boolean;
+  scheduledTasksEnabledCount?: number;
+  onOpenScheduledTasks?: (repository: Repository) => void;
 }) {
   const moreItems: MenuProps["items"] = [
     { key: "finder", label: "Finder打开" },
@@ -208,6 +251,12 @@ export function RepositoryRow({
               onOpen={() => onCodeGraphViewRepositoryInProject(project, repository)}
             />
           ) : null}
+          {onOpenScheduledTasks ? (
+            <SidebarScheduledTasksAction
+              enabledCount={scheduledTasksEnabledCount}
+              onOpen={() => onOpenScheduledTasks(repository)}
+            />
+          ) : null}
           <Dropdown
             rootClassName="app-sidebar-more-menu-dropdown"
             menu={{
@@ -258,6 +307,8 @@ export function FloatingRepositoryRow({
   onJoinExistingProject,
   onRemove,
   codeGraphIndexed = false,
+  scheduledTasksEnabledCount = 0,
+  onOpenScheduledTasks,
 }: {
   repository: StandaloneRepo;
   isActiveRepository: boolean;
@@ -274,6 +325,8 @@ export function FloatingRepositoryRow({
   onJoinExistingProject?: (repository: StandaloneRepo, projectId: string) => void;
   onRemove: (repository: StandaloneRepo) => void;
   codeGraphIndexed?: boolean;
+  scheduledTasksEnabledCount?: number;
+  onOpenScheduledTasks?: (repository: Repository) => void;
 }) {
   const hasMainOwner = Boolean(repository.mainOwnerAgentName?.trim());
   const joinChildren: MenuProps["items"] = joinableProjects.map((project) => ({
@@ -346,6 +399,12 @@ export function FloatingRepositoryRow({
           {codeGraphIndexed && onCodeGraphViewFloatingRepository ? (
             <RepositoryCodeGraphAction onOpen={() => onCodeGraphViewFloatingRepository(repository)} />
           ) : null}
+          {onOpenScheduledTasks ? (
+            <SidebarScheduledTasksAction
+              enabledCount={scheduledTasksEnabledCount}
+              onOpen={() => onOpenScheduledTasks(repository)}
+            />
+          ) : null}
           <Dropdown
             rootClassName="app-sidebar-more-menu-dropdown"
             menu={{
@@ -404,6 +463,8 @@ export function ProjectRepositoryRows({
   onRepoSidebarDragEnd,
   hideChatAction = false,
   codeGraphIndexStatusByRepoId = {},
+  scheduledTasksByRepoId = {},
+  onOpenScheduledTasks,
 }: {
   project: Workspace;
   projectRepos: Repository[];
@@ -424,6 +485,8 @@ export function ProjectRepositoryRows({
   onRepoSidebarDragEnd: () => void;
   hideChatAction?: boolean;
   codeGraphIndexStatusByRepoId?: Record<number, SidebarCodeGraphIndexStatus>;
+  scheduledTasksByRepoId?: Record<number, { total: number; enabled: number }>;
+  onOpenScheduledTasks?: (repository: Repository) => void;
 }) {
   const { message } = AntdApp.useApp();
   const [dropHint, setDropHint] = useState<{ anchorRepositoryId: number; placement: "before" | "after" } | null>(
@@ -472,6 +535,8 @@ export function ProjectRepositoryRows({
             repositoryReorder={reorderUi}
             hideChatAction={hideChatAction}
             codeGraphIndexed={codeGraphIndexStatusByRepoId[repository.id] === "done"}
+            scheduledTasksEnabledCount={scheduledTasksByRepoId[repository.id]?.enabled ?? 0}
+            onOpenScheduledTasks={onOpenScheduledTasks}
           />
         );
       })}

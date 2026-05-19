@@ -21,12 +21,14 @@ import {
 import { ProjectNameModals } from "./LeftSidebar/ProjectNameModals";
 import { RepositoryAssociateModal } from "./LeftSidebar/RepositoryAssociateModal";
 import { RepositorySddModeModal } from "./LeftSidebar/RepositorySddModeModal";
+import { RepositoryScheduledTasksModal } from "./RepositoryScheduledTasksModal";
 import { SystemResourceInline } from "./LeftSidebar/SystemResourceInline";
 import type { LeftSidebarProps } from "./LeftSidebar/types";
 import { useProjectRepositorySidebarState } from "./LeftSidebar/useProjectRepositorySidebarState";
 import { useRepositoryAssociateModalController } from "./LeftSidebar/useRepositoryAssociateModalController";
 import { useRepositorySddModeModalController } from "./LeftSidebar/useRepositorySddModeModalController";
 import { useSidebarCodeGraphIndexMap } from "./LeftSidebar/useSidebarCodeGraphIndexMap";
+import { useSidebarScheduledTasksMap } from "./LeftSidebar/useSidebarScheduledTasksMap";
 import { useSystemResourceSessions } from "./LeftSidebar/useSystemResourceSessions";
 import "./GitPanel/index.css";
 
@@ -58,6 +60,7 @@ export function LeftSidebar({
   onCodeGraphViewRepositoryInProject,
   onCodeGraphViewFloatingRepository,
   onAddFloatingRepository,
+  onAddRepositoryToProject,
   onPromoteFloatingRepositoryToProject,
   floatingRepositories = [],
   onRemoveRepository,
@@ -76,8 +79,10 @@ export function LeftSidebar({
   sessions,
   activeSessionId: _activeSessionId,
   onSelectSession: _onSelectSession,
-  employees: _employees = [],
+  employees = [],
   employeeTaskCounts: _employeeTaskCounts = [],
+  workflowTemplates = [],
+  workflowGraphsByWorkflowId = {},
   onMoveEmployee: _onMoveEmployee,
   onCancelSessionFromMonitor,
   onOpenTaskDetailFromMonitor,
@@ -133,13 +138,49 @@ export function LeftSidebar({
   });
   const repositoryAssociateModal = useRepositoryAssociateModalController({
     onAddFloatingRepository,
+    onAddRepositoryToProject,
   });
-  const { openAddFloatingRepositoryModal } = repositoryAssociateModal;
+  const { openAddFloatingRepositoryModal, openAddRepositoryModal } = repositoryAssociateModal;
   const repositorySddModeModal = useRepositorySddModeModalController({
     onUpdateRepositorySddMode,
   });
   const codeGraphIndexStatusByRepoId = useSidebarCodeGraphIndexMap(
     useMemo(() => repositories.map((repository) => repository.id), [repositories]),
+  );
+  const { byId: scheduledTasksByRepoId, refresh: refreshScheduledTasksMap } = useSidebarScheduledTasksMap(
+    repositories,
+  );
+  const [scheduledTasksModalRepository, setScheduledTasksModalRepository] = useState<{
+    path: string;
+    name: string;
+  } | null>(null);
+
+  const openScheduledTasksForRepository = useCallback((repository: Repository) => {
+    const path = repository.path?.trim();
+    if (!path) return;
+    setScheduledTasksModalRepository({
+      path,
+      name: repository.name?.trim() || repositoryFolderBasename(repository),
+    });
+  }, []);
+
+  const openScheduledTasksForProject = useCallback(
+    (project: ProjectItem) => {
+      let target: Repository | undefined;
+      for (const repositoryId of project.repositoryIds) {
+        const repository = repositories.find((item) => item.id === repositoryId);
+        if (repository && (scheduledTasksByRepoId[repositoryId]?.enabled ?? 0) > 0) {
+          target = repository;
+          break;
+        }
+      }
+      if (!target) {
+        const firstRepositoryId = project.repositoryIds[0];
+        target = repositories.find((item) => item.id === firstRepositoryId);
+      }
+      if (target) openScheduledTasksForRepository(target);
+    },
+    [openScheduledTasksForRepository, repositories, scheduledTasksByRepoId],
   );
 
   const handleFilesExplorerSectionCollapsedChange = useCallback((next: boolean) => {
@@ -250,6 +291,7 @@ export function LeftSidebar({
 
       <div
         className="app-left-sidebar-project-and-files"
+        data-has-files-explorer={activeRepositoryPath ? "true" : "false"}
         data-files-explorer-section-collapsed={
           activeRepositoryPath && filesExplorerSectionCollapsed ? "true" : undefined
         }
@@ -274,6 +316,9 @@ export function LeftSidebar({
           }}
           onAddFloatingRepositoryClick={
             onAddFloatingRepository ? openAddFloatingRepositoryModal : undefined
+          }
+          onAddRepositoryToProjectClick={
+            onAddRepositoryToProject ? openAddRepositoryModal : undefined
           }
           onReconcileProject={onReconcileProject}
           onCodeGraphGenerateProject={onCodeGraphGenerateProject}
@@ -337,6 +382,9 @@ export function LeftSidebar({
             message.error(text);
             console.error(err);
           }}
+          scheduledTasksByRepoId={scheduledTasksByRepoId}
+          onOpenScheduledTasksForRepository={openScheduledTasksForRepository}
+          onOpenScheduledTasksForProject={openScheduledTasksForProject}
         />
 
         {activeRepositoryPath ? (
@@ -455,6 +503,18 @@ export function LeftSidebar({
         onValueChange={repositorySddModeModal.setValue}
         onCancel={repositorySddModeModal.cancel}
         onSubmit={() => void repositorySddModeModal.submit()}
+      />
+      <RepositoryScheduledTasksModal
+        open={scheduledTasksModalRepository != null}
+        onClose={() => {
+          setScheduledTasksModalRepository(null);
+          void refreshScheduledTasksMap();
+        }}
+        repositoryPath={scheduledTasksModalRepository?.path ?? ""}
+        repositoryDisplayName={scheduledTasksModalRepository?.name ?? ""}
+        employees={employees}
+        workflowTemplates={workflowTemplates}
+        workflowGraphsByWorkflowId={workflowGraphsByWorkflowId}
       />
       <AppSettingsModal open={appSettingsOpen} onClose={() => setAppSettingsOpen(false)} />
     </Layout.Sider>

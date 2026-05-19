@@ -7,17 +7,16 @@ import type {
   Repository,
   SddMode,
   TaskMode,
+  WorkflowGraph,
+  WorkflowTemplateItem,
 } from "../../types";
 import type { ReconcileProjectMode } from "../../constants/reconcileProjectMode";
 import type { GitPanelOpenFileOptions } from "../GitPanel";
 import type { TaskCardsNavProps } from "../TaskCardsNav";
-import type { AuthorPane } from "../../types/viewMode";
 
 export interface LeftSidebarProps {
   dark: boolean;
   collapsed: boolean;
-  /** 工作台配置打开时暂挂左栏（保持挂载、宽度归零，避免返回时重挂载卡顿）。 */
-  parked?: boolean;
   /** Left `Sider` width in pixels. Defaults to `MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX`. */
   siderWidth?: number;
   /** Compact window mode: collapses the right rail and shrinks the main window. */
@@ -29,9 +28,7 @@ export interface LeftSidebarProps {
   activeRepositoryId: number | null;
   authorDisabled?: boolean;
   authorDisabledTooltip?: string;
-  onOpenAuthor: (pane?: AuthorPane) => void;
-  assistantHubActive?: boolean;
-  onOpenAssistantHub?: () => void;
+  onOpenAuthor: () => void;
   workspaceCreateRequest?: number;
   standaloneRepoAddRequest?: number;
   onProjectSelect: (projectId: string) => void;
@@ -86,6 +83,8 @@ export interface LeftSidebarProps {
   onSelectSession: (sessionId: string) => void;
   employees?: EmployeeItem[];
   employeeTaskCounts?: EmployeeTaskCountItem[];
+  workflowTemplates?: WorkflowTemplateItem[];
+  workflowGraphsByWorkflowId?: Record<string, WorkflowGraph>;
   onMoveEmployee?: (employeeId: string, direction: "up" | "down") => void;
   onCancelSessionFromMonitor?: (sessionId: string) => void;
   onOpenTaskDetailFromMonitor?: (taskId: string) => void;

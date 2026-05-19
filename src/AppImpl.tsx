@@ -2159,6 +2159,8 @@ export default function App() {
         onSelectSession: jumpToSessionLeavingMcpHub,
         employees,
         employeeTaskCounts,
+        workflowTemplates,
+        workflowGraphsByWorkflowId,
         onMoveEmployee: async (employeeId, direction) => {
           await moveEmployeeDisplayOrder({ employeeId, direction });
           await refreshEmployeeData();

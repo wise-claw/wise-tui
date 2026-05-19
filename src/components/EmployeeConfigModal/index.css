@@ -37,6 +37,7 @@
   border: 1px solid var(--ant-color-border-secondary);
   border-radius: 8px;
   background: var(--ant-color-bg-container);
+  box-shadow: inset 3px 0 0 var(--ant-color-primary);
 }
 
 .app-employee-config-hero__eyebrow {

@@ -4,6 +4,10 @@ import type { MenuProps } from "antd";
 import type { ReconcileProjectMode } from "../../constants/reconcileProjectMode";
 import type { Repository, StandaloneRepo, TaskMode, Workspace } from "../../types";
 import type { SidebarCodeGraphIndexStatus } from "./useSidebarCodeGraphIndexMap";
+import {
+  sumProjectScheduledTasksEnabled,
+  type SidebarScheduledTasksSummary,
+} from "./useSidebarScheduledTasksMap";
 import { resolveWorkspaceMode } from "../../utils/workspaceMode";
 import {
   ExpandIcon,
@@ -17,6 +21,7 @@ import {
   FloatingRepositoryRow,
   ProjectRepositoryRows,
   RepositoryCodeGraphAction,
+  SidebarScheduledTasksAction,
 } from "./repositoryRows";
 
 interface ProjectRepositoryListProps {
@@ -64,6 +69,9 @@ interface ProjectRepositoryListProps {
   onClearRepoSidebarDrag: () => void;
   onMoveRepositoryError: (message: string, err: unknown) => void;
   codeGraphIndexStatusByRepoId?: Record<number, SidebarCodeGraphIndexStatus>;
+  scheduledTasksByRepoId?: Record<number, SidebarScheduledTasksSummary>;
+  onOpenScheduledTasksForRepository?: (repository: Repository) => void;
+  onOpenScheduledTasksForProject?: (project: Workspace) => void;
 }
 
 export function ProjectRepositoryList({
@@ -111,6 +119,9 @@ export function ProjectRepositoryList({
   onClearRepoSidebarDrag,
   onMoveRepositoryError,
   codeGraphIndexStatusByRepoId = {},
+  scheduledTasksByRepoId = {},
+  onOpenScheduledTasksForRepository,
+  onOpenScheduledTasksForProject,
 }: ProjectRepositoryListProps) {
   return (
     <>
@@ -163,6 +174,8 @@ export function ProjectRepositoryList({
                 onJoinExistingProject={onJoinFloatingRepository}
                 onRemove={onRemoveFloatingRepository}
                 codeGraphIndexed={codeGraphIndexStatusByRepoId[repository.id] === "done"}
+                scheduledTasksEnabledCount={scheduledTasksByRepoId[repository.id]?.enabled ?? 0}
+                onOpenScheduledTasks={onOpenScheduledTasksForRepository}
               />
             ))}
           </div>
@@ -209,6 +222,9 @@ export function ProjectRepositoryList({
             onClearRepoSidebarDrag={onClearRepoSidebarDrag}
             onMoveRepositoryError={onMoveRepositoryError}
             codeGraphIndexStatusByRepoId={codeGraphIndexStatusByRepoId}
+            scheduledTasksByRepoId={scheduledTasksByRepoId}
+            onOpenScheduledTasksForRepository={onOpenScheduledTasksForRepository}
+            onOpenScheduledTasksForProject={onOpenScheduledTasksForProject}
           />
         ))}
         {projects.length === 0 && floatingRepositories.length === 0 && (
@@ -227,7 +243,7 @@ function ProjectRequirementAction({ onOpen }: { onOpen: () => void }) {
     <Tooltip title="打开需求" mouseEnterDelay={0.3}>
       <button
         type="button"
-        className="app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--requirement"
+        className="app-repository-action app-repository-action--task app-repository-action--project-quick"
         aria-label="打开需求"
         onClick={(e) => {
           e.stopPropagation();
@@ -245,7 +261,7 @@ function ProjectTrellisAction({ onOpen }: { onOpen: () => void }) {
     <Tooltip title="Workspace Trellis" mouseEnterDelay={0.3}>
       <button
         type="button"
-        className="app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--trellis"
+        className="app-repository-action app-repository-action--task app-repository-action--project-quick"
         aria-label="Workspace Trellis"
         onClick={(e) => {
           e.stopPropagation();
@@ -296,6 +312,9 @@ interface ProjectRowProps {
   onClearRepoSidebarDrag: () => void;
   onMoveRepositoryError: (message: string, err: unknown) => void;
   codeGraphIndexStatusByRepoId?: Record<number, SidebarCodeGraphIndexStatus>;
+  scheduledTasksByRepoId?: Record<number, SidebarScheduledTasksSummary>;
+  onOpenScheduledTasksForRepository?: (repository: Repository) => void;
+  onOpenScheduledTasksForProject?: (project: Workspace) => void;
 }
 
 function ProjectRow({
@@ -336,15 +355,22 @@ function ProjectRow({
   onClearRepoSidebarDrag,
   onMoveRepositoryError,
   codeGraphIndexStatusByRepoId = {},
+  scheduledTasksByRepoId = {},
+  onOpenScheduledTasksForRepository,
+  onOpenScheduledTasksForProject,
 }: ProjectRowProps) {
   const projectHasCodeGraph = project.repositoryIds.some(
     (repositoryId) => codeGraphIndexStatusByRepoId[repositoryId] === "done",
+  );
+  const projectScheduledTasksEnabled = sumProjectScheduledTasksEnabled(
+    project.repositoryIds,
+    scheduledTasksByRepoId,
   );
   const projectMoreItems: MenuProps["items"] = [
     { key: "pin", label: isPinned ? "取消置顶" : "置顶" },
     { key: "rename", label: "重命名 Workspace" },
     ...(onAddRepositoryToProject
-      ? [{ key: "add-repository", label: "关联仓库…" }] satisfies MenuProps["items"]
+      ? [{ key: "add-repository", label: "关联仓库" }] satisfies MenuProps["items"]
       : []),
     ...(onReconcileProject
       ? ([
@@ -427,20 +453,39 @@ function ProjectRow({
             e.stopPropagation();
             onToggleProjectExpand(project.id);
           }}
+          aria-expanded={expanded}
+          aria-label={expanded ? "收起 Workspace" : "展开 Workspace"}
         >
           <ExpandIcon expanded={expanded} />
         </span>
-        <span className="app-repository-icon">
-          <ProjectIcon />
+        <span className="app-repository-name-block">
+          <span className="app-repository-name">{project.name}</span>
+          {!expanded && projectRepos.length > 0 ? (
+            <span className="app-repository-meta" aria-label={`${projectRepos.length} 个仓库`}>
+              {projectRepos.length}
+            </span>
+          ) : null}
+          {isPinned ? (
+            <span className="app-repository-pin" aria-label="已置顶" title="已置顶" />
+          ) : null}
         </span>
-        <span className="app-repository-name">{project.name}</span>
-        <div className="app-repository-row-actions">
+        <div className="app-repository-row-actions app-repository-row-actions--project">
           {onOpenProjectTrellis ? (
             <ProjectTrellisAction onOpen={() => onOpenProjectTrellis(project)} />
           ) : null}
           <ProjectRequirementAction onOpen={() => onCreateProjectTask(project, "split")} />
           {projectHasCodeGraph && onCodeGraphViewProject ? (
-            <RepositoryCodeGraphAction onOpen={() => onCodeGraphViewProject(project)} />
+            <RepositoryCodeGraphAction
+              variant="project"
+              onOpen={() => onCodeGraphViewProject(project)}
+            />
+          ) : null}
+          {onOpenScheduledTasksForProject ? (
+            <SidebarScheduledTasksAction
+              variant="project"
+              enabledCount={projectScheduledTasksEnabled}
+              onOpen={() => onOpenScheduledTasksForProject(project)}
+            />
           ) : null}
           <Dropdown
             rootClassName="app-sidebar-more-menu-dropdown"
@@ -476,49 +521,38 @@ function ProjectRow({
         </div>
       </div>
 
-      {expanded && (
+      {expanded && projectRepos.length > 0 ? (
         <div className="app-repository-sessions">
-          {projectRepos.length > 0 ? (
-            <ProjectRepositoryRows
-              project={project}
-              projectRepos={projectRepos}
-              activeRepositoryId={activeRepositoryId}
-              onRepositorySelect={onRepositorySelect}
-              onCreateRepositoryTask={onCreateRepositoryTask}
-              onDetachRepositoryFromProject={onDetachRepositoryFromProject}
-              onOpenInFinder={onOpenInFinder}
-              openRepositoryInPreferredEditor={openRepositoryInPreferredEditor}
-              onOpenPromptsRepository={onOpenPromptsRepository}
-              onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
-              onReorderRepositoriesInProject={onReorderRepositoriesInProject}
-              onMoveRepositoryToProject={onMoveRepositoryToProjectWithExpand}
-              onConfigureSddMode={onConfigureRepositorySddMode}
-              onCodeGraphGenerateRepository={onCodeGraphGenerateRepository}
-              onCodeGraphViewRepositoryInProject={onCodeGraphViewRepositoryInProject}
-              repoSidebarDragRef={repoSidebarDragRef}
-              onRepoSidebarDragEnd={onClearRepoSidebarDrag}
-              hideChatAction={
-                resolveWorkspaceMode({
-                  activeProjectId: project.id,
-                  projects: [project],
-                }) === "multi_repo"
-              }
-              codeGraphIndexStatusByRepoId={codeGraphIndexStatusByRepoId}
-            />
-          ) : null}
-          <button
-            type="button"
-            className="app-repository-item app-repository-item--add-repo"
-            onClick={() => onAddRepositoryToProject?.(project.id)}
-            disabled={!onAddRepositoryToProject}
-          >
-            <span className="app-repository-add-icon" aria-hidden>
-              <PlusIcon />
-            </span>
-            <span className="app-repository-name app-repository-name--add">关联仓库</span>
-          </button>
+          <ProjectRepositoryRows
+            project={project}
+            projectRepos={projectRepos}
+            activeRepositoryId={activeRepositoryId}
+            onRepositorySelect={onRepositorySelect}
+            onCreateRepositoryTask={onCreateRepositoryTask}
+            onDetachRepositoryFromProject={onDetachRepositoryFromProject}
+            onOpenInFinder={onOpenInFinder}
+            openRepositoryInPreferredEditor={openRepositoryInPreferredEditor}
+            onOpenPromptsRepository={onOpenPromptsRepository}
+            onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
+            onReorderRepositoriesInProject={onReorderRepositoriesInProject}
+            onMoveRepositoryToProject={onMoveRepositoryToProjectWithExpand}
+            onConfigureSddMode={onConfigureRepositorySddMode}
+            onCodeGraphGenerateRepository={onCodeGraphGenerateRepository}
+            onCodeGraphViewRepositoryInProject={onCodeGraphViewRepositoryInProject}
+            repoSidebarDragRef={repoSidebarDragRef}
+            onRepoSidebarDragEnd={onClearRepoSidebarDrag}
+            hideChatAction={
+              resolveWorkspaceMode({
+                activeProjectId: project.id,
+                projects: [project],
+              }) === "multi_repo"
+            }
+            codeGraphIndexStatusByRepoId={codeGraphIndexStatusByRepoId}
+            scheduledTasksByRepoId={scheduledTasksByRepoId}
+            onOpenScheduledTasks={onOpenScheduledTasksForRepository}
+          />
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
