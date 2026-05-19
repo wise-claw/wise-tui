@@ -566,7 +566,7 @@ export const MilkdownEditor = forwardRef<MilkdownEditorHandle, MilkdownEditorPro
       if (crepeRef.current === crepe) {
         crepeRef.current = null;
       }
-      void crepe.destroy();
+      void crepe.destroy().catch(() => undefined);
     };
   }, [
     enableWiseToolbarSplit,

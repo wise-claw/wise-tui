@@ -187,6 +187,7 @@ export function TaskResultPanel({
   const showRuntime = runtimeVisible && (parsing || filteredTasks.length === 0 || runtimeLogs.length > 0);
   const [resultViewMode, setResultViewMode] = useState<ResultViewMode>("tasks");
   const showOrchestration = resultViewMode === "orchestration" && activeResult && filteredTasks.length > 0 && !showRuntime;
+  const showTaskList = !showRuntime && !showOrchestration;
   return (
     <Space orientation="vertical" size={12} className="app-prd-task-panel__full-width app-prd-task-panel__stack">
       {splitError ? <Typography.Text type="danger">{splitError}</Typography.Text> : null}
@@ -270,71 +271,80 @@ export function TaskResultPanel({
                     onRetryStage={onRetryStage}
                   />
                 </div>
-              ) : showOrchestration ? (
-                <ExecutionOrchestrationPanel
-                  result={activeResult}
-                  selectedTaskId={selectedTaskId}
-                  onSelectTask={(taskId) => {
-                    const task = activeResult.splitTasks.find((item) => item.id === taskId);
-                    if (task) onSelectTask(task);
-                  }}
-                />
               ) : (
-                <div className="app-prd-task-panel__task-list">
-                  {filteredTasks.length === 0 ? (
-                    <div className="app-prd-task-panel__task-list-empty">
-                      <Typography.Text type="secondary">暂未拆分任务</Typography.Text>
-                    </div>
-                  ) : (
-                    filteredTasks.map((task) => (
-                      <TaskResultCard
-                        key={task.id}
-                        task={task}
-                        activeResult={activeResult}
-                        selected={selectedTaskId === task.id}
-                        canDelete={(activeResult?.splitTasks.length ?? 0) > 1}
-                        closingMotionActive={closingMotionActive}
-                        resolvedTaskAnchorIds={resolvedTaskAnchorIds}
-                        pendingContent={pendingTaskContentById[task.id]}
-                        pendingApiSpec={pendingTaskApiSpecById[task.id]}
-                        taskExecutableCheckResult={taskExecutableCheckResultById[task.id] ?? ""}
-                        unmetCollapsed={taskUnmetCollapsedById[task.id] ?? false}
-                        checkCollapsed={taskCheckCollapsedById[task.id] ?? false}
-                        optimizedText={taskAiOptimizedContentById[task.id] ?? ""}
-                        optimizedReady={taskAiOptimizedReadyById[task.id] ?? false}
-                        actionLoading={!!taskAiActionLoadingById[task.id]}
-                        savingOptimized={taskAiSavingTaskId === task.id}
-                        anchorPopoverOpen={taskAnchorPopoverTaskId === task.id}
-                        aiPopoverMode={taskAiPopoverTaskId === task.id ? taskAiPopoverMode : null}
-                        generatingExecutableTaskId={generatingExecutableTaskId}
-                        savingTaskId={savingTaskId}
-                        confirmSavingTaskId={confirmSavingTaskId}
-                        getTaskAiMode={getTaskAiMode}
-                        getTaskAiInput={getTaskAiInput}
-                        getDraftedTask={getDraftedTask}
-                        displayExecutionStatus={displayExecutionStatus}
-                        cardUnmetPointsForTask={cardUnmetPointsForTask}
-                        onTaskAiInputChange={onTaskAiInputChange}
-                        onTaskAiOptimizedTextChange={onTaskAiOptimizedTextChange}
-                        onTaskAiClose={onTaskAiClose}
-                        onTaskAiSubmit={onTaskAiSubmit}
-                        onSaveOptimizedTask={onSaveOptimizedTask}
-                        onSelectTask={onSelectTask}
-                        onLocateAnchor={onLocateAnchor}
-                        onDeleteTask={onDeleteTask}
-                        onPendingContentChange={onPendingContentChange}
-                        onPendingApiSpecChange={onPendingApiSpecChange}
-                        onAnchorPopoverChange={onAnchorPopoverChange}
-                        onAiPopoverChange={onAiPopoverChange}
-                        onGenerateExecutableForTask={onGenerateExecutableForTask}
-                        onSaveTaskDraft={onSaveTaskDraft}
-                        onConfirmTaskAdjustment={onConfirmTaskAdjustment}
-                        onToggleUnmet={onToggleUnmet}
-                        onToggleCheck={onToggleCheck}
-                      />
-                    ))
-                  )}
-                </div>
+                <>
+                  {showOrchestration ? (
+                    <ExecutionOrchestrationPanel
+                      result={activeResult}
+                      selectedTaskId={selectedTaskId}
+                      onSelectTask={(taskId) => {
+                        const task = activeResult.splitTasks.find((item) => item.id === taskId);
+                        if (task) onSelectTask(task);
+                      }}
+                    />
+                  ) : null}
+                  <div
+                    className={[
+                      "app-prd-task-panel__task-list",
+                      showTaskList ? "" : "is-hidden-for-orchestration",
+                    ].filter(Boolean).join(" ")}
+                    aria-hidden={!showTaskList}
+                  >
+                    {filteredTasks.length === 0 ? (
+                      <div className="app-prd-task-panel__task-list-empty">
+                        <Typography.Text type="secondary">暂未拆分任务</Typography.Text>
+                      </div>
+                    ) : (
+                      filteredTasks.map((task) => (
+                        <TaskResultCard
+                          key={task.id}
+                          task={task}
+                          activeResult={activeResult}
+                          selected={selectedTaskId === task.id}
+                          canDelete={(activeResult?.splitTasks.length ?? 0) > 1}
+                          closingMotionActive={closingMotionActive}
+                          resolvedTaskAnchorIds={resolvedTaskAnchorIds}
+                          pendingContent={pendingTaskContentById[task.id]}
+                          pendingApiSpec={pendingTaskApiSpecById[task.id]}
+                          taskExecutableCheckResult={taskExecutableCheckResultById[task.id] ?? ""}
+                          unmetCollapsed={taskUnmetCollapsedById[task.id] ?? false}
+                          checkCollapsed={taskCheckCollapsedById[task.id] ?? false}
+                          optimizedText={taskAiOptimizedContentById[task.id] ?? ""}
+                          optimizedReady={taskAiOptimizedReadyById[task.id] ?? false}
+                          actionLoading={!!taskAiActionLoadingById[task.id]}
+                          savingOptimized={taskAiSavingTaskId === task.id}
+                          anchorPopoverOpen={taskAnchorPopoverTaskId === task.id}
+                          aiPopoverMode={taskAiPopoverTaskId === task.id ? taskAiPopoverMode : null}
+                          generatingExecutableTaskId={generatingExecutableTaskId}
+                          savingTaskId={savingTaskId}
+                          confirmSavingTaskId={confirmSavingTaskId}
+                          getTaskAiMode={getTaskAiMode}
+                          getTaskAiInput={getTaskAiInput}
+                          getDraftedTask={getDraftedTask}
+                          displayExecutionStatus={displayExecutionStatus}
+                          cardUnmetPointsForTask={cardUnmetPointsForTask}
+                          onTaskAiInputChange={onTaskAiInputChange}
+                          onTaskAiOptimizedTextChange={onTaskAiOptimizedTextChange}
+                          onTaskAiClose={onTaskAiClose}
+                          onTaskAiSubmit={onTaskAiSubmit}
+                          onSaveOptimizedTask={onSaveOptimizedTask}
+                          onSelectTask={onSelectTask}
+                          onLocateAnchor={onLocateAnchor}
+                          onDeleteTask={onDeleteTask}
+                          onPendingContentChange={onPendingContentChange}
+                          onPendingApiSpecChange={onPendingApiSpecChange}
+                          onAnchorPopoverChange={onAnchorPopoverChange}
+                          onAiPopoverChange={onAiPopoverChange}
+                          onGenerateExecutableForTask={onGenerateExecutableForTask}
+                          onSaveTaskDraft={onSaveTaskDraft}
+                          onConfirmTaskAdjustment={onConfirmTaskAdjustment}
+                          onToggleUnmet={onToggleUnmet}
+                          onToggleCheck={onToggleCheck}
+                        />
+                      ))
+                    )}
+                  </div>
+                </>
               )}
             </div>
             <div className="app-prd-task-panel__task-lower">

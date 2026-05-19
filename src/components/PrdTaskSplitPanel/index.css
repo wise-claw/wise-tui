@@ -1778,6 +1778,14 @@
   box-sizing: border-box;
 }
 
+.app-prd-task-panel__task-list.is-hidden-for-orchestration {
+  position: absolute;
+  inset: 8px;
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
 .app-prd-task-panel__task-list-item {
   border-radius: 8px;
   cursor: pointer;
