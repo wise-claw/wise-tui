@@ -468,10 +468,6 @@ export function DingTalkEnterpriseBotPopoverBody({
               联调入站
             </Typography.Text>
             {debugBlock}
-            <Divider plain style={{ margin: "8px 0 4px", fontSize: 12 }}>
-              云端中继
-            </Divider>
-            {pushBlock}
           </>
         )}
       </div>
@@ -492,10 +488,12 @@ export function DingTalkEnterpriseBotPopoverBody({
           </Typography.Link>
         </div>
         <Input size="small" value={appKey} onChange={(e) => setAppKey(e.target.value)} placeholder="一般为开发者后台「Client ID」" />
-        <FieldGuide>
-          路径：<Typography.Text code>开发者后台 → 企业内部应用 → 你的应用 → 应用信息</Typography.Text>。与 AppSecret 成对出现，用于换取
-          access_token。
-        </FieldGuide>
+        {compact ? null : (
+          <FieldGuide>
+            路径：<Typography.Text code>开发者后台 → 企业内部应用 → 你的应用 → 应用信息</Typography.Text>。与 AppSecret 成对出现，用于换取
+            access_token。
+          </FieldGuide>
+        )}
       </div>
 
       <div className="app-dingtalk-ebot-popover__field">
@@ -512,7 +510,7 @@ export function DingTalkEnterpriseBotPopoverBody({
           placeholder={loadedRef.current?.appSecret ? "留空表示沿用已保存密钥" : "一般为「Client Secret」"}
           autoComplete="new-password"
         />
-        <FieldGuide>与 AppKey 同页展示；勿泄露。保存后本地加密存储于 Wise 数据库（与密钥类设置相同风险等级）。</FieldGuide>
+        {compact ? null : <FieldGuide>与 AppKey 同页展示；勿泄露。保存后本地加密存储于 Wise 数据库（与密钥类设置相同风险等级）。</FieldGuide>}
       </div>
 
       <div className="app-dingtalk-ebot-popover__field">
@@ -523,10 +521,12 @@ export function DingTalkEnterpriseBotPopoverBody({
           </Typography.Link>
         </div>
         <Input size="small" value={robotCode} onChange={(e) => setRobotCode(e.target.value)} placeholder="机器人编码，如 dingxxxx…" />
-        <FieldGuide>
-          在应用内启用「机器人」并创建后，在机器人详情中查看 <Typography.Text code>robotCode</Typography.Text>。不是 AgentId、不是应用
-          Client ID。
-        </FieldGuide>
+        {compact ? null : (
+          <FieldGuide>
+            在应用内启用「机器人」并创建后，在机器人详情中查看 <Typography.Text code>robotCode</Typography.Text>。不是 AgentId、不是应用
+            Client ID。
+          </FieldGuide>
+        )}
       </div>
 
       <div className="app-dingtalk-ebot-popover__field">
@@ -537,9 +537,11 @@ export function DingTalkEnterpriseBotPopoverBody({
           </Typography.Link>
         </div>
         <Input size="small" value={defaultUserId} onChange={(e) => setDefaultUserId(e.target.value)} placeholder="测试发送时可自动填入下方接收人" />
-        <FieldGuide>
-          与下方「测试发送」使用同一套 userid 规则。可留空，测试时再填。
-        </FieldGuide>
+        {compact ? null : (
+          <FieldGuide>
+            与下方「测试发送」使用同一套 userid 规则。可留空，测试时再填。
+          </FieldGuide>
+        )}
       </div>
 
       <Space wrap className="app-dingtalk-ebot-popover__actions">
@@ -572,10 +574,12 @@ export function DingTalkEnterpriseBotPopoverBody({
           onChange={(e) => setTestUserId(e.target.value)}
           placeholder="通讯录中的 userid（勿填手机号 / unionId）"
         />
-        <FieldGuide>
-          若报错 <Typography.Text code>staffId.notExisted</Typography.Text>
-          ：请核对 userid 是否属于<strong>当前应用所在企业</strong>，且勿与 unionId 混淆。对方需先在钉钉内向本机器人发过消息以建立单聊。
-        </FieldGuide>
+        {compact ? null : (
+          <FieldGuide>
+            若报错 <Typography.Text code>staffId.notExisted</Typography.Text>
+            ：请核对 userid 是否属于<strong>当前应用所在企业</strong>，且勿与 unionId 混淆。对方需先在钉钉内向本机器人发过消息以建立单聊。
+          </FieldGuide>
+        )}
       </div>
       <div className="app-dingtalk-ebot-popover__field">
         <div className="app-dingtalk-ebot-popover__label">标题</div>

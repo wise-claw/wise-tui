@@ -454,6 +454,7 @@ pub fn run() {
             assistants::commands::assistants_resolve_runtime,
             skills::commands::skills_detect_external_paths,
             skills::commands::skills_scan_path,
+            skills::commands::skills_read_instruction,
             skills::commands::skills_add_external_path,
             skills::commands::skills_remove_external_path,
             skills::commands::skills_list_external_paths,

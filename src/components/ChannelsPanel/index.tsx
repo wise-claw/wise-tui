@@ -312,6 +312,11 @@ function ChannelBody({
               label: "联调",
               children: <DingTalkEnterpriseBotPopoverBody compact initialSection="debug" />,
             },
+            {
+              key: "push",
+              label: "中继",
+              children: <DingTalkEnterpriseBotPopoverBody compact initialSection="push" />,
+            },
           ]}
         />
       </div>

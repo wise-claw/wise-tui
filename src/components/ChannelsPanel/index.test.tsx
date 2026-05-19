@@ -52,5 +52,6 @@ describe("ChannelsPanel", () => {
     expect(html).toContain('data-compact="true"');
     expect(html).toContain('data-section="config"');
     expect(html).toContain("联调");
+    expect(html).toContain("中继");
   });
 });

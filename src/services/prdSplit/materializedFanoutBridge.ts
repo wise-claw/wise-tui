@@ -88,10 +88,16 @@ export async function runWorkspaceTrellisMaterializedFanout(
 
 export function dispatchWorkspaceTrellisMaterializedFanout(
   input: MaterializedFanoutInput,
-): void {
-  void runWorkspaceTrellisMaterializedFanout(input).catch((error) => {
+): Promise<ExecutionFanoutResult | null> {
+  if (!input.repositoryPath.trim()) {
+    const message = "缺少可执行仓库路径，无法自动派发实现子代理。";
+    console.error("[prdSplit] Workspace Trellis fan-out failed:", message);
+    return Promise.reject(new Error(message));
+  }
+  return runWorkspaceTrellisMaterializedFanout(input).catch((error) => {
     const message = error instanceof Error ? error.message : String(error);
     console.error("[prdSplit] Workspace Trellis fan-out failed:", message);
+    throw error;
   });
 }
 

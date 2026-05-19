@@ -52,6 +52,14 @@ describe("assistantArtifactBrief", () => {
           sourcePath: "/skills/pptx",
         },
       ],
+      skillInstructions: [
+        {
+          id: "officecli-pptx",
+          sourcePath: "/skills/pptx",
+          skillPath: "/skills/pptx/SKILL.md",
+          content: "# OfficeCLI PPTX Skill\nUse officecli for PowerPoint work.",
+        },
+      ],
       enabledMcps: [],
     });
 
@@ -59,6 +67,8 @@ describe("assistantArtifactBrief", () => {
     expect(brief).toContain("做一份融资路演。");
     expect(brief).toContain("- officecli-pptx (OfficeCLI PPTX) - /skills/pptx");
     expect(brief).toContain("必须使用 `officecli-pptx`");
+    expect(brief).toContain("## Skill 指令");
+    expect(brief).toContain("# OfficeCLI PPTX Skill");
     expect(brief).toContain("`.pptx`");
     expect(brief).toContain("深色高对比,每页一个核心观点。");
     expect(brief).toContain("Demo Workspace");
@@ -83,6 +93,7 @@ describe("assistantArtifactBrief", () => {
           sourcePath: "/skills/docx",
         },
       ],
+      skillInstructions: [],
       enabledMcps: [],
     });
 

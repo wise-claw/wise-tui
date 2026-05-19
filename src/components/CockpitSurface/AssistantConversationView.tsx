@@ -14,6 +14,7 @@ import {
   type AssistantEngineeringPreferences,
   type AssistantRuntimeBundle,
 } from "../../services/assistantPromptLayers";
+import { readSkillInstruction, type SkillInstruction } from "../../services/skills";
 import type { AssistantEntry } from "../../types/assistant";
 import {
   assistantRefsToBundleItems,
@@ -99,6 +100,8 @@ function ArtifactAssistantWorkspace({
   const [runtimeSkills, setRuntimeSkills] = useState<AssistantRuntimeBundle | null>(null);
   const [runtimeMcps, setRuntimeMcps] = useState<AssistantRuntimeBundle | null>(null);
   const [engineering, setEngineering] = useState<AssistantEngineeringPreferences>({});
+  const [skillInstructions, setSkillInstructions] = useState<SkillInstruction[]>([]);
+  const [skillInstructionError, setSkillInstructionError] = useState<string | null>(null);
   const [request, setRequest] = useState("");
 
   useEffect(() => {
@@ -129,16 +132,48 @@ function ArtifactAssistantWorkspace({
     };
   }, [activeProjectId, assistant.id, message]);
 
-  const skillBundle = runtimeSkills ?? {
+  const fallbackSkillBundle = useMemo<AssistantRuntimeBundle>(() => ({
     disabled: [],
     custom: assistantRefsToBundleItems(assistant.defaultSkills),
-  };
-  const mcpBundle = runtimeMcps ?? {
+  }), [assistant.defaultSkills]);
+  const fallbackMcpBundle = useMemo<AssistantRuntimeBundle>(() => ({
     disabled: [],
     custom: assistantRefsToBundleItems(assistant.defaultMcps),
-  };
+  }), [assistant.defaultMcps]);
+  const skillBundle = runtimeSkills ?? fallbackSkillBundle;
+  const mcpBundle = runtimeMcps ?? fallbackMcpBundle;
   const enabledSkills = useMemo(() => getEnabledBundleItems(skillBundle), [skillBundle]);
   const enabledMcps = useMemo(() => getEnabledBundleItems(mcpBundle), [mcpBundle]);
+  const readableSkills = useMemo(
+    () => enabledSkills.filter((skill) => skill.sourcePath?.trim()),
+    [enabledSkills],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    if (readableSkills.length === 0) {
+      setSkillInstructions([]);
+      setSkillInstructionError(null);
+      return;
+    }
+    setSkillInstructions([]);
+    setSkillInstructionError(null);
+    Promise.all(readableSkills.map((skill) => readSkillInstruction(skill.id, skill.sourcePath ?? "")))
+      .then((items) => {
+        if (cancelled) return;
+        setSkillInstructions(items);
+        setSkillInstructionError(null);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setSkillInstructions([]);
+        setSkillInstructionError(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [readableSkills]);
+
   const executionBrief = useMemo(
     () =>
       buildArtifactAssistantBrief({
@@ -147,9 +182,10 @@ function ArtifactAssistantWorkspace({
         userRequest: request,
         engineering,
         enabledSkills,
+        skillInstructions,
         enabledMcps,
       }),
-    [activeProjectName, assistant, enabledMcps, enabledSkills, engineering, request],
+    [activeProjectName, assistant, enabledMcps, enabledSkills, engineering, request, skillInstructions],
   );
 
   const handleCopyBrief = async () => {
@@ -164,6 +200,14 @@ function ArtifactAssistantWorkspace({
   const handleRunBrief = () => {
     if (!request.trim()) {
       message.warning("请先填写要创建或编辑的产物需求。");
+      return;
+    }
+    if (readableSkills.length > 0 && skillInstructions.length === 0) {
+      message.warning(
+        skillInstructionError
+          ? `Skill 指令未就绪：${skillInstructionError}`
+          : "Skill 指令仍在读取中，请稍后再派发。",
+      );
       return;
     }
     window.dispatchEvent(
@@ -211,6 +255,9 @@ function ArtifactAssistantWorkspace({
             <Tag>未挂载默认 Skill</Tag>
           )}
         </div>
+        {skillInstructionError ? (
+          <Typography.Text type="danger">Skill 指令读取失败：{skillInstructionError}</Typography.Text>
+        ) : null}
         {engineering.formatProfile?.trim() ? (
           <Typography.Paragraph className="assistant-artifact-workspace__format">
             {engineering.formatProfile.trim()}

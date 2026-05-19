@@ -21,6 +21,7 @@ import {
   importSkillCopy,
   importSkillSymlink,
   listExternalSkillPaths,
+  readSkillInstruction,
   removeExternalSkillPath,
   scanSkillPath,
 } from "./skills";
@@ -41,6 +42,14 @@ describe("skills service", () => {
     await scanSkillPath("/tmp/skills");
     expect(invokeMock).toHaveBeenCalledWith("skills_scan_path", {
       arg: { path: "/tmp/skills" },
+    });
+  });
+
+  test("readSkillInstruction wraps id and sourcePath", async () => {
+    invokeMock.mockResolvedValueOnce({ id: "officecli-docx", sourcePath: "/skills/docx", skillPath: "/skills/docx/SKILL.md", content: "# Skill" });
+    await readSkillInstruction("officecli-docx", "/skills/docx");
+    expect(invokeMock).toHaveBeenCalledWith("skills_read_instruction", {
+      arg: { id: "officecli-docx", sourcePath: "/skills/docx" },
     });
   });
 

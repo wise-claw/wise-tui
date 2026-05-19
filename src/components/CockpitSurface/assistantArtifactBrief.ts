@@ -3,6 +3,7 @@ import type {
   AssistantEngineeringPreferences,
   AssistantRuntimeBundle,
 } from "../../services/assistantPromptLayers";
+import type { SkillInstruction } from "../../services/skills";
 import type { AssistantBundleRef, AssistantEntry } from "../../types/assistant";
 import { resolveAssistantKind } from "./assistantKind";
 
@@ -34,11 +35,13 @@ export function buildArtifactAssistantBrief(input: {
   userRequest: string;
   engineering: AssistantEngineeringPreferences;
   enabledSkills: AssistantBundleItem[];
+  skillInstructions: SkillInstruction[];
   enabledMcps: AssistantBundleItem[];
 }): string {
   const request = input.userRequest.trim() || "请在这里补充要创建或编辑的产物需求。";
   const formatProfile = input.engineering.formatProfile?.trim() || "未配置;按助手默认质量标准执行。";
   const skills = formatBundleList(input.enabledSkills, "未启用 Skill;请先在助手设置中挂载。");
+  const skillInstructions = formatSkillInstructions(input.skillInstructions);
   const mcps = formatBundleList(input.enabledMcps, "未启用 MCP。");
   const assistantKind = resolveAssistantKind({
     id: input.assistant.id,
@@ -61,6 +64,9 @@ export function buildArtifactAssistantBrief(input: {
     "",
     "## 启用 Skills",
     skills,
+    "",
+    "## Skill 指令",
+    skillInstructions,
     "",
     "## 启用 MCP",
     mcps,
@@ -107,4 +113,21 @@ function formatBundleList(items: AssistantBundleItem[], emptyText: string): stri
       return `- ${item.id}${label}${path}`;
     })
     .join("\n");
+}
+
+function formatSkillInstructions(items: SkillInstruction[]): string {
+  if (items.length === 0) {
+    return "- 暂未读取到 SKILL.md 内容;执行前请根据启用 Skill 路径读取对应指令。";
+  }
+  return items
+    .map((item) => [
+      `### ${item.id}`,
+      `Source: ${item.sourcePath}`,
+      `File: ${item.skillPath}`,
+      "",
+      "```markdown",
+      item.content.trim(),
+      "```",
+    ].join("\n"))
+    .join("\n\n");
 }

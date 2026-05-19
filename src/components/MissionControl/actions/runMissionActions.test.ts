@@ -80,18 +80,20 @@ const createOrResumeMission = mock(async () => ({
 const trellisRuntimeUpsertAgentRunSafe = mock(async () => ({}));
 const trellisRuntimeRecordEventSafe = mock(async () => ({}));
 const trellisAgentHeartbeat = mock(async () => true);
-const dispatchWorkspaceTrellisMaterializedFanout = mock(() => {});
+const dispatchWorkspaceTrellisMaterializedFanout = mock(async () => null);
 
 mock.module("antd", () => ({
   message: {
     success: mock(() => {}),
     warning: mock(() => {}),
+    error: mock(() => {}),
   },
 }));
 mock.module("antd/lib/index.js", () => ({
   message: {
     success: mock(() => {}),
     warning: mock(() => {}),
+    error: mock(() => {}),
   },
 }));
 mock.module("../../../services/prdSplit/splitterDispatch", () => ({
