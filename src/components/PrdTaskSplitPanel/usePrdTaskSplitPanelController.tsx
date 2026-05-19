@@ -106,6 +106,10 @@ import {
   type TaskConfirmFilter,
 } from "./helpers";
 import { sameStringArray } from "../../utils/anchorStability";
+import {
+  WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED,
+  type SplitTodoCountUpdatedDetail,
+} from "../../constants/workflowUiEvents";
 import type {
   RequirementEntry,
   RequirementNameModalMode,
@@ -1112,6 +1116,24 @@ export function usePrdTaskSplitPanelController({
                   ]),
                 },
               );
+              event.plan.clusters.forEach((cluster, index) => {
+                appendSplitRuntimeLog(
+                  "assistant",
+                  index === 0
+                    ? "分片已进入启动队列，等待创建 Trellis 父任务。"
+                    : `等待分片 ${index} 输出任务列表后启动。`,
+                  {
+                    scope: "subagent",
+                    agentName: "trellis-splitter",
+                    clusterId: cluster.id,
+                    title: cluster.title,
+                    status: "queued",
+                    details: compactRuntimeDetails([
+                      { label: "requirements", value: cluster.requirementIds.join(", ") },
+                    ]),
+                  },
+                );
+              });
             }
             if (event.type === "cluster-start") {
               appendSplitRuntimeLog(
@@ -1172,6 +1194,9 @@ export function usePrdTaskSplitPanelController({
                   status,
                   details: compactRuntimeDetails([
                     { label: "taskCount", value: String(taskCount) },
+                    event.result.normalized?.splitTasks.length
+                      ? { label: "taskTitles", value: event.result.normalized.splitTasks.map((task) => task.title).join("\n") }
+                      : null,
                     { label: "duration", value: formatDurationMs(event.result.raw.durationMs) },
                     event.result.raw.claudeSessionId ? { label: "session", value: event.result.raw.claudeSessionId } : null,
                     event.result.raw.runDir ? { label: "runDir", value: event.result.raw.runDir } : null,
@@ -1959,10 +1984,38 @@ export function usePrdTaskSplitPanelController({
       return;
     }
     const migrated = migrateStoredSplitResult(stored);
+    if (isStoredSplitResultStale(requirementId, migrated)) {
+      resetRequirementTaskView();
+      return;
+    }
     setActiveResult(migrated);
     setTaskConfirmFilter(defaultTaskConfirmFilterByTasks(migrated.splitTasks));
     setSelectedTaskId(migrated.splitTasks[0]?.id ?? null);
     setSelectedAnchorTaskId(null);
+  }
+
+  /**
+   * The PRD draft (left panel) and the persisted split result (right panel)
+   * are stored separately under the same requirementId. If the user edits the
+   * PRD without re-splitting, reopening the panel would surface a task list
+   * derived from a stale PRD. Detect divergence and drop the stale result so
+   * the UI shows the empty-state until the user re-splits.
+   */
+  function isStoredSplitResultStale(requirementId: string, stored: SplitResult): boolean {
+    const currentInput = (requirementHistoryById.get(requirementId)?.inputValue ?? "").trim();
+    if (!currentInput) return false;
+    try {
+      const meta = parsePrdInput(currentInput);
+      if (meta.sourceType === "url") {
+        const storedUrl = (stored.source.sourceRef ?? "").trim();
+        return storedUrl !== (meta.rawUrl ?? "").trim();
+      }
+      const currentRendered = prdDocumentToSplitMarkdown(normalizePrdDocument(meta)).trim();
+      const storedRendered = prdDocumentToSplitMarkdown(stored.source).trim();
+      return currentRendered !== storedRendered;
+    } catch {
+      return false;
+    }
   }
 
   function buildRequirementFromCurrent(
@@ -2583,6 +2636,15 @@ export function usePrdTaskSplitPanelController({
     try {
       const out = await materializeSplitTasksToWorkspaceTrellis(sourceTasks);
       message.success(`已落盘到 Workspace Trellis：${out.parentTaskName}（${out.childTaskNames.length} 个子任务）`);
+      window.dispatchEvent(new CustomEvent<SplitTodoCountUpdatedDetail>(WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED, {
+        detail: {
+          source: "trellis",
+          openTaskDrawer: true,
+          projectId: linkedProject?.id ?? null,
+          parentTaskName: out.parentTaskName,
+          childTaskNames: out.childTaskNames,
+        },
+      }));
       closePanelToTaskListButton();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -2603,6 +2665,15 @@ export function usePrdTaskSplitPanelController({
     try {
       const out = await materializeSplitTasksToWorkspaceTrellis([task]);
       message.success(`已落盘到 Workspace Trellis：${out.childTaskNames[0] ?? out.parentTaskName}`);
+      window.dispatchEvent(new CustomEvent<SplitTodoCountUpdatedDetail>(WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED, {
+        detail: {
+          source: "trellis",
+          openTaskDrawer: true,
+          projectId: linkedProject?.id ?? null,
+          parentTaskName: out.parentTaskName,
+          childTaskNames: out.childTaskNames,
+        },
+      }));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       message.error(`落盘到 Trellis 失败：${msg}`);
