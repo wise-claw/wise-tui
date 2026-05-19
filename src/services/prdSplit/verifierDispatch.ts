@@ -186,11 +186,16 @@ export function composeVerifierPrompt(input: {
   lines.push("## 强约束");
   lines.push("1. 输出 schema 同 splitter；通过 `validateClaudeSplitPayloadStrict`。");
   lines.push("2. 每个 task `sourceRequirementIds` 必须来自 `requirements-index.json`；不得编造。");
-  lines.push("3. `taskAnchors` 须可追溯到 PRD 原文（contextBefore / contextAfter）。");
+  lines.push("3. 每个 task 的 `taskAnchors` 必须是对象，不能是 null；`contextBefore` / `contextAfter` 至少一个必须逐字复制自该 task 的 `sourceRequirementIds` 对应 requirement content。");
   lines.push("4. 尽量保留 previous-output 的 task id；新任务用 `task-<n>-v2`。");
   lines.push("5. 不可解的 issue → 把对应 task 标 `executionStatus: not_executable`，并在 missingPrerequisites 写清原因。");
   lines.push("6. 仅输出一个顶层 JSON 对象。");
   lines.push("7. 最终回复必须是 JSON 对象本身，以 `{` 开头，以 `}` 结尾。");
+  lines.push("");
+  lines.push("## 锚点修复规则");
+  lines.push("- 如果 issue 提到 `taskAnchors 必须是对象`，补一个对象，不要删除任务。");
+  lines.push("- 如果 issue 提到 `无法追溯`，从 `requirements-index.json` 找到对应 requirement，把原文中的 16-80 字符逐字复制到 `contextAfter`。");
+  lines.push("- `textHash` 优先使用对应 requirement 的 `bodyHash`；`from/to` 不确定时给出有效递增区间，并保证 context 字段可追溯。");
   lines.push("");
   lines.push("现在产出修正后的 JSON。");
   return lines.join("\n");

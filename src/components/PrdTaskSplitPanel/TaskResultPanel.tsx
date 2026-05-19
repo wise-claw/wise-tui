@@ -233,7 +233,7 @@ export function TaskResultPanel({
                 <div className="app-prd-task-panel__result-runtime">
                   <div className="app-prd-task-panel__split-runtime-head">
                     <Space size={8} align="center" className="app-prd-task-panel__split-runtime-head-title">
-                      <Typography.Text strong>Claude Code 运行过程</Typography.Text>
+                      <Typography.Text strong>子代理对话流</Typography.Text>
                       {parsing ? <Spin size="small" aria-label="拆分进行中" /> : null}
                     </Space>
                     <Button
@@ -241,7 +241,7 @@ export function TaskResultPanel({
                       type="text"
                       icon={<CloseOutlined />}
                       onClick={onCloseRuntime}
-                      aria-label="关闭处理信息面板"
+                      aria-label="关闭子代理对话面板"
                     />
                   </div>
                   <SplitRuntimeMessages

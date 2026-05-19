@@ -84,6 +84,7 @@ import {
   type ClusterRef,
 } from "../../services/prdSplit/trellisWriter";
 import { runPrdSplitSubagentWorkflow } from "../../services/prdSplit/subagentWorkflow";
+import type { DispatchClusterResult } from "../../services/prdSplit/splitterDispatch";
 import { runPrdSplitClaude } from "../../services/claudeSplitExecutor";
 import {
   TASK_AI_DEFAULT_PROMPT_BY_MODE,
@@ -108,6 +109,7 @@ import { sameStringArray } from "../../utils/anchorStability";
 import type {
   RequirementEntry,
   RequirementNameModalMode,
+  SplitRuntimeLogDetail,
   SplitPromptDraftBySlot,
   SplitQualitySummary,
   SplitWizardStep,
@@ -132,6 +134,35 @@ function scrollToTaskCard(taskId: string) {
     const el = document.querySelector<HTMLElement>(`[data-task-id="${taskId}"]`);
     el?.scrollIntoView({ behavior: "smooth", block: "center" });
   });
+}
+
+function compactRuntimeDetails(details: Array<SplitRuntimeLogDetail | null | undefined | false>): SplitRuntimeLogDetail[] {
+  return details
+    .filter((detail): detail is SplitRuntimeLogDetail => Boolean(detail))
+    .map((detail) => ({
+      label: detail.label.trim(),
+      value: detail.value.trim(),
+    }))
+    .filter((detail) => detail.label.length > 0 && detail.value.length > 0);
+}
+
+function formatDurationMs(ms: number | null | undefined): string {
+  if (typeof ms !== "number" || !Number.isFinite(ms) || ms <= 0) return "";
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  return `${(ms / 1000).toFixed(1)} s`;
+}
+
+function splitValidationIssueText(result: DispatchClusterResult): string {
+  const issues = result.validationIssues ?? [];
+  if (issues.length === 0) return "";
+  return issues
+    .slice(0, 8)
+    .map((issue) => `${issue.path}：${issue.message}`)
+    .join("\n");
+}
+
+function splitErrorText(result: DispatchClusterResult): string {
+  return result.errors.filter((error) => error.trim().length > 0).join("\n");
 }
 
 function mergeAssistantBundleItems(items: AssistantBundleItem[]): AssistantBundleItem[] {
@@ -1068,28 +1099,88 @@ export function usePrdTaskSplitPanelController({
             if (event.type === "plan") {
               appendSplitRuntimeLog(
                 "system",
-                `已规划 ${event.plan.clusters.length} 个 trellis-splitter 分组，requirements=${event.requirementsIndex.requirements.length}。`,
+                "完成需求索引与 cluster 规划，准备创建 Trellis 父任务。",
+                {
+                  scope: "main",
+                  agentName: "主会话",
+                  status: "running",
+                  title: "规划完成",
+                  details: compactRuntimeDetails([
+                    { label: "clusters", value: String(event.plan.clusters.length) },
+                    { label: "requirements", value: String(event.requirementsIndex.requirements.length) },
+                    { label: "workspace", value: rootPath },
+                  ]),
+                },
               );
             }
             if (event.type === "cluster-start") {
-              appendSplitRuntimeLog("system", `派发 trellis-splitter：${event.cluster.title}（${event.cluster.id}）。`);
+              appendSplitRuntimeLog(
+                "assistant",
+                "子代理已排队，等待 Claude Code 生成本分组的任务 JSON。",
+                {
+                  scope: "subagent",
+                  agentName: "trellis-splitter",
+                  clusterId: event.cluster.id,
+                  title: event.cluster.title,
+                  status: "running",
+                  details: compactRuntimeDetails([
+                    { label: "requirements", value: event.cluster.requirementIds.join(", ") },
+                    event.executionRootPath ? { label: "executionRoot", value: event.executionRootPath } : null,
+                  ]),
+                },
+              );
             }
             if (event.type === "parent-created") {
               appendSplitRuntimeLog(
                 "system",
-                `父任务已创建：${event.parentTaskPath}。`,
+                "已为该分组创建 Trellis 父任务，后续子任务会落到这个父任务下。",
+                {
+                  scope: "main",
+                  agentName: "主会话",
+                  clusterId: event.cluster.id,
+                  title: event.cluster.title,
+                  status: "running",
+                  details: compactRuntimeDetails([
+                    { label: "parentTask", value: event.parentTaskPath },
+                    { label: "parentName", value: event.parentTaskName },
+                  ]),
+                },
               );
             }
             if (event.type === "cluster-complete") {
               const taskCount = event.result.normalized?.splitTasks.length ?? 0;
+              const issueText = splitValidationIssueText(event.result);
+              const errorText = splitErrorText(event.result);
+              const ok = event.result.errors.length === 0;
+              const status = event.result.raw.exitCode === 130
+                ? "cancelled"
+                : ok ? "succeeded" : "failed";
               appendSplitRuntimeLog(
-                event.result.errors.length === 0 ? "assistant" : "error",
-                [
-                  `trellis-splitter 完成：${event.cluster.id}，任务 ${taskCount} 个。`,
-                  event.result.raw.runDir ? `runDir=${event.result.raw.runDir}` : "",
-                  event.result.raw.claudeSessionId ? `session_id=${event.result.raw.claudeSessionId}` : "",
-                  event.result.errors.length > 0 ? `errors=${event.result.errors.join("；")}` : "",
-                ].filter(Boolean).join("\n"),
+                ok ? "assistant" : "error",
+                ok
+                  ? `Claude Code 已返回并通过 strict 校验，产出 ${taskCount} 个任务。`
+                  : [
+                    "Claude Code 已返回，但本地 strict 校验未通过。",
+                    errorText ? `错误：\n${errorText}` : "",
+                    issueText ? `校验问题：\n${issueText}` : "",
+                  ].filter(Boolean).join("\n"),
+                {
+                  scope: "subagent",
+                  agentName: "trellis-splitter",
+                  clusterId: event.cluster.id,
+                  title: event.cluster.title,
+                  status,
+                  details: compactRuntimeDetails([
+                    { label: "taskCount", value: String(taskCount) },
+                    { label: "duration", value: formatDurationMs(event.result.raw.durationMs) },
+                    event.result.raw.claudeSessionId ? { label: "session", value: event.result.raw.claudeSessionId } : null,
+                    event.result.raw.runDir ? { label: "runDir", value: event.result.raw.runDir } : null,
+                    event.result.raw.stdoutPath ? { label: "stdout", value: event.result.raw.stdoutPath } : null,
+                    event.result.raw.stderrPath ? { label: "stderr", value: event.result.raw.stderrPath } : null,
+                    event.result.raw.rawResultPath ? { label: "rawResult", value: event.result.raw.rawResultPath } : null,
+                    issueText ? { label: "validationIssues", value: issueText } : null,
+                  ]),
+                },
               );
             }
           },
@@ -1101,7 +1192,26 @@ export function usePrdTaskSplitPanelController({
         setSelectedTaskId(nextResult.splitTasks[0]?.id ?? null);
         appendSplitRuntimeLog(
           "system",
-          `trellis-splitter 拆分完成并保存（共 ${nextResult.splitTasks.length} 个任务），右侧任务列表已刷新。`,
+          "主会话已开始收集子代理返回，准备做需求溯源与锚点定位。",
+          {
+            scope: "main",
+            agentName: "主会话",
+            status: "running",
+            title: "阶段 2",
+          },
+        );
+        appendSplitRuntimeLog(
+          "system",
+          `拆分结果已保存，右侧任务列表已刷新（共 ${nextResult.splitTasks.length} 个任务）。`,
+          {
+            scope: "main",
+            agentName: "主会话",
+            status: "succeeded",
+            title: "拆分完成",
+            details: compactRuntimeDetails([
+              { label: "tasks", value: String(nextResult.splitTasks.length) },
+            ]),
+          },
         );
         message.success(`需求拆分完成：${nextResult.splitTasks.length} 个任务`);
         if (splitRuntimeInModal) {
@@ -1113,6 +1223,16 @@ export function usePrdTaskSplitPanelController({
         }
       } catch (e) {
         const msg = toErrorMessage(e, "trellis-splitter 执行失败");
+        appendSplitRuntimeLog(
+          "error",
+          msg,
+          {
+            scope: "main",
+            agentName: "主会话",
+            status: "failed",
+            title: "拆分未完成",
+          },
+        );
         message.warning(`主编辑器拆分：${msg}`);
       }
     } catch (err) {

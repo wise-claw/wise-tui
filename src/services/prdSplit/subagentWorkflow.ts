@@ -36,7 +36,11 @@ export interface PrdSplitSubagentWorkflowInput {
 
 export type PrdSplitSubagentWorkflowEvent =
   | { type: "plan"; plan: ClusterPlan; requirementsIndex: RequirementsIndexV2 }
-  | { type: "cluster-start"; cluster: ClusterPlanItem }
+  | {
+    type: "cluster-start";
+    cluster: ClusterPlanItem;
+    executionRootPath: string | null;
+  }
   | {
     type: "parent-created";
     cluster: ClusterPlanItem;
@@ -97,7 +101,8 @@ export async function runPrdSplitSubagentWorkflow(
   const clusterRuns: PrdSplitSubagentClusterRun[] = [];
   const normalizedResults: SplitResult[] = [];
   for (const cluster of plan.clusters) {
-    input.onEvent?.({ type: "cluster-start", cluster });
+    const executionRootPath = buildClusterExecutionRoot(cluster, plannerRepos);
+    input.onEvent?.({ type: "cluster-start", cluster, executionRootPath });
     const parent = await createParentTask({
       projectRootPath: rootPath,
       cluster: {
@@ -118,7 +123,7 @@ export async function runPrdSplitSubagentWorkflow(
     });
     const result = await dispatchClusterSplit({
       projectRootPath: rootPath,
-      executionRootPath: buildClusterExecutionRoot(cluster, plannerRepos),
+      executionRootPath,
       parentTaskPath: parent.parentTaskPath,
       cluster,
       prd: input.prd,

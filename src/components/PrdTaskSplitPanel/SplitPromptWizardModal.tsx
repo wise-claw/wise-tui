@@ -135,7 +135,7 @@ export function SplitPromptWizardModal({
         size="small"
         current={step === "prompts" ? 0 : 1}
         style={{ marginBottom: 14 }}
-        items={[{ title: "提示词" }, { title: "处理信息 · Claude Code 会话" }]}
+        items={[{ title: "提示词" }, { title: "子代理对话流" }]}
       />
       {step === "prompts"
         ? (
@@ -170,7 +170,7 @@ export function SplitPromptWizardModal({
             <div className="app-prd-task-panel__split-runtime-head">
               <Space size={8} align="center" className="app-prd-task-panel__split-runtime-head-title">
                 <Typography.Text type="secondary">
-                  第 2 步：下方为 Claude Code 执行过程与系统消息，与主会话区气泡样式一致；失败项可重试对应阶段。
+                  第 2 步：主会话派发子代理，点击子代理可查看对话流；失败项可重试对应阶段。
                 </Typography.Text>
                 {parsing ? <Spin size="small" aria-label="拆分进行中" /> : null}
               </Space>

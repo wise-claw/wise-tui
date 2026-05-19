@@ -2,7 +2,6 @@ import { CopyOutlined } from "@ant-design/icons";
 import { Button } from "antd";
 import { useCallback, useState } from "react";
 import { LinkifiedPre } from "../ClaudeSessions/LinkifiedPre";
-import { SystemMessageContent } from "../ClaudeSessions/SystemMessageContent";
 import type { SplitRetryPhase, SplitRuntimeLogItem } from "./types";
 
 interface Props {
@@ -13,18 +12,9 @@ interface Props {
 
 export function SplitRuntimeMessageRow({ log, retryingPhase, onRetryStage }: Props) {
   const [copied, setCopied] = useState(false);
-  const bubbleRole: "user" | "assistant" | "system" =
-    log.role === "user" ? "user" : log.role === "assistant" ? "assistant" : "system";
-  const sender =
-    log.role === "user"
-      ? "我"
-      : log.role === "assistant"
-        ? "Claude"
-        : log.role === "error"
-          ? "错误"
-          : "系统";
-  const avatarLetter =
-    log.role === "user" ? "我" : log.role === "assistant" ? "C" : log.role === "error" ? "!" : "S";
+  const scope = log.scope ?? (log.role === "assistant" ? "subagent" : "main");
+  const status = log.status ?? (log.role === "error" ? "failed" : "info");
+  const agentName = log.agentName ?? (scope === "subagent" ? "trellis-splitter" : "主会话");
   const timeStr = new Date(log.at).toLocaleString("zh-CN", {
     year: "numeric",
     month: "2-digit",
@@ -34,17 +24,21 @@ export function SplitRuntimeMessageRow({ log, retryingPhase, onRetryStage }: Pro
     second: "2-digit",
     hour12: false,
   });
-  const isStageStartMessage = log.role === "system" && /^开始执行阶段\d+/.test(log.text.trim());
   const rowClass = [
     "app-claude-message",
-    `app-claude-message--${bubbleRole}`,
+    scope === "subagent" ? "app-claude-message--assistant" : "app-claude-message--system",
+    "app-prd-task-panel__runtime-chat-row",
+    `app-prd-task-panel__runtime-chat-row--${scope}`,
+    `app-prd-task-panel__runtime-chat-row--${status}`,
     log.role === "error" ? "app-prd-task-panel__split-runtime-msg--error" : "",
-    isStageStartMessage ? "app-prd-task-panel__split-runtime-msg--stage-running" : "",
   ]
     .filter(Boolean)
     .join(" ");
   const copyText = useCallback(async () => {
-    const content = log.text ?? "";
+    const detailText = (log.details ?? [])
+      .map((detail) => `${detail.label}: ${detail.value}`)
+      .join("\n");
+    const content = [log.title, log.text, detailText].filter(Boolean).join("\n");
     if (!content.trim()) return;
     try {
       await navigator.clipboard.writeText(content);
@@ -64,25 +58,27 @@ export function SplitRuntimeMessageRow({ log, retryingPhase, onRetryStage }: Pro
         window.setTimeout(() => setCopied(false), 1400);
       }
     }
-  }, [log.text]);
+  }, [log.details, log.text, log.title]);
   const canRetry = Boolean(log.retryPhase);
   const retryBusy = canRetry && retryingPhase === log.retryPhase;
 
   return (
     <div className={rowClass}>
-      <div className="app-claude-message-avatar">{avatarLetter}</div>
+      <div className="app-claude-message-avatar">{scope === "subagent" ? "S" : "M"}</div>
       <div className="app-claude-message-body">
         <div className="app-claude-message-header">
-          <span className="app-claude-message-sender">{sender}</span>
+          <span className="app-claude-message-sender">{agentName}</span>
+          <span className={`app-prd-task-panel__runtime-status app-prd-task-panel__runtime-status--${status}`}>
+            {runtimeStatusLabel(status)}
+          </span>
           <button
             type="button"
             className={`app-prd-task-panel__split-runtime-copy-btn ${copied ? "is-copied" : ""}`}
             onClick={() => void copyText()}
-            aria-label="复制该条处理信息"
+            aria-label="复制该条对话"
             title={copied ? "已复制" : "复制"}
           >
             <CopyOutlined />
-            <span>{copied ? "已复制" : "复制"}</span>
           </button>
           {canRetry ? (
             <Button
@@ -97,14 +93,45 @@ export function SplitRuntimeMessageRow({ log, retryingPhase, onRetryStage }: Pro
           ) : null}
           <span className="app-claude-message-time">{timeStr}</span>
         </div>
-        <div className="app-claude-message-content">
-          {bubbleRole === "system" ? (
-            <SystemMessageContent text={log.text} />
-          ) : (
-            <LinkifiedPre text={log.text} className="app-claude-message-text" />
-          )}
+        <div className="app-claude-message-content app-prd-task-panel__runtime-chat-content">
+          {log.title || log.clusterId ? (
+            <div className="app-prd-task-panel__runtime-chat-title">
+              {log.title ? <span>{log.title}</span> : null}
+              {log.clusterId ? <code>{log.clusterId}</code> : null}
+            </div>
+          ) : null}
+          <LinkifiedPre text={log.text} className="app-claude-message-text app-prd-task-panel__runtime-chat-text" />
+          {log.details?.length ? (
+            <details className="app-prd-task-panel__runtime-chat-details">
+              <summary>详情</summary>
+              {log.details.map((detail, index) => (
+                <div key={`${detail.label}-${index}`} className="app-prd-task-panel__runtime-chat-detail">
+                  <span>{detail.label}</span>
+                  <code>{detail.value}</code>
+                </div>
+              ))}
+            </details>
+          ) : null}
         </div>
       </div>
     </div>
   );
+}
+
+function runtimeStatusLabel(status: SplitRuntimeLogItem["status"]): string {
+  switch (status) {
+    case "queued":
+      return "等待";
+    case "running":
+      return "运行中";
+    case "succeeded":
+      return "完成";
+    case "failed":
+      return "失败";
+    case "cancelled":
+      return "已中断";
+    case "info":
+    default:
+      return "记录";
+  }
 }

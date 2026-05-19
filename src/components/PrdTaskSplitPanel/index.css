@@ -565,6 +565,322 @@
   background: var(--ant-color-bg-layout);
 }
 
+.app-prd-task-panel__runtime-console {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.app-prd-task-panel__runtime-phases {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.app-prd-task-panel__runtime-phase {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
+  display: grid;
+  gap: 4px;
+}
+
+.app-prd-task-panel__runtime-phase span,
+.app-prd-task-panel__runtime-phase small {
+  color: var(--ant-color-text-tertiary);
+  font-size: 11px;
+}
+
+.app-prd-task-panel__runtime-phase strong {
+  color: var(--ant-color-text);
+  font-size: 13px;
+}
+
+.app-prd-task-panel__runtime-phase--running {
+  border-color: var(--ant-color-primary-border);
+  background: var(--ant-color-primary-bg);
+}
+
+.app-prd-task-panel__runtime-phase--succeeded {
+  border-color: rgba(82, 196, 26, 0.35);
+  background: rgba(82, 196, 26, 0.06);
+}
+
+.app-prd-task-panel__runtime-phase--failed {
+  border-color: rgba(255, 77, 79, 0.42);
+  background: rgba(255, 77, 79, 0.05);
+}
+
+.app-prd-task-panel__runtime-main-line {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary);
+  min-width: 0;
+}
+
+.app-prd-task-panel__runtime-main-line span,
+.app-prd-task-panel__runtime-subagent-list-head {
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.app-prd-task-panel__runtime-main-line p {
+  margin: 0;
+  min-width: 0;
+  color: var(--ant-color-text);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.app-prd-task-panel__runtime-subagent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.app-prd-task-panel__runtime-subagent-list-head {
+  display: flex;
+  justify-content: space-between;
+}
+
+.app-prd-task-panel__runtime-subagent-empty {
+  padding: 12px;
+  color: var(--ant-color-text-tertiary);
+  font-size: 12px;
+  text-align: center;
+  border: 1px dashed var(--ant-color-border);
+  border-radius: 8px;
+}
+
+.app-prd-task-panel__runtime-subagent-row {
+  appearance: none;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
+  padding: 9px 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.app-prd-task-panel__runtime-subagent-row:hover,
+.app-prd-task-panel__runtime-subagent-row.is-active {
+  border-color: var(--ant-color-primary-border);
+  background: var(--ant-color-primary-bg);
+}
+
+.app-prd-task-panel__runtime-subagent-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.app-prd-task-panel__runtime-subagent-main strong,
+.app-prd-task-panel__runtime-subagent-main small,
+.app-prd-task-panel__runtime-subagent-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-prd-task-panel__runtime-subagent-side {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.app-prd-task-panel__runtime-subagent-main strong {
+  color: var(--ant-color-text);
+  font-size: 12px;
+}
+
+.app-prd-task-panel__runtime-subagent-main small,
+.app-prd-task-panel__runtime-subagent-meta {
+  color: var(--ant-color-text-tertiary);
+  font-size: 11px;
+}
+
+.app-prd-task-panel__runtime-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  height: 20px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.app-prd-task-panel__runtime-status--running {
+  background: rgba(22, 119, 255, 0.1);
+  color: var(--ant-color-primary);
+}
+
+.app-prd-task-panel__runtime-status--succeeded {
+  background: rgba(82, 196, 26, 0.12);
+  color: #237804;
+}
+
+.app-prd-task-panel__runtime-status--failed {
+  background: rgba(255, 77, 79, 0.12);
+  color: var(--ant-color-error);
+}
+
+.app-prd-task-panel__runtime-status--cancelled {
+  background: rgba(250, 173, 20, 0.12);
+  color: #ad6800;
+}
+
+.app-prd-task-panel__runtime-status--info,
+.app-prd-task-panel__runtime-status--queued {
+  background: var(--ant-color-fill-quaternary);
+  color: var(--ant-color-text-secondary);
+}
+
+.app-prd-task-panel__runtime-detail {
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.app-prd-task-panel__runtime-detail-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.app-prd-task-panel__runtime-detail-head div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.app-prd-task-panel__runtime-detail-head span {
+  color: var(--ant-color-text-tertiary);
+  font-size: 11px;
+}
+
+.app-prd-task-panel__runtime-detail-head strong {
+  font-size: 12px;
+  color: var(--ant-color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-prd-task-panel__runtime-detail-head button {
+  border: 0;
+  background: transparent;
+  color: var(--ant-color-primary);
+  cursor: pointer;
+  padding: 0;
+  font-size: 12px;
+}
+
+.app-prd-task-panel__runtime-chat-row {
+  margin: 0;
+  min-width: 0;
+}
+
+.app-prd-task-panel__runtime-chat-row--subagent .app-claude-message-avatar {
+  background: var(--ant-color-warning);
+  color: #fff;
+}
+
+.app-prd-task-panel__runtime-chat-row--failed .app-claude-message-avatar {
+  background: var(--ant-color-error);
+  color: #fff;
+}
+
+.app-prd-task-panel__runtime-chat-content {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.app-prd-task-panel__runtime-chat-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+}
+
+.app-prd-task-panel__runtime-chat-title span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-prd-task-panel__runtime-chat-title code {
+  flex-shrink: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ant-color-text-tertiary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.app-prd-task-panel__runtime-chat-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.app-prd-task-panel__runtime-chat-details summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--ant-color-primary);
+  font-size: 12px;
+}
+
+.app-prd-task-panel__runtime-chat-detail {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-prd-task-panel__runtime-chat-detail span {
+  color: var(--ant-color-text-tertiary);
+  font-size: 11px;
+}
+
+.app-prd-task-panel__runtime-chat-detail code {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 11px;
+  color: var(--ant-color-text);
+}
+
 .app-prd-task-panel__result-runtime {
   flex: 1 1 0;
   min-height: 0;
@@ -600,37 +916,6 @@
   color: #fff;
 }
 
-.app-prd-task-panel__split-runtime-msg--stage-running .app-claude-message-content {
-  position: relative;
-  overflow: hidden;
-  isolation: isolate;
-}
-
-.app-prd-task-panel__split-runtime-msg--stage-running .app-claude-message-content::before {
-  content: "";
-  position: absolute;
-  inset: -140% -60%;
-  background: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0) 42%,
-    rgba(255, 255, 255, 0.35) 50%,
-    rgba(255, 255, 255, 0) 58%
-  );
-  transform: translate3d(-62%, -62%, 0);
-  animation: app-prd-task-panel-runtime-sweep 2.2s ease-in-out infinite;
-  pointer-events: none;
-  z-index: 1;
-}
-
-@keyframes app-prd-task-panel-runtime-sweep {
-  0% {
-    transform: translate3d(-62%, -62%, 0);
-  }
-  100% {
-    transform: translate3d(62%, 62%, 0);
-  }
-}
-
 .app-prd-task-panel__split-runtime-copy-btn {
   display: inline-flex;
   align-items: center;
@@ -664,6 +949,18 @@
   padding: 0 8px;
   font-size: 11px;
   border-radius: 999px;
+}
+
+@media (max-width: 720px) {
+  .app-prd-task-panel__runtime-phases,
+  .app-prd-task-panel__runtime-subagent-row {
+    grid-template-columns: 1fr;
+  }
+
+  .app-prd-task-panel__runtime-subagent-side {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
 }
 
 .app-prd-task-panel__actions-left {

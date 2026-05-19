@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import type {
   SplitRetryPhase,
+  SplitRuntimeLogDetail,
   SplitRuntimeLogItem,
   SplitRuntimeLogRole,
+  SplitRuntimeLogScope,
+  SplitRuntimeLogStatus,
   SplitWizardStep,
 } from "./types";
 
@@ -26,17 +29,32 @@ export function useSplitRuntimePanel({
   const splitRuntimeRef = useRef<HTMLDivElement | null>(null);
   const splitStageRetryHandlersRef = useRef<Partial<Record<SplitRetryPhase, (() => Promise<void>)>>>({});
 
+  interface AppendSplitRuntimeLogOptions {
+    retryPhase?: SplitRetryPhase;
+    scope?: SplitRuntimeLogScope;
+    agentName?: string;
+    clusterId?: string;
+    title?: string;
+    status?: SplitRuntimeLogStatus;
+    details?: SplitRuntimeLogDetail[];
+  }
+
   const resetSplitRuntimePanel = useCallback((title: string, options?: { inModal?: boolean }) => {
     const inModal = options?.inModal === true;
+    const now = Date.now();
     setSplitRuntimeVisible(!inModal);
     setRetryingPhase(null);
     splitStageRetryHandlersRef.current = {};
     setSplitRuntimeLogs([
       {
-        id: `${Date.now()}-boot`,
+        id: `${now}-boot`,
         role: "system",
-        text: `${title}：开始准备输入并执行 Claude（当前流程仅解析结果与日志展示，暂不自动落库）。`,
-        at: Date.now(),
+        text: `${title}：开始准备 PRD、Workspace 与 Trellis 父任务。`,
+        at: now,
+        scope: "main",
+        agentName: "主会话",
+        title,
+        status: "running",
       },
     ]);
   }, []);
@@ -44,7 +62,7 @@ export function useSplitRuntimePanel({
   const appendSplitRuntimeLog = useCallback((
     role: SplitRuntimeLogRole,
     text: string,
-    options?: { retryPhase?: SplitRetryPhase },
+    options?: AppendSplitRuntimeLogOptions,
   ) => {
     const SPLIT_RUNTIME_LOG_LIMIT = 400;
     const content = text.trim();
@@ -58,6 +76,12 @@ export function useSplitRuntimePanel({
           text: content,
           at: Date.now(),
           retryPhase: options?.retryPhase,
+          scope: options?.scope,
+          agentName: options?.agentName,
+          clusterId: options?.clusterId,
+          title: options?.title,
+          status: options?.status,
+          details: options?.details,
         },
       ];
       if (next.length <= SPLIT_RUNTIME_LOG_LIMIT) {

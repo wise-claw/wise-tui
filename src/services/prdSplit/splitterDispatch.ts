@@ -275,11 +275,18 @@ export function composeSplitterPrompt(input: {
   lines.push("## Hard constraints (violating any of these invalidates the output)");
   lines.push("1. Output schema: see `OUTPUT_SCHEMA.json` in the input bundle. The output must pass `validateClaudeSplitPayloadStrict`.");
   lines.push("2. Every task must include >=1 `sourceRequirementIds`, each existing in `requirements-index.json`. Do not fabricate IDs.");
-  lines.push("3. For `taskAnchors`, at least one of `contextBefore`/`contextAfter` must be traceable to the source requirement text.");
+  lines.push("3. `taskAnchors` is mandatory for every task and must be an object, never null. At least one of `contextBefore`/`contextAfter` must contain an exact, contiguous substring copied from one of the task's `sourceRequirementIds` contents in `requirements-index.json`.");
   lines.push("4. When `executionStatus = \"executable\"`, `missingPrerequisites` must be empty; otherwise non-empty.");
   lines.push("5. `clusterId` must equal this cluster's id. `repoTarget` defaults are handled locally.");
   lines.push("6. Output exactly one top-level JSON object. No surrounding text.");
   lines.push("7. The final assistant response must be the JSON object itself, starting with `{` and ending with `}`.");
+  lines.push("");
+  lines.push("## Anchor construction");
+  lines.push("- Choose the most specific requirement content for each task from `requirements-index.json`.");
+  lines.push("- Set `taskAnchors.contextAfter` to a verbatim substring from that requirement content, preferably 16-80 characters. Do not use only headings such as `### 4`.");
+  lines.push("- Set `taskAnchors.contextBefore` to nearby PRD text if available; it may also repeat the same requirement substring.");
+  lines.push("- Set `taskAnchors.textHash` to that requirement's `bodyHash` when a single requirement is primary; otherwise use a non-empty stable string.");
+  lines.push("- If an exact source span is uncertain, still output a taskAnchors object with a verbatim requirement substring; do not output null.");
   lines.push("");
   lines.push("## Classification & design output");
   lines.push("- `classification` is one of:");
@@ -389,13 +396,17 @@ const OUTPUT_SCHEMA_JSON = JSON.stringify(
             sourceRequirementIds: { type: "array", minItems: 1, items: { type: "string" } },
             taskAnchors: {
               type: "object",
-              required: ["from", "to", "textHash"],
+              required: ["from", "to", "textHash", "contextAfter"],
               properties: {
                 from: { type: "integer", minimum: 0 },
                 to: { type: "integer", minimum: 1 },
                 textHash: { type: "string", minLength: 1 },
                 contextBefore: { type: "string" },
-                contextAfter: { type: "string" },
+                contextAfter: {
+                  type: "string",
+                  minLength: 4,
+                  description: "A verbatim substring copied from one of this task's sourceRequirementIds contents in requirements-index.json.",
+                },
               },
             },
             clusterId: { type: "string" },
