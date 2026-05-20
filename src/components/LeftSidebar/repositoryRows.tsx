@@ -5,6 +5,7 @@ import type { Repository, StandaloneRepo, TaskMode, Workspace } from "../../type
 import type { SidebarCodeGraphIndexStatus } from "./useSidebarCodeGraphIndexMap";
 import { repositoryFolderBasename } from "../../utils/repositoryType";
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
+import { reorderRepositoryIdsForDrop } from "./repositoryReorder";
 
 export interface RepositoryReorderUi {
   dragHandleEnabled: boolean;
@@ -32,22 +33,6 @@ import {
   ScheduledTasksIcon,
   RequirementIcon,
 } from "./SidebarIcons";
-
-export { repositoryEditorOpenMenuLabel } from "./sidebarMoreMenuItems";
-
-export function reorderRepositoryIdsForDrop(
-  ordered: readonly number[],
-  draggedId: number,
-  anchorId: number,
-  placement: "before" | "after",
-): number[] {
-  const next = ordered.filter((id) => id !== draggedId);
-  const anchorIdx = next.indexOf(anchorId);
-  if (anchorIdx === -1) return [...ordered];
-  const insertAt = placement === "before" ? anchorIdx : anchorIdx + 1;
-  next.splice(insertAt, 0, draggedId);
-  return next;
-}
 
 export function RepositoryConversationAction({ onOpen }: { onOpen: () => void }) {
   return (

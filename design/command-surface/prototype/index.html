@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wise 指挥台 · Command Surface 原型</title>
+  <style>
+    :root {
+      --bg-layout: #f5f5f5;
+      --bg-container: #ffffff;
+      --bg-elevated: #fafafa;
+      --border: #f0f0f0;
+      --border-strong: #d9d9d9;
+      --text: rgba(0, 0, 0, 0.88);
+      --text-secondary: rgba(0, 0, 0, 0.65);
+      --text-tertiary: rgba(0, 0, 0, 0.45);
+      --primary: #1677ff;
+      --primary-bg: #e6f4ff;
+      --primary-border: #91caff;
+      --success: #52c41a;
+      --success-bg: #f6ffed;
+      --warning: #faad14;
+      --warning-bg: #fffbe6;
+      --error: #ff4d4f;
+      --error-bg: #fff2f0;
+      --sidebar-w: 240px;
+      --inspector-w: 360px;
+      --topbar-h: 36px;
+      --radius: 6px;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; font-family: var(--font); color: var(--text); background: var(--bg-layout); font-size: 13px; }
+
+    .app {
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Left sidebar ── */
+    .sidebar {
+      width: var(--sidebar-w);
+      min-width: var(--sidebar-w);
+      background: var(--bg-container);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+    }
+    .sidebar-topbar {
+      height: var(--topbar-h);
+      padding: 4px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+      font-size: 12px;
+    }
+    .sidebar-topbar-actions { display: flex; gap: 4px; color: var(--text-tertiary); }
+    .sidebar-topbar-actions span { cursor: pointer; padding: 2px 4px; border-radius: 4px; }
+    .sidebar-topbar-actions span:hover { background: var(--bg-elevated); color: var(--text); }
+
+    .tree { flex: 1; overflow-y: auto; padding: 8px 0; }
+    .tree-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px 6px 20px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .tree-item:hover { background: var(--bg-elevated); }
+    .tree-item.active { background: var(--primary-bg); color: var(--primary); }
+    .tree-item.nested { padding-left: 36px; font-size: 12px; }
+    .tree-icon { width: 14px; text-align: center; color: var(--text-tertiary); font-size: 11px; }
+    .tree-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tree-badges { display: flex; gap: 4px; font-size: 10px; }
+    .badge { padding: 0 5px; border-radius: 10px; line-height: 16px; font-weight: 500; }
+    .badge-gate { background: var(--warning-bg); color: #d48806; border: 1px solid #ffe58f; }
+    .badge-run { background: var(--primary-bg); color: var(--primary); border: 1px solid var(--primary-border); }
+    .badge-ok { color: var(--success); }
+
+    .sidebar-footer {
+      padding: 8px 12px;
+      border-top: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--text-tertiary);
+      display: flex;
+      gap: 12px;
+    }
+
+    /* ── Main command surface ── */
+    .main {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-layout);
+    }
+    .main-topbar {
+      height: var(--topbar-h);
+      padding: 4px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-container);
+      border-bottom: 1px solid var(--border);
+    }
+    .main-topbar-title { font-weight: 600; font-size: 13px; }
+    .main-topbar-meta { font-size: 11px; color: var(--text-tertiary); display: flex; gap: 12px; align-items: center; }
+    .pill { padding: 2px 8px; border-radius: 10px; background: var(--bg-elevated); border: 1px solid var(--border); font-size: 11px; }
+    .pill-warn { background: var(--warning-bg); border-color: #ffe58f; color: #d48806; }
+
+    .command-surface {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      padding: 12px 16px 0;
+      gap: 10px;
+    }
+
+    /* GateBar */
+    .gate-bar {
+      background: var(--warning-bg);
+      border: 1px solid #ffe58f;
+      border-radius: var(--radius);
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .gate-bar-header {
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #ffe58f;
+      font-weight: 600;
+      font-size: 12px;
+      color: #d48806;
+    }
+    .gate-card {
+      padding: 12px;
+      background: var(--bg-container);
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+    }
+    .gate-card:last-child { border-bottom: none; }
+    .gate-card.active { outline: 2px solid var(--primary); outline-offset: -2px; }
+    .gate-card-meta { font-size: 11px; color: var(--text-tertiary); margin-bottom: 6px; display: flex; gap: 8px; align-items: center; }
+    .gate-card-meta .tag { background: var(--bg-elevated); padding: 1px 6px; border-radius: 4px; border: 1px solid var(--border); }
+    .gate-card-question { font-size: 14px; margin-bottom: 10px; line-height: 1.5; }
+    .gate-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .btn {
+      padding: 4px 12px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border-strong);
+      background: var(--bg-container);
+      cursor: pointer;
+      font-size: 12px;
+      font-family: inherit;
+    }
+    .btn:hover { border-color: var(--primary); color: var(--primary); }
+    .btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+    .btn-primary:hover { opacity: 0.9; color: #fff; }
+    .btn-ghost { border-color: transparent; background: transparent; color: var(--text-secondary); }
+
+    /* CommandBar — 固定底栏 */
+    .command-bar {
+      background: var(--bg-container);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      flex-shrink: 0;
+    }
+    .command-bar-row { display: flex; gap: 8px; align-items: flex-end; }
+    .command-input-wrap { flex: 1; }
+    .command-input {
+      width: 100%;
+      min-height: 56px;
+      padding: 8px 10px;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius);
+      resize: none;
+      font-family: inherit;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .command-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.1); }
+    .command-hints { margin-top: 6px; font-size: 11px; color: var(--text-tertiary); display: flex; gap: 12px; flex-wrap: wrap; }
+    .command-hints kbd { background: var(--bg-elevated); padding: 1px 4px; border-radius: 3px; border: 1px solid var(--border); }
+
+    /* WorkItemFeed */
+    .feed-section { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    .feed-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 0 8px;
+      font-weight: 600;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    .feed-list {
+      flex: 1;
+      overflow-y: auto;
+      background: var(--bg-container);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+    .feed-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+    }
+    .feed-item:last-child { border-bottom: none; }
+    .feed-item:hover { background: var(--bg-elevated); }
+    .feed-item.active { background: var(--primary-bg); }
+    .feed-status {
+      width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex-shrink: 0;
+    }
+    .feed-status.running { background: var(--primary); animation: pulse 1.5s infinite; }
+    .feed-status.waiting { background: var(--warning); }
+    .feed-status.done { background: var(--success); }
+    .feed-status.failed { background: var(--error); }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    .feed-body { flex: 1; min-width: 0; }
+    .feed-title { font-weight: 500; margin-bottom: 2px; }
+    .feed-meta { font-size: 11px; color: var(--text-tertiary); display: flex; gap: 8px; flex-wrap: wrap; }
+    .feed-meta .highlight { color: #d48806; }
+
+    .status-bar {
+      padding: 8px 16px;
+      background: var(--bg-container);
+      border-top: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--text-tertiary);
+      display: flex;
+      gap: 16px;
+    }
+    .status-bar strong { color: var(--text); font-weight: 500; }
+
+    /* ── Right lens ── */
+    .inspector {
+      width: var(--inspector-w);
+      min-width: var(--inspector-w);
+      background: var(--bg-container);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+    }
+    .inspector-topbar {
+      height: var(--topbar-h);
+      padding: 4px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+      font-size: 12px;
+    }
+    .inspector-body { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+
+    .panel {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .panel-head {
+      padding: 8px 10px;
+      background: var(--bg-elevated);
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+      font-size: 12px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .panel-body { padding: 10px; font-size: 12px; }
+
+    .agent-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+    }
+    .agent-row:last-child { border-bottom: none; }
+    .agent-row:hover { color: var(--primary); }
+    .agent-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+    .agent-dot.waiting { background: var(--warning); }
+    .agent-dot.running { background: var(--primary); }
+    .agent-name { flex: 1; }
+    .agent-role { color: var(--text-tertiary); font-size: 11px; }
+
+    .stdout {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      font-family: "SF Mono", Menlo, monospace;
+      font-size: 11px;
+      line-height: 1.5;
+      padding: 10px;
+      border-radius: 4px;
+      max-height: 160px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+    .stdout .hl { color: #569cd6; }
+    .stdout .ok { color: #6a9955; }
+    .stdout .warn { color: #dcdcaa; }
+
+    .git-empty { text-align: center; padding: 24px 12px; color: var(--text-tertiary); }
+    .git-empty-icon { font-size: 28px; margin-bottom: 8px; opacity: 0.4; }
+
+    .proto-banner {
+      position: fixed;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.75);
+      color: #fff;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 11px;
+      z-index: 100;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- 左栏 -->
+    <aside class="sidebar">
+      <div class="sidebar-topbar">
+        <span>工作区</span>
+        <div class="sidebar-topbar-actions">
+          <span title="新建">+</span>
+          <span title="布局">⊞</span>
+        </div>
+      </div>
+      <div class="tree" id="tree"></div>
+      <div class="sidebar-footer">
+        <span>内存 166MB</span>
+        <span>并发 <strong id="concurrency">3/16</strong></span>
+      </div>
+    </aside>
+
+    <!-- 中栏 -->
+    <main class="main">
+      <div class="main-topbar">
+        <span class="main-topbar-title">指挥台</span>
+        <div class="main-topbar-meta">
+          <span class="pill">WISE 网关 · 开</span>
+          <span class="pill pill-warn" id="pending-pill">待处理 2</span>
+          <span class="pill">任务 5</span>
+        </div>
+      </div>
+
+      <div class="command-surface">
+        <div class="feed-section">
+          <div class="feed-header">
+            <span>工作项</span>
+            <span id="feed-count">4 项</span>
+          </div>
+          <div class="feed-list" id="feed-list"></div>
+        </div>
+
+        <div class="gate-bar" id="gate-bar"></div>
+
+        <div class="command-bar">
+          <div class="command-bar-row">
+            <div class="command-input-wrap">
+              <textarea class="command-input" id="command-input" placeholder="@员工/团队/仓库/文件，/命令，Enter 派发…">@wise @ruflo 给两个仓加 rate limit，保持现有 API 兼容</textarea>
+              <div class="command-hints">
+                <span><kbd>@</kbd> 提及仓库</span>
+                <span><kbd>/prd-split</kbd> PRD 拆解</span>
+                <span><kbd>Enter</kbd> 派发</span>
+                <span>模型 Qwen3.6 · 分支 main</span>
+              </div>
+            </div>
+            <button class="btn btn-primary" id="dispatch-btn">派发</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="status-bar">
+        <span>模型 <strong>qwen3.6-plus</strong></span>
+        <span>会话 <strong>41m27s</strong></span>
+        <span>待答 <strong id="stat-gates">2</strong></span>
+        <span>运行中 <strong id="stat-running">3</strong></span>
+        <span>今日完成 <strong>7</strong></span>
+      </div>
+    </main>
+
+    <!-- 右栏 -->
+    <aside class="inspector">
+      <div class="inspector-topbar">
+        <span id="lens-title">透镜 · 团队概览</span>
+      </div>
+      <div class="inspector-body" id="lens-body"></div>
+    </aside>
+  </div>
+
+  <div class="proto-banner">交互原型 · design/command-surface/prototype · 点击工作项 / 关口 / 左栏节点查看联动</div>
+
+  <script>
+    const state = {
+      focus: { level: "command" },
+      gates: [
+        {
+          id: "g1",
+          kind: "question",
+          source: { repo: "wise", agent: "前端", missionId: "m42", assignmentId: "a1" },
+          question: "是否继续重构 auth 模块？当前改动影响 12 个文件。",
+          options: ["继续重构", "仅修 login 超时", "改派后端"],
+        },
+        {
+          id: "g2",
+          kind: "permission",
+          source: { repo: "ruflo", agent: "implement", missionId: "m42", assignmentId: "a2" },
+          question: "允许执行 Bash: npm test -- --grep rate",
+          options: ["批准", "拒绝", "批准同类"],
+        },
+      ],
+      workItems: [
+        { id: "m42", title: "拆分 PRD · 跨仓 rate limit", status: "waiting", repos: ["wise", "ruflo", "doc"], gates: 2, running: 2, ago: "2m" },
+        { id: "m41", title: "修复 login 超时", status: "running", repos: ["wise"], gates: 0, running: 1, ago: "8m" },
+        { id: "m40", title: "更新 README 安装说明", status: "done", repos: ["wise-marketplace"], gates: 0, running: 0, ago: "25m" },
+        { id: "m39", title: "COS 接口联调", status: "failed", repos: ["COS"], gates: 0, running: 0, ago: "1h" },
+      ],
+      tree: [
+        { id: "p1", label: "华润 2", type: "project", gates: 0, running: 0 },
+        { id: "p2", label: "WISE 8", type: "project", gates: 2, running: 2, expanded: true, children: [
+          { id: "r1", label: "wise", type: "repo", gates: 1, running: 1 },
+          { id: "r2", label: "ruflo", type: "repo", gates: 1, running: 1 },
+          { id: "r3", label: "doc", type: "repo", gates: 0, running: 0 },
+        ]},
+        { id: "p3", label: "COS", type: "project", gates: 0, running: 0 },
+      ],
+    };
+
+    function renderTree() {
+      const el = document.getElementById("tree");
+      el.innerHTML = state.tree.map(renderTreeNode).join("");
+      el.querySelectorAll(".tree-item").forEach((node) => {
+        node.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const id = node.dataset.id;
+          const type = node.dataset.type;
+          state.focus = type === "repo"
+            ? { level: "workspace", repoId: id }
+            : { level: "workspace", projectId: id };
+          renderAll();
+        });
+      });
+    }
+
+    function renderTreeNode(item, depth = 0) {
+      const badges = [
+        item.gates ? `<span class="badge badge-gate">⚡${item.gates}</span>` : "",
+        item.running ? `<span class="badge badge-run">▶${item.running}</span>` : "",
+        !item.gates && !item.running && item.type === "project" ? `<span class="badge-ok">✓</span>` : "",
+      ].join("");
+      const active = state.focus.level === "workspace" &&
+        (state.focus.projectId === item.id || state.focus.repoId === item.id);
+      let html = `<div class="tree-item ${depth ? "nested" : ""} ${active ? "active" : ""}" data-id="${item.id}" data-type="${item.type}">
+        <span class="tree-icon">${item.type === "project" ? "▾" : "○"}</span>
+        <span class="tree-label">${item.label}</span>
+        <span class="tree-badges">${badges}</span>
+      </div>`;
+      if (item.children) {
+        html += item.children.map((c) => renderTreeNode(c, depth + 1)).join("");
+      }
+      return html;
+    }
+
+    function renderGateBar() {
+      const el = document.getElementById("gate-bar");
+      if (!state.gates.length) {
+        el.innerHTML = `<div class="gate-bar-header"><span>⚡ 关口</span><span>无待办 ✓</span></div>`;
+        return;
+      }
+      el.innerHTML = `
+        <div class="gate-bar-header">
+          <span>⚡ 待你确认 (${state.gates.length})</span>
+          <button class="btn btn-ghost" style="padding:0 4px;font-size:11px">全部折叠</button>
+        </div>
+        ${state.gates.map((g) => `
+          <div class="gate-card ${state.focus.level === "gate" && state.focus.gateId === g.id ? "active" : ""}" data-gate="${g.id}">
+            <div class="gate-card-meta">
+              <span class="tag">${g.source.repo}</span>
+              <span class="tag">${g.source.agent}</span>
+              <span>#${g.source.missionId.replace("m", "")}</span>
+            </div>
+            <div class="gate-card-question">${g.question}</div>
+            <div class="gate-actions">
+              ${g.options.map((o, i) => `<button class="btn ${i === 0 ? "btn-primary" : ""}" data-action="${o}" data-gate="${g.id}">${o}</button>`).join("")}
+            </div>
+          </div>
+        `).join("")}
+      `;
+      el.querySelectorAll(".gate-card").forEach((card) => {
+        card.addEventListener("click", (e) => {
+          if (e.target.tagName === "BUTTON") return;
+          state.focus = { level: "gate", gateId: card.dataset.gate };
+          renderLens();
+          renderGateBar();
+        });
+      });
+      el.querySelectorAll("[data-action]").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const gid = btn.dataset.gate;
+          state.gates = state.gates.filter((g) => g.id !== gid);
+          state.focus = { level: "command" };
+          toast(`已回答：${btn.dataset.action} → 执行续跑`);
+          renderAll();
+        });
+      });
+    }
+
+    function renderFeed() {
+      const el = document.getElementById("feed-list");
+      el.innerHTML = state.workItems.map((w) => {
+        const statusClass = { running: "running", waiting: "waiting", done: "done", failed: "failed" }[w.status];
+        const active = state.focus.level === "work-item" && state.focus.missionId === w.id;
+        return `
+          <div class="feed-item ${active ? "active" : ""}" data-mission="${w.id}">
+            <span class="feed-status ${statusClass}"></span>
+            <div class="feed-body">
+              <div class="feed-title">${w.title}</div>
+              <div class="feed-meta">
+                <span>${w.repos.join(" · ")}</span>
+                ${w.gates ? `<span class="highlight">待答 ${w.gates}</span>` : ""}
+                ${w.running ? `<span>运行 ${w.running}</span>` : ""}
+                <span>${w.ago}</span>
+              </div>
+            </div>
+          </div>`;
+      }).join("");
+      el.querySelectorAll(".feed-item").forEach((item) => {
+        item.addEventListener("click", () => {
+          state.focus = { level: "work-item", missionId: item.dataset.mission };
+          renderAll();
+        });
+      });
+      document.getElementById("feed-count").textContent = `${state.workItems.length} 项`;
+      document.getElementById("stat-gates").textContent = state.gates.length;
+      document.getElementById("stat-running").textContent = state.workItems.filter((w) => w.running).reduce((a, w) => a + w.running, 0);
+      document.getElementById("pending-pill").textContent = `待处理 ${state.gates.length}`;
+      document.getElementById("pending-pill").style.display = state.gates.length ? "" : "none";
+    }
+
+    function renderLens() {
+      const title = document.getElementById("lens-title");
+      const body = document.getElementById("lens-body");
+
+      if (state.focus.level === "gate") {
+        const g = state.gates.find((x) => x.id === state.focus.gateId);
+        if (!g) { state.focus = { level: "command" }; return renderLens(); }
+        title.textContent = `透镜 · 关口 · ${g.source.repo}`;
+        body.innerHTML = `
+          <div class="panel">
+            <div class="panel-head"><span>上下文</span><span style="font-weight:400;color:var(--text-tertiary)">Assignment ${g.source.assignmentId}</span></div>
+            <div class="panel-body">
+              <div style="margin-bottom:8px;color:var(--text-secondary)">相关改动影响 auth 模块，以下为 Agent 输出摘要：</div>
+              <div class="stdout"><span class="hl">Analyzing</span> src/auth/login.ts...
+<span class="warn">Found timeout at line 84 — session refresh not awaited</span>
+<span class="ok">12 files would be affected by full refactor</span>
+Proposing: narrow fix vs full refactor — waiting for user...</div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><span>GIT · wise</span><span>3 变更</span></div>
+            <div class="panel-body" style="font-family:monospace;font-size:11px">
+              M src/auth/login.ts<br>M src/auth/session.ts<br>A src/auth/rate-limit.ts
+            </div>
+          </div>
+          <p style="font-size:11px;color:var(--text-tertiary);margin:0">↑ 请在中栏 GateBar 作答，右栏仅提供上下文</p>
+        `;
+        return;
+      }
+
+      if (state.focus.level === "work-item") {
+        const w = state.workItems.find((x) => x.id === state.focus.missionId);
+        title.textContent = `透镜 · 工作项 #${w.id.replace("m", "")}`;
+        body.innerHTML = `
+          <div class="panel">
+            <div class="panel-head"><span>${w.title}</span></div>
+            <div class="panel-body">
+              <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+                <span class="pill">阶段: 执行中</span>
+                <span class="pill">仓库 ${w.repos.length}</span>
+              </div>
+              <div class="agent-row"><span class="agent-dot waiting"></span><span class="agent-name">wise / 前端</span><span class="agent-role">待答</span></div>
+              <div class="agent-row"><span class="agent-dot running"></span><span class="agent-name">ruflo / implement</span><span class="agent-role">运行中</span></div>
+              <div class="agent-row"><span class="agent-dot"></span><span class="agent-name">doc / 文档</span><span class="agent-role">空闲</span></div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><span>执行输出 · ruflo</span></div>
+            <div class="panel-body"><div class="stdout">Running npm test -- --grep rate
+<span class="ok">✓ 14 passed</span>
+Waiting for permission to run full suite...</div></div>
+          </div>
+          <button class="btn" style="width:100%">打开 Mission 画布 (inspect)</button>
+        `;
+        return;
+      }
+
+      if (state.focus.level === "workspace") {
+        title.textContent = "透镜 · 工作区";
+        body.innerHTML = `
+          <div class="panel">
+            <div class="panel-head"><span>我的团队</span><span>并发 3/16</span></div>
+            <div class="panel-body">
+              ${["oh-my-claudecode", "wise", "ruflo", "crewAI", "Trellis"].map((n, i) => `
+                <div class="agent-row">
+                  <span class="agent-dot ${i < 2 ? "running" : i === 2 ? "waiting" : ""}"></span>
+                  <span class="agent-name">${n}</span>
+                  <span class="agent-role">${i < 2 ? "运行" : i === 2 ? "待答" : "空闲"}</span>
+                </div>`).join("")}
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><span>GIT</span><span>0 变更</span></div>
+            <div class="panel-body git-empty"><div class="git-empty-icon">◇</div>没有检测到变更</div>
+          </div>
+        `;
+        return;
+      }
+
+      title.textContent = "透镜 · 团队概览";
+      body.innerHTML = `
+        <div class="panel">
+          <div class="panel-head"><span>全局状态</span></div>
+          <div class="panel-body">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div><div style="color:var(--text-tertiary);font-size:11px">待答关口</div><div style="font-size:20px;font-weight:600;color:#d48806">${state.gates.length}</div></div>
+              <div><div style="color:var(--text-tertiary);font-size:11px">运行中</div><div style="font-size:20px;font-weight:600;color:var(--primary)">3</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span>仓库成员</span></div>
+          <div class="panel-body">
+            <div class="agent-row"><span class="agent-dot running"></span><span class="agent-name">wise</span><span class="agent-role">前端 · 运行</span></div>
+            <div class="agent-row"><span class="agent-dot waiting"></span><span class="agent-name">ruflo</span><span class="agent-role">implement · 待答</span></div>
+            <div class="agent-row"><span class="agent-dot"></span><span class="agent-name">doc</span><span class="agent-role">空闲</span></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span>GIT · 汇总</span><span>5 变更</span></div>
+          <div class="panel-body" style="font-size:11px;color:var(--text-secondary)">wise +3 · ruflo +2 · 点击工作项查看范围 diff</div>
+        </div>
+      `;
+    }
+
+    function toast(msg) {
+      const t = document.createElement("div");
+      t.textContent = msg;
+      t.style.cssText = "position:fixed;top:12px;left:50%;transform:translateX(-50%);background:#1677ff;color:#fff;padding:8px 16px;border-radius:6px;font-size:12px;z-index:200";
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 2200);
+    }
+
+    function renderAll() {
+      renderTree();
+      renderGateBar();
+      renderFeed();
+      renderLens();
+    }
+
+    document.getElementById("dispatch-btn").addEventListener("click", () => {
+      const text = document.getElementById("command-input").value.trim();
+      if (!text) return;
+      state.workItems.unshift({
+        id: "m" + Date.now().toString().slice(-2),
+        title: text.slice(0, 40) + (text.length > 40 ? "…" : ""),
+        status: "running",
+        repos: ["wise"],
+        gates: 0,
+        running: 1,
+        ago: "刚刚",
+      });
+      document.getElementById("command-input").value = "";
+      state.focus = { level: "work-item", missionId: state.workItems[0].id };
+      toast("已派发 · 工作项已创建");
+      renderAll();
+    });
+
+    renderAll();
+  </script>
+</body>
+</html>

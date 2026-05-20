@@ -85,6 +85,9 @@ pub fn run() {
             trellis_runtime::spawn_stale_scanner(app.handle().clone());
 
             #[cfg(target_os = "macos")]
+            crate::macos_webview_wake_recovery::register_macos_webview_wake_recovery(app.handle());
+
+            #[cfg(target_os = "macos")]
             if let Some(w) = app.handle().get_webview_window("mascot") {
                 let _ = w.set_always_on_top(true);
             }
