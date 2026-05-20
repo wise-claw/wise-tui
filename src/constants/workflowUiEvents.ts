@@ -43,6 +43,7 @@ export const WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED = "wise:split-todo-count
 export const WORKFLOW_UI_EVENT_OPEN_WORKFLOW_CONFIG = "wise:open-workflow-config";
 export const WORKFLOW_UI_EVENT_WORKFLOW_GRAPH_CHANGED = "wise:workflow-graph-changed";
 export const WORKFLOW_UI_EVENT_OPEN_REPOSITORY_FILE = "wise:open-repository-file";
+export const WORKFLOW_UI_EVENT_RUN_ASSISTANT_BRIEF = "wise:run-assistant-brief";
 
 export interface OpenPrdSplitWizardDetail {
   projectId?: string | null;
@@ -77,6 +78,13 @@ export interface OpenRepositoryFileDetail {
   repositoryPath?: string | null;
   relativePath: string;
   line?: number | null;
+}
+
+export interface RunAssistantBriefDetail {
+  assistantId: string;
+  assistantName: string;
+  prompt: string;
+  projectId?: string | null;
 }
 
 export const WORKFLOW_UI_EVENT_OMC_BATCH_RUNTIME_CHANGED = "wise:omc-batch-runtime-changed";

@@ -79,6 +79,7 @@ export function PrdTaskSplitPanel({
     latestAnchorRangePersistResultRef,
     linkedRepositoryId,
     mappingFallbackStats,
+    materializedExecutionResult,
     message,
     milkdownEditorRef,
     milkdownTaskAnchors,
@@ -291,6 +292,7 @@ export function PrdTaskSplitPanel({
               unmetMenuItems={unmetPreconditionsMenuItems}
               confirmSavingTaskId={confirmSavingTaskId}
               executionFanoutSnapshot={executionFanoutSnapshot}
+              materializedExecutionResult={materializedExecutionResult}
               activeResult={activeResult}
               taskConfirmFilter={taskConfirmFilter}
               taskConfirmCounts={taskConfirmCounts}

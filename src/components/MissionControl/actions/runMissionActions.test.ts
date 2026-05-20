@@ -80,17 +80,20 @@ const createOrResumeMission = mock(async () => ({
 const trellisRuntimeUpsertAgentRunSafe = mock(async () => ({}));
 const trellisRuntimeRecordEventSafe = mock(async () => ({}));
 const trellisAgentHeartbeat = mock(async () => true);
+const dispatchWorkspaceTrellisMaterializedFanout = mock(async () => null);
 
 mock.module("antd", () => ({
   message: {
     success: mock(() => {}),
     warning: mock(() => {}),
+    error: mock(() => {}),
   },
 }));
 mock.module("antd/lib/index.js", () => ({
   message: {
     success: mock(() => {}),
     warning: mock(() => {}),
+    error: mock(() => {}),
   },
 }));
 mock.module("../../../services/prdSplit/splitterDispatch", () => ({
@@ -129,6 +132,9 @@ mock.module("../../../services/trellisRuntime", () => ({
 mock.module("../../../services/workflowGraphs", () => ({ saveWorkflowGraph: mock(async () => ({ graph: { nodes: [], edges: [] }, status: "draft" })) }));
 mock.module("../../../services/workflowTemplates", () => ({ saveWorkflowTemplate: mock(async (input) => ({ id: input.workflowId, name: input.name })) }));
 mock.module("../../../services/projectPrdScope", () => ({ addProjectPrdWorkflow: mock(async () => {}) }));
+mock.module("../../../services/prdSplit/materializedFanoutBridge", () => ({
+  dispatchWorkspaceTrellisMaterializedFanout,
+}));
 
 function makeCluster(overrides: Partial<ClusterPlanItem> = {}): ClusterPlanItem {
   return {
@@ -245,6 +251,7 @@ describe("runMissionActions · runtime ledger parity", () => {
       trellisRuntimeRecordEventSafe,
       trellisRuntimeUpsertAgentRunSafe,
       upsertMissionAgentAssignment,
+      dispatchWorkspaceTrellisMaterializedFanout,
     ]) {
       fn.mockClear();
     }
@@ -555,5 +562,61 @@ describe("runMissionActions · runtime ledger parity", () => {
       globalThis.setInterval = originalSetInterval;
       globalThis.clearInterval = originalClearInterval;
     }
+  });
+
+  test("writeMissionToTrellis dispatches materialized child tasks to Trellis implement fan-out", async () => {
+    const { writeMissionToTrellis } = await import("./runMissionActions");
+    const state = makeState({
+      stage: "review",
+      activeMissionId: "mission-p1-hash",
+      clusterRuns: {
+        "cluster-fe": {
+          clusterId: "cluster-fe",
+          parentTaskName: "05-16-parent",
+          parentTaskPath: ".trellis/tasks/05-16-parent",
+          status: "succeeded",
+          errors: [],
+          normalized: {
+            source: null,
+            context: null,
+            splitTasks: [{
+              id: "task-a",
+              title: "Build UI",
+              description: "",
+              role: "frontend",
+              size: "M",
+              estimateDays: 1,
+              dependencies: [],
+              sourceRefs: [],
+              sourceRequirementIds: ["REQ-1"],
+              subtasks: [],
+              dod: [],
+              executionStatus: "executable",
+              flowStatus: "todo",
+            }],
+            executableTasks: [],
+            criticalPath: [],
+            parallelGroups: [],
+            unmetPreconditions: [],
+          },
+        },
+      },
+    });
+    const api = makeApi(state);
+
+    await writeMissionToTrellis(api);
+
+    expect(dispatchWorkspaceTrellisMaterializedFanout).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: "prd-split:parent",
+      projectId: "p1",
+      projectRootPath: "/repo",
+      repositoryPath: "/repo/web",
+      sourceTasks: expect.arrayContaining([expect.objectContaining({ id: "task-a" })]),
+      materializedResult: expect.objectContaining({ parentTaskName: "parent" }),
+      repositoryMetadata: expect.objectContaining({
+        ownerRepositoryId: 1,
+        ownerRepositoryPath: "/repo/web",
+      }),
+    }));
   });
 });

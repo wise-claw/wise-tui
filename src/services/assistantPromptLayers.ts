@@ -86,6 +86,20 @@ export async function saveAssistantRuntimeOverrides(input: {
   });
 }
 
+export async function resetAssistantRuntimeOverrides(input: {
+  assistantId: string;
+  scope: string;
+  sections?: Array<"prompts" | "skills" | "mcps" | "engineering" | "all">;
+}): Promise<void> {
+  await invoke("assistants_reset_overrides", {
+    args: {
+      assistantId: input.assistantId,
+      scope: input.scope,
+      sections: input.sections ?? ["all"],
+    },
+  });
+}
+
 export function parseAssistantRuntimeBundle(raw: string): AssistantRuntimeBundle {
   const fallback: AssistantRuntimeBundle = { disabled: [], custom: [] };
   let parsed: unknown;
@@ -132,6 +146,50 @@ export function buildAssistantRuntimeBundleJson(bundle: AssistantRuntimeBundle):
         origin: item.origin ?? "custom",
         ...(item.sourcePath ? { sourcePath: item.sourcePath } : {}),
       })),
+    },
+    null,
+    2,
+  );
+}
+
+export interface AssistantEngineeringPreferences {
+  reuseExistingParents?: boolean;
+  dispatchOnlyDirty?: boolean;
+  formatProfile?: string;
+}
+
+export function parseAssistantEngineeringPreferences(
+  raw: string,
+): AssistantEngineeringPreferences {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw.trim() || "{}");
+  } catch {
+    return {};
+  }
+  if (!parsed || typeof parsed !== "object") return {};
+  const obj = parsed as Record<string, unknown>;
+  const out: AssistantEngineeringPreferences = {};
+  if (typeof obj.reuseExistingParents === "boolean") {
+    out.reuseExistingParents = obj.reuseExistingParents;
+  }
+  if (typeof obj.dispatchOnlyDirty === "boolean") {
+    out.dispatchOnlyDirty = obj.dispatchOnlyDirty;
+  }
+  if (typeof obj.formatProfile === "string") {
+    out.formatProfile = obj.formatProfile;
+  }
+  return out;
+}
+
+export function buildAssistantEngineeringJson(
+  preferences: AssistantEngineeringPreferences,
+): string {
+  return JSON.stringify(
+    {
+      reuseExistingParents: preferences.reuseExistingParents ?? false,
+      dispatchOnlyDirty: preferences.dispatchOnlyDirty ?? false,
+      formatProfile: preferences.formatProfile?.trim() ?? "",
     },
     null,
     2,

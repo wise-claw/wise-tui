@@ -52,6 +52,10 @@ import { saveWorkflowGraph } from "../../../services/workflowGraphs";
 import { saveWorkflowTemplate } from "../../../services/workflowTemplates";
 import { addProjectPrdWorkflow } from "../../../services/projectPrdScope";
 import { WORKFLOW_UI_EVENT_WORKFLOW_GRAPH_CHANGED } from "../../../constants/workflowUiEvents";
+import {
+  dispatchWorkspaceTrellisMaterializedFanout,
+  resolveMaterializedFanoutRepositoryTarget,
+} from "../../../services/prdSplit/materializedFanoutBridge";
 
 interface Props {
   api: UseSplitWizardStateApi;
@@ -80,6 +84,7 @@ export function ReviewStage({ api }: Props) {
     api.beginWrite();
     try {
       const graphInputs: PrdSplitWorkflowClusterInput[] = [];
+      const fanoutPromises: Promise<unknown>[] = [];
       for (const cluster of succeededClusters) {
         const run = state.clusterRuns[cluster.id];
         if (!run?.normalized || !run.parentTaskName) {
@@ -115,6 +120,16 @@ export function ReviewStage({ api }: Props) {
             childTasks: out.childTasks,
             warnings: out.warnings,
           });
+          const target = resolveMaterializedFanoutRepositoryTarget(cluster, state.repositories);
+          fanoutPromises.push(dispatchWorkspaceTrellisMaterializedFanout({
+            sessionId: `prd-split:${out.parentTaskName}`,
+            projectId: state.project.id,
+            projectRootPath: state.project.rootPath,
+            repositoryPath: target.repositoryPath,
+            sourceTasks: effective.splitTasks,
+            materializedResult: out,
+            repositoryMetadata: target.repositoryMetadata,
+          }));
           graphInputs.push({
             cluster,
             parentTaskName: out.parentTaskName,
@@ -143,7 +158,13 @@ export function ReviewStage({ api }: Props) {
       }
       await persistWorkflowGraph(graphInputs);
       api.finishWrite();
-      message.success("Trellis 任务已落盘完成");
+      const fanoutResults = await Promise.allSettled(fanoutPromises);
+      const fanoutFailedCount = fanoutResults.filter((result) => result.status === "rejected").length;
+      if (fanoutFailedCount > 0) {
+        message.error(`Trellis 任务已落盘，但 ${fanoutFailedCount} 个分组派发失败，请查看运行队列或重试。`);
+      } else {
+        message.success("Trellis 任务已落盘，已启动实现子代理派发");
+      }
     } catch (err) {
       api.failWrite(err instanceof Error ? err.message : String(err));
     } finally {

@@ -255,3 +255,315 @@
 .cockpit-header__spacer {
   flex: 1;
 }
+
+/* AssistantSettingsDrawer */
+
+.assistant-settings-drawer .ant-drawer-body {
+  padding: 16px;
+}
+
+.assistant-settings-drawer__actions {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.assistant-settings-drawer__content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.assistant-settings-drawer__summary {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.assistant-settings-drawer__avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.assistant-settings-drawer__meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.assistant-settings-drawer__tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.assistant-settings-drawer__loading {
+  min-height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.assistant-settings-drawer__loading--compact {
+  min-height: 72px;
+}
+
+.assistant-settings-drawer__skills {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.assistant-settings-drawer__bundle-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.assistant-settings-drawer__bundle-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
+}
+
+.assistant-settings-drawer__bundle-item .ant-btn {
+  padding-inline: 0;
+  flex-shrink: 0;
+}
+
+.assistant-settings-drawer__bundle-copy {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.assistant-settings-drawer__bundle-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+}
+
+.assistant-settings-drawer__bundle-id,
+.assistant-settings-drawer__bundle-path {
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-settings-drawer__skill-pool {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px dashed var(--ant-color-border);
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.assistant-settings-drawer__section-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.assistant-settings-drawer__candidate-list {
+  max-height: 260px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.assistant-settings-drawer__candidate {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
+}
+
+.assistant-settings-drawer__candidate .ant-btn {
+  flex-shrink: 0;
+}
+
+.assistant-settings-drawer__prefs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.assistant-settings-drawer__pref-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 10px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+}
+
+.assistant-settings-drawer__pref-row > span,
+.assistant-settings-drawer__pref-note,
+.assistant-settings-drawer__format {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.assistant-settings-drawer__pref-note {
+  padding: 9px 10px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.assistant-settings-drawer__format {
+  gap: 6px;
+}
+
+/* Artifact assistants */
+
+.assistant-artifact-workspace {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(260px, 360px) 1fr;
+  gap: 14px;
+  padding: 16px;
+  background: var(--ant-color-bg-layout);
+}
+
+.assistant-artifact-workspace__panel {
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
+}
+
+.assistant-artifact-workspace__avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 600;
+}
+
+.assistant-artifact-workspace__title {
+  margin: 0 !important;
+}
+
+.assistant-artifact-workspace__description {
+  margin: 0 !important;
+}
+
+.assistant-artifact-workspace__skills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.assistant-artifact-workspace__scope {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.assistant-artifact-workspace__format {
+  max-height: 120px;
+  overflow: auto;
+  margin: 0 !important;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary);
+  white-space: pre-wrap;
+}
+
+.assistant-artifact-workspace__brief {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
+}
+
+.assistant-artifact-workspace__brief-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.assistant-artifact-workspace__brief-title {
+  margin: 0 !important;
+}
+
+.assistant-artifact-workspace__brief-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.assistant-artifact-workspace__brief-preview {
+  flex: 1;
+  min-height: 220px;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary);
+  color: var(--ant-color-text);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.assistant-artifact-workspace__empty {
+  align-self: stretch;
+  justify-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border: 1px dashed var(--ant-color-border);
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary);
+  margin: 0;
+}

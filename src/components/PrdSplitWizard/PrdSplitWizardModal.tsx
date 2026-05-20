@@ -226,11 +226,11 @@ export function PrdSplitWizardModal({
           ) : state.stage === "done" ? (
             <Result
               status="success"
-              title="Trellis 任务已落盘完成"
+              title="Trellis 任务已落盘，后台派发已启动"
               subTitle={
                 state.workflowGraphResult && !state.workflowGraphResult.error
-                  ? `共写入 ${state.writeResults.reduce((sum, r) => sum + r.childTaskNames.length, 0)} 个子任务（跨 ${state.writeResults.length} 个父任务分组），并生成 ${state.workflowGraphResult.nodeCount} 节点 / ${state.workflowGraphResult.edgeCount} 边的执行编排草稿`
-                  : `共写入 ${state.writeResults.reduce((sum, r) => sum + r.childTaskNames.length, 0)} 个子任务（跨 ${state.writeResults.length} 个父任务分组）`
+                  ? `共写入 ${state.writeResults.reduce((sum, r) => sum + r.childTaskNames.length, 0)} 个子任务（跨 ${state.writeResults.length} 个父任务分组），并生成 ${state.workflowGraphResult.nodeCount} 节点 / ${state.workflowGraphResult.edgeCount} 边的执行编排草稿；实现子代理正在按依赖波次后台执行`
+                  : `共写入 ${state.writeResults.reduce((sum, r) => sum + r.childTaskNames.length, 0)} 个子任务（跨 ${state.writeResults.length} 个父任务分组）；实现子代理正在按依赖波次后台执行`
               }
               extra={[
                 <Button key="close" onClick={onClose} type="primary">

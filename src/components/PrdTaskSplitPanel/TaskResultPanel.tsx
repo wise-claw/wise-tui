@@ -59,6 +59,7 @@ interface Props {
   unmetMenuItems: MenuProps["items"];
   confirmSavingTaskId: string | null;
   executionFanoutSnapshot: ExecutionFanoutSnapshot | null;
+  materializedExecutionResult: WriteClusterTasksOutput | null;
   activeResult: SplitResult | null;
   taskConfirmFilter: TaskConfirmFilter;
   taskConfirmCounts: TaskConfirmCounts;
@@ -134,6 +135,7 @@ export function TaskResultPanel({
   unmetMenuItems,
   confirmSavingTaskId,
   executionFanoutSnapshot,
+  materializedExecutionResult,
   activeResult,
   taskConfirmFilter,
   taskConfirmCounts,
@@ -196,10 +198,14 @@ export function TaskResultPanel({
   const showRuntime = runtimeVisible && (parsing || filteredTasks.length === 0 || runtimeLogs.length > 0);
   const [resultViewMode, setResultViewMode] = useState<ResultViewMode>("review");
   const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(() => new Set());
-  const [materializedResult, setMaterializedResult] = useState<WriteClusterTasksOutput | null>(null);
-  const showExecutionRuntime = materializedResult !== null && activeResult && !showRuntime;
+  const [runtimeQueueHidden, setRuntimeQueueHidden] = useState(false);
+  const materializedResult = materializedExecutionResult;
+  const showExecutionRuntime = materializedResult !== null && activeResult && !showRuntime && !runtimeQueueHidden;
   const showOrchestration = resultViewMode === "orchestration" && activeResult && filteredTasks.length > 0 && !showRuntime && !showExecutionRuntime;
   const showTaskList = !showRuntime && !showOrchestration && !showExecutionRuntime;
+  useEffect(() => {
+    setRuntimeQueueHidden(false);
+  }, [materializedExecutionResult]);
   useEffect(() => {
     setExpandedTaskIds((prev) => {
       const visibleIds = new Set(filteredTasks.map((task) => task.id));
@@ -281,9 +287,7 @@ export function TaskResultPanel({
                 onModeChange={setResultViewMode}
                 materialized={materializedResult !== null}
                 onMaterialize={async () => {
-                  const out = await onGenerateExecutableTasks();
-                  if (!out) return;
-                  setMaterializedResult(out.materializedResult);
+                  void onGenerateExecutableTasks();
                 }}
               />
             ) : null}
@@ -335,7 +339,7 @@ export function TaskResultPanel({
                         if (task) onSelectTask(task);
                       }}
                       onBackToPlan={() => {
-                        setMaterializedResult(null);
+                        setRuntimeQueueHidden(true);
                         setResultViewMode("orchestration");
                       }}
                     />

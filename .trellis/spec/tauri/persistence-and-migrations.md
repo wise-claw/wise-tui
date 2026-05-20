@@ -135,6 +135,117 @@ if project.root_path.is_empty() {
 
 ---
 
+## Scenario: Builtin Assistant Runtime Bundles
+
+### 1. Scope / Trigger
+
+- Trigger: adding or changing a Wise builtin assistant, default skill bundle,
+  default MCP bundle, or assistant override merge behavior.
+- Applies to `src-tauri/src/assistants/builtins/*`,
+  `assistants_list`, `assistants_resolve_runtime`, and the frontend
+  `AssistantSettingsDrawer`.
+
+### 2. Signatures
+
+- `BuiltinAssistantBundle { assistant_id, name, description, engine_id,
+  system_prompt, tools, default_workflows, default_skills, default_mcps,
+  default_prompt_layers }`
+- `BuiltinSkillRef { id, label, source_path }`
+- `assistants_list() -> Vec<AssistantEntry>`
+- `assistants_resolve_runtime({ assistantId, projectId?, repositoryId? })
+  -> ResolvedRuntime`
+- `assistant_overrides.skill_bundle_json` and `mcp_bundle_json` use
+  `{ disabled: string[], custom: [{ id, label, origin?, sourcePath? }] }`.
+- Frontend skill mounting uses `skills_detect_external_paths()` and
+  `skills_scan_path(path)` to choose existing local skills, then persists the
+  selected skill as a full `custom` bundle item through
+  `assistants_save_overrides`.
+
+### 3. Contracts
+
+- `default_workflows` are Wise product workflows such as Trellis PRD split.
+  They are visible capabilities, not Claude/Codex skill injections.
+- `default_skills` are assistant-mounted skill bundles. Word/PPT artifact
+  assistants use this path for `officecli-docx` / `officecli-pptx`.
+- Builtin assistant IDs are stable strings beginning with `builtin:`.
+- Builtin skill `source_path` must be a Wise-owned stable resource path or a
+  documented external source, never an untracked developer-machine absolute
+  path.
+- Runtime merge order remains builtin defaults -> assistant scope -> project
+  scope -> repository scope. Bundle JSON object fields replace at the top
+  level; callers that save overrides must send the complete intended bundle.
+- Assistant settings UI may add/remove non-builtin skill refs, but builtin skill
+  refs are only disabled/enabled. Removing a builtin by deleting it from
+  `custom` is a bug because builtin refs come from the Rust bundle.
+- Non-PRD builtin assistants are skill-backed artifact assistants. Their
+  frontend workspace must read `assistants_resolve_runtime` before execution so
+  project-scope disabled/custom Skill refs and `engineering.formatProfile`
+  affect the generated task brief. The brief is dispatched through the frontend
+  host into the selected Workspace/repository Claude session; assistant
+  components must not call Claude IPC directly.
+
+### 4. Validation & Error Matrix
+
+- Empty assistant id when saving overrides -> backend rejects.
+- Invalid override scope -> backend rejects.
+- Invalid bundle JSON -> backend rejects.
+- Unknown assistant id in runtime resolver -> returns legacy/minimal metadata,
+  not a crash.
+- Builtin assistant with neither workflow nor skill may be valid only for a
+  pure prompt/template assistant; otherwise add at least one visible capability.
+
+### 5. Good/Base/Bad Cases
+
+- Good: `builtin:prd-split` exposes Trellis workflow refs and no default skill,
+  because the main capability is Wise orchestration.
+- Good: `builtin:word-doc` exposes `officecli-docx` in `default_skills` with a
+  Wise resource `source_path`.
+- Base: custom assistants start with empty workflow/skill/MCP defaults and users
+  add bundles through overrides.
+- Bad: showing "内置编排" for a Word/PPT skill bundle, because that hides the
+  difference between workflow orchestration and skill mounting.
+- Bad: saving a project override with only `{ disabled: [...] }` when the UI
+  intends to preserve custom skill entries; bundle sections are top-level
+  replacement objects.
+
+### 6. Tests Required
+
+- Builtin registry tests assert every new builtin is discoverable by id.
+- Skill-backed builtin tests assert `default_workflows` is empty and the
+  expected `default_skills` item exists when adding artifact assistants.
+- Runtime resolver tests assert default skill bundle JSON includes builtin
+  skill refs and that disabled/custom override payloads survive resolution.
+- Frontend service tests assert `assistants_reset_overrides` and bundle JSON
+  builders wrap payloads under `args`.
+- Frontend pure helper tests assert scanned skill -> bundle candidate
+  conversion, dedupe on add, remove behavior, and search filtering.
+- Artifact assistant brief tests assert enabled Skill filtering and that the
+  generated brief carries Workspace, Skill source paths, and format preferences.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```rust
+BuiltinSkillRef {
+    id: "officecli-docx",
+    label: "OfficeCLI DOCX",
+    source_path: "/Users/alice/AionUi-main/src/process/resources/skills/officecli-docx",
+}
+```
+
+#### Correct
+
+```rust
+BuiltinSkillRef {
+    id: "officecli-docx",
+    label: "OfficeCLI DOCX",
+    source_path: "src-tauri/resources/skills/officecli-docx",
+}
+```
+
+---
+
 ## Atomic Writes
 
 For durable file writes:

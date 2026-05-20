@@ -12,3 +12,18 @@ export async function dingtalkStreamGatewayStop(): Promise<void> {
 export async function dingtalkStreamGatewayIsRunning(): Promise<boolean> {
   return invoke<boolean>("dingtalk_stream_gateway_is_running");
 }
+
+export interface DingTalkStreamGatewayStatus {
+  running: boolean;
+  phase: "stopped" | "connecting" | "connected" | "reconnecting" | string;
+  startedAt?: string | null;
+  connectedAt?: string | null;
+  lastInboundAt?: string | null;
+  lastErrorAt?: string | null;
+  lastError?: string | null;
+  lastStoppedAt?: string | null;
+}
+
+export async function dingtalkStreamGatewayStatus(): Promise<DingTalkStreamGatewayStatus> {
+  return invoke<DingTalkStreamGatewayStatus>("dingtalk_stream_gateway_status");
+}

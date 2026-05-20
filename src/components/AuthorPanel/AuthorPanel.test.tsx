@@ -130,6 +130,7 @@ mock.module("../../services/dingtalkEnterpriseBot", () => ({
 mock.module("../../services/dingtalkStreamGateway", () => ({
   dingtalkStreamGatewayIsRunning: mock(async () => false),
   dingtalkStreamGatewayStart: mock(async () => undefined),
+  dingtalkStreamGatewayStatus: mock(async () => ({ running: false, phase: "stopped" })),
   dingtalkStreamGatewayStop: mock(async () => undefined),
 }));
 

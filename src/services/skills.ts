@@ -18,6 +18,13 @@ export interface ScannedSkill {
   source: SkillSource;
 }
 
+export interface SkillInstruction {
+  id: string;
+  sourcePath: string;
+  skillPath: string;
+  content: string;
+}
+
 export interface ExternalPathRow {
   id: string;
   path: string;
@@ -36,6 +43,10 @@ export async function detectExternalSkillPaths(): Promise<DetectedExternalPath[]
 
 export async function scanSkillPath(path: string): Promise<ScannedSkill[]> {
   return invoke<ScannedSkill[]>("skills_scan_path", { arg: { path } });
+}
+
+export async function readSkillInstruction(id: string, sourcePath: string): Promise<SkillInstruction> {
+  return invoke<SkillInstruction>("skills_read_instruction", { arg: { id, sourcePath } });
 }
 
 export async function addExternalSkillPath(path: string): Promise<DetectedExternalPath> {

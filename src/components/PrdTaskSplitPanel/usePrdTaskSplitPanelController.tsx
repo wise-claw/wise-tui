@@ -85,10 +85,10 @@ import {
   type WriteClusterTasksOutput,
 } from "../../services/prdSplit/trellisWriter";
 import {
-  runMaterializedSplitTasksFanout,
   type ExecutionFanoutResult,
   type ExecutionFanoutSnapshot,
 } from "../../services/prdSplit/executionFanout";
+import { runWorkspaceTrellisMaterializedFanout } from "../../services/prdSplit/materializedFanoutBridge";
 import { runPrdSplitSubagentWorkflow } from "../../services/prdSplit/subagentWorkflow";
 import type { DispatchClusterResult } from "../../services/prdSplit/splitterDispatch";
 import { runPrdSplitClaude } from "../../services/claudeSplitExecutor";
@@ -114,10 +114,6 @@ import {
   type TaskConfirmFilter,
 } from "./helpers";
 import { sameStringArray } from "../../utils/anchorStability";
-import {
-  WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED,
-  type SplitTodoCountUpdatedDetail,
-} from "../../constants/workflowUiEvents";
 import type {
   RequirementEntry,
   RequirementNameModalMode,
@@ -237,6 +233,7 @@ export function usePrdTaskSplitPanelController({
   const [confirmSavingTaskId, setConfirmSavingTaskId] = useState<string | null>(null);
   const [generatingExecutableTaskId, setGeneratingExecutableTaskId] = useState<string | null>(null);
   const [executionFanoutSnapshot, setExecutionFanoutSnapshot] = useState<ExecutionFanoutSnapshot | null>(null);
+  const [materializedExecutionResult, setMaterializedExecutionResult] = useState<WriteClusterTasksOutput | null>(null);
   const [runtimePromptModalOpen, setRuntimePromptModalOpen] = useState(false);
   const [runtimePromptLoading, setRuntimePromptLoading] = useState(false);
   const [runtimePromptSaving, setRuntimePromptSaving] = useState(false);
@@ -1930,6 +1927,8 @@ export function usePrdTaskSplitPanelController({
 
   function resetRequirementTaskView() {
     setActiveResult(null);
+    setMaterializedExecutionResult(null);
+    setExecutionFanoutSnapshot(null);
     setSelectedTaskId(null);
     setSelectedAnchorTaskId(null);
     setSplitError(null);
@@ -2613,7 +2612,10 @@ export function usePrdTaskSplitPanelController({
       return false;
     }
     try {
+      setMaterializedExecutionResult(null);
+      setExecutionFanoutSnapshot(null);
       const { output: out, projectRootPath } = await materializeSplitTasksToWorkspaceTrellis(sourceTasks);
+      setMaterializedExecutionResult(out);
       const initialSnapshot: ExecutionFanoutSnapshot = {
         status: "running",
         workflowRunId: null,
@@ -2624,21 +2626,11 @@ export function usePrdTaskSplitPanelController({
         message: "任务已落盘，准备派发实现子代理。",
       };
       setExecutionFanoutSnapshot(initialSnapshot);
-      window.dispatchEvent(new CustomEvent<SplitTodoCountUpdatedDetail>(WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED, {
-        detail: {
-          source: "trellis",
-          openTaskDrawer: false,
-          projectId: linkedProject?.id ?? null,
-          parentTaskName: out.parentTaskName,
-          childTaskNames: out.childTaskNames,
-          focusParentTaskName: out.parentTaskName,
-          focusChildTaskNames: out.childTaskNames,
-        },
-      }));
       const subagentType = resolveTrellisSubagentForStage("implement") ?? "trellis-implement";
-      const result = await runMaterializedSplitTasksFanout({
+      const result = await runWorkspaceTrellisMaterializedFanout({
         facade: getWorkflowFacade(),
         sessionId: `prd-split:${out.parentTaskName}`,
+        projectId: linkedProject?.id ?? null,
         repositoryPath,
         projectRootPath,
         sourceTasks,
@@ -2882,6 +2874,7 @@ export function usePrdTaskSplitPanelController({
     confirmSavingTaskId,
     displayExecutionStatus,
     executionFanoutSnapshot,
+    materializedExecutionResult,
     filteredTasks,
     focusTaskWithFilterSync,
     generatingExecutableTaskId,

@@ -90,6 +90,11 @@ Examples:
 
 - `src/components/ClaudeSessions/` groups the session timeline, message rows,
   docks, and status surfaces for Claude execution.
+- `src/components/CockpitSurface/` owns the assistant Hub, assistant header,
+  assistant conversation/workspace shell, and assistant settings drawer. Hub
+  cards should render all `AssistantEntry.source === "builtin"` rows returned
+  by `assistants_list`; do not special-case `builtin:prd-split` as the only
+  Wise builtin.
 - `src/services/workflow/` contains engine, replay, facade, event store, and adapters.
 - `src/services/prdSplit/` contains the PRD split planning, dispatch, and
   Trellis writer pipeline plus their unit tests.
@@ -152,6 +157,20 @@ cross-panel event wiring.
 
 - Feature UI with colocated styles: `src/components/ProjectList/index.tsx`
   and `src/components/ProjectList/index.css`.
+- Assistant Hub settings: `src/components/CockpitSurface/AssistantSettingsDrawer.tsx`
+  calls `src/services/assistantPromptLayers.ts` for runtime resolution and
+  override persistence, and uses `src/services/skills.ts` to scan existing
+  skills directories before adding mounted skill refs to the assistant bundle.
+  Keep scan-to-bundle pure helpers in
+  `src/components/CockpitSurface/assistantSkillMount.ts` with focused tests.
+  Components must not call assistant override IPC directly.
+- Artifact assistant workspace: `src/components/CockpitSurface/AssistantConversationView.tsx`
+  may render non-PRD builtin assistants. Keep executable brief construction in
+  `src/components/CockpitSurface/assistantArtifactBrief.ts` and derive enabled
+  Skills/MCP from resolved assistant runtime, not from static card metadata
+  alone. Dispatch from this workspace goes through
+  `WORKFLOW_UI_EVENT_RUN_ASSISTANT_BRIEF`; App-level orchestration owns Claude
+  session selection/creation and execution.
 - Thin IPC service: `src/services/repository.ts`.
 - Runtime stream hook: `src/hooks/useClaudeSessions.ts`.
 - Pure tested domain logic: `src/services/workflow/engine.ts`.

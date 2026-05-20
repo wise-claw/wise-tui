@@ -5,6 +5,23 @@
   max-width: 456px;
 }
 
+.app-dingtalk-ebot-popover--compact {
+  gap: 8px;
+  max-width: none;
+}
+
+.app-dingtalk-ebot-popover--compact .app-dingtalk-ebot-popover__field-guide {
+  display: none;
+}
+
+.app-dingtalk-ebot-popover--compact .app-dingtalk-ebot-popover__section-title {
+  margin-top: 0;
+}
+
+.app-dingtalk-ebot-popover--compact .ant-divider {
+  color: var(--ant-color-text-tertiary);
+}
+
 .app-dingtalk-ebot-popover__field {
   display: flex;
   flex-direction: column;
@@ -84,13 +101,15 @@
   margin-top: 2px;
 }
 
-.app-dingtalk-ebot-popover__stream-row {
-  margin-bottom: 4px;
-}
-
 .app-dingtalk-ebot-popover__debug-json {
   font-family: var(--ant-font-family-code, ui-monospace, monospace);
   font-size: 11px;
+}
+
+.app-dingtalk-ebot-popover__advanced-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .app-dingtalk-ebot-popover__json-sample {
