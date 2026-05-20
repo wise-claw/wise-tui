@@ -87,7 +87,7 @@ interface Props {
   onOpenWorkflowConfig?: () => void;
   onStopEmployee?: (employeeId: string) => void;
   onStopTeam?: (workflowId: string) => void;
-  /** 当 `Project.sddMode === "wise_trellis"` 时由 AppImpl 传入 true，隐藏 EmployeeItem 入口与 section。 */
+  /** 当 `Project.sddMode === "wise_trellis"` 时由 AppImpl 传入 true，隐藏员工区块；头部仍显示「成员」配置按钮。 */
   hideEmployeeUi?: boolean;
   /** 按当前项目 + 仓库的 Claude Code 并发展示与上限编辑 */
   claudeConcurrency?: MonitorClaudeConcurrencyProps | null;
@@ -896,15 +896,15 @@ export function ProgressMonitorPanel({
         <div className="app-monitor-panel__head-start">
           <div className="app-monitor-panel__title">我的团队</div>
           <div className="app-monitor-panel__config-btns">
-            {hideEmployeeUi ? null : (
+            {onOpenEmployeeConfig ? (
               <button
                 type="button"
                 className="app-monitor-panel__config-btn"
-                onClick={() => onOpenEmployeeConfig?.()}
+                onClick={() => onOpenEmployeeConfig()}
               >
-                员工
+                {hideEmployeeUi ? "成员" : "员工"}
               </button>
-            )}
+            ) : null}
             <button
               type="button"
               className="app-monitor-panel__config-btn"

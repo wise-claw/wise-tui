@@ -3640,7 +3640,7 @@ button.app-message-part-header:disabled:hover {
 /* ── Input Area ── */
 
 .app-claude-input-area {
-  padding: 4px 12px 6px;
+  padding: 4px 6px 6px;
   flex-shrink: 0;
   min-width: 0;
 }
@@ -3692,9 +3692,9 @@ button.app-message-part-header:disabled:hover {
   border: none;
   background: transparent;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 400;
-  line-height: 1.4;
+  line-height: 14px;
   font-family: inherit;
   color: var(--ant-color-text-secondary);
   border-radius: var(--ant-border-radius-sm);
@@ -3718,6 +3718,41 @@ button.app-message-part-header:disabled:hover {
 .app-claude-model-picker__chevron {
   flex-shrink: 0;
   opacity: 0.72;
+}
+
+/* 模型下拉：极低行高 + 略大字号（覆盖 Ant 默认 menu 行高） */
+.app-claude-model-picker-dropdown .ant-dropdown-menu {
+  min-width: 88px;
+  max-width: 168px;
+  padding: 1px;
+}
+
+.app-claude-model-picker-dropdown .ant-dropdown-menu-item,
+.app-claude-model-picker-dropdown .ant-dropdown-menu-submenu-title {
+  display: flex;
+  align-items: center;
+  min-height: 20px !important;
+  height: 20px;
+  padding-block: 0 !important;
+  padding-inline: 5px;
+  margin: 0;
+  font-size: 11px;
+  line-height: 20px;
+  border-radius: 2px;
+}
+
+.app-claude-model-picker-dropdown .ant-dropdown-menu-item + .ant-dropdown-menu-item {
+  margin-top: 0;
+}
+
+.app-claude-model-picker-dropdown .ant-dropdown-menu-title-content {
+  font-size: 11px;
+  line-height: 20px;
+}
+
+.app-claude-model-picker-dropdown .ant-dropdown-menu-item .ant-dropdown-menu-item-icon {
+  font-size: 11px;
+  min-width: 0;
 }
 
 .app-chat-input-tool-btn {
@@ -4078,7 +4113,7 @@ button.app-message-part-header:disabled:hover {
 
 .app-session-quick-actions--composer {
   flex-shrink: 0;
-  padding: 4px 12px 0 12px;
+  padding: 4px 6px 0 6px;
   background: var(--ant-color-bg-container);
   border-top: 1px solid var(--ant-color-border-secondary);
 }

@@ -1577,6 +1577,7 @@ function ComposerInner({
           </Tooltip>
         ) : null}
         <Dropdown
+          overlayClassName="app-claude-model-picker-dropdown"
           menu={{
             items: modelMenuItems,
             selectable: true,
@@ -1598,8 +1599,8 @@ function ComposerInner({
             <span className="app-claude-model-picker__label">{modelDisplayLabel}</span>
             <svg
               className="app-claude-model-picker__chevron"
-              width="10"
-              height="10"
+              width="8"
+              height="8"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -1662,7 +1663,7 @@ function ComposerInner({
     >
       {/* Docks above editor：同仓库多路 AskUserQuestion 时 Tabs 嵌在题卡顶栏（原「待你确认」行） */}
       {useAggregatedQuestionDock && activeQuestionDockTab ? (
-        <div style={{ padding: "0 16px" }}>
+        <div style={{ padding: "0 6px" }}>
           <QuestionDock
             key={`${activeQuestionDockTab.ownerSessionId}:${activeQuestionDockTab.question.id}`}
             request={activeQuestionDockTab.question}
@@ -1704,7 +1705,7 @@ function ComposerInner({
           />
         </div>
       ) : questionRequest ? (
-        <div style={{ padding: "0 16px" }}>
+        <div style={{ padding: "0 6px" }}>
           <QuestionDock
             key={questionRequest.id}
             request={questionRequest}
@@ -1717,7 +1718,7 @@ function ComposerInner({
         </div>
       ) : null}
       {permissionRequest ? (
-        <div style={{ padding: "0 16px" }}>
+        <div style={{ padding: "0 6px" }}>
           <PermissionDock
             request={permissionRequest}
             requestStatus={permissionRequestStatus}

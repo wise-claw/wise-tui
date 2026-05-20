@@ -43,7 +43,7 @@ export interface ChatInspectorProps {
   onOpenWorkflowConfig?: () => void;
   onStopEmployeeMonitor?: (employeeId: string) => void;
   onStopTeamMonitor?: (workflowId: string) => void;
-  /** 隐藏 EmployeeItem UI 区块（当活动项目 `sddMode === "wise_trellis"` 时）。 */
+  /** 隐藏员工监控区块；`wise_trellis` 时头部仍显示「成员」配置按钮。 */
   hideEmployeeUi?: boolean;
   monitorClaudeConcurrency?: {
     activeCount: number;
