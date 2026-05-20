@@ -1,4 +1,5 @@
 import type { ProjectItem, Repository } from "../types";
+import { normalizeRepositoryPathKey } from "./repositoryMainSessionBinding";
 import { repositoryFolderBasename } from "./repositoryType";
 
 export interface ProjectSessionAnchor {
@@ -10,14 +11,45 @@ export interface ProjectSessionAnchor {
   isProjectRooted: boolean;
 }
 
+/** 多成员仓路径的最长公共父目录（用于无 rootPath 时推导项目级 cwd）。 */
+export function longestCommonRepositoryPathPrefix(paths: ReadonlyArray<string>): string {
+  const keys = paths.map((p) => normalizeRepositoryPathKey(p)).filter((k) => k.length > 0);
+  if (keys.length === 0) return "";
+  if (keys.length === 1) return keys[0]!;
+
+  let prefix = keys[0]!;
+  for (let i = 1; i < keys.length; i++) {
+    const current = keys[i]!;
+    while (
+      prefix &&
+      current !== prefix &&
+      !current.startsWith(`${prefix}/`)
+    ) {
+      const slash = prefix.lastIndexOf("/");
+      if (slash <= 0) {
+        prefix = "";
+        break;
+      }
+      prefix = prefix.slice(0, slash);
+    }
+    if (!prefix) break;
+  }
+  return prefix;
+}
+
+function isStrictParentRepositoryPath(parentKey: string, childKey: string): boolean {
+  return (
+    parentKey.length > 0 &&
+    childKey.length > parentKey.length &&
+    childKey.startsWith(`${parentKey}/`)
+  );
+}
+
 /**
  * 计算项目级主会话的物理锚点。
  *
- * 多仓 wise_trellis 项目（且 rootPath 非空）→ 锚定项目根；
- * 其余场景（单仓 / project_owned / 未迁移 rootPath）→ 锚定首个成员仓库。
- *
- * 单仓项目（含 wise 自身）天然退化：rootPath 通常等于唯一仓库路径，二者一致；
- * 即便此时函数返回 isProjectRooted=false，行为与历史完全一致。
+ * - 多仓（≥2 成员）→ 优先 `rootPath`；否则用成员路径的公共父目录；不与任一成员仓路径重合。
+ * - 单仓 → 锚定该成员仓（与历史 per-repo 退化一致）。
  */
 export function resolveProjectMainSessionAnchor(
   project: ProjectItem,
@@ -29,16 +61,31 @@ export function resolveProjectMainSessionAnchor(
     .filter((repo): repo is Repository => Boolean(repo));
   const trimmedRootPath = (project.rootPath ?? "").trim();
 
-  const shouldAnchorAtProjectRoot =
-    project.sddMode === "wise_trellis" &&
-    trimmedRootPath.length > 0 &&
-    memberRepos.length > 1;
-
-  if (shouldAnchorAtProjectRoot) {
+  if (memberRepos.length >= 2) {
+    if (trimmedRootPath.length > 0) {
+      return {
+        path: trimmedRootPath,
+        displayName: `Project: ${project.name}`,
+        isProjectRooted: true,
+      };
+    }
+    const memberKeys = memberRepos.map((repo) => normalizeRepositoryPathKey(repo.path));
+    const commonPrefix = longestCommonRepositoryPathPrefix(memberRepos.map((repo) => repo.path));
+    const commonKey = normalizeRepositoryPathKey(commonPrefix);
+    const isDistinctParent =
+      commonKey.length > 0 &&
+      memberKeys.every((key) => isStrictParentRepositoryPath(commonKey, key));
+    if (isDistinctParent) {
+      return {
+        path: commonPrefix,
+        displayName: `Project: ${project.name}`,
+        isProjectRooted: true,
+      };
+    }
     return {
-      path: trimmedRootPath,
-      displayName: `Project: ${project.name}`,
-      isProjectRooted: true,
+      path: "",
+      displayName: project.name,
+      isProjectRooted: false,
     };
   }
 

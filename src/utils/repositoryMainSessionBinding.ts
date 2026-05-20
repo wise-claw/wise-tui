@@ -3,11 +3,22 @@ import { extractBoundEmployeeNameFromDisplay } from "./sessionOwnerHints";
 
 export const REPOSITORY_MAIN_SESSION_BINDING_STORAGE_KEY = "wise.repositoryMainSessionBindings.v1";
 
+/** 项目主会话绑定 key，与成员仓 filesystem path 隔离。 */
+export const PROJECT_MAIN_SESSION_BINDING_PREFIX = "wise://workspace/";
+
+export function projectMainSessionBindingKey(projectId: string): string {
+  return `${PROJECT_MAIN_SESSION_BINDING_PREFIX}${projectId.trim()}`;
+}
+
+export function isProjectMainSessionBindingKey(key: string): boolean {
+  return normalizeRepositoryPathKey(key).startsWith(PROJECT_MAIN_SESSION_BINDING_PREFIX);
+}
+
 export function normalizeRepositoryPathKey(path: string): string {
   return path.trim().replace(/\\/g, "/").replace(/\/+$/, "");
 }
 
-function isProjectRootSessionDisplayName(repositoryName: string): boolean {
+export function isProjectRootSessionDisplayName(repositoryName: string): boolean {
   return repositoryName.trim().startsWith("Project: ");
 }
 
@@ -85,7 +96,11 @@ export function resolveBoundMainSessionId(
   const bound = bindings[key]?.trim();
   if (!bound) return null;
   const s = sessions.find((x) => x.id === bound);
-  if (s && isRepositoryMainSessionTab(s, key, mainOwnerAgentName)) {
+  if (!s) return null;
+  if (isProjectMainSessionBindingKey(key)) {
+    return isProjectRootSessionDisplayName(s.repositoryName ?? "") ? bound : null;
+  }
+  if (isRepositoryMainSessionTab(s, key, mainOwnerAgentName)) {
     return bound;
   }
   return null;

@@ -1053,8 +1053,17 @@ export function ClaudeSessions({
         workspaceMode,
         project: activeProject,
         repositories: repositories ?? [],
+        activeWorkspaceFocus,
+        activeRepositoryId,
       }),
-    [incomingSessions, workspaceMode, activeProject, repositories],
+    [
+      incomingSessions,
+      workspaceMode,
+      activeProject,
+      repositories,
+      activeWorkspaceFocus,
+      activeRepositoryId,
+    ],
   );
 
   const activeSession =
@@ -1062,6 +1071,9 @@ export function ClaudeSessions({
       ? undefined
       : sessions.find((s) => {
           if (s.id !== activeSessionId) return false;
+          if (activeWorkspaceFocus === "project") {
+            return (s.repositoryName ?? "").trim().startsWith("Project: ");
+          }
           return (
             resolveRepositoryForSession({
               session: s,

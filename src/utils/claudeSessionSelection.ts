@@ -1,5 +1,6 @@
 import type { ClaudeSession } from "../types";
 import { TEAM_AUTO_DRIVER_PREFIXES } from "../constants/teamAutoDriver";
+import { isProjectRootSessionDisplayName } from "./repositoryMainSessionBinding";
 import {
   extractBoundEmployeeNameFromDisplay,
   resolveOwnerHintForSession,
@@ -79,6 +80,7 @@ export function pickSessionForRepositorySidebarSelect(
   if (mainAgent) {
     const agentCandidates = sessions.filter((s) => {
       if (s.repositoryPath !== repositoryPath) return false;
+      if (isProjectRootSessionDisplayName(s.repositoryName ?? "")) return false;
       return extractBoundEmployeeNameFromDisplay(s.repositoryName ?? "") === mainAgent;
     });
     if (agentCandidates.length > 0) {
@@ -90,7 +92,30 @@ export function pickSessionForRepositorySidebarSelect(
   }
 
   const candidates = sessions.filter(
-    (s) => s.repositoryPath === repositoryPath && !extractBoundEmployeeNameFromDisplay(s.repositoryName ?? ""),
+    (s) =>
+      s.repositoryPath === repositoryPath &&
+      !extractBoundEmployeeNameFromDisplay(s.repositoryName ?? "") &&
+      !isProjectRootSessionDisplayName(s.repositoryName ?? ""),
+  );
+  if (candidates.length === 0) {
+    return null;
+  }
+  const preferred = candidates.filter((s) => !shouldDeprioritizeForRepositoryMainFocus(s, ownerHints));
+  const pool = preferred.length > 0 ? preferred : candidates;
+  return pickBestByLatestActivity(pool);
+}
+
+/** 侧栏点项目行：只恢复展示名为 `Project: …` 的项目主会话（不与仓库主会话混用）。 */
+export function pickProjectMainSessionForSidebarSelect(
+  sessions: ClaudeSession[],
+  repositoryPath: string,
+  ownerHints: Record<string, SessionOwnerHint>,
+): ClaudeSession | null {
+  const candidates = sessions.filter(
+    (s) =>
+      s.repositoryPath === repositoryPath &&
+      isProjectRootSessionDisplayName(s.repositoryName ?? "") &&
+      !extractBoundEmployeeNameFromDisplay(s.repositoryName ?? ""),
   );
   if (candidates.length === 0) {
     return null;

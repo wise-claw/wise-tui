@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { ProjectItem, Repository } from "../types";
-import { resolveProjectMainSessionAnchor } from "./projectSessionAnchor";
+import {
+  isProjectMainSessionBindingKey,
+  projectMainSessionBindingKey,
+} from "./repositoryMainSessionBinding";
+import { longestCommonRepositoryPathPrefix, resolveProjectMainSessionAnchor } from "./projectSessionAnchor";
 
 function repo(input: Partial<Repository> & Pick<Repository, "id" | "path">): Repository {
   return {
@@ -25,8 +29,28 @@ function project(input: Partial<ProjectItem> & Pick<ProjectItem, "id">): Project
   };
 }
 
+describe("projectMainSessionBindingKey", () => {
+  test("uses stable wise:// workspace id", () => {
+    expect(projectMainSessionBindingKey("p-1")).toBe("wise://workspace/p-1");
+    expect(isProjectMainSessionBindingKey("wise://workspace/p-1")).toBe(true);
+    expect(isProjectMainSessionBindingKey("/work/demo")).toBe(false);
+  });
+});
+
+describe("longestCommonRepositoryPathPrefix", () => {
+  test("sibling repos under same parent", () => {
+    expect(
+      longestCommonRepositoryPathPrefix(["/work/hualan/vocs-web", "/work/hualan/hlhb-int"]),
+    ).toBe("/work/hualan");
+  });
+
+  test("unrelated roots → empty", () => {
+    expect(longestCommonRepositoryPathPrefix(["/a/foo", "/z/bar"])).toBe("");
+  });
+});
+
 describe("resolveProjectMainSessionAnchor", () => {
-  test("wise_trellis multi-repo with rootPath → project-rooted", () => {
+  test("multi-repo with rootPath → project-rooted", () => {
     const p = project({
       id: "p",
       name: "Demo",
@@ -41,6 +65,26 @@ describe("resolveProjectMainSessionAnchor", () => {
     expect(resolveProjectMainSessionAnchor(p, repos)).toEqual({
       path: "/work/demo",
       displayName: "Project: Demo",
+      isProjectRooted: true,
+    });
+  });
+
+  test("multi-repo project_owned with rootPath → project-rooted (not first repo)", () => {
+    const p = project({
+      id: "p",
+      name: "Legacy",
+      repositoryIds: [1, 2],
+      rootPath: "/work/legacy",
+      sddMode: "project_owned",
+    });
+    const repos = [
+      repo({ id: 1, path: "/work/legacy/a", name: "a" }),
+      repo({ id: 2, path: "/work/legacy/b", name: "b" }),
+    ];
+    const anchor = resolveProjectMainSessionAnchor(p, repos);
+    expect(anchor).toEqual({
+      path: "/work/legacy",
+      displayName: "Project: Legacy",
       isProjectRooted: true,
     });
   });
@@ -60,24 +104,27 @@ describe("resolveProjectMainSessionAnchor", () => {
     expect(anchor.displayName).toBe("Wise/wise");
   });
 
-  test("project_owned with multiple repos → repo-rooted (legacy)", () => {
+  test("multi-repo without rootPath but shared parent → project-rooted at common prefix", () => {
     const p = project({
       id: "p",
-      name: "Legacy",
+      name: "Hualan",
       repositoryIds: [1, 2],
-      rootPath: "/work/legacy",
-      sddMode: "project_owned",
+      rootPath: "",
+      sddMode: "wise_trellis",
     });
     const repos = [
-      repo({ id: 1, path: "/work/legacy/a", name: "a" }),
-      repo({ id: 2, path: "/work/legacy/b", name: "b" }),
+      repo({ id: 1, path: "/work/hualan/vocs-web", name: "vocs-web" }),
+      repo({ id: 2, path: "/work/hualan/hlhb-int", name: "hlhb-int" }),
     ];
     const anchor = resolveProjectMainSessionAnchor(p, repos);
-    expect(anchor.isProjectRooted).toBe(false);
-    expect(anchor.path).toBe("/work/legacy/a");
+    expect(anchor).toEqual({
+      path: "/work/hualan",
+      displayName: "Project: Hualan",
+      isProjectRooted: true,
+    });
   });
 
-  test("wise_trellis multi-repo without rootPath → repo-rooted (unmigrated)", () => {
+  test("multi-repo with unrelated paths and no rootPath → empty anchor", () => {
     const p = project({
       id: "p",
       name: "Pending",
@@ -87,11 +134,11 @@ describe("resolveProjectMainSessionAnchor", () => {
     });
     const repos = [
       repo({ id: 1, path: "/work/p/a", name: "a" }),
-      repo({ id: 2, path: "/work/p/b", name: "b" }),
+      repo({ id: 2, path: "/other/p/b", name: "b" }),
     ];
     const anchor = resolveProjectMainSessionAnchor(p, repos);
+    expect(anchor.path).toBe("");
     expect(anchor.isProjectRooted).toBe(false);
-    expect(anchor.path).toBe("/work/p/a");
   });
 
   test("project with zero repos but rootPath set → project-rooted", () => {
@@ -118,7 +165,7 @@ describe("resolveProjectMainSessionAnchor", () => {
     });
   });
 
-  test("rootPath is trimmed before comparison", () => {
+  test("rootPath is trimmed before use", () => {
     const p = project({
       id: "p",
       name: "T",
@@ -133,7 +180,7 @@ describe("resolveProjectMainSessionAnchor", () => {
     expect(resolveProjectMainSessionAnchor(p, repos).path).toBe("/work/t");
   });
 
-  test("missing repository ids in repositories list are skipped", () => {
+  test("missing repository ids in repositories list are skipped for single-member degenerate", () => {
     const p = project({
       id: "p",
       name: "Partial",

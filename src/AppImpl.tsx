@@ -94,7 +94,10 @@ import {
   evaluateBeforeSpawnClaudeCode,
   resolveClaudeConcurrencyInvokeContext,
 } from "./utils/claudeConcurrencyGate";
-import { pickSessionForRepositorySidebarSelect } from "./utils/claudeSessionSelection";
+import {
+  pickProjectMainSessionForSidebarSelect,
+  pickSessionForRepositorySidebarSelect,
+} from "./utils/claudeSessionSelection";
 import {
   isOmcBatchHistoryStubSessionId,
   clearPersistedOmcBatchHistory,
@@ -104,8 +107,10 @@ import { isOmcMonitorEmployeeRecord } from "./utils/omcMonitorEmployeeSession";
 import {
   normalizeRepositoryPathKey as normalizeRepositoryPathForMatch,
   parseRepositoryMainSessionBindings,
+  projectMainSessionBindingKey,
   REPOSITORY_MAIN_SESSION_BINDING_STORAGE_KEY,
   resolveRepositoryForSession,
+  resolveBoundMainSessionId,
   resolveRepositoryMainSessionId,
   resolveMainOwnerAgentNameForRepositoryPath,
 } from "./utils/repositoryMainSessionBinding";
@@ -1435,6 +1440,43 @@ export default function App() {
     return refreshDiskSessionsForRepository(activeRepository.path, activeRepository.name);
   }, [activeRepository, refreshDiskSessionsForRepository]);
 
+  /** 打开/恢复/创建仓库主会话：先读绑定，再挑同路径最近会话，最后新建。 */
+  async function openRepositoryMainSession(
+    repository: Repository,
+    options?: { enterChat?: boolean },
+  ): Promise<string> {
+    if (options?.enterChat ?? true) {
+      viewMode.enter({ kind: "chat" });
+    }
+    setActiveRepositoryWithOwner(repository.id);
+    const target = resolveSidebarSelectionTarget({ repository });
+    const mainOwnerPick = resolveMainOwnerAgentNameForRepositoryPath(repositories, target.path);
+    const boundId = resolveBoundMainSessionId(
+      target.path,
+      repositoryMainSessionBindings,
+      sessions,
+      mainOwnerPick,
+    );
+    if (boundId) {
+      switchSession(boundId);
+      return boundId;
+    }
+    const latestForRepo = pickSessionForRepositorySidebarSelect(
+      sessions,
+      target.path,
+      loadSessionOwnerHints(),
+      { mainOwnerAgentName: mainOwnerPick },
+    );
+    if (latestForRepo) {
+      bindRepositoryMainSession(target.path, latestForRepo.id);
+      switchSession(latestForRepo.id);
+      return latestForRepo.id;
+    }
+    const id = await createSession(target.path, target.displayName);
+    bindRepositoryMainSession(target.path, id);
+    return id;
+  }
+
   const handleSidebarRepositorySelect = useCallback(
     (repositoryId: number | null) => {
       if (repositoryId == null) {
@@ -1445,51 +1487,9 @@ export default function App() {
       if (!repository) {
         return;
       }
-      setActiveRepositoryWithOwner(repositoryId);
-      const ownerProject = projects.find((p) => p.repositoryIds.includes(repositoryId)) ?? null;
-      const target = resolveSidebarSelectionTarget({
-        repository,
-        ownerProject,
-        repositories,
-      });
-      const mainOwnerPick = resolveMainOwnerAgentNameForRepositoryPath(repositories, target.path);
-      const boundId = resolveRepositoryMainSessionId(
-        target.path,
-        repositoryMainSessionBindings,
-        sessions,
-        mainOwnerPick,
-      );
-      if (boundId) {
-        switchSession(boundId);
-        return;
-      }
-      const latestForRepo = pickSessionForRepositorySidebarSelect(
-        sessions,
-        target.path,
-        loadSessionOwnerHints(),
-        { mainOwnerAgentName: mainOwnerPick },
-      );
-      if (latestForRepo) {
-        bindRepositoryMainSession(target.path, latestForRepo.id);
-        switchSession(latestForRepo.id);
-        return;
-      }
-      void (async () => {
-        const id = await createSession(target.path, target.displayName);
-        bindRepositoryMainSession(target.path, id);
-      })();
+      void openRepositoryMainSession(repository, { enterChat: false });
     },
-    [
-      bindRepositoryMainSession,
-      createSession,
-      projects,
-      repositories,
-      repositoryMainSessionBindings,
-      sessions,
-      setActiveRepositoryId,
-      setActiveRepositoryWithOwner,
-      switchSession,
-    ],
+    [repositories, setActiveRepositoryId, setActiveRepositoryWithOwner],
   );
 
   /**
@@ -1522,25 +1522,20 @@ export default function App() {
   const handleSidebarRepositorySelectLeavingMcpHub = useCallback(
     (repositoryId: number | null) => {
       if (repositoryId == null) {
-        // 清空选中 → 回到 cockpit 主屏
         if (!viewMode.isCockpit) viewMode.back();
         handleSidebarRepositorySelect(repositoryId);
         return;
       }
-      // Standalone Repo（不属于任何 project）→ 进 chat 子模式
-      // Workspace 内仓库 → 保持 cockpit（宪法 §6）
-      const ownerProject = projects.find((p) => p.repositoryIds.includes(repositoryId));
-      if (!ownerProject) {
-        // Standalone Repo: 进入 chat
-        viewMode.enter({ kind: "chat" });
-      } else if (viewMode.isAuthor || viewMode.isInspect) {
-        // 从 author/inspect 回到 cockpit
+      if (viewMode.isAuthor || viewMode.isInspect) {
         viewMode.back();
       }
-      // cockpit 模式下选 Workspace 内仓库：保持 cockpit 不动
-      handleSidebarRepositorySelect(repositoryId);
+      const repository = repositories.find((item) => item.id === repositoryId);
+      if (!repository) {
+        return;
+      }
+      void openRepositoryMainSession(repository, { enterChat: true });
     },
-    [handleSidebarRepositorySelect, projects, viewMode],
+    [repositories, viewMode],
   );
 
   /** 侧栏「图谱操作 → 查看检索」：与顶栏图谱入口一致，先收敛其它 Hub 再打开覆盖层。 */
@@ -1732,24 +1727,19 @@ export default function App() {
 
   const handleProjectSelectLeavingMcpHub = useCallback(
     (projectId: string) => {
-      // 选 Workspace → 回到 cockpit（如果在 author/inspect 则退出）
+      // 选 Workspace → 回到 Operator 主会话（author/inspect 先退出叠层）
       if (viewMode.isAuthor || viewMode.isInspect) {
         viewMode.back();
       }
       const project = projects.find((p) => p.id === projectId) ?? null;
-      const firstRepoId = project?.repositoryIds[0] ?? null;
-      // 进项目即开主会话：通过 handleSidebarRepositorySelect 统一路由
-      // - multi_repo → 绑定/恢复/创建 anchor.path 上的项目主会话
-      // - single_repo → per-repo session
-      // - 项目无 repo → 只切 activeProjectId 等待用户后续操作
-      if (firstRepoId != null) {
-        handleSidebarRepositorySelect(firstRepoId);
-      } else {
+      if (!project) {
         setActiveProjectId(projectId);
+        return;
       }
-      setActiveWorkspaceFocus("project");
+      // 进项目即开主会话：与 Trellis Spec / 显式「打开项目会话」共用 openProjectMainSession
+      void openProjectMainSession(project);
     },
-    [handleSidebarRepositorySelect, projects, setActiveProjectId, setActiveWorkspaceFocus, viewMode],
+    [projects, setActiveProjectId, viewMode],
   );
 
   const jumpToSessionLeavingMcpHub = useCallback(
@@ -1762,18 +1752,11 @@ export default function App() {
   );
 
   async function handleCreateRepositoryTask(repository: Repository, mode: TaskMode) {
-    setActiveRepositoryWithOwner(repository.id);
-    const ownerProject = projects.find((p) => p.repositoryIds.includes(repository.id)) ?? null;
-    const target = resolveSidebarSelectionTarget({
-      repository,
-      ownerProject,
-      repositories,
-    });
     if (mode === "chat") {
-      const id = await createSession(target.path, target.displayName);
-      bindRepositoryMainSession(target.path, id);
+      await openRepositoryMainSession(repository, { enterChat: true });
       return;
     }
+    setActiveRepositoryWithOwner(repository.id);
     if (mode === "split") {
       openMissionControl({ repositoryId: repository.id });
       return;
@@ -1809,7 +1792,7 @@ export default function App() {
     setActiveRepositoryId(primaryRepo.id);
     if (mode === "chat") {
       const id = await createSession(anchor.path, anchor.displayName);
-      bindRepositoryMainSession(anchor.path, id);
+      bindRepositoryMainSession(projectMainSessionBindingKey(project.id), id);
       return;
     }
     if (mode === "split") {
@@ -1847,30 +1830,29 @@ export default function App() {
       setActiveRepositoryId(repos[0].id);
     }
 
-    const mainOwnerPick = resolveMainOwnerAgentNameForRepositoryPath(repositories, anchor.path);
-    const boundId = resolveRepositoryMainSessionId(
-      anchor.path,
+    const projectBindingKey = projectMainSessionBindingKey(project.id);
+    const boundId = resolveBoundMainSessionId(
+      projectBindingKey,
       repositoryMainSessionBindings,
       sessions,
-      mainOwnerPick,
+      null,
     );
     if (boundId) {
       switchSession(boundId);
       return boundId;
     }
-    const latestForProject = pickSessionForRepositorySidebarSelect(
+    const latestForProject = pickProjectMainSessionForSidebarSelect(
       sessions,
       anchor.path,
       loadSessionOwnerHints(),
-      { mainOwnerAgentName: mainOwnerPick },
     );
     if (latestForProject) {
-      bindRepositoryMainSession(anchor.path, latestForProject.id);
+      bindRepositoryMainSession(projectBindingKey, latestForProject.id);
       switchSession(latestForProject.id);
       return latestForProject.id;
     }
     const id = await createSession(anchor.path, anchor.displayName);
-    bindRepositoryMainSession(anchor.path, id);
+    bindRepositoryMainSession(projectBindingKey, id);
     return id;
   }
 

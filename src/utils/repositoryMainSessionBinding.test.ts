@@ -2,6 +2,8 @@ import { describe, expect, it } from "bun:test";
 import type { ClaudeSession, Repository } from "../types";
 import {
   isRepositoryMainSessionTab,
+  projectMainSessionBindingKey,
+  resolveBoundMainSessionId,
   resolveRepositoryForSession,
   resolveRepositoryMainSessionId,
   resolveMainOwnerAgentNameForRepositoryPath,
@@ -50,6 +52,18 @@ describe("resolveMainOwnerAgentNameForRepositoryPath", () => {
       },
     ];
     expect(resolveMainOwnerAgentNameForRepositoryPath(repos, "/p/r")).toBe("executor");
+  });
+});
+
+describe("projectMainSessionBindingKey", () => {
+  it("resolves project binding without matching session.repositoryPath to key", () => {
+    const projectSession = session("/work/hr/vocs-web", "Project: 华润");
+    const bindings = {
+      [projectMainSessionBindingKey("hr")]: "s1",
+    };
+    expect(
+      resolveBoundMainSessionId(projectMainSessionBindingKey("hr"), bindings, [projectSession], null),
+    ).toBe("s1");
   });
 });
 
