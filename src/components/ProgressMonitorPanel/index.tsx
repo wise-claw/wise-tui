@@ -930,6 +930,7 @@ export function ProgressMonitorPanel({
         </div>
       </div>
 
+      {employeeItems.length > 0 ? (
       <div className="app-monitor-panel__section">
         <div className="app-monitor-panel__section-head">
           <div className="app-monitor-panel__section-title-wrap">
@@ -942,18 +943,7 @@ export function ProgressMonitorPanel({
             </Typography.Text>
           </div>
         </div>
-        {employeeItems.length === 0 ? (
-          <div className="app-monitor-panel__empty app-monitor-panel__empty--with-action">
-            <button
-              type="button"
-              className="app-monitor-panel__empty-add-btn"
-              onClick={() => onOpenEmployeeConfig?.()}
-            >
-              {hideEmployeeUi ? "新增成员" : "新增员工"}
-            </button>
-          </div>
-        ) : (
-          employeeItems.map((item) => {
+          {employeeItems.map((item) => {
             const isOmcWorker = item.employeeId === "omc-worker";
             const employeePopoverOpen = employeeHistoryPopoverId === item.employeeId;
             const keyword =
@@ -1042,9 +1032,9 @@ export function ProgressMonitorPanel({
               </div>
               </div>
             );
-          })
-        )}
+          })}
       </div>
+      ) : null}
 
       {repositoryMemberItems.length > 0 ? (
         <div className="app-monitor-panel__section">
@@ -1154,6 +1144,7 @@ export function ProgressMonitorPanel({
         </div>
       ) : null}
 
+      {teamItems.length > 0 ? (
       <div className="app-monitor-panel__section">
         <div className="app-monitor-panel__section-head">
           <div className="app-monitor-panel__section-title-wrap">
@@ -1166,18 +1157,7 @@ export function ProgressMonitorPanel({
             </Typography.Text>
           </div>
         </div>
-        {teamItems.length === 0 ? (
-          <div className="app-monitor-panel__empty app-monitor-panel__empty--with-action">
-            <button
-              type="button"
-              className="app-monitor-panel__empty-add-btn"
-              onClick={() => onOpenWorkflowConfig?.()}
-            >
-              新增团队
-            </button>
-          </div>
-        ) : (
-          teamItems.map((item) => {
+          {teamItems.map((item) => {
             const teamPopoverOpen = teamHistoryPopoverId === item.workflowId;
             const keyword = teamPopoverOpen ? normalizeSearchKeyword(teamHistorySearch) : "";
             const matchedTeamSessions = teamPopoverOpen
@@ -1266,9 +1246,9 @@ export function ProgressMonitorPanel({
               </div>
               </div>
             );
-          })
-        )}
+          })}
       </div>
+      ) : null}
 
       <MonitorHistorySessionTranscriptDrawer
         open={historyMessagesSessionId !== null}

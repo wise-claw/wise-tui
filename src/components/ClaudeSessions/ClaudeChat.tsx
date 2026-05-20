@@ -4397,7 +4397,7 @@ export function ClaudeChat({
                 window.dispatchEvent(new CustomEvent(WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL));
               }}
             >
-              <span className="app-followup-review-btn__label">PRD 拆解</span>
+              <span className="app-followup-review-btn__label">需求</span>
             </button>
             <Popover
               trigger="click"
