@@ -2775,9 +2775,10 @@ export function ClaudeChat({
   }, []);
 
   const archiveTrellisTasks = useCallback(
-    async (tasks: TrellisRequirementTaskRow[]): Promise<{ ok: number; fail: number }> => {
+    async (tasks: TrellisRequirementTaskRow[]): Promise<{ ok: number; fail: number; lastError?: string }> => {
       let ok = 0;
       let fail = 0;
+      let lastError: string | undefined;
       const removedKeys: string[] = [];
       for (const task of tasks) {
         const rootPath = task.rootPath?.trim();
@@ -2785,14 +2786,16 @@ export function ClaudeChat({
         const rowKey = trellisTaskRowKey(task);
         if (!rootPath || !taskDir) {
           fail += 1;
+          lastError = "任务缺少 rootPath 或目录路径";
           continue;
         }
         try {
           await archiveTrellisTask(rootPath, taskDir);
           ok += 1;
           removedKeys.push(rowKey);
-        } catch {
+        } catch (err: unknown) {
           fail += 1;
+          lastError = err instanceof Error ? err.message : String(err);
         }
       }
       if (removedKeys.length > 0) {
@@ -2806,16 +2809,18 @@ export function ClaudeChat({
         await syncTrellisTaskList();
         window.dispatchEvent(new CustomEvent(WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED, { detail: {} }));
       }
-      return { ok, fail };
+      return { ok, fail, lastError };
     },
     [clearTrellisTaskFocusIfNeeded, syncTrellisTaskList],
   );
 
   const handleArchiveTrellisTask = useCallback(
     async (task: TrellisRequirementTaskRow) => {
-      const { ok, fail } = await archiveTrellisTasks([task]);
+      const { ok, fail, lastError } = await archiveTrellisTasks([task]);
       if (ok > 0) void message.success(`已删除任务 ${task.taskId}`);
-      else if (fail > 0) void message.error("删除 Trellis 任务失败");
+      else if (fail > 0) {
+        void message.error(lastError ? `删除 Trellis 任务失败：${lastError}` : "删除 Trellis 任务失败");
+      }
     },
     [archiveTrellisTasks],
   );
@@ -2833,10 +2838,15 @@ export function ClaudeChat({
       okButtonProps: { danger: true },
       cancelText: "取消",
       onOk: async () => {
-        const { ok, fail } = await archiveTrellisTasks(selectedTrellisTasks);
+        const { ok, fail, lastError } = await archiveTrellisTasks(selectedTrellisTasks);
         if (ok > 0 && fail === 0) void message.success(`已删除 ${ok} 条 Trellis 任务`);
-        else if (ok > 0) void message.warning(`已删除 ${ok} 条，${fail} 条失败`);
-        else void message.error("批量删除失败");
+        else if (ok > 0) {
+          void message.warning(
+            lastError ? `已删除 ${ok} 条，${fail} 条失败：${lastError}` : `已删除 ${ok} 条，${fail} 条失败`,
+          );
+        } else {
+          void message.error(lastError ? `批量删除失败：${lastError}` : "批量删除失败");
+        }
       },
     });
   }, [archiveTrellisTasks, selectedTrellisTasks]);

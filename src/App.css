@@ -2000,6 +2000,16 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   background: color-mix(in srgb, var(--ant-color-geekblue) 14%, transparent);
 }
 
+.app-left-sidebar .app-repository-item--project .app-repository-action--project-quick.app-repository-action--trellis {
+  color: var(--ant-color-text-tertiary);
+  background: transparent;
+}
+
+.app-left-sidebar .app-repository-item--project .app-repository-action--project-quick.app-repository-action--trellis:hover {
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-content);
+}
+
 /* 当前项目：极浅底 + 字重，无侧条 */
 .app-repository-item--project.app-repository-item--project-active {
   background: var(--ant-color-fill-quaternary);
@@ -2265,8 +2275,13 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   width: 18px;
   min-width: 18px;
   max-width: 18px;
-  color: var(--ant-color-success);
-  background: color-mix(in srgb, var(--ant-color-success) 12%, transparent);
+  color: var(--ant-color-text-tertiary);
+  background: transparent;
+}
+
+.app-repository-action--trellis:hover {
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-content);
 }
 
 .app-repository-action--code-graph {

@@ -293,6 +293,7 @@ pub fn run() {
             trellis_bridge::trellis_read_task,
             trellis_bridge::trellis_write_prd,
             trellis_bridge::trellis_write_status,
+            trellis_bridge::trellis_archive_task,
             trellis_bridge::trellis_list_research,
             trellis_bridge::trellis_detect_sdd_signals,
             trellis_bridge::trellis_list_spec_areas,
