@@ -274,9 +274,20 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
         graph.resize(width, height);
       }
     };
-    resizeGraph();
+    const scheduleResizeGraph = () => {
+      resizeGraph();
+      window.requestAnimationFrame(() => {
+        resizeGraph();
+        window.requestAnimationFrame(resizeGraph);
+      });
+    };
+    scheduleResizeGraph();
+    const resizeAfterLayoutId = window.setTimeout(resizeGraph, 120);
     const resizeObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(resizeGraph) : null;
     resizeObserver?.observe(graphContainerRef.current);
+    if (canvasWrapperRef.current) {
+      resizeObserver?.observe(canvasWrapperRef.current);
+    }
 
     const handleChange = () => {
       if (!syncingRef.current) emitSnapshot();
@@ -374,6 +385,7 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
     });
 
     return () => {
+      window.clearTimeout(resizeAfterLayoutId);
       resizeObserver?.disconnect();
       graph.dispose();
       graphRef.current = null;

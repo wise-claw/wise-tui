@@ -63,6 +63,7 @@ export function buildProjectMoreMenuItems(input: BuildProjectMoreMenuItemsInput)
       onOpenScheduledTasksForProject ? { key: "scheduled-tasks", label: "定时任务" } : null,
       onOpenExecutableTasksForProject ? { key: "executable-tasks", label: "可执行任务" } : null,
     ]),
+    sidebarMenuSection([{ key: "trellis-init", label: "Trellis 初始化" }]),
     sidebarMenuSection([
       onReconcileProject
         ? {
@@ -126,6 +127,7 @@ export function buildProjectRepositoryMoreMenuItems(
     sidebarMenuSection([
       onOpenRepositoryMainOwner ? { key: "main-owner", label: "配置 Owner" } : null,
       onConfigureSddMode ? { key: "sdd-mode", label: "SDD 模式" } : null,
+      { key: "trellis-init", label: "Trellis 初始化" },
       onOpenPromptsRepository ? { key: "prompts", label: "提示词" } : null,
     ]),
     sidebarMenuSection([
@@ -193,6 +195,7 @@ export function buildFloatingRepositoryMoreMenuItems(
     sidebarMenuSection([
       onOpenRepositoryMainOwner ? { key: "main-owner", label: "主 Owner 智能体…" } : null,
       onConfigureSddMode ? { key: "sdd-mode", label: "SDD 模式" } : null,
+      { key: "trellis-init", label: "Trellis 初始化" },
     ]),
     sidebarMenuSection([
       onOpenRequirements ? { key: "requirements", label: "需求" } : null,

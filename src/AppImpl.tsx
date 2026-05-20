@@ -70,6 +70,7 @@ import {
   planAtMentionDispatch,
 } from "./services/atMentionDispatch";
 import { resolveProjectMainSessionAnchor } from "./utils/projectSessionAnchor";
+import { resolveTrellisBootstrapPath } from "./utils/trellisBootstrapPath";
 import { resolveSidebarSelectionTarget } from "./utils/sidebarSelectionTarget";
 import { employeeInProjectScope, shouldHideEmployeeUi } from "./utils/projectRepositoryRoles";
 import { buildProjectRoleTagOptions, buildProjectRepositoryMentionOptions } from "./utils/projectRoleTagOptions";
@@ -149,6 +150,7 @@ import {
 } from "./services/projectPrdScope";
 import { ensureSessionBoundToActiveMission } from "./services/mission/sessionBinding";
 import { isCodeGraphIndexBenignUserAbortError } from "./types/codeKnowledgeGraph";
+import { dispatchTrellisBootstrapComplete } from "./constants/trellisUiEvents";
 
 // ── 侧栏「图谱操作 → 生成检索」：等后台索引事件后再弹窗汇总 ──
 
@@ -380,6 +382,7 @@ export default function App() {
     handleUpdateRepositorySddMode,
     handleReorderRepositoriesInProject,
     handleReconcileProjectWorkspace,
+    handleBootstrapTrellisAtPath,
     handleUpdateRepositoryMainOwnerAgent,
     pinnedProjectIds,
     togglePinProject,
@@ -2126,6 +2129,63 @@ export default function App() {
         onTogglePinProject: togglePinProject,
         onAddFloatingRepository: handleAddFloatingRepository,
         onAddRepositoryToProject: handleAddRepositoryToProject,
+        onBootstrapTrellisForProject: async (project) => {
+          const targetPath = resolveTrellisBootstrapPath({
+            scope: "project",
+            project,
+            repositories,
+            projects,
+          });
+          if (!targetPath) {
+            message.warning("无法解析 Trellis 初始化目录（请配置工作区根目录或关联仓库）");
+            return;
+          }
+          const hide = message.loading({ content: "正在初始化 Trellis…", duration: 0 });
+          try {
+            const status = await handleBootstrapTrellisAtPath(targetPath);
+            if (status === "skipped") {
+              message.info("该工作区已存在 Trellis，已跳过");
+            } else {
+              message.success("Trellis 初始化完成");
+            }
+            dispatchTrellisBootstrapComplete({ projectId: project.id });
+          } catch (e) {
+            message.error(e instanceof Error ? e.message : String(e));
+          } finally {
+            hide();
+          }
+        },
+        onBootstrapTrellisForRepository: async (repository) => {
+          const owningProject = projects.find((p) => p.repositoryIds.includes(repository.id));
+          const targetPath = resolveTrellisBootstrapPath({
+            scope: "repository",
+            project: owningProject,
+            repository,
+            repositories,
+            projects,
+          });
+          if (!targetPath) {
+            message.warning("仓库路径为空");
+            return;
+          }
+          const hide = message.loading({ content: "正在初始化 Trellis…", duration: 0 });
+          try {
+            const status = await handleBootstrapTrellisAtPath(targetPath);
+            if (status === "skipped") {
+              message.info("该仓库已存在 Trellis，已跳过");
+            } else {
+              message.success("仓库 Trellis 初始化完成");
+            }
+            dispatchTrellisBootstrapComplete({
+              projectId: owningProject?.id,
+              repositoryId: repository.id,
+            });
+          } catch (e) {
+            message.error(e instanceof Error ? e.message : String(e));
+          } finally {
+            hide();
+          }
+        },
         onReconcileProject: async (projectId, mode: ReconcileProjectMode) => {
           try {
             const r = await handleReconcileProjectWorkspace(projectId, mode);
@@ -2162,9 +2222,31 @@ export default function App() {
         onCreateProjectTask: handleCreateProjectTask,
         onCreateRepositoryTask: handleCreateRepositoryTask,
         onOpenPromptsProject: handleOpenPromptsForProject,
-        onOpenProjectTrellis: (project) => {
-          setAuthorTrellisProjectId(project.id);
-          enterAuthorPane("trellis-spec");
+        onOpenProjectTrellis: async (project) => {
+          const targetPath = resolveTrellisBootstrapPath({
+            scope: "project",
+            project,
+            repositories,
+            projects,
+          });
+          if (!targetPath) {
+            message.warning("无法打开 Trellis：请先关联仓库或配置工作区根目录");
+            return;
+          }
+          const hide = message.loading({ content: "正在检查 Trellis…", duration: 0 });
+          try {
+            const status = await handleBootstrapTrellisAtPath(targetPath);
+            if (status === "initialized") {
+              message.success("Trellis 初始化完成");
+            }
+            dispatchTrellisBootstrapComplete({ projectId: project.id });
+            setAuthorTrellisProjectId(project.id);
+            enterAuthorPane("trellis-spec");
+          } catch (e) {
+            message.error(e instanceof Error ? e.message : String(e));
+          } finally {
+            hide();
+          }
         },
         onOpenPromptsRepository: handleOpenPromptsForRepository,
         onOpenRepositoryMainOwner: (repository) => {

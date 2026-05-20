@@ -71,9 +71,6 @@ describe("WorkflowConfigModal", () => {
     expect(html).toContain("协议库");
     expect(html).toContain("新建协议");
     expect(html).toContain("搜索协议");
-    expect(html).toContain("委派画布");
-    expect(html).toContain("发布协议");
-    expect(html).toContain("所属工作区");
-    expect(html).toContain('data-stub="workflow-canvas"');
+    expect(html).not.toContain('data-stub="workflow-canvas"');
   });
 });

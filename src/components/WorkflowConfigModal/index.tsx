@@ -119,6 +119,7 @@ export function WorkflowConfigModal({
   const [graphStatusByWorkflowId, setGraphStatusByWorkflowId] = useState<Record<string, string>>({});
   const [teamKeyword, setTeamKeyword] = useState("");
   const [statusFilter, setStatusFilter] = useState<GraphStatus | "all">("all");
+  const [canvasEditorOpen, setCanvasEditorOpen] = useState(false);
 
   const selectableEmployeeIdSet = useMemo(() => new Set(selectableEmployeeIds), [selectableEmployeeIds]);
   const enabledAgentRoleCount = useMemo(
@@ -171,7 +172,10 @@ export function WorkflowConfigModal({
   }, [validationErrors]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setCanvasEditorOpen(false);
+      return;
+    }
     const workflowId = initialWorkflowId?.trim() ?? "";
     if (!workflowId) return;
     if (editingTemplateId === workflowId) return;
@@ -228,16 +232,26 @@ export function WorkflowConfigModal({
     if (!editingTemplateId) return;
     const stillExists = templates.some((item) => item.id === editingTemplateId);
     if (!stillExists) {
-      resetEditor();
+      closeCanvasEditor();
     }
   }, [templates, editingTemplateId]);
 
-  function resetEditor() {
+  function resetEditorState() {
     setEditingTemplateId(null);
     setEditingProjectIds([]);
     setCanvasSnapshot(createDefaultCanvasSnapshot());
     setValidationErrors([]);
     form.setFieldsValue({ name: "", isDefault: false });
+  }
+
+  function closeCanvasEditor() {
+    setCanvasEditorOpen(false);
+    resetEditorState();
+  }
+
+  function openNewProtocolEditor() {
+    resetEditorState();
+    setCanvasEditorOpen(true);
   }
 
   async function handleSave() {
@@ -349,6 +363,7 @@ export function WorkflowConfigModal({
       isDefault: row.isDefault,
     });
     setEditingProjectIds(workflowProjectIds[row.id] ?? []);
+    setCanvasEditorOpen(true);
   }
 
   async function handleDeleteTemplate(workflowId: string) {
@@ -359,7 +374,7 @@ export function WorkflowConfigModal({
       return next;
     });
     if (editingTemplateId === workflowId) {
-      resetEditor();
+      closeCanvasEditor();
     }
   }
 
@@ -406,7 +421,7 @@ export function WorkflowConfigModal({
         ))}
       </div>
 
-      <div className="app-workflow-config-layout">
+      <div className="app-workflow-config-layout app-workflow-config-layout--library-only">
         <aside className="app-workflow-config-sidebar" aria-label="协议库">
           <div className="app-workflow-config-sidebar-header">
             <div className="app-workflow-config-sidebar-heading">
@@ -417,8 +432,8 @@ export function WorkflowConfigModal({
             </div>
             <Button
               size="small"
-              type={!editingTemplateId ? "primary" : "default"}
-              onClick={resetEditor}
+              type={canvasEditorOpen && !editingTemplateId ? "primary" : "default"}
+              onClick={openNewProtocolEditor}
               className="app-workflow-config-create-btn"
             >
               新建协议
@@ -448,7 +463,7 @@ export function WorkflowConfigModal({
             ) : (
               filteredTemplates.map((row) => {
                 const status = graphStatusByWorkflowId[row.id] ?? "none";
-                const active = editingTemplateId === row.id;
+                const active = canvasEditorOpen && editingTemplateId === row.id;
                 return (
                   <div
                     key={row.id}
@@ -504,8 +519,47 @@ export function WorkflowConfigModal({
             )}
           </div>
         </aside>
+      </div>
 
-        <main className="app-workflow-config-workspace">
+      <Modal
+        title={editingTemplate ? `编辑委派协议 · ${editingTemplate.name}` : "新建委派协议"}
+        open={canvasEditorOpen}
+        onCancel={closeCanvasEditor}
+        footer={null}
+        width="100vw"
+        rootClassName="app-workflow-config-canvas-modal-root"
+        destroyOnHidden
+        centered={false}
+        zIndex={1100}
+        getContainer={() => document.body}
+        styles={{
+          wrapper: {
+            width: "100vw",
+            maxWidth: "100vw",
+            margin: 0,
+            top: 0,
+            paddingBottom: 0,
+          },
+          content: {
+            height: "100vh",
+            minHeight: "100vh",
+            borderRadius: 0,
+            display: "flex",
+            flexDirection: "column",
+          },
+          header: { flex: "0 0 auto", marginBottom: 0 },
+          body: {
+            flex: 1,
+            minHeight: 0,
+            padding: 0,
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+          },
+          mask: { width: "100vw", height: "100vh" },
+        }}
+      >
+        <main className="app-workflow-config-workspace app-workflow-config-workspace--fullscreen">
           <header className="app-workflow-config-toolbar">
             <div className="app-workflow-config-toolbar__head">
               <div className="app-workflow-config-toolbar__identity">
@@ -572,11 +626,9 @@ export function WorkflowConfigModal({
                 <Button size="small" loading={loading} onClick={() => void handlePublish()}>
                   发布协议
                 </Button>
-                {editingTemplate ? (
-                  <Button size="small" onClick={resetEditor}>
-                    取消编辑
-                  </Button>
-                ) : null}
+                <Button size="small" onClick={closeCanvasEditor}>
+                  关闭
+                </Button>
               </div>
             </Form>
           </header>
@@ -620,7 +672,7 @@ export function WorkflowConfigModal({
             />
           </div>
         </main>
-      </div>
+      </Modal>
     </div>
   );
 

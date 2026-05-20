@@ -32,6 +32,7 @@ import {
   RepoDragHandleIcon,
   ScheduledTasksIcon,
   RequirementIcon,
+  TrellisIcon,
 } from "./SidebarIcons";
 
 export function RepositoryConversationAction({ onOpen }: { onOpen: () => void }) {
@@ -71,6 +72,30 @@ export function RepositoryCodeGraphAction({
         }}
       >
         <CodeGraphIcon />
+      </button>
+    </Tooltip>
+  );
+}
+
+export function RepositoryTrellisAction({
+  onOpen,
+  variant = "repo",
+}: {
+  onOpen: () => void;
+  variant?: "repo" | "project";
+}) {
+  return (
+    <Tooltip title={variant === "project" ? "工作区 Trellis" : "仓库 Trellis"} mouseEnterDelay={0.3}>
+      <button
+        type="button"
+        className={`app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--trellis${variant === "project" ? " app-repository-action--project-quick" : ""}`}
+        aria-label={variant === "project" ? "工作区 Trellis" : "仓库 Trellis"}
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpen();
+        }}
+      >
+        <TrellisIcon />
       </button>
     </Tooltip>
   );
@@ -203,11 +228,14 @@ export function RepositoryRow({
   onOpenPromptsRepository,
   onOpenRepositoryMainOwner,
   onConfigureSddMode,
+  onBootstrapTrellis,
   onCodeGraphGenerateRepository,
   onCodeGraphViewRepositoryInProject,
   repositoryReorder,
   hideChatAction = false,
   codeGraphIndexed = false,
+  trellisReady = false,
+  onOpenRepositoryTrellis,
   scheduledTasksTotalCount = 0,
   scheduledTasksEnabledCount = 0,
   requirementUnsplitCount = 0,
@@ -227,11 +255,14 @@ export function RepositoryRow({
   onOpenPromptsRepository?: (project: Workspace, repository: Repository) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
   onConfigureSddMode?: (repository: Repository) => void;
+  onBootstrapTrellis?: (repository: Repository) => void | Promise<void>;
   onCodeGraphGenerateRepository?: (repository: Repository) => void | Promise<void>;
   onCodeGraphViewRepositoryInProject?: (project: Workspace, repository: Repository) => void;
   repositoryReorder?: RepositoryReorderUi;
   hideChatAction?: boolean;
   codeGraphIndexed?: boolean;
+  trellisReady?: boolean;
+  onOpenRepositoryTrellis?: (repository: Repository, project: Workspace) => void;
   scheduledTasksTotalCount?: number;
   scheduledTasksEnabledCount?: number;
   requirementUnsplitCount?: number;
@@ -311,6 +342,9 @@ export function RepositoryRow({
           {hideChatAction ? null : (
             <RepositoryConversationAction onOpen={() => onOpenTaskMode(repository, "chat")} />
           )}
+          {trellisReady && onOpenRepositoryTrellis ? (
+            <RepositoryTrellisAction onOpen={() => onOpenRepositoryTrellis(repository, project)} />
+          ) : null}
           {codeGraphIndexed && onCodeGraphViewRepositoryInProject ? (
             <RepositoryCodeGraphAction
               onOpen={() => onCodeGraphViewRepositoryInProject(project, repository)}
@@ -347,6 +381,7 @@ export function RepositoryRow({
                 if (key === "detach") onDetachFromProject(project.id, repository.id);
                 if (key === "prompts") onOpenPromptsRepository?.(project, repository);
                 if (key === "sdd-mode") onConfigureSddMode?.(repository);
+                if (key === "trellis-init") void Promise.resolve(onBootstrapTrellis?.(repository));
                 if (key === "scheduled-tasks") onOpenScheduledTasks?.(repository);
                 if (key === "requirements") onOpenRequirements?.(repository);
                 if (key === "executable-tasks") onOpenExecutableTasks?.(repository);
@@ -382,12 +417,15 @@ export function FloatingRepositoryRow({
   onOpenRepositoryInEditor,
   onOpenRepositoryMainOwner,
   onConfigureSddMode,
+  onBootstrapTrellis,
   onCodeGraphGenerateRepository,
   onCodeGraphViewFloatingRepository,
   onPromoteToNewProject,
   onJoinExistingProject,
   onRemove,
   codeGraphIndexed = false,
+  trellisReady = false,
+  onOpenFloatingRepositoryTrellis,
   scheduledTasksTotalCount = 0,
   scheduledTasksEnabledCount = 0,
   requirementUnsplitCount = 0,
@@ -405,12 +443,15 @@ export function FloatingRepositoryRow({
   onOpenRepositoryInEditor: (repository: Repository) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
   onConfigureSddMode?: (repository: Repository) => void;
+  onBootstrapTrellis?: (repository: Repository) => void | Promise<void>;
   onCodeGraphGenerateRepository?: (repository: Repository) => void | Promise<void>;
   onCodeGraphViewFloatingRepository?: (repository: Repository) => void;
   onPromoteToNewProject?: (repository: StandaloneRepo) => void;
   onJoinExistingProject?: (repository: StandaloneRepo, projectId: string) => void;
   onRemove: (repository: StandaloneRepo) => void;
   codeGraphIndexed?: boolean;
+  trellisReady?: boolean;
+  onOpenFloatingRepositoryTrellis?: (repository: Repository) => void;
   scheduledTasksTotalCount?: number;
   scheduledTasksEnabledCount?: number;
   requirementUnsplitCount?: number;
@@ -462,6 +503,9 @@ export function FloatingRepositoryRow({
           onClick={(e) => e.stopPropagation()}
         >
           <RepositoryConversationAction onOpen={() => onOpenTaskMode(repository, "chat")} />
+          {trellisReady && onOpenFloatingRepositoryTrellis ? (
+            <RepositoryTrellisAction onOpen={() => onOpenFloatingRepositoryTrellis(repository)} />
+          ) : null}
           {codeGraphIndexed && onCodeGraphViewFloatingRepository ? (
             <RepositoryCodeGraphAction onOpen={() => onCodeGraphViewFloatingRepository(repository)} />
           ) : null}
@@ -494,6 +538,7 @@ export function FloatingRepositoryRow({
                 if (key === "editor") onOpenRepositoryInEditor(repository);
                 if (key === "main-owner") onOpenRepositoryMainOwner?.(repository);
                 if (key === "sdd-mode") onConfigureSddMode?.(repository);
+                if (key === "trellis-init") void Promise.resolve(onBootstrapTrellis?.(repository));
                 if (key === "scheduled-tasks") onOpenScheduledTasks?.(repository);
                 if (key === "requirements") onOpenRequirements?.(repository);
                 if (key === "executable-tasks") onOpenExecutableTasks?.(repository);
@@ -540,12 +585,15 @@ export function ProjectRepositoryRows({
   onReorderRepositoriesInProject,
   onMoveRepositoryToProject,
   onConfigureSddMode,
+  onBootstrapTrellis,
   onCodeGraphGenerateRepository,
   onCodeGraphViewRepositoryInProject,
   repoSidebarDragRef,
   onRepoSidebarDragEnd,
   hideChatAction = false,
   codeGraphIndexStatusByRepoId = {},
+  repositoryTrellisReadyById = {},
+  onOpenRepositoryTrellis,
   scheduledTasksByRepoId = {},
   requirementUnsplitByRepoId = {},
   executableTasksByRepoId = {},
@@ -567,12 +615,15 @@ export function ProjectRepositoryRows({
   onReorderRepositoriesInProject?: (projectId: string, repositoryIds: number[]) => void | Promise<void>;
   onMoveRepositoryToProject?: (targetProjectId: string, repositoryId: number) => void | Promise<void>;
   onConfigureSddMode?: (repository: Repository) => void;
+  onBootstrapTrellis?: (repository: Repository) => void | Promise<void>;
   onCodeGraphGenerateRepository?: (repository: Repository) => void | Promise<void>;
   onCodeGraphViewRepositoryInProject?: (project: Workspace, repository: Repository) => void;
   repoSidebarDragRef: React.MutableRefObject<{ sourceProjectId: string; repositoryId: number } | null>;
   onRepoSidebarDragEnd: () => void;
   hideChatAction?: boolean;
   codeGraphIndexStatusByRepoId?: Record<number, SidebarCodeGraphIndexStatus>;
+  repositoryTrellisReadyById?: Record<number, boolean>;
+  onOpenRepositoryTrellis?: (repository: Repository, project: Workspace) => void;
   scheduledTasksByRepoId?: Record<number, { total: number; enabled: number }>;
   requirementUnsplitByRepoId?: Record<number, number>;
   executableTasksByRepoId?: Record<number, number>;
@@ -624,11 +675,14 @@ export function ProjectRepositoryRows({
             onOpenPromptsRepository={onOpenPromptsRepository}
             onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
             onConfigureSddMode={onConfigureSddMode}
+            onBootstrapTrellis={onBootstrapTrellis}
             onCodeGraphGenerateRepository={onCodeGraphGenerateRepository}
             onCodeGraphViewRepositoryInProject={onCodeGraphViewRepositoryInProject}
             repositoryReorder={reorderUi}
             hideChatAction={hideChatAction}
             codeGraphIndexed={codeGraphIndexStatusByRepoId[repository.id] === "done"}
+            trellisReady={repositoryTrellisReadyById[repository.id] === true}
+            onOpenRepositoryTrellis={onOpenRepositoryTrellis}
             scheduledTasksTotalCount={scheduledTasksByRepoId[repository.id]?.total ?? 0}
             scheduledTasksEnabledCount={scheduledTasksByRepoId[repository.id]?.enabled ?? 0}
             requirementUnsplitCount={requirementUnsplitByRepoId[repository.id] ?? 0}

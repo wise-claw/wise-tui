@@ -144,6 +144,14 @@ export async function writeTrellisStatus(
   return invoke("trellis_write_status", { repoPath, taskId, status });
 }
 
+/** 归档 Trellis 任务（移入 `.trellis/tasks/archive/YYYY-MM/`，与 `task.py archive` 一致）。 */
+export async function archiveTrellisTask(
+  repoPath: string,
+  taskDir: string,
+): Promise<string> {
+  return invoke<string>("trellis_archive_task", { repoPath, taskDir });
+}
+
 export async function listTrellisResearch(
   repoPath: string,
   taskId: string,

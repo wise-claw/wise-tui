@@ -287,6 +287,7 @@ pub fn run() {
             repository_files::create_repository_directory,
             repository_files::delete_repository_entry,
             trellis_bootstrap::bootstrap_trellis_if_missing,
+            trellis_bootstrap::trellis_task_py_exists_at_path,
             trellis_bridge::trellis_list_tasks,
             trellis_bridge::trellis_list_requirement_workspace,
             trellis_bridge::trellis_read_task,

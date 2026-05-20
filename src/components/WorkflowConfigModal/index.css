@@ -234,6 +234,17 @@
   background: var(--ant-color-bg-container);
 }
 
+.app-workflow-config-layout--library-only {
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 280px;
+  max-height: min(52vh, 520px);
+}
+
+.app-workflow-config-layout--library-only .app-workflow-config-sidebar {
+  border-right: 0;
+  max-height: none;
+}
+
 .app-workflow-config-sidebar {
   display: flex;
   flex-direction: column;
@@ -344,6 +355,111 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+}
+
+.app-workflow-config-workspace--fullscreen {
+  flex: 1 1 0%;
+  height: 100%;
+  min-height: 0;
+}
+
+/* Ant Design 6：rootClassName 挂在 .ant-modal-root，全屏样式对齐 HooksFlowModal */
+.app-workflow-config-canvas-modal-root .ant-modal {
+  max-width: 100vw !important;
+  width: 100vw !important;
+  top: 0 !important;
+  min-height: 100vh;
+  padding-bottom: 0;
+  margin: 0;
+}
+
+.app-workflow-config-canvas-modal-root .ant-modal-container {
+  min-height: 100vh;
+}
+
+.app-workflow-config-canvas-modal-root .ant-modal-mask {
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+}
+
+.app-workflow-config-canvas-modal-root .ant-modal-wrap {
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  overflow: hidden;
+}
+
+.app-workflow-config-canvas-modal-root .ant-modal-content {
+  box-shadow: none;
+  height: 100vh;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  border-radius: 0;
+}
+
+.app-workflow-config-canvas-modal-root .ant-modal-header {
+  flex: 0 0 auto;
+  margin-bottom: 0;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-workflow-config-canvas-modal-root .ant-modal-body {
+  flex: 1 1 0%;
+  min-height: 0;
+  height: 100%;
+  padding: 0 !important;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 弹窗标题 + 工具栏 + 内边距；用 vh 计算避免 flex 百分比高度塌成 0 */
+.app-workflow-config-canvas-modal-root {
+  --workflow-canvas-chrome-offset: 158px;
+}
+
+.app-workflow-config-canvas-modal-root .app-workflow-config-workspace--fullscreen {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-workflow-config-canvas-modal-root .app-workflow-config-workspace--fullscreen .app-workflow-config-toolbar {
+  flex: 0 0 auto;
+}
+
+.app-workflow-config-canvas-modal-root .app-workflow-config-workspace--fullscreen .app-workflow-config-validation-alert {
+  flex: 0 0 auto;
+}
+
+.app-workflow-config-canvas-modal-root .app-workflow-config-workspace--fullscreen .app-workflow-config-canvas-shell {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: calc(100vh - var(--workflow-canvas-chrome-offset));
+  height: calc(100vh - var(--workflow-canvas-chrome-offset));
+  padding: 12px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.app-workflow-config-canvas-modal-root .app-workflow-config-canvas-shell .app-workflow-x6 {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 320px;
+  height: 100% !important;
+}
+
+.app-workflow-config-canvas-modal-root .app-workflow-x6__canvas {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  position: relative;
 }
 
 .app-workflow-config-toolbar {
@@ -826,6 +942,10 @@
 
   .app-workflow-config-canvas-shell .app-workflow-x6 {
     min-height: 420px;
+  }
+
+  .app-workflow-config-canvas-modal-root .app-workflow-config-canvas-shell {
+    --workflow-canvas-chrome-offset: 200px;
   }
 }
 

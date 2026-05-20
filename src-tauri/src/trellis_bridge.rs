@@ -2,6 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
+use chrono::Local;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use walkdir::WalkDir;
@@ -178,6 +179,90 @@ fn resolve_task_dir(tasks_root: &Path, task_id: &str) -> Result<PathBuf, String>
         return Err("WF_INVALID_INPUT: task dir escapes .trellis/tasks/".into());
     }
     Ok(canon)
+}
+
+fn canon_repo_root(repo_path: &str) -> Result<PathBuf, String> {
+    if repo_path.trim().is_empty() {
+        return Err("WF_INVALID_INPUT: empty repoPath".into());
+    }
+    let raw = PathBuf::from(repo_path);
+    if !raw.is_absolute() {
+        return Err("WF_INVALID_INPUT: repoPath must be absolute".into());
+    }
+    raw.canonicalize()
+        .map_err(|e| format!("WF_INVALID_INPUT: repo not found: {e}"))
+}
+
+fn resolve_task_dir_under_repo(repo_root: &Path, task_dir: &str) -> Result<(PathBuf, PathBuf), String> {
+    if task_dir.trim().is_empty() {
+        return Err("WF_INVALID_INPUT: empty taskDir".into());
+    }
+    let tasks_root = repo_root.join(".trellis").join("tasks");
+    if !tasks_root.is_dir() {
+        return Err("WF_INVALID_INPUT: .trellis/tasks/ missing".into());
+    }
+    let tasks_root = tasks_root
+        .canonicalize()
+        .map_err(|e| format!("WF_INVALID_INPUT: tasks root canon failed: {e}"))?;
+    let raw = PathBuf::from(task_dir);
+    if !raw.is_absolute() {
+        return Err("WF_INVALID_INPUT: taskDir must be absolute".into());
+    }
+    let canon = raw
+        .canonicalize()
+        .map_err(|e| format!("WF_INVALID_INPUT: task dir canon failed: {e}"))?;
+    if !canon.starts_with(&tasks_root) {
+        return Err("WF_INVALID_INPUT: task dir escapes .trellis/tasks/".into());
+    }
+    if !canon.join("task.json").is_file() {
+        return Err("WF_INVALID_INPUT: task.json missing".into());
+    }
+    Ok((tasks_root, canon))
+}
+
+fn mark_task_json_completed(task_json_path: &Path) -> Result<(), String> {
+    let raw = fs::read_to_string(task_json_path).map_err(|e| e.to_string())?;
+    let mut value: Value = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+    let obj = value
+        .as_object_mut()
+        .ok_or_else(|| "WF_INVALID_INPUT: task.json not an object".to_string())?;
+    let today = Local::now().format("%Y-%m-%d").to_string();
+    obj.insert("status".into(), Value::String("completed".into()));
+    obj.insert("completedAt".into(), Value::String(today));
+    let serialized = serde_json::to_string_pretty(&value).map_err(|e| e.to_string())?;
+    atomic_write(task_json_path, serialized.as_bytes())
+}
+
+fn is_task_dir_under_archive_bucket(tasks_root: &Path, task_dir: &Path) -> bool {
+    task_dir
+        .strip_prefix(tasks_root)
+        .ok()
+        .and_then(|relative| relative.components().next())
+        .map(|component| component.as_os_str() == "archive")
+        .unwrap_or(false)
+}
+
+fn archive_task_dir_on_disk(tasks_root: &Path, task_dir: &Path) -> Result<String, String> {
+    if is_task_dir_under_archive_bucket(tasks_root, task_dir) {
+        return Err("WF_INVALID_INPUT: task already archived".into());
+    }
+    let year_month = Local::now().format("%Y-%m").to_string();
+    let month_dir = tasks_root.join("archive").join(&year_month);
+    fs::create_dir_all(&month_dir).map_err(|e| e.to_string())?;
+    let dest = month_dir.join(
+        task_dir
+            .file_name()
+            .ok_or_else(|| "WF_INVALID_INPUT: task dir has no name".to_string())?,
+    );
+    if dest.exists() {
+        return Err(format!(
+            "WF_INVALID_INPUT: archive destination already exists: {}",
+            dest.to_string_lossy()
+        ));
+    }
+    mark_task_json_completed(&task_dir.join("task.json"))?;
+    fs::rename(task_dir, &dest).map_err(|e| e.to_string())?;
+    Ok(dest.to_string_lossy().into_owned())
 }
 
 fn atomic_write(path: &Path, contents: &[u8]) -> Result<(), String> {
@@ -631,6 +716,15 @@ pub fn trellis_write_status(
     obj.insert("status".into(), Value::String(status));
     let serialized = serde_json::to_string_pretty(&value).map_err(|e| e.to_string())?;
     atomic_write(&task_json_path, serialized.as_bytes())
+}
+
+/// Archive (delete from active list) a Trellis task directory under `.trellis/tasks/`.
+/// Matches `task.py archive`: marks completed and moves to `archive/YYYY-MM/<task-name>/`.
+#[tauri::command]
+pub fn trellis_archive_task(repo_path: String, task_dir: String) -> Result<String, String> {
+    let repo_root = canon_repo_root(&repo_path)?;
+    let (tasks_root, task_path) = resolve_task_dir_under_repo(&repo_root, &task_dir)?;
+    archive_task_dir_on_disk(&tasks_root, &task_path)
 }
 
 #[tauri::command]
@@ -1239,5 +1333,48 @@ mod tests {
         assert!(archived_prd.archived);
 
         fs::remove_dir_all(base).expect("test dir should be removed");
+    }
+
+    #[test]
+    fn trellis_archive_task_moves_active_task_to_month_bucket() {
+        let root = unique_test_dir("archive-cmd");
+        write_task(
+            &root,
+            "05-99-demo",
+            r#"{"title":"Demo","status":"planning","parent":"05-14-parent"}"#,
+            None,
+        );
+        let task_dir = root
+            .join(".trellis/tasks/05-99-demo")
+            .canonicalize()
+            .expect("task dir should canon");
+        let archived_to = trellis_archive_task(
+            root.to_string_lossy().into_owned(),
+            task_dir.to_string_lossy().into_owned(),
+        )
+        .expect("archive should succeed");
+        assert!(archived_to.contains("archive/"));
+        assert!(!task_dir.exists());
+        let archived_json =
+            fs::read_to_string(PathBuf::from(&archived_to).join("task.json")).expect("task json");
+        let value: Value = serde_json::from_str(&archived_json).expect("json");
+        assert_eq!(
+            value.get("status").and_then(Value::as_str),
+            Some("completed")
+        );
+        let snapshot = trellis_list_requirement_workspace(TrellisRequirementWorkspaceInput {
+            project_root_path: Some(root.to_string_lossy().into_owned()),
+            project_repository_paths: vec![],
+            floating_repository_paths: vec![],
+            include_archived: false,
+        })
+        .expect("workspace should list");
+        assert!(
+            !snapshot
+                .tasks
+                .iter()
+                .any(|task| task.task_id == "05-99-demo")
+        );
+        fs::remove_dir_all(root).expect("test dir should be removed");
     }
 }

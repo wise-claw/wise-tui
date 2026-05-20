@@ -44,6 +44,10 @@ export interface LeftSidebarProps {
   pinnedProjectIds: string[];
   onTogglePinProject: (projectId: string) => void;
   onReconcileProject?: (projectId: string, mode: ReconcileProjectMode) => void | Promise<void>;
+  /** 在工作区根目录执行 `trellis init -y`（已存在则跳过）。 */
+  onBootstrapTrellisForProject?: (project: ProjectItem) => void | Promise<void>;
+  /** 在仓库目录执行 `trellis init -y`（已存在则跳过）。 */
+  onBootstrapTrellisForRepository?: (repository: Repository) => void | Promise<void>;
   /** Workspace 菜单「图谱操作 → 生成 Workspace 索引」：多仓时并行启动各仓代码图谱检索 + GitNexus 仓库组同步；单仓仅本机检索 */
   onCodeGraphGenerateProject?: (project: ProjectItem) => void | Promise<void>;
   /** Workspace 菜单「图谱操作 → 查看检索」：打开代码图谱覆盖层（多仓时以当前 Workspace 为搜索范围） */

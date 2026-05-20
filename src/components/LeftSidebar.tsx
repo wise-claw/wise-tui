@@ -31,6 +31,7 @@ import { useSidebarCodeGraphIndexMap } from "./LeftSidebar/useSidebarCodeGraphIn
 import { useSidebarScheduledTasksMap } from "./LeftSidebar/useSidebarScheduledTasksMap";
 import { useSidebarRequirementUnsplitMap } from "./LeftSidebar/useSidebarRequirementUnsplitMap";
 import { useSidebarExecutableTasksMap } from "./LeftSidebar/useSidebarExecutableTasksMap";
+import { useSidebarTrellisReadyMap } from "./LeftSidebar/useSidebarTrellisReadyMap";
 import { useSystemResourceSessions } from "./LeftSidebar/useSystemResourceSessions";
 import { WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED } from "../constants/workflowUiEvents";
 import type { SplitTodoCountUpdatedDetail } from "../constants/workflowUiEvents";
@@ -59,6 +60,8 @@ export function LeftSidebar({
   pinnedProjectIds,
   onTogglePinProject,
   onReconcileProject,
+  onBootstrapTrellisForProject,
+  onBootstrapTrellisForRepository,
   onCodeGraphGenerateProject,
   onCodeGraphViewProject,
   onCodeGraphGenerateRepository,
@@ -163,6 +166,10 @@ export function LeftSidebar({
     projectExecutableById: executableTasksByProjectId,
     repositoryExecutableById: executableTasksByRepoId,
   } = useSidebarExecutableTasksMap(projects, repositories, activeProjectId);
+  const { projectTrellisReadyById, repositoryTrellisReadyById } = useSidebarTrellisReadyMap(
+    projects,
+    repositories,
+  );
   const [scheduledTasksModalRepository, setScheduledTasksModalRepository] = useState<{
     path: string;
     name: string;
@@ -203,6 +210,13 @@ export function LeftSidebar({
       }),
     );
   }, []);
+
+  const openRepositoryTrellis = useCallback(
+    (_repository: Repository, project: ProjectItem) => {
+      onOpenProjectTrellis?.(project);
+    },
+    [onOpenProjectTrellis],
+  );
 
   const openExecutableTasksForProject = useCallback(
     async (project: ProjectItem) => {
@@ -359,12 +373,16 @@ export function LeftSidebar({
             onAddRepositoryToProject ? openAddRepositoryModal : undefined
           }
           onReconcileProject={onReconcileProject}
+          onBootstrapTrellisForProject={onBootstrapTrellisForProject}
+          onBootstrapTrellisForRepository={onBootstrapTrellisForRepository}
           onCodeGraphGenerateProject={onCodeGraphGenerateProject}
           onCodeGraphViewProject={onCodeGraphViewProject}
           onCodeGraphGenerateRepository={onCodeGraphGenerateRepository}
           onCodeGraphViewRepositoryInProject={onCodeGraphViewRepositoryInProject}
           onCodeGraphViewFloatingRepository={onCodeGraphViewFloatingRepository}
           codeGraphIndexStatusByRepoId={codeGraphIndexStatusByRepoId}
+          projectTrellisReadyById={projectTrellisReadyById}
+          repositoryTrellisReadyById={repositoryTrellisReadyById}
           onToggleProjectExpand={projectRepositoryState.toggleProjectExpand}
           onTogglePinProject={onTogglePinProject}
           onRenameProject={(project) => {
@@ -383,6 +401,7 @@ export function LeftSidebar({
           }}
           onOpenPromptsProject={onOpenPromptsProject}
           onOpenProjectTrellis={onOpenProjectTrellis}
+          onOpenRepositoryTrellis={onOpenProjectTrellis ? openRepositoryTrellis : undefined}
           onCreateProjectTask={onCreateProjectTask}
           onCreateRepositoryTask={onCreateRepositoryTask}
           onOpenInFinder={onOpenInFinder}

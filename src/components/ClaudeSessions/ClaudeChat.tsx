@@ -69,6 +69,7 @@ import {
 } from "../../constants/omcBatchTemplates";
 import { loadPrdTaskSplitResult, savePrdTaskSplitResult } from "../../services/prdTaskSplitStore";
 import {
+  archiveTrellisTask,
   listProjectRequirementWorkspace,
   type TrellisRequirementTaskRow,
 } from "../../services/trellisTaskBridge";
@@ -380,6 +381,10 @@ function getTrellisTaskRelativePath(task: TrellisRequirementTaskRow): string {
   const markerIndex = dir.indexOf(marker);
   if (markerIndex >= 0) return dir.slice(markerIndex + 1);
   return dir || `.trellis/tasks/${task.taskId}`;
+}
+
+function trellisTaskRowKey(task: TrellisRequirementTaskRow): string {
+  return `${normalizeTrellisPath(task.rootPath)}:${normalizeTrellisPath(task.dir)}`;
 }
 
 function buildTrellisTaskExecutionPrompt(task: TrellisRequirementTaskRow): string {
@@ -1353,6 +1358,9 @@ export function ClaudeChat({
 
   const [taskListDrawerOpen, setTaskListDrawerOpen] = useState(false);
   const [taskListSelectedIds, setTaskListSelectedIds] = useState<string[]>([]);
+  const [trellisTaskSelectedKeys, setTrellisTaskSelectedKeys] = useState<string[]>([]);
+  const [trellisTaskEmployeeByKey, setTrellisTaskEmployeeByKey] = useState<Record<string, string>>({});
+  const [trellisBatchEmployeeName, setTrellisBatchEmployeeName] = useState("");
   const [taskListStatusFilter, setTaskListStatusFilter] = useState<"all" | "todo" | "done">("todo");
   const [omcBatchPopoverOpen, setOmcBatchPopoverOpen] = useState(false);
   const [omcBatchTemplateId, setOmcBatchTemplateId] = useState<OmcBatchTemplateId>("autopilot");
@@ -2338,9 +2346,36 @@ export function ClaudeChat({
     if (taskListSelectedIds.length !== taskListSelectableSliceIds.length) return false;
     return taskListSelectableSliceIds.every((id) => taskListSelectedSet.has(id));
   }, [taskListSelectableSliceIds, taskListSelectedIds, taskListSelectedSet]);
+  const trellisTaskSelectableKeys = useMemo(
+    () => visibleTrellisTasks.slice(0, taskListMultiSelectCap).map((task) => trellisTaskRowKey(task)),
+    [visibleTrellisTasks, taskListMultiSelectCap],
+  );
+  const trellisTaskSelectedSet = useMemo(() => new Set(trellisTaskSelectedKeys), [trellisTaskSelectedKeys]);
+  const trellisTaskAllSelected = useMemo(() => {
+    if (trellisTaskSelectableKeys.length === 0) return false;
+    if (trellisTaskSelectedKeys.length !== trellisTaskSelectableKeys.length) return false;
+    return trellisTaskSelectableKeys.every((key) => trellisTaskSelectedSet.has(key));
+  }, [trellisTaskSelectableKeys, trellisTaskSelectedKeys, trellisTaskSelectedSet]);
+  const selectedTrellisTasks = useMemo(
+    () => visibleTrellisTasks.filter((task) => trellisTaskSelectedSet.has(trellisTaskRowKey(task))),
+    [trellisTaskSelectedSet, visibleTrellisTasks],
+  );
+  const trellisEmployeeDispatchAvailable = taskListEmployeeOptions.length > 0;
 
   useEffect(() => {
     setTaskListSelectedIds((prev) => {
+      if (prev.length <= taskListMultiSelectCap) return prev;
+      return prev.slice(0, taskListMultiSelectCap);
+    });
+  }, [taskListMultiSelectCap]);
+
+  useEffect(() => {
+    const valid = new Set(visibleTrellisTasks.map((task) => trellisTaskRowKey(task)));
+    setTrellisTaskSelectedKeys((prev) => prev.filter((key) => valid.has(key)));
+  }, [visibleTrellisTasks]);
+
+  useEffect(() => {
+    setTrellisTaskSelectedKeys((prev) => {
       if (prev.length <= taskListMultiSelectCap) return prev;
       return prev.slice(0, taskListMultiSelectCap);
     });
@@ -2629,6 +2664,22 @@ export function ClaudeChat({
     void message.success(`Trellis 任务 ${task.taskId} 已发送到主会话。`);
   }, [onExecute, session.id]);
 
+  const handleRunTrellisTaskByEmployee = useCallback(
+    async (task: TrellisRequirementTaskRow, employeeNameOverride?: string) => {
+      const employeeName = (employeeNameOverride ?? trellisTaskEmployeeByKey[trellisTaskRowKey(task)] ?? "").trim();
+      if (!employeeName) {
+        void message.info("请先选择员工。");
+        return;
+      }
+      onExecute(session.id, buildTrellisTaskExecutionPrompt(task), {
+        targetType: "employee",
+        targetEmployeeName: employeeName,
+      });
+      void message.success(`Trellis 任务 ${task.taskId} 已派发给员工 ${employeeName}。`);
+    },
+    [onExecute, session.id, trellisTaskEmployeeByKey],
+  );
+
   const handleRunTaskByEmployee = useCallback(async (task: TaskItem) => {
     const employeeName = task.splitListEmployeeName?.trim();
     if (!employeeName) {
@@ -2699,6 +2750,115 @@ export function ClaudeChat({
     },
     [persistSplitAfterRemovingTasks],
   );
+
+  const clearTrellisTaskFocusIfNeeded = useCallback((removedTasks: TrellisRequirementTaskRow[]) => {
+    if (removedTasks.length === 0) return;
+    setTrellisTaskFocus((prev) => {
+      if (!prev) return prev;
+      const removedIds = new Set(removedTasks.map((task) => task.taskId.trim()));
+      const removedParents = new Set(
+        removedTasks.map((task) => task.parent?.trim() ?? "").filter((name) => name.length > 0),
+      );
+      const parentFocus = prev.parentTaskName?.trim() ?? "";
+      const childNames = prev.childTaskNames.map((name) => name.trim());
+      const touchesFocus =
+        removedIds.has(parentFocus) ||
+        childNames.some((name) => removedIds.has(name)) ||
+        (parentFocus.length > 0 && removedParents.has(parentFocus)) ||
+        removedTasks.some((task) => {
+          const taskId = task.taskId.trim();
+          const parentName = task.parent?.trim() ?? "";
+          return parentFocus === taskId || parentFocus === parentName;
+        });
+      return touchesFocus ? null : prev;
+    });
+  }, []);
+
+  const archiveTrellisTasks = useCallback(
+    async (tasks: TrellisRequirementTaskRow[]): Promise<{ ok: number; fail: number }> => {
+      let ok = 0;
+      let fail = 0;
+      const removedKeys: string[] = [];
+      for (const task of tasks) {
+        const rootPath = task.rootPath?.trim();
+        const taskDir = task.dir?.trim();
+        const rowKey = trellisTaskRowKey(task);
+        if (!rootPath || !taskDir) {
+          fail += 1;
+          continue;
+        }
+        try {
+          await archiveTrellisTask(rootPath, taskDir);
+          ok += 1;
+          removedKeys.push(rowKey);
+        } catch {
+          fail += 1;
+        }
+      }
+      if (removedKeys.length > 0) {
+        setTrellisTaskSelectedKeys((prev) => prev.filter((key) => !removedKeys.includes(key)));
+        setTrellisTaskEmployeeByKey((prev) => {
+          const next = { ...prev };
+          for (const key of removedKeys) delete next[key];
+          return next;
+        });
+        clearTrellisTaskFocusIfNeeded(tasks.filter((task) => removedKeys.includes(trellisTaskRowKey(task))));
+        await syncTrellisTaskList();
+        window.dispatchEvent(new CustomEvent(WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED, { detail: {} }));
+      }
+      return { ok, fail };
+    },
+    [clearTrellisTaskFocusIfNeeded, syncTrellisTaskList],
+  );
+
+  const handleArchiveTrellisTask = useCallback(
+    async (task: TrellisRequirementTaskRow) => {
+      const { ok, fail } = await archiveTrellisTasks([task]);
+      if (ok > 0) void message.success(`已删除任务 ${task.taskId}`);
+      else if (fail > 0) void message.error("删除 Trellis 任务失败");
+    },
+    [archiveTrellisTasks],
+  );
+
+  const handleBatchArchiveTrellisTasks = useCallback(() => {
+    if (selectedTrellisTasks.length === 0) {
+      void message.info("请先勾选 Trellis 任务。");
+      return;
+    }
+    const n = selectedTrellisTasks.length;
+    Modal.confirm({
+      title: "批量删除 Trellis 任务",
+      content: `将归档 ${n} 条任务到 .trellis/tasks/archive/，并从当前列表移除。`,
+      okText: "删除",
+      okButtonProps: { danger: true },
+      cancelText: "取消",
+      onOk: async () => {
+        const { ok, fail } = await archiveTrellisTasks(selectedTrellisTasks);
+        if (ok > 0 && fail === 0) void message.success(`已删除 ${ok} 条 Trellis 任务`);
+        else if (ok > 0) void message.warning(`已删除 ${ok} 条，${fail} 条失败`);
+        else void message.error("批量删除失败");
+      },
+    });
+  }, [archiveTrellisTasks, selectedTrellisTasks]);
+
+  const handleBatchRunTrellisByEmployee = useCallback(() => {
+    if (selectedTrellisTasks.length === 0) {
+      void message.info("请先勾选 Trellis 任务。");
+      return;
+    }
+    const employeeName = trellisBatchEmployeeName.trim();
+    if (!employeeName) {
+      void message.info("请先选择批量执行员工。");
+      return;
+    }
+    for (const task of selectedTrellisTasks) {
+      onExecute(session.id, buildTrellisTaskExecutionPrompt(task), {
+        targetType: "employee",
+        targetEmployeeName: employeeName,
+      });
+    }
+    void message.success(`已将 ${selectedTrellisTasks.length} 条 Trellis 任务派发给员工 ${employeeName}。`);
+  }, [onExecute, selectedTrellisTasks, session.id, trellisBatchEmployeeName]);
 
   const handleDeleteAllSplitTasks = useCallback(() => {
     const ids = splitTodoTasks.map((task) => task.id.trim()).filter(Boolean);
@@ -3636,17 +3796,107 @@ export function ClaudeChat({
                     刷新
                   </button>
                 </div>
+                <div className="app-claude-task-list__batch-bar app-claude-task-list__batch-bar--trellis">
+                  <label className="app-claude-task-list__batch-check">
+                    <input
+                      type="checkbox"
+                      disabled={trellisTaskSelectableKeys.length === 0}
+                      checked={trellisTaskAllSelected}
+                      onChange={(e) => {
+                        if (e.currentTarget.checked) {
+                          const next = trellisTaskSelectableKeys.slice();
+                          setTrellisTaskSelectedKeys(next);
+                          if (visibleTrellisTasks.length > taskListMultiSelectCap) {
+                            void message.info(
+                              `当前共 ${visibleTrellisTasks.length} 条，已自动只选前 ${taskListMultiSelectCap} 条（单次批量多选上限）。`,
+                            );
+                          }
+                          return;
+                        }
+                        setTrellisTaskSelectedKeys([]);
+                      }}
+                    />
+                    <span>全选</span>
+                  </label>
+                  <span className="app-claude-task-list__batch-count">
+                    已选 {trellisTaskSelectedKeys.length} / {taskListMultiSelectCap}
+                  </span>
+                  <div className="app-claude-task-list__batch-actions">
+                    <select
+                      className="app-claude-task-list__batch-filter"
+                      value={trellisBatchEmployeeName}
+                      disabled={!trellisEmployeeDispatchAvailable}
+                      title={trellisEmployeeDispatchAvailable ? undefined : "当前工作区暂无可派发员工"}
+                      onChange={(e) => {
+                        const name = e.currentTarget.value;
+                        setTrellisBatchEmployeeName(name);
+                        setTrellisTaskEmployeeByKey((prev) => {
+                          const next = { ...prev };
+                          for (const key of trellisTaskSelectedKeys) {
+                            if (name.trim()) next[key] = name;
+                            else delete next[key];
+                          }
+                          return next;
+                        });
+                      }}
+                    >
+                      <option value="">批量员工</option>
+                      {taskListEmployeeOptions.map((employee) => (
+                        <option key={employee.id} value={employee.name}>
+                          {employee.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="app-claude-task-list__batch-action-btn"
+                      disabled={!trellisEmployeeDispatchAvailable || trellisTaskSelectedKeys.length === 0}
+                      onClick={handleBatchRunTrellisByEmployee}
+                    >
+                      批量员工执行
+                    </button>
+                    <button
+                      type="button"
+                      className="app-claude-task-list__batch-action-btn app-claude-task-list__batch-action-btn--danger"
+                      disabled={trellisTaskSelectedKeys.length === 0}
+                      onClick={handleBatchArchiveTrellisTasks}
+                    >
+                      批量删除
+                    </button>
+                  </div>
+                </div>
                 {visibleTrellisTasks.map((task) => {
                   const taskPath = getTrellisTaskRelativePath(task);
+                  const rowKey = trellisTaskRowKey(task);
+                  const rowEmployeeName = trellisTaskEmployeeByKey[rowKey] ?? "";
                   return (
                     <div
-                      key={`${task.rootPath}:${task.dir}`}
+                      key={rowKey}
                       className="app-claude-task-list__item app-claude-task-list__item--trellis"
                       data-task-id={task.taskId}
                     >
                       <div className="app-claude-task-list__body">
                         <div className="app-claude-task-list__left">
                           <div className="app-claude-task-list__title-row">
+                            <label className="app-claude-task-list__item-check">
+                              <input
+                                type="checkbox"
+                                checked={trellisTaskSelectedSet.has(rowKey)}
+                                onChange={(e) => {
+                                  const checked = e.currentTarget.checked;
+                                  setTrellisTaskSelectedKeys((prev) => {
+                                    if (checked) {
+                                      if (prev.length >= taskListMultiSelectCap) {
+                                        void message.info(`最多只能勾选 ${taskListMultiSelectCap} 条（单次批量多选上限）。`);
+                                        return prev;
+                                      }
+                                      return prev.includes(rowKey) ? prev : [...prev, rowKey];
+                                    }
+                                    return prev.filter((key) => key !== rowKey);
+                                  });
+                                }}
+                              />
+                            </label>
                             <span className="app-claude-task-list__id">{task.taskId}</span>
                             <span className="app-claude-task-list__title">{task.title || "(未命名任务)"}</span>
                             <Popover
@@ -3697,6 +3947,57 @@ export function ClaudeChat({
                                 }}
                               >
                                 主会话执行
+                              </button>
+                              <Popconfirm
+                                title="删除该 Trellis 任务？"
+                                description="将归档到 .trellis/tasks/archive/ 并从当前列表移除，子目录一并移走。"
+                                okText="删除"
+                                okButtonProps={{ danger: true }}
+                                cancelText="取消"
+                                onConfirm={() => {
+                                  void handleArchiveTrellisTask(task);
+                                }}
+                              >
+                                <button
+                                  type="button"
+                                  className="app-claude-task-list__action-btn app-claude-task-list__action-btn--danger"
+                                >
+                                  删除
+                                </button>
+                              </Popconfirm>
+                            </div>
+                            <div className="app-claude-task-list__action-group app-claude-task-list__inline-runner">
+                              <select
+                                className="app-claude-task-list__select"
+                                value={rowEmployeeName}
+                                disabled={!trellisEmployeeDispatchAvailable}
+                                title={trellisEmployeeDispatchAvailable ? undefined : "当前工作区暂无可派发员工"}
+                                onChange={(e) => {
+                                  const name = e.currentTarget.value;
+                                  setTrellisTaskEmployeeByKey((prev) => {
+                                    const next = { ...prev };
+                                    if (!name.trim()) delete next[rowKey];
+                                    else next[rowKey] = name;
+                                    return next;
+                                  });
+                                }}
+                              >
+                                <option value="">选择员工</option>
+                                {taskListEmployeeOptions.map((employee) => (
+                                  <option key={employee.id} value={employee.name}>
+                                    {employee.name}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                type="button"
+                                className="app-claude-task-list__action-btn"
+                                disabled={!trellisEmployeeDispatchAvailable}
+                                onClick={() => {
+                                  void handleRunTrellisTaskByEmployee(task);
+                                }}
+                              >
+                                员工执行
                               </button>
                             </div>
                           </div>

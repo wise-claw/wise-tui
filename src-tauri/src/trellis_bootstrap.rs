@@ -2,7 +2,6 @@
 //!
 //! 优先使用本机 `trellis` CLI；若未安装则回退为 `npx --yes @mindfoldhq/trellis@latest init -y`（需 Node / npm）。
 
-use crate::claude_commands::shared::find_trellis_project_root_from_path;
 use crate::claude_commands::{claude_path_search_prefixes, merge_path_env};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -10,6 +9,31 @@ use std::process::Command;
 
 /// npm 包名：与全局 `trellis` CLI 等价入口，供 `npx` 在未全局安装时使用。
 const TRELLIS_NPX_PACKAGE: &str = "@mindfoldhq/trellis@latest";
+
+/// Non-interactive `trellis init` flags for GUI bootstrap (stdin is closed).
+fn trellis_init_args(canon: &Path) -> Vec<&'static str> {
+    let partial_trellis = canon.join(".trellis").is_dir() && !trellis_task_py_at_exact(canon);
+    if partial_trellis {
+        // Incomplete prior run: force full scaffold instead of "already initialized" short-circuit.
+        vec![
+            "init",
+            "-y",
+            "--force",
+            "--no-monorepo",
+            "--cursor",
+            "--claude",
+        ]
+    } else {
+        vec![
+            "init",
+            "-y",
+            "--skip-existing",
+            "--no-monorepo",
+            "--cursor",
+            "--claude",
+        ]
+    }
+}
 
 fn npx_program() -> &'static str {
     #[cfg(windows)]
@@ -132,12 +156,25 @@ fn find_trellis_cli_binary() -> Option<String> {
     None
 }
 
-/// 若 `repository_path` 及其祖先尚无 `.trellis/scripts/task.py`，则在仓库根执行 `trellis init -y`。
+fn trellis_task_py_at_exact(root: &Path) -> bool {
+    root.join(".trellis")
+        .join("scripts")
+        .join("task.py")
+        .is_file()
+}
+
+/// Returns whether `.trellis/scripts/task.py` exists at the given directory (not ancestors).
+#[tauri::command]
+pub fn trellis_task_py_exists_at_path(path: String) -> Result<bool, String> {
+    let canon = validate_repository_root_for_bootstrap(&path)?;
+    Ok(trellis_task_py_at_exact(&canon))
+}
+
+/// If `repository_path` itself has no `.trellis/scripts/task.py`, run `trellis init -y` in that directory.
 #[tauri::command]
 pub fn bootstrap_trellis_if_missing(repository_path: String) -> Result<(), String> {
     let canon = validate_repository_root_for_bootstrap(&repository_path)?;
-    let canon_str = canon.to_string_lossy().to_string();
-    if find_trellis_project_root_from_path(&canon_str).is_some() {
+    if trellis_task_py_at_exact(&canon) {
         return Ok(());
     }
     let path_merged = merge_path_env(&claude_path_search_prefixes());
@@ -146,24 +183,31 @@ pub fn bootstrap_trellis_if_missing(repository_path: String) -> Result<(), Strin
         .unwrap_or_default();
     let trellis_cli = find_trellis_cli_binary();
     let via_npx = trellis_cli.is_none();
+    let init_args = trellis_init_args(&canon);
     let out = match &trellis_cli {
         Some(bin) => Command::new(bin)
-            .args(["init", "-y"])
+            .args(&init_args)
             .current_dir(&canon)
             .env("PATH", &path_merged)
             .env("HOME", &home)
+            .env("CI", "1")
             .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
             .output()
             .map_err(|e| format!("无法启动 trellis: {e}")),
         None => Command::new(npx_program())
             .arg("--yes")
             .arg(TRELLIS_NPX_PACKAGE)
-            .args(["init", "-y"])
+            .args(&init_args)
             .current_dir(&canon)
             .env("PATH", &path_merged)
             .env("HOME", &home)
+            .env("CI", "1")
             .env("npm_config_yes", "true")
             .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
             .output()
             .map_err(|e| {
                 format!(
@@ -173,20 +217,35 @@ pub fn bootstrap_trellis_if_missing(repository_path: String) -> Result<(), Strin
                 )
             }),
     }?;
-    if out.status.success() {
+    if out.status.success() || trellis_task_py_at_exact(&canon) {
         return Ok(());
     }
     let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
     let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    let combined = format!("{stderr}\n{stdout}");
     let label = if via_npx {
         format!("npx {TRELLIS_NPX_PACKAGE}")
     } else {
         "trellis".to_string()
     };
-    Err(format!(
-        "{label} init 失败（退出码 {:?}）\n{}\n{}",
-        out.status.code(),
-        stderr,
+    let hint = if combined.contains("force closed the prompt") {
+        "\n提示：Trellis 在无可交互终端时触发了确认提示。请升级 Wise 后重试，或在终端手动执行：\
+trellis init -y --skip-existing --no-monorepo --cursor --claude"
+    } else {
+        ""
+    };
+    let stderr_out = if stderr.is_empty() {
+        "(无 stderr)".to_string()
+    } else {
+        stderr
+    };
+    let stdout_out = if stdout.is_empty() {
+        "(无 stdout)".to_string()
+    } else {
         stdout
+    };
+    Err(format!(
+        "{label} init 失败（退出码 {:?}）{hint}\n{stderr_out}\n{stdout_out}",
+        out.status.code()
     ))
 }
