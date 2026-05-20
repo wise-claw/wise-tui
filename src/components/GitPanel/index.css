@@ -118,8 +118,11 @@
 
 .git-panel-title {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--ant-color-text);
+  line-height: 1.2;
+  letter-spacing: 0.2px;
+  flex-shrink: 0;
 }
 
 .git-panel-title-tabs {

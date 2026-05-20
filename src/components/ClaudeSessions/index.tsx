@@ -13,6 +13,7 @@ import { Button, Empty, Input, message, Popover, Spin, Switch, Tooltip } from "a
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import { useDockSlice } from "../../hooks/useDockSlice";
 import { ClaudeChat } from "./ClaudeChat";
+import { DingTalkStreamGatewayTopbarSwitch } from "../DingTalkStreamGatewayTopbarSwitch";
 import { OpenAppMenu } from "../OpenAppMenu";
 import {
   DEFAULT_OPEN_APP_ID,
@@ -663,6 +664,7 @@ function Topbar({
                   <span className="app-topbar-repository-trigger-label">{activeRepository.name}</span>
                 </button>
               </Tooltip>
+              <DingTalkStreamGatewayTopbarSwitch />
             </>
           )}
         </div>

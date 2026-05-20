@@ -354,6 +354,7 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
       <div className={`git-panel-loading-bar ${anyLoading ? "git-panel-loading-bar--active" : ""}`} />
       <div className="git-panel-header" data-tauri-drag-region>
         <div className="git-panel-header-left">
+          <span className="git-panel-title">GIT</span>
           {status && (
             <Tag
               color={mode === "diff" ? "blue" : mode === "log" ? "green" : "default"}
