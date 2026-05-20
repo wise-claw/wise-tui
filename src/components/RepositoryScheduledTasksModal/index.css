@@ -25,6 +25,11 @@
   padding: 6px 8px !important;
 }
 
+/* Ant Design 在 scroll.x + fixed 列时会多出一列空白表头 */
+.app-scheduled-tasks-modal__table .ant-table-cell-scrollbar {
+  display: none !important;
+}
+
 .app-scheduled-tasks-modal__cron {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 11px;

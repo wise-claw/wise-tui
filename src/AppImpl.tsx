@@ -71,9 +71,13 @@ import {
 } from "./services/atMentionDispatch";
 import { resolveProjectMainSessionAnchor } from "./utils/projectSessionAnchor";
 import { resolveSidebarSelectionTarget } from "./utils/sidebarSelectionTarget";
-import { shouldHideEmployeeUi } from "./utils/projectRepositoryRoles";
+import { employeeInProjectScope, shouldHideEmployeeUi } from "./utils/projectRepositoryRoles";
 import { buildProjectRoleTagOptions, buildProjectRepositoryMentionOptions } from "./utils/projectRoleTagOptions";
-import { filterRepositoryMemberMonitorItemsBySelection, useMonitorOverview } from "./hooks/useMonitorOverview";
+import {
+  filterEmployeeMonitorItemsForProjectMembers,
+  filterRepositoryMemberMonitorItemsBySelection,
+  useMonitorOverview,
+} from "./hooks/useMonitorOverview";
 import { useIntervalSyncedState } from "./hooks/useIntervalSyncedState";
 import { useScheduledClaudeTaskRunner } from "./hooks/useScheduledClaudeTaskRunner";
 import { MONITOR_SESSIONS_SYNC_INTERVAL_MS } from "./constants/monitorUi";
@@ -1005,18 +1009,31 @@ export default function App() {
       }),
     [activeProjectId, activeRepositoryId, projects, repositoryMemberMonitorItems],
   );
-  const mentionEmployees = useMemo(() => {
-    const monitoredEmployeeIds = new Set(employeeMonitorItems.map((item) => item.employeeId));
-    return employees.filter(
-      (item) =>
-        item.enabled &&
-        monitoredEmployeeIds.has(item.id) &&
-        !isOmcMonitorEmployeeRecord(item),
-    );
-  }, [employeeMonitorItems, employees]);
   const activeProject = useMemo(
     () => (activeProjectId ? projects.find((p) => p.id === activeProjectId) ?? null : null),
     [activeProjectId, projects],
+  );
+  const mentionEmployees = useMemo(() => {
+    const trellisScoped = shouldHideEmployeeUi(activeProject) && activeProject != null;
+    return employees.filter((item) => {
+      if (!item.enabled || !item.name.trim() || isOmcMonitorEmployeeRecord(item)) {
+        return false;
+      }
+      if (trellisScoped) {
+        return employeeInProjectScope(item, activeProject);
+      }
+      const monitoredEmployeeIds = new Set(employeeMonitorItems.map((entry) => entry.employeeId));
+      return monitoredEmployeeIds.has(item.id);
+    });
+  }, [activeProject, employeeMonitorItems, employees]);
+  const teamPanelEmployeeMonitorItems = useMemo(
+    () =>
+      filterEmployeeMonitorItemsForProjectMembers(employeeMonitorItems, employees, {
+        activeProjectId,
+        projects,
+        restrictToProjectScope: shouldHideEmployeeUi(activeProject),
+      }),
+    [activeProject, activeProjectId, employeeMonitorItems, employees, projects],
   );
   const authorTrellisProject = useMemo(
     () => (
@@ -1112,9 +1129,7 @@ export default function App() {
     }
     return buildProjectRepositoryMentionOptions(activeProject, repositories);
   }, [activeProject, repositories]);
-  const composerHideEmployeesInAtMode = useMemo(() => {
-    return shouldHideEmployeeUi(activeProject);
-  }, [activeProject]);
+  const composerHideEmployeesInAtMode = false;
   const selectableWorkflowEmployeeIds = useMemo(
     () => employeeMonitorItems.map((item) => item.employeeId),
     [employeeMonitorItems],
@@ -2509,7 +2524,7 @@ export default function App() {
         monitorStats,
         monitorPanelSessions: monitorPanelSessionsMerged,
         monitorTranscriptSourceSessions: sessions,
-        employeeMonitorItems,
+        employeeMonitorItems: teamPanelEmployeeMonitorItems,
         repositoryMemberMonitorItems: scopedRepositoryMemberMonitorItems,
         teamMonitorItems,
         monitorActiveTarget: monitorDrawerTarget,

@@ -1,4 +1,4 @@
-import type { ProjectItem, ProjectSddMode, Repository } from "../types";
+import type { EmployeeItem, ProjectItem, ProjectSddMode, Repository } from "../types";
 
 /**
  * 返回仓库的角色标签数组。优先使用新的 `roleTags`；为空时 fallback 到 legacy `[repositoryType]`。
@@ -45,4 +45,21 @@ export function shouldHideEmployeeUi(
   project: ProjectItem | undefined | null,
 ): boolean {
   return getProjectSddMode(project) === "wise_trellis" && project != null;
+}
+
+/** 成员是否关联到当前项目（projectIds 或项目下任一仓库）。无关联配置时视为全局可用。 */
+export function employeeInProjectScope(
+  employee: Pick<EmployeeItem, "projectIds" | "repositoryIds">,
+  project: ProjectItem,
+): boolean {
+  if ((employee.projectIds ?? []).includes(project.id)) {
+    return true;
+  }
+  const projectRepoIds = new Set(project.repositoryIds ?? []);
+  if ((employee.repositoryIds ?? []).some((rid) => projectRepoIds.has(rid))) {
+    return true;
+  }
+  const hasProjectLink = (employee.projectIds ?? []).length > 0;
+  const hasRepoLink = (employee.repositoryIds ?? []).length > 0;
+  return !hasProjectLink && !hasRepoLink;
 }

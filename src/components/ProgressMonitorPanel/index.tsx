@@ -930,13 +930,12 @@ export function ProgressMonitorPanel({
         </div>
       </div>
 
-      {hideEmployeeUi ? null : (
       <div className="app-monitor-panel__section">
         <div className="app-monitor-panel__section-head">
           <div className="app-monitor-panel__section-title-wrap">
             <Typography.Text className="app-monitor-panel__section-title">
               <span className="app-monitor-panel__section-icon"><EmployeeMiniIcon /></span>
-              员工
+              {hideEmployeeUi ? "成员" : "员工"}
             </Typography.Text>
             <Typography.Text className="app-monitor-panel__meta">
               总数 {employeeItems.length} · 进行中 {employeeInProgress} · 空闲 {employeeItems.length - employeeInProgress}
@@ -950,7 +949,7 @@ export function ProgressMonitorPanel({
               className="app-monitor-panel__empty-add-btn"
               onClick={() => onOpenEmployeeConfig?.()}
             >
-              新增员工
+              {hideEmployeeUi ? "新增成员" : "新增员工"}
             </button>
           </div>
         ) : (
@@ -1046,7 +1045,6 @@ export function ProgressMonitorPanel({
           })
         )}
       </div>
-      )}
 
       {repositoryMemberItems.length > 0 ? (
         <div className="app-monitor-panel__section">

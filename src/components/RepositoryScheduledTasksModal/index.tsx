@@ -306,7 +306,6 @@ export function RepositoryScheduledTasksModal({
       title: "操作",
       key: "act",
       width: 108,
-      fixed: "right",
       render: (_, row) => (
         <Space size={4}>
           <Button type="link" size="small" style={{ padding: 0 }} onClick={() => openEdit(row)}>

@@ -48,7 +48,11 @@ import type {
   WorkflowTaskItem,
   WorkflowTemplateItem,
 } from "../types";
-import { getEffectiveRepoSddMode, getProjectSddMode } from "../utils/projectRepositoryRoles";
+import {
+  employeeInProjectScope,
+  getEffectiveRepoSddMode,
+  getProjectSddMode,
+} from "../utils/projectRepositoryRoles";
 
 interface UseMonitorOverviewInput {
   employees: EmployeeItem[];
@@ -513,6 +517,34 @@ export function buildRepositoryMemberMonitorItems(
     if (a.status !== b.status) return a.status === "in_progress" ? -1 : 1;
     return b.updatedAt - a.updatedAt;
   });
+}
+
+/** 右栏「成员」：Trellis 项目下按项目作用域过滤员工监控项（不含 OMC 占位）。 */
+export function filterEmployeeMonitorItemsForProjectMembers(
+  items: readonly EmployeeMonitorItem[],
+  employees: readonly EmployeeItem[],
+  input: {
+    activeProjectId: string | null;
+    projects: ReadonlyArray<ProjectItem>;
+    restrictToProjectScope: boolean;
+  },
+): EmployeeMonitorItem[] {
+  if (!input.restrictToProjectScope) {
+    return [...items];
+  }
+  if (!input.activeProjectId) {
+    return [];
+  }
+  const project = input.projects.find((entry) => entry.id === input.activeProjectId);
+  if (!project) return [];
+  const allowedIds = new Set(
+    employees
+      .filter((employee) => employeeInProjectScope(employee, project))
+      .map((employee) => employee.id),
+  );
+  return items.filter(
+    (item) => item.employeeId !== "omc-worker" && allowedIds.has(item.employeeId),
+  );
 }
 
 /** 右栏「仓库成员」：选中 Workspace 时展示其下全部仓库；仅选中游离仓库时展示该仓库。 */

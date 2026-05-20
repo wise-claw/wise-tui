@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { ProjectItem, Repository } from "../types";
+import type { EmployeeItem } from "../types";
 import {
+  employeeInProjectScope,
   getEffectiveRepoSddMode,
   getProjectSddMode,
   getRoleTags,
@@ -121,5 +123,40 @@ describe("shouldHideEmployeeUi", () => {
   test("does not hide when no active project", () => {
     expect(shouldHideEmployeeUi(null)).toBe(false);
     expect(shouldHideEmployeeUi(undefined)).toBe(false);
+  });
+});
+
+describe("employeeInProjectScope", () => {
+  const p = project({ id: "ws-1", repositoryIds: [10, 11] });
+
+  function employee(overrides: Partial<EmployeeItem> = {}): EmployeeItem {
+    return {
+      id: "e1",
+      name: "Alice",
+      agentType: "frontend",
+      enabled: true,
+      createdAt: 0,
+      updatedAt: 0,
+      displayOrder: 0,
+      repositoryIds: [],
+      projectIds: [],
+      ...overrides,
+    };
+  }
+
+  test("matches by projectIds", () => {
+    expect(employeeInProjectScope(employee({ projectIds: ["ws-1"] }), p)).toBe(true);
+  });
+
+  test("matches by repositoryIds in project", () => {
+    expect(employeeInProjectScope(employee({ repositoryIds: [11] }), p)).toBe(true);
+  });
+
+  test("unscoped employee is available in any project", () => {
+    expect(employeeInProjectScope(employee(), p)).toBe(true);
+  });
+
+  test("excludes employee scoped to another project only", () => {
+    expect(employeeInProjectScope(employee({ projectIds: ["other"] }), p)).toBe(false);
   });
 });

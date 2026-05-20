@@ -300,7 +300,8 @@ export function EmployeeConfigModal({
   }
 
   const content = (
-    <Space orientation="vertical" size={10} className="app-employee-config-modal">
+    <Space orientation="vertical" size={6} className="app-employee-config-modal">
+        <div className="app-employee-config-dashboard">
         <section className="app-employee-config-hero" aria-label="智能体角色控制台">
           <div>
             <Typography.Text className="app-employee-config-hero__eyebrow">
@@ -357,6 +358,7 @@ export function EmployeeConfigModal({
             status="协议驱动"
             description={`${workflowTemplates.length} 个模板 · ${workflowStageCount} 个阶段；委派协议负责把阶段派发给角色`}
           />
+        </div>
         </div>
 
         <Form
