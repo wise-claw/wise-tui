@@ -30,6 +30,7 @@ import {
   parsePinnedProjectIdsFromSetting,
   sortProjectsByPinOrder,
 } from "../utils/projectPinOrder";
+import type { WorkspaceFocus } from "../utils/workspaceMode";
 import {
   WORKSPACE_LAST_SESSION_REPO_ID_STORAGE_KEY,
   resolveStartupSelection,
@@ -65,6 +66,7 @@ export function useRepositoryList() {
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [pinnedProjectIds, setPinnedProjectIds] = useState<string[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [activeWorkspaceFocus, setActiveWorkspaceFocus] = useState<WorkspaceFocus>("repository");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -268,6 +270,7 @@ export function useRepositoryList() {
 
   const handleSelectProject = useCallback((projectId: string) => {
     setActiveProjectId(projectId);
+    setActiveWorkspaceFocus("project");
     const selected = projects.find((project) => project.id === projectId) ?? null;
     setActiveRepositoryId(selected?.repositoryIds[0] ?? null);
     void persistActiveProjectId(projectId);
@@ -289,6 +292,7 @@ export function useRepositoryList() {
   const selectProjectAndRepository = useCallback((projectId: string, repositoryId: number) => {
     setActiveProjectId(projectId);
     setActiveRepositoryId(repositoryId);
+    setActiveWorkspaceFocus("repository");
     void persistActiveProjectId(projectId);
   }, []);
 
@@ -304,6 +308,7 @@ export function useRepositoryList() {
       const ownerProjectId = ownerProject?.id ?? null;
       setActiveProjectId(ownerProjectId);
       setActiveRepositoryId(repositoryId);
+      setActiveWorkspaceFocus("repository");
       void persistActiveProjectId(ownerProjectId);
     },
     [projects],
@@ -347,6 +352,7 @@ export function useRepositoryList() {
       }
       setActiveProjectId(null);
       setActiveRepositoryId(repository.id);
+      setActiveWorkspaceFocus("repository");
       void persistActiveProjectId(null);
     },
     [repositories],
@@ -514,9 +520,11 @@ export function useRepositoryList() {
     floatingRepositories,
     standaloneRepos,
     activeRepositoryId,
+    activeWorkspaceFocus,
     loading,
     setActiveRepositoryId,
     setActiveProjectId: handleSelectProject,
+    setActiveWorkspaceFocus,
     selectProjectAndRepository,
     setActiveRepositoryWithOwner,
     handleCreateProject,

@@ -44,6 +44,7 @@ export function LeftSidebar({
   onToggleCompactLayoutMode,
   projects,
   activeProjectId,
+  activeWorkspaceFocus = "repository",
   repositories,
   activeRepositoryId,
   authorDisabled,
@@ -244,11 +245,11 @@ export function LeftSidebar({
   async function submitCreateProject() {
     const name = projectNameInput.trim();
     if (!name) {
-      message.warning("Workspace 名称不能为空");
+      message.warning("工作区名称不能为空");
       return;
     }
     if (!createProjectRootPath.trim()) {
-      message.warning("请先选择 Workspace 根目录");
+      message.warning("请先选择工作区根目录");
       return;
     }
     if (createProjectSubmitting) return;
@@ -274,7 +275,7 @@ export function LeftSidebar({
     if (!editProject) return;
     const name = projectNameInput.trim();
     if (!name) {
-      message.warning("Workspace 名称不能为空");
+      message.warning("工作区名称不能为空");
       return;
     }
     onUpdateProject(editProject.id, name);
@@ -286,11 +287,11 @@ export function LeftSidebar({
     if (!promotingFloatingRepo) return;
     const trimmed = promotingFloatingRepoName.trim();
     if (!trimmed) {
-      message.warning("请输入 Workspace 名称");
+      message.warning("请输入工作区名称");
       return;
     }
     if (!onPromoteFloatingRepositoryToProject) {
-      message.warning("当前环境未启用「升格为 Workspace」");
+      message.warning("当前环境未启用「升格为工作区」");
       return;
     }
     const repoId = promotingFloatingRepo.id;
@@ -298,7 +299,7 @@ export function LeftSidebar({
     setPromotingFloatingRepoName("");
     void Promise.resolve(onPromoteFloatingRepositoryToProject(repoId, trimmed)).catch(
       (err: unknown) => {
-        message.error("升格为 Workspace 失败");
+        message.error("升格为工作区失败");
         console.error(err);
       },
     );
@@ -337,6 +338,7 @@ export function LeftSidebar({
           repositoriesById={projectRepositoryState.repositoriesById}
           floatingRepositories={floatingRepositories}
           activeProjectId={activeProjectId}
+          activeWorkspaceFocus={activeWorkspaceFocus}
           activeRepositoryId={activeRepositoryId}
           pinnedProjectIds={pinnedProjectIds}
           expandedProjects={projectRepositoryState.expandedProjects}
@@ -372,7 +374,7 @@ export function LeftSidebar({
           onDeleteProject={(project) => {
             modal.confirm({
               title: "确认删除项目？",
-              content: `Workspace「${project.name}」将被删除，但仓库本身不会被移除。`,
+              content: `工作区「${project.name}」将被删除，但仓库本身不会被移除。`,
               okText: "删除",
               okType: "danger",
               cancelText: "取消",
@@ -400,8 +402,8 @@ export function LeftSidebar({
           onRemoveFloatingRepository={(repo) => {
             if (!onRemoveRepository) return;
             modal.confirm({
-              title: "确认移除 Standalone Repo？",
-              content: `Standalone Repo「${repositoryFolderBasename(repo)}」将从 Wise 列表移除（不会删除磁盘文件，也不会动 .trellis）。`,
+              title: "确认移除单仓？",
+              content: `单仓「${repositoryFolderBasename(repo)}」将从 Wise 列表移除（不会删除磁盘文件，也不会动 .trellis）。`,
               okText: "移除",
               okType: "danger",
               cancelText: "取消",

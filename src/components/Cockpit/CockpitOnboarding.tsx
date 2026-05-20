@@ -36,7 +36,7 @@ export function CockpitOnboarding({
           欢迎使用 Wise 驾驶舱
         </Title>
         <Paragraph type="secondary" className="cockpit-onboarding-hero-subtitle">
-          先创建一个 Workspace 来管理项目级 Mission，或导入一个 Standalone Repo
+          先创建一个工作区来管理项目级 Mission，或导入一个单仓
           直接进入 Claude Code 对话。
         </Paragraph>
       </div>

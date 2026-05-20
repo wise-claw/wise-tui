@@ -4,6 +4,7 @@ import { App as AntdApp, Dropdown, Tooltip } from "antd";
 import type { Repository, StandaloneRepo, TaskMode, Workspace } from "../../types";
 import type { SidebarCodeGraphIndexStatus } from "./useSidebarCodeGraphIndexMap";
 import { repositoryFolderBasename } from "../../utils/repositoryType";
+import type { WorkspaceFocus } from "../../utils/workspaceMode";
 
 export interface RepositoryReorderUi {
   dragHandleEnabled: boolean;
@@ -296,9 +297,9 @@ export function RepositoryRow({
             onDragStart={repositoryReorder.onDragStartHandle}
             onDragEnd={repositoryReorder.onDragEndHandle}
             onClick={(e) => e.stopPropagation()}
-            title="拖动排序 / 拖入其它 Workspace"
+            title="拖动排序 / 拖入其它工作区"
             role="button"
-            aria-label="拖动排序或拖入其它 Workspace"
+            aria-label="拖动排序或拖入其它工作区"
           >
             <RepoDragHandleIcon />
           </span>
@@ -543,6 +544,7 @@ export function ProjectRepositoryRows({
   project,
   projectRepos,
   activeRepositoryId,
+  activeWorkspaceFocus = "repository",
   onRepositorySelect,
   onCreateRepositoryTask,
   onDetachRepositoryFromProject,
@@ -569,6 +571,7 @@ export function ProjectRepositoryRows({
   project: Workspace;
   projectRepos: Repository[];
   activeRepositoryId: number | null;
+  activeWorkspaceFocus?: WorkspaceFocus;
   onRepositorySelect: (id: number | null) => void;
   onCreateRepositoryTask: (repository: Repository, mode: TaskMode) => void;
   onDetachRepositoryFromProject: (projectId: string, repositoryId: number) => void;
@@ -625,7 +628,9 @@ export function ProjectRepositoryRows({
             key={repository.id}
             project={project}
             repository={repository}
-            isActiveRepository={repository.id === activeRepositoryId}
+            isActiveRepository={
+              repository.id === activeRepositoryId && activeWorkspaceFocus === "repository"
+            }
             onRepositorySelect={onRepositorySelect}
             onOpenTaskMode={onCreateRepositoryTask}
             onDetachFromProject={onDetachRepositoryFromProject}
@@ -750,7 +755,7 @@ function buildRepositoryReorderUi({
       }
       if (dragged.sourceProjectId !== project.id && onMoveRepositoryToProject) {
         void Promise.resolve(onMoveRepositoryToProject(project.id, dragged.repositoryId)).catch((err: unknown) => {
-          messageError("移动仓库到 Workspace 失败");
+          messageError("移动仓库到工作区失败");
           console.error(err);
         });
       }

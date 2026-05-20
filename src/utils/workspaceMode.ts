@@ -2,6 +2,9 @@ import type { ProjectItem } from "../types";
 
 export type WorkspaceMode = "single_repo" | "multi_repo";
 
+/** 侧栏选中粒度：Workspace 项目行 vs 具体仓库行。 */
+export type WorkspaceFocus = "project" | "repository";
+
 export interface WorkspaceModeInput {
   /** 当前 active 的 project id；游离 repo / 无选中时为 null。 */
   activeProjectId: string | null;

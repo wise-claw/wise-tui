@@ -211,7 +211,7 @@ function HostProcessSessionDetails({ proc }: { proc: ClaudeHostProcess }) {
       </Typography.Paragraph>
       {path ? (
         <Typography.Paragraph copyable={{ text: path }}>
-          <Typography.Text strong>Workspace Path</Typography.Text> {path}
+          <Typography.Text strong>工作区路径</Typography.Text> {path}
         </Typography.Paragraph>
       ) : null}
       {sid ? (
@@ -245,7 +245,7 @@ function RegistryOrphanSessionDetails({
             <Typography.Text strong>模型</Typography.Text> {info.model.trim() || "—"}
           </Typography.Paragraph>
           <Typography.Paragraph copyable={{ text: info.project_path }}>
-            <Typography.Text strong>Workspace Path</Typography.Text>{" "}
+            <Typography.Text strong>工作区路径</Typography.Text>{" "}
             {info.project_path.trim() || "—"}
           </Typography.Paragraph>
         </>

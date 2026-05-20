@@ -8,7 +8,7 @@ import {
   sumProjectScheduledTasksTotal,
   type SidebarScheduledTasksSummary,
 } from "./useSidebarScheduledTasksMap";
-import { resolveWorkspaceMode } from "../../utils/workspaceMode";
+import { resolveWorkspaceMode, type WorkspaceFocus } from "../../utils/workspaceMode";
 import { buildProjectMoreMenuItems } from "./sidebarMoreMenuItems";
 import {
   ExpandIcon,
@@ -31,6 +31,7 @@ interface ProjectRepositoryListProps {
   repositoriesById: Map<number, Repository>;
   floatingRepositories: StandaloneRepo[];
   activeProjectId: string | null;
+  activeWorkspaceFocus?: WorkspaceFocus;
   activeRepositoryId: number | null;
   pinnedProjectIds: string[];
   expandedProjects: Set<string>;
@@ -88,6 +89,7 @@ export function ProjectRepositoryList({
   repositoriesById,
   floatingRepositories,
   activeProjectId,
+  activeWorkspaceFocus = "repository",
   activeRepositoryId,
   pinnedProjectIds,
   expandedProjects,
@@ -143,24 +145,24 @@ export function ProjectRepositoryList({
     <>
       <div className="app-repository-header">
         <Typography.Text className="app-repository-header-title">
-          Workspace
+          工作区
         </Typography.Text>
         <div className="app-repository-header-actions">
           {onAddFloatingRepositoryClick ? (
-            <Tooltip title="添加 Standalone Repo（不绑定 Workspace）" mouseEnterDelay={0.3}>
+            <Tooltip title="添加单仓（不绑定工作区）" mouseEnterDelay={0.3}>
               <button
                 className="app-repository-header-btn"
-                aria-label="添加 Standalone Repo"
+                aria-label="添加单仓"
                 onClick={onAddFloatingRepositoryClick}
               >
                 <PlusIcon />
               </button>
             </Tooltip>
           ) : null}
-          <Tooltip title="新建 Workspace" mouseEnterDelay={0.3}>
+          <Tooltip title="新建工作区" mouseEnterDelay={0.3}>
             <button
               className="app-repository-header-btn"
-              aria-label="新建 Workspace"
+              aria-label="新建工作区"
               onClick={onCreateProjectClick}
             >
               <ProjectIcon />
@@ -171,7 +173,7 @@ export function ProjectRepositoryList({
 
       <div className="app-repository-list">
         {floatingRepositories.length > 0 ? (
-          <div className="app-repository-floating-group" aria-label="Standalone Repo">
+          <div className="app-repository-floating-group" aria-label="单仓">
             {floatingRepositories.map((repository) => (
               <FloatingRepositoryRow
                 key={repository.id}
@@ -208,8 +210,9 @@ export function ProjectRepositoryList({
             projectRepos={project.repositoryIds
               .map((id) => repositoriesById.get(id))
               .filter((item): item is Repository => Boolean(item))}
-            isActiveProject={project.id === activeProjectId}
+            isActiveProject={project.id === activeProjectId && activeWorkspaceFocus === "project"}
             activeRepositoryId={activeRepositoryId}
+            activeWorkspaceFocus={activeWorkspaceFocus}
             isPinned={pinnedProjectIds.includes(project.id)}
             expanded={expandedProjects.has(project.id)}
             projectDropTargetId={projectDropTargetId}
@@ -258,7 +261,7 @@ export function ProjectRepositoryList({
         {projects.length === 0 && floatingRepositories.length === 0 && (
           <div className="app-repository-item app-repository-item--add" onClick={onCreateProjectClick}>
             <span className="app-repository-add-icon"><PlusIcon /></span>
-            <span className="app-repository-add-text">新建 Workspace</span>
+            <span className="app-repository-add-text">新建工作区</span>
           </div>
         )}
       </div>
@@ -268,11 +271,11 @@ export function ProjectRepositoryList({
 
 function ProjectTrellisAction({ onOpen }: { onOpen: () => void }) {
   return (
-    <Tooltip title="Workspace Trellis" mouseEnterDelay={0.3}>
+    <Tooltip title="工作区 Trellis" mouseEnterDelay={0.3}>
       <button
         type="button"
         className="app-repository-action app-repository-action--task app-repository-action--project-quick"
-        aria-label="Workspace Trellis"
+        aria-label="工作区 Trellis"
         onClick={(e) => {
           e.stopPropagation();
           onOpen();
@@ -289,6 +292,7 @@ interface ProjectRowProps {
   projectRepos: Repository[];
   isActiveProject: boolean;
   activeRepositoryId: number | null;
+  activeWorkspaceFocus: WorkspaceFocus;
   isPinned: boolean;
   expanded: boolean;
   projectDropTargetId: string | null;
@@ -339,6 +343,7 @@ function ProjectRow({
   projectRepos,
   isActiveProject,
   activeRepositoryId,
+  activeWorkspaceFocus,
   isPinned,
   expanded,
   projectDropTargetId,
@@ -437,7 +442,7 @@ function ProjectRow({
               onClearRepoSidebarDrag();
               if (!dragged || dragged.sourceProjectId === project.id) return;
               void onMoveRepositoryToProjectWithExpand(project.id, dragged.repositoryId).catch((err: unknown) => {
-                onMoveRepositoryError("移动仓库到 Workspace 失败", err);
+                onMoveRepositoryError("移动仓库到工作区失败", err);
               });
             }
           : undefined
@@ -457,7 +462,7 @@ function ProjectRow({
             onToggleProjectExpand(project.id);
           }}
           aria-expanded={expanded}
-          aria-label={expanded ? "收起 Workspace" : "展开 Workspace"}
+          aria-label={expanded ? "收起工作区" : "展开工作区"}
         >
           <ExpandIcon expanded={expanded} />
         </span>
@@ -530,7 +535,7 @@ function ProjectRow({
             <button
               type="button"
               className="app-repository-action app-repository-action--more"
-              aria-label="Workspace 更多操作"
+              aria-label="工作区更多操作"
               onClick={(e) => e.stopPropagation()}
             >
               <MoreIcon />
@@ -545,6 +550,7 @@ function ProjectRow({
             project={project}
             projectRepos={projectRepos}
             activeRepositoryId={activeRepositoryId}
+            activeWorkspaceFocus={activeWorkspaceFocus}
             onRepositorySelect={onRepositorySelect}
             onCreateRepositoryTask={onCreateRepositoryTask}
             onDetachRepositoryFromProject={onDetachRepositoryFromProject}

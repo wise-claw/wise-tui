@@ -11,6 +11,7 @@ import type {
   WorkflowTemplateItem,
 } from "../../types";
 import type { ReconcileProjectMode } from "../../constants/reconcileProjectMode";
+import type { WorkspaceFocus } from "../../utils/workspaceMode";
 import type { GitPanelOpenFileOptions } from "../GitPanel";
 import type { TaskCardsNavProps } from "../TaskCardsNav";
 
@@ -24,6 +25,8 @@ export interface LeftSidebarProps {
   onToggleCompactLayoutMode?: () => void;
   projects: ProjectItem[];
   activeProjectId: string | null;
+  /** 当前侧栏选中粒度：Workspace 项目 vs 具体仓库。 */
+  activeWorkspaceFocus?: WorkspaceFocus;
   repositories: Repository[];
   activeRepositoryId: number | null;
   authorDisabled?: boolean;

@@ -24,7 +24,7 @@ import { subscribeTerminalExit, subscribeTerminalOutput } from "../../services/e
 import { openExternalUrl } from "../../services/openExternal";
 import { filterSessionsForWorkspace } from "../../utils/projectSessionPanelFilter";
 import { resolveRepositoryForSession } from "../../utils/repositoryMainSessionBinding";
-import type { WorkspaceMode } from "../../utils/workspaceMode";
+import type { WorkspaceMode, WorkspaceFocus } from "../../utils/workspaceMode";
 import "./index.css";
 
 const TerminalPanelLazy = lazy(() =>
@@ -284,6 +284,8 @@ function TopbarBtn({ icon, label, onClick, active }: TopbarBtnProps) {
 // ── Topbar ──
 
 interface TopbarProps {
+  activeProject?: ProjectItem | null;
+  activeWorkspaceFocus?: WorkspaceFocus;
   activeRepository?: Repository;
   activeSessionRepositoryPath?: string;
   onToggleSidebar?: () => void;
@@ -300,6 +302,8 @@ interface TopbarProps {
 }
 
 function Topbar({
+  activeProject,
+  activeWorkspaceFocus = "repository",
   activeRepository,
   activeSessionRepositoryPath,
   onToggleSidebar,
@@ -627,6 +631,12 @@ function Topbar({
     runPreferredUrl,
   ]);
 
+  const topbarShowsProject = activeWorkspaceFocus === "project" && activeProject != null;
+  const topbarLabel = topbarShowsProject ? activeProject.name : activeRepository?.name;
+  const topbarPath = topbarShowsProject
+    ? (activeProject.rootPath?.trim() || activeRepository?.path?.trim() || "")
+    : (activeRepository?.path?.trim() || "");
+
   return (
     <div className="app-chat-topbar">
       <div className="app-chat-topbar-drag-region" data-tauri-drag-region>
@@ -638,7 +648,7 @@ function Topbar({
               onClick={onToggleSidebar}
             />
           )}
-          {activeRepository && (
+          {topbarLabel ? (
             <>
               <div className="app-topbar-divider" />
               <Tooltip title="点击复制绝对路径" mouseEnterDelay={0.3}>
@@ -646,9 +656,9 @@ function Topbar({
                   type="button"
                   className="app-topbar-repository-trigger"
                   onClick={() => {
-                    const path = activeRepository.path.trim();
+                    const path = topbarPath;
                     if (!path) {
-                      message.warning("暂无仓库路径");
+                      message.warning(topbarShowsProject ? "暂无 Workspace 路径" : "暂无仓库路径");
                       return;
                     }
                     void navigator.clipboard.writeText(path).then(
@@ -661,12 +671,12 @@ function Topbar({
                     );
                   }}
                 >
-                  <span className="app-topbar-repository-trigger-label">{activeRepository.name}</span>
+                  <span className="app-topbar-repository-trigger-label">{topbarLabel}</span>
                 </button>
               </Tooltip>
               <DingTalkStreamGatewayTopbarSwitch />
             </>
-          )}
+          ) : null}
         </div>
       </div>
       <div className="app-chat-topbar-right">
@@ -866,6 +876,8 @@ interface Props {
   workspaceMode?: WorkspaceMode;
   /** 当 `workspaceMode === "multi_repo"` 时用于解析项目主会话 anchor.path。 */
   activeProject?: ProjectItem | null;
+  /** 侧栏选中粒度：Workspace 项目 vs 具体仓库。 */
+  activeWorkspaceFocus?: WorkspaceFocus;
   onSelectRepository?: (id: number) => void;
   onUpdateSessionModel: (sessionId: string, model: string) => void;
   onExecuteSession: (
@@ -974,6 +986,7 @@ export function ClaudeSessions({
   activeRepositoryId,
   workspaceMode = "single_repo",
   activeProject = null,
+  activeWorkspaceFocus = "repository",
   onSelectRepository,
   onUpdateSessionModel,
   onExecuteSession,
@@ -1160,6 +1173,8 @@ export function ClaudeSessions({
     <div className="app-claude-sessions">
       {/* Topbar always visible */}
       <Topbar
+        activeProject={activeProject}
+        activeWorkspaceFocus={activeWorkspaceFocus}
         activeRepository={activeRepository}
         activeSessionRepositoryPath={activeRepository?.path}
         onToggleSidebar={onToggleSidebar}

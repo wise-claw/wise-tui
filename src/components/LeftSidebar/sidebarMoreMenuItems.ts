@@ -55,7 +55,7 @@ export function buildProjectMoreMenuItems(input: BuildProjectMoreMenuItemsInput)
   return sidebarMenuWithDividers(
     sidebarMenuSection([
       { key: "pin", label: isPinned ? "取消置顶" : "置顶" },
-      { key: "rename", label: "重命名 Workspace" },
+      { key: "rename", label: "重命名工作区" },
       onAddRepositoryToProject ? { key: "add-repository", label: "关联仓库" } : null,
     ]),
     sidebarMenuSection([
@@ -81,14 +81,14 @@ export function buildProjectMoreMenuItems(input: BuildProjectMoreMenuItemsInput)
             label: "图谱操作",
             popupClassName: "app-sidebar-more-menu-submenu",
             children: [
-              { key: "code-graph-generate-project", label: "生成 Workspace 索引" },
+              { key: "code-graph-generate-project", label: "生成工作区索引" },
               { key: "code-graph-view-project", label: "查看检索" },
             ],
           }
         : null,
       { key: "prompts", label: "提示词" },
     ]),
-    sidebarMenuSection([{ key: "delete", label: "删除 Workspace", danger: true }]),
+    sidebarMenuSection([{ key: "delete", label: "删除工作区", danger: true }]),
   );
 }
 
@@ -146,7 +146,7 @@ export function buildProjectRepositoryMoreMenuItems(
           }
         : null,
     ]),
-    sidebarMenuSection([{ key: "detach", label: "移出 Workspace", danger: true }]),
+    sidebarMenuSection([{ key: "detach", label: "移出工作区", danger: true }]),
   );
 }
 
@@ -213,11 +213,11 @@ export function buildFloatingRepositoryMoreMenuItems(
         : null,
     ]),
     sidebarMenuSection([
-      onPromoteToNewProject ? { key: "promote", label: "升格为 Workspace…" } : null,
+      onPromoteToNewProject ? { key: "promote", label: "升格为工作区…" } : null,
       onJoinExistingProject && joinChildren.length > 0
         ? {
             key: "join",
-            label: "加入 Workspace",
+            label: "加入工作区",
             popupClassName: "app-sidebar-more-menu-submenu",
             children: joinChildren,
           }
