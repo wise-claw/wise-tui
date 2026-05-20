@@ -343,6 +343,7 @@ pub fn run() {
             skills_sh::skills_cli_remove_from_registry,
             claude_commands::mcp::set_claude_mcp_server_enabled,
             claude_commands::get_claude_hooks_status,
+            claude_commands::is_omc_plugin_installed,
             claude_commands::upsert_claude_hook,
             claude_commands::remove_claude_hook,
             claude_commands::set_claude_disable_all_hooks,

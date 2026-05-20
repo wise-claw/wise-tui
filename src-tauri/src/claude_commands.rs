@@ -985,6 +985,12 @@ pub(crate) fn get_claude_hooks_status(
     })
 }
 
+/// Whether oh-my-claudecode (OMC) is installed under `~/.claude/plugins/cache/omc/`.
+#[tauri::command]
+pub(crate) fn is_omc_plugin_installed() -> bool {
+    resolve_omc_plugin_root().is_some()
+}
+
 #[tauri::command]
 pub(crate) fn upsert_claude_hook(
     scope: String,

@@ -9,7 +9,6 @@ import {
   Select,
   Space,
   Spin,
-  Switch,
   Tag,
   Typography,
   message,
@@ -33,12 +32,14 @@ import {
   validateSubagentForm,
 } from "../../utils/subagentFrontmatter";
 import { DEFAULT_OPEN_APP_ID, DEFAULT_OPEN_APP_TARGETS } from "../OpenAppMenu/constants";
-import { getAppSetting, setAppSetting } from "../../services/appSettingsStore";
 import { getOpenAppPreferenceSync, hydrateOpenAppPreference } from "../../services/openAppPreference";
+import { isOmcSubagentItem } from "../../utils/omcPluginDetect";
 
 interface Props {
   repositoryPath?: string;
   active: boolean;
+  /** 与 Rust `resolve_omc_plugin_root` 一致：未安装时不展示 OMC 子代理/协作模式。 */
+  omcInstalled?: boolean;
   /** 与右栏工具条搜索联动，仅影响列表展示。 */
   listSearch?: string;
   onBindActions?: (actions: SubagentsPanelHandle | null) => void;
@@ -71,9 +72,6 @@ export interface SubagentsPanelHandle {
 }
 
 type EditMode = "form" | "raw";
-const HIDE_PLUGIN_SUBAGENTS_STORAGE_KEY = "wise.ui.subagents.hide-plugin.v1";
-const LEGACY_APP_SETTING_KEY_HIDE_PLUGIN_SUBAGENTS = "wise-hide-plugin-subagents";
-
 const BUILTIN_SUBAGENT_TOOL_OPTIONS = [
   "Read",
   "Write",
@@ -90,7 +88,14 @@ const BUILTIN_SUBAGENT_TOOL_OPTIONS = [
   "Task",
 ];
 
-export function SubagentsPanel({ repositoryPath, active, listSearch = "", onBindActions, onCountChange }: Props) {
+export function SubagentsPanel({
+  repositoryPath,
+  active,
+  omcInstalled = false,
+  listSearch = "",
+  onBindActions,
+  onCountChange,
+}: Props) {
   function resolvePreferredEditorTarget() {
     const selectedId = getOpenAppPreferenceSync() || DEFAULT_OPEN_APP_ID;
     const selected = DEFAULT_OPEN_APP_TARGETS.find((t) => t.id === selectedId);
@@ -142,8 +147,6 @@ export function SubagentsPanel({ repositoryPath, active, listSearch = "", onBind
   const [editBackground, setEditBackground] = useState("");
   const [editPrompt, setEditPrompt] = useState("");
   const [mcpToolOptions, setMcpToolOptions] = useState<string[]>([]);
-  const [hidePluginSubagents, setHidePluginSubagents] = useState(false);
-
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -156,14 +159,14 @@ export function SubagentsPanel({ repositoryPath, active, listSearch = "", onBind
     }
   }, [repositoryPath]);
   const visibleSorted = useMemo(() => {
-    const visible = hidePluginSubagents ? list.filter((item) => item.scope !== "plugin") : list;
+    const visible = omcInstalled ? list : list.filter((item) => !isOmcSubagentItem(item));
     return [...visible].sort((a, b) => {
       if (a.isCollaborationMode !== b.isCollaborationMode) {
         return a.isCollaborationMode ? -1 : 1;
       }
       return a.name.localeCompare(b.name);
     });
-  }, [hidePluginSubagents, list]);
+  }, [omcInstalled, list]);
 
   const displayList = useMemo(() => {
     if (!listSearch.trim()) return visibleSorted;
@@ -189,20 +192,8 @@ export function SubagentsPanel({ repositoryPath, active, listSearch = "", onBind
   }, [visibleSorted.length, onCountChange]);
 
   useEffect(() => {
-    void (async () => {
-      await hydrateOpenAppPreference();
-      const raw =
-        (await getAppSetting(HIDE_PLUGIN_SUBAGENTS_STORAGE_KEY)) ??
-        (await getAppSetting(LEGACY_APP_SETTING_KEY_HIDE_PLUGIN_SUBAGENTS));
-      if (raw != null) {
-        void setAppSetting(HIDE_PLUGIN_SUBAGENTS_STORAGE_KEY, raw);
-      }
-      setHidePluginSubagents(raw === "1");
-    })();
+    void hydrateOpenAppPreference();
   }, []);
-  useEffect(() => {
-    void setAppSetting(HIDE_PLUGIN_SUBAGENTS_STORAGE_KEY, hidePluginSubagents ? "1" : "0");
-  }, [hidePluginSubagents]);
 
   useEffect(() => {
     if (!active) return;
@@ -497,12 +488,6 @@ export function SubagentsPanel({ repositoryPath, active, listSearch = "", onBind
 
   return (
     <div className="app-subagents-panel">
-      <div style={{ marginBottom: 8, display: "flex", justifyContent: "flex-end" }}>
-        <Space size={6}>
-          <span style={{ color: "var(--ant-color-text-secondary)", fontSize: 12 }}>隐藏 OMC 内置项</span>
-          <Switch size="small" checked={hidePluginSubagents} onChange={setHidePluginSubagents} />
-        </Space>
-      </div>
       <div className="app-subagents-list-wrap">
         <div className="app-subagents-count">
           结果：{displayList.length} / {visibleSorted.length}

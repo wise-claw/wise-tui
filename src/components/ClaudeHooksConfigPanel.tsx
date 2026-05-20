@@ -1,4 +1,4 @@
-import { Alert, App, Empty, Form, Space, Spin, Switch, Tag } from "antd";
+import { Alert, App, Empty, Form, Spin, Tag } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ClaudeHookHandler,
@@ -8,7 +8,7 @@ import type {
 } from "../types";
 import { getClaudeHooksStatus, removeClaudeHook, setClaudeDisableAllHooks, upsertClaudeHook } from "../services/claude";
 import { getAppSetting, setAppSetting } from "../services/appSettingsStore";
-import { EMPTY_DATA, HIDE_OMC_HOOKS_STORAGE_KEY, HOOKS_FLOW_THEME_STORAGE_KEY, LEGACY_APP_SETTING_KEY_HIDE_OMC_HOOKS, LEGACY_APP_SETTING_KEY_HOOKS_FLOW_THEME, SUPPORTED_HOOK_EVENTS } from "./ClaudeHooksConfigPanel/constants";
+import { EMPTY_DATA, HOOKS_FLOW_THEME_STORAGE_KEY, LEGACY_APP_SETTING_KEY_HOOKS_FLOW_THEME, SUPPORTED_HOOK_EVENTS } from "./ClaudeHooksConfigPanel/constants";
 import { HookScopeSection } from "./ClaudeHooksConfigPanel/HookScopeSection";
 import { HookEditModal } from "./ClaudeHooksConfigPanel/HookEditModal";
 import { HooksFlowModal } from "./ClaudeHooksConfigPanel/HooksFlowModal";
@@ -22,6 +22,8 @@ export type { ClaudeHooksConfigPanelHandle } from "./ClaudeHooksConfigPanel/type
 interface Props {
   repositoryPath?: string;
   active?: boolean;
+  /** 未安装 OMC 时不展示 `omc` 作用域（只读内置 hooks）。 */
+  omcInstalled?: boolean;
   /** 与右栏工具条搜索联动，筛选事件 / matcher / handler。 */
   listSearch?: string;
   onBindActions?: (actions: ClaudeHooksConfigPanelHandle | null) => void;
@@ -31,6 +33,7 @@ interface Props {
 export function ClaudeHooksConfigPanel({
   repositoryPath,
   active = true,
+  omcInstalled = false,
   listSearch = "",
   onBindActions,
   onCountChange,
@@ -44,7 +47,6 @@ export function ClaudeHooksConfigPanel({
   const [editing, setEditing] = useState<EditingTarget>(null);
   const [flowOpen, setFlowOpen] = useState(false);
   const [flowTheme, setFlowTheme] = useState<HooksFlowTheme>("light-tech");
-  const [hideOmcHooks, setHideOmcHooks] = useState(false);
   const userSectionRef = useRef<HTMLElement | null>(null);
   const projectSectionRef = useRef<HTMLElement | null>(null);
   const localSectionRef = useRef<HTMLElement | null>(null);
@@ -108,21 +110,6 @@ export function ClaudeHooksConfigPanel({
   useEffect(() => {
     void setAppSetting(HOOKS_FLOW_THEME_STORAGE_KEY, flowTheme);
   }, [flowTheme]);
-  useEffect(() => {
-    void (async () => {
-      const raw =
-        (await getAppSetting(HIDE_OMC_HOOKS_STORAGE_KEY)) ??
-        (await getAppSetting(LEGACY_APP_SETTING_KEY_HIDE_OMC_HOOKS));
-      if (raw != null) {
-        void setAppSetting(HIDE_OMC_HOOKS_STORAGE_KEY, raw);
-      }
-      setHideOmcHooks(raw === "1");
-    })();
-  }, []);
-  useEffect(() => {
-    void setAppSetting(HIDE_OMC_HOOKS_STORAGE_KEY, hideOmcHooks ? "1" : "0");
-  }, [hideOmcHooks]);
-
   const eventOptions = useMemo(() => {
     const existing = new Set<string>([
       ...Object.keys(data.user.hooks),
@@ -332,8 +319,8 @@ export function ClaudeHooksConfigPanel({
   }, []);
 
   const visibleScopes = useMemo(
-    () => (hideOmcHooks ? [data.user, data.project, data.local] : [data.user, data.project, data.local, data.omc]),
-    [data.local, data.omc, data.project, data.user, hideOmcHooks],
+    () => (omcInstalled ? [data.user, data.project, data.local, data.omc] : [data.user, data.project, data.local]),
+    [data.local, data.omc, data.project, data.user, omcInstalled],
   );
   const hasAnyData = visibleScopes.some((scope) => Object.keys(scope.hooks).length > 0);
   const projectScopeUnavailable = Boolean(repositoryPath) && data.project.sourcePath.startsWith("<请选择项目");
@@ -348,9 +335,9 @@ export function ClaudeHooksConfigPanel({
       user: count(data.user),
       project: count(data.project),
       local: count(data.local),
-      omc: hideOmcHooks ? 0 : omcCount,
+      omc: omcInstalled ? omcCount : 0,
     };
-  }, [data.local, data.omc, data.project, data.user, hideOmcHooks]);
+  }, [data.local, data.omc, data.project, data.user, omcInstalled]);
   const hooksCount = useMemo(
     () => filterStats.user + filterStats.project + filterStats.local + filterStats.omc,
     [filterStats.local, filterStats.omc, filterStats.project, filterStats.user],
@@ -434,12 +421,6 @@ export function ClaudeHooksConfigPanel({
           message="当前未获取到有效仓库路径，已回退展示全局（user）Hooks；project/local 暂不可用。"
         />
       ) : null}
-      <div style={{ marginBottom: 8, display: "flex", justifyContent: "flex-end" }}>
-        <Space size={6}>
-          <span style={{ color: "var(--ant-color-text-secondary)", fontSize: 12 }}>隐藏 OMC 内置项</span>
-          <Switch size="small" checked={hideOmcHooks} onChange={setHideOmcHooks} />
-        </Space>
-      </div>
       <div className="app-hooks-stats-bar">
         <button type="button" className="app-hooks-stats-btn" onClick={() => scrollToScope("user")}>
           <Tag variant="filled">user: {filterStats.user}</Tag>
@@ -450,9 +431,11 @@ export function ClaudeHooksConfigPanel({
         <button type="button" className="app-hooks-stats-btn" onClick={() => scrollToScope("local")}>
           <Tag variant="filled">local: {filterStats.local}</Tag>
         </button>
-        <button type="button" className="app-hooks-stats-btn" onClick={() => scrollToScope("omc")}>
-          <Tag variant="filled">omc: {filterStats.omc}</Tag>
-        </button>
+        {omcInstalled ? (
+          <button type="button" className="app-hooks-stats-btn" onClick={() => scrollToScope("omc")}>
+            <Tag variant="filled">omc: {filterStats.omc}</Tag>
+          </button>
+        ) : null}
       </div>
       {loading ? (
         <div className="app-hooks-loading"><Spin size="small" /></div>
@@ -496,7 +479,7 @@ export function ClaudeHooksConfigPanel({
             onClone={openClone}
             keyword={listSearch}
           />
-          {!hideOmcHooks ? (
+          {omcInstalled ? (
             <HookScopeSection
               scope="omc"
               title="OMC 插件内置（只读）"

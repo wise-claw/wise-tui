@@ -15,15 +15,24 @@ import {
   patchMcpItemEnabledById,
   removeMcpItemById,
 } from "../components/ClaudeMcp/claudeMcpListModel";
+import { filterOmcFromMcpStatus } from "../utils/omcPluginDetect";
 
 interface Options {
   repositoryPath?: string | null;
   active?: boolean;
+  /** 未安装 OMC 时从「已安装插件」列表中剔除 OMC 相关 MCP。 */
+  omcInstalled?: boolean;
   listSearch?: string;
   onCountChange?: (count: number) => void;
 }
 
-export function useClaudeMcpList({ repositoryPath, active = true, listSearch = "", onCountChange }: Options) {
+export function useClaudeMcpList({
+  repositoryPath,
+  active = true,
+  omcInstalled = false,
+  listSearch = "",
+  onCountChange,
+}: Options) {
   const { message, modal } = App.useApp();
   const [mcpData, setMcpData] = useState(EMPTY_MCP_DATA);
   const [mcpLoading, setMcpLoading] = useState(false);
@@ -92,8 +101,13 @@ export function useClaudeMcpList({ repositoryPath, active = true, listSearch = "
     void fetchMcpFromHost("initial");
   }, [active, normalizedProjectKey, mcpCacheKey, fetchMcpFromHost]);
 
-  const mcpHasData = useMemo(() => MCP_SECTIONS.some(({ key }) => mcpData[key].length > 0), [mcpData]);
-  const filteredMcpData = useMemo(() => filterMcpDataBySearch(mcpData, listSearch), [mcpData, listSearch]);
+  const visibleMcpData = useMemo(
+    () => (omcInstalled ? mcpData : filterOmcFromMcpStatus(mcpData)),
+    [mcpData, omcInstalled],
+  );
+
+  const mcpHasData = useMemo(() => MCP_SECTIONS.some(({ key }) => visibleMcpData[key].length > 0), [visibleMcpData]);
+  const filteredMcpData = useMemo(() => filterMcpDataBySearch(visibleMcpData, listSearch), [visibleMcpData, listSearch]);
   const mcpHasFilteredData = useMemo(
     () => MCP_SECTIONS.some(({ key }) => filteredMcpData[key].length > 0),
     [filteredMcpData],
@@ -102,7 +116,10 @@ export function useClaudeMcpList({ repositoryPath, active = true, listSearch = "
     if (!listSearch.trim()) return MCP_SECTIONS;
     return MCP_SECTIONS.filter(({ key }) => filteredMcpData[key].length > 0);
   }, [filteredMcpData, listSearch]);
-  const mcpCount = useMemo(() => MCP_SECTIONS.reduce((sum, { key }) => sum + mcpData[key].length, 0), [mcpData]);
+  const mcpCount = useMemo(
+    () => MCP_SECTIONS.reduce((sum, { key }) => sum + visibleMcpData[key].length, 0),
+    [visibleMcpData],
+  );
 
   useEffect(() => {
     onCountChange?.(mcpCount);

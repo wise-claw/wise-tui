@@ -39,6 +39,7 @@ import {
 import { openWorkspaceIn } from "../../services/repository";
 import { DEFAULT_OPEN_APP_ID, DEFAULT_OPEN_APP_TARGETS } from "../OpenAppMenu/constants";
 import { getOpenAppPreferenceSync, hydrateOpenAppPreference } from "../../services/openAppPreference";
+import { isOmcPluginCacheSkill } from "../../utils/omcPluginDetect";
 
 // ── Helpers ──
 
@@ -156,6 +157,8 @@ interface Props {
   repositoryPath: string;
   /** When false, skips loading (hidden tab). */
   active: boolean;
+  /** 未安装 OMC 时不展示插件缓存中的 OMC 技能目录。 */
+  omcInstalled?: boolean;
   /** 与右栏工具条搜索联动，仅影响列表展示。 */
   listSearch?: string;
   onBindActions?: (actions: ProjectSkillsPanelHandle | null) => void;
@@ -319,7 +322,14 @@ const SkillFileRow = memo(function SkillFileRow({ entry, selectedPath, selectedI
   );
 });
 
-export function ProjectSkillsPanel({ repositoryPath, active, listSearch = "", onBindActions, onCountChange }: Props) {
+export function ProjectSkillsPanel({
+  repositoryPath,
+  active,
+  omcInstalled = false,
+  listSearch = "",
+  onBindActions,
+  onCountChange,
+}: Props) {
   const [skills, setSkills] = useState<ClaudeProjectSkill[]>([]);
   const [cacheSkills, setCacheSkills] = useState<ClaudeProjectSkill[]>([]);
   const [loading, setLoading] = useState(false);
@@ -391,9 +401,14 @@ export function ProjectSkillsPanel({ repositoryPath, active, listSearch = "", on
     void load();
   }, [active, repositoryPath, load]);
 
+  const visibleCacheSkillsBase = useMemo(
+    () => (omcInstalled ? cacheSkills : cacheSkills.filter((s) => !isOmcPluginCacheSkill(s))),
+    [cacheSkills, omcInstalled],
+  );
+
   useEffect(() => {
-    onCountChange?.(skills.length + cacheSkills.length);
-  }, [onCountChange, skills.length, cacheSkills.length]);
+    onCountChange?.(skills.length + visibleCacheSkillsBase.length);
+  }, [onCountChange, skills.length, visibleCacheSkillsBase.length]);
 
   const listSearchNeedle = useMemo(() => listSearch.trim().toLowerCase(), [listSearch]);
 
@@ -403,9 +418,9 @@ export function ProjectSkillsPanel({ repositoryPath, active, listSearch = "", on
   }, [skills, listSearchNeedle, repositoryPath]);
 
   const visibleCacheSkills = useMemo(() => {
-    if (!listSearchNeedle) return cacheSkills;
-    return cacheSkills.filter((s) => skillMatchesListSearch(s, listSearchNeedle));
-  }, [cacheSkills, listSearchNeedle]);
+    if (!listSearchNeedle) return visibleCacheSkillsBase;
+    return visibleCacheSkillsBase.filter((s) => skillMatchesListSearch(s, listSearchNeedle));
+  }, [visibleCacheSkillsBase, listSearchNeedle]);
 
   const hasFilteredSkills = visibleProjectSkills.length > 0 || visibleCacheSkills.length > 0;
 

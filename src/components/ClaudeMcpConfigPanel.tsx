@@ -113,13 +113,14 @@ export type ClaudeMcpConfigPanelHandle = {
 interface Props {
   repositoryPath?: string;
   active?: boolean;
+  omcInstalled?: boolean;
   hideToolbar?: boolean;
   listSearch?: string;
   onCountChange?: (count: number) => void;
 }
 
 export const ClaudeMcpConfigPanel = forwardRef<ClaudeMcpConfigPanelHandle, Props>(function ClaudeMcpConfigPanel(
-  { repositoryPath, active = true, hideToolbar = false, listSearch = "", onCountChange },
+  { repositoryPath, active = true, omcInstalled = false, hideToolbar = false, listSearch = "", onCountChange },
   ref,
 ) {
   const [addOpen, setAddOpen] = useState(false);
@@ -139,6 +140,7 @@ export const ClaudeMcpConfigPanel = forwardRef<ClaudeMcpConfigPanelHandle, Props
   } = useClaudeMcpList({
     repositoryPath,
     active,
+    omcInstalled,
     listSearch,
     onCountChange,
   });

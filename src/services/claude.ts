@@ -836,6 +836,11 @@ export async function getClaudeHooksStatus(repositoryPath?: string | null): Prom
   });
 }
 
+/** True when `~/.claude/plugins/cache/omc/oh-my-claudecode` is present (same check as Rust OMC hooks/subagents). */
+export async function isOmcPluginInstalled(): Promise<boolean> {
+  return invoke<boolean>("is_omc_plugin_installed");
+}
+
 export async function upsertClaudeHook(payload: ClaudeHookUpsertPayload): Promise<void> {
   return invoke("upsert_claude_hook", {
     scope: payload.scope,

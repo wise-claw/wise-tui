@@ -15,10 +15,18 @@ import { openExternalUrl } from "../../services/openExternal";
 import {
   getClaudeHooksStatus,
   getClaudeMcpStatus,
+  isOmcPluginInstalled,
   listClaudePluginCacheSkills,
   listClaudeProjectSkills,
   listClaudeSubagents,
 } from "../../services/claude";
+import { useOmcPluginInstalled } from "../../hooks/useOmcPluginInstalled";
+import {
+  countHooksInScope,
+  filterOmcFromMcpStatus,
+  isOmcPluginCacheSkill,
+  isOmcSubagentItem,
+} from "../../utils/omcPluginDetect";
 import "./index.css";
 
 const ClaudeMcpConfigPanel = lazy(() =>
@@ -59,6 +67,7 @@ export function ClaudeCodeToolsPanel({
   const skillsPanelRef = useRef<ProjectSkillsPanelHandle>(null);
   const hooksPanelRef = useRef<ClaudeHooksConfigPanelHandle>(null);
   const subagentsPanelRef = useRef<SubagentsPanelHandle>(null);
+  const { omcInstalled } = useOmcPluginInstalled(true);
 
   const handleSubagentsCountChange = useCallback((count: number) => {
     setTabCounts((prev) => (prev.subagents === count ? prev : { ...prev, subagents: count }));
@@ -79,7 +88,8 @@ export function ClaudeCodeToolsPanel({
   useEffect(() => {
     let cancelled = false;
     async function preloadTabCounts() {
-      const [mcpRes, hooksRes, subagentsRes, skillsRes, cacheSkillsRes] = await Promise.allSettled([
+      const [omcRes, mcpRes, hooksRes, subagentsRes, skillsRes, cacheSkillsRes] = await Promise.allSettled([
+        isOmcPluginInstalled(),
         getClaudeMcpStatus(repositoryPath ?? null),
         getClaudeHooksStatus(repositoryPath ?? null),
         listClaudeSubagents(repositoryPath ?? null),
@@ -87,35 +97,35 @@ export function ClaudeCodeToolsPanel({
         listClaudePluginCacheSkills(),
       ]);
       if (cancelled) return;
+      const showOmc = omcRes.status === "fulfilled" && omcRes.value;
       setTabCounts((prev) => {
         const next = { ...prev };
         if (mcpRes.status === "fulfilled") {
+          const mcp = showOmc ? mcpRes.value : filterOmcFromMcpStatus(mcpRes.value);
           next.mcp =
-            mcpRes.value.user.length +
-            mcpRes.value.local.length +
-            mcpRes.value.projectShared.length +
-            mcpRes.value.legacyUserSettings.length +
-            mcpRes.value.legacyProjectSettings.length +
-            mcpRes.value.pluginMcp.length;
+            mcp.user.length +
+            mcp.local.length +
+            mcp.projectShared.length +
+            mcp.legacyUserSettings.length +
+            mcp.legacyProjectSettings.length +
+            mcp.pluginMcp.length;
         }
         if (hooksRes.status === "fulfilled") {
-          const countScope = (hooks: Record<string, { hooks: unknown[] }[]>) =>
-            Object.values(hooks).reduce(
-              (sum, groups) => sum + groups.reduce((groupSum, group) => groupSum + group.hooks.length, 0),
-              0,
-            );
           next.hooks =
-            countScope(hooksRes.value.user.hooks) +
-            countScope(hooksRes.value.project.hooks) +
-            countScope(hooksRes.value.local.hooks) +
-            countScope(hooksRes.value.omc.hooks);
+            countHooksInScope(hooksRes.value.user.hooks) +
+            countHooksInScope(hooksRes.value.project.hooks) +
+            countHooksInScope(hooksRes.value.local.hooks) +
+            (showOmc ? countHooksInScope(hooksRes.value.omc.hooks) : 0);
         }
         if (subagentsRes.status === "fulfilled") {
-          next.subagents = subagentsRes.value.length;
+          next.subagents = showOmc
+            ? subagentsRes.value.length
+            : subagentsRes.value.filter((item) => !isOmcSubagentItem(item)).length;
         }
         if (skillsRes.status === "fulfilled" || cacheSkillsRes.status === "fulfilled") {
           const nProj = skillsRes.status === "fulfilled" ? skillsRes.value.length : 0;
-          const nCache = cacheSkillsRes.status === "fulfilled" ? cacheSkillsRes.value.length : 0;
+          const cacheList = cacheSkillsRes.status === "fulfilled" ? cacheSkillsRes.value : [];
+          const nCache = showOmc ? cacheList.length : cacheList.filter((s) => !isOmcPluginCacheSkill(s)).length;
           next.skill = nProj + nCache;
         }
         return next;
@@ -125,7 +135,7 @@ export function ClaudeCodeToolsPanel({
     return () => {
       cancelled = true;
     };
-  }, [repositoryPath]);
+  }, [repositoryPath, omcInstalled]);
 
   function withCountLabel(label: string, count: number): string {
     return `${label}·${count}`;
@@ -371,6 +381,7 @@ export function ClaudeCodeToolsPanel({
                     <SubagentsPanel
                       repositoryPath={repositoryPath}
                       active={tab === "subagents"}
+                      omcInstalled={omcInstalled ?? false}
                       listSearch={listSearch}
                       onCountChange={handleSubagentsCountChange}
                       onBindActions={(actions) => {
@@ -393,6 +404,7 @@ export function ClaudeCodeToolsPanel({
                       <ProjectSkillsPanel
                         repositoryPath={repositoryPath}
                         active={tab === "skill"}
+                        omcInstalled={omcInstalled ?? false}
                         listSearch={listSearch}
                         onCountChange={handleSkillsCountChange}
                         onBindActions={(actions) => {
@@ -418,6 +430,7 @@ export function ClaudeCodeToolsPanel({
                       ref={mcpPanelRef}
                       repositoryPath={repositoryPath}
                       active={tab === "mcp"}
+                      omcInstalled={omcInstalled ?? false}
                       hideToolbar
                       listSearch={listSearch}
                       onCountChange={handleMcpCountChange}
@@ -436,6 +449,7 @@ export function ClaudeCodeToolsPanel({
                   <ClaudeHooksConfigPanel
                     repositoryPath={repositoryPath}
                     active={tab === "hooks"}
+                    omcInstalled={omcInstalled ?? false}
                     listSearch={listSearch}
                     onCountChange={handleHooksCountChange}
                     onBindActions={(actions) => {
