@@ -239,6 +239,48 @@ body {
   align-self: stretch;
   gap: 0;
   background: var(--app-workspace-stage-bg);
+  overflow: hidden;
+}
+
+/* 右栏轨道：默认收起（宽 0），展开时占固定宽并从右侧滑入，中栏 flex 自动收缩 */
+.app-right-panel-rail {
+  --app-right-panel-handle: 5px;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  min-height: 0;
+  overflow: hidden;
+  width: calc(var(--app-right-panel-width, 300px) + var(--app-right-panel-handle));
+  max-width: calc(var(--app-right-panel-width, 300px) + var(--app-right-panel-handle));
+  transition:
+    width 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+    max-width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.app-right-panel-rail--collapsed {
+  width: 0 !important;
+  max-width: 0 !important;
+  pointer-events: none;
+}
+
+.app-right-panel-rail__panel {
+  flex: 1 1 auto;
+  min-width: var(--app-right-panel-width, 300px);
+  display: flex;
+  min-height: 0;
+  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.app-right-panel-rail--collapsed .app-right-panel-rail__panel {
+  transform: translateX(100%);
+}
+
+.app-right-panel-rail .app-right-panel.ant-layout-sider {
+  flex: 1 1 auto;
+  width: var(--app-right-panel-width, 300px) !important;
+  min-width: var(--app-right-panel-width, 300px) !important;
+  max-width: var(--app-right-panel-width, 300px) !important;
 }
 
 /* MCP / skills.sh / 代码图谱：叠在主内容+右栏之上 */

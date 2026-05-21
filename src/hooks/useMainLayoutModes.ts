@@ -4,7 +4,6 @@ import { safeUnlisten, safeUnlistenPromise } from "../utils/safeTauriUnlisten";
 import { message } from "antd";
 import type { ClaudeSession, Repository } from "../types";
 import {
-  adjustMainWindowLogicalWidthByDelta,
   expandMainWindowByDualPaneCenterDelta,
   measureMainLayoutContentWidthPx,
   readMainWindowInnerSize,
@@ -65,7 +64,7 @@ export function useMainLayoutModes({
   setDualPaneSecondaryRepositoryId,
   setDualPaneSecondarySessionId,
 }: UseMainLayoutModesOptions) {
-  const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(true);
   const [compactLayoutMode, setCompactLayoutMode] = useState(false);
   const compactLayoutSnapshotRef = useRef<{ width: number; height: number } | null>(null);
   const compactLayoutModeRef = useRef(false);
@@ -331,14 +330,8 @@ export function useMainLayoutModes({
       void exitCompactLayoutMode();
       return;
     }
-    const nextCollapsed = !rightCollapsed;
-    setRightCollapsed(nextCollapsed);
-    void (async () => {
-      await waitLayoutFrames(2);
-      const dw = nextCollapsed ? -mainLayoutRightWidthPx : mainLayoutRightWidthPx;
-      await adjustMainWindowLogicalWidthByDelta(dw);
-    })();
-  }, [exitCompactLayoutMode, mainLayoutRightWidthPx, rightCollapsed]);
+    setRightCollapsed((c) => !c);
+  }, [exitCompactLayoutMode]);
 
   return {
     compactLayoutMode,

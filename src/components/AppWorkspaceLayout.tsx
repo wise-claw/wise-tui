@@ -8,6 +8,7 @@ import {
   useEffect,
   useMemo,
   useState,
+  type CSSProperties,
   type ComponentProps,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
@@ -442,8 +443,7 @@ export function AppWorkspaceLayout({
     viewMode.kind === "inspect" && isTrellisInspectorKind(viewMode.tool.kind)
       ? viewMode.tool
       : null;
-  const rightInspectorHidden =
-    effectiveRightCollapsed || missionControlMode || authorMode;
+  const chatRightRailMode = !authorMode && !missionControlMode;
   const leftSidebarParked = cockpitPrdSplitFullscreen;
   const [authorShellMounted, setAuthorShellMounted] = useState(authorMode);
   const [cockpitShellMounted, setCockpitShellMounted] = useState(missionControlMode);
@@ -593,22 +593,35 @@ export function AppWorkspaceLayout({
                       panelBelowMessages={editorPanelNode}
                     />
 
-                    {!rightInspectorHidden ? (
-                      <MainLayoutResizeHandle
-                        variant="right"
-                        startWidthPx={mainLayoutRightWidthPx}
-                        onWidthChange={onRightWidthChange}
-                      />
-                    ) : null}
-
-                    {!rightInspectorHidden ? (
-                      <Suspense fallback={null}>
-                        <ConnectedInspector
-                          viewMode={viewMode}
-                          chatInspectorProps={chatInspectorProps}
-                          cockpitInspectorProps={cockpitInspectorProps}
-                        />
-                      </Suspense>
+                    {chatRightRailMode ? (
+                      <div
+                        className={`app-right-panel-rail${
+                          effectiveRightCollapsed ? " app-right-panel-rail--collapsed" : ""
+                        }`}
+                        style={
+                          {
+                            "--app-right-panel-width": `${mainLayoutRightWidthPx}px`,
+                          } as CSSProperties
+                        }
+                        aria-hidden={effectiveRightCollapsed}
+                      >
+                        {!effectiveRightCollapsed ? (
+                          <MainLayoutResizeHandle
+                            variant="right"
+                            startWidthPx={mainLayoutRightWidthPx}
+                            onWidthChange={onRightWidthChange}
+                          />
+                        ) : null}
+                        <div className="app-right-panel-rail__panel">
+                          <Suspense fallback={null}>
+                            <ConnectedInspector
+                              viewMode={viewMode}
+                              chatInspectorProps={chatInspectorProps}
+                              cockpitInspectorProps={cockpitInspectorProps}
+                            />
+                          </Suspense>
+                        </div>
+                      </div>
                     ) : null}
 
                     <CommandPalette {...commandPaletteProps} />

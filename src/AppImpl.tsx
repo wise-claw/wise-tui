@@ -2592,7 +2592,7 @@ export default function App() {
       }}
       chatInspectorProps={{
         dark,
-        collapsed: effectiveRightCollapsed,
+        collapsed: false,
         projectId: activeProjectId,
         siderWidth: mainLayoutRightWidthPx,
         repositoryPath: activeRepository?.path,
