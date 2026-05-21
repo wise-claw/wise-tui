@@ -210,7 +210,7 @@ async fn register_stream_ticket(
             { "topic": "*", "type": "EVENT" },
             { "topic": "/v1.0/im/bot/messages/get", "type": "CALLBACK" }
         ],
-        "ua": concat!("wise-desktop/", env!("CARGO_PKG_VERSION"), " rust"),
+        "ua": concat!("wise/", env!("CARGO_PKG_VERSION"), " rust"),
     });
     let resp = client
         .post(CONNECTIONS_OPEN)

@@ -1,5 +1,5 @@
 [package]
-name = "wise-desktop"
+name = "wise"
 version = "0.1.0"
 description = "Wise desktop orchestration client"
 authors = ["Wise contributors"]

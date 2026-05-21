@@ -7,10 +7,24 @@ import type { AssistantBundleItem } from "../../services/assistantPromptLayers";
 import type { AssistantWorkflowRef } from "../../types/assistant";
 import type { LegacyRunSummary } from "../../services/prdSplit/legacyRunsImport";
 import { RequirementBoardActions } from "./RequirementBoardActions";
+import { RequirementBoardHeader } from "./RequirementBoardHeader";
 
 const MilkdownEditor = lazy(() => import("../MilkdownViewer").then((module) => ({ default: module.MilkdownEditor })));
 
+interface RequirementOption {
+  id: string;
+  requirementDisplayName: string;
+  isPinned?: boolean;
+}
+
+interface ActiveRequirementSummary {
+  isPinned?: boolean;
+}
+
 interface Props {
+  activeRequirementId: string | null;
+  activeRequirement: ActiveRequirementSummary | null;
+  options: RequirementOption[];
   inputValue: string;
   inputError: string | null;
   showUrlAnchorHint: boolean;
@@ -40,9 +54,16 @@ interface Props {
   onImportPrdFile: () => void;
   onImportLegacyPrd: (summary: LegacyRunSummary) => void;
   onAssistantMcpsChange: (ids: string[]) => void;
+  onPickRequirement: (value: string) => void;
+  onPinRequirement: () => void;
+  onCreateRequirement: () => void;
+  onDeleteRequirement: () => void;
 }
 
 export function RequirementInputCard({
+  activeRequirementId,
+  activeRequirement,
+  options,
   inputValue,
   inputError,
   showUrlAnchorHint,
@@ -72,11 +93,25 @@ export function RequirementInputCard({
   onImportPrdFile,
   onImportLegacyPrd,
   onAssistantMcpsChange,
+  onPickRequirement,
+  onPinRequirement,
+  onCreateRequirement,
+  onDeleteRequirement,
 }: Props) {
   return (
     <Card
       size="small"
-      title={<span className="app-prd-task-panel__assistant-input-title">PRD 输入</span>}
+      title={(
+        <RequirementBoardHeader
+          activeRequirementId={activeRequirementId}
+          activeRequirement={activeRequirement}
+          options={options}
+          onPick={onPickRequirement}
+          onPin={onPinRequirement}
+          onCreate={onCreateRequirement}
+          onDelete={onDeleteRequirement}
+        />
+      )}
       className="app-prd-task-panel__left-card"
       bodyStyle={{ padding: "0 0 16px 0" }}
     >

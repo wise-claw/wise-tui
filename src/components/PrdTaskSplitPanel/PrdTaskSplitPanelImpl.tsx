@@ -29,6 +29,8 @@ export function PrdTaskSplitPanel({
 }: PrdTaskSplitPanelProps) {
   const [workspaceLayout, setWorkspaceLayout] = useState<SplitWorkspaceLayout>("review");
   const {
+    activeRequirement,
+    activeRequirementId,
     activeResult,
     assistantHistoryLoading,
     assistantHistoryOptions,
@@ -55,6 +57,7 @@ export function PrdTaskSplitPanel({
     handleConfirmAllTasks,
     handleConfirmRequirementNameModal,
     handleConfirmTaskAdjustment,
+    handleDeleteActiveRequirement,
     handleDeleteTask,
     handleGenerateExecutableForSplitTask,
     handleGenerateExecutableTasks,
@@ -66,6 +69,7 @@ export function PrdTaskSplitPanel({
     handleOptimizeRuntimePromptDraft,
     handleOptimizeTaskContent,
     handlePasteImage,
+    handlePinActiveRequirement,
     handleResetRuntimePromptToDefault,
     handleRetrySplitStage,
     handleSaveOptimizedTaskContent,
@@ -88,6 +92,7 @@ export function PrdTaskSplitPanel({
     pendingTaskContentById,
     pickRequirementIdForTask,
     promptActionItems,
+    requirementHistoryById,
     requirementEditorShellRef,
     requirementNameInput,
     requirementNameModalMode,
@@ -112,6 +117,7 @@ export function PrdTaskSplitPanel({
     setPendingTaskApiSpecById,
     setPendingTaskContentById,
     setRequirementNameInput,
+    setRequirementNameModalMode,
     setRequirementNameModalOpen,
     setResolvedTaskAnchorIds,
     setRuntimePromptModalOpen,
@@ -129,6 +135,7 @@ export function PrdTaskSplitPanel({
     setTaskConfirmFilter,
     setTaskUnmetCollapsedById,
     showUrlAnchorHint,
+    sortedRequirementHistory,
     splitError,
     splitPromptAdjustStarting,
     splitQualityStats,
@@ -149,6 +156,7 @@ export function PrdTaskSplitPanel({
     taskExecutableCheckResultById,
     taskSplitHostRef,
     taskUnmetCollapsedById,
+    switchToRequirement,
     unmetPreconditionsMenuItems,
     unmetTaskIds,
     updateRuntimePromptDraft,
@@ -208,6 +216,9 @@ export function PrdTaskSplitPanel({
         >
           <Col span={12} className="app-prd-task-panel__col app-prd-task-panel__col--requirements">
             <RequirementInputCard
+              activeRequirementId={activeRequirementId}
+              activeRequirement={activeRequirement ?? null}
+              options={sortedRequirementHistory}
               inputValue={inputValue}
               inputError={inputError}
               showUrlAnchorHint={showUrlAnchorHint}
@@ -227,6 +238,18 @@ export function PrdTaskSplitPanel({
               selectedAnchorTaskId={selectedAnchorTaskId}
               filteredTaskCount={filteredTasks.length}
               onInputChange={setInputValue}
+              onPickRequirement={(value) => {
+                const picked = requirementHistoryById.get(value);
+                if (!picked) return;
+                switchToRequirement(picked);
+              }}
+              onPinRequirement={() => handlePinActiveRequirement()}
+              onCreateRequirement={() => {
+                setRequirementNameModalMode("create");
+                setRequirementNameInput("");
+                setRequirementNameModalOpen(true);
+              }}
+              onDeleteRequirement={() => handleDeleteActiveRequirement()}
               onPasteImage={(e) => void handlePasteImage(e)}
               onSplitSelection={() => void handleSplitSelection()}
               onResolvedTaskAnchorIdsChange={(taskIds) => {
