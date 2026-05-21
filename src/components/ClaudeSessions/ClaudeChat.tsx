@@ -1197,21 +1197,182 @@ export function ClaudeChat({
     findFirstDispatchableTask,
   ]);
 
-  // Auto-scroll messages（流式时 messages 极高频更新；仅贴底时跟随 + rAF 写 scrollTop，避免与用户滚动打架）
-  const autoScrollThrottleRef = useRef<{ timer?: number; lastAt: number }>({ lastAt: 0 });
-  const AUTOSCROLL_THROTTLE_MS = 120;
-  /** 用户滚动后暂停自动跟随的时间（毫秒） */
-  const PAUSE_AFTER_USER_SCROLL_MS = 1500;
+  // Auto-scroll messages：默认贴底跟随；用户手动滚动后暂停，失焦仅重新武装跟随，有新内容再贴底
+  /** 流式贴底：每帧最多移动的像素（越大越跟手，越小越丝滑） */
+  const SCROLL_FOLLOW_MAX_STEP_PX = 96;
 
   /** 消息列表滚动容器：用 scrollTop 贴底，避免 scrollIntoView 触发布局与祖先滚动链，减轻手动滚动时卡顿 */
   const messagesScrollRef = useRef<HTMLDivElement>(null);
-  /** 用户是否想贴底；用户滚动时短暂暂停，暂停期结束后自动恢复 */
+  /** 是否允许自动贴底（用户手动翻历史并仍聚焦消息区时为 false） */
   const pinToBottomRef = useRef(true);
-  /** 暂停自动滚动的截止时间（毫秒时间戳） */
-  const pauseUntilRef = useRef(0);
   /** 记录上一次的 scrollTop，用于判断用户滚动方向 */
   const lastScrollTopRef = useRef(0);
+  /** 程序触发的滚动，避免 scroll 监听误判为用户操作 */
+  const programmaticScrollRef = useRef(false);
+  /** 用户手动滚动后暂停跟随，直至消息历史区失焦 */
+  const userPausedFollowRef = useRef(false);
+  /** 失焦后已允许跟随，但等到消息指纹变化（新增/流式增高）再滚动 */
+  const awaitNewMessageBeforeFollowRef = useRef(false);
+  const followFingerprintAtBlurRef = useRef("");
+  /** 流式贴底跟随循环 */
+  const scrollFollowLoopRafRef = useRef<number | null>(null);
+  const sessionStatusRef = useRef(session.status);
+  sessionStatusRef.current = session.status;
   const lastUserMessagePinIdRef = useRef<number | null>(null);
+
+  const buildMessagesFollowFingerprint = useCallback((messages: ClaudeSession["messages"]) => {
+    if (messages.length === 0) return "empty";
+    const last = messages[messages.length - 1]!;
+    const partsTextLen =
+      last.parts?.reduce((sum, part) => {
+        if (part.type === "text") return sum + part.text.length;
+        if (part.type === "reasoning") return sum + part.text.length;
+        return sum;
+      }, 0) ?? 0;
+    return `${messages.length}:${last.id}:${last.content.length}:${partsTextLen}`;
+  }, []);
+
+  const shouldAutoFollow = useCallback(() => {
+    if (hideMessages) return false;
+    return pinToBottomRef.current;
+  }, [hideMessages]);
+
+  const canScrollForNewContent = useCallback(() => {
+    if (!awaitNewMessageBeforeFollowRef.current) return true;
+    const fp = buildMessagesFollowFingerprint(session.messages);
+    if (fp === followFingerprintAtBlurRef.current) return false;
+    awaitNewMessageBeforeFollowRef.current = false;
+    return true;
+  }, [session.messages, buildMessagesFollowFingerprint]);
+
+  const isSessionStreaming = useCallback(() => {
+    const status = sessionStatusRef.current;
+    return status === "running" || status === "connecting";
+  }, []);
+
+  const getMessagesScrollTarget = useCallback((sc: HTMLDivElement) => {
+    return Math.max(0, sc.scrollHeight - sc.clientHeight);
+  }, []);
+
+  const applyScrollTowardBottom = useCallback(
+    (sc: HTMLDivElement, opts?: { smooth?: boolean }) => {
+      const target = getMessagesScrollTarget(sc);
+      const current = sc.scrollTop;
+      const gap = target - current;
+      if (gap <= 0.5) return;
+
+      programmaticScrollRef.current = true;
+      if (!opts?.smooth || gap <= SCROLL_FOLLOW_MAX_STEP_PX) {
+        sc.scrollTop = target;
+      } else {
+        sc.scrollTop = current + Math.min(gap, SCROLL_FOLLOW_MAX_STEP_PX);
+      }
+      lastScrollTopRef.current = sc.scrollTop;
+      // 延后清除，避免 follow 循环写入 scrollTop 触发的 scroll 被误判为用户操作
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          programmaticScrollRef.current = false;
+        });
+      });
+    },
+    [getMessagesScrollTarget],
+  );
+
+  const snapScrollToBottom = useCallback(() => {
+    const sc = messagesScrollRef.current;
+    if (!sc) return;
+    applyScrollTowardBottom(sc);
+  }, [applyScrollTowardBottom]);
+
+  const cancelScrollFollowLoop = useCallback(() => {
+    if (scrollFollowLoopRafRef.current != null) {
+      window.cancelAnimationFrame(scrollFollowLoopRafRef.current);
+      scrollFollowLoopRafRef.current = null;
+    }
+  }, []);
+
+  const tickScrollFollowLoopRef = useRef<() => void>(() => undefined);
+
+  const ensureScrollFollowLoop = useCallback(() => {
+    if (!shouldAutoFollow() || !isSessionStreaming()) return;
+    if (scrollFollowLoopRafRef.current != null) return;
+    scrollFollowLoopRafRef.current = window.requestAnimationFrame(() => tickScrollFollowLoopRef.current());
+  }, [shouldAutoFollow, isSessionStreaming]);
+
+  const armAutoFollowOnMessagesBlur = useCallback(() => {
+    if (!userPausedFollowRef.current) return;
+    userPausedFollowRef.current = false;
+    pinToBottomRef.current = true;
+    awaitNewMessageBeforeFollowRef.current = true;
+    followFingerprintAtBlurRef.current = buildMessagesFollowFingerprint(session.messages);
+    // 失焦不立刻滚动；等 session.messages 有新增/流式更新后再 scheduleScrollToBottom
+  }, [buildMessagesFollowFingerprint, session.messages]);
+
+  const pauseAutoFollowForUserScroll = useCallback(() => {
+    if (userPausedFollowRef.current) return;
+    userPausedFollowRef.current = true;
+    pinToBottomRef.current = false;
+    awaitNewMessageBeforeFollowRef.current = false;
+    cancelScrollFollowLoop();
+  }, [cancelScrollFollowLoop]);
+
+  const handleMessagesBlur = useCallback(
+    (event: React.FocusEvent<HTMLDivElement>) => {
+      const sc = messagesScrollRef.current;
+      if (!sc) return;
+      const next = event.relatedTarget;
+      if (next instanceof Node && sc.contains(next)) return;
+      armAutoFollowOnMessagesBlur();
+    },
+    [armAutoFollowOnMessagesBlur],
+  );
+
+  const tickScrollFollowLoop = useCallback(() => {
+    scrollFollowLoopRafRef.current = null;
+    if (!shouldAutoFollow()) return;
+    if (!canScrollForNewContent()) return;
+
+    const sc = messagesScrollRef.current;
+    if (!sc) return;
+
+    const streaming = isSessionStreaming();
+    applyScrollTowardBottom(sc, { smooth: streaming });
+
+    if (streaming && shouldAutoFollow()) {
+      scrollFollowLoopRafRef.current = window.requestAnimationFrame(() => tickScrollFollowLoopRef.current());
+    }
+  }, [shouldAutoFollow, canScrollForNewContent, isSessionStreaming, applyScrollTowardBottom]);
+
+  tickScrollFollowLoopRef.current = tickScrollFollowLoop;
+
+  const scheduleScrollToBottom = useCallback(() => {
+    if (!shouldAutoFollow()) return;
+    if (!canScrollForNewContent()) return;
+    const sc = messagesScrollRef.current;
+    if (!sc) return;
+
+    applyScrollTowardBottom(sc, { smooth: isSessionStreaming() });
+
+    if (isSessionStreaming()) {
+      ensureScrollFollowLoop();
+      return;
+    }
+
+    // 非流式：Markdown 在子组件 rAF 中增高，下一帧再贴一次
+    window.requestAnimationFrame(() => {
+      if (!shouldAutoFollow()) return;
+      if (!canScrollForNewContent()) return;
+      const scNow = messagesScrollRef.current;
+      if (!scNow) return;
+      applyScrollTowardBottom(scNow);
+    });
+  }, [
+    shouldAutoFollow,
+    canScrollForNewContent,
+    isSessionStreaming,
+    applyScrollTowardBottom,
+    ensureScrollFollowLoop,
+  ]);
 
   const [fullTranscriptLoading, setFullTranscriptLoading] = useState(false);
 
@@ -1228,16 +1389,13 @@ export function ClaudeChat({
   );
 
   useEffect(() => {
-    const t = autoScrollThrottleRef.current.timer;
-    if (t != null) {
-      window.clearTimeout(t);
-      autoScrollThrottleRef.current.timer = undefined;
-    }
-    autoScrollThrottleRef.current.lastAt = 0;
+    cancelScrollFollowLoop();
     pinToBottomRef.current = true;
-    pauseUntilRef.current = 0;
+    userPausedFollowRef.current = false;
+    awaitNewMessageBeforeFollowRef.current = false;
+    followFingerprintAtBlurRef.current = "";
     lastUserMessagePinIdRef.current = null;
-  }, [session.id]);
+  }, [session.id, cancelScrollFollowLoop]);
 
   /** 用户新发出一条 user 消息时恢复贴底，便于立刻看到自己发送的内容 */
   useEffect(() => {
@@ -1247,9 +1405,12 @@ export function ClaudeChat({
     if (lastUserMessagePinIdRef.current === last.id) return;
     lastUserMessagePinIdRef.current = last.id;
     pinToBottomRef.current = true;
-    // 发送新消息时清除暂停状态
-    pauseUntilRef.current = 0;
-  }, [session.messages]);
+    userPausedFollowRef.current = false;
+    awaitNewMessageBeforeFollowRef.current = false;
+    cancelScrollFollowLoop();
+    snapScrollToBottom();
+    ensureScrollFollowLoop();
+  }, [session.messages, cancelScrollFollowLoop, snapScrollToBottom, ensureScrollFollowLoop]);
 
   useLayoutEffect(() => {
     if (hideMessages) return;
@@ -1260,121 +1421,93 @@ export function ClaudeChat({
     // 初始化：记录当前 scrollTop
     lastScrollTopRef.current = sc.scrollTop;
 
+    const onWheel = (event: WheelEvent) => {
+      if (programmaticScrollRef.current) return;
+      if (Math.abs(event.deltaY) <= 2) return;
+      sc.focus({ preventScroll: true });
+      pauseAutoFollowForUserScroll();
+    };
+
     const onScroll = () => {
+      if (programmaticScrollRef.current) return;
       if (pinRaf !== 0) return;
       pinRaf = window.requestAnimationFrame(() => {
         pinRaf = 0;
+        if (programmaticScrollRef.current) return;
         const currentScrollTop = sc.scrollTop;
         const prevScrollTop = lastScrollTopRef.current;
-
-        // 用户主动滚动时，暂停自动跟随一段时间
-        if (Math.abs(currentScrollTop - prevScrollTop) > 3) {
-          // 用户滚动幅度超过 3px，视为主动滚动
-          pauseUntilRef.current = Date.now() + PAUSE_AFTER_USER_SCROLL_MS;
+        if (Math.abs(currentScrollTop - prevScrollTop) > 1) {
+          sc.focus({ preventScroll: true });
+          pauseAutoFollowForUserScroll();
         }
-
         lastScrollTopRef.current = currentScrollTop;
       });
     };
+    sc.addEventListener("wheel", onWheel, { passive: true, capture: true });
     sc.addEventListener("scroll", onScroll, { passive: true });
     // 初始时默认贴底
     pinToBottomRef.current = true;
     return () => {
+      sc.removeEventListener("wheel", onWheel, { capture: true });
       sc.removeEventListener("scroll", onScroll);
       if (pinRaf !== 0) window.cancelAnimationFrame(pinRaf);
     };
-  }, [session.id, hideMessages]);
+  }, [session.id, hideMessages, getMessagesScrollTarget, pauseAutoFollowForUserScroll]);
 
-  /** 自动滚动：在 useLayoutEffect 中同步执行，确保浏览器绘制前完成滚动，避免视觉跳动 */
+  /** 消息/状态更新时贴底；流式时启动持续跟随循环 */
+  useLayoutEffect(() => {
+    if (hideMessages) return;
+    scheduleScrollToBottom();
+  }, [session.messages, session.status, hideMessages, scheduleScrollToBottom]);
+
+  /** session.status 进入/离开流式时启停跟随循环 */
+  useEffect(() => {
+    if (hideMessages) return;
+    if (shouldAutoFollow() && isSessionStreaming()) {
+      ensureScrollFollowLoop();
+      return;
+    }
+    cancelScrollFollowLoop();
+  }, [
+    session.status,
+    hideMessages,
+    shouldAutoFollow,
+    isSessionStreaming,
+    ensureScrollFollowLoop,
+    cancelScrollFollowLoop,
+  ]);
+
+  /** 尾部内容增高（Markdown/代码块）时贴底 */
   useLayoutEffect(() => {
     if (hideMessages) return;
     const sc = messagesScrollRef.current;
     if (!sc) return;
 
-    // 检查是否在暂停期内
-    const now = Date.now();
-    if (now < pauseUntilRef.current) {
-      // 用户刚滚动过，暂停自动跟随
-      return;
-    }
+    const ro = new ResizeObserver(() => {
+      scheduleScrollToBottom();
+    });
 
-    // 暂停期结束，恢复自动跟随
-    pinToBottomRef.current = true;
-
-    const throttled = session.status === "running" || session.status === "connecting";
-
-    // 流式输出时使用节流，非流式时直接滚动
-    if (throttled) {
-      const { lastAt, timer } = autoScrollThrottleRef.current;
-      if (now - lastAt < AUTOSCROLL_THROTTLE_MS) {
-        // 还在节流窗口内，不滚动（由 setTimeout 回调处理）
-        return;
-      }
-      if (timer != null) {
-        window.clearTimeout(timer);
-        autoScrollThrottleRef.current.timer = undefined;
-      }
-    } else {
-      if (autoScrollThrottleRef.current.timer != null) {
-        window.clearTimeout(autoScrollThrottleRef.current.timer);
-        autoScrollThrottleRef.current.timer = undefined;
-      }
-    }
-
-    // 同步滚动到底部
-    sc.scrollTop = sc.scrollHeight;
-    autoScrollThrottleRef.current.lastAt = now;
-  }, [session.messages, session.status, hideMessages]);
-
-  /** 流式输出时的节流 setTimeout：确保节流窗口结束后仍有一次滚动机会 */
-  useEffect(() => {
-    if (hideMessages) return;
-    const sc = messagesScrollRef.current;
-    if (!sc) return;
-
-    const throttled = session.status === "running" || session.status === "connecting";
-    if (!throttled) return;
-
-    const now = Date.now();
-
-    // 检查是否在暂停期内
-    if (now < pauseUntilRef.current) {
-      return;
-    }
-
-    const { lastAt, timer } = autoScrollThrottleRef.current;
-    const remaining = AUTOSCROLL_THROTTLE_MS - (now - lastAt);
-
-    if (remaining > 0 && timer == null) {
-      autoScrollThrottleRef.current.timer = window.setTimeout(() => {
-        autoScrollThrottleRef.current.timer = undefined;
-        // 再次检查暂停状态
-        if (Date.now() < pauseUntilRef.current) return;
-        const scNow = messagesScrollRef.current;
-        if (!scNow) return;
-        scNow.scrollTop = scNow.scrollHeight;
-        autoScrollThrottleRef.current.lastAt = Date.now();
-      }, remaining);
-    }
-
-    return () => {
-      const t2 = autoScrollThrottleRef.current.timer;
-      if (t2 != null) {
-        window.clearTimeout(t2);
-        autoScrollThrottleRef.current.timer = undefined;
+    const observeChildren = () => {
+      ro.disconnect();
+      for (const child of sc.children) {
+        ro.observe(child);
       }
     };
-  }, [session.messages, session.status, hideMessages]);
+    observeChildren();
 
-  useEffect(() => {
+    const mo = new MutationObserver(() => {
+      observeChildren();
+      if (shouldAutoFollow()) scheduleScrollToBottom();
+    });
+    mo.observe(sc, { childList: true });
+
     return () => {
-      const t = autoScrollThrottleRef.current.timer;
-      if (t != null) {
-        window.clearTimeout(t);
-        autoScrollThrottleRef.current.timer = undefined;
-      }
+      ro.disconnect();
+      mo.disconnect();
     };
-  }, []);
+  }, [session.id, hideMessages, scheduleScrollToBottom]);
+
+  useEffect(() => () => cancelScrollFollowLoop(), [cancelScrollFollowLoop]);
   const [stats, setStats] = useState({ additions: 0, deletions: 0 });
 
   useEffect(() => {
@@ -4234,7 +4367,17 @@ export function ClaudeChat({
 
       {/* Messages */}
       {!hideMessages && (
-        <div ref={messagesScrollRef} className="app-claude-messages">
+        <div
+          ref={messagesScrollRef}
+          className="app-claude-messages"
+          tabIndex={-1}
+          role="log"
+          aria-label="对话消息"
+          onPointerDownCapture={() => {
+            messagesScrollRef.current?.focus({ preventScroll: true });
+          }}
+          onBlur={handleMessagesBlur}
+        >
           {session.diskTranscriptPartial && onReloadFullDiskTranscript ? (
             <Alert
               className="app-claude-messages-disk-partial-alert"

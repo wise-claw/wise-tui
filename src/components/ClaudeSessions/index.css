@@ -2862,6 +2862,8 @@
   overscroll-behavior: contain;
   /* 提升为独立合成层，部分设备上纵向滚动更顺滑 */
   transform: translateZ(0);
+  /* 贴底跟随由 JS 缓动驱动；避免与原生 smooth 叠加产生迟滞 */
+  scroll-behavior: auto;
 }
 
 .app-claude-messages-empty {

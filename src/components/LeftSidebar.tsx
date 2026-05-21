@@ -337,7 +337,6 @@ export function LeftSidebar({
         authorDisabled={authorDisabled}
         authorTooltip={authorDisabledTooltip}
         onOpenAuthor={onOpenAuthor}
-        onOpenSettings={() => setAppSettingsOpen(true)}
       />
 
       {taskCardsNavProps ? (
