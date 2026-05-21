@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT,
+  ensurePrdSplitQuickActionPrimary,
   mergeSessionQuickActionsLayout,
   moveLayoutItem,
   parseSessionQuickActionsLayout,
@@ -39,6 +40,42 @@ describe("sessionQuickActionsLayout", () => {
     const index = next.items.findIndex((item) => item.id === "push");
     expect(next.items[index]?.id).toBe("push");
     expect(next.items[index + 1]?.id).toBe("builtin:ppt-deck");
+  });
+
+  test("merge prefers primary when legacy ids collapse to builtin:prd-split", () => {
+    const merged = parseSessionQuickActionsLayout(
+      JSON.stringify({
+        version: 1,
+        items: [
+          { id: "requirement-split", visible: true, zone: "primary" },
+          { id: "builtin:prd-split", visible: true, zone: "overflow" },
+        ],
+      }),
+    );
+    const prd = merged.items.find((item) => item.id === "builtin:prd-split");
+    expect(prd?.zone).toBe("primary");
+  });
+
+  test("ensurePrdSplitQuickActionPrimary promotes 需求 to primary zone", () => {
+    const layout = mergeSessionQuickActionsLayout({
+      version: 1,
+      items: [{ id: "builtin:prd-split", visible: true, zone: "overflow" }],
+    });
+    const promoted = ensurePrdSplitQuickActionPrimary(layout);
+    const { primary } = partitionSessionQuickActions(promoted, {
+      canNewSession: true,
+      canWorkTree: false,
+    });
+    expect(primary).toContain("builtin:prd-split");
+  });
+
+  test("default layout shows 需求 on primary bar", () => {
+    const { primary } = partitionSessionQuickActions(DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT, {
+      canNewSession: true,
+      canWorkTree: false,
+    });
+    expect(primary.indexOf("builtin:prd-split")).toBeGreaterThan(-1);
+    expect(primary.indexOf("builtin:prd-split")).toBeLessThan(primary.indexOf("push"));
   });
 
   test("merge migrates legacy requirement-split to builtin:prd-split", () => {

@@ -1,6 +1,8 @@
 import { SESSION_QUICK_BUILTIN_ASSISTANTS } from "./sessionQuickBuiltinAssistants";
 
-export const SESSION_QUICK_ACTIONS_LAYOUT_STORAGE_KEY = "wise.session.quickActionsLayout.v1";
+export const SESSION_QUICK_ACTIONS_LAYOUT_STORAGE_KEY = "wise.session.quickActionsLayout.v2";
+/** @deprecated 读取后迁移到 v2，并确保「需求」外显 */
+export const SESSION_QUICK_ACTIONS_LAYOUT_STORAGE_KEY_V1 = "wise.session.quickActionsLayout.v1";
 
 export type SessionQuickActionId =
   | "new-session"
@@ -86,6 +88,28 @@ function isZone(value: unknown): value is SessionQuickActionZone {
   return value === "primary" || value === "overflow";
 }
 
+function mergeQuickActionLayoutItem(
+  prev: SessionQuickActionLayoutItem | undefined,
+  next: SessionQuickActionLayoutItem,
+): SessionQuickActionLayoutItem {
+  if (!prev) return next;
+  return {
+    id: next.id,
+    visible: prev.visible && next.visible,
+    zone: prev.zone === "primary" || next.zone === "primary" ? "primary" : "overflow",
+  };
+}
+
+/** 「需求」默认外显；用于 v1 布局迁移与恢复默认 */
+export function ensurePrdSplitQuickActionPrimary(
+  layout: SessionQuickActionsLayoutV1,
+): SessionQuickActionsLayoutV1 {
+  return updateLayoutItem(mergeSessionQuickActionsLayout(layout), "builtin:prd-split", {
+    visible: true,
+    zone: "primary",
+  });
+}
+
 /** 与目录合并：保留用户顺序，补齐缺失项，剔除未知 id */
 export function mergeSessionQuickActionsLayout(
   input: SessionQuickActionsLayoutV1 | null | undefined,
@@ -96,11 +120,12 @@ export function mergeSessionQuickActionsLayout(
   for (const raw of source) {
     const id = normalizeSessionQuickActionId(raw?.id);
     if (!raw || !id) continue;
-    byId.set(id, {
+    const next: SessionQuickActionLayoutItem = {
       id,
       visible: raw.visible !== false,
       zone: isZone(raw.zone) ? raw.zone : "overflow",
-    });
+    };
+    byId.set(id, mergeQuickActionLayoutItem(byId.get(id), next));
   }
 
   const defaultById = new Map(DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT.items.map((item) => [item.id, item]));
@@ -134,19 +159,6 @@ export function parseSessionQuickActionsLayout(raw: string | null | undefined): 
   } catch {
     return mergeSessionQuickActionsLayout(DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT);
   }
-}
-
-export function readSessionQuickActionsLayoutFromLocalStorage(): SessionQuickActionsLayoutV1 {
-  if (typeof window === "undefined") {
-    return mergeSessionQuickActionsLayout(DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT);
-  }
-  return parseSessionQuickActionsLayout(window.localStorage.getItem(SESSION_QUICK_ACTIONS_LAYOUT_STORAGE_KEY));
-}
-
-export function writeSessionQuickActionsLayoutToLocalStorage(layout: SessionQuickActionsLayoutV1): void {
-  if (typeof window === "undefined") return;
-  const normalized = mergeSessionQuickActionsLayout(layout);
-  window.localStorage.setItem(SESSION_QUICK_ACTIONS_LAYOUT_STORAGE_KEY, JSON.stringify(normalized));
 }
 
 export interface SessionQuickActionsAvailability {

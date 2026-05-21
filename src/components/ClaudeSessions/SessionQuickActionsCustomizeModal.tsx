@@ -61,7 +61,7 @@ export function SessionQuickActionsCustomizeModal({
       }
     >
       <p className="app-session-quick-customize-modal__hint">
-        开关显示 · 外显/更多 · ↑↓ 排序；不可用项可预配。
+        开关显示 · 外显/更多 · ↑↓ 排序；不可用项可预配。调整会自动写入本地数据库（~/.wise/wise.db）。
       </p>
       <ul className="app-session-quick-customize-modal__list">
         {items.map((item, index) => {

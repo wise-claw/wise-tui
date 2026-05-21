@@ -5,6 +5,7 @@ import { searchRepositoryFiles } from "../../services/repositoryFiles";
 import type { ClaudeProjectSkill } from "../../types";
 import type { RoleTagOption, RepositoryMentionOption } from "../../utils/projectRoleTagOptions";
 import type { TriggerInfo } from "./slash-trigger";
+import { CLAUDE_BUILTIN_SLASH_COMMANDS } from "../../constants/claudeCodeSlashCommands";
 import {
   ensureSpaceAfterAtInsert,
   insertPlainAt,
@@ -51,37 +52,12 @@ interface SlashPopoverProps {
   hideEmployeesInAtMode?: boolean;
 }
 
-const CLAUDE_BUILTIN_COMMANDS: SlashOption[] = [
-  { type: "command", group: "claude", label: "clear", description: "清空当前对话" },
-  { type: "command", group: "claude", label: "compact", description: "压缩上下文释放 tokens" },
-  { type: "command", group: "claude", label: "model", description: "切换模型" },
-  { type: "command", group: "claude", label: "status", description: "查看会话状态" },
-  { type: "command", group: "claude", label: "cost", description: "查看当前会话 token 花费" },
-  { type: "command", group: "claude", label: "resume", description: "恢复之前的会话" },
-  { type: "command", group: "claude", label: "memory", description: "管理 CLAUDE.md 和自动记忆" },
-  { type: "command", group: "claude", label: "init", description: "初始化 CLAUDE.md" },
-  { type: "command", group: "claude", label: "help", description: "显示帮助和快捷键" },
-  { type: "command", group: "claude", label: "exit", description: "退出 Claude Code" },
-  { type: "command", group: "claude", label: "todos", description: "查看/管理可执行任务" },
-  { type: "command", group: "claude", label: "history", description: "查看对话历史" },
-  { type: "command", group: "claude", label: "stats", description: "查看使用统计" },
-  { type: "command", group: "claude", label: "undo", description: "撤销上一步操作" },
-  { type: "command", group: "claude", label: "rewind", description: "回退到对话中的某一点" },
-  { type: "command", group: "claude", label: "loop", description: "启动自动循环（Claude Code loop）" },
-  { type: "command", group: "claude", label: "agents", description: "管理配置的 agent" },
-  { type: "command", group: "claude", label: "skills", description: "浏览可用 Skills" },
-  { type: "command", group: "claude", label: "hooks", description: "查看/管理 hooks" },
-  { type: "command", group: "claude", label: "worktree", description: "Git worktree 管理" },
-  { type: "command", group: "claude", label: "branch", description: "创建/切换 git 分支" },
-  { type: "command", group: "claude", label: "search", description: "搜索代码库" },
-  { type: "command", group: "claude", label: "doctor", description: "检查健康状态并自动修复" },
-  { type: "command", group: "claude", label: "copy", description: "复制对话内容" },
-  { type: "command", group: "claude", label: "theme", description: "切换颜色主题" },
-  { type: "command", group: "claude", label: "effort", description: "调节速度 vs 智能程度" },
-  { type: "command", group: "claude", label: "config", description: "打开配置设置" },
-  { type: "command", group: "claude", label: "add-dir", description: "添加额外工作目录" },
-  { type: "command", group: "claude", label: "rename", description: "重命名当前会话" },
-];
+const CLAUDE_BUILTIN_COMMANDS: SlashOption[] = CLAUDE_BUILTIN_SLASH_COMMANDS.map((cmd) => ({
+  type: "command",
+  group: "claude",
+  label: cmd.label,
+  description: cmd.description,
+}));
 
 const OMC_COMMANDS: SlashOption[] = [
   { type: "command", group: "omc", label: "ask", description: "OMC 多模型咨询路由" },

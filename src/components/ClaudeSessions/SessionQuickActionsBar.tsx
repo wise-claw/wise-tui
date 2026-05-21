@@ -56,7 +56,7 @@ export function SessionQuickActionsBar({
   showWorktreeInMore = false,
   pushControl,
 }: SessionQuickActionsBarProps) {
-  const { layout, setLayout, resetLayout } = useSessionQuickActionsLayout();
+  const { layout, setLayout, resetLayout, persistLayout } = useSessionQuickActionsLayout();
   const [customizeOpen, setCustomizeOpen] = useState(false);
 
   const availability: SessionQuickActionsAvailability = useMemo(
@@ -233,7 +233,11 @@ export function SessionQuickActionsBar({
 
       <SessionQuickActionsCustomizeModal
         open={customizeOpen}
-        onClose={() => setCustomizeOpen(false)}
+        onClose={() => {
+          void persistLayout().then((ok) => {
+            if (ok) setCustomizeOpen(false);
+          });
+        }}
         layout={layout}
         onLayoutChange={setLayout}
         onReset={resetLayout}
