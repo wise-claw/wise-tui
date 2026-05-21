@@ -380,54 +380,302 @@
 }
 
 .app-employee-config-table.ant-table-wrapper {
-  margin-top: 2px;
+  margin-top: 6px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--ant-color-bg-container);
 }
 
 .app-employee-config-table.ant-table-wrapper .ant-table,
 .app-employee-config-table.ant-table-wrapper .ant-table-container {
   box-shadow: none;
-}
-
-.app-employee-config-table .ant-btn-sm {
-  height: 24px;
-  padding-inline: 8px;
-  font-size: 12px;
-  line-height: 1;
+  background: transparent;
 }
 
 .app-employee-config-table.ant-table-wrapper .ant-table .ant-table-thead > tr > th {
-  padding: 6px 12px;
-  font-size: 12px;
-  font-weight: 500;
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ant-color-text-secondary);
+  background: var(--ant-color-fill-alter);
+  border-bottom: 1px solid var(--ant-color-border-secondary);
   white-space: nowrap;
 }
 
 .app-employee-config-table.ant-table-wrapper .ant-table .ant-table-tbody > tr > td {
-  padding: 6px 12px;
+  padding: 5px 10px;
   font-size: 12px;
-  line-height: 1.35;
+  line-height: 1.3;
   vertical-align: middle;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  background: transparent;
 }
 
-.app-employee-config-owner-tag.ant-tag {
-  margin-inline-end: 0;
-  line-height: 18px;
-  padding: 0 6px;
+.app-employee-config-table.ant-table-wrapper .ant-table-tbody > tr:last-child > td {
+  border-bottom: none;
+}
+
+.app-employee-config-table.ant-table-wrapper .ant-table-tbody > tr:hover > td {
+  background: rgba(99, 102, 241, 0.02) !important;
+}
+
+/* 角色 Avatar 与单元格 */
+.app-employee-role-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-employee-role-cell--gap {
+  opacity: 0.85;
+}
+
+.app-employee-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: #ffffff;
+  text-transform: uppercase;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  flex: 0 0 auto;
+}
+
+.app-employee-avatar--gap {
+  background: var(--ant-color-fill-secondary) !important;
+  color: var(--ant-color-text-secondary) !important;
+  border: 1px dashed var(--ant-color-border);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.app-employee-role-name {
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--ant-color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-employee-gap-label {
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--ant-color-text-secondary);
+}
+
+/* 智能体 Monospace Badge */
+.app-employee-agent-badge {
+  display: inline-block;
+  font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ant-color-text-secondary);
+  background: var(--ant-color-fill-alter);
+  border: 1px solid var(--ant-color-border-secondary);
+  padding: 1px 5px;
+  border-radius: 4px;
+  line-height: 1.25;
+}
+
+/* Owner 标识 */
+.app-employee-owner-tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 4px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.app-employee-owner-tag--main {
+  background: rgba(147, 51, 234, 0.08);
+  color: rgb(147, 51, 234);
+  border: 1px solid rgba(147, 51, 234, 0.2);
+}
+
+.app-employee-owner-tag--regular {
+  background: rgba(59, 130, 246, 0.08);
+  color: rgb(59, 130, 246);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.app-employee-gap-tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--ant-color-text-quaternary);
+  background: var(--ant-color-fill-secondary);
+  border: 1px solid var(--ant-color-border-secondary);
+  padding: 1px 4px;
+  border-radius: 3px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+/* 编排状态 custom tags with pulsing indicators */
+.app-orchestration-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px 5px;
+  border-radius: 4px;
+  line-height: 1.25;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.app-orchestration-tag--active {
+  background: rgba(16, 185, 129, 0.08);
+  color: rgb(16, 185, 129);
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+.app-orchestration-tag--active::before {
+  content: '';
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgb(16, 185, 129);
+  box-shadow: 0 0 4px rgb(16, 185, 129);
+  animation: appPulse 1.6s infinite ease-in-out;
+}
+
+.app-orchestration-tag--pending {
+  background: var(--ant-color-fill-alter);
+  color: var(--ant-color-text-quaternary);
+  border-color: var(--ant-color-border-secondary);
+}
+
+.app-orchestration-tag--pending::before {
+  content: '';
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ant-color-text-quaternary);
+}
+
+@keyframes appPulse {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.6;
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6);
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 1;
+    box-shadow: 0 0 0 4px rgba(16, 185, 129, 0);
+  }
+  100% {
+    transform: scale(0.9);
+    opacity: 0.6;
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
+/* 启用 Switch */
+.app-employee-status-switch.ant-switch-checked {
+  background-color: rgb(16, 185, 129) !important;
+}
+
+/* 操作单元格 */
+.app-employee-actions-cell {
+  display: flex;
+  align-items: center;
+}
+
+.app-employee-btn.ant-btn {
+  height: 22px !important;
+  line-height: 22px !important;
+  padding: 0 6px !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  border-radius: 3px !important;
+  background: transparent !important;
+  transition: all 0.15s ease !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.app-employee-btn--edit {
+  color: var(--ant-color-primary) !important;
+}
+
+.app-employee-btn--edit:hover {
+  background: rgba(99, 102, 241, 0.08) !important;
+  color: var(--ant-color-primary-hover) !important;
+}
+
+.app-employee-btn--delete {
+  color: var(--ant-color-error) !important;
+}
+
+.app-employee-btn--delete:hover {
+  background: rgba(239, 68, 68, 0.08) !important;
+  color: var(--ant-color-error-hover) !important;
+}
+
+/* Popconfirm Overlay compact style */
+.app-employee-popconfirm .ant-popover-inner {
+  padding: 8px 12px;
+}
+
+.app-employee-popconfirm .ant-popover-message {
+  padding-block: 0;
+  font-size: 12px;
+}
+
+.app-employee-popconfirm .ant-popover-buttons {
+  margin-top: 6px;
+}
+
+.app-employee-popconfirm .ant-btn {
+  height: 22px;
+  padding-inline: 8px;
   font-size: 11px;
 }
 
-.app-employee-config-table .ant-tag {
-  margin-inline-end: 0;
-  line-height: 18px;
-  padding: 0 6px;
-  font-size: 11px;
+/* 新增角色按钮 Flat tactile style */
+.app-employee-add-btn.ant-btn {
+  background-color: var(--ant-color-primary) !important;
+  color: #ffffff !important;
+  border: none !important;
+  height: 26px !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  padding: 0 10px !important;
+  border-radius: 4px !important;
+  box-shadow: 0 1px 2px rgba(99, 102, 241, 0.1) !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.app-employee-add-btn.ant-btn:hover {
+  transform: translateY(-0.5px);
+  box-shadow: 0 3px 6px rgba(99, 102, 241, 0.2) !important;
+  opacity: 0.95;
+}
+
+.app-employee-add-btn.ant-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(99, 102, 241, 0.1) !important;
 }
 
 .app-employee-config-footnote {
   display: block;
   font-size: 11px;
   line-height: 1.45;
-}
+  color: var(--ant-color-text-quaternary);
+  margin-top: 4px;
 
 @media (max-width: 960px) {
   .app-employee-config-row,

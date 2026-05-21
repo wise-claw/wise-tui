@@ -1,4 +1,5 @@
-import { App, Button, Form, Input, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Typography } from "antd";
+import { App, Button, Form, Input, Modal, Popconfirm, Select, Space, Switch, Table, Typography } from "antd";
+import { PlusOutlined } from "@ant-design/icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { EmployeeItem, Repository, WorkflowGraph, WorkflowTemplateItem } from "../../types";
 import { collectTeamMemberEmployeeIds } from "../../utils/collectTeamMemberEmployeeIds";
@@ -24,6 +25,23 @@ type EmployeeConfigTableRow = EmployeeItem | RepoOwnerGapTableRow;
 
 function isRepoOwnerGapRow(row: EmployeeConfigTableRow): row is RepoOwnerGapTableRow {
   return "rowKind" in row && row.rowKind === "repoOwnerGap";
+}
+
+function getAvatarStyle(name: string) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const h = Math.abs(hash) % 360;
+  return {
+    backgroundColor: `hsl(${h}, 60%, 42%)`,
+  };
+}
+
+function getInitials(name: string) {
+  const trimmed = name.trim();
+  if (!trimmed) return "?";
+  return trimmed.slice(0, 2);
 }
 
 interface Props {
@@ -381,7 +399,13 @@ export function EmployeeConfigModal({
   const content = (
     <Space orientation="vertical" size={6} className="app-employee-config-modal">
         <div className="app-employee-config-toolbar">
-          <Button size="small" type="primary" onClick={openCreateFormModal}>
+          <Button
+            size="small"
+            type="primary"
+            icon={<PlusOutlined />}
+            className="app-employee-add-btn"
+            onClick={openCreateFormModal}
+          >
             新增角色
           </Button>
         </div>
@@ -398,19 +422,34 @@ export function EmployeeConfigModal({
               render: (_, row) => {
                 if (isRepoOwnerGapRow(row)) {
                   return (
-                    <Space size={4} wrap>
-                      <Typography.Text ellipsis={{ tooltip: row.repoLabel }}>{row.repoLabel}</Typography.Text>
-                      <Tag className="app-employee-config-owner-tag">仅仓库</Tag>
-                    </Space>
+                    <div className="app-employee-role-cell app-employee-role-cell--gap">
+                      <div className="app-employee-avatar app-employee-avatar--gap">
+                        ?
+                      </div>
+                      <Space size={4} wrap>
+                        <Typography.Text ellipsis={{ tooltip: row.repoLabel }} className="app-employee-gap-label">{row.repoLabel}</Typography.Text>
+                        <span className="app-employee-gap-tag">仅仓库</span>
+                      </Space>
+                    </div>
                   );
                 }
-                return row.name;
+                return (
+                  <div className="app-employee-role-cell">
+                    <div className="app-employee-avatar" style={getAvatarStyle(row.name)}>
+                      {getInitials(row.name)}
+                    </div>
+                    <span className="app-employee-role-name">{row.name}</span>
+                  </div>
+                );
               },
             },
             {
               title: "智能体",
               key: "agentType",
-              render: (_, row) => (isRepoOwnerGapRow(row) ? row.agentName : row.agentType),
+              render: (_, row) => {
+                const name = isRepoOwnerGapRow(row) ? row.agentName : row.agentType;
+                return <code className="app-employee-agent-badge">{name}</code>;
+              },
             },
             ...(projectOwnerPickMode
               ? [
@@ -420,9 +459,9 @@ export function EmployeeConfigModal({
                     render: (_: unknown, row: EmployeeConfigTableRow) => {
                       if (isRepoOwnerGapRow(row)) {
                         return (
-                          <Tag color="purple" className="app-employee-config-owner-tag">
+                          <span className="app-employee-owner-tag app-employee-owner-tag--main">
                             主 Owner
-                          </Tag>
+                          </span>
                         );
                       }
                       const names = repositoryOwnerBasenamesInScopeRelaxed(
@@ -433,9 +472,9 @@ export function EmployeeConfigModal({
                       );
                       if (names.length === 0) return "—";
                       return (
-                        <Tag color="blue" className="app-employee-config-owner-tag">
+                        <span className="app-employee-owner-tag app-employee-owner-tag--regular">
                           Owner
-                        </Tag>
+                        </span>
                       );
                     },
                   },
@@ -446,7 +485,11 @@ export function EmployeeConfigModal({
               key: "teamMember",
               render: (_, row) => {
                 if (isRepoOwnerGapRow(row)) return "—";
-                return teamEmployeeIds.has(row.id) ? <Tag color="processing">已编排</Tag> : <Tag>待编排</Tag>;
+                return teamEmployeeIds.has(row.id) ? (
+                  <span className="app-orchestration-tag app-orchestration-tag--active">已编排</span>
+                ) : (
+                  <span className="app-orchestration-tag app-orchestration-tag--pending">待编排</span>
+                );
               },
             },
             {
@@ -455,7 +498,7 @@ export function EmployeeConfigModal({
               render: (_: unknown, row) => {
                 if (isRepoOwnerGapRow(row)) {
                   return (
-                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    <Typography.Text type="secondary" style={{ fontSize: 11 }}>
                       —
                     </Typography.Text>
                   );
@@ -463,6 +506,7 @@ export function EmployeeConfigModal({
                 return (
                   <Switch
                     size="small"
+                    className="app-employee-status-switch"
                     checked={row.enabled}
                     checkedChildren="启用"
                     unCheckedChildren="禁用"
@@ -481,13 +525,18 @@ export function EmployeeConfigModal({
                 if (isRepoOwnerGapRow(row)) {
                   return (
                     <Typography.Text type="secondary" style={{ fontSize: 11 }} ellipsis={{ tooltip: "在侧栏进入单个仓库后打开智能体角色，可为角色关联仓库" }}>
-                      在单仓智能体角色中关联仓库
+                      在单仓中关联仓库
                     </Typography.Text>
                   );
                 }
                 return (
-                  <Space size={8}>
-                    <Button size="small" onClick={() => openEditFormModal(row)}>
+                  <Space size={4} className="app-employee-actions-cell">
+                    <Button
+                      size="small"
+                      type="text"
+                      className="app-employee-btn app-employee-btn--edit"
+                      onClick={() => openEditFormModal(row)}
+                    >
                       编辑
                     </Button>
                     <Popconfirm
@@ -495,8 +544,14 @@ export function EmployeeConfigModal({
                       onConfirm={() => onDelete(row.id)}
                       okText="删除"
                       cancelText="取消"
+                      overlayClassName="app-employee-popconfirm"
                     >
-                      <Button size="small" danger>
+                      <Button
+                        size="small"
+                        type="text"
+                        danger
+                        className="app-employee-btn app-employee-btn--delete"
+                      >
                         删除
                       </Button>
                     </Popconfirm>

@@ -7,16 +7,11 @@
   min-width: 0;
 }
 
-.app-extensions-panel .author-panel-page__head {
-  padding-bottom: 14px;
-}
-
 .app-extensions-panel .author-panel-page__head-row {
   gap: 12px;
 }
 
 .app-extensions-panel .author-panel-page__subrow {
-  margin-top: 10px;
   gap: 12px;
 }
 

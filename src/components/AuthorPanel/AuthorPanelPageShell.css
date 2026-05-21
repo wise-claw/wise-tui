@@ -5,7 +5,8 @@
 
 .author-panel-page__head {
   flex-shrink: 0;
-  padding: 24px 0 12px;
+  padding-top: var(--author-panel-page-head-padding-top, 24px);
+  padding-bottom: var(--author-panel-page-head-padding-bottom, 12px);
 }
 
 .author-panel-page__head-row {

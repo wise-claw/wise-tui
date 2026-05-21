@@ -244,7 +244,7 @@ export function ClaudeHooksConfigPanel({
         targetGroupId: editing?.groupId || null,
         targetHandlerId: editing?.handlerId || null,
       });
-      message.success("已保存 Hook");
+      message.success("已保存触发器处理器");
       if (!keepOpen) {
         setOpen(false);
       } else {
@@ -292,7 +292,7 @@ export function ClaudeHooksConfigPanel({
     try {
       await setClaudeDisableAllHooks({ scope, disableAllHooks: next, repositoryPath: repositoryPath ?? null });
       setData((prev) => ({ ...prev, [scope]: { ...prev[scope], disableAllHooks: next } }));
-      message.success(next ? "已禁用全部 hooks" : "已恢复 hooks");
+      message.success(next ? "已禁用全部触发器规则" : "已恢复触发器规则");
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
     }
@@ -440,7 +440,7 @@ export function ClaudeHooksConfigPanel({
       {loading ? (
         <div className="app-hooks-loading"><Spin size="small" /></div>
       ) : !hasAnyData ? (
-        <Empty description="暂无 Hook 配置，可点击「新增 Hook」" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        <Empty description="暂无触发器规则，可点击「新增触发器」" image={Empty.PRESENTED_IMAGE_SIMPLE} />
       ) : (
         <div className="app-hooks-scope-list">
           <HookScopeSection

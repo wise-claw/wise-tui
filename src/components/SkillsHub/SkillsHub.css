@@ -38,7 +38,7 @@
 /* 配置中心页：与 AuthorPanelPageShell 页头（技能市场标题行）左缘对齐 */
 .author-panel-page .app-skills-hub-root {
   padding-inline: 0;
-  padding-top: 4px;
+  padding-top: 0;
   padding-bottom: 8px;
 }
 

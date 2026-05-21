@@ -769,7 +769,7 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 6px;
   margin-bottom: 8px;
 }
 
@@ -778,6 +778,32 @@
   background: transparent;
   padding: 0;
   cursor: pointer;
+  outline: none;
+}
+
+.app-hooks-stats-btn .ant-tag {
+  font-size: 11px !important;
+  line-height: 18px !important;
+  padding: 1px 8px !important;
+  border-radius: 12px !important;
+  border: 1px solid var(--ant-color-border-secondary) !important;
+  background: var(--ant-color-fill-quaternary) !important;
+  color: var(--ant-color-text-secondary) !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  font-weight: 500 !important;
+  margin-inline-end: 0 !important;
+}
+
+.app-hooks-stats-btn:hover .ant-tag {
+  color: var(--ant-color-primary) !important;
+  border-color: var(--ant-color-primary-border) !important;
+  background: var(--ant-color-primary-bg) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.app-hooks-stats-btn:active .ant-tag {
+  transform: translateY(0);
 }
 
 .app-hooks-import-errors {
@@ -1525,14 +1551,16 @@
 .app-hooks-scope-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .app-hooks-section {
   border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 6px;
-  padding: 5px 6px;
+  border-radius: 8px;
+  padding: 6px 10px;
   background: var(--ant-color-bg-container);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
 }
 
 .app-hooks-section-head {
@@ -1540,21 +1568,29 @@
   align-items: center;
   justify-content: space-between;
   gap: 6px;
+  margin-bottom: 2px;
 }
 
 .app-hooks-section-title {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 1.25;
+  color: var(--ant-color-text);
 }
 
 .app-hooks-section-path {
   margin-top: 1px;
-  margin-bottom: 4px;
-  font-size: 11px;
+  margin-bottom: 6px;
+  font-size: 10px;
   line-height: 1.4;
-  color: var(--ant-color-text-tertiary);
+  color: var(--ant-color-text-secondary);
+  font-family: var(--font-mono, monospace);
   word-break: break-all;
+  background: var(--ant-color-fill-quaternary);
+  border: 1px solid var(--ant-color-border-secondary);
+  padding: 2px 8px;
+  border-radius: 4px;
+  display: inline-block;
 }
 
 .app-hooks-section-switch {
@@ -1580,26 +1616,33 @@
 .app-hooks-empty {
   font-size: 11px;
   color: var(--ant-color-text-tertiary);
+  padding: 6px;
 }
 
 .app-hooks-event-tag.ant-tag {
-  margin-left: 4px;
-  font-size: 9px;
-  line-height: 16px;
-  padding: 0 5px;
+  margin-left: 6px;
+  font-size: 10px !important;
+  line-height: 16px !important;
+  padding: 0 6px !important;
+  border-radius: 10px !important;
+  font-weight: 600 !important;
+  color: var(--ant-color-primary-active) !important;
+  background: var(--ant-color-primary-bg) !important;
+  border: 1px solid var(--ant-color-primary-border) !important;
 }
 
 .app-hooks-event-btn {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   border: none;
   background: transparent;
   padding: 0;
   cursor: pointer;
   color: var(--ant-color-text);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.25;
+  font-weight: 600;
 }
 
 .app-hooks-event-btn:hover {
@@ -1608,17 +1651,20 @@
 
 .app-hooks-event-btn.is-active {
   color: var(--ant-color-primary);
-  font-weight: 600;
 }
 
 .app-hooks-event-help-icon {
   width: 13px;
   height: 13px;
-  margin-left: 1px;
+  margin-left: 2px;
   margin-right: 2px;
   color: var(--ant-color-text-tertiary);
   border: 1px solid var(--ant-color-border);
   background: var(--ant-color-bg-container);
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .app-hooks-event-help-icon:hover {
@@ -1629,18 +1675,18 @@
 .app-hooks-event-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .app-hooks-event-block {
-  padding: 1px 0;
+  padding: 2px 0;
 }
 
 .app-hooks-event-head {
   display: flex;
   align-items: center;
   min-height: 20px;
-  padding: 1px 2px;
+  padding: 2px;
   margin-bottom: 2px;
 }
 
@@ -1651,85 +1697,142 @@
 }
 
 .app-hooks-group-item {
-  border: 1px dashed var(--ant-color-border);
-  border-radius: 5px;
-  padding: 3px 4px;
-  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 6px;
+  padding: 5px 8px;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 90%, transparent);
 }
 
 .app-hooks-group-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
   gap: 4px;
 }
 
 .app-hooks-group-head .ant-tag {
   margin-inline-end: 0;
-  font-size: 10px;
-  line-height: 16px;
-  padding: 0 5px;
+  font-size: 10px !important;
+  line-height: 16px !important;
+  padding: 0 6px !important;
+  font-family: var(--font-mono, monospace) !important;
+  font-weight: 600 !important;
+  border-radius: 4px !important;
+  border: 1px solid var(--ant-color-border) !important;
+  background: var(--ant-color-fill-secondary) !important;
+  color: var(--ant-color-text) !important;
 }
 
 .app-hooks-group-head .ant-btn.ant-btn-sm {
   height: 20px;
-  padding: 0 5px;
+  padding: 0 6px;
   font-size: 10px;
   line-height: 18px;
+  border-radius: 4px;
+  color: var(--ant-color-primary);
+  border: 1px solid var(--ant-color-primary-border);
+  background: var(--ant-color-primary-bg);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  font-weight: 500;
+}
+
+.app-hooks-group-head .ant-btn.ant-btn-sm:hover {
+  color: #ffffff;
+  background: var(--ant-color-primary);
+  border-color: var(--ant-color-primary);
 }
 
 .app-hooks-group-head .ant-btn .anticon {
-  font-size: 12px;
+  font-size: 10px;
 }
 
 .app-hooks-handler-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
 .app-hooks-handler-item {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 2px;
-  border-radius: 5px;
-  padding: 3px 4px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-radius: 4px;
+  padding: 3px 6px;
   background: var(--ant-color-fill-quaternary);
+  border: 1px solid var(--ant-color-border-secondary);
+  transition: all 0.2s ease;
+}
+
+.app-hooks-handler-item:hover {
+  background: var(--ant-color-fill-tertiary);
+  border-color: var(--ant-color-border);
 }
 
 .app-hooks-handler-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 4px;
-  min-height: 20px;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.app-hooks-handler-head .ant-tag {
+  margin-inline-end: 0;
+  font-size: 10px !important;
+  line-height: 16px !important;
+  font-family: var(--font-mono, monospace) !important;
+  font-weight: 600 !important;
+  padding: 0 6px !important;
+  border-radius: 4px !important;
 }
 
 .app-hooks-handler-main {
+  flex: 1 1 0;
   min-width: 0;
+  display: flex;
+  align-items: center;
 }
 
 .app-hooks-handler-summary {
-  font-size: 10px;
-  color: var(--ant-color-text-secondary);
-  line-height: 1.35;
-  white-space: pre-wrap;
-  word-break: break-all;
-  overflow: visible;
+  font-size: 11px;
+  color: var(--ant-color-text);
+  font-family: var(--font-mono, monospace);
+  line-height: 1.4;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  display: block;
+  width: 100%;
 }
 
 .app-hooks-handler-item .ant-space {
   flex-shrink: 0;
-  margin-top: -1px;
+  margin-top: 0;
 }
 
 .app-hooks-handler-item .ant-btn.ant-btn-sm {
-  width: 20px;
-  min-width: 20px;
-  height: 20px;
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
   padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: var(--ant-color-text-secondary);
+  transition: all 0.15s ease;
+}
+
+.app-hooks-handler-item .ant-btn.ant-btn-sm:hover {
+  color: var(--ant-color-primary);
+  background: var(--ant-color-fill-secondary);
+}
+
+.app-hooks-handler-item .ant-btn-dangerous.ant-btn.ant-btn-sm:hover {
+  color: var(--ant-color-error) !important;
+  background: var(--ant-color-error-bg) !important;
 }
 
 .app-hooks-handler-item .ant-btn.ant-btn-sm .anticon {

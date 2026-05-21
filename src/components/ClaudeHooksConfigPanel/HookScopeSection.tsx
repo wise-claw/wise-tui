@@ -96,7 +96,7 @@ export function HookScopeSection({
       </div>
       <div className="app-hooks-section-path">{data.sourcePath || "(未设置路径)"}</div>
       {!hasData ? (
-        <div className="app-hooks-empty">暂无 hooks</div>
+        <div className="app-hooks-empty">暂无触发器规则</div>
       ) : (
         <div className="app-hooks-event-list">
           {eventNames.map((eventName) => (
@@ -125,7 +125,7 @@ export function HookScopeSection({
                           icon={<PlusOutlined />}
                           onClick={() => onCreate(scope as ClaudeHookSourceScope, eventName, group.id)}
                         >
-                          添加 handler
+                          添加处理器
                         </Button>
                       ) : null}
                     </div>

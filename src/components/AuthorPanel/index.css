@@ -189,6 +189,14 @@ html.app-host-macos-chrome .app-author-config-sider .author-panel__nav-drag {
   overflow: auto;
   padding: 0 32px 32px;
   overscroll-behavior: contain;
+  --author-panel-page-head-padding-top: 24px;
+  --author-panel-page-head-padding-bottom: 12px;
+}
+
+/* 配置中心各 Tab：页标题距内容区顶对齐 */
+.author-panel__scroll .author-panel-page__head {
+  padding-top: var(--author-panel-page-head-padding-top);
+  padding-bottom: var(--author-panel-page-head-padding-bottom);
 }
 
 .author-panel-section-header {

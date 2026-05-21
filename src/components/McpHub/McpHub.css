@@ -6,11 +6,18 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 8px 12px;
   min-height: 0;
   flex: 1;
   overflow: hidden;
   background: transparent !important;
+}
+
+.app-mcp-hub-root:not(.author-panel-page) {
+  padding: 8px 12px;
+}
+
+.author-panel-page.app-mcp-hub-root {
+  padding: 0;
 }
 
 /* 叠层模式：顶栏固定，Tab 内容区单独滚动 */
