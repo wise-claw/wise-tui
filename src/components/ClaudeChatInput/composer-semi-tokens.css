@@ -36,9 +36,7 @@
 .app-claude-semi-chat-input-wrap .semi-aiChatInput {
   padding: 6px 8px;
   border-radius: 8px;
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
+  background: var(--ant-color-bg-container);
   min-height: calc(3em + 12px);
 }
 
@@ -49,9 +47,7 @@
 
 /* 底栏单行：收紧 Semi 默认大间距，缩小发送按钮 */
 .app-claude-semi-chat-input-wrap .semi-aiChatInput-footer {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--semi-color-border);
+  margin-top: 4px;
   column-gap: 6px;
   align-items: center;
 }

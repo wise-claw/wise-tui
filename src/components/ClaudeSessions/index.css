@@ -3937,25 +3937,12 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-claude-input-container {
-  background: color-mix(in srgb, var(--ant-color-bg-container) 60%, transparent) !important;
-  -webkit-backdrop-filter: var(--app-workspace-glass-blur) !important;
-  backdrop-filter: var(--app-workspace-glass-blur) !important;
-  border: 1px solid var(--app-workspace-glass-border) !important;
-  border-radius: 14px !important;
-  box-shadow: var(--app-workspace-glass-inset-glow), var(--app-workspace-glass-shadow) !important;
-  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
-}
-
-.app-claude-input-container:hover {
-  background: color-mix(in srgb, var(--ant-color-bg-container) 75%, transparent) !important;
-  border-color: color-mix(in srgb, var(--ant-color-primary) 32%, transparent) !important;
-  box-shadow: var(--app-workspace-glass-inset-glow), 0 8px 32px 0 color-mix(in srgb, var(--ant-color-text) 8%, transparent) !important;
+  background: var(--ant-color-fill-quaternary);
+  transition: border-color 0.2s;
 }
 
 .app-claude-input-container:focus-within {
-  border-color: var(--ant-color-primary) !important;
-  box-shadow: var(--app-workspace-active-glow), 0 8px 32px 0 color-mix(in srgb, var(--ant-color-primary) 12%, transparent) !important;
-  transform: translateY(-1px) translateZ(0);
+  border-color: var(--ant-color-primary);
 }
 
 .app-claude-input-container--drop-target {
@@ -4073,23 +4060,16 @@ button.app-message-part-header:disabled:hover {
   justify-content: center;
   width: 24px;
   height: 24px;
-  border: 1px solid color-mix(in srgb, var(--ant-color-primary) 30%, transparent);
-  border-radius: 8px;
+  border: none;
+  border-radius: var(--ant-border-radius);
   background: var(--ant-color-primary);
   color: #fff;
   cursor: pointer;
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--ant-color-primary) 30%, transparent);
-  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: all 0.15s;
 }
 
 .app-claude-send-btn:hover:not(:disabled) {
   background: var(--ant-color-primary-hover);
-  transform: scale(1.08) translateZ(0);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--ant-color-primary) 40%, transparent);
-}
-
-.app-claude-send-btn:active:not(:disabled) {
-  transform: scale(0.96) translateZ(0);
 }
 
 .app-claude-send-btn:disabled {
@@ -4441,23 +4421,16 @@ button.app-message-part-header:disabled:hover {
 .app-session-quick-actions--composer {
   flex-shrink: 0;
   padding: 4px 6px 0 6px;
-  background: color-mix(in srgb, var(--ant-color-bg-container) 35%, transparent) !important;
-  backdrop-filter: var(--app-workspace-glass-blur) !important;
-  -webkit-backdrop-filter: var(--app-workspace-glass-blur) !important;
-  border-top: 1px solid var(--app-workspace-glass-border) !important;
-  box-shadow: var(--app-workspace-glass-inset-glow) !important;
+  background: var(--ant-color-bg-container);
+  border-top: 1px solid var(--ant-color-border-secondary);
 }
 
 /* 钉钉风格：左侧紧凑胶囊 + 右侧「更多」 */
 .app-session-quick-actions--dingtalk {
   flex-shrink: 0;
   padding: 4px 6px 2px;
-  background: color-mix(in srgb, var(--ant-color-bg-container) 35%, transparent) !important;
-  backdrop-filter: var(--app-workspace-glass-blur) !important;
-  -webkit-backdrop-filter: var(--app-workspace-glass-blur) !important;
-  border-top: 1px solid var(--ant-color-border-secondary) !important;
-  border-bottom: 1px solid var(--ant-color-border-secondary) !important;
-  box-shadow: var(--app-workspace-glass-inset-glow) !important;
+  background: var(--ant-color-bg-container);
+  border-top: 1px solid var(--ant-color-border-secondary);
 }
 
 .app-session-quick-actions__row {
