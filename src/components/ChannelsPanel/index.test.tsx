@@ -38,6 +38,39 @@ mock.module("../../services/dingtalkStreamGateway", () => ({
   dingtalkStreamGatewayStop: mock(async () => undefined),
 }));
 
+mock.module("../../services/remoteChannels", () => ({
+  FEISHU_SETTINGS_KEY: "wise.channels.feishu.v1",
+  WECOM_SETTINGS_KEY: "wise.channels.wecom.v1",
+  TELEGRAM_SETTINGS_KEY: "wise.channels.telegram.v1",
+  GENERIC_WS_SETTINGS_KEY: "wise.channels.genericWs.v1",
+  loadFeishuConfig: mock(async () => null),
+  saveFeishuConfig: mock(async () => undefined),
+  clearFeishuConfig: mock(async () => undefined),
+  feishuWebhookSend: mock(async () => ({ ok: true, raw: {} })),
+  feishuWebhookTest: mock(async () => ({ ok: true, raw: {} })),
+  loadWecomConfig: mock(async () => null),
+  saveWecomConfig: mock(async () => undefined),
+  clearWecomConfig: mock(async () => undefined),
+  wecomWebhookSend: mock(async () => ({ ok: true, raw: {} })),
+  wecomWebhookTest: mock(async () => ({ ok: true, raw: {} })),
+  loadTelegramConfig: mock(async () => null),
+  saveTelegramConfig: mock(async () => undefined),
+  clearTelegramConfig: mock(async () => undefined),
+  telegramBotSendMessage: mock(async () => ({ ok: true, raw: {} })),
+  telegramBotTest: mock(async () => ({ ok: true, raw: {} })),
+  loadGenericWsConfig: mock(async () => null),
+  saveGenericWsConfig: mock(async () => undefined),
+  clearGenericWsConfig: mock(async () => undefined),
+  genericWsStart: mock(async () => ({ running: true, phase: "connecting" })),
+  genericWsStop: mock(async () => ({ running: false, phase: "stopped" })),
+  genericWsStatus: mock(async () => ({ running: false, phase: "stopped" })),
+  genericWsSendText: mock(async () => undefined),
+}));
+
+mock.module("@tauri-apps/api/event", () => ({
+  listen: mock(async () => () => undefined),
+}));
+
 describe("ChannelsPanel", () => {
   test("renders the channel list with DingTalk expanded by default", () => {
     const html = renderToStaticMarkup(<ChannelsPanel />);
@@ -48,6 +81,7 @@ describe("ChannelsPanel", () => {
     expect(html).toContain("飞书");
     expect(html).toContain("企业微信");
     expect(html).toContain("Telegram");
+    expect(html).toContain("通用 WebSocket");
     expect(html).toContain('data-stub="dingtalk-config"');
     expect(html).toContain('data-compact="true"');
     expect(html).toContain('data-section="config"');

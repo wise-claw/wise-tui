@@ -2,7 +2,7 @@ use crate::{
     agent_registry, app_state_commands, assistants, cc_wf_studio_mcp_bridge, cc_workflow_studio,
     claude_code_usage, claude_commands, claude_config_dir, claude_external_ingest, code_knowledge_graph,
     cua_driver, dingtalk_enterprise_bot, dingtalk_stream_gateway, extensions, git_commands, mission_control, mcp,
-    openspec_bootstrap, prd_url_fetch, repository_files, skills, skills_sh, system_resource, task_artifact, trellis_bootstrap,
+    openspec_bootstrap, prd_url_fetch, remote_channels, repository_files, skills, skills_sh, system_resource, task_artifact, trellis_bootstrap,
     trellis_bridge,
     trellis_runtime, wise_db, wise_mascot, wise_paths, wise_push, workspace_commands,
 };
@@ -72,6 +72,7 @@ pub fn run() {
             app.manage(wise_mascot::WiseToastMerge::default());
             app.manage(wise_push::WisePushControl::default());
             app.manage(dingtalk_stream_gateway::DingTalkStreamGatewayControl::default());
+            app.manage(remote_channels::GenericWsControl::default());
             let wise_db = wise_db::WiseDb::open().map_err(|e| e.to_string())?;
             wise_mascot::restore_mascot_on_launch(app.handle(), &wise_db)?;
             claude_config_dir::init_from_db(&wise_db);
@@ -424,6 +425,16 @@ pub fn run() {
             dingtalk_stream_gateway::dingtalk_stream_gateway_stop,
             dingtalk_stream_gateway::dingtalk_stream_gateway_is_running,
             dingtalk_stream_gateway::dingtalk_stream_gateway_status,
+            remote_channels::feishu_webhook_send,
+            remote_channels::feishu_webhook_test,
+            remote_channels::wecom_webhook_send,
+            remote_channels::wecom_webhook_test,
+            remote_channels::telegram_bot_send_message,
+            remote_channels::telegram_bot_test,
+            remote_channels::generic_ws_start,
+            remote_channels::generic_ws_stop,
+            remote_channels::generic_ws_status,
+            remote_channels::generic_ws_send_text,
             code_knowledge_graph::get_code_graph_subgraph,
             code_knowledge_graph::trigger_code_graph_reindex,
             code_knowledge_graph::cancel_code_graph_reindex,

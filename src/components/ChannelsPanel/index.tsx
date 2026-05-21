@@ -7,7 +7,7 @@ import {
   ReloadOutlined,
   SendOutlined,
 } from "@ant-design/icons";
-import { Button, Collapse, Empty, Space, Switch, Tabs, Tag, Typography, message } from "antd";
+import { Button, Empty, Space, Switch, Tabs, Tag, Typography, message } from "antd";
 import { AuthorPanelListShell, AuthorPanelPageShell } from "../AuthorPanel/AuthorPanelPageShell";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { DingTalkEnterpriseBotPopoverBody } from "../DingTalkEnterpriseBotPopoverBody";
@@ -19,6 +19,11 @@ import {
   dingtalkStreamGatewayStop,
   type DingTalkStreamGatewayStatus,
 } from "../../services/dingtalkStreamGateway";
+import { genericWsStatus, type GenericWsStatus } from "../../services/remoteChannels";
+import { FeishuChannelBody } from "./FeishuChannelBody";
+import { WecomChannelBody } from "./WecomChannelBody";
+import { TelegramChannelBody } from "./TelegramChannelBody";
+import { GenericWebSocketChannelBody } from "./GenericWebSocketChannelBody";
 import "./index.css";
 
 type ChannelKey = "dingtalk" | "feishu" | "wecom" | "telegram" | "websocket";
@@ -27,50 +32,33 @@ interface ChannelDefinition {
   key: ChannelKey;
   title: string;
   icon: ReactNode;
-  available: boolean;
-  comingSoonHint?: string;
 }
 
 const CHANNELS: ChannelDefinition[] = [
-  { key: "dingtalk", title: "钉钉", icon: <DingdingOutlined />, available: true },
-  {
-    key: "feishu",
-    title: "飞书",
-    icon: <MessageOutlined />,
-    available: false,
-    comingSoonHint: "暂未接入",
-  },
-  {
-    key: "wecom",
-    title: "企业微信",
-    icon: <SendOutlined />,
-    available: false,
-    comingSoonHint: "暂未接入",
-  },
-  {
-    key: "telegram",
-    title: "Telegram",
-    icon: <ApiOutlined />,
-    available: false,
-    comingSoonHint: "暂未接入",
-  },
-  {
-    key: "websocket",
-    title: "通用 WebSocket",
-    icon: <CloudServerOutlined />,
-    available: false,
-    comingSoonHint: "暂未接入",
-  },
+  { key: "dingtalk", title: "钉钉", icon: <DingdingOutlined /> },
+  { key: "feishu", title: "飞书", icon: <MessageOutlined /> },
+  { key: "wecom", title: "企业微信", icon: <SendOutlined /> },
+  { key: "telegram", title: "Telegram", icon: <ApiOutlined /> },
+  { key: "websocket", title: "通用 WebSocket", icon: <CloudServerOutlined /> },
 ];
 
 export function ChannelsPanel() {
-  const [activeKey, setActiveKey] = useState<ChannelKey | undefined>("dingtalk");
+  const [activeKey, setActiveKey] = useState<ChannelKey>("dingtalk");
+
+  // 钉钉沿用原有 Stream 网关状态
   const [dingTalkConfigured, setDingTalkConfigured] = useState(false);
   const [streamRunning, setStreamRunning] = useState(false);
   const [streamStatus, setStreamStatus] = useState<DingTalkStreamGatewayStatus | null>(null);
   const [streamBusy, setStreamBusy] = useState(false);
 
-  const refreshStatus = useCallback(async () => {
+  // 其它渠道的「已配置」状态来自各自 Body 回调
+  const [feishuConfigured, setFeishuConfigured] = useState(false);
+  const [wecomConfigured, setWecomConfigured] = useState(false);
+  const [telegramConfigured, setTelegramConfigured] = useState(false);
+  const [wsConfigured, setWsConfigured] = useState(false);
+  const [wsStatus, setWsStatus] = useState<GenericWsStatus>({ running: false, phase: "stopped" });
+
+  const refreshDingtalk = useCallback(async () => {
     const [config, status] = await Promise.all([
       loadDingTalkEnterpriseBotConfig().catch(() => null),
       dingtalkStreamGatewayStatus().catch(async () => {
@@ -89,10 +77,17 @@ export function ChannelsPanel() {
   }, []);
 
   useEffect(() => {
-    void refreshStatus();
-    const id = window.setInterval(() => void refreshStatus(), 3000);
+    void refreshDingtalk();
+    const id = window.setInterval(() => void refreshDingtalk(), 3000);
     return () => window.clearInterval(id);
-  }, [refreshStatus]);
+  }, [refreshDingtalk]);
+
+  // 初次进入页面时主动同步一次通用 WS 真实状态（避免事件流尚未抵达时显示 stopped）
+  useEffect(() => {
+    void genericWsStatus()
+      .then((s) => setWsStatus(s))
+      .catch(() => {});
+  }, []);
 
   const handleToggleDingTalk = useCallback(
     async (next: boolean) => {
@@ -106,16 +101,63 @@ export function ChannelsPanel() {
           await dingtalkStreamGatewayStop();
           void message.success("钉钉远程入口已停止");
         }
-        await refreshStatus();
+        await refreshDingtalk();
       } catch (err) {
-        await refreshStatus();
+        await refreshDingtalk();
         void message.error(err instanceof Error ? err.message : "钉钉远程入口切换失败");
       } finally {
         setStreamBusy(false);
       }
     },
-    [dingTalkConfigured, refreshStatus],
+    [dingTalkConfigured, refreshDingtalk],
   );
+
+  const cardMeta = useCallback(
+    (channel: ChannelDefinition): { label: string; configured: boolean; running?: boolean } => {
+      switch (channel.key) {
+        case "dingtalk":
+          return {
+            configured: dingTalkConfigured,
+            running: streamRunning,
+            label: dingtalkRowMeta({ configured: dingTalkConfigured, status: streamStatus }),
+          };
+        case "feishu":
+          return {
+            configured: feishuConfigured,
+            label: feishuConfigured ? "Webhook 已配置" : "未配置",
+          };
+        case "wecom":
+          return {
+            configured: wecomConfigured,
+            label: wecomConfigured ? "Webhook 已配置" : "未配置",
+          };
+        case "telegram":
+          return {
+            configured: telegramConfigured,
+            label: telegramConfigured ? "Bot 已配置" : "未配置",
+          };
+        case "websocket":
+          return {
+            configured: wsConfigured,
+            running: wsStatus.running,
+            label: wsConfigured ? `${wsConfigured ? "已配置" : "未配置"} · ${phaseLabel(wsStatus.phase)}` : "未配置",
+          };
+      }
+    },
+    [
+      dingTalkConfigured,
+      feishuConfigured,
+      streamRunning,
+      streamStatus,
+      telegramConfigured,
+      wecomConfigured,
+      wsConfigured,
+      wsStatus.phase,
+      wsStatus.running,
+    ],
+  );
+
+  const orderedChannels = useMemo(() => CHANNELS, []);
 
   return (
     <AuthorPanelPageShell
@@ -126,35 +168,27 @@ export function ChannelsPanel() {
     >
       <AuthorPanelListShell className="app-channels-panel__list-shell">
         <div className="app-channels-hub__grid" aria-label="渠道网关">
-          {CHANNELS.map((channel) => {
+          {orderedChannels.map((channel) => {
+            const meta = cardMeta(channel);
             const isActive = activeKey === channel.key;
-            const enabled = channel.key === "dingtalk" ? streamRunning : false;
-            const canToggle = channel.available && (channel.key !== "dingtalk" || dingTalkConfigured);
-            const metaLabel =
-              channel.key === "dingtalk"
-                ? dingtalkRowMeta({
-                    configured: dingTalkConfigured,
-                    status: streamStatus,
-                  })
-                : channel.comingSoonHint ?? "暂未接入";
-
+            const showSwitch = channel.key === "dingtalk" || channel.key === "websocket";
             return (
               <button
                 key={channel.key}
                 type="button"
-                className={`app-channels-hub__card${isActive ? " app-channels-hub__card--active" : ""}${!channel.available ? " app-channels-hub__card--coming-soon" : ""}`}
-                onClick={() => channel.available && setActiveKey(channel.key)}
+                className={`app-channels-hub__card${isActive ? " app-channels-hub__card--active" : ""}${!meta.configured ? " app-channels-hub__card--unconfigured" : ""}`}
+                onClick={() => setActiveKey(channel.key)}
               >
                 <div className="app-channels-hub__card-header">
                   <span className={`app-channels-hub__card-icon app-channels-hub__card-icon--${channel.key}`}>
                     {channel.icon}
                   </span>
-                  {channel.available ? (
+                  {showSwitch ? (
                     <Switch
                       size="small"
-                      checked={enabled}
+                      checked={Boolean(meta.running)}
                       loading={channel.key === "dingtalk" ? streamBusy : false}
-                      disabled={!canToggle}
+                      disabled={!meta.configured || (channel.key === "websocket")}
                       onChange={(next, event) => {
                         event.stopPropagation();
                         if (channel.key === "dingtalk") void handleToggleDingTalk(next);
@@ -162,45 +196,56 @@ export function ChannelsPanel() {
                       onClick={(_checked, event) => event.stopPropagation()}
                     />
                   ) : (
-                    <span className="app-channels-hub__card-badge">待接入</span>
+                    <span
+                      className={`app-channels-hub__card-badge${meta.configured ? " app-channels-hub__card-badge--ok" : ""}`}
+                    >
+                      {meta.configured ? "可用" : "待配置"}
+                    </span>
                   )}
                 </div>
                 <div className="app-channels-hub__card-body">
                   <div className="app-channels-hub__card-title" title={channel.title}>{channel.title}</div>
-                  <div className="app-channels-hub__card-meta" title={metaLabel}>{metaLabel}</div>
+                  <div className="app-channels-hub__card-meta" title={meta.label}>{meta.label}</div>
                 </div>
               </button>
             );
           })}
         </div>
 
-        {activeKey && (
-          <div className="app-channels-hub__detail">
-            {activeKey === "dingtalk" ? (
-              <ChannelBody
-                channel={CHANNELS.find((c) => c.key === "dingtalk")!}
-                dingTalkConfigured={dingTalkConfigured}
-                streamStatus={streamStatus}
-                streamBusy={streamBusy}
-                onRefreshStatus={refreshStatus}
-                onToggleDingTalk={handleToggleDingTalk}
-              />
-            ) : (
-              <Empty
-                className="app-channels-panel__placeholder"
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description={CHANNELS.find((c) => c.key === activeKey)?.comingSoonHint ?? "暂未接入。"}
-              />
-            )}
-          </div>
-        )}
+        <div className="app-channels-hub__detail">
+          {activeKey === "dingtalk" ? (
+            <DingtalkChannelBody
+              dingTalkConfigured={dingTalkConfigured}
+              streamStatus={streamStatus}
+              streamBusy={streamBusy}
+              onRefreshStatus={refreshDingtalk}
+              onToggleDingTalk={handleToggleDingTalk}
+            />
+          ) : activeKey === "feishu" ? (
+            <FeishuChannelBody onConfiguredChange={setFeishuConfigured} />
+          ) : activeKey === "wecom" ? (
+            <WecomChannelBody onConfiguredChange={setWecomConfigured} />
+          ) : activeKey === "telegram" ? (
+            <TelegramChannelBody onConfiguredChange={setTelegramConfigured} />
+          ) : activeKey === "websocket" ? (
+            <GenericWebSocketChannelBody
+              onConfiguredChange={setWsConfigured}
+              onStatusChange={setWsStatus}
+            />
+          ) : (
+            <Empty
+              className="app-channels-panel__placeholder"
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description="该渠道暂未实现"
+            />
+          )}
+        </div>
       </AuthorPanelListShell>
     </AuthorPanelPageShell>
   );
 }
 
-interface ChannelBodyProps {
-  channel: ChannelDefinition;
+interface DingtalkChannelBodyProps {
   dingTalkConfigured: boolean;
   streamStatus: DingTalkStreamGatewayStatus | null;
   streamBusy: boolean;
@@ -239,95 +284,85 @@ function dingtalkRowMeta({
   return `${configLabel} · ${phase}`;
 }
 
-function ChannelBody({
-  channel,
+function DingtalkChannelBody({
   dingTalkConfigured,
   streamStatus,
   streamBusy,
   onRefreshStatus,
   onToggleDingTalk,
-}: ChannelBodyProps) {
-  if (channel.key === "dingtalk") {
-    const status: DingTalkStreamGatewayStatus = streamStatus ?? { running: false, phase: "stopped" };
-    return (
-      <div className="app-channels-panel__body">
-        <div className="app-channels-panel__ops">
-          <div className="app-channels-panel__ops-head">
-            <div>
-              <Typography.Text strong>钉钉 Stream 网关</Typography.Text>
-              <div className="app-channels-panel__ops-subtitle">入站、执行、回执</div>
-            </div>
-            <Tag color={status.running ? "success" : status.lastError ? "error" : "default"}>
-              {phaseLabel(status.phase)}
-            </Tag>
-          </div>
-          <div className="app-channels-panel__metrics">
-            <span>连接：{formatStatusTime(status.connectedAt)}</span>
-            <span>入站：{formatStatusTime(status.lastInboundAt)}</span>
-            <span>错误：{formatStatusTime(status.lastErrorAt)}</span>
-          </div>
-          {status.lastError ? (
-            <Typography.Text type="danger" className="app-channels-panel__error">
-              {status.lastError}
-            </Typography.Text>
-          ) : null}
-          <Space wrap className="app-channels-panel__ops-actions">
-            <Button
-              type="primary"
-              size="small"
-              loading={streamBusy}
-              disabled={!dingTalkConfigured || status.running}
-              onClick={() => void onToggleDingTalk(true)}
-            >
-              启动
-            </Button>
-            <Button
-              size="small"
-              loading={streamBusy}
-              disabled={!status.running}
-              onClick={() => void onToggleDingTalk(false)}
-            >
-              停止
-            </Button>
-            <Button size="small" icon={<ReloadOutlined />} onClick={() => void onRefreshStatus()}>
-              刷新
-            </Button>
-          </Space>
-          {dingTalkConfigured ? null : (
-            <Typography.Text type="warning" className="app-channels-panel__hint">
-              先保存 AppKey / AppSecret / robotCode 后再启动。
-            </Typography.Text>
-          )}
-        </div>
-        <Tabs
-          size="small"
-          className="app-channels-panel__dingtalk-tabs"
-          items={[
-            {
-              key: "config",
-              label: "配置",
-              children: <DingTalkEnterpriseBotPopoverBody compact />,
-            },
-            {
-              key: "debug",
-              label: "联调",
-              children: <DingTalkEnterpriseBotPopoverBody compact initialSection="debug" />,
-            },
-            {
-              key: "push",
-              label: "中继",
-              children: <DingTalkEnterpriseBotPopoverBody compact initialSection="push" />,
-            },
-          ]}
-        />
-      </div>
-    );
-  }
+}: DingtalkChannelBodyProps) {
+  const status: DingTalkStreamGatewayStatus = streamStatus ?? { running: false, phase: "stopped" };
   return (
-    <Empty
-      className="app-channels-panel__placeholder"
-      image={Empty.PRESENTED_IMAGE_SIMPLE}
-      description={channel.comingSoonHint ?? `${channel.title} 即将接入。`}
-    />
+    <div className="app-channels-panel__body">
+      <div className="app-channels-panel__ops">
+        <div className="app-channels-panel__ops-head">
+          <div>
+            <Typography.Text strong>钉钉 Stream 网关</Typography.Text>
+            <div className="app-channels-panel__ops-subtitle">入站、执行、回执</div>
+          </div>
+          <Tag color={status.running ? "success" : status.lastError ? "error" : "default"}>
+            {phaseLabel(status.phase)}
+          </Tag>
+        </div>
+        <div className="app-channels-panel__metrics">
+          <span>连接：{formatStatusTime(status.connectedAt)}</span>
+          <span>入站：{formatStatusTime(status.lastInboundAt)}</span>
+          <span>错误：{formatStatusTime(status.lastErrorAt)}</span>
+        </div>
+        {status.lastError ? (
+          <Typography.Text type="danger" className="app-channels-panel__error">
+            {status.lastError}
+          </Typography.Text>
+        ) : null}
+        <Space wrap className="app-channels-panel__ops-actions">
+          <Button
+            type="primary"
+            size="small"
+            loading={streamBusy}
+            disabled={!dingTalkConfigured || status.running}
+            onClick={() => void onToggleDingTalk(true)}
+          >
+            启动
+          </Button>
+          <Button
+            size="small"
+            loading={streamBusy}
+            disabled={!status.running}
+            onClick={() => void onToggleDingTalk(false)}
+          >
+            停止
+          </Button>
+          <Button size="small" icon={<ReloadOutlined />} onClick={() => void onRefreshStatus()}>
+            刷新
+          </Button>
+        </Space>
+        {dingTalkConfigured ? null : (
+          <Typography.Text type="warning" className="app-channels-panel__hint">
+            先保存 AppKey / AppSecret / robotCode 后再启动。
+          </Typography.Text>
+        )}
+      </div>
+      <Tabs
+        size="small"
+        className="app-channels-panel__dingtalk-tabs"
+        items={[
+          {
+            key: "config",
+            label: "配置",
+            children: <DingTalkEnterpriseBotPopoverBody compact />,
+          },
+          {
+            key: "debug",
+            label: "联调",
+            children: <DingTalkEnterpriseBotPopoverBody compact initialSection="debug" />,
+          },
+          {
+            key: "push",
+            label: "中继",
+            children: <DingTalkEnterpriseBotPopoverBody compact initialSection="push" />,
+          },
+        ]}
+      />
+    </div>
   );
 }

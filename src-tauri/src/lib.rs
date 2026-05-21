@@ -20,6 +20,7 @@ mod mission_control;
 mod mcp;
 mod prd_materialize;
 mod prd_url_fetch;
+mod remote_channels;
 mod project_workspace_paths;
 mod repository_files;
 mod skills_sh;

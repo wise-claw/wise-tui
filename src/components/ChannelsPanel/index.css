@@ -60,7 +60,7 @@
   box-shadow: 0 6px 18px rgba(22, 119, 255, 0.06), 0 0 0 1px var(--ant-color-primary) !important;
 }
 
-/* 暂未接入卡片样式 */
+/* 暂未接入卡片样式（已弃用，保留以兼容旧调用） */
 .app-channels-hub__card--coming-soon {
   opacity: 0.55;
   cursor: not-allowed;
@@ -70,6 +70,11 @@
   transform: none !important;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02), inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
   border-color: color-mix(in srgb, var(--ant-color-border-secondary) 50%, transparent) !important;
+}
+
+/* 未配置卡片：可点，仅做轻度淡化 */
+.app-channels-hub__card--unconfigured:not(.app-channels-hub__card--active) {
+  opacity: 0.82;
 }
 
 /* 卡片头部 */
@@ -132,6 +137,12 @@
   color: var(--ant-color-text-quaternary);
   font-size: 9.5px;
   line-height: 1.2;
+}
+
+.app-channels-hub__card-badge--ok {
+  background: color-mix(in srgb, var(--ant-color-success-bg) 70%, transparent);
+  border-color: color-mix(in srgb, var(--ant-color-success-border) 60%, transparent);
+  color: var(--ant-color-success-text);
 }
 
 /* 卡片文本 */
@@ -363,10 +374,119 @@
   font-size: 12px;
 }
 
+/* 通用渠道配置/调试主体 */
+.app-channels-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.app-channels-body__form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.app-channels-body__row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.app-channels-body__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-channels-body__field > span {
+  font-weight: 500;
+}
+
+.app-channels-body__actions {
+  margin-top: 2px;
+}
+
+.app-channels-body__debug {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 30%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--ant-color-border-secondary) 60%, transparent);
+  border-radius: 8px;
+}
+
+.app-channels-body__debug .ant-btn {
+  align-self: flex-start;
+}
+
+.app-channels-body__result {
+  display: block;
+  font-size: 11.5px;
+  color: var(--ant-color-text-tertiary);
+  word-break: break-word;
+}
+
+.app-channels-body__inbound {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 65%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 30%, transparent);
+  border-radius: 8px;
+}
+
+.app-channels-body__inbound-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+  font-size: 11px;
+  font-family: var(--ant-font-family-code, ui-monospace, monospace);
+}
+
+.app-channels-body__inbound-list li {
+  display: grid;
+  grid-template-columns: 96px 56px 1fr;
+  gap: 8px;
+  padding: 4px 6px;
+  border-bottom: 1px dashed color-mix(in srgb, var(--ant-color-border-secondary) 40%, transparent);
+}
+
+.app-channels-body__inbound-list li:last-child {
+  border-bottom: none;
+}
+
+.app-channels-body__inbound-time {
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-channels-body__inbound-kind {
+  color: var(--ant-color-primary-text);
+}
+
+.app-channels-body__inbound-text {
+  color: var(--ant-color-text-secondary);
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+
 /* 响应式断点控制 */
 @media (max-width: 900px) {
   .app-channels-hub__grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .app-channels-body__row {
+    grid-template-columns: 1fr;
   }
 }
 
