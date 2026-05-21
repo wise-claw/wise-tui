@@ -185,3 +185,36 @@ Closed P0 (ViewMode discriminated union — already wired to DEFAULT cockpit) an
 ### Next Steps
 
 - None - task complete
+
+
+## Session 6: Assistant Hub D13 收敛 + Inspector 透镜 + task_artifact IPC 修复
+
+**Date**: 2026-05-21
+**Task**: Assistant Hub D13 收敛 + Inspector 透镜 + task_artifact IPC 修复
+**Branch**: `main`
+
+### Summary
+
+完成 assistant-hub-builtin-prd-split 任务。修复 task_artifact 三个 #[tauri::command] 漏注册的运行时崩溃 bug。Stage 5 抽出 4 个 Inspector 透镜（runtime-events / workflow-graph / spec-timeline / spec-library），AuthorPane 移除 prompts/trellis-spec，新增 WORKFLOW_UI_EVENT_OPEN_ASSISTANT 统一助手入口。CLAUDE.md 同步 CockpitSurface / PrdTaskSplitPanel 角色描述。focused tests 129/129 pass，cargo check 0 errors（dead code warnings 也清了）。范围外的 7 条旧测试失败（McpHub / WorkflowConfigModal / SpecLibraryPanel / WorkflowGraphPanel）按 implement.md §0 'Do not mix unrelated UI cleanup' 留给后续任务。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e173fc8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
