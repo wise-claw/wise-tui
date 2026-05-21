@@ -5,12 +5,12 @@
   "children": [],
   "clusterId": "requirements-mpf275il",
   "commit": null,
-  "completedAt": null,
+  "completedAt": "2026-05-21",
   "createdAt": "2026-05-21",
   "creator": "申蛟隆",
   "description": "Source requirements: req-functional-1",
   "dev_type": "frontend",
-  "id": "task-2",
+  "id": "task-3",
   "meta": {
     "childDependencies": [
       "task-1"
@@ -20,16 +20,16 @@
       "req-functional-1"
     ],
     "taskAnchors": {
-      "contextAfter": "编辑功能",
-      "contextBefore": "新增一个商品页面",
-      "from": 8,
-      "mdFrom": 8,
-      "mdTo": 11,
-      "textHash": "b7e4c9d1f6a2",
-      "to": 11
+      "contextAfter": "功能。",
+      "contextBefore": "新增一个商品页面，包含列表",
+      "from": 12,
+      "mdFrom": 12,
+      "mdTo": 16,
+      "textHash": "c2d8e3f7a1b5",
+      "to": 16
     }
   },
-  "name": "task-2",
+  "name": "task-3",
   "notes": "",
   "package": null,
   "parent": "05-21-prd",
@@ -38,8 +38,8 @@
   "relatedFiles": [],
   "repositoryId": 1778163801246,
   "scope": null,
-  "status": "planning",
+  "status": "completed",
   "subtasks": [],
-  "title": "商品列表页面开发",
+  "title": "商品编辑页面开发",
   "worktree_path": null
 }

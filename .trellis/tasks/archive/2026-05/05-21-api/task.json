@@ -5,7 +5,7 @@
   "children": [],
   "clusterId": "requirements-mpf275il",
   "commit": null,
-  "completedAt": null,
+  "completedAt": "2026-05-21",
   "createdAt": "2026-05-21",
   "creator": "申蛟隆",
   "description": "Source requirements: req-functional-1",
@@ -36,7 +36,7 @@
   "relatedFiles": [],
   "repositoryId": 1778163801246,
   "scope": null,
-  "status": "planning",
+  "status": "completed",
   "subtasks": [],
   "title": "商品数据模型与 API 接口定义",
   "worktree_path": null
