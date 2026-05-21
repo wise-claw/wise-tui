@@ -3,8 +3,6 @@ import { Button, Dropdown, Segmented, Typography } from "antd";
 import type { MenuProps } from "antd";
 import type { SplitResult } from "../../types";
 import { UnmetConditionsQuestionIcon } from "./UnmetConditionsQuestionIcon";
-import type { TaskRoleFilter } from "./types";
-
 type TaskConfirmFilter = "unconfirmed" | "confirmed";
 
 interface Props {
@@ -15,14 +13,10 @@ interface Props {
   activeResult: SplitResult | null;
   taskConfirmFilter: TaskConfirmFilter;
   taskConfirmCounts: { unconfirmedCount: number; confirmedCount: number };
-  taskRoleFilter: TaskRoleFilter;
-  taskRoleFilterOptions: { label: string; value: TaskRoleFilter }[];
-  showRoleFilterTabs: boolean;
   onConfirmAll: () => void | Promise<void>;
   onAddTask: () => void;
   onClearAllTasks: () => void;
   onTaskConfirmFilterChange: (filter: TaskConfirmFilter) => void;
-  onTaskRoleFilterChange: (filter: TaskRoleFilter) => void;
 }
 
 export function TaskBoardHeader({
@@ -33,14 +27,10 @@ export function TaskBoardHeader({
   activeResult,
   taskConfirmFilter,
   taskConfirmCounts,
-  taskRoleFilter,
-  taskRoleFilterOptions,
-  showRoleFilterTabs,
   onConfirmAll,
   onAddTask,
   onClearAllTasks,
   onTaskConfirmFilterChange,
-  onTaskRoleFilterChange,
 }: Props) {
   const noTasks = !activeResult || activeResult.splitTasks.length === 0;
   return (
@@ -112,15 +102,6 @@ export function TaskBoardHeader({
             { label: `已确认（${taskConfirmCounts.confirmedCount}）`, value: "confirmed" },
           ]}
         />
-        {showRoleFilterTabs ? (
-          <Segmented
-            size="small"
-            className="app-prd-task-panel__task-toolbar-segmented"
-            value={taskRoleFilter}
-            onChange={(value: string | number) => onTaskRoleFilterChange(value as TaskRoleFilter)}
-            options={taskRoleFilterOptions}
-          />
-        ) : null}
       </div>
     </div>
   );

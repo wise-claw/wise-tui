@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "requirements": [
+    {
+      "id": "req-functional-1",
+      "content": "新增一个商品页面，包含列表、编辑功能。",
+      "start": 41,
+      "end": 60
+    }
+  ]
+}

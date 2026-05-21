@@ -4,6 +4,7 @@ import {
   estimateDaysFromSize,
   parseTaskMarkdownDraft,
   sameApiSpec,
+  taskPreviewLine,
   taskToMarkdown,
 } from "./helpers";
 
@@ -193,5 +194,16 @@ describe("parseTaskMarkdownDraft", () => {
     expect(parsed.dod).toEqual(["验收A"]);
     expect(parsed.apiSpec?.endpoint).toBe("/api/x");
     expect(parsed.apiSpec?.errorCodes).toEqual(["400"]);
+  });
+});
+
+describe("taskPreviewLine", () => {
+  test("strips br tags and collapses whitespace", () => {
+    expect(taskPreviewLine("行一<br />行二", "")).toBe("行一 行二");
+  });
+
+  test("falls back to second part and default label", () => {
+    expect(taskPreviewLine("", "子任务 A")).toBe("子任务 A");
+    expect(taskPreviewLine("", "")).toBe("暂无任务内容");
   });
 });

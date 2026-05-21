@@ -445,12 +445,6 @@ body {
   background: var(--ant-color-bg-layout);
 }
 
-@media (display-mode: window-controls-overlay) {
-  .app-cockpit-workspace-layer--prd-split-fullscreen {
-    top: env(titlebar-area-height, 28px);
-  }
-}
-
 /* 工作台配置全屏：左栏为配置 Tab 导航（替换工作区树），主区铺满剩余宽度 */
 .app-main-layout--author .app-workspace-main {
   display: flex;

@@ -121,7 +121,6 @@ import type {
   SplitPromptDraftBySlot,
   SplitQualitySummary,
   SplitWizardStep,
-  TaskRoleFilter,
 } from "./types";
 import { useSplitRuntimePanel } from "./useSplitRuntimePanel";
 import { summarizeSplitQuality } from "./splitExecutionQuality";
@@ -274,7 +273,6 @@ export function usePrdTaskSplitPanelController({
   const [splitQualitySummary, setSplitQualitySummary] = useState<SplitQualitySummary | null>(null);
   const [resolvedTaskAnchorIds, setResolvedTaskAnchorIds] = useState<string[]>([]);
   const [anchorResolveReported, setAnchorResolveReported] = useState(false);
-  const [taskRoleFilter, setTaskRoleFilter] = useState<TaskRoleFilter>("all");
   const [taskConfirmFilter, setTaskConfirmFilter] = useState<TaskConfirmFilter>("unconfirmed");
   const milkdownEditorRef = useRef<MilkdownEditorHandle | null>(null);
   /** 与 `focusTask` 同步，用于在切换任务时清除需求侧区间高亮（避免依赖闭包中的旧 `selectedTaskId`）。 */
@@ -495,10 +493,9 @@ export function usePrdTaskSplitPanelController({
       const isConfirmed = displayExecutionStatus(task) === "executable";
       if (taskConfirmFilter === "confirmed" && !isConfirmed) return false;
       if (taskConfirmFilter === "unconfirmed" && isConfirmed) return false;
-      if (taskRoleFilter !== "all" && task.role !== taskRoleFilter) return false;
       return true;
     });
-  }, [activeResult, taskConfirmFilter, taskRoleFilter]);
+  }, [activeResult, taskConfirmFilter]);
   const taskConfirmCounts = useMemo(() => {
     const tasks = activeResult?.splitTasks ?? [];
     const confirmedCount = tasks.filter((task) => displayExecutionStatus(task) === "executable").length;
@@ -516,30 +513,6 @@ export function usePrdTaskSplitPanelController({
     && hasConfirmedTasks
     && !confirmSavingTaskId,
   );
-  const taskRoleCounts = useMemo(() => {
-    const allCount = activeResult?.splitTasks.length ?? 0;
-    const frontendCount = activeResult?.splitTasks.filter((task) => task.role === "frontend").length ?? 0;
-    const backendCount = activeResult?.splitTasks.filter((task) => task.role === "backend").length ?? 0;
-    const documentCount = activeResult?.splitTasks.filter((task) => task.role === "document").length ?? 0;
-    const distinctRoleKinds = [frontendCount > 0, backendCount > 0, documentCount > 0].filter(Boolean).length;
-    return { allCount, frontendCount, backendCount, documentCount, distinctRoleKinds };
-  }, [activeResult?.splitTasks]);
-  const showRoleFilterTabs = taskRoleCounts.distinctRoleKinds >= 2;
-  const taskRoleFilterOptions = useMemo(() => {
-    const opts: { label: string; value: TaskRoleFilter }[] = [
-      { label: `全部（${taskRoleCounts.allCount}）`, value: "all" },
-    ];
-    if (taskRoleCounts.frontendCount > 0) {
-      opts.push({ label: `前端（${taskRoleCounts.frontendCount}）`, value: "frontend" });
-    }
-    if (taskRoleCounts.backendCount > 0) {
-      opts.push({ label: `后端（${taskRoleCounts.backendCount}）`, value: "backend" });
-    }
-    if (taskRoleCounts.documentCount > 0) {
-      opts.push({ label: `文档（${taskRoleCounts.documentCount}）`, value: "document" });
-    }
-    return opts;
-  }, [taskRoleCounts]);
   const splitRubricReport = useMemo(
     () => (activeResult ? validateSplitResult(activeResult) : null),
     [activeResult],
@@ -775,14 +748,10 @@ export function usePrdTaskSplitPanelController({
       const shouldToConfirmed = displayExecutionStatus(task) === "executable";
       const targetConfirmFilter: TaskConfirmFilter = shouldToConfirmed ? "confirmed" : "unconfirmed";
       const needTabSwitch = taskConfirmFilter !== targetConfirmFilter;
-      const needRoleReset = taskRoleFilter !== "all" && task.role !== taskRoleFilter;
       if (needTabSwitch) {
         setTaskConfirmFilter(targetConfirmFilter);
       }
-      if (needRoleReset) {
-        setTaskRoleFilter("all");
-      }
-      if (needTabSwitch || needRoleReset) {
+      if (needTabSwitch) {
         window.requestAnimationFrame(() => {
           window.requestAnimationFrame(() => {
             focusTask(taskId);
@@ -792,7 +761,7 @@ export function usePrdTaskSplitPanelController({
         focusTask(taskId);
       }
     },
-    [activeResult?.splitTasks, focusTask, taskConfirmFilter, taskRoleFilter],
+    [activeResult?.splitTasks, focusTask, taskConfirmFilter],
   );
 
   useEffect(() => {
@@ -834,23 +803,6 @@ export function usePrdTaskSplitPanelController({
   useEffect(() => {
     selectedTaskIdRef.current = selectedTaskId;
   }, [selectedTaskId]);
-
-  useEffect(() => {
-    if (!showRoleFilterTabs && taskRoleFilter !== "all") {
-      setTaskRoleFilter("all");
-    }
-  }, [showRoleFilterTabs, taskRoleFilter]);
-
-  useEffect(() => {
-    if (taskRoleFilter === "all") return;
-    const count =
-      taskRoleFilter === "frontend"
-        ? taskRoleCounts.frontendCount
-        : taskRoleFilter === "backend"
-          ? taskRoleCounts.backendCount
-          : taskRoleCounts.documentCount;
-    if (count === 0) setTaskRoleFilter("all");
-  }, [taskRoleFilter, taskRoleCounts]);
 
   useEffect(() => {
     if ((activeResult?.splitTasks.length ?? 0) === 0) {
@@ -987,7 +939,7 @@ export function usePrdTaskSplitPanelController({
         window.cancelAnimationFrame(rafId);
       }
     };
-  }, [hasSplitTopFixedBanner, activeResult, taskRoleFilter]);
+  }, [hasSplitTopFixedBanner, activeResult]);
 
   useEffect(() => {
     urlAnchorAutoBackfilledRef.current = false;
@@ -1262,10 +1214,7 @@ export function usePrdTaskSplitPanelController({
           return current > max ? current : max;
         }, 0);
       const nextId = `task-${maxOrdinal + 1}`;
-      const inferredRole: TaskRole =
-        taskRoleFilter === "frontend" || taskRoleFilter === "backend" || taskRoleFilter === "document"
-          ? taskRoleFilter
-          : defaultTaskRoleForRepositoryType(baseResult.context?.repositoryType);
+      const inferredRole: TaskRole = defaultTaskRoleForRepositoryType(baseResult.context?.repositoryType);
       const mappedRequirementIds = Array.from(requirementContentById.entries())
         .filter(([, content]) => includesLoosely(anchorDraft.text, content))
         .map(([id]) => id)
@@ -1933,7 +1882,6 @@ export function usePrdTaskSplitPanelController({
     setSelectedAnchorTaskId(null);
     setSplitError(null);
     setTaskConfirmFilter("unconfirmed");
-    setTaskRoleFilter("all");
   }
 
   async function loadTaskResultForActiveRequirement(requirementId: string | null) {
@@ -2464,7 +2412,6 @@ export function usePrdTaskSplitPanelController({
         setActiveResult(out);
         setSelectedTaskId(null);
         setTaskConfirmFilter("unconfirmed");
-        setTaskRoleFilter("all");
         message.success("已清空所有任务并保存。");
       },
     });
@@ -2807,10 +2754,7 @@ export function usePrdTaskSplitPanelController({
         return current > max ? current : max;
       }, 0);
     const nextId = `task-${maxOrdinal + 1}`;
-    const inferredRole: TaskRole =
-      taskRoleFilter === "frontend" || taskRoleFilter === "backend" || taskRoleFilter === "document"
-        ? taskRoleFilter
-        : defaultTaskRoleForRepositoryType(baseResult.context?.repositoryType);
+    const inferredRole: TaskRole = defaultTaskRoleForRepositoryType(baseResult.context?.repositoryType);
     const nextTask: TaskItem = {
       id: nextId,
       title: `任务 ${maxOrdinal + 1}`,
@@ -2976,9 +2920,7 @@ export function usePrdTaskSplitPanelController({
     setTaskAnchorPopoverTaskId,
     setTaskCheckCollapsedById,
     setTaskConfirmFilter,
-    setTaskRoleFilter,
     setTaskUnmetCollapsedById,
-    showRoleFilterTabs,
     showUrlAnchorHint,
     sortedRequirementHistory,
     splitError,
@@ -3007,8 +2949,6 @@ export function usePrdTaskSplitPanelController({
     taskConfirmCounts,
     taskConfirmFilter,
     taskExecutableCheckResultById,
-    taskRoleFilter,
-    taskRoleFilterOptions,
     taskSplitHostRef,
     taskUnmetCollapsedById,
     unmetPreconditionsMenuItems,

@@ -127,9 +127,7 @@ export function PrdTaskSplitPanel({
     setTaskAnchorPopoverTaskId,
     setTaskCheckCollapsedById,
     setTaskConfirmFilter,
-    setTaskRoleFilter,
     setTaskUnmetCollapsedById,
-    showRoleFilterTabs,
     showUrlAnchorHint,
     splitError,
     splitPromptAdjustStarting,
@@ -149,8 +147,6 @@ export function PrdTaskSplitPanel({
     taskConfirmCounts,
     taskConfirmFilter,
     taskExecutableCheckResultById,
-    taskRoleFilter,
-    taskRoleFilterOptions,
     taskSplitHostRef,
     taskUnmetCollapsedById,
     unmetPreconditionsMenuItems,
@@ -296,9 +292,6 @@ export function PrdTaskSplitPanel({
               activeResult={activeResult}
               taskConfirmFilter={taskConfirmFilter}
               taskConfirmCounts={taskConfirmCounts}
-              taskRoleFilter={taskRoleFilter}
-              taskRoleFilterOptions={taskRoleFilterOptions}
-              showRoleFilterTabs={showRoleFilterTabs}
               canGenerateExecutableTasks={canGenerateExecutableTasks}
               closingMotionActive={false}
               selectedTaskId={selectedTaskId}
@@ -321,7 +314,6 @@ export function PrdTaskSplitPanel({
               onAddTask={() => void handleAddTask()}
               onClearAllTasks={() => handleClearAllTasks()}
               onTaskConfirmFilterChange={setTaskConfirmFilter}
-              onTaskRoleFilterChange={setTaskRoleFilter}
               getTaskAiMode={getTaskAiMode}
               getTaskAiInput={getTaskAiInput}
               getDraftedTask={getDraftedTask}

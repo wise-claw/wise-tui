@@ -1,5 +1,3 @@
-import type { TaskRole } from "../../types";
-
 export type RequirementEntry = {
   id: string;
   type: "functional" | "nonFunctional" | "acceptance";
@@ -7,7 +5,6 @@ export type RequirementEntry = {
   content: string;
 };
 
-export type TaskRoleFilter = "all" | TaskRole;
 export type SplitRuntimeLogRole = "system" | "user" | "assistant" | "error";
 export type SplitRuntimeLogScope = "main" | "subagent";
 export type SplitRuntimeLogStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled" | "info";

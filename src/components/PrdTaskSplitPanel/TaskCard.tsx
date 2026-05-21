@@ -7,7 +7,7 @@ import {
   taskRoleChineseLabel,
   taskRoleTagModifierClass,
 } from "../../utils/repositoryType";
-import { anchorLabelFromTaskId } from "./helpers";
+import { anchorLabelFromTaskId, taskPreviewLine } from "./helpers";
 import { TaskApiSpecEditor } from "./TaskApiSpecEditor";
 
 const MilkdownEditor = lazy(() =>
@@ -126,7 +126,7 @@ export function TaskCard({
         <span className="app-prd-task-panel__task-card-summary-main">
           <strong>{task.title}</strong>
           {expanded ? null : (
-            <small>{draftedTask.description.trim() || draftedTask.subtasks[0] || "暂无任务内容"}</small>
+            <small>{taskPreviewLine(draftedTask.description, draftedTask.subtasks[0])}</small>
           )}
         </span>
         <span className="app-prd-task-panel__task-card-summary-side">

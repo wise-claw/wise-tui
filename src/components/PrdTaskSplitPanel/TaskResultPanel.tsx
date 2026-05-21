@@ -19,7 +19,6 @@ import type {
   SplitQualitySummary,
   SplitRetryPhase,
   SplitRuntimeLogItem,
-  TaskRoleFilter,
 } from "./types";
 import type { TaskAiMode, TaskConfirmFilter } from "./helpers";
 import { taskToMarkdown } from "./helpers";
@@ -63,9 +62,6 @@ interface Props {
   activeResult: SplitResult | null;
   taskConfirmFilter: TaskConfirmFilter;
   taskConfirmCounts: TaskConfirmCounts;
-  taskRoleFilter: TaskRoleFilter;
-  taskRoleFilterOptions: { label: string; value: TaskRoleFilter }[];
-  showRoleFilterTabs: boolean;
   canGenerateExecutableTasks: boolean;
   closingMotionActive: boolean;
   selectedTaskId: string | null;
@@ -88,7 +84,6 @@ interface Props {
   onAddTask: () => void;
   onClearAllTasks: () => void;
   onTaskConfirmFilterChange: (value: TaskConfirmFilter) => void;
-  onTaskRoleFilterChange: (value: TaskRoleFilter) => void;
   getTaskAiMode: (task: TaskItem) => TaskAiMode;
   getTaskAiInput: (task: TaskItem, mode: TaskAiMode) => string;
   getDraftedTask: (task: TaskItem) => TaskItem;
@@ -139,9 +134,6 @@ export function TaskResultPanel({
   activeResult,
   taskConfirmFilter,
   taskConfirmCounts,
-  taskRoleFilter,
-  taskRoleFilterOptions,
-  showRoleFilterTabs,
   canGenerateExecutableTasks,
   closingMotionActive,
   selectedTaskId,
@@ -164,7 +156,6 @@ export function TaskResultPanel({
   onAddTask,
   onClearAllTasks,
   onTaskConfirmFilterChange,
-  onTaskRoleFilterChange,
   getTaskAiMode,
   getTaskAiInput,
   getDraftedTask,
@@ -248,14 +239,10 @@ export function TaskResultPanel({
               activeResult={activeResult}
               taskConfirmFilter={taskConfirmFilter}
               taskConfirmCounts={taskConfirmCounts}
-              taskRoleFilter={taskRoleFilter}
-              taskRoleFilterOptions={taskRoleFilterOptions}
-              showRoleFilterTabs={showRoleFilterTabs}
               onConfirmAll={handleConfirmAllAndEnterOrchestration}
               onAddTask={onAddTask}
               onClearAllTasks={onClearAllTasks}
               onTaskConfirmFilterChange={onTaskConfirmFilterChange}
-              onTaskRoleFilterChange={onTaskRoleFilterChange}
             />
           )}
           extra={filteredTasks.length > 0 ? (

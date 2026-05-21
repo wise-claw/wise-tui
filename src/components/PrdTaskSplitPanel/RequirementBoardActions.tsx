@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import {
   DownOutlined,
   FileAddOutlined,
@@ -6,11 +7,32 @@ import {
   SaveOutlined,
   SettingOutlined,
 } from "@ant-design/icons";
-import { Button, Dropdown, Select, Space, Tag, Typography } from "antd";
+import { Button, Dropdown, Select, Space, Tooltip, Typography } from "antd";
 import type { MenuProps } from "antd";
 import type { AssistantBundleItem } from "../../services/assistantPromptLayers";
 import type { AssistantWorkflowRef } from "../../types/assistant";
 import type { LegacyRunSummary } from "../../services/prdSplit/legacyRunsImport";
+
+function buildWorkflowSummary(workflows: AssistantWorkflowRef[]): string {
+  if (workflows.length === 0) return "Wise Trellis";
+  return workflows.map((item) => item.label).join(" · ");
+}
+
+function buildWorkflowTooltip(workflows: AssistantWorkflowRef[]): ReactNode {
+  if (workflows.length === 0) {
+    return "内置 Trellis 编排";
+  }
+  return (
+    <ul className="app-prd-task-panel__assistant-orchestration-tip">
+      {workflows.map((item) => (
+        <li key={item.id}>
+          {item.label}
+          {item.description ? ` — ${item.description}` : ""}
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 interface Props {
   hasInput: boolean;
@@ -50,33 +72,35 @@ export function RequirementBoardActions({
   return (
     <div className="app-prd-task-panel__actions-row">
       <div className="app-prd-task-panel__assistant-resource-row">
-        <div className="app-prd-task-panel__assistant-skill-pack" aria-label="需求拆分助手内置 Trellis 编排">
-          <Typography.Text type="secondary" className="app-prd-task-panel__assistant-skill-pack-label">
-            内置编排
-          </Typography.Text>
-          <div className="app-prd-task-panel__assistant-skill-pack-tags">
-            {assistantRuntimeLoading ? (
-              <Tag>加载中</Tag>
-            ) : assistantWorkflowOptions.length > 0 ? (
-              assistantWorkflowOptions.map((item) => (
-                <Tag key={item.id} color="blue" title={item.description}>
-                  {item.label}
-                </Tag>
-              ))
-            ) : (
-              <Tag>Wise Trellis Workflow</Tag>
-            )}
+        <Tooltip title={buildWorkflowTooltip(assistantWorkflowOptions)}>
+          <div
+            className="app-prd-task-panel__assistant-orchestration"
+            aria-label="需求拆分助手内置 Trellis 编排"
+          >
+            <Typography.Text type="secondary" className="app-prd-task-panel__assistant-orchestration-label">
+              编排
+            </Typography.Text>
+            <Typography.Text
+              type="secondary"
+              className="app-prd-task-panel__assistant-orchestration-value"
+              ellipsis
+            >
+              {assistantRuntimeLoading
+                ? "加载中…"
+                : buildWorkflowSummary(assistantWorkflowOptions)}
+            </Typography.Text>
           </div>
-        </div>
+        </Tooltip>
         <Select
           mode="multiple"
           size="small"
-          placeholder="选择 MCP"
+          placeholder="MCP"
           loading={assistantRuntimeLoading}
           value={assistantSelectedMcpIds}
           options={assistantMcpOptions.map((item) => ({ label: item.label, value: item.id }))}
           onChange={onAssistantMcpsChange}
-          maxTagCount="responsive"
+          maxTagCount={1}
+          maxTagPlaceholder={(omitted) => `+${omitted.length}`}
           className="app-prd-task-panel__assistant-resource-select"
         />
       </div>

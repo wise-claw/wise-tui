@@ -9,6 +9,18 @@ export {
 export type TaskConfirmFilter = "unconfirmed" | "confirmed";
 export type TaskAiMode = "optimize" | "check";
 
+/** One-line preview for collapsed task cards; strips lightweight HTML from LLM output. */
+export function taskPreviewLine(...parts: Array<string | undefined | null>): string {
+  const raw = parts.find((part) => part?.trim())?.trim() ?? "";
+  if (!raw) return "暂无任务内容";
+  const plain = raw
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return plain || "暂无任务内容";
+}
+
 export function createRequirementHistoryId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return `req-${crypto.randomUUID()}`;

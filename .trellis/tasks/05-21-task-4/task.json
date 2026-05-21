@@ -1,0 +1,46 @@
+{
+  "assignee": "申蛟隆",
+  "base_branch": "main",
+  "branch": null,
+  "children": [],
+  "clusterId": "requirements-mpf275il",
+  "commit": null,
+  "completedAt": null,
+  "createdAt": "2026-05-21",
+  "creator": "申蛟隆",
+  "description": "Source requirements: req-functional-1",
+  "dev_type": "frontend",
+  "id": "task-4",
+  "meta": {
+    "childDependencies": [
+      "task-2",
+      "task-3"
+    ],
+    "classification": "lightweight",
+    "sourceRequirementIds": [
+      "req-functional-1"
+    ],
+    "taskAnchors": {
+      "contextAfter": "新增一个商品页面，包含列表、编辑功能。",
+      "contextBefore": "新增一个商品页面，包含列表、编辑功能",
+      "from": 0,
+      "mdFrom": 0,
+      "mdTo": 19,
+      "textHash": "d9e1f4a8b3c7",
+      "to": 19
+    }
+  },
+  "name": "task-4",
+  "notes": "",
+  "package": null,
+  "parent": "05-21-prd",
+  "pr_url": null,
+  "priority": "P2",
+  "relatedFiles": [],
+  "repositoryId": 1778163801246,
+  "scope": null,
+  "status": "planning",
+  "subtasks": [],
+  "title": "集成测试与端到端验证",
+  "worktree_path": null
+}
