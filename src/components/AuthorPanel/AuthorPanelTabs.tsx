@@ -4,7 +4,6 @@ import {
   AppstoreAddOutlined,
   BranchesOutlined,
   FieldTimeOutlined,
-  FileSearchOutlined,
   FolderOpenOutlined,
   GatewayOutlined,
   BlockOutlined,
@@ -56,7 +55,6 @@ export const AUTHOR_TAB_GROUPS: Array<{ title: string; items: AuthorTabDefinitio
     items: [
       { key: "automation", label: "定时自动化", description: "Cron、Mission 和会话续跑", icon: <FieldTimeOutlined /> },
       { key: "channels", label: "远程入口", description: "钉钉、飞书、企微和 Telegram", icon: <GatewayOutlined /> },
-      { key: "artifacts", label: "产物检查台", description: "Markdown、Diff、图片、PDF、Office", icon: <FileSearchOutlined /> },
       { key: "claude-config", label: "引擎环境", description: "用户级配置、settings 和 agents", icon: <FolderOpenOutlined /> },
       { key: "hooks", label: "触发器规则", description: "工具链事件、权限和自动化", icon: <ApartmentOutlined /> },
       { key: "shortcuts", label: "快捷键", description: "桌面操作和窗口控制", icon: <IconKeyboardShortcuts /> },

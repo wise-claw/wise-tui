@@ -7,7 +7,6 @@ import {
 } from "@ant-design/icons";
 import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { AppShortcutsPopoverBody } from "../AppShortcutsPopoverBody";
-import { ArtifactsPanel } from "../ArtifactsPanel";
 import { AssistantsPanel } from "../AssistantsPanel";
 import { AutomationPanel } from "../AutomationPanel";
 import { ChannelsPanel } from "../ChannelsPanel";
@@ -38,7 +37,6 @@ const PANELS_WITH_OWN_SHELL = new Set<AuthorPane>([
   "workflows",
   "channels",
   "automation",
-  "artifacts",
   "engine-registry",
 ]);
 
@@ -58,12 +56,11 @@ export interface AuthorPanelProps {
   assistantsPanelProps?: AssistantsPanelProps;
   repositoryPath?: string | null;
   automationPanelProps: ComponentProps<typeof AutomationPanel>;
-  artifactsPanelProps: ComponentProps<typeof ArtifactsPanel>;
   workflowStudioAction?: ReactNode;
 }
 
 function normalizeStoredAuthorPane(raw: string, fallback: AuthorPane): AuthorPane {
-  if (raw === "workspaces") return DEFAULT_AUTHOR_PANE;
+  if (raw === "workspaces" || raw === "artifacts") return DEFAULT_AUTHOR_PANE;
   return isAuthorPane(raw) ? raw : fallback;
 }
 
@@ -98,7 +95,6 @@ export function AuthorPanel({
   assistantsPanelProps,
   repositoryPath,
   automationPanelProps,
-  artifactsPanelProps,
   workflowStudioAction,
 }: AuthorPanelProps) {
   const [hooksSearch, setHooksSearch] = useState("");
@@ -207,12 +203,6 @@ export function AuthorPanel({
         ) : (
           <AuthorUnavailable label="定时自动化" />
         );
-      case "artifacts":
-        return artifactsPanelProps ? (
-          <ArtifactsPanel {...artifactsPanelProps} />
-        ) : (
-          <AuthorUnavailable label="产物检查台" />
-        );
       case "channels":
         return <ChannelsPanel />;
       case "shortcuts":
@@ -227,7 +217,6 @@ export function AuthorPanel({
     activeTab.icon,
     activeTab.label,
     automationPanelProps,
-    artifactsPanelProps,
     employeeConfigProps,
     hooksSearch,
     hooksRepositoryPath,

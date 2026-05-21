@@ -2492,18 +2492,6 @@ export default function App() {
           workflowTemplates,
           workflowGraphsByWorkflowId,
         },
-        artifactsPanelProps: {
-          repositories,
-          activeRepositoryId,
-          onOpenRepositoryFile: (repository, relativePath) => {
-            openRepositoryFileByEvent({
-              repositoryId: repository.id,
-              repositoryPath: repository.path,
-              relativePath,
-              line: null,
-            });
-          },
-        },
         repositoryPath: activeRepository?.path ?? null,
         workflowStudioAction: undefined,
       }}

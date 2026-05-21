@@ -45,7 +45,6 @@ export function ClaudeConfigDirPanel() {
       />
 
       <Alert
-        type="info"
         showIcon
         className="app-claude-config-dir-panel__hint"
         title="影响范围"

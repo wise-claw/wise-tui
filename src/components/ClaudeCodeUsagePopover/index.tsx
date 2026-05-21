@@ -15,14 +15,9 @@ import "./index.css";
 function IconClaudeUsage() {
   return (
     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-      {/* 等距立方体外轮廓（六角形），与中栏顶栏 24 / stroke-2 一致，去掉内部棱线 */}
-      <path
-        d="M12 4l8 4v8l-8 4-8-4V8l8-4z"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
+      <polygon points="12 3 20 7.5 20 16.5 12 21 4 16.5 4 7.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <polygon points="12 7.5 16 9.75 16 14.25 12 16.5 8 14.25 8 9.75" stroke="currentColor" strokeWidth="1.8" strokeOpacity="0.4" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="12" cy="12" r="1.5" fill="currentColor" />
     </svg>
   );
 }

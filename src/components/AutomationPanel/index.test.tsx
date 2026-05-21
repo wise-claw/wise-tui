@@ -46,8 +46,9 @@ describe("AutomationPanel", () => {
       />,
     );
 
-    expect(html).toContain("管理当前仓库定时任务");
-    expect(html).toContain("编辑计划任务");
+    expect(html).toContain("管理定时任务");
+    expect(html).toContain("app-automation-console__repos");
+    expect(html).toContain("/repo/wise");
     expect(html).toContain("计划任务弹窗:/repo/wise");
   });
 });

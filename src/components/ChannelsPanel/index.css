@@ -10,113 +10,193 @@
 .app-channels-panel {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
   min-width: 0;
 }
 
 .app-channels-panel__list-shell.author-panel-page__list-shell {
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.app-channels-panel__list.ant-collapse {
-  border: none;
-  border-radius: 8px;
-  background: var(--ant-color-bg-container);
+/* 渠道卡片高精自适应网格 */
+.app-channels-hub__grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+  padding: 2px 1px 4px;
 }
 
-.app-channels-panel__list.ant-collapse > .ant-collapse-item {
-  border-bottom: 1px solid var(--ant-color-border-secondary);
+/* 极致毛玻璃渠道卡片 */
+.app-channels-hub__card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 75%, transparent) !important;
+  backdrop-filter: blur(14px) saturate(120%);
+  -webkit-backdrop-filter: blur(14px) saturate(120%);
+  border: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 50%, transparent) !important;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02), inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  overflow: hidden;
 }
 
-.app-channels-panel__list.ant-collapse > .ant-collapse-item:last-child {
-  border-bottom: none;
+/* 卡片悬停浮起 */
+.app-channels-hub__card:hover {
+  transform: translateY(-2px) translateZ(0) !important;
+  border-color: color-mix(in srgb, var(--ant-color-primary) 50%, transparent) !important;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.04), 0 2px 4px rgba(0, 0, 0, 0.01) !important;
 }
 
-.app-channels-panel__list.ant-collapse > .ant-collapse-item > .ant-collapse-header {
+/* 选中激活状态 */
+.app-channels-hub__card--active {
+  background: color-mix(in srgb, var(--ant-color-primary-bg) 60%, transparent) !important;
+  border-color: var(--ant-color-primary) !important;
+  box-shadow: 0 6px 18px rgba(22, 119, 255, 0.06), 0 0 0 1px var(--ant-color-primary) !important;
+}
+
+/* 暂未接入卡片样式 */
+.app-channels-hub__card--coming-soon {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.app-channels-hub__card--coming-soon:hover {
+  transform: none !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02), inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
+  border-color: color-mix(in srgb, var(--ant-color-border-secondary) 50%, transparent) !important;
+}
+
+/* 卡片头部 */
+.app-channels-hub__card-header {
+  display: flex;
   align-items: center;
-  min-height: 0;
-  padding: 8px 12px;
+  justify-content: space-between;
+  width: 100%;
 }
 
-.app-channels-panel__list.ant-collapse > .ant-collapse-item > .ant-collapse-header .ant-collapse-expand-icon {
-  padding-inline-end: 8px;
-}
-
-.app-channels-panel__list.ant-collapse > .ant-collapse-item > .ant-collapse-header .ant-collapse-extra {
-  margin-left: 8px;
-}
-
-.app-channels-panel__list.ant-collapse .ant-collapse-content > .ant-collapse-content-box {
-  padding: 0;
-}
-
-.app-channels-panel__row {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.app-channels-panel__row-icon {
+/* 渠道图标舱 (Circular Icon Cabin) */
+.app-channels-hub__card-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 5px;
-  background: var(--ant-color-fill-quaternary);
-  color: var(--ant-color-primary);
-  font-size: 12px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 13.5px;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.app-channels-panel__row-title {
+.app-channels-hub__card:hover .app-channels-hub__card-icon {
+  transform: scale(1.08);
+}
+
+/* 钉钉图标 */
+.app-channels-hub__card-icon--dingtalk {
+  background: color-mix(in srgb, #1677ff 12%, transparent);
+  color: #1677ff;
+}
+
+/* 其他待接入图标 */
+.app-channels-hub__card-icon--feishu {
+  background: color-mix(in srgb, #36b37e 12%, transparent);
+  color: #36b37e;
+}
+
+.app-channels-hub__card-icon--wecom {
+  background: color-mix(in srgb, #ffab00 12%, transparent);
+  color: #ffab00;
+}
+
+.app-channels-hub__card-icon--telegram {
+  background: color-mix(in srgb, #0088cc 12%, transparent);
+  color: #0088cc;
+}
+
+.app-channels-hub__card-icon--websocket {
+  background: color-mix(in srgb, #6554c0 12%, transparent);
+  color: #6554c0;
+}
+
+/* "待接入" 胶囊标签 */
+.app-channels-hub__card-badge {
+  padding: 1px 5px;
+  background: color-mix(in srgb, var(--ant-color-fill-tertiary) 60%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 40%, transparent);
+  border-radius: 4px;
+  color: var(--ant-color-text-quaternary);
+  font-size: 9.5px;
+  line-height: 1.2;
+}
+
+/* 卡片文本 */
+.app-channels-hub__card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.app-channels-hub__card-title {
   color: var(--ant-color-text);
   font-size: 13px;
   font-weight: 600;
   line-height: 1.3;
 }
 
-.app-channels-panel__row-copy {
-  display: inline-flex;
-  min-width: 0;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.app-channels-panel__row-meta {
-  min-width: 0;
+.app-channels-hub__card-meta {
   color: var(--ant-color-text-tertiary);
-  font-size: 11px;
-  line-height: 1.3;
+  font-size: 10.5px;
+  line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.app-channels-panel__row-tag {
-  padding: 0 5px;
-  border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 4px;
-  color: var(--ant-color-text-tertiary);
-  font-size: 10px;
-  line-height: 16px;
+.app-channels-hub__card--active .app-channels-hub__card-meta {
+  color: var(--ant-color-primary-text-hover);
+}
+
+/* ---------------------------------------------------- */
+/* 渠道主工作台 (Channel Workspace Board) */
+.app-channels-hub__detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 85%, transparent) !important;
+  backdrop-filter: blur(16px) saturate(120%);
+  -webkit-backdrop-filter: blur(16px) saturate(120%);
+  border: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 50%, transparent) !important;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
 }
 
 .app-channels-panel__body {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 0 12px 10px;
+  gap: 12px;
+  padding: 0;
 }
 
+/* 控制台模块 (Operations Dashboard Box) */
 .app-channels-panel__ops {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-  border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 8px;
-  background: var(--ant-color-fill-quaternary);
+  gap: 10px;
+  padding: 14px;
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 35%, transparent) !important;
+  border: 1px dashed color-mix(in srgb, var(--ant-color-border-secondary) 80%, transparent) !important;
+  border-radius: 10px;
 }
 
 .app-channels-panel__ops-head {
@@ -126,6 +206,12 @@
   gap: 10px;
 }
 
+.app-channels-panel__ops-head strong {
+  font-size: 13.5px;
+  color: var(--ant-color-text);
+  font-weight: 700;
+}
+
 .app-channels-panel__ops-subtitle {
   margin-top: 2px;
   color: var(--ant-color-text-tertiary);
@@ -133,20 +219,57 @@
   line-height: 1.35;
 }
 
+/* 状态度量卡片排 (Metrics Rows) */
 .app-channels-panel__metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+  margin: 2px 0;
+}
+
+.app-channels-panel__metrics span {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px 12px;
-  color: var(--ant-color-text-tertiary);
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 65%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 30%, transparent);
+  border-radius: 6px;
   font-size: 11px;
-  line-height: 1.35;
+  color: var(--ant-color-text-secondary);
+  font-family: var(--ant-font-family-code, ui-monospace, monospace);
+  line-height: 1.3;
+}
+
+.app-channels-panel__metrics span::before {
+  content: "";
+  display: block;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--ant-color-text-quaternary);
+  letter-spacing: 0.5px;
+}
+
+/* 利用 CSS 内容伪类自动填充中文元数据标题 */
+.app-channels-panel__metrics span:nth-child(1)::before {
+  content: "连接建立时间";
+}
+.app-channels-panel__metrics span:nth-child(2)::before {
+  content: "最后成功入站";
+}
+.app-channels-panel__metrics span:nth-child(3)::before {
+  content: "最后异常错误";
 }
 
 .app-channels-panel__error {
   display: block;
-  padding: 6px 8px;
+  padding: 8px 10px;
   border-radius: 6px;
-  background: var(--ant-color-error-bg);
+  background: color-mix(in srgb, var(--ant-color-error-bg) 60%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ant-color-error-border) 30%, transparent);
+  color: var(--ant-color-error);
   font-size: 11px;
   line-height: 1.45;
   word-break: break-word;
@@ -156,9 +279,26 @@
   margin-top: 2px;
 }
 
+/* 纯正扁平实色按钮样式约束 */
+.app-channels-panel__ops-actions .ant-btn {
+  font-weight: 500;
+}
+
+.app-channels-panel__ops-actions .ant-btn-primary {
+  background: var(--ant-color-primary) !important;
+  border-color: var(--ant-color-primary) !important;
+  box-shadow: none !important;
+}
+
+.app-channels-panel__ops-actions .ant-btn-primary:hover {
+  background: var(--ant-color-primary-hover) !important;
+  border-color: var(--ant-color-primary-hover) !important;
+}
+
 .app-channels-panel__hint {
   display: block;
-  font-size: 12px;
+  font-size: 11.5px;
+  color: var(--ant-color-warning-text);
   line-height: 1.45;
 }
 
@@ -166,17 +306,52 @@
   max-width: none;
 }
 
+/* 极致紧凑 Capsule 药丸滑动选项卡 */
 .app-channels-panel__dingtalk-tabs.ant-tabs {
   min-width: 0;
+  margin-top: 4px;
 }
 
 .app-channels-panel__dingtalk-tabs .ant-tabs-nav {
-  margin: 0 0 8px;
+  margin: 0 0 12px !important;
+}
+
+.app-channels-panel__dingtalk-tabs .ant-tabs-nav-wrap {
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 60%, transparent);
+  padding: 3px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 30%, transparent);
+}
+
+.app-channels-panel__dingtalk-tabs .ant-tabs-nav::before {
+  display: none !important;
 }
 
 .app-channels-panel__dingtalk-tabs .ant-tabs-tab {
-  padding: 6px 0;
-  font-size: 12px;
+  margin: 0 !important;
+  padding: 4px 14px !important;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.app-channels-panel__dingtalk-tabs .ant-tabs-tab-active {
+  background: var(--ant-color-bg-container);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.app-channels-panel__dingtalk-tabs .ant-tabs-tab-btn {
+  color: var(--ant-color-text-secondary) !important;
+  font-size: 11.5px !important;
+  font-weight: 500 !important;
+}
+
+.app-channels-panel__dingtalk-tabs .ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: var(--ant-color-primary) !important;
+  font-weight: 600 !important;
+}
+
+.app-channels-panel__dingtalk-tabs .ant-tabs-ink-bar {
+  display: none !important;
 }
 
 .app-channels-panel .app-dingtalk-ebot-popover__json-sample {
@@ -185,9 +360,25 @@
 
 .app-channels-panel__placeholder {
   margin: 0;
-  padding: 12px;
+  padding: 16px;
 }
 
 .app-channels-panel__placeholder .ant-empty-description {
   font-size: 12px;
+}
+
+/* 响应式断点控制 */
+@media (max-width: 900px) {
+  .app-channels-hub__grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .app-channels-hub__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .app-channels-panel__metrics {
+    grid-template-columns: 1fr;
+  }
 }

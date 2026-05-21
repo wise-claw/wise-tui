@@ -7,8 +7,9 @@ interface Props {
 
 export function ClaudeConfigDirCurrent({ info }: Props) {
   const modeLabel = info.isDefault ? "官方默认引擎环境" : "自定义引擎环境";
+  const modeClass = info.isDefault ? "app-claude-config-dir-panel__current--default" : "app-claude-config-dir-panel__current--custom";
   return (
-    <section className="app-claude-config-dir-panel__current" aria-label="当前引擎环境">
+    <section className={`app-claude-config-dir-panel__current ${modeClass}`} aria-label="当前引擎环境">
       <div className="app-claude-config-dir-panel__current-head">
         <div>
           <Typography.Text type="secondary" className="app-claude-config-dir-panel__eyebrow">

@@ -117,62 +117,6 @@ export function ChannelsPanel() {
     [dingTalkConfigured, refreshStatus],
   );
 
-  const items = useMemo(
-    () =>
-      CHANNELS.map((channel) => {
-        const enabled = channel.key === "dingtalk" ? streamRunning : false;
-        const canToggle = channel.available && (channel.key !== "dingtalk" || dingTalkConfigured);
-        const metaLabel =
-          channel.key === "dingtalk"
-            ? dingtalkRowMeta({
-                configured: dingTalkConfigured,
-                status: streamStatus,
-              })
-            : channel.comingSoonHint ?? "暂未接入";
-        return {
-          key: channel.key,
-          label: (
-            <div className="app-channels-panel__row">
-              <span className="app-channels-panel__row-icon" aria-hidden>
-                {channel.icon}
-              </span>
-              <span className="app-channels-panel__row-copy">
-                <span className="app-channels-panel__row-title">{channel.title}</span>
-                <span className="app-channels-panel__row-meta">{metaLabel}</span>
-              </span>
-              {!channel.available ? (
-                <span className="app-channels-panel__row-tag">待接入</span>
-              ) : null}
-            </div>
-          ),
-          extra: (
-            <Switch
-              size="small"
-              checked={enabled}
-              loading={channel.key === "dingtalk" ? streamBusy : false}
-              disabled={!canToggle}
-              onChange={(next, event) => {
-                event.stopPropagation();
-                if (channel.key === "dingtalk") void handleToggleDingTalk(next);
-              }}
-              onClick={(_checked, event) => event.stopPropagation()}
-            />
-          ),
-          children: (
-            <ChannelBody
-              channel={channel}
-              dingTalkConfigured={dingTalkConfigured}
-              streamStatus={channel.key === "dingtalk" ? streamStatus : null}
-              streamBusy={streamBusy}
-              onRefreshStatus={refreshStatus}
-              onToggleDingTalk={handleToggleDingTalk}
-            />
-          ),
-        };
-      }),
-    [dingTalkConfigured, handleToggleDingTalk, refreshStatus, streamBusy, streamRunning, streamStatus],
-  );
-
   return (
     <AuthorPanelPageShell
       className="app-channels-panel"
@@ -181,18 +125,75 @@ export function ChannelsPanel() {
       subtitle="移动端通知、回执与远程控制"
     >
       <AuthorPanelListShell className="app-channels-panel__list-shell">
-        <Collapse
-          accordion
-          bordered={false}
-          ghost
-          activeKey={activeKey}
-          onChange={(key) => {
-            const next = Array.isArray(key) ? key[0] : key;
-            setActiveKey((next as ChannelKey | undefined) ?? undefined);
-          }}
-          items={items}
-          className="app-channels-panel__list"
-        />
+        <div className="app-channels-hub__grid" aria-label="渠道网关">
+          {CHANNELS.map((channel) => {
+            const isActive = activeKey === channel.key;
+            const enabled = channel.key === "dingtalk" ? streamRunning : false;
+            const canToggle = channel.available && (channel.key !== "dingtalk" || dingTalkConfigured);
+            const metaLabel =
+              channel.key === "dingtalk"
+                ? dingtalkRowMeta({
+                    configured: dingTalkConfigured,
+                    status: streamStatus,
+                  })
+                : channel.comingSoonHint ?? "暂未接入";
+
+            return (
+              <button
+                key={channel.key}
+                type="button"
+                className={`app-channels-hub__card${isActive ? " app-channels-hub__card--active" : ""}${!channel.available ? " app-channels-hub__card--coming-soon" : ""}`}
+                onClick={() => channel.available && setActiveKey(channel.key)}
+              >
+                <div className="app-channels-hub__card-header">
+                  <span className={`app-channels-hub__card-icon app-channels-hub__card-icon--${channel.key}`}>
+                    {channel.icon}
+                  </span>
+                  {channel.available ? (
+                    <Switch
+                      size="small"
+                      checked={enabled}
+                      loading={channel.key === "dingtalk" ? streamBusy : false}
+                      disabled={!canToggle}
+                      onChange={(next, event) => {
+                        event.stopPropagation();
+                        if (channel.key === "dingtalk") void handleToggleDingTalk(next);
+                      }}
+                      onClick={(_checked, event) => event.stopPropagation()}
+                    />
+                  ) : (
+                    <span className="app-channels-hub__card-badge">待接入</span>
+                  )}
+                </div>
+                <div className="app-channels-hub__card-body">
+                  <div className="app-channels-hub__card-title" title={channel.title}>{channel.title}</div>
+                  <div className="app-channels-hub__card-meta" title={metaLabel}>{metaLabel}</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {activeKey && (
+          <div className="app-channels-hub__detail">
+            {activeKey === "dingtalk" ? (
+              <ChannelBody
+                channel={CHANNELS.find((c) => c.key === "dingtalk")!}
+                dingTalkConfigured={dingTalkConfigured}
+                streamStatus={streamStatus}
+                streamBusy={streamBusy}
+                onRefreshStatus={refreshStatus}
+                onToggleDingTalk={handleToggleDingTalk}
+              />
+            ) : (
+              <Empty
+                className="app-channels-panel__placeholder"
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={CHANNELS.find((c) => c.key === activeKey)?.comingSoonHint ?? "暂未接入。"}
+              />
+            )}
+          </div>
+        )}
       </AuthorPanelListShell>
     </AuthorPanelPageShell>
   );

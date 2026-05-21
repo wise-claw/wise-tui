@@ -304,11 +304,6 @@ function buildProps(
       workflowTemplates: [],
       workflowGraphsByWorkflowId: {},
     },
-    artifactsPanelProps: {
-      repositories: [repo],
-      activeRepositoryId: repo.id,
-      onOpenRepositoryFile: mock(() => {}),
-    },
     ...overrides,
   };
   return { props, onPaneChange, onBack };
@@ -331,7 +326,6 @@ describe("AuthorPanel", () => {
       "助手模板",
       "执行引擎",
       "定时自动化",
-      "产物检查台",
       "远程入口",
       "快捷键",
       "Claude 沙箱",
@@ -416,7 +410,6 @@ describe("AuthorPanel", () => {
       "extensions",
       "automation",
       "channels",
-      "artifacts",
     ] as const) {
       const { props } = buildProps({ pane });
       renderAuthorPanel(props);

@@ -29,17 +29,31 @@ export function ClaudeConfigDirChoiceList({
         className="app-claude-config-dir-panel__choices"
       >
         <Space orientation="vertical" size={6} style={{ width: "100%" }}>
-          {CLAUDE_USER_CONFIG_DIR_PRESETS.map((preset) => (
-            <Radio key={preset.key} value={preset.key} className="app-claude-config-dir-panel__choice">
-              <div className="app-claude-config-dir-panel__choice-body">
-                <Typography.Text strong>{preset.label}</Typography.Text>
-                <Typography.Text type="secondary" className="app-claude-config-dir-panel__choice-desc">
-                  {preset.description}
-                </Typography.Text>
-              </div>
-            </Radio>
-          ))}
-          <Radio value="custom" className="app-claude-config-dir-panel__choice">
+          {CLAUDE_USER_CONFIG_DIR_PRESETS.map((preset) => {
+            const isActive = state.choice === preset.key;
+            return (
+              <Radio
+                key={preset.key}
+                value={preset.key}
+                className={`app-claude-config-dir-panel__choice${
+                  isActive ? " app-claude-config-dir-panel__choice--active" : ""
+                }`}
+              >
+                <div className="app-claude-config-dir-panel__choice-body">
+                  <Typography.Text strong>{preset.label}</Typography.Text>
+                  <Typography.Text type="secondary" className="app-claude-config-dir-panel__choice-desc">
+                    {preset.description}
+                  </Typography.Text>
+                </div>
+              </Radio>
+            );
+          })}
+          <Radio
+            value="custom"
+            className={`app-claude-config-dir-panel__choice${
+              state.choice === "custom" ? " app-claude-config-dir-panel__choice--active" : ""
+            }`}
+          >
             <div className="app-claude-config-dir-panel__choice-body">
               <Typography.Text strong>自定义路径</Typography.Text>
               <Typography.Text type="secondary" className="app-claude-config-dir-panel__choice-desc">

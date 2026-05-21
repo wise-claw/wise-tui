@@ -1,16 +1,9 @@
-import {
-  CheckCircleOutlined,
-  ClockCircleOutlined,
-  FieldTimeOutlined,
-  PlayCircleOutlined,
-  ReloadOutlined,
-} from "@ant-design/icons";
-import { Button, Empty, Select, Typography } from "antd";
+import { CheckCircleOutlined, FieldTimeOutlined, PlayCircleOutlined, ReloadOutlined } from "@ant-design/icons";
+import { Button, Empty, Select } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { EmployeeItem, Repository, RepositoryScheduledClaudeTask, WorkflowGraph, WorkflowTemplateItem } from "../../types";
 import { readRepositoryScheduledClaudeTasks } from "../../services/repositoryScheduledClaudeTasksStore";
 import { AuthorPanelPageShell } from "../AuthorPanel/AuthorPanelPageShell";
-import { HubDot, HubTag } from "../HubCard";
 import { RepositoryScheduledTasksModal } from "../RepositoryScheduledTasksModal";
 import "./index.css";
 
@@ -45,16 +38,23 @@ function latestExecutedAt(tasks: RepositoryScheduledClaudeTask[]): number | null
     .sort((a, b) => b - a)[0] ?? null;
 }
 
-function taskTargetLabel(task: RepositoryScheduledClaudeTask, employees: EmployeeItem[]): string {
-  const id = task.employeeId?.trim();
-  if (!id) return "主会话";
-  return employees.find((employee) => employee.id === id)?.name ?? "智能体已缺失";
+function getAvatarGradient(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const h1 = Math.abs(hash) % 360;
+  const h2 = (h1 + 45) % 360;
+  return `linear-gradient(135deg, hsl(${h1}, 70%, 55%), hsl(${h2}, 70%, 45%))`;
 }
 
-function taskStatusTone(task: RepositoryScheduledClaudeTask): "success" | "warning" | "default" {
-  if (task.lastExecuteOk === false) return "warning";
-  if (task.lastExecuteOk === true) return "success";
-  return "default";
+function getInitials(name: string): string {
+  const clean = name.split(/[\\/]/).pop() || name;
+  const parts = clean.split(/[-_\s]+/);
+  if (parts.length >= 2 && parts[0] && parts[1]) {
+    return (parts[0][0]! + parts[1][0]!).toUpperCase();
+  }
+  return clean.substring(0, 2).toUpperCase();
 }
 
 export function AutomationPanel({
@@ -105,16 +105,15 @@ export function AutomationPanel({
     ? summaries
     : repositories.map((repository) => ({ repository, tasks: [] }));
   const selectedRepository = selectedSummary?.repository ?? repositories.find((repo) => repo.id === selectedRepositoryId) ?? null;
-  const selectedTasks = selectedSummary?.tasks ?? [];
 
   const repositoryOptions = repositories.map((repository) => ({
     value: repository.id,
     label: repository.name || repository.path,
   }));
-  const visibleTasks = [...selectedTasks].sort((a, b) => {
-    if (a.enabled !== b.enabled) return a.enabled ? -1 : 1;
-    return (b.lastExecutedAt ?? b.updatedAt ?? 0) - (a.lastExecutedAt ?? a.updatedAt ?? 0);
-  }).slice(0, 5);
+  const openRepositoryTasks = useCallback((repositoryId: number) => {
+    setSelectedRepositoryId(repositoryId);
+    setModalOpen(true);
+  }, []);
 
   return (
     <AuthorPanelPageShell
@@ -144,7 +143,7 @@ export function AutomationPanel({
           disabled={!selectedRepository?.path?.trim()}
           onClick={() => setModalOpen(true)}
         >
-          管理当前仓库定时任务
+          管理定时任务
         </Button>
         </>
       }
@@ -152,98 +151,70 @@ export function AutomationPanel({
       {visibleSummaries.length === 0 ? (
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无可配置仓库" />
       ) : (
-        <div className="app-automation-console">
-          <aside className="app-automation-console__repos" aria-label="自动化仓库">
-            {visibleSummaries.map(({ repository, tasks }) => {
-              const enabled = tasks.filter((task) => task.enabled).length;
-              const failed = tasks.filter((task) => task.lastExecuteOk === false).length;
-              const selected = repository.id === selectedRepositoryId;
-              return (
-                <button
-                  key={repository.id}
-                  type="button"
-                  className={`app-automation-repo-card${selected ? " app-automation-repo-card--selected" : ""}`}
-                  onClick={() => setSelectedRepositoryId(repository.id)}
-                >
-                  <span className="app-automation-repo-card__top">
-                    <strong>{repository.name || repository.path}</strong>
-                    {enabled > 0 ? <HubTag tone="success">{enabled} 启用</HubTag> : <HubTag>未启用</HubTag>}
-                  </span>
-                  <span className="app-automation-repo-card__path">{repository.path}</span>
-                  <span className="app-automation-repo-card__meta">
-                    <span>
-                      <CheckCircleOutlined />
+        <div className="app-automation-console__repos" aria-label="自动化仓库">
+          {visibleSummaries.map(({ repository, tasks }) => {
+            const enabled = tasks.filter((task) => task.enabled).length;
+            const failed = tasks.filter((task) => task.lastExecuteOk === false).length;
+            const selected = repository.id === selectedRepositoryId;
+            const name = repository.name || repository.path;
+            return (
+              <button
+                key={repository.id}
+                type="button"
+                className={`app-automation-repo-card${selected ? " app-automation-repo-card--selected" : ""}`}
+                onClick={() => openRepositoryTasks(repository.id)}
+                style={{ "--repo-gradient": getAvatarGradient(name) } as React.CSSProperties}
+              >
+                <div className="app-automation-repo-card__avatar-wrap">
+                  <div className="app-automation-repo-card__avatar">
+                    {getInitials(name)}
+                  </div>
+                </div>
+                <div className="app-automation-repo-card__content">
+                  <div className="app-automation-repo-card__top">
+                    <strong title={name}>{name}</strong>
+                    {enabled > 0 ? (
+                      <span className="app-automation-repo-card__status-badge app-automation-repo-card__status-badge--enabled">
+                        <span className="app-automation-repo-card__pulse-dot app-automation-repo-card__pulse-dot--success" />
+                        {enabled} 启用
+                      </span>
+                    ) : (
+                      <span className="app-automation-repo-card__status-badge app-automation-repo-card__status-badge--disabled">
+                        未启用
+                      </span>
+                    )}
+                  </div>
+                  <div className="app-automation-repo-card__path-wrap">
+                    <code className="app-automation-repo-card__path" title={repository.path}>
+                      {repository.path}
+                    </code>
+                  </div>
+                  <div className="app-automation-repo-card__meta">
+                    <span className="app-automation-repo-card__meta-item">
+                      <CheckCircleOutlined className="app-automation-repo-card__meta-icon" />
                       {tasks.length} 个任务
                     </span>
-                    <span className={failed > 0 ? "app-automation-repo-card__failed" : undefined}>
-                      <HubDot tone={failed > 0 ? "warn" : "off"} />
-                      {failed} 失败
+                    <span className={`app-automation-repo-card__meta-item ${failed > 0 ? "app-automation-repo-card__meta-item--failed" : ""}`}>
+                      {failed > 0 ? (
+                        <>
+                          <span className="app-automation-repo-card__pulse-dot app-automation-repo-card__pulse-dot--failed" />
+                          {failed} 失败
+                        </>
+                      ) : (
+                        <>
+                          <span className="app-automation-repo-card__pulse-dot app-automation-repo-card__pulse-dot--off" />
+                          0 失败
+                        </>
+                      )}
                     </span>
-                    <span>最近：{formatShortDateTime(latestExecutedAt(tasks))}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </aside>
-
-          <section className="app-automation-console__detail" aria-label="当前仓库自动化">
-            {selectedRepository ? (
-              <>
-                <div className="app-automation-console__detail-head">
-                  <div>
-                    <Typography.Title level={5}>{selectedRepository.name || selectedRepository.path}</Typography.Title>
-                    <Typography.Text type="secondary">{selectedRepository.path}</Typography.Text>
+                    <span className="app-automation-repo-card__meta-item app-automation-repo-card__meta-item--recent">
+                      最近: {formatShortDateTime(latestExecutedAt(tasks))}
+                    </span>
                   </div>
-                  <Button
-                    size="small"
-                    type="primary"
-                    icon={<PlayCircleOutlined />}
-                    disabled={!selectedRepository.path.trim()}
-                    onClick={() => setModalOpen(true)}
-                  >
-                    编辑计划任务
-                  </Button>
                 </div>
-
-                {visibleTasks.length > 0 ? (
-                  <div className="app-automation-task-list">
-                    {visibleTasks.map((task) => (
-                      <button
-                        key={task.id}
-                        type="button"
-                        className="app-automation-task-row"
-                        onClick={() => setModalOpen(true)}
-                      >
-                        <span className="app-automation-task-row__main">
-                          <span className="app-automation-task-row__title">
-                            <HubDot tone={task.enabled ? "on" : "off"} />
-                            {task.title || "未命名任务"}
-                          </span>
-                          <span className="app-automation-task-row__meta">
-                            <code>{task.cronExpression}</code>
-                            <span>{taskTargetLabel(task, employees)}</span>
-                            <span>
-                              <ClockCircleOutlined /> {formatShortDateTime(task.lastExecutedAt)}
-                            </span>
-                          </span>
-                        </span>
-                        <HubTag tone={taskStatusTone(task)}>
-                          {task.lastExecuteOk === false ? "失败" : task.enabled ? "运行中" : "已停用"}
-                        </HubTag>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <Empty
-                    image={Empty.PRESENTED_IMAGE_SIMPLE}
-                    description="当前仓库暂无计划任务，点击「编辑计划任务」创建第一个自动化。"
-                  />
-                )}
-              </>
-            ) : (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="请选择仓库" />
-            )}
-          </section>
+              </button>
+            );
+          })}
         </div>
       )}
 

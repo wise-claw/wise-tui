@@ -36,7 +36,6 @@ export type AuthorPane =
   | "engine-registry"
   | "channels"
   | "automation"
-  | "artifacts"
   | "shortcuts"
   | "sandbox";
 

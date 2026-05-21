@@ -148,8 +148,9 @@ export function WorkflowStudioNavIcon() {
 export function IconCompactLayout() {
   return (
     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-      <rect x="3.5" y="4" width="17" height="16" rx="2" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-      <rect x="12" y="11" width="8.5" height="8" rx="1.5" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+      <rect x="3" y="3" width="18" height="18" rx="2.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <rect x="11" y="11" width="10" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="currentColor" fillOpacity="0.1" />
+      <path d="M14 10l-4 4m0 0h3m-3 0v-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

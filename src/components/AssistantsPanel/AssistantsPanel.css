@@ -259,8 +259,8 @@
   background: rgba(0, 0, 0, 0.05) !important;
   color: var(--ant-color-text-secondary) !important;
   border-radius: 10px !important;
-  padding: 0 6px !important;
-  font-size: 11px !important;
+  padding: 0 7px !important;
+  font-size: 11.5px !important;
   font-weight: 600 !important;
   line-height: 16px !important;
   height: 16px !important;
@@ -271,6 +271,7 @@
 }
 
 .app-assistants-panel .author-panel-hub-tab--active .author-panel-hub-tab__count {
-  background: rgba(255, 255, 255, 0.25) !important;
-  color: #ffffff !important;
+  background: #ffffff !important;
+  color: var(--ant-color-primary) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
 }

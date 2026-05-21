@@ -31,7 +31,6 @@ import { RepositoryFileEditorPanel } from "./RepositoryFileEditorPanel";
 import { RepositoryFilePreviewModal } from "./RepositoryFilePreviewModal";
 import { SkillsHub } from "./SkillsHub";
 import type * as PrdTaskSplitPanelModule from "./PrdTaskSplitPanel";
-import type { Repository } from "../types";
 import type { InspectTool, ViewMode } from "../types/viewMode";
 import type { OpenRepositoryFileDetail } from "../constants/workflowUiEvents";
 import { useRepositoryFileEditor } from "../hooks/useRepositoryFileEditor";
@@ -254,33 +253,6 @@ const ConnectedRepositoryFileEditorPanel = memo(function ConnectedRepositoryFile
 const ConnectedRepositoryFilePreviewModal = memo(function ConnectedRepositoryFilePreviewModal() {
   const { onClosePreview, preview } = useRepositoryFileEditorPanelContextValue();
   return <RepositoryFilePreviewModal preview={preview} onClose={onClosePreview} />;
-});
-
-const ConnectedAuthorPanel = memo(function ConnectedAuthorPanel({
-  activeRepositoryPath,
-  authorPanelProps,
-}: {
-  activeRepositoryPath: string | null | undefined;
-  authorPanelProps: AuthorPanelProps;
-}) {
-  const openRepositoryFile = useRepositoryFileEditorOpenFile();
-  return (
-    <AuthorPanel
-      {...authorPanelProps}
-      artifactsPanelProps={{
-        ...authorPanelProps.artifactsPanelProps,
-        onOpenRepositoryFile: (repository: Repository, relativePath: string) => {
-          const currentPath = activeRepositoryPath?.trim() ?? "";
-          const targetPath = repository.path.trim();
-          if (targetPath && currentPath === targetPath) {
-            openRepositoryFile(relativePath);
-            return;
-          }
-          authorPanelProps.artifactsPanelProps.onOpenRepositoryFile(repository, relativePath);
-        },
-      }}
-    />
-  );
 });
 
 export interface AppWorkspaceLayoutProps {
@@ -747,10 +719,7 @@ export function AppWorkspaceLayout({
                     <div
                       className={`app-full-width-main app-author-workspace-layer${!authorMode ? " app-workspace-layer--parked" : ""}`}
                     >
-                      <ConnectedAuthorPanel
-                        activeRepositoryPath={activeRepositoryPath}
-                        authorPanelProps={authorPanelProps}
-                      />
+                      <AuthorPanel {...authorPanelProps} />
                     </div>
                   ) : null}
                 </div>
