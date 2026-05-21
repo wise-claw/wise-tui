@@ -325,9 +325,24 @@ export function SlashPopover({
   );
 
   useEffect(() => {
-    if (!mode || options.length === 0) return;
+    if (!mode) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      const root = surfaceRef.current?.anchorEl?.();
+      const target = e.target as Node | null;
+      if (!root || !target || !root.contains(target)) return;
+
+      if (e.key === "Tab" && !e.shiftKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (options.length > 0) {
+          handleSelect(options[selectedIndex]);
+        }
+        return;
+      }
+
+      if (options.length === 0) return;
+
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
@@ -340,7 +355,7 @@ export function SlashPopover({
         e.preventDefault();
         e.stopPropagation();
         setSelectedIndex((i) => Math.max(i - 1, 0));
-      } else if (e.key === "Enter" && !e.shiftKey && options.length > 0) {
+      } else if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         e.stopPropagation();
         handleSelect(options[selectedIndex]);
@@ -349,7 +364,7 @@ export function SlashPopover({
 
     document.addEventListener("keydown", handleKeyDown, { capture: true });
     return () => document.removeEventListener("keydown", handleKeyDown, { capture: true });
-  }, [mode, options, selectedIndex, handleSelect, onDismiss]);
+  }, [mode, options, selectedIndex, handleSelect, onDismiss, surfaceRef]);
 
   if (!mode) return null;
 
