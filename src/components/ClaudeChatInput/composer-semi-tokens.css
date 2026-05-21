@@ -49,7 +49,9 @@
 
 /* 底栏单行：收紧 Semi 默认大间距，缩小发送按钮 */
 .app-claude-semi-chat-input-wrap .semi-aiChatInput-footer {
-  margin-top: 4px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--semi-color-border);
   column-gap: 6px;
   align-items: center;
 }

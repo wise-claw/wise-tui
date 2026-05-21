@@ -1491,7 +1491,7 @@
   background: color-mix(in srgb, var(--ant-color-bg-container) 45%, transparent) !important;
   backdrop-filter: var(--app-workspace-glass-blur) !important;
   -webkit-backdrop-filter: var(--app-workspace-glass-blur) !important;
-  border-bottom: 1px solid var(--app-workspace-glass-border) !important;
+  border-bottom: 1px solid var(--ant-color-border-secondary) !important;
   box-shadow: var(--app-workspace-glass-inset-glow) !important;
   pointer-events: none;
 }
@@ -1516,8 +1516,18 @@
   border-radius: var(--ant-border-radius);
 }
 
+.app-claude-session-tool-group--compact .app-claude-session-tool-btn:not(:first-child) {
+  border-left: 1px solid var(--app-workspace-glass-border) !important;
+  border-top-left-radius: 0 !important;
+  border-bottom-left-radius: 0 !important;
+}
+
+.app-claude-session-tool-group--compact .app-claude-session-tool-btn:not(:last-child) {
+  border-top-right-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+}
+
 .app-claude-session-tool-group--compact .app-claude-session-tool-btn:hover {
-  border: none;
   box-shadow: none;
   background: var(--ant-color-fill-secondary);
   color: var(--ant-color-text);
@@ -2847,7 +2857,7 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-  background: transparent !important;
+  background: var(--ant-color-bg-container);
   /* 减少滚动链传到外层布局，降低嵌套滚动时的合成/重绘开销 */
   overscroll-behavior: contain;
   /* 提升为独立合成层，部分设备上纵向滚动更顺滑 */
@@ -2895,6 +2905,7 @@
 
 .app-claude-message {
   display: flex;
+  align-items: flex-start;
   gap: 6px;
   max-width: 100%;
   padding: 0;
@@ -2905,13 +2916,13 @@
 
 /* 新发送者一组：仅留白区隔，无顶部分隔线 */
 .app-claude-messages > .app-claude-message + .app-claude-message:not(.app-claude-message--merged) {
-  margin-top: 10px;
+  margin-top: 6px;
   padding-top: 0;
 }
 
 /* 与上一条同发送者：不再重复头像与时间，仅保留内容以纵向成组 */
 .app-claude-message--merged {
-  margin-top: 3px;
+  margin-top: 2px;
 }
 
 .app-claude-message--merged .app-claude-message-avatar {
@@ -2968,8 +2979,8 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 6px;
-  margin-bottom: 2px;
-  min-height: 15px;
+  margin-bottom: 1px;
+  min-height: 14px;
 }
 
 .app-claude-message-sender {
@@ -3281,6 +3292,26 @@
   color: var(--ant-color-text);
 }
 
+/* 主会话消息列表：紧凑气泡（无玻璃 hover），区分用户/助手正文 */
+.app-claude-messages .app-message-part--text {
+  display: inline-block;
+  max-width: 100%;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-fill-quaternary);
+  box-sizing: border-box;
+}
+
+.app-claude-messages .app-claude-message--user .app-message-part--text {
+  background: var(--ant-color-primary-bg);
+  border-color: color-mix(in srgb, var(--ant-color-primary) 22%, var(--ant-color-border-secondary));
+}
+
+.app-claude-messages .app-claude-message--assistant .app-message-part--text {
+  background: var(--ant-color-bg-container);
+}
+
 .app-message-part--text p {
   margin: 0 0 4px;
 }
@@ -3451,6 +3482,10 @@ button.app-message-part-header:disabled:hover {
   border-radius: var(--ant-border-radius);
   overflow: hidden;
   background: color-mix(in srgb, var(--ant-color-fill-quaternary) 55%, var(--ant-color-bg-container));
+}
+
+.app-claude-messages .app-message-part--reasoning .app-message-part-header {
+  padding: 3px 8px;
 }
 
 .app-message-part--reasoning .app-message-part-header {
@@ -4420,7 +4455,8 @@ button.app-message-part-header:disabled:hover {
   background: color-mix(in srgb, var(--ant-color-bg-container) 35%, transparent) !important;
   backdrop-filter: var(--app-workspace-glass-blur) !important;
   -webkit-backdrop-filter: var(--app-workspace-glass-blur) !important;
-  border-top: 1px solid var(--app-workspace-glass-border) !important;
+  border-top: 1px solid var(--ant-color-border-secondary) !important;
+  border-bottom: 1px solid var(--ant-color-border-secondary) !important;
   box-shadow: var(--app-workspace-glass-inset-glow) !important;
 }
 
