@@ -21,6 +21,7 @@ import {
 } from "../../services/git";
 import type { GitLogEntry, GitPanelMode, GitStatusResponse } from "../../types";
 import { DiffMode } from "./DiffMode";
+import { GitSyncActions } from "./GitSyncActions";
 import { InitMode } from "./InitMode";
 import { LogMode } from "./LogMode";
 import { yieldToPaint } from "./gitPanelUtils";
@@ -364,65 +365,75 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
             </Tag>
           )}
         </div>
-        <Dropdown
-          menu={{
-            items: MODE_OPTIONS.map((option) => ({
-              key: option.value,
-              label: (
-                <Space size={6}>
-                  {option.icon}
-                  {option.label}
-                </Space>
-              ),
-            })),
-            onClick: ({ key }) => setMode(key as GitPanelMode),
-            selectedKeys: [mode],
-          }}
-          placement="bottomRight"
-          trigger={["click"]}
-        >
-          <Button type="text" size="small" icon={modeIcon} className="git-mode-btn">
-            <span className="git-mode-btn-text">{mode === "diff" ? "变更" : "日志"}</span>
-            <DownOutlined style={{ fontSize: 10 }} />
-          </Button>
-        </Dropdown>
+        <div className="git-panel-header-right">
+          {mode === "diff" && status ? (
+            <GitSyncActions
+              status={status}
+              loading={loading}
+              onFetch={handleFetch}
+              onPull={() => void handlePull()}
+              onPush={() => void handlePush()}
+            />
+          ) : null}
+          <Dropdown
+            menu={{
+              items: MODE_OPTIONS.map((option) => ({
+                key: option.value,
+                label: (
+                  <Space size={6}>
+                    {option.icon}
+                    {option.label}
+                  </Space>
+                ),
+              })),
+              onClick: ({ key }) => setMode(key as GitPanelMode),
+              selectedKeys: [mode],
+            }}
+            placement="bottomRight"
+            trigger={["click"]}
+          >
+            <Button type="text" size="small" icon={modeIcon} className="git-mode-btn">
+              <span className="git-mode-btn-text">{mode === "diff" ? "变更" : "日志"}</span>
+              <DownOutlined style={{ fontSize: 10 }} />
+            </Button>
+          </Dropdown>
+        </div>
       </div>
 
-      {loading.status && !status && !isMissingRepo ? (
-        <div style={{ padding: 24, textAlign: "center" }}>
-          <Spin size="small" description="加载中..." />
-        </div>
-      ) : isMissingRepo ? (
-        <InitMode onInit={handleInit} loading={loading.init} />
-      ) : mode === "diff" ? (
-        status && (
-          <DiffMode
-            repositoryPath={repositoryPath}
-            status={status}
-            loading={loading}
-            errors={errors}
-            onStage={handleStage}
-            onUnstage={handleUnstage}
-            onDiscard={handleDiscard}
-            onStageAll={handleStageAll}
-            onUnstageAll={handleUnstageAll}
-            onDiscardAll={handleDiscardAll}
+      <div className="git-panel-body">
+        {loading.status && !status && !isMissingRepo ? (
+          <div style={{ padding: 24, textAlign: "center" }}>
+            <Spin size="small" description="加载中..." />
+          </div>
+        ) : isMissingRepo ? (
+          <InitMode onInit={handleInit} loading={loading.init} />
+        ) : mode === "diff" ? (
+          status && (
+            <DiffMode
+              repositoryPath={repositoryPath}
+              status={status}
+              loading={loading}
+              errors={errors}
+              onStage={handleStage}
+              onUnstage={handleUnstage}
+              onDiscard={handleDiscard}
+              onStageAll={handleStageAll}
+              onUnstageAll={handleUnstageAll}
+              onDiscardAll={handleDiscardAll}
             onCommit={handleCommit}
-            onPush={() => void handlePush()}
-            onPull={() => void handlePull()}
-            onFetch={handleFetch}
             onOpenFile={onOpenFile}
+            />
+          )
+        ) : (
+          <LogMode
+            entries={logData.entries}
+            loading={loading.log}
+            ahead={logData.ahead}
+            behind={logData.behind}
+            upstream={logData.upstream}
           />
-        )
-      ) : (
-        <LogMode
-          entries={logData.entries}
-          loading={loading.log}
-          ahead={logData.ahead}
-          behind={logData.behind}
-          upstream={logData.upstream}
-        />
-      )}
+        )}
+      </div>
     </div>
   );
 }

@@ -43,23 +43,25 @@ export function LogMode({ entries, loading, ahead, behind, upstream }: LogModePr
         </div>
       )}
 
-      {ahead > 0 && entries.length > 0 && (
+      <div className="git-log-mode-scroll">
+        {ahead > 0 && entries.length > 0 && (
+          <div className="git-log-section">
+            <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>待推送</Text>
+            <div className="git-log-list">
+              {entries.slice(0, ahead).map((entry) => (
+                <LogEntry key={entry.sha} entry={entry} />
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="git-log-section">
-          <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>待推送</Text>
+          <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>最近提交</Text>
           <div className="git-log-list">
-            {entries.slice(0, ahead).map((entry) => (
+            {entries.map((entry) => (
               <LogEntry key={entry.sha} entry={entry} />
             ))}
           </div>
-        </div>
-      )}
-
-      <div className="git-log-section">
-        <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>最近提交</Text>
-        <div className="git-log-list">
-          {entries.map((entry) => (
-            <LogEntry key={entry.sha} entry={entry} />
-          ))}
         </div>
       </div>
     </div>

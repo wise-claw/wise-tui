@@ -3,9 +3,42 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow-y: auto;
+  min-height: 0;
+  overflow: hidden;
   overflow-x: hidden;
   padding: 0;
+}
+
+.git-panel-body {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Diff mode：表头/提交区固定，变更列表在内部滚动 ── */
+.git-diff-mode {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.git-diff-mode > .git-error-banner,
+.git-diff-mode > .git-commit-section,
+.git-diff-mode > .git-push-section {
+  flex-shrink: 0;
+}
+
+.git-diff-mode-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* ── Header ── */
@@ -13,6 +46,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-shrink: 0;
   /* 与主区 .app-chat-topbar 一致：约 4px 垂直留白 + 28px 级控件，便于与右栏顶缘对齐 */
   padding: 1px 12px 4px 12px;
   min-height: 36px;
@@ -40,6 +74,8 @@
 .git-panel-header .git-panel-files-search,
 .git-panel-header .git-panel-files-search input,
 .git-panel-header .ant-tag,
+.git-panel-header .git-header-sync-actions,
+.git-panel-header .git-header-sync-actions .ant-btn,
 .git-panel-header .git-mode-btn,
 .git-panel-header .ant-dropdown-trigger {
   pointer-events: auto;
@@ -51,6 +87,15 @@
   gap: 8px;
   flex: 1;
   min-width: 0;
+}
+
+.git-panel-header-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-left: auto;
+  pointer-events: none;
 }
 
 .git-panel-files-search {
@@ -65,12 +110,14 @@
   box-sizing: border-box;
 }
 
-.git-mode-btn {
+.git-mode-btn.ant-btn {
   height: 28px;
   min-height: 28px;
-  padding: 0 6px;
+  padding: 0 4px !important;
+  padding-inline: 4px !important;
   display: inline-flex;
   align-items: center;
+  gap: 2px;
 }
 
 /* ── Loading Bar ── */
@@ -110,7 +157,7 @@
 
 .git-mode-btn-text {
   font-size: 11px;
-  padding: 0 2px;
+  padding: 0;
 }
 
 .git-panel-header .ant-space .anticon {
@@ -196,45 +243,24 @@
   gap: 6px;
 }
 
-.git-ai-summary-btn.ant-btn.ant-btn-text {
-  height: 20px;
-  padding: 0 6px;
-  border-radius: 4px;
-  border: 1px solid var(--ant-color-primary-border);
-  background: var(--ant-color-primary-bg);
-  color: var(--ant-color-primary);
-  font-size: 11px;
-  line-height: 1;
-  font-weight: 500;
-}
-
-.git-ai-summary-btn.ant-btn.ant-btn-text:hover,
-.git-ai-summary-btn.ant-btn.ant-btn-text:focus,
-.git-ai-summary-btn.ant-btn.ant-btn-text:active {
-  background: var(--ant-color-primary-bg) !important;
-}
-
-.git-ai-summary-btn.ant-btn.ant-btn-text:hover,
-.git-ai-summary-btn.ant-btn.ant-btn-text:focus {
-  border-color: var(--ant-color-primary);
-  color: var(--ant-color-primary-hover);
-}
-
-.git-ai-summary-btn.ant-btn.ant-btn-text:active {
-  border-color: var(--ant-color-primary-active);
-  color: var(--ant-color-primary-active);
-}
-
-/* ── Sync toolbar: tighter icon + count ── */
+/* ── Sync toolbar: tighter icon + count（表头 / 旧 sync 行共用） ── */
+.git-header-sync-actions.ant-space,
 .git-sync-row-actions.ant-space {
   column-gap: 2px !important;
+  flex-shrink: 0;
 }
 
+.git-panel-header-right .git-header-sync-actions {
+  margin: 0;
+}
+
+.git-panel-header .git-sync-count-btn.ant-btn-sm,
 .git-sync-row .git-sync-count-btn.ant-btn-sm {
   padding-inline: 4px;
   gap: 1px;
 }
 
+.git-panel-header .git-sync-count-btn.ant-btn-sm .ant-btn-icon,
 .git-sync-row .git-sync-count-btn.ant-btn-sm .ant-btn-icon {
   margin-inline-end: 1px;
 }
@@ -266,6 +292,9 @@
 }
 
 /* 拉取 / 推送 / 待提交：纯数字，无背景徽章 */
+.git-panel-header .ant-btn-text .sync-count.sync-count--behind,
+.git-panel-header .ant-btn-text .sync-count.sync-count--ahead,
+.git-panel-header .ant-btn-text .sync-count.sync-count--staged,
 .git-sync-row .ant-btn-text .sync-count.sync-count--behind,
 .git-sync-row .ant-btn-text .sync-count.sync-count--ahead,
 .git-sync-row .ant-btn-text .sync-count.sync-count--staged {
@@ -277,95 +306,126 @@
   font-size: 10px;
 }
 
+.git-panel-header .ant-btn-text .sync-count.sync-count--behind,
 .git-sync-row .ant-btn-text .sync-count.sync-count--behind {
   color: var(--ant-color-info);
 }
 
+.git-panel-header .ant-btn-text .sync-count.sync-count--ahead,
 .git-sync-row .ant-btn-text .sync-count.sync-count--ahead {
   color: var(--ant-color-warning);
 }
 
+.git-panel-header .ant-btn-text .sync-count.sync-count--staged,
 .git-sync-row .ant-btn-text .sync-count.sync-count--staged {
   color: var(--ant-color-primary);
 }
 
-/* ── Commit Section ── */
+/* ── Commit Section：输入 + 操作整合为单卡片 ── */
 .git-commit-section {
-  padding: 8px 10px 10px 10px;
-  border-bottom: 1px solid var(--app-workspace-glass-border) !important;
-  background: color-mix(in srgb, var(--ant-color-bg-container) 10%, transparent);
+  padding: 6px 8px 8px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-bg-container);
 }
 
-.git-commit-input {
+.git-commit-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary);
+  overflow: hidden;
+  transition: border-color 0.15s ease;
+}
+
+.git-commit-card:focus-within {
+  border-color: var(--ant-color-primary);
+  box-shadow: none;
+  outline: none;
+  background: var(--ant-color-bg-container);
+}
+
+.git-commit-card__input.ant-input {
   font-size: 11px;
-}
-
-.git-commit-input .ant-input,
-.git-commit-section textarea.ant-input {
-  border-radius: 8px !important;
-  font-size: 11px;
-  padding: 6px 8px;
-  background: color-mix(in srgb, var(--ant-color-bg-container) 45%, transparent) !important;
-  border: 1px solid var(--app-workspace-glass-border) !important;
-  box-shadow: var(--app-workspace-glass-inset-glow) !important;
-  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
-}
-
-.git-commit-input .ant-input:focus,
-.git-commit-section textarea.ant-input:focus {
-  border-color: var(--ant-color-primary) !important;
-  box-shadow: var(--app-workspace-active-glow) !important;
-  background: color-mix(in srgb, var(--ant-color-bg-container) 60%, transparent) !important;
-}
-
-.git-commit-btn.ant-btn.ant-btn-primary {
-  margin-top: 6px;
-  min-height: 0;
-  height: 26px;
-  padding: 0 10px;
-  font-size: 11px;
-  line-height: 1.15;
-  border-radius: 8px !important;
-  color: #ffffff !important;
-  background: linear-gradient(135deg, var(--ant-color-primary) 0%, color-mix(in srgb, var(--ant-color-primary) 80%, #a855f7) 100%) !important;
-  border: 1px solid color-mix(in srgb, var(--ant-color-primary) 40%, transparent) !important;
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--ant-color-primary) 25%, transparent), var(--app-workspace-glass-inset-glow) !important;
-  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
-  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.15);
-  font-weight: 500;
-}
-
-.git-commit-btn.ant-btn.ant-btn-primary:hover:not(:disabled) {
-  background: linear-gradient(135deg, var(--ant-color-primary-hover) 0%, color-mix(in srgb, var(--ant-color-primary) 90%, #b866ff) 100%) !important;
-  border-color: color-mix(in srgb, var(--ant-color-primary) 60%, transparent) !important;
-  transform: translateY(-1px) scale(1.01) translateZ(0);
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--ant-color-primary) 35%, transparent), var(--app-workspace-glass-inset-glow) !important;
-}
-
-.git-commit-btn.ant-btn.ant-btn-primary:active:not(:disabled) {
-  transform: scale(0.96) translateZ(0);
-}
-
-.git-commit-btn.ant-btn.ant-btn-primary:disabled,
-.git-commit-btn.ant-btn.ant-btn-primary[disabled],
-.git-commit-btn.ant-btn.ant-btn-primary[disabled]:hover {
-  background: var(--ant-color-fill-secondary) !important;
-  border: 1px solid var(--ant-color-border) !important;
-  color: var(--ant-color-text-tertiary) !important;
+  line-height: 1.45;
+  padding: 7px 8px 2px !important;
+  resize: none;
+  background: transparent !important;
   box-shadow: none !important;
-  text-shadow: none !important;
-  cursor: not-allowed !important;
-  transform: none !important;
-  opacity: 1 !important;
+  outline: none !important;
 }
 
-.git-commit-btn.ant-btn.ant-btn-primary .ant-btn-icon {
-  margin-inline-end: 3px;
-  line-height: 0;
+.git-commit-card__input.ant-input:focus,
+.git-commit-card__input.ant-input-focused,
+.git-commit-card__input.ant-input:hover {
+  box-shadow: none !important;
+  outline: none !important;
+  border: none !important;
 }
 
-.git-commit-btn.ant-btn.ant-btn-primary .anticon {
+.git-commit-card__input.ant-input::placeholder {
+  color: var(--ant-color-text-quaternary);
+}
+
+.git-commit-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 0 4px 3px;
+  border-top: none;
+  background: transparent;
+}
+
+.git-commit-card__footer .git-commit-btn.ant-btn-text,
+.git-commit-card__footer .git-ai-summary-btn.ant-btn-text {
+  height: 18px;
+  min-height: 18px;
+  margin: 0;
+  padding: 0 2px;
   font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
+  border: none !important;
+  border-radius: 4px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.git-commit-card__footer .git-commit-btn.ant-btn-text {
+  color: var(--ant-color-primary);
+}
+
+.git-commit-card__footer .git-commit-btn.ant-btn-text:hover:not(:disabled),
+.git-commit-card__footer .git-commit-btn.ant-btn-text:focus:not(:disabled) {
+  color: var(--ant-color-primary-hover) !important;
+  background: var(--ant-color-fill-content) !important;
+}
+
+.git-commit-card__footer .git-commit-btn.ant-btn-text:disabled {
+  color: var(--ant-color-text-quaternary) !important;
+  background: transparent !important;
+}
+
+.git-commit-card__footer .git-commit-btn.ant-btn-text .anticon {
+  font-size: 11px;
+  color: inherit;
+}
+
+.git-commit-card__footer .git-ai-summary-btn.ant-btn-text {
+  flex-shrink: 0;
+  color: var(--ant-color-primary);
+}
+
+.git-commit-card__footer .git-ai-summary-btn.ant-btn-text:hover:not(:disabled),
+.git-commit-card__footer .git-ai-summary-btn.ant-btn-text:focus:not(:disabled) {
+  color: var(--ant-color-primary-hover) !important;
+  background: var(--ant-color-fill-content) !important;
+}
+
+.git-commit-card__footer .git-ai-summary-btn.ant-btn-text:disabled {
+  color: var(--ant-color-text-quaternary) !important;
+  background: transparent !important;
 }
 
 /* ── Push Section ── */
@@ -378,7 +438,6 @@
 
 /* ── Sections (Staged / Unstaged) ── */
 .git-section {
-  border-bottom: 1px solid var(--ant-color-border-secondary);
   overflow-x: hidden;
 }
 
@@ -387,6 +446,31 @@
   align-items: center;
   justify-content: space-between;
   padding: 6px 12px;
+}
+
+.git-section--collapsed .git-section-header {
+  padding-bottom: 6px;
+}
+
+.git-section-header-actions-space.ant-space {
+  gap: 4px !important;
+}
+
+.git-section-action-btn.ant-btn {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  padding: 0;
+  color: var(--ant-color-text-tertiary);
+}
+
+.git-section-action-btn.ant-btn:hover:not(:disabled) {
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-content);
+}
+
+.git-section-action-btn.ant-btn .anticon {
+  font-size: 12px;
 }
 
 /* ── File List ── */
@@ -1274,7 +1358,20 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
 
 /* ── Log Mode ── */
 .git-log-mode {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
   padding: 0 12px;
+  overflow: hidden;
+}
+
+.git-log-mode-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .git-log-sync-info {

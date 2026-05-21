@@ -284,17 +284,19 @@ body {
     max-width var(--app-layout-rail-duration) var(--app-layout-rail-easing);
 }
 
-/* 右栏轨道：仅占 flex 宽度（拖拽条），与面板分离以便同步收放 */
+/* 右栏轨道：面板宽度 + 1px 分界拖条（原 5px 会在中栏与右栏之间露出宽空隙） */
 .app-right-panel-rail {
-  --app-right-panel-handle: 5px;
+  --app-right-panel-handle: 1px;
   position: relative;
+  z-index: 1;
   flex: 0 0 calc(var(--app-right-panel-width, 300px) + var(--app-right-panel-handle));
   display: flex;
   flex-direction: row;
   align-items: stretch;
   min-height: 0;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
+  pointer-events: none;
   width: calc(var(--app-right-panel-width, 300px) + var(--app-right-panel-handle));
   max-width: calc(var(--app-right-panel-width, 300px) + var(--app-right-panel-handle));
   transition:
@@ -325,6 +327,7 @@ body {
   max-width: var(--app-right-panel-width, 300px);
   display: flex;
   min-height: 0;
+  pointer-events: auto;
   transform: translateX(0);
   opacity: 1;
   transition:
@@ -344,11 +347,36 @@ body {
   pointer-events: none;
 }
 
+/* 分界拖条：保留 1px 可见线 + 更宽命中区，叠在右栏左缘之上可拖 */
+.app-right-panel-rail .app-main-layout-resize-handle {
+  flex: 0 0 var(--app-right-panel-handle, 1px);
+  width: var(--app-right-panel-handle, 1px);
+  min-width: var(--app-right-panel-handle, 1px);
+  z-index: 5;
+  pointer-events: auto;
+}
+
+.app-right-panel-rail .app-main-layout-resize-handle::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 8px;
+  transform: translateX(-50%);
+}
+
 .app-right-panel-rail__panel .app-right-panel.ant-layout-sider {
   flex: 1 1 auto;
-  width: var(--app-right-panel-width, 300px) !important;
-  min-width: var(--app-right-panel-width, 300px) !important;
-  max-width: var(--app-right-panel-width, 300px) !important;
+  height: 100%;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+
+.app-right-panel-rail__panel .app-right-panel.app-chat-inspector.ant-layout-sider {
+  margin: 0 !important;
+  border-radius: 0 !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

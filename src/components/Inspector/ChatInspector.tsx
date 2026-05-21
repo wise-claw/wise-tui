@@ -12,6 +12,7 @@ import { MAIN_LAYOUT_RIGHT_SIDER_WIDTH_PX } from "../../constants/mainLayoutWidt
 import { ClaudeCodeToolsPanel } from "../ClaudeCodeToolsPanel";
 import { GitPanel, type GitPanelOpenFileOptions } from "../GitPanel";
 import { ProgressMonitorPanel } from "../ProgressMonitorPanel";
+import "./Inspector.css";
 
 const { Sider } = Layout;
 
@@ -116,16 +117,16 @@ export function ChatInspector({
       width={siderWidth}
       collapsedWidth={0}
       collapsed={collapsed}
-      className="app-right-panel"
+      className="app-right-panel app-chat-inspector"
       theme={dark ? "dark" : "light"}
     >
-      <div className="app-right-panel-inner">
-        <div className="app-right-panel-upper">
-          <div className="app-right-panel-git">
+      <div className="app-right-panel-inner app-chat-inspector-inner">
+        <div className="app-chat-inspector-card">
+          <div className="app-chat-inspector-section app-chat-inspector-section--git" aria-label="Git">
             <GitPanel repositoryPath={repositoryPath} repositoryName={repositoryName} onOpenFile={onOpenFile} />
           </div>
           {monitorStats ? (
-            <div className="app-right-panel-team">
+            <div className="app-chat-inspector-section app-chat-inspector-section--team" aria-label="我的团队">
               <ProgressMonitorPanel
                 employeeItems={employeeMonitorItems}
                 repositoryMemberItems={repositoryMemberMonitorItems}
@@ -149,18 +150,19 @@ export function ChatInspector({
               />
             </div>
           ) : null}
-        </div>
-        <div
-          className={
-            "app-right-panel-bottom" +
-            (claudeToolsSectionCollapsed ? " app-right-panel-bottom--claude-collapsed" : "")
-          }
-        >
-          <ClaudeCodeToolsPanel
-            repositoryPath={repositoryPath}
-            sectionCollapsed={claudeToolsSectionCollapsed}
-            onSectionCollapsedChange={handleClaudeToolsSectionCollapsedChange}
-          />
+          <div
+            className={
+              "app-chat-inspector-section app-chat-inspector-section--tools" +
+              (claudeToolsSectionCollapsed ? " app-chat-inspector-section--tools-collapsed" : "")
+            }
+            aria-label="Claude Code"
+          >
+            <ClaudeCodeToolsPanel
+              repositoryPath={repositoryPath}
+              sectionCollapsed={claudeToolsSectionCollapsed}
+              onSectionCollapsedChange={handleClaudeToolsSectionCollapsedChange}
+            />
+          </div>
         </div>
       </div>
     </Sider>

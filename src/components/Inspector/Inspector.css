@@ -149,3 +149,223 @@
   flex: 1 1 0;
   min-height: 0;
 }
+
+/* ── Chat Inspector：右栏贴边撑满、白底、区块分隔线 ── */
+
+.app-main-chat-and-rail-body > .app-right-panel-rail__panel .app-chat-inspector.ant-layout-sider,
+.app-chat-inspector.ant-layout-sider,
+.app-chat-inspector .ant-layout-sider-children {
+  height: 100%;
+  max-height: 100%;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  background: var(--ant-color-bg-container) !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.app-chat-inspector-inner {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  background: var(--ant-color-bg-container) !important;
+}
+
+.app-chat-inspector-card {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  background: var(--ant-color-bg-container);
+}
+
+.app-chat-inspector-section {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--ant-color-bg-container);
+}
+
+.app-chat-inspector-section + .app-chat-inspector-section {
+  border-top: 1px solid var(--ant-color-border-secondary);
+  padding-top: 0;
+  margin-top: 0;
+}
+
+.app-chat-inspector-section--git {
+  flex: 1 1 200px;
+  min-height: 180px;
+  overflow: hidden;
+}
+
+.app-chat-inspector-section--team {
+  flex: 0 0 auto;
+}
+
+.app-chat-inspector-section--tools {
+  flex: 1 1 140px;
+  min-height: 120px;
+  overflow: hidden;
+}
+
+.app-chat-inspector-section--tools-collapsed {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.app-chat-inspector .app-chat-inspector-section--git > .app-git-panel {
+  flex: 1 1 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--ant-color-bg-container);
+}
+
+.app-chat-inspector .git-panel-body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Git 表头：实色不透底，紧凑行高；不参与外层滚动 */
+.app-chat-inspector .git-panel-header {
+  position: static;
+  flex-shrink: 0;
+  padding: 3px 8px;
+  min-height: 0;
+  height: 28px;
+  box-sizing: border-box;
+  background: var(--ant-color-bg-container) !important;
+  background-image: none !important;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  cursor: grab;
+}
+
+.app-chat-inspector .git-panel-title {
+  font-size: 12px;
+  line-height: 1.1;
+}
+
+.app-chat-inspector .git-panel-title-tab {
+  width: 22px;
+  height: 22px;
+}
+
+.app-chat-inspector .git-mode-btn.ant-btn {
+  height: 24px;
+  min-height: 24px;
+  padding: 0 2px !important;
+  padding-inline: 2px !important;
+  gap: 1px;
+}
+
+.app-chat-inspector .git-commit-section {
+  padding: 5px 8px 6px;
+  background: var(--ant-color-bg-container) !important;
+  border-bottom: 1px solid var(--ant-color-split) !important;
+}
+
+.app-chat-inspector .git-commit-card {
+  border-color: var(--ant-color-border-secondary);
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-chat-inspector .git-commit-card:focus-within {
+  border-color: var(--ant-color-primary);
+  box-shadow: none;
+  outline: none;
+  background: var(--ant-color-bg-container);
+}
+
+.app-chat-inspector .git-commit-card__footer {
+  background: transparent;
+}
+
+.app-chat-inspector .git-section-header {
+  padding: 4px 10px;
+}
+
+.app-chat-inspector .git-error-banner {
+  padding: 4px 10px;
+}
+
+.app-chat-inspector .app-chat-inspector-section--team .app-monitor-panel {
+  margin-top: 0;
+  padding: 0;
+  border-top: none;
+  background: var(--ant-color-bg-container);
+}
+
+.app-chat-inspector .app-monitor-panel__head {
+  margin: 0;
+  padding: 5px 10px 4px;
+  background: var(--ant-color-bg-container) !important;
+  background-image: none !important;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.app-chat-inspector .app-monitor-panel__section,
+.app-chat-inspector .app-completed-task-panel {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+.app-chat-inspector .app-chat-inspector-section--tools > .app-claude-code-tools {
+  height: 100%;
+  min-height: 0;
+  background: var(--ant-color-bg-container);
+}
+
+.app-chat-inspector .app-claude-code-tools-head {
+  padding: 5px 10px 2px;
+  background: var(--ant-color-bg-container);
+}
+
+.app-chat-inspector .app-claude-code-tools-toolbar {
+  padding: 0 10px 5px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-chat-inspector .app-claude-code-tools-scroll {
+  padding: 2px 10px 8px;
+  background: var(--ant-color-bg-container);
+}
+
+.app-chat-inspector .app-claude-code-tools--collapsed-single-btn {
+  padding: 4px 10px;
+}
+
+.app-chat-inspector .app-chat-inspector-section--tools-collapsed > .app-claude-code-tools {
+  height: auto;
+}
+
+.app-chat-inspector .app-mcp-item {
+  border: none;
+  border-radius: 0;
+  background: var(--ant-color-bg-container);
+  padding: 6px 4px;
+}
+
+.app-chat-inspector .app-mcp-item + .app-mcp-item {
+  border-top: 1px solid var(--ant-color-split);
+}
+
+.app-chat-inspector .app-mcp-computer-use-row {
+  border: none;
+  border-radius: 0;
+  background: var(--ant-color-bg-container);
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--ant-color-split);
+}
