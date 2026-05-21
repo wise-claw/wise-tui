@@ -29,6 +29,7 @@ describe("sessionQuickActionsLayout", () => {
     const { primary, overflow } = partitionSessionQuickActions(layout, {
       canNewSession: false,
       canWorkTree: false,
+      canCompactContext: true,
     });
     expect(primary).toContain("builtin:word-doc");
     expect(primary).not.toContain("new-session");
@@ -39,7 +40,7 @@ describe("sessionQuickActionsLayout", () => {
     const next = moveLayoutItem(DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT, "push", "down");
     const index = next.items.findIndex((item) => item.id === "push");
     expect(next.items[index]?.id).toBe("push");
-    expect(next.items[index + 1]?.id).toBe("builtin:ppt-deck");
+    expect(next.items[index - 1]?.id).toBe("compact-context");
   });
 
   test("merge prefers primary when legacy ids collapse to builtin:prd-split", () => {
@@ -65,17 +66,20 @@ describe("sessionQuickActionsLayout", () => {
     const { primary } = partitionSessionQuickActions(promoted, {
       canNewSession: true,
       canWorkTree: false,
+      canCompactContext: false,
     });
     expect(primary).toContain("builtin:prd-split");
   });
 
-  test("default layout shows 需求 on primary bar", () => {
+  test("default layout shows 需求 on primary bar without compact-context pill", () => {
     const { primary } = partitionSessionQuickActions(DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT, {
       canNewSession: true,
       canWorkTree: false,
+      canCompactContext: true,
     });
     expect(primary.indexOf("builtin:prd-split")).toBeGreaterThan(-1);
     expect(primary.indexOf("builtin:prd-split")).toBeLessThan(primary.indexOf("push"));
+    expect(primary).not.toContain("compact-context");
   });
 
   test("merge migrates legacy requirement-split to builtin:prd-split", () => {

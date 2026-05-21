@@ -6,7 +6,6 @@ import {
   DeleteOutlined,
   FieldTimeOutlined,
   QuestionCircleOutlined,
-  CompressOutlined,
   ReloadOutlined,
   UnorderedListOutlined,
 } from "@ant-design/icons";
@@ -3302,37 +3301,6 @@ export function ClaudeChat({
                 </Tooltip>
               </Popover>
 
-              {onCompactSessionHistory ? (
-                <Tooltip title={compactSessionTooltip} mouseEnterDelay={0.35}>
-                  <button
-                    type="button"
-                    className={[
-                      "app-claude-session-tool-btn",
-                      "app-claude-session-tool-btn--compact-context",
-                      sessionContextMetrics.ctxPercent >= CONTEXT_WARN_PERCENT
-                        ? "app-claude-session-tool-btn--context-high"
-                        : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                    data-ui-anchor="session-compact-context-btn"
-                    disabled={!canCompactSessionHistory}
-                    aria-busy={compactHistoryInFlight}
-                    onClick={handleCompactSessionHistory}
-                  >
-                    <CompressOutlined spin={compactHistoryInFlight} />
-                    <span className="app-claude-session-tool-btn__text">压缩上下文</span>
-                    {sessionContextMetrics.ctxPercent >= CONTEXT_WARN_PERCENT ? (
-                      <span
-                        className="app-claude-session-tool-btn__badge"
-                        aria-label={`上下文约 ${sessionContextMetrics.ctxPercent}%`}
-                      >
-                        {sessionContextMetrics.ctxPercent}%
-                      </span>
-                    ) : null}
-                  </button>
-                </Tooltip>
-              ) : null}
               </div>
             </div>
 
@@ -4665,6 +4633,17 @@ export function ClaudeChat({
           }}
           dualPaneRepositoryPicker={dualPaneRepositoryPicker}
           missionContext={missionContext}
+          compactContext={
+            onCompactSessionHistory
+              ? {
+                  canCompact: canCompactSessionHistory,
+                  inFlight: compactHistoryInFlight,
+                  ctxPercent: sessionContextMetrics.ctxPercent,
+                  tooltip: compactSessionTooltip,
+                  onCompact: handleCompactSessionHistory,
+                }
+              : undefined
+          }
         />
 
       </div>

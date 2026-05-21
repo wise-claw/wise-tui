@@ -1,4 +1,6 @@
+import { CLAUDE_DISK_JSONL_TAIL_LINES_INITIAL } from "../constants/claudeMessageListWindow";
 import type { ClaudeSession } from "../types";
+import { parseClaudeSessionJsonlLines } from "../utils/claudeSessionJsonl";
 
 /** 与 Claude Code 默认 200k 窗口对齐的近似上限（UI 估算，非官方计数）。 */
 export const DEFAULT_MAX_CONTEXT_TOKENS = 200_000;
@@ -50,22 +52,79 @@ export function estimateMessageTokens(message: ClaudeSession["messages"][number]
   return Math.max(0, Math.round(textChars / 4));
 }
 
+export function estimateTokensFromMessages(messages: readonly ClaudeSession["messages"][number][]): number {
+  let total = 0;
+  for (const message of messages) {
+    total += estimateMessageTokens(message);
+  }
+  return total;
+}
+
 export function estimateSessionTokens(session: ClaudeSession): number {
+  return estimateTokensFromMessages(session.messages);
+}
+
+/** 从 Claude Code 磁盘 `*.jsonl` 行估算上下文（员工/团队标签内存消息为空时仍可对齐 resume 历史）。 */
+export function estimateTokensFromJsonlLines(lines: readonly string[]): number {
+  const trimmed = lines.map((line) => line.trim()).filter(Boolean);
+  if (trimmed.length === 0) return 0;
+  const messages = parseClaudeSessionJsonlLines([...trimmed]);
+  if (messages.length > 0) {
+    return estimateTokensFromMessages(messages);
+  }
   let textChars = 0;
-  for (const message of session.messages) {
-    textChars += message.content.length;
-    for (const part of message.parts) {
-      if (part.type === "text" || part.type === "reasoning") {
-        textChars += part.text.length;
-      } else if (part.type === "tool_use") {
-        textChars += part.name.length;
-        textChars += JSON.stringify(part.input ?? {}).length;
-        textChars += (part.output ?? "").length;
-        textChars += (part.error ?? "").length;
-      }
-    }
+  for (const line of trimmed) {
+    textChars += line.length;
   }
   return Math.max(0, Math.round(textChars / 4));
+}
+
+export type LoadClaudeJsonlForContextEstimate = (
+  repositoryPath: string,
+  claudeSessionId: string,
+  options?: { tailLines?: number | null },
+) => Promise<string[]>;
+
+/**
+ * 员工/团队派发会话常因标签未激活而 `messages=[]`，但磁盘 transcript 已很长；
+ * 发送前需读 jsonl 才能正确触发自动 `/compact`。
+ */
+export function shouldLoadDiskForContextEstimate(session: ClaudeSession): boolean {
+  const claudeSid = session.claudeSessionId?.trim();
+  if (!claudeSid || !session.repositoryPath?.trim()) return false;
+  if (session.messages.length === 0) return true;
+  if (session.diskTranscriptPartial) return true;
+  return getSessionContextMetrics(session).ctxPercent >= CONTEXT_WARN_PERCENT;
+}
+
+export async function resolveSessionContextMetricsForSend(
+  session: ClaudeSession,
+  loadJsonl: LoadClaudeJsonlForContextEstimate,
+): Promise<SessionContextMetrics> {
+  const memory = getSessionContextMetrics(session);
+  if (!shouldLoadDiskForContextEstimate(session)) {
+    return memory;
+  }
+  const cc = session.claudeSessionId!.trim();
+  const rp = session.repositoryPath.trim();
+  try {
+    const tailLines = await loadJsonl(rp, cc, {
+      tailLines: CLAUDE_DISK_JSONL_TAIL_LINES_INITIAL,
+    });
+    let diskTokens = estimateTokensFromJsonlLines(tailLines);
+    const tailSaturated = tailLines.length >= CLAUDE_DISK_JSONL_TAIL_LINES_INITIAL;
+    if (tailSaturated && (session.messages.length === 0 || session.diskTranscriptPartial)) {
+      const fullLines = await loadJsonl(rp, cc);
+      diskTokens = Math.max(diskTokens, estimateTokensFromJsonlLines(fullLines));
+    }
+    const estimatedTokens = Math.max(memory.estimatedTokens, diskTokens);
+    return {
+      estimatedTokens,
+      ctxPercent: estimateContextPercent(estimatedTokens),
+    };
+  } catch {
+    return memory;
+  }
 }
 
 export function estimateContextPercent(
@@ -113,8 +172,9 @@ export function looksLikeContextOverflowError(message: string): boolean {
 export function planAutoCompactBeforeSend(
   session: ClaudeSession,
   outgoingPrompt: string,
+  metricsOverride?: SessionContextMetrics,
 ): AutoCompactBeforeSendPlan {
-  const metrics = getSessionContextMetrics(session);
+  const metrics = metricsOverride ?? getSessionContextMetrics(session);
   if (isCompactSlashPrompt(outgoingPrompt)) {
     return { ...metrics, needed: false };
   }

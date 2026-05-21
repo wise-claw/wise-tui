@@ -44,11 +44,13 @@ import { FollowupDock } from "./dock/followup-dock";
 import { TodoDock } from "./dock/todo-dock";
 import { RevertDock } from "./dock/revert-dock";
 import { addToHistory, promptLength, navigatePromptHistory, canNavigateHistoryAtCursor } from "./prompt-history";
+import { CompressOutlined } from "@ant-design/icons";
 import { Dropdown, Button, Empty, Input, Popover, Select, Spin, Tabs, Tag, Tooltip, message } from "antd";
 import type { MenuProps } from "antd";
 import { logClaudeDrop } from "./drop-debug";
 import { buildClaudeOutgoingPrompt } from "../../services/claudeComposerPrompt";
 import {
+  CONTEXT_WARN_PERCENT,
   contextPercentToneClassName,
   formatContextStatusHint,
   getContextPercentTone,
@@ -73,6 +75,15 @@ import type { ControlRequestStatus } from "../../notifications";
 import type { QuestionDockTabSpec } from "../../hooks/useQuestionDockTabs";
 import { WORKFLOW_UI_EVENT_APPLY_STARTER_PROMPT } from "../../constants/workflowUiEvents";
 import type { GitBranchEntry } from "../../types";
+
+/** 输入框底栏：分支后的「压缩上下文」（Claude Code `/compact`） */
+export interface ComposerCompactContextProps {
+  canCompact: boolean;
+  inFlight: boolean;
+  ctxPercent: number;
+  tooltip: string;
+  onCompact: () => void;
+}
 
 /** 双栏右侧主会话：输入框底栏在截屏按钮旁选择目标仓库 */
 export interface DualPaneComposerRepositoryPickerProps {
@@ -155,6 +166,7 @@ interface ComposerInnerProps {
     projectId?: string | null;
     rootPath?: string | null;
   };
+  compactContext?: ComposerCompactContextProps;
 }
 
 interface LastSentComposerDraft {
@@ -337,6 +349,7 @@ function ComposerInner({
   pendingExecutionTaskCount = 0,
   dualPaneRepositoryPicker,
   missionContext,
+  compactContext,
 }: ComposerInnerProps) {
   /** 含题卡/待办/底栏等整块输入 chrome，用于 Esc 命中判定（仅 shellRef 会漏掉模型选择、停止等） */
   const composerEscapeRootRef = useRef<HTMLDivElement>(null);
@@ -1552,9 +1565,40 @@ function ComposerInner({
           />
         ) : null}
         {branchPickerInFooterToolbar}
+        {compactContext ? (
+          <Tooltip title={compactContext.tooltip} mouseEnterDelay={0.35}>
+            <Button
+              type="text"
+              size="small"
+              className={[
+                "app-claude-semi-footer-compact-context",
+                contextPercentToneClassName(getContextPercentTone(compactContext.ctxPercent)),
+              ].join(" ")}
+              data-ui-anchor="session-compact-context-btn"
+              disabled={!compactContext.canCompact}
+              aria-busy={compactContext.inFlight}
+              onClick={compactContext.onCompact}
+              style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}
+            >
+              <CompressOutlined spin={compactContext.inFlight} />
+              <span>压缩上下文</span>
+              {compactContext.ctxPercent >= CONTEXT_WARN_PERCENT ? (
+                <span className="app-claude-semi-footer-compact-context__pct" aria-hidden>
+                  {compactContext.ctxPercent}%
+                </span>
+              ) : null}
+            </Button>
+          </Tooltip>
+        ) : null}
       </div>
     );
-  }, [branchPickerInFooterToolbar, dualPaneRepositoryPicker, handleFileAttach, handleScreenshot]);
+  }, [
+    branchPickerInFooterToolbar,
+    compactContext,
+    dualPaneRepositoryPicker,
+    handleFileAttach,
+    handleScreenshot,
+  ]);
 
   /** 与 Semi 底栏同一行：停止（占用中）+ 模型选择 + 发送（Semi 在 generating 时会拦截发送，故用独立停止 + generating=false） */
   const renderSemiComposerActionArea = useCallback(
@@ -1912,6 +1956,7 @@ export interface ComposerRegionProps {
     projectId?: string | null;
     rootPath?: string | null;
   };
+  compactContext?: ComposerCompactContextProps;
 }
 
 export function ComposerRegion({ session, draftBucketKey, ...rest }: ComposerRegionProps) {

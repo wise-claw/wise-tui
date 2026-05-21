@@ -7,6 +7,7 @@ export const SESSION_QUICK_ACTIONS_LAYOUT_STORAGE_KEY_V1 = "wise.session.quickAc
 export type SessionQuickActionId =
   | "new-session"
   | "push"
+  | "compact-context"
   | "builtin:prd-split"
   | "builtin:word-doc"
   | "builtin:ppt-deck"
@@ -43,6 +44,7 @@ function builtinMeta(id: SessionQuickActionId, menuLabel: string): SessionQuickA
 export const SESSION_QUICK_ACTION_META: Record<SessionQuickActionId, SessionQuickActionMeta> = {
   "new-session": { id: "new-session", label: "新建会话", pillLabel: "新建会话" },
   push: { id: "push", label: "推送", pillLabel: "推送" },
+  "compact-context": { id: "compact-context", label: "压缩上下文", pillLabel: "压缩上下文" },
   "builtin:prd-split": { id: "builtin:prd-split", label: "需求", pillLabel: "需求" },
   "builtin:word-doc": builtinMeta("builtin:word-doc", SESSION_QUICK_BUILTIN_ASSISTANTS[1].menuLabel),
   "builtin:ppt-deck": builtinMeta("builtin:ppt-deck", SESSION_QUICK_BUILTIN_ASSISTANTS[2].menuLabel),
@@ -54,6 +56,7 @@ export const SESSION_QUICK_ACTION_META: Record<SessionQuickActionId, SessionQuic
 export const SESSION_QUICK_ACTION_CATALOG_ORDER: SessionQuickActionId[] = [
   "new-session",
   "push",
+  "compact-context",
   "builtin:prd-split",
   "builtin:word-doc",
   "builtin:ppt-deck",
@@ -67,6 +70,7 @@ export const DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT: SessionQuickActionsLayoutV1 =
     { id: "new-session", visible: true, zone: "primary" },
     { id: "builtin:prd-split", visible: true, zone: "primary" },
     { id: "push", visible: true, zone: "primary" },
+    { id: "compact-context", visible: false, zone: "overflow" },
     { id: "builtin:word-doc", visible: true, zone: "overflow" },
     { id: "builtin:ppt-deck", visible: true, zone: "overflow" },
     { id: "work-trajectory", visible: true, zone: "overflow" },
@@ -164,6 +168,7 @@ export function parseSessionQuickActionsLayout(raw: string | null | undefined): 
 export interface SessionQuickActionsAvailability {
   canNewSession: boolean;
   canWorkTree: boolean;
+  canCompactContext: boolean;
 }
 
 export function isSessionQuickActionAvailable(
@@ -172,6 +177,8 @@ export function isSessionQuickActionAvailable(
 ): boolean {
   if (id === "new-session") return availability.canNewSession;
   if (id === "work-tree") return availability.canWorkTree;
+  /** 已迁至输入框底栏（分支后），快捷条不再展示 */
+  if (id === "compact-context") return false;
   return true;
 }
 

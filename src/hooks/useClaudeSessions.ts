@@ -72,6 +72,7 @@ import {
   isCompactSlashPrompt,
   looksLikeContextOverflowError,
   planAutoCompactBeforeSend,
+  resolveSessionContextMetricsForSend,
 } from "../services/claudeSessionContext";
 
 type ClaudeStreamRuntimeHandlers = ReturnType<typeof createClaudeStreamRuntime>;
@@ -688,7 +689,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         });
       };
 
-      const pre = planAutoCompactBeforeSend(session, prompt);
+      const metrics = await resolveSessionContextMetricsForSend(session, loadClaudeSessionJsonl);
+      const pre = planAutoCompactBeforeSend(session, prompt, metrics);
       if (pre.needed) {
         appendSys(buildAutoCompactSystemMessage(pre));
         await runOnce(CLAUDE_COMPACT_SLASH_PROMPT);

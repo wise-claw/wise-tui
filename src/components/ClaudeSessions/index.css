@@ -4321,6 +4321,14 @@ button.app-message-part-header:disabled:hover {
   outline: none;
 }
 
+.app-session-quick-pill--compact-context.app-session-quick-pill--context-high {
+  color: var(--ant-color-warning);
+}
+
+.app-session-quick-pill--compact-context.app-session-quick-pill--context-high .app-session-quick-pill__label {
+  color: var(--ant-color-warning);
+}
+
 .app-session-quick-pill--push {
   gap: 4px;
   padding: 3px 8px;

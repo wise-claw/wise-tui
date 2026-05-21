@@ -63,6 +63,7 @@ export function SessionQuickActionsBar({
     () => ({
       canNewSession: Boolean(onCreateNewSession),
       canWorkTree: showWorktreeInMore && Boolean(onOpenWorktreeMenu),
+      canCompactContext: false,
     }),
     [onCreateNewSession, onOpenWorktreeMenu, showWorktreeInMore],
   );
