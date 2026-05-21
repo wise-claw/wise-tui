@@ -3001,44 +3001,29 @@
 /* ── System message（卡片 + 长日志折叠） ── */
 
 .app-system-message {
-  border-radius: 12px;
-  border: 1px solid var(--app-workspace-glass-border) !important;
-  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 35%, transparent) !important;
-  backdrop-filter: var(--app-workspace-glass-blur) !important;
-  -webkit-backdrop-filter: var(--app-workspace-glass-blur) !important;
-  box-shadow: var(--app-workspace-glass-inset-glow), var(--app-workspace-glass-shadow) !important;
+  border-radius: 8px;
+  border: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-fill-quaternary);
   overflow: hidden;
   max-width: 100%;
-  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.app-system-message:hover {
-  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 50%, transparent) !important;
-  transform: translateY(-1px) translateZ(0);
 }
 
 .app-system-message--error {
-  border-color: color-mix(in srgb, var(--ant-color-error-border) 45%, transparent) !important;
-  background: color-mix(in srgb, var(--ant-color-error-bg) 45%, transparent) !important;
-  box-shadow: 0 0 12px color-mix(in srgb, var(--ant-color-error) 15%, transparent), var(--app-workspace-glass-inset-glow) !important;
-}
-
-.app-system-message--error:hover {
-  background: color-mix(in srgb, var(--ant-color-error-bg) 60%, transparent) !important;
+  border-color: var(--ant-color-error-border);
+  background: var(--ant-color-error-bg);
 }
 
 .app-system-message-bar {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--app-workspace-glass-border) !important;
-  background: color-mix(in srgb, var(--ant-color-text) 3%, transparent);
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
   min-height: 28px;
 }
 
 .app-system-message--error .app-system-message-bar {
-  border-bottom-color: color-mix(in srgb, var(--ant-color-error-border) 35%, transparent) !important;
+  border-bottom-color: var(--ant-color-error-border);
 }
 
 .app-system-message-badge {
@@ -3197,19 +3182,11 @@
 }
 
 .app-system-dispatch-card {
-  border: 1px solid var(--app-workspace-glass-border) !important;
-  background: color-mix(in srgb, var(--ant-color-bg-container) 45%, transparent) !important;
-  backdrop-filter: var(--app-workspace-glass-blur) !important;
-  -webkit-backdrop-filter: var(--app-workspace-glass-blur) !important;
-  border-radius: 12px;
-  padding: 8px 12px;
-  box-shadow: var(--app-workspace-glass-inset-glow), var(--app-workspace-glass-shadow) !important;
-  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.app-system-dispatch-card:hover {
-  background: color-mix(in srgb, var(--ant-color-bg-container) 60%, transparent) !important;
-  transform: translateY(-1px) translateZ(0);
+  border: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-bg-container);
+  border-radius: 8px;
+  padding: 4px 6px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .app-system-dispatch-card__head {
@@ -3267,28 +3244,20 @@
 }
 
 .app-system-dispatch-card__btn {
-  border: 1px solid color-mix(in srgb, var(--ant-color-primary) 30%, transparent) !important;
-  background: color-mix(in srgb, var(--ant-color-primary) 8%, transparent) !important;
-  color: var(--ant-color-primary) !important;
-  border-radius: 6px !important;
+  border: none;
+  background: transparent;
+  color: var(--ant-color-primary);
+  border-radius: 0;
   font-size: 11px;
   line-height: 1.2;
-  font-weight: 600;
-  padding: 4px 10px !important;
+  font-weight: 500;
+  padding: 0;
   cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
 }
 
 .app-system-dispatch-card__btn:hover {
-  background: var(--ant-color-primary) !important;
-  color: #fff !important;
-  border-color: var(--ant-color-primary) !important;
-  transform: translateY(-0.5px) translateZ(0);
-  box-shadow: 0 2px 6px color-mix(in srgb, var(--ant-color-primary) 25%, transparent);
-}
-
-.app-system-dispatch-card__btn:active {
-  transform: scale(0.96) translateZ(0);
+  color: var(--ant-color-primary-hover);
+  text-decoration: underline;
 }
 
 /* ── Message Parts ── */
@@ -3310,29 +3279,6 @@
   font-size: 12.5px;
   line-height: 1.45;
   color: var(--ant-color-text);
-  padding: 8px 12px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--ant-color-bg-container) 55%, transparent);
-  border: 1px solid var(--app-workspace-glass-border);
-  box-shadow: var(--app-workspace-glass-inset-glow), var(--app-workspace-glass-shadow);
-  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-  display: inline-block;
-  max-width: 100%;
-}
-
-.app-claude-message--user .app-message-part--text {
-  background: color-mix(in srgb, var(--ant-color-primary) 8%, var(--app-workspace-glass-base)) !important;
-  border-color: color-mix(in srgb, var(--ant-color-primary) 24%, transparent) !important;
-  box-shadow: var(--app-workspace-active-glow), var(--app-workspace-glass-shadow) !important;
-}
-
-.app-message-part--text:hover {
-  background: color-mix(in srgb, var(--ant-color-bg-container) 75%, transparent);
-  transform: translateY(-1px) translateZ(0);
-}
-
-.app-claude-message--user .app-message-part--text:hover {
-  background: color-mix(in srgb, var(--ant-color-primary) 12%, var(--app-workspace-glass-base)) !important;
 }
 
 .app-message-part--text p {
@@ -3501,18 +3447,10 @@ button.app-message-part-header:disabled:hover {
 /* ── Reasoning Part ── */
 
 .app-message-part--reasoning {
-  border: 1px solid var(--app-workspace-glass-border) !important;
-  border-radius: 12px !important;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: var(--ant-border-radius);
   overflow: hidden;
-  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 20%, transparent) !important;
-  backdrop-filter: var(--app-workspace-glass-blur) !important;
-  box-shadow: var(--app-workspace-glass-inset-glow) !important;
-  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.app-message-part--reasoning:hover {
-  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 30%, transparent) !important;
-  border-color: color-mix(in srgb, var(--ant-color-border-secondary) 50%, transparent) !important;
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 55%, var(--ant-color-bg-container));
 }
 
 .app-message-part--reasoning .app-message-part-header {
@@ -3536,21 +3474,10 @@ button.app-message-part-header:disabled:hover {
   font-size: 11px;
 }
 
-.app-message-part--reasoning .app-message-part-content {
-  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 10%, transparent) !important;
-  border-top: 1px solid var(--app-workspace-glass-border) !important;
-  padding: 8px 10px !important;
-}
-
 .app-message-part--reasoning-content {
   font-size: 11.5px;
   color: var(--ant-color-text-secondary);
   opacity: 0.85;
-  background: transparent !important;
-}
-
-.app-message-part--reasoning-content .app-markdown {
-  background: transparent !important;
 }
 
 .app-message-part--reasoning-content p {
@@ -3562,24 +3489,22 @@ button.app-message-part-header:disabled:hover {
 /* ── Tool Part ── */
 
 .app-message-part--tool {
-  border: 1px solid var(--app-workspace-glass-border) !important;
-  border-radius: 12px !important;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: var(--ant-border-radius);
   overflow: hidden;
-  background: color-mix(in srgb, var(--ant-color-bg-container) 45%, transparent) !important;
-  backdrop-filter: var(--app-workspace-glass-blur) !important;
-  box-shadow: var(--app-workspace-glass-inset-glow), var(--app-workspace-glass-shadow) !important;
+  background: var(--ant-color-bg-container);
 }
 
 .app-message-part--tool .app-message-part-header {
-  border: none !important;
+  border: none;
   border-radius: 0;
-  border-bottom: 1px solid var(--app-workspace-glass-border) !important;
-  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 35%, transparent) !important;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 65%, var(--ant-color-bg-container));
   align-items: flex-start;
 }
 
 .app-message-part--tool .app-message-part-header:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--ant-color-fill-secondary) 60%, transparent) !important;
+  background: var(--ant-color-fill-secondary);
 }
 
 .app-message-part--tool .app-message-part-content {
