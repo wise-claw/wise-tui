@@ -1568,6 +1568,8 @@ export function ClaudeChat({
   const [historyVisibleCount, setHistoryVisibleCount] = useState(FEATURE_SESSION_LIST_PAGE_SIZE);
   const [historySessionsRefreshing, setHistorySessionsRefreshing] = useState(false);
   const historyPopoverScrollRef = useRef<HTMLDivElement>(null);
+  /** 历史会话删除二次确认 Modal 打开期间，忽略 Popover 的外部点击关闭 */
+  const historyPopoverCloseGuardRef = useRef(false);
   const [sessionTraceDrawerOpen, setSessionTraceDrawerOpen] = useState(false);
   const [sessionSendTraces, setSessionSendTraces] = useState<SessionSendTraceEntry[]>([]);
   const [notificationRows, setNotificationRows] = useState<WiseInboundMessageRow[]>([]);
@@ -2445,10 +2447,18 @@ export function ClaudeChat({
    * 注意：物理删除 jsonl 不可恢复；后端 IPC 抛错（如运行中拒绝）时仅 toast 提示，
    * 不抹掉本地 tab，让用户先取消运行再重试。
    */
+  const releaseHistoryPopoverCloseGuard = useCallback(() => {
+    // 延后解除，避免蒙层/按钮点击在同一事件循环里误关历史 Popover
+    window.setTimeout(() => {
+      historyPopoverCloseGuardRef.current = false;
+    }, 0);
+  }, []);
+
   const handleDeleteHistorySession = useCallback(
     (sessionId: string, previewText: string) => {
       if (!onDeleteHistorySession) return;
       const preview = (previewText || "").trim() || "(无预览)";
+      historyPopoverCloseGuardRef.current = true;
       Modal.confirm({
         title: "删除该历史会话？",
         content: (
@@ -2467,6 +2477,9 @@ export function ClaudeChat({
         okType: "danger",
         cancelText: "取消",
         autoFocusButton: "cancel",
+        mask: { closable: true },
+        onCancel: releaseHistoryPopoverCloseGuard,
+        afterClose: releaseHistoryPopoverCloseGuard,
         onOk: async () => {
           try {
             await onDeleteHistorySession(sessionId);
@@ -2479,7 +2492,7 @@ export function ClaudeChat({
         },
       });
     },
-    [onDeleteHistorySession],
+    [onDeleteHistorySession, releaseHistoryPopoverCloseGuard],
   );
 
   useEffect(() => {
@@ -3329,6 +3342,9 @@ export function ClaudeChat({
                 placement="bottomLeft"
                 open={historyPopoverOpen}
                 onOpenChange={(nextOpen) => {
+                  if (!nextOpen && historyPopoverCloseGuardRef.current) {
+                    return;
+                  }
                   setHistoryPopoverOpen(nextOpen);
                   if (nextOpen) {
                     setUserQuestionsPopoverOpen(false);
