@@ -17,12 +17,14 @@
   padding: 1px 12px 4px 12px;
   min-height: 36px;
   box-sizing: border-box;
-  border-bottom: 1px solid var(--ant-color-border-secondary);
+  border-bottom: 1px solid var(--app-workspace-glass-border, var(--ant-color-border-secondary));
   cursor: grab;
   position: sticky;
   top: 0;
   z-index: 20;
-  background: var(--ant-color-bg-container);
+  background: var(--app-workspace-chrome-right, var(--ant-color-bg-container));
+  -webkit-backdrop-filter: var(--app-workspace-glass-blur);
+  backdrop-filter: var(--app-workspace-glass-blur);
 }
 
 /*
@@ -704,7 +706,26 @@
   border-bottom: 1px solid var(--ant-color-border-secondary);
 }
 .git-files-mode--section-collapsed .git-files-explorer-bar {
-  padding: 4px 8px;
+  display: none;
+}
+
+.git-files-explorer-expand {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  color: var(--ant-color-text-tertiary);
+}
+
+.git-files-explorer-expand svg {
+  width: 10px;
+  height: 10px;
+}
+
+button.git-files-explorer-title.git-files-explorer-title--with-expand {
+  gap: 4px;
 }
 
 .git-files-explorer-title {

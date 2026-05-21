@@ -7,6 +7,7 @@ import {
   MinusSquareOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
+import { ExpandIcon } from "../LeftSidebar/SidebarIcons";
 import { ExplorerInlineCreateRow } from "./ExplorerInlineCreateRow";
 import { RepositoryTreeNode } from "./RepositoryTreeNode";
 import type { GitPanelOpenFileOptions } from "./types";
@@ -42,22 +43,66 @@ export function RepositoryFilesExplorer({
   const setSectionCollapsed = onSectionCollapsedChange;
 
   if (sectionCollapsed && setSectionCollapsed) {
+    const label = repositoryLabel || "资源管理器";
     return (
       <div className="git-files-mode git-files-mode--section-collapsed">
-        <div className="git-files-explorer-bar">
-          <Tooltip title="点击展开文件树" mouseEnterDelay={0.35}>
-            <button
-              type="button"
-              className="git-files-explorer-title git-files-explorer-title--toggle"
-              title={repositoryPath}
-              onClick={() => setSectionCollapsed(false)}
+        <div className="app-repository-row app-left-sidebar-files-explorer-collapsed-row">
+          <div
+            className="app-repository-item app-repository-item--repo app-repository-item--files-root app-repository-item--files-root-collapsed"
+            title={repositoryPath}
+          >
+            <span
+              className="app-repository-expand"
+              role="button"
+              tabIndex={0}
+              aria-expanded={false}
+              aria-label="展开文件树"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSectionCollapsed(false);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setSectionCollapsed(false);
+                }
+              }}
             >
-              <span className="git-files-explorer-title-icon-wrap" aria-hidden>
+              <ExpandIcon expanded={false} />
+            </span>
+            <span
+              className="app-repository-icon-wrap app-left-sidebar-files-explorer-collapsed-hit"
+              role="button"
+              tabIndex={0}
+              aria-label={`展开 ${label}`}
+              onClick={() => setSectionCollapsed(false)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setSectionCollapsed(false);
+                }
+              }}
+            >
+              <span className="app-repository-icon app-repository-icon--folder">
                 <FolderOpenOutlined />
               </span>
-              <span className="git-files-explorer-title-text">{repositoryLabel || "资源管理器"}</span>
-            </button>
-          </Tooltip>
+            </span>
+            <span
+              className="app-repository-name app-left-sidebar-files-explorer-collapsed-hit"
+              role="button"
+              tabIndex={0}
+              onClick={() => setSectionCollapsed(false)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setSectionCollapsed(false);
+                }
+              }}
+            >
+              {label}
+            </span>
+          </div>
         </div>
       </div>
     );
@@ -116,10 +161,13 @@ export function RepositoryFilesExplorer({
           <Tooltip title="点击收起文件树" mouseEnterDelay={0.35}>
             <button
               type="button"
-              className="git-files-explorer-title git-files-explorer-title--toggle"
+              className="git-files-explorer-title git-files-explorer-title--toggle git-files-explorer-title--with-expand"
               title={repositoryPath}
               onClick={() => setSectionCollapsed(true)}
             >
+              <span className="git-files-explorer-expand" aria-hidden>
+                <ExpandIcon expanded />
+              </span>
               <span className="git-files-explorer-title-icon-wrap" aria-hidden>
                 <FolderOpenOutlined />
               </span>

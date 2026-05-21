@@ -1,7 +1,7 @@
 .app-monitor-panel {
   padding: 0 0 2px;
-  border-top: 1px solid var(--ant-color-border-secondary);
-  background: var(--ant-color-bg-container);
+  border-top: 1px solid var(--app-workspace-glass-border, var(--ant-color-border-secondary));
+  background: transparent;
   margin-top: 0;
 }
 
@@ -20,8 +20,10 @@
   gap: 8px;
   margin: 0 0 2px;
   padding: 3px 8px 3px 0;
-  background: var(--ant-color-bg-container);
-  border-bottom: 1px solid var(--ant-color-border-secondary);
+  background: var(--app-workspace-chrome-right, var(--ant-color-bg-container));
+  -webkit-backdrop-filter: var(--app-workspace-glass-blur);
+  backdrop-filter: var(--app-workspace-glass-blur);
+  border-bottom: 1px solid var(--app-workspace-glass-border, var(--ant-color-border-secondary));
 }
 
 .app-monitor-panel__head-start {

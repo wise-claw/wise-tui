@@ -109,7 +109,7 @@
   min-height: var(--app-column-topbar-min-height);
   height: var(--app-column-topbar-min-height);
   padding: var(--app-column-topbar-padding-y) 2px;
-  background: var(--ant-color-bg-container);
+  background: var(--app-workspace-stage-bg, var(--ant-color-bg-container));
   border-bottom: 1px solid var(--ant-color-border-secondary);
   flex-shrink: 0;
   user-select: none;
@@ -888,7 +888,7 @@
   flex: 1;
   min-height: 0;
   min-width: 0;
-  background: var(--ant-color-bg-container);
+  background: var(--app-workspace-stage-bg, var(--ant-color-bg-container));
   /* 由 ClaudeChat ResizeObserver 写入，供快捷条与后台摘要 dock 的 bottom 联动 */
   --app-composer-tray-h: 200px;
 }
