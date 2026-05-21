@@ -1,0 +1,154 @@
+.app-claude-plugin-hub-root {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  flex: 1;
+}
+
+.app-claude-plugin-hub-root .author-panel-page__head {
+  padding: 16px 0 8px;
+}
+
+.app-claude-plugin-hub-root .author-panel-page__head-row {
+  flex-wrap: nowrap;
+}
+
+.app-claude-plugin-hub-root .author-panel-page__title-wrap {
+  flex: 1 1 auto;
+  min-width: 120px;
+}
+
+.app-claude-plugin-hub-root .author-panel-page__actions {
+  flex-shrink: 0;
+}
+
+.app-claude-plugin-hub-root .author-panel-page__toolbar {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.app-claude-plugin-hub-search {
+  flex: 1 1 160px;
+  min-width: 140px;
+  max-width: 280px;
+}
+
+.app-claude-plugin-hub-category {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.app-claude-plugin-hub-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(188px, 1fr));
+  gap: 6px;
+  padding-bottom: 6px;
+}
+
+.app-claude-plugin-hub-card {
+  border: 1px solid var(--wise-border-subtle, rgba(0, 0, 0, 0.08));
+  border-radius: 8px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: var(--wise-surface-elevated, #fff);
+  min-height: 0;
+}
+
+.app-claude-plugin-hub-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.app-claude-plugin-hub-card-name {
+  flex: 1 1 0%;
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1.3;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-claude-plugin-hub-card-cta.ant-btn,
+.app-claude-plugin-hub-card-cta-group .ant-btn {
+  flex: none;
+  height: 20px !important;
+  min-height: 20px;
+  padding: 0 6px !important;
+  font-size: 11px !important;
+  line-height: 18px !important;
+  border-radius: 4px;
+}
+
+.app-claude-plugin-hub-card-cta.ant-btn-link {
+  height: auto !important;
+  min-height: 0;
+  padding: 0 !important;
+  font-size: 11px !important;
+  line-height: 1.3 !important;
+}
+
+.app-claude-plugin-hub-card-cta-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+}
+
+.app-claude-plugin-hub-card-installed-tag {
+  margin-inline-end: 0 !important;
+  font-size: 10px;
+  line-height: 16px;
+  padding-inline: 4px;
+}
+
+.app-claude-plugin-hub-card-ref {
+  font-size: 10px;
+  color: var(--wise-text-tertiary, rgba(0, 0, 0, 0.45));
+  word-break: break-all;
+  line-height: 1.2;
+}
+
+.app-claude-plugin-hub-card-tags {
+  margin-top: 1px;
+}
+
+.app-claude-plugin-hub-card-tags .ant-tag {
+  margin-inline-end: 0;
+  font-size: 10px;
+  line-height: 14px;
+  padding-inline: 4px;
+}
+
+.app-claude-plugin-hub-card-desc {
+  font-size: 10px;
+  line-height: 1.32;
+  color: var(--wise-text-secondary, rgba(0, 0, 0, 0.65));
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.app-claude-plugin-hub-loading,
+.app-claude-plugin-hub-empty-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 24px 12px;
+}
+
+.app-claude-plugin-hub-bootstrap-hint {
+  font-size: 11px;
+  color: var(--wise-text-tertiary, rgba(0, 0, 0, 0.45));
+}
+
+.app-claude-plugin-hub-root .ant-tabs-nav {
+  margin-bottom: 6px !important;
+}

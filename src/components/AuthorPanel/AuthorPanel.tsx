@@ -17,6 +17,7 @@ import { AgentRegistrySection } from "../ClaudeConfigDirPanel/AgentRegistrySecti
 import { ClaudeSandboxHelpPopoverBody } from "../ClaudeSandboxHelpPopoverBody";
 import { EmployeeConfigModal } from "../EmployeeConfigModal";
 import { ExtensionsPanel } from "../ExtensionsPanel";
+import { ClaudePluginMarketHub } from "../ClaudePluginMarketHub";
 import { McpHub } from "../McpHub";
 import { ProjectTrellisCenter } from "../ProjectTrellisCenter";
 import { PromptsPanel } from "../PromptsPanel";
@@ -36,6 +37,7 @@ const PANELS_WITH_OWN_SHELL = new Set<AuthorPane>([
   "assistants",
   "mcp",
   "skills",
+  "claude-plugins",
   "hooks",
   "workflows",
   "channels",
@@ -143,6 +145,8 @@ export function AuthorPanel({
         return <McpHub {...mcpHubProps} onClose={undefined} />;
       case "skills":
         return <SkillsHub {...skillsHubProps} onClose={undefined} />;
+      case "claude-plugins":
+        return <ClaudePluginMarketHub onClose={undefined} />;
       case "hooks":
         return (
           <AuthorPanelPageShell

@@ -29,6 +29,7 @@ export type AuthorPane =
   | "workflows"
   | "mcp"
   | "skills"
+  | "claude-plugins"
   | "hooks"
   | "prompts"
   | "trellis-spec"
@@ -50,6 +51,7 @@ export const WORKSPACE_SCOPED_AUTHOR_PANES: ReadonlySet<AuthorPane> = new Set([
   "workflows",
   "mcp",
   "skills",
+  "claude-plugins",
   "hooks",
   "prompts",
   "trellis-spec",

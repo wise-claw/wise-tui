@@ -410,6 +410,13 @@ describe("AuthorPanel", () => {
     expect(html).toContain("技能");
   });
 
+  test("claude-plugins pane mounts ClaudePluginMarketHub", () => {
+    const { props } = buildProps({ pane: "claude-plugins" });
+    const html = renderAuthorPanel(props);
+    expect(html).toContain("Claude Code 插件");
+    expect(html).toContain("精选市场");
+  });
+
   test("prompts pane mounts PromptsPanel", () => {
     const { props } = buildProps({ pane: "prompts" });
     const html = renderAuthorPanel(props);
