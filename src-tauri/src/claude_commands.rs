@@ -1207,6 +1207,7 @@ fn create_claude_command(
     model: Option<&str>,
     extra_args: &[&str],
     bare: bool,
+    trellis_context_id: Option<&str>,
 ) -> Result<tokio::process::Command, String> {
     let claude_path = find_claude_binary()?;
 
@@ -1243,6 +1244,10 @@ fn create_claude_command(
     // 与 Wise 前端发送前 `/compact` 策略对齐：未显式配置时让 Claude Code 在约 88% 窗口时自动压缩。
     if std::env::var("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE").is_err() {
         cmd.env("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", "88");
+    }
+
+    if let Some(context_id) = trellis_context_id.map(str::trim).filter(|v| !v.is_empty()) {
+        cmd.env("TRELLIS_CONTEXT_ID", context_id);
     }
 
     if bare {
@@ -1633,6 +1638,7 @@ pub(crate) async fn execute_claude_code(
     concurrency_scope_key: Option<String>,
     concurrency_limit: Option<u32>,
     bare: Option<bool>,
+    trellis_context_id: Option<String>,
 ) -> Result<(), String> {
     let registry = app.state::<ClaudeSessionRegistry>();
     let app_clone = app.clone();
@@ -1643,6 +1649,7 @@ pub(crate) async fn execute_claude_code(
         model_for_cmd,
         &[],
         bare.unwrap_or(false),
+        trellis_context_id.as_deref(),
     )?;
     let model_label = model
         .as_deref()
@@ -1677,6 +1684,7 @@ pub(crate) async fn resume_claude_code(
     connection_mode: Option<String>,
     concurrency_scope_key: Option<String>,
     concurrency_limit: Option<u32>,
+    trellis_context_id: Option<String>,
 ) -> Result<(), String> {
     let process_state = app.state::<ClaudeProcessState>();
     kill_active_claude_run_for_session(&process_state, &session_id).await;
@@ -1690,6 +1698,7 @@ pub(crate) async fn resume_claude_code(
         model_for_cmd,
         &["-r", &session_id],
         false,
+        trellis_context_id.as_deref(),
     )?;
     let model_label = model
         .as_deref()

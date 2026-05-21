@@ -74,6 +74,94 @@ are long-running flows. They need explicit lifecycle handling:
 
 Do not block the UI on a command that can stream or emit progress.
 
+## Scenario: Claude Main Session Trellis Context
+
+### 1. Scope / Trigger
+
+- Trigger: Wise-launched interactive Claude Code sessions must preserve the
+  Trellis active-task pointer across `-p` / resume subprocess launches.
+- Applies to GUI main-chat starts and resumes only. Bare orchestration paths
+  such as PRD split and direct OMC batch dispatch stay unbound unless they
+  explicitly own an active-task context.
+
+### 2. Signatures
+
+- Frontend: `executeClaudeCode(..., bare?: boolean, trellisContextId?: string)`.
+- Frontend: `resumeClaudeCode(..., concurrencyLimit?: number, trellisContextId?: string)`.
+- Rust command args:
+  - `execute_claude_code(..., bare: Option<bool>, trellis_context_id: Option<String>)`.
+  - `resume_claude_code(..., trellis_context_id: Option<String>)`.
+- Rust process builder: `create_claude_command(..., bare: bool, trellis_context_id: Option<&str>)`.
+
+### 3. Contracts
+
+- Frontend payload field is `trellisContextId`; Rust receives
+  `trellis_context_id` through Tauri camelCase mapping.
+- `src/hooks/useClaudeSessions.ts` owns a stable tab/session to context-id map
+  in app settings under `wise.claudeTrellisContextBindings.v1`.
+- When a Claude tab id migrates to the real Claude `session_id`, copy the same
+  context id to the real session id before the next resume.
+- Rust writes non-empty `trellis_context_id` to the child environment as
+  `TRELLIS_CONTEXT_ID`.
+- Do not append this value to the prompt. Trellis hooks read environment and
+  `.trellis/.runtime/sessions/`; prompt text is not the active-task store.
+
+### 4. Validation & Error Matrix
+
+- Empty or whitespace `trellisContextId` -> send `null` / omit env var.
+- `bare=true` with no explicit context -> send `trellisContextId: null`.
+- Missing stored binding for an old tab -> derive `wise_<tabSessionId>` and
+  persist it before launch.
+- App setting JSON parse failure -> reset the in-memory map and continue.
+
+### 5. Good/Base/Bad Cases
+
+- Good: main Workspace chat starts with `trellisContextId`, creates/starts a
+  Trellis task, then resume uses the same context after Claude `session_id`
+  migration.
+- Base: no active Trellis task exists; hook emits `no_task` for that stable
+  context and normal chat still works.
+- Bad: PRD split bare dispatch inherits the main session context and mutates the
+  wrong `.trellis/.runtime/sessions/<context>.json`.
+
+### 6. Tests Required
+
+- Service wrapper test asserts `execute_claude_code` and `resume_claude_code`
+  receive trimmed `trellisContextId`.
+- Service wrapper test asserts bare dispatch defaults to `trellisContextId:
+  null`.
+- Rust check must compile the extended command signatures.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+await executeClaudeCode(repoPath, prompt, model, invocationKey, "oneshot");
+```
+
+This relies on Claude hook payloads or single-session fallback to identify the
+Trellis session.
+
+#### Correct
+
+```ts
+await executeClaudeCode(
+  repoPath,
+  prompt,
+  model,
+  invocationKey,
+  "oneshot",
+  scopeKey,
+  limit,
+  false,
+  resolveTrellisContextId(tabSessionId),
+);
+```
+
+The spawned Claude process now has `TRELLIS_CONTEXT_ID`, so Trellis hooks and
+`task.py start/current/finish` resolve the same session-scoped active task.
+
 ---
 
 ## Events

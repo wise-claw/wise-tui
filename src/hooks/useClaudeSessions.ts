@@ -122,6 +122,12 @@ function generateId() {
   return `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function trellisContextIdForTab(tabSessionId: string): string {
+  return `wise_${tabSessionId}`;
+}
+
+const TRELLIS_CONTEXT_BINDING_STORAGE_KEY = "wise.claudeTrellisContextBindings.v1";
+
 /** stdin 已不可写时，将选择题答案改写成一条用户消息，走 resume/execute 继续同一会话（正文仅含所选文案，便于模型直接接着做） */
 function buildQuestionFallbackUserPrompt(qr: QuestionRequest, answers: string[], customAnswer?: string): string {
   const byValue = new Map(qr.options.map((o) => [o.value, o.label.trim() || o.value]));
@@ -145,6 +151,11 @@ const CLAUDE_STREAM_RUNTIME_READY_POLL_MS = 40;
 function persistWorkflowBindings(map: Map<string, string>): void {
   const payload = Object.fromEntries(Array.from(map.entries()));
   void setAppSetting(WORKFLOW_BINDING_STORAGE_KEY, JSON.stringify(payload));
+}
+
+function persistTrellisContextBindings(map: Map<string, string>): void {
+  const payload = Object.fromEntries(Array.from(map.entries()));
+  void setAppSetting(TRELLIS_CONTEXT_BINDING_STORAGE_KEY, JSON.stringify(payload));
 }
 
 function markClaudeRegistryBootstrapWarmup(
@@ -376,6 +387,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   const [sessions, setSessions] = useState<ClaudeSession[]>([]);
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
+  const [trellisContextBindingsHydrated, setTrellisContextBindingsHydrated] = useState(false);
   const onClaudeTurnCompleteRef = useRef(options?.onClaudeTurnComplete);
   onClaudeTurnCompleteRef.current = options?.onClaudeTurnComplete;
   const onSessionTabIdMigratedRef = useRef(options?.onSessionTabIdMigrated);
@@ -395,6 +407,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   const claudeInvocationInflightRef = useRef(
     new Map<string, { tabId: string; detach: () => void }>(),
   );
+  const trellisContextIdBySessionRef = useRef<Map<string, string>>(new Map());
 
   const detachClaudeInvocationsForSessionKey = useCallback((closedId: string) => {
     const ids = new Set<string>([closedId]);
@@ -403,6 +416,10 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     for (const [temp, real] of sessionIdMapRef.current.entries()) {
       if (real === closedId) ids.add(temp);
     }
+    for (const id of ids) {
+      trellisContextIdBySessionRef.current.delete(id);
+    }
+    persistTrellisContextBindings(trellisContextIdBySessionRef.current);
     for (const [, meta] of [...claudeInvocationInflightRef.current.entries()]) {
       if (ids.has(meta.tabId)) {
         meta.detach();
@@ -416,6 +433,22 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         meta.tabId = toClaudeSessionId;
       }
     }
+  }, []);
+
+  const resolveTrellisContextId = useCallback((tabSessionId: string, claudeSessionId?: string | null): string => {
+    const existing =
+      trellisContextIdBySessionRef.current.get(tabSessionId) ??
+      (claudeSessionId ? trellisContextIdBySessionRef.current.get(claudeSessionId) : undefined);
+    if (existing) {
+      return existing;
+    }
+    const created = trellisContextIdForTab(tabSessionId);
+    trellisContextIdBySessionRef.current.set(tabSessionId, created);
+    if (claudeSessionId?.trim()) {
+      trellisContextIdBySessionRef.current.set(claudeSessionId.trim(), created);
+    }
+    persistTrellisContextBindings(trellisContextIdBySessionRef.current);
+    return created;
   }, []);
 
   /** 整页刷新 / 离开前释放 invocation 监听（关标签仍走 `closeSession`）。 */
@@ -497,6 +530,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             "oneshot",
             sk,
             lim,
+            resolveTrellisContextId(tabSessionId, resumeClaudeSid),
           );
         } else {
           await executeClaudeCode(
@@ -507,6 +541,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             "oneshot",
             sk,
             lim,
+            undefined,
+            resolveTrellisContextId(tabSessionId),
           );
         }
       } catch (e) {
@@ -514,7 +550,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         throw e;
       }
     },
-    [],
+    [resolveTrellisContextId],
   );
 
   /** 与本轮用户发送绑定，用于 `serverMsgId` 去重（单调递增，避免多会话同时发送撞号）。 */
@@ -765,6 +801,37 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   useEffect(() => {
     let cancelled = false;
     void (async () => {
+      const raw = await getAppSetting(TRELLIS_CONTEXT_BINDING_STORAGE_KEY);
+      if (cancelled) return;
+      if (!raw) {
+        trellisContextIdBySessionRef.current = new Map();
+        return;
+      }
+      try {
+        const parsed = JSON.parse(raw) as Record<string, string>;
+        trellisContextIdBySessionRef.current = new Map(
+          Object.entries(parsed).filter((entry): entry is [string, string] => {
+            const [sessionId, contextId] = entry;
+            return typeof sessionId === "string" && sessionId.trim().length > 0 && contextId.trim().length > 0;
+          }),
+        );
+      } catch {
+        trellisContextIdBySessionRef.current = new Map();
+      }
+    })().finally(() => {
+      if (!cancelled) {
+        setTrellisContextBindingsHydrated(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!trellisContextBindingsHydrated) return;
+    let cancelled = false;
+    void (async () => {
       try {
         const data = await loadSessionTabsState();
         if (cancelled) return;
@@ -779,10 +846,26 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             const cfg = modelByPath.get(s.repositoryPath);
             return cfg ? { ...s, model: cfg } : s;
           });
+          let trellisContextChanged = false;
           for (const s of normalizedWithModels) {
+            const contextId =
+              trellisContextIdBySessionRef.current.get(s.id) ??
+              (s.claudeSessionId ? trellisContextIdBySessionRef.current.get(s.claudeSessionId) : undefined) ??
+              trellisContextIdForTab(s.id);
+            if (trellisContextIdBySessionRef.current.get(s.id) !== contextId) {
+              trellisContextIdBySessionRef.current.set(s.id, contextId);
+              trellisContextChanged = true;
+            }
+            if (s.claudeSessionId?.trim() && trellisContextIdBySessionRef.current.get(s.claudeSessionId.trim()) !== contextId) {
+              trellisContextIdBySessionRef.current.set(s.claudeSessionId.trim(), contextId);
+              trellisContextChanged = true;
+            }
             if (s.claudeSessionId && s.messages.length > 0) {
               diskLoadDoneRef.current.add(s.id);
             }
+          }
+          if (trellisContextChanged) {
+            persistTrellisContextBindings(trellisContextIdBySessionRef.current);
           }
           const active =
             data.activeSessionId && normalizedWithModels.some((x) => x.id === data.activeSessionId)
@@ -798,7 +881,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [trellisContextBindingsHydrated]);
 
   useEffect(() => {
     let cancelled = false;
@@ -901,6 +984,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           nonceMap.delete(fromTabId);
           nonceMap.set(toClaudeSessionId, pendingNonce);
         }
+        const trellisContextId =
+          trellisContextIdBySessionRef.current.get(fromTabId) ?? trellisContextIdForTab(fromTabId);
+        trellisContextIdBySessionRef.current.set(fromTabId, trellisContextId);
+        trellisContextIdBySessionRef.current.set(toClaudeSessionId, trellisContextId);
+        persistTrellisContextBindings(trellisContextIdBySessionRef.current);
         migrateClaudeInvocationTabId(fromTabId, toClaudeSessionId);
         onSessionTabIdMigratedRef.current?.(fromTabId, toClaudeSessionId);
       },
@@ -1139,6 +1227,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         sessionsRef.current = next;
         return next;
       });
+      trellisContextIdBySessionRef.current.set(id, trellisContextIdForTab(id));
+      persistTrellisContextBindings(trellisContextIdBySessionRef.current);
       if (!opts?.skipActivate) {
         setActiveSessionId(id);
       }

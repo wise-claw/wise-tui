@@ -1200,13 +1200,18 @@ export function ClaudeChat({
   // Auto-scroll messages（流式时 messages 极高频更新；仅贴底时跟随 + rAF 写 scrollTop，避免与用户滚动打架）
   const autoScrollThrottleRef = useRef<{ timer?: number; lastAt: number }>({ lastAt: 0 });
   const AUTOSCROLL_THROTTLE_MS = 120;
+  /** 用户滚动后暂停自动跟随的时间（毫秒） */
+  const PAUSE_AFTER_USER_SCROLL_MS = 1500;
 
   /** 消息列表滚动容器：用 scrollTop 贴底，避免 scrollIntoView 触发布局与祖先滚动链，减轻手动滚动时卡顿 */
   const messagesScrollRef = useRef<HTMLDivElement>(null);
-  /** 用户是否在底部附近；上滑阅读历史后为 false，流式输出不再抢滚动 */
+  /** 用户是否想贴底；用户滚动时短暂暂停，暂停期结束后自动恢复 */
   const pinToBottomRef = useRef(true);
+  /** 暂停自动滚动的截止时间（毫秒时间戳） */
+  const pauseUntilRef = useRef(0);
+  /** 记录上一次的 scrollTop，用于判断用户滚动方向 */
+  const lastScrollTopRef = useRef(0);
   const lastUserMessagePinIdRef = useRef<number | null>(null);
-  const MESSAGES_PIN_THRESHOLD_PX = 80;
 
   const [fullTranscriptLoading, setFullTranscriptLoading] = useState(false);
 
@@ -1230,6 +1235,7 @@ export function ClaudeChat({
     }
     autoScrollThrottleRef.current.lastAt = 0;
     pinToBottomRef.current = true;
+    pauseUntilRef.current = 0;
     lastUserMessagePinIdRef.current = null;
   }, [session.id]);
 
@@ -1241,6 +1247,8 @@ export function ClaudeChat({
     if (lastUserMessagePinIdRef.current === last.id) return;
     lastUserMessagePinIdRef.current = last.id;
     pinToBottomRef.current = true;
+    // 发送新消息时清除暂停状态
+    pauseUntilRef.current = 0;
   }, [session.messages]);
 
   useLayoutEffect(() => {
@@ -1248,62 +1256,107 @@ export function ClaudeChat({
     const sc = messagesScrollRef.current;
     if (!sc) return;
     let pinRaf = 0;
-    const syncPin = () => {
-      const dist = sc.scrollHeight - sc.scrollTop - sc.clientHeight;
-      pinToBottomRef.current = dist <= MESSAGES_PIN_THRESHOLD_PX;
-    };
+
+    // 初始化：记录当前 scrollTop
+    lastScrollTopRef.current = sc.scrollTop;
+
     const onScroll = () => {
       if (pinRaf !== 0) return;
       pinRaf = window.requestAnimationFrame(() => {
         pinRaf = 0;
-        syncPin();
+        const currentScrollTop = sc.scrollTop;
+        const prevScrollTop = lastScrollTopRef.current;
+
+        // 用户主动滚动时，暂停自动跟随一段时间
+        if (Math.abs(currentScrollTop - prevScrollTop) > 3) {
+          // 用户滚动幅度超过 3px，视为主动滚动
+          pauseUntilRef.current = Date.now() + PAUSE_AFTER_USER_SCROLL_MS;
+        }
+
+        lastScrollTopRef.current = currentScrollTop;
       });
     };
     sc.addEventListener("scroll", onScroll, { passive: true });
-    syncPin();
+    // 初始时默认贴底
+    pinToBottomRef.current = true;
     return () => {
       sc.removeEventListener("scroll", onScroll);
       if (pinRaf !== 0) window.cancelAnimationFrame(pinRaf);
     };
   }, [session.id, hideMessages]);
 
-  useEffect(() => {
+  /** 自动滚动：在 useLayoutEffect 中同步执行，确保浏览器绘制前完成滚动，避免视觉跳动 */
+  useLayoutEffect(() => {
     if (hideMessages) return;
     const sc = messagesScrollRef.current;
-    if (!sc || !pinToBottomRef.current) return;
+    if (!sc) return;
 
-    const runScroll = () => {
-      if (!pinToBottomRef.current) return;
-      sc.scrollTop = sc.scrollHeight;
-      autoScrollThrottleRef.current.lastAt = Date.now();
-    };
-
-    const throttled = session.status === "running" || session.status === "connecting";
-    if (!throttled) {
-      if (autoScrollThrottleRef.current.timer != null) {
-        window.clearTimeout(autoScrollThrottleRef.current.timer);
-        autoScrollThrottleRef.current.timer = undefined;
-      }
-      const raf = window.requestAnimationFrame(runScroll);
-      return () => window.cancelAnimationFrame(raf);
+    // 检查是否在暂停期内
+    const now = Date.now();
+    if (now < pauseUntilRef.current) {
+      // 用户刚滚动过，暂停自动跟随
+      return;
     }
 
-    const now = Date.now();
-    const { lastAt, timer } = autoScrollThrottleRef.current;
-    if (now - lastAt >= AUTOSCROLL_THROTTLE_MS) {
+    // 暂停期结束，恢复自动跟随
+    pinToBottomRef.current = true;
+
+    const throttled = session.status === "running" || session.status === "connecting";
+
+    // 流式输出时使用节流，非流式时直接滚动
+    if (throttled) {
+      const { lastAt, timer } = autoScrollThrottleRef.current;
+      if (now - lastAt < AUTOSCROLL_THROTTLE_MS) {
+        // 还在节流窗口内，不滚动（由 setTimeout 回调处理）
+        return;
+      }
       if (timer != null) {
         window.clearTimeout(timer);
         autoScrollThrottleRef.current.timer = undefined;
       }
-      const raf = window.requestAnimationFrame(runScroll);
-      return () => window.cancelAnimationFrame(raf);
+    } else {
+      if (autoScrollThrottleRef.current.timer != null) {
+        window.clearTimeout(autoScrollThrottleRef.current.timer);
+        autoScrollThrottleRef.current.timer = undefined;
+      }
     }
-    if (timer == null) {
+
+    // 同步滚动到底部
+    sc.scrollTop = sc.scrollHeight;
+    autoScrollThrottleRef.current.lastAt = now;
+  }, [session.messages, session.status, hideMessages]);
+
+  /** 流式输出时的节流 setTimeout：确保节流窗口结束后仍有一次滚动机会 */
+  useEffect(() => {
+    if (hideMessages) return;
+    const sc = messagesScrollRef.current;
+    if (!sc) return;
+
+    const throttled = session.status === "running" || session.status === "connecting";
+    if (!throttled) return;
+
+    const now = Date.now();
+
+    // 检查是否在暂停期内
+    if (now < pauseUntilRef.current) {
+      return;
+    }
+
+    const { lastAt, timer } = autoScrollThrottleRef.current;
+    const remaining = AUTOSCROLL_THROTTLE_MS - (now - lastAt);
+
+    if (remaining > 0 && timer == null) {
       autoScrollThrottleRef.current.timer = window.setTimeout(() => {
         autoScrollThrottleRef.current.timer = undefined;
-        window.requestAnimationFrame(runScroll);
-      }, AUTOSCROLL_THROTTLE_MS - (now - lastAt));
+        // 再次检查暂停状态
+        if (Date.now() < pauseUntilRef.current) return;
+        const scNow = messagesScrollRef.current;
+        if (!scNow) return;
+        scNow.scrollTop = scNow.scrollHeight;
+        autoScrollThrottleRef.current.lastAt = Date.now();
+      }, remaining);
     }
+
     return () => {
       const t2 = autoScrollThrottleRef.current.timer;
       if (t2 != null) {
