@@ -1,4 +1,7 @@
-import { SESSION_QUICK_BUILTIN_ASSISTANTS } from "./sessionQuickBuiltinAssistants";
+import {
+  SESSION_QUICK_BUILTIN_ASSISTANTS,
+  type SessionQuickBuiltinAssistantId,
+} from "./sessionQuickBuiltinAssistants";
 
 export const SESSION_QUICK_ACTIONS_LAYOUT_STORAGE_KEY = "wise.session.quickActionsLayout.v2";
 /** @deprecated 读取后迁移到 v2，并确保「需求」外显 */
@@ -8,9 +11,7 @@ export type SessionQuickActionId =
   | "new-session"
   | "push"
   | "compact-context"
-  | "builtin:prd-split"
-  | "builtin:word-doc"
-  | "builtin:ppt-deck"
+  | SessionQuickBuiltinAssistantId
   | "work-trajectory"
   | "work-tree";
 
@@ -33,21 +34,30 @@ export interface SessionQuickActionMeta {
   pillLabel: string;
 }
 
-function builtinMeta(id: SessionQuickActionId, menuLabel: string): SessionQuickActionMeta {
+function builtinMeta(id: SessionQuickBuiltinAssistantId, menuLabel: string): SessionQuickActionMeta {
+  const pillLabel =
+    id === "builtin:prd-split"
+      ? "需求"
+      : menuLabel.replace(/助手$/, "") || menuLabel;
   return {
     id,
-    label: menuLabel,
-    pillLabel: menuLabel.replace(/助手$/, "") || menuLabel,
+    label: id === "builtin:prd-split" ? "需求" : menuLabel,
+    pillLabel,
   };
 }
+
+const BUILTIN_QUICK_ACTION_META = Object.fromEntries(
+  SESSION_QUICK_BUILTIN_ASSISTANTS.map((row) => [
+    row.id,
+    builtinMeta(row.id, row.menuLabel),
+  ]),
+) as Record<SessionQuickBuiltinAssistantId, SessionQuickActionMeta>;
 
 export const SESSION_QUICK_ACTION_META: Record<SessionQuickActionId, SessionQuickActionMeta> = {
   "new-session": { id: "new-session", label: "新建会话", pillLabel: "新建会话" },
   push: { id: "push", label: "推送", pillLabel: "推送" },
   "compact-context": { id: "compact-context", label: "压缩上下文", pillLabel: "压缩上下文" },
-  "builtin:prd-split": { id: "builtin:prd-split", label: "需求", pillLabel: "需求" },
-  "builtin:word-doc": builtinMeta("builtin:word-doc", SESSION_QUICK_BUILTIN_ASSISTANTS[1].menuLabel),
-  "builtin:ppt-deck": builtinMeta("builtin:ppt-deck", SESSION_QUICK_BUILTIN_ASSISTANTS[2].menuLabel),
+  ...BUILTIN_QUICK_ACTION_META,
   "work-trajectory": { id: "work-trajectory", label: "工作轨迹", pillLabel: "工作轨迹" },
   "work-tree": { id: "work-tree", label: "工作树", pillLabel: "工作树" },
 };
@@ -57,9 +67,7 @@ export const SESSION_QUICK_ACTION_CATALOG_ORDER: SessionQuickActionId[] = [
   "new-session",
   "push",
   "compact-context",
-  "builtin:prd-split",
-  "builtin:word-doc",
-  "builtin:ppt-deck",
+  ...SESSION_QUICK_BUILTIN_ASSISTANTS.map((row) => row.id),
   "work-trajectory",
   "work-tree",
 ];
@@ -73,6 +81,11 @@ export const DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT: SessionQuickActionsLayoutV1 =
     { id: "compact-context", visible: false, zone: "overflow" },
     { id: "builtin:word-doc", visible: true, zone: "overflow" },
     { id: "builtin:ppt-deck", visible: true, zone: "overflow" },
+    { id: "builtin:excel-data", visible: true, zone: "overflow" },
+    { id: "builtin:code-review", visible: true, zone: "overflow" },
+    { id: "builtin:tech-docs", visible: true, zone: "overflow" },
+    { id: "builtin:test-gen", visible: true, zone: "overflow" },
+    { id: "builtin:release-notes", visible: true, zone: "overflow" },
     { id: "work-trajectory", visible: true, zone: "overflow" },
     { id: "work-tree", visible: true, zone: "overflow" },
   ],

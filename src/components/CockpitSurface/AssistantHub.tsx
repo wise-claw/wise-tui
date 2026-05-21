@@ -71,12 +71,12 @@ export function AssistantHub({
       }),
     [builtinAssistants],
   );
+  const engineeringAssistants = useMemo(
+    () => builtinAssistants.filter((assistant) => resolveAssistantKind(assistant) === "engineering"),
+    [builtinAssistants],
+  );
   const builtinGeneralAssistants = useMemo(
-    () =>
-      builtinAssistants.filter((assistant) => {
-        const kind = resolveAssistantKind(assistant);
-        return kind !== "trellis-orchestration" && kind !== "office-doc" && kind !== "office-deck" && kind !== "skill-artifact";
-      }),
+    () => builtinAssistants.filter((assistant) => resolveAssistantKind(assistant) === "general"),
     [builtinAssistants],
   );
 
@@ -120,6 +120,22 @@ export function AssistantHub({
                 assistant={assistant}
                 disabled={false}
                 disabledHint={activeProjectId ? undefined : "未选择工作区时会先进入助手空态"}
+                onSelect={() => onSelectAssistant(assistant.id)}
+                onOpenSettings={() => onOpenAssistantSettings(assistant.id)}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {engineeringAssistants.length > 0 ? (
+        <section className="cockpit-hub__section">
+          <h2 className="cockpit-hub__section-title">研发助手</h2>
+          <div className="cockpit-hub__grid">
+            {engineeringAssistants.map((assistant) => (
+              <AssistantCard
+                key={assistant.id}
+                assistant={assistant}
                 onSelect={() => onSelectAssistant(assistant.id)}
                 onOpenSettings={() => onOpenAssistantSettings(assistant.id)}
               />
@@ -280,6 +296,8 @@ function cardSourceLabel(source: AssistantEntry["source"], kind: AssistantKind):
     case "office-deck":
     case "skill-artifact":
       return "Wise 内置 Skill";
+    case "engineering":
+      return "Wise 研发助手";
     case "general":
       return "Wise 内置";
   }

@@ -1,9 +1,14 @@
 import {
   AppstoreOutlined,
+  AuditOutlined,
+  BookOutlined,
   CommentOutlined,
+  ExperimentOutlined,
+  FileExcelOutlined,
   FileTextOutlined,
   FileWordOutlined,
   FundProjectionScreenOutlined,
+  RocketOutlined,
   SettingOutlined,
   UnorderedListOutlined,
 } from "@ant-design/icons";
@@ -16,6 +21,7 @@ import {
   type SessionQuickActionsAvailability,
   type SessionQuickActionsLayoutV1,
 } from "../../constants/sessionQuickActionsLayout";
+import { isSessionQuickBuiltinAssistantId } from "../../constants/sessionQuickBuiltinAssistants";
 import { useSessionQuickActionsLayout } from "../../hooks/useSessionQuickActionsLayout";
 import { SessionQuickActionsCustomizeModal } from "./SessionQuickActionsCustomizeModal";
 
@@ -34,18 +40,17 @@ const ACTION_MENU_ICONS: Partial<Record<SessionQuickActionId, ReactNode>> = {
   "builtin:prd-split": <FileTextOutlined />,
   "builtin:word-doc": <FileWordOutlined />,
   "builtin:ppt-deck": <FundProjectionScreenOutlined />,
+  "builtin:excel-data": <FileExcelOutlined />,
+  "builtin:code-review": <AuditOutlined />,
+  "builtin:tech-docs": <BookOutlined />,
+  "builtin:test-gen": <ExperimentOutlined />,
+  "builtin:release-notes": <RocketOutlined />,
   "work-trajectory": <UnorderedListOutlined />,
   "work-tree": <AppstoreOutlined />,
 };
 
-const BUILTIN_ASSISTANT_IDS = new Set<SessionQuickActionId>([
-  "builtin:prd-split",
-  "builtin:word-doc",
-  "builtin:ppt-deck",
-]);
-
-function isBuiltinAssistantId(id: SessionQuickActionId): id is "builtin:prd-split" | "builtin:word-doc" | "builtin:ppt-deck" {
-  return BUILTIN_ASSISTANT_IDS.has(id);
+function isBuiltinAssistantQuickAction(id: SessionQuickActionId): boolean {
+  return isSessionQuickBuiltinAssistantId(id);
 }
 
 export function SessionQuickActionsBar({
@@ -97,7 +102,7 @@ export function SessionQuickActionsBar({
         </div>
       );
     }
-    if (isBuiltinAssistantId(id)) {
+    if (isBuiltinAssistantQuickAction(id)) {
       const iconTone = id === "builtin:prd-split" ? "orange" : "neutral";
       return (
         <button
@@ -142,7 +147,7 @@ export function SessionQuickActionsBar({
   const overflowMenuItems: MenuProps["items"] = useMemo(() => {
     const items: MenuProps["items"] = overflow.map((id) => {
       const meta = SESSION_QUICK_ACTION_META[id];
-      if (isBuiltinAssistantId(id)) {
+      if (isBuiltinAssistantQuickAction(id)) {
         return {
           key: id,
           label: meta.label,

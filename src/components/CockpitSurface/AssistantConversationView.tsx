@@ -16,6 +16,7 @@ import {
 } from "../../services/assistantPromptLayers";
 import { readSkillInstruction, type SkillInstruction } from "../../services/skills";
 import type { AssistantEntry } from "../../types/assistant";
+import { builtinAssistantBriefPlaceholder } from "../../constants/builtinAssistantBriefPlaceholders";
 import {
   assistantRefsToBundleItems,
   buildArtifactAssistantBrief,
@@ -292,9 +293,7 @@ function ArtifactAssistantWorkspace({
           value={request}
           onChange={(event) => setRequest(event.target.value)}
           rows={5}
-          placeholder={assistant.id === "builtin:ppt-deck"
-            ? "例如：根据这份商业计划书做 12 页融资路演 PPT，风格深色高对比，保留数据图表。"
-            : "例如：根据会议纪要生成一份正式项目复盘 Word 报告，包含摘要、问题、行动项和附件清单。"}
+          placeholder={builtinAssistantBriefPlaceholder(assistant.id)}
         />
         <pre className="assistant-artifact-workspace__brief-preview">{executionBrief}</pre>
         {enabledSkills.length === 0 ? (
