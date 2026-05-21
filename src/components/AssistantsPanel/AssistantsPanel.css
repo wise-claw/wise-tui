@@ -1,0 +1,123 @@
+.author-panel-page--hub-body .author-panel-page__body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.author-panel-page--hub-body .app-assistants-hub-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 0 12px;
+}
+
+.author-panel .app-assistants-panel {
+  min-height: calc(100vh - 160px);
+}
+
+.app-assistants-hub-root {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  padding: 10px 12px 16px;
+  overflow: auto;
+  background: var(--ant-color-bg-layout);
+}
+
+.app-assistants-hub-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.app-assistants-hub-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.app-assistants-hub-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  min-width: 0;
+  flex: 1;
+}
+
+.app-assistants-hub-subtitle {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-assistants-hub-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.app-assistants-hub-close-btn {
+  flex-shrink: 0;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-assistants-hub-close-btn:hover {
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-tertiary);
+}
+
+.app-assistants-hub-filters {
+  flex-shrink: 0;
+}
+
+.app-assistants-hub-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+}
+
+.app-assistants-hub-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+}
+
+.app-assistants-hub__card-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.app-assistants-hub__card-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.app-assistants-hub__card-status-dot--ok {
+  background: var(--ant-color-success);
+}
+
+.app-assistants-hub__card-status-dot--warn {
+  background: var(--ant-color-warning);
+}
+
+.app-assistants-hub__card-status-dot--muted {
+  background: var(--ant-color-text-quaternary);
+}

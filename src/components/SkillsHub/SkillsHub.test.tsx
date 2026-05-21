@@ -59,9 +59,9 @@ describe("SkillsHub", () => {
     );
 
     expect(html).toContain("技能市场");
-    expect(html).toContain("公开目录");
-    expect(html).toContain("本机外部");
-    expect(html).toContain("扩展贡献");
-    expect(html).toContain("同步安装态");
+    expect(html).toContain("公开");
+    expect(html).toContain("本地");
+    expect(html).toContain("扩展");
+    expect(html).toContain("同步安装状态");
   });
 });

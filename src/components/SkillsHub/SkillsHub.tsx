@@ -1,12 +1,13 @@
 import {
   CloseOutlined,
+  DownloadOutlined,
   FolderOpenOutlined,
   LinkOutlined,
   ReloadOutlined,
   SearchOutlined,
   ToolOutlined,
 } from "@ant-design/icons";
-import { App, Alert, Button, Empty, Input, Segmented, Spin, Tag, Tooltip, Typography } from "antd";
+import { App, Alert, Button, Empty, Input, Segmented, Space, Spin, Tag, Tooltip, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { listClaudeProjectSkills, listClaudeUserSkills } from "../../services/claude";
 import {
@@ -43,6 +44,69 @@ function formatInstalls(n: number): string {
   return String(n);
 }
 
+function getSkillMeta(name: string) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const colors = [
+    { bg: "var(--ant-color-primary-bg)", border: "var(--ant-color-primary-border)", text: "var(--ant-color-primary)" }, // Theme Primary
+    { bg: "#F6FFED", border: "#B7EB8F", text: "#389E0D" }, // Green
+    { bg: "#FFF7E6", border: "#FFE7BA", text: "#D46B08" }, // Orange
+    { bg: "#F9F0FF", border: "#D3ADF7", text: "#531DAB" }, // Purple
+    { bg: "#FFF0F6", border: "#FFADD2", text: "#C41D7F" }, // Magenta
+    { bg: "#E6FFFB", border: "#87E8DE", text: "#08979C" }, // Cyan
+    { bg: "#FFF1F0", border: "#FFA39E", text: "#CF1322" }, // Red
+  ];
+  const idx = Math.abs(hash) % colors.length;
+  return colors[idx];
+}
+
+const RECOMMENDED_SKILLS: SkillsShSkillEntry[] = [
+  {
+    id: "source-command-prd-task-splitter",
+    skillId: "prd-task-splitter",
+    name: "PRD 任务拆解器",
+    installs: 12450,
+    source: "official",
+  },
+  {
+    id: "source-command-subject-multilingual-extractor",
+    skillId: "subject-multilingual-extractor",
+    name: "多语言主题提取器",
+    installs: 8920,
+    source: "official",
+  },
+  {
+    id: "source-command-weather-query",
+    skillId: "weather-query",
+    name: "天气智能查询助手",
+    installs: 6310,
+    source: "official",
+  },
+  {
+    id: "source-command-cc-workflow-ai-editor",
+    skillId: "cc-workflow-ai-editor",
+    name: "AI 工作流设计器",
+    installs: 15800,
+    source: "official",
+  },
+  {
+    id: "trellis-brainstorm",
+    skillId: "trellis-brainstorm",
+    name: "需求脑暴专家",
+    installs: 23100,
+    source: "trellis",
+  },
+  {
+    id: "trellis-check",
+    skillId: "trellis-check",
+    name: "质量检查官",
+    installs: 19400,
+    source: "trellis",
+  },
+];
+
 type HubMode = "registry" | "external" | "extension";
 
 export function SkillsHub({ repositoryPath, onClose }: Props) {
@@ -71,6 +135,17 @@ export function SkillsHub({ repositoryPath, onClose }: Props) {
   // Extension-contributed skills (read-only)
   const [extSkills, setExtSkills] = useState<ResolvedSkill[]>([]);
   const [extLoading, setExtLoading] = useState(false);
+
+  const filteredExtSkills = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return extSkills;
+    return extSkills.filter(
+      (s) =>
+        s.name.toLowerCase().includes(q) ||
+        (s.description || "").toLowerCase().includes(q) ||
+        s.extension.toLowerCase().includes(q)
+    );
+  }, [extSkills, query]);
 
   const refreshExtSkills = useCallback(async () => {
     setExtLoading(true);
@@ -348,70 +423,114 @@ export function SkillsHub({ repositoryPath, onClose }: Props) {
             ) : null}
           </div>
         ) : null}
-        <Segmented<HubMode>
-          size="small"
-          value={hubMode}
-          onChange={(v) => setHubMode(v)}
-          options={[
-            { label: `公开目录 · ${debouncedQuery.length >= 2 ? results.length : installedNames.size}`, value: "registry" },
-            { label: `本机外部 · ${externalSkillTotal}`, value: "external" },
-            { label: `扩展贡献 · ${extSkills.length}`, value: "extension" },
-          ]}
-        />
-        <div className="app-skills-hub-scope-row">
-          <span className="app-skills-hub-scope-label">安装范围</span>
-          <Segmented<SkillsInstallScope>
+
+        <div className="app-skills-hub-toolbar-top">
+          <Segmented<HubMode>
             size="small"
-            value={installScope}
-            onChange={(v) => setInstallScope(v)}
-            className="app-skills-hub-scope-segmented"
+            value={hubMode}
+            onChange={(v) => setHubMode(v)}
+            className="app-skills-hub-mode-segmented"
             options={[
-              { label: "当前仓库", value: "project" },
-              { label: "全局（用户）", value: "global" },
+              { label: `🌐 公开 (${debouncedQuery.length >= 2 ? results.length : installedNames.size})`, value: "registry" },
+              { label: `💻 本地 (${externalSkillTotal})`, value: "external" },
+              { label: `🔌 扩展 (${extSkills.length})`, value: "extension" },
             ]}
-            disabled={hubMode === "external"}
           />
-        </div>
-        {hubMode === "extension" ? (
-          <div className="app-skills-hub-search-row">
-            <Button size="small" icon={<ReloadOutlined />} loading={extLoading} onClick={() => void refreshExtSkills()}>
-              刷新扩展贡献
-            </Button>
-          </div>
-        ) : (
-          <div className="app-skills-hub-search-row">
-            <Input
-              allowClear
+          {hubMode !== "external" ? (
+            <Segmented<SkillsInstallScope>
               size="small"
-              prefix={<SearchOutlined />}
-              placeholder={
-                hubMode === "registry" ? "搜索公开技能（至少 2 个字符）…" : "粘贴新的外部技能目录"
-              }
-              value={hubMode === "registry" ? query : newPathInput}
-              onChange={(e) =>
-                hubMode === "registry" ? setQuery(e.target.value) : setNewPathInput(e.target.value)
-              }
-              onPressEnter={hubMode === "external" ? () => void handleAddExternalPath() : undefined}
-              className="app-skills-hub-search"
+              value={installScope}
+              onChange={(v) => setInstallScope(v)}
+              className="app-skills-hub-scope-segmented"
+              options={[
+                { label: "项目", value: "project" },
+                { label: "全局", value: "global" },
+              ]}
             />
-            {hubMode === "registry" ? (
-              <Button size="small" icon={<ReloadOutlined />} loading={listLoading} onClick={() => void loadInstalled()}>
-                同步安装态
+          ) : null}
+        </div>
+
+        <div className="app-skills-hub-toolbar-bottom">
+          {hubMode === "registry" ? (
+            <Space.Compact style={{ width: "100%" }}>
+              <Input
+                allowClear
+                size="small"
+                prefix={<SearchOutlined />}
+                placeholder="搜索公开技能（至少 2 个字符）…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="app-skills-hub-search-input"
+              />
+              <Tooltip title="同步安装状态" mouseEnterDelay={0.35}>
+                <Button
+                  size="small"
+                  icon={<ReloadOutlined />}
+                  loading={listLoading}
+                  onClick={() => void loadInstalled()}
+                  aria-label="同步安装状态"
+                  className="app-skills-hub-refresh-btn"
+                />
+              </Tooltip>
+            </Space.Compact>
+          ) : hubMode === "external" ? (
+            <Space.Compact style={{ width: "100%" }}>
+              <Input
+                allowClear
+                size="small"
+                prefix={<SearchOutlined />}
+                placeholder="粘贴并添加新的外部技能路径…"
+                value={newPathInput}
+                onChange={(e) => setNewPathInput(e.target.value)}
+                onPressEnter={() => void handleAddExternalPath()}
+                className="app-skills-hub-search-input"
+              />
+              <Button
+                size="small"
+                type="primary"
+                disabled={!newPathInput.trim()}
+                onClick={() => void handleAddExternalPath()}
+              >
+                添加
               </Button>
-            ) : (
-              <>
-                <Button size="small" type="primary" disabled={!newPathInput.trim()} onClick={() => void handleAddExternalPath()}>
-                  添加路径
-                </Button>
-                <Button size="small" icon={<ReloadOutlined />} loading={externalLoading} onClick={() => void refreshExternalPaths()}>
-                  刷新外部目录
-                </Button>
-              </>
-            )}
-          </div>
-        )}
+              <Tooltip title="刷新外部目录" mouseEnterDelay={0.35}>
+                <Button
+                  size="small"
+                  icon={<ReloadOutlined />}
+                  loading={externalLoading}
+                  onClick={() => void refreshExternalPaths()}
+                  aria-label="刷新外部目录"
+                  className="app-skills-hub-refresh-btn"
+                />
+              </Tooltip>
+            </Space.Compact>
+          ) : (
+            <Space.Compact style={{ width: "100%" }}>
+              <Input
+                allowClear
+                size="small"
+                prefix={<SearchOutlined />}
+                placeholder="搜索已启用的扩展技能…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="app-skills-hub-search-input"
+              />
+              <Tooltip title="刷新扩展技能" mouseEnterDelay={0.35}>
+                <Button
+                  size="small"
+                  icon={<ReloadOutlined />}
+                  loading={extLoading}
+                  onClick={() => void refreshExtSkills()}
+                  aria-label="刷新扩展技能"
+                  className="app-skills-hub-refresh-btn"
+                />
+              </Tooltip>
+            </Space.Compact>
+          )}
+        </div>
       </header>
 
+      <div className="app-skills-hub-main">
       {hubMode === "registry" && installScope === "project" && !hasRepo ? (
         <Alert
           type="warning"
@@ -457,12 +576,26 @@ export function SkillsHub({ repositoryPath, onClose }: Props) {
               {results.map((entry) => {
                 const installed = installedNames.has(entry.skillId);
                 const busy = busySkillId === entry.skillId;
+                const meta = getSkillMeta(entry.name);
                 return (
                   <article key={entry.id} className="app-skills-hub-card">
-                    <div className="app-skills-hub-card-name">{entry.name}</div>
-                    <div className="app-skills-hub-card-meta">安装量约 {formatInstalls(entry.installs)}</div>
-                    <div className="app-skills-hub-card-source" title={entry.id}>
-                      {entry.source} · {entry.skillId}
+                    <div className="app-skills-hub-card-top-bar" style={{ background: `linear-gradient(90deg, ${meta.text} 0%, ${meta.border} 100%)` }} />
+                    <div className="app-skills-hub-card-header">
+                      <div className="app-skills-hub-card-avatar" style={{ backgroundColor: meta.bg, color: meta.text, borderColor: meta.border }}>
+                        {entry.name.slice(0, 1).toUpperCase()}
+                      </div>
+                      <div className="app-skills-hub-card-title-group">
+                        <div className="app-skills-hub-card-name" title={entry.name}>{entry.name}</div>
+                        <div className="app-skills-hub-card-source" title={entry.id}>
+                          {entry.source} · {entry.skillId}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="app-skills-hub-card-meta">
+                      <span className="app-skills-hub-installs">
+                        <DownloadOutlined style={{ fontSize: 11, marginRight: 4 }} />
+                        安装量约 {formatInstalls(entry.installs)}
+                      </span>
                     </div>
                     <div className="app-skills-hub-card-actions">
                       {installed ? (
@@ -472,8 +605,9 @@ export function SkillsHub({ repositoryPath, onClose }: Props) {
                           loading={busy}
                           disabled={!canInstallOrRemove || busy}
                           onClick={() => void handleUninstall(entry)}
+                          className="app-skills-hub-btn-uninstall"
                         >
-                          卸载
+                          卸载技能
                         </Button>
                       ) : (
                         <Button
@@ -482,8 +616,9 @@ export function SkillsHub({ repositoryPath, onClose }: Props) {
                           loading={busy}
                           disabled={!canInstallOrRemove || busy}
                           onClick={() => void handleInstall(entry)}
+                          className="app-skills-hub-btn-install"
                         >
-                          安装
+                          安装技能
                         </Button>
                       )}
                       <Typography.Link
@@ -492,23 +627,93 @@ export function SkillsHub({ repositoryPath, onClose }: Props) {
                         target="_blank"
                         rel="noreferrer"
                       >
-                        目录
-                        <LinkOutlined style={{ marginLeft: 4, fontSize: 10 }} />
+                        文档
+                        <LinkOutlined style={{ fontSize: 10 }} />
                       </Typography.Link>
                     </div>
                   </article>
                 );
               })}
             </div>
-          ) : (
+          ) : debouncedQuery.length >= 2 ? (
             <Empty className="app-skills-hub-empty" description={emptyHint} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          ) : (
+            <div className="app-skills-hub-recommendations">
+              <div className="app-skills-hub-section-title">
+                <span className="app-skills-hub-fire-icon">🔥</span> 热门推荐技能
+              </div>
+              <div className="app-skills-hub-grid">
+                {RECOMMENDED_SKILLS.map((entry) => {
+                  const installed = installedNames.has(entry.skillId);
+                  const busy = busySkillId === entry.skillId;
+                  const meta = getSkillMeta(entry.name);
+                  return (
+                    <article key={entry.id} className="app-skills-hub-card">
+                      <div className="app-skills-hub-card-top-bar" style={{ background: `linear-gradient(90deg, ${meta.text} 0%, ${meta.border} 100%)` }} />
+                      <div className="app-skills-hub-card-header">
+                        <div className="app-skills-hub-card-avatar" style={{ backgroundColor: meta.bg, color: meta.text, borderColor: meta.border }}>
+                          {entry.name.slice(0, 1).toUpperCase()}
+                        </div>
+                        <div className="app-skills-hub-card-title-group">
+                          <div className="app-skills-hub-card-name" title={entry.name}>{entry.name}</div>
+                          <div className="app-skills-hub-card-source" title={entry.id}>
+                            {entry.source} · {entry.skillId}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="app-skills-hub-card-meta">
+                        <span className="app-skills-hub-installs">
+                          <DownloadOutlined style={{ fontSize: 11, marginRight: 4 }} />
+                          载入量约 {formatInstalls(entry.installs)}
+                        </span>
+                      </div>
+                      <div className="app-skills-hub-card-actions">
+                        {installed ? (
+                          <Button
+                            size="small"
+                            danger
+                            loading={busy}
+                            disabled={!canInstallOrRemove || busy}
+                            onClick={() => void handleUninstall(entry)}
+                            className="app-skills-hub-btn-uninstall"
+                          >
+                            卸载技能
+                          </Button>
+                        ) : (
+                          <Button
+                            type="primary"
+                            size="small"
+                            loading={busy}
+                            disabled={!canInstallOrRemove || busy}
+                            onClick={() => void handleInstall(entry)}
+                            className="app-skills-hub-btn-install"
+                          >
+                            安装技能
+                          </Button>
+                        )}
+                        <Typography.Link
+                          className="app-skills-hub-card-link"
+                          href={`https://skills.sh/${entry.source}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          文档
+                          <LinkOutlined style={{ fontSize: 10 }} />
+                        </Typography.Link>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
           )}
         </>
       ) : hubMode === "extension" ? (
         <ExtensionContributedSkills
-          skills={extSkills}
+          skills={filteredExtSkills}
           loading={extLoading}
           onRefresh={() => void refreshExtSkills()}
+          searchQuery={query}
         />
       ) : (
         <ExternalBrowse
@@ -524,6 +729,7 @@ export function SkillsHub({ repositoryPath, onClose }: Props) {
           onDeleteImported={handleDeleteImported}
         />
       )}
+      </div>
     </div>
   );
 
@@ -546,9 +752,10 @@ interface ExtensionContributedSkillsProps {
   skills: ResolvedSkill[];
   loading: boolean;
   onRefresh: () => void;
+  searchQuery: string;
 }
 
-function ExtensionContributedSkills({ skills, loading, onRefresh }: ExtensionContributedSkillsProps) {
+function ExtensionContributedSkills({ skills, loading, onRefresh, searchQuery }: ExtensionContributedSkillsProps) {
   return (
     <div className="app-skills-hub-extension">
       <Alert
@@ -575,42 +782,39 @@ function ExtensionContributedSkills({ skills, loading, onRefresh }: ExtensionCon
       ) : skills.length === 0 ? (
         <Empty
           className="app-skills-hub-empty"
-          description="暂无扩展贡献的技能。安装一个声明 contributes.skills 的扩展即可在此显示。"
+          description={searchQuery ? "未找到匹配的扩展技能" : "暂无扩展贡献的技能。安装一个声明 contributes.skills 的扩展即可在此显示。"}
           image={Empty.PRESENTED_IMAGE_SIMPLE}
         />
       ) : (
         <div className="app-skills-hub-grid">
-          {skills.map((s) => (
-            <article key={s.id} className="app-skills-hub-card">
-              <div className="app-skills-hub-card-name">
-                {s.name}
-                <Tag color="purple" style={{ marginLeft: 8 }}>扩展贡献</Tag>
-              </div>
-              <div className="app-skills-hub-card-source" title={s.location}>
-                来自扩展 {s.extension}
-              </div>
-              <div
-                style={{
-                  fontSize: 12,
-                  color: "var(--ant-color-text-secondary)",
-                  marginTop: 6,
-                }}
-              >
-                {s.description || "—"}
-              </div>
-              <div
-                style={{
-                  fontFamily: "var(--ant-font-family-code, monospace)",
-                  fontSize: 11,
-                  color: "var(--ant-color-text-tertiary)",
-                  marginTop: 4,
-                  wordBreak: "break-all",
-                }}
-              >
-                {s.location}
-              </div>
-            </article>
-          ))}
+          {skills.map((s) => {
+            const meta = getSkillMeta(s.name);
+            return (
+              <article key={s.id} className="app-skills-hub-card">
+                <div className="app-skills-hub-card-top-bar" style={{ background: `linear-gradient(90deg, ${meta.text} 0%, ${meta.border} 100%)` }} />
+                <div className="app-skills-hub-card-header">
+                  <div className="app-skills-hub-card-avatar" style={{ backgroundColor: meta.bg, color: meta.text, borderColor: meta.border }}>
+                    {s.name.slice(0, 1).toUpperCase()}
+                  </div>
+                  <div className="app-skills-hub-card-title-group">
+                    <div className="app-skills-hub-card-name" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      {s.name}
+                      <Tag color="purple" bordered={false} style={{ margin: 0, fontSize: 10 }}>扩展</Tag>
+                    </div>
+                    <div className="app-skills-hub-card-source" title={s.location}>
+                      来自扩展 {s.extension}
+                    </div>
+                  </div>
+                </div>
+                <div className="app-skills-hub-card-desc">
+                  {s.description || "暂无描述"}
+                </div>
+                <div className="app-skills-hub-card-path">
+                  {s.location}
+                </div>
+              </article>
+            );
+          })}
         </div>
       )}
     </div>
@@ -718,13 +922,23 @@ function ExternalBrowse({
             <div className="app-skills-hub-grid">
               {scanned.map((s) => {
                 const busy = importBusy === s.location;
+                const meta = getSkillMeta(s.name);
                 return (
                   <article key={s.location} className="app-skills-hub-card">
-                    <div className="app-skills-hub-card-name">
-                      {s.name} {s.isSymlink ? <Tag color="blue">软链接</Tag> : null}
-                    </div>
-                    <div className="app-skills-hub-card-source" title={s.location}>
-                      {s.location}
+                    <div className="app-skills-hub-card-top-bar" style={{ background: `linear-gradient(90deg, ${meta.text} 0%, ${meta.border} 100%)` }} />
+                    <div className="app-skills-hub-card-header">
+                      <div className="app-skills-hub-card-avatar" style={{ backgroundColor: meta.bg, color: meta.text, borderColor: meta.border }}>
+                        {s.name.slice(0, 1).toUpperCase()}
+                      </div>
+                      <div className="app-skills-hub-card-title-group">
+                        <div className="app-skills-hub-card-name" style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                          {s.name}
+                          {s.isSymlink ? <Tag color="blue" bordered={false} style={{ margin: 0, fontSize: 10 }}>链接</Tag> : null}
+                        </div>
+                        <div className="app-skills-hub-card-source" title={s.location}>
+                          {s.location}
+                        </div>
+                      </div>
                     </div>
                     <div className="app-skills-hub-card-actions">
                       <Button
@@ -733,14 +947,28 @@ function ExternalBrowse({
                         loading={busy}
                         disabled={busy || !s.hasSkillMd}
                         onClick={() => onImport(s, "copy")}
+                        className="app-skills-hub-btn-install"
                       >
-                        复制
+                        复制技能
                       </Button>
-                      <Button size="small" loading={busy} disabled={busy || !s.hasSkillMd} onClick={() => onImport(s, "symlink")}>
-                        链接
+                      <Button
+                        size="small"
+                        loading={busy}
+                        disabled={busy || !s.hasSkillMd}
+                        onClick={() => onImport(s, "symlink")}
+                        className="app-skills-hub-btn-link"
+                      >
+                        软链技能
                       </Button>
-                      <Button size="small" type="text" danger loading={busy} onClick={() => onDeleteImported(s)}>
-                        从 wise 移除
+                      <Button
+                        size="small"
+                        type="text"
+                        danger
+                        loading={busy}
+                        onClick={() => onDeleteImported(s)}
+                        className="app-skills-hub-btn-uninstall"
+                      >
+                        Wise 移除
                       </Button>
                     </div>
                   </article>

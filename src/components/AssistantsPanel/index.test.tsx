@@ -64,7 +64,7 @@ mock.module("../../services/assistants", () => ({
 }));
 
 describe("AssistantsPanel", () => {
-  test("renders the assistant template list", () => {
+  test("renders assistant templates in hub card layout", () => {
     const html = renderToStaticMarkup(
       <AntApp>
         <AssistantsPanel />
@@ -75,5 +75,7 @@ describe("AssistantsPanel", () => {
     expect(html).toContain("同步模板");
     expect(html).toContain("新增模板");
     expect(html).toContain("扩展贡献");
+    expect(html).toContain("app-assistants-hub-body");
+    expect(html).toContain("按助手 Hub 分组");
   });
 });

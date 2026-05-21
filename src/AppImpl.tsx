@@ -2480,6 +2480,11 @@ export default function App() {
         skillsHubProps: {
           repositoryPath: activeRepository?.path ?? null,
         },
+        assistantsPanelProps: {
+          activeProjectId: activeProjectId ?? null,
+          activeProjectName: activeProject?.name ?? null,
+          onOpenAssistant: openBuiltinAssistant,
+        },
         automationPanelProps: {
           repositories,
           activeRepositoryId,

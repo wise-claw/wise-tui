@@ -1,12 +1,10 @@
-import {
-  DeleteOutlined,
-  EditOutlined,
-  PlusOutlined,
-  ReloadOutlined,
-  UserOutlined,
-} from "@ant-design/icons";
-import { App, Button, Drawer, Empty, Form, Input, Modal, Select, Spin } from "antd";
+import { PlusOutlined, ReloadOutlined, UserOutlined } from "@ant-design/icons";
+import { App, Button, Drawer, Form, Input, Modal, Select } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { AssistantHubBody } from "../AssistantHubShared/AssistantHubBody";
+import type { AssistantHubFilter } from "../AssistantHubShared/groupAssistants";
+import { AssistantSettingsDrawer } from "../CockpitSurface/AssistantSettingsDrawer";
+import { resolveAssistantKind } from "../CockpitSurface/assistantKind";
 import { listAgents } from "../../services/agentRegistry";
 import {
   deleteCustomAssistant,
@@ -16,17 +14,16 @@ import {
 import type { DetectedAgent } from "../../types/detectedAgent";
 import type { AssistantEntry, CustomAssistantInput } from "../../types/assistant";
 import {
-  AuthorPanelEmptyShell,
   AuthorPanelHubTab,
   AuthorPanelHubTabs,
-  AuthorPanelListShell,
   AuthorPanelPageShell,
 } from "../AuthorPanel/AuthorPanelPageShell";
-import { HubDot, HubItem, HubItems, HubTag, avatarColorFor } from "../HubCard";
 import {
   buildAgentEngineIndex,
   resolveAssistantEngineBinding,
 } from "./engineBinding";
+import "../CockpitSurface/index.css";
+import "./AssistantsPanel.css";
 
 interface FormValues {
   id?: string;
@@ -37,17 +34,32 @@ interface FormValues {
   model?: string;
 }
 
-type Filter = "all" | "custom" | "extension" | "builtin";
+export interface AssistantsPanelProps {
+  activeProjectId?: string | null;
+  activeProjectName?: string | null;
+  /** 在 Cockpit 中打开该助手（与助手 Hub「打开」一致） */
+  onOpenAssistant?: (assistantId: string) => void;
+}
 
-export function AssistantsPanel() {
+export function AssistantsPanel({
+  activeProjectId = null,
+  activeProjectName = null,
+  onOpenAssistant,
+}: AssistantsPanelProps = {}) {
   const { message } = App.useApp();
   const [list, setList] = useState<AssistantEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [agents, setAgents] = useState<DetectedAgent[]>([]);
-  const [filter, setFilter] = useState<Filter>("all");
+  const [filter, setFilter] = useState<AssistantHubFilter>("all");
   const [editor, setEditor] = useState<{ open: boolean; row?: AssistantEntry }>({ open: false });
+  const [settingsAssistantId, setSettingsAssistantId] = useState<string | null>(null);
   const [form] = Form.useForm<FormValues>();
   const [saving, setSaving] = useState(false);
+
+  const settingsAssistant = useMemo(
+    () => list.find((a) => a.id === settingsAssistantId) ?? null,
+    [list, settingsAssistantId],
+  );
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -77,11 +89,6 @@ export function AssistantsPanel() {
   );
 
   const agentEngineIndex = useMemo(() => buildAgentEngineIndex(agents), [agents]);
-
-  const filtered = useMemo(() => {
-    if (filter === "all") return list;
-    return list.filter((a) => a.source === filter);
-  }, [list, filter]);
 
   const openCreate = useCallback(() => {
     setEditor({ open: true });
@@ -177,17 +184,46 @@ export function AssistantsPanel() {
     return opts;
   }, [agentEngineIndex, agents]);
 
+  const filterTabs = (
+    <AuthorPanelHubTabs aria-label="助手筛选">
+      <AuthorPanelHubTab
+        active={filter === "all"}
+        label="全部"
+        count={counts.total}
+        onClick={() => setFilter("all")}
+      />
+      <AuthorPanelHubTab
+        active={filter === "builtin"}
+        label="内置"
+        count={counts.builtin}
+        onClick={() => setFilter("builtin")}
+      />
+      <AuthorPanelHubTab
+        active={filter === "custom"}
+        label="自定义"
+        count={counts.custom}
+        onClick={() => setFilter("custom")}
+      />
+      <AuthorPanelHubTab
+        active={filter === "extension"}
+        label="扩展贡献"
+        count={counts.extension}
+        onClick={() => setFilter("extension")}
+      />
+    </AuthorPanelHubTabs>
+  );
+
   return (
     <>
       <AuthorPanelPageShell
-        className="app-assistants-panel"
+        className="app-assistants-panel author-panel-page--hub-body"
         id="assistants"
         icon={<UserOutlined />}
         title="助手模板"
-        subtitle="角色模板、模型和系统提示词"
+        subtitle="角色模板、模型和系统提示词；按助手 Hub 分组浏览与管理"
         actions={
           <>
-            <Button size="small" icon={<ReloadOutlined />} onClick={() => void fetchAll()}>
+            <Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={() => void fetchAll()}>
               同步模板
             </Button>
             <Button size="small" type="primary" icon={<PlusOutlined />} onClick={openCreate}>
@@ -195,103 +231,54 @@ export function AssistantsPanel() {
             </Button>
           </>
         }
-        toolbar={
-          <AuthorPanelHubTabs aria-label="助手筛选">
-            <AuthorPanelHubTab
-              active={filter === "all"}
-              label="全部"
-              count={counts.total}
-              onClick={() => setFilter("all")}
-            />
-            <AuthorPanelHubTab
-              active={filter === "builtin"}
-              label="内置"
-              count={counts.builtin}
-              onClick={() => setFilter("builtin")}
-            />
-            <AuthorPanelHubTab
-              active={filter === "custom"}
-              label="自定义"
-              count={counts.custom}
-              onClick={() => setFilter("custom")}
-            />
-            <AuthorPanelHubTab
-              active={filter === "extension"}
-              label="扩展贡献"
-              count={counts.extension}
-              onClick={() => setFilter("extension")}
-            />
-          </AuthorPanelHubTabs>
-        }
+        toolbar={filterTabs}
+        toolbarLayout="stacked"
       >
-        {loading && list.length === 0 ? (
-          <div className="author-panel-page__loading">
-            <Spin size="small" />
-          </div>
-        ) : filtered.length === 0 ? (
-          <AuthorPanelEmptyShell>
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="此类别暂无助手" />
-          </AuthorPanelEmptyShell>
-        ) : (
-          <AuthorPanelListShell>
-          <HubItems>
-            {filtered.map((a) => {
-              const tone =
-                a.source === "extension" ? "purple" : a.source === "builtin" ? "default" : "primary";
-              const sourceLabel =
-                a.source === "extension"
-                  ? `来自扩展 ${a.extensionId ?? "ext"}`
-                  : a.source === "builtin"
-                    ? "内置"
-                    : "自定义";
-              const engineStatus = resolveAssistantEngineBinding(a, agentEngineIndex);
-              return (
-                <HubItem
-                  key={a.id}
-                  avatarText={a.name || "·"}
-                  avatarColor={a.avatarColor ?? avatarColorFor(a.name)}
-                  title={a.name}
-                  tags={
-                    <>
-                      <HubTag tone={tone}>{sourceLabel}</HubTag>
-                      <HubTag mono>{a.engineId}</HubTag>
-                      {a.model ? <HubTag mono>{a.model}</HubTag> : null}
-                      <HubTag tone={engineStatus.tone}>
-                        <HubDot tone={engineStatus.dotTone} />
-                        {engineStatus.label}
-                      </HubTag>
-                    </>
-                  }
-                  author={`执行入口：${engineStatus.detail}`}
-                  description={a.description || (a.systemPrompt ?? "—").slice(0, 120)}
-                  actions={
-                    a.source === "custom" ? (
-                      <>
-                        <Button
-                          size="small"
-                          type="text"
-                          icon={<EditOutlined />}
-                          onClick={() => openEdit(a)}
-                          aria-label="编辑"
-                        />
-                        <Button
-                          size="small"
-                          type="text"
-                          danger
-                          icon={<DeleteOutlined />}
-                          onClick={() => handleDelete(a)}
-                          aria-label="删除"
-                        />
-                      </>
-                    ) : null
-                  }
-                />
-              );
-            })}
-          </HubItems>
-          </AuthorPanelListShell>
-        )}
+        <AssistantHubBody
+          assistants={list}
+          filter={filter}
+          loading={loading}
+          mode="manage"
+          emptyDescription={
+            filter === "custom"
+              ? "暂无自定义模板，可点击「新增模板」创建"
+              : filter === "extension"
+                ? "暂无扩展贡献的助手，请在扩展市场中安装并启用扩展"
+                : "此类别暂无助手"
+          }
+          resolveEngineStatus={(assistant) =>
+            resolveAssistantEngineBinding(assistant, agentEngineIndex)
+          }
+          renderCardActions={(assistant) => {
+            const needsProject =
+              resolveAssistantKind(assistant) === "trellis-orchestration" && !activeProjectId;
+            const actions = {
+              disabled: needsProject,
+              disabledHint: needsProject ? "请先在左栏选择工作区后再打开编排助手" : undefined,
+              onSelect: onOpenAssistant
+                ? () => onOpenAssistant(assistant.id)
+                : undefined,
+              onOpenSettings: () => setSettingsAssistantId(assistant.id),
+            };
+            if (assistant.source === "custom") {
+              return {
+                ...actions,
+                onEdit: () => openEdit(assistant),
+                onDelete: () => handleDelete(assistant),
+              };
+            }
+            return actions;
+          }}
+        />
       </AuthorPanelPageShell>
+
+      <AssistantSettingsDrawer
+        open={settingsAssistantId !== null}
+        assistant={settingsAssistant}
+        activeProjectId={activeProjectId}
+        activeProjectName={activeProjectName}
+        onClose={() => setSettingsAssistantId(null)}
+      />
 
       <Drawer
         title={editor.row ? `编辑模板 · ${editor.row.name}` : "新增模板"}

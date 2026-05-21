@@ -46,6 +46,7 @@ type EmployeeConfigProps = ComponentProps<typeof EmployeeConfigModal>;
 type WorkflowConfigProps = ComponentProps<typeof WorkflowConfigModal>;
 type McpHubProps = ComponentProps<typeof McpHub>;
 type SkillsHubProps = ComponentProps<typeof SkillsHub>;
+type AssistantsPanelProps = ComponentProps<typeof AssistantsPanel>;
 export interface AuthorPanelProps {
   pane: AuthorPane;
   onPaneChange: (pane: AuthorPane) => void;
@@ -54,6 +55,7 @@ export interface AuthorPanelProps {
   workflowConfigProps: WorkflowConfigProps | null;
   mcpHubProps: McpHubProps;
   skillsHubProps: SkillsHubProps;
+  assistantsPanelProps?: AssistantsPanelProps;
   repositoryPath?: string | null;
   automationPanelProps: ComponentProps<typeof AutomationPanel>;
   artifactsPanelProps: ComponentProps<typeof ArtifactsPanel>;
@@ -93,6 +95,7 @@ export function AuthorPanel({
   workflowConfigProps,
   mcpHubProps,
   skillsHubProps,
+  assistantsPanelProps,
   repositoryPath,
   automationPanelProps,
   artifactsPanelProps,
@@ -195,7 +198,7 @@ export function AuthorPanel({
       case "extensions":
         return <ExtensionsPanel />;
       case "assistants":
-        return <AssistantsPanel />;
+        return <AssistantsPanel {...assistantsPanelProps} />;
       case "engine-registry":
         return <AgentRegistrySection />;
       case "automation":
@@ -228,6 +231,7 @@ export function AuthorPanel({
     employeeConfigProps,
     hooksSearch,
     hooksRepositoryPath,
+    assistantsPanelProps,
     mcpHubProps,
     pane,
     repositoryPath,
