@@ -438,6 +438,22 @@ function ComposerInner({
     lastEditorPlainRef.current = "";
   }, [session.id, draftBucketKey]);
 
+  /** 会话输入区：Tab 仅用于 @ / 补全，不触发浏览器默认焦点切换（底栏按钮等） */
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+      const active = document.activeElement;
+      if (!active || !shell.contains(active)) return;
+      const editor = shell.querySelector(".ProseMirror");
+      if (!editor || (active !== editor && !editor.contains(active))) return;
+      e.preventDefault();
+    };
+    shell.addEventListener("keydown", onKeyDown, { capture: true });
+    return () => shell.removeEventListener("keydown", onKeyDown, { capture: true });
+  }, [session.id]);
+
   useLayoutEffect(() => {
     if (lastEditorPlainRef.current === displayPlain) return;
     lastEditorPlainRef.current = displayPlain;
