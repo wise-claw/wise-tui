@@ -1,11 +1,4 @@
-import {
-  ApartmentOutlined,
-  BranchesOutlined,
-  CheckCircleOutlined,
-  CrownOutlined,
-  NodeIndexOutlined,
-  TeamOutlined,
-} from "@ant-design/icons";
+import { BranchesOutlined, NodeIndexOutlined, TeamOutlined } from "@ant-design/icons";
 import {
   Alert,
   Button,
@@ -21,7 +14,7 @@ import {
   Typography,
   message,
 } from "antd";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   EmployeeItem,
   WorkflowGraph,
@@ -41,29 +34,6 @@ import { getWorkflowValidationGroupTitle as getWorkflowValidationGroupTitleImpl,
 import "./index.css";
 
 type GraphStatus = "published" | "draft" | "unknown" | "none";
-
-const DELEGATION_LOOP_STEPS = [
-  {
-    icon: <CrownOutlined />,
-    title: "任务拆解",
-    description: "负责人把需求拆成阶段任务、依赖关系和交付标准。",
-  },
-  {
-    icon: <TeamOutlined />,
-    title: "角色委派",
-    description: "为每个阶段绑定智能体角色、上下文和成果责任。",
-  },
-  {
-    icon: <CheckCircleOutlined />,
-    title: "验收流转",
-    description: "画布校验、阶段验收、草稿和发布状态集中处理。",
-  },
-  {
-    icon: <ApartmentOutlined />,
-    title: "工作区分发",
-    description: "把协议绑定到工作区范围，供当前任务上下文复用。",
-  },
-] satisfies Array<{ icon: ReactNode; title: string; description: string }>;
 
 interface Props {
   open: boolean;
@@ -121,25 +91,6 @@ export function WorkflowConfigModal({
   const [statusFilter, setStatusFilter] = useState<GraphStatus | "all">("all");
   const [canvasEditorOpen, setCanvasEditorOpen] = useState(false);
 
-  const selectableEmployeeIdSet = useMemo(() => new Set(selectableEmployeeIds), [selectableEmployeeIds]);
-  const enabledAgentRoleCount = useMemo(
-    () => employees.filter((employee) => employee.enabled && selectableEmployeeIdSet.has(employee.id)).length,
-    [employees, selectableEmployeeIdSet],
-  );
-  const templateStatusSummary = useMemo(() => {
-    return templates.reduce(
-      (summary, template) => {
-        const status = (graphStatusByWorkflowId[template.id] ?? "none") as GraphStatus;
-        summary[status] += 1;
-        return summary;
-      },
-      { published: 0, draft: 0, unknown: 0, none: 0 } satisfies Record<GraphStatus, number>,
-    );
-  }, [graphStatusByWorkflowId, templates]);
-  const stageCount = useMemo(
-    () => templates.reduce((total, template) => total + template.stages.length, 0),
-    [templates],
-  );
   const canvasStageCount = useMemo(
     () => canvasSnapshot.nodes.filter((node) => node.kind === "material").length,
     [canvasSnapshot.nodes],
@@ -155,7 +106,6 @@ export function WorkflowConfigModal({
   );
   const canvasFlowEdgeCount = canvasSnapshot.edges.length;
   const currentGraphStatus = editingTemplateId ? graphStatusByWorkflowId[editingTemplateId] ?? "none" : "none";
-  const readyTemplateCount = templateStatusSummary.published + templateStatusSummary.draft;
   const editingTemplate = useMemo(
     () => templates.find((item) => item.id === editingTemplateId) ?? null,
     [templates, editingTemplateId],
@@ -259,7 +209,7 @@ export function WorkflowConfigModal({
       const values = form.getFieldsValue(["name", "isDefault"]) as { name?: string; isDefault?: boolean };
       const normalizedName = (values.name ?? "").trim();
       if (!normalizedName) {
-        message.warning("请输入协议名称");
+        message.warning("请输入工作流名称");
         return;
       }
       setValidationErrors([]);
@@ -286,11 +236,11 @@ export function WorkflowConfigModal({
       try {
         await onSaveGraph({ workflowId: savedTemplate.id, graph, status: "draft" });
         setGraphStatusByWorkflowId((prev) => ({ ...prev, [savedTemplate.id]: "draft" }));
-        const successText = `委派协议「${savedTemplate.name}」草稿已保存。`;
+        const successText = `工作流「${savedTemplate.name}」草稿已保存。`;
         message.success(successText);
       } catch (error) {
         const messageText = error instanceof Error ? error.message : "未知错误";
-        message.error(`协议已保存，但委派画布保存失败：${messageText}`);
+        message.error(`工作流已保存，但工作流画布保存失败：${messageText}`);
       }
       setEditingTemplateId(savedTemplate.id);
       form.setFieldsValue({ name: savedTemplate.name, isDefault: Boolean(values.isDefault) });
@@ -306,7 +256,7 @@ export function WorkflowConfigModal({
       const values = form.getFieldsValue(["name", "isDefault"]) as { name?: string; isDefault?: boolean };
       const normalizedName = (values.name ?? "").trim();
       if (!normalizedName) {
-        message.warning("请输入协议名称");
+        message.warning("请输入工作流名称");
         return;
       }
       setValidationErrors([]);
@@ -314,7 +264,7 @@ export function WorkflowConfigModal({
       const graph = canvasSnapshotToWorkflowGraphImpl(canvasSnapshot, fallbackEmployeeId);
       const stages = canvasSnapshotToStagesImpl(canvasSnapshot, employees);
       if (stages.length === 0) {
-        const warning = "请至少添加一个智能体阶段后再发布协议。";
+        const warning = "请至少添加一个智能体阶段后再发布工作流。";
         message.error(warning);
         return;
       }
@@ -332,13 +282,13 @@ export function WorkflowConfigModal({
       });
       await onSaveGraph({ workflowId: savedTemplate.id, graph, status: "published" });
       setGraphStatusByWorkflowId((prev) => ({ ...prev, [savedTemplate.id]: "published" }));
-      const successText = `委派协议「${savedTemplate.name}」已发布。`;
+      const successText = `工作流「${savedTemplate.name}」已发布。`;
       message.success(successText);
       setEditingTemplateId(savedTemplate.id);
       form.setFieldsValue({ name: savedTemplate.name, isDefault: Boolean(values.isDefault) });
     } catch (error) {
       const messageText = error instanceof Error ? error.message : "未知错误";
-      const warning = `发布协议失败：${messageText}`;
+      const warning = `发布工作流失败：${messageText}`;
       message.error(warning);
     }
   }
@@ -380,52 +330,11 @@ export function WorkflowConfigModal({
 
   const content = (
     <div className="app-workflow-config-shell">
-      <section className="app-workflow-config-hero" aria-label="委派协议控制台">
-        <div>
-          <Typography.Text className="app-workflow-config-hero__eyebrow">
-            多智能体委派协议
-          </Typography.Text>
-          <Typography.Title level={4} className="app-workflow-config-hero__title">
-            委派协议控制台
-          </Typography.Title>
-          <Typography.Paragraph className="app-workflow-config-hero__subtitle">
-            把负责人到智能体角色的任务拆解、阶段验收、工作区绑定和发布状态集中管理。画布保留原有编排能力，
-            入口语义收敛为多智能体协作协议。
-          </Typography.Paragraph>
-        </div>
-        <div className="app-workflow-config-hero__meter">
-          <strong>{readyTemplateCount}/{templates.length}</strong>
-          <span>可运行协议</span>
-        </div>
-      </section>
-
-      <div className="app-workflow-config-summary" aria-label="委派协议状态">
-        <WorkflowMetric icon={<BranchesOutlined />} label="协议模板" value={templates.length} />
-        <WorkflowMetric icon={<NodeIndexOutlined />} label="累计阶段" value={stageCount} />
-        <WorkflowMetric icon={<CheckCircleOutlined />} label="已发布" value={templateStatusSummary.published} />
-        <WorkflowMetric icon={<TeamOutlined />} label="可派发角色" value={enabledAgentRoleCount} />
-      </div>
-
-      <div className="app-workflow-config-loop" aria-label="多智能体委派闭环">
-        {DELEGATION_LOOP_STEPS.map((step, index) => (
-          <div className="app-workflow-config-loop-step" key={step.title}>
-            <span className="app-workflow-config-loop-step__index">{index + 1}</span>
-            <span className="app-workflow-config-loop-step__icon" aria-hidden>
-              {step.icon}
-            </span>
-            <span className="app-workflow-config-loop-step__body">
-              <strong>{step.title}</strong>
-              <small>{step.description}</small>
-            </span>
-          </div>
-        ))}
-      </div>
-
       <div className="app-workflow-config-layout app-workflow-config-layout--library-only">
-        <aside className="app-workflow-config-sidebar" aria-label="协议库">
+        <aside className="app-workflow-config-sidebar" aria-label="工作流库">
           <div className="app-workflow-config-sidebar-header">
             <div className="app-workflow-config-sidebar-heading">
-              <Typography.Text strong>协议库</Typography.Text>
+              <Typography.Text strong>工作流库</Typography.Text>
               <Typography.Text type="secondary" className="app-workflow-config-sidebar-count">
                 {templates.length}
               </Typography.Text>
@@ -436,14 +345,14 @@ export function WorkflowConfigModal({
               onClick={openNewProtocolEditor}
               className="app-workflow-config-create-btn"
             >
-              新建协议
+              新建工作流
             </Button>
           </div>
           <div className="app-workflow-config-filter-row">
             <Input.Search
               size="small"
               allowClear
-              placeholder="搜索协议"
+              placeholder="搜索工作流"
               value={teamKeyword}
               onChange={(event) => setTeamKeyword(event.target.value)}
             />
@@ -457,7 +366,7 @@ export function WorkflowConfigModal({
           </div>
           <div className="app-workflow-config-protocol-list">
             {templates.length === 0 ? (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无委派协议" />
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无工作流" />
             ) : filteredTemplates.length === 0 ? (
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="无匹配结果" />
             ) : (
@@ -495,7 +404,7 @@ export function WorkflowConfigModal({
                         {status === "none" ? <Tag>未生成</Tag> : null}
                       </Space>
                       <Popconfirm
-                        title="确认删除该协议？"
+                        title="确认删除该工作流？"
                         onConfirm={() => handleDeleteTemplate(row.id)}
                         okText="删除"
                         cancelText="取消"
@@ -522,7 +431,7 @@ export function WorkflowConfigModal({
       </div>
 
       <Modal
-        title={editingTemplate ? `编辑委派协议 · ${editingTemplate.name}` : "新建委派协议"}
+        title={editingTemplate ? `编辑工作流 · ${editingTemplate.name}` : "新建工作流"}
         open={canvasEditorOpen}
         onCancel={closeCanvasEditor}
         footer={null}
@@ -563,9 +472,9 @@ export function WorkflowConfigModal({
           <header className="app-workflow-config-toolbar">
             <div className="app-workflow-config-toolbar__head">
               <div className="app-workflow-config-toolbar__identity">
-                <Typography.Text className="app-workflow-config-toolbar__eyebrow">委派画布</Typography.Text>
+                <Typography.Text className="app-workflow-config-toolbar__eyebrow">工作流画布</Typography.Text>
                 <Typography.Text strong className="app-workflow-config-toolbar__title">
-                  {editingTemplate ? editingTemplate.name : "新建委派协议"}
+                  {editingTemplate ? editingTemplate.name : "新建工作流"}
                 </Typography.Text>
               </div>
               <Space size={6} wrap className="app-workflow-config-toolbar__stats">
@@ -587,13 +496,13 @@ export function WorkflowConfigModal({
             >
               <div className="app-workflow-config-toolbar__fields">
                 <div className="app-workflow-config-toolbar__field">
-                  <span className="app-workflow-config-toolbar__label">协议名称</span>
+                  <span className="app-workflow-config-toolbar__label">工作流名称</span>
                   <Form.Item name="name">
-                    <Input placeholder="输入协议名称" className="app-workflow-config-name-input" />
+                    <Input placeholder="输入工作流名称" className="app-workflow-config-name-input" />
                   </Form.Item>
                 </div>
                 <div className="app-workflow-config-toolbar__field app-workflow-config-toolbar__field--switch">
-                  <span className="app-workflow-config-toolbar__label">默认协议</span>
+                  <span className="app-workflow-config-toolbar__label">默认工作流</span>
                   <Form.Item name="isDefault" valuePropName="checked">
                     <Switch checkedChildren="是" unCheckedChildren="否" />
                   </Form.Item>
@@ -624,7 +533,7 @@ export function WorkflowConfigModal({
                   {editingTemplate ? "保存草稿" : "创建草稿"}
                 </Button>
                 <Button size="small" loading={loading} onClick={() => void handlePublish()}>
-                  发布协议
+                  发布工作流
                 </Button>
                 <Button size="small" onClick={closeCanvasEditor}>
                   关闭
@@ -638,7 +547,7 @@ export function WorkflowConfigModal({
               className="app-workflow-config-validation-alert"
               type="error"
               showIcon
-              message="委派画布校验未通过"
+              message="工作流画布校验未通过"
               description={
                 <div>
                   {groupedValidationErrors.map(([groupTitle, groupItems]) => (
@@ -683,7 +592,7 @@ export function WorkflowConfigModal({
 
   return (
     <Modal
-      title="委派协议"
+      title="工作流"
       open={open}
       onCancel={onClose}
       footer={null}
@@ -693,25 +602,5 @@ export function WorkflowConfigModal({
     >
       {content}
     </Modal>
-  );
-}
-
-interface WorkflowMetricProps {
-  icon: ReactNode;
-  label: string;
-  value: number;
-}
-
-function WorkflowMetric({ icon, label, value }: WorkflowMetricProps) {
-  return (
-    <div className="app-workflow-config-metric">
-      <span className="app-workflow-config-metric__icon" aria-hidden>
-        {icon}
-      </span>
-      <span>
-        <strong>{value}</strong>
-        <small>{label}</small>
-      </span>
-    </div>
   );
 }

@@ -20,7 +20,7 @@ export function getWorkflowValidationSuggestion(code: string): string {
     WF_GRAPH_EDGE_ENDPOINT_MISSING: "请补全边的 source 与 target。",
     WF_GRAPH_EDGE_SOURCE_NOT_FOUND: "请将该边连接到存在的源节点。",
     WF_GRAPH_EDGE_TARGET_NOT_FOUND: "请将该边连接到存在的目标节点。",
-    WF_GRAPH_START_MISSING: "请添加一个开始节点作为协议入口。",
+    WF_GRAPH_START_MISSING: "请添加一个开始节点作为工作流入口。",
     WF_GRAPH_START_DUPLICATED: "请只保留一个 start 节点。",
     WF_GRAPH_APPROVAL_INCOMING_MISSING: "请为智能体阶段添加至少一条入边。",
     WF_GRAPH_APPROVAL_OUTGOING_MISSING: "请为智能体阶段添加至少一条出边。",

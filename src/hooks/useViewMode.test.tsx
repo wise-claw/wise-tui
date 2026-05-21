@@ -90,7 +90,7 @@ describe("useViewMode", () => {
 
   test("author panes that are not mcp/skills do not raise any legacy flag", () => {
     const probe = renderProbe();
-    for (const pane of ["workspaces", "agents", "workflows", "hooks", "assistants"] as const) {
+    for (const pane of ["agents", "workflows", "hooks", "assistants"] as const) {
       act(() => {
         probe.api.enter(authorView(pane));
       });

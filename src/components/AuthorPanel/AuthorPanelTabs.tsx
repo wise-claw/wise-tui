@@ -31,9 +31,8 @@ export const AUTHOR_TAB_GROUPS: Array<{ title: string; items: AuthorTabDefinitio
   {
     title: "工作台",
     items: [
-      { key: "workspaces", label: "工作区", description: "项目、仓库和 Trellis 根目录", icon: <FolderOpenOutlined /> },
       { key: "agents", label: "智能体角色", description: "角色供给、职责和默认仓库", icon: <RobotOutlined /> },
-      { key: "workflows", label: "委派协议", description: "阶段派发、验收和委派画布", icon: <BranchesOutlined /> },
+      { key: "workflows", label: "工作流", description: "阶段派发、验收和工作流画布", icon: <BranchesOutlined /> },
     ],
   },
   {

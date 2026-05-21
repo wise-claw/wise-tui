@@ -240,19 +240,9 @@ function buildProps(
   const onPaneChange = mock((_: AuthorPane) => {});
   const onBack = mock(() => {});
   const props: Parameters<typeof AuthorPanel>[0] = {
-    pane: "workspaces",
+    pane: "agents",
     onPaneChange,
     onBack,
-    workspacesTabProps: {
-      workspaces: [workspace],
-      standaloneRepos: [repo],
-      activeWorkspaceId: "w1",
-      activeRepositoryId: null,
-      onCreateWorkspace: mock(() => {}),
-      onAddStandaloneRepo: mock(() => {}),
-      onSelectWorkspace: mock(() => {}),
-      onSelectStandaloneRepo: mock(() => {}),
-    },
     employeeConfigProps: {
       open: true,
       loading: false,
@@ -329,9 +319,8 @@ describe("AuthorPanel", () => {
     const { props } = buildProps();
     const html = renderAuthorPanel(props);
     for (const label of [
-      "工作区",
       "智能体角色",
-      "委派协议",
+      "工作流",
       "MCP 工具",
       "技能市场",
       "触发器规则",
@@ -363,12 +352,6 @@ describe("AuthorPanel", () => {
     const { setAppSetting } = await import("../../services/appSettingsStore");
     writeAuthorPaneToStorage("skills");
     expect(setAppSetting).toHaveBeenCalledWith("wise.author.lastPane", "skills");
-  });
-
-  test("workspaces pane renders the workspace list", () => {
-    const { props } = buildProps({ pane: "workspaces" });
-    const html = renderAuthorPanel(props);
-    expect(html).toContain("Wise");
   });
 
   test("agents pane mounts EmployeeConfigModal and forwards defaultRepositoryIds", () => {

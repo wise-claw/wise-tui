@@ -74,7 +74,7 @@ export function WorkflowNodeEditModal({
         <div className="app-workflow-node-edit-form__field-header">
           <span className="app-workflow-node-edit-form__field-title app-workflow-node-edit-form__field-title--with-hint">
             阶段任务依据（可选）
-            <Tooltip placement="topLeft" styles={{ container: { maxWidth: 400 } }} title="从当前委派画布中各阶段已配置的「阶段成果」中选择一项或多项；保存后随协议派发写入 Claude Code 会话，置于「阶段任务」正文之前（多项之间以分隔线隔开）。每条派发为「【阶段任务依据】成果「名称」」并附上该成果标准原文。">
+            <Tooltip placement="topLeft" styles={{ container: { maxWidth: 400 } }} title="从当前工作流画布中各阶段已配置的「阶段成果」中选择一项或多项；保存后随工作流派发写入 Claude Code 会话，置于「阶段任务」正文之前（多项之间以分隔线隔开）。每条派发为「【阶段任务依据】成果「名称」」并附上该成果标准原文。">
               <QuestionCircleOutlined className="app-workflow-node-edit-form__field-hint-icon" aria-label="阶段任务依据说明" />
             </Tooltip>
           </span>
@@ -87,7 +87,7 @@ export function WorkflowNodeEditModal({
             showSearch
             optionFilterProp="label"
             maxTagCount="responsive"
-            placeholder={stageTaskBasisSelectOptions.length === 0 ? "请先在部分阶段配置「阶段成果」" : "选择协议内已有成果（可多选）…"}
+            placeholder={stageTaskBasisSelectOptions.length === 0 ? "请先在部分阶段配置「阶段成果」" : "选择工作流内已有成果（可多选）…"}
             options={stageTaskBasisSelectOptions}
             disabled={stageTaskBasisSelectOptions.length === 0}
           />

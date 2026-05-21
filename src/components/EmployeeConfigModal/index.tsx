@@ -1,13 +1,5 @@
-import {
-  BranchesOutlined,
-  CheckCircleOutlined,
-  CrownOutlined,
-  ExclamationCircleOutlined,
-  TeamOutlined,
-  ThunderboltOutlined,
-} from "@ant-design/icons";
 import { App, Button, Form, Input, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Typography } from "antd";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { EmployeeItem, Repository, WorkflowGraph, WorkflowTemplateItem } from "../../types";
 import { collectTeamMemberEmployeeIds } from "../../utils/collectTeamMemberEmployeeIds";
 import { repositoryFolderBasename } from "../../utils/repositoryType";
@@ -101,6 +93,8 @@ export function EmployeeConfigModal({
   const { message } = App.useApp();
   const [form] = Form.useForm();
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [formModalOpen, setFormModalOpen] = useState(false);
+  const autoOpenedCreateRef = useRef(false);
 
   const editingEmployee = useMemo(
     () => employees.find((item) => item.id === editingId) ?? null,
@@ -169,44 +163,12 @@ export function EmployeeConfigModal({
       }));
   }, [projectOwnerPickMode, repositories, employees, defaultRepositoryIds]);
 
-  const scopedRepositoryIds = useMemo(
-    () => (defaultRepositoryIds.length > 0 ? defaultRepositoryIds : repositories.map((repository) => repository.id)),
-    [defaultRepositoryIds, repositories],
-  );
-  const scopedRepositoryIdSet = useMemo(() => new Set(scopedRepositoryIds), [scopedRepositoryIds]);
-  const scopedRepositories = useMemo(
-    () => repositories.filter((repository) => scopedRepositoryIdSet.has(repository.id)),
-    [repositories, scopedRepositoryIdSet],
-  );
-  const enabledEmployees = useMemo(
-    () => employees.filter((employee) => employee.enabled),
-    [employees],
-  );
-  const activeTeamMemberCount = useMemo(
-    () => enabledEmployees.filter((employee) => teamEmployeeIds.has(employee.id)).length,
-    [enabledEmployees, teamEmployeeIds],
-  );
-  const scopedOwnerGapCount = useMemo(
-    () => listRepositoryMainOwnerDisplayGaps(scopedRepositories, employees).length,
-    [scopedRepositories, employees],
-  );
-  const scopedOwnerConfiguredCount = useMemo(
-    () => scopedRepositories.filter((repository) => repository.mainOwnerAgentName?.trim()).length,
-    [scopedRepositories],
-  );
-  const workflowStageCount = useMemo(
-    () => workflowTemplates.reduce((total, template) => total + template.stages.length, 0),
-    [workflowTemplates],
-  );
-  const disabledEmployeeCount = employees.length - enabledEmployees.length;
-
   const tableDataSource = useMemo(
     (): EmployeeConfigTableRow[] => [...tableEmployees, ...repoOwnerGapRows],
     [tableEmployees, repoOwnerGapRows],
   );
 
-  function handleCreateClick() {
-    setEditingId(null);
+  function resetCreateFormValues() {
     form.setFieldsValue({
       name: initialCreateEmployeeName?.trim() ?? "",
       agentType: "executor",
@@ -216,25 +178,51 @@ export function EmployeeConfigModal({
     });
   }
 
-  useEffect(() => {
-    if (!open || editingId) return;
-    if (!repositoryOwnerScopeOnly || !initialCreateEmployeeName?.trim()) return;
+  function openCreateFormModal() {
+    setEditingId(null);
+    resetCreateFormValues();
+    setFormModalOpen(true);
+  }
+
+  function openEditFormModal(employee: EmployeeItem) {
+    setEditingId(employee.id);
     form.setFieldsValue({
-      name: initialCreateEmployeeName.trim(),
-      agentType: "executor",
-      repositoryIds: defaultRepositoryIds,
-      projectIds: singleProjectScopeId ? [singleProjectScopeId] : undefined,
-      ownerRepositoryId: singleOwnerRepositoryId ?? undefined,
+      name: employee.name,
+      agentType: employee.agentType,
+      repositoryIds: employee.repositoryIds,
+      projectIds: employee.projectIds,
+      ownerRepositoryId: undefined,
     });
+    setFormModalOpen(true);
+  }
+
+  function closeFormModal() {
+    setFormModalOpen(false);
+    setEditingId(null);
+    form.resetFields();
+    resetCreateFormValues();
+  }
+
+  useEffect(() => {
+    if (!open) {
+      autoOpenedCreateRef.current = false;
+      setFormModalOpen(false);
+      setEditingId(null);
+      return;
+    }
+    if (autoOpenedCreateRef.current || editingId || formModalOpen) return;
+    if (!repositoryOwnerScopeOnly || !initialCreateEmployeeName?.trim()) return;
+    autoOpenedCreateRef.current = true;
+    openCreateFormModal();
   }, [
     open,
     editingId,
+    formModalOpen,
     repositoryOwnerScopeOnly,
     initialCreateEmployeeName,
     defaultRepositoryIds,
     singleOwnerRepositoryId,
     singleProjectScopeId,
-    form,
   ]);
 
   async function handleSubmit() {
@@ -251,6 +239,7 @@ export function EmployeeConfigModal({
           repositoryIds: nextRepositoryIds,
           projectIds: values.projectIds ?? editingEmployee.projectIds,
         });
+        closeFormModal();
         return;
       }
       if (projectOwnerPickMode) {
@@ -268,18 +257,13 @@ export function EmployeeConfigModal({
           repositoryIds: [ownerRid],
           ownerRepositoryId: ownerRid,
         });
-        form.setFieldsValue({
-          name: "",
-          agentType: "executor",
-          ownerRepositoryId: undefined,
-          repositoryIds: defaultRepositoryIds,
-        });
+        closeFormModal();
         return;
       }
       const selectedRepositoryIds: number[] = values.repositoryIds ?? defaultRepositoryIds;
       const mergedRepositoryIds = Array.from(new Set([...defaultRepositoryIds, ...selectedRepositoryIds]));
       await onCreate({ name: values.name, agentType: values.agentType, enabled: true, repositoryIds: mergedRepositoryIds });
-      form.setFieldsValue({ name: "", agentType: "executor", repositoryIds: defaultRepositoryIds });
+      closeFormModal();
     } catch (error) {
       console.error("handleSubmit error:", error);
       if (error instanceof Error) {
@@ -299,193 +283,108 @@ export function EmployeeConfigModal({
     });
   }
 
+  const employeeFormModal = (
+    <Modal
+      title={editingEmployee ? "编辑角色" : "新增角色"}
+      open={formModalOpen}
+      onCancel={closeFormModal}
+      onOk={() => void handleSubmit()}
+      okText={editingEmployee ? "保存" : "新增"}
+      cancelText="取消"
+      confirmLoading={loading}
+      width={400}
+      destroyOnHidden
+      wrapClassName="app-employee-config-form-modal"
+      maskClosable={false}
+    >
+      <Form
+        form={form}
+        layout="vertical"
+        size="small"
+        colon={false}
+        initialValues={{
+          name: "",
+          agentType: "executor",
+          repositoryIds: defaultRepositoryIds,
+          ownerRepositoryId: undefined,
+        }}
+        className="app-employee-config-form--modal"
+      >
+        {projects && projects.length > 0 && !repositoryOwnerScopeOnly && !singleProjectScopeId ? (
+          <Form.Item name="projectIds" label="所属工作区">
+            <Select
+              mode="multiple"
+              allowClear
+              placeholder="选择所属工作区"
+              maxTagCount="responsive"
+              options={projects.map((p) => ({
+                value: p.id,
+                label: p.name,
+              }))}
+            />
+          </Form.Item>
+        ) : null}
+        {(!hideRepositorySelector || repositoryOwnerScopeOnly) ? (
+          <Form.Item name="repositoryIds" label="关联仓库">
+            <Select
+              mode="multiple"
+              allowClear={!repositoryOwnerScopeOnly}
+              placeholder="选择关联仓库"
+              maxTagCount="responsive"
+              disabled={repositoryOwnerScopeOnly}
+              options={repositories.map((repository) => ({
+                value: repository.id,
+                label: repositoryFolderBasename(repository),
+              }))}
+            />
+          </Form.Item>
+        ) : null}
+        <Form.Item name="name" label="角色名称" rules={[{ required: true, message: "请输入角色名称" }]}>
+          <Input placeholder="Agent 角色名称" allowClear />
+        </Form.Item>
+        <Form.Item name="agentType" label="智能体" rules={[{ required: true, message: "请选择智能体" }]}>
+          <Select
+            showSearch
+            placeholder="选择智能体"
+            options={selectableAgentTypeOptions}
+            optionFilterProp="label"
+          />
+        </Form.Item>
+        {projectOwnerPickMode && !editingEmployee && !singleOwnerRepositoryId ? (
+          <Form.Item
+            name="ownerRepositoryId"
+            label="仓库"
+            tooltip="作为该仓唯一主 Owner 的新角色将关联此仓库"
+          >
+            <Select
+              allowClear
+              showSearch
+              placeholder="选择仓库（每仓仅 1 名 Owner）"
+              optionFilterProp="label"
+              options={defaultRepositoryIds.map((id) => {
+                const repository = repositories.find((r) => r.id === id);
+                const labelBase = repository ? repositoryFolderBasename(repository) : `仓库 #${id}`;
+                const taken = Boolean(repository?.mainOwnerAgentName?.trim());
+                return {
+                  value: id,
+                  label: taken ? `${labelBase}（已有 Owner）` : labelBase,
+                  disabled: taken,
+                };
+              })}
+            />
+          </Form.Item>
+        ) : null}
+      </Form>
+    </Modal>
+  );
+
   const content = (
     <Space orientation="vertical" size={6} className="app-employee-config-modal">
-        <div className="app-employee-config-dashboard">
-        <section className="app-employee-config-hero" aria-label="智能体角色控制台">
-          <div>
-            <Typography.Text className="app-employee-config-hero__eyebrow">
-              智能体角色供给
-            </Typography.Text>
-            <Typography.Title level={4} className="app-employee-config-hero__title">
-              智能体角色控制台
-            </Typography.Title>
-            <Typography.Paragraph className="app-employee-config-hero__subtitle">
-              集中管理可被负责人委派的智能体角色、仓库主 Owner 和委派协议成员。原有员工配置能力保留，
-              但统一收敛成角色供给层。
-            </Typography.Paragraph>
-          </div>
-          <div className="app-employee-config-hero__meter">
-            <strong>{enabledEmployees.length}/{employees.length}</strong>
-            <span>可用角色</span>
-          </div>
-        </section>
-
-        <div className="app-employee-config-summary" aria-label="智能体角色状态">
-          <TeamRoleMetric icon={<TeamOutlined />} label="启用角色" value={enabledEmployees.length} />
-          <TeamRoleMetric icon={<BranchesOutlined />} label="参与委派协议" value={activeTeamMemberCount} />
-          <TeamRoleMetric icon={<CrownOutlined />} label="仓库 Owner" value={scopedOwnerConfiguredCount} />
-          <TeamRoleMetric
-            icon={scopedOwnerGapCount > 0 || disabledEmployeeCount > 0 ? <ExclamationCircleOutlined /> : <CheckCircleOutlined />}
-            label="待处理项"
-            value={scopedOwnerGapCount + disabledEmployeeCount}
-            tone={scopedOwnerGapCount > 0 || disabledEmployeeCount > 0 ? "danger" : "default"}
-          />
+        <div className="app-employee-config-toolbar">
+          <Button size="small" type="primary" onClick={openCreateFormModal}>
+            新增角色
+          </Button>
         </div>
-
-        <div className="app-employee-config-map" aria-label="智能体角色供给闭环">
-          <TeamRoleSupplyItem
-            icon={<TeamOutlined />}
-            title="角色供给"
-            status="可编辑"
-            description={`${employees.length} 个角色集中管理；名称、启用态、关联仓库和工作区归属保留原有配置能力`}
-          />
-          <TeamRoleSupplyItem
-            icon={<ThunderboltOutlined />}
-            title="执行引擎"
-            status="已绑定"
-            description={`${agentTypeOptions.length} 个可选智能体名称；角色通过智能体名称绑定 Claude、Codex 或自定义命令`}
-          />
-          <TeamRoleSupplyItem
-            icon={<CrownOutlined />}
-            title="共享工作区"
-            status="Owner"
-            description={`${scopedRepositories.length} 个仓库在当前作用域内；Owner 决定默认主执行角色，缺口会显式标出`}
-          />
-          <TeamRoleSupplyItem
-            icon={<BranchesOutlined />}
-            title="委派分发"
-            status="协议驱动"
-            description={`${workflowTemplates.length} 个模板 · ${workflowStageCount} 个阶段；委派协议负责把阶段派发给角色`}
-          />
-        </div>
-        </div>
-
-        <Form
-          form={form}
-          layout="inline"
-          size="small"
-          initialValues={{
-            name: "",
-            agentType: "executor",
-            repositoryIds: defaultRepositoryIds,
-            ownerRepositoryId: undefined,
-          }}
-          className={`app-employee-config-form${projectOwnerPickMode ? " app-employee-config-form--project-owner" : ""}`}
-        >
-          <div
-            className={`app-employee-config-row ${
-              projectOwnerPickMode
-                ? "app-employee-config-row--project-owner"
-                : hideRepositorySelector
-                  ? "app-employee-config-row--compact"
-                  : ""
-            }`}
-          >
-            {projects && projects.length > 0 && !repositoryOwnerScopeOnly && !singleProjectScopeId ? (
-              <div className="app-employee-config-field">
-                <div className="app-employee-config-field-label">所属工作区</div>
-                <Form.Item
-                  name="projectIds"
-                  className="app-employee-config-item app-employee-config-item--projects"
-                >
-                  <Select
-                    mode="multiple"
-                    allowClear
-                    placeholder="所属工作区"
-                    maxTagCount="responsive"
-                    options={projects.map((p) => ({
-                      value: p.id,
-                      label: p.name,
-                    }))}
-                  />
-                </Form.Item>
-              </div>
-            ) : null}
-            {(!hideRepositorySelector || repositoryOwnerScopeOnly) ? (
-              <div className="app-employee-config-field">
-                <div className="app-employee-config-field-label">关联仓库</div>
-                <Form.Item
-                  name="repositoryIds"
-                  className="app-employee-config-item app-employee-config-item--repositories"
-                >
-                  <Select
-                    mode="multiple"
-                    allowClear={repositoryOwnerScopeOnly ? false : true}
-                    placeholder="关联仓库"
-                    maxTagCount="responsive"
-                    disabled={repositoryOwnerScopeOnly}
-                    options={repositories.map((repository) => ({
-                      value: repository.id,
-                      label: repositoryFolderBasename(repository),
-                    }))}
-                  />
-                </Form.Item>
-              </div>
-            ) : null}
-            <div className="app-employee-config-field">
-              <div className="app-employee-config-field-label">角色名称</div>
-              <Form.Item
-                name="name"
-                rules={[{ required: true, message: "请输入角色名称" }]}
-                className="app-employee-config-item app-employee-config-item--name"
-              >
-                <Input placeholder="Agent 角色名称" allowClear />
-              </Form.Item>
-            </div>
-            <div className="app-employee-config-field">
-              <div className="app-employee-config-field-label">智能体</div>
-              <Form.Item
-                name="agentType"
-                rules={[{ required: true, message: "请输入智能体" }]}
-                className="app-employee-config-item app-employee-config-item--agent"
-              >
-                <Select
-                  showSearch
-                  placeholder="选择智能体"
-                  options={selectableAgentTypeOptions}
-                  optionFilterProp="label"
-                  popupMatchSelectWidth={false}
-                />
-              </Form.Item>
-            </div>
-            <div className="app-employee-config-actions">
-              <Button size="small" type="primary" loading={loading} onClick={() => void handleSubmit()}>
-                {editingEmployee ? "保存角色" : "新增角色"}
-              </Button>
-              {editingEmployee ? <Button size="small" onClick={handleCreateClick}>取消编辑</Button> : null}
-            </div>
-            {projectOwnerPickMode && !editingEmployee && !singleOwnerRepositoryId ? (
-              <div className="app-employee-config-field">
-                <div className="app-employee-config-field-label" title="作为该仓唯一主 Owner 的新角色将关联此仓库">
-                  仓库
-                </div>
-                <Form.Item
-                  name="ownerRepositoryId"
-                  className="app-employee-config-item app-employee-config-item--owner-repo"
-                >
-                  <Select
-                    allowClear
-                    showSearch
-                    placeholder="选择仓库（每仓仅 1 名 Owner）"
-                    optionFilterProp="label"
-                    popupMatchSelectWidth={false}
-                    options={defaultRepositoryIds.map((id) => {
-                      const repository = repositories.find((r) => r.id === id);
-                      const labelBase = repository ? repositoryFolderBasename(repository) : `仓库 #${id}`;
-                      const taken = Boolean(repository?.mainOwnerAgentName?.trim());
-                      return {
-                        value: id,
-                        label: taken ? `${labelBase}（已有 Owner）` : labelBase,
-                        disabled: taken,
-                      };
-                    })}
-                  />
-                </Form.Item>
-              </div>
-            ) : null}
-          </div>
-        </Form>
         <Table<EmployeeConfigTableRow>
           rowKey={(r) => r.id}
           loading={loading}
@@ -588,19 +487,7 @@ export function EmployeeConfigModal({
                 }
                 return (
                   <Space size={8}>
-                    <Button
-                      size="small"
-                      onClick={() => {
-                        setEditingId(row.id);
-                        form.setFieldsValue({
-                          name: row.name,
-                          agentType: row.agentType,
-                          repositoryIds: row.repositoryIds,
-                          projectIds: row.projectIds,
-                          ownerRepositoryId: undefined,
-                        });
-                      }}
-                    >
+                    <Button size="small" onClick={() => openEditFormModal(row)}>
                       编辑
                     </Button>
                     <Popconfirm
@@ -635,65 +522,28 @@ export function EmployeeConfigModal({
 
   if (inline) {
     if (!open) return null;
-    return <div className="app-employee-config-inline-root">{content}</div>;
+    return (
+      <div className="app-employee-config-inline-root">
+        {content}
+        {employeeFormModal}
+      </div>
+    );
   }
 
   return (
-    <Modal
-      title="智能体角色"
-      open={open}
-      onCancel={onClose}
-      footer={null}
-      width={projectOwnerPickMode ? 850 : 780}
-      destroyOnHidden
-      rootClassName="app-employee-config-modal-root"
-    >
-      {content}
-    </Modal>
-  );
-}
-
-interface TeamRoleMetricProps {
-  icon: ReactNode;
-  label: string;
-  value: number;
-  tone?: "default" | "danger";
-}
-
-function TeamRoleMetric({ icon, label, value, tone = "default" }: TeamRoleMetricProps) {
-  return (
-    <div className={`app-employee-config-metric${tone === "danger" ? " app-employee-config-metric--danger" : ""}`}>
-      <span className="app-employee-config-metric__icon" aria-hidden>
-        {icon}
-      </span>
-      <span>
-        <strong>{value}</strong>
-        <small>{label}</small>
-      </span>
-    </div>
-  );
-}
-
-interface TeamRoleSupplyItemProps {
-  icon: ReactNode;
-  title: string;
-  status: string;
-  description: string;
-}
-
-function TeamRoleSupplyItem({ icon, title, status, description }: TeamRoleSupplyItemProps) {
-  return (
-    <div className="app-employee-config-supply">
-      <span className="app-employee-config-supply__icon" aria-hidden>
-        {icon}
-      </span>
-      <span>
-        <span className="app-employee-config-supply__head">
-          <strong>{title}</strong>
-          <Tag color="processing">{status}</Tag>
-        </span>
-        <small>{description}</small>
-      </span>
-    </div>
+    <>
+      <Modal
+        title="智能体角色"
+        open={open}
+        onCancel={onClose}
+        footer={null}
+        width={projectOwnerPickMode ? 850 : 780}
+        destroyOnHidden
+        rootClassName="app-employee-config-modal-root"
+      >
+        {content}
+      </Modal>
+      {employeeFormModal}
+    </>
   );
 }

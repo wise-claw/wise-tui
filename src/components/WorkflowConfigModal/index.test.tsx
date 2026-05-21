@@ -24,7 +24,7 @@ const employee = {
 
 const template = {
   id: "workflow-1",
-  name: "需求交付协议",
+  name: "需求交付工作流",
   isDefault: true,
   stages: [
     {
@@ -39,7 +39,7 @@ const template = {
 };
 
 describe("WorkflowConfigModal", () => {
-  test("renders the AionUi-style delegation protocol workbench copy", () => {
+  test("renders the workflow library without the legacy dashboard hero", () => {
     const html = renderToStaticMarkup(
       <AntApp>
         <WorkflowConfigModal
@@ -62,15 +62,12 @@ describe("WorkflowConfigModal", () => {
       </AntApp>,
     );
 
-    expect(html).toContain("多智能体委派协议");
-    expect(html).toContain("委派协议控制台");
-    expect(html).toContain("任务拆解");
-    expect(html).toContain("角色委派");
-    expect(html).toContain("验收流转");
-    expect(html).toContain("工作区分发");
-    expect(html).toContain("协议库");
-    expect(html).toContain("新建协议");
-    expect(html).toContain("搜索协议");
+    expect(html).toContain("工作流库");
+    expect(html).toContain("新建工作流");
+    expect(html).toContain("搜索工作流");
+    expect(html).not.toContain("委派协议控制台");
+    expect(html).not.toContain("多智能体委派协议");
+    expect(html).not.toContain("任务拆解");
     expect(html).not.toContain('data-stub="workflow-canvas"');
   });
 });

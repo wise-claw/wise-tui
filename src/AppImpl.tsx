@@ -2322,20 +2322,6 @@ export default function App() {
         pane: authorPane,
         onPaneChange: handleAuthorPaneChange,
         onBack: viewMode.back,
-        workspacesTabProps: {
-          workspaces: projects,
-          standaloneRepos,
-          activeWorkspaceId: activeProjectId,
-          activeRepositoryId,
-          onCreateWorkspace: () => {
-            setWorkspaceCreateRequest((value) => value + 1);
-          },
-          onAddStandaloneRepo: () => {
-            setStandaloneRepoAddRequest((value) => value + 1);
-          },
-          onSelectWorkspace: handleProjectSelectLeavingMcpHub,
-          onSelectStandaloneRepo: (repositoryId) => handleSidebarRepositorySelectLeavingMcpHub(repositoryId),
-        },
         employeeConfigProps: {
           open: true,
           loading: employeeLoading,

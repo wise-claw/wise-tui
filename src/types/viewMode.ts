@@ -24,7 +24,6 @@ export type ViewMode =
   | { kind: "inspect"; tool: InspectTool };
 
 export type AuthorPane =
-  | "workspaces"
   | "agents"
   | "workflows"
   | "mcp"
@@ -41,10 +40,9 @@ export type AuthorPane =
   | "shortcuts"
   | "sandbox";
 
-export const DEFAULT_AUTHOR_PANE: AuthorPane = "workspaces";
+export const DEFAULT_AUTHOR_PANE: AuthorPane = "agents";
 
 export const WORKSPACE_SCOPED_AUTHOR_PANES: ReadonlySet<AuthorPane> = new Set([
-  "workspaces",
   "agents",
   "workflows",
   "mcp",

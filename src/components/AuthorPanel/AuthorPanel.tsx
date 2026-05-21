@@ -26,11 +26,9 @@ import { getAppSetting, setAppSetting } from "../../services/appSettingsStore";
 import { DEFAULT_AUTHOR_PANE } from "../../types/viewMode";
 import { AUTHOR_TAB_STORAGE_KEY, AUTHOR_TABS, isAuthorPane, type AuthorPane } from "./AuthorPanelTabs";
 import { AuthorPanelPageShell } from "./AuthorPanelPageShell";
-import { WorkspacesTab } from "./tabs/WorkspacesTab";
 import "./index.css";
 
 const PANELS_WITH_OWN_SHELL = new Set<AuthorPane>([
-  "workspaces",
   "extensions",
   "assistants",
   "mcp",
@@ -48,13 +46,10 @@ type EmployeeConfigProps = ComponentProps<typeof EmployeeConfigModal>;
 type WorkflowConfigProps = ComponentProps<typeof WorkflowConfigModal>;
 type McpHubProps = ComponentProps<typeof McpHub>;
 type SkillsHubProps = ComponentProps<typeof SkillsHub>;
-type WorkspacesTabProps = ComponentProps<typeof WorkspacesTab>;
-
 export interface AuthorPanelProps {
   pane: AuthorPane;
   onPaneChange: (pane: AuthorPane) => void;
   onBack: () => void;
-  workspacesTabProps: WorkspacesTabProps;
   employeeConfigProps: EmployeeConfigProps | null;
   workflowConfigProps: WorkflowConfigProps | null;
   mcpHubProps: McpHubProps;
@@ -65,15 +60,20 @@ export interface AuthorPanelProps {
   workflowStudioAction?: ReactNode;
 }
 
+function normalizeStoredAuthorPane(raw: string, fallback: AuthorPane): AuthorPane {
+  if (raw === "workspaces") return DEFAULT_AUTHOR_PANE;
+  return isAuthorPane(raw) ? raw : fallback;
+}
+
 export function readAuthorPaneFromStorage(fallback: AuthorPane = DEFAULT_AUTHOR_PANE): AuthorPane {
   if (typeof window === "undefined") return fallback;
   const raw = window.localStorage.getItem(AUTHOR_TAB_STORAGE_KEY)?.trim() ?? "";
-  return isAuthorPane(raw) ? raw : fallback;
+  return normalizeStoredAuthorPane(raw, fallback);
 }
 
 export async function readAuthorPaneFromSettings(fallback: AuthorPane = DEFAULT_AUTHOR_PANE): Promise<AuthorPane> {
   const raw = (await getAppSetting(AUTHOR_TAB_STORAGE_KEY))?.trim() ?? "";
-  return isAuthorPane(raw) ? raw : readAuthorPaneFromStorage(fallback);
+  return normalizeStoredAuthorPane(raw, readAuthorPaneFromStorage(fallback));
 }
 
 export function writeAuthorPaneToStorage(pane: AuthorPane): void {
@@ -89,7 +89,6 @@ export function AuthorPanel({
   pane,
   onPaneChange: _onPaneChange,
   onBack: _onBack,
-  workspacesTabProps,
   employeeConfigProps,
   workflowConfigProps,
   mcpHubProps,
@@ -110,8 +109,6 @@ export function AuthorPanel({
 
   const content = useMemo(() => {
     switch (pane) {
-      case "workspaces":
-        return <WorkspacesTab {...workspacesTabProps} />;
       case "agents":
         return employeeConfigProps ? (
           <EmployeeConfigModal {...employeeConfigProps} open inline />
@@ -131,7 +128,7 @@ export function AuthorPanel({
             </div>
           </AuthorPanelPageShell>
         ) : (
-          <AuthorUnavailable label="委派协议" />
+          <AuthorUnavailable label="工作流" />
         );
       case "mcp":
         return <McpHub {...mcpHubProps} onClose={undefined} />;
@@ -237,7 +234,6 @@ export function AuthorPanel({
     skillsHubProps,
     workflowConfigProps,
     workflowStudioAction,
-    workspacesTabProps,
   ]);
 
   const wrappedContent =
