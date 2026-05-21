@@ -44,7 +44,9 @@ export async function executeClaudeCode(
   concurrencyLimit?: number,
   /** 为 true 时追加 `--bare`，减少 hooks/记忆等对编排子进程的粘连 */
   bare?: boolean,
+  trellisContextId?: string,
 ): Promise<void> {
+  const normalizedTrellisContextId = trellisContextId?.trim() || null;
   return invoke("execute_claude_code", {
     projectPath: repositoryPath,
     prompt,
@@ -54,6 +56,7 @@ export async function executeClaudeCode(
     concurrencyScopeKey,
     concurrencyLimit,
     bare: bare ?? false,
+    trellisContextId: normalizedTrellisContextId,
   });
 }
 
@@ -538,7 +541,9 @@ export async function resumeClaudeCode(
   connectionMode: ClaudeConnectionMode = "oneshot",
   concurrencyScopeKey?: string,
   concurrencyLimit?: number,
+  trellisContextId?: string,
 ): Promise<void> {
+  const normalizedTrellisContextId = trellisContextId?.trim() || null;
   return invoke("resume_claude_code", {
     projectPath: repositoryPath,
     sessionId,
@@ -548,6 +553,7 @@ export async function resumeClaudeCode(
     connectionMode,
     concurrencyScopeKey,
     concurrencyLimit,
+    trellisContextId: normalizedTrellisContextId,
   });
 }
 
