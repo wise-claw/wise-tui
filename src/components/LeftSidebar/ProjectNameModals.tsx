@@ -1,10 +1,8 @@
 import { FolderOpenOutlined } from "@ant-design/icons";
-import { Button, Checkbox, Form, Input, Modal, Typography } from "antd";
+import { Button, Form, Input, Modal, Typography } from "antd";
 import type { StandaloneRepo, Workspace } from "../../types";
-import {
-  WORKSPACE_BOOTSTRAP_PLUGIN_ADDONS,
-  type WorkspaceBootstrapSelection,
-} from "../../constants/workspaceBootstrapAddons";
+import type { WorkspaceBootstrapSelection } from "../../constants/workspaceBootstrapAddons";
+import { WorkspaceBootstrapPicker } from "../WorkspaceBootstrapPicker";
 import { repositoryFolderBasename } from "../../utils/repositoryType";
 import "./ProjectNameModals.css";
 
@@ -29,26 +27,6 @@ interface ProjectNameModalsProps {
   onCancelPromote: () => void;
   onSubmitPromote: () => void;
 }
-
-function patchBootstrapSelection(
-  prev: WorkspaceBootstrapSelection,
-  patch: Partial<WorkspaceBootstrapSelection>,
-): WorkspaceBootstrapSelection {
-  return { ...prev, ...patch };
-}
-
-const WORKSPACE_SCAFFOLD_BOOTSTRAP_OPTIONS = [
-  {
-    id: "trellis" as const,
-    label: "Trellis",
-    title: "根目录 trellis init -y；已有 .trellis/scripts/task.py 则跳过",
-  },
-  {
-    id: "openspec" as const,
-    label: "OpenSpec",
-    title: "根目录 openspec init --tools claude；已有 .openspec/ 则跳过",
-  },
-] as const;
 
 export function ProjectNameModals({
   createOpen,
@@ -131,55 +109,11 @@ export function ProjectNameModals({
             </Typography.Text>
           </div>
 
-          <div className="app-create-workspace-bootstrap">
-            <Typography.Text strong className="app-create-workspace-bootstrap__title">
-              一键内置
-            </Typography.Text>
-            <div className="app-create-workspace-bootstrap__groups">
-              <div className="app-create-workspace-bootstrap__group">
-                <span className="app-create-workspace-bootstrap__group-label">根目录</span>
-                <div className="app-create-workspace-bootstrap__chips">
-                  {WORKSPACE_SCAFFOLD_BOOTSTRAP_OPTIONS.map((option) => (
-                    <Checkbox
-                      key={option.id}
-                      className="app-create-workspace-bootstrap__chip"
-                      checked={selection[option.id]}
-                      disabled={createSubmitLoading}
-                      title={option.title}
-                      onChange={(event) =>
-                        setSelection(
-                          patchBootstrapSelection(selection, { [option.id]: event.target.checked }),
-                        )
-                      }
-                    >
-                      {option.label}
-                    </Checkbox>
-                  ))}
-                </div>
-              </div>
-              <div className="app-create-workspace-bootstrap__group">
-                <span className="app-create-workspace-bootstrap__group-label">Claude</span>
-                <div className="app-create-workspace-bootstrap__chips">
-                  {WORKSPACE_BOOTSTRAP_PLUGIN_ADDONS.map((addon) => (
-                    <Checkbox
-                      key={addon.id}
-                      className="app-create-workspace-bootstrap__chip"
-                      checked={selection[addon.id]}
-                      disabled={createSubmitLoading}
-                      title={addon.label}
-                      onChange={(event) =>
-                        setSelection(
-                          patchBootstrapSelection(selection, { [addon.id]: event.target.checked }),
-                        )
-                      }
-                    >
-                      {addon.shortLabel}
-                    </Checkbox>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
+          <WorkspaceBootstrapPicker
+            selection={selection}
+            onChange={setSelection}
+            disabled={createSubmitLoading}
+          />
         </Form>
       </Modal>
 

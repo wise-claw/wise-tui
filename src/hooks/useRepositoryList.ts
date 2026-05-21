@@ -353,6 +353,9 @@ export function useRepositoryList() {
       if (!folderPath) return;
       let repository = repositories.find((item) => item.path === folderPath) ?? null;
       if (!repository) {
+        if (options?.bootstrap) {
+          await runWorkspaceBootstrap(folderPath, options.bootstrap);
+        }
         repository = await createRepositoryFromPathWithType(folderPath, repositoryType, options);
         setRepositories((prev) => [...prev, repository as Repository]);
       }

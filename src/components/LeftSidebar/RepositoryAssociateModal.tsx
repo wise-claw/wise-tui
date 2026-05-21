@@ -1,6 +1,8 @@
 import { Button, Divider, Input, Modal, Select, Space, Tooltip } from "antd";
 import type { AddRepositoryOptions, Repository, RepositoryAssociatePreset, SddMode } from "../../types";
+import type { WorkspaceBootstrapSelection } from "../../constants/workspaceBootstrapAddons";
 import { REPOSITORY_ICON_COLOR_PRESETS } from "../../utils/repositoryType";
+import { WorkspaceBootstrapPicker } from "../WorkspaceBootstrapPicker";
 import { SddModeSwitch } from "../SddModeSwitch";
 
 interface RepositoryAssociateModalProps {
@@ -11,6 +13,8 @@ interface RepositoryAssociateModalProps {
   onRepositoryTypeChange: (value: Repository["repositoryType"]) => void;
   sddMode: SddMode;
   onSddModeChange: (value: SddMode) => void;
+  workspaceBootstrapSelection: WorkspaceBootstrapSelection;
+  onWorkspaceBootstrapSelectionChange: (value: WorkspaceBootstrapSelection) => void;
   iconDisplayName: string;
   onIconDisplayNameChange: (value: string) => void;
   iconColor: string | null;
@@ -34,6 +38,8 @@ export function RepositoryAssociateModal({
   onRepositoryTypeChange,
   sddMode,
   onSddModeChange,
+  workspaceBootstrapSelection,
+  onWorkspaceBootstrapSelectionChange,
   iconDisplayName,
   onIconDisplayNameChange,
   iconColor,
@@ -52,7 +58,7 @@ export function RepositoryAssociateModal({
       onOk={onSubmit}
       okText="继续选择仓库目录"
       cancelText="取消"
-      width={400}
+      width={floatingMode ? 440 : 400}
     >
       <Space orientation="vertical" size={8} style={{ width: "100%" }}>
         <div>
@@ -131,15 +137,22 @@ export function RepositoryAssociateModal({
             style={{ width: "100%" }}
           />
         </div>
-        <div>
-          <div className="app-add-repo-field-label">SDD 模式</div>
-          <SddModeSwitch
-            value={sddMode}
-            autoResolved="wise_trellis"
-            onChange={onSddModeChange}
-            size="small"
+        {floatingMode ? (
+          <WorkspaceBootstrapPicker
+            selection={workspaceBootstrapSelection}
+            onChange={onWorkspaceBootstrapSelectionChange}
           />
-        </div>
+        ) : (
+          <div>
+            <div className="app-add-repo-field-label">SDD 模式</div>
+            <SddModeSwitch
+              value={sddMode}
+              autoResolved="wise_trellis"
+              onChange={onSddModeChange}
+              size="small"
+            />
+          </div>
+        )}
       </Space>
     </Modal>
   );
@@ -149,15 +162,21 @@ export function buildAddRepositoryOptions({
   iconDisplayName,
   iconColor,
   sddMode,
+  bootstrap,
+  floatingMode,
 }: {
   iconDisplayName: string;
   iconColor: string | null;
-  sddMode: SddMode;
+  sddMode?: SddMode;
+  bootstrap?: WorkspaceBootstrapSelection;
+  floatingMode?: boolean;
 }): AddRepositoryOptions {
   const iconText = iconDisplayName.trim();
+  const resolvedBootstrap = floatingMode ? bootstrap : undefined;
   return {
     iconDisplayName: iconText.length > 0 ? iconText : undefined,
     iconColor,
-    sddMode,
+    bootstrap: resolvedBootstrap,
+    sddMode: resolvedBootstrap ? undefined : sddMode,
   };
 }

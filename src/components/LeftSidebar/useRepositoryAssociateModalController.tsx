@@ -2,6 +2,10 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { App as AntdApp } from "antd";
 import type { AddRepositoryOptions, Repository, RepositoryAssociatePreset, SddMode } from "../../types";
 import {
+  DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION,
+  type WorkspaceBootstrapSelection,
+} from "../../constants/workspaceBootstrapAddons";
+import {
   REPOSITORY_ASSOCIATE_PRESETS_MAX,
   REPOSITORY_ASSOCIATE_PRESETS_STORAGE_KEY,
 } from "../../constants/repositoryAssociatePresets";
@@ -46,6 +50,9 @@ export function useRepositoryAssociateModalController({
   const [floatingMode, setFloatingMode] = useState(false);
   const [repositoryType, setRepositoryType] = useState<Repository["repositoryType"]>("frontend");
   const [sddMode, setSddMode] = useState<SddMode>("auto");
+  const [workspaceBootstrapSelection, setWorkspaceBootstrapSelection] = useState(
+    () => ({ ...DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION }),
+  );
   const [iconDisplayName, setIconDisplayName] = useState("");
   const [iconColor, setIconColor] = useState<string | null>(null);
   const [presets, setPresets] = useState<RepositoryAssociatePreset[]>([]);
@@ -55,6 +62,7 @@ export function useRepositoryAssociateModalController({
     setAssociateSelectValue("frontend");
     setRepositoryType("frontend");
     setSddMode("auto");
+    setWorkspaceBootstrapSelection({ ...DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION });
     setIconDisplayName("");
     setIconColor(null);
   }, []);
@@ -185,7 +193,13 @@ export function useRepositoryAssociateModalController({
         return;
       }
     }
-    const options = buildAddRepositoryOptions({ iconDisplayName, iconColor, sddMode });
+    const options = buildAddRepositoryOptions({
+      iconDisplayName,
+      iconColor,
+      sddMode,
+      bootstrap: workspaceBootstrapSelection,
+      floatingMode,
+    });
     if (floatingMode) {
       if (!onAddFloatingRepository) {
         message.warning("当前环境未启用「添加单仓」入口");
@@ -215,6 +229,7 @@ export function useRepositoryAssociateModalController({
     presets,
     repositoryType,
     sddMode,
+    workspaceBootstrapSelection,
   ]);
 
   return {
@@ -226,6 +241,8 @@ export function useRepositoryAssociateModalController({
     setRepositoryType,
     sddMode,
     setSddMode,
+    workspaceBootstrapSelection,
+    setWorkspaceBootstrapSelection,
     iconDisplayName,
     setIconDisplayName,
     iconColor,

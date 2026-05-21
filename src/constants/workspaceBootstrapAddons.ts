@@ -1,6 +1,37 @@
-/** 新建工作区时可选的一键内置能力（Trellis / OpenSpec 脚手架 + Claude 插件）。 */
+import type { SddMode } from "../types";
+
+/** 新建工作区 / 添加单仓时可选的一键内置能力（Trellis / OpenSpec 脚手架 + Claude 插件）。 */
 
 export type WorkspaceBootstrapAddonId = "trellis" | "omc" | "superpowers" | "gsd" | "openspec";
+
+export const WORKSPACE_SCAFFOLD_BOOTSTRAP_OPTIONS = [
+  {
+    id: "trellis" as const,
+    label: "Trellis",
+    title: "仓库目录 trellis init -y；已有 .trellis/scripts/task.py 则跳过",
+  },
+  {
+    id: "openspec" as const,
+    label: "OpenSpec",
+    title: "仓库目录 openspec init --tools claude；已有 .openspec/ 则跳过",
+  },
+] as const;
+
+export function patchWorkspaceBootstrapSelection(
+  prev: WorkspaceBootstrapSelection,
+  patch: Partial<WorkspaceBootstrapSelection>,
+): WorkspaceBootstrapSelection {
+  return { ...prev, ...patch };
+}
+
+/** 根据一键内置选项推断写入仓库的 SDD 模式。 */
+export function workspaceBootstrapSelectionToSddMode(
+  selection: WorkspaceBootstrapSelection,
+): SddMode {
+  if (!selection.trellis && !selection.openspec) return "auto";
+  if (selection.openspec && !selection.trellis) return "project_owned";
+  return "wise_trellis";
+}
 
 export interface WorkspaceBootstrapSelection {
   trellis: boolean;

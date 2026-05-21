@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { workspaceBootstrapSelectionToSddMode } from "../constants/workspaceBootstrapAddons";
 import type {
   AddRepositoryOptions,
   ProjectItem,
@@ -51,8 +52,11 @@ export async function createRepositoryFromPathWithType(
     iconDisplayName: iconDisplayName && iconDisplayName.length > 0 ? iconDisplayName : null,
     iconColor: iconColor && iconColor.length > 0 ? iconColor : null,
   });
-  if (options?.sddMode && options.sddMode !== "auto") {
-    return updateRepositorySddMode(repository.id, options.sddMode);
+  const resolvedSddMode = options?.bootstrap
+    ? workspaceBootstrapSelectionToSddMode(options.bootstrap)
+    : options?.sddMode;
+  if (resolvedSddMode && resolvedSddMode !== "auto") {
+    return updateRepositorySddMode(repository.id, resolvedSddMode);
   }
   return repository;
 }

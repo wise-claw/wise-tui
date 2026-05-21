@@ -38,7 +38,12 @@ export interface AddRepositoryOptions {
   iconDisplayName?: string;
   /** 非空则写入持久化角标色；`null` / 省略表示与角色标签默认色一致。 */
   iconColor?: string | null;
-  /** 创建后写入仓库 SDD 模式；省略则保持自动模式。 */
+  /**
+   * 创建前在仓库目录执行一键内置，并据此写入 `sddMode`（单仓与新建工作区一致）。
+   * 与显式 `sddMode` 同时传入时以 `bootstrap` 为准。
+   */
+  bootstrap?: import("./constants/workspaceBootstrapAddons").WorkspaceBootstrapSelection;
+  /** 创建后写入仓库 SDD 模式；省略则保持自动模式或由 `bootstrap` 推断。 */
   sddMode?: SddMode;
 }
 
