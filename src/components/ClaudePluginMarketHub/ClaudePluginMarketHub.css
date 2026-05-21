@@ -4,9 +4,11 @@
   gap: 6px;
   min-height: 0;
   flex: 1;
+  height: 100%;
 }
 
 .app-claude-plugin-hub-root .author-panel-page__head {
+  flex-shrink: 0;
   padding: 16px 0 8px;
 }
 
@@ -19,99 +21,258 @@
   min-width: 120px;
 }
 
+/* 刷新市场按钮高级美化 */
 .app-claude-plugin-hub-root .author-panel-page__actions {
   flex-shrink: 0;
+}
+
+.app-claude-plugin-hub-root .author-panel-page__actions .ant-btn {
+  background: var(--ant-color-bg-container) !important;
+  border: 1px solid var(--ant-color-border-secondary) !important;
+  color: var(--ant-color-text-secondary) !important;
+  font-weight: 500 !important;
+  border-radius: 8px !important;
+  height: 28px !important;
+  padding: 0 12px !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.01) !important;
+  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+}
+
+.app-claude-plugin-hub-root .author-panel-page__actions .ant-btn:hover {
+  transform: translateY(-1px) !important;
+  border-color: var(--ant-color-primary) !important;
+  color: var(--ant-color-primary) !important;
+  background: var(--ant-color-primary-bg) !important;
+  box-shadow: 0 4px 12px rgba(24, 144, 255, 0.12) !important;
+}
+
+.app-claude-plugin-hub-root .author-panel-page__actions .ant-btn:active {
+  transform: translateY(0) !important;
+  box-shadow: 0 2px 4px rgba(24, 144, 255, 0.05) !important;
 }
 
 .app-claude-plugin-hub-root .author-panel-page__toolbar {
   width: 100%;
   justify-content: flex-start;
+  gap: 12px;
 }
 
+/* 搜索框高级玻璃质感聚焦 */
 .app-claude-plugin-hub-search {
   flex: 1 1 160px;
   min-width: 140px;
   max-width: 280px;
+  border-radius: 8px !important;
+  border-color: var(--ant-color-border-secondary) !important;
+  background: var(--ant-color-bg-container) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02) !important;
+  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
 }
 
+.app-claude-plugin-hub-search:hover {
+  border-color: var(--ant-color-primary-hover) !important;
+}
+
+.app-claude-plugin-hub-search.ant-input-affix-wrapper-focused,
+.app-claude-plugin-hub-search:focus-within {
+  border-color: var(--ant-color-primary) !important;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.12), 0 2px 8px rgba(24, 144, 255, 0.08) !important;
+  background: var(--ant-color-bg-container) !important;
+}
+
+/* 顶栏类别胶囊式分段选择器 */
 .app-claude-plugin-hub-category {
   flex: 1 1 auto;
   min-width: 0;
+  background: var(--ant-color-fill-quaternary) !important;
+  border: 1px solid var(--ant-color-border-secondary) !important;
+  padding: 3px !important;
+  border-radius: 20px !important;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.02) !important;
 }
 
+.app-claude-plugin-hub-category .ant-segmented-item {
+  border-radius: 16px !important;
+  font-size: 11.5px !important;
+  font-weight: 500 !important;
+  color: var(--ant-color-text-secondary) !important;
+  transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+}
+
+.app-claude-plugin-hub-category .ant-segmented-item-selected {
+  background: #1890ff !important;
+  color: #ffffff !important;
+  border-radius: 16px !important;
+  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.18) !important;
+}
+
+.app-claude-plugin-hub-category .ant-segmented-item:hover:not(.ant-segmented-item-selected) {
+  color: var(--ant-color-text) !important;
+}
+
+/* 插件卡片网格系统 */
 .app-claude-plugin-hub-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(188px, 1fr));
-  gap: 6px;
-  padding-bottom: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  padding: 4px 2px 16px;
+  width: 100%;
 }
 
+/* 极精美毛玻璃插件卡片 */
 .app-claude-plugin-hub-card {
-  border: 1px solid var(--wise-border-subtle, rgba(0, 0, 0, 0.08));
-  border-radius: 8px;
-  padding: 6px 8px;
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  background: var(--wise-surface-elevated, #fff);
-  min-height: 0;
+  gap: 8px;
+  padding: 14px;
+  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.015);
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  overflow: hidden;
+  min-height: 146px;
+}
+
+.app-claude-plugin-hub-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(24, 144, 255, 0.4);
+  box-shadow: 0 8px 24px rgba(24, 144, 255, 0.08);
 }
 
 .app-claude-plugin-hub-card-title-row {
   display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: space-between;
+  gap: 8px;
   min-width: 0;
 }
 
 .app-claude-plugin-hub-card-name {
   flex: 1 1 0%;
   font-weight: 600;
-  font-size: 12px;
-  line-height: 1.3;
+  font-size: 13.5px;
+  line-height: 1.35;
+  color: var(--ant-color-text);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.app-claude-plugin-hub-card-cta.ant-btn,
-.app-claude-plugin-hub-card-cta-group .ant-btn {
+/* 按钮操作区美化 */
+.app-claude-plugin-hub-card-cta.ant-btn-primary {
   flex: none;
-  height: 20px !important;
-  min-height: 20px;
-  padding: 0 6px !important;
+  background: var(--ant-color-primary) !important;
+  border: 1px solid var(--ant-color-primary) !important;
+  color: #ffffff !important;
+  font-weight: 500 !important;
+  border-radius: 6px !important;
+  height: 22px !important;
+  min-height: 22px !important;
+  padding: 0 10px !important;
   font-size: 11px !important;
-  line-height: 18px !important;
-  border-radius: 4px;
+  line-height: 20px !important;
+  box-shadow: 0 2px 6px rgba(24, 144, 255, 0.15) !important;
+  transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+  cursor: pointer !important;
+}
+
+.app-claude-plugin-hub-card-cta.ant-btn-primary:hover {
+  transform: translateY(-0.5px);
+  background: var(--ant-color-primary-hover) !important;
+  border-color: var(--ant-color-primary-hover) !important;
+  box-shadow: 0 4px 10px rgba(24, 144, 255, 0.25) !important;
+  color: #ffffff !important;
 }
 
 .app-claude-plugin-hub-card-cta.ant-btn-link {
-  height: auto !important;
-  min-height: 0;
-  padding: 0 !important;
+  flex: none;
   font-size: 11px !important;
-  line-height: 1.3 !important;
+  font-weight: 500 !important;
+  color: var(--ant-color-primary) !important;
+  border: 1px solid rgba(24, 144, 255, 0.2) !important;
+  background: rgba(24, 144, 255, 0.02) !important;
+  padding: 0 8px !important;
+  border-radius: 6px !important;
+  height: 22px !important;
+  min-height: 22px !important;
+  line-height: 20px !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease !important;
+  cursor: pointer !important;
+  text-decoration: none !important;
+}
+
+.app-claude-plugin-hub-card-cta.ant-btn-link:hover {
+  background: rgba(24, 144, 255, 0.08) !important;
+  border-color: var(--ant-color-primary) !important;
+  color: var(--ant-color-primary-hover) !important;
+  text-decoration: none !important;
 }
 
 .app-claude-plugin-hub-card-cta-group {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 6px;
   flex: none;
 }
 
+/* 已安装徽标 */
 .app-claude-plugin-hub-card-installed-tag {
   margin-inline-end: 0 !important;
-  font-size: 10px;
-  line-height: 16px;
-  padding-inline: 4px;
+  background: rgba(82, 196, 26, 0.08) !important;
+  border-color: rgba(82, 196, 26, 0.2) !important;
+  color: #52c41a !important;
+  border-radius: 12px !important;
+  font-size: 10px !important;
+  padding: 1px 6px !important;
+  line-height: 14px !important;
 }
 
+/* 卸载动作按钮 */
+.app-claude-plugin-hub-card-cta-group .ant-btn {
+  height: 22px !important;
+  min-height: 22px !important;
+  padding: 0 8px !important;
+  font-size: 10.5px !important;
+  line-height: 20px !important;
+  border-radius: 6px !important;
+  border: 1px solid rgba(255, 77, 79, 0.2) !important;
+  background: rgba(255, 77, 79, 0.02) !important;
+  color: #ff4d4f !important;
+  transition: all 0.2s ease !important;
+  cursor: pointer !important;
+}
+
+.app-claude-plugin-hub-card-cta-group .ant-btn:hover {
+  background: #ff4d4f !important;
+  color: #ffffff !important;
+  border-color: #ff4d4f !important;
+  box-shadow: 0 4px 10px rgba(255, 77, 79, 0.2) !important;
+}
+
+/* 极客终端风 Reference ID Box */
 .app-claude-plugin-hub-card-ref {
-  font-size: 10px;
-  color: var(--wise-text-tertiary, rgba(0, 0, 0, 0.45));
-  word-break: break-all;
+  font-family: var(--ant-font-family-code, monospace);
+  font-size: 10.5px;
+  color: var(--ant-color-text-quaternary);
+  padding: 3px 6px;
+  background: var(--ant-color-fill-quaternary);
+  border-radius: 4px;
+  border: 1px solid var(--ant-color-border-secondary);
+  display: inline-block;
+  max-width: max-content;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   line-height: 1.2;
 }
 
@@ -119,22 +280,29 @@
   margin-top: 1px;
 }
 
+/* 精选高亮标签 */
 .app-claude-plugin-hub-card-tags .ant-tag {
   margin-inline-end: 0;
-  font-size: 10px;
+  background: rgba(24, 144, 255, 0.08) !important;
+  border-color: rgba(24, 144, 255, 0.2) !important;
+  color: #1890ff !important;
+  font-size: 10px !important;
+  border-radius: 4px !important;
+  padding: 0 5px !important;
   line-height: 14px;
-  padding-inline: 4px;
 }
 
+/* 插件简介多行文本截断 */
 .app-claude-plugin-hub-card-desc {
-  font-size: 10px;
-  line-height: 1.32;
-  color: var(--wise-text-secondary, rgba(0, 0, 0, 0.65));
-  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ant-color-text-secondary);
+  margin: 4px 0 0;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .app-claude-plugin-hub-loading,
@@ -145,10 +313,113 @@
 }
 
 .app-claude-plugin-hub-bootstrap-hint {
+  flex-shrink: 0;
   font-size: 11px;
-  color: var(--wise-text-tertiary, rgba(0, 0, 0, 0.45));
+  color: var(--ant-color-text-quaternary);
 }
 
-.app-claude-plugin-hub-root .ant-tabs-nav {
-  margin-bottom: 6px !important;
+.app-claude-plugin-hub-root .author-panel-page__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 全局标签页高级药丸胶囊轨道化重构 */
+.app-claude-plugin-hub-tabs {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-claude-plugin-hub-tabs.ant-tabs-top > .ant-tabs-nav {
+  flex-shrink: 0;
+  margin-bottom: 12px !important;
+  background: var(--ant-color-fill-quaternary) !important;
+  border: 1px solid var(--ant-color-border-secondary) !important;
+  padding: 3px !important;
+  border-radius: 20px !important;
+  display: inline-flex !important;
+  width: max-content !important;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.03) !important;
+}
+
+.app-claude-plugin-hub-tabs .ant-tabs-nav-wrap {
+  flex: none !important;
+}
+
+.app-claude-plugin-hub-tabs .ant-tabs-nav-list {
+  display: flex !important;
+  gap: 2px !important;
+}
+
+.app-claude-plugin-hub-tabs .ant-tabs-tab {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 16px !important;
+  padding: 4px 14px !important;
+  height: 26px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  color: var(--ant-color-text-secondary) !important;
+  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+  margin: 0 !important;
+}
+
+.app-claude-plugin-hub-tabs .ant-tabs-tab:hover {
+  color: var(--ant-color-text) !important;
+}
+
+.app-claude-plugin-hub-tabs .ant-tabs-tab-active {
+  background: #1890ff !important;
+  border-radius: 16px !important;
+  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.2) !important;
+}
+
+.app-claude-plugin-hub-tabs .ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: #ffffff !important;
+  text-shadow: none !important;
+}
+
+.app-claude-plugin-hub-tabs .ant-tabs-ink-bar {
+  display: none !important;
+}
+
+/* 标签内 Badge 精致高亮悬浮数 */
+.app-claude-plugin-hub-tabs .ant-badge-count {
+  background: rgba(0, 0, 0, 0.05) !important;
+  color: var(--ant-color-text-tertiary) !important;
+  box-shadow: none !important;
+  transition: all 0.25s ease !important;
+  font-weight: 600;
+}
+
+.app-claude-plugin-hub-tabs .ant-tabs-tab-active .ant-badge-count {
+  background: rgba(255, 255, 255, 0.25) !important;
+  color: #ffffff !important;
+}
+
+.app-claude-plugin-hub-tabs .ant-tabs-content-holder {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.app-claude-plugin-hub-tabs .ant-tabs-tabpane {
+  padding: 0;
+}
+
+/* 配置中心：页头/筛选固定，网格单独滚动 */
+.author-panel__scroll:has(.app-claude-plugin-hub-root) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.author-panel__scroll:has(.app-claude-plugin-hub-root) > .app-claude-plugin-hub-root {
+  flex: 1;
+  min-height: 0;
 }

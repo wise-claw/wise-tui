@@ -1,6 +1,5 @@
 import { DeleteOutlined, EditOutlined, SettingOutlined } from "@ant-design/icons";
 import { Button, Tag, Tooltip } from "antd";
-import type { ReactNode } from "react";
 import type { AssistantEntry } from "../../types/assistant";
 import { resolveAssistantKind } from "../CockpitSurface/assistantKind";
 import type { AssistantEngineBindingStatus } from "../AssistantsPanel/engineBinding";
@@ -37,14 +36,24 @@ export function AssistantHubCard({
   const assistantKind = resolveAssistantKind(assistant);
   const isCustom = assistant.source === "custom";
 
+  const cardClass = [
+    "cockpit-hub__card",
+    disabled ? "cockpit-hub__card--disabled" : "",
+    `cockpit-hub__card--source-${assistant.source}`,
+    `cockpit-hub__card--kind-${assistantKind}`,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <article className={`cockpit-hub__card${disabled ? " cockpit-hub__card--disabled" : ""}`}>
+    <article
+      className={cardClass}
+      style={{
+        ["--assistant-avatar-color" as any]: assistant.avatarColor ?? "#1677FF",
+      }}
+    >
       <div className="cockpit-hub__card-head">
-        <span
-          className="cockpit-hub__card-avatar"
-          style={{ background: assistant.avatarColor ?? "#1677FF" }}
-          aria-hidden
-        >
+        <span className="cockpit-hub__card-avatar" aria-hidden>
           {assistant.name.slice(0, 1)}
         </span>
         <div className="cockpit-hub__card-id">

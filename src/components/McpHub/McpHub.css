@@ -1,14 +1,162 @@
+/* ==========================================================================
+   MCP Tools Hub - Extreme Compact & Premium Redesign Style
+   ========================================================================== */
+
 .app-mcp-hub-root {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 10px 12px 16px;
+  padding: 8px 12px;
   min-height: 0;
   flex: 1;
-  overflow: auto;
-  background: var(--ant-color-bg-layout);
+  overflow: hidden;
+  background: transparent !important;
 }
 
+/* 叠层模式：顶栏固定，Tab 内容区单独滚动 */
+.app-mcp-hub-root:not(.author-panel-page) > .app-mcp-hub-header {
+  flex-shrink: 0;
+}
+
+.app-mcp-hub-root:not(.author-panel-page) > .app-mcp-hub-tabs {
+  flex: 1;
+  min-height: 0;
+}
+
+/* 顶栏控制流 & 紧凑型工具栏 */
+.app-mcp-hub-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.app-mcp-hub-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.app-mcp-hub-title {
+  margin: 0 !important;
+  font-weight: 600 !important;
+  font-size: 13.5px !important;
+  line-height: 1.2 !important;
+  min-width: 0;
+  color: var(--ant-color-text);
+}
+
+.app-mcp-hub-close-btn {
+  flex-shrink: 0;
+  color: var(--ant-color-text-tertiary);
+  width: 22px !important;
+  height: 22px !important;
+  padding: 0 !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-mcp-hub-close-btn:hover {
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-tertiary);
+}
+
+.app-mcp-hub-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+/* 搜索框高级毛玻璃高对比圆角 */
+.app-mcp-hub-search {
+  flex: 1;
+  min-width: 140px;
+  max-width: 280px;
+  border-radius: 6px !important;
+  border-color: color-mix(in srgb, var(--ant-color-border-secondary) 80%, transparent) !important;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 90%, transparent) !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.01) !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  padding: 2px 6px !important;
+  height: 24px !important;
+  font-size: 11px !important;
+}
+
+.app-mcp-hub-search:hover {
+  border-color: var(--ant-color-primary-hover) !important;
+}
+
+.app-mcp-hub-search.ant-input-affix-wrapper-focused,
+.app-mcp-hub-search:focus-within {
+  border-color: var(--ant-color-primary) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ant-color-primary) 12%, transparent), 0 2px 4px rgba(24, 144, 255, 0.04) !important;
+  background: var(--ant-color-bg-container) !important;
+}
+
+.app-mcp-hub-search .ant-input {
+  font-size: 11px !important;
+}
+
+/* 顶栏按钮一致化微渐变 */
+.app-mcp-hub-root .author-panel-page__actions .ant-btn-primary,
+.app-mcp-hub-toolbar .ant-btn-primary {
+  background: var(--ant-color-primary) !important;
+  border: 1px solid var(--ant-color-primary) !important;
+  color: #ffffff !important;
+  font-weight: 500 !important;
+  border-radius: 6px !important;
+  height: 24px !important;
+  padding: 0 10px !important;
+  font-size: 11px !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+}
+
+.app-mcp-hub-root .author-panel-page__actions .ant-btn-primary:hover,
+.app-mcp-hub-toolbar .ant-btn-primary:hover {
+  transform: translateY(-0.5px) !important;
+  background: var(--ant-color-primary-hover) !important;
+  border-color: var(--ant-color-primary-hover) !important;
+  box-shadow: 0 3px 6px rgba(24, 144, 255, 0.15) !important;
+  color: #ffffff !important;
+}
+
+.app-mcp-hub-root .author-panel-page__actions .ant-btn:not(.ant-btn-primary):not(.app-mcp-hub-close-btn),
+.app-mcp-hub-toolbar .ant-btn:not(.ant-btn-primary) {
+  background: color-mix(in srgb, var(--ant-color-bg-container) 90%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 80%, transparent) !important;
+  color: var(--ant-color-text-secondary) !important;
+  font-weight: 500 !important;
+  border-radius: 6px !important;
+  height: 24px !important;
+  padding: 0 8px !important;
+  font-size: 11px !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.01) !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+}
+
+.app-mcp-hub-root .author-panel-page__actions .ant-btn:not(.ant-btn-primary):not(.app-mcp-hub-close-btn):hover,
+.app-mcp-hub-toolbar .ant-btn:not(.ant-btn-primary):hover {
+  transform: translateY(-0.5px) !important;
+  border-color: #52c41a !important;
+  color: #52c41a !important;
+  background: rgba(82, 196, 26, 0.03) !important;
+  box-shadow: 0 4px 8px rgba(82, 196, 26, 0.08) !important;
+}
+
+/* 全局标签页高级药丸胶囊轨道 */
 .app-mcp-hub-tabs {
   flex: 1;
   min-height: 0;
@@ -17,60 +165,509 @@
 }
 
 .app-mcp-hub-tabs.ant-tabs-top > .ant-tabs-nav {
-  margin-bottom: 8px;
+  margin-bottom: 8px !important;
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 75%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 50%, transparent) !important;
+  padding: 2px !important;
+  border-radius: 18px !important;
+  display: inline-flex !important;
+  width: max-content !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02) !important;
 }
 
-/* 与侧栏列表选中一致：圆角药丸 + 浅底，去掉 Ant 默认粗蓝 ink 条 */
 .app-mcp-hub-tabs.ant-tabs-top > .ant-tabs-nav::before {
   border-bottom: none;
 }
 
+.app-mcp-hub-tabs .ant-tabs-nav-wrap {
+  flex: none !important;
+}
+
 .app-mcp-hub-tabs .ant-tabs-nav-list {
-  gap: 4px;
+  display: flex !important;
+  gap: 2px !important;
 }
 
 .app-mcp-hub-tabs .ant-tabs-tab {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 16px !important;
+  padding: 3px 12px !important;
+  height: 22px !important;
+  line-height: 22px !important;
+  font-size: 11.5px !important;
+  font-weight: 500 !important;
+  color: var(--ant-color-text-secondary) !important;
+  transition: all 0.2s ease !important;
   margin: 0 !important;
-  padding: 4px 10px !important;
-  border-radius: 6px;
-  transition: background 0.12s ease, color 0.12s ease;
 }
 
-.app-mcp-hub-tabs .ant-tabs-tab:not(.ant-tabs-tab-active):hover {
-  background: var(--ant-color-fill-tertiary);
+.app-mcp-hub-tabs .ant-tabs-tab:hover {
+  color: var(--ant-color-text) !important;
 }
 
 .app-mcp-hub-tabs .ant-tabs-tab-active {
-  background: var(--ant-control-item-bg-active);
+  background: var(--ant-color-primary) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 2px 6px rgba(24, 144, 255, 0.18) !important;
 }
 
 .app-mcp-hub-tabs .ant-tabs-tab-active .ant-tabs-tab-btn {
-  color: var(--ant-color-text);
-  font-weight: 500;
-  text-shadow: none;
-}
-
-.app-mcp-hub-tabs .ant-tabs-tab-btn {
-  color: var(--ant-color-text-secondary);
+  color: #ffffff !important;
+  text-shadow: none !important;
 }
 
 .app-mcp-hub-tabs .ant-tabs-ink-bar {
-  display: none;
+  display: none !important;
+}
+
+/* 标签页 Badge 极简计数器 */
+.app-mcp-hub-tabs .ant-badge-count {
+  background: rgba(0, 0, 0, 0.05) !important;
+  color: var(--ant-color-text-tertiary) !important;
+  box-shadow: none !important;
+  transition: all 0.2s ease !important;
+  font-weight: 600;
+  font-size: 10px;
+  height: 14px;
+  line-height: 14px;
+  min-width: 14px;
+  padding: 0 4px;
+  border-radius: 7px;
+  margin-left: 2px !important;
+}
+
+.app-mcp-hub-tabs .ant-tabs-tab-active .ant-badge-count {
+  background: rgba(255, 255, 255, 0.25) !important;
+  color: #ffffff !important;
 }
 
 .app-mcp-hub-tabs .ant-tabs-content-holder {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .app-mcp-hub-tabs .ant-tabs-tabpane {
   padding: 0;
 }
 
+/* MCP 卡片高密度自适应网格 */
+.app-mcp-hub-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(216px, 1fr));
+  gap: 8px;
+  padding: 2px 1px 12px;
+  width: 100%;
+}
+
+/* 极致毛玻璃卡片核心样式 */
+.app-mcp-hub-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 85%, transparent) !important;
+  backdrop-filter: blur(16px) saturate(120%);
+  -webkit-backdrop-filter: blur(16px) saturate(120%);
+  border: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 50%, transparent) !important;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.015), inset 0 1px 0 rgba(255, 255, 255, 0.4) !important;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  overflow: hidden;
+  min-height: 116px;
+}
+
+/* 卡片悬停微浮起与动态霓虹底光 */
+.app-mcp-hub-card:hover {
+  transform: translateY(-2px) translateZ(0) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04), 0 2px 4px rgba(0, 0, 0, 0.01) !important;
+  border-color: var(--ant-color-primary-hover) !important;
+}
+
+/* 1. 已连通 (Connected) 状态卡片样式 */
+.app-mcp-hub-card--connected:hover {
+  border-color: rgba(82, 196, 26, 0.35) !important;
+  box-shadow: 0 8px 24px rgba(82, 196, 26, 0.06), 0 2px 4px rgba(82, 196, 26, 0.01) !important;
+}
+
+.app-mcp-hub-card--connected .app-mcp-hub-card-avatar {
+  background: linear-gradient(135deg, rgba(82, 196, 26, 0.12), rgba(82, 196, 26, 0.04)) !important;
+  color: #389e0d !important;
+  border: 1px solid rgba(82, 196, 26, 0.2) !important;
+}
+
+/* 2. 失败 (Failed) 状态卡片样式 */
+.app-mcp-hub-card--failed:hover {
+  border-color: rgba(255, 77, 79, 0.35) !important;
+  box-shadow: 0 8px 24px rgba(255, 77, 79, 0.06), 0 2px 4px rgba(255, 77, 79, 0.01) !important;
+}
+
+.app-mcp-hub-card--failed .app-mcp-hub-card-avatar {
+  background: linear-gradient(135deg, rgba(255, 77, 79, 0.12), rgba(255, 77, 79, 0.04)) !important;
+  color: #cf1322 !important;
+  border: 1px solid rgba(255, 77, 79, 0.2) !important;
+}
+
+/* 3. 推荐卡片 (Recommend) 状态样式 */
+.app-mcp-hub-card--recommend:hover {
+  border-color: rgba(24, 144, 255, 0.35) !important;
+  box-shadow: 0 8px 24px rgba(24, 144, 255, 0.06), 0 2px 4px rgba(24, 144, 255, 0.01) !important;
+}
+
+.app-mcp-hub-card--recommend .app-mcp-hub-card-avatar {
+  background: linear-gradient(135deg, rgba(24, 144, 255, 0.12), rgba(24, 144, 255, 0.04)) !important;
+  color: #0958d9 !important;
+  border: 1px solid rgba(24, 144, 255, 0.2) !important;
+}
+
+.app-mcp-hub-card--installed {
+  opacity: 0.65;
+}
+
+.app-mcp-hub-card--installed:hover {
+  opacity: 1;
+}
+
+/* 4. 扩展卡片 (Extension) 状态样式 */
+.app-mcp-hub-card--extension:hover {
+  border-color: rgba(250, 140, 22, 0.35) !important;
+  box-shadow: 0 8px 24px rgba(250, 140, 22, 0.06), 0 2px 4px rgba(250, 140, 22, 0.01) !important;
+}
+
+.app-mcp-hub-card--extension .app-mcp-hub-card-avatar {
+  background: linear-gradient(135deg, rgba(250, 140, 22, 0.12), rgba(250, 140, 22, 0.04)) !important;
+  color: #d46b08 !important;
+  border: 1px solid rgba(250, 140, 22, 0.2) !important;
+}
+
+/* 卡片头部 */
+.app-mcp-hub-card-top {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+/* 迷你 Squircle 圆角渐变头像 */
+.app-mcp-hub-card-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--ant-color-text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 11px;
+  flex-shrink: 0;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.app-mcp-hub-card:hover .app-mcp-hub-card-avatar {
+  transform: scale(1.05) rotate(4deg);
+}
+
+.app-mcp-hub-card-headline {
+  min-width: 0;
+  flex: 1;
+}
+
+.app-mcp-hub-card-name-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  height: 16px;
+}
+
+.app-mcp-hub-card-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 600;
+  font-size: 12.5px;
+  color: var(--ant-color-text);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 极窄状态标签与微型呼吸灯 */
+.app-mcp-hub-card-tag {
+  border-radius: 4px !important;
+  font-size: 9px !important;
+  padding: 0 4px !important;
+  line-height: 13px !important;
+  height: 14px !important;
+  flex-shrink: 0;
+  margin-inline-end: 0 !important;
+  border: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 50%, transparent) !important;
+}
+
+/* 已连通呼吸指示灯 */
+.app-mcp-hub-card--connected .app-mcp-hub-card-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(82, 196, 26, 0.06) !important;
+  border-color: rgba(82, 196, 26, 0.15) !important;
+  color: #52c41a !important;
+}
+
+.app-mcp-hub-card--connected .app-mcp-hub-card-tag::before {
+  content: "";
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #52c41a;
+  box-shadow: 0 0 0 rgba(82, 196, 26, 0.4);
+  animation: pulse-green 1.6s infinite;
+  flex-shrink: 0;
+}
+
+/* 失败故障呼吸指示灯 */
+.app-mcp-hub-card--failed .app-mcp-hub-card-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(255, 77, 79, 0.06) !important;
+  border-color: rgba(255, 77, 79, 0.15) !important;
+  color: #ff4d4f !important;
+}
+
+.app-mcp-hub-card--failed .app-mcp-hub-card-tag::before {
+  content: "";
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #ff4d4f;
+  box-shadow: 0 0 0 rgba(255, 77, 79, 0.4);
+  animation: pulse-red 1.6s infinite;
+  flex-shrink: 0;
+}
+
+@keyframes pulse-green {
+  0% {
+    transform: scale(0.9);
+    box-shadow: 0 0 0 0 rgba(82, 196, 26, 0.6);
+  }
+  70% {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 3px rgba(82, 196, 26, 0);
+  }
+  100% {
+    transform: scale(0.9);
+    box-shadow: 0 0 0 0 rgba(82, 196, 26, 0);
+  }
+}
+
+@keyframes pulse-red {
+  0% {
+    transform: scale(0.9);
+    box-shadow: 0 0 0 0 rgba(255, 77, 79, 0.6);
+  }
+  70% {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 3px rgba(255, 77, 79, 0);
+  }
+  100% {
+    transform: scale(0.9);
+    box-shadow: 0 0 0 0 rgba(255, 77, 79, 0);
+  }
+}
+
+/* 作用域/引用标识 */
+.app-mcp-hub-card-ref,
+.app-mcp-hub-card-scope {
+  font-size: 10px;
+  color: var(--ant-color-text-quaternary);
+  margin-top: 1px;
+  line-height: 1.1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-mcp-hub-card-ref {
+  color: var(--ant-color-text-secondary);
+}
+
+/* 终端 Mono 风格极窄 Command 命令框 */
+.app-mcp-hub-card-command {
+  font-family: var(--ant-font-family-code, monospace);
+  font-size: 10px;
+  color: var(--ant-color-text-secondary);
+  padding: 3px 6px;
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 60%, transparent) !important;
+  border-radius: 5px;
+  border: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 40%, transparent) !important;
+  line-height: 1.3;
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+/* 插件描述文本紧凑化 */
+.app-mcp-hub-card-desc {
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--ant-color-text-secondary);
+  margin-top: 2px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 拥有工具徽标列表 */
+.app-mcp-hub-card-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 3px;
+}
+
+.app-mcp-hub-tool-chip {
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--ant-color-primary) 6%, transparent) !important;
+  color: var(--ant-color-primary) !important;
+  border: 1px solid color-mix(in srgb, var(--ant-color-primary) 12%, transparent) !important;
+  font-weight: 500;
+  line-height: 12px;
+}
+
+.app-mcp-hub-tool-more {
+  font-size: 9px;
+  color: var(--ant-color-text-tertiary);
+  font-weight: 600;
+  padding: 1px 2px;
+  line-height: 12px;
+}
+
+/* 底部极细功能条 */
+.app-mcp-hub-card-actions {
+  margin-top: auto;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 5px;
+  padding-top: 6px;
+  border-top: 1px dashed color-mix(in srgb, var(--ant-color-border-secondary) 40%, transparent) !important;
+  min-width: 0;
+}
+
+.app-mcp-hub-card-switch-label {
+  font-size: 10.5px;
+  color: var(--ant-color-text-tertiary);
+  margin-right: auto;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+/* 一键安装按钮精致化 */
+.app-mcp-hub-card-actions .app-mcp-hub-btn-install.ant-btn-sm {
+  background: var(--ant-color-primary) !important;
+  border: 1px solid var(--ant-color-primary) !important;
+  color: #ffffff !important;
+  font-weight: 500 !important;
+  border-radius: 5px !important;
+  height: 20px !important;
+  padding: 0 8px !important;
+  font-size: 10.5px !important;
+  line-height: 18px !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  cursor: pointer !important;
+}
+
+.app-mcp-hub-card-actions .app-mcp-hub-btn-install.ant-btn-sm:hover {
+  transform: translateY(-0.5px);
+  background: var(--ant-color-primary-hover) !important;
+  border-color: var(--ant-color-primary-hover) !important;
+  box-shadow: 0 3px 6px rgba(24, 144, 255, 0.15) !important;
+  color: #ffffff !important;
+}
+
+.app-mcp-hub-card-actions .app-mcp-hub-btn-install.ant-btn-sm .anticon {
+  font-size: 10px;
+}
+
+/* 卸载/删除动作按钮 */
+.app-mcp-hub-card-actions .ant-btn-dangerous,
+.app-mcp-hub-card-actions .ant-btn-text {
+  width: 20px !important;
+  height: 20px !important;
+  padding: 0 !important;
+  border-radius: 5px !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ant-color-text-quaternary) !important;
+  transition: all 0.2s ease !important;
+  cursor: pointer !important;
+}
+
+.app-mcp-hub-card-actions .ant-btn-dangerous:hover,
+.app-mcp-hub-card-actions .ant-btn-text:hover {
+  color: #ff4d4f !important;
+  background: rgba(255, 77, 79, 0.06) !important;
+}
+
+/* 系统推荐/辅助面板紧凑控制 */
+.app-mcp-hub-pending-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.app-mcp-hub-pending-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.app-mcp-hub-pending-subtitle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.app-mcp-hub-pending-subtitle {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+  line-height: 1.2;
+}
+
+.app-mcp-hub-pending-subtitle-side {
+  font-size: 10px;
+  color: var(--ant-color-text-tertiary);
+  font-weight: 400;
+}
+
 .app-mcp-hub-pending-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(216px, 1fr));
   gap: 8px;
 }
 
@@ -81,356 +678,188 @@
 }
 
 .app-mcp-hub-tab-load {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--ant-color-text-tertiary);
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.app-mcp-hub-header {
-  display: flex;
-  flex-direction: column;
   gap: 6px;
+  margin-bottom: 4px;
 }
 
-.app-mcp-hub-header .app-hub-loop {
-  margin-top: 6px;
-}
-
-.app-mcp-hub-header .app-hub-summary {
-  margin-bottom: 0;
-}
-
-.app-mcp-hub-header-top {
+.app-mcp-hub-loading {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-width: 0;
+  justify-content: center;
+  padding: 16px;
 }
 
-.app-mcp-hub-title {
-  margin: 0 !important;
-  font-weight: 600 !important;
-  font-size: 14px !important;
-  line-height: 1.2 !important;
-  min-width: 0;
-  flex: 1;
+.app-mcp-hub-empty {
+  margin: 6px 0;
 }
 
-.app-mcp-hub-close-btn {
-  flex-shrink: 0;
-  color: var(--ant-color-text-tertiary);
+.app-mcp-hub-empty .ant-empty-image {
+  height: 28px;
+  margin-bottom: 4px;
 }
 
-.app-mcp-hub-close-btn:hover {
-  color: var(--ant-color-text);
-  background: var(--ant-color-fill-tertiary);
+.app-mcp-hub-empty .ant-empty-description {
+  font-size: 10.5px;
 }
 
-.app-mcp-hub-subtitle {
-  margin-bottom: 0 !important;
-  margin-top: 0 !important;
-  font-size: 11px;
-  line-height: 1.35;
-  max-width: 640px;
-}
-
+/* 推荐扩展驱动卡片重构 */
 .app-mcp-hub-supply-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 6px;
 }
 
 .app-mcp-hub-supply-card {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 6px;
   min-width: 0;
-  min-height: 120px;
-  padding: 10px;
-  border: 1px solid var(--ant-color-border-secondary);
+  min-height: 96px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 60%, transparent);
   border-radius: 8px;
-  background: var(--ant-color-bg-container);
+  background: color-mix(in srgb, var(--ant-color-bg-container) 85%, transparent);
   color: inherit;
   cursor: pointer;
   font: inherit;
   text-align: left;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.01);
 }
 
 .app-mcp-hub-supply-card:hover {
-  background: var(--ant-color-fill-quaternary);
-  border-color: var(--ant-color-primary-border);
+  transform: translateY(-1.5px);
+  border-color: rgba(24, 144, 255, 0.35);
+  box-shadow: 0 4px 12px rgba(24, 144, 255, 0.05);
 }
 
 .app-mcp-hub-supply-card--active {
-  background: var(--ant-color-primary-bg);
-  border-color: var(--ant-color-primary-border);
+  background: var(--ant-color-primary-bg) !important;
+  border-color: var(--ant-color-primary-border) !important;
 }
 
 .app-mcp-hub-supply-card__head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 10px;
+  gap: 6px;
   min-width: 0;
-}
-
-.app-mcp-hub-supply-card__head > span:first-child {
-  min-width: 0;
-}
-
-.app-mcp-hub-supply-card__title,
-.app-mcp-hub-supply-card__eyebrow,
-.app-mcp-hub-supply-card__detail,
-.app-mcp-hub-supply-card__status,
-.app-mcp-hub-supply-card__metric span {
-  display: block;
 }
 
 .app-mcp-hub-supply-card__title {
   overflow: hidden;
   color: var(--ant-color-text);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .app-mcp-hub-supply-card__eyebrow {
-  margin-top: 2px;
+  margin-top: 1px;
   color: var(--ant-color-text-tertiary);
-  font-size: 10px;
+  font-size: 9.5px;
 }
 
 .app-mcp-hub-supply-card__metric {
   flex: none;
-  min-width: 54px;
-  padding: 3px 6px;
+  min-width: 44px;
+  padding: 2px 4px;
   border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 6px;
+  border-radius: 4px;
   background: var(--ant-color-fill-quaternary);
   text-align: right;
 }
 
 .app-mcp-hub-supply-card__metric strong {
   color: var(--ant-color-text);
-  font-size: 15px;
-  line-height: 1.1;
+  font-size: 13px;
+  line-height: 1;
 }
 
 .app-mcp-hub-supply-card__metric span {
   color: var(--ant-color-text-tertiary);
-  font-size: 10px;
-  line-height: 1.2;
+  font-size: 9px;
+  line-height: 1.1;
 }
 
 .app-mcp-hub-supply-card__detail {
   color: var(--ant-color-text-secondary);
-  font-size: 11.5px;
-  line-height: 1.45;
+  font-size: 10.5px;
+  line-height: 1.35;
 }
 
 .app-mcp-hub-supply-card__status {
   width: max-content;
   max-width: 100%;
   margin-top: auto;
-  padding: 1px 7px;
+  padding: 1px 5px;
   border: 1px solid var(--ant-color-border-secondary);
   border-radius: 4px;
   color: var(--ant-color-text-secondary);
-  font-size: 11px;
-  line-height: 1.5;
+  font-size: 10px;
+  line-height: 1.3;
 }
 
 .app-mcp-hub-supply-card--ready .app-mcp-hub-supply-card__status {
-  border-color: var(--ant-color-success-border);
-  background: var(--ant-color-success-bg);
-  color: var(--ant-color-success);
+  border-color: rgba(82, 196, 26, 0.15);
+  background: rgba(82, 196, 26, 0.05);
+  color: #52c41a;
 }
 
 .app-mcp-hub-supply-card--warn .app-mcp-hub-supply-card__status {
-  border-color: var(--ant-color-warning-border);
-  background: var(--ant-color-warning-bg);
-  color: var(--ant-color-warning);
+  border-color: rgba(250, 140, 22, 0.15);
+  background: rgba(250, 140, 22, 0.05);
+  color: #fa8c16;
 }
 
 .app-mcp-hub-error-body {
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
-.app-mcp-hub-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-}
-
-.app-mcp-hub-search {
-  flex: 1;
-  min-width: 160px;
-  max-width: 360px;
-}
-
-.app-mcp-hub-loading {
-  display: flex;
-  justify-content: center;
-  padding: 24px;
-}
-
-.app-mcp-hub-empty {
-  margin: 10px 0;
-}
-
-.app-mcp-hub-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 8px;
-}
-
-.app-mcp-hub-card {
-  border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 8px;
-  background: var(--ant-color-bg-container);
-  padding: 8px 10px;
+/* 配置中心：页头/搜索固定，Tab 下方 MCP 列表单独滚动 */
+.author-panel__scroll:has(.app-mcp-hub-root) {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  overflow: hidden;
+}
+
+.author-panel__scroll:has(.app-mcp-hub-root) > .app-mcp-hub-root {
+  flex: 1;
   min-height: 0;
-  min-width: 0;
+  height: 100%;
+  padding-inline: 0;
+  overflow: hidden;
 }
 
-.app-mcp-hub-card-top {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-}
-
-.app-mcp-hub-card-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  background: var(--ant-color-fill-secondary);
-  color: var(--ant-color-text);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 12px;
+.author-panel-page.app-mcp-hub-root .author-panel-page__head {
   flex-shrink: 0;
 }
 
-.app-mcp-hub-card-headline {
-  min-width: 0;
+.author-panel-page.app-mcp-hub-root .author-panel-page__body {
   flex: 1;
-}
-
-.app-mcp-hub-card-name-row {
+  min-height: 0;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 3px;
-}
-
-.app-mcp-hub-card-name {
-  font-weight: 600;
-  font-size: 12px;
-  color: var(--ant-color-text);
-  word-break: break-word;
-  line-height: 1.25;
-}
-
-.app-mcp-hub-card-tag {
-  font-size: 10px;
-  line-height: 1.15;
-  margin-inline-end: 0 !important;
-}
-
-.app-mcp-hub-card-scope {
-  font-size: 10px;
-  color: var(--ant-color-text-tertiary);
-  margin-top: 1px;
-  line-height: 1.2;
-}
-
-.app-mcp-hub-card-command {
-  font-size: 10px;
-  color: var(--ant-color-text-secondary);
-  font-family: var(--ant-font-family-code);
-  line-height: 1.4;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  flex-direction: column;
   overflow: hidden;
-  word-break: break-all;
 }
 
-.app-mcp-hub-card-tools {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 3px;
+.author-panel-page.app-mcp-hub-root .app-mcp-hub-tabs {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
 }
 
-.app-mcp-hub-tool-chip {
-  font-size: 9px;
-  padding: 0 4px;
-  border-radius: 3px;
-  background: var(--ant-color-fill-quaternary);
-  color: var(--ant-color-text-secondary);
+.app-mcp-hub-tabs .ant-tabs-content {
+  height: 100%;
 }
 
-.app-mcp-hub-tool-more {
-  font-size: 9px;
-  color: var(--ant-color-text-tertiary);
-}
-
-.app-mcp-hub-card-actions {
-  margin-top: auto;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-  padding-top: 3px;
-  border-top: 1px solid var(--ant-color-border-secondary);
-}
-
-.app-mcp-hub-card-actions .app-mcp-hub-btn-install.ant-btn-sm {
-  height: 22px;
-  padding-inline: 7px;
-  font-size: 11px;
-  line-height: 1.2;
-  border-radius: 4px;
-}
-
-.app-mcp-hub-card-actions .app-mcp-hub-btn-install.ant-btn-sm .anticon {
-  font-size: 11px;
-}
-
-.app-mcp-hub-card-switch-label {
-  font-size: 10px;
-  color: var(--ant-color-text-tertiary);
-  margin-right: auto;
-}
-
-.app-mcp-hub-card .ant-tag {
-  margin-inline-end: 0 !important;
-  padding: 0 4px;
-  font-size: 10px;
-  line-height: 16px;
-  min-height: 16px;
-}
-
-.app-mcp-hub-empty .ant-empty-image {
-  height: 36px;
-  margin-bottom: 6px;
-}
-
-.app-mcp-hub-empty .ant-empty-description {
-  font-size: 11px;
+.app-mcp-hub-pending-pane {
+  min-width: 0;
 }
 
 @media (max-width: 980px) {

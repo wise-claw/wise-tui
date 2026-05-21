@@ -357,6 +357,7 @@ export function ClaudePluginMarketHub({ onClose }: Props) {
         activeKey={activeTab}
         onChange={(key) => setActiveTab(key as HubTab)}
         size="small"
+        className="app-claude-plugin-hub-tabs"
         items={[
           { key: "catalog", label: catalogTabLabel, children: catalogPanel },
           { key: "installed", label: installedTabLabel, children: installedPanel },

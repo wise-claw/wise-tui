@@ -1,6 +1,6 @@
 import {
-  CheckCircleOutlined,
   CloseCircleOutlined,
+  CopyOutlined,
   DeleteOutlined,
   EditOutlined,
   PlusOutlined,
@@ -201,10 +201,10 @@ export function AgentRegistrySection() {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
-          <Button size="small" icon={<PlusOutlined />} onClick={openCreateModal}>
+          <Button type="primary" size="small" className="app-agent-registry-btn-add" icon={<PlusOutlined />} onClick={openCreateModal}>
             新增自定义
           </Button>
-          <Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={() => void reload(true)}>
+          <Button size="small" className="app-agent-registry-btn-reload" icon={<ReloadOutlined />} loading={loading} onClick={() => void reload(true)}>
             重新探测
           </Button>
         </Space>
@@ -238,21 +238,63 @@ export function AgentRegistrySection() {
         </AuthorPanelHubTabs>
       }
     >
+      {/* 顶部紧凑运行状态仪表盘 */}
+      <div className="app-agent-registry-dashboard">
+        <div className="app-agent-registry-metric-card app-agent-registry-metric-card--total">
+          <div className="app-agent-registry-metric-card__icon">
+            <ThunderboltOutlined />
+          </div>
+          <div className="app-agent-registry-metric-card__content">
+            <strong>{stats.total}</strong>
+            <small>总执行引擎</small>
+          </div>
+        </div>
+        <div className="app-agent-registry-metric-card app-agent-registry-metric-card--available">
+          <div className="app-agent-registry-metric-card__icon">
+            <span className="app-agent-registry-metric-card__dot-pulsing" />
+          </div>
+          <div className="app-agent-registry-metric-card__content">
+            <strong>{stats.available}</strong>
+            <small>就绪可用</small>
+          </div>
+        </div>
+        <div className="app-agent-registry-metric-card app-agent-registry-metric-card--custom">
+          <div className="app-agent-registry-metric-card__icon">
+            <PlusOutlined />
+          </div>
+          <div className="app-agent-registry-metric-card__content">
+            <strong>{stats.custom}</strong>
+            <small>自定义入口</small>
+          </div>
+        </div>
+        <div className="app-agent-registry-metric-card app-agent-registry-metric-card--errors">
+          <div className="app-agent-registry-metric-card__icon">
+            <CloseCircleOutlined />
+          </div>
+          <div className="app-agent-registry-metric-card__content">
+            <strong>{stats.unavailable}</strong>
+            <small>异常待排查</small>
+          </div>
+        </div>
+      </div>
+
       <AuthorPanelListShell className="app-agent-registry-section__list" aria-busy={loading}>
         {filteredAgents.length === 0 && !loading ? (
           <AuthorPanelEmptyShell>
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={getEmptyDescription(filter, query)} />
           </AuthorPanelEmptyShell>
         ) : (
-          filteredAgents.map((agent) => (
-            <AgentRegistryRow
-              key={agent.id}
-              agent={agent}
-              busy={loading}
-              onEdit={openEditModal}
-              onDelete={(id) => void handleDelete(id)}
-            />
-          ))
+          <div className="app-agent-registry-grid">
+            {filteredAgents.map((agent) => (
+              <AgentRegistryRow
+                key={agent.id}
+                agent={agent}
+                busy={loading}
+                onEdit={openEditModal}
+                onDelete={(id) => void handleDelete(id)}
+              />
+            ))}
+          </div>
         )}
       </AuthorPanelListShell>
 
@@ -287,7 +329,7 @@ export function AgentRegistrySection() {
             <Input placeholder="/usr/local/bin/my-agent 或 my-agent" autoComplete="off" />
           </Form.Item>
           <Form.Item name="argsText" label="参数">
-            <Input.TextArea rows={3} placeholder="每行一个参数" />
+            <Input.TextArea rows={3} placeholder="每行一个参数" style={{ fontFamily: "monospace" }} />
           </Form.Item>
           <Form.Item
             name="envText"
@@ -300,7 +342,7 @@ export function AgentRegistrySection() {
               },
             ]}
           >
-            <Input.TextArea rows={3} placeholder="KEY=value，每行一个" />
+            <Input.TextArea rows={3} placeholder="KEY=value，每行一个" style={{ fontFamily: "monospace" }} />
           </Form.Item>
         </Form>
         {testResult ? (
@@ -309,33 +351,15 @@ export function AgentRegistrySection() {
             type={testResult.ok ? "success" : "error"}
             showIcon
             title={testResult.ok ? "探测通过" : "探测失败"}
-            description={testResult.ok ? testResult.resolvedPath : testResult.error}
+            description={
+              <div style={{ fontFamily: "monospace", fontSize: "11px", whiteSpace: "pre-wrap" }}>
+                {testResult.ok ? testResult.resolvedPath : testResult.error}
+              </div>
+            }
           />
         ) : null}
       </Modal>
     </AuthorPanelPageShell>
-  );
-}
-
-interface AgentRegistryFilterButtonProps {
-  active: boolean;
-  count: number;
-  label: string;
-  onClick: () => void;
-}
-
-function AgentRegistryFilterButton({ active, count, label, onClick }: AgentRegistryFilterButtonProps) {
-  return (
-    <button
-      type="button"
-      className={`app-agent-registry-filter${active ? " app-agent-registry-filter--active" : ""}`}
-      onClick={onClick}
-      role="tab"
-      aria-selected={active}
-    >
-      {label}
-      <span>{count}</span>
-    </button>
   );
 }
 
@@ -347,58 +371,103 @@ interface AgentRegistryRowProps {
 }
 
 function AgentRegistryRow({ agent, busy, onEdit, onDelete }: AgentRegistryRowProps) {
-  const availableTag = agent.available ? (
-    <Tag icon={<CheckCircleOutlined />} color="success">
-      可用
-    </Tag>
-  ) : (
-    <Tooltip title={agent.failureReason ?? "不可用"}>
-      <Tag icon={<CloseCircleOutlined />} color="error">
-        不可用
-      </Tag>
-    </Tooltip>
-  );
+  const pathText = getAgentPathLabel(agent);
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard
+      .writeText(pathText)
+      .then(() => {
+        message.success("路径已复制到剪贴板");
+      })
+      .catch(() => {
+        message.error("复制失败");
+      });
+  }, [pathText]);
+
+  const brandClass = `app-agent-registry-card--${agent.kind}`;
 
   return (
-    <div className={`app-agent-registry-row${agent.available ? "" : " app-agent-registry-row--error"}`}>
-      <span className={`app-agent-registry-row__avatar app-agent-registry-row__avatar--${agent.kind}`} aria-hidden>
-        <ThunderboltOutlined />
-      </span>
-      <div className="app-agent-registry-row__main">
-        <div className="app-agent-registry-row__title-line">
-          <Typography.Text strong>{agent.name}</Typography.Text>
-          <Tag className="app-agent-registry-row__kind">{getAgentKindLabel(agent.kind)}</Tag>
-          {availableTag}
-          <Tag className="app-agent-registry-row__backend">{agent.backend}</Tag>
+    <article className={`app-agent-registry-card ${brandClass} ${agent.available ? "" : "app-agent-registry-card--error"}`}>
+      {/* 头部：Avatar 品牌图标与引擎状态灯 */}
+      <div className="app-agent-registry-card__header">
+        <span className={`app-agent-registry-card__avatar app-agent-registry-card__avatar--${agent.kind}`}>
+          <ThunderboltOutlined />
+        </span>
+        <div className="app-agent-registry-card__title-area">
+          <Typography.Text className="app-agent-registry-card__title" strong>
+            {agent.name}
+          </Typography.Text>
+          <div className="app-agent-registry-card__subtitle">
+            {getAgentKindLabel(agent.kind)} · {agent.backend}
+          </div>
         </div>
-        <Typography.Text className="app-agent-registry-row__path" code>
-          {getAgentPathLabel(agent)}
-        </Typography.Text>
-        <div className="app-agent-registry-row__meta">
-          <span>{describeAgentRuntime(agent)}</span>
-          <span>检测时间：{formatDetectedAt(agent.detectedAt)}</span>
+
+        <div className="app-agent-registry-card__status">
+          {agent.available ? (
+            <Tag color="success" className="app-agent-registry-card__status-tag">
+              <span className="app-agent-registry-card__status-indicator app-agent-registry-card__status-indicator--ok" />
+              就绪可用
+            </Tag>
+          ) : (
+            <Tooltip title={agent.failureReason ?? "当前环境尚未配置就绪"}>
+              <Tag color="error" className="app-agent-registry-card__status-tag">
+                <span className="app-agent-registry-card__status-indicator app-agent-registry-card__status-indicator--error" />
+                等待就绪
+              </Tag>
+            </Tooltip>
+          )}
         </div>
       </div>
-      {isAgentKind(agent, "custom") ? (
-        <Space size={4} className="app-agent-registry-row__actions">
-          <Button size="small" icon={<EditOutlined />} disabled={busy} onClick={() => onEdit(agent)}>
-            编辑
-          </Button>
-          <Popconfirm
-            title="删除自定义执行引擎"
-            description="将移除这条已保存的执行引擎配置。"
-            okText="删除"
-            cancelText="取消"
-            okButtonProps={{ danger: true }}
-            onConfirm={() => onDelete(agent.id)}
-          >
-            <Button size="small" danger icon={<DeleteOutlined />} disabled={busy}>
-              删除
+
+      {/* 命令/路径 Monospace 显示区 */}
+      <div className="app-agent-registry-card__path-box">
+        <span className="app-agent-registry-card__path-icon">💻</span>
+        <code className="app-agent-registry-card__path-code" title={pathText}>
+          {pathText}
+        </code>
+        <Tooltip title="复制路径">
+          <Button
+            type="text"
+            size="small"
+            className="app-agent-registry-card__copy-btn"
+            icon={<CopyOutlined style={{ fontSize: "11px" }} />}
+            onClick={handleCopy}
+          />
+        </Tooltip>
+      </div>
+
+      {/* 中部 Meta 运行时介绍 */}
+      <div className="app-agent-registry-card__runtime-desc">
+        {describeAgentRuntime(agent)}
+      </div>
+
+      {/* 底部 actions 和时间戳 */}
+      <div className="app-agent-registry-card__footer">
+        <span className="app-agent-registry-card__timestamp">
+          探测于 {formatDetectedAt(agent.detectedAt)}
+        </span>
+
+        {isAgentKind(agent, "custom") ? (
+          <Space size={4} className="app-agent-registry-card__actions">
+            <Button size="small" type="text" icon={<EditOutlined />} disabled={busy} onClick={() => onEdit(agent)}>
+              编辑
             </Button>
-          </Popconfirm>
-        </Space>
-      ) : null}
-    </div>
+            <Popconfirm
+              title="删除自定义执行引擎"
+              description="将移除这条已保存的执行引擎配置。"
+              okText="删除"
+              cancelText="取消"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => onDelete(agent.id)}
+            >
+              <Button size="small" type="text" danger icon={<DeleteOutlined />} disabled={busy}>
+                删除
+              </Button>
+            </Popconfirm>
+          </Space>
+        ) : null}
+      </div>
+    </article>
   );
 }
 

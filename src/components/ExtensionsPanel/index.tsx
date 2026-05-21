@@ -17,7 +17,7 @@ import {
   AuthorPanelListShell,
   AuthorPanelPageShell,
 } from "../AuthorPanel/AuthorPanelPageShell";
-import { HubDot, HubItem, HubItems, HubTag } from "../HubCard";
+import { HubDot, HubItem, HubItems, HubTag, avatarColorFor } from "../HubCard";
 import {
   installHelloWorldExtension,
   listExtensions,
@@ -105,6 +105,7 @@ function ExtensionsUsageGuide() {
         {
           key: "usage",
           label: "使用说明",
+          forceRender: true,
           children: (
             <div className="app-extensions-panel__guide-body">
               <Typography.Paragraph className="app-extensions-panel__guide-lead">
@@ -395,10 +396,18 @@ export function ExtensionsPanel() {
                 const extThemes = themes.filter((t) => t.extension === ext.name);
                 const extDecls = decls.filter((d) => d.extension === ext.name);
                 const hasContributes = extSkills.length + extThemes.length + extDecls.length > 0;
+                const extAvatarColor = avatarColorFor(ext.name);
                 return (
-                  <div key={ext.name}>
+                  <div
+                    key={ext.name}
+                    className={`app-extensions-panel__card${ext.enabled ? " app-extensions-panel__card--enabled" : ""}${ext.error ? " app-extensions-panel__card--error" : ""}`}
+                    style={{
+                      ["--extension-avatar-color" as any]: extAvatarColor,
+                    }}
+                  >
                     <HubItem
                       avatarText={ext.name || "·"}
+                      avatarColor={extAvatarColor}
                       title={ext.name}
                       tags={
                         <>

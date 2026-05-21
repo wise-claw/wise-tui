@@ -221,20 +221,22 @@ export function McpHub({ repositoryPath, onClose }: Props) {
       <div className="app-mcp-hub-grid">
         {flatRows.map(({ item, sectionTitle, sectionKey }) => {
           const readOnly = sectionKey === "pluginMcp";
+          const isConnected = item.runtimeStatus === "connected";
+          const isFailed = item.runtimeStatus === "failed";
+          const cardClass = `app-mcp-hub-card ${
+            isConnected ? "app-mcp-hub-card--connected" : isFailed ? "app-mcp-hub-card--failed" : ""
+          } ${readOnly ? "app-mcp-hub-card--readonly" : ""}`;
           return (
-            <article key={item.id} className="app-mcp-hub-card">
+            <article key={item.id} className={cardClass}>
               <div className="app-mcp-hub-card-top">
                 <span className="app-mcp-hub-card-avatar" aria-hidden>
                   {item.name.slice(0, 1).toUpperCase()}
                 </span>
                 <div className="app-mcp-hub-card-headline">
                   <div className="app-mcp-hub-card-name-row">
-                    <span className="app-mcp-hub-card-name">{item.name}</span>
-                    {item.pluginRef ? (
-                      <Tag variant="filled" className="app-mcp-hub-card-tag">
-                        {item.pluginRef}
-                      </Tag>
-                    ) : null}
+                    <span className="app-mcp-hub-card-name" title={item.name}>
+                      {item.name}
+                    </span>
                     {item.runtimeStatus === "connected" ? (
                       <Tag variant="filled" color="success" className="app-mcp-hub-card-tag">
                         已连通
@@ -245,7 +247,20 @@ export function McpHub({ repositoryPath, onClose }: Props) {
                       </Tag>
                     ) : null}
                   </div>
-                  <div className="app-mcp-hub-card-scope">{sectionTitle}</div>
+                  {item.pluginRef ? (
+                    <div className="app-mcp-hub-card-ref" title={item.pluginRef}>
+                      {item.pluginRef}
+                    </div>
+                  ) : (
+                    <div className="app-mcp-hub-card-scope" title={sectionTitle}>
+                      {sectionTitle}
+                    </div>
+                  )}
+                  {item.pluginRef ? (
+                    <div className="app-mcp-hub-card-scope" title={sectionTitle}>
+                      {sectionTitle}
+                    </div>
+                  ) : null}
                 </div>
               </div>
               <div className="app-mcp-hub-card-command" title={item.command}>
@@ -281,7 +296,7 @@ export function McpHub({ repositoryPath, onClose }: Props) {
     );
 
   const pendingPanel = (
-    <div className="app-mcp-hub-pending-pane" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+    <div className="app-mcp-hub-pending-pane">
       {!cuaDriverStatus ? (
         <div className="app-mcp-hub-tab-load">
           <Spin size="small" />
@@ -290,8 +305,8 @@ export function McpHub({ repositoryPath, onClose }: Props) {
       ) : null}
 
       {showComputerUseInPending ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-          <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--ant-color-text)" }}>
+        <div className="app-mcp-hub-pending-section">
+          <div className="app-mcp-hub-pending-subtitle">
             系统辅助驱动
           </div>
           <div className="app-mcp-hub-pending-grid">
@@ -300,11 +315,11 @@ export function McpHub({ repositoryPath, onClose }: Props) {
         </div>
       ) : null}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-        <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--ant-color-text)", display: "flex", justifyContent: "space-between" }}>
-          <span>常用工具一键安装</span>
+      <div className="app-mcp-hub-pending-section">
+        <div className="app-mcp-hub-pending-subtitle-row">
+          <span className="app-mcp-hub-pending-subtitle">常用工具一键安装</span>
           {hubSearch && (
-            <span style={{ fontWeight: 400, color: "var(--ant-color-text-secondary)" }}>
+            <span className="app-mcp-hub-pending-subtitle-side">
               已筛选出 {filteredRecommendations.length} 项
             </span>
           )}
@@ -327,9 +342,12 @@ export function McpHub({ repositoryPath, onClose }: Props) {
               else if (mcp.category === "智能辅助") categoryColor = "purple";
 
               const commandPreview = `${mcp.command} ${mcp.args.join(" ")}`;
+              const cardClass = `app-mcp-hub-card app-mcp-hub-card--recommend ${
+                isInstalled ? "app-mcp-hub-card--installed" : ""
+              }`;
 
               return (
-                <article key={mcp.name} className="app-mcp-hub-card" style={{ opacity: isInstalled ? 0.75 : 1 }}>
+                <article key={mcp.name} className={cardClass}>
                   <div className="app-mcp-hub-card-top">
                     <span className="app-mcp-hub-card-avatar" aria-hidden>
                       {mcp.name.slice(0, 1).toUpperCase()}
@@ -347,19 +365,7 @@ export function McpHub({ repositoryPath, onClose }: Props) {
                   <div className="app-mcp-hub-card-command" title={commandPreview}>
                     {commandPreview}
                   </div>
-                  <div
-                    style={{
-                      fontSize: "11px",
-                      color: "var(--ant-color-text-secondary)",
-                      marginTop: "2px",
-                      lineHeight: 1.45,
-                      display: "-webkit-box",
-                      WebkitLineClamp: 3,
-                      WebkitBoxOrient: "vertical",
-                      overflow: "hidden",
-                    }}
-                    title={mcp.description}
-                  >
+                  <div className="app-mcp-hub-card-desc" title={mcp.description}>
                     {mcp.description}
                   </div>
                   {mcp.tools.length > 0 ? (
@@ -415,34 +421,32 @@ export function McpHub({ repositoryPath, onClose }: Props) {
         const command = s.transport.type === "stdio"
           ? [s.transport.command ?? "", ...(s.transport.args ?? [])].filter(Boolean).join(" ")
           : s.transport.url ?? "";
+        const cardClass = "app-mcp-hub-card app-mcp-hub-card--extension";
         return (
-          <article key={s.id} className="app-mcp-hub-card">
+          <article key={s.id} className={cardClass}>
             <div className="app-mcp-hub-card-top">
               <span className="app-mcp-hub-card-avatar" aria-hidden>
                 {s.name.slice(0, 1).toUpperCase()}
               </span>
               <div className="app-mcp-hub-card-headline">
                 <div className="app-mcp-hub-card-name-row">
-                  <span className="app-mcp-hub-card-name">{s.name}</span>
-                  <Tag color="purple" style={{ marginLeft: 4 }}>
+                  <span className="app-mcp-hub-card-name" title={s.name}>
+                    {s.name}
+                  </span>
+                  <Tag color="purple" className="app-mcp-hub-card-tag">
                     {s.transport.type}
                   </Tag>
-                  <Tag color="default">来自扩展 {s.extension}</Tag>
                 </div>
-                <div className="app-mcp-hub-card-scope">扩展贡献 · 只读</div>
+                <div className="app-mcp-hub-card-ref" title={`来自扩展 ${s.extension}`}>
+                  来自扩展 {s.extension} · 只读
+                </div>
               </div>
             </div>
             <div className="app-mcp-hub-card-command" title={command}>
               {command || "—"}
             </div>
             {s.description ? (
-              <div
-                style={{
-                  fontSize: 12,
-                  color: "var(--ant-color-text-secondary)",
-                  marginTop: 4,
-                }}
-              >
+              <div className="app-mcp-hub-card-desc" title={s.description}>
                 {s.description}
               </div>
             ) : null}
