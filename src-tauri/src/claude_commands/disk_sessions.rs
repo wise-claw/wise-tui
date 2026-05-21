@@ -290,12 +290,21 @@ pub(crate) fn load_claude_session_jsonl(
 ///
 /// 安全约束：复用 `resolve_session_jsonl_path` 校验，确保 `session_id` 形态合法、
 /// 解析后的 jsonl 真实存在于该项目目录内（canonicalize + `starts_with`）。
+/// 删除时若项目目录或 jsonl 已不存在，视为幂等成功（磁盘侧已无记录）。
+fn delete_session_jsonl_already_absent(err: &str) -> bool {
+    err.contains("session file not found") || err.contains("bad project sessions dir")
+}
+
 #[tauri::command]
 pub(crate) fn delete_claude_disk_session(
     project_path: String,
     session_id: String,
 ) -> Result<(), String> {
-    let (_dir_canon, path_canon) = resolve_session_jsonl_path(&project_path, &session_id)?;
+    let (_dir_canon, path_canon) = match resolve_session_jsonl_path(&project_path, &session_id) {
+        Ok(paths) => paths,
+        Err(e) if delete_session_jsonl_already_absent(&e) => return Ok(()),
+        Err(e) => return Err(e),
+    };
     fs::remove_file(&path_canon).map_err(|e| format!("remove session jsonl: {}", e))?;
     Ok(())
 }
