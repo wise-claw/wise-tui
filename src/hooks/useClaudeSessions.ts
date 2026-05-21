@@ -812,7 +812,12 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         trellisContextIdBySessionRef.current = new Map(
           Object.entries(parsed).filter((entry): entry is [string, string] => {
             const [sessionId, contextId] = entry;
-            return typeof sessionId === "string" && sessionId.trim().length > 0 && contextId.trim().length > 0;
+            return (
+              typeof sessionId === "string" &&
+              sessionId.trim().length > 0 &&
+              typeof contextId === "string" &&
+              contextId.trim().length > 0
+            );
           }),
         );
       } catch {
@@ -822,7 +827,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       if (!cancelled) {
         setTrellisContextBindingsHydrated(true);
       }
-    })();
+    });
     return () => {
       cancelled = true;
     };
