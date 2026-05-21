@@ -57,8 +57,8 @@ export const AuthorPanelNav = memo(function AuthorPanelNav({
             type="button"
             className="author-panel-nav-item author-panel-nav-item--back"
             onClick={handleBack}
-            title="关闭工作台配置"
-            aria-label="关闭工作台配置"
+            title="关闭工作台配置 (Esc)"
+            aria-label="关闭工作台配置 (Esc)"
           >
             <span className="author-panel-nav-item__icon" aria-hidden>
               <LeftOutlined />
@@ -66,25 +66,27 @@ export const AuthorPanelNav = memo(function AuthorPanelNav({
             <span className="author-panel-nav-item__label">返回</span>
           </button>
         </div>
-        {AUTHOR_TAB_GROUPS.map((group) => (
-          <div className="author-panel-nav-group" key={group.title}>
-            <div className="author-panel-nav-group__title">{group.title}</div>
-            {group.items.map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                className={`author-panel-nav-item${tab.key === pane ? " author-panel-nav-item--active" : ""}`}
-                onClick={() => handlePaneChange(tab.key)}
-                title={tab.description}
-              >
-                <span className="author-panel-nav-item__icon" aria-hidden>
-                  {tab.icon}
-                </span>
-                <span className="author-panel-nav-item__label">{tab.label}</span>
-              </button>
-            ))}
-          </div>
-        ))}
+        <div className="author-panel__nav-scroll">
+          {AUTHOR_TAB_GROUPS.map((group) => (
+            <div className="author-panel-nav-group" key={group.title}>
+              <div className="author-panel-nav-group__title">{group.title}</div>
+              {group.items.map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  className={`author-panel-nav-item${tab.key === pane ? " author-panel-nav-item--active" : ""}`}
+                  onClick={() => handlePaneChange(tab.key)}
+                  title={tab.description}
+                >
+                  <span className="author-panel-nav-item__icon" aria-hidden>
+                    {tab.icon}
+                  </span>
+                  <span className="author-panel-nav-item__label">{tab.label}</span>
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
       </nav>
     </Layout.Sider>
   );

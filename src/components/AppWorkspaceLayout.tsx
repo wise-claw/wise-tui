@@ -454,6 +454,28 @@ export function AppWorkspaceLayout({
   }, [authorMode]);
 
   useEffect(() => {
+    if (!authorMode) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (event.defaultPrevented) return;
+      const target = event.target;
+      if (target instanceof Element) {
+        if (
+          target.closest(
+            ".ant-modal-wrap, .ant-drawer-open, .ant-image-preview-root, .ant-select-dropdown, .ant-dropdown, .ant-picker-dropdown, .ant-popover, .ant-color-picker-dropdown",
+          )
+        ) {
+          return;
+        }
+      }
+      event.preventDefault();
+      authorPanelProps.onBack();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [authorMode, authorPanelProps.onBack]);
+
+  useEffect(() => {
     if (missionControlMode) setCockpitShellMounted(true);
   }, [missionControlMode]);
 

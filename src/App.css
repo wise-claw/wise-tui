@@ -1985,7 +1985,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 .app-left-sidebar-project-and-files > .app-repository-header {
   flex-shrink: 0;
   min-height: 22px;
-  padding: 0 8px;
+  padding: 0 6px;
 }
 
 .app-left-sidebar-project-and-files > .app-repository-header .app-repository-header-title {
@@ -2009,7 +2009,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   align-self: stretch;
   max-height: min(50%, 360px);
   min-height: 0;
-  padding: 0 8px 0;
+  padding: 0 6px 0;
   overflow-y: auto;
 }
 
@@ -2166,7 +2166,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 
 /* 仅左栏：与 ProjectList 组件中的 .app-repository-list 区分，避免全局 flex 互相覆盖 */
 .app-left-sidebar .app-repository-list {
-  padding: 2px 8px 12px 4px;
+  padding: 2px 6px 12px 2px;
 }
 
 .app-left-sidebar-assistant-entry {
@@ -2311,8 +2311,8 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 8px;
-  margin: 2px 4px;
+  padding: 5px 6px;
+  margin: 2px 2px;
   border-radius: 8px;
   cursor: pointer;
   font-size: 12px;
@@ -2338,11 +2338,11 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 .app-repository-item--project {
   gap: 3px;
   min-height: 24px;
-  padding: 4px 8px;
+  padding: 4px 6px;
 }
 
 .app-repository-item--repo {
-  padding: 3px 8px;
+  padding: 3px 6px;
 }
 
 .app-repository-item--project .app-repository-name-block {
