@@ -59,7 +59,8 @@
       "../scripts/cc-workflow-studio-mcp/register-tools.mjs",
       "../scripts/cc-workflow-studio-mcp/resources/workflow-schema.toon",
       "resources/skills/officecli-docx/SKILL.md",
-      "resources/skills/officecli-pptx/SKILL.md"
+      "resources/skills/officecli-pptx/SKILL.md",
+      "../examples/wise-extensions/hello-world"
     ],
     "macOS": {
       "minimumSystemVersion": "12.0",

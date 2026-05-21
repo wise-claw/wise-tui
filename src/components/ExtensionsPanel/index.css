@@ -2,6 +2,85 @@
   min-width: 0;
 }
 
+.app-extensions-panel .author-panel-page__head {
+  padding-bottom: 16px;
+}
+
+.app-extensions-panel .author-panel-page__head-row {
+  gap: 14px;
+}
+
+.app-extensions-panel .author-panel-page__subrow {
+  margin-top: 12px;
+  gap: 14px;
+}
+
+.app-extensions-panel .author-panel-page__body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.app-extensions-panel__guide {
+  margin-bottom: 0;
+  background: var(--ant-color-fill-quaternary);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+}
+
+.app-extensions-panel__guide .ant-collapse-item {
+  border: none !important;
+}
+
+.app-extensions-panel__guide .ant-collapse-header {
+  padding: 8px 12px !important;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+}
+
+.app-extensions-panel__guide .ant-collapse-content-box {
+  padding: 0 12px 12px !important;
+}
+
+.app-extensions-panel__guide-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.app-extensions-panel__guide-lead.ant-typography {
+  margin: 0 !important;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-extensions-panel__guide-steps-title {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-extensions-panel__guide-steps {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-extensions-panel__guide-steps li + li {
+  margin-top: 6px;
+}
+
+.app-extensions-panel__guide-note.ant-typography {
+  margin: 0 !important;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .app-extensions-panel__page-head {
   flex-shrink: 0;
   padding: 24px 0 12px;

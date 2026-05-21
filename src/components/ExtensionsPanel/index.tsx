@@ -1,12 +1,13 @@
 import {
   AppstoreAddOutlined,
   DownOutlined,
+  DownloadOutlined,
   FolderOpenOutlined,
   ReloadOutlined,
   RightOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
-import { App, Button, Empty, Input, Space, Spin, Switch } from "antd";
+import { App, Button, Collapse, Empty, Input, Popconfirm, Space, Spin, Switch, Typography } from "antd";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -18,6 +19,7 @@ import {
 } from "../AuthorPanel/AuthorPanelPageShell";
 import { HubDot, HubItem, HubItems, HubTag } from "../HubCard";
 import {
+  installHelloWorldExtension,
   listExtensions,
   reloadExtensions,
   setExtensionEnabled,
@@ -58,6 +60,85 @@ function countContributes(
   };
 }
 
+function InstallExampleExtensionButton({
+  hasHelloWorld,
+  installing,
+  onInstall,
+}: {
+  hasHelloWorld: boolean;
+  installing: boolean;
+  onInstall: () => void;
+}) {
+  const button = (
+    <Button
+      size="small"
+      type="primary"
+      icon={<DownloadOutlined />}
+      loading={installing}
+      onClick={hasHelloWorld ? undefined : onInstall}
+    >
+      安装示例扩展
+    </Button>
+  );
+
+  if (!hasHelloWorld) return button;
+
+  return (
+    <Popconfirm
+      title="将覆盖 ~/.wise/extensions/hello-world 下的现有文件，是否继续？"
+      okText="覆盖安装"
+      cancelText="取消"
+      onConfirm={onInstall}
+    >
+      {button}
+    </Popconfirm>
+  );
+}
+
+function ExtensionsUsageGuide() {
+  return (
+    <Collapse
+      bordered={false}
+      className="app-extensions-panel__guide"
+      defaultActiveKey={[]}
+      items={[
+        {
+          key: "usage",
+          label: "使用说明",
+          children: (
+            <div className="app-extensions-panel__guide-body">
+              <Typography.Paragraph className="app-extensions-panel__guide-lead">
+                扩展市场是 Wise 本机<strong>可插拔能力包</strong>的管理入口。每个扩展通过清单声明技能、主题、MCP、助手与设置项等贡献，启用后会汇入工作台其它生态页。
+              </Typography.Paragraph>
+              <Typography.Text className="app-extensions-panel__guide-steps-title">手动安装</Typography.Text>
+              <ol className="app-extensions-panel__guide-steps">
+                <li>
+                  也可点页头「安装示例扩展」一键安装官方 <Typography.Text code>hello-world</Typography.Text> 示例。
+                </li>
+                <li>
+                  在用户目录 <Typography.Text code>~/.wise/extensions/</Typography.Text> 下为每个扩展单独建文件夹（可点右上角「打开目录」）。
+                </li>
+                <li>
+                  在文件夹根目录放置 <Typography.Text code>wise-extension.json</Typography.Text> 清单，声明名称、版本与{" "}
+                  <Typography.Text code>contributes</Typography.Text>（技能、主题、MCP 等）。
+                </li>
+                <li>放入或更新文件后，点击「重新扫描」加载扩展；加载失败会出现在「异常」筛选中。</li>
+                <li>用列表右侧开关启用或禁用扩展；可展开卡片查看该扩展具体贡献了哪些能力。</li>
+                <li>
+                  已启用的技能、MCP 等会分别出现在「技能市场」「MCP 工具」「助手模板」等页面，无需重复安装。
+                </li>
+              </ol>
+              <Typography.Paragraph type="secondary" className="app-extensions-panel__guide-note">
+                与侧栏「Claude 插件」不同：扩展市场管理的是 Wise 扩展目录；Claude 插件面向 Claude Code 官方/精选插件市场。
+              </Typography.Paragraph>
+            </div>
+          ),
+        },
+      ]}
+    />
+  );
+}
+
 export function ExtensionsPanel() {
   const { message } = App.useApp();
   const [list, setList] = useState<ExtensionListEntry[]>([]);
@@ -70,6 +151,7 @@ export function ExtensionsPanel() {
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<"installed" | "disabled" | "errors">("installed");
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const [installingExample, setInstallingExample] = useState(false);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -179,6 +261,35 @@ export function ExtensionsPanel() {
     [enriched],
   );
 
+  const hasHelloWorld = useMemo(
+    () => enriched.some((entry) => entry.name === "hello-world"),
+    [enriched],
+  );
+
+  const handleInstallExample = useCallback(async () => {
+    setInstallingExample(true);
+    try {
+      const result = await installHelloWorldExtension();
+      const [l, s, t, d] = await Promise.all([
+        listExtensions(),
+        getExtensionSkills(),
+        getExtensionThemes(),
+        getExtensionSettingsDeclarations(),
+      ]);
+      setList(l);
+      setSkills(s);
+      setThemes(t);
+      setDecls(d);
+      setScope("installed");
+      setExpanded((prev) => new Set(prev).add("hello-world"));
+      message.success(`示例已安装到 ${result.destPath}`);
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setInstallingExample(false);
+    }
+  }, [message]);
+
   return (
     <AuthorPanelPageShell
       className="app-extensions-panel"
@@ -212,6 +323,11 @@ export function ExtensionsPanel() {
           >
             打开目录
           </Button>
+          <InstallExampleExtensionButton
+            hasHelloWorld={hasHelloWorld}
+            installing={installingExample}
+            onInstall={() => void handleInstallExample()}
+          />
         </Space>
       }
       toolbar={
@@ -237,6 +353,7 @@ export function ExtensionsPanel() {
         </AuthorPanelHubTabs>
       }
     >
+        <ExtensionsUsageGuide />
         {loading && enriched.length === 0 ? (
           <div className="author-panel-page__loading">
             <Spin size="small" />
@@ -247,7 +364,7 @@ export function ExtensionsPanel() {
               image={Empty.PRESENTED_IMAGE_SIMPLE}
               description={
                 scope === "installed"
-                  ? "暂无扩展。把 wise-extension.json 目录放入 ~/.wise/extensions/ 后点重新扫描。"
+                  ? "暂无已安装的扩展。可点「安装示例扩展」，或按使用说明手动放入扩展目录后重新扫描。"
                   : scope === "disabled"
                     ? "没有禁用的扩展"
                     : "没有异常的扩展"

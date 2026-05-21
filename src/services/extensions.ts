@@ -52,3 +52,12 @@ export async function getExtensionPermissions(
 export async function reloadExtensions(): Promise<ExtensionListEntry[]> {
   return invoke<ExtensionListEntry[]>("extensions_reload");
 }
+
+export interface InstallHelloWorldExtensionResult {
+  destPath: string;
+  entry: ExtensionListEntry;
+}
+
+export async function installHelloWorldExtension(): Promise<InstallHelloWorldExtensionResult> {
+  return invoke<InstallHelloWorldExtensionResult>("extensions_install_hello_world_example");
+}

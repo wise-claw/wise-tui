@@ -8,6 +8,7 @@ pub mod loader;
 pub mod state;
 pub mod registry;
 pub mod lifecycle;
+pub mod example_install;
 pub mod commands;
 
 pub use registry::ExtensionRegistry;

@@ -17,6 +17,7 @@ import {
   getExtensionSettingsDeclarations,
   getExtensionSkills,
   getExtensionThemes,
+  installHelloWorldExtension,
   listExtensions,
   reloadExtensions,
   setExtensionEnabled,
@@ -72,5 +73,23 @@ describe("extensions service", () => {
     invokeMock.mockResolvedValueOnce([]);
     await reloadExtensions();
     expect(invokeMock).toHaveBeenCalledWith("extensions_reload");
+  });
+
+  test("installHelloWorldExtension calls extensions_install_hello_world_example", async () => {
+    invokeMock.mockResolvedValueOnce({
+      destPath: "/Users/test/.wise/extensions/hello-world",
+      entry: {
+        name: "hello-world",
+        version: "0.1.0",
+        description: "demo",
+        enabled: true,
+        installed: true,
+        error: null,
+        lastActivation: null,
+      },
+    });
+    const out = await installHelloWorldExtension();
+    expect(out.entry.name).toBe("hello-world");
+    expect(invokeMock).toHaveBeenCalledWith("extensions_install_hello_world_example");
   });
 });

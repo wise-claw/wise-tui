@@ -455,6 +455,7 @@ pub fn run() {
             extensions::commands::extensions_set_enabled,
             extensions::commands::extensions_get_permissions,
             extensions::commands::extensions_reload,
+            extensions::commands::extensions_install_hello_world_example,
             extensions::commands::extensions_get_mcp_servers,
             extensions::commands::extensions_get_settings_tabs,
             extensions::commands::extensions_read_settings_tab_body,

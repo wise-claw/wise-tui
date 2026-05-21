@@ -24,6 +24,18 @@ mock.module("../../services/extensions", () => ({
     },
   ]),
   reloadExtensions: mock(async () => []),
+  installHelloWorldExtension: mock(async () => ({
+    destPath: "/Users/test/.wise/extensions/hello-world",
+    entry: {
+      name: "hello-world",
+      version: "0.1.0",
+      description: "Reference extension",
+      enabled: true,
+      installed: true,
+      error: null,
+      lastActivation: null,
+    },
+  })),
   setExtensionEnabled: mock(async () => undefined),
   getExtensionSkills: mock(async () => [
     {
@@ -62,8 +74,11 @@ describe("ExtensionsPanel", () => {
     );
 
     expect(html).toContain("扩展市场");
+    expect(html).toContain("使用说明");
+    expect(html).toContain("安装示例扩展");
     expect(html).toContain("重新扫描");
     expect(html).toContain("打开目录");
     expect(html).toContain("已安装");
+    expect(html).toContain("wise-extension.json");
   });
 });

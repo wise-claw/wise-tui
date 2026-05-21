@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
+use super::example_install::InstallHelloWorldResult;
 use super::manifest::Permissions;
 use super::registry::{
     ExtensionListEntry, ExtensionRegistry, ResolvedMcpServer, ResolvedSettingsDeclaration,
@@ -82,6 +83,14 @@ pub fn extensions_reload(
     let extra: Vec<PathBuf> = Vec::new();
     state.hot_reload(&extra)?;
     Ok(state.list())
+}
+
+#[tauri::command]
+pub fn extensions_install_hello_world_example(
+    app: tauri::AppHandle,
+    state: State<'_, ExtensionRegistry>,
+) -> Result<InstallHelloWorldResult, String> {
+    super::example_install::install_hello_world(&app, &state)
 }
 
 #[tauri::command]
