@@ -6,6 +6,7 @@ import {
   DeleteOutlined,
   FieldTimeOutlined,
   QuestionCircleOutlined,
+  CompressOutlined,
   ReloadOutlined,
   UnorderedListOutlined,
 } from "@ant-design/icons";
@@ -119,6 +120,11 @@ import {
   resolveMainOwnerAgentNameForRepositoryPath,
 } from "../../utils/repositoryMainSessionBinding";
 import { getAppSetting, setAppSetting } from "../../services/appSettingsStore";
+import {
+  CONTEXT_AUTO_COMPACT_BEFORE_SEND_PERCENT,
+  CONTEXT_WARN_PERCENT,
+  getSessionContextMetrics,
+} from "../../services/claudeSessionContext";
 import {
   buildAiCommitSummary,
   buildTaskExecutionPrompt,
@@ -285,6 +291,8 @@ interface Props {
   onAddWorktreeRepositoryToProject?: (worktreePath: string) => void | Promise<void>;
   /** 从磁盘读取完整 jsonl 覆盖当前标签消息（`diskTranscriptPartial` 时） */
   onReloadFullDiskTranscript?: (sessionId: string) => void | Promise<void>;
+  /** 手动执行 Claude Code `/compact` 压缩会话历史 */
+  onCompactSessionHistory?: (sessionId: string) => void | Promise<void>;
   /** 双栏右侧主会话：输入框底栏仓库选择（由父级仅在右侧注入） */
   dualPaneRepositoryPicker?: DualPaneComposerRepositoryPickerProps;
   activeProject?: ProjectItem | null;
@@ -478,6 +486,7 @@ export function ClaudeChat({
   omcBatchPipelineActive = false,
   onAddWorktreeRepositoryToProject,
   onReloadFullDiskTranscript,
+  onCompactSessionHistory,
   dualPaneRepositoryPicker,
   missionContext,
   activeProject,
@@ -3075,6 +3084,49 @@ export function ClaudeChat({
     };
   }, [sessionSendTraces, sessionTraceStorageKey]);
 
+  const sessionContextMetrics = useMemo(() => getSessionContextMetrics(session), [session.messages]);
+  const [compactHistoryInFlight, setCompactHistoryInFlight] = useState(false);
+  const isSessionBusy =
+    session.status === "running" || session.status === "connecting";
+  const canCompactSessionHistory =
+    Boolean(onCompactSessionHistory) &&
+    Boolean(session.claudeSessionId?.trim()) &&
+    !isSessionBusy &&
+    !compactHistoryInFlight;
+
+  const handleCompactSessionHistory = useCallback(() => {
+    if (!onCompactSessionHistory || !canCompactSessionHistory) return;
+    setCompactHistoryInFlight(true);
+    void Promise.resolve(onCompactSessionHistory(session.id))
+      .then(() => {
+        message.success("会话历史已压缩");
+      })
+      .catch(() => {
+        /* 失败说明已由 hook 写入会话系统消息 */
+      })
+      .finally(() => {
+        setCompactHistoryInFlight(false);
+      });
+  }, [canCompactSessionHistory, onCompactSessionHistory, session.id]);
+
+  const compactSessionTooltip = useMemo(() => {
+    if (!session.claudeSessionId?.trim()) {
+      return "会话尚未建立 Claude session_id，暂无法压缩";
+    }
+    if (isSessionBusy) {
+      return "会话运行中，请结束当前轮次后再压缩";
+    }
+    const { ctxPercent, estimatedTokens } = sessionContextMetrics;
+    const autoNote =
+      ctxPercent >= CONTEXT_AUTO_COMPACT_BEFORE_SEND_PERCENT
+        ? "；发送新消息前也会自动压缩"
+        : "";
+    if (ctxPercent >= CONTEXT_WARN_PERCENT) {
+      return `上下文约 ${ctxPercent}%（~${estimatedTokens.toLocaleString("zh-CN")} tokens），执行 /compact 压缩磁盘历史${autoNote}`;
+    }
+    return `执行 Claude Code /compact 压缩对话历史${autoNote}`;
+  }, [isSessionBusy, session.claudeSessionId, sessionContextMetrics]);
+
   return (
     <div
       ref={chatRootRef}
@@ -3249,6 +3301,38 @@ export function ClaudeChat({
                   </button>
                 </Tooltip>
               </Popover>
+
+              {onCompactSessionHistory ? (
+                <Tooltip title={compactSessionTooltip} mouseEnterDelay={0.35}>
+                  <button
+                    type="button"
+                    className={[
+                      "app-claude-session-tool-btn",
+                      "app-claude-session-tool-btn--compact-context",
+                      sessionContextMetrics.ctxPercent >= CONTEXT_WARN_PERCENT
+                        ? "app-claude-session-tool-btn--context-high"
+                        : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    data-ui-anchor="session-compact-context-btn"
+                    disabled={!canCompactSessionHistory}
+                    aria-busy={compactHistoryInFlight}
+                    onClick={handleCompactSessionHistory}
+                  >
+                    <CompressOutlined spin={compactHistoryInFlight} />
+                    <span className="app-claude-session-tool-btn__text">压缩上下文</span>
+                    {sessionContextMetrics.ctxPercent >= CONTEXT_WARN_PERCENT ? (
+                      <span
+                        className="app-claude-session-tool-btn__badge"
+                        aria-label={`上下文约 ${sessionContextMetrics.ctxPercent}%`}
+                      >
+                        {sessionContextMetrics.ctxPercent}%
+                      </span>
+                    ) : null}
+                  </button>
+                </Tooltip>
+              ) : null}
               </div>
             </div>
 

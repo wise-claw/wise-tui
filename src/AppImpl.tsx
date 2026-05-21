@@ -581,6 +581,7 @@ export default function App() {
     refreshDiskSessionsForRepository,
     tabsHydrated,
     reloadFullDiskTranscript,
+    compactSessionHistory,
   } = useClaudeSessions({
     onClaudeTurnComplete: (p) => {
       advanceTeamAfterTurnRef.current(p);
@@ -2280,6 +2281,7 @@ export default function App() {
           setMonitorDrawerTarget({ type: "task", taskId });
         },
         onReloadFullDiskTranscript: reloadFullDiskTranscript,
+        onCompactSessionHistory: compactSessionHistory,
         activeRepositoryPath: activeRepository?.path,
         activeRepositoryName: activeRepository?.name,
         onCodeGraphGenerateProject: (project) => {
@@ -2540,6 +2542,7 @@ export default function App() {
         sessions,
         activeSessionId,
         onReloadFullDiskTranscript: reloadFullDiskTranscript,
+        onCompactSessionHistory: compactSessionHistory,
         omcBatchPipelineActive: Boolean(omcBatchRuntime?.active),
         onAddWorktreeRepositoryToProject: handleAddWorktreeRepositoryToProject,
         activeRepository,
@@ -2667,6 +2670,7 @@ export default function App() {
         onOpenOmcBatchInvocationDetail: handleOpenOmcBatchInvocationDetail,
         onCancelOmcDirectBatchInvocation: handleCancelOmcDirectBatchInvocation,
         onReloadFullDiskTranscript: reloadFullDiskTranscript,
+        onCompactSessionHistory: compactSessionHistory,
         hideEmployeeUi: shouldHideEmployeeUi(activeProject),
       }}
       cockpitInspectorProps={{
@@ -2766,6 +2770,7 @@ export default function App() {
           setMonitorDrawerTarget(null);
         },
         onReloadFullDiskTranscript: reloadFullDiskTranscript,
+        onCompactSessionHistory: compactSessionHistory,
         onCancelSession: cancelSession,
         onOpenTaskDetail: (taskId) => {
           setMonitorDrawerTarget({ type: "task", taskId });

@@ -65,6 +65,14 @@ import {
   parseStreamLineSessionId,
 } from "../services/claudeStreamParser";
 import { getAppSetting, setAppSetting } from "../services/appSettingsStore";
+import {
+  buildAutoCompactSystemMessage,
+  buildContextOverflowRetrySystemMessage,
+  CLAUDE_COMPACT_SLASH_PROMPT,
+  isCompactSlashPrompt,
+  looksLikeContextOverflowError,
+  planAutoCompactBeforeSend,
+} from "../services/claudeSessionContext";
 
 type ClaudeStreamRuntimeHandlers = ReturnType<typeof createClaudeStreamRuntime>;
 
@@ -358,6 +366,8 @@ interface UseClaudeSessionsReturn {
   tabsHydrated: boolean;
   /** 从磁盘读取完整 jsonl 覆盖该标签的 messages（`sessionKey` 可为标签 id 或 `claudeSessionId`） */
   reloadFullDiskTranscript: (sessionKey: string) => Promise<void>;
+  /** 手动触发 Claude Code `/compact` 压缩会话历史 */
+  compactSessionHistory: (sessionId: string) => Promise<void>;
 }
 
 export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaudeSessionsReturn {
@@ -624,6 +634,83 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       }
     },
     [setSessions],
+  );
+
+  const runClaudeTurnWithContextGuard = useCallback(
+    async (params: {
+      tabSessionId: string;
+      turnNonce: number;
+      invokeConc:
+        | { concurrencyScopeKey: string; concurrencyLimit: number }
+        | null
+        | undefined;
+      repositoryPath: string;
+      prompt: string;
+      modelArg: string | undefined;
+      resumeClaudeSid: string | null;
+    }) => {
+      const { tabSessionId, prompt, repositoryPath, ...invokeRest } = params;
+      const session = sessionsRef.current.find((s) => s.id === tabSessionId);
+      if (!session) {
+        await runClaudeOneshotWithInvocation(params);
+        return;
+      }
+
+      const resolveClaudeSid = (): string | null => {
+        const live = sessionsRef.current.find((s) => s.id === tabSessionId);
+        const sid =
+          live?.claudeSessionId?.trim() ??
+          sessionIdMapRef.current.get(tabSessionId)?.trim() ??
+          params.resumeClaudeSid?.trim() ??
+          null;
+        return sid || null;
+      };
+
+      const reloadAfterCompact = async () => {
+        const cc = resolveClaudeSid();
+        const rp = repositoryPath.trim();
+        if (!cc || !rp) return;
+        await reloadTranscriptFromDisk({ tabId: tabSessionId, repositoryPath: rp, claudeSessionId: cc });
+      };
+
+      const appendSys = (text: string) => {
+        setSessions((prev) => appendSystemMessageBySessionId(prev, tabSessionId, text));
+      };
+
+      const runOnce = async (outbound: string) => {
+        const cc = resolveClaudeSid();
+        await runClaudeOneshotWithInvocation({
+          ...invokeRest,
+          tabSessionId,
+          repositoryPath,
+          prompt: outbound,
+          resumeClaudeSid: cc,
+        });
+      };
+
+      const pre = planAutoCompactBeforeSend(session, prompt);
+      if (pre.needed) {
+        appendSys(buildAutoCompactSystemMessage(pre));
+        await runOnce(CLAUDE_COMPACT_SLASH_PROMPT);
+        await reloadAfterCompact();
+      }
+
+      try {
+        await runOnce(prompt);
+      } catch (err) {
+        const errText = err instanceof Error ? err.message : String(err);
+        const canRetry =
+          !isCompactSlashPrompt(prompt) &&
+          looksLikeContextOverflowError(errText) &&
+          Boolean(resolveClaudeSid());
+        if (!canRetry) throw err;
+        appendSys(buildContextOverflowRetrySystemMessage());
+        await runOnce(CLAUDE_COMPACT_SLASH_PROMPT);
+        await reloadAfterCompact();
+        await runOnce(prompt);
+      }
+    },
+    [runClaudeOneshotWithInvocation, reloadTranscriptFromDisk],
   );
 
   const reloadFullDiskTranscript = useCallback(
@@ -1166,7 +1253,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
       void (async () => {
         try {
-          await runClaudeOneshotWithInvocation({
+          await runClaudeTurnWithContextGuard({
             tabSessionId: sessionId,
             turnNonce,
             invokeConc,
@@ -1190,7 +1277,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       })();
       return true;
     },
-    [runClaudeOneshotWithInvocation],
+    [runClaudeTurnWithContextGuard],
   );
 
   const appendSystemMessage = useCallback((sessionId: string, text: string) => {
@@ -1252,7 +1339,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
       return (async () => {
         try {
-          await runClaudeOneshotWithInvocation({
+          await runClaudeTurnWithContextGuard({
             tabSessionId: sessionId,
             turnNonce,
             invokeConc,
@@ -1276,7 +1363,66 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         }
       })();
     },
-    [runClaudeOneshotWithInvocation],
+    [runClaudeTurnWithContextGuard],
+  );
+
+  const compactSessionHistory = useCallback(
+    async (sessionId: string) => {
+      const session = sessionsRef.current.find((s) => s.id === sessionId);
+      if (!session) return;
+      const claudeSessionId =
+        session.claudeSessionId ?? sessionIdMapRef.current.get(sessionId) ?? null;
+      if (!claudeSessionId?.trim()) {
+        message.warning("会话尚未建立 Claude session_id，暂无法压缩历史。");
+        return;
+      }
+      if (session.status === "running" || session.status === "connecting") {
+        message.warning("会话运行中，请结束当前轮次后再压缩上下文。");
+        return;
+      }
+      streamingTargetIdRef.current = sessionId;
+      streamTurnSeqRef.current += 1;
+      lastUserSendNonceRef.current = streamTurnSeqRef.current;
+      const turnNonce = lastUserSendNonceRef.current;
+      expectedTurnNonceByTabIdRef.current.set(sessionId, turnNonce);
+      markClaudeRegistryBootstrapWarmup(registryBootstrapDeadlineByClaudeSidRef, claudeSessionId);
+      setSessions((prev) =>
+        setSessionRunningWithUserPrompt(
+          appendSystemMessageBySessionId(prev, sessionId, "正在执行 /compact 压缩会话历史…"),
+          sessionId,
+          CLAUDE_COMPACT_SLASH_PROMPT,
+        ),
+      );
+      const invokeConc =
+        claudeSessionsOptionsRef.current?.claudeConcurrencyInvokeContextRef?.current?.(session) ?? null;
+      const modelArg = session.model.trim().length > 0 ? session.model : undefined;
+      try {
+        await runClaudeOneshotWithInvocation({
+          tabSessionId: sessionId,
+          turnNonce,
+          invokeConc,
+          repositoryPath: session.repositoryPath,
+          prompt: CLAUDE_COMPACT_SLASH_PROMPT,
+          modelArg,
+          resumeClaudeSid: claudeSessionId,
+        });
+        await reloadTranscriptFromDisk({
+          tabId: sessionId,
+          repositoryPath: session.repositoryPath,
+          claudeSessionId: claudeSessionId.trim(),
+        });
+      } catch (err) {
+        setSessions((prev) =>
+          appendSystemMessageBySessionId(
+            prev.map((s) => (s.id === sessionId ? { ...s, status: "error" as const } : s)),
+            sessionId,
+            `压缩失败: ${err instanceof Error ? err.message : String(err)}`,
+          ),
+        );
+        throw err;
+      }
+    },
+    [runClaudeOneshotWithInvocation, reloadTranscriptFromDisk],
   );
 
   const sendMessage = useCallback(
@@ -1646,5 +1792,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     refreshDiskSessionsForRepository,
     tabsHydrated,
     reloadFullDiskTranscript,
+    compactSessionHistory,
   };
 }

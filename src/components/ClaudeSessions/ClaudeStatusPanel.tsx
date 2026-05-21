@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { writeProjectRelativeFile } from "../../services/materializePrdSnapshot";
+import {
+  contextPercentToneClassName,
+  estimateContextPercent,
+  estimateMessageTokens,
+  estimateSessionTokens,
+  formatContextStatusHint,
+  getContextPercentTone,
+} from "../../services/claudeSessionContext";
 import type { ClaudeSession } from "../../types";
 
 interface ClaudeStatusPanelProps {
@@ -69,50 +77,13 @@ function mapSessionStatus(status: ClaudeSession["status"]): string {
   return "空闲";
 }
 
-function estimateSessionTokens(session: ClaudeSession): number {
-  let textChars = 0;
-  for (const message of session.messages) {
-    textChars += message.content.length;
-    for (const part of message.parts) {
-      if (part.type === "text" || part.type === "reasoning") {
-        textChars += part.text.length;
-      } else if (part.type === "tool_use") {
-        textChars += part.name.length;
-        textChars += JSON.stringify(part.input ?? {}).length;
-        textChars += (part.output ?? "").length;
-        textChars += (part.error ?? "").length;
-      }
-    }
-  }
-  // 粗略估算：中英文混合按约 4 字符 ~ 1 token。
-  return Math.max(0, Math.round(textChars / 4));
-}
-
-function estimateMessageTokens(message: ClaudeSession["messages"][number]): number {
-  let textChars = message.content.length;
-  for (const part of message.parts) {
-    if (part.type === "text" || part.type === "reasoning") {
-      textChars += part.text.length;
-    } else if (part.type === "tool_use") {
-      textChars += part.name.length;
-      textChars += JSON.stringify(part.input ?? {}).length;
-      textChars += (part.output ?? "").length;
-      textChars += (part.error ?? "").length;
-    }
-  }
-  return Math.max(0, Math.round(textChars / 4));
-}
-
-function estimateContextPercent(estimatedTokens: number): number {
-  // 缺少官方实时 token 计数时，按 200k 上下文窗口进行近似展示。
-  const MAX_CONTEXT_TOKENS = 200_000;
-  return Math.min(100, Math.round((estimatedTokens / MAX_CONTEXT_TOKENS) * 100));
-}
-
 function buildAutoSnapshot(source: SnapshotSource, metrics: TokenMetrics): StatusSnapshot {
   const plugin = source.model?.trim() || "Claude";
   const sessionText = formatSessionDuration(source.createdAt);
-  const ctx = `${metrics.ctxPercent}% (~${metrics.estimatedTokens.toLocaleString("zh-CN")} tokens)`;
+  const hint = formatContextStatusHint(metrics);
+  const ctx = hint
+    ? `${metrics.ctxPercent}% (~${metrics.estimatedTokens.toLocaleString("zh-CN")} tokens, ${hint})`
+    : `${metrics.ctxPercent}% (~${metrics.estimatedTokens.toLocaleString("zh-CN")} tokens)`;
   const state = mapSessionStatus(source.status);
   return {
     source: "wise-auto-status-panel",
@@ -260,7 +231,11 @@ export function ClaudeStatusPanel({ repositoryPath, session }: ClaudeStatusPanel
       </div>
       <div className="app-claude-status-panel__row">
         <span className="app-claude-status-panel__tag">上下文</span>
-        <span className="app-claude-status-panel__value">{snapshot.ctx ?? "-"}</span>
+        <span
+          className={`app-claude-status-panel__value ${contextPercentToneClassName(getContextPercentTone(metrics.ctxPercent))}`}
+        >
+          {snapshot.ctx ?? "-"}
+        </span>
       </div>
     </div>
   );

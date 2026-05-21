@@ -1553,6 +1553,15 @@
   padding-right: 14px;
 }
 
+.app-claude-session-tool-btn--compact-context.app-claude-session-tool-btn--context-high {
+  color: var(--ant-color-warning);
+}
+
+.app-claude-session-tool-btn--compact-context.app-claude-session-tool-btn--context-high:hover:not(:disabled) {
+  color: var(--ant-color-warning-hover, var(--ant-color-warning));
+  border-color: var(--ant-color-warning-border, var(--ant-color-warning));
+}
+
 .app-task-completion-modal .ant-modal-body {
   padding: 8px 14px 10px;
 }
@@ -3814,6 +3823,22 @@ button.app-message-part-header:disabled:hover {
   font-size: 12px;
   color: var(--ant-color-text-tertiary);
   font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+}
+
+.app-claude-ctx-tone--ok {
+  color: var(--ant-color-success);
+}
+
+.app-claude-ctx-tone--caution {
+  color: var(--ant-color-warning);
+}
+
+.app-claude-ctx-tone--high {
+  color: var(--ant-orange-6, #fa8c16);
+}
+
+.app-claude-ctx-tone--critical {
+  color: var(--ant-color-error);
 }
 
 .app-claude-branch-trigger.ant-btn {

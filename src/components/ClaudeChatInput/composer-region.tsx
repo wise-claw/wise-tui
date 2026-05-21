@@ -48,6 +48,12 @@ import { Dropdown, Button, Empty, Input, Popover, Select, Spin, Tabs, Tag, Toolt
 import type { MenuProps } from "antd";
 import { logClaudeDrop } from "./drop-debug";
 import { buildClaudeOutgoingPrompt } from "../../services/claudeComposerPrompt";
+import {
+  contextPercentToneClassName,
+  formatContextStatusHint,
+  getContextPercentTone,
+  getSessionContextMetrics,
+} from "../../services/claudeSessionContext";
 import { getClaudeModelPickerOptions } from "../../services/claude";
 import { promptToLogicalPlainString } from "../../utils/serializeClaudePrompt";
 import { getWiseRepositoryFileDragPaths, isWiseRepositoryFileDrag } from "../../utils/repositoryFileDrag";
@@ -282,29 +288,6 @@ function formatSessionDuration(createdAt: number): string {
   if (hours > 0) return `${hours}h${String(minutes).padStart(2, "0")}m`;
   if (minutes > 0) return `${minutes}m${String(seconds).padStart(2, "0")}s`;
   return `${seconds}s`;
-}
-
-function estimateSessionTokens(session: ClaudeSession): number {
-  let textChars = 0;
-  for (const message of session.messages) {
-    textChars += message.content.length;
-    for (const part of message.parts) {
-      if (part.type === "text" || part.type === "reasoning") {
-        textChars += part.text.length;
-      } else if (part.type === "tool_use") {
-        textChars += part.name.length;
-        textChars += JSON.stringify(part.input ?? {}).length;
-        textChars += (part.output ?? "").length;
-        textChars += (part.error ?? "").length;
-      }
-    }
-  }
-  return Math.max(0, Math.round(textChars / 4));
-}
-
-function estimateContextPercent(estimatedTokens: number): number {
-  const MAX_CONTEXT_TOKENS = 200_000;
-  return Math.min(100, Math.round((estimatedTokens / MAX_CONTEXT_TOKENS) * 100));
 }
 
 function formatRelativeTime(timestamp: number | null): string {
@@ -656,13 +639,24 @@ function ComposerInner({
     if (!branchPopoverOpen) return;
     void loadBranches();
   }, [branchPopoverOpen, loadBranches]);
-  const bottomStatusLine = useMemo(() => {
+  const bottomStatus = useMemo(() => {
     const modelLabel = session.model?.trim() || "Claude";
     const sessionDuration = formatSessionDuration(session.createdAt);
-    const estimatedTokens = estimateSessionTokens(session);
-    const ctxPercent = estimateContextPercent(estimatedTokens);
+    const metrics = getSessionContextMetrics(session);
+    const ctxHint = formatContextStatusHint(metrics);
     const statusText = mapSessionStatus(session.status);
-    return `[${modelLabel}] | session:${sessionDuration} | ctx:${ctxPercent}% (~${estimatedTokens.toLocaleString("zh-CN")} tokens) | status:${statusText}`;
+    const ctxSegment = ctxHint
+      ? `ctx:${metrics.ctxPercent}% (~${metrics.estimatedTokens.toLocaleString("zh-CN")} tokens, ${ctxHint})`
+      : `ctx:${metrics.ctxPercent}% (~${metrics.estimatedTokens.toLocaleString("zh-CN")} tokens)`;
+    const fullLine = `[${modelLabel}] | session:${sessionDuration} | ${ctxSegment} | status:${statusText}`;
+    return {
+      modelLabel,
+      sessionDuration,
+      ctxSegment,
+      ctxToneClass: contextPercentToneClassName(getContextPercentTone(metrics.ctxPercent)),
+      statusText,
+      fullLine,
+    };
   }, [session]);
   const logicalPlain = useMemo(
     () => promptToLogicalPlainString(prompt).replace(/\u200B/g, ""),
@@ -1819,8 +1813,10 @@ function ComposerInner({
 
         {/* Bottom bar：会话元信息（分支已移至输入框底栏截屏按钮后） */}
         <div className="app-claude-input-bottom-bar">
-          <span className="app-claude-input-bottom-statusline" title={bottomStatusLine}>
-            {bottomStatusLine}
+          <span className="app-claude-input-bottom-statusline" title={bottomStatus.fullLine}>
+            [{bottomStatus.modelLabel}] | session:{bottomStatus.sessionDuration} |{" "}
+            <span className={bottomStatus.ctxToneClass}>{bottomStatus.ctxSegment}</span> | status:
+            {bottomStatus.statusText}
           </span>
         </div>
       </div>
