@@ -8,6 +8,8 @@
   background: transparent;
   position: relative;
   z-index: 2;
+  opacity: 1;
+  transition: opacity var(--app-layout-rail-duration, 0.32s) var(--app-layout-rail-easing, cubic-bezier(0.33, 1, 0.68, 1));
 }
 
 .app-main-layout-resize-handle::after {

@@ -9,7 +9,7 @@ import type {
   WorkflowTaskItem,
   WorkflowTemplateItem,
 } from "../../types";
-import { Button, Empty, Input, message, Popover, Spin, Switch, Tooltip } from "antd";
+import { Button, Empty, Input, message, Popover, Spin, Switch, Tooltip, type TooltipProps } from "antd";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import { useDockSlice } from "../../hooks/useDockSlice";
 import { ClaudeChat } from "./ClaudeChat";
@@ -265,11 +265,17 @@ interface TopbarBtnProps {
   label: string;
   onClick?: () => void;
   active?: boolean;
+  tooltipPlacement?: TooltipProps["placement"];
 }
 
-function TopbarBtn({ icon, label, onClick, active }: TopbarBtnProps) {
+function TopbarBtn({ icon, label, onClick, active, tooltipPlacement = "bottom" }: TopbarBtnProps) {
   return (
-    <Tooltip title={label} mouseEnterDelay={0.3}>
+    <Tooltip
+      title={label}
+      mouseEnterDelay={0.3}
+      placement={tooltipPlacement}
+      getPopupContainer={() => document.body}
+    >
       <button
         className={`app-topbar-btn ${active ? "active" : ""}`}
         onClick={onClick}
@@ -283,7 +289,7 @@ function TopbarBtn({ icon, label, onClick, active }: TopbarBtnProps) {
 
 // ── Topbar ──
 
-interface TopbarProps {
+export interface TopbarProps {
   activeProject?: ProjectItem | null;
   activeWorkspaceFocus?: WorkspaceFocus;
   activeRepository?: Repository;
@@ -301,7 +307,7 @@ interface TopbarProps {
   onToggleDualPane?: () => void;
 }
 
-function Topbar({
+export function Topbar({
   activeProject,
   activeWorkspaceFocus = "repository",
   activeRepository,
@@ -959,6 +965,7 @@ function Topbar({
             icon={<IconRightPanel collapsed={rightCollapsed ?? false} />}
             label={rightCollapsed ? "展开右侧面板" : "收起右侧面板"}
             onClick={onToggleRightPanel}
+            tooltipPlacement="bottomRight"
           />
         )}
       </div>
@@ -971,6 +978,7 @@ function Topbar({
 interface Props {
   sessions: ClaudeSession[];
   activeSessionId: string | null;
+  hideTopbar?: boolean;
   activeRepository?: Repository;
   repositories?: Repository[];
   activeRepositoryId?: number | null;
@@ -1090,6 +1098,7 @@ interface Props {
 export function ClaudeSessions({
   sessions: incomingSessions,
   activeSessionId,
+  hideTopbar = false,
   activeRepository,
   repositories,
   activeRepositoryId,
@@ -1295,22 +1304,24 @@ export function ClaudeSessions({
   return (
     <div className="app-claude-sessions">
       {/* Topbar always visible */}
-      <Topbar
-        activeProject={activeProject}
-        activeWorkspaceFocus={activeWorkspaceFocus}
-        activeRepository={activeRepository}
-        activeSessionRepositoryPath={activeRepository?.path}
-        onToggleSidebar={onToggleSidebar}
-        onToggleRightPanel={onToggleRightPanel}
-        onToggleTerminal={onToggleTerminal}
-        onSearch={onSearch}
-        collapsed={collapsed}
-        rightCollapsed={rightCollapsed}
-        terminalCollapsed={terminalCollapsed}
-        onAutoFixRunError={(prompt) => onAutoFixRunErrorFromProps?.(prompt)}
-        dualPaneEnabled={dualPaneEnabled}
-        onToggleDualPane={onToggleDualPane}
-      />
+      {!hideTopbar && (
+        <Topbar
+          activeProject={activeProject}
+          activeWorkspaceFocus={activeWorkspaceFocus}
+          activeRepository={activeRepository}
+          activeSessionRepositoryPath={activeRepository?.path}
+          onToggleSidebar={onToggleSidebar}
+          onToggleRightPanel={onToggleRightPanel}
+          onToggleTerminal={onToggleTerminal}
+          onSearch={onSearch}
+          collapsed={collapsed}
+          rightCollapsed={rightCollapsed}
+          terminalCollapsed={terminalCollapsed}
+          onAutoFixRunError={(prompt) => onAutoFixRunErrorFromProps?.(prompt)}
+          dualPaneEnabled={dualPaneEnabled}
+          onToggleDualPane={onToggleDualPane}
+        />
+      )}
 
       {/* Session Tabs - 会话标签栏 */}
       {!activeRepository ? (

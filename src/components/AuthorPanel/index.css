@@ -5,7 +5,7 @@
   flex: 1 1 0%;
   min-width: 0;
   min-height: 0;
-  background: var(--ant-color-bg-layout);
+  background: var(--ant-color-bg-container);
 }
 
 .app-author-config-sider.ant-layout-sider {
@@ -148,7 +148,7 @@ html.app-host-macos-chrome .app-author-config-sider .author-panel__nav-drag {
   display: flex;
   flex-direction: column;
   width: 100%;
-  background: var(--ant-color-bg-layout);
+  background: var(--ant-color-bg-container);
 }
 
 .author-panel__title {
@@ -343,10 +343,12 @@ html.app-host-macos-chrome .app-author-config-sider .author-panel__nav-drag {
 .author-panel .app-channels-panel,
 .author-panel .app-artifacts-panel {
   min-height: calc(100vh - 160px);
+  background: var(--ant-color-bg-container);
 }
 
 .author-panel .app-prompts-panel {
   min-height: calc(100vh - 160px);
+  background: var(--ant-color-bg-container);
 }
 
 @media (max-width: 980px) {

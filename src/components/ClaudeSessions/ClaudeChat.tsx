@@ -4489,6 +4489,7 @@ export function ClaudeChat({
         </div>
       ) : null}
 
+      <div className="app-claude-chat-bottom">
       <SessionQuickActionsBar
         onCreateNewSession={onCreateNewSession}
         onOpenBuiltinAssistant={onOpenBuiltinAssistant}
@@ -4699,6 +4700,7 @@ export function ClaudeChat({
           }
         />
 
+      </div>
       </div>
     </div>
   );

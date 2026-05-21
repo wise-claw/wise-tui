@@ -18,7 +18,7 @@ import { App as AntdApp, ConfigProvider, Layout, Spin, theme } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import { AuthorPanel } from "./AuthorPanel/AuthorPanel";
 import { AuthorPanelNav } from "./AuthorPanel/AuthorPanelNav";
-import { ClaudeSessions } from "./ClaudeSessions";
+import { ClaudeSessions, Topbar } from "./ClaudeSessions";
 import { CockpitOnboarding, type CockpitOnboardingProps } from "./Cockpit";
 import { CommandPalette } from "./CommandPalette";
 import type { GitPanelOpenFileOptions } from "./GitPanel";
@@ -172,6 +172,7 @@ const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
         hideMessages={editorVisible}
         hideSessionTools={editorVisible}
         panelBelowMessages={panelBelowMessages}
+        hideTopbar={true}
       />
     </Layout.Content>
   );
@@ -587,42 +588,72 @@ export function AppWorkspaceLayout({
                       authorMode || missionControlMode ? " app-workspace-layer--parked" : ""
                     }`}
                   >
-                    <ConnectedClaudeSessions
-                      claudeSessionsProps={claudeSessionsProps}
-                      mainLayoutContentRef={mainLayoutContentRef}
-                      panelBelowMessages={editorPanelNode}
-                    />
+                    {chatRightRailMode && (
+                      <Topbar
+                        activeProject={claudeSessionsProps.activeProject}
+                        activeWorkspaceFocus={claudeSessionsProps.activeWorkspaceFocus}
+                        activeRepository={claudeSessionsProps.activeRepository}
+                        activeSessionRepositoryPath={claudeSessionsProps.activeRepository?.path}
+                        onToggleSidebar={claudeSessionsProps.onToggleSidebar}
+                        onToggleRightPanel={claudeSessionsProps.onToggleRightPanel}
+                        onToggleTerminal={claudeSessionsProps.onToggleTerminal}
+                        onSearch={claudeSessionsProps.onSearch}
+                        collapsed={claudeSessionsProps.collapsed}
+                        rightCollapsed={claudeSessionsProps.rightCollapsed}
+                        terminalCollapsed={claudeSessionsProps.terminalCollapsed}
+                        onAutoFixRunError={claudeSessionsProps.onAutoFixRunError}
+                        dualPaneEnabled={claudeSessionsProps.dualPaneEnabled}
+                        onToggleDualPane={claudeSessionsProps.onToggleDualPane}
+                      />
+                    )}
 
-                    {chatRightRailMode ? (
-                      <div
-                        className={`app-right-panel-rail${
-                          effectiveRightCollapsed ? " app-right-panel-rail--collapsed" : ""
-                        }`}
-                        style={
-                          {
-                            "--app-right-panel-width": `${mainLayoutRightWidthPx}px`,
-                          } as CSSProperties
-                        }
-                        aria-hidden={effectiveRightCollapsed}
-                      >
-                        {!effectiveRightCollapsed ? (
-                          <MainLayoutResizeHandle
-                            variant="right"
-                            startWidthPx={mainLayoutRightWidthPx}
-                            onWidthChange={onRightWidthChange}
-                          />
-                        ) : null}
-                        <div className="app-right-panel-rail__panel">
-                          <Suspense fallback={null}>
-                            <ConnectedInspector
-                              viewMode={viewMode}
-                              chatInspectorProps={chatInspectorProps}
-                              cockpitInspectorProps={cockpitInspectorProps}
+                    <div
+                      className="app-main-chat-and-rail-body"
+                      style={
+                        chatRightRailMode
+                          ? ({
+                              "--app-right-panel-width": `${mainLayoutRightWidthPx}px`,
+                            } as CSSProperties)
+                          : undefined
+                      }
+                    >
+                      <ConnectedClaudeSessions
+                        claudeSessionsProps={claudeSessionsProps}
+                        mainLayoutContentRef={mainLayoutContentRef}
+                        panelBelowMessages={editorPanelNode}
+                      />
+
+                      {chatRightRailMode ? (
+                        <>
+                          <div
+                            className={`app-right-panel-rail${
+                              effectiveRightCollapsed ? " app-right-panel-rail--collapsed" : ""
+                            }`}
+                            aria-hidden={effectiveRightCollapsed}
+                          >
+                            <MainLayoutResizeHandle
+                              variant="right"
+                              startWidthPx={mainLayoutRightWidthPx}
+                              onWidthChange={onRightWidthChange}
                             />
-                          </Suspense>
-                        </div>
-                      </div>
-                    ) : null}
+                          </div>
+                          <div
+                            className={`app-right-panel-rail__panel${
+                              effectiveRightCollapsed ? " app-right-panel-rail__panel--collapsed" : ""
+                            }`}
+                            aria-hidden={effectiveRightCollapsed}
+                          >
+                            <Suspense fallback={null}>
+                              <ConnectedInspector
+                                viewMode={viewMode}
+                                chatInspectorProps={chatInspectorProps}
+                                cockpitInspectorProps={cockpitInspectorProps}
+                              />
+                            </Suspense>
+                          </div>
+                        </>
+                      ) : null}
+                    </div>
 
                     <CommandPalette {...commandPaletteProps} />
                     {mcpHubMode ? (

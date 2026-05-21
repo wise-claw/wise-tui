@@ -76,8 +76,8 @@ export function ClaudePluginMarketHub({ onClose }: Props) {
   }, [loadInstalled, message]);
 
   useEffect(() => {
-    void refreshAll();
-  }, [refreshAll]);
+    void loadInstalled();
+  }, [loadInstalled]);
 
   useEffect(() => {
     if (!onClose) return;

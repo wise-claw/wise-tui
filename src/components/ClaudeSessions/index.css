@@ -102,6 +102,7 @@
 /* ── Topbar ── */
 
 .app-chat-topbar {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -112,10 +113,22 @@
   background: var(--app-workspace-chrome-left) !important;
   -webkit-backdrop-filter: var(--app-workspace-glass-blur);
   backdrop-filter: var(--app-workspace-glass-blur);
-  border-bottom: 1px solid var(--app-workspace-glass-border);
+  border-bottom: none;
   box-shadow: var(--app-workspace-glass-inset-glow);
   flex-shrink: 0;
   user-select: none;
+}
+
+.app-chat-topbar::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--ant-color-split);
+  pointer-events: none;
+  z-index: 2;
 }
 
 /* Drag region only on left side — buttons on right must remain interactive */
@@ -265,6 +278,7 @@
   vertical-align: middle;
 }
 
+/* ── 统一顶栏图标按钮 ── 与左栏 .app-left-sidebar-topbar-btn 同一套风格 */
 .app-topbar-btn {
   display: flex;
   align-items: center;
@@ -301,8 +315,8 @@
 }
 
 .app-topbar-btn svg {
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
 }
 
 .app-topbar-btn.active {
@@ -321,13 +335,16 @@
   height: 24px;
 }
 
-/* 中栏顶栏：OpenApp 与图标按钮同高、同 hover */
+/* 中栏顶栏：OpenApp（Cursor 等）与图标按钮同高、同 hover */
 .app-chat-topbar-right .app-open-app-menu {
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
   border-radius: 6px;
   overflow: hidden;
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 
 .app-chat-topbar-right .app-open-app-btn.ant-btn,
@@ -340,16 +357,18 @@
   padding: 0 6px;
   line-height: 1;
   font-size: 12px;
-  color: var(--ant-color-text-secondary);
-  background: transparent;
-  border: none;
-  box-shadow: none;
+  color: var(--ant-color-text-tertiary);
+  background: transparent !important;
+  border: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  transition: background 0.15s, color 0.15s;
 }
 
 .app-chat-topbar-right .app-open-app-btn {
   gap: 4px;
   border-radius: 0;
-  border-right: 1px solid var(--ant-color-border-secondary);
+  border-right: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 55%, transparent);
 }
 
 .app-chat-topbar-right .app-open-app-chevron {
@@ -357,15 +376,28 @@
   border-radius: 0;
 }
 
-.app-chat-topbar-right .app-open-app-btn.ant-btn:not(:disabled):hover,
-.app-chat-topbar-right .app-open-app-chevron.ant-btn:not(:disabled):hover {
+.app-chat-topbar-right .app-open-app-menu:hover .app-open-app-btn.ant-btn:not(:disabled),
+.app-chat-topbar-right .app-open-app-menu:hover .app-open-app-chevron.ant-btn:not(:disabled),
+.app-chat-topbar-right .app-open-app-chevron.ant-btn.ant-dropdown-open {
   color: var(--ant-color-text);
   background: var(--ant-color-fill-content);
 }
 
+.app-chat-topbar-right .app-open-app-menu:has(.ant-dropdown-open) .app-open-app-btn.ant-btn:not(:disabled),
+.app-chat-topbar-right .app-open-app-menu:has(.ant-dropdown-open) .app-open-app-chevron.ant-btn:not(:disabled) {
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-content);
+}
+
+.app-chat-topbar-right .app-open-app-btn.ant-btn:focus-visible,
+.app-chat-topbar-right .app-open-app-chevron.ant-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--ant-color-primary) 28%, transparent);
+  outline-offset: 1px;
+}
+
 .app-chat-topbar-right .app-open-app-btn-icon {
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
 }
 
 .app-run-command-popover .ant-popover-inner {
@@ -1142,6 +1174,26 @@
   outline: none;
 }
 
+/* 消息区与底部（快捷条 + 输入）的分界 */
+.app-claude-chat-bottom {
+  flex-shrink: 0;
+  min-width: 0;
+  position: relative;
+  background: var(--ant-color-bg-container);
+}
+
+.app-claude-chat-bottom::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--ant-color-split);
+  pointer-events: none;
+  z-index: 2;
+}
+
 .app-claude-composer-tray {
   flex-shrink: 0;
   min-width: 0;
@@ -1491,7 +1543,7 @@
   background: color-mix(in srgb, var(--ant-color-bg-container) 45%, transparent) !important;
   backdrop-filter: var(--app-workspace-glass-blur) !important;
   -webkit-backdrop-filter: var(--app-workspace-glass-blur) !important;
-  border-bottom: 1px solid var(--ant-color-border-secondary) !important;
+  border-bottom: 1px solid var(--ant-color-split);
   box-shadow: var(--app-workspace-glass-inset-glow) !important;
   pointer-events: none;
 }
@@ -2862,6 +2914,8 @@
   overscroll-behavior: contain;
   /* 提升为独立合成层，部分设备上纵向滚动更顺滑 */
   transform: translateZ(0);
+  /* 与底部输入区交界（固定在消息视口底缘，不随内容滚动） */
+  box-shadow: inset 0 -1px 0 0 var(--ant-color-split);
 }
 
 .app-claude-messages-empty {
@@ -4421,16 +4475,14 @@ button.app-message-part-header:disabled:hover {
 .app-session-quick-actions--composer {
   flex-shrink: 0;
   padding: 4px 6px 0 6px;
-  background: var(--ant-color-bg-container);
-  border-top: 1px solid var(--ant-color-border-secondary);
+  background: transparent;
 }
 
 /* 钉钉风格：左侧紧凑胶囊 + 右侧「更多」 */
 .app-session-quick-actions--dingtalk {
   flex-shrink: 0;
   padding: 4px 6px 2px;
-  background: var(--ant-color-bg-container);
-  border-top: 1px solid var(--ant-color-border-secondary);
+  background: transparent;
 }
 
 .app-session-quick-actions__row {
@@ -4646,22 +4698,18 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-session-quick-pill__icon--blue {
-  background: var(--ant-color-primary-bg);
   color: var(--ant-color-primary);
 }
 
 .app-session-quick-pill__icon--orange {
-  background: var(--ant-color-warning-bg);
   color: var(--ant-color-warning);
 }
 
 .app-session-quick-pill__icon--green {
-  background: var(--ant-color-success-bg);
   color: var(--ant-color-success);
 }
 
 .app-session-quick-pill__icon--neutral {
-  background: var(--ant-color-fill-secondary);
   color: var(--ant-color-text-secondary);
 }
 

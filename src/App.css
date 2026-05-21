@@ -53,6 +53,9 @@
     color-mix(in srgb, var(--ant-color-fill-tertiary) 22%, transparent) 0%,
     transparent 45%
   );
+  /* 左/右栏收起展开：统一时长与缓动 */
+  --app-layout-rail-duration: 0.32s;
+  --app-layout-rail-easing: cubic-bezier(0.33, 1, 0.68, 1);
   --app-workspace-rail-left-fallback: color-mix(
     in srgb,
     var(--ant-color-primary-bg) 8%,
@@ -206,6 +209,19 @@ body {
   z-index: 1;
 }
 
+.app-main-layout.ant-layout > .app-left-sidebar.ant-layout-sider:not(.app-left-sidebar--parked) {
+  transition:
+    width var(--app-layout-rail-duration) var(--app-layout-rail-easing),
+    min-width var(--app-layout-rail-duration) var(--app-layout-rail-easing),
+    max-width var(--app-layout-rail-duration) var(--app-layout-rail-easing),
+    flex var(--app-layout-rail-duration) var(--app-layout-rail-easing),
+    flex-basis var(--app-layout-rail-duration) var(--app-layout-rail-easing) !important;
+}
+
+.app-main-layout.ant-layout > .app-workspace-main {
+  transition: flex var(--app-layout-rail-duration) var(--app-layout-rail-easing);
+}
+
 /* 主内容区：必须是 ant-layout-content，才能在 has-sider 下获得 width:0 + flex:auto，避免双栏时主区按内容宽度溢出盖住右侧栏 */
 .app-main-layout-content.ant-layout-content {
   flex: 1 1 0%;
@@ -225,7 +241,7 @@ body {
   background: var(--app-workspace-stage-bg) !important;
   border-radius: 0;
   box-shadow: none;
-  border-right: 1px solid var(--app-workspace-glass-border);
+  border-right: none;
   overflow: hidden;
 }
 
@@ -233,6 +249,7 @@ body {
 .app-main-chat-with-right-pane {
   position: relative;
   display: flex;
+  flex-direction: column;
   flex: 1 1 0%;
   min-width: 0;
   min-height: 0;
@@ -242,45 +259,111 @@ body {
   overflow: hidden;
 }
 
-/* 右栏轨道：默认收起（宽 0），展开时占固定宽并从右侧滑入，中栏 flex 自动收缩 */
+/* 子级主体行容器：包裹中栏与右侧轨道 */
+.app-main-chat-and-rail-body {
+  display: flex;
+  flex-direction: row;
+  flex: 1 1 0%;
+  min-width: 0;
+  min-height: 0;
+  align-self: stretch;
+  overflow: hidden;
+  position: relative;
+}
+
+/* 中栏在 flex 行内可收缩，避免右栏收起后仍被 min-width 撑出横向滚动 */
+.app-main-chat-and-rail-body > .app-main-layout-content.ant-layout-content {
+  flex: 1 1 0%;
+  min-width: 0;
+  width: 0;
+  max-width: 100%;
+  position: relative;
+  z-index: 1;
+  transition:
+    flex var(--app-layout-rail-duration) var(--app-layout-rail-easing),
+    max-width var(--app-layout-rail-duration) var(--app-layout-rail-easing);
+}
+
+/* 右栏轨道：仅占 flex 宽度（拖拽条），与面板分离以便同步收放 */
 .app-right-panel-rail {
   --app-right-panel-handle: 5px;
-  flex: 0 0 auto;
+  position: relative;
+  flex: 0 0 calc(var(--app-right-panel-width, 300px) + var(--app-right-panel-handle));
   display: flex;
   flex-direction: row;
   align-items: stretch;
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
   width: calc(var(--app-right-panel-width, 300px) + var(--app-right-panel-handle));
   max-width: calc(var(--app-right-panel-width, 300px) + var(--app-right-panel-handle));
   transition:
-    width 0.28s cubic-bezier(0.4, 0, 0.2, 1),
-    max-width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    width var(--app-layout-rail-duration) var(--app-layout-rail-easing),
+    max-width var(--app-layout-rail-duration) var(--app-layout-rail-easing),
+    flex var(--app-layout-rail-duration) var(--app-layout-rail-easing),
+    flex-basis var(--app-layout-rail-duration) var(--app-layout-rail-easing);
 }
 
 .app-right-panel-rail--collapsed {
+  flex: 0 0 0 !important;
   width: 0 !important;
   max-width: 0 !important;
+  min-width: 0 !important;
+  overflow: hidden;
   pointer-events: none;
 }
 
-.app-right-panel-rail__panel {
-  flex: 1 1 auto;
-  min-width: var(--app-right-panel-width, 300px);
+/* 面板挂在中栏行容器上，与轨道同步收放；滑出时叠在中栏之上 */
+.app-main-chat-and-rail-body > .app-right-panel-rail__panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  width: var(--app-right-panel-width, 300px);
+  min-width: 0;
+  max-width: var(--app-right-panel-width, 300px);
   display: flex;
   min-height: 0;
-  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: translateX(0);
+  opacity: 1;
+  transition:
+    transform var(--app-layout-rail-duration) var(--app-layout-rail-easing),
+    opacity calc(var(--app-layout-rail-duration) * 0.85) var(--app-layout-rail-easing);
+  will-change: transform, opacity;
 }
 
-.app-right-panel-rail--collapsed .app-right-panel-rail__panel {
+.app-main-chat-and-rail-body > .app-right-panel-rail__panel--collapsed {
   transform: translateX(100%);
+  opacity: 0;
+  pointer-events: none;
 }
 
-.app-right-panel-rail .app-right-panel.ant-layout-sider {
+.app-right-panel-rail--collapsed .app-main-layout-resize-handle {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.app-right-panel-rail__panel .app-right-panel.ant-layout-sider {
   flex: 1 1 auto;
   width: var(--app-right-panel-width, 300px) !important;
   min-width: var(--app-right-panel-width, 300px) !important;
   max-width: var(--app-right-panel-width, 300px) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-main-layout.ant-layout > .app-left-sidebar.ant-layout-sider:not(.app-left-sidebar--parked),
+  .app-main-layout.ant-layout > .app-workspace-main,
+  .app-main-chat-and-rail-body > .app-main-layout-content.ant-layout-content,
+  .app-right-panel-rail,
+  .app-right-panel-rail__panel,
+  .app-left-sidebar .ant-layout-sider-children {
+    transition: none !important;
+  }
+
+  .app-right-panel-rail__panel {
+    will-change: auto;
+  }
 }
 
 /* MCP / skills.sh / 代码图谱：叠在主内容+右栏之上 */
@@ -541,7 +624,6 @@ body {
   border-right: 1px solid var(--app-workspace-glass-border) !important;
   box-shadow: var(--app-workspace-glass-inset-glow), var(--app-workspace-glass-shadow) !important;
   overflow: hidden;
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   z-index: 1;
   min-height: 0;
@@ -563,6 +645,13 @@ body {
   min-height: 0;
   height: 100%;
   background: transparent !important;
+  opacity: 1;
+  transition: opacity calc(var(--app-layout-rail-duration) * 0.75) var(--app-layout-rail-easing);
+}
+
+.app-left-sidebar.ant-layout-sider.ant-layout-sider-collapsed:not(.app-left-sidebar--parked) .ant-layout-sider-children {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .app-left-sidebar.app-left-sidebar--parked.ant-layout-sider {
@@ -718,29 +807,20 @@ body {
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 1px solid transparent;
-  border-radius: 8px;
+  border: none;
+  border-radius: 6px;
   background: transparent;
   color: var(--ant-color-text-tertiary);
   cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: background 0.15s, color 0.15s;
   -webkit-app-region: no-drag;
 }
 
 .app-left-sidebar-topbar-btn:hover,
 .app-left-sidebar-compact-btn:hover,
 .app-cc-usage-header-btn:hover {
-  background: color-mix(in srgb, var(--ant-color-bg-container) 80%, transparent);
-  border-color: var(--app-workspace-glass-border);
+  background: var(--ant-color-fill-content);
   color: var(--ant-color-text);
-  transform: scale(1.08) translateZ(0);
-  box-shadow: var(--app-workspace-glass-inset-glow), var(--app-workspace-glass-shadow);
-}
-
-.app-left-sidebar-topbar-btn:active,
-.app-left-sidebar-compact-btn:active,
-.app-cc-usage-header-btn:active {
-  transform: scale(0.96) translateZ(0);
 }
 
 .app-left-sidebar-topbar-btn:disabled,
@@ -748,8 +828,6 @@ body {
   color: var(--ant-color-text-quaternary);
   cursor: not-allowed;
   opacity: 0.55;
-  transform: none !important;
-  box-shadow: none !important;
 }
 
 .app-left-sidebar-topbar-btn:disabled:hover,
@@ -760,10 +838,7 @@ body {
 
 .app-left-sidebar-topbar-btn--active,
 .app-left-sidebar-compact-btn--active {
-  color: var(--ant-color-primary) !important;
-  background: color-mix(in srgb, var(--ant-color-primary) 12%, transparent) !important;
-  border-color: color-mix(in srgb, var(--ant-color-primary) 28%, transparent) !important;
-  box-shadow: var(--app-workspace-active-glow) !important;
+  color: var(--ant-color-primary);
 }
 
 .app-left-sidebar-topbar-btn svg,
@@ -1545,7 +1620,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   color: var(--ant-color-text-secondary);
 }
 
-/* ── Right Panel（中性弱半透明毛玻璃）── */
+/* ── Right Panel（中性弱半透明毛玻璃 - 卡片化）── */
 .app-right-panel.ant-layout-sider,
 .ant-layout-sider-light.app-right-panel,
 .ant-layout-sider-dark.app-right-panel {
@@ -1558,11 +1633,12 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
     var(--app-workspace-glass-base) !important;
   -webkit-backdrop-filter: var(--app-workspace-glass-blur) !important;
   backdrop-filter: var(--app-workspace-glass-blur) !important;
-  border-left: 1px solid var(--app-workspace-glass-border) !important;
+  border: 1px solid var(--app-workspace-glass-border) !important;
   box-shadow: var(--app-workspace-glass-inset-glow), var(--app-workspace-glass-shadow) !important;
-  border-radius: 0;
+  border-radius: 12px !important;
   overflow: hidden;
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  margin: 8px 12px 12px 6px !important;
 }
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
@@ -1938,12 +2014,14 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   flex-shrink: 0;
 }
 
-/* 共用布局；仅展开态吃掉剩余高度，避免与收起态同特异性时 flex:1 盖住 flex:0 把标题栏顶到底部 */
+/* 共用布局；顶部分隔线与工作区列表区分；仅展开态吃掉剩余高度 */
 .app-left-sidebar-files-explorer {
   display: flex;
   flex-direction: column;
-  border-top: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 70%, transparent);
-  margin: 0;
+  flex-shrink: 0;
+  margin: 4px 0 0;
+  padding-top: 4px;
+  border-top: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 88%, var(--ant-color-border));
   border-radius: 0;
   overflow: hidden;
   background: transparent;
@@ -1955,13 +2033,15 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   flex: 1 1 0;
 }
 
-/* 收起后：线框行贴底（具体贴底由父级 margin-top: auto 控制） */
+/* 收起后：独立底栏贴底（具体贴底由父级 margin-top: auto 控制） */
 .app-left-sidebar-files-explorer--section-collapsed {
   flex: 0 0 auto;
   min-height: 0;
-  padding: 8px 8px 4px 4px;
+  margin-top: auto;
+  padding: 4px 8px 6px 4px;
   box-sizing: border-box;
-  border-top: none;
+  border-top: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 88%, var(--ant-color-border));
+  background: transparent;
 }
 
 .app-left-sidebar-files-explorer--section-collapsed .app-left-sidebar-files-explorer-body {
@@ -1974,28 +2054,49 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   margin: 0;
 }
 
-/* 收起态：线框容器，不用选中底（避免与工作区列表实心高亮冲突） */
+/* 收起态：与工作区仓库行同系样式，仅浅底提示可展开文件树 */
 .app-left-sidebar-files-explorer-collapsed-row .app-repository-item--files-root-collapsed {
-  margin: 0;
-  background: transparent !important;
-  border: 1px solid var(--ant-color-border-secondary);
+  margin: 2px 4px;
+  padding: 3px 8px;
+  background: var(--ant-color-fill-quaternary) !important;
+  border: 1px solid transparent;
   border-radius: 8px;
   box-sizing: border-box;
-  transition: border-color 0.12s ease, color 0.12s ease;
+  box-shadow: none;
+  transform: none;
+  transition: background 0.15s ease, transform 0.15s ease, color 0.15s ease;
 }
 
 .app-left-sidebar-files-explorer-collapsed-row .app-repository-item--files-root-collapsed:hover {
-  background: transparent !important;
-  border-color: color-mix(in srgb, var(--ant-color-primary) 45%, var(--ant-color-border-secondary));
+  background: color-mix(in srgb, var(--ant-color-text) 6%, transparent) !important;
+  border-color: transparent;
+  box-shadow: none;
+  transform: translateX(2px) translateZ(0);
 }
 
 .app-left-sidebar-files-explorer-collapsed-row .app-repository-item--files-root-collapsed .app-repository-name {
   font-weight: 500;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-left-sidebar-files-explorer-collapsed-row
+  .app-repository-item--files-root-collapsed:hover
+  .app-repository-name {
   color: var(--ant-color-text);
 }
 
 .app-left-sidebar-files-explorer-collapsed-row .app-repository-item--files-root-collapsed .app-repository-icon {
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-left-sidebar-files-explorer-collapsed-row
+  .app-repository-item--files-root-collapsed:hover
+  .app-repository-icon {
   color: var(--ant-color-text-secondary);
+}
+
+.app-left-sidebar-files-explorer-collapsed-row .app-repository-item--files-root-collapsed .app-repository-expand {
+  color: var(--ant-color-text-quaternary);
 }
 
 .app-left-sidebar-files-explorer-collapsed-hit {
@@ -2004,7 +2105,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 
 .app-left-sidebar-files-explorer-search {
   flex-shrink: 0;
-  padding: 6px 6px 4px;
+  padding: 2px 6px 4px;
 }
 
 .app-left-sidebar-files-explorer-search .ant-input-affix-wrapper {
