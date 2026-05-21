@@ -8,16 +8,29 @@
   padding: 12px;
   overflow-y: auto;
   overflow-x: hidden;
+  background: transparent !important;
 }
 
+/* 液体玻璃拟态 2.0 舱段面板 */
 .app-cockpit-inspector-section {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  background: var(--ant-color-bg-container);
-  border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 6px;
-  padding: 10px 12px;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 55%, transparent) !important;
+  -webkit-backdrop-filter: var(--app-workspace-glass-blur) !important;
+  backdrop-filter: var(--app-workspace-glass-blur) !important;
+  border: 1px solid var(--app-workspace-glass-border) !important;
+  border-radius: 12px !important;
+  padding: 12px 14px !important;
+  box-shadow: var(--app-workspace-glass-inset-glow), var(--app-workspace-glass-shadow) !important;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+.app-cockpit-inspector-section:hover {
+  background: color-mix(in srgb, var(--ant-color-bg-container) 70%, transparent) !important;
+  border-color: color-mix(in srgb, var(--ant-color-primary) 24%, transparent) !important;
+  transform: translateY(-1.5px) translateZ(0);
+  box-shadow: var(--app-workspace-active-glow), var(--app-workspace-glass-shadow) !important;
 }
 
 .app-cockpit-inspector-section-header {
@@ -50,21 +63,41 @@
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding: 4px 0;
+  padding: 6px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 15%, transparent);
 }
 
+.app-cockpit-inspector-agent-item:last-child {
+  border-bottom: none;
+}
+
+/* 呼吸发光指示灯 */
 .app-cockpit-inspector-agent-status {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--ant-color-fill-secondary);
+  background: color-mix(in srgb, var(--ant-color-text) 22%, transparent);
   margin-top: 6px;
   flex: 0 0 auto;
+  transition: all 0.3s ease;
+}
+
+@keyframes pulse-active-glow {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.8;
+    box-shadow: 0 0 4px color-mix(in srgb, var(--ant-color-success) 50%, transparent);
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+    box-shadow: 0 0 10px 2px var(--ant-color-success);
+  }
 }
 
 .app-cockpit-inspector-agent-status--running {
-  background: var(--ant-color-success);
-  box-shadow: 0 0 0 2px var(--ant-color-success-bg);
+  background: var(--ant-color-success) !important;
+  animation: pulse-active-glow 2s infinite ease-in-out;
 }
 
 .app-cockpit-inspector-agent-meta {
@@ -91,6 +124,11 @@
   font-size: 12px;
   color: var(--ant-color-text-secondary);
   padding: 2px 0;
+  transition: color 0.2s ease;
+}
+
+.app-cockpit-inspector-agent-idle-group > summary:hover {
+  color: var(--ant-color-primary);
 }
 
 .app-cockpit-inspector-git {

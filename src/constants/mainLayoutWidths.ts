@@ -1,5 +1,5 @@
 /** 与 `LeftSidebar` 中 `Layout.Sider` 的 `width` 一致。 */
-export const MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX = 240;
+export const MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX = 270;
 
 /** 与 `RightPanel` 中 `Layout.Sider` 的 `width` 一致。 */
 export const MAIN_LAYOUT_RIGHT_SIDER_WIDTH_PX = 300;

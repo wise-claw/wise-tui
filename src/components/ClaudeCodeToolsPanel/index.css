@@ -5,7 +5,7 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  background: var(--ant-color-bg-container);
+  background: transparent !important;
   gap: 2px;
 }
 
@@ -112,12 +112,30 @@
   height: 20px;
   padding: 0 5px;
   font-size: 10px;
-  border-radius: 4px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 45%, transparent) !important;
+  border: 1px solid var(--app-workspace-glass-border) !important;
+  box-shadow: var(--app-workspace-glass-inset-glow) !important;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+.app-claude-code-tools-list-search-wrap .ant-input-affix-wrapper:hover {
+  background: color-mix(in srgb, var(--ant-color-bg-container) 60%, transparent) !important;
+  border-color: color-mix(in srgb, var(--ant-color-primary) 32%, transparent) !important;
+}
+
+.app-claude-code-tools-list-search-wrap .ant-input-affix-wrapper-focused {
+  background: color-mix(in srgb, var(--ant-color-bg-container) 70%, transparent) !important;
+  border-color: var(--ant-color-primary) !important;
+  box-shadow: var(--app-workspace-active-glow) !important;
 }
 
 .app-claude-code-tools-list-search-wrap .ant-input-affix-wrapper .ant-input {
   font-size: 10px;
   line-height: 18px;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 .app-claude-code-tools-list-search-wrap > .ant-input.ant-input-sm {
@@ -125,7 +143,22 @@
   padding: 0 5px;
   font-size: 10px;
   line-height: 18px;
-  border-radius: 4px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 45%, transparent) !important;
+  border: 1px solid var(--app-workspace-glass-border) !important;
+  box-shadow: var(--app-workspace-glass-inset-glow) !important;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+.app-claude-code-tools-list-search-wrap > .ant-input.ant-input-sm:hover {
+  background: color-mix(in srgb, var(--ant-color-bg-container) 60%, transparent) !important;
+  border-color: color-mix(in srgb, var(--ant-color-primary) 32%, transparent) !important;
+}
+
+.app-claude-code-tools-list-search-wrap > .ant-input.ant-input-sm:focus {
+  background: color-mix(in srgb, var(--ant-color-bg-container) 70%, transparent) !important;
+  border-color: var(--ant-color-primary) !important;
+  box-shadow: var(--app-workspace-active-glow) !important;
 }
 
 .app-claude-code-tools-guide-btn.ant-btn.ant-btn-link.ant-btn-sm {
@@ -244,10 +277,21 @@
 }
 
 .app-subagents-card {
-  border: 1px solid var(--ant-color-border-secondary);
+  border: 1px solid var(--app-workspace-glass-border, var(--ant-color-border-secondary)) !important;
   border-radius: 10px;
   padding: 8px;
-  background: var(--ant-color-bg-container);
+  background: color-mix(in srgb, var(--ant-color-bg-container) 45%, transparent) !important;
+  -webkit-backdrop-filter: var(--app-workspace-glass-blur);
+  backdrop-filter: var(--app-workspace-glass-blur);
+  box-shadow: var(--app-workspace-glass-inset-glow), var(--app-workspace-glass-shadow);
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.app-subagents-card:hover {
+  background: color-mix(in srgb, var(--ant-color-bg-container) 65%, transparent) !important;
+  border-color: color-mix(in srgb, var(--ant-color-primary) 30%, transparent) !important;
+  transform: translateY(-1px) translateZ(0);
+  box-shadow: var(--app-workspace-active-glow), var(--app-workspace-glass-shadow);
 }
 
 .app-subagents-card-head {
@@ -396,17 +440,19 @@
 }
 
 .app-repository-skills-card {
-  border: 1px solid var(--ant-color-border-secondary);
+  border: 1px solid var(--app-workspace-glass-border, var(--ant-color-border-secondary)) !important;
   border-radius: 10px;
   padding: 4px 6px;
-  background: linear-gradient(180deg, var(--ant-color-bg-elevated) 0%, var(--ant-color-bg-container) 100%);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 45%, transparent) !important;
+  box-shadow: var(--app-workspace-glass-inset-glow), var(--app-workspace-glass-shadow) !important;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .app-repository-skills-card:hover {
-  border-color: var(--ant-color-primary-border);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border-color: color-mix(in srgb, var(--ant-color-primary) 30%, transparent) !important;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 65%, transparent) !important;
+  transform: translateY(-1px) translateZ(0);
+  box-shadow: var(--app-workspace-active-glow), var(--app-workspace-glass-shadow) !important;
 }
 
 .app-repository-skills-card-head {

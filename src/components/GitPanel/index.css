@@ -22,7 +22,7 @@
   position: sticky;
   top: 0;
   z-index: 20;
-  background: var(--app-workspace-chrome-right, var(--ant-color-bg-container));
+  background: color-mix(in srgb, var(--ant-color-bg-container) 45%, transparent) !important;
   -webkit-backdrop-filter: var(--app-workspace-glass-blur);
   backdrop-filter: var(--app-workspace-glass-blur);
 }
@@ -291,8 +291,9 @@
 
 /* ── Commit Section ── */
 .git-commit-section {
-  padding: 0 8px 4px 8px;
-  border-bottom: 1px solid var(--ant-color-border-secondary);
+  padding: 8px 10px 10px 10px;
+  border-bottom: 1px solid var(--app-workspace-glass-border) !important;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 10%, transparent);
 }
 
 .git-commit-input {
@@ -301,19 +302,61 @@
 
 .git-commit-input .ant-input,
 .git-commit-section textarea.ant-input {
-  border-radius: 4px;
+  border-radius: 8px !important;
   font-size: 11px;
-  padding: 4px 6px;
+  padding: 6px 8px;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 45%, transparent) !important;
+  border: 1px solid var(--app-workspace-glass-border) !important;
+  box-shadow: var(--app-workspace-glass-inset-glow) !important;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+.git-commit-input .ant-input:focus,
+.git-commit-section textarea.ant-input:focus {
+  border-color: var(--ant-color-primary) !important;
+  box-shadow: var(--app-workspace-active-glow) !important;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 60%, transparent) !important;
 }
 
 .git-commit-btn.ant-btn.ant-btn-primary {
-  margin-top: 3px;
+  margin-top: 6px;
   min-height: 0;
-  height: 22px;
-  padding: 0 8px;
-  font-size: 10px;
+  height: 26px;
+  padding: 0 10px;
+  font-size: 11px;
   line-height: 1.15;
-  border-radius: 3px;
+  border-radius: 8px !important;
+  color: #ffffff !important;
+  background: linear-gradient(135deg, var(--ant-color-primary) 0%, color-mix(in srgb, var(--ant-color-primary) 80%, #a855f7) 100%) !important;
+  border: 1px solid color-mix(in srgb, var(--ant-color-primary) 40%, transparent) !important;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--ant-color-primary) 25%, transparent), var(--app-workspace-glass-inset-glow) !important;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.15);
+  font-weight: 500;
+}
+
+.git-commit-btn.ant-btn.ant-btn-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--ant-color-primary-hover) 0%, color-mix(in srgb, var(--ant-color-primary) 90%, #b866ff) 100%) !important;
+  border-color: color-mix(in srgb, var(--ant-color-primary) 60%, transparent) !important;
+  transform: translateY(-1px) scale(1.01) translateZ(0);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--ant-color-primary) 35%, transparent), var(--app-workspace-glass-inset-glow) !important;
+}
+
+.git-commit-btn.ant-btn.ant-btn-primary:active:not(:disabled) {
+  transform: scale(0.96) translateZ(0);
+}
+
+.git-commit-btn.ant-btn.ant-btn-primary:disabled,
+.git-commit-btn.ant-btn.ant-btn-primary[disabled],
+.git-commit-btn.ant-btn.ant-btn-primary[disabled]:hover {
+  background: var(--ant-color-fill-secondary) !important;
+  border: 1px solid var(--ant-color-border) !important;
+  color: var(--ant-color-text-tertiary) !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+  opacity: 1 !important;
 }
 
 .git-commit-btn.ant-btn.ant-btn-primary .ant-btn-icon {

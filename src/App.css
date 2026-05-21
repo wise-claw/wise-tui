@@ -36,32 +36,35 @@
   --app-column-topbar-min-height: 36px;
   --app-column-topbar-padding-y: 4px;
   /* 三栏：中栏通栏实心 + 左右弱半透明毛玻璃 */
-  --app-workspace-stage-bg: var(--ant-color-bg-container);
-  --app-workspace-glass-blur: blur(18px) saturate(1.08);
-  --app-workspace-glass-base: color-mix(in srgb, var(--ant-color-bg-container) 78%, transparent);
-  --app-workspace-glass-border: color-mix(in srgb, var(--ant-color-border-secondary) 65%, transparent);
+  --app-workspace-stage-bg: color-mix(in srgb, var(--ant-color-bg-container) 97%, transparent);
+  --app-workspace-glass-blur: blur(25px) saturate(140%);
+  --app-workspace-glass-base: color-mix(in srgb, var(--ant-color-bg-container) 91%, transparent);
+  --app-workspace-glass-border: color-mix(in srgb, var(--ant-color-border-secondary) 45%, transparent);
+  --app-workspace-glass-inset-glow: inset 0 1px 1px 0 color-mix(in srgb, #ffffff 16%, transparent), inset 0 -1px 0px 0 color-mix(in srgb, #ffffff 6%, transparent);
+  --app-workspace-glass-shadow: 0 8px 32px 0 color-mix(in srgb, var(--ant-color-text) 5%, transparent);
+  --app-workspace-active-glow: 0 0 12px 0 color-mix(in srgb, var(--ant-color-primary) 22%, transparent), inset 0 1px 1px 0 color-mix(in srgb, #ffffff 18%, transparent);
   --app-workspace-rail-left-tint: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--ant-color-primary-bg) 22%, transparent) 0%,
+    color-mix(in srgb, var(--ant-color-primary-bg) 18%, transparent) 0%,
     transparent 48%
   );
   --app-workspace-rail-right-tint: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--ant-color-fill-tertiary) 28%, transparent) 0%,
+    color-mix(in srgb, var(--ant-color-fill-tertiary) 22%, transparent) 0%,
     transparent 45%
   );
   --app-workspace-rail-left-fallback: color-mix(
     in srgb,
-    var(--ant-color-primary-bg) 12%,
-    var(--ant-color-bg-layout) 88%
+    var(--ant-color-primary-bg) 8%,
+    var(--ant-color-bg-layout) 92%
   );
   --app-workspace-rail-right-fallback: color-mix(
     in srgb,
-    var(--ant-color-fill-tertiary) 10%,
-    var(--ant-color-bg-layout) 90%
+    var(--ant-color-fill-tertiary) 8%,
+    var(--ant-color-bg-layout) 92%
   );
-  --app-workspace-chrome-left: color-mix(in srgb, var(--ant-color-primary-bg) 18%, var(--app-workspace-glass-base));
-  --app-workspace-chrome-right: color-mix(in srgb, var(--ant-color-fill-tertiary) 16%, var(--app-workspace-glass-base));
+  --app-workspace-chrome-left: color-mix(in srgb, var(--ant-color-primary-bg) 12%, var(--app-workspace-glass-base));
+  --app-workspace-chrome-right: color-mix(in srgb, var(--ant-color-fill-tertiary) 10%, var(--app-workspace-glass-base));
 }
 
 /* ── Keyframes ── */
@@ -135,6 +138,7 @@ body {
   position: relative;
   isolation: isolate;
   background: var(--ant-color-bg-layout);
+  overflow: hidden !important;
 }
 
 /* 环境色：极弱，仅供侧栏毛玻璃轻微透视 */
@@ -144,18 +148,55 @@ body {
   inset: 0;
   z-index: 0;
   pointer-events: none;
+  background: var(--ant-color-bg-layout);
+}
+
+/* 液体玻璃 2.0 流动液态背景 blobs */
+.app-main-layout.ant-layout::after {
+  content: "";
+  position: absolute;
+  width: 150%;
+  height: 150%;
+  top: -25%;
+  left: -25%;
+  z-index: 0;
+  pointer-events: none;
   background:
     radial-gradient(
-      ellipse 42% 38% at 0% 100%,
-      color-mix(in srgb, var(--ant-color-primary) 5%, transparent),
-      transparent 72%
+      circle 650px at 15% 25%,
+      color-mix(in srgb, var(--ant-color-primary) 2.5%, transparent),
+      transparent 80%
     ),
     radial-gradient(
-      ellipse 38% 34% at 100% 0%,
-      color-mix(in srgb, var(--ant-color-primary) 4%, transparent),
-      transparent 74%
+      circle 550px at 85% 15%,
+      color-mix(in srgb, #9d4edd 2%, transparent),
+      transparent 80%
     ),
-    var(--ant-color-bg-layout);
+    radial-gradient(
+      circle 750px at 25% 85%,
+      color-mix(in srgb, #00b4d8 2.2%, transparent),
+      transparent 80%
+    ),
+    radial-gradient(
+      circle 550px at 85% 85%,
+      color-mix(in srgb, var(--ant-color-success) 2%, transparent),
+      transparent 80%
+    );
+  filter: blur(80px) saturate(1.1);
+  animation: liquid-flow 45s infinite alternate ease-in-out;
+  transform-origin: center center;
+}
+
+@keyframes liquid-flow {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  50% {
+    transform: rotate(180deg) scale(1.18);
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
+  }
 }
 
 .app-main-layout.ant-layout > .ant-layout-sider,
@@ -173,7 +214,7 @@ body {
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
-  background: var(--app-workspace-stage-bg);
+  background: var(--app-workspace-stage-bg) !important;
 }
 
 .app-main-layout-content.ant-layout-content > .app-claude-sessions {
@@ -181,7 +222,7 @@ body {
   min-height: 0;
   position: relative;
   z-index: 1;
-  background: var(--app-workspace-stage-bg);
+  background: var(--app-workspace-stage-bg) !important;
   border-radius: 0;
   box-shadow: none;
   border-right: 1px solid var(--app-workspace-glass-border);
@@ -453,11 +494,12 @@ body {
   background:
     var(--app-workspace-rail-left-tint),
     var(--app-workspace-glass-base) !important;
-  -webkit-backdrop-filter: var(--app-workspace-glass-blur);
-  backdrop-filter: var(--app-workspace-glass-blur);
-  border-right: 1px solid var(--app-workspace-glass-border);
+  -webkit-backdrop-filter: var(--app-workspace-glass-blur) !important;
+  backdrop-filter: var(--app-workspace-glass-blur) !important;
+  border-right: 1px solid var(--app-workspace-glass-border) !important;
+  box-shadow: var(--app-workspace-glass-inset-glow), var(--app-workspace-glass-shadow) !important;
   overflow: hidden;
-  transition: width 0.2s ease;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   z-index: 1;
   min-height: 0;
@@ -634,20 +676,29 @@ body {
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: none;
-  border-radius: 6px;
+  border: 1px solid transparent;
+  border-radius: 8px;
   background: transparent;
   color: var(--ant-color-text-tertiary);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
   -webkit-app-region: no-drag;
 }
 
 .app-left-sidebar-topbar-btn:hover,
 .app-left-sidebar-compact-btn:hover,
 .app-cc-usage-header-btn:hover {
-  background: var(--ant-color-fill-content);
+  background: color-mix(in srgb, var(--ant-color-bg-container) 80%, transparent);
+  border-color: var(--app-workspace-glass-border);
   color: var(--ant-color-text);
+  transform: scale(1.08) translateZ(0);
+  box-shadow: var(--app-workspace-glass-inset-glow), var(--app-workspace-glass-shadow);
+}
+
+.app-left-sidebar-topbar-btn:active,
+.app-left-sidebar-compact-btn:active,
+.app-cc-usage-header-btn:active {
+  transform: scale(0.96) translateZ(0);
 }
 
 .app-left-sidebar-topbar-btn:disabled,
@@ -655,6 +706,8 @@ body {
   color: var(--ant-color-text-quaternary);
   cursor: not-allowed;
   opacity: 0.55;
+  transform: none !important;
+  box-shadow: none !important;
 }
 
 .app-left-sidebar-topbar-btn:disabled:hover,
@@ -665,7 +718,10 @@ body {
 
 .app-left-sidebar-topbar-btn--active,
 .app-left-sidebar-compact-btn--active {
-  color: var(--ant-color-primary);
+  color: var(--ant-color-primary) !important;
+  background: color-mix(in srgb, var(--ant-color-primary) 12%, transparent) !important;
+  border-color: color-mix(in srgb, var(--ant-color-primary) 28%, transparent) !important;
+  box-shadow: var(--app-workspace-active-glow) !important;
 }
 
 .app-left-sidebar-topbar-btn svg,
@@ -1458,12 +1514,13 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   background:
     var(--app-workspace-rail-right-tint),
     var(--app-workspace-glass-base) !important;
-  -webkit-backdrop-filter: var(--app-workspace-glass-blur);
-  backdrop-filter: var(--app-workspace-glass-blur);
-  border-left: 1px solid var(--app-workspace-glass-border);
+  -webkit-backdrop-filter: var(--app-workspace-glass-blur) !important;
+  backdrop-filter: var(--app-workspace-glass-blur) !important;
+  border-left: 1px solid var(--app-workspace-glass-border) !important;
+  box-shadow: var(--app-workspace-glass-inset-glow), var(--app-workspace-glass-shadow) !important;
   border-radius: 0;
   overflow: hidden;
-  transition: width 0.2s ease;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
@@ -1532,17 +1589,15 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   flex-direction: column;
   overflow: hidden;
   border-top: 1px solid var(--app-workspace-glass-border);
-  background: color-mix(in srgb, var(--app-workspace-chrome-right) 88%, transparent);
-  -webkit-backdrop-filter: var(--app-workspace-glass-blur);
-  backdrop-filter: var(--app-workspace-glass-blur);
+  background: transparent !important;
 }
 
 .app-right-panel-bottom .app-claude-config-dir-panel__hero,
 .app-right-panel-bottom .app-claude-config-dir-panel__section,
 .app-right-panel-bottom .app-claude-config-dir-panel__current,
 .app-right-panel-bottom .app-claude-config-dir-panel__contract-item {
-  background: color-mix(in srgb, var(--ant-color-bg-container) 72%, transparent);
-  border-color: var(--app-workspace-glass-border);
+  background: color-mix(in srgb, var(--ant-color-bg-container) 45%, transparent) !important;
+  border-color: var(--app-workspace-glass-border) !important;
 }
 
 .app-right-panel-bottom--claude-collapsed {
@@ -1955,26 +2010,30 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   align-items: center;
   gap: 8px;
   padding: 7px 10px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: transparent;
+  border: 1px solid var(--app-workspace-glass-border) !important;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 45%, transparent) !important;
   color: var(--ant-color-text);
   cursor: pointer;
   font-size: 13px;
   line-height: 1;
   text-align: left;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  box-shadow: var(--app-workspace-glass-inset-glow), var(--app-workspace-glass-shadow);
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .app-left-sidebar-assistant-button:hover {
-  background: var(--ant-color-fill-secondary);
-  border-color: var(--ant-color-border-secondary);
+  background: color-mix(in srgb, var(--ant-color-bg-container) 65%, transparent) !important;
+  border-color: color-mix(in srgb, var(--ant-color-primary) 24%, transparent) !important;
+  transform: translateY(-1px) translateZ(0);
+  box-shadow: var(--app-workspace-active-glow), var(--app-workspace-glass-shadow);
 }
 
 .app-left-sidebar-assistant-button--active {
-  background: var(--ant-color-primary-bg);
-  border-color: var(--ant-color-primary-border);
-  color: var(--ant-color-primary-text);
+  background: color-mix(in srgb, var(--ant-color-primary) 12%, transparent) !important;
+  border-color: color-mix(in srgb, var(--ant-color-primary) 28%, transparent) !important;
+  color: var(--ant-color-primary-text) !important;
+  box-shadow: var(--app-workspace-active-glow), var(--app-workspace-glass-shadow) !important;
 }
 
 .app-left-sidebar-assistant-button__icon {
@@ -2080,13 +2139,15 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 .app-repository-item {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 6px 3px 0px;
-  border-radius: 6px;
+  gap: 6px;
+  padding: 5px 8px;
+  margin: 2px 4px;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 12px;
   line-height: 1.35;
-  transition: background 0.12s ease, color 0.12s ease;
+  border: 1px solid transparent;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .app-repository-item:hover .app-repository-action {
@@ -2099,13 +2160,18 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 .app-repository-item:hover {
-  background: var(--ant-color-fill-tertiary);
+  background: color-mix(in srgb, var(--ant-color-text) 6%, transparent);
+  transform: translateX(2px) translateZ(0);
 }
 
 .app-repository-item--project {
-  gap: 2px;
-  min-height: 26px;
-  padding: 2px 6px 2px 0;
+  gap: 3px;
+  min-height: 24px;
+  padding: 4px 8px;
+}
+
+.app-repository-item--repo {
+  padding: 3px 8px;
 }
 
 .app-repository-item--project .app-repository-name-block {
@@ -2190,36 +2256,42 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   background: var(--ant-color-fill-content);
 }
 
-/* 当前项目：极浅底 + 字重，无侧条 */
+/* 当前项目：液体玻璃选中底 */
 .app-repository-item--project.app-repository-item--project-active {
-  background: var(--ant-color-fill-quaternary);
+  background: color-mix(in srgb, var(--ant-color-primary) 12%, transparent) !important;
+  border-color: color-mix(in srgb, var(--ant-color-primary) 22%, transparent);
+  box-shadow: var(--app-workspace-active-glow);
 }
 
 .app-repository-item--project.app-repository-item--project-active .app-repository-name {
-  font-weight: 500;
+  font-weight: 600;
   color: var(--ant-color-text);
 }
 
 .app-repository-item--project.app-repository-item--project-active:hover {
-  background: var(--ant-color-fill-tertiary);
+  background: color-mix(in srgb, var(--ant-color-primary) 16%, transparent) !important;
 }
 
-/* 当前仓库：Ant 菜单式选中底，与项目行浅灰底区分、无侧条无描边 */
+/* 当前仓库：极品发光液体玻璃舱 */
 .app-repository-item--repo.app-repository-item--repo-active {
-  background: var(--ant-control-item-bg-active);
+  background: color-mix(in srgb, var(--ant-color-primary) 16%, transparent) !important;
+  border-color: color-mix(in srgb, var(--ant-color-primary) 28%, transparent) !important;
+  box-shadow: var(--app-workspace-active-glow), 0 4px 12px color-mix(in srgb, var(--ant-color-primary) 10%, transparent) !important;
+  transform: translateX(4px) translateZ(0) scale(1.01);
 }
 
 .app-repository-item--repo.app-repository-item--repo-active:hover {
-  background: var(--ant-control-item-bg-active);
+  background: color-mix(in srgb, var(--ant-color-primary) 20%, transparent) !important;
 }
 
 .app-repository-item--repo.app-repository-item--repo-active .app-repository-name {
-  font-weight: 500;
+  font-weight: 600;
   color: var(--ant-color-text);
 }
 
 .app-repository-item--repo.app-repository-item--repo-active .app-repository-icon {
   color: var(--ant-color-primary);
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--ant-color-primary) 40%, transparent));
 }
 
 /* 子仓库选中时弱化父项目行，避免两层灰块抢视觉 */

@@ -20,7 +20,7 @@
   gap: 8px;
   margin: 0 0 2px;
   padding: 3px 8px 3px 0;
-  background: var(--app-workspace-chrome-right, var(--ant-color-bg-container));
+  background: color-mix(in srgb, var(--ant-color-bg-container) 45%, transparent) !important;
   -webkit-backdrop-filter: var(--app-workspace-glass-blur);
   backdrop-filter: var(--app-workspace-glass-blur);
   border-bottom: 1px solid var(--app-workspace-glass-border, var(--ant-color-border-secondary));

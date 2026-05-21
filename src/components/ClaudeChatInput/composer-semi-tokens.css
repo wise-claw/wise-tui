@@ -36,7 +36,9 @@
 .app-claude-semi-chat-input-wrap .semi-aiChatInput {
   padding: 6px 8px;
   border-radius: 8px;
-  background: var(--ant-color-bg-container);
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
   min-height: calc(3em + 12px);
 }
 

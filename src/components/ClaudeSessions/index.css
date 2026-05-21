@@ -43,7 +43,7 @@
   min-width: 0;
   min-height: 0;
   padding: 24px;
-  background: var(--ant-color-bg-container);
+  background: transparent !important;
 }
 
 .app-claude-session-empty__content.ant-empty {
@@ -108,9 +108,12 @@
   box-sizing: border-box;
   min-height: var(--app-column-topbar-min-height);
   height: var(--app-column-topbar-min-height);
-  padding: var(--app-column-topbar-padding-y) 2px;
-  background: var(--app-workspace-stage-bg, var(--ant-color-bg-container));
-  border-bottom: 1px solid var(--ant-color-border-secondary);
+  padding: var(--app-column-topbar-padding-y) 12px;
+  background: var(--app-workspace-chrome-left) !important;
+  -webkit-backdrop-filter: var(--app-workspace-glass-blur);
+  backdrop-filter: var(--app-workspace-glass-blur);
+  border-bottom: 1px solid var(--app-workspace-glass-border);
+  box-shadow: var(--app-workspace-glass-inset-glow);
   flex-shrink: 0;
   user-select: none;
 }
@@ -370,64 +373,258 @@
 }
 
 .app-run-command-popover__content {
-  width: 280px;
+  --app-run-popover-label-w: 56px;
+  --app-run-popover-save-btn-w: 68px;
+  width: 336px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px;
+  gap: 0;
+  min-height: 0;
+}
+
+.app-run-command-popover__content .ant-input-sm {
+  font-size: 12px;
+}
+
+.app-run-command-popover__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 6px 10px 5px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
 }
 
 .app-run-command-popover__title {
   font-size: 12px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+  line-height: 1.2;
+}
+
+.app-run-command-popover__hint-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--ant-color-text-tertiary);
+  cursor: help;
+  line-height: 0;
+}
+
+.app-run-command-popover__hint-btn:hover {
   color: var(--ant-color-text-secondary);
 }
 
-.app-run-command-popover__status {
-  font-size: 12px;
-  color: var(--ant-color-text-tertiary);
+.app-run-command-popover__hint-icon {
+  display: block;
 }
 
-.app-run-command-popover__hint {
-  font-size: 11px;
-  color: var(--ant-color-text-quaternary);
-}
-
-.app-run-command-popover__error-monitor-toggle {
+.app-run-command-popover__section {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px;
+}
+
+.app-run-command-popover__section + .app-run-command-popover__section {
+  border-top: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-run-command-popover__section--form {
   gap: 6px;
 }
 
-.app-run-command-popover__error-monitor-label {
-  font-size: 12px;
+.app-run-command-popover__row {
+  display: grid;
+  grid-template-columns: var(--app-run-popover-label-w) minmax(0, 1fr);
+  align-items: center;
+  column-gap: 8px;
+  min-width: 0;
+  min-height: 28px;
+}
+
+.app-run-command-popover__row--options {
+  align-items: stretch;
+  min-height: 0;
+}
+
+.app-run-command-popover__field-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--app-run-popover-save-btn-w);
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.app-run-command-popover__field-label {
+  flex-shrink: 0;
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--ant-color-text-tertiary);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.app-run-command-popover__options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 6px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-run-command-popover__option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 22px;
+}
+
+.app-run-command-popover__option-label {
+  font-size: 11px;
+  color: var(--ant-color-text);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.app-run-command-popover__section--dock {
+  padding: 0;
+  border-top: none;
+}
+
+.app-run-command-popover__section--form + .app-run-command-popover__section--dock {
+  border-top: none;
+}
+
+.app-run-command-popover__dock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 12px 10px;
+  padding: 10px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-run-command-popover__dock-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 20px;
+}
+
+.app-run-command-popover__dock-title {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ant-color-text-secondary);
+  line-height: 1.2;
+}
+
+.app-run-command-popover__status-badge {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-run-command-popover__status-badge--idle {
+  background: var(--ant-color-fill-secondary);
   color: var(--ant-color-text-secondary);
 }
 
-.app-run-command-popover__url {
-  border: 1px solid var(--ant-color-primary-border);
+.app-run-command-popover__status-badge--running {
   background: var(--ant-color-primary-bg);
   color: var(--ant-color-primary);
-  border-radius: 6px;
-  font-size: 12px;
-  line-height: 1.2;
-  padding: 5px 8px;
-  text-align: left;
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-weight: 500;
 }
 
-.app-run-command-popover__url:hover {
-  border-color: var(--ant-color-primary);
+.app-run-command-popover__status-badge--stopping {
+  background: var(--ant-color-warning-bg);
+  color: var(--ant-color-warning);
+  font-weight: 500;
+}
+
+.app-run-command-popover__dock-url {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 6px;
+  background: var(--ant-color-bg-container);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.app-run-command-popover__dock-url:hover {
+  border-color: var(--ant-color-primary-border);
+  background: var(--ant-color-primary-bg);
+}
+
+.app-run-command-popover__dock-url-label {
+  font-size: 10px;
+  line-height: 1.2;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-run-command-popover__dock-url-value {
+  width: 100%;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--ant-color-primary);
+  font-family: var(--ant-font-family-code, Menlo, Monaco, "Courier New", monospace);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-run-command-popover__dock-url:hover .app-run-command-popover__dock-url-value {
+  text-decoration: underline;
+}
+
+.app-run-command-popover__section--logs {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.app-run-command-popover__footer {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+  margin-top: auto;
+  padding: 8px 12px 10px;
+  border-top: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-bg-container);
 }
 
 .app-run-command-popover__logs {
   border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 6px;
+  border-radius: 4px;
   background: var(--ant-color-fill-quaternary);
-  padding: 6px 8px;
-  max-height: 96px;
+  padding: 4px 6px;
+  max-height: 72px;
   overflow: auto;
 }
 
@@ -443,21 +640,23 @@
   font-weight: 600;
 }
 
-.app-run-command-popover__actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 6px;
-}
-
 .app-run-command-popover__btn {
   border: 1px solid var(--ant-color-border);
   background: var(--ant-color-bg-container);
   color: var(--ant-color-text);
-  border-radius: 6px;
-  padding: 4px 10px;
-  font-size: 12px;
+  border-radius: 4px;
+  min-height: 24px;
+  padding: 0 6px;
+  font-size: 11px;
   line-height: 1.2;
   cursor: pointer;
+  white-space: nowrap;
+}
+
+.app-run-command-popover__btn--inline {
+  width: 100%;
+  padding: 0;
+  justify-self: stretch;
 }
 
 .app-run-command-popover__btn:disabled {
@@ -465,16 +664,47 @@
   cursor: not-allowed;
 }
 
+.app-run-command-popover__btn--ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-run-command-popover__btn--ghost:hover:not(:disabled) {
+  background: var(--ant-color-fill-secondary);
+  color: var(--ant-color-text);
+}
+
+.app-run-command-popover__btn--footer-main {
+  width: 100%;
+  min-height: 28px;
+  font-weight: 500;
+}
+
 .app-run-command-popover__btn--primary {
-  border-color: var(--ant-color-primary-border);
-  background: var(--ant-color-primary-bg);
-  color: var(--ant-color-primary);
+  min-width: 44px;
+  border-color: var(--ant-color-primary);
+  background: var(--ant-color-primary);
+  color: #fff;
+  font-weight: 500;
+}
+
+.app-run-command-popover__btn--primary:hover:not(:disabled) {
+  border-color: var(--ant-color-primary-hover);
+  background: var(--ant-color-primary-hover);
 }
 
 .app-run-command-popover__btn--danger {
-  border-color: var(--ant-color-error-border);
-  background: var(--ant-color-error-bg);
-  color: var(--ant-color-error);
+  min-width: 44px;
+  border-color: var(--ant-color-error);
+  background: var(--ant-color-error);
+  color: #fff;
+  font-weight: 500;
+}
+
+.app-run-command-popover__btn--danger:hover:not(:disabled) {
+  border-color: var(--ant-color-error-hover);
+  background: var(--ant-color-error-hover);
 }
 
 /* ── Welcome Screen ── */
@@ -484,7 +714,7 @@
   align-items: center;
   justify-content: center;
   height: 100%;
-  background: var(--ant-color-bg-layout);
+  background: transparent !important;
 }
 
 .app-claude-welcome-content {
@@ -547,16 +777,22 @@
   align-items: center;
   gap: 6px;
   padding: 8px 14px;
-  border-radius: var(--ant-border-radius);
-  background: var(--ant-color-fill-secondary);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 60%, transparent) !important;
+  border: 1px solid var(--app-workspace-glass-border) !important;
   color: var(--ant-color-text-secondary);
   font-size: 13px;
   cursor: pointer;
-  transition: background 0.2s;
+  box-shadow: var(--app-workspace-glass-inset-glow), var(--app-workspace-glass-shadow);
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
 }
 
 .app-claude-welcome-tip:hover {
-  background: var(--ant-color-fill);
+  background: color-mix(in srgb, var(--ant-color-bg-container) 80%, transparent) !important;
+  border-color: color-mix(in srgb, var(--ant-color-primary) 30%, transparent) !important;
+  color: var(--ant-color-text) !important;
+  transform: translateY(-2px) translateZ(0);
+  box-shadow: var(--app-workspace-active-glow), var(--app-workspace-glass-shadow);
 }
 
 .app-claude-welcome-tip-emoji {
@@ -568,10 +804,13 @@
 .app-session-tabs {
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 4px 8px;
-  background: var(--ant-color-bg-container);
-  border-bottom: 1px solid var(--ant-color-border-secondary);
+  gap: 4px;
+  padding: 6px 12px;
+  background: var(--app-workspace-chrome-left) !important;
+  -webkit-backdrop-filter: var(--app-workspace-glass-blur);
+  backdrop-filter: var(--app-workspace-glass-blur);
+  border-bottom: 1px solid var(--app-workspace-glass-border);
+  box-shadow: var(--app-workspace-glass-inset-glow);
   flex-shrink: 0;
   min-width: 0;
   overflow: hidden;
@@ -580,7 +819,7 @@
 .app-session-tabs-list {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   flex: 1;
   min-width: 0;
   overflow-x: auto;
@@ -596,17 +835,17 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
-  border-radius: var(--ant-border-radius-sm);
-  background: var(--ant-color-fill-quaternary);
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--ant-color-text) 5%, transparent);
   border: 1px solid transparent;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
   flex-shrink: 0;
-  max-width: 140px;
-  min-width: 60px;
-  height: 24px;
+  max-width: 145px;
+  min-width: 65px;
+  height: 26px;
 }
 
 .app-session-tab-badge {
@@ -629,13 +868,15 @@
 }
 
 .app-session-tab:hover {
-  background: var(--ant-color-fill-secondary);
-  border-color: var(--ant-color-border);
+  background: color-mix(in srgb, var(--ant-color-text) 9%, transparent);
+  border-color: color-mix(in srgb, var(--ant-color-border) 40%, transparent);
+  transform: translateY(-1px) translateZ(0);
 }
 
 .app-session-tab--active {
-  background: var(--ant-color-primary-bg);
-  border-color: var(--ant-color-primary-border);
+  background: color-mix(in srgb, var(--ant-color-primary) 12%, transparent) !important;
+  border-color: color-mix(in srgb, var(--ant-color-primary) 28%, transparent) !important;
+  box-shadow: var(--app-workspace-active-glow);
 }
 
 .app-session-tab--active .app-session-tab-title {
@@ -1246,9 +1487,12 @@
   gap: 6px;
   width: 100%;
   box-sizing: border-box;
-  padding: 3px 8px;
-  background: color-mix(in srgb, var(--ant-color-bg-elevated) 92%, transparent);
-  border-bottom: 1px solid var(--ant-color-border-secondary);
+  padding: 4px 12px;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 45%, transparent) !important;
+  backdrop-filter: var(--app-workspace-glass-blur) !important;
+  -webkit-backdrop-filter: var(--app-workspace-glass-blur) !important;
+  border-bottom: 1px solid var(--app-workspace-glass-border) !important;
+  box-shadow: var(--app-workspace-glass-inset-glow) !important;
   pointer-events: none;
 }
 
@@ -1257,10 +1501,10 @@
   display: inline-flex;
   align-items: stretch;
   gap: 0;
-  padding: 1px;
-  border-radius: var(--ant-border-radius);
-  background: var(--ant-color-fill-quaternary);
-  border: 1px solid var(--ant-color-border-secondary);
+  padding: 2px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--ant-color-text) 4%, transparent) !important;
+  border: 1px solid var(--app-workspace-glass-border) !important;
   pointer-events: auto;
   min-width: 0;
 }
@@ -2575,9 +2819,12 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 16px;
-  background: var(--ant-color-bg-container);
-  border-bottom: 1px solid var(--ant-color-border-secondary);
+  padding: 5px 16px;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 45%, transparent) !important;
+  backdrop-filter: var(--app-workspace-glass-blur) !important;
+  -webkit-backdrop-filter: var(--app-workspace-glass-blur) !important;
+  border-bottom: 1px solid var(--app-workspace-glass-border) !important;
+  box-shadow: var(--app-workspace-glass-inset-glow) !important;
   flex-shrink: 0;
 }
 
@@ -2600,7 +2847,7 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-  background: var(--ant-color-bg-container);
+  background: transparent !important;
   /* 减少滚动链传到外层布局，降低嵌套滚动时的合成/重绘开销 */
   overscroll-behavior: contain;
   /* 提升为独立合成层，部分设备上纵向滚动更顺滑 */
@@ -2754,29 +3001,44 @@
 /* ── System message（卡片 + 长日志折叠） ── */
 
 .app-system-message {
-  border-radius: 8px;
-  border: 1px solid var(--ant-color-border-secondary);
-  background: var(--ant-color-fill-quaternary);
+  border-radius: 12px;
+  border: 1px solid var(--app-workspace-glass-border) !important;
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 35%, transparent) !important;
+  backdrop-filter: var(--app-workspace-glass-blur) !important;
+  -webkit-backdrop-filter: var(--app-workspace-glass-blur) !important;
+  box-shadow: var(--app-workspace-glass-inset-glow), var(--app-workspace-glass-shadow) !important;
   overflow: hidden;
   max-width: 100%;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.app-system-message:hover {
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 50%, transparent) !important;
+  transform: translateY(-1px) translateZ(0);
 }
 
 .app-system-message--error {
-  border-color: var(--ant-color-error-border);
-  background: var(--ant-color-error-bg);
+  border-color: color-mix(in srgb, var(--ant-color-error-border) 45%, transparent) !important;
+  background: color-mix(in srgb, var(--ant-color-error-bg) 45%, transparent) !important;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--ant-color-error) 15%, transparent), var(--app-workspace-glass-inset-glow) !important;
+}
+
+.app-system-message--error:hover {
+  background: color-mix(in srgb, var(--ant-color-error-bg) 60%, transparent) !important;
 }
 
 .app-system-message-bar {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 10px;
-  border-bottom: 1px solid var(--ant-color-border-secondary);
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--app-workspace-glass-border) !important;
+  background: color-mix(in srgb, var(--ant-color-text) 3%, transparent);
   min-height: 28px;
 }
 
 .app-system-message--error .app-system-message-bar {
-  border-bottom-color: var(--ant-color-error-border);
+  border-bottom-color: color-mix(in srgb, var(--ant-color-error-border) 35%, transparent) !important;
 }
 
 .app-system-message-badge {
@@ -2935,11 +3197,19 @@
 }
 
 .app-system-dispatch-card {
-  border: 1px solid var(--ant-color-border-secondary);
-  background: var(--ant-color-bg-container);
-  border-radius: 8px;
-  padding: 4px 6px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  border: 1px solid var(--app-workspace-glass-border) !important;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 45%, transparent) !important;
+  backdrop-filter: var(--app-workspace-glass-blur) !important;
+  -webkit-backdrop-filter: var(--app-workspace-glass-blur) !important;
+  border-radius: 12px;
+  padding: 8px 12px;
+  box-shadow: var(--app-workspace-glass-inset-glow), var(--app-workspace-glass-shadow) !important;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.app-system-dispatch-card:hover {
+  background: color-mix(in srgb, var(--ant-color-bg-container) 60%, transparent) !important;
+  transform: translateY(-1px) translateZ(0);
 }
 
 .app-system-dispatch-card__head {
@@ -2997,20 +3267,28 @@
 }
 
 .app-system-dispatch-card__btn {
-  border: none;
-  background: transparent;
-  color: var(--ant-color-primary);
-  border-radius: 0;
+  border: 1px solid color-mix(in srgb, var(--ant-color-primary) 30%, transparent) !important;
+  background: color-mix(in srgb, var(--ant-color-primary) 8%, transparent) !important;
+  color: var(--ant-color-primary) !important;
+  border-radius: 6px !important;
   font-size: 11px;
   line-height: 1.2;
-  font-weight: 500;
-  padding: 0;
+  font-weight: 600;
+  padding: 4px 10px !important;
   cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
 }
 
 .app-system-dispatch-card__btn:hover {
-  color: var(--ant-color-primary-hover);
-  text-decoration: underline;
+  background: var(--ant-color-primary) !important;
+  color: #fff !important;
+  border-color: var(--ant-color-primary) !important;
+  transform: translateY(-0.5px) translateZ(0);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--ant-color-primary) 25%, transparent);
+}
+
+.app-system-dispatch-card__btn:active {
+  transform: scale(0.96) translateZ(0);
 }
 
 /* ── Message Parts ── */
@@ -3032,6 +3310,29 @@
   font-size: 12.5px;
   line-height: 1.45;
   color: var(--ant-color-text);
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 55%, transparent);
+  border: 1px solid var(--app-workspace-glass-border);
+  box-shadow: var(--app-workspace-glass-inset-glow), var(--app-workspace-glass-shadow);
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  display: inline-block;
+  max-width: 100%;
+}
+
+.app-claude-message--user .app-message-part--text {
+  background: color-mix(in srgb, var(--ant-color-primary) 8%, var(--app-workspace-glass-base)) !important;
+  border-color: color-mix(in srgb, var(--ant-color-primary) 24%, transparent) !important;
+  box-shadow: var(--app-workspace-active-glow), var(--app-workspace-glass-shadow) !important;
+}
+
+.app-message-part--text:hover {
+  background: color-mix(in srgb, var(--ant-color-bg-container) 75%, transparent);
+  transform: translateY(-1px) translateZ(0);
+}
+
+.app-claude-message--user .app-message-part--text:hover {
+  background: color-mix(in srgb, var(--ant-color-primary) 12%, var(--app-workspace-glass-base)) !important;
 }
 
 .app-message-part--text p {
@@ -3200,10 +3501,18 @@ button.app-message-part-header:disabled:hover {
 /* ── Reasoning Part ── */
 
 .app-message-part--reasoning {
-  border: 1px solid var(--ant-color-border-secondary);
-  border-radius: var(--ant-border-radius);
+  border: 1px solid var(--app-workspace-glass-border) !important;
+  border-radius: 12px !important;
   overflow: hidden;
-  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 55%, var(--ant-color-bg-container));
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 20%, transparent) !important;
+  backdrop-filter: var(--app-workspace-glass-blur) !important;
+  box-shadow: var(--app-workspace-glass-inset-glow) !important;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.app-message-part--reasoning:hover {
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 30%, transparent) !important;
+  border-color: color-mix(in srgb, var(--ant-color-border-secondary) 50%, transparent) !important;
 }
 
 .app-message-part--reasoning .app-message-part-header {
@@ -3227,10 +3536,21 @@ button.app-message-part-header:disabled:hover {
   font-size: 11px;
 }
 
+.app-message-part--reasoning .app-message-part-content {
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 10%, transparent) !important;
+  border-top: 1px solid var(--app-workspace-glass-border) !important;
+  padding: 8px 10px !important;
+}
+
 .app-message-part--reasoning-content {
   font-size: 11.5px;
   color: var(--ant-color-text-secondary);
   opacity: 0.85;
+  background: transparent !important;
+}
+
+.app-message-part--reasoning-content .app-markdown {
+  background: transparent !important;
 }
 
 .app-message-part--reasoning-content p {
@@ -3242,22 +3562,24 @@ button.app-message-part-header:disabled:hover {
 /* ── Tool Part ── */
 
 .app-message-part--tool {
-  border: 1px solid var(--ant-color-border-secondary);
-  border-radius: var(--ant-border-radius);
+  border: 1px solid var(--app-workspace-glass-border) !important;
+  border-radius: 12px !important;
   overflow: hidden;
-  background: var(--ant-color-bg-container);
+  background: color-mix(in srgb, var(--ant-color-bg-container) 45%, transparent) !important;
+  backdrop-filter: var(--app-workspace-glass-blur) !important;
+  box-shadow: var(--app-workspace-glass-inset-glow), var(--app-workspace-glass-shadow) !important;
 }
 
 .app-message-part--tool .app-message-part-header {
-  border: none;
+  border: none !important;
   border-radius: 0;
-  border-bottom: 1px solid var(--ant-color-border-secondary);
-  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 65%, var(--ant-color-bg-container));
+  border-bottom: 1px solid var(--app-workspace-glass-border) !important;
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 35%, transparent) !important;
   align-items: flex-start;
 }
 
 .app-message-part--tool .app-message-part-header:hover:not(:disabled) {
-  background: var(--ant-color-fill-secondary);
+  background: color-mix(in srgb, var(--ant-color-fill-secondary) 60%, transparent) !important;
 }
 
 .app-message-part--tool .app-message-part-content {
@@ -3655,12 +3977,25 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-claude-input-container {
-  background: var(--ant-color-fill-quaternary);
-  transition: border-color 0.2s;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 60%, transparent) !important;
+  -webkit-backdrop-filter: var(--app-workspace-glass-blur) !important;
+  backdrop-filter: var(--app-workspace-glass-blur) !important;
+  border: 1px solid var(--app-workspace-glass-border) !important;
+  border-radius: 14px !important;
+  box-shadow: var(--app-workspace-glass-inset-glow), var(--app-workspace-glass-shadow) !important;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+.app-claude-input-container:hover {
+  background: color-mix(in srgb, var(--ant-color-bg-container) 75%, transparent) !important;
+  border-color: color-mix(in srgb, var(--ant-color-primary) 32%, transparent) !important;
+  box-shadow: var(--app-workspace-glass-inset-glow), 0 8px 32px 0 color-mix(in srgb, var(--ant-color-text) 8%, transparent) !important;
 }
 
 .app-claude-input-container:focus-within {
-  border-color: var(--ant-color-primary);
+  border-color: var(--ant-color-primary) !important;
+  box-shadow: var(--app-workspace-active-glow), 0 8px 32px 0 color-mix(in srgb, var(--ant-color-primary) 12%, transparent) !important;
+  transform: translateY(-1px) translateZ(0);
 }
 
 .app-claude-input-container--drop-target {
@@ -3778,16 +4113,23 @@ button.app-message-part-header:disabled:hover {
   justify-content: center;
   width: 24px;
   height: 24px;
-  border: none;
-  border-radius: var(--ant-border-radius);
+  border: 1px solid color-mix(in srgb, var(--ant-color-primary) 30%, transparent);
+  border-radius: 8px;
   background: var(--ant-color-primary);
   color: #fff;
   cursor: pointer;
-  transition: all 0.15s;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--ant-color-primary) 30%, transparent);
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .app-claude-send-btn:hover:not(:disabled) {
   background: var(--ant-color-primary-hover);
+  transform: scale(1.08) translateZ(0);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--ant-color-primary) 40%, transparent);
+}
+
+.app-claude-send-btn:active:not(:disabled) {
+  transform: scale(0.96) translateZ(0);
 }
 
 .app-claude-send-btn:disabled {
@@ -4139,16 +4481,22 @@ button.app-message-part-header:disabled:hover {
 .app-session-quick-actions--composer {
   flex-shrink: 0;
   padding: 4px 6px 0 6px;
-  background: var(--ant-color-bg-container);
-  border-top: 1px solid var(--ant-color-border-secondary);
+  background: color-mix(in srgb, var(--ant-color-bg-container) 35%, transparent) !important;
+  backdrop-filter: var(--app-workspace-glass-blur) !important;
+  -webkit-backdrop-filter: var(--app-workspace-glass-blur) !important;
+  border-top: 1px solid var(--app-workspace-glass-border) !important;
+  box-shadow: var(--app-workspace-glass-inset-glow) !important;
 }
 
 /* 钉钉风格：左侧紧凑胶囊 + 右侧「更多」 */
 .app-session-quick-actions--dingtalk {
   flex-shrink: 0;
   padding: 4px 6px 2px;
-  background: var(--ant-color-bg-container);
-  border-top: 1px solid var(--ant-color-border-secondary);
+  background: color-mix(in srgb, var(--ant-color-bg-container) 35%, transparent) !important;
+  backdrop-filter: var(--app-workspace-glass-blur) !important;
+  -webkit-backdrop-filter: var(--app-workspace-glass-blur) !important;
+  border-top: 1px solid var(--app-workspace-glass-border) !important;
+  box-shadow: var(--app-workspace-glass-inset-glow) !important;
 }
 
 .app-session-quick-actions__row {
@@ -4306,15 +4654,29 @@ button.app-message-part-header:disabled:hover {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 3px;
-  border: 1px solid transparent;
+  padding: 2px 6px;
+  border: 1px solid var(--app-workspace-glass-border) !important;
   border-radius: 999px;
-  background: var(--ant-color-fill-quaternary);
-  color: var(--ant-color-text);
-  font-size: 12px;
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 35%, transparent) !important;
+  color: var(--ant-color-text) !important;
+  font-size: 11.5px;
   line-height: 1.15;
   cursor: pointer;
   white-space: nowrap;
+  backdrop-filter: var(--app-workspace-glass-blur) !important;
+  -webkit-backdrop-filter: var(--app-workspace-glass-blur) !important;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+.app-session-quick-pill:hover {
+  background: color-mix(in srgb, var(--ant-color-fill-secondary) 60%, transparent) !important;
+  border-color: color-mix(in srgb, var(--ant-color-primary) 32%, transparent) !important;
+  transform: translateY(-0.8px) scale(1.02);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--ant-color-primary) 8%, transparent) !important;
+}
+
+.app-session-quick-pill:active {
+  transform: scale(0.96);
 }
 
 .app-session-quick-pill:focus-visible {
@@ -5449,9 +5811,12 @@ button.app-message-part-header:disabled:hover {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 16px;
-  background: var(--ant-color-bg-container);
-  border-bottom: 1px solid var(--ant-color-border-secondary);
+  padding: 5px 16px;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 45%, transparent) !important;
+  backdrop-filter: var(--app-workspace-glass-blur) !important;
+  -webkit-backdrop-filter: var(--app-workspace-glass-blur) !important;
+  border-bottom: 1px solid var(--app-workspace-glass-border) !important;
+  box-shadow: var(--app-workspace-glass-inset-glow) !important;
   flex-shrink: 0;
 }
 
