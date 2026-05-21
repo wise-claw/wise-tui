@@ -143,7 +143,6 @@ import {
   SESSION_NOTIFICATION_UI_EVENT_OPEN_PANEL,
   WORKFLOW_UI_EVENT_FOCUS_TASK_TOOL,
   WORKFLOW_UI_EVENT_OMC_BATCH_RUNTIME_CHANGED,
-  WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL,
   WORKFLOW_UI_EVENT_REPO_WORKTREES_MAY_HAVE_CHANGED,
   WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED,
   type SplitTodoCountUpdatedDetail,
@@ -4387,9 +4386,6 @@ export function ClaudeChat({
 
       <SessionQuickActionsBar
         onCreateNewSession={onCreateNewSession}
-        onOpenRequirementSplit={() => {
-          window.dispatchEvent(new CustomEvent(WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL));
-        }}
         onOpenBuiltinAssistant={onOpenBuiltinAssistant}
         onOpenWorkTrajectory={() => setWorkTrajectoryDrawerOpen(true)}
         showWorktreeInMore={Boolean(session.repositoryPath)}
@@ -4435,7 +4431,7 @@ export function ClaudeChat({
           >
             <button
               type="button"
-              className={`app-session-quick-pill app-session-quick-pill--push${pushPopoverOpen ? " app-session-quick-pill--selected" : ""}`}
+              className="app-session-quick-pill app-session-quick-pill--push"
             >
               <span className="app-session-quick-pill__icon app-session-quick-pill__icon--green" aria-hidden>
                 <CloudUploadOutlined />

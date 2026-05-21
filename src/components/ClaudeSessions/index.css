@@ -4290,14 +4290,9 @@ button.app-message-part-header:disabled:hover {
   line-height: 1.15;
   cursor: pointer;
   white-space: nowrap;
-  transition:
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
 }
 
-.app-session-quick-pill--selected,
 .app-session-quick-pill:focus-visible {
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ant-color-primary) 50%, transparent);
   outline: none;
 }
 

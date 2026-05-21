@@ -178,6 +178,61 @@
   padding-top: 5px;
 }
 
+.app-monitor-panel__section--repo-members {
+  padding-bottom: 0;
+}
+
+.app-monitor-panel__section--repo-members .app-monitor-panel__section-head {
+  margin-bottom: 1px;
+}
+
+.app-monitor-panel__section--repo-members .app-monitor-panel__meta {
+  font-size: 9px;
+}
+
+.app-monitor-panel__section--repo-members .app-monitor-panel__item {
+  padding: 1px 4px;
+}
+
+.app-monitor-panel__section--repo-members .app-monitor-panel__item-row {
+  gap: 4px;
+  min-height: 18px;
+}
+
+.app-monitor-panel__section--repo-members .app-monitor-panel__item-name {
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.app-monitor-panel__section--repo-members .app-monitor-panel__repo-type {
+  font-size: 9px;
+  line-height: 12px;
+  padding: 0 3px;
+}
+
+.app-monitor-panel__section--repo-members .app-monitor-panel__result-pill {
+  padding: 0 5px;
+  font-size: 9px;
+  line-height: 12px;
+}
+
+.app-monitor-panel__section--repo-members .app-monitor-panel__subagent-tree {
+  margin: 1px 0 0 6px;
+  padding-left: 5px;
+  gap: 0;
+}
+
+.app-monitor-panel__section--repo-members .app-monitor-panel__subagent-row {
+  height: 16px;
+}
+
+.app-monitor-panel__section--repo-members .app-monitor-panel__subagent-name,
+.app-monitor-panel__section--repo-members .app-monitor-panel__subagent-stage,
+.app-monitor-panel__section--repo-members .app-monitor-panel__subagent-status {
+  font-size: 9px;
+  line-height: 12px;
+}
+
 .app-monitor-panel__task-status-filters {
   display: flex;
   gap: 4px;

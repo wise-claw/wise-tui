@@ -4,7 +4,6 @@ export const SESSION_QUICK_ACTIONS_LAYOUT_STORAGE_KEY = "wise.session.quickActio
 
 export type SessionQuickActionId =
   | "new-session"
-  | "requirement-split"
   | "push"
   | "builtin:prd-split"
   | "builtin:word-doc"
@@ -41,9 +40,8 @@ function builtinMeta(id: SessionQuickActionId, menuLabel: string): SessionQuickA
 
 export const SESSION_QUICK_ACTION_META: Record<SessionQuickActionId, SessionQuickActionMeta> = {
   "new-session": { id: "new-session", label: "新建会话", pillLabel: "新建会话" },
-  "requirement-split": { id: "requirement-split", label: "需求", pillLabel: "需求" },
   push: { id: "push", label: "推送", pillLabel: "推送" },
-  "builtin:prd-split": builtinMeta("builtin:prd-split", SESSION_QUICK_BUILTIN_ASSISTANTS[0].menuLabel),
+  "builtin:prd-split": { id: "builtin:prd-split", label: "需求", pillLabel: "需求" },
   "builtin:word-doc": builtinMeta("builtin:word-doc", SESSION_QUICK_BUILTIN_ASSISTANTS[1].menuLabel),
   "builtin:ppt-deck": builtinMeta("builtin:ppt-deck", SESSION_QUICK_BUILTIN_ASSISTANTS[2].menuLabel),
   "work-trajectory": { id: "work-trajectory", label: "工作轨迹", pillLabel: "工作轨迹" },
@@ -53,7 +51,6 @@ export const SESSION_QUICK_ACTION_META: Record<SessionQuickActionId, SessionQuic
 /** 配置面板与合并时的稳定目录顺序 */
 export const SESSION_QUICK_ACTION_CATALOG_ORDER: SessionQuickActionId[] = [
   "new-session",
-  "requirement-split",
   "push",
   "builtin:prd-split",
   "builtin:word-doc",
@@ -66,9 +63,8 @@ export const DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT: SessionQuickActionsLayoutV1 =
   version: 1,
   items: [
     { id: "new-session", visible: true, zone: "primary" },
-    { id: "requirement-split", visible: true, zone: "primary" },
+    { id: "builtin:prd-split", visible: true, zone: "primary" },
     { id: "push", visible: true, zone: "primary" },
-    { id: "builtin:prd-split", visible: true, zone: "overflow" },
     { id: "builtin:word-doc", visible: true, zone: "overflow" },
     { id: "builtin:ppt-deck", visible: true, zone: "overflow" },
     { id: "work-trajectory", visible: true, zone: "overflow" },
@@ -78,6 +74,12 @@ export const DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT: SessionQuickActionsLayoutV1 =
 
 function isSessionQuickActionId(value: unknown): value is SessionQuickActionId {
   return typeof value === "string" && value in SESSION_QUICK_ACTION_META;
+}
+
+/** 旧版「需求」与「需求拆分助手」合并为 builtin:prd-split */
+function normalizeSessionQuickActionId(value: unknown): SessionQuickActionId | null {
+  if (value === "requirement-split") return "builtin:prd-split";
+  return isSessionQuickActionId(value) ? value : null;
 }
 
 function isZone(value: unknown): value is SessionQuickActionZone {
@@ -92,9 +94,10 @@ export function mergeSessionQuickActionsLayout(
   const byId = new Map<SessionQuickActionId, SessionQuickActionLayoutItem>();
 
   for (const raw of source) {
-    if (!raw || !isSessionQuickActionId(raw.id)) continue;
-    byId.set(raw.id, {
-      id: raw.id,
+    const id = normalizeSessionQuickActionId(raw?.id);
+    if (!raw || !id) continue;
+    byId.set(id, {
+      id,
       visible: raw.visible !== false,
       zone: isZone(raw.zone) ? raw.zone : "overflow",
     });
@@ -104,8 +107,9 @@ export function mergeSessionQuickActionsLayout(
 
   const orderedKnown: SessionQuickActionLayoutItem[] = [];
   for (const item of source) {
-    if (!item || !isSessionQuickActionId(item.id) || orderedKnown.some((x) => x.id === item.id)) continue;
-    orderedKnown.push(byId.get(item.id)!);
+    const id = normalizeSessionQuickActionId(item?.id);
+    if (!item || !id || orderedKnown.some((x) => x.id === id)) continue;
+    orderedKnown.push(byId.get(id)!);
   }
 
   for (const id of SESSION_QUICK_ACTION_CATALOG_ORDER) {

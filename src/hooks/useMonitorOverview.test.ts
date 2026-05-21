@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test";
 import type { WorkflowInvocationStreamDetail } from "../constants/workflowUiEvents";
 import type { TrellisAgentRun } from "../services/trellisRuntime";
 import type { ProjectItem, Repository } from "../types";
-import { buildRepositoryMemberMonitorItems } from "./useMonitorOverview";
+import {
+  buildRepositoryMemberMonitorItems,
+  isRepositoryMemberMainSessionSubagent,
+} from "./useMonitorOverview";
 
 function repo(input: Partial<Repository> & Pick<Repository, "id" | "path">): Repository {
   return {
@@ -269,6 +272,15 @@ describe("buildRepositoryMemberMonitorItems", () => {
     });
   });
 
+  test("isRepositoryMemberMainSessionSubagent detects main-session rows", () => {
+    expect(
+      isRepositoryMemberMainSessionSubagent({ stage: "main-session", subagentType: "claude-cli" }),
+    ).toBe(true);
+    expect(
+      isRepositoryMemberMainSessionSubagent({ stage: "implement", subagentType: "trellis-implement" }),
+    ).toBe(false);
+  });
+
   test("reclaims external Claude CLI runs that are no longer in the host process registry", () => {
     const items = buildRepositoryMemberMonitorItems(
       [repo({ id: 1, path: "/work/wise", sddMode: "wise_trellis" })],
@@ -294,10 +306,7 @@ describe("buildRepositoryMemberMonitorItems", () => {
     expect(items[0]).toMatchObject({
       status: "idle",
       activeSubagentCount: 0,
-    });
-    expect(items[0]?.subagents[0]).toMatchObject({
-      invocationKey: "external-stopped",
-      status: "reclaimed",
+      subagents: [],
     });
   });
 
@@ -324,12 +333,9 @@ describe("buildRepositoryMemberMonitorItems", () => {
 
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({
-      status: "in_progress",
-      activeSubagentCount: 1,
-    });
-    expect(items[0]?.subagents[0]).toMatchObject({
-      invocationKey: "external-fresh",
-      status: "running",
+      status: "idle",
+      activeSubagentCount: 0,
+      subagents: [],
     });
   });
 
@@ -356,12 +362,9 @@ describe("buildRepositoryMemberMonitorItems", () => {
 
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({
-      status: "in_progress",
-      activeSubagentCount: 1,
-    });
-    expect(items[0]?.subagents[0]).toMatchObject({
-      invocationKey: "external-running",
-      status: "stale",
+      status: "idle",
+      activeSubagentCount: 0,
+      subagents: [],
     });
   });
 

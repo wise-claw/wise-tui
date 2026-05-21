@@ -209,6 +209,32 @@ function isActiveRepositoryMemberSubagent(status: RepositoryMemberMonitorSubagen
   return status === "running" || status === "stale";
 }
 
+/** 仓库成员树不展示 Claude 主会话行（仅展示 Trellis / 子代理等）。 */
+export function isRepositoryMemberMainSessionSubagent(
+  subagent: Pick<RepositoryMemberMonitorSubagentItem, "stage" | "subagentType">,
+): boolean {
+  const stage = subagent.stage?.trim().toLowerCase();
+  if (stage === "main-session") return true;
+  const type = subagent.subagentType?.trim().toLowerCase();
+  return type === "main-session";
+}
+
+function finalizeRepositoryMemberMonitorItem(item: RepositoryMemberMonitorItem): RepositoryMemberMonitorItem {
+  const subagents = item.subagents.filter((entry) => !isRepositoryMemberMainSessionSubagent(entry));
+  const activeSubagentCount = subagents.filter((entry) => isActiveRepositoryMemberSubagent(entry.status)).length;
+  return {
+    ...item,
+    subagents,
+    activeSubagentCount,
+    status: activeSubagentCount > 0 ? "in_progress" : "idle",
+    previewText: subagents[0]?.previewText ?? "暂无 Trellis 子进程",
+    updatedAt:
+      subagents.length > 0
+        ? Math.max(item.updatedAt, ...subagents.map((entry) => entry.updatedAt))
+        : item.updatedAt,
+  };
+}
+
 function normalizeMonitorPath(path: string | null | undefined): string {
   const normalized = (path ?? "").trim().replace(/\\/g, "/").replace(/\/+$/g, "");
   return normalized === "" ? "" : normalized;
@@ -513,10 +539,12 @@ export function buildRepositoryMemberMonitorItems(
     });
   }
 
-  return Array.from(itemsByRepositoryId.values()).sort((a, b) => {
-    if (a.status !== b.status) return a.status === "in_progress" ? -1 : 1;
-    return b.updatedAt - a.updatedAt;
-  });
+  return Array.from(itemsByRepositoryId.values())
+    .map(finalizeRepositoryMemberMonitorItem)
+    .sort((a, b) => {
+      if (a.status !== b.status) return a.status === "in_progress" ? -1 : 1;
+      return b.updatedAt - a.updatedAt;
+    });
 }
 
 /** 右栏「成员」：Trellis 项目下按项目作用域过滤员工监控项（不含 OMC 占位）。 */

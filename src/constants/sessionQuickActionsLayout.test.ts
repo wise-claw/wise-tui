@@ -3,6 +3,7 @@ import {
   DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT,
   mergeSessionQuickActionsLayout,
   moveLayoutItem,
+  parseSessionQuickActionsLayout,
   partitionSessionQuickActions,
   updateLayoutItem,
 } from "./sessionQuickActionsLayout";
@@ -37,6 +38,19 @@ describe("sessionQuickActionsLayout", () => {
     const next = moveLayoutItem(DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT, "push", "down");
     const index = next.items.findIndex((item) => item.id === "push");
     expect(next.items[index]?.id).toBe("push");
-    expect(next.items[index + 1]?.id).toBe("builtin:word-doc");
+    expect(next.items[index + 1]?.id).toBe("builtin:ppt-deck");
+  });
+
+  test("merge migrates legacy requirement-split to builtin:prd-split", () => {
+    const merged = parseSessionQuickActionsLayout(
+      JSON.stringify({
+        version: 1,
+        items: [{ id: "requirement-split", visible: false, zone: "overflow" }],
+      }),
+    );
+    const prd = merged.items.find((item) => item.id === "builtin:prd-split");
+    expect(prd?.visible).toBe(false);
+    expect(prd?.zone).toBe("overflow");
+    expect(merged.items.some((item) => (item.id as string) === "requirement-split")).toBe(false);
   });
 });

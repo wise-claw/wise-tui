@@ -21,7 +21,6 @@ import { SessionQuickActionsCustomizeModal } from "./SessionQuickActionsCustomiz
 
 export interface SessionQuickActionsBarProps {
   onCreateNewSession?: () => void;
-  onOpenRequirementSplit: () => void;
   onOpenBuiltinAssistant?: (assistantId: string) => void;
   onOpenWorkTrajectory: () => void;
   onOpenWorktreeMenu?: () => void;
@@ -32,7 +31,6 @@ export interface SessionQuickActionsBarProps {
 
 const ACTION_MENU_ICONS: Partial<Record<SessionQuickActionId, ReactNode>> = {
   "new-session": <CommentOutlined />,
-  "requirement-split": <FileTextOutlined />,
   "builtin:prd-split": <FileTextOutlined />,
   "builtin:word-doc": <FileWordOutlined />,
   "builtin:ppt-deck": <FundProjectionScreenOutlined />,
@@ -52,7 +50,6 @@ function isBuiltinAssistantId(id: SessionQuickActionId): id is "builtin:prd-spli
 
 export function SessionQuickActionsBar({
   onCreateNewSession,
-  onOpenRequirementSplit,
   onOpenBuiltinAssistant,
   onOpenWorkTrajectory,
   onOpenWorktreeMenu,
@@ -61,7 +58,6 @@ export function SessionQuickActionsBar({
 }: SessionQuickActionsBarProps) {
   const { layout, setLayout, resetLayout } = useSessionQuickActionsLayout();
   const [customizeOpen, setCustomizeOpen] = useState(false);
-  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
 
   const availability: SessionQuickActionsAvailability = useMemo(
     () => ({
@@ -93,16 +89,6 @@ export function SessionQuickActionsBar({
         </button>
       );
     }
-    if (id === "requirement-split") {
-      return (
-        <button key={id} type="button" className="app-session-quick-pill" onClick={onOpenRequirementSplit}>
-          <span className="app-session-quick-pill__icon app-session-quick-pill__icon--orange" aria-hidden>
-            <FileTextOutlined />
-          </span>
-          <span className="app-session-quick-pill__label">{meta.pillLabel}</span>
-        </button>
-      );
-    }
     if (id === "push") {
       return (
         <div key={id} className="app-session-quick-pill-slot">
@@ -111,6 +97,7 @@ export function SessionQuickActionsBar({
       );
     }
     if (isBuiltinAssistantId(id)) {
+      const iconTone = id === "builtin:prd-split" ? "orange" : "neutral";
       return (
         <button
           key={id}
@@ -118,7 +105,10 @@ export function SessionQuickActionsBar({
           className="app-session-quick-pill"
           onClick={() => onOpenBuiltinAssistant?.(id)}
         >
-          <span className="app-session-quick-pill__icon app-session-quick-pill__icon--neutral" aria-hidden>
+          <span
+            className={`app-session-quick-pill__icon app-session-quick-pill__icon--${iconTone}`}
+            aria-hidden
+          >
             {ACTION_MENU_ICONS[id] ?? <CommentOutlined />}
           </span>
           <span className="app-session-quick-pill__label">{meta.pillLabel}</span>
@@ -151,14 +141,6 @@ export function SessionQuickActionsBar({
   const overflowMenuItems: MenuProps["items"] = useMemo(() => {
     const items: MenuProps["items"] = overflow.map((id) => {
       const meta = SESSION_QUICK_ACTION_META[id];
-      if (id === "requirement-split") {
-        return {
-          key: id,
-          label: meta.label,
-          icon: ACTION_MENU_ICONS[id],
-          onClick: onOpenRequirementSplit,
-        };
-      }
       if (isBuiltinAssistantId(id)) {
         return {
           key: id,
@@ -214,7 +196,6 @@ export function SessionQuickActionsBar({
     overflow,
     onCreateNewSession,
     onOpenBuiltinAssistant,
-    onOpenRequirementSplit,
     onOpenWorkTrajectory,
     onOpenWorktreeMenu,
   ]);
@@ -233,11 +214,10 @@ export function SessionQuickActionsBar({
               trigger={["click"]}
               placement="topRight"
               overlayClassName="app-session-quick-more-dropdown"
-              onOpenChange={setMoreMenuOpen}
             >
               <button
                 type="button"
-                className={`app-session-quick-pill app-session-quick-pill--more${moreMenuOpen ? " app-session-quick-pill--selected" : ""}`}
+                className="app-session-quick-pill app-session-quick-pill--more"
                 aria-haspopup="menu"
                 aria-label="更多快捷操作"
               >

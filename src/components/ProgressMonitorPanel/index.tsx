@@ -1037,7 +1037,7 @@ export function ProgressMonitorPanel({
       ) : null}
 
       {repositoryMemberItems.length > 0 ? (
-        <div className="app-monitor-panel__section">
+        <div className="app-monitor-panel__section app-monitor-panel__section--repo-members">
           <div className="app-monitor-panel__section-head">
             <div className="app-monitor-panel__section-title-wrap">
               <Typography.Text className="app-monitor-panel__section-title">
@@ -1065,6 +1065,7 @@ export function ProgressMonitorPanel({
                   </span>
                 </span>
               </div>
+              {item.subagents.length > 0 ? (
               <div className="app-monitor-panel__subagent-tree" aria-label={`${item.repositoryName} Trellis 子进程`}>
                 {item.subagents.slice(0, 3).map((subagent) => (
                   <button
@@ -1088,6 +1089,7 @@ export function ProgressMonitorPanel({
                   </button>
                 ))}
               </div>
+              ) : null}
             </div>
           ))}
         </div>
