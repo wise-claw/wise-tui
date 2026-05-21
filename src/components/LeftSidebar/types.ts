@@ -37,7 +37,12 @@ export interface LeftSidebarProps {
   onProjectSelect: (projectId: string) => void;
   onCreateProject: (
     name: string,
-    options?: { embedTrellis?: boolean; rootPath?: string | null },
+    options?: {
+      rootPath?: string | null;
+      bootstrap?: import("../../constants/workspaceBootstrapAddons").WorkspaceBootstrapSelection;
+      /** @deprecated 使用 `bootstrap.trellis` */
+      embedTrellis?: boolean;
+    },
   ) => void | Promise<void>;
   onUpdateProject: (projectId: string, name: string) => void;
   onDeleteProject: (projectId: string) => void;

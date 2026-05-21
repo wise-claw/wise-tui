@@ -2,7 +2,8 @@ use crate::{
     agent_registry, app_state_commands, assistants, cc_wf_studio_mcp_bridge, cc_workflow_studio,
     claude_code_usage, claude_commands, claude_config_dir, claude_external_ingest, code_knowledge_graph,
     cua_driver, dingtalk_enterprise_bot, dingtalk_stream_gateway, extensions, git_commands, mission_control, mcp,
-    prd_url_fetch, repository_files, skills, skills_sh, system_resource, trellis_bootstrap, trellis_bridge,
+    openspec_bootstrap, prd_url_fetch, repository_files, skills, skills_sh, system_resource, trellis_bootstrap,
+    trellis_bridge,
     trellis_runtime, wise_db, wise_mascot, wise_paths, wise_push, workspace_commands,
 };
 use std::sync::Mutex;
@@ -288,6 +289,7 @@ pub fn run() {
             repository_files::delete_repository_entry,
             trellis_bootstrap::bootstrap_trellis_if_missing,
             trellis_bootstrap::trellis_task_py_exists_at_path,
+            openspec_bootstrap::bootstrap_openspec_if_missing,
             trellis_bridge::trellis_list_tasks,
             trellis_bridge::trellis_list_requirement_workspace,
             trellis_bridge::trellis_read_task,

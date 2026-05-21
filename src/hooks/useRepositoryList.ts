@@ -20,6 +20,9 @@ import {
   setActiveProjectId as persistActiveProjectId,
   updateProjectName,
 } from "../services/projectState";
+import type { WorkspaceBootstrapSelection } from "../constants/workspaceBootstrapAddons";
+import { DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION } from "../constants/workspaceBootstrapAddons";
+import { runWorkspaceBootstrap } from "../services/workspaceBootstrap";
 import { bootstrapTrellisIfMissing, trellisTaskPyExistsAtPath } from "../services/trellisBootstrap";
 import { regenerateProjectWorkflowGraphsFromTemplates } from "../services/rebuildProjectWorkflowGraphs";
 import { deleteAppSetting, getAppSetting, setAppSetting } from "../services/appSettingsStore";
@@ -188,7 +191,12 @@ export function useRepositoryList() {
 
   const handleCreateProject = useCallback(async (
     name: string,
-    options?: { embedTrellis?: boolean; rootPath?: string | null },
+    options?: {
+      rootPath?: string | null;
+      bootstrap?: WorkspaceBootstrapSelection;
+      /** @deprecated 使用 `bootstrap.trellis` */
+      embedTrellis?: boolean;
+    },
   ) => {
     const trimmed = name.trim();
     if (!trimmed) return;
@@ -196,14 +204,12 @@ export function useRepositoryList() {
     if (!rootPathRaw) {
       throw new Error("请先选择 Workspace 根目录");
     }
-    const embedTrellis = options?.embedTrellis !== false;
-    if (embedTrellis) {
-      try {
-        await bootstrapTrellisIfMissing(rootPathRaw);
-      } catch (err: unknown) {
-        throw err instanceof Error ? err : new Error(String(err));
-      }
-    }
+    const bootstrap: WorkspaceBootstrapSelection =
+      options?.bootstrap ??
+      (options?.embedTrellis === false
+        ? { ...DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION, trellis: false }
+        : DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION);
+    await runWorkspaceBootstrap(rootPathRaw, bootstrap);
     const createdProject = await createProject(trimmed, rootPathRaw);
     const seedRepository = resolveProjectCreationSeedRepository({
       activeRepositoryId,

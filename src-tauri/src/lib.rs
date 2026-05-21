@@ -27,6 +27,7 @@ mod skills;
 mod subagents_parser;
 mod system_resource;
 mod task_artifact;
+mod openspec_bootstrap;
 mod trellis_bootstrap;
 mod trellis_bridge;
 mod trellis_runtime;

@@ -1,0 +1,173 @@
+.app-create-workspace-modal .ant-modal-body {
+  padding-top: 10px;
+  padding-bottom: 6px;
+}
+
+.app-create-workspace-form.ant-form-vertical .ant-form-item {
+  margin-bottom: 8px;
+}
+
+.app-create-workspace-form.ant-form-vertical .ant-form-item-label {
+  padding-bottom: 2px;
+}
+
+.app-create-workspace-form.ant-form-vertical .ant-form-item-label > label {
+  font-size: 12px;
+  color: var(--ant-color-text-secondary);
+  height: auto;
+}
+
+.app-create-workspace-form__section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.app-create-workspace-form__section-label {
+  font-size: 12px;
+  color: var(--ant-color-text-secondary);
+  line-height: 1.2;
+}
+
+.app-create-workspace-path {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  gap: 0;
+  border: 1px solid var(--ant-color-border);
+  border-radius: var(--ant-border-radius);
+  overflow: hidden;
+  background: var(--ant-color-bg-container);
+}
+
+.app-create-workspace-path__pick {
+  flex-shrink: 0;
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  border-radius: 0;
+  border-right: 1px solid var(--ant-color-border);
+  box-shadow: none;
+}
+
+.app-create-workspace-path__value {
+  flex: 1;
+  min-width: 0;
+  padding: 0 8px;
+  font-size: 12px;
+  line-height: 28px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ant-color-text);
+}
+
+.app-create-workspace-path__value--empty {
+  color: var(--ant-color-text-quaternary);
+}
+
+.app-create-workspace-form__hint {
+  display: block;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-create-workspace-bootstrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: var(--ant-border-radius);
+  border: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-create-workspace-bootstrap__title {
+  font-size: 12px;
+  line-height: 1.2;
+  color: var(--ant-color-text);
+}
+
+.app-create-workspace-bootstrap__groups {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.app-create-workspace-bootstrap__group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.app-create-workspace-bootstrap__group-label {
+  flex-shrink: 0;
+  width: 42px;
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--ant-color-text-tertiary);
+  text-align: right;
+}
+
+.app-create-workspace-bootstrap__chips {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* 统一为胶囊复选：根目录脚手架与 Claude 插件同一视觉语言 */
+.app-create-workspace-bootstrap__chip.ant-checkbox-wrapper {
+  display: inline-flex;
+  align-items: center;
+  margin-inline-start: 0 !important;
+  padding: 0 8px 0 6px;
+  min-height: 26px;
+  border: 1px solid var(--ant-color-border);
+  border-radius: 13px;
+  background: var(--ant-color-bg-container);
+  font-size: 12px;
+  line-height: 1;
+  transition:
+    border-color 0.15s,
+    background 0.15s,
+    color 0.15s;
+}
+
+.app-create-workspace-bootstrap__chip.ant-checkbox-wrapper:hover {
+  border-color: var(--ant-color-primary-border-hover);
+}
+
+.app-create-workspace-bootstrap__chip .ant-checkbox {
+  top: 0;
+}
+
+.app-create-workspace-bootstrap__chip .ant-checkbox + span {
+  padding-inline: 6px 0 !important;
+  color: var(--ant-color-text);
+}
+
+.app-create-workspace-bootstrap__chip .ant-checkbox-inner {
+  width: 14px;
+  height: 14px;
+}
+
+.app-create-workspace-bootstrap__chip.ant-checkbox-wrapper-checked {
+  border-color: var(--ant-color-primary);
+  background: var(--ant-color-primary-bg);
+}
+
+.app-create-workspace-bootstrap__chip.ant-checkbox-wrapper-checked .ant-checkbox + span {
+  color: var(--ant-color-primary);
+  font-weight: 500;
+}
+
+.app-create-workspace-bootstrap__chip.ant-checkbox-wrapper-disabled {
+  opacity: 0.55;
+}

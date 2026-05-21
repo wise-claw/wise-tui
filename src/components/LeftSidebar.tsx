@@ -4,6 +4,7 @@ import type { ProjectItem, Repository } from "../types";
 import { repositoryFolderBasename } from "../utils/repositoryType";
 import { AppSettingsModal } from "./AppSettingsModal";
 import { MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths";
+import { DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION } from "../constants/workspaceBootstrapAddons";
 import { cancelClaudeExecution } from "../services/claude";
 import { pickFolder } from "../services/repository";
 import {
@@ -123,7 +124,9 @@ export function LeftSidebar({
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
   const [createProjectRootPath, setCreateProjectRootPath] = useState("");
   const [createProjectSubmitting, setCreateProjectSubmitting] = useState(false);
-  const [embedTrellisForNewProject, setEmbedTrellisForNewProject] = useState(true);
+  const [workspaceBootstrapSelection, setWorkspaceBootstrapSelection] = useState(
+    () => ({ ...DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION }),
+  );
   const [projectNameInput, setProjectNameInput] = useState("");
   const [editProject, setEditProject] = useState<ProjectItem | null>(null);
   /** 待升格为新项目的游离 repo（菜单触发后弹出输入项目名 modal）。 */
@@ -247,7 +250,7 @@ export function LeftSidebar({
     if (!workspaceCreateRequest) return;
     setProjectNameInput("");
     setCreateProjectRootPath("");
-    setEmbedTrellisForNewProject(true);
+    setWorkspaceBootstrapSelection({ ...DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION });
     setCreateProjectOpen(true);
   }, [workspaceCreateRequest]);
 
@@ -271,7 +274,7 @@ export function LeftSidebar({
     try {
       await Promise.resolve(
         onCreateProject(name, {
-          embedTrellis: embedTrellisForNewProject,
+          bootstrap: workspaceBootstrapSelection,
           rootPath: createProjectRootPath.trim(),
         }),
       );
@@ -363,7 +366,7 @@ export function LeftSidebar({
           onCreateProjectClick={() => {
             setProjectNameInput("");
             setCreateProjectRootPath("");
-            setEmbedTrellisForNewProject(true);
+            setWorkspaceBootstrapSelection({ ...DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION });
             setCreateProjectOpen(true);
           }}
           onAddFloatingRepositoryClick={
@@ -513,8 +516,8 @@ export function LeftSidebar({
           const picked = await pickFolder();
           if (picked) setCreateProjectRootPath(picked);
         }}
-        embedTrellisForNewProject={embedTrellisForNewProject}
-        onEmbedTrellisForNewProjectChange={setEmbedTrellisForNewProject}
+        workspaceBootstrapSelection={workspaceBootstrapSelection}
+        onWorkspaceBootstrapSelectionChange={setWorkspaceBootstrapSelection}
         editProject={editProject}
         projectNameInput={projectNameInput}
         onProjectNameInputChange={setProjectNameInput}
