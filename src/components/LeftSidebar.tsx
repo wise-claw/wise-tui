@@ -42,6 +42,7 @@ export function LeftSidebar({
   dark,
   collapsed,
   siderWidth = MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX,
+  parked = false,
   compactLayoutMode = false,
   onToggleCompactLayoutMode,
   projects,
@@ -326,8 +327,8 @@ export function LeftSidebar({
     <Layout.Sider
       width={siderWidth}
       collapsedWidth={0}
-      collapsed={collapsed}
-      className="app-left-sidebar"
+      collapsed={collapsed || parked}
+      className={`app-left-sidebar${parked ? " app-left-sidebar--parked" : ""}`}
       theme={dark ? "dark" : "light"}
     >
       <LeftSidebarTopbar

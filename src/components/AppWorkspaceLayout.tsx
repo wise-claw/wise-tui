@@ -307,6 +307,9 @@ export interface AppWorkspaceLayoutProps {
   cockpitSurfaceInitialAssistantId?: string | null;
   /** 显式打开助手/需求拆分入口的递增信号。 */
   cockpitSurfaceOpenRequestKey: number;
+  /** 需求拆分助手全屏：收起左栏，主区仅展示 PRD 拆分面板 */
+  cockpitPrdSplitFullscreen?: boolean;
+  onCockpitActiveAssistantIdChange?: (assistantId: string | null) => void;
   commandPaletteProps: ComponentProps<typeof CommandPalette>;
   mcpHubProps: ComponentProps<typeof McpHub>;
   skillsHubProps: ComponentProps<typeof SkillsHub>;
@@ -354,6 +357,8 @@ export function AppWorkspaceLayout({
   cockpitSurfaceHasInitialTarget,
   cockpitSurfaceInitialAssistantId,
   cockpitSurfaceOpenRequestKey,
+  cockpitPrdSplitFullscreen = false,
+  onCockpitActiveAssistantIdChange,
   commandPaletteProps,
   mcpHubProps,
   skillsHubProps,
@@ -385,6 +390,7 @@ export function AppWorkspaceLayout({
     viewMode.kind === "inspect" && viewMode.tool.kind === "workflow-studio";
   const rightInspectorHidden =
     effectiveRightCollapsed || missionControlMode || authorMode;
+  const leftSidebarParked = cockpitPrdSplitFullscreen;
   const [authorShellMounted, setAuthorShellMounted] = useState(authorMode);
   const [cockpitShellMounted, setCockpitShellMounted] = useState(missionControlMode);
 
@@ -484,7 +490,9 @@ export function AppWorkspaceLayout({
           >
             <AntdApp>
               <Layout
-                className={`app-main-layout${authorMode ? " app-main-layout--author" : ""}`}
+                className={`app-main-layout${authorMode ? " app-main-layout--author" : ""}${
+                  cockpitPrdSplitFullscreen ? " app-main-layout--prd-split-fullscreen" : ""
+                }`}
                 style={{ minWidth: 0, flex: 1, minHeight: 0, height: "100%" }}
               >
                 {authorMode ? (
@@ -503,7 +511,7 @@ export function AppWorkspaceLayout({
                   <ConnectedLeftSidebar
                     dark={dark}
                     collapsed={collapsed}
-                    parked={false}
+                    parked={leftSidebarParked}
                     siderWidth={mainLayoutLeftWidthPx}
                     compactLayoutMode={compactLayoutMode}
                     onToggleCompactLayoutMode={onToggleCompactLayoutMode}
@@ -511,7 +519,7 @@ export function AppWorkspaceLayout({
                   />
                 )}
 
-                {!promptsMode && !collapsed ? (
+                {!leftSidebarParked && !promptsMode && !collapsed ? (
                   <MainLayoutResizeHandle
                     variant="left"
                     startWidthPx={mainLayoutLeftWidthPx}
@@ -588,7 +596,7 @@ export function AppWorkspaceLayout({
                     <div
                       className={`app-full-width-main app-cockpit-workspace-layer${
                         !missionControlMode ? " app-workspace-layer--parked" : ""
-                      }`}
+                      }${cockpitPrdSplitFullscreen ? " app-cockpit-workspace-layer--prd-split-fullscreen" : ""}`}
                     >
                       <Layout.Content className="app-main-layout-content">
                         {cockpitEmpty ? (
@@ -603,6 +611,7 @@ export function AppWorkspaceLayout({
                               openRequestKey={cockpitSurfaceOpenRequestKey}
                               missionControlProps={missionControlProps}
                               prdTaskSplitPanelProps={prdTaskSplitPanelProps}
+                              onActiveAssistantIdChange={onCockpitActiveAssistantIdChange}
                             />
                           </Suspense>
                         )}

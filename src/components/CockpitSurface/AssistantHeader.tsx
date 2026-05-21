@@ -7,6 +7,8 @@ export interface AssistantHeaderProps {
   activeProjectName: string | null;
   /** 显示返回 Hub 按钮(仅在 conversation 子态)。 */
   showBackToHub: boolean;
+  /** 为 true 时返回按钮直接关闭 Cockpit（需求拆分全屏）。 */
+  backClosesSurface?: boolean;
   onBackToHub: () => void;
   /** 返回主会话;助手不抢占主会话优先级。 */
   onOpenChat: () => void;
@@ -22,6 +24,7 @@ export function AssistantHeader({
   assistant,
   activeProjectName,
   showBackToHub,
+  backClosesSurface = false,
   onBackToHub,
   onOpenChat,
   onOpenSettings,
@@ -31,14 +34,18 @@ export function AssistantHeader({
     return null;
   }
   return (
-    <header className="cockpit-header" aria-label="助手 Header">
+    <header
+      className={`cockpit-header${backClosesSurface ? " cockpit-header--overlay-titlebar" : ""}`}
+      aria-label="助手 Header"
+    >
       {showBackToHub ? (
         <Button
           size="small"
           type="text"
           icon={<ArrowLeftOutlined />}
           onClick={onBackToHub}
-          aria-label="返回 Hub"
+          aria-label={backClosesSurface ? "关闭需求拆分" : "返回 Hub"}
+          title={backClosesSurface ? "关闭" : "返回 Hub"}
         />
       ) : null}
       <span
@@ -54,7 +61,7 @@ export function AssistantHeader({
         关联工作区:{activeProjectName ?? "未选择"}
       </span>
       <div className="cockpit-header__chip">引擎:{assistant.engineId}</div>
-      <div className="cockpit-header__spacer" />
+      <div className="cockpit-header__spacer" data-tauri-drag-region />
       <Tooltip title="返回主会话">
         <Button
           size="small"

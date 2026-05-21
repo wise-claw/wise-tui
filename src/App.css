@@ -434,6 +434,23 @@ body {
   z-index: 2;
 }
 
+/* 需求拆分：fixed 盖住整窗（含左栏），而非仅 app-workspace-main */
+.app-cockpit-workspace-layer--prd-split-fullscreen {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 50;
+  background: var(--ant-color-bg-layout);
+}
+
+@media (display-mode: window-controls-overlay) {
+  .app-cockpit-workspace-layer--prd-split-fullscreen {
+    top: env(titlebar-area-height, 28px);
+  }
+}
+
 /* 工作台配置全屏：左栏为配置 Tab 导航（替换工作区树），主区铺满剩余宽度 */
 .app-main-layout--author .app-workspace-main {
   display: flex;

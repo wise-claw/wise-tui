@@ -36,6 +36,7 @@ import { useClaudeSessions, type ClaudeTurnCompletePayload } from "./hooks/useCl
 import { openInFinder } from "./services/repository";
 import { triggerCodeGraphProjectSearch, triggerCodeGraphReindex } from "./services/codeKnowledgeGraph";
 import { AppWorkspaceLayout } from "./components/AppWorkspaceLayout";
+import { DEFAULT_PRD_SPLIT_ASSISTANT_ID } from "./services/assistantPromptLayers";
 import { readAuthorPaneFromSettings, readAuthorPaneFromStorage } from "./components/AuthorPanel";
 import type { PromptsOpenContext } from "./components/PromptsPanel";
 import { reloadAppWindow } from "./services/window";
@@ -259,6 +260,7 @@ export default function App() {
   const [missionControlInitialTarget, setMissionControlInitialTarget] = useState<OpenMissionControlDetail | null>(null);
   const [missionControlOpenRequestKey, setMissionControlOpenRequestKey] = useState(0);
   const [cockpitSurfaceInitialAssistantId, setCockpitSurfaceInitialAssistantId] = useState<string | null>(null);
+  const [cockpitActiveAssistantId, setCockpitActiveAssistantId] = useState<string | null>(null);
   const [authorTrellisProjectId, setAuthorTrellisProjectId] = useState<string | null>(null);
   const [workspaceCreateRequest, setWorkspaceCreateRequest] = useState(0);
   const [standaloneRepoAddRequest, setStandaloneRepoAddRequest] = useState(0);
@@ -1129,10 +1131,32 @@ export default function App() {
     viewMode.enter(cockpitView());
   }, [viewMode]);
   const exitCockpit = useCallback(() => {
+    setCockpitActiveAssistantId(null);
     startTransition(() => {
       viewMode.back();
     });
   }, [viewMode]);
+
+  /** 需求拆分助手：fixed 叠层盖住整窗（含左栏） */
+  const cockpitPrdSplitFullscreen = useMemo(() => {
+    if (viewMode.view.kind !== "cockpit") return false;
+    const activeId =
+      cockpitActiveAssistantId?.trim() || cockpitSurfaceInitialAssistantId?.trim() || "";
+    if (activeId === DEFAULT_PRD_SPLIT_ASSISTANT_ID) return true;
+    if (
+      !activeId &&
+      Boolean(missionControlInitialTarget?.projectId || missionControlInitialTarget?.repositoryId)
+    ) {
+      return true;
+    }
+    return false;
+  }, [
+    viewMode.view.kind,
+    cockpitActiveAssistantId,
+    cockpitSurfaceInitialAssistantId,
+    missionControlInitialTarget?.projectId,
+    missionControlInitialTarget?.repositoryId,
+  ]);
   const composerProjectRoleTagOptions = useMemo(() => {
     if (!shouldHideEmployeeUi(activeProject)) {
       return [];
@@ -2693,6 +2717,8 @@ export default function App() {
       )}
       cockpitSurfaceInitialAssistantId={cockpitSurfaceInitialAssistantId}
       cockpitSurfaceOpenRequestKey={missionControlOpenRequestKey}
+      cockpitPrdSplitFullscreen={cockpitPrdSplitFullscreen}
+      onCockpitActiveAssistantIdChange={setCockpitActiveAssistantId}
       commandPaletteProps={{
         open: searchOpen,
         onClose: () => setSearchOpen(false),

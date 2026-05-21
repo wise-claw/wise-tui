@@ -477,7 +477,7 @@
 .app-prd-task-panel__assistant-resource-row {
   width: 100%;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, calc((100% - 8px) / 2 - 100px));
   gap: 8px;
 }
 

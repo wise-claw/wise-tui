@@ -20,6 +20,8 @@ export interface LeftSidebarProps {
   collapsed: boolean;
   /** Left `Sider` width in pixels. Defaults to `MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX`. */
   siderWidth?: number;
+  /** 为 true 时收起侧栏（需求拆分全屏叠层仍会用 fixed 盖住整窗）。 */
+  parked?: boolean;
   /** Compact window mode: collapses the right rail and shrinks the main window. */
   compactLayoutMode?: boolean;
   onToggleCompactLayoutMode?: () => void;

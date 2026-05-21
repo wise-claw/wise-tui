@@ -2,7 +2,8 @@ import { isTauri } from "@tauri-apps/api/core";
 
 /**
  * Tauri macOS 叠加标题栏下，WKWebView 往往不触发 `window-controls-overlay` 媒体查询，
- * 通过 `html` 类名驱动 CSS，为左栏顶部 `.app-left-sidebar-topbar` 预留红绿灯安全区。
+ * 通过 `html` 类名驱动 CSS，为左栏 `.app-left-sidebar-topbar` 与全屏需求拆分
+ * `.cockpit-header--overlay-titlebar` 预留红绿灯安全区。
  */
 export function applyTauriMacHostChromeClass(): void {
   if (typeof document === "undefined") return;

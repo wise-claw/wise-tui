@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { App as AntdApp, Button, Empty, Spin, Tag } from "antd";
+import { App as AntdApp, Button, Empty, Spin, Tag, Tooltip } from "antd";
 import { CloseOutlined, SettingOutlined } from "@ant-design/icons";
 import { listAssistants } from "../../services/assistants";
 import type { AssistantEntry } from "../../types/assistant";
@@ -252,18 +252,20 @@ function AssistantCard({ assistant, disabled, disabledHint, onSelect, onOpenSett
       <div className="cockpit-hub__card-foot">
         <span className="cockpit-hub__card-engine">{assistant.engineId}</span>
         <div className="cockpit-hub__card-actions">
-          <Button
-            size="small"
-            type="text"
-            icon={<SettingOutlined />}
-            aria-label={`${assistant.name} 设置`}
-            onClick={onOpenSettings}
-          >
-            设置
-          </Button>
+          <Tooltip title="设置" mouseEnterDelay={0.35}>
+            <Button
+              size="small"
+              type="text"
+              className="cockpit-hub__card-action-btn cockpit-hub__card-action-btn--icon"
+              icon={<SettingOutlined />}
+              aria-label={`${assistant.name} 设置`}
+              onClick={onOpenSettings}
+            />
+          </Tooltip>
           <Button
             size="small"
             type="primary"
+            className="cockpit-hub__card-action-btn"
             disabled={disabled}
             title={disabled ? disabledHint : undefined}
             onClick={onSelect}

@@ -31,6 +31,8 @@ function cockpitSubModeFromEntry(
 }
 
 export interface CockpitSurfaceProps {
+  /** 当前 conversation 助手 id 变化时通知宿主（用于需求拆分全屏盖住左栏）。 */
+  onActiveAssistantIdChange?: (assistantId: string | null) => void;
   /** 当前选定的工作区 id;影响 hub 是否启用 PRD-split 助手以及对话 header 显示。 */
   activeProjectId: string | null;
   activeProjectName: string | null;
@@ -58,6 +60,7 @@ export function CockpitSurface({
   openRequestKey,
   missionControlProps,
   prdTaskSplitPanelProps,
+  onActiveAssistantIdChange,
 }: CockpitSurfaceProps) {
   const [subMode, setSubMode] = useState<CockpitSubMode>(() =>
     cockpitSubModeFromEntry(hasInitialTarget, initialAssistantId),
@@ -115,13 +118,26 @@ export function CockpitSurface({
     setSettingsAssistantId(null);
   }, []);
 
+  const isPrdSplitConversation =
+    subMode.kind === "conversation" && subMode.assistantId === DEFAULT_PRD_SPLIT_ASSISTANT_ID;
+
+  useEffect(() => {
+    if (!onActiveAssistantIdChange) return;
+    onActiveAssistantIdChange(subMode.kind === "conversation" ? subMode.assistantId : null);
+  }, [onActiveAssistantIdChange, subMode]);
+
   return (
-    <div className="cockpit-surface">
+    <div
+      className={`cockpit-surface${isPrdSplitConversation ? " cockpit-surface--prd-split-fullscreen" : ""}`}
+    >
       <AssistantHeader
         assistant={activeAssistant}
         activeProjectName={activeProjectName}
         showBackToHub={subMode.kind === "conversation"}
-        onBackToHub={handleBackToHub}
+        backClosesSurface={isPrdSplitConversation}
+        onBackToHub={
+          isPrdSplitConversation ? prdTaskSplitPanelProps.onClose : handleBackToHub
+        }
         onOpenChat={prdTaskSplitPanelProps.onClose}
         onOpenSettings={activeAssistant ? handleOpenActiveSettings : undefined}
       />
