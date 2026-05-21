@@ -14,28 +14,21 @@ export function DiscardFilePopconfirm({
 }: DiscardFilePopconfirmProps) {
   return (
     <Popconfirm
+      classNames={{ root: "app-git-discard-popconfirm" }}
       title="确认放弃更改？"
-      description={
-        <>
-          <div>未暂存的修改将被永久丢弃，且无法恢复。</div>
-          <div
-            style={{
-              marginTop: 8,
-              wordBreak: "break-all",
-              fontFamily: "var(--ant-font-family-code, monospace)",
-              fontSize: 12,
-            }}
-          >
-            {filePath}
-          </div>
-        </>
-      }
-      okText="放弃更改"
+      description={(
+        <div className="app-git-discard-popconfirm__body">
+          <span className="app-git-discard-popconfirm__hint">未暂存修改将永久丢失。</span>
+          <code className="app-git-discard-popconfirm__path">{filePath}</code>
+        </div>
+      )}
+      okText="放弃"
       cancelText="取消"
-      okButtonProps={{ danger: true }}
+      okButtonProps={{ danger: true, size: "small" }}
+      cancelButtonProps={{ size: "small" }}
       placement="top"
       getPopupContainer={() => document.body}
-      styles={{ container: { width: 300 } }}
+      styles={{ container: { width: 228, maxWidth: "min(228px, 78vw)" } }}
       onConfirm={onConfirm}
     >
       {children}

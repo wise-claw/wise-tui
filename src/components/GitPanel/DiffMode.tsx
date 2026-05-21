@@ -181,7 +181,7 @@ export function DiffMode({
                 onClick={() => void handleGenerateCommitByAi()}
                 loading={aiSummaryLoading}
               >
-                AI 生成信息
+                AI 生成提交信息
               </Button>
             </Tooltip>
           </div>
@@ -362,14 +362,16 @@ export function DiffMode({
                 />
               </Tooltip>
               <Popconfirm
+                classNames={{ root: "app-git-discard-popconfirm" }}
                 title="确认放弃全部更改？"
-                description="所有未暂存的本地修改将被永久丢弃，此操作不可恢复。"
+                description="未暂存修改将永久丢失。"
                 okText="全部放弃"
                 cancelText="取消"
-                okButtonProps={{ danger: true }}
+                okButtonProps={{ danger: true, size: "small" }}
+                cancelButtonProps={{ size: "small" }}
                 placement="bottomRight"
                 getPopupContainer={() => document.body}
-                styles={{ container: { width: 300 } }}
+                styles={{ container: { width: 228, maxWidth: "min(228px, 78vw)" } }}
                 disabled={loading.stageAll || loading.unstageAll || loading.discardAll}
                 onConfirm={onDiscardAll}
               >

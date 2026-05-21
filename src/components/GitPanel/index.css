@@ -794,6 +794,58 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
   color: var(--ant-color-text);
 }
 
+/* 放弃更改：紧凑 Popconfirm */
+.app-git-discard-popconfirm.ant-popconfirm .ant-popconfirm-inner {
+  padding: 8px 10px 6px;
+}
+
+.app-git-discard-popconfirm .ant-popconfirm-message {
+  margin-bottom: 4px;
+}
+
+.app-git-discard-popconfirm .ant-popconfirm-message-icon {
+  font-size: 14px;
+  margin-top: 1px;
+}
+
+.app-git-discard-popconfirm .ant-popconfirm-message-title {
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.app-git-discard-popconfirm .ant-popconfirm-description {
+  margin-top: 0;
+}
+
+.app-git-discard-popconfirm__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-git-discard-popconfirm__hint {
+  display: block;
+}
+
+.app-git-discard-popconfirm__path {
+  display: block;
+  padding: 2px 5px;
+  border-radius: var(--ant-border-radius-sm);
+  background: var(--ant-color-fill-quaternary);
+  font-family: var(--ant-font-family-code, monospace);
+  font-size: 10px;
+  line-height: 1.3;
+  color: var(--ant-color-text);
+  word-break: break-all;
+}
+
+.app-git-discard-popconfirm .ant-popconfirm-buttons {
+  margin-top: 6px;
+}
+
 /* 删除：Popconfirm 内说明文案（气泡内，非全屏） */
 .git-files-delete-pop-desc {
   max-width: min(280px, 72vw);
