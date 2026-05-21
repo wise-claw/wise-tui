@@ -7,6 +7,7 @@ import {
 } from "@ant-design/icons";
 import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { AppShortcutsPopoverBody } from "../AppShortcutsPopoverBody";
+import { ArtifactsPanel } from "../ArtifactsPanel";
 import { AssistantsPanel } from "../AssistantsPanel";
 import { AutomationPanel } from "../AutomationPanel";
 import { ChannelsPanel } from "../ChannelsPanel";
@@ -25,9 +26,11 @@ import { getAppSetting, setAppSetting } from "../../services/appSettingsStore";
 import { DEFAULT_AUTHOR_PANE } from "../../types/viewMode";
 import { AUTHOR_TAB_STORAGE_KEY, AUTHOR_TABS, isAuthorPane, type AuthorPane } from "./AuthorPanelTabs";
 import { AuthorPanelPageShell } from "./AuthorPanelPageShell";
+import { WorkspacesTab } from "./tabs/WorkspacesTab";
 import "./index.css";
 
 const PANELS_WITH_OWN_SHELL = new Set<AuthorPane>([
+  "workspaces",
   "extensions",
   "assistants",
   "mcp",
@@ -37,18 +40,24 @@ const PANELS_WITH_OWN_SHELL = new Set<AuthorPane>([
   "workflows",
   "channels",
   "automation",
+  "artifacts",
   "engine-registry",
 ]);
+
+const LEGACY_AUTHOR_PANES: ReadonlySet<AuthorPane> = new Set(["agents", "workflows"]);
 
 type EmployeeConfigProps = ComponentProps<typeof EmployeeConfigModal>;
 type WorkflowConfigProps = ComponentProps<typeof WorkflowConfigModal>;
 type McpHubProps = ComponentProps<typeof McpHub>;
 type SkillsHubProps = ComponentProps<typeof SkillsHub>;
+type WorkspacesTabProps = ComponentProps<typeof WorkspacesTab>;
 type AssistantsPanelProps = ComponentProps<typeof AssistantsPanel>;
+
 export interface AuthorPanelProps {
   pane: AuthorPane;
   onPaneChange: (pane: AuthorPane) => void;
   onBack: () => void;
+  workspacesTabProps: WorkspacesTabProps;
   employeeConfigProps: EmployeeConfigProps | null;
   workflowConfigProps: WorkflowConfigProps | null;
   mcpHubProps: McpHubProps;
@@ -56,26 +65,23 @@ export interface AuthorPanelProps {
   assistantsPanelProps?: AssistantsPanelProps;
   repositoryPath?: string | null;
   automationPanelProps: ComponentProps<typeof AutomationPanel>;
+  artifactsPanelProps: ComponentProps<typeof ArtifactsPanel>;
   workflowStudioAction?: ReactNode;
-}
-
-function normalizeStoredAuthorPane(raw: string, fallback: AuthorPane): AuthorPane {
-  if (raw === "workspaces" || raw === "artifacts") return DEFAULT_AUTHOR_PANE;
-  return isAuthorPane(raw) ? raw : fallback;
 }
 
 export function readAuthorPaneFromStorage(fallback: AuthorPane = DEFAULT_AUTHOR_PANE): AuthorPane {
   if (typeof window === "undefined") return fallback;
   const raw = window.localStorage.getItem(AUTHOR_TAB_STORAGE_KEY)?.trim() ?? "";
-  return normalizeStoredAuthorPane(raw, fallback);
+  return isAuthorPane(raw) && !LEGACY_AUTHOR_PANES.has(raw) ? raw : fallback;
 }
 
 export async function readAuthorPaneFromSettings(fallback: AuthorPane = DEFAULT_AUTHOR_PANE): Promise<AuthorPane> {
   const raw = (await getAppSetting(AUTHOR_TAB_STORAGE_KEY))?.trim() ?? "";
-  return normalizeStoredAuthorPane(raw, readAuthorPaneFromStorage(fallback));
+  return isAuthorPane(raw) && !LEGACY_AUTHOR_PANES.has(raw) ? raw : readAuthorPaneFromStorage(fallback);
 }
 
 export function writeAuthorPaneToStorage(pane: AuthorPane): void {
+  if (LEGACY_AUTHOR_PANES.has(pane)) return;
   if (typeof window !== "undefined") {
     window.localStorage.setItem(AUTHOR_TAB_STORAGE_KEY, pane);
   }
@@ -88,6 +94,7 @@ export function AuthorPanel({
   pane,
   onPaneChange: _onPaneChange,
   onBack: _onBack,
+  workspacesTabProps,
   employeeConfigProps,
   workflowConfigProps,
   mcpHubProps,
@@ -95,6 +102,7 @@ export function AuthorPanel({
   assistantsPanelProps,
   repositoryPath,
   automationPanelProps,
+  artifactsPanelProps,
   workflowStudioAction,
 }: AuthorPanelProps) {
   const [hooksSearch, setHooksSearch] = useState("");
@@ -108,11 +116,13 @@ export function AuthorPanel({
 
   const content = useMemo(() => {
     switch (pane) {
+      case "workspaces":
+        return <WorkspacesTab {...workspacesTabProps} />;
       case "agents":
         return employeeConfigProps ? (
           <EmployeeConfigModal {...employeeConfigProps} open inline />
         ) : (
-          <AuthorUnavailable label="智能体角色" />
+          <AuthorUnavailable label="员工角色" />
         );
       case "workflows":
         return workflowConfigProps ? (
@@ -127,7 +137,7 @@ export function AuthorPanel({
             </div>
           </AuthorPanelPageShell>
         ) : (
-          <AuthorUnavailable label="工作流" />
+          <AuthorUnavailable label="委派协议" />
         );
       case "mcp":
         return <McpHub {...mcpHubProps} onClose={undefined} />;
@@ -203,6 +213,12 @@ export function AuthorPanel({
         ) : (
           <AuthorUnavailable label="定时自动化" />
         );
+      case "artifacts":
+        return artifactsPanelProps ? (
+          <ArtifactsPanel {...artifactsPanelProps} />
+        ) : (
+          <AuthorUnavailable label="产物检查台" />
+        );
       case "channels":
         return <ChannelsPanel />;
       case "shortcuts":
@@ -217,16 +233,18 @@ export function AuthorPanel({
     activeTab.icon,
     activeTab.label,
     automationPanelProps,
+    artifactsPanelProps,
+    assistantsPanelProps,
     employeeConfigProps,
     hooksSearch,
     hooksRepositoryPath,
-    assistantsPanelProps,
     mcpHubProps,
     pane,
     repositoryPath,
     skillsHubProps,
     workflowConfigProps,
     workflowStudioAction,
+    workspacesTabProps,
   ]);
 
   const wrappedContent =

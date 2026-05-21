@@ -19,7 +19,6 @@ import {
   SESSION_QUICK_ACTION_META,
   type SessionQuickActionId,
   type SessionQuickActionsAvailability,
-  type SessionQuickActionsLayoutV1,
 } from "../../constants/sessionQuickActionsLayout";
 import { isSessionQuickBuiltinAssistantId } from "../../constants/sessionQuickBuiltinAssistants";
 import { useSessionQuickActionsLayout } from "../../hooks/useSessionQuickActionsLayout";

@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 6
+- **Total Sessions**: 7
 - **Last Active**: 2026-05-21
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~220 | Active |
+| `journal-1.md` | ~251 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 7 | 2026-05-21 | 需求助手主链路第一波收敛 | - | `main` |
 | 6 | 2026-05-21 | Assistant Hub D13 收敛 + Inspector 透镜 + task_artifact IPC 修复 | `e173fc8` | `main` |
 | 5 | 2026-05-17 | P0 ViewMode + P1 Cockpit default + Agent Harness umbrella | `53a44a5` | `main` |
 | 4 | 2026-05-17 | P3 Author entry and P5 Workspace naming | `f8658f0`, `fb78625` | `main` |

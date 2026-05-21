@@ -1569,7 +1569,7 @@ function ComposerInner({
             popupMatchSelectWidth={false}
             showSearch
             optionFilterProp="label"
-            title="右侧主会话目标仓库"
+            title="右侧 Repo 执行会话目标仓库"
             aria-label="选择仓库"
             value={dualPaneRepositoryPicker.valueRepositoryId}
             options={dualPaneRepositoryPicker.repositories.map((r) => ({

@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { App as AntdApp } from "antd";
 import type { AddRepositoryOptions, Repository, RepositoryAssociatePreset, SddMode } from "../../types";
-import {
-  DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION,
-  type WorkspaceBootstrapSelection,
-} from "../../constants/workspaceBootstrapAddons";
+import { DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION } from "../../constants/workspaceBootstrapAddons";
 import {
   REPOSITORY_ASSOCIATE_PRESETS_MAX,
   REPOSITORY_ASSOCIATE_PRESETS_STORAGE_KEY,

@@ -9,7 +9,7 @@
  * P0 阶段：仅替换状态结构，不改任何视觉行为。各 kind 的渲染规则与
  * 重构前完全一致：
  *   - `chat`     → ClaudeSessions + RightPanel（默认主屏）
- *   - `cockpit`  → 全屏 MissionControl（替换主区，左栏保留）
+ *   - `cockpit`  → AssistantHub / 需求助手工作台（替换主区，左栏保留）
  *   - `author`   → 三种 pane 渲染规则不同（详见下方）
  *   - `inspect`  → 叠层（在底层 view 之上，左栏保留）
  *
@@ -24,6 +24,7 @@ export type ViewMode =
   | { kind: "inspect"; tool: InspectTool };
 
 export type AuthorPane =
+  | "workspaces"
   | "agents"
   | "workflows"
   | "mcp"
@@ -36,12 +37,14 @@ export type AuthorPane =
   | "engine-registry"
   | "channels"
   | "automation"
+  | "artifacts"
   | "shortcuts"
   | "sandbox";
 
-export const DEFAULT_AUTHOR_PANE: AuthorPane = "agents";
+export const DEFAULT_AUTHOR_PANE: AuthorPane = "workspaces";
 
 export const WORKSPACE_SCOPED_AUTHOR_PANES: ReadonlySet<AuthorPane> = new Set([
+  "workspaces",
   "agents",
   "workflows",
   "mcp",
@@ -53,17 +56,15 @@ export const WORKSPACE_SCOPED_AUTHOR_PANES: ReadonlySet<AuthorPane> = new Set([
 /**
  * Inspect 工具枚举。
  *
- * Stage 5(D5 / E7)新增四个透镜:`runtime-events` / `workflow-graph` /
- * `spec-timeline` / `spec-library`。它们承接旧 `ProjectTrellisCenter` 的
- * runtime / workflow / spec 三个 Tab,改为按需打开的 Inspector 叠层(宪法 §2.3)。
+ * Stage 5(D5 / E7)新增 Trellis 运行透镜:`runtime-events` / `workflow-graph` /
+ * `spec-timeline`。规范编辑由 Author 工作区的 `ProjectTrellisCenter` 承担。
  */
 export type InspectTool =
   | InspectCodeGraph
   | InspectWorkflowStudio
   | InspectRuntimeEvents
   | InspectWorkflowGraph
-  | InspectSpecTimeline
-  | InspectSpecLibrary;
+  | InspectSpecTimeline;
 
 export interface InspectCodeGraph {
   kind: "code-graph";
@@ -96,12 +97,6 @@ export interface InspectWorkflowGraph {
 /** Trellis spec revision / workspace snapshot 时间轴透镜。 */
 export interface InspectSpecTimeline {
   kind: "spec-timeline";
-  rootPath: string;
-}
-
-/** Trellis spec library 只读速览透镜。 */
-export interface InspectSpecLibrary {
-  kind: "spec-library";
   rootPath: string;
 }
 

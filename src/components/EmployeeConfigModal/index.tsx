@@ -185,6 +185,10 @@ export function EmployeeConfigModal({
     (): EmployeeConfigTableRow[] => [...tableEmployees, ...repoOwnerGapRows],
     [tableEmployees, repoOwnerGapRows],
   );
+  const enabledEmployees = useMemo(
+    () => employees.filter((employee) => employee.enabled),
+    [employees],
+  );
 
   function resetCreateFormValues() {
     form.setFieldsValue({
@@ -398,6 +402,20 @@ export function EmployeeConfigModal({
 
   const content = (
     <Space orientation="vertical" size={6} className="app-employee-config-modal">
+        <section className="app-employee-config-legacy-note" aria-label="Legacy 员工角色">
+          <div>
+            <Typography.Text className="app-employee-config-legacy-note__title">
+              Legacy 员工角色
+            </Typography.Text>
+            <Typography.Text className="app-employee-config-legacy-note__desc">
+              Wise 当前主线为 Trellis 工作区编排；这里仅保留旧项目的 Claude Code 子会话角色、仓库 Owner 和委派协议兼容配置。
+            </Typography.Text>
+          </div>
+          <div className="app-employee-config-legacy-note__meter">
+            <strong>{enabledEmployees.length}/{employees.length}</strong>
+            <span>可用角色</span>
+          </div>
+        </section>
         <div className="app-employee-config-toolbar">
           <Button
             size="small"

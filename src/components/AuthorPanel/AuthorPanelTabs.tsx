@@ -2,12 +2,11 @@ import {
   ApartmentOutlined,
   ApiOutlined,
   AppstoreAddOutlined,
-  BranchesOutlined,
   FieldTimeOutlined,
+  FileSearchOutlined,
   FolderOpenOutlined,
   GatewayOutlined,
   BlockOutlined,
-  RobotOutlined,
   ThunderboltOutlined,
   ToolOutlined,
   UserOutlined,
@@ -30,8 +29,7 @@ export const AUTHOR_TAB_GROUPS: Array<{ title: string; items: AuthorTabDefinitio
   {
     title: "工作台",
     items: [
-      { key: "agents", label: "智能体角色", description: "角色供给、职责和默认仓库", icon: <RobotOutlined /> },
-      { key: "workflows", label: "工作流", description: "阶段派发、验收和工作流画布", icon: <BranchesOutlined /> },
+      { key: "workspaces", label: "工作区", description: "项目、仓库和 Trellis 根目录", icon: <FolderOpenOutlined /> },
     ],
   },
   {
@@ -47,7 +45,7 @@ export const AUTHOR_TAB_GROUPS: Array<{ title: string; items: AuthorTabDefinitio
         description: "精选 50+ 插件，一键安装 oh-my-claudecode 等",
         icon: <BlockOutlined />,
       },
-      { key: "engine-registry", label: "执行引擎", description: "Claude、Codex 和自定义命令", icon: <ThunderboltOutlined /> },
+      { key: "engine-registry", label: "Claude Code 环境", description: "本机 Claude Code 与预留运行入口", icon: <ThunderboltOutlined /> },
     ],
   },
   {
@@ -55,6 +53,7 @@ export const AUTHOR_TAB_GROUPS: Array<{ title: string; items: AuthorTabDefinitio
     items: [
       { key: "automation", label: "定时自动化", description: "Cron、Mission 和会话续跑", icon: <FieldTimeOutlined /> },
       { key: "channels", label: "远程入口", description: "钉钉、飞书、企微和 Telegram", icon: <GatewayOutlined /> },
+      { key: "artifacts", label: "产物检查台", description: "Markdown、Diff、图片、PDF、Office", icon: <FileSearchOutlined /> },
       { key: "claude-config", label: "引擎环境", description: "用户级配置、settings 和 agents", icon: <FolderOpenOutlined /> },
       { key: "hooks", label: "触发器规则", description: "工具链事件、权限和自动化", icon: <ApartmentOutlined /> },
       { key: "shortcuts", label: "快捷键", description: "桌面操作和窗口控制", icon: <IconKeyboardShortcuts /> },

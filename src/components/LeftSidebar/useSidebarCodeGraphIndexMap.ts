@@ -24,12 +24,12 @@ export function useSidebarCodeGraphIndexMap(repositoryIds: number[]) {
           const status = await getCodeGraphIndexStatus(id);
           return [id, status.status] as const;
         } catch {
-          return [id, "idle" as const];
+          return [id, "idle"] as const;
         }
       }),
     );
     setById((prev) => {
-      const next = { ...prev };
+      const next: Record<number, SidebarCodeGraphIndexStatus> = { ...prev };
       for (const [id, status] of entries) next[id] = status;
       return next;
     });

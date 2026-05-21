@@ -42,7 +42,7 @@ function session(
 }
 
 describe("filterSessionsForWorkspace", () => {
-  test("multi_repo + project focus → keep only Project: display-name sessions", () => {
+  test("project focus → keep only project-rooted session at workspace root", () => {
     const r1 = repo({ id: 1, path: "/work/wise/frontend" });
     const r2 = repo({ id: 2, path: "/work/wise/backend" });
     const p = project({
@@ -54,6 +54,7 @@ describe("filterSessionsForWorkspace", () => {
     });
     const sessions = [
       session({ id: "s-main", repositoryPath: "/work/wise", repositoryName: "Project: Wise" }),
+      session({ id: "s-other-project", repositoryPath: "/other/wise", repositoryName: "Project: Wise" }),
       session({ id: "s-frontend-legacy", repositoryPath: "/work/wise/frontend" }),
       session({ id: "s-backend-legacy", repositoryPath: "/work/wise/backend" }),
     ];
@@ -91,11 +92,12 @@ describe("filterSessionsForWorkspace", () => {
     expect(filtered.map((s) => s.id)).toEqual(["s-a"]);
   });
 
-  test("single_repo → returns sessions unchanged (no filter)", () => {
+  test("single_repo workspace with project focus → keep project main session", () => {
     const r = repo({ id: 1, path: "/r/1" });
-    const p = project({ id: "p1", repositoryIds: [1] });
+    const p = project({ id: "p1", name: "P1", repositoryIds: [1], rootPath: "/r/1" });
     const sessions = [
-      session({ id: "s-a", repositoryPath: "/r/1" }),
+      session({ id: "s-project", repositoryPath: "/r/1", repositoryName: "Project: P1" }),
+      session({ id: "s-repo", repositoryPath: "/r/1", repositoryName: "repo-1" }),
       session({ id: "s-b", repositoryPath: "/r/2" }),
     ];
     const filtered = filterSessionsForWorkspace({
@@ -103,8 +105,9 @@ describe("filterSessionsForWorkspace", () => {
       workspaceMode: "single_repo",
       project: p,
       repositories: [r],
+      activeWorkspaceFocus: "project",
     });
-    expect(filtered.map((s) => s.id)).toEqual(["s-a", "s-b"]);
+    expect(filtered.map((s) => s.id)).toEqual(["s-project"]);
   });
 
   test("floating repo (no project) → returns sessions unchanged", () => {

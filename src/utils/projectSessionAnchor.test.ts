@@ -89,7 +89,7 @@ describe("resolveProjectMainSessionAnchor", () => {
     });
   });
 
-  test("wise_trellis single repo → repo-rooted (degenerate)", () => {
+  test("single-repo workspace with rootPath → project-rooted", () => {
     const p = project({
       id: "p",
       name: "Wise",
@@ -98,10 +98,27 @@ describe("resolveProjectMainSessionAnchor", () => {
       sddMode: "wise_trellis",
     });
     const repos = [repo({ id: 1, path: "/Users/x/wise", name: "wise" })];
-    const anchor = resolveProjectMainSessionAnchor(p, repos);
-    expect(anchor.isProjectRooted).toBe(false);
-    expect(anchor.path).toBe("/Users/x/wise");
-    expect(anchor.displayName).toBe("Wise/wise");
+    expect(resolveProjectMainSessionAnchor(p, repos)).toEqual({
+      path: "/Users/x/wise",
+      displayName: "Project: Wise",
+      isProjectRooted: true,
+    });
+  });
+
+  test("single-repo workspace without rootPath → repo-rooted fallback", () => {
+    const p = project({
+      id: "p",
+      name: "Wise",
+      repositoryIds: [1],
+      rootPath: "",
+      sddMode: "wise_trellis",
+    });
+    const repos = [repo({ id: 1, path: "/Users/x/wise", name: "wise" })];
+    expect(resolveProjectMainSessionAnchor(p, repos)).toEqual({
+      path: "/Users/x/wise",
+      displayName: "Wise/wise",
+      isProjectRooted: false,
+    });
   });
 
   test("multi-repo without rootPath but shared parent → project-rooted at common prefix", () => {
@@ -180,7 +197,7 @@ describe("resolveProjectMainSessionAnchor", () => {
     expect(resolveProjectMainSessionAnchor(p, repos).path).toBe("/work/t");
   });
 
-  test("missing repository ids in repositories list are skipped for single-member degenerate", () => {
+  test("missing repository ids still prefer rootPath when configured", () => {
     const p = project({
       id: "p",
       name: "Partial",
@@ -189,8 +206,10 @@ describe("resolveProjectMainSessionAnchor", () => {
       sddMode: "wise_trellis",
     });
     const repos = [repo({ id: 1, path: "/work/p/a", name: "a" })];
-    const anchor = resolveProjectMainSessionAnchor(p, repos);
-    expect(anchor.isProjectRooted).toBe(false);
-    expect(anchor.path).toBe("/work/p/a");
+    expect(resolveProjectMainSessionAnchor(p, repos)).toEqual({
+      path: "/work/p",
+      displayName: "Project: Partial",
+      isProjectRooted: true,
+    });
   });
 });

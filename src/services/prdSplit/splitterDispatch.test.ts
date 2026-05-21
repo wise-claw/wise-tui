@@ -5,6 +5,7 @@ import {
   composeSplitterPrompt,
   cancelClusterRun,
   dispatchClusterSplit,
+  recoverClusterRunFromRunDir,
   retryClusterFromRunDir,
   type DispatchClusterRawOutput,
 } from "./splitterDispatch";
@@ -148,6 +149,119 @@ describe("dispatchClusterSplit", () => {
     });
   });
 
+  test("keeps original requirement ids when a cluster contains a later PRD requirement", async () => {
+    const laterCluster = {
+      ...cluster,
+      requirementIds: ["req-functional-2"],
+    };
+    const raw: DispatchClusterRawOutput = {
+      runId: "run-later",
+      runDir: "/tmp/run-later",
+      exitCode: 0,
+      durationMs: 1,
+      stdoutPath: "/tmp/run-later/claude.stdout.log",
+      stderrPath: "/tmp/run-later/claude.stderr.log",
+      rawResultPath: "/tmp/run-later/split-result.raw.json",
+      claudeSessionId: "sid-later",
+      stdoutTruncatedPreview: "",
+      rawOutput: {
+        tasks: [
+          {
+            id: "task-later",
+            title: "Implement backend requirement",
+            description: "Implement the later requirement without id renumbering.",
+            role: "backend",
+            executionStatus: "executable",
+            missingPrerequisites: [],
+            subtasks: ["Build backend"],
+            dod: ["The backend requirement is implemented"],
+            dependencies: [],
+            sourceRequirementIds: ["req-functional-2"],
+            taskAnchors: {
+              from: 0,
+              to: 24,
+              textHash: "bbbbbbbbbbbbbbbb",
+              contextBefore: "Build unrelated backend",
+              contextAfter: "Build unrelated backend",
+            },
+            clusterId: "cluster-fe-1",
+          },
+        ],
+      },
+    };
+    const invoke = mock(async () => raw);
+    mock.module("@tauri-apps/api/core", () => ({ invoke }));
+
+    const result = await dispatchClusterSplit({
+      projectRootPath: "/repo",
+      parentTaskPath: ".trellis/tasks/parent",
+      cluster: laterCluster,
+      prd: makePrd(),
+      requirementsIndex: makeRequirementsIndex(),
+      context: null,
+    });
+
+    expect(result.errors).toEqual([]);
+    expect(result.validationIssues).toEqual([]);
+    expect(result.normalized?.splitTasks[0]?.sourceRequirementIds).toEqual(["req-functional-2"]);
+    const bundle = invoke.mock.calls[0]?.[1]?.input?.bundle as Record<string, string>;
+    const bundledIndex = JSON.parse(bundle["requirements-index.json"]);
+    expect(bundledIndex.requirements.map((entry: { id: string }) => entry.id)).toEqual(["req-functional-2"]);
+  });
+
+  test("rejects splitter output that escapes the cluster requirement scope", async () => {
+    const raw: DispatchClusterRawOutput = {
+      runId: "run-scope",
+      runDir: "/tmp/run-scope",
+      exitCode: 0,
+      durationMs: 1,
+      stdoutPath: "/tmp/run-scope/claude.stdout.log",
+      stderrPath: "/tmp/run-scope/claude.stderr.log",
+      rawResultPath: "/tmp/run-scope/split-result.raw.json",
+      claudeSessionId: "sid-scope",
+      stdoutTruncatedPreview: "",
+      rawOutput: {
+        tasks: [
+          {
+            id: "task-out-of-scope",
+            title: "Wrong scope",
+            description: "Uses a requirement from another cluster.",
+            role: "frontend",
+            executionStatus: "executable",
+            missingPrerequisites: [],
+            subtasks: ["Build UI"],
+            dod: ["Done"],
+            dependencies: [],
+            sourceRequirementIds: ["req-functional-2"],
+            taskAnchors: {
+              from: 0,
+              to: 24,
+              textHash: "bbbbbbbbbbbbbbbb",
+              contextBefore: "Build unrelated backend",
+              contextAfter: "Build unrelated backend",
+            },
+            clusterId: "cluster-fe-1",
+          },
+        ],
+      },
+    };
+    const invoke = mock(async () => raw);
+    mock.module("@tauri-apps/api/core", () => ({ invoke }));
+
+    const result = await dispatchClusterSplit({
+      projectRootPath: "/repo",
+      parentTaskPath: ".trellis/tasks/parent",
+      cluster,
+      prd: makePrd(),
+      requirementsIndex: makeRequirementsIndex(),
+      context: null,
+    });
+
+    expect(result.normalized).toBeNull();
+    expect(result.validationIssues[0]?.message).toContain("非本 cluster");
+    expect(result.errors.join("\n")).toContain("非本 cluster");
+  });
+
   test("reports run artifact paths when Claude output has no JSON payload", async () => {
     const raw: DispatchClusterRawOutput = {
       runId: "run-2",
@@ -221,6 +335,101 @@ describe("retryClusterFromRunDir", () => {
   });
 });
 
+describe("recoverClusterRunFromRunDir", () => {
+  test("hydrates a finished retry run from run-result.json and raw output", async () => {
+    const files = new Map([
+      ["/tmp/run-2/run-result.json", JSON.stringify({
+        runId: "run-2",
+        status: "succeeded",
+        exitCode: 0,
+        durationMs: 12,
+        clusterId: "cluster-fe-1",
+        claudeSessionId: "sid-2",
+        stdoutPath: "/tmp/run-2/claude.stdout.log",
+        stderrPath: "/tmp/run-2/claude.stderr.log",
+        rawResultPath: "/tmp/run-2/split-result.raw.json",
+      })],
+      ["/tmp/run-2/split-result.raw.json", JSON.stringify({
+        tasks: [
+          {
+            id: "task-1",
+            title: "Recovered task",
+            description: "Recovered from background retry.",
+            role: "frontend",
+            executionStatus: "executable",
+            missingPrerequisites: [],
+            subtasks: ["Recover"],
+            dod: ["Recovered"],
+            dependencies: [],
+            sourceRequirementIds: ["req-functional-1"],
+            taskAnchors: {
+              from: 0,
+              to: 18,
+              textHash: "aaaaaaaaaaaaaaaa",
+              contextBefore: "Build selected UI",
+              contextAfter: "Build selected UI",
+            },
+          },
+        ],
+      })],
+    ]);
+    mock.module("../materializePrdSnapshot", () => ({
+      readSnapshotFile: mock(async (path: string) => {
+        const content = files.get(path);
+        if (content == null) throw new Error(`missing ${path}`);
+        return content;
+      }),
+    }));
+
+    const result = await recoverClusterRunFromRunDir({
+      runId: "run-2",
+      runDir: "/tmp/run-2",
+      prd: makePrd(),
+      cluster,
+      requirementsIndex: makeRequirementsIndex(),
+      context: null,
+    });
+
+    expect(result.errors).toEqual([]);
+    expect(result.raw.claudeSessionId).toBe("sid-2");
+    expect(result.normalized?.splitTasks[0]?.title).toBe("Recovered task");
+  });
+
+  test("keeps cancelled retry evidence even when raw output is missing", async () => {
+    mock.module("../materializePrdSnapshot", () => ({
+      readSnapshotFile: mock(async (path: string) => {
+        if (path === "/tmp/run-cancelled/run-result.json") {
+          return JSON.stringify({
+            runId: "run-cancelled",
+            status: "cancelled",
+            exitCode: 130,
+            durationMs: 0,
+            clusterId: "cluster-fe-1",
+            stdoutPath: "/tmp/run-cancelled/claude.stdout.log",
+            stderrPath: "/tmp/run-cancelled/claude.stderr.log",
+            error: "PRD split run cancelled by user",
+          });
+        }
+        throw new Error(`missing ${path}`);
+      }),
+    }));
+
+    const result = await recoverClusterRunFromRunDir({
+      runId: "run-cancelled",
+      runDir: "/tmp/run-cancelled",
+      prd: makePrd(),
+      cluster,
+      requirementsIndex: makeRequirementsIndex(),
+      context: null,
+    });
+
+    expect(result.normalized).toBeNull();
+    expect(result.raw.exitCode).toBe(130);
+    expect(result.raw.rawResultPath).toBe("/tmp/run-cancelled/split-result.raw.json");
+    expect(result.errors.join("\n")).toContain("PRD split run cancelled by user");
+  });
+});
+
 describe("cancelClusterRun", () => {
   test("wraps the cancel Tauri command", async () => {
     const output = {
@@ -244,3 +453,28 @@ describe("cancelClusterRun", () => {
     });
   });
 });
+
+function makePrd(): PrdDocument {
+  return {
+    title: "Feature",
+    sourceType: "manual",
+    sourceRef: null,
+    background: [],
+    goals: [],
+    scenarios: [],
+    functional: ["Build selected UI", "Build unrelated backend"],
+    nonFunctional: [],
+    acceptance: [],
+  };
+}
+
+function makeRequirementsIndex(): RequirementsIndexV2 {
+  return {
+    schemaVersion: 2,
+    version: "v1",
+    requirements: [
+      { id: "req-functional-1", content: "Build selected UI", bodyHash: "aaaaaaaaaaaaaaaa" },
+      { id: "req-functional-2", content: "Build unrelated backend", bodyHash: "bbbbbbbbbbbbbbbb" },
+    ],
+  };
+}

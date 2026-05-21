@@ -218,3 +218,34 @@ Closed P0 (ViewMode discriminated union — already wired to DEFAULT cockpit) an
 ### Next Steps
 
 - None - task complete
+
+
+## Session 7: 需求助手主链路第一波收敛
+
+**Date**: 2026-05-21
+**Task**: 需求助手主链路第一波收敛
+**Branch**: `main`
+
+### Summary
+
+Created Trellis target resolver for Workspace/Standalone Repo, connected PrdTaskSplitPanel to target context/root, added mission strip, added headless requirement mission controller adapter, and validated focused tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+(No commits - planning session)
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

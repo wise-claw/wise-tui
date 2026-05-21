@@ -40,22 +40,22 @@ describe("assistant engine binding presentation", () => {
     const index = buildAgentEngineIndex([availableClaude, unavailableCodex]);
 
     expect(resolveAssistantEngineBinding(assistants[0], index)).toMatchObject({
-      label: "引擎可用",
+      label: "Claude Code 就绪",
       tone: "success",
       dotTone: "on",
       detail: "Claude Code",
     });
     expect(resolveAssistantEngineBinding(assistants[1], index)).toMatchObject({
-      label: "不可用",
+      label: "运行入口不可用",
       tone: "danger",
       dotTone: "off",
       detail: "binary not found",
     });
     expect(resolveAssistantEngineBinding(assistants[2], index)).toMatchObject({
-      label: "未检测",
+      label: "预留入口未检测",
       tone: "warning",
       dotTone: "warn",
-      detail: "执行入口未登记",
+      detail: "运行入口未登记",
     });
   });
 

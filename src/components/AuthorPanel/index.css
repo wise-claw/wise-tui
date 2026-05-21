@@ -224,6 +224,10 @@ html.app-host-macos-chrome .app-author-config-sider .author-panel__nav-drag {
   max-width: 920px;
 }
 
+.author-panel-workspaces--trellis {
+  max-width: none;
+}
+
 .author-panel-workspaces {
   display: flex;
   flex-direction: column;
@@ -231,6 +235,10 @@ html.app-host-macos-chrome .app-author-config-sider .author-panel__nav-drag {
 }
 
 .author-panel-workspaces__section {
+  min-width: 0;
+}
+
+.author-panel-workspaces__trellis {
   min-width: 0;
 }
 
@@ -407,4 +415,3 @@ html.app-host-macos-chrome .app-author-config-sider .author-panel__nav-drag {
     justify-content: flex-start;
   }
 }
-

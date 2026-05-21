@@ -474,13 +474,6 @@ export function WorkflowConfigModal({
             top: 0,
             paddingBottom: 0,
           },
-          content: {
-            height: "100vh",
-            minHeight: "100vh",
-            borderRadius: 0,
-            display: "flex",
-            flexDirection: "column",
-          },
           header: { flex: "0 0 auto", marginBottom: 0 },
           body: {
             flex: 1,

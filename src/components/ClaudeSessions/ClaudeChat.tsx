@@ -1376,6 +1376,26 @@ export function ClaudeChat({
 
   const [fullTranscriptLoading, setFullTranscriptLoading] = useState(false);
 
+  const scrollMessageTargetIntoView = useCallback((target: Element | null, behavior: ScrollBehavior = "smooth") => {
+    const sc = messagesScrollRef.current;
+    if (!sc || !(target instanceof HTMLElement) || !sc.contains(target)) {
+      return false;
+    }
+    const scRect = sc.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const targetTop =
+      sc.scrollTop + targetRect.top - scRect.top - Math.max(0, (sc.clientHeight - targetRect.height) / 2);
+    const maxTop = Math.max(0, sc.scrollHeight - sc.clientHeight);
+    const nextTop = Math.max(0, Math.min(maxTop, targetTop));
+    userPausedFollowRef.current = true;
+    pinToBottomRef.current = false;
+    awaitNewMessageBeforeFollowRef.current = false;
+    cancelScrollFollowLoop();
+    sc.scrollTo({ top: nextTop, behavior });
+    lastScrollTopRef.current = nextTop;
+    return true;
+  }, [cancelScrollFollowLoop]);
+
   const tailMessageForThinkingHint = useMemo(
     () => (session.messages.length > 0 ? session.messages[session.messages.length - 1]! : null),
     [session.messages],
@@ -1638,9 +1658,9 @@ export function ClaudeChat({
   const scrollToSessionMessageId = useCallback((messageId: number) => {
     window.setTimeout(() => {
       const row = document.querySelector(`[data-message-id="${CSS.escape(String(messageId))}"]`);
-      row?.scrollIntoView({ behavior: "smooth", block: "center" });
+      scrollMessageTargetIntoView(row);
     }, 50);
-  }, []);
+  }, [scrollMessageTargetIntoView]);
 
   /** OMC 批量与后台 invocation 流统一挂到「仓库主标签」，避免从员工子标签发起时执行详情无法在中栏主会话打开。 */
   const omcBatchAnchorSessionId = useMemo(() => {
@@ -3119,7 +3139,22 @@ export function ClaudeChat({
       function tryScroll(): boolean {
         const target = document.querySelector(`[data-task-id="${CSS.escape(id)}"]`);
         if (target instanceof HTMLElement) {
-          target.scrollIntoView({ behavior: "smooth", block: "center" });
+          const localScroll = target.closest(".ant-drawer-body, .ant-modal-body, [data-scroll-container]");
+          if (localScroll instanceof HTMLElement) {
+            const containerRect = localScroll.getBoundingClientRect();
+            const targetRect = target.getBoundingClientRect();
+            const top =
+              localScroll.scrollTop +
+              targetRect.top -
+              containerRect.top -
+              Math.max(0, (localScroll.clientHeight - targetRect.height) / 2);
+            localScroll.scrollTo({
+              top: Math.max(0, Math.min(localScroll.scrollHeight - localScroll.clientHeight, top)),
+              behavior: "smooth",
+            });
+          } else {
+            scrollMessageTargetIntoView(target);
+          }
           return true;
         }
         return false;
@@ -3137,7 +3172,7 @@ export function ClaudeChat({
     return () => {
       window.removeEventListener(WORKFLOW_UI_EVENT_FOCUS_TASK_TOOL, handleFocusTaskTool as EventListener);
     };
-  }, []);
+  }, [scrollMessageTargetIntoView]);
 
   const traceDrawerWidth = Math.min(620, typeof window !== "undefined" ? window.innerWidth - 24 : 620);
   const sessionTraceStorageKey = getSessionTraceStorageKey(session.id, session.repositoryPath);
@@ -3206,7 +3241,7 @@ export function ClaudeChat({
       const byTask = document.querySelector(`[data-task-id="${CSS.escape(taskIdHint)}"]`);
       if (byTask) {
         window.setTimeout(() => {
-          byTask.scrollIntoView({ behavior: "smooth", block: "center" });
+          scrollMessageTargetIntoView(byTask);
           try {
             sessionStorage.removeItem(WISE_PENDING_NOTIFICATION_SCROLL_STORAGE_KEY);
           } catch {
@@ -3254,9 +3289,9 @@ export function ClaudeChat({
           msg != null
             ? document.querySelector(`[data-message-id="${CSS.escape(String(msg.id))}"]`)
             : null;
-        row?.scrollIntoView({ behavior: "smooth", block: "center" });
+        scrollMessageTargetIntoView(row);
       } else {
-        target?.scrollIntoView({ behavior: "smooth", block: "center" });
+        scrollMessageTargetIntoView(target);
       }
       try {
         sessionStorage.removeItem(WISE_PENDING_NOTIFICATION_SCROLL_STORAGE_KEY);

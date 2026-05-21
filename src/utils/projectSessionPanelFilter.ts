@@ -9,10 +9,10 @@ import type { WorkspaceFocus, WorkspaceMode } from "./workspaceMode";
 export interface FilterSessionsForWorkspaceInput {
   sessions: ReadonlyArray<ClaudeSession>;
   workspaceMode: WorkspaceMode;
-  /** 当前 active 的项目；workspaceMode === "multi_repo" 时必须给出，否则视为退化。 */
+  /** 当前 active 的项目；缺失时视为 floating repo，透传列表。 */
   project: ProjectItem | null;
   repositories: ReadonlyArray<Repository>;
-  /** 多仓时：点项目行 → 只列项目主会话；点仓库行 → 只列该仓会话。 */
+  /** 点项目行 → 只列项目主会话；点仓库行 → 只列该仓会话。 */
   activeWorkspaceFocus?: WorkspaceFocus;
   activeRepositoryId?: number | null;
 }
@@ -20,23 +20,22 @@ export interface FilterSessionsForWorkspaceInput {
 /**
  * ClaudeSessions 面板可见会话过滤器。
  *
- * - `multi_repo` + `activeWorkspaceFocus === "project"` → 项目 anchor.path 上的会话
- * - `multi_repo` + `activeWorkspaceFocus === "repository"` → 当前 active 仓库 path 上的会话
- * - 其余形态 → 透传原列表
+ * - 有 active project + `activeWorkspaceFocus === "project"` → 项目 anchor.path 上的主会话
+ * - 有 active project + `activeWorkspaceFocus === "repository"` → 当前 active 仓库 path 上的会话
+ * - 无 active project → floating repo，透传原列表
  */
 export function filterSessionsForWorkspace(
   input: FilterSessionsForWorkspaceInput,
 ): ClaudeSession[] {
   const {
     sessions,
-    workspaceMode,
     project,
     repositories,
     activeWorkspaceFocus = "repository",
     activeRepositoryId = null,
   } = input;
 
-  if (workspaceMode === "single_repo" || !project) {
+  if (!project) {
     return [...sessions];
   }
 
@@ -57,5 +56,14 @@ export function filterSessionsForWorkspace(
     });
   }
 
-  return sessions.filter((session) => isProjectRootSessionDisplayName(session.repositoryName ?? ""));
+  const anchor = resolveProjectMainSessionAnchor(project, repositories);
+  const anchorKey = normalizeRepositoryPathKey(anchor.path);
+  if (!anchorKey) {
+    return [...sessions];
+  }
+  return sessions.filter(
+    (session) =>
+      normalizeRepositoryPathKey(session.repositoryPath) === anchorKey &&
+      isProjectRootSessionDisplayName(session.repositoryName ?? ""),
+  );
 }

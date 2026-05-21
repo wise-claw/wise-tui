@@ -29,11 +29,11 @@ function repo(overrides: Partial<Repository> = {}): Repository {
 }
 
 describe("resolveAutoSddMode", () => {
-  test("returns project_owned when .trellis/tasks/ exists", () => {
-    expect(resolveAutoSddMode(signals({ hasTrellisTasks: true }))).toBe("project_owned");
+  test("returns wise_trellis when .trellis/tasks/ exists", () => {
+    expect(resolveAutoSddMode(signals({ hasTrellisTasks: true }))).toBe("wise_trellis");
   });
-  test("returns project_owned when .trellis/spec/ exists", () => {
-    expect(resolveAutoSddMode(signals({ hasTrellisSpec: true }))).toBe("project_owned");
+  test("returns wise_trellis when .trellis/spec/ exists", () => {
+    expect(resolveAutoSddMode(signals({ hasTrellisSpec: true }))).toBe("wise_trellis");
   });
   test("returns project_owned when .openspec/ exists", () => {
     expect(resolveAutoSddMode(signals({ hasOpenSpec: true }))).toBe("project_owned");
@@ -63,7 +63,7 @@ describe("effectiveSddMode", () => {
   });
 
   test("treats undefined sddMode as auto", () => {
-    expect(effectiveSddMode(repo(), signals({ hasTrellisTasks: true }))).toBe("project_owned");
+    expect(effectiveSddMode(repo(), signals({ hasTrellisTasks: true }))).toBe("wise_trellis");
     expect(effectiveSddMode(repo(), signals())).toBe("wise_trellis");
   });
 });

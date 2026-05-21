@@ -1,41 +1,76 @@
 import { FolderOpenOutlined, PlusOutlined } from "@ant-design/icons";
 import { Button, Empty, Space, Tag, Tooltip } from "antd";
-import type { StandaloneRepo, Workspace } from "../../../types";
+import type { Repository, StandaloneRepo, Workspace } from "../../../types";
 import { repositoryFolderBasename } from "../../../utils/repositoryType";
+import { ProjectTrellisCenter } from "../../ProjectTrellisCenter";
 import { AuthorPanelPageShell } from "../AuthorPanelPageShell";
 
 interface WorkspacesTabProps {
   workspaces: Workspace[];
+  repositories: Repository[];
   standaloneRepos: StandaloneRepo[];
   activeWorkspaceId: string | null;
   activeRepositoryId: number | null;
+  trellisWorkspaceId?: string | null;
   onCreateWorkspace: () => void;
   onAddStandaloneRepo?: () => void;
   onSelectWorkspace: (workspaceId: string) => void;
   onSelectStandaloneRepo: (repositoryId: number) => void;
+  onOpenProjectSession?: (workspace: Workspace) => void | Promise<void>;
+  onRequestSpecAgentUpdate?: (workspace: Workspace, area: string) => void | Promise<void>;
 }
 
 export function WorkspacesTab({
   workspaces,
+  repositories,
   standaloneRepos,
   activeWorkspaceId,
   activeRepositoryId,
+  trellisWorkspaceId,
   onCreateWorkspace,
   onAddStandaloneRepo,
   onSelectWorkspace,
   onSelectStandaloneRepo,
+  onOpenProjectSession,
+  onRequestSpecAgentUpdate,
 }: WorkspacesTabProps) {
   const hasItems = workspaces.length > 0 || standaloneRepos.length > 0;
+  const standaloneTrellisRepoId = trellisWorkspaceId?.startsWith("repo:")
+    ? Number(trellisWorkspaceId.slice("repo:".length))
+    : null;
+  const trellisStandaloneRepo =
+    standaloneTrellisRepoId !== null && Number.isFinite(standaloneTrellisRepoId)
+      ? standaloneRepos.find((repo) => repo.id === standaloneTrellisRepoId)
+      : null;
+  const trellisStandaloneWorkspace: Workspace | null = trellisStandaloneRepo
+    ? {
+        id: `repo:${trellisStandaloneRepo.id}`,
+        name: repositoryFolderBasename(trellisStandaloneRepo),
+        repositoryIds: [trellisStandaloneRepo.id],
+        createdAt: 0,
+        updatedAt: 0,
+        rootPath: trellisStandaloneRepo.path,
+        sddMode: "wise_trellis",
+      }
+    : null;
+  const trellisWorkspace =
+    trellisStandaloneWorkspace ??
+    workspaces.find(
+      (workspace) =>
+        workspace.id === (trellisWorkspaceId ?? "") &&
+        (workspace.sddMode === "wise_trellis" || workspace.sddMode == null),
+    ) ??
+    null;
 
   return (
     <AuthorPanelPageShell
-      className="author-panel-workspaces"
+      className={`author-panel-workspaces${trellisWorkspace ? " author-panel-workspaces--trellis" : ""}`}
       icon={<FolderOpenOutlined />}
       title="工作区"
-      subtitle="项目、仓库和 Trellis 根目录"
+      subtitle="Workspace、成员仓库和 Wise Trellis 状态"
       actions={
         <Space size={8} wrap>
-          <Tooltip title="添加一个不接入 Trellis / Mission 的轻量仓库">
+          <Tooltip title="添加一个轻量 Claude Code 仓库入口">
             <Button size="small" onClick={onAddStandaloneRepo} disabled={!onAddStandaloneRepo}>
               添加单仓
             </Button>
@@ -46,6 +81,19 @@ export function WorkspacesTab({
         </Space>
       }
     >
+      {trellisWorkspace ? (
+        <section className="author-panel-workspaces__trellis" aria-label="工作区 Trellis">
+          <ProjectTrellisCenter
+            open
+            inline
+            project={trellisWorkspace}
+            repositories={repositories}
+            onOpenProjectSession={onOpenProjectSession}
+            onRequestSpecAgentUpdate={onRequestSpecAgentUpdate}
+          />
+        </section>
+      ) : null}
+
       {!hasItems ? (
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有工作区或单仓，请先新建工作区或添加单仓" />
       ) : (
@@ -68,12 +116,12 @@ export function WorkspacesTab({
                         <span className="author-panel-workspace-row__name">{workspace.name}</span>
                         <span className="author-panel-workspace-row__meta">
                           {workspace.repositoryIds.length} 个仓库
-                          {workspace.rootPath ? ` · ${workspace.rootPath}` : " · 未绑定 Trellis 根目录"}
+                          {workspace.rootPath ? ` · ${workspace.rootPath}` : " · 未绑定根目录"}
                         </span>
                       </span>
                       <span className="author-panel-workspace-row__tags">
-                        <Tag color={workspace.rootPath ? "success" : "warning"}>
-                          {workspace.rootPath ? "根目录就绪" : "待绑定"}
+                        <Tag color={workspace.sddMode === "wise_trellis" ? "success" : "default"}>
+                          {workspace.sddMode === "wise_trellis" ? "Trellis 已启用" : "Claude Code 工作区"}
                         </Tag>
                       </span>
                     </button>
@@ -102,7 +150,12 @@ export function WorkspacesTab({
                         <span className="author-panel-workspace-row__meta">{repo.path}</span>
                       </span>
                       <span className="author-panel-workspace-row__tags">
-                        <Tag icon={<FolderOpenOutlined />}>单仓会话</Tag>
+                        <Tag
+                          icon={<FolderOpenOutlined />}
+                          color={repo.sddMode === "wise_trellis" ? "success" : "default"}
+                        >
+                          {repo.sddMode === "wise_trellis" ? "Trellis 已启用" : "单仓会话"}
+                        </Tag>
                       </span>
                     </button>
                   ))}

@@ -14,6 +14,7 @@ import {
 import { TaskCardsNav } from "./TaskCardsNav";
 import { ActiveRepositoryFilesPanel } from "./LeftSidebar/ActiveRepositoryFilesPanel";
 import { LeftSidebarTopbar } from "./LeftSidebar/LeftSidebarTopbar";
+import { ChatIcon } from "./LeftSidebar/SidebarIcons";
 import { ProjectRepositoryList } from "./LeftSidebar/ProjectRepositoryList";
 import {
   readLeftFilesExplorerCollapsedFromStorage,
@@ -53,6 +54,8 @@ export function LeftSidebar({
   authorDisabled,
   authorDisabledTooltip,
   onOpenAuthor,
+  assistantHubActive = false,
+  onOpenAssistantHub,
   workspaceCreateRequest,
   standaloneRepoAddRequest,
   onProjectSelect,
@@ -215,9 +218,17 @@ export function LeftSidebar({
     );
   }, []);
 
-  const openRepositoryTrellis = useCallback(
-    (_repository: Repository, project: ProjectItem) => {
-      onOpenProjectTrellis?.(project);
+  const openFloatingRepositoryTrellis = useCallback(
+    (repository: Repository) => {
+      onOpenProjectTrellis?.({
+        id: `repo:${repository.id}`,
+        name: repositoryFolderBasename(repository),
+        repositoryIds: [repository.id],
+        createdAt: 0,
+        updatedAt: 0,
+        rootPath: repository.path,
+        sddMode: "wise_trellis",
+      });
     },
     [onOpenProjectTrellis],
   );
@@ -343,6 +354,21 @@ export function LeftSidebar({
         <TaskCardsNav {...taskCardsNavProps} />
       ) : null}
 
+      {onOpenAssistantHub ? (
+        <div className="app-left-sidebar-assistant-entry">
+          <button
+            type="button"
+            className={`app-left-sidebar-assistant-button${assistantHubActive ? " app-left-sidebar-assistant-button--active" : ""}`}
+            onClick={onOpenAssistantHub}
+          >
+            <span className="app-left-sidebar-assistant-button__icon" aria-hidden>
+              <ChatIcon />
+            </span>
+            <span className="app-left-sidebar-assistant-button__label">助手 Hub</span>
+          </button>
+        </div>
+      ) : null}
+
       <div
         className="app-left-sidebar-project-and-files"
         data-has-files-explorer={activeRepositoryPath ? "true" : "false"}
@@ -404,7 +430,7 @@ export function LeftSidebar({
           }}
           onOpenPromptsProject={onOpenPromptsProject}
           onOpenProjectTrellis={onOpenProjectTrellis}
-          onOpenRepositoryTrellis={onOpenProjectTrellis ? openRepositoryTrellis : undefined}
+          onOpenFloatingRepositoryTrellis={onOpenProjectTrellis ? openFloatingRepositoryTrellis : undefined}
           onCreateProjectTask={onCreateProjectTask}
           onCreateRepositoryTask={onCreateRepositoryTask}
           onOpenInFinder={onOpenInFinder}

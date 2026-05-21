@@ -48,9 +48,6 @@ const WorkflowGraphInspector = lazy(() =>
 const SpecTimelineInspector = lazy(() =>
   import("./Inspectors").then((m) => ({ default: m.SpecTimelineInspector })),
 );
-const SpecLibraryInspector = lazy(() =>
-  import("./Inspectors").then((m) => ({ default: m.SpecLibraryInspector })),
-);
 const WiseCcWorkflowStudioPanel = lazy(() =>
   import("../features/cc-wf-studio/WiseCcWorkflowStudioPanel").then((m) => ({ default: m.WiseCcWorkflowStudioPanel })),
 );
@@ -315,16 +312,11 @@ function PanelLoadingFallback() {
 
 type TrellisInspectorTool = Extract<
   InspectTool,
-  { kind: "runtime-events" | "workflow-graph" | "spec-timeline" | "spec-library" }
+  { kind: "runtime-events" | "workflow-graph" | "spec-timeline" }
 >;
 
-function isTrellisInspectorKind(kind: InspectTool["kind"]): kind is TrellisInspectorTool["kind"] {
-  return (
-    kind === "runtime-events" ||
-    kind === "workflow-graph" ||
-    kind === "spec-timeline" ||
-    kind === "spec-library"
-  );
+function isTrellisInspectorTool(tool: InspectTool): tool is TrellisInspectorTool {
+  return tool.kind === "runtime-events" || tool.kind === "workflow-graph" || tool.kind === "spec-timeline";
 }
 
 function TrellisInspectorOverlay({
@@ -353,8 +345,6 @@ function TrellisInspectorOverlay({
       );
     case "spec-timeline":
       return <SpecTimelineInspector rootPath={tool.rootPath} onClose={onClose} />;
-    case "spec-library":
-      return <SpecLibraryInspector rootPath={tool.rootPath} onClose={onClose} />;
   }
 }
 
@@ -413,7 +403,7 @@ export function AppWorkspaceLayout({
   const ccWfStudioMode =
     viewMode.kind === "inspect" && viewMode.tool.kind === "workflow-studio";
   const trellisInspectorTool =
-    viewMode.kind === "inspect" && isTrellisInspectorKind(viewMode.tool.kind)
+    viewMode.kind === "inspect" && isTrellisInspectorTool(viewMode.tool)
       ? viewMode.tool
       : null;
   const chatRightRailMode = !authorMode && !missionControlMode;

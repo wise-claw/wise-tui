@@ -6,6 +6,7 @@ import {
   loadRepositories,
   removeRepository,
   updateRepositoryMainOwnerAgent,
+  updateProjectSddMode,
   updateRepositorySddMode,
 } from "../services/repository";
 import {
@@ -21,7 +22,10 @@ import {
   updateProjectName,
 } from "../services/projectState";
 import type { WorkspaceBootstrapSelection } from "../constants/workspaceBootstrapAddons";
-import { DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION } from "../constants/workspaceBootstrapAddons";
+import {
+  DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION,
+  workspaceBootstrapSelectionToSddMode,
+} from "../constants/workspaceBootstrapAddons";
 import { runWorkspaceBootstrap } from "../services/workspaceBootstrap";
 import { bootstrapTrellisIfMissing, trellisTaskPyExistsAtPath } from "../services/trellisBootstrap";
 import { regenerateProjectWorkflowGraphsFromTemplates } from "../services/rebuildProjectWorkflowGraphs";
@@ -211,12 +215,17 @@ export function useRepositoryList() {
         : DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION);
     await runWorkspaceBootstrap(rootPathRaw, bootstrap);
     const createdProject = await createProject(trimmed, rootPathRaw);
+    const projectSddMode = workspaceBootstrapSelectionToSddMode(bootstrap);
+    const modeRegisteredProject =
+      projectSddMode === "wise_trellis" || projectSddMode === "project_owned"
+        ? await updateProjectSddMode(createdProject.id, projectSddMode)
+        : createdProject;
     const seedRepository = resolveProjectCreationSeedRepository({
       activeRepositoryId,
       projects,
       repositories,
     });
-    let nextProject = createdProject;
+    let nextProject = modeRegisteredProject;
     if (seedRepository) {
       nextProject = await addRepositoryToProject(createdProject.id, seedRepository.id);
     }
@@ -244,6 +253,15 @@ export function useRepositoryList() {
     if (!trimmed) return;
     const updated = await updateProjectName(projectId, trimmed);
     setProjects((prev) => prev.map((project) => (project.id === projectId ? updated : project)));
+  }, []);
+
+  const handleUpdateProjectSddMode = useCallback(async (
+    projectId: string,
+    sddMode: "wise_trellis" | "project_owned",
+  ) => {
+    const updated = await updateProjectSddMode(projectId, sddMode);
+    setProjects((prev) => prev.map((project) => (project.id === projectId ? updated : project)));
+    return updated;
   }, []);
 
   const handleDeleteProject = useCallback(async (projectId: string) => {
@@ -327,14 +345,17 @@ export function useRepositoryList() {
   ) => {
     const folderPath = await pickFolder();
     if (!folderPath) return;
-    let repository = repositories.find((item) => item.path === folderPath) ?? null;
+    const folderPathKey = normalizeRepositoryPathKey(folderPath);
+    let repository =
+      repositories.find((item) => normalizeRepositoryPathKey(item.path) === folderPathKey) ?? null;
     if (!repository) {
       repository = await createRepositoryFromPathWithType(folderPath, repositoryType, options);
-      setRepositories((prev) => [...prev, repository as Repository]);
     }
     const repositoryId = repository.id;
     const updatedProject = await addRepositoryToProject(projectId, repositoryId);
+    const repositoryList = await loadRepositories();
     setProjects((prev) => prev.map((project) => (project.id === projectId ? updatedProject : project)));
+    setRepositories(repositoryList);
     setActiveProjectId(projectId);
     void persistActiveProjectId(projectId);
     setActiveRepositoryId(repositoryId);
@@ -408,7 +429,6 @@ export function useRepositoryList() {
         repositories.find((item) => normalizeRepositoryPathKey(item.path) === pathKey) ?? null;
       if (!repository) {
         repository = await createRepositoryFromPathWithType(trimmed, repositoryType);
-        setRepositories((prev) => [...prev, repository as Repository]);
       }
       const repositoryId = repository.id;
       const project = projects.find((p) => p.id === projectId);
@@ -417,6 +437,8 @@ export function useRepositoryList() {
         return "already_in_project";
       }
       const updatedProject = await addRepositoryToProject(projectId, repositoryId);
+      const repositoryList = await loadRepositories();
+      setRepositories(repositoryList);
       setProjects((prev) => prev.map((proj) => (proj.id === projectId ? updatedProject : proj)));
       selectProjectAndRepository(projectId, repositoryId);
       return "added";
@@ -555,6 +577,7 @@ export function useRepositoryList() {
     setActiveRepositoryWithOwner,
     handleCreateProject,
     handleUpdateProject,
+    handleUpdateProjectSddMode,
     handleDeleteProject,
     handleAddRepositoryToProject,
     handleAddRepositoryPathToProject,

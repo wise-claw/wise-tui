@@ -354,7 +354,7 @@ export function DingTalkEnterpriseBotPopoverBody({
               <Typography.Text code>创建会话</Typography.Text> / <Typography.Text code>新建标签</Typography.Text>
               ：可带仓库名（同「切换仓库」写法）；仅命令时依赖侧栏默认仓库或 JSON 的{" "}
               <Typography.Text code>repositoryName</Typography.Text>；带名时在<strong>全部仓库</strong>中匹配。→
-              新建空白会话、绑定为该仓库主会话并打开，钉钉回复「消息已处理完成」，不启动 Claude。
+              新建空白 Repo 执行会话、绑定到该仓库并打开，钉钉回复「消息已处理完成」，不启动 Claude。
             </li>
             <li>
               <Typography.Text code>切换仓库</Typography.Text> / <Typography.Text code>换仓库</Typography.Text> /{" "}
@@ -362,7 +362,7 @@ export function DingTalkEnterpriseBotPopoverBody({
               ：可 <Typography.Text code>切换仓库 my-app</Typography.Text>、<Typography.Text code>请换仓库：my-app</Typography.Text>；或首行仅命令、
               <strong>次行写仓库名</strong>（与钉钉里 @ 机器人后换行常见）；也可仅用命令并在 JSON 填{" "}
               <Typography.Text code>repositoryName</Typography.Text>。行首 <Typography.Text code>@机器人</Typography.Text> 后可无空格。
-              → 在<strong>全部已添加仓库</strong>中匹配名称（可跨项目），自动选中并切换侧栏项目、打开/绑定主会话，并钉钉回复「消息已处理完成」。
+              → 在<strong>全部已添加仓库</strong>中匹配名称（可跨项目），自动选中并切换侧栏项目、打开/绑定 Repo 执行会话，并钉钉回复「消息已处理完成」。
             </li>
           </ul>
         </div>

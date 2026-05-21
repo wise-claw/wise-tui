@@ -257,8 +257,8 @@ export function useDingTalkAutomationInbound({
             key: uxMessageKey,
             type: "loading",
             content: isSwitch
-              ? `正在打开「${repo.name}」并创建主会话…`
-              : `正在为「${repo.name}」新建会话…`,
+              ? `正在打开「${repo.name}」Repo 执行会话…`
+              : `正在为「${repo.name}」新建 Repo 执行会话…`,
             duration: 0,
           });
           let targetId: string | null = null;
@@ -289,18 +289,18 @@ export function useDingTalkAutomationInbound({
           await sendDingTalkWiseAutomationReplyMarkdown(
             dingTalkUserId.trim(),
             isSwitch
-              ? `消息已处理完成。\n\n已切换至仓库 **${repo.name}** 并打开主会话。`
-              : `消息已处理完成。\n\n已在仓库 **${repo.name}** 新建会话并打开。`,
+              ? `消息已处理完成。\n\n已切换至仓库 **${repo.name}** 并打开 Repo 执行会话。`
+              : `消息已处理完成。\n\n已在仓库 **${repo.name}** 新建 Repo 执行会话并打开。`,
             "Wise",
           );
-          void message.success({ content: isSwitch ? "钉钉：已切换仓库并打开主会话" : "钉钉：已新建会话", duration: 2.5 });
+          void message.success({ content: isSwitch ? "钉钉：已切换仓库并打开 Repo 执行会话" : "钉钉：已新建 Repo 执行会话", duration: 2.5 });
         } catch (err) {
           message.destroy(uxMessageKey);
           console.error("DingTalk automation repository command failed:", err);
           try {
             await sendDingTalkWiseAutomationReplyMarkdown(
               dingTalkUserId.trim(),
-              `${isSwitch ? "创建主会话" : "新建会话"}失败：${err instanceof Error ? err.message : String(err)}`,
+              `${isSwitch ? "打开 Repo 执行会话" : "新建 Repo 执行会话"}失败：${err instanceof Error ? err.message : String(err)}`,
               "Wise",
             );
           } catch (e) {
@@ -354,7 +354,7 @@ export function useDingTalkAutomationInbound({
           void message.open({
             key: uxMessageKey,
             type: "loading",
-            content: `正在打开「${repository.name}」并创建主会话…`,
+            content: `正在打开「${repository.name}」Repo 执行会话…`,
             duration: 0,
           });
           targetId = await createSessionRef.current(repositoryPath, repositorySessionTabDisplayName(repository));
@@ -375,7 +375,7 @@ export function useDingTalkAutomationInbound({
       void message.open({
         key: uxMessageKey,
         type: "loading",
-        content: `正在切换到「${repository.name}」主会话…`,
+        content: `正在切换到「${repository.name}」Repo 执行会话…`,
         duration: 0,
       });
 
@@ -390,7 +390,7 @@ export function useDingTalkAutomationInbound({
       void message.open({
         key: uxMessageKey,
         type: "loading",
-        content: `已在「${repository.name}」主会话执行钉钉指令，处理完成后将回发钉钉…`,
+        content: `已在「${repository.name}」Repo 执行会话处理钉钉指令，完成后将回发钉钉…`,
         duration: 0,
       });
 

@@ -74,7 +74,7 @@ const OmcWorkerDrawerInvocationList = memo(function OmcWorkerDrawerInvocationLis
     return (
       <Empty
         image={Empty.PRESENTED_IMAGE_SIMPLE}
-        description="暂无历史会话。每路结束后会将截断 stdout/stderr 与派发正文写入发起批量的仓库主会话「后台执行详情」，请打开该主标签回溯。"
+        description="暂无历史会话。每路结束后会将截断 stdout/stderr 与派发正文写入发起批量的 Repo 执行会话「后台执行详情」，请打开该执行会话回溯。"
       />
     );
   }
@@ -156,6 +156,7 @@ interface Props {
   onOpenOmcBatchInvocationDetail?: (input: { sessionId: string; repositoryPath: string; invocationKey: string }) => void;
   onCancelOmcDirectBatchInvocation?: (invocationKey: string) => void;
   onReloadFullDiskTranscript?: (sessionKey: string) => void | Promise<void>;
+  onCompactSessionHistory?: (sessionId: string) => void | Promise<void>;
   /** 历史执行会话消息抽屉：应用实时会话列表解析正文，避免与节流 `sessions` 不同步导致消息闪没 */
   transcriptSourceSessions?: ClaudeSession[];
   /** 与监控台一致：抽屉内停止运行中会话 */
@@ -583,6 +584,7 @@ export function ProgressMonitorDrawer({
   onOpenOmcBatchInvocationDetail,
   onCancelOmcDirectBatchInvocation,
   onReloadFullDiskTranscript,
+  onCompactSessionHistory,
   transcriptSourceSessions,
   onCancelSession,
   onOpenTaskDetail,
@@ -1205,6 +1207,7 @@ export function ProgressMonitorDrawer({
       onClose={() => setHistoryPeekSessionId(null)}
       transcriptSourceSessions={sessionsForHistoryTranscript}
       onReloadFullDiskTranscript={onReloadFullDiskTranscript}
+      onCompactSessionHistory={onCompactSessionHistory}
       onCancelSession={onCancelSession}
       onOpenTaskDetail={onOpenTaskDetail}
     />

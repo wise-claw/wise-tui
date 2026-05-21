@@ -115,7 +115,6 @@ import {
   REPOSITORY_MAIN_SESSION_BINDING_STORAGE_KEY,
   resolveRepositoryForSession,
   resolveBoundMainSessionId,
-  resolveRepositoryMainSessionId,
   resolveMainOwnerAgentNameForRepositoryPath,
 } from "./utils/repositoryMainSessionBinding";
 import { loadSessionOwnerHints } from "./utils/sessionOwnerHints";
@@ -255,8 +254,8 @@ export default function App() {
       ? viewMode.view.tool.defaultProjectMultiRepo
       : false;
   const [lastAuthorPane, setLastAuthorPane] = useState(() => readAuthorPaneFromStorage());
-  const [missionControlInitialTarget, setMissionControlInitialTarget] = useState<OpenAssistantDetail | null>(null);
-  const [missionControlOpenRequestKey, setMissionControlOpenRequestKey] = useState(0);
+  const [assistantInitialTarget, setAssistantInitialTarget] = useState<OpenAssistantDetail | null>(null);
+  const [assistantOpenRequestKey, setAssistantOpenRequestKey] = useState(0);
   const [cockpitSurfaceInitialAssistantId, setCockpitSurfaceInitialAssistantId] = useState<string | null>(null);
   const [cockpitActiveAssistantId, setCockpitActiveAssistantId] = useState<string | null>(null);
   const [authorTrellisProjectId, setAuthorTrellisProjectId] = useState<string | null>(null);
@@ -368,10 +367,10 @@ export default function App() {
     loading: repositoryListLoading,
     setActiveRepositoryId,
     setActiveProjectId,
-    setActiveWorkspaceFocus,
     setActiveRepositoryWithOwner,
     handleCreateProject,
     handleUpdateProject,
+    handleUpdateProjectSddMode,
     handleDeleteProject,
     handleAddRepositoryToProject,
     handleAddRepositoryPathToProject,
@@ -1096,27 +1095,27 @@ export default function App() {
     viewMode.enter({ kind: "chat" });
   }, [repositories, setActiveRepositoryWithOwner, viewMode]);
   const workspaceMode = useWorkspaceMode({ activeProjectId, projects });
-  const openMissionControl = useCallback((detail: OpenAssistantDetail) => {
+  const openRequirementAssistant = useCallback((detail: OpenAssistantDetail) => {
     setSearchOpen(false);
-    setMissionControlInitialTarget(detail);
+    setAssistantInitialTarget(detail);
     setCockpitSurfaceInitialAssistantId(null);
-    setMissionControlOpenRequestKey((value) => value + 1);
+    setAssistantOpenRequestKey((value) => value + 1);
     viewMode.enter(cockpitView());
   }, [viewMode]);
   const openDefaultAssistant = useCallback(() => {
     setSearchOpen(false);
-    setMissionControlInitialTarget(null);
+    setAssistantInitialTarget(null);
     setCockpitSurfaceInitialAssistantId(null);
-    setMissionControlOpenRequestKey((value) => value + 1);
+    setAssistantOpenRequestKey((value) => value + 1);
     viewMode.enter(cockpitView());
   }, [viewMode]);
   const openBuiltinAssistant = useCallback((assistantId: string) => {
     const trimmed = assistantId.trim();
     if (!trimmed) return;
     setSearchOpen(false);
-    setMissionControlInitialTarget(null);
+    setAssistantInitialTarget(null);
     setCockpitSurfaceInitialAssistantId(trimmed);
-    setMissionControlOpenRequestKey((value) => value + 1);
+    setAssistantOpenRequestKey((value) => value + 1);
     viewMode.enter(cockpitView());
   }, [viewMode]);
   const exitCockpit = useCallback(() => {
@@ -1134,7 +1133,7 @@ export default function App() {
     if (activeId === DEFAULT_PRD_SPLIT_ASSISTANT_ID) return true;
     if (
       !activeId &&
-      Boolean(missionControlInitialTarget?.projectId || missionControlInitialTarget?.repositoryId)
+      Boolean(assistantInitialTarget?.projectId || assistantInitialTarget?.repositoryId)
     ) {
       return true;
     }
@@ -1143,8 +1142,8 @@ export default function App() {
     viewMode.view.kind,
     cockpitActiveAssistantId,
     cockpitSurfaceInitialAssistantId,
-    missionControlInitialTarget?.projectId,
-    missionControlInitialTarget?.repositoryId,
+    assistantInitialTarget?.projectId,
+    assistantInitialTarget?.repositoryId,
   ]);
   const composerProjectRoleTagOptions = useMemo(() => {
     if (!shouldHideEmployeeUi(activeProject)) {
@@ -1802,7 +1801,7 @@ export default function App() {
     }
     setActiveRepositoryWithOwner(repository.id);
     if (mode === "split") {
-      openMissionControl({ repositoryId: repository.id });
+      openRequirementAssistant({ repositoryId: repository.id });
       return;
     }
     // 默认模式（split prompt 执行）保持 per-repo 语义：repo 维度的任务拆分依赖 repo.path 上下文
@@ -1840,7 +1839,7 @@ export default function App() {
       return;
     }
     if (mode === "split") {
-      openMissionControl({ projectId: project.id });
+      openRequirementAssistant({ projectId: project.id });
       return;
     }
     const sessionId = await createSession(anchor.path, anchor.displayName);
@@ -1869,9 +1868,16 @@ export default function App() {
     setAuthorTrellisProjectId(null);
     // 打开项目主会话 → 进入 chat 子模式
     viewMode.enter({ kind: "chat" });
-    setActiveProjectId(project.id);
+    const isStandaloneTrellisProject = project.id.startsWith("repo:");
     if (repos[0]) {
-      setActiveRepositoryId(repos[0].id);
+      if (isStandaloneTrellisProject) {
+        setActiveRepositoryWithOwner(repos[0].id);
+      } else {
+        setActiveProjectId(project.id);
+        setActiveRepositoryId(repos[0].id);
+      }
+    } else if (!isStandaloneTrellisProject) {
+      setActiveProjectId(project.id);
     }
 
     const projectBindingKey = projectMainSessionBindingKey(project.id);
@@ -1962,7 +1968,7 @@ export default function App() {
 
   useEffect(() => {
     function handleOpenTaskSplitPanel() {
-      openMissionControl(
+      openRequirementAssistant(
         activeProjectId
           ? { projectId: activeProjectId }
           : activeRepositoryId != null
@@ -1982,9 +1988,9 @@ export default function App() {
         openBuiltinAssistant(detail.assistantId);
         return;
       }
-      openMissionControl(detail);
+      openRequirementAssistant(detail);
     }
-  }, [activeProjectId, activeRepositoryId, openBuiltinAssistant, openMissionControl]);
+  }, [activeProjectId, activeRepositoryId, openBuiltinAssistant, openRequirementAssistant]);
 
   useEffect(() => {
     function handleWorkflowConfigEvent(event: Event) {
@@ -2106,6 +2112,7 @@ export default function App() {
       viewMode={viewMode.view}
       ccWfStudioSessionPath={ccWfStudioSessionPath}
       onCloseCcWorkflowStudio={onCloseCcWorkflowStudio}
+      onCloseTrellisInspector={viewMode.back}
       compactLayoutMode={compactLayoutMode}
       effectiveRightCollapsed={effectiveRightCollapsed}
       mainLayoutContentRef={mainLayoutContentRef}
@@ -2163,6 +2170,7 @@ export default function App() {
             } else {
               message.success("Trellis 初始化完成");
             }
+            await handleUpdateProjectSddMode(project.id, "wise_trellis");
             dispatchTrellisBootstrapComplete({ projectId: project.id });
           } catch (e) {
             message.error(e instanceof Error ? e.message : String(e));
@@ -2253,9 +2261,21 @@ export default function App() {
             if (status === "initialized") {
               message.success("Trellis 初始化完成");
             }
+            const isStandaloneTrellisProject = project.id.startsWith("repo:");
+            if (!isStandaloneTrellisProject) {
+              await handleUpdateProjectSddMode(project.id, "wise_trellis");
+            }
             dispatchTrellisBootstrapComplete({ projectId: project.id });
             setAuthorTrellisProjectId(project.id);
-            viewMode.enter(inspectView({ kind: "spec-library", rootPath: targetPath }));
+            if (isStandaloneTrellisProject) {
+              const repositoryId = project.repositoryIds[0] ?? null;
+              if (repositoryId !== null) {
+                setActiveRepositoryWithOwner(repositoryId);
+              }
+            } else {
+              setActiveProjectId(project.id);
+            }
+            viewMode.enter(authorView("workspaces"));
           } catch (e) {
             message.error(e instanceof Error ? e.message : String(e));
           } finally {
@@ -2281,7 +2301,6 @@ export default function App() {
           setMonitorDrawerTarget({ type: "task", taskId });
         },
         onReloadFullDiskTranscript: reloadFullDiskTranscript,
-        onCompactSessionHistory: compactSessionHistory,
         activeRepositoryPath: activeRepository?.path,
         activeRepositoryName: activeRepository?.name,
         onCodeGraphGenerateProject: (project) => {
@@ -2322,6 +2341,26 @@ export default function App() {
         pane: authorPane,
         onPaneChange: handleAuthorPaneChange,
         onBack: viewMode.back,
+        workspacesTabProps: {
+          workspaces: projects,
+          repositories,
+          standaloneRepos,
+          activeWorkspaceId: activeProjectId,
+          activeRepositoryId,
+          trellisWorkspaceId: authorTrellisProjectId,
+          onCreateWorkspace: () => {
+            setWorkspaceCreateRequest((value) => value + 1);
+          },
+          onAddStandaloneRepo: () => {
+            setStandaloneRepoAddRequest((value) => value + 1);
+          },
+          onSelectWorkspace: handleProjectSelectLeavingMcpHub,
+          onSelectStandaloneRepo: (repositoryId) => handleSidebarRepositorySelectLeavingMcpHub(repositoryId),
+          onOpenProjectSession: async (project) => {
+            await openProjectMainSession(project);
+          },
+          onRequestSpecAgentUpdate: handleRequestSpecAgentUpdate,
+        },
         employeeConfigProps: {
           open: true,
           loading: employeeLoading,
@@ -2492,6 +2531,18 @@ export default function App() {
           workflowTemplates,
           workflowGraphsByWorkflowId,
         },
+        artifactsPanelProps: {
+          repositories,
+          activeRepositoryId,
+          onOpenRepositoryFile: (repository, relativePath) => {
+            openRepositoryFileByEvent({
+              repositoryId: repository.id,
+              repositoryPath: repository.path,
+              relativePath,
+              line: null,
+            });
+          },
+        },
         repositoryPath: activeRepository?.path ?? null,
         workflowStudioAction: undefined,
       }}
@@ -2516,6 +2567,7 @@ export default function App() {
         onCloseSession: handleCloseSession,
         onSwitchSession: jumpToSessionWithRepository,
         onNewSession: (repository) => void handleCreateRepositoryTask(repository, "chat"),
+        onNewProjectSession: (project) => void openProjectMainSession(project),
         repositoryMainBindings: repositoryMainSessionBindings,
         onAppendSystemMessage: appendSystemMessage,
         onAppendUserMessage: appendUserMessage,
@@ -2646,10 +2698,10 @@ export default function App() {
       cockpitSurfaceActiveProjectId={activeProjectId ?? null}
       cockpitSurfaceActiveProjectName={activeProject?.name ?? null}
       cockpitSurfaceHasInitialTarget={Boolean(
-        missionControlInitialTarget?.projectId || missionControlInitialTarget?.repositoryId,
+        assistantInitialTarget?.projectId || assistantInitialTarget?.repositoryId,
       )}
       cockpitSurfaceInitialAssistantId={cockpitSurfaceInitialAssistantId}
-      cockpitSurfaceOpenRequestKey={missionControlOpenRequestKey}
+      cockpitSurfaceOpenRequestKey={assistantOpenRequestKey}
       cockpitPrdSplitFullscreen={cockpitPrdSplitFullscreen}
       onCockpitActiveAssistantIdChange={setCockpitActiveAssistantId}
       commandPaletteProps={{

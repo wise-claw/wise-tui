@@ -45,7 +45,7 @@ const agents = [
 ] satisfies DetectedAgent[];
 
 describe("agent registry presentation helpers", () => {
-  test("derives summary counters for execution engine states", () => {
+  test("derives summary counters for runtime entry states", () => {
     expect(deriveAgentRegistryStats(agents)).toEqual({
       total: 3,
       available: 2,
@@ -64,11 +64,11 @@ describe("agent registry presentation helpers", () => {
   });
 
   test("returns Chinese empty-state descriptions for every filter", () => {
-    expect(getEmptyDescription("all", "")).toBe("暂未探测到执行引擎");
-    expect(getEmptyDescription("available", "")).toBe("当前没有可用执行引擎，请重新探测或新增自定义命令");
-    expect(getEmptyDescription("custom", "")).toBe("还没有自定义执行入口");
-    expect(getEmptyDescription("errors", "")).toBe("没有异常执行引擎");
-    expect(getEmptyDescription("all", "claude")).toBe("没有匹配的执行引擎");
+    expect(getEmptyDescription("all", "")).toBe("暂未探测到 Claude Code 运行入口");
+    expect(getEmptyDescription("available", "")).toBe("当前没有可用运行入口，请重新探测或新增预留命令");
+    expect(getEmptyDescription("custom", "")).toBe("还没有自定义预留入口");
+    expect(getEmptyDescription("errors", "")).toBe("没有异常运行入口");
+    expect(getEmptyDescription("all", "claude")).toBe("没有匹配的运行入口");
   });
 
   test("formats labels, runtime descriptions, paths, and invalid dates", () => {
@@ -79,10 +79,10 @@ describe("agent registry presentation helpers", () => {
     expect(getAgentPathLabel(agents[0])).toBe("/usr/local/bin/claude");
     expect(getAgentPathLabel(agents[1])).toBe("command not found");
     expect(getAgentPathLabel(agents[2])).toBe("/opt/wise/local-agent");
-    expect(describeAgentRuntime(agents[0])).toContain("可参与团队协作 / 定时自动化调度");
+    expect(describeAgentRuntime(agents[0])).toContain("当前主运行时");
     expect(describeAgentRuntime(agents[0])).not.toContain("配置目录");
     expect(describeAgentRuntime(agents[1])).toContain("等待本机命令就绪");
-    expect(describeAgentRuntime(agents[2])).toBe("自定义命令 · 3 个默认参数 · 1 个环境变量");
+    expect(describeAgentRuntime(agents[2])).toBe("预留命令 · 3 个默认参数 · 1 个环境变量");
     expect(formatDetectedAt("not-a-date")).toBe("未记录");
   });
 });

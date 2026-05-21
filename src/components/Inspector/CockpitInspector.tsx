@@ -35,9 +35,8 @@ export interface CockpitInspectorProps {
  *  - 子代理活动摘要（来自 useMonitorOverview 的 employeeMonitorItems）
  *  - 当存在活动仓库时，在底部继续渲染 GitPanel
  *
- * 任务详情 / PRD 锚点 / 实时 stdout 等更深的视角由 MissionControl 自身的
- * Drawer 承担（它已经有 `TaskDetailDrawer` / `PrdAnchorDrawer`），本 Inspector
- * 只是 Cockpit 主屏的补充上下文，不与 MissionControl 内部 selection 状态耦合。
+ * 任务详情 / PRD 锚点 / 实时 stdout 等更深的视角由需求助手工作台或
+ * Trellis 运行透镜承担；本 Inspector 只是 Cockpit 主屏的补充上下文。
  */
 export function CockpitInspector({
   dark,

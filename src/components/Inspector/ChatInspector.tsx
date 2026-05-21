@@ -60,6 +60,7 @@ export interface ChatInspectorProps {
   }) => void;
   onCancelOmcDirectBatchInvocation?: (invocationKey: string) => void;
   onReloadFullDiskTranscript?: (sessionKey: string) => void | Promise<void>;
+  onCompactSessionHistory?: (sessionId: string) => void | Promise<void>;
   projectId?: string | null;
 }
 
@@ -96,6 +97,7 @@ export function ChatInspector({
   onOpenOmcBatchInvocationDetail,
   onCancelOmcDirectBatchInvocation,
   onReloadFullDiskTranscript,
+  onCompactSessionHistory,
   projectId,
 }: ChatInspectorProps) {
   const [claudeToolsSectionCollapsed, setClaudeToolsSectionCollapsed] = useState(readClaudeToolsCollapsedFromStorage);
@@ -145,6 +147,7 @@ export function ChatInspector({
                 onOpenOmcBatchInvocationDetail={onOpenOmcBatchInvocationDetail}
                 onCancelOmcDirectBatchInvocation={onCancelOmcDirectBatchInvocation}
                 onReloadFullDiskTranscript={onReloadFullDiskTranscript}
+                onCompactSessionHistory={onCompactSessionHistory}
                 transcriptSourceSessions={transcriptSessions}
                 projectId={projectId}
               />

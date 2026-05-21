@@ -10,9 +10,9 @@ interface SddModeOption {
 
 const OPTIONS: readonly SddModeOption[] = [
   { label: "自动", value: "auto", description: "按仓库内的 .trellis / .openspec / .spec 信号自动选择" },
-  { label: "内置 Trellis", value: "wise_trellis", description: "由 Wise 接管 .trellis 任务与产出" },
-  { label: "项目自带", value: "project_owned", description: "仓库已自带 SDD，Wise 仅派发不写文件" },
-  { label: "关闭", value: "off", description: "禁用 trellis-team 派发" },
+  { label: "Wise Trellis", value: "wise_trellis", description: "由 Wise 读取或初始化 .trellis，并启用需求、任务与规范入口" },
+  { label: "自有 SDD", value: "project_owned", description: "仓库使用 OpenSpec 或其它自有 SDD，Wise 保留 Claude Code 会话能力" },
+  { label: "关闭", value: "off", description: "隐藏 Wise Trellis 入口，仅作为 Claude Code 工作目录使用" },
 ];
 
 interface Props {

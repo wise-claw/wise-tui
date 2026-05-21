@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { safeUnlisten, safeUnlistenPromise } from "../utils/safeTauriUnlisten";
+import { safeUnlisten } from "../utils/safeTauriUnlisten";
 import { message } from "antd";
 import type { ClaudeSession, Repository } from "../types";
 import {
@@ -155,7 +155,7 @@ export function useMainLayoutModes({
       setDualPaneEnabled(true);
     } catch (error) {
       console.error("Failed to create dual-pane right session:", error);
-      message.error("创建右侧主会话失败");
+      message.error("创建右侧 Repo 执行会话失败");
     }
   }, [activeRepository, createSession, dualPaneEnabled, snapshotDualPaneWindowBeforeOpen]);
 

@@ -34,6 +34,23 @@ const retryClusterFromRunDir = mock(async () => ({
   newRunId: "run-2",
   newRunDir: "/tmp/run-2",
 }));
+const recoverClusterRunFromRunDir = mock(async () => ({
+  raw: {
+    runId: "run-2",
+    runDir: "/tmp/run-2",
+    exitCode: 0,
+    durationMs: 10,
+    stdoutPath: "/tmp/run-2/claude.stdout.log",
+    stderrPath: "/tmp/run-2/claude.stderr.log",
+    rawResultPath: "/tmp/run-2/split-result.raw.json",
+    rawOutput: { tasks: [] },
+    stdoutTruncatedPreview: "",
+    claudeSessionId: "claude-session-2",
+  },
+  normalized: null,
+  validationIssues: [],
+  errors: [],
+}));
 const cancelClusterRun = mock(async () => ({
   runId: "run-1",
   runDir: "/tmp/run-1",
@@ -48,6 +65,21 @@ const createParentTask = mock(async () => ({
 }));
 const renderParentPrd = mock((markdown: string) => markdown);
 const markChildrenPlanning = mock(async () => ({ updatedChildNames: [], skipped: [] }));
+const writeClusterTasks = mock(async (input: {
+  parentTaskName: string;
+  normalized: {
+    splitTasks: Array<{ id: string; title: string }>;
+  };
+}) => ({
+  parentTaskName: "parent",
+  childTaskNames: input.normalized.splitTasks.map((task) => `${task.id}-child`),
+  childTasks: input.normalized.splitTasks.map((task) => ({
+    sourceTaskId: task.id,
+    taskName: `${task.id}-child`,
+    taskPath: `.trellis/tasks/${input.parentTaskName}/${task.id}-child`,
+  })),
+  warnings: [],
+}));
 const upsertMissionAgentAssignment = mock(async (input) => ({
   assignmentId: input.assignmentId,
   missionId: input.missionId,
@@ -81,6 +113,17 @@ const trellisRuntimeUpsertAgentRunSafe = mock(async () => ({}));
 const trellisRuntimeRecordEventSafe = mock(async () => ({}));
 const trellisAgentHeartbeat = mock(async () => true);
 const dispatchWorkspaceTrellisMaterializedFanout = mock(async () => null);
+const saveWorkflowGraph = mock(async (input) => ({ graph: input.graph, status: "draft" }));
+const saveWorkflowTemplate = mock(async (input) => ({ id: input.workflowId, name: input.name }));
+const resolveMaterializedFanoutRepositoryTarget = mock(() => ({
+  repositoryPath: "/repo/web",
+  repositoryMetadata: {
+    ownerRepositoryId: 1,
+    ownerRepositoryName: "web",
+    ownerRepositoryPath: "/repo/web",
+    repositoryType: "frontend",
+  },
+}));
 
 mock.module("antd", () => ({
   message: {
@@ -99,13 +142,14 @@ mock.module("antd/lib/index.js", () => ({
 mock.module("../../../services/prdSplit/splitterDispatch", () => ({
   cancelClusterRun,
   dispatchClusterSplit,
+  recoverClusterRunFromRunDir,
   retryClusterFromRunDir,
 }));
 mock.module("../../../services/prdSplit/trellisWriter", () => ({
   createParentTask,
   markChildrenPlanning,
   renderParentPrd,
-  writeClusterTasks: mock(async () => ({ parentTaskName: "parent", childTaskNames: [], childTasks: [], warnings: [] })),
+  writeClusterTasks,
 }));
 mock.module("../../../services/missionControlBackend", () => ({
   appendMissionEvent,
@@ -129,11 +173,12 @@ mock.module("../../../services/trellisRuntime", () => ({
   trellisRuntimeRecordEventSafe,
   trellisRuntimeUpsertAgentRunSafe,
 }));
-mock.module("../../../services/workflowGraphs", () => ({ saveWorkflowGraph: mock(async () => ({ graph: { nodes: [], edges: [] }, status: "draft" })) }));
-mock.module("../../../services/workflowTemplates", () => ({ saveWorkflowTemplate: mock(async (input) => ({ id: input.workflowId, name: input.name })) }));
+mock.module("../../../services/workflowGraphs", () => ({ saveWorkflowGraph }));
+mock.module("../../../services/workflowTemplates", () => ({ saveWorkflowTemplate }));
 mock.module("../../../services/projectPrdScope", () => ({ addProjectPrdWorkflow: mock(async () => {}) }));
 mock.module("../../../services/prdSplit/materializedFanoutBridge", () => ({
   dispatchWorkspaceTrellisMaterializedFanout,
+  resolveMaterializedFanoutRepositoryTarget,
 }));
 
 function makeCluster(overrides: Partial<ClusterPlanItem> = {}): ClusterPlanItem {
@@ -245,13 +290,17 @@ describe("runMissionActions · runtime ledger parity", () => {
       createParentTask,
       dispatchClusterSplit,
       retryClusterFromRunDir,
+      recoverClusterRunFromRunDir,
       markChildrenPlanning,
       renderParentPrd,
+      writeClusterTasks,
       trellisAgentHeartbeat,
       trellisRuntimeRecordEventSafe,
       trellisRuntimeUpsertAgentRunSafe,
       upsertMissionAgentAssignment,
       dispatchWorkspaceTrellisMaterializedFanout,
+      saveWorkflowGraph,
+      saveWorkflowTemplate,
     ]) {
       fn.mockClear();
     }
@@ -564,7 +613,7 @@ describe("runMissionActions · runtime ledger parity", () => {
     }
   });
 
-  test("writeMissionToTrellis dispatches materialized child tasks to Trellis implement fan-out", async () => {
+	  test("writeMissionToTrellis dispatches materialized child tasks to Trellis implement fan-out", async () => {
     const { writeMissionToTrellis } = await import("./runMissionActions");
     const state = makeState({
       stage: "review",
@@ -606,17 +655,210 @@ describe("runMissionActions · runtime ledger parity", () => {
 
     await writeMissionToTrellis(api);
 
-    expect(dispatchWorkspaceTrellisMaterializedFanout).toHaveBeenCalledWith(expect.objectContaining({
-      sessionId: "prd-split:parent",
-      projectId: "p1",
-      projectRootPath: "/repo",
-      repositoryPath: "/repo/web",
+	    expect(dispatchWorkspaceTrellisMaterializedFanout).toHaveBeenCalledWith(expect.objectContaining({
+	      sessionId: "prd-split:parent",
+	      projectId: "p1",
+	      projectRootPath: "/repo",
+	      repositoryPath: "/repo/web",
       sourceTasks: expect.arrayContaining([expect.objectContaining({ id: "task-a" })]),
       materializedResult: expect.objectContaining({ parentTaskName: "parent" }),
       repositoryMetadata: expect.objectContaining({
         ownerRepositoryId: 1,
         ownerRepositoryPath: "/repo/web",
+	      }),
+	    }));
+	  });
+
+  test("writeMissionToTrellis maps namespaced UI task ids back to cluster output ids before materializing", async () => {
+    const { writeMissionToTrellis } = await import("./runMissionActions");
+    const state = makeState({
+      stage: "review",
+      activeMissionId: "mission-p1-hash",
+      clusterRuns: {
+        "cluster-fe": {
+          clusterId: "cluster-fe",
+          parentTaskName: "05-16-parent",
+          parentTaskPath: ".trellis/tasks/05-16-parent",
+          status: "succeeded",
+          errors: [],
+          normalized: {
+            source: makeState().prd!,
+            context: null,
+            splitTasks: [
+              {
+                id: "task-1",
+                title: "Build base UI",
+                description: "",
+                role: "frontend",
+                size: "M",
+                estimateDays: 1,
+                dependencies: [],
+                sourceRefs: [],
+                sourceRequirementIds: ["REQ-1"],
+                subtasks: [],
+                dod: [],
+                executionStatus: "executable",
+                flowStatus: "todo",
+              },
+              {
+                id: "task-2",
+                title: "Wire UI flow",
+                description: "",
+                role: "frontend",
+                size: "M",
+                estimateDays: 1,
+                dependencies: ["task-1"],
+                sourceRefs: [],
+                sourceRequirementIds: ["REQ-1"],
+                subtasks: [],
+                dod: [],
+                executionStatus: "executable",
+                flowStatus: "todo",
+              },
+            ],
+            executableTasks: [],
+            criticalPath: [],
+            parallelGroups: [],
+            unmetPreconditions: [],
+            claudeSplitMapping: {
+              version: 1,
+              taskRequirementLinks: [
+                { taskId: "cluster-fe-task-1", requirementIds: ["REQ-1"] },
+                { taskId: "cluster-fe-task-2", requirementIds: ["REQ-1"] },
+              ],
+              idRemap: [
+                { from: "task-1", to: "cluster-fe-task-1" },
+                { from: "task-2", to: "cluster-fe-task-2" },
+              ],
+              capturedAtMs: 1,
+            },
+          },
+        },
+      },
+    });
+    const api = makeApi(state);
+
+    await writeMissionToTrellis(api, { sourceTaskIds: ["cluster-fe-task-2"] });
+
+    expect(writeClusterTasks).toHaveBeenCalledTimes(1);
+    expect(writeClusterTasks.mock.calls[0]?.[0].normalized.splitTasks.map((task) => task.id)).toEqual(["task-2"]);
+    expect(api.addWriteResult).toHaveBeenCalledWith(expect.objectContaining({
+      childTasks: [
+        expect.objectContaining({
+          sourceTaskId: "cluster-fe-task-2",
+          taskName: "task-2-child",
+        }),
+      ],
+    }));
+    expect(dispatchWorkspaceTrellisMaterializedFanout).toHaveBeenCalledWith(expect.objectContaining({
+      sourceTasks: [expect.objectContaining({ id: "task-2" })],
+      materializedResult: expect.objectContaining({
+        childTasks: [expect.objectContaining({ sourceTaskId: "task-2" })],
       }),
     }));
+    const graph = saveWorkflowGraph.mock.calls[0]?.[0].graph;
+    const taskNode = graph.nodes.find((node: { data?: { sourceTaskId?: string } }) =>
+      node.data?.sourceTaskId === "cluster-fe-task-2"
+    );
+    expect(taskNode?.data.dependencies).toEqual(["cluster-fe-task-1"]);
   });
-});
+
+  test("hydrateClusterRunFromRunDir records recovered retry output into the cluster run and ledgers", async () => {
+    const { hydrateClusterRunFromRunDir } = await import("./runMissionActions");
+    recoverClusterRunFromRunDir.mockResolvedValueOnce({
+      raw: {
+        runId: "run-2",
+        runDir: "/tmp/run-2",
+        exitCode: 0,
+        durationMs: 10,
+        stdoutPath: "/tmp/run-2/claude.stdout.log",
+        stderrPath: "/tmp/run-2/claude.stderr.log",
+        rawResultPath: "/tmp/run-2/split-result.raw.json",
+        rawOutput: { tasks: [] },
+        stdoutTruncatedPreview: "",
+        claudeSessionId: "claude-session-2",
+      },
+      normalized: {
+        source: null,
+        context: null,
+        splitTasks: [{
+          id: "task-a",
+          title: "Recovered UI",
+          description: "",
+          role: "frontend",
+          size: "M",
+          estimateDays: 1,
+          dependencies: [],
+          sourceRefs: [],
+          sourceRequirementIds: ["REQ-1"],
+          subtasks: [],
+          dod: [],
+          executionStatus: "executable",
+          flowStatus: "todo",
+        }],
+        executableTasks: [],
+        criticalPath: [],
+        parallelGroups: [],
+        unmetPreconditions: [],
+      },
+      validationIssues: [],
+      errors: [],
+    });
+    const state = makeState({
+      activeMissionId: "mission-p1-hash",
+      clusterRuns: {
+        "cluster-fe": {
+          clusterId: "cluster-fe",
+          parentTaskName: "05-16-parent",
+          parentTaskPath: ".trellis/tasks/05-16-parent",
+          status: "dispatching",
+          errors: [],
+          startedAt: 100,
+          raw: {
+            runId: "run-2",
+            runDir: "/tmp/run-2",
+            exitCode: 0,
+            durationMs: 0,
+            stdoutPath: "/tmp/run-2/claude.stdout.log",
+            stderrPath: "/tmp/run-2/claude.stderr.log",
+            rawResultPath: "/tmp/run-2/split-result.raw.json",
+            rawOutput: null,
+            stdoutTruncatedPreview: "",
+            claudeSessionId: null,
+          },
+        },
+      },
+    });
+    const api = makeApi(state);
+
+    await hydrateClusterRunFromRunDir("run-2", "/tmp/run-2", "cluster-fe", state, api, state.activeMissionId, "succeeded");
+
+    expect(recoverClusterRunFromRunDir).toHaveBeenCalledWith(expect.objectContaining({
+      runId: "run-2",
+      runDir: "/tmp/run-2",
+      cluster: expect.objectContaining({ id: "cluster-fe" }),
+    }));
+    expect(state.clusterRuns["cluster-fe"]).toMatchObject({
+      status: "succeeded",
+      raw: { runId: "run-2", claudeSessionId: "claude-session-2" },
+      normalized: { splitTasks: [expect.objectContaining({ id: "task-a" })] },
+      progress: { status: "succeeded", progressPercent: 100 },
+    });
+    expect(completeMissionAgentAssignment).toHaveBeenCalledWith(expect.objectContaining({
+      assignmentId: "mission-p1-hash-cluster-fe-splitter-retry",
+      status: "succeeded",
+    }));
+    expect(trellisRuntimeRecordEventSafe).toHaveBeenCalledWith(expect.objectContaining({
+      eventKind: "trellis.agent.completed",
+      correlationId: "mission-p1-hash-cluster-fe-splitter-retry",
+      payload: expect.objectContaining({
+        runDir: "/tmp/run-2",
+        rawResultPath: "/tmp/run-2/split-result.raw.json",
+      }),
+    }));
+    expect(attachMissionToSession).toHaveBeenCalledWith({
+      missionId: "mission-p1-hash",
+      sessionId: "claude-session-2",
+    });
+  });
+	});

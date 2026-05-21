@@ -34,6 +34,8 @@ export interface LeftSidebarProps {
   authorDisabled?: boolean;
   authorDisabledTooltip?: string;
   onOpenAuthor: () => void;
+  assistantHubActive?: boolean;
+  onOpenAssistantHub?: () => void;
   workspaceCreateRequest?: number;
   standaloneRepoAddRequest?: number;
   onProjectSelect: (projectId: string) => void;

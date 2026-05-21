@@ -21,7 +21,7 @@ export interface InspectorProps {
  *
  * 注意：
  *   - chat 行为完全保持现状（PRD §4.3）：本组件只是把"永远显示"变成"按 mode 显示"。
- *   - cockpit Inspector 不与 MissionControl 内部 selection 耦合（详见 CockpitInspector 注释）。
+ *   - cockpit Inspector 不与需求助手内部 selection 耦合（详见 CockpitInspector 注释）。
  *   - inspect 与 chat 共享同一份 ChatInspector；inspect 叠层渲染在主区之上，
  *     底层右栏继续显示。
  */

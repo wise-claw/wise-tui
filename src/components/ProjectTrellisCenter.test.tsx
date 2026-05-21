@@ -78,10 +78,6 @@ mock.module("../services/trellisSpecBridge", () => ({
   writeTrellisSpecFile: mock(async () => {}),
 }));
 
-mock.module("./MissionControl/engineering/SpecLibraryPanel", () => ({
-  SpecLibraryPanel: () => <section data-stub="spec-editor">index 编辑器</section>,
-}));
-
 const { ProjectTrellisCenter } = await import("./ProjectTrellisCenter");
 
 const project: ProjectItem = {

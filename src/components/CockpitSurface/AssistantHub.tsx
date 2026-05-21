@@ -79,7 +79,7 @@ export function AssistantHub({
         </div>
         <p className="cockpit-hub__subtitle">
           {activeProjectName
-            ? `当前工作区：${activeProjectName}。选择一个助手开始工作。`
+            ? `当前工作区：${activeProjectName}。选择一个助手，让 Wise 用 Claude Code 编排后续工作。`
             : "选择一个助手开始工作。需要拆分 PRD 时建议先在左栏选定一个工作区。"}
         </p>
       </header>

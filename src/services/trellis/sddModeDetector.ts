@@ -13,7 +13,7 @@ export async function detectSddSignals(repoPath: string): Promise<SddSignals> {
 }
 
 export function resolveAutoSddMode(signals: SddSignals): SddMode {
-  if (signals.hasTrellisTasks || signals.hasTrellisSpec) return "project_owned";
+  if (signals.hasTrellisTasks || signals.hasTrellisSpec) return "wise_trellis";
   if (signals.hasOpenSpec || signals.hasGenericSpec) return "project_owned";
   return "wise_trellis";
 }

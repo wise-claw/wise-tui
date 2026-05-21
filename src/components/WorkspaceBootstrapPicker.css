@@ -1,54 +1,28 @@
 .app-workspace-bootstrap-picker {
+  display: block;
+}
+
+.app-workspace-bootstrap-picker__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.app-workspace-bootstrap-picker__copy {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
 }
 
 .app-workspace-bootstrap-picker__title {
   font-size: 12px;
-  line-height: 1.2;
-  color: var(--ant-color-text-secondary);
-}
-
-.app-workspace-bootstrap-picker__groups {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.app-workspace-bootstrap-picker__group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.app-workspace-bootstrap-picker__group-label {
-  flex-shrink: 0;
-  width: 42px;
-  font-size: 11px;
-  line-height: 1.2;
-  color: var(--ant-color-text-tertiary);
-  text-align: right;
-}
-
-.app-workspace-bootstrap-picker__options {
-  display: flex;
-  flex: 1;
-  flex-wrap: wrap;
-  align-items: center;
-  column-gap: 14px;
-  row-gap: 2px;
-  min-width: 0;
-}
-
-.app-workspace-bootstrap-picker__option.ant-checkbox-wrapper {
-  margin-inline-start: 0 !important;
-  font-size: 12px;
-  line-height: 1.2;
   color: var(--ant-color-text);
 }
 
-.app-workspace-bootstrap-picker__option .ant-checkbox + span {
-  padding-inline-start: 4px !important;
+.app-workspace-bootstrap-picker__hint {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--ant-color-text-secondary);
 }

@@ -7,6 +7,9 @@ import {
 } from "../../services/splitPromptBundle";
 import { SplitRuntimeMessages } from "./SplitRuntimeMessages";
 import type {
+  ClusterRunState,
+} from "../PrdSplitWizard/types";
+import type {
   SplitPromptDraftBySlot,
   SplitRetryPhase,
   SplitRuntimeLogItem,
@@ -31,6 +34,7 @@ interface Props {
   loading: boolean;
   draftBySlot: SplitPromptDraftBySlot;
   runtimeLogs: SplitRuntimeLogItem[];
+  clusterRuns?: ClusterRunState[];
   runtimeListRef: RefObject<HTMLDivElement | null>;
   retryingPhase: SplitRetryPhase | null;
   onStepChange: (step: SplitWizardStep) => void;
@@ -40,6 +44,8 @@ interface Props {
   onStartSplit: () => void;
   onOptimize: (slot: WizardPromptSlot) => void;
   onRetryStage: (phase: SplitRetryPhase) => void;
+  onRetryCluster?: (clusterId: string) => void;
+  onCancelCluster?: (clusterId: string) => void;
 }
 
 export function SplitPromptWizardModal({
@@ -52,6 +58,7 @@ export function SplitPromptWizardModal({
   loading,
   draftBySlot,
   runtimeLogs,
+  clusterRuns,
   runtimeListRef,
   retryingPhase,
   onStepChange,
@@ -61,6 +68,8 @@ export function SplitPromptWizardModal({
   onStartSplit,
   onOptimize,
   onRetryStage,
+  onRetryCluster,
+  onCancelCluster,
 }: Props) {
   return (
     <Modal
@@ -175,12 +184,15 @@ export function SplitPromptWizardModal({
                 {parsing ? <Spin size="small" aria-label="拆分进行中" /> : null}
               </Space>
             </div>
-            <SplitRuntimeMessages
-              logs={runtimeLogs}
-              listRef={runtimeListRef}
-              retryingPhase={retryingPhase}
-              onRetryStage={onRetryStage}
-            />
+	            <SplitRuntimeMessages
+	              logs={runtimeLogs}
+	              clusterRuns={clusterRuns}
+	              listRef={runtimeListRef}
+	              retryingPhase={retryingPhase}
+	              onRetryStage={onRetryStage}
+	              onRetryCluster={onRetryCluster}
+	              onCancelCluster={onCancelCluster}
+	            />
           </div>
         )}
     </Modal>

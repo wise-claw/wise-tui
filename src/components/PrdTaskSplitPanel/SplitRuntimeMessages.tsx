@@ -1,21 +1,39 @@
 import { useMemo, useState, type RefObject } from "react";
+import { Button, Space } from "antd";
 import { SplitRuntimeMessageRow } from "./SplitRuntimeMessageRow";
 import { buildSplitRuntimeModel, type RuntimeStepState } from "./splitRuntimeModel";
 import type { SplitRetryPhase, SplitRuntimeLogItem } from "./types";
+import type { ClusterRunState } from "../PrdSplitWizard/types";
 
 interface Props {
   logs: SplitRuntimeLogItem[];
   listRef: RefObject<HTMLDivElement | null>;
   retryingPhase: SplitRetryPhase | null;
   onRetryStage: (phase: SplitRetryPhase) => void;
+  clusterRuns?: ClusterRunState[];
+  onRetryCluster?: (clusterId: string) => void;
+  onCancelCluster?: (clusterId: string) => void;
 }
 
-export function SplitRuntimeMessages({ logs, listRef, retryingPhase, onRetryStage }: Props) {
+export function SplitRuntimeMessages({
+  logs,
+  listRef,
+  retryingPhase,
+  onRetryStage,
+  clusterRuns = [],
+  onRetryCluster,
+  onCancelCluster,
+}: Props) {
   const [activeClusterId, setActiveClusterId] = useState<string | null>(null);
   const runtime = useMemo(() => buildSplitRuntimeModel(logs), [logs]);
+  const clusterRunById = useMemo(
+    () => new Map(clusterRuns.map((run) => [run.clusterId, run])),
+    [clusterRuns],
+  );
   const activeSubagent = activeClusterId
     ? runtime.subagents.find((item) => item.clusterId === activeClusterId) ?? null
     : null;
+  const activeRun = activeClusterId ? clusterRunById.get(activeClusterId) ?? null : null;
   return (
     <div className="app-prd-task-panel__split-runtime-list">
       <div ref={listRef} className="app-claude-messages app-prd-task-panel__split-runtime-messages">
@@ -103,8 +121,17 @@ export function SplitRuntimeMessages({ logs, listRef, retryingPhase, onRetryStag
                     <span>splitter 输出流</span>
                     <strong>{activeSubagent.title}</strong>
                   </div>
-                  <button type="button" onClick={() => setActiveClusterId(null)}>收起</button>
+                  <Space size={6}>
+                    {activeRun?.status === "dispatching" ? (
+                      <Button size="small" danger onClick={() => onCancelCluster?.(activeRun.clusterId)}>中断</Button>
+                    ) : null}
+                    {activeRun && (activeRun.status === "failed" || activeRun.status === "cancelled") ? (
+                      <Button size="small" onClick={() => onRetryCluster?.(activeRun.clusterId)}>重试</Button>
+                    ) : null}
+                    <button type="button" onClick={() => setActiveClusterId(null)}>收起</button>
+                  </Space>
                 </div>
+                {activeRun ? <ClusterRunArtifacts run={activeRun} /> : null}
                 {activeSubagent.logs.map((log) => (
                   <SplitRuntimeMessageRow
                     key={log.id}
@@ -118,6 +145,28 @@ export function SplitRuntimeMessages({ logs, listRef, retryingPhase, onRetryStag
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function ClusterRunArtifacts({ run }: { run: ClusterRunState }) {
+  const details = [
+    ["状态", run.status],
+    ["runDir", run.raw?.runDir ?? ""],
+    ["stdout", run.raw?.stdoutPath ?? run.progress?.error?.stdoutPath ?? ""],
+    ["stderr", run.raw?.stderrPath ?? run.progress?.error?.stderrPath ?? ""],
+    ["raw", run.raw?.rawResultPath ?? ""],
+    ["父任务", run.parentTaskPath ?? ""],
+  ].filter(([, value]) => value.trim().length > 0);
+  if (details.length === 0) return null;
+  return (
+    <div className="app-prd-task-panel__runtime-artifacts">
+      {details.map(([label, value]) => (
+        <div key={label}>
+          <span>{label}</span>
+          <code>{value}</code>
+        </div>
+      ))}
     </div>
   );
 }

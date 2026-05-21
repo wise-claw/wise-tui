@@ -580,7 +580,7 @@ export function useOmcRuntime({
       }
     }
     if (!targetId) {
-      void message.warning("未找到该仓库的主会话标签，请先在侧栏打开仓库主会话后再查看后台输出。");
+      void message.warning("未找到该仓库的 Repo 执行会话，请先在侧栏打开仓库后再查看后台输出。");
       return;
     }
 

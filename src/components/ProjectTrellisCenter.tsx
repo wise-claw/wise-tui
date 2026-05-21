@@ -50,7 +50,6 @@ import {
   type TrellisSpecFile,
   type TrellisSpecTreeNode,
 } from "../services/trellisSpecBridge";
-import { SpecLibraryPanel } from "./MissionControl/engineering/SpecLibraryPanel";
 import "./ProjectTrellisCenter.css";
 
 interface ProjectTrellisCenterProps {
@@ -295,15 +294,17 @@ export function ProjectTrellisCenter({
   onRequestSpecAgentUpdate,
 }: ProjectTrellisCenterProps) {
   const configuredRootPath = project?.rootPath?.trim() || null;
+  const standaloneRepositoryProject = Boolean(project?.id.startsWith("repo:"));
   const memberRepositories = useMemo(() => {
     if (!project?.repositoryIds.length) return [];
     const ids = new Set(project.repositoryIds);
     return repositories.filter((repo) => ids.has(repo.id));
   }, [project?.repositoryIds, repositories]);
   const memberRepoRootConflict = useMemo(() => {
+    if (standaloneRepositoryProject) return null;
     if (!configuredRootPath || memberRepositories.length === 0) return null;
     return memberRepositories.find((repo) => repo.path.trim() === configuredRootPath) ?? null;
-  }, [configuredRootPath, memberRepositories]);
+  }, [configuredRootPath, memberRepositories, standaloneRepositoryProject]);
   const rootPath = memberRepoRootConflict ? null : configuredRootPath;
   const runtime = useTrellisRuntime({
     projectId: project?.id ?? null,
@@ -426,7 +427,6 @@ function TrellisSpecTreePanel({
   const [tree, setTree] = useState<TrellisSpecTreeNode[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [activeFile, setActiveFile] = useState<TrellisSpecFile | null>(null);
   const [draft, setDraft] = useState("");
@@ -623,25 +623,8 @@ function TrellisSpecTreePanel({
               回到主会话
             </Button>
           ) : null}
-          <Button size="small" type="default" onClick={() => setAdvancedOpen((value) => !value)}>
-            {advancedOpen ? "收起 index 编辑" : "兼容入口编辑"}
-          </Button>
         </Space>
       </div>
-      {advancedOpen ? (
-        <SpecLibraryPanel
-          rootPath={rootPath}
-          enabled={enabled}
-          onOpenProjectSession={
-            project && onOpenProjectSession ? () => onOpenProjectSession(project) : undefined
-          }
-          onRequestAgentUpdate={
-            project && onRequestSpecAgentUpdate
-              ? (area) => onRequestSpecAgentUpdate(project, area)
-              : undefined
-          }
-        />
-      ) : null}
     </section>
   );
 }

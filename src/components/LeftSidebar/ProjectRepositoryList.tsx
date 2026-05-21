@@ -56,7 +56,6 @@ interface ProjectRepositoryListProps {
   onDeleteProject: (project: Workspace) => void;
   onOpenPromptsProject?: (project: Workspace) => void;
   onOpenProjectTrellis?: (project: Workspace) => void;
-  onOpenRepositoryTrellis?: (repository: Repository, project: Workspace) => void;
   onOpenFloatingRepositoryTrellis?: (repository: Repository) => void;
   onCreateProjectTask: (project: Workspace, mode: TaskMode) => void;
   onCreateRepositoryTask: (repository: Repository, mode: TaskMode) => void;
@@ -120,7 +119,6 @@ export function ProjectRepositoryList({
   onDeleteProject,
   onOpenPromptsProject,
   onOpenProjectTrellis,
-  onOpenRepositoryTrellis,
   onOpenFloatingRepositoryTrellis,
   onCreateProjectTask,
   onCreateRepositoryTask,
@@ -240,13 +238,11 @@ export function ProjectRepositoryList({
             onDeleteProject={onDeleteProject}
             onOpenPromptsProject={onOpenPromptsProject}
             onOpenProjectTrellis={onOpenProjectTrellis}
-            onOpenRepositoryTrellis={onOpenRepositoryTrellis}
             onAddRepositoryToProject={onAddRepositoryToProjectClick}
             onCreateProjectTask={onCreateProjectTask}
             onCreateRepositoryTask={onCreateRepositoryTask}
             onReconcileProject={onReconcileProject}
             onBootstrapTrellisForProject={onBootstrapTrellisForProject}
-            onBootstrapTrellisForRepository={onBootstrapTrellisForRepository}
             onCodeGraphGenerateProject={onCodeGraphGenerateProject}
             onCodeGraphViewProject={onCodeGraphViewProject}
             onCodeGraphGenerateRepository={onCodeGraphGenerateRepository}
@@ -311,13 +307,11 @@ interface ProjectRowProps {
   onDeleteProject: (project: Workspace) => void;
   onOpenPromptsProject?: (project: Workspace) => void;
   onOpenProjectTrellis?: (project: Workspace) => void;
-  onOpenRepositoryTrellis?: (repository: Repository, project: Workspace) => void;
   onAddRepositoryToProject?: (projectId: Workspace["id"]) => void;
   onCreateProjectTask: (project: Workspace, mode: TaskMode) => void;
   onCreateRepositoryTask: (repository: Repository, mode: TaskMode) => void;
   onReconcileProject?: (projectId: string, mode: ReconcileProjectMode) => void | Promise<void>;
   onBootstrapTrellisForProject?: (project: Workspace) => void | Promise<void>;
-  onBootstrapTrellisForRepository?: (repository: Repository) => void | Promise<void>;
   onCodeGraphGenerateProject?: (project: Workspace) => void | Promise<void>;
   onCodeGraphViewProject?: (project: Workspace) => void;
   onCodeGraphGenerateRepository?: (repository: Repository) => void | Promise<void>;
@@ -367,13 +361,11 @@ function ProjectRow({
   onDeleteProject,
   onOpenPromptsProject,
   onOpenProjectTrellis,
-  onOpenRepositoryTrellis,
   onAddRepositoryToProject,
   onCreateProjectTask,
   onCreateRepositoryTask,
   onReconcileProject,
   onBootstrapTrellisForProject,
-  onBootstrapTrellisForRepository,
   onCodeGraphGenerateProject,
   onCodeGraphViewProject,
   onCodeGraphGenerateRepository,
@@ -405,6 +397,7 @@ function ProjectRow({
   onOpenExecutableTasksForRepository,
 }: ProjectRowProps) {
   const projectTrellisReady = projectTrellisReadyById[project.id] === true;
+  const projectTrellisEnabled = project.sddMode !== "project_owned" || projectTrellisReady;
   const projectHasCodeGraph = project.repositoryIds.some(
     (repositoryId) => codeGraphIndexStatusByRepoId[repositoryId] === "done",
   );
@@ -420,6 +413,8 @@ function ProjectRow({
   const projectExecutableTaskCount = executableTasksByProjectId[project.id] ?? 0;
   const projectMoreItems = buildProjectMoreMenuItems({
     isPinned,
+    trellisEnabled: projectTrellisEnabled,
+    trellisReady: projectTrellisReady,
     onAddRepositoryToProject: Boolean(onAddRepositoryToProject),
     onOpenScheduledTasksForProject: Boolean(onOpenScheduledTasksForProject),
     onOpenExecutableTasksForProject: Boolean(onOpenExecutableTasksForProject),
@@ -495,14 +490,16 @@ function ProjectRow({
           ) : null}
         </span>
         <div className="app-repository-row-actions app-repository-row-actions--project">
-          {projectTrellisReady && onOpenProjectTrellis ? (
+          {projectTrellisEnabled && projectTrellisReady && onOpenProjectTrellis ? (
             <ProjectTrellisAction onOpen={() => onOpenProjectTrellis(project)} />
           ) : null}
-          <SidebarRequirementAction
-            variant="project"
-            unsplitCount={projectRequirementUnsplitCount}
-            onOpen={() => onCreateProjectTask(project, "split")}
-          />
+          {projectTrellisEnabled ? (
+            <SidebarRequirementAction
+              variant="project"
+              unsplitCount={projectRequirementUnsplitCount}
+              onOpen={() => onCreateProjectTask(project, "split")}
+            />
+          ) : null}
           {projectHasCodeGraph && onCodeGraphViewProject ? (
             <RepositoryCodeGraphAction
               variant="project"
@@ -517,7 +514,7 @@ function ProjectRow({
               onOpen={() => onOpenScheduledTasksForProject(project)}
             />
           ) : null}
-          {onOpenExecutableTasksForProject ? (
+          {projectTrellisEnabled && onOpenExecutableTasksForProject ? (
             <SidebarExecutableTasksAction
               variant="project"
               executableCount={projectExecutableTaskCount}
@@ -534,8 +531,8 @@ function ProjectRow({
                 if (key === "rename") onRenameProject(project);
                 if (key === "add-repository") onAddRepositoryToProject?.(project.id);
                 if (key === "scheduled-tasks") onOpenScheduledTasksForProject?.(project);
-                if (key === "requirements") onCreateProjectTask(project, "split");
-                if (key === "executable-tasks") onOpenExecutableTasksForProject?.(project);
+                if (key === "requirements" && projectTrellisEnabled) onCreateProjectTask(project, "split");
+                if (key === "executable-tasks" && projectTrellisEnabled) onOpenExecutableTasksForProject?.(project);
                 if (key === "trellis-init") void Promise.resolve(onBootstrapTrellisForProject?.(project));
                 if (key === "reconcile-repos") void Promise.resolve(onReconcileProject?.(project.id, "repos_only"));
                 if (key === "reconcile-repos-graphs") {
@@ -579,7 +576,6 @@ function ProjectRow({
             onReorderRepositoriesInProject={onReorderRepositoriesInProject}
             onMoveRepositoryToProject={onMoveRepositoryToProjectWithExpand}
             onConfigureSddMode={onConfigureRepositorySddMode}
-            onBootstrapTrellis={onBootstrapTrellisForRepository}
             onCodeGraphGenerateRepository={onCodeGraphGenerateRepository}
             onCodeGraphViewRepositoryInProject={onCodeGraphViewRepositoryInProject}
             repoSidebarDragRef={repoSidebarDragRef}
@@ -592,7 +588,6 @@ function ProjectRow({
             }
             codeGraphIndexStatusByRepoId={codeGraphIndexStatusByRepoId}
             repositoryTrellisReadyById={repositoryTrellisReadyById}
-            onOpenRepositoryTrellis={onOpenRepositoryTrellis}
             scheduledTasksByRepoId={scheduledTasksByRepoId}
             requirementUnsplitByRepoId={requirementUnsplitByRepoId}
             executableTasksByRepoId={executableTasksByRepoId}

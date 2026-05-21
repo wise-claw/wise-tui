@@ -4,6 +4,7 @@ import { buildClusterDispatchContext } from "../../../services/prdSplit/clusterD
 import {
   cancelClusterRun,
   dispatchClusterSplit,
+  recoverClusterRunFromRunDir,
   retryClusterFromRunDir as retryClusterRunFromDir,
   type DispatchClusterResult,
 } from "../../../services/prdSplit/splitterDispatch";
@@ -15,6 +16,7 @@ import {
 import { saveWorkflowGraph } from "../../../services/workflowGraphs";
 import { saveWorkflowTemplate } from "../../../services/workflowTemplates";
 import { addProjectPrdWorkflow } from "../../../services/projectPrdScope";
+import { refreshSplitResultDerivedFields } from "../../../services/taskSplitter";
 import {
   dispatchWorkspaceTrellisMaterializedFanout,
   resolveMaterializedFanoutRepositoryTarget,
@@ -37,9 +39,19 @@ import {
 import { applyEditsToSplitResult } from "../../PrdSplitWizard/taskEdits";
 import type { UseSplitWizardStateApi } from "../../PrdSplitWizard/useSplitWizardState";
 import type { ClusterRunState, WizardWorkflowGraphResult, WizardWriteResult } from "../../PrdSplitWizard/types";
+import type { SplitResult } from "../../../types";
 
 const MISSION_SCHEMA_VERSION = 1;
 const SPLITTER_HEARTBEAT_INTERVAL_MS = 30_000;
+
+export interface WriteMissionToTrellisOptions {
+  sourceTaskIds?: readonly string[];
+}
+
+interface SourceTaskSelectionMatch {
+  taskId: string;
+  outputSourceTaskId: string;
+}
 
 export async function runMissionClusters(api: UseSplitWizardStateApi): Promise<void> {
   const { state } = api;
@@ -642,6 +654,122 @@ export async function retryClusterFromRunDir(
   }
 }
 
+export async function hydrateClusterRunFromRunDir(
+  runId: string,
+  runDir: string,
+  clusterId: string,
+  state: UseSplitWizardStateApi["state"],
+  api: UseSplitWizardStateApi,
+  missionId?: string | null,
+  terminalStatus?: "succeeded" | "failed" | "cancelled",
+): Promise<void> {
+  if (!state.project || !state.prd || !state.requirementsIndex) return;
+  const cluster = state.plan?.clusters.find((candidate) => candidate.id === clusterId) ?? null;
+  if (!cluster) {
+    api.setGlobalError(`找不到任务分组：${clusterId}`);
+    return;
+  }
+  const currentRun = state.clusterRuns[clusterId];
+  const startedAt = currentRun?.startedAt ?? Date.now();
+  const endedAt = Date.now();
+  try {
+    const result = await recoverClusterRunFromRunDir({
+      runId,
+      runDir,
+      prd: state.prd,
+      cluster,
+      requirementsIndex: state.requirementsIndex,
+      context: buildClusterDispatchContext({
+        baseContext: state.context,
+        cluster,
+        repositories: state.repositories,
+      }),
+    });
+    const finalStatus = terminalStatus === "cancelled" || result.raw.exitCode === 130
+      ? "cancelled"
+      : result.normalized && result.errors.length === 0
+        ? "succeeded"
+        : "failed";
+    api.patchClusterRun(clusterId, {
+      status: finalStatus,
+      raw: result.raw,
+      normalized: result.normalized ?? undefined,
+      validationIssues: result.validationIssues,
+      errors: result.errors,
+      endedAt,
+      progress: {
+        status: finalStatus,
+        progressPercent: finalStatus === "succeeded" ? 100 : 0,
+        stageLabel: finalStatus === "succeeded" ? "重试完成" : result.errors[0] ?? "重试失败",
+        elapsedMs: endedAt - startedAt,
+        error: finalStatus === "succeeded"
+          ? null
+          : {
+            summary: result.errors[0] ?? "重试失败",
+            exitCode: result.raw.exitCode,
+            stdoutPath: result.raw.stdoutPath,
+            stderrPath: result.raw.stderrPath,
+          },
+      },
+    });
+    if (finalStatus === "succeeded") {
+      api.clearClusterNeedsResplit(clusterId);
+    }
+    const assignmentId = missionId ? missionAssignmentId(missionId, clusterId, "splitter-retry") : null;
+    const repositoryPath = resolveClusterRepositoryPath(cluster, state.repositories);
+    const metadata = {
+      clusterId,
+      status: finalStatus,
+      parentTaskName: currentRun?.parentTaskName ?? null,
+      parentTaskPath: currentRun?.parentTaskPath ?? null,
+      taskCount: result.normalized?.splitTasks.length ?? 0,
+      validationIssueCount: result.validationIssues.length,
+      errorCount: result.errors.length,
+      exitCode: result.raw.exitCode,
+      stdoutPath: result.raw.stdoutPath,
+      stderrPath: result.raw.stderrPath,
+      runDir: result.raw.runDir,
+      rawResultPath: result.raw.rawResultPath,
+    };
+    await completeMissionAgentAssignmentSafe(assignmentId, finalStatus, metadata);
+    await upsertSplitterAgentRunSafe(missionId, state, {
+      agentRunId: assignmentId,
+      cluster,
+      repositoryPath,
+      status: finalStatus,
+      taskPath: currentRun?.parentTaskPath ?? null,
+      metadata,
+      startedAt,
+      completedAt: endedAt,
+    });
+    await recordSplitterTerminalRuntimeEventSafe(missionId, state, assignmentId, metadata);
+    await appendMissionEventSafe(missionId, "mission.cluster.retry_completed", metadata);
+    if (missionId && result.raw.claudeSessionId) {
+      await attachMissionToSessionSafe(missionId, result.raw.claudeSessionId);
+    }
+  } catch (error) {
+    const messageText = error instanceof Error ? error.message : String(error);
+    api.patchClusterRun(clusterId, {
+      status: "failed",
+      errors: [`读取重试结果失败: ${messageText}`],
+      endedAt,
+      progress: {
+        status: "failed",
+        progressPercent: 0,
+        stageLabel: messageText,
+        elapsedMs: endedAt - startedAt,
+        error: {
+          summary: messageText,
+          exitCode: null,
+          stdoutPath: currentRun?.raw?.stdoutPath ?? "",
+          stderrPath: currentRun?.raw?.stderrPath ?? "",
+        },
+      },
+    });
+    api.setGlobalError(`读取重试结果失败：${messageText}`);
+  }
+}
+
 export async function cancelClusterDispatch(
   runId: string,
   clusterId: string,
@@ -807,11 +935,16 @@ async function dispatchWithRetry(
 
 // ────────────────────────────────────────────────────────────────────
 
-export async function writeMissionToTrellis(api: UseSplitWizardStateApi): Promise<void> {
+export async function writeMissionToTrellis(
+  api: UseSplitWizardStateApi,
+  options: WriteMissionToTrellisOptions = {},
+): Promise<void> {
   const { state } = api;
   if (!state.project || !state.prd) return;
+  const sourceTaskIdSet = new Set((options.sourceTaskIds ?? []).map((id) => id.trim()).filter(Boolean));
   const mission = await persistMissionSnapshot(api, "writing", "running", "mission.write.started", {
     succeededClusterCount: Object.values(state.clusterRuns).filter((run) => run.status === "succeeded").length,
+    sourceTaskIds: sourceTaskIdSet.size > 0 ? Array.from(sourceTaskIdSet) : null,
   }, undefined, {
     stage: "writing",
   });
@@ -837,7 +970,21 @@ export async function writeMissionToTrellis(api: UseSplitWizardStateApi): Promis
         api.addWriteResult(result);
         continue;
       }
-      const effective = applyEditsToSplitResult(run.normalized, state.editsByCluster[cluster.id]);
+      const effectiveAll = applyEditsToSplitResult(run.normalized, state.editsByCluster[cluster.id]);
+      const selectedTasks = sourceTaskIdSet.size === 0
+        ? effectiveAll.splitTasks.map((task): SourceTaskSelectionMatch => ({ taskId: task.id, outputSourceTaskId: task.id }))
+        : collectSelectedClusterTasks(effectiveAll, cluster.id, sourceTaskIdSet);
+      const outputSourceTaskIdByTaskId = new Map(selectedTasks.map((item) => [item.taskId, item.outputSourceTaskId]));
+      const effective = sourceTaskIdSet.size === 0
+        ? effectiveAll
+        : refreshSplitResultDerivedFields({
+          ...effectiveAll,
+          splitTasks: effectiveAll.splitTasks.filter((task) => outputSourceTaskIdByTaskId.has(task.id)),
+          executableTasks: [],
+        });
+      if (effective.splitTasks.length === 0) {
+        continue;
+      }
       try {
         const out = await writeClusterTasks({
           projectRootPath: state.project.rootPath,
@@ -851,11 +998,18 @@ export async function writeMissionToTrellis(api: UseSplitWizardStateApi): Promis
           normalized: effective,
           prdSource: state.prd,
         });
+        const displayChildTasks = out.childTasks.map((task) => ({
+          ...task,
+          sourceTaskId: outputSourceTaskIdByTaskId.get(task.sourceTaskId) ?? task.sourceTaskId,
+        }));
+        const uiTaskIdByOutputTaskId = buildUiTaskIdByOutputTaskId(effectiveAll);
+        const toDisplayTaskId = (taskId: string) =>
+          outputSourceTaskIdByTaskId.get(taskId) ?? uiTaskIdByOutputTaskId.get(taskId) ?? taskId;
         const result: WizardWriteResult = {
           clusterId: cluster.id,
           parentTaskName: out.parentTaskName,
           childTaskNames: out.childTaskNames,
-          childTasks: out.childTasks,
+          childTasks: displayChildTasks,
           warnings: out.warnings,
         };
         writeResults.push(result);
@@ -873,12 +1027,12 @@ export async function writeMissionToTrellis(api: UseSplitWizardStateApi): Promis
         graphInputs.push({
           cluster,
           parentTaskName: out.parentTaskName,
-          childTasks: out.childTasks,
+          childTasks: displayChildTasks,
           tasks: effective.splitTasks.map((task) => ({
-            sourceTaskId: task.id,
+            sourceTaskId: toDisplayTaskId(task.id),
             title: task.title,
             role: task.role,
-            dependencies: task.dependencies,
+            dependencies: task.dependencies.map(toDisplayTaskId),
             sourceRequirementIds: task.sourceRequirementIds,
             sourceRefs: task.sourceRefs,
             taskAnchors: task.taskAnchors,
@@ -897,6 +1051,9 @@ export async function writeMissionToTrellis(api: UseSplitWizardStateApi): Promis
         writeResults.push(result);
         api.addWriteResult(result);
       }
+    }
+    if (writeResults.length === 0) {
+      throw new Error("没有匹配的可落盘任务。");
     }
     const workflowGraphResult = await persistMissionWorkflowGraph(api, graphInputs);
     api.finishWrite();
@@ -926,6 +1083,54 @@ export async function writeMissionToTrellis(api: UseSplitWizardStateApi): Promis
       writeResults,
     });
   }
+}
+
+function collectSelectedClusterTasks(
+  result: SplitResult,
+  clusterId: string,
+  sourceTaskIdSet: Set<string>,
+): SourceTaskSelectionMatch[] {
+  const outputByUiId = buildOutputTaskIdByUiTaskId(result);
+  return result.splitTasks
+    .map((task): SourceTaskSelectionMatch | null => {
+      const directId = task.id.trim();
+      const uiIds = Array.from(new Set([
+        directId,
+        `${clusterId}-${directId}`,
+        ...Array.from(outputByUiId.entries())
+          .filter(([, outputTaskId]) => outputTaskId === directId)
+          .map(([uiTaskId]) => uiTaskId),
+      ]));
+      if (!uiIds.some((id) => sourceTaskIdSet.has(id))) return null;
+      const selectedUiId = uiIds.find((id) => sourceTaskIdSet.has(id)) ?? directId;
+      return {
+        taskId: directId,
+        outputSourceTaskId: selectedUiId,
+      };
+    })
+    .filter((item): item is SourceTaskSelectionMatch => Boolean(item));
+}
+
+function buildOutputTaskIdByUiTaskId(result: Pick<SplitResult, "claudeSplitMapping">): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const remap of result.claudeSplitMapping?.idRemap ?? []) {
+    const from = remap.from.trim();
+    const to = remap.to.trim();
+    if (!from || !to) continue;
+    out.set(to, from);
+  }
+  return out;
+}
+
+function buildUiTaskIdByOutputTaskId(result: Pick<SplitResult, "claudeSplitMapping">): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const remap of result.claudeSplitMapping?.idRemap ?? []) {
+    const from = remap.from.trim();
+    const to = remap.to.trim();
+    if (!from || !to) continue;
+    out.set(from, to);
+  }
+  return out;
 }
 
 async function persistMissionWorkflowGraph(

@@ -94,10 +94,6 @@ mock.module("../MissionControl/engineering/WorkflowGraphPanel", () => ({
   WorkflowGraphPanel: () => <section data-stub="workflow-graph">工作流图</section>,
 }));
 
-mock.module("../MissionControl/engineering/SpecLibraryPanel", () => ({
-  SpecLibraryPanel: () => <section data-stub="spec-library">规范库面板</section>,
-}));
-
 mock.module("../../services/appSettingsStore", () => ({
   getAppSetting: mock(async () => null),
   getAppSettingJson: mock(async () => null),
@@ -240,9 +236,20 @@ function buildProps(
   const onPaneChange = mock((_: AuthorPane) => {});
   const onBack = mock(() => {});
   const props: Parameters<typeof AuthorPanel>[0] = {
-    pane: "agents",
+    pane: "workspaces",
     onPaneChange,
     onBack,
+    workspacesTabProps: {
+      workspaces: [workspace],
+      repositories: [repo],
+      standaloneRepos: [repo],
+      activeWorkspaceId: "w1",
+      activeRepositoryId: null,
+      onCreateWorkspace: mock(() => {}),
+      onAddStandaloneRepo: mock(() => {}),
+      onSelectWorkspace: mock(() => {}),
+      onSelectStandaloneRepo: mock(() => {}),
+    },
     employeeConfigProps: {
       open: true,
       loading: false,
@@ -284,18 +291,6 @@ function buildProps(
     },
     mcpHubProps: { repositoryPath: "/repo" },
     skillsHubProps: { repositoryPath: "/repo" },
-    promptsPanelProps: {
-      projects: [workspace],
-      repositories: [repo],
-      activeProjectId: "w1",
-      activeRepositoryId: 1,
-      openContext: null,
-      repositoryListLoading: false,
-    },
-    trellisSpecProps: {
-      open: true,
-      project: workspace,
-    },
     repositoryPath: "/repo",
     automationPanelProps: {
       repositories: [repo],
@@ -303,6 +298,11 @@ function buildProps(
       employees: [],
       workflowTemplates: [],
       workflowGraphsByWorkflowId: {},
+    },
+    artifactsPanelProps: {
+      repositories: [repo],
+      activeRepositoryId: repo.id,
+      onOpenRepositoryFile: mock(() => {}),
     },
     ...overrides,
   };
@@ -314,24 +314,24 @@ describe("AuthorPanel", () => {
     const { props } = buildProps();
     const html = renderAuthorPanel(props);
     for (const label of [
-      "智能体角色",
-      "工作流",
+      "工作区",
       "MCP 工具",
       "技能市场",
       "触发器规则",
-      "提示词工坊",
-      "Trellis 规范",
       "引擎环境",
       "扩展市场",
       "助手模板",
-      "执行引擎",
+      "Claude Code 环境",
       "定时自动化",
+      "产物检查台",
       "远程入口",
       "快捷键",
       "Claude 沙箱",
     ]) {
       expect(html).toContain(label);
     }
+    expect(html).not.toContain("智能体角色");
+    expect(html).not.toContain("委派协议");
   });
 
   test("pane change and back callbacks remain shell-owned", () => {
@@ -348,17 +348,23 @@ describe("AuthorPanel", () => {
     expect(setAppSetting).toHaveBeenCalledWith("wise.author.lastPane", "skills");
   });
 
+  test("legacy Author panes are not restored as the default configuration page", async () => {
+    const { setAppSetting } = await import("../../services/appSettingsStore");
+    writeAuthorPaneToStorage("agents");
+    expect(setAppSetting).not.toHaveBeenCalledWith("wise.author.lastPane", "agents");
+  });
+
+  test("workspaces pane renders the workspace list", () => {
+    const { props } = buildProps({ pane: "workspaces" });
+    const html = renderAuthorPanel(props);
+    expect(html).toContain("Wise");
+  });
+
   test("agents pane mounts EmployeeConfigModal and forwards defaultRepositoryIds", () => {
     const { props } = buildProps({ pane: "agents" });
     const html = renderAuthorPanel(props);
     expect(html).toContain('data-stub="agents"');
     expect(html).toContain("agents:2");
-  });
-
-  test("trellis-spec pane mounts ProjectTrellisCenter with the workspace", () => {
-    const { props } = buildProps({ pane: "trellis-spec" });
-    const html = renderAuthorPanel(props);
-    expect(html).toContain("Wise");
   });
 
   test("workflows pane mounts WorkflowConfigModal with the initial workflow id", () => {
@@ -394,12 +400,6 @@ describe("AuthorPanel", () => {
     expect(html).toContain("精选市场");
   });
 
-  test("prompts pane mounts PromptsPanel", () => {
-    const { props } = buildProps({ pane: "prompts" });
-    const html = renderAuthorPanel(props);
-    expect(html).toContain("提示词");
-  });
-
   test("application setting panes mount inside configuration center", () => {
     for (const pane of [
       "claude-config",
@@ -410,6 +410,7 @@ describe("AuthorPanel", () => {
       "extensions",
       "automation",
       "channels",
+      "artifacts",
     ] as const) {
       const { props } = buildProps({ pane });
       renderAuthorPanel(props);

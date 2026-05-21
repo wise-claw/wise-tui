@@ -129,9 +129,9 @@ export function AgentRegistrySection() {
       setTestResult(result);
       setTestedFingerprint(result.ok ? fingerprint : null);
       if (result.ok) {
-        message.success("执行命令已探测通过");
+        message.success("运行命令已探测通过");
       } else {
-        message.error(result.error ?? "执行命令探测失败");
+        message.error(result.error ?? "运行命令探测失败");
       }
     } catch (e) {
       if (e instanceof Error) message.error(e.message);
@@ -154,7 +154,7 @@ export function AgentRegistrySection() {
       setModalOpen(false);
       setTestResult(null);
       setTestedFingerprint(null);
-      message.success("自定义执行引擎已保存");
+      message.success("自定义运行入口已保存");
       await reload(true);
     } catch (e) {
       if (e instanceof Error) message.error(e.message);
@@ -169,7 +169,7 @@ export function AgentRegistrySection() {
       try {
         await deleteCustomAgent(id);
         if (!aliveRef.current) return;
-        message.success("自定义执行引擎已删除");
+        message.success("自定义运行入口已删除");
         await reload(true);
       } catch (e) {
         message.error(e instanceof Error ? e.message : String(e));
@@ -188,8 +188,8 @@ export function AgentRegistrySection() {
     <AuthorPanelPageShell
       className="app-agent-registry-section"
       icon={<ThunderboltOutlined />}
-      title="执行引擎"
-      subtitle="Claude、Codex 和自定义命令"
+      title="Claude Code 运行环境"
+      subtitle="本机 Claude Code 探测与未来运行入口预留"
       actions={
         <Space size={8} wrap>
           <Input
@@ -197,12 +197,12 @@ export function AgentRegistrySection() {
             size="small"
             className="app-agent-registry-section__search"
             prefix={<SearchOutlined />}
-            placeholder="搜索名称、类型、命令或路径"
+            placeholder="搜索运行入口、命令或路径"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
           <Button type="primary" size="small" className="app-agent-registry-btn-add" icon={<PlusOutlined />} onClick={openCreateModal}>
-            新增自定义
+            新增预留入口
           </Button>
           <Button size="small" className="app-agent-registry-btn-reload" icon={<ReloadOutlined />} loading={loading} onClick={() => void reload(true)}>
             重新探测
@@ -210,7 +210,7 @@ export function AgentRegistrySection() {
         </Space>
       }
       toolbar={
-        <AuthorPanelHubTabs aria-label="执行引擎筛选">
+        <AuthorPanelHubTabs aria-label="Claude Code 运行环境筛选">
           <AuthorPanelHubTab
             active={filter === "all"}
             label="全部"
@@ -246,7 +246,7 @@ export function AgentRegistrySection() {
           </div>
           <div className="app-agent-registry-metric-card__content">
             <strong>{stats.total}</strong>
-            <small>总执行引擎</small>
+            <small>总运行入口</small>
           </div>
         </div>
         <div className="app-agent-registry-metric-card app-agent-registry-metric-card--available">
@@ -299,7 +299,7 @@ export function AgentRegistrySection() {
       </AuthorPanelListShell>
 
       <Modal
-        title={editingAgent ? "编辑自定义执行引擎" : "新增自定义执行引擎"}
+        title={editingAgent ? "编辑自定义运行入口" : "新增自定义运行入口"}
         open={modalOpen}
         onCancel={() => setModalOpen(false)}
         footer={[
@@ -323,7 +323,7 @@ export function AgentRegistrySection() {
           initialValues={{ name: "", command: "", argsText: "", envText: "" }}
         >
           <Form.Item name="name" label="名称" rules={[{ required: true, message: "请输入名称" }]}>
-            <Input placeholder="本地模型 CLI" autoComplete="off" />
+            <Input placeholder="备用 CLI 入口" autoComplete="off" />
           </Form.Item>
           <Form.Item name="command" label="命令" rules={[{ required: true, message: "请输入命令" }]}>
             <Input placeholder="/usr/local/bin/my-agent 或 my-agent" autoComplete="off" />
@@ -453,8 +453,8 @@ function AgentRegistryRow({ agent, busy, onEdit, onDelete }: AgentRegistryRowPro
               编辑
             </Button>
             <Popconfirm
-              title="删除自定义执行引擎"
-              description="将移除这条已保存的执行引擎配置。"
+              title="删除自定义运行入口"
+              description="将移除这条已保存的运行入口配置。"
               okText="删除"
               cancelText="取消"
               okButtonProps={{ danger: true }}

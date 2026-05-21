@@ -32,6 +32,8 @@ function sidebarMenuWithDividers(...sections: Array<MenuItem[] | null | undefine
 
 export interface BuildProjectMoreMenuItemsInput {
   isPinned: boolean;
+  trellisEnabled?: boolean;
+  trellisReady?: boolean;
   onAddRepositoryToProject?: boolean;
   onOpenScheduledTasksForProject?: boolean;
   onOpenExecutableTasksForProject?: boolean;
@@ -44,6 +46,8 @@ export interface BuildProjectMoreMenuItemsInput {
 export function buildProjectMoreMenuItems(input: BuildProjectMoreMenuItemsInput): MenuProps["items"] {
   const {
     isPinned,
+    trellisEnabled = false,
+    trellisReady = false,
     onAddRepositoryToProject,
     onOpenScheduledTasksForProject,
     onOpenExecutableTasksForProject,
@@ -59,11 +63,13 @@ export function buildProjectMoreMenuItems(input: BuildProjectMoreMenuItemsInput)
       onAddRepositoryToProject ? { key: "add-repository", label: "关联仓库" } : null,
     ]),
     sidebarMenuSection([
-      { key: "requirements", label: "需求" },
+      trellisEnabled ? { key: "requirements", label: "需求" } : null,
       onOpenScheduledTasksForProject ? { key: "scheduled-tasks", label: "定时任务" } : null,
-      onOpenExecutableTasksForProject ? { key: "executable-tasks", label: "可执行任务" } : null,
+      trellisEnabled && onOpenExecutableTasksForProject ? { key: "executable-tasks", label: "可执行任务" } : null,
     ]),
-    sidebarMenuSection([{ key: "trellis-init", label: "Trellis 初始化" }]),
+    trellisEnabled && !trellisReady
+      ? sidebarMenuSection([{ key: "trellis-init", label: "启用 Wise Trellis" }])
+      : null,
     sidebarMenuSection([
       onReconcileProject
         ? {
@@ -94,6 +100,9 @@ export function buildProjectMoreMenuItems(input: BuildProjectMoreMenuItemsInput)
 }
 
 export interface BuildProjectRepositoryMoreMenuItemsInput {
+  trellisEnabled?: boolean;
+  trellisReady?: boolean;
+  trellisRootActionEnabled?: boolean;
   onOpenRepositoryMainOwner?: boolean;
   onOpenPromptsRepository?: boolean;
   onConfigureSddMode?: boolean;
@@ -110,6 +119,9 @@ export function buildProjectRepositoryMoreMenuItems(
 ): MenuProps["items"] {
   const {
     onOpenRepositoryMainOwner,
+    trellisEnabled = false,
+    trellisReady = false,
+    trellisRootActionEnabled = trellisEnabled,
     onOpenPromptsRepository,
     onConfigureSddMode,
     onOpenScheduledTasks,
@@ -127,13 +139,13 @@ export function buildProjectRepositoryMoreMenuItems(
     sidebarMenuSection([
       onOpenRepositoryMainOwner ? { key: "main-owner", label: "配置 Owner" } : null,
       onConfigureSddMode ? { key: "sdd-mode", label: "SDD 模式" } : null,
-      { key: "trellis-init", label: "Trellis 初始化" },
+      trellisRootActionEnabled && !trellisReady ? { key: "trellis-init", label: "启用 Wise Trellis" } : null,
       onOpenPromptsRepository ? { key: "prompts", label: "提示词" } : null,
     ]),
     sidebarMenuSection([
-      onOpenRequirements ? { key: "requirements", label: "需求" } : null,
+      trellisEnabled && onOpenRequirements ? { key: "requirements", label: "需求" } : null,
       onOpenScheduledTasks ? { key: "scheduled-tasks", label: "定时任务" } : null,
-      onOpenExecutableTasks ? { key: "executable-tasks", label: "可执行任务" } : null,
+      trellisEnabled && onOpenExecutableTasks ? { key: "executable-tasks", label: "可执行任务" } : null,
     ]),
     sidebarMenuSection([
       onCodeGraphGenerateRepository && onCodeGraphViewRepositoryInProject
@@ -154,6 +166,8 @@ export function buildProjectRepositoryMoreMenuItems(
 
 export interface BuildFloatingRepositoryMoreMenuItemsInput {
   joinableProjects: Workspace[];
+  trellisEnabled?: boolean;
+  trellisReady?: boolean;
   onOpenRepositoryMainOwner?: boolean;
   onConfigureSddMode?: boolean;
   onOpenScheduledTasks?: boolean;
@@ -171,6 +185,8 @@ export function buildFloatingRepositoryMoreMenuItems(
 ): MenuProps["items"] {
   const {
     joinableProjects,
+    trellisEnabled = false,
+    trellisReady = false,
     onOpenRepositoryMainOwner,
     onConfigureSddMode,
     onOpenScheduledTasks,
@@ -195,12 +211,12 @@ export function buildFloatingRepositoryMoreMenuItems(
     sidebarMenuSection([
       onOpenRepositoryMainOwner ? { key: "main-owner", label: "主 Owner 智能体…" } : null,
       onConfigureSddMode ? { key: "sdd-mode", label: "SDD 模式" } : null,
-      { key: "trellis-init", label: "Trellis 初始化" },
+      trellisEnabled && !trellisReady ? { key: "trellis-init", label: "启用 Wise Trellis" } : null,
     ]),
     sidebarMenuSection([
-      onOpenRequirements ? { key: "requirements", label: "需求" } : null,
+      trellisEnabled && onOpenRequirements ? { key: "requirements", label: "需求" } : null,
       onOpenScheduledTasks ? { key: "scheduled-tasks", label: "定时任务" } : null,
-      onOpenExecutableTasks ? { key: "executable-tasks", label: "可执行任务" } : null,
+      trellisEnabled && onOpenExecutableTasks ? { key: "executable-tasks", label: "可执行任务" } : null,
     ]),
     sidebarMenuSection([
       onCodeGraphGenerateRepository && onCodeGraphViewFloatingRepository

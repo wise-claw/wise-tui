@@ -3,6 +3,7 @@ import { Button, Space, Spin, Typography } from "antd";
 import type { RefObject } from "react";
 import { SplitRuntimeMessages } from "./SplitRuntimeMessages";
 import type { SplitRetryPhase, SplitRuntimeLogItem } from "./types";
+import type { ClusterRunState } from "../PrdSplitWizard/types";
 
 interface Props {
   visible: boolean;
@@ -10,9 +11,12 @@ interface Props {
   containerRef: RefObject<HTMLDivElement | null>;
   listRef: RefObject<HTMLDivElement | null>;
   logs: SplitRuntimeLogItem[];
+  clusterRuns?: ClusterRunState[];
   retryingPhase: SplitRetryPhase | null;
   onClose: () => void;
   onRetryStage: (phase: SplitRetryPhase) => void;
+  onRetryCluster?: (clusterId: string) => void;
+  onCancelCluster?: (clusterId: string) => void;
 }
 
 export function InlineRuntimePanel({
@@ -21,9 +25,12 @@ export function InlineRuntimePanel({
   containerRef,
   listRef,
   logs,
+  clusterRuns,
   retryingPhase,
   onClose,
   onRetryStage,
+  onRetryCluster,
+  onCancelCluster,
 }: Props) {
   if (!visible) return null;
   return (
@@ -42,9 +49,12 @@ export function InlineRuntimePanel({
       </div>
       <SplitRuntimeMessages
         logs={logs}
+        clusterRuns={clusterRuns}
         listRef={listRef}
         retryingPhase={retryingPhase}
         onRetryStage={onRetryStage}
+        onRetryCluster={onRetryCluster}
+        onCancelCluster={onCancelCluster}
       />
     </div>
   );

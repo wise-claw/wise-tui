@@ -27,7 +27,7 @@ type ViewModeAction =
 
 /**
  * `patch` 的语义：仅当当前 view 与 partial 同 kind 时，浅合并字段。
- * 用于 cockpit 内 `setMissionControlInitialTarget`、code-graph 入口微调等。
+ * 用于 cockpit 内 `setAssistantInitialTarget`、code-graph 入口微调等。
  */
 type ViewModePatch =
   | { kind: "cockpit"; missionId?: string }

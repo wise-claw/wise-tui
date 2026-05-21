@@ -7,6 +7,7 @@ import { RequirementNameModal } from "./RequirementNameModal";
 import { RuntimePromptEditModal } from "./RuntimePromptEditModal";
 import { RequirementInputCard } from "./RequirementInputCard";
 import { TaskResultPanel } from "./TaskResultPanel";
+import { TrellisMissionStrip } from "./TrellisMissionStrip";
 import { reconcileResolvedAnchorRanges } from "./anchorReconcile";
 import { usePrdTaskSplitPanelController } from "./usePrdTaskSplitPanelController";
 
@@ -61,6 +62,7 @@ export function PrdTaskSplitPanel({
     handleDeleteTask,
     handleGenerateExecutableForSplitTask,
     handleGenerateExecutableTasks,
+    handleDispatchPlannedClusters,
     handleImportLegacyPrd,
     handleImportPrdFile,
     handleMoveTaskInExecutionPlan,
@@ -87,6 +89,7 @@ export function PrdTaskSplitPanel({
     message,
     milkdownEditorRef,
     milkdownTaskAnchors,
+    plannedMissionSummary,
     parsing,
     pendingTaskApiSpecById,
     pendingTaskContentById,
@@ -142,6 +145,9 @@ export function PrdTaskSplitPanel({
     splitRuntimeListRef,
     splitRuntimeLogs,
     splitRuntimeVisible,
+    requirementMission,
+    trellisStageItems,
+    trellisTargetSummary,
     openTaskAiPopover,
     taskAiActionLoadingById,
     taskAiOptimizedContentById,
@@ -207,6 +213,7 @@ export function PrdTaskSplitPanel({
         onConfirm={() => void handleConfirmRequirementNameModal()}
       />
       <Space orientation="vertical" size={4} className="app-prd-task-panel__stack">
+        <TrellisMissionStrip target={trellisTargetSummary} stages={trellisStageItems} />
         <Row
           gutter={12}
           className={[
@@ -304,6 +311,7 @@ export function PrdTaskSplitPanel({
               filteredTasks={filteredTasks}
               runtimeVisible={splitRuntimeVisible}
               runtimeLogs={splitRuntimeLogs}
+              clusterRuns={Object.values(requirementMission.state.clusterRuns)}
               runtimeListRef={splitRuntimeListRef}
               retryingPhase={retryingPhase}
               parsing={parsing}
@@ -313,6 +321,7 @@ export function PrdTaskSplitPanel({
               executionFanoutSnapshot={executionFanoutSnapshot}
               materializedExecutionResult={materializedExecutionResult}
               activeResult={activeResult}
+              plannedMissionSummary={plannedMissionSummary}
               taskConfirmFilter={taskConfirmFilter}
               taskConfirmCounts={taskConfirmCounts}
               canGenerateExecutableTasks={canGenerateExecutableTasks}
@@ -442,11 +451,14 @@ export function PrdTaskSplitPanel({
                 }));
               }}
               onGenerateExecutableTasks={handleGenerateExecutableTasks}
+              onDispatchPlannedClusters={() => void handleDispatchPlannedClusters()}
               onMoveTaskInExecutionPlan={(taskId, direction) => void handleMoveTaskInExecutionPlan(taskId, direction)}
               onMoveTaskToExecutionWave={(taskId, waveIndex) => void handleMoveTaskToExecutionWave(taskId, waveIndex)}
               onWorkspaceLayoutChange={setWorkspaceLayout}
               onCloseRuntime={() => setSplitRuntimeVisible(false)}
               onRetryStage={(phase) => { void handleRetrySplitStage(phase); }}
+              onRetryCluster={(clusterId) => { void requirementMission.retryCluster(clusterId); }}
+              onCancelCluster={(clusterId) => { void requirementMission.cancelCluster(clusterId); }}
               onShowRuntime={() => setSplitRuntimeVisible(true)}
             />
           </Col>

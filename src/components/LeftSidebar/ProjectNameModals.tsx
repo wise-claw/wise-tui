@@ -105,7 +105,7 @@ export function ProjectNameModals({
               </span>
             </div>
             <Typography.Text className="app-create-workspace-form__hint" ellipsis>
-              任务编排根目录；代码仓通过「关联仓库」添加。
+              Workspace 工作目录；代码仓通过「关联仓库」添加。
             </Typography.Text>
           </div>
 

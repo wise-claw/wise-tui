@@ -1,5 +1,5 @@
-import { Button, Drawer, Empty, Space, Tag } from "antd";
-import { useEffect, useMemo } from "react";
+import { Button, Drawer, Empty, Space, Tag, message } from "antd";
+import { useEffect, useMemo, useState } from "react";
 import type { ClaudeSession } from "../../types";
 import { ClaudeSessionMessagesColumn } from "../ClaudeSessions/ClaudeSessionMessagesColumn";
 import {
@@ -15,6 +15,7 @@ export interface MonitorHistorySessionTranscriptDrawerProps {
   /** 与监控台一致：用于解析抽屉内会话（可与节流列表分离） */
   transcriptSourceSessions: ClaudeSession[];
   onReloadFullDiskTranscript?: (sessionKey: string) => void | Promise<void>;
+  onCompactSessionHistory?: (sessionId: string) => void | Promise<void>;
   onCancelSession?: (sessionId: string) => void;
   onOpenTaskDetail?: (taskId: string) => void;
 }
@@ -25,9 +26,11 @@ export function MonitorHistorySessionTranscriptDrawer({
   onClose,
   transcriptSourceSessions,
   onReloadFullDiskTranscript,
+  onCompactSessionHistory,
   onCancelSession,
   onOpenTaskDetail,
 }: MonitorHistorySessionTranscriptDrawerProps) {
+  const [compactInFlight, setCompactInFlight] = useState(false);
   const drawerWidth = useMemo(
     () => Math.min(560, typeof window !== "undefined" ? window.innerWidth - 24 : 560),
     [],
@@ -64,6 +67,28 @@ export function MonitorHistorySessionTranscriptDrawer({
     Boolean(onCancelSession) &&
     liveSession != null &&
     (liveSession.status === "running" || liveSession.status === "connecting");
+  const canCompactSession =
+    Boolean(onCompactSessionHistory) &&
+    liveSession != null &&
+    Boolean(liveSession.claudeSessionId?.trim()) &&
+    liveSession.status !== "running" &&
+    liveSession.status !== "connecting" &&
+    !compactInFlight;
+
+  function compactSessionHistory() {
+    if (!onCompactSessionHistory || !liveSession || !canCompactSession) return;
+    setCompactInFlight(true);
+    void Promise.resolve(onCompactSessionHistory(liveSession.id))
+      .then(() => {
+        message.success("会话历史已压缩");
+      })
+      .catch(() => {
+        /* 失败说明已由会话系统消息记录。 */
+      })
+      .finally(() => {
+        setCompactInFlight(false);
+      });
+  }
 
   return (
     <Drawer
@@ -80,6 +105,16 @@ export function MonitorHistorySessionTranscriptDrawer({
             <Tag color={historySessionStatusTagColor(liveSession.status)}>
               {historySessionStatusLabel(liveSession.status)}
             </Tag>
+            {onCompactSessionHistory ? (
+              <Button
+                size="small"
+                loading={compactInFlight}
+                disabled={!canCompactSession}
+                onClick={compactSessionHistory}
+              >
+                压缩
+              </Button>
+            ) : null}
             {canStopLiveSession && onCancelSession ? (
               <Button
                 size="small"

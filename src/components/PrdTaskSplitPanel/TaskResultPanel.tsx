@@ -12,9 +12,13 @@ import { TaskBoardHeader } from "./TaskBoardHeader";
 import { TaskCard } from "./TaskCard";
 import { SplitQualityStrip } from "./SplitQualityStrip";
 import { SplitRuntimeMessages } from "./SplitRuntimeMessages";
-import type { WriteClusterTasksOutput } from "../../services/prdSplit/trellisWriter";
 import type { ExecutionFanoutSnapshot } from "../../services/prdSplit/executionFanout";
 import type { GenerateExecutableTasksResult } from "./usePrdTaskSplitPanelController";
+import type {
+  RequirementMissionMaterializeResult,
+  RequirementMissionPlanSummary,
+} from "./useRequirementMissionController";
+import type { ClusterRunState } from "../PrdSplitWizard/types";
 import type {
   SplitQualitySummary,
   SplitRetryPhase,
@@ -51,6 +55,7 @@ interface Props {
   filteredTasks: TaskItem[];
   runtimeVisible: boolean;
   runtimeLogs: SplitRuntimeLogItem[];
+  clusterRuns: ClusterRunState[];
   runtimeListRef: RefObject<HTMLDivElement | null>;
   retryingPhase: SplitRetryPhase | null;
   parsing: boolean;
@@ -58,8 +63,9 @@ interface Props {
   unmetMenuItems: MenuProps["items"];
   confirmSavingTaskId: string | null;
   executionFanoutSnapshot: ExecutionFanoutSnapshot | null;
-  materializedExecutionResult: WriteClusterTasksOutput | null;
+  materializedExecutionResult: RequirementMissionMaterializeResult | null;
   activeResult: SplitResult | null;
+  plannedMissionSummary: RequirementMissionPlanSummary | null;
   taskConfirmFilter: TaskConfirmFilter;
   taskConfirmCounts: TaskConfirmCounts;
   canGenerateExecutableTasks: boolean;
@@ -107,11 +113,14 @@ interface Props {
   onToggleUnmet: (taskId: string, collapsed: boolean) => void;
   onToggleCheck: (taskId: string, collapsed: boolean) => void;
   onGenerateExecutableTasks: () => Promise<GenerateExecutableTasksResult | false>;
+  onDispatchPlannedClusters: () => void;
   onMoveTaskInExecutionPlan: (taskId: string, direction: "earlier" | "later") => void;
   onMoveTaskToExecutionWave: (taskId: string, waveIndex: number) => void;
   onWorkspaceLayoutChange: (mode: WorkspaceLayoutMode) => void;
   onCloseRuntime: () => void;
   onRetryStage: (phase: SplitRetryPhase) => void;
+  onRetryCluster: (clusterId: string) => void;
+  onCancelCluster: (clusterId: string) => void;
   onShowRuntime: () => void;
 }
 
@@ -123,6 +132,7 @@ export function TaskResultPanel({
   filteredTasks,
   runtimeVisible,
   runtimeLogs,
+  clusterRuns,
   runtimeListRef,
   retryingPhase,
   parsing,
@@ -132,6 +142,7 @@ export function TaskResultPanel({
   executionFanoutSnapshot,
   materializedExecutionResult,
   activeResult,
+  plannedMissionSummary,
   taskConfirmFilter,
   taskConfirmCounts,
   canGenerateExecutableTasks,
@@ -179,11 +190,14 @@ export function TaskResultPanel({
   onToggleUnmet,
   onToggleCheck,
   onGenerateExecutableTasks,
+  onDispatchPlannedClusters,
   onMoveTaskInExecutionPlan,
   onMoveTaskToExecutionWave,
   onWorkspaceLayoutChange,
   onCloseRuntime,
   onRetryStage,
+  onRetryCluster,
+  onCancelCluster,
   onShowRuntime,
 }: Props) {
   const showRuntime = runtimeVisible && (parsing || filteredTasks.length === 0 || runtimeLogs.length > 0);
@@ -193,7 +207,8 @@ export function TaskResultPanel({
   const materializedResult = materializedExecutionResult;
   const showExecutionRuntime = materializedResult !== null && activeResult && !showRuntime && !runtimeQueueHidden;
   const showOrchestration = resultViewMode === "orchestration" && activeResult && filteredTasks.length > 0 && !showRuntime && !showExecutionRuntime;
-  const showTaskList = !showRuntime && !showOrchestration && !showExecutionRuntime;
+  const showPlanPreview = !showRuntime && !activeResult && plannedMissionSummary !== null;
+  const showTaskList = !showRuntime && !showOrchestration && !showExecutionRuntime && !showPlanPreview;
   useEffect(() => {
     setRuntimeQueueHidden(false);
   }, [materializedExecutionResult]);
@@ -294,12 +309,15 @@ export function TaskResultPanel({
                       aria-label="关闭子代理对话面板"
                     />
                   </div>
-                  <SplitRuntimeMessages
-                    logs={runtimeLogs}
-                    listRef={runtimeListRef}
-                    retryingPhase={retryingPhase}
-                    onRetryStage={onRetryStage}
-                  />
+	                  <SplitRuntimeMessages
+	                    logs={runtimeLogs}
+	                    clusterRuns={clusterRuns}
+	                    listRef={runtimeListRef}
+	                    retryingPhase={retryingPhase}
+	                    onRetryStage={onRetryStage}
+	                    onRetryCluster={onRetryCluster}
+	                    onCancelCluster={onCancelCluster}
+	                  />
                 </div>
               ) : (
                 <>
@@ -315,7 +333,7 @@ export function TaskResultPanel({
                       onMoveTaskToWave={onMoveTaskToExecutionWave}
                     />
                   ) : null}
-                  {showExecutionRuntime ? (
+	                  {showExecutionRuntime ? (
                     <ExecutionRuntimeQueue
                       result={activeResult}
                       materializedResult={materializedResult}
@@ -330,8 +348,15 @@ export function TaskResultPanel({
                         setResultViewMode("orchestration");
                       }}
                     />
-                  ) : null}
-                  <div
+	                  ) : null}
+	                  {showPlanPreview ? (
+	                    <PlannedClusterPreview
+	                      summary={plannedMissionSummary}
+	                      parsing={parsing}
+	                      onDispatch={onDispatchPlannedClusters}
+	                    />
+	                  ) : null}
+	                  <div
                     className={[
                       "app-prd-task-panel__task-list",
                       showTaskList ? "" : "is-hidden-for-orchestration",
@@ -472,6 +497,45 @@ function SplitResultStageRail({
         <strong>落盘执行</strong>
         <small>{materialized ? "执行已启动" : canGenerateExecutableTasks ? "写入并派发" : "等待确认"}</small>
       </button>
+    </div>
+  );
+}
+
+function PlannedClusterPreview({
+  summary,
+  parsing,
+  onDispatch,
+}: {
+  summary: RequirementMissionPlanSummary;
+  parsing: boolean;
+  onDispatch: () => void;
+}) {
+  return (
+    <div className="app-prd-task-panel__planned-clusters">
+      <div className="app-prd-task-panel__planned-clusters-head">
+        <div>
+          <Typography.Text strong>Cluster 规划</Typography.Text>
+          <Typography.Text type="secondary">
+            {summary.requirementCount} 条需求 · {summary.clusters.length} 个分组
+          </Typography.Text>
+        </div>
+        <Button type="primary" size="small" loading={parsing} disabled={parsing || summary.clusters.length === 0} onClick={onDispatch}>
+          派发 splitter
+        </Button>
+      </div>
+      <div className="app-prd-task-panel__planned-cluster-list">
+        {summary.clusters.map((cluster, index) => (
+          <div key={cluster.id} className="app-prd-task-panel__planned-cluster-row">
+            <span>C{index + 1}</span>
+            <div>
+              <strong>{cluster.title}</strong>
+              <small>
+                {cluster.id} · requirements: {cluster.requirementIds.join(", ") || "none"}
+              </small>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

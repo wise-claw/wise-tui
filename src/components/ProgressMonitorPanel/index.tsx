@@ -100,6 +100,8 @@ interface Props {
   onCancelOmcDirectBatchInvocation?: (invocationKey: string) => void;
   /** 非活动标签正文已丢弃时，从历史抽屉按需从磁盘拉回完整 jsonl */
   onReloadFullDiskTranscript?: (sessionKey: string) => void | Promise<void>;
+  /** 历史会话抽屉内手动执行 Claude Code `/compact`。 */
+  onCompactSessionHistory?: (sessionId: string) => void | Promise<void>;
   /**
    * 历史会话消息抽屉用：解析 `messages` 与触发磁盘补全时应读「实时」会话列表。
    * 若仅传节流后的 `sessions`，会出现抽屉先显示旧快照里的正文、下一帧同步到已回收内存后的空数组，表现为消息突然消失。
@@ -762,6 +764,7 @@ export function ProgressMonitorPanel({
   onOpenOmcBatchInvocationDetail,
   onCancelOmcDirectBatchInvocation,
   onReloadFullDiskTranscript,
+  onCompactSessionHistory,
   transcriptSourceSessions,
   projectId,
 }: Props) {
@@ -1258,6 +1261,7 @@ export function ProgressMonitorPanel({
         onClose={closeHistoryMessagesDrawer}
         transcriptSourceSessions={sessionsForHistoryTranscript}
         onReloadFullDiskTranscript={onReloadFullDiskTranscript}
+        onCompactSessionHistory={onCompactSessionHistory}
         onCancelSession={onCancelSession}
         onOpenTaskDetail={onOpenTaskDetail}
       />

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION,
-  workspaceBootstrapPluginInstallRefs,
+  setWiseTrellisBootstrapEnabled,
   workspaceBootstrapSelectionToSddMode,
 } from "./workspaceBootstrapAddons";
 
@@ -32,16 +32,34 @@ describe("workspaceBootstrapAddons", () => {
         gsd: false,
         openspec: false,
       }),
-    ).toBe("auto");
+    ).toBe("project_owned");
   });
 
-  test("collects plugin install refs", () => {
+  test("Wise Trellis switch disables all external bootstrap choices", () => {
+    expect(setWiseTrellisBootstrapEnabled(DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION, false)).toMatchObject({
+      trellis: false,
+      openspec: false,
+      omc: false,
+      superpowers: false,
+      gsd: false,
+    });
     expect(
-      workspaceBootstrapPluginInstallRefs({
-        ...DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION,
-        omc: true,
-        gsd: true,
-      }),
-    ).toEqual(["oh-my-claudecode@omc", "gsd@gsd-plugin"]);
+      setWiseTrellisBootstrapEnabled(
+        {
+          trellis: false,
+          openspec: true,
+          omc: true,
+          superpowers: true,
+          gsd: true,
+        },
+        true,
+      ),
+    ).toMatchObject({
+      trellis: true,
+      openspec: false,
+      omc: false,
+      superpowers: false,
+      gsd: false,
+    });
   });
 });

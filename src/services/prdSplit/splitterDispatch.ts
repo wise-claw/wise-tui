@@ -23,8 +23,10 @@ import {
   validateClaudeSplitPayloadStrict,
   type ClaudeSplitStrictValidationIssue,
 } from "../claudeSplitOutputNormalize";
+import { readSnapshotFile } from "../materializePrdSnapshot";
 import type { ClusterPlanItem } from "./clusterPlanner";
 import type { RequirementsIndexV2 } from "./requirementsIndexVersion";
+import { computeIndexVersion } from "./requirementsIndexVersion";
 
 export interface DispatchClusterInput {
   projectRootPath: string;
@@ -89,6 +91,28 @@ export interface CancelClusterRunOutput {
   alreadyFinished: boolean;
 }
 
+export interface RecoverClusterRunInput {
+  runId: string;
+  runDir: string;
+  prd: PrdDocument;
+  cluster: ClusterPlanItem;
+  requirementsIndex: RequirementsIndexV2;
+  context: TaskSplitContext | null;
+}
+
+interface RetryRunResultJson {
+  runId: string;
+  status: "succeeded" | "failed" | "cancelled" | "running";
+  exitCode: number;
+  durationMs: number;
+  clusterId: string;
+  claudeSessionId?: string | null;
+  stdoutPath: string;
+  stderrPath: string;
+  rawResultPath: string | null;
+  error?: string | null;
+}
+
 /** 0 = 无超时，子代理应自行结束或报错 */
 const DEFAULT_SPLITTER_TIMEOUT_MS = 0;
 
@@ -103,6 +127,7 @@ export async function dispatchClusterSplit(input: DispatchClusterInput): Promise
     clusterRequirementIds,
   );
 
+  const clusterRequirementsIndex = filterRequirementsIndexToCluster(input.requirementsIndex, clusterRequirementIds);
   const clusterPayload = buildClusterMetaJson(input.cluster);
   const outputSchema = OUTPUT_SCHEMA_JSON;
   const payload = buildSplitRequestPayload({
@@ -123,7 +148,7 @@ export async function dispatchClusterSplit(input: DispatchClusterInput): Promise
   const bundle: Record<string, string> = {
     ...payload.bundle,
     "cluster.json": clusterPayload,
-    "requirements-index.json": JSON.stringify(input.requirementsIndex, null, 2),
+    "requirements-index.json": JSON.stringify(clusterRequirementsIndex, null, 2),
   };
 
   const prompt = composeSplitterPrompt({
@@ -178,8 +203,11 @@ export async function dispatchClusterSplit(input: DispatchClusterInput): Promise
 
   const validation = validateClaudeSplitPayloadStrict({
     payload: raw.rawOutput,
-    source: clusterFilteredPrd,
+    source: input.prd,
   });
+  const clusterScopeIssues = validation.ok
+    ? validateClusterRequirementScope(raw.rawOutput, input.cluster)
+    : [];
   if (!validation.ok) {
     return {
       raw,
@@ -188,10 +216,18 @@ export async function dispatchClusterSplit(input: DispatchClusterInput): Promise
       errors: [...errors, `输出未通过 strict 校验（${validation.issues.length} 条 issue）`],
     };
   }
+  if (clusterScopeIssues.length > 0) {
+    return {
+      raw,
+      normalized: null,
+      validationIssues: clusterScopeIssues,
+      errors: [...errors, `输出引用了非本 cluster 的 requirement id（${clusterScopeIssues.length} 条 issue）`],
+    };
+  }
 
   const normalized = normalizeClaudeSplitOutputToSplitResult({
     payload: raw.rawOutput,
-    source: clusterFilteredPrd,
+    source: input.prd,
     context: input.context,
   });
 
@@ -215,6 +251,81 @@ export async function retryClusterFromRunDir(
       model: input.model ?? null,
     },
   });
+}
+
+export async function recoverClusterRunFromRunDir(
+  input: RecoverClusterRunInput,
+): Promise<DispatchClusterResult> {
+  const resultJsonPath = `${input.runDir.replace(/\/+$/, "")}/run-result.json`;
+  const resultJson = parseRetryRunResultJson(await readSnapshotFile(resultJsonPath), resultJsonPath);
+  const runDir = input.runDir.replace(/\/+$/, "");
+  const rawResultPath = resultJson.rawResultPath ?? `${runDir}/split-result.raw.json`;
+  const rawOutput = await readRetryRawOutput(rawResultPath);
+  const raw: DispatchClusterRawOutput = {
+    runId: resultJson.runId || input.runId,
+    runDir,
+    exitCode: resultJson.exitCode,
+    durationMs: resultJson.durationMs,
+    stdoutPath: resultJson.stdoutPath || `${runDir}/claude.stdout.log`,
+    stderrPath: resultJson.stderrPath || `${runDir}/claude.stderr.log`,
+    rawResultPath,
+    rawOutput,
+    stdoutTruncatedPreview: "",
+    claudeSessionId: resultJson.claudeSessionId ?? null,
+  };
+  const errors = resultJson.error ? [resultJson.error] : [];
+  if (resultJson.status !== "succeeded") {
+    return {
+      raw,
+      normalized: null,
+      validationIssues: [],
+      errors: errors.length > 0 ? errors : [`retry run ended with status: ${resultJson.status}`],
+    };
+  }
+  if (rawOutput == null) {
+    return {
+      raw,
+      normalized: null,
+      validationIssues: [],
+      errors: [
+        ...errors,
+        formatMissingJsonError(raw),
+      ],
+    };
+  }
+  const validation = validateClaudeSplitPayloadStrict({
+    payload: rawOutput,
+    source: input.prd,
+  });
+  const clusterScopeIssues = validation.ok
+    ? validateClusterRequirementScope(rawOutput, input.cluster)
+    : [];
+  if (!validation.ok) {
+    return {
+      raw,
+      normalized: null,
+      validationIssues: validation.issues,
+      errors: [...errors, `输出未通过 strict 校验（${validation.issues.length} 条 issue）`],
+    };
+  }
+  if (clusterScopeIssues.length > 0) {
+    return {
+      raw,
+      normalized: null,
+      validationIssues: clusterScopeIssues,
+      errors: [...errors, `输出引用了非本 cluster 的 requirement id（${clusterScopeIssues.length} 条 issue）`],
+    };
+  }
+  return {
+    raw,
+    normalized: normalizeClaudeSplitOutputToSplitResult({
+      payload: rawOutput,
+      source: input.prd,
+      context: input.context,
+    }),
+    validationIssues: [],
+    errors,
+  };
 }
 
 export async function cancelClusterRun(input: CancelClusterRunInput): Promise<CancelClusterRunOutput> {
@@ -325,6 +436,20 @@ function buildClusterMetaJson(cluster: ClusterPlanItem): string {
   );
 }
 
+function filterRequirementsIndexToCluster(
+  index: RequirementsIndexV2,
+  clusterRequirementIds: Set<string>,
+): RequirementsIndexV2 {
+  if (clusterRequirementIds.size === 0) return index;
+  const requirements = index.requirements.filter((entry) => clusterRequirementIds.has(entry.id));
+  if (requirements.length === 0) return index;
+  return {
+    schemaVersion: 2,
+    version: computeIndexVersion(requirements),
+    requirements,
+  };
+}
+
 /** 把全量 PRD 收窄到只含 cluster 关联的 requirements；其他段落保留以利上下文。 */
 function filterPrdToClusterRequirements(
   prd: PrdDocument,
@@ -347,6 +472,31 @@ function filterPrdToClusterRequirements(
   };
 }
 
+function validateClusterRequirementScope(
+  payload: unknown,
+  cluster: ClusterPlanItem,
+): ClaudeSplitStrictValidationIssue[] {
+  if (cluster.requirementIds.length === 0) return [];
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return [];
+  const root = payload as Record<string, unknown>;
+  const tasks = Array.isArray(root.tasks) ? root.tasks : [];
+  const allowed = new Set(cluster.requirementIds);
+  const issues: ClaudeSplitStrictValidationIssue[] = [];
+  tasks.forEach((task, index) => {
+    if (!task || typeof task !== "object" || Array.isArray(task)) return;
+    const rawTask = task as Record<string, unknown>;
+    const taskId = typeof rawTask.id === "string" && rawTask.id.trim() ? rawTask.id.trim() : `task@${index + 1}`;
+    const ids = readStringArray(rawTask.sourceRequirementIds ?? rawTask.source_requirement_ids);
+    const outOfScope = ids.filter((id) => !allowed.has(id));
+    if (outOfScope.length === 0) return;
+    issues.push({
+      path: `tasks[${index}].sourceRequirementIds`,
+      message: `${taskId} 引用了非本 cluster 的 requirement id: ${outOfScope.join(", ")}`,
+    });
+  });
+  return issues;
+}
+
 function emptyRaw(): DispatchClusterRawOutput {
   return {
     runId: "",
@@ -360,6 +510,67 @@ function emptyRaw(): DispatchClusterRawOutput {
     stdoutTruncatedPreview: "",
     claudeSessionId: null,
   };
+}
+
+function parseRetryRunResultJson(raw: string, path: string): RetryRunResultJson {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`解析 retry run-result.json 失败 (${path}): ${message}`);
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`retry run-result.json 不是对象: ${path}`);
+  }
+  const value = parsed as Record<string, unknown>;
+  const runId = readString(value.runId);
+  const status = readStatus(value.status);
+  const rawResultPath = readString(value.rawResultPath);
+  if (!runId || !status) {
+    throw new Error(`retry run-result.json 缺少 runId/status: ${path}`);
+  }
+  return {
+    runId,
+    status,
+    exitCode: readNumber(value.exitCode) ?? (status === "succeeded" ? 0 : -1),
+    durationMs: readNumber(value.durationMs) ?? 0,
+    clusterId: readString(value.clusterId) ?? "",
+    claudeSessionId: readString(value.claudeSessionId),
+    stdoutPath: readString(value.stdoutPath) ?? "",
+    stderrPath: readString(value.stderrPath) ?? "",
+    rawResultPath,
+    error: readString(value.error),
+  };
+}
+
+async function readRetryRawOutput(rawResultPath: string): Promise<unknown> {
+  const raw = await readSnapshotFile(rawResultPath).catch(() => "");
+  if (!raw.trim()) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function readString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function readStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => readString(item))
+    .filter((item): item is string => Boolean(item));
+}
+
+function readNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function readStatus(value: unknown): RetryRunResultJson["status"] | null {
+  return value === "succeeded" || value === "failed" || value === "cancelled" || value === "running" ? value : null;
 }
 
 const OUTPUT_SCHEMA_JSON = JSON.stringify(

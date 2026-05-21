@@ -6,7 +6,7 @@ export type AssistantEngineBindingDot = "on" | "warn" | "off";
 
 export interface AssistantEngineBindingStatus {
   engineId: string;
-  label: "引擎可用" | "未检测" | "不可用";
+  label: "Claude Code 就绪" | "预留入口未检测" | "运行入口不可用";
   tone: AssistantEngineBindingTone;
   dotTone: AssistantEngineBindingDot;
   detail: string;
@@ -41,17 +41,17 @@ export function resolveAssistantEngineBinding(
   if (!agent) {
     return {
       engineId,
-      label: "未检测",
+      label: "预留入口未检测",
       tone: "warning",
       dotTone: "warn",
-      detail: "执行入口未登记",
+      detail: "运行入口未登记",
     };
   }
 
   if (!agent.available) {
     return {
       engineId,
-      label: "不可用",
+      label: "运行入口不可用",
       tone: "danger",
       dotTone: "off",
       detail: agent.failureReason?.trim() || agent.name,
@@ -60,9 +60,9 @@ export function resolveAssistantEngineBinding(
 
   return {
     engineId,
-    label: "引擎可用",
-    tone: "success",
-    dotTone: "on",
+    label: agent.kind === "claude" ? "Claude Code 就绪" : "预留入口未检测",
+    tone: agent.kind === "claude" ? "success" : "warning",
+    dotTone: agent.kind === "claude" ? "on" : "warn",
     detail: agent.name,
   };
 }
@@ -74,9 +74,9 @@ export function summarizeAssistantEngineBindings(
   return assistants.reduce<AssistantEngineBindingSummary>(
     (summary, assistant) => {
       const status = resolveAssistantEngineBinding(assistant, agentIndex);
-      if (status.label === "引擎可用") {
+      if (status.label === "Claude Code 就绪") {
         summary.available += 1;
-      } else if (status.label === "不可用") {
+      } else if (status.label === "运行入口不可用") {
         summary.unavailable += 1;
       } else {
         summary.undetected += 1;

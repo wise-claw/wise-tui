@@ -2,7 +2,6 @@ import { CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, LoadingO
 import { Button } from "antd";
 import { useMemo } from "react";
 import type { SplitResult } from "../../types";
-import type { WriteClusterTasksOutput } from "../../services/prdSplit/trellisWriter";
 import type {
   ExecutionFanoutSnapshot,
   ExecutionFanoutTaskSnapshot,
@@ -11,10 +10,11 @@ import type {
 } from "../../services/prdSplit/executionFanout";
 import { taskRoleChineseLabel, taskRoleTagModifierClass } from "../../utils/repositoryType";
 import { buildExecutionOrchestrationModel, type TaskOrchestrationItem } from "./executionOrchestrationModel";
+import type { RequirementMissionMaterializeResult } from "./useRequirementMissionController";
 
 interface Props {
   result: SplitResult;
-  materializedResult: WriteClusterTasksOutput | null;
+  materializedResult: RequirementMissionMaterializeResult | null;
   fanoutSnapshot: ExecutionFanoutSnapshot | null;
   selectedTaskId: string | null;
   onSelectTask: (taskId: string) => void;

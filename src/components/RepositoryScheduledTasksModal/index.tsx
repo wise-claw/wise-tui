@@ -338,7 +338,7 @@ export function RepositoryScheduledTasksModal({
       >
         <div className="app-scheduled-tasks-modal__toolbar">
           <Typography.Paragraph className="app-scheduled-tasks-modal__hint" style={{ marginBottom: 0 }}>
-            按 Cron 在后台触发：向当前仓库绑定主会话发起一次与手动「执行」相同的 Claude Code 调用；可选员工子标签。应用需保持运行；主会话非空闲时本轮跳过。
+            按 Cron 在后台触发：向当前 Repo 绑定的执行会话发起一次与手动「执行」相同的 Claude Code 调用；可选员工子标签。应用需保持运行；执行会话非空闲时本轮跳过。
           </Typography.Paragraph>
           <Button type="primary" size="small" icon={<PlusOutlined />} onClick={openCreate}>
             新建
@@ -407,13 +407,13 @@ export function RepositoryScheduledTasksModal({
             label="执行员工"
             extra={(
               <span className="app-scheduled-tasks-modal__mono-muted">
-                已参与任意团队流程（阶段指派或画布节点）的员工不可选；请使用主会话或其他员工。
+                已参与任意团队流程（阶段指派或画布节点）的员工不可选；请使用 Repo 执行会话或其他员工。
               </span>
             )}
           >
             <Select
               allowClear
-              placeholder="主会话（仓库绑定标签）"
+              placeholder="Repo 执行会话（仓库绑定标签）"
               options={scheduledTaskEmployeeSelectOptions}
             />
           </Form.Item>

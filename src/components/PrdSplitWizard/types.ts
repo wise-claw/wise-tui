@@ -1,5 +1,5 @@
 /**
- * Wizard state machine types for PrdSplitWizard.
+ * Headless requirement mission state machine types.
  *
  * Flow:
  *   idle → input → plan → dispatch → review → writing → done
@@ -107,7 +107,7 @@ export interface ClusterEditState {
 
 export interface WizardState {
   stage: WizardStage;
-  /** Active Mission ledger id for this wizard run, once Mission Control has created/resumed it. */
+  /** Active Mission ledger id for this requirement run. */
   activeMissionId: string | null;
   /** 当前 wizard 关联的项目根；从入参或下拉选择。 */
   project: ProjectRef | null;

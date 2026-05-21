@@ -30,11 +30,11 @@ export function filterAgents(
 }
 
 export function getEmptyDescription(filter: AgentRegistryFilter, query: string): string {
-  if (query.trim()) return "没有匹配的执行引擎";
-  if (filter === "available") return "当前没有可用执行引擎，请重新探测或新增自定义命令";
-  if (filter === "custom") return "还没有自定义执行入口";
-  if (filter === "errors") return "没有异常执行引擎";
-  return "暂未探测到执行引擎";
+  if (query.trim()) return "没有匹配的运行入口";
+  if (filter === "available") return "当前没有可用运行入口，请重新探测或新增预留命令";
+  if (filter === "custom") return "还没有自定义预留入口";
+  if (filter === "errors") return "没有异常运行入口";
+  return "暂未探测到 Claude Code 运行入口";
 }
 
 export function getAgentKindLabel(kind: DetectedAgent["kind"]): string {
@@ -60,9 +60,10 @@ export function describeAgentRuntime(agent: DetectedAgent): string {
   if (isAgentKind(agent, "custom")) {
     const args = agent.args.length === 0 ? "无默认参数" : `${agent.args.length} 个默认参数`;
     const env = Object.keys(agent.env).length;
-    return `自定义命令 · ${args} · ${env} 个环境变量`;
+    return `预留命令 · ${args} · ${env} 个环境变量`;
   }
-  return `自动探测 · ${agent.command} · ${agent.available ? "可参与团队协作 / 定时自动化调度" : "等待本机命令就绪"}`;
+  const runtimeScope = agent.kind === "claude" ? "当前主运行时" : "未来运行入口预留";
+  return `自动探测 · ${agent.command} · ${runtimeScope} · ${agent.available ? "本机命令就绪" : "等待本机命令就绪"}`;
 }
 
 export function formatDetectedAt(value: string): string {

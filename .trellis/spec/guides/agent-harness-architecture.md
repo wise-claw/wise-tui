@@ -205,7 +205,7 @@ type CockpitSubMode =
 - `conversation`：进入助手工作台。当前内置需求助手渲染 `AssistantHeader + PrdTaskSplitPanel`，左侧是 PRD 输入 / 导入 / Skills / MCP / 拆分配置，右侧在运行中展示 Claude subagent 过程，完成后展示拆分任务并可“重看过程”。
 - 切换由 `CockpitSurface` 内 `useState` 管理，挂载策略见 `agent-harness-architecture` 引用文档（task `05-18-assistant-hub-builtin-prd-split`）。
 
-**等价旧组件**：`MissionControl.tsx` 仍保留为兼容内核；新助手入口优先复用 `PrdTaskSplitPanel`，避免把助手页扩成新的 ChatPane / ArtifactPane 产品。
+**等价旧组件**：`MissionControl.tsx` 全屏壳不再保留。新助手入口复用 `PrdTaskSplitPanel`，运行能力保留在 headless mission actions、ledger hook 与 Inspector 透镜里，避免把助手页扩成新的 ChatPane / ArtifactPane 产品。
 
 ---
 
@@ -322,15 +322,16 @@ mission_runs.workflow_snapshot_id  -> trellis_workflow_snapshots.id
 | 旧名 | 新名 | 含义 |
 |------|------|------|
 | 项目 | **Workspace** | 一组共享 Trellis + 共享 Mission 的仓库（monorepo 或多仓） |
-| 游离仓库 | **Standalone Repo** | 单仓快速接入，**不强制 Trellis**，**不进 Mission Control** |
+| 游离仓库 | **Standalone Repo** | 单仓快速接入，可在仓库路径上启用 Trellis；不再进入旧 MissionControl 全屏页 |
 
 **产品规则**：
 
-1. **Standalone Repo 只跑 Chat 模式**。能用 Claude Code、git、文件编辑、code graph，但 Mission Control / Workflow / Author 域功能默认隐藏。
-2. **Workspace 才是 Wise 的"主菜"**。Trellis 默认嵌入，Mission Control 是它的主屏。
+1. **Standalone Repo 是一等入口**。能用 Claude Code、git、文件编辑、code graph；检测到 `.trellis` 后同样可打开需求助手，但 Trellis root 使用仓库路径自身。
+2. **Workspace 才是 Wise 的调度边界**。Trellis 默认嵌入，需求助手工作台以 Workspace rootPath 作为事实源，成员 repo 只是执行目标。
 3. **Standalone Repo 可以"升格"为 Workspace**（已有 `handlePromoteFloatingRepositoryToProject`），升格意味着接入 Trellis。
 4. **Workspace rootPath 是 Trellis/运行时根，不是成员仓库的物理边界**。手动关联仓库允许任意磁盘路径；`重新初始化` 只自动扫描 rootPath 下的 Git 仓库。
-5. UI 不必立刻改名，但所有新写的代码、文档、注释统一用 Workspace / Standalone Repo。
+5. **Workspace 主会话属于 Workspace rootPath**。成员 repo 行打开的是 **Repo 执行会话**：cwd 是 repo path，继承 Workspace 的 Trellis 契约，但对话历史与 Workspace 主会话隔离，适合作为被指派后的局部实现窗口。
+6. UI 不必立刻改名，但所有新写的代码、文档、注释统一用 Workspace / Standalone Repo。
 
 ---
 
@@ -367,7 +368,7 @@ mission_runs.workflow_snapshot_id  -> trellis_workflow_snapshots.id
 
 > 2026-05-18 修订：`Prompts` 与 `Trellis Spec` 两个 Tab 已从 Author Drawer 移除。
 > - 提示词工坊（含 PRD 拆分提示词的项目层 / 仓库层 / 助手层覆盖）合并到 `AssistantSettingsDrawer` 的 `Prompts` Tab，按 scope 切换；存储统一到 `assistant_overrides` 表。
-> - Trellis 规范库拆为两处：`AssistantSettingsDrawer` 的 `Specs` Tab（可写）+ `InspectTool { kind: "spec-library" }`（只读速览）。
+> - Trellis 规范编辑收敛到 Author 工作区里的 `ProjectTrellisCenter`，不再保留旧规范库兼容透镜。
 > - 因此 Author Drawer 当前 Tab 集合为：Workspaces / Agents / Workflows / MCP / Skills / Hooks（外加生态与运行设置组的若干 Tab）。`AuthorPane` union 中 `prompts` 与 `trellis-spec` 已下线。
 
 ### P4 · Trellis ↔ Mission 双写补全 `[2 周，含 05-16 F1/F4/F7]`
@@ -406,7 +407,7 @@ mission_runs.workflow_snapshot_id  -> trellis_workflow_snapshots.id
 | 2026-05-18 | D13 收敛：需求助手 conversation 先复用 `PrdTaskSplitPanel`，不实现独立 ChatPane / ArtifactPane | 先完成 AionUI 式助手壳与 Wise 现有需求拆分能力集成，避免一次性重写对话系统 |
 | 2026-05-18 | 需求助手右侧运行过程化：运行中展示 Claude subagent 日志，完成后展示拆分任务并可重看过程 | 匹配“先看过程，结果生成后看任务”的助手工作台心智 |
 | 2026-05-18 | 提示词覆盖统一到 `assistant_overrides(assistant_id, scope)` | 助手层 / 项目层 / 仓库层共用一表，删除 Author/prompts |
-| 2026-05-18 | ProjectTrellisCenter 解体：Runtime/Workflow/SpecTimeline 降为 InspectTool；SpecLibrary 进 AssistantSettingsDrawer + InspectTool | Author 配置 Tab 不再混入运行态/观察态，符合 §2 三域分层 |
+| 2026-05-18 | ProjectTrellisCenter 解体：Runtime/Workflow/SpecTimeline 降为 InspectTool；旧规范库兼容透镜后续收敛回 Author 工作区编辑中心 | Author 配置 Tab 不再混入运行态/观察态，符合 §2 三域分层 |
 | 2026-05-18 | 三张审计表加 `assistant_id` 列，旧行 NULL = 前助手时代；mission_runs 加 task_dir | 不回填，UI 兜底显示"早期版本" |
 
 ---

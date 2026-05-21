@@ -24,8 +24,8 @@ describe("AgentRegistrySection", () => {
     const { AgentRegistrySection } = await import("./AgentRegistrySection");
     const html = renderToStaticMarkup(<AgentRegistrySection />);
 
-    expect(html).toContain("新增自定义");
+    expect(html).toContain("新增预留入口");
     expect(html).toContain("重新探测");
-    expect(html).toContain("暂未探测到执行引擎");
+    expect(html).toContain("暂未探测到 Claude Code 运行入口");
   });
 });

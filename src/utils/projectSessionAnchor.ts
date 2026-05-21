@@ -7,7 +7,7 @@ export interface ProjectSessionAnchor {
   path: string;
   /** 新主会话写入 `ClaudeSession.repositoryName` 的展示名。 */
   displayName: string;
-  /** true 表示锚定在项目根目录（多仓 wise_trellis 项目）；false 表示锚定在某个具体成员仓库。 */
+  /** true 表示锚定在 Workspace 根目录；false 表示锚定在某个具体成员仓库。 */
   isProjectRooted: boolean;
 }
 
@@ -48,8 +48,9 @@ function isStrictParentRepositoryPath(parentKey: string, childKey: string): bool
 /**
  * 计算项目级主会话的物理锚点。
  *
- * - 多仓（≥2 成员）→ 优先 `rootPath`；否则用成员路径的公共父目录；不与任一成员仓路径重合。
- * - 单仓 → 锚定该成员仓（与历史 per-repo 退化一致）。
+ * - 有 `rootPath` → 一律锚定 Workspace 根目录；单仓 Workspace 不再自动退化成 repo 主会话。
+ * - 无 `rootPath` 的多仓 → 用成员路径的公共父目录；不与任一成员仓路径重合。
+ * - 无 `rootPath` 的单仓 → 兼容历史 per-repo 退化。
  */
 export function resolveProjectMainSessionAnchor(
   project: ProjectItem,
@@ -61,14 +62,15 @@ export function resolveProjectMainSessionAnchor(
     .filter((repo): repo is Repository => Boolean(repo));
   const trimmedRootPath = (project.rootPath ?? "").trim();
 
+  if (trimmedRootPath.length > 0) {
+    return {
+      path: trimmedRootPath,
+      displayName: `Project: ${project.name}`,
+      isProjectRooted: true,
+    };
+  }
+
   if (memberRepos.length >= 2) {
-    if (trimmedRootPath.length > 0) {
-      return {
-        path: trimmedRootPath,
-        displayName: `Project: ${project.name}`,
-        isProjectRooted: true,
-      };
-    }
     const memberKeys = memberRepos.map((repo) => normalizeRepositoryPathKey(repo.path));
     const commonPrefix = longestCommonRepositoryPathPrefix(memberRepos.map((repo) => repo.path));
     const commonKey = normalizeRepositoryPathKey(commonPrefix);
@@ -86,14 +88,6 @@ export function resolveProjectMainSessionAnchor(
       path: "",
       displayName: project.name,
       isProjectRooted: false,
-    };
-  }
-
-  if (memberRepos.length === 0 && trimmedRootPath.length > 0) {
-    return {
-      path: trimmedRootPath,
-      displayName: `Project: ${project.name}`,
-      isProjectRooted: true,
     };
   }
 

@@ -1,8 +1,8 @@
 /**
- * 状态机 hook：把 PrdSplitWizard 的阶段流转封装为 reducer + 显式 action 接口。
+ * Headless requirement mission state machine.
  */
 
-import { useCallback, useMemo, useReducer } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { TaskSplitContext } from "../../types";
 import type { ClusterPlan, ClusterPlanItem, PlannerRepo } from "../../services/prdSplit/clusterPlanner";
@@ -44,6 +44,7 @@ export type Action =
   | { type: "set-project"; project: ProjectRef | null; repositories: PlannerRepo[] }
   | { type: "set-selected-repos"; ids: number[] }
   | { type: "set-prd-markdown"; markdown: string }
+  | { type: "parse-plan-start"; markdown: string }
   | { type: "go-to-plan"; plan: ClusterPlan; prd: ReturnType<typeof prdDocumentFromMarkdownFragment>; index: RequirementsIndexV2 }
   | { type: "set-existing-parents"; existing: Map<string, ExistingParentRef> | null; diffByCluster: Record<string, ClusterDiffStatus> }
   | { type: "set-reuse-existing-parents"; value: boolean }
@@ -96,6 +97,8 @@ export function reducer(state: WizardState, action: Action): WizardState {
       return { ...state, selectedRepositoryIds: action.ids };
     case "set-prd-markdown":
       return { ...state, prdMarkdown: action.markdown };
+    case "parse-plan-start":
+      return { ...state, prdMarkdown: action.markdown, globalError: null };
     case "go-to-plan": {
       const edits = emptyClusterPlanEdits();
       return {
@@ -450,6 +453,7 @@ export interface UseSplitWizardStateApi {
   setPrdMarkdown(markdown: string): void;
   /** 解析 PRD → 构建 requirements-index v2 → 用 selectedRepositoryIds 派生 ClusterPlan，并跳到 plan 阶段。 */
   parseAndPlan(options?: { maxRequirementsPerCluster?: number }): Promise<{ ok: true } | { ok: false; reason: string }>;
+  parseAndPlanMarkdown(markdown: string, options?: { maxRequirementsPerCluster?: number }): Promise<{ ok: true } | { ok: false; reason: string }>;
   /** 在 plan 阶段调用：扫描项目下已有父任务并算每个 cluster 的 diff 状态。 */
   refreshExistingParents(): Promise<void>;
   setReuseExistingParents(value: boolean): void;
@@ -486,11 +490,22 @@ export interface UseSplitWizardStateApi {
 }
 
 export function useSplitWizardState(): UseSplitWizardStateApi {
-  const [state, dispatch] = useReducer(reducer, emptyWizardState());
+  const [state, setState] = useState(() => emptyWizardState());
+  const stateRef = useRef(state);
 
-  const parseAndPlan = useCallback<UseSplitWizardStateApi["parseAndPlan"]>(
-    async (options) => {
-      const markdown = state.prdMarkdown.trim();
+  const dispatch = useCallback((action: Action) => {
+    const next = reducer(stateRef.current, action);
+    stateRef.current = next;
+    setState(next);
+  }, []);
+
+  const parseAndPlanFromMarkdown = useCallback(
+    async (
+      markdownInput: string,
+      options?: { maxRequirementsPerCluster?: number },
+    ): Promise<{ ok: true } | { ok: false; reason: string }> => {
+      const current = stateRef.current;
+      const markdown = markdownInput.trim();
       if (!markdown) return { ok: false, reason: "请粘贴 PRD Markdown 后再继续。" };
       const prd = prdDocumentFromMarkdownFragment(markdown);
       const rawIndex = buildRequirementsIndex(prd);
@@ -501,13 +516,13 @@ export function useSplitWizardState(): UseSplitWizardStateApi {
       if (upgraded.requirements.length === 0) {
         return { ok: false, reason: "PRD 中未识别到任何需求条目，请补全功能 / 非功能 / 验收章节。" };
       }
-      const repos = state.selectedRepositoryIds.length === 0
-        ? state.repositories
-        : state.repositories.filter((r) => state.selectedRepositoryIds.includes(r.id));
+      const repos = current.selectedRepositoryIds.length === 0
+        ? current.repositories
+        : current.repositories.filter((r) => current.selectedRepositoryIds.includes(r.id));
 
       // 多仓库时用 AI 判断每条需求归属哪个仓库
       let repoAssignments: Record<string, number> | undefined;
-      if (repos.length > 1 && state.project?.rootPath) {
+      if (repos.length > 1 && current.project?.rootPath) {
         try {
           const reposInfo = repos.map((r) => ({ id: r.id, name: r.name, type: r.type }));
           const prompt = [
@@ -527,7 +542,7 @@ export function useSplitWizardState(): UseSplitWizardStateApi {
           ].join("\n");
 
           const stdout = await invoke<string>("run_claude_quick", {
-            projectPath: state.project.rootPath,
+            projectPath: current.project.rootPath,
             prompt,
             timeoutMs: 60_000,
           });
@@ -549,23 +564,37 @@ export function useSplitWizardState(): UseSplitWizardStateApi {
         },
       });
       dispatch({ type: "go-to-plan", plan, prd, index: upgraded });
-      return { ok: true };
+      return { ok: true as const };
     },
-    [state.prdMarkdown, state.repositories, state.selectedRepositoryIds, state.project?.rootPath],
+    [dispatch],
+  );
+
+  const parseAndPlan = useCallback<UseSplitWizardStateApi["parseAndPlan"]>(
+    async (options) => parseAndPlanFromMarkdown(stateRef.current.prdMarkdown, options),
+    [parseAndPlanFromMarkdown],
+  );
+
+  const parseAndPlanMarkdown = useCallback<UseSplitWizardStateApi["parseAndPlanMarkdown"]>(
+    async (markdown, options) => {
+      dispatch({ type: "parse-plan-start", markdown });
+      return parseAndPlanFromMarkdown(markdown, options);
+    },
+    [parseAndPlanFromMarkdown],
   );
 
   const refreshExistingParents = useCallback<UseSplitWizardStateApi["refreshExistingParents"]>(
     async () => {
-      if (!state.project || !state.plan || !state.requirementsIndex) return;
+      const current = stateRef.current;
+      if (!current.project || !current.plan || !current.requirementsIndex) return;
       try {
         const scanned = await scanProjectParentsAcrossRoots([
-          state.project.rootPath,
-          ...state.repositories.map((repo) => repo.path),
+          current.project.rootPath,
+          ...current.repositories.map((repo) => repo.path),
         ]);
         const indexed = indexParentsByClusterId(scanned);
         const diffByCluster = computeDiffByCluster(
-          state.plan.clusters,
-          state.requirementsIndex,
+          current.plan.clusters,
+          current.requirementsIndex,
           indexed,
         );
         dispatch({ type: "set-existing-parents", existing: indexed, diffByCluster });
@@ -574,12 +603,14 @@ export function useSplitWizardState(): UseSplitWizardStateApi {
         dispatch({ type: "set-global-error", error: `扫描历史父任务失败：${message}` });
       }
     },
-    [state.project, state.plan, state.requirementsIndex],
+    [dispatch],
   );
 
   return useMemo<UseSplitWizardStateApi>(
     () => ({
-      state,
+      get state() {
+        return stateRef.current;
+      },
       reset: (project, repositories, context) =>
         dispatch({
           type: "reset",
@@ -593,6 +624,7 @@ export function useSplitWizardState(): UseSplitWizardStateApi {
       setSelectedRepos: (ids) => dispatch({ type: "set-selected-repos", ids }),
       setPrdMarkdown: (markdown) => dispatch({ type: "set-prd-markdown", markdown }),
       parseAndPlan,
+      parseAndPlanMarkdown,
       refreshExistingParents,
       setReuseExistingParents: (value) => dispatch({ type: "set-reuse-existing-parents", value }),
       setDispatchOnlyDirty: (value) => dispatch({ type: "set-dispatch-only-dirty", value }),
@@ -632,7 +664,7 @@ export function useSplitWizardState(): UseSplitWizardStateApi {
       clearClusterNeedsResplit: (clusterId) => dispatch({ type: "clear-cluster-needs-resplit", clusterId }),
       resetClusterPlanEdits: () => dispatch({ type: "reset-cluster-plan-edits" }),
     }),
-    [state, parseAndPlan, refreshExistingParents],
+    [state, parseAndPlan, parseAndPlanMarkdown, refreshExistingParents],
   );
 }
 

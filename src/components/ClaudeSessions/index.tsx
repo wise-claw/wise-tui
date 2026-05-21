@@ -689,6 +689,7 @@ export function Topbar({
 
   const topbarShowsProject = activeWorkspaceFocus === "project" && activeProject != null;
   const topbarLabel = topbarShowsProject ? activeProject.name : activeRepository?.name;
+  const topbarScopeLabel = topbarShowsProject ? "Workspace 主会话" : "Repo 执行会话";
   const topbarPath = topbarShowsProject
     ? (activeProject.rootPath?.trim() || activeRepository?.path?.trim() || "")
     : (activeRepository?.path?.trim() || "");
@@ -707,7 +708,7 @@ export function Topbar({
           {topbarLabel ? (
             <>
               <div className="app-topbar-divider" />
-              <Tooltip title="点击复制绝对路径" mouseEnterDelay={0.3}>
+              <Tooltip title={`${topbarScopeLabel} · 点击复制绝对路径`} mouseEnterDelay={0.3}>
                 <button
                   type="button"
                   className="app-topbar-repository-trigger"
@@ -727,6 +728,7 @@ export function Topbar({
                     );
                   }}
                 >
+                  <span className="app-topbar-scope-pill">{topbarScopeLabel}</span>
                   <span className="app-topbar-repository-trigger-label">{topbarLabel}</span>
                 </button>
               </Tooltip>
@@ -965,7 +967,7 @@ export function Topbar({
             label={
               dualPaneEnabled
                 ? "关闭双栏（⌥K）"
-                : "双栏：右侧为当前仓库新建一条主会话，与左侧并行执行（快捷键 ⌥K）"
+                : "双栏：右侧打开一个 Repo 执行会话，与左侧隔离并行（快捷键 ⌥K）"
             }
             active={!!dualPaneEnabled}
             onClick={onToggleDualPane}
@@ -1019,6 +1021,7 @@ interface Props {
   onCloseSession: (sessionId: string) => void;
   onSwitchSession: (sessionId: string) => void;
   onNewSession: (repository: Repository) => void;
+  onNewProjectSession?: (project: ProjectItem) => void | Promise<void>;
   onRespondToQuestion: (sessionId: string, answers: string[], customAnswer?: string) => void;
   onDismissQuestion: (sessionId: string) => void;
   onRespondToPermission: (sessionId: string, response: "allow_once" | "allow_always" | "deny") => void;
@@ -1128,6 +1131,7 @@ export function ClaudeSessions({
   onCloseSession: _onCloseSession,
   onSwitchSession,
   onNewSession,
+  onNewProjectSession,
   onRespondToQuestion,
   onDismissQuestion,
   onRespondToPermission,
@@ -1265,6 +1269,32 @@ export function ClaudeSessions({
     onNewSession(activeRepository);
   }, [activeRepository, onNewSession]);
 
+  const isProjectFocused = activeWorkspaceFocus === "project" && Boolean(activeProject);
+  const handleCreatePrimarySession = useCallback(() => {
+    if (activeWorkspaceFocus === "project" && activeProject && onNewProjectSession) {
+      void onNewProjectSession(activeProject);
+      return;
+    }
+    handleCreateActiveRepositorySession();
+  }, [
+    activeProject,
+    activeWorkspaceFocus,
+    handleCreateActiveRepositorySession,
+    onNewProjectSession,
+  ]);
+
+  const emptyStateCopy = isProjectFocused
+    ? {
+        title: "当前工作区还没有主会话",
+        hint: "新建后会以 Workspace 根目录作为 Claude Code 工作目录。",
+        primaryLabel: "新建工作区主会话",
+      }
+    : {
+        title: "当前 Repo 还没有执行会话",
+        hint: "Repo 执行会话继承 Workspace 的 Trellis 规范，但对话历史与主会话隔离。",
+        primaryLabel: "新建 Repo 执行会话",
+      };
+
   const handleCreateSecondarySession = useCallback(() => {
     const repo = dualPaneSecondaryRepository ?? activeRepository;
     if (!repo || !onNewSecondarySession) {
@@ -1360,7 +1390,7 @@ export function ClaudeSessions({
                   pendingCollapseNotificationForSessionId === activeSession.id
                 }
                 onSwitchSession={handleSwitchToSession}
-                onCreateNewSession={handleCreateActiveRepositorySession}
+                onCreateNewSession={handleCreatePrimarySession}
                 onOpenBuiltinAssistant={onOpenBuiltinAssistant}
                 onSend={onSendMessage}
                 onExecute={onExecuteSession}
@@ -1475,11 +1505,11 @@ export function ClaudeSessions({
                 />
               ) : (
                 <SessionEmptyState
-                  title="右侧主会话尚未就绪"
-                  hint="当前右侧窗格没有可用会话，可以为选中的仓库重新创建一个主会话。"
+                  title="右侧 Repo 执行会话尚未就绪"
+                  hint="当前右侧窗格没有可用执行会话，可以为选中的仓库重新创建一个隔离会话。"
                   primaryAction={
                     onNewSecondarySession && (dualPaneSecondaryRepository ?? activeRepository)
-                      ? { label: "新建右侧主会话", onClick: handleCreateSecondarySession }
+                      ? { label: "新建右侧执行会话", onClick: handleCreateSecondarySession }
                       : undefined
                   }
                 />
@@ -1498,7 +1528,7 @@ export function ClaudeSessions({
               pendingCollapseNotificationForSessionId === activeSession.id
             }
             onSwitchSession={handleSwitchToSession}
-            onCreateNewSession={handleCreateActiveRepositorySession}
+            onCreateNewSession={handleCreatePrimarySession}
             onOpenBuiltinAssistant={onOpenBuiltinAssistant}
             onSend={onSendMessage}
             onExecute={onExecuteSession}
@@ -1545,9 +1575,9 @@ export function ClaudeSessions({
         )
       ) : (
         <SessionEmptyState
-          title="当前仓库还没有可用会话"
-          hint="新建会话后可以直接开始对话；已有历史会话会在恢复后出现在这里。"
-          primaryAction={{ label: "新建会话", onClick: handleCreateActiveRepositorySession }}
+          title={emptyStateCopy.title}
+          hint={emptyStateCopy.hint}
+          primaryAction={{ label: emptyStateCopy.primaryLabel, onClick: handleCreatePrimarySession }}
           secondaryAction={onSearch ? { label: "切换工作对象", onClick: onSearch } : undefined}
         />
       )}

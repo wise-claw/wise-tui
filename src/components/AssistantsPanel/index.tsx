@@ -220,7 +220,7 @@ export function AssistantsPanel({
         id="assistants"
         icon={<UserOutlined />}
         title="助手模板"
-        subtitle="角色模板、模型和系统提示词；按助手 Hub 分组浏览与管理"
+        subtitle="任务入口、系统提示词与 Claude Code 编排预设"
         actions={
           <>
             <Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={() => void fetchAll()}>
@@ -309,11 +309,11 @@ export function AssistantsPanel({
           </Form.Item>
           <Form.Item
             name="engineId"
-            label="执行引擎"
-            rules={[{ required: true, message: "需要选择引擎" }]}
-            help="引用一个已检测执行引擎的后端标识。未检测到的引擎也可以保存，使用前会提示。"
+            label="运行环境"
+            rules={[{ required: true, message: "需要选择运行环境" }]}
+            help="当前主运行环境是 Claude Code；其它入口作为未来连接器预留，使用前会提示。"
           >
-            <Select options={engineOptions} placeholder="选择 Claude / Codex / Gemini / 自定义引擎" />
+            <Select options={engineOptions} placeholder="优先选择 Claude Code" />
           </Form.Item>
           <Form.Item name="model" label="模型（可选）">
             <Input placeholder="例如 claude-sonnet-4-6" />
