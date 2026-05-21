@@ -23,14 +23,10 @@ import {
   getEnabledBundleItems,
 } from "./assistantArtifactBrief";
 
-const MissionControl = lazy(() =>
-  import("../MissionControl").then((module) => ({ default: module.MissionControl })),
-);
 const PrdTaskSplitPanel = lazy(() =>
   import("../PrdTaskSplitPanel").then((module) => ({ default: module.PrdTaskSplitPanel })),
 );
 
-export type AssistantConversationMissionControlProps = ComponentProps<typeof MissionControl>;
 export type AssistantConversationPrdTaskSplitPanelProps = ComponentProps<typeof PrdTaskSplitPanel>;
 
 export interface AssistantConversationViewProps {
@@ -38,16 +34,14 @@ export interface AssistantConversationViewProps {
   assistant: AssistantEntry | null;
   activeProjectId: string | null;
   activeProjectName: string | null;
-  missionControlProps: AssistantConversationMissionControlProps;
   prdTaskSplitPanelProps: AssistantConversationPrdTaskSplitPanelProps;
   onOpenSettings: () => void;
 }
 
 /**
- * D13 修订:助手 conversation 视图 = 现 MissionControl(单栏)的薄封装。
- * 不再实现 ChatPane / ArtifactPane / 双栏 / Claude tool use。
- *
- * Stage 5 可能把内核换成 PrdTaskSplitPanel 直挂(单独立任务决定);本组件保持稳定。
+ * D13 修订:助手 conversation 视图 = `PrdTaskSplitPanel`(单栏)的薄封装。
+ * 不再实现 ChatPane / ArtifactPane / 双栏 / Claude tool use,
+ * 也不再依赖已删除的 MissionControl 全屏壳(E3)。
  */
 export function AssistantConversationView({
   assistantId,

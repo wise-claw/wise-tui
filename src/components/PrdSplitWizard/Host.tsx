@@ -6,13 +6,12 @@ import { useCallback } from "react";
 import { Button, Tooltip } from "antd";
 import { PartitionOutlined } from "@ant-design/icons";
 import {
-  WORKFLOW_UI_EVENT_OPEN_MISSION_CONTROL,
-  WORKFLOW_UI_EVENT_OPEN_PRD_SPLIT_WIZARD,
-  type OpenPrdSplitWizardDetail,
+  WORKFLOW_UI_EVENT_OPEN_ASSISTANT,
+  type OpenAssistantDetail,
 } from "../../constants/workflowUiEvents";
 
-export const OPEN_PRD_SPLIT_WIZARD_EVENT = WORKFLOW_UI_EVENT_OPEN_PRD_SPLIT_WIZARD;
-export type OpenPrdSplitWizardEventDetail = OpenPrdSplitWizardDetail;
+export const OPEN_PRD_SPLIT_WIZARD_EVENT = WORKFLOW_UI_EVENT_OPEN_ASSISTANT;
+export type OpenPrdSplitWizardEventDetail = OpenAssistantDetail;
 
 const FAB_STYLE: React.CSSProperties = {
   position: "fixed",
@@ -32,7 +31,9 @@ const FAB_STYLE: React.CSSProperties = {
 
 export function PrdSplitWizardHost() {
   const onFabClick = useCallback(() => {
-    window.dispatchEvent(new CustomEvent(WORKFLOW_UI_EVENT_OPEN_MISSION_CONTROL, { detail: {} }));
+    window.dispatchEvent(
+      new CustomEvent<OpenAssistantDetail>(WORKFLOW_UI_EVENT_OPEN_ASSISTANT, { detail: {} }),
+    );
   }, []);
 
   return (

@@ -41,12 +41,16 @@ App shell:
 Feature and support modules:
 
 - `src/components/`: feature and shared UI surfaces.
+- `src/components/CockpitSurface/`: assistant hub shell — `AssistantHub` lists builtin/user assistants; `AssistantConversationView` thin-wraps each assistant (`builtin:prd-split` renders `PrdTaskSplitPanel`); `AssistantHeader` + `AssistantSettingsDrawer` cover metadata and override editing.
+- `src/components/PrdTaskSplitPanel/`: active PRD-split assistant surface — split fan-out runtime, candidate review, orchestration confirmation, materialization, runtime queue.
 - `src/hooks/`: reusable stateful orchestration.
 - `src/services/`: Tauri IPC wrappers and pure service modules.
 - `src/services/workflow/`: workflow engine, facade, replay, event store, adapters.
 - `src/services/prdSplit/`: PRD split planning, dispatch, verification, persistence helpers.
 - `src/services/mission/`: mission session binding helpers.
 - `src/services/trellis/`: Trellis SDD-mode detection helpers.
+- `src/services/assistantPromptLayers.ts`: assistant runtime resolver (platform default → builtin → assistant scope → project scope → repository scope).
+- `src/services/taskArtifact.ts`: `.trellis/tasks/<dir>/{prd,design,implement}.md` read/write IPC wrappers (paired with `src-tauri/src/task_artifact.rs`).
 - `src/features/cc-wf-studio/`: cc-workflow-studio host integration (Wise side).
 - `src/cc-workflow-studio-core/`: pure workflow definition and prompt generation.
 - `src/stores/`: small external subscription stores for cross-component runtime state.

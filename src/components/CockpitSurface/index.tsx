@@ -4,7 +4,6 @@ import type { AssistantEntry } from "../../types/assistant";
 import { DEFAULT_PRD_SPLIT_ASSISTANT_ID } from "../../services/assistantPromptLayers";
 import {
   AssistantConversationView,
-  type AssistantConversationMissionControlProps,
   type AssistantConversationPrdTaskSplitPanelProps,
 } from "./AssistantConversationView";
 import { AssistantHeader } from "./AssistantHeader";
@@ -42,8 +41,6 @@ export interface CockpitSurfaceProps {
   initialAssistantId?: string | null;
   /** 显式打开助手入口的递增信号;用于同一 cockpit 实例内重复打开。 */
   openRequestKey: number;
-  /** 透传给现有 MissionControl 内核(Wave B 拆为 ChatPane / ArtifactPane)。 */
-  missionControlProps: AssistantConversationMissionControlProps;
   /** 透传给现有 PRD 拆分面板,作为需求助手主工作台。 */
   prdTaskSplitPanelProps: AssistantConversationPrdTaskSplitPanelProps;
 }
@@ -58,7 +55,6 @@ export function CockpitSurface({
   hasInitialTarget,
   initialAssistantId = null,
   openRequestKey,
-  missionControlProps,
   prdTaskSplitPanelProps,
   onActiveAssistantIdChange,
 }: CockpitSurfaceProps) {
@@ -156,7 +152,6 @@ export function CockpitSurface({
             assistant={activeAssistant}
             activeProjectId={activeProjectId}
             activeProjectName={activeProjectName}
-            missionControlProps={missionControlProps}
             prdTaskSplitPanelProps={prdTaskSplitPanelProps}
             onOpenSettings={handleOpenActiveSettings}
           />

@@ -1,5 +1,7 @@
 # Assistant Hub: built-in PRD-split assistant + user-created assistants
 
+> **当前有效口径(2026-05-21 收敛)**:执行以 D13-D16 为准。PRD-split 助手是 `AssistantHeader + PrdTaskSplitPanel` 的表单驱动编排宿主,不是 ChatPane / ArtifactPane / 真 tool-use 对话产品。D8-D12 / E1-E7 中关于多轮对话、双栏 Artifact、`start_splitter` tool use 的内容仅作为历史决策记录保留,不得作为后续实现依据。
+
 ## Goal
 
 把 Wise 的"需求拆分(Mission Control)"从"项目 FAB 触发的全屏黑盒"反转为 AionUI 风格的**助手宿主**:

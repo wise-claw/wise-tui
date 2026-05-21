@@ -38,19 +38,17 @@ import { triggerCodeGraphProjectSearch, triggerCodeGraphReindex } from "./servic
 import { AppWorkspaceLayout } from "./components/AppWorkspaceLayout";
 import { DEFAULT_PRD_SPLIT_ASSISTANT_ID } from "./services/assistantPromptLayers";
 import { readAuthorPaneFromSettings, readAuthorPaneFromStorage } from "./components/AuthorPanel";
-import type { PromptsOpenContext } from "./components/PromptsPanel";
 import { reloadAppWindow } from "./services/window";
 import { wiseMascotShow } from "./services/wiseMascot";
 import { getTaskTemplate, setTaskTemplate } from "./services/projectState";
 import { ensureCrepeToolbarTitleHintsInstalled } from "./utils/crepeToolbarTitles";
 import {
-  WORKFLOW_UI_EVENT_OPEN_PRD_SPLIT_WIZARD,
-  WORKFLOW_UI_EVENT_OPEN_MISSION_CONTROL,
+  WORKFLOW_UI_EVENT_OPEN_ASSISTANT,
   WORKFLOW_UI_EVENT_OPEN_REPOSITORY_FILE,
   WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL,
   WORKFLOW_UI_EVENT_OPEN_WORKFLOW_CONFIG,
   WORKFLOW_UI_EVENT_WORKFLOW_GRAPH_CHANGED,
-  type OpenMissionControlDetail,
+  type OpenAssistantDetail,
   type OpenRepositoryFileDetail,
   type OpenWorkflowConfigDetail,
   type WorkflowGraphChangedDetail,
@@ -257,14 +255,13 @@ export default function App() {
       ? viewMode.view.tool.defaultProjectMultiRepo
       : false;
   const [lastAuthorPane, setLastAuthorPane] = useState(() => readAuthorPaneFromStorage());
-  const [missionControlInitialTarget, setMissionControlInitialTarget] = useState<OpenMissionControlDetail | null>(null);
+  const [missionControlInitialTarget, setMissionControlInitialTarget] = useState<OpenAssistantDetail | null>(null);
   const [missionControlOpenRequestKey, setMissionControlOpenRequestKey] = useState(0);
   const [cockpitSurfaceInitialAssistantId, setCockpitSurfaceInitialAssistantId] = useState<string | null>(null);
   const [cockpitActiveAssistantId, setCockpitActiveAssistantId] = useState<string | null>(null);
   const [authorTrellisProjectId, setAuthorTrellisProjectId] = useState<string | null>(null);
   const [workspaceCreateRequest, setWorkspaceCreateRequest] = useState(0);
   const [standaloneRepoAddRequest, setStandaloneRepoAddRequest] = useState(0);
-  const [promptsOpenContext, setPromptsOpenContext] = useState<PromptsOpenContext | null>(null);
   const [repositorySplitTemplate, setRepositorySplitTemplate] = useState("");
   const [projectSplitTemplate, setProjectSplitTemplate] = useState("");
   const [dark, _setDark] = useState(false);
@@ -1042,14 +1039,6 @@ export default function App() {
       }),
     [activeProject, activeProjectId, employeeMonitorItems, employees, projects],
   );
-  const authorTrellisProject = useMemo(
-    () => (
-      authorTrellisProjectId
-        ? projects.find((project) => project.id === authorTrellisProjectId) ?? null
-        : null
-    ),
-    [authorTrellisProjectId, projects],
-  );
   const missionSessionBindingKeyRef = useRef("");
   useEffect(() => {
     const session = activeSessionId ? sessionsLatestRef.current.find((item) => item.id === activeSessionId) : null;
@@ -1107,7 +1096,7 @@ export default function App() {
     viewMode.enter({ kind: "chat" });
   }, [repositories, setActiveRepositoryWithOwner, viewMode]);
   const workspaceMode = useWorkspaceMode({ activeProjectId, projects });
-  const openMissionControl = useCallback((detail: OpenMissionControlDetail) => {
+  const openMissionControl = useCallback((detail: OpenAssistantDetail) => {
     setSearchOpen(false);
     setMissionControlInitialTarget(detail);
     setCockpitSurfaceInitialAssistantId(null);
@@ -1936,19 +1925,6 @@ export default function App() {
     });
   }
 
-  function handleOpenPromptsForProject(project: ProjectItem) {
-    setPromptsOpenContext({ project });
-    setActiveProjectId(project.id);
-    enterAuthorPane("prompts");
-  }
-
-  function handleOpenPromptsForRepository(project: ProjectItem, repository: Repository) {
-    setPromptsOpenContext({ project, repository });
-    setActiveProjectId(project.id);
-    setActiveRepositoryId(repository.id);
-    enterAuthorPane("prompts");
-  }
-
   async function refreshWorkflowTemplates() {
     const templates = await listWorkflowTemplates();
     setWorkflowTemplates(templates);
@@ -1995,18 +1971,20 @@ export default function App() {
       );
     }
     window.addEventListener(WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL, handleOpenTaskSplitPanel as EventListener);
-    window.addEventListener(WORKFLOW_UI_EVENT_OPEN_PRD_SPLIT_WIZARD, handleOpenMissionControlEvent as EventListener);
-    window.addEventListener(WORKFLOW_UI_EVENT_OPEN_MISSION_CONTROL, handleOpenMissionControlEvent as EventListener);
+    window.addEventListener(WORKFLOW_UI_EVENT_OPEN_ASSISTANT, handleOpenAssistantEvent as EventListener);
     return () => {
       window.removeEventListener(WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL, handleOpenTaskSplitPanel as EventListener);
-      window.removeEventListener(WORKFLOW_UI_EVENT_OPEN_PRD_SPLIT_WIZARD, handleOpenMissionControlEvent as EventListener);
-      window.removeEventListener(WORKFLOW_UI_EVENT_OPEN_MISSION_CONTROL, handleOpenMissionControlEvent as EventListener);
+      window.removeEventListener(WORKFLOW_UI_EVENT_OPEN_ASSISTANT, handleOpenAssistantEvent as EventListener);
     };
-    function handleOpenMissionControlEvent(event: Event) {
-      const detail = (event as CustomEvent<OpenMissionControlDetail>).detail ?? {};
+    function handleOpenAssistantEvent(event: Event) {
+      const detail = (event as CustomEvent<OpenAssistantDetail>).detail ?? {};
+      if (typeof detail.assistantId === "string" && detail.assistantId.trim()) {
+        openBuiltinAssistant(detail.assistantId);
+        return;
+      }
       openMissionControl(detail);
     }
-  }, [activeProjectId, activeRepositoryId, openMissionControl]);
+  }, [activeProjectId, activeRepositoryId, openBuiltinAssistant, openMissionControl]);
 
   useEffect(() => {
     function handleWorkflowConfigEvent(event: Event) {
@@ -2258,7 +2236,6 @@ export default function App() {
         onOpenInFinder: handleOpenInFinder,
         onCreateProjectTask: handleCreateProjectTask,
         onCreateRepositoryTask: handleCreateRepositoryTask,
-        onOpenPromptsProject: handleOpenPromptsForProject,
         onOpenProjectTrellis: async (project) => {
           const targetPath = resolveTrellisBootstrapPath({
             scope: "project",
@@ -2278,14 +2255,13 @@ export default function App() {
             }
             dispatchTrellisBootstrapComplete({ projectId: project.id });
             setAuthorTrellisProjectId(project.id);
-            enterAuthorPane("trellis-spec");
+            viewMode.enter(inspectView({ kind: "spec-library", rootPath: targetPath }));
           } catch (e) {
             message.error(e instanceof Error ? e.message : String(e));
           } finally {
             hide();
           }
         },
-        onOpenPromptsRepository: handleOpenPromptsForRepository,
         onOpenRepositoryMainOwner: (repository) => {
           void openEmployeeConfigForRepositoryOwner(repository);
         },
@@ -2518,20 +2494,6 @@ export default function App() {
         skillsHubProps: {
           repositoryPath: activeRepository?.path ?? null,
         },
-        promptsPanelProps: {
-          projects,
-          repositories,
-          activeProjectId,
-          activeRepositoryId,
-          openContext: promptsOpenContext,
-          repositoryListLoading,
-        },
-        trellisSpecProps: {
-          open: true,
-          project: authorTrellisProject ?? activeProject,
-          onOpenProjectSession: (project) => void openProjectMainSession(project),
-          onRequestSpecAgentUpdate: handleRequestSpecAgentUpdate,
-        },
         automationPanelProps: {
           repositories,
           activeRepositoryId,
@@ -2553,14 +2515,6 @@ export default function App() {
         },
         repositoryPath: activeRepository?.path ?? null,
         workflowStudioAction: undefined,
-      }}
-      promptsPanelProps={{
-        projects,
-        repositories,
-        activeProjectId,
-        activeRepositoryId,
-        openContext: promptsOpenContext,
-        repositoryListLoading,
       }}
       claudeSessionsProps={{
         sessions,
@@ -2753,16 +2707,6 @@ export default function App() {
         },
         onOpenAddRepository: () => void handleAddFloatingRepository("frontend"),
         suppressIdleAutoReindex: codeGraphSuppressIdleAutoReindex,
-      }}
-      missionControlProps={{
-        projects,
-        repositories,
-        sessions,
-        // P1 §5.1: 显式 initialTarget > 当前选中项目 > null
-        initialTarget:
-          missionControlInitialTarget ??
-          (activeProjectId ? { projectId: activeProjectId } : null),
-        onClose: exitCockpit,
       }}
       prdTaskSplitPanelProps={{
         projects,

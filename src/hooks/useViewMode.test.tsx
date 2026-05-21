@@ -73,7 +73,6 @@ describe("useViewMode", () => {
     const probe = renderProbe();
     const allModes = [
       cockpitView(),
-      authorView("prompts"),
       authorView("mcp"),
       authorView("skills"),
       inspectView(codeGraphInspectTool()),
@@ -89,9 +88,9 @@ describe("useViewMode", () => {
     probe.unmount();
   });
 
-  test("author panes that are not prompts/mcp/skills do not raise any legacy flag", () => {
+  test("author panes that are not mcp/skills do not raise any legacy flag", () => {
     const probe = renderProbe();
-    for (const pane of ["workspaces", "agents", "workflows", "hooks", "trellis-spec"] as const) {
+    for (const pane of ["workspaces", "agents", "workflows", "hooks", "assistants"] as const) {
       act(() => {
         probe.api.enter(authorView(pane));
       });
@@ -123,17 +122,17 @@ describe("useViewMode", () => {
     probe.unmount();
   });
 
-  test("enter author/skills then author/prompts overrides previous pane", () => {
+  test("entering author overrides previous pane", () => {
     const probe = renderProbe();
     act(() => {
       probe.api.enter(authorView("skills"));
     });
     expect(probe.api.legacy.skillsHubMode).toBe(true);
     act(() => {
-      probe.api.enter(authorView("prompts"));
+      probe.api.enter(authorView("mcp"));
     });
     expect(probe.api.legacy.skillsHubMode).toBe(false);
-    expect(probe.api.legacy.promptsMode).toBe(true);
+    expect(probe.api.legacy.mcpHubMode).toBe(true);
     probe.unmount();
   });
 

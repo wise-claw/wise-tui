@@ -31,8 +31,6 @@ export type AuthorPane =
   | "skills"
   | "claude-plugins"
   | "hooks"
-  | "prompts"
-  | "trellis-spec"
   | "claude-config"
   | "extensions"
   | "assistants"
@@ -53,31 +51,61 @@ export const WORKSPACE_SCOPED_AUTHOR_PANES: ReadonlySet<AuthorPane> = new Set([
   "skills",
   "claude-plugins",
   "hooks",
-  "prompts",
-  "trellis-spec",
 ]);
 
 /**
  * Inspect 工具枚举。
  *
- * P0 阶段仅有 code-graph 与 workflow-studio（即历史代码中的两个叠层）。
- * P5 之后会扩展为：task-detail / monitor-drawer / session-history
- * 等更多透镜（见宪法 §3）。
+ * Stage 5(D5 / E7)新增四个透镜:`runtime-events` / `workflow-graph` /
+ * `spec-timeline` / `spec-library`。它们承接旧 `ProjectTrellisCenter` 的
+ * runtime / workflow / spec 三个 Tab,改为按需打开的 Inspector 叠层(宪法 §2.3)。
  */
-export type InspectTool = InspectCodeGraph | InspectWorkflowStudio;
+export type InspectTool =
+  | InspectCodeGraph
+  | InspectWorkflowStudio
+  | InspectRuntimeEvents
+  | InspectWorkflowGraph
+  | InspectSpecTimeline
+  | InspectSpecLibrary;
 
 export interface InspectCodeGraph {
   kind: "code-graph";
-  /** 来自侧栏「图谱操作 → 查看检索」时为 true：图谱面板不在 idle 时自动重建索引；顶栏入口为 false。 */
+  /** 来自侧栏「图谱操作 → 查看检索」时为 true：图谱面板不在 idle 时自动重建索引;顶栏入口为 false。 */
   suppressIdleAutoReindex: boolean;
-  /** 侧栏仓库/Workspace 入口为 true：仅当前仓 UI，不显示「全部仓库」关联入口。 */
+  /** 侧栏仓库/Workspace 入口为 true：仅当前仓 UI,不显示「全部仓库」关联入口。 */
   lockToEntryRepository: boolean;
-  /** 侧栏 Workspace 入口为 true：默认多仓关联合并视图（候选 ≥ 2 时）。 */
+  /** 侧栏 Workspace 入口为 true：默认多仓关联合并视图(候选 ≥ 2 时)。 */
   defaultProjectMultiRepo: boolean;
 }
 
 export interface InspectWorkflowStudio {
   kind: "workflow-studio";
+}
+
+/** Trellis 运行证据透镜:onboarding / agent ownership / runtime events feed。 */
+export interface InspectRuntimeEvents {
+  kind: "runtime-events";
+  rootPath: string;
+  projectId: string | null;
+}
+
+/** Trellis 工作流图透镜:展示 workflow.md 编译后的阶段图与平台分支。 */
+export interface InspectWorkflowGraph {
+  kind: "workflow-graph";
+  rootPath: string;
+  projectId: string | null;
+}
+
+/** Trellis spec revision / workspace snapshot 时间轴透镜。 */
+export interface InspectSpecTimeline {
+  kind: "spec-timeline";
+  rootPath: string;
+}
+
+/** Trellis spec library 只读速览透镜。 */
+export interface InspectSpecLibrary {
+  kind: "spec-library";
+  rootPath: string;
 }
 
 /** 默认 View（应用启动 / `back()` 回退兜底）。主会话优先，助手从左栏显式进入。 */

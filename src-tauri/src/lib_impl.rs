@@ -2,7 +2,7 @@ use crate::{
     agent_registry, app_state_commands, assistants, cc_wf_studio_mcp_bridge, cc_workflow_studio,
     claude_code_usage, claude_commands, claude_config_dir, claude_external_ingest, code_knowledge_graph,
     cua_driver, dingtalk_enterprise_bot, dingtalk_stream_gateway, extensions, git_commands, mission_control, mcp,
-    openspec_bootstrap, prd_url_fetch, repository_files, skills, skills_sh, system_resource, trellis_bootstrap,
+    openspec_bootstrap, prd_url_fetch, repository_files, skills, skills_sh, system_resource, task_artifact, trellis_bootstrap,
     trellis_bridge,
     trellis_runtime, wise_db, wise_mascot, wise_paths, wise_push, workspace_commands,
 };
@@ -253,6 +253,9 @@ pub fn run() {
             mission_control::mission_list_evidence,
             mission_control::mission_get_replay,
             mission_control::mission_get_onboarding_health,
+            task_artifact::read_task_artifact,
+            task_artifact::write_task_artifact,
+            task_artifact::mission_create_with_task,
             prd_url_fetch::fetch_prd_from_url,
             workspace_commands::open_in_finder,
             workspace_commands::open_claude_user_agents_dir,

@@ -37,20 +37,24 @@ export interface CcWfStudioEnterExecutionWatchDetail {
   repositoryPath: string;
 }
 export const WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL = "wise:open-task-split-panel";
-export const WORKFLOW_UI_EVENT_OPEN_PRD_SPLIT_WIZARD = "wise:open-prd-split-wizard";
-export const WORKFLOW_UI_EVENT_OPEN_MISSION_CONTROL = "wise:open-mission-control";
+/**
+ * D13 / E4：助手宿主统一入口。
+ * 替代旧的 `wise:open-prd-split-wizard` / `wise:open-mission-control`。
+ * detail 可携带 `assistantId`（缺省时由 cockpit 决定默认助手），以及
+ * 可选的 `projectId` / `repositoryId` 作为运行上下文。
+ */
+export const WORKFLOW_UI_EVENT_OPEN_ASSISTANT = "wise:open-assistant";
 export const WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED = "wise:split-todo-count-updated";
 export const WORKFLOW_UI_EVENT_OPEN_WORKFLOW_CONFIG = "wise:open-workflow-config";
 export const WORKFLOW_UI_EVENT_WORKFLOW_GRAPH_CHANGED = "wise:workflow-graph-changed";
 export const WORKFLOW_UI_EVENT_OPEN_REPOSITORY_FILE = "wise:open-repository-file";
 export const WORKFLOW_UI_EVENT_RUN_ASSISTANT_BRIEF = "wise:run-assistant-brief";
 
-export interface OpenPrdSplitWizardDetail {
+export interface OpenAssistantDetail {
+  assistantId?: string | null;
   projectId?: string | null;
   repositoryId?: number | null;
 }
-
-export type OpenMissionControlDetail = OpenPrdSplitWizardDetail;
 
 export interface SplitTodoCountUpdatedDetail {
   source?: "wise" | "trellis";

@@ -102,7 +102,6 @@ export interface UseViewModeApi {
 
   /** 6 个互斥布尔兼容别名。仅供过渡期 layout / sidebar nav 直接读，不要在新代码里依赖。 */
   legacy: {
-    promptsMode: boolean;
     mcpHubMode: boolean;
     skillsHubMode: boolean;
     missionControlMode: boolean;
@@ -134,12 +133,9 @@ export function useViewMode(initial: ViewMode = DEFAULT_VIEW_MODE): UseViewModeA
 
   const legacy = useMemo(
     () => ({
-      // P0 阶段：author/<prompts|mcp|skills> 仍走老的全屏 / 叠层渲染（PromptsPanel /
-      // McpHub overlay / SkillsHub overlay）。AppWorkspaceLayout 透过 `legacy.*`
-      // 读这三个旧名走老分支，行为完全等价。
-      // P3 把 author 域折成 AuthorPanel 后，AppWorkspaceLayout 改读 `isAuthor`，
-      // 这三个 legacy 名再降级为常量 false 不影响渲染。
-      promptsMode: view.kind === "author" && view.pane === "prompts",
+      // P0 阶段:author/<mcp|skills> 仍走老的全屏 / 叠层渲染(McpHub overlay /
+      // SkillsHub overlay)。AppWorkspaceLayout 透过 `legacy.*` 读这两个旧名走老
+      // 分支,行为完全等价。Stage 4 删除 prompts 后,`promptsMode` 名彻底下线。
       mcpHubMode: view.kind === "author" && view.pane === "mcp",
       skillsHubMode: view.kind === "author" && view.pane === "skills",
       missionControlMode: view.kind === "cockpit",

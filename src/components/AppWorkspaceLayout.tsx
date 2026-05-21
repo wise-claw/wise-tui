@@ -29,11 +29,9 @@ import { ProgressMonitorDrawer } from "./ProgressMonitorDrawer";
 import { RepositoryFileEditorPanel } from "./RepositoryFileEditorPanel";
 import { RepositoryFilePreviewModal } from "./RepositoryFilePreviewModal";
 import { SkillsHub } from "./SkillsHub";
-import type * as MissionControlModule from "./MissionControl";
 import type * as PrdTaskSplitPanelModule from "./PrdTaskSplitPanel";
-import type * as PromptsPanelModule from "./PromptsPanel";
 import type { Repository } from "../types";
-import type { ViewMode } from "../types/viewMode";
+import type { InspectTool, ViewMode } from "../types/viewMode";
 import type { OpenRepositoryFileDetail } from "../constants/workflowUiEvents";
 import { useRepositoryFileEditor } from "../hooks/useRepositoryFileEditor";
 
@@ -41,7 +39,18 @@ const Inspector = lazy(() => import("./Inspector").then((module) => ({ default: 
 const CockpitSurface = lazy(() =>
   import("./CockpitSurface").then((module) => ({ default: module.CockpitSurface })),
 );
-const PromptsPanel = lazy(() => import("./PromptsPanel").then((module) => ({ default: module.PromptsPanel })));
+const RuntimeEventsInspector = lazy(() =>
+  import("./Inspectors").then((m) => ({ default: m.RuntimeEventsInspector })),
+);
+const WorkflowGraphInspector = lazy(() =>
+  import("./Inspectors").then((m) => ({ default: m.WorkflowGraphInspector })),
+);
+const SpecTimelineInspector = lazy(() =>
+  import("./Inspectors").then((m) => ({ default: m.SpecTimelineInspector })),
+);
+const SpecLibraryInspector = lazy(() =>
+  import("./Inspectors").then((m) => ({ default: m.SpecLibraryInspector })),
+);
 const WiseCcWorkflowStudioPanel = lazy(() =>
   import("../features/cc-wf-studio/WiseCcWorkflowStudioPanel").then((m) => ({ default: m.WiseCcWorkflowStudioPanel })),
 );
@@ -67,9 +76,7 @@ type LeftSidebarProps = Omit<
   | "onOpenActiveRepositoryFile"
 >;
 type AuthorPanelProps = ComponentProps<typeof AuthorPanel>;
-type MissionControlProps = ComponentProps<typeof MissionControlModule.MissionControl>;
 type PrdTaskSplitPanelProps = ComponentProps<typeof PrdTaskSplitPanelModule.PrdTaskSplitPanel>;
-type PromptsPanelProps = ComponentProps<typeof PromptsPanelModule.PromptsPanel>;
 type RightPanelProps = Omit<ChatInspectorProps, "onOpenFile">;
 type InspectorCockpitProps = Omit<CockpitInspectorProps, "onOpenFile">;
 
@@ -282,6 +289,8 @@ export interface AppWorkspaceLayoutProps {
   viewMode: ViewMode;
   ccWfStudioSessionPath: string | null;
   onCloseCcWorkflowStudio: () => void;
+  /** Stage 5 / E7：四个 Trellis Inspector 透镜统一通过 viewMode.back() 关闭。 */
+  onCloseTrellisInspector: () => void;
   compactLayoutMode: boolean;
   effectiveRightCollapsed: boolean;
   mainLayoutContentRef: RefObject<HTMLElement | null>;
@@ -289,7 +298,6 @@ export interface AppWorkspaceLayoutProps {
   mainLayoutRightWidthPx: number;
   leftSidebarProps: LeftSidebarProps;
   authorPanelProps: AuthorPanelProps;
-  promptsPanelProps: PromptsPanelProps;
   claudeSessionsProps: ClaudeSessionsProps;
   /** 历史名 `rightPanelProps`，与 ChatInspector 的 props 一致。 */
   chatInspectorProps: RightPanelProps;
@@ -314,7 +322,6 @@ export interface AppWorkspaceLayoutProps {
   mcpHubProps: ComponentProps<typeof McpHub>;
   skillsHubProps: ComponentProps<typeof SkillsHub>;
   codeKnowledgeGraphProps: CodeKnowledgeGraphPanelProps;
-  missionControlProps: MissionControlProps;
   prdTaskSplitPanelProps: PrdTaskSplitPanelProps;
   progressMonitorDrawerProps: ComponentProps<typeof ProgressMonitorDrawer>;
   onToggleCompactLayoutMode: () => void;
@@ -332,6 +339,51 @@ function PanelLoadingFallback() {
   );
 }
 
+type TrellisInspectorTool = Extract<
+  InspectTool,
+  { kind: "runtime-events" | "workflow-graph" | "spec-timeline" | "spec-library" }
+>;
+
+function isTrellisInspectorKind(kind: InspectTool["kind"]): kind is TrellisInspectorTool["kind"] {
+  return (
+    kind === "runtime-events" ||
+    kind === "workflow-graph" ||
+    kind === "spec-timeline" ||
+    kind === "spec-library"
+  );
+}
+
+function TrellisInspectorOverlay({
+  tool,
+  onClose,
+}: {
+  tool: TrellisInspectorTool;
+  onClose: () => void;
+}) {
+  switch (tool.kind) {
+    case "runtime-events":
+      return (
+        <RuntimeEventsInspector
+          rootPath={tool.rootPath}
+          projectId={tool.projectId}
+          onClose={onClose}
+        />
+      );
+    case "workflow-graph":
+      return (
+        <WorkflowGraphInspector
+          rootPath={tool.rootPath}
+          projectId={tool.projectId}
+          onClose={onClose}
+        />
+      );
+    case "spec-timeline":
+      return <SpecTimelineInspector rootPath={tool.rootPath} onClose={onClose} />;
+    case "spec-library":
+      return <SpecLibraryInspector rootPath={tool.rootPath} onClose={onClose} />;
+  }
+}
+
 export function AppWorkspaceLayout({
   activeRepositoryPath,
   dark,
@@ -339,6 +391,7 @@ export function AppWorkspaceLayout({
   viewMode,
   ccWfStudioSessionPath,
   onCloseCcWorkflowStudio,
+  onCloseTrellisInspector,
   compactLayoutMode,
   effectiveRightCollapsed,
   mainLayoutContentRef,
@@ -346,7 +399,6 @@ export function AppWorkspaceLayout({
   mainLayoutRightWidthPx,
   leftSidebarProps,
   authorPanelProps,
-  promptsPanelProps,
   claudeSessionsProps,
   chatInspectorProps,
   cockpitInspectorProps,
@@ -363,7 +415,6 @@ export function AppWorkspaceLayout({
   mcpHubProps,
   skillsHubProps,
   codeKnowledgeGraphProps,
-  missionControlProps,
   prdTaskSplitPanelProps,
   progressMonitorDrawerProps,
   onToggleCompactLayoutMode,
@@ -381,13 +432,16 @@ export function AppWorkspaceLayout({
    */
   const authorMode = viewMode.kind === "author";
   const missionControlMode = viewMode.kind === "cockpit";
-  const promptsMode = viewMode.kind === "author" && viewMode.pane === "prompts";
   const mcpHubMode = viewMode.kind === "author" && viewMode.pane === "mcp";
   const skillsHubMode = viewMode.kind === "author" && viewMode.pane === "skills";
   const codeKnowledgeGraphMode =
     viewMode.kind === "inspect" && viewMode.tool.kind === "code-graph";
   const ccWfStudioMode =
     viewMode.kind === "inspect" && viewMode.tool.kind === "workflow-studio";
+  const trellisInspectorTool =
+    viewMode.kind === "inspect" && isTrellisInspectorKind(viewMode.tool.kind)
+      ? viewMode.tool
+      : null;
   const rightInspectorHidden =
     effectiveRightCollapsed || missionControlMode || authorMode;
   const leftSidebarParked = cockpitPrdSplitFullscreen;
@@ -519,7 +573,7 @@ export function AppWorkspaceLayout({
                   />
                 )}
 
-                {!leftSidebarParked && !promptsMode && !collapsed ? (
+                {!leftSidebarParked && !collapsed ? (
                   <MainLayoutResizeHandle
                     variant="left"
                     startWidthPx={mainLayoutLeftWidthPx}
@@ -581,6 +635,11 @@ export function AppWorkspaceLayout({
                         </Suspense>
                       </div>
                     ) : null}
+                    {trellisInspectorTool ? (
+                      <Suspense fallback={null}>
+                        <TrellisInspectorOverlay tool={trellisInspectorTool} onClose={onCloseTrellisInspector} />
+                      </Suspense>
+                    ) : null}
                     {ccWfStudioSessionPath ? (
                       <Suspense fallback={null}>
                         <WiseCcWorkflowStudioPanel
@@ -609,7 +668,6 @@ export function AppWorkspaceLayout({
                               hasInitialTarget={cockpitSurfaceHasInitialTarget}
                               initialAssistantId={cockpitSurfaceInitialAssistantId}
                               openRequestKey={cockpitSurfaceOpenRequestKey}
-                              missionControlProps={missionControlProps}
                               prdTaskSplitPanelProps={prdTaskSplitPanelProps}
                               onActiveAssistantIdChange={onCockpitActiveAssistantIdChange}
                             />
@@ -621,22 +679,12 @@ export function AppWorkspaceLayout({
 
                   {authorShellMounted ? (
                     <div
-                      className={`app-full-width-main app-author-workspace-layer${!authorMode || promptsMode ? " app-workspace-layer--parked" : ""}`}
+                      className={`app-full-width-main app-author-workspace-layer${!authorMode ? " app-workspace-layer--parked" : ""}`}
                     >
                       <ConnectedAuthorPanel
                         activeRepositoryPath={activeRepositoryPath}
                         authorPanelProps={authorPanelProps}
                       />
-                    </div>
-                  ) : null}
-
-                  {authorShellMounted ? (
-                    <div
-                      className={`app-full-width-main app-prompts-workspace-layer${!promptsMode ? " app-workspace-layer--parked" : ""}`}
-                    >
-                      <Suspense fallback={<PanelLoadingFallback />}>
-                        <PromptsPanel {...promptsPanelProps} />
-                      </Suspense>
                     </div>
                   ) : null}
                 </div>

@@ -19,8 +19,6 @@ import { EmployeeConfigModal } from "../EmployeeConfigModal";
 import { ExtensionsPanel } from "../ExtensionsPanel";
 import { ClaudePluginMarketHub } from "../ClaudePluginMarketHub";
 import { McpHub } from "../McpHub";
-import { ProjectTrellisCenter } from "../ProjectTrellisCenter";
-import { PromptsPanel } from "../PromptsPanel";
 import { SettingsViewModeProvider } from "../SettingsView";
 import { SkillsHub } from "../SkillsHub";
 import { WorkflowConfigModal } from "../WorkflowConfigModal";
@@ -48,10 +46,8 @@ const PANELS_WITH_OWN_SHELL = new Set<AuthorPane>([
 
 type EmployeeConfigProps = ComponentProps<typeof EmployeeConfigModal>;
 type WorkflowConfigProps = ComponentProps<typeof WorkflowConfigModal>;
-type PromptsPanelProps = ComponentProps<typeof PromptsPanel>;
 type McpHubProps = ComponentProps<typeof McpHub>;
 type SkillsHubProps = ComponentProps<typeof SkillsHub>;
-type ProjectTrellisCenterProps = ComponentProps<typeof ProjectTrellisCenter>;
 type WorkspacesTabProps = ComponentProps<typeof WorkspacesTab>;
 
 export interface AuthorPanelProps {
@@ -63,8 +59,6 @@ export interface AuthorPanelProps {
   workflowConfigProps: WorkflowConfigProps | null;
   mcpHubProps: McpHubProps;
   skillsHubProps: SkillsHubProps;
-  promptsPanelProps: PromptsPanelProps;
-  trellisSpecProps: ProjectTrellisCenterProps;
   repositoryPath?: string | null;
   automationPanelProps: ComponentProps<typeof AutomationPanel>;
   artifactsPanelProps: ComponentProps<typeof ArtifactsPanel>;
@@ -100,8 +94,6 @@ export function AuthorPanel({
   workflowConfigProps,
   mcpHubProps,
   skillsHubProps,
-  promptsPanelProps,
-  trellisSpecProps,
   repositoryPath,
   automationPanelProps,
   artifactsPanelProps,
@@ -201,10 +193,6 @@ export function AuthorPanel({
             </div>
           </AuthorPanelPageShell>
         );
-      case "prompts":
-        return <PromptsPanel {...promptsPanelProps} />;
-      case "trellis-spec":
-        return <ProjectTrellisCenter {...trellisSpecProps} open inline onClose={undefined} />;
       case "claude-config":
         return <ClaudeConfigDirPanel />;
       case "extensions":
@@ -245,10 +233,8 @@ export function AuthorPanel({
     hooksRepositoryPath,
     mcpHubProps,
     pane,
-    promptsPanelProps,
     repositoryPath,
     skillsHubProps,
-    trellisSpecProps,
     workflowConfigProps,
     workflowStudioAction,
     workspacesTabProps,
