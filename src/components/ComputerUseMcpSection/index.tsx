@@ -214,6 +214,7 @@ export function ComputerUseMcpSection({ repositoryPath, active = true, onRefresh
           <Button
             type="default"
             size="small"
+            className="app-mcp-hub-btn-install"
             loading={cuaDriverBusy}
             onClick={() => handleUpdateCuaDriver()}
           >
@@ -223,6 +224,7 @@ export function ComputerUseMcpSection({ repositoryPath, active = true, onRefresh
         <Button
           type="primary"
           size="small"
+          className="app-mcp-hub-btn-install"
           loading={cuaDriverBusy}
           disabled={cuaDriverStatus?.platformMacos !== true}
           onClick={() => void handleComputerUseOneClick()}

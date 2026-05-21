@@ -1,5 +1,6 @@
 import {
   ApiOutlined,
+  CheckOutlined,
   CloseOutlined,
   DeleteOutlined,
   PlusOutlined,
@@ -16,6 +17,8 @@ import { ClaudeMcpAddServerModal } from "../ClaudeMcp/ClaudeMcpAddServerModal";
 import { flattenMcpItemsForHub } from "../ClaudeMcp/claudeMcpListModel";
 import { AuthorPanelPageShell } from "../AuthorPanel/AuthorPanelPageShell";
 import { ComputerUseMcpSection } from "../ComputerUseMcpSection";
+import { RECOMMENDED_MCP_SERVERS, type RecommendedMcp } from "./recommendedMcps";
+import { McpOneClickInstallModal } from "./McpOneClickInstallModal";
 import "../ClaudeMcpLayout.css";
 import "../HubCard/index.css";
 import "./McpHub.css";
@@ -30,6 +33,8 @@ export function McpHub({ repositoryPath, onClose }: Props) {
   const embeddedInAuthor = !onClose;
   const [hubSearch, setHubSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
+  const [selectedMcpForInstall, setSelectedMcpForInstall] = useState<RecommendedMcp | null>(null);
+  const [installOpen, setInstallOpen] = useState(false);
   const [cuaDriverStatus, setCuaDriverStatus] = useState<CuaDriverStatus | null>(null);
   const [activeTab, setActiveTab] = useState<string>("installed");
   const [extServers, setExtServers] = useState<ResolvedMcpServer[]>([]);
@@ -87,6 +92,39 @@ export function McpHub({ repositoryPath, onClose }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  const installedNames = useMemo(() => {
+    const names = new Set<string>();
+    const sections: (keyof typeof mcpData)[] = [
+      "user",
+      "local",
+      "projectShared",
+      "legacyUserSettings",
+      "legacyProjectSettings",
+      "pluginMcp",
+    ];
+    for (const key of sections) {
+      if (mcpData[key]) {
+        for (const item of mcpData[key]) {
+          names.add(item.name.toLowerCase());
+        }
+      }
+    }
+    return names;
+  }, [mcpData]);
+
+  const filteredRecommendations = useMemo(() => {
+    const needle = hubSearch.trim().toLowerCase();
+    return RECOMMENDED_MCP_SERVERS.filter((mcp) => {
+      if (!needle) return true;
+      return (
+        mcp.name.toLowerCase().includes(needle) ||
+        mcp.category.toLowerCase().includes(needle) ||
+        mcp.description.toLowerCase().includes(needle) ||
+        mcp.tools.some((t) => t.toLowerCase().includes(needle))
+      );
+    });
+  }, [hubSearch]);
+
   const showComputerUseInPending = useMemo(() => {
     if (!cuaDriverStatus) return false;
     if (!cuaDriverStatus.platformMacos) return true;
@@ -94,11 +132,23 @@ export function McpHub({ repositoryPath, onClose }: Props) {
     return !computerUseMcpLikelyRegistered(mcpData);
   }, [cuaDriverStatus, mcpData]);
 
+  const uninstalledCount = useMemo(() => {
+    let count = 0;
+    for (const mcp of RECOMMENDED_MCP_SERVERS) {
+      if (!installedNames.has(mcp.name.toLowerCase())) {
+        count++;
+      }
+    }
+    return count;
+  }, [installedNames]);
+
   const pendingInstallCount = useMemo(() => {
-    if (!cuaDriverStatus?.platformMacos) return 0;
-    if (!cuaDriverStatus.installed) return 1;
-    return computerUseMcpLikelyRegistered(mcpData) ? 0 : 1;
-  }, [cuaDriverStatus, mcpData]);
+    let count = uninstalledCount;
+    if (cuaDriverStatus?.platformMacos && !computerUseMcpLikelyRegistered(mcpData)) {
+      count++;
+    }
+    return count;
+  }, [cuaDriverStatus, mcpData, uninstalledCount]);
 
   if (mcpError) {
     return (
@@ -231,20 +281,121 @@ export function McpHub({ repositoryPath, onClose }: Props) {
     );
 
   const pendingPanel = (
-    <div className="app-mcp-hub-pending-pane">
+    <div className="app-mcp-hub-pending-pane" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
       {!cuaDriverStatus ? (
         <div className="app-mcp-hub-tab-load">
           <Spin size="small" />
           正在检查推荐项…
         </div>
       ) : null}
+
       {showComputerUseInPending ? (
-        <div className="app-mcp-hub-pending-grid">
-          <ComputerUseMcpSection repositoryPath={repositoryPath} active onRefreshMcpList={() => void refreshAll()} />
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--ant-color-text)" }}>
+            系统辅助驱动
+          </div>
+          <div className="app-mcp-hub-pending-grid">
+            <ComputerUseMcpSection repositoryPath={repositoryPath} active onRefreshMcpList={() => void refreshAll()} />
+          </div>
         </div>
-      ) : cuaDriverStatus ? (
-        <Empty className="app-mcp-hub-empty" description="暂无待安装的推荐项" image={Empty.PRESENTED_IMAGE_SIMPLE} />
       ) : null}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--ant-color-text)", display: "flex", justifyContent: "space-between" }}>
+          <span>常用工具一键安装</span>
+          {hubSearch && (
+            <span style={{ fontWeight: 400, color: "var(--ant-color-text-secondary)" }}>
+              已筛选出 {filteredRecommendations.length} 项
+            </span>
+          )}
+        </div>
+
+        {filteredRecommendations.length === 0 ? (
+          <Empty
+            className="app-mcp-hub-empty"
+            description="没有符合搜索条件的推荐 MCP"
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+          />
+        ) : (
+          <div className="app-mcp-hub-grid">
+            {filteredRecommendations.map((mcp) => {
+              const isInstalled = installedNames.has(mcp.name.toLowerCase());
+              let categoryColor = "default";
+              if (mcp.category === "开发与数据") categoryColor = "success";
+              else if (mcp.category === "搜索与信息") categoryColor = "processing";
+              else if (mcp.category === "办公与写作") categoryColor = "warning";
+              else if (mcp.category === "智能辅助") categoryColor = "purple";
+
+              const commandPreview = `${mcp.command} ${mcp.args.join(" ")}`;
+
+              return (
+                <article key={mcp.name} className="app-mcp-hub-card" style={{ opacity: isInstalled ? 0.75 : 1 }}>
+                  <div className="app-mcp-hub-card-top">
+                    <span className="app-mcp-hub-card-avatar" aria-hidden>
+                      {mcp.name.slice(0, 1).toUpperCase()}
+                    </span>
+                    <div className="app-mcp-hub-card-headline">
+                      <div className="app-mcp-hub-card-name-row">
+                        <span className="app-mcp-hub-card-name">{mcp.name}</span>
+                        <Tag className="app-mcp-hub-card-tag" color={categoryColor}>
+                          {mcp.category}
+                        </Tag>
+                      </div>
+                      <div className="app-mcp-hub-card-scope">推荐 Stdio MCP</div>
+                    </div>
+                  </div>
+                  <div className="app-mcp-hub-card-command" title={commandPreview}>
+                    {commandPreview}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "11px",
+                      color: "var(--ant-color-text-secondary)",
+                      marginTop: "2px",
+                      lineHeight: 1.45,
+                      display: "-webkit-box",
+                      WebkitLineClamp: 3,
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                    }}
+                    title={mcp.description}
+                  >
+                    {mcp.description}
+                  </div>
+                  {mcp.tools.length > 0 ? (
+                    <div className="app-mcp-hub-card-tools" style={{ marginTop: "4px" }}>
+                      {mcp.tools.map((tool) => (
+                        <span key={tool} className="app-mcp-hub-tool-chip">
+                          {tool}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                  <div className="app-mcp-hub-card-actions" style={{ marginTop: "auto", display: "flex", justifyContent: "flex-end" }}>
+                    {isInstalled ? (
+                      <Tag icon={<CheckOutlined />} color="success" style={{ marginInlineEnd: 0 }}>
+                        已连通就绪
+                      </Tag>
+                    ) : (
+                      <Button
+                        type="primary"
+                        size="small"
+                        className="app-mcp-hub-btn-install"
+                        onClick={() => {
+                          setSelectedMcpForInstall(mcp);
+                          setInstallOpen(true);
+                        }}
+                      >
+                        安装
+                      </Button>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 
@@ -352,6 +503,17 @@ export function McpHub({ repositoryPath, onClose }: Props) {
         onClose={() => setAddOpen(false)}
         repositoryPath={repositoryPath}
         onAdded={() => void refreshAll()}
+      />
+
+      <McpOneClickInstallModal
+        open={installOpen}
+        onClose={() => {
+          setInstallOpen(false);
+          setSelectedMcpForInstall(null);
+        }}
+        mcp={selectedMcpForInstall}
+        repositoryPath={repositoryPath}
+        onInstalled={() => void refreshAll()}
       />
     </>
   );

@@ -398,6 +398,18 @@
   border-top: 1px solid var(--ant-color-border-secondary);
 }
 
+.app-mcp-hub-card-actions .app-mcp-hub-btn-install.ant-btn-sm {
+  height: 22px;
+  padding-inline: 7px;
+  font-size: 11px;
+  line-height: 1.2;
+  border-radius: 4px;
+}
+
+.app-mcp-hub-card-actions .app-mcp-hub-btn-install.ant-btn-sm .anticon {
+  font-size: 11px;
+}
+
 .app-mcp-hub-card-switch-label {
   font-size: 10px;
   color: var(--ant-color-text-tertiary);

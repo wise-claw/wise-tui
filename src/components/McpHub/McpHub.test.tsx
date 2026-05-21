@@ -92,7 +92,7 @@ describe("McpHub", () => {
   test("renders the MCP tool list with management actions", () => {
     const html = renderToStaticMarkup(
       <AntApp>
-        <McpHub repositoryPath="/repo/wise" />
+        <McpHub repositoryPath="/repo/wise" onClose={() => {}} />
       </AntApp>,
     );
 
