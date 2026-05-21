@@ -1,4 +1,4 @@
-import { BranchesOutlined, NodeIndexOutlined, TeamOutlined } from "@ant-design/icons";
+import { BranchesOutlined, NodeIndexOutlined, PlusOutlined, TeamOutlined } from "@ant-design/icons";
 import {
   Alert,
   Button,
@@ -10,6 +10,7 @@ import {
   Select,
   Space,
   Switch,
+  Table,
   Tag,
   Typography,
   message,
@@ -34,6 +35,13 @@ import { getWorkflowValidationGroupTitle as getWorkflowValidationGroupTitleImpl,
 import "./index.css";
 
 type GraphStatus = "published" | "draft" | "unknown" | "none";
+
+function renderWorkflowGraphStatusTag(status: GraphStatus) {
+  if (status === "published") return <Tag color="success">已发布</Tag>;
+  if (status === "draft") return <Tag color="processing">草稿</Tag>;
+  if (status === "unknown") return <Tag color="warning">未知</Tag>;
+  return <Tag>未生成</Tag>;
+}
 
 interface Props {
   open: boolean;
@@ -328,107 +336,124 @@ export function WorkflowConfigModal({
     }
   }
 
+  const libraryToolbar =
+    templates.length > 0 ? (
+      <div className="app-workflow-config-library-toolbar">
+        <Input.Search
+          size="small"
+          allowClear
+          placeholder="搜索工作流"
+          value={teamKeyword}
+          onChange={(event) => setTeamKeyword(event.target.value)}
+          className="app-workflow-config-library-search"
+        />
+        <Select
+          size="small"
+          value={statusFilter}
+          options={statusFilterOptions}
+          onChange={(value) => setStatusFilter(value)}
+          className="app-workflow-config-library-filter"
+        />
+        <Button
+          size="small"
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={openNewProtocolEditor}
+          className="app-workflow-config-library-create"
+        >
+          新建工作流
+        </Button>
+      </div>
+    ) : null;
+
   const content = (
-    <div className="app-workflow-config-shell">
-      <div className="app-workflow-config-layout app-workflow-config-layout--library-only">
-        <aside className="app-workflow-config-sidebar" aria-label="工作流库">
-          <div className="app-workflow-config-sidebar-header">
-            <div className="app-workflow-config-sidebar-heading">
-              <Typography.Text strong>工作流库</Typography.Text>
-              <Typography.Text type="secondary" className="app-workflow-config-sidebar-count">
-                {templates.length}
-              </Typography.Text>
-            </div>
-            <Button
-              size="small"
-              type={canvasEditorOpen && !editingTemplateId ? "primary" : "default"}
-              onClick={openNewProtocolEditor}
-              className="app-workflow-config-create-btn"
-            >
+    <div className="app-workflow-config-shell app-workflow-config-shell--library">
+      {templates.length === 0 ? (
+        <div className="app-workflow-config-library-empty">
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无工作流，创建后可编排阶段与角色委派">
+            <Button type="primary" size="small" icon={<PlusOutlined />} onClick={openNewProtocolEditor}>
               新建工作流
             </Button>
-          </div>
-          <div className="app-workflow-config-filter-row">
-            <Input.Search
-              size="small"
-              allowClear
-              placeholder="搜索工作流"
-              value={teamKeyword}
-              onChange={(event) => setTeamKeyword(event.target.value)}
-            />
-            <Select
-              size="small"
-              value={statusFilter}
-              options={statusFilterOptions}
-              onChange={(value) => setStatusFilter(value)}
-              className="app-workflow-config-filter-status"
-            />
-          </div>
-          <div className="app-workflow-config-protocol-list">
-            {templates.length === 0 ? (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无工作流" />
-            ) : filteredTemplates.length === 0 ? (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="无匹配结果" />
-            ) : (
-              filteredTemplates.map((row) => {
-                const status = graphStatusByWorkflowId[row.id] ?? "none";
-                const active = canvasEditorOpen && editingTemplateId === row.id;
-                return (
-                  <div
-                    key={row.id}
-                    role="button"
-                    tabIndex={0}
-                    className={`app-workflow-config-protocol-item${active ? " app-workflow-config-protocol-item--active" : ""}`}
-                    onClick={() => startEditingTemplate(row)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
+          </Empty>
+        </div>
+      ) : (
+        <>
+          {libraryToolbar}
+          <Table<WorkflowTemplateItem>
+            rowKey="id"
+            loading={loading}
+            dataSource={filteredTemplates}
+            pagination={false}
+            className="app-workflow-config-library-table"
+            locale={{ emptyText: "无匹配工作流" }}
+            rowClassName={(row) =>
+              canvasEditorOpen && editingTemplateId === row.id ? "app-workflow-config-library-row--active" : ""
+            }
+            onRow={(row) => ({
+              onClick: () => {
+                void startEditingTemplate(row);
+              },
+            })}
+            columns={[
+              {
+                title: "工作流",
+                key: "name",
+                ellipsis: true,
+                render: (_, row) => (
+                  <Space size={6} wrap>
+                    <Typography.Text strong ellipsis={{ tooltip: row.name }}>
+                      {row.name}
+                    </Typography.Text>
+                    {row.isDefault ? <Tag color="gold">默认</Tag> : null}
+                  </Space>
+                ),
+              },
+              {
+                title: "阶段",
+                key: "stages",
+                width: 88,
+                render: (_, row) => `${row.stages.length} 个`,
+              },
+              {
+                title: "画布状态",
+                key: "graphStatus",
+                width: 96,
+                render: (_, row) =>
+                  renderWorkflowGraphStatusTag((graphStatusByWorkflowId[row.id] ?? "none") as GraphStatus),
+              },
+              {
+                title: "操作",
+                key: "actions",
+                width: 120,
+                render: (_, row) => (
+                  <Space size={4} onClick={(event) => event.stopPropagation()}>
+                    <Button
+                      type="link"
+                      size="small"
+                      className="app-workflow-config-library-action"
+                      onClick={() => {
                         void startEditingTemplate(row);
-                      }
-                    }}
-                  >
-                    <div className="app-workflow-config-protocol-item__main">
-                      <Typography.Text strong ellipsis className="app-workflow-config-protocol-item__name">
-                        {row.name}
-                      </Typography.Text>
-                      <Typography.Text type="secondary" className="app-workflow-config-protocol-item__meta">
-                        {row.stages.length} 个阶段
-                      </Typography.Text>
-                    </div>
-                    <div className="app-workflow-config-protocol-item__footer">
-                      <Space size={4} wrap className="app-workflow-config-protocol-item__tags">
-                        {row.isDefault ? <Tag color="gold">默认</Tag> : null}
-                        {status === "published" ? <Tag color="success">已发布</Tag> : null}
-                        {status === "draft" ? <Tag color="processing">草稿</Tag> : null}
-                        {status === "unknown" ? <Tag color="warning">未知</Tag> : null}
-                        {status === "none" ? <Tag>未生成</Tag> : null}
-                      </Space>
-                      <Popconfirm
-                        title="确认删除该工作流？"
-                        onConfirm={() => handleDeleteTemplate(row.id)}
-                        okText="删除"
-                        cancelText="取消"
-                      >
-                        <Button
-                          size="small"
-                          danger
-                          type="link"
-                          className="app-workflow-config-protocol-item__delete"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                          }}
-                        >
-                          删除
-                        </Button>
-                      </Popconfirm>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </aside>
-      </div>
+                      }}
+                    >
+                      编辑
+                    </Button>
+                    <Popconfirm
+                      title="确认删除该工作流？"
+                      onConfirm={() => handleDeleteTemplate(row.id)}
+                      okText="删除"
+                      cancelText="取消"
+                    >
+                      <Button type="link" size="small" danger className="app-workflow-config-library-action">
+                        删除
+                      </Button>
+                    </Popconfirm>
+                  </Space>
+                ),
+              },
+            ]}
+          />
+        </>
+      )}
 
       <Modal
         title={editingTemplate ? `编辑工作流 · ${editingTemplate.name}` : "新建工作流"}

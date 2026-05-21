@@ -8,12 +8,6 @@
   min-width: 0;
 }
 
-.app-workflow-config-inline-root .app-workflow-config-layout {
-  height: 100%;
-  min-height: 0;
-  max-height: none;
-}
-
 .app-workflow-config-shell {
   display: flex;
   flex-direction: column;
@@ -22,6 +16,91 @@
   min-width: 0;
   height: 100%;
   min-height: 0;
+}
+
+.app-workflow-config-shell--library {
+  gap: 12px;
+  height: auto;
+  min-height: 0;
+}
+
+.app-workflow-config-library-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+}
+
+.app-workflow-config-library-search {
+  flex: 1 1 200px;
+  min-width: 160px;
+  max-width: 360px;
+}
+
+.app-workflow-config-library-filter {
+  width: 108px;
+  flex: none;
+}
+
+.app-workflow-config-library-create {
+  margin-left: auto;
+  flex: none;
+}
+
+.app-workflow-config-library-empty {
+  padding: 8px 0 12px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-workflow-config-library-empty .ant-empty {
+  margin: 28px 0 20px;
+}
+
+.app-workflow-config-library-empty .ant-empty-description {
+  max-width: 280px;
+  margin-inline: auto;
+}
+
+.app-workflow-config-library-table.ant-table-wrapper .ant-table,
+.app-workflow-config-library-table.ant-table-wrapper .ant-table-container {
+  box-shadow: none;
+}
+
+.app-workflow-config-library-table.ant-table-wrapper .ant-table .ant-table-thead > tr > th {
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.app-workflow-config-library-table.ant-table-wrapper .ant-table .ant-table-tbody > tr > td {
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.35;
+  vertical-align: middle;
+}
+
+.app-workflow-config-library-table .ant-table-tbody > tr {
+  cursor: pointer;
+}
+
+.app-workflow-config-library-table .ant-table-tbody > tr.app-workflow-config-library-row--active > td {
+  background: var(--ant-color-primary-bg);
+}
+
+.app-workflow-config-library-table .ant-tag {
+  margin-inline-end: 0;
+  font-size: 11px;
+  line-height: 18px;
+  padding: 0 6px;
+}
+
+.app-workflow-config-library-action.ant-btn {
+  padding-inline: 0;
+  height: auto;
+  font-size: 12px;
 }
 
 .app-workflow-config-layout {

@@ -39,7 +39,7 @@ const template = {
 };
 
 describe("WorkflowConfigModal", () => {
-  test("renders the workflow library without the legacy dashboard hero", () => {
+  test("renders library table layout without the legacy dashboard hero", () => {
     const html = renderToStaticMarkup(
       <AntApp>
         <WorkflowConfigModal
@@ -62,12 +62,36 @@ describe("WorkflowConfigModal", () => {
       </AntApp>,
     );
 
-    expect(html).toContain("工作流库");
-    expect(html).toContain("新建工作流");
     expect(html).toContain("搜索工作流");
+    expect(html).toContain("新建工作流");
+    expect(html).toContain("app-workflow-config-library-table");
+    expect(html).toContain("需求交付工作流");
     expect(html).not.toContain("委派协议控制台");
-    expect(html).not.toContain("多智能体委派协议");
-    expect(html).not.toContain("任务拆解");
+    expect(html).not.toContain("工作流库");
     expect(html).not.toContain('data-stub="workflow-canvas"');
+  });
+
+  test("renders empty library shell with create action when no templates", () => {
+    const html = renderToStaticMarkup(
+      <AntApp>
+        <WorkflowConfigModal
+          open
+          inline
+          loading={false}
+          employees={[employee]}
+          templates={[]}
+          onClose={mock(() => {})}
+          onSaveTemplate={mock(async () => template)}
+          onLoadGraphItem={mock(async () => null)}
+          onSaveGraph={mock(async () => {})}
+          onValidateGraph={mock(async () => ({ ok: true, errors: [] }))}
+          onDeleteTemplate={mock(async () => {})}
+        />
+      </AntApp>,
+    );
+
+    expect(html).toContain("app-workflow-config-library-empty");
+    expect(html).toContain("暂无工作流");
+    expect(html).toContain("新建工作流");
   });
 });

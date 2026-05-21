@@ -341,7 +341,6 @@ html.app-host-macos-chrome .app-author-config-sider .author-panel__nav-drag {
 .author-panel-workflows {
   display: flex;
   flex-direction: column;
-  gap: 12px;
   min-width: 0;
 }
 
