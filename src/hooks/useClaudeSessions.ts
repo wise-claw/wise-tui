@@ -245,6 +245,24 @@ async function modelsForRepositoryPaths(paths: string[]): Promise<Map<string, st
   return map;
 }
 
+/** 刷新磁盘索引后，去掉「已有 Claude session_id 但 jsonl 已不在磁盘、且无本地消息」的幽灵标签。 */
+export function pruneGhostRepositorySessions(
+  sessions: ClaudeSession[],
+  repositoryPath: string,
+  disk: ClaudeDiskSessionItem[],
+): ClaudeSession[] {
+  const diskIds = new Set(disk.map((d) => d.sessionId));
+  return sessions.filter((s) => {
+    if (s.repositoryPath !== repositoryPath) return true;
+    if (s.status === "running" || s.status === "connecting") return true;
+    const claudeId = s.claudeSessionId?.trim();
+    if (!claudeId) return true;
+    if (diskIds.has(claudeId) || diskIds.has(s.id)) return true;
+    if (s.messages.length > 0) return true;
+    return false;
+  });
+}
+
 function mergeRepositoryDiskSessions(
   prev: ClaudeSession[],
   repositoryPath: string,
@@ -252,7 +270,8 @@ function mergeRepositoryDiskSessions(
   disk: ClaudeDiskSessionItem[],
   configFallbackModel: string,
 ): ClaudeSession[] {
-  const copy = prev.map((s) => ({ ...s }));
+  const pruned = pruneGhostRepositorySessions(prev, repositoryPath, disk);
+  const copy = pruned.map((s) => ({ ...s }));
 
   for (let i = 0; i < copy.length; i++) {
     if (copy[i].repositoryPath !== repositoryPath) continue;
