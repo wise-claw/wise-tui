@@ -916,6 +916,8 @@ interface Props {
   rightCollapsed?: boolean;
   terminalCollapsed?: boolean;
   onOpenWorkflowConfig?: () => void;
+  /** 从会话快捷条「更多」直达指定内置助手对话页 */
+  onOpenBuiltinAssistant?: (assistantId: string) => void;
   employees?: EmployeeItem[];
   mentionEmployees?: EmployeeItem[];
   composerProjectRoleTagOptions?: ReadonlyArray<import("../../utils/projectRoleTagOptions").RoleTagOption>;
@@ -1018,6 +1020,7 @@ export function ClaudeSessions({
   terminalCollapsed,
   onAutoFixRunError: onAutoFixRunErrorFromProps,
   onOpenWorkflowConfig,
+  onOpenBuiltinAssistant,
   employees = [],
   mentionEmployees = [],
   composerProjectRoleTagOptions = [],
@@ -1224,6 +1227,7 @@ export function ClaudeSessions({
                 }
                 onSwitchSession={handleSwitchToSession}
                 onCreateNewSession={handleCreateActiveRepositorySession}
+                onOpenBuiltinAssistant={onOpenBuiltinAssistant}
                 onSend={onSendMessage}
                 onExecute={onExecuteSession}
                 onSessionModelChange={(model) => onUpdateSessionModel(activeSession.id, model)}
@@ -1281,6 +1285,7 @@ export function ClaudeSessions({
                   }
                   onSwitchSession={handleSwitchToSession}
                   onCreateNewSession={handleCreateSecondarySession}
+                  onOpenBuiltinAssistant={onOpenBuiltinAssistant}
                   onSend={onSendMessage}
                   onExecute={onExecuteSession}
                   onSessionModelChange={(model) => onUpdateSessionModel(secondarySession.id, model)}
@@ -1358,6 +1363,7 @@ export function ClaudeSessions({
             }
             onSwitchSession={handleSwitchToSession}
             onCreateNewSession={handleCreateActiveRepositorySession}
+            onOpenBuiltinAssistant={onOpenBuiltinAssistant}
             onSend={onSendMessage}
             onExecute={onExecuteSession}
             onSessionModelChange={(model) => onUpdateSessionModel(activeSession.id, model)}

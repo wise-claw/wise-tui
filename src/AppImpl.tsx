@@ -258,6 +258,7 @@ export default function App() {
   const [lastAuthorPane, setLastAuthorPane] = useState(() => readAuthorPaneFromStorage());
   const [missionControlInitialTarget, setMissionControlInitialTarget] = useState<OpenMissionControlDetail | null>(null);
   const [missionControlOpenRequestKey, setMissionControlOpenRequestKey] = useState(0);
+  const [cockpitSurfaceInitialAssistantId, setCockpitSurfaceInitialAssistantId] = useState<string | null>(null);
   const [authorTrellisProjectId, setAuthorTrellisProjectId] = useState<string | null>(null);
   const [workspaceCreateRequest, setWorkspaceCreateRequest] = useState(0);
   const [standaloneRepoAddRequest, setStandaloneRepoAddRequest] = useState(0);
@@ -1106,12 +1107,23 @@ export default function App() {
   const openMissionControl = useCallback((detail: OpenMissionControlDetail) => {
     setSearchOpen(false);
     setMissionControlInitialTarget(detail);
+    setCockpitSurfaceInitialAssistantId(null);
     setMissionControlOpenRequestKey((value) => value + 1);
     viewMode.enter(cockpitView());
   }, [viewMode]);
   const openDefaultAssistant = useCallback(() => {
     setSearchOpen(false);
     setMissionControlInitialTarget(null);
+    setCockpitSurfaceInitialAssistantId(null);
+    setMissionControlOpenRequestKey((value) => value + 1);
+    viewMode.enter(cockpitView());
+  }, [viewMode]);
+  const openBuiltinAssistant = useCallback((assistantId: string) => {
+    const trimmed = assistantId.trim();
+    if (!trimmed) return;
+    setSearchOpen(false);
+    setMissionControlInitialTarget(null);
+    setCockpitSurfaceInitialAssistantId(trimmed);
     setMissionControlOpenRequestKey((value) => value + 1);
     viewMode.enter(cockpitView());
   }, [viewMode]);
@@ -2577,6 +2589,7 @@ export default function App() {
         rightCollapsed: effectiveRightCollapsed,
         terminalCollapsed,
         onOpenWorkflowConfig: openWorkflowConfigFromSidebar,
+        onOpenBuiltinAssistant: openBuiltinAssistant,
         employees,
         mentionEmployees,
         composerProjectRoleTagOptions,
@@ -2674,6 +2687,7 @@ export default function App() {
       cockpitSurfaceHasInitialTarget={Boolean(
         missionControlInitialTarget?.projectId || missionControlInitialTarget?.repositoryId,
       )}
+      cockpitSurfaceInitialAssistantId={cockpitSurfaceInitialAssistantId}
       cockpitSurfaceOpenRequestKey={missionControlOpenRequestKey}
       commandPaletteProps={{
         open: searchOpen,

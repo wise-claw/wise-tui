@@ -1,6 +1,7 @@
 import {
   BellOutlined,
   CheckCircleOutlined,
+  CloudUploadOutlined,
   CommentOutlined,
   DeleteOutlined,
   FieldTimeOutlined,
@@ -48,6 +49,7 @@ import type { ControlRequestStatus } from "../../notifications";
 import { StreamingReplyHint } from "./Markdown";
 import { ClaudeChatMessageRow } from "./ClaudeChatMessageRow";
 import { ClaudeSessionTrajectoryDrawer } from "./ClaudeSessionTrajectoryDrawer";
+import { SessionQuickActionsBar } from "./SessionQuickActionsBar";
 import { ComposerRegion, type DualPaneComposerRepositoryPickerProps } from "../ClaudeChatInput";
 import { gitCommit, gitPull, gitPush, gitStage, gitStatus, gitWorktreeList, gitWorktreeRemove } from "../../services/git";
 import { openInFinder } from "../../services/repository";
@@ -196,6 +198,8 @@ interface Props {
   /** 由父级在「返回主会话」等场景传入，使重挂载后面板默认收起 */
   initialNotificationPanelCollapsed?: boolean;
   onCreateNewSession?: () => void;
+  /** 从快捷条「更多」直达指定内置助手对话页 */
+  onOpenBuiltinAssistant?: (assistantId: string) => void;
   onSend: (prompt: string) => void;
   onExecute: (
     sessionId: string,
@@ -425,6 +429,7 @@ export function ClaudeChat({
   onSwitchSession,
   initialNotificationPanelCollapsed = false,
   onCreateNewSession,
+  onOpenBuiltinAssistant,
   onSend: _onSend,
   onExecute,
   onSessionModelChange,
@@ -4380,184 +4385,154 @@ export function ClaudeChat({
         </div>
       ) : null}
 
-      <div className="app-session-quick-actions app-session-quick-actions--composer">
-        <div className="app-session-quick-actions__row">
-          <div className="app-session-quick-actions__group app-session-quick-actions__group--segmented">
-            <button
-              type="button"
-              className="app-followup-review-btn app-followup-review-btn--split"
-              onClick={() => onCreateNewSession?.()}
-            >
-              <span className="app-followup-review-btn__label">新建会话</span>
-            </button>
-            <button
-              type="button"
-              className="app-followup-review-btn app-followup-review-btn--split"
-              onClick={() => {
-                window.dispatchEvent(new CustomEvent(WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL));
-              }}
-            >
-              <span className="app-followup-review-btn__label">需求</span>
-            </button>
-            <Popover
-              trigger="click"
-              placement="topLeft"
-              open={pushPopoverOpen}
-              onOpenChange={(open) => setPushPopoverOpen(open)}
-              overlayClassName="app-push-popover"
-              content={
-                <div className="app-push-popover__content">
-                  <div className="app-push-popover__title">推送前提交总结（AI 生成草稿）</div>
-                  {pushSummaryLoading ? (
-                    <div className="app-push-popover__loading">
-                      <Spin size="small" />
-                      <span>{pushSummaryPhase || "正在生成提交总结..."}</span>
-                    </div>
-                  ) : null}
-                  <textarea
-                    className="app-push-popover__textarea"
-                    value={pushSummaryDraft}
-                    onChange={(event) => setPushSummaryDraft(event.target.value)}
-                    placeholder="正在生成提交总结..."
+      <SessionQuickActionsBar
+        onCreateNewSession={onCreateNewSession}
+        onOpenRequirementSplit={() => {
+          window.dispatchEvent(new CustomEvent(WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL));
+        }}
+        onOpenBuiltinAssistant={onOpenBuiltinAssistant}
+        onOpenWorkTrajectory={() => setWorkTrajectoryDrawerOpen(true)}
+        showWorktreeInMore={Boolean(session.repositoryPath)}
+        onOpenWorktreeMenu={() => {
+          setGitWorktreePopoverOpen(true);
+          void loadLinkedWorktrees();
+        }}
+        pushControl={
+          <Popover
+            trigger="click"
+            placement="topLeft"
+            open={pushPopoverOpen}
+            onOpenChange={(open) => setPushPopoverOpen(open)}
+            overlayClassName="app-push-popover"
+            content={
+              <div className="app-push-popover__content">
+                <div className="app-push-popover__title">推送前提交总结（AI 生成草稿）</div>
+                {pushSummaryLoading ? (
+                  <div className="app-push-popover__loading">
+                    <Spin size="small" />
+                    <span>{pushSummaryPhase || "正在生成提交总结..."}</span>
+                  </div>
+                ) : null}
+                <textarea
+                  className="app-push-popover__textarea"
+                  value={pushSummaryDraft}
+                  onChange={(event) => setPushSummaryDraft(event.target.value)}
+                  placeholder="正在生成提交总结..."
+                  disabled={pushSummaryLoading || pushSubmitting}
+                />
+                <div className="app-push-popover__footer">
+                  <button
+                    type="button"
+                    className="app-push-popover__submit"
+                    onClick={() => void handlePushSubmit()}
                     disabled={pushSummaryLoading || pushSubmitting}
-                  />
-                  <div className="app-push-popover__footer">
-                    <button
-                      type="button"
-                      className="app-push-popover__submit"
-                      onClick={() => void handlePushSubmit()}
-                      disabled={pushSummaryLoading || pushSubmitting}
-                    >
-                      {pushSubmitting ? "推送中..." : "推送"}
-                    </button>
-                  </div>
+                  >
+                    {pushSubmitting ? "推送中..." : "推送"}
+                  </button>
                 </div>
-              }
+              </div>
+            }
+          >
+            <button
+              type="button"
+              className={`app-session-quick-pill app-session-quick-pill--push${pushPopoverOpen ? " app-session-quick-pill--selected" : ""}`}
             >
-              <button type="button" className="app-followup-review-btn">
-                <span className="app-followup-review-btn__label">推送</span>
-                <span
-                  className={`app-followup-review-btn__stats${reviewGitStatsPulse ? " app-followup-review-btn__stats--pulse" : ""}`}
-                >
-                  <span className="app-followup-review-btn__add">+{stats.additions}</span>
-                  <span className="app-followup-review-btn__del">-{stats.deletions}</span>
-                </span>
-              </button>
-            </Popover>
-          </div>
-          <div className="app-session-quick-actions__group app-session-quick-actions__group--right">
-            <Tooltip
-              title="按消息顺序查看用户、Claude、思考与工具在各轮中的分布（泳道时间线）"
-              mouseEnterDelay={0.35}
-            >
-              <button
-                type="button"
-                className="app-followup-review-btn"
-                onClick={() => setWorkTrajectoryDrawerOpen(true)}
+              <span className="app-session-quick-pill__icon app-session-quick-pill__icon--green" aria-hidden>
+                <CloudUploadOutlined />
+              </span>
+              <span className="app-session-quick-pill__label">推送</span>
+              <span
+                className={`app-session-quick-pill__stats${reviewGitStatsPulse ? " app-session-quick-pill__stats--pulse" : ""}`}
               >
-                <span className="app-followup-review-btn__label">工作轨迹</span>
-              </button>
-            </Tooltip>
-            {session.repositoryPath ? (
-              <Popover
-                trigger="click"
-                placement="topRight"
-                open={gitWorktreePopoverOpen}
-                onOpenChange={(open) => {
-                  setGitWorktreePopoverOpen(open);
-                  if (open) void loadLinkedWorktrees();
-                }}
-                overlayClassName="app-gitworktree-popover"
-                content={
-                  <div className="app-gitworktree-popover__content">
-                    <div className="app-gitworktree-popover__title">本仓库额外 worktree</div>
-                    {gitWorktreeLoading ? (
-                      <div className="app-gitworktree-popover__loading">
-                        <Spin size="small" />
-                        <span>加载中...</span>
+                <span className="app-session-quick-pill__add">+{stats.additions}</span>
+                <span className="app-session-quick-pill__del">-{stats.deletions}</span>
+              </span>
+            </button>
+          </Popover>
+        }
+      />
+
+      {session.repositoryPath ? (
+        <Modal
+          title="本仓库额外 worktree"
+          open={gitWorktreePopoverOpen}
+          onCancel={() => setGitWorktreePopoverOpen(false)}
+          footer={null}
+          width={520}
+          destroyOnHidden
+          className="app-gitworktree-modal"
+        >
+          <div className="app-gitworktree-popover__content">
+            {gitWorktreeLoading ? (
+              <div className="app-gitworktree-popover__loading">
+                <Spin size="small" />
+                <span>加载中...</span>
+              </div>
+            ) : linkedWorktrees.length === 0 ? (
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无额外 worktree" />
+            ) : (
+              <ul className="app-gitworktree-popover__list">
+                {linkedWorktrees.map((w) => (
+                  <li key={w.path} className="app-gitworktree-popover__item">
+                    <div className="app-gitworktree-popover__item-main">
+                      <div className="app-gitworktree-popover__branch">{formatWorktreeBranchLabel(w.branch)}</div>
+                      <div className="app-gitworktree-popover__path" title={w.path}>
+                        {formatWorktreePathRelative(session.repositoryPath ?? "", w.path)}
                       </div>
-                    ) : linkedWorktrees.length === 0 ? (
-                      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无额外 worktree" />
-                    ) : (
-                      <ul className="app-gitworktree-popover__list">
-                        {linkedWorktrees.map((w) => (
-                          <li key={w.path} className="app-gitworktree-popover__item">
-                            <div className="app-gitworktree-popover__item-main">
-                              <div className="app-gitworktree-popover__branch">{formatWorktreeBranchLabel(w.branch)}</div>
-                              <div className="app-gitworktree-popover__path" title={w.path}>
-                                {formatWorktreePathRelative(session.repositoryPath ?? "", w.path)}
-                              </div>
-                            </div>
-                            <div className="app-gitworktree-popover__item-actions">
-                              <Tooltip title="在系统文件管理器中打开此目录">
-                                <Button type="link" size="small" onClick={() => handleOpenWorktreeInFinder(w.path)}>
-                                  打开目录
-                                </Button>
-                              </Tooltip>
-                              {onAddWorktreeRepositoryToProject ? (
-                                <Tooltip title="加入左侧当前项目，便于在仓库列表中切换">
-                                  <Button
-                                    type="link"
-                                    size="small"
-                                    loading={gitWorktreeAddingToProjectPath === w.path}
-                                    disabled={
-                                      (gitWorktreeAddingToProjectPath !== null &&
-                                        gitWorktreeAddingToProjectPath !== w.path) ||
-                                      (gitWorktreeRemovingPath !== null && gitWorktreeRemovingPath !== w.path)
-                                    }
-                                    onClick={() => void handleAddWorktreeToProject(w.path)}
-                                  >
-                                    加入项目
-                                  </Button>
-                                </Tooltip>
-                              ) : null}
-                              <Popconfirm
-                                title="撤回此 worktree？"
-                                description="将执行 git worktree remove --force，并删除该 worktree 对应的工作区目录。"
-                                okText="确定"
-                                cancelText="取消"
-                                styles={{ container: { width: "min(92vw, 300px)", maxWidth: "min(92vw, 300px)" } }}
-                                onConfirm={() => void handleGitWorktreeRemove(w.path)}
-                              >
-                                <Button
-                                  type="link"
-                                  size="small"
-                                  danger
-                                  loading={gitWorktreeRemovingPath === w.path}
-                                  disabled={
-                                    (gitWorktreeRemovingPath !== null && gitWorktreeRemovingPath !== w.path) ||
-                                    (gitWorktreeAddingToProjectPath !== null &&
-                                      gitWorktreeAddingToProjectPath !== w.path)
-                                  }
-                                >
-                                  撤销
-                                </Button>
-                              </Popconfirm>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                }
-              >
-                <button
-                  type="button"
-                  className="app-followup-review-btn app-gitworktree-btn"
-                  title="查看并管理本仓库的额外 git worktree"
-                >
-                  <span className="app-followup-review-btn__label">工作树</span>
-                  {linkedWorktrees.length > 0 ? (
-                    <span className="app-gitworktree-btn__badge" aria-label={`${linkedWorktrees.length} 个 worktree`}>
-                      {linkedWorktrees.length > 99 ? "99+" : linkedWorktrees.length}
-                    </span>
-                  ) : null}
-                </button>
-              </Popover>
-            ) : null}
+                    </div>
+                    <div className="app-gitworktree-popover__item-actions">
+                      <Tooltip title="在系统文件管理器中打开此目录">
+                        <Button type="link" size="small" onClick={() => handleOpenWorktreeInFinder(w.path)}>
+                          打开目录
+                        </Button>
+                      </Tooltip>
+                      {onAddWorktreeRepositoryToProject ? (
+                        <Tooltip title="加入左侧当前项目，便于在仓库列表中切换">
+                          <Button
+                            type="link"
+                            size="small"
+                            loading={gitWorktreeAddingToProjectPath === w.path}
+                            disabled={
+                              (gitWorktreeAddingToProjectPath !== null &&
+                                gitWorktreeAddingToProjectPath !== w.path) ||
+                              (gitWorktreeRemovingPath !== null && gitWorktreeRemovingPath !== w.path)
+                            }
+                            onClick={() => void handleAddWorktreeToProject(w.path)}
+                          >
+                            加入项目
+                          </Button>
+                        </Tooltip>
+                      ) : null}
+                      <Popconfirm
+                        title="撤回此 worktree？"
+                        description="将执行 git worktree remove --force，并删除该 worktree 对应的工作区目录。"
+                        okText="确定"
+                        cancelText="取消"
+                        styles={{ container: { width: "min(92vw, 300px)", maxWidth: "min(92vw, 300px)" } }}
+                        onConfirm={() => void handleGitWorktreeRemove(w.path)}
+                      >
+                        <Button
+                          type="link"
+                          size="small"
+                          danger
+                          loading={gitWorktreeRemovingPath === w.path}
+                          disabled={
+                            (gitWorktreeRemovingPath !== null && gitWorktreeRemovingPath !== w.path) ||
+                            (gitWorktreeAddingToProjectPath !== null &&
+                              gitWorktreeAddingToProjectPath !== w.path)
+                          }
+                        >
+                          撤销
+                        </Button>
+                      </Popconfirm>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
-        </div>
-      </div>
+        </Modal>
+      ) : null}
 
       {/* Composer：高度写入 --app-composer-tray-h，供快捷条定位；后台 invocation 仅保留抽屉（无浮层摘要） */}
       <div ref={composerTrayRef} className="app-claude-composer-tray">

@@ -16,12 +16,28 @@ type CockpitSubMode =
   | { kind: "hub" }
   | { kind: "conversation"; assistantId: string };
 
+function cockpitSubModeFromEntry(
+  hasInitialTarget: boolean,
+  initialAssistantId?: string | null,
+): CockpitSubMode {
+  const assistantId = initialAssistantId?.trim();
+  if (assistantId) {
+    return { kind: "conversation", assistantId };
+  }
+  if (hasInitialTarget) {
+    return { kind: "conversation", assistantId: DEFAULT_PRD_SPLIT_ASSISTANT_ID };
+  }
+  return { kind: "hub" };
+}
+
 export interface CockpitSurfaceProps {
   /** 当前选定的工作区 id;影响 hub 是否启用 PRD-split 助手以及对话 header 显示。 */
   activeProjectId: string | null;
   activeProjectName: string | null;
   /** 是否携带显式入口(项目 FAB / 仓库 FAB)。携带时直接进入对话子态。 */
   hasInitialTarget: boolean;
+  /** 从会话快捷条「更多」指定内置助手时直接进入该助手对话页。 */
+  initialAssistantId?: string | null;
   /** 显式打开助手入口的递增信号;用于同一 cockpit 实例内重复打开。 */
   openRequestKey: number;
   /** 透传给现有 MissionControl 内核(Wave B 拆为 ChatPane / ArtifactPane)。 */
@@ -38,14 +54,13 @@ export function CockpitSurface({
   activeProjectId,
   activeProjectName,
   hasInitialTarget,
+  initialAssistantId = null,
   openRequestKey,
   missionControlProps,
   prdTaskSplitPanelProps,
 }: CockpitSurfaceProps) {
   const [subMode, setSubMode] = useState<CockpitSubMode>(() =>
-    hasInitialTarget
-      ? { kind: "conversation", assistantId: DEFAULT_PRD_SPLIT_ASSISTANT_ID }
-      : { kind: "hub" },
+    cockpitSubModeFromEntry(hasInitialTarget, initialAssistantId),
   );
   const [assistants, setAssistants] = useState<AssistantEntry[] | null>(null);
   const [settingsAssistantId, setSettingsAssistantId] = useState<string | null>(null);
@@ -68,12 +83,8 @@ export function CockpitSurface({
   // 显式入口变更(项目 FAB / 仓库 FAB / 左栏助手)时切换子态。
   useEffect(() => {
     if (openRequestKey <= 0) return;
-    setSubMode(
-      hasInitialTarget
-        ? { kind: "conversation", assistantId: DEFAULT_PRD_SPLIT_ASSISTANT_ID }
-        : { kind: "hub" },
-    );
-  }, [hasInitialTarget, openRequestKey]);
+    setSubMode(cockpitSubModeFromEntry(hasInitialTarget, initialAssistantId));
+  }, [hasInitialTarget, initialAssistantId, openRequestKey]);
 
   const activeAssistant = useMemo(() => {
     if (subMode.kind !== "conversation") return null;

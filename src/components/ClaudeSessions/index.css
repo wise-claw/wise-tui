@@ -4118,6 +4118,255 @@ button.app-message-part-header:disabled:hover {
   border-top: 1px solid var(--ant-color-border-secondary);
 }
 
+/* 钉钉风格：左侧紧凑胶囊 + 右侧「更多」 */
+.app-session-quick-actions--dingtalk {
+  flex-shrink: 0;
+  padding: 4px 6px 2px;
+  background: var(--ant-color-bg-container);
+  border-top: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-session-quick-actions__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.app-session-quick-actions__primary {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.app-session-quick-actions__primary::-webkit-scrollbar {
+  display: none;
+}
+
+.app-session-quick-actions__more {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* 会话快捷条「更多」下拉：紧凑行高，与侧栏更多菜单风格一致但更密 */
+.app-session-quick-more-dropdown .ant-dropdown-menu.app-session-quick-more-menu-inner {
+  padding: 2px 4px;
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.app-session-quick-more-dropdown .app-session-quick-more-menu-inner .ant-dropdown-menu-item {
+  padding: 0 6px;
+  margin-inline: 0;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.2;
+  min-height: 22px !important;
+  height: auto !important;
+  gap: 4px;
+}
+
+.app-session-quick-more-dropdown .app-session-quick-more-menu-inner .ant-dropdown-menu-item > .ant-dropdown-menu-title-content {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.app-session-quick-more-dropdown .app-session-quick-more-menu-inner .ant-dropdown-menu-item-icon {
+  font-size: 12px;
+  margin-inline-end: 4px;
+}
+
+.app-session-quick-more-dropdown .app-session-quick-more-menu-inner .ant-dropdown-menu-item-divider {
+  margin: 2px 0;
+}
+
+.app-session-quick-customize-modal__hint {
+  margin: 0 0 6px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-session-quick-customize-modal__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: min(56vh, 320px);
+  overflow-y: auto;
+}
+
+.app-session-quick-customize-modal__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 2px 4px 2px 8px;
+  border-radius: 6px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-session-quick-customize-modal__label {
+  flex: 1 1 72px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-session-quick-customize-modal__tag {
+  flex-shrink: 0;
+  margin: 0;
+  font-size: 10px;
+  line-height: 14px;
+  padding: 0 3px;
+}
+
+.app-session-quick-customize-modal__visible {
+  flex-shrink: 0;
+}
+
+.app-session-quick-customize-modal__zone.ant-segmented {
+  flex-shrink: 0;
+}
+
+.app-session-quick-customize-modal__zone .ant-segmented-item-label {
+  padding: 0 6px;
+  font-size: 11px;
+  line-height: 20px;
+  min-height: 20px;
+}
+
+.app-session-quick-customize-modal__sort {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  margin-inline-start: -2px;
+}
+
+.app-session-quick-customize-modal__sort .ant-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+}
+
+.app-session-quick-customize-modal__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.app-session-quick-pill-slot {
+  flex-shrink: 0;
+  display: inline-flex;
+}
+
+.app-session-quick-pill {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 3px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--ant-color-fill-quaternary);
+  color: var(--ant-color-text);
+  font-size: 12px;
+  line-height: 1.15;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.app-session-quick-pill--selected,
+.app-session-quick-pill:focus-visible {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ant-color-primary) 50%, transparent);
+  outline: none;
+}
+
+.app-session-quick-pill--push {
+  gap: 4px;
+  padding: 3px 8px;
+}
+
+.app-session-quick-pill--more {
+  padding: 3px 8px;
+}
+
+.app-session-quick-pill__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.app-session-quick-pill__icon--blue {
+  background: var(--ant-color-primary-bg);
+  color: var(--ant-color-primary);
+}
+
+.app-session-quick-pill__icon--orange {
+  background: var(--ant-color-warning-bg);
+  color: var(--ant-color-warning);
+}
+
+.app-session-quick-pill__icon--green {
+  background: var(--ant-color-success-bg);
+  color: var(--ant-color-success);
+}
+
+.app-session-quick-pill__icon--neutral {
+  background: var(--ant-color-fill-secondary);
+  color: var(--ant-color-text-secondary);
+}
+
+.app-session-quick-pill__label {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.app-session-quick-pill__stats {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-session-quick-pill__stats--pulse {
+  animation: app-session-notification-count-pop 0.48s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.app-session-quick-pill__add {
+  color: var(--ant-color-success);
+}
+
+.app-session-quick-pill__del {
+  color: var(--ant-color-error);
+}
+
 /* 会话区左下浮层：不占用布局，宽度 260px，可收起 */
 .app-session-notification-dock {
   position: absolute;

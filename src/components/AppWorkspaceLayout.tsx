@@ -303,6 +303,8 @@ export interface AppWorkspaceLayoutProps {
   cockpitSurfaceActiveProjectName: string | null;
   /** 显式 FAB 入口已触发 → 直接进入 conversation 子态,跳过 hub。 */
   cockpitSurfaceHasInitialTarget: boolean;
+  /** 会话快捷条指定内置助手 id，直达该助手对话页。 */
+  cockpitSurfaceInitialAssistantId?: string | null;
   /** 显式打开助手/需求拆分入口的递增信号。 */
   cockpitSurfaceOpenRequestKey: number;
   commandPaletteProps: ComponentProps<typeof CommandPalette>;
@@ -350,6 +352,7 @@ export function AppWorkspaceLayout({
   cockpitSurfaceActiveProjectId,
   cockpitSurfaceActiveProjectName,
   cockpitSurfaceHasInitialTarget,
+  cockpitSurfaceInitialAssistantId,
   cockpitSurfaceOpenRequestKey,
   commandPaletteProps,
   mcpHubProps,
@@ -596,6 +599,7 @@ export function AppWorkspaceLayout({
                               activeProjectId={cockpitSurfaceActiveProjectId}
                               activeProjectName={cockpitSurfaceActiveProjectName}
                               hasInitialTarget={cockpitSurfaceHasInitialTarget}
+                              initialAssistantId={cockpitSurfaceInitialAssistantId}
                               openRequestKey={cockpitSurfaceOpenRequestKey}
                               missionControlProps={missionControlProps}
                               prdTaskSplitPanelProps={prdTaskSplitPanelProps}
