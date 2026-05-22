@@ -317,6 +317,7 @@
 
 .app-prd-task-panel__columns {
   align-items: stretch;
+  flex-wrap: nowrap;
   flex: 1 1 0;
   min-height: 0;
   overflow: hidden;
@@ -4200,23 +4201,6 @@
     grid-template-columns: 1fr;
   }
 
-  .app-prd-task-panel__columns.app-prd-task-panel__columns--writing .app-prd-task-panel__col--requirements.ant-col-12,
-  .app-prd-task-panel__columns.app-prd-task-panel__columns--writing .app-prd-task-panel__col--tasks.ant-col-12,
-  .app-prd-task-panel__columns.app-prd-task-panel__columns--has-task-flow .app-prd-task-panel__col--requirements.ant-col-12,
-  .app-prd-task-panel__columns.app-prd-task-panel__columns--has-task-flow .app-prd-task-panel__col--tasks.ant-col-12 {
-    flex: 0 0 100%;
-    max-width: 100%;
-    width: 100%;
-  }
-
-  .app-prd-task-panel__columns {
-    overflow-y: auto;
-  }
-
-  .app-prd-task-panel__columns--task-focus .app-prd-task-panel__col--requirements.ant-col-12 {
-    display: none;
-  }
-
   .app-prd-task-panel__deepen-layout > .ant-col {
     max-width: 100%;
     flex: 0 0 100%;
@@ -4229,6 +4213,26 @@
   .app-prd-task-panel__snapshot-tools {
     width: 100%;
     justify-content: flex-start;
+  }
+}
+
+@media (max-width: 860px) {
+  .app-prd-task-panel__columns {
+    flex-wrap: wrap;
+    overflow-y: auto;
+  }
+
+  .app-prd-task-panel__columns.app-prd-task-panel__columns--writing .app-prd-task-panel__col--requirements.ant-col-12,
+  .app-prd-task-panel__columns.app-prd-task-panel__columns--writing .app-prd-task-panel__col--tasks.ant-col-12,
+  .app-prd-task-panel__columns.app-prd-task-panel__columns--has-task-flow .app-prd-task-panel__col--requirements.ant-col-12,
+  .app-prd-task-panel__columns.app-prd-task-panel__columns--has-task-flow .app-prd-task-panel__col--tasks.ant-col-12 {
+    flex: 0 0 100%;
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .app-prd-task-panel__columns--task-focus .app-prd-task-panel__col--requirements.ant-col-12 {
+    display: none;
   }
 }
 

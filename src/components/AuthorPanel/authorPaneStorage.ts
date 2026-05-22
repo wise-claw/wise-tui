@@ -2,9 +2,11 @@ import { getAppSetting, setAppSetting } from "../../services/appSettingsStore";
 import { DEFAULT_AUTHOR_PANE, type AuthorPane } from "../../types/viewMode";
 import { AUTHOR_TAB_STORAGE_KEY, isAuthorPane } from "./AuthorPanelTabs";
 
-/** 侧栏可见 Tab；`workspaces` / `artifacts` 等已从导航移除。 */
+const DIRECT_ENTRY_AUTHOR_PANES: ReadonlySet<AuthorPane> = new Set(["workspaces", "artifacts"]);
+
+/** 侧栏可见 Tab + 侧栏工作区/Trellis 等直达 Pane。 */
 export function resolveAuthorNavPane(pane: AuthorPane, fallback: AuthorPane = DEFAULT_AUTHOR_PANE): AuthorPane {
-  return isAuthorPane(pane) ? pane : fallback;
+  return isAuthorPane(pane) || DIRECT_ENTRY_AUTHOR_PANES.has(pane) ? pane : fallback;
 }
 
 export function readAuthorPaneFromStorage(fallback: AuthorPane = DEFAULT_AUTHOR_PANE): AuthorPane {

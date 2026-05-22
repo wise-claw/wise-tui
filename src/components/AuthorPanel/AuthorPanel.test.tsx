@@ -206,7 +206,7 @@ mock.module("../../services/agentRegistry", () => ({
 }));
 
 const { AuthorPanel } = await import("./AuthorPanel");
-const { writeAuthorPaneToStorage } = await import("./authorPaneStorage");
+const { resolveAuthorNavPane, writeAuthorPaneToStorage } = await import("./authorPaneStorage");
 const { AuthorPanelNav } = await import("./AuthorPanelNav");
 
 function renderAuthorPanel(props: Parameters<typeof AuthorPanel>[0]): string {
@@ -371,6 +371,10 @@ describe("AuthorPanel", () => {
     expect(setAppSetting).toHaveBeenCalledWith("wise.author.lastPane", "agents");
     writeAuthorPaneToStorage("workflows");
     expect(setAppSetting).toHaveBeenCalledWith("wise.author.lastPane", "workflows");
+  });
+
+  test("keeps direct-entry workspaces pane routable", () => {
+    expect(resolveAuthorNavPane("workspaces")).toBe("workspaces");
   });
 
   test("workspaces pane renders the workspace list", () => {

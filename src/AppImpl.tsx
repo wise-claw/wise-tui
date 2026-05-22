@@ -2365,7 +2365,7 @@ export default function App() {
             } else {
               setActiveProjectId(project.id);
             }
-            viewMode.enter(authorView("agents"));
+            viewMode.enter(authorView("workspaces"));
           } catch (e) {
             message.error(e instanceof Error ? e.message : String(e));
           } finally {
