@@ -56,7 +56,10 @@ export function WorkspaceWelcomeLanding({
             />
           </div>
           <h1 className="app-workspace-welcome-landing__title">Wise</h1>
-          <p className="app-workspace-welcome-landing__tagline">以 Claude Code 为底座的 AI 研发新范式</p>
+          <p className="app-workspace-welcome-landing__tagline">
+            <span className="app-workspace-welcome-landing__tagline-dot" />
+            以 Claude Code 为底座的 AI 研发新范式
+          </p>
           <p className="app-workspace-welcome-landing__mission">
             结合 AI 可视化窗口与深度定制的 Trellis 研发工作流，引入多 Agent 并发、工作流编排，汇聚桌面端全部能力，打造接近全自动开发的研发工具——对需求、任务与开发全程溯源、自动驾驶。
           </p>
@@ -88,6 +91,11 @@ export function WorkspaceWelcomeLanding({
               <span className="app-workspace-welcome-landing__card-desc">
                 多仓工作区 + Trellis 规范，统筹需求拆分、任务编排与团队 Agent 并发。
               </span>
+              <div className="app-workspace-welcome-landing__card-tags">
+                <span className="app-workspace-welcome-landing__card-tag">多仓 Hub</span>
+                <span className="app-workspace-welcome-landing__card-tag">团队 Agent</span>
+                <span className="app-workspace-welcome-landing__card-tag">Trellis 规范</span>
+              </div>
             </span>
             <RightOutlined className="app-workspace-welcome-landing__card-arrow" aria-hidden />
           </button>
@@ -105,6 +113,11 @@ export function WorkspaceWelcomeLanding({
               <span className="app-workspace-welcome-landing__card-desc">
                 登记本地仓库，直达 Claude Code 执行会话，适合单点试验与快速开工。
               </span>
+              <div className="app-workspace-welcome-landing__card-tags">
+                <span className="app-workspace-welcome-landing__card-tag">Git 仓库</span>
+                <span className="app-workspace-welcome-landing__card-tag">直达 Claude</span>
+                <span className="app-workspace-welcome-landing__card-tag">极速开工</span>
+              </div>
             </span>
             <RightOutlined className="app-workspace-welcome-landing__card-arrow" aria-hidden />
           </button>
