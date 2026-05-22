@@ -503,6 +503,7 @@ export function usePrdTaskSplitPanelController({
           setActiveResult(nextResult);
           setPlannedMissionSummary(null);
           setSelectedTaskId(nextResult.splitTasks[0]?.id ?? null);
+          setSplitRuntimeVisible(false);
           appendSplitRuntimeLogRef.current(
             payload.status === "succeeded" ? "assistant" : "error",
             payload.status === "succeeded"
@@ -1219,6 +1220,7 @@ export function usePrdTaskSplitPanelController({
         setActiveResult(nextResult);
         setPlannedMissionSummary(null);
         setSelectedTaskId(nextResult.splitTasks[0]?.id ?? null);
+        setSplitRuntimeVisible(false);
         appendSplitRuntimeLog(row.status === "succeeded" ? "assistant" : "error", row.status === "succeeded"
           ? `已恢复后台结果，回流 ${nextResult.splitTasks.length} 个候选任务。`
           : "后台任务已结束，但未产出可用任务。", {
@@ -1632,6 +1634,7 @@ export function usePrdTaskSplitPanelController({
     setActiveResult(nextResult);
     setPlannedMissionSummary(null);
     setSelectedTaskId(nextResult.splitTasks[0]?.id ?? null);
+    setSplitRuntimeVisible(false);
     appendSplitRuntimeLog(
       "system",
       "主会话已开始汇总任务草案，准备做需求溯源与锚点定位。",
@@ -2867,6 +2870,7 @@ export function usePrdTaskSplitPanelController({
     const hasExecutableTask = out.splitTasks.some((task) => displayExecutionStatus(task) === "executable");
     if (hasExecutableTask) {
       setTaskConfirmFilter("confirmed");
+      setSplitRuntimeVisible(false);
     }
     if (blockedTaskCount > 0) {
       message.warning(`已一键确认并写入数据库，其中 ${blockedTaskCount} 条任务仍为不可执行。`);

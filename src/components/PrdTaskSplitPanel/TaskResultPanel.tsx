@@ -206,7 +206,15 @@ export function TaskResultPanel({
   const [runtimeQueueHidden, setRuntimeQueueHidden] = useState(false);
   const materializedResult = materializedExecutionResult;
   const showExecutionRuntime = materializedResult !== null && activeResult && !showRuntime && !runtimeQueueHidden;
-  const showOrchestration = resultViewMode === "orchestration" && activeResult && filteredTasks.length > 0 && !showRuntime && !showExecutionRuntime;
+  const canShowOrchestration = Boolean(activeResult?.splitTasks.length);
+  const orchestrationResult = resultViewMode === "orchestration"
+    && activeResult
+    && activeResult.splitTasks.length > 0
+    && !showRuntime
+    && !showExecutionRuntime
+    ? activeResult
+    : null;
+  const showOrchestration = orchestrationResult !== null;
   const showPlanPreview = !showRuntime && !activeResult && plannedMissionSummary !== null;
   const showTaskList = !showRuntime && !showOrchestration && !showExecutionRuntime && !showPlanPreview;
   useEffect(() => {
@@ -281,7 +289,7 @@ export function TaskResultPanel({
             {!showRuntime && filteredTasks.length > 0 ? (
               <SplitResultStageRail
                 mode={resultViewMode}
-                canEnterOrchestration={Boolean(activeResult)}
+                canEnterOrchestration={canShowOrchestration}
                 canGenerateExecutableTasks={canGenerateExecutableTasks}
                 confirmedCount={taskConfirmCounts.confirmedCount}
                 totalCount={filteredTasks.length}
@@ -323,10 +331,10 @@ export function TaskResultPanel({
                 <>
                   {showOrchestration ? (
                     <ExecutionOrchestrationPanel
-                      result={activeResult}
+                      result={orchestrationResult}
                       selectedTaskId={selectedTaskId}
                       onSelectTask={(taskId) => {
-                        const task = activeResult.splitTasks.find((item) => item.id === taskId);
+                        const task = orchestrationResult.splitTasks.find((item) => item.id === taskId);
                         if (task) onSelectTask(task);
                       }}
                       onMoveTask={onMoveTaskInExecutionPlan}
