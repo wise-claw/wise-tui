@@ -7,7 +7,6 @@ import {
   parseDispatchRecord,
   systemMessagePlainText,
 } from "../../utils/claudeChatMessageDisplay";
-import { formatChatMessageListTime } from "../../utils/formatChatMessageListTime";
 
 interface Props {
   msg: ClaudeMessage;
@@ -66,6 +65,8 @@ function ClaudeChatMessageRowInner({
     );
   }
 
+  const showSender = !mergedWithPrevious && (toolUser || (msg.role !== "user" && msg.role !== "assistant"));
+
   return (
     <div
       data-message-id={String(msg.id)}
@@ -75,13 +76,10 @@ function ClaudeChatMessageRowInner({
         {toolUser ? "具" : msg.role === "user" ? "我" : msg.role === "assistant" ? "C" : "S"}
       </div>
       <div className="app-claude-message-body">
-        {mergedWithPrevious ? null : (
+        {showSender && (
           <div className="app-claude-message-header">
             <span className="app-claude-message-sender">
-              {toolUser ? "工具" : msg.role === "user" ? "我" : msg.role === "assistant" ? "Claude" : "系统"}
-            </span>
-            <span className="app-claude-message-time" title={new Date(msg.timestamp).toLocaleString("zh-CN")}>
-              {formatChatMessageListTime(msg.timestamp)}
+              {toolUser ? "工具" : "系统"}
             </span>
           </div>
         )}

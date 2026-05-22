@@ -2989,7 +2989,7 @@
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 6px 12px 8px;
+  padding: 12px 16px 16px; /* Sniper-snug layout padding */
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -3038,32 +3038,33 @@
   border-color: var(--ant-color-primary);
 }
 
-/* 与 `.app-claude-message` 中头像 20px + gap 6px 对齐，使「正在思考」仅在列表末尾出现一条 */
+/* 与 `.app-claude-message` 中头像 20px + gap 10px 对齐，使「正在思考」仅在列表末尾出现一条 */
 .app-claude-messages-end-thinking {
   flex-shrink: 0;
-  padding-left: 26px;
+  padding-left: 30px;
 }
 
 .app-claude-message {
   display: flex;
   align-items: flex-start;
-  gap: 6px;
+  gap: 10px; /* Snugger Slack-like spacing */
   max-width: 100%;
   padding: 0;
   background: transparent;
   border: none;
   box-shadow: none;
+  position: relative;
 }
 
 /* 新发送者一组：仅留白区隔，无顶部分隔线 */
 .app-claude-messages > .app-claude-message + .app-claude-message:not(.app-claude-message--merged) {
-  margin-top: 6px;
+  margin-top: 8px; /* Snugger breathing space between different messages */
   padding-top: 0;
 }
 
 /* 与上一条同发送者：不再重复头像与时间，仅保留内容以纵向成组 */
 .app-claude-message--merged {
-  margin-top: 2px;
+  margin-top: 3px; /* Clean gap between consecutive messages from same sender */
 }
 
 .app-claude-message--merged .app-claude-message-avatar {
@@ -3119,23 +3120,26 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 6px;
-  margin-bottom: 1px;
-  min-height: 14px;
+  gap: 4px;
+  margin-bottom: 2px; /* Clean gap before message content */
+  min-height: 13px;
 }
 
 .app-claude-message-sender {
-  font-size: 11px;
+  font-size: 12.5px; /* Gold hierarchy header size */
   font-weight: 600;
   color: var(--ant-color-text);
   letter-spacing: 0.01em;
 }
 
 .app-claude-message-time {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--ant-color-text-tertiary);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
+  position: absolute;
+  top: 1px;
+  right: 0;
 }
 
 .app-claude-message-text {
@@ -3417,44 +3421,226 @@
 .app-message-parts {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0;
   min-width: 0;
   max-width: 100%;
 }
 
+.app-claude-messages .app-message-parts {
+  gap: 0;
+}
+
+.app-claude-messages .app-message-part + .app-message-part {
+  margin-top: 2px; /* Extremely snug spacing between different layout modules */
+}
+
 .app-message-part {
-  border-radius: 6px;
+  border-radius: 8px; /* Elegant modern rounding */
   overflow: hidden;
 }
 
 .app-message-part--text {
-  font-size: 12.5px;
-  line-height: 1.45;
+  font-size: 14px; /* Golden font reading size */
+  line-height: 1.6;
   color: var(--ant-color-text);
 }
 
-/* 主会话消息列表：紧凑气泡（无玻璃 hover），区分用户/助手正文 */
+/* 主会话消息列表：正文无边框气泡，靠发送者与排版区分 */
 .app-claude-messages .app-message-part--text {
-  display: inline-block;
+  display: block;
   max-width: 100%;
-  padding: 5px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--ant-color-border-secondary);
-  background: var(--ant-color-fill-quaternary);
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
   box-sizing: border-box;
 }
 
-.app-claude-messages .app-claude-message--user .app-message-part--text {
-  background: var(--ant-color-primary-bg);
-  border-color: color-mix(in srgb, var(--ant-color-primary) 22%, var(--ant-color-border-secondary));
+.app-claude-messages .app-claude-message--user .app-message-part--text,
+.app-claude-messages .app-claude-message--assistant .app-message-part--text {
+  background: transparent;
+  border: none;
 }
 
-.app-claude-messages .app-claude-message--assistant .app-message-part--text {
+/* 主列表：思考过程独占一行展示，精简柔和，避免喧宾夺主 */
+.app-claude-messages .app-message-part--reasoning {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  margin: 0;
+  display: block;
+}
+
+.app-claude-messages .app-message-part--reasoning .app-message-part-header {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  width: 100%;
+  max-width: 100%;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--ant-color-fill-quaternary);
+  border: 1px solid transparent;
+  color: var(--ant-color-text-quaternary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.app-claude-messages .app-message-part--reasoning .app-message-part-header__main {
+  flex: 0 1 auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 0;
+}
+
+.app-claude-messages .app-message-part--reasoning .app-message-part-header__chevron {
+  color: var(--ant-color-text-quaternary);
+}
+
+.app-claude-messages .app-message-part--reasoning .app-message-part-icon,
+.app-claude-messages .app-message-part--reasoning .app-message-part-title {
+  color: var(--ant-color-text-quaternary);
+}
+
+.app-claude-messages .app-message-part--reasoning .app-message-part-header:hover:not(:disabled) {
+  background: var(--ant-color-fill-secondary);
+  border-color: transparent;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-claude-messages .app-message-part--reasoning .app-message-part-header:hover:not(:disabled) .app-message-part-icon,
+.app-claude-messages .app-message-part--reasoning .app-message-part-header:hover:not(:disabled) .app-message-part-title,
+.app-claude-messages .app-message-part--reasoning .app-message-part-header:hover:not(:disabled) .app-message-part-header__chevron {
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-message-parts__tool-group {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin: 0;
+  width: 100%;
+}
+
+.app-message-parts__tool-group .app-message-part--tool {
+  flex: 1 1 150px;
+  min-width: 0;
+  margin: 0 !important;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.app-message-parts__tool-group .app-message-part--tool.app-message-part--expanded {
+  flex: 1 1 100%;
+}
+
+
+.app-message-parts__tool-group .app-message-part-header__main {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.app-message-parts__tool-group .app-message-part-subtitle {
+  margin-top: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-message-parts__tool-group .app-message-part-title {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.app-message-parts__tool-group .app-message-part-title::after {
+  content: ":";
+  margin-left: 1px;
+}
+
+.app-claude-messages .app-message-part--tool {
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  overflow: hidden;
   background: var(--ant-color-bg-container);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+  margin: 0;
+}
+
+.app-claude-messages .app-message-part--tool .app-message-part-header {
+  border: none;
+  border-radius: 0;
+  border-bottom: none;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--ant-color-fill-quaternary) 70%, var(--ant-color-bg-container)), var(--ant-color-bg-container));
+  padding: 2px 6px;
+}
+
+.app-claude-messages .app-message-part--tool.app-message-part--expanded .app-message-part-header {
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-message-part--expanded .app-message-part-subtitle {
+  white-space: normal !important;
+  word-break: break-all !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+}
+
+.app-tool-expanded-input {
+  margin-bottom: 6px;
+  background: var(--ant-color-fill-quaternary);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.app-tool-expanded-input-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ant-color-text-secondary);
+  margin-bottom: 3px;
+}
+
+.app-tool-expanded-input-code {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  font-family: var(--ant-font-family-code, Menlo, Monaco, "Courier New", monospace);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ant-color-text);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.app-claude-messages .app-message-part--tool button.app-message-part-header:disabled {
+  opacity: 0.55;
+}
+
+.app-claude-messages .app-message-part--tool .app-message-part-header:hover:not(:disabled) {
+  background: var(--ant-color-fill-secondary);
+  border: none;
+}
+
+.app-claude-messages .app-message-part--tool .app-message-part-content {
+  padding: 10px 12px;
 }
 
 .app-message-part--text p {
-  margin: 0 0 4px;
+  margin: 0 0 3px;
+}
+
+.app-claude-messages .app-message-part--text p {
+  margin: 0 0 2px;
 }
 
 .app-message-part--text p:last-child {
@@ -3480,16 +3666,16 @@
 
 .app-message-part-header {
   display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  padding: 4px 8px;
-  border-radius: var(--ant-border-radius);
+  align-items: center;
+  gap: 8px; /* Elegant gap spacing */
+  padding: 6px 10px; /* Relaxed padding */
+  border-radius: 6px;
   background: var(--ant-color-fill-quaternary);
   border: 1px solid var(--ant-color-border-secondary);
   cursor: pointer;
-  font-size: 11px;
+  font-size: 12px; /* Highly readable */
   color: var(--ant-color-text-secondary);
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: all 0.15s ease;
   user-select: none;
   width: 100%;
   margin: 0;
@@ -3517,8 +3703,7 @@ button.app-message-part-header:disabled:hover {
 .app-message-part-header__leading {
   flex-shrink: 0;
   display: flex;
-  align-items: flex-start;
-  padding-top: 1px;
+  align-items: center;
 }
 
 .app-message-part-header__main {
@@ -3527,7 +3712,7 @@ button.app-message-part-header:disabled:hover {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 1px;
+  gap: 2px;
 }
 
 .app-message-part-header__main .app-message-part-subtitle {
@@ -3538,21 +3723,20 @@ button.app-message-part-header:disabled:hover {
 .app-message-part-header__tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 3px;
-  margin-top: 1px;
+  gap: 4px;
+  margin-top: 2px;
 }
 
 .app-message-part-header__chevron {
   flex-shrink: 0;
   display: flex;
-  align-items: flex-start;
-  padding-top: 2px;
+  align-items: center;
   color: var(--ant-color-text-tertiary);
 }
 
 .app-message-part-icon {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3560,15 +3744,15 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-message-part-icon svg {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
 }
 
 .app-message-part-title {
-  font-weight: 500;
+  font-weight: 600;
   color: var(--ant-color-text);
-  font-size: 11px;
-  line-height: 1.25;
+  font-size: 12px;
+  line-height: 1.3;
 }
 
 .app-message-part-subtitle {
@@ -3579,18 +3763,19 @@ button.app-message-part-header:disabled:hover {
   word-break: break-word;
   overflow-wrap: anywhere;
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-  font-size: 10px;
-  line-height: 1.35;
+  font-size: 11px;
+  line-height: 1.4;
   color: var(--ant-color-text-tertiary);
+  margin-top: 1px;
 }
 
 .app-message-part-tag {
   display: inline-flex;
   align-items: center;
-  padding: 0 5px;
+  padding: 0 6px;
   border-radius: 999px;
-  font-size: 9px;
-  line-height: 14px;
+  font-size: 10px;
+  line-height: 16px;
   background: var(--ant-color-fill);
   color: var(--ant-color-text-tertiary);
   flex-shrink: 0;
@@ -3618,65 +3803,116 @@ button.app-message-part-header:disabled:hover {
 
 /* ── Reasoning Part ── */
 
+.app-message-parts {
+  display: block;
+}
+
+/* 思考过程独占一行展示，精简柔和，避免喧宾夺主 */
 .app-message-part--reasoning {
-  border: 1px solid var(--ant-color-border-secondary);
-  border-radius: var(--ant-border-radius);
-  overflow: hidden;
-  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 55%, var(--ant-color-bg-container));
-}
-
-.app-claude-messages .app-message-part--reasoning .app-message-part-header {
-  padding: 3px 8px;
-}
-
-.app-message-part--reasoning .app-message-part-header {
   border: none;
   border-radius: 0;
   background: transparent;
+  box-shadow: none;
+  margin: 4px 0 6px;
+  display: block;
+}
+
+/* 当思考过程展开时，保持块级元素并适当调整间距 */
+.app-message-part--reasoning-expanded {
+  margin-bottom: 8px;
+}
+
+.app-message-part--reasoning .app-message-part-header {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  width: auto;
+  max-width: 100%;
   align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--ant-color-fill-quaternary);
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--ant-color-text-quaternary);
+  transition: all 0.2s ease;
+  user-select: none;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+
+.app-message-part--reasoning .app-message-part-header__main {
+  flex: 0 1 auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 0;
+}
+
+.app-message-part--reasoning .app-message-part-header__chevron {
+  color: var(--ant-color-text-quaternary);
 }
 
 .app-message-part--reasoning .app-message-part-header:hover:not(:disabled) {
   background: var(--ant-color-fill-secondary);
-}
-
-.app-message-part--reasoning .app-message-part-icon {
+  border-color: transparent;
   color: var(--ant-color-text-tertiary);
 }
 
+.app-message-part--reasoning .app-message-part-header:hover:not(:disabled) .app-message-part-icon,
+.app-message-part--reasoning .app-message-part-header:hover:not(:disabled) .app-message-part-title,
+.app-message-part--reasoning .app-message-part-header:hover:not(:disabled) .app-message-part-header__chevron {
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-message-part--reasoning .app-message-part-icon {
+  color: var(--ant-color-text-quaternary);
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
 .app-message-part--reasoning .app-message-part-title {
-  color: var(--ant-color-text-secondary);
+  color: var(--ant-color-text-quaternary);
   font-weight: 400;
   font-size: 11px;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
 .app-message-part--reasoning-content {
   font-size: 11.5px;
-  color: var(--ant-color-text-secondary);
-  opacity: 0.85;
+  color: var(--ant-color-text-tertiary);
+  line-height: 1.55;
+  border-left: 2px solid var(--ant-color-border-secondary);
+  padding-left: 10px;
+  margin-left: 4px;
+  margin-top: 6px;
+  margin-bottom: 6px;
 }
 
 .app-message-part--reasoning-content p {
-  margin: 0 0 3px;
+  margin: 0 0 4px;
   font-size: 11.5px;
-  line-height: 1.45;
+  line-height: 1.55;
 }
 
 /* ── Tool Part ── */
 
 .app-message-part--tool {
   border: 1px solid var(--ant-color-border-secondary);
-  border-radius: var(--ant-border-radius);
+  border-radius: 8px;
   overflow: hidden;
   background: var(--ant-color-bg-container);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
 }
-
 .app-message-part--tool .app-message-part-header {
   border: none;
   border-radius: 0;
   border-bottom: 1px solid var(--ant-color-border-secondary);
-  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 65%, var(--ant-color-bg-container));
-  align-items: flex-start;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--ant-color-fill-quaternary) 70%, var(--ant-color-bg-container)), var(--ant-color-bg-container));
+  align-items: center;
+  padding: 4px 8px;
 }
 
 .app-message-part--tool .app-message-part-header:hover:not(:disabled) {
@@ -3688,22 +3924,55 @@ button.app-message-part-header:disabled:hover {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  padding: 5px 8px;
 }
 
 .app-tool-error {
   margin: 0;
-  padding: 5px 8px;
-  border-radius: var(--ant-border-radius);
+  padding: 6px 10px;
+  border-radius: 8px;
   border: 1px solid var(--ant-color-error-border);
-  background: var(--ant-color-error-bg);
+  border-left: 4px solid var(--ant-color-error);
+  background: color-mix(in srgb, var(--ant-color-error-bg) 40%, var(--ant-color-bg-container));
   color: var(--ant-color-error-text);
-  font-family: var(--ant-font-family-code);
-  font-size: 10px;
-  line-height: 1.4;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
-  max-height: 160px;
+  max-height: 240px;
   overflow: auto;
+}
+
+.app-tool-error::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.app-tool-error::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
+}
+.app-tool-error::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--ant-color-error) 20%, transparent);
+  border-radius: 4px;
+}
+.app-tool-error::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--ant-color-error) 40%, transparent);
+}
+
+@keyframes app-tool-pulse {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--ant-color-primary) 70%, transparent);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--ant-color-primary) 0%, transparent);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--ant-color-primary) 0%, transparent);
+  }
 }
 
 .app-tool-status-dot {
@@ -3715,37 +3984,80 @@ button.app-message-part-header:disabled:hover {
   flex-shrink: 0;
   vertical-align: middle;
   box-sizing: border-box;
-  margin-top: 2px;
 }
 
-/* Ant Design 6 无 --ant-color-processing，用主色表示进行中 */
 .app-tool-status-dot--running {
   background: var(--ant-color-primary);
-  box-shadow: 0 0 0 1px var(--ant-color-primary-bg);
+  animation: app-tool-pulse 2s infinite ease-in-out;
 }
 
 .app-tool-status-dot--completed {
   background: var(--ant-color-success);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--ant-color-success) 40%, transparent);
 }
 
 .app-tool-status-dot--error {
   background: var(--ant-color-error);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--ant-color-error) 40%, transparent);
 }
 
 .app-tool-output {
-  background: var(--ant-color-fill-quaternary);
-  border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 6px;
-  padding: 6px 8px;
+  background: var(--ant-color-fill-quaternary) !important;
+  border: 1px solid var(--ant-color-border-secondary) !important;
+  border-radius: 8px;
+  padding: 6px 10px;
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-  font-size: 10px;
-  line-height: 1.4;
+  font-size: 12px;
+  line-height: 1.45;
   overflow-x: auto;
   white-space: pre;
-  color: var(--ant-color-text-secondary);
+  color: var(--ant-color-text) !important;
   max-height: 180px;
   overflow-y: auto;
   margin: 0;
+}
+
+.app-tool-output::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.app-tool-output::-webkit-scrollbar-track {
+  background: transparent;
+}
+.app-tool-output::-webkit-scrollbar-thumb {
+  background: var(--ant-color-border-secondary);
+  border-radius: 4px;
+}
+.app-tool-output::-webkit-scrollbar-thumb:hover {
+  background: var(--ant-color-border);
+}
+
+.app-tool-output-markdown {
+  background: var(--ant-color-fill-quaternary) !important;
+  border: 1px solid var(--ant-color-border-secondary) !important;
+  border-radius: 8px;
+  padding: 8px 12px;
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 0;
+  box-sizing: border-box;
+  font-size: 13px !important;
+  line-height: 1.55 !important;
+}
+
+.app-tool-output-markdown::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.app-tool-output-markdown::-webkit-scrollbar-track {
+  background: transparent;
+}
+.app-tool-output-markdown::-webkit-scrollbar-thumb {
+  background: var(--ant-color-border-secondary);
+  border-radius: 3px;
+}
+.app-tool-output-markdown::-webkit-scrollbar-thumb:hover {
+  background: var(--ant-color-border);
 }
 
 .app-tool-copy-btn {
@@ -3768,6 +4080,7 @@ button.app-message-part-header:disabled:hover {
 
 .app-message-part--tool .app-message-part-content:hover .app-tool-copy-btn,
 .app-tool-output:hover ~ .app-tool-copy-btn,
+.app-tool-output-markdown:hover ~ .app-tool-copy-btn,
 .app-tool-error:hover ~ .app-tool-copy-btn,
 .app-tool-copy-btn:hover {
   opacity: 1;
@@ -3887,23 +4200,40 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-markdown p {
-  margin: 0 0 6px;
+  margin: 0 0 4px;
 }
 
 .app-markdown p:last-child {
   margin-bottom: 0;
 }
 
-.app-markdown h1,
-.app-markdown h2,
-.app-markdown h3,
+.app-markdown h1 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 12px 0 6px;
+  line-height: 1.3;
+}
+
+.app-markdown h2 {
+  font-size: 14.5px;
+  font-weight: 600;
+  margin: 10px 0 5px;
+  line-height: 1.35;
+}
+
+.app-markdown h3 {
+  font-size: 13.5px;
+  font-weight: 600;
+  margin: 8px 0 4px;
+  line-height: 1.4;
+}
+
 .app-markdown h4,
 .app-markdown h5,
 .app-markdown h6 {
-  margin: 10px 0 4px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--ant-color-text);
+  margin: 8px 0 4px;
   line-height: 1.4;
 }
 
@@ -3916,7 +4246,7 @@ button.app-message-part-header:disabled:hover {
 .app-markdown ul,
 .app-markdown ol {
   margin: 0 0 6px;
-  padding-left: 18px;
+  padding-left: 16px;
 }
 
 .app-markdown li {
@@ -3933,7 +4263,7 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-markdown pre {
-  margin: 6px 0;
+  margin: 8px 0;
 }
 
 .app-markdown pre code {
@@ -3942,11 +4272,12 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-markdown blockquote {
-  margin: 6px 0;
-  padding: 3px 10px;
-  border-left: 3px solid var(--ant-color-border);
+  margin: 10px 0;
+  padding: 8px 12px;
+  border-left: 4px solid var(--ant-color-primary-border);
   color: var(--ant-color-text-secondary);
-  background: var(--ant-color-fill-quaternary);
+  background: color-mix(in srgb, var(--ant-color-primary-bg) 25%, var(--ant-color-fill-quaternary));
+  border-radius: 4px;
 }
 
 .app-markdown a {
@@ -3962,29 +4293,53 @@ button.app-message-part-header:disabled:hover {
   border-collapse: collapse;
   width: 100%;
   max-width: 100%;
-  margin: 6px 0;
-  font-size: 12px;
-  table-layout: fixed;
+  margin: 12px 0;
+  font-size: 12.5px;
+  table-layout: auto;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--ant-color-border-secondary);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
 }
 
 .app-markdown th,
 .app-markdown td {
-  border: 1px solid var(--ant-color-border-secondary);
-  padding: 4px 8px;
+  border: none;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  padding: 8px 12px;
   text-align: left;
   word-break: break-word;
   overflow-wrap: anywhere;
+  line-height: 1.45;
+  transition: background-color 0.2s ease;
 }
 
 .app-markdown th {
-  background: var(--ant-color-fill-quaternary);
+  background: var(--ant-color-primary-bg) !important;
+  color: var(--ant-color-text);
   font-weight: 600;
+}
+
+.app-markdown tr:last-child td {
+  border-bottom: none;
+}
+
+.app-markdown tr {
+  transition: background-color 0.2s ease;
+}
+
+.app-markdown tr:nth-child(even) {
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 25%, transparent);
+}
+
+.app-markdown tr:hover td {
+  background: color-mix(in srgb, var(--ant-color-primary-bg) 40%, var(--ant-color-fill-quaternary)) !important;
 }
 
 .app-markdown hr {
   border: none;
   border-top: 1px solid var(--ant-color-border-secondary);
-  margin: 8px 0;
+  margin: 12px 0;
 }
 
 /* ── Markdown Code Block ── */
@@ -4013,6 +4368,21 @@ button.app-message-part-header:disabled:hover {
   overflow-x: auto;
   font-size: 12px;
   line-height: 1.45;
+}
+
+.app-markdown-code pre::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.app-markdown-code pre::-webkit-scrollbar-track {
+  background: transparent;
+}
+.app-markdown-code pre::-webkit-scrollbar-thumb {
+  background: var(--ant-color-border-secondary);
+  border-radius: 4px;
+}
+.app-markdown-code pre::-webkit-scrollbar-thumb:hover {
+  background: var(--ant-color-border);
 }
 
 .app-markdown-code code {
@@ -6043,3 +6413,33 @@ button.app-message-part-header:disabled:hover {
   color: var(--ant-color-text-tertiary);
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
 }
+
+.app-markdown-host--continuation {
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary);
+  padding: 8px 12px;
+}
+
+.app-markdown-host--continuation::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.app-markdown-host--continuation::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.app-markdown-host--continuation::-webkit-scrollbar-thumb {
+  background: var(--ant-color-border-secondary);
+  border-radius: 4px;
+}
+
+.app-markdown-host--continuation::-webkit-scrollbar-thumb:hover {
+  background: var(--ant-color-border);
+}
+
+
+

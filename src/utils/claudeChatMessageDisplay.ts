@@ -1,4 +1,4 @@
-import type { ClaudeMessage } from "../types";
+import type { ClaudeMessage, MessagePart } from "../types";
 
 export function isToolOnlyUserMessage(msg: ClaudeMessage): boolean {
   const parts = msg.parts;
@@ -21,7 +21,58 @@ export function indexOfLastRenderableUserMessage(messages: readonly ClaudeMessag
   return -1;
 }
 
+/** Claude 助手流中的无展示价值占位句（仍可能出现在 parts 里）。 */
+const ASSISTANT_DISPLAY_NOISE_TEXT = new Set(["no response requested.", "no response requested"]);
+
+export function isAssistantDisplayNoiseText(text: string): boolean {
+  const normalized = text.trim().toLowerCase();
+  return normalized.length > 0 && ASSISTANT_DISPLAY_NOISE_TEXT.has(normalized);
+}
+
+/** 单条 part 是否在消息列表中有展示价值（空白/占位句不计）。 */
+export function isRenderableMessagePart(part: MessagePart): boolean {
+  switch (part.type) {
+    case "text": {
+      const trimmed = part.text.trim();
+      return trimmed.length > 0 && !isAssistantDisplayNoiseText(part.text);
+    }
+    case "reasoning":
+      return part.text.trim().length > 0;
+    case "tool_use":
+      return true;
+    default:
+      return false;
+  }
+}
+
+/** 消息行是否应在主会话列表中渲染（无正文则整行跳过）。 */
+export function hasRenderableChatMessageBody(msg: ClaudeMessage): boolean {
+  if (msg.role === "system") {
+    return systemMessagePlainText(msg).trim().length > 0;
+  }
+  const parts = msg.parts;
+  if (Array.isArray(parts) && parts.length > 0) {
+    return parts.some(isRenderableMessagePart);
+  }
+  const content = (msg.content ?? "").trim();
+  if (!content) return false;
+  if (msg.role === "assistant" && isAssistantDisplayNoiseText(content)) return false;
+  return true;
+}
+
+/** 列表中当前条之前最近一条「可渲染」消息下标；无则 -1。 */
+export function indexOfPreviousRenderableMessage(
+  messages: readonly ClaudeMessage[],
+  fromIndex: number,
+): number {
+  for (let i = fromIndex - 1; i >= 0; i -= 1) {
+    if (hasRenderableChatMessageBody(messages[i]!)) return i;
+  }
+  return -1;
+}
+
 /** 用户气泡的纯文本（用于 sticky 摘要等）。 */
+
 export function userMessagePlainTextForDisplay(msg: ClaudeMessage): string {
   const fromParts = msg.parts
     ?.filter((p): p is { type: "text"; text: string } => p.type === "text" && typeof p.text === "string")

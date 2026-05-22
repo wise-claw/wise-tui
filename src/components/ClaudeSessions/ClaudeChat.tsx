@@ -111,6 +111,8 @@ import { extractClaudeInvocationFinalText } from "../../utils/claudeInvocationTe
 import { removeSplitResultTasksByIds } from "../../utils/removeSplitResultTasksByIds";
 import {
   getMessageSenderGroupKey,
+  hasRenderableChatMessageBody,
+  indexOfPreviousRenderableMessage,
   isToolOnlyUserMessage,
   userMessagePlainTextForDisplay,
 } from "../../utils/claudeChatMessageDisplay";
@@ -4480,13 +4482,18 @@ export function ClaudeChat({
           ) : (
             <>
               {session.messages.flatMap((msg, originalIndex) => {
+                if (!hasRenderableChatMessageBody(msg)) return [];
                 const streamingThisBubble =
                   session.status === "running" &&
                   msg.role === "assistant" &&
                   originalIndex === session.messages.length - 1;
                 const toolUser = isToolOnlyUserMessage(msg);
+                const prevRenderableIndex = indexOfPreviousRenderableMessage(
+                  session.messages,
+                  originalIndex,
+                );
                 const prevInSession =
-                  originalIndex > 0 ? session.messages[originalIndex - 1] : undefined;
+                  prevRenderableIndex >= 0 ? session.messages[prevRenderableIndex] : undefined;
                 const mergedWithPrevious =
                   prevInSession !== undefined &&
                   getMessageSenderGroupKey(prevInSession) === getMessageSenderGroupKey(msg);

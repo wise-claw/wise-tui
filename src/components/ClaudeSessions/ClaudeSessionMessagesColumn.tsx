@@ -1,5 +1,5 @@
 import { useEffect, useState, type RefObject } from "react";
-import type { ClaudeMessage, ClaudeSession } from "../../types";
+import type { ClaudeSession } from "../../types";
 import {
   CLAUDE_MESSAGE_LIST_INITIAL_VISIBLE,
   CLAUDE_MESSAGE_LIST_LOAD_MORE_STEP,
@@ -8,60 +8,15 @@ import { MessagePartsDisplay } from "./MessageParts";
 import { Markdown, StreamingReplyHint } from "./Markdown";
 import { SystemMessageContent } from "./SystemMessageContent";
 import { formatChatMessageListTime } from "../../utils/formatChatMessageListTime";
+import {
+  getMessageSenderGroupKey,
+  hasRenderableChatMessageBody,
+  indexOfPreviousRenderableMessage,
+  isToolOnlyUserMessage,
+  parseDispatchRecord,
+  systemMessagePlainText,
+} from "../../utils/claudeChatMessageDisplay";
 import "./index.css";
-
-function isToolOnlyUserMessage(msg: ClaudeMessage): boolean {
-  const parts = msg.parts;
-  return msg.role === "user" && Array.isArray(parts) && parts.length > 0 && parts.every((p) => p.type === "tool_use");
-}
-
-function getMessageSenderGroupKey(msg: ClaudeMessage): string {
-  if (msg.role === "system") return "system";
-  if (msg.role === "assistant") return "assistant";
-  if (msg.role === "user") {
-    if (isToolOnlyUserMessage(msg)) return "assistant";
-    return "user:normal";
-  }
-  return msg.role;
-}
-
-function systemMessagePlainText(msg: ClaudeMessage): string {
-  const fromParts = msg.parts
-    ?.filter((p) => p.type === "text")
-    .map((p) => p.text)
-    .join("\n\n");
-  if (fromParts?.trim()) return fromParts;
-  return msg.content;
-}
-
-interface DispatchRecordMeta {
-  dispatchType?: string;
-  targetName?: string;
-  targetSessionId?: string;
-  taskId?: string;
-  dispatchTime?: string;
-}
-
-function parseDispatchRecord(text: string): DispatchRecordMeta | null {
-  const lines = text.split("\n").map((line) => line.trim());
-  if (lines[0] !== "任务分发记录") return null;
-  const meta: DispatchRecordMeta = {};
-  for (const line of lines.slice(1)) {
-    if (!line.startsWith("- ")) continue;
-    const payload = line.slice(2);
-    const idx = payload.indexOf("：");
-    if (idx < 0) continue;
-    const key = payload.slice(0, idx).trim();
-    const value = payload.slice(idx + 1).trim();
-    if (!value) continue;
-    if (key === "类型") meta.dispatchType = value;
-    if (key === "目标") meta.targetName = value;
-    if (key === "分发会话") meta.targetSessionId = value;
-    if (key === "任务ID") meta.taskId = value;
-    if (key === "时间") meta.dispatchTime = value;
-  }
-  return meta;
-}
 
 interface Props {
   session: ClaudeSession;
@@ -128,7 +83,8 @@ export function ClaudeSessionMessagesColumn({
             </button>
           </div>
         ) : null}
-        {visibleMessages.map((msg, index) => {
+        {visibleMessages.flatMap((msg, index) => {
+          if (!hasRenderableChatMessageBody(msg)) return [];
           const originalIndex = hiddenMessageCount + index;
           const streamingThisBubble =
             session.status === "running" &&
@@ -136,10 +92,13 @@ export function ClaudeSessionMessagesColumn({
             originalIndex === sessionLastIndex;
 
           const toolUser = isToolOnlyUserMessage(msg);
-          const prevInSession = originalIndex > 0 ? session.messages[originalIndex - 1] : undefined;
+          const prevRenderableIndex = indexOfPreviousRenderableMessage(session.messages, originalIndex);
+          const prevInSession =
+            prevRenderableIndex >= 0 ? session.messages[prevRenderableIndex] : undefined;
           const mergedWithPrevious =
             prevInSession !== undefined && getMessageSenderGroupKey(prevInSession) === getMessageSenderGroupKey(msg);
-          return (
+          return [
+            (
             <div
               key={msg.id}
               data-message-id={String(msg.id)}
@@ -216,7 +175,8 @@ export function ClaudeSessionMessagesColumn({
                 </div>
               </div>
             </div>
-          );
+            ),
+          ];
         })}
         {showListEndThinkingHint ? (
           <div className="app-claude-messages-end-thinking">

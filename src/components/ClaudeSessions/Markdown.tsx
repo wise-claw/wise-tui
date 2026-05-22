@@ -159,8 +159,11 @@ export function Markdown({ text, streaming, showPendingHint, className }: Props)
     };
   }, []);
 
+
+  const isContinuation = text.includes("This session is being continued from a previous conversation");
+
   return (
-    <div className={`app-markdown-host${showHint ? " app-markdown-host--streaming" : ""}`}>
+    <div className={`app-markdown-host${showHint ? " app-markdown-host--streaming" : ""}${isContinuation ? " app-markdown-host--continuation" : ""}`}>
       <div ref={containerRef} className={`app-markdown ${className ?? ""}`} />
       {showHint && <StreamingReplyHint />}
     </div>

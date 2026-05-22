@@ -1,6 +1,7 @@
 import { memo, useMemo, useState } from "react";
 import { message } from "antd";
 import type { MessagePart, TextPart, ToolUsePart, ReasoningPart } from "../../types";
+import { isRenderableMessagePart } from "../../utils/claudeChatMessageDisplay";
 import { LinkifiedPre } from "./LinkifiedPre";
 import { Markdown, StreamingReplyHint, usePacedText } from "./Markdown";
 import { WORKFLOW_UI_EVENT_FOCUS_TASK_TOOL } from "../../constants/workflowUiEvents";
@@ -68,7 +69,7 @@ const ReasoningPartDisplay = memo(function ReasoningPartDisplay({
   const text = usePacedText(part.text, streaming);
 
   return (
-    <div className="app-message-part app-message-part--reasoning">
+    <div className={`app-message-part app-message-part--reasoning${expanded ? " app-message-part--reasoning-expanded" : ""}`}>
       <button
         type="button"
         className="app-message-part-header"
@@ -77,7 +78,7 @@ const ReasoningPartDisplay = memo(function ReasoningPartDisplay({
       >
         <span className="app-message-part-header__leading">
           <span className="app-message-part-icon">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
             </svg>
           </span>
@@ -128,10 +129,9 @@ export function getToolDisplayInfo(part: ToolUsePart): { label: string; subtitle
   const input = part.input as Record<string, unknown>;
   const n = part.name.trim();
   if (!n && (part.output?.trim() || part.error?.trim())) {
-    const idHint = part.id.length > 14 ? `${part.id.slice(0, 10)}…` : part.id;
     return {
       label: "工具结果",
-      subtitle: idHint ? `调用 ID ${idHint}` : "",
+      subtitle: part.id ? `调用 ID ${part.id}` : "",
     };
   }
   const lower = n.toLowerCase();
@@ -141,13 +141,11 @@ export function getToolDisplayInfo(part: ToolUsePart): { label: string; subtitle
     case "exec":
       return {
         label: lower === "exec" ? "Exec" : "Bash",
-        subtitle: pickInputString(input, [
-          "command",
-          "cmd",
-          "shell_command",
-          "script",
-          "line",
-        ]),
+        subtitle: pickInputString(
+          input,
+          ["command", "cmd", "shell_command", "script", "line"],
+          2000
+        ),
       };
     case "read":
       return {
@@ -167,21 +165,25 @@ export function getToolDisplayInfo(part: ToolUsePart): { label: string; subtitle
     case "glob":
       return {
         label: "Glob",
-        subtitle: pickInputString(input, [
-          "pattern",
-          "glob_pattern",
-          "glob",
-          "path",
-          "target_directory",
-          "root",
-          "root_path",
-          "paths",
-        ]),
+        subtitle: pickInputString(
+          input,
+          [
+            "pattern",
+            "glob_pattern",
+            "glob",
+            "path",
+            "target_directory",
+            "root",
+            "root_path",
+            "paths",
+          ],
+          1000
+        ),
       };
     case "grep":
       return {
         label: "Grep",
-        subtitle: pickInputString(input, ["pattern", "query", "path", "file_path", "glob"]),
+        subtitle: pickInputString(input, ["pattern", "query", "path", "file_path", "glob"], 1000),
       };
     case "web_fetch":
       return {
@@ -238,10 +240,56 @@ function getToolMetaTags(part: ToolUsePart): string[] {
   return tags;
 }
 
+export function shouldRenderOutputAsMarkdown(part: ToolUsePart): boolean {
+  const name = part.name.trim().toLowerCase();
+  // If the name is empty or it is a generic "工具结果" or a subagent/task tool
+  if (!name || name === "task" || name === "subagent" || name === "agent") {
+    return true;
+  }
+
+  // If it's a code/CLI/filesystem tool, we should NOT render it as markdown to preserve monospace formatting
+  const excludeList = [
+    "bash",
+    "exec",
+    "run_command",
+    "read",
+    "read_file",
+    "view_file",
+    "edit",
+    "edit_file",
+    "write",
+    "write_file",
+    "grep",
+    "grep_search",
+    "glob",
+    "list_dir",
+  ];
+  if (excludeList.includes(name)) {
+    return false;
+  }
+
+  const text = part.output || "";
+  if (!text.trim()) return false;
+
+  // Use robust regex with multiline flag 'm' to detect markdown structures
+  const hasMarkdownCues =
+    /^(?:#+\s|[-*+]\s|\d+\.\s)/m.test(text) ||  // headings, bullets, numbered lists at the start of any line
+    /^(?:---|___|\*\*\*)$/m.test(text) ||       // horizontal lines
+    /\*\*|__|_|`[^`]+`/.test(text) ||            // bold, italic, or inline code
+    /\|.+\|.+\|/m.test(text);                   // tables
+
+  return hasMarkdownCues;
+}
+
 const ToolUsePartDisplay = memo(function ToolUsePartDisplay({ part }: { part: ToolUsePart }) {
-  const hasExpandableBody = Boolean(part.output?.trim() || part.error?.trim());
-  const [expanded, setExpanded] = useState(part.status === "error" || Boolean(part.error?.trim()));
   const info = useMemo(() => getToolDisplayInfo(part), [part]);
+  const isBashOrExec = part.name.toLowerCase() === "bash" || part.name.toLowerCase() === "exec";
+  const hasExpandableBody = Boolean(
+    part.output?.trim() ||
+      part.error?.trim() ||
+      (isBashOrExec && info.subtitle?.trim())
+  );
+  const [expanded, setExpanded] = useState(part.status === "error" || Boolean(part.error?.trim()));
   const tags = useMemo(() => getToolMetaTags(part), [part]);
   const input = part.input as Record<string, unknown>;
   const taskId =
@@ -253,7 +301,10 @@ const ToolUsePartDisplay = memo(function ToolUsePartDisplay({ part }: { part: To
 
   function handleCopy(e: React.MouseEvent<HTMLButtonElement>) {
     e.stopPropagation();
-    const text = (part.output?.trim() ? part.output : part.error?.trim()) ?? "";
+    const text =
+      (part.output?.trim() ? part.output : part.error?.trim()) ||
+      (isBashOrExec ? info.subtitle : "") ||
+      "";
     if (!text) return;
     void navigator.clipboard.writeText(text).then(
       () => message.success("已复制到剪贴板"),
@@ -279,7 +330,7 @@ const ToolUsePartDisplay = memo(function ToolUsePartDisplay({ part }: { part: To
     );
 
   return (
-    <div className="app-message-part app-message-part--tool" data-task-id={taskId || undefined}>
+    <div className={`app-message-part app-message-part--tool${expanded ? " app-message-part--expanded" : ""}`} data-task-id={taskId || undefined}>
       <div className="app-message-part-tool-head">
         <button
           type="button"
@@ -291,7 +342,11 @@ const ToolUsePartDisplay = memo(function ToolUsePartDisplay({ part }: { part: To
           <span className="app-message-part-header__leading">{statusIcon}</span>
           <span className="app-message-part-header__main">
             <span className="app-message-part-title">{info.label}</span>
-            {info.subtitle ? <span className="app-message-part-subtitle">{info.subtitle}</span> : null}
+            {info.subtitle ? (
+              <span className="app-message-part-subtitle" title={info.subtitle}>
+                {info.subtitle}
+              </span>
+            ) : null}
             {tags.length > 0 ? (
               <span className="app-message-part-header__tags">
                 {tags.map((tag) => (
@@ -316,8 +371,20 @@ const ToolUsePartDisplay = memo(function ToolUsePartDisplay({ part }: { part: To
       </div>
       {expanded && hasExpandableBody ? (
         <div className="app-message-part-content">
+          {isBashOrExec && info.subtitle ? (
+            <div className="app-tool-expanded-input">
+              <span className="app-tool-expanded-input-label">完整命令：</span>
+              <pre className="app-tool-expanded-input-code"><code>{info.subtitle}</code></pre>
+            </div>
+          ) : null}
           {part.error?.trim() ? <pre className="app-tool-error">{part.error.trim()}</pre> : null}
-          {part.output?.trim() ? <LinkifiedPre text={part.output} className="app-tool-output" /> : null}
+          {part.output?.trim() ? (
+            shouldRenderOutputAsMarkdown(part) ? (
+              <Markdown text={part.output} className="app-tool-output-markdown" />
+            ) : (
+              <LinkifiedPre text={part.output} className="app-tool-output" />
+            )
+          ) : null}
           <button type="button" className="app-tool-copy-btn" onClick={handleCopy} title="复制">
             <CopyIcon />
           </button>
@@ -339,27 +406,56 @@ export const MessagePartsDisplay = memo(function MessagePartsDisplay({
   streaming: boolean;
   inlinePendingHint?: boolean;
 }) {
-  if (parts.length === 0) return null;
+  const visibleParts = parts.filter(isRenderableMessagePart);
+  if (visibleParts.length === 0) return null;
 
-  const lastIdx = parts.length - 1;
+  const lastIdx = visibleParts.length - 1;
+
+  type RenderGroup =
+    | { type: "single"; part: MessagePart; originalIndex: number }
+    | { type: "tool_group"; parts: { part: ToolUsePart; originalIndex: number }[] };
+
+  const groups: RenderGroup[] = [];
+  visibleParts.forEach((part, i) => {
+    if (part.type === "tool_use") {
+      const lastGroup = groups[groups.length - 1];
+      if (lastGroup && lastGroup.type === "tool_group") {
+        lastGroup.parts.push({ part, originalIndex: i });
+      } else {
+        groups.push({ type: "tool_group", parts: [{ part, originalIndex: i }] });
+      }
+    } else {
+      groups.push({ type: "single", part, originalIndex: i });
+    }
+  });
 
   return (
     <div className="app-message-parts">
-      {parts.map((part, i) => {
-        const key = `${part.type}-${i}`;
-        const hintHere = streaming && inlinePendingHint && i === lastIdx;
-        switch (part.type) {
-          case "text":
-            return <TextPartDisplay key={key} part={part} streaming={streaming} showPendingHint={hintHere} />;
-          case "reasoning":
-            return <ReasoningPartDisplay key={key} part={part} streaming={streaming} showPendingHint={hintHere} />;
-          case "tool_use":
-            return <ToolUsePartDisplay key={key} part={part} />;
-          default:
-            return null;
+      {groups.map((group, groupIdx) => {
+        if (group.type === "tool_group") {
+          return (
+            <div key={`tool-group-${groupIdx}`} className="app-message-parts__tool-group">
+              {group.parts.map(({ part, originalIndex }) => {
+                const key = `${part.type}-${originalIndex}`;
+                return <ToolUsePartDisplay key={key} part={part} />;
+              })}
+            </div>
+          );
+        } else {
+          const { part, originalIndex } = group;
+          const key = `${part.type}-${originalIndex}`;
+          const hintHere = streaming && inlinePendingHint && originalIndex === lastIdx;
+          switch (part.type) {
+            case "text":
+              return <TextPartDisplay key={key} part={part} streaming={streaming} showPendingHint={hintHere} />;
+            case "reasoning":
+              return <ReasoningPartDisplay key={key} part={part} streaming={streaming} showPendingHint={hintHere} />;
+            default:
+              return null;
+          }
         }
       })}
-      {streaming && inlinePendingHint && parts[lastIdx]?.type === "tool_use" && <StreamingReplyHint />}
+      {streaming && inlinePendingHint && visibleParts[lastIdx]?.type === "tool_use" && <StreamingReplyHint />}
     </div>
   );
 });
