@@ -12,6 +12,7 @@ export function readRightPanelDefaultCollapsedFromStorage(
   return raw === "1" || raw === "true";
 }
 
+/** @deprecated 请使用 `saveRightPanelDefaultCollapsed`（`app_settings`）。保留供测试与一次性迁移读取。 */
 export function writeRightPanelDefaultCollapsedToStorage(collapsed: boolean): void {
   if (typeof window === "undefined") return;
   try {

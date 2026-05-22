@@ -340,6 +340,7 @@ describe("AuthorPanel", () => {
       "执行环境",
       "定时自动化",
       "远程入口",
+      "默认配置",
       "快捷键",
       "Claude 沙箱",
     ]) {
@@ -418,8 +419,20 @@ describe("AuthorPanel", () => {
     expect(html).toContain("精选市场");
   });
 
+  test("defaults pane renders global session and layout defaults", () => {
+    const { props } = buildProps({ pane: "defaults" });
+    const html = renderAuthorPanel(props);
+    expect(html).toContain("会话处理方式");
+    expect(html).toContain("右侧面板");
+    expect(html).toContain("长驻会话");
+    expect(html).toContain("逐轮处理");
+    expect(html).toContain("说明");
+    expect(html).toContain("设置写入全局数据库");
+  });
+
   test("application setting panes mount inside configuration center", () => {
     for (const pane of [
+      "defaults",
       "claude-config",
       "assistants",
       "engine-registry",

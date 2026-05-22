@@ -8,6 +8,7 @@ mock.module("../services/appSettingsStore", () => ({
 }));
 
 import {
+  loadDefaultClaudeConnectionKind,
   normalizeClaudeConnectionKind,
   saveDefaultClaudeConnectionKind,
   sessionUsesStreamingConnection,
@@ -20,16 +21,20 @@ describe("claudeConnection", () => {
     setAppSetting.mockClear();
   });
 
-  test("normalizeClaudeConnectionKind defaults to streaming", () => {
-    expect(normalizeClaudeConnectionKind(undefined)).toBe("streaming");
-    expect(normalizeClaudeConnectionKind("bad")).toBe("streaming");
+  test("normalizeClaudeConnectionKind defaults to oneshot", () => {
+    expect(normalizeClaudeConnectionKind(undefined)).toBe("oneshot");
+    expect(normalizeClaudeConnectionKind("bad")).toBe("oneshot");
     expect(normalizeClaudeConnectionKind("oneshot", "streaming")).toBe("oneshot");
   });
 
   test("sessionUsesStreamingConnection respects session override", () => {
     expect(sessionUsesStreamingConnection({ connectionKind: "oneshot" })).toBe(false);
     expect(sessionUsesStreamingConnection({ connectionKind: "streaming" })).toBe(true);
-    expect(sessionUsesStreamingConnection({})).toBe(true);
+    expect(sessionUsesStreamingConnection({})).toBe(false);
+  });
+
+  test("loadDefaultClaudeConnectionKind defaults to oneshot when unset", async () => {
+    expect(await loadDefaultClaudeConnectionKind()).toBe("oneshot");
   });
 
   test("saveDefaultClaudeConnectionKind persists setting", async () => {

@@ -2,13 +2,14 @@ import { message } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import {
   CLAUDE_CONNECTION_KIND_LABELS,
+  CLAUDE_DEFAULT_CONNECTION_KIND_FALLBACK,
   loadDefaultClaudeConnectionKind,
   saveDefaultClaudeConnectionKind,
   type ClaudeSessionConnectionKind,
 } from "../../constants/claudeConnection";
 
 export function useClaudeConnectionModeSetting() {
-  const [kind, setKind] = useState<ClaudeSessionConnectionKind>("streaming");
+  const [kind, setKind] = useState<ClaudeSessionConnectionKind>(CLAUDE_DEFAULT_CONNECTION_KIND_FALLBACK);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 

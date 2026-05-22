@@ -10,9 +10,9 @@ export function ClaudeConnectionModeSection() {
   };
 
   return (
-    <section className="app-claude-config-dir-panel__section" aria-label="主会话连接方式">
+    <section className="app-claude-config-dir-panel__section" aria-label="会话处理方式">
       <div className="app-claude-config-dir-panel__section-head">
-        <Typography.Text strong>主会话连接方式</Typography.Text>
+        <Typography.Text strong>会话处理方式</Typography.Text>
         <Typography.Text type="secondary">
           控制 Composer 新建标签如何拉起 Claude Code。已打开的标签保持创建时的设置，直至关闭。
         </Typography.Text>

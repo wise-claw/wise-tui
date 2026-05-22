@@ -13,6 +13,7 @@ import { AutomationPanel } from "../AutomationPanel";
 import { ChannelsPanel } from "../ChannelsPanel";
 import { ClaudeHooksConfigPanel, type ClaudeHooksConfigPanelHandle } from "../ClaudeHooksConfigPanel";
 import { ClaudeConfigDirPanel } from "../ClaudeConfigDirPanel";
+import { DefaultConfigPanel } from "../DefaultConfigPanel";
 import { AgentRegistrySection } from "../ClaudeConfigDirPanel/AgentRegistrySection";
 import { ClaudeSandboxHelpPopoverBody } from "../ClaudeSandboxHelpPopoverBody";
 import { EmployeeConfigModal } from "../EmployeeConfigModal";
@@ -175,6 +176,8 @@ export function AuthorPanel({
             </div>
           </AuthorPanelPageShell>
         );
+      case "defaults":
+        return <DefaultConfigPanel />;
       case "claude-config":
         return <ClaudeConfigDirPanel />;
       case "extensions":
@@ -229,6 +232,7 @@ export function AuthorPanel({
         icon={activeTab.icon}
         title={activeTab.label}
         subtitle={activeTab.description}
+        className={pane === "defaults" ? "author-panel-page--default-config" : undefined}
       >
         {content}
       </AuthorPanelPageShell>

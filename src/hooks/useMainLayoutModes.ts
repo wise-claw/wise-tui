@@ -24,9 +24,11 @@ import {
 } from "../utils/repositoryMainSessionBinding";
 import { usePersistedMainLayoutSiderWidths } from "./usePersistedMainLayoutSiderWidths";
 import {
-  readRightPanelDefaultCollapsedFromStorage,
-  writeRightPanelDefaultCollapsedToStorage,
-} from "../utils/rightPanelStorage";
+  loadRightPanelDefaultCollapsed,
+  saveRightPanelDefaultCollapsed,
+  WISE_RIGHT_PANEL_DEFAULT_CHANGED,
+} from "../services/rightPanelDefaultStore";
+import { readRightPanelDefaultCollapsedFromStorage } from "../utils/rightPanelStorage";
 
 const COMPACT_LAYOUT_WINDOW_WIDTH_PX = 700;
 const COMPACT_LAYOUT_WINDOW_HEIGHT_PX = 600;
@@ -340,12 +342,45 @@ export function useMainLayoutModes({
     setRightCollapsed((c) => !c);
   }, [exitCompactLayoutMode]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void loadRightPanelDefaultCollapsed().then((collapsed) => {
+      if (cancelled) return;
+      setRightPanelDefaultCollapsed(collapsed);
+      if (!compactLayoutModeRef.current) {
+        setRightCollapsed(collapsed);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handler = (event: Event) => {
+      const collapsed = (event as CustomEvent<{ collapsed?: boolean }>).detail?.collapsed;
+      if (typeof collapsed !== "boolean") return;
+      setRightPanelDefaultCollapsed(collapsed);
+      if (!compactLayoutModeRef.current) {
+        setRightCollapsed(collapsed);
+      }
+    };
+    window.addEventListener(WISE_RIGHT_PANEL_DEFAULT_CHANGED, handler);
+    return () => window.removeEventListener(WISE_RIGHT_PANEL_DEFAULT_CHANGED, handler);
+  }, []);
+
   const handleSetRightPanelDefaultCollapsed = useCallback((collapsed: boolean) => {
-    writeRightPanelDefaultCollapsedToStorage(collapsed);
-    setRightPanelDefaultCollapsed(collapsed);
-    if (!compactLayoutModeRef.current) {
-      setRightCollapsed(collapsed);
-    }
+    void saveRightPanelDefaultCollapsed(collapsed)
+      .then(() => {
+        setRightPanelDefaultCollapsed(collapsed);
+        if (!compactLayoutModeRef.current) {
+          setRightCollapsed(collapsed);
+        }
+      })
+      .catch(() => {
+        message.error("保存右侧面板默认状态失败");
+      });
   }, []);
 
   return {

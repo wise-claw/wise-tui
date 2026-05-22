@@ -1,0 +1,83 @@
+import { Typography } from "antd";
+import type { ClaudeSessionConnectionKind } from "../../constants/claudeConnection";
+import { useClaudeConnectionModeSetting } from "../ClaudeConfigDirPanel/useClaudeConnectionModeSetting";
+import { DefaultConfigOptionPick } from "./DefaultConfigOptionPick";
+import { useRightPanelDefaultSetting } from "./useRightPanelDefaultSetting";
+import "./index.css";
+
+const DEFAULT_CONFIG_NOTES = [
+  "设置写入全局数据库，新建标签与下次启动主布局时生效。",
+  "长驻模式使用 --input-format stream-json，与终端 CLI 共享 MCP / Skills / Hooks。",
+  "OMC 直连批量、PRD 拆分等编排仍使用独立 -p 子进程，不受会话默认影响。",
+  "小窗口模式会强制收起右栏，不受右侧面板默认影响。",
+] as const;
+
+/** 工作台配置 / 运行设置 / 默认配置：全局会话与布局默认值。 */
+export function DefaultConfigPanel() {
+  const connection = useClaudeConnectionModeSetting();
+  const rightPanel = useRightPanelDefaultSetting();
+
+  return (
+    <div className="app-default-config-panel">
+      <section className="app-default-config-panel__settings" aria-label="全局默认项">
+        <div className="app-default-config-row" aria-label="会话处理方式">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">会话处理方式</span>
+            <span className="app-default-config-row__hint">
+              新建标签的连接方式；已打开标签保持创建时设置
+            </span>
+          </div>
+          <div className="app-default-config-row__control">
+            <DefaultConfigOptionPick<ClaudeSessionConnectionKind>
+              aria-label="会话处理方式"
+              disabled={connection.loading || connection.saving}
+              value={connection.kind}
+              options={[
+                { label: "长驻会话", value: "streaming" },
+                { label: "逐轮处理", value: "oneshot" },
+              ]}
+              onChange={(value) => {
+                void connection.save(value);
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="app-default-config-row" aria-label="右侧面板">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">右侧面板</span>
+            <span className="app-default-config-row__hint">
+              启动时右栏展开/收起；顶栏按钮右键可改同一默认
+            </span>
+          </div>
+          <div className="app-default-config-row__control">
+            <DefaultConfigOptionPick<"expanded" | "collapsed">
+              aria-label="右侧面板默认状态"
+              disabled={rightPanel.loading || rightPanel.saving}
+              value={rightPanel.collapsed ? "collapsed" : "expanded"}
+              options={[
+                { label: "展开", value: "expanded" },
+                { label: "收起", value: "collapsed" },
+              ]}
+              onChange={(value) => {
+                void rightPanel.save(value === "collapsed");
+              }}
+            />
+          </div>
+        </div>
+      </section>
+
+      <aside className="app-default-config-panel__notes" aria-label="默认配置说明">
+        <div className="app-default-config-panel__notes-title">说明</div>
+        <ul className="app-default-config-panel__notes-list">
+          {DEFAULT_CONFIG_NOTES.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+        <Typography.Text type="secondary" className="app-default-config-panel__notes-foot">
+          未单独配置时，新建主会话标签默认使用逐轮处理。
+        </Typography.Text>
+      </aside>
+    </div>
+  );
+}

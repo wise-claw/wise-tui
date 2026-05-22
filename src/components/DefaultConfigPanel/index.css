@@ -1,0 +1,140 @@
+.app-default-config-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(240px, 0.85fr);
+  gap: 10px;
+  width: 100%;
+  align-items: start;
+}
+
+.app-default-config-panel__settings {
+  min-width: 0;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
+  overflow: hidden;
+}
+
+.app-default-config-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+}
+
+.app-default-config-row + .app-default-config-row {
+  border-top: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-default-config-row__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-default-config-row__title {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--ant-color-text);
+}
+
+.app-default-config-row__hint {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-default-config-row__control {
+  flex-shrink: 0;
+}
+
+.app-default-config-choice.ant-radio-group {
+  display: inline-flex;
+  flex-wrap: nowrap;
+}
+
+.app-default-config-choice .ant-radio-button-wrapper {
+  height: 28px;
+  padding-inline: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 26px;
+}
+
+.app-default-config-choice .ant-radio-button-wrapper:not(.ant-radio-button-wrapper-checked) {
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-quaternary);
+  border-color: var(--ant-color-border-secondary) !important;
+}
+
+.app-default-config-choice .ant-radio-button-wrapper-checked {
+  font-weight: 600;
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--ant-color-primary) 28%, transparent);
+}
+
+.app-default-config-choice .ant-radio-button-wrapper-checked:not(.ant-radio-button-wrapper-disabled) {
+  color: var(--ant-color-bg-container);
+  background: var(--ant-color-primary);
+  border-color: var(--ant-color-primary) !important;
+}
+
+.app-default-config-choice .ant-radio-button-wrapper:hover:not(.ant-radio-button-wrapper-checked):not(
+    .ant-radio-button-wrapper-disabled
+  ) {
+  color: var(--ant-color-primary);
+  background: var(--ant-color-primary-bg);
+}
+
+.app-default-config-panel__notes {
+  min-width: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-default-config-panel__notes-title {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-default-config-panel__notes-list {
+  margin: 0;
+  padding-left: 1.1em;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-default-config-panel__notes-list li + li {
+  margin-top: 6px;
+}
+
+.app-default-config-panel__notes-foot {
+  display: block;
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.author-panel-page--default-config {
+  width: 100%;
+  max-width: none;
+}
+
+.author-panel-page--default-config .author-panel-page__head {
+  --author-panel-page-head-padding-top: 16px;
+  --author-panel-page-head-padding-bottom: 8px;
+}
+
+@media (max-width: 760px) {
+  .app-default-config-panel {
+    grid-template-columns: 1fr;
+  }
+}

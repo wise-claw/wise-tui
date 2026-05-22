@@ -551,7 +551,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     new Map<string, { tabId: string; detach: () => void }>(),
   );
   const trellisContextIdBySessionRef = useRef<Map<string, string>>(new Map());
-  const defaultConnectionKindRef = useRef<ClaudeSessionConnectionKind>("streaming");
+  const defaultConnectionKindRef = useRef<ClaudeSessionConnectionKind>("oneshot");
   const streamStallTimerByTabRef = useRef<Map<string, number>>(new Map());
   /** 已对「Hook 进行中」放过一次 45s 宽限的标签 */
   const streamStallHookExtendedByTabRef = useRef<Set<string>>(new Set());

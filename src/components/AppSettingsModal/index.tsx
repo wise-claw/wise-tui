@@ -241,6 +241,7 @@ export function BuiltinSettingsMoved({ extTabCount }: { extTabCount: number }) {
         <span>助手模板 → 工作台配置 / 生态 / 助手模板</span>
         <span>MCP 工具 → 工作台配置 / 生态 / MCP 工具</span>
         <span>执行引擎 → 工作台配置 / 生态 / 执行引擎</span>
+        <span>默认配置 → 工作台配置 / 运行设置 / 默认配置</span>
         <span>快捷键 → 工作台配置 / 运行设置 / 快捷键</span>
         <span>Claude 沙箱 → 工作台配置 / 运行设置 / Claude 沙箱</span>
       </div>
