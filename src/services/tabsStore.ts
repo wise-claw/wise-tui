@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { normalizeClaudeConnectionKind } from "../constants/claudeConnection";
 import type { ClaudeSession, PersistedTabsState } from "../types";
 
 function normalizePersistedSession(raw: unknown): ClaudeSession {
@@ -8,6 +9,7 @@ function normalizePersistedSession(raw: unknown): ClaudeSession {
   delete out.projectName;
   out.repositoryPath = (typeof v.repositoryPath === "string" && v.repositoryPath) || String(v.projectPath ?? "");
   out.repositoryName = (typeof v.repositoryName === "string" && v.repositoryName) || String(v.projectName ?? "");
+  out.connectionKind = normalizeClaudeConnectionKind(v.connectionKind);
   return out as unknown as ClaudeSession;
 }
 

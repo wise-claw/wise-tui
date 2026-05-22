@@ -1,4 +1,5 @@
 import type { MutableRefObject } from "react";
+import { sessionUsesStreamingConnection } from "../constants/claudeConnection";
 import type { ClaudeSession, MessagePart } from "../types";
 import { appendAssistantStreamParts, capAssistantStreamBufferText } from "./claudeStreamAssembler";
 import {
@@ -49,6 +50,8 @@ interface RuntimeDeps {
   onSessionTabIdMigrated?: (fromTabId: string, toClaudeSessionId: string) => void;
   /** 与 `executeSession` 写入的轮次 nonce 对齐；全局 `claude-complete` 用于通知去重，避免误用「当前最新」nonce */
   expectedTurnNonceByTabIdRef?: MutableRefObject<Map<string, number>>;
+  /** 任意 stdout 行到达时重置「无可见输出」看门狗（Hook 阶段可能尚无助手正文）。 */
+  onStreamActivity?: (tabId: string) => void;
   /**
    * 一轮流式结束后用磁盘 `*.jsonl` 覆盖内存消息，与 Claude Code 原生会话对齐。
    * 流式路径会把多行 delta 压成少量气泡并带去重，仅靠内存会与 jsonl 条数不一致。
@@ -91,19 +94,27 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     onSessionTabIdMigrated,
     reloadTranscriptFromDisk,
     expectedTurnNonceByTabIdRef,
+    onStreamActivity,
   } = deps;
 
   /** 多标签并行时：用 invocation 通道回退到发送时的 tab id，且勿写全局 `streamingTargetIdRef`（否则后发送会话会抢走先发送会话的流式路由）。 */
-  function handleOutputForSendTab(stableTabId: string, payload: unknown) {
+  function handleOutputForSendTab(
+    stableTabId: string,
+    payload: unknown,
+    opts?: { syncStreamingTargetRefOnInit?: boolean },
+  ) {
     const line = typeof payload === "string" ? payload : JSON.stringify(payload);
     const lineSid = parseStreamLineSessionId(line);
     const mapped = sessionIdMapRef.current.get(stableTabId) ?? stableTabId;
-    let tid = resolveTabIdForClaudeStream(sessionsRef.current, lineSid, lineSid ? null : mapped);
+    let tid = resolveTabIdForClaudeStream(sessionsRef.current, lineSid, mapped);
     if (!tid) {
-      tid = resolveTabIdForClaudeStream(sessionsRef.current, null, mapped);
+      tid = resolveTabIdForClaudeStream(sessionsRef.current, null, stableTabId);
     }
     if (!tid) return;
-    applyOutputLine(tid, line, { syncStreamingTargetRefOnInit: false });
+    onStreamActivity?.(tid);
+    applyOutputLine(tid, line, {
+      syncStreamingTargetRefOnInit: opts?.syncStreamingTargetRefOnInit ?? false,
+    });
   }
 
   function applyOutputLine(
@@ -181,11 +192,9 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
 
   function handleOutput(payload: unknown) {
     const refTid = streamingTargetIdRef.current;
-    const line = typeof payload === "string" ? payload : JSON.stringify(payload);
-    const lineSid = parseStreamLineSessionId(line);
-    const tid = resolveTabIdForClaudeStream(sessionsRef.current, lineSid, refTid);
-    if (!tid) return;
-    applyOutputLine(tid, line, { syncStreamingTargetRefOnInit: true });
+    if (!refTid) return;
+    // 与 invocation 路径共用 tab 映射：`system.init` 后 tab id 会变为 Claude session_id，旧 ref 须经 sessionIdMap 解析。
+    handleOutputForSendTab(refTid, payload, { syncStreamingTargetRefOnInit: true });
   }
 
   function looksLikeClaudeUuid(s: string): boolean {
@@ -204,11 +213,12 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
   function applySessionComplete(tid: string, payload: unknown, turnNonce: number) {
     const session = sessionsRef.current.find((s) => s.id === tid || s.claudeSessionId === tid);
     if (session) {
-      if (session.status === "completed" || session.status === "cancelled" || session.status === "error") {
+      if (session.status !== "running" && session.status !== "connecting") {
         clearAssistBufferKeysForTab(session, tid);
         return;
       }
     }
+    const streamingResident = sessionUsesStreamingConnection(session);
     const success = resolveSuccessFromCompletePayload(payload);
     const buf = assistantStreamTextByTabRef.current;
     const chunks = [
@@ -230,6 +240,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
         targetId: tid,
         success,
         noAssistantReply,
+        streamingResident,
       }),
     );
     // 多员工/多会话并行时：仅当「当前仍指向本会话」时才清空，避免误清其它仍在流式中的标签
@@ -242,7 +253,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       streamingTargetIdRef.current = null;
     }
 
-    if (reloadTranscriptFromDisk && success) {
+    if (reloadTranscriptFromDisk && success && !streamingResident) {
       const stableTabId = session?.id ?? tid;
       const repo = session?.repositoryPath?.trim() ?? "";
       const tidTrim = tid.trim();
@@ -260,22 +271,19 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
   }
 
   function handleComplete(payload: unknown) {
-    const tid = resolveTabIdFromCompletePayload(payload, sessionsRef.current, streamingTargetIdRef.current);
-    if (!tid) return;
-    const session = sessionsRef.current.find((s) => s.id === tid || s.claudeSessionId === tid);
-    const tabKey = session?.id ?? tid;
-    const cc = session?.claudeSessionId?.trim();
+    const refTid = streamingTargetIdRef.current;
+    if (!refTid) return;
+    const mapped = sessionIdMapRef.current.get(refTid) ?? refTid;
     const mapRef = expectedTurnNonceByTabIdRef?.current;
     const nonceForTurn =
-      (mapRef?.get(tabKey) ?? mapRef?.get(tid) ?? (cc ? mapRef?.get(cc) : undefined)) ??
-      lastUserSendNonceRef.current;
-    applySessionComplete(tid, payload, nonceForTurn);
+      (mapRef?.get(refTid) ?? mapRef?.get(mapped) ?? undefined) ?? lastUserSendNonceRef.current;
+    handleCompleteForSendTab(refTid, payload, nonceForTurn);
   }
 
   function handleCompleteForSendTab(stableTabId: string, payload: unknown, turnNonce: number) {
     const mapped = sessionIdMapRef.current.get(stableTabId) ?? stableTabId;
-    let tid = resolveTabIdFromCompletePayload(payload, sessionsRef.current, streamingTargetIdRef.current);
-    if (!tid) tid = resolveTabIdFromCompletePayload(payload, sessionsRef.current, mapped);
+    let tid = resolveTabIdFromCompletePayload(payload, sessionsRef.current, mapped);
+    if (!tid) tid = resolveTabIdFromCompletePayload(payload, sessionsRef.current, stableTabId);
     if (!tid) {
       const session = sessionsRef.current.find((s) => s.id === mapped || s.claudeSessionId === mapped);
       tid = session?.id ?? null;
@@ -285,10 +293,9 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
   }
 
   function handleError(payload: unknown) {
-    const tid = streamingTargetIdRef.current;
-    if (!tid) return;
-    const errorMsg = typeof payload === "string" ? payload : JSON.stringify(payload);
-    setSessions((prev) => appendSystemMessageBySessionOrClaudeId(prev, tid, `Claude stderr: ${errorMsg}`));
+    const refTid = streamingTargetIdRef.current;
+    if (!refTid) return;
+    handleErrorForSendTab(refTid, payload);
   }
 
   function handleErrorForSendTab(stableTabId: string, payload: unknown) {

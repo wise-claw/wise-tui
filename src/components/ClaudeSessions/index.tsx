@@ -279,11 +279,19 @@ interface TopbarBtnProps {
   icon: React.ReactNode;
   label: string;
   onClick?: () => void;
+  onContextMenu?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   active?: boolean;
   tooltipPlacement?: TooltipProps["placement"];
 }
 
-function TopbarBtn({ icon, label, onClick, active, tooltipPlacement = "bottom" }: TopbarBtnProps) {
+function TopbarBtn({
+  icon,
+  label,
+  onClick,
+  onContextMenu,
+  active,
+  tooltipPlacement = "bottom",
+}: TopbarBtnProps) {
   return (
     <Tooltip
       title={label}
@@ -294,6 +302,7 @@ function TopbarBtn({ icon, label, onClick, active, tooltipPlacement = "bottom" }
       <button
         className={`app-topbar-btn ${active ? "active" : ""}`}
         onClick={onClick}
+        onContextMenu={onContextMenu}
         type="button"
       >
         {icon}
@@ -311,6 +320,8 @@ export interface TopbarProps {
   activeSessionRepositoryPath?: string;
   onToggleSidebar?: () => void;
   onToggleRightPanel?: () => void;
+  rightPanelDefaultCollapsed?: boolean;
+  onSetRightPanelDefaultCollapsed?: (collapsed: boolean) => void;
   onToggleTerminal?: () => void;
   onSearch?: () => void;
   collapsed?: boolean;
@@ -329,6 +340,8 @@ export function Topbar({
   activeSessionRepositoryPath,
   onToggleSidebar,
   onToggleRightPanel,
+  rightPanelDefaultCollapsed = false,
+  onSetRightPanelDefaultCollapsed,
   onToggleTerminal,
   onSearch,
   collapsed,
@@ -350,6 +363,7 @@ export function Topbar({
   const [runDetectedUrl, setRunDetectedUrl] = useState<string | null>(null);
   const [runErrorMonitorEnabled, setRunErrorMonitorEnabled] = useState(true);
   const [runAutoOpenPageEnabled, setRunAutoOpenPageEnabled] = useState(true);
+  const [rightPanelDefaultPopoverOpen, setRightPanelDefaultPopoverOpen] = useState(false);
   const runLogTailRef = useRef("");
   const runChunkBufferRef = useRef("");
   const idleTimerRef = useRef<number | null>(null);
@@ -978,12 +992,46 @@ export function Topbar({
         )}
         <div className="app-topbar-divider" />
         {onToggleRightPanel && (
-          <TopbarBtn
-            icon={<IconRightPanel collapsed={rightCollapsed ?? false} />}
-            label={rightCollapsed ? "展开右侧面板" : "收起右侧面板"}
-            onClick={onToggleRightPanel}
-            tooltipPlacement="bottomRight"
-          />
+          <Popover
+            trigger={[]}
+            open={rightPanelDefaultPopoverOpen}
+            onOpenChange={setRightPanelDefaultPopoverOpen}
+            placement="bottomRight"
+            overlayClassName="app-topbar-right-panel-default-popover"
+            content={
+              onSetRightPanelDefaultCollapsed ? (
+                <label className="app-topbar-right-panel-default-popover__row">
+                  <span className="app-topbar-right-panel-default-popover__label">启动默认展开</span>
+                  <Switch
+                    size="small"
+                    checked={!rightPanelDefaultCollapsed}
+                    onChange={(checked) => onSetRightPanelDefaultCollapsed(!checked)}
+                  />
+                </label>
+              ) : null
+            }
+          >
+            <span className="app-topbar-right-panel-trigger-wrap">
+              <TopbarBtn
+                icon={<IconRightPanel collapsed={rightCollapsed ?? false} />}
+                label={
+                  rightCollapsed
+                    ? "展开右侧面板（右键设默认）"
+                    : "收起右侧面板（右键设默认）"
+                }
+                onClick={onToggleRightPanel}
+                onContextMenu={
+                  onSetRightPanelDefaultCollapsed
+                    ? (event) => {
+                        event.preventDefault();
+                        setRightPanelDefaultPopoverOpen(true);
+                      }
+                    : undefined
+                }
+                tooltipPlacement="bottomRight"
+              />
+            </span>
+          </Popover>
         )}
       </div>
     </div>
@@ -1010,6 +1058,10 @@ interface Props {
   activeWorkspaceFocus?: WorkspaceFocus;
   onSelectRepository?: (id: number) => void;
   onUpdateSessionModel: (sessionId: string, model: string) => void;
+  onUpdateSessionConnectionKind: (
+    sessionId: string,
+    kind: import("../../constants/claudeConnection").ClaudeSessionConnectionKind,
+  ) => void | Promise<void>;
   onExecuteSession: (
     sessionId: string,
     prompt: string,
@@ -1041,6 +1093,8 @@ interface Props {
   onNewSecondarySession?: (repository: Repository) => void;
   onToggleSidebar?: () => void;
   onToggleRightPanel?: () => void;
+  rightPanelDefaultCollapsed?: boolean;
+  onSetRightPanelDefaultCollapsed?: (collapsed: boolean) => void;
   onToggleTerminal?: () => void;
   onSearch?: () => void;
   collapsed?: boolean;
@@ -1125,6 +1179,7 @@ export function ClaudeSessions({
   activeWorkspaceFocus = "repository",
   onSelectRepository,
   onUpdateSessionModel,
+  onUpdateSessionConnectionKind,
   onExecuteSession,
   onSendMessage,
   onCancelSession,
@@ -1148,6 +1203,8 @@ export function ClaudeSessions({
   onNewSecondarySession,
   onToggleSidebar,
   onToggleRightPanel,
+  rightPanelDefaultCollapsed,
+  onSetRightPanelDefaultCollapsed,
   onToggleTerminal,
   onSearch,
   collapsed,
@@ -1357,6 +1414,8 @@ export function ClaudeSessions({
           activeSessionRepositoryPath={activeRepository?.path}
           onToggleSidebar={onToggleSidebar}
           onToggleRightPanel={onToggleRightPanel}
+          rightPanelDefaultCollapsed={rightPanelDefaultCollapsed}
+          onSetRightPanelDefaultCollapsed={onSetRightPanelDefaultCollapsed}
           onToggleTerminal={onToggleTerminal}
           onSearch={onSearch}
           collapsed={collapsed}
@@ -1395,6 +1454,9 @@ export function ClaudeSessions({
                 onSend={onSendMessage}
                 onExecute={onExecuteSession}
                 onSessionModelChange={(model) => onUpdateSessionModel(activeSession.id, model)}
+                onSessionConnectionKindChange={(kind) =>
+                  void onUpdateSessionConnectionKind(activeSession.id, kind)
+                }
                 onCancel={(opts) => onCancelSession(activeSession.id, opts)}
                 respondQuestionAt={onRespondToQuestion}
                 dismissQuestionAt={onDismissQuestion}
@@ -1454,6 +1516,9 @@ export function ClaudeSessions({
                   onSend={onSendMessage}
                   onExecute={onExecuteSession}
                   onSessionModelChange={(model) => onUpdateSessionModel(secondarySession.id, model)}
+                  onSessionConnectionKindChange={(kind) =>
+                    void onUpdateSessionConnectionKind(secondarySession.id, kind)
+                  }
                   onCancel={(opts) => onCancelSession(secondarySession.id, opts)}
                   respondQuestionAt={onRespondToQuestion}
                   dismissQuestionAt={onDismissQuestion}
@@ -1533,6 +1598,9 @@ export function ClaudeSessions({
             onSend={onSendMessage}
             onExecute={onExecuteSession}
             onSessionModelChange={(model) => onUpdateSessionModel(activeSession.id, model)}
+            onSessionConnectionKindChange={(kind) =>
+              void onUpdateSessionConnectionKind(activeSession.id, kind)
+            }
             onCancel={(opts) => onCancelSession(activeSession.id, opts)}
             respondQuestionAt={onRespondToQuestion}
             dismissQuestionAt={onDismissQuestion}

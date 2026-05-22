@@ -1,6 +1,22 @@
 import type { MessagePart } from "../types";
 import { unwrapClaudeStreamLineRoot } from "../notifications/streamIngest";
 
+function extractPartsFromStreamDelta(delta: unknown): MessagePart[] {
+  if (!delta || typeof delta !== "object") return [];
+  const d = delta as Record<string, unknown>;
+  const typ = typeof d.type === "string" ? d.type : "";
+  if (typ === "text_delta" && typeof d.text === "string" && d.text) {
+    return [{ type: "text", text: d.text }];
+  }
+  if (typ === "thinking_delta" && typeof d.thinking === "string" && d.thinking) {
+    return [{ type: "reasoning", text: d.thinking }];
+  }
+  if (typeof d.text === "string" && d.text.trim()) {
+    return [{ type: "text", text: d.text }];
+  }
+  return [];
+}
+
 /**
  * Extract structured parts from a Claude stream-json line。
  * 与 Hub 一致地对 `stream_event` 等外壳解包，避免仅 Hub 能解析 AskUserQuestion 而 UI 气泡已展示、Dock 未写入。
@@ -45,15 +61,25 @@ export function extractPartsFromStreamLine(line: string): { parts: MessagePart[]
       }
     }
 
-    // Stream delta variants (SDK / stream-json).
+    // Stream delta variants (SDK / stream-json): content_block_delta, message_delta, etc.
+    if (json.type === "content_block_delta" || json.type === "message_delta") {
+      const deltaParts = extractPartsFromStreamDelta(json.delta);
+      if (deltaParts.length > 0) {
+        return { parts: deltaParts, isInit: false, sessionId: null };
+      }
+    }
+
+    const deltaParts = extractPartsFromStreamDelta(json.delta);
+    if (deltaParts.length > 0) {
+      return { parts: deltaParts, isInit: false, sessionId: null };
+    }
+
     const deltaText =
-      typeof json.delta?.text === "string"
-        ? json.delta.text
-        : typeof json.content_block?.text === "string"
-          ? json.content_block.text
-          : typeof json.text === "string"
-            ? json.text
-            : "";
+      typeof json.content_block?.text === "string"
+        ? json.content_block.text
+        : typeof json.text === "string"
+          ? json.text
+          : "";
     if (deltaText.trim()) {
       return { parts: [{ type: "text", text: deltaText }], isInit: false, sessionId: null };
     }
@@ -144,6 +170,14 @@ export function extractSystemErrorMessageFromStreamLine(line: string): string | 
     const type = typeof json.type === "string" ? json.type : "";
     const subtype = typeof json.subtype === "string" ? json.subtype : "";
     if (type !== "system") return null;
+
+    if (subtype === "hook_started") {
+      const hookName = typeof json.hook_name === "string" ? json.hook_name.trim() : "";
+      if (hookName) {
+        return `Claude Hook 启动中: ${hookName}（完成后会继续生成回复）`;
+      }
+      return "Claude Hook 启动中（完成后会继续生成回复）";
+    }
 
     if (subtype === "hook_response") {
       const outcome = typeof json.outcome === "string" ? json.outcome : "";

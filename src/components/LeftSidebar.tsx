@@ -6,6 +6,11 @@ import { AppSettingsModal } from "./AppSettingsModal";
 import { MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths";
 import { DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION } from "../constants/workspaceBootstrapAddons";
 import { cancelClaudeExecution } from "../services/claude";
+import { killClaudeHostProcess } from "../services/systemResource";
+import {
+  parseHostProcessDrawerPid,
+  parseRegistryOrphanClaudeSid,
+} from "./LeftSidebar/systemSessions";
 import { pickFolder } from "../services/repository";
 import {
   OPEN_WORKSPACE_ERROR,
@@ -509,6 +514,38 @@ export function LeftSidebar({
           systemResourceSessions.setClaudeCountPopoverOpen(false);
           systemResourceSessions.setClaudeSystemSessionSearch("");
           systemResourceSessions.setSystemSessionDrawerId(sessionId);
+        }}
+        onEndSession={(rowSessionId) => {
+          const orphanSid = parseRegistryOrphanClaudeSid(rowSessionId);
+          const hostPid = parseHostProcessDrawerPid(rowSessionId);
+          const rowSession = systemResourceSessions.matchedSystemInlineSessions.find(
+            (s) => s.id === rowSessionId,
+          );
+          const finish = () => {
+            message.success("已请求结束该进程");
+            systemResourceSessions.setClaudeCountPopoverOpen(false);
+            systemResourceSessions.setSystemSessionDrawerId(null);
+          };
+          const fail = (err: unknown) => {
+            message.error(err instanceof Error ? err.message : "结束失败");
+          };
+          if (orphanSid) {
+            void cancelClaudeExecution(orphanSid).then(finish, fail);
+            return;
+          }
+          if (hostPid != null) {
+            const sid = rowSession?.claudeSessionId?.trim();
+            if (sid) {
+              void cancelClaudeExecution(sid).then(finish, fail);
+            } else {
+              void killClaudeHostProcess(hostPid).then(finish, fail);
+            }
+            return;
+          }
+          if (onCancelSessionFromMonitor) {
+            onCancelSessionFromMonitor(rowSessionId);
+            finish();
+          }
         }}
         drawerTitle={systemResourceSessions.systemSessionDrawerTitle}
         drawerOpen={systemResourceSessions.systemSessionDrawerId !== null}

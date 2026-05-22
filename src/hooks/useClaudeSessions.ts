@@ -18,11 +18,23 @@ import type {
 import {
   executeClaudeCode,
   resumeClaudeCode,
+  spawnStreamingSession,
+  sendStreamingUserMessage,
+  closeStreamingSession,
   cancelClaudeExecution,
   getClaudeConfigModel,
   submitClaudeStdinLine,
   listRunningClaudeSessions,
 } from "../services/claude";
+import {
+  CLAUDE_CONNECTION_KIND_LABELS,
+  loadDefaultClaudeConnectionKind,
+  normalizeClaudeConnectionKind,
+  sessionUsesStreamingConnection,
+  WISE_CLAUDE_CONNECTION_KIND_CHANGED,
+  type ClaudeSessionConnectionKind,
+} from "../constants/claudeConnection";
+import type { ClaudeSpawnCliExtras } from "../services/claudeSpawnExtras";
 import { deleteClaudeDiskSession, listClaudeDiskSessions, loadClaudeSessionJsonl } from "../services/claudeDisk";
 import { loadSessionTabsState, saveSessionTabsState } from "../services/tabsStore";
 import {
@@ -118,6 +130,50 @@ async function attachClaudeInvocationStream(
   return cleanup;
 }
 
+/**
+ * Streaming 后续轮次无新 invocation_key，按 Claude `session_id` 订阅 stdout/complete。
+ */
+async function attachClaudeSessionStreamForTurn(
+  claudeSessionId: string,
+  stableTabId: string,
+  rt: ClaudeStreamRuntimeHandlers,
+  turnNonce: number,
+  onCleaned?: () => void,
+): Promise<() => void> {
+  const sid = claudeSessionId.trim();
+  if (!sid) {
+    return () => {};
+  }
+  let cleaned = false;
+  let uo: UnlistenFn = () => {};
+  let ue: UnlistenFn = () => {};
+  let uc: UnlistenFn = () => {};
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    safeUnlisten(uo);
+    safeUnlisten(ue);
+    safeUnlisten(uc);
+    onCleaned?.();
+  };
+  const [uo0, ue0, uc0] = await Promise.all([
+    listen(`claude-output:${sid}`, (e) => {
+      rt.handleOutputForSendTab(stableTabId, e.payload);
+    }),
+    listen(`claude-error:${sid}`, (e) => {
+      rt.handleErrorForSendTab(stableTabId, e.payload);
+    }),
+    listen(`claude-complete:${sid}`, (e) => {
+      rt.handleCompleteForSendTab(stableTabId, e.payload, turnNonce);
+      cleanup();
+    }),
+  ]);
+  uo = uo0;
+  ue = ue0;
+  uc = uc0;
+  return cleanup;
+}
+
 function generateId() {
   return `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -147,6 +203,26 @@ const CLAUDE_REGISTRY_BOOTSTRAP_WARMUP_MS = 60_000;
 /** 全局 `claude-*` 监听挂载晚于首帧时，避免无监听就 `invoke` 导致丢流 */
 const CLAUDE_STREAM_RUNTIME_READY_WAIT_MS = 12_000;
 const CLAUDE_STREAM_RUNTIME_READY_POLL_MS = 40;
+/** 无助手正文时的首轮无输出告警（自上次流式活动起算） */
+const CLAUDE_STREAM_STALL_MS = 45_000;
+/** Hook 已启动但助手正文仍迟迟未到时，再给一轮宽限 */
+const CLAUDE_STREAM_STALL_HOOK_EXTEND_MS = 75_000;
+
+function sessionHasVisibleStreamProgress(session: ClaudeSession): boolean {
+  return session.messages.some((m) => {
+    if (m.role === "assistant") {
+      return m.content.trim().length > 0 || (m.parts?.length ?? 0) > 0;
+    }
+    if (m.role === "system" && m.content.trim().length > 0) return true;
+    return false;
+  });
+}
+
+function sessionHasHookSystemActivity(session: ClaudeSession): boolean {
+  return session.messages.some(
+    (m) => m.role === "system" && /Hook|hook|启动中/.test(m.content),
+  );
+}
 
 function persistWorkflowBindings(map: Map<string, string>): void {
   const payload = Object.fromEntries(Array.from(map.entries()));
@@ -184,12 +260,33 @@ function resolveTabIdForClaudeStream(
   sessions: ClaudeSession[],
   lineSid: string | null,
   refTid: string | null,
+  sessionIdMap?: Map<string, string>,
 ): string | null {
   if (lineSid) {
-    const match = sessions.find((s) => s.claudeSessionId === lineSid || s.id === lineSid);
-    if (match) return match.id;
+    const bySid = sessions.find((s) => s.claudeSessionId === lineSid || s.id === lineSid);
+    if (bySid) return bySid.id;
+    if (sessionIdMap) {
+      for (const s of sessions) {
+        if (sessionIdMap.get(s.id) === lineSid) return s.id;
+      }
+    }
   }
-  return refTid;
+  if (refTid) {
+    const byRef = sessions.find((s) => s.id === refTid || s.claudeSessionId === refTid);
+    if (byRef) return byRef.id;
+    if (sessionIdMap) {
+      const mapped = sessionIdMap.get(refTid);
+      if (mapped) {
+        const byMapped = sessions.find((s) => s.id === mapped || s.claudeSessionId === mapped);
+        if (byMapped) return byMapped.id;
+      }
+      for (const s of sessions) {
+        if (sessionIdMap.get(s.id) === refTid) return s.id;
+      }
+    }
+    return refTid;
+  }
+  return null;
 }
 
 /** 与 Rust `ClaudeCompletePayload`（camelCase）及旧版 boolean 兼容。 */
@@ -197,6 +294,7 @@ function resolveTabIdFromCompletePayload(
   payload: unknown,
   sessions: ClaudeSession[],
   refTid: string | null,
+  sessionIdMap?: Map<string, string>,
 ): string | null {
   if (payload !== null && typeof payload === "object" && !Array.isArray(payload)) {
     const o = payload as Record<string, unknown>;
@@ -205,13 +303,18 @@ function resolveTabIdFromCompletePayload(
     if (sid && sid !== "unknown") {
       const match = sessions.find((s) => s.claudeSessionId === sid || s.id === sid);
       if (match) return match.id;
+      if (sessionIdMap) {
+        for (const s of sessions) {
+          if (sessionIdMap.get(s.id) === sid) return s.id;
+        }
+      }
       return sid;
     }
   }
   if (typeof payload === "boolean") {
-    return refTid;
+    return refTid ? resolveTabIdForClaudeStream(sessions, null, refTid, sessionIdMap) : null;
   }
-  return refTid;
+  return refTid ? resolveTabIdForClaudeStream(sessions, null, refTid, sessionIdMap) : null;
 }
 
 function sessionMatchesDiskId(s: ClaudeSession, diskSessionId: string): boolean {
@@ -347,6 +450,12 @@ interface UseClaudeSessionsOptions {
   claudeConcurrencyInvokeContextRef?: MutableRefObject<
     ((session: ClaudeSession) => { concurrencyScopeKey: string; concurrencyLimit: number } | null) | null
   >;
+  /**
+   * 主会话 spawn 前解析 CLI 扩展（助手 tools / systemPrompt 等）；省略则仅使用 Claude Code 默认配置。
+   */
+  claudeSpawnExtrasContextRef?: MutableRefObject<
+    ((session: ClaudeSession) => Promise<ClaudeSpawnCliExtras | null>) | null
+  >;
   /** 双栏模式下右侧栏绑定的会话 id，用于磁盘 JSONL 拉取与运行态探测 */
   companionSessionId?: string | null;
   /** 流式 init 将临时 tab id 合并为真实 `session_id` 时回调（同步双栏右侧绑定） */
@@ -359,9 +468,14 @@ interface UseClaudeSessionsReturn {
   createSession: (
     repositoryPath: string,
     repositoryName: string,
-    opts?: { skipActivate?: boolean },
+    opts?: { skipActivate?: boolean; connectionKind?: ClaudeSessionConnectionKind },
   ) => Promise<string>;
   updateSessionModel: (sessionId: string, model: string) => void;
+  /** 切换本标签连接方式；运行中拒绝；会结束长驻子进程以便下一条按新模式拉起。 */
+  updateSessionConnectionKind: (
+    sessionId: string,
+    kind: ClaudeSessionConnectionKind,
+  ) => Promise<void>;
   /** 返回 false 表示未启动（例如并发门闸拦截）；其余路径为 true（含已安排重试的暂不可见会话）。 */
   executeSession: (sessionId: string, prompt: string, opts?: ClaudeComposerExecuteBubbleOptions) => boolean;
   appendSystemMessage: (sessionId: string, text: string) => void;
@@ -406,6 +520,14 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   const [sessions, setSessions] = useState<ClaudeSession[]>([]);
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
+  /** 流式事件可能在同一帧连发多行；须在 `setSessions` updater 内同步 ref，避免 init 后 assistant 行因 ref 过期被丢弃。 */
+  const commitSessions = useCallback((updater: (prev: ClaudeSession[]) => ClaudeSession[]) => {
+    setSessions((prev) => {
+      const next = updater(prev);
+      sessionsRef.current = next;
+      return next;
+    });
+  }, []);
   const [trellisContextBindingsHydrated, setTrellisContextBindingsHydrated] = useState(false);
   const onClaudeTurnCompleteRef = useRef(options?.onClaudeTurnComplete);
   onClaudeTurnCompleteRef.current = options?.onClaudeTurnComplete;
@@ -420,6 +542,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   const executeSessionRetryCountRef = useRef<Map<string, number>>(new Map());
   /** Which session tab receives stdout until `claude-complete` / `claude-error`. */
   const streamingTargetIdRef = useRef<string | null>(null);
+  /** 长驻 streaming 子进程：tab id → 已知 Claude session_id（init 前可为 null）。 */
+  const streamingProcessByTabRef = useRef<Map<string, { claudeSessionId: string | null }>>(new Map());
   /** 供 `attachClaudeInvocationStream` 使用；挂载后由 stream effect 赋值。 */
   const streamRuntimeRef = useRef<ClaudeStreamRuntimeHandlers | null>(null);
   /** invocation 监听仍占位时登记于此；关标签 / 卸载时反注册，避免泄漏与关页后仍改状态 */
@@ -427,6 +551,71 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     new Map<string, { tabId: string; detach: () => void }>(),
   );
   const trellisContextIdBySessionRef = useRef<Map<string, string>>(new Map());
+  const defaultConnectionKindRef = useRef<ClaudeSessionConnectionKind>("streaming");
+  const streamStallTimerByTabRef = useRef<Map<string, number>>(new Map());
+  /** 已对「Hook 进行中」放过一次 45s 宽限的标签 */
+  const streamStallHookExtendedByTabRef = useRef<Set<string>>(new Set());
+
+  const clearStreamStallTimer = useCallback((tabId: string) => {
+    const key = tabId.trim();
+    if (!key) return;
+    streamStallHookExtendedByTabRef.current.delete(key);
+    const existing = streamStallTimerByTabRef.current.get(key);
+    if (existing !== undefined) {
+      window.clearTimeout(existing);
+      streamStallTimerByTabRef.current.delete(key);
+    }
+    for (const [temp, real] of sessionIdMapRef.current.entries()) {
+      if (temp === key || real === key) {
+        streamStallHookExtendedByTabRef.current.delete(temp);
+        streamStallHookExtendedByTabRef.current.delete(real);
+        const t = streamStallTimerByTabRef.current.get(temp) ?? streamStallTimerByTabRef.current.get(real);
+        if (t !== undefined) {
+          window.clearTimeout(t);
+          streamStallTimerByTabRef.current.delete(temp);
+          streamStallTimerByTabRef.current.delete(real);
+        }
+      }
+    }
+  }, []);
+
+  const scheduleStreamStallTimer = useCallback(
+    (tabId: string) => {
+      clearStreamStallTimer(tabId);
+      const key = tabId.trim();
+      if (!key) return;
+      const fireStallCheck = () => {
+        streamStallTimerByTabRef.current.delete(key);
+        const mapped = sessionIdMapRef.current.get(key) ?? key;
+        const session = sessionsRef.current.find(
+          (s) => s.id === key || s.id === mapped || s.claudeSessionId === mapped,
+        );
+        if (!session || session.status !== "running") return;
+        if (sessionHasVisibleStreamProgress(session)) return;
+        if (
+          sessionHasHookSystemActivity(session) &&
+          !streamStallHookExtendedByTabRef.current.has(key)
+        ) {
+          streamStallHookExtendedByTabRef.current.add(key);
+          const extendTimer = window.setTimeout(fireStallCheck, CLAUDE_STREAM_STALL_HOOK_EXTEND_MS);
+          streamStallTimerByTabRef.current.set(key, extendTimer);
+          return;
+        }
+        commitSessions((prev) =>
+          appendSystemMessageBySessionId(
+            prev.map((s) =>
+              s.id === session.id ? { ...s, status: "error" as const } : s,
+            ),
+            session.id,
+            "Claude 子进程长时间无可见输出。请点「停止」后重试；若反复出现，可暂时关闭 Cockpit 助手 MCP 或在终端用 stream-json 自检。",
+          ),
+        );
+      };
+      const timer = window.setTimeout(fireStallCheck, CLAUDE_STREAM_STALL_MS);
+      streamStallTimerByTabRef.current.set(key, timer);
+    },
+    [clearStreamStallTimer, commitSessions],
+  );
 
   const detachClaudeInvocationsForSessionKey = useCallback((closedId: string) => {
     const ids = new Set<string>([closedId]);
@@ -477,6 +666,17 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     }
     claudeInvocationInflightRef.current.clear();
   }, []);
+
+  const resolveSpawnExtrasForTab = useCallback(
+    async (tabSessionId: string): Promise<ClaudeSpawnCliExtras | null> => {
+      const session = sessionsRef.current.find((s) => s.id === tabSessionId);
+      if (!session) return null;
+      const resolver = claudeSessionsOptionsRef.current?.claudeSpawnExtrasContextRef?.current;
+      if (!resolver) return null;
+      return resolver(session);
+    },
+    [],
+  );
 
   const runClaudeOneshotWithInvocation = useCallback(
     async (params: {
@@ -538,6 +738,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       }
       const sk = invokeConc?.concurrencyScopeKey;
       const lim = invokeConc?.concurrencyLimit;
+      const cliExtras = await resolveSpawnExtrasForTab(tabSessionId);
       try {
         if (resumeClaudeSid) {
           await resumeClaudeCode(
@@ -550,6 +751,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             sk,
             lim,
             resolveTrellisContextId(tabSessionId, resumeClaudeSid),
+            cliExtras,
           );
         } else {
           await executeClaudeCode(
@@ -562,6 +764,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             lim,
             undefined,
             resolveTrellisContextId(tabSessionId),
+            cliExtras,
           );
         }
       } catch (e) {
@@ -569,8 +772,198 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         throw e;
       }
     },
-    [resolveTrellisContextId],
+    [resolveTrellisContextId, resolveSpawnExtrasForTab],
   );
+
+  const runClaudeStreamingWithInvocation = useCallback(
+    async (params: {
+      tabSessionId: string;
+      turnNonce: number;
+      invokeConc:
+        | { concurrencyScopeKey: string; concurrencyLimit: number }
+        | null
+        | undefined;
+      repositoryPath: string;
+      prompt: string;
+      modelArg: string | undefined;
+      resumeClaudeSid: string | null;
+    }) => {
+      const {
+        tabSessionId,
+        turnNonce,
+        invokeConc,
+        repositoryPath,
+        prompt,
+        modelArg,
+        resumeClaudeSid,
+      } = params;
+
+      if (!streamRuntimeRef.current) {
+        const deadline = Date.now() + CLAUDE_STREAM_RUNTIME_READY_WAIT_MS;
+        while (!streamRuntimeRef.current && Date.now() < deadline) {
+          await new Promise<void>((r) => {
+            window.setTimeout(r, CLAUDE_STREAM_RUNTIME_READY_POLL_MS);
+          });
+        }
+        if (!streamRuntimeRef.current) {
+          message.error("流式引擎尚未就绪或初始化超时，请稍后重试发送。");
+          throw new Error("Claude stream runtime not ready");
+        }
+      }
+
+      notificationHub.invalidateControlRequestsForSession(tabSessionId, "已发起新一轮对话");
+      const mappedTab = sessionIdMapRef.current.get(tabSessionId);
+      if (mappedTab && mappedTab !== tabSessionId) {
+        notificationHub.invalidateControlRequestsForSession(mappedTab, "已发起新一轮对话");
+      }
+
+      const liveSid =
+        sessionsRef.current.find((s) => s.id === tabSessionId)?.claudeSessionId?.trim() ??
+        sessionIdMapRef.current.get(tabSessionId)?.trim() ??
+        resumeClaudeSid?.trim() ??
+        null;
+
+      const entry = streamingProcessByTabRef.current.get(tabSessionId);
+      const isFollowUp = Boolean(
+        entry && liveSid && entry.claudeSessionId?.trim() === liveSid,
+      );
+
+      if (isFollowUp && liveSid) {
+        const rt = streamRuntimeRef.current;
+        let detachFollowUp: (() => void) | null = null;
+        const followInv = crypto.randomUUID();
+        if (rt) {
+          try {
+            detachFollowUp = await attachClaudeSessionStreamForTurn(
+              liveSid,
+              tabSessionId,
+              rt,
+              turnNonce,
+              () => {
+                claudeInvocationInflightRef.current.delete(followInv);
+              },
+            );
+            claudeInvocationInflightRef.current.set(followInv, {
+              tabId: tabSessionId,
+              detach: detachFollowUp,
+            });
+          } catch {
+            detachFollowUp = null;
+          }
+        }
+        try {
+          await sendStreamingUserMessage(liveSid, prompt);
+          return;
+        } catch (err) {
+          detachFollowUp?.();
+          claudeInvocationInflightRef.current.delete(followInv);
+          const errText = err instanceof Error ? err.message : String(err);
+          const stdinGone =
+            errText.includes("没有可写 stdin") || errText.includes("stdin");
+          if (!stdinGone) {
+            streamingProcessByTabRef.current.delete(tabSessionId);
+            throw err;
+          }
+          // 长驻子进程可能已在首轮后退出；回退为 resume spawn，勿让用户卡死。
+        }
+      }
+
+      if (liveSid) {
+        await closeStreamingSession(liveSid).catch(() => {
+          /* 旧进程可能已退出 */
+        });
+      }
+      streamingProcessByTabRef.current.delete(tabSessionId);
+
+      const rt = streamRuntimeRef.current;
+      let detach: (() => void) | null = null;
+      const inv = crypto.randomUUID();
+      if (rt) {
+        try {
+          detach = await attachClaudeInvocationStream(inv, tabSessionId, rt, turnNonce, () => {
+            claudeInvocationInflightRef.current.delete(inv);
+          });
+          claudeInvocationInflightRef.current.set(inv, { tabId: tabSessionId, detach });
+        } catch {
+          detach = null;
+        }
+      }
+      const invocationKey = detach ? inv : undefined;
+      if (rt && !detach) {
+        message.warning("本会话流式监听未建立，已退回全局通道；若多标签同时跑 Claude，输出可能短暂串屏。");
+      }
+
+      const sk = invokeConc?.concurrencyScopeKey;
+      const lim = invokeConc?.concurrencyLimit;
+      const cliExtras = await resolveSpawnExtrasForTab(tabSessionId);
+
+      try {
+        await spawnStreamingSession({
+          repositoryPath,
+          initialPrompt: prompt,
+          model: modelArg,
+          sessionIdToResume: liveSid,
+          invocationKey,
+          concurrencyScopeKey: sk,
+          concurrencyLimit: lim,
+          trellisContextId: resolveTrellisContextId(tabSessionId, liveSid),
+          cliExtras,
+        });
+        streamingProcessByTabRef.current.set(tabSessionId, {
+          claudeSessionId: liveSid,
+        });
+      } catch (e) {
+        detach?.();
+        streamingProcessByTabRef.current.delete(tabSessionId);
+        throw e;
+      }
+    },
+    [resolveTrellisContextId, resolveSpawnExtrasForTab],
+  );
+
+  const invokeClaudeTurn = useCallback(
+    async (params: {
+      tabSessionId: string;
+      turnNonce: number;
+      invokeConc:
+        | { concurrencyScopeKey: string; concurrencyLimit: number }
+        | null
+        | undefined;
+      repositoryPath: string;
+      prompt: string;
+      modelArg: string | undefined;
+      resumeClaudeSid: string | null;
+    }) => {
+      const session = sessionsRef.current.find((s) => s.id === params.tabSessionId);
+      if (sessionUsesStreamingConnection(session, defaultConnectionKindRef.current)) {
+        await runClaudeStreamingWithInvocation(params);
+      } else {
+        await runClaudeOneshotWithInvocation(params);
+      }
+    },
+    [runClaudeStreamingWithInvocation, runClaudeOneshotWithInvocation],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadDefaultClaudeConnectionKind().then((kind) => {
+      if (!cancelled) defaultConnectionKindRef.current = kind;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const onKindChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ kind?: ClaudeSessionConnectionKind }>).detail;
+      if (detail?.kind === "streaming" || detail?.kind === "oneshot") {
+        defaultConnectionKindRef.current = detail.kind;
+      }
+    };
+    window.addEventListener(WISE_CLAUDE_CONNECTION_KIND_CHANGED, onKindChanged);
+    return () => window.removeEventListener(WISE_CLAUDE_CONNECTION_KIND_CHANGED, onKindChanged);
+  }, []);
 
   /** 与本轮用户发送绑定，用于 `serverMsgId` 去重（单调递增，避免多会话同时发送撞号）。 */
   const lastUserSendNonceRef = useRef(0);
@@ -708,7 +1101,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const { tabSessionId, prompt, repositoryPath, ...invokeRest } = params;
       const session = sessionsRef.current.find((s) => s.id === tabSessionId);
       if (!session) {
-        await runClaudeOneshotWithInvocation(params);
+        await invokeClaudeTurn(params);
         return;
       }
 
@@ -735,7 +1128,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
       const runOnce = async (outbound: string) => {
         const cc = resolveClaudeSid();
-        await runClaudeOneshotWithInvocation({
+        await invokeClaudeTurn({
           ...invokeRest,
           tabSessionId,
           repositoryPath,
@@ -767,7 +1160,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         await runOnce(prompt);
       }
     },
-    [runClaudeOneshotWithInvocation, reloadTranscriptFromDisk],
+    [invokeClaudeTurn, reloadTranscriptFromDisk],
   );
 
   const reloadFullDiskTranscript = useCallback(
@@ -925,6 +1318,18 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       unlisteners.push(u);
     };
 
+    const resolveTabIdForStream = (
+      list: ClaudeSession[],
+      lineSid: string | null,
+      refTid: string | null,
+    ) => resolveTabIdForClaudeStream(list, lineSid, refTid, sessionIdMapRef.current);
+
+    const resolveCompleteTabIdForStream = (
+      payload: unknown,
+      list: ClaudeSession[],
+      refTid: string | null,
+    ) => resolveTabIdFromCompletePayload(payload, list, refTid, sessionIdMapRef.current);
+
     const runtime = createClaudeStreamRuntime({
       sessionsRef,
       streamingTargetIdRef,
@@ -933,12 +1338,13 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       lastStreamTextBySessionRef,
       lastUserSendNonceRef,
       assistantStreamTextByTabRef,
-      setSessions,
+      setSessions: commitSessions,
       setActiveSessionId,
       ingestClaudeStreamLineForHub,
       ingestStreamAssistText: (sessionId, text) => notificationHub.ingestStreamAssistText(sessionId, text),
       migrateSessionKey: (from, to) => notificationHub.migrateSessionKey(from, to),
       notifyCompletion: ({ tid, success, nonce, previewRaw, structuredVerdict }) => {
+        clearStreamStallTimer(tid);
         const session = sessionsRef.current.find((s) => s.id === tid || s.claudeSessionId === tid);
         const tabSessionId = session?.id ?? tid;
         // 勿在单轮 complete 时清空 Dock：子进程若先于 UI 帧结束，会擦掉刚写入的 AskUserQuestion，导致弹窗永远不出现。
@@ -996,8 +1402,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         });
       },
       parseStreamLineSessionId,
-      resolveTabIdForClaudeStream,
-      resolveTabIdFromCompletePayload,
+      resolveTabIdForClaudeStream: resolveTabIdForStream,
+      resolveTabIdFromCompletePayload: resolveCompleteTabIdForStream,
       resolveSuccessFromCompletePayload: resolveClaudeCompleteSuccess,
       extractSystemErrorMessageFromStreamLine,
       extractPartsFromStreamLine,
@@ -1014,10 +1420,17 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         trellisContextIdBySessionRef.current.set(toClaudeSessionId, trellisContextId);
         persistTrellisContextBindings(trellisContextIdBySessionRef.current);
         migrateClaudeInvocationTabId(fromTabId, toClaudeSessionId);
+        const streamingEntry = streamingProcessByTabRef.current.get(fromTabId);
+        if (streamingEntry) {
+          streamingProcessByTabRef.current.set(fromTabId, {
+            claudeSessionId: toClaudeSessionId,
+          });
+        }
         onSessionTabIdMigratedRef.current?.(fromTabId, toClaudeSessionId);
       },
       reloadTranscriptFromDisk,
       expectedTurnNonceByTabIdRef,
+      onStreamActivity: (tabId) => scheduleStreamStallTimer(tabId),
     });
 
     void (async () => {
@@ -1036,7 +1449,13 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       // invocation 监听由 `closeSession` 与单轮 `onCleaned` 释放。
       unlisteners.forEach((u) => safeUnlisten(u));
     };
-  }, [migrateClaudeInvocationTabId, reloadTranscriptFromDisk]);
+  }, [
+    clearStreamStallTimer,
+    commitSessions,
+    migrateClaudeInvocationTabId,
+    reloadTranscriptFromDisk,
+    scheduleStreamStallTimer,
+  ]);
 
   const refreshDiskSessionsForRepository = useCallback(async (repositoryPath: string, repositoryName: string) => {
     const disk = await listClaudeDiskSessions(repositoryPath);
@@ -1225,10 +1644,53 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     );
   }, []);
 
+  const updateSessionConnectionKind = useCallback(
+    async (sessionId: string, kind: ClaudeSessionConnectionKind) => {
+      const session = sessionsRef.current.find((s) => s.id === sessionId);
+      if (!session) return;
+
+      const next = normalizeClaudeConnectionKind(kind);
+      if (normalizeClaudeConnectionKind(session.connectionKind) === next) {
+        return;
+      }
+
+      if (session.status === "running" || session.status === "connecting") {
+        message.warning("会话运行中，请先点击「停止」后再切换连接方式。");
+        return;
+      }
+
+      const claudeSid =
+        session.claudeSessionId?.trim() ?? sessionIdMapRef.current.get(sessionId)?.trim() ?? null;
+      if (claudeSid) {
+        await closeStreamingSession(claudeSid).catch(() => {
+          /* 进程可能已退出 */
+        });
+      }
+      streamingProcessByTabRef.current.delete(sessionId);
+      detachClaudeInvocationsForSessionKey(sessionId);
+
+      setSessions((prev) => {
+        const nextSessions = prev.map((s) =>
+          s.id === sessionId ? { ...s, connectionKind: next } : s,
+        );
+        sessionsRef.current = nextSessions;
+        return nextSessions;
+      });
+      message.success(`本标签已切换为：${CLAUDE_CONNECTION_KIND_LABELS[next].title}`);
+    },
+    [detachClaudeInvocationsForSessionKey],
+  );
+
   // Create a session without executing Claude (idle state); model from Claude Code settings.json
   const createSession = useCallback(
-    async (repositoryPath: string, repositoryName: string, opts?: { skipActivate?: boolean }) => {
+    async (
+      repositoryPath: string,
+      repositoryName: string,
+      opts?: { skipActivate?: boolean; connectionKind?: ClaudeSessionConnectionKind },
+    ) => {
       const id = generateId();
+      const connectionKind =
+        opts?.connectionKind ?? defaultConnectionKindRef.current;
       const newSession: ClaudeSession = {
         id,
         claudeSessionId: null,
@@ -1239,6 +1701,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         messages: [],
         createdAt: Date.now(),
         pendingPrompt: "",
+        connectionKind,
       };
 
       // 先写入 state/ref，避免 await 读配置阻塞 UI（侧栏切仓库时中间栏会晚出现）。
@@ -1352,7 +1815,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
       expectedTurnNonceByTabIdRef.current.set(sessionId, lastUserSendNonceRef.current);
       markClaudeRegistryBootstrapWarmup(registryBootstrapDeadlineByClaudeSidRef, claudeSid);
-      setSessions((prev) =>
+      commitSessions((prev) =>
         opts?.replaceUserBubbleAtIndex !== undefined && Number.isFinite(opts.replaceUserBubbleAtIndex)
           ? setSessionRunningReplacingUserBubbleAtIndex(prev, sessionId, opts.replaceUserBubbleAtIndex, prompt)
           : opts?.replaceLastUserBubble
@@ -1361,6 +1824,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
               ? setSessionRunningReplacingFirstUserBubble(prev, sessionId, prompt)
               : setSessionRunningWithUserPrompt(prev, sessionId, prompt),
       );
+      scheduleStreamStallTimer(sessionId);
 
       const invokeConc =
         claudeSessionsOptionsRef.current?.claudeConcurrencyInvokeContextRef?.current?.(session) ?? null;
@@ -1379,10 +1843,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             resumeClaudeSid: claudeSid,
           });
         } catch (err) {
+          clearStreamStallTimer(sessionId);
           if (claudeSid?.trim()) {
             registryBootstrapDeadlineByClaudeSidRef.current.delete(claudeSid.trim());
           }
-          setSessions((prev) =>
+          commitSessions((prev) =>
             appendSystemMessageBySessionId(
               prev.map((s) => (s.id === sessionId ? { ...s, status: "error" as const } : s)),
               sessionId,
@@ -1393,7 +1858,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       })();
       return true;
     },
-    [runClaudeTurnWithContextGuard],
+    [clearStreamStallTimer, commitSessions, runClaudeTurnWithContextGuard, scheduleStreamStallTimer],
   );
 
   const appendSystemMessage = useCallback((sessionId: string, text: string) => {
@@ -1513,7 +1978,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         claudeSessionsOptionsRef.current?.claudeConcurrencyInvokeContextRef?.current?.(session) ?? null;
       const modelArg = session.model.trim().length > 0 ? session.model : undefined;
       try {
-        await runClaudeOneshotWithInvocation({
+        await invokeClaudeTurn({
           tabSessionId: sessionId,
           turnNonce,
           invokeConc,
@@ -1538,7 +2003,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         throw err;
       }
     },
-    [runClaudeOneshotWithInvocation, reloadTranscriptFromDisk],
+    [invokeClaudeTurn, reloadTranscriptFromDisk],
   );
 
   const sendMessage = useCallback(
@@ -1556,6 +2021,13 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       expectedTurnNonceByTabIdRef.current.delete(victim.claudeSessionId.trim());
     }
     detachClaudeInvocationsForSessionKey(sessionId);
+    const victimSid = victim?.claudeSessionId?.trim() ?? sessionIdMapRef.current.get(sessionId)?.trim();
+    if (victimSid) {
+      void closeStreamingSession(victimSid).catch(() => {
+        /* 进程可能已结束 */
+      });
+    }
+    streamingProcessByTabRef.current.delete(sessionId);
     diskLoadDoneRef.current.delete(sessionId);
     notificationHub.removeSession(sessionId);
     setSessions((prev) => prev.filter((s) => s.id !== sessionId));
@@ -1602,7 +2074,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         cancelClaudeExecution(realSessionId).catch((err) => {
           console.error("Failed to cancel session:", err);
         });
+        void closeStreamingSession(realSessionId).catch(() => {
+          /* 长驻进程可能已退出 */
+        });
       }
+      streamingProcessByTabRef.current.delete(sessionId);
       if (opts?.retractLastUserTurn) {
         const tabId = sessionId;
         assistantStreamTextByTabRef.current.delete(tabId);
@@ -1888,6 +2364,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     activeSessionId,
     createSession,
     updateSessionModel,
+    updateSessionConnectionKind,
     executeSession,
     appendSystemMessage,
     appendUserMessage,

@@ -285,6 +285,36 @@ fn collect_system_memory_bytes() -> (u64, u64) {
     (0, 0)
 }
 
+/// 终止本机扫描到的 Claude 子进程（无 Wise 注册表 / session 绑定时用 PID）。
+#[tauri::command]
+pub fn kill_claude_host_process(pid: u32) -> Result<(), String> {
+    if pid == 0 {
+        return Err("无效 PID".to_string());
+    }
+    #[cfg(unix)]
+    {
+        use std::process::Command;
+        let status = Command::new("kill")
+            .arg(pid.to_string())
+            .status()
+            .map_err(|e| format!("kill 失败: {}", e))?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(format!(
+                "kill 未能结束进程 {}（退出码 {:?}）",
+                pid,
+                status.code()
+            ))
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = pid;
+        Err("当前平台不支持按 PID 终止进程".to_string())
+    }
+}
+
 #[tauri::command]
 pub fn get_system_resource_snapshot() -> SystemResourceSnapshot {
     let (system_total_bytes, system_used_bytes) = collect_system_memory_bytes();

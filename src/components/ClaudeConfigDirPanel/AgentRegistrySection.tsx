@@ -188,7 +188,7 @@ export function AgentRegistrySection() {
     <AuthorPanelPageShell
       className="app-agent-registry-section"
       icon={<ThunderboltOutlined />}
-      title="Claude Code 运行环境"
+      title="执行环境"
       subtitle="本机 Claude Code 探测与未来运行入口预留"
       actions={
         <Space size={8} wrap>
@@ -210,7 +210,7 @@ export function AgentRegistrySection() {
         </Space>
       }
       toolbar={
-        <AuthorPanelHubTabs aria-label="Claude Code 运行环境筛选">
+        <AuthorPanelHubTabs aria-label="执行环境筛选">
           <AuthorPanelHubTab
             active={filter === "all"}
             label="全部"

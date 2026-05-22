@@ -9,7 +9,7 @@ import {
 } from "@ant-design/icons";
 import { Button, Empty, Space, Switch, Tabs, Tag, Typography, message } from "antd";
 import { AuthorPanelListShell, AuthorPanelPageShell } from "../AuthorPanel/AuthorPanelPageShell";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { DingTalkEnterpriseBotPopoverBody } from "../DingTalkEnterpriseBotPopoverBody";
 import { loadDingTalkEnterpriseBotConfig } from "../../services/dingtalkEnterpriseBot";
 import {

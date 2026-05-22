@@ -16,6 +16,8 @@ import {
   type WorkflowInvocationStreamDetail,
 } from "../constants/workflowUiEvents";
 import { persistDirectBatchInvocationSnapshotForAnchorSession } from "./backgroundInvocationSnapshot";
+import type { ClaudeSpawnCliExtras } from "./claudeSpawnExtras";
+import { compactClaudeSpawnCliExtras } from "./claudeSpawnExtras";
 import type {
   ClaudeConnectionMode,
   ClaudeHooksStatusResponse,
@@ -45,6 +47,7 @@ export async function executeClaudeCode(
   /** 为 true 时追加 `--bare`，减少 hooks/记忆等对编排子进程的粘连 */
   bare?: boolean,
   trellisContextId?: string,
+  cliExtras?: ClaudeSpawnCliExtras | null,
 ): Promise<void> {
   const normalizedTrellisContextId = trellisContextId?.trim() || null;
   return invoke("execute_claude_code", {
@@ -57,6 +60,7 @@ export async function executeClaudeCode(
     concurrencyLimit,
     bare: bare ?? false,
     trellisContextId: normalizedTrellisContextId,
+    cliExtras: compactClaudeSpawnCliExtras(cliExtras),
   });
 }
 
@@ -532,6 +536,45 @@ export async function executeClaudeCodeAndWait(params: {
   }
 }
 
+/** 启动 `--input-format stream-json` 长驻会话；首条消息在 init 后写入 stdin。 */
+export async function spawnStreamingSession(params: {
+  repositoryPath: string;
+  initialPrompt: string;
+  model?: string;
+  sessionIdToResume?: string | null;
+  invocationKey?: string;
+  concurrencyScopeKey?: string;
+  concurrencyLimit?: number;
+  trellisContextId?: string;
+  cliExtras?: ClaudeSpawnCliExtras | null;
+}): Promise<void> {
+  const normalizedTrellisContextId = params.trellisContextId?.trim() || null;
+  return invoke("spawn_streaming_session", {
+    projectPath: params.repositoryPath,
+    initialPrompt: params.initialPrompt,
+    model: params.model,
+    sessionIdToResume: params.sessionIdToResume?.trim() || null,
+    invocationKey: params.invocationKey,
+    concurrencyScopeKey: params.concurrencyScopeKey,
+    concurrencyLimit: params.concurrencyLimit,
+    trellisContextId: normalizedTrellisContextId,
+    cliExtras: compactClaudeSpawnCliExtras(params.cliExtras),
+  });
+}
+
+/** 向已建立的长驻 Claude 会话（Claude `session_id`）追加用户消息。 */
+export async function sendStreamingUserMessage(
+  sessionId: string,
+  prompt: string,
+): Promise<void> {
+  return invoke("send_user_message_to_session", { sessionId, prompt });
+}
+
+/** 终止长驻 Claude 子进程并释放 stdin。 */
+export async function closeStreamingSession(sessionId: string): Promise<void> {
+  return invoke("close_streaming_session", { sessionId });
+}
+
 export async function resumeClaudeCode(
   repositoryPath: string,
   sessionId: string,
@@ -542,6 +585,7 @@ export async function resumeClaudeCode(
   concurrencyScopeKey?: string,
   concurrencyLimit?: number,
   trellisContextId?: string,
+  cliExtras?: ClaudeSpawnCliExtras | null,
 ): Promise<void> {
   const normalizedTrellisContextId = trellisContextId?.trim() || null;
   return invoke("resume_claude_code", {
@@ -554,6 +598,7 @@ export async function resumeClaudeCode(
     concurrencyScopeKey,
     concurrencyLimit,
     trellisContextId: normalizedTrellisContextId,
+    cliExtras: compactClaudeSpawnCliExtras(cliExtras),
   });
 }
 
@@ -610,6 +655,22 @@ export async function getClaudeModelPickerOptions(
 export async function getClaudeMcpStatus(repositoryPath?: string | null): Promise<ClaudeMcpStatusResponse> {
   return invoke<ClaudeMcpStatusResponse>("get_claude_mcp_status", {
     projectPath: repositoryPath ?? null,
+  });
+}
+
+/** 将助手 MCP bundle 物化为 `~/.wise/spawn-mcp/*.json`，供 spawn 时 `--mcp-config` 使用。 */
+export async function materializeClaudeSpawnMcpConfig(params: {
+  repositoryPath?: string | null;
+  serverKeys: string[];
+  extraConfigPaths?: string[];
+}): Promise<string | null> {
+  const serverKeys = params.serverKeys.map((k) => k.trim()).filter(Boolean);
+  const extraConfigPaths = (params.extraConfigPaths ?? []).map((p) => p.trim()).filter(Boolean);
+  if (serverKeys.length === 0 && extraConfigPaths.length === 0) return null;
+  return invoke<string | null>("materialize_claude_spawn_mcp_config", {
+    projectPath: params.repositoryPath ?? null,
+    serverKeys,
+    extraConfigPaths,
   });
 }
 

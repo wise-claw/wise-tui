@@ -1737,3 +1737,166 @@ pub(crate) async fn set_claude_mcp_server_enabled(
     .await
     .map_err(|e| format!("set_claude_mcp_server_enabled: {}", e))?
 }
+
+fn server_key_matches_mcp_item(key: &str, item: &ClaudeMcpItem) -> bool {
+    let key = key.trim();
+    if key.is_empty() {
+        return false;
+    }
+    if key == item.id || key == item.name {
+        return true;
+    }
+    key.ends_with(&format!("::{}", item.name))
+}
+
+fn merge_mcp_servers_from_json_value(
+    out: &mut serde_json::Map<String, serde_json::Value>,
+    v: &serde_json::Value,
+) {
+    let Some(map) = v
+        .get("mcpServers")
+        .and_then(|x| x.as_object())
+        .or_else(|| v.get("mcp_servers").and_then(|x| x.as_object()))
+    else {
+        if let Some(map) = v.as_object() {
+            if !map.is_empty() && map.values().all(|vv| vv.as_object().is_some()) {
+                for (name, cfg) in map {
+                    out.insert(name.clone(), cfg.clone());
+                }
+            }
+        }
+        return;
+    };
+    for (name, cfg) in map {
+        out.insert(name.clone(), cfg.clone());
+    }
+}
+
+fn plugin_root_from_mcp_source_path(source_path: &str) -> Option<PathBuf> {
+    let mut cur = PathBuf::from(source_path.trim());
+    if cur.is_file() {
+        cur = cur.parent()?.to_path_buf();
+    }
+    loop {
+        if cur.join(".claude-plugin").join("plugin.json").is_file() {
+            return Some(cur);
+        }
+        if !cur.pop() {
+            break;
+        }
+    }
+    None
+}
+
+fn resolve_mcp_server_config_from_item(item: &ClaudeMcpItem) -> Option<serde_json::Value> {
+    let source = Path::new(item.source_path.trim());
+    let v = read_json_file(source)?;
+    let mut cfg = if item.scope == "local" {
+        let key = item.claude_json_project_key.as_deref()?;
+        v.get("projects")?
+            .get(key)?
+            .get("mcpServers")
+            .or_else(|| v.get("projects")?.get(key)?.get("mcp_servers"))?
+            .as_object()?
+            .get(&item.name)
+            .cloned()?
+    } else {
+        let map = v
+            .get("mcpServers")
+            .and_then(|x| x.as_object())
+            .or_else(|| v.get("mcp_servers").and_then(|x| x.as_object()))
+            .or_else(|| v.as_object().filter(|map| {
+                !map.is_empty() && map.values().all(|vv| vv.as_object().is_some())
+            }))?;
+        map.get(&item.name).cloned()?
+    };
+    if item.scope == "plugin" {
+        if let (Some(plugin_ref), Some(plugin_root)) = (
+            item.plugin_ref.as_deref(),
+            plugin_root_from_mcp_source_path(&item.source_path),
+        ) {
+            let data_dir = claude_plugin_data_dir_from_ref(plugin_ref);
+            let data_dir_str = data_dir.to_string_lossy().to_string();
+            expand_plugin_vars_in_json_value(&mut cfg, &plugin_root, &data_dir_str);
+        }
+    }
+    Some(cfg)
+}
+
+fn materialize_claude_spawn_mcp_config_impl(
+    project_path: Option<String>,
+    server_keys: Vec<String>,
+    extra_config_paths: Vec<String>,
+) -> Result<Option<String>, String> {
+    let keys: HashSet<String> = server_keys
+        .into_iter()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    if keys.is_empty() && extra_config_paths.is_empty() {
+        return Ok(None);
+    }
+
+    let status = get_claude_mcp_status_collect(project_path)?;
+    let mut servers = serde_json::Map::<String, serde_json::Value>::new();
+
+    let all_items: Vec<&ClaudeMcpItem> = [
+        &status.user,
+        &status.local,
+        &status.project_shared,
+        &status.legacy_user_settings,
+        &status.legacy_project_settings,
+        &status.plugin_mcp,
+    ]
+    .into_iter()
+    .flat_map(|v| v.iter())
+    .collect();
+
+    if !keys.is_empty() {
+        for item in all_items {
+            if !keys.iter().any(|k| server_key_matches_mcp_item(k, item)) {
+                continue;
+            }
+            if let Some(cfg) = resolve_mcp_server_config_from_item(item) {
+                servers.insert(item.name.clone(), cfg);
+            }
+        }
+    }
+
+    for raw_path in extra_config_paths {
+        let path = raw_path.trim();
+        if path.is_empty() {
+            continue;
+        }
+        if let Some(v) = read_json_file(Path::new(path)) {
+            merge_mcp_servers_from_json_value(&mut servers, &v);
+        }
+    }
+
+    if servers.is_empty() {
+        return Ok(None);
+    }
+
+    let wise_dir = crate::wise_paths::wise_dir()?;
+    let out_dir = wise_dir.join("spawn-mcp");
+    let file_name = format!("{}.json", uuid::Uuid::new_v4());
+    let out_path = out_dir.join(file_name);
+    let payload = serde_json::json!({ "mcpServers": servers });
+    let serialized = serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())?;
+    crate::wise_paths::write_file_atomic(&out_path, &serialized)?;
+    Ok(Some(out_path.to_string_lossy().to_string()))
+}
+
+/// 按助手 MCP bundle 的 id / sourcePath 合并真实 server 配置，写入 `~/.wise/spawn-mcp/*.json` 供 `--mcp-config` 使用。
+#[tauri::command]
+pub(crate) async fn materialize_claude_spawn_mcp_config(
+    project_path: Option<String>,
+    server_keys: Vec<String>,
+    extra_config_paths: Vec<String>,
+) -> Result<Option<String>, String> {
+    tokio::task::spawn_blocking(move || {
+        materialize_claude_spawn_mcp_config_impl(project_path, server_keys, extra_config_paths)
+    })
+    .await
+    .map_err(|e| format!("materialize_claude_spawn_mcp_config: {}", e))?
+}

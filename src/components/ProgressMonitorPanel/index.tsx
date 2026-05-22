@@ -201,6 +201,8 @@ interface HistorySessionPopoverContentProps {
   rows: HistorySessionRow[];
   emptyDescription: string;
   onSelectSession?: (sessionId: string) => void;
+  /** 列表行右侧「结束」；由调用方按 Wise 标签 / 注册表 / PID 分发终止逻辑 */
+  onEndSession?: (sessionId: string) => void;
   searchPlaceholder?: string;
 }
 
@@ -677,6 +679,7 @@ export function HistorySessionPopoverContent({
   rows,
   emptyDescription,
   onSelectSession,
+  onEndSession,
   searchPlaceholder = "搜索历史会话...",
 }: HistorySessionPopoverContentProps) {
   const showEmployeeFilter = Boolean(onEmployeeFilterChange);
@@ -714,24 +717,42 @@ export function HistorySessionPopoverContent({
       {hasRows ? (
         <div className="app-monitor-panel__history-popover-list">
           {rows.map((row) => (
-            <button
-              key={row.session.id}
-              type="button"
-              className="app-monitor-panel__history-popover-item"
-              onClick={(event) => {
-                event.stopPropagation();
-                onSelectSession?.(row.session.id);
-              }}
-            >
-              <span className="app-monitor-panel__history-popover-item-title">
-                {getSessionPreview(row.session)}
-              </span>
-              <span className="app-monitor-panel__history-popover-item-time">
-                {row.employeeName
-                  ? `${row.employeeName} · ${new Date(sessionUpdatedAt(row.session)).toLocaleString("zh-CN", { hour12: false })}`
-                  : new Date(sessionUpdatedAt(row.session)).toLocaleString("zh-CN", { hour12: false })}
-              </span>
-            </button>
+            <div key={row.session.id} className="app-monitor-panel__history-popover-omc-row">
+              <button
+                type="button"
+                className="app-monitor-panel__history-popover-item app-monitor-panel__history-popover-item--grow"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onSelectSession?.(row.session.id);
+                }}
+              >
+                <span className="app-monitor-panel__history-popover-item-title">
+                  {getSessionPreview(row.session)}
+                </span>
+                <span className="app-monitor-panel__history-popover-item-time">
+                  {row.employeeName
+                    ? `${row.employeeName} · ${new Date(sessionUpdatedAt(row.session)).toLocaleString("zh-CN", { hour12: false })}`
+                    : new Date(sessionUpdatedAt(row.session)).toLocaleString("zh-CN", { hour12: false })}
+                </span>
+              </button>
+              {onEndSession ? (
+                <span className="app-monitor-panel__history-popover-omc-stop-wrap">
+                  <button
+                    type="button"
+                    className="app-monitor-panel__history-popover-omc-stop"
+                    title="结束该 Claude 进程"
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onEndSession(row.session.id);
+                    }}
+                  >
+                    结束
+                  </button>
+                </span>
+              ) : null}
+            </div>
           ))}
         </div>
       ) : (

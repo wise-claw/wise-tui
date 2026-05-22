@@ -2,6 +2,7 @@ import { Alert, Typography, message } from "antd";
 import { useCallback } from "react";
 import { ClaudeConfigDirActions } from "./ClaudeConfigDirActions";
 import { ClaudeConfigDirChoiceList } from "./ClaudeConfigDirChoiceList";
+import { ClaudeConnectionModeSection } from "./ClaudeConnectionModeSection";
 import { ClaudeConfigDirCurrent } from "./ClaudeConfigDirCurrent";
 import { useClaudeConfigDir } from "./useClaudeConfigDir";
 import { useClaudeConfigDirChoice } from "./useClaudeConfigDirChoice";
@@ -36,6 +37,8 @@ export function ClaudeConfigDirPanel() {
   return (
     <div className="app-claude-config-dir-panel">
       <ClaudeConfigDirCurrent info={info} />
+
+      <ClaudeConnectionModeSection />
 
       <ClaudeConfigDirChoiceList
         state={choice.state}

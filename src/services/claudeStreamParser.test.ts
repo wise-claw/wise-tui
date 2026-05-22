@@ -53,6 +53,26 @@ describe("extractPartsFromStreamLine", () => {
       .toEqual([{ type: "text", text: "chunk" }]);
   });
 
+  test("parses content_block_delta text_delta and thinking_delta", () => {
+    expect(
+      extractPartsFromStreamLine(
+        JSON.stringify({
+          type: "stream_event",
+          event: { type: "content_block_delta", delta: { type: "text_delta", text: "你好" } },
+        }),
+      ).parts,
+    ).toEqual([{ type: "text", text: "你好" }]);
+
+    expect(
+      extractPartsFromStreamLine(
+        JSON.stringify({
+          type: "content_block_delta",
+          delta: { type: "thinking_delta", thinking: "planning" },
+        }),
+      ).parts,
+    ).toEqual([{ type: "reasoning", text: "planning" }]);
+  });
+
   test("returns an empty parse result for malformed JSON", () => {
     expect(extractPartsFromStreamLine("{not-json")).toEqual({
       parts: [],

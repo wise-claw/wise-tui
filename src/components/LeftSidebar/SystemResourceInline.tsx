@@ -34,6 +34,7 @@ interface SystemResourceInlineProps {
   canStopLiveDrawerSession: boolean;
   onCancelLiveDrawerSession?: (sessionId: string) => void;
   onCancelRegistryOrphanSession: (sid: string) => void;
+  onEndSession?: (sessionId: string) => void;
   onOpenTaskDetailFromMonitor?: (taskId: string) => void;
 }
 
@@ -58,6 +59,7 @@ export function SystemResourceInline({
   canStopLiveDrawerSession,
   onCancelLiveDrawerSession,
   onCancelRegistryOrphanSession,
+  onEndSession,
   onOpenTaskDetailFromMonitor,
 }: SystemResourceInlineProps) {
   return (
@@ -88,6 +90,7 @@ export function SystemResourceInline({
                           : "暂无运行中的会话"
                     }
                     onSelectSession={onSelectSession}
+                    onEndSession={onEndSession}
                     searchPlaceholder="搜索会话..."
                   />
                 }

@@ -90,6 +90,29 @@ export function getClaudeSessionConcurrencyScopeKey(params: {
   return resolveClaudeConcurrencyInvokeContext(params)?.concurrencyScopeKey ?? null;
 }
 
+/** 解析会话所属项目与仓库（与并发槽位归属一致）。 */
+export function resolveSessionProjectRepository(params: {
+  session: ClaudeSession;
+  projects: ProjectItem[];
+  repositories: Repository[];
+  preferredProjectId: string | null;
+}): { project: ProjectItem; repository: Repository } | null {
+  const repository = findRepositoryBySessionPath(params.repositories, params.session.repositoryPath);
+  if (!repository) {
+    return null;
+  }
+  const project = resolveProjectForSession(
+    params.session,
+    params.projects,
+    repository,
+    params.preferredProjectId,
+  );
+  if (!project) {
+    return null;
+  }
+  return { project, repository };
+}
+
 export function countRunningClaudeSessionsInProjectRepository(
   sessions: ClaudeSession[],
   project: ProjectItem,

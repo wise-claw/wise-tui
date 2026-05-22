@@ -580,6 +580,8 @@ export function AppWorkspaceLayout({
                         activeSessionRepositoryPath={claudeSessionsProps.activeRepository?.path}
                         onToggleSidebar={claudeSessionsProps.onToggleSidebar}
                         onToggleRightPanel={claudeSessionsProps.onToggleRightPanel}
+                        rightPanelDefaultCollapsed={claudeSessionsProps.rightPanelDefaultCollapsed}
+                        onSetRightPanelDefaultCollapsed={claudeSessionsProps.onSetRightPanelDefaultCollapsed}
                         onToggleTerminal={claudeSessionsProps.onToggleTerminal}
                         onSearch={claudeSessionsProps.onSearch}
                         collapsed={claudeSessionsProps.collapsed}

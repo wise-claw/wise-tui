@@ -27,6 +27,7 @@ describe("claude service", () => {
       concurrencyLimit: 2,
       bare: false,
       trellisContextId: "ctx-1",
+      cliExtras: null,
     });
     expect(invoke).toHaveBeenCalledWith("resume_claude_code", {
       projectPath: "/repo",
@@ -38,6 +39,7 @@ describe("claude service", () => {
       concurrencyScopeKey: "scope",
       concurrencyLimit: 2,
       trellisContextId: "ctx-1",
+      cliExtras: null,
     });
   });
 
@@ -56,6 +58,7 @@ describe("claude service", () => {
       concurrencyLimit: undefined,
       bare: true,
       trellisContextId: null,
+      cliExtras: null,
     });
   });
 });

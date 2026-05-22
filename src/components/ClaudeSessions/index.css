@@ -284,10 +284,31 @@
   flex-shrink: 0;
 }
 
-.app-topbar-run-trigger-wrap {
+.app-topbar-run-trigger-wrap,
+.app-topbar-right-panel-trigger-wrap {
   display: inline-flex;
   align-items: center;
   vertical-align: middle;
+}
+
+.app-topbar-right-panel-default-popover .ant-popover-inner {
+  padding: 6px 8px;
+}
+
+.app-topbar-right-panel-default-popover__row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.app-topbar-right-panel-default-popover__label {
+  font-size: 12px;
+  line-height: 1;
+  color: var(--ant-color-text);
 }
 
 /* ── 统一顶栏图标按钮 ── 与左栏 .app-left-sidebar-topbar-btn 同一套风格 */
@@ -4042,6 +4063,82 @@ button.app-message-part-header:disabled:hover {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+/* 主会话连接方式：Composer 底栏模型选择旁 */
+.app-claude-connection-kind-chip-btn {
+  display: inline-flex;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  line-height: inherit;
+}
+
+.app-claude-connection-kind-chip-btn:focus-visible {
+  outline: 2px solid var(--ant-color-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.app-claude-connection-kind-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  padding: 0 5px;
+  height: 18px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: var(--ant-color-text-secondary);
+  background: var(--ant-color-fill-quaternary);
+  border: 1px solid var(--ant-color-border-secondary);
+  cursor: default;
+  user-select: none;
+}
+
+.app-claude-connection-kind-chip--interactive {
+  cursor: pointer;
+}
+
+.app-claude-connection-kind-chip--interactive:hover {
+  color: var(--ant-color-text);
+  border-color: var(--ant-color-border);
+}
+
+.app-claude-connection-kind-chip__chevron {
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+
+.app-claude-connection-kind-dropdown .ant-dropdown-menu {
+  min-width: 280px;
+  max-width: 360px;
+}
+
+.app-claude-connection-kind-menu-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 320px;
+}
+
+.app-claude-connection-kind-menu-item__title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+}
+
+.app-claude-connection-kind-menu-item__desc {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--ant-color-text-secondary);
+  white-space: normal;
 }
 
 /* 极简模型选择：灰色文案 + 小三角，无框 */

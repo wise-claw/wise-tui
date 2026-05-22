@@ -357,6 +357,11 @@ export function reconcileSessionStatusesWithRunningRegistry(
       changed = true;
       return { ...s, status: "idle" as const };
     }
+    // 长驻单轮结束后注册表为 completed，若 UI 未收到 complete 事件会一直 running。
+    if (knownInRegistry && !inRunningRegistry && uiBusy) {
+      changed = true;
+      return { ...s, status: "idle" as const };
+    }
     if (inRunningRegistry && !uiBusy) {
       if (s.status === "error" || s.status === "cancelled") return s;
       changed = true;
@@ -372,8 +377,10 @@ export function finalizeSessionAfterComplete(params: {
   targetId: string;
   success: boolean;
   noAssistantReply: boolean;
+  /** 长驻 streaming：单轮结束后置 idle，子进程仍存活，便于继续发下一条。 */
+  streamingResident?: boolean;
 }): ClaudeSession[] {
-  const { sessions, targetId, success, noAssistantReply } = params;
+  const { sessions, targetId, success, noAssistantReply, streamingResident = false } = params;
   return sessions.map((session) => {
     if (!sessionMatchesCrossTabTargetId(sessions, session, targetId)) return session;
     const isUserCancelled = session.status === "cancelled";
@@ -387,9 +394,14 @@ export function finalizeSessionAfterComplete(params: {
             createSystemTextMessage(noReplyFailureMessage),
           ]
         : session.messages;
+    const nextStatus = success
+      ? streamingResident
+        ? ("idle" as const)
+        : ("completed" as const)
+      : ("cancelled" as const);
     return {
       ...session,
-      status: success ? "completed" : "cancelled",
+      status: nextStatus,
       messages,
     };
   });

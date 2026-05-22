@@ -115,16 +115,93 @@ async fn release_claude_spawn_slot(
     }
 }
 
+/// 可选 Claude CLI 旗标（主会话 streaming / 交互式 oneshot 共用）。
+#[derive(Debug, Default, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ClaudeSpawnCliExtras {
+    /// 追加 `--add-dir`（除 `current_dir` 外的可读目录）。
+    #[serde(default)]
+    pub add_dirs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allowed_tools: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub disallowed_tools: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub append_system_prompt: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mcp_config_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub strict_mcp_config: Option<bool>,
+    /// 例如 `user,project` 或 `none`（透传 `--setting-sources`）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub setting_sources: Option<String>,
+}
+
+fn apply_claude_spawn_cli_extras(cmd: &mut tokio::process::Command, extras: &ClaudeSpawnCliExtras) {
+    for dir in &extras.add_dirs {
+        let t = dir.trim();
+        if !t.is_empty() {
+            cmd.arg("--add-dir").arg(t);
+        }
+    }
+    if let Some(v) = extras
+        .allowed_tools
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        cmd.arg("--allowed-tools").arg(v);
+    }
+    if let Some(v) = extras
+        .disallowed_tools
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        cmd.arg("--disallowed-tools").arg(v);
+    }
+    if let Some(v) = extras
+        .append_system_prompt
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        cmd.arg("--append-system-prompt").arg(v);
+    }
+    if let Some(v) = extras
+        .mcp_config_path
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        cmd.arg("--mcp-config").arg(v);
+    }
+    if extras.strict_mcp_config == Some(true) {
+        cmd.arg("--strict-mcp-config");
+    }
+    if let Some(v) = extras
+        .setting_sources
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        cmd.arg("--setting-sources").arg(v);
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ClaudeConnectionMode {
     Persistent,
     Oneshot,
+    /// `--input-format stream-json` 长驻子进程；用户消息经 stdin JSON 写入，与 CLI 会话能力对齐。
+    Streaming,
 }
 
 impl ClaudeConnectionMode {
     fn from_option_str(value: Option<&str>) -> Self {
         match value.map(str::trim).map(|v| v.to_ascii_lowercase()) {
             Some(v) if v == "oneshot" || v == "one-shot" || v == "one_shot" => Self::Oneshot,
+            Some(v) if v == "streaming" || v == "stream" => Self::Streaming,
             _ => Self::Persistent,
         }
     }
@@ -291,6 +368,14 @@ impl ClaudeSessionRegistry {
             } else {
                 "cancelled".to_string()
             };
+        }
+    }
+
+    /// 长驻 streaming 新一轮用户消息写入 stdin 时，注册表恢复为 running（进程未退出）。
+    fn mark_running(&self, session_id: &str) {
+        let mut sessions = self.sessions.lock().unwrap();
+        if let Some(info) = sessions.get_mut(session_id) {
+            info.status = "running".to_string();
         }
     }
 
@@ -1208,6 +1293,7 @@ fn create_claude_command(
     extra_args: &[&str],
     bare: bool,
     trellis_context_id: Option<&str>,
+    cli_extras: &ClaudeSpawnCliExtras,
 ) -> Result<tokio::process::Command, String> {
     let claude_path = find_claude_binary()?;
 
@@ -1229,6 +1315,8 @@ fn create_claude_command(
     for arg in extra_args {
         cmd.arg(arg);
     }
+
+    apply_claude_spawn_cli_extras(&mut cmd, cli_extras);
 
     // Inherit environment
     cmd.env(
@@ -1264,10 +1352,240 @@ fn create_claude_command(
     Ok(cmd)
 }
 
+/// Streaming 会话模式：`--input-format stream-json` 长驻进程。
+/// 不使用 `-p`，提示通过 stdin 发送。
+fn create_streaming_claude_command(
+    project_path: &str,
+    model: Option<&str>,
+    session_id_to_resume: Option<&str>,
+    trellis_context_id: Option<&str>,
+    cli_extras: &ClaudeSpawnCliExtras,
+) -> Result<tokio::process::Command, String> {
+    let claude_path = find_claude_binary()?;
+
+    let mut cmd = tokio::process::Command::new(&claude_path);
+    cmd.current_dir(project_path);
+    cmd.arg("--input-format").arg("stream-json");
+    cmd.arg("--output-format").arg("stream-json");
+    cmd.arg("--verbose");
+    cmd.arg("--permission-mode").arg("bypassPermissions");
+    cmd.arg("--permission-prompt-tool").arg("stdio");
+
+    if let Some(m) = model.and_then(trim_model_cli_arg) {
+        cmd.arg("--model").arg(m);
+    }
+
+    if let Some(sid) = session_id_to_resume.map(str::trim).filter(|s| !s.is_empty()) {
+        cmd.arg("--resume").arg(sid);
+    }
+
+    apply_claude_spawn_cli_extras(&mut cmd, cli_extras);
+
+    // Inherit environment
+    cmd.env(
+        "HOME",
+        dirs::home_dir()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default(),
+    );
+    cmd.env("PATH", merge_path_env(&claude_path_search_prefixes()));
+
+    if std::env::var("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE").is_err() {
+        cmd.env("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", "88");
+    }
+
+    if let Some(context_id) = trellis_context_id.map(str::trim).filter(|v| !v.is_empty()) {
+        cmd.env("TRELLIS_CONTEXT_ID", context_id);
+    }
+
+    cmd.stdin(std::process::Stdio::piped());
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::piped());
+
+    Ok(cmd)
+}
+
 /// Claude `-p` 与管道 stdin 并存时，CLI 可能在 stderr 打出「数秒内无 stdin」提示后自行继续；
 /// 该行不应经 `claude-error*` 事件进入前端系统消息。
 fn claude_stderr_line_suppressed_for_ui_events(line: &str) -> bool {
     line.to_lowercase().contains("no stdin data received in 3s")
+}
+
+/// `stream-json` 单轮结束包络（`type: result`）；长驻子进程不会因此退出。
+fn streaming_turn_success_from_result(json: &serde_json::Value) -> Option<bool> {
+    if json.get("type").and_then(|v| v.as_str()) != Some("result") {
+        return None;
+    }
+    let is_error = json.get("is_error").and_then(|v| v.as_bool()).unwrap_or(false);
+    Some(!is_error)
+}
+
+fn session_channel_sid_valid(sid: &str) -> bool {
+    !sid.is_empty() && sid != "unknown"
+}
+
+/// 长驻 streaming 后续轮按 `session_id` 订阅；带 invocation 时仍须发 session 通道（仅抑制全局通道）。
+fn emit_claude_stdout_line(
+    app: &tauri::AppHandle,
+    sid: &str,
+    line: &str,
+    connection_mode: ClaudeConnectionMode,
+    invocation_key: Option<&str>,
+    suppress_shared_stdout: bool,
+) {
+    if connection_mode == ClaudeConnectionMode::Streaming && session_channel_sid_valid(sid) {
+        let _ = app.emit(&format!("claude-output:{}", sid), line);
+    } else if !suppress_shared_stdout && session_channel_sid_valid(sid) {
+        let _ = app.emit(&format!("claude-output:{}", sid), line);
+    }
+    if !suppress_shared_stdout {
+        let _ = app.emit("claude-output", line);
+    }
+    if let Some(inv) = invocation_key {
+        let _ = app.emit(&format!("claude-output:invocation:{}", inv), line);
+    }
+}
+
+fn emit_claude_complete_payload(
+    app: &tauri::AppHandle,
+    sid: &str,
+    payload: &ClaudeCompletePayload,
+    connection_mode: ClaudeConnectionMode,
+    invocation_key: Option<&str>,
+    suppress_shared_stdout: bool,
+) {
+    if connection_mode == ClaudeConnectionMode::Streaming && session_channel_sid_valid(sid) {
+        let _ = app.emit(&format!("claude-complete:{}", sid), payload);
+    } else if !suppress_shared_stdout && session_channel_sid_valid(sid) {
+        let _ = app.emit(&format!("claude-complete:{}", sid), payload);
+    }
+    if !suppress_shared_stdout {
+        let _ = app.emit("claude-complete", payload);
+    }
+    if let Some(inv) = invocation_key {
+        let _ = app.emit(&format!("claude-complete:invocation:{}", inv), payload);
+    }
+}
+
+fn emit_streaming_turn_complete_events(
+    app: &tauri::AppHandle,
+    registry: &ClaudeSessionRegistry,
+    sid: &str,
+    success: bool,
+    structured_verdict: Option<serde_json::Value>,
+    invocation_key: Option<&str>,
+    suppress_shared_stdout: bool,
+) -> bool {
+    let sid = sid.trim();
+    if sid.is_empty() || sid == "unknown" {
+        return false;
+    }
+    registry.mark_completed(sid, success);
+    let payload = ClaudeCompletePayload {
+        session_id: sid.to_string(),
+        success,
+        structured_verdict,
+    };
+    emit_claude_complete_payload(
+        app,
+        sid,
+        &payload,
+        ClaudeConnectionMode::Streaming,
+        invocation_key,
+        suppress_shared_stdout,
+    );
+    true
+}
+
+fn extract_claude_session_id_from_stream_json(json: &serde_json::Value) -> Option<String> {
+    json.get("session_id")
+        .or_else(|| json.get("sessionId"))
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+}
+
+/// 绑定 spawn 期 stdin 到 Claude `session_id`，并在 streaming 模式下写入首条用户消息。
+/// Trellis `SessionStart` 场景下 CLI 可能先有 hook 行、迟迟不发 `system.init`；若只等 init 再写 stdin 会死锁。
+/// 在拿到 Claude `session_id` 之前，向 spawn 期 `pending_stdin` 写入首条用户消息。
+/// Trellis `SessionStart` 无 stdin 时 CLI 可能长时间只跑 Hook、不发 `system.init`。
+async fn try_write_initial_streaming_prompt_pending(
+    spawn_id: u64,
+    initial_prompt: &str,
+    initial_sent: &mut bool,
+    pending_stdin_by_spawn: &Arc<TokioMutex<HashMap<u64, tokio::process::ChildStdin>>>,
+) {
+    if *initial_sent {
+        return;
+    }
+    let prompt = initial_prompt.trim();
+    if prompt.is_empty() {
+        return;
+    }
+    let mut g = pending_stdin_by_spawn.lock().await;
+    let Some(sin) = g.get_mut(&spawn_id) else {
+        return;
+    };
+    if write_streaming_user_message_to_stdin(sin, prompt).await.is_ok() {
+        *initial_sent = true;
+    }
+}
+
+async fn bootstrap_streaming_session_stdin(
+    sid: &str,
+    spawn_id: u64,
+    connection_mode: ClaudeConnectionMode,
+    initial_prompt: Option<&str>,
+    initial_sent: &mut bool,
+    real_session_id: &mut Option<String>,
+    pending_stdin_by_spawn: &Arc<TokioMutex<HashMap<u64, tokio::process::ChildStdin>>>,
+    stdin_map_mtx: &Arc<TokioMutex<HashMap<String, tokio::process::ChildStdin>>>,
+    active_child_by_session: &Arc<TokioMutex<HashMap<String, Arc<TokioMutex<Option<Child>>>>>>,
+    wait_child_mutex: &Arc<TokioMutex<Option<Child>>>,
+    registry: &ClaudeSessionRegistry,
+    project_path: &str,
+    model: &str,
+    current_session_id_mtx: &Arc<TokioMutex<Option<String>>>,
+) {
+    let sid = sid.trim();
+    if sid.is_empty() {
+        return;
+    }
+
+    if real_session_id.is_none() {
+        *real_session_id = Some(sid.to_string());
+        if let Some(stdin) = pending_stdin_by_spawn.lock().await.remove(&spawn_id) {
+            stdin_map_mtx
+                .lock()
+                .await
+                .insert(sid.to_string(), stdin);
+        }
+        if connection_mode == ClaudeConnectionMode::Persistent {
+            *current_session_id_mtx.lock().await = Some(sid.to_string());
+        }
+        if connection_mode == ClaudeConnectionMode::Oneshot
+            || connection_mode == ClaudeConnectionMode::Streaming
+        {
+            active_child_by_session
+                .lock()
+                .await
+                .insert(sid.to_string(), wait_child_mutex.clone());
+        }
+        registry.register(sid.to_string(), project_path.to_string(), model.to_string());
+    }
+
+    if *initial_sent || connection_mode != ClaudeConnectionMode::Streaming {
+        return;
+    }
+    let Some(initial) = initial_prompt.map(str::trim).filter(|p| !p.is_empty()) else {
+        return;
+    };
+    if let Some(sin) = stdin_map_mtx.lock().await.get_mut(sid) {
+        if write_streaming_user_message_to_stdin(sin, initial).await.is_ok() {
+            *initial_sent = true;
+        }
+    }
 }
 
 /// 自动应答 CLI 的 `initialize` control，避免仅开 stdin 时首包卡死。
@@ -1350,6 +1668,7 @@ async fn spawn_claude_process(
     connection_mode: ClaudeConnectionMode,
     concurrency_scope_key: Option<String>,
     concurrency_limit: Option<u32>,
+    initial_streaming_prompt: Option<String>,
 ) -> Result<(), String> {
     let process_state = app.state::<ClaudeProcessState>();
     let child_mutex = process_state.current_process.clone();
@@ -1415,13 +1734,24 @@ async fn spawn_claude_process(
     let stdin = child.stdin.take();
     let wait_child_mutex: Arc<TokioMutex<Option<Child>>>;
 
+    let mut initial_streaming_prompt_sent_at_spawn = false;
     if let Some(sin) = stdin {
-        // 不在此处向 stdin 写入占位数据：`--permission-prompt-tool stdio` 对 stdin 解析较严格，
-        // 抢先写入（如 `\n`）曾导致控制流异常、会话「调不通」；无数据时 CLI 可能 stderr 提示再等约 3s，属可接受噪声。
         pending_stdin_by_spawn_mtx
             .lock()
             .await
             .insert(spawn_id, sin);
+        // 写入 stream-json 用户行（非占位 `\n`）：避免 Trellis Hook 阶段无 stdin 死锁。
+        if connection_mode == ClaudeConnectionMode::Streaming {
+            if let Some(ref ip) = initial_streaming_prompt {
+                try_write_initial_streaming_prompt_pending(
+                    spawn_id,
+                    ip.as_str(),
+                    &mut initial_streaming_prompt_sent_at_spawn,
+                    &pending_stdin_by_spawn_mtx,
+                )
+                .await;
+            }
+        }
     }
 
     if connection_mode == ClaudeConnectionMode::Persistent {
@@ -1453,6 +1783,8 @@ async fn spawn_claude_process(
     let spawned_pid_stdout = spawned_pid;
     let slots_mtx_clone = slots_mtx.clone();
     let acquired_scope_clone = acquired_scope.clone();
+    let initial_streaming_prompt_stdout = initial_streaming_prompt;
+    let initial_streaming_prompt_sent_at_spawn_stdout = initial_streaming_prompt_sent_at_spawn;
 
     // Spawn async task for stdout processing
     tokio::spawn(async move {
@@ -1460,62 +1792,114 @@ async fn spawn_claude_process(
         let mut lines = reader.lines();
         let mut real_session_id: Option<String> = None;
         let mut structured_verdict: Option<serde_json::Value> = None;
-        // 带 `invocation_key` 的 oneshot 运行：只走 invocation 通道，避免全局 `claude-output` 把主会话 UI 每条流式行都打爆。
+        let mut initial_streaming_prompt_sent = initial_streaming_prompt_sent_at_spawn_stdout;
+        let mut streaming_turn_complete_sent = false;
+        // 带 `invocation_key` 的 oneshot/streaming 运行：只走 invocation 通道，避免全局 `claude-output` 把主会话 UI 每条流式行都打爆。
         let suppress_shared_stdout = invocation_key_clone.is_some()
-            && connection_mode_stdout == ClaudeConnectionMode::Oneshot;
+            && (connection_mode_stdout == ClaudeConnectionMode::Oneshot
+                || connection_mode_stdout == ClaudeConnectionMode::Streaming);
 
         while let Ok(Some(line)) = lines.next_line().await {
             maybe_ack_control_initialize(&line, &pending_stdin_by_spawn_clone, spawn_id).await;
             // Try to parse as JSON to extract session_id
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&line) {
-                if real_session_id.is_none()
-                    && json.get("type").and_then(|v| v.as_str()) == Some("system")
-                    && json.get("subtype").and_then(|v| v.as_str()) == Some("init")
-                {
-                    if let Some(sid) = json
-                        .get("session_id")
-                        .and_then(|v| v.as_str())
-                        .or_else(|| json.get("sessionId").and_then(|v| v.as_str()))
-                    {
-                        real_session_id = Some(sid.to_string());
-                        if let Some(stdin) =
-                            pending_stdin_by_spawn_clone.lock().await.remove(&spawn_id)
-                        {
-                            stdin_map_mtx_clone
-                                .lock()
-                                .await
-                                .insert(sid.to_string(), stdin);
-                        }
-                        if connection_mode_stdout == ClaudeConnectionMode::Persistent {
-                            *current_session_id_mtx_clone.lock().await = Some(sid.to_string());
-                        }
-                        if connection_mode_stdout == ClaudeConnectionMode::Oneshot {
-                            let mut ac = active_child_by_session_clone.lock().await;
-                            ac.insert(sid.to_string(), wait_child_mutex_clone.clone());
-                        }
-                        registry_clone.register(
-                            sid.to_string(),
-                            project_path_clone.clone(),
-                            model_clone.clone(),
-                        );
+                let line_sid = extract_claude_session_id_from_stream_json(&json);
+                let line_type = json.get("type").and_then(|v| v.as_str());
+                let line_subtype = json.get("subtype").and_then(|v| v.as_str());
+
+                if line_type == Some("system") && line_subtype == Some("init") {
+                    if let Some(sid) = line_sid.as_deref() {
+                        bootstrap_streaming_session_stdin(
+                            sid,
+                            spawn_id,
+                            connection_mode_stdout,
+                            initial_streaming_prompt_stdout.as_deref(),
+                            &mut initial_streaming_prompt_sent,
+                            &mut real_session_id,
+                            &pending_stdin_by_spawn_clone,
+                            &stdin_map_mtx_clone,
+                            &active_child_by_session_clone,
+                            &wait_child_mutex_clone,
+                            &registry_clone,
+                            &project_path_clone,
+                            &model_clone,
+                            &current_session_id_mtx_clone,
+                        )
+                        .await;
                     }
                 }
+
+                // Trellis SessionStart 完成后绑定 stdin；若 spawn 时未写入则再试 pending。
+                if line_type == Some("system") && line_subtype == Some("hook_response") {
+                    let outcome = json.get("outcome").and_then(|v| v.as_str()).unwrap_or("");
+                    if outcome == "success" {
+                        if let Some(ip) = initial_streaming_prompt_stdout.as_deref() {
+                            try_write_initial_streaming_prompt_pending(
+                                spawn_id,
+                                ip,
+                                &mut initial_streaming_prompt_sent,
+                                &pending_stdin_by_spawn_clone,
+                            )
+                            .await;
+                        }
+                        if let Some(sid) = line_sid.as_deref() {
+                            bootstrap_streaming_session_stdin(
+                                sid,
+                                spawn_id,
+                                connection_mode_stdout,
+                                initial_streaming_prompt_stdout.as_deref(),
+                                &mut initial_streaming_prompt_sent,
+                                &mut real_session_id,
+                                &pending_stdin_by_spawn_clone,
+                                &stdin_map_mtx_clone,
+                                &active_child_by_session_clone,
+                                &wait_child_mutex_clone,
+                                &registry_clone,
+                                &project_path_clone,
+                                &model_clone,
+                                &current_session_id_mtx_clone,
+                            )
+                            .await;
+                        }
+                    }
+                }
+
                 if let Some(candidate) = extract_structured_verdict_candidate(&json) {
                     structured_verdict = Some(candidate);
+                }
+
+                if connection_mode_stdout == ClaudeConnectionMode::Streaming {
+                    if let Some(turn_ok) = streaming_turn_success_from_result(&json) {
+                        let sid_for_turn = real_session_id
+                            .as_deref()
+                            .or(line_sid.as_deref())
+                            .unwrap_or("unknown");
+                        let turn_verdict = extract_structured_verdict_candidate(&json);
+                        if emit_streaming_turn_complete_events(
+                            &app_clone,
+                            &registry_clone,
+                            sid_for_turn,
+                            turn_ok,
+                            turn_verdict,
+                            invocation_key_clone.as_deref(),
+                            suppress_shared_stdout,
+                        ) {
+                            streaming_turn_complete_sent = true;
+                        }
+                    }
                 }
             }
 
             let sid = real_session_id.as_deref().unwrap_or("unknown");
 
-            // Emit output events
-            if !suppress_shared_stdout {
-                let _ = app_clone.emit(&format!("claude-output:{}", sid), &line);
-                // Also emit without suffix for backward compatibility
-                let _ = app_clone.emit("claude-output", &line);
-            }
-            if let Some(inv) = invocation_key_clone.as_deref() {
-                let _ = app_clone.emit(&format!("claude-output:invocation:{}", inv), &line);
-            }
+            emit_claude_stdout_line(
+                &app_clone,
+                sid,
+                &line,
+                connection_mode_stdout,
+                invocation_key_clone.as_deref(),
+                suppress_shared_stdout,
+            );
         }
 
         // Process finished — 只 wait 本 stdout 对应的子进程。Persistent 下新 spawn 会替换全局槽位并 kill 旧进程，
@@ -1538,8 +1922,53 @@ async fn spawn_claude_process(
             return;
         }
 
-        let success = exit_status.map(|s| s.success()).unwrap_or(false);
+        let child_still_running = {
+            let mut slot = wait_child_mutex_clone.lock().await;
+            match slot.as_mut() {
+                Some(c) if c.id() == Some(spawned_pid_stdout) => c
+                    .try_wait()
+                    .ok()
+                    .flatten()
+                    .is_none(),
+                _ => false,
+            }
+        };
+
         let sid = real_session_id.as_deref().unwrap_or("unknown");
+
+        // 长驻 streaming：单轮 result 已发过 turn complete；子进程仍存活则保留 stdin 供下一轮。
+        if connection_mode_stdout == ClaudeConnectionMode::Streaming && streaming_turn_complete_sent {
+            if child_still_running {
+                pending_stdin_by_spawn_clone.lock().await.remove(&spawn_id);
+                release_claude_spawn_slot(&slots_mtx_clone, acquired_scope_clone.clone()).await;
+                return;
+            }
+            if real_session_id.is_some() {
+                registry_clone.remove(sid);
+            }
+            stdin_map_mtx_clone.lock().await.remove(sid);
+            if !sid.is_empty() && sid != "unknown" {
+                let mut m = active_child_by_session_clone.lock().await;
+                if let Some(existing) = m.get(sid) {
+                    if Arc::ptr_eq(existing, &wait_child_mutex_clone) {
+                        m.remove(sid);
+                    }
+                }
+            }
+            if let Some(inv) = invocation_key_clone.as_deref() {
+                let mut m = active_child_by_invocation_clone.lock().await;
+                if let Some(existing) = m.get(inv) {
+                    if Arc::ptr_eq(existing, &wait_child_mutex_clone) {
+                        m.remove(inv);
+                    }
+                }
+            }
+            pending_stdin_by_spawn_clone.lock().await.remove(&spawn_id);
+            release_claude_spawn_slot(&slots_mtx_clone, acquired_scope_clone.clone()).await;
+            return;
+        }
+
+        let success = exit_status.map(|s| s.success()).unwrap_or(false);
         let complete_payload = ClaudeCompletePayload {
             session_id: sid.to_string(),
             success,
@@ -1549,17 +1978,14 @@ async fn spawn_claude_process(
         // Mark session as completed
         registry_clone.mark_completed(sid, success);
 
-        // Emit completion event（invocation 独占 oneshot 时不发全局，避免误触发主会话 finalize）
-        if !suppress_shared_stdout {
-            let _ = app_clone.emit(&format!("claude-complete:{}", sid), &complete_payload);
-            let _ = app_clone.emit("claude-complete", &complete_payload);
-        }
-        if let Some(inv) = invocation_key_clone.as_deref() {
-            let _ = app_clone.emit(
-                &format!("claude-complete:invocation:{}", inv),
-                &complete_payload,
-            );
-        }
+        emit_claude_complete_payload(
+            &app_clone,
+            sid,
+            &complete_payload,
+            connection_mode_stdout,
+            invocation_key_clone.as_deref(),
+            suppress_shared_stdout,
+        );
 
         // Clean up registry
         if real_session_id.is_some() {
@@ -1572,7 +1998,8 @@ async fn spawn_claude_process(
                 *g = None;
             }
         }
-        if connection_mode_stdout == ClaudeConnectionMode::Oneshot
+        if (connection_mode_stdout == ClaudeConnectionMode::Oneshot
+            || connection_mode_stdout == ClaudeConnectionMode::Streaming)
             && !sid.is_empty()
             && sid != "unknown"
         {
@@ -1603,7 +2030,8 @@ async fn spawn_claude_process(
         let reader = BufReader::new(stderr);
         let mut lines = reader.lines();
         let suppress_shared_stderr = invocation_key_stderr.is_some()
-            && connection_mode_stderr == ClaudeConnectionMode::Oneshot;
+            && (connection_mode_stderr == ClaudeConnectionMode::Oneshot
+                || connection_mode_stderr == ClaudeConnectionMode::Streaming);
 
         while let Ok(Some(line)) = lines.next_line().await {
             if claude_stderr_line_suppressed_for_ui_events(&line) {
@@ -1639,10 +2067,12 @@ pub(crate) async fn execute_claude_code(
     concurrency_limit: Option<u32>,
     bare: Option<bool>,
     trellis_context_id: Option<String>,
+    cli_extras: Option<ClaudeSpawnCliExtras>,
 ) -> Result<(), String> {
     let registry = app.state::<ClaudeSessionRegistry>();
     let app_clone = app.clone();
     let model_for_cmd = model.as_deref().and_then(trim_model_cli_arg);
+    let extras = cli_extras.unwrap_or_default();
     let cmd = create_claude_command(
         &project_path,
         &prompt,
@@ -1650,6 +2080,7 @@ pub(crate) async fn execute_claude_code(
         &[],
         bare.unwrap_or(false),
         trellis_context_id.as_deref(),
+        &extras,
     )?;
     let model_label = model
         .as_deref()
@@ -1669,6 +2100,7 @@ pub(crate) async fn execute_claude_code(
         mode,
         concurrency_scope_key,
         concurrency_limit,
+        None,
     )
     .await
 }
@@ -1685,6 +2117,7 @@ pub(crate) async fn resume_claude_code(
     concurrency_scope_key: Option<String>,
     concurrency_limit: Option<u32>,
     trellis_context_id: Option<String>,
+    cli_extras: Option<ClaudeSpawnCliExtras>,
 ) -> Result<(), String> {
     let process_state = app.state::<ClaudeProcessState>();
     kill_active_claude_run_for_session(&process_state, &session_id).await;
@@ -1692,6 +2125,7 @@ pub(crate) async fn resume_claude_code(
     let registry = app.state::<ClaudeSessionRegistry>();
     let app_clone = app.clone();
     let model_for_cmd = model.as_deref().and_then(trim_model_cli_arg);
+    let extras = cli_extras.unwrap_or_default();
     let cmd = create_claude_command(
         &project_path,
         &prompt,
@@ -1699,6 +2133,7 @@ pub(crate) async fn resume_claude_code(
         &["-r", &session_id],
         false,
         trellis_context_id.as_deref(),
+        &extras,
     )?;
     let model_label = model
         .as_deref()
@@ -1718,6 +2153,7 @@ pub(crate) async fn resume_claude_code(
         mode,
         concurrency_scope_key,
         concurrency_limit,
+        None,
     )
     .await
 }
@@ -1864,4 +2300,147 @@ pub(crate) async fn claude_submit_stdin_line(
 pub(crate) fn list_running_claude_sessions(app: tauri::AppHandle) -> Vec<ClaudeSessionInfo> {
     let registry = app.state::<ClaudeSessionRegistry>();
     registry.list()
+}
+
+// ── Streaming Session Commands (主会话长驻进程模式) ──
+
+/// Streaming 会话用户消息（`--input-format stream-json` stdin 行）。
+fn build_streaming_user_message(prompt: &str) -> String {
+    serde_json::json!({
+        "type": "user",
+        "message": {
+            "role": "user",
+            "content": [{ "type": "text", "text": prompt }]
+        }
+    })
+    .to_string()
+}
+
+async fn write_streaming_user_message_to_stdin(
+    sin: &mut tokio::process::ChildStdin,
+    prompt: &str,
+) -> Result<(), String> {
+    let payload = build_streaming_user_message(prompt);
+    use tokio::io::AsyncWriteExt;
+    sin.write_all(payload.as_bytes())
+        .await
+        .map_err(|e| e.to_string())?;
+    sin.write_all(b"\n").await.map_err(|e| e.to_string())?;
+    sin.flush().await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// 启动 streaming 会话的长驻子进程；首条用户消息在 spawn 后立即写入 pending stdin（并可在 hook/init 后补绑 session）。
+/// 前端监听 `claude-output:invocation:{invocation_key}`（与 oneshot 一致）。
+#[tauri::command]
+pub(crate) async fn spawn_streaming_session(
+    app: tauri::AppHandle,
+    project_path: String,
+    initial_prompt: String,
+    model: Option<String>,
+    session_id_to_resume: Option<String>,
+    invocation_key: Option<String>,
+    concurrency_scope_key: Option<String>,
+    concurrency_limit: Option<u32>,
+    trellis_context_id: Option<String>,
+    cli_extras: Option<ClaudeSpawnCliExtras>,
+) -> Result<(), String> {
+    if initial_prompt.trim().is_empty() {
+        return Err("initial_prompt 不能为空".to_string());
+    }
+
+    let model_for_cmd = model.as_deref().and_then(trim_model_cli_arg);
+    let resume_sid = session_id_to_resume
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let extras = cli_extras.unwrap_or_default();
+    let cmd = create_streaming_claude_command(
+        &project_path,
+        model_for_cmd,
+        resume_sid,
+        trellis_context_id.as_deref(),
+        &extras,
+    )?;
+    let model_label = model
+        .as_deref()
+        .map(str::trim)
+        .filter(|m| !m.is_empty())
+        .unwrap_or("(from Claude config)")
+        .to_string();
+
+    let registry = app.state::<ClaudeSessionRegistry>();
+    let app_clone = app.clone();
+
+    spawn_claude_process(
+        cmd,
+        app_clone,
+        &registry,
+        project_path,
+        model_label,
+        invocation_key,
+        ClaudeConnectionMode::Streaming,
+        concurrency_scope_key,
+        concurrency_limit,
+        Some(initial_prompt),
+    )
+    .await
+}
+
+/// 向已连接的 streaming 会话（按 Claude `session_id`）发送一条用户消息。
+#[tauri::command]
+pub(crate) async fn send_user_message_to_session(
+    app: tauri::AppHandle,
+    process_state: tauri::State<'_, ClaudeProcessState>,
+    session_id: String,
+    prompt: String,
+) -> Result<(), String> {
+    let sid = session_id.trim().to_string();
+    if sid.is_empty() {
+        return Err("session_id 不能为空".to_string());
+    }
+    if prompt.trim().is_empty() {
+        return Err("prompt 不能为空".to_string());
+    }
+    let registry = app.state::<ClaudeSessionRegistry>();
+    registry.mark_running(&sid);
+
+    let mut stdin_map = process_state.claude_stdin_by_session.lock().await;
+    let Some(sin) = stdin_map.get_mut(&sid) else {
+        return Err(format!(
+            "Streaming 会话 {} 没有可写 stdin，可能子进程已结束。请重新发送以重启进程。",
+            sid
+        ));
+    };
+    write_streaming_user_message_to_stdin(sin, &prompt).await
+}
+
+/// 关闭 streaming 会话：终止子进程并释放 stdin 映射。
+#[tauri::command]
+pub(crate) async fn close_streaming_session(
+    app: tauri::AppHandle,
+    session_id: String,
+) -> Result<(), String> {
+    let sid = session_id.trim().to_string();
+    if sid.is_empty() {
+        return Ok(());
+    }
+    let process_state = app.state::<ClaudeProcessState>();
+    process_state
+        .claude_stdin_by_session
+        .lock()
+        .await
+        .remove(&sid);
+    let killed = {
+        let mut m = process_state.active_child_by_claude_session.lock().await;
+        m.remove(&sid)
+    };
+    if let Some(arc) = killed {
+        let mut slot = arc.lock().await;
+        if let Some(ref mut proc) = *slot {
+            let _ = proc.kill().await;
+        }
+        *slot = None;
+    }
+    Ok(())
 }

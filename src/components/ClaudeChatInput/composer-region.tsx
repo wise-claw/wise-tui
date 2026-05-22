@@ -11,6 +11,7 @@ import { AIChatInput, ConfigProvider as SemiConfigProvider } from "@douyinfe/sem
 import semiLocaleZhCN from "@douyinfe/semi-ui/lib/es/locale/source/zh_CN";
 import "./composer-semi-tokens.css";
 import type { Content } from "@douyinfe/semi-ui/lib/es/aiChatInput/interface";
+import type { ClaudeSessionConnectionKind } from "../../constants/claudeConnection";
 import type {
   ClaudeComposerExecuteBubbleOptions,
   ClaudeSession,
@@ -46,6 +47,7 @@ import { RevertDock } from "./dock/revert-dock";
 import { addToHistory, promptLength, navigatePromptHistory, canNavigateHistoryAtCursor } from "./prompt-history";
 import { Dropdown, Button, Empty, Input, Popover, Select, Spin, Tabs, Tag, Tooltip, message } from "antd";
 import { ContextCompactProgressRing } from "./ContextCompactProgressRing";
+import { ClaudeConnectionKindChip } from "./ClaudeConnectionKindChip";
 import type { MenuProps } from "antd";
 import { logClaudeDrop } from "./drop-debug";
 import { buildClaudeOutgoingPrompt } from "../../services/claudeComposerPrompt";
@@ -110,6 +112,7 @@ interface ComposerInnerProps {
     executeOptions?: ClaudeComposerExecuteBubbleOptions,
   ) => void;
   onSessionModelChange: (model: string) => void;
+  onSessionConnectionKindChange?: (kind: ClaudeSessionConnectionKind) => void;
   /** `retractLastUserTurn`：Esc 撤回刚发时从 transcript 去掉本轮 user/assistant 并杀进程 */
   onCancel: (opts?: { retractLastUserTurn?: boolean }) => void;
   todos: TodoItem[];
@@ -218,6 +221,34 @@ function repairTiptapTrailingSpaceIfNeeded(
   }
 }
 
+function isProseMirrorFocused(shell: HTMLElement | null): boolean {
+  if (!shell) return false;
+  const pm = shell.querySelector(".ProseMirror");
+  if (!pm) return false;
+  const ae = document.activeElement;
+  return ae === pm || (ae instanceof Node && pm.contains(ae));
+}
+
+/** 焦点误落在底栏按钮或消息滚动区时，把空格还回编辑器。 */
+function refocusComposerAndInsertSpace(aiChat: InstanceType<typeof AIChatInput> | null): void {
+  const ed = aiChat?.getEditor?.() as
+    | {
+        chain?: () => {
+          focus: (pos?: string) => { insertContent: (v: string) => { run: () => void } };
+        };
+      }
+    | undefined;
+  if (ed?.chain) {
+    try {
+      ed.chain().focus("end").insertContent(" ").run();
+      return;
+    } catch {
+      /* fall through */
+    }
+  }
+  aiChat?.focusEditor?.("end");
+}
+
 const SAFE_AI_CHAT_SET_CONTENT_MAX_FRAMES = 48;
 
 /**
@@ -317,6 +348,7 @@ function ComposerInner({
   gitRepositoryPath,
   onExecute,
   onSessionModelChange,
+  onSessionConnectionKindChange,
   onCancel: _onCancel,
   todos,
   questionRequest,
@@ -451,6 +483,39 @@ function ComposerInner({
     };
     shell.addEventListener("keydown", onKeyDown, { capture: true });
     return () => shell.removeEventListener("keydown", onKeyDown, { capture: true });
+  }, [session.id]);
+
+  /**
+   * 空格在「可滚动容器 / 底栏按钮」上会触发滚动或点击发送，表现为输入框失焦。
+   * 捕获阶段把空格收回 ProseMirror（仅本会话 composer 可见时）。
+   */
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== " " || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.isComposing || e.repeat) return;
+      const shell = shellRef.current;
+      const composerRoot = composerEscapeRootRef.current;
+      if (!shell || !composerRoot?.isConnected) return;
+      if (isProseMirrorFocused(shell)) return;
+
+      const ae = document.activeElement;
+      if (!(ae instanceof Element)) return;
+      const chat = composerRoot.closest(".app-claude-chat");
+      if (!chat?.contains(ae)) return;
+
+      const inComposerChrome = ae.closest("[data-wise-composer-root]") != null;
+      const onMessagesViewport = ae.closest(".app-claude-messages") != null;
+      const onChatShellOnly =
+        ae.classList.contains("app-claude-chat") && !ae.closest("[data-wise-composer-root]");
+
+      if (!inComposerChrome && !onMessagesViewport && !onChatShellOnly) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      refocusComposerAndInsertSpace(aiChatRef.current);
+    };
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
   }, [session.id]);
 
   useLayoutEffect(() => {
@@ -1621,6 +1686,11 @@ function ComposerInner({
             </Button>
           </Tooltip>
         ) : null}
+        <ClaudeConnectionKindChip
+          connectionKind={session.connectionKind}
+          disabled={isSessionBusy}
+          onConnectionKindChange={onSessionConnectionKindChange}
+        />
         <Dropdown
           overlayClassName="app-claude-model-picker-dropdown"
           menu={{
@@ -1661,7 +1731,17 @@ function ComposerInner({
         {menuItem}
       </div>
     ),
-    [isSessionBusy, _onCancel, model, modelDisplayLabel, modelMenuItems, onSessionModelChange, setModel],
+    [
+      isSessionBusy,
+      _onCancel,
+      session.connectionKind,
+      onSessionConnectionKindChange,
+      model,
+      modelDisplayLabel,
+      modelMenuItems,
+      onSessionModelChange,
+      setModel,
+    ],
   );
 
   /** F3 仅注册一次全局监听；双栏时避免两次 screencapture 争用导致松手后无图 */
@@ -1855,6 +1935,11 @@ function ComposerInner({
                   lastEditorPlainRef.current = plain;
                   set(singleTextPrompt(plain), c);
                   reportAtSlashTriggerFromPlain(plain, c, setTrigger, shellRef.current?.getBoundingClientRect() ?? null);
+                  if (plain.endsWith(" ")) {
+                    queueMicrotask(() => {
+                      repairTiptapTrailingSpaceIfNeeded(aiChatRef.current, plain);
+                    });
+                  }
                 }}
                 style={{ width: "100%" }}
               />
@@ -1908,6 +1993,7 @@ export interface ComposerRegionProps {
     executeOptions?: ClaudeComposerExecuteBubbleOptions,
   ) => void;
   onSessionModelChange: (model: string) => void;
+  onSessionConnectionKindChange?: (kind: ClaudeSessionConnectionKind) => void;
   /** `retractLastUserTurn`：Esc 撤回刚发时从 transcript 去掉本轮 user/assistant 并杀进程 */
   onCancel: (opts?: { retractLastUserTurn?: boolean }) => void;
   todos: TodoItem[];

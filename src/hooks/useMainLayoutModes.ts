@@ -23,6 +23,10 @@ import {
   resolveMainOwnerAgentNameForRepositoryPath,
 } from "../utils/repositoryMainSessionBinding";
 import { usePersistedMainLayoutSiderWidths } from "./usePersistedMainLayoutSiderWidths";
+import {
+  readRightPanelDefaultCollapsedFromStorage,
+  writeRightPanelDefaultCollapsedToStorage,
+} from "../utils/rightPanelStorage";
 
 const COMPACT_LAYOUT_WINDOW_WIDTH_PX = 700;
 const COMPACT_LAYOUT_WINDOW_HEIGHT_PX = 600;
@@ -64,7 +68,10 @@ export function useMainLayoutModes({
   setDualPaneSecondaryRepositoryId,
   setDualPaneSecondarySessionId,
 }: UseMainLayoutModesOptions) {
-  const [rightCollapsed, setRightCollapsed] = useState(true);
+  const [rightCollapsed, setRightCollapsed] = useState(() => readRightPanelDefaultCollapsedFromStorage());
+  const [rightPanelDefaultCollapsed, setRightPanelDefaultCollapsed] = useState(() =>
+    readRightPanelDefaultCollapsedFromStorage(),
+  );
   const [compactLayoutMode, setCompactLayoutMode] = useState(false);
   const compactLayoutSnapshotRef = useRef<{ width: number; height: number } | null>(null);
   const compactLayoutModeRef = useRef(false);
@@ -333,6 +340,14 @@ export function useMainLayoutModes({
     setRightCollapsed((c) => !c);
   }, [exitCompactLayoutMode]);
 
+  const handleSetRightPanelDefaultCollapsed = useCallback((collapsed: boolean) => {
+    writeRightPanelDefaultCollapsedToStorage(collapsed);
+    setRightPanelDefaultCollapsed(collapsed);
+    if (!compactLayoutModeRef.current) {
+      setRightCollapsed(collapsed);
+    }
+  }, []);
+
   return {
     compactLayoutMode,
     effectiveRightCollapsed,
@@ -341,6 +356,8 @@ export function useMainLayoutModes({
     handleToggleCompactLayoutMode,
     handleToggleDualPane,
     handleToggleRightPanel,
+    handleSetRightPanelDefaultCollapsed,
+    rightPanelDefaultCollapsed,
     mainLayoutContentRef,
     mainLayoutLeftWidthPx,
     mainLayoutRightWidthPx,

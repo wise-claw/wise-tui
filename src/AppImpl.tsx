@@ -37,7 +37,11 @@ import { openInFinder } from "./services/repository";
 import { triggerCodeGraphProjectSearch, triggerCodeGraphReindex } from "./services/codeKnowledgeGraph";
 import { AppWorkspaceLayout } from "./components/AppWorkspaceLayout";
 import { DEFAULT_PRD_SPLIT_ASSISTANT_ID } from "./services/assistantPromptLayers";
-import { readAuthorPaneFromSettings, readAuthorPaneFromStorage } from "./components/AuthorPanel";
+import {
+  readAuthorPaneFromSettings,
+  readAuthorPaneFromStorage,
+  resolveAuthorNavPane,
+} from "./components/AuthorPanel";
 import { reloadAppWindow } from "./services/window";
 import { wiseMascotShow } from "./services/wiseMascot";
 import { getTaskTemplate, setTaskTemplate } from "./services/projectState";
@@ -93,6 +97,7 @@ import {
   type ClaudeConcurrencyLimitsMap,
 } from "./services/claudeConcurrencyLimits";
 import { getClaudeSpawnSlotCount } from "./services/claudeSpawnSlots";
+import { resolveClaudeSpawnExtrasForSession } from "./services/claudeSpawnExtras";
 import {
   countRunningClaudeSessionsInProjectRepository,
   evaluateBeforeSpawnClaudeCode,
@@ -285,21 +290,25 @@ export default function App() {
 
   const enterAuthorPane = useCallback(
     (pane: AuthorPane) => {
+      const resolved = resolveAuthorNavPane(pane);
       setSearchOpen(false);
-      setLastAuthorPane(pane);
-      viewMode.enter(authorView(pane));
+      setLastAuthorPane(resolved);
+      viewMode.enter(authorView(resolved));
     },
     [viewMode],
   );
 
   const handleAuthorPaneChange = useCallback(
     (pane: AuthorPane) => {
-      setLastAuthorPane(pane);
-      viewMode.enter(authorView(pane));
+      const resolved = resolveAuthorNavPane(pane);
+      setLastAuthorPane(resolved);
+      viewMode.enter(authorView(resolved));
     },
     [viewMode],
   );
-  const authorPane: AuthorPane = viewMode.view.kind === "author" ? viewMode.view.pane : lastAuthorPane;
+  const authorPane: AuthorPane = resolveAuthorNavPane(
+    viewMode.view.kind === "author" ? viewMode.view.pane : lastAuthorPane,
+  );
   const authorWorkflowPaneActive = viewMode.view.kind === "author" && viewMode.view.pane === "workflows";
   const [employeeConfigDefaultRepositoryIds, setEmployeeConfigDefaultRepositoryIds] = useState<number[]>([]);
   /** 非空：从需求面板打开员工配置，新建成功后自动关联到该 Workspace。 */
@@ -535,6 +544,10 @@ export default function App() {
     ((session: ClaudeSession) => { concurrencyScopeKey: string; concurrencyLimit: number } | null) | null
   >(null);
 
+  const claudeSpawnExtrasContextRef = useRef<
+    ((session: ClaudeSession) => Promise<import("./services/claudeSpawnExtras").ClaudeSpawnCliExtras | null>) | null
+  >(null);
+
   const advanceTeamAfterTurnRef = useRef<(p: ClaudeTurnCompletePayload) => void>(() => {});
 
   const moveDingTalkAutomationPendingSessionIdRef = useRef<(fromTabId: string, toClaudeSessionId: string) => void>(() => {});
@@ -560,6 +573,7 @@ export default function App() {
     activeSessionId,
     createSession,
     updateSessionModel,
+    updateSessionConnectionKind,
     executeSession,
     appendSystemMessage,
     appendUserMessage,
@@ -586,6 +600,7 @@ export default function App() {
     },
     beforeSpawnClaudeRef,
     claudeConcurrencyInvokeContextRef,
+    claudeSpawnExtrasContextRef,
     onClaudeSpawnBlocked: (blockedMessage) => {
       message.warning(blockedMessage);
     },
@@ -864,6 +879,15 @@ export default function App() {
       repositories,
       limitsMap: claudeConcurrencyLimitsMap,
       preferredProjectId: activeProjectId,
+    });
+
+  claudeSpawnExtrasContextRef.current = async (session) =>
+    resolveClaudeSpawnExtrasForSession({
+      session,
+      projects,
+      repositories,
+      preferredProjectId: activeProjectId,
+      activeAssistantId: cockpitActiveAssistantId,
     });
 
   /** @-mention 派发拦截：wise_trellis 项目下，`@<roleTag>` 命中项目仓库时改走多仓库 trellis-implement 直派；其他场景回退到原 send 路径。 */
@@ -1422,6 +1446,8 @@ export default function App() {
     handleToggleCompactLayoutMode,
     handleToggleDualPane,
     handleToggleRightPanel,
+    handleSetRightPanelDefaultCollapsed,
+    rightPanelDefaultCollapsed,
     mainLayoutContentRef,
     mainLayoutLeftWidthPx,
     mainLayoutRightWidthPx,
@@ -2275,7 +2301,7 @@ export default function App() {
             } else {
               setActiveProjectId(project.id);
             }
-            viewMode.enter(authorView("workspaces"));
+            viewMode.enter(authorView("agents"));
           } catch (e) {
             message.error(e instanceof Error ? e.message : String(e));
           } finally {
@@ -2561,6 +2587,7 @@ export default function App() {
         activeWorkspaceFocus,
         onSelectRepository: setActiveRepositoryId,
         onUpdateSessionModel: updateSessionModel,
+        onUpdateSessionConnectionKind: updateSessionConnectionKind,
         onExecuteSession: handleComposerExecute,
         onSendMessage: handleSendMessageWithAtMention,
         onCancelSession: cancelSession,
@@ -2595,6 +2622,8 @@ export default function App() {
         onNewSecondarySession: handleNewSecondarySession,
         onToggleSidebar: () => setCollapsed((c) => !c),
         onToggleRightPanel: handleToggleRightPanel,
+        rightPanelDefaultCollapsed,
+        onSetRightPanelDefaultCollapsed: handleSetRightPanelDefaultCollapsed,
         onToggleTerminal: () => setTerminalCollapsed((c) => !c),
         onSearch: () => setSearchOpen(true),
         collapsed,

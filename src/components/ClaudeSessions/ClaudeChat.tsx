@@ -50,6 +50,7 @@ import { StreamingReplyHint } from "./Markdown";
 import { ClaudeChatMessageRow } from "./ClaudeChatMessageRow";
 import { ClaudeSessionTrajectoryDrawer } from "./ClaudeSessionTrajectoryDrawer";
 import { SessionQuickActionsBar } from "./SessionQuickActionsBar";
+import type { ClaudeSessionConnectionKind } from "../../constants/claudeConnection";
 import { ComposerRegion, type DualPaneComposerRepositoryPickerProps } from "../ClaudeChatInput";
 import { gitCommit, gitPull, gitPush, gitStage, gitStatus, gitWorktreeList, gitWorktreeRemove } from "../../services/git";
 import { openInFinder } from "../../services/repository";
@@ -212,6 +213,7 @@ interface Props {
     executeOptions?: ClaudeComposerExecuteBubbleOptions,
   ) => boolean | void | Promise<boolean | void>;
   onSessionModelChange: (model: string) => void;
+  onSessionConnectionKindChange?: (kind: ClaudeSessionConnectionKind) => void;
   onCancel: (opts?: { retractLastUserTurn?: boolean }) => void;
   // Dock props
   todos: TodoItem[];
@@ -439,6 +441,7 @@ export function ClaudeChat({
   onSend: _onSend,
   onExecute,
   onSessionModelChange,
+  onSessionConnectionKindChange,
   onCancel,
   todos,
   questionRequest,
@@ -1441,9 +1444,15 @@ export function ClaudeChat({
     // 初始化：记录当前 scrollTop
     lastScrollTopRef.current = sc.scrollTop;
 
+    const composerEditorHasFocus = () => {
+      const ae = document.activeElement;
+      return ae instanceof Element && ae.closest("[data-wise-composer-root] .ProseMirror") != null;
+    };
+
     const onWheel = (event: WheelEvent) => {
       if (programmaticScrollRef.current) return;
       if (Math.abs(event.deltaY) <= 2) return;
+      if (composerEditorHasFocus()) return;
       sc.focus({ preventScroll: true });
       pauseAutoFollowForUserScroll();
     };
@@ -1457,7 +1466,9 @@ export function ClaudeChat({
         const currentScrollTop = sc.scrollTop;
         const prevScrollTop = lastScrollTopRef.current;
         if (Math.abs(currentScrollTop - prevScrollTop) > 1) {
-          sc.focus({ preventScroll: true });
+          if (!composerEditorHasFocus()) {
+            sc.focus({ preventScroll: true });
+          }
           pauseAutoFollowForUserScroll();
         }
         lastScrollTopRef.current = currentScrollTop;
@@ -4425,6 +4436,10 @@ export function ClaudeChat({
           role="log"
           aria-label="对话消息"
           onPointerDownCapture={() => {
+            const ae = document.activeElement;
+            if (ae instanceof Element && ae.closest("[data-wise-composer-root] .ProseMirror")) {
+              return;
+            }
             messagesScrollRef.current?.focus({ preventScroll: true });
           }}
           onBlur={handleMessagesBlur}
@@ -4841,6 +4856,7 @@ export function ClaudeChat({
           pendingExecutionTaskCount={pendingTasks.length}
           onExecute={handleComposerExecute}
           onSessionModelChange={onSessionModelChange}
+          onSessionConnectionKindChange={onSessionConnectionKindChange}
           onCancel={onCancel}
           todos={todos}
           questionRequest={questionRequest}
