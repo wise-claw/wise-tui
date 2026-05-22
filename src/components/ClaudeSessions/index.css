@@ -4258,13 +4258,13 @@ button.app-message-part-header:disabled:hover {
 .app-claude-model-picker-dropdown .ant-dropdown-menu-submenu-title {
   display: flex;
   align-items: center;
-  min-height: 20px !important;
-  height: 20px;
+  min-height: 24px !important;
+  height: 24px;
   padding-block: 0 !important;
   padding-inline: 5px;
   margin: 0;
   font-size: 11px;
-  line-height: 20px;
+  line-height: 24px;
   border-radius: 2px;
 }
 
@@ -4274,7 +4274,7 @@ button.app-message-part-header:disabled:hover {
 
 .app-claude-model-picker-dropdown .ant-dropdown-menu-title-content {
   font-size: 11px;
-  line-height: 20px;
+  line-height: 24px;
 }
 
 .app-claude-model-picker-dropdown .ant-dropdown-menu-item .ant-dropdown-menu-item-icon {

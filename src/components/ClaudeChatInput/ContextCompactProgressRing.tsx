@@ -64,7 +64,7 @@ export function ContextCompactProgressRing({
       data-ui-anchor={dataUiAnchor}
       disabled={disabled}
       aria-busy={inFlight}
-      aria-label={`压缩上下文，当前约 ${pct}%`}
+      aria-label={`点击手动压缩上下文，当前约 ${pct}%`}
       onClick={onClick}
     >
       <svg

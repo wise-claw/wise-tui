@@ -3366,10 +3366,11 @@ export function ClaudeChat({
       ctxPercent >= CONTEXT_AUTO_COMPACT_BEFORE_SEND_PERCENT
         ? "；发送新消息前也会自动压缩"
         : "";
+    const clickHint = "；点击可手动压缩上下文";
     if (ctxPercent >= CONTEXT_WARN_PERCENT) {
-      return `上下文约 ${ctxPercent}%（~${estimatedTokens.toLocaleString("zh-CN")} tokens），执行 /compact 压缩磁盘历史${autoNote}`;
+      return `上下文约 ${ctxPercent}%（~${estimatedTokens.toLocaleString("zh-CN")} tokens）${clickHint}（/compact 压缩磁盘历史${autoNote}）`;
     }
-    return `执行 Claude Code /compact 压缩对话历史${autoNote}`;
+    return `点击可手动压缩上下文（Claude Code /compact 压缩对话历史${autoNote}）`;
   }, [isSessionBusy, session.claudeSessionId, sessionContextMetrics]);
 
   return (
