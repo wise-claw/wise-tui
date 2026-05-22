@@ -13,7 +13,10 @@ interface Props {
   activeResult: SplitResult | null;
   taskConfirmFilter: TaskConfirmFilter;
   taskConfirmCounts: { unconfirmedCount: number; confirmedCount: number };
-  onConfirmAll: () => void | Promise<void>;
+  primaryActionLabel: string;
+  primaryActionLoading: boolean;
+  primaryActionDisabled: boolean;
+  onPrimaryAction: () => void | Promise<void>;
   onAddTask: () => void;
   onClearAllTasks: () => void;
   onTaskConfirmFilterChange: (filter: TaskConfirmFilter) => void;
@@ -27,7 +30,10 @@ export function TaskBoardHeader({
   activeResult,
   taskConfirmFilter,
   taskConfirmCounts,
-  onConfirmAll,
+  primaryActionLabel,
+  primaryActionLoading,
+  primaryActionDisabled,
+  onPrimaryAction,
   onAddTask,
   onClearAllTasks,
   onTaskConfirmFilterChange,
@@ -67,11 +73,11 @@ export function TaskBoardHeader({
           size="small"
           type="primary"
           className="app-prd-task-panel__task-toolbar-btn"
-          loading={confirmSavingTaskId === "__all__"}
-          disabled={noTasks || Boolean(confirmSavingTaskId)}
-          onClick={onConfirmAll}
+          loading={primaryActionLoading}
+          disabled={primaryActionDisabled}
+          onClick={onPrimaryAction}
         >
-          确认任务
+          {primaryActionLabel}
         </Button>
         <Button
           size="small"

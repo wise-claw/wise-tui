@@ -364,20 +364,15 @@
 }
 
 .app-prd-task-panel__columns--task-focus .app-prd-task-panel__col--requirements.ant-col-12 {
-  flex: 0 0 0;
-  max-width: 0;
-  width: 0;
-  padding-left: 0 !important;
-  padding-right: 0 !important;
-  opacity: 0;
-  transform: translateX(-10px);
-  pointer-events: none;
+  display: none;
 }
 
-.app-prd-task-panel__columns--task-focus .app-prd-task-panel__col--tasks.ant-col-12 {
+.app-prd-task-panel__columns.app-prd-task-panel__columns--task-focus .app-prd-task-panel__col--tasks.ant-col-12 {
   flex: 0 0 100%;
   max-width: 100%;
   width: 100%;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
 }
 
 /* 右侧列内纵向 Space 占满列高，否则内部 Card 拿不到高度、列表会塌 */

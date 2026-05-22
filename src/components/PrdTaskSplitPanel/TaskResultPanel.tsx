@@ -217,6 +217,13 @@ export function TaskResultPanel({
   const showOrchestration = orchestrationResult !== null;
   const showPlanPreview = !showRuntime && !activeResult && plannedMissionSummary !== null;
   const showTaskList = !showRuntime && !showOrchestration && !showExecutionRuntime && !showPlanPreview;
+  const primaryActionLabel = resultViewMode === "orchestration" ? "落盘并启动" : "确认并编排";
+  const primaryActionLoading = resultViewMode === "orchestration"
+    ? generatingExecutableTaskId === "__all__"
+    : confirmSavingTaskId === "__all__";
+  const primaryActionDisabled = resultViewMode === "orchestration"
+    ? !canGenerateExecutableTasks || materializedResult !== null || Boolean(generatingExecutableTaskId)
+    : !activeResult || activeResult.splitTasks.length === 0 || Boolean(confirmSavingTaskId);
   useEffect(() => {
     setRuntimeQueueHidden(false);
   }, [materializedExecutionResult]);
@@ -237,6 +244,14 @@ export function TaskResultPanel({
     const confirmed = await onConfirmAll();
     if (confirmed === false) return;
     setResultViewMode("orchestration");
+  }
+
+  function handlePrimaryAction() {
+    if (resultViewMode === "orchestration") {
+      void onGenerateExecutableTasks();
+      return;
+    }
+    void handleConfirmAllAndEnterOrchestration();
   }
 
   return (
@@ -262,7 +277,10 @@ export function TaskResultPanel({
               activeResult={activeResult}
               taskConfirmFilter={taskConfirmFilter}
               taskConfirmCounts={taskConfirmCounts}
-              onConfirmAll={handleConfirmAllAndEnterOrchestration}
+              primaryActionLabel={primaryActionLabel}
+              primaryActionLoading={primaryActionLoading}
+              primaryActionDisabled={primaryActionDisabled}
+              onPrimaryAction={handlePrimaryAction}
               onAddTask={onAddTask}
               onClearAllTasks={onClearAllTasks}
               onTaskConfirmFilterChange={onTaskConfirmFilterChange}
@@ -292,7 +310,7 @@ export function TaskResultPanel({
                 canEnterOrchestration={canShowOrchestration}
                 canGenerateExecutableTasks={canGenerateExecutableTasks}
                 confirmedCount={taskConfirmCounts.confirmedCount}
-                totalCount={filteredTasks.length}
+                totalCount={activeResult?.splitTasks.length ?? filteredTasks.length}
                 waveCount={activeResult?.parallelGroups.length ?? 0}
                 onModeChange={setResultViewMode}
                 materialized={materializedResult !== null}
@@ -493,7 +511,7 @@ function SplitResultStageRail({
       >
         <span>2</span>
         <strong>执行计划</strong>
-        <small>{waveCount > 0 ? `${waveCount} 个执行批次` : "确认后生成"}</small>
+        <small>{waveCount > 0 ? `${waveCount} 个执行批次待确认` : "确认后编排"}</small>
       </button>
       <button
         type="button"
@@ -503,7 +521,7 @@ function SplitResultStageRail({
       >
         <span>3</span>
         <strong>开始执行</strong>
-        <small>{materialized ? "执行已启动" : canGenerateExecutableTasks ? "生成任务并启动" : "等待确认"}</small>
+        <small>{materialized ? "执行已启动" : canGenerateExecutableTasks ? "落盘并启动" : "等待编排确认"}</small>
       </button>
     </div>
   );

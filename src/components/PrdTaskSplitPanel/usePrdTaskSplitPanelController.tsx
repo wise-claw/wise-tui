@@ -2915,7 +2915,12 @@ export function usePrdTaskSplitPanelController({
       message.info("当前没有可用于生成的已确认拆分任务。");
       return false;
     }
-    return materializeMissionReviewedTasks(sourceTasks);
+    setGeneratingExecutableTaskId("__all__");
+    try {
+      return await materializeMissionReviewedTasks(sourceTasks);
+    } finally {
+      setGeneratingExecutableTaskId(null);
+    }
   }
 
   async function materializeMissionReviewedTasks(
