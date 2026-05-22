@@ -173,6 +173,20 @@ mock.module("../ClaudeConfigDirPanel/useClaudeConfigDirChoice", () => ({
   }),
 }));
 
+mock.module("../ClaudeConfigDirPanel/useClaudeConnectionModeSetting", () => ({
+  useClaudeConnectionModeSetting: () => ({
+    kind: "streaming" as const,
+    loading: false,
+    saving: false,
+    refresh: mock(async () => undefined),
+    save: mock(async () => undefined),
+    labels: {
+      streaming: { title: "长驻会话（推荐）", description: "stream-json" },
+      oneshot: { title: "逐轮独立进程", description: "-p" },
+    },
+  }),
+}));
+
 mock.module("../../services/agentRegistry", () => ({
   deleteCustomAgent: mock(async () => undefined),
   listAgents: mock(async () => []),
@@ -191,7 +205,8 @@ mock.module("../../services/agentRegistry", () => ({
   testCustomAgent: mock(async () => ({ ok: true, resolvedPath: "/usr/local/bin/test-agent" })),
 }));
 
-const { AuthorPanel, writeAuthorPaneToStorage } = await import("./AuthorPanel");
+const { AuthorPanel } = await import("./AuthorPanel");
+const { writeAuthorPaneToStorage } = await import("./authorPaneStorage");
 const { AuthorPanelNav } = await import("./AuthorPanelNav");
 
 function renderAuthorPanel(props: Parameters<typeof AuthorPanel>[0]): string {
@@ -236,7 +251,7 @@ function buildProps(
   const onPaneChange = mock((_: AuthorPane) => {});
   const onBack = mock(() => {});
   const props: Parameters<typeof AuthorPanel>[0] = {
-    pane: "workspaces",
+    pane: "agents",
     onPaneChange,
     onBack,
     workspacesTabProps: {
@@ -314,23 +329,24 @@ describe("AuthorPanel", () => {
     const { props } = buildProps();
     const html = renderAuthorPanel(props);
     for (const label of [
-      "工作区",
+      "智能体角色",
+      "工作流",
       "MCP 工具",
       "技能市场",
       "触发器规则",
       "引擎环境",
       "扩展市场",
       "助手模板",
-      "Claude Code 环境",
+      "执行环境",
       "定时自动化",
-      "产物检查台",
       "远程入口",
       "快捷键",
       "Claude 沙箱",
     ]) {
       expect(html).toContain(label);
     }
-    expect(html).not.toContain("智能体角色");
+    expect(html).not.toContain("工作区");
+    expect(html).not.toContain("产物检查台");
     expect(html).not.toContain("委派协议");
   });
 
@@ -348,10 +364,12 @@ describe("AuthorPanel", () => {
     expect(setAppSetting).toHaveBeenCalledWith("wise.author.lastPane", "skills");
   });
 
-  test("legacy Author panes are not restored as the default configuration page", async () => {
+  test("persists workbench panes through the settings store", async () => {
     const { setAppSetting } = await import("../../services/appSettingsStore");
     writeAuthorPaneToStorage("agents");
-    expect(setAppSetting).not.toHaveBeenCalledWith("wise.author.lastPane", "agents");
+    expect(setAppSetting).toHaveBeenCalledWith("wise.author.lastPane", "agents");
+    writeAuthorPaneToStorage("workflows");
+    expect(setAppSetting).toHaveBeenCalledWith("wise.author.lastPane", "workflows");
   });
 
   test("workspaces pane renders the workspace list", () => {
@@ -410,7 +428,6 @@ describe("AuthorPanel", () => {
       "extensions",
       "automation",
       "channels",
-      "artifacts",
     ] as const) {
       const { props } = buildProps({ pane });
       renderAuthorPanel(props);

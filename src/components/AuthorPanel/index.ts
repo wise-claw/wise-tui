@@ -1,9 +1,10 @@
+export { AuthorPanel } from "./AuthorPanel";
 export {
-  AuthorPanel,
   readAuthorPaneFromSettings,
   readAuthorPaneFromStorage,
+  resolveAuthorNavPane,
   writeAuthorPaneToStorage,
-} from "./AuthorPanel";
+} from "./authorPaneStorage";
 export type { AuthorPanelProps } from "./AuthorPanel";
 export { AuthorPanelNav } from "./AuthorPanelNav";
 export type { AuthorPanelNavProps } from "./AuthorPanelNav";

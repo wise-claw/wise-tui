@@ -147,29 +147,123 @@
 .app-claude-semi-footer-compact-context {
   flex-shrink: 0;
   margin-inline-start: 2px;
-  max-width: min(168px, 32vw);
-  padding-inline: 4px !important;
-  color: var(--ant-color-text-tertiary) !important;
 }
 
-.app-claude-semi-footer-compact-context.app-claude-ctx-tone--ok {
-  color: var(--ant-color-text-secondary) !important;
+.app-claude-context-compact-ring-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  line-height: 0;
 }
 
-.app-claude-semi-footer-compact-context.app-claude-ctx-tone--caution,
-.app-claude-semi-footer-compact-context.app-claude-ctx-tone--high,
-.app-claude-semi-footer-compact-context.app-claude-ctx-tone--critical {
-  font-weight: 500;
+.app-claude-context-compact-ring-wrap--disabled {
+  cursor: not-allowed;
 }
 
-.app-claude-semi-footer-compact-context:disabled {
+.app-claude-context-compact-ring-wrap--disabled .app-claude-context-compact-ring {
+  pointer-events: none;
+}
+
+.app-claude-context-compact-ring__tip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 280px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.app-claude-context-compact-ring__tip-ctx {
+  font-weight: 600;
+  font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+}
+
+.app-claude-context-compact-ring__tip-ctx.app-claude-ctx-tone--ok {
+  color: var(--ant-color-success);
+}
+
+.app-claude-context-compact-ring__tip-ctx.app-claude-ctx-tone--caution {
+  color: var(--ant-color-warning);
+}
+
+.app-claude-context-compact-ring__tip-ctx.app-claude-ctx-tone--high {
+  color: var(--ant-orange-6, #fa8c16);
+}
+
+.app-claude-context-compact-ring__tip-ctx.app-claude-ctx-tone--critical {
+  color: var(--ant-color-error);
+}
+
+.app-claude-context-compact-ring__tip-body {
+  color: inherit;
+  opacity: 0.92;
+}
+
+/* 上下文占用圆环：细描边进度，点击执行 /compact */
+.app-claude-context-compact-ring {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+/* 与底栏 `.app-claude-ctx-tone--*` 色阶一致 */
+.app-claude-context-compact-ring.app-claude-ctx-tone--ok {
+  color: var(--ant-color-success);
+}
+
+.app-claude-context-compact-ring.app-claude-ctx-tone--caution {
+  color: var(--ant-color-warning);
+}
+
+.app-claude-context-compact-ring.app-claude-ctx-tone--high {
+  color: var(--ant-orange-6, #fa8c16);
+}
+
+.app-claude-context-compact-ring.app-claude-ctx-tone--critical {
+  color: var(--ant-color-error);
+}
+
+.app-claude-context-compact-ring__svg {
+  display: block;
+  flex-shrink: 0;
+}
+
+.app-claude-context-compact-ring__track {
+  stroke: currentColor;
+  opacity: 0.28;
+}
+
+.app-claude-context-compact-ring__progress {
+  stroke: currentColor;
+  opacity: 1;
+  transition: stroke-dashoffset 0.25s ease;
+}
+
+.app-claude-context-compact-ring:disabled {
+  cursor: not-allowed;
   opacity: 0.45;
 }
 
-.app-claude-semi-footer-compact-context__pct {
-  font-variant-numeric: tabular-nums;
-  font-size: 11px;
-  opacity: 0.92;
+.app-claude-context-compact-ring--in-flight .app-claude-context-compact-ring__svg {
+  animation: app-claude-context-compact-ring-spin 0.85s linear infinite;
+}
+
+@keyframes app-claude-context-compact-ring-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .app-claude-semi-footer-toolbar-right {

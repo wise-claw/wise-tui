@@ -557,6 +557,12 @@ export interface ClaudeSession {
    * 不落盘，仅运行时。
    */
   diskTranscriptPartial?: boolean;
+  /**
+   * 会话连接方式：
+   * - `"streaming"` 长驻进程 + `--input-format stream-json`（主会话默认）
+   * - `"oneshot"` 每轮独立子进程（OMC/编排等兼容路径，向后兼容默认值）
+   */
+  connectionKind?: "streaming" | "oneshot";
 }
 
 /** One session row from `list_claude_disk_sessions` (Claude Code on-disk index). */
@@ -623,7 +629,7 @@ export interface SystemResourceSnapshot {
   claudeProcesses: ClaudeHostProcess[];
 }
 
-export type ClaudeConnectionMode = "persistent" | "oneshot";
+export type ClaudeConnectionMode = "persistent" | "oneshot" | "streaming";
 
 /** Aligns with Claude Code: user / local / project + legacy settings.json. */
 export type ClaudeMcpScope =

@@ -22,9 +22,8 @@ import { McpHub } from "../McpHub";
 import { SettingsViewModeProvider } from "../SettingsView";
 import { SkillsHub } from "../SkillsHub";
 import { WorkflowConfigModal } from "../WorkflowConfigModal";
-import { getAppSetting, setAppSetting } from "../../services/appSettingsStore";
-import { DEFAULT_AUTHOR_PANE } from "../../types/viewMode";
-import { AUTHOR_TAB_STORAGE_KEY, AUTHOR_TABS, isAuthorPane, type AuthorPane } from "./AuthorPanelTabs";
+import { AUTHOR_TABS, type AuthorPane } from "./AuthorPanelTabs";
+import { writeAuthorPaneToStorage } from "./authorPaneStorage";
 import { AuthorPanelPageShell } from "./AuthorPanelPageShell";
 import { WorkspacesTab } from "./tabs/WorkspacesTab";
 import "./index.css";
@@ -43,8 +42,6 @@ const PANELS_WITH_OWN_SHELL = new Set<AuthorPane>([
   "artifacts",
   "engine-registry",
 ]);
-
-const LEGACY_AUTHOR_PANES: ReadonlySet<AuthorPane> = new Set(["agents", "workflows"]);
 
 type EmployeeConfigProps = ComponentProps<typeof EmployeeConfigModal>;
 type WorkflowConfigProps = ComponentProps<typeof WorkflowConfigModal>;
@@ -67,27 +64,6 @@ export interface AuthorPanelProps {
   automationPanelProps: ComponentProps<typeof AutomationPanel>;
   artifactsPanelProps: ComponentProps<typeof ArtifactsPanel>;
   workflowStudioAction?: ReactNode;
-}
-
-export function readAuthorPaneFromStorage(fallback: AuthorPane = DEFAULT_AUTHOR_PANE): AuthorPane {
-  if (typeof window === "undefined") return fallback;
-  const raw = window.localStorage.getItem(AUTHOR_TAB_STORAGE_KEY)?.trim() ?? "";
-  return isAuthorPane(raw) && !LEGACY_AUTHOR_PANES.has(raw) ? raw : fallback;
-}
-
-export async function readAuthorPaneFromSettings(fallback: AuthorPane = DEFAULT_AUTHOR_PANE): Promise<AuthorPane> {
-  const raw = (await getAppSetting(AUTHOR_TAB_STORAGE_KEY))?.trim() ?? "";
-  return isAuthorPane(raw) && !LEGACY_AUTHOR_PANES.has(raw) ? raw : readAuthorPaneFromStorage(fallback);
-}
-
-export function writeAuthorPaneToStorage(pane: AuthorPane): void {
-  if (LEGACY_AUTHOR_PANES.has(pane)) return;
-  if (typeof window !== "undefined") {
-    window.localStorage.setItem(AUTHOR_TAB_STORAGE_KEY, pane);
-  }
-  void setAppSetting(AUTHOR_TAB_STORAGE_KEY, pane).catch(() => {
-    /* Last Author tab is a UI convenience; keep local fallback if settings write fails. */
-  });
 }
 
 export function AuthorPanel({

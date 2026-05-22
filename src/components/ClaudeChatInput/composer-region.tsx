@@ -44,13 +44,12 @@ import { FollowupDock } from "./dock/followup-dock";
 import { TodoDock } from "./dock/todo-dock";
 import { RevertDock } from "./dock/revert-dock";
 import { addToHistory, promptLength, navigatePromptHistory, canNavigateHistoryAtCursor } from "./prompt-history";
-import { CompressOutlined } from "@ant-design/icons";
 import { Dropdown, Button, Empty, Input, Popover, Select, Spin, Tabs, Tag, Tooltip, message } from "antd";
+import { ContextCompactProgressRing } from "./ContextCompactProgressRing";
 import type { MenuProps } from "antd";
 import { logClaudeDrop } from "./drop-debug";
 import { buildClaudeOutgoingPrompt } from "../../services/claudeComposerPrompt";
 import {
-  CONTEXT_WARN_PERCENT,
   contextPercentToneClassName,
   formatContextStatusHint,
   getContextPercentTone,
@@ -682,6 +681,7 @@ function ComposerInner({
       modelLabel,
       sessionDuration,
       ctxSegment,
+      ctxPercent: metrics.ctxPercent,
       ctxToneClass: contextPercentToneClassName(getContextPercentTone(metrics.ctxPercent)),
       statusText,
       fullLine,
@@ -1582,33 +1582,24 @@ function ComposerInner({
         ) : null}
         {branchPickerInFooterToolbar}
         {compactContext ? (
-          <Tooltip title={compactContext.tooltip} mouseEnterDelay={0.35}>
-            <Button
-              type="text"
-              size="small"
-              className={[
-                "app-claude-semi-footer-compact-context",
-                contextPercentToneClassName(getContextPercentTone(compactContext.ctxPercent)),
-              ].join(" ")}
-              data-ui-anchor="session-compact-context-btn"
-              disabled={!compactContext.canCompact}
-              aria-busy={compactContext.inFlight}
-              onClick={compactContext.onCompact}
-              style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}
-            >
-              <CompressOutlined spin={compactContext.inFlight} />
-              <span>压缩上下文</span>
-              {compactContext.ctxPercent >= CONTEXT_WARN_PERCENT ? (
-                <span className="app-claude-semi-footer-compact-context__pct" aria-hidden>
-                  {compactContext.ctxPercent}%
-                </span>
-              ) : null}
-            </Button>
-          </Tooltip>
+          <ContextCompactProgressRing
+            className="app-claude-semi-footer-compact-context"
+            data-ui-anchor="session-compact-context-btn"
+            percent={bottomStatus.ctxPercent}
+            toneClassName={bottomStatus.ctxToneClass}
+            ctxStatusLine={bottomStatus.ctxSegment}
+            disabled={!compactContext.canCompact}
+            inFlight={compactContext.inFlight}
+            tooltip={compactContext.tooltip}
+            onClick={compactContext.onCompact}
+          />
         ) : null}
       </div>
     );
   }, [
+    bottomStatus.ctxPercent,
+    bottomStatus.ctxSegment,
+    bottomStatus.ctxToneClass,
     branchPickerInFooterToolbar,
     compactContext,
     dualPaneRepositoryPicker,
