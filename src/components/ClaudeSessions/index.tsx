@@ -364,6 +364,7 @@ export function Topbar({
   const [runErrorMonitorEnabled, setRunErrorMonitorEnabled] = useState(true);
   const [runAutoOpenPageEnabled, setRunAutoOpenPageEnabled] = useState(true);
   const [rightPanelDefaultPopoverOpen, setRightPanelDefaultPopoverOpen] = useState(false);
+  const [rightPanelDefaultDraftCollapsed, setRightPanelDefaultDraftCollapsed] = useState(false);
   const runLogTailRef = useRef("");
   const runChunkBufferRef = useRef("");
   const idleTimerRef = useRef<number | null>(null);
@@ -995,19 +996,49 @@ export function Topbar({
           <Popover
             trigger={[]}
             open={rightPanelDefaultPopoverOpen}
-            onOpenChange={setRightPanelDefaultPopoverOpen}
+            onOpenChange={(open) => {
+              setRightPanelDefaultPopoverOpen(open);
+              if (open) {
+                setRightPanelDefaultDraftCollapsed(rightPanelDefaultCollapsed);
+              }
+            }}
             placement="bottomRight"
             overlayClassName="app-topbar-right-panel-default-popover"
             content={
               onSetRightPanelDefaultCollapsed ? (
-                <label className="app-topbar-right-panel-default-popover__row">
-                  <span className="app-topbar-right-panel-default-popover__label">启动默认展开</span>
-                  <Switch
-                    size="small"
-                    checked={!rightPanelDefaultCollapsed}
-                    onChange={(checked) => onSetRightPanelDefaultCollapsed(!checked)}
-                  />
-                </label>
+                <div
+                  className="app-topbar-right-panel-default-popover__content"
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <div className="app-topbar-right-panel-default-popover__row">
+                    <span className="app-topbar-right-panel-default-popover__label">启动默认展开</span>
+                    <Switch
+                      size="small"
+                      checked={!rightPanelDefaultDraftCollapsed}
+                      onChange={(expandByDefault) => setRightPanelDefaultDraftCollapsed(!expandByDefault)}
+                    />
+                  </div>
+                  <footer className="app-topbar-right-panel-default-popover__footer">
+                    <button
+                      type="button"
+                      className="app-topbar-right-panel-default-popover__btn app-topbar-right-panel-default-popover__btn--ghost"
+                      onClick={() => setRightPanelDefaultPopoverOpen(false)}
+                    >
+                      关闭
+                    </button>
+                    <button
+                      type="button"
+                      className="app-topbar-right-panel-default-popover__btn app-topbar-right-panel-default-popover__btn--primary"
+                      onClick={() => {
+                        onSetRightPanelDefaultCollapsed(rightPanelDefaultDraftCollapsed);
+                        setRightPanelDefaultPopoverOpen(false);
+                      }}
+                    >
+                      确认
+                    </button>
+                  </footer>
+                </div>
               ) : null
             }
           >
@@ -1024,6 +1055,7 @@ export function Topbar({
                   onSetRightPanelDefaultCollapsed
                     ? (event) => {
                         event.preventDefault();
+                        setRightPanelDefaultDraftCollapsed(rightPanelDefaultCollapsed);
                         setRightPanelDefaultPopoverOpen(true);
                       }
                     : undefined

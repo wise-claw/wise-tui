@@ -292,15 +292,23 @@
 }
 
 .app-topbar-right-panel-default-popover .ant-popover-inner {
-  padding: 6px 8px;
+  padding: 6px 8px 8px;
+}
+
+.app-topbar-right-panel-default-popover__content {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  min-width: 132px;
 }
 
 .app-topbar-right-panel-default-popover__row {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   margin: 0;
-  cursor: pointer;
   white-space: nowrap;
   user-select: none;
 }
@@ -309,6 +317,46 @@
   font-size: 12px;
   line-height: 1;
   color: var(--ant-color-text);
+}
+
+.app-topbar-right-panel-default-popover__footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.app-topbar-right-panel-default-popover__btn {
+  min-height: 24px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.app-topbar-right-panel-default-popover__btn--ghost {
+  background: transparent;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-topbar-right-panel-default-popover__btn--ghost:hover {
+  background: var(--ant-color-fill-secondary);
+  color: var(--ant-color-text);
+}
+
+.app-topbar-right-panel-default-popover__btn--primary {
+  border-color: var(--ant-color-primary);
+  background: var(--ant-color-primary);
+  color: #fff;
+}
+
+.app-topbar-right-panel-default-popover__btn--primary:hover {
+  border-color: var(--ant-color-primary-hover);
+  background: var(--ant-color-primary-hover);
 }
 
 /* ── 统一顶栏图标按钮 ── 与左栏 .app-left-sidebar-topbar-btn 同一套风格 */
