@@ -2132,7 +2132,10 @@ export default function App() {
   };
 
   const workspaceWelcomeFullscreen =
-    activeRepositoryId == null && viewMode.view.kind === "chat";
+    !repositoryListLoading &&
+    projects.length === 0 &&
+    repositories.length === 0 &&
+    viewMode.view.kind === "chat";
 
   return (
     <>
