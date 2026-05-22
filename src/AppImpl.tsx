@@ -87,6 +87,7 @@ import { useScheduledClaudeTaskRunner } from "./hooks/useScheduledClaudeTaskRunn
 import { MONITOR_SESSIONS_SYNC_INTERVAL_MS } from "./constants/monitorUi";
 import { invalidateWorkflowRunCacheForRepository } from "./hooks/useWorkflowRun";
 import { deleteAppSetting, getAppSetting, setAppSetting } from "./services/appSettingsStore";
+import { loadWiseDefaultConfig } from "./services/wiseDefaultConfigStore";
 import { migratePromptContextSessionKey } from "./components/ClaudeChatInput/prompt-context";
 import {
   clampConcurrencyLimit,
@@ -286,6 +287,12 @@ export default function App() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    void loadWiseDefaultConfig().catch(() => {
+      /* 启动时确保默认配置已迁入 app_settings */
+    });
   }, []);
 
   const enterAuthorPane = useCallback(

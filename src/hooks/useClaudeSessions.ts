@@ -29,7 +29,9 @@ import {
 import {
   CLAUDE_CONNECTION_KIND_LABELS,
   loadDefaultClaudeConnectionKind,
+  applyTabConnectionKindOverride,
   normalizeClaudeConnectionKind,
+  resolveSessionConnectionKind,
   sessionUsesStreamingConnection,
   WISE_CLAUDE_CONNECTION_KIND_CHANGED,
   type ClaudeSessionConnectionKind,
@@ -1253,11 +1255,34 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         const data = await loadSessionTabsState();
         if (cancelled) return;
         if (data?.sessions && data.sessions.length > 0) {
-          const normalized = data.sessions.map((s) => ({
-            ...s,
-            status:
-              s.status === "running" || s.status === "connecting" ? ("idle" as const) : s.status,
-          }));
+          const globalDefault = await loadDefaultClaudeConnectionKind();
+          if (!cancelled) defaultConnectionKindRef.current = globalDefault;
+
+          const stripLegacyOverrides = !(await getAppSetting(
+            "wise.defaultConfig.stripTabConnectionOverrides.v1",
+          ))?.trim();
+
+          const normalized = data.sessions.map((s) => {
+            const base = {
+              ...s,
+              status:
+                s.status === "running" || s.status === "connecting" ? ("idle" as const) : s.status,
+            };
+            if (stripLegacyOverrides && base.connectionKind !== undefined) {
+              const { connectionKind: _omit, ...rest } = base;
+              return rest;
+            }
+            if (base.connectionKind === globalDefault) {
+              const { connectionKind: _omit, ...rest } = base;
+              return rest;
+            }
+            return base;
+          });
+
+          if (stripLegacyOverrides) {
+            await setAppSetting("wise.defaultConfig.stripTabConnectionOverrides.v1", "1");
+          }
+
           const modelByPath = await modelsForRepositoryPaths(normalized.map((s) => s.repositoryPath));
           const normalizedWithModels = normalized.map((s) => {
             const cfg = modelByPath.get(s.repositoryPath);
@@ -1650,7 +1675,10 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       if (!session) return;
 
       const next = normalizeClaudeConnectionKind(kind);
-      if (normalizeClaudeConnectionKind(session.connectionKind) === next) {
+      if (
+        resolveSessionConnectionKind(session.connectionKind, defaultConnectionKindRef.current) ===
+        next
+      ) {
         return;
       }
 
@@ -1669,14 +1697,21 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       streamingProcessByTabRef.current.delete(sessionId);
       detachClaudeInvocationsForSessionKey(sessionId);
 
+      const globalDefault = defaultConnectionKindRef.current;
+      const clearingOverride = next === globalDefault && session.connectionKind !== undefined;
+
       setSessions((prev) => {
         const nextSessions = prev.map((s) =>
-          s.id === sessionId ? { ...s, connectionKind: next } : s,
+          s.id === sessionId ? applyTabConnectionKindOverride(s, next, globalDefault) : s,
         );
         sessionsRef.current = nextSessions;
         return nextSessions;
       });
-      message.success(`本标签已切换为：${CLAUDE_CONNECTION_KIND_LABELS[next].title}`);
+      message.success(
+        clearingOverride
+          ? `已恢复跟随全局默认：${CLAUDE_CONNECTION_KIND_LABELS[globalDefault].title}`
+          : `本标签已临时切换为：${CLAUDE_CONNECTION_KIND_LABELS[next].title}`,
+      );
     },
     [detachClaudeInvocationsForSessionKey],
   );
@@ -1689,8 +1724,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       opts?: { skipActivate?: boolean; connectionKind?: ClaudeSessionConnectionKind },
     ) => {
       const id = generateId();
-      const connectionKind =
-        opts?.connectionKind ?? defaultConnectionKindRef.current;
       const newSession: ClaudeSession = {
         id,
         claudeSessionId: null,
@@ -1701,7 +1734,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         messages: [],
         createdAt: Date.now(),
         pendingPrompt: "",
-        connectionKind,
+        ...(opts?.connectionKind ? { connectionKind: opts.connectionKind } : {}),
       };
 
       // 先写入 state/ref，避免 await 读配置阻塞 UI（侧栏切仓库时中间栏会晚出现）。

@@ -1,12 +1,7 @@
 import { message } from "antd";
 import { useCallback, useEffect, useState } from "react";
-import {
-  CLAUDE_CONNECTION_KIND_LABELS,
-  CLAUDE_DEFAULT_CONNECTION_KIND_FALLBACK,
-  loadDefaultClaudeConnectionKind,
-  saveDefaultClaudeConnectionKind,
-  type ClaudeSessionConnectionKind,
-} from "../../constants/claudeConnection";
+import { CLAUDE_CONNECTION_KIND_LABELS, loadDefaultClaudeConnectionKind, saveDefaultClaudeConnectionKind } from "../../constants/claudeConnection";
+import { CLAUDE_DEFAULT_CONNECTION_KIND_FALLBACK, type ClaudeSessionConnectionKind } from "../../services/wiseDefaultConfigStore";
 
 export function useClaudeConnectionModeSetting() {
   const [kind, setKind] = useState<ClaudeSessionConnectionKind>(CLAUDE_DEFAULT_CONNECTION_KIND_FALLBACK);

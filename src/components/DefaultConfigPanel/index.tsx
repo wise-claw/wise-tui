@@ -6,7 +6,7 @@ import { useRightPanelDefaultSetting } from "./useRightPanelDefaultSetting";
 import "./index.css";
 
 const DEFAULT_CONFIG_NOTES = [
-  "设置写入全局数据库，新建标签与下次启动主布局时生效。",
+  "设置写入 SQLite app_settings（wise.defaultConfig.v1），新建标签与下次启动主布局时生效。",
   "长驻模式使用 --input-format stream-json，与终端 CLI 共享 MCP / Skills / Hooks。",
   "OMC 直连批量、PRD 拆分等编排仍使用独立 -p 子进程，不受会话默认影响。",
   "小窗口模式会强制收起右栏，不受右侧面板默认影响。",
@@ -24,7 +24,7 @@ export function DefaultConfigPanel() {
           <div className="app-default-config-row__main">
             <span className="app-default-config-row__title">会话处理方式</span>
             <span className="app-default-config-row__hint">
-              新建标签的连接方式；已打开标签保持创建时设置
+              全局默认逐轮处理；新建标签沿用此项，已打开且单独设置过的标签不变
             </span>
           </div>
           <div className="app-default-config-row__control">
@@ -33,8 +33,8 @@ export function DefaultConfigPanel() {
               disabled={connection.loading || connection.saving}
               value={connection.kind}
               options={[
-                { label: "长驻会话", value: "streaming" },
                 { label: "逐轮处理", value: "oneshot" },
+                { label: "长驻会话", value: "streaming" },
               ]}
               onChange={(value) => {
                 void connection.save(value);

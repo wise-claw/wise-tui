@@ -48,6 +48,7 @@ import { addToHistory, promptLength, navigatePromptHistory, canNavigateHistoryAt
 import { Dropdown, Button, Empty, Input, Popover, Select, Spin, Tabs, Tag, Tooltip, message } from "antd";
 import { ContextCompactProgressRing } from "./ContextCompactProgressRing";
 import { ClaudeConnectionKindChip } from "./ClaudeConnectionKindChip";
+import { useDefaultClaudeConnectionKind } from "../../hooks/useDefaultClaudeConnectionKind";
 import type { MenuProps } from "antd";
 import { logClaudeDrop } from "./drop-debug";
 import { buildClaudeOutgoingPrompt } from "../../services/claudeComposerPrompt";
@@ -401,6 +402,7 @@ function ComposerInner({
     availableModels: string[];
   } | null>(null);
   const [model, setModel] = useState(() => session.model?.trim() || "sonnet");
+  const defaultConnectionKind = useDefaultClaudeConnectionKind();
   const [activeBranch, setActiveBranch] = useState<string>("-");
   const [branchPopoverOpen, setBranchPopoverOpen] = useState(false);
   const [branchActionTab, setBranchActionTab] = useState<"create" | "detached">("create");
@@ -1695,6 +1697,7 @@ function ComposerInner({
         ) : null}
         <ClaudeConnectionKindChip
           connectionKind={session.connectionKind}
+          defaultConnectionKind={defaultConnectionKind}
           disabled={isSessionBusy}
           onConnectionKindChange={onSessionConnectionKindChange}
         />
@@ -1742,6 +1745,7 @@ function ComposerInner({
       isSessionBusy,
       _onCancel,
       session.connectionKind,
+      defaultConnectionKind,
       onSessionConnectionKindChange,
       model,
       modelDisplayLabel,

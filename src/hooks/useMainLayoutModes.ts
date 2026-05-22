@@ -27,8 +27,8 @@ import {
   loadRightPanelDefaultCollapsed,
   saveRightPanelDefaultCollapsed,
   WISE_RIGHT_PANEL_DEFAULT_CHANGED,
-} from "../services/rightPanelDefaultStore";
-import { readRightPanelDefaultCollapsedFromStorage } from "../utils/rightPanelStorage";
+} from "../services/wiseDefaultConfigStore";
+import { RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK } from "../utils/rightPanelStorage";
 
 const COMPACT_LAYOUT_WINDOW_WIDTH_PX = 700;
 const COMPACT_LAYOUT_WINDOW_HEIGHT_PX = 600;
@@ -70,9 +70,9 @@ export function useMainLayoutModes({
   setDualPaneSecondaryRepositoryId,
   setDualPaneSecondarySessionId,
 }: UseMainLayoutModesOptions) {
-  const [rightCollapsed, setRightCollapsed] = useState(() => readRightPanelDefaultCollapsedFromStorage());
-  const [rightPanelDefaultCollapsed, setRightPanelDefaultCollapsed] = useState(() =>
-    readRightPanelDefaultCollapsedFromStorage(),
+  const [rightCollapsed, setRightCollapsed] = useState(RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK);
+  const [rightPanelDefaultCollapsed, setRightPanelDefaultCollapsed] = useState(
+    RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK,
   );
   const [compactLayoutMode, setCompactLayoutMode] = useState(false);
   const compactLayoutSnapshotRef = useRef<{ width: number; height: number } | null>(null);

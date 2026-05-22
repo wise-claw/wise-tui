@@ -1,9 +1,9 @@
 import { message } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import {
-  loadRightPanelDefaultCollapsed,
-  saveRightPanelDefaultCollapsed,
-} from "../../services/rightPanelDefaultStore";
+  loadRightPanelDefaultCollapsedFromStore as loadRightPanelDefaultCollapsed,
+  saveRightPanelDefaultCollapsedToStore as saveRightPanelDefaultCollapsed,
+} from "../../services/wiseDefaultConfigStore";
 
 export function useRightPanelDefaultSetting() {
   const [collapsed, setCollapsed] = useState(false);
