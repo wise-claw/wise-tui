@@ -49,7 +49,7 @@ export function useSplitRuntimePanel({
       {
         id: `${now}-boot`,
         role: "system",
-        text: `${title}：开始准备 PRD、Workspace 与 Trellis 父任务。`,
+        text: `${title}：开始读取需求并准备任务草案。`,
         at: now,
         scope: "main",
         agentName: "主会话",

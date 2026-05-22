@@ -188,7 +188,7 @@
 
 .app-prd-task-panel__mission-strip {
   display: grid;
-  grid-template-columns: minmax(220px, 1.2fr) minmax(260px, 1fr) minmax(300px, 1.3fr);
+  grid-template-columns: minmax(220px, 1.15fr) minmax(260px, 1fr) minmax(260px, 0.95fr);
   align-items: center;
   gap: 12px;
   width: 100%;
@@ -275,7 +275,7 @@
 
 .app-prd-task-panel__mission-stages {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 4px;
   min-width: 0;
   margin: 0;
@@ -322,6 +322,30 @@
   overflow: hidden;
   width: 100%;
   margin: 0 !important;
+}
+
+.app-prd-task-panel__columns.app-prd-task-panel__columns--writing .app-prd-task-panel__col--requirements.ant-col-12 {
+  flex: 0 0 68%;
+  max-width: 68%;
+  width: 68%;
+}
+
+.app-prd-task-panel__columns.app-prd-task-panel__columns--writing .app-prd-task-panel__col--tasks.ant-col-12 {
+  flex: 0 0 32%;
+  max-width: 32%;
+  width: 32%;
+}
+
+.app-prd-task-panel__columns.app-prd-task-panel__columns--has-task-flow .app-prd-task-panel__col--requirements.ant-col-12 {
+  flex: 0 0 38%;
+  max-width: 38%;
+  width: 38%;
+}
+
+.app-prd-task-panel__columns.app-prd-task-panel__columns--has-task-flow .app-prd-task-panel__col--tasks.ant-col-12 {
+  flex: 0 0 62%;
+  max-width: 62%;
+  width: 62%;
 }
 
 .app-prd-task-panel__col {
@@ -2629,13 +2653,16 @@
 }
 
 .app-prd-task-panel__task-list-empty {
-  min-height: 160px;
+  min-height: 220px;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 18px;
   border: 1px dashed var(--ant-color-border-secondary);
   border-radius: 8px;
   background: var(--ant-color-bg-container);
+  text-align: center;
+  line-height: 1.5;
 }
 
 .app-prd-task-panel__task-card-summary {
@@ -4169,6 +4196,27 @@
 }
 
 @media (max-width: 1200px) {
+  .app-prd-task-panel__mission-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .app-prd-task-panel__columns.app-prd-task-panel__columns--writing .app-prd-task-panel__col--requirements.ant-col-12,
+  .app-prd-task-panel__columns.app-prd-task-panel__columns--writing .app-prd-task-panel__col--tasks.ant-col-12,
+  .app-prd-task-panel__columns.app-prd-task-panel__columns--has-task-flow .app-prd-task-panel__col--requirements.ant-col-12,
+  .app-prd-task-panel__columns.app-prd-task-panel__columns--has-task-flow .app-prd-task-panel__col--tasks.ant-col-12 {
+    flex: 0 0 100%;
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .app-prd-task-panel__columns {
+    overflow-y: auto;
+  }
+
+  .app-prd-task-panel__columns--task-focus .app-prd-task-panel__col--requirements.ant-col-12 {
+    display: none;
+  }
+
   .app-prd-task-panel__deepen-layout > .ant-col {
     max-width: 100%;
     flex: 0 0 100%;

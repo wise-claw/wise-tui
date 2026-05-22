@@ -136,7 +136,7 @@ export interface GenerateExecutableTasksResult extends ExecutionFanoutSnapshot {
 }
 
 export interface RequirementAssistantStageItem {
-  key: "intake" | "plan" | "review" | "dispatch" | "done";
+  key: "write" | "draft" | "review" | "execute";
   label: string;
   status: "waiting" | "active" | "done";
 }
@@ -214,20 +214,19 @@ function buildRequirementAssistantStageItems(input: {
   materialized: boolean;
 }): RequirementAssistantStageItem[] {
   const activeKey: RequirementAssistantStageItem["key"] = input.parsing
-    ? "dispatch"
+    ? "draft"
     : input.materialized
-      ? "done"
+      ? "execute"
       : input.hasResult
         ? "review"
         : input.hasInput
-          ? "plan"
-          : "intake";
+          ? "draft"
+          : "write";
   const order: Array<Pick<RequirementAssistantStageItem, "key" | "label">> = [
-    { key: "intake", label: "收集" },
-    { key: "plan", label: "规划" },
-    { key: "review", label: "审查" },
-    { key: "dispatch", label: "派发" },
-    { key: "done", label: "落盘" },
+    { key: "write", label: "写需求" },
+    { key: "draft", label: "生成草案" },
+    { key: "review", label: "复核任务" },
+    { key: "execute", label: "开始执行" },
   ];
   const activeIndex = order.findIndex((item) => item.key === activeKey);
   return order.map((item, index) => ({
@@ -258,10 +257,10 @@ function buildTrellisTargetSummary(
     : target.repositories.find((repository) => repository.id === target.defaultExecutionRepositoryId) ?? null;
   const repositoryLabel = activeRepo?.name ?? fallbackRepo?.name ?? "待选择执行仓库";
   return {
-    title: target.kind === "workspace" ? `Workspace：${target.displayName}` : `游离仓库：${target.displayName}`,
+    title: target.kind === "workspace" ? `工作区：${target.displayName}` : `仓库：${target.displayName}`,
     subtitle: target.kind === "workspace"
-      ? ".trellis 归属 Workspace，成员仓库只作为执行目标"
-      : "该仓库路径同时作为 Trellis 根与执行目标",
+      ? "任务会按当前工作区生成，并派到成员仓库执行"
+      : "任务会在当前仓库内生成并执行",
     rootPath: target.rootPath,
     repositoryCount: target.repositories.length,
     activeRepositoryLabel: repositoryLabel,
@@ -492,13 +491,13 @@ export function usePrdTaskSplitPanelController({
               : "重试结束但未产出可用任务，请展开分组查看详情。",
             {
               scope: "subagent",
-              agentName: "trellis-splitter",
+              agentName: "任务生成器",
               clusterId: payload.clusterId,
               title: payload.clusterId,
               status: payload.status,
               details: compactRuntimeDetails([
-                { label: "runDir", value: runDir },
-                { label: "duration", value: formatDurationMs(payload.durationMs) },
+                { label: "运行目录", value: runDir },
+                { label: "耗时", value: formatDurationMs(payload.durationMs) },
               ]),
             },
           );
@@ -507,7 +506,7 @@ export function usePrdTaskSplitPanelController({
           const msg = err instanceof Error ? err.message : String(err);
           appendSplitRuntimeLogRef.current("error", `重试结果回流失败：${msg}`, {
             scope: "subagent",
-            agentName: "trellis-splitter",
+            agentName: "任务生成器",
             clusterId: payload.clusterId,
             title: payload.clusterId,
             status: "failed",
@@ -1062,7 +1061,7 @@ export function usePrdTaskSplitPanelController({
 
   useEffect(() => {
     if (!activeRequirementId) return;
-	    setRequirementHistory((prev) => prev.map((item) => {
+    setRequirementHistory((prev) => prev.map((item) => {
       if (item.id !== activeRequirementId) return item;
       const name = requirementDisplayName?.trim() || item.requirementDisplayName;
       return {
@@ -1186,80 +1185,80 @@ export function usePrdTaskSplitPanelController({
         doc = normalizePrdDocument(effectiveMeta);
       }
       setSplitError(null);
-      resetSplitRuntimePanel("主编辑器拆分", { inModal: splitRuntimeInModal });
+      resetSplitRuntimePanel("生成任务草案", { inModal: splitRuntimeInModal });
 
       const splitContext = buildPolicyAwareContext();
       logSplitInputPrepareBundle(doc, splitContext, "主编辑器 · 拆分");
       try {
         const rootPath = trellisTarget?.rootPath.trim();
         if (!trellisTarget || !targetProject || !rootPath) {
-          throw new Error(trellisTargetError ?? "当前需求助手必须关联到 Workspace 或游离仓库，才能派发 trellis-splitter。");
+          throw new Error(trellisTargetError ?? "当前需求助手必须先关联到工作区或仓库。");
         }
         const prdMarkdown = splitSourceInput.trim() || prdDocumentToSplitMarkdown(doc);
-	        const planResult = await requirementMission.plan(prdMarkdown);
-	        if (!planResult.ok) {
-	          throw new Error(planResult.reason);
-	        }
-	        const plannedState = requirementMission.api.state;
-	        setPlannedMissionSummary(planResult.summary);
-	        setActiveResult(null);
-	        setSplitQualitySummary(null);
-	        setMaterializedExecutionResult(null);
-	        setExecutionFanoutSnapshot(null);
-	        appendSplitRuntimeLog(
-	          "system",
-	          "完成需求索引与 cluster 规划，当前仍在 sandbox 预览，尚未写入 .trellis/tasks。",
-	          {
-	            scope: "main",
-	            agentName: "主会话",
-	            status: "succeeded",
-	            title: "规划完成",
-	            details: compactRuntimeDetails([
-	              { label: "clusters", value: String(plannedState.plan?.clusters.length ?? 0) },
-	              { label: "requirements", value: String(plannedState.requirementsIndex?.requirements.length ?? 0) },
-	              { label: "workspace", value: rootPath },
+        const planResult = await requirementMission.plan(prdMarkdown);
+        if (!planResult.ok) {
+          throw new Error(planResult.reason);
+        }
+        const plannedState = requirementMission.api.state;
+        setPlannedMissionSummary(planResult.summary);
+        setActiveResult(null);
+        setSplitQualitySummary(null);
+        setMaterializedExecutionResult(null);
+        setExecutionFanoutSnapshot(null);
+        appendSplitRuntimeLog(
+          "system",
+          "已读完需求并完成任务草案规划，等待你确认后再生成任务文件。",
+          {
+            scope: "main",
+            agentName: "主会话",
+              status: "succeeded",
+              title: "规划完成",
+              details: compactRuntimeDetails([
+                { label: "需求分组", value: String(plannedState.plan?.clusters.length ?? 0) },
+                { label: "需求条目", value: String(plannedState.requirementsIndex?.requirements.length ?? 0) },
+                { label: "工作目录", value: rootPath },
+              ]),
+            },
+          );
+        for (const [index, cluster] of (plannedState.plan?.clusters ?? []).entries()) {
+          appendSplitRuntimeLog(
+            "assistant",
+            index === 0
+              ? "任务草案计划已生成，等待开始生成具体任务。"
+              : `第 ${index + 1} 组需求已进入任务草案计划。`,
+            {
+              scope: "subagent",
+              agentName: "任务生成器",
+              clusterId: cluster.id,
+              title: cluster.title,
+              status: "queued",
+              details: compactRuntimeDetails([
+                { label: "需求条目", value: cluster.requirementIds.join(", ") },
+              ]),
+            },
+          );
+        }
+        appendSplitRuntimeLog(
+          "system",
+          `已规划 ${planResult.summary.clusters.length} 个需求分组，请在右侧生成任务草案。`,
+          {
+            scope: "main",
+            agentName: "主会话",
+            status: "succeeded",
+            title: "草案计划就绪",
+            details: compactRuntimeDetails([
+              { label: "需求分组", value: String(planResult.summary.clusters.length) },
             ]),
           },
         );
-        for (const [index, cluster] of (plannedState.plan?.clusters ?? []).entries()) {
-          appendSplitRuntimeLog(
-	            "assistant",
-	            index === 0
-	              ? "分片计划已生成，等待用户显式派发 trellis-splitter。"
-	              : `分片 ${index + 1} 已进入计划，等待显式派发。`,
-	            {
-	              scope: "subagent",
-	              agentName: "trellis-splitter",
-	              clusterId: cluster.id,
-	              title: cluster.title,
-              status: "queued",
-              details: compactRuntimeDetails([
-                { label: "requirements", value: cluster.requirementIds.join(", ") },
-	              ]),
-	            },
-	          );
-	        }
-	        appendSplitRuntimeLog(
-	          "system",
-	          `已规划 ${planResult.summary.clusters.length} 个 cluster，请在右侧确认后派发 trellis-splitter。`,
-	          {
-	            scope: "main",
-	            agentName: "主会话",
-	            status: "succeeded",
-	            title: "sandbox 就绪",
-	            details: compactRuntimeDetails([
-	              { label: "clusters", value: String(planResult.summary.clusters.length) },
-	            ]),
-	          },
-	        );
-	        message.success(`已完成 sandbox 规划：${planResult.summary.clusters.length} 个 cluster`);
-	        if (splitRuntimeInModal) {
-	          setSplitWizardStep("runtime");
-	        } else {
-	          setSplitRuntimeVisible(true);
-	        }
+        message.success(`已生成任务草案计划：${planResult.summary.clusters.length} 个需求分组`);
+        if (splitRuntimeInModal) {
+          setSplitWizardStep("runtime");
+        } else {
+          setSplitRuntimeVisible(true);
+        }
       } catch (e) {
-        const msg = toErrorMessage(e, "trellis-splitter 执行失败");
+        const msg = toErrorMessage(e, "生成任务草案失败");
         appendSplitRuntimeLog(
           "error",
           msg,
@@ -1422,29 +1421,29 @@ export function usePrdTaskSplitPanelController({
     appendSplitRuntimeLog(
       ok ? "assistant" : "error",
       ok
-        ? `Claude Code 已返回并通过 strict 校验，产出 ${taskCount} 个任务。`
-        : `Claude Code 未完成有效拆分：${run.errors.join("\n") || run.progress?.error?.summary || "未知错误"}`,
+        ? `任务草案已生成并通过校验，产出 ${taskCount} 个任务。`
+        : `任务草案生成失败：${run.errors.join("\n") || run.progress?.error?.summary || "未知错误"}`,
       {
         scope: "subagent",
-        agentName: "trellis-splitter",
+        agentName: "任务生成器",
         clusterId: run.clusterId,
         title: requirementMission.state.plan?.clusters.find((cluster) => cluster.id === run.clusterId)?.title ?? run.clusterId,
         status,
         details: compactRuntimeDetails([
-          { label: "taskCount", value: String(taskCount) },
+          { label: "任务数", value: String(taskCount) },
           run.normalized?.splitTasks.length
-            ? { label: "taskTitles", value: run.normalized.splitTasks.map((task) => task.title).join("\n") }
+            ? { label: "任务标题", value: run.normalized.splitTasks.map((task) => task.title).join("\n") }
             : null,
-          { label: "duration", value: formatDurationMs((run.endedAt ?? 0) - (run.startedAt ?? 0)) },
-          run.parentTaskPath ? { label: "parentTask", value: run.parentTaskPath } : null,
-          run.parentTaskName ? { label: "parentName", value: run.parentTaskName } : null,
-          run.raw?.claudeSessionId ? { label: "session", value: run.raw.claudeSessionId } : null,
-          run.raw?.runDir ? { label: "runDir", value: run.raw.runDir } : null,
-          run.raw?.stdoutPath ? { label: "stdout", value: run.raw.stdoutPath } : null,
-          run.raw?.stderrPath ? { label: "stderr", value: run.raw.stderrPath } : null,
-          run.raw?.rawResultPath ? { label: "rawResult", value: run.raw.rawResultPath } : null,
+          { label: "耗时", value: formatDurationMs((run.endedAt ?? 0) - (run.startedAt ?? 0)) },
+          run.parentTaskPath ? { label: "任务集合", value: run.parentTaskPath } : null,
+          run.parentTaskName ? { label: "任务集合名称", value: run.parentTaskName } : null,
+          run.raw?.claudeSessionId ? { label: "会话", value: run.raw.claudeSessionId } : null,
+          run.raw?.runDir ? { label: "运行目录", value: run.raw.runDir } : null,
+          run.raw?.stdoutPath ? { label: "标准输出", value: run.raw.stdoutPath } : null,
+          run.raw?.stderrPath ? { label: "错误输出", value: run.raw.stderrPath } : null,
+          run.raw?.rawResultPath ? { label: "原始结果", value: run.raw.rawResultPath } : null,
           run.validationIssues?.length
-            ? { label: "validationIssues", value: run.validationIssues.slice(0, 8).map((issue) => `${issue.path}：${issue.message}`).join("\n") }
+            ? { label: "校验问题", value: run.validationIssues.slice(0, 8).map((issue) => `${issue.path}：${issue.message}`).join("\n") }
             : null,
         ]),
       },
@@ -1458,20 +1457,20 @@ export function usePrdTaskSplitPanelController({
       setSplitRuntimeVisible(true);
       appendSplitRuntimeLog(
         "system",
-        "开始显式派发 trellis-splitter；此步骤会创建或复用 Trellis 父任务。",
+        "开始生成任务草案。系统会在后台准备运行记录，完成后回到任务复核区。",
         {
           scope: "main",
           agentName: "主会话",
           status: "running",
-          title: "派发开始",
+          title: "生成开始",
           details: compactRuntimeDetails([
-            { label: "clusters", value: String(plannedMissionSummary.clusters.length) },
+            { label: "需求分组", value: String(plannedMissionSummary.clusters.length) },
           ]),
         },
       );
       const out = await requirementMission.dispatchClusters();
       if (!out) {
-        throw new Error("trellis-splitter 未产出有效拆分结果。");
+        throw new Error("未产出有效任务草案。");
       }
       for (const run of out.allClusterRuns) {
         appendClusterRunLog(run);
@@ -1484,37 +1483,37 @@ export function usePrdTaskSplitPanelController({
       setSelectedTaskId(nextResult.splitTasks[0]?.id ?? null);
       appendSplitRuntimeLog(
         "system",
-        "主会话已开始收集子代理返回，准备做需求溯源与锚点定位。",
+        "主会话已开始汇总任务草案，准备做需求溯源与锚点定位。",
         {
           scope: "main",
           agentName: "主会话",
           status: "running",
-          title: "阶段 2",
+          title: "整理任务",
         },
       );
       appendSplitRuntimeLog(
         "system",
-        `拆分结果已保存，右侧任务列表已刷新（共 ${nextResult.splitTasks.length} 个任务）。`,
+        `任务草案已保存，右侧任务列表已刷新（共 ${nextResult.splitTasks.length} 个任务）。`,
         {
           scope: "main",
           agentName: "主会话",
           status: "succeeded",
           title: "拆分完成",
           details: compactRuntimeDetails([
-            { label: "tasks", value: String(nextResult.splitTasks.length) },
+            { label: "任务数", value: String(nextResult.splitTasks.length) },
           ]),
         },
       );
-      message.success(`需求拆分完成：${nextResult.splitTasks.length} 个任务`);
+      message.success(`任务草案已生成：${nextResult.splitTasks.length} 个任务`);
     } catch (err) {
-      const msg = toErrorMessage(err, "trellis-splitter 执行失败");
+      const msg = toErrorMessage(err, "生成任务草案失败");
       appendSplitRuntimeLog("error", msg, {
         scope: "main",
         agentName: "主会话",
         status: "failed",
-        title: "派发未完成",
+        title: "生成未完成",
       });
-      message.warning(`子代理派发：${msg}`);
+      message.warning(`任务草案生成：${msg}`);
     } finally {
       setParsing(false);
     }
@@ -2103,12 +2102,12 @@ export function usePrdTaskSplitPanelController({
       return;
     }
     const migrated = migrateStoredSplitResult(stored);
-	    if (isStoredSplitResultStale(requirementId, migrated)) {
-	      resetRequirementTaskView();
-	      return;
-	    }
-	    setPlannedMissionSummary(null);
-	    setActiveResult(migrated);
+      if (isStoredSplitResultStale(requirementId, migrated)) {
+        resetRequirementTaskView();
+        return;
+      }
+      setPlannedMissionSummary(null);
+      setActiveResult(migrated);
     setTaskConfirmFilter(defaultTaskConfirmFilterByTasks(migrated.splitTasks));
     setSelectedTaskId(migrated.splitTasks[0]?.id ?? null);
     setSelectedAnchorTaskId(null);
@@ -2770,12 +2769,12 @@ export function usePrdTaskSplitPanelController({
         doneCount: 0,
         failedCount: 0,
         waves: [],
-        message: "任务已落盘，准备派发实现子代理。",
+        message: "任务文件已生成，准备按执行计划开始处理。",
       };
       setExecutionFanoutSnapshot(initialSnapshot);
       const materialized = await requirementMission.materializeReviewedTasks(sourceTasks.map((task) => task.id));
       if (!materialized) {
-        throw new Error("没有可落盘的 Mission 写入结果。");
+        throw new Error("没有可生成的任务文件。");
       }
       setMaterializedExecutionResult(materialized);
       const finalSnapshot = buildMissionExecutionSnapshot(activeResult, sourceTasks, materialized);
@@ -2785,9 +2784,9 @@ export function usePrdTaskSplitPanelController({
         materializedResult: materialized,
       };
       if (materialized.failedCount > 0) {
-        message.error(`已落盘并派发：成功 ${result.doneCount}，失败 ${materialized.failedCount}。`);
+        message.error(`开始执行：成功 ${result.doneCount}，失败 ${materialized.failedCount}。`);
       } else {
-        message.success(`已落盘并完成执行 fan-out：${result.doneCount} 个子任务。`);
+        message.success(`已开始执行：${result.doneCount} 个任务。`);
       }
       return result;
     } catch (err) {
@@ -2803,7 +2802,7 @@ export function usePrdTaskSplitPanelController({
           waves: [],
           message: msg,
         });
-      message.error(`落盘执行失败：${msg}`);
+      message.error(`开始执行失败：${msg}`);
       return false;
     }
   }
@@ -2844,8 +2843,8 @@ export function usePrdTaskSplitPanelController({
       failedCount: materialized.failedCount,
       waves,
       message: materialized.failedCount > 0
-        ? "Trellis 任务已部分落盘，部分分组派发失败。"
-        : "Trellis 任务已落盘并完成实现子代理派发。",
+        ? "部分任务已生成，但有任务启动失败。"
+        : "任务已生成并开始执行。",
     };
   }
 
@@ -2919,7 +2918,7 @@ export function usePrdTaskSplitPanelController({
       await materializeMissionReviewedTasks([task]);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      message.error(`落盘执行失败：${msg}`);
+      message.error(`开始执行失败：${msg}`);
     } finally {
       setGeneratingExecutableTaskId(null);
     }

@@ -1,3 +1,8 @@
+/* ═══════════════════════════════════════════════
+   Trellis Workspace Design Enhancements
+   Visual Flowchart Pipeline Canvas Styles
+   ═══════════════════════════════════════════════ */
+
 .project-trellis-center {
   min-width: 0;
   color: var(--mission-text);
@@ -7,62 +12,79 @@
   min-width: 0;
 }
 
+/* Sleek top status toolbar */
 .project-trellis-center__toolbar {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   min-width: 0;
-  margin-bottom: 8px;
+  margin-bottom: 16px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--mission-surface-soft) 40%, transparent);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--mission-border);
 }
 
 .project-trellis-center__root {
   max-width: min(560px, 52vw);
   overflow: hidden;
-  color: var(--mission-dim);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--mission-muted);
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
+  opacity: 0.85;
 }
 
+/* Beautiful custom Tabs navigation */
 .project-trellis-center__tabs .ant-tabs-nav {
-  margin-bottom: 10px;
+  margin-bottom: 16px !important;
+  border-bottom: 1px solid var(--mission-border) !important;
+}
+
+.project-trellis-center__tabs .ant-tabs-tab {
+  font-weight: 500;
+  font-size: 13px;
+  padding: 10px 16px !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.project-trellis-center__tabs .ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: var(--mission-accent) !important;
+  text-shadow: 0 0 10px var(--mission-accent-glow);
 }
 
 .project-trellis-center__root-alert {
-  margin-bottom: 8px;
+  margin-bottom: 12px;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
 }
 
 .project-trellis-center__root-alert.ant-alert {
   align-items: flex-start;
-  padding: 6px 10px;
+  padding: 10px 14px;
 }
 
 .project-trellis-center__root-alert .ant-alert-icon {
-  margin-top: 1px;
-  font-size: 14px;
-  line-height: 1.2;
-}
-
-.project-trellis-center__root-alert .ant-alert-content {
-  min-width: 0;
+  margin-top: 2px;
+  font-size: 15px;
 }
 
 .project-trellis-center__root-alert .ant-alert-message {
-  margin-bottom: 2px;
+  margin-bottom: 3px;
   font-size: 12px;
   font-weight: 600;
-  line-height: 1.35;
 }
 
 .project-trellis-center__root-alert .ant-alert-description {
   font-size: 11px;
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
 .project-trellis-center__loading,
 .project-trellis-center__empty {
-  padding: 28px;
+  padding: 36px;
   text-align: center;
 }
 
@@ -71,11 +93,14 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
 .project-trellis-panel-head .ant-typography {
   margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
 }
 
 .project-trellis-spec,
@@ -84,15 +109,15 @@
 .project-trellis-center__runtime {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .project-trellis-spec__body {
   display: grid;
-  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  gap: 14px;
   align-items: stretch;
-  min-height: min(650px, calc(100vh - 260px));
+  min-height: min(680px, calc(100vh - 250px));
 }
 
 .project-trellis-spec__tree,
@@ -103,14 +128,20 @@
 .project-trellis-runtime__checks,
 .project-trellis-runtime__event-list {
   border: 1px solid var(--mission-border);
-  border-radius: 8px;
+  border-radius: 12px;
   background: var(--mission-surface);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .project-trellis-spec__tree {
   min-height: 0;
-  padding: 8px;
+  padding: 12px;
   overflow: auto;
+}
+
+.project-trellis-spec__tree:hover {
+  border-color: var(--mission-border-strong);
 }
 
 .project-trellis-spec__tree .ant-tree {
@@ -120,28 +151,34 @@
 
 .project-trellis-spec__tree .ant-tree-treenode {
   width: 100%;
-  min-height: 28px;
-  padding: 0 0 3px;
+  min-height: 30px;
+  padding: 0 0 4px;
 }
 
 .project-trellis-spec__tree .ant-tree-node-content-wrapper {
   min-width: 0;
   flex: 1 1 auto;
-  padding: 2px 6px;
+  padding: 3px 8px;
   overflow: hidden;
   border-radius: 6px;
+  transition: all 0.2s ease;
 }
 
-.project-trellis-spec__tree .ant-tree-title {
-  display: block;
-  min-width: 0;
+.project-trellis-spec__tree .ant-tree-node-content-wrapper:hover {
+  background: var(--mission-surface-soft) !important;
+}
+
+.project-trellis-spec__tree .ant-tree-node-selected {
+  background: color-mix(in srgb, var(--mission-accent) 10%, transparent) !important;
+  color: var(--mission-accent) !important;
+  font-weight: 500;
 }
 
 .project-trellis-spec__tree .ant-tree-switcher {
   flex: 0 0 20px;
   width: 20px;
   align-self: flex-start;
-  line-height: 28px;
+  line-height: 30px;
 }
 
 .project-trellis-spec-tree-node {
@@ -150,14 +187,19 @@
   min-width: 0;
   width: 100%;
   height: 24px;
-  gap: 7px;
+  gap: 8px;
   overflow: hidden;
 }
 
 .project-trellis-spec-tree-node > .anticon {
   flex: 0 0 auto;
   color: var(--mission-dim);
-  font-size: 13px;
+  font-size: 14px;
+  transition: color 0.2s ease;
+}
+
+.ant-tree-node-selected .project-trellis-spec-tree-node > .anticon {
+  color: var(--mission-accent);
 }
 
 .project-trellis-spec-tree-node__name {
@@ -168,6 +210,31 @@
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.project-trellis-spec__sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.project-trellis-spec__tree-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.project-trellis-spec__tree-actions .ant-btn:first-child {
+  flex: 1 1 auto;
+}
+
+.project-trellis-spec__tree-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 8px;
+  overflow: auto;
+  border: 1px solid var(--mission-border);
+  border-radius: 8px;
 }
 
 .project-trellis-spec__editor {
@@ -182,12 +249,12 @@
 .project-trellis-spec__editor-head {
   display: flex;
   flex: 0 0 auto;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 9px 10px;
+  gap: 12px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--mission-border);
-  background: var(--mission-surface-soft);
+  background: linear-gradient(180deg, var(--mission-surface) 0%, var(--mission-surface-soft) 100%);
 }
 
 .project-trellis-spec__editor-head > div {
@@ -200,21 +267,126 @@
 .project-trellis-spec__editor-head .ant-typography {
   margin: 0;
   overflow: hidden;
-  font-size: 12px;
+  font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.project-trellis-spec__editor-head .ant-typography-secondary {
+  font-size: 11px;
+}
+
+.project-trellis-spec__editor-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.project-trellis-spec__editor-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.project-trellis-spec__editor-divider {
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: var(--mission-border);
+}
+
+.project-trellis-spec__diff-container {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  min-height: 0;
+  padding: 12px;
+  overflow-y: auto;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.project-trellis-spec__diff-column {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.project-trellis-spec__diff-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  border-radius: 6px 6px 0 0;
+  background: #1e293b;
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.project-trellis-spec__diff-head .ant-tag {
+  margin: 0;
+  font-size: 9px;
+}
+
+.project-trellis-spec__diff-head .ant-tag-default {
+  border-color: #334155;
+  background: #1e293b;
+  color: #94a3b8;
+}
+
+.project-trellis-spec__diff-content {
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border-left: 3px solid #64748b;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+}
+
+.project-trellis-spec__diff-content--base {
+  border-left-color: #ef4444;
+  background: rgba(239, 68, 68, 0.05);
+}
+
+.project-trellis-spec__diff-content--draft {
+  border-left-color: #10b981;
+  background: rgba(16, 185, 129, 0.05);
+}
+
+.project-trellis-spec__editor-container {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.project-trellis-spec__markdown-toolbar-groups {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Monospace Markdown editor with subtle terminal background */
 .project-trellis-spec__markdown-editor.ant-input {
   flex: 1 1 auto;
   min-height: 0;
   border: 0;
   border-radius: 0;
-  background: color-mix(in srgb, var(--mission-surface) 96%, var(--mission-accent) 4%);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 12px;
-  line-height: 1.58;
+  background: rgba(15, 23, 42, 0.015);
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.6;
+  padding: 16px;
   resize: none;
+  transition: background 0.3s ease;
+}
+
+.project-trellis-spec__markdown-editor.ant-input:focus {
+  background: rgba(15, 23, 42, 0.035);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mission-accent) 15%, transparent);
 }
 
 .project-trellis-spec__footer {
@@ -222,302 +394,865 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 8px 10px;
+  padding: 10px 16px;
   border: 1px solid var(--mission-border);
-  border-radius: 8px;
+  border-radius: 12px;
   background: var(--mission-surface);
 }
 
 .project-trellis-workflow__graph {
   display: flex;
   flex-direction: column;
-  min-height: min(720px, calc(100vh - 190px));
+  min-height: min(840px, calc(100vh - 180px));
   padding: 0;
   overflow: hidden;
 }
 
+/* Beautiful mesh graph flowchart canvas background with multi-colored gentle ambient glow pools */
 .project-trellis-flow {
   display: flex;
   flex: 1 1 auto;
   min-width: 0;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px;
-  overflow-x: hidden;
+  gap: 16px;
+  padding: 16px;
+  overflow-x: auto;
   overflow-y: auto;
-  background:
-    linear-gradient(var(--mission-surface-soft), var(--mission-surface-soft)) padding-box,
-    radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--mission-text) 14%, transparent) 1px, transparent 0) border-box;
-  background-size: auto, 18px 18px;
+  background-color: #f8fafc;
+  background-image:
+    radial-gradient(circle at 15% 20%, rgba(59, 130, 246, 0.05), transparent 30%),
+    radial-gradient(circle at 50% 60%, rgba(139, 92, 246, 0.05), transparent 30%),
+    radial-gradient(circle at 85% 80%, rgba(16, 185, 129, 0.05), transparent 30%),
+    radial-gradient(#cbd5e1 1.2px, transparent 1.2px);
+  background-size: 100% 100%, 100% 100%, 100% 100%, 18px 18px;
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.02);
+  border-bottom: 1px solid var(--mission-border);
+  position: relative;
 }
 
 .project-trellis-flow__phasebar {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 16px;
   width: 100%;
-  min-width: 0;
+  margin-bottom: 4px;
 }
 
+/* Premium Phase header cards */
 .project-trellis-flow-phase {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
-  padding: 8px 10px;
-  border: 1px solid var(--mission-border);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--mission-surface) 92%, var(--mission-accent) 8%);
+  padding: 10px 16px;
+  border: 1px solid rgba(226, 232, 240, 0.6);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
   color: var(--mission-text);
   font-size: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.015);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.project-trellis-flow-phase:nth-child(1):hover {
+  border-color: rgba(59, 130, 246, 0.4);
+  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.06);
+  transform: translateY(-1px);
+}
+
+.project-trellis-flow-phase:nth-child(2):hover {
+  border-color: rgba(139, 92, 246, 0.4);
+  box-shadow: 0 6px 16px rgba(139, 92, 246, 0.06);
+  transform: translateY(-1px);
+}
+
+.project-trellis-flow-phase:nth-child(3):hover {
+  border-color: rgba(16, 185, 129, 0.4);
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.06);
+  transform: translateY(-1px);
 }
 
 .project-trellis-flow-phase strong {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .project-trellis-flow-phase span {
   flex: 0 0 auto;
-  color: var(--mission-dim);
-  font-size: 11px;
+  color: var(--mission-accent);
+  background: color-mix(in srgb, var(--mission-accent) 6%, transparent);
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 6px;
 }
 
-.project-trellis-flow-lane {
+.project-trellis-flow-phase span:last-child {
+  color: var(--mission-muted);
+  background: #f1f5f9;
+}
+
+/* 3-Column flowchart grid */
+.project-trellis-flow__columns {
+  display: flex;
+  flex-direction: row;
+  gap: 16px;
+  align-items: stretch;
   width: 100%;
-  min-width: 0;
-  padding: 10px;
-  border: 1px solid color-mix(in srgb, var(--mission-border) 82%, var(--mission-accent) 18%);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--mission-surface) 90%, transparent);
 }
 
-.project-trellis-flow-lane__head {
+/* Flowchart Swimlanes styled as floating blueprint modules */
+.project-trellis-flow-column {
+  position: relative;
+  flex: 1 1 0%;
+  min-width: 170px;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.5);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 20px -5px rgba(0, 0, 0, 0.015);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.project-trellis-flow-column--boot {
+  background: linear-gradient(180deg, rgba(59, 130, 246, 0.02), rgba(59, 130, 246, 0.005));
+}
+.project-trellis-flow-column--dispatch {
+  background: linear-gradient(180deg, rgba(139, 92, 246, 0.02), rgba(139, 92, 246, 0.005));
+}
+.project-trellis-flow-column--finish {
+  background: linear-gradient(180deg, rgba(16, 185, 129, 0.02), rgba(16, 185, 129, 0.005));
+}
+
+.project-trellis-flow-column--boot:hover {
+  border-color: rgba(59, 130, 246, 0.2);
+  box-shadow: 0 10px 30px rgba(59, 130, 246, 0.03);
+}
+.project-trellis-flow-column--dispatch:hover {
+  border-color: rgba(139, 92, 246, 0.2);
+  box-shadow: 0 10px 30px rgba(139, 92, 246, 0.03);
+}
+.project-trellis-flow-column--finish:hover {
+  border-color: rgba(16, 185, 129, 0.2);
+  box-shadow: 0 10px 30px rgba(16, 185, 129, 0.03);
+}
+
+.project-trellis-flow-column__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   min-height: 22px;
-  margin-bottom: 8px;
+  margin-bottom: 16px;
+  padding-left: 10px;
+  border-left: 3px solid var(--mission-accent);
 }
 
-.project-trellis-flow-lane__head .ant-typography {
+/* Distinct color accents for each lane function */
+.project-trellis-flow-column--boot .project-trellis-flow-column__head {
+  border-left-color: #3b82f6; /* Blue for bootstrap */
+}
+.project-trellis-flow-column--dispatch .project-trellis-flow-column__head {
+  border-left-color: #8b5cf6; /* Purple for context/dispatch */
+}
+.project-trellis-flow-column--finish .project-trellis-flow-column__head {
+  border-left-color: #10b981; /* Emerald for finish/archive */
+}
+
+.project-trellis-flow-column__head .ant-typography {
   margin: 0;
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  color: var(--mission-text);
 }
 
-.project-trellis-flow-lane__track {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+/* Column track stacking flowchart cards vertically */
+.project-trellis-flow-column__track {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  align-items: stretch;
+  position: relative;
+  z-index: 1;
+}
+
+/* Visual vertical connecting pipeline line */
+.project-trellis-flow-column__track::before {
+  content: "";
+  position: absolute;
+  top: 26px;
+  bottom: 26px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1px;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+.project-trellis-flow-column--boot .project-trellis-flow-column__track::before {
+  background: repeating-linear-gradient(to bottom, transparent, transparent 3px, #cbd5e1 3px, #cbd5e1 6px);
+}
+.project-trellis-flow-column--dispatch .project-trellis-flow-column__track::before {
+  background: repeating-linear-gradient(to bottom, transparent, transparent 3px, #cbd5e1 3px, #cbd5e1 6px);
+}
+.project-trellis-flow-column--finish .project-trellis-flow-column__track::before {
+  background: repeating-linear-gradient(to bottom, transparent, transparent 3px, #cbd5e1 3px, #cbd5e1 6px);
+}
+
+.project-trellis-flow-node-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  position: relative;
+  z-index: 1;
+}
+
+/* Premium styled vertical connecting flowchart arrows matching stage themes */
+.project-trellis-flow-vertical-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  color: #cbd5e1;
+  z-index: 1;
+  pointer-events: none;
+  transition: all 0.25s ease;
+}
+
+.project-trellis-flow-vertical-arrow svg {
+  width: 12px;
+  height: 18px;
+}
+
+.project-trellis-flow-column--boot:hover .project-trellis-flow-vertical-arrow {
+  color: #3b82f6;
+  filter: drop-shadow(0 0 3px rgba(59, 130, 246, 0.4));
+}
+.project-trellis-flow-column--dispatch:hover .project-trellis-flow-vertical-arrow {
+  color: #8b5cf6;
+  filter: drop-shadow(0 0 3px rgba(139, 92, 246, 0.4));
+}
+.project-trellis-flow-column--finish:hover .project-trellis-flow-vertical-arrow {
+  color: #10b981;
+  filter: drop-shadow(0 0 3px rgba(16, 185, 129, 0.4));
+}
+
+/* Sleek horizontal column connecting bridges */
+.project-trellis-flow-bridge-arrow {
+  position: absolute;
+  right: -12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #64748b;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 50%;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.04);
+  pointer-events: none;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.project-trellis-flow-bridge-arrow svg {
+  width: 14px;
+  height: 14px;
+}
+
+.project-trellis-flow-column--boot:hover .project-trellis-flow-bridge-arrow {
+  border-color: #3b82f6;
+  color: #3b82f6;
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.3);
+  transform: translateY(-50%) scale(1.1);
+}
+
+.project-trellis-flow-column--dispatch:hover .project-trellis-flow-bridge-arrow {
+  border-color: #8b5cf6;
+  color: #8b5cf6;
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.3);
+  transform: translateY(-50%) scale(1.1);
+}
+
+/* Custom Visual Flowchart Node - Highly Polished Rounded Rectangles */
+.project-trellis-flow-node {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  max-width: 220px;
+  height: 52px;
+  margin: 6px auto;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--mission-text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02), 0 4px 12px rgba(0, 0, 0, 0.01);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 2;
+}
+
+/* Left Indicator Stripe based on stage function */
+.project-trellis-flow-column--boot .project-trellis-flow-node {
+  border-left: 4px solid #3b82f6;
+}
+.project-trellis-flow-column--dispatch .project-trellis-flow-node {
+  border-left: 4px solid #8b5cf6;
+}
+.project-trellis-flow-column--finish .project-trellis-flow-node {
+  border-left: 4px solid #10b981;
+}
+
+/* Hover dynamic scaling and elevation */
+.project-trellis-flow-node:hover {
+  transform: translateY(-2px) scale(1.02);
+  border-color: rgba(203, 213, 225, 0.8);
+}
+
+/* Selected outline glow matching stage theme colors */
+.project-trellis-flow-column--boot .project-trellis-flow-node--selected {
+  border-color: #3b82f6;
+  background: linear-gradient(to right, rgba(59, 130, 246, 0.02), #ffffff);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.15), 0 8px 24px rgba(59, 130, 246, 0.08);
+}
+.project-trellis-flow-column--dispatch .project-trellis-flow-node--selected {
+  border-color: #8b5cf6;
+  background: linear-gradient(to right, rgba(139, 92, 246, 0.02), #ffffff);
+  box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.15), 0 8px 24px rgba(139, 92, 246, 0.08);
+}
+.project-trellis-flow-column--finish .project-trellis-flow-node--selected {
+  border-color: #10b981;
+  background: linear-gradient(to right, rgba(16, 185, 129, 0.02), #ffffff);
+  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.15), 0 8px 24px rgba(16, 185, 129, 0.08);
+}
+
+/* Inner elements */
+.project-trellis-flow-node__inner {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  height: 100%;
+  padding: 0 12px;
   gap: 10px;
+  min-width: 0;
+}
+
+/* High-tech Gradient Badges inside node card */
+.project-trellis-flow-node__icon-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.project-trellis-flow-node__icon {
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #475569;
+}
+
+/* 1. Circle shape container (Endpoints) */
+.project-trellis-flow-node__icon-container--circle {
+  border-radius: 50%;
+  background: linear-gradient(135deg, #eff6ff, #dbeafe);
+  border: 1px solid #bfdbfe;
+}
+.project-trellis-flow-node__icon-container--circle .project-trellis-flow-node__icon {
+  color: #2563eb;
+}
+
+.project-trellis-flow-node__icon-container--circle-end {
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ecfdf5, #d1fae5);
+  border: 1px solid #a7f3d0;
+}
+.project-trellis-flow-node__icon-container--circle-end .project-trellis-flow-node__icon {
+  color: #059669;
+}
+
+/* 2. Diamond shape container (Decisions / Verification) */
+.project-trellis-flow-node__icon-container--diamond {
+  transform: rotate(45deg);
+  border-radius: 4px;
+  background: linear-gradient(135deg, #fffbeb, #fef3c7);
+  border: 1px solid #fde047;
+  width: 24px;
+  height: 24px;
+}
+
+.project-trellis-flow-node__icon-container--diamond .project-trellis-flow-node__icon {
+  transform: rotate(-45deg);
+  color: #d97706;
+  font-size: 13px;
+}
+
+/* 3. Hexagon shape container (Hooks / Interception) */
+.project-trellis-flow-node__icon-container--hexagon {
+  clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+  background: linear-gradient(135deg, #faf5ff, #ede9fe);
+  border: 1px solid #ddd6fe;
+  width: 32px;
+  height: 32px;
+  border-radius: 0;
+}
+.project-trellis-flow-node__icon-container--hexagon .project-trellis-flow-node__icon {
+  color: #7c3aed;
+}
+
+/* 4. Cylinder Database Shape container */
+.project-trellis-flow-node__icon-container--data {
+  border-radius: 8px;
+  background: linear-gradient(135deg, #f5f3ff, #e0e7ff);
+  border: 1px solid #c7d2fe;
+}
+.project-trellis-flow-node__icon-container--data .project-trellis-flow-node__icon {
+  color: #4f46e5;
+}
+
+/* 5. Process Capsule container */
+.project-trellis-flow-node__icon-container--capsule {
+  border-radius: 8px;
+  background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+  border: 1px solid #cbd5e1;
+}
+
+.project-trellis-flow-node__content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.project-trellis-flow-node__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-trellis-flow-node__detail {
+  font-size: 9.5px;
+  color: #64748b;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+
+/* Glowing magnetic socket indicators on nodes */
+.project-trellis-flow-node__socket {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 6px;
+  height: 6px;
+  background: #ffffff;
+  border: 2px solid #cbd5e1;
+  border-radius: 50%;
+  z-index: 10;
+  opacity: 0.9;
+  transition: all 0.3s ease;
+}
+
+.project-trellis-flow-node__socket--top {
+  top: -4px;
+}
+
+.project-trellis-flow-node__socket--bottom {
+  bottom: -4px;
+}
+
+.project-trellis-flow-column--boot .project-trellis-flow-node--selected .project-trellis-flow-node__socket {
+  border-color: #3b82f6;
+  box-shadow: 0 0 6px #3b82f6;
+}
+.project-trellis-flow-column--dispatch .project-trellis-flow-node--selected .project-trellis-flow-node__socket {
+  border-color: #8b5cf6;
+  box-shadow: 0 0 6px #8b5cf6;
+}
+.project-trellis-flow-column--finish .project-trellis-flow-node--selected .project-trellis-flow-node__socket {
+  border-color: #10b981;
+  box-shadow: 0 0 6px #10b981;
+}
+
+/* Active Node Styling - Pulsing glowing border */
+.project-trellis-flow-node--active {
+  border-color: #8b5cf6 !important;
+  animation: node-pulse-border 2s infinite ease-in-out;
+}
+
+@keyframes node-pulse-border {
+  0% {
+    box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.2), 0 2px 4px rgba(0, 0, 0, 0.02), 0 0 8px rgba(139, 92, 246, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.15), 0 6px 16px rgba(139, 92, 246, 0.06), 0 0 16px rgba(139, 92, 246, 0.4);
+    transform: translateY(-1px) scale(1.01);
+  }
+  100% {
+    box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.2), 0 2px 4px rgba(0, 0, 0, 0.02), 0 0 8px rgba(139, 92, 246, 0.2);
+  }
+}
+
+/* Active beacon dot indicator on the right with a ping wave */
+.project-trellis-flow-node__beacon {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #8b5cf6;
+  flex: 0 0 auto;
+  box-shadow: 0 0 8px #8b5cf6;
+  position: relative;
+}
+
+.project-trellis-flow-node__beacon::after {
+  content: "";
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  right: -4px;
+  bottom: -4px;
+  border-radius: 50%;
+  border: 2px solid #8b5cf6;
+  opacity: 0;
+  animation: beacon-ping 1.5s infinite ease-out;
+}
+
+@keyframes beacon-ping {
+  0% { transform: scale(0.6); opacity: 1; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+/* Side-by-Side Graph Canvas & Inspector Layout */
+.project-trellis-workflow__graph-layout {
+  display: grid;
+  grid-template-columns: 1.15fr 320px;
+  gap: 16px;
+  min-height: min(840px, calc(100vh - 180px));
   align-items: stretch;
 }
 
-.project-trellis-flow-lane__step {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 24px;
-  gap: 6px;
-  align-items: center;
+.project-trellis-workflow__graph-canvas {
+  flex: 1 1 auto;
   min-width: 0;
-}
-
-.project-trellis-flow-lane__step:last-child {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.project-trellis-flow-card {
-  display: flex;
-  min-width: 0;
-  min-height: 172px;
-  flex-direction: column;
-  gap: 7px;
-  padding: 10px;
+  overflow: auto;
+  border-radius: 12px;
   border: 1px solid var(--mission-border);
-  border-radius: 8px;
+  background: var(--mission-surface-soft);
+}
+
+.project-trellis-workflow__inspector-panel {
+  flex: 0 0 320px;
+  border-radius: 12px;
+  border: 1px solid var(--mission-border);
   background: var(--mission-surface);
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+  overflow: hidden;
 }
 
-.project-trellis-flow-card--active {
-  border-color: var(--mission-accent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--mission-accent) 30%, transparent);
-}
-
-.project-trellis-flow-card__top {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 6px;
-  align-items: flex-start;
-}
-
-.project-trellis-flow-card__top > div {
+/* Gorgeous Visual Inspector Panel */
+.project-trellis-inspector {
   display: flex;
-  min-width: 0;
   flex-direction: column;
-  gap: 2px;
+  height: 100%;
+  padding: 18px 16px;
+  gap: 14px;
+  box-sizing: border-box;
 }
 
-.project-trellis-flow-card__top .ant-typography {
-  margin: 0;
-  overflow: hidden;
-  color: var(--mission-text);
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.project-trellis-inspector__head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.project-trellis-flow-card__top span {
-  overflow: hidden;
-  color: var(--mission-dim);
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.project-trellis-flow-card__desc.ant-typography {
-  min-height: 42px;
-  margin: 0;
-  color: var(--mission-text);
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.project-trellis-flow-card__status {
+.project-trellis-inspector__title-row {
   display: flex;
   align-items: center;
-  min-height: 24px;
-  padding: 4px 7px;
-  border-radius: 6px;
-  background: var(--mission-surface-soft);
-  color: var(--mission-dim);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  gap: 10px;
+}
+
+.project-trellis-inspector__icon {
+  font-size: 20px;
+  color: var(--mission-accent);
+  background: color-mix(in srgb, var(--mission-accent) 8%, transparent);
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--mission-accent) 15%, transparent);
+}
+
+.project-trellis-inspector__title {
+  color: var(--mission-text) !important;
+  font-weight: 700 !important;
+}
+
+.project-trellis-inspector__subtitle {
   font-size: 11px;
+  color: var(--mission-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-.project-trellis-flow-card__status span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.project-trellis-flow-card__files {
+.project-trellis-inspector__badges {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin-top: auto;
+  gap: 6px;
 }
 
-.project-trellis-flow-card__files .ant-tag {
-  max-width: 100%;
-  margin-inline-end: 0;
-  overflow: hidden;
-  font-size: 10px;
-  text-overflow: ellipsis;
+.project-trellis-inspector__badges .ant-tag {
+  font-size: 9.5px;
+  font-weight: 600;
+  border-radius: 5px;
+  padding: 1px 6px;
 }
 
-.project-trellis-flow-arrow {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border: 1px solid var(--mission-border);
-  border-radius: 50%;
-  background: var(--mission-surface);
-  color: var(--mission-accent);
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.project-trellis-flow-connector {
-  display: grid;
-  place-items: center;
+.project-trellis-inspector__divider {
+  height: 1px;
+  background: var(--mission-border);
   width: 100%;
-  min-width: 0;
-  height: 28px;
 }
 
-.project-trellis-flow-connector span {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
+.project-trellis-inspector__section {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.project-trellis-inspector__section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--mission-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.project-trellis-inspector__desc.ant-typography {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--mission-text);
+  margin: 0;
+  background: var(--mission-surface-soft);
+  padding: 10px 12px;
+  border-radius: 8px;
   border: 1px solid var(--mission-border);
-  border-radius: 50%;
-  background: var(--mission-surface);
-  color: var(--mission-accent);
-  font-size: 16px;
-  font-weight: 700;
-  line-height: 1;
 }
 
-.project-trellis-workflow__platforms {
+.project-trellis-inspector__terminal {
+  background: #0f172a !important;
+  border-radius: 8px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.project-trellis-inspector__terminal-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.project-trellis-inspector__terminal-prompt {
+  color: var(--mission-accent);
+  user-select: none;
+  font-weight: bold;
+}
+
+.project-trellis-inspector__terminal-val {
+  color: #38bdf8;
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+
+.project-trellis-inspector__files {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 130px;
+  overflow-y: auto;
+}
+
+.project-trellis-inspector-file-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px;
+  background: var(--mission-surface-soft);
+  border: 1px solid var(--mission-border);
+  padding: 6px 10px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.project-trellis-inspector-file-row:hover {
+  background: var(--mission-surface);
+  border-color: color-mix(in srgb, var(--mission-accent) 25%, transparent);
+}
+
+.project-trellis-inspector-file-row__icon {
+  font-size: 12px;
+  color: var(--mission-dim);
+}
+
+.project-trellis-inspector-file-row__name {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10.5px;
+  color: var(--mission-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1 1 auto;
+}
+
+.project-trellis-inspector__actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 16px;
+}
+
+/* UI platform and alert styling adjustments */
+.project-trellis-workflow__platforms {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+}
+
+.project-trellis-workflow__platforms .ant-typography {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.project-trellis-workflow__alert {
+  margin-bottom: 8px;
+  border-radius: 8px;
 }
 
 .project-trellis-workflow__path {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 11px;
+  padding: 0 4px;
 }
 
+/* Premium Telemetry Overview hero board */
 .project-trellis-runtime__hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 16px;
+  gap: 20px;
   align-items: center;
-  padding: 16px;
+  padding: 20px 24px;
+  background: linear-gradient(135deg, var(--mission-surface), var(--mission-surface-soft));
 }
 
 .project-trellis-runtime__hero .ant-typography {
   margin: 0;
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .project-trellis-runtime__hero .ant-typography-secondary {
   display: block;
-  margin-top: 4px;
+  margin-top: 6px;
   max-width: 640px;
   font-size: 12px;
-  line-height: 1.55;
+  line-height: 1.6;
+}
+
+.project-trellis-runtime__hero-copy {
+  min-width: 0;
 }
 
 .project-trellis-runtime__metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  gap: 12px;
 }
 
+/* Beautiful telemetry KPI cards */
 .project-trellis-runtime-metric {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 4px 8px;
+  gap: 4px 12px;
   align-items: center;
-  padding: 10px;
+  padding: 14px 16px;
   border: 1px solid var(--mission-border);
-  border-radius: 8px;
+  border-radius: 12px;
   background: var(--mission-surface);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.01);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.project-trellis-runtime-metric:hover {
+  transform: translateY(-2px);
+  border-color: var(--mission-accent);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--mission-accent) 10%, transparent);
 }
 
 .project-trellis-runtime-metric > span {
   grid-row: 1 / span 2;
   color: var(--mission-accent);
-  font-size: 18px;
+  font-size: 20px;
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--mission-accent) 8%, transparent);
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--mission-accent) 15%, transparent);
+  transition: all 0.3s ease;
+}
+
+.project-trellis-runtime-metric:hover > span {
+  background: var(--mission-accent);
+  color: #fff;
+  border-color: var(--mission-accent);
+  box-shadow: 0 0 10px var(--mission-accent-glow);
 }
 
 .project-trellis-runtime-metric small {
   color: var(--mission-muted);
   font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
 }
 
 .project-trellis-runtime-metric strong {
   overflow: hidden;
   color: var(--mission-text);
-  font-size: 15px;
+  font-size: 16px;
+  font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -525,22 +1260,32 @@
 .project-trellis-runtime__checks {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  padding: 10px;
+  gap: 10px;
+  padding: 14px;
 }
 
+/* Beautiful Health Check telemetry rows */
 .project-trellis-runtime-check {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 8px;
-  align-items: flex-start;
-  padding: 9px;
-  border-radius: 7px;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 16px;
+  border-radius: 10px;
   background: var(--mission-surface-soft);
+  border: 1px solid var(--mission-border);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.01);
+  transition: all 0.25s ease;
+}
+
+.project-trellis-runtime-check:hover {
+  background: var(--mission-surface);
+  border-color: var(--mission-border-strong);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.03);
 }
 
 .project-trellis-runtime-check > .anticon {
-  margin-top: 2px;
+  font-size: 16px;
   color: var(--mission-success);
 }
 
@@ -551,44 +1296,128 @@
 .project-trellis-runtime-check .ant-typography {
   display: block;
   margin: 0;
-  font-size: 12px;
-  line-height: 1.35;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.project-trellis-runtime-check .ant-typography-secondary {
+  font-size: 11px;
+  font-weight: 400;
+  margin-top: 2px;
+}
+
+.project-trellis-runtime-check .ant-tag {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 6px;
+  margin-inline-end: 0;
 }
 
 .project-trellis-runtime__event-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px;
+  gap: 8px;
+  padding: 12px;
 }
 
+/* High-tech execution event logger rows */
 .project-trellis-runtime-event {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 8px;
-  align-items: flex-start;
-  padding: 8px;
-  border-radius: 7px;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: 8px;
   background: var(--mission-surface-soft);
+  border: 1px solid var(--mission-border);
+  transition: all 0.2s ease;
+}
+
+.project-trellis-runtime-event:hover {
+  background: var(--mission-surface);
+  border-color: var(--mission-border-strong);
 }
 
 .project-trellis-runtime-event > .anticon {
-  margin-top: 2px;
+  font-size: 16px;
   color: var(--mission-accent);
+  background: color-mix(in srgb, var(--mission-accent) 8%, transparent);
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
 }
 
 .project-trellis-runtime-event .ant-typography {
   display: block;
   margin: 0;
   font-size: 12px;
+  font-weight: 600;
 }
 
-@media (max-width: 1200px) {
+.project-trellis-runtime-event .ant-typography-secondary {
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+/* Responsive flow layout for smaller screens */
+@media (max-width: 1100px) {
+  .project-trellis-workflow__graph-layout {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  .project-trellis-workflow__inspector-panel {
+    flex: 1 1 auto;
+    width: 100%;
+    margin-top: 12px;
+  }
+}
+
+@media (max-width: 960px) {
+  .project-trellis-flow__phasebar {
+    grid-template-columns: 1fr;
+    min-width: 100%;
+    gap: 12px;
+  }
+  .project-trellis-flow__columns {
+    flex-direction: column;
+    gap: 36px;
+    min-width: 100%;
+  }
+  .project-trellis-flow-column {
+    min-width: 100%;
+  }
+  .project-trellis-flow-bridge-arrow {
+    right: auto;
+    left: 50%;
+    bottom: -28px;
+    top: auto;
+    transform: translateX(-50%) rotate(90deg);
+    animation: bridge-glow-vertical 2s infinite alternate ease-in-out;
+  }
+
+  @keyframes bridge-glow-vertical {
+    0% {
+      transform: translateX(-50%) rotate(90deg) scale(1);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04), 0 0 3px var(--mission-accent-glow);
+    }
+    100% {
+      transform: translateX(-50%) rotate(90deg) scale(1.1);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12), 0 0 8px var(--mission-accent);
+    }
+  }
 }
 
 @media (max-width: 800px) {
   .project-trellis-center__toolbar {
     justify-content: flex-start;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
   }
   .project-trellis-center__root {
     max-width: 100%;
@@ -597,13 +1426,523 @@
     grid-template-columns: 1fr;
   }
   .project-trellis-spec__tree {
-    height: 220px;
+    height: 240px;
   }
   .project-trellis-spec__editor {
-    height: 460px;
+    height: 480px;
   }
   .project-trellis-spec__footer {
     align-items: flex-start;
     flex-direction: column;
+    gap: 12px;
   }
+  .project-trellis-runtime__metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .project-trellis-runtime__checks {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ═══════════════════════════════════════════════
+   Trellis Spec & Diagnostics Premium Overhaul Styles
+   ═══════════════════════════════════════════════ */
+
+/* 1. Spec Tree Node Label Tags & Custom Icons */
+.project-trellis-spec-tree-node__folder-icon {
+  color: #f59e0b !important; /* Golden Warm Amber folder */
+  filter: drop-shadow(0 2px 4px rgba(245, 158, 11, 0.15));
+}
+
+.project-trellis-spec-tree-node__file-icon {
+  color: #0ea5e9 !important; /* Cyber bright blue markdown file */
+  filter: drop-shadow(0 2px 4px rgba(14, 165, 233, 0.15));
+}
+
+.project-trellis-spec-tree-node__tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 4px;
+  line-height: 1;
+  margin-left: auto;
+  margin-right: 4px;
+  letter-spacing: 0.2px;
+  user-select: none;
+}
+
+.project-trellis-spec-tree-node__tag--index {
+  background: rgba(245, 158, 11, 0.08);
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.project-trellis-spec-tree-node__tag--guidelines {
+  background: rgba(6, 182, 212, 0.08);
+  color: #0891b2;
+  border: 1px solid rgba(6, 182, 212, 0.2);
+}
+
+.project-trellis-spec-tree-node__tag--guide {
+  background: rgba(139, 92, 246, 0.08);
+  color: #7c3aed;
+  border: 1px solid rgba(139, 92, 246, 0.2);
+}
+
+.project-trellis-spec-tree-node__tag--template {
+  background: rgba(249, 115, 22, 0.08);
+  color: #ea580c;
+  border: 1px solid rgba(249, 115, 22, 0.2);
+}
+
+/* Selected tree node glow */
+.project-trellis-spec__tree .ant-tree-node-selected {
+  position: relative;
+  box-shadow: 0 0 12px rgba(14, 165, 233, 0.08);
+}
+.project-trellis-spec__tree .ant-tree-node-selected::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  background: var(--mission-accent);
+  border-radius: 0 4px 4px 0;
+}
+
+/* 2. Spec Mode Toggle segmented button */
+.project-trellis-spec__mode-toggle {
+  display: inline-flex;
+  background: var(--mission-surface-soft);
+  border: 1px solid var(--mission-border);
+  padding: 2px;
+  border-radius: 8px;
+  gap: 1px;
+}
+
+.project-trellis-spec__mode-toggle .ant-btn {
+  border: 0 !important;
+  box-shadow: none !important;
+  height: 24px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 6px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.project-trellis-spec__mode-toggle .ant-btn-primary {
+  background: var(--mission-surface) !important;
+  color: var(--mission-accent) !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06) !important;
+  border: 1px solid var(--mission-border) !important;
+}
+
+/* 3. Markdown Formatting Toolbar */
+.project-trellis-spec__editor-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.project-trellis-spec__markdown-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  background: linear-gradient(180deg, var(--mission-surface) 0%, var(--mission-surface-soft) 100%);
+  border-bottom: 1px solid var(--mission-border);
+}
+
+.project-trellis-spec__markdown-toolbar .ant-btn-text {
+  color: var(--mission-muted);
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.project-trellis-spec__markdown-toolbar .ant-btn-text:hover {
+  background: var(--mission-surface-soft) !important;
+  color: var(--mission-accent) !important;
+  transform: scale(1.05);
+}
+
+.project-trellis-spec__toolbar-divider {
+  width: 1px;
+  height: 14px;
+  background: var(--mission-border);
+  margin: 0 6px;
+}
+
+/* 4. Markdown AI Copilot pulsing status bar */
+.project-trellis-spec__ai-copilot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--mission-accent) 4%, transparent), transparent);
+  border-top: 1px solid var(--mission-border);
+  user-select: none;
+}
+
+.project-trellis-spec__ai-copilot-pulse {
+  width: 6px;
+  height: 6px;
+  background: var(--mission-accent);
+  border-radius: 50%;
+  position: relative;
+}
+
+.project-trellis-spec__ai-copilot-pulse::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  left: -3px;
+  right: -3px;
+  bottom: -3px;
+  border-radius: 50%;
+  border: 1px solid var(--mission-accent);
+  opacity: 0;
+  animation: beacon-ping 1.8s infinite ease-out;
+}
+
+.project-trellis-spec__ai-copilot-text {
+  font-size: 11px;
+  color: var(--mission-muted);
+}
+
+.project-trellis-spec__ai-copilot-text strong {
+  color: var(--mission-text);
+}
+
+/* 5. GFM Preview Container and Render styling */
+.project-trellis-spec__preview-container {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 24px 32px;
+  background: #ffffff;
+  min-height: 0;
+}
+
+.project-trellis-spec__preview-render {
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: #334155;
+  max-width: 820px;
+  margin: 0 auto;
+}
+
+.project-trellis-spec__preview-render h1 {
+  font-size: 22px;
+  font-weight: 700;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 8px;
+  margin-top: 0;
+  margin-bottom: 16px;
+  color: #0f172a;
+}
+
+.project-trellis-spec__preview-render h2 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-top: 24px;
+  margin-bottom: 12px;
+  color: #1e293b;
+}
+
+.project-trellis-spec__preview-render h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-top: 18px;
+  margin-bottom: 8px;
+  color: #334155;
+}
+
+.project-trellis-spec__preview-render blockquote {
+  border-left: 4px solid var(--mission-accent);
+  background: #f8fafc;
+  padding: 10px 16px;
+  margin: 16px 0;
+  border-radius: 0 8px 8px 0;
+  color: #475569;
+  font-style: italic;
+}
+
+.project-trellis-spec__preview-render table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+  font-size: 12.5px;
+}
+
+.project-trellis-spec__preview-render th {
+  background: #f1f5f9;
+  font-weight: 600;
+  text-align: left;
+  border: 1px solid #e2e8f0;
+  padding: 8px 12px;
+}
+
+.project-trellis-spec__preview-render td {
+  border: 1px solid #e2e8f0;
+  padding: 8px 12px;
+}
+
+.project-trellis-spec__preview-render tr:nth-child(even) {
+  background: #f8fafc;
+}
+
+/* 6. Runtime Diagnostics Overhaul Styles */
+.project-trellis-runtime-metric__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.project-trellis-runtime__checks-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.project-trellis-runtime__section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--mission-text);
+  letter-spacing: 0.3px;
+  padding: 0 4px;
+  margin-top: 8px;
+}
+
+/* Custom individual health check card styling */
+.project-trellis-runtime-check {
+  padding: 12px 16px;
+  align-items: center;
+}
+
+.project-trellis-runtime-check__icon-wrap {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--mission-surface);
+  border: 1px solid var(--mission-border);
+  transition: all 0.25s ease;
+}
+
+/* Colors for specific health check icons */
+.project-trellis-check-icon--dir { color: #f59e0b; }
+.project-trellis-check-icon--code { color: #3b82f6; }
+.project-trellis-check-icon--workflow { color: #8b5cf6; }
+.project-trellis-check-icon--spec { color: #06b6d4; }
+.project-trellis-check-icon--identity { color: #ec4899; }
+.project-trellis-check-icon--codex { color: #f97316; }
+.project-trellis-check-icon--claude { color: #10b981; }
+.project-trellis-check-icon--workspace { color: #6366f1; }
+
+/* Neon border pings for health status */
+.project-trellis-runtime-check--pass {
+  border-color: rgba(16, 185, 129, 0.15) !important;
+  background: linear-gradient(90deg, rgba(16, 185, 129, 0.015) 0%, var(--mission-surface-soft) 100%) !important;
+}
+
+.project-trellis-runtime-check--pass:hover {
+  border-color: rgba(16, 185, 129, 0.4) !important;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.05) !important;
+}
+
+.project-trellis-runtime-check--fail {
+  border-color: rgba(239, 68, 68, 0.15) !important;
+  background: linear-gradient(90deg, rgba(239, 68, 68, 0.015) 0%, var(--mission-surface-soft) 100%) !important;
+  animation: check-fail-wobble 4s infinite ease-in-out;
+}
+
+.project-trellis-runtime-check--fail:hover {
+  border-color: rgba(239, 68, 68, 0.4) !important;
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.05) !important;
+}
+
+@keyframes check-fail-wobble {
+  0%, 100% { transform: translateX(0); }
+  95% { transform: translateX(0); }
+  96% { transform: translateX(-2px); }
+  97% { transform: translateX(2px); }
+  98% { transform: translateX(-1px); }
+  99% { transform: translateX(1px); }
+}
+
+.project-trellis-runtime-check__content {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 4px;
+}
+
+.project-trellis-runtime-check__status {
+  margin-inline-end: 0 !important;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 5px;
+}
+
+.project-trellis-runtime-check__status--pass {
+  background: rgba(16, 185, 129, 0.08) !important;
+  color: #10b981 !important;
+  border: 1px solid rgba(16, 185, 129, 0.2) !important;
+}
+
+.project-trellis-runtime-check__status--fail {
+  background: rgba(239, 68, 68, 0.08) !important;
+  color: #ef4444 !important;
+  border: 1px solid rgba(239, 68, 68, 0.2) !important;
+}
+
+/* 7. Permanent Telemetry Console Pane */
+.project-trellis-runtime__telemetry-pane {
+  border: 1px solid var(--mission-border);
+  border-radius: 12px;
+  background: #0f172a; /* Dark terminal backdrop */
+  box-shadow: 0 8px 32px rgba(15, 23, 42, 0.15);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  margin-top: 16px;
+}
+
+.project-trellis-runtime__telemetry-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: #1e293b;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.project-trellis-runtime__telemetry-title {
+  display: flex;
+  align-items: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.project-trellis-runtime__telemetry-status-dot {
+  width: 6px;
+  height: 6px;
+  background: #10b981;
+  border-radius: 50%;
+  box-shadow: 0 0 8px #10b981;
+}
+
+.project-trellis-runtime__telemetry-empty {
+  padding: 32px;
+  text-align: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.project-trellis-runtime__telemetry-terminal {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  font-size: 11.5px;
+}
+
+.project-trellis-runtime__telemetry-terminal::-webkit-scrollbar {
+  width: 6px;
+}
+
+.project-trellis-runtime__telemetry-terminal::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+.project-trellis-runtime__telemetry-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  line-height: 1.5;
+  color: #94a3b8;
+  padding: 2px 0;
+}
+
+.project-trellis-runtime__telemetry-time {
+  color: #64748b;
+  user-select: none;
+}
+
+.project-trellis-runtime__telemetry-kind {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  line-height: 1;
+  letter-spacing: 0.3px;
+}
+
+.project-trellis-runtime__telemetry-kind--agent {
+  background: rgba(139, 92, 246, 0.15);
+  color: #a78bfa;
+}
+
+.project-trellis-runtime__telemetry-kind--task {
+  background: rgba(59, 130, 246, 0.15);
+  color: #93c5fd;
+}
+
+.project-trellis-runtime__telemetry-kind--hook {
+  background: rgba(244, 63, 94, 0.15);
+  color: #fda4af;
+}
+
+.project-trellis-runtime__telemetry-kind--spec {
+  background: rgba(6, 182, 212, 0.15);
+  color: #67e8f9;
+}
+
+.project-trellis-runtime__telemetry-kind--default {
+  background: rgba(148, 163, 184, 0.15);
+  color: #cbd5e1;
+}
+
+.project-trellis-runtime__telemetry-msg {
+  color: #cbd5e1;
+}
+
+.project-trellis-runtime__telemetry-actor {
+  color: #38bdf8;
+  font-weight: 500;
+}
+
+.project-trellis-runtime__telemetry-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 9.5px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #1e293b;
+  color: #94a3b8;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }

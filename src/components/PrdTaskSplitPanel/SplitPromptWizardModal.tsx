@@ -179,20 +179,20 @@ export function SplitPromptWizardModal({
             <div className="app-prd-task-panel__split-runtime-head">
               <Space size={8} align="center" className="app-prd-task-panel__split-runtime-head-title">
                 <Typography.Text type="secondary">
-                  第 2 步：主会话派发子代理，点击子代理可查看对话流；失败项可重试对应阶段。
+                  第 2 步：主会话生成任务草案；失败项可展开详情并重试。
                 </Typography.Text>
                 {parsing ? <Spin size="small" aria-label="拆分进行中" /> : null}
               </Space>
             </div>
-	            <SplitRuntimeMessages
-	              logs={runtimeLogs}
-	              clusterRuns={clusterRuns}
-	              listRef={runtimeListRef}
-	              retryingPhase={retryingPhase}
-	              onRetryStage={onRetryStage}
-	              onRetryCluster={onRetryCluster}
-	              onCancelCluster={onCancelCluster}
-	            />
+            <SplitRuntimeMessages
+              logs={runtimeLogs}
+              clusterRuns={clusterRuns}
+              listRef={runtimeListRef}
+              retryingPhase={retryingPhase}
+              onRetryStage={onRetryStage}
+              onRetryCluster={onRetryCluster}
+              onCancelCluster={onCancelCluster}
+            />
           </div>
         )}
     </Modal>

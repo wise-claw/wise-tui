@@ -42,7 +42,7 @@ export function ExecutionOrchestrationPanel({
       <aside className="app-prd-task-panel__orchestration-requirements-panel">
         <div className="app-prd-task-panel__orchestration-panel-head">
           <strong>需求上下文</strong>
-          <span>PRD → Tasks</span>
+          <span>需求 → 任务</span>
         </div>
         <div className="app-prd-task-panel__orchestration-requirement-list">
           {model.requirements.map((requirement) => (
@@ -71,7 +71,7 @@ export function ExecutionOrchestrationPanel({
         <div className="app-prd-task-panel__orchestration-board-head">
           <div>
             <strong>编排确认 · 执行波次</strong>
-            <span>拖拽任务到目标波次；卡片展示需求来源、子代理与依赖，文件触点缺失时不占用主信息位。</span>
+            <span>拖拽任务调整执行批次；卡片展示需求来源、依赖和目标仓库。</span>
           </div>
           <div className="app-prd-task-panel__orchestration-board-actions">
             <SummaryPill icon={<DeploymentUnitOutlined />} text={`${model.tasks.length} 任务`} />
@@ -104,8 +104,8 @@ export function ExecutionOrchestrationPanel({
 
       <aside className="app-prd-task-panel__orchestration-dispatch">
         <div className="app-prd-task-panel__orchestration-dispatch-head">
-          <strong>派发状态监控</strong>
-          <span>{model.conflictWarnings.length > 0 ? `${model.conflictWarnings.length} 个冲突` : "等待派发"}</span>
+          <strong>执行预览</strong>
+          <span>{model.conflictWarnings.length > 0 ? `${model.conflictWarnings.length} 个冲突` : "等待开始"}</span>
         </div>
         {model.conflictWarnings.length > 0 ? (
           <div className="app-prd-task-panel__orchestration-conflict-list">
@@ -304,7 +304,7 @@ function DispatchWave({
     <article className="app-prd-task-panel__orchestration-wave">
       <div className="app-prd-task-panel__orchestration-wave-head">
         <strong>{waveTitle(index)}</strong>
-        <span>{group.tasks.length > 1 ? `${group.tasks.length} 个并行子代理` : "串行收口节点"}</span>
+        <span>{group.tasks.length > 1 ? `${group.tasks.length} 个任务并行` : "串行收口节点"}</span>
       </div>
       <div className="app-prd-task-panel__orchestration-wave-runs">
         {group.tasks.map((task) => (
@@ -340,7 +340,7 @@ function AgentCard({
         </span>
         <div>
           <strong>{agent.title}</strong>
-          <small>{agent.status === "running" ? "运行中" : "等待派发"}</small>
+          <small>{agent.status === "running" ? "运行中" : "等待开始"}</small>
         </div>
       </div>
       <div className="app-prd-task-panel__orchestration-agent-runs">

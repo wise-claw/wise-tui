@@ -69,16 +69,18 @@ export function WorkspacesTab({
       title="工作区"
       subtitle="Workspace、成员仓库和 Wise Trellis 状态"
       actions={
-        <Space size={8} wrap>
-          <Tooltip title="添加一个轻量 Claude Code 仓库入口">
-            <Button size="small" onClick={onAddStandaloneRepo} disabled={!onAddStandaloneRepo}>
-              添加单仓
+        trellisWorkspace ? null : (
+          <Space size={8} wrap>
+            <Tooltip title="添加一个轻量 Claude Code 仓库入口">
+              <Button size="small" onClick={onAddStandaloneRepo} disabled={!onAddStandaloneRepo}>
+                添加单仓
+              </Button>
+            </Tooltip>
+            <Button size="small" type="primary" icon={<PlusOutlined />} onClick={onCreateWorkspace}>
+              新建工作区
             </Button>
-          </Tooltip>
-          <Button size="small" type="primary" icon={<PlusOutlined />} onClick={onCreateWorkspace}>
-            新建工作区
-          </Button>
-        </Space>
+          </Space>
+        )
       }
     >
       {trellisWorkspace ? (
@@ -92,9 +94,7 @@ export function WorkspacesTab({
             onRequestSpecAgentUpdate={onRequestSpecAgentUpdate}
           />
         </section>
-      ) : null}
-
-      {!hasItems ? (
+      ) : !hasItems ? (
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有工作区或单仓，请先新建工作区或添加单仓" />
       ) : (
         <>
