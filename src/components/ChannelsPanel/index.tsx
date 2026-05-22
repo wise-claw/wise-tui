@@ -157,8 +157,6 @@ export function ChannelsPanel() {
     ],
   );
 
-  const orderedChannels = useMemo(() => CHANNELS, []);
-
   return (
     <AuthorPanelPageShell
       className="app-channels-panel"
@@ -168,7 +166,7 @@ export function ChannelsPanel() {
     >
       <AuthorPanelListShell className="app-channels-panel__list-shell">
         <div className="app-channels-hub__grid" aria-label="渠道网关">
-          {orderedChannels.map((channel) => {
+          {CHANNELS.map((channel) => {
             const meta = cardMeta(channel);
             const isActive = activeKey === channel.key;
             const showSwitch = channel.key === "dingtalk" || channel.key === "websocket";
