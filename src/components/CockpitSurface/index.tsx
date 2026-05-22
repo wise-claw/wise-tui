@@ -41,6 +41,8 @@ export interface CockpitSurfaceProps {
   initialAssistantId?: string | null;
   /** 显式打开助手入口的递增信号;用于同一 cockpit 实例内重复打开。 */
   openRequestKey: number;
+  /** 普通助手入口再次打开时恢复上次会话，而不是回到 Hub。 */
+  resumeAssistantId?: string | null;
   /** 透传给现有 PRD 拆分面板,作为需求助手主工作台。 */
   prdTaskSplitPanelProps: AssistantConversationPrdTaskSplitPanelProps;
 }
@@ -55,6 +57,7 @@ export function CockpitSurface({
   hasInitialTarget,
   initialAssistantId = null,
   openRequestKey,
+  resumeAssistantId = null,
   prdTaskSplitPanelProps,
   onActiveAssistantIdChange,
 }: CockpitSurfaceProps) {
@@ -82,8 +85,8 @@ export function CockpitSurface({
   // 显式入口变更(项目 FAB / 仓库 FAB / 左栏助手)时切换子态。
   useEffect(() => {
     if (openRequestKey <= 0) return;
-    setSubMode(cockpitSubModeFromEntry(hasInitialTarget, initialAssistantId));
-  }, [hasInitialTarget, initialAssistantId, openRequestKey]);
+    setSubMode(cockpitSubModeFromEntry(hasInitialTarget, initialAssistantId ?? resumeAssistantId));
+  }, [hasInitialTarget, initialAssistantId, openRequestKey, resumeAssistantId]);
 
   const activeAssistant = useMemo(() => {
     if (subMode.kind !== "conversation") return null;

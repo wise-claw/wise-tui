@@ -82,6 +82,8 @@ import {
 import {
   type ExecutionFanoutSnapshot,
 } from "../../services/prdSplit/executionFanout";
+import { listActivePrdRuns } from "../../services/prdSplit/activeRuns";
+import { buildPrdSplitMissionId } from "../../services/prdSplit/missionIds";
 import { runPrdSplitClaude } from "../../services/claudeSplitExecutor";
 import {
   resolveTrellisTarget,
@@ -164,6 +166,8 @@ export interface PrdTaskSplitPanelControllerInput {
   repositories: Repository[];
   activeProjectId: string | null;
   activeRepositoryId: number | null;
+  initialProjectId?: string | null;
+  initialRepositoryId?: number | null;
 }
 
 function scrollToTaskCard(taskId: string) {
@@ -274,6 +278,8 @@ export function usePrdTaskSplitPanelController({
   repositories,
   activeProjectId,
   activeRepositoryId,
+  initialProjectId = null,
+  initialRepositoryId = null,
 }: PrdTaskSplitPanelControllerInput) {
   const { message } = AntdApp.useApp();
   const [parsing, setParsing] = useState(false);
@@ -281,8 +287,8 @@ export function usePrdTaskSplitPanelController({
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedAnchorTaskId, setSelectedAnchorTaskId] = useState<string | null>(null);
   const [contextMode, setContextMode] = useState<"project" | "repository">("repository");
-  const [linkedProjectId, setLinkedProjectId] = useState<string | null>(activeProjectId);
-  const [linkedRepositoryId, setLinkedRepositoryId] = useState<number | null>(activeRepositoryId);
+  const [linkedProjectId, setLinkedProjectId] = useState<string | null>(initialProjectId ?? activeProjectId);
+  const [linkedRepositoryId, setLinkedRepositoryId] = useState<number | null>(initialRepositoryId ?? activeRepositoryId);
   const [pendingTaskSizeById, setPendingTaskSizeById] = useState<Record<string, TaskSize>>({});
   const [pendingTaskContentById, setPendingTaskContentById] = useState<Record<string, string>>({});
   const [pendingTaskApiSpecById, setPendingTaskApiSpecById] = useState<Record<string, TaskApiSpec>>({});
@@ -354,6 +360,9 @@ export function usePrdTaskSplitPanelController({
   const urlAnchorAutoBackfilledRef = useRef(false);
   const anchorRangePersistTimerRef = useRef<number | null>(null);
   const latestAnchorRangePersistResultRef = useRef<SplitResult | null>(null);
+  const hydratedBackgroundRunIdsRef = useRef<Set<string>>(new Set());
+  const activeResultRef = useRef<SplitResult | null>(null);
+  const plannedMissionSummaryRef = useRef<RequirementMissionPlanSummary | null>(null);
   const {
     appendSplitRuntimeLog,
     handleRetrySplitStage,
@@ -374,6 +383,12 @@ export function usePrdTaskSplitPanelController({
   useEffect(() => {
     appendSplitRuntimeLogRef.current = appendSplitRuntimeLog;
   }, [appendSplitRuntimeLog]);
+  useEffect(() => {
+    activeResultRef.current = activeResult;
+  }, [activeResult]);
+  useEffect(() => {
+    plannedMissionSummaryRef.current = plannedMissionSummary;
+  }, [plannedMissionSummary]);
   const requirementHistoryById = useMemo(
     () => new Map(requirementHistory.map((item) => [item.id, item])),
     [requirementHistory],
@@ -393,6 +408,10 @@ export function usePrdTaskSplitPanelController({
     [requirementHistory],
   );
   const hasInput = useMemo(() => inputValue.trim().length > 0, [inputValue]);
+  const initialTargetKey = useMemo(
+    () => `${initialProjectId?.trim() ?? ""}:${initialRepositoryId ?? ""}`,
+    [initialProjectId, initialRepositoryId],
+  );
   const isUrlInputMode = useMemo(() => {
     if (!inputValue.trim()) return false;
     try {
@@ -1009,15 +1028,18 @@ export function usePrdTaskSplitPanelController({
 
   useEffect(() => {
     const projectDraftScope = activeProjectId?.trim() || linkedProjectId?.trim() || null;
+    let cancelled = false;
     void (async () => {
       const draft = await loadPrdDraft(projectDraftScope);
+      if (cancelled) return;
       if (!draft) return;
       const historical = (draft.requirements ?? []).filter((item) => item.requirementDisplayName.trim().length > 0);
       if (historical.length > 0) {
         const sorted = [...historical].sort((a, b) => b.updatedAt - a.updatedAt);
         const pinned = sorted.find((item) => item.isPinned);
-        // 进入面板时：有置顶优先展示置顶；否则展示最新需求
-        const selectedId = pinned?.id ?? sorted[0]?.id ?? null;
+        const storedCurrentId = draft.currentRequirementId?.trim();
+        const storedCurrent = storedCurrentId ? sorted.find((item) => item.id === storedCurrentId) ?? null : null;
+        const selectedId = storedCurrent?.id ?? pinned?.id ?? sorted[0]?.id ?? null;
         const selected = selectedId ? sorted.find((item) => item.id === selectedId) ?? null : null;
         setRequirementHistory(sorted);
         setActiveRequirementId(selectedId);
@@ -1057,6 +1079,9 @@ export function usePrdTaskSplitPanelController({
       setLinkedRepositoryId(draft.linkedRepositoryId);
       setRequirementDisplayName(named ? named : null);
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [activeProjectId, linkedProjectId, setInputValue]);
 
   useEffect(() => {
@@ -1093,6 +1118,134 @@ export function usePrdTaskSplitPanelController({
     if (activeProjectId) setLinkedProjectId(activeProjectId);
     if (activeRepositoryId) setLinkedRepositoryId(activeRepositoryId);
   }, [activeProjectId, activeRepositoryId]);
+
+  useEffect(() => {
+    if (initialProjectId) {
+      setLinkedProjectId(initialProjectId);
+      setContextMode("project");
+    }
+    if (initialRepositoryId != null) {
+      setLinkedRepositoryId(initialRepositoryId);
+      if (!initialProjectId) setContextMode("repository");
+    }
+  }, [initialTargetKey, initialProjectId, initialRepositoryId]);
+
+  useEffect(() => {
+    if (!trellisTarget?.rootPath || !inputValue.trim()) return;
+    if (activeResultRef.current || plannedMissionSummaryRef.current) return;
+    let cancelled = false;
+    void (async () => {
+      const rows = await listActivePrdRuns().catch(() => []);
+      if (cancelled) return;
+      const targetRoot = trellisTarget.rootPath.trim();
+      const expectedMissionId = buildPrdSplitMissionId(trellisTarget.project.id, inputValue);
+      const candidates = rows
+        .filter((row) => row.projectRootPath.trim() === targetRoot)
+        .filter((row) => !row.missionId || row.missionId === expectedMissionId)
+        .filter((row) => !hydratedBackgroundRunIdsRef.current.has(row.runId));
+      if (candidates.length === 0) return;
+      if (activeResultRef.current || plannedMissionSummaryRef.current) return;
+      const planResult = await requirementMission.plan(inputValue);
+      if (cancelled || !planResult.ok) return;
+      setPlannedMissionSummary(planResult.summary);
+      setSplitRuntimeVisible(true);
+      appendSplitRuntimeLog("system", "已恢复后台任务草案生成进度。", {
+        scope: "main",
+        agentName: "主会话",
+        status: "running",
+        title: "恢复进度",
+        details: compactRuntimeDetails([
+          { label: "后台运行", value: String(candidates.length) },
+          { label: "工作目录", value: targetRoot },
+        ]),
+      });
+      for (const row of candidates) {
+        hydratedBackgroundRunIdsRef.current.add(row.runId);
+        if (cancelled) return;
+        if (row.status === "running") {
+          requirementMission.api.patchClusterRun(row.clusterId, {
+            status: "dispatching",
+            parentTaskName: null,
+            parentTaskPath: row.parentTaskPath,
+            raw: {
+              runId: row.runId,
+              runDir: row.runDir,
+              exitCode: row.exitCode ?? 0,
+              durationMs: Math.max(0, Date.now() - row.startedAtMs),
+              stdoutPath: row.stdoutPath,
+              stderrPath: row.stderrPath,
+              rawResultPath: row.rawResultPath,
+              rawOutput: null,
+              stdoutTruncatedPreview: row.stdoutTail,
+            },
+            errors: row.error ? [row.error] : [],
+            startedAt: row.startedAtMs,
+            progress: {
+              status: "running",
+              progressPercent: 35,
+              stageLabel: "后台生成中",
+              elapsedMs: Math.max(0, Date.now() - row.startedAtMs),
+              error: null,
+            },
+          });
+          appendSplitRuntimeLog("assistant", "任务生成器仍在后台运行。", {
+            scope: "subagent",
+            agentName: "任务生成器",
+            clusterId: row.clusterId,
+            title: row.clusterId,
+            status: "running",
+            details: compactRuntimeDetails([
+              { label: "运行目录", value: row.runDir },
+              row.stdoutTail ? { label: "输出预览", value: row.stdoutTail } : null,
+              row.stderrTail ? { label: "错误预览", value: row.stderrTail } : null,
+            ]),
+          });
+          continue;
+        }
+        const out = await requirementMission.hydrateClusterRun(
+          row.clusterId,
+          row.runId,
+          row.runDir,
+          row.status,
+        );
+        if (cancelled || !out?.result) continue;
+        const nextResult = syncTaskAnchorTextsFromRequirements(out.result);
+        setSplitQualitySummary(summarizeSplitQuality(nextResult.source, nextResult));
+        await savePrdTaskSplitResult(nextResult).catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          message.warning(`恢复结果保存失败：${msg}`);
+        });
+        if (cancelled) return;
+        setActiveResult(nextResult);
+        setPlannedMissionSummary(null);
+        setSelectedTaskId(nextResult.splitTasks[0]?.id ?? null);
+        appendSplitRuntimeLog(row.status === "succeeded" ? "assistant" : "error", row.status === "succeeded"
+          ? `已恢复后台结果，回流 ${nextResult.splitTasks.length} 个候选任务。`
+          : "后台任务已结束，但未产出可用任务。", {
+          scope: "subagent",
+          agentName: "任务生成器",
+          clusterId: row.clusterId,
+          title: row.clusterId,
+          status: row.status,
+          details: compactRuntimeDetails([
+            { label: "运行目录", value: row.runDir },
+            row.error ? { label: "错误", value: row.error } : null,
+          ]),
+        });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    appendSplitRuntimeLog,
+    inputValue,
+    message,
+    requirementMission,
+    setSplitRuntimeVisible,
+    trellisTarget?.project.id,
+    trellisTarget?.rootPath,
+  ]);
 
 
   useEffect(() => {

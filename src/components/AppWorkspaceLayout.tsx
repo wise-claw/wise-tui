@@ -291,6 +291,8 @@ export interface AppWorkspaceLayoutProps {
   cockpitSurfaceHasInitialTarget: boolean;
   /** 会话快捷条指定内置助手 id，直达该助手对话页。 */
   cockpitSurfaceInitialAssistantId?: string | null;
+  /** 普通助手入口再次打开时恢复上次助手会话。 */
+  cockpitSurfaceResumeAssistantId?: string | null;
   /** 显式打开助手/需求拆分入口的递增信号。 */
   cockpitSurfaceOpenRequestKey: number;
   /** 需求拆分助手全屏：收起左栏，主区仅展示 PRD 拆分面板 */
@@ -381,6 +383,7 @@ export function AppWorkspaceLayout({
   cockpitSurfaceActiveProjectName,
   cockpitSurfaceHasInitialTarget,
   cockpitSurfaceInitialAssistantId,
+  cockpitSurfaceResumeAssistantId,
   cockpitSurfaceOpenRequestKey,
   cockpitPrdSplitFullscreen = false,
   onCockpitActiveAssistantIdChange,
@@ -717,6 +720,7 @@ export function AppWorkspaceLayout({
                               activeProjectName={cockpitSurfaceActiveProjectName}
                               hasInitialTarget={cockpitSurfaceHasInitialTarget}
                               initialAssistantId={cockpitSurfaceInitialAssistantId}
+                              resumeAssistantId={cockpitSurfaceResumeAssistantId}
                               openRequestKey={cockpitSurfaceOpenRequestKey}
                               prdTaskSplitPanelProps={prdTaskSplitPanelProps}
                               onActiveAssistantIdChange={onCockpitActiveAssistantIdChange}

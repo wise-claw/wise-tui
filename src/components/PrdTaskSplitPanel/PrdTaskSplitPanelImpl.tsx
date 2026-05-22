@@ -19,6 +19,8 @@ export interface PrdTaskSplitPanelProps {
   repositories: Repository[];
   activeProjectId: string | null;
   activeRepositoryId: number | null;
+  initialProjectId?: string | null;
+  initialRepositoryId?: number | null;
 }
 
 export function PrdTaskSplitPanel({
@@ -27,6 +29,8 @@ export function PrdTaskSplitPanel({
   repositories,
   activeProjectId,
   activeRepositoryId,
+  initialProjectId = null,
+  initialRepositoryId = null,
 }: PrdTaskSplitPanelProps) {
   const [workspaceLayout, setWorkspaceLayout] = useState<SplitWorkspaceLayout>("review");
   const {
@@ -172,6 +176,8 @@ export function PrdTaskSplitPanel({
     repositories,
     activeProjectId,
     activeRepositoryId,
+    initialProjectId,
+    initialRepositoryId,
   });
   const workspaceStageClass = filteredTasks.length > 0 || plannedMissionSummary || splitRuntimeVisible
     ? "app-prd-task-panel__columns--has-task-flow"

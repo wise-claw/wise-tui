@@ -22,6 +22,10 @@ import {
   resolveMaterializedFanoutRepositoryTarget,
 } from "../../../services/prdSplit/materializedFanoutBridge";
 import {
+  buildPrdSplitMissionAssignmentId,
+  buildPrdSplitMissionId,
+} from "../../../services/prdSplit/missionIds";
+import {
   appendMissionEvent,
   attachMissionToSession,
   completeMissionAgentAssignment,
@@ -1208,7 +1212,7 @@ async function persistMissionSnapshot(
 ): Promise<MissionSnapshotRecord | null> {
   const { state } = api;
   if (!state.project) return null;
-  const missionId = existingMissionId ?? buildMissionId(state.project.id, state.prdMarkdown);
+  const missionId = existingMissionId ?? buildPrdSplitMissionId(state.project.id, state.prdMarkdown);
   try {
     const mission = await createOrResumeMission({
       missionId,
@@ -1262,22 +1266,8 @@ function buildMissionSnapshot(
   };
 }
 
-function buildMissionId(projectId: string, prdMarkdown: string): string {
-  const source = `${projectId}:${prdMarkdown.trim()}`;
-  let hash = 2166136261;
-  for (let i = 0; i < source.length; i += 1) {
-    hash ^= source.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return `mission-${normalizeId(projectId)}-${(hash >>> 0).toString(16)}`;
-}
-
 function missionAssignmentId(missionId: string, clusterId: string, stage: string): string {
-  return `${normalizeId(missionId)}-${normalizeId(clusterId)}-${normalizeId(stage)}`;
-}
-
-function normalizeId(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "mission";
+  return buildPrdSplitMissionAssignmentId(missionId, clusterId, stage);
 }
 
 function uniqueMessages(messages: string[]): string[] {
@@ -1286,7 +1276,7 @@ function uniqueMessages(messages: string[]): string[] {
 
 async function sha256Hex(value: string): Promise<string> {
   if (!globalThis.crypto?.subtle) {
-    return buildMissionId("hash", value);
+    return buildPrdSplitMissionId("hash", value);
   }
   const bytes = new TextEncoder().encode(value);
   const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);

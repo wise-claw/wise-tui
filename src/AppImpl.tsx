@@ -264,6 +264,7 @@ export default function App() {
   const [assistantOpenRequestKey, setAssistantOpenRequestKey] = useState(0);
   const [cockpitSurfaceInitialAssistantId, setCockpitSurfaceInitialAssistantId] = useState<string | null>(null);
   const [cockpitActiveAssistantId, setCockpitActiveAssistantId] = useState<string | null>(null);
+  const [cockpitResumeAssistantId, setCockpitResumeAssistantId] = useState<string | null>(null);
   const [authorTrellisProjectId, setAuthorTrellisProjectId] = useState<string | null>(null);
   const [workspaceCreateRequest, setWorkspaceCreateRequest] = useState(0);
   const [standaloneRepoAddRequest, setStandaloneRepoAddRequest] = useState(0);
@@ -894,7 +895,7 @@ export default function App() {
       projects,
       repositories,
       preferredProjectId: activeProjectId,
-      activeAssistantId: cockpitActiveAssistantId,
+      activeAssistantId: viewMode.view.kind === "cockpit" ? cockpitActiveAssistantId : null,
     });
 
   /** @-mention 派发拦截：wise_trellis 项目下，`@<roleTag>` 命中项目仓库时改走多仓库 trellis-implement 直派；其他场景回退到原 send 路径。 */
@@ -1130,16 +1131,17 @@ export default function App() {
     setSearchOpen(false);
     setAssistantInitialTarget(detail);
     setCockpitSurfaceInitialAssistantId(null);
+    setCockpitResumeAssistantId(DEFAULT_PRD_SPLIT_ASSISTANT_ID);
     setAssistantOpenRequestKey((value) => value + 1);
     viewMode.enter(cockpitView());
   }, [viewMode]);
   const openDefaultAssistant = useCallback(() => {
     setSearchOpen(false);
     setAssistantInitialTarget(null);
-    setCockpitSurfaceInitialAssistantId(null);
+    setCockpitSurfaceInitialAssistantId(cockpitResumeAssistantId);
     setAssistantOpenRequestKey((value) => value + 1);
     viewMode.enter(cockpitView(undefined, "assistant"));
-  }, [viewMode]);
+  }, [cockpitResumeAssistantId, viewMode]);
   const openMcpHubFromSidebar = useCallback(() => {
     setSearchOpen(false);
     viewMode.enter(cockpitView(undefined, "mcp"));
@@ -1154,13 +1156,13 @@ export default function App() {
     setSearchOpen(false);
     setAssistantInitialTarget(null);
     setCockpitSurfaceInitialAssistantId(trimmed);
+    setCockpitResumeAssistantId(trimmed);
     setAssistantOpenRequestKey((value) => value + 1);
     viewMode.enter(cockpitView());
   }, [viewMode]);
   const exitCockpit = useCallback(() => {
-    setCockpitActiveAssistantId(null);
     startTransition(() => {
-      viewMode.back();
+      viewMode.enter({ kind: "chat" });
     });
   }, [viewMode]);
 
@@ -2804,9 +2806,13 @@ export default function App() {
         assistantInitialTarget?.projectId || assistantInitialTarget?.repositoryId,
       )}
       cockpitSurfaceInitialAssistantId={cockpitSurfaceInitialAssistantId}
+      cockpitSurfaceResumeAssistantId={cockpitResumeAssistantId}
       cockpitSurfaceOpenRequestKey={assistantOpenRequestKey}
       cockpitPrdSplitFullscreen={cockpitPrdSplitFullscreen}
-      onCockpitActiveAssistantIdChange={setCockpitActiveAssistantId}
+      onCockpitActiveAssistantIdChange={(assistantId) => {
+        setCockpitActiveAssistantId(assistantId);
+        if (assistantId) setCockpitResumeAssistantId(assistantId);
+      }}
       commandPaletteProps={{
         open: searchOpen,
         onClose: () => setSearchOpen(false),
@@ -2847,6 +2853,8 @@ export default function App() {
         repositories,
         activeProjectId,
         activeRepositoryId,
+        initialProjectId: assistantInitialTarget?.projectId ?? null,
+        initialRepositoryId: assistantInitialTarget?.repositoryId ?? null,
         onClose: exitCockpit,
       }}
       progressMonitorDrawerProps={{
