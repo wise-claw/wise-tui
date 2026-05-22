@@ -4783,13 +4783,63 @@ button.app-message-part-header:disabled:hover {
 
 .app-session-quick-customize-modal__zone.ant-segmented {
   flex-shrink: 0;
+  padding: 2px;
+  background: var(--ant-color-fill-tertiary);
+  border: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-session-quick-customize-modal__zone .ant-segmented-item {
+  transition: color 0.15s ease;
 }
 
 .app-session-quick-customize-modal__zone .ant-segmented-item-label {
-  padding: 0 6px;
+  padding: 0 8px;
   font-size: 11px;
   line-height: 20px;
   min-height: 20px;
+  font-weight: 400;
+  color: var(--ant-color-text-quaternary);
+  transition: color 0.15s ease, font-weight 0.15s ease;
+}
+
+.app-session-quick-customize-modal__zone .ant-segmented-thumb {
+  background: var(--ant-color-bg-container);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+}
+
+.app-session-quick-customize-modal__zone
+  .ant-segmented-item:nth-child(1).ant-segmented-item-selected
+  .ant-segmented-item-label {
+  color: var(--ant-color-primary);
+  font-weight: 600;
+}
+
+.app-session-quick-customize-modal__zone
+  .ant-segmented-item:nth-child(2).ant-segmented-item-selected
+  .ant-segmented-item-label {
+  color: var(--ant-color-text);
+  font-weight: 600;
+}
+
+.app-session-quick-customize-modal__zone.ant-segmented:has(
+    .ant-segmented-item:nth-child(1).ant-segmented-item-selected
+  )
+  .ant-segmented-thumb {
+  background: var(--ant-color-primary-bg);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ant-color-primary) 28%, transparent);
+}
+
+.app-session-quick-customize-modal__zone.ant-segmented:has(
+    .ant-segmented-item:nth-child(2).ant-segmented-item-selected
+  )
+  .ant-segmented-thumb {
+  background: var(--ant-color-fill-secondary);
+  box-shadow: 0 0 0 1px var(--ant-color-border);
+}
+
+.app-session-quick-customize-modal__zone.ant-segmented.ant-segmented-disabled {
+  opacity: 0.45;
 }
 
 .app-session-quick-customize-modal__sort {

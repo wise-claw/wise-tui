@@ -47,6 +47,7 @@ import { RevertDock } from "./dock/revert-dock";
 import { addToHistory, promptLength, navigatePromptHistory, canNavigateHistoryAtCursor } from "./prompt-history";
 import { Dropdown, Button, Empty, Input, Popover, Select, Spin, Tabs, Tag, Tooltip, message } from "antd";
 import { ContextCompactProgressRing } from "./ContextCompactProgressRing";
+import { useContextBreakdown } from "../../hooks/useContextBreakdown";
 import { ClaudeConnectionKindChip } from "./ClaudeConnectionKindChip";
 import { useDefaultClaudeConnectionKind } from "../../hooks/useDefaultClaudeConnectionKind";
 import type { MenuProps } from "antd";
@@ -384,6 +385,8 @@ function ComposerInner({
   missionContext,
   compactContext,
 }: ComposerInnerProps) {
+  const { breakdown, loading: contextBreakdownLoading, ensureBreakdown } =
+    useContextBreakdown(session);
   /** 含题卡/待办/底栏等整块输入 chrome，用于 Esc 命中判定（仅 shellRef 会漏掉模型选择、停止等） */
   const composerEscapeRootRef = useRef<HTMLDivElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
@@ -736,7 +739,6 @@ function ComposerInner({
     void loadBranches();
   }, [branchPopoverOpen, loadBranches]);
   const bottomStatus = useMemo(() => {
-    const modelLabel = session.model?.trim() || "Claude";
     const sessionDuration = formatSessionDuration(session.createdAt);
     const metrics = getSessionContextMetrics(session);
     const ctxHint = formatContextStatusHint(metrics);
@@ -744,9 +746,8 @@ function ComposerInner({
     const ctxSegment = ctxHint
       ? `ctx:${metrics.ctxPercent}% (~${metrics.estimatedTokens.toLocaleString("zh-CN")} tokens, ${ctxHint})`
       : `ctx:${metrics.ctxPercent}% (~${metrics.estimatedTokens.toLocaleString("zh-CN")} tokens)`;
-    const fullLine = `[${modelLabel}] | session:${sessionDuration} | ${ctxSegment} | status:${statusText}`;
+    const fullLine = `session:${sessionDuration} | ${ctxSegment} | status:${statusText}`;
     return {
-      modelLabel,
       sessionDuration,
       ctxSegment,
       ctxPercent: metrics.ctxPercent,
@@ -1660,6 +1661,9 @@ function ComposerInner({
             inFlight={compactContext.inFlight}
             tooltip={compactContext.tooltip}
             onClick={compactContext.onCompact}
+            breakdown={breakdown}
+            breakdownLoading={contextBreakdownLoading}
+            onBreakdownHover={() => void ensureBreakdown()}
           />
         ) : null}
       </div>
@@ -1669,8 +1673,11 @@ function ComposerInner({
     bottomStatus.ctxSegment,
     bottomStatus.ctxToneClass,
     branchPickerInFooterToolbar,
+    breakdown,
     compactContext,
+    contextBreakdownLoading,
     dualPaneRepositoryPicker,
+    ensureBreakdown,
     handleFileAttach,
     handleScreenshot,
   ]);
@@ -1968,7 +1975,7 @@ function ComposerInner({
         {/* Bottom bar：会话元信息（分支已移至输入框底栏截屏按钮后） */}
         <div className="app-claude-input-bottom-bar">
           <span className="app-claude-input-bottom-statusline" title={bottomStatus.fullLine}>
-            [{bottomStatus.modelLabel}] | session:{bottomStatus.sessionDuration} |{" "}
+            session:{bottomStatus.sessionDuration} |{" "}
             <span className={bottomStatus.ctxToneClass}>{bottomStatus.ctxSegment}</span> | status:
             {bottomStatus.statusText}
           </span>

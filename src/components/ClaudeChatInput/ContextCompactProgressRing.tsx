@@ -1,5 +1,7 @@
 import { useMemo } from "react";
-import { Tooltip } from "antd";
+import { Popover } from "antd";
+import { ContextDetailPopover } from "./ContextDetailPopover";
+import type { ContextBreakdownSnapshot } from "../../services/claudeContextBreakdown";
 
 const RING_SIZE = 14;
 const STROKE_WIDTH = 1.5;
@@ -7,7 +9,7 @@ const STROKE_WIDTH = 1.5;
 export interface ContextCompactProgressRingProps {
   percent: number;
   toneClassName: string;
-  /** 与底栏状态行 `ctx:…` 片段一致，用于 Tooltip 首行 */
+  /** 与底栏状态行 `ctx:…` 片段一致，用于详情面板摘要 */
   ctxStatusLine?: string;
   disabled?: boolean;
   inFlight?: boolean;
@@ -15,9 +17,12 @@ export interface ContextCompactProgressRingProps {
   onClick: () => void;
   className?: string;
   "data-ui-anchor"?: string;
+  breakdown?: ContextBreakdownSnapshot | null;
+  breakdownLoading?: boolean;
+  onBreakdownHover?: () => void;
 }
 
-/** 输入框底栏：上下文占用圆环（点击执行 /compact） */
+/** 输入框底栏：上下文占用圆环（悬停详情，点击 /compact） */
 export function ContextCompactProgressRing({
   percent,
   toneClassName,
@@ -28,6 +33,9 @@ export function ContextCompactProgressRing({
   onClick,
   className,
   "data-ui-anchor": dataUiAnchor,
+  breakdown,
+  breakdownLoading = false,
+  onBreakdownHover,
 }: ContextCompactProgressRingProps) {
   const pct = Math.min(100, Math.max(0, Math.round(percent)));
   const { radius, circumference, dashOffset, center } = useMemo(() => {
@@ -40,15 +48,6 @@ export function ContextCompactProgressRing({
       center: RING_SIZE / 2,
     };
   }, [pct]);
-
-  const tipTitle = (
-    <span className="app-claude-context-compact-ring__tip">
-      <span className={`app-claude-context-compact-ring__tip-ctx ${toneClassName}`}>
-        {ctxStatusLine ?? `ctx:${pct}%`}
-      </span>
-      <span className="app-claude-context-compact-ring__tip-body">{tooltip}</span>
-    </span>
-  );
 
   const ringButton = (
     <button
@@ -64,7 +63,8 @@ export function ContextCompactProgressRing({
       data-ui-anchor={dataUiAnchor}
       disabled={disabled}
       aria-busy={inFlight}
-      aria-label={`点击手动压缩上下文，当前约 ${pct}%`}
+      aria-label={`上下文约 ${pct}%，点击可手动压缩`}
+      title={tooltip}
       onClick={onClick}
     >
       <svg
@@ -99,7 +99,23 @@ export function ContextCompactProgressRing({
   );
 
   return (
-    <Tooltip title={tipTitle} mouseEnterDelay={0.3} placement="top">
+    <Popover
+      trigger="hover"
+      placement="topLeft"
+      mouseEnterDelay={0.2}
+      destroyOnHidden
+      overlayClassName="app-claude-context-detail-popover"
+      onOpenChange={(open) => {
+        if (open) onBreakdownHover?.();
+      }}
+      content={
+        <ContextDetailPopover
+          breakdown={breakdown ?? null}
+          loading={breakdownLoading}
+          compactHint={tooltip}
+        />
+      }
+    >
       <span
         className={[
           "app-claude-context-compact-ring-wrap",
@@ -107,9 +123,13 @@ export function ContextCompactProgressRing({
         ]
           .filter(Boolean)
           .join(" ")}
+        onMouseEnter={() => onBreakdownHover?.()}
       >
         {ringButton}
+        {ctxStatusLine ? (
+          <span className="app-claude-context-compact-ring__sr-only">{ctxStatusLine}</span>
+        ) : null}
       </span>
-    </Tooltip>
+    </Popover>
   );
 }
