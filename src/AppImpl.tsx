@@ -1543,6 +1543,7 @@ export default function App() {
     }
     const id = await createSession(target.path, target.displayName);
     bindRepositoryMainSession(target.path, id);
+    switchSession(id);
     return id;
   }
 
@@ -2129,6 +2130,9 @@ export default function App() {
         message.error("结束员工任务失败");
       });
   };
+
+  const workspaceWelcomeFullscreen =
+    activeRepositoryId == null && viewMode.view.kind === "chat";
 
   return (
     <>
@@ -2723,6 +2727,11 @@ export default function App() {
       cockpitOnboardingProps={{
         onCreateWorkspace: () => setWorkspaceCreateRequest((value) => value + 1),
         onImportStandaloneRepo: () => setStandaloneRepoAddRequest((value) => value + 1),
+      }}
+      workspaceWelcomeFullscreen={workspaceWelcomeFullscreen}
+      workspaceWelcomeProps={{
+        onAddWorkspace: () => setWorkspaceCreateRequest((value) => value + 1),
+        onAddStandaloneRepo: () => setStandaloneRepoAddRequest((value) => value + 1),
       }}
       cockpitSurfaceActiveProjectId={activeProjectId ?? null}
       cockpitSurfaceActiveProjectName={activeProject?.name ?? null}

@@ -134,6 +134,11 @@ body {
 }
 
 /* 主壳 Layout：占满 .ant-app，含侧栏 + 主区时横向 flex */
+.app-main-layout--welcome-hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .app-main-layout.ant-layout {
   flex: 1 1 0%;
   min-height: 0;

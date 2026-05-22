@@ -22,8 +22,14 @@ import { getOpenAppPreferenceSync, hydrateOpenAppPreference } from "../../servic
 import { openTerminalSession, writeTerminalSession } from "../../services/terminal";
 import { subscribeTerminalExit, subscribeTerminalOutput } from "../../services/events";
 import { openExternalUrl } from "../../services/openExternal";
+import { pickSessionForRepositorySidebarSelect } from "../../utils/claudeSessionSelection";
 import { filterSessionsForWorkspace } from "../../utils/projectSessionPanelFilter";
-import { resolveRepositoryForSession } from "../../utils/repositoryMainSessionBinding";
+import {
+  resolveBoundMainSessionId,
+  resolveMainOwnerAgentNameForRepositoryPath,
+  resolveRepositoryForSession,
+} from "../../utils/repositoryMainSessionBinding";
+import { loadSessionOwnerHints } from "../../utils/sessionOwnerHints";
 import type { WorkspaceMode, WorkspaceFocus } from "../../utils/workspaceMode";
 import "./index.css";
 
@@ -1358,7 +1364,6 @@ export function ClaudeSessions({
     onNewSession(activeRepository);
   }, [activeRepository, onNewSession]);
 
-  const isProjectFocused = activeWorkspaceFocus === "project" && Boolean(activeProject);
   const handleCreatePrimarySession = useCallback(() => {
     if (activeWorkspaceFocus === "project" && activeProject && onNewProjectSession) {
       void onNewProjectSession(activeProject);
@@ -1372,17 +1377,61 @@ export function ClaudeSessions({
     onNewProjectSession,
   ]);
 
-  const emptyStateCopy = isProjectFocused
-    ? {
-        title: "当前工作区还没有主会话",
-        hint: "新建后会以 Workspace 根目录作为 Claude Code 工作目录。",
-        primaryLabel: "新建工作区主会话",
-      }
-    : {
-        title: "当前 Repo 还没有执行会话",
-        hint: "Repo 执行会话继承 Workspace 的 Trellis 规范，但对话历史与主会话隔离。",
-        primaryLabel: "新建 Repo 执行会话",
-      };
+  const ensurePrimarySessionKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!activeRepository) {
+      ensurePrimarySessionKeyRef.current = null;
+      return;
+    }
+    if (activeSession) {
+      ensurePrimarySessionKeyRef.current = null;
+      return;
+    }
+    const ensureKey = `${activeRepository.id}:${activeWorkspaceFocus}`;
+    if (ensurePrimarySessionKeyRef.current === ensureKey) {
+      return;
+    }
+    ensurePrimarySessionKeyRef.current = ensureKey;
+
+    const mainOwnerPick = resolveMainOwnerAgentNameForRepositoryPath(
+      repositories ?? [],
+      activeRepository.path,
+    );
+    const boundId = resolveBoundMainSessionId(
+      activeRepository.path,
+      repositoryMainBindings,
+      incomingSessions,
+      mainOwnerPick,
+    );
+    if (boundId && sessions.some((item) => item.id === boundId)) {
+      onSwitchSession(boundId);
+      return;
+    }
+
+    const picked = pickSessionForRepositorySidebarSelect(
+      sessions,
+      activeRepository.path,
+      loadSessionOwnerHints(),
+      { mainOwnerAgentName: mainOwnerPick },
+    );
+    if (picked) {
+      onSwitchSession(picked.id);
+      return;
+    }
+
+    handleCreatePrimarySession();
+  }, [
+    activeRepository,
+    activeSession,
+    activeWorkspaceFocus,
+    handleCreatePrimarySession,
+    incomingSessions,
+    onSwitchSession,
+    repositories,
+    repositoryMainBindings,
+    sessions,
+  ]);
 
   const handleCreateSecondarySession = useCallback(() => {
     const repo = dualPaneSecondaryRepository ?? activeRepository;
@@ -1460,13 +1509,7 @@ export function ClaudeSessions({
       )}
 
       {/* Session Tabs - 会话标签栏 */}
-      {!activeRepository ? (
-        <SessionEmptyState
-          title="先选择一个工作对象"
-          hint="从左侧选择项目或仓库后，这里会显示对应的 Claude 会话。"
-          primaryAction={onSearch ? { label: "搜索项目或仓库", onClick: onSearch } : undefined}
-        />
-      ) : activeSession ? (
+      {!activeRepository ? null : activeSession ? (
         dualPaneEnabled ? (
           <div className="app-claude-sessions__dual-panes">
             <div className="app-claude-sessions__dual-pane">
@@ -1673,14 +1716,7 @@ export function ClaudeSessions({
             missionContext={missionContext}
           />
         )
-      ) : (
-        <SessionEmptyState
-          title={emptyStateCopy.title}
-          hint={emptyStateCopy.hint}
-          primaryAction={{ label: emptyStateCopy.primaryLabel, onClick: handleCreatePrimarySession }}
-          secondaryAction={onSearch ? { label: "切换工作对象", onClick: onSearch } : undefined}
-        />
-      )}
+      ) : null}
 
       {/* Terminal Panel：按需加载 xterm，避免进入会话页即拉取 terminal-vendor */}
       {!terminalCollapsed && activeRepository && onToggleTerminal && (

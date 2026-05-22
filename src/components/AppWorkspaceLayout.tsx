@@ -20,6 +20,10 @@ import { AuthorPanel } from "./AuthorPanel/AuthorPanel";
 import { AuthorPanelNav } from "./AuthorPanel/AuthorPanelNav";
 import { ClaudeSessions, Topbar } from "./ClaudeSessions";
 import { CockpitOnboarding, type CockpitOnboardingProps } from "./Cockpit";
+import {
+  WorkspaceWelcomeLanding,
+  type WorkspaceWelcomeLandingProps,
+} from "./WorkspaceWelcomeLanding";
 import { CommandPalette } from "./CommandPalette";
 import type { GitPanelOpenFileOptions } from "./GitPanel";
 import { type ChatInspectorProps, type CockpitInspectorProps } from "./Inspector";
@@ -277,6 +281,9 @@ export interface AppWorkspaceLayoutProps {
   /** Cockpit 主屏空态：用户没有任何 Workspace / Standalone Repo 时引导创建。 */
   cockpitEmpty: boolean;
   cockpitOnboardingProps: CockpitOnboardingProps;
+  /** 未选中仓库时在主窗口全屏展示欢迎页（隐藏侧栏/顶栏/右栏）。 */
+  workspaceWelcomeFullscreen?: boolean;
+  workspaceWelcomeProps?: WorkspaceWelcomeLandingProps;
   /** Cockpit hub/conversation 子状态决策(Stage 3 Wave A 引入)。 */
   cockpitSurfaceActiveProjectId: string | null;
   cockpitSurfaceActiveProjectName: string | null;
@@ -368,6 +375,8 @@ export function AppWorkspaceLayout({
   cockpitInspectorProps,
   cockpitEmpty,
   cockpitOnboardingProps,
+  workspaceWelcomeFullscreen = false,
+  workspaceWelcomeProps,
   cockpitSurfaceActiveProjectId,
   cockpitSurfaceActiveProjectName,
   cockpitSurfaceHasInitialTarget,
@@ -528,10 +537,15 @@ export function AppWorkspaceLayout({
             }}
           >
             <AntdApp>
+              {workspaceWelcomeFullscreen && workspaceWelcomeProps ? (
+                <div className="app-workspace-welcome-fullscreen">
+                  <WorkspaceWelcomeLanding {...workspaceWelcomeProps} />
+                </div>
+              ) : null}
               <Layout
                 className={`app-main-layout${authorMode ? " app-main-layout--author" : ""}${
                   cockpitPrdSplitFullscreen ? " app-main-layout--prd-split-fullscreen" : ""
-                }`}
+                }${workspaceWelcomeFullscreen ? " app-main-layout--welcome-hidden" : ""}`}
                 style={{ minWidth: 0, flex: 1, minHeight: 0, height: "100%" }}
               >
                 {authorMode ? (
