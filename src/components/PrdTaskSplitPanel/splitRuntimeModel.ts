@@ -51,7 +51,9 @@ export function buildSplitRuntimeModel(logs: SplitRuntimeLogItem[]): SplitRuntim
   const anyFailed = subagents.some((item) => item.status === "failed" || item.status === "cancelled");
   const allDone = subagents.length > 0 && subagents.every((item) => item.status === "succeeded");
   const anyRunning = subagents.some((item) => item.status === "running");
-  const finalDone = orderedLogs.some((log) => log.scope === "main" && log.status === "succeeded");
+  const finalDone = orderedLogs.some((log) =>
+    log.scope === "main" && log.status === "succeeded" && (log.title === "拆分完成" || log.title === "合并完成"),
+  );
   const phase2Running = orderedLogs.some((log) => log.scope === "main" && log.status === "running" && log.title === "阶段 2");
   const phase1Status: SplitRuntimeLogStatus = anyFailed ? "failed" : allDone ? "succeeded" : anyRunning ? "running" : "queued";
   const phase2Status: SplitRuntimeLogStatus = finalDone ? "succeeded" : phase2Running ? "running" : "queued";
@@ -61,9 +63,8 @@ export function buildSplitRuntimeModel(logs: SplitRuntimeLogItem[]): SplitRuntim
     stages: [
       { index: 1, title: "生成任务草案", status: phase1Status },
       { index: 2, title: "合并校验", status: phase2Status },
-      { index: 3, title: "进入执行计划", status: phase2Status },
     ],
-    activeStageIndex: phase2Status === "succeeded" ? 3 : activeStageIndex,
+    activeStageIndex,
     mainSummary: buildMainSummary({ subagents, finalDone, anyFailed }),
     subagents,
   };

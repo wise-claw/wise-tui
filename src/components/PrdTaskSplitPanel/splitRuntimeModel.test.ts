@@ -64,15 +64,29 @@ describe("buildSplitRuntimeModel", () => {
           { label: "taskTitles", value: "替换 InputStage TextArea\n图片管道接入" },
         ],
       }),
-      log({ id: "final", at: 2, scope: "main", status: "succeeded" }),
+      log({ id: "final", at: 2, scope: "main", status: "succeeded", title: "拆分完成" }),
     ]);
 
-    expect(model.activeStageIndex).toBe(3);
+    expect(model.stages).toHaveLength(2);
+    expect(model.activeStageIndex).toBe(2);
+    expect(model.stages[1]?.status).toBe("succeeded");
     expect(model.subagents[0]?.outputs).toEqual([
       { title: "替换 InputStage TextArea", state: "done" },
       { title: "图片管道接入", state: "done" },
     ]);
     expect(model.mainSummary).toContain("任务草案交给执行计划");
+  });
+
+  test("ignores main-scope succeeded milestones that are not phase2 completion", () => {
+    const model = buildSplitRuntimeModel([
+      log({ id: "queue", at: 1, clusterId: "cluster-a", title: "wise", scope: "subagent", status: "queued" }),
+      log({ id: "plan", at: 2, scope: "main", status: "succeeded", title: "规划完成" }),
+    ]);
+
+    expect(model.stages).toHaveLength(2);
+    expect(model.stages[1]?.status).toBe("queued");
+    expect(model.activeStageIndex).toBe(1);
+    expect(model.mainSummary).not.toContain("任务草案交给执行计划");
   });
 
   test("reads simplified runtime detail labels", () => {

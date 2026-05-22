@@ -1365,7 +1365,7 @@ export function usePrdTaskSplitPanelController({
           {
             scope: "main",
             agentName: "主会话",
-            status: "succeeded",
+            status: "info",
             title: "规划完成",
             details: compactRuntimeDetails([
               { label: "需求分组", value: String(plannedState.plan?.clusters.length ?? 0) },
