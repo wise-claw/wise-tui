@@ -298,7 +298,7 @@ export function TaskResultPanel({
                 <div className="app-prd-task-panel__result-runtime">
                   <div className="app-prd-task-panel__split-runtime-head">
                     <Space size={8} align="center" className="app-prd-task-panel__split-runtime-head-title">
-                      <Typography.Text strong>拆分 fan-out 运行图</Typography.Text>
+                      <Typography.Text strong>任务生成记录</Typography.Text>
                       {parsing ? <Spin size="small" aria-label="拆分进行中" /> : null}
                     </Space>
                     <Button
@@ -306,18 +306,18 @@ export function TaskResultPanel({
                       type="text"
                       icon={<CloseOutlined />}
                       onClick={onCloseRuntime}
-                      aria-label="关闭子代理对话面板"
+                      aria-label="关闭任务生成记录"
                     />
                   </div>
-	                  <SplitRuntimeMessages
-	                    logs={runtimeLogs}
-	                    clusterRuns={clusterRuns}
-	                    listRef={runtimeListRef}
-	                    retryingPhase={retryingPhase}
-	                    onRetryStage={onRetryStage}
-	                    onRetryCluster={onRetryCluster}
-	                    onCancelCluster={onCancelCluster}
-	                  />
+                  <SplitRuntimeMessages
+                    logs={runtimeLogs}
+                    clusterRuns={clusterRuns}
+                    listRef={runtimeListRef}
+                    retryingPhase={retryingPhase}
+                    onRetryStage={onRetryStage}
+                    onRetryCluster={onRetryCluster}
+                    onCancelCluster={onCancelCluster}
+                  />
                 </div>
               ) : (
                 <>
@@ -333,7 +333,7 @@ export function TaskResultPanel({
                       onMoveTaskToWave={onMoveTaskToExecutionWave}
                     />
                   ) : null}
-	                  {showExecutionRuntime ? (
+                  {showExecutionRuntime ? (
                     <ExecutionRuntimeQueue
                       result={activeResult}
                       materializedResult={materializedResult}
@@ -348,15 +348,15 @@ export function TaskResultPanel({
                         setResultViewMode("orchestration");
                       }}
                     />
-	                  ) : null}
-	                  {showPlanPreview ? (
-	                    <PlannedClusterPreview
-	                      summary={plannedMissionSummary}
-	                      parsing={parsing}
-	                      onDispatch={onDispatchPlannedClusters}
-	                    />
-	                  ) : null}
-	                  <div
+                  ) : null}
+                  {showPlanPreview ? (
+                    <PlannedClusterPreview
+                      summary={plannedMissionSummary}
+                      parsing={parsing}
+                      onDispatch={onDispatchPlannedClusters}
+                    />
+                  ) : null}
+                  <div
                     className={[
                       "app-prd-task-panel__task-list",
                       showTaskList ? "" : "is-hidden-for-orchestration",
@@ -365,7 +365,7 @@ export function TaskResultPanel({
                   >
                     {filteredTasks.length === 0 ? (
                       <div className="app-prd-task-panel__task-list-empty">
-                        <Typography.Text type="secondary">暂未拆分任务</Typography.Text>
+                        <Typography.Text type="secondary">先在左侧写需求，然后生成任务草案。</Typography.Text>
                       </div>
                     ) : (
                       filteredTasks.map((task) => (
@@ -471,7 +471,7 @@ function SplitResultStageRail({
         onClick={() => onModeChange("review")}
       >
         <span>1</span>
-        <strong>候选任务复核</strong>
+        <strong>复核任务</strong>
         <small>{confirmedCount}/{totalCount} 已确认</small>
       </button>
       <button
@@ -484,8 +484,8 @@ function SplitResultStageRail({
         onClick={() => onModeChange("orchestration")}
       >
         <span>2</span>
-        <strong>编排确认</strong>
-        <small>{waveCount > 0 ? `${waveCount} 个执行波次` : "生成 DAG"}</small>
+        <strong>执行计划</strong>
+        <small>{waveCount > 0 ? `${waveCount} 个执行批次` : "确认后生成"}</small>
       </button>
       <button
         type="button"
@@ -494,8 +494,8 @@ function SplitResultStageRail({
         onClick={onMaterialize}
       >
         <span>3</span>
-        <strong>落盘执行</strong>
-        <small>{materialized ? "执行已启动" : canGenerateExecutableTasks ? "写入并派发" : "等待确认"}</small>
+        <strong>开始执行</strong>
+        <small>{materialized ? "执行已启动" : canGenerateExecutableTasks ? "生成任务并启动" : "等待确认"}</small>
       </button>
     </div>
   );
@@ -514,13 +514,13 @@ function PlannedClusterPreview({
     <div className="app-prd-task-panel__planned-clusters">
       <div className="app-prd-task-panel__planned-clusters-head">
         <div>
-          <Typography.Text strong>Cluster 规划</Typography.Text>
+          <Typography.Text strong>任务草案计划</Typography.Text>
           <Typography.Text type="secondary">
-            {summary.requirementCount} 条需求 · {summary.clusters.length} 个分组
+            {summary.requirementCount} 条需求 · {summary.clusters.length} 个需求分组
           </Typography.Text>
         </div>
         <Button type="primary" size="small" loading={parsing} disabled={parsing || summary.clusters.length === 0} onClick={onDispatch}>
-          派发 splitter
+          生成任务草案
         </Button>
       </div>
       <div className="app-prd-task-panel__planned-cluster-list">
@@ -530,7 +530,7 @@ function PlannedClusterPreview({
             <div>
               <strong>{cluster.title}</strong>
               <small>
-                {cluster.id} · requirements: {cluster.requirementIds.join(", ") || "none"}
+                覆盖需求：{cluster.requirementIds.join(", ") || "无"}
               </small>
             </div>
           </div>

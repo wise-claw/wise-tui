@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX,
   MAIN_LAYOUT_RIGHT_SIDER_WIDTH_PX,
   clampMainLayoutLeftWidthPx,
   clampMainLayoutRightWidthPx,

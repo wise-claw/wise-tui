@@ -173,6 +173,9 @@ export function PrdTaskSplitPanel({
     activeProjectId,
     activeRepositoryId,
   });
+  const workspaceStageClass = filteredTasks.length > 0 || plannedMissionSummary || splitRuntimeVisible
+    ? "app-prd-task-panel__columns--has-task-flow"
+    : "app-prd-task-panel__columns--writing";
 
   return (
     <Suspense
@@ -218,6 +221,7 @@ export function PrdTaskSplitPanel({
           gutter={12}
           className={[
             "app-prd-task-panel__columns",
+            workspaceStageClass,
             workspaceLayout === "focused" ? "app-prd-task-panel__columns--task-focus" : "",
           ].filter(Boolean).join(" ")}
         >

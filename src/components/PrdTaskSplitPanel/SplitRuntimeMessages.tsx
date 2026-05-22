@@ -50,11 +50,11 @@ export function SplitRuntimeMessages({
             </div>
             <div className="app-prd-task-panel__runtime-subagent-list">
               <div className="app-prd-task-panel__runtime-subagent-list-head">
-                <span>子代理</span>
+                <span>任务生成</span>
                 <span>{runtime.subagents.length} 个</span>
               </div>
               {runtime.subagents.length === 0 ? (
-                <div className="app-prd-task-panel__runtime-subagent-empty">等待派发</div>
+                <div className="app-prd-task-panel__runtime-subagent-empty">等待开始</div>
               ) : (
                 runtime.subagents.map((subagent) => (
                   <button
@@ -70,9 +70,9 @@ export function SplitRuntimeMessages({
                     )}
                   >
                     <span className="app-prd-task-panel__runtime-subagent-main">
-                      <span className="app-prd-task-panel__runtime-subagent-avatar">C{subagent.ordinal}</span>
+                      <span className="app-prd-task-panel__runtime-subagent-avatar">{subagent.ordinal}</span>
                       <span className="app-prd-task-panel__runtime-subagent-title">
-                        <strong>{subagent.title} · Cluster {subagent.ordinal}/{subagent.total}</strong>
+                        <strong>{subagent.title} · 第 {subagent.ordinal}/{subagent.total} 组</strong>
                         <small>{subagent.waitingReason ?? subagent.clusterId}</small>
                       </span>
                     </span>
@@ -94,7 +94,7 @@ export function SplitRuntimeMessages({
                       ))}
                     </span>
                     <span className="app-prd-task-panel__runtime-thinking">
-                      <span>拆分依据</span>
+                      <span>生成依据</span>
                       <small>{subagent.thinking}</small>
                     </span>
                     <span className="app-prd-task-panel__runtime-output-list">
@@ -118,7 +118,7 @@ export function SplitRuntimeMessages({
               <div className="app-prd-task-panel__runtime-detail">
                 <div className="app-prd-task-panel__runtime-detail-head">
                   <div>
-                    <span>splitter 输出流</span>
+                    <span>高级运行详情</span>
                     <strong>{activeSubagent.title}</strong>
                   </div>
                   <Space size={6}>
@@ -152,11 +152,11 @@ export function SplitRuntimeMessages({
 function ClusterRunArtifacts({ run }: { run: ClusterRunState }) {
   const details = [
     ["状态", run.status],
-    ["runDir", run.raw?.runDir ?? ""],
-    ["stdout", run.raw?.stdoutPath ?? run.progress?.error?.stdoutPath ?? ""],
-    ["stderr", run.raw?.stderrPath ?? run.progress?.error?.stderrPath ?? ""],
-    ["raw", run.raw?.rawResultPath ?? ""],
-    ["父任务", run.parentTaskPath ?? ""],
+    ["运行目录", run.raw?.runDir ?? ""],
+    ["标准输出", run.raw?.stdoutPath ?? run.progress?.error?.stdoutPath ?? ""],
+    ["错误输出", run.raw?.stderrPath ?? run.progress?.error?.stderrPath ?? ""],
+    ["原始结果", run.raw?.rawResultPath ?? ""],
+    ["任务来源", run.parentTaskPath ?? ""],
   ].filter(([, value]) => value.trim().length > 0);
   if (details.length === 0) return null;
   return (

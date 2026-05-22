@@ -49,12 +49,12 @@ export function ExecutionRuntimeQueue({
     <div className="app-prd-task-panel__execution-runtime">
       <header className="app-prd-task-panel__execution-runtime-head">
         <div>
-          <span>Workspace Trellis</span>
+          <span>主会话执行</span>
           <strong>{runtimeTitle(overallStatus)}</strong>
-          <p>{fanoutSnapshot?.message ?? "任务目录已写入 Workspace Trellis，正在按编排波次自动派发实现子代理。"}</p>
+          <p>{fanoutSnapshot?.message ?? "任务已生成，正在按执行计划自动处理。"}</p>
         </div>
         <div className="app-prd-task-panel__execution-runtime-actions">
-          <Button size="small" onClick={onBackToPlan}>返回编排</Button>
+          <Button size="small" onClick={onBackToPlan}>返回执行计划</Button>
           <Button size="small" icon={overallStatus === "running" ? <LoadingOutlined /> : <CheckCircleOutlined />} disabled>
             {overallStatus === "running" ? "执行中" : overallStatus === "failed" ? "有失败" : "已完成"}
           </Button>
@@ -62,7 +62,7 @@ export function ExecutionRuntimeQueue({
       </header>
 
       <div className="app-prd-task-panel__execution-runtime-summary">
-        <RuntimeSummaryItem label="已落盘" value={materializedResult?.childTaskNames.length ?? 0} />
+        <RuntimeSummaryItem label="已生成" value={materializedResult?.childTaskNames.length ?? 0} />
         <RuntimeSummaryItem label="执行中" value={runningCount} />
         <RuntimeSummaryItem label="已完成" value={fanoutSnapshot?.doneCount ?? 0} />
       </div>
@@ -159,13 +159,13 @@ function RuntimeTaskRow({
 }
 
 function runtimeTitle(status: ExecutionFanoutSnapshot["status"]) {
-  if (status === "failed") return "执行 fan-out 有失败";
-  if (status === "succeeded") return "执行 fan-out 已完成";
-  return "正在自动派发执行";
+  if (status === "failed") return "执行有失败";
+  if (status === "succeeded") return "执行已完成";
+  return "正在执行任务";
 }
 
 function waveStatusText(status: ExecutionFanoutWaveStatus) {
-  if (status === "running") return "本波次子代理执行中";
+  if (status === "running") return "本批次执行中";
   if (status === "succeeded") return "本波次已完成";
   if (status === "failed") return "本波次执行失败";
   return "等待前置波次完成";

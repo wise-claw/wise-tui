@@ -158,12 +158,12 @@ export function useRequirementMissionController({ target }: RequirementMissionCo
       plan,
       dispatchClusters,
       materializeReviewedTasks,
-	      retryCluster,
-	      cancelCluster,
-	      hydrateClusterRun,
-	    }),
-	    [api, busy, cancelCluster, dispatchClusters, hydrateClusterRun, materializeReviewedTasks, plan, retryCluster],
-	  );
+      retryCluster,
+      cancelCluster,
+      hydrateClusterRun,
+    }),
+    [api, busy, cancelCluster, dispatchClusters, hydrateClusterRun, materializeReviewedTasks, plan, retryCluster],
+  );
 }
 
 function summarizeWriteResults(writeResults: WizardWriteResult[]): RequirementMissionMaterializeResult | null {

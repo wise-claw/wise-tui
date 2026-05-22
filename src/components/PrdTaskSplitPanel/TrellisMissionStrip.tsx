@@ -12,7 +12,7 @@ interface Props {
 
 export function TrellisMissionStrip({ target, stages }: Props) {
   return (
-    <section className="app-prd-task-panel__mission-strip" aria-label="Trellis 任务编排状态">
+    <section className="app-prd-task-panel__mission-strip" aria-label="需求拆分助手流程状态">
       <div className="app-prd-task-panel__mission-target">
         <span
           className={[
@@ -27,7 +27,7 @@ export function TrellisMissionStrip({ target, stages }: Props) {
               {target.title}
             </Typography.Text>
             {target.healthy ? (
-              <Tooltip title="Trellis 目标可用">
+              <Tooltip title="当前目标可用">
                 <CheckOutlined className="app-prd-task-panel__mission-target-ok" />
               </Tooltip>
             ) : (
@@ -42,11 +42,11 @@ export function TrellisMissionStrip({ target, stages }: Props) {
         </div>
       </div>
       <div className="app-prd-task-panel__mission-meta">
-        <span title={target.rootPath || "未解析 Trellis 根"}>
-          Root：{target.rootPath || "未绑定"}
+          <span title={target.rootPath || "未绑定工作目录"}>
+          目录：{target.rootPath || "未绑定"}
         </span>
-        <span>Repos：{target.repositoryCount}</span>
-        <span title={target.activeRepositoryLabel}>Exec：{target.activeRepositoryLabel}</span>
+        <span>仓库：{target.repositoryCount}</span>
+        <span title={target.activeRepositoryLabel}>执行：{target.activeRepositoryLabel}</span>
       </div>
       <ol className="app-prd-task-panel__mission-stages">
         {stages.map((stage) => (

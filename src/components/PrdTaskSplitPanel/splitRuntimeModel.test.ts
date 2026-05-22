@@ -21,9 +21,9 @@ describe("buildSplitRuntimeModel", () => {
 
     expect(model.subagents).toHaveLength(2);
     expect(model.subagents[1]?.status).toBe("queued");
-    expect(model.subagents[1]?.waitingReason).toBe("等待 cluster 1 输出候选任务");
+    expect(model.subagents[1]?.waitingReason).toBe("等待第 1 组需求生成任务");
     expect(model.subagents[1]?.outputs[0]).toEqual({
-      title: "等待子代理输出",
+      title: "等待任务生成",
       state: "pending",
     });
   });
@@ -46,7 +46,7 @@ describe("buildSplitRuntimeModel", () => {
     expect(subagent?.status).toBe("running");
     expect(subagent?.steps.map((step) => step.state)).toContain("active");
     expect(subagent?.thinking).toContain("任务依赖");
-    expect(model.mainSummary).toContain("Cluster 1/1");
+    expect(model.mainSummary).toContain("正在处理第 1/1 组");
   });
 
   test("shows completed task titles as output chips", () => {
@@ -72,6 +72,29 @@ describe("buildSplitRuntimeModel", () => {
       { title: "替换 InputStage TextArea", state: "done" },
       { title: "图片管道接入", state: "done" },
     ]);
-    expect(model.mainSummary).toContain("交给编排层生成 DAG");
+    expect(model.mainSummary).toContain("任务草案交给执行计划");
+  });
+
+  test("reads simplified runtime detail labels", () => {
+    const model = buildSplitRuntimeModel([
+      log({
+        id: "done",
+        at: 1,
+        role: "assistant",
+        clusterId: "cluster-a",
+        title: "wise",
+        scope: "subagent",
+        status: "succeeded",
+        details: [
+          { label: "任务数", value: "1" },
+          { label: "任务标题", value: "重构主流程" },
+          { label: "任务集合", value: ".trellis/tasks/parent" },
+        ],
+      }),
+    ]);
+
+    expect(model.subagents[0]?.summary).toBe("已产出 1 个任务");
+    expect(model.subagents[0]?.thinking).toContain("执行计划");
+    expect(model.subagents[0]?.outputs).toEqual([{ title: "重构主流程", state: "done" }]);
   });
 });

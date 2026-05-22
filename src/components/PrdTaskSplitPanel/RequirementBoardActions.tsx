@@ -14,13 +14,13 @@ import type { AssistantWorkflowRef } from "../../types/assistant";
 import type { LegacyRunSummary } from "../../services/prdSplit/legacyRunsImport";
 
 function buildWorkflowSummary(workflows: AssistantWorkflowRef[]): string {
-  if (workflows.length === 0) return "Wise Trellis";
+  if (workflows.length === 0) return "内置任务规划";
   return workflows.map((item) => item.label).join(" · ");
 }
 
 function buildWorkflowTooltip(workflows: AssistantWorkflowRef[]): ReactNode {
   if (workflows.length === 0) {
-    return "内置 Trellis 编排";
+    return "内置任务规划与执行流程";
   }
   return (
     <ul className="app-prd-task-panel__assistant-orchestration-tip">
@@ -75,10 +75,10 @@ export function RequirementBoardActions({
         <Tooltip title={buildWorkflowTooltip(assistantWorkflowOptions)}>
           <div
             className="app-prd-task-panel__assistant-orchestration"
-            aria-label="需求拆分助手内置 Trellis 编排"
+            aria-label="需求拆分助手内置任务规划"
           >
             <Typography.Text type="secondary" className="app-prd-task-panel__assistant-orchestration-label">
-              编排
+              流程
             </Typography.Text>
             <Typography.Text
               type="secondary"
@@ -149,7 +149,7 @@ export function RequirementBoardActions({
           loading={parsing}
           disabled={!hasInput || parsing || splitStarting}
         >
-          拆分
+          生成任务草案
         </Button>
       </Space>
       <Space size={8}>
