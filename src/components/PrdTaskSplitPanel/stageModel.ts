@@ -54,8 +54,8 @@ export function requirementExecutionStageLabel(
   executionStatus: ExecutionFanoutSnapshot["status"] | null,
   materialized: boolean,
 ): string {
-  if (executionStatus === "succeeded") return "执行完成";
-  if (executionStatus === "failed") return "执行失败";
-  if (executionStatus === "running") return "执行中";
-  return materialized ? "执行结果" : "开始执行";
+  if (executionStatus === "succeeded") return "主会话接管";
+  if (executionStatus === "failed") return "派发失败";
+  if (executionStatus === "running") return "派发中";
+  return materialized ? "已落盘" : "落盘执行";
 }

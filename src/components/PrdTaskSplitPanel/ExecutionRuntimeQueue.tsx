@@ -17,6 +17,8 @@ interface Props {
   materializedResult: RequirementMissionMaterializeResult | null;
   fanoutSnapshot: ExecutionFanoutSnapshot | null;
   selectedTaskId: string | null;
+  onOpenMainSession?: () => void;
+  onOpenRuntimeLens?: () => void;
   onSelectTask: (taskId: string) => void;
   onBackToPlan: () => void;
 }
@@ -26,6 +28,8 @@ export function ExecutionRuntimeQueue({
   materializedResult,
   fanoutSnapshot,
   selectedTaskId,
+  onOpenMainSession,
+  onOpenRuntimeLens,
   onSelectTask,
   onBackToPlan,
 }: Props) {
@@ -51,12 +55,18 @@ export function ExecutionRuntimeQueue({
         <div>
           <span>主会话执行</span>
           <strong>{runtimeTitle(overallStatus)}</strong>
-          <p>{fanoutSnapshot?.message ?? "任务已生成，正在按执行计划自动处理。"}</p>
+          <p>{runtimeMessage(overallStatus, fanoutSnapshot?.message)}</p>
         </div>
         <div className="app-prd-task-panel__execution-runtime-actions">
           <Button size="small" onClick={onBackToPlan}>返回执行计划</Button>
+          {onOpenRuntimeLens ? (
+            <Button size="small" onClick={onOpenRuntimeLens}>运行透镜</Button>
+          ) : null}
+          {onOpenMainSession ? (
+            <Button size="small" type="primary" onClick={onOpenMainSession}>回主会话</Button>
+          ) : null}
           <Button size="small" icon={overallStatus === "running" ? <LoadingOutlined /> : <CheckCircleOutlined />} disabled>
-            {overallStatus === "running" ? "执行中" : overallStatus === "failed" ? "有失败" : "已完成"}
+            {overallStatus === "running" ? "派发中" : overallStatus === "failed" ? "有失败" : "已接管"}
           </Button>
         </div>
       </header>
@@ -159,9 +169,15 @@ function RuntimeTaskRow({
 }
 
 function runtimeTitle(status: ExecutionFanoutSnapshot["status"]) {
-  if (status === "failed") return "执行有失败";
-  if (status === "succeeded") return "执行已完成";
-  return "正在执行任务";
+  if (status === "failed") return "派发有失败";
+  if (status === "succeeded") return "已交给主会话";
+  return "正在派发任务";
+}
+
+function runtimeMessage(status: ExecutionFanoutSnapshot["status"], message: string | undefined) {
+  if (status === "succeeded") return "任务已写入并派发，后续实现进展在主会话与运行透镜查看。";
+  if (status === "failed") return message ?? "部分任务派发失败，请查看运行透镜定位失败项。";
+  return message ?? "任务已生成，正在按执行计划启动实现任务。";
 }
 
 function waveStatusText(status: ExecutionFanoutWaveStatus) {

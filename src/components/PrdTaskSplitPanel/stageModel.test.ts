@@ -53,7 +53,7 @@ describe("buildRequirementAssistantStageItems", () => {
     });
 
     expect(stages.map((stage) => stage.status)).toEqual(["done", "done", "done", "done", "done", "done"]);
-    expect(stages.at(-1)?.label).toBe("执行完成");
+    expect(stages.at(-1)?.label).toBe("主会话接管");
   });
 
   test("keeps execution active and failed when fanout fails", () => {
@@ -75,7 +75,7 @@ describe("buildRequirementAssistantStageItems", () => {
       plan: "done",
       execute: "failed",
     });
-    expect(stages.at(-1)?.label).toBe("执行失败");
+    expect(stages.at(-1)?.label).toBe("派发失败");
   });
 });
 

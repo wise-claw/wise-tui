@@ -2294,7 +2294,7 @@
 .app-prd-task-panel__result-stage-rail {
   flex: 0 0 auto;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 0.78fr)) minmax(0, 1.35fr);
   gap: 8px;
   padding: 8px;
   border: 1px solid var(--ant-color-border-secondary);
@@ -2388,14 +2388,62 @@
   color: var(--ant-color-error);
 }
 
-.app-prd-task-panel__result-stage--execute:not(:disabled):not(.is-done):not(.is-failed):not(.is-active) {
-  border-color: rgba(82, 196, 26, 0.45);
-  background: rgba(82, 196, 26, 0.09);
+.app-prd-task-panel__execution-handoff {
+  min-width: 0;
+  border: 1px solid rgba(82, 196, 26, 0.35);
+  border-radius: 8px;
+  background: rgba(82, 196, 26, 0.08);
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
-.app-prd-task-panel__result-stage--execute:not(:disabled):not(.is-done):not(.is-failed):not(.is-active) > span {
+.app-prd-task-panel__execution-handoff.is-running {
+  border-color: rgba(22, 119, 255, 0.4);
+  background: var(--ant-color-primary-bg);
+}
+
+.app-prd-task-panel__execution-handoff.is-done {
   border-color: rgba(82, 196, 26, 0.45);
-  color: #389e0d;
+  background: var(--ant-color-success-bg);
+}
+
+.app-prd-task-panel__execution-handoff.is-failed {
+  border-color: rgba(255, 77, 79, 0.42);
+  background: var(--ant-color-error-bg);
+}
+
+.app-prd-task-panel__execution-handoff > div:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.app-prd-task-panel__execution-handoff strong,
+.app-prd-task-panel__execution-handoff small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-prd-task-panel__execution-handoff strong {
+  color: var(--ant-color-text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.app-prd-task-panel__execution-handoff small {
+  color: var(--ant-color-text-secondary);
+  font-size: 11px;
+}
+
+.app-prd-task-panel__execution-handoff-actions {
+  flex: 0 0 auto;
+  display: inline-flex;
+  gap: 6px;
 }
 
 .app-prd-task-panel__execution-runtime {

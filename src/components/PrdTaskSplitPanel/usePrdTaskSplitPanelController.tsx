@@ -152,6 +152,11 @@ export interface TrellisTargetSummary {
   healthy: boolean;
 }
 
+export interface TrellisRuntimeLensTarget {
+  rootPath: string;
+  projectId: string | null;
+}
+
 interface SplitterCompleteEvent {
   clusterId: string;
   status: "succeeded" | "failed" | "cancelled";
@@ -436,6 +441,13 @@ export function usePrdTaskSplitPanelController({
     () => buildTrellisTargetSummary(trellisTarget, trellisTargetError),
     [trellisTarget, trellisTargetError],
   );
+  const trellisRuntimeLensTarget = useMemo<TrellisRuntimeLensTarget | null>(() => {
+    if (!trellisTarget?.rootPath.trim()) return null;
+    return {
+      rootPath: trellisTarget.rootPath,
+      projectId: trellisTarget.kind === "workspace" ? trellisTarget.projectId : null,
+    };
+  }, [trellisTarget]);
   const requirementMission = useRequirementMissionController({ target: trellisTarget });
   const requirementMissionRef = useRef(requirementMission);
   useEffect(() => {
@@ -3287,6 +3299,7 @@ export function usePrdTaskSplitPanelController({
     trellisStageItems,
     trellisTarget,
     trellisTargetError,
+    trellisRuntimeLensTarget,
     trellisTargetSummary,
     requirementMission,
     openTaskAiPopover,

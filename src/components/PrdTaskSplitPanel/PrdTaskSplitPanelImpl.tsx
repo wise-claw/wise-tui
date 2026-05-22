@@ -15,6 +15,8 @@ type SplitWorkspaceLayout = "review" | "focused";
 
 export interface PrdTaskSplitPanelProps {
   onClose: () => void;
+  onOpenMainSession?: () => void;
+  onOpenRuntimeLens?: (input: { rootPath: string; projectId: string | null }) => void;
   projects: ProjectItem[];
   repositories: Repository[];
   activeProjectId: string | null;
@@ -25,6 +27,8 @@ export interface PrdTaskSplitPanelProps {
 
 export function PrdTaskSplitPanel({
   onClose,
+  onOpenMainSession,
+  onOpenRuntimeLens,
   projects,
   repositories,
   activeProjectId,
@@ -152,6 +156,7 @@ export function PrdTaskSplitPanel({
     requirementMission,
     trellisStageItems,
     trellisTargetSummary,
+    trellisRuntimeLensTarget,
     openTaskAiPopover,
     taskAiActionLoadingById,
     taskAiOptimizedContentById,
@@ -470,6 +475,10 @@ export function PrdTaskSplitPanel({
               onRetryCluster={(clusterId) => { void requirementMission.retryCluster(clusterId); }}
               onCancelCluster={(clusterId) => { void requirementMission.cancelCluster(clusterId); }}
               onShowRuntime={() => setSplitRuntimeVisible(true)}
+              onOpenMainSession={onOpenMainSession ?? onClose}
+              onOpenRuntimeLens={trellisRuntimeLensTarget && onOpenRuntimeLens
+                ? () => onOpenRuntimeLens(trellisRuntimeLensTarget)
+                : undefined}
             />
           </Col>
         </Row>

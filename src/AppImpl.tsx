@@ -2856,6 +2856,14 @@ export default function App() {
         initialProjectId: assistantInitialTarget?.projectId ?? null,
         initialRepositoryId: assistantInitialTarget?.repositoryId ?? null,
         onClose: exitCockpit,
+        onOpenMainSession: exitCockpit,
+        onOpenRuntimeLens: ({ rootPath, projectId }) => {
+          viewMode.enter(inspectView({
+            kind: "runtime-events",
+            rootPath,
+            projectId,
+          }));
+        },
       }}
       progressMonitorDrawerProps={{
         open: monitorDrawerTarget != null,

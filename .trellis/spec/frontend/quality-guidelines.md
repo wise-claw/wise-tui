@@ -217,6 +217,8 @@ setProjects((prev) => prev.map((p) => (p.id === projectId ? updatedProject : p))
 - `Active task:` in the Claude prompt must use `executionMetadata.activeTaskPath` when present; never pass `task-a`/`task-1` style planning ids as the executable Trellis path.
 - Batch and single-task “落盘执行” entry points must share the same materialize-and-fan-out helper. Single-task execution passes `parallelGroups = [[task.id]]`.
 - Missing `childTasks` mappings are hard failures. Do not silently dispatch fewer tasks than the user confirmed.
+- UI must not present the materialized fan-out handoff as implementation completion. Once `.trellis/tasks` are written and implement agents are dispatched, label the state as main-session handoff / dispatch status and route follow-up observation to the main session plus the Trellis runtime-events inspector.
+- Do not run `.trellis/scripts/add_session.py` directly from PRD split UI. Session record / journal writes remain part of the Trellis finish-work flow unless a dedicated service wrapper is added.
 
 ### 4. Validation & Error Matrix
 
@@ -225,14 +227,19 @@ setProjects((prev) => prev.map((p) => (p.id === projectId ? updatedProject : p))
 - Missing `sourceTaskId -> taskPath` mapping -> `runMaterializedSplitTasksFanout` throws before `runSplitTasksOmcBatch`.
 - Wave batch returns failures -> mark the wave failed, stop later waves, keep the materialized task focus data visible.
 - Empty executable source task list -> show an info message and do not create a parent task.
+- Fan-out succeeds -> UI status is “main session took over” / dispatch succeeded, not “implementation completed”.
+- User wants final session record -> return to main session / Trellis finish flow; PRD split UI should not mutate journals directly.
 
 ### 5. Good/Base/Bad Cases
 
 - Good: two source tasks in two waves produce two `.trellis/tasks/...` workflow task ids; the second wave depends on the first materialized ref.
 - Good: a single task card action writes one child task and immediately dispatches exactly one implement subagent.
+- Good: after successful dispatch, the split panel offers “回主会话” and “运行透镜” actions while keeping the execution plan inspectable.
 - Base: manual OMC batch execution that does not pass `executionMetadataByTaskId` keeps existing task id behavior.
 - Bad: showing “已落盘到 Workspace Trellis” and closing the panel without calling the workflow runner.
 - Bad: using the source id as `Active task:` because the subagent cannot locate the materialized task directory.
+- Bad: adding a third “执行完成” product step when no new user-confirmable artifact is created.
+- Bad: calling `add_session.py` from the frontend to simulate `/trellis:finish-work`.
 
 ### 6. Tests Required
 

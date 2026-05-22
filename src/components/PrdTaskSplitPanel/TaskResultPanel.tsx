@@ -122,6 +122,8 @@ interface Props {
   onRetryCluster: (clusterId: string) => void;
   onCancelCluster: (clusterId: string) => void;
   onShowRuntime: () => void;
+  onOpenMainSession?: () => void;
+  onOpenRuntimeLens?: () => void;
 }
 
 export function TaskResultPanel({
@@ -199,6 +201,8 @@ export function TaskResultPanel({
   onRetryCluster,
   onCancelCluster,
   onShowRuntime,
+  onOpenMainSession,
+  onOpenRuntimeLens,
 }: Props) {
   const showRuntime = runtimeVisible && (parsing || filteredTasks.length === 0 || runtimeLogs.length > 0);
   const [resultViewMode, setResultViewMode] = useState<ResultViewMode>("review");
@@ -227,8 +231,8 @@ export function TaskResultPanel({
   const showPlanPreview = !showRuntime && !activeResult && plannedMissionSummary !== null;
   const showTaskList = !showRuntime && !showOrchestration && !showExecutionRuntime && !showPlanPreview;
   const primaryActionLabel = resultViewMode === "runtime"
-    ? "执行结果"
-    : resultViewMode === "orchestration" ? "落盘并启动" : "确认并编排";
+    ? "执行状态"
+    : resultViewMode === "orchestration" ? "落盘并执行" : "确认并编排";
   const primaryActionLoading = resultViewMode === "orchestration"
     ? generatingExecutableTaskId === "__all__"
     : confirmSavingTaskId === "__all__";
@@ -415,6 +419,8 @@ export function TaskResultPanel({
                       materializedResult={executionRuntimePayload.materializedResult}
                       fanoutSnapshot={executionFanoutSnapshot}
                       selectedTaskId={selectedTaskId}
+                      onOpenMainSession={onOpenMainSession}
+                      onOpenRuntimeLens={onOpenRuntimeLens}
                       onSelectTask={(taskId) => {
                         const task = executionRuntimePayload.result.splitTasks.find((item) => item.id === taskId);
                         if (task) onSelectTask(task);
@@ -559,36 +565,67 @@ function SplitResultStageRail({
         className={[
           "app-prd-task-panel__result-stage",
           mode === "orchestration" ? "is-active" : "",
+          materialized ? "is-done" : "",
         ].filter(Boolean).join(" ")}
         disabled={!canEnterOrchestration}
         onClick={() => onModeChange("orchestration")}
       >
         <span>2</span>
         <strong>执行计划</strong>
-        <small>{waveCount > 0 ? `${waveCount} 个执行批次待确认` : "确认后编排"}</small>
+        <small>{waveCount > 0 ? `${waveCount} 个批次，确认后落盘并执行` : "确认后落盘并执行"}</small>
       </button>
-      <button
-        type="button"
-        className={[
-          "app-prd-task-panel__result-stage",
-          "app-prd-task-panel__result-stage--execute",
-          mode === "runtime" ? "is-active" : "",
-          executionStatus === "succeeded" ? "is-done" : "",
-          executionStatus === "failed" ? "is-failed" : "",
-        ].filter(Boolean).join(" ")}
-        disabled={!canGenerateExecutableTasks && !canViewRuntime}
-        onClick={() => {
-          if (canViewRuntime) {
-            onModeChange("runtime");
-            return;
-          }
-          onMaterialize();
-        }}
-      >
-        <span>3</span>
+      <ExecutionHandoffStrip
+        canGenerateExecutableTasks={canGenerateExecutableTasks}
+        canViewRuntime={canViewRuntime}
+        executionStatus={executionStatus}
+        materialized={materialized}
+        onMaterialize={onMaterialize}
+        onViewRuntime={() => onModeChange("runtime")}
+      />
+    </div>
+  );
+}
+
+function ExecutionHandoffStrip({
+  canGenerateExecutableTasks,
+  canViewRuntime,
+  executionStatus,
+  materialized,
+  onMaterialize,
+  onViewRuntime,
+}: {
+  canGenerateExecutableTasks: boolean;
+  canViewRuntime: boolean;
+  executionStatus: ExecutionFanoutSnapshot["status"] | null;
+  materialized: boolean;
+  onMaterialize: () => void;
+  onViewRuntime: () => void;
+}) {
+  return (
+    <div
+      className={[
+        "app-prd-task-panel__execution-handoff",
+        executionStatus === "failed" ? "is-failed" : "",
+        executionStatus === "succeeded" ? "is-done" : "",
+        executionStatus === "running" ? "is-running" : "",
+      ].filter(Boolean).join(" ")}
+    >
+      <div>
         <strong>{executionStageTitle({ executionStatus, materialized })}</strong>
         <small>{executionStageHint({ executionStatus, materialized, canGenerateExecutableTasks })}</small>
-      </button>
+      </div>
+      <div className="app-prd-task-panel__execution-handoff-actions">
+        {!materialized && canGenerateExecutableTasks ? (
+          <Button size="small" type="primary" onClick={onMaterialize}>
+            落盘并执行
+          </Button>
+        ) : null}
+        {canViewRuntime ? (
+          <Button size="small" onClick={onViewRuntime}>
+            查看队列
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -600,10 +637,10 @@ function executionStageTitle({
   executionStatus: ExecutionFanoutSnapshot["status"] | null;
   materialized: boolean;
 }) {
-  if (executionStatus === "succeeded") return "执行完成";
-  if (executionStatus === "failed") return "执行失败";
-  if (executionStatus === "running") return "执行中";
-  return materialized ? "执行结果" : "开始执行";
+  if (executionStatus === "succeeded") return "主会话已接管";
+  if (executionStatus === "failed") return "派发有失败";
+  if (executionStatus === "running") return "正在派发";
+  return materialized ? "已生成任务文件" : "等待落盘执行";
 }
 
 function executionStageHint({
@@ -615,11 +652,11 @@ function executionStageHint({
   materialized: boolean;
   canGenerateExecutableTasks: boolean;
 }) {
-  if (executionStatus === "succeeded") return "已写入并完成";
-  if (executionStatus === "failed") return "执行有失败";
-  if (executionStatus === "running") return "执行中";
-  if (materialized) return "查看执行结果";
-  if (canGenerateExecutableTasks) return "落盘并启动";
+  if (executionStatus === "succeeded") return "任务已写入并派发，后续进展在主会话与运行透镜查看";
+  if (executionStatus === "failed") return "部分任务未派发成功，可查看队列定位失败项";
+  if (executionStatus === "running") return "正在按执行计划启动实现任务";
+  if (materialized) return "任务文件已生成，可查看队列";
+  if (canGenerateExecutableTasks) return "执行计划确认后会写入 Trellis 并启动实现任务";
   return "等待编排确认";
 }
 
