@@ -1360,24 +1360,24 @@ export function usePrdTaskSplitPanelController({
         setExecutionFanoutSnapshot(null);
         appendSplitRuntimeLog(
           "system",
-          "已读完需求并完成任务草案规划，等待你确认后再生成任务文件。",
+          "已读完需求并完成任务草案规划，正在启动任务生成器。",
           {
             scope: "main",
             agentName: "主会话",
-              status: "succeeded",
-              title: "规划完成",
-              details: compactRuntimeDetails([
-                { label: "需求分组", value: String(plannedState.plan?.clusters.length ?? 0) },
-                { label: "需求条目", value: String(plannedState.requirementsIndex?.requirements.length ?? 0) },
-                { label: "工作目录", value: rootPath },
-              ]),
-            },
-          );
+            status: "succeeded",
+            title: "规划完成",
+            details: compactRuntimeDetails([
+              { label: "需求分组", value: String(plannedState.plan?.clusters.length ?? 0) },
+              { label: "需求条目", value: String(plannedState.requirementsIndex?.requirements.length ?? 0) },
+              { label: "工作目录", value: rootPath },
+            ]),
+          },
+        );
         for (const [index, cluster] of (plannedState.plan?.clusters ?? []).entries()) {
           appendSplitRuntimeLog(
             "assistant",
             index === 0
-              ? "任务草案计划已生成，等待开始生成具体任务。"
+              ? "任务草案计划已生成，即将生成候选任务。"
               : `第 ${index + 1} 组需求已进入任务草案计划。`,
             {
               scope: "subagent",
@@ -1393,23 +1393,23 @@ export function usePrdTaskSplitPanelController({
         }
         appendSplitRuntimeLog(
           "system",
-          `已规划 ${planResult.summary.clusters.length} 个需求分组，请在右侧生成任务草案。`,
+          `已规划 ${planResult.summary.clusters.length} 个需求分组，开始生成候选任务。`,
           {
             scope: "main",
             agentName: "主会话",
-            status: "succeeded",
+            status: "running",
             title: "草案计划就绪",
             details: compactRuntimeDetails([
               { label: "需求分组", value: String(planResult.summary.clusters.length) },
             ]),
           },
         );
-        message.success(`已生成任务草案计划：${planResult.summary.clusters.length} 个需求分组`);
         if (splitRuntimeInModal) {
           setSplitWizardStep("runtime");
         } else {
           setSplitRuntimeVisible(true);
         }
+        await dispatchPlannedClusters(planResult.summary);
       } catch (e) {
         const msg = toErrorMessage(e, "生成任务草案失败");
         appendSplitRuntimeLog(
@@ -1603,61 +1603,67 @@ export function usePrdTaskSplitPanelController({
     );
   }
 
+  async function dispatchPlannedClusters(summary: RequirementMissionPlanSummary) {
+    setSplitRuntimeVisible(true);
+    appendSplitRuntimeLog(
+      "system",
+      "开始生成任务草案。系统会在后台准备运行记录，完成后回到任务复核区。",
+      {
+        scope: "main",
+        agentName: "主会话",
+        status: "running",
+        title: "生成开始",
+        details: compactRuntimeDetails([
+          { label: "需求分组", value: String(summary.clusters.length) },
+        ]),
+      },
+    );
+    const out = await requirementMission.dispatchClusters();
+    const allRuns = out?.allClusterRuns ?? Object.values(requirementMission.api.state.clusterRuns);
+    for (const run of allRuns) {
+      appendClusterRunLog(run);
+    }
+    if (!out) {
+      throw new Error("未产出有效任务草案，请展开分组查看失败详情。");
+    }
+    const nextResult = syncTaskAnchorTextsFromRequirements(out.result);
+    setSplitQualitySummary(summarizeSplitQuality(nextResult.source, nextResult));
+    await savePrdTaskSplitResult(nextResult);
+    setActiveResult(nextResult);
+    setPlannedMissionSummary(null);
+    setSelectedTaskId(nextResult.splitTasks[0]?.id ?? null);
+    appendSplitRuntimeLog(
+      "system",
+      "主会话已开始汇总任务草案，准备做需求溯源与锚点定位。",
+      {
+        scope: "main",
+        agentName: "主会话",
+        status: "running",
+        title: "整理任务",
+      },
+    );
+    appendSplitRuntimeLog(
+      "system",
+      `任务草案已保存，右侧任务列表已刷新（共 ${nextResult.splitTasks.length} 个任务）。`,
+      {
+        scope: "main",
+        agentName: "主会话",
+        status: "succeeded",
+        title: "拆分完成",
+        details: compactRuntimeDetails([
+          { label: "任务数", value: String(nextResult.splitTasks.length) },
+        ]),
+      },
+    );
+    message.success(`任务草案已生成：${nextResult.splitTasks.length} 个任务`);
+  }
+
   async function handleDispatchPlannedClusters() {
-    if (!plannedMissionSummary || parsing) return;
+    const summary = plannedMissionSummaryRef.current;
+    if (!summary || parsing) return;
     try {
       setParsing(true);
-      setSplitRuntimeVisible(true);
-      appendSplitRuntimeLog(
-        "system",
-        "开始生成任务草案。系统会在后台准备运行记录，完成后回到任务复核区。",
-        {
-          scope: "main",
-          agentName: "主会话",
-          status: "running",
-          title: "生成开始",
-          details: compactRuntimeDetails([
-            { label: "需求分组", value: String(plannedMissionSummary.clusters.length) },
-          ]),
-        },
-      );
-      const out = await requirementMission.dispatchClusters();
-      if (!out) {
-        throw new Error("未产出有效任务草案。");
-      }
-      for (const run of out.allClusterRuns) {
-        appendClusterRunLog(run);
-      }
-      const nextResult = syncTaskAnchorTextsFromRequirements(out.result);
-      setSplitQualitySummary(summarizeSplitQuality(nextResult.source, nextResult));
-      await savePrdTaskSplitResult(nextResult);
-      setActiveResult(nextResult);
-      setPlannedMissionSummary(null);
-      setSelectedTaskId(nextResult.splitTasks[0]?.id ?? null);
-      appendSplitRuntimeLog(
-        "system",
-        "主会话已开始汇总任务草案，准备做需求溯源与锚点定位。",
-        {
-          scope: "main",
-          agentName: "主会话",
-          status: "running",
-          title: "整理任务",
-        },
-      );
-      appendSplitRuntimeLog(
-        "system",
-        `任务草案已保存，右侧任务列表已刷新（共 ${nextResult.splitTasks.length} 个任务）。`,
-        {
-          scope: "main",
-          agentName: "主会话",
-          status: "succeeded",
-          title: "拆分完成",
-          details: compactRuntimeDetails([
-            { label: "任务数", value: String(nextResult.splitTasks.length) },
-          ]),
-        },
-      );
-      message.success(`任务草案已生成：${nextResult.splitTasks.length} 个任务`);
+      await dispatchPlannedClusters(summary);
     } catch (err) {
       const msg = toErrorMessage(err, "生成任务草案失败");
       appendSplitRuntimeLog("error", msg, {
