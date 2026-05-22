@@ -431,7 +431,7 @@ describe("AuthorPanel", () => {
     expect(html).toContain("长驻会话");
     expect(html).toContain("逐轮处理");
     expect(html).toContain("说明");
-    expect(html).toContain("设置写入全局数据库");
+    expect(html).toContain("设置写入 SQLite app_settings");
   });
 
   test("application setting panes mount inside configuration center", () => {
