@@ -440,8 +440,6 @@ export function LeftSidebar({
         assistantHubActive={assistantHubActive}
         mcpHubActive={mcpHubActive}
         skillsHubActive={skillsHubActive}
-        authorDisabled={authorDisabled}
-        authorDisabledTooltip={authorDisabledTooltip}
         onOpenAssistantHub={onOpenAssistantHub}
         onOpenMcpHub={onOpenMcpHub}
         onOpenSkillsHub={onOpenSkillsHub}
