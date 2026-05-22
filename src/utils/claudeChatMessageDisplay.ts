@@ -24,6 +24,15 @@ export function indexOfLastRenderableUserMessage(messages: readonly ClaudeMessag
 /** Claude 助手流中的无展示价值占位句（仍可能出现在 parts 里）。 */
 const ASSISTANT_DISPLAY_NOISE_TEXT = new Set(["no response requested.", "no response requested"]);
 
+/** 会话 UI 中应跳过的系统占位/噪声文案（含历史已写入的消息）。 */
+const SYSTEM_MESSAGE_DISPLAY_NOISE = [/^Claude 系统错误:\s*unknown\s*$/i];
+
+export function isSystemMessageDisplayNoiseText(text: string): boolean {
+  const normalized = text.trim();
+  if (!normalized) return true;
+  return SYSTEM_MESSAGE_DISPLAY_NOISE.some((pattern) => pattern.test(normalized));
+}
+
 export function isAssistantDisplayNoiseText(text: string): boolean {
   const normalized = text.trim().toLowerCase();
   return normalized.length > 0 && ASSISTANT_DISPLAY_NOISE_TEXT.has(normalized);
@@ -48,7 +57,8 @@ export function isRenderableMessagePart(part: MessagePart): boolean {
 /** 消息行是否应在主会话列表中渲染（无正文则整行跳过）。 */
 export function hasRenderableChatMessageBody(msg: ClaudeMessage): boolean {
   if (msg.role === "system") {
-    return systemMessagePlainText(msg).trim().length > 0;
+    const text = systemMessagePlainText(msg).trim();
+    return text.length > 0 && !isSystemMessageDisplayNoiseText(text);
   }
   const parts = msg.parts;
   if (Array.isArray(parts) && parts.length > 0) {

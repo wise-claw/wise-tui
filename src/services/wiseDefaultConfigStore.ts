@@ -4,11 +4,15 @@
  */
 import type { ClaudeSession } from "../types";
 import { RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK, RIGHT_PANEL_DEFAULT_COLLAPSED_KEY } from "../utils/rightPanelStorage";
-import { deleteAppSetting, getAppSetting, setAppSettingJson } from "./appSettingsStore";
+import { deleteAppSetting, getAppSetting, setAppSetting, setAppSettingJson } from "./appSettingsStore";
 
 export type ClaudeSessionConnectionKind = NonNullable<ClaudeSession["connectionKind"]>;
 
 export const WISE_DEFAULT_CONFIG_KEY = "wise.defaultConfig.v1";
+
+/** 一次性：产品默认由逐轮改为长驻后，将已持久化的 `oneshot` 升为 `streaming`。 */
+export const WISE_DEFAULT_CONFIG_ONESHOT_TO_STREAMING_MIGRATION_KEY =
+  "wise.defaultConfig.oneshotToStreaming.v1";
 
 /** @deprecated 迁移后删除；读路径仅用于迁入 `wise.defaultConfig.v1`。 */
 export const CLAUDE_DEFAULT_CONNECTION_KIND_KEY = "wise.claudeDefaultConnectionKind.v1";
@@ -16,7 +20,7 @@ export const CLAUDE_DEFAULT_CONNECTION_KIND_KEY = "wise.claudeDefaultConnectionK
 /** @deprecated 迁移后删除；读路径仅用于迁入 `wise.defaultConfig.v1`。 */
 export const RIGHT_PANEL_DEFAULT_COLLAPSED_APP_KEY = "wise.rightPanel.defaultCollapsed.v1";
 
-export const CLAUDE_DEFAULT_CONNECTION_KIND_FALLBACK: ClaudeSessionConnectionKind = "oneshot";
+export const CLAUDE_DEFAULT_CONNECTION_KIND_FALLBACK: ClaudeSessionConnectionKind = "streaming";
 
 export const WISE_CLAUDE_CONNECTION_KIND_CHANGED = "wise:claude-connection-kind-changed";
 
@@ -138,17 +142,34 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
   };
 }
 
+/** 将旧版代码默认写入库的 `oneshot` 升为当前产品默认 `streaming`（仅执行一次）。 */
+async function maybeUpgradeOneshotDefaultToStreaming(
+  config: WiseDefaultConfigV1,
+): Promise<WiseDefaultConfigV1> {
+  if (config.connectionKind !== "oneshot") return config;
+  if ((await getAppSetting(WISE_DEFAULT_CONFIG_ONESHOT_TO_STREAMING_MIGRATION_KEY)) === "1") {
+    return config;
+  }
+  const next: WiseDefaultConfigV1 = { ...config, connectionKind: "streaming" };
+  await persistConfig(next);
+  await setAppSetting(WISE_DEFAULT_CONFIG_ONESHOT_TO_STREAMING_MIGRATION_KEY, "1");
+  dispatchConnectionKindChanged("streaming");
+  return next;
+}
+
 /** 从 `app_settings` 读取默认配置；无记录时写入默认值并返回。 */
 export async function loadWiseDefaultConfig(): Promise<WiseDefaultConfigV1> {
   const fromJson = parseConfigJson(await getAppSetting(WISE_DEFAULT_CONFIG_KEY));
-  if (fromJson) return fromJson;
+  if (fromJson) {
+    return await maybeUpgradeOneshotDefaultToStreaming(fromJson);
+  }
 
   const migrated = await migrateLegacyConfig();
   const resolved = migrated ?? DEFAULT_CONFIG;
   await persistConfig(resolved);
   await deleteLegacyAppSettings();
   clearLegacyLocalStorage();
-  return resolved;
+  return await maybeUpgradeOneshotDefaultToStreaming(resolved);
 }
 
 export async function saveWiseDefaultConfig(

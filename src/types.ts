@@ -559,8 +559,8 @@ export interface ClaudeSession {
   diskTranscriptPartial?: boolean;
   /**
    * 会话连接方式：
-   * - `"streaming"` 长驻进程 + `--input-format stream-json`
-   * - `"oneshot"` 逐轮 `claude -p`（全局默认，见默认配置）
+   * - `"streaming"` 长驻进程 + `--input-format stream-json`（全局默认，见默认配置）
+   * - `"oneshot"` 逐轮 `claude -p`
    */
   connectionKind?: "streaming" | "oneshot";
 }

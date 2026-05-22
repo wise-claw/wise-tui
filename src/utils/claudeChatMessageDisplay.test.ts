@@ -4,6 +4,7 @@ import {
   hasRenderableChatMessageBody,
   isAssistantDisplayNoiseText,
   isRenderableMessagePart,
+  isSystemMessageDisplayNoiseText,
 } from "./claudeChatMessageDisplay";
 
 describe("isAssistantDisplayNoiseText", () => {
@@ -24,6 +25,18 @@ describe("isRenderableMessagePart", () => {
     expect(isRenderableMessagePart({ type: "text", text: "No response requested." })).toBe(false);
     expect(isRenderableMessagePart({ type: "reasoning", text: "" })).toBe(false);
     expect(isRenderableMessagePart({ type: "text", text: "你好" })).toBe(true);
+  });
+});
+
+describe("isSystemMessageDisplayNoiseText", () => {
+  test("matches placeholder Claude system errors", () => {
+    expect(isSystemMessageDisplayNoiseText("Claude 系统错误: unknown")).toBe(true);
+    expect(isSystemMessageDisplayNoiseText("  Claude 系统错误: unknown  ")).toBe(true);
+  });
+
+  test("ignores meaningful system messages", () => {
+    expect(isSystemMessageDisplayNoiseText("Claude Hook 启动中")).toBe(false);
+    expect(isSystemMessageDisplayNoiseText("Claude 系统错误: rate limit exceeded")).toBe(false);
   });
 });
 
@@ -49,5 +62,13 @@ describe("hasRenderableChatMessageBody", () => {
       timestamp: 0,
     };
     expect(hasRenderableChatMessageBody(withReply)).toBe(true);
+
+    const unknownSystemError: ClaudeMessage = {
+      id: 3,
+      role: "system",
+      content: "Claude 系统错误: unknown",
+      timestamp: 0,
+    };
+    expect(hasRenderableChatMessageBody(unknownSystemError)).toBe(false);
   });
 });

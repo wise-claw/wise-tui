@@ -24,7 +24,7 @@ export function DefaultConfigPanel() {
           <div className="app-default-config-row__main">
             <span className="app-default-config-row__title">会话处理方式</span>
             <span className="app-default-config-row__hint">
-              全局默认逐轮处理；新建标签沿用此项，已打开且单独设置过的标签不变
+              全局默认长驻会话；新建标签沿用此项，已打开且单独设置过的标签不变
             </span>
           </div>
           <div className="app-default-config-row__control">
@@ -75,7 +75,7 @@ export function DefaultConfigPanel() {
           ))}
         </ul>
         <Typography.Text type="secondary" className="app-default-config-panel__notes-foot">
-          未单独配置时，新建主会话标签默认使用逐轮处理。
+          未单独配置时，新建主会话标签默认使用长驻会话。
         </Typography.Text>
       </aside>
     </div>

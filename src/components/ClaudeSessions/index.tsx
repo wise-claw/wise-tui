@@ -15,6 +15,7 @@ import { useDockSlice } from "../../hooks/useDockSlice";
 import { ClaudeChat } from "./ClaudeChat";
 import { DingTalkStreamGatewayTopbarSwitch } from "../DingTalkStreamGatewayTopbarSwitch";
 import { OpenAppMenu } from "../OpenAppMenu";
+import { LlmProxyTopbarTrigger } from "./LlmProxyTopbarTrigger";
 import {
   DEFAULT_OPEN_APP_ID,
 } from "../OpenAppMenu/constants";
@@ -766,6 +767,11 @@ export function Topbar({
             onSelectOpenAppId={setSelectedOpenAppId}
           />
         )}
+        {activeRepository ? (
+          <LlmProxyTopbarTrigger
+            repositoryPath={activeSessionRepositoryPath?.trim() || activeRepository.path}
+          />
+        ) : null}
         {onSearch && (
           <TopbarBtn icon={<IconSearch />} label="搜索文件 (Cmd+K)" onClick={onSearch} />
         )}

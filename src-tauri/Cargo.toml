@@ -54,7 +54,7 @@ keyboard-types = "0.7.0"
 rusqlite = { version = "0.32", features = ["bundled"] }
 tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std", "async-await"] }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "multipart"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "multipart", "stream"] }
 urlencoding = "2.1"
 sha2 = "0.10"
 serde_yaml = "0.9"

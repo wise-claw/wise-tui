@@ -129,4 +129,25 @@ describe("extractSystemErrorMessageFromStreamLine", () => {
     expect(extractSystemErrorMessageFromStreamLine(JSON.stringify({ type: "assistant" }))).toBeNull();
     expect(extractSystemErrorMessageFromStreamLine("{not-json")).toBeNull();
   });
+
+  test("ignores placeholder unknown system errors", () => {
+    expect(
+      extractSystemErrorMessageFromStreamLine(
+        JSON.stringify({ type: "system", message: "unknown" }),
+      ),
+    ).toBeNull();
+    expect(
+      extractSystemErrorMessageFromStreamLine(
+        JSON.stringify({ type: "system", error: "Unknown" }),
+      ),
+    ).toBeNull();
+  });
+
+  test("formats meaningful system errors", () => {
+    expect(
+      extractSystemErrorMessageFromStreamLine(
+        JSON.stringify({ type: "system", message: "rate limit exceeded" }),
+      ),
+    ).toBe("Claude 系统错误: rate limit exceeded");
+  });
 });

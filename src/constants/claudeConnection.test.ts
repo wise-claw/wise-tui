@@ -23,9 +23,9 @@ describe("claudeConnection", () => {
     setAppSetting.mockClear();
   });
 
-  test("normalizeClaudeConnectionKind defaults to oneshot", () => {
-    expect(normalizeClaudeConnectionKind(undefined)).toBe("oneshot");
-    expect(normalizeClaudeConnectionKind("bad")).toBe("oneshot");
+  test("normalizeClaudeConnectionKind defaults to streaming", () => {
+    expect(normalizeClaudeConnectionKind(undefined)).toBe("streaming");
+    expect(normalizeClaudeConnectionKind("bad")).toBe("streaming");
     expect(normalizeClaudeConnectionKind("oneshot", "streaming")).toBe("oneshot");
   });
 
@@ -47,11 +47,11 @@ describe("claudeConnection", () => {
   test("sessionUsesStreamingConnection respects session override", () => {
     expect(sessionUsesStreamingConnection({ connectionKind: "oneshot" })).toBe(false);
     expect(sessionUsesStreamingConnection({ connectionKind: "streaming" })).toBe(true);
-    expect(sessionUsesStreamingConnection({})).toBe(false);
+    expect(sessionUsesStreamingConnection({})).toBe(true);
   });
 
-  test("loadDefaultClaudeConnectionKind defaults to oneshot when unset", async () => {
-    expect(await loadDefaultClaudeConnectionKind()).toBe("oneshot");
+  test("loadDefaultClaudeConnectionKind defaults to streaming when unset", async () => {
+    expect(await loadDefaultClaudeConnectionKind()).toBe("streaming");
   });
 
   test("saveDefaultClaudeConnectionKind persists unified default config", async () => {

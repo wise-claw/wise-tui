@@ -1,6 +1,7 @@
 use crate::{
     agent_registry, app_state_commands, assistants, cc_wf_studio_mcp_bridge, cc_workflow_studio,
-    claude_code_usage, claude_commands, claude_config_dir, claude_external_ingest, code_knowledge_graph,
+    claude_code_usage, claude_commands, claude_config_dir, claude_external_ingest, claude_llm_proxy,
+    code_knowledge_graph,
     cua_driver, dingtalk_enterprise_bot, dingtalk_stream_gateway, extensions, git_commands, mission_control, mcp,
     openspec_bootstrap, prd_url_fetch, remote_channels, repository_files, skills, skills_sh, system_resource, task_artifact, trellis_bootstrap,
     trellis_bridge,
@@ -85,6 +86,7 @@ pub fn run() {
             app.manage(extension_registry);
             app.manage(agent_registry::AgentRegistry::new());
             trellis_runtime::spawn_stale_scanner(app.handle().clone());
+            claude_llm_proxy::bootstrap_from_db(app.handle());
 
             #[cfg(target_os = "macos")]
             crate::macos_webview_wake_recovery::register_macos_webview_wake_recovery(app.handle());
@@ -326,6 +328,11 @@ pub fn run() {
             claude_commands::terminal::terminal_write,
             claude_commands::terminal::terminal_resize,
             claude_commands::terminal::terminal_close,
+            claude_llm_proxy::list_claude_llm_proxy_records,
+            claude_llm_proxy::clear_claude_llm_proxy_records,
+            claude_llm_proxy::get_claude_llm_proxy_status,
+            claude_llm_proxy::get_claude_llm_proxy_config,
+            claude_llm_proxy::set_claude_llm_proxy_config,
             claude_commands::execute_claude_code,
             claude_commands::resume_claude_code,
             claude_commands::spawn_streaming_session,

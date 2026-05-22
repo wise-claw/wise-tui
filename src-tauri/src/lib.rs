@@ -7,6 +7,7 @@ mod claude_code_usage;
 mod claude_commands;
 mod claude_config_dir;
 mod claude_external_ingest;
+mod claude_llm_proxy;
 mod code_knowledge_graph;
 mod cua_driver;
 mod dingtalk_enterprise_bot;
