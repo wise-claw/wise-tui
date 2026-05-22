@@ -34,7 +34,9 @@ export function ContextDetailPopover({
     );
   }
 
-  const visibleCategories = breakdown.categories.filter((c) => c.tokens > 0);
+  const barCategories = breakdown.categories.filter((c) => c.tokens > 0);
+  const conversationTokens =
+    breakdown.categories.find((c) => c.id === "conversation")?.tokens ?? 0;
 
   return (
     <div className="app-claude-context-detail">
@@ -58,7 +60,7 @@ export function ContextDetailPopover({
         role="img"
         aria-label={`上下文占用约 ${breakdown.ctxPercent}%`}
       >
-        {visibleCategories.map((cat) => (
+        {barCategories.map((cat) => (
           <span
             key={cat.id}
             className="app-claude-context-detail__bar-seg"
@@ -72,7 +74,7 @@ export function ContextDetailPopover({
       </div>
 
       <ul className="app-claude-context-detail__list">
-        {visibleCategories.map((cat) => (
+        {breakdown.categories.map((cat) => (
           <li key={cat.id} className="app-claude-context-detail__row">
             <span
               className="app-claude-context-detail__swatch"
@@ -81,11 +83,16 @@ export function ContextDetailPopover({
             />
             <span className="app-claude-context-detail__label">{cat.label}</span>
             <span className="app-claude-context-detail__value">
-              {formatContextTokenCount(cat.tokens)}
+              {cat.tokens > 0 ? formatContextTokenCount(cat.tokens) : "—"}
             </span>
           </li>
         ))}
       </ul>
+
+      <p className="app-claude-context-detail__meta">
+        底栏圆环按对话约 {formatContextTokenCount(conversationTokens)} tokens；
+        合计含启动项。终端执行 <code>/context</code> 可看 Claude 官方实测。
+      </p>
 
       {compactHint ? (
         <p className="app-claude-context-detail__hint">{compactHint}</p>

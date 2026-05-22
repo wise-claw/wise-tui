@@ -187,8 +187,8 @@ export function buildContextBreakdownSnapshot(
     overhead.mcp +
     overhead.subagents;
   const totalTokens = Math.max(conversationTokens + overheadTotal, metrics?.estimatedTokens ?? 0);
-  const ctxPercent =
-    metrics?.ctxPercent ?? estimateContextPercent(totalTokens, maxContextTokens);
+  /** 详情面板按「启动开销 + 对话」合计占比；底栏圆环仍用仅对话的 metrics（与 /compact 触发一致）。 */
+  const ctxPercent = estimateContextPercent(totalTokens, maxContextTokens);
 
   return {
     maxTokens: maxContextTokens,

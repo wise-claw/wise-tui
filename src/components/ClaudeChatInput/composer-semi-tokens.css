@@ -384,8 +384,22 @@
   color: var(--ant-color-text-secondary);
 }
 
+.app-claude-context-detail__meta {
+  margin: 8px 0 0;
+  color: var(--ant-color-text-tertiary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.app-claude-context-detail__meta code {
+  font-size: 10px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--ant-color-fill-tertiary);
+}
+
 .app-claude-context-detail__hint {
-  margin: 10px 0 0;
+  margin: 8px 0 0;
   padding-top: 8px;
   border-top: 1px solid var(--ant-color-border-secondary);
   color: var(--ant-color-text-tertiary);
