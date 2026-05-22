@@ -8,6 +8,7 @@ import {
   type AgentDispatchOrchestrationItem,
   type ParallelGroupOrchestrationItem,
   type TaskOrchestrationItem,
+  type TaskConflictWarning,
 } from "./executionOrchestrationModel";
 
 interface Props {
@@ -172,6 +173,21 @@ function WaveColumn({
   onDragEnd: () => void;
   onDrop: (event: DragEvent<HTMLElement>, waveIndex: number) => void;
 }) {
+  const waveConflicts = useMemo(() => {
+    const seen = new Set<string>();
+    const uniq: TaskConflictWarning[] = [];
+    for (const task of group.tasks) {
+      if (!task.conflictWarnings) continue;
+      for (const warning of task.conflictWarnings) {
+        if (!seen.has(warning.id)) {
+          seen.add(warning.id);
+          uniq.push(warning);
+        }
+      }
+    }
+    return uniq;
+  }, [group.tasks]);
+
   return (
     <article
       className="app-prd-task-panel__orchestration-wave-column"
@@ -185,6 +201,28 @@ function WaveColumn({
         </div>
         <small>{index === 0 ? "无前置依赖" : "依赖上一波次"}</small>
       </div>
+      {waveConflicts.length > 0 ? (
+        <div className="app-prd-task-panel__orchestration-conflict-list" style={{ padding: "0 8px" }}>
+          {waveConflicts.map((conflict) => (
+            <div
+              key={conflict.id}
+              className="app-prd-task-panel__orchestration-conflict is-warning"
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: "6px",
+                padding: "6px 8px",
+                margin: "4px 0",
+                fontSize: "11px",
+                borderRadius: "4px"
+              }}
+            >
+              <AlertOutlined style={{ marginTop: "2px" }} />
+              <span style={{ lineHeight: "1.3" }}>{conflict.message}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
       <div className="app-prd-task-panel__orchestration-task-stack">
         {group.tasks.map((task) => (
           <TaskNode

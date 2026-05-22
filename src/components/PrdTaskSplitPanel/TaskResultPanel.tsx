@@ -1,4 +1,4 @@
-import { CloseOutlined, HistoryOutlined } from "@ant-design/icons";
+import { CloseOutlined, HistoryOutlined, CheckCircleOutlined, LoadingOutlined } from "@ant-design/icons";
 import { Button, Card, Space, Spin, Typography } from "antd";
 import type { MenuProps } from "antd";
 import { useEffect, useState } from "react";
@@ -200,15 +200,15 @@ export function TaskResultPanel({
   onCancelCluster,
   onShowRuntime,
 }: Props) {
-  const showRuntime = runtimeVisible && (parsing || filteredTasks.length === 0 || runtimeLogs.length > 0);
+  const showRuntimePanel = runtimeVisible && (parsing || runtimeLogs.length > 0);
   const [resultViewMode, setResultViewMode] = useState<ResultViewMode>("review");
   const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(() => new Set());
   const [runtimeQueueHidden, setRuntimeQueueHidden] = useState(false);
   const materializedResult = materializedExecutionResult;
-  const showExecutionRuntime = materializedResult !== null && activeResult && !showRuntime && !runtimeQueueHidden;
-  const showOrchestration = resultViewMode === "orchestration" && activeResult && filteredTasks.length > 0 && !showRuntime && !showExecutionRuntime;
-  const showPlanPreview = !showRuntime && !activeResult && plannedMissionSummary !== null;
-  const showTaskList = !showRuntime && !showOrchestration && !showExecutionRuntime && !showPlanPreview;
+  const showExecutionRuntime = materializedResult !== null && activeResult && !runtimeQueueHidden;
+  const showOrchestration = resultViewMode === "orchestration" && activeResult && filteredTasks.length > 0 && !showExecutionRuntime;
+  const showPlanPreview = !activeResult && plannedMissionSummary !== null;
+  const showTaskList = resultViewMode === "review" && !showPlanPreview && !showExecutionRuntime;
   useEffect(() => {
     setRuntimeQueueHidden(false);
   }, [materializedExecutionResult]);
@@ -222,13 +222,140 @@ export function TaskResultPanel({
     });
   }, [filteredTasks, selectedTaskId]);
   useEffect(() => {
-    onWorkspaceLayoutChange(resultViewMode === "orchestration" || showExecutionRuntime ? "focused" : "review");
-  }, [onWorkspaceLayoutChange, resultViewMode, showExecutionRuntime]);
+    const shouldFocus =
+      resultViewMode === "orchestration" ||
+      showExecutionRuntime ||
+      (resultViewMode === "review" && showRuntimePanel);
+
+    onWorkspaceLayoutChange(shouldFocus ? "focused" : "review");
+  }, [onWorkspaceLayoutChange, resultViewMode, showExecutionRuntime, showRuntimePanel]);
 
   async function handleConfirmAllAndEnterOrchestration() {
     const confirmed = await onConfirmAll();
     if (confirmed === false) return;
     setResultViewMode("orchestration");
+  }
+
+  // Dynamic header rendering
+  let cardTitle: ReactNode = null;
+  let cardExtra: ReactNode = null;
+
+  if (showExecutionRuntime) {
+    const overallStatus = executionFanoutSnapshot?.status ?? "running";
+    const getExecutionRuntimeTitle = (status: string | undefined) => {
+      if (status === "failed") return "执行 fan-out 有失败";
+      if (status === "succeeded") return "执行 fan-out 已完成";
+      return "正在自动派发执行";
+    };
+    cardTitle = (
+      <Space orientation="vertical" size={2} style={{ display: 'flex', width: '100%' }}>
+        <Space size={8} align="center">
+          <Typography.Text strong style={{ fontSize: 13 }}>
+            ⚙️ Workspace Trellis · {getExecutionRuntimeTitle(overallStatus)}
+          </Typography.Text>
+          {overallStatus === "running" ? <Spin size="small" /> : null}
+        </Space>
+        <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block', fontWeight: 'normal', whiteSpace: 'normal', wordBreak: 'break-all' }}>
+          {executionFanoutSnapshot?.message ?? "任务目录已写入 Workspace Trellis，正在按编排波次自动派发实现子代理。"}
+        </Typography.Text>
+      </Space>
+    );
+    cardExtra = (
+      <Space size={8}>
+        <Button
+          size="small"
+          onClick={() => {
+            setRuntimeQueueHidden(true);
+            setResultViewMode("orchestration");
+          }}
+        >
+          返回编排
+        </Button>
+        <Button
+          size="small"
+          icon={overallStatus === "running" ? <LoadingOutlined /> : <CheckCircleOutlined />}
+          disabled
+        >
+          {overallStatus === "running" ? "执行中" : overallStatus === "failed" ? "有失败" : "已完成"}
+        </Button>
+      </Space>
+    );
+  } else if (showOrchestration) {
+    cardTitle = (
+      <Space size={8} align="center">
+        <Typography.Text strong style={{ fontSize: 13 }}>🗺️ 并行波次编排 (Execution wave lanes DAG)</Typography.Text>
+      </Space>
+    );
+    cardExtra = (
+      <Button
+        size="small"
+        onClick={() => setResultViewMode("review")}
+      >
+        返回列表复核
+      </Button>
+    );
+  } else if (showPlanPreview) {
+    cardTitle = (
+      <Space orientation="vertical" size={2} style={{ display: 'flex', width: '100%' }}>
+        <Typography.Text strong style={{ fontSize: 13 }}>Cluster 规划</Typography.Text>
+        <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block', fontWeight: 'normal' }}>
+          {plannedMissionSummary?.requirementCount} 条需求 · {plannedMissionSummary?.clusters.length} 个分组
+        </Typography.Text>
+      </Space>
+    );
+    cardExtra = (
+      <Button
+        type="primary"
+        size="small"
+        loading={parsing}
+        disabled={parsing || plannedMissionSummary?.clusters.length === 0}
+        onClick={onDispatchPlannedClusters}
+      >
+        派发 splitter
+      </Button>
+    );
+  } else {
+    // Normal Stage 1 Review mode
+    cardTitle = (
+      <TaskBoardHeader
+        filteredTasksCount={filteredTasks.length}
+        unmetTaskIds={unmetTaskIds}
+        unmetMenuItems={unmetMenuItems}
+        confirmSavingTaskId={confirmSavingTaskId}
+        activeResult={activeResult}
+        taskConfirmFilter={taskConfirmFilter}
+        taskConfirmCounts={taskConfirmCounts}
+        onConfirmAll={handleConfirmAllAndEnterOrchestration}
+        onAddTask={onAddTask}
+        onClearAllTasks={onClearAllTasks}
+        onTaskConfirmFilterChange={onTaskConfirmFilterChange}
+      />
+    );
+    cardExtra = (
+      <Space size={8}>
+        {(runtimeLogs.length > 0 || parsing) ? (
+          runtimeVisible ? (
+            <Button
+              size="small"
+              type="text"
+              icon={<CloseOutlined />}
+              onClick={onCloseRuntime}
+            >
+              收起过程
+            </Button>
+          ) : (
+            <Button
+              size="small"
+              type="text"
+              icon={<HistoryOutlined />}
+              onClick={onShowRuntime}
+            >
+              重看过程
+            </Button>
+          )
+        ) : null}
+      </Space>
+    );
   }
 
   return (
@@ -245,40 +372,13 @@ export function TaskResultPanel({
       <div ref={taskHostRef} className="app-prd-task-panel__task-card-host">
         <Card
           size="small"
-          title={(
-            <TaskBoardHeader
-              filteredTasksCount={filteredTasks.length}
-              unmetTaskIds={unmetTaskIds}
-              unmetMenuItems={unmetMenuItems}
-              confirmSavingTaskId={confirmSavingTaskId}
-              activeResult={activeResult}
-              taskConfirmFilter={taskConfirmFilter}
-              taskConfirmCounts={taskConfirmCounts}
-              onConfirmAll={handleConfirmAllAndEnterOrchestration}
-              onAddTask={onAddTask}
-              onClearAllTasks={onClearAllTasks}
-              onTaskConfirmFilterChange={onTaskConfirmFilterChange}
-            />
-          )}
-          extra={filteredTasks.length > 0 ? (
-            <Space size={8}>
-              {runtimeLogs.length > 0 ? (
-                <Button
-                  size="small"
-                  type="text"
-                  icon={<HistoryOutlined />}
-                  onClick={onShowRuntime}
-                >
-                  重看过程
-                </Button>
-              ) : null}
-            </Space>
-          ) : null}
+          title={cardTitle}
+          extra={cardExtra}
           className="app-prd-task-panel__result-card app-prd-task-panel__task-card"
           bodyStyle={{ padding: 0 }}
         >
           <div className="app-prd-task-panel__task-split-layout">
-            {!showRuntime && filteredTasks.length > 0 ? (
+            {!showPlanPreview && filteredTasks.length > 0 ? (
               <SplitResultStageRail
                 mode={resultViewMode}
                 canEnterOrchestration={Boolean(activeResult)}
@@ -294,75 +394,124 @@ export function TaskResultPanel({
               />
             ) : null}
             <div className="app-prd-task-panel__task-upper">
-              {showRuntime ? (
-                <div className="app-prd-task-panel__result-runtime">
-                  <div className="app-prd-task-panel__split-runtime-head">
-                    <Space size={8} align="center" className="app-prd-task-panel__split-runtime-head-title">
-                      <Typography.Text strong>拆分 fan-out 运行图</Typography.Text>
-                      {parsing ? <Spin size="small" aria-label="拆分进行中" /> : null}
-                    </Space>
-                    <Button
-                      size="small"
-                      type="text"
-                      icon={<CloseOutlined />}
-                      onClick={onCloseRuntime}
-                      aria-label="关闭子代理对话面板"
-                    />
+              {showPlanPreview ? (
+                <PlannedClusterPreview
+                  summary={plannedMissionSummary}
+                />
+              ) : null}
+
+              {showOrchestration ? (
+                <ExecutionOrchestrationPanel
+                  result={activeResult}
+                  selectedTaskId={selectedTaskId}
+                  onSelectTask={(taskId) => {
+                    const task = activeResult.splitTasks.find((item) => item.id === taskId);
+                    if (task) onSelectTask(task);
+                  }}
+                  onMoveTask={onMoveTaskInExecutionPlan}
+                  onMoveTaskToWave={onMoveTaskToExecutionWave}
+                />
+              ) : null}
+
+              {showExecutionRuntime ? (
+                <ExecutionRuntimeQueue
+                  result={activeResult}
+                  materializedResult={materializedResult}
+                  fanoutSnapshot={executionFanoutSnapshot}
+                  selectedTaskId={selectedTaskId}
+                  onSelectTask={(taskId) => {
+                    const task = activeResult.splitTasks.find((item) => item.id === taskId);
+                    if (task) onSelectTask(task);
+                  }}
+                />
+              ) : null}
+
+              {showTaskList ? (
+                showRuntimePanel ? (
+                  <div className="app-prd-task-panel__stage-review-split">
+                    <div className="app-prd-task-panel__stage-review-runtime app-prd-task-panel__result-runtime">
+                      <SplitRuntimeMessages
+                        logs={runtimeLogs}
+                        clusterRuns={clusterRuns}
+                        listRef={runtimeListRef}
+                        retryingPhase={retryingPhase}
+                        onRetryStage={onRetryStage}
+                        onRetryCluster={onRetryCluster}
+                        onCancelCluster={onCancelCluster}
+                      />
+                    </div>
+                    <div className="app-prd-task-panel__stage-review-tasks">
+                      <div className="app-prd-task-panel__task-list">
+                        {filteredTasks.length === 0 ? (
+                          <div className="app-prd-task-panel__task-list-empty">
+                            <Typography.Text type="secondary">暂未拆分任务</Typography.Text>
+                          </div>
+                        ) : (
+                          filteredTasks.map((task) => (
+                            <TaskResultCard
+                              key={task.id}
+                              task={task}
+                              activeResult={activeResult}
+                              selected={selectedTaskId === task.id}
+                              expanded={expandedTaskIds.has(task.id)}
+                              canDelete={(activeResult?.splitTasks.length ?? 0) > 1}
+                              closingMotionActive={closingMotionActive}
+                              resolvedTaskAnchorIds={resolvedTaskAnchorIds}
+                              pendingContent={pendingTaskContentById[task.id]}
+                              pendingApiSpec={pendingTaskApiSpecById[task.id]}
+                              taskExecutableCheckResult={taskExecutableCheckResultById[task.id] ?? ""}
+                              unmetCollapsed={taskUnmetCollapsedById[task.id] ?? false}
+                              checkCollapsed={taskCheckCollapsedById[task.id] ?? false}
+                              optimizedText={taskAiOptimizedContentById[task.id] ?? ""}
+                              optimizedReady={taskAiOptimizedReadyById[task.id] ?? false}
+                              actionLoading={!!taskAiActionLoadingById[task.id]}
+                              savingOptimized={taskAiSavingTaskId === task.id}
+                              anchorPopoverOpen={taskAnchorPopoverTaskId === task.id}
+                              aiPopoverMode={taskAiPopoverTaskId === task.id ? taskAiPopoverMode : null}
+                              generatingExecutableTaskId={generatingExecutableTaskId}
+                              savingTaskId={savingTaskId}
+                              confirmSavingTaskId={confirmSavingTaskId}
+                              getTaskAiMode={getTaskAiMode}
+                              getTaskAiInput={getTaskAiInput}
+                              getDraftedTask={getDraftedTask}
+                              displayExecutionStatus={displayExecutionStatus}
+                              cardUnmetPointsForTask={cardUnmetPointsForTask}
+                              onTaskAiInputChange={onTaskAiInputChange}
+                              onTaskAiOptimizedTextChange={onTaskAiOptimizedTextChange}
+                              onTaskAiClose={onTaskAiClose}
+                              onTaskAiSubmit={onTaskAiSubmit}
+                              onSaveOptimizedTask={onSaveOptimizedTask}
+                              onSelectTask={onSelectTask}
+                              onLocateAnchor={onLocateAnchor}
+                              onDeleteTask={onDeleteTask}
+                              onPendingContentChange={onPendingContentChange}
+                              onPendingApiSpecChange={onPendingApiSpecChange}
+                              onAnchorPopoverChange={onAnchorPopoverChange}
+                              onAiPopoverChange={onAiPopoverChange}
+                              onGenerateExecutableForTask={onGenerateExecutableForTask}
+                              onSaveTaskDraft={onSaveTaskDraft}
+                              onConfirmTaskAdjustment={onConfirmTaskAdjustment}
+                              onToggleExpanded={(taskId) => {
+                                setExpandedTaskIds((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(taskId)) {
+                                    next.delete(taskId);
+                                  } else {
+                                    next.add(taskId);
+                                  }
+                                  return next;
+                                });
+                              }}
+                              onToggleUnmet={onToggleUnmet}
+                              onToggleCheck={onToggleCheck}
+                            />
+                          ))
+                        )}
+                      </div>
+                    </div>
                   </div>
-	                  <SplitRuntimeMessages
-	                    logs={runtimeLogs}
-	                    clusterRuns={clusterRuns}
-	                    listRef={runtimeListRef}
-	                    retryingPhase={retryingPhase}
-	                    onRetryStage={onRetryStage}
-	                    onRetryCluster={onRetryCluster}
-	                    onCancelCluster={onCancelCluster}
-	                  />
-                </div>
-              ) : (
-                <>
-                  {showOrchestration ? (
-                    <ExecutionOrchestrationPanel
-                      result={activeResult}
-                      selectedTaskId={selectedTaskId}
-                      onSelectTask={(taskId) => {
-                        const task = activeResult.splitTasks.find((item) => item.id === taskId);
-                        if (task) onSelectTask(task);
-                      }}
-                      onMoveTask={onMoveTaskInExecutionPlan}
-                      onMoveTaskToWave={onMoveTaskToExecutionWave}
-                    />
-                  ) : null}
-	                  {showExecutionRuntime ? (
-                    <ExecutionRuntimeQueue
-                      result={activeResult}
-                      materializedResult={materializedResult}
-                      fanoutSnapshot={executionFanoutSnapshot}
-                      selectedTaskId={selectedTaskId}
-                      onSelectTask={(taskId) => {
-                        const task = activeResult.splitTasks.find((item) => item.id === taskId);
-                        if (task) onSelectTask(task);
-                      }}
-                      onBackToPlan={() => {
-                        setRuntimeQueueHidden(true);
-                        setResultViewMode("orchestration");
-                      }}
-                    />
-	                  ) : null}
-	                  {showPlanPreview ? (
-	                    <PlannedClusterPreview
-	                      summary={plannedMissionSummary}
-	                      parsing={parsing}
-	                      onDispatch={onDispatchPlannedClusters}
-	                    />
-	                  ) : null}
-	                  <div
-                    className={[
-                      "app-prd-task-panel__task-list",
-                      showTaskList ? "" : "is-hidden-for-orchestration",
-                    ].filter(Boolean).join(" ")}
-                    aria-hidden={!showTaskList}
-                  >
+                ) : (
+                  <div className="app-prd-task-panel__task-list">
                     {filteredTasks.length === 0 ? (
                       <div className="app-prd-task-panel__task-list-empty">
                         <Typography.Text type="secondary">暂未拆分任务</Typography.Text>
@@ -429,8 +578,8 @@ export function TaskResultPanel({
                       ))
                     )}
                   </div>
-                </>
-              )}
+                )
+              ) : null}
             </div>
           </div>
         </Card>
@@ -503,26 +652,11 @@ function SplitResultStageRail({
 
 function PlannedClusterPreview({
   summary,
-  parsing,
-  onDispatch,
 }: {
   summary: RequirementMissionPlanSummary;
-  parsing: boolean;
-  onDispatch: () => void;
 }) {
   return (
     <div className="app-prd-task-panel__planned-clusters">
-      <div className="app-prd-task-panel__planned-clusters-head">
-        <div>
-          <Typography.Text strong>Cluster 规划</Typography.Text>
-          <Typography.Text type="secondary">
-            {summary.requirementCount} 条需求 · {summary.clusters.length} 个分组
-          </Typography.Text>
-        </div>
-        <Button type="primary" size="small" loading={parsing} disabled={parsing || summary.clusters.length === 0} onClick={onDispatch}>
-          派发 splitter
-        </Button>
-      </div>
       <div className="app-prd-task-panel__planned-cluster-list">
         {summary.clusters.map((cluster, index) => (
           <div key={cluster.id} className="app-prd-task-panel__planned-cluster-row">

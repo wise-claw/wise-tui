@@ -9,7 +9,7 @@ import {
 } from "@ant-design/icons";
 import { Button, Empty, Space, Switch, Tabs, Tag, Typography, message } from "antd";
 import { AuthorPanelListShell, AuthorPanelPageShell } from "../AuthorPanel/AuthorPanelPageShell";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { DingTalkEnterpriseBotPopoverBody } from "../DingTalkEnterpriseBotPopoverBody";
 import { loadDingTalkEnterpriseBotConfig } from "../../services/dingtalkEnterpriseBot";
 import {
@@ -168,7 +168,7 @@ export function ChannelsPanel() {
     >
       <AuthorPanelListShell className="app-channels-panel__list-shell">
         <div className="app-channels-hub__grid" aria-label="渠道网关">
-          {orderedChannels.map((channel) => {
+          {orderedChannels.map((channel: ChannelDefinition) => {
             const meta = cardMeta(channel);
             const isActive = activeKey === channel.key;
             const showSwitch = channel.key === "dingtalk" || channel.key === "websocket";

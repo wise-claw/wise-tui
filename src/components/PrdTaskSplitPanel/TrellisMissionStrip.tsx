@@ -55,7 +55,11 @@ export function TrellisMissionStrip({ target, stages }: Props) {
             className={`app-prd-task-panel__mission-stage is-${stage.status}`}
             aria-current={stage.status === "active" ? "step" : undefined}
           >
-            <span className="app-prd-task-panel__mission-stage-dot" aria-hidden />
+            {stage.status === "done" ? (
+              <CheckOutlined className="app-prd-task-panel__mission-stage-icon" />
+            ) : (
+              <span className="app-prd-task-panel__mission-stage-dot" aria-hidden />
+            )}
             <span>{stage.label}</span>
           </li>
         ))}

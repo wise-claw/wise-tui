@@ -18,7 +18,6 @@ interface Props {
   fanoutSnapshot: ExecutionFanoutSnapshot | null;
   selectedTaskId: string | null;
   onSelectTask: (taskId: string) => void;
-  onBackToPlan: () => void;
 }
 
 export function ExecutionRuntimeQueue({
@@ -27,7 +26,6 @@ export function ExecutionRuntimeQueue({
   fanoutSnapshot,
   selectedTaskId,
   onSelectTask,
-  onBackToPlan,
 }: Props) {
   const model = useMemo(() => buildExecutionOrchestrationModel(result), [result]);
   const materializedBySourceId = useMemo(() => new Map(
@@ -43,23 +41,9 @@ export function ExecutionRuntimeQueue({
   const fanoutWaveByIndex = useMemo(() => new Map(
     (fanoutSnapshot?.waves ?? []).map((wave) => [wave.waveIndex, wave]),
   ), [fanoutSnapshot]);
-  const overallStatus = fanoutSnapshot?.status ?? "running";
   const runningCount = fanoutSnapshot?.waves.flatMap((wave) => wave.tasks).filter((task) => task.status === "running").length ?? 0;
   return (
     <div className="app-prd-task-panel__execution-runtime">
-      <header className="app-prd-task-panel__execution-runtime-head">
-        <div>
-          <span>Workspace Trellis</span>
-          <strong>{runtimeTitle(overallStatus)}</strong>
-          <p>{fanoutSnapshot?.message ?? "任务目录已写入 Workspace Trellis，正在按编排波次自动派发实现子代理。"}</p>
-        </div>
-        <div className="app-prd-task-panel__execution-runtime-actions">
-          <Button size="small" onClick={onBackToPlan}>返回编排</Button>
-          <Button size="small" icon={overallStatus === "running" ? <LoadingOutlined /> : <CheckCircleOutlined />} disabled>
-            {overallStatus === "running" ? "执行中" : overallStatus === "failed" ? "有失败" : "已完成"}
-          </Button>
-        </div>
-      </header>
 
       <div className="app-prd-task-panel__execution-runtime-summary">
         <RuntimeSummaryItem label="已落盘" value={materializedResult?.childTaskNames.length ?? 0} />
@@ -158,11 +142,6 @@ function RuntimeTaskRow({
   );
 }
 
-function runtimeTitle(status: ExecutionFanoutSnapshot["status"]) {
-  if (status === "failed") return "执行 fan-out 有失败";
-  if (status === "succeeded") return "执行 fan-out 已完成";
-  return "正在自动派发执行";
-}
 
 function waveStatusText(status: ExecutionFanoutWaveStatus) {
   if (status === "running") return "本波次子代理执行中";

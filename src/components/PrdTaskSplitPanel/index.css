@@ -723,51 +723,60 @@
 }
 
 .app-prd-task-panel__runtime-stage-progress {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   min-width: 0;
-  padding: 2px 0 4px;
+  padding: 6px 0 8px;
 }
 
 .app-prd-task-panel__runtime-stage-node {
   position: relative;
   min-width: 0;
-  display: grid;
-  gap: 3px;
-  padding-left: 30px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 24px;
 }
 
 .app-prd-task-panel__runtime-stage-node::before {
   content: "";
   position: absolute;
   left: 0;
-  top: 4px;
-  width: 18px;
-  height: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
   border-radius: 999px;
   border: 2px solid var(--ant-color-border);
   background: var(--ant-color-bg-container);
+  transition: all 0.2s ease;
 }
 
 .app-prd-task-panel__runtime-stage-node::after {
   content: "";
   position: absolute;
-  left: 6px;
-  top: 10px;
+  left: 5px;
+  top: 50%;
+  transform: translateY(-50%);
   width: 6px;
   height: 6px;
   border-radius: 999px;
   background: var(--ant-color-border);
+  transition: all 0.2s ease;
 }
 
 .app-prd-task-panel__runtime-stage-node i {
   position: absolute;
-  left: 24px;
-  right: -6px;
-  top: 12px;
-  height: 2px;
+  left: 20px;
+  right: -12px;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 1px;
   background: var(--ant-color-border-secondary);
+  transition: all 0.2s ease;
 }
 
 .app-prd-task-panel__runtime-stage-node span {
@@ -816,6 +825,15 @@
 
 .app-prd-task-panel__runtime-stage-node--failed::after {
   background: var(--ant-color-error);
+}
+
+.app-prd-task-panel__runtime-stage-node--succeeded i {
+  background: rgba(82, 196, 26, 0.45);
+}
+
+.app-prd-task-panel__runtime-stage-node--running i,
+.app-prd-task-panel__runtime-stage-node.is-active i {
+  background: var(--ant-color-primary-border);
 }
 
 .app-prd-task-panel__runtime-main-line {
@@ -2014,14 +2032,45 @@
 .app-prd-task-panel__status-chip {
   display: inline-flex;
   align-items: center;
-  height: 20px;
+  height: 18px;
   padding: 0 6px;
-  border-radius: 999px;
+  border-radius: 4px;
   border: 1px solid var(--ant-color-border-secondary);
   background: var(--ant-color-fill-quaternary);
   color: var(--ant-color-text-secondary);
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1;
+  font-weight: 500;
+}
+
+.app-prd-task-panel__status-chip--running {
+  border-color: var(--ant-color-primary-border);
+  color: var(--ant-color-primary);
+  background: var(--ant-color-primary-bg);
+}
+
+.app-prd-task-panel__status-chip--succeeded {
+  border-color: rgba(82, 196, 26, 0.45);
+  color: var(--ant-color-success);
+  background: rgba(82, 196, 26, 0.08);
+}
+
+.app-prd-task-panel__status-chip--failed {
+  border-color: rgba(255, 77, 79, 0.5);
+  color: var(--ant-color-error);
+  background: rgba(255, 77, 79, 0.08);
+}
+
+.app-prd-task-panel__status-chip--cancelled {
+  border-color: rgba(255, 77, 79, 0.35);
+  color: var(--ant-color-text-secondary);
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-prd-task-panel__status-chip--queued {
+  border-color: var(--ant-color-border-secondary);
+  color: var(--ant-color-text-secondary);
+  background: var(--ant-color-fill-quaternary);
 }
 
 .app-prd-task-panel__diff-item {
@@ -4272,3 +4321,600 @@
 .app-prd-project-employee-tooltip-inner-muted.ant-typography {
   color: rgba(255, 255, 255, 0.72) !important;
 }
+
+/* ==========================================================================
+   WISH AI WORKBENCH - REQUIREMENT SPLIT ASSISTANT UED REFACTORED STYLES
+   ========================================================================== */
+
+/* Subagent Tabs Area */
+.app-prd-task-panel__subagent-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  padding: 0 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none; /* Firefox */
+}
+
+.app-prd-task-panel__subagent-tabs::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
+}
+
+.app-prd-task-panel__subagent-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--ant-color-text-secondary);
+  font-size: 11px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 4px 4px 0 0;
+  transition: all 200ms ease;
+  white-space: nowrap;
+  position: relative;
+}
+
+.app-prd-task-panel__subagent-tab:hover {
+  background: var(--ant-color-fill-tertiary);
+  color: var(--ant-color-text);
+}
+
+.app-prd-task-panel__subagent-tab.is-active {
+  background: var(--ant-color-fill-quaternary);
+  color: var(--ant-color-primary);
+  font-weight: 600;
+}
+
+.app-prd-task-panel__subagent-tab.is-active::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--ant-color-primary);
+  border-radius: 2px 2px 0 0;
+  transition: all 200ms ease;
+}
+
+.app-prd-task-panel__subagent-tab-icon {
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.app-prd-task-panel__subagent-tab-icon.is-running {
+  color: var(--ant-color-primary);
+}
+
+.app-prd-task-panel__subagent-tab-icon.is-succeeded {
+  color: var(--ant-color-success);
+}
+
+.app-prd-task-panel__subagent-tab-icon.is-failed {
+  color: var(--ant-color-error);
+}
+
+.app-prd-task-panel__subagent-tab-icon.is-cancelled {
+  color: var(--ant-color-warning);
+}
+
+.app-prd-task-panel__subagent-tab-icon.is-queued {
+  color: var(--ant-color-text-tertiary);
+}
+
+/* Chat Stream Container */
+.app-prd-task-panel__runtime-chat-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+/* Main Session View styling */
+.app-prd-task-panel__runtime-main-view {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.app-prd-task-panel__runtime-main-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-prd-task-panel__runtime-main-icon {
+  font-size: 14px;
+  color: var(--ant-color-primary);
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.app-prd-task-panel__runtime-main-line div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.app-prd-task-panel__runtime-main-line span {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-prd-task-panel__runtime-main-line p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ant-color-text);
+}
+
+/* Subagent View styling */
+.app-prd-task-panel__runtime-subagent-view {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.app-prd-task-panel__runtime-subagent-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-bg-container);
+}
+
+.app-prd-task-panel__runtime-subagent-header-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.app-prd-task-panel__runtime-subagent-ordinal {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--ant-color-primary-bg);
+  color: var(--ant-color-primary);
+  font-weight: 700;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.app-prd-task-panel__runtime-subagent-header-title div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.app-prd-task-panel__runtime-subagent-header-title strong {
+  font-size: 12px;
+  color: var(--ant-color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-prd-task-panel__runtime-subagent-header-title small {
+  font-size: 10px;
+  color: var(--ant-color-text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Collapsible Thinking Box */
+.app-prd-task-panel__thinking-box {
+  border-radius: 8px;
+  border: 1px solid var(--ant-color-border-secondary);
+  background: color-mix(in srgb, var(--ant-color-bg-container) 85%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  transition: all 250ms ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.app-prd-task-panel__thinking-box.has-issues {
+  border-color: var(--ant-color-warning-border);
+  background: rgba(250, 173, 20, 0.04);
+}
+
+.app-prd-task-panel__thinking-box-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+  gap: 10px;
+}
+
+.app-prd-task-panel__thinking-box-header-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.app-prd-task-panel__thinking-box-icon {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.app-prd-task-panel__thinking-box-header-title strong {
+  font-size: 11px;
+  color: var(--ant-color-text);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.app-prd-task-panel__thinking-box-summary {
+  font-size: 11px;
+  color: var(--ant-color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-prd-task-panel__thinking-box-arrow {
+  font-size: 10px;
+  color: var(--ant-color-primary);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.app-prd-task-panel__thinking-box-body {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--ant-color-border-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.app-prd-task-panel__thinking-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.app-prd-task-panel__thinking-section-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ant-color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.app-prd-task-panel__thinking-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 2px 0;
+}
+
+.app-prd-task-panel__thinking-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.app-prd-task-panel__thinking-step-label {
+  font-size: 11px;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-prd-task-panel__thinking-step-label.is-pending {
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-prd-task-panel__thinking-step-label.is-active {
+  color: var(--ant-color-primary);
+  font-weight: 500;
+}
+
+.app-prd-task-panel__thinking-step-label.is-done {
+  color: var(--ant-color-success);
+}
+
+.app-prd-task-panel__thinking-step-label.is-failed {
+  color: var(--ant-color-error);
+}
+
+.app-prd-task-panel__thinking-outputs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.app-prd-task-panel__thinking-output {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 4px;
+  border: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-fill-quaternary);
+  color: var(--ant-color-text-secondary);
+  font-size: 11px;
+}
+
+.app-prd-task-panel__thinking-output::before {
+  content: "✓";
+  color: var(--ant-color-success);
+  margin-right: 4px;
+  font-weight: bold;
+}
+
+.app-prd-task-panel__thinking-output--active {
+  border-style: dashed;
+  border-color: var(--ant-color-primary-border);
+  color: var(--ant-color-primary);
+  background: var(--ant-color-primary-bg);
+}
+
+.app-prd-task-panel__thinking-output--active::before {
+  content: "…";
+  color: var(--ant-color-primary);
+}
+
+.app-prd-task-panel__thinking-output--pending {
+  border-color: var(--ant-color-border-secondary);
+  color: var(--ant-color-text-tertiary);
+  background: transparent;
+}
+
+.app-prd-task-panel__thinking-output--pending::before {
+  content: "○";
+  color: var(--ant-color-text-tertiary);
+}
+
+
+/* ==========================================================================
+   UED Spec Refactoring - Requirement Split Assistant Full-Link Refinements
+   ========================================================================== */
+
+/* 1. Wizard Stage Strip (TrellisMissionStrip) Breathing Active Glow */
+@keyframes active-breath {
+  0% {
+    box-shadow: 0 0 4px rgba(22, 119, 255, 0.2), inset 0 0 2px rgba(22, 119, 255, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 10px rgba(22, 119, 255, 0.45), inset 0 0 4px rgba(22, 119, 255, 0.2);
+  }
+  100% {
+    box-shadow: 0 0 4px rgba(22, 119, 255, 0.2), inset 0 0 2px rgba(22, 119, 255, 0.1);
+  }
+}
+
+.app-prd-task-panel__mission-stage.is-active {
+  animation: active-breath 2s infinite ease-in-out;
+  border: 1px solid var(--ant-color-primary-border) !important;
+}
+
+.app-prd-task-panel__mission-stage-icon {
+  font-size: 10px !important;
+  color: var(--ant-color-success) !important;
+}
+
+/* 2. Selection Float Pill inside Milkdown Editor */
+.milkdown .milkdown-toolbar {
+  height: 24px !important;
+  border-radius: 12px !important;
+  border: 1px solid var(--ant-color-primary-border) !important;
+  box-shadow: 0 0 0 1px rgba(22, 119, 255, 0.15), 0 2px 8px rgba(22, 119, 255, 0.12) !important;
+  background: var(--ant-color-bg-elevated) !important;
+  padding: 0 6px !important;
+  display: flex !important;
+  align-items: center !important;
+  box-sizing: border-box !important;
+}
+
+.milkdown .milkdown-toolbar [data-item-id="wise-split-selection"] {
+  display: inline-flex !important;
+  align-items: center !important;
+  height: 20px !important;
+  padding: 0 8px !important;
+  border-radius: 10px !important;
+  background: var(--ant-color-primary-bg) !important;
+  color: var(--ant-color-primary) !important;
+  border: 1px solid var(--ant-color-primary-border) !important;
+  box-shadow: 0 0 4px rgba(22, 119, 255, 0.2) !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+  box-sizing: border-box !important;
+}
+
+.milkdown .milkdown-toolbar [data-item-id="wise-split-selection"]:hover {
+  background: var(--ant-color-primary) !important;
+  color: #fff !important;
+}
+
+.milkdown .milkdown-toolbar [data-item-id="wise-split-selection"] svg {
+  width: 11px !important;
+  height: 11px !important;
+}
+
+.milkdown .milkdown-toolbar [data-item-id="wise-split-selection"]::after {
+  content: "从选区新增任务" !important;
+  font-size: 10px !important;
+  margin-left: 4px !important;
+  font-weight: 500 !important;
+}
+
+/* 3. PRD Paragraph Anchors Hanging Leftward */
+.app-milkdown-task-anchor-group {
+  transform: translate(-18px, 0) !important;
+}
+
+.app-milkdown-task-anchor-badge {
+  width: 15px !important;
+  height: 15px !important;
+  min-width: 15px !important;
+  border-radius: 50% !important;
+  background: var(--ant-color-primary) !important;
+  color: #fff !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  line-height: 15px !important;
+  text-align: center !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2) !important;
+  border: none !important;
+}
+
+.app-milkdown-task-anchor-group--selected .app-milkdown-task-anchor-badge {
+  box-shadow: 0 0 0 2px var(--ant-color-primary-border), 0 2px 4px rgba(0, 0, 0, 0.18) !important;
+  background: var(--ant-color-primary) !important;
+}
+
+/* 4. Candidate Cards left borders (Warning Orange vs Success Green) */
+.app-prd-task-panel__task-list-item {
+  border-left: 2px solid var(--ant-color-warning) !important;
+}
+
+.app-prd-task-panel__task-list-item.is-executable {
+  border-left: 2px solid var(--ant-color-success) !important;
+}
+
+/* 5. Compact checklist line-height for DoD inside Milkdown */
+.app-prd-task-panel__task-card-editor .milkdown .ProseMirror ul.task-list {
+  line-height: 1.4 !important;
+}
+
+.app-prd-task-panel__task-card-editor .milkdown .ProseMirror ul.task-list li {
+  color: var(--ant-color-text-secondary) !important;
+  margin-bottom: 2px !important;
+}
+
+/* 6. AI Evaluation Warning Box (Red Translucent, Monospace) */
+.app-prd-task-panel__task-unmet-box {
+  background: rgba(255, 77, 79, 0.08) !important;
+  border: 1px solid var(--ant-color-error-border) !important;
+  font-family: SF Pro Monospace, JetBrains Mono, Inter, monospace !important;
+  font-size: 11px !important;
+  border-radius: 6px !important;
+}
+
+.app-prd-task-panel__task-unmet-title {
+  color: var(--ant-color-error) !important;
+  font-family: SF Pro Monospace, JetBrains Mono, Inter, monospace !important;
+}
+
+.app-prd-task-panel__task-unmet-list,
+.app-prd-task-panel__task-unmet-check-result-text {
+  font-family: SF Pro Monospace, JetBrains Mono, Inter, monospace !important;
+  font-size: 11px !important;
+}
+
+.app-prd-task-panel__task-unmet-list {
+  padding-left: 14px !important;
+}
+
+.app-prd-task-panel__task-unmet-list li {
+  color: var(--ant-color-text-secondary) !important;
+}
+
+.app-prd-task-panel__task-unmet-check-result {
+  border-top-color: rgba(255, 77, 79, 0.15) !important;
+}
+
+/* 7. Statistics Strip (SplitQualityStrip) */
+.app-prd-task-panel__quality-strip {
+  display: flex !important;
+  align-items: center !important;
+  height: 28px !important;
+  background: var(--ant-color-fill-quaternary) !important;
+  border-radius: 4px !important;
+  padding: 0 8px !important;
+  gap: 8px !important;
+  box-sizing: border-box !important;
+}
+
+.app-prd-task-panel__quality-chip {
+  display: inline-flex !important;
+  align-items: center !important;
+  font-size: 11px !important;
+  font-family: SF Pro Monospace, JetBrains Mono, Inter, monospace !important;
+  font-variant-numeric: tabular-nums !important;
+  color: var(--ant-color-text-secondary) !important;
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+}
+
+.app-prd-task-panel__quality-chip--good {
+  color: var(--ant-color-success) !important;
+  font-weight: 500 !important;
+}
+
+.app-prd-task-panel__quality-chip--warning {
+  color: var(--ant-color-warning) !important;
+  font-weight: 500 !important;
+}
+
+/* 8. Execution Orchestration Panel swimlanes and Parallel conflict warning */
+.app-prd-task-panel__orchestration-wave-column {
+  border-style: dashed !important;
+}
+
+.app-prd-task-panel__orchestration-conflict.is-warning {
+  background: rgba(250, 173, 20, 0.12) !important;
+  border: 1px solid var(--ant-color-warning-border) !important;
+  color: var(--ant-color-warning) !important;
+}
+
+/* 9. Stage 1 Review side-by-side split workspace UED layout */
+.app-prd-task-panel__stage-review-split {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 12px;
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+  padding: 8px;
+  box-sizing: border-box;
+}
+
+.app-prd-task-panel__stage-review-runtime {
+  flex: 1.25 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-prd-task-panel__stage-review-tasks {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
