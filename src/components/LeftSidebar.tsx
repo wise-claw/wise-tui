@@ -1,5 +1,5 @@
 import { App as AntdApp, Layout } from "antd";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectItem, Repository } from "../types";
 import { repositoryFolderBasename } from "../utils/repositoryType";
 import { AppSettingsModal } from "./AppSettingsModal";
@@ -340,8 +340,13 @@ export function LeftSidebar({
     setRepositoryFileTreeSearch("");
   }, [activeRepositoryPath]);
 
+  const lastHandledWorkspaceCreateRequestRef = useRef(0);
+  const lastHandledStandaloneRepoAddRequestRef = useRef(0);
+
   useEffect(() => {
     if (!workspaceCreateRequest) return;
+    if (workspaceCreateRequest <= lastHandledWorkspaceCreateRequestRef.current) return;
+    lastHandledWorkspaceCreateRequestRef.current = workspaceCreateRequest;
     setProjectNameInput("");
     setCreateProjectRootPath("");
     setWorkspaceBootstrapSelection({ ...DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION });
@@ -350,6 +355,8 @@ export function LeftSidebar({
 
   useEffect(() => {
     if (!standaloneRepoAddRequest || !onAddFloatingRepository) return;
+    if (standaloneRepoAddRequest <= lastHandledStandaloneRepoAddRequestRef.current) return;
+    lastHandledStandaloneRepoAddRequestRef.current = standaloneRepoAddRequest;
     openAddFloatingRepositoryModal();
   }, [onAddFloatingRepository, openAddFloatingRepositoryModal, standaloneRepoAddRequest]);
 
