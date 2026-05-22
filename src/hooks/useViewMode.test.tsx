@@ -189,6 +189,23 @@ describe("useViewMode", () => {
     probe.unmount();
   });
 
+  test("switching cockpit hub panes does not stack history", () => {
+    const probe = renderProbe();
+    act(() => {
+      probe.api.enter(cockpitView(undefined, "assistant"));
+    });
+    act(() => {
+      probe.api.enter(cockpitView(undefined, "mcp"));
+    });
+    expect(probe.api.view).toEqual({ kind: "cockpit", hubPane: "mcp" });
+
+    act(() => {
+      probe.api.back();
+    });
+    expect(probe.api.view).toEqual({ kind: "chat" });
+    probe.unmount();
+  });
+
   test("entering one mode clears any other previously-active legacy flag", () => {
     const probe = renderProbe();
     act(() => {

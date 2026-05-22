@@ -1138,7 +1138,15 @@ export default function App() {
     setAssistantInitialTarget(null);
     setCockpitSurfaceInitialAssistantId(null);
     setAssistantOpenRequestKey((value) => value + 1);
-    viewMode.enter(cockpitView());
+    viewMode.enter(cockpitView(undefined, "assistant"));
+  }, [viewMode]);
+  const openMcpHubFromSidebar = useCallback(() => {
+    setSearchOpen(false);
+    viewMode.enter(cockpitView(undefined, "mcp"));
+  }, [viewMode]);
+  const openSkillsHubFromSidebar = useCallback(() => {
+    setSearchOpen(false);
+    viewMode.enter(cockpitView(undefined, "skills"));
   }, [viewMode]);
   const openBuiltinAssistant = useCallback((assistantId: string) => {
     const trimmed = assistantId.trim();
@@ -1636,11 +1644,13 @@ export default function App() {
   const handleSidebarRepositorySelectLeavingMcpHub = useCallback(
     (repositoryId: number | null) => {
       if (repositoryId == null) {
-        if (!viewMode.isCockpit) viewMode.back();
+        if (viewMode.isCockpit || viewMode.isAuthor || viewMode.isInspect) {
+          viewMode.back();
+        }
         handleSidebarRepositorySelect(repositoryId);
         return;
       }
-      if (viewMode.isAuthor || viewMode.isInspect) {
+      if (viewMode.isCockpit || viewMode.isAuthor || viewMode.isInspect) {
         viewMode.back();
       }
       const repository = repositories.find((item) => item.id === repositoryId);
@@ -1842,7 +1852,7 @@ export default function App() {
   const handleProjectSelectLeavingMcpHub = useCallback(
     (projectId: string) => {
       // 选 Workspace → 回到 Operator 主会话（author/inspect 先退出叠层）
-      if (viewMode.isAuthor || viewMode.isInspect) {
+      if (viewMode.isAuthor || viewMode.isInspect || viewMode.isCockpit) {
         viewMode.back();
       }
       const project = projects.find((p) => p.id === projectId) ?? null;
@@ -2213,8 +2223,14 @@ export default function App() {
           }
           enterAuthorPane(lastAuthorPane);
         },
-        assistantHubActive: viewMode.view.kind === "cockpit",
+        assistantHubActive:
+          viewMode.view.kind === "cockpit" &&
+          (viewMode.view.hubPane ?? "assistant") === "assistant",
         onOpenAssistantHub: openDefaultAssistant,
+        mcpHubActive: viewMode.view.kind === "cockpit" && viewMode.view.hubPane === "mcp",
+        onOpenMcpHub: openMcpHubFromSidebar,
+        skillsHubActive: viewMode.view.kind === "cockpit" && viewMode.view.hubPane === "skills",
+        onOpenSkillsHub: openSkillsHubFromSidebar,
         workspaceCreateRequest,
         standaloneRepoAddRequest,
         onProjectSelect: handleProjectSelectLeavingMcpHub,

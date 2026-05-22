@@ -35,7 +35,6 @@ function sourceLabelForSession(session: ClaudeSession): string {
 }
 
 function memoryLabelForRow(
-  session: ClaudeSession,
   proc: ClaudeHostProcess | undefined,
 ): string | null {
   if (proc && Number.isFinite(proc.memoryBytes) && proc.memoryBytes > 0) {
@@ -82,7 +81,7 @@ export function buildClaudeProcessPopoverCard(
     repositoryName: labels.repositoryName,
     claudeSessionId,
     pid: hostPid ?? proc?.pid ?? null,
-    memoryLabel: memoryLabelForRow(session, proc),
+    memoryLabel: memoryLabelForRow(proc),
     sourceLabel: sourceLabelForSession(session),
     updatedAt: sessionUpdatedAt(session),
   };

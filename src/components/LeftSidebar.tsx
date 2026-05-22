@@ -26,7 +26,7 @@ import {
 import { TaskCardsNav } from "./TaskCardsNav";
 import { ActiveRepositoryFilesPanel } from "./LeftSidebar/ActiveRepositoryFilesPanel";
 import { LeftSidebarTopbar } from "./LeftSidebar/LeftSidebarTopbar";
-import { ChatIcon } from "./LeftSidebar/SidebarIcons";
+import { LeftSidebarHubQuickEntries } from "./LeftSidebar/LeftSidebarHubQuickEntries";
 import { ProjectRepositoryList } from "./LeftSidebar/ProjectRepositoryList";
 import {
   readLeftFilesExplorerCollapsedFromStorage,
@@ -69,6 +69,10 @@ export function LeftSidebar({
   onOpenAuthor,
   assistantHubActive = false,
   onOpenAssistantHub,
+  mcpHubActive = false,
+  onOpenMcpHub,
+  skillsHubActive = false,
+  onOpenSkillsHub,
   workspaceCreateRequest,
   standaloneRepoAddRequest,
   onProjectSelect,
@@ -432,20 +436,16 @@ export function LeftSidebar({
         <TaskCardsNav {...taskCardsNavProps} />
       ) : null}
 
-      {onOpenAssistantHub ? (
-        <div className="app-left-sidebar-assistant-entry">
-          <button
-            type="button"
-            className={`app-left-sidebar-assistant-button${assistantHubActive ? " app-left-sidebar-assistant-button--active" : ""}`}
-            onClick={onOpenAssistantHub}
-          >
-            <span className="app-left-sidebar-assistant-button__icon" aria-hidden>
-              <ChatIcon />
-            </span>
-            <span className="app-left-sidebar-assistant-button__label">助手 Hub</span>
-          </button>
-        </div>
-      ) : null}
+      <LeftSidebarHubQuickEntries
+        assistantHubActive={assistantHubActive}
+        mcpHubActive={mcpHubActive}
+        skillsHubActive={skillsHubActive}
+        authorDisabled={authorDisabled}
+        authorDisabledTooltip={authorDisabledTooltip}
+        onOpenAssistantHub={onOpenAssistantHub}
+        onOpenMcpHub={onOpenMcpHub}
+        onOpenSkillsHub={onOpenSkillsHub}
+      />
 
       <div
         className="app-left-sidebar-project-and-files"

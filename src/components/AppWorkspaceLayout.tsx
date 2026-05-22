@@ -35,7 +35,7 @@ import { RepositoryFileEditorPanel } from "./RepositoryFileEditorPanel";
 import { RepositoryFilePreviewModal } from "./RepositoryFilePreviewModal";
 import { SkillsHub } from "./SkillsHub";
 import type * as PrdTaskSplitPanelModule from "./PrdTaskSplitPanel";
-import type { InspectTool, ViewMode } from "../types/viewMode";
+import { resolveCockpitHubPane, type InspectTool, type ViewMode } from "../types/viewMode";
 import type { OpenRepositoryFileDetail } from "../constants/workflowUiEvents";
 import { useRepositoryFileEditor } from "../hooks/useRepositoryFileEditor";
 
@@ -405,6 +405,8 @@ export function AppWorkspaceLayout({
    */
   const authorMode = viewMode.kind === "author";
   const missionControlMode = viewMode.kind === "cockpit";
+  const cockpitHubPane =
+    viewMode.kind === "cockpit" ? resolveCockpitHubPane(viewMode) : null;
   const mcpHubMode = viewMode.kind === "author" && viewMode.pane === "mcp";
   const skillsHubMode = viewMode.kind === "author" && viewMode.pane === "skills";
   const codeKnowledgeGraphMode =
@@ -704,6 +706,10 @@ export function AppWorkspaceLayout({
                       <Layout.Content className="app-main-layout-content">
                         {cockpitEmpty ? (
                           <CockpitOnboarding {...cockpitOnboardingProps} />
+                        ) : cockpitHubPane === "mcp" ? (
+                          <McpHub {...mcpHubProps} />
+                        ) : cockpitHubPane === "skills" ? (
+                          <SkillsHub {...skillsHubProps} />
                         ) : (
                           <Suspense fallback={<PanelLoadingFallback />}>
                             <CockpitSurface

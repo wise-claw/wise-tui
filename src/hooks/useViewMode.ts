@@ -1,7 +1,10 @@
 import { useCallback, useMemo, useReducer } from "react";
 import {
+  DEFAULT_COCKPIT_HUB_PANE,
   DEFAULT_VIEW_MODE,
+  resolveCockpitHubPane,
   type AuthorPane,
+  type CockpitHubPane,
   type InspectCodeGraph,
   type InspectTool,
   type ViewMode,
@@ -30,7 +33,7 @@ type ViewModeAction =
  * 用于 cockpit 内 `setAssistantInitialTarget`、code-graph 入口微调等。
  */
 type ViewModePatch =
-  | { kind: "cockpit"; missionId?: string }
+  | { kind: "cockpit"; missionId?: string; hubPane?: CockpitHubPane }
   | { kind: "inspect"; tool: Partial<InspectCodeGraph> & { kind: "code-graph" } };
 
 interface ViewModeState {
@@ -42,7 +45,12 @@ interface ViewModeState {
 function viewsEqual(a: ViewMode, b: ViewMode): boolean {
   if (a.kind !== b.kind) return false;
   if (a.kind === "author" && b.kind === "author") return a.pane === b.pane;
-  if (a.kind === "cockpit" && b.kind === "cockpit") return a.missionId === b.missionId;
+  if (a.kind === "cockpit" && b.kind === "cockpit") {
+    return (
+      a.missionId === b.missionId &&
+      resolveCockpitHubPane(a) === resolveCockpitHubPane(b)
+    );
+  }
   return true;
 }
 
@@ -53,6 +61,10 @@ function viewModeReducer(prev: ViewModeState, action: ViewModeAction): ViewModeS
       if (viewsEqual(prev.current, action.mode)) return prev;
       // 工作台配置内换 Tab：只改 pane，不把上一 Tab 压入历史。
       if (prev.current.kind === "author" && action.mode.kind === "author") {
+        return { current: action.mode, prev: prev.prev };
+      }
+      // Cockpit 内切换 Hub 子页（助手 / MCP / 技能）：不压栈。
+      if (prev.current.kind === "cockpit" && action.mode.kind === "cockpit") {
         return { current: action.mode, prev: prev.prev };
       }
       return { current: action.mode, prev: prev.current };
@@ -168,9 +180,16 @@ export function inspectView(tool: InspectTool): ViewMode {
   return { kind: "inspect", tool };
 }
 
-/** Helper：构造 cockpit view，可选携带 missionId。 */
-export function cockpitView(missionId?: string): ViewMode {
-  return missionId ? { kind: "cockpit", missionId } : { kind: "cockpit" };
+/** Helper：构造 cockpit view，可选携带 missionId 与 Hub 子页。 */
+export function cockpitView(
+  missionId?: string,
+  hubPane: CockpitHubPane = DEFAULT_COCKPIT_HUB_PANE,
+): ViewMode {
+  const hubFields =
+    hubPane === DEFAULT_COCKPIT_HUB_PANE ? {} : ({ hubPane } as const);
+  return missionId
+    ? { kind: "cockpit", missionId, ...hubFields }
+    : { kind: "cockpit", ...hubFields };
 }
 
 /** Helper：构造默认 code-graph inspect tool（所有 flag 为 false，对应顶栏入口）。 */

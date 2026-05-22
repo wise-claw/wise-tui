@@ -36,6 +36,10 @@ export interface LeftSidebarProps {
   onOpenAuthor: () => void;
   assistantHubActive?: boolean;
   onOpenAssistantHub?: () => void;
+  mcpHubActive?: boolean;
+  onOpenMcpHub?: () => void;
+  skillsHubActive?: boolean;
+  onOpenSkillsHub?: () => void;
   workspaceCreateRequest?: number;
   standaloneRepoAddRequest?: number;
   onProjectSelect: (projectId: string) => void;

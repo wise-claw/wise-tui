@@ -2174,45 +2174,70 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   padding: 2px 6px 12px 2px;
 }
 
-.app-left-sidebar-assistant-entry {
+.app-left-sidebar-hub-quick {
   flex: 0 0 auto;
-  padding: 0 8px 4px;
-}
-
-.app-left-sidebar-assistant-button {
-  width: 100%;
-  min-height: 34px;
   display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 6px;
+}
+
+.app-left-sidebar-hub-quick__tooltip-wrap {
+  display: block;
+  width: 100%;
+}
+
+.app-left-sidebar-hub-quick__btn {
+  width: 100%;
+  min-height: 28px;
+  display: flex;
+  flex-direction: row;
   align-items: center;
+  justify-content: flex-start;
   gap: 8px;
-  padding: 7px 10px;
-  border: 1px solid var(--app-workspace-glass-border) !important;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--ant-color-bg-container) 45%, transparent) !important;
-  color: var(--ant-color-text);
+  padding: 3px 10px;
+  border: 1px solid transparent !important;
+  border-radius: 6px;
+  background: transparent !important;
+  color: var(--ant-color-text-secondary);
   cursor: pointer;
-  font-size: 13px;
-  line-height: 1;
-  text-align: left;
-  box-shadow: var(--app-workspace-glass-inset-glow), var(--app-workspace-glass-shadow);
-  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  font-size: 12px;
+  line-height: 1.35;
+  box-shadow: none !important;
+  transition: all 0.2s cubic-bezier(0.165, 0.84, 0.44, 1);
 }
 
-.app-left-sidebar-assistant-button:hover {
-  background: color-mix(in srgb, var(--ant-color-bg-container) 65%, transparent) !important;
-  border-color: color-mix(in srgb, var(--ant-color-primary) 24%, transparent) !important;
-  transform: translateY(-1px) translateZ(0);
-  box-shadow: var(--app-workspace-active-glow), var(--app-workspace-glass-shadow);
+.app-left-sidebar-hub-quick__tooltip-wrap .app-left-sidebar-hub-quick__btn {
+  width: 100%;
 }
 
-.app-left-sidebar-assistant-button--active {
+.app-left-sidebar-hub-quick__btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ant-color-text) 6%, transparent) !important;
+  color: var(--ant-color-text);
+  transform: translateX(2px) translateZ(0) !important;
+  box-shadow: none !important;
+  border-color: transparent !important;
+}
+
+.app-left-sidebar-hub-quick__btn--active {
   background: color-mix(in srgb, var(--ant-color-primary) 12%, transparent) !important;
-  border-color: color-mix(in srgb, var(--ant-color-primary) 28%, transparent) !important;
-  color: var(--ant-color-primary-text) !important;
-  box-shadow: var(--app-workspace-active-glow), var(--app-workspace-glass-shadow) !important;
+  border-color: color-mix(in srgb, var(--ant-color-primary) 22%, transparent) !important;
+  color: var(--ant-color-primary) !important;
+  font-weight: 600;
+  box-shadow: var(--app-workspace-active-glow) !important;
+  transform: translateX(4px) translateZ(0) scale(1.01) !important;
 }
 
-.app-left-sidebar-assistant-button__icon {
+.app-left-sidebar-hub-quick__btn--disabled,
+.app-left-sidebar-hub-quick__btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+  transform: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+.app-left-sidebar-hub-quick__icon {
   width: 18px;
   height: 18px;
   border-radius: 5px;
@@ -2220,15 +2245,31 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  background: color-mix(in srgb, currentColor 10%, transparent);
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  transition: all 0.2s ease;
 }
 
-.app-left-sidebar-assistant-button__label {
+.app-left-sidebar-hub-quick__btn:hover:not(:disabled) .app-left-sidebar-hub-quick__icon {
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+
+.app-left-sidebar-hub-quick__btn--active .app-left-sidebar-hub-quick__icon {
+  color: var(--ant-color-primary);
+  background: color-mix(in srgb, var(--ant-color-primary) 15%, transparent) !important;
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--ant-color-primary) 40%, transparent));
+}
+
+.app-left-sidebar-hub-quick__icon svg {
+  width: 13px;
+  height: 13px;
+}
+
+.app-left-sidebar-hub-quick__label {
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font-weight: 600;
+  font-weight: 550;
 }
 
 .app-left-sidebar-system-inline {

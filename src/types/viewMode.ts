@@ -17,11 +17,22 @@
  * Agents / Workflows / MCP / Skills / Hooks / Prompts / Trellis Spec /
  * 应用级设置。
  */
+/** Cockpit 叠层内的 Hub 子页（左栏快捷入口与助手 Hub 打开方式一致）。 */
+export type CockpitHubPane = "assistant" | "mcp" | "skills";
+
+export const DEFAULT_COCKPIT_HUB_PANE: CockpitHubPane = "assistant";
+
 export type ViewMode =
   | { kind: "chat" }
-  | { kind: "cockpit"; missionId?: string }
+  | { kind: "cockpit"; missionId?: string; hubPane?: CockpitHubPane }
   | { kind: "author"; pane: AuthorPane }
   | { kind: "inspect"; tool: InspectTool };
+
+export function resolveCockpitHubPane(
+  view: Extract<ViewMode, { kind: "cockpit" }>,
+): CockpitHubPane {
+  return view.hubPane ?? DEFAULT_COCKPIT_HUB_PANE;
+}
 
 export type AuthorPane =
   | "workspaces"
