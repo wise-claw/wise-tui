@@ -312,6 +312,7 @@ describe("runMissionActions · runtime ledger parity", () => {
       wroteRunResult: true,
       alreadyFinished: false,
     });
+    dispatchWorkspaceTrellisMaterializedFanout.mockResolvedValue(null);
   });
 
   test("runMissionClusters stores active mission id before dispatching clusters", async () => {
@@ -668,6 +669,56 @@ describe("runMissionActions · runtime ledger parity", () => {
 	      }),
 	    }));
 	  });
+
+  test("writeMissionToTrellis reports fanout failures in write results", async () => {
+    const { writeMissionToTrellis } = await import("./runMissionActions");
+    dispatchWorkspaceTrellisMaterializedFanout.mockRejectedValueOnce(new Error("fanout failed"));
+    const state = makeState({
+      stage: "review",
+      activeMissionId: "mission-p1-hash",
+      clusterRuns: {
+        "cluster-fe": {
+          clusterId: "cluster-fe",
+          parentTaskName: "05-16-parent",
+          parentTaskPath: ".trellis/tasks/05-16-parent",
+          status: "succeeded",
+          errors: [],
+          normalized: {
+            source: makeState().prd!,
+            context: null,
+            splitTasks: [{
+              id: "task-a",
+              title: "Build UI",
+              description: "",
+              role: "frontend",
+              size: "M",
+              estimateDays: 1,
+              dependencies: [],
+              sourceRefs: [],
+              sourceRequirementIds: ["REQ-1"],
+              subtasks: [],
+              dod: [],
+              executionStatus: "executable",
+              flowStatus: "todo",
+            }],
+            executableTasks: [],
+            criticalPath: [],
+            parallelGroups: [],
+            unmetPreconditions: [],
+          },
+        },
+      },
+    });
+    const api = makeApi(state);
+
+    await writeMissionToTrellis(api);
+
+    expect(api.addWriteResult).toHaveBeenCalledWith(expect.objectContaining({
+      clusterId: "cluster-fe",
+      childTasks: [expect.objectContaining({ sourceTaskId: "task-a" })],
+      fanoutFailedCount: 1,
+    }));
+  });
 
   test("writeMissionToTrellis maps namespaced UI task ids back to cluster output ids before materializing", async () => {
     const { writeMissionToTrellis } = await import("./runMissionActions");

@@ -275,7 +275,7 @@
 
 .app-prd-task-panel__mission-stages {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 4px;
   min-width: 0;
   margin: 0;
@@ -306,6 +306,11 @@
 .app-prd-task-panel__mission-stage.is-done {
   color: var(--ant-color-success);
   background: var(--ant-color-success-bg);
+}
+
+.app-prd-task-panel__mission-stage.is-failed {
+  color: var(--ant-color-error);
+  background: var(--ant-color-error-bg);
 }
 
 .app-prd-task-panel__mission-stage-dot {
@@ -2363,12 +2368,32 @@
   color: var(--ant-color-primary);
 }
 
-.app-prd-task-panel__result-stage--execute:not(:disabled) {
+.app-prd-task-panel__result-stage.is-done {
+  border-color: rgba(82, 196, 26, 0.45);
+  background: var(--ant-color-success-bg);
+}
+
+.app-prd-task-panel__result-stage.is-done > span {
+  border-color: rgba(82, 196, 26, 0.55);
+  color: var(--ant-color-success);
+}
+
+.app-prd-task-panel__result-stage.is-failed {
+  border-color: rgba(255, 77, 79, 0.45);
+  background: var(--ant-color-error-bg);
+}
+
+.app-prd-task-panel__result-stage.is-failed > span {
+  border-color: rgba(255, 77, 79, 0.55);
+  color: var(--ant-color-error);
+}
+
+.app-prd-task-panel__result-stage--execute:not(:disabled):not(.is-done):not(.is-failed):not(.is-active) {
   border-color: rgba(82, 196, 26, 0.45);
   background: rgba(82, 196, 26, 0.09);
 }
 
-.app-prd-task-panel__result-stage--execute:not(:disabled) > span {
+.app-prd-task-panel__result-stage--execute:not(:disabled):not(.is-done):not(.is-failed):not(.is-active) > span {
   border-color: rgba(82, 196, 26, 0.45);
   color: #389e0d;
 }

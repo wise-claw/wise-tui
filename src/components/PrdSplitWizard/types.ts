@@ -63,6 +63,7 @@ export interface WizardWriteResult {
     taskName: string;
     taskPath: string;
   }>;
+  fanoutFailedCount?: number;
   warnings: string[];
   error?: string;
 }

@@ -1,7 +1,7 @@
 import { CloseOutlined, HistoryOutlined } from "@ant-design/icons";
 import { Button, Card, Space, Spin, Typography } from "antd";
 import type { MenuProps } from "antd";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import type { SplitResult, TaskApiSpec, TaskExecutionStatus, TaskItem } from "../../types";
 import { ExecutionOrchestrationPanel } from "./ExecutionOrchestrationPanel";
@@ -27,7 +27,7 @@ import type {
 import type { TaskAiMode, TaskConfirmFilter } from "./helpers";
 import { taskToMarkdown } from "./helpers";
 
-type ResultViewMode = "review" | "orchestration";
+type ResultViewMode = "review" | "orchestration" | "runtime";
 type WorkspaceLayoutMode = "review" | "focused";
 
 interface TaskConfirmCounts {
@@ -204,8 +204,17 @@ export function TaskResultPanel({
   const [resultViewMode, setResultViewMode] = useState<ResultViewMode>("review");
   const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(() => new Set());
   const [runtimeQueueHidden, setRuntimeQueueHidden] = useState(false);
+  const previousActiveResultRef = useRef<SplitResult | null>(null);
   const materializedResult = materializedExecutionResult;
-  const showExecutionRuntime = materializedResult !== null && activeResult && !showRuntime && !runtimeQueueHidden;
+  const hasExecutionRuntime = materializedResult !== null && activeResult !== null;
+  const executionRuntimePayload = resultViewMode === "runtime"
+    && activeResult
+    && materializedResult
+    && !showRuntime
+    && !runtimeQueueHidden
+    ? { result: activeResult, materializedResult }
+    : null;
+  const showExecutionRuntime = executionRuntimePayload !== null;
   const canShowOrchestration = Boolean(activeResult?.splitTasks.length);
   const orchestrationResult = resultViewMode === "orchestration"
     && activeResult
@@ -217,16 +226,50 @@ export function TaskResultPanel({
   const showOrchestration = orchestrationResult !== null;
   const showPlanPreview = !showRuntime && !activeResult && plannedMissionSummary !== null;
   const showTaskList = !showRuntime && !showOrchestration && !showExecutionRuntime && !showPlanPreview;
-  const primaryActionLabel = resultViewMode === "orchestration" ? "落盘并启动" : "确认并编排";
+  const primaryActionLabel = resultViewMode === "runtime"
+    ? "执行结果"
+    : resultViewMode === "orchestration" ? "落盘并启动" : "确认并编排";
   const primaryActionLoading = resultViewMode === "orchestration"
     ? generatingExecutableTaskId === "__all__"
     : confirmSavingTaskId === "__all__";
-  const primaryActionDisabled = resultViewMode === "orchestration"
-    ? !canGenerateExecutableTasks || materializedResult !== null || Boolean(generatingExecutableTaskId)
-    : !activeResult || activeResult.splitTasks.length === 0 || Boolean(confirmSavingTaskId);
+  const primaryActionDisabled = resultViewMode === "runtime"
+    ? true
+    : resultViewMode === "orchestration"
+      ? !canGenerateExecutableTasks || materializedResult !== null || Boolean(generatingExecutableTaskId)
+      : !activeResult || activeResult.splitTasks.length === 0 || Boolean(confirmSavingTaskId);
+
+  function handleResultViewModeChange(mode: ResultViewMode) {
+    if (mode === "runtime") {
+      setRuntimeQueueHidden(false);
+      onCloseRuntime();
+    }
+    setResultViewMode(mode);
+  }
+
   useEffect(() => {
+    if (!materializedExecutionResult) return;
     setRuntimeQueueHidden(false);
+    setResultViewMode("runtime");
   }, [materializedExecutionResult]);
+  useEffect(() => {
+    if (activeResult && !materializedExecutionResult && resultViewMode === "runtime") {
+      setRuntimeQueueHidden(false);
+      setResultViewMode("review");
+    }
+  }, [activeResult, materializedExecutionResult, resultViewMode]);
+  useEffect(() => {
+    const previousActiveResult = previousActiveResultRef.current;
+    previousActiveResultRef.current = activeResult;
+    if (
+      activeResult
+      && activeResult.splitTasks.length > 0
+      && !materializedExecutionResult
+      && (previousActiveResult === null || previousActiveResult.source !== activeResult.source)
+    ) {
+      setRuntimeQueueHidden(false);
+      setResultViewMode(taskConfirmCounts.unconfirmedCount === 0 ? "orchestration" : "review");
+    }
+  }, [activeResult, materializedExecutionResult, taskConfirmCounts.unconfirmedCount]);
   useEffect(() => {
     setExpandedTaskIds((prev) => {
       const visibleIds = new Set(filteredTasks.map((task) => task.id));
@@ -237,18 +280,22 @@ export function TaskResultPanel({
     });
   }, [filteredTasks, selectedTaskId]);
   useEffect(() => {
-    onWorkspaceLayoutChange(resultViewMode === "orchestration" || showExecutionRuntime ? "focused" : "review");
+    onWorkspaceLayoutChange(resultViewMode === "orchestration" || resultViewMode === "runtime" || showExecutionRuntime ? "focused" : "review");
   }, [onWorkspaceLayoutChange, resultViewMode, showExecutionRuntime]);
 
   async function handleConfirmAllAndEnterOrchestration() {
     const confirmed = await onConfirmAll();
     if (confirmed === false) return;
-    setResultViewMode("orchestration");
+    handleResultViewModeChange("orchestration");
   }
 
   function handlePrimaryAction() {
+    if (resultViewMode === "runtime") return;
     if (resultViewMode === "orchestration") {
-      void onGenerateExecutableTasks();
+      void (async () => {
+        const out = await onGenerateExecutableTasks();
+        if (out) handleResultViewModeChange("runtime");
+      })();
       return;
     }
     void handleConfirmAllAndEnterOrchestration();
@@ -304,18 +351,21 @@ export function TaskResultPanel({
           bodyStyle={{ padding: 0 }}
         >
           <div className="app-prd-task-panel__task-split-layout">
-            {!showRuntime && filteredTasks.length > 0 ? (
+            {!showRuntime && (activeResult?.splitTasks.length ?? 0) > 0 ? (
               <SplitResultStageRail
                 mode={resultViewMode}
                 canEnterOrchestration={canShowOrchestration}
                 canGenerateExecutableTasks={canGenerateExecutableTasks}
+                canViewRuntime={hasExecutionRuntime}
                 confirmedCount={taskConfirmCounts.confirmedCount}
                 totalCount={activeResult?.splitTasks.length ?? filteredTasks.length}
                 waveCount={activeResult?.parallelGroups.length ?? 0}
-                onModeChange={setResultViewMode}
+                executionStatus={executionFanoutSnapshot?.status ?? null}
+                onModeChange={handleResultViewModeChange}
                 materialized={materializedResult !== null}
                 onMaterialize={async () => {
-                  void onGenerateExecutableTasks();
+                  const out = await onGenerateExecutableTasks();
+                  if (out) handleResultViewModeChange("runtime");
                 }}
               />
             ) : null}
@@ -361,17 +411,17 @@ export function TaskResultPanel({
                   ) : null}
                   {showExecutionRuntime ? (
                     <ExecutionRuntimeQueue
-                      result={activeResult}
-                      materializedResult={materializedResult}
+                      result={executionRuntimePayload.result}
+                      materializedResult={executionRuntimePayload.materializedResult}
                       fanoutSnapshot={executionFanoutSnapshot}
                       selectedTaskId={selectedTaskId}
                       onSelectTask={(taskId) => {
-                        const task = activeResult.splitTasks.find((item) => item.id === taskId);
+                        const task = executionRuntimePayload.result.splitTasks.find((item) => item.id === taskId);
                         if (task) onSelectTask(task);
                       }}
                       onBackToPlan={() => {
                         setRuntimeQueueHidden(true);
-                        setResultViewMode("orchestration");
+                        handleResultViewModeChange("orchestration");
                       }}
                     />
                   ) : null}
@@ -469,9 +519,11 @@ function SplitResultStageRail({
   mode,
   canEnterOrchestration,
   canGenerateExecutableTasks,
+  canViewRuntime,
   confirmedCount,
   totalCount,
   waveCount,
+  executionStatus,
   materialized,
   onModeChange,
   onMaterialize,
@@ -479,9 +531,11 @@ function SplitResultStageRail({
   mode: ResultViewMode;
   canEnterOrchestration: boolean;
   canGenerateExecutableTasks: boolean;
+  canViewRuntime: boolean;
   confirmedCount: number;
   totalCount: number;
   waveCount: number;
+  executionStatus: ExecutionFanoutSnapshot["status"] | null;
   materialized: boolean;
   onModeChange: (mode: ResultViewMode) => void;
   onMaterialize: () => void;
@@ -515,16 +569,58 @@ function SplitResultStageRail({
       </button>
       <button
         type="button"
-        className="app-prd-task-panel__result-stage app-prd-task-panel__result-stage--execute"
-        disabled={!canGenerateExecutableTasks || materialized}
-        onClick={onMaterialize}
+        className={[
+          "app-prd-task-panel__result-stage",
+          "app-prd-task-panel__result-stage--execute",
+          mode === "runtime" ? "is-active" : "",
+          executionStatus === "succeeded" ? "is-done" : "",
+          executionStatus === "failed" ? "is-failed" : "",
+        ].filter(Boolean).join(" ")}
+        disabled={!canGenerateExecutableTasks && !canViewRuntime}
+        onClick={() => {
+          if (canViewRuntime) {
+            onModeChange("runtime");
+            return;
+          }
+          onMaterialize();
+        }}
       >
         <span>3</span>
-        <strong>开始执行</strong>
-        <small>{materialized ? "执行已启动" : canGenerateExecutableTasks ? "落盘并启动" : "等待编排确认"}</small>
+        <strong>{executionStageTitle({ executionStatus, materialized })}</strong>
+        <small>{executionStageHint({ executionStatus, materialized, canGenerateExecutableTasks })}</small>
       </button>
     </div>
   );
+}
+
+function executionStageTitle({
+  executionStatus,
+  materialized,
+}: {
+  executionStatus: ExecutionFanoutSnapshot["status"] | null;
+  materialized: boolean;
+}) {
+  if (executionStatus === "succeeded") return "执行完成";
+  if (executionStatus === "failed") return "执行失败";
+  if (executionStatus === "running") return "执行中";
+  return materialized ? "执行结果" : "开始执行";
+}
+
+function executionStageHint({
+  executionStatus,
+  materialized,
+  canGenerateExecutableTasks,
+}: {
+  executionStatus: ExecutionFanoutSnapshot["status"] | null;
+  materialized: boolean;
+  canGenerateExecutableTasks: boolean;
+}) {
+  if (executionStatus === "succeeded") return "已写入并完成";
+  if (executionStatus === "failed") return "执行有失败";
+  if (executionStatus === "running") return "执行中";
+  if (materialized) return "查看执行结果";
+  if (canGenerateExecutableTasks) return "落盘并启动";
+  return "等待编排确认";
 }
 
 function PlannedClusterPreview({

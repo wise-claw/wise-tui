@@ -128,6 +128,10 @@ import {
   type ExecutionPlanMoveDirection,
 } from "./executionPlanAdjustments";
 import { buildExecutionOrchestrationModel } from "./executionOrchestrationModel";
+import {
+  buildRequirementAssistantStageItems,
+  type RequirementAssistantStageItem,
+} from "./stageModel";
 import type {
   RequirementMissionMaterializeResult,
   RequirementMissionPlanSummary,
@@ -137,11 +141,7 @@ export interface GenerateExecutableTasksResult extends ExecutionFanoutSnapshot {
   materializedResult: RequirementMissionMaterializeResult;
 }
 
-export interface RequirementAssistantStageItem {
-  key: "write" | "draft" | "review" | "execute";
-  label: string;
-  status: "waiting" | "active" | "done";
-}
+export type { RequirementAssistantStageItem };
 
 export interface TrellisTargetSummary {
   title: string;
@@ -209,34 +209,6 @@ function mergeAssistantBundleItems(items: AssistantBundleItem[]): AssistantBundl
     }
   }
   return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
-}
-
-function buildRequirementAssistantStageItems(input: {
-  hasInput: boolean;
-  hasResult: boolean;
-  parsing: boolean;
-  materialized: boolean;
-}): RequirementAssistantStageItem[] {
-  const activeKey: RequirementAssistantStageItem["key"] = input.parsing
-    ? "draft"
-    : input.materialized
-      ? "execute"
-      : input.hasResult
-        ? "review"
-        : input.hasInput
-          ? "draft"
-          : "write";
-  const order: Array<Pick<RequirementAssistantStageItem, "key" | "label">> = [
-    { key: "write", label: "写需求" },
-    { key: "draft", label: "生成草案" },
-    { key: "review", label: "复核任务" },
-    { key: "execute", label: "开始执行" },
-  ];
-  const activeIndex = order.findIndex((item) => item.key === activeKey);
-  return order.map((item, index) => ({
-    ...item,
-    status: index < activeIndex ? "done" : index === activeIndex ? "active" : "waiting",
-  }));
 }
 
 function buildTrellisTargetSummary(
@@ -460,15 +432,6 @@ export function usePrdTaskSplitPanelController({
       updatedAt: 0,
     };
   }, [linkedProject, projects, trellisTarget]);
-  const trellisStageItems = useMemo(
-    () => buildRequirementAssistantStageItems({
-      hasInput,
-      hasResult: Boolean(activeResult || plannedMissionSummary),
-      parsing,
-      materialized: Boolean(materializedExecutionResult),
-    }),
-    [activeResult, hasInput, materializedExecutionResult, parsing, plannedMissionSummary],
-  );
   const trellisTargetSummary = useMemo(
     () => buildTrellisTargetSummary(trellisTarget, trellisTargetError),
     [trellisTarget, trellisTargetError],
@@ -711,6 +674,30 @@ export function usePrdTaskSplitPanelController({
       unconfirmedCount: tasks.length - confirmedCount,
     };
   }, [activeResult?.splitTasks]);
+  const trellisStageItems = useMemo(
+    () => buildRequirementAssistantStageItems({
+      hasInput,
+      parsing,
+      hasPlannedSummary: plannedMissionSummary !== null,
+      hasResult: Boolean(activeResult),
+      allTasksConfirmed: Boolean(
+        activeResult
+        && activeResult.splitTasks.length > 0
+        && taskConfirmCounts.unconfirmedCount === 0,
+      ),
+      hasMaterializedResult: Boolean(materializedExecutionResult),
+      executionStatus: executionFanoutSnapshot?.status ?? null,
+    }),
+    [
+      activeResult,
+      executionFanoutSnapshot?.status,
+      hasInput,
+      materializedExecutionResult,
+      parsing,
+      plannedMissionSummary,
+      taskConfirmCounts.unconfirmedCount,
+    ],
+  );
   const hasUnconfirmedTasks = taskConfirmCounts.unconfirmedCount > 0;
   const hasConfirmedTasks = taskConfirmCounts.confirmedCount > 0;
   const canGenerateExecutableTasks = Boolean(
@@ -2951,8 +2938,8 @@ export function usePrdTaskSplitPanelController({
         ...finalSnapshot,
         materializedResult: materialized,
       };
-      if (materialized.failedCount > 0) {
-        message.error(`开始执行：成功 ${result.doneCount}，失败 ${materialized.failedCount}。`);
+      if (result.failedCount > 0) {
+        message.error(`开始执行：成功 ${result.doneCount}，失败 ${result.failedCount}。`);
       } else {
         message.success(`已开始执行：${result.doneCount} 个任务。`);
       }
@@ -3003,14 +2990,15 @@ export function usePrdTaskSplitPanelController({
           .filter((task): task is NonNullable<typeof task> => Boolean(task)),
       }))
       .filter((wave) => wave.tasks.length > 0);
+    const failedCount = materialized.failedCount;
     return {
-      status: materialized.failedCount > 0 ? "failed" : "succeeded",
+      status: failedCount > 0 ? "failed" : "succeeded",
       workflowRunId: null,
       totalCount: sourceTasks.length,
       doneCount: materialized.childTasks.length,
-      failedCount: materialized.failedCount,
+      failedCount,
       waves,
-      message: materialized.failedCount > 0
+      message: failedCount > 0
         ? "部分任务已生成，但有任务启动失败。"
         : "任务已生成并开始执行。",
     };

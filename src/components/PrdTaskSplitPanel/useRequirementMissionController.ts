@@ -39,6 +39,7 @@ export interface RequirementMissionMaterializeResult {
     taskPath: string;
   }>;
   failedCount: number;
+  fanoutFailedCount: number;
 }
 
 export function useRequirementMissionController({ target }: RequirementMissionControllerInput) {
@@ -169,11 +170,14 @@ export function useRequirementMissionController({ target }: RequirementMissionCo
 function summarizeWriteResults(writeResults: WizardWriteResult[]): RequirementMissionMaterializeResult | null {
   if (writeResults.length === 0) return null;
   const successful = writeResults.filter((result) => !result.error);
+  const failedWriteCount = writeResults.length - successful.length;
+  const fanoutFailedCount = successful.reduce((count, result) => count + (result.fanoutFailedCount ?? 0), 0);
   return {
     parentTaskNames: successful.map((result) => result.parentTaskName).filter((name) => name.trim().length > 0),
     childTaskNames: successful.flatMap((result) => result.childTaskNames),
     childTasks: successful.flatMap((result) => result.childTasks),
-    failedCount: writeResults.length - successful.length,
+    failedCount: failedWriteCount + fanoutFailedCount,
+    fanoutFailedCount,
   };
 }
 

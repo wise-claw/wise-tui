@@ -57,6 +57,11 @@ interface SourceTaskSelectionMatch {
   outputSourceTaskId: string;
 }
 
+interface ClusterFanoutTracker {
+  clusterId: string;
+  promise: Promise<unknown>;
+}
+
 export async function runMissionClusters(api: UseSplitWizardStateApi): Promise<void> {
   const { state } = api;
   if (!state.plan || !state.prd || !state.requirementsIndex || !state.project) return;
@@ -958,7 +963,7 @@ export async function writeMissionToTrellis(
   api.beginWrite();
   try {
     const graphInputs: PrdSplitWorkflowClusterInput[] = [];
-    const fanoutPromises: Promise<unknown>[] = [];
+    const fanoutTrackers: ClusterFanoutTracker[] = [];
     for (const cluster of succeededClusters) {
       const run = state.clusterRuns[cluster.id];
       if (!run?.normalized || !run.parentTaskName) {
@@ -1017,17 +1022,19 @@ export async function writeMissionToTrellis(
           warnings: out.warnings,
         };
         writeResults.push(result);
-        api.addWriteResult(result);
         const target = resolveMaterializedFanoutRepositoryTarget(cluster, state.repositories);
-        fanoutPromises.push(dispatchWorkspaceTrellisMaterializedFanout({
-          sessionId: `prd-split:${out.parentTaskName}`,
-          projectId: state.project.id,
-          projectRootPath: state.project.rootPath,
-          repositoryPath: target.repositoryPath,
-          sourceTasks: effective.splitTasks,
-          materializedResult: out,
-          repositoryMetadata: target.repositoryMetadata,
-        }));
+        fanoutTrackers.push({
+          clusterId: cluster.id,
+          promise: dispatchWorkspaceTrellisMaterializedFanout({
+            sessionId: `prd-split:${out.parentTaskName}`,
+            projectId: state.project.id,
+            projectRootPath: state.project.rootPath,
+            repositoryPath: target.repositoryPath,
+            sourceTasks: effective.splitTasks,
+            materializedResult: out,
+            repositoryMetadata: target.repositoryMetadata,
+          }),
+        });
         graphInputs.push({
           cluster,
           parentTaskName: out.parentTaskName,
@@ -1061,8 +1068,21 @@ export async function writeMissionToTrellis(
     }
     const workflowGraphResult = await persistMissionWorkflowGraph(api, graphInputs);
     api.finishWrite();
-    const fanoutResults = await Promise.allSettled(fanoutPromises);
+    const fanoutResults = await Promise.allSettled(fanoutTrackers.map((tracker) => tracker.promise));
     const fanoutFailedCount = fanoutResults.filter((result) => result.status === "rejected").length;
+    if (fanoutFailedCount > 0) {
+      const failedClusterIds = fanoutTrackers
+        .filter((_, index) => fanoutResults[index]?.status === "rejected")
+        .map((tracker) => tracker.clusterId);
+      for (const result of writeResults) {
+        if (failedClusterIds.includes(result.clusterId)) {
+          result.fanoutFailedCount = 1;
+        }
+      }
+    }
+    for (const result of writeResults.filter((result) => !result.error)) {
+      api.addWriteResult({ ...result });
+    }
     await persistMissionSnapshot(api, "done", "completed", "mission.write.completed", {
       writeResultCount: writeResults.length,
       workflowId: workflowGraphResult?.workflowId ?? null,
