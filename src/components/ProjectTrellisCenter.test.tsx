@@ -99,7 +99,14 @@ const repository: Repository = {
   updatedAt: "0",
 };
 
-function renderCenter(input: { open?: boolean; project?: ProjectItem | null; repositories?: Repository[] } = {}) {
+function renderCenter(
+  input: {
+    open?: boolean;
+    project?: ProjectItem | null;
+    repositories?: Repository[];
+    onOpenProjectSession?: (project: ProjectItem) => void | Promise<void>;
+  } = {},
+) {
   return renderToStaticMarkup(
     <AntApp>
       <ProjectTrellisCenter
@@ -107,6 +114,7 @@ function renderCenter(input: { open?: boolean; project?: ProjectItem | null; rep
         inline
         project={input.project === undefined ? project : input.project}
         repositories={input.repositories ?? []}
+        onOpenProjectSession={input.onOpenProjectSession}
       />
     </AntApp>,
   );

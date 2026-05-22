@@ -58,7 +58,7 @@ import {
 } from "antd";
 import type { DataNode, EventDataNode } from "antd/es/tree";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Dispatch, ReactNode, SetStateAction } from "react";
+import type { Dispatch, KeyboardEvent, ReactNode, SetStateAction } from "react";
 import type { ProjectItem, Repository } from "../types";
 import { useTrellisRuntime } from "../hooks/useTrellisRuntime";
 import {
@@ -320,6 +320,7 @@ export function ProjectTrellisCenter({
   project,
   repositories = [],
   onClose,
+  onOpenProjectSession,
   onRequestSpecAgentUpdate,
 }: ProjectTrellisCenterProps) {
   const configuredRootPath = project?.rootPath?.trim() || null;
@@ -349,6 +350,13 @@ export function ProjectTrellisCenter({
 
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>("spec");
+  const handleReturnToMainSession = useCallback(() => {
+    if (project && onOpenProjectSession) {
+      void onOpenProjectSession(project);
+      return;
+    }
+    onClose?.();
+  }, [onClose, onOpenProjectSession, project]);
 
   const content = (
     <div className="project-trellis-center">
@@ -367,7 +375,8 @@ export function ProjectTrellisCenter({
             type="primary"
             ghost
             icon={<ExternalLink size={13} />}
-            onClick={onClose}
+            disabled={!project && !onClose}
+            onClick={handleReturnToMainSession}
           >
             回到主会话
           </Button>
@@ -638,9 +647,10 @@ function TrellisSpecTreePanel({
 
   const activeArea = selectedPath?.split("/")[0] ?? null;
   const hasDraftChanges = activeFile ? draft !== activeFile.content : false;
+  const canSaveDraft = Boolean(selectedPath && hasDraftChanges && !fileLoading && !saving);
 
   const handleSave = useCallback(async () => {
-    if (!rootPath || !selectedPath) return;
+    if (!rootPath || !selectedPath || !hasDraftChanges || fileLoading || saving) return;
     setSaving(true);
     setFileError(null);
     try {
@@ -665,7 +675,17 @@ function TrellisSpecTreePanel({
     } finally {
       setSaving(false);
     }
-  }, [draft, message, project?.id, rootPath, selectedPath]);
+  }, [draft, fileLoading, hasDraftChanges, message, project?.id, rootPath, saving, selectedPath]);
+
+  const handleEditorKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        if (canSaveDraft) void handleSave();
+      }
+    },
+    [canSaveDraft, handleSave],
+  );
 
   const handleCreateSpec = useCallback(async () => {
     if (!newSpecName || !rootPath) return;
@@ -840,16 +860,6 @@ function TrellisSpecTreePanel({
                   让 Agent 补全规约
                 </Button>
               ) : null}
-              <Button
-                size="small"
-                type="primary"
-                icon={<SaveOutlined />}
-                loading={saving}
-                disabled={!selectedPath || !hasDraftChanges || fileLoading}
-                onClick={handleSave}
-              >
-                保存
-              </Button>
             </div>
           </div>
           {fileError ? <Alert type="error" showIcon message={fileError} /> : null}
@@ -899,6 +909,7 @@ function TrellisSpecTreePanel({
                   className="project-trellis-spec__markdown-editor"
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
+                  onKeyDown={handleEditorKeyDown}
                   autoSize={false}
                   spellCheck={false}
                   style={{ flex: 1, minHeight: 0 }}
