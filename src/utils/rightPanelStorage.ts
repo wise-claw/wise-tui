@@ -1,7 +1,7 @@
 export const RIGHT_PANEL_DEFAULT_COLLAPSED_KEY = "wise.rightPanel.defaultCollapsed";
 
-/** `false` = 启动时默认展开右侧面板。 */
-export const RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK = false;
+/** `true` = 启动时默认收起右侧面板。 */
+export const RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK = true;
 
 export function readRightPanelDefaultCollapsedFromStorage(
   fallback: boolean = RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK,
