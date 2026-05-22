@@ -320,7 +320,6 @@ export function ProjectTrellisCenter({
   project,
   repositories = [],
   onClose,
-  onOpenProjectSession,
   onRequestSpecAgentUpdate,
 }: ProjectTrellisCenterProps) {
   const configuredRootPath = project?.rootPath?.trim() || null;
@@ -399,7 +398,6 @@ export function ProjectTrellisCenter({
                 project={project}
                 selectedPath={selectedPath}
                 setSelectedPath={setSelectedPath}
-                onOpenProjectSession={onOpenProjectSession}
                 onRequestSpecAgentUpdate={onRequestSpecAgentUpdate}
               />
             ),
@@ -466,7 +464,6 @@ interface TrellisSpecTreePanelProps {
   project: ProjectItem | null;
   selectedPath: string | null;
   setSelectedPath: Dispatch<SetStateAction<string | null>>;
-  onOpenProjectSession?: (project: ProjectItem) => void | Promise<void>;
   onRequestSpecAgentUpdate?: (project: ProjectItem, area: string) => void | Promise<void>;
 }
 
@@ -501,7 +498,6 @@ function TrellisSpecTreePanel({
   project,
   selectedPath,
   setSelectedPath,
-  onOpenProjectSession,
   onRequestSpecAgentUpdate,
 }: TrellisSpecTreePanelProps) {
   const { message } = AntApp.useApp();
@@ -717,13 +713,13 @@ function TrellisSpecTreePanel({
 
   const handleAgentReview = useCallback(async () => {
     if (!project || !onRequestSpecAgentUpdate || !activeArea) {
-      message.info("当前没有可用的 Agent 更新入口");
+      message.info("当前没有可用的规约补全入口");
       return;
     }
     setAiOptimizing(true);
     try {
       await onRequestSpecAgentUpdate(project, activeArea);
-      message.success("已请求 Agent 审查当前规约区");
+      message.success("已请求 Agent 补全当前规约区");
     } catch (err) {
       message.error(err instanceof Error ? err.message : String(err));
     } finally {
@@ -738,19 +734,17 @@ function TrellisSpecTreePanel({
   return (
     <section className="project-trellis-spec">
       <div className="project-trellis-panel-head">
-        <Typography.Text strong>Spec 规约库配置中心</Typography.Text>
+        <div className="project-trellis-panel-title">
+          <Typography.Text strong>Spec 填写引导中心</Typography.Text>
+          <Typography.Text type="secondary">
+            初始化任务 00-bootstrap-guidelines 会引导团队补齐这些规约模板
+          </Typography.Text>
+        </div>
         <Space size={6} wrap>
-          <Tag color="cyan">{areas.length} 规约区</Tag>
-          <Tag color="blue">{markdownCount} 规范文档</Tag>
-          <Tag color={managedAreas === areas.length ? "success" : "warning"}>{managedAreas}/{areas.length} 主入口就绪</Tag>
-          {project && onOpenProjectSession ? (
-            <Button size="small" icon={<ExternalLink size={12} />} onClick={() => void onOpenProjectSession(project)}>
-              打开主会话
-            </Button>
-          ) : null}
-          <Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={load}>
-            刷新
-          </Button>
+          <Tag color="purple">初始化任务：00-bootstrap-guidelines</Tag>
+          <Tag color="blue">待补全：{markdownCount} 篇规约</Tag>
+          <Tag color={managedAreas === areas.length ? "success" : "warning"}>入口检查：{managedAreas}/{areas.length} 就绪</Tag>
+          <Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={load} title="刷新规约库" />
         </Space>
       </div>
       {error ? <Alert type="error" showIcon message={error} /> : null}
@@ -780,9 +774,8 @@ function TrellisSpecTreePanel({
               disabled={!selectedPath}
               icon={<Trash2 size={12} />}
               onClick={handleDeleteSpec}
-            >
-              删除
-            </Button>
+              title="删除规约"
+            />
           </div>
           <div className="project-trellis-spec__tree project-trellis-spec__tree-shell" aria-label="Trellis spec 目录树">
             {treeData.length === 0 ? (
@@ -815,9 +808,8 @@ function TrellisSpecTreePanel({
             </div>
             <div className="project-trellis-spec__editor-actions">
               {activeFile ? (
-                <>
+                <Space.Compact size="small">
                   <Button
-                    size="small"
                     type={viewMode === "preview" ? "primary" : "default"}
                     icon={<Eye size={13} />}
                     onClick={() => setViewMode(viewMode === "preview" ? "edit" : "preview")}
@@ -825,14 +817,13 @@ function TrellisSpecTreePanel({
                     预览
                   </Button>
                   <Button
-                    size="small"
                     type={viewMode === "diff" ? "primary" : "default"}
                     icon={<FileCode size={13} />}
                     onClick={() => setViewMode(viewMode === "diff" ? "edit" : "diff")}
                   >
-                    对比 (Diff)
+                    查看改动
                   </Button>
-                </>
+                </Space.Compact>
               ) : null}
               {activeFile ? (
                 <div className="project-trellis-spec__editor-divider" />
@@ -840,11 +831,13 @@ function TrellisSpecTreePanel({
               {activeArea ? (
                 <Button
                   size="small"
-                  icon={<FileDoneOutlined />}
+                  className="project-trellis-spec__ai-btn"
+                  icon={<Sparkles size={12} />}
                   disabled={!onRequestSpecAgentUpdate}
+                  loading={aiOptimizing}
                   onClick={handleAgentReview}
                 >
-                  请求 Agent 更新
+                  让 Agent 补全规约
                 </Button>
               ) : null}
               <Button
@@ -901,17 +894,6 @@ function TrellisSpecTreePanel({
                     <Button type="text" size="small" onClick={() => insertMarkdown("todo")} title="待办事项"><ListTodo size={13} /></Button>
                     <Button type="text" size="small" onClick={() => insertMarkdown("table")} title="插入表格"><Table size={13} /></Button>
                   </div>
-                  <Button
-                    type="primary"
-                    ghost
-                    size="small"
-                    loading={aiOptimizing}
-                    icon={<Sparkles size={11} />}
-                    disabled={!onRequestSpecAgentUpdate || !activeArea}
-                    onClick={handleAgentReview}
-                  >
-                    AI 智能优化
-                  </Button>
                 </div>
                 <Input.TextArea
                   className="project-trellis-spec__markdown-editor"
@@ -924,7 +906,7 @@ function TrellisSpecTreePanel({
                 <div className="project-trellis-spec__ai-copilot">
                   <span className="project-trellis-spec__ai-copilot-pulse" />
                   <span className="project-trellis-spec__ai-copilot-text">
-                    <strong>Trellis Agent 可审查</strong>：保存后可请求 Agent 基于当前规约区提出更新建议；Wise 不会自动改写草稿。
+                    <strong>00-bootstrap-guidelines</strong>：可让 Agent 根据项目现状补全当前规约区；Wise 不会自动改写草稿。
                   </span>
                 </div>
               </div>

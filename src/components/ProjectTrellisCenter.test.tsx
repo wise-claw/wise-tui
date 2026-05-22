@@ -112,6 +112,10 @@ function renderCenter(input: { open?: boolean; project?: ProjectItem | null; rep
   );
 }
 
+function countText(html: string, text: string): number {
+  return html.split(text).length - 1;
+}
+
 describe("ProjectTrellisCenter", () => {
   test("renders Trellis as a workspace runtime with a compact status bar", () => {
     const html = renderCenter();
@@ -127,6 +131,16 @@ describe("ProjectTrellisCenter", () => {
     expect(html).toContain("工作流图");
     expect(html).toContain("运行证据");
     expect(html).toContain("Spec");
+  });
+
+  test("presents the spec page as bootstrap-guidelines completion flow", () => {
+    const html = renderCenter();
+    expect(html).toContain("Spec 填写引导中心");
+    expect(html).toContain("00-bootstrap-guidelines");
+    expect(html).not.toContain("请求 Agent 更新");
+    expect(html).not.toContain("AI 智能优化");
+    expect(html).not.toContain("对比 (Diff)");
+    expect(countText(html, "让 Agent 补全规约")).toBeLessThanOrEqual(1);
   });
 
   test("keeps unavailable project state readable", () => {

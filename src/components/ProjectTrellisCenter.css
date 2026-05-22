@@ -103,6 +103,20 @@
   letter-spacing: 0.2px;
 }
 
+.project-trellis-panel-title {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.project-trellis-panel-title .ant-typography-secondary {
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
 .project-trellis-spec,
 .project-trellis-workflow,
 .project-trellis-runtime,
@@ -285,7 +299,9 @@
   display: flex;
   flex: 0 0 auto;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
+  flex-wrap: nowrap;
 }
 
 .project-trellis-spec__editor-divider {
@@ -293,6 +309,20 @@
   height: 16px;
   margin: 0 4px;
   background: var(--mission-border);
+}
+
+.project-trellis-spec__ai-btn {
+  border-color: color-mix(in srgb, var(--mission-accent) 40%, var(--mission-border));
+  background: color-mix(in srgb, var(--mission-accent) 5%, transparent);
+  color: var(--mission-accent);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.project-trellis-spec__ai-btn:hover:not(:disabled) {
+  border-color: var(--mission-accent) !important;
+  color: var(--mission-accent) !important;
+  background: color-mix(in srgb, var(--mission-accent) 12%, transparent) !important;
+  box-shadow: 0 0 8px var(--mission-accent-glow);
 }
 
 .project-trellis-spec__diff-container {
