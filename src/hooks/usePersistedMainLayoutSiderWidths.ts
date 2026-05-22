@@ -4,9 +4,10 @@ import {
   MAIN_LAYOUT_RIGHT_SIDER_WIDTH_PX,
   clampMainLayoutLeftWidthPx,
   clampMainLayoutRightWidthPx,
+  readPersistedLeftSiderWidthFromStorage,
+  writePersistedLeftSiderWidthToStorage,
 } from "../constants/mainLayoutWidths";
 
-const STORAGE_LEFT_KEY = "wise.mainLayout.leftSiderWidthPx";
 const STORAGE_RIGHT_KEY = "wise.mainLayout.rightSiderWidthPx";
 
 function readStoredWidth(key: string, fallback: number): number {
@@ -29,9 +30,7 @@ export function usePersistedMainLayoutSiderWidths(options: {
 }) {
   const { leftCollapsed, rightCollapsed } = options;
 
-  const [leftWidthPx, setLeftWidthPxState] = useState(() =>
-    readStoredWidth(STORAGE_LEFT_KEY, MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX),
-  );
+  const [leftWidthPx, setLeftWidthPxState] = useState(() => readPersistedLeftSiderWidthFromStorage());
   const [rightWidthPx, setRightWidthPxState] = useState(() =>
     readStoredWidth(STORAGE_RIGHT_KEY, MAIN_LAYOUT_RIGHT_SIDER_WIDTH_PX),
   );
@@ -77,11 +76,17 @@ export function usePersistedMainLayoutSiderWidths(options: {
     setLeftWidthPxState(l);
     setRightWidthPxState(r);
     try {
-      window.localStorage.setItem(STORAGE_LEFT_KEY, String(l));
+      writePersistedLeftSiderWidthToStorage(l);
       window.localStorage.setItem(STORAGE_RIGHT_KEY, String(r));
     } catch {
       /* ignore */
     }
+  }, []);
+
+  useEffect(() => {
+    const normalized = readPersistedLeftSiderWidthFromStorage();
+    setLeftWidthPxState(normalized);
+    writePersistedLeftSiderWidthToStorage(normalized);
   }, []);
 
   useEffect(() => {
@@ -108,7 +113,7 @@ export function usePersistedMainLayoutSiderWidths(options: {
     });
     setLeftWidthPxState(clamped);
     try {
-      window.localStorage.setItem(STORAGE_LEFT_KEY, String(clamped));
+      writePersistedLeftSiderWidthToStorage(clamped);
     } catch {
       /* ignore */
     }

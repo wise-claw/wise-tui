@@ -4534,7 +4534,7 @@ export function ClaudeChat({
             <span className="app-session-owner-panel__text">{sessionOwnerInfo.name}</span>
           ) : null}
           {session.status === "running" || session.status === "connecting" ? (
-            <Tooltip title="终止当前 Claude Code 运行（与输入区停止按钮相同）" placement="bottom" mouseEnterDelay={0.35}>
+            <Tooltip title="结束当前 Claude Code 运行（与输入区结束按钮相同）" placement="bottom" mouseEnterDelay={0.35}>
               <button
                 type="button"
                 className="app-session-owner-panel__end-btn"

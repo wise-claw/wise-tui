@@ -123,7 +123,7 @@ export function MonitorHistorySessionTranscriptDrawer({
                   onCancelSession(liveSession.id);
                 }}
               >
-                停止
+                结束
               </Button>
             ) : null}
           </Space>

@@ -1,5 +1,8 @@
 /** 与 `LeftSidebar` 中 `Layout.Sider` 的 `width` 一致。 */
-export const MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX = 270;
+export const MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX = 260;
+
+/** 历史左栏默认宽度；持久化值与之相同时归一化为 {@link MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX}。 */
+const MAIN_LAYOUT_LEFT_SIDER_PRIOR_DEFAULT_WIDTHS_PX: readonly number[] = [300, 280, 270];
 
 /** 与 `RightPanel` 中 `Layout.Sider` 的 `width` 一致。 */
 export const MAIN_LAYOUT_RIGHT_SIDER_WIDTH_PX = 300;
@@ -10,6 +13,68 @@ export const MAIN_LAYOUT_RESIZE_HANDLE_PX = 5;
 /** 左栏可拖动宽度范围。 */
 export const MAIN_LAYOUT_LEFT_SIDER_MIN_WIDTH_PX = 200;
 export const MAIN_LAYOUT_LEFT_SIDER_MAX_WIDTH_PX = 480;
+
+/** @deprecated 仅用于读取旧版 localStorage 并迁移到 v2。 */
+export const MAIN_LAYOUT_LEFT_SIDER_WIDTH_STORAGE_KEY_LEGACY = "wise.mainLayout.leftSiderWidthPx";
+
+export const MAIN_LAYOUT_LEFT_SIDER_WIDTH_STORAGE_KEY = "wise.mainLayout.leftSiderWidthPx.v2";
+
+/**
+ * 读取持久化左栏宽度：无记录或旧版偏窄（小于当前默认）时用默认宽度；
+ * v2 起用户主动拖窄的值会原样保留。
+ */
+export function resolvePersistedLeftSiderWidthPx(
+  stored: number | null | undefined,
+  fallback: number = MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX,
+): number {
+  if (stored == null || !Number.isFinite(stored)) {
+    return fallback;
+  }
+  return normalizePersistedLeftSiderWidthPx(stored);
+}
+
+function normalizePersistedLeftSiderWidthPx(width: number): number {
+  if (MAIN_LAYOUT_LEFT_SIDER_PRIOR_DEFAULT_WIDTHS_PX.includes(width)) {
+    return MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX;
+  }
+  if (width < MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX) {
+    return MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX;
+  }
+  return width;
+}
+
+export function readPersistedLeftSiderWidthFromStorage(): number {
+  if (typeof window === "undefined") {
+    return MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX;
+  }
+  try {
+    const v2Raw = window.localStorage.getItem(MAIN_LAYOUT_LEFT_SIDER_WIDTH_STORAGE_KEY);
+    if (v2Raw != null) {
+      const v2 = Number(v2Raw);
+      return resolvePersistedLeftSiderWidthPx(Number.isFinite(v2) ? v2 : null);
+    }
+    const legacyRaw = window.localStorage.getItem(MAIN_LAYOUT_LEFT_SIDER_WIDTH_STORAGE_KEY_LEGACY);
+    if (legacyRaw == null) {
+      return MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX;
+    }
+    const legacy = Number(legacyRaw);
+    if (!Number.isFinite(legacy)) {
+      return MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX;
+    }
+    return normalizePersistedLeftSiderWidthPx(legacy);
+  } catch {
+    return MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX;
+  }
+}
+
+export function writePersistedLeftSiderWidthToStorage(widthPx: number): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(MAIN_LAYOUT_LEFT_SIDER_WIDTH_STORAGE_KEY, String(widthPx));
+  } catch {
+    /* ignore */
+  }
+}
 
 /** 右栏可拖动宽度范围。 */
 export const MAIN_LAYOUT_RIGHT_SIDER_MIN_WIDTH_PX = 300;

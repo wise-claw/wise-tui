@@ -607,7 +607,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
               s.id === session.id ? { ...s, status: "error" as const } : s,
             ),
             session.id,
-            "Claude 子进程长时间无可见输出。请点「停止」后重试；若反复出现，可暂时关闭 Cockpit 助手 MCP 或在终端用 stream-json 自检。",
+            "Claude 子进程长时间无可见输出。请点「结束」后重试；若反复出现，可暂时关闭 Cockpit 助手 MCP 或在终端用 stream-json 自检。",
           ),
         );
       };
@@ -1655,7 +1655,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       }
 
       if (session.status === "running" || session.status === "connecting") {
-        message.warning("会话运行中，请先点击「停止」后再切换连接方式。");
+        message.warning("会话运行中，请先点击「结束」后再切换连接方式。");
         return;
       }
 

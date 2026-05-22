@@ -1672,7 +1672,7 @@ function ComposerInner({
     handleScreenshot,
   ]);
 
-  /** 与 Semi 底栏同一行：停止（占用中）+ 模型选择 + 发送（Semi 在 generating 时会拦截发送，故用独立停止 + generating=false） */
+  /** 与 Semi 底栏同一行：结束（占用中）+ 模型选择 + 发送（Semi 在 generating 时会拦截发送，故用独立结束 + generating=false） */
   const renderSemiComposerActionArea = useCallback(
     ({ menuItem, className }: { menuItem: React.ReactNode[]; className: string }) => (
       <div
@@ -1680,9 +1680,15 @@ function ComposerInner({
         onClick={(e) => e.stopPropagation()}
       >
         {isSessionBusy ? (
-          <Tooltip title="终止当前 Claude Code 运行" placement="top">
-            <Button type="text" size="small" className="app-claude-semi-footer-stop-btn" onClick={() => _onCancel()}>
-              停止
+          <Tooltip title="结束当前 Claude Code 运行" placement="top">
+            <Button
+              type="text"
+              size="small"
+              className="app-claude-semi-footer-stop-btn"
+              aria-label="结束当前运行"
+              onClick={() => _onCancel()}
+            >
+              结束
             </Button>
           </Tooltip>
         ) : null}
