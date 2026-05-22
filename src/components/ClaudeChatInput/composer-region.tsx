@@ -74,6 +74,7 @@ import { gitCheckoutBranch, gitCheckoutDetached, gitCreateBranch, gitListBranche
 import { recordMissionComposerMessage } from "./missionMentionHook";
 import type { ControlRequestStatus } from "../../notifications";
 import type { QuestionDockTabSpec } from "../../hooks/useQuestionDockTabs";
+import { buildClaudeSessionHoverTitle } from "../../utils/claudeSessionIdTooltip";
 import { WORKFLOW_UI_EVENT_APPLY_STARTER_PROMPT } from "../../constants/workflowUiEvents";
 import type { GitBranchEntry } from "../../types";
 
@@ -1809,17 +1810,24 @@ function ComposerInner({
                     tabBarGutter={8}
                     activeKey={activeQuestionTabKey}
                     onChange={setActiveQuestionTabKey}
-                    items={dockTabs.map((tab) => ({
+                    items={dockTabs.map((tab) => {
+                      const claudeTitle = buildClaudeSessionHoverTitle({
+                        id: tab.ownerSessionId,
+                        claudeSessionId: tab.claudeSessionId,
+                      });
+                      const timePart = tab.tabSubtitle ? `\n出题时间：${tab.tabSubtitle}` : "";
+                      return {
                       key: tab.tabKey,
                       label: (
                         <span
                           className="app-claude-question-tab-label"
-                          title={tab.tabSubtitle ? `${tab.tabTitle}\n出题时间：${tab.tabSubtitle}` : tab.tabTitle}
+                          title={`${tab.tabTitle}\n${claudeTitle}${timePart}`}
                         >
                           <span className="app-claude-question-tab-title">{tab.tabTitle}</span>
                         </span>
                       ),
-                    }))}
+                    };
+                    })}
                   />
                 </div>
                 {activeQuestionDockTab.queueLength > 0 ? (

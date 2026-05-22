@@ -1161,8 +1161,16 @@ impl WiseDb {
         Ok(())
     }
 
+    /// 删除仓库在 SQLite 中的关联行（员工映射、助手覆盖、代码图谱索引等）。
+    /// 全局 `repositories.json` 条目由 `remove_repository_global_impl` 负责。
+    pub fn purge_repository_database_refs(&self, repository_id: i64) -> Result<(), String> {
+        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        purge_repository_database_refs_conn(&g, repository_id)
+    }
+
     pub fn delete_project(&self, id: &str) -> Result<(), String> {
         let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        delete_project_scoped_rows_conn(&g, id)?;
         g.execute(
             "DELETE FROM project_repositories WHERE project_id = ?1",
             params![id],
@@ -1916,6 +1924,45 @@ pub(crate) fn unix_now_ms() -> i64 {
         .unwrap_or(0)
 }
 
+fn delete_project_scoped_rows_conn(conn: &Connection, project_id: &str) -> Result<(), String> {
+    let project_scope = format!("project:{project_id}");
+    for sql in [
+        "DELETE FROM mission_runs WHERE project_id = ?1",
+        "DELETE FROM trellis_runtime_events WHERE project_id = ?1",
+        "DELETE FROM trellis_agent_runs WHERE project_id = ?1",
+        "DELETE FROM trellis_spec_revisions WHERE project_id = ?1",
+        "DELETE FROM trellis_workspace_snapshots WHERE project_id = ?1",
+    ] {
+        conn.execute(sql, params![project_id])
+            .map_err(|e| e.to_string())?;
+    }
+    conn.execute(
+        "DELETE FROM assistant_overrides WHERE scope = ?1",
+        params![project_scope],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn purge_repository_database_refs_conn(
+    conn: &Connection,
+    repository_id: i64,
+) -> Result<(), String> {
+    let repository_scope = format!("repository:{repository_id}");
+    conn.execute(
+        "DELETE FROM employee_repositories WHERE repository_id = ?1",
+        params![repository_id],
+    )
+    .map_err(|e| e.to_string())?;
+    conn.execute(
+        "DELETE FROM assistant_overrides WHERE scope = ?1",
+        params![repository_scope],
+    )
+    .map_err(|e| e.to_string())?;
+    crate::code_knowledge_graph::storage::clear_repository_graph_index(conn, repository_id)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2051,5 +2098,96 @@ mod tests {
                 .expect("sqlite_master query succeeds");
             assert_eq!(count, 1, "{table} table exists");
         }
+    }
+
+    #[test]
+    fn delete_project_removes_links_and_purges_orphan_repository_database_refs() {
+        let conn = Connection::open_in_memory().expect("in-memory sqlite opens");
+        conn.execute_batch("PRAGMA foreign_keys = ON;")
+            .expect("foreign keys on");
+        run_migrations(&conn).expect("migrations succeed");
+
+        let now = unix_now_ms();
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at, updated_at) VALUES ('ws-a', 'A', ?1, ?1)",
+            params![now],
+        )
+        .expect("insert project");
+        conn.execute(
+            "INSERT INTO project_repositories (project_id, repository_id, created_at, display_order)
+             VALUES ('ws-a', 42, ?1, 0)",
+            params![now],
+        )
+        .expect("link repository");
+        conn.execute(
+            "INSERT INTO employees (id, name, agent_type, enabled, created_at, updated_at, display_order)
+             VALUES ('emp-1', 'E', 'claude', 1, ?1, ?1, 0)",
+            params![now],
+        )
+        .expect("insert employee");
+        conn.execute(
+            "INSERT INTO employee_repositories (employee_id, repository_id, created_at)
+             VALUES ('emp-1', 42, ?1)",
+            params![now],
+        )
+        .expect("link employee repository");
+        conn.execute(
+            "INSERT INTO assistant_overrides (assistant_id, scope, prompt_layers_json, updated_at)
+             VALUES ('builtin:prd-split', 'repository:42', '{}', ?1)",
+            params![now],
+        )
+        .expect("insert repository override");
+        conn.execute(
+            "INSERT INTO graph_index_meta (repo_id, index_version, status) VALUES (42, 'v1', 'done')",
+            [],
+        )
+        .expect("insert graph meta");
+
+        delete_project_scoped_rows_conn(&conn, "ws-a").expect("delete scoped rows");
+        conn.execute(
+            "DELETE FROM project_repositories WHERE project_id = 'ws-a'",
+            [],
+        )
+        .expect("unlink repositories");
+        conn.execute("DELETE FROM projects WHERE id = 'ws-a'", [])
+            .expect("delete project");
+
+        let link_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM project_repositories WHERE project_id = 'ws-a'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count project links");
+        assert_eq!(link_count, 0);
+
+        purge_repository_database_refs_conn(&conn, 42).expect("purge repository refs");
+
+        let employee_repo_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM employee_repositories WHERE repository_id = 42",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count employee repository links");
+        assert_eq!(employee_repo_count, 0);
+
+        let override_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM assistant_overrides WHERE scope = 'repository:42'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count repository overrides");
+        assert_eq!(override_count, 0);
+
+        let graph_meta_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM graph_index_meta WHERE repo_id = 42",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count graph meta");
+        assert_eq!(graph_meta_count, 0);
     }
 }

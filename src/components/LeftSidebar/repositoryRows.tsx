@@ -34,6 +34,7 @@ import {
   RequirementIcon,
   TrellisIcon,
 } from "./SidebarIcons";
+import { RunningMainSessionDot } from "./RunningMainSessionDot";
 
 function repositoryTrellisEntrypointsEnabled(repository: Repository, trellisReady: boolean): boolean {
   return repository.sddMode !== "off" && (trellisReady || repository.sddMode !== "project_owned");
@@ -245,6 +246,8 @@ export function RepositoryRow({
   onOpenScheduledTasks,
   onOpenRequirements,
   onOpenExecutableTasks,
+  mainSessionRunning = false,
+  onStopMainSession,
 }: {
   project: Workspace;
   repository: Repository;
@@ -270,6 +273,8 @@ export function RepositoryRow({
   onOpenScheduledTasks?: (repository: Repository) => void;
   onOpenRequirements?: (repository: Repository) => void;
   onOpenExecutableTasks?: (repository: Repository) => void;
+  mainSessionRunning?: boolean;
+  onStopMainSession?: () => void;
 }) {
   const workspaceTrellisEnabled = project.sddMode !== "project_owned" || trellisReady;
   const moreItems = buildProjectRepositoryMoreMenuItems({
@@ -306,7 +311,13 @@ export function RepositoryRow({
       <div
         className={`app-repository-item app-repository-item--repo${isActiveRepository ? " app-repository-item--repo-active" : ""}`}
         onClick={(e) => {
-          if ((e.target as HTMLElement | null)?.closest(".app-repository-row-actions")) return;
+          const target = e.target as HTMLElement | null;
+          if (
+            target?.closest(".app-repository-row-actions") ||
+            target?.closest(".app-repository-main-session-running-dot-wrap")
+          ) {
+            return;
+          }
           onRepositorySelect(repository.id);
         }}
       >
@@ -338,7 +349,10 @@ export function RepositoryRow({
             </span>
           ) : null}
         </span>
-        <span className="app-repository-name">{repositoryFolderBasename(repository)}</span>
+        <span className="app-repository-name-block">
+          <span className="app-repository-name">{repositoryFolderBasename(repository)}</span>
+          {mainSessionRunning ? <RunningMainSessionDot onStop={onStopMainSession} /> : null}
+        </span>
         <div
           className="app-repository-row-actions"
           onClick={(e) => e.stopPropagation()}
@@ -433,6 +447,8 @@ export function FloatingRepositoryRow({
   onOpenScheduledTasks,
   onOpenRequirements,
   onOpenExecutableTasks,
+  mainSessionRunning = false,
+  onStopMainSession,
 }: {
   repository: StandaloneRepo;
   isActiveRepository: boolean;
@@ -459,6 +475,8 @@ export function FloatingRepositoryRow({
   onOpenScheduledTasks?: (repository: Repository) => void;
   onOpenRequirements?: (repository: Repository) => void;
   onOpenExecutableTasks?: (repository: Repository) => void;
+  mainSessionRunning?: boolean;
+  onStopMainSession?: () => void;
 }) {
   const hasMainOwner = Boolean(repository.mainOwnerAgentName?.trim());
   const trellisEnabled = repositoryTrellisEntrypointsEnabled(repository, trellisReady);
@@ -482,7 +500,13 @@ export function FloatingRepositoryRow({
       <div
         className={`app-repository-item app-repository-item--repo${isActiveRepository ? " app-repository-item--repo-active" : ""}`}
         onClick={(e) => {
-          if ((e.target as HTMLElement | null)?.closest(".app-repository-row-actions")) return;
+          const target = e.target as HTMLElement | null;
+          if (
+            target?.closest(".app-repository-row-actions") ||
+            target?.closest(".app-repository-main-session-running-dot-wrap")
+          ) {
+            return;
+          }
           onRepositorySelect(repository.id);
         }}
       >
@@ -500,7 +524,10 @@ export function FloatingRepositoryRow({
             </span>
           ) : null}
         </span>
-        <span className="app-repository-name">{repositoryFolderBasename(repository)}</span>
+        <span className="app-repository-name-block">
+          <span className="app-repository-name">{repositoryFolderBasename(repository)}</span>
+          {mainSessionRunning ? <RunningMainSessionDot onStop={onStopMainSession} /> : null}
+        </span>
         <div
           className="app-repository-row-actions"
           onClick={(e) => e.stopPropagation()}
@@ -601,6 +628,8 @@ export function ProjectRepositoryRows({
   onOpenScheduledTasks,
   onOpenRepositoryRequirements,
   onOpenRepositoryExecutableTasks,
+  runningMainSessionByRepositoryId = {},
+  onStopRepositoryMainSession,
 }: {
   project: Workspace;
   projectRepos: Repository[];
@@ -629,6 +658,8 @@ export function ProjectRepositoryRows({
   onOpenScheduledTasks?: (repository: Repository) => void;
   onOpenRepositoryRequirements?: (repository: Repository) => void;
   onOpenRepositoryExecutableTasks?: (repository: Repository) => void;
+  runningMainSessionByRepositoryId?: Record<number, boolean>;
+  onStopRepositoryMainSession?: (repository: Repository) => void;
 }) {
   const { message } = AntdApp.useApp();
   const [dropHint, setDropHint] = useState<{ anchorRepositoryId: number; placement: "before" | "after" } | null>(
@@ -687,6 +718,12 @@ export function ProjectRepositoryRows({
             onOpenScheduledTasks={onOpenScheduledTasks}
             onOpenRequirements={onOpenRepositoryRequirements}
             onOpenExecutableTasks={onOpenRepositoryExecutableTasks}
+            mainSessionRunning={runningMainSessionByRepositoryId[repository.id] === true}
+            onStopMainSession={
+              runningMainSessionByRepositoryId[repository.id] === true && onStopRepositoryMainSession
+                ? () => onStopRepositoryMainSession(repository)
+                : undefined
+            }
           />
         );
       })}

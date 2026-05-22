@@ -6,7 +6,14 @@ import { AppSettingsModal } from "./AppSettingsModal";
 import { MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths";
 import { DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION } from "../constants/workspaceBootstrapAddons";
 import { cancelClaudeExecution } from "../services/claude";
+import { stopClaudeMainSession } from "../services/stopClaudeMainSession";
 import { killClaudeHostProcess } from "../services/systemResource";
+import {
+  projectMainSessionBindingKey,
+  resolveBoundMainSessionId,
+  resolveMainOwnerAgentNameForRepositoryPath,
+  resolveRepositoryMainSessionId,
+} from "../utils/repositoryMainSessionBinding";
 import {
   parseHostProcessDrawerPid,
   parseRegistryOrphanClaudeSid,
@@ -40,6 +47,7 @@ import { useSidebarRequirementUnsplitMap } from "./LeftSidebar/useSidebarRequire
 import { useSidebarExecutableTasksMap } from "./LeftSidebar/useSidebarExecutableTasksMap";
 import { useSidebarTrellisReadyMap } from "./LeftSidebar/useSidebarTrellisReadyMap";
 import { useSystemResourceSessions } from "./LeftSidebar/useSystemResourceSessions";
+import { useSidebarRunningMainSessionIndicators } from "./LeftSidebar/useSidebarRunningMainSessionIndicators";
 import { WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED } from "../constants/workflowUiEvents";
 import type { SplitTodoCountUpdatedDetail } from "../constants/workflowUiEvents";
 import "./GitPanel/index.css";
@@ -95,6 +103,7 @@ export function LeftSidebar({
   onOpenPromptsRepository,
   onOpenRepositoryMainOwner,
   sessions,
+  repositoryMainSessionBindings,
   activeSessionId: _activeSessionId,
   onSelectSession: _onSelectSession,
   employees = [],
@@ -156,6 +165,70 @@ export function LeftSidebar({
     onCancelSessionFromMonitor,
     onReloadFullDiskTranscript,
   });
+  const { runningByProjectId, runningByRepositoryId } = useSidebarRunningMainSessionIndicators({
+    projects,
+    repositories,
+    sessions,
+    repositoryMainSessionBindings,
+    claudeProcesses: systemResourceSessions.systemSummary.claudeProcesses,
+  });
+
+  const handleStopBoundMainSession = useCallback(
+    async (boundSessionId: string | null | undefined) => {
+      const id = boundSessionId?.trim();
+      if (!id) {
+        message.warning("未绑定主会话");
+        return;
+      }
+      const session = sessions.find((item) => item.id === id);
+      if (!session) {
+        message.warning("未找到绑定主会话");
+        return;
+      }
+      try {
+        await stopClaudeMainSession({
+          session,
+          claudeProcesses: systemResourceSessions.systemSummary.claudeProcesses,
+          onCancelTabSession: onCancelSessionFromMonitor,
+        });
+        message.success("已请求结束该进程");
+      } catch (err: unknown) {
+        message.error(err instanceof Error ? err.message : "结束失败");
+      }
+    },
+    [
+      message,
+      onCancelSessionFromMonitor,
+      sessions,
+      systemResourceSessions.systemSummary.claudeProcesses,
+    ],
+  );
+
+  const handleStopProjectMainSession = useCallback(
+    (projectId: string) => {
+      const boundSessionId = resolveBoundMainSessionId(
+        projectMainSessionBindingKey(projectId),
+        repositoryMainSessionBindings,
+        sessions,
+        null,
+      );
+      void handleStopBoundMainSession(boundSessionId);
+    },
+    [handleStopBoundMainSession, repositoryMainSessionBindings, sessions],
+  );
+
+  const handleStopRepositoryMainSession = useCallback(
+    (repository: Repository) => {
+      const boundSessionId = resolveRepositoryMainSessionId(
+        repository.path,
+        repositoryMainSessionBindings,
+        sessions,
+        resolveMainOwnerAgentNameForRepositoryPath(repositories, repository.path),
+      );
+      void handleStopBoundMainSession(boundSessionId);
+    },
+    [handleStopBoundMainSession, repositories, repositoryMainSessionBindings, sessions],
+  );
   const repositoryAssociateModal = useRepositoryAssociateModalController({
     onAddFloatingRepository,
     onAddRepositoryToProject,
@@ -483,6 +556,10 @@ export function LeftSidebar({
           onOpenRepositoryRequirements={(repository) => onCreateRepositoryTask(repository, "split")}
           onOpenExecutableTasksForProject={openExecutableTasksForProject}
           onOpenExecutableTasksForRepository={openExecutableTasksForRepository}
+          runningMainSessionByProjectId={runningByProjectId}
+          runningMainSessionByRepositoryId={runningByRepositoryId}
+          onStopProjectMainSession={handleStopProjectMainSession}
+          onStopRepositoryMainSession={handleStopRepositoryMainSession}
         />
 
         {activeRepositoryPath ? (
@@ -509,6 +586,11 @@ export function LeftSidebar({
         searchValue={systemResourceSessions.claudeSystemSessionSearch}
         onSearchChange={systemResourceSessions.setClaudeSystemSessionSearch}
         matchedSessions={systemResourceSessions.matchedSystemInlineSessions}
+        allSessions={sessions}
+        projects={projects}
+        repositories={repositories}
+        repositoryMainSessionBindings={repositoryMainSessionBindings}
+        claudeProcesses={systemResourceSessions.systemSummary.claudeProcesses}
         claudeProcessCount={systemResourceSessions.systemSummary.claudeProcessCount}
         onSelectSession={(sessionId) => {
           systemResourceSessions.setClaudeCountPopoverOpen(false);

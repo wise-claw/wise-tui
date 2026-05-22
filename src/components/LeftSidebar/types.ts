@@ -95,6 +95,7 @@ export interface LeftSidebarProps {
   onOpenPromptsRepository?: (project: ProjectItem, repository: Repository) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
   sessions: ClaudeSession[];
+  repositoryMainSessionBindings: Record<string, string>;
   activeSessionId: string | null;
   onSelectSession: (sessionId: string) => void;
   employees?: EmployeeItem[];

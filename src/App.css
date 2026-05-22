@@ -2350,7 +2350,8 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   padding: 3px 6px;
 }
 
-.app-repository-item--project .app-repository-name-block {
+.app-repository-item--project .app-repository-name-block,
+.app-repository-item--repo .app-repository-name-block {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -2358,13 +2359,17 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   gap: 4px;
 }
 
-.app-repository-item--project .app-repository-name {
+.app-repository-item--project .app-repository-name,
+.app-repository-item--repo .app-repository-name-block .app-repository-name {
   flex: 0 1 auto;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.app-repository-item--project .app-repository-name {
   font-weight: 500;
 }
 
@@ -2391,6 +2396,73 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   height: 5px;
   border-radius: 50%;
   background: var(--ant-color-warning);
+}
+
+.app-repository-main-session-running-dot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ant-color-success);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ant-color-success) 35%, transparent);
+}
+
+.app-repository-item--repo .app-repository-name-block .app-repository-main-session-running-dot,
+.app-repository-item--project .app-repository-name-block .app-repository-main-session-running-dot {
+  flex-shrink: 0;
+}
+
+.app-repository-main-session-running-dot-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.app-repository-main-session-running-dot-wrap .app-repository-main-session-running-dot {
+  transition: opacity 0.12s ease;
+}
+
+.app-repository-main-session-running-stop {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  color: var(--ant-color-error);
+  background: color-mix(in srgb, var(--ant-color-error-bg) 85%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ant-color-error-border) 55%, transparent);
+  cursor: pointer;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.app-repository-main-session-running-stop .anticon {
+  font-size: 8px;
+}
+
+.app-repository-main-session-running-dot-wrap:hover .app-repository-main-session-running-dot,
+.app-repository-main-session-running-dot-wrap:focus-within .app-repository-main-session-running-dot {
+  opacity: 0;
+}
+
+.app-repository-main-session-running-dot-wrap:hover .app-repository-main-session-running-stop,
+.app-repository-main-session-running-dot-wrap:focus-within .app-repository-main-session-running-stop {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.app-repository-main-session-running-stop:hover {
+  color: var(--ant-color-text-light-solid);
+  background: var(--ant-color-error);
+  transform: scale(1.06);
 }
 
 .app-left-sidebar .app-repository-row-actions--project {

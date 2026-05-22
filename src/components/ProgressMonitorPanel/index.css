@@ -825,6 +825,7 @@
 
 .app-monitor-panel__history-popover .ant-popover-inner {
   padding: 0;
+  max-width: min(440px, calc(100vw - 32px));
 }
 
 .app-monitor-panel__history-popover-content {

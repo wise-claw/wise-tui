@@ -25,6 +25,7 @@ import {
   SidebarRequirementAction,
   SidebarScheduledTasksAction,
 } from "./repositoryRows";
+import { RunningMainSessionDot } from "./RunningMainSessionDot";
 
 interface ProjectRepositoryListProps {
   projects: Workspace[];
@@ -87,6 +88,10 @@ interface ProjectRepositoryListProps {
   onOpenRepositoryRequirements?: (repository: Repository) => void;
   onOpenExecutableTasksForProject?: (project: Workspace) => void;
   onOpenExecutableTasksForRepository?: (repository: Repository) => void;
+  runningMainSessionByProjectId?: Record<string, boolean>;
+  runningMainSessionByRepositoryId?: Record<number, boolean>;
+  onStopProjectMainSession?: (projectId: string) => void;
+  onStopRepositoryMainSession?: (repository: Repository) => void;
 }
 
 export function ProjectRepositoryList({
@@ -150,6 +155,10 @@ export function ProjectRepositoryList({
   onOpenRepositoryRequirements,
   onOpenExecutableTasksForProject,
   onOpenExecutableTasksForRepository,
+  runningMainSessionByProjectId = {},
+  runningMainSessionByRepositoryId = {},
+  onStopProjectMainSession,
+  onStopRepositoryMainSession,
 }: ProjectRepositoryListProps) {
   return (
     <>
@@ -212,6 +221,12 @@ export function ProjectRepositoryList({
                 onOpenScheduledTasks={onOpenScheduledTasksForRepository}
                 onOpenRequirements={onOpenRepositoryRequirements}
                 onOpenExecutableTasks={onOpenExecutableTasksForRepository}
+                mainSessionRunning={runningMainSessionByRepositoryId[repository.id] === true}
+                onStopMainSession={
+                  runningMainSessionByRepositoryId[repository.id] === true && onStopRepositoryMainSession
+                    ? () => onStopRepositoryMainSession(repository)
+                    : undefined
+                }
               />
             ))}
           </div>
@@ -272,6 +287,10 @@ export function ProjectRepositoryList({
             executableTasksByRepoId={executableTasksByRepoId}
             onOpenExecutableTasksForProject={onOpenExecutableTasksForProject}
             onOpenExecutableTasksForRepository={onOpenExecutableTasksForRepository}
+            mainSessionRunning={runningMainSessionByProjectId[project.id] === true}
+            runningMainSessionByRepositoryId={runningMainSessionByRepositoryId}
+            onStopProjectMainSession={onStopProjectMainSession}
+            onStopRepositoryMainSession={onStopRepositoryMainSession}
           />
         ))}
         {projects.length === 0 && floatingRepositories.length === 0 && (
@@ -341,6 +360,10 @@ interface ProjectRowProps {
   onOpenRepositoryRequirements?: (repository: Repository) => void;
   onOpenExecutableTasksForProject?: (project: Workspace) => void;
   onOpenExecutableTasksForRepository?: (repository: Repository) => void;
+  mainSessionRunning?: boolean;
+  runningMainSessionByRepositoryId?: Record<number, boolean>;
+  onStopProjectMainSession?: (projectId: string) => void;
+  onStopRepositoryMainSession?: (repository: Repository) => void;
 }
 
 function ProjectRow({
@@ -395,6 +418,10 @@ function ProjectRow({
   onOpenRepositoryRequirements,
   onOpenExecutableTasksForProject,
   onOpenExecutableTasksForRepository,
+  mainSessionRunning = false,
+  runningMainSessionByRepositoryId = {},
+  onStopProjectMainSession,
+  onStopRepositoryMainSession,
 }: ProjectRowProps) {
   const projectTrellisReady = projectTrellisReadyById[project.id] === true;
   const projectTrellisEnabled = project.sddMode !== "project_owned" || projectTrellisReady;
@@ -463,7 +490,13 @@ function ProjectRow({
       <div
         className={`app-repository-item app-repository-item--project${isActiveProject ? " app-repository-item--project-active" : ""}`}
         onClick={(e) => {
-          if ((e.target as HTMLElement | null)?.closest(".app-repository-row-actions")) return;
+          const target = e.target as HTMLElement | null;
+          if (
+            target?.closest(".app-repository-row-actions") ||
+            target?.closest(".app-repository-main-session-running-dot-wrap")
+          ) {
+            return;
+          }
           onProjectSelect(project.id);
         }}
       >
@@ -480,6 +513,13 @@ function ProjectRow({
         </span>
         <span className="app-repository-name-block">
           <span className="app-repository-name">{project.name}</span>
+          {mainSessionRunning ? (
+            <RunningMainSessionDot
+              onStop={
+                onStopProjectMainSession ? () => onStopProjectMainSession(project.id) : undefined
+              }
+            />
+          ) : null}
           {!expanded && projectRepos.length > 0 ? (
             <span className="app-repository-meta" aria-label={`${projectRepos.length} 个仓库`}>
               {projectRepos.length}
@@ -594,6 +634,8 @@ function ProjectRow({
             onOpenScheduledTasks={onOpenScheduledTasksForRepository}
             onOpenRepositoryRequirements={onOpenRepositoryRequirements}
             onOpenRepositoryExecutableTasks={onOpenExecutableTasksForRepository}
+            runningMainSessionByRepositoryId={runningMainSessionByRepositoryId}
+            onStopRepositoryMainSession={onStopRepositoryMainSession}
           />
         </div>
       ) : null}

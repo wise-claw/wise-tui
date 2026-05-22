@@ -4,6 +4,7 @@ import {
   isRepositoryMainSessionTab,
   projectMainSessionBindingKey,
   resolveBoundMainSessionId,
+  resolveRepositoryByClaudeSessionId,
   resolveRepositoryForSession,
   resolveRepositoryMainSessionId,
   resolveMainOwnerAgentNameForRepositoryPath,
@@ -126,5 +127,46 @@ describe("project-rooted main session matching", () => {
         preferredRepositoryId: 2,
       })?.id,
     ).toBe(2);
+  });
+});
+
+describe("binding value as claudeSessionId", () => {
+  const repos: Repository[] = [
+    {
+      id: 10,
+      name: "vocs-web",
+      path: "/work/hr/vocs-web",
+      repositoryType: "frontend",
+      createdAt: "0",
+      updatedAt: "0",
+    },
+  ];
+  const tab: ClaudeSession = {
+    id: "tab-1",
+    claudeSessionId: "claude-sid-abc",
+    repositoryPath: "/work/hr/vocs-web",
+    repositoryName: "vocs-web",
+    model: "sonnet",
+    status: "running",
+    messages: [],
+    createdAt: 1,
+    pendingPrompt: "",
+  };
+
+  it("resolveBoundMainSessionId accepts migrated binding value", () => {
+    const bindings = { "/work/hr/vocs-web": "claude-sid-abc" };
+    expect(resolveBoundMainSessionId("/work/hr/vocs-web", bindings, [tab], null)).toBe("tab-1");
+  });
+
+  it("resolveRepositoryByClaudeSessionId uses binding when tab is missing", () => {
+    const bindings = { "/work/hr/vocs-web": "claude-sid-abc" };
+    expect(
+      resolveRepositoryByClaudeSessionId({
+        claudeSessionId: "claude-sid-abc",
+        repositories: repos,
+        bindings,
+        sessions: [],
+      })?.name,
+    ).toBe("vocs-web");
   });
 });

@@ -1377,22 +1377,11 @@ export function ClaudeSessions({
     onNewProjectSession,
   ]);
 
-  const ensurePrimarySessionKeyRef = useRef<string | null>(null);
-
+  /** 打开仓库/项目时仅恢复已有主会话绑定，不自动新建（新建仅走「新建会话」按钮）。 */
   useEffect(() => {
-    if (!activeRepository) {
-      ensurePrimarySessionKeyRef.current = null;
+    if (!activeRepository || activeSession) {
       return;
     }
-    if (activeSession) {
-      ensurePrimarySessionKeyRef.current = null;
-      return;
-    }
-    const ensureKey = `${activeRepository.id}:${activeWorkspaceFocus}`;
-    if (ensurePrimarySessionKeyRef.current === ensureKey) {
-      return;
-    }
-    ensurePrimarySessionKeyRef.current = ensureKey;
 
     const mainOwnerPick = resolveMainOwnerAgentNameForRepositoryPath(
       repositories ?? [],
@@ -1417,15 +1406,10 @@ export function ClaudeSessions({
     );
     if (picked) {
       onSwitchSession(picked.id);
-      return;
     }
-
-    handleCreatePrimarySession();
   }, [
     activeRepository,
     activeSession,
-    activeWorkspaceFocus,
-    handleCreatePrimarySession,
     incomingSessions,
     onSwitchSession,
     repositories,
@@ -1716,7 +1700,13 @@ export function ClaudeSessions({
             missionContext={missionContext}
           />
         )
-      ) : null}
+      ) : (
+        <SessionEmptyState
+          title="暂无 Claude Code 会话"
+          hint="使用下方「新建会话」开始对话，或从「历史会话」恢复已有会话。"
+          primaryAction={{ label: "新建会话", onClick: handleCreatePrimarySession }}
+        />
+      )}
 
       {/* Terminal Panel：按需加载 xterm，避免进入会话页即拉取 terminal-vendor */}
       {!terminalCollapsed && activeRepository && onToggleTerminal && (

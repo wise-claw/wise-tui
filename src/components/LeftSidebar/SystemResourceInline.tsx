@@ -1,12 +1,17 @@
-import { Button, Drawer, Empty, Popover, Space, Tag, Typography } from "antd";
+import { Button, Drawer, Empty, Popover, Space, Tag } from "antd";
 import type { ClaudeHostProcess, ClaudeSession, ClaudeSessionInfo } from "../../types";
 import { formatBytes } from "./systemSessions";
+import {
+  HostProcessSessionDetails,
+  RegistryOrphanSessionDetails,
+} from "./SystemResourceSessionDetails";
 import { ClaudeSessionMessagesColumn } from "../ClaudeSessions/ClaudeSessionMessagesColumn";
 import {
-  HistorySessionPopoverContent,
   historySessionStatusLabel,
   historySessionStatusTagColor,
 } from "../ProgressMonitorPanel";
+import { ClaudeProcessPopoverContent } from "./ClaudeProcessPopoverContent";
+import type { ProjectItem, Repository } from "../../types";
 interface SystemSummary {
   appMemoryBytes: number;
   claudeMemoryBytes: number;
@@ -20,6 +25,11 @@ interface SystemResourceInlineProps {
   searchValue: string;
   onSearchChange: (value: string) => void;
   matchedSessions: ClaudeSession[];
+  allSessions: ClaudeSession[];
+  projects: ReadonlyArray<ProjectItem>;
+  repositories: Repository[];
+  repositoryMainSessionBindings: Record<string, string>;
+  claudeProcesses: ClaudeHostProcess[];
   /** 与 `claude:` 内存同源：`ps` 扫描到的 Claude 相关进程数 */
   claudeProcessCount: number;
   onSelectSession: (sessionId: string) => void;
@@ -46,6 +56,11 @@ export function SystemResourceInline({
   searchValue,
   onSearchChange,
   matchedSessions,
+  allSessions,
+  projects,
+  repositories,
+  repositoryMainSessionBindings,
+  claudeProcesses,
   claudeProcessCount,
   onSelectSession,
   drawerTitle,
@@ -78,20 +93,24 @@ export function SystemResourceInline({
                 onOpenChange={onPopoverOpenChange}
                 overlayClassName="app-monitor-panel__history-popover"
                 content={
-                  <HistorySessionPopoverContent
+                  <ClaudeProcessPopoverContent
                     searchValue={searchValue}
                     onSearchChange={onSearchChange}
-                    rows={matchedSessions.map((session) => ({ session }))}
+                    matchedSessions={matchedSessions}
+                    allSessions={allSessions}
+                    projects={projects}
+                    repositories={repositories}
+                    repositoryMainSessionBindings={repositoryMainSessionBindings}
+                    claudeProcesses={claudeProcesses}
                     emptyDescription={
                       searchValue.trim()
-                        ? "未找到匹配会话"
+                        ? "未找到匹配进程"
                         : claudeProcessCount > 0
-                          ? "检测到 Claude 进程；点击下方条目查看 PID / 会话 ID"
-                          : "暂无运行中的会话"
+                          ? "暂无匹配的 Claude 进程"
+                          : "暂无运行中的 Claude 进程"
                     }
                     onSelectSession={onSelectSession}
                     onEndSession={onEndSession}
-                    searchPlaceholder="搜索会话..."
                   />
                 }
               >
@@ -187,80 +206,5 @@ export function SystemResourceInline({
         )}
       </Drawer>
     </>
-  );
-}
-
-function HostProcessSessionDetails({ proc }: { proc: ClaudeHostProcess }) {
-  const sid = proc.sessionId?.trim() ?? "";
-  const path = proc.projectPath?.trim() ?? "";
-  const sourceLabel =
-    proc.sessionSource === "lsof_jsonl"
-      ? "打开中的 jsonl（lsof）"
-      : proc.sessionSource === "resume_arg"
-        ? "命令行 -r"
-        : "未能解析";
-  return (
-    <div className="app-monitor-panel__history-session-drawer-scroll">
-      <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
-        该条目来自本机进程扫描（非 Wise 注册表）。若会话由终端启动，可通过会话 ID 终止；仅 PID 无会话 ID 时请在终端确认。
-      </Typography.Paragraph>
-      <Typography.Paragraph>
-        <Typography.Text strong>PID</Typography.Text> {proc.pid}
-        {" · "}
-        <Typography.Text strong>内存</Typography.Text> {formatBytes(proc.memoryBytes)}
-      </Typography.Paragraph>
-      <Typography.Paragraph>
-        <Typography.Text strong>会话 ID 来源</Typography.Text> {sourceLabel}
-      </Typography.Paragraph>
-      {path ? (
-        <Typography.Paragraph copyable={{ text: path }}>
-          <Typography.Text strong>工作区路径</Typography.Text> {path}
-        </Typography.Paragraph>
-      ) : null}
-      {sid ? (
-        <Typography.Paragraph copyable={{ text: sid }}>
-          <Typography.Text strong>Claude 会话 ID</Typography.Text> {sid}
-        </Typography.Paragraph>
-      ) : (
-        <Typography.Paragraph type="secondary">
-          未从命令行 `-r` 或 jsonl 路径解析到会话 ID（可能为新会话首包前，或非 Claude Code 主进程）。
-        </Typography.Paragraph>
-      )}
-    </div>
-  );
-}
-
-function RegistryOrphanSessionDetails({
-  sid,
-  info,
-}: {
-  sid: string;
-  info?: ClaudeSessionInfo;
-}) {
-  return (
-    <div className="app-monitor-panel__history-session-drawer-scroll">
-      <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
-        该进程在系统注册表中为运行状态，但未与 Wise 侧栏中的会话标签绑定；可直接终止进程，或在终端侧确认是否为预期中的 Claude Code。
-      </Typography.Paragraph>
-      {info ? (
-        <>
-          <Typography.Paragraph>
-            <Typography.Text strong>模型</Typography.Text> {info.model.trim() || "—"}
-          </Typography.Paragraph>
-          <Typography.Paragraph copyable={{ text: info.project_path }}>
-            <Typography.Text strong>工作区路径</Typography.Text>{" "}
-            {info.project_path.trim() || "—"}
-          </Typography.Paragraph>
-        </>
-      ) : null}
-      <Typography.Paragraph copyable={{ text: sid }}>
-        <Typography.Text strong>Claude 会话 ID</Typography.Text> {sid}
-      </Typography.Paragraph>
-      {!info ? (
-        <Typography.Paragraph type="secondary">
-          注册表中暂无该条目的最新信息（可能已结束或已刷新）。
-        </Typography.Paragraph>
-      ) : null}
-    </div>
   );
 }

@@ -86,6 +86,20 @@ export function resolveMainOwnerAgentNameForRepositoryPath(
   return v && v.length > 0 ? v : null;
 }
 
+/** 绑定值可能是 Wise 标签 `id`，也可能是迁移后的 Claude `claudeSessionId`。 */
+export function resolveSessionFromBindingValue(
+  bound: string,
+  sessions: ClaudeSession[],
+): ClaudeSession | null {
+  const v = bound.trim();
+  if (!v) {
+    return null;
+  }
+  return (
+    sessions.find((x) => x.id === v) ?? sessions.find((x) => x.claudeSessionId?.trim() === v) ?? null
+  );
+}
+
 export function resolveBoundMainSessionId(
   repositoryPath: string,
   bindings: Record<string, string>,
@@ -95,13 +109,56 @@ export function resolveBoundMainSessionId(
   const key = normalizeRepositoryPathKey(repositoryPath);
   const bound = bindings[key]?.trim();
   if (!bound) return null;
-  const s = sessions.find((x) => x.id === bound);
+  const s = resolveSessionFromBindingValue(bound, sessions);
   if (!s) return null;
   if (isProjectMainSessionBindingKey(key)) {
-    return isProjectRootSessionDisplayName(s.repositoryName ?? "") ? bound : null;
+    return isProjectRootSessionDisplayName(s.repositoryName ?? "") ? s.id : null;
   }
   if (isRepositoryMainSessionTab(s, key, mainOwnerAgentName)) {
-    return bound;
+    return s.id;
+  }
+  return null;
+}
+
+/** 仅凭 Claude 会话 ID 反查已注册仓库（Wise 标签或主会话绑定表）。 */
+export function resolveRepositoryByClaudeSessionId(params: {
+  claudeSessionId: string;
+  repositories: Repository[];
+  bindings: Record<string, string>;
+  sessions: ClaudeSession[];
+}): Repository | null {
+  const sid = params.claudeSessionId.trim();
+  if (!sid) {
+    return null;
+  }
+
+  const directSession = params.sessions.find((item) => item.claudeSessionId?.trim() === sid);
+  if (directSession) {
+    return resolveRepositoryForSession({
+      session: directSession,
+      repositories: params.repositories,
+      bindings: params.bindings,
+      sessions: params.sessions,
+    });
+  }
+
+  for (const [pathKey, bound] of Object.entries(params.bindings)) {
+    if (isProjectMainSessionBindingKey(pathKey)) {
+      continue;
+    }
+    const repoPathKey = normalizeRepositoryPathKey(pathKey);
+    const boundSession = resolveSessionFromBindingValue(bound, params.sessions);
+    const matches =
+      bound.trim() === sid || boundSession?.claudeSessionId?.trim() === sid;
+    if (!matches) {
+      continue;
+    }
+    const repo = params.repositories.find(
+      (item) => normalizeRepositoryPathKey(item.path) === repoPathKey,
+    );
+    if (repo) {
+      return repo;
+    }
   }
   return null;
 }

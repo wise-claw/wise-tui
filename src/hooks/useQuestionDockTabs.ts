@@ -11,6 +11,8 @@ import {
 export interface QuestionDockTabSpec {
   tabKey: string;
   ownerSessionId: string;
+  /** 对应标签的 Claude Code 落盘会话 id（无则 null） */
+  claudeSessionId: string | null;
   question: QuestionRequest;
   queueLength: number;
   status: ControlRequestStatus | null;
@@ -78,6 +80,7 @@ export function useQuestionDockTabsForRepository(
       specs.push({
         tabKey: `${e.ownerSessionId}:${e.question.id}`,
         ownerSessionId: e.ownerSessionId,
+        claudeSessionId: sess.claudeSessionId?.trim() || null,
         question: e.question,
         queueLength: slice.questionRequestQueue.length,
         status: st,

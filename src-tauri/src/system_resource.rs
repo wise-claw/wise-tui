@@ -195,12 +195,12 @@ fn collect_claude_host_processes() -> Vec<ClaudeHostProcess> {
         let mut project_path = None;
         let mut session_source = session_id.as_ref().map(|_| "resume_arg".to_string());
 
-        if session_id.is_none() {
-            if let Some((sid, path)) = enrich_session_from_lsof(row.pid) {
-                session_id = Some(sid);
-                project_path = Some(path);
+        if let Some((lsof_sid, path)) = enrich_session_from_lsof(row.pid) {
+            if session_id.is_none() {
+                session_id = Some(lsof_sid);
                 session_source = Some("lsof_jsonl".to_string());
             }
+            project_path = Some(path);
         }
 
         out.push(ClaudeHostProcess {

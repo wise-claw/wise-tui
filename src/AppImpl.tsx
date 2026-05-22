@@ -1509,11 +1509,11 @@ export default function App() {
     return refreshDiskSessionsForRepository(activeRepository.path, activeRepository.name);
   }, [activeRepository, refreshDiskSessionsForRepository]);
 
-  /** 打开/恢复/创建仓库主会话：先读绑定，再挑同路径最近会话，最后新建。 */
+  /** 打开/恢复仓库主会话：先读绑定，再挑同路径最近会话；不自动新建。 */
   async function openRepositoryMainSession(
     repository: Repository,
     options?: { enterChat?: boolean },
-  ): Promise<string> {
+  ): Promise<string | null> {
     if (options?.enterChat ?? true) {
       viewMode.enter({ kind: "chat" });
     }
@@ -1526,7 +1526,7 @@ export default function App() {
       sessions,
       mainOwnerPick,
     );
-    if (boundId) {
+    if (boundId && sessions.some((item) => item.id === boundId)) {
       switchSession(boundId);
       return boundId;
     }
@@ -1541,8 +1541,45 @@ export default function App() {
       switchSession(latestForRepo.id);
       return latestForRepo.id;
     }
+    return null;
+  }
+
+  /** 手动「新建会话」：始终创建新标签并绑定为仓库主会话。 */
+  async function handleManualNewRepositorySession(repository: Repository): Promise<string> {
+    viewMode.enter({ kind: "chat" });
+    setActiveRepositoryWithOwner(repository.id);
+    const target = resolveSidebarSelectionTarget({ repository });
     const id = await createSession(target.path, target.displayName);
     bindRepositoryMainSession(target.path, id);
+    switchSession(id);
+    return id;
+  }
+
+  /** 手动为 Workspace 新建项目主会话标签。 */
+  async function handleManualNewProjectSession(project: ProjectItem): Promise<string | null> {
+    const byId = new Map(repositories.map((repo) => [repo.id, repo]));
+    const repos = project.repositoryIds
+      .map((id) => byId.get(id))
+      .filter((repo): repo is Repository => Boolean(repo));
+    const anchor = resolveProjectMainSessionAnchor(project, repositories);
+    if (!anchor.path) {
+      message.warning("该 Workspace 缺少根目录，请先配置 rootPath");
+      return null;
+    }
+    viewMode.enter({ kind: "chat" });
+    const isStandaloneTrellisProject = project.id.startsWith("repo:");
+    if (repos[0]) {
+      if (isStandaloneTrellisProject) {
+        setActiveRepositoryWithOwner(repos[0].id);
+      } else {
+        setActiveProjectId(project.id);
+        setActiveRepositoryId(repos[0].id);
+      }
+    } else if (!isStandaloneTrellisProject) {
+      setActiveProjectId(project.id);
+    }
+    const id = await createSession(anchor.path, anchor.displayName);
+    bindRepositoryMainSession(projectMainSessionBindingKey(project.id), id);
     switchSession(id);
     return id;
   }
@@ -1861,8 +1898,7 @@ export default function App() {
     setActiveProjectId(project.id);
     setActiveRepositoryId(primaryRepo.id);
     if (mode === "chat") {
-      const id = await createSession(anchor.path, anchor.displayName);
-      bindRepositoryMainSession(projectMainSessionBindingKey(project.id), id);
+      await openProjectMainSession(project);
       return;
     }
     if (mode === "split") {
@@ -1914,7 +1950,7 @@ export default function App() {
       sessions,
       null,
     );
-    if (boundId) {
+    if (boundId && sessions.some((item) => item.id === boundId)) {
       switchSession(boundId);
       return boundId;
     }
@@ -1928,9 +1964,7 @@ export default function App() {
       switchSession(latestForProject.id);
       return latestForProject.id;
     }
-    const id = await createSession(anchor.path, anchor.displayName);
-    bindRepositoryMainSession(projectBindingKey, id);
-    return id;
+    return null;
   }
 
   async function handleRequestSpecAgentUpdate(project: ProjectItem, area: string) {
@@ -2319,6 +2353,7 @@ export default function App() {
           void openEmployeeConfigForRepositoryOwner(repository);
         },
         sessions,
+        repositoryMainSessionBindings,
         activeSessionId,
         onSelectSession: jumpToSessionLeavingMcpHub,
         employees,
@@ -2600,8 +2635,12 @@ export default function App() {
         onCancelSession: cancelSession,
         onCloseSession: handleCloseSession,
         onSwitchSession: jumpToSessionWithRepository,
-        onNewSession: (repository) => void handleCreateRepositoryTask(repository, "chat"),
-        onNewProjectSession: (project) => void openProjectMainSession(project),
+        onNewSession: (repository) => {
+          void handleManualNewRepositorySession(repository);
+        },
+        onNewProjectSession: (project) => {
+          void handleManualNewProjectSession(project);
+        },
         repositoryMainBindings: repositoryMainSessionBindings,
         onAppendSystemMessage: appendSystemMessage,
         onAppendUserMessage: appendUserMessage,

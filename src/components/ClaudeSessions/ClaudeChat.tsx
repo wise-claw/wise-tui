@@ -61,6 +61,7 @@ import { PendingTaskQueuePanel } from "./PendingTaskQueuePanel";
 import { RepositoryScheduledTasksModal } from "../RepositoryScheduledTasksModal";
 import { usePendingTaskQueue } from "../../hooks/usePendingTaskQueue";
 import { useQuestionDockTabsForRepository } from "../../hooks/useQuestionDockTabs";
+import { buildClaudeSessionHoverTitle } from "../../utils/claudeSessionIdTooltip";
 import { requestWorkflowRunRefresh, useWorkflowRun } from "../../hooks/useWorkflowRun";
 import { getWorkflowFacade } from "../../services/workflow";
 import { runSplitTasksOmcBatch } from "../../services/workflow/actions";
@@ -3444,8 +3445,10 @@ export function ClaudeChat({
                             {group.items.map((item) => {
                               const active = item.id === session.id;
                               const preview = getSessionPreview(item);
+                              const sessionHoverTitle = buildClaudeSessionHoverTitle(item);
                               return (
                                 <div key={item.id} className="app-claude-session-history-popover__item-row">
+                                  <Tooltip title={sessionHoverTitle} mouseEnterDelay={0.35}>
                                   <button
                                     type="button"
                                     className={`app-claude-session-history-popover__item ${active ? "app-claude-session-history-popover__item--active" : ""}`}
@@ -3458,6 +3461,7 @@ export function ClaudeChat({
                                     <span className="app-claude-session-history-popover__item-dot" />
                                     <span className="app-claude-session-history-popover__item-title">{preview}</span>
                                   </button>
+                                  </Tooltip>
                                   {onDeleteHistorySession ? (
                                     <Tooltip title="删除该历史会话" mouseEnterDelay={0.35}>
                                       <Button
@@ -4526,6 +4530,7 @@ export function ClaudeChat({
       ) : null}
 
       {!hideMessages ? (
+        <Tooltip title={buildClaudeSessionHoverTitle(session)} placement="top" mouseEnterDelay={0.35}>
         <div className="app-session-owner-panel">
           <span className={`app-session-owner-panel__tag app-session-owner-panel__tag--${sessionOwnerInfo.type}`}>
             {sessionOwnerInfo.typeLabel}
@@ -4575,6 +4580,7 @@ export function ClaudeChat({
             </Tooltip>
           ) : null}
         </div>
+        </Tooltip>
       ) : null}
 
       {sessionUnreadNotificationRows.length > 0 ? (

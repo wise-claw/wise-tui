@@ -91,7 +91,7 @@ export function useSystemResourceSessions({
 
   const systemInlineSessionKeyword = normalizeSearchKeyword(claudeSystemSessionSearch);
   const claudeRegistryRunningIds = useMemo(
-    () => new Set(registryRunningClaude.map((item) => item.session_id)),
+    () => new Set(registryRunningClaude.map((item) => item.session_id.trim()).filter(Boolean)),
     [registryRunningClaude],
   );
 
@@ -245,6 +245,7 @@ export function useSystemResourceSessions({
     isClaudeSessionRunningInHostOrUi(liveSystemDrawerSession, claudeRegistryRunningIds);
 
   return {
+    claudeRegistryRunningIds,
     systemSummary,
     systemSummaryError,
     claudeCountPopoverOpen,

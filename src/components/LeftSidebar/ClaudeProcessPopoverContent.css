@@ -1,0 +1,189 @@
+.app-monitor-panel__history-popover:has(.app-claude-process-popover) .ant-popover-inner {
+  max-width: min(360px, calc(100vw - 24px));
+}
+
+.app-claude-process-popover {
+  width: 340px;
+  max-width: 100%;
+  max-height: min(360px, 52vh);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 2px;
+  box-sizing: border-box;
+}
+
+.app-claude-process-popover__search {
+  flex-shrink: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--ant-color-border);
+  background: var(--ant-color-bg-container);
+  font-size: 11px;
+  outline: none;
+}
+
+.app-claude-process-popover__search:focus {
+  border-color: var(--ant-color-primary);
+}
+
+.app-claude-process-popover__list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 2px;
+}
+
+.app-claude-process-popover__card {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 8px;
+  border: 1px solid var(--app-workspace-glass-border, var(--ant-color-border-secondary));
+  background: color-mix(in srgb, var(--ant-color-bg-container) 90%, transparent);
+}
+
+.app-claude-process-popover__card-main {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 3px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.app-claude-process-popover__card-main:hover {
+  background: color-mix(in srgb, var(--ant-color-primary-bg) 35%, transparent);
+}
+
+.app-claude-process-popover__card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.app-claude-process-popover__card-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--ant-color-text);
+  word-break: break-word;
+}
+
+.app-claude-process-popover__card-head-actions {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding-top: 2px;
+}
+
+.app-claude-process-popover__card-running {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ant-color-success);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ant-color-success) 35%, transparent);
+}
+
+.app-claude-process-popover__card-stop {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  color: var(--ant-color-error);
+  background: transparent;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease, background 0.12s ease;
+  cursor: pointer;
+}
+
+.app-claude-process-popover__card-stop .anticon {
+  font-size: 9px;
+}
+
+.app-claude-process-popover__card:hover .app-claude-process-popover__card-stop,
+.app-claude-process-popover__card:focus-within .app-claude-process-popover__card-stop {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.app-claude-process-popover__card:hover .app-claude-process-popover__card-running,
+.app-claude-process-popover__card:focus-within .app-claude-process-popover__card-running {
+  opacity: 0;
+}
+
+.app-claude-process-popover__card-stop:hover {
+  color: var(--ant-color-text-light-solid);
+  background: var(--ant-color-error);
+}
+
+.app-claude-process-popover__card-kind {
+  font-size: 10px;
+  line-height: 1.3;
+  color: var(--ant-color-text-quaternary);
+}
+
+.app-claude-process-popover__card-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 8px;
+}
+
+.app-claude-process-popover__meta-cell {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 3px;
+  min-width: 0;
+}
+
+.app-claude-process-popover__meta-label {
+  flex-shrink: 0;
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--ant-color-text-tertiary);
+  white-space: nowrap;
+}
+
+.app-claude-process-popover__meta-label::after {
+  content: "：";
+}
+
+.app-claude-process-popover__meta-value {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--ant-color-text);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.app-claude-process-popover__meta-value--mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.app-claude-process-popover__meta-cell--full {
+  grid-column: 1 / -1;
+}
+
+.app-claude-process-popover__empty {
+  padding: 8px 0;
+}

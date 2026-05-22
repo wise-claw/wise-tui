@@ -43,9 +43,9 @@ describe("rightPanelStorage", () => {
     storage = null;
   });
 
-  test("falls back to collapsed when unset", () => {
+  test("falls back to expanded when unset", () => {
     expect(readRightPanelDefaultCollapsedFromStorage()).toBe(RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK);
-    expect(readRightPanelDefaultCollapsedFromStorage()).toBe(true);
+    expect(readRightPanelDefaultCollapsedFromStorage()).toBe(false);
   });
 
   test("persists collapsed preference", () => {

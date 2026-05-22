@@ -536,6 +536,7 @@ fn remove_repository_global_impl(
     db: &wise_db::WiseDb,
     id: i64,
 ) -> Result<(), String> {
+    db.purge_repository_database_refs(id)?;
     remove_repository(app.clone(), id)?;
     db.remove_repository_from_all_projects(id)?;
     Ok(())
