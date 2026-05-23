@@ -11,7 +11,6 @@ export interface WorkflowTransformNodeFormValues {
   promptTemplate: string;
   knowledgeQuery: string;
   codeScript: string;
-  branchCriteria: string;
 }
 
 interface Props {
@@ -44,7 +43,6 @@ export function WorkflowTransformNodeEditModal({ editingNode, form, onCancel, on
           promptTemplate: "",
           knowledgeQuery: "",
           codeScript: "",
-          branchCriteria: "",
         }}
       >
         <Form.Item label="节点名称" name="title" rules={[{ required: true, message: "请输入节点名称" }]}>
@@ -77,11 +75,6 @@ export function WorkflowTransformNodeEditModal({ editingNode, form, onCancel, on
         {materialKey === "code" ? (
           <Form.Item label="脚本/命令说明" name="codeScript" rules={[{ required: true, message: "请输入脚本说明" }]}>
             <Input.TextArea rows={6} placeholder="例如：bun test src/services/workflowGraphRuntime.test.ts" />
-          </Form.Item>
-        ) : null}
-        {materialKey === "branch" ? (
-          <Form.Item label="分支说明（可选）" name="branchCriteria">
-            <Input.TextArea rows={3} placeholder="说明通过/驳回路径的业务含义；连线请从「通过」「驳回」端口引出。" />
           </Form.Item>
         ) : null}
       </Form>

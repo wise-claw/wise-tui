@@ -1,5 +1,6 @@
 import type { EmployeeItem, WorkflowGraph, WorkflowGraphNode, WorkflowGraphNodeData, WorkflowTemplateStage } from "../../types";
 import { normalizeWorkflowStageOutcomeCriteria } from "../../utils/workflowStageOutcomeCriteria";
+import { branchPortLabelFromId, normalizeBranchConditions } from "../../services/workflowBranchEvaluation";
 import { normalizeStageTaskBasisRefsFromNodeData } from "../../services/workflowGraphRuntime";
 import type { CanvasSnapshot } from "../workflowGraph/workflowX6CanvasShared";
 import {
@@ -60,7 +61,12 @@ export function canvasSnapshotToWorkflowGraph(snapshot: CanvasSnapshot, fallback
             ...(materialKey === "prompt" ? { promptTemplate: node.promptTemplate || "" } : {}),
             ...(materialKey === "knowledge" ? { knowledgeQuery: node.knowledgeQuery || "" } : {}),
             ...(materialKey === "code" ? { codeScript: node.codeScript || "" } : {}),
-            ...(materialKey === "branch" ? { branchCriteria: node.branchCriteria || "" } : {}),
+            ...(materialKey === "branch"
+              ? {
+                  branchCriteria: node.branchCriteria || "",
+                  branchConditions: normalizeBranchConditions(node.branchConditions),
+                }
+              : {}),
           },
         };
       }
@@ -94,7 +100,7 @@ export function canvasSnapshotToWorkflowGraph(snapshot: CanvasSnapshot, fallback
       target: edge.target,
       sourceHandle: edge.sourcePort,
       targetHandle: edge.targetPort,
-      label: edge.label || edgeLabelFromSourcePort(edge.sourcePort),
+      label: edge.label || edgeLabelFromSourcePort(edge.sourcePort, snapshot.nodes),
       data: {
         sourcePort: edge.sourcePort,
         targetPort: edge.targetPort,
@@ -111,9 +117,15 @@ const MATERIAL_FALLBACK_LABEL: Record<string, string> = {
   branch: "条件分支",
 };
 
-function edgeLabelFromSourcePort(sourcePort?: string): string | undefined {
+function edgeLabelFromSourcePort(sourcePort?: string, nodes?: CanvasSnapshot["nodes"]): string | undefined {
   if (sourcePort === "if") return "通过";
   if (sourcePort === "else") return "驳回";
+  if (!sourcePort || !nodes) return undefined;
+  for (const node of nodes) {
+    if (node.materialKey !== "branch") continue;
+    const label = branchPortLabelFromId(sourcePort, node.branchConditions);
+    if (label) return label;
+  }
   return undefined;
 }
 

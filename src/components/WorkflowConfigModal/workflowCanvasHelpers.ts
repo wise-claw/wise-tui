@@ -1,6 +1,7 @@
 import { Graph, type Node as X6Node } from "@antv/x6";
 import type { WorkflowGraphNodeData } from "../../types";
 import { normalizeWorkflowVariables } from "../../utils/workflowVariables";
+import { branchPortLabelFromId, normalizeBranchConditions } from "../../services/workflowBranchEvaluation";
 import { normalizeWorkflowStageOutcomeCriteria } from "../../utils/workflowStageOutcomeCriteria";
 import {
   STAGE_TASK_BASIS_REF_SEPARATOR,
@@ -111,6 +112,7 @@ export function canvasNodeItemFromX6Node(node: X6Node): CanvasNodeItem {
     knowledgeQuery: raw.knowledgeQuery || "",
     codeScript: raw.codeScript || "",
     branchCriteria: raw.branchCriteria || "",
+    branchConditions: normalizeBranchConditions(raw.branchConditions),
     workflowVariables: normalizeWorkflowVariables(raw.workflowVariables),
     passthroughData: raw.passthroughData,
   };
@@ -163,6 +165,7 @@ export function snapshotFromWorkflowGraph(graph: Graph): CanvasSnapshot {
       knowledgeQuery: (data.knowledgeQuery as string | undefined) ?? "",
       codeScript: (data.codeScript as string | undefined) ?? "",
       branchCriteria: (data.branchCriteria as string | undefined) ?? "",
+      branchConditions: normalizeBranchConditions(data.branchConditions),
       workflowVariables: normalizeWorkflowVariables(data.workflowVariables),
       passthroughData: data.passthroughData as Record<string, unknown> | undefined,
       x: pos.x,
@@ -205,13 +208,18 @@ export function snapshotFromWorkflowGraph(graph: Graph): CanvasSnapshot {
           : "";
       const source = startIdRemap.get(rawSource) ?? endIdRemap.get(rawSource) ?? rawSource;
       const target = startIdRemap.get(rawTarget) ?? endIdRemap.get(rawTarget) ?? rawTarget;
+      const sourceNode = nodesById.get(source) ?? dedupedByIdNodes.find((node) => node.id === source);
+      const branchLabel =
+        sourcePort && sourceNode?.materialKey === "branch"
+          ? branchPortLabelFromId(sourcePort, sourceNode.branchConditions)
+          : undefined;
       return {
         id: edge.id || `edge-${index + 1}`,
         source,
         target,
         sourcePort,
         targetPort,
-        label: labelFromEdge || (sourcePort === "if" ? "通过" : sourcePort === "else" ? "驳回" : undefined),
+        label: labelFromEdge || branchLabel || (sourcePort === "if" ? "通过" : sourcePort === "else" ? "驳回" : undefined),
       };
     })
     .filter((edge) => edge.source && edge.target && nodeIdSet.has(edge.source) && nodeIdSet.has(edge.target))

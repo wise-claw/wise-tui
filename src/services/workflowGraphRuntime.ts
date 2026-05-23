@@ -10,6 +10,11 @@ import { applyWorkflowVariableSubstitution, normalizeWorkflowVariables, workflow
 import { formatPassthroughBlockForNode, isPassthroughGraphNodeType } from "./workflowPassthroughBlocks";
 import { WORKFLOW_ACCEPTANCE_VERDICT_KEY } from "./workflow/acceptanceVerdict";
 import type { AcceptanceDecision } from "./workflow/acceptanceVerdict";
+import {
+  evaluateBranchConditions,
+  normalizeBranchConditions,
+  type BranchEvaluationContext,
+} from "./workflowBranchEvaluation";
 
 export type { AcceptanceDecision } from "./workflow/acceptanceVerdict";
 export { WORKFLOW_ACCEPTANCE_VERDICT_KEY, inferAcceptanceDecisionFromOutput } from "./workflow/acceptanceVerdict";
@@ -266,10 +271,36 @@ export function createWorkflowRuntimeState(graph: WorkflowGraph): WorkflowGraphR
   };
 }
 
+function selectBranchEdge(
+  edges: WorkflowGraphEdge[],
+  branchNode: WorkflowGraphNode,
+  ctx: BranchEvaluationContext,
+): WorkflowGraphEdge {
+  const conditions = normalizeBranchConditions(branchNode.data.branchConditions);
+  const matched = evaluateBranchConditions(conditions, ctx);
+  const byPort = edges.find((edge) => edge.sourceHandle === matched.portId);
+  if (byPort) return byPort;
+  const byLabel = edges.find((edge) => typeof edge.label === "string" && edge.label.trim() === matched.label.trim());
+  if (byLabel) return byLabel;
+  throw new Error(`WF_BRANCH_EDGE_NOT_FOUND:${matched.portId}`);
+}
+
+function buildBranchEvaluationContext(
+  graph: WorkflowGraph,
+  params: { lastOutput?: string; acceptanceDecision?: AcceptanceDecision },
+): BranchEvaluationContext {
+  return {
+    variables: workflowVariablesFromGraph(graph),
+    lastOutput: params.lastOutput,
+    acceptanceDecision: params.acceptanceDecision,
+  };
+}
+
 function selectOutgoingEdge(
   graph: WorkflowGraph,
   fromNode: WorkflowGraphNode,
   acceptanceDecision: AcceptanceDecision | undefined,
+  lastOutput?: string,
 ): WorkflowGraphEdge {
   const edges = outgoingEdges(graph, fromNode.id);
   if (edges.length === 0) {
@@ -286,10 +317,8 @@ function selectOutgoingEdge(
     return edges[0];
   }
   if (fromNode.type === "branch") {
-    if (!acceptanceDecision) {
-      throw new Error("WF_ACCEPTANCE_DECISION_REQUIRED");
-    }
-    return selectAcceptanceEdge(edges, acceptanceDecision);
+    const ctx = buildBranchEvaluationContext(graph, { acceptanceDecision, lastOutput });
+    return selectBranchEdge(edges, fromNode, ctx);
   }
   return edges[0];
 }
@@ -298,12 +327,13 @@ function resolveDispatchTarget(params: {
   graph: WorkflowGraph;
   startNode: WorkflowGraphNode;
   acceptanceDecision?: AcceptanceDecision;
+  lastOutput?: string;
 }): { dispatchNode: WorkflowGraphNode; prefixBlocks: string[]; traceNodeIds: string[] } {
-  const { graph } = params;
-  let cursor = params.startNode;
+  const { graph, startNode, acceptanceDecision, lastOutput } = params;
+  let cursor = startNode;
   const prefixBlocks: string[] = [];
   const traceNodeIds: string[] = [];
-  let branchDecision = params.acceptanceDecision;
+  let branchDecision = acceptanceDecision;
 
   while (true) {
     traceNodeIds.push(cursor.id);
@@ -323,11 +353,12 @@ function resolveDispatchTarget(params: {
       continue;
     }
     if (cursor.type === "branch") {
-      if (!branchDecision) {
-        throw new Error("WF_ACCEPTANCE_DECISION_REQUIRED");
-      }
+      const ctx = buildBranchEvaluationContext(graph, {
+        acceptanceDecision: branchDecision,
+        lastOutput,
+      });
       const out = outgoingEdges(graph, cursor.id);
-      const selected = selectAcceptanceEdge(out, branchDecision);
+      const selected = selectBranchEdge(out, cursor, ctx);
       cursor = nodeById(graph, selected.target);
       branchDecision = undefined;
       continue;
@@ -354,7 +385,7 @@ export function advanceWorkflowGraph(params: {
   }
 
   let effectiveDecision = acceptanceDecision;
-  const selectedEdge = selectOutgoingEdge(graph, currentNode, effectiveDecision);
+  const selectedEdge = selectOutgoingEdge(graph, currentNode, effectiveDecision, lastOutput);
   let nextNode = nodeById(graph, selectedEdge.target);
   const baseInput = applyGraphVariables(startContent.trim(), graph);
 
@@ -370,6 +401,7 @@ export function advanceWorkflowGraph(params: {
     graph,
     startNode: nextNode,
     acceptanceDecision: branchDecisionForTraversal,
+    lastOutput,
   });
   const dispatchNode = resolved.dispatchNode;
   const uniqueTrace = [...state.trace];

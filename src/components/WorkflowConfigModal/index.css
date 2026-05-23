@@ -795,6 +795,24 @@
   background: var(--ant-color-fill-quaternary);
 }
 
+.app-workflow-branch-edit-modal__hint {
+  font-size: 12px;
+}
+
+.app-workflow-branch-edit-modal__branch-card {
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-workflow-branch-edit-modal__branch-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
 .app-workflow-node-edit-form__field-hint-icon {
   color: var(--ant-color-text-secondary);
   font-size: 14px;

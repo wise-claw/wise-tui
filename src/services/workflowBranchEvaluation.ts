@@ -145,8 +145,12 @@ function evaluateRules(condition: WorkflowBranchCondition, ctx: BranchEvaluation
 
 function substituteExpression(expr: string, ctx: BranchEvaluationContext): string {
   return expr
-    .replace(/\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g, (_, name: string) => ctx.variables[name] ?? "")
-    .replace(/\$\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}/g, (_, name: string) => ctx.variables[name] ?? "")
+    .replace(/\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g, (match, name: string) =>
+      Object.prototype.hasOwnProperty.call(ctx.variables, name) ? (ctx.variables[name] ?? "") : match,
+    )
+    .replace(/\$\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}/g, (match, name: string) =>
+      Object.prototype.hasOwnProperty.call(ctx.variables, name) ? (ctx.variables[name] ?? "") : match,
+    )
     .replace(/\{\{\s*last_output\s*\}\}/gi, ctx.lastOutput?.trim() ?? "")
     .replace(/\$\{\s*last_output\s*\}/gi, ctx.lastOutput?.trim() ?? "")
     .replace(/\{\{\s*acceptance\s*\}\}/gi, ctx.acceptanceDecision ?? "")
@@ -157,9 +161,9 @@ function evaluateExpression(expression: string, ctx: BranchEvaluationContext): b
   const normalized = substituteExpression(expression, ctx).trim();
   if (!normalized) return false;
 
-  const containsMatch = normalized.match(/^contains\s*\(\s*(.+?)\s*,\s*(['"])(.*?)\2\s*\)$/i);
+  const containsMatch = normalized.match(/^contains\s*\(\s*(.*)\s*,\s*["']([^"']+)["']\s*\)\s*$/i);
   if (containsMatch) {
-    return containsMatch[1].toLowerCase().includes(containsMatch[3].toLowerCase());
+    return containsMatch[1].trim().toLowerCase().includes(containsMatch[2].trim().toLowerCase());
   }
 
   const acceptanceMatch = normalized.match(/^acceptance\s*(==|!=)\s*(pass|reject|approve|通过|驳回)$/i);

@@ -11,6 +11,7 @@ import {
   FLOW_NODE_HEIGHT,
   FLOW_NODE_WIDTH,
   createGraphNodeFromSnapshotNode,
+  createBranchPorts,
   defaultNodeFieldsForMaterial,
   defaultTitleForMaterialKey,
   ensureWorkflowX6Nodes,
@@ -30,6 +31,8 @@ import { runPrdSplitClaude } from "../../services/claudeSplitExecutor";
 import { WorkflowNodeEditModal, type WorkflowNodeEditFormValues } from "./WorkflowNodeEditModal";
 import { WorkflowStartNodeEditModal, type WorkflowStartNodeFormValues } from "./WorkflowStartNodeEditModal";
 import { WorkflowTransformNodeEditModal, type WorkflowTransformNodeFormValues } from "./WorkflowTransformNodeEditModal";
+import { WorkflowBranchNodeEditModal, type WorkflowBranchNodeFormValues } from "./WorkflowBranchNodeEditModal";
+import { branchPortLabelFromId, normalizeBranchConditions } from "../../services/workflowBranchEvaluation";
 import {
   buildMergedStageTaskBasisSelectOptions,
   canvasNodeItemFromX6Node,
@@ -67,6 +70,14 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
   const [editForm] = Form.useForm<WorkflowNodeEditFormValues>();
   const [startEditForm] = Form.useForm<WorkflowStartNodeFormValues>();
   const [transformEditForm] = Form.useForm<WorkflowTransformNodeFormValues>();
+  const [branchEditForm] = Form.useForm<WorkflowBranchNodeFormValues>();
+  const workflowVariableOptions = useMemo(() => {
+    const start = value.nodes.find((node) => node.kind === "start");
+    return (start?.workflowVariables ?? []).map((item) => ({
+      value: item.name,
+      label: item.label?.trim() ? `${item.label} (${item.name})` : item.name,
+    }));
+  }, [value.nodes]);
   const selectableEmployeeIdSet = useMemo(() => new Set(selectableEmployeeIds), [selectableEmployeeIds]);
   const occupiedEmployeeIds = useMemo(() => {
     const ids = new Set(
@@ -198,14 +209,22 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
       });
       return;
     }
-    if (payload.kind === "material" && (isPassthroughMaterialKey(payload.materialKey) || payload.materialKey === "branch")) {
+    if (payload.kind === "material" && payload.materialKey === "branch") {
+      setEditingNode(payload);
+      branchEditForm.setFieldsValue({
+        title: payload.title,
+        branchCriteria: payload.branchCriteria || "",
+        branchConditions: normalizeBranchConditions(payload.branchConditions),
+      });
+      return;
+    }
+    if (payload.kind === "material" && isPassthroughMaterialKey(payload.materialKey)) {
       setEditingNode(payload);
       transformEditForm.setFieldsValue({
         title: payload.title,
         promptTemplate: payload.promptTemplate || "",
         knowledgeQuery: payload.knowledgeQuery || "",
         codeScript: payload.codeScript || "",
-        branchCriteria: payload.branchCriteria || "",
       });
       return;
     }
@@ -408,9 +427,26 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
     graph.on("edge:connected", ({ edge }) => {
       connectingRef.current = false;
       const sourcePort = edge.getSourcePortId();
-      if (sourcePort === "if" || sourcePort === "else") {
-        edge.setLabels([{ attrs: { label: { text: sourcePort === "if" ? "通过" : "驳回", fill: "#595959", fontSize: 11 } } }]);
-        edge.setAttrByPath("line/stroke", sourcePort === "if" ? "#73D13D" : "#FF7875");
+      const sourceId = edge.getSourceCellId();
+      if (sourceId && sourcePort) {
+        const sourceNode = graph.getCellById(sourceId);
+        if (sourceNode?.isNode()) {
+          const data = (sourceNode.getData() ?? {}) as Partial<CanvasNodeItem>;
+          const label =
+            data.materialKey === "branch"
+              ? branchPortLabelFromId(sourcePort, data.branchConditions)
+              : sourcePort === "if"
+                ? "通过"
+                : sourcePort === "else"
+                  ? "驳回"
+                  : undefined;
+          if (label) {
+            edge.setLabels([{ attrs: { label: { text: label, fill: "#595959", fontSize: 11 } } }]);
+          }
+          const stroke =
+            sourcePort === "else" ? "#FF7875" : sourcePort === "if" ? "#73D13D" : "#9254DE";
+          edge.setAttrByPath("line/stroke", stroke);
+        }
       }
       graph.getNodes().forEach((node) => refreshNodePorts(graph, node, false));
       if (!syncingRef.current) emitSnapshot();
@@ -583,6 +619,30 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
     emitSnapshot();
   }
 
+  async function handleSubmitBranchNodeEdit() {
+    if (!editingNode || editingNode.materialKey !== "branch" || !graphRef.current) return;
+    const values = await branchEditForm.validateFields();
+    const graph = graphRef.current;
+    const target = graph.getCellById(editingNode.id);
+    if (!target || !target.isNode()) {
+      setEditingNode(null);
+      return;
+    }
+    const node = target as X6Node;
+    const branchConditions = normalizeBranchConditions(values.branchConditions);
+    const nextData: Partial<CanvasNodeItem> = {
+      ...(node.getData() ?? {}),
+      title: values.title.trim(),
+      branchCriteria: values.branchCriteria?.trim() ?? "",
+      branchConditions,
+    };
+    node.setData(nextData);
+    node.setProp("ports", createBranchPorts("branch", branchConditions));
+    applyNodeVisual(node, nextData);
+    setEditingNode(null);
+    emitSnapshot();
+  }
+
   async function handleSubmitTransformNodeEdit() {
     if (!editingNode || editingNode.kind !== "material" || !graphRef.current) return;
     const values = await transformEditForm.validateFields();
@@ -600,7 +660,6 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
       promptTemplate: values.promptTemplate?.trim() ?? "",
       knowledgeQuery: values.knowledgeQuery?.trim() ?? "",
       codeScript: values.codeScript?.trim() ?? "",
-      branchCriteria: values.branchCriteria?.trim() ?? "",
     };
     node.setData(nextData);
     applyNodeVisual(node, nextData);
@@ -672,11 +731,11 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
     editingNode && editingNode.kind === "material" && isAgentMaterialKey(editingNode.materialKey) ? editingNode : null;
   const editingStartNode = editingNode && editingNode.kind === "start" ? editingNode : null;
   const editingTransformNode =
-    editingNode &&
-    editingNode.kind === "material" &&
-    (isPassthroughMaterialKey(editingNode.materialKey) || editingNode.materialKey === "branch")
+    editingNode && editingNode.kind === "material" && isPassthroughMaterialKey(editingNode.materialKey)
       ? editingNode
       : null;
+  const editingBranchNode =
+    editingNode && editingNode.kind === "material" && editingNode.materialKey === "branch" ? editingNode : null;
 
   return (
     <>
@@ -759,6 +818,13 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
         form={transformEditForm}
         onCancel={handleCloseNodeEdit}
         onSubmit={() => void handleSubmitTransformNodeEdit()}
+      />
+      <WorkflowBranchNodeEditModal
+        editingNode={editingBranchNode}
+        form={branchEditForm}
+        variableOptions={workflowVariableOptions}
+        onCancel={handleCloseNodeEdit}
+        onSubmit={() => void handleSubmitBranchNodeEdit()}
       />
     </>
   );

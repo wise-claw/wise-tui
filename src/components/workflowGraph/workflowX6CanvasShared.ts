@@ -4,7 +4,10 @@
  */
 import { Graph, type Node as X6Node } from "@antv/x6";
 import type { WorkflowGraph, WorkflowGraphNodeData, WorkflowStageOutcomeCriterion, WorkflowVariableDefinition } from "../../types";
+import type { WorkflowBranchCondition } from "../../types/workflowBranch";
+import { DEFAULT_WORKFLOW_BRANCH_CONDITIONS } from "../../types/workflowBranch";
 import { normalizeWorkflowVariables } from "../../utils/workflowVariables";
+import { normalizeBranchConditions, summarizeBranchCondition } from "../../services/workflowBranchEvaluation";
 import { normalizeWorkflowStageOutcomeCriteria } from "../../utils/workflowStageOutcomeCriteria";
 import { normalizeStageTaskBasisRefsFromNodeData } from "../../services/workflowGraphRuntime";
 
@@ -38,6 +41,7 @@ export interface CanvasNodeItem {
   knowledgeQuery?: string;
   codeScript?: string;
   branchCriteria?: string;
+  branchConditions?: WorkflowBranchCondition[];
   workflowVariables?: WorkflowVariableDefinition[];
   passthroughData?: Record<string, unknown>;
 }
@@ -140,7 +144,7 @@ export const MATERIALS: Record<string, MaterialItem> = {
     key: "branch",
     iconText: "IF",
     title: "条件分支",
-    desc: "按验收结论路由至通过或驳回路径。",
+    desc: "按条件路由：验收、变量规则或表达式，支持多出口。",
     inputPlaceholder: "分支说明（可选）",
     theme: "purple",
   },
@@ -189,6 +193,14 @@ export function defaultTitleForMaterialKey(materialKey: string): string {
 export function defaultNodeFieldsForMaterial(materialKey: string): Partial<CanvasNodeItem> {
   if (materialKey === "gateway") {
     return { acceptanceEnabled: true };
+  }
+  if (materialKey === "branch") {
+    return {
+      branchConditions: DEFAULT_WORKFLOW_BRANCH_CONDITIONS.map((item) => ({
+        ...item,
+        rules: item.rules.map((rule) => ({ ...rule })),
+      })),
+    };
   }
   return {};
 }
@@ -258,6 +270,7 @@ export function workflowGraphToCanvasSnapshot(graph: WorkflowGraph | null | unde
       knowledgeQuery: typeof node.data.knowledgeQuery === "string" ? node.data.knowledgeQuery : "",
       codeScript: typeof node.data.codeScript === "string" ? node.data.codeScript : "",
       branchCriteria: typeof node.data.branchCriteria === "string" ? node.data.branchCriteria : "",
+      branchConditions: normalizeBranchConditions(node.data.branchConditions),
       passthroughData: omitGraphNodeMappedData(node.data, "material"),
       x: node.position.x,
       y: node.position.y,
@@ -322,6 +335,7 @@ function omitGraphNodeMappedData(
     delete out.knowledgeQuery;
     delete out.codeScript;
     delete out.branchCriteria;
+    delete out.branchConditions;
   }
   return Object.keys(out).length > 0 ? out : undefined;
 }
@@ -350,8 +364,13 @@ function summarizePassthroughNode(node: Partial<CanvasNodeItem>): string {
     return text ? `脚本：${text.slice(0, 48)}${text.length > 48 ? "…" : ""}` : "未填写脚本说明";
   }
   if (materialKey === "branch") {
-    const text = (node.branchCriteria || "").trim();
-    return text ? `说明：${text.slice(0, 48)}${text.length > 48 ? "…" : ""}` : "按上阶段验收结论路由";
+    const conditions = normalizeBranchConditions(node.branchConditions);
+    const labels = conditions
+      .filter((item) => item.kind !== "default")
+      .slice(0, 3)
+      .map((item) => `${item.label}：${summarizeBranchCondition(item)}`);
+    const more = conditions.length > 3 ? `…共 ${conditions.length} 条` : "";
+    return labels.length > 0 ? labels.join(" · ") + more : "按条件路由";
   }
   return "";
 }
@@ -574,6 +593,7 @@ export function createGraphNodeFromSnapshotNode(node: CanvasNodeItem, employeeNa
       knowledgeQuery: node.knowledgeQuery || "",
       codeScript: node.codeScript || "",
       branchCriteria: node.branchCriteria || "",
+      branchConditions: normalizeBranchConditions(node.branchConditions),
       ...(() => {
         const refs = normalizeStageTaskBasisRefsFromNodeData({
           label: node.title || "",
@@ -597,12 +617,13 @@ export function createGraphNodeFromSnapshotNode(node: CanvasNodeItem, employeeNa
       desc3: { text: isEmployeeNode ? employeeSummary?.acceptance ?? "" : "", fill: "rgba(0,0,0,0.65)" },
       desc4: { text: isEmployeeNode ? employeeSummary?.stageSuccess ?? "" : "", fill: "rgba(0,0,0,0.65)" },
     },
-    ports: createBranchPorts(node.materialKey),
+    ports: createBranchPorts(node.materialKey, node.branchConditions),
   };
 }
 
-export function createBranchPorts(materialKey?: string) {
+export function createBranchPorts(materialKey?: string, branchConditions?: WorkflowBranchCondition[]) {
   if (materialKey === "branch") {
+    const conditions = normalizeBranchConditions(branchConditions);
     const base = {
       attrs: {
         circle: {
@@ -614,20 +635,30 @@ export function createBranchPorts(materialKey?: string) {
         },
       },
     };
-    return {
-      groups: {
-        top: { ...base, position: "top" },
-        right: { ...base, position: "right" },
-        bottom: { ...base, position: "bottom" },
-        left: { ...base, position: "left" },
-      },
-      items: [
-        { id: "top", group: "top" },
-        { id: "if", group: "right", attrs: { circle: { stroke: "#52C41A" } } },
-        { id: "else", group: "bottom", attrs: { circle: { stroke: "#FF4D4F" } } },
-        { id: "left", group: "left" },
-      ],
+    const groups: Record<string, unknown> = {
+      top: { ...base, position: "top" },
+      left: { ...base, position: "left" },
     };
+    const items: Array<{ id: string; group: string; attrs?: Record<string, unknown> }> = [
+      { id: "top", group: "top" },
+      { id: "left", group: "left" },
+    ];
+    const count = Math.max(conditions.length, 2);
+    conditions.forEach((condition, index) => {
+      const groupId = `branch-out-${index}`;
+      const ratio = (index + 1) / (count + 1);
+      groups[groupId] = {
+        ...base,
+        position: { name: "absolute", args: { x: "100%", y: `${Math.round(ratio * 100)}%` } },
+      };
+      const stroke = condition.kind === "acceptance_reject" || condition.portId === "else" ? "#FF4D4F" : condition.kind === "acceptance_pass" || condition.portId === "if" ? "#52C41A" : "#9254DE";
+      items.push({
+        id: condition.portId || `branch-${index}`,
+        group: groupId,
+        attrs: { circle: { stroke } },
+      });
+    });
+    return { groups, items };
   }
   return createPorts();
 }
