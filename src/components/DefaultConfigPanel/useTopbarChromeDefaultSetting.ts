@@ -7,6 +7,7 @@ import {
 
 export function useTopbarChromeDefaultSetting() {
   const [showLlmProxyTopbar, setShowLlmProxyTopbar] = useState(false);
+  const [showFccTopbar, setShowFccTopbar] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -15,6 +16,7 @@ export function useTopbarChromeDefaultSetting() {
     try {
       const loaded = await loadTopbarChromeDefaultsFromStore();
       setShowLlmProxyTopbar(loaded.showLlmProxyTopbar);
+      setShowFccTopbar(loaded.showFccTopbar);
     } finally {
       setLoading(false);
     }
@@ -42,11 +44,31 @@ export function useTopbarChromeDefaultSetting() {
     [showLlmProxyTopbar],
   );
 
+  const saveFcc = useCallback(
+    async (visible: boolean) => {
+      if (visible === showFccTopbar) return;
+      setSaving(true);
+      try {
+        await saveTopbarChromeDefaultsToStore({ showFccTopbar: visible });
+        setShowFccTopbar(visible);
+        message.success(visible ? "已保存：显示 FCC 顶栏图标" : "已保存：隐藏 FCC 顶栏图标");
+      } catch (err) {
+        message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+        throw err;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [showFccTopbar],
+  );
+
   return {
     showLlmProxyTopbar,
+    showFccTopbar,
     loading,
     saving,
     refresh,
     saveLlmProxy,
+    saveFcc,
   };
 }

@@ -229,6 +229,18 @@ pub(crate) fn build_claude_spawn_env(
     {
         merged.remove("ANTHROPIC_API_KEY");
     }
+    if merged
+        .get("ANTHROPIC_BASE_URL")
+        .map(|s| is_local_fcc_proxy_base_url(s))
+        .unwrap_or(false)
+    {
+        merged
+            .entry("CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY".to_string())
+            .or_insert_with(|| "1".to_string());
+        merged
+            .entry("CLAUDE_CODE_AUTO_COMPACT_WINDOW".to_string())
+            .or_insert_with(|| "190000".to_string());
+    }
     merged
 }
 

@@ -27,6 +27,28 @@
   border-top: 1px solid var(--ant-color-border-secondary);
 }
 
+.app-default-config-fcc {
+  border-top: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-default-config-fcc__head {
+  align-items: flex-start;
+}
+
+.app-default-config-fcc__meta {
+  padding: 0 14px 8px;
+}
+
+.app-default-config-fcc__meta-line {
+  display: block;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.app-default-config-fcc__actions {
+  padding: 0 14px 12px;
+}
+
 .app-default-config-row__main {
   flex: 1;
   min-width: 0;

@@ -188,7 +188,7 @@ describe("wiseDefaultConfigStore", () => {
     expect(storage?.getItem(RIGHT_PANEL_DEFAULT_COLLAPSED_KEY)).toBeNull();
   });
 
-  test("load backfills missing topbar chrome fields as hidden", async () => {
+  test("load backfills missing topbar chrome fields with product defaults", async () => {
     getAppSetting.mockImplementation(async (key: string) =>
       key === WISE_DEFAULT_CONFIG_KEY
         ? JSON.stringify({
@@ -200,6 +200,7 @@ describe("wiseDefaultConfigStore", () => {
     );
     const config = await loadWiseDefaultConfig();
     expect(config.showLlmProxyTopbar).toBe(false);
+    expect(config.showFccTopbar).toBe(true);
   });
 
   test("save topbar chrome dispatches visibility event", async () => {

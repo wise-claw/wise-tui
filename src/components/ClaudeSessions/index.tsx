@@ -16,6 +16,7 @@ import { useWiseTopbarChromeVisibility } from "../../hooks/useWiseTopbarChromeVi
 import { ClaudeChat } from "./ClaudeChat";
 import { DingTalkStreamGatewayTopbarSwitch } from "../DingTalkStreamGatewayTopbarSwitch";
 import { OpenAppMenu } from "../OpenAppMenu";
+import { FccTopbarTrigger } from "./FccTopbarTrigger";
 import { LlmProxyTopbarTrigger } from "./LlmProxyTopbarTrigger";
 import {
   DEFAULT_OPEN_APP_ID,
@@ -769,6 +770,7 @@ export function Topbar({
             onSelectOpenAppId={setSelectedOpenAppId}
           />
         )}
+        {activeRepository && topbarChrome.showFccTopbar ? <FccTopbarTrigger /> : null}
         {activeRepository && topbarChrome.showLlmProxyTopbar ? (
           <LlmProxyTopbarTrigger
             repositoryPath={activeSessionRepositoryPath?.trim() || activeRepository.path}

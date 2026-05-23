@@ -27,9 +27,6 @@ let snapshot: StoreSnapshot = { records, status };
 let initialized = false;
 let initPromise: Promise<void> | null = null;
 const listeners = new Set<Listener>();
-let unlistenProxyRecord: (() => void) | null = null;
-let unlistenStreamOutput: (() => void) | null = null;
-
 
 function statusFieldsEqual(
   a: ClaudeLlmProxyStatus | null,
@@ -83,8 +80,8 @@ async function ensureInitialized(): Promise<void> {
       ]);
       records = loaded.slice(0, MAX_RECORDS);
       status = st;
-      unlistenProxyRecord = await subscribeClaudeLlmProxyRecords(upsertRecord);
-      unlistenStreamOutput = await listen<string>("claude-output", (ev) => {
+      await subscribeClaudeLlmProxyRecords(upsertRecord);
+      await listen<string>("claude-output", (ev) => {
         const line = typeof ev.payload === "string" ? ev.payload : String(ev.payload ?? "");
         const rec = tryIngestStreamJsonLineForLlmProxy(line);
         if (rec) upsertRecord(rec);

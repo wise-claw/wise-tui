@@ -531,7 +531,7 @@ fn try_claude_from_login_shell() -> Option<String> {
 }
 
 /// Finds the claude binary in common locations (works when packaged app has a narrow PATH).
-fn find_claude_binary() -> Result<String, String> {
+pub(crate) fn find_claude_binary() -> Result<String, String> {
     for c in claude_binary_candidates() {
         if c.is_file() {
             return Ok(c.to_string_lossy().to_string());
