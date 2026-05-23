@@ -22,6 +22,7 @@ function ClaudeSettingsJsonEditorInner({ value, onChange, height = 320, readOnly
         options={{
           readOnly,
           minimap: { enabled: false },
+          stickyScroll: { enabled: false },
           fontSize: 12,
           lineNumbers: "on",
           scrollBeyondLastLine: false,
