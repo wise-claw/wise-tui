@@ -4,6 +4,7 @@ import {
   buildSequenceEventsFromFccTraces,
   buildSequenceEventsFromMessages,
   buildTrajectorySequenceModel,
+  filterSequenceEventsForTurn,
   mergeSequenceEventsByTime,
   parseTrajectoryJsonlSupplemental,
   suppressInferredApiRequestsWhenObserved,
@@ -200,6 +201,35 @@ describe("claudeSessionTrajectorySequence", () => {
     const out = suppressInferredApiRequestsWhenObserved([...inferred, ...observed]);
     expect(out.some((e) => e.kind === "api_request" && !e.flags.observedHttp)).toBe(false);
     expect(out.some((e) => e.flags.observedHttp)).toBe(true);
+  });
+
+  it("filterSequenceEventsForTurn keeps one conversation round", () => {
+    const messages: ClaudeMessage[] = [
+      { id: 1, role: "user", content: "a", parts: [{ type: "text", text: "a" }], timestamp: 1000 },
+      {
+        id: 2,
+        role: "assistant",
+        content: "b",
+        parts: [{ type: "text", text: "b" }],
+        timestamp: 2000,
+      },
+      { id: 3, role: "user", content: "c", parts: [{ type: "text", text: "c" }], timestamp: 3000 },
+      {
+        id: 4,
+        role: "assistant",
+        content: "d",
+        parts: [{ type: "text", text: "d" }],
+        timestamp: 4000,
+      },
+    ];
+    const events = buildSequenceEventsFromMessages(messages);
+    const turn1 = filterSequenceEventsForTurn(events, 1);
+    const turn2 = filterSequenceEventsForTurn(events, 2);
+    expect(turn1.some((e) => e.kind === "user_input" && e.subtitle === "a")).toBe(true);
+    expect(turn1.some((e) => e.kind === "assistant_text")).toBe(true);
+    expect(turn1.some((e) => e.subtitle === "c")).toBe(false);
+    expect(turn2.some((e) => e.kind === "user_input" && e.subtitle === "c")).toBe(true);
+    expect(turn2.some((e) => e.kind === "assistant_text")).toBe(true);
   });
 
   it("merges messages with supplemental", () => {

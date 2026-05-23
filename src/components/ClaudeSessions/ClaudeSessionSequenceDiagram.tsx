@@ -1,9 +1,9 @@
 import { Popover, Tag } from "antd";
-import { useMemo, useCallback, useEffect, useId, useState, type MouseEvent } from "react";
+import { useEffect, useState } from "react";
 import "./ClaudeSessionTrajectoryDrawer.css";
 import type { SequenceEvent } from "../../utils/claudeSessionTrajectorySequence";
 import { SequenceEventPopoverContent } from "./SequenceEventPopoverContent";
-import { TRAJECTORY_LANE_IDS, sequenceEventActivityCategory, type TrajectoryLaneId } from "../../utils/claudeSessionTrajectorySequence";
+import { TRAJECTORY_LANE_IDS, type TrajectoryLaneId } from "../../utils/claudeSessionTrajectorySequence";
 import { formatChatMessageListTime } from "../../utils/formatChatMessageListTime";
 
 const LANE_LABELS: Record<TrajectoryLaneId, string> = {
@@ -148,59 +148,24 @@ function getLaneSpan(ev: SequenceEvent): LaneSpanInfo {
 
 interface Props {
   events: SequenceEvent[];
-  visibleStart: number;
-  visibleEndExclusive: number;
-  onVisibleRangeChange: (start: number, endExclusive: number) => void;
   onSubagentDrilldown?: (ev: SequenceEvent) => void;
   markInferredHttp?: boolean;
 }
 
 export function ClaudeSessionSequenceDiagram({
   events,
-  visibleStart,
-  visibleEndExclusive,
-  onVisibleRangeChange,
   onSubagentDrilldown,
   markInferredHttp = false,
 }: Props) {
   const lanes = TRAJECTORY_LANE_IDS;
-  const rawGridId = useId();
   const [detailPopoverEventId, setDetailPopoverEventId] = useState<string | null>(null);
-
-  const safeStart = Math.max(0, Math.min(visibleStart, Math.max(0, events.length - 1)));
-  const safeEnd = Math.max(safeStart + 1, Math.min(visibleEndExclusive, events.length));
-  const slice = events.slice(safeStart, safeEnd);
 
   useEffect(() => {
     setDetailPopoverEventId((id) => {
       if (!id) return id;
-      return slice.some((e) => e.id === id) ? id : null;
+      return events.some((e) => e.id === id) ? id : null;
     });
-  }, [slice]);
-
-  const onMinimapClick = useCallback(
-    (e: MouseEvent<HTMLDivElement>) => {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const ratio = rect.width > 0 ? x / rect.width : 0;
-      const win = safeEnd - safeStart;
-      const center = ratio * events.length;
-      let ns = Math.floor(center - win / 2);
-      ns = Math.max(0, Math.min(ns, Math.max(0, events.length - win)));
-      onVisibleRangeChange(ns, Math.min(ns + win, events.length));
-    },
-    [events.length, onVisibleRangeChange, safeEnd, safeStart],
-  );
-
-  const minimapSegments = useMemo(() => {
-    return events.map((ev) => ({
-      cat: sequenceEventActivityCategory(ev),
-      key: ev.id,
-    }));
   }, [events]);
-
-  const v0 = events.length > 0 ? safeStart / events.length : 0;
-  const v1 = events.length > 0 ? safeEnd / events.length : 1;
 
   return (
     <div className="app-seq-diagram">
@@ -217,55 +182,6 @@ export function ClaudeSessionSequenceDiagram({
           <span className="app-seq-diagram__legend-item app-seq-diagram__legend-item--model">模型接口</span>
           <span className="app-seq-diagram__legend-note">
             CC 泳道自环：Skills / MCP / Subagent / Hooks · 模型请求为「接口」 · 点击卡片查看详情
-          </span>
-        </div>
-
-        <div
-          className="app-seq-diagram__minimap"
-          onClick={onMinimapClick}
-          role="presentation"
-          title="点击跳转时间区间"
-        >
-          {minimapSegments.map((s) => (
-            <div
-              key={s.key}
-              className={`app-seq-diagram__minimap-seg app-seq-diagram__minimap-seg--${s.cat}`}
-              style={{ flex: events.length > 0 ? 1 : 0 }}
-            />
-          ))}
-          {events.length > 0 ? (
-            <div className="app-seq-diagram__minimap-viewport" style={{ left: `${v0 * 100}%`, width: `${Math.max(0.02, v1 - v0) * 100}%` }} />
-          ) : null}
-        </div>
-
-        <div className="app-seq-diagram__brush">
-          <span className="app-seq-diagram__brush-label">区间</span>
-          <input
-            type="range"
-            min={0}
-            max={Math.max(0, events.length - 1)}
-            value={safeStart}
-            onChange={(e) => {
-              const ns = Number(e.target.value);
-              const span = Math.max(1, safeEnd - safeStart);
-              onVisibleRangeChange(ns, Math.min(ns + span, events.length));
-            }}
-            className="app-seq-diagram__brush-input"
-          />
-          <input
-            type="range"
-            min={1}
-            max={events.length}
-            value={safeEnd}
-            onChange={(e) => {
-              const ne = Number(e.target.value);
-              if (ne <= safeStart) onVisibleRangeChange(Math.max(0, ne - 1), ne);
-              else onVisibleRangeChange(safeStart, ne);
-            }}
-            className="app-seq-diagram__brush-input"
-          />
-          <span className="app-seq-diagram__brush-meta">
-            {safeStart + 1}–{safeEnd} / {events.length}
           </span>
         </div>
       </div>
@@ -290,7 +206,7 @@ export function ClaudeSessionSequenceDiagram({
 
       <div className="app-seq-flow">
         <div className="app-seq-flow__timeline-container">
-          {slice.map((ev, i) => {
+          {events.map((ev, i) => {
             const isApiRequest = ev.kind === "api_request";
 
             const cardBodyRaw = messageBodyForCard(ev);

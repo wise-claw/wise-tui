@@ -657,3 +657,21 @@ export function buildTrajectorySequenceModel(
 
   return events;
 }
+
+/** 与 {@link buildSessionLinkRecords} 相同的轮次划分：每个 `user_input` 开启新轮次。 */
+export function sequenceEventTurnIndex(ev: SequenceEvent, turnCounter: { value: number }): number {
+  if (ev.kind === "user_input") {
+    turnCounter.value += 1;
+  }
+  return ev.kind === "user_input" ? turnCounter.value : Math.max(1, turnCounter.value);
+}
+
+/** 提取单轮对话的序列图事件（含该轮内的工具、Hook、HTTP 等）。 */
+export function filterSequenceEventsForTurn(
+  events: readonly SequenceEvent[],
+  turnIndex: number,
+): SequenceEvent[] {
+  if (turnIndex < 1) return [];
+  const counter = { value: 0 };
+  return events.filter((ev) => sequenceEventTurnIndex(ev, counter) === turnIndex);
+}

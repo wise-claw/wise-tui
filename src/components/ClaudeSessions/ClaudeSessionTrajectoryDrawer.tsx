@@ -43,8 +43,6 @@ export function ClaudeSessionTrajectoryDrawer({
   const [jsonlLines, setJsonlLines] = useState<string[] | null>(null);
   const [jsonlLoading, setJsonlLoading] = useState(false);
   const [jsonlError, setJsonlError] = useState<string | null>(null);
-  const [visibleStart, setVisibleStart] = useState(0);
-  const [visibleEndExclusive, setVisibleEndExclusive] = useState(1);
   const [subagentOpen, setSubagentOpen] = useState(false);
   const [subagentPart, setSubagentPart] = useState<ToolUsePart | null>(null);
 
@@ -158,28 +156,6 @@ export function ClaudeSessionTrajectoryDrawer({
     ];
   }, [exportBundle, runExport]);
 
-  useEffect(() => {
-    const n = events.length;
-    const span = Math.min(48, Math.max(8, n));
-    if (n === 0) {
-      setVisibleStart(0);
-      setVisibleEndExclusive(1);
-      return;
-    }
-    // 原先固定对齐「会话尾部」：长会话时首屏是最后 span 条，开头的 user_input 被裁掉，「我」泳道看起来全空。
-    const tailStart = Math.max(0, n - span);
-    const firstUserIdx = events.findIndex((e) => e.kind === "user_input");
-    const start =
-      firstUserIdx >= 0 && firstUserIdx < tailStart ? Math.max(0, firstUserIdx) : tailStart;
-    setVisibleStart(start);
-    setVisibleEndExclusive(Math.min(start + span, n));
-  }, [events]);
-
-  const onRangeChange = useCallback((start: number, endExclusive: number) => {
-    setVisibleStart(start);
-    setVisibleEndExclusive(Math.max(start + 1, endExclusive));
-  }, []);
-
   const onSubagentDrilldown = useCallback((ev: SequenceEvent) => {
     if (!ev.drilldown) return;
     setSubagentPart(ev.drilldown.toolPart);
@@ -251,9 +227,6 @@ export function ClaudeSessionTrajectoryDrawer({
             ) : (
               <ClaudeSessionSequenceDiagram
                 events={events}
-                visibleStart={visibleStart}
-                visibleEndExclusive={visibleEndExclusive}
-                onVisibleRangeChange={onRangeChange}
                 onSubagentDrilldown={onSubagentDrilldown}
                 markInferredHttp
               />

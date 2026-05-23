@@ -4,6 +4,7 @@ import {
   Collapse,
   Drawer,
   Empty,
+  Modal,
   Dropdown,
   Segmented,
   Select,
@@ -12,7 +13,18 @@ import {
   Typography,
   message,
 } from "antd";
-import { CopyOutlined, DownloadOutlined, ExportOutlined } from "@ant-design/icons";
+import {
+  CopyOutlined,
+  DownloadOutlined,
+  CheckOutlined,
+  ClockCircleOutlined,
+  ToolOutlined,
+  GlobalOutlined,
+  DatabaseOutlined,
+  ApiOutlined,
+  DownOutlined,
+  RightOutlined,
+} from "@ant-design/icons";
 import { save } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ClaudeSession } from "../../types";
@@ -43,7 +55,10 @@ import {
   serializeSessionLinkExportBundle,
   stripSessionLinkDetailsForMetadataExport,
 } from "../../utils/sessionLinkExport";
-import { buildTrajectorySequenceModel } from "../../utils/claudeSessionTrajectorySequence";
+import {
+  buildTrajectorySequenceModel,
+  filterSequenceEventsForTurn,
+} from "../../utils/claudeSessionTrajectorySequence";
 import { ClaudeSessionSequenceDiagram } from "./ClaudeSessionSequenceDiagram";
 import "./SessionDataLinkDrawer.css";
 
@@ -108,6 +123,100 @@ function formatDuration(ms: number): string {
   return `${Math.floor(ms / 60_000)}m${Math.round((ms % 60_000) / 1000)}s`;
 }
 
+interface RecordItemProps {
+  record: SessionLinkRecord;
+}
+
+function RecordItem({ record }: RecordItemProps) {
+  const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const detailText = record.detail?.trim() ?? "";
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(detailText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      message.error("复制失败");
+    }
+  };
+
+  return (
+    <li
+      className={`app-session-data-link__record app-session-data-link__record--layer-${record.layer} ${
+        record.kind === "api_request" && !record.observed
+          ? "app-session-data-link__record--inferred"
+          : ""
+      }`}
+    >
+      <div className="app-session-data-link__record-node" />
+      <div className="app-session-data-link__record-body">
+        <div className="app-session-data-link__record-head">
+          <span className="app-session-data-link__record-time">
+            {formatTime(record.timestampMs)}
+          </span>
+          <span className="app-session-data-link__layer-dot" />
+          <span className="app-session-data-link__layer-text">
+            {LAYER_LABELS[record.layer]}
+          </span>
+          {record.layer === "http" ? (
+            <span className={`app-session-data-link__badge app-session-data-link__badge--${record.observed ? "observed" : "inferred"}`}>
+              {record.observed ? "已观测" : "推断"}
+            </span>
+          ) : null}
+          {shouldShowSourceTag(record.source) ? (
+            <span className="app-session-data-link__source-badge">
+              {record.source}
+            </span>
+          ) : null}
+
+          {detailText ? (
+            <span
+              className={`app-session-data-link__detail-toggle ${expanded ? "expanded" : ""}`}
+              onClick={() => setExpanded(!expanded)}
+            >
+              {expanded ? "收起" : "详情"}
+              {expanded ? <DownOutlined style={{ fontSize: 9, marginLeft: 2 }} /> : <RightOutlined style={{ fontSize: 9, marginLeft: 2 }} />}
+            </span>
+          ) : null}
+        </div>
+
+        <div className="app-session-data-link__record-summary">
+          {record.summary}
+        </div>
+
+        {detailText && expanded ? (
+          <div className="app-session-data-link__console">
+            <div className="app-session-data-link__console-header">
+              <div className="app-session-data-link__console-dots">
+                <span className="dot dot-red" />
+                <span className="dot dot-yellow" />
+                <span className="dot dot-green" />
+              </div>
+              <span className="app-session-data-link__console-title">
+                {record.layer === "http" || record.kind === "api_request" ? "HTTP TRACE" : "PAYLOAD"}
+              </span>
+              <span
+                className={`app-session-data-link__console-copy ${copied ? "copied" : ""}`}
+                onClick={handleCopy}
+              >
+                {copied ? <CheckOutlined style={{ color: "#10b981", fontSize: 10 }} /> : <CopyOutlined style={{ fontSize: 10 }} />}
+                <span className="copy-label">{copied ? "已复制" : "复制"}</span>
+              </span>
+            </div>
+            <pre className="app-session-data-link__console-body">
+              {formatRecordDetail(detailText, record)}
+            </pre>
+          </div>
+        ) : null}
+      </div>
+    </li>
+  );
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -120,8 +229,7 @@ export function SessionDataLinkDrawer({ open, onClose, session }: Props) {
   const [jsonlLines, setJsonlLines] = useState<string[] | null>(null);
   const [jsonlLoading, setJsonlLoading] = useState(false);
   const [jsonlError, setJsonlError] = useState<string | null>(null);
-  const [visibleStart, setVisibleStart] = useState(0);
-  const [visibleEndExclusive, setVisibleEndExclusive] = useState(1);
+  const [turnDiagramTurn, setTurnDiagramTurn] = useState<number | null>(null);
   const [proxySnap, setProxySnap] = useState(getClaudeLlmProxyStoreSnapshot);
 
   const messages = session?.messages ?? [];
@@ -229,25 +337,14 @@ export function SessionDataLinkDrawer({ open, onClose, session }: Props) {
     [buildExportBundle, filteredRecords],
   );
 
-  useEffect(() => {
-    const n = events.length;
-    const span = Math.min(48, Math.max(8, n));
-    if (n === 0) {
-      setVisibleStart(0);
-      setVisibleEndExclusive(1);
-      return;
-    }
-    const tailStart = Math.max(0, n - span);
-    const firstUserIdx = events.findIndex((e) => e.kind === "user_input");
-    const start =
-      firstUserIdx >= 0 && firstUserIdx < tailStart ? Math.max(0, firstUserIdx) : tailStart;
-    setVisibleStart(start);
-    setVisibleEndExclusive(Math.min(start + span, n));
-  }, [events]);
+  const turnDiagramEvents = useMemo(() => {
+    if (turnDiagramTurn == null) return [];
+    return filterSequenceEventsForTurn(events, turnDiagramTurn);
+  }, [events, turnDiagramTurn]);
 
-  const onRangeChange = useCallback((start: number, endExclusive: number) => {
-    setVisibleStart(start);
-    setVisibleEndExclusive(Math.max(start + 1, endExclusive));
+  const openTurnDiagram = useCallback((turn: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setTurnDiagramTurn(turn);
   }, []);
 
   const runExport = useCallback(
@@ -321,69 +418,26 @@ export function SessionDataLinkDrawer({ open, onClose, session }: Props) {
               )}
             </span>
           ),
+          extra: (
+            <Button
+              type="link"
+              size="small"
+              className="app-session-data-link__turn-diagram-btn"
+              onClick={(e) => openTurnDiagram(turn, e)}
+            >
+              时序图
+            </Button>
+          ),
           children: (
             <ul className="app-session-data-link__record-list">
-              {recs.map((r) => {
-                const detailText = r.detail?.trim() ?? "";
-                return (
-                  <li
-                    key={r.id}
-                    className={
-                      "app-session-data-link__record" +
-                      (r.kind === "api_request" && !r.observed
-                        ? " app-session-data-link__record--inferred"
-                        : "")
-                    }
-                  >
-                    <div className="app-session-data-link__record-head">
-                      <Text type="secondary" className="app-session-data-link__record-time">
-                        {formatTime(r.timestampMs)}
-                      </Text>
-                      <Tag bordered={false} className="app-session-data-link__pill" color={layerTagColor(r.layer)}>
-                        {LAYER_LABELS[r.layer]}
-                      </Tag>
-                      {r.layer === "http" ? (
-                        <Tag
-                          bordered={false}
-                          className="app-session-data-link__pill"
-                          color={r.observed ? "success" : "warning"}
-                        >
-                          {r.observed ? "已观测" : "推断"}
-                        </Tag>
-                      ) : null}
-                      {shouldShowSourceTag(r.source) ? (
-                        <Tag bordered={false} className="app-session-data-link__pill app-session-data-link__pill--muted">
-                          {r.source}
-                        </Tag>
-                      ) : null}
-                    </div>
-                    <div className="app-session-data-link__record-summary">{r.summary}</div>
-                    {detailText ? (
-                      <Collapse
-                        size="small"
-                        ghost
-                        className="app-session-data-link__record-detail-collapse"
-                        items={[
-                          {
-                            key: "detail",
-                            label: r.layer === "http" || r.kind === "api_request" ? "HTTP 详情" : "详情",
-                            children: (
-                              <pre className="app-session-data-link__record-detail">
-                                {formatRecordDetail(detailText, r)}
-                              </pre>
-                            ),
-                          },
-                        ]}
-                      />
-                    ) : null}
-                  </li>
-                );
-              })}
+              {recs.map((r) => (
+                <RecordItem key={r.id} record={r} />
+              ))}
             </ul>
           ),
         };
       });
-  }, [filteredRecords, turnMetrics]);
+  }, [filteredRecords, turnMetrics, openTurnDiagram]);
 
   const defaultActiveTurnKeys = useMemo(() => {
     if (collapseItems.length === 0) return [];
@@ -442,36 +496,80 @@ export function SessionDataLinkDrawer({ open, onClose, session }: Props) {
         ) : (
           <>
             <div className="app-session-data-link__toolbar">
-              <Segmented
-                size="small"
-                value={viewMode}
-                onChange={(v) => setViewMode(v as "list" | "diagram")}
-                options={[
-                  { label: "链路列表", value: "list" },
-                  { label: "序列图", value: "diagram" },
-                ]}
-              />
-              {viewMode === "list" ? (
-                <Select
+              <div className="app-session-data-link__toolbar-left">
+                <Segmented
                   size="small"
-                  className="app-session-data-link__filter"
-                  value={filterPreset}
-                  onChange={setFilterPreset}
-                  options={SESSION_LINK_FILTER_OPTIONS}
-                  aria-label="链路过滤"
+                  value={viewMode}
+                  onChange={(v) => setViewMode(v as "list" | "diagram")}
+                  options={[
+                    { label: "链路列表", value: "list" },
+                    { label: "序列图", value: "diagram" },
+                  ]}
                 />
-              ) : null}
-            </div>
+                {viewMode === "list" ? (
+                  <Select
+                    size="small"
+                    className="app-session-data-link__filter"
+                    value={filterPreset}
+                    onChange={setFilterPreset}
+                    options={SESSION_LINK_FILTER_OPTIONS}
+                    aria-label="链路过滤"
+                  />
+                ) : null}
+              </div>
 
-            <div className="app-session-data-link__stats">
-              <Text type="secondary">
-                轮次 {stats.turns} · 工具 {stats.tools} · HTTP {stats.httpObserved}
-                {stats.httpInferred > 0 ? ` / 推断 ${stats.httpInferred}` : ""}
-                {llmProxyRecords.length > 0 ? ` · 代理 ${llmProxyRecords.length}` : ""}
-                {fccAligned && fccTraces.length > 0 ? ` · FCC ${fccTraces.length}` : ""}
-                {fccAligned && fccLoading ? " · FCC…" : ""}
-                {diskStatusLine ? ` · ${diskStatusLine}` : ""}
-              </Text>
+              <div className="app-session-data-link__stats-bar">
+              <div className="app-session-data-link__stat-item">
+                <ClockCircleOutlined className="stat-icon stat-icon--turns" />
+                <span className="stat-label">轮次</span>
+                <span className="stat-num">{stats.turns}</span>
+              </div>
+              <div className="app-session-data-link__stat-divider" />
+              <div className="app-session-data-link__stat-item">
+                <ToolOutlined className="stat-icon stat-icon--tools" />
+                <span className="stat-label">工具</span>
+                <span className="stat-num">{stats.tools}</span>
+              </div>
+              <div className="app-session-data-link__stat-divider" />
+              <div className="app-session-data-link__stat-item">
+                <GlobalOutlined className="stat-icon stat-icon--http" />
+                <span className="stat-label">HTTP/推断</span>
+                <span className="stat-num">
+                  {stats.httpObserved}
+                  {stats.httpInferred > 0 ? <span className="stat-num-sub">/{stats.httpInferred}</span> : null}
+                </span>
+              </div>
+              {llmProxyRecords.length > 0 ? (
+                <>
+                  <div className="app-session-data-link__stat-divider" />
+                  <div className="app-session-data-link__stat-item">
+                    <ApiOutlined className="stat-icon stat-icon--proxy" />
+                    <span className="stat-label">代理</span>
+                    <span className="stat-num">{llmProxyRecords.length}</span>
+                  </div>
+                </>
+              ) : null}
+              {fccAligned && (fccTraces.length > 0 || fccLoading) ? (
+                <>
+                  <div className="app-session-data-link__stat-divider" />
+                  <div className="app-session-data-link__stat-item">
+                    <DatabaseOutlined className="stat-icon stat-icon--fcc" />
+                    <span className="stat-label">FCC</span>
+                    <span className="stat-num">{fccLoading ? "..." : fccTraces.length}</span>
+                  </div>
+                </>
+              ) : null}
+              {diskStatusLine ? (
+                <>
+                  <div className="app-session-data-link__stat-divider" />
+                  <div className="app-session-data-link__stat-item">
+                    <DatabaseOutlined className="stat-icon stat-icon--disk" />
+                    <span className="stat-label">JSONL行</span>
+                    <span className="stat-num">{jsonlLines ? jsonlLines.length : "..."}</span>
+                  </div>
+                </>
+              ) : null}
+              </div>
             </div>
 
             {showFccHint ? (
@@ -494,7 +592,7 @@ export function SessionDataLinkDrawer({ open, onClose, session }: Props) {
             ) : null}
 
             {!canLoadDisk ? (
-              <div className="app-session-data-link__stats">
+              <div className="app-session-data-link__stats-fallback">
                 <Text type="secondary">无会话 ID，仅内存消息</Text>
               </div>
             ) : null}
@@ -514,30 +612,33 @@ export function SessionDataLinkDrawer({ open, onClose, session }: Props) {
               ) : events.length === 0 ? (
                 <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无序列事件" />
               ) : (
-                <ClaudeSessionSequenceDiagram
-                  events={events}
-                  visibleStart={visibleStart}
-                  visibleEndExclusive={visibleEndExclusive}
-                  onVisibleRangeChange={onRangeChange}
-                  markInferredHttp
-                />
+                <ClaudeSessionSequenceDiagram events={events} markInferredHttp />
               )}
             </div>
-
-            <footer className="app-session-data-link__foot">
-              <Typography.Link
-                href="design/session-data-link-observability/README.md"
-                onClick={(e) => {
-                  e.preventDefault();
-                  message.info("方案：design/session-data-link-observability/");
-                }}
-              >
-                <ExportOutlined /> 方案说明
-              </Typography.Link>
-            </footer>
           </>
         )}
       </div>
+
+      <Modal
+        title={turnDiagramTurn != null ? `轮次 ${turnDiagramTurn} · 时序图` : "时序图"}
+        open={turnDiagramTurn != null}
+        onCancel={() => setTurnDiagramTurn(null)}
+        footer={null}
+        width={920}
+        destroyOnClose
+        className="app-session-data-link-turn-diagram-modal"
+        styles={{ body: { padding: 0 } }}
+      >
+        {turnDiagramEvents.length === 0 ? (
+          <Empty
+            className="app-session-data-link-turn-diagram-modal__empty"
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description="该轮次暂无序列事件"
+          />
+        ) : (
+          <ClaudeSessionSequenceDiagram events={turnDiagramEvents} markInferredHttp />
+        )}
+      </Modal>
     </Drawer>
   );
 }
