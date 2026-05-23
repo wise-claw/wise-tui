@@ -11,6 +11,7 @@ import type {
   WorkflowTemplateItem,
 } from "../../types";
 import type { ReconcileProjectMode } from "../../constants/reconcileProjectMode";
+import type { LeftSidebarHubQuickEntryId } from "../../constants/leftSidebarHubQuickEntries";
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
 import type { GitPanelOpenFileOptions } from "../GitPanel";
 import type { TaskCardsNavProps } from "../TaskCardsNav";
@@ -34,12 +35,17 @@ export interface LeftSidebarProps {
   authorDisabled?: boolean;
   authorDisabledTooltip?: string;
   onOpenAuthor: () => void;
+  leftSidebarHubQuickEntryIds?: readonly LeftSidebarHubQuickEntryId[];
   mcpHubActive?: boolean;
   onOpenMcpHub?: () => void;
   skillsHubActive?: boolean;
   onOpenSkillsHub?: () => void;
   automationHubActive?: boolean;
   onOpenAutomationHub?: () => void;
+  assistantsHubActive?: boolean;
+  onOpenAssistantsHub?: () => void;
+  claudePluginsHubActive?: boolean;
+  onOpenClaudePluginsHub?: () => void;
   workspaceCreateRequest?: number;
   standaloneRepoAddRequest?: number;
   onProjectSelect: (projectId: string) => void;

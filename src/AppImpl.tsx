@@ -83,6 +83,7 @@ import {
   useMonitorOverview,
 } from "./hooks/useMonitorOverview";
 import { useIntervalSyncedState } from "./hooks/useIntervalSyncedState";
+import { useLeftSidebarHubQuickEntries } from "./hooks/useLeftSidebarHubQuickEntries";
 import { useScheduledClaudeTaskRunner } from "./hooks/useScheduledClaudeTaskRunner";
 import { MONITOR_SESSIONS_SYNC_INTERVAL_MS } from "./constants/monitorUi";
 import { invalidateWorkflowRunCacheForRepository } from "./hooks/useWorkflowRun";
@@ -1181,6 +1182,21 @@ export default function App() {
     setSearchOpen(false);
     viewMode.enter(cockpitView(undefined, "automation"));
   }, [viewMode]);
+  const openAssistantsFromSidebar = useCallback(() => {
+    if (!activeProjectId && activeRepositoryId != null) {
+      message.warning("Standalone Repo 不支持工作台配置；升格为 Workspace 后启用");
+      return;
+    }
+    enterAuthorPane("assistants");
+  }, [activeProjectId, activeRepositoryId, enterAuthorPane]);
+  const openClaudePluginsFromSidebar = useCallback(() => {
+    if (!activeProjectId && activeRepositoryId != null) {
+      message.warning("Standalone Repo 不支持工作台配置；升格为 Workspace 后启用");
+      return;
+    }
+    enterAuthorPane("claude-plugins");
+  }, [activeProjectId, activeRepositoryId, enterAuthorPane]);
+  const leftSidebarHubQuickEntries = useLeftSidebarHubQuickEntries();
   const openBuiltinAssistant = useCallback((assistantId: string) => {
     const trimmed = assistantId.trim();
     if (!trimmed) return;
@@ -2278,12 +2294,17 @@ export default function App() {
           }
           enterAuthorPane(lastAuthorPane);
         },
+        leftSidebarHubQuickEntryIds: leftSidebarHubQuickEntries.enabledEntryIds,
         mcpHubActive: viewMode.view.kind === "cockpit" && viewMode.view.hubPane === "mcp",
         onOpenMcpHub: openMcpHubFromSidebar,
         skillsHubActive: viewMode.view.kind === "cockpit" && viewMode.view.hubPane === "skills",
         onOpenSkillsHub: openSkillsHubFromSidebar,
         automationHubActive: viewMode.view.kind === "cockpit" && viewMode.view.hubPane === "automation",
         onOpenAutomationHub: openAutomationHubFromSidebar,
+        assistantsHubActive: viewMode.view.kind === "author" && viewMode.view.pane === "assistants",
+        onOpenAssistantsHub: openAssistantsFromSidebar,
+        claudePluginsHubActive: viewMode.view.kind === "author" && viewMode.view.pane === "claude-plugins",
+        onOpenClaudePluginsHub: openClaudePluginsFromSidebar,
         workspaceCreateRequest,
         standaloneRepoAddRequest,
         onProjectSelect: handleProjectSelectLeavingMcpHub,

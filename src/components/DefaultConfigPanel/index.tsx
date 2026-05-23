@@ -1,13 +1,16 @@
-import { Typography } from "antd";
+import { Checkbox, Typography } from "antd";
 import type { ClaudeSessionConnectionKind } from "../../constants/claudeConnection";
+import { LEFT_SIDEBAR_HUB_QUICK_ENTRY_LABELS } from "../../constants/leftSidebarHubQuickEntries";
+import type { LeftSidebarHubQuickEntryId } from "../../constants/leftSidebarHubQuickEntries";
 import { useClaudeConnectionModeSetting } from "../ClaudeConfigDirPanel/useClaudeConnectionModeSetting";
 import { DefaultConfigOptionPick } from "./DefaultConfigOptionPick";
+import { useLeftSidebarHubQuickEntriesSetting } from "./useLeftSidebarHubQuickEntriesSetting";
 import { useRightPanelDefaultSetting } from "./useRightPanelDefaultSetting";
 import { useTopbarChromeDefaultSetting } from "./useTopbarChromeDefaultSetting";
 import "./index.css";
 
 const DEFAULT_CONFIG_NOTES = [
-  "设置写入 SQLite app_settings（wise.defaultConfig.v1），保存后立即作用于主会话顶栏。",
+  "设置写入 SQLite app_settings（wise.defaultConfig.v1），保存后立即作用于主会话顶栏与左栏快捷入口。",
   "Free Claude Code 的安装、启停与 Claude 对齐请在主会话顶栏 FCC 图标弹窗中操作；此处仅控制图标是否显示。",
   "长驻模式使用 --input-format stream-json，与终端 CLI 共享 MCP / Skills / Hooks。",
   "OMC 直连批量、PRD 拆分等编排仍使用独立 -p 子进程，不受会话默认影响。",
@@ -20,6 +23,7 @@ export function DefaultConfigPanel() {
   const connection = useClaudeConnectionModeSetting();
   const rightPanel = useRightPanelDefaultSetting();
   const topbarChrome = useTopbarChromeDefaultSetting();
+  const hubQuickEntries = useLeftSidebarHubQuickEntriesSetting();
 
   return (
     <div className="app-default-config-panel">
@@ -65,6 +69,29 @@ export function DefaultConfigPanel() {
               ]}
               onChange={(value) => {
                 void rightPanel.save(value === "collapsed");
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="app-default-config-row app-default-config-row--hub-quick" aria-label="左栏快捷入口">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">左栏快捷入口</span>
+            <span className="app-default-config-row__hint">
+              勾选后显示在左侧栏顶部；MCP / 技能 / 自动化进入 Cockpit，助手 / 插件市场进入工作台配置
+            </span>
+          </div>
+          <div className="app-default-config-row__control app-default-config-row__control--hub-quick">
+            <Checkbox.Group
+              className="app-default-config-hub-quick-checkboxes"
+              disabled={hubQuickEntries.loading || hubQuickEntries.saving}
+              value={hubQuickEntries.selected}
+              options={hubQuickEntries.allEntryIds.map((id) => ({
+                label: LEFT_SIDEBAR_HUB_QUICK_ENTRY_LABELS[id],
+                value: id,
+              }))}
+              onChange={(values) => {
+                void hubQuickEntries.save(values as LeftSidebarHubQuickEntryId[]);
               }}
             />
           </div>

@@ -473,18 +473,6 @@ export function McpHub({ repositoryPath, onClose }: Props) {
       <Button size="small" type="primary" icon={<PlusOutlined />} onClick={() => setAddOpen(true)}>
         添加
       </Button>
-      {onClose ? (
-        <Tooltip title="关闭" mouseEnterDelay={0.35}>
-          <Button
-            type="text"
-            size="small"
-            className="app-mcp-hub-close-btn"
-            icon={<CloseOutlined />}
-            aria-label="关闭"
-            onClick={onClose}
-          />
-        </Tooltip>
-      ) : null}
     </>
   );
 

@@ -1,17 +1,30 @@
 import type { ReactNode } from "react";
-import { McpNavIcon, SkillsNavIcon, AutomationNavIcon } from "./SidebarIcons";
+import type { LeftSidebarHubQuickEntryId } from "../../constants/leftSidebarHubQuickEntries";
+import { LEFT_SIDEBAR_HUB_QUICK_ENTRY_LABELS, LEFT_SIDEBAR_HUB_QUICK_ENTRY_ORDER } from "../../constants/leftSidebarHubQuickEntries";
+import {
+  AssistantNavIcon,
+  AutomationNavIcon,
+  McpNavIcon,
+  PluginMarketNavIcon,
+  SkillsNavIcon,
+} from "./SidebarIcons";
 
 export interface LeftSidebarHubQuickEntriesProps {
+  enabledEntryIds: readonly LeftSidebarHubQuickEntryId[];
   mcpHubActive?: boolean;
   skillsHubActive?: boolean;
   automationHubActive?: boolean;
+  assistantsHubActive?: boolean;
+  claudePluginsHubActive?: boolean;
   onOpenMcpHub?: () => void;
   onOpenSkillsHub?: () => void;
   onOpenAutomationHub?: () => void;
+  onOpenAssistantsHub?: () => void;
+  onOpenClaudePluginsHub?: () => void;
 }
 
 interface HubQuickEntry {
-  key: string;
+  key: LeftSidebarHubQuickEntryId;
   label: string;
   icon: ReactNode;
   active: boolean;
@@ -41,43 +54,66 @@ function HubQuickButton({ entry }: { entry: HubQuickEntry }) {
   );
 }
 
-export function LeftSidebarHubQuickEntries({
-  mcpHubActive = false,
-  skillsHubActive = false,
-  automationHubActive = false,
-  onOpenMcpHub,
-  onOpenSkillsHub,
-  onOpenAutomationHub,
-}: LeftSidebarHubQuickEntriesProps) {
-  const entries: HubQuickEntry[] = [];
+function buildEntry(
+  id: LeftSidebarHubQuickEntryId,
+  props: LeftSidebarHubQuickEntriesProps,
+): HubQuickEntry | null {
+  switch (id) {
+    case "mcp":
+      if (!props.onOpenMcpHub) return null;
+      return {
+        key: id,
+        label: LEFT_SIDEBAR_HUB_QUICK_ENTRY_LABELS[id],
+        icon: <McpNavIcon />,
+        active: Boolean(props.mcpHubActive),
+        onClick: props.onOpenMcpHub,
+      };
+    case "skills":
+      if (!props.onOpenSkillsHub) return null;
+      return {
+        key: id,
+        label: LEFT_SIDEBAR_HUB_QUICK_ENTRY_LABELS[id],
+        icon: <SkillsNavIcon />,
+        active: Boolean(props.skillsHubActive),
+        onClick: props.onOpenSkillsHub,
+      };
+    case "automation":
+      if (!props.onOpenAutomationHub) return null;
+      return {
+        key: id,
+        label: LEFT_SIDEBAR_HUB_QUICK_ENTRY_LABELS[id],
+        icon: <AutomationNavIcon />,
+        active: Boolean(props.automationHubActive),
+        onClick: props.onOpenAutomationHub,
+      };
+    case "assistants":
+      if (!props.onOpenAssistantsHub) return null;
+      return {
+        key: id,
+        label: LEFT_SIDEBAR_HUB_QUICK_ENTRY_LABELS[id],
+        icon: <AssistantNavIcon />,
+        active: Boolean(props.assistantsHubActive),
+        onClick: props.onOpenAssistantsHub,
+      };
+    case "claude-plugins":
+      if (!props.onOpenClaudePluginsHub) return null;
+      return {
+        key: id,
+        label: LEFT_SIDEBAR_HUB_QUICK_ENTRY_LABELS[id],
+        icon: <PluginMarketNavIcon />,
+        active: Boolean(props.claudePluginsHubActive),
+        onClick: props.onOpenClaudePluginsHub,
+      };
+    default:
+      return null;
+  }
+}
 
-  if (onOpenMcpHub) {
-    entries.push({
-      key: "mcp",
-      label: "MCP",
-      icon: <McpNavIcon />,
-      active: mcpHubActive,
-      onClick: onOpenMcpHub,
-    });
-  }
-  if (onOpenSkillsHub) {
-    entries.push({
-      key: "skills",
-      label: "技能",
-      icon: <SkillsNavIcon />,
-      active: skillsHubActive,
-      onClick: onOpenSkillsHub,
-    });
-  }
-  if (onOpenAutomationHub) {
-    entries.push({
-      key: "automation",
-      label: "自动化",
-      icon: <AutomationNavIcon />,
-      active: automationHubActive,
-      onClick: onOpenAutomationHub,
-    });
-  }
+export function LeftSidebarHubQuickEntries(props: LeftSidebarHubQuickEntriesProps) {
+  const enabled = new Set(props.enabledEntryIds);
+  const entries = LEFT_SIDEBAR_HUB_QUICK_ENTRY_ORDER.map((id) => (enabled.has(id) ? buildEntry(id, props) : null)).filter(
+    (item): item is HubQuickEntry => item != null,
+  );
 
   if (entries.length === 0) return null;
 

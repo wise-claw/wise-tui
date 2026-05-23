@@ -64,12 +64,17 @@ export function LeftSidebar({
   authorDisabled,
   authorDisabledTooltip,
   onOpenAuthor,
+  leftSidebarHubQuickEntryIds = [],
   mcpHubActive = false,
   onOpenMcpHub,
   skillsHubActive = false,
   onOpenSkillsHub,
   automationHubActive = false,
   onOpenAutomationHub,
+  assistantsHubActive = false,
+  onOpenAssistantsHub,
+  claudePluginsHubActive = false,
+  onOpenClaudePluginsHub,
   workspaceCreateRequest,
   standaloneRepoAddRequest,
   onProjectSelect,
@@ -513,12 +518,17 @@ export function LeftSidebar({
       ) : null}
 
       <LeftSidebarHubQuickEntries
+        enabledEntryIds={leftSidebarHubQuickEntryIds}
         mcpHubActive={mcpHubActive}
         skillsHubActive={skillsHubActive}
         automationHubActive={automationHubActive}
+        assistantsHubActive={assistantsHubActive}
+        claudePluginsHubActive={claudePluginsHubActive}
         onOpenMcpHub={onOpenMcpHub}
         onOpenSkillsHub={onOpenSkillsHub}
         onOpenAutomationHub={onOpenAutomationHub}
+        onOpenAssistantsHub={onOpenAssistantsHub}
+        onOpenClaudePluginsHub={onOpenClaudePluginsHub}
       />
 
       <div

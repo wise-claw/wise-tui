@@ -143,6 +143,33 @@ export function AutomationNavIcon() {
   );
 }
 
+export function AssistantNavIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <circle cx="8" cy="5.5" r="2.25" stroke="currentColor" strokeWidth="1.2" />
+      <path
+        d="M4 13c0-2.2 1.8-4 4-4s4 1.8 4 4"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+export function PluginMarketNavIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <path
+        d="M3 3h4v4H3V3zm6 0h4v4H9V3zM3 9h4v4H3V9zm6 0h4v4H9V9z"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 /** 左栏「工作流」入口：与 Claude Code 团队编排画布语义一致 */
 export function WorkflowStudioNavIcon() {
   return (

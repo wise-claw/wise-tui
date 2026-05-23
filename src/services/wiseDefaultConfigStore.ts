@@ -3,6 +3,11 @@
  * 首次加载会从 legacy 分键与 `localStorage` 一次性迁入并清除旧副本。
  */
 import type { ClaudeSession } from "../types";
+import {
+  DEFAULT_LEFT_SIDEBAR_HUB_QUICK_ENTRIES,
+  normalizeLeftSidebarHubQuickEntries,
+  type LeftSidebarHubQuickEntryId,
+} from "../constants/leftSidebarHubQuickEntries";
 import { RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK, RIGHT_PANEL_DEFAULT_COLLAPSED_KEY } from "../utils/rightPanelStorage";
 import { deleteAppSetting, getAppSetting, setAppSetting, setAppSettingJson } from "./appSettingsStore";
 
@@ -28,6 +33,8 @@ export const WISE_RIGHT_PANEL_DEFAULT_CHANGED = "wise:right-panel-default-change
 
 export const WISE_TOPBAR_CHROME_DEFAULT_CHANGED = "wise:topbar-chrome-default-changed";
 
+export const WISE_LEFT_SIDEBAR_HUB_QUICK_ENTRIES_CHANGED = "wise:left-sidebar-hub-quick-entries-changed";
+
 export interface WiseDefaultConfigV1 {
   version: 1;
   connectionKind: ClaudeSessionConnectionKind;
@@ -40,6 +47,8 @@ export interface WiseDefaultConfigV1 {
   showFccTrafficTopbar: boolean;
   /** 主会话顶栏全链路分析图标；默认隐藏。 */
   showSessionDataLinkTopbar: boolean;
+  /** 左栏 AI 工作台快捷入口；默认 MCP、技能、自动化。 */
+  leftSidebarHubQuickEntries: LeftSidebarHubQuickEntryId[];
 }
 
 const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
@@ -50,6 +59,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   showFccTopbar: true,
   showFccTrafficTopbar: false,
   showSessionDataLinkTopbar: false,
+  leftSidebarHubQuickEntries: [...DEFAULT_LEFT_SIDEBAR_HUB_QUICK_ENTRIES],
 };
 
 function normalizeBoolean(raw: unknown, fallback = false): boolean {
@@ -92,6 +102,7 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
           : normalizeBoolean(parsed.showFccTopbar),
       showFccTrafficTopbar: normalizeBoolean(parsed.showFccTrafficTopbar),
       showSessionDataLinkTopbar: normalizeBoolean(parsed.showSessionDataLinkTopbar),
+      leftSidebarHubQuickEntries: normalizeLeftSidebarHubQuickEntries(parsed.leftSidebarHubQuickEntries),
     };
   } catch {
     return null;
@@ -199,7 +210,17 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     showFccTopbar: DEFAULT_CONFIG.showFccTopbar,
     showFccTrafficTopbar: DEFAULT_CONFIG.showFccTrafficTopbar,
     showSessionDataLinkTopbar: DEFAULT_CONFIG.showSessionDataLinkTopbar,
+    leftSidebarHubQuickEntries: [...DEFAULT_LEFT_SIDEBAR_HUB_QUICK_ENTRIES],
   };
+}
+
+function dispatchLeftSidebarHubQuickEntriesChanged(entries: LeftSidebarHubQuickEntryId[]): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_LEFT_SIDEBAR_HUB_QUICK_ENTRIES_CHANGED, {
+      detail: { leftSidebarHubQuickEntries: entries },
+    }),
+  );
 }
 
 /** 将旧版代码默认写入库的 `oneshot` 升为当前产品默认 `streaming`（仅执行一次）。 */
@@ -242,6 +263,7 @@ export async function saveWiseDefaultConfig(
       | "showFccTopbar"
       | "showFccTrafficTopbar"
       | "showSessionDataLinkTopbar"
+      | "leftSidebarHubQuickEntries"
     >
   >,
 ): Promise<WiseDefaultConfigV1> {
@@ -256,6 +278,10 @@ export async function saveWiseDefaultConfig(
     showFccTrafficTopbar: patch.showFccTrafficTopbar ?? current.showFccTrafficTopbar,
     showSessionDataLinkTopbar:
       patch.showSessionDataLinkTopbar ?? current.showSessionDataLinkTopbar,
+    leftSidebarHubQuickEntries:
+      patch.leftSidebarHubQuickEntries !== undefined
+        ? normalizeLeftSidebarHubQuickEntries(patch.leftSidebarHubQuickEntries)
+        : current.leftSidebarHubQuickEntries,
   };
   if (patch.connectionKind !== undefined) {
     next.connectionKind = normalizeConnectionKind(patch.connectionKind) ?? current.connectionKind;
@@ -271,6 +297,9 @@ export async function saveWiseDefaultConfig(
   }
   if (patch.showSessionDataLinkTopbar !== undefined) {
     next.showSessionDataLinkTopbar = normalizeBoolean(patch.showSessionDataLinkTopbar);
+  }
+  if (patch.leftSidebarHubQuickEntries !== undefined) {
+    next.leftSidebarHubQuickEntries = normalizeLeftSidebarHubQuickEntries(patch.leftSidebarHubQuickEntries);
   }
   await persistConfig(next);
   await deleteLegacyAppSettings();
@@ -305,8 +334,24 @@ export async function saveWiseDefaultConfig(
       });
     }
   }
+  if (
+    patch.leftSidebarHubQuickEntries !== undefined &&
+    JSON.stringify(next.leftSidebarHubQuickEntries) !== JSON.stringify(current.leftSidebarHubQuickEntries)
+  ) {
+    dispatchLeftSidebarHubQuickEntriesChanged(next.leftSidebarHubQuickEntries);
+  }
 
   return next;
+}
+
+export async function loadLeftSidebarHubQuickEntriesFromStore(): Promise<LeftSidebarHubQuickEntryId[]> {
+  return [...(await loadWiseDefaultConfig()).leftSidebarHubQuickEntries];
+}
+
+export async function saveLeftSidebarHubQuickEntriesToStore(
+  entries: LeftSidebarHubQuickEntryId[],
+): Promise<void> {
+  await saveWiseDefaultConfig({ leftSidebarHubQuickEntries: entries });
 }
 
 export async function loadDefaultClaudeConnectionKindFromStore(): Promise<ClaudeSessionConnectionKind> {

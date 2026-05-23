@@ -86,6 +86,7 @@ describe("wiseDefaultConfigStore", () => {
     expect(config.connectionKind).toBe("streaming");
     expect(config.rightPanelDefaultCollapsed).toBe(false);
     expect(config.showLlmProxyTopbar).toBe(false);
+    expect(config.leftSidebarHubQuickEntries).toEqual(["mcp", "skills", "automation"]);
     expect(setAppSetting).toHaveBeenCalled();
     const payload = JSON.parse(String(setAppSetting.mock.calls[0]?.[1]));
     expect(payload).toMatchObject({
@@ -93,6 +94,7 @@ describe("wiseDefaultConfigStore", () => {
       connectionKind: "streaming",
       rightPanelDefaultCollapsed: false,
       showLlmProxyTopbar: false,
+      leftSidebarHubQuickEntries: ["mcp", "skills", "automation"],
     });
   });
 
