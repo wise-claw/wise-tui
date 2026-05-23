@@ -7,6 +7,7 @@ import {
   appendComposerStreamingSpeechPcm,
   cancelComposerStreamingSpeech,
   finishComposerStreamingSpeech,
+  isComposerLocalSpeechPlatform,
   isComposerLocalSpeechPreferred,
   listenComposerSpeechTranscript,
   openComposerSpeechRecognitionPrivacySettings,
@@ -16,6 +17,7 @@ import {
   ComposerAudioRecorder,
   float32ToBase64,
   mergeFloat32Chunks,
+  resampleFloat32Linear,
 } from "../utils/composerAudioCapture";
 import {
   collectLiveSpeechTranscript,
@@ -61,6 +63,8 @@ export function useComposerSpeechDictation({
   const wantListeningRef = useRef(false);
   const recorderRef = useRef<ComposerAudioRecorder | null>(null);
   const streamSessionIdRef = useRef<string | null>(null);
+  const targetSampleRateRef = useRef(16_000);
+  const captureSampleRateRef = useRef(16_000);
   const pcmPendingRef = useRef<Float32Array[]>([]);
   const pcmFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onUpdateRef = useRef(onTranscriptUpdate);
@@ -103,7 +107,13 @@ export function useComposerSpeechDictation({
     pcmPendingRef.current = [];
     if (!sessionId || pending.length === 0) return;
     const merged = mergeFloat32Chunks(pending);
-    void appendComposerStreamingSpeechPcm(sessionId, float32ToBase64(merged)).catch((e) => {
+    const targetRate = targetSampleRateRef.current;
+    const captureRate = captureSampleRateRef.current;
+    const pcm =
+      captureRate > 0 && targetRate > 0 && captureRate !== targetRate
+        ? resampleFloat32Linear(merged, captureRate, targetRate)
+        : merged;
+    void appendComposerStreamingSpeechPcm(sessionId, float32ToBase64(pcm)).catch((e) => {
       const msg = e instanceof Error ? e.message : String(e);
       onErrorRef.current?.(msg || "推送音频失败");
     });
@@ -236,14 +246,19 @@ export function useComposerSpeechDictation({
     try {
       const { sessionId, sampleRate } = await startComposerStreamingSpeech(lang);
       streamSessionIdRef.current = sessionId;
+      targetSampleRateRef.current = sampleRate;
       await recorder.startStreaming({
         sampleRate,
-        onPcmChunk: (chunk) => {
+        onPcmChunk: (chunk, captureRate) => {
           if (!streamSessionIdRef.current) return;
+          if (captureRate > 0) {
+            captureSampleRateRef.current = captureRate;
+          }
           pcmPendingRef.current.push(chunk);
           schedulePcmFlush();
         },
       });
+      captureSampleRateRef.current = recorder.getSampleRate();
       setListening(true);
     } catch (e) {
       cancelLocalStream();
@@ -302,11 +317,15 @@ export function useComposerSpeechDictation({
     void start();
   }, [engine, finishLocalStream, listening, start, stop, transcribing]);
 
+  /** macOS 本地转写事件：挂载即订阅，避免 engine 判定完成前首次听写丢事件。 */
   useEffect(() => {
-    if (engine !== "local") return;
+    if (!isComposerLocalSpeechPlatform()) return;
     let unlisten: (() => void) | undefined;
-    void listenComposerSpeechTranscript(({ sessionId, transcript, isFinal }) => {
+    void listenComposerSpeechTranscript(({ sessionId, transcript, isFinal, error }) => {
       if (sessionId !== streamSessionIdRef.current) return;
+      if (error?.trim()) {
+        onErrorRef.current?.(error.trim());
+      }
       if (transcript) {
         onUpdateRef.current({ text: transcript, isFinal });
       }
@@ -322,7 +341,7 @@ export function useComposerSpeechDictation({
     return () => {
       unlisten?.();
     };
-  }, [engine]);
+  }, []);
 
   useEffect(() => {
     if (!enabled && (listening || wantListeningRef.current || transcribing)) {

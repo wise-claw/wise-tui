@@ -5,4 +5,6 @@ export interface ComposerSpeechTranscriptPayload {
   sessionId: string;
   transcript: string;
   isFinal: boolean;
+  /** 识别失败时的本地化说明（final 且无 transcript 时常见）。 */
+  error?: string;
 }

@@ -463,11 +463,11 @@ function ComposerInner({
     },
     setPlainAndCursor: (plain: string, c: number) => {
       ignoreNextContentSyncRef.current = true;
-      lastEditorPlainRef.current = plain;
       cursorRef.current = c;
       set(singleTextPrompt(plain), c);
       scheduleSafeAiChatSetContent(() => aiChatRef.current, plain, () => {
         repairTiptapTrailingSpaceIfNeeded(aiChatRef.current, plain);
+        lastEditorPlainRef.current = plain;
         aiChatRef.current?.focusEditor?.("end");
       });
     },

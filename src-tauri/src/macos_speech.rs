@@ -42,7 +42,13 @@ fn speech_recognition_usage_description_present() -> bool {
         return false;
     };
     let key = NSString::from_str("NSSpeechRecognitionUsageDescription");
-    info.objectForKey(&key).is_some()
+    let Some(value) = info.objectForKey(&key) else {
+        return false;
+    };
+    let Some(description) = value.downcast_ref::<NSString>() else {
+        return false;
+    };
+    !description.to_string().trim().is_empty()
 }
 
 #[cfg(target_os = "macos")]
@@ -59,8 +65,9 @@ pub(crate) fn ensure_speech_authorization() -> Result<SFSpeechRecognizerAuthoriz
 
     if !speech_recognition_usage_description_present() {
         return Err(
-            "应用未声明语音识别隐私说明（NSSpeechRecognitionUsageDescription）。\
-             请完整重新编译 Wise（cargo clean 后重新运行 tauri dev），勿在开发态重复嵌入 Info.plist。"
+            "当前运行的 Wise 可执行文件未嵌入语音识别隐私说明（NSSpeechRecognitionUsageDescription）。\
+             请停止 tauri dev 后执行：cd src-tauri && cargo clean -p wise && cd .. && bun run tauri:dev。\
+             仅重编 lib 不会刷新 __info_plist，必须重新链接 wise 二进制。"
                 .to_string(),
         );
     }

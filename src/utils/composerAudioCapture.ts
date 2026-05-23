@@ -58,8 +58,30 @@ export function mergeFloat32Chunks(chunks: Float32Array[]): Float32Array {
 }
 
 export function float32ToBase64(samples: Float32Array): string {
-  const copy = new Float32Array(samples);
-  return arrayBufferToBase64(copy.buffer);
+  const bytes = samples.buffer.slice(samples.byteOffset, samples.byteOffset + samples.byteLength);
+  return arrayBufferToBase64(bytes);
+}
+
+/** 线性插值重采样，将 WebView 实际采集率对齐到 Speech `nativeAudioFormat`。 */
+export function resampleFloat32Linear(
+  samples: Float32Array,
+  fromRate: number,
+  toRate: number,
+): Float32Array {
+  if (samples.length === 0 || fromRate <= 0 || toRate <= 0 || fromRate === toRate) {
+    return samples;
+  }
+  const ratio = toRate / fromRate;
+  const outLen = Math.max(1, Math.round(samples.length * ratio));
+  const out = new Float32Array(outLen);
+  for (let i = 0; i < outLen; i += 1) {
+    const srcPos = i / ratio;
+    const i0 = Math.floor(srcPos);
+    const i1 = Math.min(samples.length - 1, i0 + 1);
+    const t = srcPos - i0;
+    out[i] = (samples[i0] ?? 0) * (1 - t) + (samples[i1] ?? 0) * t;
+  }
+  return out;
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
@@ -128,8 +150,12 @@ export class ComposerAudioRecorder {
       throw new Error("当前环境不支持音频处理。");
     }
 
-    const sampleRate = preferredSampleRate ?? TARGET_SAMPLE_RATE;
-    this.context = new Ctx({ sampleRate });
+    // 不在此强制 sampleRate：WebView 常忽略构造参数（仍用 44.1/48kHz），由调用方重采样到 Speech 原生格式。
+    void preferredSampleRate;
+    this.context = new Ctx();
+    if (this.context.state === "suspended") {
+      await this.context.resume();
+    }
     this.source = this.context.createMediaStreamSource(this.stream);
     const processor = this.context.createScriptProcessor(4096, 1, 1) as ScriptProcessorNodeLike;
     this.processor = processor;

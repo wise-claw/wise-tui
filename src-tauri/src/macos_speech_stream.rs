@@ -7,7 +7,7 @@ use base64::Engine;
 use block2::RcBlock;
 use objc2::rc::Retained;
 use objc2::AnyThread;
-use objc2_avf_audio::{AVAudioFormat, AVAudioPCMBuffer};
+use objc2_avf_audio::{AVAudioCommonFormat, AVAudioFormat, AVAudioPCMBuffer};
 use objc2_speech::{
     SFSpeechAudioBufferRecognitionRequest, SFSpeechRecognitionRequest,
     SFSpeechRecognitionResult, SFSpeechRecognitionTask, SFSpeechRecognizer,
@@ -25,6 +25,8 @@ pub struct ComposerSpeechTranscriptPayload {
     pub session_id: String,
     pub transcript: String,
     pub is_final: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -83,6 +85,156 @@ fn decode_pcm_f32_base64(pcm_base64: &str) -> Result<Vec<f32>, String> {
     Ok(out)
 }
 
+fn f32_sample_to_i16(sample: f32) -> i16 {
+    let clamped = sample.clamp(-1.0, 1.0);
+    if clamped < 0.0 {
+        (clamped * 32_768.0).round() as i16
+    } else {
+        (clamped * 32_767.0).round() as i16
+    }
+}
+
+fn f32_sample_to_i32(sample: f32) -> i32 {
+    let clamped = sample.clamp(-1.0, 1.0);
+    if clamped < 0.0 {
+        (clamped * 2_147_483_648.0).round() as i32
+    } else {
+        (clamped * 2_147_483_647.0).round() as i32
+    }
+}
+
+fn write_f32_samples_to_pcm_buffer(
+    buffer: &AVAudioPCMBuffer,
+    samples: &[f32],
+    format: &AVAudioFormat,
+) -> Result<(), String> {
+    let channels_ptr = unsafe { buffer.floatChannelData() };
+    if channels_ptr.is_null() {
+        return Err("PCM 缓冲不可用（非 Float32 格式）".to_string());
+    }
+    let channel_count = usize::max(unsafe { format.channelCount() } as usize, 1);
+    let stride = usize::max(unsafe { buffer.stride() } as usize, 1);
+    let interleaved = unsafe { format.isInterleaved() };
+
+    if interleaved {
+        let base = unsafe { (*channels_ptr).as_ptr() };
+        if base.is_null() {
+            return Err("PCM 通道不可用".to_string());
+        }
+        for (frame, &sample) in samples.iter().enumerate() {
+            let v = sample;
+            for ch in 0..channel_count {
+                unsafe {
+                    base.add(frame * stride + ch).write(v);
+                }
+            }
+        }
+        return Ok(());
+    }
+
+    for ch in 0..channel_count {
+        let ch_ptr = unsafe { *channels_ptr.add(ch) };
+        let dst = ch_ptr.as_ptr();
+        if dst.is_null() {
+            return Err("PCM 通道不可用".to_string());
+        }
+        for (frame, &sample) in samples.iter().enumerate() {
+            unsafe {
+                dst.add(frame).write(sample);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn write_i16_samples_to_pcm_buffer(
+    buffer: &AVAudioPCMBuffer,
+    samples: &[f32],
+    format: &AVAudioFormat,
+) -> Result<(), String> {
+    let channels_ptr = unsafe { buffer.int16ChannelData() };
+    if channels_ptr.is_null() {
+        return Err("PCM 缓冲不可用（非 Int16 格式）".to_string());
+    }
+    let channel_count = usize::max(unsafe { format.channelCount() } as usize, 1);
+    let stride = usize::max(unsafe { buffer.stride() } as usize, 1);
+    let interleaved = unsafe { format.isInterleaved() };
+
+    if interleaved {
+        let base = unsafe { (*channels_ptr).as_ptr() };
+        if base.is_null() {
+            return Err("PCM 通道不可用".to_string());
+        }
+        for (frame, &sample) in samples.iter().enumerate() {
+            let v = f32_sample_to_i16(sample);
+            for ch in 0..channel_count {
+                unsafe {
+                    base.add(frame * stride + ch).write(v);
+                }
+            }
+        }
+        return Ok(());
+    }
+
+    for ch in 0..channel_count {
+        let ch_ptr = unsafe { *channels_ptr.add(ch) };
+        let dst = ch_ptr.as_ptr();
+        if dst.is_null() {
+            return Err("PCM 通道不可用".to_string());
+        }
+        for (frame, &sample) in samples.iter().enumerate() {
+            unsafe {
+                dst.add(frame).write(f32_sample_to_i16(sample));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn write_i32_samples_to_pcm_buffer(
+    buffer: &AVAudioPCMBuffer,
+    samples: &[f32],
+    format: &AVAudioFormat,
+) -> Result<(), String> {
+    let channels_ptr = unsafe { buffer.int32ChannelData() };
+    if channels_ptr.is_null() {
+        return Err("PCM 缓冲不可用（非 Int32 格式）".to_string());
+    }
+    let channel_count = usize::max(unsafe { format.channelCount() } as usize, 1);
+    let stride = usize::max(unsafe { buffer.stride() } as usize, 1);
+    let interleaved = unsafe { format.isInterleaved() };
+
+    if interleaved {
+        let base = unsafe { (*channels_ptr).as_ptr() };
+        if base.is_null() {
+            return Err("PCM 通道不可用".to_string());
+        }
+        for (frame, &sample) in samples.iter().enumerate() {
+            let v = f32_sample_to_i32(sample);
+            for ch in 0..channel_count {
+                unsafe {
+                    base.add(frame * stride + ch).write(v);
+                }
+            }
+        }
+        return Ok(());
+    }
+
+    for ch in 0..channel_count {
+        let ch_ptr = unsafe { *channels_ptr.add(ch) };
+        let dst = ch_ptr.as_ptr();
+        if dst.is_null() {
+            return Err("PCM 通道不可用".to_string());
+        }
+        for (frame, &sample) in samples.iter().enumerate() {
+            unsafe {
+                dst.add(frame).write(f32_sample_to_i32(sample));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn pcm_buffer_from_f32(
     samples: &[f32],
     format: &AVAudioFormat,
@@ -97,19 +249,43 @@ fn pcm_buffer_from_f32(
     }
     .ok_or_else(|| "无法创建 PCM 缓冲".to_string())?;
     unsafe { buffer.setFrameLength(frame_count) };
-    let channels = unsafe { buffer.floatChannelData() };
-    if channels.is_null() {
-        return Err("PCM 缓冲不可用".to_string());
-    }
-    let ch0 = unsafe { *channels };
-    let dst = ch0.as_ptr();
-    if dst.is_null() {
-        return Err("PCM 通道不可用".to_string());
-    }
-    unsafe {
-        std::ptr::copy_nonoverlapping(samples.as_ptr(), dst, samples.len());
-    }
+
+    let common = unsafe { format.commonFormat() };
+    let write_result = if common == AVAudioCommonFormat::PCMFormatFloat32 {
+        write_f32_samples_to_pcm_buffer(&buffer, samples, format)
+    } else if common == AVAudioCommonFormat::PCMFormatInt16 {
+        write_i16_samples_to_pcm_buffer(&buffer, samples, format)
+    } else if common == AVAudioCommonFormat::PCMFormatInt32 {
+        write_i32_samples_to_pcm_buffer(&buffer, samples, format)
+    } else if common == AVAudioCommonFormat::PCMFormatFloat64 {
+        Err("暂不支持 Float64 PCM，请关闭本地听写或更新 Wise。".to_string())
+    } else {
+        write_f32_samples_to_pcm_buffer(&buffer, samples, format)
+            .or_else(|_| write_i16_samples_to_pcm_buffer(&buffer, samples, format))
+            .or_else(|_| write_i32_samples_to_pcm_buffer(&buffer, samples, format))
+    };
+
+    write_result.map_err(|e| {
+        format!(
+            "无法写入 PCM 样本（format={common:?}, rate={}, ch={}, interleaved={}）: {e}",
+            unsafe { format.sampleRate() },
+            unsafe { format.channelCount() },
+            unsafe { format.isInterleaved() }
+        )
+    })?;
     Ok(buffer)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::f32_sample_to_i16;
+
+    #[test]
+    fn f32_to_i16_clamps() {
+        assert_eq!(f32_sample_to_i16(0.0), 0);
+        assert_eq!(f32_sample_to_i16(1.0), 32_767);
+        assert_eq!(f32_sample_to_i16(-1.0), -32_768);
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -138,15 +314,12 @@ fn start_streaming_on_main_thread(
         return Err("语音识别服务暂不可用，请稍后重试。".to_string());
     }
 
-    let on_device = unsafe { recognizer.supportsOnDeviceRecognition() };
     let request_allocated = SFSpeechAudioBufferRecognitionRequest::alloc();
     let request = unsafe { SFSpeechAudioBufferRecognitionRequest::init(request_allocated) };
     unsafe {
         request.setAddsPunctuation(true);
         request.setShouldReportPartialResults(true);
-        if on_device {
-            request.setRequiresOnDeviceRecognition(true);
-        }
+        // 流式听写不 setRequiresOnDeviceRecognition：语言包未就绪时会导致无 partial / 无 final 文本。
     }
 
     let format = unsafe { request.nativeAudioFormat() };
@@ -168,12 +341,20 @@ fn start_streaming_on_main_thread(
             };
 
             if !error.is_null() {
+                let msg = unsafe { &*error }
+                    .localizedDescription()
+                    .to_string();
                 let _ = app_for_handler.emit(
                     COMPOSER_SPEECH_TRANSCRIPT_EVENT,
                     ComposerSpeechTranscriptPayload {
                         session_id: session_id_for_handler.clone(),
                         transcript: String::new(),
                         is_final: true,
+                        error: Some(if msg.is_empty() {
+                            "语音识别失败".to_string()
+                        } else {
+                            msg
+                        }),
                     },
                 );
                 cleanup();
@@ -194,6 +375,7 @@ fn start_streaming_on_main_thread(
                     session_id: session_id_for_handler.clone(),
                     transcript,
                     is_final,
+                    error: None,
                 },
             );
             if is_final {
