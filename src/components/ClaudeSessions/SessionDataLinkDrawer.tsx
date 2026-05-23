@@ -9,7 +9,6 @@ import {
   Segmented,
   Select,
   Space,
-  Tag,
   Typography,
   message,
 } from "antd";
@@ -74,23 +73,6 @@ const LAYER_LABELS: Record<SessionLinkRecord["layer"], string> = {
   http: "HTTP",
   fcc_upstream: "FCC 上游",
 };
-
-function layerTagColor(layer: SessionLinkRecord["layer"]): string {
-  switch (layer) {
-    case "input":
-      return "blue";
-    case "tool":
-      return "purple";
-    case "http":
-      return "orange";
-    case "hook":
-      return "cyan";
-    case "fcc_upstream":
-      return "geekblue";
-    default:
-      return "default";
-  }
-}
 
 function formatTime(ts: number): string {
   try {

@@ -86,7 +86,7 @@ export function resolveWorkspaceMainSession(input: ResolveWorkspaceMainSessionIn
     const anchorPath = normalizeRepositoryPathKey(anchor.path);
     const picked =
       pickProjectMainSessionForSidebarSelect(list, anchorPath, loadSessionOwnerHints()) ??
-      pickSessionForRepositorySidebarSelect(list, anchorPath, loadSessionOwnerHints(), null);
+      pickSessionForRepositorySidebarSelect(list, anchorPath, loadSessionOwnerHints(), undefined);
     if (picked) {
       return picked;
     }
