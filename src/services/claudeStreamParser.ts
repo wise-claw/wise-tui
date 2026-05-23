@@ -164,6 +164,12 @@ export function extractPartsFromStreamLine(line: string): { parts: MessagePart[]
   }
 }
 
+/** Claude stream-json 中占位/无信息量的 system error 文案，不应写入会话 UI。 */
+function isIgnorableClaudeStreamSystemErrorDetail(detail: string): boolean {
+  const normalized = detail.trim().toLowerCase();
+  return normalized === "unknown" || normalized === "undefined";
+}
+
 export function extractSystemErrorMessageFromStreamLine(line: string): string | null {
   try {
     const json = JSON.parse(line) as Record<string, unknown>;
@@ -194,7 +200,9 @@ export function extractSystemErrorMessageFromStreamLine(line: string): string | 
         : typeof json.error === "string"
           ? json.error.trim()
           : "";
-    if (msg) return `Claude 系统错误: ${msg}`;
+    if (msg && !isIgnorableClaudeStreamSystemErrorDetail(msg)) {
+      return `Claude 系统错误: ${msg}`;
+    }
     return null;
   } catch {
     return null;

@@ -1,0 +1,45 @@
+.app-fcc-topbar-btn {
+  position: relative;
+}
+
+.app-fcc-topbar-btn__badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ant-color-warning);
+  border: 1px solid var(--ant-color-bg-container);
+  pointer-events: none;
+}
+
+.app-fcc-topbar-btn__badge--live {
+  background: var(--ant-color-success);
+  box-shadow: 0 0 4px var(--ant-color-success);
+}
+
+.app-fcc-topbar-btn__badge--warn {
+  background: var(--ant-color-warning);
+}
+
+.app-fcc-topbar-popover {
+  max-width: min(94vw, 440px);
+}
+
+.app-fcc-topbar-popover .ant-popover-container {
+  padding: 0 !important;
+  overflow: hidden;
+  width: min(94vw, 440px) !important;
+  max-width: min(94vw, 440px) !important;
+  box-sizing: border-box;
+}
+
+.app-fcc-topbar-popover .ant-popover-content {
+  padding: 0 !important;
+  max-width: 100%;
+}
+
+.app-fcc-topbar-popover .ant-popover-inner-content {
+  padding: 0 !important;
+}

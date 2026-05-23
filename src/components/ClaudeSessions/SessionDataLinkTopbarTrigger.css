@@ -1,0 +1,9 @@
+.app-session-data-link-topbar-btn.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.app-session-data-link-topbar-btn svg {
+  width: 18px;
+  height: 18px;
+}

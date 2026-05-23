@@ -260,7 +260,7 @@ export function RepositoryScheduledTasksModal({
     {
       title: "Cron",
       dataIndex: "cronExpression",
-      width: 148,
+      width: 88,
       ellipsis: true,
       render: (c: string) => (
         <Tooltip title={c}>
@@ -271,15 +271,22 @@ export function RepositoryScheduledTasksModal({
     {
       title: "下次",
       key: "next",
-      width: 138,
-      render: (_, row) => (
-        <span className="app-scheduled-tasks-modal__mono-muted">{formatNextRunHint(row.cronExpression)}</span>
-      ),
+      width: 100,
+      ellipsis: true,
+      render: (_, row) => {
+        const hint = formatNextRunHint(row.cronExpression);
+        return (
+          <Tooltip title={hint}>
+            <span className="app-scheduled-tasks-modal__mono-muted">{hint}</span>
+          </Tooltip>
+        );
+      },
     },
     {
       title: "员工",
       key: "emp",
-      width: 88,
+      width: 72,
+      ellipsis: true,
       render: (_, row) => {
         if (!row.employeeId) return <Tag>主会话</Tag>;
         const n = employees.find((e) => e.id === row.employeeId)?.name ?? "—";
@@ -289,7 +296,8 @@ export function RepositoryScheduledTasksModal({
     {
       title: "最近",
       key: "last",
-      width: 128,
+      width: 96,
+      ellipsis: true,
       render: (_, row) => {
         if (!row.lastExecutedAt) return <span className="app-scheduled-tasks-modal__mono-muted">—</span>;
         const ok = row.lastExecuteOk !== false;
@@ -305,9 +313,9 @@ export function RepositoryScheduledTasksModal({
     {
       title: "操作",
       key: "act",
-      width: 108,
+      width: 96,
       render: (_, row) => (
-        <Space size={4}>
+        <Space size={4} wrap>
           <Button type="link" size="small" style={{ padding: 0 }} onClick={() => openEdit(row)}>
             编辑
           </Button>
@@ -349,8 +357,9 @@ export function RepositoryScheduledTasksModal({
           rowKey="id"
           loading={loading}
           className="app-scheduled-tasks-modal__table"
+          tableLayout="fixed"
           pagination={false}
-          scroll={{ x: 780, y: minTableBodyHeight() }}
+          scroll={{ y: minTableBodyHeight() }}
           columns={columns}
           dataSource={tasks}
           locale={{ emptyText: "暂无定时任务" }}

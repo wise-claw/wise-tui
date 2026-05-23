@@ -1,7 +1,9 @@
 use crate::{
     agent_registry, app_state_commands, assistants, cc_wf_studio_mcp_bridge, cc_workflow_studio,
-    claude_code_usage, claude_commands, claude_config_dir, claude_external_ingest, code_knowledge_graph,
-    cua_driver, dingtalk_enterprise_bot, dingtalk_stream_gateway, extensions, git_commands, mission_control, mcp,
+    claude_code_usage, claude_commands, claude_config_dir, claude_external_ingest, claude_llm_proxy,
+    code_knowledge_graph, fcc_traces, free_claude_code,
+    cua_driver, dingtalk_enterprise_bot, dingtalk_stream_gateway, extensions, git_commands,
+    mission_control, mcp,
     openspec_bootstrap, prd_url_fetch, remote_channels, repository_files, skills, skills_sh, system_resource, task_artifact, trellis_bootstrap,
     trellis_bridge,
     trellis_runtime, wise_db, wise_mascot, wise_paths, wise_push, workspace_commands,
@@ -85,6 +87,7 @@ pub fn run() {
             app.manage(extension_registry);
             app.manage(agent_registry::AgentRegistry::new());
             trellis_runtime::spawn_stale_scanner(app.handle().clone());
+            claude_llm_proxy::bootstrap_from_db(app.handle());
 
             #[cfg(target_os = "macos")]
             crate::macos_webview_wake_recovery::register_macos_webview_wake_recovery(app.handle());
@@ -259,6 +262,7 @@ pub fn run() {
             task_artifact::mission_create_with_task,
             prd_url_fetch::fetch_prd_from_url,
             workspace_commands::open_in_finder,
+            workspace_commands::write_text_file_absolute,
             workspace_commands::open_claude_user_agents_dir,
             workspace_commands::get_claude_user_agents_dir,
             workspace_commands::open_workspace_in,
@@ -326,6 +330,11 @@ pub fn run() {
             claude_commands::terminal::terminal_write,
             claude_commands::terminal::terminal_resize,
             claude_commands::terminal::terminal_close,
+            claude_llm_proxy::list_claude_llm_proxy_records,
+            claude_llm_proxy::clear_claude_llm_proxy_records,
+            claude_llm_proxy::get_claude_llm_proxy_status,
+            claude_llm_proxy::get_claude_llm_proxy_config,
+            claude_llm_proxy::set_claude_llm_proxy_config,
             claude_commands::execute_claude_code,
             claude_commands::resume_claude_code,
             claude_commands::spawn_streaming_session,
@@ -343,6 +352,16 @@ pub fn run() {
             claude_commands::get_claude_model_picker_options,
             claude_config_dir::get_claude_user_config_dir,
             claude_config_dir::set_claude_user_config_dir,
+            claude_config_dir::sanitize_claude_credentials_for_fcc,
+            free_claude_code::get_free_claude_code_status,
+            free_claude_code::start_free_claude_code_server,
+            free_claude_code::stop_free_claude_code_server,
+            free_claude_code::install_free_claude_code,
+            free_claude_code::uninstall_free_claude_code,
+            free_claude_code::open_free_claude_code_admin,
+            free_claude_code::apply_free_claude_code_claude_settings,
+            fcc_traces::list_fcc_traces,
+            fcc_traces::clear_fcc_traces,
             claude_commands::mcp::get_claude_mcp_status,
             claude_commands::mcp::get_claude_mcp_runtime_health,
             claude_commands::mcp::remove_claude_mcp_server,

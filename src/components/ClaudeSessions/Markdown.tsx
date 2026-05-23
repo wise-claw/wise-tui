@@ -127,6 +127,14 @@ export function Markdown({ text, streaming, showPendingHint, className }: Props)
       }
     });
 
+    temp.querySelectorAll("a[href]").forEach((anchor) => {
+      anchor.classList.add("app-markdown-link");
+      if (!anchor.getAttribute("target")) {
+        anchor.setAttribute("target", "_blank");
+        anchor.setAttribute("rel", "noopener noreferrer");
+      }
+    });
+
     container.innerHTML = temp.innerHTML;
   }, [text]);
 

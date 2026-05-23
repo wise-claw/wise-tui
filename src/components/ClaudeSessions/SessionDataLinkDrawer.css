@@ -1,0 +1,595 @@
+.app-session-data-link {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background-color: var(--ant-color-bg-layout);
+}
+
+.app-session-data-link__empty {
+  margin: auto;
+  padding: 48px 24px;
+}
+
+.app-session-data-link__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 12px 6px;
+  background: var(--ant-color-bg-container);
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-session-data-link__toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.app-session-data-link__filter {
+  min-width: 108px;
+}
+
+/* ── 极简、高密度的水平指标面板（与标签栏同一行、右对齐） ── */
+.app-session-data-link__stats-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-left: auto;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.app-session-data-link__stat-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-session-data-link__stat-item .stat-icon {
+  font-size: 12px;
+}
+
+.app-session-data-link__stat-item .stat-icon--turns { color: #3b82f6; }
+.app-session-data-link__stat-item .stat-icon--tools { color: #a855f7; }
+.app-session-data-link__stat-item .stat-icon--http { color: #f97316; }
+.app-session-data-link__stat-item .stat-icon--proxy { color: #06b6d4; }
+.app-session-data-link__stat-item .stat-icon--fcc { color: #6366f1; }
+.app-session-data-link__stat-item .stat-icon--disk { color: #64748b; }
+
+.app-session-data-link__stat-label {
+  font-weight: 500;
+  opacity: 0.85;
+}
+
+.app-session-data-link__stat-num {
+  font-family: ui-monospace, SFMono-Regular, Monaco, Consolas, monospace;
+  font-weight: 700;
+  color: var(--ant-color-text);
+  background: color-mix(in srgb, var(--ant-color-fill-tertiary) 30%, transparent);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 10.5px;
+}
+
+.app-session-data-link__stat-num-sub {
+  font-size: 9px;
+  font-weight: 500;
+  color: var(--ant-color-text-quaternary);
+}
+
+.app-session-data-link__stat-divider {
+  width: 1px;
+  height: 10px;
+  background: var(--ant-color-border-secondary);
+}
+
+.app-session-data-link__stats-fallback {
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-session-data-link__alert {
+  margin: 6px 12px 0;
+}
+
+.app-session-data-link__alert .ant-alert {
+  padding: 4px 8px;
+}
+
+.app-session-data-link__alert .ant-alert-message {
+  font-size: 11.5px;
+  margin-bottom: 0;
+}
+
+.app-session-data-link__alert .ant-alert-description {
+  font-size: 10.5px;
+  margin-top: 1px;
+}
+
+.app-session-data-link__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 12px;
+}
+
+/* ── 链路列表：高密度时间线 trace 面板 ── */
+.app-session-data-link__collapse.ant-collapse {
+  background: transparent;
+  border: none;
+}
+
+.app-session-data-link__collapse.ant-collapse > .ant-collapse-item {
+  margin-bottom: 8px;
+  border: 1px solid var(--ant-color-border-secondary) !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+  background: var(--ant-color-bg-container);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.015);
+}
+
+.app-session-data-link__collapse.ant-collapse > .ant-collapse-item > .ant-collapse-header {
+  padding: 6px 10px !important;
+  background: var(--ant-color-fill-quaternary) !important;
+  align-items: center !important;
+}
+
+.app-session-data-link__collapse.ant-collapse > .ant-collapse-item > .ant-collapse-content > .ant-collapse-content-box {
+  padding: 10px 10px 10px 4px !important;
+  background: var(--ant-color-bg-container);
+}
+
+.app-session-data-link__turn-label {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ant-color-text);
+  line-height: 1.2;
+}
+
+.app-session-data-link__turn-meta {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 99px;
+  background: var(--ant-color-fill-tertiary);
+  color: var(--ant-color-text-secondary);
+  margin-left: 8px;
+}
+
+.app-session-data-link__turn-diagram-btn {
+  flex-shrink: 0;
+  height: auto;
+  padding: 0 6px;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.app-session-data-link__collapse.ant-collapse > .ant-collapse-item > .ant-collapse-header .ant-collapse-extra {
+  margin-inline-start: 8px;
+}
+
+.app-session-data-link-turn-diagram-modal .ant-modal-body {
+  max-height: min(78vh, 720px);
+  overflow: auto;
+}
+
+.app-session-data-link-turn-diagram-modal__empty {
+  padding: 32px 16px;
+}
+
+/* ── 垂直时间线追踪器 ── */
+.app-session-data-link__record-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 时间线竖线 */
+.app-session-data-link__record-list::before {
+  content: "";
+  position: absolute;
+  left: 11px;
+  top: 6px;
+  bottom: 6px;
+  width: 1.5px;
+  background: var(--ant-color-border-secondary);
+  z-index: 1;
+}
+
+.app-session-data-link__record {
+  position: relative;
+  padding-left: 24px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+/* 时间线节点 dot */
+.app-session-data-link__record-node {
+  position: absolute;
+  left: 7.5px;
+  top: 5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--ant-color-bg-container);
+  background-color: var(--layer-indicator-color, #94a3b8);
+  box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.15);
+  z-index: 2;
+  transition: all 0.2s ease;
+}
+
+.app-session-data-link__record:hover .app-session-data-link__record-node {
+  transform: scale(1.2);
+  box-shadow: 0 0 0 4px var(--layer-indicator-glow-color, rgba(148, 163, 184, 0.25));
+}
+
+/* 分层色系变量映射 */
+.app-session-data-link__record--layer-input {
+  --layer-indicator-color: #3b82f6;
+  --layer-indicator-glow-color: rgba(59, 130, 246, 0.25);
+}
+.app-session-data-link__record--layer-tool {
+  --layer-indicator-color: #a855f7;
+  --layer-indicator-glow-color: rgba(168, 85, 247, 0.25);
+}
+.app-session-data-link__record--layer-http {
+  --layer-indicator-color: #f97316;
+  --layer-indicator-glow-color: rgba(249, 115, 22, 0.25);
+}
+.app-session-data-link__record--layer-hook {
+  --layer-indicator-color: #06b6d4;
+  --layer-indicator-glow-color: rgba(6, 182, 212, 0.25);
+}
+.app-session-data-link__record--layer-fcc_upstream {
+  --layer-indicator-color: #6366f1;
+  --layer-indicator-glow-color: rgba(99, 102, 241, 0.25);
+}
+
+.app-session-data-link__record-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-session-data-link__record-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1;
+  margin-bottom: 3px;
+  flex-wrap: wrap;
+}
+
+.app-session-data-link__record-time {
+  font-family: ui-monospace, SFMono-Regular, Monaco, Consolas, monospace;
+  font-weight: 500;
+  color: var(--ant-color-text-quaternary);
+}
+
+.app-session-data-link__layer-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: var(--layer-indicator-color);
+}
+
+.app-session-data-link__layer-text {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--layer-indicator-color);
+  text-transform: uppercase;
+}
+
+/* 紧凑层级/状态徽章 */
+.app-session-data-link__badge {
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.app-session-data-link__badge--observed {
+  background: rgba(16, 185, 129, 0.08);
+  color: #059669;
+}
+
+.app-session-data-link__badge--inferred {
+  background: rgba(245, 158, 11, 0.08);
+  color: #d97706;
+}
+
+.app-session-data-link__source-badge {
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 500;
+  background: var(--ant-color-fill-tertiary);
+  color: var(--ant-color-text-secondary);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+/* 详情展开 Toggle */
+.app-session-data-link__detail-toggle {
+  margin-left: auto;
+  color: var(--ant-color-primary);
+  font-size: 10.5px;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+  transition: opacity 0.15s ease;
+}
+
+.app-session-data-link__detail-toggle:hover {
+  opacity: 0.8;
+}
+
+/* Summary 文本 */
+.app-session-data-link__record-summary {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+/* Inferred HTTP dashed effect */
+.app-session-data-link__record--inferred .app-session-data-link__record-summary {
+  color: var(--ant-color-text-secondary);
+  font-style: italic;
+}
+
+/* ── macOS style dark terminal console detail ── */
+.app-session-data-link__console {
+  margin-top: 6px;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-session-data-link__console-header {
+  display: flex;
+  align-items: center;
+  background: #1e293b;
+  padding: 4px 10px;
+  font-size: 9px;
+  border-bottom: 1px solid #0f172a;
+}
+
+.app-session-data-link__console-dots {
+  display: flex;
+  gap: 4px;
+}
+
+.app-session-data-link__console-dots .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.app-session-data-link__console-dots .dot-red { background: #ef4444; }
+.app-session-data-link__console-dots .dot-yellow { background: #f59e0b; }
+.app-session-data-link__console-dots .dot-green { background: #10b981; }
+
+.app-session-data-link__console-title {
+  margin-left: 8px;
+  color: #94a3b8;
+  font-family: ui-monospace, SFMono-Regular, Monaco, Consolas, monospace;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.app-session-data-link__console-copy {
+  margin-left: auto;
+  color: #94a3b8;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.app-session-data-link__console-copy:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8fafc;
+}
+
+.app-session-data-link__console-copy .copy-label {
+  font-size: 9px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-weight: 700;
+}
+
+.app-session-data-link__console-body {
+  margin: 0;
+  padding: 6px 10px;
+  max-height: 140px;
+  overflow: auto;
+  font-size: 10.5px;
+  line-height: 1.4;
+  background: #090d16 !important;
+  color: #2dd4bf !important;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+}
+
+/* Custom Scrollbars */
+.app-session-data-link__console-body::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.app-session-data-link__console-body::-webkit-scrollbar-track {
+  background: #090d16;
+}
+
+.app-session-data-link__console-body::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 2px;
+}
+
+.app-session-data-link__console-body::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* 序列图：未观测 HTTP（推断 REQUEST） */
+.app-seq-flow__step--http-inferred .app-seq-flow__arrow--http-inferred {
+  stroke-dasharray: 4 3;
+  opacity: 0.55;
+}
+
+.app-seq-flow__step--http-inferred .app-seq-iface-box--inferred {
+  opacity: 0.65;
+}
+
+/* ── Drawer 弹窗头部全局与局部样式覆盖（开发者控制台风格） ── */
+.app-session-link-drawer-root .ant-drawer-header {
+  padding: 10px 16px !important;
+  border-bottom: 1px solid var(--ant-color-border-secondary) !important;
+  background: var(--ant-color-bg-container) !important;
+  align-items: center !important;
+}
+
+.app-session-link-drawer-root .ant-drawer-close {
+  padding: 0 !important;
+  width: 28px !important;
+  height: 28px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 6px !important;
+  transition: background 0.2s ease !important;
+  color: var(--ant-color-text-secondary) !important;
+}
+
+.app-session-link-drawer-root .ant-drawer-close:hover {
+  background: var(--ant-color-fill-tertiary) !important;
+  color: var(--ant-color-text) !important;
+}
+
+.app-session-link-drawer-root .ant-drawer-close .anticon {
+  font-size: 14px !important;
+}
+
+/* Title 样式 */
+.app-session-link-drawer__title {
+  display: inline-flex;
+  align-items: center;
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.app-session-link-drawer__title .title-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  margin-right: 8px;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+  animation: app-title-pulse 2s infinite;
+}
+
+@keyframes app-title-pulse {
+  0% { box-shadow: 0 0 0 0px rgba(16, 185, 129, 0.4); }
+  70% { box-shadow: 0 0 0 4px rgba(16, 185, 129, 0); }
+  100% { box-shadow: 0 0 0 0px rgba(16, 185, 129, 0); }
+}
+
+.app-session-link-drawer__title .title-text {
+  color: var(--ant-color-text);
+}
+
+.app-session-link-drawer__title .title-divider {
+  margin: 0 6px;
+  color: var(--ant-color-text-quaternary);
+}
+
+.app-session-link-drawer__title .title-session-label {
+  background: color-mix(in srgb, var(--ant-color-primary) 10%, transparent);
+  color: var(--ant-color-primary);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.app-session-link-drawer__title .title-session-name {
+  margin-left: 4px;
+  font-size: 11px;
+  color: var(--ant-color-text-secondary);
+  font-family: ui-monospace, SFMono-Regular, Monaco, Consolas, monospace;
+}
+
+/* 头部动作按钮 */
+.app-session-link-header-btn.ant-btn {
+  height: 26px !important;
+  border-radius: 5px !important;
+  font-size: 11.5px !important;
+  font-weight: 600 !important;
+  padding: 0 10px !important;
+  box-shadow: none !important;
+  transition: all 0.2s ease !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 4px !important;
+}
+
+.app-session-link-header-btn.ant-btn .anticon {
+  font-size: 11px !important;
+}
+
+/* 复制 JSON 按钮 */
+.app-session-link-header-btn--copy.ant-btn {
+  background: var(--ant-color-bg-container) !important;
+  border: 1.5px solid var(--ant-color-border) !important;
+  color: var(--ant-color-text-secondary) !important;
+}
+
+.app-session-link-header-btn--copy.ant-btn:hover:not(:disabled) {
+  border-color: var(--ant-color-primary) !important;
+  color: var(--ant-color-primary) !important;
+  background: color-mix(in srgb, var(--ant-color-primary) 3%, var(--ant-color-bg-container)) !important;
+}
+
+.app-session-link-header-btn--copy.copied.ant-btn {
+  border-color: #10b981 !important;
+  color: #059669 !important;
+  background: rgba(16, 185, 129, 0.05) !important;
+}
+
+/* 导出按钮 */
+.app-session-link-header-btn--export.ant-btn {
+  background: #0f172a !important;
+  border: none !important;
+  color: #ffffff !important;
+}
+
+.app-session-link-header-btn--export.ant-btn:hover:not(:disabled) {
+  background: #1e293b !important;
+  color: #ffffff !important;
+  transform: translateY(-0.5px);
+}

@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { CloseOutlined } from "@ant-design/icons";
-import { Empty, Tooltip } from "antd";
+import { Button, Empty, Popconfirm, Tooltip } from "antd";
 import type { ClaudeHostProcess, ClaudeSession, ProjectItem, Repository } from "../../types";
+import type { ClaudeProcessWorkspaceLabelCacheHandle } from "../../hooks/useClaudeProcessWorkspaceLabelCache";
 import {
   buildClaudeProcessPopoverCards,
   type ClaudeProcessPopoverCard,
@@ -17,8 +19,11 @@ interface ClaudeProcessPopoverContentProps {
   repositoryMainSessionBindings: Record<string, string>;
   allSessions: ClaudeSession[];
   claudeProcesses: ReadonlyArray<ClaudeHostProcess>;
+  claudeProcessLabelCache?: ClaudeProcessWorkspaceLabelCacheHandle;
   onSelectSession?: (sessionId: string) => void;
   onEndSession?: (sessionId: string) => void;
+  /** 批量结束当前列表（含搜索过滤后）中的全部进程 */
+  onBatchEndSessions?: (sessionIds: string[]) => void | Promise<void>;
 }
 
 function formatCardUpdatedAt(ms: number): string {
@@ -121,9 +126,12 @@ export function ClaudeProcessPopoverContent({
   repositoryMainSessionBindings,
   allSessions,
   claudeProcesses,
+  claudeProcessLabelCache,
   onSelectSession,
   onEndSession,
+  onBatchEndSessions,
 }: ClaudeProcessPopoverContentProps) {
+  const [batchEnding, setBatchEnding] = useState(false);
   const cards = buildClaudeProcessPopoverCards(matchedSessions, {
     projects,
     repositories,
@@ -131,7 +139,22 @@ export function ClaudeProcessPopoverContent({
     sessions: allSessions,
     claudeProcesses,
     searchKeyword: searchValue,
+    labelCache: claudeProcessLabelCache,
   });
+
+  const canBatchEnd = Boolean(onBatchEndSessions) && cards.length > 0;
+
+  const handleBatchEnd = async () => {
+    if (!onBatchEndSessions || cards.length === 0 || batchEnding) {
+      return;
+    }
+    setBatchEnding(true);
+    try {
+      await onBatchEndSessions(cards.map((card) => card.sessionId));
+    } finally {
+      setBatchEnding(false);
+    }
+  };
 
   return (
     <div className="app-claude-process-popover">
@@ -142,6 +165,30 @@ export function ClaudeProcessPopoverContent({
         placeholder="搜索工作区、仓库、PID、会话 ID…"
         onClick={(event) => event.stopPropagation()}
       />
+      {canBatchEnd ? (
+        <div
+          className="app-claude-process-popover__toolbar"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <Popconfirm
+            title={`确定结束列出的 ${cards.length} 个 Claude 进程？`}
+            okText="全部结束"
+            cancelText="取消"
+            okButtonProps={{ danger: true, loading: batchEnding }}
+            onConfirm={() => void handleBatchEnd()}
+          >
+            <Button
+              size="small"
+              danger
+              loading={batchEnding}
+              disabled={batchEnding}
+              onClick={(event) => event.stopPropagation()}
+            >
+              批量结束（{cards.length}）
+            </Button>
+          </Popconfirm>
+        </div>
+      ) : null}
       {cards.length > 0 ? (
         <div className="app-claude-process-popover__list">
           {cards.map((card) => (

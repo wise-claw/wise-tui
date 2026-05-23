@@ -29,6 +29,13 @@
   border-color: var(--ant-color-primary);
 }
 
+.app-claude-process-popover__toolbar {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
 .app-claude-process-popover__list {
   flex: 1;
   min-height: 0;

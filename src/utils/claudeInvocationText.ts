@@ -79,6 +79,11 @@ function truncatePreviewChars(text: string, maxChars: number): string {
 }
 
 /** 与 `extractSystemErrorMessageFromStreamLine` 对齐；避免 utils 依赖 services。 */
+function isIgnorableClaudeStreamSystemErrorDetail(detail: string): boolean {
+  const normalized = detail.trim().toLowerCase();
+  return normalized === "unknown" || normalized === "undefined";
+}
+
 function extractStreamSystemErrorPreview(line: string): string | null {
   try {
     const json = JSON.parse(line) as Record<string, unknown>;
@@ -101,7 +106,9 @@ function extractStreamSystemErrorPreview(line: string): string | null {
         : typeof json.error === "string"
           ? json.error.trim()
           : "";
-    if (msg) return `Claude 系统错误: ${msg}`;
+    if (msg && !isIgnorableClaudeStreamSystemErrorDetail(msg)) {
+      return `Claude 系统错误: ${msg}`;
+    }
     return null;
   } catch {
     return null;

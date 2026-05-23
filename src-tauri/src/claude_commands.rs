@@ -531,7 +531,7 @@ fn try_claude_from_login_shell() -> Option<String> {
 }
 
 /// Finds the claude binary in common locations (works when packaged app has a narrow PATH).
-fn find_claude_binary() -> Result<String, String> {
+pub(crate) fn find_claude_binary() -> Result<String, String> {
     for c in claude_binary_candidates() {
         if c.is_file() {
             return Ok(c.to_string_lossy().to_string());
@@ -1698,6 +1698,12 @@ async fn spawn_claude_process(
     }
 
     let mut cmd = cmd;
+    let base_url_override = crate::claude_llm_proxy::claude_spawn_anthropic_base_url_override();
+    crate::claude_config_dir::configure_claude_child_process(
+        &mut cmd,
+        &project_path,
+        base_url_override.as_deref(),
+    );
     let mut child = match cmd.spawn() {
         Ok(c) => c,
         Err(e) => {

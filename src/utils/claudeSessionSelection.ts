@@ -1,6 +1,6 @@
 import type { ClaudeSession } from "../types";
 import { TEAM_AUTO_DRIVER_PREFIXES } from "../constants/teamAutoDriver";
-import { isProjectRootSessionDisplayName } from "./repositoryMainSessionBinding";
+import { isProjectRootSessionDisplayName, normalizeRepositoryPathKey } from "./repositoryMainSessionBinding";
 import {
   extractBoundEmployeeNameFromDisplay,
   resolveOwnerHintForSession,
@@ -76,10 +76,11 @@ export function pickSessionForRepositorySidebarSelect(
   ownerHints: Record<string, SessionOwnerHint>,
   options?: PickSessionForRepositorySidebarOptions,
 ): ClaudeSession | null {
+  const repoKey = normalizeRepositoryPathKey(repositoryPath);
   const mainAgent = options?.mainOwnerAgentName?.trim();
   if (mainAgent) {
     const agentCandidates = sessions.filter((s) => {
-      if (s.repositoryPath !== repositoryPath) return false;
+      if (normalizeRepositoryPathKey(s.repositoryPath) !== repoKey) return false;
       if (isProjectRootSessionDisplayName(s.repositoryName ?? "")) return false;
       return extractBoundEmployeeNameFromDisplay(s.repositoryName ?? "") === mainAgent;
     });
@@ -93,7 +94,7 @@ export function pickSessionForRepositorySidebarSelect(
 
   const candidates = sessions.filter(
     (s) =>
-      s.repositoryPath === repositoryPath &&
+      normalizeRepositoryPathKey(s.repositoryPath) === repoKey &&
       !extractBoundEmployeeNameFromDisplay(s.repositoryName ?? "") &&
       !isProjectRootSessionDisplayName(s.repositoryName ?? ""),
   );
@@ -111,9 +112,10 @@ export function pickProjectMainSessionForSidebarSelect(
   repositoryPath: string,
   ownerHints: Record<string, SessionOwnerHint>,
 ): ClaudeSession | null {
+  const repoKey = normalizeRepositoryPathKey(repositoryPath);
   const candidates = sessions.filter(
     (s) =>
-      s.repositoryPath === repositoryPath &&
+      normalizeRepositoryPathKey(s.repositoryPath) === repoKey &&
       isProjectRootSessionDisplayName(s.repositoryName ?? "") &&
       !extractBoundEmployeeNameFromDisplay(s.repositoryName ?? ""),
   );

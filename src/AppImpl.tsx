@@ -122,6 +122,8 @@ import {
   resolveRepositoryForSession,
   resolveBoundMainSessionId,
   resolveMainOwnerAgentNameForRepositoryPath,
+  resolveSessionFromBindingValue,
+  isProjectMainSessionBindingKey,
 } from "./utils/repositoryMainSessionBinding";
 import { loadSessionOwnerHints } from "./utils/sessionOwnerHints";
 import type { WorkflowGraphRuntimeState } from "./services/workflowGraphRuntime";
@@ -474,16 +476,6 @@ export default function App() {
     };
   }, []);
 
-  const bindRepositoryMainSession = useCallback((repositoryPath: string, sessionId: string) => {
-    const key = normalizeRepositoryPathForMatch(repositoryPath);
-    setRepositoryMainSessionBindings((prev) => {
-      if (prev[key] === sessionId) return prev;
-      const next = { ...prev, [key]: sessionId };
-      void setAppSetting(REPOSITORY_MAIN_SESSION_BINDING_STORAGE_KEY, JSON.stringify(next));
-      return next;
-    });
-  }, []);
-
   const handlePersistRepositoryMainOwnerAgent = useCallback(
     async (repository: Repository, mainOwnerAgentName: string | null) => {
       try {
@@ -602,6 +594,7 @@ export default function App() {
     tabsHydrated,
     reloadFullDiskTranscript,
     compactSessionHistory,
+    releaseSessionHostProcess,
   } = useClaudeSessions({
     onClaudeTurnComplete: (p) => {
       advanceTeamAfterTurnRef.current(p);
@@ -624,6 +617,44 @@ export default function App() {
 
   const repositoryMainBindingsLatestRef = useRef(repositoryMainSessionBindings);
   repositoryMainBindingsLatestRef.current = repositoryMainSessionBindings;
+
+  const releaseSessionHostProcessRef = useRef(releaseSessionHostProcess);
+  releaseSessionHostProcessRef.current = releaseSessionHostProcess;
+
+  const bindRepositoryMainSession = useCallback(
+    async (repositoryPath: string, sessionId: string) => {
+      const key = normalizeRepositoryPathForMatch(repositoryPath);
+      const nextId = sessionId.trim();
+      if (!nextId) {
+        return;
+      }
+      const prevRaw = repositoryMainBindingsLatestRef.current[key]?.trim();
+      if (prevRaw && prevRaw !== nextId) {
+        const mainOwner = isProjectMainSessionBindingKey(key)
+          ? null
+          : resolveMainOwnerAgentNameForRepositoryPath(repositoriesLatestRef.current, key);
+        const prevTabId = resolveBoundMainSessionId(
+          key,
+          repositoryMainBindingsLatestRef.current,
+          sessionsLatestRef.current,
+          mainOwner,
+        );
+        const prevSession =
+          (prevTabId ? sessionsLatestRef.current.find((s) => s.id === prevTabId) : null) ??
+          resolveSessionFromBindingValue(prevRaw, sessionsLatestRef.current);
+        if (prevSession && prevSession.id !== nextId) {
+          await releaseSessionHostProcessRef.current(prevSession.id);
+        }
+      }
+      setRepositoryMainSessionBindings((prev) => {
+        if (prev[key] === nextId) return prev;
+        const next = { ...prev, [key]: nextId };
+        void setAppSetting(REPOSITORY_MAIN_SESSION_BINDING_STORAGE_KEY, JSON.stringify(next));
+        return next;
+      });
+    },
+    [],
+  );
 
   const employeesLatestRef = useRef(employees);
   employeesLatestRef.current = employees;
@@ -1554,20 +1585,39 @@ export default function App() {
       { mainOwnerAgentName: mainOwnerPick },
     );
     if (latestForRepo) {
-      bindRepositoryMainSession(target.path, latestForRepo.id);
+      await bindRepositoryMainSession(target.path, latestForRepo.id);
       switchSession(latestForRepo.id);
       return latestForRepo.id;
     }
     return null;
   }
 
+  /** 新建主会话前结束仍占着本机 Claude 的上一活动标签（含其它仓库，避免「数量」累加）。 */
+  async function releasePriorActiveSessionHostBeforeNewMain(
+    priorActiveId: string | null | undefined,
+    newSessionId: string,
+  ): Promise<void> {
+    const priorId = priorActiveId?.trim();
+    const nextId = newSessionId.trim();
+    if (!priorId || priorId === nextId) {
+      return;
+    }
+    const prior = sessionsLatestRef.current.find((s) => s.id === priorId);
+    if (!prior) {
+      return;
+    }
+    await releaseSessionHostProcessRef.current(prior.id);
+  }
+
   /** 手动「新建会话」：始终创建新标签并绑定为仓库主会话。 */
   async function handleManualNewRepositorySession(repository: Repository): Promise<string> {
     viewMode.enter({ kind: "chat" });
-    setActiveRepositoryWithOwner(repository.id);
     const target = resolveSidebarSelectionTarget({ repository });
+    const priorActiveId = activeSessionIdLatestRef.current;
+    setActiveRepositoryWithOwner(repository.id);
     const id = await createSession(target.path, target.displayName);
-    bindRepositoryMainSession(target.path, id);
+    await releasePriorActiveSessionHostBeforeNewMain(priorActiveId, id);
+    await bindRepositoryMainSession(target.path, id);
     switchSession(id);
     return id;
   }
@@ -1595,8 +1645,10 @@ export default function App() {
     } else if (!isStandaloneTrellisProject) {
       setActiveProjectId(project.id);
     }
+    const priorActiveId = activeSessionIdLatestRef.current;
     const id = await createSession(anchor.path, anchor.displayName);
-    bindRepositoryMainSession(projectMainSessionBindingKey(project.id), id);
+    await releasePriorActiveSessionHostBeforeNewMain(priorActiveId, id);
+    await bindRepositoryMainSession(projectMainSessionBindingKey(project.id), id);
     switchSession(id);
     return id;
   }
@@ -1979,7 +2031,7 @@ export default function App() {
       loadSessionOwnerHints(),
     );
     if (latestForProject) {
-      bindRepositoryMainSession(projectBindingKey, latestForProject.id);
+      await bindRepositoryMainSession(projectBindingKey, latestForProject.id);
       switchSession(latestForProject.id);
       return latestForProject.id;
     }

@@ -7,6 +7,8 @@ import {
   resolveRepositoryForSession,
 } from "./repositoryMainSessionBinding";
 
+export const GENERIC_CLAUDE_PROCESS_SCOPE_TITLE = "本机 Claude 进程";
+
 const PLACEHOLDER_PATH_KEYS = new Set(["—", "-", ""]);
 
 function isPlaceholderRepositoryPath(pathKey: string): boolean {
@@ -152,7 +154,7 @@ export function resolveClaudeProcessWorkspaceLabels(params: {
   const pathLabel =
     rawLabel && !isPlaceholderRepositoryPath(normalizeRepositoryPathKey(rawLabel))
       ? rawLabel
-      : "本机 Claude 进程";
+      : GENERIC_CLAUDE_PROCESS_SCOPE_TITLE;
   return {
     projectName: null,
     repositoryName: null,

@@ -546,3 +546,22 @@ pub(crate) fn run_shell_command(
         exit_code: output.status.code().unwrap_or(-1),
     })
 }
+
+/// 将文本写入用户通过系统对话框选择的绝对路径（供会话链路包导出等）。
+#[tauri::command]
+pub(crate) fn write_text_file_absolute(path: String, contents: String) -> Result<(), String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("路径不能为空".to_string());
+    }
+    let p = PathBuf::from(trimmed);
+    if !p.is_absolute() {
+        return Err("仅允许写入绝对路径".to_string());
+    }
+    if let Some(parent) = p.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+    }
+    crate::wise_paths::write_file_atomic(&p, &contents)
+}

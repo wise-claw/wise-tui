@@ -1,7 +1,17 @@
-import { Alert, Drawer, Empty, Spin, Typography } from "antd";
+import { Alert, Button, Drawer, Dropdown, Empty, Space, Spin, Typography, message } from "antd";
+import { CopyOutlined, DownloadOutlined } from "@ant-design/icons";
+import { save } from "@tauri-apps/plugin-dialog";
+import type { MenuProps } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ClaudeMessage, ToolUsePart } from "../../types";
 import { loadClaudeSessionJsonl } from "../../services/claudeDisk";
+import { writeTextFileAbsolute } from "../../services/sessionLink";
+import {
+  buildSessionLinkExportBundle,
+  serializeSessionLinkExportBundle,
+} from "../../utils/sessionLinkExport";
+import { buildSessionLinkRecordsFromSources } from "../../utils/sessionLinkPipeline";
+import { useFccSessionTraces } from "../../hooks/useFccSessionTraces";
 import { buildTrajectorySequenceModel, type SequenceEvent } from "../../utils/claudeSessionTrajectorySequence";
 import { getToolDisplayInfo } from "./MessageParts";
 import { ClaudeSessionSequenceDiagram } from "./ClaudeSessionSequenceDiagram";
@@ -15,6 +25,7 @@ interface Props {
   open: boolean;
   onClose: () => void;
   messages: ClaudeMessage[];
+  wiseTabSessionId?: string;
   repositoryPath?: string;
   claudeSessionId?: string | null;
   diskTranscriptPartial?: boolean;
@@ -24,6 +35,7 @@ export function ClaudeSessionTrajectoryDrawer({
   open,
   onClose,
   messages,
+  wiseTabSessionId,
   repositoryPath,
   claudeSessionId,
   diskTranscriptPartial,
@@ -31,12 +43,15 @@ export function ClaudeSessionTrajectoryDrawer({
   const [jsonlLines, setJsonlLines] = useState<string[] | null>(null);
   const [jsonlLoading, setJsonlLoading] = useState(false);
   const [jsonlError, setJsonlError] = useState<string | null>(null);
-  const [visibleStart, setVisibleStart] = useState(0);
-  const [visibleEndExclusive, setVisibleEndExclusive] = useState(1);
   const [subagentOpen, setSubagentOpen] = useState(false);
   const [subagentPart, setSubagentPart] = useState<ToolUsePart | null>(null);
 
   const canLoadDisk = Boolean(repositoryPath?.trim() && claudeSessionId?.trim());
+
+  const { fccAligned, traces: fccTraces } = useFccSessionTraces({
+    open,
+    sessionHint: claudeSessionId ?? undefined,
+  });
 
   useEffect(() => {
     if (!open) {
@@ -70,31 +85,76 @@ export function ClaudeSessionTrajectoryDrawer({
   }, [open, canLoadDisk, repositoryPath, claudeSessionId]);
 
   const events = useMemo(
-    () => buildTrajectorySequenceModel(messages, jsonlLines ?? undefined),
-    [messages, jsonlLines],
+    () =>
+      buildTrajectorySequenceModel(messages, jsonlLines ?? undefined, {
+        fccTraces: fccAligned ? fccTraces : undefined,
+      }),
+    [messages, jsonlLines, fccAligned, fccTraces],
   );
 
-  useEffect(() => {
-    const n = events.length;
-    const span = Math.min(48, Math.max(8, n));
-    if (n === 0) {
-      setVisibleStart(0);
-      setVisibleEndExclusive(1);
-      return;
-    }
-    // 原先固定对齐「会话尾部」：长会话时首屏是最后 span 条，开头的 user_input 被裁掉，「我」泳道看起来全空。
-    const tailStart = Math.max(0, n - span);
-    const firstUserIdx = events.findIndex((e) => e.kind === "user_input");
-    const start =
-      firstUserIdx >= 0 && firstUserIdx < tailStart ? Math.max(0, firstUserIdx) : tailStart;
-    setVisibleStart(start);
-    setVisibleEndExclusive(Math.min(start + span, n));
-  }, [events]);
+  const linkRecords = useMemo(
+    () =>
+      buildSessionLinkRecordsFromSources({
+        messages,
+        jsonlLines: jsonlLines ?? undefined,
+        fccTraces: fccAligned ? fccTraces : undefined,
+      }),
+    [messages, jsonlLines, fccAligned, fccTraces],
+  );
 
-  const onRangeChange = useCallback((start: number, endExclusive: number) => {
-    setVisibleStart(start);
-    setVisibleEndExclusive(Math.max(start + 1, endExclusive));
-  }, []);
+  const exportBundle = useMemo(
+    () =>
+      buildSessionLinkExportBundle({
+        messages,
+        jsonlLines: jsonlLines ?? undefined,
+        records: linkRecords,
+        wiseTabSessionId,
+        claudeSessionId,
+        repositoryPath,
+      }),
+    [messages, jsonlLines, linkRecords, wiseTabSessionId, claudeSessionId, repositoryPath],
+  );
+
+  const runExport = useCallback(async () => {
+    if (!exportBundle) return;
+    const text = serializeSessionLinkExportBundle(exportBundle);
+    const sid = claudeSessionId?.slice(0, 8) ?? wiseTabSessionId?.slice(0, 8) ?? "session";
+    try {
+      const path = await save({
+        defaultPath: `session-link-${sid}-${Date.now()}.json`,
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
+      if (!path) return;
+      await writeTextFileAbsolute(path, text);
+      message.success("已导出链路包");
+    } catch (e) {
+      message.error(`导出失败：${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, [exportBundle, claudeSessionId, wiseTabSessionId]);
+
+  const exportMenuItems: MenuProps["items"] = useMemo(() => {
+    if (!exportBundle) return [];
+    const text = serializeSessionLinkExportBundle(exportBundle);
+    return [
+      {
+        key: "copy",
+        label: "复制 JSON",
+        icon: <CopyOutlined />,
+        onClick: () => {
+          void navigator.clipboard.writeText(text).then(
+            () => message.success("已复制"),
+            () => message.error("复制失败"),
+          );
+        },
+      },
+      {
+        key: "save",
+        label: "保存文件…",
+        icon: <DownloadOutlined />,
+        onClick: () => void runExport(),
+      },
+    ];
+  }, [exportBundle, runExport]);
 
   const onSubagentDrilldown = useCallback((ev: SequenceEvent) => {
     if (!ev.drilldown) return;
@@ -121,6 +181,15 @@ export function ClaudeSessionTrajectoryDrawer({
         destroyOnClose
         open={open}
         onClose={onClose}
+        extra={
+          <Space size={8}>
+            <Dropdown menu={{ items: exportMenuItems }} disabled={!exportBundle}>
+              <Button size="small" icon={<DownloadOutlined />} disabled={!exportBundle}>
+                导出链路包
+              </Button>
+            </Dropdown>
+          </Space>
+        }
         styles={{ body: { padding: 0, display: "flex", flexDirection: "column", height: "100%" } }}
       >
         <div className="app-session-trajectory-drawer">
@@ -158,10 +227,8 @@ export function ClaudeSessionTrajectoryDrawer({
             ) : (
               <ClaudeSessionSequenceDiagram
                 events={events}
-                visibleStart={visibleStart}
-                visibleEndExclusive={visibleEndExclusive}
-                onVisibleRangeChange={onRangeChange}
                 onSubagentDrilldown={onSubagentDrilldown}
+                markInferredHttp
               />
             )}
           </div>

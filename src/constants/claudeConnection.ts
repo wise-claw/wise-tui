@@ -73,11 +73,11 @@ export const CLAUDE_CONNECTION_KIND_LABELS: Record<
 > = {
   oneshot: {
     title: "逐轮处理",
-    description: "每条用户消息拉起新的 claude -p 子进程；Wise 全局默认，适合编排与批量任务。",
+    description: "每条用户消息拉起新的 claude -p 子进程；适合编排与批量任务。",
   },
   streaming: {
     title: "长驻会话",
     description:
-      "单标签保持一个 Claude 子进程，经 stream-json 多轮对话；MCP、Skills、Hooks、子代理与终端 CLI 更接近。",
+      "单标签保持一个 Claude 子进程，经 stream-json 多轮对话；Wise 全局默认，MCP、Skills、Hooks、子代理与终端 CLI 更接近。",
   },
 };
