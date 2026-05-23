@@ -48,7 +48,11 @@ export function FccTopbarTrigger() {
       placement="bottomRight"
       open={open}
       onOpenChange={handleOpenChange}
-      overlayClassName="app-fcc-topbar-popover"
+      classNames={{ root: "app-fcc-topbar-popover" }}
+      styles={{
+        container: { padding: 0 },
+        content: { padding: 0 },
+      }}
       content={<FreeClaudeCodePanel fcc={fcc} onClose={() => setOpen(false)} />}
     >
       <button

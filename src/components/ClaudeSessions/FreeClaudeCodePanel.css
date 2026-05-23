@@ -1,4 +1,7 @@
 .app-fcc-topbar-panel {
+  width: 100%;
+  max-width: 100%;
+  padding: 10px 12px 8px;
   box-sizing: border-box;
 }
 
