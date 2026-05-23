@@ -19,15 +19,28 @@
 
 .app-scheduled-tasks-modal__table .ant-table {
   font-size: 12px;
+  width: 100%;
 }
 
 .app-scheduled-tasks-modal__table .ant-table-cell {
   padding: 6px 8px !important;
 }
 
-/* Ant Design 在 scroll.x + fixed 列时会多出一列空白表头 */
+.app-scheduled-tasks-modal__table .ant-table-content,
+.app-scheduled-tasks-modal__table .ant-table-body {
+  overflow-x: hidden !important;
+}
+
 .app-scheduled-tasks-modal__table .ant-table-cell-scrollbar {
   display: none !important;
+}
+
+.app-scheduled-tasks-modal__cron,
+.app-scheduled-tasks-modal__mono-muted {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-scheduled-tasks-modal__cron {

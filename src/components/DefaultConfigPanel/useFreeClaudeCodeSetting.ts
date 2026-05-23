@@ -61,7 +61,7 @@ export function useFreeClaudeCodeSetting() {
   );
 
   const stopServer = useCallback(
-    () => runAction("已停止 Wise 托管的 FCC 进程", stopFreeClaudeCodeServer),
+    () => runAction("已停止 FCC 代理服务", stopFreeClaudeCodeServer),
     [runAction],
   );
 

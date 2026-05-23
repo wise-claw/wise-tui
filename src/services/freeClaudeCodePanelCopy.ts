@@ -3,6 +3,9 @@ import type { FreeClaudeCodeStatus } from "./freeClaudeCode";
 /** 顶栏 FCC 面板主提示文案。 */
 export function buildFccSummaryMessage(st: FreeClaudeCodeStatus): string {
   if (st.serverRunning) {
+    if (!st.managedByWise) {
+      return "代理服务运行中（非 Wise 启动）。点击「停止」将尝试结束本机 fcc-server 进程。";
+    }
     return "代理服务运行中，可在 Admin UI 配置 Provider Key。";
   }
   if (st.installed) {

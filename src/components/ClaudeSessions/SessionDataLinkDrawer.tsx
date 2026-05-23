@@ -229,6 +229,7 @@ export function SessionDataLinkDrawer({ open, onClose, session }: Props) {
   const [jsonlLines, setJsonlLines] = useState<string[] | null>(null);
   const [jsonlLoading, setJsonlLoading] = useState(false);
   const [jsonlError, setJsonlError] = useState<string | null>(null);
+  const [headerCopied, setHeaderCopied] = useState(false);
   const [turnDiagramTurn, setTurnDiagramTurn] = useState<number | null>(null);
   const [proxySnap, setProxySnap] = useState(getClaudeLlmProxyStoreSnapshot);
 
@@ -376,6 +377,8 @@ export function SessionDataLinkDrawer({ open, onClose, session }: Props) {
     const text = serializeSessionLinkExportBundle(exportBundle);
     try {
       await navigator.clipboard.writeText(text);
+      setHeaderCopied(true);
+      setTimeout(() => setHeaderCopied(false), 2000);
       message.success("已复制当前筛选结果的链路 JSON");
     } catch {
       message.error("复制失败");
@@ -461,10 +464,19 @@ export function SessionDataLinkDrawer({ open, onClose, session }: Props) {
 
   return (
     <Drawer
+      rootClassName="app-session-link-drawer-root"
       title={
-        session
-          ? `全链路分析 · 主会话（${session.repositoryName.trim() || "未命名"}）`
-          : "全链路分析"
+        session ? (
+          <div className="app-session-link-drawer__title">
+            <span className="title-dot" />
+            <span className="title-text">全链路分析</span>
+            <span className="title-divider">·</span>
+            <span className="title-session-label">主会话</span>
+            <span className="title-session-name">({session.repositoryName.trim() || "未命名"})</span>
+          </div>
+        ) : (
+          "全链路分析"
+        )
       }
       placement="right"
       size={880}
@@ -475,14 +487,21 @@ export function SessionDataLinkDrawer({ open, onClose, session }: Props) {
         <Space size={8} wrap>
           <Button
             size="small"
-            icon={<CopyOutlined />}
+            className={`app-session-link-header-btn app-session-link-header-btn--copy ${headerCopied ? "copied" : ""}`}
+            icon={headerCopied ? <CheckOutlined style={{ color: "#10b981" }} /> : <CopyOutlined />}
             disabled={!exportBundle}
             onClick={() => void handleCopyExport()}
           >
-            复制 JSON
+            {headerCopied ? "已复制" : "复制 JSON"}
           </Button>
           <Dropdown menu={{ items: exportMenuItems }} disabled={!exportBundle}>
-            <Button size="small" type="primary" icon={<DownloadOutlined />} disabled={!exportBundle}>
+            <Button
+              size="small"
+              type="primary"
+              className="app-session-link-header-btn app-session-link-header-btn--export"
+              icon={<DownloadOutlined />}
+              disabled={!exportBundle}
+            >
               导出
             </Button>
           </Dropdown>

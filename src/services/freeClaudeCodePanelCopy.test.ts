@@ -27,10 +27,20 @@ describe("buildFccSummaryMessage", () => {
     expect(buildFccSummaryMessage(baseStatus({ installed: true }))).toContain("启动");
   });
 
-  test("proxy running", () => {
-    expect(buildFccSummaryMessage(baseStatus({ installed: true, serverRunning: true }))).toContain(
-      "Admin UI",
-    );
+  test("proxy running under Wise", () => {
+    expect(
+      buildFccSummaryMessage(
+        baseStatus({ installed: true, serverRunning: true, managedByWise: true }),
+      ),
+    ).toContain("Admin UI");
+  });
+
+  test("proxy running externally", () => {
+    expect(
+      buildFccSummaryMessage(
+        baseStatus({ installed: true, serverRunning: true, managedByWise: false }),
+      ),
+    ).toContain("非 Wise 启动");
   });
 });
 

@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
+use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
@@ -189,18 +189,131 @@ pub async fn get_free_claude_code_status() -> Result<FreeClaudeCodeStatus, Strin
     Ok(build_status().await)
 }
 
-fn stop_managed_server_locked() {
-    let mut guard = managed_child_cell().lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(mut child) = guard.take() {
+fn take_managed_child() -> Option<Child> {
+    managed_child_cell()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take()
+}
+
+async fn stop_managed_server_async() {
+    if let Some(mut child) = take_managed_child() {
         let _ = child.start_kill();
+        let _ = tokio::time::timeout(Duration::from_secs(8), child.wait()).await;
     }
+}
+
+/// 监听 `port` 的进程 PID（`lsof -sTCP:LISTEN`）。
+fn listen_pids_on_port(port: u16) -> Vec<u32> {
+    let Ok(out) = Command::new("lsof")
+        .args(["-n", "-P", "-sTCP:LISTEN", "-ti", &format!(":{port}")])
+        .output()
+    else {
+        return Vec::new();
+    };
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .filter_map(|line| line.trim().parse::<u32>().ok())
+        .filter(|pid| *pid > 0)
+        .collect()
+}
+
+fn pid_command_line(pid: u32) -> Option<String> {
+    let Ok(out) = Command::new("ps")
+        .args(["-p", pid.to_string().as_str(), "-o", "command="])
+        .output()
+    else {
+        return None;
+    };
+    let cmd = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if cmd.is_empty() {
+        None
+    } else {
+        Some(cmd)
+    }
+}
+
+fn command_looks_like_fcc_server(cmd: &str) -> bool {
+    let lower = cmd.to_ascii_lowercase();
+    lower.contains("fcc-server")
+        || lower.contains("free-claude-code")
+        || lower.contains("free_claude_code")
+}
+
+/// 仅终止命令行像 fcc-server 的监听进程，避免误杀占用同端口的其它服务。
+fn kill_fcc_listeners_on_port(port: u16) -> Vec<u32> {
+    let mut killed = Vec::new();
+    for pid in listen_pids_on_port(port) {
+        let Some(cmd) = pid_command_line(pid) else {
+            continue;
+        };
+        if !command_looks_like_fcc_server(&cmd) {
+            continue;
+        }
+        let _ = Command::new("kill").arg(pid.to_string()).status();
+        killed.push(pid);
+    }
+    killed
+}
+
+async fn wait_until_port_closed(host: &str, port: u16, attempts: u32, interval: Duration) -> bool {
+    for _ in 0..attempts {
+        if !tcp_port_open(host, port).await {
+            return true;
+        }
+        tokio::time::sleep(interval).await;
+    }
+    !tcp_port_open(host, port).await
 }
 
 #[tauri::command]
 pub async fn stop_free_claude_code_server() -> Result<FreeClaudeCodeStatus, String> {
-    tokio::task::spawn_blocking(stop_managed_server_locked)
+    let fcc_env = parse_fcc_dotenv(&fcc_config_path());
+    let port = fcc_port_from_env(&fcc_env);
+
+    stop_managed_server_async().await;
+
+    if tcp_port_open("127.0.0.1", port).await {
+        let port_for_kill = port;
+        let killed = tokio::task::spawn_blocking(move || kill_fcc_listeners_on_port(port_for_kill))
+            .await
+            .map_err(|e| format!("停止任务被中断: {e}"))?;
+        if killed.is_empty() {
+            let listeners = listen_pids_on_port(port);
+            if !listeners.is_empty() {
+                return Err(format!(
+                    "端口 {port} 仍被非 Wise 进程占用（PID {}），请在终端手动结束后再试。",
+                    listeners
+                        .iter()
+                        .map(|p| p.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            }
+        }
+        let _ = wait_until_port_closed("127.0.0.1", port, 24, Duration::from_millis(250)).await;
+    }
+
+    if tcp_port_open("127.0.0.1", port).await {
+        let port_for_kill = port;
+        let _ = tokio::task::spawn_blocking(move || {
+            for pid in kill_fcc_listeners_on_port(port_for_kill) {
+                let _ = Command::new("kill")
+                    .args(["-9", &pid.to_string()])
+                    .status();
+            }
+        })
         .await
         .map_err(|e| format!("停止任务被中断: {e}"))?;
+        let _ = wait_until_port_closed("127.0.0.1", port, 12, Duration::from_millis(250)).await;
+    }
+
+    if tcp_port_open("127.0.0.1", port).await {
+        return Err(format!(
+            "fcc-server 仍在监听 {port}，请执行 lsof -i :{port} 查看进程后手动结束。"
+        ));
+    }
+
     Ok(build_status().await)
 }
 
@@ -215,7 +328,10 @@ pub async fn start_free_claude_code_server() -> Result<FreeClaudeCodeStatus, Str
         return Ok(build_status().await);
     }
 
-    stop_managed_server_locked();
+    if let Some(mut child) = take_managed_child() {
+        let _ = child.start_kill();
+        let _ = tokio::time::timeout(Duration::from_secs(2), child.wait()).await;
+    }
 
     let mut cmd = tokio::process::Command::new(&binary);
     cmd.stdout(Stdio::null()).stderr(Stdio::null()).stdin(Stdio::null());
@@ -299,9 +415,14 @@ pub async fn uninstall_free_claude_code() -> Result<FreeClaudeCodeStatus, String
     let fcc_env = parse_fcc_dotenv(&fcc_config_path());
     let port = fcc_port_from_env(&fcc_env);
 
-    tokio::task::spawn_blocking(stop_managed_server_locked)
-        .await
-        .map_err(|e| format!("停止任务被中断: {e}"))?;
+    stop_managed_server_async().await;
+    if tcp_port_open("127.0.0.1", port).await {
+        let port_for_kill = port;
+        let _ = tokio::task::spawn_blocking(move || kill_fcc_listeners_on_port(port_for_kill))
+            .await
+            .map_err(|e| format!("停止任务被中断: {e}"))?;
+        let _ = wait_until_port_closed("127.0.0.1", port, 24, Duration::from_millis(250)).await;
+    }
 
     if tcp_port_open("127.0.0.1", port).await {
         return Err(
@@ -456,5 +577,16 @@ mod tests {
         assert!(is_local_fcc_proxy_base_url("http://localhost:8082"));
         assert!(is_local_fcc_proxy_base_url("http://127.0.0.1:8082"));
         assert!(!is_local_fcc_proxy_base_url("https://api.anthropic.com"));
+    }
+
+    #[test]
+    fn command_looks_like_fcc_server_matches_binary_names() {
+        assert!(command_looks_like_fcc_server(
+            "/Users/x/.local/bin/fcc-server"
+        ));
+        assert!(command_looks_like_fcc_server(
+            "python -m free_claude_code.server"
+        ));
+        assert!(!command_looks_like_fcc_server("node /tmp/other-proxy.js"));
     }
 }
