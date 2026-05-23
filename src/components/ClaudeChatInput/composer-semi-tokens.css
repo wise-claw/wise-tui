@@ -97,6 +97,24 @@
   }
 }
 
+.app-claude-composer-voice-menu-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 168px;
+}
+
+.app-claude-composer-voice-menu-check {
+  width: 14px;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--ant-color-primary);
+}
+
+.app-claude-composer-voice-menu-check--placeholder {
+  visibility: hidden;
+}
+
 .app-claude-dual-pane-repo-picker {
   max-width: min(168px, 34vw);
   min-width: 0;

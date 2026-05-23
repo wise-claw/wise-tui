@@ -45,12 +45,15 @@ import { FollowupDock } from "./dock/followup-dock";
 import { TodoDock } from "./dock/todo-dock";
 import { RevertDock } from "./dock/revert-dock";
 import { addToHistory, promptLength, navigatePromptHistory, canNavigateHistoryAtCursor } from "./prompt-history";
+import { CheckOutlined } from "@ant-design/icons";
 import { Dropdown, Button, Empty, Input, Popover, Select, Spin, Tabs, Tag, Tooltip, message } from "antd";
 import { ContextCompactProgressRing } from "./ContextCompactProgressRing";
 import { useContextBreakdown } from "../../hooks/useContextBreakdown";
 import { ClaudeConnectionKindChip } from "./ClaudeConnectionKindChip";
 import { useDefaultClaudeConnectionKind } from "../../hooks/useDefaultClaudeConnectionKind";
 import { useComposerSpeechDictation } from "../../hooks/useComposerSpeechDictation";
+import { useComposerSpeechPreferences } from "../../hooks/useComposerSpeechPreferences";
+import { COMPOSER_SPEECH_IDLE_AUTO_SEND_MS } from "../../constants/composerSpeechPreferences";
 import {
   applyComposerSpeechStreamTranscript,
   createComposerSpeechStreamAnchor,
@@ -620,6 +623,22 @@ function ComposerInner({
   const speechStreamAnchorRef = useRef<ReturnType<typeof createComposerSpeechStreamAnchor> | null>(
     null,
   );
+  const speechIdleAutoSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleSpeechIdleAutoSendRef = useRef<() => void>(() => undefined);
+
+  const { prefs: speechPrefs, update: updateSpeechPrefs } = useComposerSpeechPreferences();
+  const speechPrefsRef = useRef(speechPrefs);
+  speechPrefsRef.current = speechPrefs;
+  const [speechMenuOpen, setSpeechMenuOpen] = useState(false);
+
+  const clearSpeechIdleAutoSendTimer = useCallback(() => {
+    if (speechIdleAutoSendTimerRef.current != null) {
+      clearTimeout(speechIdleAutoSendTimerRef.current);
+      speechIdleAutoSendTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => clearSpeechIdleAutoSendTimer(), [clearSpeechIdleAutoSendTimer]);
 
   const handleSpeechTranscriptUpdate = useCallback(
     ({ text, isFinal }: { text: string; isFinal: boolean }) => {
@@ -639,6 +658,10 @@ function ComposerInner({
       );
       speechStreamAnchorRef.current = anchor;
       surface.setPlainAndCursor(plain, cursor);
+
+      if (text.trim() && speechPrefsRef.current.sendMode === "silenceAutoSend") {
+        scheduleSpeechIdleAutoSendRef.current();
+      }
     },
     [],
   );
@@ -656,18 +679,84 @@ function ComposerInner({
     },
   });
 
+  const speechDictationRef = useRef(speechDictation);
+  speechDictationRef.current = speechDictation;
+
+  const scheduleSpeechIdleAutoSend = useCallback(() => {
+    if (speechPrefsRef.current.sendMode !== "silenceAutoSend") return;
+    clearSpeechIdleAutoSendTimer();
+    speechIdleAutoSendTimerRef.current = setTimeout(() => {
+      speechIdleAutoSendTimerRef.current = null;
+      if (speechPrefsRef.current.sendMode !== "silenceAutoSend") return;
+      const surface = plainSurfaceRef.current;
+      if (!surface) return;
+      const plain = surface.getPlain().trim();
+      if (!plain) return;
+      if (speechDictationRef.current.listening || speechDictationRef.current.transcribing) {
+        speechDictationRef.current.stop();
+      }
+      speechStreamAnchorRef.current = null;
+      void handleSendRef.current(plain);
+    }, COMPOSER_SPEECH_IDLE_AUTO_SEND_MS);
+  }, [clearSpeechIdleAutoSendTimer]);
+
+  scheduleSpeechIdleAutoSendRef.current = scheduleSpeechIdleAutoSend;
+
+  useEffect(() => {
+    if (speechPrefs.sendMode === "manual") {
+      clearSpeechIdleAutoSendTimer();
+    }
+  }, [clearSpeechIdleAutoSendTimer, speechPrefs.sendMode]);
+
   const speechListeningPrevRef = useRef(false);
   useEffect(() => {
     if (speechDictation.listening && !speechListeningPrevRef.current) {
       speechStreamAnchorRef.current = null;
+      clearSpeechIdleAutoSendTimer();
     }
     speechListeningPrevRef.current = speechDictation.listening;
-  }, [speechDictation.listening]);
+  }, [clearSpeechIdleAutoSendTimer, speechDictation.listening]);
 
   useEffect(() => {
     speechStreamAnchorRef.current = null;
     speechDictation.stop();
-  }, [session.id, speechDictation.stop]);
+    clearSpeechIdleAutoSendTimer();
+  }, [session.id, speechDictation.stop, clearSpeechIdleAutoSendTimer]);
+
+  const voiceContextMenuItems: MenuProps["items"] = useMemo(
+    () => [
+      {
+        key: "mode-manual",
+        label: (
+          <span className="app-claude-composer-voice-menu-row">
+            {speechPrefs.sendMode === "manual" ? (
+              <CheckOutlined className="app-claude-composer-voice-menu-check" />
+            ) : (
+              <span className="app-claude-composer-voice-menu-check app-claude-composer-voice-menu-check--placeholder" />
+            )}
+            手动发送（仅转写）
+          </span>
+        ),
+        onClick: () => void updateSpeechPrefs({ sendMode: "manual" }),
+      },
+      {
+        key: "mode-silence-auto",
+        label: (
+          <span className="app-claude-composer-voice-menu-row">
+            {speechPrefs.sendMode === "silenceAutoSend" ? (
+              <CheckOutlined className="app-claude-composer-voice-menu-check" />
+            ) : (
+              <span className="app-claude-composer-voice-menu-check app-claude-composer-voice-menu-check--placeholder" />
+            )}
+            停顿 1 秒无新语音自动发送
+          </span>
+        ),
+        onClick: () => void updateSpeechPrefs({ sendMode: "silenceAutoSend" }),
+      },
+    ],
+    [speechPrefs.sendMode, updateSpeechPrefs],
+  );
+
   const onCancelRef = useRef(_onCancel);
   onCancelRef.current = _onCancel;
   const loadActiveBranch = useCallback(async () => {
@@ -908,6 +997,7 @@ function ComposerInner({
 
   const handleSend = useCallback(
     async (plainFromEditor?: string) => {
+      clearSpeechIdleAutoSendTimer();
       const promptSnap: Prompt =
         plainFromEditor !== undefined ? singleTextPrompt(plainFromEditor) : prompt.map((part) => ({ ...part }));
       const logicalSnap = promptToLogicalPlainString(promptSnap).replace(/\u200B/g, "");
@@ -1167,6 +1257,7 @@ function ComposerInner({
       employeesForDispatchRoute,
       draftBucketKey,
       recordMissionMessage,
+      clearSpeechIdleAutoSendTimer,
     ],
   );
 
@@ -1482,42 +1573,39 @@ function ComposerInner({
                     key: "create",
                     label: "创建分支",
                     children: (
-                      <div className="app-claude-branch-popover__tab-pane">
-                        <div className="app-claude-branch-popover__group-desc">输入新分支名称，可选指定基线分支</div>
-                        <div className="app-claude-branch-popover__create-name-row">
-                          <Input
-                            size="small"
-                            placeholder="新分支名"
-                            className="app-claude-branch-popover__branch-name-input"
-                            value={branchCreateName}
-                            onChange={(event) => setBranchCreateName(event.target.value)}
-                            onPressEnter={() => void handleCreateBranch()}
-                            disabled={branchActionLoading}
-                          />
-                        </div>
-                        <div className="app-claude-branch-popover__create-row">
-                          <Select
-                            size="small"
-                            allowClear
-                            placeholder="from..."
-                            className="app-claude-branch-popover__from-select"
-                            value={branchCreateFromRef}
-                            onChange={(value) => setBranchCreateFromRef(value)}
-                            options={branches.map((item) => ({ value: item.name, label: item.name }))}
-                            disabled={branchActionLoading || branchListLoading}
-                            showSearch
-                            optionFilterProp="label"
-                          />
-                          <Button
-                            size="small"
-                            type="primary"
-                            className="app-claude-branch-popover__action-btn"
-                            onClick={() => void handleCreateBranch()}
-                            loading={branchActionLoading}
-                          >
-                            新建
-                          </Button>
-                        </div>
+                      <div className="app-claude-branch-popover__create-inline-row">
+                        <Input
+                          size="small"
+                          placeholder="新分支名"
+                          className="app-claude-branch-popover__branch-name-input"
+                          value={branchCreateName}
+                          onChange={(event) => setBranchCreateName(event.target.value)}
+                          onPressEnter={() => void handleCreateBranch()}
+                          disabled={branchActionLoading}
+                        />
+                        <Select
+                          size="small"
+                          allowClear
+                          placeholder="基线(可选)"
+                          className="app-claude-branch-popover__from-select"
+                          value={branchCreateFromRef}
+                          onChange={(value) => setBranchCreateFromRef(value)}
+                          options={branches.map((item) => ({ value: item.name, label: item.name }))}
+                          disabled={branchActionLoading || branchListLoading}
+                          showSearch
+                          optionFilterProp="label"
+                          popupMatchSelectWidth={false}
+                          popupClassName="app-claude-branch-popover__select-dropdown"
+                        />
+                        <Button
+                          size="small"
+                          type="primary"
+                          className="app-claude-branch-popover__action-btn"
+                          onClick={() => void handleCreateBranch()}
+                          loading={branchActionLoading}
+                        >
+                          新建
+                        </Button>
                       </div>
                     ),
                   },
@@ -1525,33 +1613,33 @@ function ComposerInner({
                     key: "detached",
                     label: "分离检出",
                     children: (
-                      <div className="app-claude-branch-popover__tab-pane">
-                        <div className="app-claude-branch-popover__group-desc">切到分支/标签/提交，但不切换到本地分支</div>
-                        <div className="app-claude-branch-popover__create-row">
-                          <Select
-                            size="small"
-                            showSearch
-                            placeholder="checkout detached... (branch/tag/commit)"
-                            className="app-claude-branch-popover__detached-select"
-                            value={detachedTargetRef || undefined}
-                            onChange={(value) => setDetachedTargetRef(value ?? "")}
-                            onSearch={(value) => setDetachedTargetRef(value)}
-                            options={branches.map((item) => ({
-                              value: item.name,
-                              label: item.name,
-                            }))}
-                            disabled={branchActionLoading || branchListLoading}
-                            optionFilterProp="label"
-                          />
-                          <Button
-                            size="small"
-                            className="app-claude-branch-popover__action-btn"
-                            onClick={() => void handleCheckoutDetached()}
-                            loading={branchActionLoading}
-                          >
-                            分离检出
-                          </Button>
-                        </div>
+                      <div className="app-claude-branch-popover__create-inline-row">
+                        <Select
+                          size="small"
+                          showSearch
+                          placeholder="checkout... (分支/标签/提交)"
+                          className="app-claude-branch-popover__detached-select"
+                          value={detachedTargetRef || undefined}
+                          onChange={(value) => setDetachedTargetRef(value ?? "")}
+                          onSearch={(value) => setDetachedTargetRef(value)}
+                          options={branches.map((item) => ({
+                            value: item.name,
+                            label: item.name,
+                          }))}
+                          disabled={branchActionLoading || branchListLoading}
+                          optionFilterProp="label"
+                          popupMatchSelectWidth={false}
+                          popupClassName="app-claude-branch-popover__select-dropdown"
+                        />
+                        <Button
+                          size="small"
+                          type="primary"
+                          className="app-claude-branch-popover__action-btn"
+                          onClick={() => void handleCheckoutDetached()}
+                          loading={branchActionLoading}
+                        >
+                          检出
+                        </Button>
                       </div>
                     ),
                   },
@@ -1687,67 +1775,79 @@ function ComposerInner({
           </svg>
         </Button>
         {speechDictation.supported ? (
-          <Tooltip
-            title={
-              speechDictation.transcribing
-                ? "正在本地转写…"
-                : speechDictation.listening
-                  ? speechDictation.engine === "local"
-                    ? "点击结束录音并转写"
-                    : "点击停止语音听写"
-                  : speechDictation.engine === "local"
-                    ? "本地语音听写（边说边出字）"
-                    : "语音听写（边说边出字）"
-            }
-            placement="top"
+          <Dropdown
+            menu={{ items: voiceContextMenuItems }}
+            trigger={["contextMenu"]}
+            placement="topLeft"
+            open={speechMenuOpen}
+            onOpenChange={setSpeechMenuOpen}
           >
-            <Button
-              type="text"
-              size="small"
-              className={
-                speechDictation.listening || speechDictation.transcribing
-                  ? "app-claude-composer-voice-btn app-claude-composer-voice-btn--active"
-                  : "app-claude-composer-voice-btn"
-              }
-              disabled={isSessionBusy || speechDictation.transcribing}
-              loading={speechDictation.transcribing}
-              aria-pressed={speechDictation.listening}
-              aria-label={
+            <Tooltip
+              title={
                 speechDictation.transcribing
-                  ? "正在转写"
+                  ? "正在本地转写…"
                   : speechDictation.listening
-                    ? speechDictation.engine === "local"
-                      ? "结束录音并转写"
-                      : "停止语音听写"
-                    : speechDictation.engine === "local"
-                      ? "开始本地语音转文字"
-                      : "开始语音听写"
+                    ? speechPrefs.sendMode === "silenceAutoSend"
+                      ? "停顿 1 秒无新语音将自动发送；点击结束听写"
+                      : speechDictation.engine === "local"
+                        ? "点击结束录音并转写"
+                        : "点击停止语音听写"
+                    : speechPrefs.sendMode === "silenceAutoSend"
+                      ? "点击开始听写，停顿 1 秒无新语音自动发送；右键配置"
+                      : speechDictation.engine === "local"
+                        ? "本地语音听写（边说边出字）；右键配置"
+                        : "语音听写（边说边出字）；右键配置"
               }
-              onClick={() => speechDictation.toggle()}
-              style={{
-                color: speechDictation.listening
-                  ? "var(--ant-color-error)"
-                  : "var(--ant-color-text-secondary)",
-              }}
+              placement="top"
             >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden
+              <Button
+                type="text"
+                size="small"
+                className={
+                  speechDictation.listening || speechDictation.transcribing
+                    ? "app-claude-composer-voice-btn app-claude-composer-voice-btn--active"
+                    : "app-claude-composer-voice-btn"
+                }
+                disabled={isSessionBusy || speechDictation.transcribing}
+                loading={speechDictation.transcribing}
+                aria-pressed={speechDictation.listening}
+                aria-label={
+                  speechDictation.transcribing
+                    ? "正在转写"
+                    : speechDictation.listening
+                      ? speechDictation.engine === "local"
+                        ? "结束录音并转写"
+                        : "停止语音听写"
+                      : speechDictation.engine === "local"
+                        ? "开始本地语音转文字"
+                        : "开始语音听写"
+                }
+                onClick={() => speechDictation.toggle()}
+                style={{
+                  color: speechDictation.listening
+                    ? "var(--ant-color-error)"
+                    : "var(--ant-color-text-secondary)",
+                }}
               >
-                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
-                <path d="M19 10v1a7 7 0 0 1-14 0v-1" />
-                <line x1="12" y1="19" x2="12" y2="22" />
-                <line x1="8" y1="22" x2="16" y2="22" />
-              </svg>
-            </Button>
-          </Tooltip>
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+                  <path d="M19 10v1a7 7 0 0 1-14 0v-1" />
+                  <line x1="12" y1="19" x2="12" y2="22" />
+                  <line x1="8" y1="22" x2="16" y2="22" />
+                </svg>
+              </Button>
+            </Tooltip>
+          </Dropdown>
         ) : null}
         {dualPaneRepositoryPicker ? (
           <Select
@@ -1806,6 +1906,9 @@ function ComposerInner({
     speechDictation.supported,
     speechDictation.toggle,
     speechDictation.transcribing,
+    speechMenuOpen,
+    speechPrefs.sendMode,
+    voiceContextMenuItems,
   ]);
 
   /** 与 Semi 底栏同一行：结束（占用中）+ 模型选择 + 发送（Semi 在 generating 时会拦截发送，故用独立结束 + generating=false） */
