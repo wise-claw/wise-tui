@@ -6,3 +6,4 @@ export function formatClaudeModelLabel(modelId: string): string {
   if (!head) return v;
   return head.charAt(0).toUpperCase() + head.slice(1).toLowerCase();
 }
+

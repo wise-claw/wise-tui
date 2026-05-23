@@ -4435,6 +4435,9 @@ export function ClaudeChat({
         diskTranscriptPartial={session.diskTranscriptPartial}
       />
 
+      <div className="app-claude-chat-body">
+        <div className="app-claude-chat-main">
+
       {/* Messages */}
       {!hideMessages && (
         <div
@@ -4926,6 +4929,8 @@ export function ClaudeChat({
         />
 
       </div>
+      </div>
+        </div>
       </div>
     </div>
   );

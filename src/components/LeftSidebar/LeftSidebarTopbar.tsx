@@ -1,6 +1,6 @@
 import { Tooltip } from "antd";
-import { ClaudeModelTopbarTrigger } from "../ClaudeSessions/ClaudeModelTopbarTrigger";
 import { ClaudeCodeUsageHeaderBtn } from "../ClaudeCodeUsagePopover";
+import { ClaudeModelTopbarTrigger } from "../ClaudeSessions/ClaudeModelTopbarTrigger";
 import { useClaudeModelProfileStore } from "../../hooks/useClaudeModelProfileStore";
 import { IconSettings } from "../icons/IconSettings";
 import { IconCompactLayout } from "./SidebarIcons";
@@ -62,7 +62,10 @@ export function LeftSidebarTopbar({
           </Tooltip>
         ) : null}
         <ClaudeCodeUsageHeaderBtn />
-        <ClaudeModelTopbarTrigger effectiveModel={claudeModelStore?.effectiveModel} variant="sidebar" />
+        <ClaudeModelTopbarTrigger
+          variant="sidebar"
+          effectiveModel={claudeModelStore?.effectiveModel ?? null}
+        />
       </div>
     </div>
   );

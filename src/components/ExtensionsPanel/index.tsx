@@ -130,7 +130,7 @@ function ExtensionsUsageGuide() {
                 </li>
               </ol>
               <Typography.Paragraph type="secondary" className="app-extensions-panel__guide-note">
-                与侧栏「Claude 插件」不同：扩展市场管理的是 Wise 扩展目录；Claude 插件面向 Claude Code 官方/精选插件市场。
+                与侧栏「插件市场」不同：扩展市场管理的是 Wise 扩展目录；插件市场面向 Claude Code 官方/精选插件目录。
               </Typography.Paragraph>
             </div>
           ),

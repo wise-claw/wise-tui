@@ -20,14 +20,14 @@
 }
 
 .app-claude-model-topbar-popover {
-  max-width: min(94vw, 360px);
+  max-width: min(94vw, 252px);
 }
 
 .app-claude-model-topbar-popover .ant-popover-container {
   padding: 0 !important;
   overflow: hidden;
-  width: min(94vw, 360px) !important;
-  max-width: min(94vw, 360px) !important;
+  width: min(94vw, 252px) !important;
+  max-width: min(94vw, 252px) !important;
   box-sizing: border-box;
 }
 
@@ -38,16 +38,17 @@
 .app-claude-model-topbar-panel {
   display: flex;
   flex-direction: column;
-  max-height: min(70vh, 420px);
-  min-width: 280px;
+  max-height: min(60vh, 300px);
+  min-width: 0;
+  width: 100%;
 }
 
 .app-claude-model-topbar-panel__head {
-  padding: 10px 12px 8px;
+  padding: 8px 10px 6px;
   border-bottom: 1px solid var(--ant-color-border-secondary);
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 
 .app-claude-model-topbar-panel__head-row {
@@ -59,35 +60,41 @@
 }
 
 .app-claude-model-topbar-panel__title {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   flex-shrink: 0;
 }
 
 .app-claude-model-topbar-panel__sync.ant-btn {
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-width: 0;
   height: auto;
   padding: 0;
-  font-size: 11px;
-  line-height: 1.3;
+  font-size: 10px;
+  line-height: 1.25;
   white-space: nowrap;
 }
 
-.app-claude-model-topbar-panel__effective {
+.app-claude-model-topbar-panel__sync.ant-btn .anticon {
   font-size: 11px;
+}
+
+.app-claude-model-topbar-panel__effective {
+  font-size: 10px;
+  line-height: 1.3;
 }
 
 .app-claude-model-topbar-panel__list {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: 4px;
+  padding: 2px 4px;
 }
 
 .app-claude-model-topbar-panel__list .ant-list-item {
-  padding: 2px 6px 2px 10px !important;
-  margin: 1px 0;
-  border-radius: 6px;
+  padding: 1px 4px 1px 8px !important;
+  margin: 0;
+  border-radius: 4px;
   border-block-end: none !important;
   transition: background 0.15s ease;
 }
@@ -113,8 +120,8 @@
 
 /* Make action buttons compact and tidy */
 .app-claude-model-topbar-panel__list .ant-list-item-action .ant-btn {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -151,68 +158,60 @@
   display: flex;
   flex-direction: row;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  justify-content: flex-start;
+  gap: 0;
   border: none;
   background: transparent;
-  padding: 2px 0;
+  padding: 1px 0;
   cursor: pointer;
   text-align: left;
   min-width: 0;
   flex: 1;
 }
 
-.app-claude-model-topbar-panel__item-name {
-  font-size: 12px;
+.app-claude-model-topbar-panel__item-label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.app-claude-model-topbar-panel__item-name,
+.app-claude-model-topbar-panel__item-company {
+  font-size: 11px;
   font-weight: 550;
   color: var(--ant-color-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.app-claude-model-topbar-panel__item-meta {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  margin-left: auto; /* Pull to the right side */
-  color: var(--ant-color-text-tertiary);
+  flex-shrink: 1;
   min-width: 0;
-  overflow: hidden;
-}
-
-.app-claude-model-topbar-panel__item-company {
-  font-size: 10px;
-  color: var(--ant-color-text-quaternary);
-  background: var(--ant-color-fill-content);
-  padding: 0 4px;
-  border-radius: 3px;
-  flex-shrink: 0;
-}
-
-.app-claude-model-topbar-panel__item-company::after {
-  content: "" !important;
-  margin-left: 0 !important;
 }
 
 .app-claude-model-topbar-panel__item-model {
   font-size: 11px;
-  color: var(--ant-color-text-tertiary);
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-weight: 500;
+  color: var(--ant-color-text-secondary);
+  flex-shrink: 0;
   white-space: nowrap;
 }
 
 .app-claude-model-topbar-panel__foot {
-  padding: 6px 12px 8px;
+  padding: 4px 8px 6px;
   border-top: 1px solid var(--ant-color-border-secondary);
 }
 
+.app-claude-model-topbar-panel__foot .ant-btn {
+  font-size: 11px;
+  height: 26px;
+  padding-block: 0;
+}
+
 .app-claude-model-topbar-panel__empty {
-  margin: 16px 0;
+  margin: 10px 0;
+  font-size: 11px;
 }
 
 .app-claude-model-topbar-panel__form {

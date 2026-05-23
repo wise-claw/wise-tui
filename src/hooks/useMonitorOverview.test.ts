@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { WorkflowInvocationStreamDetail } from "../constants/workflowUiEvents";
 import type { TrellisAgentRun } from "../services/trellisRuntime";
-import type { ProjectItem, Repository } from "../types";
+import type { EmployeeItem, EmployeeMonitorItem, ProjectItem, Repository } from "../types";
 import {
   buildRepositoryMemberMonitorItems,
   isRepositoryMemberMainSessionSubagent,
+  resolveTeamPanelEmployeeMonitorItems,
 } from "./useMonitorOverview";
 
 function repo(input: Partial<Repository> & Pick<Repository, "id" | "path">): Repository {
@@ -407,5 +408,68 @@ describe("buildRepositoryMemberMonitorItems", () => {
       activeSubagentCount: 0,
     });
     expect(items[0]?.subagents.map((item) => item.status)).toEqual(["completed", "failed", "cancelled"]);
+  });
+});
+
+describe("resolveTeamPanelEmployeeMonitorItems", () => {
+  const ws = project({ id: "ws-1", repositoryIds: [10] });
+
+  function employee(overrides: Partial<EmployeeItem> = {}): EmployeeItem {
+    return {
+      id: overrides.id ?? "e1",
+      name: overrides.name ?? "Alice",
+      agentType: "frontend",
+      enabled: true,
+      createdAt: 0,
+      updatedAt: 0,
+      displayOrder: 0,
+      repositoryIds: [],
+      projectIds: [],
+      ...overrides,
+    };
+  }
+
+  test("trellis scope includes team-assigned employees as idle when absent from monitor list", () => {
+    const employees = [
+      employee({ id: "e-team", name: "Team Dev", projectIds: ["ws-1"] }),
+      employee({ id: "e-free", name: "Solo Dev", projectIds: ["ws-1"] }),
+    ];
+    const monitorItems: EmployeeMonitorItem[] = [
+      {
+        employeeId: "e-free",
+        name: "Solo Dev",
+        agentType: "frontend",
+        status: "idle",
+        updatedAt: 1,
+      },
+    ];
+
+    const result = resolveTeamPanelEmployeeMonitorItems(monitorItems, employees, {
+      activeProjectId: "ws-1",
+      projects: [ws],
+      restrictToProjectScope: true,
+    });
+
+    expect(result.map((item) => item.employeeId).sort()).toEqual(["e-free", "e-team"]);
+    expect(result.find((item) => item.employeeId === "e-team")).toMatchObject({
+      name: "Team Dev",
+      status: "idle",
+    });
+  });
+
+  test("non-trellis mode keeps legacy filter on monitor items only", () => {
+    const employees = [employee({ id: "e1", projectIds: ["ws-1"] }), employee({ id: "e2", projectIds: ["other"] })];
+    const monitorItems: EmployeeMonitorItem[] = [
+      { employeeId: "e1", name: "Alice", agentType: "frontend", status: "idle", updatedAt: 1 },
+      { employeeId: "e2", name: "Bob", agentType: "frontend", status: "idle", updatedAt: 2 },
+    ];
+
+    const result = resolveTeamPanelEmployeeMonitorItems(monitorItems, employees, {
+      activeProjectId: "ws-1",
+      projects: [ws],
+      restrictToProjectScope: false,
+    });
+
+    expect(result.map((item) => item.employeeId)).toEqual(["e1", "e2"]);
   });
 });

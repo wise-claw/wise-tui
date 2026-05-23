@@ -8,12 +8,14 @@ import {
   getClaudeModelProfileStore,
   getClaudeUserSettingsJson,
   saveClaudeUserSettingsJson,
+  upsertClaudeModelProfile,
   syncClaudeModelProfilesFromCcSwitch,
   dispatchClaudeUserSettingsChanged,
 } from "../../services/claudeModelProfiles";
 import type { ClaudeModelProfile, ClaudeModelProfileStoreView } from "../../types/claudeModelProfile";
 import { formatClaudeModelLabel } from "../../utils/claudeModel";
 import { ClaudeSettingsJsonEditor } from "./ClaudeSettingsJsonEditor";
+import "./ClaudeModelTopbarTrigger.css";
 
 interface Props {
   onApplied?: () => void;
@@ -44,6 +46,8 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
   const [addSaving, setAddSaving] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
   const [configProfile, setConfigProfile] = useState<ClaudeModelProfile | null>(null);
+  const [configCompany, setConfigCompany] = useState("");
+  const [configName, setConfigName] = useState("");
   const [settingsDraft, setSettingsDraft] = useState("");
   const [savingConfig, setSavingConfig] = useState(false);
   const [syncingCcSwitch, setSyncingCcSwitch] = useState(false);
@@ -132,6 +136,8 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
 
   const openConfig = useCallback((profile: ClaudeModelProfile) => {
     setConfigProfile(profile);
+    setConfigCompany(profile.company?.trim() || profile.name?.trim() || "");
+    setConfigName(profile.name || "");
     setSettingsDraft(profile.settingsJson);
     setConfigOpen(true);
     setSavingConfig(false);
@@ -139,6 +145,11 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
 
   const handleSaveConfig = useCallback(async () => {
     if (!configProfile) return;
+    const name = configName.trim();
+    if (!name) {
+      message.warning("请输入配置名称");
+      return;
+    }
     const jsonErr = validateSettingsJson(settingsDraft);
     if (jsonErr) {
       message.warning(jsonErr);
@@ -146,13 +157,20 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
     }
     setSavingConfig(true);
     try {
-      const next = await saveClaudeUserSettingsJson(settingsDraft, configProfile.id);
+      const updatedProfile: ClaudeModelProfile = {
+        ...configProfile,
+        company: configCompany.trim(),
+        name,
+        settingsJson: settingsDraft,
+        updatedAtMs: Date.now(),
+      };
+      const next = await upsertClaudeModelProfile(updatedProfile);
       setStore(next);
-        message.success(
-          next.effectiveModel?.trim()
-            ? `已保存全局配置，当前模型：${formatClaudeModelLabel(next.effectiveModel.trim())}`
-            : "已保存到数据库并写入 Claude Code 全局 settings.json",
-        );
+      message.success(
+        next.effectiveModel?.trim()
+          ? `已保存全局配置，当前模型：${formatClaudeModelLabel(next.effectiveModel.trim())}`
+          : "已保存到数据库并写入 Claude Code 全局 settings.json",
+      );
       dispatchClaudeUserSettingsChanged({
         effectiveModel: next.effectiveModel?.trim() || null,
       });
@@ -164,7 +182,7 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
     } finally {
       setSavingConfig(false);
     }
-  }, [configProfile, settingsDraft, onApplied]);
+  }, [configProfile, configCompany, configName, settingsDraft, onApplied]);
 
   const handleSyncFromCcSwitch = useCallback(async () => {
     setSyncingCcSwitch(true);
@@ -263,17 +281,34 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
                   type="button"
                   className="app-claude-model-topbar-panel__item-main"
                   onClick={() => void handleApply(item.id)}
+                  title={
+                    item.company.trim()
+                      ? `${item.company.trim()} ${formatClaudeModelLabel(item.modelId)}`
+                      : item.name
+                  }
                 >
-                  <span className="app-claude-model-topbar-panel__item-name">{item.name}</span>
-                  <span className="app-claude-model-topbar-panel__item-meta">
-                    {item.company?.trim() ? (
-                      <span className="app-claude-model-topbar-panel__item-company">
-                        {item.company.trim()}
-                      </span>
-                    ) : null}
-                    <span className="app-claude-model-topbar-panel__item-model">
-                      {formatClaudeModelLabel(item.modelId)}
-                    </span>
+                  <span className="app-claude-model-topbar-panel__item-label">
+                    {item.company.trim() ? (
+                      <>
+                        <span className="app-claude-model-topbar-panel__item-company">
+                          {item.company.trim()}
+                        </span>
+                        <span className="app-claude-model-topbar-panel__item-model">
+                          {formatClaudeModelLabel(item.modelId)}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="app-claude-model-topbar-panel__item-name">
+                          {item.name.trim() || formatClaudeModelLabel(item.modelId)}
+                        </span>
+                        {item.name.trim() ? (
+                          <span className="app-claude-model-topbar-panel__item-model">
+                            {formatClaudeModelLabel(item.modelId)}
+                          </span>
+                        ) : null}
+                      </>
+                    )}
                   </span>
                 </button>
               </List.Item>
@@ -367,15 +402,40 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
         confirmLoading={savingConfig}
         destroyOnHidden
       >
-        <Typography.Paragraph type="secondary" className="app-claude-model-topbar-panel__hint">
-          编辑后将写入用户级 Claude Code <Typography.Text code>settings.json</Typography.Text>
-          ，并更新该档案。
-        </Typography.Paragraph>
-        <ClaudeSettingsJsonEditor
-          value={settingsDraft}
-          onChange={setSettingsDraft}
-          height={420}
-        />
+        <div className="app-claude-model-topbar-panel__form">
+          <div className="app-claude-model-topbar-panel__form-row">
+            <div className="app-claude-model-topbar-panel__form-field">
+              <label className="app-claude-model-topbar-panel__label">公司</label>
+              <Input
+                value={configCompany}
+                onChange={(e) => setConfigCompany(e.target.value)}
+                placeholder="例如：百炼"
+              />
+            </div>
+            <div className="app-claude-model-topbar-panel__form-field">
+              <label className="app-claude-model-topbar-panel__label">名称</label>
+              <Input
+                value={configName}
+                onChange={(e) => setConfigName(e.target.value)}
+                placeholder="例如：Qwen 配置"
+              />
+            </div>
+          </div>
+          <div className="app-claude-model-topbar-panel__json-head">
+            <div className="app-claude-model-topbar-panel__json-head-text">
+              <label className="app-claude-model-topbar-panel__label">配置 JSON</label>
+              <Typography.Paragraph type="secondary" className="app-claude-model-topbar-panel__hint">
+                编辑后将写入用户级 Claude Code <Typography.Text code>settings.json</Typography.Text>
+                ，并更新该档案。
+              </Typography.Paragraph>
+            </div>
+          </div>
+          <ClaudeSettingsJsonEditor
+            value={settingsDraft}
+            onChange={setSettingsDraft}
+            height={360}
+          />
+        </div>
       </Modal>
     </div>
   );

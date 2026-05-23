@@ -46,7 +46,8 @@ export function ClaudeModelTopbarTrigger({ effectiveModel, variant = "chat" }: P
   return (
     <Popover
       trigger="click"
-      placement={isSidebar ? "bottomRight" : "bottomLeft"}
+      placement={isSidebar ? "bottomRight" : "rightTop"}
+      arrow={!isSidebar}
       open={open}
       onOpenChange={handleOpenChange}
       classNames={{ root: "app-claude-model-topbar-popover" }}

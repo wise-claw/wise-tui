@@ -419,7 +419,7 @@ describe("AuthorPanel", () => {
   test("claude-plugins pane mounts ClaudePluginMarketHub", () => {
     const { props } = buildProps({ pane: "claude-plugins" });
     const html = renderAuthorPanel(props);
-    expect(html).toContain("Claude Code 插件");
+    expect(html).toContain("插件市场");
     expect(html).toContain("精选市场");
   });
 

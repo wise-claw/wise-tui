@@ -53,6 +53,7 @@ import {
   getEffectiveRepoSddMode,
   getProjectSddMode,
 } from "../utils/projectRepositoryRoles";
+import { isOmcMonitorEmployeeRecord } from "../utils/omcMonitorEmployeeSession";
 
 interface UseMonitorOverviewInput {
   employees: EmployeeItem[];
@@ -573,6 +574,66 @@ export function filterEmployeeMonitorItemsForProjectMembers(
   return items.filter(
     (item) => item.employeeId !== "omc-worker" && allowedIds.has(item.employeeId),
   );
+}
+
+function createIdleEmployeeMonitorItem(employee: EmployeeItem): EmployeeMonitorItem {
+  return {
+    employeeId: employee.id,
+    name: employee.name,
+    agentType: employee.agentType,
+    status: "idle",
+    updatedAt: employee.updatedAt,
+  };
+}
+
+function sortEmployeeMonitorItems(items: EmployeeMonitorItem[]): EmployeeMonitorItem[] {
+  return [...items].sort((a, b) => {
+    if (a.status !== b.status) return a.status === "in_progress" ? -1 : 1;
+    return b.updatedAt - a.updatedAt;
+  });
+}
+
+/**
+ * 右栏「我的团队」成员列表：Trellis 项目下展示项目作用域内全部启用成员（含已挂工作流的），
+ * 并与 `useMonitorOverview` 的运行态合并；非 Trellis 时仍仅过滤监控项子集。
+ */
+export function resolveTeamPanelEmployeeMonitorItems(
+  employeeMonitorItems: readonly EmployeeMonitorItem[],
+  employees: readonly EmployeeItem[],
+  input: {
+    activeProjectId: string | null;
+    projects: ReadonlyArray<ProjectItem>;
+    restrictToProjectScope: boolean;
+  },
+): EmployeeMonitorItem[] {
+  if (!input.restrictToProjectScope) {
+    return filterEmployeeMonitorItemsForProjectMembers(employeeMonitorItems, employees, input);
+  }
+  if (!input.activeProjectId) {
+    return [];
+  }
+  const project = input.projects.find((entry) => entry.id === input.activeProjectId);
+  if (!project) {
+    return [];
+  }
+
+  const byEmployeeId = new Map(employeeMonitorItems.map((item) => [item.employeeId, item] as const));
+  const scoped = employees
+    .filter(
+      (employee) =>
+        employee.enabled &&
+        employee.name.trim().length > 0 &&
+        !isOmcMonitorEmployeeRecord(employee) &&
+        employeeInProjectScope(employee, project),
+    )
+    .map((employee) => byEmployeeId.get(employee.id) ?? createIdleEmployeeMonitorItem(employee));
+
+  const omc = employeeMonitorItems.find((item) => item.employeeId === "omc-worker");
+  if (omc) {
+    scoped.push(omc);
+  }
+
+  return sortEmployeeMonitorItems(scoped);
 }
 
 /** 右栏「仓库成员」：选中 Workspace 时展示其下全部仓库；仅选中游离仓库时展示该仓库。 */

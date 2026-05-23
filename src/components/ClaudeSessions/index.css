@@ -1258,6 +1258,23 @@
   outline: none;
 }
 
+.app-claude-chat-body {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.app-claude-chat-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
 /* 消息区与底部（快捷条 + 输入）的分界 */
 .app-claude-chat-bottom {
   flex-shrink: 0;

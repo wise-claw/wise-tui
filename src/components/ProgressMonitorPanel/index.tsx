@@ -850,8 +850,8 @@ export function ProgressMonitorPanel({
     () => teamItems.filter((item) => item.status === "in_progress").length,
     [teamItems],
   );
-  const repositoryMemberInProgress = useMemo(
-    () => repositoryMemberItems.filter((item) => item.status === "in_progress").length,
+  const runningRepositoryMemberItems = useMemo(
+    () => repositoryMemberItems.filter((item) => item.status === "in_progress"),
     [repositoryMemberItems],
   );
 
@@ -914,6 +914,12 @@ export function ProgressMonitorPanel({
     setOmcDirectBatchDetailSnapshot(inv);
   }, []);
 
+  const panelHasListContent =
+    employeeItems.length > 0 ||
+    runningRepositoryMemberItems.length > 0 ||
+    agentAssignments.length > 0 ||
+    teamItems.length > 0;
+
   return (
     <div className="app-monitor-panel">
       <div className="app-monitor-panel__head">
@@ -953,6 +959,21 @@ export function ProgressMonitorPanel({
           )}
         </div>
       </div>
+
+      {!panelHasListContent ? (
+        <div className="app-monitor-panel__empty app-monitor-panel__empty--with-action">
+          <span>{hideEmployeeUi ? "暂无成员" : "暂无员工"}</span>
+          {onOpenEmployeeConfig ? (
+            <button
+              type="button"
+              className="app-monitor-panel__empty-add-btn"
+              onClick={() => onOpenEmployeeConfig()}
+            >
+              {hideEmployeeUi ? "配置成员" : "配置员工"}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       {employeeItems.length > 0 ? (
       <div className="app-monitor-panel__section">
@@ -1060,7 +1081,7 @@ export function ProgressMonitorPanel({
       </div>
       ) : null}
 
-      {repositoryMemberItems.length > 0 ? (
+      {runningRepositoryMemberItems.length > 0 ? (
         <div className="app-monitor-panel__section app-monitor-panel__section--repo-members">
           <div className="app-monitor-panel__section-head">
             <div className="app-monitor-panel__section-title-wrap">
@@ -1069,11 +1090,11 @@ export function ProgressMonitorPanel({
                 仓库成员
               </Typography.Text>
               <Typography.Text className="app-monitor-panel__meta">
-                总数 {repositoryMemberItems.length} · 进行中 {repositoryMemberInProgress} · 空闲 {repositoryMemberItems.length - repositoryMemberInProgress}
+                进行中 {runningRepositoryMemberItems.length}
               </Typography.Text>
             </div>
           </div>
-          {repositoryMemberItems.map((item) => (
+          {runningRepositoryMemberItems.map((item) => (
             <div key={item.repositoryId} className="app-monitor-panel__item app-monitor-panel__item--readonly">
               <div className="app-monitor-panel__item-row">
                 <span className="app-monitor-panel__item-name-wrap">

@@ -40,11 +40,11 @@ export const AUTHOR_TAB_GROUPS: Array<{ title: string; items: AuthorTabDefinitio
     items: [
       { key: "extensions", label: "扩展市场", description: "本地扩展、远程索引和贡献能力", icon: <AppstoreAddOutlined /> },
       { key: "assistants", label: "助手模板", description: "角色模板、模型和系统提示词", icon: <UserOutlined /> },
-      { key: "skills", label: "技能市场", description: "skills.sh、外部目录和扩展技能", icon: <ToolOutlined /> },
       { key: "mcp", label: "MCP 工具", description: "服务器、推荐项和扩展工具协议", icon: <ApiOutlined /> },
+      { key: "skills", label: "技能市场", description: "skills.sh、外部目录和扩展技能", icon: <ToolOutlined /> },
       {
         key: "claude-plugins",
-        label: "Claude 插件",
+        label: "插件市场",
         description: "精选 50+ 插件，一键安装 oh-my-claudecode 等",
         icon: <BlockOutlined />,
       },

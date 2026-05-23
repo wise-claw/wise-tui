@@ -371,7 +371,7 @@ export function ClaudePluginMarketHub({ onClose }: Props) {
       <AuthorPanelPageShell
         className="app-claude-plugin-hub-root"
         icon={<BlockOutlined />}
-        title="Claude Code 插件"
+        title="插件市场"
         subtitle="精选 56+ 个主流插件，支持一键安装"
         actions={headerActions}
         toolbar={headerToolbar}
@@ -387,7 +387,7 @@ export function ClaudePluginMarketHub({ onClose }: Props) {
       <header className="app-mcp-hub-header">
         <div className="app-mcp-hub-header-top">
           <Typography.Title level={5} className="app-mcp-hub-title">
-            Claude Code 插件市场
+            插件市场
           </Typography.Title>
           {onClose ? (
             <Tooltip title="关闭" mouseEnterDelay={0.35}>

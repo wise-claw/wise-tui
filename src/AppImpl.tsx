@@ -78,7 +78,7 @@ import { resolveSidebarSelectionTarget } from "./utils/sidebarSelectionTarget";
 import { employeeInProjectScope, shouldHideEmployeeUi } from "./utils/projectRepositoryRoles";
 import { buildProjectRoleTagOptions, buildProjectRepositoryMentionOptions } from "./utils/projectRoleTagOptions";
 import {
-  filterEmployeeMonitorItemsForProjectMembers,
+  resolveTeamPanelEmployeeMonitorItems,
   filterRepositoryMemberMonitorItemsBySelection,
   useMonitorOverview,
 } from "./hooks/useMonitorOverview";
@@ -1097,7 +1097,7 @@ export default function App() {
   }, [activeProject, employeeMonitorItems, employees]);
   const teamPanelEmployeeMonitorItems = useMemo(
     () =>
-      filterEmployeeMonitorItemsForProjectMembers(employeeMonitorItems, employees, {
+      resolveTeamPanelEmployeeMonitorItems(employeeMonitorItems, employees, {
         activeProjectId,
         projects,
         restrictToProjectScope: shouldHideEmployeeUi(activeProject),
