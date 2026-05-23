@@ -277,8 +277,16 @@ export interface WorkflowGraphNodeData extends Record<string, unknown> {
   promptRequireAcknowledgement?: boolean;
   /** 知识检索节点查询语句，支持 {{var}} */
   knowledgeQuery?: string;
-  /** 代码/脚本节点内容 */
+  /** 代码/脚本节点内容（兼容字段，与 codeSource 同步） */
   codeScript?: string;
+  codeMode?: import("./workflowCode").WorkflowCodeExecutionMode;
+  codeLanguage?: import("./workflowCode").WorkflowCodeLanguage;
+  codeSource?: string;
+  codeInputBindings?: import("./workflowCode").WorkflowCodeInputBinding[];
+  codeOutputVariables?: import("./workflowCode").WorkflowCodeOutputVariable[];
+  codeRequireStructuredOutput?: boolean;
+  codeWorkingDirectory?: string;
+  codeTimeoutSeconds?: number;
   /** 条件分支节点可选说明 */
   branchCriteria?: string;
   /** 条件分支配置 */

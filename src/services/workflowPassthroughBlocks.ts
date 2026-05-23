@@ -2,6 +2,7 @@ import type { WorkflowGraph, WorkflowGraphNode } from "../types";
 import type { BranchEvaluationContext } from "./workflowBranchEvaluation";
 import { workflowVariablesFromGraph } from "./workflowGraphRuntime";
 import { formatPromptPassthroughBlockFromNode } from "./workflowPromptTemplate";
+import { formatCodePassthroughBlockFromNode } from "./workflowCodeExecution";
 
 function passthroughContext(graph: WorkflowGraph | null | undefined, taskContent?: string): BranchEvaluationContext {
   return {
@@ -23,17 +24,8 @@ export function formatKnowledgePassthroughBlock(node: WorkflowGraphNode): string
   return lines.join("\n");
 }
 
-export function formatCodePassthroughBlock(node: WorkflowGraphNode): string {
-  const script = typeof node.data.codeScript === "string" ? node.data.codeScript.trim() : "";
-  const label = (node.data.label || node.id).trim() || node.id;
-  const lines = [
-    "【代码/脚本执行说明】",
-    `节点「${label}」：请在受控环境中执行以下脚本或命令，并将执行结果摘要写入回复。`,
-  ];
-  if (script) {
-    lines.push("", "```", script, "```");
-  }
-  return lines.join("\n");
+export function formatCodePassthroughBlock(node: WorkflowGraphNode, ctx?: BranchEvaluationContext): string {
+  return formatCodePassthroughBlockFromNode(node, ctx ?? {});
 }
 
 export function formatPassthroughBlockForNode(
@@ -45,7 +37,7 @@ export function formatPassthroughBlockForNode(
     return formatPromptPassthroughBlockFromNode(node, passthroughContext(graph, taskContent));
   }
   if (node.type === "knowledge") return formatKnowledgePassthroughBlock(node);
-  if (node.type === "code") return formatCodePassthroughBlock(node);
+  if (node.type === "code") return formatCodePassthroughBlock(node, passthroughContext(graph, taskContent));
   return "";
 }
 

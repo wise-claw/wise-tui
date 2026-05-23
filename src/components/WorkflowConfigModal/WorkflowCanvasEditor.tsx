@@ -33,8 +33,10 @@ import { WorkflowStartNodeEditModal, type WorkflowStartNodeFormValues } from "./
 import { WorkflowTransformNodeEditModal, type WorkflowTransformNodeFormValues } from "./WorkflowTransformNodeEditModal";
 import { WorkflowBranchNodeEditModal, type WorkflowBranchNodeFormValues } from "./WorkflowBranchNodeEditModal";
 import { WorkflowPromptNodeEditModal, type WorkflowPromptNodeFormValues } from "./WorkflowPromptNodeEditModal";
+import { WorkflowCodeNodeEditModal, type WorkflowCodeNodeFormValues } from "./WorkflowCodeNodeEditModal";
 import { promptConfigFromNodeData, serializePromptConfigToNodeData } from "../../services/workflowPromptTemplate";
 import { normalizePromptMessages } from "../../services/workflowPromptTemplate";
+import { codeConfigFromNodeData, serializeCodeConfigToNodeData } from "../../services/workflowCodeExecution";
 import { branchPortLabelFromId, normalizeBranchConditions } from "../../services/workflowBranchEvaluation";
 import {
   buildMergedStageTaskBasisSelectOptions,
@@ -75,6 +77,7 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
   const [transformEditForm] = Form.useForm<WorkflowTransformNodeFormValues>();
   const [branchEditForm] = Form.useForm<WorkflowBranchNodeFormValues>();
   const [promptEditForm] = Form.useForm<WorkflowPromptNodeFormValues>();
+  const [codeEditForm] = Form.useForm<WorkflowCodeNodeFormValues>();
   const taskContentPreview = useMemo(() => {
     const start = value.nodes.find((node) => node.kind === "start");
     return start?.title?.trim() ? `（开始节点：${start.title}）` : "";
@@ -243,12 +246,38 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
       });
       return;
     }
+    if (payload.kind === "material" && payload.materialKey === "code") {
+      setEditingNode(payload);
+      const config = codeConfigFromNodeData({
+        label: payload.title,
+        codeScript: payload.codeScript,
+        codeMode: payload.codeMode,
+        codeLanguage: payload.codeLanguage,
+        codeSource: payload.codeSource,
+        codeInputBindings: payload.codeInputBindings,
+        codeOutputVariables: payload.codeOutputVariables,
+        codeRequireStructuredOutput: payload.codeRequireStructuredOutput,
+        codeWorkingDirectory: payload.codeWorkingDirectory,
+        codeTimeoutSeconds: payload.codeTimeoutSeconds,
+      });
+      codeEditForm.setFieldsValue({
+        title: payload.title,
+        mode: config.mode,
+        language: config.language,
+        source: config.source,
+        inputBindings: config.inputBindings,
+        outputVariables: config.outputVariables,
+        requireStructuredOutput: config.requireStructuredOutput,
+        workingDirectory: config.workingDirectory ?? "",
+        timeoutSeconds: config.timeoutSeconds,
+      });
+      return;
+    }
     if (payload.kind === "material" && isPassthroughMaterialKey(payload.materialKey)) {
       setEditingNode(payload);
       transformEditForm.setFieldsValue({
         title: payload.title,
         knowledgeQuery: payload.knowledgeQuery || "",
-        codeScript: payload.codeScript || "",
       });
       return;
     }
@@ -698,6 +727,37 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
     emitSnapshot();
   }
 
+  async function handleSubmitCodeNodeEdit() {
+    if (!editingNode || editingNode.kind !== "material" || !graphRef.current) return;
+    const values = await codeEditForm.validateFields();
+    const graph = graphRef.current;
+    const target = graph.getCellById(editingNode.id);
+    if (!target || !target.isNode()) {
+      setEditingNode(null);
+      return;
+    }
+    const node = target as X6Node;
+    const serialized = serializeCodeConfigToNodeData({
+      mode: values.mode,
+      language: values.language,
+      source: values.source,
+      inputBindings: values.inputBindings ?? [],
+      outputVariables: values.outputVariables ?? [],
+      requireStructuredOutput: values.requireStructuredOutput,
+      workingDirectory: values.workingDirectory?.trim() || undefined,
+      timeoutSeconds: values.timeoutSeconds,
+    });
+    const nextData: Partial<CanvasNodeItem> = {
+      ...(node.getData() ?? {}),
+      title: values.title.trim(),
+      ...serialized,
+    };
+    node.setData(nextData);
+    applyNodeVisual(node, nextData);
+    setEditingNode(null);
+    emitSnapshot();
+  }
+
   async function handleSubmitTransformNodeEdit() {
     if (!editingNode || editingNode.kind !== "material" || !graphRef.current) return;
     const values = await transformEditForm.validateFields();
@@ -713,7 +773,6 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
       ...currentData,
       title: values.title.trim(),
       knowledgeQuery: values.knowledgeQuery?.trim() ?? "",
-      codeScript: values.codeScript?.trim() ?? "",
     };
     node.setData(nextData);
     applyNodeVisual(node, nextData);
@@ -792,6 +851,8 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
     editingNode && editingNode.kind === "material" && editingNode.materialKey === "branch" ? editingNode : null;
   const editingPromptNode =
     editingNode && editingNode.kind === "material" && editingNode.materialKey === "prompt" ? editingNode : null;
+  const editingCodeNode =
+    editingNode && editingNode.kind === "material" && editingNode.materialKey === "code" ? editingNode : null;
 
   return (
     <>
@@ -889,6 +950,14 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
         taskContentPreview={taskContentPreview}
         onCancel={handleCloseNodeEdit}
         onSubmit={() => void handleSubmitPromptNodeEdit()}
+      />
+      <WorkflowCodeNodeEditModal
+        editingNode={editingCodeNode}
+        form={codeEditForm}
+        variableOptions={workflowVariableOptions}
+        taskContentPreview={taskContentPreview}
+        onCancel={handleCloseNodeEdit}
+        onSubmit={() => void handleSubmitCodeNodeEdit()}
       />
     </>
   );

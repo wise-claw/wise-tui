@@ -8,6 +8,7 @@ import type { WorkflowBranchCondition } from "../../types/workflowBranch";
 import { DEFAULT_WORKFLOW_BRANCH_CONDITIONS } from "../../types/workflowBranch";
 import { normalizeWorkflowVariables } from "../../utils/workflowVariables";
 import { normalizeBranchConditions, summarizeBranchCondition } from "../../services/workflowBranchEvaluation";
+import { codeConfigFromNodeData, summarizeCodeConfig } from "../../services/workflowCodeExecution";
 import { promptConfigFromNodeData, summarizePromptConfig } from "../../services/workflowPromptTemplate";
 import { normalizeWorkflowStageOutcomeCriteria } from "../../utils/workflowStageOutcomeCriteria";
 import { normalizeStageTaskBasisRefsFromNodeData } from "../../services/workflowGraphRuntime";
@@ -44,6 +45,14 @@ export interface CanvasNodeItem {
   promptRequireAcknowledgement?: boolean;
   knowledgeQuery?: string;
   codeScript?: string;
+  codeMode?: import("../../types/workflowCode").WorkflowCodeExecutionMode;
+  codeLanguage?: import("../../types/workflowCode").WorkflowCodeLanguage;
+  codeSource?: string;
+  codeInputBindings?: import("../../types/workflowCode").WorkflowCodeInputBinding[];
+  codeOutputVariables?: import("../../types/workflowCode").WorkflowCodeOutputVariable[];
+  codeRequireStructuredOutput?: boolean;
+  codeWorkingDirectory?: string;
+  codeTimeoutSeconds?: number;
   branchCriteria?: string;
   branchConditions?: WorkflowBranchCondition[];
   workflowVariables?: WorkflowVariableDefinition[];
@@ -172,7 +181,7 @@ export const MATERIALS: Record<string, MaterialItem> = {
     key: "code",
     iconText: "RUN",
     title: "代码执行",
-    desc: "注入脚本/命令执行说明。",
+    desc: "配置命令/脚本、变量映射与输出结构后注入执行说明。",
     inputPlaceholder: "输入脚本或命令说明",
     theme: "magenta",
   },
@@ -185,7 +194,11 @@ export function isAgentMaterialKey(materialKey: string | undefined): boolean {
 }
 
 export function isPassthroughMaterialKey(materialKey: string | undefined): boolean {
-  return materialKey === "knowledge" || materialKey === "code";
+  return materialKey === "knowledge";
+}
+
+export function isTransformGraphMaterialKey(materialKey: string | undefined): boolean {
+  return materialKey === "prompt" || materialKey === "knowledge" || materialKey === "code" || materialKey === "branch";
 }
 
 export function defaultTitleForMaterialKey(materialKey: string): string {
@@ -259,6 +272,7 @@ export function workflowGraphToCanvasSnapshot(graph: WorkflowGraph | null | unde
     }
     const key = graphNodeTypeToMaterialKey(node);
     const promptConfig = key === "prompt" ? promptConfigFromNodeData(node.data) : null;
+    const codeConfig = key === "code" ? codeConfigFromNodeData(node.data) : null;
     return {
       id: node.id,
       kind: "material",
@@ -280,7 +294,19 @@ export function workflowGraphToCanvasSnapshot(graph: WorkflowGraph | null | unde
           }
         : {}),
       knowledgeQuery: typeof node.data.knowledgeQuery === "string" ? node.data.knowledgeQuery : "",
-      codeScript: typeof node.data.codeScript === "string" ? node.data.codeScript : "",
+      codeScript: codeConfig ? codeConfig.source : typeof node.data.codeScript === "string" ? node.data.codeScript : "",
+      ...(codeConfig
+        ? {
+            codeMode: codeConfig.mode,
+            codeLanguage: codeConfig.language,
+            codeSource: codeConfig.source,
+            codeInputBindings: codeConfig.inputBindings,
+            codeOutputVariables: codeConfig.outputVariables,
+            codeRequireStructuredOutput: codeConfig.requireStructuredOutput,
+            ...(codeConfig.workingDirectory ? { codeWorkingDirectory: codeConfig.workingDirectory } : {}),
+            ...(codeConfig.timeoutSeconds ? { codeTimeoutSeconds: codeConfig.timeoutSeconds } : {}),
+          }
+        : {}),
       branchCriteria: typeof node.data.branchCriteria === "string" ? node.data.branchCriteria : "",
       branchConditions: normalizeBranchConditions(node.data.branchConditions),
       passthroughData: omitGraphNodeMappedData(node.data, "material"),
@@ -349,6 +375,14 @@ function omitGraphNodeMappedData(
     delete out.promptRequireAcknowledgement;
     delete out.knowledgeQuery;
     delete out.codeScript;
+    delete out.codeMode;
+    delete out.codeLanguage;
+    delete out.codeSource;
+    delete out.codeInputBindings;
+    delete out.codeOutputVariables;
+    delete out.codeRequireStructuredOutput;
+    delete out.codeWorkingDirectory;
+    delete out.codeTimeoutSeconds;
     delete out.branchCriteria;
     delete out.branchConditions;
   }
@@ -381,8 +415,19 @@ function summarizePassthroughNode(node: Partial<CanvasNodeItem>): string {
     return text ? `检索：${text.slice(0, 48)}${text.length > 48 ? "…" : ""}` : "未填写检索语句";
   }
   if (materialKey === "code") {
-    const text = (node.codeScript || "").trim();
-    return text ? `脚本：${text.slice(0, 48)}${text.length > 48 ? "…" : ""}` : "未填写脚本说明";
+    const config = codeConfigFromNodeData({
+      label: node.title || "",
+      codeScript: node.codeScript,
+      codeMode: node.codeMode,
+      codeLanguage: node.codeLanguage,
+      codeSource: node.codeSource,
+      codeInputBindings: node.codeInputBindings,
+      codeOutputVariables: node.codeOutputVariables,
+      codeRequireStructuredOutput: node.codeRequireStructuredOutput,
+      codeWorkingDirectory: node.codeWorkingDirectory,
+      codeTimeoutSeconds: node.codeTimeoutSeconds,
+    });
+    return summarizeCodeConfig(config);
   }
   if (materialKey === "branch") {
     const conditions = normalizeBranchConditions(node.branchConditions);
@@ -616,6 +661,14 @@ export function createGraphNodeFromSnapshotNode(node: CanvasNodeItem, employeeNa
       promptRequireAcknowledgement: node.promptRequireAcknowledgement ?? false,
       knowledgeQuery: node.knowledgeQuery || "",
       codeScript: node.codeScript || "",
+      codeMode: node.codeMode,
+      codeLanguage: node.codeLanguage,
+      codeSource: node.codeSource,
+      codeInputBindings: node.codeInputBindings,
+      codeOutputVariables: node.codeOutputVariables,
+      codeRequireStructuredOutput: node.codeRequireStructuredOutput ?? false,
+      codeWorkingDirectory: node.codeWorkingDirectory,
+      codeTimeoutSeconds: node.codeTimeoutSeconds,
       branchCriteria: node.branchCriteria || "",
       branchConditions: normalizeBranchConditions(node.branchConditions),
       ...(() => {

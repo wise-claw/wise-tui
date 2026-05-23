@@ -2,11 +2,12 @@ import type { EmployeeItem, WorkflowGraph, WorkflowGraphNode, WorkflowGraphNodeD
 import { normalizeWorkflowStageOutcomeCriteria } from "../../utils/workflowStageOutcomeCriteria";
 import { branchPortLabelFromId, normalizeBranchConditions } from "../../services/workflowBranchEvaluation";
 import { normalizePromptMessages, serializePromptConfigToNodeData } from "../../services/workflowPromptTemplate";
+import { codeConfigFromNodeData, serializeCodeConfigToNodeData } from "../../services/workflowCodeExecution";
 import { normalizeStageTaskBasisRefsFromNodeData } from "../../services/workflowGraphRuntime";
 import type { CanvasSnapshot } from "../workflowGraph/workflowX6CanvasShared";
 import {
   isAgentMaterialKey,
-  isPassthroughMaterialKey,
+  isTransformGraphMaterialKey,
   normalizeCanvasSnapshot,
   workflowGraphToCanvasSnapshot,
 } from "../workflowGraph/workflowX6CanvasShared";
@@ -50,7 +51,7 @@ export function canvasSnapshotToWorkflowGraph(snapshot: CanvasSnapshot, fallback
       }
       const materialKey = node.materialKey || "employee";
       const graphType = materialKeyToGraphType(materialKey);
-      if (isPassthroughMaterialKey(materialKey) || materialKey === "branch") {
+      if (isTransformGraphMaterialKey(materialKey)) {
         return {
           id: node.id,
           type: graphType,
@@ -67,7 +68,22 @@ export function canvasSnapshotToWorkflowGraph(snapshot: CanvasSnapshot, fallback
                 })
               : {}),
             ...(materialKey === "knowledge" ? { knowledgeQuery: node.knowledgeQuery || "" } : {}),
-            ...(materialKey === "code" ? { codeScript: node.codeScript || "" } : {}),
+            ...(materialKey === "code"
+              ? serializeCodeConfigToNodeData(
+                  codeConfigFromNodeData({
+                    label: node.title || "",
+                    codeScript: node.codeScript,
+                    codeMode: node.codeMode,
+                    codeLanguage: node.codeLanguage,
+                    codeSource: node.codeSource,
+                    codeInputBindings: node.codeInputBindings,
+                    codeOutputVariables: node.codeOutputVariables,
+                    codeRequireStructuredOutput: node.codeRequireStructuredOutput,
+                    codeWorkingDirectory: node.codeWorkingDirectory,
+                    codeTimeoutSeconds: node.codeTimeoutSeconds,
+                  }),
+                )
+              : {}),
             ...(materialKey === "branch"
               ? {
                   branchCriteria: node.branchCriteria || "",

@@ -114,6 +114,14 @@ export function canvasNodeItemFromX6Node(node: X6Node): CanvasNodeItem {
     promptRequireAcknowledgement: Boolean(raw.promptRequireAcknowledgement),
     knowledgeQuery: raw.knowledgeQuery || "",
     codeScript: raw.codeScript || "",
+    codeMode: raw.codeMode as CanvasNodeItem["codeMode"],
+    codeLanguage: raw.codeLanguage as CanvasNodeItem["codeLanguage"],
+    codeSource: raw.codeSource,
+    codeInputBindings: Array.isArray(raw.codeInputBindings) ? raw.codeInputBindings : undefined,
+    codeOutputVariables: Array.isArray(raw.codeOutputVariables) ? raw.codeOutputVariables : undefined,
+    codeRequireStructuredOutput: Boolean(raw.codeRequireStructuredOutput),
+    codeWorkingDirectory: raw.codeWorkingDirectory,
+    codeTimeoutSeconds: typeof raw.codeTimeoutSeconds === "number" ? raw.codeTimeoutSeconds : undefined,
     branchCriteria: raw.branchCriteria || "",
     branchConditions: normalizeBranchConditions(raw.branchConditions),
     workflowVariables: normalizeWorkflowVariables(raw.workflowVariables),
@@ -170,6 +178,18 @@ export function snapshotFromWorkflowGraph(graph: Graph): CanvasSnapshot {
       promptRequireAcknowledgement: Boolean(data.promptRequireAcknowledgement),
       knowledgeQuery: (data.knowledgeQuery as string | undefined) ?? "",
       codeScript: (data.codeScript as string | undefined) ?? "",
+      codeMode: data.codeMode as CanvasNodeItem["codeMode"],
+      codeLanguage: data.codeLanguage as CanvasNodeItem["codeLanguage"],
+      codeSource: data.codeSource as string | undefined,
+      codeInputBindings: Array.isArray(data.codeInputBindings)
+        ? (data.codeInputBindings as CanvasNodeItem["codeInputBindings"])
+        : undefined,
+      codeOutputVariables: Array.isArray(data.codeOutputVariables)
+        ? (data.codeOutputVariables as CanvasNodeItem["codeOutputVariables"])
+        : undefined,
+      codeRequireStructuredOutput: Boolean(data.codeRequireStructuredOutput),
+      codeWorkingDirectory: data.codeWorkingDirectory as string | undefined,
+      codeTimeoutSeconds: typeof data.codeTimeoutSeconds === "number" ? data.codeTimeoutSeconds : undefined,
       branchCriteria: (data.branchCriteria as string | undefined) ?? "",
       branchConditions: normalizeBranchConditions(data.branchConditions),
       workflowVariables: normalizeWorkflowVariables(data.workflowVariables),
