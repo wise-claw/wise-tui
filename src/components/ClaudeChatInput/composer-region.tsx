@@ -50,6 +50,8 @@ import { ContextCompactProgressRing } from "./ContextCompactProgressRing";
 import { useContextBreakdown } from "../../hooks/useContextBreakdown";
 import { ClaudeConnectionKindChip } from "./ClaudeConnectionKindChip";
 import { useDefaultClaudeConnectionKind } from "../../hooks/useDefaultClaudeConnectionKind";
+import { useComposerSpeechDictation } from "../../hooks/useComposerSpeechDictation";
+import { buildSpeechInsertion } from "../../utils/composerSpeechRecognition";
 import type { MenuProps } from "antd";
 import { logClaudeDrop } from "./drop-debug";
 import { buildClaudeOutgoingPrompt } from "../../services/claudeComposerPrompt";
@@ -611,6 +613,29 @@ function ComposerInner({
   const isSessionBusy = session.status === "running" || session.status === "connecting";
   const isSessionBusyRef = useRef(isSessionBusy);
   isSessionBusyRef.current = isSessionBusy;
+
+  const handleSpeechFinalTranscript = useCallback((transcript: string) => {
+    const surface = plainSurfaceRef.current;
+    if (!surface) return;
+    const plain = surface.getPlain();
+    const cur = surface.getCursor();
+    const { insertion, nextCursor } = buildSpeechInsertion(plain, cur, transcript);
+    if (!insertion) return;
+    const { plain: nextPlain } = insertPlainAt(plain, cur, insertion);
+    surface.setPlainAndCursor(nextPlain, nextCursor);
+  }, []);
+
+  const speechDictation = useComposerSpeechDictation({
+    enabled: !isSessionBusy,
+    onFinalTranscript: handleSpeechFinalTranscript,
+    onError: (msg) => {
+      if (msg) message.warning(msg);
+    },
+  });
+
+  useEffect(() => {
+    speechDictation.stop();
+  }, [session.id, speechDictation.stop]);
   const onCancelRef = useRef(_onCancel);
   onCancelRef.current = _onCancel;
   const loadActiveBranch = useCallback(async () => {
@@ -1629,6 +1654,43 @@ function ComposerInner({
             <path d="M12 17v4" />
           </svg>
         </Button>
+        {speechDictation.supported ? (
+          <Tooltip title={speechDictation.listening ? "点击停止语音听写" : "语音听写"} placement="top">
+            <Button
+              type="text"
+              size="small"
+              className={
+                speechDictation.listening ? "app-claude-composer-voice-btn app-claude-composer-voice-btn--active" : "app-claude-composer-voice-btn"
+              }
+              disabled={isSessionBusy}
+              aria-pressed={speechDictation.listening}
+              aria-label={speechDictation.listening ? "停止语音听写" : "开始语音听写"}
+              onClick={() => speechDictation.toggle()}
+              style={{
+                color: speechDictation.listening
+                  ? "var(--ant-color-error)"
+                  : "var(--ant-color-text-secondary)",
+              }}
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+                <path d="M19 10v1a7 7 0 0 1-14 0v-1" />
+                <line x1="12" y1="19" x2="12" y2="22" />
+                <line x1="8" y1="22" x2="16" y2="22" />
+              </svg>
+            </Button>
+          </Tooltip>
+        ) : null}
         {dualPaneRepositoryPicker ? (
           <Select
             size="small"
@@ -1680,6 +1742,10 @@ function ComposerInner({
     ensureBreakdown,
     handleFileAttach,
     handleScreenshot,
+    isSessionBusy,
+    speechDictation.listening,
+    speechDictation.supported,
+    speechDictation.toggle,
   ]);
 
   /** 与 Semi 底栏同一行：结束（占用中）+ 模型选择 + 发送（Semi 在 generating 时会拦截发送，故用独立结束 + generating=false） */

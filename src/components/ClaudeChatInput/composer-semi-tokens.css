@@ -83,6 +83,20 @@
   min-width: 0;
 }
 
+.app-claude-composer-voice-btn--active {
+  animation: app-claude-composer-voice-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes app-claude-composer-voice-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
 .app-claude-dual-pane-repo-picker {
   max-width: min(168px, 34vw);
   min-width: 0;

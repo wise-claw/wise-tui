@@ -37,7 +37,9 @@ export async function updateCuaDriver(): Promise<string> {
 }
 
 /** 打开 macOS 系统设置中的隐私子页面（不经前端 opener 白名单限制）。 */
-export async function macosOpenPrivacyPane(pane: "accessibility" | "screenCapture"): Promise<void> {
+export async function macosOpenPrivacyPane(
+  pane: "accessibility" | "screenCapture" | "microphone",
+): Promise<void> {
   return invoke("macos_open_privacy_pane", { pane });
 }
 

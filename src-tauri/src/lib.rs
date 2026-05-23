@@ -17,6 +17,8 @@ mod dingtalk_stream_gateway;
 pub mod extensions;
 mod git_commands;
 #[cfg(target_os = "macos")]
+mod macos_microphone;
+#[cfg(target_os = "macos")]
 mod macos_webview_wake_recovery;
 mod lib_impl;
 mod mission_control;

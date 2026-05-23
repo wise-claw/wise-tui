@@ -4,5 +4,7 @@
 <dict>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>Wise 需要截取屏幕画面以便在对话中插入截图；请在系统提示或「隐私与安全性 → 屏幕录制」中允许本应用。</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Wise 需要使用麦克风进行会话语音听写，将识别结果填入输入框。</string>
 </dict>
 </plist>

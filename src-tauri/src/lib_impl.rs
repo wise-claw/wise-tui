@@ -369,6 +369,8 @@ pub fn run() {
             cua_driver::get_cua_driver_status,
             cua_driver::install_cua_driver,
             cua_driver::macos_open_privacy_pane,
+            #[cfg(target_os = "macos")]
+            crate::macos_microphone::macos_request_microphone_access,
             skills_sh::skills_sh_search,
             skills_sh::skills_cli_add_from_registry,
             skills_sh::skills_cli_remove_from_registry,

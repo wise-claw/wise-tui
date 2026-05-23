@@ -226,9 +226,12 @@ pub fn macos_open_privacy_pane(pane: String) -> Result<(), String> {
         "screenCapture" => {
             "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
         }
+        "microphone" => {
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+        }
         other => {
             return Err(format!(
-                "未知面板「{}」；仅支持 accessibility、screenCapture",
+                "未知面板「{}」；仅支持 accessibility、screenCapture、microphone",
                 other
             ));
         }
