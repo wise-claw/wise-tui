@@ -20,6 +20,7 @@ import {
   WISE_DEFAULT_CONFIG_KEY,
   WISE_DEFAULT_CONFIG_ONESHOT_TO_STREAMING_MIGRATION_KEY,
   WISE_RIGHT_PANEL_DEFAULT_CHANGED,
+  WISE_TOPBAR_CHROME_DEFAULT_CHANGED,
 } from "./wiseDefaultConfigStore";
 
 function installWindowLocalStorageStub(): Storage {
@@ -84,12 +85,14 @@ describe("wiseDefaultConfigStore", () => {
     const config = await loadWiseDefaultConfig();
     expect(config.connectionKind).toBe("streaming");
     expect(config.rightPanelDefaultCollapsed).toBe(false);
+    expect(config.showLlmProxyTopbar).toBe(false);
     expect(setAppSetting).toHaveBeenCalled();
     const payload = JSON.parse(String(setAppSetting.mock.calls[0]?.[1]));
     expect(payload).toMatchObject({
       version: 1,
       connectionKind: "streaming",
       rightPanelDefaultCollapsed: false,
+      showLlmProxyTopbar: false,
     });
   });
 
@@ -183,5 +186,47 @@ describe("wiseDefaultConfigStore", () => {
       rightPanelDefaultCollapsed: true,
     });
     expect(storage?.getItem(RIGHT_PANEL_DEFAULT_COLLAPSED_KEY)).toBeNull();
+  });
+
+  test("load backfills missing topbar chrome fields as hidden", async () => {
+    getAppSetting.mockImplementation(async (key: string) =>
+      key === WISE_DEFAULT_CONFIG_KEY
+        ? JSON.stringify({
+            version: 1,
+            connectionKind: "streaming",
+            rightPanelDefaultCollapsed: false,
+          })
+        : null,
+    );
+    const config = await loadWiseDefaultConfig();
+    expect(config.showLlmProxyTopbar).toBe(false);
+  });
+
+  test("save topbar chrome dispatches visibility event", async () => {
+    getAppSetting.mockImplementation(async (key: string) => {
+      if (key === WISE_DEFAULT_CONFIG_ONESHOT_TO_STREAMING_MIGRATION_KEY) return "1";
+      if (key === WISE_DEFAULT_CONFIG_KEY) {
+        return JSON.stringify({
+          version: 1,
+          connectionKind: "streaming",
+          rightPanelDefaultCollapsed: false,
+          showLlmProxyTopbar: false,
+        });
+      }
+      return null;
+    });
+    const seen: Array<{ showLlmProxyTopbar: boolean }> = [];
+    window.addEventListener(WISE_TOPBAR_CHROME_DEFAULT_CHANGED, (e: Event) => {
+      const detail = (e as CustomEvent<{ showLlmProxyTopbar?: boolean }>).detail;
+      if (detail) {
+        seen.push({
+          showLlmProxyTopbar: Boolean(detail.showLlmProxyTopbar),
+        });
+      }
+    });
+    await saveWiseDefaultConfig({
+      showLlmProxyTopbar: true,
+    });
+    expect(seen).toEqual([{ showLlmProxyTopbar: true }]);
   });
 });

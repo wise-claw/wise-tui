@@ -12,6 +12,7 @@ import type {
 import { Button, Empty, Input, message, Popover, Spin, Switch, Tooltip, type TooltipProps } from "antd";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import { useDockSlice } from "../../hooks/useDockSlice";
+import { useWiseTopbarChromeVisibility } from "../../hooks/useWiseTopbarChromeVisibility";
 import { ClaudeChat } from "./ClaudeChat";
 import { DingTalkStreamGatewayTopbarSwitch } from "../DingTalkStreamGatewayTopbarSwitch";
 import { OpenAppMenu } from "../OpenAppMenu";
@@ -358,6 +359,7 @@ export function Topbar({
   dualPaneEnabled,
   onToggleDualPane,
 }: TopbarProps) {
+  const topbarChrome = useWiseTopbarChromeVisibility();
   const [selectedOpenAppId, setSelectedOpenAppId] = useState<string>(() => {
     return getOpenAppPreferenceSync() || DEFAULT_OPEN_APP_ID;
   });
@@ -767,7 +769,7 @@ export function Topbar({
             onSelectOpenAppId={setSelectedOpenAppId}
           />
         )}
-        {activeRepository ? (
+        {activeRepository && topbarChrome.showLlmProxyTopbar ? (
           <LlmProxyTopbarTrigger
             repositoryPath={activeSessionRepositoryPath?.trim() || activeRepository.path}
           />

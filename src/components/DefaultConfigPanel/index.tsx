@@ -3,19 +3,22 @@ import type { ClaudeSessionConnectionKind } from "../../constants/claudeConnecti
 import { useClaudeConnectionModeSetting } from "../ClaudeConfigDirPanel/useClaudeConnectionModeSetting";
 import { DefaultConfigOptionPick } from "./DefaultConfigOptionPick";
 import { useRightPanelDefaultSetting } from "./useRightPanelDefaultSetting";
+import { useTopbarChromeDefaultSetting } from "./useTopbarChromeDefaultSetting";
 import "./index.css";
 
 const DEFAULT_CONFIG_NOTES = [
-  "设置写入 SQLite app_settings（wise.defaultConfig.v1），新建标签与下次启动主布局时生效。",
+  "设置写入 SQLite app_settings（wise.defaultConfig.v1），保存后立即作用于主会话顶栏。",
   "长驻模式使用 --input-format stream-json，与终端 CLI 共享 MCP / Skills / Hooks。",
   "OMC 直连批量、PRD 拆分等编排仍使用独立 -p 子进程，不受会话默认影响。",
   "小窗口模式会强制收起右栏，不受右侧面板默认影响。",
+  "LLM 代理图标默认隐藏，可在下方单独开启。",
 ] as const;
 
 /** 工作台配置 / 运行设置 / 默认配置：全局会话与布局默认值。 */
 export function DefaultConfigPanel() {
   const connection = useClaudeConnectionModeSetting();
   const rightPanel = useRightPanelDefaultSetting();
+  const topbarChrome = useTopbarChromeDefaultSetting();
 
   return (
     <div className="app-default-config-panel">
@@ -61,6 +64,29 @@ export function DefaultConfigPanel() {
               ]}
               onChange={(value) => {
                 void rightPanel.save(value === "collapsed");
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="app-default-config-row" aria-label="LLM 代理图标">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">LLM 代理图标</span>
+            <span className="app-default-config-row__hint">
+              控制主会话顶栏 LLM 流量监听入口；默认不显示
+            </span>
+          </div>
+          <div className="app-default-config-row__control">
+            <DefaultConfigOptionPick<"hidden" | "visible">
+              aria-label="LLM 代理顶栏显示"
+              disabled={topbarChrome.loading || topbarChrome.saving}
+              value={topbarChrome.showLlmProxyTopbar ? "visible" : "hidden"}
+              options={[
+                { label: "不显示", value: "hidden" },
+                { label: "显示", value: "visible" },
+              ]}
+              onChange={(value) => {
+                void topbarChrome.saveLlmProxy(value === "visible");
               }}
             />
           </div>

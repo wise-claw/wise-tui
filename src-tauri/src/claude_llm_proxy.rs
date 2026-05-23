@@ -712,6 +712,21 @@ fn materialize_llm_proxy_settings(proxy_url: &str) -> Result<String, String> {
     Ok(out_path.to_string_lossy().to_string())
 }
 
+/// 用户已开启 LLM 流量监听且本地代理进程在运行。
+pub(crate) fn llm_proxy_listening_and_running() -> bool {
+    let listening = persisted_config_cell()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .listening;
+    if !listening {
+        return false;
+    }
+    proxy_cell()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .is_some()
+}
+
 /// 在 spawn Claude 子进程前注入 `ANTHROPIC_BASE_URL` 指向本地代理。
 /// 仅当用户已开启监听且本地代理在运行时才注入。
 pub(crate) fn apply_proxy_env(
@@ -719,11 +734,7 @@ pub(crate) fn apply_proxy_env(
     _app: &AppHandle,
     _project_path: &str,
 ) {
-    let listening = persisted_config_cell()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .listening;
-    if !listening {
+    if !llm_proxy_listening_and_running() {
         return;
     }
     let inner = {

@@ -26,17 +26,31 @@ export const WISE_CLAUDE_CONNECTION_KIND_CHANGED = "wise:claude-connection-kind-
 
 export const WISE_RIGHT_PANEL_DEFAULT_CHANGED = "wise:right-panel-default-changed";
 
+export const WISE_TOPBAR_CHROME_DEFAULT_CHANGED = "wise:topbar-chrome-default-changed";
+
 export interface WiseDefaultConfigV1 {
   version: 1;
   connectionKind: ClaudeSessionConnectionKind;
   rightPanelDefaultCollapsed: boolean;
+  /** 主会话顶栏 LLM 代理图标；默认隐藏。 */
+  showLlmProxyTopbar: boolean;
 }
 
 const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   version: 1,
   connectionKind: CLAUDE_DEFAULT_CONNECTION_KIND_FALLBACK,
   rightPanelDefaultCollapsed: RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK,
+  showLlmProxyTopbar: false,
 };
+
+function normalizeBoolean(raw: unknown, fallback = false): boolean {
+  if (raw === true || raw === false) return raw;
+  if (typeof raw !== "string") return fallback;
+  const trimmed = raw.trim();
+  if (trimmed === "1" || trimmed === "true") return true;
+  if (trimmed === "0" || trimmed === "false") return false;
+  return fallback;
+}
 
 function normalizeConnectionKind(raw: unknown): ClaudeSessionConnectionKind | null {
   return raw === "streaming" || raw === "oneshot" ? raw : null;
@@ -58,7 +72,12 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
     const connectionKind = normalizeConnectionKind(parsed.connectionKind);
     const rightPanelDefaultCollapsed = normalizeRightPanelCollapsed(parsed.rightPanelDefaultCollapsed);
     if (connectionKind === null || rightPanelDefaultCollapsed === null) return null;
-    return { version: 1, connectionKind, rightPanelDefaultCollapsed };
+    return {
+      version: 1,
+      connectionKind,
+      rightPanelDefaultCollapsed,
+      showLlmProxyTopbar: normalizeBoolean(parsed.showLlmProxyTopbar),
+    };
   } catch {
     return null;
   }
@@ -117,6 +136,17 @@ function dispatchRightPanelDefaultChanged(collapsed: boolean): void {
   window.dispatchEvent(new CustomEvent(WISE_RIGHT_PANEL_DEFAULT_CHANGED, { detail: { collapsed } }));
 }
 
+function dispatchTopbarChromeDefaultChanged(config: Pick<WiseDefaultConfigV1, "showLlmProxyTopbar">): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_TOPBAR_CHROME_DEFAULT_CHANGED, {
+      detail: {
+        showLlmProxyTopbar: config.showLlmProxyTopbar,
+      },
+    }),
+  );
+}
+
 async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
   let connectionKind: ClaudeSessionConnectionKind | null = null;
   let rightPanelDefaultCollapsed: boolean | null = null;
@@ -139,6 +169,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     connectionKind: connectionKind ?? DEFAULT_CONFIG.connectionKind,
     rightPanelDefaultCollapsed:
       rightPanelDefaultCollapsed ?? DEFAULT_CONFIG.rightPanelDefaultCollapsed,
+    showLlmProxyTopbar: DEFAULT_CONFIG.showLlmProxyTopbar,
   };
 }
 
@@ -173,7 +204,12 @@ export async function loadWiseDefaultConfig(): Promise<WiseDefaultConfigV1> {
 }
 
 export async function saveWiseDefaultConfig(
-  patch: Partial<Pick<WiseDefaultConfigV1, "connectionKind" | "rightPanelDefaultCollapsed">>,
+  patch: Partial<
+    Pick<
+      WiseDefaultConfigV1,
+      "connectionKind" | "rightPanelDefaultCollapsed" | "showLlmProxyTopbar"
+    >
+  >,
 ): Promise<WiseDefaultConfigV1> {
   const current = await loadWiseDefaultConfig();
   const next: WiseDefaultConfigV1 = {
@@ -181,9 +217,13 @@ export async function saveWiseDefaultConfig(
     connectionKind: patch.connectionKind ?? current.connectionKind,
     rightPanelDefaultCollapsed:
       patch.rightPanelDefaultCollapsed ?? current.rightPanelDefaultCollapsed,
+    showLlmProxyTopbar: patch.showLlmProxyTopbar ?? current.showLlmProxyTopbar,
   };
   if (patch.connectionKind !== undefined) {
     next.connectionKind = normalizeConnectionKind(patch.connectionKind) ?? current.connectionKind;
+  }
+  if (patch.showLlmProxyTopbar !== undefined) {
+    next.showLlmProxyTopbar = normalizeBoolean(patch.showLlmProxyTopbar);
   }
   await persistConfig(next);
   await deleteLegacyAppSettings();
@@ -197,6 +237,11 @@ export async function saveWiseDefaultConfig(
     next.rightPanelDefaultCollapsed !== current.rightPanelDefaultCollapsed
   ) {
     dispatchRightPanelDefaultChanged(next.rightPanelDefaultCollapsed);
+  }
+  if (patch.showLlmProxyTopbar !== undefined) {
+    if (next.showLlmProxyTopbar !== current.showLlmProxyTopbar) {
+      dispatchTopbarChromeDefaultChanged(next);
+    }
   }
 
   return next;
@@ -230,3 +275,18 @@ export const loadRightPanelDefaultCollapsed = loadRightPanelDefaultCollapsedFrom
 
 /** @alias saveRightPanelDefaultCollapsedToStore */
 export const saveRightPanelDefaultCollapsed = saveRightPanelDefaultCollapsedToStore;
+
+export async function loadTopbarChromeDefaultsFromStore(): Promise<
+  Pick<WiseDefaultConfigV1, "showLlmProxyTopbar">
+> {
+  const config = await loadWiseDefaultConfig();
+  return {
+    showLlmProxyTopbar: config.showLlmProxyTopbar,
+  };
+}
+
+export async function saveTopbarChromeDefaultsToStore(
+  patch: Partial<Pick<WiseDefaultConfigV1, "showLlmProxyTopbar">>,
+): Promise<void> {
+  await saveWiseDefaultConfig(patch);
+}
