@@ -188,7 +188,7 @@ describe("dispatch input composition", () => {
       startContent: "原始需求",
     });
     expect(result.dispatch?.nodeId).toBe("task-1");
-    expect(result.dispatch?.input).toContain("【提示词模板】");
+    expect(result.dispatch?.input).toContain("【提示词模板 · 多段消息】");
     expect(result.dispatch?.input).toContain("请围绕 Wise 编写方案");
     expect(result.dispatch?.input).toContain("原始需求");
   });

@@ -1,6 +1,7 @@
 import type { EmployeeItem, WorkflowGraph, WorkflowGraphNode, WorkflowGraphNodeData, WorkflowTemplateStage } from "../../types";
 import { normalizeWorkflowStageOutcomeCriteria } from "../../utils/workflowStageOutcomeCriteria";
 import { branchPortLabelFromId, normalizeBranchConditions } from "../../services/workflowBranchEvaluation";
+import { normalizePromptMessages, serializePromptConfigToNodeData } from "../../services/workflowPromptTemplate";
 import { normalizeStageTaskBasisRefsFromNodeData } from "../../services/workflowGraphRuntime";
 import type { CanvasSnapshot } from "../workflowGraph/workflowX6CanvasShared";
 import {
@@ -58,7 +59,13 @@ export function canvasSnapshotToWorkflowGraph(snapshot: CanvasSnapshot, fallback
             ...node.passthroughData,
             label: node.title || MATERIAL_FALLBACK_LABEL[materialKey] || "节点",
             materialKey,
-            ...(materialKey === "prompt" ? { promptTemplate: node.promptTemplate || "" } : {}),
+            ...(materialKey === "prompt"
+              ? serializePromptConfigToNodeData({
+                  messages: normalizePromptMessages(node.promptMessages),
+                  injectionMode: node.promptInjectionMode === "user_prefix" ? "user_prefix" : "structured_block",
+                  requireAcknowledgement: Boolean(node.promptRequireAcknowledgement),
+                })
+              : {}),
             ...(materialKey === "knowledge" ? { knowledgeQuery: node.knowledgeQuery || "" } : {}),
             ...(materialKey === "code" ? { codeScript: node.codeScript || "" } : {}),
             ...(materialKey === "branch"

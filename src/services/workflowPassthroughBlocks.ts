@@ -1,9 +1,13 @@
-import type { WorkflowGraphNode } from "../types";
+import type { WorkflowGraph, WorkflowGraphNode } from "../types";
+import type { BranchEvaluationContext } from "./workflowBranchEvaluation";
+import { workflowVariablesFromGraph } from "./workflowGraphRuntime";
+import { formatPromptPassthroughBlockFromNode } from "./workflowPromptTemplate";
 
-export function formatPromptPassthroughBlock(node: WorkflowGraphNode): string {
-  const template = typeof node.data.promptTemplate === "string" ? node.data.promptTemplate.trim() : "";
-  if (!template) return "";
-  return ["【提示词模板】", template].join("\n");
+function passthroughContext(graph: WorkflowGraph | null | undefined, taskContent?: string): BranchEvaluationContext {
+  return {
+    variables: graph ? workflowVariablesFromGraph(graph) : {},
+    taskContent,
+  };
 }
 
 export function formatKnowledgePassthroughBlock(node: WorkflowGraphNode): string {
@@ -32,8 +36,14 @@ export function formatCodePassthroughBlock(node: WorkflowGraphNode): string {
   return lines.join("\n");
 }
 
-export function formatPassthroughBlockForNode(node: WorkflowGraphNode): string {
-  if (node.type === "prompt") return formatPromptPassthroughBlock(node);
+export function formatPassthroughBlockForNode(
+  node: WorkflowGraphNode,
+  graph?: WorkflowGraph | null,
+  taskContent?: string,
+): string {
+  if (node.type === "prompt") {
+    return formatPromptPassthroughBlockFromNode(node, passthroughContext(graph, taskContent));
+  }
   if (node.type === "knowledge") return formatKnowledgePassthroughBlock(node);
   if (node.type === "code") return formatCodePassthroughBlock(node);
   return "";

@@ -8,6 +8,7 @@ import type { WorkflowBranchCondition } from "../../types/workflowBranch";
 import { DEFAULT_WORKFLOW_BRANCH_CONDITIONS } from "../../types/workflowBranch";
 import { normalizeWorkflowVariables } from "../../utils/workflowVariables";
 import { normalizeBranchConditions, summarizeBranchCondition } from "../../services/workflowBranchEvaluation";
+import { promptConfigFromNodeData, summarizePromptConfig } from "../../services/workflowPromptTemplate";
 import { normalizeWorkflowStageOutcomeCriteria } from "../../utils/workflowStageOutcomeCriteria";
 import { normalizeStageTaskBasisRefsFromNodeData } from "../../services/workflowGraphRuntime";
 
@@ -38,6 +39,9 @@ export interface CanvasNodeItem {
   acceptanceEnabled?: boolean;
   acceptanceCriteria?: string;
   promptTemplate?: string;
+  promptMessages?: import("../../types/workflowPrompt").WorkflowPromptMessage[];
+  promptInjectionMode?: import("../../types/workflowPrompt").WorkflowPromptInjectionMode;
+  promptRequireAcknowledgement?: boolean;
   knowledgeQuery?: string;
   codeScript?: string;
   branchCriteria?: string;
@@ -152,7 +156,7 @@ export const MATERIALS: Record<string, MaterialItem> = {
     key: "prompt",
     iconText: "TPL",
     title: "提示词模板",
-    desc: "注入模板文本，支持 {{变量}} 占位符。",
+    desc: "多段 System/User/Assistant 消息，支持变量与派发预览。",
     inputPlaceholder: "输入提示词模板",
     theme: "cyan",
   },
@@ -181,7 +185,7 @@ export function isAgentMaterialKey(materialKey: string | undefined): boolean {
 }
 
 export function isPassthroughMaterialKey(materialKey: string | undefined): boolean {
-  return materialKey === "prompt" || materialKey === "knowledge" || materialKey === "code";
+  return materialKey === "knowledge" || materialKey === "code";
 }
 
 export function defaultTitleForMaterialKey(materialKey: string): string {
@@ -254,6 +258,7 @@ export function workflowGraphToCanvasSnapshot(graph: WorkflowGraph | null | unde
       };
     }
     const key = graphNodeTypeToMaterialKey(node);
+    const promptConfig = key === "prompt" ? promptConfigFromNodeData(node.data) : null;
     return {
       id: node.id,
       kind: "material",
@@ -266,7 +271,14 @@ export function workflowGraphToCanvasSnapshot(graph: WorkflowGraph | null | unde
       stageTaskBasisRefs: normalizeStageTaskBasisRefsFromNodeData(node.data as WorkflowGraphNodeData),
       acceptanceEnabled: typeof node.data.conditionElsePrompt === "string" ? node.data.conditionElsePrompt === "acceptance_enabled" : false,
       acceptanceCriteria: typeof node.data.conditionIfPrompt === "string" && node.data.conditionIfPrompt !== "rollback" ? node.data.conditionIfPrompt : "",
-      promptTemplate: typeof node.data.promptTemplate === "string" ? node.data.promptTemplate : "",
+      promptTemplate: promptConfig ? promptConfig.messages.map((m) => m.content).join("\n\n") : typeof node.data.promptTemplate === "string" ? node.data.promptTemplate : "",
+      ...(promptConfig
+        ? {
+            promptMessages: promptConfig.messages,
+            promptInjectionMode: promptConfig.injectionMode,
+            promptRequireAcknowledgement: promptConfig.requireAcknowledgement,
+          }
+        : {}),
       knowledgeQuery: typeof node.data.knowledgeQuery === "string" ? node.data.knowledgeQuery : "",
       codeScript: typeof node.data.codeScript === "string" ? node.data.codeScript : "",
       branchCriteria: typeof node.data.branchCriteria === "string" ? node.data.branchCriteria : "",
@@ -332,6 +344,9 @@ function omitGraphNodeMappedData(
     delete out.stageTaskBasisRefs;
     delete out.stageTaskBasisRef;
     delete out.promptTemplate;
+    delete out.promptMessages;
+    delete out.promptInjectionMode;
+    delete out.promptRequireAcknowledgement;
     delete out.knowledgeQuery;
     delete out.codeScript;
     delete out.branchCriteria;
@@ -352,8 +367,14 @@ export function getMaterialNodeStyle(theme: MaterialTheme) {
 function summarizePassthroughNode(node: Partial<CanvasNodeItem>): string {
   const materialKey = node.materialKey;
   if (materialKey === "prompt") {
-    const text = (node.promptTemplate || "").trim();
-    return text ? `模板：${text.slice(0, 48)}${text.length > 48 ? "…" : ""}` : "未填写模板";
+    const config = promptConfigFromNodeData({
+      label: node.title || "",
+      promptTemplate: node.promptTemplate,
+      promptMessages: node.promptMessages,
+      promptInjectionMode: node.promptInjectionMode,
+      promptRequireAcknowledgement: node.promptRequireAcknowledgement,
+    });
+    return summarizePromptConfig(config);
   }
   if (materialKey === "knowledge") {
     const text = (node.knowledgeQuery || "").trim();
@@ -590,6 +611,9 @@ export function createGraphNodeFromSnapshotNode(node: CanvasNodeItem, employeeNa
       employeeId: node.employeeId,
       stageSuccessCriteria: normalizeWorkflowStageOutcomeCriteria(node.stageSuccessCriteria),
       promptTemplate: node.promptTemplate || "",
+      promptMessages: node.promptMessages,
+      promptInjectionMode: node.promptInjectionMode,
+      promptRequireAcknowledgement: node.promptRequireAcknowledgement ?? false,
       knowledgeQuery: node.knowledgeQuery || "",
       codeScript: node.codeScript || "",
       branchCriteria: node.branchCriteria || "",

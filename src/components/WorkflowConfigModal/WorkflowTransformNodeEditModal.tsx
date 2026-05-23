@@ -1,14 +1,8 @@
 import { Form, Input, Modal } from "antd";
 import type { FormInstance } from "antd";
-import { Suspense, lazy } from "react";
 import type { CanvasNodeItem } from "../workflowGraph/workflowX6CanvasShared";
 import { MATERIALS } from "../workflowGraph/workflowX6CanvasShared";
-
-const MilkdownEditor = lazy(() => import("../MilkdownViewer").then((module) => ({ default: module.MilkdownEditor })));
-
-export interface WorkflowTransformNodeFormValues {
   title: string;
-  promptTemplate: string;
   knowledgeQuery: string;
   codeScript: string;
 }
@@ -21,8 +15,8 @@ interface Props {
 }
 
 export function WorkflowTransformNodeEditModal({ editingNode, form, onCancel, onSubmit }: Props) {
-  const materialKey = editingNode?.materialKey ?? "prompt";
-  const material = MATERIALS[materialKey] ?? MATERIALS.prompt;
+  const materialKey = editingNode?.materialKey ?? "knowledge";
+  const material = MATERIALS[materialKey] ?? MATERIALS.knowledge;
 
   return (
     <Modal
@@ -40,7 +34,6 @@ export function WorkflowTransformNodeEditModal({ editingNode, form, onCancel, on
         layout="vertical"
         initialValues={{
           title: "",
-          promptTemplate: "",
           knowledgeQuery: "",
           codeScript: "",
         }}
@@ -48,25 +41,6 @@ export function WorkflowTransformNodeEditModal({ editingNode, form, onCancel, on
         <Form.Item label="节点名称" name="title" rules={[{ required: true, message: "请输入节点名称" }]}>
           <Input size="small" placeholder={material.title} />
         </Form.Item>
-        {materialKey === "prompt" ? (
-          <Form.Item
-            label="提示词模板"
-            name="promptTemplate"
-            rules={[{ validator: async (_, value: unknown) => { if (typeof value === "string" && value.trim()) return; throw new Error("请输入提示词模板"); } }]}
-          >
-            <div className="app-workflow-node-edit-form__milkdown-block">
-              <div className="app-workflow-node-edit-form__milkdown-editor">
-                <Suspense fallback={null}>
-                  <MilkdownEditor
-                    floatingToolbar={false}
-                    text={String(form.getFieldValue("promptTemplate") ?? "")}
-                    onChange={(markdown) => form.setFieldValue("promptTemplate", markdown)}
-                  />
-                </Suspense>
-              </div>
-            </div>
-          </Form.Item>
-        ) : null}
         {materialKey === "knowledge" ? (
           <Form.Item label="检索语句" name="knowledgeQuery" rules={[{ required: true, message: "请输入检索语句" }]}>
             <Input.TextArea rows={4} placeholder="例如：与 {{topic}} 相关的 API 路由与数据模型" />

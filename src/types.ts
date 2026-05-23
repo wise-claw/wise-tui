@@ -272,6 +272,9 @@ export interface WorkflowGraphNodeData extends Record<string, unknown> {
   stageTaskBasisRef?: string;
   /** 提示词模板节点正文 */
   promptTemplate?: string;
+  promptMessages?: import("./workflowPrompt").WorkflowPromptMessage[];
+  promptInjectionMode?: import("./workflowPrompt").WorkflowPromptInjectionMode;
+  promptRequireAcknowledgement?: boolean;
   /** 知识检索节点查询语句，支持 {{var}} */
   knowledgeQuery?: string;
   /** 代码/脚本节点内容 */

@@ -32,6 +32,9 @@ import { WorkflowNodeEditModal, type WorkflowNodeEditFormValues } from "./Workfl
 import { WorkflowStartNodeEditModal, type WorkflowStartNodeFormValues } from "./WorkflowStartNodeEditModal";
 import { WorkflowTransformNodeEditModal, type WorkflowTransformNodeFormValues } from "./WorkflowTransformNodeEditModal";
 import { WorkflowBranchNodeEditModal, type WorkflowBranchNodeFormValues } from "./WorkflowBranchNodeEditModal";
+import { WorkflowPromptNodeEditModal, type WorkflowPromptNodeFormValues } from "./WorkflowPromptNodeEditModal";
+import { promptConfigFromNodeData, serializePromptConfigToNodeData } from "../../services/workflowPromptTemplate";
+import { normalizePromptMessages } from "../../services/workflowPromptTemplate";
 import { branchPortLabelFromId, normalizeBranchConditions } from "../../services/workflowBranchEvaluation";
 import {
   buildMergedStageTaskBasisSelectOptions,
@@ -71,6 +74,11 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
   const [startEditForm] = Form.useForm<WorkflowStartNodeFormValues>();
   const [transformEditForm] = Form.useForm<WorkflowTransformNodeFormValues>();
   const [branchEditForm] = Form.useForm<WorkflowBranchNodeFormValues>();
+  const [promptEditForm] = Form.useForm<WorkflowPromptNodeFormValues>();
+  const taskContentPreview = useMemo(() => {
+    const start = value.nodes.find((node) => node.kind === "start");
+    return start?.title?.trim() ? `（开始节点：${start.title}）` : "";
+  }, [value.nodes]);
   const workflowVariableOptions = useMemo(() => {
     const start = value.nodes.find((node) => node.kind === "start");
     return (start?.workflowVariables ?? []).map((item) => ({
@@ -218,11 +226,27 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
       });
       return;
     }
+    if (payload.kind === "material" && payload.materialKey === "prompt") {
+      setEditingNode(payload);
+      const config = promptConfigFromNodeData({
+        label: payload.title,
+        promptTemplate: payload.promptTemplate,
+        promptMessages: payload.promptMessages,
+        promptInjectionMode: payload.promptInjectionMode,
+        promptRequireAcknowledgement: payload.promptRequireAcknowledgement,
+      });
+      promptEditForm.setFieldsValue({
+        title: payload.title,
+        messages: config.messages,
+        injectionMode: config.injectionMode,
+        requireAcknowledgement: config.requireAcknowledgement,
+      });
+      return;
+    }
     if (payload.kind === "material" && isPassthroughMaterialKey(payload.materialKey)) {
       setEditingNode(payload);
       transformEditForm.setFieldsValue({
         title: payload.title,
-        promptTemplate: payload.promptTemplate || "",
         knowledgeQuery: payload.knowledgeQuery || "",
         codeScript: payload.codeScript || "",
       });
@@ -356,7 +380,7 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
       const editable =
         data.kind === "start" ||
         (data.kind === "material" &&
-          (isAgentMaterialKey(data.materialKey) || isPassthroughMaterialKey(data.materialKey) || data.materialKey === "branch"));
+          (isAgentMaterialKey(data.materialKey) || isPassthroughMaterialKey(data.materialKey) || data.materialKey === "branch" || data.materialKey === "prompt"));
       if (editable) {
         node.addTools([
           {
@@ -643,6 +667,37 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
     emitSnapshot();
   }
 
+  async function handleSubmitPromptNodeEdit() {
+    if (!editingNode || editingNode.materialKey !== "prompt" || !graphRef.current) return;
+    const values = await promptEditForm.validateFields();
+    const messages = normalizePromptMessages(values.messages);
+    if (!messages.some((m) => m.content.trim())) {
+      message.error("请至少填写一条有效消息内容。");
+      return;
+    }
+    const graph = graphRef.current;
+    const target = graph.getCellById(editingNode.id);
+    if (!target || !target.isNode()) {
+      setEditingNode(null);
+      return;
+    }
+    const node = target as X6Node;
+    const serialized = serializePromptConfigToNodeData({
+      messages,
+      injectionMode: values.injectionMode,
+      requireAcknowledgement: values.requireAcknowledgement,
+    });
+    const nextData: Partial<CanvasNodeItem> = {
+      ...(node.getData() ?? {}),
+      title: values.title.trim(),
+      ...serialized,
+    };
+    node.setData(nextData);
+    applyNodeVisual(node, nextData);
+    setEditingNode(null);
+    emitSnapshot();
+  }
+
   async function handleSubmitTransformNodeEdit() {
     if (!editingNode || editingNode.kind !== "material" || !graphRef.current) return;
     const values = await transformEditForm.validateFields();
@@ -657,7 +712,6 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
     const nextData: Partial<CanvasNodeItem> = {
       ...currentData,
       title: values.title.trim(),
-      promptTemplate: values.promptTemplate?.trim() ?? "",
       knowledgeQuery: values.knowledgeQuery?.trim() ?? "",
       codeScript: values.codeScript?.trim() ?? "",
     };
@@ -736,6 +790,8 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
       : null;
   const editingBranchNode =
     editingNode && editingNode.kind === "material" && editingNode.materialKey === "branch" ? editingNode : null;
+  const editingPromptNode =
+    editingNode && editingNode.kind === "material" && editingNode.materialKey === "prompt" ? editingNode : null;
 
   return (
     <>
@@ -825,6 +881,14 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
         variableOptions={workflowVariableOptions}
         onCancel={handleCloseNodeEdit}
         onSubmit={() => void handleSubmitBranchNodeEdit()}
+      />
+      <WorkflowPromptNodeEditModal
+        editingNode={editingPromptNode}
+        form={promptEditForm}
+        variableOptions={workflowVariableOptions}
+        taskContentPreview={taskContentPreview}
+        onCancel={handleCloseNodeEdit}
+        onSubmit={() => void handleSubmitPromptNodeEdit()}
       />
     </>
   );

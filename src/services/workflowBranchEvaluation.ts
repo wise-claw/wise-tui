@@ -9,6 +9,7 @@ import type { AcceptanceDecision } from "./workflow/acceptanceVerdict";
 
 export interface BranchEvaluationContext {
   variables: Record<string, string>;
+  taskContent?: string;
   lastOutput?: string;
   acceptanceDecision?: AcceptanceDecision;
 }

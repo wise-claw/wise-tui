@@ -40,7 +40,7 @@ export interface WorkflowAdvanceResult {
   completed: boolean;
 }
 
-function workflowVariablesFromGraph(graph: WorkflowGraph | null | undefined): Record<string, string> {
+export function workflowVariablesFromGraph(graph: WorkflowGraph | null | undefined): Record<string, string> {
   if (!graph) return {};
   const start = graph.nodes.find((node) => node.type === "start");
   if (!start) return {};
@@ -287,10 +287,11 @@ function selectBranchEdge(
 
 function buildBranchEvaluationContext(
   graph: WorkflowGraph,
-  params: { lastOutput?: string; acceptanceDecision?: AcceptanceDecision },
+  params: { lastOutput?: string; acceptanceDecision?: AcceptanceDecision; taskContent?: string },
 ): BranchEvaluationContext {
   return {
     variables: workflowVariablesFromGraph(graph),
+    taskContent: params.taskContent,
     lastOutput: params.lastOutput,
     acceptanceDecision: params.acceptanceDecision,
   };
@@ -328,8 +329,9 @@ function resolveDispatchTarget(params: {
   startNode: WorkflowGraphNode;
   acceptanceDecision?: AcceptanceDecision;
   lastOutput?: string;
+  taskContent?: string;
 }): { dispatchNode: WorkflowGraphNode; prefixBlocks: string[]; traceNodeIds: string[] } {
-  const { graph, startNode, acceptanceDecision, lastOutput } = params;
+  const { graph, startNode, acceptanceDecision, lastOutput, taskContent } = params;
   let cursor = startNode;
   const prefixBlocks: string[] = [];
   const traceNodeIds: string[] = [];
@@ -341,7 +343,7 @@ function resolveDispatchTarget(params: {
       return { dispatchNode: cursor, prefixBlocks, traceNodeIds };
     }
     if (isPassthroughGraphNodeType(cursor.type)) {
-      const block = formatPassthroughBlockForNode(cursor);
+      const block = formatPassthroughBlockForNode(cursor, graph, taskContent);
       if (block.trim()) {
         prefixBlocks.push(applyGraphVariables(block, graph));
       }
@@ -402,6 +404,7 @@ export function advanceWorkflowGraph(params: {
     startNode: nextNode,
     acceptanceDecision: branchDecisionForTraversal,
     lastOutput,
+    taskContent: baseInput,
   });
   const dispatchNode = resolved.dispatchNode;
   const uniqueTrace = [...state.trace];
