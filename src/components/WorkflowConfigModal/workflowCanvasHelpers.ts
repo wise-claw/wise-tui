@@ -1,5 +1,6 @@
 import { Graph, type Node as X6Node } from "@antv/x6";
 import type { WorkflowGraphNodeData } from "../../types";
+import { normalizeWorkflowVariables } from "../../utils/workflowVariables";
 import { normalizeWorkflowStageOutcomeCriteria } from "../../utils/workflowStageOutcomeCriteria";
 import {
   STAGE_TASK_BASIS_REF_SEPARATOR,
@@ -17,7 +18,7 @@ export function isWorkflowMaterialX6Node(node: X6Node): boolean {
 export function isMaterialSnapshotNode(node: CanvasNodeItem): boolean {
   if (node.kind === "material") return true;
   if (node.kind === "start" || node.kind === "end") return false;
-  return Boolean(node.materialKey === "employee" || node.employeeId);
+  return Boolean(node.materialKey === "employee" || node.materialKey === "gateway" || node.employeeId);
 }
 
 export function buildStageTaskBasisOptionsFromCanvasSnapshot(snapshot: CanvasSnapshot): { value: string; label: string }[] {
@@ -106,6 +107,11 @@ export function canvasNodeItemFromX6Node(node: X6Node): CanvasNodeItem {
     ...(basisRefsNormalized.length > 0 ? { stageTaskBasisRefs: basisRefsNormalized } : {}),
     acceptanceEnabled: raw.acceptanceEnabled ?? false,
     acceptanceCriteria: raw.acceptanceCriteria || "",
+    promptTemplate: raw.promptTemplate || "",
+    knowledgeQuery: raw.knowledgeQuery || "",
+    codeScript: raw.codeScript || "",
+    branchCriteria: raw.branchCriteria || "",
+    workflowVariables: normalizeWorkflowVariables(raw.workflowVariables),
     passthroughData: raw.passthroughData,
   };
 }
@@ -153,6 +159,11 @@ export function snapshotFromWorkflowGraph(graph: Graph): CanvasSnapshot {
       ...(mergedRefs.length > 0 ? { stageTaskBasisRefs: mergedRefs } : {}),
       acceptanceEnabled: Boolean(data.acceptanceEnabled),
       acceptanceCriteria: (data.acceptanceCriteria as string | undefined) ?? "",
+      promptTemplate: (data.promptTemplate as string | undefined) ?? "",
+      knowledgeQuery: (data.knowledgeQuery as string | undefined) ?? "",
+      codeScript: (data.codeScript as string | undefined) ?? "",
+      branchCriteria: (data.branchCriteria as string | undefined) ?? "",
+      workflowVariables: normalizeWorkflowVariables(data.workflowVariables),
       passthroughData: data.passthroughData as Record<string, unknown> | undefined,
       x: pos.x,
       y: pos.y,
@@ -187,9 +198,21 @@ export function snapshotFromWorkflowGraph(graph: Graph): CanvasSnapshot {
       const rawTarget = edge.getTargetCellId() || "";
       const sourcePort = edge.getSourcePortId() || undefined;
       const targetPort = edge.getTargetPortId() || undefined;
+      const labels = edge.getLabels();
+      const labelFromEdge =
+        labels.length > 0
+          ? String((labels[0] as { attrs?: { label?: { text?: string } } })?.attrs?.label?.text ?? "").trim()
+          : "";
       const source = startIdRemap.get(rawSource) ?? endIdRemap.get(rawSource) ?? rawSource;
       const target = startIdRemap.get(rawTarget) ?? endIdRemap.get(rawTarget) ?? rawTarget;
-      return { id: edge.id || `edge-${index + 1}`, source, target, sourcePort, targetPort };
+      return {
+        id: edge.id || `edge-${index + 1}`,
+        source,
+        target,
+        sourcePort,
+        targetPort,
+        label: labelFromEdge || (sourcePort === "if" ? "通过" : sourcePort === "else" ? "驳回" : undefined),
+      };
     })
     .filter((edge) => edge.source && edge.target && nodeIdSet.has(edge.source) && nodeIdSet.has(edge.target))
     .filter((edge) => {

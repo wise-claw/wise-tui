@@ -3,11 +3,12 @@
  * WorkflowConfigModal and read-only viewers (e.g. progress monitor).
  */
 import { Graph, type Node as X6Node } from "@antv/x6";
-import type { WorkflowGraph, WorkflowGraphNodeData, WorkflowStageOutcomeCriterion } from "../../types";
+import type { WorkflowGraph, WorkflowGraphNodeData, WorkflowStageOutcomeCriterion, WorkflowVariableDefinition } from "../../types";
+import { normalizeWorkflowVariables } from "../../utils/workflowVariables";
 import { normalizeWorkflowStageOutcomeCriteria } from "../../utils/workflowStageOutcomeCriteria";
 import { normalizeStageTaskBasisRefsFromNodeData } from "../../services/workflowGraphRuntime";
 
-export type MaterialTheme = "blue" | "green" | "orange";
+export type MaterialTheme = "blue" | "green" | "orange" | "purple" | "cyan" | "magenta";
 
 export interface MaterialItem {
   key: string;
@@ -33,6 +34,11 @@ export interface CanvasNodeItem {
   stageTaskBasisRef?: string;
   acceptanceEnabled?: boolean;
   acceptanceCriteria?: string;
+  promptTemplate?: string;
+  knowledgeQuery?: string;
+  codeScript?: string;
+  branchCriteria?: string;
+  workflowVariables?: WorkflowVariableDefinition[];
   passthroughData?: Record<string, unknown>;
 }
 
@@ -42,6 +48,7 @@ export interface CanvasEdgeItem {
   target: string;
   sourcePort?: string;
   targetPort?: string;
+  label?: string;
 }
 
 export interface CanvasSnapshot {
@@ -101,7 +108,7 @@ export const MATERIALS: Record<string, MaterialItem> = {
     key: "start",
     iconText: "S",
     title: "开始",
-    desc: "流程开始节点。",
+    desc: "流程入口，可定义工作流变量。",
     inputPlaceholder: "",
     theme: "blue",
   },
@@ -121,15 +128,93 @@ export const MATERIALS: Record<string, MaterialItem> = {
     inputPlaceholder: "输入阶段任务",
     theme: "green",
   },
+  gateway: {
+    key: "gateway",
+    iconText: "GW",
+    title: "验收网关",
+    desc: "执行并验收上阶段成果，支持通过/驳回分支。",
+    inputPlaceholder: "输入评判标准",
+    theme: "green",
+  },
+  branch: {
+    key: "branch",
+    iconText: "IF",
+    title: "条件分支",
+    desc: "按验收结论路由至通过或驳回路径。",
+    inputPlaceholder: "分支说明（可选）",
+    theme: "purple",
+  },
+  prompt: {
+    key: "prompt",
+    iconText: "TPL",
+    title: "提示词模板",
+    desc: "注入模板文本，支持 {{变量}} 占位符。",
+    inputPlaceholder: "输入提示词模板",
+    theme: "cyan",
+  },
+  knowledge: {
+    key: "knowledge",
+    iconText: "KB",
+    title: "知识检索",
+    desc: "注入代码知识图谱检索指令。",
+    inputPlaceholder: "输入检索关键词或问题",
+    theme: "cyan",
+  },
+  code: {
+    key: "code",
+    iconText: "RUN",
+    title: "代码执行",
+    desc: "注入脚本/命令执行说明。",
+    inputPlaceholder: "输入脚本或命令说明",
+    theme: "magenta",
+  },
 };
 
 export const MATERIAL_KEYS = Object.keys(MATERIALS);
+
+export function isAgentMaterialKey(materialKey: string | undefined): boolean {
+  return materialKey === "employee" || materialKey === "gateway";
+}
+
+export function isPassthroughMaterialKey(materialKey: string | undefined): boolean {
+  return materialKey === "prompt" || materialKey === "knowledge" || materialKey === "code";
+}
+
+export function defaultTitleForMaterialKey(materialKey: string): string {
+  if (materialKey === "employee") return "智能体阶段";
+  if (materialKey === "gateway") return "验收网关";
+  return MATERIALS[materialKey]?.title ?? "节点";
+}
+
+export function defaultNodeFieldsForMaterial(materialKey: string): Partial<CanvasNodeItem> {
+  if (materialKey === "gateway") {
+    return { acceptanceEnabled: true };
+  }
+  return {};
+}
 
 export function createDefaultCanvasSnapshot(): CanvasSnapshot {
   return {
     nodes: [],
     edges: [],
   };
+}
+
+function graphNodeTypeToMaterialKey(node: { type: string; data: WorkflowGraphNodeData }): string {
+  const fromData = typeof node.data.materialKey === "string" ? node.data.materialKey.trim() : "";
+  if (fromData && MATERIALS[fromData]) return fromData;
+  switch (node.type) {
+    case "prompt":
+      return "prompt";
+    case "knowledge":
+      return "knowledge";
+    case "code":
+      return "code";
+    case "branch":
+      return "branch";
+    default:
+      return "employee";
+  }
 }
 
 export function workflowGraphToCanvasSnapshot(graph: WorkflowGraph | null | undefined): CanvasSnapshot {
@@ -142,6 +227,7 @@ export function workflowGraphToCanvasSnapshot(graph: WorkflowGraph | null | unde
         title: node.data.label || "开始",
         x: node.position.x,
         y: node.position.y,
+        workflowVariables: normalizeWorkflowVariables(node.data.workflowVariables),
         passthroughData: omitGraphNodeMappedData(node.data, "start"),
       };
     }
@@ -155,19 +241,23 @@ export function workflowGraphToCanvasSnapshot(graph: WorkflowGraph | null | unde
         passthroughData: omitGraphNodeMappedData(node.data, "end"),
       };
     }
-    const key = typeof node.data.materialKey === "string" && MATERIALS[node.data.materialKey] ? node.data.materialKey : "employee";
+    const key = graphNodeTypeToMaterialKey(node);
     return {
       id: node.id,
       kind: "material",
       title: node.data.label || `节点${index + 1}`,
       materialKey: key,
-      theme: MATERIALS[key].theme,
+      theme: MATERIALS[key]?.theme ?? MATERIALS.employee.theme,
       stageTask: typeof node.data.employeePrompt === "string" ? node.data.employeePrompt : "",
       employeeId: typeof node.data.employeeId === "string" ? node.data.employeeId : undefined,
       stageSuccessCriteria: normalizeWorkflowStageOutcomeCriteria(node.data.stageSuccessCriteria),
       stageTaskBasisRefs: normalizeStageTaskBasisRefsFromNodeData(node.data as WorkflowGraphNodeData),
       acceptanceEnabled: typeof node.data.conditionElsePrompt === "string" ? node.data.conditionElsePrompt === "acceptance_enabled" : false,
       acceptanceCriteria: typeof node.data.conditionIfPrompt === "string" && node.data.conditionIfPrompt !== "rollback" ? node.data.conditionIfPrompt : "",
+      promptTemplate: typeof node.data.promptTemplate === "string" ? node.data.promptTemplate : "",
+      knowledgeQuery: typeof node.data.knowledgeQuery === "string" ? node.data.knowledgeQuery : "",
+      codeScript: typeof node.data.codeScript === "string" ? node.data.codeScript : "",
+      branchCriteria: typeof node.data.branchCriteria === "string" ? node.data.branchCriteria : "",
       passthroughData: omitGraphNodeMappedData(node.data, "material"),
       x: node.position.x,
       y: node.position.y,
@@ -204,6 +294,7 @@ export function workflowGraphToCanvasSnapshot(graph: WorkflowGraph | null | unde
       target,
       sourcePort,
       targetPort,
+      label: typeof edge.label === "string" ? edge.label : typeof edge.data?.label === "string" ? edge.data.label : undefined,
     };
   });
   return normalizeCanvasSnapshot({ nodes, edges });
@@ -215,6 +306,9 @@ function omitGraphNodeMappedData(
 ): Record<string, unknown> | undefined {
   const out: Record<string, unknown> = { ...data };
   delete out.label;
+  if (kind === "start") {
+    delete out.workflowVariables;
+  }
   if (kind === "material") {
     delete out.materialKey;
     delete out.employeePrompt;
@@ -224,6 +318,10 @@ function omitGraphNodeMappedData(
     delete out.stageSuccessCriteria;
     delete out.stageTaskBasisRefs;
     delete out.stageTaskBasisRef;
+    delete out.promptTemplate;
+    delete out.knowledgeQuery;
+    delete out.codeScript;
+    delete out.branchCriteria;
   }
   return Object.keys(out).length > 0 ? out : undefined;
 }
@@ -231,7 +329,31 @@ function omitGraphNodeMappedData(
 export function getMaterialNodeStyle(theme: MaterialTheme) {
   if (theme === "green") return { body: "#E6FFFB", border: "#13C2C2", text: "#006D75" };
   if (theme === "orange") return { body: "#FFF7E6", border: "#FA8C16", text: "#AD4E00" };
+  if (theme === "purple") return { body: "#F9F0FF", border: "#9254DE", text: "#531DAB" };
+  if (theme === "cyan") return { body: "#E6FFFB", border: "#36CFC9", text: "#08979C" };
+  if (theme === "magenta") return { body: "#FFF0F6", border: "#EB2F96", text: "#9E1068" };
   return { body: "#F0F5FF", border: "#5F95FF", text: "#1D39C4" };
+}
+
+function summarizePassthroughNode(node: Partial<CanvasNodeItem>): string {
+  const materialKey = node.materialKey;
+  if (materialKey === "prompt") {
+    const text = (node.promptTemplate || "").trim();
+    return text ? `模板：${text.slice(0, 48)}${text.length > 48 ? "…" : ""}` : "未填写模板";
+  }
+  if (materialKey === "knowledge") {
+    const text = (node.knowledgeQuery || "").trim();
+    return text ? `检索：${text.slice(0, 48)}${text.length > 48 ? "…" : ""}` : "未填写检索语句";
+  }
+  if (materialKey === "code") {
+    const text = (node.codeScript || "").trim();
+    return text ? `脚本：${text.slice(0, 48)}${text.length > 48 ? "…" : ""}` : "未填写脚本说明";
+  }
+  if (materialKey === "branch") {
+    const text = (node.branchCriteria || "").trim();
+    return text ? `说明：${text.slice(0, 48)}${text.length > 48 ? "…" : ""}` : "按上阶段验收结论路由";
+  }
+  return "";
 }
 
 let workflowX6NodeRegistered = false;
@@ -411,7 +533,7 @@ export function createGraphNodeFromSnapshotNode(node: CanvasNodeItem, employeeNa
       width: FLOW_NODE_WIDTH,
       height: FLOW_NODE_HEIGHT,
       shape: "rect",
-      data: { kind: node.kind, title: node.title, passthroughData: node.passthroughData },
+      data: { kind: node.kind, title: node.title, passthroughData: node.passthroughData, workflowVariables: node.workflowVariables },
       attrs: {
         body: {
           fill: node.kind === "start" ? "#E6F4FF" : "#FFF1F0",
@@ -429,8 +551,9 @@ export function createGraphNodeFromSnapshotNode(node: CanvasNodeItem, employeeNa
   const theme = node.theme ?? material.theme;
   const style = getMaterialNodeStyle(theme);
   const title = node.title || material.title;
-  const isEmployeeNode = node.materialKey === "employee";
+  const isEmployeeNode = isAgentMaterialKey(node.materialKey);
   const employeeSummary = isEmployeeNode ? buildEmployeeNodeSummary(node, employeeNameById) : null;
+  const passthroughSummary = !isEmployeeNode ? summarizePassthroughNode(node) : "";
   return {
     id: node.id,
     x: node.x,
@@ -447,6 +570,10 @@ export function createGraphNodeFromSnapshotNode(node: CanvasNodeItem, employeeNa
       stageTask: node.stageTask || "",
       employeeId: node.employeeId,
       stageSuccessCriteria: normalizeWorkflowStageOutcomeCriteria(node.stageSuccessCriteria),
+      promptTemplate: node.promptTemplate || "",
+      knowledgeQuery: node.knowledgeQuery || "",
+      codeScript: node.codeScript || "",
+      branchCriteria: node.branchCriteria || "",
       ...(() => {
         const refs = normalizeStageTaskBasisRefsFromNodeData({
           label: node.title || "",
@@ -466,10 +593,41 @@ export function createGraphNodeFromSnapshotNode(node: CanvasNodeItem, employeeNa
       iconText: { text: material.iconText, fill: style.text },
       title: { text: title, fill: "#141414" },
       desc1: { text: isEmployeeNode ? employeeSummary?.assignee ?? "" : material.desc, fill: "rgba(0,0,0,0.78)" },
-      desc2: { text: isEmployeeNode ? employeeSummary?.task ?? "" : "", fill: "rgba(0,0,0,0.65)" },
+      desc2: { text: isEmployeeNode ? employeeSummary?.task ?? "" : passthroughSummary, fill: "rgba(0,0,0,0.65)" },
       desc3: { text: isEmployeeNode ? employeeSummary?.acceptance ?? "" : "", fill: "rgba(0,0,0,0.65)" },
-      desc4: { text: "", fill: "rgba(0,0,0,0.65)" },
+      desc4: { text: isEmployeeNode ? employeeSummary?.stageSuccess ?? "" : "", fill: "rgba(0,0,0,0.65)" },
     },
-    ports: createPorts(),
+    ports: createBranchPorts(node.materialKey),
   };
+}
+
+export function createBranchPorts(materialKey?: string) {
+  if (materialKey === "branch") {
+    const base = {
+      attrs: {
+        circle: {
+          r: 6,
+          magnet: true,
+          strokeWidth: 1,
+          fill: "#fff",
+          style: { visibility: "hidden", cursor: "crosshair" },
+        },
+      },
+    };
+    return {
+      groups: {
+        top: { ...base, position: "top" },
+        right: { ...base, position: "right" },
+        bottom: { ...base, position: "bottom" },
+        left: { ...base, position: "left" },
+      },
+      items: [
+        { id: "top", group: "top" },
+        { id: "if", group: "right", attrs: { circle: { stroke: "#52C41A" } } },
+        { id: "else", group: "bottom", attrs: { circle: { stroke: "#FF4D4F" } } },
+        { id: "left", group: "left" },
+      ],
+    };
+  }
+  return createPorts();
 }

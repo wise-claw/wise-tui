@@ -539,11 +539,23 @@
 }
 
 .app-workflow-x6__materials {
-  width: 170px;
+  width: 196px;
   flex: none;
   border-right: 1px solid var(--ant-color-border-secondary);
   padding: 10px;
   overflow: auto;
+}
+
+.app-workflow-x6__material-category {
+  margin-bottom: 12px;
+}
+
+.app-workflow-x6__material-category-title {
+  display: block;
+  font-size: 11px;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .app-workflow-x6__materials-title {
@@ -601,6 +613,21 @@
 .app-workflow-x6__material-icon--orange {
   background: #fff7e6;
   color: #ad4e00;
+}
+
+.app-workflow-x6__material-icon--purple {
+  background: #f9f0ff;
+  color: #531dab;
+}
+
+.app-workflow-x6__material-icon--cyan {
+  background: #e6fffb;
+  color: #08979c;
+}
+
+.app-workflow-x6__material-icon--magenta {
+  background: #fff0f6;
+  color: #9e1068;
 }
 
 .app-workflow-x6__material-body {
@@ -752,6 +779,20 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+.app-workflow-node-edit-form__hint {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--ant-color-text-secondary);
+  line-height: 1.5;
+}
+
+.app-workflow-node-edit-form__hint code {
+  font-size: 11px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--ant-color-fill-quaternary);
 }
 
 .app-workflow-node-edit-form__field-hint-icon {

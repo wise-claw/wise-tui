@@ -377,7 +377,7 @@ export function Topbar({
   const [runStatusHint, setRunStatusHint] = useState("未运行");
   const [runOutputPreview, setRunOutputPreview] = useState<Array<{ text: string; isError: boolean }>>([]);
   const [runDetectedUrl, setRunDetectedUrl] = useState<string | null>(null);
-  const [runErrorMonitorEnabled, setRunErrorMonitorEnabled] = useState(true);
+  const [runErrorMonitorEnabled, setRunErrorMonitorEnabled] = useState(false);
   const [runAutoOpenPageEnabled, setRunAutoOpenPageEnabled] = useState(true);
   const [rightPanelDefaultPopoverOpen, setRightPanelDefaultPopoverOpen] = useState(false);
   const [rightPanelDefaultDraftCollapsed, setRightPanelDefaultDraftCollapsed] = useState(false);
@@ -838,96 +838,146 @@ export function Topbar({
               <section className="app-run-command-popover__section app-run-command-popover__section--form">
                 <label className="app-run-command-popover__row">
                   <span className="app-run-command-popover__field-label">运行命令</span>
-                  <div className="app-run-command-popover__field-control">
-                    <Input
-                      size="small"
-                      value={runCommand}
-                      onChange={(event) => setRunCommand(event.target.value)}
-                      placeholder="bun run dev"
-                      disabled={!runCwd || runStatus === "stopping"}
-                      onPressEnter={() => {
-                        saveRunCommand();
-                      }}
-                    />
-                    <button
-                      type="button"
-                      className="app-run-command-popover__btn app-run-command-popover__btn--inline"
-                      onClick={saveRunCommand}
-                      disabled={!runCwd || runStatus === "stopping"}
-                    >
-                      保存指令
-                    </button>
-                  </div>
+                  <Input
+                    size="small"
+                    value={runCommand}
+                    onChange={(event) => setRunCommand(event.target.value)}
+                    placeholder="bun run dev"
+                    disabled={!runCwd || runStatus === "stopping"}
+                    onPressEnter={() => {
+                      saveRunCommand();
+                    }}
+                    suffix={
+                      <Tooltip title="保存指令" mouseEnterDelay={0.3}>
+                        <button
+                          type="button"
+                          className="app-run-command-popover__suffix-btn"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            saveRunCommand();
+                          }}
+                          disabled={!runCwd || runStatus === "stopping"}
+                        >
+                          <svg
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                            <polyline points="17 21 17 13 7 13 7 21" />
+                            <polyline points="7 3 7 8 15 8" />
+                          </svg>
+                        </button>
+                      </Tooltip>
+                    }
+                  />
                 </label>
                 <label className="app-run-command-popover__row">
                   <span className="app-run-command-popover__field-label">打开地址</span>
-                  <div className="app-run-command-popover__field-control">
-                    <Input
-                      size="small"
-                      value={runPreferredUrl}
-                      onChange={(event) => setRunPreferredUrl(event.target.value)}
-                      placeholder="localhost:5173"
-                      disabled={!runCwd || runStatus === "stopping"}
-                      onPressEnter={() => {
-                        saveRunOpenUrl();
-                      }}
-                    />
-                    <button
-                      type="button"
-                      className="app-run-command-popover__btn app-run-command-popover__btn--inline"
-                      onClick={saveRunOpenUrl}
-                      disabled={!runCwd || runStatus === "stopping"}
-                    >
-                      保存地址
-                    </button>
-                  </div>
+                  <Input
+                    size="small"
+                    value={runPreferredUrl}
+                    onChange={(event) => setRunPreferredUrl(event.target.value)}
+                    placeholder="localhost:5173"
+                    disabled={!runCwd || runStatus === "stopping"}
+                    onPressEnter={() => {
+                      saveRunOpenUrl();
+                    }}
+                    suffix={
+                      <Tooltip title="保存地址" mouseEnterDelay={0.3}>
+                        <button
+                          type="button"
+                          className="app-run-command-popover__suffix-btn"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            saveRunOpenUrl();
+                          }}
+                          disabled={!runCwd || runStatus === "stopping"}
+                        >
+                          <svg
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                            <polyline points="17 21 17 13 7 13 7 21" />
+                            <polyline points="7 3 7 8 15 8" />
+                          </svg>
+                        </button>
+                      </Tooltip>
+                    }
+                  />
                 </label>
-                <div className="app-run-command-popover__row app-run-command-popover__row--options">
-                  <span className="app-run-command-popover__field-label" aria-hidden="true">
-                    &nbsp;
-                  </span>
-                  <div className="app-run-command-popover__options">
-                    <div className="app-run-command-popover__option">
-                      <span className="app-run-command-popover__option-label">自动打开页面</span>
-                      <Switch
-                        size="small"
-                        checked={runAutoOpenPageEnabled}
-                        onChange={handleRunAutoOpenPageChange}
-                      />
-                    </div>
-                    <div className="app-run-command-popover__option">
-                      <span className="app-run-command-popover__option-label">AI 报错监控</span>
-                      <Switch
-                        size="small"
-                        checked={runErrorMonitorEnabled}
-                        onChange={setRunErrorMonitorEnabled}
-                      />
-                    </div>
+                <div className="app-run-command-popover__options-row">
+                  <div className="app-run-command-popover__option-item">
+                    <Switch
+                      size="small"
+                      checked={runAutoOpenPageEnabled}
+                      onChange={handleRunAutoOpenPageChange}
+                    />
+                    <span className="app-run-command-popover__option-text">自动打开页面</span>
+                  </div>
+                  <div className="app-run-command-popover__option-item">
+                    <Switch
+                      size="small"
+                      checked={runErrorMonitorEnabled}
+                      onChange={setRunErrorMonitorEnabled}
+                    />
+                    <span className="app-run-command-popover__option-text">AI 报错监控</span>
                   </div>
                 </div>
               </section>
 
               <section className="app-run-command-popover__section app-run-command-popover__section--dock">
                 <div className="app-run-command-popover__dock">
-                  <div className="app-run-command-popover__dock-head">
-                    <span className="app-run-command-popover__dock-title">运行状态</span>
+                  <div className="app-run-command-popover__dock-row">
+                    <span className="app-run-command-popover__dock-label">运行状态</span>
                     <span
                       className={`app-run-command-popover__status-badge app-run-command-popover__status-badge--${runStatus}`}
                     >
                       {runStatusHint}
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    className="app-run-command-popover__dock-url"
-                    onClick={() => void openExternalUrl(resolveOpenUrl())}
-                    title={resolveOpenUrl()}
-                  >
-                    <span className="app-run-command-popover__dock-url-label">
+                  <div className="app-run-command-popover__dock-row">
+                    <span className="app-run-command-popover__dock-label">
                       {runDetectedUrl ? "检测地址" : "默认地址"}
                     </span>
-                    <span className="app-run-command-popover__dock-url-value">{resolveOpenUrl()}</span>
-                  </button>
+                    <button
+                      type="button"
+                      className="app-run-command-popover__dock-url-link"
+                      onClick={() => void openExternalUrl(resolveOpenUrl())}
+                      title={resolveOpenUrl()}
+                    >
+                      <span className="app-run-command-popover__dock-url-text">{resolveOpenUrl()}</span>
+                      <svg
+                        className="app-run-command-popover__link-icon"
+                        width="10"
+                        height="10"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                        <polyline points="15 3 21 3 21 9" />
+                        <line x1="10" y1="14" x2="21" y2="3" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               </section>
 

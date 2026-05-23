@@ -81,7 +81,7 @@ export function WorkflowConfigEditorPanel({
           ) : null}
         </div>
         <Typography.Text type="secondary" ellipsis className="app-workflow-config-stage-tip">
-          流程编排：左侧物料、右侧画布；拖拽节点调序，连线定义执行流
+          流程编排：左侧节点库、右侧画布；支持变量、模板、分支与 Agent 阶段组合
         </Typography.Text>
         <div className="app-workflow-config-editor-form-actions">
           <Form.Item>

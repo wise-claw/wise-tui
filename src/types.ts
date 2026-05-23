@@ -228,7 +228,21 @@ export interface WorkflowTemplateItem {
   stages: WorkflowTemplateStage[];
 }
 
-export type WorkflowGraphNodeType = "start" | "task" | "approval" | "end";
+export type WorkflowGraphNodeType =
+  | "start"
+  | "task"
+  | "approval"
+  | "end"
+  | "prompt"
+  | "knowledge"
+  | "code"
+  | "branch";
+
+export interface WorkflowVariableDefinition {
+  name: string;
+  label: string;
+  defaultValue?: string;
+}
 
 /** 单条阶段成果：名称与要求（Markdown）均可编辑；派发时一并写入强约束文案 */
 export interface WorkflowStageOutcomeCriterion {
@@ -256,6 +270,19 @@ export interface WorkflowGraphNodeData extends Record<string, unknown> {
    * @deprecated 由 `stageTaskBasisRefs` 替代；读取时若仅有此项则视为单选。
    */
   stageTaskBasisRef?: string;
+  /** 提示词模板节点正文 */
+  promptTemplate?: string;
+  /** 知识检索节点查询语句，支持 {{var}} */
+  knowledgeQuery?: string;
+  /** 代码/脚本节点内容 */
+  codeScript?: string;
+  /** 条件分支节点可选说明 */
+  branchCriteria?: string;
+  /** 条件分支配置 */
+  branchConditions?: import("./workflowBranch").WorkflowBranchCondition[];
+  /** 开始节点工作流变量定义 */
+  workflowVariables?: WorkflowVariableDefinition[];
+  materialKey?: string;
 }
 
 export interface WorkflowGraphNode {

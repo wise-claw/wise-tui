@@ -166,4 +166,30 @@ describe("dispatch input composition", () => {
     expect(input).toContain("workflowAcceptanceVerdict");
     expect(input).toContain("Must pass all criteria.");
   });
+
+  test("advances through prompt passthrough nodes and merges template into dispatch input", () => {
+    const start = node("start", "start", "Start");
+    start.data.workflowVariables = [{ name: "topic", label: "主题", defaultValue: "Wise" }];
+    const prompt = node("prompt-1", "prompt", "Template");
+    prompt.data.promptTemplate = "请围绕 {{topic}} 编写方案";
+    const task = node("task-1", "task", "Build");
+    const end = node("end", "end", "End");
+    const graph: WorkflowGraph = {
+      nodes: [start, prompt, task, end],
+      edges: [
+        { id: "e1", source: "start", target: "prompt-1" },
+        { id: "e2", source: "prompt-1", target: "task-1" },
+        { id: "e3", source: "task-1", target: "end" },
+      ],
+    };
+    const result = advanceWorkflowGraph({
+      graph,
+      state: createWorkflowRuntimeState(graph),
+      startContent: "原始需求",
+    });
+    expect(result.dispatch?.nodeId).toBe("task-1");
+    expect(result.dispatch?.input).toContain("【提示词模板】");
+    expect(result.dispatch?.input).toContain("请围绕 Wise 编写方案");
+    expect(result.dispatch?.input).toContain("原始需求");
+  });
 });

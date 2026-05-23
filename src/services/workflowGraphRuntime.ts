@@ -6,6 +6,8 @@ import type {
   WorkflowStageOutcomeCriterion,
 } from "../types";
 import { normalizeWorkflowStageOutcomeCriteria } from "../utils/workflowStageOutcomeCriteria";
+import { applyWorkflowVariableSubstitution, normalizeWorkflowVariables, workflowVariablesToRecord } from "../utils/workflowVariables";
+import { formatPassthroughBlockForNode, isPassthroughGraphNodeType } from "./workflowPassthroughBlocks";
 import { WORKFLOW_ACCEPTANCE_VERDICT_KEY } from "./workflow/acceptanceVerdict";
 import type { AcceptanceDecision } from "./workflow/acceptanceVerdict";
 
@@ -31,6 +33,19 @@ export interface WorkflowAdvanceResult {
   state: WorkflowGraphRuntimeState;
   dispatch?: WorkflowNodeDispatch;
   completed: boolean;
+}
+
+function workflowVariablesFromGraph(graph: WorkflowGraph | null | undefined): Record<string, string> {
+  if (!graph) return {};
+  const start = graph.nodes.find((node) => node.type === "start");
+  if (!start) return {};
+  return workflowVariablesToRecord(normalizeWorkflowVariables(start.data.workflowVariables));
+}
+
+function applyGraphVariables(text: string, graph: WorkflowGraph | null | undefined): string {
+  const vars = workflowVariablesFromGraph(graph);
+  if (Object.keys(vars).length === 0) return text;
+  return applyWorkflowVariableSubstitution(text, vars);
 }
 
 function nodeById(graph: WorkflowGraph, nodeId: string): WorkflowGraphNode {
@@ -237,7 +252,7 @@ export function composeDispatchInput(
     );
   }
 
-  return lines.join("\n");
+  return applyGraphVariables(lines.join("\n"), graph);
 }
 
 export function createWorkflowRuntimeState(graph: WorkflowGraph): WorkflowGraphRuntimeState {
@@ -249,6 +264,79 @@ export function createWorkflowRuntimeState(graph: WorkflowGraph): WorkflowGraphR
     currentNodeId: startNode.id,
     trace: [startNode.id],
   };
+}
+
+function selectOutgoingEdge(
+  graph: WorkflowGraph,
+  fromNode: WorkflowGraphNode,
+  acceptanceDecision: AcceptanceDecision | undefined,
+): WorkflowGraphEdge {
+  const edges = outgoingEdges(graph, fromNode.id);
+  if (edges.length === 0) {
+    throw new Error(`WF_NO_OUTGOING_EDGE:${fromNode.id}`);
+  }
+  if (fromNode.type === "approval") {
+    const acceptanceRequired = isAcceptanceEnabledForEmployeeNode(fromNode);
+    if (acceptanceRequired) {
+      if (!acceptanceDecision) {
+        throw new Error("WF_ACCEPTANCE_DECISION_REQUIRED");
+      }
+      return selectAcceptanceEdge(edges, acceptanceDecision);
+    }
+    return edges[0];
+  }
+  if (fromNode.type === "branch") {
+    if (!acceptanceDecision) {
+      throw new Error("WF_ACCEPTANCE_DECISION_REQUIRED");
+    }
+    return selectAcceptanceEdge(edges, acceptanceDecision);
+  }
+  return edges[0];
+}
+
+function resolveDispatchTarget(params: {
+  graph: WorkflowGraph;
+  startNode: WorkflowGraphNode;
+  acceptanceDecision?: AcceptanceDecision;
+}): { dispatchNode: WorkflowGraphNode; prefixBlocks: string[]; traceNodeIds: string[] } {
+  const { graph } = params;
+  let cursor = params.startNode;
+  const prefixBlocks: string[] = [];
+  const traceNodeIds: string[] = [];
+  let branchDecision = params.acceptanceDecision;
+
+  while (true) {
+    traceNodeIds.push(cursor.id);
+    if (cursor.type === "end") {
+      return { dispatchNode: cursor, prefixBlocks, traceNodeIds };
+    }
+    if (isPassthroughGraphNodeType(cursor.type)) {
+      const block = formatPassthroughBlockForNode(cursor);
+      if (block.trim()) {
+        prefixBlocks.push(applyGraphVariables(block, graph));
+      }
+      const out = outgoingEdges(graph, cursor.id);
+      if (out.length === 0) {
+        throw new Error(`WF_NO_OUTGOING_EDGE:${cursor.id}`);
+      }
+      cursor = nodeById(graph, out[0].target);
+      continue;
+    }
+    if (cursor.type === "branch") {
+      if (!branchDecision) {
+        throw new Error("WF_ACCEPTANCE_DECISION_REQUIRED");
+      }
+      const out = outgoingEdges(graph, cursor.id);
+      const selected = selectAcceptanceEdge(out, branchDecision);
+      cursor = nodeById(graph, selected.target);
+      branchDecision = undefined;
+      continue;
+    }
+    if (cursor.type === "task" || cursor.type === "approval") {
+      return { dispatchNode: cursor, prefixBlocks, traceNodeIds };
+    }
+    throw new Error(`WF_UNSUPPORTED_NODE:${cursor.id}`);
+  }
 }
 
 export function advanceWorkflowGraph(params: {
@@ -265,47 +353,53 @@ export function advanceWorkflowGraph(params: {
     return { state, completed: true };
   }
 
-  const edges = outgoingEdges(graph, currentNode.id);
-  if (edges.length === 0) {
-    throw new Error(`WF_NO_OUTGOING_EDGE:${currentNode.id}`);
-  }
+  let effectiveDecision = acceptanceDecision;
+  const selectedEdge = selectOutgoingEdge(graph, currentNode, effectiveDecision);
+  let nextNode = nodeById(graph, selectedEdge.target);
+  const baseInput = applyGraphVariables(startContent.trim(), graph);
 
-  let selectedEdge: WorkflowGraphEdge;
-  if (currentNode.type === "approval") {
-    const acceptanceRequired = isAcceptanceEnabledForEmployeeNode(currentNode);
-    if (acceptanceRequired) {
-      if (!acceptanceDecision) {
-        throw new Error("WF_ACCEPTANCE_DECISION_REQUIRED");
-      }
-      selectedEdge = selectAcceptanceEdge(edges, acceptanceDecision);
-    } else {
-      selectedEdge = edges[0];
+  let branchDecisionForTraversal = effectiveDecision;
+  if (nextNode.type === "branch" && !branchDecisionForTraversal && lastOutput?.trim()) {
+    const inferred = inferAcceptanceDecisionFromOutput(lastOutput);
+    if (inferred) {
+      branchDecisionForTraversal = inferred;
     }
-  } else {
-    selectedEdge = edges[0];
   }
 
-  const nextNode = nodeById(graph, selectedEdge.target);
-  // 团队流转输入统一基于“开始会话输入消息”，不透传上一阶段执行输出。
-  const baseInput = startContent.trim();
+  const resolved = resolveDispatchTarget({
+    graph,
+    startNode: nextNode,
+    acceptanceDecision: branchDecisionForTraversal,
+  });
+  const dispatchNode = resolved.dispatchNode;
+  const uniqueTrace = [...state.trace];
+  for (const id of resolved.traceNodeIds) {
+    if (!uniqueTrace.includes(id)) {
+      uniqueTrace.push(id);
+    }
+  }
 
   const nextState: WorkflowGraphRuntimeState = {
-    currentNodeId: nextNode.id,
+    currentNodeId: dispatchNode.id,
     lastNodeId: currentNode.id,
     lastOutput: lastOutput ?? state.lastOutput,
-    trace: [...state.trace, nextNode.id],
+    trace: uniqueTrace,
   };
 
-  if (nextNode.type === "end") {
+  if (dispatchNode.type === "end") {
     return { state: nextState, completed: true };
   }
 
+  const composed = composeDispatchInput(dispatchNode, baseInput, graph);
+  const mergedInput =
+    resolved.prefixBlocks.length > 0 ? `${resolved.prefixBlocks.join("\n\n")}\n\n${composed}` : composed;
+
   const dispatch: WorkflowNodeDispatch = {
-    nodeId: nextNode.id,
-    nodeType: resolveWorkflowDispatchNodeType(nextNode),
-    employeeId: nextNode.data.employeeId,
-    employeeName: nextNode.data.label,
-    input: composeDispatchInput(nextNode, baseInput, graph),
+    nodeId: dispatchNode.id,
+    nodeType: resolveWorkflowDispatchNodeType(dispatchNode),
+    employeeId: dispatchNode.data.employeeId,
+    employeeName: dispatchNode.data.label,
+    input: mergedInput,
   };
 
   return {

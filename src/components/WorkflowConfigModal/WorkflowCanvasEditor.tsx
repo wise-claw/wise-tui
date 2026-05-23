@@ -5,25 +5,31 @@ import type { EmployeeItem } from "../../types";
 import { normalizeWorkflowStageOutcomeCriteria } from "../../utils/workflowStageOutcomeCriteria";
 import type { CanvasNodeItem, CanvasSnapshot, MaterialItem } from "../workflowGraph/workflowX6CanvasShared";
 import {
-  MATERIAL_KEYS,
+  MATERIALS,
   MATERIAL_NODE_HEIGHT,
   MATERIAL_NODE_WIDTH,
-  MATERIALS,
   FLOW_NODE_HEIGHT,
   FLOW_NODE_WIDTH,
   createGraphNodeFromSnapshotNode,
+  defaultNodeFieldsForMaterial,
+  defaultTitleForMaterialKey,
   ensureWorkflowX6Nodes,
   getEmployeeNodeHeight,
   buildEmployeeNodeSummary,
+  isAgentMaterialKey,
+  isPassthroughMaterialKey,
   isPortConnected,
   refreshNodePorts,
   setPortColor,
   setPortVisible,
 } from "../workflowGraph/workflowX6CanvasShared";
+import { WORKFLOW_MATERIAL_CATEGORIES } from "../workflowGraph/workflowMaterialsCatalog";
 import { buildOptimizeTonePrompt, isOptimizeTone, WORKFLOW_NODE_OPTIMIZE_TONE_STORAGE_KEY, type OptimizeTone } from "./optimizeTone";
 import { materializePrdSnapshot, readSnapshotFile } from "../../services/materializePrdSnapshot";
 import { runPrdSplitClaude } from "../../services/claudeSplitExecutor";
 import { WorkflowNodeEditModal, type WorkflowNodeEditFormValues } from "./WorkflowNodeEditModal";
+import { WorkflowStartNodeEditModal, type WorkflowStartNodeFormValues } from "./WorkflowStartNodeEditModal";
+import { WorkflowTransformNodeEditModal, type WorkflowTransformNodeFormValues } from "./WorkflowTransformNodeEditModal";
 import {
   buildMergedStageTaskBasisSelectOptions,
   canvasNodeItemFromX6Node,
@@ -59,11 +65,13 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
     acceptanceCriteria: "acceptance",
   });
   const [editForm] = Form.useForm<WorkflowNodeEditFormValues>();
+  const [startEditForm] = Form.useForm<WorkflowStartNodeFormValues>();
+  const [transformEditForm] = Form.useForm<WorkflowTransformNodeFormValues>();
   const selectableEmployeeIdSet = useMemo(() => new Set(selectableEmployeeIds), [selectableEmployeeIds]);
   const occupiedEmployeeIds = useMemo(() => {
     const ids = new Set(
       value.nodes
-        .filter((node) => node.kind === "material" && node.materialKey === "employee" && Boolean(node.employeeId))
+        .filter((node) => node.kind === "material" && isAgentMaterialKey(node.materialKey) && Boolean(node.employeeId))
         .map((node) => node.employeeId as string),
     );
     if (editingNode?.employeeId) {
@@ -170,7 +178,7 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
     }
     const material = MATERIALS[data.materialKey || "employee"] ?? MATERIALS.employee;
     const title = data.title || material.title;
-    const isEmployeeNode = data.materialKey === "employee";
+    const isEmployeeNode = isAgentMaterialKey(data.materialKey);
     const employeeSummary = isEmployeeNode ? buildEmployeeNodeSummary(data, employeeNameById) : null;
     node.resize(MATERIAL_NODE_WIDTH, isEmployeeNode ? getEmployeeNodeHeight(data) : MATERIAL_NODE_HEIGHT);
     node.setAttrByPath("title/text", title);
@@ -182,6 +190,28 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
 
   function openEditModal(node: X6Node) {
     const payload = canvasNodeItemFromX6Node(node);
+    if (payload.kind === "start") {
+      setEditingNode(payload);
+      startEditForm.setFieldsValue({
+        title: payload.title,
+        workflowVariables: payload.workflowVariables ?? [],
+      });
+      return;
+    }
+    if (payload.kind === "material" && (isPassthroughMaterialKey(payload.materialKey) || payload.materialKey === "branch")) {
+      setEditingNode(payload);
+      transformEditForm.setFieldsValue({
+        title: payload.title,
+        promptTemplate: payload.promptTemplate || "",
+        knowledgeQuery: payload.knowledgeQuery || "",
+        codeScript: payload.codeScript || "",
+        branchCriteria: payload.branchCriteria || "",
+      });
+      return;
+    }
+    if (payload.kind !== "material" || !isAgentMaterialKey(payload.materialKey)) {
+      return;
+    }
     const basisRefsNormalized = normalizeStageTaskBasisRefsForNode(payload);
     setEditingNode(payload);
     setStageTaskBasisSelectOptions(buildMergedStageTaskBasisSelectOptions(value, graphRef.current));
@@ -257,7 +287,8 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
           id: edge.id,
           source: { cell: edge.source, port: edge.sourcePort },
           target: { cell: edge.target, port: edge.targetPort },
-          attrs: { line: { stroke: "#5F95FF", strokeWidth: 2, targetMarker: "classic" } },
+          labels: edge.label ? [{ attrs: { label: { text: edge.label, fill: "#595959", fontSize: 11 } } }] : undefined,
+          attrs: { line: { stroke: edge.sourcePort === "else" ? "#FF7875" : edge.sourcePort === "if" ? "#73D13D" : "#5F95FF", strokeWidth: 2, targetMarker: "classic" } },
         });
       });
       syncingRef.current = false;
@@ -303,7 +334,11 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
 
     graph.on("node:mouseenter", ({ node }: { node: X6Node }) => {
       const data = (node.getData() ?? {}) as Partial<CanvasNodeItem>;
-      if (data.kind === "material") {
+      const editable =
+        data.kind === "start" ||
+        (data.kind === "material" &&
+          (isAgentMaterialKey(data.materialKey) || isPassthroughMaterialKey(data.materialKey) || data.materialKey === "branch"));
+      if (editable) {
         node.addTools([
           {
             name: "button",
@@ -370,9 +405,15 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
         if (targetNode && targetNode.isNode()) refreshNodePorts(graph, targetNode, false);
       }
     });
-    graph.on("edge:connected", () => {
+    graph.on("edge:connected", ({ edge }) => {
       connectingRef.current = false;
+      const sourcePort = edge.getSourcePortId();
+      if (sourcePort === "if" || sourcePort === "else") {
+        edge.setLabels([{ attrs: { label: { text: sourcePort === "if" ? "通过" : "驳回", fill: "#595959", fontSize: 11 } } }]);
+        edge.setAttrByPath("line/stroke", sourcePort === "if" ? "#73D13D" : "#FF7875");
+      }
       graph.getNodes().forEach((node) => refreshNodePorts(graph, node, false));
+      if (!syncingRef.current) emitSnapshot();
     });
     graph.on("node:mouseup", () => {
       if (!connectingRef.current) return;
@@ -410,7 +451,8 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
         id: edge.id,
         source: { cell: edge.source, port: edge.sourcePort },
         target: { cell: edge.target, port: edge.targetPort },
-        attrs: { line: { stroke: "#5F95FF", strokeWidth: 2, targetMarker: "classic" } },
+        labels: edge.label ? [{ attrs: { label: { text: edge.label, fill: "#595959", fontSize: 11 } } }] : undefined,
+        attrs: { line: { stroke: edge.sourcePort === "else" ? "#FF7875" : edge.sourcePort === "if" ? "#73D13D" : "#5F95FF", strokeWidth: 2, targetMarker: "classic" } },
       });
     });
     graph.getNodes().forEach((node) => refreshNodePorts(graph, node, false));
@@ -453,7 +495,16 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
     const positionY = y ?? 60 + Math.floor(existing / 2) * 120;
     graph.addNode(
       createGraphNodeFromSnapshotNode(
-        { id, kind: "material", title: material.key === "employee" ? "智能体阶段" : material.title, materialKey: material.key, theme: material.theme, x: positionX, y: positionY },
+        {
+          id,
+          kind: "material",
+          title: defaultTitleForMaterialKey(material.key),
+          materialKey: material.key,
+          theme: material.theme,
+          x: positionX,
+          y: positionY,
+          ...defaultNodeFieldsForMaterial(material.key),
+        },
         employeeNameByIdRef.current,
       ),
     );
@@ -507,6 +558,54 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
     if (!graph) return;
     graph.zoomToFit({ padding: 24, maxScale: 2 });
     setZoomPercent(Math.round(graph.zoom() * 100));
+  }
+
+  async function handleSubmitStartNodeEdit() {
+    if (!editingNode || editingNode.kind !== "start" || !graphRef.current) return;
+    const values = await startEditForm.validateFields();
+    const graph = graphRef.current;
+    const target = graph.getCellById(editingNode.id);
+    if (!target || !target.isNode()) {
+      setEditingNode(null);
+      return;
+    }
+    const node = target as X6Node;
+    const currentData = (node.getData() ?? {}) as Partial<CanvasNodeItem>;
+    const nextData: Partial<CanvasNodeItem> = {
+      ...currentData,
+      kind: "start",
+      title: values.title.trim(),
+      workflowVariables: values.workflowVariables ?? [],
+    };
+    node.setData(nextData);
+    node.setAttrByPath("label/text", nextData.title ?? "开始");
+    setEditingNode(null);
+    emitSnapshot();
+  }
+
+  async function handleSubmitTransformNodeEdit() {
+    if (!editingNode || editingNode.kind !== "material" || !graphRef.current) return;
+    const values = await transformEditForm.validateFields();
+    const graph = graphRef.current;
+    const target = graph.getCellById(editingNode.id);
+    if (!target || !target.isNode()) {
+      setEditingNode(null);
+      return;
+    }
+    const node = target as X6Node;
+    const currentData = (node.getData() ?? {}) as Partial<CanvasNodeItem>;
+    const nextData: Partial<CanvasNodeItem> = {
+      ...currentData,
+      title: values.title.trim(),
+      promptTemplate: values.promptTemplate?.trim() ?? "",
+      knowledgeQuery: values.knowledgeQuery?.trim() ?? "",
+      codeScript: values.codeScript?.trim() ?? "",
+      branchCriteria: values.branchCriteria?.trim() ?? "",
+    };
+    node.setData(nextData);
+    applyNodeVisual(node, nextData);
+    setEditingNode(null);
+    emitSnapshot();
   }
 
   async function handleSubmitNodeEdit() {
@@ -569,37 +668,55 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
     setOptimizingField(null);
   }
 
+  const editingAgentNode =
+    editingNode && editingNode.kind === "material" && isAgentMaterialKey(editingNode.materialKey) ? editingNode : null;
+  const editingStartNode = editingNode && editingNode.kind === "start" ? editingNode : null;
+  const editingTransformNode =
+    editingNode &&
+    editingNode.kind === "material" &&
+    (isPassthroughMaterialKey(editingNode.materialKey) || editingNode.materialKey === "branch")
+      ? editingNode
+      : null;
+
   return (
     <>
       <div className="app-workflow-x6" ref={canvasWrapperRef}>
         <div className="app-workflow-x6__materials">
-          <Typography.Text strong className="app-workflow-x6__materials-title">物料</Typography.Text>
-          <div className="app-workflow-x6__materials-list">
-            {MATERIAL_KEYS.map((key) => {
-              const item = MATERIALS[key];
-              return (
-                <button
-                  key={item.key}
-                  type="button"
-                  draggable
-                  className="app-workflow-x6__material-item"
-                  onDragStart={(event) => {
-                    setDraggingMaterialKey(item.key);
-                    event.dataTransfer.setData("application/x-wise-material", item.key);
-                    event.dataTransfer.effectAllowed = "copy";
-                  }}
-                  onDragEnd={() => setDraggingMaterialKey(null)}
-                  onClick={() => appendMaterialNode(item)}
-                >
-                  <span className={`app-workflow-x6__material-icon app-workflow-x6__material-icon--${item.theme}`}>{item.iconText}</span>
-                  <span className="app-workflow-x6__material-body">
-                    <span className="app-workflow-x6__material-title">{item.title}</span>
-                    <span className="app-workflow-x6__material-desc">{item.desc}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          <Typography.Text strong className="app-workflow-x6__materials-title">节点库</Typography.Text>
+          {WORKFLOW_MATERIAL_CATEGORIES.map((category) => (
+            <div key={category.key} className="app-workflow-x6__material-category">
+              <Typography.Text type="secondary" className="app-workflow-x6__material-category-title">
+                {category.title}
+              </Typography.Text>
+              <div className="app-workflow-x6__materials-list">
+                {category.materialKeys.map((key) => {
+                  const item = MATERIALS[key];
+                  if (!item) return null;
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      draggable
+                      className="app-workflow-x6__material-item"
+                      onDragStart={(event) => {
+                        setDraggingMaterialKey(item.key);
+                        event.dataTransfer.setData("application/x-wise-material", item.key);
+                        event.dataTransfer.effectAllowed = "copy";
+                      }}
+                      onDragEnd={() => setDraggingMaterialKey(null)}
+                      onClick={() => appendMaterialNode(item)}
+                    >
+                      <span className={`app-workflow-x6__material-icon app-workflow-x6__material-icon--${item.theme}`}>{item.iconText}</span>
+                      <span className="app-workflow-x6__material-body">
+                        <span className="app-workflow-x6__material-title">{item.title}</span>
+                        <span className="app-workflow-x6__material-desc">{item.desc}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
         <div
           className={`app-workflow-x6__canvas${draggingMaterialKey ? " app-workflow-x6__canvas--dragging" : ""}`}
@@ -619,7 +736,7 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
         </div>
       </div>
       <WorkflowNodeEditModal
-        editingNode={editingNode}
+        editingNode={editingAgentNode}
         form={editForm}
         stageTaskBasisSelectOptions={stageTaskBasisSelectOptions}
         employeeOptions={employeeOptions}
@@ -630,6 +747,18 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
         onSubmit={() => void handleSubmitNodeEdit()}
         onOptimize={(field) => void handleAiOptimizeField(field)}
         onOptimizeToneChange={(field, tone) => setOptimizeToneByField((prev) => ({ ...prev, [field]: tone }))}
+      />
+      <WorkflowStartNodeEditModal
+        editingNode={editingStartNode}
+        form={startEditForm}
+        onCancel={handleCloseNodeEdit}
+        onSubmit={() => void handleSubmitStartNodeEdit()}
+      />
+      <WorkflowTransformNodeEditModal
+        editingNode={editingTransformNode}
+        form={transformEditForm}
+        onCancel={handleCloseNodeEdit}
+        onSubmit={() => void handleSubmitTransformNodeEdit()}
       />
     </>
   );
