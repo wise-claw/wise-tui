@@ -45,6 +45,7 @@ interface SystemResourceInlineProps {
   onCancelLiveDrawerSession?: (sessionId: string) => void;
   onCancelRegistryOrphanSession: (sid: string) => void;
   onEndSession?: (sessionId: string) => void;
+  onBatchEndSessions?: (sessionIds: string[]) => void | Promise<void>;
   onOpenTaskDetailFromMonitor?: (taskId: string) => void;
 }
 
@@ -75,6 +76,7 @@ export function SystemResourceInline({
   onCancelLiveDrawerSession,
   onCancelRegistryOrphanSession,
   onEndSession,
+  onBatchEndSessions,
   onOpenTaskDetailFromMonitor,
 }: SystemResourceInlineProps) {
   return (
@@ -111,6 +113,7 @@ export function SystemResourceInline({
                     }
                     onSelectSession={onSelectSession}
                     onEndSession={onEndSession}
+                    onBatchEndSessions={onBatchEndSessions}
                   />
                 }
               >

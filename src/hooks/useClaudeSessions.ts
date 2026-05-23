@@ -79,6 +79,8 @@ import {
   parseStreamLineSessionId,
 } from "../services/claudeStreamParser";
 import { getAppSetting, setAppSetting } from "../services/appSettingsStore";
+import { stopClaudeMainSession } from "../services/stopClaudeMainSession";
+import { getSystemResourceSnapshot } from "../services/systemResource";
 import {
   buildAutoCompactSystemMessage,
   buildContextOverflowRetrySystemMessage,
@@ -515,6 +517,11 @@ interface UseClaudeSessionsReturn {
   reloadFullDiskTranscript: (sessionKey: string) => Promise<void>;
   /** 手动触发 Claude Code `/compact` 压缩会话历史 */
   compactSessionHistory: (sessionId: string) => Promise<void>;
+  /**
+   * 结束指定标签对应的本机长驻/逐轮子进程（不关标签、不删绑定）。
+   * 用于仓库/项目主会话换绑前释放旧进程，保证同一绑定仅一个长驻子进程。
+   */
+  releaseSessionHostProcess: (sessionId: string) => Promise<void>;
 }
 
 export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaudeSessionsReturn {
@@ -2047,6 +2054,66 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     [activeSessionId, sendMessageToSession],
   );
 
+  const releaseSessionHostProcess = useCallback(
+    async (sessionId: string) => {
+      const session = sessionsRef.current.find((s) => s.id === sessionId);
+      if (!session) {
+        return;
+      }
+
+      expectedTurnNonceByTabIdRef.current.delete(sessionId);
+      if (session.claudeSessionId?.trim()) {
+        expectedTurnNonceByTabIdRef.current.delete(session.claudeSessionId.trim());
+      }
+      detachClaudeInvocationsForSessionKey(sessionId);
+      streamingProcessByTabRef.current.delete(sessionId);
+      const streamTarget = streamingTargetIdRef.current?.trim();
+      if (
+        streamTarget &&
+        (streamTarget === sessionId || streamTarget === session.claudeSessionId?.trim())
+      ) {
+        streamingTargetIdRef.current = null;
+      }
+
+      const snapshot = await getSystemResourceSnapshot().catch(() => null);
+      try {
+        await stopClaudeMainSession({
+          session,
+          claudeProcesses: snapshot?.claudeProcesses ?? [],
+          onCancelTabSession: (tabId) => {
+            const tab = sessionsRef.current.find((s) => s.id === tabId);
+            const sid =
+              tab?.claudeSessionId?.trim() ?? sessionIdMapRef.current.get(tabId)?.trim() ?? null;
+            if (sid) {
+              void cancelClaudeExecution(sid).catch(() => {});
+            }
+          },
+        });
+      } catch {
+        /* 无本机进程可结束 */
+      }
+
+      const claudeSid =
+        session.claudeSessionId?.trim() ?? sessionIdMapRef.current.get(sessionId)?.trim() ?? null;
+      if (claudeSid && sessionUsesStreamingConnection(session, defaultConnectionKindRef.current)) {
+        await closeStreamingSession(claudeSid).catch(() => {
+          /* 进程可能已退出 */
+        });
+      }
+
+      commitSessions((prev) =>
+        prev.map((s) => {
+          if (s.id !== sessionId) return s;
+          if (s.status === "running" || s.status === "connecting") {
+            return { ...s, status: "idle" as const };
+          }
+          return s;
+        }),
+      );
+    },
+    [commitSessions, detachClaudeInvocationsForSessionKey],
+  );
+
   const closeSession = useCallback((sessionId: string) => {
     const victim = sessionsRef.current.find((s) => s.id === sessionId);
     expectedTurnNonceByTabIdRef.current.delete(sessionId);
@@ -2419,5 +2486,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     tabsHydrated,
     reloadFullDiskTranscript,
     compactSessionHistory,
+    releaseSessionHostProcess,
   };
 }

@@ -122,6 +122,8 @@ import {
   resolveRepositoryForSession,
   resolveBoundMainSessionId,
   resolveMainOwnerAgentNameForRepositoryPath,
+  resolveSessionFromBindingValue,
+  isProjectMainSessionBindingKey,
 } from "./utils/repositoryMainSessionBinding";
 import { loadSessionOwnerHints } from "./utils/sessionOwnerHints";
 import type { WorkflowGraphRuntimeState } from "./services/workflowGraphRuntime";
@@ -473,16 +475,6 @@ export default function App() {
     };
   }, []);
 
-  const bindRepositoryMainSession = useCallback((repositoryPath: string, sessionId: string) => {
-    const key = normalizeRepositoryPathForMatch(repositoryPath);
-    setRepositoryMainSessionBindings((prev) => {
-      if (prev[key] === sessionId) return prev;
-      const next = { ...prev, [key]: sessionId };
-      void setAppSetting(REPOSITORY_MAIN_SESSION_BINDING_STORAGE_KEY, JSON.stringify(next));
-      return next;
-    });
-  }, []);
-
   const handlePersistRepositoryMainOwnerAgent = useCallback(
     async (repository: Repository, mainOwnerAgentName: string | null) => {
       try {
@@ -601,6 +593,7 @@ export default function App() {
     tabsHydrated,
     reloadFullDiskTranscript,
     compactSessionHistory,
+    releaseSessionHostProcess,
   } = useClaudeSessions({
     onClaudeTurnComplete: (p) => {
       advanceTeamAfterTurnRef.current(p);
@@ -623,6 +616,44 @@ export default function App() {
 
   const repositoryMainBindingsLatestRef = useRef(repositoryMainSessionBindings);
   repositoryMainBindingsLatestRef.current = repositoryMainSessionBindings;
+
+  const releaseSessionHostProcessRef = useRef(releaseSessionHostProcess);
+  releaseSessionHostProcessRef.current = releaseSessionHostProcess;
+
+  const bindRepositoryMainSession = useCallback(
+    async (repositoryPath: string, sessionId: string) => {
+      const key = normalizeRepositoryPathForMatch(repositoryPath);
+      const nextId = sessionId.trim();
+      if (!nextId) {
+        return;
+      }
+      const prevRaw = repositoryMainBindingsLatestRef.current[key]?.trim();
+      if (prevRaw && prevRaw !== nextId) {
+        const mainOwner = isProjectMainSessionBindingKey(key)
+          ? null
+          : resolveMainOwnerAgentNameForRepositoryPath(repositoriesLatestRef.current, key);
+        const prevTabId = resolveBoundMainSessionId(
+          key,
+          repositoryMainBindingsLatestRef.current,
+          sessionsLatestRef.current,
+          mainOwner,
+        );
+        const prevSession =
+          (prevTabId ? sessionsLatestRef.current.find((s) => s.id === prevTabId) : null) ??
+          resolveSessionFromBindingValue(prevRaw, sessionsLatestRef.current);
+        if (prevSession && prevSession.id !== nextId) {
+          await releaseSessionHostProcessRef.current(prevSession.id);
+        }
+      }
+      setRepositoryMainSessionBindings((prev) => {
+        if (prev[key] === nextId) return prev;
+        const next = { ...prev, [key]: nextId };
+        void setAppSetting(REPOSITORY_MAIN_SESSION_BINDING_STORAGE_KEY, JSON.stringify(next));
+        return next;
+      });
+    },
+    [],
+  );
 
   const employeesLatestRef = useRef(employees);
   employeesLatestRef.current = employees;
@@ -1552,7 +1583,7 @@ export default function App() {
       { mainOwnerAgentName: mainOwnerPick },
     );
     if (latestForRepo) {
-      bindRepositoryMainSession(target.path, latestForRepo.id);
+      await bindRepositoryMainSession(target.path, latestForRepo.id);
       switchSession(latestForRepo.id);
       return latestForRepo.id;
     }
@@ -1565,7 +1596,7 @@ export default function App() {
     setActiveRepositoryWithOwner(repository.id);
     const target = resolveSidebarSelectionTarget({ repository });
     const id = await createSession(target.path, target.displayName);
-    bindRepositoryMainSession(target.path, id);
+    await bindRepositoryMainSession(target.path, id);
     switchSession(id);
     return id;
   }
@@ -1594,7 +1625,7 @@ export default function App() {
       setActiveProjectId(project.id);
     }
     const id = await createSession(anchor.path, anchor.displayName);
-    bindRepositoryMainSession(projectMainSessionBindingKey(project.id), id);
+    await bindRepositoryMainSession(projectMainSessionBindingKey(project.id), id);
     switchSession(id);
     return id;
   }
@@ -1977,7 +2008,7 @@ export default function App() {
       loadSessionOwnerHints(),
     );
     if (latestForProject) {
-      bindRepositoryMainSession(projectBindingKey, latestForProject.id);
+      await bindRepositoryMainSession(projectBindingKey, latestForProject.id);
       switchSession(latestForProject.id);
       return latestForProject.id;
     }

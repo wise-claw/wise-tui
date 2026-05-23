@@ -7,17 +7,13 @@ import { MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths";
 import { DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION } from "../constants/workspaceBootstrapAddons";
 import { cancelClaudeExecution } from "../services/claude";
 import { stopClaudeMainSession } from "../services/stopClaudeMainSession";
-import { killClaudeHostProcess } from "../services/systemResource";
 import {
   projectMainSessionBindingKey,
   resolveBoundMainSessionId,
   resolveMainOwnerAgentNameForRepositoryPath,
   resolveRepositoryMainSessionId,
 } from "../utils/repositoryMainSessionBinding";
-import {
-  parseHostProcessDrawerPid,
-  parseRegistryOrphanClaudeSid,
-} from "./LeftSidebar/systemSessions";
+import { endClaudeProcessRow } from "./LeftSidebar/endClaudeProcessRow";
 import { pickFolder } from "../services/repository";
 import {
   OPEN_WORKSPACE_ERROR,
@@ -233,6 +229,60 @@ export function LeftSidebar({
     },
     [handleStopBoundMainSession, repositories, repositoryMainSessionBindings, sessions],
   );
+
+  const finishClaudeProcessPopoverEnd = useCallback(() => {
+    message.success("已请求结束该进程");
+    systemResourceSessions.setClaudeCountPopoverOpen(false);
+    systemResourceSessions.setSystemSessionDrawerId(null);
+  }, [message, systemResourceSessions]);
+
+  const failClaudeProcessPopoverEnd = useCallback(
+    (err: unknown) => {
+      message.error(err instanceof Error ? err.message : "结束失败");
+    },
+    [message],
+  );
+
+  const endClaudeProcessPopoverRow = useCallback(
+    async (rowSessionId: string) => {
+      const rowSession = systemResourceSessions.matchedSystemInlineSessions.find(
+        (s) => s.id === rowSessionId,
+      );
+      await endClaudeProcessRow({
+        rowSessionId,
+        rowSession,
+        onCancelTabSession: onCancelSessionFromMonitor,
+      });
+    },
+    [onCancelSessionFromMonitor, systemResourceSessions.matchedSystemInlineSessions],
+  );
+
+  const handleBatchEndClaudeProcessRows = useCallback(
+    async (sessionIds: string[]) => {
+      const uniqueIds = [...new Set(sessionIds.map((id) => id.trim()).filter(Boolean))];
+      if (uniqueIds.length === 0) {
+        return;
+      }
+      const results = await Promise.allSettled(
+        uniqueIds.map((rowSessionId) => endClaudeProcessPopoverRow(rowSessionId)),
+      );
+      const failed = results.filter((r) => r.status === "rejected").length;
+      systemResourceSessions.setClaudeCountPopoverOpen(false);
+      systemResourceSessions.setSystemSessionDrawerId(null);
+      systemResourceSessions.setClaudeSystemSessionSearch("");
+      if (failed === 0) {
+        message.success(`已请求结束 ${uniqueIds.length} 个进程`);
+      } else if (failed < uniqueIds.length) {
+        message.warning(
+          `已请求结束 ${uniqueIds.length - failed} 个进程，${failed} 个失败`,
+        );
+      } else {
+        message.error("批量结束失败");
+      }
+    },
+    [endClaudeProcessPopoverRow, message, systemResourceSessions],
+  );
+
   const repositoryAssociateModal = useRepositoryAssociateModalController({
     onAddFloatingRepository,
     onAddRepositoryToProject,
@@ -603,37 +653,9 @@ export function LeftSidebar({
           systemResourceSessions.setSystemSessionDrawerId(sessionId);
         }}
         onEndSession={(rowSessionId) => {
-          const orphanSid = parseRegistryOrphanClaudeSid(rowSessionId);
-          const hostPid = parseHostProcessDrawerPid(rowSessionId);
-          const rowSession = systemResourceSessions.matchedSystemInlineSessions.find(
-            (s) => s.id === rowSessionId,
-          );
-          const finish = () => {
-            message.success("已请求结束该进程");
-            systemResourceSessions.setClaudeCountPopoverOpen(false);
-            systemResourceSessions.setSystemSessionDrawerId(null);
-          };
-          const fail = (err: unknown) => {
-            message.error(err instanceof Error ? err.message : "结束失败");
-          };
-          if (orphanSid) {
-            void cancelClaudeExecution(orphanSid).then(finish, fail);
-            return;
-          }
-          if (hostPid != null) {
-            const sid = rowSession?.claudeSessionId?.trim();
-            if (sid) {
-              void cancelClaudeExecution(sid).then(finish, fail);
-            } else {
-              void killClaudeHostProcess(hostPid).then(finish, fail);
-            }
-            return;
-          }
-          if (onCancelSessionFromMonitor) {
-            onCancelSessionFromMonitor(rowSessionId);
-            finish();
-          }
+          void endClaudeProcessPopoverRow(rowSessionId).then(finishClaudeProcessPopoverEnd, failClaudeProcessPopoverEnd);
         }}
+        onBatchEndSessions={handleBatchEndClaudeProcessRows}
         drawerTitle={systemResourceSessions.systemSessionDrawerTitle}
         drawerOpen={systemResourceSessions.systemSessionDrawerId !== null}
         onCloseDrawer={() => systemResourceSessions.setSystemSessionDrawerId(null)}

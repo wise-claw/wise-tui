@@ -27,7 +27,7 @@ type CreateSession = (
 interface UseDingTalkAutomationInboundOptions {
   activeProjectId: string | null;
   activeRepositoryId: number | null;
-  bindRepositoryMainSession: (repositoryPath: string, sessionId: string) => void;
+  bindRepositoryMainSession: (repositoryPath: string, sessionId: string) => void | Promise<void>;
   createSession: CreateSession;
   executeSession: (sessionId: string, prompt: string) => boolean;
   jumpToSessionWithRepository: (sessionId: string) => void;
@@ -283,7 +283,7 @@ export function useDingTalkAutomationInbound({
           if (!targetId) {
             targetId = await createSessionRef.current(repositoryPath, repositorySessionTabDisplayName(repo));
           }
-          bindRepositoryMainSessionRef.current(repositoryPath, targetId);
+          await bindRepositoryMainSessionRef.current(repositoryPath, targetId);
           jumpToSessionWithRepositoryRef.current(targetId);
           message.destroy(uxMessageKey);
           await sendDingTalkWiseAutomationReplyMarkdown(
@@ -358,7 +358,7 @@ export function useDingTalkAutomationInbound({
             duration: 0,
           });
           targetId = await createSessionRef.current(repositoryPath, repositorySessionTabDisplayName(repository));
-          bindRepositoryMainSessionRef.current(repositoryPath, targetId);
+          await bindRepositoryMainSessionRef.current(repositoryPath, targetId);
         } catch (err) {
           message.destroy(uxMessageKey);
           console.error("DingTalk automation createSession failed:", err);
@@ -369,7 +369,7 @@ export function useDingTalkAutomationInbound({
           return;
         }
       } else {
-        bindRepositoryMainSessionRef.current(repositoryPath, targetId);
+        await bindRepositoryMainSessionRef.current(repositoryPath, targetId);
       }
 
       void message.open({

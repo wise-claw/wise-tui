@@ -12,6 +12,8 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(async () => ({
   plugins: [react()],
   resolve: {
+    /** 避免多份 React 进入不同 chunk，引发 `useLayoutEffect` of undefined。 */
+    dedupe: ["react", "react-dom"],
     alias: {
       /** CC Workflow Studio（vendor）与上游一致的 `@shared/*` 解析。 */
       "@shared": resolve(root, "src/features/cc-wf-studio/vendor/shared"),
@@ -63,7 +65,8 @@ export default defineConfig(async () => ({
           if (id.includes("@tauri-apps")) {
             return "tauri-vendor";
           }
-          if (id.includes("react-dom") || id.includes("/react/")) {
+          // 仅匹配核心 react / react-dom，勿用 `/react/`（会误伤 @milkdown/react 等）。
+          if (id.includes("node_modules/react-dom/") || id.includes("node_modules/react/")) {
             return "react-vendor";
           }
           if (id.includes("@monaco-editor") || id.includes("/monaco-editor/")) {

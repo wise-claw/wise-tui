@@ -3518,15 +3518,16 @@
 
 .app-message-parts__tool-group {
   display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  gap: 3px;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 4px;
   margin: 0;
   width: 100%;
 }
 
 .app-message-parts__tool-group .app-message-part--tool {
-  flex: 1 1 150px;
+  flex: 0 0 auto;
+  width: 100%;
   min-width: 0;
   margin: 0 !important;
   max-width: 100%;
@@ -3534,7 +3535,8 @@
 }
 
 .app-message-parts__tool-group .app-message-part--tool.app-message-part--expanded {
-  flex: 1 1 100%;
+  flex: 0 0 auto;
+  width: 100%;
 }
 
 
