@@ -229,9 +229,12 @@ pub fn macos_open_privacy_pane(pane: String) -> Result<(), String> {
         "microphone" => {
             "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
         }
+        "speechRecognition" => {
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition"
+        }
         other => {
             return Err(format!(
-                "未知面板「{}」；仅支持 accessibility、screenCapture、microphone",
+                "未知面板「{}」；仅支持 accessibility、screenCapture、microphone、speechRecognition",
                 other
             ));
         }

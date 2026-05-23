@@ -11,8 +11,7 @@ use tokio::net::TcpStream;
 use tokio::process::Child;
 
 use crate::claude_config_dir::{
-    is_local_fcc_proxy_base_url, read_claude_json_env_block, sanitize_claude_root_json_for_fcc_proxy,
-    user_claude_dir,
+    read_claude_json_env_block, sanitize_claude_root_json_for_fcc_proxy, user_claude_dir,
 };
 
 /// Wise 集成的 FCC 发行源（百炼等定制 provider）。
@@ -553,6 +552,7 @@ fn apply_free_claude_code_claude_settings_sync() -> Result<bool, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::claude_config_dir::is_local_fcc_proxy_base_url;
 
     #[test]
     fn parse_fcc_dotenv_ignores_comments() {

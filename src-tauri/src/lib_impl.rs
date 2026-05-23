@@ -102,36 +102,30 @@ pub fn run() {
         .manage(Mutex::new(workspace_commands::GitWatcherState::new()))
         .manage(Mutex::new(claude_commands::TerminalManager::new()))
         .manage(claude_commands::ClaudeProcessState::default())
-        .manage(claude_commands::ClaudeSessionRegistry::new())
-        .on_window_event(|window, event| {
-            // macOS：主窗口红点关闭默认会销毁窗口，导致后续点击程序坞图标只触发
-            // `RunEvent::Reopen` 但 `get_webview_window("main")` 已为 None，没有任何窗口可显示。
-            // 与原生 macOS App 行为对齐：拦截关闭事件 → 阻止销毁 → 隐藏整个应用。
-            //
-            // 注意：这里调用 `app_handle().hide()`（NSApp.hide:，即 Cmd+H）而**不是**
-            // `window.hide()`。原因：
-            // - `window.hide()` 走的是 NSWindow.orderOut:，单个 NSWindow 被移出窗口序列；
-            //   配合 `macos-private-api`（透明背景 / 自定义 chrome）会让 WKWebView 渲染层
-            //   失效，dock 点击后 `show()` 出来一片白（已知白屏问题）。
-            // - `app_handle().hide()` 走的是 NSApp.hide:，整个应用进入 hidden 状态，
-            //   WKWebView 渲染状态完整保留；dock 点击时 macOS 系统自动 unhide，再触发
-            //   `RunEvent::Reopen`（见 run 回调），不会白屏。
-            #[cfg(target_os = "macos")]
-            if window.label() == "main" {
-                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                    api.prevent_close();
-                    let _ = window.app_handle().hide();
-                }
-            }
-            // 非 macOS 沿用平台默认行为（Windows / Linux 通常希望关闭即退出）。
-            #[cfg(not(target_os = "macos"))]
-            let _ = (window, event);
-        });
+        .manage(claude_commands::ClaudeSessionRegistry::new());
+    #[cfg(target_os = "macos")]
+    let builder = builder.manage(crate::macos_speech_stream::MacosStreamingSpeechState::default());
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder;
 
     #[cfg(desktop)]
     let builder = {
         use tauri::menu::{Menu, MenuItem, Submenu};
         builder
+            .on_window_event(|window, event| {
+                // macOS：主窗口红点关闭默认会销毁窗口，导致后续点击程序坞图标只触发
+                // `RunEvent::Reopen` 但 `get_webview_window("main")` 已为 None，没有任何窗口可显示。
+                // 与原生 macOS App 行为对齐：拦截关闭事件 → 阻止销毁 → 隐藏整个应用。
+                #[cfg(target_os = "macos")]
+                if window.label() == "main" {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = window.app_handle().hide();
+                    }
+                }
+                #[cfg(not(target_os = "macos"))]
+                let _ = (window, event);
+            })
             .menu(|app| {
                 let menu = Menu::default(app)?;
                 let open_console = MenuItem::with_id(
@@ -371,6 +365,18 @@ pub fn run() {
             cua_driver::macos_open_privacy_pane,
             #[cfg(target_os = "macos")]
             crate::macos_microphone::macos_request_microphone_access,
+            #[cfg(target_os = "macos")]
+            crate::macos_speech::macos_local_speech_capabilities,
+            #[cfg(target_os = "macos")]
+            crate::macos_speech::macos_transcribe_composer_wav,
+            #[cfg(target_os = "macos")]
+            crate::macos_speech_stream::macos_streaming_speech_start,
+            #[cfg(target_os = "macos")]
+            crate::macos_speech_stream::macos_streaming_speech_append_pcm,
+            #[cfg(target_os = "macos")]
+            crate::macos_speech_stream::macos_streaming_speech_finish,
+            #[cfg(target_os = "macos")]
+            crate::macos_speech_stream::macos_streaming_speech_cancel,
             skills_sh::skills_sh_search,
             skills_sh::skills_cli_add_from_registry,
             skills_sh::skills_cli_remove_from_registry,

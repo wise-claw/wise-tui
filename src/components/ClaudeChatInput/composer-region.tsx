@@ -51,7 +51,10 @@ import { useContextBreakdown } from "../../hooks/useContextBreakdown";
 import { ClaudeConnectionKindChip } from "./ClaudeConnectionKindChip";
 import { useDefaultClaudeConnectionKind } from "../../hooks/useDefaultClaudeConnectionKind";
 import { useComposerSpeechDictation } from "../../hooks/useComposerSpeechDictation";
-import { buildSpeechInsertion } from "../../utils/composerSpeechRecognition";
+import {
+  applyComposerSpeechStreamTranscript,
+  createComposerSpeechStreamAnchor,
+} from "../../utils/composerSpeechStreaming";
 import type { MenuProps } from "antd";
 import { logClaudeDrop } from "./drop-debug";
 import { buildClaudeOutgoingPrompt } from "../../services/claudeComposerPrompt";
@@ -614,26 +617,55 @@ function ComposerInner({
   const isSessionBusyRef = useRef(isSessionBusy);
   isSessionBusyRef.current = isSessionBusy;
 
-  const handleSpeechFinalTranscript = useCallback((transcript: string) => {
-    const surface = plainSurfaceRef.current;
-    if (!surface) return;
-    const plain = surface.getPlain();
-    const cur = surface.getCursor();
-    const { insertion, nextCursor } = buildSpeechInsertion(plain, cur, transcript);
-    if (!insertion) return;
-    const { plain: nextPlain } = insertPlainAt(plain, cur, insertion);
-    surface.setPlainAndCursor(nextPlain, nextCursor);
+  const speechStreamAnchorRef = useRef<ReturnType<typeof createComposerSpeechStreamAnchor> | null>(
+    null,
+  );
+
+  const handleSpeechTranscriptUpdate = useCallback(
+    ({ text, isFinal }: { text: string; isFinal: boolean }) => {
+      const surface = plainSurfaceRef.current;
+      if (!surface) return;
+
+      if (!speechStreamAnchorRef.current) {
+        const plain = surface.getPlain();
+        const cur = surface.getCursor();
+        speechStreamAnchorRef.current = createComposerSpeechStreamAnchor(plain, cur);
+      }
+
+      const { anchor, plain, cursor } = applyComposerSpeechStreamTranscript(
+        speechStreamAnchorRef.current,
+        text,
+        isFinal,
+      );
+      speechStreamAnchorRef.current = anchor;
+      surface.setPlainAndCursor(plain, cursor);
+    },
+    [],
+  );
+
+  const handleSpeechSessionEnd = useCallback(() => {
+    speechStreamAnchorRef.current = null;
   }, []);
 
   const speechDictation = useComposerSpeechDictation({
     enabled: !isSessionBusy,
-    onFinalTranscript: handleSpeechFinalTranscript,
+    onTranscriptUpdate: handleSpeechTranscriptUpdate,
+    onSessionEnd: handleSpeechSessionEnd,
     onError: (msg) => {
       if (msg) message.warning(msg);
     },
   });
 
+  const speechListeningPrevRef = useRef(false);
   useEffect(() => {
+    if (speechDictation.listening && !speechListeningPrevRef.current) {
+      speechStreamAnchorRef.current = null;
+    }
+    speechListeningPrevRef.current = speechDictation.listening;
+  }, [speechDictation.listening]);
+
+  useEffect(() => {
+    speechStreamAnchorRef.current = null;
     speechDictation.stop();
   }, [session.id, speechDictation.stop]);
   const onCancelRef = useRef(_onCancel);
@@ -1655,16 +1687,42 @@ function ComposerInner({
           </svg>
         </Button>
         {speechDictation.supported ? (
-          <Tooltip title={speechDictation.listening ? "点击停止语音听写" : "语音听写"} placement="top">
+          <Tooltip
+            title={
+              speechDictation.transcribing
+                ? "正在本地转写…"
+                : speechDictation.listening
+                  ? speechDictation.engine === "local"
+                    ? "点击结束录音并转写"
+                    : "点击停止语音听写"
+                  : speechDictation.engine === "local"
+                    ? "本地语音听写（边说边出字）"
+                    : "语音听写（边说边出字）"
+            }
+            placement="top"
+          >
             <Button
               type="text"
               size="small"
               className={
-                speechDictation.listening ? "app-claude-composer-voice-btn app-claude-composer-voice-btn--active" : "app-claude-composer-voice-btn"
+                speechDictation.listening || speechDictation.transcribing
+                  ? "app-claude-composer-voice-btn app-claude-composer-voice-btn--active"
+                  : "app-claude-composer-voice-btn"
               }
-              disabled={isSessionBusy}
+              disabled={isSessionBusy || speechDictation.transcribing}
+              loading={speechDictation.transcribing}
               aria-pressed={speechDictation.listening}
-              aria-label={speechDictation.listening ? "停止语音听写" : "开始语音听写"}
+              aria-label={
+                speechDictation.transcribing
+                  ? "正在转写"
+                  : speechDictation.listening
+                    ? speechDictation.engine === "local"
+                      ? "结束录音并转写"
+                      : "停止语音听写"
+                    : speechDictation.engine === "local"
+                      ? "开始本地语音转文字"
+                      : "开始语音听写"
+              }
               onClick={() => speechDictation.toggle()}
               style={{
                 color: speechDictation.listening
@@ -1743,9 +1801,11 @@ function ComposerInner({
     handleFileAttach,
     handleScreenshot,
     isSessionBusy,
+    speechDictation.engine,
     speechDictation.listening,
     speechDictation.supported,
     speechDictation.toggle,
+    speechDictation.transcribing,
   ]);
 
   /** 与 Semi 底栏同一行：结束（占用中）+ 模型选择 + 发送（Semi 在 generating 时会拦截发送，故用独立结束 + generating=false） */

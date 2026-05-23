@@ -70,6 +70,22 @@ export function needsLeadingSpaceBeforeInsert(plain: string, cursor: number, ins
   return /\S/u.test(prev) && /\S/u.test(first) && /[A-Za-z0-9]/u.test(prev) && /[A-Za-z0-9]/u.test(first);
 }
 
+/** 合并当前识别事件中的全部结果（含 interim），用于边说边出字。 */
+export function collectLiveSpeechTranscript(event: SpeechRecognitionResultEventLike): {
+  text: string;
+  isFinal: boolean;
+} {
+  let text = "";
+  let isFinal = false;
+  for (let i = 0; i < event.results.length; i += 1) {
+    const result = event.results[i];
+    if (!result) continue;
+    text += result[0]?.transcript ?? "";
+    if (result.isFinal) isFinal = true;
+  }
+  return { text: text.trim(), isFinal };
+}
+
 export function collectFinalSpeechTranscript(event: SpeechRecognitionResultEventLike): string {
   let out = "";
   for (let i = event.resultIndex; i < event.results.length; i += 1) {

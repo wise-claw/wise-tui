@@ -2,9 +2,29 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>zh-Hans</string>
+	<key>CFBundleExecutable</key>
+	<string>wise</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.wise.desktop</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Wise</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0.0</string>
+	<key>CFBundleVersion</key>
+	<string>1.0.0</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>12.0</string>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>Wise 需要截取屏幕画面以便在对话中插入截图；请在系统提示或「隐私与安全性 → 屏幕录制」中允许本应用。</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Wise 需要使用麦克风进行会话语音听写，将识别结果填入输入框。</string>
+	<string>Wise 需要使用麦克风录制语音，并在设备端转为文字填入会话输入框。</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Wise 需要在设备端将录音转为文字并填入会话输入框，音频不会用于其他用途。</string>
 </dict>
 </plist>

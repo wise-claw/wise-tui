@@ -4,40 +4,120 @@ import {
   openComposerMicrophonePrivacySettings,
 } from "../services/composerMicrophone";
 import {
-  collectFinalSpeechTranscript,
+  appendComposerStreamingSpeechPcm,
+  cancelComposerStreamingSpeech,
+  finishComposerStreamingSpeech,
+  isComposerLocalSpeechPreferred,
+  listenComposerSpeechTranscript,
+  openComposerSpeechRecognitionPrivacySettings,
+  startComposerStreamingSpeech,
+} from "../services/composerLocalSpeech";
+import {
+  ComposerAudioRecorder,
+  float32ToBase64,
+  mergeFloat32Chunks,
+} from "../utils/composerAudioCapture";
+import {
+  collectLiveSpeechTranscript,
   getSpeechRecognitionCtor,
   isSpeechRecognitionSupported,
   speechRecognitionErrorMessage,
   type SpeechRecognitionLike,
 } from "../utils/composerSpeechRecognition";
 
+export type ComposerSpeechEngine = "local" | "web";
+
+export interface ComposerSpeechTranscriptUpdate {
+  text: string;
+  isFinal: boolean;
+}
+
 export interface UseComposerSpeechDictationOptions {
   /** 为 false 时不启动识别（例如会话占用中）。 */
   enabled?: boolean;
   /** BCP-47 语言，默认 zh-CN。 */
   lang?: string;
-  onFinalTranscript: (text: string) => void;
+  /** 流式 partial 或 final 更新（边说边出字）。 */
+  onTranscriptUpdate: (update: ComposerSpeechTranscriptUpdate) => void;
+  /** 整段听写结束（本地模式在 final 后；Web 模式在 stop 时可选触发）。 */
+  onSessionEnd?: () => void;
   onError?: (message: string) => void;
 }
+
+const PCM_FLUSH_MS = 120;
 
 export function useComposerSpeechDictation({
   enabled = true,
   lang = "zh-CN",
-  onFinalTranscript,
+  onTranscriptUpdate,
+  onSessionEnd,
   onError,
 }: UseComposerSpeechDictationOptions) {
-  const supported = useMemo(() => isSpeechRecognitionSupported(), []);
+  const [engine, setEngine] = useState<ComposerSpeechEngine | null>(null);
   const [listening, setListening] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const wantListeningRef = useRef(false);
-  const onFinalRef = useRef(onFinalTranscript);
+  const recorderRef = useRef<ComposerAudioRecorder | null>(null);
+  const streamSessionIdRef = useRef<string | null>(null);
+  const pcmPendingRef = useRef<Float32Array[]>([]);
+  const pcmFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onUpdateRef = useRef(onTranscriptUpdate);
+  const onSessionEndRef = useRef(onSessionEnd);
   const onErrorRef = useRef(onError);
-  onFinalRef.current = onFinalTranscript;
+  onUpdateRef.current = onTranscriptUpdate;
+  onSessionEndRef.current = onSessionEnd;
   onErrorRef.current = onError;
 
-  const stop = useCallback(() => {
-    wantListeningRef.current = false;
-    setListening(false);
+  const webSupported = useMemo(() => isSpeechRecognitionSupported(), []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const local = await isComposerLocalSpeechPreferred(lang);
+      if (cancelled) return;
+      if (local) {
+        setEngine("local");
+        return;
+      }
+      setEngine(webSupported ? "web" : null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [lang, webSupported]);
+
+  const supported = engine != null;
+
+  const clearPcmFlushTimer = useCallback(() => {
+    if (pcmFlushTimerRef.current != null) {
+      clearTimeout(pcmFlushTimerRef.current);
+      pcmFlushTimerRef.current = null;
+    }
+  }, []);
+
+  const flushPcmPending = useCallback(() => {
+    const sessionId = streamSessionIdRef.current;
+    const pending = pcmPendingRef.current;
+    pcmPendingRef.current = [];
+    if (!sessionId || pending.length === 0) return;
+    const merged = mergeFloat32Chunks(pending);
+    void appendComposerStreamingSpeechPcm(sessionId, float32ToBase64(merged)).catch((e) => {
+      const msg = e instanceof Error ? e.message : String(e);
+      onErrorRef.current?.(msg || "推送音频失败");
+    });
+  }, []);
+
+  const schedulePcmFlush = useCallback(() => {
+    if (pcmFlushTimerRef.current != null) return;
+    pcmFlushTimerRef.current = setTimeout(() => {
+      pcmFlushTimerRef.current = null;
+      flushPcmPending();
+    }, PCM_FLUSH_MS);
+  }, [flushPcmPending]);
+
+  const stopWebRecognition = useCallback(() => {
     const rec = recognitionRef.current;
     recognitionRef.current = null;
     try {
@@ -51,7 +131,27 @@ export function useComposerSpeechDictation({
     }
   }, []);
 
-  const beginRecognition = useCallback(() => {
+  const cancelLocalStream = useCallback(() => {
+    clearPcmFlushTimer();
+    pcmPendingRef.current = [];
+    const sessionId = streamSessionIdRef.current;
+    streamSessionIdRef.current = null;
+    if (sessionId) {
+      void cancelComposerStreamingSpeech(sessionId).catch(() => undefined);
+    }
+    recorderRef.current?.stopStreaming();
+    recorderRef.current = null;
+  }, [clearPcmFlushTimer]);
+
+  const stop = useCallback(() => {
+    wantListeningRef.current = false;
+    setListening(false);
+    setTranscribing(false);
+    stopWebRecognition();
+    cancelLocalStream();
+  }, [cancelLocalStream, stopWebRecognition]);
+
+  const beginWebRecognition = useCallback(() => {
     const Ctor = getSpeechRecognitionCtor();
     if (!Ctor) return;
 
@@ -61,8 +161,8 @@ export function useComposerSpeechDictation({
     recognition.lang = lang;
     recognition.onstart = () => setListening(true);
     recognition.onresult = (event) => {
-      const transcript = collectFinalSpeechTranscript(event).trim();
-      if (transcript) onFinalRef.current(transcript);
+      const { text, isFinal } = collectLiveSpeechTranscript(event);
+      if (text) onUpdateRef.current({ text, isFinal });
     };
     recognition.onerror = (event) => {
       const msg = speechRecognitionErrorMessage(event.error);
@@ -76,11 +176,13 @@ export function useComposerSpeechDictation({
       recognitionRef.current = null;
       if (!wantListeningRef.current) {
         setListening(false);
+        onSessionEndRef.current?.();
         return;
       }
       if (!enabled) {
         wantListeningRef.current = false;
         setListening(false);
+        onSessionEndRef.current?.();
         return;
       }
       try {
@@ -88,6 +190,7 @@ export function useComposerSpeechDictation({
       } catch {
         wantListeningRef.current = false;
         setListening(false);
+        onSessionEndRef.current?.();
       }
     };
 
@@ -100,11 +203,63 @@ export function useComposerSpeechDictation({
       setListening(false);
       onErrorRef.current?.("无法启动语音听写，请稍后重试。");
     }
-  }, [lang]);
+  }, [enabled, lang]);
+
+  const finishLocalStream = useCallback(async () => {
+    clearPcmFlushTimer();
+    flushPcmPending();
+    recorderRef.current?.stopStreaming();
+    recorderRef.current = null;
+
+    const sessionId = streamSessionIdRef.current;
+    if (!sessionId) {
+      setListening(false);
+      return;
+    }
+
+    setTranscribing(true);
+    try {
+      await finishComposerStreamingSpeech(sessionId);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      onErrorRef.current?.(msg || "结束语音转写失败");
+      streamSessionIdRef.current = null;
+      setTranscribing(false);
+      setListening(false);
+      onSessionEndRef.current?.();
+    }
+  }, [clearPcmFlushTimer, flushPcmPending]);
+
+  const startLocalStream = useCallback(async () => {
+    const recorder = new ComposerAudioRecorder();
+    recorderRef.current = recorder;
+    try {
+      const { sessionId, sampleRate } = await startComposerStreamingSpeech(lang);
+      streamSessionIdRef.current = sessionId;
+      await recorder.startStreaming({
+        sampleRate,
+        onPcmChunk: (chunk) => {
+          if (!streamSessionIdRef.current) return;
+          pcmPendingRef.current.push(chunk);
+          schedulePcmFlush();
+        },
+      });
+      setListening(true);
+    } catch (e) {
+      cancelLocalStream();
+      const msg = e instanceof Error ? e.message : String(e);
+      onErrorRef.current?.(msg || "无法开始本地语音转写");
+      if (msg.includes("语音识别权限")) {
+        void openComposerSpeechRecognitionPrivacySettings();
+      }
+      wantListeningRef.current = false;
+      setListening(false);
+    }
+  }, [cancelLocalStream, lang, schedulePcmFlush]);
 
   const start = useCallback(async () => {
-    if (!enabled || !supported) return;
-    if (wantListeningRef.current || recognitionRef.current) return;
+    if (!enabled || !supported || !engine) return;
+    if (wantListeningRef.current || recognitionRef.current || transcribing) return;
 
     const mic = await ensureComposerMicrophoneAccess();
     if (!mic.ok) {
@@ -117,28 +272,71 @@ export function useComposerSpeechDictation({
 
     stop();
     wantListeningRef.current = true;
-    beginRecognition();
-  }, [beginRecognition, enabled, stop, supported]);
+
+    if (engine === "local") {
+      await startLocalStream();
+      return;
+    }
+
+    beginWebRecognition();
+  }, [beginWebRecognition, enabled, engine, startLocalStream, stop, supported, transcribing]);
 
   const toggle = useCallback(() => {
+    if (transcribing) return;
+
+    if (engine === "local") {
+      if (listening || wantListeningRef.current) {
+        wantListeningRef.current = false;
+        void finishLocalStream();
+        return;
+      }
+      void start();
+      return;
+    }
+
     if (listening || wantListeningRef.current) {
       stop();
+      onSessionEndRef.current?.();
       return;
     }
     void start();
-  }, [listening, start, stop]);
+  }, [engine, finishLocalStream, listening, start, stop, transcribing]);
 
   useEffect(() => {
-    if (!enabled && (listening || wantListeningRef.current)) {
+    if (engine !== "local") return;
+    let unlisten: (() => void) | undefined;
+    void listenComposerSpeechTranscript(({ sessionId, transcript, isFinal }) => {
+      if (sessionId !== streamSessionIdRef.current) return;
+      if (transcript) {
+        onUpdateRef.current({ text: transcript, isFinal });
+      }
+      if (!isFinal) return;
+      streamSessionIdRef.current = null;
+      setTranscribing(false);
+      setListening(false);
+      wantListeningRef.current = false;
+      onSessionEndRef.current?.();
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => {
+      unlisten?.();
+    };
+  }, [engine]);
+
+  useEffect(() => {
+    if (!enabled && (listening || wantListeningRef.current || transcribing)) {
       stop();
     }
-  }, [enabled, listening, stop]);
+  }, [enabled, listening, stop, transcribing]);
 
   useEffect(() => () => stop(), [stop]);
 
   return {
     supported,
+    engine,
     listening,
+    transcribing,
     start,
     stop,
     toggle,

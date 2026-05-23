@@ -19,6 +19,10 @@ mod git_commands;
 #[cfg(target_os = "macos")]
 mod macos_microphone;
 #[cfg(target_os = "macos")]
+mod macos_speech;
+#[cfg(target_os = "macos")]
+mod macos_speech_stream;
+#[cfg(target_os = "macos")]
 mod macos_webview_wake_recovery;
 mod lib_impl;
 mod mission_control;

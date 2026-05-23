@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildSpeechInsertion,
   collectFinalSpeechTranscript,
+  collectLiveSpeechTranscript,
   needsLeadingSpaceBeforeInsert,
   speechRecognitionErrorMessage,
 } from "./composerSpeechRecognition";
@@ -26,6 +27,17 @@ describe("composerSpeechRecognition", () => {
       insertion: " tests",
       nextCursor: 9,
     });
+  });
+
+  test("collectLiveSpeechTranscript merges interim and final flags", () => {
+    const event = {
+      resultIndex: 0,
+      results: [
+        { isFinal: false, length: 1, 0: { transcript: "你" } },
+        { isFinal: true, length: 1, 0: { transcript: "好" } },
+      ],
+    };
+    expect(collectLiveSpeechTranscript(event)).toEqual({ text: "你好", isFinal: true });
   });
 
   test("collectFinalSpeechTranscript ignores interim results", () => {
