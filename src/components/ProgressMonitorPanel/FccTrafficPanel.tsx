@@ -1,9 +1,11 @@
 import { DeleteOutlined, FieldTimeOutlined, GlobalOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import { Button, Collapse, Input, message } from "antd";
-import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { FCC_TRACES_PAGE_SIZE } from "../../constants/fccTraces";
 import {
   clearFccTracesStore,
   getFccTracesStoreSnapshot,
+  loadMoreFccTraces,
   startFccTracesPolling,
   stopFccTracesPolling,
   subscribeFccTracesStore,
@@ -147,6 +149,8 @@ export function FccTrafficPanel({ active = true, variant = "sidebar" }: Props) {
   );
   const st = snapshot.status;
   const running = st?.serverRunning === true;
+  const listHostRef = useRef<HTMLDivElement | null>(null);
+  const [visibleCount, setVisibleCount] = useState(FCC_TRACES_PAGE_SIZE);
 
   useEffect(() => {
     if (!active) {
@@ -157,9 +161,50 @@ export function FccTrafficPanel({ active = true, variant = "sidebar" }: Props) {
     return () => stopFccTracesPolling();
   }, [active]);
 
+  useEffect(() => {
+    if (snapshot.traces.length === 0) {
+      setVisibleCount(FCC_TRACES_PAGE_SIZE);
+    }
+  }, [snapshot.traces.length]);
+
+  const displayedTraces = useMemo(
+    () => snapshot.traces.slice(0, visibleCount),
+    [snapshot.traces, visibleCount],
+  );
+
+  const canRevealMoreLocally = visibleCount < snapshot.traces.length;
+  const showListFooter =
+    snapshot.traces.length > 0 &&
+    (canRevealMoreLocally || snapshot.hasMore || snapshot.loadingMore);
+
+  const handleListScroll = useCallback(() => {
+    const el = listHostRef.current;
+    if (!el) return;
+    const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 56;
+    if (!nearBottom) return;
+
+    const snap = getFccTracesStoreSnapshot();
+    setVisibleCount((c) => {
+      if (c < snap.traces.length) {
+        return Math.min(c + FCC_TRACES_PAGE_SIZE, snap.traces.length);
+      }
+      if (snap.hasMore && !snap.loadingMore) {
+        void loadMoreFccTraces().then(() => {
+          setVisibleCount((prev) =>
+            Math.min(prev + FCC_TRACES_PAGE_SIZE, getFccTracesStoreSnapshot().traces.length),
+          );
+        });
+      }
+      return c;
+    });
+  }, []);
+
   const handleClear = useCallback(() => {
     void clearFccTracesStore()
-      .then(() => message.success("已清空 FCC trace 文件"))
+      .then(() => {
+        setVisibleCount(FCC_TRACES_PAGE_SIZE);
+        message.success("已清空 FCC trace 文件");
+      })
       .catch((e) => {
         message.error(typeof e === "string" ? e : "清空 trace 失败");
       });
@@ -167,7 +212,7 @@ export function FccTrafficPanel({ active = true, variant = "sidebar" }: Props) {
 
   const items = useMemo(
     () =>
-      snapshot.traces.map((record) => ({
+      displayedTraces.map((record) => ({
         key: record.id,
         label: <RecordSummary record={record} />,
         children: (
@@ -215,7 +260,7 @@ export function FccTrafficPanel({ active = true, variant = "sidebar" }: Props) {
           </div>
         ),
       })),
-    [snapshot.traces, st?.proxyBaseUrl],
+    [displayedTraces, st?.proxyBaseUrl],
   );
 
   return (
@@ -291,7 +336,30 @@ export function FccTrafficPanel({ active = true, variant = "sidebar" }: Props) {
       </div>
 
       {items.length > 0 ? (
-        <Collapse size="small" className="app-llm-proxy-panel__list" items={items} />
+        <div
+          ref={listHostRef}
+          className="app-llm-proxy-panel__list-host"
+          onScroll={handleListScroll}
+        >
+          <Collapse size="small" className="app-llm-proxy-panel__list" items={items} />
+          {showListFooter ? (
+            <div className="app-llm-proxy-panel__list-footer">
+              {snapshot.loadingMore ? (
+                <span>加载更早记录…</span>
+              ) : canRevealMoreLocally || snapshot.hasMore ? (
+                <span>
+                  已显示 {displayedTraces.length}
+                  {snapshot.traces.length > displayedTraces.length
+                    ? ` / ${snapshot.traces.length}`
+                    : ""}{" "}
+                  条 · 继续向下滚动加载
+                </span>
+              ) : (
+                <span>共 {snapshot.traces.length} 条</span>
+              )}
+            </div>
+          ) : null}
+        </div>
       ) : (
         <div className="app-llm-proxy-panel__empty-container">
           <div className="app-llm-proxy-empty-radar">

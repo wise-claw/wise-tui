@@ -21,8 +21,14 @@
   max-height: 280px;
 }
 
-.app-llm-proxy-panel--popover .app-llm-proxy-panel__list {
+.app-llm-proxy-panel--popover .app-llm-proxy-panel__list-host {
   flex: 1 1 auto;
+  min-height: 0;
+}
+
+.app-llm-proxy-panel--popover .app-llm-proxy-panel__list {
+  flex: none;
+  overflow: visible;
   overflow-x: hidden;
 }
 
@@ -232,10 +238,33 @@
 }
 
 /* List / Collapse Panel Stylings */
-.app-llm-proxy-panel__list {
+.app-llm-proxy-panel__list-host {
   flex: 1 1 auto;
   min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
+}
+
+.app-llm-proxy-panel__list-host::-webkit-scrollbar {
+  width: 6px;
+}
+
+.app-llm-proxy-panel__list-host::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--ant-color-text) 18%, transparent);
+  border-radius: 3px;
+}
+
+.app-llm-proxy-panel__list-footer {
+  padding: 8px 12px 10px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
+  border-top: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-llm-proxy-panel__list {
+  flex: none;
+  overflow: visible;
   border: none !important;
   background: transparent !important;
   border-radius: 0 !important;

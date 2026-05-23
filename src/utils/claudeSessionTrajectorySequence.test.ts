@@ -61,6 +61,64 @@ describe("claudeSessionTrajectorySequence", () => {
     expect(kinds).toContain("tool_use");
   });
 
+  it("classifies skill, mcp, and subagent tool_use on CC lane", () => {
+    const messages: ClaudeMessage[] = [
+      {
+        id: 1,
+        role: "assistant",
+        content: "",
+        parts: [
+          {
+            type: "tool_use",
+            id: "s1",
+            name: "Skill",
+            input: { skill: "commit" },
+            status: "completed",
+          },
+          {
+            type: "tool_use",
+            id: "m1",
+            name: "mcp__linear__search_issues",
+            input: { server: "linear" },
+            status: "completed",
+          },
+          {
+            type: "tool_use",
+            id: "t1",
+            name: "Task",
+            input: { description: "run subagent" },
+            status: "completed",
+          },
+        ],
+        timestamp: 2000,
+      },
+    ];
+    const ev = buildSequenceEventsFromMessages(messages);
+    const skill = ev.find((e) => e.kind === "skill");
+    const mcp = ev.find((e) => e.kind === "mcp");
+    const sub = ev.find((e) => e.kind === "subagent");
+    expect(skill?.label).toBe("SKILL");
+    expect(skill?.fromLane).toBe("claude_code");
+    expect(skill?.toLane).toBe("claude_code");
+    expect(mcp?.label).toBe("MCP");
+    expect(mcp?.fromLane).toBe("claude_code");
+    expect(sub?.label).toBe("SUBAGENT");
+    expect(sub?.drilldown?.type).toBe("subagent_task");
+  });
+
+  it("parses hook_started from supplemental jsonl", () => {
+    const line = JSON.stringify({
+      type: "system",
+      subtype: "hook_started",
+      timestamp: 5000,
+      hook_name: "PreToolUse",
+    });
+    const ev = parseTrajectoryJsonlSupplemental([line]);
+    expect(ev.length).toBe(1);
+    expect(ev[0]!.kind).toBe("hook");
+    expect(ev[0]!.subtitle).toContain("启动");
+  });
+
   it("parses hook_response from supplemental jsonl", () => {
     const line = JSON.stringify({
       type: "system",

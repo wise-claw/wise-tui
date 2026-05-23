@@ -26,9 +26,12 @@ function messageBodyForCard(ev: SequenceEvent): string {
   return ev.label;
 }
 
-function messageCardVariant(kind: SequenceEvent["kind"]): "user" | "assistant" | "default" {
+function messageCardVariant(
+  kind: SequenceEvent["kind"],
+): "user" | "assistant" | "hook" | "skill" | "mcp" | "subagent" | "default" {
   if (kind === "user_input") return "user";
   if (kind === "assistant_text") return "assistant";
+  if (kind === "hook" || kind === "skill" || kind === "mcp" || kind === "subagent") return kind;
   return "default";
 }
 
@@ -66,6 +69,19 @@ interface LaneSpanInfo {
 function getLaneSpan(ev: SequenceEvent): LaneSpanInfo {
   const from = ev.fromLane;
   const to = ev.toLane;
+
+  if (
+    ev.kind === "hook" ||
+    ev.kind === "skill" ||
+    ev.kind === "mcp" ||
+    ev.kind === "subagent" ||
+    (from === "claude_code" && to === "claude_code")
+  ) {
+    return {
+      gridColumn: "3 / 4",
+      arrowDir: "self-loop-cc",
+    };
+  }
 
   if (ev.kind === "api_request") {
     return {
@@ -196,8 +212,12 @@ export function ClaudeSessionSequenceDiagram({
           <span className="app-seq-diagram__legend-item app-seq-diagram__legend-item--file">读写文件</span>
           <span className="app-seq-diagram__legend-item app-seq-diagram__legend-item--hook">Hooks</span>
           <span className="app-seq-diagram__legend-item app-seq-diagram__legend-item--skill">Skills</span>
+          <span className="app-seq-diagram__legend-item app-seq-diagram__legend-item--mcp">MCP</span>
+          <span className="app-seq-diagram__legend-item app-seq-diagram__legend-item--subagent">Subagent</span>
           <span className="app-seq-diagram__legend-item app-seq-diagram__legend-item--model">模型接口</span>
-          <span className="app-seq-diagram__legend-note">消息叠在泳道间 · 模型请求显示「接口」 · 点击卡片或接口查看全文</span>
+          <span className="app-seq-diagram__legend-note">
+            CC 泳道自环：Skills / MCP / Subagent / Hooks · 模型请求为「接口」 · 点击卡片查看详情
+          </span>
         </div>
 
         <div

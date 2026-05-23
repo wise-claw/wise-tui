@@ -141,6 +141,8 @@
 .app-seq-diagram__legend-item--file::before { background: #0284c7; }
 .app-seq-diagram__legend-item--hook::before { background: #ca8a04; }
 .app-seq-diagram__legend-item--skill::before { background: #db2777; }
+.app-seq-diagram__legend-item--mcp::before { background: #0891b2; }
+.app-seq-diagram__legend-item--subagent::before { background: #7c3aed; }
 .app-seq-diagram__legend-item--model::before { background: #2563eb; }
 
 .app-seq-diagram__legend-note {
@@ -174,6 +176,8 @@
 .app-seq-diagram__minimap-seg--file { background: #0284c7; }
 .app-seq-diagram__minimap-seg--hook { background: #ca8a04; }
 .app-seq-diagram__minimap-seg--skill { background: #db2777; }
+.app-seq-diagram__minimap-seg--mcp { background: #0891b2; }
+.app-seq-diagram__minimap-seg--subagent { background: #9333ea; }
 .app-seq-diagram__minimap-seg--model { background: #2563eb; }
 .app-seq-diagram__minimap-seg--other { background: var(--ant-color-text-quaternary); }
 
@@ -696,6 +700,39 @@
 
 .app-seq-msg-card--default .app-seq-msg-card__badge {
   background: #64748b;
+}
+
+.app-seq-msg-card--hook {
+  border-color: #ca8a04;
+}
+.app-seq-msg-card--hook .app-seq-msg-card__badge {
+  background: #ca8a04;
+}
+
+.app-seq-msg-card--skill {
+  border-color: #db2777;
+}
+.app-seq-msg-card--skill .app-seq-msg-card__badge {
+  background: #db2777;
+}
+
+.app-seq-msg-card--mcp {
+  border-color: #0891b2;
+}
+.app-seq-msg-card--mcp .app-seq-msg-card__badge {
+  background: #0891b2;
+}
+
+.app-seq-msg-card--subagent {
+  border-color: #7c3aed;
+}
+.app-seq-msg-card--subagent .app-seq-msg-card__badge {
+  background: #7c3aed;
+}
+
+.app-seq-row[data-kind="tool_use"] .app-seq-msg-card__badge,
+.app-seq-row[data-kind="tool_result"] .app-seq-msg-card__badge {
+  background: #ea580c;
 }
 
 .app-seq-msg-card__body {

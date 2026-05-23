@@ -519,6 +519,7 @@ fn merge_trace_lists(file_traces: Vec<FccTraceEntry>, log_traces: Vec<FccTraceEn
 #[tauri::command]
 pub(crate) fn list_fcc_traces(
     since_ms: Option<i64>,
+    before_ms: Option<i64>,
     limit: Option<u32>,
     session_hint: Option<String>,
 ) -> Result<Vec<FccTraceEntry>, String> {
@@ -535,6 +536,9 @@ pub(crate) fn list_fcc_traces(
     let mut all = merge_trace_lists(file_traces, log_traces);
     if let Some(since) = since_ms {
         all.retain(|e| e.timestamp_ms >= since);
+    }
+    if let Some(before) = before_ms {
+        all.retain(|e| e.timestamp_ms < before);
     }
     if let Some(ref hint) = session_hint {
         let h = hint.trim();

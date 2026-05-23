@@ -21,7 +21,20 @@ export type SequenceEventKind =
   | "system"
   | "hook"
   | "skill"
+  | "mcp"
+  | "subagent"
   | "jsonl_other";
+
+export type SequenceActivityCategory =
+  | "thinking"
+  | "command"
+  | "file"
+  | "hook"
+  | "skill"
+  | "mcp"
+  | "subagent"
+  | "model"
+  | "other";
 
 export interface SequenceEvent {
   id: string;
@@ -60,18 +73,20 @@ export interface SequenceEvent {
   };
 }
 
-/** 供缩略轴着色：思考 / 跑命令 / 改文件 / 其它 */
-export function sequenceEventActivityCategory(ev: SequenceEvent): "thinking" | "command" | "file" | "hook" | "skill" | "model" | "other" {
+/** 供缩略轴着色：思考 / 命令 / 文件 / Hooks / Skills / MCP / Subagent 等 */
+export function sequenceEventActivityCategory(ev: SequenceEvent): SequenceActivityCategory {
   if (ev.kind === "thinking") return "thinking";
   if (ev.kind === "hook") return "hook";
   if (ev.kind === "skill") return "skill";
+  if (ev.kind === "mcp") return "mcp";
+  if (ev.kind === "subagent") return "subagent";
   if (ev.kind === "assistant_text" || ev.kind === "api_request") return "model";
   if (ev.kind === "tool_use" || ev.kind === "tool_result") {
     const t = `${ev.subtitle ?? ""} ${ev.label}`.toLowerCase();
     if (/(bash|exec|command|终端|shell)/i.test(t)) return "command";
     if (/(read|write|edit|glob|grep|文件|目录)/i.test(t)) return "file";
-    if (/mcp|plugin/i.test(t)) return "hook";
-    if (/task|子\s*agent|subagent/i.test(t)) return "other";
+    if (/mcp|plugin/i.test(t)) return "mcp";
+    if (/task|子\s*agent|subagent/i.test(t)) return "subagent";
     return "other";
   }
   return "other";
@@ -107,7 +122,80 @@ function isSkillToolPart(part: ToolUsePart): boolean {
 
 function isSubagentTaskPart(part: ToolUsePart): boolean {
   const n = part.name.trim().toLowerCase();
-  return n === "task" || n.includes("subagent");
+  if (n === "task" || n.includes("subagent")) return true;
+  const input = part.input && typeof part.input === "object" && !Array.isArray(part.input)
+    ? (part.input as Record<string, unknown>)
+    : null;
+  const desc = input?.description;
+  return typeof desc === "string" && /subagent|子\s*代理/i.test(desc);
+}
+
+function isMcpToolPart(part: ToolUsePart): boolean {
+  const n = part.name.trim().toLowerCase();
+  if (n.startsWith("mcp__") || n.includes("mcp_") || n === "mcp" || /\bmcp\b/i.test(part.name)) {
+    return true;
+  }
+  const server =
+    part.input && typeof part.input === "object" && !Array.isArray(part.input)
+      ? (part.input as Record<string, unknown>).server
+      : undefined;
+  return typeof server === "string" && server.trim().length > 0;
+}
+
+type ClassifiedToolKind = "skill" | "mcp" | "subagent" | "tool_use";
+
+function classifyToolUsePart(part: ToolUsePart): ClassifiedToolKind {
+  if (isSkillToolPart(part)) return "skill";
+  if (isSubagentTaskPart(part)) return "subagent";
+  if (isMcpToolPart(part)) return "mcp";
+  return "tool_use";
+}
+
+const TOOL_USE_LABELS: Record<ClassifiedToolKind, string> = {
+  skill: "SKILL",
+  mcp: "MCP",
+  subagent: "SUBAGENT",
+  tool_use: "TOOL",
+};
+
+function toolUseSubtitle(part: ToolUsePart, kind: ClassifiedToolKind): string {
+  if (kind === "skill") {
+    const skillName =
+      (typeof part.input.skill === "string" && part.input.skill) ||
+      (typeof (part.input as { skill_name?: unknown }).skill_name === "string" &&
+        String((part.input as { skill_name: string }).skill_name)) ||
+      part.name;
+    return String(skillName);
+  }
+  if (kind === "mcp") {
+    const server =
+      part.input && typeof part.input === "object" && !Array.isArray(part.input)
+        ? (part.input as Record<string, unknown>).server
+        : undefined;
+    if (typeof server === "string" && server.trim()) {
+      return `${server.trim()} · ${part.name}`;
+    }
+    return part.name.replace(/^mcp__?/i, "").replace(/__/g, " / ") || part.name;
+  }
+  if (kind === "subagent") {
+    const input = part.input as Record<string, unknown>;
+    const desc =
+      (typeof input.description === "string" && input.description.trim()) ||
+      (typeof input.prompt === "string" && input.prompt.trim()) ||
+      "";
+    return desc ? `${part.name} · ${desc.slice(0, 64)}${desc.length > 64 ? "…" : ""}` : `${part.name} · Task`;
+  }
+  return part.name;
+}
+
+function lanesForToolUseKind(kind: ClassifiedToolKind): {
+  fromLane: TrajectoryLaneId;
+  toLane: TrajectoryLaneId;
+} {
+  if (kind === "skill" || kind === "mcp" || kind === "subagent") {
+    return { fromLane: "claude_code", toLane: "claude_code" };
+  }
+  return { fromLane: "model", toLane: "claude_code" };
 }
 
 function collectTextParts(parts: MessagePart[] | undefined, kind: "text" | "reasoning"): string {
@@ -154,6 +242,27 @@ export function parseTrajectoryJsonlSupplemental(lines: readonly string[]): Sequ
     const subtype = typeof j.subtype === "string" ? j.subtype : "";
     const ts = parseRowTimestamp(j.timestamp);
     order += 1;
+
+    if (type === "system" && subtype === "hook_started") {
+      const hookName =
+        (typeof j.hook_name === "string" && j.hook_name.trim()) ||
+        (typeof j.hook_event === "string" && j.hook_event.trim()) ||
+        "hook";
+      out.push({
+        id: `jl-hook-start-${lineNo}-${order}`,
+        order: 1_000_000 + lineNo,
+        timestamp: ts,
+        kind: "hook",
+        fromLane: "claude_code",
+        toLane: "claude_code",
+        label: "HOOK",
+        subtitle: `${hookName} · 启动`,
+        detail: JSON.stringify(j, null, 2),
+        rawJsonlLine: trimmed,
+        flags: { key: true },
+      });
+      continue;
+    }
 
     if (type === "system" && subtype === "hook_response") {
       const hookEvent =
@@ -364,58 +473,26 @@ export function buildSequenceEventsFromMessages(messages: readonly ClaudeMessage
         if (part.error?.trim()) detailParts.push(`error:\n${part.error}`);
         const detail = detailParts.join("\n\n---\n\n");
 
-        if (isSkillToolPart(part)) {
-          const skillName =
-            (typeof part.input.skill === "string" && part.input.skill) ||
-            (typeof (part.input as { skill_name?: unknown }).skill_name === "string" &&
-              String((part.input as { skill_name: string }).skill_name)) ||
-            part.name;
-          push({
-            id: `sk-${msg.id}-${part.id}`,
-            timestamp: ts,
-            kind: "skill",
-            fromLane: "model",
-            toLane: "claude_code",
-            label: "SKILL",
-            subtitle: typeof skillName === "string" ? skillName : String(part.name),
-            detail,
-            messageId: msg.id,
-            toolFingerprint: stableToolKey(`skill:${part.name}`, part.input as Record<string, unknown>),
-            flags: {},
-          });
-          continue;
-        }
-
-        if (isSubagentTaskPart(part)) {
-          push({
-            id: `tu-${msg.id}-${part.id}`,
-            timestamp: ts,
-            kind: "tool_use",
-            fromLane: "model",
-            toLane: "claude_code",
-            label: "TOOL_USE",
-            subtitle: `${part.name} · Task`,
-            detail,
-            messageId: msg.id,
-            toolFingerprint: stableToolKey(part.name, part.input as Record<string, unknown>),
-            drilldown: { type: "subagent_task", toolPart: part, messageId: msg.id },
-            flags: { key: true },
-          });
-          continue;
-        }
-
+        const toolKind = classifyToolUsePart(part);
+        const lanes = lanesForToolUseKind(toolKind);
+        const eventKind: SequenceEventKind =
+          toolKind === "tool_use" ? "tool_use" : toolKind;
         push({
           id: `tu-${msg.id}-${part.id}`,
           timestamp: ts,
-          kind: "tool_use",
-          fromLane: "model",
-          toLane: "claude_code",
-          label: "TOOL_USE",
-          subtitle: `${part.name}`,
+          kind: eventKind,
+          fromLane: lanes.fromLane,
+          toLane: lanes.toLane,
+          label: TOOL_USE_LABELS[toolKind],
+          subtitle: toolUseSubtitle(part, toolKind),
           detail,
           messageId: msg.id,
           toolFingerprint: stableToolKey(part.name, part.input as Record<string, unknown>),
-          flags: {},
+          drilldown:
+            toolKind === "subagent"
+              ? { type: "subagent_task", toolPart: part, messageId: msg.id }
+              : undefined,
+          flags: { key: toolKind === "subagent" || toolKind === "mcp" },
         });
       }
     }
@@ -521,6 +598,8 @@ export function annotateSequenceEvents(events: readonly SequenceEvent[]): Sequen
       ev.kind === "system" ||
       ev.kind === "hook" ||
       ev.kind === "skill" ||
+      ev.kind === "mcp" ||
+      ev.kind === "subagent" ||
       ev.kind === "jsonl_other"
     ) {
       toolExchangeStreak = 0;

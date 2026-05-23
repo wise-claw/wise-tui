@@ -3,11 +3,13 @@ import type { FccTraceEntry } from "../types/fccTrace";
 
 export async function listFccTraces(options?: {
   sinceMs?: number;
+  beforeMs?: number;
   limit?: number;
   sessionHint?: string;
 }): Promise<FccTraceEntry[]> {
   return invoke<FccTraceEntry[]>("list_fcc_traces", {
     sinceMs: options?.sinceMs ?? null,
+    beforeMs: options?.beforeMs ?? null,
     limit: options?.limit ?? 200,
     sessionHint: options?.sessionHint?.trim() || null,
   });

@@ -1,23 +1,34 @@
+import { FCC_TRACES_FETCH_LIMIT } from "../constants/fccTraces";
 import type { FreeClaudeCodeStatus } from "../services/freeClaudeCode";
 import { getFreeClaudeCodeStatus } from "../services/freeClaudeCode";
 import { clearFccTraces, listFccTraces } from "../services/fccTraces";
 import type { FccTraceEntry } from "../types/fccTrace";
+import { mergeFccTraceEntries } from "../utils/mergeFccTraceEntries";
 
-const MAX_TRACES = 200;
 const POLL_MS = 2000;
 
 type Listener = () => void;
 
-type StoreSnapshot = {
+export type FccTracesStoreSnapshot = {
   traces: FccTraceEntry[];
   status: FreeClaudeCodeStatus | null;
   loading: boolean;
+  loadingMore: boolean;
+  hasMore: boolean;
 };
 
 let traces: FccTraceEntry[] = [];
 let status: FreeClaudeCodeStatus | null = null;
 let loading = false;
-let snapshot: StoreSnapshot = { traces, status, loading };
+let loadingMore = false;
+let hasMore = false;
+let snapshot: FccTracesStoreSnapshot = {
+  traces,
+  status,
+  loading,
+  loadingMore,
+  hasMore,
+};
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let pollConsumers = 0;
@@ -50,7 +61,7 @@ function statusFieldsEqual(
 }
 
 function publish(): void {
-  snapshot = { traces, status, loading };
+  snapshot = { traces, status, loading, loadingMore, hasMore };
   for (const fn of listeners) {
     try {
       fn();
@@ -69,15 +80,19 @@ async function refreshFccTracesStore(): Promise<void> {
     publish();
   }
   try {
-    const [nextStatus, nextTraces] = await Promise.all([
+    const [nextStatus, newest] = await Promise.all([
       getFreeClaudeCodeStatus(),
-      listFccTraces({ limit: MAX_TRACES }),
+      listFccTraces({ limit: FCC_TRACES_FETCH_LIMIT }),
     ]);
-    const capped = nextTraces.slice(0, MAX_TRACES);
+    const merged = mergeFccTraceEntries(traces, newest);
     const changed =
-      !statusFieldsEqual(status, nextStatus) || !tracesEqual(traces, capped);
+      !statusFieldsEqual(status, nextStatus) || !tracesEqual(traces, merged);
     status = nextStatus;
-    traces = capped;
+    traces = merged;
+    const onlyInitialWindow = traces.length <= newest.length;
+    if (onlyInitialWindow) {
+      hasMore = newest.length >= FCC_TRACES_FETCH_LIMIT;
+    }
     if (changed || loading) {
       loading = false;
       publish();
@@ -97,7 +112,7 @@ export function subscribeFccTracesStore(listener: Listener): () => void {
   return () => listeners.delete(listener);
 }
 
-export function getFccTracesStoreSnapshot(): StoreSnapshot {
+export function getFccTracesStoreSnapshot(): FccTracesStoreSnapshot {
   return snapshot;
 }
 
@@ -121,8 +136,34 @@ export async function refreshFccTracesStoreNow(): Promise<void> {
   await refreshFccTracesStore();
 }
 
+/** 滚动到底时加载更早一页（每页 {@link FCC_TRACES_FETCH_LIMIT} 条）。 */
+export async function loadMoreFccTraces(): Promise<void> {
+  if (loadingMore || !hasMore || traces.length === 0) return;
+  const oldest = traces[traces.length - 1]?.timestampMs;
+  if (oldest == null) return;
+
+  loadingMore = true;
+  publish();
+  try {
+    const older = await listFccTraces({
+      limit: FCC_TRACES_FETCH_LIMIT,
+      beforeMs: oldest,
+    });
+    const merged = mergeFccTraceEntries(traces, older);
+    traces = merged;
+    hasMore = older.length >= FCC_TRACES_FETCH_LIMIT;
+    publish();
+  } catch {
+    publish();
+  } finally {
+    loadingMore = false;
+    publish();
+  }
+}
+
 export async function clearFccTracesStore(): Promise<void> {
   await clearFccTraces();
   traces = [];
+  hasMore = false;
   publish();
 }

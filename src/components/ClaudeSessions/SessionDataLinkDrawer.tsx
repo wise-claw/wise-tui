@@ -8,7 +8,6 @@ import {
   Segmented,
   Select,
   Space,
-  Spin,
   Tag,
   Typography,
   message,
@@ -48,7 +47,7 @@ import { buildTrajectorySequenceModel } from "../../utils/claudeSessionTrajector
 import { ClaudeSessionSequenceDiagram } from "./ClaudeSessionSequenceDiagram";
 import "./SessionDataLinkDrawer.css";
 
-const { Text, Paragraph } = Typography;
+const { Text } = Typography;
 
 const JSONL_TAIL = 8000;
 
@@ -89,6 +88,18 @@ function formatTime(ts: number): string {
   } catch {
     return "—";
   }
+}
+
+function shouldShowSourceTag(source: string): boolean {
+  const s = source.trim();
+  return s.length > 0 && s !== "memory" && s !== "message";
+}
+
+function formatRecordDetail(detail: string, record: SessionLinkRecord): string {
+  if (record.layer === "http" || record.kind === "api_request") {
+    return formatHttpTraceDetailForDisplay(detail);
+  }
+  return formatHttpBodyJsonForDisplay(detail);
 }
 
 function formatDuration(ms: number): string {
@@ -312,44 +323,80 @@ export function SessionDataLinkDrawer({ open, onClose, session }: Props) {
           ),
           children: (
             <ul className="app-session-data-link__record-list">
-              {recs.map((r) => (
-                <li
-                  key={r.id}
-                  className={
-                    "app-session-data-link__record" +
-                    (r.kind === "api_request" && !r.observed
-                      ? " app-session-data-link__record--inferred"
-                      : "")
-                  }
-                >
-                  <div className="app-session-data-link__record-head">
-                    <Text type="secondary" className="app-session-data-link__record-time">
-                      {formatTime(r.timestampMs)}
-                    </Text>
-                    <Tag color={layerTagColor(r.layer)}>{LAYER_LABELS[r.layer]}</Tag>
-                    <Tag>{r.kind}</Tag>
-                    {r.layer === "http" ? (
-                      <Tag color={r.observed ? "success" : "warning"}>
-                        {r.observed ? "已观测" : "未观测"}
+              {recs.map((r) => {
+                const detailText = r.detail?.trim() ?? "";
+                return (
+                  <li
+                    key={r.id}
+                    className={
+                      "app-session-data-link__record" +
+                      (r.kind === "api_request" && !r.observed
+                        ? " app-session-data-link__record--inferred"
+                        : "")
+                    }
+                  >
+                    <div className="app-session-data-link__record-head">
+                      <Text type="secondary" className="app-session-data-link__record-time">
+                        {formatTime(r.timestampMs)}
+                      </Text>
+                      <Tag bordered={false} className="app-session-data-link__pill" color={layerTagColor(r.layer)}>
+                        {LAYER_LABELS[r.layer]}
                       </Tag>
+                      {r.layer === "http" ? (
+                        <Tag
+                          bordered={false}
+                          className="app-session-data-link__pill"
+                          color={r.observed ? "success" : "warning"}
+                        >
+                          {r.observed ? "已观测" : "推断"}
+                        </Tag>
+                      ) : null}
+                      {shouldShowSourceTag(r.source) ? (
+                        <Tag bordered={false} className="app-session-data-link__pill app-session-data-link__pill--muted">
+                          {r.source}
+                        </Tag>
+                      ) : null}
+                    </div>
+                    <div className="app-session-data-link__record-summary">{r.summary}</div>
+                    {detailText ? (
+                      <Collapse
+                        size="small"
+                        ghost
+                        className="app-session-data-link__record-detail-collapse"
+                        items={[
+                          {
+                            key: "detail",
+                            label: r.layer === "http" || r.kind === "api_request" ? "HTTP 详情" : "详情",
+                            children: (
+                              <pre className="app-session-data-link__record-detail">
+                                {formatRecordDetail(detailText, r)}
+                              </pre>
+                            ),
+                          },
+                        ]}
+                      />
                     ) : null}
-                    <Tag className="app-session-data-link__source-tag">{r.source}</Tag>
-                  </div>
-                  <div className="app-session-data-link__record-summary">{r.summary}</div>
-                  {r.detail?.trim() ? (
-                    <pre className="app-session-data-link__record-detail">
-                      {r.layer === "http" || r.kind === "api_request"
-                        ? formatHttpTraceDetailForDisplay(r.detail)
-                        : formatHttpBodyJsonForDisplay(r.detail)}
-                    </pre>
-                  ) : null}
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           ),
         };
       });
   }, [filteredRecords, turnMetrics]);
+
+  const defaultActiveTurnKeys = useMemo(() => {
+    if (collapseItems.length === 0) return [];
+    return [collapseItems[collapseItems.length - 1]!.key];
+  }, [collapseItems]);
+
+  const diskStatusLine = useMemo(() => {
+    if (!canLoadDisk) return null;
+    if (jsonlLoading) return "JSONL 合并中…";
+    if (jsonlError) return `JSONL 失败：${jsonlError}`;
+    if (jsonlLines) return `JSONL ${jsonlLines.length} 行`;
+    return null;
+  }, [canLoadDisk, jsonlLoading, jsonlError, jsonlLines]);
 
   const showFccHint =
     fccAligned &&
@@ -418,11 +465,12 @@ export function SessionDataLinkDrawer({ open, onClose, session }: Props) {
 
             <div className="app-session-data-link__stats">
               <Text type="secondary">
-                轮次 {stats.turns} · 工具 {stats.tools} · HTTP 已观测 {stats.httpObserved} · 推断{" "}
-                {stats.httpInferred}
-                {llmProxyRecords.length > 0 ? ` · LLM 代理 ${llmProxyRecords.length}` : ""}
+                轮次 {stats.turns} · 工具 {stats.tools} · HTTP {stats.httpObserved}
+                {stats.httpInferred > 0 ? ` / 推断 ${stats.httpInferred}` : ""}
+                {llmProxyRecords.length > 0 ? ` · 代理 ${llmProxyRecords.length}` : ""}
                 {fccAligned && fccTraces.length > 0 ? ` · FCC ${fccTraces.length}` : ""}
-                {fccAligned && fccLoading ? " · FCC 加载中" : ""}
+                {fccAligned && fccLoading ? " · FCC…" : ""}
+                {diskStatusLine ? ` · ${diskStatusLine}` : ""}
               </Text>
             </div>
 
@@ -432,21 +480,7 @@ export function SessionDataLinkDrawer({ open, onClose, session }: Props) {
                 type="info"
                 showIcon
                 message="FCC 直连：HTTP 未观测"
-                description={
-                  <>
-                    可将 trace 写入 <Text code>~/.fcc/traces/**/*.json</Text>（见 design 方案），或临时开启顶栏
-                    「LLM 代理」、上游指向 FCC 地址捕获 HTTP。
-                  </>
-                }
-              />
-            ) : null}
-
-            {fccAligned && fccTraces.length > 0 ? (
-              <Alert
-                className="app-session-data-link__alert"
-                type="success"
-                showIcon
-                message={`已合并 ${fccTraces.length} 条 FCC trace（模型泳道接口）`}
+                description="开启 FCC 后查看 server.log trace，或临时用 LLM 代理中转。"
               />
             ) : null}
 
@@ -455,27 +489,15 @@ export function SessionDataLinkDrawer({ open, onClose, session }: Props) {
                 className="app-session-data-link__alert"
                 type="warning"
                 showIcon
-                message="消息可能仅为磁盘尾部子集，链路以已加载内容为准。"
+                message="磁盘消息可能仅为尾部子集"
               />
             ) : null}
 
-            {canLoadDisk ? (
-              <div className="app-session-data-link__disk">
-                {jsonlLoading ? (
-                  <span>
-                    <Spin size="small" /> 合并 JSONL…
-                  </span>
-                ) : jsonlError ? (
-                  <Text type="danger">JSONL：{jsonlError}</Text>
-                ) : jsonlLines ? (
-                  <Text type="secondary">已合并 {jsonlLines.length} 行 JSONL</Text>
-                ) : null}
+            {!canLoadDisk ? (
+              <div className="app-session-data-link__stats">
+                <Text type="secondary">无会话 ID，仅内存消息</Text>
               </div>
-            ) : (
-              <Paragraph type="secondary" className="app-session-data-link__disk">
-                无 Claude 会话 ID，仅内存消息（无 Hooks 等磁盘补充）。
-              </Paragraph>
-            )}
+            ) : null}
 
             <div className="app-session-data-link__body">
               {viewMode === "list" ? (
@@ -483,9 +505,10 @@ export function SessionDataLinkDrawer({ open, onClose, session }: Props) {
                   <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无链路记录" />
                 ) : (
                   <Collapse
+                    size="small"
                     className="app-session-data-link__collapse"
                     items={collapseItems}
-                    defaultActiveKey={collapseItems.map((i) => i.key)}
+                    defaultActiveKey={defaultActiveTurnKeys}
                   />
                 )
               ) : events.length === 0 ? (
