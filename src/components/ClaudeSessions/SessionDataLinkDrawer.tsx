@@ -27,6 +27,7 @@ import {
   subscribeClaudeLlmProxyStore,
 } from "../../stores/claudeLlmProxyStore";
 import { countSessionLinkStats } from "../../utils/buildSessionLinkRecords";
+import { formatHttpBodyJsonForDisplay } from "../../utils/formatHttpBodyJson";
 import { filterLlmProxyRecordsForDisplay } from "../../utils/llmProxyTrafficDisplay";
 import {
   SESSION_LINK_FILTER_OPTIONS,
@@ -333,7 +334,9 @@ export function SessionDataLinkDrawer({ open, onClose, session }: Props) {
                   </div>
                   <div className="app-session-data-link__record-summary">{r.summary}</div>
                   {r.detail?.trim() ? (
-                    <pre className="app-session-data-link__record-detail">{r.detail}</pre>
+                    <pre className="app-session-data-link__record-detail">
+                      {formatHttpBodyJsonForDisplay(r.detail)}
+                    </pre>
                   ) : null}
                 </li>
               ))}

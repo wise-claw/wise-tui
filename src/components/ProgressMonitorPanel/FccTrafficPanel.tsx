@@ -1,15 +1,6 @@
-import {
-  CheckOutlined,
-  CopyOutlined,
-  DeleteOutlined,
-  DownOutlined,
-  FieldTimeOutlined,
-  GlobalOutlined,
-  RightOutlined,
-  ThunderboltOutlined,
-} from "@ant-design/icons";
+import { DeleteOutlined, FieldTimeOutlined, GlobalOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import { Button, Collapse, Input, message } from "antd";
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import {
   clearFccTracesStore,
   getFccTracesStoreSnapshot,
@@ -18,6 +9,7 @@ import {
   subscribeFccTracesStore,
 } from "../../stores/fccTracesStore";
 import type { FccTraceEntry } from "../../types/fccTrace";
+import { HttpBodyJsonViewer, isHttpBodyTruncatedPreview } from "./HttpBodyJsonViewer";
 import "./LlmProxyTrafficPanel.css";
 
 function formatBytes(n: number): string {
@@ -37,20 +29,6 @@ function formatTime(ts: number): string {
   } catch {
     return "—";
   }
-}
-
-function tryPrettyJson(raw: string): string {
-  const t = raw.trim();
-  if (!t) return raw;
-  try {
-    return JSON.stringify(JSON.parse(t), null, 2);
-  } catch {
-    return raw;
-  }
-}
-
-function isTruncatedPreview(raw: string | null | undefined): boolean {
-  return Boolean(raw?.includes("…[truncated]"));
 }
 
 function RecordSummary({ record }: { record: FccTraceEntry }) {
@@ -155,119 +133,6 @@ function RecordSummary({ record }: { record: FccTraceEntry }) {
   );
 }
 
-interface JSONViewerProps {
-  title: string;
-  rawContent: string;
-  isTruncated?: boolean;
-  defaultExpanded?: boolean;
-  emptyHint?: string;
-}
-
-function JSONViewer({
-  title,
-  rawContent,
-  isTruncated,
-  defaultExpanded = true,
-  emptyHint,
-}: JSONViewerProps) {
-  const [copied, setCopied] = useState(false);
-  const [expanded, setExpanded] = useState(defaultExpanded);
-  const prettyJson = useMemo(() => tryPrettyJson(rawContent), [rawContent]);
-  const hasBody = prettyJson.trim().length > 0;
-
-  const handleCopy = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-      void navigator.clipboard.writeText(prettyJson).then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      });
-    },
-    [prettyJson],
-  );
-
-  const toggleExpanded = useCallback(() => {
-    if (!hasBody) return;
-    setExpanded((prev) => !prev);
-  }, [hasBody]);
-
-  return (
-    <div
-      className={
-        "app-llm-proxy-json-viewer" +
-        (expanded ? "" : " app-llm-proxy-json-viewer--collapsed")
-      }
-    >
-      <div
-        className={
-          "app-llm-proxy-json-viewer__header" +
-          (hasBody ? " app-llm-proxy-json-viewer__header--toggle" : "")
-        }
-        role={hasBody ? "button" : undefined}
-        tabIndex={hasBody ? 0 : undefined}
-        aria-expanded={hasBody ? expanded : undefined}
-        onClick={hasBody ? toggleExpanded : undefined}
-        onKeyDown={
-          hasBody
-            ? (e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  toggleExpanded();
-                }
-              }
-            : undefined
-        }
-      >
-        <div className="app-llm-proxy-json-viewer__title-group">
-          {hasBody ? (
-            <span className="app-llm-proxy-json-viewer__chevron" aria-hidden>
-              {expanded ? <DownOutlined /> : <RightOutlined />}
-            </span>
-          ) : null}
-          <span className="app-llm-proxy-json-viewer__title">{title}</span>
-          {isTruncated ? (
-            <span className="app-llm-proxy-json-viewer__badge app-llm-proxy-json-viewer__badge--warning">
-              已截断
-            </span>
-          ) : (
-            <span className="app-llm-proxy-json-viewer__badge">JSON</span>
-          )}
-          {!expanded && hasBody ? (
-            <span className="app-llm-proxy-json-viewer__size-hint">
-              {formatBytes(prettyJson.length)}
-            </span>
-          ) : null}
-        </div>
-        <Button
-          size="small"
-          type="text"
-          icon={
-            copied ? (
-              <CheckOutlined style={{ color: "var(--ant-color-success)" }} />
-            ) : (
-              <CopyOutlined />
-            )
-          }
-          onClick={handleCopy}
-          className="app-llm-proxy-json-viewer__copy-btn"
-          disabled={!hasBody}
-        >
-          {copied ? "已复制" : "复制"}
-        </Button>
-      </div>
-      {expanded ? (
-        hasBody ? (
-          <div className="app-llm-proxy-json-viewer__code-wrapper">
-            <pre className="app-llm-proxy-json-viewer__code">{prettyJson}</pre>
-          </div>
-        ) : emptyHint ? (
-          <p className="app-llm-proxy-json-viewer__empty-hint">{emptyHint}</p>
-        ) : null
-      ) : null}
-    </div>
-  );
-}
-
 interface Props {
   active?: boolean;
   variant?: "sidebar" | "popover";
@@ -307,10 +172,10 @@ export function FccTrafficPanel({ active = true, variant = "sidebar" }: Props) {
         label: <RecordSummary record={record} />,
         children: (
           <div className="app-llm-proxy-record__body">
-            <JSONViewer
+            <HttpBodyJsonViewer
               title="Claude 请求 (Request Body)"
               rawContent={record.requestPreview ?? ""}
-              isTruncated={isTruncatedPreview(record.requestPreview)}
+              isTruncated={isHttpBodyTruncatedPreview(record.requestPreview)}
               defaultExpanded
               emptyHint={
                 !record.requestPreview?.trim()
@@ -318,10 +183,10 @@ export function FccTrafficPanel({ active = true, variant = "sidebar" }: Props) {
                   : undefined
               }
             />
-            <JSONViewer
+            <HttpBodyJsonViewer
               title="FCC 响应 (Response Body)"
               rawContent={record.responsePreview ?? ""}
-              isTruncated={isTruncatedPreview(record.responsePreview)}
+              isTruncated={isHttpBodyTruncatedPreview(record.responsePreview)}
               defaultExpanded={false}
               emptyHint={
                 !record.responsePreview?.trim()
@@ -330,10 +195,10 @@ export function FccTrafficPanel({ active = true, variant = "sidebar" }: Props) {
               }
             />
             {record.upstreamPreview?.trim() ? (
-              <JSONViewer
+              <HttpBodyJsonViewer
                 title="FCC → 上游 (Upstream)"
                 rawContent={record.upstreamPreview}
-                isTruncated={isTruncatedPreview(record.upstreamPreview)}
+                isTruncated={isHttpBodyTruncatedPreview(record.upstreamPreview)}
                 defaultExpanded={false}
               />
             ) : null}
@@ -419,7 +284,7 @@ export function FccTrafficPanel({ active = true, variant = "sidebar" }: Props) {
           </div>
           {running ? (
             <p className="app-llm-proxy-panel__config-hint">
-              Claude 经 FCC 代理发消息时，请求/响应会写入 `~/.fcc/traces/` 并在此展示。
+              Claude 经 FCC 代理发消息时，TRACE 会写入 `~/.fcc/logs/server.log`（及可选的 `~/.fcc/traces/`）并在此展示。
             </p>
           ) : null}
         </div>
@@ -450,8 +315,8 @@ export function FccTrafficPanel({ active = true, variant = "sidebar" }: Props) {
 
           <span className="app-llm-proxy-panel__empty-subtitle">
             {running
-              ? "请确认 Claude settings 已对齐 FCC，并在会话中发送消息；trace 文件出现后会自动刷新。"
-              : "请先在「服务」页启动 Free Claude Code，并确保 Claude 使用 FCC 作为 ANTHROPIC_BASE_URL。"}
+              ? "请确认 Claude settings 已对齐 FCC，并在会话中发送消息；`server.log` 出现 TRACE 后会自动刷新（流式响应仅展示元数据摘要）。"
+              : "请先在 FCC 服务入口启动 Free Claude Code，并确保 Claude 使用 FCC 作为 ANTHROPIC_BASE_URL。"}
           </span>
         </div>
       )}

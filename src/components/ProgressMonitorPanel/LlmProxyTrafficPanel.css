@@ -521,6 +521,40 @@
   tab-size: 2;
 }
 
+.app-llm-proxy-json-viewer__code code {
+  font: inherit;
+  color: inherit;
+  background: none;
+}
+
+.app-llm-proxy-json-viewer__code .app-json__punct {
+  color: var(--ant-color-text-tertiary);
+  font-weight: 500;
+}
+
+.app-llm-proxy-json-viewer__code .app-json__key {
+  color: var(--ant-color-primary);
+  font-weight: 500;
+}
+
+.app-llm-proxy-json-viewer__code .app-json__str {
+  color: var(--ant-color-success);
+}
+
+.app-llm-proxy-json-viewer__code .app-json__num {
+  color: var(--ant-color-warning);
+  font-variant-numeric: tabular-nums;
+}
+
+.app-llm-proxy-json-viewer__code .app-json__kw {
+  color: var(--ant-color-info);
+  font-weight: 500;
+}
+
+.app-llm-proxy-json-viewer__code .app-json__misc {
+  color: var(--ant-color-text-secondary);
+}
+
 .app-llm-proxy-json-viewer__code-wrapper::-webkit-scrollbar {
   width: 6px;
   height: 6px;

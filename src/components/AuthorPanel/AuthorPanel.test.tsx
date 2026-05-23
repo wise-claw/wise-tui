@@ -425,6 +425,7 @@ describe("AuthorPanel", () => {
     expect(html).toContain("会话处理方式");
     expect(html).toContain("右侧面板");
     expect(html).toContain("FCC 顶栏图标");
+    expect(html).toContain("FCC 请求流量");
     expect(html).toContain("LLM 代理图标");
     expect(html).toContain("全链路分析");
     expect(html).toContain("长驻会话");

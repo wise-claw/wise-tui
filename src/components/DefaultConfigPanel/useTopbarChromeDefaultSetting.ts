@@ -8,6 +8,7 @@ import {
 export function useTopbarChromeDefaultSetting() {
   const [showLlmProxyTopbar, setShowLlmProxyTopbar] = useState(false);
   const [showFccTopbar, setShowFccTopbar] = useState(true);
+  const [showFccTrafficTopbar, setShowFccTrafficTopbar] = useState(false);
   const [showSessionDataLinkTopbar, setShowSessionDataLinkTopbar] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -18,6 +19,7 @@ export function useTopbarChromeDefaultSetting() {
       const loaded = await loadTopbarChromeDefaultsFromStore();
       setShowLlmProxyTopbar(loaded.showLlmProxyTopbar);
       setShowFccTopbar(loaded.showFccTopbar);
+      setShowFccTrafficTopbar(loaded.showFccTrafficTopbar);
       setShowSessionDataLinkTopbar(loaded.showSessionDataLinkTopbar);
     } finally {
       setLoading(false);
@@ -64,6 +66,24 @@ export function useTopbarChromeDefaultSetting() {
     [showFccTopbar],
   );
 
+  const saveFccTraffic = useCallback(
+    async (visible: boolean) => {
+      if (visible === showFccTrafficTopbar) return;
+      setSaving(true);
+      try {
+        await saveTopbarChromeDefaultsToStore({ showFccTrafficTopbar: visible });
+        setShowFccTrafficTopbar(visible);
+        message.success(visible ? "已保存：显示 FCC 请求流量图标" : "已保存：隐藏 FCC 请求流量图标");
+      } catch (err) {
+        message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+        throw err;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [showFccTrafficTopbar],
+  );
+
   const saveSessionDataLink = useCallback(
     async (visible: boolean) => {
       if (visible === showSessionDataLinkTopbar) return;
@@ -85,12 +105,14 @@ export function useTopbarChromeDefaultSetting() {
   return {
     showLlmProxyTopbar,
     showFccTopbar,
+    showFccTrafficTopbar,
     showSessionDataLinkTopbar,
     loading,
     saving,
     refresh,
     saveLlmProxy,
     saveFcc,
+    saveFccTraffic,
     saveSessionDataLink,
   };
 }

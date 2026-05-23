@@ -2,14 +2,10 @@ import { Button, Collapse, Input, Switch, message } from "antd";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import {
   DeleteOutlined,
-  CopyOutlined,
-  CheckOutlined,
   ThunderboltOutlined,
   FieldTimeOutlined,
   SwapOutlined,
   GlobalOutlined,
-  DownOutlined,
-  RightOutlined,
 } from "@ant-design/icons";
 import type { ClaudeLlmProxyRecord } from "../../services/claudeLlmProxy";
 import {
@@ -20,6 +16,7 @@ import {
   subscribeClaudeLlmProxyStore,
 } from "../../stores/claudeLlmProxyStore";
 import { filterLlmProxyRecordsForDisplay } from "../../utils/llmProxyTrafficDisplay";
+import { HttpBodyJsonViewer } from "./HttpBodyJsonViewer";
 import "./LlmProxyTrafficPanel.css";
 
 function formatBytes(n: number): string {
@@ -38,16 +35,6 @@ function formatTime(ts: number): string {
     });
   } catch {
     return "—";
-  }
-}
-
-function tryPrettyJson(raw: string): string {
-  const t = raw.trim();
-  if (!t) return raw;
-  try {
-    return JSON.stringify(JSON.parse(t), null, 2);
-  } catch {
-    return raw;
   }
 }
 
@@ -154,107 +141,6 @@ function RecordSummary({ record }: { record: ClaudeLlmProxyRecord }) {
   );
 }
 
-interface JSONViewerProps {
-  title: string;
-  rawContent: string;
-  isTruncated?: boolean;
-  /** 初始是否展开正文 */
-  defaultExpanded?: boolean;
-  emptyHint?: string;
-}
-
-function JSONViewer({
-  title,
-  rawContent,
-  isTruncated,
-  defaultExpanded = true,
-  emptyHint,
-}: JSONViewerProps) {
-  const [copied, setCopied] = useState(false);
-  const [expanded, setExpanded] = useState(defaultExpanded);
-  const prettyJson = useMemo(() => tryPrettyJson(rawContent), [rawContent]);
-  const hasBody = prettyJson.trim().length > 0;
-
-  const handleCopy = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    void navigator.clipboard.writeText(prettyJson).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }, [prettyJson]);
-
-  const toggleExpanded = useCallback(() => {
-    if (!hasBody) return;
-    setExpanded((prev) => !prev);
-  }, [hasBody]);
-
-  return (
-    <div
-      className={
-        "app-llm-proxy-json-viewer" +
-        (expanded ? "" : " app-llm-proxy-json-viewer--collapsed")
-      }
-    >
-      <div
-        className={
-          "app-llm-proxy-json-viewer__header" +
-          (hasBody ? " app-llm-proxy-json-viewer__header--toggle" : "")
-        }
-        role={hasBody ? "button" : undefined}
-        tabIndex={hasBody ? 0 : undefined}
-        aria-expanded={hasBody ? expanded : undefined}
-        onClick={hasBody ? toggleExpanded : undefined}
-        onKeyDown={
-          hasBody
-            ? (e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  toggleExpanded();
-                }
-              }
-            : undefined
-        }
-      >
-        <div className="app-llm-proxy-json-viewer__title-group">
-          {hasBody ? (
-            <span className="app-llm-proxy-json-viewer__chevron" aria-hidden>
-              {expanded ? <DownOutlined /> : <RightOutlined />}
-            </span>
-          ) : null}
-          <span className="app-llm-proxy-json-viewer__title">{title}</span>
-          {isTruncated ? (
-            <span className="app-llm-proxy-json-viewer__badge app-llm-proxy-json-viewer__badge--warning">已截断</span>
-          ) : (
-            <span className="app-llm-proxy-json-viewer__badge">JSON</span>
-          )}
-          {!expanded && hasBody ? (
-            <span className="app-llm-proxy-json-viewer__size-hint">{formatBytes(prettyJson.length)}</span>
-          ) : null}
-        </div>
-        <Button
-          size="small"
-          type="text"
-          icon={copied ? <CheckOutlined style={{ color: "var(--ant-color-success)" }} /> : <CopyOutlined />}
-          onClick={handleCopy}
-          className="app-llm-proxy-json-viewer__copy-btn"
-          disabled={!hasBody}
-        >
-          {copied ? "已复制" : "复制"}
-        </Button>
-      </div>
-      {expanded ? (
-        hasBody ? (
-          <div className="app-llm-proxy-json-viewer__code-wrapper">
-            <pre className="app-llm-proxy-json-viewer__code">{prettyJson}</pre>
-          </div>
-        ) : emptyHint ? (
-          <p className="app-llm-proxy-json-viewer__empty-hint">{emptyHint}</p>
-        ) : null
-      ) : null}
-    </div>
-  );
-}
-
 interface Props {
   repositoryPath?: string;
   /** 顶栏 Popover 内使用更宽的固定尺寸 */
@@ -329,7 +215,7 @@ export function LlmProxyTrafficPanel({ repositoryPath, variant = "sidebar" }: Pr
         label: <RecordSummary record={record} />,
         children: (
           <div className="app-llm-proxy-record__body">
-            <JSONViewer
+            <HttpBodyJsonViewer
               title="请求主体 (Request Body)"
               rawContent={record.requestBodyPreview}
               isTruncated={record.requestTruncated}
@@ -340,7 +226,7 @@ export function LlmProxyTrafficPanel({ repositoryPath, variant = "sidebar" }: Pr
                   : undefined
               }
             />
-            <JSONViewer
+            <HttpBodyJsonViewer
               title="响应主体 (Response Body)"
               rawContent={record.responseBodyPreview}
               isTruncated={record.responseTruncated}

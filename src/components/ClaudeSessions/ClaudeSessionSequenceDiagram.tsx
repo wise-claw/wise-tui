@@ -1,5 +1,6 @@
 import { Button, Popover, Tag } from "antd";
 import { useMemo, useCallback, useEffect, useId, useState, type MouseEvent } from "react";
+import "./ClaudeSessionTrajectoryDrawer.css";
 import type { SequenceEvent } from "../../utils/claudeSessionTrajectorySequence";
 import { TRAJECTORY_LANE_IDS, sequenceEventActivityCategory, type TrajectoryLaneId } from "../../utils/claudeSessionTrajectorySequence";
 import { formatChatMessageListTime } from "../../utils/formatChatMessageListTime";

@@ -3,9 +3,12 @@
 Wise 通过 Tauri 命令 `list_fcc_traces` 扫描：
 
 ```text
+~/.fcc/logs/server.log          # FCC 运行时 TRACE 行（主数据源，按 request_id 聚合）
 ~/.fcc/traces/<YYYY-MM-DD>/*.json
 ~/.fcc/traces/**/*.jsonl
 ```
+
+`server.log` 中关注 `event`：`api.request.received`（`snapshot` → 请求体）、`provider.request.sent`（`body` → 上游）、`api.response.stream_completed`（流式元数据 → 响应摘要）。
 
 ## 单条记录 JSON 字段
 

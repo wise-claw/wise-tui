@@ -777,7 +777,9 @@ export function Topbar({
           />
         )}
         {activeRepository && topbarChrome.showFccTopbar ? <FccTopbarTrigger /> : null}
-        {activeRepository && topbarChrome.showFccTopbar ? <FccTrafficTopbarTrigger /> : null}
+        {activeRepository && topbarChrome.showFccTrafficTopbar ? (
+          <FccTrafficTopbarTrigger />
+        ) : null}
         {activeRepository && topbarChrome.showLlmProxyTopbar ? (
           <LlmProxyTopbarTrigger
             repositoryPath={activeSessionRepositoryPath?.trim() || activeRepository.path}

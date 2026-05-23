@@ -74,7 +74,7 @@ export function DefaultConfigPanel() {
           <div className="app-default-config-row__main">
             <span className="app-default-config-row__title">FCC 顶栏图标</span>
             <span className="app-default-config-row__hint">
-              控制主会话顶栏 Free Claude Code 服务与「FCC 请求流量」两个入口
+              控制主会话顶栏 Free Claude Code 服务入口
             </span>
           </div>
           <div className="app-default-config-row__control">
@@ -88,6 +88,29 @@ export function DefaultConfigPanel() {
               ]}
               onChange={(value) => {
                 void topbarChrome.saveFcc(value === "visible");
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="app-default-config-row" aria-label="FCC 请求流量图标">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">FCC 请求流量</span>
+            <span className="app-default-config-row__hint">
+              控制主会话顶栏 FCC 请求流量监听入口；默认不显示
+            </span>
+          </div>
+          <div className="app-default-config-row__control">
+            <DefaultConfigOptionPick<"hidden" | "visible">
+              aria-label="FCC 请求流量顶栏显示"
+              disabled={topbarChrome.loading || topbarChrome.saving}
+              value={topbarChrome.showFccTrafficTopbar ? "visible" : "hidden"}
+              options={[
+                { label: "不显示", value: "hidden" },
+                { label: "显示", value: "visible" },
+              ]}
+              onChange={(value) => {
+                void topbarChrome.saveFccTraffic(value === "visible");
               }}
             />
           </div>
