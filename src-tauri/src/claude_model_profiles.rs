@@ -14,6 +14,9 @@ const STORE_SETTINGS_KEY: &str = "claude_model_profiles_v1";
 #[serde(rename_all = "camelCase")]
 pub struct ClaudeModelProfile {
     pub id: String,
+    /// 供应商/公司（与 CC Switch 供应商名称或预设一致）。
+    #[serde(default)]
+    pub company: String,
     pub name: String,
     pub model_id: String,
     /// 该档案对应的 Claude Code `settings.json` 片段（完整对象 JSON）。
@@ -24,8 +27,8 @@ pub struct ClaudeModelProfile {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-struct ClaudeModelProfileStore {
-    profiles: Vec<ClaudeModelProfile>,
+pub(crate) struct ClaudeModelProfileStore {
+    pub(crate) profiles: Vec<ClaudeModelProfile>,
     active_profile_id: Option<String>,
 }
 
@@ -44,14 +47,14 @@ fn now_ms() -> i64 {
         .unwrap_or(0)
 }
 
-fn load_store(db: &WiseDb) -> ClaudeModelProfileStore {
+pub(crate) fn load_store(db: &WiseDb) -> ClaudeModelProfileStore {
     let Ok(Some(raw)) = db.get_setting(STORE_SETTINGS_KEY) else {
         return ClaudeModelProfileStore::default();
     };
     serde_json::from_str(&raw).unwrap_or_default()
 }
 
-fn save_store(db: &WiseDb, store: &ClaudeModelProfileStore) -> Result<(), String> {
+pub(crate) fn save_store(db: &WiseDb, store: &ClaudeModelProfileStore) -> Result<(), String> {
     let raw = serde_json::to_string(store).map_err(|e| e.to_string())?;
     db.set_setting(STORE_SETTINGS_KEY, &raw)
 }
@@ -64,7 +67,7 @@ fn read_json_file(path: &Path) -> Option<serde_json::Value> {
     serde_json::from_str(&text).ok()
 }
 
-fn read_effective_model(v: &serde_json::Value) -> Option<String> {
+pub(crate) fn read_effective_model(v: &serde_json::Value) -> Option<String> {
     if let Some(env) = v.get("env").and_then(|e| e.as_object()) {
         if let Some(m) = env.get("ANTHROPIC_MODEL").and_then(|x| x.as_str()) {
             let t = m.trim();
@@ -153,7 +156,7 @@ fn effective_model_from_disk() -> Option<String> {
     read_json_file(&path).and_then(|v| read_effective_model(&v))
 }
 
-fn store_view(db: &WiseDb) -> ClaudeModelProfileStoreView {
+pub(crate) fn store_view(db: &WiseDb) -> ClaudeModelProfileStoreView {
     let store = load_store(db);
     ClaudeModelProfileStoreView {
         profiles: store.profiles.clone(),
@@ -197,6 +200,7 @@ pub(crate) fn upsert_claude_model_profile(
     };
 
     if let Some(slot) = store.profiles.iter_mut().find(|p| p.id == id) {
+        slot.company = profile.company.trim().to_string();
         slot.name = name.to_string();
         slot.model_id = model_id.to_string();
         slot.settings_json = profile.settings_json;
@@ -204,6 +208,7 @@ pub(crate) fn upsert_claude_model_profile(
     } else {
         store.profiles.push(ClaudeModelProfile {
             id: id.clone(),
+            company: profile.company.trim().to_string(),
             name: name.to_string(),
             model_id: model_id.to_string(),
             settings_json: profile.settings_json,
@@ -298,9 +303,11 @@ pub(crate) fn save_claude_user_settings_json(
 #[tauri::command]
 pub(crate) fn create_claude_model_profile(
     db: tauri::State<'_, WiseDb>,
+    company: Option<String>,
     name: String,
     settings_json: String,
 ) -> Result<ClaudeModelProfileStoreView, String> {
+    let vendor = company.unwrap_or_default().trim().to_string();
     let label = name.trim();
     if label.is_empty() {
         return Err("名称不能为空".to_string());
@@ -321,6 +328,7 @@ pub(crate) fn create_claude_model_profile(
     let now = now_ms();
     let profile = ClaudeModelProfile {
         id: Uuid::new_v4().to_string(),
+        company: vendor,
         name: label.to_string(),
         model_id: mid,
         settings_json: pretty,
@@ -336,9 +344,11 @@ pub(crate) fn create_claude_model_profile(
 #[tauri::command]
 pub(crate) fn create_claude_model_profile_from_current(
     db: tauri::State<'_, WiseDb>,
+    company: Option<String>,
     name: String,
     model_id: Option<String>,
 ) -> Result<ClaudeModelProfileStoreView, String> {
+    let vendor = company.unwrap_or_default().trim().to_string();
     let label = name.trim();
     if label.is_empty() {
         return Err("名称不能为空".to_string());
@@ -354,6 +364,7 @@ pub(crate) fn create_claude_model_profile_from_current(
     let now = now_ms();
     let profile = ClaudeModelProfile {
         id: Uuid::new_v4().to_string(),
+        company: vendor,
         name: label.to_string(),
         model_id: mid,
         settings_json,
@@ -374,6 +385,7 @@ mod tests {
     fn apply_profile_sets_model_and_available_models() {
         let profile = ClaudeModelProfile {
             id: "p1".into(),
+            company: "Bailian".into(),
             name: "Test".into(),
             model_id: "qwen3.6-plus".into(),
             settings_json: r#"{"env":{"ANTHROPIC_BASE_URL":"http://127.0.0.1:8082"}}"#.into(),

@@ -1,7 +1,7 @@
 use crate::{
-    agent_registry, app_state_commands, assistants, cc_wf_studio_mcp_bridge, cc_workflow_studio,
-    claude_code_usage, claude_commands, claude_config_dir, claude_external_ingest, claude_llm_proxy,
-    claude_model_profiles,
+    agent_registry, app_state_commands, assistants, cc_switch_import, cc_wf_studio_mcp_bridge,
+    cc_workflow_studio, claude_code_usage, claude_commands, claude_config_dir, claude_external_ingest,
+    claude_llm_proxy, claude_model_profiles,
     code_knowledge_graph, fcc_traces, free_claude_code,
     cua_driver, dingtalk_enterprise_bot, dingtalk_stream_gateway, extensions, git_commands,
     mission_control, mcp,
@@ -365,6 +365,7 @@ pub fn run() {
             claude_model_profiles::create_claude_model_profile_from_current,
             claude_model_profiles::get_claude_user_settings_json,
             claude_model_profiles::save_claude_user_settings_json,
+            cc_switch_import::sync_claude_model_profiles_from_cc_switch,
             claude_commands::mcp::get_claude_mcp_status,
             claude_commands::mcp::get_claude_mcp_runtime_health,
             claude_commands::mcp::remove_claude_mcp_server,

@@ -50,9 +50,27 @@
   gap: 2px;
 }
 
+.app-claude-model-topbar-panel__head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
 .app-claude-model-topbar-panel__title {
   font-size: 13px;
   font-weight: 600;
+  flex-shrink: 0;
+}
+
+.app-claude-model-topbar-panel__sync.ant-btn {
+  flex-shrink: 0;
+  height: auto;
+  padding: 0;
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: nowrap;
 }
 
 .app-claude-model-topbar-panel__effective {
@@ -99,9 +117,14 @@
   color: var(--ant-color-text);
 }
 
-.app-claude-model-topbar-panel__item-model {
+.app-claude-model-topbar-panel__item-company {
   font-size: 11px;
   color: var(--ant-color-text-secondary);
+}
+
+.app-claude-model-topbar-panel__item-model {
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
 }
 
 .app-claude-model-topbar-panel__foot {
@@ -119,6 +142,19 @@
   gap: 8px;
 }
 
+.app-claude-model-topbar-panel__form-row {
+  display: flex;
+  gap: 12px;
+}
+
+.app-claude-model-topbar-panel__form-field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .app-claude-model-topbar-panel__label {
   font-size: 12px;
   color: var(--ant-color-text-secondary);
@@ -126,19 +162,40 @@
 
 .app-claude-model-topbar-panel__json-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
   margin-top: 4px;
+}
+
+.app-claude-model-topbar-panel__json-head-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
 }
 
 .app-claude-model-topbar-panel__json-head .app-claude-model-topbar-panel__label {
   margin: 0;
 }
 
+.app-claude-model-topbar-panel__json-load {
+  flex-shrink: 0;
+  padding-inline: 0;
+  height: auto;
+  line-height: 1.4;
+}
+
 .app-claude-model-topbar-panel__hint {
   font-size: 11px;
   margin-bottom: 0 !important;
+}
+
+.app-claude-model-topbar-panel__hint--subtitle {
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .app-claude-model-topbar-panel__settings-editor {

@@ -12,20 +12,24 @@ export async function getClaudeModelProfileStore(): Promise<ClaudeModelProfileSt
 }
 
 export async function createClaudeModelProfile(
+  company: string,
   name: string,
   settingsJson: string,
 ): Promise<ClaudeModelProfileStoreView> {
   return invoke<ClaudeModelProfileStoreView>("create_claude_model_profile", {
+    company: company.trim() || null,
     name,
     settingsJson,
   });
 }
 
 export async function createClaudeModelProfileFromCurrent(
+  company: string,
   name: string,
   modelId?: string | null,
 ): Promise<ClaudeModelProfileStoreView> {
   return invoke<ClaudeModelProfileStoreView>("create_claude_model_profile_from_current", {
+    company: company.trim() || null,
     name,
     modelId: modelId?.trim() || null,
   });
@@ -61,4 +65,17 @@ export async function saveClaudeUserSettingsJson(
     settingsJson,
     profileId: profileId?.trim() || null,
   });
+}
+
+export interface CcSwitchSyncResult {
+  store: ClaudeModelProfileStoreView;
+  added: number;
+  updated: number;
+  skipped: number;
+  source: string;
+  message: string;
+}
+
+export async function syncClaudeModelProfilesFromCcSwitch(): Promise<CcSwitchSyncResult> {
+  return invoke<CcSwitchSyncResult>("sync_claude_model_profiles_from_cc_switch");
 }

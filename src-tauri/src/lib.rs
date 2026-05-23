@@ -8,6 +8,7 @@ mod claude_commands;
 mod claude_config_dir;
 mod claude_external_ingest;
 mod claude_llm_proxy;
+mod cc_switch_import;
 mod claude_model_profiles;
 mod fcc_traces;
 mod free_claude_code;

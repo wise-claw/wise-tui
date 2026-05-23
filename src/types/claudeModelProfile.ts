@@ -2,6 +2,8 @@
 
 export interface ClaudeModelProfile {
   id: string;
+  /** 供应商/公司（与 CC Switch 供应商名称或预设一致）。 */
+  company: string;
   name: string;
   modelId: string;
   settingsJson: string;

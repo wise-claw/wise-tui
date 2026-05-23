@@ -1,4 +1,4 @@
-import { DeleteOutlined, PlusOutlined, SettingOutlined } from "@ant-design/icons";
+import { CloudSyncOutlined, DeleteOutlined, PlusOutlined, SettingOutlined } from "@ant-design/icons";
 import { Button, Empty, Input, List, Modal, Typography, message } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -8,6 +8,7 @@ import {
   getClaudeModelProfileStore,
   getClaudeUserSettingsJson,
   saveClaudeUserSettingsJson,
+  syncClaudeModelProfilesFromCcSwitch,
   WISE_CLAUDE_USER_SETTINGS_CHANGED,
 } from "../../services/claudeModelProfiles";
 import type { ClaudeModelProfile, ClaudeModelProfileStoreView } from "../../types/claudeModelProfile";
@@ -36,6 +37,7 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
   const [store, setStore] = useState<ClaudeModelProfileStoreView | null>(null);
   const [loading, setLoading] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [addCompany, setAddCompany] = useState("");
   const [addName, setAddName] = useState("");
   const [addSettingsJson, setAddSettingsJson] = useState("{\n}\n");
   const [addLoadingJson, setAddLoadingJson] = useState(false);
@@ -44,6 +46,7 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
   const [configProfile, setConfigProfile] = useState<ClaudeModelProfile | null>(null);
   const [settingsDraft, setSettingsDraft] = useState("");
   const [savingConfig, setSavingConfig] = useState(false);
+  const [syncingCcSwitch, setSyncingCcSwitch] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -74,6 +77,7 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
   }, []);
 
   const openAddModal = useCallback(() => {
+    setAddCompany("");
     setAddName("");
     setAddSettingsJson("{\n}\n");
     setAddOpen(true);
@@ -108,9 +112,10 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
     }
     setAddSaving(true);
     try {
-      const next = await createClaudeModelProfile(name, addSettingsJson);
+      const next = await createClaudeModelProfile(addCompany, name, addSettingsJson);
       setStore(next);
       setAddOpen(false);
+      setAddCompany("");
       setAddName("");
       message.success("已保存模型配置");
     } catch (e) {
@@ -118,7 +123,7 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
     } finally {
       setAddSaving(false);
     }
-  }, [addName, addSettingsJson]);
+  }, [addCompany, addName, addSettingsJson]);
 
   const openConfig = useCallback((profile: ClaudeModelProfile) => {
     setConfigProfile(profile);
@@ -150,6 +155,19 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
     }
   }, [configProfile, settingsDraft, onApplied]);
 
+  const handleSyncFromCcSwitch = useCallback(async () => {
+    setSyncingCcSwitch(true);
+    try {
+      const result = await syncClaudeModelProfilesFromCcSwitch();
+      setStore(result.store);
+      message.success(result.message);
+    } catch (e) {
+      message.error(typeof e === "string" ? e : "同步 CC Switch 配置失败");
+    } finally {
+      setSyncingCcSwitch(false);
+    }
+  }, []);
+
   const handleDelete = useCallback(async (profileId: string) => {
     try {
       const next = await deleteClaudeModelProfile(profileId);
@@ -166,7 +184,19 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
   return (
     <div className="app-claude-model-topbar-panel">
       <header className="app-claude-model-topbar-panel__head">
-        <Typography.Text className="app-claude-model-topbar-panel__title">模型切换</Typography.Text>
+        <div className="app-claude-model-topbar-panel__head-row">
+          <Typography.Text className="app-claude-model-topbar-panel__title">模型切换</Typography.Text>
+          <Button
+            type="link"
+            size="small"
+            className="app-claude-model-topbar-panel__sync"
+            icon={<CloudSyncOutlined />}
+            loading={syncingCcSwitch}
+            onClick={() => void handleSyncFromCcSwitch()}
+          >
+            从 CC Switch 同步
+          </Button>
+        </div>
         <Typography.Text type="secondary" className="app-claude-model-topbar-panel__effective">
           当前：{formatClaudeModelLabel(effective)}
         </Typography.Text>
@@ -224,6 +254,11 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
                   onClick={() => void handleApply(item.id)}
                 >
                   <span className="app-claude-model-topbar-panel__item-name">{item.name}</span>
+                  {item.company?.trim() ? (
+                    <span className="app-claude-model-topbar-panel__item-company">
+                      {item.company.trim()}
+                    </span>
+                  ) : null}
                   <span className="app-claude-model-topbar-panel__item-model">
                     {formatClaudeModelLabel(item.modelId)}
                   </span>
@@ -258,27 +293,45 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
         destroyOnHidden
       >
         <div className="app-claude-model-topbar-panel__form">
-          <label className="app-claude-model-topbar-panel__label">名称</label>
-          <Input
-            value={addName}
-            onChange={(e) => setAddName(e.target.value)}
-            placeholder="例如：百炼 Qwen"
-          />
+          <div className="app-claude-model-topbar-panel__form-row">
+            <div className="app-claude-model-topbar-panel__form-field">
+              <label className="app-claude-model-topbar-panel__label">公司</label>
+              <Input
+                value={addCompany}
+                onChange={(e) => setAddCompany(e.target.value)}
+                placeholder="例如：百炼"
+              />
+            </div>
+            <div className="app-claude-model-topbar-panel__form-field">
+              <label className="app-claude-model-topbar-panel__label">名称</label>
+              <Input
+                value={addName}
+                onChange={(e) => setAddName(e.target.value)}
+                placeholder="例如：Qwen 配置"
+              />
+            </div>
+          </div>
           <div className="app-claude-model-topbar-panel__json-head">
-            <label className="app-claude-model-topbar-panel__label">配置 JSON</label>
+            <div className="app-claude-model-topbar-panel__json-head-text">
+              <label className="app-claude-model-topbar-panel__label">配置 JSON</label>
+              <Typography.Text
+                type="secondary"
+                className="app-claude-model-topbar-panel__hint app-claude-model-topbar-panel__hint--subtitle"
+              >
+                完整 Claude Code 用户级 <Typography.Text code>settings.json</Typography.Text>
+                ；切换配置时将整体替换全局文件（与 cc-switch 相同）。
+              </Typography.Text>
+            </div>
             <Button
               type="link"
               size="small"
+              className="app-claude-model-topbar-panel__json-load"
               loading={addLoadingJson}
               onClick={() => void loadGlobalSettingsIntoAdd()}
             >
               载入当前全局配置
             </Button>
           </div>
-          <Typography.Paragraph type="secondary" className="app-claude-model-topbar-panel__hint">
-            完整 Claude Code 用户级 <Typography.Text code>settings.json</Typography.Text>
-            ；切换配置时将整体替换全局文件（与 cc-switch 相同）。
-          </Typography.Paragraph>
           <ClaudeSettingsJsonEditor
             value={addSettingsJson}
             onChange={setAddSettingsJson}
