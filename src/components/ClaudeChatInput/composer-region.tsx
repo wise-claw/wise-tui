@@ -69,6 +69,7 @@ import {
   getSessionContextMetrics,
 } from "../../services/claudeSessionContext";
 import { getClaudeModelPickerOptions } from "../../services/claude";
+import { WISE_CLAUDE_USER_SETTINGS_CHANGED } from "../../services/claudeModelProfiles";
 import { promptToLogicalPlainString } from "../../utils/serializeClaudePrompt";
 import { getWiseRepositoryFileDragPaths, isWiseRepositoryFileDrag } from "../../utils/repositoryFileDrag";
 import { formatClaudeModelLabel } from "../../utils/claudeModel";
@@ -557,17 +558,19 @@ function ComposerInner({
     };
   }, [session.id, set]);
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const opts = await getClaudeModelPickerOptions(session.repositoryPath);
-      if (cancelled) return;
-      setClaudePicker(opts);
-    })();
-    return () => {
-      cancelled = true;
-    };
+  const refreshClaudeModelPicker = useCallback(() => {
+    void getClaudeModelPickerOptions(session.repositoryPath).then(setClaudePicker);
   }, [session.repositoryPath]);
+
+  useEffect(() => {
+    refreshClaudeModelPicker();
+  }, [refreshClaudeModelPicker]);
+
+  useEffect(() => {
+    const onSettingsChanged = () => refreshClaudeModelPicker();
+    window.addEventListener(WISE_CLAUDE_USER_SETTINGS_CHANGED, onSettingsChanged);
+    return () => window.removeEventListener(WISE_CLAUDE_USER_SETTINGS_CHANGED, onSettingsChanged);
+  }, [refreshClaudeModelPicker]);
 
   const claudeSettingsModel = claudePicker?.defaultModel?.trim() || null;
   const pickerAllowlist = claudePicker?.availableModels;

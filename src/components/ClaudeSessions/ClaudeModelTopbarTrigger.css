@@ -1,0 +1,147 @@
+.app-claude-model-topbar-btn {
+  position: relative;
+}
+
+.app-left-sidebar-topbar-btn.app-claude-model-topbar-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.app-claude-model-topbar-btn__badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ant-color-primary);
+  border: 1px solid var(--ant-color-bg-container);
+  pointer-events: none;
+}
+
+.app-claude-model-topbar-popover {
+  max-width: min(94vw, 360px);
+}
+
+.app-claude-model-topbar-popover .ant-popover-container {
+  padding: 0 !important;
+  overflow: hidden;
+  width: min(94vw, 360px) !important;
+  max-width: min(94vw, 360px) !important;
+  box-sizing: border-box;
+}
+
+.app-claude-model-topbar-popover .ant-popover-content {
+  padding: 0 !important;
+}
+
+.app-claude-model-topbar-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: min(70vh, 420px);
+  min-width: 280px;
+}
+
+.app-claude-model-topbar-panel__head {
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.app-claude-model-topbar-panel__title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.app-claude-model-topbar-panel__effective {
+  font-size: 11px;
+}
+
+.app-claude-model-topbar-panel__list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 0;
+}
+
+.app-claude-model-topbar-panel__list .ant-list-item {
+  padding: 4px 8px 4px 12px !important;
+  border-block-end: none !important;
+}
+
+.app-claude-model-topbar-panel__list .ant-list-item-action {
+  margin-inline-start: 4px !important;
+}
+
+.app-claude-model-topbar-panel__item--active {
+  background: var(--ant-color-primary-bg);
+}
+
+.app-claude-model-topbar-panel__item-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  border: none;
+  background: transparent;
+  padding: 2px 0;
+  cursor: pointer;
+  text-align: left;
+  min-width: 0;
+  flex: 1;
+}
+
+.app-claude-model-topbar-panel__item-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+}
+
+.app-claude-model-topbar-panel__item-model {
+  font-size: 11px;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-claude-model-topbar-panel__foot {
+  padding: 8px 12px 10px;
+  border-top: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-claude-model-topbar-panel__empty {
+  margin: 16px 0;
+}
+
+.app-claude-model-topbar-panel__form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.app-claude-model-topbar-panel__label {
+  font-size: 12px;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-claude-model-topbar-panel__json-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.app-claude-model-topbar-panel__json-head .app-claude-model-topbar-panel__label {
+  margin: 0;
+}
+
+.app-claude-model-topbar-panel__hint {
+  font-size: 11px;
+  margin-bottom: 0 !important;
+}
+
+.app-claude-model-topbar-panel__settings-editor {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+}

@@ -1,5 +1,7 @@
 import { Tooltip } from "antd";
+import { ClaudeModelTopbarTrigger } from "../ClaudeSessions/ClaudeModelTopbarTrigger";
 import { ClaudeCodeUsageHeaderBtn } from "../ClaudeCodeUsagePopover";
+import { useClaudeModelProfileStore } from "../../hooks/useClaudeModelProfileStore";
 import { IconSettings } from "../icons/IconSettings";
 import { IconCompactLayout } from "./SidebarIcons";
 import type { AuthorPane } from "../../types/viewMode";
@@ -19,6 +21,8 @@ export function LeftSidebarTopbar({
   authorTooltip = "单仓不支持工作台配置；升格为工作区后启用",
   onOpenAuthor,
 }: LeftSidebarTopbarProps) {
+  const { store: claudeModelStore } = useClaudeModelProfileStore(true);
+
   return (
     <div className="app-left-sidebar-topbar">
       <div className="app-left-sidebar-topbar-brand app-logo-draggable" data-tauri-drag-region>
@@ -58,6 +62,7 @@ export function LeftSidebarTopbar({
           </Tooltip>
         ) : null}
         <ClaudeCodeUsageHeaderBtn />
+        <ClaudeModelTopbarTrigger effectiveModel={claudeModelStore?.effectiveModel} variant="sidebar" />
       </div>
     </div>
   );

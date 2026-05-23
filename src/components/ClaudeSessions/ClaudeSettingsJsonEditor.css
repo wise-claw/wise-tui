@@ -1,0 +1,19 @@
+.app-claude-settings-json-editor {
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 6px;
+  overflow: hidden;
+  min-height: 200px;
+}
+
+.app-claude-settings-json-editor--loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-claude-settings-json-editor .monaco-editor,
+.app-claude-settings-json-editor .monaco-editor-background {
+  background: var(--ant-color-bg-container) !important;
+}
