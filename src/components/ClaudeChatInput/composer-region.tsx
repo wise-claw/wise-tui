@@ -69,7 +69,10 @@ import {
   getSessionContextMetrics,
 } from "../../services/claudeSessionContext";
 import { getClaudeModelPickerOptions } from "../../services/claude";
-import { WISE_CLAUDE_USER_SETTINGS_CHANGED } from "../../services/claudeModelProfiles";
+import {
+  WISE_CLAUDE_USER_SETTINGS_CHANGED,
+  type ClaudeUserSettingsChangedDetail,
+} from "../../services/claudeModelProfiles";
 import { promptToLogicalPlainString } from "../../utils/serializeClaudePrompt";
 import { getWiseRepositoryFileDragPaths, isWiseRepositoryFileDrag } from "../../utils/repositoryFileDrag";
 import { formatClaudeModelLabel } from "../../utils/claudeModel";
@@ -567,10 +570,18 @@ function ComposerInner({
   }, [refreshClaudeModelPicker]);
 
   useEffect(() => {
-    const onSettingsChanged = () => refreshClaudeModelPicker();
+    const onSettingsChanged = (event: Event) => {
+      refreshClaudeModelPicker();
+      const detail = (event as CustomEvent<ClaudeUserSettingsChangedDetail>).detail;
+      const fromProfile = detail?.effectiveModel?.trim();
+      if (fromProfile) {
+        setModel(fromProfile);
+        onSessionModelChange(fromProfile);
+      }
+    };
     window.addEventListener(WISE_CLAUDE_USER_SETTINGS_CHANGED, onSettingsChanged);
     return () => window.removeEventListener(WISE_CLAUDE_USER_SETTINGS_CHANGED, onSettingsChanged);
-  }, [refreshClaudeModelPicker]);
+  }, [refreshClaudeModelPicker, onSessionModelChange]);
 
   const claudeSettingsModel = claudePicker?.defaultModel?.trim() || null;
   const pickerAllowlist = claudePicker?.availableModels;

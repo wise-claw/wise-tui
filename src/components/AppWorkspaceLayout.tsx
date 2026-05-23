@@ -739,7 +739,10 @@ export function AppWorkspaceLayout({
                         ) : cockpitHubPane === "skills" ? (
                           <SkillsHub {...skillsHubProps} />
                         ) : cockpitHubPane === "automation" ? (
-                          <AutomationPanel {...authorPanelProps.automationPanelProps} />
+                          <AutomationPanel
+                            {...authorPanelProps.automationPanelProps}
+                            onClose={() => viewMode.back()}
+                          />
                         ) : (
                           <Suspense fallback={<PanelLoadingFallback />}>
                             <CockpitSurface

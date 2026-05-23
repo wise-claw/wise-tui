@@ -51,4 +51,20 @@ describe("AutomationPanel", () => {
     expect(html).toContain("/repo/wise");
     expect(html).toContain("计划任务弹窗:/repo/wise");
   });
+
+  test("renders close control when onClose is provided", () => {
+    const html = renderToStaticMarkup(
+      <AutomationPanel
+        repositories={[repository]}
+        activeRepositoryId={repository.id}
+        employees={[]}
+        workflowTemplates={[]}
+        workflowGraphsByWorkflowId={{}}
+        onClose={() => {}}
+      />,
+    );
+
+    expect(html).toContain('aria-label="关闭"');
+    expect(html).toContain("app-automation-panel-root--closable");
+  });
 });

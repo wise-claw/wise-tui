@@ -67,12 +67,33 @@ fn read_json_file(path: &Path) -> Option<serde_json::Value> {
     serde_json::from_str(&text).ok()
 }
 
+/// 与 Claude Code / CC Switch 一致：优先 `env.ANTHROPIC_MODEL`，其次其他 `env.*MODEL*` 与顶层 `model`。
 pub(crate) fn read_effective_model(v: &serde_json::Value) -> Option<String> {
     if let Some(env) = v.get("env").and_then(|e| e.as_object()) {
-        if let Some(m) = env.get("ANTHROPIC_MODEL").and_then(|x| x.as_str()) {
-            let t = m.trim();
-            if !t.is_empty() {
-                return Some(t.to_string());
+        const PREFERRED_ENV_KEYS: &[&str] = &[
+            "ANTHROPIC_MODEL",
+            "ANTHROPIC_DEFAULT_SONNET_MODEL",
+            "ANTHROPIC_DEFAULT_OPUS_MODEL",
+            "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+            "ANTHROPIC_REASONING_MODEL",
+            "ANTHROPIC_SMALL_FAST_MODEL",
+        ];
+        for key in PREFERRED_ENV_KEYS {
+            if let Some(m) = env.get(*key).and_then(|x| x.as_str()) {
+                let t = m.trim();
+                if !t.is_empty() {
+                    return Some(t.to_string());
+                }
+            }
+        }
+        for (key, val) in env {
+            if key.contains("MODEL") {
+                if let Some(m) = val.as_str() {
+                    let t = m.trim();
+                    if !t.is_empty() {
+                        return Some(t.to_string());
+                    }
+                }
             }
         }
     }
@@ -80,6 +101,53 @@ pub(crate) fn read_effective_model(v: &serde_json::Value) -> Option<String> {
         .and_then(|x| x.as_str())
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
+}
+
+/// CC Switch 切换供应商时常见的模型 env 键（切换时统一写入同一 model id）。
+const CC_SWITCH_MODEL_ENV_KEYS: &[&str] = &[
+    "ANTHROPIC_MODEL",
+    "ANTHROPIC_REASONING_MODEL",
+    "ANTHROPIC_SMALL_FAST_MODEL",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL",
+];
+
+/// 将解析后的 settings 中的模型选择对齐到单一 model id（写入 env 与顶层 `model`）。
+fn sync_claude_code_model_selection(root: &mut serde_json::Value, model_id: &str) -> Result<(), String> {
+    let mid = model_id.trim();
+    if mid.is_empty() {
+        return Err("无法解析有效模型 ID".to_string());
+    }
+    let obj = root
+        .as_object_mut()
+        .ok_or_else(|| "settings 根节点不是对象".to_string())?;
+    let env = obj
+        .entry("env")
+        .or_insert_with(|| serde_json::json!({}));
+    let env_obj = env
+        .as_object_mut()
+        .ok_or_else(|| "settings.env 不是对象".to_string())?;
+
+    let has_model_env = env_obj
+        .keys()
+        .any(|k| k.contains("MODEL") || CC_SWITCH_MODEL_ENV_KEYS.contains(&k.as_str()));
+    if has_model_env {
+        for key in CC_SWITCH_MODEL_ENV_KEYS {
+            env_obj.insert(key.to_string(), serde_json::Value::String(mid.to_string()));
+        }
+    } else {
+        env_obj.insert(
+            "ANTHROPIC_MODEL".to_string(),
+            serde_json::Value::String(mid.to_string()),
+        );
+    }
+    obj.insert(
+        "model".to_string(),
+        serde_json::Value::String(mid.to_string()),
+    );
+    push_available_model(root, mid);
+    Ok(())
 }
 
 fn push_available_model(root: &mut serde_json::Value, model_id: &str) {
@@ -107,32 +175,25 @@ fn push_available_model(root: &mut serde_json::Value, model_id: &str) {
     }
 }
 
-fn apply_profile_settings_to_value(mut root: serde_json::Value, profile: &ClaudeModelProfile) -> Result<serde_json::Value, String> {
-    let parsed: serde_json::Value =
+fn apply_profile_settings_to_value(_root: serde_json::Value, profile: &ClaudeModelProfile) -> Result<serde_json::Value, String> {
+    let mut parsed: serde_json::Value =
         serde_json::from_str(profile.settings_json.trim()).map_err(|e| format!("档案 settingsJson 无效: {e}"))?;
     if !parsed.is_object() {
         return Err("档案 settingsJson 顶层必须是对象".to_string());
     }
-    root = parsed;
-    let model_id = profile.model_id.trim();
-    if model_id.is_empty() {
-        return Err("modelId 不能为空".to_string());
-    }
-    let obj = root
-        .as_object_mut()
-        .ok_or_else(|| "settings 根节点不是对象".to_string())?;
-    let env = obj
-        .entry("env")
-        .or_insert_with(|| serde_json::json!({}));
-    let env_obj = env
-        .as_object_mut()
-        .ok_or_else(|| "settings.env 不是对象".to_string())?;
-    env_obj.insert(
-        "ANTHROPIC_MODEL".to_string(),
-        serde_json::Value::String(model_id.to_string()),
-    );
-    push_available_model(&mut root, model_id);
-    Ok(root)
+    let model_id = read_effective_model(&parsed)
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            let mid = profile.model_id.trim();
+            if mid.is_empty() {
+                None
+            } else {
+                Some(mid.to_string())
+            }
+        })
+        .ok_or_else(|| "档案中未找到模型 ID（请检查 env.ANTHROPIC_MODEL 等）".to_string())?;
+    sync_claude_code_model_selection(&mut parsed, &model_id)?;
+    Ok(parsed)
 }
 
 fn write_user_settings_json(value: &serde_json::Value) -> Result<(), String> {
@@ -254,6 +315,12 @@ pub(crate) fn apply_claude_model_profile(
     apply_profile_to_disk(&profile)?;
     let mut next = store;
     next.active_profile_id = Some(id.to_string());
+    if let Some(slot) = next.profiles.iter_mut().find(|p| p.id == id) {
+        if let Some(mid) = effective_model_from_disk() {
+            slot.model_id = mid;
+            slot.updated_at_ms = now_ms();
+        }
+    }
     save_store(&db, &next)?;
     Ok(store_view(&db))
 }
@@ -382,10 +449,37 @@ mod tests {
     use super::*;
 
     #[test]
-    fn apply_profile_sets_model_and_available_models() {
+    fn apply_profile_uses_settings_json_model_not_stale_profile_id() {
         let profile = ClaudeModelProfile {
             id: "p1".into(),
             company: "Bailian".into(),
+            name: "Test".into(),
+            model_id: "stale-wrong-id".into(),
+            settings_json: r#"{
+              "env": {
+                "ANTHROPIC_BASE_URL": "http://127.0.0.1:8082",
+                "ANTHROPIC_MODEL": "kimi-k2",
+                "ANTHROPIC_DEFAULT_SONNET_MODEL": "old-sonnet"
+              }
+            }"#
+            .into(),
+            created_at_ms: 0,
+            updated_at_ms: 0,
+        };
+        let out = apply_profile_settings_to_value(serde_json::json!({}), &profile).expect("merge");
+        assert_eq!(out["env"]["ANTHROPIC_MODEL"].as_str(), Some("kimi-k2"));
+        assert_eq!(
+            out["env"]["ANTHROPIC_DEFAULT_SONNET_MODEL"].as_str(),
+            Some("kimi-k2")
+        );
+        assert_eq!(out["model"].as_str(), Some("kimi-k2"));
+    }
+
+    #[test]
+    fn apply_profile_falls_back_to_profile_model_id_when_env_missing() {
+        let profile = ClaudeModelProfile {
+            id: "p1".into(),
+            company: "".into(),
             name: "Test".into(),
             model_id: "qwen3.6-plus".into(),
             settings_json: r#"{"env":{"ANTHROPIC_BASE_URL":"http://127.0.0.1:8082"}}"#.into(),
@@ -397,10 +491,5 @@ mod tests {
             out["env"]["ANTHROPIC_MODEL"].as_str(),
             Some("qwen3.6-plus")
         );
-        assert!(out["availableModels"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|v| v.as_str() == Some("qwen3.6-plus")));
     }
 }

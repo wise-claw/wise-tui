@@ -1,5 +1,11 @@
-import { CheckCircleOutlined, FieldTimeOutlined, PlayCircleOutlined, ReloadOutlined } from "@ant-design/icons";
-import { Button, Empty, Select } from "antd";
+import {
+  CheckCircleOutlined,
+  CloseOutlined,
+  FieldTimeOutlined,
+  PlayCircleOutlined,
+  ReloadOutlined,
+} from "@ant-design/icons";
+import { Button, Empty, Select, Tooltip } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { EmployeeItem, Repository, RepositoryScheduledClaudeTask, WorkflowGraph, WorkflowTemplateItem } from "../../types";
 import { readRepositoryScheduledClaudeTasks } from "../../services/repositoryScheduledClaudeTasksStore";
@@ -13,6 +19,8 @@ interface AutomationPanelProps {
   employees: EmployeeItem[];
   workflowTemplates: WorkflowTemplateItem[];
   workflowGraphsByWorkflowId: Record<string, WorkflowGraph>;
+  /** 关闭定时自动化页（例如 Cockpit 叠层返回助手）。 */
+  onClose?: () => void;
 }
 
 interface RepositoryScheduleSummary {
@@ -63,6 +71,7 @@ export function AutomationPanel({
   employees,
   workflowTemplates,
   workflowGraphsByWorkflowId,
+  onClose,
 }: AutomationPanelProps) {
   const [selectedRepositoryId, setSelectedRepositoryId] = useState<number | null>(activeRepositoryId);
   const [summaries, setSummaries] = useState<RepositoryScheduleSummary[]>([]);
@@ -96,6 +105,26 @@ export function AutomationPanel({
     void refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    if (!onClose) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      const target = event.target;
+      if (target instanceof Element) {
+        if (
+          target.closest(
+            ".ant-modal-wrap, .ant-drawer-open, .ant-select-dropdown, .ant-dropdown, .ant-popover",
+          )
+        ) {
+          return;
+        }
+      }
+      onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
   const selectedSummary = useMemo(() => {
     if (selectedRepositoryId == null) return null;
     return summaries.find((item) => item.repository.id === selectedRepositoryId) ?? null;
@@ -115,7 +144,7 @@ export function AutomationPanel({
     setModalOpen(true);
   }, []);
 
-  return (
+  const panel = (
     <AuthorPanelPageShell
       className="app-automation-panel"
       icon={<FieldTimeOutlined />}
@@ -233,5 +262,28 @@ export function AutomationPanel({
         />
       ) : null}
     </AuthorPanelPageShell>
+  );
+
+  if (!onClose) {
+    return panel;
+  }
+
+  return (
+    <div className="app-automation-panel-root app-automation-panel-root--closable">
+      <div className="app-automation-panel__titlebar">
+        <div className="app-automation-panel__titlebar-drag" data-tauri-drag-region aria-hidden />
+        <Tooltip title="关闭" mouseEnterDelay={0.35}>
+          <Button
+            type="text"
+            size="small"
+            className="app-automation-panel__close-btn"
+            icon={<CloseOutlined />}
+            aria-label="关闭"
+            onClick={onClose}
+          />
+        </Tooltip>
+      </div>
+      {panel}
+    </div>
   );
 }

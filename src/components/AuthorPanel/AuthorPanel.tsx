@@ -70,7 +70,7 @@ export interface AuthorPanelProps {
 export function AuthorPanel({
   pane,
   onPaneChange: _onPaneChange,
-  onBack: _onBack,
+  onBack,
   workspacesTabProps,
   employeeConfigProps,
   workflowConfigProps,
@@ -188,7 +188,7 @@ export function AuthorPanel({
         return <AgentRegistrySection />;
       case "automation":
         return automationPanelProps ? (
-          <AutomationPanel {...automationPanelProps} />
+          <AutomationPanel {...automationPanelProps} onClose={onBack} />
         ) : (
           <AuthorUnavailable label="定时自动化" />
         );
@@ -218,6 +218,7 @@ export function AuthorPanel({
     hooksSearch,
     hooksRepositoryPath,
     mcpHubProps,
+    onBack,
     pane,
     repositoryPath,
     skillsHubProps,

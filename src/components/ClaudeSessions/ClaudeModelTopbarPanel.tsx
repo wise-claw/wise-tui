@@ -9,7 +9,7 @@ import {
   getClaudeUserSettingsJson,
   saveClaudeUserSettingsJson,
   syncClaudeModelProfilesFromCcSwitch,
-  WISE_CLAUDE_USER_SETTINGS_CHANGED,
+  dispatchClaudeUserSettingsChanged,
 } from "../../services/claudeModelProfiles";
 import type { ClaudeModelProfile, ClaudeModelProfileStoreView } from "../../types/claudeModelProfile";
 import { formatClaudeModelLabel } from "../../utils/claudeModel";
@@ -89,8 +89,13 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
       try {
         const next = await applyClaudeModelProfile(profileId);
         setStore(next);
-        message.success("已切换并替换 Claude Code 全局 settings.json");
-        window.dispatchEvent(new CustomEvent(WISE_CLAUDE_USER_SETTINGS_CHANGED));
+        const effective = next.effectiveModel?.trim() || null;
+        message.success(
+          effective
+            ? `已切换模型配置，当前模型：${formatClaudeModelLabel(effective)}`
+            : "已切换并替换 Claude Code 全局 settings.json",
+        );
+        dispatchClaudeUserSettingsChanged({ effectiveModel: effective });
         onApplied?.();
       } catch (e) {
         message.error(typeof e === "string" ? e : "切换失败");
@@ -143,8 +148,14 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
     try {
       const next = await saveClaudeUserSettingsJson(settingsDraft, configProfile.id);
       setStore(next);
-      message.success("已保存到数据库并写入 Claude Code 全局 settings.json");
-      window.dispatchEvent(new CustomEvent(WISE_CLAUDE_USER_SETTINGS_CHANGED));
+        message.success(
+          next.effectiveModel?.trim()
+            ? `已保存全局配置，当前模型：${formatClaudeModelLabel(next.effectiveModel.trim())}`
+            : "已保存到数据库并写入 Claude Code 全局 settings.json",
+        );
+      dispatchClaudeUserSettingsChanged({
+        effectiveModel: next.effectiveModel?.trim() || null,
+      });
       setConfigOpen(false);
       setConfigProfile(null);
       onApplied?.();

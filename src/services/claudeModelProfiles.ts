@@ -7,6 +7,21 @@ import type {
 /** 全局 `settings.json` 已变更（模型切换或配置保存后派发）。 */
 export const WISE_CLAUDE_USER_SETTINGS_CHANGED = "wise-claude-user-settings-changed";
 
+export interface ClaudeUserSettingsChangedDetail {
+  /** 写入磁盘后的生效模型（`env.ANTHROPIC_MODEL` 或 `model`）。 */
+  effectiveModel?: string | null;
+}
+
+export function dispatchClaudeUserSettingsChanged(
+  detail?: ClaudeUserSettingsChangedDetail,
+): void {
+  window.dispatchEvent(
+    new CustomEvent<ClaudeUserSettingsChangedDetail>(WISE_CLAUDE_USER_SETTINGS_CHANGED, {
+      detail: detail ?? {},
+    }),
+  );
+}
+
 export async function getClaudeModelProfileStore(): Promise<ClaudeModelProfileStoreView> {
   return invoke<ClaudeModelProfileStoreView>("get_claude_model_profile_store");
 }
