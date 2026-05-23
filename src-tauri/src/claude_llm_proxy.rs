@@ -698,20 +698,6 @@ async fn run_proxy_listener(app: AppHandle, inner: Arc<ProxyInner>) {
     }
 }
 
-fn materialize_llm_proxy_settings(proxy_url: &str) -> Result<String, String> {
-    let wise_dir = crate::wise_paths::wise_dir()?;
-    let out_dir = wise_dir.join("llm-proxy");
-    let out_path = out_dir.join(format!("{}.json", Uuid::new_v4()));
-    let payload = serde_json::json!({
-        "env": {
-            "ANTHROPIC_BASE_URL": proxy_url
-        }
-    });
-    let serialized = serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())?;
-    crate::wise_paths::write_file_atomic(&out_path, &serialized)?;
-    Ok(out_path.to_string_lossy().to_string())
-}
-
 /// 用户已开启 LLM 流量监听且本地代理进程在运行。
 pub(crate) fn llm_proxy_listening_and_running() -> bool {
     let listening = persisted_config_cell()
@@ -727,28 +713,16 @@ pub(crate) fn llm_proxy_listening_and_running() -> bool {
         .is_some()
 }
 
-/// 在 spawn Claude 子进程前注入 `ANTHROPIC_BASE_URL` 指向本地代理。
-/// 仅当用户已开启监听且本地代理在运行时才注入。
-pub(crate) fn apply_proxy_env(
-    cmd: &mut tokio::process::Command,
-    _app: &AppHandle,
-    _project_path: &str,
-) {
+/// LLM 流量监听开启时，将 `ANTHROPIC_BASE_URL` 指向 Wise 本地代理（由 `configure_claude_child_process` 消费）。
+pub(crate) fn claude_spawn_anthropic_base_url_override() -> Option<String> {
     if !llm_proxy_listening_and_running() {
-        return;
+        return None;
     }
     let inner = {
         let cell = proxy_cell().lock().unwrap_or_else(|e| e.into_inner());
         cell.as_ref().cloned()
     };
-    let Some(inner) = inner else {
-        return;
-    };
-    let proxy_url = format!("http://127.0.0.1:{}", inner.port);
-    cmd.env("ANTHROPIC_BASE_URL", &proxy_url);
-    if let Ok(settings_path) = materialize_llm_proxy_settings(&proxy_url) {
-        cmd.arg("--settings").arg(settings_path);
-    }
+    inner.map(|i| format!("http://127.0.0.1:{}", i.port))
 }
 
 #[tauri::command]

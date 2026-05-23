@@ -1698,7 +1698,12 @@ async fn spawn_claude_process(
     }
 
     let mut cmd = cmd;
-    crate::claude_llm_proxy::apply_proxy_env(&mut cmd, &app, &project_path);
+    let base_url_override = crate::claude_llm_proxy::claude_spawn_anthropic_base_url_override();
+    crate::claude_config_dir::configure_claude_child_process(
+        &mut cmd,
+        &project_path,
+        base_url_override.as_deref(),
+    );
     let mut child = match cmd.spawn() {
         Ok(c) => c,
         Err(e) => {

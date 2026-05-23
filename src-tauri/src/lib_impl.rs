@@ -351,6 +351,7 @@ pub fn run() {
             claude_commands::get_claude_model_picker_options,
             claude_config_dir::get_claude_user_config_dir,
             claude_config_dir::set_claude_user_config_dir,
+            claude_config_dir::sanitize_claude_credentials_for_fcc,
             claude_commands::mcp::get_claude_mcp_status,
             claude_commands::mcp::get_claude_mcp_runtime_health,
             claude_commands::mcp::remove_claude_mcp_server,

@@ -8,8 +8,10 @@
 //! 仓库内的 `<project>/.claude/...`（项目级配置始终保持官方布局）。
 
 use serde::Serialize;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::RwLock;
+use uuid::Uuid;
 
 use crate::wise_db::WiseDb;
 
@@ -114,6 +116,174 @@ fn build_info(raw_value: Option<String>) -> ClaudeUserConfigDirInfo {
     }
 }
 
+/// 从 Claude `settings.json` / `~/.claude.json` 的 `env` 块读取键值（忽略空值）。
+pub(crate) fn read_claude_json_env_block(path: &Path) -> HashMap<String, String> {
+    let text = match std::fs::read_to_string(path) {
+        Ok(t) => t,
+        Err(_) => return HashMap::new(),
+    };
+    let v: serde_json::Value = match serde_json::from_str(&text) {
+        Ok(v) => v,
+        Err(_) => return HashMap::new(),
+    };
+    let Some(env) = v.get("env").and_then(|e| e.as_object()) else {
+        return HashMap::new();
+    };
+    let mut out = HashMap::new();
+    for (k, val) in env {
+        let Some(s) = val.as_str().map(str::trim).filter(|s| !s.is_empty()) else {
+            continue;
+        };
+        out.insert(k.clone(), s.to_string());
+    }
+    out
+}
+
+/// 是否为本机 free-claude-code / FCC 类代理地址。
+pub(crate) fn is_local_fcc_proxy_base_url(url: &str) -> bool {
+    let t = url.trim().to_ascii_lowercase();
+    t.starts_with("http://127.0.0.1:")
+        || t.starts_with("http://localhost:")
+        || t.starts_with("http://[::1]:")
+}
+
+/// 仅合并用户 + 项目 `settings.json`（**不**读 `~/.claude.json` 的 `env`，避免百炼 key 污染 spawn）。
+pub(crate) fn merged_claude_spawn_env(project_path: Option<&str>) -> HashMap<String, String> {
+    let mut out = read_claude_json_env_block(&user_claude_dir().join("settings.json"));
+    if let Some(pp) = project_path.map(str::trim).filter(|s| !s.is_empty()) {
+        out.extend(read_claude_json_env_block(
+            &PathBuf::from(pp).join(".claude").join("settings.json"),
+        ));
+    }
+    out
+}
+
+/// 用户 `settings.json` 已配置 FCC 时，从 `~/.claude.json` 移除会干扰认证的 `env` 项（Claude 运行时仍会读该文件）。
+pub(crate) fn sanitize_claude_root_json_for_fcc_proxy() -> Result<bool, String> {
+    let user_settings = user_claude_dir().join("settings.json");
+    let user_env = read_claude_json_env_block(&user_settings);
+    let has_auth = user_env
+        .get("ANTHROPIC_AUTH_TOKEN")
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false);
+    let fcc_base = user_env
+        .get("ANTHROPIC_BASE_URL")
+        .map(|s| is_local_fcc_proxy_base_url(s))
+        .unwrap_or(false);
+    if !has_auth || !fcc_base {
+        return Ok(false);
+    }
+
+    let path = user_claude_root_json();
+    let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let mut root: serde_json::Value =
+        serde_json::from_str(&text).map_err(|e| format!("解析 {} 失败: {e}", path.display()))?;
+    let Some(env) = root.get_mut("env").and_then(|e| e.as_object_mut()) else {
+        return Ok(false);
+    };
+
+    let mut changed = false;
+    if env.remove("ANTHROPIC_API_KEY").is_some() {
+        changed = true;
+    }
+    if let Some(url) = env.get("ANTHROPIC_BASE_URL").and_then(|v| v.as_str()) {
+        if !is_local_fcc_proxy_base_url(url) {
+            env.remove("ANTHROPIC_BASE_URL");
+            changed = true;
+        }
+    }
+    if !changed {
+        return Ok(false);
+    }
+
+    let serialized = serde_json::to_string_pretty(&root).map_err(|e| e.to_string())?;
+    crate::wise_paths::write_file_atomic(&path, &serialized)?;
+    Ok(true)
+}
+
+const ANTHROPIC_ENV_SCRUB_KEYS: &[&str] = &[
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_BASE_URL",
+];
+
+fn scrub_inherited_anthropic_env(cmd: &mut tokio::process::Command) {
+    for key in ANTHROPIC_ENV_SCRUB_KEYS {
+        cmd.env_remove(key);
+    }
+}
+
+/// Wise 子进程应使用的 `env`；存在 `ANTHROPIC_AUTH_TOKEN` 时剔除百炼 `ANTHROPIC_API_KEY`（FCC 要求）。
+pub(crate) fn build_claude_spawn_env(
+    project_path: Option<&str>,
+    anthropic_base_url_override: Option<&str>,
+) -> HashMap<String, String> {
+    let mut merged = merged_claude_spawn_env(project_path);
+    if let Some(url) = anthropic_base_url_override.map(str::trim).filter(|s| !s.is_empty()) {
+        merged.insert("ANTHROPIC_BASE_URL".to_string(), url.to_string());
+    }
+    if merged
+        .get("ANTHROPIC_AUTH_TOKEN")
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false)
+    {
+        merged.remove("ANTHROPIC_API_KEY");
+    }
+    merged
+}
+
+fn write_claude_spawn_settings_file(env: &HashMap<String, String>) -> Result<String, String> {
+    let wise_dir = crate::wise_paths::wise_dir()?;
+    let out_dir = wise_dir.join("claude-spawn");
+    std::fs::create_dir_all(&out_dir).map_err(|e| e.to_string())?;
+    let out_path = out_dir.join(format!("{}.json", Uuid::new_v4()));
+    let env_json: serde_json::Map<String, serde_json::Value> = env
+        .iter()
+        .map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone())))
+        .collect();
+    let payload = serde_json::json!({ "env": env_json });
+    let serialized = serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())?;
+    crate::wise_paths::write_file_atomic(&out_path, &serialized)?;
+    Ok(out_path.to_string_lossy().to_string())
+}
+
+/// 对齐终端 CLI 的 FCC / free-claude-code 认证：`--settings` + 子进程 `env`，并清理 `~/.claude.json` 中冲突项。
+pub(crate) fn configure_claude_child_process(
+    cmd: &mut tokio::process::Command,
+    project_path: &str,
+    anthropic_base_url_override: Option<&str>,
+) {
+    let _ = sanitize_claude_root_json_for_fcc_proxy();
+
+    let merged = build_claude_spawn_env(Some(project_path), anthropic_base_url_override);
+    let strip_api_key = merged
+        .get("ANTHROPIC_AUTH_TOKEN")
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false);
+
+    scrub_inherited_anthropic_env(cmd);
+
+    for (k, v) in &merged {
+        cmd.env(k, v);
+    }
+    if strip_api_key {
+        cmd.env_remove("ANTHROPIC_API_KEY");
+    }
+
+    if merged.is_empty() {
+        return;
+    }
+    if let Ok(settings_path) = write_claude_spawn_settings_file(&merged) {
+        cmd.arg("--settings").arg(settings_path);
+    }
+}
+
+/// 手动修复：从 `~/.claude.json` 移除与 FCC `settings.json` 冲突的认证项（供设置页或排障调用）。
+#[tauri::command]
+pub(crate) fn sanitize_claude_credentials_for_fcc() -> Result<bool, String> {
+    sanitize_claude_root_json_for_fcc_proxy()
+}
+
 fn validate_user_dir_candidate(raw: &str) -> Result<PathBuf, String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -181,6 +351,56 @@ mod tests {
                 home.join(".codefuse/engine/cc")
             );
         }
+    }
+
+    #[test]
+    fn sanitize_root_json_removes_conflicting_env_for_fcc() {
+        let dir = tempfile::tempdir().unwrap();
+        update_cache(Some(dir.path().join("wise-claude-sanitize")));
+        let wise_claude = user_claude_dir();
+        std::fs::create_dir_all(&wise_claude).unwrap();
+        std::fs::write(
+            wise_claude.join("settings.json"),
+            r#"{"env":{"ANTHROPIC_AUTH_TOKEN":"fcc-token","ANTHROPIC_BASE_URL":"http://localhost:8082"}}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            user_claude_root_json(),
+            r#"{"env":{"ANTHROPIC_API_KEY":"sk-bailian","ANTHROPIC_BASE_URL":"https://dashscope.example.com"}}"#,
+        )
+        .unwrap();
+
+        assert!(sanitize_claude_root_json_for_fcc_proxy().unwrap());
+        let env = read_claude_json_env_block(&user_claude_root_json());
+        assert!(!env.contains_key("ANTHROPIC_API_KEY"));
+        assert!(!env.contains_key("ANTHROPIC_BASE_URL"));
+        update_cache(None);
+    }
+
+    #[test]
+    fn build_spawn_env_strips_api_key_when_auth_token_present() {
+        let dir = tempfile::tempdir().unwrap();
+        update_cache(Some(dir.path().join("wise-claude-test2")));
+        let wise_claude = user_claude_dir();
+        std::fs::create_dir_all(&wise_claude).unwrap();
+        std::fs::write(
+            wise_claude.join("settings.json"),
+            r#"{"env":{"ANTHROPIC_AUTH_TOKEN":"fcc-token","ANTHROPIC_BASE_URL":"http://localhost:8082"}}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            user_claude_root_json(),
+            r#"{"env":{"ANTHROPIC_API_KEY":"sk-bailian"}}"#,
+        )
+        .unwrap();
+
+        let built = build_claude_spawn_env(None, None);
+        assert_eq!(
+            built.get("ANTHROPIC_AUTH_TOKEN").map(String::as_str),
+            Some("fcc-token")
+        );
+        assert!(!built.contains_key("ANTHROPIC_API_KEY"));
+        update_cache(None);
     }
 
     #[test]
