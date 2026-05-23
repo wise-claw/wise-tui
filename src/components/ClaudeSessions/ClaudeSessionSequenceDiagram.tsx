@@ -1,7 +1,8 @@
-import { Button, Popover, Tag } from "antd";
+import { Popover, Tag } from "antd";
 import { useMemo, useCallback, useEffect, useId, useState, type MouseEvent } from "react";
 import "./ClaudeSessionTrajectoryDrawer.css";
 import type { SequenceEvent } from "../../utils/claudeSessionTrajectorySequence";
+import { SequenceEventPopoverContent } from "./SequenceEventPopoverContent";
 import { TRAJECTORY_LANE_IDS, sequenceEventActivityCategory, type TrajectoryLaneId } from "../../utils/claudeSessionTrajectorySequence";
 import { formatChatMessageListTime } from "../../utils/formatChatMessageListTime";
 
@@ -271,9 +272,6 @@ export function ClaudeSessionSequenceDiagram({
         <div className="app-seq-flow__timeline-container">
           {slice.map((ev, i) => {
             const isApiRequest = ev.kind === "api_request";
-            const popoverBodyRaw = [ev.subtitle, ev.detail, ev.rawJsonlLine].filter(Boolean).join("\n\n\n").trim();
-            const popoverBodyText =
-              popoverBodyRaw.length > 12000 ? `${popoverBodyRaw.slice(0, 12000)}…` : popoverBodyRaw || "—";
 
             const cardBodyRaw = messageBodyForCard(ev);
             const badgeLabel = ev.flags.loopDense ? "LOOP" : ev.label;
@@ -316,14 +314,7 @@ export function ClaudeSessionSequenceDiagram({
                           placement="bottom"
                           destroyOnHidden
                           rootClassName="app-seq-event-popover-root"
-                          content={
-                            <div className="app-seq-event-popover-card">
-                              <span className="app-seq-event-popover-card__badge" data-kind={ev.kind}>
-                                {ev.label}
-                              </span>
-                              <div className="app-seq-event-popover-card__main">{popoverBodyText}</div>
-                            </div>
-                          }
+                          content={<SequenceEventPopoverContent ev={ev} />}
                         >
                           <button
                             type="button"
@@ -344,26 +335,17 @@ export function ClaudeSessionSequenceDiagram({
                           destroyOnHidden
                           rootClassName="app-seq-event-popover-root"
                           content={
-                            <div className="app-seq-event-popover-card">
-                              <span className="app-seq-event-popover-card__badge" data-kind={ev.kind}>
-                                {ev.label}
-                              </span>
-                              <div className="app-seq-event-popover-card__main">{popoverBodyText}</div>
-                              {ev.drilldown && onSubagentDrilldown ? (
-                                <Button
-                                  type="link"
-                                  size="small"
-                                  className="app-seq-event-popover-card__drill"
-                                  onMouseDown={(e) => e.preventDefault()}
-                                  onClick={() => {
-                                    onSubagentDrilldown(ev);
-                                    setDetailPopoverEventId(null);
-                                  }}
-                                >
-                                  查看子代理任务
-                                </Button>
-                              ) : null}
-                            </div>
+                            <SequenceEventPopoverContent
+                              ev={ev}
+                              onSubagentDrilldown={
+                                onSubagentDrilldown
+                                  ? (target) => {
+                                      onSubagentDrilldown(target);
+                                      setDetailPopoverEventId(null);
+                                    }
+                                  : undefined
+                              }
+                            />
                           }
                         >
                           <button
@@ -384,26 +366,17 @@ export function ClaudeSessionSequenceDiagram({
                           destroyOnHidden
                           rootClassName="app-seq-event-popover-root"
                           content={
-                            <div className="app-seq-event-popover-card">
-                              <span className="app-seq-event-popover-card__badge" data-kind={ev.kind}>
-                                {ev.label}
-                              </span>
-                              <div className="app-seq-event-popover-card__main">{popoverBodyText}</div>
-                              {ev.drilldown && onSubagentDrilldown ? (
-                                <Button
-                                  type="link"
-                                  size="small"
-                                  className="app-seq-event-popover-card__drill"
-                                  onMouseDown={(e) => e.preventDefault()}
-                                  onClick={() => {
-                                    onSubagentDrilldown(ev);
-                                    setDetailPopoverEventId(null);
-                                  }}
-                                >
-                                  查看子代理任务
-                                </Button>
-                              ) : null}
-                            </div>
+                            <SequenceEventPopoverContent
+                              ev={ev}
+                              onSubagentDrilldown={
+                                onSubagentDrilldown
+                                  ? (target) => {
+                                      onSubagentDrilldown(target);
+                                      setDetailPopoverEventId(null);
+                                    }
+                                  : undefined
+                              }
+                            />
                           }
                         >
                           <button

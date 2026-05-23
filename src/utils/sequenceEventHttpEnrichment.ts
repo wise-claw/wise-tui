@@ -21,6 +21,7 @@ export function fccTraceHttpDetail(entry: FccTraceEntry): string {
     entry.anthropicRequestId?.trim() ? `request-id: ${entry.anthropicRequestId}` : "",
     entry.requestPreview?.trim() ? `request:\n${entry.requestPreview}` : "",
     entry.responsePreview?.trim() ? `response:\n${entry.responsePreview}` : "",
+    entry.upstreamPreview?.trim() ? `upstream:\n${entry.upstreamPreview}` : "",
   ]
     .filter(Boolean)
     .join("\n\n---\n\n");

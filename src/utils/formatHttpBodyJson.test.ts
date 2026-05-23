@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
   formatHttpBodyJsonForDisplay,
+  formatHttpTraceDetailForDisplay,
   HTTP_BODY_TRUNCATION_MARKER,
+  parseHttpTraceDetailSections,
   stripHttpBodyTruncationMarker,
 } from "./formatHttpBodyJson";
 
@@ -33,5 +35,25 @@ describe("formatHttpBodyJson", () => {
       body: '{"x":1}',
       wasTruncated: true,
     });
+  });
+
+  test("parseHttpTraceDetailSections splits request and response", () => {
+    const detail = [
+      "POST /v1/messages · 200",
+      "request:\n{\"max_tokens\":32000}",
+      "response:\n{\"type\":\"stream\"}",
+    ].join("\n\n---\n\n");
+    const sections = parseHttpTraceDetailSections(detail);
+    expect(sections).toHaveLength(3);
+    expect(sections[0]?.kind).toBe("meta");
+    expect(sections[1]?.kind).toBe("request");
+    expect(sections[2]?.kind).toBe("response");
+  });
+
+  test("formatHttpTraceDetailForDisplay pretty-prints bodies", () => {
+    const detail = "request:\n{\"a\":1}";
+    const out = formatHttpTraceDetailForDisplay(detail);
+    expect(out).toContain('"a": 1');
+    expect(out).toContain("\n");
   });
 });

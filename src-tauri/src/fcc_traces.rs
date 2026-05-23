@@ -7,7 +7,6 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-const MAX_PREVIEW_CHARS: usize = 24_000;
 const DEFAULT_LIMIT: usize = 200;
 const MAX_LOG_TAIL_BYTES: usize = 3 * 1024 * 1024;
 
@@ -48,13 +47,6 @@ fn fcc_traces_root() -> PathBuf {
 
 fn fcc_server_log_path() -> PathBuf {
     fcc_home().join("logs").join("server.log")
-}
-
-fn truncate_preview(s: &str) -> String {
-    if s.len() <= MAX_PREVIEW_CHARS {
-        return s.to_string();
-    }
-    format!("{}…[truncated]", &s[..MAX_PREVIEW_CHARS])
 }
 
 fn parse_timestamp_ms(v: &serde_json::Value) -> Option<i64> {
@@ -145,12 +137,12 @@ fn entry_from_json_value(v: &serde_json::Value, fallback_id: &str) -> Option<Fcc
         .get("requestPreview")
         .or_else(|| obj.get("request_preview"))
         .and_then(|v| v.as_str())
-        .map(truncate_preview);
+        .map(str::to_string);
     let response_preview = obj
         .get("responsePreview")
         .or_else(|| obj.get("response_preview"))
         .and_then(|v| v.as_str())
-        .map(truncate_preview);
+        .map(str::to_string);
     Some(FccTraceEntry {
         id,
         timestamp_ms,
@@ -185,7 +177,7 @@ fn entry_from_json_value(v: &serde_json::Value, fallback_id: &str) -> Option<Fcc
             .get("upstreamPreview")
             .or_else(|| obj.get("upstream_preview"))
             .and_then(|v| v.as_str())
-            .map(truncate_preview),
+            .map(str::to_string),
     })
 }
 
@@ -241,7 +233,7 @@ struct PendingServerLogTrace {
 }
 
 fn json_value_preview(v: &serde_json::Value) -> String {
-    truncate_preview(&v.to_string())
+    v.to_string()
 }
 
 fn ingest_server_log_event(
@@ -586,6 +578,15 @@ mod tests {
             utc.with_timezone(&east8).format("%H:%M:%S").to_string(),
             "17:39:29"
         );
+    }
+
+    #[test]
+    fn preview_text_is_not_truncated() {
+        let long = "x".repeat(30_000);
+        let v = serde_json::json!({ "body": long });
+        let preview = json_value_preview(&v);
+        assert!(!preview.contains("…[truncated]"));
+        assert!(preview.len() > 30_000);
     }
 
     #[test]

@@ -21,11 +21,11 @@ Wise 通过 Tauri 命令 `list_fcc_traces` 扫描：
 | `statusCode` | number | 否 | HTTP 状态 |
 | `durationMs` | number | 否 | 耗时 |
 | `model` | string | 否 | 模型 id |
-| `requestPreview` | string | 否 | 请求体摘要（建议 ≤24KB） |
-| `responsePreview` | string | 否 | 响应体摘要 |
+| `requestPreview` | string | 否 | 请求体全文（Wise 读取时不截断） |
+| `responsePreview` | string | 否 | 响应体全文 |
 | `sessionHint` | string | 否 | Claude `session_id` 片段，用于过滤 |
 | `anthropicRequestId` | string | 否 | 请求 id |
-| `upstreamPreview` | string | 否 | FCC→上游摘要；有则生成 `fcc_upstream` 链路节点 |
+| `upstreamPreview` | string | 否 | FCC→上游请求全文；有则生成 `fcc_upstream` 链路节点 |
 
 文件可为 **单个对象**、**对象数组**，或 **JSONL**（每行一条）。
 

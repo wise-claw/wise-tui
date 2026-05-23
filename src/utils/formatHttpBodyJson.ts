@@ -113,3 +113,47 @@ export function formatHttpBodyJsonForDisplay(raw: string): string {
 
   return raw;
 }
+
+export type HttpTraceBodySectionKind = "request" | "response" | "upstream";
+
+export interface HttpTraceDetailSection {
+  kind: "meta" | HttpTraceBodySectionKind;
+  content: string;
+}
+
+const HTTP_TRACE_DETAIL_SPLIT = "\n\n---\n\n";
+const HTTP_TRACE_BODY_SECTION_RE =
+  /^(request|response|upstream):\s*\n?([\s\S]*)$/i;
+
+/** 解析 `fccTraceHttpDetail` / `llmProxyHttpDetail` 拼接的详情文本。 */
+export function parseHttpTraceDetailSections(detail: string): HttpTraceDetailSection[] {
+  const trimmed = detail.trim();
+  if (!trimmed) return [];
+
+  return trimmed
+    .split(HTTP_TRACE_DETAIL_SPLIT)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      const match = part.match(HTTP_TRACE_BODY_SECTION_RE);
+      if (!match) {
+        return { kind: "meta" as const, content: part };
+      }
+      const kind = match[1]!.toLowerCase() as HttpTraceBodySectionKind;
+      return { kind, content: (match[2] ?? "").trim() };
+    });
+}
+
+/** 将 HTTP trace 详情中的 request/response/upstream 块格式化为缩进 JSON。 */
+export function formatHttpTraceDetailForDisplay(detail: string): string {
+  const sections = parseHttpTraceDetailSections(detail);
+  if (sections.length === 0) return detail;
+
+  return sections
+    .map((sec) => {
+      if (sec.kind === "meta") return sec.content;
+      const pretty = formatHttpBodyJsonForDisplay(sec.content);
+      return `${sec.kind}:\n${pretty}`;
+    })
+    .join(HTTP_TRACE_DETAIL_SPLIT);
+}

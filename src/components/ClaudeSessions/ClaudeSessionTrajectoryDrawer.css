@@ -785,6 +785,34 @@
   color: var(--ant-color-text-secondary);
 }
 
+.app-seq-event-popover-card__meta {
+  flex-shrink: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--ant-color-text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.app-seq-event-popover-card__bodies {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.app-seq-event-popover-card__bodies .app-llm-proxy-json-viewer {
+  flex-shrink: 0;
+}
+
+.app-seq-event-popover-card__bodies .app-llm-proxy-json-viewer__code-wrapper {
+  max-height: min(38vh, 220px);
+}
+
 .app-seq-event-popover-card__main {
   flex: 1 1 auto;
   min-height: 0;
@@ -801,6 +829,16 @@
   background: var(--ant-color-fill-quaternary);
   color: var(--ant-color-text);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+.app-seq-event-popover-card__main--highlight {
+  margin: 0;
+  padding: 8px 10px;
+}
+
+.app-seq-event-popover-card__main--highlight code {
+  display: block;
+  font-family: inherit;
 }
 
 .app-seq-event-popover-card__drill {
