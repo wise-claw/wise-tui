@@ -6,6 +6,12 @@ import { CronExpressionParser } from "cron-parser";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { EmployeeItem, RepositoryScheduledClaudeTask, WorkflowGraph, WorkflowTemplateItem } from "../../types";
 import { collectTeamMemberEmployeeIds } from "../../utils/collectTeamMemberEmployeeIds";
+import {
+  formatScheduledTaskDispatchTargetLabel,
+  parseScheduledTaskDispatchTargetKey,
+  scheduledTaskDispatchTargetKey,
+  SCHEDULED_TASK_DISPATCH_MAIN,
+} from "../../utils/scheduledTaskDispatchTarget";
 import { PromptMilkdownField } from "../PromptMilkdownField";
 import {
   initialLastScheduledSlotForCron,
@@ -60,7 +66,7 @@ export function RepositoryScheduledTasksModal({
   const [form] = Form.useForm<{
     title: string;
     cronExpression: string;
-    employeeId: string | null;
+    dispatchTargetKey: string;
     enabled: boolean;
     contentMarkdown: string;
   }>();
@@ -75,24 +81,72 @@ export function RepositoryScheduledTasksModal({
     [workflowTemplates, workflowGraphsByWorkflowId],
   );
 
-  const watchedEmployeeId = Form.useWatch("employeeId", form);
-  const scheduledTaskEmployeeSelectOptions = useMemo(() => {
-    const currentIdRaw = typeof watchedEmployeeId === "string" ? watchedEmployeeId.trim() : "";
-    const currentId = currentIdRaw || null;
-    const base = dispatchableEmployees.filter((e) => !teamMemberEmployeeIds.has(e.id));
-    const pinned =
-      currentId && teamMemberEmployeeIds.has(currentId) ? employees.find((e) => e.id === currentId) : undefined;
-    const pinnedOption = pinned
-      ? [
-          {
-            value: pinned.id,
-            label: `${pinned.name}（已在团队流程中，请清空或另选）`,
-            disabled: true as const,
-          },
-        ]
-      : [];
-    return [...pinnedOption, ...base.map((e) => ({ value: e.id, label: e.name }))];
-  }, [dispatchableEmployees, employees, teamMemberEmployeeIds, watchedEmployeeId]);
+  const watchedDispatchTargetKey = Form.useWatch("dispatchTargetKey", form);
+  const scheduledTaskDispatchSelectOptions = useMemo(() => {
+    const currentKey =
+      typeof watchedDispatchTargetKey === "string" && watchedDispatchTargetKey.trim()
+        ? watchedDispatchTargetKey.trim()
+        : SCHEDULED_TASK_DISPATCH_MAIN;
+    const parsedCurrent = parseScheduledTaskDispatchTargetKey(currentKey);
+    const baseEmployees = dispatchableEmployees.filter((e) => !teamMemberEmployeeIds.has(e.id));
+    const pinnedEmployee =
+      parsedCurrent.type === "employee" &&
+      parsedCurrent.employeeId &&
+      teamMemberEmployeeIds.has(parsedCurrent.employeeId)
+        ? employees.find((e) => e.id === parsedCurrent.employeeId)
+        : undefined;
+    const employeeOptions = [
+      ...(pinnedEmployee
+        ? [
+            {
+              value: scheduledTaskDispatchTargetKey({ employeeId: pinnedEmployee.id }),
+              label: `${pinnedEmployee.name}（已在团队流程中，请改选工作流）`,
+              disabled: true as const,
+            },
+          ]
+        : []),
+      ...baseEmployees.map((e) => ({
+        value: scheduledTaskDispatchTargetKey({ employeeId: e.id }),
+        label: e.name,
+      })),
+    ];
+    const workflowOptions = workflowTemplates.map((wf) => ({
+      value: scheduledTaskDispatchTargetKey({ workflowId: wf.id }),
+      label: wf.name.trim() || wf.id,
+    }));
+    const pinnedWorkflow =
+      parsedCurrent.type === "team" &&
+      parsedCurrent.workflowId &&
+      !workflowTemplates.some((wf) => wf.id === parsedCurrent.workflowId)
+        ? [
+            {
+              value: scheduledTaskDispatchTargetKey({ workflowId: parsedCurrent.workflowId }),
+              label: `${parsedCurrent.workflowId}（工作流已不存在）`,
+              disabled: true as const,
+            },
+          ]
+        : [];
+    return [
+      {
+        label: "Repo 执行会话",
+        options: [{ value: SCHEDULED_TASK_DISPATCH_MAIN, label: "仓库绑定主会话" }],
+      },
+      {
+        label: "执行员工",
+        options: employeeOptions,
+      },
+      {
+        label: "团队 / 工作流",
+        options: [...pinnedWorkflow, ...workflowOptions],
+      },
+    ];
+  }, [
+    dispatchableEmployees,
+    employees,
+    teamMemberEmployeeIds,
+    watchedDispatchTargetKey,
+    workflowTemplates,
+  ]);
 
   const reload = useCallback(async () => {
     const path = repositoryPath.trim();
@@ -124,6 +178,7 @@ export function RepositoryScheduledTasksModal({
       cronExpression: "0 9 * * *",
       contentMarkdown: "",
       employeeId: null,
+      workflowId: null,
       enabled: true,
       createdAt: now,
       updatedAt: now,
@@ -133,7 +188,7 @@ export function RepositoryScheduledTasksModal({
     form.setFieldsValue({
       title: "",
       cronExpression: draft.cronExpression,
-      employeeId: null,
+      dispatchTargetKey: SCHEDULED_TASK_DISPATCH_MAIN,
       enabled: true,
       contentMarkdown: "",
     });
@@ -145,7 +200,7 @@ export function RepositoryScheduledTasksModal({
     form.setFieldsValue({
       title: row.title,
       cronExpression: row.cronExpression,
-      employeeId: row.employeeId?.trim() ? row.employeeId : null,
+      dispatchTargetKey: scheduledTaskDispatchTargetKey(row),
       enabled: row.enabled,
       contentMarkdown: row.contentMarkdown,
     });
@@ -177,9 +232,15 @@ export function RepositoryScheduledTasksModal({
       }
       const isNew = !tasks.some((t) => t.id === editing.id);
       const slot = initialLastScheduledSlotForCron(cron, now);
-      const employeeId = v.employeeId?.trim() ? v.employeeId.trim() : null;
+      const dispatchParsed = parseScheduledTaskDispatchTargetKey(v.dispatchTargetKey);
+      const employeeId = dispatchParsed.employeeId;
+      const workflowId = dispatchParsed.workflowId;
       if (employeeId && teamMemberEmployeeIds.has(employeeId)) {
-        message.error("执行员工不能选择已在团队流程中的员工");
+        message.error("执行员工不能选择已在团队流程中的员工，请改选团队工作流");
+        return;
+      }
+      if (workflowId && !workflowTemplates.some((wf) => wf.id === workflowId)) {
+        message.error("所选团队工作流不存在");
         return;
       }
       if (isNew) {
@@ -189,6 +250,7 @@ export function RepositoryScheduledTasksModal({
           cronExpression: cron,
           contentMarkdown: v.contentMarkdown,
           employeeId,
+          workflowId,
           enabled: v.enabled,
           createdAt: now,
           updatedAt: now,
@@ -207,6 +269,7 @@ export function RepositoryScheduledTasksModal({
           cronExpression: cron,
           contentMarkdown: v.contentMarkdown,
           employeeId,
+          workflowId,
           enabled: v.enabled,
           updatedAt: now,
           lastScheduledSlotAt: resetSlot ? slot ?? prev.lastScheduledSlotAt : prev.lastScheduledSlotAt,
@@ -283,14 +346,19 @@ export function RepositoryScheduledTasksModal({
       },
     },
     {
-      title: "员工",
-      key: "emp",
-      width: 72,
+      title: "执行目标",
+      key: "dispatch",
+      width: 96,
       ellipsis: true,
       render: (_, row) => {
-        if (!row.employeeId) return <Tag>主会话</Tag>;
-        const n = employees.find((e) => e.id === row.employeeId)?.name ?? "—";
-        return <Tag color="blue">{n}</Tag>;
+        const label = formatScheduledTaskDispatchTargetLabel({
+          employeeId: row.employeeId,
+          workflowId: row.workflowId,
+          employeeName: employees.find((e) => e.id === row.employeeId)?.name,
+          workflowName: workflowTemplates.find((wf) => wf.id === row.workflowId)?.name,
+        });
+        const color = row.workflowId ? "purple" : row.employeeId ? "blue" : "default";
+        return <Tag color={color}>{label}</Tag>;
       },
     },
     {
@@ -346,7 +414,7 @@ export function RepositoryScheduledTasksModal({
       >
         <div className="app-scheduled-tasks-modal__toolbar">
           <Typography.Paragraph className="app-scheduled-tasks-modal__hint" style={{ marginBottom: 0 }}>
-            按 Cron 在后台触发：向当前 Repo 绑定的执行会话发起一次与手动「执行」相同的 Claude Code 调用；可选员工子标签。应用需保持运行；执行会话非空闲时本轮跳过。
+            按 Cron 在后台触发：向当前 Repo 绑定的执行会话发起一次与手动「执行」相同的 Claude Code 调用；可指定主会话、员工子标签或团队工作流。应用需保持运行；执行会话非空闲时本轮跳过。
           </Typography.Paragraph>
           <Button type="primary" size="small" icon={<PlusOutlined />} onClick={openCreate}>
             新建
@@ -412,18 +480,20 @@ export function RepositoryScheduledTasksModal({
           </Form.Item>
           <Form.Item
             className="app-scheduled-tasks-drawer__field"
-            name="employeeId"
-            label="执行员工"
+            name="dispatchTargetKey"
+            label="执行目标"
+            rules={[{ required: true, message: "请选择执行目标" }]}
             extra={(
               <span className="app-scheduled-tasks-modal__mono-muted">
-                已参与任意团队流程（阶段指派或画布节点）的员工不可选；请使用 Repo 执行会话或其他员工。
+                可选主会话、独立员工或团队工作流。已参与团队流程画布的员工请改选对应工作流，勿重复选为员工。
               </span>
             )}
           >
             <Select
-              allowClear
-              placeholder="Repo 执行会话（仓库绑定标签）"
-              options={scheduledTaskEmployeeSelectOptions}
+              showSearch
+              optionFilterProp="label"
+              placeholder="仓库绑定主会话"
+              options={scheduledTaskDispatchSelectOptions}
             />
           </Form.Item>
           <Form.Item className="app-scheduled-tasks-drawer__field" name="enabled" label="启用" valuePropName="checked">
@@ -450,7 +520,7 @@ interface MilkdownFormBridgeProps {
   form: FormInstance<{
     title: string;
     cronExpression: string;
-    employeeId: string | null;
+    dispatchTargetKey: string;
     enabled: boolean;
     contentMarkdown: string;
   }>;

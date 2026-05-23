@@ -1,6 +1,6 @@
 import { useEffect, useRef, type MutableRefObject } from "react";
 import { CronExpressionParser } from "cron-parser";
-import type { ClaudeSession, EmployeeItem, PendingExecutionTask, Repository } from "../types";
+import type { ClaudeSession, EmployeeItem, PendingExecutionTask, Repository, WorkflowTemplateItem } from "../types";
 import { buildClaudeOutgoingPrompt } from "../services/claudeComposerPrompt";
 import { patchRepositoryScheduledClaudeTask, readRepositoryScheduledClaudeTasks } from "../services/repositoryScheduledClaudeTasksStore";
 import { resolveBoundMainSessionId, resolveMainOwnerAgentNameForRepositoryPath } from "../utils/repositoryMainSessionBinding";
@@ -13,6 +13,7 @@ interface Params {
   sessionsRef: MutableRefObject<ClaudeSession[]>;
   bindingsRef: MutableRefObject<Record<string, string>>;
   employeesRef: MutableRefObject<EmployeeItem[]>;
+  workflowTemplatesRef: MutableRefObject<WorkflowTemplateItem[]>;
   executeRef: MutableRefObject<
     (
       sessionId: string,
@@ -31,6 +32,7 @@ export function useScheduledClaudeTaskRunner({
   sessionsRef,
   bindingsRef,
   employeesRef,
+  workflowTemplatesRef,
   executeRef,
 }: Params): void {
   const inFlightRef = useRef(false);
@@ -45,6 +47,7 @@ export function useScheduledClaudeTaskRunner({
         const sessions = sessionsRef.current;
         const bindings = bindingsRef.current;
         const employees = employeesRef.current;
+        const workflowTemplates = workflowTemplatesRef.current;
         const execute = executeRef.current;
         const now = Date.now();
 
@@ -127,9 +130,32 @@ export function useScheduledClaudeTaskRunner({
               continue;
             }
 
+            const wfId = task.workflowId?.trim() ?? "";
             const empId = task.employeeId?.trim() ?? "";
-            let dispatch: Pick<PendingExecutionTask, "targetType" | "targetEmployeeName"> | undefined;
-            if (empId) {
+            let dispatch:
+              | Pick<
+                  PendingExecutionTask,
+                  "targetType" | "targetEmployeeName" | "targetWorkflowId" | "targetWorkflowName"
+                >
+              | undefined;
+
+            if (wfId) {
+              const wf = workflowTemplates.find((t) => t.id === wfId);
+              if (!wf) {
+                await patchRepositoryScheduledClaudeTask(repoPath, task.id, {
+                  lastScheduledSlotAt: nextFireMs,
+                  lastExecutedAt: now,
+                  lastExecuteOk: false,
+                  lastExecuteMessage: "所选团队工作流不存在或不可用，已跳过",
+                });
+                continue;
+              }
+              dispatch = {
+                targetType: "team",
+                targetWorkflowId: wf.id,
+                targetWorkflowName: wf.name.trim(),
+              };
+            } else if (empId) {
               const emp = employees.find((e) => e.id === empId && !isOmcMonitorEmployeeRecord(e));
               if (!emp) {
                 await patchRepositoryScheduledClaudeTask(repoPath, task.id, {
@@ -165,5 +191,5 @@ export function useScheduledClaudeTaskRunner({
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [bindingsRef, employeesRef, executeRef, repositoriesRef, sessionsRef]);
+  }, [bindingsRef, employeesRef, executeRef, repositoriesRef, sessionsRef, workflowTemplatesRef]);
 }

@@ -498,8 +498,10 @@ export interface RepositoryScheduledClaudeTask {
   cronExpression: string;
   /** Milkdown 编辑区对应的 Markdown 正文，定时触发时经 `buildClaudeOutgoingPrompt` 发往 CLI */
   contentMarkdown: string;
-  /** 为 null 或空字符串时在仓库绑定主会话执行；否则按员工名分发到员工子标签 */
+  /** 为 null 或空字符串时在仓库绑定主会话执行；否则按员工名分发到员工子标签。与 `workflowId` 互斥。 */
   employeeId: string | null;
+  /** 非空时按团队工作流分发；与 `employeeId` 互斥。 */
+  workflowId?: string | null;
   enabled: boolean;
   createdAt: number;
   updatedAt: number;

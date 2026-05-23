@@ -18,7 +18,7 @@
  * 应用级设置。
  */
 /** Cockpit 叠层内的 Hub 子页（左栏快捷入口与助手 Hub 打开方式一致）。 */
-export type CockpitHubPane = "assistant" | "mcp" | "skills";
+export type CockpitHubPane = "assistant" | "mcp" | "skills" | "automation";
 
 export const DEFAULT_COCKPIT_HUB_PANE: CockpitHubPane = "assistant";
 

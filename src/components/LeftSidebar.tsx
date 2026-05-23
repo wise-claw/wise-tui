@@ -70,6 +70,8 @@ export function LeftSidebar({
   onOpenMcpHub,
   skillsHubActive = false,
   onOpenSkillsHub,
+  automationHubActive = false,
+  onOpenAutomationHub,
   workspaceCreateRequest,
   standaloneRepoAddRequest,
   onProjectSelect,
@@ -516,9 +518,11 @@ export function LeftSidebar({
         assistantHubActive={assistantHubActive}
         mcpHubActive={mcpHubActive}
         skillsHubActive={skillsHubActive}
+        automationHubActive={automationHubActive}
         onOpenAssistantHub={onOpenAssistantHub}
         onOpenMcpHub={onOpenMcpHub}
         onOpenSkillsHub={onOpenSkillsHub}
+        onOpenAutomationHub={onOpenAutomationHub}
       />
 
       <div

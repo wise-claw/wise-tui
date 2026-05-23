@@ -40,6 +40,8 @@ export interface LeftSidebarProps {
   onOpenMcpHub?: () => void;
   skillsHubActive?: boolean;
   onOpenSkillsHub?: () => void;
+  automationHubActive?: boolean;
+  onOpenAutomationHub?: () => void;
   workspaceCreateRequest?: number;
   standaloneRepoAddRequest?: number;
   onProjectSelect: (projectId: string) => void;

@@ -1,13 +1,15 @@
 import type { ReactNode } from "react";
-import { ChatIcon, McpNavIcon, SkillsNavIcon } from "./SidebarIcons";
+import { ChatIcon, McpNavIcon, SkillsNavIcon, AutomationNavIcon } from "./SidebarIcons";
 
 export interface LeftSidebarHubQuickEntriesProps {
   assistantHubActive?: boolean;
   mcpHubActive?: boolean;
   skillsHubActive?: boolean;
+  automationHubActive?: boolean;
   onOpenAssistantHub?: () => void;
   onOpenMcpHub?: () => void;
   onOpenSkillsHub?: () => void;
+  onOpenAutomationHub?: () => void;
 }
 
 interface HubQuickEntry {
@@ -45,9 +47,11 @@ export function LeftSidebarHubQuickEntries({
   assistantHubActive = false,
   mcpHubActive = false,
   skillsHubActive = false,
+  automationHubActive = false,
   onOpenAssistantHub,
   onOpenMcpHub,
   onOpenSkillsHub,
+  onOpenAutomationHub,
 }: LeftSidebarHubQuickEntriesProps) {
   const entries: HubQuickEntry[] = [];
 
@@ -76,6 +80,15 @@ export function LeftSidebarHubQuickEntries({
       icon: <ChatIcon />,
       active: assistantHubActive,
       onClick: onOpenAssistantHub,
+    });
+  }
+  if (onOpenAutomationHub) {
+    entries.push({
+      key: "automation",
+      label: "自动化",
+      icon: <AutomationNavIcon />,
+      active: automationHubActive,
+      onClick: onOpenAutomationHub,
     });
   }
 

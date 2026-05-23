@@ -133,6 +133,16 @@ export function SkillsNavIcon() {
   );
 }
 
+export function AutomationNavIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <circle cx="8" cy="8.5" r="5.25" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M8 5.75v3l2 1.15" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5.5 2.5h5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 /** 左栏「工作流」入口：与 Claude Code 团队编排画布语义一致 */
 export function WorkflowStudioNavIcon() {
   return (

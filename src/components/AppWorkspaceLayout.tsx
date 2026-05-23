@@ -35,6 +35,7 @@ import { ProgressMonitorDrawer } from "./ProgressMonitorDrawer";
 import { RepositoryFileEditorPanel } from "./RepositoryFileEditorPanel";
 import { RepositoryFilePreviewModal } from "./RepositoryFilePreviewModal";
 import { SkillsHub } from "./SkillsHub";
+import { AutomationPanel } from "./AutomationPanel";
 import type * as PrdTaskSplitPanelModule from "./PrdTaskSplitPanel";
 import { resolveCockpitHubPane, type InspectTool, type ViewMode } from "../types/viewMode";
 import type { OpenRepositoryFileDetail } from "../constants/workflowUiEvents";
@@ -737,6 +738,8 @@ export function AppWorkspaceLayout({
                           <McpHub {...mcpHubProps} />
                         ) : cockpitHubPane === "skills" ? (
                           <SkillsHub {...skillsHubProps} />
+                        ) : cockpitHubPane === "automation" ? (
+                          <AutomationPanel {...authorPanelProps.automationPanelProps} />
                         ) : (
                           <Suspense fallback={<PanelLoadingFallback />}>
                             <CockpitSurface

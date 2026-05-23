@@ -658,6 +658,8 @@ export default function App() {
 
   const employeesLatestRef = useRef(employees);
   employeesLatestRef.current = employees;
+  const workflowTemplatesLatestRef = useRef(workflowTemplates);
+  workflowTemplatesLatestRef.current = workflowTemplates;
 
   /** 监控侧栏 / Drawer 用：与主会话流式更新解耦，避免 `useMonitorOverview` 等巨型 memo 同频重算卡死主线程 */
   const sessionsSyncedForMonitorUi = useIntervalSyncedState(
@@ -898,6 +900,7 @@ export default function App() {
     sessionsRef: sessionsLatestRef,
     bindingsRef: repositoryMainBindingsLatestRef,
     employeesRef: employeesLatestRef,
+    workflowTemplatesRef: workflowTemplatesLatestRef,
     executeRef: handleComposerExecuteRef,
   });
 
@@ -1180,6 +1183,10 @@ export default function App() {
   const openSkillsHubFromSidebar = useCallback(() => {
     setSearchOpen(false);
     viewMode.enter(cockpitView(undefined, "skills"));
+  }, [viewMode]);
+  const openAutomationHubFromSidebar = useCallback(() => {
+    setSearchOpen(false);
+    viewMode.enter(cockpitView(undefined, "automation"));
   }, [viewMode]);
   const openBuiltinAssistant = useCallback((assistantId: string) => {
     const trimmed = assistantId.trim();
@@ -2285,6 +2292,8 @@ export default function App() {
         onOpenMcpHub: openMcpHubFromSidebar,
         skillsHubActive: viewMode.view.kind === "cockpit" && viewMode.view.hubPane === "skills",
         onOpenSkillsHub: openSkillsHubFromSidebar,
+        automationHubActive: viewMode.view.kind === "cockpit" && viewMode.view.hubPane === "automation",
+        onOpenAutomationHub: openAutomationHubFromSidebar,
         workspaceCreateRequest,
         standaloneRepoAddRequest,
         onProjectSelect: handleProjectSelectLeavingMcpHub,
