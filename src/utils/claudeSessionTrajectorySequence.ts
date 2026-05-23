@@ -1,4 +1,10 @@
 import type { ClaudeMessage, MessagePart, TextPart, ToolUsePart } from "../types";
+import type { ClaudeLlmProxyRecord } from "../services/claudeLlmProxy";
+import type { FccTraceEntry } from "../types/fccTrace";
+import {
+  enrichSequenceEventsWithObservedHttp,
+  INFERRED_HTTP_DETAIL_PLACEHOLDER,
+} from "./sequenceEventHttpEnrichment";
 import { unwrapClaudeStreamLineRoot } from "../notifications/streamIngest";
 import { isToolOnlyUserMessage, userMessagePlainTextForDisplay } from "./claudeChatMessageDisplay";
 
@@ -43,6 +49,8 @@ export interface SequenceEvent {
     longGap?: boolean;
     /** 关键节点（轮次首条、错误、首条工具链） */
     key?: boolean;
+    /** FCC / LLM 代理等真实 HTTP 观测（非工具结果后的推断占位） */
+    observedHttp?: boolean;
   };
   /** 子代理 Task 工具下钻 */
   drilldown?: {
@@ -294,9 +302,9 @@ export function buildSequenceEventsFromMessages(messages: readonly ClaudeMessage
     }
 
     if (msg.role === "assistant") {
-      const prevIsToolUser =
-        prev !== null && prev.role === "user" && isToolOnlyUserMessage(prev);
-      if (prevIsToolUser) {
+      const prevIsUser = prev !== null && prev.role === "user";
+      if (prevIsUser) {
+        const prevIsToolUser = isToolOnlyUserMessage(prev!);
         push({
           id: `api-${msg.id}`,
           timestamp: ts - 0.5,
@@ -304,7 +312,8 @@ export function buildSequenceEventsFromMessages(messages: readonly ClaudeMessage
           fromLane: "claude_code",
           toLane: "model",
           label: "REQUEST",
-          subtitle: "携带工具结果发起模型请求",
+          subtitle: prevIsToolUser ? "携带工具结果发起模型请求" : "发起模型请求",
+          detail: undefined,
           messageId: msg.id,
           flags: { key: true },
         });
@@ -424,6 +433,69 @@ export function mergeSequenceEventsByTime(a: readonly SequenceEvent[], b: readon
   return annotateSequenceEvents(merged);
 }
 
+/** 将 FCC HTTP trace 转为模型泳道「接口」事件（`observedHttp`）。 */
+export function buildSequenceEventsFromFccTraces(entries: readonly FccTraceEntry[]): SequenceEvent[] {
+  const events: SequenceEvent[] = [];
+  let order = 2_000_000;
+  for (const entry of entries) {
+    order += 1;
+    const method = (entry.method?.trim() || "POST").toUpperCase();
+    const path = entry.path?.trim() || "/v1/messages";
+    const status = entry.statusCode != null ? String(entry.statusCode) : "";
+    const duration = entry.durationMs != null ? `${entry.durationMs}ms` : "";
+    const model = entry.model?.trim() ?? "";
+    const subtitleParts = [
+      `${method} ${path}`,
+      status || undefined,
+      duration || undefined,
+      model ? `model: ${model}` : undefined,
+    ].filter(Boolean) as string[];
+    const detail = [
+      model ? `model: ${model}` : "",
+      entry.anthropicRequestId?.trim() ? `request-id: ${entry.anthropicRequestId}` : "",
+      entry.requestPreview?.trim() ? `request:\n${entry.requestPreview}` : "",
+      entry.responsePreview?.trim() ? `response:\n${entry.responsePreview}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n\n---\n\n");
+
+    events.push({
+      id: `fcc-api-${entry.id}`,
+      order,
+      timestamp: entry.timestampMs,
+      kind: "api_request",
+      fromLane: "claude_code",
+      toLane: "model",
+      label: "REQUEST",
+      subtitle: subtitleParts.join(" · ") || "FCC HTTP",
+      detail: detail || undefined,
+      flags: { key: true, observedHttp: true },
+    });
+  }
+  return events;
+}
+
+/** 同时间窗已有真实 HTTP 时移除推断的 `api_request` 占位。 */
+export function suppressInferredApiRequestsWhenObserved(events: readonly SequenceEvent[]): SequenceEvent[] {
+  const observedTs: number[] = [];
+  for (const e of events) {
+    if (e.kind === "api_request" && e.flags.observedHttp) {
+      observedTs.push(e.timestamp);
+    }
+  }
+  if (observedTs.length === 0) return [...events];
+  const windowMs = 120_000;
+  return events.filter((e) => {
+    if (e.kind !== "api_request" || e.flags.observedHttp) return true;
+    return !observedTs.some((t) => Math.abs(e.timestamp - t) <= windowMs);
+  });
+}
+
+export interface BuildTrajectorySequenceOptions {
+  fccTraces?: readonly FccTraceEntry[];
+  llmProxyRecords?: readonly ClaudeLlmProxyRecord[];
+}
+
 export function annotateSequenceEvents(events: readonly SequenceEvent[]): SequenceEvent[] {
   const copy = events.map((e) => ({ ...e, flags: { ...e.flags } }));
   const toolKeyHistory = new Map<string, number>();
@@ -470,12 +542,39 @@ export function annotateSequenceEvents(events: readonly SequenceEvent[]): Sequen
   return copy;
 }
 
-/** 合并内存消息与磁盘 JSONL 补充后统一标注（对外主入口）。 */
+/** 合并内存消息与磁盘 JSONL / FCC trace 后统一标注（对外主入口）。 */
 export function buildTrajectorySequenceModel(
   messages: readonly ClaudeMessage[],
   supplementalLines?: readonly string[] | null,
+  options?: BuildTrajectorySequenceOptions,
 ): SequenceEvent[] {
-  const base = buildSequenceEventsFromMessages(messages);
-  if (!supplementalLines?.length) return annotateSequenceEvents(base);
-  return mergeSequenceEventsByTime(base, parseTrajectoryJsonlSupplemental(supplementalLines));
+  let events = buildSequenceEventsFromMessages(messages);
+  if (supplementalLines?.length) {
+    events = mergeSequenceEventsByTime(events, parseTrajectoryJsonlSupplemental(supplementalLines));
+  } else {
+    events = annotateSequenceEvents(events);
+  }
+  const fcc = options?.fccTraces ?? [];
+  const llm = options?.llmProxyRecords ?? [];
+  if (fcc.length > 0 || llm.length > 0) {
+    const enriched = enrichSequenceEventsWithObservedHttp(events, {
+      fccTraces: fcc.length > 0 ? fcc : undefined,
+      llmProxyRecords: llm.length > 0 ? llm : undefined,
+    });
+    events = enriched.events;
+    if (enriched.unusedFccTraces.length > 0) {
+      events = mergeSequenceEventsByTime(events, buildSequenceEventsFromFccTraces(enriched.unusedFccTraces));
+    }
+    events = suppressInferredApiRequestsWhenObserved(events);
+  }
+
+  events = events.map((e) => {
+    if (e.kind !== "api_request" || e.flags.observedHttp || e.detail?.trim()) return e;
+    return {
+      ...e,
+      detail: INFERRED_HTTP_DETAIL_PLACEHOLDER,
+    };
+  });
+
+  return events;
 }

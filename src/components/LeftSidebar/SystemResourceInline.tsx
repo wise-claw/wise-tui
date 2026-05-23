@@ -1,5 +1,6 @@
 import { Button, Drawer, Empty, Popover, Space, Tag } from "antd";
 import type { ClaudeHostProcess, ClaudeSession, ClaudeSessionInfo } from "../../types";
+import type { ClaudeProcessWorkspaceLabelCacheHandle } from "../../hooks/useClaudeProcessWorkspaceLabelCache";
 import { formatBytes } from "./systemSessions";
 import {
   HostProcessSessionDetails,
@@ -30,6 +31,7 @@ interface SystemResourceInlineProps {
   repositories: Repository[];
   repositoryMainSessionBindings: Record<string, string>;
   claudeProcesses: ClaudeHostProcess[];
+  claudeProcessLabelCache?: ClaudeProcessWorkspaceLabelCacheHandle;
   /** 与 `claude:` 内存同源：`ps` 扫描到的 Claude 相关进程数 */
   claudeProcessCount: number;
   onSelectSession: (sessionId: string) => void;
@@ -62,6 +64,7 @@ export function SystemResourceInline({
   repositories,
   repositoryMainSessionBindings,
   claudeProcesses,
+  claudeProcessLabelCache,
   claudeProcessCount,
   onSelectSession,
   drawerTitle,
@@ -104,6 +107,7 @@ export function SystemResourceInline({
                     repositories={repositories}
                     repositoryMainSessionBindings={repositoryMainSessionBindings}
                     claudeProcesses={claudeProcesses}
+                    claudeProcessLabelCache={claudeProcessLabelCache}
                     emptyDescription={
                       searchValue.trim()
                         ? "未找到匹配进程"

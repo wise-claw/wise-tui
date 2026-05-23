@@ -8,18 +8,30 @@ import {
 export function useWiseTopbarChromeVisibility(): {
   showLlmProxyTopbar: boolean;
   showFccTopbar: boolean;
+  showSessionDataLinkTopbar: boolean;
 } {
   const [showLlmProxyTopbar, setShowLlmProxyTopbar] = useState(false);
   const [showFccTopbar, setShowFccTopbar] = useState(true);
+  const [showSessionDataLinkTopbar, setShowSessionDataLinkTopbar] = useState(false);
 
-  const apply = useCallback((next: { showLlmProxyTopbar?: boolean; showFccTopbar?: boolean }) => {
-    if (typeof next.showLlmProxyTopbar === "boolean") {
-      setShowLlmProxyTopbar(next.showLlmProxyTopbar);
-    }
-    if (typeof next.showFccTopbar === "boolean") {
-      setShowFccTopbar(next.showFccTopbar);
-    }
-  }, []);
+  const apply = useCallback(
+    (next: {
+      showLlmProxyTopbar?: boolean;
+      showFccTopbar?: boolean;
+      showSessionDataLinkTopbar?: boolean;
+    }) => {
+      if (typeof next.showLlmProxyTopbar === "boolean") {
+        setShowLlmProxyTopbar(next.showLlmProxyTopbar);
+      }
+      if (typeof next.showFccTopbar === "boolean") {
+        setShowFccTopbar(next.showFccTopbar);
+      }
+      if (typeof next.showSessionDataLinkTopbar === "boolean") {
+        setShowSessionDataLinkTopbar(next.showSessionDataLinkTopbar);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -27,8 +39,13 @@ export function useWiseTopbarChromeVisibility(): {
       if (!cancelled) apply(loaded);
     });
     const onChanged = (event: Event) => {
-      const detail = (event as CustomEvent<{ showLlmProxyTopbar?: boolean; showFccTopbar?: boolean }>)
-        .detail;
+      const detail = (
+        event as CustomEvent<{
+          showLlmProxyTopbar?: boolean;
+          showFccTopbar?: boolean;
+          showSessionDataLinkTopbar?: boolean;
+        }>
+      ).detail;
       if (detail) apply(detail);
     };
     window.addEventListener(WISE_TOPBAR_CHROME_DEFAULT_CHANGED, onChanged);
@@ -38,5 +55,5 @@ export function useWiseTopbarChromeVisibility(): {
     };
   }, [apply]);
 
-  return { showLlmProxyTopbar, showFccTopbar };
+  return { showLlmProxyTopbar, showFccTopbar, showSessionDataLinkTopbar };
 }

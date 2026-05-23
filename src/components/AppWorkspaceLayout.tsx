@@ -19,6 +19,7 @@ import zhCN from "antd/locale/zh_CN";
 import { AuthorPanel } from "./AuthorPanel/AuthorPanel";
 import { AuthorPanelNav } from "./AuthorPanel/AuthorPanelNav";
 import { ClaudeSessions, Topbar } from "./ClaudeSessions";
+import { resolveWorkspaceMainSession } from "../utils/resolveWorkspaceMainSession";
 import { CockpitOnboarding, type CockpitOnboardingProps } from "./Cockpit";
 import {
   WorkspaceWelcomeLanding,
@@ -398,6 +399,28 @@ export function AppWorkspaceLayout({
 }: AppWorkspaceLayoutProps) {
   const algorithm = dark ? theme.darkAlgorithm : theme.defaultAlgorithm;
 
+  const mainSessionForDataLink = useMemo(
+    () =>
+      resolveWorkspaceMainSession({
+        sessions: claudeSessionsProps.sessions,
+        bindings: claudeSessionsProps.repositoryMainBindings ?? {},
+        repositories: claudeSessionsProps.repositories ?? [],
+        activeRepository: claudeSessionsProps.activeRepository,
+        activeProject: claudeSessionsProps.activeProject,
+        activeWorkspaceFocus: claudeSessionsProps.activeWorkspaceFocus,
+        activeSessionId: claudeSessionsProps.activeSessionId,
+      }),
+    [
+      claudeSessionsProps.sessions,
+      claudeSessionsProps.repositoryMainBindings,
+      claudeSessionsProps.repositories,
+      claudeSessionsProps.activeRepository,
+      claudeSessionsProps.activeProject,
+      claudeSessionsProps.activeWorkspaceFocus,
+      claudeSessionsProps.activeSessionId,
+    ],
+  );
+
   /**
    * 旧布尔派生：本组件保留按 ViewMode 内部派生的旧布尔语义（与 P0 阶段
    * `viewMode.legacy.*` 完全等价），用于驱动主屏分支与叠层渲染。AppImpl 不再
@@ -594,6 +617,7 @@ export function AppWorkspaceLayout({
                         activeWorkspaceFocus={claudeSessionsProps.activeWorkspaceFocus}
                         activeRepository={claudeSessionsProps.activeRepository}
                         activeSessionRepositoryPath={claudeSessionsProps.activeRepository?.path}
+                        mainSessionForDataLink={mainSessionForDataLink}
                         onToggleSidebar={claudeSessionsProps.onToggleSidebar}
                         onToggleRightPanel={claudeSessionsProps.onToggleRightPanel}
                         rightPanelDefaultCollapsed={claudeSessionsProps.rightPanelDefaultCollapsed}

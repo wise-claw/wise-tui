@@ -17,7 +17,9 @@ import { ClaudeChat } from "./ClaudeChat";
 import { DingTalkStreamGatewayTopbarSwitch } from "../DingTalkStreamGatewayTopbarSwitch";
 import { OpenAppMenu } from "../OpenAppMenu";
 import { FccTopbarTrigger } from "./FccTopbarTrigger";
+import { FccTrafficTopbarTrigger } from "./FccTrafficTopbarTrigger";
 import { LlmProxyTopbarTrigger } from "./LlmProxyTopbarTrigger";
+import { SessionDataLinkTopbarTrigger } from "./SessionDataLinkTopbarTrigger";
 import {
   DEFAULT_OPEN_APP_ID,
 } from "../OpenAppMenu/constants";
@@ -32,6 +34,7 @@ import {
   resolveMainOwnerAgentNameForRepositoryPath,
   resolveRepositoryForSession,
 } from "../../utils/repositoryMainSessionBinding";
+import { resolveWorkspaceMainSession } from "../../utils/resolveWorkspaceMainSession";
 import { loadSessionOwnerHints } from "../../utils/sessionOwnerHints";
 import type { WorkspaceMode, WorkspaceFocus } from "../../utils/workspaceMode";
 import "./index.css";
@@ -327,6 +330,8 @@ export interface TopbarProps {
   activeWorkspaceFocus?: WorkspaceFocus;
   activeRepository?: Repository;
   activeSessionRepositoryPath?: string;
+  /** 当前项目/仓库主会话；全链路分析固定分析此会话，非活动标签 */
+  mainSessionForDataLink?: ClaudeSession | null;
   onToggleSidebar?: () => void;
   onToggleRightPanel?: () => void;
   rightPanelDefaultCollapsed?: boolean;
@@ -347,6 +352,7 @@ export function Topbar({
   activeWorkspaceFocus = "repository",
   activeRepository,
   activeSessionRepositoryPath,
+  mainSessionForDataLink = null,
   onToggleSidebar,
   onToggleRightPanel,
   rightPanelDefaultCollapsed = false,
@@ -771,10 +777,14 @@ export function Topbar({
           />
         )}
         {activeRepository && topbarChrome.showFccTopbar ? <FccTopbarTrigger /> : null}
+        {activeRepository && topbarChrome.showFccTopbar ? <FccTrafficTopbarTrigger /> : null}
         {activeRepository && topbarChrome.showLlmProxyTopbar ? (
           <LlmProxyTopbarTrigger
             repositoryPath={activeSessionRepositoryPath?.trim() || activeRepository.path}
           />
+        ) : null}
+        {activeRepository && topbarChrome.showSessionDataLinkTopbar ? (
+          <SessionDataLinkTopbarTrigger mainSession={mainSessionForDataLink} />
         ) : null}
         {onSearch && (
           <TopbarBtn icon={<IconSearch />} label="搜索文件 (Cmd+K)" onClick={onSearch} />
@@ -1358,6 +1368,28 @@ export function ClaudeSessions({
   const [pendingCollapseNotificationForSessionId, setPendingCollapseNotificationForSessionId] = useState<
     string | null
   >(null);
+  const mainSessionForDataLink = useMemo(
+    () =>
+      resolveWorkspaceMainSession({
+        sessions: incomingSessions,
+        bindings: repositoryMainBindings,
+        repositories: repositories ?? [],
+        activeRepository,
+        activeProject,
+        activeWorkspaceFocus,
+        activeSessionId,
+      }),
+    [
+      incomingSessions,
+      repositoryMainBindings,
+      repositories,
+      activeRepository,
+      activeProject,
+      activeWorkspaceFocus,
+      activeSessionId,
+    ],
+  );
+
   const activeSessionWorkflowTasks = useMemo(
     () => workflowTasks.filter((task) => task.creator === activeSession?.id),
     [workflowTasks, activeSession?.id],
@@ -1487,6 +1519,7 @@ export function ClaudeSessions({
           activeWorkspaceFocus={activeWorkspaceFocus}
           activeRepository={activeRepository}
           activeSessionRepositoryPath={activeRepository?.path}
+          mainSessionForDataLink={mainSessionForDataLink}
           onToggleSidebar={onToggleSidebar}
           onToggleRightPanel={onToggleRightPanel}
           rightPanelDefaultCollapsed={rightPanelDefaultCollapsed}

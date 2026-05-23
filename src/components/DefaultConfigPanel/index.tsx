@@ -74,7 +74,7 @@ export function DefaultConfigPanel() {
           <div className="app-default-config-row__main">
             <span className="app-default-config-row__title">FCC 顶栏图标</span>
             <span className="app-default-config-row__hint">
-              控制主会话顶栏 Free Claude Code 入口；点击图标进行安装、启停与同步
+              控制主会话顶栏 Free Claude Code 服务与「FCC 请求流量」两个入口
             </span>
           </div>
           <div className="app-default-config-row__control">
@@ -111,6 +111,29 @@ export function DefaultConfigPanel() {
               ]}
               onChange={(value) => {
                 void topbarChrome.saveLlmProxy(value === "visible");
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="app-default-config-row" aria-label="全链路分析图标">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">全链路分析</span>
+            <span className="app-default-config-row__hint">
+              控制主会话顶栏会话全链路分析入口；默认不显示
+            </span>
+          </div>
+          <div className="app-default-config-row__control">
+            <DefaultConfigOptionPick<"hidden" | "visible">
+              aria-label="全链路分析顶栏显示"
+              disabled={topbarChrome.loading || topbarChrome.saving}
+              value={topbarChrome.showSessionDataLinkTopbar ? "visible" : "hidden"}
+              options={[
+                { label: "不显示", value: "hidden" },
+                { label: "显示", value: "visible" },
+              ]}
+              onChange={(value) => {
+                void topbarChrome.saveSessionDataLink(value === "visible");
               }}
             />
           </div>

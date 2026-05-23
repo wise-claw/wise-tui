@@ -27,7 +27,6 @@
   max-width: min(94vw, 440px);
 }
 
-/* Ant Design 6：卡片背景与默认 padding 在 container / content，非 ant-popover-inner */
 .app-fcc-topbar-popover .ant-popover-container {
   padding: 0 !important;
   overflow: hidden;
@@ -41,7 +40,6 @@
   max-width: 100%;
 }
 
-/* 覆盖 App.css 全局 .ant-popover-inner-content（若仍命中） */
 .app-fcc-topbar-popover .ant-popover-inner-content {
   padding: 0 !important;
 }

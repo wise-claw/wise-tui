@@ -4429,6 +4429,7 @@ export function ClaudeChat({
         open={workTrajectoryDrawerOpen}
         onClose={() => setWorkTrajectoryDrawerOpen(false)}
         messages={session.messages}
+        wiseTabSessionId={session.id}
         repositoryPath={session.repositoryPath}
         claudeSessionId={session.claudeSessionId}
         diskTranscriptPartial={session.diskTranscriptPartial}

@@ -36,6 +36,8 @@ export interface WiseDefaultConfigV1 {
   showLlmProxyTopbar: boolean;
   /** 主会话顶栏 Free Claude Code 图标；默认显示。 */
   showFccTopbar: boolean;
+  /** 主会话顶栏全链路分析图标；默认隐藏。 */
+  showSessionDataLinkTopbar: boolean;
 }
 
 const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
@@ -44,6 +46,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   rightPanelDefaultCollapsed: RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK,
   showLlmProxyTopbar: false,
   showFccTopbar: true,
+  showSessionDataLinkTopbar: false,
 };
 
 function normalizeBoolean(raw: unknown, fallback = false): boolean {
@@ -84,6 +87,7 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
         parsed.showFccTopbar === undefined
           ? DEFAULT_CONFIG.showFccTopbar
           : normalizeBoolean(parsed.showFccTopbar),
+      showSessionDataLinkTopbar: normalizeBoolean(parsed.showSessionDataLinkTopbar),
     };
   } catch {
     return null;
@@ -144,7 +148,10 @@ function dispatchRightPanelDefaultChanged(collapsed: boolean): void {
 }
 
 function dispatchTopbarChromeDefaultChanged(
-  config: Pick<WiseDefaultConfigV1, "showLlmProxyTopbar" | "showFccTopbar">,
+  config: Pick<
+    WiseDefaultConfigV1,
+    "showLlmProxyTopbar" | "showFccTopbar" | "showSessionDataLinkTopbar"
+  >,
 ): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
@@ -152,6 +159,7 @@ function dispatchTopbarChromeDefaultChanged(
       detail: {
         showLlmProxyTopbar: config.showLlmProxyTopbar,
         showFccTopbar: config.showFccTopbar,
+        showSessionDataLinkTopbar: config.showSessionDataLinkTopbar,
       },
     }),
   );
@@ -181,6 +189,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
       rightPanelDefaultCollapsed ?? DEFAULT_CONFIG.rightPanelDefaultCollapsed,
     showLlmProxyTopbar: DEFAULT_CONFIG.showLlmProxyTopbar,
     showFccTopbar: DEFAULT_CONFIG.showFccTopbar,
+    showSessionDataLinkTopbar: DEFAULT_CONFIG.showSessionDataLinkTopbar,
   };
 }
 
@@ -218,7 +227,11 @@ export async function saveWiseDefaultConfig(
   patch: Partial<
     Pick<
       WiseDefaultConfigV1,
-      "connectionKind" | "rightPanelDefaultCollapsed" | "showLlmProxyTopbar" | "showFccTopbar"
+      | "connectionKind"
+      | "rightPanelDefaultCollapsed"
+      | "showLlmProxyTopbar"
+      | "showFccTopbar"
+      | "showSessionDataLinkTopbar"
     >
   >,
 ): Promise<WiseDefaultConfigV1> {
@@ -230,6 +243,8 @@ export async function saveWiseDefaultConfig(
       patch.rightPanelDefaultCollapsed ?? current.rightPanelDefaultCollapsed,
     showLlmProxyTopbar: patch.showLlmProxyTopbar ?? current.showLlmProxyTopbar,
     showFccTopbar: patch.showFccTopbar ?? current.showFccTopbar,
+    showSessionDataLinkTopbar:
+      patch.showSessionDataLinkTopbar ?? current.showSessionDataLinkTopbar,
   };
   if (patch.connectionKind !== undefined) {
     next.connectionKind = normalizeConnectionKind(patch.connectionKind) ?? current.connectionKind;
@@ -239,6 +254,9 @@ export async function saveWiseDefaultConfig(
   }
   if (patch.showFccTopbar !== undefined) {
     next.showFccTopbar = normalizeBoolean(patch.showFccTopbar);
+  }
+  if (patch.showSessionDataLinkTopbar !== undefined) {
+    next.showSessionDataLinkTopbar = normalizeBoolean(patch.showSessionDataLinkTopbar);
   }
   await persistConfig(next);
   await deleteLegacyAppSettings();
@@ -253,14 +271,20 @@ export async function saveWiseDefaultConfig(
   ) {
     dispatchRightPanelDefaultChanged(next.rightPanelDefaultCollapsed);
   }
-  if (patch.showLlmProxyTopbar !== undefined || patch.showFccTopbar !== undefined) {
+  if (
+    patch.showLlmProxyTopbar !== undefined ||
+    patch.showFccTopbar !== undefined ||
+    patch.showSessionDataLinkTopbar !== undefined
+  ) {
     if (
       next.showLlmProxyTopbar !== current.showLlmProxyTopbar ||
-      next.showFccTopbar !== current.showFccTopbar
+      next.showFccTopbar !== current.showFccTopbar ||
+      next.showSessionDataLinkTopbar !== current.showSessionDataLinkTopbar
     ) {
       dispatchTopbarChromeDefaultChanged({
         showLlmProxyTopbar: next.showLlmProxyTopbar,
         showFccTopbar: next.showFccTopbar,
+        showSessionDataLinkTopbar: next.showSessionDataLinkTopbar,
       });
     }
   }
@@ -298,17 +322,23 @@ export const loadRightPanelDefaultCollapsed = loadRightPanelDefaultCollapsedFrom
 export const saveRightPanelDefaultCollapsed = saveRightPanelDefaultCollapsedToStore;
 
 export async function loadTopbarChromeDefaultsFromStore(): Promise<
-  Pick<WiseDefaultConfigV1, "showLlmProxyTopbar" | "showFccTopbar">
+  Pick<
+    WiseDefaultConfigV1,
+    "showLlmProxyTopbar" | "showFccTopbar" | "showSessionDataLinkTopbar"
+  >
 > {
   const config = await loadWiseDefaultConfig();
   return {
     showLlmProxyTopbar: config.showLlmProxyTopbar,
     showFccTopbar: config.showFccTopbar,
+    showSessionDataLinkTopbar: config.showSessionDataLinkTopbar,
   };
 }
 
 export async function saveTopbarChromeDefaultsToStore(
-  patch: Partial<Pick<WiseDefaultConfigV1, "showLlmProxyTopbar" | "showFccTopbar">>,
+  patch: Partial<
+    Pick<WiseDefaultConfigV1, "showLlmProxyTopbar" | "showFccTopbar" | "showSessionDataLinkTopbar">
+  >,
 ): Promise<void> {
   await saveWiseDefaultConfig(patch);
 }

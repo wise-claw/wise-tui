@@ -1,12 +1,15 @@
 import { describe, expect, it } from "bun:test";
 import {
   annotateSequenceEvents,
+  buildSequenceEventsFromFccTraces,
   buildSequenceEventsFromMessages,
   buildTrajectorySequenceModel,
   mergeSequenceEventsByTime,
   parseTrajectoryJsonlSupplemental,
+  suppressInferredApiRequestsWhenObserved,
 } from "./claudeSessionTrajectorySequence";
 import type { ClaudeMessage } from "../types";
+import type { FccTraceEntry } from "../types/fccTrace";
 
 describe("claudeSessionTrajectorySequence", () => {
   it("builds API_REQUEST after tool-only user before assistant", () => {
@@ -72,6 +75,73 @@ describe("claudeSessionTrajectorySequence", () => {
     expect(ev[0]!.kind).toBe("hook");
     expect(ev[0]!.fromLane).toBe("claude_code");
     expect(ev[0]!.toLane).toBe("claude_code");
+  });
+
+  it("adds api_request after plain user before assistant", () => {
+    const messages: ClaudeMessage[] = [
+      { id: 1, role: "user", content: "你在干什么", parts: [{ type: "text", text: "你在干什么" }], timestamp: 1000 },
+      {
+        id: 2,
+        role: "assistant",
+        content: "待命",
+        parts: [{ type: "text", text: "待命" }],
+        timestamp: 2000,
+      },
+    ];
+    const ev = buildSequenceEventsFromMessages(messages);
+    const api = ev.find((e) => e.kind === "api_request");
+    expect(api).toBeDefined();
+    expect(api?.messageId).toBe(2);
+  });
+
+  it("merges FCC trace as observed api_request on model lane", () => {
+    const messages: ClaudeMessage[] = [
+      { id: 1, role: "user", content: "hi", parts: [{ type: "text", text: "hi" }], timestamp: 1000 },
+      {
+        id: 2,
+        role: "assistant",
+        content: "hello",
+        parts: [{ type: "text", text: "hello" }],
+        timestamp: 2000,
+      },
+    ];
+    const fcc: FccTraceEntry[] = [
+      {
+        id: "t1",
+        timestampMs: 1500,
+        method: "POST",
+        path: "/v1/messages",
+        statusCode: 200,
+        durationMs: 120,
+      },
+    ];
+    const merged = buildTrajectorySequenceModel(messages, undefined, { fccTraces: fcc });
+    const http = merged.filter((e) => e.kind === "api_request");
+    expect(http.length).toBe(1);
+    expect(http[0]!.flags.observedHttp).toBe(true);
+    expect(http[0]!.fromLane).toBe("claude_code");
+    expect(http[0]!.toLane).toBe("model");
+  });
+
+  it("suppresses inferred api_request near observed FCC trace", () => {
+    const observed = buildSequenceEventsFromFccTraces([
+      { id: "a", timestampMs: 3000, method: "POST", path: "/v1/messages" },
+    ]);
+    const inferred: ReturnType<typeof buildSequenceEventsFromMessages> = [
+      {
+        id: "api-4",
+        order: 10,
+        timestamp: 3001,
+        kind: "api_request",
+        fromLane: "claude_code",
+        toLane: "model",
+        label: "REQUEST",
+        flags: {},
+      },
+    ];
+    const out = suppressInferredApiRequestsWhenObserved([...inferred, ...observed]);
+    expect(out.some((e) => e.kind === "api_request" && !e.flags.observedHttp)).toBe(false);
+    expect(out.some((e) => e.flags.observedHttp)).toBe(true);
   });
 
   it("merges messages with supplemental", () => {

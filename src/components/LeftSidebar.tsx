@@ -42,6 +42,7 @@ import { useSidebarScheduledTasksMap } from "./LeftSidebar/useSidebarScheduledTa
 import { useSidebarRequirementUnsplitMap } from "./LeftSidebar/useSidebarRequirementUnsplitMap";
 import { useSidebarExecutableTasksMap } from "./LeftSidebar/useSidebarExecutableTasksMap";
 import { useSidebarTrellisReadyMap } from "./LeftSidebar/useSidebarTrellisReadyMap";
+import { useClaudeProcessWorkspaceLabelCache } from "../hooks/useClaudeProcessWorkspaceLabelCache";
 import { useSystemResourceSessions } from "./LeftSidebar/useSystemResourceSessions";
 import { useSidebarRunningMainSessionIndicators } from "./LeftSidebar/useSidebarRunningMainSessionIndicators";
 import { WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED } from "../constants/workflowUiEvents";
@@ -160,11 +161,29 @@ export function LeftSidebar({
     repositories,
     onMoveRepositoryToProject,
   });
+  const claudeProcessLabelCache = useClaudeProcessWorkspaceLabelCache();
   const systemResourceSessions = useSystemResourceSessions({
     sessions,
     onCancelSessionFromMonitor,
     onReloadFullDiskTranscript,
   });
+
+  useEffect(() => {
+    claudeProcessLabelCache.syncFromRuntime({
+      projects,
+      repositories,
+      bindings: repositoryMainSessionBindings,
+      sessions,
+      claudeProcesses: systemResourceSessions.systemSummary.claudeProcesses,
+    });
+  }, [
+    claudeProcessLabelCache,
+    projects,
+    repositories,
+    repositoryMainSessionBindings,
+    sessions,
+    systemResourceSessions.systemSummary.claudeProcesses,
+  ]);
   const { runningByProjectId, runningByRepositoryId } = useSidebarRunningMainSessionIndicators({
     projects,
     repositories,
@@ -646,6 +665,7 @@ export function LeftSidebar({
         repositories={repositories}
         repositoryMainSessionBindings={repositoryMainSessionBindings}
         claudeProcesses={systemResourceSessions.systemSummary.claudeProcesses}
+        claudeProcessLabelCache={claudeProcessLabelCache}
         claudeProcessCount={systemResourceSessions.systemSummary.claudeProcessCount}
         onSelectSession={(sessionId) => {
           systemResourceSessions.setClaudeCountPopoverOpen(false);

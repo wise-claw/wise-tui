@@ -1,5 +1,12 @@
 import type { ClaudeHostProcess, ClaudeSession, ProjectItem, Repository } from "../../types";
+import type { ClaudeProcessWorkspaceLabelCacheHandle } from "../../hooks/useClaudeProcessWorkspaceLabelCache";
 import { sessionUpdatedAt } from "../ProgressMonitorPanel";
+import {
+  enrichSessionWithHostProcessPath,
+  isResolvedClaudeProcessScopeTitle,
+  labelsFromCacheEntry,
+} from "../../utils/claudeProcessWorkspaceLabelCache";
+import { normalizeRepositoryPathKey } from "../../utils/repositoryMainSessionBinding";
 import { resolveClaudeProcessWorkspaceLabels } from "../../utils/resolveClaudeProcessWorkspaceLabels";
 import { normalizeSearchKeyword } from "../ProgressMonitorPanel";
 import {
@@ -51,6 +58,7 @@ export function buildClaudeProcessPopoverCard(
     bindings: Record<string, string>;
     sessions: ClaudeSession[];
     claudeProcesses: ReadonlyArray<ClaudeHostProcess>;
+    labelCache?: ClaudeProcessWorkspaceLabelCacheHandle;
   },
 ): ClaudeProcessPopoverCard {
   const hostPid = parseHostProcessDrawerPid(session.id);
@@ -62,15 +70,33 @@ export function buildClaudeProcessPopoverCard(
   }
 
   const claudeSessionId = claudeSid || proc?.sessionId?.trim() || null;
+  const sessionForLabels = enrichSessionWithHostProcessPath(session, proc);
+  const pathKey = normalizeRepositoryPathKey(
+    proc?.projectPath?.trim() || sessionForLabels.repositoryPath,
+  );
+  const cacheKeys = {
+    pid: hostPid ?? proc?.pid ?? null,
+    claudeSessionId,
+    projectPathKey: pathKey.length > 0 && pathKey !== "—" ? pathKey : null,
+  };
 
-  const labels = resolveClaudeProcessWorkspaceLabels({
-    session,
+  let labels = resolveClaudeProcessWorkspaceLabels({
+    session: sessionForLabels,
     projects: ctx.projects,
     repositories: ctx.repositories,
     bindings: ctx.bindings,
     sessions: ctx.sessions,
     claudeSessionId,
   });
+
+  if (!isResolvedClaudeProcessScopeTitle(labels.scopeTitle) && ctx.labelCache) {
+    const cached = ctx.labelCache.lookup(cacheKeys);
+    if (cached) {
+      labels = labelsFromCacheEntry(cached);
+    }
+  } else if (isResolvedClaudeProcessScopeTitle(labels.scopeTitle) && ctx.labelCache) {
+    ctx.labelCache.rememberResolved(cacheKeys, labels, cacheKeys.projectPathKey);
+  }
 
   return {
     rowKey: session.id,
@@ -115,6 +141,7 @@ export function buildClaudeProcessPopoverCards(
     sessions: ClaudeSession[];
     claudeProcesses: ReadonlyArray<ClaudeHostProcess>;
     searchKeyword: string;
+    labelCache?: ClaudeProcessWorkspaceLabelCacheHandle;
   },
 ): ClaudeProcessPopoverCard[] {
   const keyword = normalizeSearchKeyword(ctx.searchKeyword);

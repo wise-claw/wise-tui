@@ -1590,12 +1590,31 @@ export default function App() {
     return null;
   }
 
+  /** 新建主会话前结束仍占着本机 Claude 的上一活动标签（含其它仓库，避免「数量」累加）。 */
+  async function releasePriorActiveSessionHostBeforeNewMain(
+    priorActiveId: string | null | undefined,
+    newSessionId: string,
+  ): Promise<void> {
+    const priorId = priorActiveId?.trim();
+    const nextId = newSessionId.trim();
+    if (!priorId || priorId === nextId) {
+      return;
+    }
+    const prior = sessionsLatestRef.current.find((s) => s.id === priorId);
+    if (!prior) {
+      return;
+    }
+    await releaseSessionHostProcessRef.current(prior.id);
+  }
+
   /** 手动「新建会话」：始终创建新标签并绑定为仓库主会话。 */
   async function handleManualNewRepositorySession(repository: Repository): Promise<string> {
     viewMode.enter({ kind: "chat" });
-    setActiveRepositoryWithOwner(repository.id);
     const target = resolveSidebarSelectionTarget({ repository });
+    const priorActiveId = activeSessionIdLatestRef.current;
+    setActiveRepositoryWithOwner(repository.id);
     const id = await createSession(target.path, target.displayName);
+    await releasePriorActiveSessionHostBeforeNewMain(priorActiveId, id);
     await bindRepositoryMainSession(target.path, id);
     switchSession(id);
     return id;
@@ -1624,7 +1643,9 @@ export default function App() {
     } else if (!isStandaloneTrellisProject) {
       setActiveProjectId(project.id);
     }
+    const priorActiveId = activeSessionIdLatestRef.current;
     const id = await createSession(anchor.path, anchor.displayName);
+    await releasePriorActiveSessionHostBeforeNewMain(priorActiveId, id);
     await bindRepositoryMainSession(projectMainSessionBindingKey(project.id), id);
     switchSession(id);
     return id;

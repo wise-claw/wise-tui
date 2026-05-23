@@ -201,6 +201,7 @@ describe("wiseDefaultConfigStore", () => {
     const config = await loadWiseDefaultConfig();
     expect(config.showLlmProxyTopbar).toBe(false);
     expect(config.showFccTopbar).toBe(true);
+    expect(config.showSessionDataLinkTopbar).toBe(false);
   });
 
   test("save topbar chrome dispatches visibility event", async () => {

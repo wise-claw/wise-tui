@@ -2,6 +2,7 @@ import { useState } from "react";
 import { CloseOutlined } from "@ant-design/icons";
 import { Button, Empty, Popconfirm, Tooltip } from "antd";
 import type { ClaudeHostProcess, ClaudeSession, ProjectItem, Repository } from "../../types";
+import type { ClaudeProcessWorkspaceLabelCacheHandle } from "../../hooks/useClaudeProcessWorkspaceLabelCache";
 import {
   buildClaudeProcessPopoverCards,
   type ClaudeProcessPopoverCard,
@@ -18,6 +19,7 @@ interface ClaudeProcessPopoverContentProps {
   repositoryMainSessionBindings: Record<string, string>;
   allSessions: ClaudeSession[];
   claudeProcesses: ReadonlyArray<ClaudeHostProcess>;
+  claudeProcessLabelCache?: ClaudeProcessWorkspaceLabelCacheHandle;
   onSelectSession?: (sessionId: string) => void;
   onEndSession?: (sessionId: string) => void;
   /** 批量结束当前列表（含搜索过滤后）中的全部进程 */
@@ -124,6 +126,7 @@ export function ClaudeProcessPopoverContent({
   repositoryMainSessionBindings,
   allSessions,
   claudeProcesses,
+  claudeProcessLabelCache,
   onSelectSession,
   onEndSession,
   onBatchEndSessions,
@@ -136,6 +139,7 @@ export function ClaudeProcessPopoverContent({
     sessions: allSessions,
     claudeProcesses,
     searchKeyword: searchValue,
+    labelCache: claudeProcessLabelCache,
   });
 
   const canBatchEnd = Boolean(onBatchEndSessions) && cards.length > 0;

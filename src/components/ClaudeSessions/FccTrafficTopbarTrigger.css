@@ -1,0 +1,41 @@
+.app-fcc-traffic-topbar-btn {
+  position: relative;
+}
+
+.app-fcc-traffic-topbar-btn__badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ant-color-text-quaternary);
+  border: 1px solid var(--ant-color-bg-container);
+  pointer-events: none;
+}
+
+.app-fcc-traffic-topbar-btn__badge--live {
+  background: var(--ant-color-success);
+  box-shadow: 0 0 4px var(--ant-color-success);
+}
+
+.app-fcc-traffic-topbar-popover {
+  max-width: min(94vw, 560px);
+}
+
+.app-fcc-traffic-topbar-popover .ant-popover-container {
+  padding: 0 !important;
+  overflow: hidden;
+  width: min(94vw, 560px) !important;
+  max-width: min(94vw, 560px) !important;
+  box-sizing: border-box;
+}
+
+.app-fcc-traffic-topbar-popover .ant-popover-content {
+  padding: 0 !important;
+  max-width: 100%;
+}
+
+.app-fcc-traffic-topbar-popover .ant-popover-inner-content {
+  padding: 0 !important;
+}

@@ -4282,13 +4282,29 @@ button.app-message-part-header:disabled:hover {
   border-radius: 4px;
 }
 
-.app-markdown a {
+.app-markdown a,
+.app-markdown-link,
+.app-claude-message-text .app-markdown-link,
+.app-background-invocation-drawer__pre-linkified .app-markdown-link {
   color: var(--ant-color-primary);
-  text-decoration: none;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: color-mix(in srgb, var(--ant-color-primary) 50%, transparent);
+  word-break: break-all;
 }
 
-.app-markdown a:hover {
-  text-decoration: underline;
+.app-markdown a:hover,
+.app-markdown-link:hover,
+.app-claude-message-text .app-markdown-link:hover,
+.app-background-invocation-drawer__pre-linkified .app-markdown-link:hover {
+  color: var(--ant-color-primary-hover);
+  text-decoration-color: var(--ant-color-primary-hover);
+}
+
+.app-markdown a code,
+.app-markdown-link code {
+  color: inherit;
+  background: color-mix(in srgb, var(--ant-color-primary) 12%, var(--ant-color-fill-quaternary));
 }
 
 .app-markdown table {
@@ -4434,11 +4450,6 @@ button.app-message-part-header:disabled:hover {
 
 .app-markdown-copy-btn[data-copied="true"] .check-icon {
   display: block;
-}
-
-.app-markdown-link {
-  color: var(--ant-color-primary);
-  word-break: break-all;
 }
 
 /* ── Input Area ── */

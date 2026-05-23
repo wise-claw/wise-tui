@@ -1,0 +1,130 @@
+.app-session-data-link {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.app-session-data-link__empty {
+  margin: auto;
+  padding: 48px 24px;
+}
+
+.app-session-data-link__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px 0;
+}
+
+.app-session-data-link__filter {
+  min-width: 120px;
+}
+
+.app-session-data-link__stats {
+  padding: 8px 16px 0;
+  font-size: 12px;
+}
+
+.app-session-data-link__alert {
+  margin: 8px 16px 0;
+}
+
+.app-session-data-link__disk {
+  padding: 6px 16px 0;
+  font-size: 12px;
+}
+
+.app-session-data-link__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 16px 16px;
+}
+
+.app-session-data-link__collapse {
+  background: transparent;
+}
+
+.app-session-data-link__turn-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-session-data-link__turn-meta {
+  font-size: 12px;
+}
+
+.app-session-data-link__record-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.app-session-data-link__record {
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-session-data-link__record-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.app-session-data-link__record-time {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-session-data-link__record-summary {
+  font-size: 13px;
+  word-break: break-word;
+}
+
+.app-session-data-link__record-detail {
+  margin: 8px 0 0;
+  padding: 8px;
+  max-height: 200px;
+  overflow: auto;
+  font-size: 11px;
+  border-radius: 6px;
+  background: var(--ant-color-bg-container);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.app-session-data-link__foot {
+  padding: 8px 16px 12px;
+  border-top: 1px solid var(--ant-color-border-secondary);
+  font-size: 12px;
+}
+
+.app-session-data-link__record--inferred {
+  border-style: dashed;
+  opacity: 0.92;
+}
+
+.app-session-data-link__source-tag {
+  font-size: 10px;
+  margin-inline-start: 0;
+}
+
+/* 序列图：未观测 HTTP（推断 REQUEST） */
+.app-seq-flow__step--http-inferred .app-seq-flow__arrow--http-inferred {
+  stroke-dasharray: 4 3;
+  opacity: 0.55;
+}
+
+.app-seq-flow__step--http-inferred .app-seq-iface-box--inferred {
+  opacity: 0.65;
+}

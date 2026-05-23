@@ -1,7 +1,17 @@
-import { Alert, Drawer, Empty, Spin, Typography } from "antd";
+import { Alert, Button, Drawer, Dropdown, Empty, Space, Spin, Typography, message } from "antd";
+import { CopyOutlined, DownloadOutlined } from "@ant-design/icons";
+import { save } from "@tauri-apps/plugin-dialog";
+import type { MenuProps } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ClaudeMessage, ToolUsePart } from "../../types";
 import { loadClaudeSessionJsonl } from "../../services/claudeDisk";
+import { writeTextFileAbsolute } from "../../services/sessionLink";
+import {
+  buildSessionLinkExportBundle,
+  serializeSessionLinkExportBundle,
+} from "../../utils/sessionLinkExport";
+import { buildSessionLinkRecordsFromSources } from "../../utils/sessionLinkPipeline";
+import { useFccSessionTraces } from "../../hooks/useFccSessionTraces";
 import { buildTrajectorySequenceModel, type SequenceEvent } from "../../utils/claudeSessionTrajectorySequence";
 import { getToolDisplayInfo } from "./MessageParts";
 import { ClaudeSessionSequenceDiagram } from "./ClaudeSessionSequenceDiagram";
@@ -15,6 +25,7 @@ interface Props {
   open: boolean;
   onClose: () => void;
   messages: ClaudeMessage[];
+  wiseTabSessionId?: string;
   repositoryPath?: string;
   claudeSessionId?: string | null;
   diskTranscriptPartial?: boolean;
@@ -24,6 +35,7 @@ export function ClaudeSessionTrajectoryDrawer({
   open,
   onClose,
   messages,
+  wiseTabSessionId,
   repositoryPath,
   claudeSessionId,
   diskTranscriptPartial,
@@ -37,6 +49,11 @@ export function ClaudeSessionTrajectoryDrawer({
   const [subagentPart, setSubagentPart] = useState<ToolUsePart | null>(null);
 
   const canLoadDisk = Boolean(repositoryPath?.trim() && claudeSessionId?.trim());
+
+  const { fccAligned, traces: fccTraces } = useFccSessionTraces({
+    open,
+    sessionHint: claudeSessionId ?? undefined,
+  });
 
   useEffect(() => {
     if (!open) {
@@ -70,9 +87,76 @@ export function ClaudeSessionTrajectoryDrawer({
   }, [open, canLoadDisk, repositoryPath, claudeSessionId]);
 
   const events = useMemo(
-    () => buildTrajectorySequenceModel(messages, jsonlLines ?? undefined),
-    [messages, jsonlLines],
+    () =>
+      buildTrajectorySequenceModel(messages, jsonlLines ?? undefined, {
+        fccTraces: fccAligned ? fccTraces : undefined,
+      }),
+    [messages, jsonlLines, fccAligned, fccTraces],
   );
+
+  const linkRecords = useMemo(
+    () =>
+      buildSessionLinkRecordsFromSources({
+        messages,
+        jsonlLines: jsonlLines ?? undefined,
+        fccTraces: fccAligned ? fccTraces : undefined,
+      }),
+    [messages, jsonlLines, fccAligned, fccTraces],
+  );
+
+  const exportBundle = useMemo(
+    () =>
+      buildSessionLinkExportBundle({
+        messages,
+        jsonlLines: jsonlLines ?? undefined,
+        records: linkRecords,
+        wiseTabSessionId,
+        claudeSessionId,
+        repositoryPath,
+      }),
+    [messages, jsonlLines, linkRecords, wiseTabSessionId, claudeSessionId, repositoryPath],
+  );
+
+  const runExport = useCallback(async () => {
+    if (!exportBundle) return;
+    const text = serializeSessionLinkExportBundle(exportBundle);
+    const sid = claudeSessionId?.slice(0, 8) ?? wiseTabSessionId?.slice(0, 8) ?? "session";
+    try {
+      const path = await save({
+        defaultPath: `session-link-${sid}-${Date.now()}.json`,
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
+      if (!path) return;
+      await writeTextFileAbsolute(path, text);
+      message.success("已导出链路包");
+    } catch (e) {
+      message.error(`导出失败：${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, [exportBundle, claudeSessionId, wiseTabSessionId]);
+
+  const exportMenuItems: MenuProps["items"] = useMemo(() => {
+    if (!exportBundle) return [];
+    const text = serializeSessionLinkExportBundle(exportBundle);
+    return [
+      {
+        key: "copy",
+        label: "复制 JSON",
+        icon: <CopyOutlined />,
+        onClick: () => {
+          void navigator.clipboard.writeText(text).then(
+            () => message.success("已复制"),
+            () => message.error("复制失败"),
+          );
+        },
+      },
+      {
+        key: "save",
+        label: "保存文件…",
+        icon: <DownloadOutlined />,
+        onClick: () => void runExport(),
+      },
+    ];
+  }, [exportBundle, runExport]);
 
   useEffect(() => {
     const n = events.length;
@@ -121,6 +205,15 @@ export function ClaudeSessionTrajectoryDrawer({
         destroyOnClose
         open={open}
         onClose={onClose}
+        extra={
+          <Space size={8}>
+            <Dropdown menu={{ items: exportMenuItems }} disabled={!exportBundle}>
+              <Button size="small" icon={<DownloadOutlined />} disabled={!exportBundle}>
+                导出链路包
+              </Button>
+            </Dropdown>
+          </Space>
+        }
         styles={{ body: { padding: 0, display: "flex", flexDirection: "column", height: "100%" } }}
       >
         <div className="app-session-trajectory-drawer">
@@ -162,6 +255,7 @@ export function ClaudeSessionTrajectoryDrawer({
                 visibleEndExclusive={visibleEndExclusive}
                 onVisibleRangeChange={onRangeChange}
                 onSubagentDrilldown={onSubagentDrilldown}
+                markInferredHttp
               />
             )}
           </div>
