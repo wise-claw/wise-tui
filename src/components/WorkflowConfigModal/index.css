@@ -917,6 +917,62 @@
   color: var(--ant-color-text);
 }
 
+.app-workflow-knowledge-edit-modal__var-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-workflow-knowledge-edit-modal__var-label {
+  font-size: 12px;
+  line-height: 28px;
+}
+
+.app-workflow-knowledge-edit-modal__section-title {
+  display: block;
+  margin: 12px 0 4px;
+}
+
+.app-workflow-knowledge-edit-modal__supplement-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.app-workflow-knowledge-edit-modal__preview-toolbar {
+  margin-top: 8px;
+}
+
+.app-workflow-knowledge-edit-modal__preview {
+  margin-top: 4px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px dashed var(--ant-color-border);
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-workflow-knowledge-edit-modal__preview-hint {
+  display: block;
+  font-size: 12px;
+  margin: 4px 0 8px;
+}
+
+.app-workflow-knowledge-edit-modal__preview-body {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ant-color-text);
+}
+
 .app-workflow-branch-edit-modal__hint {
   font-size: 12px;
 }

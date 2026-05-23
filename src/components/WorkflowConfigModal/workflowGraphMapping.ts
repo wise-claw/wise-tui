@@ -3,6 +3,7 @@ import { normalizeWorkflowStageOutcomeCriteria } from "../../utils/workflowStage
 import { branchPortLabelFromId, normalizeBranchConditions } from "../../services/workflowBranchEvaluation";
 import { normalizePromptMessages, serializePromptConfigToNodeData } from "../../services/workflowPromptTemplate";
 import { codeConfigFromNodeData, serializeCodeConfigToNodeData } from "../../services/workflowCodeExecution";
+import { knowledgeConfigFromNodeData, serializeKnowledgeConfigToNodeData } from "../../services/workflowKnowledgeRetrieval";
 import { normalizeStageTaskBasisRefsFromNodeData } from "../../services/workflowGraphRuntime";
 import type { CanvasSnapshot } from "../workflowGraph/workflowX6CanvasShared";
 import {
@@ -67,7 +68,24 @@ export function canvasSnapshotToWorkflowGraph(snapshot: CanvasSnapshot, fallback
                   requireAcknowledgement: Boolean(node.promptRequireAcknowledgement),
                 })
               : {}),
-            ...(materialKey === "knowledge" ? { knowledgeQuery: node.knowledgeQuery || "" } : {}),
+            ...(materialKey === "knowledge"
+              ? serializeKnowledgeConfigToNodeData(
+                  knowledgeConfigFromNodeData({
+                    label: node.title || "",
+                    knowledgeQuery: node.knowledgeQuery,
+                    knowledgeSearchMode: node.knowledgeSearchMode,
+                    knowledgeNodeKinds: node.knowledgeNodeKinds,
+                    knowledgeTopK: node.knowledgeTopK,
+                    knowledgeSubgraphHop: node.knowledgeSubgraphHop,
+                    knowledgeSubgraphDirection: node.knowledgeSubgraphDirection,
+                    knowledgePathPrefix: node.knowledgePathPrefix,
+                    knowledgeOutputMode: node.knowledgeOutputMode,
+                    knowledgeRequireCitation: node.knowledgeRequireCitation,
+                    knowledgeOutputVariable: node.knowledgeOutputVariable,
+                    knowledgeSupplementQueries: node.knowledgeSupplementQueries,
+                  }),
+                )
+              : {}),
             ...(materialKey === "code"
               ? serializeCodeConfigToNodeData(
                   codeConfigFromNodeData({

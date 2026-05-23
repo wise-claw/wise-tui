@@ -113,6 +113,16 @@ export function canvasNodeItemFromX6Node(node: X6Node): CanvasNodeItem {
     promptInjectionMode: raw.promptInjectionMode as CanvasNodeItem["promptInjectionMode"],
     promptRequireAcknowledgement: Boolean(raw.promptRequireAcknowledgement),
     knowledgeQuery: raw.knowledgeQuery || "",
+    knowledgeSearchMode: raw.knowledgeSearchMode as CanvasNodeItem["knowledgeSearchMode"],
+    knowledgeNodeKinds: Array.isArray(raw.knowledgeNodeKinds) ? raw.knowledgeNodeKinds : undefined,
+    knowledgeTopK: typeof raw.knowledgeTopK === "number" ? raw.knowledgeTopK : undefined,
+    knowledgeSubgraphHop: typeof raw.knowledgeSubgraphHop === "number" ? raw.knowledgeSubgraphHop : undefined,
+    knowledgeSubgraphDirection: raw.knowledgeSubgraphDirection as CanvasNodeItem["knowledgeSubgraphDirection"],
+    knowledgePathPrefix: raw.knowledgePathPrefix,
+    knowledgeOutputMode: raw.knowledgeOutputMode as CanvasNodeItem["knowledgeOutputMode"],
+    knowledgeRequireCitation: typeof raw.knowledgeRequireCitation === "boolean" ? raw.knowledgeRequireCitation : undefined,
+    knowledgeOutputVariable: raw.knowledgeOutputVariable,
+    knowledgeSupplementQueries: Array.isArray(raw.knowledgeSupplementQueries) ? raw.knowledgeSupplementQueries : undefined,
     codeScript: raw.codeScript || "",
     codeMode: raw.codeMode as CanvasNodeItem["codeMode"],
     codeLanguage: raw.codeLanguage as CanvasNodeItem["codeLanguage"],
@@ -177,6 +187,21 @@ export function snapshotFromWorkflowGraph(graph: Graph): CanvasSnapshot {
       promptInjectionMode: data.promptInjectionMode as CanvasNodeItem["promptInjectionMode"],
       promptRequireAcknowledgement: Boolean(data.promptRequireAcknowledgement),
       knowledgeQuery: (data.knowledgeQuery as string | undefined) ?? "",
+      knowledgeSearchMode: data.knowledgeSearchMode as CanvasNodeItem["knowledgeSearchMode"],
+      knowledgeNodeKinds: Array.isArray(data.knowledgeNodeKinds)
+        ? (data.knowledgeNodeKinds as CanvasNodeItem["knowledgeNodeKinds"])
+        : undefined,
+      knowledgeTopK: typeof data.knowledgeTopK === "number" ? data.knowledgeTopK : undefined,
+      knowledgeSubgraphHop: typeof data.knowledgeSubgraphHop === "number" ? data.knowledgeSubgraphHop : undefined,
+      knowledgeSubgraphDirection: data.knowledgeSubgraphDirection as CanvasNodeItem["knowledgeSubgraphDirection"],
+      knowledgePathPrefix: data.knowledgePathPrefix as string | undefined,
+      knowledgeOutputMode: data.knowledgeOutputMode as CanvasNodeItem["knowledgeOutputMode"],
+      knowledgeRequireCitation:
+        typeof data.knowledgeRequireCitation === "boolean" ? data.knowledgeRequireCitation : undefined,
+      knowledgeOutputVariable: data.knowledgeOutputVariable as string | undefined,
+      knowledgeSupplementQueries: Array.isArray(data.knowledgeSupplementQueries)
+        ? (data.knowledgeSupplementQueries as string[])
+        : undefined,
       codeScript: (data.codeScript as string | undefined) ?? "",
       codeMode: data.codeMode as CanvasNodeItem["codeMode"],
       codeLanguage: data.codeLanguage as CanvasNodeItem["codeLanguage"],

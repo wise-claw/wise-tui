@@ -275,8 +275,18 @@ export interface WorkflowGraphNodeData extends Record<string, unknown> {
   promptMessages?: import("./workflowPrompt").WorkflowPromptMessage[];
   promptInjectionMode?: import("./workflowPrompt").WorkflowPromptInjectionMode;
   promptRequireAcknowledgement?: boolean;
-  /** 知识检索节点查询语句，支持 {{var}} */
+  /** 知识检索节点查询语句，支持 {{var}}（与 knowledgeQuery 同步） */
   knowledgeQuery?: string;
+  knowledgeSearchMode?: import("./workflowKnowledge").WorkflowKnowledgeSearchMode;
+  knowledgeNodeKinds?: import("./workflowKnowledge").WorkflowKnowledgeNodeKindFilter[];
+  knowledgeTopK?: number;
+  knowledgeSubgraphHop?: number;
+  knowledgeSubgraphDirection?: import("./codeKnowledgeGraph").CodeGraphSubgraphDirection;
+  knowledgePathPrefix?: string;
+  knowledgeOutputMode?: import("./workflowKnowledge").WorkflowKnowledgeOutputMode;
+  knowledgeRequireCitation?: boolean;
+  knowledgeOutputVariable?: string;
+  knowledgeSupplementQueries?: string[];
   /** 代码/脚本节点内容（兼容字段，与 codeSource 同步） */
   codeScript?: string;
   codeMode?: import("./workflowCode").WorkflowCodeExecutionMode;

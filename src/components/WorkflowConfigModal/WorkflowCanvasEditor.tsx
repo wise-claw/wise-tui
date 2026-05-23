@@ -18,7 +18,7 @@ import {
   getEmployeeNodeHeight,
   buildEmployeeNodeSummary,
   isAgentMaterialKey,
-  isPassthroughMaterialKey,
+  isTransformGraphMaterialKey,
   isPortConnected,
   refreshNodePorts,
   setPortColor,
@@ -30,13 +30,14 @@ import { materializePrdSnapshot, readSnapshotFile } from "../../services/materia
 import { runPrdSplitClaude } from "../../services/claudeSplitExecutor";
 import { WorkflowNodeEditModal, type WorkflowNodeEditFormValues } from "./WorkflowNodeEditModal";
 import { WorkflowStartNodeEditModal, type WorkflowStartNodeFormValues } from "./WorkflowStartNodeEditModal";
-import { WorkflowTransformNodeEditModal, type WorkflowTransformNodeFormValues } from "./WorkflowTransformNodeEditModal";
+import { WorkflowKnowledgeNodeEditModal, type WorkflowKnowledgeNodeFormValues } from "./WorkflowKnowledgeNodeEditModal";
 import { WorkflowBranchNodeEditModal, type WorkflowBranchNodeFormValues } from "./WorkflowBranchNodeEditModal";
 import { WorkflowPromptNodeEditModal, type WorkflowPromptNodeFormValues } from "./WorkflowPromptNodeEditModal";
 import { WorkflowCodeNodeEditModal, type WorkflowCodeNodeFormValues } from "./WorkflowCodeNodeEditModal";
 import { promptConfigFromNodeData, serializePromptConfigToNodeData } from "../../services/workflowPromptTemplate";
 import { normalizePromptMessages } from "../../services/workflowPromptTemplate";
 import { codeConfigFromNodeData, serializeCodeConfigToNodeData } from "../../services/workflowCodeExecution";
+import { knowledgeConfigFromNodeData, serializeKnowledgeConfigToNodeData } from "../../services/workflowKnowledgeRetrieval";
 import { branchPortLabelFromId, normalizeBranchConditions } from "../../services/workflowBranchEvaluation";
 import {
   buildMergedStageTaskBasisSelectOptions,
@@ -74,7 +75,7 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
   });
   const [editForm] = Form.useForm<WorkflowNodeEditFormValues>();
   const [startEditForm] = Form.useForm<WorkflowStartNodeFormValues>();
-  const [transformEditForm] = Form.useForm<WorkflowTransformNodeFormValues>();
+  const [knowledgeEditForm] = Form.useForm<WorkflowKnowledgeNodeFormValues>();
   const [branchEditForm] = Form.useForm<WorkflowBranchNodeFormValues>();
   const [promptEditForm] = Form.useForm<WorkflowPromptNodeFormValues>();
   const [codeEditForm] = Form.useForm<WorkflowCodeNodeFormValues>();
@@ -273,11 +274,35 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
       });
       return;
     }
-    if (payload.kind === "material" && isPassthroughMaterialKey(payload.materialKey)) {
+    if (payload.kind === "material" && payload.materialKey === "knowledge") {
       setEditingNode(payload);
-      transformEditForm.setFieldsValue({
+      const config = knowledgeConfigFromNodeData({
+        label: payload.title,
+        knowledgeQuery: payload.knowledgeQuery,
+        knowledgeSearchMode: payload.knowledgeSearchMode,
+        knowledgeNodeKinds: payload.knowledgeNodeKinds,
+        knowledgeTopK: payload.knowledgeTopK,
+        knowledgeSubgraphHop: payload.knowledgeSubgraphHop,
+        knowledgeSubgraphDirection: payload.knowledgeSubgraphDirection,
+        knowledgePathPrefix: payload.knowledgePathPrefix,
+        knowledgeOutputMode: payload.knowledgeOutputMode,
+        knowledgeRequireCitation: payload.knowledgeRequireCitation,
+        knowledgeOutputVariable: payload.knowledgeOutputVariable,
+        knowledgeSupplementQueries: payload.knowledgeSupplementQueries,
+      });
+      knowledgeEditForm.setFieldsValue({
         title: payload.title,
-        knowledgeQuery: payload.knowledgeQuery || "",
+        query: config.query,
+        searchMode: config.searchMode,
+        nodeKinds: config.nodeKinds,
+        topK: config.topK,
+        subgraphHop: config.subgraphHop,
+        subgraphDirection: config.subgraphDirection,
+        pathPrefix: config.pathPrefix ?? "",
+        outputMode: config.outputMode,
+        requireCitation: config.requireCitation,
+        outputVariable: config.outputVariable ?? "",
+        supplementQueries: config.supplementQueries,
       });
       return;
     }
@@ -409,7 +434,7 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
       const editable =
         data.kind === "start" ||
         (data.kind === "material" &&
-          (isAgentMaterialKey(data.materialKey) || isPassthroughMaterialKey(data.materialKey) || data.materialKey === "branch" || data.materialKey === "prompt"));
+          (isAgentMaterialKey(data.materialKey) || isTransformGraphMaterialKey(data.materialKey)));
       if (editable) {
         node.addTools([
           {
@@ -758,9 +783,9 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
     emitSnapshot();
   }
 
-  async function handleSubmitTransformNodeEdit() {
+  async function handleSubmitKnowledgeNodeEdit() {
     if (!editingNode || editingNode.kind !== "material" || !graphRef.current) return;
-    const values = await transformEditForm.validateFields();
+    const values = await knowledgeEditForm.validateFields();
     const graph = graphRef.current;
     const target = graph.getCellById(editingNode.id);
     if (!target || !target.isNode()) {
@@ -768,11 +793,23 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
       return;
     }
     const node = target as X6Node;
-    const currentData = (node.getData() ?? {}) as Partial<CanvasNodeItem>;
+    const serialized = serializeKnowledgeConfigToNodeData({
+      query: values.query,
+      searchMode: values.searchMode,
+      nodeKinds: values.nodeKinds ?? [],
+      topK: values.topK,
+      subgraphHop: values.subgraphHop,
+      subgraphDirection: values.subgraphDirection,
+      pathPrefix: values.pathPrefix?.trim() || undefined,
+      outputMode: values.outputMode,
+      requireCitation: values.requireCitation,
+      outputVariable: values.outputVariable?.trim() || undefined,
+      supplementQueries: (values.supplementQueries ?? []).map((item) => String(item ?? "").trim()).filter(Boolean),
+    });
     const nextData: Partial<CanvasNodeItem> = {
-      ...currentData,
+      ...(node.getData() ?? {}),
       title: values.title.trim(),
-      knowledgeQuery: values.knowledgeQuery?.trim() ?? "",
+      ...serialized,
     };
     node.setData(nextData);
     applyNodeVisual(node, nextData);
@@ -843,10 +880,8 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
   const editingAgentNode =
     editingNode && editingNode.kind === "material" && isAgentMaterialKey(editingNode.materialKey) ? editingNode : null;
   const editingStartNode = editingNode && editingNode.kind === "start" ? editingNode : null;
-  const editingTransformNode =
-    editingNode && editingNode.kind === "material" && isPassthroughMaterialKey(editingNode.materialKey)
-      ? editingNode
-      : null;
+  const editingKnowledgeNode =
+    editingNode && editingNode.kind === "material" && editingNode.materialKey === "knowledge" ? editingNode : null;
   const editingBranchNode =
     editingNode && editingNode.kind === "material" && editingNode.materialKey === "branch" ? editingNode : null;
   const editingPromptNode =
@@ -930,11 +965,13 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
         onCancel={handleCloseNodeEdit}
         onSubmit={() => void handleSubmitStartNodeEdit()}
       />
-      <WorkflowTransformNodeEditModal
-        editingNode={editingTransformNode}
-        form={transformEditForm}
+      <WorkflowKnowledgeNodeEditModal
+        editingNode={editingKnowledgeNode}
+        form={knowledgeEditForm}
+        variableOptions={workflowVariableOptions}
+        taskContentPreview={taskContentPreview}
         onCancel={handleCloseNodeEdit}
-        onSubmit={() => void handleSubmitTransformNodeEdit()}
+        onSubmit={() => void handleSubmitKnowledgeNodeEdit()}
       />
       <WorkflowBranchNodeEditModal
         editingNode={editingBranchNode}

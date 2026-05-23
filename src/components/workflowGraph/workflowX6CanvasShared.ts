@@ -9,6 +9,7 @@ import { DEFAULT_WORKFLOW_BRANCH_CONDITIONS } from "../../types/workflowBranch";
 import { normalizeWorkflowVariables } from "../../utils/workflowVariables";
 import { normalizeBranchConditions, summarizeBranchCondition } from "../../services/workflowBranchEvaluation";
 import { codeConfigFromNodeData, summarizeCodeConfig } from "../../services/workflowCodeExecution";
+import { knowledgeConfigFromNodeData, summarizeKnowledgeConfig } from "../../services/workflowKnowledgeRetrieval";
 import { promptConfigFromNodeData, summarizePromptConfig } from "../../services/workflowPromptTemplate";
 import { normalizeWorkflowStageOutcomeCriteria } from "../../utils/workflowStageOutcomeCriteria";
 import { normalizeStageTaskBasisRefsFromNodeData } from "../../services/workflowGraphRuntime";
@@ -44,6 +45,16 @@ export interface CanvasNodeItem {
   promptInjectionMode?: import("../../types/workflowPrompt").WorkflowPromptInjectionMode;
   promptRequireAcknowledgement?: boolean;
   knowledgeQuery?: string;
+  knowledgeSearchMode?: import("../../types/workflowKnowledge").WorkflowKnowledgeSearchMode;
+  knowledgeNodeKinds?: import("../../types/workflowKnowledge").WorkflowKnowledgeNodeKindFilter[];
+  knowledgeTopK?: number;
+  knowledgeSubgraphHop?: number;
+  knowledgeSubgraphDirection?: import("../../types/codeKnowledgeGraph").CodeGraphSubgraphDirection;
+  knowledgePathPrefix?: string;
+  knowledgeOutputMode?: import("../../types/workflowKnowledge").WorkflowKnowledgeOutputMode;
+  knowledgeRequireCitation?: boolean;
+  knowledgeOutputVariable?: string;
+  knowledgeSupplementQueries?: string[];
   codeScript?: string;
   codeMode?: import("../../types/workflowCode").WorkflowCodeExecutionMode;
   codeLanguage?: import("../../types/workflowCode").WorkflowCodeLanguage;
@@ -173,7 +184,7 @@ export const MATERIALS: Record<string, MaterialItem> = {
     key: "knowledge",
     iconText: "KB",
     title: "知识检索",
-    desc: "注入代码知识图谱检索指令。",
+    desc: "配置检索策略、图谱过滤与输出格式后注入检索说明。",
     inputPlaceholder: "输入检索关键词或问题",
     theme: "cyan",
   },
@@ -191,10 +202,6 @@ export const MATERIAL_KEYS = Object.keys(MATERIALS);
 
 export function isAgentMaterialKey(materialKey: string | undefined): boolean {
   return materialKey === "employee" || materialKey === "gateway";
-}
-
-export function isPassthroughMaterialKey(materialKey: string | undefined): boolean {
-  return materialKey === "knowledge";
 }
 
 export function isTransformGraphMaterialKey(materialKey: string | undefined): boolean {
@@ -273,6 +280,7 @@ export function workflowGraphToCanvasSnapshot(graph: WorkflowGraph | null | unde
     const key = graphNodeTypeToMaterialKey(node);
     const promptConfig = key === "prompt" ? promptConfigFromNodeData(node.data) : null;
     const codeConfig = key === "code" ? codeConfigFromNodeData(node.data) : null;
+    const knowledgeConfig = key === "knowledge" ? knowledgeConfigFromNodeData(node.data) : null;
     return {
       id: node.id,
       kind: "material",
@@ -293,7 +301,21 @@ export function workflowGraphToCanvasSnapshot(graph: WorkflowGraph | null | unde
             promptRequireAcknowledgement: promptConfig.requireAcknowledgement,
           }
         : {}),
-      knowledgeQuery: typeof node.data.knowledgeQuery === "string" ? node.data.knowledgeQuery : "",
+      knowledgeQuery: knowledgeConfig ? knowledgeConfig.query : typeof node.data.knowledgeQuery === "string" ? node.data.knowledgeQuery : "",
+      ...(knowledgeConfig
+        ? {
+            knowledgeSearchMode: knowledgeConfig.searchMode,
+            knowledgeNodeKinds: knowledgeConfig.nodeKinds,
+            knowledgeTopK: knowledgeConfig.topK,
+            knowledgeSubgraphHop: knowledgeConfig.subgraphHop,
+            knowledgeSubgraphDirection: knowledgeConfig.subgraphDirection,
+            knowledgeOutputMode: knowledgeConfig.outputMode,
+            knowledgeRequireCitation: knowledgeConfig.requireCitation,
+            knowledgeSupplementQueries: knowledgeConfig.supplementQueries,
+            ...(knowledgeConfig.pathPrefix ? { knowledgePathPrefix: knowledgeConfig.pathPrefix } : {}),
+            ...(knowledgeConfig.outputVariable ? { knowledgeOutputVariable: knowledgeConfig.outputVariable } : {}),
+          }
+        : {}),
       codeScript: codeConfig ? codeConfig.source : typeof node.data.codeScript === "string" ? node.data.codeScript : "",
       ...(codeConfig
         ? {
@@ -374,6 +396,16 @@ function omitGraphNodeMappedData(
     delete out.promptInjectionMode;
     delete out.promptRequireAcknowledgement;
     delete out.knowledgeQuery;
+    delete out.knowledgeSearchMode;
+    delete out.knowledgeNodeKinds;
+    delete out.knowledgeTopK;
+    delete out.knowledgeSubgraphHop;
+    delete out.knowledgeSubgraphDirection;
+    delete out.knowledgePathPrefix;
+    delete out.knowledgeOutputMode;
+    delete out.knowledgeRequireCitation;
+    delete out.knowledgeOutputVariable;
+    delete out.knowledgeSupplementQueries;
     delete out.codeScript;
     delete out.codeMode;
     delete out.codeLanguage;
@@ -411,8 +443,21 @@ function summarizePassthroughNode(node: Partial<CanvasNodeItem>): string {
     return summarizePromptConfig(config);
   }
   if (materialKey === "knowledge") {
-    const text = (node.knowledgeQuery || "").trim();
-    return text ? `检索：${text.slice(0, 48)}${text.length > 48 ? "…" : ""}` : "未填写检索语句";
+    const config = knowledgeConfigFromNodeData({
+      label: node.title || "",
+      knowledgeQuery: node.knowledgeQuery,
+      knowledgeSearchMode: node.knowledgeSearchMode,
+      knowledgeNodeKinds: node.knowledgeNodeKinds,
+      knowledgeTopK: node.knowledgeTopK,
+      knowledgeSubgraphHop: node.knowledgeSubgraphHop,
+      knowledgeSubgraphDirection: node.knowledgeSubgraphDirection,
+      knowledgePathPrefix: node.knowledgePathPrefix,
+      knowledgeOutputMode: node.knowledgeOutputMode,
+      knowledgeRequireCitation: node.knowledgeRequireCitation,
+      knowledgeOutputVariable: node.knowledgeOutputVariable,
+      knowledgeSupplementQueries: node.knowledgeSupplementQueries,
+    });
+    return summarizeKnowledgeConfig(config);
   }
   if (materialKey === "code") {
     const config = codeConfigFromNodeData({
@@ -660,6 +705,16 @@ export function createGraphNodeFromSnapshotNode(node: CanvasNodeItem, employeeNa
       promptInjectionMode: node.promptInjectionMode,
       promptRequireAcknowledgement: node.promptRequireAcknowledgement ?? false,
       knowledgeQuery: node.knowledgeQuery || "",
+      knowledgeSearchMode: node.knowledgeSearchMode,
+      knowledgeNodeKinds: node.knowledgeNodeKinds,
+      knowledgeTopK: node.knowledgeTopK,
+      knowledgeSubgraphHop: node.knowledgeSubgraphHop,
+      knowledgeSubgraphDirection: node.knowledgeSubgraphDirection,
+      knowledgePathPrefix: node.knowledgePathPrefix,
+      knowledgeOutputMode: node.knowledgeOutputMode,
+      knowledgeRequireCitation: node.knowledgeRequireCitation ?? true,
+      knowledgeOutputVariable: node.knowledgeOutputVariable,
+      knowledgeSupplementQueries: node.knowledgeSupplementQueries,
       codeScript: node.codeScript || "",
       codeMode: node.codeMode,
       codeLanguage: node.codeLanguage,
