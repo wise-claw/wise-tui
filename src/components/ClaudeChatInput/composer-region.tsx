@@ -54,6 +54,7 @@ import { useDefaultClaudeConnectionKind } from "../../hooks/useDefaultClaudeConn
 import { useComposerSpeechDictation } from "../../hooks/useComposerSpeechDictation";
 import { useComposerSpeechPreferences } from "../../hooks/useComposerSpeechPreferences";
 import { COMPOSER_SPEECH_IDLE_AUTO_SEND_MS } from "../../constants/composerSpeechPreferences";
+import { splitUtteranceAtAutoSendEnding } from "../../utils/composerSpeechAutoSendEnding";
 import {
   applyComposerSpeechStreamTranscript,
   createComposerSpeechStreamAnchor,
@@ -625,11 +626,22 @@ function ComposerInner({
   );
   const speechIdleAutoSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scheduleSpeechIdleAutoSendRef = useRef<() => void>(() => undefined);
+  const triggerSpeechAutoSendRef = useRef<() => void>(() => undefined);
+  const suffixAutoSendFiredRef = useRef(false);
 
   const { prefs: speechPrefs, update: updateSpeechPrefs } = useComposerSpeechPreferences();
   const speechPrefsRef = useRef(speechPrefs);
   speechPrefsRef.current = speechPrefs;
   const [speechMenuOpen, setSpeechMenuOpen] = useState(false);
+  const [draftAutoSendEndingText, setDraftAutoSendEndingText] = useState(
+    speechPrefs.autoSendEndingText,
+  );
+
+  useEffect(() => {
+    if (speechMenuOpen) {
+      setDraftAutoSendEndingText(speechPrefs.autoSendEndingText);
+    }
+  }, [speechMenuOpen, speechPrefs.autoSendEndingText]);
 
   const clearSpeechIdleAutoSendTimer = useCallback(() => {
     if (speechIdleAutoSendTimerRef.current != null) {
@@ -651,19 +663,33 @@ function ComposerInner({
         speechStreamAnchorRef.current = createComposerSpeechStreamAnchor(plain, cur);
       }
 
+      const isEndingWordMode = speechPrefsRef.current.sendMode === "endingWordAutoSend";
+      const { utterance: spokenText, shouldAutoSend } = isEndingWordMode
+        ? splitUtteranceAtAutoSendEnding(
+            text,
+            speechPrefsRef.current.autoSendEndingText,
+          )
+        : { utterance: text, shouldAutoSend: false };
+
       const { anchor, plain, cursor } = applyComposerSpeechStreamTranscript(
         speechStreamAnchorRef.current,
-        text,
+        spokenText,
         isFinal,
       );
       speechStreamAnchorRef.current = anchor;
       surface.setPlainAndCursor(plain, cursor);
 
-      if (text.trim() && speechPrefsRef.current.sendMode === "silenceAutoSend") {
+      if (spokenText.trim() && speechPrefsRef.current.sendMode === "silenceAutoSend") {
         scheduleSpeechIdleAutoSendRef.current();
       }
+
+      if (shouldAutoSend && !suffixAutoSendFiredRef.current) {
+        suffixAutoSendFiredRef.current = true;
+        clearSpeechIdleAutoSendTimer();
+        queueMicrotask(() => triggerSpeechAutoSendRef.current());
+      }
     },
-    [],
+    [clearSpeechIdleAutoSendTimer],
   );
 
   const handleSpeechSessionEnd = useCallback(() => {
@@ -682,23 +708,29 @@ function ComposerInner({
   const speechDictationRef = useRef(speechDictation);
   speechDictationRef.current = speechDictation;
 
+  const triggerComposerSpeechAutoSend = useCallback(() => {
+    const surface = plainSurfaceRef.current;
+    if (!surface) return;
+    const plain = surface.getPlain().trim();
+    if (!plain) return;
+    if (speechDictationRef.current.listening || speechDictationRef.current.transcribing) {
+      speechDictationRef.current.stop();
+    }
+    speechStreamAnchorRef.current = null;
+    void handleSendRef.current(plain);
+  }, []);
+
+  triggerSpeechAutoSendRef.current = triggerComposerSpeechAutoSend;
+
   const scheduleSpeechIdleAutoSend = useCallback(() => {
     if (speechPrefsRef.current.sendMode !== "silenceAutoSend") return;
     clearSpeechIdleAutoSendTimer();
     speechIdleAutoSendTimerRef.current = setTimeout(() => {
       speechIdleAutoSendTimerRef.current = null;
       if (speechPrefsRef.current.sendMode !== "silenceAutoSend") return;
-      const surface = plainSurfaceRef.current;
-      if (!surface) return;
-      const plain = surface.getPlain().trim();
-      if (!plain) return;
-      if (speechDictationRef.current.listening || speechDictationRef.current.transcribing) {
-        speechDictationRef.current.stop();
-      }
-      speechStreamAnchorRef.current = null;
-      void handleSendRef.current(plain);
+      triggerComposerSpeechAutoSend();
     }, COMPOSER_SPEECH_IDLE_AUTO_SEND_MS);
-  }, [clearSpeechIdleAutoSendTimer]);
+  }, [clearSpeechIdleAutoSendTimer, triggerComposerSpeechAutoSend]);
 
   scheduleSpeechIdleAutoSendRef.current = scheduleSpeechIdleAutoSend;
 
@@ -712,6 +744,7 @@ function ComposerInner({
   useEffect(() => {
     if (speechDictation.listening && !speechListeningPrevRef.current) {
       speechStreamAnchorRef.current = null;
+      suffixAutoSendFiredRef.current = false;
       clearSpeechIdleAutoSendTimer();
     }
     speechListeningPrevRef.current = speechDictation.listening;
@@ -720,6 +753,7 @@ function ComposerInner({
   useEffect(() => {
     speechStreamAnchorRef.current = null;
     speechDictation.stop();
+    suffixAutoSendFiredRef.current = false;
     clearSpeechIdleAutoSendTimer();
   }, [session.id, speechDictation.stop, clearSpeechIdleAutoSendTimer]);
 
@@ -753,8 +787,59 @@ function ComposerInner({
         ),
         onClick: () => void updateSpeechPrefs({ sendMode: "silenceAutoSend" }),
       },
+      {
+        key: "mode-ending-auto",
+        label: (
+          <span className="app-claude-composer-voice-menu-row">
+            {speechPrefs.sendMode === "endingWordAutoSend" ? (
+              <CheckOutlined className="app-claude-composer-voice-menu-check" />
+            ) : (
+              <span className="app-claude-composer-voice-menu-check app-claude-composer-voice-menu-check--placeholder" />
+            )}
+            自动发送结束词（口播触发）
+          </span>
+        ),
+        onClick: () => void updateSpeechPrefs({ sendMode: "endingWordAutoSend" }),
+      },
+      { type: "divider" as const },
+      {
+        key: "auto-send-ending",
+        label: (
+          <div
+            className="app-claude-composer-voice-menu-label"
+            onClick={(ev) => ev.stopPropagation()}
+          >
+            <div className="app-claude-composer-voice-menu-label-title">
+              结束词设置 <span className="app-claude-composer-voice-menu-label-subtitle">(口播该词自动发送且不写入)</span>
+            </div>
+            <div className="app-claude-composer-voice-menu-inline-row">
+              <Input
+                size="small"
+                maxLength={16}
+                value={draftAutoSendEndingText}
+                onChange={(ev) => setDraftAutoSendEndingText(ev.target.value)}
+                onPressEnter={() =>
+                  void updateSpeechPrefs({ autoSendEndingText: draftAutoSendEndingText })
+                }
+                placeholder="发送"
+                className="app-claude-composer-voice-menu-input"
+              />
+              <Button
+                type="primary"
+                size="small"
+                className="app-claude-composer-voice-menu-save-btn"
+                onClick={() =>
+                  void updateSpeechPrefs({ autoSendEndingText: draftAutoSendEndingText })
+                }
+              >
+                保存
+              </Button>
+            </div>
+          </div>
+        ),
+      },
     ],
-    [speechPrefs.sendMode, updateSpeechPrefs],
+    [draftAutoSendEndingText, speechPrefs.sendMode, updateSpeechPrefs],
   );
 
   const onCancelRef = useRef(_onCancel);
@@ -1789,14 +1874,18 @@ function ComposerInner({
                   : speechDictation.listening
                     ? speechPrefs.sendMode === "silenceAutoSend"
                       ? "停顿 1 秒无新语音将自动发送；点击结束听写"
-                      : speechDictation.engine === "local"
-                        ? "点击结束录音并转写"
-                        : "点击停止语音听写"
+                      : speechPrefs.sendMode === "endingWordAutoSend"
+                        ? `口播「${speechPrefs.autoSendEndingText}」将自动发送；点击结束听写`
+                        : speechDictation.engine === "local"
+                          ? "点击结束录音并转写"
+                          : "点击停止语音听写"
                     : speechPrefs.sendMode === "silenceAutoSend"
-                      ? "点击开始听写，停顿 1 秒无新语音自动发送；右键配置"
-                      : speechDictation.engine === "local"
-                        ? "本地语音听写（边说边出字）；右键配置"
-                        : "语音听写（边说边出字）；右键配置"
+                      ? "点击开始听写，停顿 1 秒自动发送；右键配置"
+                      : speechPrefs.sendMode === "endingWordAutoSend"
+                        ? `点击开始听写，口播「${speechPrefs.autoSendEndingText}」自动发送；右键配置`
+                        : speechDictation.engine === "local"
+                          ? "本地语音听写（手动发送）；右键配置"
+                          : "语音听写（手动发送）；右键配置"
               }
               placement="top"
             >
@@ -1907,6 +1996,7 @@ function ComposerInner({
     speechDictation.toggle,
     speechDictation.transcribing,
     speechMenuOpen,
+    speechPrefs.autoSendEndingText,
     speechPrefs.sendMode,
     voiceContextMenuItems,
   ]);

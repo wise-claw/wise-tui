@@ -4,13 +4,14 @@ import {
   type ComposerSpeechPreferencesV1,
   type ComposerSpeechSendMode,
 } from "../constants/composerSpeechPreferences";
+import { normalizeComposerSpeechAutoSendEndingText } from "../utils/composerSpeechAutoSendEnding";
 import { getAppSettingJson, setAppSettingJson } from "./appSettingsStore";
 
 let current: ComposerSpeechPreferencesV1 = { ...DEFAULT_COMPOSER_SPEECH_PREFERENCES };
 let hydrated = false;
 let hydrating = false;
 
-const SEND_MODES = new Set<ComposerSpeechSendMode>(["manual", "silenceAutoSend"]);
+const SEND_MODES = new Set<ComposerSpeechSendMode>(["manual", "silenceAutoSend", "endingWordAutoSend"]);
 
 function coerceSendMode(raw: unknown): ComposerSpeechSendMode {
   if (raw === "holdAutoSend") return "silenceAutoSend";
@@ -26,8 +27,14 @@ export function normalizeComposerSpeechPreferences(
     return { ...DEFAULT_COMPOSER_SPEECH_PREFERENCES };
   }
   const o = raw as Record<string, unknown>;
+  const autoSendEndingText =
+    typeof o.autoSendEndingText === "string"
+      ? normalizeComposerSpeechAutoSendEndingText(o.autoSendEndingText)
+      : "";
   return {
     sendMode: coerceSendMode(o.sendMode),
+    autoSendEndingText:
+      autoSendEndingText || DEFAULT_COMPOSER_SPEECH_PREFERENCES.autoSendEndingText,
   };
 }
 
