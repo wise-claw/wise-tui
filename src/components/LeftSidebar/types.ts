@@ -34,8 +34,6 @@ export interface LeftSidebarProps {
   authorDisabled?: boolean;
   authorDisabledTooltip?: string;
   onOpenAuthor: () => void;
-  assistantHubActive?: boolean;
-  onOpenAssistantHub?: () => void;
   mcpHubActive?: boolean;
   onOpenMcpHub?: () => void;
   skillsHubActive?: boolean;

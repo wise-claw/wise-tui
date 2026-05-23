@@ -174,6 +174,21 @@ export function AutomationPanel({
         >
           管理定时任务
         </Button>
+        {onClose ? (
+          <Tooltip title="关闭" mouseEnterDelay={0.35}>
+            <Button
+              type="text"
+              size="small"
+              className="app-automation-panel__close-btn"
+              icon={<CloseOutlined />}
+              aria-label="关闭"
+              onClick={(e) => {
+                e.stopPropagation();
+                onClose();
+              }}
+            />
+          </Tooltip>
+        ) : null}
         </>
       }
     >
@@ -268,22 +283,5 @@ export function AutomationPanel({
     return panel;
   }
 
-  return (
-    <div className="app-automation-panel-root app-automation-panel-root--closable">
-      <div className="app-automation-panel__titlebar">
-        <div className="app-automation-panel__titlebar-drag" data-tauri-drag-region aria-hidden />
-        <Tooltip title="关闭" mouseEnterDelay={0.35}>
-          <Button
-            type="text"
-            size="small"
-            className="app-automation-panel__close-btn"
-            icon={<CloseOutlined />}
-            aria-label="关闭"
-            onClick={onClose}
-          />
-        </Tooltip>
-      </div>
-      {panel}
-    </div>
-  );
+  return <div className="app-automation-panel-root app-automation-panel-root--closable">{panel}</div>;
 }

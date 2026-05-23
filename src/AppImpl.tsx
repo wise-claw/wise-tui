@@ -1169,13 +1169,6 @@ export default function App() {
     setAssistantOpenRequestKey((value) => value + 1);
     viewMode.enter(cockpitView());
   }, [viewMode]);
-  const openDefaultAssistant = useCallback(() => {
-    setSearchOpen(false);
-    setAssistantInitialTarget(null);
-    setCockpitSurfaceInitialAssistantId(cockpitResumeAssistantId);
-    setAssistantOpenRequestKey((value) => value + 1);
-    viewMode.enter(cockpitView(undefined, "assistant"));
-  }, [cockpitResumeAssistantId, viewMode]);
   const openMcpHubFromSidebar = useCallback(() => {
     setSearchOpen(false);
     viewMode.enter(cockpitView(undefined, "mcp"));
@@ -2258,6 +2251,7 @@ export default function App() {
       ccWfStudioSessionPath={ccWfStudioSessionPath}
       onCloseCcWorkflowStudio={onCloseCcWorkflowStudio}
       onCloseTrellisInspector={viewMode.back}
+      onCloseCockpitAutomationHub={viewMode.back}
       compactLayoutMode={compactLayoutMode}
       effectiveRightCollapsed={effectiveRightCollapsed}
       mainLayoutContentRef={mainLayoutContentRef}
@@ -2284,10 +2278,6 @@ export default function App() {
           }
           enterAuthorPane(lastAuthorPane);
         },
-        assistantHubActive:
-          viewMode.view.kind === "cockpit" &&
-          (viewMode.view.hubPane ?? "assistant") === "assistant",
-        onOpenAssistantHub: openDefaultAssistant,
         mcpHubActive: viewMode.view.kind === "cockpit" && viewMode.view.hubPane === "mcp",
         onOpenMcpHub: openMcpHubFromSidebar,
         skillsHubActive: viewMode.view.kind === "cockpit" && viewMode.view.hubPane === "skills",

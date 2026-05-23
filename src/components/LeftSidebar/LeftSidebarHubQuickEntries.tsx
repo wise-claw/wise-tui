@@ -1,12 +1,10 @@
 import type { ReactNode } from "react";
-import { ChatIcon, McpNavIcon, SkillsNavIcon, AutomationNavIcon } from "./SidebarIcons";
+import { McpNavIcon, SkillsNavIcon, AutomationNavIcon } from "./SidebarIcons";
 
 export interface LeftSidebarHubQuickEntriesProps {
-  assistantHubActive?: boolean;
   mcpHubActive?: boolean;
   skillsHubActive?: boolean;
   automationHubActive?: boolean;
-  onOpenAssistantHub?: () => void;
   onOpenMcpHub?: () => void;
   onOpenSkillsHub?: () => void;
   onOpenAutomationHub?: () => void;
@@ -44,11 +42,9 @@ function HubQuickButton({ entry }: { entry: HubQuickEntry }) {
 }
 
 export function LeftSidebarHubQuickEntries({
-  assistantHubActive = false,
   mcpHubActive = false,
   skillsHubActive = false,
   automationHubActive = false,
-  onOpenAssistantHub,
   onOpenMcpHub,
   onOpenSkillsHub,
   onOpenAutomationHub,
@@ -71,15 +67,6 @@ export function LeftSidebarHubQuickEntries({
       icon: <SkillsNavIcon />,
       active: skillsHubActive,
       onClick: onOpenSkillsHub,
-    });
-  }
-  if (onOpenAssistantHub) {
-    entries.push({
-      key: "assistant",
-      label: "助手",
-      icon: <ChatIcon />,
-      active: assistantHubActive,
-      onClick: onOpenAssistantHub,
     });
   }
   if (onOpenAutomationHub) {

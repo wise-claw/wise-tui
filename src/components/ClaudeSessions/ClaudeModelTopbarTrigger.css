@@ -80,28 +80,79 @@
 .app-claude-model-topbar-panel__list {
   flex: 1 1 auto;
   min-height: 0;
-  overflow: auto;
-  padding: 4px 0;
+  overflow-y: auto;
+  padding: 4px;
 }
 
 .app-claude-model-topbar-panel__list .ant-list-item {
-  padding: 4px 8px 4px 12px !important;
+  padding: 2px 6px 2px 10px !important;
+  margin: 1px 0;
+  border-radius: 6px;
   border-block-end: none !important;
+  transition: background 0.15s ease;
+}
+
+.app-claude-model-topbar-panel__list .ant-list-item:hover {
+  background: var(--ant-color-fill-content);
+}
+
+.app-claude-model-topbar-panel__item--active {
+  background: color-mix(in srgb, var(--ant-color-primary) 10%, transparent) !important;
 }
 
 .app-claude-model-topbar-panel__list .ant-list-item-action {
   margin-inline-start: 4px !important;
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 
-.app-claude-model-topbar-panel__item--active {
-  background: var(--ant-color-primary-bg);
+.app-claude-model-topbar-panel__list .ant-list-item-action-split {
+  display: none !important; /* Hide separator line */
+}
+
+/* Make action buttons compact and tidy */
+.app-claude-model-topbar-panel__list .ant-list-item-action .ant-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: var(--ant-color-text-secondary);
+  border: none;
+  background: transparent;
+}
+
+.app-claude-model-topbar-panel__list .ant-list-item-action .ant-btn:hover {
+  background: var(--ant-color-fill-content);
+  color: var(--ant-color-text);
+}
+
+.app-claude-model-topbar-panel__list .ant-list-item-action .ant-btn-dangerous:hover {
+  color: var(--ant-color-error) !important;
+  background: var(--ant-color-error-bg) !important;
+}
+
+/* Hide actions until item hovered */
+.app-claude-model-topbar-panel__list .ant-list-item .ant-list-item-action {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+
+.app-claude-model-topbar-panel__list .ant-list-item:hover .ant-list-item-action {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .app-claude-model-topbar-panel__item-main {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   border: none;
   background: transparent;
   padding: 2px 0;
@@ -113,22 +164,50 @@
 
 .app-claude-model-topbar-panel__item-name {
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 550;
   color: var(--ant-color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-claude-model-topbar-panel__item-meta {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  margin-left: auto; /* Pull to the right side */
+  color: var(--ant-color-text-tertiary);
+  min-width: 0;
+  overflow: hidden;
 }
 
 .app-claude-model-topbar-panel__item-company {
-  font-size: 11px;
-  color: var(--ant-color-text-secondary);
+  font-size: 10px;
+  color: var(--ant-color-text-quaternary);
+  background: var(--ant-color-fill-content);
+  padding: 0 4px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.app-claude-model-topbar-panel__item-company::after {
+  content: "" !important;
+  margin-left: 0 !important;
 }
 
 .app-claude-model-topbar-panel__item-model {
   font-size: 11px;
   color: var(--ant-color-text-tertiary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-claude-model-topbar-panel__foot {
-  padding: 8px 12px 10px;
+  padding: 6px 12px 8px;
   border-top: 1px solid var(--ant-color-border-secondary);
 }
 

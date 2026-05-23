@@ -64,8 +64,6 @@ export function LeftSidebar({
   authorDisabled,
   authorDisabledTooltip,
   onOpenAuthor,
-  assistantHubActive = false,
-  onOpenAssistantHub,
   mcpHubActive = false,
   onOpenMcpHub,
   skillsHubActive = false,
@@ -515,11 +513,9 @@ export function LeftSidebar({
       ) : null}
 
       <LeftSidebarHubQuickEntries
-        assistantHubActive={assistantHubActive}
         mcpHubActive={mcpHubActive}
         skillsHubActive={skillsHubActive}
         automationHubActive={automationHubActive}
-        onOpenAssistantHub={onOpenAssistantHub}
         onOpenMcpHub={onOpenMcpHub}
         onOpenSkillsHub={onOpenSkillsHub}
         onOpenAutomationHub={onOpenAutomationHub}

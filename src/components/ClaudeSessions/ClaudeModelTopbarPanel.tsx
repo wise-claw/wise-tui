@@ -265,13 +265,15 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
                   onClick={() => void handleApply(item.id)}
                 >
                   <span className="app-claude-model-topbar-panel__item-name">{item.name}</span>
-                  {item.company?.trim() ? (
-                    <span className="app-claude-model-topbar-panel__item-company">
-                      {item.company.trim()}
+                  <span className="app-claude-model-topbar-panel__item-meta">
+                    {item.company?.trim() ? (
+                      <span className="app-claude-model-topbar-panel__item-company">
+                        {item.company.trim()}
+                      </span>
+                    ) : null}
+                    <span className="app-claude-model-topbar-panel__item-model">
+                      {formatClaudeModelLabel(item.modelId)}
                     </span>
-                  ) : null}
-                  <span className="app-claude-model-topbar-panel__item-model">
-                    {formatClaudeModelLabel(item.modelId)}
                   </span>
                 </button>
               </List.Item>

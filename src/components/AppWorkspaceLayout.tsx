@@ -268,6 +268,8 @@ export interface AppWorkspaceLayoutProps {
   onCloseCcWorkflowStudio: () => void;
   /** Stage 5 / E7：四个 Trellis Inspector 透镜统一通过 viewMode.back() 关闭。 */
   onCloseTrellisInspector: () => void;
+  /** Cockpit 定时自动化 Hub 关闭（返回上一 ViewMode）。 */
+  onCloseCockpitAutomationHub: () => void;
   compactLayoutMode: boolean;
   effectiveRightCollapsed: boolean;
   mainLayoutContentRef: RefObject<HTMLElement | null>;
@@ -367,6 +369,7 @@ export function AppWorkspaceLayout({
   ccWfStudioSessionPath,
   onCloseCcWorkflowStudio,
   onCloseTrellisInspector,
+  onCloseCockpitAutomationHub,
   compactLayoutMode,
   effectiveRightCollapsed,
   mainLayoutContentRef,
@@ -741,7 +744,7 @@ export function AppWorkspaceLayout({
                         ) : cockpitHubPane === "automation" ? (
                           <AutomationPanel
                             {...authorPanelProps.automationPanelProps}
-                            onClose={() => viewMode.back()}
+                            onClose={onCloseCockpitAutomationHub}
                           />
                         ) : (
                           <Suspense fallback={<PanelLoadingFallback />}>
