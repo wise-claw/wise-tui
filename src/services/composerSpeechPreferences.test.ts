@@ -6,6 +6,7 @@ describe("normalizeComposerSpeechPreferences", () => {
     expect(normalizeComposerSpeechPreferences(null)).toEqual({
       sendMode: "manual",
       autoSendEndingText: "发送",
+      speechToRequirementEnabled: false,
     });
   });
 
@@ -17,6 +18,7 @@ describe("normalizeComposerSpeechPreferences", () => {
     ).toEqual({
       sendMode: "silenceAutoSend",
       autoSendEndingText: "发送",
+      speechToRequirementEnabled: false,
     });
   });
 
@@ -29,6 +31,17 @@ describe("normalizeComposerSpeechPreferences", () => {
     ).toEqual({
       sendMode: "silenceAutoSend",
       autoSendEndingText: "提交",
+      speechToRequirementEnabled: false,
+    });
+  });
+
+  test("enables speechToRequirement when true", () => {
+    expect(
+      normalizeComposerSpeechPreferences({
+        speechToRequirementEnabled: true,
+      }),
+    ).toMatchObject({
+      speechToRequirementEnabled: true,
     });
   });
 
@@ -41,6 +54,7 @@ describe("normalizeComposerSpeechPreferences", () => {
     ).toEqual({
       sendMode: "manual",
       autoSendEndingText: "发送",
+      speechToRequirementEnabled: false,
     });
   });
 });

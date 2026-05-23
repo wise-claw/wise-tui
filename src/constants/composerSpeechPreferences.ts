@@ -11,11 +11,14 @@ export interface ComposerSpeechPreferencesV1 {
   sendMode: ComposerSpeechSendMode;
   /** 口播该结束词时自动发送；不写入发给 Claude 的正文。 */
   autoSendEndingText: string;
+  /** 开启后会话谈话内容自动追加到当前项目/仓库的需求草稿（与需求拆分助手保存一致）。 */
+  speechToRequirementEnabled: boolean;
 }
 
 export const DEFAULT_COMPOSER_SPEECH_PREFERENCES: ComposerSpeechPreferencesV1 = {
   sendMode: "manual",
   autoSendEndingText: "发送",
+  speechToRequirementEnabled: false,
 };
 
 /** 转写流式更新后，超过该时长无新片段则触发自动发送。 */

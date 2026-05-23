@@ -46,7 +46,7 @@ import { TodoDock } from "./dock/todo-dock";
 import { RevertDock } from "./dock/revert-dock";
 import { addToHistory, promptLength, navigatePromptHistory, canNavigateHistoryAtCursor } from "./prompt-history";
 import { CheckOutlined } from "@ant-design/icons";
-import { Dropdown, Button, Empty, Input, Popover, Select, Spin, Tabs, Tag, Tooltip, message } from "antd";
+import { Dropdown, Button, Empty, Input, Popover, Select, Spin, Switch, Tabs, Tag, Tooltip, message } from "antd";
 import { ContextCompactProgressRing } from "./ContextCompactProgressRing";
 import { useContextBreakdown } from "../../hooks/useContextBreakdown";
 import { ClaudeConnectionKindChip } from "./ClaudeConnectionKindChip";
@@ -817,6 +817,23 @@ function ComposerInner({
       },
       { type: "divider" as const },
       {
+        key: "speech-to-requirement",
+        label: (
+          <div
+            className="app-claude-composer-voice-menu-row app-claude-composer-voice-menu-row--switch"
+            onClick={(ev) => ev.stopPropagation()}
+          >
+            <span className="app-claude-composer-voice-menu-row-label">录音转需求</span>
+            <Switch
+              size="small"
+              checked={speechPrefs.speechToRequirementEnabled}
+              onChange={(checked) => void updateSpeechPrefs({ speechToRequirementEnabled: checked })}
+            />
+          </div>
+        ),
+      },
+      { type: "divider" as const },
+      {
         key: "auto-send-ending",
         label: (
           <div
@@ -853,7 +870,7 @@ function ComposerInner({
         ),
       },
     ],
-    [draftAutoSendEndingText, speechPrefs.sendMode, updateSpeechPrefs],
+    [draftAutoSendEndingText, speechPrefs.sendMode, speechPrefs.speechToRequirementEnabled, updateSpeechPrefs],
   );
 
   const onCancelRef = useRef(_onCancel);

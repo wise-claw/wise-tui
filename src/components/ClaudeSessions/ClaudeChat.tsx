@@ -117,6 +117,11 @@ import {
   userMessagePlainTextForDisplay,
 } from "../../utils/claudeChatMessageDisplay";
 import { pickSessionForRepositorySidebarSelect } from "../../utils/claudeSessionSelection";
+import { useComposerSpeechPreferences } from "../../hooks/useComposerSpeechPreferences";
+import {
+  buildSpeechToRequirementScope,
+  useSpeechToRequirementSync,
+} from "../../hooks/useSpeechToRequirementSync";
 import { buildOmcBatchTaskIntentOneLiner } from "../../utils/omcBatchTaskIntentOneLiner";
 import {
   resolveRepositoryMainSessionId,
@@ -498,6 +503,16 @@ export function ClaudeChat({
 }: Props) {
   const chatRootRef = useRef<HTMLDivElement>(null);
   const composerTrayRef = useRef<HTMLDivElement>(null);
+  const { prefs: speechPrefs } = useComposerSpeechPreferences();
+  const speechToRequirementScope = useMemo(
+    () =>
+      buildSpeechToRequirementScope({
+        activeProjectId: activeProject?.id ?? missionContext?.projectId ?? null,
+        activeRepositoryId: activeRepository?.id ?? null,
+      }),
+    [activeProject?.id, activeRepository?.id, missionContext?.projectId],
+  );
+  useSpeechToRequirementSync(speechPrefs.speechToRequirementEnabled, speechToRequirementScope, session);
 
   useLayoutEffect(() => {
     const root = chatRootRef.current;

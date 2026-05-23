@@ -35,6 +35,7 @@ export function normalizeComposerSpeechPreferences(
     sendMode: coerceSendMode(o.sendMode),
     autoSendEndingText:
       autoSendEndingText || DEFAULT_COMPOSER_SPEECH_PREFERENCES.autoSendEndingText,
+    speechToRequirementEnabled: o.speechToRequirementEnabled === true,
   };
 }
 
