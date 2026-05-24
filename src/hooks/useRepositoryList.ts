@@ -9,6 +9,8 @@ import {
   updateProjectSddMode,
   updateRepositorySddMode,
 } from "../services/repository";
+import { updateRepositoryExecutionEngine } from "../services/repositoryExecutionEngine";
+import type { SessionExecutionEngine } from "../types";
 import {
   addRepositoryToProject,
   createProject,
@@ -499,6 +501,14 @@ export function useRepositoryList() {
     setRepositories((prev) => prev.map((r) => (r.id === repositoryId ? updated : r)));
   }, []);
 
+  const handleUpdateRepositoryExecutionEngine = useCallback(
+    async (repositoryId: number, executionEngine: SessionExecutionEngine) => {
+      const updated = await updateRepositoryExecutionEngine(repositoryId, executionEngine);
+      setRepositories((prev) => prev.map((r) => (r.id === repositoryId ? updated : r)));
+    },
+    [],
+  );
+
   const handleMoveRepositoryToProject = useCallback(
     async (targetProjectId: string, repositoryId: number) => {
       const owningIds = projects.filter((p) => p.repositoryIds.includes(repositoryId)).map((p) => p.id);
@@ -591,6 +601,7 @@ export function useRepositoryList() {
     handleReconcileProjectWorkspace,
     handleBootstrapTrellisAtPath,
     handleUpdateRepositoryMainOwnerAgent,
+    handleUpdateRepositoryExecutionEngine,
     togglePinProject,
   };
 }

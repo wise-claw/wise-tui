@@ -24,6 +24,7 @@ import type {
   PendingExecutionTask,
   Prompt,
   Repository,
+  SessionExecutionEngine,
 } from "../../types";
 import { PromptProvider, clearPromptContextSessionKey, usePrompt } from "./prompt-context";
 import type { TriggerInfo } from "./slash-trigger";
@@ -50,6 +51,7 @@ import { Dropdown, Button, Empty, Input, Popover, Select, Spin, Switch, Tabs, Ta
 import { ContextCompactProgressRing } from "./ContextCompactProgressRing";
 import { useContextBreakdown } from "../../hooks/useContextBreakdown";
 import { ClaudeConnectionKindChip } from "./ClaudeConnectionKindChip";
+import { SessionExecutionEngineChip } from "./SessionExecutionEngineChip";
 import { useDefaultClaudeConnectionKind } from "../../hooks/useDefaultClaudeConnectionKind";
 import { useComposerSpeechDictation } from "../../hooks/useComposerSpeechDictation";
 import { useComposerSpeechPreferences } from "../../hooks/useComposerSpeechPreferences";
@@ -129,6 +131,10 @@ interface ComposerInnerProps {
   ) => void;
   onSessionModelChange: (model: string) => void;
   onSessionConnectionKindChange?: (kind: ClaudeSessionConnectionKind) => void;
+  sessionExecutionEngine?: SessionExecutionEngine;
+  codexAvailable?: boolean;
+  onSessionExecutionEngineChange?: (engine: SessionExecutionEngine) => void;
+  onOpenExecutionEnvironment?: () => void;
   /** `retractLastUserTurn`：Esc 撤回刚发时从 transcript 去掉本轮 user/assistant 并杀进程 */
   onCancel: (opts?: { retractLastUserTurn?: boolean }) => void;
   todos: TodoItem[];
@@ -365,6 +371,10 @@ function ComposerInner({
   onExecute,
   onSessionModelChange,
   onSessionConnectionKindChange,
+  sessionExecutionEngine = "claude",
+  codexAvailable = true,
+  onSessionExecutionEngineChange,
+  onOpenExecutionEnvironment,
   onCancel: _onCancel,
   todos,
   questionRequest,
@@ -2052,6 +2062,13 @@ function ComposerInner({
             </Button>
           </Tooltip>
         ) : null}
+        <SessionExecutionEngineChip
+          engine={sessionExecutionEngine}
+          codexAvailable={codexAvailable}
+          disabled={isSessionBusy}
+          onEngineChange={onSessionExecutionEngineChange}
+          onOpenExecutionEnvironment={onOpenExecutionEnvironment}
+        />
         <ClaudeConnectionKindChip
           connectionKind={session.connectionKind}
           defaultConnectionKind={defaultConnectionKind}
@@ -2104,6 +2121,10 @@ function ComposerInner({
       session.connectionKind,
       defaultConnectionKind,
       onSessionConnectionKindChange,
+      sessionExecutionEngine,
+      codexAvailable,
+      onSessionExecutionEngineChange,
+      onOpenExecutionEnvironment,
       model,
       modelDisplayLabel,
       modelMenuItems,
@@ -2369,6 +2390,10 @@ export interface ComposerRegionProps {
   ) => void;
   onSessionModelChange: (model: string) => void;
   onSessionConnectionKindChange?: (kind: ClaudeSessionConnectionKind) => void;
+  sessionExecutionEngine?: SessionExecutionEngine;
+  codexAvailable?: boolean;
+  onSessionExecutionEngineChange?: (engine: SessionExecutionEngine) => void;
+  onOpenExecutionEnvironment?: () => void;
   /** `retractLastUserTurn`：Esc 撤回刚发时从 transcript 去掉本轮 user/assistant 并杀进程 */
   onCancel: (opts?: { retractLastUserTurn?: boolean }) => void;
   todos: TodoItem[];

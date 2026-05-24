@@ -11,6 +11,7 @@ export async function createEmployee(input: {
   enabled?: boolean;
   repositoryIds?: number[];
   projectIds?: string[];
+  executionEngine?: import("../types").SessionExecutionEngine;
 }): Promise<EmployeeItem> {
   return invoke<EmployeeItem>("create_employee", {
     name: input.name,
@@ -18,6 +19,7 @@ export async function createEmployee(input: {
     enabled: input.enabled ?? true,
     repositoryIds: input.repositoryIds ?? [],
     projectIds: input.projectIds ?? [],
+    executionEngine: input.executionEngine ?? "claude",
   });
 }
 
@@ -28,6 +30,7 @@ export async function updateEmployee(input: {
   enabled: boolean;
   repositoryIds?: number[];
   projectIds?: string[];
+  executionEngine?: import("../types").SessionExecutionEngine;
 }): Promise<EmployeeItem> {
   return invoke<EmployeeItem>("update_employee", input);
 }

@@ -1,5 +1,8 @@
 import type { MouseEvent as ReactMouseEvent } from "react";
 
+/** 主会话 / 成员会话执行引擎。 */
+export type SessionExecutionEngine = "claude" | "codex";
+
 /** Wise 侧栏中保存的工作区（磁盘上的 Git/代码目录）。 */
 export interface Repository {
   id: number;
@@ -19,6 +22,8 @@ export interface Repository {
    * 未设置时侧栏点仓库仍优先人类主会话（无 `员工:` 段的标签）。
    */
   mainOwnerAgentName?: string | null;
+  /** 主会话执行引擎：`claude`（默认）或 `codex`。 */
+  executionEngine?: SessionExecutionEngine;
   branch?: string;
   createdAt: string;
   updatedAt: string;
@@ -90,6 +95,8 @@ export interface EmployeeItem {
   displayOrder: number;
   repositoryIds: number[];
   projectIds: string[];
+  /** 成员会话执行引擎；缺省为 Claude Code。 */
+  executionEngine?: SessionExecutionEngine;
 }
 
 export interface EmployeeTaskCountItem {

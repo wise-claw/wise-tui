@@ -5,6 +5,7 @@ mod cc_wf_studio_mcp_bridge;
 mod cc_workflow_studio;
 mod claude_code_usage;
 mod claude_commands;
+mod codex_commands;
 mod claude_config_dir;
 mod claude_external_ingest;
 mod claude_llm_proxy;

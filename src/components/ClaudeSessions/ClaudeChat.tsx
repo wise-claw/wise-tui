@@ -107,6 +107,7 @@ import {
   resolveOwnerHintForSession,
   WISE_SESSION_OWNER_HINTS_CHANGED_EVENT,
 } from "../../utils/sessionOwnerHints";
+import { resolveSessionExecutionEngine } from "../../utils/sessionExecutionEngine";
 import { extractClaudeInvocationFinalText } from "../../utils/claudeInvocationText";
 import { removeSplitResultTasksByIds } from "../../utils/removeSplitResultTasksByIds";
 import {
@@ -175,6 +176,7 @@ import type {
   PendingExecutionTask,
   ProjectItem,
   Repository,
+  SessionExecutionEngine,
   TaskItem,
   TaskFlowStatus,
   WorkflowGraph,
@@ -222,6 +224,16 @@ interface Props {
   ) => boolean | void | Promise<boolean | void>;
   onSessionModelChange: (model: string) => void;
   onSessionConnectionKindChange?: (kind: ClaudeSessionConnectionKind) => void;
+  onUpdateRepositoryExecutionEngine?: (
+    repositoryId: number,
+    engine: SessionExecutionEngine,
+  ) => void | Promise<void>;
+  onUpdateEmployeeExecutionEngine?: (
+    employeeId: string,
+    engine: SessionExecutionEngine,
+  ) => void | Promise<void>;
+  codexAvailable?: boolean;
+  onOpenExecutionEnvironment?: () => void;
   onCancel: (opts?: { retractLastUserTurn?: boolean }) => void;
   // Dock props
   todos: TodoItem[];
@@ -450,6 +462,10 @@ export function ClaudeChat({
   onExecute,
   onSessionModelChange,
   onSessionConnectionKindChange,
+  onUpdateRepositoryExecutionEngine,
+  onUpdateEmployeeExecutionEngine,
+  codexAvailable = true,
+  onOpenExecutionEnvironment,
   onCancel,
   todos,
   questionRequest,
@@ -1683,6 +1699,45 @@ export function ClaudeChat({
     rows.sort((a, b) => b.timestamp - a.timestamp);
     return rows;
   }, [session.messages]);
+
+  const sessionExecutionEngine = useMemo(
+    () => resolveSessionExecutionEngine(session, repositories, employees),
+    [session, repositories, employees],
+  );
+
+  const handleSessionExecutionEngineChange = useCallback(
+    (engine: SessionExecutionEngine) => {
+      const employeeName = extractBoundEmployeeNameFromDisplay(session.repositoryName ?? "");
+      if (employeeName) {
+        const match = employees.find(
+          (item) => item.enabled && item.name.trim() === employeeName.trim(),
+        );
+        if (match) {
+          void onUpdateEmployeeExecutionEngine?.(match.id, engine);
+          return;
+        }
+      }
+      const repo =
+        activeRepository ??
+        repositories.find(
+          (item) =>
+            item.path.trim() === session.repositoryPath.trim() ||
+            item.name.trim() === session.repositoryName.split("/")[0]?.trim(),
+        );
+      if (repo) {
+        void onUpdateRepositoryExecutionEngine?.(repo.id, engine);
+      }
+    },
+    [
+      activeRepository,
+      employees,
+      onUpdateEmployeeExecutionEngine,
+      onUpdateRepositoryExecutionEngine,
+      repositories,
+      session.repositoryName,
+      session.repositoryPath,
+    ],
+  );
 
   const scrollToSessionMessageId = useCallback((messageId: number) => {
     window.setTimeout(() => {
@@ -4890,6 +4945,10 @@ export function ClaudeChat({
           onExecute={handleComposerExecute}
           onSessionModelChange={onSessionModelChange}
           onSessionConnectionKindChange={onSessionConnectionKindChange}
+          sessionExecutionEngine={sessionExecutionEngine}
+          codexAvailable={codexAvailable}
+          onOpenExecutionEnvironment={onOpenExecutionEnvironment}
+          onSessionExecutionEngineChange={handleSessionExecutionEngineChange}
           onCancel={onCancel}
           todos={todos}
           questionRequest={questionRequest}

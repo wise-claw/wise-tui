@@ -1,6 +1,6 @@
 use crate::{
     agent_registry, app_state_commands, assistants, cc_switch_import, cc_wf_studio_mcp_bridge,
-    cc_workflow_studio, claude_code_usage, claude_commands, claude_config_dir, claude_external_ingest,
+    cc_workflow_studio, claude_code_usage, claude_commands, codex_commands, claude_config_dir, claude_external_ingest,
     claude_llm_proxy, claude_model_profiles,
     code_knowledge_graph, fcc_traces, free_claude_code,
     cua_driver, dingtalk_enterprise_bot, dingtalk_stream_gateway, extensions, git_commands,
@@ -156,6 +156,7 @@ pub fn run() {
             app_state_commands::create_repository_from_path,
             app_state_commands::update_repository_icon_display,
             app_state_commands::update_repository_main_owner_agent,
+            app_state_commands::update_repository_execution_engine,
             app_state_commands::update_repository_sdd_mode,
             app_state_commands::update_repository_role_tags,
             app_state_commands::remove_repository,
@@ -331,6 +332,7 @@ pub fn run() {
             claude_llm_proxy::get_claude_llm_proxy_config,
             claude_llm_proxy::set_claude_llm_proxy_config,
             claude_commands::execute_claude_code,
+            codex_commands::execute_codex_code,
             claude_commands::resume_claude_code,
             claude_commands::spawn_streaming_session,
             claude_commands::send_user_message_to_session,

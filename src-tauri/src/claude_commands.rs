@@ -47,7 +47,7 @@ pub(crate) struct ClaudeProcessState {
     active_child_by_claude_session:
         Arc<TokioMutex<HashMap<String, Arc<TokioMutex<Option<Child>>>>>>,
     /// Oneshot invocation 早于 `system.init.session_id` 可见；按 invocation_key 保存 wait 句柄，支持精准取消。
-    active_child_by_invocation_key:
+    pub(crate) active_child_by_invocation_key:
         Arc<TokioMutex<HashMap<String, Arc<TokioMutex<Option<Child>>>>>>,
     /// 与前端「项目+仓库并发」一致：按 `projectId:repositoryId` 计数当前已占用的 Claude spawn 槽位。
     spawn_slots_by_scope: Arc<TokioMutex<HashMap<String, u32>>>,
@@ -343,7 +343,7 @@ impl ClaudeSessionRegistry {
         }
     }
 
-    fn register(&self, session_id: String, project_path: String, model: String) {
+    pub(crate) fn register(&self, session_id: String, project_path: String, model: String) {
         let mut sessions = self.sessions.lock().unwrap();
         sessions.insert(
             session_id.clone(),
@@ -360,7 +360,7 @@ impl ClaudeSessionRegistry {
         );
     }
 
-    fn mark_completed(&self, session_id: &str, success: bool) {
+    pub(crate) fn mark_completed(&self, session_id: &str, success: bool) {
         let mut sessions = self.sessions.lock().unwrap();
         if let Some(info) = sessions.get_mut(session_id) {
             info.status = if success {

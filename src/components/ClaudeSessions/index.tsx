@@ -1172,6 +1172,16 @@ interface Props {
     sessionId: string,
     kind: import("../../constants/claudeConnection").ClaudeSessionConnectionKind,
   ) => void | Promise<void>;
+  onUpdateRepositoryExecutionEngine?: (
+    repositoryId: number,
+    engine: import("../../types").SessionExecutionEngine,
+  ) => void | Promise<void>;
+  onUpdateEmployeeExecutionEngine?: (
+    employeeId: string,
+    engine: import("../../types").SessionExecutionEngine,
+  ) => void | Promise<void>;
+  codexAvailable?: boolean;
+  onOpenExecutionEnvironment?: () => void;
   onExecuteSession: (
     sessionId: string,
     prompt: string,
@@ -1290,6 +1300,10 @@ export function ClaudeSessions({
   onSelectRepository,
   onUpdateSessionModel,
   onUpdateSessionConnectionKind,
+  onUpdateRepositoryExecutionEngine,
+  onUpdateEmployeeExecutionEngine,
+  codexAvailable = true,
+  onOpenExecutionEnvironment,
   onExecuteSession,
   onSendMessage,
   onCancelSession,
@@ -1611,6 +1625,10 @@ export function ClaudeSessions({
                 onSessionConnectionKindChange={(kind) =>
                   void onUpdateSessionConnectionKind(activeSession.id, kind)
                 }
+                onUpdateRepositoryExecutionEngine={onUpdateRepositoryExecutionEngine}
+                onUpdateEmployeeExecutionEngine={onUpdateEmployeeExecutionEngine}
+                codexAvailable={codexAvailable}
+                onOpenExecutionEnvironment={onOpenExecutionEnvironment}
                 onCancel={(opts) => onCancelSession(activeSession.id, opts)}
                 respondQuestionAt={onRespondToQuestion}
                 dismissQuestionAt={onDismissQuestion}
@@ -1673,6 +1691,10 @@ export function ClaudeSessions({
                   onSessionConnectionKindChange={(kind) =>
                     void onUpdateSessionConnectionKind(secondarySession.id, kind)
                   }
+                  onUpdateRepositoryExecutionEngine={onUpdateRepositoryExecutionEngine}
+                  onUpdateEmployeeExecutionEngine={onUpdateEmployeeExecutionEngine}
+                  codexAvailable={codexAvailable}
+                onOpenExecutionEnvironment={onOpenExecutionEnvironment}
                   onCancel={(opts) => onCancelSession(secondarySession.id, opts)}
                   respondQuestionAt={onRespondToQuestion}
                   dismissQuestionAt={onDismissQuestion}
@@ -1755,6 +1777,10 @@ export function ClaudeSessions({
             onSessionConnectionKindChange={(kind) =>
               void onUpdateSessionConnectionKind(activeSession.id, kind)
             }
+            onUpdateRepositoryExecutionEngine={onUpdateRepositoryExecutionEngine}
+            onUpdateEmployeeExecutionEngine={onUpdateEmployeeExecutionEngine}
+            codexAvailable={codexAvailable}
+            onOpenExecutionEnvironment={onOpenExecutionEnvironment}
             onCancel={(opts) => onCancelSession(activeSession.id, opts)}
             respondQuestionAt={onRespondToQuestion}
             dismissQuestionAt={onDismissQuestion}

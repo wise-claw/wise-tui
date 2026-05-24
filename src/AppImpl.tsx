@@ -23,7 +23,9 @@ import {
   repositorySessionTabDisplayName,
   repositoryTypeChineseLabel,
 } from "./utils/repositoryType";
-import { useRepositoryList } from "./hooks/useRepositoryList";
+import { resolveSessionExecutionEngine } from "./utils/sessionExecutionEngine";
+import { listAgents } from "./services/agentRegistry";
+import { isAgentKind } from "./types/detectedAgent";
 import { useCcWorkflowStudioWorkspace } from "./hooks/useCcWorkflowStudioWorkspace";
 import {
   authorView,
@@ -34,6 +36,7 @@ import {
 } from "./hooks/useViewMode";
 import type { AuthorPane } from "./types/viewMode";
 import { useClaudeSessions, type ClaudeTurnCompletePayload } from "./hooks/useClaudeSessions";
+import { useRepositoryList } from "./hooks/useRepositoryList";
 import { openInFinder } from "./services/repository";
 import { triggerCodeGraphProjectSearch, triggerCodeGraphReindex } from "./services/codeKnowledgeGraph";
 import { AppWorkspaceLayout } from "./components/AppWorkspaceLayout";
@@ -406,11 +409,20 @@ export default function App() {
     handleReconcileProjectWorkspace,
     handleBootstrapTrellisAtPath,
     handleUpdateRepositoryMainOwnerAgent,
+    handleUpdateRepositoryExecutionEngine,
     pinnedProjectIds,
     togglePinProject,
     floatingRepositories,
     standaloneRepos,
   } = useRepositoryList();
+
+  const handleOpenExecutionEnvironment = useCallback(() => {
+    if (!activeProjectId && activeRepositoryId != null) {
+      message.warning("Standalone Repo 不支持 Author 配置；升格为 Workspace 后启用");
+      return;
+    }
+    enterAuthorPane("engine-registry");
+  }, [activeProjectId, activeRepositoryId, enterAuthorPane]);
 
   const sidebarCodeGraphReindexBatchRef = useRef<SidebarReindexBatchState | null>(null);
   const disposeSidebarCodeGraphReindexBatch = useCallback(() => {
@@ -552,6 +564,45 @@ export default function App() {
     ((session: ClaudeSession) => Promise<import("./services/claudeSpawnExtras").ClaudeSpawnCliExtras | null>) | null
   >(null);
 
+  const resolveExecutionEngineRef = useRef<
+    ((session: ClaudeSession) => import("./types").SessionExecutionEngine) | null
+  >(null);
+
+  const [codexAvailable, setCodexAvailable] = useState(false);
+
+  useEffect(() => {
+    void listAgents()
+      .then((agents) => {
+        setCodexAvailable(agents.some((agent) => isAgentKind(agent, "codex") && agent.available));
+      })
+      .catch(() => setCodexAvailable(false));
+  }, []);
+
+  useEffect(() => {
+    resolveExecutionEngineRef.current = (session) =>
+      resolveSessionExecutionEngine(session, repositoriesLatestRef.current, employeesLatestRef.current);
+  });
+
+  const handleUpdateEmployeeExecutionEngine = useCallback(
+    async (employeeId: string, engine: import("./types").SessionExecutionEngine) => {
+      const row = employees.find((e) => e.id === employeeId);
+      if (!row) return;
+      await updateEmployee({
+        employeeId,
+        name: row.name,
+        agentType: row.agentType,
+        enabled: row.enabled,
+        repositoryIds: row.repositoryIds,
+        projectIds: row.projectIds,
+        executionEngine: engine,
+      });
+      setEmployees((prev) =>
+        prev.map((e) => (e.id === employeeId ? { ...e, executionEngine: engine } : e)),
+      );
+    },
+    [employees],
+  );
+
   const advanceTeamAfterTurnRef = useRef<(p: ClaudeTurnCompletePayload) => void>(() => {});
 
   const moveDingTalkAutomationPendingSessionIdRef = useRef<(fromTabId: string, toClaudeSessionId: string) => void>(() => {});
@@ -607,6 +658,7 @@ export default function App() {
     beforeSpawnClaudeRef,
     claudeConcurrencyInvokeContextRef,
     claudeSpawnExtrasContextRef,
+    resolveExecutionEngineRef,
     onClaudeSpawnBlocked: (blockedMessage) => {
       message.warning(blockedMessage);
     },
@@ -2577,6 +2629,7 @@ export default function App() {
                 enabled: input.enabled,
                 repositoryIds: input.repositoryIds,
                 projectIds: linkPid ? [linkPid] : [],
+                executionEngine: input.executionEngine,
               });
               if (linkPid) {
                 setEmployeeConfigPrdVisibleEmployeeIds((prev) =>
@@ -2751,6 +2804,10 @@ export default function App() {
         onSelectRepository: setActiveRepositoryId,
         onUpdateSessionModel: updateSessionModel,
         onUpdateSessionConnectionKind: updateSessionConnectionKind,
+        onUpdateRepositoryExecutionEngine: handleUpdateRepositoryExecutionEngine,
+        onUpdateEmployeeExecutionEngine: handleUpdateEmployeeExecutionEngine,
+        codexAvailable,
+        onOpenExecutionEnvironment: handleOpenExecutionEnvironment,
         onExecuteSession: handleComposerExecute,
         onSendMessage: handleSendMessageWithAtMention,
         onCancelSession: cancelSession,

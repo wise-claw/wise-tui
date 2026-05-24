@@ -27,6 +27,8 @@ import {
   submitClaudeStdinLine,
   listRunningClaudeSessions,
 } from "../services/claude";
+import { executeCodexCode } from "../services/codex";
+import type { SessionExecutionEngine } from "../types";
 import {
   CLAUDE_CONNECTION_KIND_LABELS,
   loadDefaultClaudeConnectionKind,
@@ -466,6 +468,10 @@ interface UseClaudeSessionsOptions {
   companionSessionId?: string | null;
   /** 流式 init 将临时 tab id 合并为真实 `session_id` 时回调（同步双栏右侧绑定） */
   onSessionTabIdMigrated?: (fromTabId: string, toClaudeSessionId: string) => void;
+  /** 解析会话应使用的执行引擎（主会话读仓库配置，成员会话读员工配置）。 */
+  resolveExecutionEngineRef?: MutableRefObject<
+    ((session: ClaudeSession) => SessionExecutionEngine) | null
+  >;
 }
 
 interface UseClaudeSessionsReturn {
@@ -788,6 +794,59 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     [resolveTrellisContextId, resolveSpawnExtrasForTab],
   );
 
+  const runCodexOneshotWithInvocation = useCallback(
+    async (params: {
+      tabSessionId: string;
+      turnNonce: number;
+      repositoryPath: string;
+      prompt: string;
+      modelArg: string | undefined;
+    }) => {
+      const { tabSessionId, turnNonce, repositoryPath, prompt, modelArg } = params;
+      if (!streamRuntimeRef.current) {
+        const deadline = Date.now() + CLAUDE_STREAM_RUNTIME_READY_WAIT_MS;
+        while (!streamRuntimeRef.current && Date.now() < deadline) {
+          await new Promise<void>((r) => {
+            window.setTimeout(r, CLAUDE_STREAM_RUNTIME_READY_POLL_MS);
+          });
+        }
+        if (!streamRuntimeRef.current) {
+          message.error("流式引擎尚未就绪或初始化超时，请稍后重试发送。");
+          throw new Error("Claude stream runtime not ready");
+        }
+      }
+      notificationHub.invalidateControlRequestsForSession(tabSessionId, "已发起新一轮对话");
+      const rt = streamRuntimeRef.current;
+      let detach: (() => void) | null = null;
+      const inv = crypto.randomUUID();
+      if (rt) {
+        try {
+          detach = await attachClaudeInvocationStream(inv, tabSessionId, rt, turnNonce, () => {
+            claudeInvocationInflightRef.current.delete(inv);
+          });
+          claudeInvocationInflightRef.current.set(inv, { tabId: tabSessionId, detach });
+        } catch {
+          detach = null;
+        }
+      }
+      const invocationKey = detach ? inv : undefined;
+      try {
+        await executeCodexCode(
+          repositoryPath,
+          prompt,
+          modelArg,
+          invocationKey,
+          tabSessionId,
+          resolveTrellisContextId(tabSessionId),
+        );
+      } catch (e) {
+        detach?.();
+        throw e;
+      }
+    },
+    [resolveTrellisContextId],
+  );
+
   const runClaudeStreamingWithInvocation = useCallback(
     async (params: {
       tabSessionId: string;
@@ -948,13 +1007,26 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       resumeClaudeSid: string | null;
     }) => {
       const session = sessionsRef.current.find((s) => s.id === params.tabSessionId);
+      const resolver = claudeSessionsOptionsRef.current?.resolveExecutionEngineRef?.current;
+      const engine: SessionExecutionEngine =
+        session && resolver ? resolver(session) : "claude";
+      if (engine === "codex") {
+        await runCodexOneshotWithInvocation({
+          tabSessionId: params.tabSessionId,
+          turnNonce: params.turnNonce,
+          repositoryPath: params.repositoryPath,
+          prompt: params.prompt,
+          modelArg: params.modelArg,
+        });
+        return;
+      }
       if (sessionUsesStreamingConnection(session, defaultConnectionKindRef.current)) {
         await runClaudeStreamingWithInvocation(params);
       } else {
         await runClaudeOneshotWithInvocation(params);
       }
     },
-    [runClaudeStreamingWithInvocation, runClaudeOneshotWithInvocation],
+    [runClaudeStreamingWithInvocation, runClaudeOneshotWithInvocation, runCodexOneshotWithInvocation],
   );
 
   useEffect(() => {
@@ -1139,6 +1211,18 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         setSessions((prev) => appendSystemMessageBySessionId(prev, tabSessionId, text));
       };
 
+      const resolver = claudeSessionsOptionsRef.current?.resolveExecutionEngineRef?.current;
+      if (resolver?.(session) === "codex") {
+        await runCodexOneshotWithInvocation({
+          tabSessionId,
+          turnNonce: params.turnNonce,
+          repositoryPath,
+          prompt,
+          modelArg: params.modelArg,
+        });
+        return;
+      }
+
       const runOnce = async (outbound: string) => {
         const cc = resolveClaudeSid();
         await invokeClaudeTurn({
@@ -1173,7 +1257,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         await runOnce(prompt);
       }
     },
-    [invokeClaudeTurn, reloadTranscriptFromDisk],
+    [invokeClaudeTurn, reloadTranscriptFromDisk, runCodexOneshotWithInvocation],
   );
 
   const reloadFullDiskTranscript = useCallback(

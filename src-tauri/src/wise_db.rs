@@ -47,6 +47,7 @@ const MIGRATION_027: &str = include_str!("../migrations/027_assistant_id.sql");
 const MIGRATION_028: &str = include_str!("../migrations/028_assistant_overrides.sql");
 const MIGRATION_029: &str =
     include_str!("../migrations/029_migrate_prompt_layers_into_assistant_overrides.sql");
+const MIGRATION_030: &str = include_str!("../migrations/030_employee_execution_engine.sql");
 const PLATFORM_SPLIT_PROMPT_SEED_JSON: &str =
     include_str!("../migrations/005_platform_split_prompt_seed.json");
 
@@ -177,6 +178,10 @@ const MIGRATIONS: &[Migration] = &[
         name: "029_migrate_prompt_layers_into_assistant_overrides",
         action: MigrationAction::Sql(MIGRATION_029),
     },
+    Migration {
+        name: "030_employee_execution_engine",
+        action: MigrationAction::Sql(MIGRATION_030),
+    },
 ];
 
 #[derive(Debug, Clone, Serialize)]
@@ -206,6 +211,7 @@ pub struct WiseEmployeeRow {
     pub display_order: i64,
     pub repository_ids: Vec<i64>,
     pub project_ids: Vec<String>,
+    pub execution_engine: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -552,7 +558,7 @@ impl WiseDb {
         let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
         let mut stmt = g
             .prepare(
-                "SELECT id, name, agent_type, enabled, created_at, updated_at, display_order
+                "SELECT id, name, agent_type, enabled, created_at, updated_at, display_order, execution_engine
                  FROM employees
                  ORDER BY display_order ASC, created_at ASC",
             )
@@ -569,6 +575,7 @@ impl WiseDb {
                     display_order: row.get(6)?,
                     repository_ids: Vec::new(),
                     project_ids: Vec::new(),
+                    execution_engine: row.get(7)?,
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -622,13 +629,23 @@ impl WiseDb {
         enabled: bool,
         now_ms: i64,
         repository_ids: &[i64],
+        execution_engine: &str,
     ) -> Result<(), String> {
         let mut g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
         let tx = g.transaction().map_err(|e| e.to_string())?;
         tx.execute(
-            "INSERT INTO employees (id, name, agent_type, enabled, created_at, updated_at, display_order)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            params![id, name, agent_type, if enabled { 1 } else { 0 }, now_ms, now_ms, now_ms],
+            "INSERT INTO employees (id, name, agent_type, enabled, created_at, updated_at, display_order, execution_engine)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                id,
+                name,
+                agent_type,
+                if enabled { 1 } else { 0 },
+                now_ms,
+                now_ms,
+                now_ms,
+                execution_engine
+            ],
         )
         .map_err(|e| e.to_string())?;
         for repository_id in repository_ids {
@@ -651,15 +668,16 @@ impl WiseDb {
         enabled: bool,
         now_ms: i64,
         repository_ids: &[i64],
+        execution_engine: &str,
     ) -> Result<(), String> {
         let mut g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
         let tx = g.transaction().map_err(|e| e.to_string())?;
         let n = tx
             .execute(
                 "UPDATE employees
-                 SET name = ?1, agent_type = ?2, enabled = ?3, updated_at = ?4
-                 WHERE id = ?5",
-                params![name, agent_type, if enabled { 1 } else { 0 }, now_ms, id],
+                 SET name = ?1, agent_type = ?2, enabled = ?3, updated_at = ?4, execution_engine = ?5
+                 WHERE id = ?6",
+                params![name, agent_type, if enabled { 1 } else { 0 }, now_ms, execution_engine, id],
             )
             .map_err(|e| e.to_string())?;
         if n == 0 {

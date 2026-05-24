@@ -18,6 +18,17 @@ const availableClaude: DetectedAgent<"claude"> = {
   detectedAt: "2026-05-17T00:00:00.000Z",
 };
 
+const availableCodex: DetectedAgent<"codex"> = {
+  id: "codex",
+  name: "Codex CLI",
+  kind: "codex",
+  available: true,
+  backend: "codex",
+  command: "codex",
+  binaryPath: "/bin/codex",
+  detectedAt: "2026-05-17T00:00:00.000Z",
+};
+
 const unavailableCodex: DetectedAgent<"codex"> = {
   id: "codex",
   name: "Codex CLI",
@@ -50,6 +61,13 @@ describe("assistant engine binding presentation", () => {
       tone: "danger",
       dotTone: "off",
       detail: "binary not found",
+    });
+    const codexIndex = buildAgentEngineIndex([availableCodex]);
+    expect(resolveAssistantEngineBinding(assistants[1], codexIndex)).toMatchObject({
+      label: "Codex CLI 就绪",
+      tone: "success",
+      dotTone: "on",
+      detail: "Codex CLI",
     });
     expect(resolveAssistantEngineBinding(assistants[2], index)).toMatchObject({
       label: "预留入口未检测",

@@ -2,6 +2,10 @@ import { App, Button, Form, Input, Modal, Popconfirm, Select, Space, Switch, Tab
 import { PlusOutlined } from "@ant-design/icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { EmployeeItem, Repository, WorkflowGraph, WorkflowTemplateItem } from "../../types";
+import {
+  SESSION_EXECUTION_ENGINE_LABELS,
+  type SessionExecutionEngine,
+} from "../../constants/sessionExecutionEngine";
 import { collectTeamMemberEmployeeIds } from "../../utils/collectTeamMemberEmployeeIds";
 import { repositoryFolderBasename } from "../../utils/repositoryType";
 import {
@@ -80,10 +84,19 @@ interface Props {
     enabled: boolean;
     repositoryIds: number[];
     projectIds?: string[];
+    executionEngine?: SessionExecutionEngine;
     /** 创建后把该仓 `mainOwnerAgentName` 设为角色的 `agentType` */
     ownerRepositoryId?: number | null;
   }) => Promise<void>;
-  onUpdate: (input: { employeeId: string; name: string; agentType: string; enabled: boolean; repositoryIds: number[]; projectIds?: string[] }) => Promise<void>;
+  onUpdate: (input: {
+    employeeId: string;
+    name: string;
+    agentType: string;
+    enabled: boolean;
+    repositoryIds: number[];
+    projectIds?: string[];
+    executionEngine?: SessionExecutionEngine;
+  }) => Promise<void>;
   onDelete: (employeeId: string) => Promise<void>;
 }
 
@@ -194,6 +207,7 @@ export function EmployeeConfigModal({
     form.setFieldsValue({
       name: initialCreateEmployeeName?.trim() ?? "",
       agentType: "executor",
+      executionEngine: "claude",
       repositoryIds: defaultRepositoryIds,
       projectIds: singleProjectScopeId ? [singleProjectScopeId] : undefined,
       ownerRepositoryId: singleOwnerRepositoryId ?? undefined,
@@ -211,6 +225,7 @@ export function EmployeeConfigModal({
     form.setFieldsValue({
       name: employee.name,
       agentType: employee.agentType,
+      executionEngine: employee.executionEngine ?? "claude",
       repositoryIds: employee.repositoryIds,
       projectIds: employee.projectIds,
       ownerRepositoryId: undefined,
@@ -249,7 +264,8 @@ export function EmployeeConfigModal({
 
   async function handleSubmit() {
     try {
-      const values = await form.validateFields(["name", "agentType"]);
+      const values = await form.validateFields(["name", "agentType", "executionEngine"]);
+      const executionEngine = (values.executionEngine as SessionExecutionEngine | undefined) ?? "claude";
       if (editingEmployee) {
         const nextRepositoryIds =
           hideRepositorySelector ? editingEmployee.repositoryIds : (values.repositoryIds ?? defaultRepositoryIds);
@@ -260,6 +276,7 @@ export function EmployeeConfigModal({
           enabled: editingEmployee.enabled,
           repositoryIds: nextRepositoryIds,
           projectIds: values.projectIds ?? editingEmployee.projectIds,
+          executionEngine,
         });
         closeFormModal();
         return;
@@ -278,13 +295,20 @@ export function EmployeeConfigModal({
           enabled: true,
           repositoryIds: [ownerRid],
           ownerRepositoryId: ownerRid,
+          executionEngine,
         });
         closeFormModal();
         return;
       }
       const selectedRepositoryIds: number[] = values.repositoryIds ?? defaultRepositoryIds;
       const mergedRepositoryIds = Array.from(new Set([...defaultRepositoryIds, ...selectedRepositoryIds]));
-      await onCreate({ name: values.name, agentType: values.agentType, enabled: true, repositoryIds: mergedRepositoryIds });
+      await onCreate({
+        name: values.name,
+        agentType: values.agentType,
+        enabled: true,
+        repositoryIds: mergedRepositoryIds,
+        executionEngine,
+      });
       closeFormModal();
     } catch (error) {
       console.error("handleSubmit error:", error);
@@ -302,6 +326,7 @@ export function EmployeeConfigModal({
       enabled,
       repositoryIds: row.repositoryIds,
       projectIds: row.projectIds,
+      executionEngine: row.executionEngine ?? "claude",
     });
   }
 
@@ -370,6 +395,19 @@ export function EmployeeConfigModal({
             placeholder="选择智能体"
             options={selectableAgentTypeOptions}
             optionFilterProp="label"
+          />
+        </Form.Item>
+        <Form.Item
+          name="executionEngine"
+          label="执行引擎"
+          tooltip="该成员会话派发时使用的 CLI 引擎"
+          initialValue="claude"
+        >
+          <Select
+            options={(["claude", "codex"] as const).map((key) => ({
+              value: key,
+              label: SESSION_EXECUTION_ENGINE_LABELS[key].title,
+            }))}
           />
         </Form.Item>
         {projectOwnerPickMode && !editingEmployee && !singleOwnerRepositoryId ? (
@@ -467,6 +505,15 @@ export function EmployeeConfigModal({
               render: (_, row) => {
                 const name = isRepoOwnerGapRow(row) ? row.agentName : row.agentType;
                 return <code className="app-employee-agent-badge">{name}</code>;
+              },
+            },
+            {
+              title: "执行引擎",
+              key: "executionEngine",
+              render: (_, row) => {
+                if (isRepoOwnerGapRow(row)) return "—";
+                const engine = row.executionEngine ?? "claude";
+                return SESSION_EXECUTION_ENGINE_LABELS[engine].short;
               },
             },
             ...(projectOwnerPickMode

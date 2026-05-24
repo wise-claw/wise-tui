@@ -41,6 +41,9 @@ pub(crate) struct StoredRepository {
     /// 主 Owner 子代理展示名（与 `repositoryName` 中 `…/员工:姓名` 的姓名一致）；未设置则为人类主会话逻辑。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     main_owner_agent_name: Option<String>,
+    /// 主会话执行引擎：`claude` | `codex`。
+    #[serde(default = "default_execution_engine", alias = "execution_engine")]
+    execution_engine: String,
     branch: Option<String>,
     #[serde(alias = "created_at")]
     created_at: String,
@@ -52,6 +55,17 @@ pub(crate) struct StoredRepository {
 
 fn default_repository_type() -> String {
     "frontend".to_string()
+}
+
+fn default_execution_engine() -> String {
+    "claude".to_string()
+}
+
+fn normalize_execution_engine(raw: Option<String>) -> String {
+    match raw.as_deref().map(str::trim) {
+        Some("codex") => "codex".to_string(),
+        _ => "claude".to_string(),
+    }
 }
 
 fn normalize_hex_icon_color(input: Option<String>) -> Option<String> {
@@ -102,6 +116,7 @@ pub(crate) struct EmployeeItem {
     display_order: i64,
     repository_ids: Vec<i64>,
     project_ids: Vec<String>,
+  execution_engine: String,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -376,6 +391,7 @@ pub(crate) fn create_repository_from_path(
         icon_color: normalize_hex_icon_color(icon_color),
         icon_display_name: icon_disp,
         main_owner_agent_name: None,
+        execution_engine: default_execution_engine(),
         branch: git_commands::get_git_branch(&folder_path),
         created_at: now.to_string(),
         updated_at: now.to_string(),
@@ -434,6 +450,29 @@ pub(crate) fn update_repository_main_owner_agent(
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string());
     repositories[idx].main_owner_agent_name = trimmed;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_millis() as i64;
+    repositories[idx].updated_at = now.to_string();
+    save_repositories(&app, &repositories)?;
+    let mut out = repositories[idx].clone();
+    out.branch = git_commands::get_git_branch(&out.path);
+    Ok(out)
+}
+
+#[tauri::command]
+pub(crate) fn update_repository_execution_engine(
+    app: tauri::AppHandle,
+    id: i64,
+    execution_engine: Option<String>,
+) -> Result<StoredRepository, String> {
+    let mut repositories = load_repositories(&app);
+    let idx = repositories
+        .iter()
+        .position(|p| p.id == id)
+        .ok_or_else(|| "仓库未找到".to_string())?;
+    repositories[idx].execution_engine = normalize_execution_engine(execution_engine);
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|e| e.to_string())?
@@ -919,6 +958,7 @@ pub(crate) fn reconcile_project_workspace(
             icon_color: None,
             icon_display_name: None,
             main_owner_agent_name: None,
+            execution_engine: default_execution_engine(),
             branch: git_commands::get_git_branch(&repo_path_str),
             created_at: now.to_string(),
             updated_at: now.to_string(),
@@ -1129,6 +1169,7 @@ pub(crate) fn list_employees(
             display_order: row.display_order,
             repository_ids: row.repository_ids,
             project_ids: row.project_ids,
+            execution_engine: normalize_execution_engine(Some(row.execution_engine)),
         })
         .collect())
 }
@@ -1141,6 +1182,7 @@ pub(crate) fn create_employee(
     enabled: Option<bool>,
     repository_ids: Option<Vec<i64>>,
     project_ids: Option<Vec<String>>,
+    execution_engine: Option<String>,
 ) -> Result<EmployeeItem, String> {
     let now_ms = unix_now_ms();
     let normalized_name = name.trim();
@@ -1154,6 +1196,7 @@ pub(crate) fn create_employee(
     let id = format!("employee_{}", Uuid::new_v4().simple());
     let repository_ids = repository_ids.unwrap_or_default();
     let project_ids = project_ids.unwrap_or_default();
+    let execution_engine = normalize_execution_engine(execution_engine);
     db.create_employee(
         &id,
         normalized_name,
@@ -1161,6 +1204,7 @@ pub(crate) fn create_employee(
         enabled.unwrap_or(true),
         now_ms,
         &repository_ids,
+        &execution_engine,
     )?;
     for pid in &project_ids {
         let _ = db.add_project_prd_employee(pid, &id, now_ms);
@@ -1180,6 +1224,7 @@ pub(crate) fn create_employee(
         display_order: created.display_order,
         repository_ids: created.repository_ids,
         project_ids: created.project_ids,
+        execution_engine: normalize_execution_engine(Some(created.execution_engine)),
     })
 }
 
@@ -1192,6 +1237,7 @@ pub(crate) fn update_employee(
     enabled: bool,
     repository_ids: Option<Vec<i64>>,
     project_ids: Option<Vec<String>>,
+    execution_engine: Option<String>,
 ) -> Result<EmployeeItem, String> {
     let now_ms = unix_now_ms();
     let normalized_name = name.trim();
@@ -1204,6 +1250,7 @@ pub(crate) fn update_employee(
     }
     let repository_ids = repository_ids.unwrap_or_default();
     let new_project_ids = project_ids.unwrap_or_default();
+    let execution_engine = normalize_execution_engine(execution_engine);
     db.update_employee(
         &employee_id,
         normalized_name,
@@ -1211,6 +1258,7 @@ pub(crate) fn update_employee(
         enabled,
         now_ms,
         &repository_ids,
+        &execution_engine,
     )?;
 
     let updated = db
@@ -1243,6 +1291,7 @@ pub(crate) fn update_employee(
         display_order: updated.display_order,
         repository_ids: updated.repository_ids,
         project_ids: updated.project_ids,
+        execution_engine: normalize_execution_engine(Some(updated.execution_engine)),
     })
 }
 

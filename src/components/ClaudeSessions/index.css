@@ -4597,6 +4597,45 @@ button.app-message-part-header:disabled:hover {
   white-space: normal;
 }
 
+.app-claude-connection-kind-menu-item--with-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 220px;
+}
+
+.app-claude-connection-kind-menu-item__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.app-claude-connection-kind-menu-item__probe {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0 6px;
+  border: none;
+  border-radius: var(--ant-border-radius-sm);
+  background: color-mix(in srgb, var(--ant-color-primary) 12%, transparent);
+  color: var(--ant-color-primary);
+  font-size: 11px;
+  line-height: 20px;
+  font-family: inherit;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.app-claude-connection-kind-menu-item__probe:hover {
+  background: color-mix(in srgb, var(--ant-color-primary) 20%, transparent);
+}
+
+.ant-dropdown-menu-item-disabled .app-claude-connection-kind-menu-item__probe {
+  pointer-events: auto;
+}
+
 /* 极简模型选择：灰色文案 + 小三角，无框 */
 .app-claude-model-picker {
   display: inline-flex;
