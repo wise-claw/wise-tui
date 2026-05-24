@@ -8,7 +8,6 @@ import {
   getClaudeModelProfileStore,
   getClaudeUserSettingsJson,
   getCodexUserSettingsJson,
-  saveClaudeUserSettingsJson,
   upsertClaudeModelProfile,
   syncClaudeModelProfilesFromCcSwitch,
   dispatchClaudeUserSettingsChanged,
@@ -261,7 +260,6 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
       };
       const next = await upsertClaudeModelProfile(updatedProfile);
       setStore(next);
-      const profileEngine = normalizeModelProfileEngine(configProfile.engine);
       message.success(
         (profileEngine === "codex" ? next.effectiveCodexModel : next.effectiveModel)?.trim()
           ? `已保存全局配置，当前模型：${formatClaudeModelLabel(

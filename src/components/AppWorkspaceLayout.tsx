@@ -40,6 +40,7 @@ import type * as PrdTaskSplitPanelModule from "./PrdTaskSplitPanel";
 import { resolveCockpitHubPane, type InspectTool, type ViewMode } from "../types/viewMode";
 import type { OpenRepositoryFileDetail } from "../constants/workflowUiEvents";
 import { useRepositoryFileEditor } from "../hooks/useRepositoryFileEditor";
+import { ErrorBoundary } from "./ErrorBoundary";
 
 const Inspector = lazy(() => import("./Inspector").then((module) => ({ default: module.Inspector })));
 const CockpitSurface = lazy(() =>
@@ -650,11 +651,13 @@ export function AppWorkspaceLayout({
                           : undefined
                       }
                     >
-                      <ConnectedClaudeSessions
-                        claudeSessionsProps={claudeSessionsProps}
-                        mainLayoutContentRef={mainLayoutContentRef}
-                        panelBelowMessages={editorPanelNode}
-                      />
+                       <ErrorBoundary type="local" fallbackTitle="智能对话会话模块出错">
+                        <ConnectedClaudeSessions
+                          claudeSessionsProps={claudeSessionsProps}
+                          mainLayoutContentRef={mainLayoutContentRef}
+                          panelBelowMessages={editorPanelNode}
+                        />
+                      </ErrorBoundary>
 
                       {chatRightRailMode ? (
                         <>
@@ -677,11 +680,13 @@ export function AppWorkspaceLayout({
                             aria-hidden={effectiveRightCollapsed}
                           >
                             <Suspense fallback={null}>
-                              <ConnectedInspector
-                                viewMode={viewMode}
-                                chatInspectorProps={chatInspectorProps}
-                                cockpitInspectorProps={cockpitInspectorProps}
-                              />
+                              <ErrorBoundary type="local" fallbackTitle="右侧属性检查器出错">
+                                <ConnectedInspector
+                                  viewMode={viewMode}
+                                  chatInspectorProps={chatInspectorProps}
+                                  cockpitInspectorProps={cockpitInspectorProps}
+                                />
+                              </ErrorBoundary>
                             </Suspense>
                           </div>
                         </>
@@ -691,12 +696,16 @@ export function AppWorkspaceLayout({
                     <CommandPalette {...commandPaletteProps} />
                     {mcpHubMode ? (
                       <div className="app-mcp-hub-overlay" role="region" aria-label="MCP 管理">
-                        <McpHub {...mcpHubProps} />
+                        <ErrorBoundary type="local" fallbackTitle="MCP 管理面板出错">
+                          <McpHub {...mcpHubProps} />
+                        </ErrorBoundary>
                       </div>
                     ) : null}
                     {skillsHubMode ? (
                       <div className="app-skills-hub-overlay" role="region" aria-label="skills.sh 技能目录">
-                        <SkillsHub {...skillsHubProps} />
+                        <ErrorBoundary type="local" fallbackTitle="技能目录面板出错">
+                          <SkillsHub {...skillsHubProps} />
+                        </ErrorBoundary>
                       </div>
                     ) : null}
                     {codeKnowledgeGraphMode ? (
@@ -708,58 +717,66 @@ export function AppWorkspaceLayout({
                             </div>
                           }
                         >
-                          <ConnectedCodeKnowledgeGraphPanel codeKnowledgeGraphProps={codeKnowledgeGraphProps} />
+                          <ErrorBoundary type="local" fallbackTitle="代码知识图谱面板出错">
+                            <ConnectedCodeKnowledgeGraphPanel codeKnowledgeGraphProps={codeKnowledgeGraphProps} />
+                          </ErrorBoundary>
                         </Suspense>
                       </div>
                     ) : null}
                     {trellisInspectorTool ? (
                       <Suspense fallback={null}>
-                        <TrellisInspectorOverlay tool={trellisInspectorTool} onClose={onCloseTrellisInspector} />
+                        <ErrorBoundary type="local" fallbackTitle="Trellis 运行时透镜出错">
+                          <TrellisInspectorOverlay tool={trellisInspectorTool} onClose={onCloseTrellisInspector} />
+                        </ErrorBoundary>
                       </Suspense>
                     ) : null}
                     {ccWfStudioSessionPath ? (
                       <Suspense fallback={null}>
-                        <WiseCcWorkflowStudioPanel
-                          repositoryPath={ccWfStudioSessionPath}
-                          overlayVisible={ccWfStudioMode}
-                          onClose={onCloseCcWorkflowStudio}
-                        />
+                        <ErrorBoundary type="local" fallbackTitle="CC Workflow 工作流编辑器出错">
+                          <WiseCcWorkflowStudioPanel
+                            repositoryPath={ccWfStudioSessionPath}
+                            overlayVisible={ccWfStudioMode}
+                            onClose={onCloseCcWorkflowStudio}
+                          />
+                        </ErrorBoundary>
                       </Suspense>
                     ) : null}
                   </div>
 
-                  {cockpitShellMounted ? (
+                   {cockpitShellMounted ? (
                     <div
                       className={`app-full-width-main app-cockpit-workspace-layer${
                         !missionControlMode ? " app-workspace-layer--parked" : ""
                       }${cockpitPrdSplitFullscreen ? " app-cockpit-workspace-layer--prd-split-fullscreen" : ""}`}
                     >
                       <Layout.Content className="app-main-layout-content">
-                        {cockpitEmpty ? (
-                          <CockpitOnboarding {...cockpitOnboardingProps} />
-                        ) : cockpitHubPane === "mcp" ? (
-                          <McpHub {...mcpHubProps} />
-                        ) : cockpitHubPane === "skills" ? (
-                          <SkillsHub {...skillsHubProps} />
-                        ) : cockpitHubPane === "automation" ? (
-                          <AutomationPanel
-                            {...authorPanelProps.automationPanelProps}
-                            onClose={onCloseCockpitAutomationHub}
-                          />
-                        ) : (
-                          <Suspense fallback={<PanelLoadingFallback />}>
-                            <CockpitSurface
-                              activeProjectId={cockpitSurfaceActiveProjectId}
-                              activeProjectName={cockpitSurfaceActiveProjectName}
-                              hasInitialTarget={cockpitSurfaceHasInitialTarget}
-                              initialAssistantId={cockpitSurfaceInitialAssistantId}
-                              resumeAssistantId={cockpitSurfaceResumeAssistantId}
-                              openRequestKey={cockpitSurfaceOpenRequestKey}
-                              prdTaskSplitPanelProps={prdTaskSplitPanelProps}
-                              onActiveAssistantIdChange={onCockpitActiveAssistantIdChange}
+                        <ErrorBoundary type="local" fallbackTitle="需求与自动化调度面板出错">
+                          {cockpitEmpty ? (
+                            <CockpitOnboarding {...cockpitOnboardingProps} />
+                          ) : cockpitHubPane === "mcp" ? (
+                            <McpHub {...mcpHubProps} />
+                          ) : cockpitHubPane === "skills" ? (
+                            <SkillsHub {...skillsHubProps} />
+                          ) : cockpitHubPane === "automation" ? (
+                            <AutomationPanel
+                              {...authorPanelProps.automationPanelProps}
+                              onClose={onCloseCockpitAutomationHub}
                             />
-                          </Suspense>
-                        )}
+                          ) : (
+                            <Suspense fallback={<PanelLoadingFallback />}>
+                              <CockpitSurface
+                                activeProjectId={cockpitSurfaceActiveProjectId}
+                                activeProjectName={cockpitSurfaceActiveProjectName}
+                                hasInitialTarget={cockpitSurfaceHasInitialTarget}
+                                initialAssistantId={cockpitSurfaceInitialAssistantId}
+                                resumeAssistantId={cockpitSurfaceResumeAssistantId}
+                                openRequestKey={cockpitSurfaceOpenRequestKey}
+                                prdTaskSplitPanelProps={prdTaskSplitPanelProps}
+                                onActiveAssistantIdChange={onCockpitActiveAssistantIdChange}
+                              />
+                            </Suspense>
+                          )}
+                        </ErrorBoundary>
                       </Layout.Content>
                     </div>
                   ) : null}
@@ -768,7 +785,9 @@ export function AppWorkspaceLayout({
                     <div
                       className={`app-full-width-main app-author-workspace-layer${!authorMode ? " app-workspace-layer--parked" : ""}`}
                     >
-                      <AuthorPanel {...authorPanelProps} />
+                      <ErrorBoundary type="local" fallbackTitle="协同设计开发面板出错">
+                        <AuthorPanel {...authorPanelProps} />
+                      </ErrorBoundary>
                     </div>
                   ) : null}
                 </div>

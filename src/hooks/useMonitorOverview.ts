@@ -53,7 +53,6 @@ import {
   getEffectiveRepoSddMode,
   getProjectSddMode,
 } from "../utils/projectRepositoryRoles";
-import { isOmcMonitorEmployeeRecord } from "../utils/omcMonitorEmployeeSession";
 
 interface UseMonitorOverviewInput {
   employees: EmployeeItem[];
@@ -584,6 +583,7 @@ function createIdleEmployeeMonitorItem(employee: EmployeeItem): EmployeeMonitorI
     name: employee.name,
     agentType: employee.agentType,
     status: "idle",
+    previewText: "暂无会话",
     updatedAt: employee.updatedAt,
   };
 }

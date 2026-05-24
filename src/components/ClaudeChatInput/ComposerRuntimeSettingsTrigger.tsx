@@ -8,6 +8,7 @@ import {
   type ClaudeSessionConnectionKind,
 } from "../../constants/claudeConnection";
 import {
+  normalizeSessionExecutionEngine,
   SESSION_EXECUTION_ENGINE_LABELS,
   type SessionExecutionEngine,
 } from "../../constants/sessionExecutionEngine";
@@ -60,7 +61,7 @@ function isConnectionKindKey(key: string): key is ClaudeSessionConnectionKind {
 }
 
 export function ComposerRuntimeSettingsTrigger({
-  engine,
+  engine: engineProp,
   codexAvailable = true,
   onEngineChange,
   onOpenExecutionEnvironment,
@@ -70,6 +71,7 @@ export function ComposerRuntimeSettingsTrigger({
   disabled = false,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const engine = normalizeSessionExecutionEngine(engineProp);
 
   const showEngine = codexAvailable && Boolean(onEngineChange);
   const showConnection = engine === "claude" && Boolean(onConnectionKindChange);
@@ -93,24 +95,33 @@ export function ComposerRuntimeSettingsTrigger({
     const items: MenuProps["items"] = [];
 
     if (showEngine) {
-      items.push({
-        type: "group",
-        label: "执行环境",
-        children: buildSessionExecutionEngineMenuItems({
-          engine,
-          codexAvailable,
-          onOpenExecutionEnvironment,
-          onProbeClick: () => setMenuOpen(false),
-        }),
+      const engineItems = buildSessionExecutionEngineMenuItems({
+        engine,
+        codexAvailable,
+        onOpenExecutionEnvironment,
+        onProbeClick: () => setMenuOpen(false),
       });
+      if (engineItems?.length) {
+        items.push({
+          type: "group",
+          label: "执行环境",
+          children: engineItems,
+        });
+      }
     }
 
     if (showConnection) {
-      items.push({
-        type: "group",
-        label: "连接方式",
-        children: buildConnectionKindMenuItems(resolvedConnectionKind, defaultConnectionKind),
-      });
+      const connectionItems = buildConnectionKindMenuItems(
+        resolvedConnectionKind,
+        defaultConnectionKind,
+      );
+      if (connectionItems?.length) {
+        items.push({
+          type: "group",
+          label: "连接方式",
+          children: connectionItems,
+        });
+      }
     }
 
     return items;
@@ -135,6 +146,10 @@ export function ComposerRuntimeSettingsTrigger({
     return null;
   }
 
+  if (!menuItems?.length) {
+    return null;
+  }
+
   return (
     <Dropdown
       overlayClassName="app-claude-connection-kind-dropdown app-composer-runtime-settings-dropdown"
@@ -143,6 +158,7 @@ export function ComposerRuntimeSettingsTrigger({
         selectable: true,
         selectedKeys,
         onClick: ({ key }) => {
+          if (typeof key !== "string") return;
           if (isSessionExecutionEngineKey(key)) {
             if (key !== engine) {
               onEngineChange?.(key);
@@ -164,11 +180,11 @@ export function ComposerRuntimeSettingsTrigger({
       onOpenChange={setMenuOpen}
       dropdownRender={(menu) => (
         <div className="app-claude-connection-kind-dropdown-container app-composer-runtime-settings-popover">
-          {menu}
+          {menu ?? null}
         </div>
       )}
     >
-      <Tooltip title={tooltip} placement="top">
+      <Tooltip title={tooltip} placement="top" open={menuOpen ? false : undefined}>
         <button
           type="button"
           className={`app-composer-runtime-settings-btn${
