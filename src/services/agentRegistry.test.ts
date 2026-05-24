@@ -24,12 +24,27 @@ describe("agentRegistry service", () => {
     expect(invoke).toHaveBeenCalledWith("agent_registry_get", { id: "claude" });
   });
 
-  test("wraps install builtin command", async () => {
+  test("wraps install builtin command and publishes registry snapshot", async () => {
     const { installBuiltinAgent } = await import("./agentRegistry");
+    const { getAgentRegistrySnapshot } = await import("../stores/agentRegistryStore");
+    const agents = [
+      {
+        id: "codex",
+        name: "Codex CLI",
+        kind: "codex",
+        available: true,
+        backend: "codex",
+        command: "codex",
+        detectedAt: "2026-05-24T00:00:00.000Z",
+      },
+    ];
+    invoke.mockImplementation(async () => agents);
 
-    await installBuiltinAgent("codex");
+    const result = await installBuiltinAgent("codex");
 
     expect(invoke).toHaveBeenCalledWith("agent_registry_install_builtin", { kind: "codex" });
+    expect(result).toEqual(agents);
+    expect(getAgentRegistrySnapshot().agents).toEqual(agents);
   });
 
   test("wraps custom agent commands with the exact payload shape", async () => {

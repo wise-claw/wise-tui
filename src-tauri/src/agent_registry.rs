@@ -458,11 +458,29 @@ async fn resolve_command(command: &str, env: &HashMap<String, String>) -> ProbeR
                 .filter(|line| !line.is_empty())
                 .map(str::to_string);
             match path {
-                Some(path) => ProbeResult {
-                    ok: true,
-                    error: None,
-                    resolved_path: Some(path),
-                },
+                Some(path) => {
+                    if is_runnable_binary(Path::new(&path)) {
+                        ProbeResult {
+                            ok: true,
+                            error: None,
+                            resolved_path: Some(path),
+                        }
+                    } else if Path::new(&path).is_symlink() {
+                        ProbeResult {
+                            ok: false,
+                            error: Some(format!(
+                                "binary symlink is broken: {path}（请删除后重新安装）"
+                            )),
+                            resolved_path: Some(path),
+                        }
+                    } else {
+                        ProbeResult {
+                            ok: false,
+                            error: Some(format!("binary not executable or missing: {path}")),
+                            resolved_path: Some(path),
+                        }
+                    }
+                }
                 None => ProbeResult {
                     ok: false,
                     error: Some("resolver returned no path".to_string()),
@@ -498,6 +516,58 @@ async fn resolve_command(command: &str, env: &HashMap<String, String>) -> ProbeR
 fn looks_like_path(command: &str) -> bool {
     let path = Path::new(command);
     path.is_absolute() || command.contains('/') || command.contains('\\')
+}
+
+fn is_runnable_binary(path: &Path) -> bool {
+    match std::fs::metadata(path) {
+        Ok(meta) if meta.is_file() => {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                meta.permissions().mode() & 0o111 != 0
+            }
+            #[cfg(not(unix))]
+            {
+                true
+            }
+        }
+        _ => false,
+    }
+}
+
+fn builtin_command_name(kind: &str) -> Option<&'static str> {
+    match kind.trim().to_lowercase().as_str() {
+        "claude" => Some("claude"),
+        "codex" => Some("codex"),
+        "gemini" => Some("gemini"),
+        _ => None,
+    }
+}
+
+/// Remove broken symlinks on PATH that block `npm install -g` from linking the CLI bin.
+fn clear_blocking_broken_bins(command: &str, path_env: &str) -> Result<Vec<String>, String> {
+    let mut removed = Vec::new();
+    let separator = path_env_separator();
+    for dir in path_env.split(separator) {
+        let trimmed = dir.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let candidate = PathBuf::from(trimmed).join(command);
+        if !candidate.is_symlink() {
+            continue;
+        }
+        if std::fs::symlink_metadata(&candidate).is_ok() && std::fs::metadata(&candidate).is_err() {
+            std::fs::remove_file(&candidate).map_err(|e| {
+                format!(
+                    "无法移除损坏的符号链接 {}: {e}",
+                    candidate.to_string_lossy()
+                )
+            })?;
+            removed.push(candidate.to_string_lossy().to_string());
+        }
+    }
+    Ok(removed)
 }
 
 fn path_search_prefixes() -> Vec<PathBuf> {
@@ -831,19 +901,41 @@ pub async fn agent_registry_install_builtin(
     let path_env =
         crate::claude_commands::merge_path_env(&crate::claude_commands::claude_path_search_prefixes());
     let package = spec.npm_package.to_string();
+    let command_name = builtin_command_name(&normalized_kind)
+        .ok_or_else(|| format!("无法解析 {} 对应的 CLI 命令名", normalized_kind))?;
 
     let install_output = tokio::task::spawn_blocking(move || {
         let npm = resolve_npm_binary(&path_env)?;
-        run_npm_global_install(&npm, &home_s, &path_env, &package)
+        let removed = clear_blocking_broken_bins(command_name, &path_env)?;
+        let output = run_npm_global_install(&npm, &home_s, &path_env, &package)?;
+        Ok::<_, String>((output, removed))
     })
     .await
     .map_err(|e| format!("安装任务被中断: {e}"))??;
 
+    let (install_output, removed_bins) = install_output;
     let stdout = String::from_utf8_lossy(&install_output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&install_output.stderr).to_string();
     if !install_output.status.success() {
+        let removed_hint = if removed_bins.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "\n已自动移除损坏的符号链接：{}",
+                removed_bins.join("、")
+            )
+        };
+        let eexist_hint = if stderr.contains("EEXIST") {
+            format!(
+                "\n提示：PATH 上已有同名文件占用安装位置（常见于 Homebrew Cask 残留）。\
+                 可手动执行 `rm <路径>` 删除旧链接后重试，或使用 `npm install -g {} --force`。{removed_hint}",
+                spec.npm_package
+            )
+        } else {
+            removed_hint
+        };
         return Err(format!(
-            "安装 {} 失败（退出码 {:?}）\n{stdout}\n{stderr}",
+            "安装 {} 失败（退出码 {:?}）\n{stdout}\n{stderr}{eexist_hint}",
             spec.npm_package,
             install_output.status.code()
         ));
@@ -1082,6 +1174,30 @@ mod tests {
     fn parse_builtin_install_kind_rejects_custom_and_empty() {
         assert!(parse_builtin_install_kind("custom").is_err());
         assert!(parse_builtin_install_kind("").is_err());
+    }
+
+    #[test]
+    fn clear_blocking_broken_bins_removes_only_broken_symlinks() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bin_dir = temp.path().join("bin");
+        std::fs::create_dir_all(&bin_dir).expect("mkdir");
+        let broken = bin_dir.join("codex");
+        std::os::unix::fs::symlink("/no/such/codex-target", &broken).expect("symlink");
+        let regular = bin_dir.join("claude");
+        std::fs::write(&regular, b"#!/bin/sh\n").expect("write");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(&regular).expect("meta").permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(&regular, perms).expect("chmod");
+        }
+
+        let path_env = bin_dir.to_string_lossy().to_string();
+        let removed = clear_blocking_broken_bins("codex", &path_env).expect("remove broken");
+        assert_eq!(removed, vec![broken.to_string_lossy().to_string()]);
+        assert!(!broken.exists());
+        assert!(regular.exists());
     }
 
     #[test]

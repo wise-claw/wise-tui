@@ -38,17 +38,27 @@ export function ClaudeConnectionKindChip({
   const menuItems: MenuProps["items"] = (["oneshot", "streaming"] as const).map((key) => {
     const itemMeta = CLAUDE_CONNECTION_KIND_LABELS[key];
     const isGlobalDefault = key === defaultConnectionKind;
+    const isSelected = kind === key;
     return {
       key,
+      className: `app-claude-connection-kind-menu-item-wrapper ${
+        isSelected ? "app-claude-connection-kind-menu-item-wrapper--selected" : ""
+      }`,
       label: (
-        <div className="app-claude-connection-kind-menu-item">
-          <span className="app-claude-connection-kind-menu-item__title">
-            {itemMeta.title}
-            {isGlobalDefault ? (
-              <span className="app-claude-connection-kind-menu-item__badge">全局默认</span>
-            ) : null}
-          </span>
-          <span className="app-claude-connection-kind-menu-item__desc">{itemMeta.description}</span>
+        <div
+          className={`app-claude-connection-kind-menu-item${
+            isSelected ? " app-claude-connection-kind-menu-item--selected" : ""
+          }`}
+        >
+          <div className="app-claude-connection-kind-menu-item__body">
+            <span className="app-claude-connection-kind-menu-item__title">
+              {itemMeta.title}
+              {isGlobalDefault ? (
+                <span className="app-claude-connection-kind-menu-item__badge">全局默认</span>
+              ) : null}
+            </span>
+            <span className="app-claude-connection-kind-menu-item__desc">{itemMeta.description}</span>
+          </div>
         </div>
       ),
     };
@@ -109,6 +119,17 @@ export function ClaudeConnectionKindChip({
       trigger={["click"]}
       placement="top"
       disabled={disabled}
+      dropdownRender={(menu) => (
+        <div className="app-claude-connection-kind-dropdown-container">
+          <div className="app-claude-connection-kind-dropdown-header">
+            <span className="app-claude-connection-kind-dropdown-header-title">连接方式</span>
+            <span className="app-claude-connection-kind-dropdown-header-subtitle">
+              选择 Claude 会话长驻或逐轮处理
+            </span>
+          </div>
+          {menu}
+        </div>
+      )}
     >
       <Tooltip title={chipTooltip} placement="top">
         <button type="button" className="app-claude-connection-kind-chip-btn">

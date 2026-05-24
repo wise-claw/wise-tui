@@ -24,8 +24,7 @@ import {
   repositoryTypeChineseLabel,
 } from "./utils/repositoryType";
 import { resolveSessionExecutionEngine } from "./utils/sessionExecutionEngine";
-import { listAgents } from "./services/agentRegistry";
-import { isAgentKind } from "./types/detectedAgent";
+import { useAgentRegistryCodexAvailable } from "./hooks/useAgentRegistryCodexAvailable";
 import { useCcWorkflowStudioWorkspace } from "./hooks/useCcWorkflowStudioWorkspace";
 import {
   authorView,
@@ -568,15 +567,7 @@ export default function App() {
     ((session: ClaudeSession) => import("./types").SessionExecutionEngine) | null
   >(null);
 
-  const [codexAvailable, setCodexAvailable] = useState(false);
-
-  useEffect(() => {
-    void listAgents()
-      .then((agents) => {
-        setCodexAvailable(agents.some((agent) => isAgentKind(agent, "codex") && agent.available));
-      })
-      .catch(() => setCodexAvailable(false));
-  }, []);
+  const codexAvailable = useAgentRegistryCodexAvailable();
 
   useEffect(() => {
     resolveExecutionEngineRef.current = (session) =>

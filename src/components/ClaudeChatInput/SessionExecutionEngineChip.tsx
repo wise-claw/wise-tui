@@ -40,6 +40,7 @@ export function SessionExecutionEngineChip({
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
+            setMenuOpen(false);
             onOpenExecutionEnvironment();
           }}
         >
@@ -151,11 +152,14 @@ export function SessionExecutionEngineChip({
         onClick: ({ key }) => {
           const next = key === "codex" || key === "claude" ? key : engine;
           if (next !== engine) onEngineChange?.(next);
+          setMenuOpen(false);
         },
       }}
       trigger={["click"]}
       placement="top"
       disabled={disabled}
+      open={menuOpen}
+      onOpenChange={setMenuOpen}
       dropdownRender={(menu) => (
         <div className="app-claude-connection-kind-dropdown-container">
           <div className="app-claude-connection-kind-dropdown-header">
