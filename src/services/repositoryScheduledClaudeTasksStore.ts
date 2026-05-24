@@ -18,6 +18,11 @@ function isRepositoryScheduledClaudeTask(x: unknown): x is RepositoryScheduledCl
     typeof o.contentMarkdown === "string" &&
     (o.employeeId === null || typeof o.employeeId === "string") &&
     (o.workflowId === undefined || o.workflowId === null || typeof o.workflowId === "string") &&
+    (o.executionKind === undefined ||
+      o.executionKind === "claude" ||
+      o.executionKind === "script" ||
+      o.executionKind === "workflow") &&
+    (o.ccWorkflowId === undefined || o.ccWorkflowId === null || typeof o.ccWorkflowId === "string") &&
     typeof o.enabled === "boolean" &&
     typeof o.createdAt === "number" &&
     typeof o.updatedAt === "number"

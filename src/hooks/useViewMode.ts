@@ -6,9 +6,17 @@ import {
   type AuthorPane,
   type CockpitHubPane,
   type InspectCodeGraph,
+  type InspectMcpHub,
+  type InspectSkillsHub,
   type InspectTool,
   type ViewMode,
 } from "../types/viewMode";
+
+function isHubOverlayInspectTool(
+  tool: InspectTool,
+): tool is InspectMcpHub | InspectSkillsHub {
+  return tool.kind === "mcp-hub" || tool.kind === "skills-hub";
+}
 
 /**
  * 顶层 View 状态机（参见 `.trellis/spec/guides/agent-harness-architecture.md` §3）。
@@ -51,6 +59,26 @@ function viewsEqual(a: ViewMode, b: ViewMode): boolean {
       resolveCockpitHubPane(a) === resolveCockpitHubPane(b)
     );
   }
+  if (a.kind === "inspect" && b.kind === "inspect") {
+    if (a.tool.kind !== b.tool.kind) return false;
+    if (a.tool.kind === "code-graph" && b.tool.kind === "code-graph") {
+      return (
+        a.tool.suppressIdleAutoReindex === b.tool.suppressIdleAutoReindex &&
+        a.tool.lockToEntryRepository === b.tool.lockToEntryRepository &&
+        a.tool.defaultProjectMultiRepo === b.tool.defaultProjectMultiRepo
+      );
+    }
+    if (a.tool.kind === "runtime-events" && b.tool.kind === "runtime-events") {
+      return a.tool.rootPath === b.tool.rootPath && a.tool.projectId === b.tool.projectId;
+    }
+    if (a.tool.kind === "workflow-graph" && b.tool.kind === "workflow-graph") {
+      return a.tool.rootPath === b.tool.rootPath && a.tool.projectId === b.tool.projectId;
+    }
+    if (a.tool.kind === "spec-timeline" && b.tool.kind === "spec-timeline") {
+      return a.tool.rootPath === b.tool.rootPath;
+    }
+    return true;
+  }
   return true;
 }
 
@@ -65,6 +93,15 @@ function viewModeReducer(prev: ViewModeState, action: ViewModeAction): ViewModeS
       }
       // Cockpit 内切换 Hub 子页（助手 / MCP / 技能）：不压栈。
       if (prev.current.kind === "cockpit" && action.mode.kind === "cockpit") {
+        return { current: action.mode, prev: prev.prev };
+      }
+      // 侧栏 MCP / 技能叠层互切：不压栈。
+      if (
+        prev.current.kind === "inspect" &&
+        action.mode.kind === "inspect" &&
+        isHubOverlayInspectTool(prev.current.tool) &&
+        isHubOverlayInspectTool(action.mode.tool)
+      ) {
         return { current: action.mode, prev: prev.prev };
       }
       return { current: action.mode, prev: prev.current };
@@ -148,8 +185,12 @@ export function useViewMode(initial: ViewMode = DEFAULT_VIEW_MODE): UseViewModeA
       // P0 阶段:author/<mcp|skills> 仍走老的全屏 / 叠层渲染(McpHub overlay /
       // SkillsHub overlay)。AppWorkspaceLayout 透过 `legacy.*` 读这两个旧名走老
       // 分支,行为完全等价。Stage 4 删除 prompts 后,`promptsMode` 名彻底下线。
-      mcpHubMode: view.kind === "author" && view.pane === "mcp",
-      skillsHubMode: view.kind === "author" && view.pane === "skills",
+      mcpHubMode:
+        (view.kind === "author" && view.pane === "mcp") ||
+        (view.kind === "inspect" && view.tool.kind === "mcp-hub"),
+      skillsHubMode:
+        (view.kind === "author" && view.pane === "skills") ||
+        (view.kind === "inspect" && view.tool.kind === "skills-hub"),
       missionControlMode: view.kind === "cockpit",
       codeKnowledgeGraphMode: view.kind === "inspect" && view.tool.kind === "code-graph",
       ccWfStudioMode: view.kind === "inspect" && view.tool.kind === "workflow-studio",
@@ -203,4 +244,14 @@ export function codeGraphInspectTool(
     defaultProjectMultiRepo: false,
     ...overrides,
   };
+}
+
+/** Helper：侧栏 MCP 叠层（保留左栏 + 主会话区）。 */
+export function mcpHubInspectTool(): InspectMcpHub {
+  return { kind: "mcp-hub" };
+}
+
+/** Helper：侧栏技能叠层（保留左栏 + 主会话区）。 */
+export function skillsHubInspectTool(): InspectSkillsHub {
+  return { kind: "skills-hub" };
 }

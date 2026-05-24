@@ -29,6 +29,8 @@ import { useCcWorkflowStudioWorkspace } from "./hooks/useCcWorkflowStudioWorkspa
 import {
   authorView,
   cockpitView,
+  mcpHubInspectTool,
+  skillsHubInspectTool,
   codeGraphInspectTool,
   inspectView,
   useViewMode,
@@ -962,6 +964,8 @@ export default function App() {
 
   const handleComposerExecuteRef = useRef(handleComposerExecute);
   handleComposerExecuteRef.current = handleComposerExecute;
+  const sendMessageToSessionRef = useRef(sendMessageToSession);
+  sendMessageToSessionRef.current = sendMessageToSession;
 
   useScheduledClaudeTaskRunner({
     repositoriesRef: repositoriesLatestRef,
@@ -970,6 +974,7 @@ export default function App() {
     employeesRef: employeesLatestRef,
     workflowTemplatesRef: workflowTemplatesLatestRef,
     executeRef: handleComposerExecuteRef,
+    sendMessageRef: sendMessageToSessionRef,
   });
 
   beforeSpawnClaudeRef.current = (session) =>
@@ -1243,11 +1248,11 @@ export default function App() {
   }, [viewMode]);
   const openMcpHubFromSidebar = useCallback(() => {
     setSearchOpen(false);
-    viewMode.enter(cockpitView(undefined, "mcp"));
+    viewMode.enter(inspectView(mcpHubInspectTool()));
   }, [viewMode]);
   const openSkillsHubFromSidebar = useCallback(() => {
     setSearchOpen(false);
-    viewMode.enter(cockpitView(undefined, "skills"));
+    viewMode.enter(inspectView(skillsHubInspectTool()));
   }, [viewMode]);
   const openAutomationHubFromSidebar = useCallback(() => {
     setSearchOpen(false);
@@ -2413,9 +2418,11 @@ export default function App() {
           enterAuthorPane(lastAuthorPane);
         },
         leftSidebarHubQuickEntryIds: leftSidebarHubQuickEntries.enabledEntryIds,
-        mcpHubActive: viewMode.view.kind === "cockpit" && viewMode.view.hubPane === "mcp",
+        mcpHubActive:
+          viewMode.view.kind === "inspect" && viewMode.view.tool.kind === "mcp-hub",
         onOpenMcpHub: openMcpHubFromSidebar,
-        skillsHubActive: viewMode.view.kind === "cockpit" && viewMode.view.hubPane === "skills",
+        skillsHubActive:
+          viewMode.view.kind === "inspect" && viewMode.view.tool.kind === "skills-hub",
         onOpenSkillsHub: openSkillsHubFromSidebar,
         automationHubActive: viewMode.view.kind === "cockpit" && viewMode.view.hubPane === "automation",
         onOpenAutomationHub: openAutomationHubFromSidebar,

@@ -68,6 +68,11 @@
   margin-bottom: 4px;
 }
 
+.app-scheduled-tasks-drawer__script {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+}
+
 .app-scheduled-tasks-drawer__editor {
   min-height: 220px;
   border: 1px solid var(--ant-color-border-secondary);

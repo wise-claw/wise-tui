@@ -720,7 +720,6 @@ export function Topbar({
 
   const topbarShowsProject = activeWorkspaceFocus === "project" && activeProject != null;
   const topbarLabel = topbarShowsProject ? activeProject.name : activeRepository?.name;
-  const topbarScopeLabel = topbarShowsProject ? "Workspace 主会话" : "Repo 执行会话";
   const topbarPath = topbarShowsProject
     ? (activeProject.rootPath?.trim() || activeRepository?.path?.trim() || "")
     : (activeRepository?.path?.trim() || "");
@@ -739,7 +738,7 @@ export function Topbar({
           {topbarLabel ? (
             <>
               <div className="app-topbar-divider" />
-              <Tooltip title={`${topbarScopeLabel} · 点击复制绝对路径`} mouseEnterDelay={0.3}>
+              <Tooltip title="点击复制绝对路径" mouseEnterDelay={0.3}>
                 <button
                   type="button"
                   className="app-topbar-repository-trigger"
@@ -759,7 +758,6 @@ export function Topbar({
                     );
                   }}
                 >
-                  <span className="app-topbar-scope-pill">{topbarScopeLabel}</span>
                   <span className="app-topbar-repository-trigger-label">{topbarLabel}</span>
                 </button>
               </Tooltip>

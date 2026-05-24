@@ -6,6 +6,8 @@ import {
   cockpitView,
   codeGraphInspectTool,
   inspectView,
+  mcpHubInspectTool,
+  skillsHubInspectTool,
   useViewMode,
   type UseViewModeApi,
 } from "./useViewMode";
@@ -76,6 +78,8 @@ describe("useViewMode", () => {
       authorView("mcp"),
       authorView("skills"),
       inspectView(codeGraphInspectTool()),
+      inspectView(mcpHubInspectTool()),
+      inspectView(skillsHubInspectTool()),
       inspectView({ kind: "workflow-studio" }),
     ];
     for (const mode of allModes) {
@@ -198,6 +202,46 @@ describe("useViewMode", () => {
       probe.api.enter(cockpitView(undefined, "mcp"));
     });
     expect(probe.api.view).toEqual({ kind: "cockpit", hubPane: "mcp" });
+
+    act(() => {
+      probe.api.back();
+    });
+    expect(probe.api.view).toEqual({ kind: "chat" });
+    probe.unmount();
+  });
+
+  test("sidebar MCP/skills overlay uses inspect and back returns to chat", () => {
+    const probe = renderProbe();
+    act(() => {
+      probe.api.enter(inspectView(mcpHubInspectTool()));
+    });
+    expect(probe.api.view).toEqual({ kind: "inspect", tool: { kind: "mcp-hub" } });
+    expect(probe.api.legacy.mcpHubMode).toBe(true);
+    expect(probe.api.isChat).toBe(false);
+    expect(probe.api.isInspect).toBe(true);
+
+    act(() => {
+      probe.api.enter(inspectView(skillsHubInspectTool()));
+    });
+    expect(probe.api.view).toEqual({ kind: "inspect", tool: { kind: "skills-hub" } });
+    expect(probe.api.legacy.skillsHubMode).toBe(true);
+
+    act(() => {
+      probe.api.back();
+    });
+    expect(probe.api.view).toEqual({ kind: "chat" });
+    probe.unmount();
+  });
+
+  test("switching MCP and skills inspect overlays does not stack history", () => {
+    const probe = renderProbe();
+    act(() => {
+      probe.api.enter(inspectView(mcpHubInspectTool()));
+    });
+    act(() => {
+      probe.api.enter(inspectView(skillsHubInspectTool()));
+    });
+    expect(probe.api.view).toEqual({ kind: "inspect", tool: { kind: "skills-hub" } });
 
     act(() => {
       probe.api.back();

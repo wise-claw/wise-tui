@@ -11,7 +11,7 @@
  *   - `chat`     → ClaudeSessions + RightPanel（默认主屏）
  *   - `cockpit`  → AssistantHub / 需求助手工作台（替换主区，左栏保留）
  *   - `author`   → 三种 pane 渲染规则不同（详见下方）
- *   - `inspect`  → 叠层（在底层 view 之上，左栏保留）
+ *   - `inspect`  → 叠层（在底层 view 之上，左栏保留；含 MCP / 技能 / 代码图谱等）
  *
  * `author` 统一渲染为全屏 AuthorPanel，内部 Tab 承载 Workspace /
  * Agents / Workflows / MCP / Skills / Hooks / Prompts / Trellis Spec /
@@ -73,9 +73,21 @@ export const WORKSPACE_SCOPED_AUTHOR_PANES: ReadonlySet<AuthorPane> = new Set([
 export type InspectTool =
   | InspectCodeGraph
   | InspectWorkflowStudio
+  | InspectMcpHub
+  | InspectSkillsHub
   | InspectRuntimeEvents
   | InspectWorkflowGraph
   | InspectSpecTimeline;
+
+/** 侧栏 MCP 快捷入口：叠在主会话区之上，左栏保留。 */
+export interface InspectMcpHub {
+  kind: "mcp-hub";
+}
+
+/** 侧栏技能快捷入口：叠在主会话区之上，左栏保留。 */
+export interface InspectSkillsHub {
+  kind: "skills-hub";
+}
 
 export interface InspectCodeGraph {
   kind: "code-graph";

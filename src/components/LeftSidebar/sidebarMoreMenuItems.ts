@@ -5,6 +5,9 @@ import { getOpenAppPreferenceSync } from "../../services/openAppPreference";
 
 type MenuItem = NonNullable<MenuProps["items"]>[number];
 
+/** 产品暂时隐藏仓库右键「配置 Owner」入口；恢复时改为 true。 */
+const REPOSITORY_MAIN_OWNER_MENU_ENABLED = false;
+
 export function repositoryEditorOpenMenuLabel(): string {
   const id = getOpenAppPreferenceSync().trim() || DEFAULT_OPEN_APP_ID;
   const target = DEFAULT_OPEN_APP_TARGETS.find((item) => item.id === id) ?? DEFAULT_OPEN_APP_TARGETS[0];
@@ -137,8 +140,10 @@ export function buildProjectRepositoryMoreMenuItems(
       { key: "editor", label: repositoryEditorOpenMenuLabel() },
     ]),
     sidebarMenuSection([
-      onOpenRepositoryMainOwner ? { key: "main-owner", label: "配置 Owner" } : null,
-      onConfigureSddMode ? { key: "sdd-mode", label: "SDD 模式" } : null,
+      REPOSITORY_MAIN_OWNER_MENU_ENABLED && onOpenRepositoryMainOwner
+        ? { key: "main-owner", label: "配置 Owner" }
+        : null,
+      onConfigureSddMode ? { key: "sdd-mode", label: "设置 SDD 模式" } : null,
       trellisRootActionEnabled && !trellisReady ? { key: "trellis-init", label: "启用 Wise Trellis" } : null,
       onOpenPromptsRepository ? { key: "prompts", label: "提示词" } : null,
     ]),
@@ -209,8 +214,10 @@ export function buildFloatingRepositoryMoreMenuItems(
       { key: "editor", label: repositoryEditorOpenMenuLabel() },
     ]),
     sidebarMenuSection([
-      onOpenRepositoryMainOwner ? { key: "main-owner", label: "主 Owner 智能体…" } : null,
-      onConfigureSddMode ? { key: "sdd-mode", label: "SDD 模式" } : null,
+      REPOSITORY_MAIN_OWNER_MENU_ENABLED && onOpenRepositoryMainOwner
+        ? { key: "main-owner", label: "主 Owner 智能体…" }
+        : null,
+      onConfigureSddMode ? { key: "sdd-mode", label: "设置 SDD 模式" } : null,
       trellisEnabled && !trellisReady ? { key: "trellis-init", label: "启用 Wise Trellis" } : null,
     ]),
     sidebarMenuSection([

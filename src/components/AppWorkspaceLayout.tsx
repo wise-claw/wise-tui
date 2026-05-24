@@ -438,8 +438,12 @@ export function AppWorkspaceLayout({
   const missionControlMode = viewMode.kind === "cockpit";
   const cockpitHubPane =
     viewMode.kind === "cockpit" ? resolveCockpitHubPane(viewMode) : null;
-  const mcpHubMode = viewMode.kind === "author" && viewMode.pane === "mcp";
-  const skillsHubMode = viewMode.kind === "author" && viewMode.pane === "skills";
+  const mcpHubMode =
+    (viewMode.kind === "author" && viewMode.pane === "mcp") ||
+    (viewMode.kind === "inspect" && viewMode.tool.kind === "mcp-hub");
+  const skillsHubMode =
+    (viewMode.kind === "author" && viewMode.pane === "skills") ||
+    (viewMode.kind === "inspect" && viewMode.tool.kind === "skills-hub");
   const codeKnowledgeGraphMode =
     viewMode.kind === "inspect" && viewMode.tool.kind === "code-graph";
   const ccWfStudioMode =

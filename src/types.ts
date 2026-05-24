@@ -572,6 +572,9 @@ export interface PermissionRequest {
 
 // ── Claude Code Types ──
 
+/** 定时任务执行方式。缺省或未知值按 `claude` 处理（兼容旧数据）。 */
+export type RepositoryScheduledTaskExecutionKind = "claude" | "script" | "workflow";
+
 /** 按仓库持久化的「定时 Claude Code」任务（会话特性面板）。 */
 export interface RepositoryScheduledClaudeTask {
   id: string;
@@ -579,8 +582,15 @@ export interface RepositoryScheduledClaudeTask {
   title: string;
   /** Cron：`分 时 日 月 周`（5 段），与 `cron-parser` 一致。 */
   cronExpression: string;
-  /** Milkdown 编辑区对应的 Markdown 正文，定时触发时经 `buildClaudeOutgoingPrompt` 发往 CLI */
+  /**
+   * 执行方式：`claude` 提示词、`script` 仓库内 Shell、`workflow` CC Workflow Studio Slash。
+   * @default "claude"
+   */
+  executionKind?: RepositoryScheduledTaskExecutionKind;
+  /** Milkdown / 脚本正文：`claude` 为 Markdown 提示；`script` 为 zsh -c 执行的命令或脚本 */
   contentMarkdown: string;
+  /** `workflow` 模式：CC Workflow Studio 工作流 id（列表项 `CcWorkflowListItem.id`） */
+  ccWorkflowId?: string | null;
   /** 为 null 或空字符串时在仓库绑定主会话执行；否则按员工名分发到员工子标签。与 `workflowId` 互斥。 */
   employeeId: string | null;
   /** 非空时按团队工作流分发；与 `employeeId` 互斥。 */
