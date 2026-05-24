@@ -24,6 +24,14 @@ describe("agentRegistry service", () => {
     expect(invoke).toHaveBeenCalledWith("agent_registry_get", { id: "claude" });
   });
 
+  test("wraps install builtin command", async () => {
+    const { installBuiltinAgent } = await import("./agentRegistry");
+
+    await installBuiltinAgent("codex");
+
+    expect(invoke).toHaveBeenCalledWith("agent_registry_install_builtin", { kind: "codex" });
+  });
+
   test("wraps custom agent commands with the exact payload shape", async () => {
     const { deleteCustomAgent, saveCustomAgent, testCustomAgent } = await import("./agentRegistry");
     const input: CustomAgentInput = {

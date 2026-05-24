@@ -1,12 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import type { DetectedAgent } from "../../types/detectedAgent";
 import {
+  canInstallBuiltinAgent,
   deriveAgentRegistryStats,
   describeAgentRuntime,
   filterAgents,
   formatDetectedAt,
   getAgentKindLabel,
   getAgentPathLabel,
+  getBuiltinInstallCommand,
   getEmptyDescription,
 } from "./agentRegistryPresentation";
 
@@ -72,6 +74,10 @@ describe("agent registry presentation helpers", () => {
   });
 
   test("formats labels, runtime descriptions, paths, and invalid dates", () => {
+    expect(canInstallBuiltinAgent(agents[0])).toBe(false);
+    expect(canInstallBuiltinAgent(agents[1])).toBe(true);
+    expect(canInstallBuiltinAgent(agents[2])).toBe(false);
+    expect(getBuiltinInstallCommand("codex")).toBe("npm install -g @openai/codex");
     expect(getAgentKindLabel("claude")).toBe("Claude");
     expect(getAgentKindLabel("codex")).toBe("Codex");
     expect(getAgentKindLabel("gemini")).toBe("Gemini");

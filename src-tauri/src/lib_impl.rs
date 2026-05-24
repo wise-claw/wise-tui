@@ -540,6 +540,7 @@ pub fn run() {
             agent_registry::agent_registry_test_custom,
             agent_registry::agent_registry_save_custom,
             agent_registry::agent_registry_delete_custom,
+            agent_registry::agent_registry_install_builtin,
             mcp::commands::mcp_list_servers,
             mcp::commands::mcp_save_server,
             mcp::commands::mcp_delete_server,

@@ -1,5 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { CustomAgentInput, DetectedAgent, ProbeResult } from "../types/detectedAgent";
+import type {
+  CustomAgentInput,
+  DetectedAgent,
+  DetectedAgentKind,
+  ProbeResult,
+} from "../types/detectedAgent";
 
 export async function listAgents(): Promise<DetectedAgent[]> {
   return invoke<DetectedAgent[]>("agent_registry_list");
@@ -23,6 +28,12 @@ export async function saveCustomAgent(input: CustomAgentInput): Promise<Detected
 
 export async function deleteCustomAgent(id: string): Promise<void> {
   return invoke<void>("agent_registry_delete_custom", { id });
+}
+
+export type BuiltinInstallableKind = Exclude<DetectedAgentKind, "custom">;
+
+export async function installBuiltinAgent(kind: BuiltinInstallableKind): Promise<DetectedAgent[]> {
+  return invoke<DetectedAgent[]>("agent_registry_install_builtin", { kind });
 }
 
 function normalizeCustomAgentInput(input: CustomAgentInput): Record<string, unknown> {

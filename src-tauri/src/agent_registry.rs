@@ -6,6 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
+use std::process::Command;
 use std::sync::{Mutex, RwLock};
 use std::time::{Duration, Instant};
 
@@ -239,6 +240,24 @@ impl DetectedAgent {
             | DetectedAgent::Codex(agent)
             | DetectedAgent::Gemini(agent) => &agent.id,
             DetectedAgent::Custom(agent) => &agent.id,
+        }
+    }
+
+    fn name(&self) -> &str {
+        match self {
+            DetectedAgent::Claude(agent)
+            | DetectedAgent::Codex(agent)
+            | DetectedAgent::Gemini(agent) => &agent.name,
+            DetectedAgent::Custom(agent) => &agent.name,
+        }
+    }
+
+    fn is_available(&self) -> bool {
+        match self {
+            DetectedAgent::Claude(agent)
+            | DetectedAgent::Codex(agent)
+            | DetectedAgent::Gemini(agent) => agent.available,
+            DetectedAgent::Custom(agent) => agent.available,
         }
     }
 
@@ -699,6 +718,87 @@ pub(crate) fn insert_custom_agent(
     Ok(record)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct BuiltinInstallSpec {
+    npm_package: &'static str,
+}
+
+fn parse_builtin_install_kind(kind: &str) -> Result<BuiltinInstallSpec, String> {
+    match kind.trim().to_lowercase().as_str() {
+        "claude" => Ok(BuiltinInstallSpec {
+            npm_package: "@anthropic-ai/claude-code",
+        }),
+        "codex" => Ok(BuiltinInstallSpec {
+            npm_package: "@openai/codex",
+        }),
+        "gemini" => Ok(BuiltinInstallSpec {
+            npm_package: "@google/gemini-cli",
+        }),
+        "" => Err("kind is required".to_string()),
+        other => Err(format!("不支持一键安装的运行入口：{other}")),
+    }
+}
+
+fn path_env_separator() -> char {
+    if cfg!(windows) {
+        ';'
+    } else {
+        ':'
+    }
+}
+
+fn resolve_npm_binary(path_env: &str) -> Result<PathBuf, String> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    for dir in path_env.split(path_env_separator()) {
+        let trimmed = dir.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        candidates.push(PathBuf::from(trimmed).join(if cfg!(windows) {
+            "npm.cmd"
+        } else {
+            "npm"
+        }));
+    }
+    candidates.push(PathBuf::from(if cfg!(windows) { "npm.cmd" } else { "npm" }));
+
+    for candidate in candidates {
+        if candidate == PathBuf::from("npm") || candidate == PathBuf::from("npm.cmd") {
+            if Command::new(&candidate)
+                .arg("--version")
+                .output()
+                .map(|output| output.status.success())
+                .unwrap_or(false)
+            {
+                return Ok(candidate);
+            }
+            continue;
+        }
+        if candidate.is_file() {
+            return Ok(candidate);
+        }
+    }
+
+    Err(
+        "未找到 npm。请先安装 Node.js（https://nodejs.org），并确保 npm 在 PATH 中。"
+            .to_string(),
+    )
+}
+
+fn run_npm_global_install(
+    npm_bin: &Path,
+    home: &str,
+    path_env: &str,
+    package: &str,
+) -> Result<std::process::Output, String> {
+    Command::new(npm_bin)
+        .args(["install", "-g", package])
+        .env("HOME", home)
+        .env("PATH", path_env)
+        .output()
+        .map_err(|e| format!("执行 npm install -g {package} 失败: {e}"))
+}
+
 pub(crate) fn delete_custom_agent(db: &Mutex<Connection>, id: &str) -> Result<(), String> {
     let row_id = strip_custom_prefix(id.trim()).trim();
     if row_id.is_empty() {
@@ -708,6 +808,49 @@ pub(crate) fn delete_custom_agent(db: &Mutex<Connection>, id: &str) -> Result<()
     conn.execute("DELETE FROM agent_custom WHERE id = ?1", params![row_id])
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[tauri::command]
+pub async fn agent_registry_install_builtin(
+    kind: String,
+    registry: tauri::State<'_, AgentRegistry>,
+    db: tauri::State<'_, wise_db::WiseDb>,
+) -> Result<Vec<DetectedAgent>, String> {
+    let normalized_kind = kind.trim().to_lowercase();
+    let spec = parse_builtin_install_kind(&normalized_kind)?;
+
+    let snapshot = registry.snapshot()?;
+    if let Some(agent) = snapshot.iter().find(|agent| agent.id() == normalized_kind) {
+        if agent.is_available() {
+            return Err(format!("{} 已就绪，无需重复安装", agent.name()));
+        }
+    }
+
+    let home = dirs::home_dir().ok_or_else(|| "无法解析用户主目录".to_string())?;
+    let home_s = home.to_string_lossy().to_string();
+    let path_env =
+        crate::claude_commands::merge_path_env(&crate::claude_commands::claude_path_search_prefixes());
+    let package = spec.npm_package.to_string();
+
+    let install_output = tokio::task::spawn_blocking(move || {
+        let npm = resolve_npm_binary(&path_env)?;
+        run_npm_global_install(&npm, &home_s, &path_env, &package)
+    })
+    .await
+    .map_err(|e| format!("安装任务被中断: {e}"))??;
+
+    let stdout = String::from_utf8_lossy(&install_output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&install_output.stderr).to_string();
+    if !install_output.status.success() {
+        return Err(format!(
+            "安装 {} 失败（退出码 {:?}）\n{stdout}\n{stderr}",
+            spec.npm_package,
+            install_output.status.code()
+        ));
+    }
+
+    let probe = OsProbe;
+    registry.refresh_all(true, &db.0, &probe).await
 }
 
 #[tauri::command]
@@ -911,6 +1054,34 @@ mod tests {
             args: Vec::new(),
             env: HashMap::new(),
         }
+    }
+
+    #[test]
+    fn parse_builtin_install_kind_accepts_builtin_kinds() {
+        assert_eq!(
+            parse_builtin_install_kind("claude").expect("claude"),
+            BuiltinInstallSpec {
+                npm_package: "@anthropic-ai/claude-code",
+            }
+        );
+        assert_eq!(
+            parse_builtin_install_kind("codex").expect("codex"),
+            BuiltinInstallSpec {
+                npm_package: "@openai/codex",
+            }
+        );
+        assert_eq!(
+            parse_builtin_install_kind("gemini").expect("gemini"),
+            BuiltinInstallSpec {
+                npm_package: "@google/gemini-cli",
+            }
+        );
+    }
+
+    #[test]
+    fn parse_builtin_install_kind_rejects_custom_and_empty() {
+        assert!(parse_builtin_install_kind("custom").is_err());
+        assert!(parse_builtin_install_kind("").is_err());
     }
 
     #[test]

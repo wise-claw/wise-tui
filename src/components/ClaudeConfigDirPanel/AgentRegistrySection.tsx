@@ -1,5 +1,6 @@
 import {
   CloseCircleOutlined,
+  CloudDownloadOutlined,
   CopyOutlined,
   DeleteOutlined,
   EditOutlined,
@@ -12,6 +13,7 @@ import { Alert, Button, Empty, Form, Input, Modal, Popconfirm, Space, Tag, Toolt
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   deleteCustomAgent,
+  installBuiltinAgent,
   listAgents,
   refreshAgents,
   saveCustomAgent,
@@ -19,12 +21,14 @@ import {
 } from "../../services/agentRegistry";
 import { isAgentKind, type CustomAgentInput, type DetectedAgent, type ProbeResult } from "../../types/detectedAgent";
 import {
+  canInstallBuiltinAgent,
   deriveAgentRegistryStats,
   describeAgentRuntime,
   filterAgents,
   formatDetectedAt,
   getAgentKindLabel,
   getAgentPathLabel,
+  getBuiltinInstallCommand,
   getEmptyDescription,
   type AgentRegistryFilter,
 } from "./agentRegistryPresentation";
@@ -57,6 +61,7 @@ export function AgentRegistrySection() {
   const [testResult, setTestResult] = useState<ProbeResult | null>(null);
   const [testedFingerprint, setTestedFingerprint] = useState<string | null>(null);
   const [draftFingerprint, setDraftFingerprint] = useState("");
+  const [installingId, setInstallingId] = useState<string | null>(null);
   const [form] = Form.useForm<CustomAgentFormValues>();
   const aliveRef = useRef(true);
 
@@ -180,6 +185,28 @@ export function AgentRegistrySection() {
     [reload],
   );
 
+  const handleInstall = useCallback(
+    async (agent: DetectedAgent<"claude" | "codex" | "gemini">) => {
+      setInstallingId(agent.id);
+      try {
+        const next = await installBuiltinAgent(agent.kind);
+        if (!aliveRef.current) return;
+        setAgents(next);
+        const refreshed = next.find((entry) => entry.id === agent.id);
+        if (refreshed?.available) {
+          message.success(`${agent.name} 安装成功`);
+        } else {
+          message.warning("安装已完成，但命令仍未探测到，请检查 PATH 后重新探测");
+        }
+      } catch (e) {
+        message.error(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (aliveRef.current) setInstallingId(null);
+      }
+    },
+    [],
+  );
+
   const canSave = Boolean(testResult?.ok && testedFingerprint === draftFingerprint && draftFingerprint);
   const stats = useMemo(() => deriveAgentRegistryStats(agents), [agents]);
   const filteredAgents = useMemo(() => filterAgents(agents, filter, query), [agents, filter, query]);
@@ -290,8 +317,10 @@ export function AgentRegistrySection() {
                 key={agent.id}
                 agent={agent}
                 busy={loading}
+                installing={installingId === agent.id}
                 onEdit={openEditModal}
                 onDelete={(id) => void handleDelete(id)}
+                onInstall={(entry) => void handleInstall(entry)}
               />
             ))}
           </div>
@@ -366,11 +395,13 @@ export function AgentRegistrySection() {
 interface AgentRegistryRowProps {
   agent: DetectedAgent;
   busy: boolean;
+  installing: boolean;
   onEdit: (agent: DetectedAgent<"custom">) => void;
   onDelete: (id: string) => void;
+  onInstall: (agent: DetectedAgent<"claude" | "codex" | "gemini">) => void;
 }
 
-function AgentRegistryRow({ agent, busy, onEdit, onDelete }: AgentRegistryRowProps) {
+function AgentRegistryRow({ agent, busy, installing, onEdit, onDelete, onInstall }: AgentRegistryRowProps) {
   const pathText = getAgentPathLabel(agent);
 
   const handleCopy = useCallback(() => {
@@ -464,6 +495,22 @@ function AgentRegistryRow({ agent, busy, onEdit, onDelete }: AgentRegistryRowPro
                 删除
               </Button>
             </Popconfirm>
+          </Space>
+        ) : canInstallBuiltinAgent(agent) ? (
+          <Space size={4} className="app-agent-registry-card__actions">
+            <Tooltip title={getBuiltinInstallCommand(agent.kind)}>
+              <Button
+                size="small"
+                type="primary"
+                ghost
+                icon={<CloudDownloadOutlined />}
+                loading={installing}
+                disabled={busy || installing}
+                onClick={() => onInstall(agent)}
+              >
+                一键安装
+              </Button>
+            </Tooltip>
           </Space>
         ) : null}
       </div>

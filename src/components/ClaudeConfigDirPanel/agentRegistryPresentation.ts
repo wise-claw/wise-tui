@@ -1,4 +1,6 @@
-import { isAgentKind, type DetectedAgent } from "../../types/detectedAgent";
+import { isAgentKind, type DetectedAgent, type DetectedAgentKind } from "../../types/detectedAgent";
+
+export type BuiltinInstallableKind = Exclude<DetectedAgentKind, "custom">;
 
 export type AgentRegistryFilter = "all" | "available" | "custom" | "errors";
 
@@ -35,6 +37,23 @@ export function getEmptyDescription(filter: AgentRegistryFilter, query: string):
   if (filter === "custom") return "还没有自定义预留入口";
   if (filter === "errors") return "没有异常运行入口";
   return "暂未探测到 Claude Code 运行入口";
+}
+
+export function canInstallBuiltinAgent(
+  agent: DetectedAgent,
+): agent is DetectedAgent<BuiltinInstallableKind> {
+  return agent.kind !== "custom" && !agent.available;
+}
+
+export function getBuiltinInstallCommand(kind: BuiltinInstallableKind): string {
+  switch (kind) {
+    case "claude":
+      return "npm install -g @anthropic-ai/claude-code";
+    case "codex":
+      return "npm install -g @openai/codex";
+    case "gemini":
+      return "npm install -g @google/gemini-cli";
+  }
 }
 
 export function getAgentKindLabel(kind: DetectedAgent["kind"]): string {

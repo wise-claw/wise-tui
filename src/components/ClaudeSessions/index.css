@@ -4559,50 +4559,107 @@ button.app-message-part-header:disabled:hover {
   opacity: 0.75;
 }
 
+/* Custom premium execution engine dropdown styling */
+.app-claude-connection-kind-dropdown-container {
+  background: var(--app-workspace-glass-bg, var(--ant-color-bg-elevated)) !important;
+  -webkit-backdrop-filter: var(--app-workspace-glass-blur, blur(16px)) !important;
+  backdrop-filter: var(--app-workspace-glass-blur, blur(16px)) !important;
+  border: 1px solid var(--app-workspace-glass-border, var(--ant-color-border-secondary)) !important;
+  border-radius: 10px !important;
+  box-shadow: 
+    0 12px 32px rgba(0, 0, 0, 0.16), 
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  overflow: hidden;
+  min-width: 250px;
+  max-width: 320px;
+}
+
+.app-claude-connection-kind-dropdown-header {
+  padding: 10px 12px 6px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  user-select: none;
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 35%, transparent);
+}
+
+.app-claude-connection-kind-dropdown-header-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-claude-connection-kind-dropdown-header-subtitle {
+  font-size: 9.5px;
+  color: var(--ant-color-text-tertiary);
+  line-height: 1.3;
+}
+
+/* Override Ant Design's menu container inside the dropdown */
 .app-claude-connection-kind-dropdown .ant-dropdown-menu {
-  min-width: 280px;
-  max-width: 360px;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 4px !important;
+  min-width: 242px;
+}
+
+/* Dropdown list item wrapper styles */
+.app-claude-connection-kind-dropdown .ant-dropdown-menu-item {
+  padding: 0 !important;
+  border-radius: 6px !important;
+  margin: 2px 0 !important;
+  background: transparent !important;
+  transition: all 0.15s ease !important;
+}
+
+.app-claude-connection-kind-dropdown .ant-dropdown-menu-item:hover:not(.ant-dropdown-menu-item-disabled) {
+  background: var(--ant-color-fill-quaternary) !important;
+}
+
+.app-claude-connection-kind-dropdown .app-claude-connection-kind-menu-item-wrapper--selected {
+  background: color-mix(in srgb, var(--ant-color-primary-bg) 60%, transparent) !important;
 }
 
 .app-claude-connection-kind-menu-item {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  max-width: 320px;
-}
-
-.app-claude-connection-kind-menu-item__title {
-  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ant-color-text);
+  gap: 10px;
+  padding: 8px 12px;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
 }
 
-.app-claude-connection-kind-menu-item__badge {
-  padding: 0 6px;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1.5;
-  color: var(--ant-color-primary);
-  background: var(--ant-color-primary-bg);
+.app-claude-connection-kind-menu-item--disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
-.app-claude-connection-kind-menu-item__desc {
-  font-size: 11px;
-  line-height: 1.35;
-  color: var(--ant-color-text-secondary);
-  white-space: normal;
-}
-
-.app-claude-connection-kind-menu-item--with-action {
+.app-claude-connection-kind-menu-item__icon-wrap {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: var(--ant-color-fill-secondary);
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-width: 220px;
+  justify-content: center;
+  color: var(--ant-color-text-tertiary);
+  transition: all 0.2s ease;
+}
+
+.app-claude-connection-kind-menu-item--selected .app-claude-connection-kind-menu-item__icon-wrap {
+  background: var(--ant-color-primary) !important;
+  color: #fff !important;
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--ant-color-primary) 30%, transparent);
+}
+
+.app-claude-connection-kind-menu-item__icon {
+  display: block;
 }
 
 .app-claude-connection-kind-menu-item__body {
@@ -4613,23 +4670,92 @@ button.app-message-part-header:disabled:hover {
   flex: 1;
 }
 
+.app-claude-connection-kind-menu-item__title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.app-claude-connection-kind-menu-item__title {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+  line-height: 1.2;
+}
+
+.app-claude-connection-kind-menu-item__badge {
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: bold;
+  line-height: 14px;
+  color: var(--ant-color-primary);
+  background: var(--ant-color-primary-bg);
+  border: 1px solid color-mix(in srgb, var(--ant-color-primary) 25%, transparent);
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+
+.app-claude-connection-kind-menu-item__badge--codex {
+  color: var(--ant-color-success);
+  background: var(--ant-color-success-bg);
+  border-color: color-mix(in srgb, var(--ant-color-success) 25%, transparent);
+}
+
+.app-claude-connection-kind-menu-item__desc {
+  font-size: 10.5px;
+  line-height: 1.3;
+  color: var(--ant-color-text-secondary);
+  white-space: normal;
+  word-break: break-word;
+}
+
+.app-claude-connection-kind-menu-item__action-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  min-width: 14px;
+}
+
+.app-claude-connection-kind-menu-item__checkmark {
+  color: var(--ant-color-primary);
+  animation: app-claude-checkmark-scale 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes app-claude-checkmark-scale {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
 .app-claude-connection-kind-menu-item__probe {
   flex-shrink: 0;
   margin: 0;
-  padding: 0 6px;
-  border: none;
-  border-radius: var(--ant-border-radius-sm);
-  background: color-mix(in srgb, var(--ant-color-primary) 12%, transparent);
+  padding: 2px 8px;
+  border: 1px solid var(--ant-color-primary-border);
+  border-radius: 999px;
+  background: var(--ant-color-primary-bg);
   color: var(--ant-color-primary);
-  font-size: 11px;
-  line-height: 20px;
-  font-family: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
   cursor: pointer;
   pointer-events: auto;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .app-claude-connection-kind-menu-item__probe:hover {
-  background: color-mix(in srgb, var(--ant-color-primary) 20%, transparent);
+  background: var(--ant-color-primary) !important;
+  color: #fff !important;
+  border-color: var(--ant-color-primary) !important;
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--ant-color-primary) 30%, transparent);
 }
 
 .ant-dropdown-menu-item-disabled .app-claude-connection-kind-menu-item__probe {

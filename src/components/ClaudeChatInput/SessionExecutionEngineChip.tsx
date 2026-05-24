@@ -1,4 +1,5 @@
 import { Dropdown, Tooltip, type MenuProps } from "antd";
+import { useState } from "react";
 import {
   SESSION_EXECUTION_ENGINE_LABELS,
   type SessionExecutionEngine,
@@ -22,12 +23,15 @@ export function SessionExecutionEngineChip({
   disabled = false,
   className,
 }: Props) {
+  const [menuOpen, setMenuOpen] = useState(false);
   const meta = SESSION_EXECUTION_ENGINE_LABELS[engine];
   const interactive = Boolean(onEngineChange) && !disabled;
 
   const menuItems: MenuProps["items"] = (["claude", "codex"] as const).map((key) => {
     const itemMeta = SESSION_EXECUTION_ENGINE_LABELS[key];
     const itemDisabled = key === "codex" && !codexAvailable;
+    const isSelected = engine === key;
+
     const codexProbeAction =
       key === "codex" && itemDisabled && onOpenExecutionEnvironment ? (
         <button
@@ -42,24 +46,55 @@ export function SessionExecutionEngineChip({
           探测
         </button>
       ) : null;
+
     return {
       key,
       disabled: itemDisabled,
+      className: `app-claude-connection-kind-menu-item-wrapper ${isSelected ? "app-claude-connection-kind-menu-item-wrapper--selected" : ""}`,
       label: (
         <div
-          className={`app-claude-connection-kind-menu-item${
-            codexProbeAction ? " app-claude-connection-kind-menu-item--with-action" : ""
-          }`}
+          className={`app-claude-connection-kind-menu-item ${
+            itemDisabled ? "app-claude-connection-kind-menu-item--disabled" : ""
+          } ${isSelected ? "app-claude-connection-kind-menu-item--selected" : ""}`}
         >
+          <div className="app-claude-connection-kind-menu-item__icon-wrap">
+            {key === "claude" ? (
+              <svg className="app-claude-connection-kind-menu-item__icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="4 17 10 11 4 5" />
+                <line x1="12" y1="19" x2="20" y2="19" />
+              </svg>
+            ) : (
+              <svg className="app-claude-connection-kind-menu-item__icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="12 2 2 7 12 12 22 7 12 2" />
+                <polyline points="2 17 12 22 22 17" />
+                <polyline points="2 12 12 17 22 12" />
+              </svg>
+            )}
+          </div>
           <div className="app-claude-connection-kind-menu-item__body">
-            <span className="app-claude-connection-kind-menu-item__title">{itemMeta.title}</span>
+            <div className="app-claude-connection-kind-menu-item__title-row">
+              <span className="app-claude-connection-kind-menu-item__title">{itemMeta.title}</span>
+              {key === "claude" ? (
+                <span className="app-claude-connection-kind-menu-item__badge">默认</span>
+              ) : null}
+              {key === "codex" && !itemDisabled ? (
+                <span className="app-claude-connection-kind-menu-item__badge app-claude-connection-kind-menu-item__badge--codex">本地</span>
+              ) : null}
+            </div>
             <span className="app-claude-connection-kind-menu-item__desc">
               {key === "codex" && itemDisabled
                 ? "未检测到 Codex CLI，点击右侧探测"
                 : itemMeta.description}
             </span>
           </div>
-          {codexProbeAction}
+          <div className="app-claude-connection-kind-menu-item__action-wrap">
+            {codexProbeAction}
+            {isSelected && !itemDisabled ? (
+              <svg className="app-claude-connection-kind-menu-item__checkmark" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            ) : null}
+          </div>
         </div>
       ),
     };
@@ -121,6 +156,15 @@ export function SessionExecutionEngineChip({
       trigger={["click"]}
       placement="top"
       disabled={disabled}
+      dropdownRender={(menu) => (
+        <div className="app-claude-connection-kind-dropdown-container">
+          <div className="app-claude-connection-kind-dropdown-header">
+            <span className="app-claude-connection-kind-dropdown-header-title">执行环境</span>
+            <span className="app-claude-connection-kind-dropdown-header-subtitle">选择后台 AI 代码执行的 CLI 引擎</span>
+          </div>
+          {menu}
+        </div>
+      )}
     >
       <Tooltip title={chipTooltip} placement="top">
         <button type="button" className="app-claude-connection-kind-chip-btn">
