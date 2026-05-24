@@ -190,11 +190,19 @@ type TaggedOmcSignal = OmcActiveExecutionSignal & {
   signalSource: "workflow_task" | "running_session";
 };
 
+const eventPayloadCache = new WeakMap<WorkflowTaskEventItem, Record<string, unknown> | null>();
+
 function parseEventPayload(event: WorkflowTaskEventItem): Record<string, unknown> | null {
   if (!event.payloadJson) return null;
+  if (eventPayloadCache.has(event)) {
+    return eventPayloadCache.get(event)!;
+  }
   try {
-    return JSON.parse(event.payloadJson) as Record<string, unknown>;
+    const parsed = JSON.parse(event.payloadJson) as Record<string, unknown>;
+    eventPayloadCache.set(event, parsed);
+    return parsed;
   } catch {
+    eventPayloadCache.set(event, null);
     return null;
   }
 }
@@ -821,20 +829,13 @@ function extractOmcProgressText(
   for (let i = events.length - 1; i >= 0; i -= 1) {
     const event = events[i];
     if (event.eventType !== "task.run.progressed") continue;
-    if (!event.payloadJson) continue;
-    try {
-      const payload = JSON.parse(event.payloadJson) as {
-        stage?: string;
-        message?: string;
-      };
-      const message = payload.message?.trim();
-      const stage = payload.stage?.trim();
-      if (message && stage) return `OMC · ${stage} · ${message}`;
-      if (message) return `OMC · ${message}`;
-      if (stage) return `OMC · ${stage}`;
-    } catch {
-      // ignore malformed payload
-    }
+    const payload = parseEventPayload(event);
+    if (!payload) continue;
+    const message = (payload.message as string | undefined)?.trim();
+    const stage = (payload.stage as string | undefined)?.trim();
+    if (message && stage) return `OMC · ${stage} · ${message}`;
+    if (message) return `OMC · ${message}`;
+    if (stage) return `OMC · ${stage}`;
   }
   if (!active) {
     return undefined;
@@ -1022,14 +1023,10 @@ export function useMonitorOverview({
     for (const task of workflowTasks) {
       const events = workflowTaskEventsByTaskId[task.id] ?? [];
       for (const event of events) {
-        if (!event.payloadJson) continue;
-        try {
-          const payload = JSON.parse(event.payloadJson) as { employeeId?: string };
-          if (typeof payload.employeeId === "string" && payload.employeeId.trim()) {
-            teamEmployeeIds.add(payload.employeeId);
-          }
-        } catch {
-          // ignore malformed payload
+        const payload = parseEventPayload(event);
+        if (!payload) continue;
+        if (typeof payload.employeeId === "string" && payload.employeeId.trim()) {
+          teamEmployeeIds.add(payload.employeeId);
         }
       }
     }
@@ -1295,37 +1292,29 @@ export function useMonitorOverview({
       for (const task of tasks) {
         const events = workflowTaskEventsByTaskId[task.id] ?? [];
         for (const event of events) {
-          if (!event.payloadJson) continue;
-          try {
-            const payload = JSON.parse(event.payloadJson) as {
-              employeeId?: string;
-              employeeName?: string;
-              snapshot?: { toNodeName?: string };
-              toNodeName?: string;
-            };
-            if (typeof payload.employeeId === "string" && payload.employeeId.trim()) {
-              memberIds.add(payload.employeeId);
+          const payload = parseEventPayload(event);
+          if (!payload) continue;
+          if (typeof payload.employeeId === "string" && payload.employeeId.trim()) {
+            memberIds.add(payload.employeeId);
+          }
+          if (typeof payload.employeeName === "string" && payload.employeeName.trim()) {
+            const employee = employeeByName.get(payload.employeeName.trim());
+            if (employee) {
+              memberIds.add(employee.id);
             }
-            if (typeof payload.employeeName === "string" && payload.employeeName.trim()) {
-              const employee = employeeByName.get(payload.employeeName.trim());
-              if (employee) {
-                memberIds.add(employee.id);
-              }
+          }
+          if (typeof payload.toNodeName === "string" && payload.toNodeName.trim()) {
+            const employee = employeeByName.get(payload.toNodeName.trim());
+            if (employee) {
+              memberIds.add(employee.id);
             }
-            if (typeof payload.toNodeName === "string" && payload.toNodeName.trim()) {
-              const employee = employeeByName.get(payload.toNodeName.trim());
-              if (employee) {
-                memberIds.add(employee.id);
-              }
+          }
+          const snapshot = payload.snapshot as Record<string, unknown> | undefined;
+          if (typeof snapshot?.toNodeName === "string" && snapshot.toNodeName.trim()) {
+            const employee = employeeByName.get(snapshot.toNodeName.trim());
+            if (employee) {
+              memberIds.add(employee.id);
             }
-            if (typeof payload.snapshot?.toNodeName === "string" && payload.snapshot.toNodeName.trim()) {
-              const employee = employeeByName.get(payload.snapshot.toNodeName.trim());
-              if (employee) {
-                memberIds.add(employee.id);
-              }
-            }
-          } catch {
-            // ignore malformed payload
           }
         }
       }

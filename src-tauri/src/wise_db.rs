@@ -272,8 +272,13 @@ impl WiseDb {
         fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
         let path: PathBuf = dir.join("wise.db");
         let conn = Connection::open(&path).map_err(|e| e.to_string())?;
-        conn.execute_batch("PRAGMA foreign_keys = ON;")
-            .map_err(|e| e.to_string())?;
+        conn.execute_batch(
+            "PRAGMA journal_mode = WAL;
+             PRAGMA synchronous = NORMAL;
+             PRAGMA foreign_keys = ON;
+             PRAGMA busy_timeout = 5000;",
+        )
+        .map_err(|e| e.to_string())?;
         run_migrations(&conn)?;
         ensure_graph_index_meta_progress_column(&conn)?;
         ensure_graph_index_meta_indexing_current_file_column(&conn)?;
