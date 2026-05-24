@@ -37,6 +37,10 @@ import { ClaudeSessionMessagesColumn } from "../ClaudeSessions/ClaudeSessionMess
 
 import { useAgentAssignments } from "../../hooks/useAgentAssignments";
 import { SubagentStatusIndicator } from "./SubagentStatusIndicator";
+import {
+  SessionConversationTaskDetailDrawer,
+  type SessionConversationTaskDetailTarget,
+} from "./SessionConversationTaskDetailDrawer";
 import "./index.css";
 
 export {
@@ -804,6 +808,8 @@ export function ProgressMonitorPanel({
   const [historyMessagesSessionId, setHistoryMessagesSessionId] = useState<string | null>(null);
   const [omcDirectBatchDetailSnapshot, setOmcDirectBatchDetailSnapshot] = useState<WorkflowInvocationStreamDetail | null>(null);
   const [repositorySubagentDetailTarget, setRepositorySubagentDetailTarget] = useState<RepositorySubagentDetailTarget | null>(null);
+  const [sessionConversationTaskDetailTarget, setSessionConversationTaskDetailTarget] =
+    useState<SessionConversationTaskDetailTarget | null>(null);
 
   const omcDirectBatchInvocationsLive = useSyncExternalStore(
     subscribeOmcDirectBatchInvocations,
@@ -916,8 +922,38 @@ export function ProgressMonitorPanel({
   const handleOmcDirectBatchRowActivate = useCallback((inv: WorkflowInvocationStreamDetail) => {
     setEmployeeHistoryPopoverId(null);
     setEmployeeHistorySearch("");
+    setSessionConversationTaskDetailTarget(null);
     setOmcDirectBatchDetailSnapshot(inv);
   }, []);
+
+  const openSessionConversationTaskDetail = useCallback(
+    (item: SessionConversationTaskItem) => {
+      if (item.invocationKey && item.sessionId && item.repositoryPath) {
+        const inv = omcDirectBatchInvocationsLive.find((row) => row.invocationKey === item.invocationKey);
+        setSessionConversationTaskDetailTarget(null);
+        if (inv) {
+          setOmcDirectBatchDetailSnapshot(inv);
+          return;
+        }
+        onOpenOmcBatchInvocationDetail?.({
+          sessionId: item.sessionId,
+          repositoryPath: item.repositoryPath,
+          invocationKey: item.invocationKey,
+        });
+        return;
+      }
+
+      const sid = item.sessionId?.trim();
+      if (!sid) return;
+      const sessionHit =
+        sessionsForHistoryTranscript.find((row) => row.id === sid || row.claudeSessionId?.trim() === sid) ??
+        sessions.find((row) => row.id === sid || row.claudeSessionId?.trim() === sid);
+      if (!sessionHit) return;
+      setOmcDirectBatchDetailSnapshot(null);
+      setSessionConversationTaskDetailTarget({ task: item });
+    },
+    [omcDirectBatchInvocationsLive, onOpenOmcBatchInvocationDetail, sessions, sessionsForHistoryTranscript],
+  );
 
   const runningSessionConversationTasks = useMemo(
     () => sessionConversationTaskItems.filter((item) => item.status === "running"),
@@ -955,15 +991,7 @@ export function ProgressMonitorPanel({
                   type="button"
                   className="app-monitor-panel__subagent-row app-monitor-panel__subagent-row--clickable"
                   title={item.previewText}
-                  onClick={() => {
-                    if (item.invocationKey && item.sessionId && item.repositoryPath) {
-                      onOpenOmcBatchInvocationDetail?.({
-                        sessionId: item.sessionId,
-                        repositoryPath: item.repositoryPath,
-                        invocationKey: item.invocationKey,
-                      });
-                    }
-                  }}
+                  onClick={() => openSessionConversationTaskDetail(item)}
                 >
                   <span className="app-monitor-panel__subagent-branch" aria-hidden />
                   <span className="app-monitor-panel__subagent-main">
@@ -1379,6 +1407,12 @@ export function ProgressMonitorPanel({
         sessions={sessions}
         onClose={() => setOmcDirectBatchDetailSnapshot(null)}
         onOpenInMainSessionBackground={onOpenOmcBatchInvocationDetail ? handleOmcBatchInvocationSelect : undefined}
+      />
+
+      <SessionConversationTaskDetailDrawer
+        target={sessionConversationTaskDetailTarget}
+        sessions={sessionsForHistoryTranscript}
+        onClose={() => setSessionConversationTaskDetailTarget(null)}
       />
 
       <RepositorySubagentDetailDrawer

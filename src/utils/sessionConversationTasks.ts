@@ -1,7 +1,7 @@
 import type { BackgroundInvocationSnapshot } from "../services/backgroundInvocationSnapshot";
 import type { WorkflowInvocationStreamDetail } from "../constants/workflowUiEvents";
-import type { ClaudeSession, SessionConversationTaskItem, ToolUsePart } from "../types";
-import { indexOfLastRenderableUserMessage } from "./claudeChatMessageDisplay";
+import type { ClaudeMessage, ClaudeSession, MessagePart, SessionConversationTaskItem, ToolUsePart } from "../types";
+import { indexOfLastRenderableUserMessage, isToolOnlyUserMessage } from "./claudeChatMessageDisplay";
 import { isOmcDirectBatchInvocationRunning } from "./omcDirectBatchInvocationDisplay";
 
 function truncate(text: string, max = 72): string {
@@ -311,4 +311,131 @@ export function sessionConversationTaskStatusLabel(status: SessionConversationTa
   if (status === "running") return "运行中";
   if (status === "failed") return "失败";
   return "已完成";
+}
+
+export function findMergedToolUseInSession(
+  messages: ClaudeSession["messages"],
+  toolUseId: string,
+): ToolUsePart | null {
+  const id = toolUseId.trim();
+  if (!id) return null;
+  return mergeToolUseParts(messages).find((part) => part.id === id) ?? null;
+}
+
+function filterMessagePartsForTool(message: ClaudeMessage, toolUseId: string): MessagePart[] {
+  const id = toolUseId.trim();
+  return message.parts.filter((part) => {
+    if (part.type === "tool_use") return part.id === id;
+    if (part.type === "text" || part.type === "reasoning") return true;
+    return false;
+  });
+}
+
+/** 提取与指定 tool_use 相关的会话片段，供详情 drawer 展示。 */
+export function buildConversationTaskDetailMessages(
+  messages: ClaudeSession["messages"],
+  toolUseId: string,
+): ClaudeMessage[] {
+  const id = toolUseId.trim();
+  if (!id) return [];
+
+  const out: ClaudeMessage[] = [];
+  let collecting = false;
+  for (const message of messages) {
+    const containsTool = message.parts.some((part) => part.type === "tool_use" && part.id === id);
+    if (containsTool) {
+      collecting = true;
+      const parts = filterMessagePartsForTool(message, id);
+      if (parts.length > 0) {
+        out.push({
+          ...message,
+          parts,
+          content: parts
+            .filter((part): part is Extract<MessagePart, { type: "text" }> => part.type === "text")
+            .map((part) => part.text)
+            .join("\n"),
+        });
+      }
+      continue;
+    }
+    if (!collecting) continue;
+
+    if (message.role === "user") {
+      if (!isToolOnlyUserMessage(message)) break;
+      const parts = message.parts.filter((part) => part.type === "tool_use" && part.id === id);
+      if (parts.length > 0) {
+        out.push({
+          ...message,
+          parts,
+          content: parts
+            .filter((p): p is ToolUsePart => p.type === "tool_use")
+            .map((p) => p.output ?? "")
+            .join("\n\n"),
+        });
+      }
+      continue;
+    }
+
+    if (message.role === "assistant") {
+      const hasOtherTool = message.parts.some((part) => part.type === "tool_use" && part.id !== id);
+      if (hasOtherTool) break;
+      out.push(message);
+      const hasSummaryText = message.parts.some(
+        (part) => part.type === "text" && typeof part.text === "string" && part.text.trim().length > 0,
+      );
+      if (hasSummaryText) break;
+    }
+  }
+  return out;
+}
+
+export function buildSessionConversationTaskDetailSession(
+  session: ClaudeSession,
+  task: SessionConversationTaskItem,
+): ClaudeSession {
+  const toolUseId = task.toolUseId?.trim() ?? "";
+  const detailMessages = toolUseId ? buildConversationTaskDetailMessages(session.messages, toolUseId) : [];
+  const status: ClaudeSession["status"] =
+    task.status === "running" ? "running" : task.status === "failed" ? "error" : "completed";
+
+  if (detailMessages.length > 0) {
+    return {
+      ...session,
+      id: `${session.id}::task::${toolUseId || task.key}`,
+      status,
+      messages: detailMessages,
+    };
+  }
+
+  const toolPart = toolUseId ? findMergedToolUseInSession(session.messages, toolUseId) : null;
+  const now = task.updatedAt || Date.now();
+  const inputText =
+    toolPart?.input && typeof toolPart.input === "object"
+      ? JSON.stringify(toolPart.input, null, 2)
+      : task.previewText;
+  const outputText = toolPart?.output?.trim() || toolPart?.error?.trim() || task.previewText || "暂无输出";
+
+  return {
+    ...session,
+    id: `${session.id}::task::${task.key}`,
+    status,
+    messages: [
+      {
+        id: 1,
+        role: "user",
+        content: inputText,
+        parts: [{ type: "text", text: inputText }],
+        timestamp: now - 500,
+      },
+      {
+        id: 2,
+        role: "assistant",
+        content: outputText,
+        parts: toolPart
+          ? [{ ...toolPart, status: toolPart.status ?? (task.status === "failed" ? "error" : "completed") }]
+          : [{ type: "text", text: outputText }],
+        timestamp: now,
+      },
+    ],
+  };
 }

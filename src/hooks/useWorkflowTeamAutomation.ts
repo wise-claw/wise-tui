@@ -42,6 +42,7 @@ import {
   composeDispatchInput,
   createWorkflowRuntimeState,
   resolveWorkflowDispatchNodeType,
+  resolveGraphRollbackNode,
   type WorkflowGraphRuntimeState,
 } from "../services/workflowGraphRuntime";
 import {
@@ -1072,8 +1073,9 @@ export function useWorkflowTeamAutomation({
           updatedTaskAfterDecision.status === "in_progress"
         ) {
           const rollbackPending = pendingEmployeesAfterDecision ?? [];
-          const stageNodes = orderedExecutableNodes(graphItem.graph);
-          const rollbackNode = stageNodes[updatedTaskAfterDecision.currentStageIndex];
+          const rollbackNode =
+            resolveGraphRollbackNode(graphItem.graph, runtimeState, currentNode.id) ??
+            orderedExecutableNodes(graphItem.graph)[updatedTaskAfterDecision.currentStageIndex];
           const rollbackEmployeeId = rollbackPending[0]?.employeeId ?? rollbackNode?.data.employeeId;
           const rollbackEmployeeName = rollbackPending[0]?.name ?? rollbackNode?.data.label ?? "回退阶段执行";
           if (rollbackEmployeeId) {
@@ -1183,8 +1185,9 @@ export function useWorkflowTeamAutomation({
           updatedTaskAfterDecision &&
           updatedTaskAfterDecision.status === "in_progress"
         ) {
-          const stageNodes = orderedExecutableNodes(graphItem.graph);
-          const rollbackNode = stageNodes[updatedTaskAfterDecision.currentStageIndex];
+          const rollbackNode =
+            resolveGraphRollbackNode(graphItem.graph, runtimeState, currentNode.id) ??
+            orderedExecutableNodes(graphItem.graph)[updatedTaskAfterDecision.currentStageIndex];
           const pendingFallback = pendingEmployeesAfterDecision?.[0];
           const fallbackEmployeeId = pendingFallback?.employeeId ?? rollbackNode?.data.employeeId;
           const fallbackEmployeeName = pendingFallback?.name ?? rollbackNode?.data.label ?? "回退阶段执行";
@@ -1391,8 +1394,9 @@ export function useWorkflowTeamAutomation({
             const manualAcceptanceEnabled =
               currentNode?.type === "approval" && currentNode.data.conditionElsePrompt?.trim() === "acceptance_enabled";
             if (input.decision === "rejected" && manualAcceptanceEnabled && updatedTask.status === "in_progress") {
-              const stageNodes = orderedExecutableNodes(graphItem.graph);
-              const rollbackNode = stageNodes[updatedTask.currentStageIndex];
+              const rollbackNode =
+                resolveGraphRollbackNode(graphItem.graph, runtimeState, currentNode.id) ??
+                orderedExecutableNodes(graphItem.graph)[updatedTask.currentStageIndex];
               const rollbackEmployeeId = pendingEmployees[0]?.employeeId ?? rollbackNode?.data.employeeId;
               const rollbackEmployeeName = pendingEmployees[0]?.name ?? rollbackNode?.data.label ?? "回退阶段执行";
               if (rollbackEmployeeId) {

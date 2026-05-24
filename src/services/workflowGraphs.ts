@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { WorkflowGraph } from "../types";
+import { validateWorkflowGraphStructure } from "./workflowGraphValidation";
 
 export interface GetWorkflowGraphParams {
   workflowId: string;
@@ -53,5 +54,7 @@ export async function saveWorkflowGraph(params: SaveWorkflowGraphParams): Promis
 export async function validateWorkflowGraph(
   params: ValidateWorkflowGraphParams,
 ): Promise<WorkflowGraphValidationResult> {
+  const clientResult = validateWorkflowGraphStructure(params.graph);
+  if (!clientResult.ok) return clientResult;
   return invoke<WorkflowGraphValidationResult>("validate_workflow_graph", { graph: params.graph });
 }

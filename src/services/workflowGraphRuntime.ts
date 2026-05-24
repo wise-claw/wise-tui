@@ -278,6 +278,44 @@ export function composeDispatchInput(
   return applyGraphVariables(lines.join("\n"), graph, loopStack);
 }
 
+/** 验收驳回时，按图运行时 trace 回退到上一可执行节点（优先 lastNodeId） */
+export function resolveGraphRollbackNode(
+  graph: WorkflowGraph,
+  runtimeState: WorkflowGraphRuntimeState,
+  rejectionNodeId: string,
+): WorkflowGraphNode | null {
+  const isExecutable = (node: WorkflowGraphNode | undefined): node is WorkflowGraphNode =>
+    Boolean(node && (node.type === "task" || node.type === "approval"));
+
+  if (runtimeState.lastNodeId && runtimeState.lastNodeId !== rejectionNodeId) {
+    const last = graph.nodes.find((node) => node.id === runtimeState.lastNodeId);
+    if (isExecutable(last)) {
+      return last;
+    }
+  }
+
+  for (let i = runtimeState.trace.length - 1; i >= 0; i -= 1) {
+    const id = runtimeState.trace[i];
+    if (!id || id === rejectionNodeId) continue;
+    const node = graph.nodes.find((item) => item.id === id);
+    if (isExecutable(node)) {
+      return node;
+    }
+  }
+
+  return null;
+}
+
+export function assertDispatchableNode(node: WorkflowGraphNode): void {
+  if (node.type !== "task" && node.type !== "approval") {
+    throw new Error(`WF_DISPATCH_UNSUPPORTED_NODE:${node.id}`);
+  }
+  const employeeId = typeof node.data.employeeId === "string" ? node.data.employeeId.trim() : "";
+  if (!employeeId) {
+    throw new Error(`WF_DISPATCH_EMPLOYEE_MISSING:${node.id}`);
+  }
+}
+
 export function createWorkflowRuntimeState(graph: WorkflowGraph): WorkflowGraphRuntimeState {
   const startNode = graph.nodes.find((node) => node.type === "start");
   if (!startNode) {
@@ -344,6 +382,13 @@ function selectOutgoingEdge(
   if (fromNode.type === "branch") {
     const ctx = buildBranchEvaluationContext(graph, { acceptanceDecision, lastOutput, loopStack });
     return selectBranchEdge(edges, fromNode, ctx);
+  }
+  if (edges.length > 1) {
+    const sorted = [...edges].sort((a, b) => (a.id || "").localeCompare(b.id || ""));
+    const nonControl = sorted.filter(
+      (edge) => edge.sourceHandle !== "loop-back" && edge.sourceHandle !== "loop-next",
+    );
+    return nonControl[0] ?? sorted[0]!;
   }
   return edges[0];
 }
@@ -539,6 +584,8 @@ export function advanceWorkflowGraph(params: {
   if (dispatchNode.type === "end") {
     return { state: nextState, completed: true };
   }
+
+  assertDispatchableNode(dispatchNode);
 
   const composed = composeDispatchInput(dispatchNode, baseInput, graph, mergedLoopStack);
   const mergedInput =

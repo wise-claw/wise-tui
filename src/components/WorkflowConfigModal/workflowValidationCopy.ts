@@ -1,7 +1,7 @@
 export function getWorkflowValidationGroupTitle(code: string): string {
   if (code.includes("EDGE")) return "连线错误";
-  if (code.includes("NODE")) return "节点错误";
-  if (code.includes("START") || code.includes("APPROVAL")) return "委派结构错误";
+  if (code.includes("NODE") || code.includes("UNREACHABLE") || code.includes("AGENT")) return "节点错误";
+  if (code.includes("START") || code.includes("APPROVAL") || code.includes("END")) return "委派结构错误";
   return "其他错误";
 }
 
@@ -27,6 +27,11 @@ export function getWorkflowValidationSuggestion(code: string): string {
     WF_GRAPH_LOOP_BODY_MISSING: "请从循环节点的「循环体」出口连接到循环内首个节点。",
     WF_GRAPH_LOOP_NEXT_MISSING: "请从循环节点的「下一步」出口连接到循环结束后的节点。",
     WF_GRAPH_LOOP_MAX_INVALID: "循环最大次数须在 1–100 之间。",
+    WF_GRAPH_END_MISSING: "请添加至少一个结束节点。",
+    WF_GRAPH_END_UNREACHABLE: "从「开始」无法到达「结束」，请检查连线是否形成完整路径。",
+    WF_GRAPH_NODE_UNREACHABLE: "该节点从「开始」不可达，可能是孤岛节点，请接入主流程。",
+    WF_GRAPH_AGENT_EMPLOYEE_MISSING: "请为智能体阶段绑定执行角色。",
+    WF_GRAPH_MULTI_OUTGOING_WITHOUT_BRANCH: "该节点有多条出边但未使用条件分支，运行时只会走第一条边。",
   };
   return suggestions[code] ?? "请根据错误提示修正节点/边配置后重试发布。";
 }

@@ -362,6 +362,142 @@ pub(crate) fn validate_workflow_graph(
             edge_id: None,
         });
     }
+
+    let mut end_count = 0usize;
+  let mut start_node_id: Option<String> = None;
+  let mut end_node_ids: Vec<String> = Vec::new();
+  for node in nodes {
+    let node_id = node
+      .get("id")
+      .and_then(|v| v.as_str())
+      .map(|v| v.trim().to_string())
+      .filter(|v| !v.is_empty());
+    let node_type = node.get("type").and_then(|v| v.as_str()).map(str::trim);
+    if matches!(node_type, Some("start")) {
+      if start_node_id.is_none() {
+        start_node_id = node_id.clone();
+      }
+    }
+    if matches!(node_type, Some("end")) {
+      end_count += 1;
+      if let Some(ref id) = node_id {
+        end_node_ids.push(id.clone());
+      }
+    }
+    if matches!(node_type, Some("approval") | Some("task")) {
+      if let Some(ref id) = node_id {
+        let employee_id = node
+          .get("data")
+          .and_then(|v| v.as_object())
+          .and_then(|data| data.get("employeeId"))
+          .and_then(|v| v.as_str())
+          .map(str::trim)
+          .unwrap_or("");
+        if employee_id.is_empty() {
+          errors.push(WorkflowGraphValidationError {
+            code: "WF_GRAPH_AGENT_EMPLOYEE_MISSING".to_string(),
+            message: "智能体阶段未绑定执行角色".to_string(),
+            node_id: Some(id.clone()),
+            edge_id: None,
+          });
+        }
+      }
+    }
+    if let (Some(id), Some(node_type)) = (node_id, node_type) {
+      let outgoing = outgoing_counts.get(&id).copied().unwrap_or(0);
+      if outgoing > 1 && node_type != "branch" && node_type != "loop" {
+        let is_acceptance_gateway = node
+          .get("data")
+          .and_then(|v| v.as_object())
+          .and_then(|data| data.get("conditionElsePrompt"))
+          .and_then(|v| v.as_str())
+          .map(str::trim)
+          == Some("acceptance_enabled");
+        if !is_acceptance_gateway {
+          errors.push(WorkflowGraphValidationError {
+            code: "WF_GRAPH_MULTI_OUTGOING_WITHOUT_BRANCH".to_string(),
+            message: "非分支节点存在多条出边，请改用条件分支".to_string(),
+            node_id: Some(id),
+            edge_id: None,
+          });
+        }
+      }
+    }
+  }
+  if end_count == 0 {
+    errors.push(WorkflowGraphValidationError {
+      code: "WF_GRAPH_END_MISSING".to_string(),
+      message: "必须包含至少一个 end 节点".to_string(),
+      node_id: None,
+      edge_id: None,
+    });
+  }
+
+  if let Some(start_id) = start_node_id.clone() {
+    let mut adjacency: std::collections::HashMap<String, Vec<String>> =
+      std::collections::HashMap::new();
+    for edge in edges {
+      let source = edge
+        .get("source")
+        .and_then(|v| v.as_str())
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty());
+      let target = edge
+        .get("target")
+        .and_then(|v| v.as_str())
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty());
+      if let (Some(source_id), Some(target_id)) = (source, target) {
+        adjacency.entry(source_id).or_default().push(target_id);
+      }
+    }
+    let mut reachable: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut queue: std::collections::VecDeque<String> = std::collections::VecDeque::new();
+    queue.push_back(start_id.clone());
+    while let Some(current) = queue.pop_front() {
+      if !reachable.insert(current.clone()) {
+        continue;
+      }
+      if let Some(nexts) = adjacency.get(&current) {
+        for next in nexts {
+          if !reachable.contains(next) {
+            queue.push_back(next.clone());
+          }
+        }
+      }
+    }
+    let can_reach_end = end_node_ids.iter().any(|end_id| reachable.contains(end_id));
+    if !can_reach_end && end_count > 0 {
+      errors.push(WorkflowGraphValidationError {
+        code: "WF_GRAPH_END_UNREACHABLE".to_string(),
+        message: "从 start 无法到达任何 end 节点".to_string(),
+        node_id: None,
+        edge_id: None,
+      });
+    }
+    for node in nodes {
+      let node_id = node
+        .get("id")
+        .and_then(|v| v.as_str())
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty());
+      let node_type = node.get("type").and_then(|v| v.as_str()).map(str::trim);
+      if let Some(id) = node_id {
+        if matches!(node_type, Some("start") | Some("end")) {
+          continue;
+        }
+        if !reachable.contains(&id) {
+          errors.push(WorkflowGraphValidationError {
+            code: "WF_GRAPH_NODE_UNREACHABLE".to_string(),
+            message: "节点从 start 不可达".to_string(),
+            node_id: Some(id),
+            edge_id: None,
+          });
+        }
+      }
+    }
+  }
+
     Ok(WorkflowGraphValidationResult {
         ok: errors.is_empty(),
         errors,

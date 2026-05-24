@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ClaudeSession } from "../types";
-import { buildSessionConversationTasks } from "./sessionConversationTasks";
+import { buildSessionConversationTasks, buildConversationTaskDetailMessages } from "./sessionConversationTasks";
 
 function session(partial: Partial<ClaudeSession>): ClaudeSession {
   return {
@@ -205,6 +205,41 @@ describe("buildSessionConversationTasks", () => {
     expect(items).toHaveLength(1);
     expect(items[0]?.label).toBe("子代理问候测试");
     expect(items[0]?.status).toBe("completed");
+  });
+
+  test("builds detail transcript for a tool_use in session messages", () => {
+    const messages = [
+      {
+        id: 1,
+        role: "user" as const,
+        content: "test",
+        timestamp: 50,
+        parts: [{ type: "text" as const, text: "test" }],
+      },
+      {
+        id: 2,
+        role: "assistant" as const,
+        content: "",
+        timestamp: 100,
+        parts: [
+          {
+            type: "tool_use" as const,
+            id: "agent-1",
+            name: "Agent",
+            input: { description: "子代理问候测试" },
+            status: "running" as const,
+          },
+        ],
+      },
+      {
+        id: 3,
+        role: "assistant" as const,
+        content: "done",
+        timestamp: 200,
+        parts: [{ type: "text" as const, text: "子代理执行成功" }],
+      },
+    ];
+    expect(buildConversationTaskDetailMessages(messages, "agent-1")).toHaveLength(2);
   });
 
   test("clears tasks when a new session has no messages yet", () => {

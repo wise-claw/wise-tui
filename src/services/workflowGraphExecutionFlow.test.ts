@@ -3,7 +3,11 @@ import type { WorkflowGraph, WorkflowGraphNode } from "../types";
 import { advanceWorkflowGraph, createWorkflowRuntimeState } from "./workflowGraphRuntime";
 
 function node(id: string, type: WorkflowGraphNode["type"], label = id): WorkflowGraphNode {
-  return { id, type, position: { x: 0, y: 0 }, data: { label } };
+  const n: WorkflowGraphNode = { id, type, position: { x: 0, y: 0 }, data: { label } };
+  if (type === "task" || type === "approval") {
+    n.data.employeeId = "emp-default";
+  }
+  return n;
 }
 
 function simulateWorkflowRun(params: {
