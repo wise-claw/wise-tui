@@ -2,6 +2,7 @@ import { Graph, type Node as X6Node } from "@antv/x6";
 import type { WorkflowGraphNodeData } from "../../types";
 import { normalizeWorkflowVariables } from "../../utils/workflowVariables";
 import { branchPortLabelFromId, normalizeBranchConditions } from "../../services/workflowBranchEvaluation";
+import { normalizeLoopExitConditions, normalizeLoopMaxIterations } from "../../services/workflowLoop";
 import { normalizeWorkflowStageOutcomeCriteria } from "../../utils/workflowStageOutcomeCriteria";
 import {
   STAGE_TASK_BASIS_REF_SEPARATOR,
@@ -134,6 +135,9 @@ export function canvasNodeItemFromX6Node(node: X6Node): CanvasNodeItem {
     codeTimeoutSeconds: typeof raw.codeTimeoutSeconds === "number" ? raw.codeTimeoutSeconds : undefined,
     branchCriteria: raw.branchCriteria || "",
     branchConditions: normalizeBranchConditions(raw.branchConditions),
+    loopVariables: normalizeWorkflowVariables(raw.loopVariables),
+    loopExitConditions: normalizeLoopExitConditions(raw.loopExitConditions),
+    loopMaxIterations: normalizeLoopMaxIterations(raw.loopMaxIterations),
     workflowVariables: normalizeWorkflowVariables(raw.workflowVariables),
     passthroughData: raw.passthroughData,
   };
@@ -153,7 +157,7 @@ export function snapshotFromWorkflowGraph(graph: Graph): CanvasSnapshot {
     const pos = node.position();
     const kindFromData = data.kind;
     const inferredKind: CanvasNodeItem["kind"] =
-      kindFromData === "start" || kindFromData === "end" || kindFromData === "material"
+      kindFromData === "start" || kindFromData === "end" || kindFromData === "material" || kindFromData === "loop"
         ? kindFromData
         : node.id === "start"
           ? "start"
@@ -217,6 +221,9 @@ export function snapshotFromWorkflowGraph(graph: Graph): CanvasSnapshot {
       codeTimeoutSeconds: typeof data.codeTimeoutSeconds === "number" ? data.codeTimeoutSeconds : undefined,
       branchCriteria: (data.branchCriteria as string | undefined) ?? "",
       branchConditions: normalizeBranchConditions(data.branchConditions),
+      loopVariables: normalizeWorkflowVariables(data.loopVariables),
+      loopExitConditions: normalizeLoopExitConditions(data.loopExitConditions),
+      loopMaxIterations: normalizeLoopMaxIterations(data.loopMaxIterations),
       workflowVariables: normalizeWorkflowVariables(data.workflowVariables),
       passthroughData: data.passthroughData as Record<string, unknown> | undefined,
       x: pos.x,
@@ -228,8 +235,10 @@ export function snapshotFromWorkflowGraph(graph: Graph): CanvasSnapshot {
   const dedupedByIdNodes = Array.from(nodesById.values());
   const uniqueStart = dedupedByIdNodes.find((node) => node.kind === "start");
   const uniqueEnd = dedupedByIdNodes.find((node) => node.kind === "end");
+  const loopNodes = dedupedByIdNodes.filter((node) => node.kind === "loop");
   const nodes = dedupedByIdNodes.filter((node) => node.kind === "material");
   if (uniqueStart) nodes.unshift(uniqueStart);
+  loopNodes.forEach((loopNode) => nodes.splice(Math.max(nodes.length - (uniqueEnd ? 1 : 0), 1), 0, loopNode));
   if (uniqueEnd) nodes.push(uniqueEnd);
   const startIdRemap = new Map<string, string>();
   const endIdRemap = new Map<string, string>();
@@ -270,7 +279,7 @@ export function snapshotFromWorkflowGraph(graph: Graph): CanvasSnapshot {
         target,
         sourcePort,
         targetPort,
-        label: labelFromEdge || branchLabel || (sourcePort === "if" ? "通过" : sourcePort === "else" ? "驳回" : undefined),
+        label: labelFromEdge || branchLabel || (sourcePort === "if" ? "通过" : sourcePort === "else" ? "驳回" : sourcePort === "loop-body" ? "循环体" : sourcePort === "loop-next" ? "下一步" : sourcePort === "loop-back" ? "返回循环" : undefined),
       };
     })
     .filter((edge) => edge.source && edge.target && nodeIdSet.has(edge.source) && nodeIdSet.has(edge.target))

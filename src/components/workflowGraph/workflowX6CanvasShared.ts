@@ -12,6 +12,7 @@ import { codeConfigFromNodeData, summarizeCodeConfig } from "../../services/work
 import { knowledgeConfigFromNodeData, summarizeKnowledgeConfig } from "../../services/workflowKnowledgeRetrieval";
 import { promptConfigFromNodeData, summarizePromptConfig } from "../../services/workflowPromptTemplate";
 import { normalizeWorkflowStageOutcomeCriteria } from "../../utils/workflowStageOutcomeCriteria";
+import { normalizeLoopExitConditions, normalizeLoopMaxIterations, summarizeLoopConfig } from "../../services/workflowLoop";
 import { normalizeStageTaskBasisRefsFromNodeData } from "../../services/workflowGraphRuntime";
 
 export type MaterialTheme = "blue" | "green" | "orange" | "purple" | "cyan" | "magenta";
@@ -27,7 +28,7 @@ export interface MaterialItem {
 
 export interface CanvasNodeItem {
   id: string;
-  kind: "start" | "material" | "end";
+  kind: "start" | "material" | "end" | "loop";
   x: number;
   y: number;
   title: string;
@@ -67,6 +68,9 @@ export interface CanvasNodeItem {
   branchCriteria?: string;
   branchConditions?: WorkflowBranchCondition[];
   workflowVariables?: WorkflowVariableDefinition[];
+  loopVariables?: WorkflowVariableDefinition[];
+  loopExitConditions?: WorkflowBranchCondition[];
+  loopMaxIterations?: number;
   passthroughData?: Record<string, unknown>;
 }
 
@@ -87,6 +91,7 @@ export interface CanvasSnapshot {
 export function normalizeCanvasSnapshot(snapshot: CanvasSnapshot): CanvasSnapshot {
   const startNodes = snapshot.nodes.filter((node) => node.kind === "start");
   const endNodes = snapshot.nodes.filter((node) => node.kind === "end");
+  const loopNodes = snapshot.nodes.filter((node) => node.kind === "loop");
   const materialNodes = snapshot.nodes.filter((node) => node.kind === "material");
 
   const canonicalStart = startNodes[0];
@@ -100,7 +105,7 @@ export function normalizeCanvasSnapshot(snapshot: CanvasSnapshot): CanvasSnapsho
     endNodes.slice(1).forEach((node) => remap.set(node.id, canonicalEnd.id));
   }
 
-  const nodes: CanvasNodeItem[] = [...materialNodes];
+  const nodes: CanvasNodeItem[] = [...materialNodes, ...loopNodes];
   if (canonicalStart) nodes.unshift(canonicalStart);
   if (canonicalEnd) nodes.push(canonicalEnd);
   const nodeIdSet = new Set(nodes.map((node) => node.id));
@@ -130,6 +135,9 @@ export const EMPLOYEE_NODE_HEIGHT = 124;
 export const EMPLOYEE_NODE_HEIGHT_WITH_ACCEPTANCE = 148;
 export const EMPLOYEE_NODE_HEIGHT_STAGE_SUCCESS_EXTRA = 22;
 export const EMPLOYEE_NODE_HEIGHT_TASK_BASIS_EXTRA = 18;
+
+export const LOOP_NODE_WIDTH = 240;
+export const LOOP_NODE_HEIGHT = 96;
 
 export const MATERIALS: Record<string, MaterialItem> = {
   start: {
@@ -170,6 +178,14 @@ export const MATERIALS: Record<string, MaterialItem> = {
     title: "条件分支",
     desc: "按条件路由：验收、变量规则或表达式，支持多出口。",
     inputPlaceholder: "分支说明（可选）",
+    theme: "purple",
+  },
+  loop: {
+    key: "loop",
+    iconText: "∞",
+    title: "循环",
+    desc: "重复执行循环体内节点，支持终止条件与最大次数。",
+    inputPlaceholder: "",
     theme: "purple",
   },
   prompt: {
@@ -226,6 +242,13 @@ export function defaultNodeFieldsForMaterial(materialKey: string): Partial<Canva
       })),
     };
   }
+  if (materialKey === "loop") {
+    return {
+      loopMaxIterations: 10,
+      loopVariables: [],
+      loopExitConditions: [],
+    };
+  }
   return {};
 }
 
@@ -248,6 +271,8 @@ function graphNodeTypeToMaterialKey(node: { type: string; data: WorkflowGraphNod
       return "code";
     case "branch":
       return "branch";
+    case "loop":
+      return "loop";
     default:
       return "employee";
   }
@@ -275,6 +300,19 @@ export function workflowGraphToCanvasSnapshot(graph: WorkflowGraph | null | unde
         x: node.position.x,
         y: node.position.y,
         passthroughData: omitGraphNodeMappedData(node.data, "end"),
+      };
+    }
+    if (node.type === "loop") {
+      return {
+        id: node.id,
+        kind: "loop",
+        title: node.data.label || "循环",
+        x: node.position.x,
+        y: node.position.y,
+        loopVariables: normalizeWorkflowVariables(node.data.loopVariables),
+        loopExitConditions: normalizeLoopExitConditions(node.data.loopExitConditions),
+        loopMaxIterations: normalizeLoopMaxIterations(node.data.loopMaxIterations),
+        passthroughData: omitGraphNodeMappedData(node.data, "loop"),
       };
     }
     const key = graphNodeTypeToMaterialKey(node);
@@ -381,6 +419,12 @@ function omitGraphNodeMappedData(
   delete out.label;
   if (kind === "start") {
     delete out.workflowVariables;
+  }
+  if (kind === "loop") {
+    delete out.loopVariables;
+    delete out.loopExitConditions;
+    delete out.loopMaxIterations;
+    delete out.materialKey;
   }
   if (kind === "material") {
     delete out.materialKey;
@@ -677,6 +721,48 @@ export function createGraphNodeFromSnapshotNode(node: CanvasNodeItem, employeeNa
       ports: createPorts(),
     };
   }
+  if (node.kind === "loop") {
+    const summary = summarizeLoopConfig({
+      label: node.title || "循环",
+      loopVariables: node.loopVariables,
+      loopExitConditions: node.loopExitConditions,
+      loopMaxIterations: node.loopMaxIterations,
+    });
+    return {
+      id: node.id,
+      x: node.x,
+      y: node.y,
+      width: LOOP_NODE_WIDTH,
+      height: LOOP_NODE_HEIGHT,
+      shape: "rect",
+      data: {
+        kind: "loop",
+        title: node.title || "循环",
+        loopVariables: normalizeWorkflowVariables(node.loopVariables),
+        loopExitConditions: normalizeLoopExitConditions(node.loopExitConditions),
+        loopMaxIterations: normalizeLoopMaxIterations(node.loopMaxIterations),
+        passthroughData: node.passthroughData,
+      },
+      attrs: {
+        body: {
+          fill: "#F9F0FF",
+          stroke: "#9254DE",
+          strokeWidth: 1.5,
+          rx: 12,
+          ry: 12,
+          strokeDasharray: "6 4",
+        },
+        label: { text: node.title || "循环", refY: 28, fill: "#531DAB", fontSize: 14, fontWeight: 600 },
+        desc: { text: summary, refY: 52, fill: "rgba(0,0,0,0.65)", fontSize: 11, textWrap: { width: LOOP_NODE_WIDTH - 24, height: 36, ellipsis: "..." } },
+      },
+      markup: [
+        { tagName: "rect", selector: "body" },
+        { tagName: "text", selector: "label" },
+        { tagName: "text", selector: "desc" },
+      ],
+      ports: createLoopPorts(),
+    };
+  }
   const material = MATERIALS[node.materialKey || "employee"] ?? MATERIALS.employee;
   const theme = node.theme ?? material.theme;
   const style = getMaterialNodeStyle(theme);
@@ -750,6 +836,46 @@ export function createGraphNodeFromSnapshotNode(node: CanvasNodeItem, employeeNa
       desc4: { text: isEmployeeNode ? employeeSummary?.stageSuccess ?? "" : "", fill: "rgba(0,0,0,0.65)" },
     },
     ports: createBranchPorts(node.materialKey, node.branchConditions),
+  };
+}
+
+export function createLoopPorts() {
+  const base = {
+    attrs: {
+      circle: {
+        r: 6,
+        magnet: true,
+        strokeWidth: 1,
+        fill: "#fff",
+        style: { visibility: "hidden", cursor: "crosshair" },
+      },
+    },
+  };
+  return {
+    groups: {
+      left: { ...base, position: "left" },
+      right: { ...base, position: "right" },
+      bottom: { ...base, position: "bottom" },
+      top: { ...base, position: "top" },
+    },
+    items: [
+      { id: "left", group: "left" },
+      {
+        id: "loop-next",
+        group: "right",
+        attrs: { circle: { stroke: "#52C41A" } },
+      },
+      {
+        id: "loop-body",
+        group: "bottom",
+        attrs: { circle: { stroke: "#9254DE" } },
+      },
+      {
+        id: "loop-back-in",
+        group: "top",
+        attrs: { circle: { stroke: "#FA8C16" } },
+      },
+    ],
   };
 }
 

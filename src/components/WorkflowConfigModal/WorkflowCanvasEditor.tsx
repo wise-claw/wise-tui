@@ -10,6 +10,8 @@ import {
   MATERIAL_NODE_WIDTH,
   FLOW_NODE_HEIGHT,
   FLOW_NODE_WIDTH,
+  LOOP_NODE_HEIGHT,
+  LOOP_NODE_WIDTH,
   createGraphNodeFromSnapshotNode,
   createBranchPorts,
   defaultNodeFieldsForMaterial,
@@ -34,6 +36,8 @@ import { WorkflowKnowledgeNodeEditModal, type WorkflowKnowledgeNodeFormValues } 
 import { WorkflowBranchNodeEditModal, type WorkflowBranchNodeFormValues } from "./WorkflowBranchNodeEditModal";
 import { WorkflowPromptNodeEditModal, type WorkflowPromptNodeFormValues } from "./WorkflowPromptNodeEditModal";
 import { WorkflowCodeNodeEditModal, type WorkflowCodeNodeFormValues } from "./WorkflowCodeNodeEditModal";
+import { WorkflowLoopNodeEditModal, type WorkflowLoopNodeFormValues } from "./WorkflowLoopNodeEditModal";
+import { normalizeLoopExitConditions, normalizeLoopMaxIterations, summarizeLoopConfig } from "../../services/workflowLoop";
 import { promptConfigFromNodeData, serializePromptConfigToNodeData } from "../../services/workflowPromptTemplate";
 import { normalizePromptMessages } from "../../services/workflowPromptTemplate";
 import { codeConfigFromNodeData, serializeCodeConfigToNodeData } from "../../services/workflowCodeExecution";
@@ -79,6 +83,7 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
   const [branchEditForm] = Form.useForm<WorkflowBranchNodeFormValues>();
   const [promptEditForm] = Form.useForm<WorkflowPromptNodeFormValues>();
   const [codeEditForm] = Form.useForm<WorkflowCodeNodeFormValues>();
+  const [loopEditForm] = Form.useForm<WorkflowLoopNodeFormValues>();
   const taskContentPreview = useMemo(() => {
     const start = value.nodes.find((node) => node.kind === "start");
     return start?.title?.trim() ? `（开始节点：${start.title}）` : "";
@@ -218,6 +223,16 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
       startEditForm.setFieldsValue({
         title: payload.title,
         workflowVariables: payload.workflowVariables ?? [],
+      });
+      return;
+    }
+    if (payload.kind === "loop") {
+      setEditingNode(payload);
+      loopEditForm.setFieldsValue({
+        title: payload.title,
+        loopMaxIterations: normalizeLoopMaxIterations(payload.loopMaxIterations),
+        loopVariables: payload.loopVariables ?? [],
+        loopExitConditions: normalizeLoopExitConditions(payload.loopExitConditions),
       });
       return;
     }
@@ -433,6 +448,7 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
       const data = (node.getData() ?? {}) as Partial<CanvasNodeItem>;
       const editable =
         data.kind === "start" ||
+        data.kind === "loop" ||
         (data.kind === "material" &&
           (isAgentMaterialKey(data.materialKey) || isTransformGraphMaterialKey(data.materialKey)));
       if (editable) {
@@ -513,16 +529,34 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
           const label =
             data.materialKey === "branch"
               ? branchPortLabelFromId(sourcePort, data.branchConditions)
-              : sourcePort === "if"
-                ? "通过"
-                : sourcePort === "else"
-                  ? "驳回"
-                  : undefined;
+              : data.kind === "loop"
+                ? sourcePort === "loop-body"
+                  ? "循环体"
+                  : sourcePort === "loop-next"
+                    ? "下一步"
+                    : undefined
+                : sourcePort === "loop-back"
+                  ? "返回循环"
+                  : sourcePort === "if"
+                    ? "通过"
+                    : sourcePort === "else"
+                      ? "驳回"
+                      : undefined;
           if (label) {
             edge.setLabels([{ attrs: { label: { text: label, fill: "#595959", fontSize: 11 } } }]);
           }
           const stroke =
-            sourcePort === "else" ? "#FF7875" : sourcePort === "if" ? "#73D13D" : "#9254DE";
+            sourcePort === "else"
+              ? "#FF7875"
+              : sourcePort === "if"
+                ? "#73D13D"
+                : sourcePort === "loop-back"
+                  ? "#FA8C16"
+                  : sourcePort === "loop-next"
+                    ? "#73D13D"
+                    : sourcePort === "loop-body"
+                      ? "#9254DE"
+                      : "#9254DE";
           edge.setAttrByPath("line/stroke", stroke);
         }
       }
@@ -579,6 +613,27 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
   function appendMaterialNode(material: MaterialItem, x?: number, y?: number) {
     if (!graphRef.current) return;
     const graph = graphRef.current;
+    if (material.key === "loop") {
+      const id = `loop-${crypto.randomUUID().slice(0, 8)}`;
+      const existing = graph.getNodes().filter((node) => (node.getData() as Partial<CanvasNodeItem>)?.kind === "loop").length;
+      const positionX = x ?? 220 + (existing % 2) * 280;
+      const positionY = y ?? 80 + Math.floor(existing / 2) * 140;
+      graph.addNode(
+        createGraphNodeFromSnapshotNode(
+          {
+            id,
+            kind: "loop",
+            title: material.title,
+            x: positionX,
+            y: positionY,
+            ...defaultNodeFieldsForMaterial("loop"),
+          },
+          employeeNameByIdRef.current,
+        ),
+      );
+      emitSnapshot();
+      return;
+    }
     if (material.key === "start" || material.key === "end") {
       const targetKind = material.key as "start" | "end";
       const exists = graph
@@ -640,8 +695,18 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
     const localViewportWidth = rect.width / zoom;
     const localViewportHeight = rect.height / zoom;
     const padding = 12;
-    const nodeWidth = materialKey === "start" || materialKey === "end" ? FLOW_NODE_WIDTH : MATERIAL_NODE_WIDTH;
-    const nodeHeight = materialKey === "start" || materialKey === "end" ? FLOW_NODE_HEIGHT : MATERIAL_NODE_HEIGHT;
+    const nodeWidth =
+      materialKey === "start" || materialKey === "end"
+        ? FLOW_NODE_WIDTH
+        : materialKey === "loop"
+          ? LOOP_NODE_WIDTH
+          : MATERIAL_NODE_WIDTH;
+    const nodeHeight =
+      materialKey === "start" || materialKey === "end"
+        ? FLOW_NODE_HEIGHT
+        : materialKey === "loop"
+          ? LOOP_NODE_HEIGHT
+          : MATERIAL_NODE_HEIGHT;
     const minX = centerLocal.x - localViewportWidth / 2 + padding;
     const maxX = centerLocal.x + localViewportWidth / 2 - nodeWidth - padding;
     const minY = centerLocal.y - localViewportHeight / 2 + padding;
@@ -693,6 +758,39 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
     };
     node.setData(nextData);
     node.setAttrByPath("label/text", nextData.title ?? "开始");
+    setEditingNode(null);
+    emitSnapshot();
+  }
+
+  async function handleSubmitLoopNodeEdit() {
+    if (!editingNode || editingNode.kind !== "loop" || !graphRef.current) return;
+    const values = await loopEditForm.validateFields();
+    const graph = graphRef.current;
+    const target = graph.getCellById(editingNode.id);
+    if (!target || !target.isNode()) {
+      setEditingNode(null);
+      return;
+    }
+    const node = target as X6Node;
+    const nextData: Partial<CanvasNodeItem> = {
+      ...(node.getData() ?? {}),
+      kind: "loop",
+      title: values.title.trim(),
+      loopMaxIterations: normalizeLoopMaxIterations(values.loopMaxIterations),
+      loopVariables: values.loopVariables ?? [],
+      loopExitConditions: normalizeLoopExitConditions(values.loopExitConditions),
+    };
+    node.setData(nextData);
+    node.setAttrByPath("label/text", nextData.title ?? "循环");
+    node.setAttrByPath(
+      "desc/text",
+      summarizeLoopConfig({
+        label: nextData.title ?? "循环",
+        loopVariables: nextData.loopVariables,
+        loopExitConditions: nextData.loopExitConditions,
+        loopMaxIterations: nextData.loopMaxIterations,
+      }),
+    );
     setEditingNode(null);
     emitSnapshot();
   }
@@ -882,6 +980,7 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
   const editingStartNode = editingNode && editingNode.kind === "start" ? editingNode : null;
   const editingKnowledgeNode =
     editingNode && editingNode.kind === "material" && editingNode.materialKey === "knowledge" ? editingNode : null;
+  const editingLoopNode = editingNode && editingNode.kind === "loop" ? editingNode : null;
   const editingBranchNode =
     editingNode && editingNode.kind === "material" && editingNode.materialKey === "branch" ? editingNode : null;
   const editingPromptNode =
@@ -972,6 +1071,13 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
         taskContentPreview={taskContentPreview}
         onCancel={handleCloseNodeEdit}
         onSubmit={() => void handleSubmitKnowledgeNodeEdit()}
+      />
+      <WorkflowLoopNodeEditModal
+        editingNode={editingLoopNode}
+        form={loopEditForm}
+        variableOptions={workflowVariableOptions}
+        onCancel={handleCloseNodeEdit}
+        onSubmit={() => void handleSubmitLoopNodeEdit()}
       />
       <WorkflowBranchNodeEditModal
         editingNode={editingBranchNode}

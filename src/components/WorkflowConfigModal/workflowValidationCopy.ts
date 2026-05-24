@@ -24,6 +24,9 @@ export function getWorkflowValidationSuggestion(code: string): string {
     WF_GRAPH_START_DUPLICATED: "请只保留一个 start 节点。",
     WF_GRAPH_APPROVAL_INCOMING_MISSING: "请为智能体阶段添加至少一条入边。",
     WF_GRAPH_APPROVAL_OUTGOING_MISSING: "请为智能体阶段添加至少一条出边。",
+    WF_GRAPH_LOOP_BODY_MISSING: "请从循环节点的「循环体」出口连接到循环内首个节点。",
+    WF_GRAPH_LOOP_NEXT_MISSING: "请从循环节点的「下一步」出口连接到循环结束后的节点。",
+    WF_GRAPH_LOOP_MAX_INVALID: "循环最大次数须在 1–100 之间。",
   };
   return suggestions[code] ?? "请根据错误提示修正节点/边配置后重试发布。";
 }

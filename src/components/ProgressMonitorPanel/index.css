@@ -588,6 +588,193 @@
   color: var(--ant-color-text-tertiary);
 }
 
+.app-monitor-panel__subagent-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+
+.app-monitor-panel__subagent-status-svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.app-monitor-panel__subagent-status-svg--spin {
+  animation: app-monitor-panel-spinner-rotate 0.72s linear infinite;
+  will-change: transform;
+}
+
+.app-monitor-panel__subagent-status-svg--pulse {
+  animation: app-monitor-panel-subagent-status-pulse 1.4s ease-in-out infinite;
+}
+
+.app-monitor-panel__subagent-status-track {
+  stroke: color-mix(in srgb, var(--ant-color-success) 28%, transparent);
+  stroke-width: 2;
+}
+
+.app-monitor-panel__subagent-status-arc {
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 10.5 32;
+  transform-origin: 8px 8px;
+  transform: rotate(-90deg);
+}
+
+.app-monitor-panel__subagent-status-arc--running {
+  stroke: var(--ant-color-success);
+}
+
+.app-monitor-panel__subagent-status-ring {
+  stroke-width: 1.75;
+  transform-origin: 8px 8px;
+}
+
+.app-monitor-panel__subagent-status-ring--completed {
+  stroke: color-mix(in srgb, var(--ant-color-success) 35%, transparent);
+  animation: app-monitor-panel-subagent-ring-pop 0.45s ease-out both;
+}
+
+.app-monitor-panel__subagent-status-ring--failed {
+  stroke: color-mix(in srgb, var(--ant-color-error) 35%, transparent);
+  animation: app-monitor-panel-subagent-ring-pop 0.45s ease-out both;
+}
+
+.app-monitor-panel__subagent-status-ring--stale {
+  stroke: color-mix(in srgb, var(--ant-color-warning) 45%, transparent);
+}
+
+.app-monitor-panel__subagent-status-ring--idle {
+  stroke: color-mix(in srgb, var(--ant-color-text-tertiary) 40%, transparent);
+}
+
+.app-monitor-panel__subagent-status-check {
+  stroke: var(--ant-color-success);
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 12;
+  stroke-dashoffset: 12;
+  animation: app-monitor-panel-subagent-check-draw 0.55s ease-out 0.08s forwards;
+}
+
+.app-monitor-panel__subagent-status-cross {
+  stroke: var(--ant-color-error);
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-dasharray: 12;
+  stroke-dashoffset: 12;
+  animation: app-monitor-panel-subagent-cross-draw 0.45s ease-out 0.08s forwards;
+}
+
+.app-monitor-panel__subagent-status-dot--stale {
+  fill: var(--ant-color-warning);
+}
+
+.app-monitor-panel__subagent-status-pause {
+  stroke: var(--ant-color-text-tertiary);
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  opacity: 0.85;
+}
+
+@keyframes app-monitor-panel-subagent-check-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes app-monitor-panel-subagent-cross-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes app-monitor-panel-subagent-ring-pop {
+  0% {
+    transform: scale(0.82);
+    opacity: 0.35;
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes app-monitor-panel-subagent-status-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.94);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-monitor-panel__subagent-status-svg--spin,
+  .app-monitor-panel__subagent-status-svg--pulse {
+    animation: none;
+  }
+
+  .app-monitor-panel__subagent-status-check,
+  .app-monitor-panel__subagent-status-cross,
+  .app-monitor-panel__subagent-status-ring--completed,
+  .app-monitor-panel__subagent-status-ring--failed {
+    animation: none;
+    stroke-dashoffset: 0;
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.app-monitor-panel__section--session-tasks {
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-monitor-panel__session-task-row {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.app-monitor-panel__session-task-row .app-monitor-panel__subagent-row {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.app-monitor-panel__session-task-stop {
+  flex: 0 0 auto;
+  align-self: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ant-color-text-tertiary);
+  cursor: pointer;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.app-monitor-panel__session-task-stop:hover {
+  background: var(--ant-color-fill-secondary);
+  color: var(--ant-color-error);
+}
+
+.app-monitor-panel__subagent-status--completed {
+  color: var(--ant-color-text-secondary);
+}
+
 .app-monitor-panel__subagent-status--running {
   color: var(--ant-color-success);
 }

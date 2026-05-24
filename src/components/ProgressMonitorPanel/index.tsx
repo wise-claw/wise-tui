@@ -7,6 +7,7 @@ import type {
   MonitorDrawerTarget,
   RepositoryMemberMonitorItem,
   RepositoryMemberMonitorSubagentItem,
+  SessionConversationTaskItem,
   TeamMonitorItem,
 } from "../../types";
 import type { WorkflowInvocationStreamDetail } from "../../constants/workflowUiEvents";
@@ -35,6 +36,7 @@ import { getSessionPreview } from "./historySessionDrawerChrome";
 import { ClaudeSessionMessagesColumn } from "../ClaudeSessions/ClaudeSessionMessagesColumn";
 
 import { useAgentAssignments } from "../../hooks/useAgentAssignments";
+import { SubagentStatusIndicator } from "./SubagentStatusIndicator";
 import "./index.css";
 
 export {
@@ -80,6 +82,8 @@ interface Props {
   employeeItems: EmployeeMonitorItem[];
   repositoryMemberItems: RepositoryMemberMonitorItem[];
   teamItems: TeamMonitorItem[];
+  /** 当前对话子代理 / 任务（显示在「我的团队」上方） */
+  sessionConversationTaskItems?: SessionConversationTaskItem[];
   sessions: ClaudeSession[];
   activeTarget?: MonitorDrawerTarget | null;
   onOpenTeamDetail: (workflowId: string) => void;
@@ -771,6 +775,7 @@ export function ProgressMonitorPanel({
   employeeItems,
   repositoryMemberItems,
   teamItems,
+  sessionConversationTaskItems = [],
   sessions,
   activeTarget,
   onOpenTeamDetail,
@@ -914,7 +919,13 @@ export function ProgressMonitorPanel({
     setOmcDirectBatchDetailSnapshot(inv);
   }, []);
 
+  const runningSessionConversationTasks = useMemo(
+    () => sessionConversationTaskItems.filter((item) => item.status === "running"),
+    [sessionConversationTaskItems],
+  );
+
   const panelHasListContent =
+    sessionConversationTaskItems.length > 0 ||
     employeeItems.length > 0 ||
     runningRepositoryMemberItems.length > 0 ||
     agentAssignments.length > 0 ||
@@ -922,6 +933,62 @@ export function ProgressMonitorPanel({
 
   return (
     <div className="app-monitor-panel">
+      {sessionConversationTaskItems.length > 0 ? (
+        <div className="app-monitor-panel__section app-monitor-panel__section--session-tasks">
+          <div className="app-monitor-panel__section-head">
+            <div className="app-monitor-panel__section-title-wrap">
+              <Typography.Text className="app-monitor-panel__section-title">
+                <span className="app-monitor-panel__section-icon"><RepositoryMiniIcon /></span>
+                子代理 / 任务
+              </Typography.Text>
+              <Typography.Text className="app-monitor-panel__meta">
+                {runningSessionConversationTasks.length > 0
+                  ? `进行中 ${runningSessionConversationTasks.length}`
+                  : `共 ${sessionConversationTaskItems.length} 项`}
+              </Typography.Text>
+            </div>
+          </div>
+          <div className="app-monitor-panel__subagent-tree" aria-label="当前对话子代理与任务">
+            {sessionConversationTaskItems.map((item) => (
+              <div key={item.key} className="app-monitor-panel__session-task-row">
+                <button
+                  type="button"
+                  className="app-monitor-panel__subagent-row app-monitor-panel__subagent-row--clickable"
+                  title={item.previewText}
+                  onClick={() => {
+                    if (item.invocationKey && item.sessionId && item.repositoryPath) {
+                      onOpenOmcBatchInvocationDetail?.({
+                        sessionId: item.sessionId,
+                        repositoryPath: item.repositoryPath,
+                        invocationKey: item.invocationKey,
+                      });
+                    }
+                  }}
+                >
+                  <span className="app-monitor-panel__subagent-branch" aria-hidden />
+                  <span className="app-monitor-panel__subagent-main">
+                    <span className="app-monitor-panel__subagent-name">{item.label}</span>
+                    {item.subtitle ? (
+                      <span className="app-monitor-panel__subagent-stage">{item.subtitle}</span>
+                    ) : null}
+                  </span>
+                  <SubagentStatusIndicator status={item.status} />
+                </button>
+                {item.cancellable && item.invocationKey && onCancelOmcDirectBatchInvocation ? (
+                  <button
+                    type="button"
+                    className="app-monitor-panel__session-task-stop"
+                    aria-label="停止任务"
+                    onClick={() => onCancelOmcDirectBatchInvocation(item.invocationKey!)}
+                  >
+                    ■
+                  </button>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <div className="app-monitor-panel__head">
         <div className="app-monitor-panel__head-start">
           <div className="app-monitor-panel__title">我的团队</div>
@@ -1128,9 +1195,7 @@ export function ProgressMonitorPanel({
                       <span className="app-monitor-panel__subagent-name">{subagent.subagentType}</span>
                       {subagent.stage ? <span className="app-monitor-panel__subagent-stage">{subagent.stage}</span> : null}
                     </span>
-                    <span className={`app-monitor-panel__subagent-status app-monitor-panel__subagent-status--${subagent.status}`}>
-                      {subagentStatusLabel(subagent.status)}
-                    </span>
+                    <SubagentStatusIndicator status={subagent.status} label={subagentStatusLabel(subagent.status)} />
                   </button>
                 ))}
               </div>

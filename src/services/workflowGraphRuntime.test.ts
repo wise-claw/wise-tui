@@ -42,6 +42,27 @@ function graphWithAcceptance(): WorkflowGraph {
   };
 }
 
+function graphWithLoop(maxIterations = 3): WorkflowGraph {
+  const start = node("start", "start", "Start");
+  const loop = node("loop-1", "loop", "Loop");
+  loop.data.loopMaxIterations = maxIterations;
+  loop.data.loopVariables = [{ name: "counter", label: "计数", defaultValue: "0" }];
+  const bodyTask = node("body-task", "task", "Body Task");
+  const afterTask = node("after-task", "task", "After Loop");
+  const end = node("end", "end", "End");
+
+  return {
+    nodes: [start, loop, bodyTask, afterTask, end],
+    edges: [
+      { id: "e1", source: "start", target: "loop-1" },
+      { id: "e2", source: "loop-1", target: "body-task", sourceHandle: "loop-body" },
+      { id: "e3", source: "loop-1", target: "after-task", sourceHandle: "loop-next" },
+      { id: "e4", source: "body-task", target: "loop-1", sourceHandle: "loop-back", targetHandle: "loop-back-in" },
+      { id: "e5", source: "after-task", target: "end" },
+    ],
+  };
+}
+
 describe("stage task basis helpers", () => {
   test("parses and normalizes stage task basis refs", () => {
     expect(parseStageTaskBasisRef("source-node#2")).toEqual({ sourceNodeId: "source-node", index: 2 });
@@ -146,6 +167,59 @@ describe("workflow graph runtime", () => {
     expect(result.dispatch).toBeUndefined();
     expect(result.state.currentNodeId).toBe("end");
     expect(result.state.lastOutput).toBe("done");
+  });
+
+  test("enters loop body on first advance and exposes loop variables", () => {
+    const graph = graphWithLoop();
+    const result = advanceWorkflowGraph({
+      graph,
+      state: createWorkflowRuntimeState(graph),
+      startContent: "run loop",
+    });
+
+    expect(result.dispatch?.nodeId).toBe("body-task");
+    expect(result.state.loopStack?.[0]).toMatchObject({ loopNodeId: "loop-1", iteration: 1 });
+    expect(result.state.trace).toContain("loop-1");
+  });
+
+  test("repeats loop body until max iterations then exits via loop-next", () => {
+    const graph = graphWithLoop(2);
+    let state = createWorkflowRuntimeState(graph);
+    let result = advanceWorkflowGraph({ graph, state, startContent: "run" });
+    expect(result.dispatch?.nodeId).toBe("body-task");
+
+    state = result.state;
+    result = advanceWorkflowGraph({ graph, state, startContent: "run", lastOutput: "iter-1" });
+    expect(result.dispatch?.nodeId).toBe("body-task");
+    expect(result.state.loopStack?.[0]?.iteration).toBe(2);
+
+    state = result.state;
+    result = advanceWorkflowGraph({ graph, state, startContent: "run", lastOutput: "iter-2" });
+    expect(result.dispatch?.nodeId).toBe("after-task");
+    expect(result.state.loopStack).toBeUndefined();
+  });
+
+  test("exits loop early when termination condition matches", () => {
+    const graph = graphWithLoop(10);
+    graph.nodes.find((item) => item.id === "loop-1")!.data.loopExitConditions = [
+      {
+        id: "exit-1",
+        label: "done",
+        portId: "exit-1",
+        kind: "rules",
+        logic: "and",
+        rules: [{ source: "last_output", operator: "contains", value: "READY" }],
+      },
+    ];
+
+    let state = createWorkflowRuntimeState(graph);
+    let result = advanceWorkflowGraph({ graph, state, startContent: "run" });
+    expect(result.dispatch?.nodeId).toBe("body-task");
+
+    state = result.state;
+    result = advanceWorkflowGraph({ graph, state, startContent: "run", lastOutput: "status READY now" });
+    expect(result.dispatch?.nodeId).toBe("after-task");
+    expect(result.state.loopStack).toBeUndefined();
   });
 });
 

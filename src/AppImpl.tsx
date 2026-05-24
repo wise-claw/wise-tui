@@ -82,6 +82,7 @@ import {
   filterRepositoryMemberMonitorItemsBySelection,
   useMonitorOverview,
 } from "./hooks/useMonitorOverview";
+import { useSessionConversationTasks } from "./hooks/useSessionConversationTasks";
 import { useIntervalSyncedState } from "./hooks/useIntervalSyncedState";
 import { useLeftSidebarHubQuickEntries } from "./hooks/useLeftSidebarHubQuickEntries";
 import { useScheduledClaudeTaskRunner } from "./hooks/useScheduledClaudeTaskRunner";
@@ -1079,6 +1080,7 @@ export default function App() {
       }),
     [activeProjectId, activeRepositoryId, projects, repositoryMemberMonitorItems],
   );
+  const sessionConversationTaskItems = useSessionConversationTasks(activeSessionId, sessions);
   const activeProject = useMemo(
     () => (activeProjectId ? projects.find((p) => p.id === activeProjectId) ?? null : null),
     [activeProjectId, projects],
@@ -2805,6 +2807,7 @@ export default function App() {
         monitorTranscriptSourceSessions: sessions,
         employeeMonitorItems: teamPanelEmployeeMonitorItems,
         repositoryMemberMonitorItems: scopedRepositoryMemberMonitorItems,
+        sessionConversationTaskItems,
         teamMonitorItems,
         monitorActiveTarget: monitorDrawerTarget,
         onOpenTeamMonitorDetail: (workflowId) => {

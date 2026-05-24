@@ -5,6 +5,7 @@ import { normalizePromptMessages, serializePromptConfigToNodeData } from "../../
 import { codeConfigFromNodeData, serializeCodeConfigToNodeData } from "../../services/workflowCodeExecution";
 import { knowledgeConfigFromNodeData, serializeKnowledgeConfigToNodeData } from "../../services/workflowKnowledgeRetrieval";
 import { normalizeStageTaskBasisRefsFromNodeData } from "../../services/workflowGraphRuntime";
+import { normalizeLoopExitConditions, normalizeLoopMaxIterations } from "../../services/workflowLoop";
 import type { CanvasSnapshot } from "../workflowGraph/workflowX6CanvasShared";
 import {
   isAgentMaterialKey,
@@ -18,6 +19,7 @@ function materialKeyToGraphType(materialKey: string): WorkflowGraphNode["type"] 
   if (materialKey === "knowledge") return "knowledge";
   if (materialKey === "code") return "code";
   if (materialKey === "branch") return "branch";
+  if (materialKey === "loop") return "loop";
   return "approval";
 }
 
@@ -47,6 +49,21 @@ export function canvasSnapshotToWorkflowGraph(snapshot: CanvasSnapshot, fallback
           data: {
             ...node.passthroughData,
             label: node.title || "结束",
+          },
+        };
+      }
+      if (node.kind === "loop") {
+        return {
+          id: node.id,
+          type: "loop",
+          position: { x: node.x, y: node.y },
+          data: {
+            ...node.passthroughData,
+            label: node.title || "循环",
+            materialKey: "loop",
+            loopVariables: node.loopVariables,
+            loopExitConditions: normalizeLoopExitConditions(node.loopExitConditions),
+            loopMaxIterations: normalizeLoopMaxIterations(node.loopMaxIterations),
           },
         };
       }
@@ -161,6 +178,9 @@ const MATERIAL_FALLBACK_LABEL: Record<string, string> = {
 function edgeLabelFromSourcePort(sourcePort?: string, nodes?: CanvasSnapshot["nodes"]): string | undefined {
   if (sourcePort === "if") return "通过";
   if (sourcePort === "else") return "驳回";
+  if (sourcePort === "loop-body") return "循环体";
+  if (sourcePort === "loop-next") return "下一步";
+  if (sourcePort === "loop-back") return "返回循环";
   if (!sourcePort || !nodes) return undefined;
   for (const node of nodes) {
     if (node.materialKey !== "branch") continue;

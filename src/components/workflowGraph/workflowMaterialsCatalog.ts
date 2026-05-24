@@ -21,7 +21,7 @@ export const WORKFLOW_MATERIAL_CATEGORIES: WorkflowMaterialCategory[] = [
   {
     key: "logic",
     title: "逻辑",
-    materialKeys: ["branch"],
+    materialKeys: ["branch", "loop"],
   },
   {
     key: "transform",

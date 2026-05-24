@@ -177,6 +177,23 @@ export interface RepositoryMemberMonitorItem {
   updatedAt: number;
 }
 
+/** 当前对话内的子代理 / 后台任务执行态（右栏「我的团队」上方） */
+export interface SessionConversationTaskItem {
+  key: string;
+  label: string;
+  subtitle?: string;
+  status: "running" | "completed" | "failed";
+  previewText: string;
+  updatedAt: number;
+  source: "message_tool" | "invocation_stream" | "background_snapshot";
+  toolUseId?: string;
+  invocationKey?: string;
+  sessionId?: string;
+  repositoryPath?: string;
+  /** 是否可调用直连批量取消 */
+  cancellable?: boolean;
+}
+
 export interface MonitorStats {
   activeEmployees: number;
   employeesInProgress: number;
@@ -236,7 +253,8 @@ export type WorkflowGraphNodeType =
   | "prompt"
   | "knowledge"
   | "code"
-  | "branch";
+  | "branch"
+  | "loop";
 
 export interface WorkflowVariableDefinition {
   name: string;
@@ -303,6 +321,12 @@ export interface WorkflowGraphNodeData extends Record<string, unknown> {
   branchConditions?: import("./workflowBranch").WorkflowBranchCondition[];
   /** 开始节点工作流变量定义 */
   workflowVariables?: WorkflowVariableDefinition[];
+  /** 循环节点：循环体内局部变量 */
+  loopVariables?: WorkflowVariableDefinition[];
+  /** 循环节点：满足任一条件时终止循环 */
+  loopExitConditions?: import("./workflowBranch").WorkflowBranchCondition[];
+  /** 循环节点：最大循环次数（默认 10，上限 100） */
+  loopMaxIterations?: number;
   materialKey?: string;
 }
 
@@ -311,6 +335,8 @@ export interface WorkflowGraphNode {
   type: WorkflowGraphNodeType;
   position: { x: number; y: number };
   data: WorkflowGraphNodeData;
+  /** 所属循环容器节点 id（画布内节点） */
+  parentLoopId?: string;
 }
 
 export interface WorkflowGraphEdgeData extends Record<string, unknown> {

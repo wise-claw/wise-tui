@@ -197,7 +197,7 @@ function evaluateExpression(expression: string, ctx: BranchEvaluationContext): b
   return normalized.toLowerCase() === "true";
 }
 
-function evaluateConditionKind(condition: WorkflowBranchCondition, ctx: BranchEvaluationContext): boolean {
+export function evaluateConditionKind(condition: WorkflowBranchCondition, ctx: BranchEvaluationContext): boolean {
   switch (condition.kind) {
     case "acceptance_pass":
       return ctx.acceptanceDecision === "pass";
@@ -212,6 +212,17 @@ function evaluateConditionKind(condition: WorkflowBranchCondition, ctx: BranchEv
     default:
       return false;
   }
+}
+
+export function matchesAnyBranchCondition(conditions: WorkflowBranchCondition[], ctx: BranchEvaluationContext): boolean {
+  const normalized = normalizeBranchConditions(conditions);
+  for (const condition of normalized) {
+    if (condition.kind === "default") continue;
+    if (evaluateConditionKind(condition, ctx)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function evaluateBranchConditions(

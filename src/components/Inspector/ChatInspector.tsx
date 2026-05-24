@@ -6,6 +6,7 @@ import type {
   MonitorDrawerTarget,
   MonitorStats,
   RepositoryMemberMonitorItem,
+  SessionConversationTaskItem,
   TeamMonitorItem,
 } from "../../types";
 import { MAIN_LAYOUT_RIGHT_SIDER_WIDTH_PX } from "../../constants/mainLayoutWidths";
@@ -37,6 +38,7 @@ export interface ChatInspectorProps {
   monitorTranscriptSourceSessions?: ClaudeSession[];
   employeeMonitorItems?: EmployeeMonitorItem[];
   repositoryMemberMonitorItems?: RepositoryMemberMonitorItem[];
+  sessionConversationTaskItems?: SessionConversationTaskItem[];
   teamMonitorItems?: TeamMonitorItem[];
   monitorActiveTarget?: MonitorDrawerTarget | null;
   onOpenTeamMonitorDetail?: (workflowId: string) => void;
@@ -83,6 +85,7 @@ export function ChatInspector({
   monitorTranscriptSourceSessions,
   employeeMonitorItems = [],
   repositoryMemberMonitorItems = [],
+  sessionConversationTaskItems = [],
   teamMonitorItems = [],
   monitorActiveTarget,
   onOpenTeamMonitorDetail,
@@ -132,6 +135,7 @@ export function ChatInspector({
               <ProgressMonitorPanel
                 employeeItems={employeeMonitorItems}
                 repositoryMemberItems={repositoryMemberMonitorItems}
+                sessionConversationTaskItems={sessionConversationTaskItems}
                 teamItems={teamMonitorItems}
                 sessions={sessionsForMonitor}
                 activeTarget={monitorActiveTarget}

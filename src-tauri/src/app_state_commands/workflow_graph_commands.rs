@@ -137,6 +137,7 @@ pub(crate) fn validate_workflow_graph(
     let mut outgoing_counts: std::collections::HashMap<String, usize> =
         std::collections::HashMap::new();
     let mut approval_node_ids = std::collections::HashSet::new();
+    let mut loop_node_ids = std::collections::HashSet::new();
     for node in nodes {
         let node_id = node
             .get("id")
@@ -159,6 +160,11 @@ pub(crate) fn validate_workflow_graph(
         if matches!(node_type, Some("approval")) || matches!(data_type, Some("approval")) {
             if let Some(id) = node_id.clone() {
                 approval_node_ids.insert(id);
+            }
+        }
+        if matches!(node_type, Some("loop")) || matches!(data_type, Some("loop")) {
+            if let Some(id) = node_id.clone() {
+                loop_node_ids.insert(id);
             }
         }
         if node_type.is_none() {
@@ -297,6 +303,46 @@ pub(crate) fn validate_workflow_graph(
                 code: "WF_GRAPH_APPROVAL_OUTGOING_MISSING".to_string(),
                 message: "审批节点至少需要一条出边".to_string(),
                 node_id: Some(approval_id),
+                edge_id: None,
+            });
+        }
+    }
+    for loop_id in loop_node_ids {
+        let has_body = edges.iter().any(|edge| {
+            edge.get("source")
+                .and_then(|v| v.as_str())
+                .map(|v| v.trim())
+                == Some(loop_id.as_str())
+                && edge
+                    .get("sourceHandle")
+                    .and_then(|v| v.as_str())
+                    .map(str::trim)
+                    == Some("loop-body")
+        });
+        let has_next = edges.iter().any(|edge| {
+            edge.get("source")
+                .and_then(|v| v.as_str())
+                .map(|v| v.trim())
+                == Some(loop_id.as_str())
+                && edge
+                    .get("sourceHandle")
+                    .and_then(|v| v.as_str())
+                    .map(str::trim)
+                    == Some("loop-next")
+        });
+        if !has_body {
+            errors.push(WorkflowGraphValidationError {
+                code: "WF_GRAPH_LOOP_BODY_MISSING".to_string(),
+                message: "循环节点必须包含 loop-body 出边".to_string(),
+                node_id: Some(loop_id.clone()),
+                edge_id: None,
+            });
+        }
+        if !has_next {
+            errors.push(WorkflowGraphValidationError {
+                code: "WF_GRAPH_LOOP_NEXT_MISSING".to_string(),
+                message: "循环节点必须包含 loop-next 出边".to_string(),
+                node_id: Some(loop_id),
                 edge_id: None,
             });
         }
