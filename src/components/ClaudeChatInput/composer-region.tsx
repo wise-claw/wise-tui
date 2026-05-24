@@ -58,9 +58,10 @@ import { COMPOSER_SPEECH_IDLE_AUTO_SEND_MS } from "../../constants/composerSpeec
 import type { ComposerSpeechSendMode } from "../../constants/composerSpeechPreferences";
 import { splitUtteranceAtAutoSendEnding } from "../../utils/composerSpeechAutoSendEnding";
 import {
-  applyComposerSpeechStreamTranscript,
+  advanceComposerSpeechTranscriptBaseline,
   createComposerSpeechStreamAnchor,
-  reconcileComposerSpeechStreamAnchor,
+  extractComposerSpeechTranscriptDelta,
+  resolveComposerSpeechDisplayText,
 } from "../../utils/composerSpeechStreaming";
 import type { MenuProps } from "antd";
 import { logClaudeDrop } from "./drop-debug";
@@ -649,6 +650,10 @@ function ComposerInner({
   const speechStreamAnchorRef = useRef<ReturnType<typeof createComposerSpeechStreamAnchor> | null>(
     null,
   );
+  /** 引擎 cumulative 转写 baseline：每次发送后推进，避免连续听写重复带上已发内容。 */
+  const speechEngineTranscriptBaselineRef = useRef("");
+  const speechEngineTranscriptBaselineRollbackRef = useRef<string | null>(null);
+  const lastRawSpeechTranscriptRef = useRef("");
   const speechIdleAutoSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scheduleSpeechIdleAutoSendRef = useRef<() => void>(() => undefined);
   const triggerSpeechAutoSendRef = useRef<() => void>(() => undefined);
@@ -687,35 +692,33 @@ function ComposerInner({
   useEffect(() => () => clearSpeechIdleAutoSendTimer(), [clearSpeechIdleAutoSendTimer]);
 
   const handleSpeechTranscriptUpdate = useCallback(
-    ({ text, isFinal }: { text: string; isFinal: boolean }) => {
+    ({ text, isFinal: _isFinal }: { text: string; isFinal: boolean }) => {
       const surface = plainSurfaceRef.current;
       if (!surface) return;
 
-      const surfacePlain = surface.getPlain();
-      const surfaceCursor = surface.getCursor();
-      speechStreamAnchorRef.current = reconcileComposerSpeechStreamAnchor(
-        speechStreamAnchorRef.current,
-        surfacePlain,
-        surfaceCursor,
+      lastRawSpeechTranscriptRef.current = text;
+      const delta = extractComposerSpeechTranscriptDelta(
+        speechEngineTranscriptBaselineRef.current,
+        text,
       );
 
       const isEndingWordMode = speechPrefsRef.current.sendMode === "endingWordAutoSend";
       const { utterance: spokenText, shouldAutoSend } = isEndingWordMode
         ? splitUtteranceAtAutoSendEnding(
-            text,
+            delta,
             speechPrefsRef.current.autoSendEndingText,
           )
-        : { utterance: text, shouldAutoSend: false };
+        : { utterance: delta, shouldAutoSend: false };
 
-      const { anchor, plain, cursor } = applyComposerSpeechStreamTranscript(
-        speechStreamAnchorRef.current,
-        spokenText,
-        isFinal,
-      );
-      speechStreamAnchorRef.current = anchor;
-      surface.setPlainAndCursor(plain, cursor);
+      const { plain, cursor } = resolveComposerSpeechDisplayText(spokenText);
+      if (plain) {
+        speechStreamAnchorRef.current = createComposerSpeechStreamAnchor("", 0);
+        surface.setPlainAndCursor(plain, cursor);
+      } else if (!shouldAutoSend) {
+        return;
+      }
 
-      if (spokenText.trim() && speechPrefsRef.current.sendMode === "silenceAutoSend") {
+      if (plain && speechPrefsRef.current.sendMode === "silenceAutoSend") {
         scheduleSpeechIdleAutoSendRef.current();
       }
 
@@ -730,6 +733,9 @@ function ComposerInner({
 
   const handleSpeechSessionEnd = useCallback(() => {
     speechStreamAnchorRef.current = null;
+    speechEngineTranscriptBaselineRef.current = "";
+    speechEngineTranscriptBaselineRollbackRef.current = null;
+    lastRawSpeechTranscriptRef.current = "";
   }, []);
 
   const speechDictation = useComposerSpeechDictation({
@@ -760,6 +766,34 @@ function ComposerInner({
 
   triggerSpeechAutoSendRef.current = triggerComposerSpeechAutoSend;
 
+  const prepareSpeechTranscriptBaselineForSend = useCallback((sentPlain?: string) => {
+    if (!speechDictationRef.current.listening && !speechDictationRef.current.transcribing) {
+      return;
+    }
+    const rawForBaseline =
+      lastRawSpeechTranscriptRef.current.trim() || sentPlain?.trim() || "";
+    if (!rawForBaseline) {
+      return;
+    }
+    speechEngineTranscriptBaselineRollbackRef.current = speechEngineTranscriptBaselineRef.current;
+    speechEngineTranscriptBaselineRef.current = advanceComposerSpeechTranscriptBaseline(
+      speechEngineTranscriptBaselineRef.current,
+      rawForBaseline,
+    );
+  }, []);
+
+  const finalizeSpeechTranscriptBaselineAfterSend = useCallback(() => {
+    speechEngineTranscriptBaselineRollbackRef.current = null;
+  }, []);
+
+  const rollbackSpeechTranscriptBaselineOnSendFailure = useCallback(() => {
+    if (speechEngineTranscriptBaselineRollbackRef.current == null) {
+      return;
+    }
+    speechEngineTranscriptBaselineRef.current = speechEngineTranscriptBaselineRollbackRef.current;
+    speechEngineTranscriptBaselineRollbackRef.current = null;
+  }, []);
+
   const scheduleSpeechIdleAutoSend = useCallback(() => {
     if (speechPrefsRef.current.sendMode !== "silenceAutoSend") return;
     clearSpeechIdleAutoSendTimer();
@@ -782,6 +816,9 @@ function ComposerInner({
   useEffect(() => {
     if (speechDictation.listening && !speechListeningPrevRef.current) {
       speechStreamAnchorRef.current = null;
+      speechEngineTranscriptBaselineRef.current = "";
+      speechEngineTranscriptBaselineRollbackRef.current = null;
+      lastRawSpeechTranscriptRef.current = "";
       suffixAutoSendFiredRef.current = false;
       clearSpeechIdleAutoSendTimer();
       if (isAutoSendSpeechMode(speechPrefsRef.current.sendMode)) {
@@ -805,6 +842,9 @@ function ComposerInner({
 
   useEffect(() => {
     speechStreamAnchorRef.current = null;
+    speechEngineTranscriptBaselineRef.current = "";
+    speechEngineTranscriptBaselineRollbackRef.current = null;
+    lastRawSpeechTranscriptRef.current = "";
     speechDictation.stop();
     suffixAutoSendFiredRef.current = false;
     setSpeechKeepAliveDuringBusy(false);
@@ -1068,6 +1108,7 @@ function ComposerInner({
   );
 
   const restoreComposerDraft = useCallback((draft: LastSentComposerDraft) => {
+    rollbackSpeechTranscriptBaselineOnSendFailure();
     const display = promptToDisplayPlain(draft.prompt);
     ignoreNextContentSyncRef.current = true;
     lastEditorPlainRef.current = display;
@@ -1086,7 +1127,7 @@ function ComposerInner({
         aiChatRef.current?.focusEditor?.("end");
       });
     });
-  }, [set, setImages, contextAdd]);
+  }, [set, setImages, contextAdd, rollbackSpeechTranscriptBaselineOnSendFailure]);
 
   const triggerRef = useRef(trigger);
   triggerRef.current = trigger;
@@ -1171,11 +1212,12 @@ function ComposerInner({
       };
 
       /** 先清空输入区，再 await 构建 outbound（图片落盘等），避免主线程长时间被占导致「点了没反应」 */
-      const clearComposerSurfaceSync = () => {
+      const clearComposerSurfaceSync = (sentPlain?: string) => {
         setTrigger({ mode: null, query: "", rect: null });
         ignoreNextContentSyncRef.current = true;
         lastEditorPlainRef.current = "";
         cursorRef.current = 0;
+        prepareSpeechTranscriptBaselineForSend(sentPlain);
         speechStreamAnchorRef.current = createComposerSpeechStreamAnchor("", 0);
         suffixAutoSendFiredRef.current = false;
         flushSync(() => {
@@ -1198,7 +1240,7 @@ function ComposerInner({
           timestamp: Date.now(),
           detail: "会话占用中，本则消息仅加入待执行队列。",
         });
-        clearComposerSurfaceSync();
+        clearComposerSurfaceSync(logicalSnap.trim());
         let outbound: string;
         try {
           outbound = await buildClaudeOutgoingPrompt({
@@ -1268,6 +1310,7 @@ function ComposerInner({
         });
         recordMissionMessage(logicalSnap);
         postSendEscUndoRef.current = rollbackDraft;
+        finalizeSpeechTranscriptBaselineAfterSend();
         return;
       }
 
@@ -1278,7 +1321,7 @@ function ComposerInner({
         detail: "用户点击发送按钮或按下 Enter 触发发送。",
       });
       lastSentDraftRef.current = rollbackDraft;
-      clearComposerSurfaceSync();
+      clearComposerSurfaceSync(logicalSnap.trim());
 
       let outbound: string;
       try {
@@ -1375,6 +1418,7 @@ function ComposerInner({
           recordMissionMessage(logicalSnap);
           lastSentDraftRef.current = null;
           postSendEscUndoRef.current = rollbackDraft;
+          finalizeSpeechTranscriptBaselineAfterSend();
           return;
         }
       }
@@ -1392,6 +1436,7 @@ function ComposerInner({
       recordMissionMessage(logicalSnap);
       lastSentDraftRef.current = null;
       postSendEscUndoRef.current = rollbackDraft;
+      finalizeSpeechTranscriptBaselineAfterSend();
       onExecute(session.id, dispatchPromptText, consumePending, dispatchTargetForExecute);
     },
     [
@@ -1417,6 +1462,8 @@ function ComposerInner({
       draftBucketKey,
       recordMissionMessage,
       clearSpeechIdleAutoSendTimer,
+      prepareSpeechTranscriptBaselineForSend,
+      finalizeSpeechTranscriptBaselineAfterSend,
     ],
   );
 

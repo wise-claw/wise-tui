@@ -30,6 +30,107 @@ export function reconcileComposerSpeechStreamAnchor(
   return anchor;
 }
 
+export function normalizeSpeechTranscriptLine(raw: string): string {
+  return raw.replace(/\s+/g, " ").trim();
+}
+
+const SPEECH_COMPARE_STRIP_RE = /[\s，。！？、,.!?;:：；'"''""\-—…]/gu;
+
+function isSpeechCompareSeparator(ch: string): boolean {
+  return /[\s，。！？、,.!?;:：；'"''""\-—…]/u.test(ch);
+}
+
+/** 忽略标点/空白后用于 baseline 前缀比对。 */
+export function stripSpeechCompareNoise(raw: string): string {
+  return raw.replace(SPEECH_COMPARE_STRIP_RE, "");
+}
+
+/** 将 compare 前缀长度映射回 raw 字符串上的切分点（跳过标点/空白）。 */
+export function sliceRawTranscriptAfterComparePrefix(raw: string, comparePrefixLen: number): string {
+  if (comparePrefixLen <= 0) {
+    return normalizeSpeechTranscriptLine(raw);
+  }
+  let cmpLen = 0;
+  let rawIdx = 0;
+  while (rawIdx < raw.length && cmpLen < comparePrefixLen) {
+    const ch = raw[rawIdx]!;
+    if (!isSpeechCompareSeparator(ch)) {
+      cmpLen += 1;
+    }
+    rawIdx += 1;
+  }
+  while (rawIdx < raw.length && isSpeechCompareSeparator(raw[rawIdx]!)) {
+    rawIdx += 1;
+  }
+  return raw.slice(rawIdx).trimStart();
+}
+
+/**
+ * 从引擎 cumulative 转写中提取相对 baseline 的新增片段。
+ * macOS / Web 连续听写会话会返回自会话开始以来的全文，发送后须以 baseline 截断避免重复。
+ */
+export function extractComposerSpeechTranscriptDelta(
+  baseline: string,
+  rawTranscript: string,
+): string {
+  const raw = normalizeSpeechTranscriptLine(rawTranscript);
+  const base = normalizeSpeechTranscriptLine(baseline);
+  if (!raw) return "";
+  if (!base) return raw;
+  if (raw === base) return "";
+  if (raw.startsWith(base)) {
+    return raw.slice(base.length).trimStart();
+  }
+  if (base.startsWith(raw)) return "";
+
+  const rawCmp = stripSpeechCompareNoise(raw);
+  const baseCmp = stripSpeechCompareNoise(base);
+  if (!rawCmp) return "";
+  if (!baseCmp) return raw;
+  if (rawCmp === baseCmp) return "";
+  if (rawCmp.startsWith(baseCmp)) {
+    return sliceRawTranscriptAfterComparePrefix(raw, baseCmp.length);
+  }
+  if (baseCmp.startsWith(rawCmp)) return "";
+
+  const baseHead = baseCmp.slice(0, Math.min(baseCmp.length, 12));
+  if (baseHead.length > 0 && !rawCmp.startsWith(baseHead)) {
+    // 句段 final 后引擎可能只推送下一句（不再带 baseline 前缀）。
+    return raw;
+  }
+
+  let shared = 0;
+  while (shared < rawCmp.length && shared < baseCmp.length && rawCmp[shared] === baseCmp[shared]) {
+    shared += 1;
+  }
+  return sliceRawTranscriptAfterComparePrefix(raw, shared);
+}
+
+/** 发送后推进 baseline，使后续 delta 不再包含已发送片段。 */
+export function advanceComposerSpeechTranscriptBaseline(
+  baseline: string,
+  rawTranscript: string,
+): string {
+  const raw = normalizeSpeechTranscriptLine(rawTranscript);
+  if (!raw) return baseline;
+  const base = normalizeSpeechTranscriptLine(baseline);
+  if (!base || raw.startsWith(base) || base.startsWith(raw)) {
+    return raw;
+  }
+  const rawCmp = stripSpeechCompareNoise(raw);
+  const baseCmp = stripSpeechCompareNoise(base);
+  if (!baseCmp || rawCmp.startsWith(baseCmp) || baseCmp.startsWith(rawCmp)) {
+    return raw;
+  }
+  return raw;
+}
+
+/** 连续听写：输入框仅展示相对 baseline 的 delta（整段替换，不在 anchor 上叠加）。 */
+export function resolveComposerSpeechDisplayText(delta: string): { plain: string; cursor: number } {
+  const plain = normalizeSpeechTranscriptLine(delta);
+  return { plain, cursor: plain.length };
+}
+
 /** 将当前 utterance 的 partial 或 final 文本合并进 plain。final 时提交到 prefix。 */
 export function applyComposerSpeechStreamTranscript(
   anchor: ComposerSpeechStreamAnchor,
