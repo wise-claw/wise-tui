@@ -299,41 +299,41 @@ export interface WorkflowGraphNodeData extends Record<string, unknown> {
   stageTaskBasisRef?: string;
   /** 提示词模板节点正文 */
   promptTemplate?: string;
-  promptMessages?: import("./types/workflowPrompt").WorkflowPromptMessage[];
-  promptInjectionMode?: import("./types/workflowPrompt").WorkflowPromptInjectionMode;
+  promptMessages?: import("./workflowPrompt").WorkflowPromptMessage[];
+  promptInjectionMode?: import("./workflowPrompt").WorkflowPromptInjectionMode;
   promptRequireAcknowledgement?: boolean;
   /** 知识检索节点查询语句，支持 {{var}}（与 knowledgeQuery 同步） */
   knowledgeQuery?: string;
-  knowledgeSearchMode?: import("./types/workflowKnowledge").WorkflowKnowledgeSearchMode;
-  knowledgeNodeKinds?: import("./types/workflowKnowledge").WorkflowKnowledgeNodeKindFilter[];
+  knowledgeSearchMode?: import("./workflowKnowledge").WorkflowKnowledgeSearchMode;
+  knowledgeNodeKinds?: import("./workflowKnowledge").WorkflowKnowledgeNodeKindFilter[];
   knowledgeTopK?: number;
   knowledgeSubgraphHop?: number;
-  knowledgeSubgraphDirection?: import("./types/codeKnowledgeGraph").CodeGraphSubgraphDirection;
+  knowledgeSubgraphDirection?: import("./codeKnowledgeGraph").CodeGraphSubgraphDirection;
   knowledgePathPrefix?: string;
-  knowledgeOutputMode?: import("./types/workflowKnowledge").WorkflowKnowledgeOutputMode;
+  knowledgeOutputMode?: import("./workflowKnowledge").WorkflowKnowledgeOutputMode;
   knowledgeRequireCitation?: boolean;
   knowledgeOutputVariable?: string;
   knowledgeSupplementQueries?: string[];
   /** 代码/脚本节点内容（兼容字段，与 codeSource 同步） */
   codeScript?: string;
-  codeMode?: import("./types/workflowCode").WorkflowCodeExecutionMode;
-  codeLanguage?: import("./types/workflowCode").WorkflowCodeLanguage;
+  codeMode?: import("./workflowCode").WorkflowCodeExecutionMode;
+  codeLanguage?: import("./workflowCode").WorkflowCodeLanguage;
   codeSource?: string;
-  codeInputBindings?: import("./types/workflowCode").WorkflowCodeInputBinding[];
-  codeOutputVariables?: import("./types/workflowCode").WorkflowCodeOutputVariable[];
+  codeInputBindings?: import("./workflowCode").WorkflowCodeInputBinding[];
+  codeOutputVariables?: import("./workflowCode").WorkflowCodeOutputVariable[];
   codeRequireStructuredOutput?: boolean;
   codeWorkingDirectory?: string;
   codeTimeoutSeconds?: number;
   /** 条件分支节点可选说明 */
   branchCriteria?: string;
   /** 条件分支配置 */
-  branchConditions?: import("./types/workflowBranch").WorkflowBranchCondition[];
+  branchConditions?: import("./workflowBranch").WorkflowBranchCondition[];
   /** 开始节点工作流变量定义 */
   workflowVariables?: WorkflowVariableDefinition[];
   /** 循环节点：循环体内局部变量 */
   loopVariables?: WorkflowVariableDefinition[];
   /** 循环节点：满足任一条件时终止循环 */
-  loopExitConditions?: import("./types/workflowBranch").WorkflowBranchCondition[];
+  loopExitConditions?: import("./workflowBranch").WorkflowBranchCondition[];
   /** 循环节点：最大循环次数（默认 10，上限 100） */
   loopMaxIterations?: number;
   materialKey?: string;
