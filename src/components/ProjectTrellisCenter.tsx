@@ -358,29 +358,35 @@ export function ProjectTrellisCenter({
     onClose?.();
   }, [onClose, onOpenProjectSession, project]);
 
+  const centerClassName = inline
+    ? "project-trellis-center project-trellis-center--compact"
+    : "project-trellis-center";
+
   const content = (
-    <div className="project-trellis-center">
+    <div className={centerClassName}>
       <div className="project-trellis-center__toolbar" aria-label="Trellis 工作区状态">
-        <Space size={6} wrap style={{ width: '100%', justifyContent: 'space-between' }}>
-          <Space size={6} wrap>
-            <Tag color={rootPath ? "success" : "warning"}>{rootPath ? "根目录就绪" : "未绑定根目录"}</Tag>
-            <Tag>{sddModeLabel}</Tag>
-            {rootPath ? (
-              <Typography.Text className="project-trellis-center__root" title={rootPath}>
-                {rootPath}
-              </Typography.Text>
-            ) : null}
-          </Space>
-          <Button
-            type="primary"
-            ghost
-            icon={<ExternalLink size={13} />}
-            disabled={!project && !onClose}
-            onClick={handleReturnToMainSession}
-          >
-            回到主会话
-          </Button>
-        </Space>
+        <div className="project-trellis-center__toolbar-main">
+          <Tag className="project-trellis-center__tag" color={rootPath ? "success" : "warning"}>
+            {rootPath ? "根目录就绪" : "未绑定根目录"}
+          </Tag>
+          <Tag className="project-trellis-center__tag">{sddModeLabel}</Tag>
+          {rootPath ? (
+            <Typography.Text className="project-trellis-center__root" title={rootPath}>
+              {rootPath}
+            </Typography.Text>
+          ) : null}
+        </div>
+        <Button
+          type="primary"
+          ghost
+          size={inline ? "small" : "middle"}
+          className="project-trellis-center__session-btn"
+          icon={<ExternalLink size={inline ? 12 : 13} />}
+          disabled={!project && !onClose}
+          onClick={handleReturnToMainSession}
+        >
+          回到主会话
+        </Button>
       </div>
       {memberRepoRootConflict ? (
         <Alert
@@ -1103,9 +1109,16 @@ function TrellisWorkflowMap({
         <Alert
           type="warning"
           showIcon
-          className="project-trellis-workflow__alert"
-          message="workflow.md 有校验提示"
-          description={compiled.validationIssues.map((issue) => issue.message).join("\n")}
+          className="project-trellis-workflow__alert project-trellis-workflow__alert--compact"
+          message={
+            <span
+              className="project-trellis-workflow__alert-line"
+              title={compiled.validationIssues.map((issue) => issue.message).join("\n")}
+            >
+              <span className="project-trellis-workflow__alert-label">workflow.md</span>
+              {compiled.validationIssues.map((issue) => issue.message).join(" · ")}
+            </span>
+          }
         />
       ) : null}
 

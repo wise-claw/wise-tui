@@ -520,7 +520,7 @@ function ProjectRow({
               }
             />
           ) : null}
-          {!expanded && projectRepos.length > 0 ? (
+          {projectRepos.length > 0 ? (
             <span className="app-repository-meta" aria-label={`${projectRepos.length} 个仓库`}>
               {projectRepos.length}
             </span>

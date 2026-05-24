@@ -143,7 +143,7 @@ export function buildProjectRepositoryMoreMenuItems(
       REPOSITORY_MAIN_OWNER_MENU_ENABLED && onOpenRepositoryMainOwner
         ? { key: "main-owner", label: "配置 Owner" }
         : null,
-      onConfigureSddMode ? { key: "sdd-mode", label: "设置 SDD 模式" } : null,
+      onConfigureSddMode ? { key: "sdd-mode", label: "配置 Claude 插件" } : null,
       trellisRootActionEnabled && !trellisReady ? { key: "trellis-init", label: "启用 Wise Trellis" } : null,
       onOpenPromptsRepository ? { key: "prompts", label: "提示词" } : null,
     ]),
@@ -217,7 +217,7 @@ export function buildFloatingRepositoryMoreMenuItems(
       REPOSITORY_MAIN_OWNER_MENU_ENABLED && onOpenRepositoryMainOwner
         ? { key: "main-owner", label: "主 Owner 智能体…" }
         : null,
-      onConfigureSddMode ? { key: "sdd-mode", label: "设置 SDD 模式" } : null,
+      onConfigureSddMode ? { key: "sdd-mode", label: "配置 Claude 插件" } : null,
       trellisEnabled && !trellisReady ? { key: "trellis-init", label: "启用 Wise Trellis" } : null,
     ]),
     sidebarMenuSection([

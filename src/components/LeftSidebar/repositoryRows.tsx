@@ -35,6 +35,7 @@ import {
   TrellisIcon,
 } from "./SidebarIcons";
 import { RunningMainSessionDot } from "./RunningMainSessionDot";
+import { RepositorySddStackBadge } from "./RepositorySddStackBadge";
 
 function repositoryTrellisEntrypointsEnabled(repository: Repository, trellisReady: boolean): boolean {
   return repository.sddMode !== "off" && (trellisReady || repository.sddMode !== "project_owned");
@@ -384,6 +385,7 @@ export function RepositoryRow({
               onOpen={() => onOpenExecutableTasks(repository)}
             />
           ) : null}
+          <RepositorySddStackBadge repository={repository} />
           <Dropdown
             rootClassName="app-sidebar-more-menu-dropdown"
             menu={{
@@ -558,6 +560,7 @@ export function FloatingRepositoryRow({
               onOpen={() => onOpenExecutableTasks(repository)}
             />
           ) : null}
+          <RepositorySddStackBadge repository={repository} />
           <Dropdown
             rootClassName="app-sidebar-more-menu-dropdown"
             menu={{

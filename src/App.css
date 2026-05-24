@@ -2431,6 +2431,24 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   text-align: center;
 }
 
+.app-left-sidebar .app-repository-row-actions .app-repository-sdd-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  line-height: 0;
+  color: var(--ant-color-text-quaternary);
+  pointer-events: none;
+}
+
+.app-left-sidebar .app-repository-row-actions .app-repository-sdd-icon svg {
+  width: 12px;
+  height: 12px;
+  display: block;
+}
+
 .app-repository-pin {
   flex-shrink: 0;
   width: 5px;

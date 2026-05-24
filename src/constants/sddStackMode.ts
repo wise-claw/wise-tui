@@ -4,7 +4,7 @@ import {
   type WorkspaceBootstrapSelection,
 } from "./workspaceBootstrapAddons";
 
-/** 仓库 SDD / 内置能力栈：用于「设置 SDD 模式」与创建时引导。 */
+/** 仓库 SDD / 内置能力栈：用于「配置 Claude 插件」与创建时引导。 */
 export type SddStackMode =
   | "auto"
   | "wise_trellis"

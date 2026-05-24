@@ -7,8 +7,10 @@ import {
   sddStackModeToSddMode,
   type SddStackMode,
 } from "../../constants/sddStackMode";
+import { dispatchTrellisBootstrapComplete } from "../../constants/trellisUiEvents";
 import { detectSddSignals, type SddSignals } from "../../services/trellis/sddModeDetector";
 import { runWorkspaceBootstrap } from "../../services/workspaceBootstrap";
+import { workspaceBootstrapNeedsTrellisInit } from "../../constants/workspaceBootstrapAddons";
 
 interface UseRepositorySddModeModalControllerInput {
   onUpdateRepositorySddMode?: (repositoryId: number, sddMode: Repository["sddMode"]) => void | Promise<void>;
@@ -72,6 +74,9 @@ export function useRepositorySddModeModalController({
         await runWorkspaceBootstrap(repository.path, bootstrap);
       }
       await onUpdateRepositorySddMode(repository.id, sddMode);
+      if (workspaceBootstrapNeedsTrellisInit(bootstrap)) {
+        dispatchTrellisBootstrapComplete({ repositoryId: repository.id });
+      }
       message.success("SDD 模式已保存");
       setRepository(null);
     } catch (err) {

@@ -228,10 +228,33 @@ html.app-host-macos-chrome .app-author-config-sider .author-panel__nav-drag {
   max-width: none;
 }
 
+.author-panel-workspaces--trellis .author-panel-page__head {
+  --author-panel-page-head-padding-top: 12px;
+  --author-panel-page-head-padding-bottom: 4px;
+}
+
+.author-panel-workspaces--trellis .author-panel-page__title {
+  font-size: 1rem;
+}
+
+.author-panel-workspaces--trellis .author-panel-page__icon {
+  width: 20px;
+  height: 20px;
+  font-size: 12px;
+}
+
+.author-panel-workspaces--trellis .author-panel-page__body {
+  padding-top: 0;
+}
+
 .author-panel-workspaces {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.author-panel-workspaces--trellis.author-panel-workspaces {
+  gap: 0;
 }
 
 .author-panel-workspaces__section {

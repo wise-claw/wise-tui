@@ -35,8 +35,21 @@ export function WorkspacesTab({
   onRequestSpecAgentUpdate,
 }: WorkspacesTabProps) {
   const hasItems = workspaces.length > 0 || standaloneRepos.length > 0;
-  const standaloneTrellisRepoId = trellisWorkspaceId?.startsWith("repo:")
-    ? Number(trellisWorkspaceId.slice("repo:".length))
+  const activeTrellisWorkspaceId =
+    trellisWorkspaceId ??
+    (() => {
+      if (activeWorkspaceId) {
+        const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId);
+        if (activeWorkspace?.sddMode === "wise_trellis") return activeWorkspaceId;
+      }
+      if (activeRepositoryId !== null && !activeWorkspaceId) {
+        const activeStandalone = standaloneRepos.find((repo) => repo.id === activeRepositoryId);
+        if (activeStandalone?.sddMode === "wise_trellis") return `repo:${activeRepositoryId}`;
+      }
+      return null;
+    })();
+  const standaloneTrellisRepoId = activeTrellisWorkspaceId?.startsWith("repo:")
+    ? Number(activeTrellisWorkspaceId.slice("repo:".length))
     : null;
   const trellisStandaloneRepo =
     standaloneTrellisRepoId !== null && Number.isFinite(standaloneTrellisRepoId)
@@ -57,7 +70,7 @@ export function WorkspacesTab({
     trellisStandaloneWorkspace ??
     workspaces.find(
       (workspace) =>
-        workspace.id === (trellisWorkspaceId ?? "") &&
+        workspace.id === (activeTrellisWorkspaceId ?? "") &&
         (workspace.sddMode === "wise_trellis" || workspace.sddMode == null),
     ) ??
     null;
@@ -67,7 +80,9 @@ export function WorkspacesTab({
       className={`author-panel-workspaces${trellisWorkspace ? " author-panel-workspaces--trellis" : ""}`}
       icon={<FolderOpenOutlined />}
       title="工作区"
-      subtitle="Workspace、成员仓库和 Wise Trellis 状态"
+      subtitle={
+        trellisWorkspace ? undefined : "Workspace、成员仓库和 Wise Trellis 状态"
+      }
       actions={
         trellisWorkspace ? null : (
           <Space size={8} wrap>

@@ -329,6 +329,7 @@ describe("AuthorPanel", () => {
     const { props } = buildProps();
     const html = renderAuthorPanel(props);
     for (const label of [
+      "工作区",
       "智能体角色",
       "工作流",
       "MCP 工具",
@@ -346,7 +347,6 @@ describe("AuthorPanel", () => {
     ]) {
       expect(html).toContain(label);
     }
-    expect(html).not.toContain("工作区");
     expect(html).not.toContain("产物检查台");
     expect(html).not.toContain("委派协议");
   });
