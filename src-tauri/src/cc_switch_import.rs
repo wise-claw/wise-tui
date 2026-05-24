@@ -1,4 +1,4 @@
-//! 从 CC Switch（桌面 `~/.cc-switch/cc-switch.db` 或 CLI `~/.ccswitch/ccs.json`）导入 Claude 模型档案。
+//! 从 CC Switch（桌面 `~/.cc-switch/cc-switch.db` 或 CLI `~/.ccswitch/ccs.json`）导入 Claude / Codex 模型档案。
 
 use std::path::{Path, PathBuf};
 
@@ -9,6 +9,9 @@ use uuid::Uuid;
 use crate::claude_model_profiles::{
     load_store, read_effective_model, save_store, store_view, ClaudeModelProfile,
     ClaudeModelProfileStoreView,
+};
+use crate::codex_config_dir::{
+    parse_codex_profile_envelope, read_effective_codex_model_from_envelope,
 };
 use crate::wise_db::WiseDb;
 
@@ -31,6 +34,7 @@ struct LegacyCcsFile {
 }
 
 struct ImportedProfile {
+    engine: String,
     company: String,
     name: String,
     settings_json: String,
@@ -92,17 +96,45 @@ fn normalize_settings_root(v: serde_json::Value) -> Result<serde_json::Value, St
     Ok(serde_json::json!({ "env": v }))
 }
 
-fn profile_from_settings(name: &str, settings: serde_json::Value) -> Result<ImportedProfile, String> {
+fn profile_from_settings(
+    name: &str,
+    settings: serde_json::Value,
+    engine: &str,
+) -> Result<ImportedProfile, String> {
+    let label = name.trim();
+    if label.is_empty() {
+        return Err("配置名称为空".to_string());
+    }
+    let engine_key = if engine.trim().eq_ignore_ascii_case("codex") {
+        "codex"
+    } else {
+        "claude"
+    };
+
+    if engine_key == "codex" {
+        let envelope = parse_codex_profile_envelope(
+            &serde_json::to_string(&settings).map_err(|e| e.to_string())?,
+        )?;
+        let pretty = serde_json::to_string_pretty(&envelope).map_err(|e| e.to_string())?;
+        let model_id = read_effective_codex_model_from_envelope(&envelope)
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "custom".to_string());
+        return Ok(ImportedProfile {
+            engine: engine_key.to_string(),
+            company: infer_company_from_cc_switch_name(label),
+            name: label.to_string(),
+            settings_json: pretty,
+            model_id,
+        });
+    }
+
     let root = normalize_settings_root(settings)?;
     let pretty = serde_json::to_string_pretty(&root).map_err(|e| e.to_string())?;
     let model_id = read_effective_model(&root)
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "custom".to_string());
-    let label = name.trim();
-    if label.is_empty() {
-        return Err("配置名称为空".to_string());
-    }
     Ok(ImportedProfile {
+        engine: engine_key.to_string(),
         company: infer_company_from_cc_switch_name(label),
         name: label.to_string(),
         settings_json: pretty,
@@ -114,8 +146,8 @@ fn load_from_cc_switch_db(path: &Path) -> Result<Vec<ImportedProfile>, String> {
     let conn = Connection::open(path).map_err(|e| format!("无法打开 CC Switch 数据库：{e}"))?;
     let mut stmt = conn
         .prepare(
-            "SELECT name, settings_config FROM providers \
-             WHERE app_type LIKE '%claude%' \
+            "SELECT name, settings_config, app_type FROM providers \
+             WHERE app_type IN ('claude', 'codex') \
              ORDER BY COALESCE(sort_index, 999999), created_at ASC, name ASC",
         )
         .map_err(|e| format!("读取 providers 表失败：{e}"))?;
@@ -123,16 +155,17 @@ fn load_from_cc_switch_db(path: &Path) -> Result<Vec<ImportedProfile>, String> {
         .query_map([], |row| {
             let name: String = row.get(0)?;
             let settings_config_str: String = row.get(1)?;
-            Ok((name, settings_config_str))
+            let app_type: String = row.get(2)?;
+            Ok((name, settings_config_str, app_type))
         })
         .map_err(|e| format!("查询 CC Switch 供应商失败：{e}"))?;
 
     let mut out = Vec::new();
     for row in rows {
-        let (name, raw) = row.map_err(|e| e.to_string())?;
+        let (name, raw, app_type) = row.map_err(|e| e.to_string())?;
         let settings: serde_json::Value =
             serde_json::from_str(raw.trim()).unwrap_or(serde_json::json!({}));
-        match profile_from_settings(&name, settings) {
+        match profile_from_settings(&name, settings, &app_type) {
             Ok(p) => out.push(p),
             Err(_) => continue,
         }
@@ -146,7 +179,7 @@ fn load_from_legacy_ccs_json(path: &Path) -> Result<Vec<ImportedProfile>, String
         serde_json::from_str(&text).map_err(|e| format!("ccs.json 解析失败：{e}"))?;
     let mut out = Vec::new();
     for (name, env_val) in parsed.profiles {
-        match profile_from_settings(&name, env_val) {
+        match profile_from_settings(&name, env_val, "claude") {
             Ok(p) => out.push(p),
             Err(_) => continue,
         }
@@ -191,11 +224,11 @@ fn merge_imported_into_store(
 
     for item in imported {
         let name_key = item.name.to_lowercase();
-        if let Some(slot) = store
-            .profiles
-            .iter_mut()
-            .find(|p| p.name.trim().to_lowercase() == name_key)
-        {
+        let engine_key = item.engine.to_lowercase();
+        if let Some(slot) = store.profiles.iter_mut().find(|p| {
+            p.name.trim().to_lowercase() == name_key
+                && p.engine.trim().eq_ignore_ascii_case(&engine_key)
+        }) {
             if slot.settings_json.trim() == item.settings_json.trim()
                 && slot.model_id.trim() == item.model_id.trim()
                 && slot.company.trim() == item.company.trim()
@@ -206,6 +239,7 @@ fn merge_imported_into_store(
             slot.company = item.company;
             slot.settings_json = item.settings_json;
             slot.model_id = item.model_id;
+            slot.engine = item.engine;
             slot.updated_at_ms = now;
             updated += 1;
         } else {
@@ -215,6 +249,7 @@ fn merge_imported_into_store(
                 name: item.name,
                 model_id: item.model_id,
                 settings_json: item.settings_json,
+                engine: item.engine,
                 created_at_ms: now,
                 updated_at_ms: now,
             });
@@ -261,12 +296,23 @@ mod tests {
     use super::*;
 
     #[test]
+    fn parses_codex_provider_envelope() {
+        let v = serde_json::json!({
+            "auth": { "OPENAI_API_KEY": "sk-test", "auth_mode": "apikey" },
+            "config": "model = \"gpt-5.4\"\n"
+        });
+        let p = profile_from_settings("default", v, "codex").expect("profile");
+        assert_eq!(p.engine, "codex");
+        assert_eq!(p.model_id, "gpt-5.4");
+    }
+
+    #[test]
     fn flattens_legacy_env_map() {
         let v = serde_json::json!({
             "ANTHROPIC_MODEL": "qwen3.6",
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:8082"
         });
-        let p = profile_from_settings("test", v).expect("profile");
+        let p = profile_from_settings("test", v, "claude").expect("profile");
         assert_eq!(p.model_id, "qwen3.6");
         assert!(p.settings_json.contains("\"env\""));
     }

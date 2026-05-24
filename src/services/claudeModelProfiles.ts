@@ -30,11 +30,13 @@ export async function createClaudeModelProfile(
   company: string,
   name: string,
   settingsJson: string,
+  engine: import("../types/claudeModelProfile").ModelProfileEngine = "claude",
 ): Promise<ClaudeModelProfileStoreView> {
   return invoke<ClaudeModelProfileStoreView>("create_claude_model_profile", {
     company: company.trim() || null,
     name,
     settingsJson,
+    engine,
   });
 }
 
@@ -70,6 +72,10 @@ export async function applyClaudeModelProfile(
 
 export async function getClaudeUserSettingsJson(): Promise<string> {
   return invoke<string>("get_claude_user_settings_json");
+}
+
+export async function getCodexUserSettingsJson(): Promise<string> {
+  return invoke<string>("get_codex_user_settings_json");
 }
 
 export async function saveClaudeUserSettingsJson(

@@ -2062,19 +2062,23 @@ function ComposerInner({
             </Button>
           </Tooltip>
         ) : null}
-        <SessionExecutionEngineChip
-          engine={sessionExecutionEngine}
-          codexAvailable={codexAvailable}
-          disabled={isSessionBusy}
-          onEngineChange={onSessionExecutionEngineChange}
-          onOpenExecutionEnvironment={onOpenExecutionEnvironment}
-        />
-        <ClaudeConnectionKindChip
-          connectionKind={session.connectionKind}
-          defaultConnectionKind={defaultConnectionKind}
-          disabled={isSessionBusy}
-          onConnectionKindChange={onSessionConnectionKindChange}
-        />
+        {codexAvailable ? (
+          <SessionExecutionEngineChip
+            engine={sessionExecutionEngine}
+            codexAvailable={codexAvailable}
+            disabled={isSessionBusy}
+            onEngineChange={onSessionExecutionEngineChange}
+            onOpenExecutionEnvironment={onOpenExecutionEnvironment}
+          />
+        ) : null}
+        {sessionExecutionEngine === "claude" ? (
+          <ClaudeConnectionKindChip
+            connectionKind={session.connectionKind}
+            defaultConnectionKind={defaultConnectionKind}
+            disabled={isSessionBusy}
+            onConnectionKindChange={onSessionConnectionKindChange}
+          />
+        ) : null}
         <Dropdown
           overlayClassName="app-claude-model-picker-dropdown"
           menu={{

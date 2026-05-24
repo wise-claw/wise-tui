@@ -4554,6 +4554,18 @@ button.app-message-part-header:disabled:hover {
   border-color: color-mix(in srgb, var(--ant-color-primary) 35%, var(--ant-color-border-secondary));
 }
 
+.app-claude-connection-kind-chip--claude {
+  color: var(--ant-color-purple, #722ed1) !important;
+  background: var(--ant-color-purple-bg, color-mix(in srgb, #722ed1 8%, transparent)) !important;
+  border-color: color-mix(in srgb, #722ed1 35%, var(--ant-color-border-secondary)) !important;
+}
+
+.app-claude-connection-kind-chip--codex {
+  color: var(--ant-color-primary) !important;
+  background: var(--ant-color-primary-bg) !important;
+  border-color: color-mix(in srgb, var(--ant-color-primary) 35%, var(--ant-color-border-secondary)) !important;
+}
+
 .app-claude-connection-kind-chip__chevron {
   flex-shrink: 0;
   opacity: 0.75;

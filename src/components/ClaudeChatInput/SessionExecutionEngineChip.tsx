@@ -110,7 +110,7 @@ export function SessionExecutionEngineChip({
     <span
       className={`app-claude-connection-kind-chip${
         interactive ? " app-claude-connection-kind-chip--interactive" : ""
-      }${engine === "codex" ? " app-claude-connection-kind-chip--override" : ""}${className ? ` ${className}` : ""}`}
+      } app-claude-connection-kind-chip--${engine}${className ? ` ${className}` : ""}`}
       aria-label={chipTooltip}
       aria-haspopup={interactive ? "menu" : undefined}
     >

@@ -6,6 +6,11 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::claude_config_dir::user_claude_dir;
+use crate::codex_config_dir::{
+    apply_codex_profile_envelope, codex_profile_envelope_to_json, effective_codex_model_from_disk,
+    parse_codex_profile_envelope, read_codex_profile_envelope,
+    read_effective_codex_model_from_envelope,
+};
 use crate::wise_db::WiseDb;
 
 const STORE_SETTINGS_KEY: &str = "claude_model_profiles_v1";
@@ -19,10 +24,28 @@ pub struct ClaudeModelProfile {
     pub company: String,
     pub name: String,
     pub model_id: String,
-    /// 该档案对应的 Claude Code `settings.json` 片段（完整对象 JSON）。
+    /// Claude：`settings.json`；Codex：`{ auth, config }` envelope（与 CC Switch 一致）。
     pub settings_json: String,
+    /// 运行引擎：`claude` | `codex`。
+    #[serde(default = "default_profile_engine")]
+    pub engine: String,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
+}
+
+fn default_profile_engine() -> String {
+    "claude".to_string()
+}
+
+fn normalize_profile_engine(raw: &str) -> &str {
+    match raw.trim().to_lowercase().as_str() {
+        "codex" => "codex",
+        _ => "claude",
+    }
+}
+
+fn profile_engine(profile: &ClaudeModelProfile) -> &str {
+    normalize_profile_engine(&profile.engine)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -30,6 +53,8 @@ pub struct ClaudeModelProfile {
 pub(crate) struct ClaudeModelProfileStore {
     pub(crate) profiles: Vec<ClaudeModelProfile>,
     active_profile_id: Option<String>,
+    #[serde(default)]
+    active_codex_profile_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,7 +62,9 @@ pub(crate) struct ClaudeModelProfileStore {
 pub struct ClaudeModelProfileStoreView {
     pub profiles: Vec<ClaudeModelProfile>,
     pub active_profile_id: Option<String>,
+    pub active_codex_profile_id: Option<String>,
     pub effective_model: Option<String>,
+    pub effective_codex_model: Option<String>,
 }
 
 fn now_ms() -> i64 {
@@ -205,7 +232,43 @@ fn write_user_settings_json(value: &serde_json::Value) -> Result<(), String> {
     crate::wise_paths::write_file_atomic(&path, &out)
 }
 
+fn resolve_profile_model_id(profile: &ClaudeModelProfile) -> Result<String, String> {
+    if profile_engine(profile) == "codex" {
+        let envelope = parse_codex_profile_envelope(&profile.settings_json)?;
+        return read_effective_codex_model_from_envelope(&envelope)
+            .filter(|s| !s.is_empty())
+            .or_else(|| {
+                let mid = profile.model_id.trim();
+                if mid.is_empty() {
+                    None
+                } else {
+                    Some(mid.to_string())
+                }
+            })
+            .ok_or_else(|| "Codex 档案中未找到 model（请检查 config TOML）".to_string());
+    }
+
+    let parsed: serde_json::Value =
+        serde_json::from_str(profile.settings_json.trim()).map_err(|e| format!("档案 settingsJson 无效: {e}"))?;
+    read_effective_model(&parsed)
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            let mid = profile.model_id.trim();
+            if mid.is_empty() {
+                None
+            } else {
+                Some(mid.to_string())
+            }
+        })
+        .ok_or_else(|| "档案中未找到模型 ID（请检查 env.ANTHROPIC_MODEL 等）".to_string())
+}
+
 fn apply_profile_to_disk(profile: &ClaudeModelProfile) -> Result<(), String> {
+    if profile_engine(profile) == "codex" {
+        let envelope = parse_codex_profile_envelope(&profile.settings_json)?;
+        return apply_codex_profile_envelope(&envelope);
+    }
+
     let path = user_claude_dir().join("settings.json");
     let current = read_json_file(&path).unwrap_or_else(|| serde_json::json!({}));
     let merged = apply_profile_settings_to_value(current, profile)?;
@@ -222,7 +285,9 @@ pub(crate) fn store_view(db: &WiseDb) -> ClaudeModelProfileStoreView {
     ClaudeModelProfileStoreView {
         profiles: store.profiles.clone(),
         active_profile_id: store.active_profile_id.clone(),
+        active_codex_profile_id: store.active_codex_profile_id.clone(),
         effective_model: effective_model_from_disk(),
+        effective_codex_model: effective_codex_model_from_disk(),
     }
 }
 
@@ -249,8 +314,12 @@ pub(crate) fn upsert_claude_model_profile(
     if profile.settings_json.trim().is_empty() {
         return Err("settingsJson 不能为空".to_string());
     }
-    let _: serde_json::Value = serde_json::from_str(profile.settings_json.trim())
-        .map_err(|e| format!("settingsJson 不是合法 JSON: {e}"))?;
+    if profile_engine(&profile) == "codex" {
+        parse_codex_profile_envelope(&profile.settings_json)?;
+    } else {
+        let _: serde_json::Value = serde_json::from_str(profile.settings_json.trim())
+            .map_err(|e| format!("settingsJson 不是合法 JSON: {e}"))?;
+    }
 
     let mut store = load_store(&db);
     let now = now_ms();
@@ -265,6 +334,7 @@ pub(crate) fn upsert_claude_model_profile(
         slot.name = name.to_string();
         slot.model_id = model_id.to_string();
         slot.settings_json = profile.settings_json;
+        slot.engine = profile.engine.trim().to_string();
         slot.updated_at_ms = now;
     } else {
         store.profiles.push(ClaudeModelProfile {
@@ -273,6 +343,11 @@ pub(crate) fn upsert_claude_model_profile(
             name: name.to_string(),
             model_id: model_id.to_string(),
             settings_json: profile.settings_json,
+            engine: if profile.engine.trim().is_empty() {
+                default_profile_engine()
+            } else {
+                profile.engine.trim().to_string()
+            },
             created_at_ms: now,
             updated_at_ms: now,
         });
@@ -295,6 +370,9 @@ pub(crate) fn delete_claude_model_profile(
     if store.active_profile_id.as_deref() == Some(id) {
         store.active_profile_id = None;
     }
+    if store.active_codex_profile_id.as_deref() == Some(id) {
+        store.active_codex_profile_id = None;
+    }
     save_store(&db, &store)?;
     Ok(store_view(&db))
 }
@@ -314,15 +392,25 @@ pub(crate) fn apply_claude_model_profile(
         .clone();
     apply_profile_to_disk(&profile)?;
     let mut next = store;
-    next.active_profile_id = Some(id.to_string());
+    if profile_engine(&profile) == "codex" {
+        next.active_codex_profile_id = Some(id.to_string());
+    } else {
+        next.active_profile_id = Some(id.to_string());
+    }
     if let Some(slot) = next.profiles.iter_mut().find(|p| p.id == id) {
-        if let Some(mid) = effective_model_from_disk() {
+        if let Ok(mid) = resolve_profile_model_id(slot) {
             slot.model_id = mid;
             slot.updated_at_ms = now_ms();
         }
     }
     save_store(&db, &next)?;
     Ok(store_view(&db))
+}
+
+#[tauri::command]
+pub(crate) fn get_codex_user_settings_json() -> Result<String, String> {
+    let envelope = read_codex_profile_envelope();
+    codex_profile_envelope_to_json(&envelope)
 }
 
 #[tauri::command]
@@ -373,6 +461,7 @@ pub(crate) fn create_claude_model_profile(
     company: Option<String>,
     name: String,
     settings_json: String,
+    engine: Option<String>,
 ) -> Result<ClaudeModelProfileStoreView, String> {
     let vendor = company.unwrap_or_default().trim().to_string();
     let label = name.trim();
@@ -383,15 +472,26 @@ pub(crate) fn create_claude_model_profile(
     if trimmed.is_empty() {
         return Err("配置 JSON 不能为空".to_string());
     }
-    let v: serde_json::Value =
-        serde_json::from_str(trimmed).map_err(|e| format!("配置 JSON 无效: {e}"))?;
-    if !v.is_object() {
-        return Err("配置 JSON 顶层必须是对象".to_string());
-    }
-    let pretty = serde_json::to_string_pretty(&v).map_err(|e| e.to_string())?;
-    let mid = read_effective_model(&v)
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "custom".to_string());
+    let engine_key = normalize_profile_engine(engine.as_deref().unwrap_or("claude")).to_string();
+    let (pretty, mid) = if engine_key == "codex" {
+        let envelope = parse_codex_profile_envelope(trimmed)?;
+        let pretty = codex_profile_envelope_to_json(&envelope)?;
+        let mid = read_effective_codex_model_from_envelope(&envelope)
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "custom".to_string());
+        (pretty, mid)
+    } else {
+        let v: serde_json::Value =
+            serde_json::from_str(trimmed).map_err(|e| format!("配置 JSON 无效: {e}"))?;
+        if !v.is_object() {
+            return Err("配置 JSON 顶层必须是对象".to_string());
+        }
+        let pretty = serde_json::to_string_pretty(&v).map_err(|e| e.to_string())?;
+        let mid = read_effective_model(&v)
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "custom".to_string());
+        (pretty, mid)
+    };
     let now = now_ms();
     let profile = ClaudeModelProfile {
         id: Uuid::new_v4().to_string(),
@@ -399,6 +499,7 @@ pub(crate) fn create_claude_model_profile(
         name: label.to_string(),
         model_id: mid,
         settings_json: pretty,
+        engine: engine_key,
         created_at_ms: now,
         updated_at_ms: now,
     };
@@ -435,6 +536,7 @@ pub(crate) fn create_claude_model_profile_from_current(
         name: label.to_string(),
         model_id: mid,
         settings_json,
+        engine: default_profile_engine(),
         created_at_ms: now,
         updated_at_ms: now,
     };
@@ -463,6 +565,7 @@ mod tests {
               }
             }"#
             .into(),
+            engine: default_profile_engine(),
             created_at_ms: 0,
             updated_at_ms: 0,
         };
@@ -483,6 +586,7 @@ mod tests {
             name: "Test".into(),
             model_id: "qwen3.6-plus".into(),
             settings_json: r#"{"env":{"ANTHROPIC_BASE_URL":"http://127.0.0.1:8082"}}"#.into(),
+            engine: default_profile_engine(),
             created_at_ms: 0,
             updated_at_ms: 0,
         };

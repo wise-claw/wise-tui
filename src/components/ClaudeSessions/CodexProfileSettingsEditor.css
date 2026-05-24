@@ -1,0 +1,35 @@
+.app-codex-profile-settings-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.app-codex-profile-settings-editor__section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.app-codex-profile-settings-editor__section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.app-codex-profile-settings-editor__section-hint {
+  color: var(--ant-color-text-secondary);
+  font-size: 11px;
+}
+
+.app-codex-profile-settings-editor__pane {
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.app-codex-profile-settings-editor__pane--loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

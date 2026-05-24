@@ -1,33 +1,52 @@
 import { CloudSyncOutlined, DeleteOutlined, PlusOutlined, SettingOutlined } from "@ant-design/icons";
-import { Button, Empty, Input, List, Modal, Typography, message } from "antd";
-import { useCallback, useEffect, useState } from "react";
+import { Button, Empty, Input, List, Modal, Segmented, Typography, message } from "antd";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   applyClaudeModelProfile,
   createClaudeModelProfile,
   deleteClaudeModelProfile,
   getClaudeModelProfileStore,
   getClaudeUserSettingsJson,
+  getCodexUserSettingsJson,
   saveClaudeUserSettingsJson,
   upsertClaudeModelProfile,
   syncClaudeModelProfilesFromCcSwitch,
   dispatchClaudeUserSettingsChanged,
 } from "../../services/claudeModelProfiles";
 import type { ClaudeModelProfile, ClaudeModelProfileStoreView } from "../../types/claudeModelProfile";
+import {
+  normalizeModelProfileEngine,
+  type ModelProfileEngine,
+} from "../../types/claudeModelProfile";
 import { formatClaudeModelLabel } from "../../utils/claudeModel";
+import {
+  EMPTY_CODEX_AUTH_JSON,
+  EMPTY_CODEX_CONFIG_TOML,
+  parseCodexProfileEnvelopeJson,
+  serializeCodexProfileEnvelope,
+  validateCodexProfileDraft,
+} from "../../utils/codexProfileEnvelope";
 import { ClaudeSettingsJsonEditor } from "./ClaudeSettingsJsonEditor";
+import { CodexProfileSettingsEditor } from "./CodexProfileSettingsEditor";
 import "./ClaudeModelTopbarTrigger.css";
 
 interface Props {
   onApplied?: () => void;
 }
 
-function validateSettingsJson(text: string): string | null {
+function validateSettingsJson(text: string, engine: ModelProfileEngine): string | null {
   const trimmed = text.trim();
   if (!trimmed) return "配置 JSON 不能为空";
   try {
     const v = JSON.parse(trimmed) as unknown;
     if (v === null || typeof v !== "object" || Array.isArray(v)) {
       return "配置 JSON 顶层必须是对象";
+    }
+    if (engine === "codex") {
+      const obj = v as Record<string, unknown>;
+      if (!("auth" in obj) && !("config" in obj)) {
+        return "Codex 配置需包含 auth 与 config 字段（与 CC Switch 一致）";
+      }
     }
     return null;
   } catch (e) {
@@ -36,12 +55,15 @@ function validateSettingsJson(text: string): string | null {
 }
 
 export function ClaudeModelTopbarPanel({ onApplied }: Props) {
+  const [panelEngine, setPanelEngine] = useState<ModelProfileEngine>("claude");
   const [store, setStore] = useState<ClaudeModelProfileStoreView | null>(null);
   const [loading, setLoading] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [addCompany, setAddCompany] = useState("");
   const [addName, setAddName] = useState("");
   const [addSettingsJson, setAddSettingsJson] = useState("{\n}\n");
+  const [addCodexAuthJson, setAddCodexAuthJson] = useState(EMPTY_CODEX_AUTH_JSON);
+  const [addCodexConfigToml, setAddCodexConfigToml] = useState(EMPTY_CODEX_CONFIG_TOML);
   const [addLoadingJson, setAddLoadingJson] = useState(false);
   const [addSaving, setAddSaving] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
@@ -49,6 +71,8 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
   const [configCompany, setConfigCompany] = useState("");
   const [configName, setConfigName] = useState("");
   const [settingsDraft, setSettingsDraft] = useState("");
+  const [configCodexAuthJson, setConfigCodexAuthJson] = useState(EMPTY_CODEX_AUTH_JSON);
+  const [configCodexConfigToml, setConfigCodexConfigToml] = useState(EMPTY_CODEX_CONFIG_TOML);
   const [savingConfig, setSavingConfig] = useState(false);
   const [syncingCcSwitch, setSyncingCcSwitch] = useState(false);
 
@@ -71,19 +95,28 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
   const loadGlobalSettingsIntoAdd = useCallback(async () => {
     setAddLoadingJson(true);
     try {
-      const text = await getClaudeUserSettingsJson();
-      setAddSettingsJson(text);
+      if (panelEngine === "codex") {
+        const text = await getCodexUserSettingsJson();
+        const draft = parseCodexProfileEnvelopeJson(text);
+        setAddCodexAuthJson(draft.authJson);
+        setAddCodexConfigToml(draft.configToml);
+      } else {
+        const text = await getClaudeUserSettingsJson();
+        setAddSettingsJson(text);
+      }
     } catch (e) {
       message.error(typeof e === "string" ? e : "读取全局配置失败");
     } finally {
       setAddLoadingJson(false);
     }
-  }, []);
+  }, [panelEngine]);
 
   const openAddModal = useCallback(() => {
     setAddCompany("");
     setAddName("");
     setAddSettingsJson("{\n}\n");
+    setAddCodexAuthJson(EMPTY_CODEX_AUTH_JSON);
+    setAddCodexConfigToml(EMPTY_CODEX_CONFIG_TOML);
     setAddOpen(true);
     void loadGlobalSettingsIntoAdd();
   }, [loadGlobalSettingsIntoAdd]);
@@ -93,11 +126,15 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
       try {
         const next = await applyClaudeModelProfile(profileId);
         setStore(next);
-        const effective = next.effectiveModel?.trim() || null;
+        const effective =
+          (panelEngine === "codex" ? next.effectiveCodexModel : next.effectiveModel)?.trim() ||
+          null;
         message.success(
           effective
             ? `已切换模型配置，当前模型：${formatClaudeModelLabel(effective)}`
-            : "已切换并替换 Claude Code 全局 settings.json",
+            : panelEngine === "codex"
+              ? "已切换并写入 Codex 全局 auth.json / config.toml"
+              : "已切换并替换 Claude Code 全局 settings.json",
         );
         dispatchClaudeUserSettingsChanged({ effectiveModel: effective });
         onApplied?.();
@@ -105,7 +142,7 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
         message.error(typeof e === "string" ? e : "切换失败");
       }
     },
-    [onApplied],
+    [onApplied, panelEngine],
   );
 
   const handleAdd = useCallback(async () => {
@@ -114,14 +151,35 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
       message.warning("请输入配置名称");
       return;
     }
-    const jsonErr = validateSettingsJson(addSettingsJson);
-    if (jsonErr) {
-      message.warning(jsonErr);
-      return;
+    let settingsPayload = addSettingsJson;
+    if (panelEngine === "codex") {
+      const codexErr = validateCodexProfileDraft({
+        authJson: addCodexAuthJson,
+        configToml: addCodexConfigToml,
+      });
+      if (codexErr) {
+        message.warning(codexErr);
+        return;
+      }
+      try {
+        settingsPayload = serializeCodexProfileEnvelope({
+          authJson: addCodexAuthJson,
+          configToml: addCodexConfigToml,
+        });
+      } catch (e) {
+        message.warning(e instanceof Error ? e.message : "Codex 配置合并失败");
+        return;
+      }
+    } else {
+      const jsonErr = validateSettingsJson(addSettingsJson, panelEngine);
+      if (jsonErr) {
+        message.warning(jsonErr);
+        return;
+      }
     }
     setAddSaving(true);
     try {
-      const next = await createClaudeModelProfile(addCompany, name, addSettingsJson);
+      const next = await createClaudeModelProfile(addCompany, name, settingsPayload, panelEngine);
       setStore(next);
       setAddOpen(false);
       setAddCompany("");
@@ -132,13 +190,27 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
     } finally {
       setAddSaving(false);
     }
-  }, [addCompany, addName, addSettingsJson]);
+  }, [addCompany, addName, addSettingsJson, addCodexAuthJson, addCodexConfigToml, panelEngine]);
 
   const openConfig = useCallback((profile: ClaudeModelProfile) => {
     setConfigProfile(profile);
     setConfigCompany(profile.company?.trim() || profile.name?.trim() || "");
     setConfigName(profile.name || "");
-    setSettingsDraft(profile.settingsJson);
+    if (normalizeModelProfileEngine(profile.engine) === "codex") {
+      try {
+        const draft = parseCodexProfileEnvelopeJson(profile.settingsJson);
+        setConfigCodexAuthJson(draft.authJson);
+        setConfigCodexConfigToml(draft.configToml);
+      } catch {
+        setConfigCodexAuthJson(EMPTY_CODEX_AUTH_JSON);
+        setConfigCodexConfigToml(EMPTY_CODEX_CONFIG_TOML);
+      }
+      setSettingsDraft("");
+    } else {
+      setSettingsDraft(profile.settingsJson);
+      setConfigCodexAuthJson(EMPTY_CODEX_AUTH_JSON);
+      setConfigCodexConfigToml(EMPTY_CODEX_CONFIG_TOML);
+    }
     setConfigOpen(true);
     setSavingConfig(false);
   }, []);
@@ -150,10 +222,32 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
       message.warning("请输入配置名称");
       return;
     }
-    const jsonErr = validateSettingsJson(settingsDraft);
-    if (jsonErr) {
-      message.warning(jsonErr);
-      return;
+    const profileEngine = normalizeModelProfileEngine(configProfile.engine);
+    let settingsJson = settingsDraft;
+    if (profileEngine === "codex") {
+      const codexErr = validateCodexProfileDraft({
+        authJson: configCodexAuthJson,
+        configToml: configCodexConfigToml,
+      });
+      if (codexErr) {
+        message.warning(codexErr);
+        return;
+      }
+      try {
+        settingsJson = serializeCodexProfileEnvelope({
+          authJson: configCodexAuthJson,
+          configToml: configCodexConfigToml,
+        });
+      } catch (e) {
+        message.warning(e instanceof Error ? e.message : "Codex 配置合并失败");
+        return;
+      }
+    } else {
+      const jsonErr = validateSettingsJson(settingsDraft, profileEngine);
+      if (jsonErr) {
+        message.warning(jsonErr);
+        return;
+      }
     }
     setSavingConfig(true);
     try {
@@ -161,18 +255,28 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
         ...configProfile,
         company: configCompany.trim(),
         name,
-        settingsJson: settingsDraft,
+        settingsJson,
+        engine: profileEngine,
         updatedAtMs: Date.now(),
       };
       const next = await upsertClaudeModelProfile(updatedProfile);
       setStore(next);
+      const profileEngine = normalizeModelProfileEngine(configProfile.engine);
       message.success(
-        next.effectiveModel?.trim()
-          ? `已保存全局配置，当前模型：${formatClaudeModelLabel(next.effectiveModel.trim())}`
-          : "已保存到数据库并写入 Claude Code 全局 settings.json",
+        (profileEngine === "codex" ? next.effectiveCodexModel : next.effectiveModel)?.trim()
+          ? `已保存全局配置，当前模型：${formatClaudeModelLabel(
+              (profileEngine === "codex"
+                ? next.effectiveCodexModel
+                : next.effectiveModel)!.trim(),
+            )}`
+          : profileEngine === "codex"
+            ? "已保存 Codex 档案"
+            : "已保存到数据库并写入 Claude Code 全局 settings.json",
       );
       dispatchClaudeUserSettingsChanged({
-        effectiveModel: next.effectiveModel?.trim() || null,
+        effectiveModel:
+          (profileEngine === "codex" ? next.effectiveCodexModel : next.effectiveModel)?.trim() ||
+          null,
       });
       setConfigOpen(false);
       setConfigProfile(null);
@@ -182,7 +286,7 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
     } finally {
       setSavingConfig(false);
     }
-  }, [configProfile, configCompany, configName, settingsDraft, onApplied]);
+  }, [configProfile, configCompany, configName, settingsDraft, configCodexAuthJson, configCodexConfigToml, onApplied]);
 
   const handleSyncFromCcSwitch = useCallback(async () => {
     setSyncingCcSwitch(true);
@@ -207,8 +311,20 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
     }
   }, []);
 
-  const effective = store?.effectiveModel?.trim() || "—";
-  const profiles = store?.profiles ?? [];
+  const profiles = useMemo(
+    () =>
+      (store?.profiles ?? []).filter(
+        (item) => normalizeModelProfileEngine(item.engine) === panelEngine,
+      ),
+    [panelEngine, store?.profiles],
+  );
+  const activeProfileId =
+    panelEngine === "codex" ? store?.activeCodexProfileId : store?.activeProfileId;
+  const effective =
+    (panelEngine === "codex" ? store?.effectiveCodexModel : store?.effectiveModel)?.trim() || "—";
+  const engineLabel = panelEngine === "codex" ? "Codex" : "Claude Code";
+  const editingCodexProfile =
+    configProfile != null && normalizeModelProfileEngine(configProfile.engine) === "codex";
 
   return (
     <div className="app-claude-model-topbar-panel">
@@ -229,12 +345,22 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
         <Typography.Text type="secondary" className="app-claude-model-topbar-panel__effective">
           当前：{formatClaudeModelLabel(effective)}
         </Typography.Text>
+        <Segmented
+          size="small"
+          className="app-claude-model-topbar-panel__engine-tabs"
+          value={panelEngine}
+          options={[
+            { label: "Claude", value: "claude" },
+            { label: "Codex", value: "codex" },
+          ]}
+          onChange={(value) => setPanelEngine(value as ModelProfileEngine)}
+        />
       </header>
 
       {profiles.length === 0 ? (
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description="暂无已保存的模型配置"
+          description={`暂无已保存的 ${engineLabel} 模型配置`}
           className="app-claude-model-topbar-panel__empty"
         />
       ) : (
@@ -244,7 +370,7 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
           dataSource={profiles}
           loading={loading}
           renderItem={(item) => {
-            const active = store?.activeProfileId === item.id;
+            const active = activeProfileId === item.id;
             return (
               <List.Item
                 className={
@@ -252,29 +378,29 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
                   (active ? " app-claude-model-topbar-panel__item--active" : "")
                 }
                 actions={[
-                  <Button
-                    key="cfg"
-                    type="text"
-                    size="small"
-                    icon={<SettingOutlined />}
-                    aria-label={`配置 ${item.name}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openConfig(item);
-                    }}
-                  />,
-                  <Button
-                    key="del"
-                    type="text"
-                    size="small"
-                    danger
-                    icon={<DeleteOutlined />}
-                    aria-label={`删除 ${item.name}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void handleDelete(item.id);
-                    }}
-                  />,
+                  <span key="actions" className="app-claude-model-topbar-panel__item-actions">
+                    <Button
+                      type="text"
+                      size="small"
+                      icon={<SettingOutlined />}
+                      aria-label={`配置 ${item.name}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openConfig(item);
+                      }}
+                    />
+                    <Button
+                      type="text"
+                      size="small"
+                      danger
+                      icon={<DeleteOutlined />}
+                      aria-label={`删除 ${item.name}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void handleDelete(item.id);
+                      }}
+                    />
+                  </span>,
                 ]}
               >
                 <button
@@ -333,6 +459,9 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
         title="新增模型配置"
         open={addOpen}
         width={modalWidth()}
+        classNames={
+          panelEngine === "codex" ? { body: "app-claude-model-topbar-modal__body--codex" } : undefined
+        }
         onCancel={() => setAddOpen(false)}
         onOk={() => void handleAdd()}
         okText="保存"
@@ -361,13 +490,25 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
           </div>
           <div className="app-claude-model-topbar-panel__json-head">
             <div className="app-claude-model-topbar-panel__json-head-text">
-              <label className="app-claude-model-topbar-panel__label">配置 JSON</label>
+              <label className="app-claude-model-topbar-panel__label">
+                {panelEngine === "codex" ? "Codex 配置" : "配置 JSON"}
+              </label>
               <Typography.Text
                 type="secondary"
                 className="app-claude-model-topbar-panel__hint app-claude-model-topbar-panel__hint--subtitle"
               >
-                完整 Claude Code 用户级 <Typography.Text code>settings.json</Typography.Text>
-                ；切换配置时将整体替换全局文件（与 cc-switch 相同）。
+                {panelEngine === "codex" ? (
+                  <>
+                    分别编辑 <Typography.Text code>auth.json</Typography.Text> 与{" "}
+                    <Typography.Text code>config.toml</Typography.Text>；保存后写入{" "}
+                    <Typography.Text code>~/.codex/</Typography.Text>（与 CC Switch 相同）。
+                  </>
+                ) : (
+                  <>
+                    完整 Claude Code 用户级 <Typography.Text code>settings.json</Typography.Text>
+                    ；切换配置时将整体替换全局文件（与 cc-switch 相同）。
+                  </>
+                )}
               </Typography.Text>
             </div>
             <Button
@@ -380,11 +521,20 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
               载入当前全局配置
             </Button>
           </div>
-          <ClaudeSettingsJsonEditor
-            value={addSettingsJson}
-            onChange={setAddSettingsJson}
-            height={360}
-          />
+          {panelEngine === "codex" ? (
+            <CodexProfileSettingsEditor
+              authJson={addCodexAuthJson}
+              configToml={addCodexConfigToml}
+              onAuthJsonChange={setAddCodexAuthJson}
+              onConfigTomlChange={setAddCodexConfigToml}
+            />
+          ) : (
+            <ClaudeSettingsJsonEditor
+              value={addSettingsJson}
+              onChange={setAddSettingsJson}
+              height={360}
+            />
+          )}
         </div>
       </Modal>
 
@@ -392,6 +542,9 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
         title={configProfile ? `全局配置 · ${configProfile.name}` : "全局配置"}
         open={configOpen}
         width={modalWidth()}
+        classNames={
+          editingCodexProfile ? { body: "app-claude-model-topbar-modal__body--codex" } : undefined
+        }
         onCancel={() => {
           setConfigOpen(false);
           setConfigProfile(null);
@@ -423,18 +576,38 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
           </div>
           <div className="app-claude-model-topbar-panel__json-head">
             <div className="app-claude-model-topbar-panel__json-head-text">
-              <label className="app-claude-model-topbar-panel__label">配置 JSON</label>
+              <label className="app-claude-model-topbar-panel__label">
+                {editingCodexProfile ? "Codex 配置" : "配置 JSON"}
+              </label>
               <Typography.Paragraph type="secondary" className="app-claude-model-topbar-panel__hint">
-                编辑后将写入用户级 Claude Code <Typography.Text code>settings.json</Typography.Text>
-                ，并更新该档案。
+                {editingCodexProfile ? (
+                  <>
+                    分别编辑 <Typography.Text code>auth.json</Typography.Text> 与{" "}
+                    <Typography.Text code>config.toml</Typography.Text>，保存后更新档案。
+                  </>
+                ) : (
+                  <>
+                    编辑后将写入用户级 Claude Code <Typography.Text code>settings.json</Typography.Text>
+                    ，并更新该档案。
+                  </>
+                )}
               </Typography.Paragraph>
             </div>
           </div>
-          <ClaudeSettingsJsonEditor
-            value={settingsDraft}
-            onChange={setSettingsDraft}
-            height={360}
-          />
+          {editingCodexProfile ? (
+            <CodexProfileSettingsEditor
+              authJson={configCodexAuthJson}
+              configToml={configCodexConfigToml}
+              onAuthJsonChange={setConfigCodexAuthJson}
+              onConfigTomlChange={setConfigCodexConfigToml}
+            />
+          ) : (
+            <ClaudeSettingsJsonEditor
+              value={settingsDraft}
+              onChange={setSettingsDraft}
+              height={360}
+            />
+          )}
         </div>
       </Modal>
     </div>
