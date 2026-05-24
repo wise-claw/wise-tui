@@ -750,8 +750,6 @@ export function LeftSidebar({
         associateSelectValue={repositoryAssociateModal.associateSelectValue}
         onAssociateSelectValueChange={repositoryAssociateModal.setAssociateSelectValue}
         onRepositoryTypeChange={repositoryAssociateModal.setRepositoryType}
-        sddMode={repositoryAssociateModal.sddMode}
-        onSddModeChange={repositoryAssociateModal.setSddMode}
         workspaceBootstrapSelection={repositoryAssociateModal.workspaceBootstrapSelection}
         onWorkspaceBootstrapSelectionChange={repositoryAssociateModal.setWorkspaceBootstrapSelection}
         iconDisplayName={repositoryAssociateModal.iconDisplayName}

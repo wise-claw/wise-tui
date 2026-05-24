@@ -5,6 +5,11 @@ mock.module("./trellisBootstrap", () => ({
   bootstrapTrellisIfMissing: mock(async () => {}),
 }));
 
+mock.module("./claudePluginMarket", () => ({
+  claudePluginMarketBootstrap: mock(async () => ({ ok: true, log: "" })),
+  claudePluginInstall: mock(async () => "ok"),
+}));
+
 describe("runWorkspaceBootstrap", () => {
   test("runs trellis by default selection", async () => {
     const trellis = (await import("./trellisBootstrap")).bootstrapTrellisIfMissing as ReturnType<typeof mock>;
@@ -17,21 +22,43 @@ describe("runWorkspaceBootstrap", () => {
     expect(bootstrapTrellisIfMissing).toHaveBeenCalledWith("/tmp/workspace");
   });
 
-  test("skips trellis when Wise Trellis is disabled", async () => {
+  test("skips trellis when only omc is selected", async () => {
+    const trellis = (await import("./trellisBootstrap")).bootstrapTrellisIfMissing as ReturnType<typeof mock>;
+    trellis.mockClear();
+
+    const { bootstrapTrellisIfMissing } = await import("./trellisBootstrap");
+    const { claudePluginInstall } = await import("./claudePluginMarket");
+    const { runWorkspaceBootstrap } = await import("./workspaceBootstrap");
+
+    await runWorkspaceBootstrap("/tmp/ws2", {
+      trellis: false,
+      trellisInit: false,
+      omc: true,
+      superpowers: false,
+      gsd: false,
+      openspec: false,
+    });
+
+    expect(bootstrapTrellisIfMissing).not.toHaveBeenCalled();
+    expect(claudePluginInstall).toHaveBeenCalled();
+  });
+
+  test("runs trellis init for trellis-only selection", async () => {
     const trellis = (await import("./trellisBootstrap")).bootstrapTrellisIfMissing as ReturnType<typeof mock>;
     trellis.mockClear();
 
     const { bootstrapTrellisIfMissing } = await import("./trellisBootstrap");
     const { runWorkspaceBootstrap } = await import("./workspaceBootstrap");
 
-    await runWorkspaceBootstrap("/tmp/ws2", {
+    await runWorkspaceBootstrap("/tmp/ws3", {
       trellis: false,
-      omc: true,
-      superpowers: true,
+      trellisInit: true,
+      omc: false,
+      superpowers: false,
       gsd: false,
-      openspec: true,
+      openspec: false,
     });
 
-    expect(bootstrapTrellisIfMissing).not.toHaveBeenCalled();
+    expect(bootstrapTrellisIfMissing).toHaveBeenCalledWith("/tmp/ws3");
   });
 });

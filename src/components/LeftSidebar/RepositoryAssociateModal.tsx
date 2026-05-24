@@ -1,9 +1,8 @@
 import { Button, Divider, Input, Modal, Select, Space, Tooltip } from "antd";
-import type { AddRepositoryOptions, Repository, RepositoryAssociatePreset, SddMode } from "../../types";
+import type { AddRepositoryOptions, Repository, RepositoryAssociatePreset } from "../../types";
 import type { WorkspaceBootstrapSelection } from "../../constants/workspaceBootstrapAddons";
 import { REPOSITORY_ICON_COLOR_PRESETS } from "../../utils/repositoryType";
 import { WorkspaceBootstrapPicker } from "../WorkspaceBootstrapPicker";
-import { SddModeSwitch } from "../SddModeSwitch";
 
 interface RepositoryAssociateModalProps {
   open: boolean;
@@ -11,8 +10,6 @@ interface RepositoryAssociateModalProps {
   associateSelectValue: string;
   onAssociateSelectValueChange: (value: string) => void;
   onRepositoryTypeChange: (value: Repository["repositoryType"]) => void;
-  sddMode: SddMode;
-  onSddModeChange: (value: SddMode) => void;
   workspaceBootstrapSelection: WorkspaceBootstrapSelection;
   onWorkspaceBootstrapSelectionChange: (value: WorkspaceBootstrapSelection) => void;
   iconDisplayName: string;
@@ -36,8 +33,6 @@ export function RepositoryAssociateModal({
   associateSelectValue,
   onAssociateSelectValueChange,
   onRepositoryTypeChange,
-  sddMode,
-  onSddModeChange,
   workspaceBootstrapSelection,
   onWorkspaceBootstrapSelectionChange,
   iconDisplayName,
@@ -137,22 +132,13 @@ export function RepositoryAssociateModal({
             style={{ width: "100%" }}
           />
         </div>
-        {floatingMode ? (
+        <div>
+          <div className="app-add-repo-field-label">SDD 与内置能力</div>
           <WorkspaceBootstrapPicker
             selection={workspaceBootstrapSelection}
             onChange={onWorkspaceBootstrapSelectionChange}
           />
-        ) : (
-          <div>
-            <div className="app-add-repo-field-label">SDD 模式</div>
-            <SddModeSwitch
-              value={sddMode}
-              autoResolved="wise_trellis"
-              onChange={onSddModeChange}
-              size="small"
-            />
-          </div>
-        )}
+        </div>
       </Space>
     </Modal>
   );
@@ -161,22 +147,16 @@ export function RepositoryAssociateModal({
 export function buildAddRepositoryOptions({
   iconDisplayName,
   iconColor,
-  sddMode,
   bootstrap,
-  floatingMode,
 }: {
   iconDisplayName: string;
   iconColor: string | null;
-  sddMode?: SddMode;
   bootstrap?: WorkspaceBootstrapSelection;
-  floatingMode?: boolean;
 }): AddRepositoryOptions {
   const iconText = iconDisplayName.trim();
-  const resolvedBootstrap = floatingMode ? bootstrap : undefined;
   return {
     iconDisplayName: iconText.length > 0 ? iconText : undefined,
     iconColor,
-    bootstrap: resolvedBootstrap,
-    sddMode: resolvedBootstrap ? undefined : sddMode,
+    bootstrap,
   };
 }

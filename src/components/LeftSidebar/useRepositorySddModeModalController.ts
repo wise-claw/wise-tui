@@ -1,10 +1,17 @@
 import { App as AntdApp } from "antd";
 import { useCallback, useEffect, useState } from "react";
-import type { Repository, SddMode } from "../../types";
+import type { Repository } from "../../types";
+import {
+  sddStackModeFromRepositorySddMode,
+  sddStackModeToBootstrap,
+  sddStackModeToSddMode,
+  type SddStackMode,
+} from "../../constants/sddStackMode";
 import { detectSddSignals, type SddSignals } from "../../services/trellis/sddModeDetector";
+import { runWorkspaceBootstrap } from "../../services/workspaceBootstrap";
 
 interface UseRepositorySddModeModalControllerInput {
-  onUpdateRepositorySddMode?: (repositoryId: number, sddMode: SddMode) => void | Promise<void>;
+  onUpdateRepositorySddMode?: (repositoryId: number, sddMode: Repository["sddMode"]) => void | Promise<void>;
 }
 
 const EMPTY_SDD_SIGNALS: SddSignals = {
@@ -19,7 +26,7 @@ export function useRepositorySddModeModalController({
 }: UseRepositorySddModeModalControllerInput) {
   const { message } = AntdApp.useApp();
   const [repository, setRepository] = useState<Repository | null>(null);
-  const [value, setValue] = useState<SddMode>("auto");
+  const [value, setValue] = useState<SddStackMode>("auto");
   const [saving, setSaving] = useState(false);
   const [signals, setSignals] = useState<SddSignals | null>(null);
 
@@ -45,7 +52,7 @@ export function useRepositorySddModeModalController({
 
   const open = useCallback((nextRepository: Repository) => {
     setRepository(nextRepository);
-    setValue(nextRepository.sddMode ?? "auto");
+    setValue(sddStackModeFromRepositorySddMode(nextRepository.sddMode));
   }, []);
 
   const cancel = useCallback(() => {
@@ -59,12 +66,17 @@ export function useRepositorySddModeModalController({
     }
     setSaving(true);
     try {
-      await onUpdateRepositorySddMode(repository.id, value);
+      const bootstrap = sddStackModeToBootstrap(value);
+      const sddMode = sddStackModeToSddMode(value);
+      if (bootstrap.trellis || bootstrap.trellisInit || bootstrap.omc) {
+        await runWorkspaceBootstrap(repository.path, bootstrap);
+      }
+      await onUpdateRepositorySddMode(repository.id, sddMode);
       message.success("SDD 模式已保存");
       setRepository(null);
     } catch (err) {
       console.error(err);
-      message.error("保存 SDD 模式失败");
+      message.error(err instanceof Error ? err.message : "保存 SDD 模式失败");
     } finally {
       setSaving(false);
     }

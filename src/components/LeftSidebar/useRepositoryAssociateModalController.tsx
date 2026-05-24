@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { App as AntdApp } from "antd";
-import type { AddRepositoryOptions, Repository, RepositoryAssociatePreset, SddMode } from "../../types";
+import type { AddRepositoryOptions, Repository, RepositoryAssociatePreset } from "../../types";
 import { DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION } from "../../constants/workspaceBootstrapAddons";
 import {
   REPOSITORY_ASSOCIATE_PRESETS_MAX,
@@ -46,7 +46,6 @@ export function useRepositoryAssociateModalController({
   const [pendingProjectId, setPendingProjectId] = useState<string | null>(null);
   const [floatingMode, setFloatingMode] = useState(false);
   const [repositoryType, setRepositoryType] = useState<Repository["repositoryType"]>("frontend");
-  const [sddMode, setSddMode] = useState<SddMode>("auto");
   const [workspaceBootstrapSelection, setWorkspaceBootstrapSelection] = useState(
     () => ({ ...DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION }),
   );
@@ -58,7 +57,6 @@ export function useRepositoryAssociateModalController({
   const resetDraft = useCallback(() => {
     setAssociateSelectValue("frontend");
     setRepositoryType("frontend");
-    setSddMode("auto");
     setWorkspaceBootstrapSelection({ ...DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION });
     setIconDisplayName("");
     setIconColor(null);
@@ -193,9 +191,7 @@ export function useRepositoryAssociateModalController({
     const options = buildAddRepositoryOptions({
       iconDisplayName,
       iconColor,
-      sddMode,
       bootstrap: workspaceBootstrapSelection,
-      floatingMode,
     });
     if (floatingMode) {
       if (!onAddFloatingRepository) {
@@ -225,7 +221,6 @@ export function useRepositoryAssociateModalController({
     pendingProjectId,
     presets,
     repositoryType,
-    sddMode,
     workspaceBootstrapSelection,
   ]);
 
@@ -236,8 +231,6 @@ export function useRepositoryAssociateModalController({
     setAssociateSelectValue,
     repositoryType,
     setRepositoryType,
-    sddMode,
-    setSddMode,
     workspaceBootstrapSelection,
     setWorkspaceBootstrapSelection,
     iconDisplayName,

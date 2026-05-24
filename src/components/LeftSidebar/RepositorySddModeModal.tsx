@@ -1,16 +1,17 @@
 import { Modal, Space, Typography } from "antd";
-import type { Repository, SddMode } from "../../types";
+import type { Repository } from "../../types";
 import { resolveAutoSddMode, type SddSignals } from "../../services/trellis/sddModeDetector";
+import type { SddStackMode } from "../../constants/sddStackMode";
+import { SddStackModeSwitch } from "../SddStackModeSwitch";
 import { repositoryFolderBasename } from "../../utils/repositoryType";
-import { SddModeSwitch } from "../SddModeSwitch";
 
 interface RepositorySddModeModalProps {
   repository: Repository | null;
-  value: SddMode;
+  value: SddStackMode;
   signals: SddSignals | null;
   saving: boolean;
   canSave: boolean;
-  onValueChange: (value: SddMode) => void;
+  onValueChange: (value: SddStackMode) => void;
   onCancel: () => void;
   onSubmit: () => void;
 }
@@ -34,13 +35,16 @@ export function RepositorySddModeModal({
       confirmLoading={saving}
       okText="保存"
       cancelText="取消"
-      width={460}
+      width={520}
     >
-      <Space orientation="vertical" size={10} style={{ width: "100%" }}>
+      <Space direction="vertical" size={8} style={{ width: "100%" }}>
         <Typography.Text strong>
           {repository ? repositoryFolderBasename(repository) : ""}
         </Typography.Text>
-        <SddModeSwitch
+        <Typography.Text type="secondary" className="app-add-repo-field-label">
+          选择内置能力栈；保存时将按选项初始化 .trellis 或安装 OMC 插件。
+        </Typography.Text>
+        <SddStackModeSwitch
           value={value}
           autoResolved={resolveAutoSddMode(
             signals ?? {
