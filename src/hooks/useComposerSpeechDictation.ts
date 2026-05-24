@@ -37,6 +37,8 @@ export interface ComposerSpeechTranscriptUpdate {
 export interface UseComposerSpeechDictationOptions {
   /** 为 false 时不启动识别（例如会话占用中）。 */
   enabled?: boolean;
+  /** enabled 变为 false 时若返回 true，则不自动 stop（连续听写 + 自动发送场景）。 */
+  retainSessionWhenDisabled?: () => boolean;
   /** BCP-47 语言，默认 zh-CN。 */
   lang?: string;
   /** 流式 partial 或 final 更新（边说边出字）。 */
@@ -50,6 +52,7 @@ const PCM_FLUSH_MS = 120;
 
 export function useComposerSpeechDictation({
   enabled = true,
+  retainSessionWhenDisabled,
   lang = "zh-CN",
   onTranscriptUpdate,
   onSessionEnd,
@@ -67,12 +70,15 @@ export function useComposerSpeechDictation({
   const captureSampleRateRef = useRef(16_000);
   const pcmPendingRef = useRef<Float32Array[]>([]);
   const pcmFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const finishingStreamRef = useRef(false);
   const onUpdateRef = useRef(onTranscriptUpdate);
   const onSessionEndRef = useRef(onSessionEnd);
   const onErrorRef = useRef(onError);
+  const retainSessionWhenDisabledRef = useRef(retainSessionWhenDisabled);
   onUpdateRef.current = onTranscriptUpdate;
   onSessionEndRef.current = onSessionEnd;
   onErrorRef.current = onError;
+  retainSessionWhenDisabledRef.current = retainSessionWhenDisabled;
 
   const webSupported = useMemo(() => isSpeechRecognitionSupported(), []);
 
@@ -144,6 +150,7 @@ export function useComposerSpeechDictation({
   const cancelLocalStream = useCallback(() => {
     clearPcmFlushTimer();
     pcmPendingRef.current = [];
+    finishingStreamRef.current = false;
     const sessionId = streamSessionIdRef.current;
     streamSessionIdRef.current = null;
     if (sessionId) {
@@ -228,11 +235,13 @@ export function useComposerSpeechDictation({
     }
 
     setTranscribing(true);
+    finishingStreamRef.current = true;
     try {
       await finishComposerStreamingSpeech(sessionId);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       onErrorRef.current?.(msg || "结束语音转写失败");
+      finishingStreamRef.current = false;
       streamSessionIdRef.current = null;
       setTranscribing(false);
       setListening(false);
@@ -325,11 +334,23 @@ export function useComposerSpeechDictation({
       if (sessionId !== streamSessionIdRef.current) return;
       if (error?.trim()) {
         onErrorRef.current?.(error.trim());
+        if (isFinal) {
+          finishingStreamRef.current = false;
+          streamSessionIdRef.current = null;
+          setTranscribing(false);
+          setListening(false);
+          wantListeningRef.current = false;
+          onSessionEndRef.current?.();
+        }
+        return;
       }
       if (transcript) {
         onUpdateRef.current({ text: transcript, isFinal });
       }
       if (!isFinal) return;
+      // 句段 final 不结束会话；仅用户点击停止（finish）后的 final 才收尾。
+      if (!finishingStreamRef.current) return;
+      finishingStreamRef.current = false;
       streamSessionIdRef.current = null;
       setTranscribing(false);
       setListening(false);
@@ -344,7 +365,9 @@ export function useComposerSpeechDictation({
   }, []);
 
   useEffect(() => {
-    if (!enabled && (listening || wantListeningRef.current || transcribing)) {
+    if (enabled) return;
+    if (retainSessionWhenDisabledRef.current?.()) return;
+    if (listening || wantListeningRef.current || transcribing) {
       stop();
     }
   }, [enabled, listening, stop, transcribing]);

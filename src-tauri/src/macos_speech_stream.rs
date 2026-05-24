@@ -42,6 +42,8 @@ struct StreamingSpeechSession {
     request: Retained<SFSpeechAudioBufferRecognitionRequest>,
     task: Retained<SFSpeechRecognitionTask>,
     format: Retained<AVAudioFormat>,
+    /// 用户点击停止并 `endAudio` 后为 true；仅此时句段 final 才销毁会话。
+    end_audio_requested: bool,
 }
 
 // SAFETY: Speech / AVFoundation 对象仅在主线程通过 `run_on_main_thread` 访问。
@@ -379,7 +381,22 @@ fn start_streaming_on_main_thread(
                 },
             );
             if is_final {
-                cleanup();
+                let should_cleanup = app_for_handler
+                    .try_state::<MacosStreamingSpeechState>()
+                    .and_then(|st| {
+                        st.sessions
+                            .lock()
+                            .ok()
+                            .and_then(|guard| {
+                                guard
+                                    .get(&session_id_for_handler)
+                                    .map(|session| session.end_audio_requested)
+                            })
+                    })
+                    .unwrap_or(true);
+                if should_cleanup {
+                    cleanup();
+                }
             }
         },
     );
@@ -393,6 +410,7 @@ fn start_streaming_on_main_thread(
         request,
         task,
         format,
+        end_audio_requested: false,
     };
 
     state
@@ -435,15 +453,15 @@ fn finish_stream_on_main_thread(
     session_id: &str,
 ) -> Result<(), String> {
     let request = {
-        let guard = state
+        let mut guard = state
             .sessions
             .lock()
             .map_err(|_| "流式语音识别状态锁失败".to_string())?;
-        guard
-            .get(session_id)
-            .ok_or_else(|| "流式语音识别会话已结束".to_string())?
-            .request
-            .clone()
+        let session = guard
+            .get_mut(session_id)
+            .ok_or_else(|| "流式语音识别会话已结束".to_string())?;
+        session.end_audio_requested = true;
+        session.request.clone()
     };
     unsafe { request.endAudio() };
     Ok(())

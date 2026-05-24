@@ -15,6 +15,21 @@ export function createComposerSpeechStreamAnchor(plain: string, cursor: number):
   };
 }
 
+/** 输入框已清空但听写锚点仍保留上一轮文本时，丢弃陈旧锚点（常见于发送后连续录音）。 */
+export function reconcileComposerSpeechStreamAnchor(
+  anchor: ComposerSpeechStreamAnchor | null,
+  plain: string,
+  cursor: number,
+): ComposerSpeechStreamAnchor {
+  if (!anchor) {
+    return createComposerSpeechStreamAnchor(plain, cursor);
+  }
+  if (!plain && (anchor.prefix.length > 0 || anchor.suffix.length > 0)) {
+    return createComposerSpeechStreamAnchor("", 0);
+  }
+  return anchor;
+}
+
 /** 将当前 utterance 的 partial 或 final 文本合并进 plain。final 时提交到 prefix。 */
 export function applyComposerSpeechStreamTranscript(
   anchor: ComposerSpeechStreamAnchor,

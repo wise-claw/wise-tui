@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   applyComposerSpeechStreamTranscript,
   createComposerSpeechStreamAnchor,
+  reconcileComposerSpeechStreamAnchor,
 } from "./composerSpeechStreaming";
 
 describe("composerSpeechStreaming", () => {
@@ -21,5 +22,13 @@ describe("composerSpeechStreaming", () => {
     expect(final.plain).toBe("hi 世界");
     expect(final.anchor.prefix).toBe("hi 世界");
     expect(final.cursor).toBe(final.anchor.prefix.length);
+  });
+
+  test("reconcile drops stale anchor after composer cleared on send", () => {
+    const stale = createComposerSpeechStreamAnchor("已发送的内容", 6);
+    expect(reconcileComposerSpeechStreamAnchor(stale, "", 0)).toEqual({
+      prefix: "",
+      suffix: "",
+    });
   });
 });
