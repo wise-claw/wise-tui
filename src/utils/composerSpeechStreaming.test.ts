@@ -1,10 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import {
+  advanceComposerSpeechTranscriptBaseline,
   applyComposerSpeechStreamTranscript,
+  appendSpeechBaselineSegment,
+  commitComposerSpeechTranscriptBaselineForSend,
   createComposerSpeechStreamAnchor,
   extractComposerSpeechTranscriptDelta,
+  pickLongerSpeechBaseline,
   reconcileComposerSpeechStreamAnchor,
   resolveComposerSpeechDisplayText,
+  stripComposerSpeechDeltaOverlap,
 } from "./composerSpeechStreaming";
 
 describe("composerSpeechStreaming", () => {
@@ -48,6 +53,57 @@ describe("composerSpeechStreaming", () => {
   test("extract delta ignores punctuation drift between baseline and raw", () => {
     const baseline = "你好，我是谁";
     expect(extractComposerSpeechTranscriptDelta(baseline, "你好我是谁不要发送")).toBe("不要发送");
+  });
+
+  test("extract delta when baseline is embedded in cumulative raw", () => {
+    const baseline = "还有宝可梦和神奇宝贝";
+    const raw = "我有很多卡片。奥特曼卡片。还有宝可梦和神奇宝贝。神奇宝贝，这些卡片能做什么";
+    expect(extractComposerSpeechTranscriptDelta(baseline, raw)).toBe("神奇宝贝，这些卡片能做什么");
+  });
+
+  test("advance baseline appends sentPlain instead of replacing cumulative baseline", () => {
+    const baseline = "我有很多卡片。奥特曼卡片";
+    const sent = "还有宝可梦和神奇宝贝";
+    expect(advanceComposerSpeechTranscriptBaseline(baseline, "", sent)).toBe(
+      "我有很多卡片。奥特曼卡片。还有宝可梦和神奇宝贝",
+    );
+  });
+
+  test("commit baseline keeps cumulative history when lastRaw is only current phrase", () => {
+    expect(
+      commitComposerSpeechTranscriptBaselineForSend(
+        "我有很多卡片。奥特曼卡片",
+        "还有宝可梦和神奇宝贝",
+        "还有宝可梦和神奇宝贝",
+      ),
+    ).toBe("我有很多卡片。奥特曼卡片。还有宝可梦和神奇宝贝");
+  });
+
+  test("strip delta overlap removes repeated last sent plain", () => {
+    expect(
+      stripComposerSpeechDeltaOverlap(
+        "神奇宝贝，还有宝可梦和神奇宝贝，这些卡片能做什么",
+        "还有宝可梦和神奇宝贝",
+      ),
+    ).toBe("神奇宝贝，这些卡片能做什么");
+  });
+
+  test("pickLongerSpeechBaseline prefers cumulative over short raw", () => {
+    expect(
+      pickLongerSpeechBaseline(
+        "我有很多卡片。奥特曼卡片",
+        "还有宝可梦和神奇宝贝",
+      ),
+    ).toBe("我有很多卡片。奥特曼卡片");
+  });
+
+  test("appendSpeechBaselineSegment prefers longer raw hint", () => {
+    const merged = appendSpeechBaselineSegment(
+      "我有很多卡片。奥特曼卡片",
+      "还有宝可梦和神奇宝贝",
+      "我有很多卡片。奥特曼卡片。还有宝可梦和神奇宝贝",
+    );
+    expect(merged).toBe("我有很多卡片。奥特曼卡片。还有宝可梦和神奇宝贝");
   });
 
   test("resolve display text replaces composer with delta only", () => {

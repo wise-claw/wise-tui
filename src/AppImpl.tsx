@@ -72,6 +72,10 @@ import {
 } from "./services/workflowTasks";
 import { cancelClaudeInvocation, listClaudeSubagents } from "./services/claude";
 import {
+  releaseClaudeHostProcessesForProjectScope,
+  releaseClaudeHostProcessesForRepositoryScope,
+} from "./services/releaseClaudeHostProcessesForWorkspaceScope";
+import {
   dispatchAtMentionPromptToRepos,
   planAtMentionDispatch,
 } from "./services/atMentionDispatch";
@@ -1692,6 +1696,43 @@ export default function App() {
     await releaseSessionHostProcessRef.current(prior.id);
   }
 
+  /** 新建主会话前：结束目标仓库 / 项目范围内仍绑定的本机 Claude 进程，并收尾上一活动标签。 */
+  async function releaseScopedClaudeHostsBeforeNewMain(
+    params:
+      | {
+          kind: "repository";
+          repositoryPath: string;
+          newSessionId: string;
+          priorActiveId?: string | null;
+        }
+      | {
+          kind: "project";
+          project: ProjectItem;
+          newSessionId: string;
+          priorActiveId?: string | null;
+        },
+  ): Promise<void> {
+    const releaseOpts = {
+      sessions: sessionsLatestRef.current,
+      excludeSessionId: params.newSessionId,
+      releaseWiseTabSession: (sessionId: string) => releaseSessionHostProcessRef.current(sessionId),
+      onCancelTabSession: (sessionId: string) => cancelSession(sessionId),
+    };
+    if (params.kind === "repository") {
+      await releaseClaudeHostProcessesForRepositoryScope({
+        repositoryPath: params.repositoryPath,
+        ...releaseOpts,
+      });
+    } else {
+      await releaseClaudeHostProcessesForProjectScope({
+        project: params.project,
+        repositories: repositoriesLatestRef.current,
+        ...releaseOpts,
+      });
+    }
+    await releasePriorActiveSessionHostBeforeNewMain(params.priorActiveId, params.newSessionId);
+  }
+
   /** 手动「新建会话」：始终创建新标签并绑定为仓库主会话。 */
   async function handleManualNewRepositorySession(repository: Repository): Promise<string> {
     viewMode.enter({ kind: "chat" });
@@ -1699,7 +1740,12 @@ export default function App() {
     const priorActiveId = activeSessionIdLatestRef.current;
     setActiveRepositoryWithOwner(repository.id);
     const id = await createSession(target.path, target.displayName);
-    await releasePriorActiveSessionHostBeforeNewMain(priorActiveId, id);
+    await releaseScopedClaudeHostsBeforeNewMain({
+      kind: "repository",
+      repositoryPath: target.path,
+      newSessionId: id,
+      priorActiveId,
+    });
     await bindRepositoryMainSession(target.path, id);
     switchSession(id);
     return id;
@@ -1730,7 +1776,12 @@ export default function App() {
     }
     const priorActiveId = activeSessionIdLatestRef.current;
     const id = await createSession(anchor.path, anchor.displayName);
-    await releasePriorActiveSessionHostBeforeNewMain(priorActiveId, id);
+    await releaseScopedClaudeHostsBeforeNewMain({
+      kind: "project",
+      project,
+      newSessionId: id,
+      priorActiveId,
+    });
     await bindRepositoryMainSession(projectMainSessionBindingKey(project.id), id);
     switchSession(id);
     return id;

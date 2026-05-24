@@ -63,7 +63,11 @@ export function useComposerSpeechDictation({
   const [transcribing, setTranscribing] = useState(false);
 
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const listeningRef = useRef(false);
+  const transcribingRef = useRef(false);
   const wantListeningRef = useRef(false);
+  listeningRef.current = listening;
+  transcribingRef.current = transcribing;
   const recorderRef = useRef<ComposerAudioRecorder | null>(null);
   const streamSessionIdRef = useRef<string | null>(null);
   const targetSampleRateRef = useRef(16_000);
@@ -222,7 +226,19 @@ export function useComposerSpeechDictation({
     }
   }, [enabled, lang]);
 
+  const isLocalCaptureActive = useCallback(
+    () =>
+      wantListeningRef.current ||
+      listeningRef.current ||
+      Boolean(streamSessionIdRef.current) ||
+      recorderRef.current?.recording === true,
+    [],
+  );
+
   const finishLocalStream = useCallback(async () => {
+    // 立即停止录音 UI，避免用户以为仍在采集而重复点击。
+    setListening(false);
+
     clearPcmFlushTimer();
     flushPcmPending();
     recorderRef.current?.stopStreaming();
@@ -230,7 +246,11 @@ export function useComposerSpeechDictation({
 
     const sessionId = streamSessionIdRef.current;
     if (!sessionId) {
-      setListening(false);
+      cancelLocalStream();
+      return;
+    }
+
+    if (finishingStreamRef.current || transcribingRef.current) {
       return;
     }
 
@@ -247,13 +267,21 @@ export function useComposerSpeechDictation({
       setListening(false);
       onSessionEndRef.current?.();
     }
-  }, [clearPcmFlushTimer, flushPcmPending]);
+  }, [cancelLocalStream, clearPcmFlushTimer, flushPcmPending]);
 
   const startLocalStream = useCallback(async () => {
+    if (!wantListeningRef.current) return;
+
     const recorder = new ComposerAudioRecorder();
     recorderRef.current = recorder;
     try {
       const { sessionId, sampleRate } = await startComposerStreamingSpeech(lang);
+      if (!wantListeningRef.current) {
+        void cancelComposerStreamingSpeech(sessionId).catch(() => undefined);
+        cancelLocalStream();
+        return;
+      }
+
       streamSessionIdRef.current = sessionId;
       targetSampleRateRef.current = sampleRate;
       await recorder.startStreaming({
@@ -267,6 +295,19 @@ export function useComposerSpeechDictation({
           schedulePcmFlush();
         },
       });
+
+      if (!wantListeningRef.current) {
+        if (finishingStreamRef.current || transcribingRef.current) {
+          return;
+        }
+        if (streamSessionIdRef.current) {
+          void finishLocalStream();
+        } else {
+          cancelLocalStream();
+        }
+        return;
+      }
+
       captureSampleRateRef.current = recorder.getSampleRate();
       setListening(true);
     } catch (e) {
@@ -279,11 +320,11 @@ export function useComposerSpeechDictation({
       wantListeningRef.current = false;
       setListening(false);
     }
-  }, [cancelLocalStream, lang, schedulePcmFlush]);
+  }, [cancelLocalStream, finishLocalStream, lang, schedulePcmFlush]);
 
   const start = useCallback(async () => {
     if (!enabled || !supported || !engine) return;
-    if (wantListeningRef.current || recognitionRef.current || transcribing) return;
+    if (wantListeningRef.current || recognitionRef.current || transcribingRef.current) return;
 
     const mic = await ensureComposerMicrophoneAccess();
     if (!mic.ok) {
@@ -293,6 +334,8 @@ export function useComposerSpeechDictation({
       }
       return;
     }
+    if (!enabled || !supported || !engine) return;
+    if (wantListeningRef.current || recognitionRef.current || transcribingRef.current) return;
 
     stop();
     wantListeningRef.current = true;
@@ -303,13 +346,13 @@ export function useComposerSpeechDictation({
     }
 
     beginWebRecognition();
-  }, [beginWebRecognition, enabled, engine, startLocalStream, stop, supported, transcribing]);
+  }, [beginWebRecognition, enabled, engine, startLocalStream, stop, supported]);
 
   const toggle = useCallback(() => {
-    if (transcribing) return;
+    if (transcribingRef.current) return;
 
     if (engine === "local") {
-      if (listening || wantListeningRef.current) {
+      if (isLocalCaptureActive()) {
         wantListeningRef.current = false;
         void finishLocalStream();
         return;
@@ -318,13 +361,13 @@ export function useComposerSpeechDictation({
       return;
     }
 
-    if (listening || wantListeningRef.current) {
+    if (listeningRef.current || wantListeningRef.current) {
       stop();
       onSessionEndRef.current?.();
       return;
     }
     void start();
-  }, [engine, finishLocalStream, listening, start, stop, transcribing]);
+  }, [engine, finishLocalStream, isLocalCaptureActive, start, stop]);
 
   /** macOS 本地转写事件：挂载即订阅，避免 engine 判定完成前首次听写丢事件。 */
   useEffect(() => {
