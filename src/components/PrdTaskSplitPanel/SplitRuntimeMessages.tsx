@@ -189,9 +189,12 @@ function RuntimeStageProgress({
             stage.index === activeStageIndex ? "is-active" : "",
           ].filter(Boolean).join(" ")}
         >
-          <span>阶段 {stage.index}</span>
-          <strong>{stage.title}</strong>
-          {index < stages.length - 1 ? <i aria-hidden="true" /> : null}
+          <span className="app-prd-task-panel__runtime-stage-marker" aria-hidden="true" />
+          <div className="app-prd-task-panel__runtime-stage-copy">
+            <span>阶段 {stage.index}</span>
+            <strong>{stage.title}</strong>
+          </div>
+          {index < stages.length - 1 ? <i className="app-prd-task-panel__runtime-stage-connector" aria-hidden="true" /> : null}
         </div>
       ))}
     </div>

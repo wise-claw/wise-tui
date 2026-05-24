@@ -25,6 +25,10 @@ import {
   monitorEmployeeHistoryStructureFingerprint,
 } from "../../utils/omcEmployeeMonitorHistory";
 import {
+  pickSubagentTranscriptSession,
+  useSubagentDiskTranscript,
+} from "../../hooks/useSubagentDiskTranscript";
+import {
   clampConcurrencyLimit,
   MAX_CLAUDE_CONCURRENCY_LIMIT,
   MIN_CLAUDE_CONCURRENCY_LIMIT,
@@ -525,30 +529,35 @@ function RepositorySubagentDetailDrawer({
   const subagent = target?.subagent ?? null;
   const repository = target?.repository ?? null;
   const matchedSession = subagent ? findSubagentSession(sessions, subagent) : null;
-  const transcriptSession = repository && subagent
-    ? matchedSession && matchedSession.messages.length > 0
-      ? matchedSession
-      : buildSyntheticSubagentSession(repository, subagent)
-    : null;
+  const repositoryPath =
+    subagent?.repositoryPath?.trim() || repository?.repositoryPath?.trim() || "";
+  const claudeSessionId =
+    matchedSession?.claudeSessionId?.trim() || subagent?.sessionId?.trim() || "";
+  const syntheticSession =
+    repository && subagent ? buildSyntheticSubagentSession(repository, subagent) : null;
+  const diskTranscriptStatus = matchedSession?.status ?? subagentSessionStatus(subagent?.status ?? "completed");
+
+  const { session: diskTranscriptSession } = useSubagentDiskTranscript({
+    enabled: target !== null && Boolean(repositoryPath && claudeSessionId),
+    repositoryPath,
+    repositoryName: repository?.repositoryName ?? subagent?.repositoryPath ?? "",
+    claudeSessionId,
+    model: subagent?.model ?? matchedSession?.model,
+    status: diskTranscriptStatus,
+    createdAt: subagent?.startedAt ?? matchedSession?.createdAt,
+  });
+
+  const transcriptSession = pickSubagentTranscriptSession(
+    diskTranscriptSession,
+    matchedSession,
+    syntheticSession,
+  );
 
   const matchedSessionId = matchedSession?.id ?? null;
-  const matchedSessionMessagesLen = matchedSession?.messages.length ?? 0;
-  const matchedSessionStatus = matchedSession?.status;
-  const matchedClaudeSessionId = matchedSession?.claudeSessionId?.trim() ?? "";
   useEffect(() => {
-    if (!target || !onReloadFullDiskTranscript || !matchedSessionId) return;
-    if (matchedSessionMessagesLen > 0) return;
-    if (matchedSessionStatus === "running" || matchedSessionStatus === "connecting") return;
-    if (!matchedClaudeSessionId) return;
+    if (!target || !onReloadFullDiskTranscript || !matchedSessionId || !claudeSessionId) return;
     void onReloadFullDiskTranscript(matchedSessionId);
-  }, [
-    target,
-    onReloadFullDiskTranscript,
-    matchedSessionId,
-    matchedSessionMessagesLen,
-    matchedSessionStatus,
-    matchedClaudeSessionId,
-  ]);
+  }, [target, onReloadFullDiskTranscript, matchedSessionId, claudeSessionId]);
 
   return (
     <Drawer
