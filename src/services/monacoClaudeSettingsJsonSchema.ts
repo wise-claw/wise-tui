@@ -27,7 +27,7 @@ export function configureMonacoClaudeSettingsJson(monaco: typeof Monaco): void {
   }
   configured = true;
 
-  monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
+  monaco.json.jsonDefaults.setDiagnosticsOptions({
     validate: true,
     allowComments: false,
     enableSchemaRequest: false,
