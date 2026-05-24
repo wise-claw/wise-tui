@@ -7,7 +7,7 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::process::Command;
-use std::sync::{Mutex, RwLock};
+use std::sync::{Mutex, OnceLock, RwLock};
 use std::time::{Duration, Instant};
 
 const CACHE_TTL: Duration = Duration::from_secs(30);
@@ -124,10 +124,23 @@ impl AgentRegistry {
     }
 
     pub fn get(&self, id: &str) -> Result<Option<DetectedAgent>, String> {
-        Ok(self
-            .snapshot()?
-            .into_iter()
-            .find(|agent| agent.id() == id))
+        let guard = self
+            .state
+            .read()
+            .map_err(|_| "agent registry lock poisoned".to_string())?;
+        Ok(guard
+            .agents
+            .iter()
+            .find(|agent| agent.id() == id)
+            .cloned())
+    }
+
+    pub fn is_empty(&self) -> Result<bool, String> {
+        let guard = self
+            .state
+            .read()
+            .map_err(|_| "agent registry lock poisoned".to_string())?;
+        Ok(guard.agents.is_empty())
     }
 
     pub async fn refresh_all(
@@ -294,34 +307,44 @@ fn deduplicate_agents(agents: Vec<DetectedAgent>) -> Vec<DetectedAgent> {
 }
 
 async fn detect_builtin_agents(probe: &dyn Probe) -> Vec<DetectedAgent> {
-    let specs = [
-        ("claude", "Claude Code", "claude"),
-        ("codex", "Codex CLI", "codex"),
-        ("gemini", "Gemini CLI", "gemini"),
-    ];
     let empty_env = HashMap::new();
-    let mut out = Vec::with_capacity(specs.len());
-    for (kind, name, command) in specs {
-        let result = probe_builtin(command, probe, &empty_env).await;
-        let agent = synthetic_agent(kind, name, command, result);
-        out.push(match kind {
-            "claude" => DetectedAgent::Claude(agent),
-            "codex" => DetectedAgent::Codex(agent),
-            "gemini" => DetectedAgent::Gemini(agent),
-            _ => unreachable!("builtin agent kind is fixed"),
-        });
-    }
-    out
+    let (claude, codex, gemini) = tokio::join!(
+        probe_builtin("claude", probe, &empty_env),
+        probe_builtin("codex", probe, &empty_env),
+        probe_builtin("gemini", probe, &empty_env),
+    );
+    vec![
+        DetectedAgent::Claude(synthetic_agent("claude", "Claude Code", "claude", claude)),
+        DetectedAgent::Codex(synthetic_agent("codex", "Codex CLI", "codex", codex)),
+        DetectedAgent::Gemini(synthetic_agent("gemini", "Gemini CLI", "gemini", gemini)),
+    ]
+}
+
+fn probe_custom_agent(
+    record: CustomAgentRecord,
+    probe: &dyn Probe,
+) -> Pin<Box<dyn Future<Output = DetectedAgent> + Send + '_>> {
+    Box::pin(async move {
+        let result = probe.probe(&record.command, &record.env).await;
+        DetectedAgent::Custom(custom_agent(record, result))
+    })
 }
 
 async fn detect_custom_agents(
     records: Vec<CustomAgentRecord>,
     probe: &dyn Probe,
 ) -> Vec<DetectedAgent> {
+    const PROBE_CHUNK: usize = 4;
     let mut out = Vec::with_capacity(records.len());
-    for record in records {
-        let result = probe.probe(&record.command, &record.env).await;
-        out.push(DetectedAgent::Custom(custom_agent(record, result)));
+    for chunk in records.chunks(PROBE_CHUNK) {
+        let batch = futures_util::future::join_all(
+            chunk
+                .iter()
+                .cloned()
+                .map(|record| probe_custom_agent(record, probe)),
+        )
+        .await;
+        out.extend(batch);
     }
     out
 }
@@ -570,50 +593,54 @@ fn clear_blocking_broken_bins(command: &str, path_env: &str) -> Result<Vec<Strin
     Ok(removed)
 }
 
-fn path_search_prefixes() -> Vec<PathBuf> {
-    let mut prefixes = Vec::new();
-    #[cfg(not(windows))]
-    {
-        prefixes.extend([
-            PathBuf::from("/opt/homebrew/bin"),
-            PathBuf::from("/usr/local/bin"),
-            PathBuf::from("/usr/bin"),
-            PathBuf::from("/bin"),
-        ]);
-    }
-    #[cfg(windows)]
-    {
+static PATH_SEARCH_PREFIXES: OnceLock<Vec<PathBuf>> = OnceLock::new();
+
+fn path_search_prefixes() -> &'static [PathBuf] {
+    PATH_SEARCH_PREFIXES.get_or_init(|| {
+        let mut prefixes = Vec::new();
+        #[cfg(not(windows))]
+        {
+            prefixes.extend([
+                PathBuf::from("/opt/homebrew/bin"),
+                PathBuf::from("/usr/local/bin"),
+                PathBuf::from("/usr/bin"),
+                PathBuf::from("/bin"),
+            ]);
+        }
+        #[cfg(windows)]
+        {
+            if let Some(home) = dirs::home_dir() {
+                prefixes.push(home.join("AppData/Roaming/npm"));
+                prefixes.push(home.join("AppData/Local/npm"));
+            }
+            prefixes.push(PathBuf::from(r"C:\Program Files\nodejs"));
+            prefixes.push(PathBuf::from(r"C:\Program Files (x86)\nodejs"));
+        }
         if let Some(home) = dirs::home_dir() {
-            prefixes.push(home.join("AppData/Roaming/npm"));
-            prefixes.push(home.join("AppData/Local/npm"));
-        }
-        prefixes.push(PathBuf::from(r"C:\Program Files\nodejs"));
-        prefixes.push(PathBuf::from(r"C:\Program Files (x86)\nodejs"));
-    }
-    if let Some(home) = dirs::home_dir() {
-        prefixes.push(home.join("bin"));
-        prefixes.push(home.join(".local/bin"));
-        prefixes.push(home.join(".volta/bin"));
-        prefixes.push(home.join(".bun/bin"));
-        prefixes.push(home.join(".npm-global/bin"));
-        collect_node_version_bins(home.join(".nvm/versions/node"), &mut prefixes);
-        if let Ok(nvm_dir) = std::env::var("NVM_DIR") {
-            collect_node_version_bins(PathBuf::from(nvm_dir).join("versions/node"), &mut prefixes);
-        }
-        for base in [
-            home.join(".local/share/fnm/node-versions"),
-            home.join(".fnm/node-versions"),
-        ] {
-            if let Ok(entries) = std::fs::read_dir(base) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    prefixes.push(path.join("installation/bin"));
-                    prefixes.push(path.join("bin"));
+            prefixes.push(home.join("bin"));
+            prefixes.push(home.join(".local/bin"));
+            prefixes.push(home.join(".volta/bin"));
+            prefixes.push(home.join(".bun/bin"));
+            prefixes.push(home.join(".npm-global/bin"));
+            collect_node_version_bins(home.join(".nvm/versions/node"), &mut prefixes);
+            if let Ok(nvm_dir) = std::env::var("NVM_DIR") {
+                collect_node_version_bins(PathBuf::from(nvm_dir).join("versions/node"), &mut prefixes);
+            }
+            for base in [
+                home.join(".local/share/fnm/node-versions"),
+                home.join(".fnm/node-versions"),
+            ] {
+                if let Ok(entries) = std::fs::read_dir(base) {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        prefixes.push(path.join("installation/bin"));
+                        prefixes.push(path.join("bin"));
+                    }
                 }
             }
         }
-    }
-    prefixes
+        prefixes
+    })
 }
 
 fn collect_node_version_bins(base: PathBuf, prefixes: &mut Vec<PathBuf>) {
@@ -975,7 +1002,7 @@ pub async fn agent_registry_get(
     db: tauri::State<'_, wise_db::WiseDb>,
 ) -> Result<Option<DetectedAgent>, String> {
     let probe = OsProbe;
-    if registry.snapshot()?.is_empty() {
+    if registry.is_empty()? {
         registry.refresh_all(false, &db.0, &probe).await?;
     }
     registry.get(&id)
@@ -1021,7 +1048,7 @@ pub async fn agent_registry_save_custom(
     let record = insert_custom_agent(&db.0, input)?;
     let id = format!("custom:{}", record.id);
     let probe = OsProbe;
-    let agents = registry.refresh_all(true, &db.0, &probe).await?;
+    let agents = registry.refresh_custom(true, &db.0, &probe).await?;
     agents
         .into_iter()
         .find(|agent| agent.id() == id)

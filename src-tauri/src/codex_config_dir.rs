@@ -1,6 +1,8 @@
 //! Codex CLI 用户级配置（`~/.codex/auth.json` + `config.toml`），与 CC Switch 供应商 envelope 对齐。
 
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::time::SystemTime;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -20,6 +22,40 @@ fn read_text_file(path: &Path) -> Option<String> {
     }
 }
 
+fn file_mtime(path: &Path) -> Option<SystemTime> {
+    std::fs::metadata(path).ok()?.modified().ok()
+}
+
+#[derive(Clone)]
+struct CodexDiskCache {
+    auth_mtime: Option<SystemTime>,
+    config_mtime: Option<SystemTime>,
+    envelope: CodexProfileEnvelope,
+}
+
+static CODEX_DISK_CACHE: Mutex<Option<CodexDiskCache>> = Mutex::new(None);
+
+pub(crate) fn invalidate_codex_disk_cache() {
+    if let Ok(mut guard) = CODEX_DISK_CACHE.lock() {
+        *guard = None;
+    }
+}
+
+fn read_codex_profile_envelope_fresh() -> CodexProfileEnvelope {
+    let dir = user_codex_dir();
+    let auth_path = dir.join("auth.json");
+    let config_path = dir.join("config.toml");
+
+    let auth = read_text_file(&auth_path)
+        .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+        .and_then(|v| v.as_object().cloned())
+        .unwrap_or_default();
+
+    let config = read_text_file(&config_path).unwrap_or_default();
+
+    CodexProfileEnvelope { auth, config }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexProfileEnvelope {
@@ -33,15 +69,26 @@ pub fn read_codex_profile_envelope() -> CodexProfileEnvelope {
     let dir = user_codex_dir();
     let auth_path = dir.join("auth.json");
     let config_path = dir.join("config.toml");
+    let auth_mtime = file_mtime(&auth_path);
+    let config_mtime = file_mtime(&config_path);
 
-    let auth = read_text_file(&auth_path)
-        .and_then(|text| serde_json::from_str::<Value>(&text).ok())
-        .and_then(|v| v.as_object().cloned())
-        .unwrap_or_default();
+    if let Ok(guard) = CODEX_DISK_CACHE.lock() {
+        if let Some(cache) = guard.as_ref() {
+            if cache.auth_mtime == auth_mtime && cache.config_mtime == config_mtime {
+                return cache.envelope.clone();
+            }
+        }
+    }
 
-    let config = read_text_file(&config_path).unwrap_or_default();
-
-    CodexProfileEnvelope { auth, config }
+    let envelope = read_codex_profile_envelope_fresh();
+    if let Ok(mut guard) = CODEX_DISK_CACHE.lock() {
+        *guard = Some(CodexDiskCache {
+            auth_mtime,
+            config_mtime,
+            envelope: envelope.clone(),
+        });
+    }
+    envelope
 }
 
 pub fn codex_profile_envelope_to_json(envelope: &CodexProfileEnvelope) -> Result<String, String> {
@@ -113,6 +160,7 @@ fn write_config_toml(config: &str) -> Result<(), String> {
 pub fn apply_codex_profile_envelope(envelope: &CodexProfileEnvelope) -> Result<(), String> {
     write_auth_json(&envelope.auth)?;
     write_config_toml(&envelope.config)?;
+    invalidate_codex_disk_cache();
     Ok(())
 }
 

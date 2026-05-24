@@ -1,5 +1,6 @@
 //! 从 CC Switch（桌面 `~/.cc-switch/cc-switch.db` 或 CLI `~/.ccswitch/ccs.json`）导入 Claude / Codex 模型档案。
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use rusqlite::Connection;
@@ -7,7 +8,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::claude_model_profiles::{
-    load_store, read_effective_model, save_store, store_view, ClaudeModelProfile,
+    load_store, read_effective_model, save_store, store_view_from_store, ClaudeModelProfile,
     ClaudeModelProfileStoreView,
 };
 use crate::codex_config_dir::{
@@ -222,13 +223,22 @@ fn merge_imported_into_store(
     let mut updated = 0usize;
     let mut skipped = 0usize;
 
+    let mut index: HashMap<(String, String), usize> = HashMap::new();
+    for (idx, profile) in store.profiles.iter().enumerate() {
+        index.insert(
+            (
+                profile.name.trim().to_lowercase(),
+                profile.engine.trim().to_lowercase(),
+            ),
+            idx,
+        );
+    }
+
     for item in imported {
         let name_key = item.name.to_lowercase();
         let engine_key = item.engine.to_lowercase();
-        if let Some(slot) = store.profiles.iter_mut().find(|p| {
-            p.name.trim().to_lowercase() == name_key
-                && p.engine.trim().eq_ignore_ascii_case(&engine_key)
-        }) {
+        if let Some(&idx) = index.get(&(name_key.clone(), engine_key.clone())) {
+            let slot = &mut store.profiles[idx];
             if slot.settings_json.trim() == item.settings_json.trim()
                 && slot.model_id.trim() == item.model_id.trim()
                 && slot.company.trim() == item.company.trim()
@@ -243,6 +253,7 @@ fn merge_imported_into_store(
             slot.updated_at_ms = now;
             updated += 1;
         } else {
+            let new_idx = store.profiles.len();
             store.profiles.push(ClaudeModelProfile {
                 id: Uuid::new_v4().to_string(),
                 company: item.company,
@@ -253,6 +264,7 @@ fn merge_imported_into_store(
                 created_at_ms: now,
                 updated_at_ms: now,
             });
+            index.insert((name_key, engine_key), new_idx);
             added += 1;
         }
     }
@@ -282,7 +294,7 @@ pub(crate) fn sync_claude_model_profiles_from_cc_switch(
     };
 
     Ok(CcSwitchSyncResult {
-        store: store_view(&db),
+        store: store_view_from_store(&store),
         added,
         updated,
         skipped,

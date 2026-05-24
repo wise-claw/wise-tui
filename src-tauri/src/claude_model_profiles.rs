@@ -1,6 +1,8 @@
 //! Claude Code 模型配置档案：存于 `app_settings`，应用时写入用户级 `settings.json`。
 
 use std::path::Path;
+use std::sync::Mutex;
+use std::time::SystemTime;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -92,6 +94,24 @@ fn read_json_file(path: &Path) -> Option<serde_json::Value> {
         return Some(serde_json::json!({}));
     }
     serde_json::from_str(&text).ok()
+}
+
+fn file_mtime(path: &Path) -> Option<SystemTime> {
+    std::fs::metadata(path).ok()?.modified().ok()
+}
+
+#[derive(Clone)]
+struct ClaudeEffectiveModelCache {
+    mtime: Option<SystemTime>,
+    model: Option<String>,
+}
+
+static CLAUDE_EFFECTIVE_MODEL_CACHE: Mutex<Option<ClaudeEffectiveModelCache>> = Mutex::new(None);
+
+fn invalidate_claude_effective_model_cache() {
+    if let Ok(mut guard) = CLAUDE_EFFECTIVE_MODEL_CACHE.lock() {
+        *guard = None;
+    }
 }
 
 /// 与 Claude Code / CC Switch 一致：优先 `env.ANTHROPIC_MODEL`，其次其他 `env.*MODEL*` 与顶层 `model`。
@@ -229,7 +249,9 @@ fn write_user_settings_json(value: &serde_json::Value) -> Result<(), String> {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     let out = serde_json::to_string_pretty(value).map_err(|e| e.to_string())?;
-    crate::wise_paths::write_file_atomic(&path, &out)
+    crate::wise_paths::write_file_atomic(&path, &out)?;
+    invalidate_claude_effective_model_cache();
+    Ok(())
 }
 
 fn resolve_profile_model_id(profile: &ClaudeModelProfile) -> Result<String, String> {
@@ -277,11 +299,22 @@ fn apply_profile_to_disk(profile: &ClaudeModelProfile) -> Result<(), String> {
 
 fn effective_model_from_disk() -> Option<String> {
     let path = user_claude_dir().join("settings.json");
-    read_json_file(&path).and_then(|v| read_effective_model(&v))
+    let mtime = file_mtime(&path);
+    if let Ok(guard) = CLAUDE_EFFECTIVE_MODEL_CACHE.lock() {
+        if let Some(cache) = guard.as_ref() {
+            if cache.mtime == mtime {
+                return cache.model.clone();
+            }
+        }
+    }
+    let model = read_json_file(&path).and_then(|v| read_effective_model(&v));
+    if let Ok(mut guard) = CLAUDE_EFFECTIVE_MODEL_CACHE.lock() {
+        *guard = Some(ClaudeEffectiveModelCache { mtime, model: model.clone() });
+    }
+    model
 }
 
-pub(crate) fn store_view(db: &WiseDb) -> ClaudeModelProfileStoreView {
-    let store = load_store(db);
+pub(crate) fn store_view_from_store(store: &ClaudeModelProfileStore) -> ClaudeModelProfileStoreView {
     ClaudeModelProfileStoreView {
         profiles: store.profiles.clone(),
         active_profile_id: store.active_profile_id.clone(),
@@ -289,6 +322,10 @@ pub(crate) fn store_view(db: &WiseDb) -> ClaudeModelProfileStoreView {
         effective_model: effective_model_from_disk(),
         effective_codex_model: effective_codex_model_from_disk(),
     }
+}
+
+pub(crate) fn store_view(db: &WiseDb) -> ClaudeModelProfileStoreView {
+    store_view_from_store(&load_store(db))
 }
 
 #[tauri::command]
@@ -353,7 +390,7 @@ pub(crate) fn upsert_claude_model_profile(
         });
     }
     save_store(&db, &store)?;
-    Ok(store_view(&db))
+    Ok(store_view_from_store(&store))
 }
 
 #[tauri::command]
@@ -374,7 +411,7 @@ pub(crate) fn delete_claude_model_profile(
         store.active_codex_profile_id = None;
     }
     save_store(&db, &store)?;
-    Ok(store_view(&db))
+    Ok(store_view_from_store(&store))
 }
 
 #[tauri::command]
@@ -404,7 +441,7 @@ pub(crate) fn apply_claude_model_profile(
         }
     }
     save_store(&db, &next)?;
-    Ok(store_view(&db))
+    Ok(store_view_from_store(&next))
 }
 
 #[tauri::command]
@@ -450,6 +487,7 @@ pub(crate) fn save_claude_user_settings_json(
             }
             slot.updated_at_ms = now_ms();
             save_store(&db, &store)?;
+            return Ok(store_view_from_store(&store));
         }
     }
     Ok(store_view(&db))
@@ -506,7 +544,7 @@ pub(crate) fn create_claude_model_profile(
     let mut store = load_store(&db);
     store.profiles.push(profile);
     save_store(&db, &store)?;
-    Ok(store_view(&db))
+    Ok(store_view_from_store(&store))
 }
 
 #[tauri::command]
@@ -543,7 +581,7 @@ pub(crate) fn create_claude_model_profile_from_current(
     let mut store = load_store(&db);
     store.profiles.push(profile);
     save_store(&db, &store)?;
-    Ok(store_view(&db))
+    Ok(store_view_from_store(&store))
 }
 
 #[cfg(test)]
