@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { ClaudeSession } from "../types";
-import { buildSessionConversationTasks, buildConversationTaskDetailMessages, canStopSessionConversationTask } from "./sessionConversationTasks";
+import {
+  buildSessionConversationTasks,
+  buildConversationTaskDetailMessages,
+  canStopSessionConversationTask,
+  markSessionToolUseStopped,
+} from "./sessionConversationTasks";
 
 function session(partial: Partial<ClaudeSession>): ClaudeSession {
   return {
@@ -278,6 +283,37 @@ describe("buildSessionConversationTasks", () => {
         onCancelSession: () => {},
       }),
     ).toBe(true);
+  });
+
+  test("markSessionToolUseStopped marks running tool as error", () => {
+    const base = session({
+      messages: [
+        {
+          id: 1,
+          role: "assistant",
+          content: "",
+          timestamp: 100,
+          parts: [
+            {
+              type: "tool_use",
+              id: "agent-1",
+              name: "Agent",
+              input: { description: "子代理问候测试" },
+              status: "running",
+            },
+          ],
+        },
+      ],
+    });
+    const next = markSessionToolUseStopped(base, "agent-1");
+    const part = next.messages[0]?.parts[0];
+    expect(part?.type).toBe("tool_use");
+    if (part?.type === "tool_use") {
+      expect(part.status).toBe("error");
+      expect(part.error).toBe("已手动结束");
+    }
+    const items = buildSessionConversationTasks({ session: { ...next, status: "cancelled" } });
+    expect(items[0]?.status).toBe("failed");
   });
 
   test("clears tasks when a new session has no messages yet", () => {

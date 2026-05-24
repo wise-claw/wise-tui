@@ -14,6 +14,7 @@ import type {
   ClaudeDiskSessionItem,
   ClaudeSession,
   QuestionRequest,
+  SessionConversationTaskItem,
 } from "../types";
 import {
   executeClaudeCode,
@@ -72,6 +73,7 @@ import {
   setSessionRunningReplacingUserBubbleAtIndex,
   setSessionRunningWithUserPrompt,
 } from "../services/claudeSessionState";
+import { markSessionToolUseStopped } from "../utils/sessionConversationTasks";
 import { createClaudeStreamRuntime } from "../services/claudeStreamRuntime";
 import {
   extractPartsFromStreamLine,
@@ -501,6 +503,8 @@ interface UseClaudeSessionsReturn {
   deleteSession: (sessionId: string) => Promise<void>;
   switchSession: (sessionId: string) => void;
   cancelSession: (sessionId: string, opts?: { retractLastUserTurn?: boolean }) => void;
+  /** 结束当前对话子代理 / 任务：标记 tool_use、取消 Claude 执行并刷新会话状态 */
+  stopSessionConversationTask: (item: SessionConversationTaskItem) => boolean;
   respondToQuestion: (sessionId: string, answers: string[], customAnswer?: string) => void;
   /** 关闭选择题 Dock：已过期/失败则仅收起；仍可操作时等同于跳过（空选提交） */
   dismissQuestion: (sessionId: string) => void;
@@ -2203,6 +2207,44 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     [],
   );
 
+  const stopSessionConversationTask = useCallback((item: SessionConversationTaskItem): boolean => {
+    if (item.status !== "running" || !item.cancellable) return false;
+    const sid = item.sessionId?.trim();
+    if (!sid) return false;
+
+    const session = sessionsRef.current.find((s) => s.id === sid);
+    const realSessionId =
+      session?.claudeSessionId ?? sessionIdMapRef.current.get(sid) ?? null;
+    if (realSessionId) {
+      cancelClaudeExecution(realSessionId).catch((err) => {
+        console.error("Failed to cancel session:", err);
+      });
+      void closeStreamingSession(realSessionId).catch(() => {
+        /* 长驻进程可能已退出 */
+      });
+    }
+    streamingProcessByTabRef.current.delete(sid);
+    if (session?.claudeSessionId?.trim()) {
+      assistantStreamTextByTabRef.current.delete(session.claudeSessionId.trim());
+    }
+    assistantStreamTextByTabRef.current.delete(sid);
+    const refT = streamingTargetIdRef.current;
+    if (refT !== null && (refT === sid || refT === session?.claudeSessionId?.trim())) {
+      streamingTargetIdRef.current = null;
+    }
+
+    setSessions((prev) =>
+      prev.map((s) => {
+        if (s.id !== sid) return s;
+        const marked = item.toolUseId?.trim()
+          ? markSessionToolUseStopped(s, item.toolUseId)
+          : s;
+        return { ...marked, status: "cancelled" as const };
+      }),
+    );
+    return true;
+  }, []);
+
   /**
    * 立刻向宿主拉取仍在跑的 Claude `session_id`，用 `reconcileSessionStatusesWithRunningRegistry`
    * 刷新主会话 / 员工独立标签 / 团队流程等全部标签的 `status`，不必等定时轮询。
@@ -2474,6 +2516,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     deleteSession,
     switchSession,
     cancelSession,
+    stopSessionConversationTask,
     respondToQuestion,
     dismissQuestion,
     respondToPermission,

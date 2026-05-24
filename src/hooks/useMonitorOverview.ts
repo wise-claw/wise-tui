@@ -29,7 +29,7 @@ import {
 } from "../services/trellisRuntime";
 import { sanitizeOmcDirectBatchPreviewLineForList } from "../utils/claudeInvocationText";
 import { isOmcDirectBatchInvocationRunning } from "../utils/omcDirectBatchInvocationDisplay";
-import { omcWorkerRepositoryBoundNameMatchers } from "../utils/omcMonitorEmployeeSession";
+import { isOmcMonitorEmployeeRecord, omcWorkerRepositoryBoundNameMatchers } from "../utils/omcMonitorEmployeeSession";
 import { listRunningClaudeSessions } from "../services/claude";
 import { isClaudeSessionRunningInHostOrUi } from "../services/claudeSessionState";
 import type {
@@ -67,6 +67,8 @@ interface UseMonitorOverviewInput {
   taskPendingEmployeesByTaskId: Record<string, Array<{ employeeId: string; name: string }>>;
   sessions: ClaudeSession[];
   omcBatchRuntime?: WorkflowOmcBatchRuntimeDetail | null;
+  /** 仅当 `~/.claude/plugins/cache/omc/oh-my-claudecode` 存在时展示 OMC 员工监控行。 */
+  omcInstalled?: boolean;
 }
 
 interface MonitorLookup {
@@ -604,6 +606,7 @@ export function resolveTeamPanelEmployeeMonitorItems(
     activeProjectId: string | null;
     projects: ReadonlyArray<ProjectItem>;
     restrictToProjectScope: boolean;
+    omcInstalled?: boolean;
   },
 ): EmployeeMonitorItem[] {
   if (!input.restrictToProjectScope) {
@@ -628,9 +631,11 @@ export function resolveTeamPanelEmployeeMonitorItems(
     )
     .map((employee) => byEmployeeId.get(employee.id) ?? createIdleEmployeeMonitorItem(employee));
 
-  const omc = employeeMonitorItems.find((item) => item.employeeId === "omc-worker");
-  if (omc) {
-    scoped.push(omc);
+  if (input.omcInstalled === true) {
+    const omc = employeeMonitorItems.find((item) => item.employeeId === "omc-worker");
+    if (omc) {
+      scoped.push(omc);
+    }
   }
 
   return sortEmployeeMonitorItems(scoped);
@@ -855,6 +860,7 @@ export function useMonitorOverview({
   taskPendingEmployeesByTaskId,
   sessions,
   omcBatchRuntime = null,
+  omcInstalled = false,
 }: UseMonitorOverviewInput): UseMonitorOverviewResult {
   const [registryRunningClaudeSessionIds, setRegistryRunningClaudeSessionIds] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -1027,7 +1033,13 @@ export function useMonitorOverview({
         }
       }
     }
-    const monitoredEmployees = employees.filter((item) => item.enabled && !teamEmployeeIds.has(item.id));
+    const showOmcEmployee = omcInstalled === true;
+    const monitoredEmployees = employees.filter(
+      (item) =>
+        item.enabled &&
+        !teamEmployeeIds.has(item.id) &&
+        (showOmcEmployee || !isOmcMonitorEmployeeRecord(item)),
+    );
     const sessionsById = new Map(sessions.map((item) => [item.id, item] as const));
     const runningEmployeeSessionByName = new Map<string, ClaudeSession>();
     const allEmployeeSessionsByName = new Map<string, ClaudeSession[]>();
@@ -1243,7 +1255,9 @@ export function useMonitorOverview({
         updatedAt: latest.updatedAt,
       };
     })();
-    employeeMonitorItems.push(omcMonitorItem);
+    if (showOmcEmployee) {
+      employeeMonitorItems.push(omcMonitorItem);
+    }
 
     const workflowIds = Array.from(new Set([...workflowTemplates.map((item) => item.id), ...workflowTasks.map((item) => item.workflowId)]));
     const teamMonitorItems: TeamMonitorItem[] = workflowIds.map((workflowId) => {
@@ -1428,5 +1442,6 @@ export function useMonitorOverview({
     repositoryMemberInvocationsSnap,
     externalTrellisAgentRuns,
     registryRunningClaudeSessionIds,
+    omcInstalled,
   ]);
 }

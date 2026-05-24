@@ -10,6 +10,7 @@ import type {
   MonitorDrawerTarget,
   ProjectItem,
   Repository,
+  SessionConversationTaskItem,
   TaskMode,
   WorkflowGraph,
   WorkflowRuntimeStepSnapshot,
@@ -149,6 +150,7 @@ import {
 import { useMainLayoutModes } from "./hooks/useMainLayoutModes";
 import type { ReconcileProjectMode } from "./constants/reconcileProjectMode";
 import { useDingTalkAutomationInbound } from "./hooks/useDingTalkAutomationInbound";
+import { useOmcPluginInstalled } from "./hooks/useOmcPluginInstalled";
 import { useOmcRuntime } from "./hooks/useOmcRuntime";
 import { useWorkflowTeamAutomation } from "./hooks/useWorkflowTeamAutomation";
 import { useWorkspaceMode } from "./hooks/useWorkspaceMode";
@@ -584,6 +586,7 @@ export default function App() {
     deleteSession,
     switchSession,
     cancelSession,
+    stopSessionConversationTask,
     respondToQuestion,
     dismissQuestion,
     respondToPermission,
@@ -854,6 +857,22 @@ export default function App() {
   });
   moveOmcRuntimeSessionIdRef.current = moveOmcRuntimeSessionId;
 
+  const handleStopSessionConversationTask = useCallback(
+    (item: SessionConversationTaskItem) => {
+      if (item.cancelMode === "invocation") {
+        const key = item.invocationKey?.trim();
+        if (!key) return;
+        handleCancelOmcDirectBatchInvocation(key);
+        void message.info("已请求结束后台任务");
+        return;
+      }
+      if (stopSessionConversationTask(item)) {
+        void message.success("已结束子代理执行");
+      }
+    },
+    [handleCancelOmcDirectBatchInvocation, stopSessionConversationTask],
+  );
+
   const {
     handleClaudeTurnComplete,
     handleComposerExecute,
@@ -1058,6 +1077,7 @@ export default function App() {
     rustSpawnSlotOccupied,
   ]);
 
+  const { omcInstalled } = useOmcPluginInstalled(true);
   const { employeeMonitorItems, repositoryMemberMonitorItems, teamMonitorItems, stats: monitorStats } = useMonitorOverview({
     employees,
     repositories,
@@ -1070,6 +1090,7 @@ export default function App() {
     sessions: sessionsSyncedForMonitorUi,
     workflowGraphsByWorkflowId,
     omcBatchRuntime,
+    omcInstalled: omcInstalled === true,
   });
   const scopedRepositoryMemberMonitorItems = useMemo(
     () =>
@@ -1104,8 +1125,9 @@ export default function App() {
         activeProjectId,
         projects,
         restrictToProjectScope: shouldHideEmployeeUi(activeProject),
+        omcInstalled: omcInstalled === true,
       }),
-    [activeProject, activeProjectId, employeeMonitorItems, employees, projects],
+    [activeProject, activeProjectId, employeeMonitorItems, employees, omcInstalled, projects],
   );
   const missionSessionBindingKeyRef = useRef("");
   useEffect(() => {
@@ -2853,6 +2875,7 @@ export default function App() {
         },
         onOpenOmcBatchInvocationDetail: handleOpenOmcBatchInvocationDetail,
         onCancelOmcDirectBatchInvocation: handleCancelOmcDirectBatchInvocation,
+        onStopSessionConversationTask: handleStopSessionConversationTask,
         onReloadFullDiskTranscript: reloadFullDiskTranscript,
         onCompactSessionHistory: compactSessionHistory,
         hideEmployeeUi: shouldHideEmployeeUi(activeProject),

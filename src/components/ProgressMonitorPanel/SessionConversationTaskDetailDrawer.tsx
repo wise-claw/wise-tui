@@ -38,20 +38,27 @@ function compactId(value: string | undefined): string {
 export const SessionConversationTaskDetailDrawer = memo(function SessionConversationTaskDetailDrawer({
   target,
   sessions,
+  sessionConversationTaskItems,
   onClose,
   onStopTask,
   onCancelSession,
   onCancelOmcDirectBatchInvocation,
+  onStopSessionConversationTask,
 }: {
   target: SessionConversationTaskDetailTarget | null;
   sessions: readonly ClaudeSession[];
+  sessionConversationTaskItems?: readonly SessionConversationTaskItem[];
   onClose: () => void;
   onStopTask?: (task: SessionConversationTaskItem) => void;
   onCancelSession?: (sessionId: string) => void;
   onCancelOmcDirectBatchInvocation?: (invocationKey: string) => void;
+  onStopSessionConversationTask?: (item: SessionConversationTaskItem) => void;
 }) {
   const width = Math.min(760, typeof window !== "undefined" ? window.innerWidth - 40 : 760);
-  const task = target?.task ?? null;
+  const task = useMemo(() => {
+    if (!target?.task) return null;
+    return sessionConversationTaskItems?.find((item) => item.key === target.task.key) ?? target.task;
+  }, [sessionConversationTaskItems, target]);
 
   const session = useMemo(() => {
     const sid = task?.sessionId?.trim();
@@ -70,7 +77,11 @@ export const SessionConversationTaskDetailDrawer = memo(function SessionConversa
   }, [session, task]);
 
   const canStop = task
-    ? canStopSessionConversationTask(task, { onCancelSession, onCancelOmcDirectBatchInvocation })
+    ? canStopSessionConversationTask(task, {
+        onCancelSession,
+        onCancelOmcDirectBatchInvocation,
+        onStopSessionConversationTask,
+      })
     : false;
 
   return (

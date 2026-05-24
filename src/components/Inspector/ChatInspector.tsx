@@ -61,6 +61,7 @@ export interface ChatInspectorProps {
     invocationKey: string;
   }) => void;
   onCancelOmcDirectBatchInvocation?: (invocationKey: string) => void;
+  onStopSessionConversationTask?: (item: SessionConversationTaskItem) => void;
   onReloadFullDiskTranscript?: (sessionKey: string) => void | Promise<void>;
   onCompactSessionHistory?: (sessionId: string) => void | Promise<void>;
   projectId?: string | null;
@@ -99,6 +100,7 @@ export function ChatInspector({
   onOpenTaskDetailFromMonitor,
   onOpenOmcBatchInvocationDetail,
   onCancelOmcDirectBatchInvocation,
+  onStopSessionConversationTask,
   onReloadFullDiskTranscript,
   onCompactSessionHistory,
   projectId,
@@ -150,7 +152,7 @@ export function ChatInspector({
                 onOpenTaskDetail={onOpenTaskDetailFromMonitor}
                 onOpenOmcBatchInvocationDetail={onOpenOmcBatchInvocationDetail}
                 onCancelOmcDirectBatchInvocation={onCancelOmcDirectBatchInvocation}
-                onCancelSession={onCancelSessionFromMonitor}
+                onStopSessionConversationTask={onStopSessionConversationTask}
                 onReloadFullDiskTranscript={onReloadFullDiskTranscript}
                 onCompactSessionHistory={onCompactSessionHistory}
                 transcriptSourceSessions={transcriptSessions}

@@ -107,6 +107,8 @@ interface Props {
   onOpenOmcBatchInvocationDetail?: (input: { sessionId: string; repositoryPath: string; invocationKey: string }) => void;
   /** 结束直连批量下单条 Claude Code 子进程 */
   onCancelOmcDirectBatchInvocation?: (invocationKey: string) => void;
+  /** 结束当前对话子代理 / 任务（含消息内 tool_use 标记与会话取消） */
+  onStopSessionConversationTask?: (item: SessionConversationTaskItem) => void;
   /** 非活动标签正文已丢弃时，从历史抽屉按需从磁盘拉回完整 jsonl */
   onReloadFullDiskTranscript?: (sessionKey: string) => void | Promise<void>;
   /** 历史会话抽屉内手动执行 Claude Code `/compact`。 */
@@ -794,6 +796,7 @@ export function ProgressMonitorPanel({
   onOpenTaskDetail,
   onOpenOmcBatchInvocationDetail,
   onCancelOmcDirectBatchInvocation,
+  onStopSessionConversationTask,
   onReloadFullDiskTranscript,
   onCompactSessionHistory,
   transcriptSourceSessions,
@@ -929,12 +932,17 @@ export function ProgressMonitorPanel({
 
   const stopSessionConversationTask = useCallback(
     (item: SessionConversationTaskItem) => {
-      if (!item.cancellable) return;
-      if (item.cancelMode === "session") {
-        const sid = item.sessionId?.trim();
-        if (sid && onCancelSession) {
-          onCancelSession(sid);
-        }
+      if (
+        !canStopSessionConversationTask(item, {
+          onCancelSession,
+          onCancelOmcDirectBatchInvocation,
+          onStopSessionConversationTask,
+        })
+      ) {
+        return;
+      }
+      if (onStopSessionConversationTask) {
+        onStopSessionConversationTask(item);
         return;
       }
       if (item.cancelMode === "invocation") {
@@ -942,9 +950,14 @@ export function ProgressMonitorPanel({
         if (key && onCancelOmcDirectBatchInvocation) {
           onCancelOmcDirectBatchInvocation(key);
         }
+        return;
+      }
+      const sid = item.sessionId?.trim();
+      if (sid && onCancelSession) {
+        onCancelSession(sid);
       }
     },
-    [onCancelOmcDirectBatchInvocation, onCancelSession],
+    [onCancelOmcDirectBatchInvocation, onCancelSession, onStopSessionConversationTask],
   );
 
   const openSessionConversationTaskDetail = useCallback(
@@ -1010,6 +1023,7 @@ export function ProgressMonitorPanel({
               const showStop = canStopSessionConversationTask(item, {
                 onCancelSession,
                 onCancelOmcDirectBatchInvocation,
+                onStopSessionConversationTask,
               });
               return (
               <div className="app-monitor-panel__session-task-row" key={item.key}>
@@ -1069,7 +1083,7 @@ export function ProgressMonitorPanel({
               className="app-monitor-panel__config-btn"
               onClick={() => onOpenWorkflowConfig?.()}
             >
-              团队
+              工作流
             </button>
           </div>
         </div>
@@ -1324,7 +1338,7 @@ export function ProgressMonitorPanel({
           <div className="app-monitor-panel__section-title-wrap">
             <Typography.Text className="app-monitor-panel__section-title">
               <span className="app-monitor-panel__section-icon"><TeamMiniIcon /></span>
-              团队
+              工作流
             </Typography.Text>
             <Typography.Text className="app-monitor-panel__meta">
               总数 {teamItems.length} · 进行中 {teamInProgress} · 空闲 {teamItems.length - teamInProgress}
@@ -1446,10 +1460,12 @@ export function ProgressMonitorPanel({
       <SessionConversationTaskDetailDrawer
         target={sessionConversationTaskDetailTarget}
         sessions={sessionsForHistoryTranscript}
+        sessionConversationTaskItems={sessionConversationTaskItems ?? []}
         onClose={() => setSessionConversationTaskDetailTarget(null)}
         onStopTask={stopSessionConversationTask}
         onCancelSession={onCancelSession}
         onCancelOmcDirectBatchInvocation={onCancelOmcDirectBatchInvocation}
+        onStopSessionConversationTask={onStopSessionConversationTask}
       />
 
       <RepositorySubagentDetailDrawer

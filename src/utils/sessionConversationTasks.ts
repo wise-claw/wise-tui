@@ -144,10 +144,12 @@ function hasSettledAfterToolUse(messages: ClaudeSession["messages"], toolId: str
 function resolveConversationTaskToolStatus(
   part: ToolUsePart,
   messages: ClaudeSession["messages"],
+  sessionStatus?: ClaudeSession["status"],
 ): SessionConversationTaskItem["status"] | null {
   if (part.status === "error" || part.error?.trim()) return "failed";
   if (part.status === "completed" || part.output?.trim()) return "completed";
   if (part.status === "pending" || part.status === "running") {
+    if (sessionStatus === "cancelled" || sessionStatus === "error") return "failed";
     if (hasSettledAfterToolUse(messages, part.id)) return "completed";
     return "running";
   }
@@ -231,7 +233,7 @@ export function buildSessionConversationTasks(input: {
 
   for (const part of mergeToolUseParts(turnMessages)) {
     if (!isConversationTaskTool(part)) continue;
-    const status = resolveConversationTaskToolStatus(part, session.messages);
+    const status = resolveConversationTaskToolStatus(part, session.messages, session.status);
     if (!status) continue;
     const { label, subtitle } = labelFromToolPart(part);
     const preview =
@@ -323,13 +325,40 @@ export function canStopSessionConversationTask(
   handlers: {
     onCancelSession?: (sessionId: string) => void;
     onCancelOmcDirectBatchInvocation?: (invocationKey: string) => void;
+    onStopSessionConversationTask?: (item: SessionConversationTaskItem) => void;
   },
 ): boolean {
   if (item.status !== "running" || !item.cancellable) return false;
+  if (handlers.onStopSessionConversationTask) return true;
   if (item.cancelMode === "invocation") {
     return Boolean(item.invocationKey?.trim() && handlers.onCancelOmcDirectBatchInvocation);
   }
   return Boolean(item.sessionId?.trim() && handlers.onCancelSession);
+}
+
+/** 将仍在运行中的 tool_use 标记为手动结束，便于右栏与气泡同步更新。 */
+export function markSessionToolUseStopped(
+  session: ClaudeSession,
+  toolUseId: string,
+  reason = "已手动结束",
+): ClaudeSession {
+  const id = toolUseId.trim();
+  if (!id) return session;
+  return {
+    ...session,
+    messages: session.messages.map((message) => ({
+      ...message,
+      parts: message.parts.map((part) => {
+        if (part.type !== "tool_use" || part.id !== id) return part;
+        if (part.status === "completed" || part.output?.trim()) return part;
+        return {
+          ...part,
+          status: "error" as const,
+          error: part.error?.trim() || reason,
+        };
+      }),
+    })),
+  };
 }
 
 export function findMergedToolUseInSession(
