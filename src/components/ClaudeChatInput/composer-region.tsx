@@ -63,6 +63,7 @@ import {
   extractComposerSpeechTranscriptDelta,
   resolveComposerSpeechDisplayText,
   stripComposerSpeechDeltaOverlap,
+  stripSpeechCompareNoise,
 } from "../../utils/composerSpeechStreaming";
 import type { MenuProps } from "antd";
 import { logClaudeDrop } from "./drop-debug";
@@ -716,9 +717,16 @@ function ComposerInner({
 
       const { plain, cursor } = resolveComposerSpeechDisplayText(spokenText);
       if (plain) {
-        speechLastSentPlainRef.current = "";
         speechStreamAnchorRef.current = createComposerSpeechStreamAnchor("", 0);
         surface.setPlainAndCursor(plain, cursor);
+        const lastSent = speechLastSentPlainRef.current;
+        if (lastSent) {
+          const sentCmp = stripSpeechCompareNoise(lastSent);
+          const plainCmp = stripSpeechCompareNoise(plain);
+          if (sentCmp && !plainCmp.startsWith(sentCmp)) {
+            speechLastSentPlainRef.current = "";
+          }
+        }
       } else if (!shouldAutoSend) {
         return;
       }
@@ -761,16 +769,16 @@ function ComposerInner({
   speechDictationRef.current = speechDictation;
 
   const prepareSpeechTranscriptBaselineForSend = useCallback((sentPlain?: string) => {
+    const lastRaw = lastRawSpeechTranscriptRef.current.trim();
+    const sent = sentPlain?.trim() ?? "";
+    if (!lastRaw && !sent) {
+      return;
+    }
     const tracking =
       speechDictationRef.current.listening ||
       speechDictationRef.current.transcribing ||
       speechKeepAliveDuringBusyRef.current;
     if (!tracking) {
-      return;
-    }
-    const lastRaw = lastRawSpeechTranscriptRef.current.trim();
-    const sent = sentPlain?.trim() ?? "";
-    if (!lastRaw && !sent) {
       return;
     }
     speechEngineTranscriptBaselineRollbackRef.current = speechEngineTranscriptBaselineRef.current;
@@ -788,8 +796,18 @@ function ComposerInner({
   const triggerComposerSpeechAutoSend = useCallback(() => {
     const surface = plainSurfaceRef.current;
     if (!surface) return;
-    const plain = surface.getPlain().trim();
+    const rawPlain = surface.getPlain().trim();
+    if (!rawPlain) return;
+    const stripped = stripComposerSpeechDeltaOverlap(
+      rawPlain,
+      speechLastSentPlainRef.current,
+    );
+    const plain = resolveComposerSpeechDisplayText(stripped).plain;
     if (!plain) return;
+    if (plain !== rawPlain) {
+      speechStreamAnchorRef.current = createComposerSpeechStreamAnchor("", 0);
+      surface.setPlainAndCursor(plain, plain.length);
+    }
     prepareSpeechTranscriptBaselineForSend(plain);
     // 停顿/结束词自动发送：保持录音，仅用户点击停止才结束听写，便于连续多轮触发。
     speechStreamAnchorRef.current = createComposerSpeechStreamAnchor("", 0);

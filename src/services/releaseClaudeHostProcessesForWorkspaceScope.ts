@@ -14,7 +14,7 @@ import {
 } from "../utils/workspaceScopeClaudeProcessMatch";
 import { cancelClaudeExecution, listRunningClaudeSessions } from "./claude";
 import { isClaudeSessionRunningInHostOrUi } from "./claudeSessionState";
-import { getSystemResourceSnapshot, killClaudeHostProcess } from "./systemResource";
+import { getSystemResourceSnapshot } from "./systemResource";
 
 export interface ReleaseClaudeHostProcessesForWorkspaceScopeParams {
   scopePathKeys: ReadonlySet<string>;

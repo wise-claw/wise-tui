@@ -110,16 +110,22 @@ describe("composerSpeechStreaming", () => {
     expect(resolveComposerSpeechDisplayText("第二句")).toEqual({ plain: "第二句", cursor: 3 });
   });
 
-  test("isFinal must not stack on anchor when using delta replace mode", () => {
-    const baseline = "第一句";
-    const raw = "第一句第二句";
-    const delta = extractComposerSpeechTranscriptDelta(baseline, raw);
-    expect(delta).toBe("第二句");
-    const first = resolveComposerSpeechDisplayText(delta);
-    expect(first.plain).toBe("第二句");
-    const staleAnchor = createComposerSpeechStreamAnchor("第一句", 3);
-    const stacked = applyComposerSpeechStreamTranscript(staleAnchor, delta, true);
-    expect(stacked.plain).toBe("第一句第二句");
-    expect(first.plain).toBe("第二句");
+  test("strip delta overlap removes prefix duplicate from previous auto-send", () => {
+    expect(
+      stripComposerSpeechDeltaOverlap(
+        "载一首歌，我要出发了，我出发了",
+        "载一首歌，我要出发了。",
+      ),
+    ).toBe("我出发了");
+  });
+
+  test("extract delta after auto-send with punctuation drift", () => {
+    const baseline = commitComposerSpeechTranscriptBaselineForSend(
+      "",
+      "载一首歌，我要出发了",
+      "载一首歌，我要出发了。",
+    );
+    const delta = extractComposerSpeechTranscriptDelta(baseline, "载一首歌，我要出发了，我出发了");
+    expect(resolveComposerSpeechDisplayText(delta).plain).toBe("我出发了");
   });
 });
