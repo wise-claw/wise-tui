@@ -190,8 +190,10 @@ export interface SessionConversationTaskItem {
   invocationKey?: string;
   sessionId?: string;
   repositoryPath?: string;
-  /** 是否可调用直连批量取消 */
+  /** 是否可手动结束（停止子代理 / 后台任务） */
   cancellable?: boolean;
+  /** 手动结束时的取消方式 */
+  cancelMode?: "session" | "invocation";
 }
 
 export interface MonitorStats {

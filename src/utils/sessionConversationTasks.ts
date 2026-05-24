@@ -252,6 +252,8 @@ export function buildSessionConversationTasks(input: {
       toolUseId: part.id,
       sessionId: session.id,
       repositoryPath: session.repositoryPath,
+      cancellable: status === "running",
+      cancelMode: status === "running" ? "session" : undefined,
     });
   }
 
@@ -274,7 +276,8 @@ export function buildSessionConversationTasks(input: {
       invocationKey: inv.invocationKey,
       sessionId: session.id,
       repositoryPath: inv.repositoryPath?.trim() || session.repositoryPath,
-      cancellable: status === "running" && inv.omcInvocationSource === "direct_batch",
+      cancellable: status === "running" && Boolean(inv.invocationKey?.trim()),
+      cancelMode: status === "running" && inv.invocationKey?.trim() ? "invocation" : undefined,
     });
   }
 
@@ -294,6 +297,8 @@ export function buildSessionConversationTasks(input: {
       invocationKey: snap.invocationKey,
       sessionId: session.id,
       repositoryPath: session.repositoryPath,
+      cancellable: status === "running" && Boolean(snap.invocationKey?.trim()),
+      cancelMode: status === "running" && snap.invocationKey?.trim() ? "invocation" : undefined,
     });
   }
 
@@ -311,6 +316,20 @@ export function sessionConversationTaskStatusLabel(status: SessionConversationTa
   if (status === "running") return "运行中";
   if (status === "failed") return "失败";
   return "已完成";
+}
+
+export function canStopSessionConversationTask(
+  item: SessionConversationTaskItem,
+  handlers: {
+    onCancelSession?: (sessionId: string) => void;
+    onCancelOmcDirectBatchInvocation?: (invocationKey: string) => void;
+  },
+): boolean {
+  if (item.status !== "running" || !item.cancellable) return false;
+  if (item.cancelMode === "invocation") {
+    return Boolean(item.invocationKey?.trim() && handlers.onCancelOmcDirectBatchInvocation);
+  }
+  return Boolean(item.sessionId?.trim() && handlers.onCancelSession);
 }
 
 export function findMergedToolUseInSession(

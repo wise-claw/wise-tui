@@ -1,8 +1,9 @@
-import { Collapse, Descriptions, Drawer, Empty, Tag, Typography } from "antd";
+import { Button, Collapse, Drawer, Empty, Tag, Typography } from "antd";
 import { memo, useMemo } from "react";
 import type { ClaudeSession, SessionConversationTaskItem } from "../../types";
 import {
   buildSessionConversationTaskDetailSession,
+  canStopSessionConversationTask,
   findMergedToolUseInSession,
   sessionConversationTaskStatusLabel,
 } from "../../utils/sessionConversationTasks";
@@ -38,10 +39,16 @@ export const SessionConversationTaskDetailDrawer = memo(function SessionConversa
   target,
   sessions,
   onClose,
+  onStopTask,
+  onCancelSession,
+  onCancelOmcDirectBatchInvocation,
 }: {
   target: SessionConversationTaskDetailTarget | null;
   sessions: readonly ClaudeSession[];
   onClose: () => void;
+  onStopTask?: (task: SessionConversationTaskItem) => void;
+  onCancelSession?: (sessionId: string) => void;
+  onCancelOmcDirectBatchInvocation?: (invocationKey: string) => void;
 }) {
   const width = Math.min(760, typeof window !== "undefined" ? window.innerWidth - 40 : 760);
   const task = target?.task ?? null;
@@ -62,6 +69,10 @@ export const SessionConversationTaskDetailDrawer = memo(function SessionConversa
     return findMergedToolUseInSession(session.messages, task.toolUseId);
   }, [session, task]);
 
+  const canStop = task
+    ? canStopSessionConversationTask(task, { onCancelSession, onCancelOmcDirectBatchInvocation })
+    : false;
+
   return (
     <Drawer
       title={task ? `${task.label} · 子代理执行` : "子代理执行详情"}
@@ -74,6 +85,15 @@ export const SessionConversationTaskDetailDrawer = memo(function SessionConversa
       extra={
         task ? (
           <span className="app-monitor-panel__subagent-detail-drawer-extra">
+            {canStop && onStopTask && task ? (
+              <Button
+                size="small"
+                danger
+                onClick={() => onStopTask(task)}
+              >
+                结束执行
+              </Button>
+            ) : null}
             <SubagentStatusIndicator status={task.status} />
             <Tag color={taskStatusTagColor(task.status)}>{sessionConversationTaskStatusLabel(task.status)}</Tag>
           </span>
@@ -85,9 +105,10 @@ export const SessionConversationTaskDetailDrawer = memo(function SessionConversa
       ) : (
         <div className="app-monitor-panel__subagent-detail">
           {task.status === "running" ? (
-            <Typography.Text type="secondary" className="app-monitor-panel__subagent-detail-hint">
-              子代理仍在执行中，下方内容会随对话流式更新。
-            </Typography.Text>
+            <div className="app-monitor-panel__subagent-detail-hint">
+              <span className="app-monitor-panel__subagent-detail-hint-dot" />
+              <span>子代理正在执行，内容随对话流式更新中...</span>
+            </div>
           ) : null}
           <div className="app-monitor-panel__subagent-detail-session">
             {transcriptSession && transcriptSession.messages.length > 0 ? (
@@ -106,32 +127,70 @@ export const SessionConversationTaskDetailDrawer = memo(function SessionConversa
                 label: "元数据",
                 children: (
                   <>
-                    <Descriptions column={1} size="small" bordered>
-                      <Descriptions.Item label="名称">{task.label}</Descriptions.Item>
-                      {task.subtitle ? <Descriptions.Item label="类型">{task.subtitle}</Descriptions.Item> : null}
-                      <Descriptions.Item label="来源">{sourceLabel(task.source)}</Descriptions.Item>
-                      <Descriptions.Item label="仓库">{session.repositoryName || "—"}</Descriptions.Item>
-                      <Descriptions.Item label="会话 id">
-                        <Typography.Text code copyable={{ text: session.id }}>
-                          {compactId(session.id)}
-                        </Typography.Text>
-                      </Descriptions.Item>
-                      {task.toolUseId ? (
-                        <Descriptions.Item label="tool_use id">
-                          <Typography.Text code copyable={{ text: task.toolUseId }}>
-                            {compactId(task.toolUseId)}
+                    <div className="app-monitor-panel__subagent-metadata-grid">
+                      <div className="app-monitor-panel__subagent-metadata-item">
+                        <span className="app-monitor-panel__subagent-metadata-label">名称</span>
+                        <span className="app-monitor-panel__subagent-metadata-value" title={task.label}>
+                          {task.label}
+                        </span>
+                      </div>
+                      {task.subtitle ? (
+                        <div className="app-monitor-panel__subagent-metadata-item">
+                          <span className="app-monitor-panel__subagent-metadata-label">类型</span>
+                          <span className="app-monitor-panel__subagent-metadata-value" title={task.subtitle}>
+                            {task.subtitle}
+                          </span>
+                        </div>
+                      ) : null}
+                      <div className="app-monitor-panel__subagent-metadata-item">
+                        <span className="app-monitor-panel__subagent-metadata-label">来源</span>
+                        <span className="app-monitor-panel__subagent-metadata-value">
+                          {sourceLabel(task.source)}
+                        </span>
+                      </div>
+                      <div className="app-monitor-panel__subagent-metadata-item">
+                        <span className="app-monitor-panel__subagent-metadata-label">仓库</span>
+                        <span className="app-monitor-panel__subagent-metadata-value" title={session.repositoryName || ""}>
+                          {session.repositoryName || "—"}
+                        </span>
+                      </div>
+                      <div className="app-monitor-panel__subagent-metadata-item">
+                        <span className="app-monitor-panel__subagent-metadata-label">会话 ID</span>
+                        <span className="app-monitor-panel__subagent-metadata-value">
+                          <Typography.Text code copyable={{ text: session.id }} className="app-monitor-panel__subagent-metadata-code">
+                            {compactId(session.id)}
                           </Typography.Text>
-                        </Descriptions.Item>
+                        </span>
+                      </div>
+                      {task.toolUseId ? (
+                        <div className="app-monitor-panel__subagent-metadata-item">
+                          <span className="app-monitor-panel__subagent-metadata-label">Tool Use ID</span>
+                          <span className="app-monitor-panel__subagent-metadata-value">
+                            <Typography.Text code copyable={{ text: task.toolUseId }} className="app-monitor-panel__subagent-metadata-code">
+                              {compactId(task.toolUseId)}
+                            </Typography.Text>
+                          </span>
+                        </div>
                       ) : null}
                       {task.invocationKey ? (
-                        <Descriptions.Item label="invocation key">
-                          <Typography.Text code copyable={{ text: task.invocationKey }}>
-                            {compactId(task.invocationKey)}
-                          </Typography.Text>
-                        </Descriptions.Item>
+                        <div className="app-monitor-panel__subagent-metadata-item">
+                          <span className="app-monitor-panel__subagent-metadata-label">Invocation Key</span>
+                          <span className="app-monitor-panel__subagent-metadata-value">
+                            <Typography.Text code copyable={{ text: task.invocationKey }} className="app-monitor-panel__subagent-metadata-code">
+                              {compactId(task.invocationKey)}
+                            </Typography.Text>
+                          </span>
+                        </div>
                       ) : null}
-                      {toolPart?.name ? <Descriptions.Item label="工具">{toolPart.name}</Descriptions.Item> : null}
-                    </Descriptions>
+                      {toolPart?.name ? (
+                        <div className="app-monitor-panel__subagent-metadata-item">
+                          <span className="app-monitor-panel__subagent-metadata-label">对应工具</span>
+                          <span className="app-monitor-panel__subagent-metadata-value" title={toolPart.name}>
+                            {toolPart.name}
+                          </span>
+                        </div>
+                      ) : null}
+                    </div>
 
                     <div className="app-monitor-panel__subagent-detail-section">
                       <Typography.Text strong className="app-monitor-panel__subagent-detail-section-title">

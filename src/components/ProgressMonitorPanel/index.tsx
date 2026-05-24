@@ -37,6 +37,7 @@ import { ClaudeSessionMessagesColumn } from "../ClaudeSessions/ClaudeSessionMess
 
 import { useAgentAssignments } from "../../hooks/useAgentAssignments";
 import { SubagentStatusIndicator } from "./SubagentStatusIndicator";
+import { canStopSessionConversationTask } from "../../utils/sessionConversationTasks";
 import {
   SessionConversationTaskDetailDrawer,
   type SessionConversationTaskDetailTarget,
@@ -926,6 +927,26 @@ export function ProgressMonitorPanel({
     setOmcDirectBatchDetailSnapshot(inv);
   }, []);
 
+  const stopSessionConversationTask = useCallback(
+    (item: SessionConversationTaskItem) => {
+      if (!item.cancellable) return;
+      if (item.cancelMode === "session") {
+        const sid = item.sessionId?.trim();
+        if (sid && onCancelSession) {
+          onCancelSession(sid);
+        }
+        return;
+      }
+      if (item.cancelMode === "invocation") {
+        const key = item.invocationKey?.trim();
+        if (key && onCancelOmcDirectBatchInvocation) {
+          onCancelOmcDirectBatchInvocation(key);
+        }
+      }
+    },
+    [onCancelOmcDirectBatchInvocation, onCancelSession],
+  );
+
   const openSessionConversationTaskDetail = useCallback(
     (item: SessionConversationTaskItem) => {
       if (item.invocationKey && item.sessionId && item.repositoryPath) {
@@ -985,11 +1006,16 @@ export function ProgressMonitorPanel({
             </div>
           </div>
           <div className="app-monitor-panel__subagent-tree" aria-label="当前对话子代理与任务">
-            {sessionConversationTaskItems.map((item) => (
-              <div key={item.key} className="app-monitor-panel__session-task-row">
+            {sessionConversationTaskItems.map((item) => {
+              const showStop = canStopSessionConversationTask(item, {
+                onCancelSession,
+                onCancelOmcDirectBatchInvocation,
+              });
+              return (
+              <div className="app-monitor-panel__session-task-row" key={item.key}>
                 <button
                   type="button"
-                  className="app-monitor-panel__subagent-row app-monitor-panel__subagent-row--clickable"
+                  className="app-monitor-panel__subagent-row app-monitor-panel__subagent-row--clickable app-monitor-panel__session-task-row-main"
                   title={item.previewText}
                   onClick={() => openSessionConversationTaskDetail(item)}
                 >
@@ -1000,20 +1026,28 @@ export function ProgressMonitorPanel({
                       <span className="app-monitor-panel__subagent-stage">{item.subtitle}</span>
                     ) : null}
                   </span>
-                  <SubagentStatusIndicator status={item.status} />
                 </button>
-                {item.cancellable && item.invocationKey && onCancelOmcDirectBatchInvocation ? (
-                  <button
-                    type="button"
-                    className="app-monitor-panel__session-task-stop"
-                    aria-label="停止任务"
-                    onClick={() => onCancelOmcDirectBatchInvocation(item.invocationKey!)}
-                  >
-                    ■
-                  </button>
-                ) : null}
+                <span className="app-monitor-panel__session-task-actions">
+                  {showStop ? (
+                    <Tooltip title="结束执行">
+                      <button
+                        type="button"
+                        className="app-monitor-panel__session-task-stop"
+                        aria-label="结束执行"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          stopSessionConversationTask(item);
+                        }}
+                      >
+                        ■
+                      </button>
+                    </Tooltip>
+                  ) : null}
+                  <SubagentStatusIndicator status={item.status} />
+                </span>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       ) : null}
@@ -1413,6 +1447,9 @@ export function ProgressMonitorPanel({
         target={sessionConversationTaskDetailTarget}
         sessions={sessionsForHistoryTranscript}
         onClose={() => setSessionConversationTaskDetailTarget(null)}
+        onStopTask={stopSessionConversationTask}
+        onCancelSession={onCancelSession}
+        onCancelOmcDirectBatchInvocation={onCancelOmcDirectBatchInvocation}
       />
 
       <RepositorySubagentDetailDrawer

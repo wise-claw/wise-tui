@@ -150,6 +150,7 @@ export function ChatInspector({
                 onOpenTaskDetail={onOpenTaskDetailFromMonitor}
                 onOpenOmcBatchInvocationDetail={onOpenOmcBatchInvocationDetail}
                 onCancelOmcDirectBatchInvocation={onCancelOmcDirectBatchInvocation}
+                onCancelSession={onCancelSessionFromMonitor}
                 onReloadFullDiskTranscript={onReloadFullDiskTranscript}
                 onCompactSessionHistory={onCompactSessionHistory}
                 transcriptSourceSessions={transcriptSessions}

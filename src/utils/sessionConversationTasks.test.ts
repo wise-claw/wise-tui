@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ClaudeSession } from "../types";
-import { buildSessionConversationTasks, buildConversationTaskDetailMessages } from "./sessionConversationTasks";
+import { buildSessionConversationTasks, buildConversationTaskDetailMessages, canStopSessionConversationTask } from "./sessionConversationTasks";
 
 function session(partial: Partial<ClaudeSession>): ClaudeSession {
   return {
@@ -240,6 +240,44 @@ describe("buildSessionConversationTasks", () => {
       },
     ];
     expect(buildConversationTaskDetailMessages(messages, "agent-1")).toHaveLength(2);
+  });
+
+  test("marks running message tool as stoppable even when session host is idle", () => {
+    const items = buildSessionConversationTasks({
+      session: session({
+        status: "idle",
+        messages: [
+          {
+            id: 1,
+            role: "user",
+            content: "test",
+            timestamp: 50,
+            parts: [{ type: "text", text: "test" }],
+          },
+          {
+            id: 2,
+            role: "assistant",
+            content: "",
+            timestamp: 100,
+            parts: [
+              {
+                type: "tool_use",
+                id: "agent-1",
+                name: "Agent",
+                input: { description: "子代理问候测试" },
+                status: "running",
+              },
+            ],
+          },
+        ],
+      }),
+    });
+    expect(items[0]?.cancellable).toBe(true);
+    expect(
+      canStopSessionConversationTask(items[0]!, {
+        onCancelSession: () => {},
+      }),
+    ).toBe(true);
   });
 
   test("clears tasks when a new session has no messages yet", () => {
