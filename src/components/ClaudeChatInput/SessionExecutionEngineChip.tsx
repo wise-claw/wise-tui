@@ -1,33 +1,29 @@
-import { Dropdown, Tooltip, type MenuProps } from "antd";
-import { useState } from "react";
+import { Dropdown, Menu, Tooltip, type MenuProps } from "antd";
+import { useMemo, useState } from "react";
 import {
   SESSION_EXECUTION_ENGINE_LABELS,
   type SessionExecutionEngine,
 } from "../../constants/sessionExecutionEngine";
 
-interface Props {
+interface PickerSectionProps {
   engine: SessionExecutionEngine;
   codexAvailable?: boolean;
   onEngineChange?: (engine: SessionExecutionEngine) => void;
-  /** Codex 未就绪时跳转到配置中心「执行环境」并触发探测 */
   onOpenExecutionEnvironment?: () => void;
+}
+
+interface ChipProps extends PickerSectionProps {
   disabled?: boolean;
   className?: string;
 }
 
-export function SessionExecutionEngineChip({
+export function buildSessionExecutionEngineMenuItems({
   engine,
   codexAvailable = true,
-  onEngineChange,
   onOpenExecutionEnvironment,
-  disabled = false,
-  className,
-}: Props) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const meta = SESSION_EXECUTION_ENGINE_LABELS[engine];
-  const interactive = Boolean(onEngineChange) && !disabled;
-
-  const menuItems: MenuProps["items"] = (["claude", "codex"] as const).map((key) => {
+  onProbeClick,
+}: PickerSectionProps & { onProbeClick?: () => void }): MenuProps["items"] {
+  return (["claude", "codex"] as const).map((key) => {
     const itemMeta = SESSION_EXECUTION_ENGINE_LABELS[key];
     const itemDisabled = key === "codex" && !codexAvailable;
     const isSelected = engine === key;
@@ -40,7 +36,7 @@ export function SessionExecutionEngineChip({
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
-            setMenuOpen(false);
+            onProbeClick?.();
             onOpenExecutionEnvironment();
           }}
         >
@@ -100,6 +96,66 @@ export function SessionExecutionEngineChip({
       ),
     };
   });
+}
+
+export function SessionExecutionEnginePickerSection({
+  engine,
+  codexAvailable = true,
+  onEngineChange,
+  onOpenExecutionEnvironment,
+}: PickerSectionProps) {
+  const menuItems = useMemo(
+    () =>
+      buildSessionExecutionEngineMenuItems({
+        engine,
+        codexAvailable,
+        onOpenExecutionEnvironment,
+      }),
+    [codexAvailable, engine, onOpenExecutionEnvironment],
+  );
+
+  return (
+    <>
+      <div className="app-claude-connection-kind-dropdown-header">
+        <span className="app-claude-connection-kind-dropdown-header-title">执行环境</span>
+        <span className="app-claude-connection-kind-dropdown-header-subtitle">选择后台 AI 代码执行的 CLI 引擎</span>
+      </div>
+      <Menu
+        className="app-composer-runtime-settings-menu"
+        items={menuItems}
+        selectable
+        selectedKeys={[engine]}
+        onClick={({ key }) => {
+          const next = key === "codex" || key === "claude" ? key : engine;
+          if (next !== engine) onEngineChange?.(next);
+        }}
+      />
+    </>
+  );
+}
+
+export function SessionExecutionEngineChip({
+  engine,
+  codexAvailable = true,
+  onEngineChange,
+  onOpenExecutionEnvironment,
+  disabled = false,
+  className,
+}: ChipProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const meta = SESSION_EXECUTION_ENGINE_LABELS[engine];
+  const interactive = Boolean(onEngineChange) && !disabled;
+
+  const menuItems = useMemo(
+    () =>
+      buildSessionExecutionEngineMenuItems({
+        engine,
+        codexAvailable,
+        onOpenExecutionEnvironment,
+        onProbeClick: () => setMenuOpen(false),
+      }),
+    [codexAvailable, engine, onOpenExecutionEnvironment],
+  );
 
   const chipTooltip =
     engine === "codex" && !codexAvailable

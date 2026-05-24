@@ -524,3 +524,66 @@
 .app-claude-semi-footer-stop-btn:hover {
   color: var(--ant-color-error) !important;
 }
+
+.app-composer-runtime-settings-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ant-color-text-tertiary);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.app-composer-runtime-settings-btn:hover:not(:disabled) {
+  color: var(--ant-color-text-secondary);
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-composer-runtime-settings-btn:focus-visible {
+  outline: 2px solid var(--ant-color-primary);
+  outline-offset: 1px;
+}
+
+.app-composer-runtime-settings-btn--active {
+  color: var(--ant-color-primary);
+}
+
+.app-composer-runtime-settings-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.app-composer-runtime-settings-popover {
+  min-width: 250px;
+  max-width: 320px;
+}
+
+.app-composer-runtime-settings-dropdown .ant-dropdown-menu-item-group-title {
+  padding: 8px 12px 4px;
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ant-color-text-tertiary);
+  line-height: 1.2;
+}
+
+.app-composer-runtime-settings-dropdown .ant-dropdown-menu-item-group:not(:first-child) .ant-dropdown-menu-item-group-title {
+  padding-top: 10px;
+  border-top: 1px solid var(--ant-color-border-secondary);
+  margin-top: 2px;
+}
+
+.app-composer-runtime-settings-dropdown .ant-dropdown-menu {
+  padding-top: 2px !important;
+  padding-bottom: 4px !important;
+}

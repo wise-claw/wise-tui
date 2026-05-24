@@ -1,4 +1,5 @@
-import { Dropdown, Tooltip, type MenuProps } from "antd";
+import { Dropdown, Menu, Tooltip, type MenuProps } from "antd";
+import { useMemo } from "react";
 import {
   CLAUDE_CONNECTION_KIND_LABELS,
   CLAUDE_DEFAULT_CONNECTION_KIND_FALLBACK,
@@ -12,30 +13,22 @@ const SHORT_LABEL: Record<ClaudeSessionConnectionKind, string> = {
   oneshot: "逐轮",
 };
 
-interface Props {
-  /** 本标签临时覆盖；未设置时显示并跟随 `defaultConnectionKind`。 */
+interface PickerSectionProps {
   connectionKind?: ClaudeSessionConnectionKind | null;
-  /** 全局默认（`wise.defaultConfig.v1`）。 */
   defaultConnectionKind?: ClaudeSessionConnectionKind;
   onConnectionKindChange?: (kind: ClaudeSessionConnectionKind) => void;
+}
+
+interface ChipProps extends PickerSectionProps {
   disabled?: boolean;
   className?: string;
 }
 
-export function ClaudeConnectionKindChip({
-  connectionKind,
-  defaultConnectionKind = CLAUDE_DEFAULT_CONNECTION_KIND_FALLBACK,
-  onConnectionKindChange,
-  disabled = false,
-  className,
-}: Props) {
-  const hasTabOverride = isTabConnectionKindOverride(connectionKind);
-  const kind = resolveSessionConnectionKind(connectionKind, defaultConnectionKind);
-  const meta = CLAUDE_CONNECTION_KIND_LABELS[kind];
-  const interactive = Boolean(onConnectionKindChange) && !disabled;
-  const defaultMeta = CLAUDE_CONNECTION_KIND_LABELS[defaultConnectionKind];
-
-  const menuItems: MenuProps["items"] = (["oneshot", "streaming"] as const).map((key) => {
+export function buildConnectionKindMenuItems(
+  kind: ClaudeSessionConnectionKind,
+  defaultConnectionKind: ClaudeSessionConnectionKind,
+): MenuProps["items"] {
+  return (["oneshot", "streaming"] as const).map((key) => {
     const itemMeta = CLAUDE_CONNECTION_KIND_LABELS[key];
     const isGlobalDefault = key === defaultConnectionKind;
     const isSelected = kind === key;
@@ -63,6 +56,60 @@ export function ClaudeConnectionKindChip({
       ),
     };
   });
+}
+
+export function ClaudeConnectionKindPickerSection({
+  connectionKind,
+  defaultConnectionKind = CLAUDE_DEFAULT_CONNECTION_KIND_FALLBACK,
+  onConnectionKindChange,
+}: PickerSectionProps) {
+  const kind = resolveSessionConnectionKind(connectionKind, defaultConnectionKind);
+  const hasTabOverride = isTabConnectionKindOverride(connectionKind);
+
+  const menuItems = useMemo(
+    () => buildConnectionKindMenuItems(kind, defaultConnectionKind),
+    [defaultConnectionKind, kind],
+  );
+
+  return (
+    <>
+      <div className="app-claude-connection-kind-dropdown-header">
+        <span className="app-claude-connection-kind-dropdown-header-title">连接方式</span>
+        <span className="app-claude-connection-kind-dropdown-header-subtitle">
+          选择 Claude 会话长驻或逐轮处理
+        </span>
+      </div>
+      <Menu
+        className="app-composer-runtime-settings-menu"
+        items={menuItems}
+        selectable
+        selectedKeys={[kind]}
+        onClick={({ key }) => {
+          const next = key === "streaming" || key === "oneshot" ? key : kind;
+          if (next !== kind || hasTabOverride) onConnectionKindChange?.(next);
+        }}
+      />
+    </>
+  );
+}
+
+export function ClaudeConnectionKindChip({
+  connectionKind,
+  defaultConnectionKind = CLAUDE_DEFAULT_CONNECTION_KIND_FALLBACK,
+  onConnectionKindChange,
+  disabled = false,
+  className,
+}: ChipProps) {
+  const hasTabOverride = isTabConnectionKindOverride(connectionKind);
+  const kind = resolveSessionConnectionKind(connectionKind, defaultConnectionKind);
+  const meta = CLAUDE_CONNECTION_KIND_LABELS[kind];
+  const interactive = Boolean(onConnectionKindChange) && !disabled;
+  const defaultMeta = CLAUDE_CONNECTION_KIND_LABELS[defaultConnectionKind];
+
+  const menuItems = useMemo(
+    () => buildConnectionKindMenuItems(kind, defaultConnectionKind),
+    [defaultConnectionKind, kind],
+  );
 
   const chipTooltip = hasTabOverride
     ? `本标签已临时设为${meta.title}；选「${defaultMeta.title}」可恢复跟随全局默认`
@@ -112,7 +159,9 @@ export function ClaudeConnectionKindChip({
         selectable: true,
         selectedKeys: [kind],
         onClick: ({ key }) => {
-          const next = key === "streaming" || key === "oneshot" ? key : kind;
+          const next = key === "streaming" || key === "oneshot" 
+            ? key
+            : kind;
           if (next !== kind || hasTabOverride) onConnectionKindChange?.(next);
         },
       }}

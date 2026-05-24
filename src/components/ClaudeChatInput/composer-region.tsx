@@ -50,8 +50,7 @@ import { CheckOutlined } from "@ant-design/icons";
 import { Dropdown, Button, Empty, Input, Popover, Select, Spin, Switch, Tabs, Tag, Tooltip, message } from "antd";
 import { ContextCompactProgressRing } from "./ContextCompactProgressRing";
 import { useContextBreakdown } from "../../hooks/useContextBreakdown";
-import { ClaudeConnectionKindChip } from "./ClaudeConnectionKindChip";
-import { SessionExecutionEngineChip } from "./SessionExecutionEngineChip";
+import { ComposerRuntimeSettingsTrigger } from "./ComposerRuntimeSettingsTrigger";
 import { useDefaultClaudeConnectionKind } from "../../hooks/useDefaultClaudeConnectionKind";
 import { useComposerSpeechDictation } from "../../hooks/useComposerSpeechDictation";
 import { useComposerSpeechPreferences } from "../../hooks/useComposerSpeechPreferences";
@@ -2062,23 +2061,16 @@ function ComposerInner({
             </Button>
           </Tooltip>
         ) : null}
-        {codexAvailable ? (
-          <SessionExecutionEngineChip
-            engine={sessionExecutionEngine}
-            codexAvailable={codexAvailable}
-            disabled={isSessionBusy}
-            onEngineChange={onSessionExecutionEngineChange}
-            onOpenExecutionEnvironment={onOpenExecutionEnvironment}
-          />
-        ) : null}
-        {sessionExecutionEngine === "claude" ? (
-          <ClaudeConnectionKindChip
-            connectionKind={session.connectionKind}
-            defaultConnectionKind={defaultConnectionKind}
-            disabled={isSessionBusy}
-            onConnectionKindChange={onSessionConnectionKindChange}
-          />
-        ) : null}
+        <ComposerRuntimeSettingsTrigger
+          engine={sessionExecutionEngine}
+          codexAvailable={codexAvailable}
+          disabled={isSessionBusy}
+          onEngineChange={onSessionExecutionEngineChange}
+          onOpenExecutionEnvironment={onOpenExecutionEnvironment}
+          connectionKind={session.connectionKind}
+          defaultConnectionKind={defaultConnectionKind}
+          onConnectionKindChange={onSessionConnectionKindChange}
+        />
         <Dropdown
           overlayClassName="app-claude-model-picker-dropdown"
           menu={{

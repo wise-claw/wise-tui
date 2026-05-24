@@ -4895,7 +4895,7 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-claude-input-bottom-bar {
-  display: flex;
+  display: none;
   align-items: center;
   gap: 8px;
   margin-top: 8px;
