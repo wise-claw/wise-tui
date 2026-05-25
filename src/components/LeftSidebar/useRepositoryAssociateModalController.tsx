@@ -25,7 +25,16 @@ import {
   deriveFolderNameFromGitUrl,
   validateRepositoryAcquireParams,
 } from "../../utils/repositoryAcquire";
+import { yieldToUi } from "../../utils/yieldToUi";
 import { buildAddRepositoryOptions } from "./RepositoryAssociateModal";
+
+const REPO_ACQUIRE_LOADING_KEY = "wise-repo-acquire";
+
+function acquireLoadingLabel(mode: RepositoryAcquireMode): string {
+  if (mode === "git_clone") return "正在克隆仓库…";
+  if (mode === "create_empty") return "正在创建空仓库…";
+  return "正在处理…";
+}
 
 interface UseRepositoryAssociateModalControllerInput {
   projects?: ProjectItem[];
@@ -69,7 +78,6 @@ export function useRepositoryAssociateModalController({
   const [parentPath, setParentPath] = useState("");
   const [folderName, setFolderName] = useState("");
   const [gitUrl, setGitUrl] = useState("");
-  const [submitting, setSubmitting] = useState(false);
 
   const pendingProject = useMemo(
     () => (pendingProjectId ? projects.find((p) => p.id === pendingProjectId) ?? null : null),
@@ -176,7 +184,6 @@ export function useRepositoryAssociateModalController({
   const close = useCallback(() => {
     setPendingProjectId(null);
     setFloatingMode(false);
-    setSubmitting(false);
   }, []);
 
   const pickParentPath = useCallback(async () => {
@@ -236,7 +243,7 @@ export function useRepositoryAssociateModalController({
     };
   }, [acquireMode, folderName, gitUrl, parentPath]);
 
-  const submit = useCallback(async () => {
+  const submit = useCallback(() => {
     if (!pendingProjectId && !floatingMode) return;
     if (isCustomPresetSelectValue(associateSelectValue)) {
       const presetId = associateSelectValue.slice("custom:".length);
@@ -257,52 +264,96 @@ export function useRepositoryAssociateModalController({
       return;
     }
 
-    const dispatch = (explicitFolderPath?: string) => {
-      if (floatingMode) {
-        if (!onAddFloatingRepository) {
-          message.warning("当前环境未启用「添加单仓」入口");
-          return;
+    const capturedProjectId = pendingProjectId;
+    const capturedFloating = floatingMode;
+    const capturedDefaultParent = defaultParentPath;
+
+    const runAssociate = async (explicitFolderPath: string) => {
+      const hideLink = message.loading({
+        content: "正在关联仓库…",
+        duration: 0,
+        key: REPO_ACQUIRE_LOADING_KEY,
+      });
+      try {
+        if (capturedFloating) {
+          if (!onAddFloatingRepository) {
+            message.warning("当前环境未启用「添加单仓」入口");
+            return;
+          }
+          await Promise.resolve(
+            onAddFloatingRepository(repositoryType, options, acquire, explicitFolderPath),
+          );
+        } else if (capturedProjectId) {
+          if (!onAddRepositoryToProject) {
+            message.warning("当前环境未启用「加入工作区」");
+            return;
+          }
+          await Promise.resolve(
+            onAddRepositoryToProject(
+              capturedProjectId,
+              repositoryType,
+              options,
+              acquire,
+              explicitFolderPath,
+            ),
+          );
         }
-        void onAddFloatingRepository(repositoryType, options, acquire, explicitFolderPath);
-        return;
+        message.success("仓库已关联");
+      } catch (err) {
+        console.error(err);
+        message.error(err instanceof Error ? err.message : String(err));
+      } finally {
+        hideLink();
       }
-      if (!pendingProjectId) return;
-      if (!onAddRepositoryToProject) {
-        message.warning("当前环境未启用「加入工作区」");
-        close();
-        return;
-      }
-      void onAddRepositoryToProject(
-        pendingProjectId,
-        repositoryType,
-        options,
-        acquire,
-        explicitFolderPath,
-      );
     };
 
     if (acquire.mode === "pick_existing") {
-      setPendingProjectId(null);
-      setFloatingMode(false);
-      dispatch();
+      close();
+      void (async () => {
+        if (capturedFloating) {
+          if (!onAddFloatingRepository) {
+            message.warning("当前环境未启用「添加单仓」入口");
+            return;
+          }
+          await Promise.resolve(onAddFloatingRepository(repositoryType, options, acquire));
+          return;
+        }
+        if (!capturedProjectId) return;
+        if (!onAddRepositoryToProject) {
+          message.warning("当前环境未启用「加入工作区」");
+          return;
+        }
+        await Promise.resolve(
+          onAddRepositoryToProject(capturedProjectId, repositoryType, options, acquire),
+        );
+      })();
       return;
     }
 
-    setSubmitting(true);
-    try {
-      const resolved = await resolveRepositoryAcquirePath(acquire, {
-        defaultParentPath: defaultParentPath || undefined,
-      });
-      if (!resolved.ok) {
-        if (resolved.error) message.error(resolved.error);
-        return;
+    close();
+    const hideAcquire = message.loading({
+      content: acquireLoadingLabel(acquire.mode),
+      duration: 0,
+      key: REPO_ACQUIRE_LOADING_KEY,
+    });
+    void (async () => {
+      try {
+        await yieldToUi();
+        const resolved = await resolveRepositoryAcquirePath(acquire, {
+          defaultParentPath: capturedDefaultParent || undefined,
+        });
+        hideAcquire();
+        if (!resolved.ok) {
+          if (resolved.error) message.error(resolved.error);
+          return;
+        }
+        await runAssociate(resolved.path);
+      } catch (err) {
+        hideAcquire();
+        console.error(err);
+        message.error(err instanceof Error ? err.message : String(err));
       }
-      setPendingProjectId(null);
-      setFloatingMode(false);
-      dispatch(resolved.path);
-    } finally {
-      setSubmitting(false);
-    }
+    })();
   }, [
     associateSelectValue,
     buildAcquireParams,
@@ -332,7 +383,6 @@ export function useRepositoryAssociateModalController({
   return {
     open,
     floatingMode,
-    submitting,
     acquireMode,
     setAcquireMode,
     parentPath,

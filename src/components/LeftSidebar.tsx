@@ -743,7 +743,6 @@ export function LeftSidebar({
       <RepositoryAssociateModal
         open={repositoryAssociateModal.open}
         floatingMode={repositoryAssociateModal.floatingMode}
-        submitting={repositoryAssociateModal.submitting}
         acquireMode={repositoryAssociateModal.acquireMode}
         onAcquireModeChange={repositoryAssociateModal.setAcquireMode}
         parentPath={repositoryAssociateModal.parentPath}

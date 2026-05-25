@@ -961,9 +961,7 @@ pub(crate) fn prepare_empty_repository_dir(
     Ok(canon.to_string_lossy().to_string())
 }
 
-/// 在父目录下执行 `git clone`，返回克隆后的仓库绝对路径。
-#[tauri::command]
-pub(crate) fn git_clone_repository(
+fn git_clone_repository_blocking(
     parent_path: String,
     url: String,
     folder_name: Option<String>,
@@ -1002,6 +1000,18 @@ pub(crate) fn git_clone_repository(
     }
     canonicalize_existing_dir(&dest.to_string_lossy())
         .map(|p| p.to_string_lossy().to_string())
+}
+
+/// 在父目录下执行 `git clone`，返回克隆后的仓库绝对路径（阻塞任务在后台线程执行）。
+#[tauri::command]
+pub async fn git_clone_repository(
+    parent_path: String,
+    url: String,
+    folder_name: Option<String>,
+) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || git_clone_repository_blocking(parent_path, url, folder_name))
+        .await
+        .map_err(|e| format!("git clone 任务异常: {e}"))?
 }
 
 #[cfg(test)]

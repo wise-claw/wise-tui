@@ -10,7 +10,6 @@ import { WorkspaceBootstrapPicker } from "../WorkspaceBootstrapPicker";
 interface RepositoryAssociateModalProps {
   open: boolean;
   floatingMode: boolean;
-  submitting?: boolean;
   acquireMode: RepositoryAcquireMode;
   onAcquireModeChange: (mode: RepositoryAcquireMode) => void;
   parentPath: string;
@@ -50,7 +49,6 @@ const ACQUIRE_MODE_OPTIONS: { value: RepositoryAcquireMode; label: string }[] = 
 export function RepositoryAssociateModal({
   open,
   floatingMode,
-  submitting = false,
   acquireMode,
   onAcquireModeChange,
   parentPath,
@@ -84,13 +82,11 @@ export function RepositoryAssociateModal({
       title={floatingMode ? "添加单仓" : "关联仓库"}
       open={open}
       onCancel={onCancel}
-      onOk={onSubmit}
+      onOk={() => {
+        onSubmit();
+      }}
       okText={submitOkText}
       cancelText="取消"
-      confirmLoading={submitting}
-      closable={!submitting}
-      mask={{ closable: !submitting }}
-      keyboard={!submitting}
       width={floatingMode ? 480 : 440}
     >
       <Space orientation="vertical" size={8} style={{ width: "100%" }}>
@@ -100,7 +96,6 @@ export function RepositoryAssociateModal({
             block
             size="small"
             value={acquireMode}
-            disabled={submitting}
             options={ACQUIRE_MODE_OPTIONS}
             onChange={(value) => onAcquireModeChange(value as RepositoryAcquireMode)}
           />
@@ -114,7 +109,6 @@ export function RepositoryAssociateModal({
                 type="default"
                 size="small"
                 icon={<FolderOpenOutlined />}
-                disabled={submitting}
                 onClick={() => void onPickParentPath()}
               >
                 选择
@@ -122,7 +116,6 @@ export function RepositoryAssociateModal({
               <Input
                 size="small"
                 value={parentPath}
-                disabled={submitting}
                 placeholder="工作区根目录或任意父路径"
                 onChange={(event) => onParentPathChange(event.target.value)}
               />
@@ -137,7 +130,6 @@ export function RepositoryAssociateModal({
                 <Input
                   size="small"
                   value={gitUrl}
-                  disabled={submitting}
                   placeholder="https://github.com/org/repo.git 或 git@host:org/repo.git"
                   onChange={(event) => onGitUrlChange(event.target.value)}
                   allowClear
@@ -146,7 +138,6 @@ export function RepositoryAssociateModal({
                 <Input
                   size="small"
                   value={folderName}
-                  disabled={submitting}
                   placeholder={gitFolderPlaceholder}
                   onChange={(event) => onFolderNameChange(event.target.value)}
                   allowClear
@@ -158,7 +149,6 @@ export function RepositoryAssociateModal({
                 <Input
                   size="small"
                   value={folderName}
-                  disabled={submitting}
                   placeholder="例如 frontend-api"
                   onChange={(event) => onFolderNameChange(event.target.value)}
                   allowClear
@@ -180,7 +170,6 @@ export function RepositoryAssociateModal({
             popupMatchSelectWidth
             optionLabelProp="title"
             value={associateSelectValue}
-            disabled={submitting}
             onChange={(value) => {
               const nextValue = String(value);
               if (nextValue === "frontend" || nextValue === "backend" || nextValue === "document") {
@@ -253,7 +242,6 @@ export function RepositoryAssociateModal({
           <WorkspaceBootstrapPicker
             selection={workspaceBootstrapSelection}
             onChange={onWorkspaceBootstrapSelectionChange}
-            disabled={submitting}
           />
         </div>
       </Space>
