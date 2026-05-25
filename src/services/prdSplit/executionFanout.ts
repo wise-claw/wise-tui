@@ -9,6 +9,7 @@ export type ExecutionFanoutTaskStatus = "waiting" | "running" | "succeeded" | "f
 export type ExecutionFanoutWaveStatus = "waiting" | "running" | "succeeded" | "failed";
 export type ExecutionFanoutLoopStageKey = "dispatch" | "run" | "verify" | "spec";
 export type ExecutionFanoutLoopStageStatus = "waiting" | "active" | "done" | "failed";
+export type ExecutionFanoutBatchStage = "implement" | "check";
 
 export interface ExecutionFanoutLoopStageSnapshot {
   key: ExecutionFanoutLoopStageKey;
@@ -41,6 +42,8 @@ export interface ExecutionFanoutSnapshot {
   totalCount: number;
   doneCount: number;
   failedCount: number;
+  verifyDoneCount?: number;
+  verifyFailedCount?: number;
   waves: ExecutionFanoutWaveSnapshot[];
   lifecycleStages?: ExecutionFanoutLoopStageSnapshot[];
   message?: string;
@@ -69,6 +72,8 @@ export type RunWaveBatch = (params: {
   waveIndex: number;
   executionItems: MaterializedTaskForExecution[];
   boundWorkflowRunId: string | null;
+  stage: ExecutionFanoutBatchStage;
+  subagentType: string;
 }) => Promise<RunSplitTasksOmcBatchResult>;
 
 export interface RunMaterializedSplitTasksFanoutInput {
@@ -80,6 +85,8 @@ export interface RunMaterializedSplitTasksFanoutInput {
   materializedResult: WriteClusterTasksOutput;
   parallelGroups: string[][];
   subagentType?: string;
+  verifyAfterRun?: boolean;
+  verifySubagentType?: string;
   repositoryMetadata?: {
     ownerRepositoryId?: number;
     ownerRepositoryName?: string;
@@ -88,6 +95,7 @@ export interface RunMaterializedSplitTasksFanoutInput {
   };
   onSnapshot?: (snapshot: ExecutionFanoutSnapshot) => void;
   runWaveBatch?: RunWaveBatch;
+  runVerifyBatch?: RunWaveBatch;
 }
 
 export function buildMaterializedExecutionWaves(input: {
@@ -131,7 +139,11 @@ export async function runMaterializedSplitTasksFanout(
   const workflowRunIds = new Set<string>();
   let doneCount = 0;
   let failedCount = 0;
+  let verifyDoneCount = 0;
+  let verifyFailedCount = 0;
   let waveSnapshots = buildInitialWaveSnapshots(waves, itemBySourceId);
+  const implementSubagentType = input.subagentType?.trim() || "trellis-implement";
+  const verifySubagentType = input.verifySubagentType?.trim() || "trellis-check";
 
   const emit = (
     patch?: Partial<ExecutionFanoutSnapshot>,
@@ -139,16 +151,19 @@ export async function runMaterializedSplitTasksFanout(
   ) => {
     const failed = failedCount > 0;
     const complete = doneCount + failedCount >= executionItems.length;
-    const status = failed ? "failed" : complete ? "succeeded" : "running";
+    const baseStatus: ExecutionFanoutSnapshot["status"] = failed ? "failed" : complete ? "succeeded" : "running";
+    const snapshotStatus = patch?.status ?? baseStatus;
     const snapshot: ExecutionFanoutSnapshot = {
-      status,
+      status: snapshotStatus,
       workflowRunId,
       workflowRunIds: Array.from(workflowRunIds),
       totalCount: executionItems.length,
       doneCount,
       failedCount,
+      verifyDoneCount,
+      verifyFailedCount,
       waves: waveSnapshots,
-      lifecycleStages: buildExecutionFanoutLoopStages(status, activeStage),
+      lifecycleStages: buildExecutionFanoutLoopStages(snapshotStatus, activeStage),
       ...patch,
     };
     input.onSnapshot?.(snapshot);
@@ -162,33 +177,13 @@ export async function runMaterializedSplitTasksFanout(
     emit({ message: `正在派发第 ${wave.waveIndex + 1} 波。` }, "run");
 
     const items = wave.taskIds.map((sourceId) => itemBySourceId.get(sourceId)).filter((item): item is MaterializedTaskForExecution => Boolean(item));
-    const batch = await (input.runWaveBatch ?? ((params) => runSplitTasksOmcBatch({
-      facade: input.facade,
-      sessionId: input.sessionId,
-      repositoryPath: input.repositoryPath,
-      tasks: params.tasks,
-      templateId: TRELLIS_BATCH_TEMPLATE_ID,
-      subagentType: input.subagentType?.trim() || "trellis-implement",
-      executionMetadata: {
-        ownerKind: "repository",
-        ...(input.repositoryMetadata ?? {}),
-        stage: "implement",
-        subagentType: input.subagentType?.trim() || "trellis-implement",
-        parentTaskName: input.materializedResult.parentTaskName,
-        waveIndex: params.waveIndex,
-      },
-      executionMetadataByTaskId: Object.fromEntries(params.executionItems.map((item) => [item.workflowTask.id, {
-        activeTaskPath: item.activeTaskPath,
-        sourceTaskId: item.sourceTask.id,
-        childTaskName: item.taskName,
-      }])),
-      concurrency: Math.max(1, params.tasks.length),
-      boundWorkflowRunId: params.boundWorkflowRunId,
-    })))({
+    const batch = await runFanoutBatch(input, input.runWaveBatch, {
       tasks: wave.workflowTasks,
       waveIndex: wave.waveIndex,
       executionItems: items,
       boundWorkflowRunId: workflowRunId,
+      stage: "implement",
+      subagentType: implementSubagentType,
     });
 
     workflowRunId = batch.workflowRunId ?? workflowRunId;
@@ -208,6 +203,35 @@ export async function runMaterializedSplitTasksFanout(
     if (batch.failedCount > 0) break;
   }
 
+  if (failedCount === 0 && input.verifyAfterRun) {
+    emit({
+      status: "running",
+      message: `实现运行完成：成功 ${doneCount}，失败 0。正在启动 trellis-check 校验。`,
+    }, "verify");
+    const verifyBatch = await runFanoutBatch(input, input.runVerifyBatch, {
+      tasks: executionItems.map((item) => item.workflowTask),
+      waveIndex: waves.length,
+      executionItems,
+      boundWorkflowRunId: workflowRunId,
+      stage: "check",
+      subagentType: verifySubagentType,
+    });
+    workflowRunId = verifyBatch.workflowRunId ?? workflowRunId;
+    if (verifyBatch.workflowRunId) workflowRunIds.add(verifyBatch.workflowRunId);
+    verifyDoneCount = verifyBatch.doneCount;
+    verifyFailedCount = verifyBatch.failedCount;
+    const verifiedSnapshot = emit({
+      status: verifyFailedCount > 0 ? "failed" : "succeeded",
+      message: verifyFailedCount > 0
+        ? `校验失败：通过 ${verifyDoneCount}，失败 ${verifyFailedCount}。Spec 反哺保持等待。`
+        : `校验完成：通过 ${verifyDoneCount}，失败 0。等待 Spec 反哺。`,
+    }, verifyFailedCount > 0 ? "verify" : "spec");
+    return {
+      ...verifiedSnapshot,
+      materializedResult: input.materializedResult,
+    };
+  }
+
   const finalSnapshot = emit({
     status: failedCount > 0 ? "failed" : "succeeded",
     message: failedCount > 0
@@ -218,6 +242,37 @@ export async function runMaterializedSplitTasksFanout(
     ...finalSnapshot,
     materializedResult: input.materializedResult,
   };
+}
+
+async function runFanoutBatch(
+  input: RunMaterializedSplitTasksFanoutInput,
+  overrideBatch: RunWaveBatch | undefined,
+  params: Parameters<RunWaveBatch>[0],
+): Promise<RunSplitTasksOmcBatchResult> {
+  if (overrideBatch) return overrideBatch(params);
+  return runSplitTasksOmcBatch({
+    facade: input.facade,
+    sessionId: input.sessionId,
+    repositoryPath: input.repositoryPath,
+    tasks: params.tasks,
+    templateId: TRELLIS_BATCH_TEMPLATE_ID,
+    subagentType: params.subagentType,
+    executionMetadata: {
+      ownerKind: "repository",
+      ...(input.repositoryMetadata ?? {}),
+      stage: params.stage,
+      subagentType: params.subagentType,
+      parentTaskName: input.materializedResult.parentTaskName,
+      waveIndex: params.waveIndex,
+    },
+    executionMetadataByTaskId: Object.fromEntries(params.executionItems.map((item) => [item.workflowTask.id, {
+      activeTaskPath: item.activeTaskPath,
+      sourceTaskId: item.sourceTask.id,
+      childTaskName: item.taskName,
+    }])),
+    concurrency: Math.max(1, params.tasks.length),
+    boundWorkflowRunId: params.boundWorkflowRunId,
+  });
 }
 
 export function buildExecutionFanoutLoopStages(
@@ -249,8 +304,12 @@ function loopStageMessage(
 ): string {
   if (stage === "dispatch") return status === "done" ? "任务已派发" : "写入并派发任务";
   if (stage === "run") return status === "done" ? "实现运行完成" : status === "failed" ? "实现运行失败" : "实现运行中";
-  if (stage === "verify") return status === "active" ? "等待校验接续" : "等待校验";
-  return status === "active" ? "等待 Spec 反哺" : "等待反哺";
+  if (stage === "verify") {
+    if (status === "done") return "校验完成";
+    if (status === "failed") return "校验失败";
+    return status === "active" ? "校验接续中" : "等待校验";
+  }
+  return status === "active" ? "Spec 反哺中" : "等待反哺";
 }
 
 function assertAllSourceTasksMaterialized(

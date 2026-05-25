@@ -40,6 +40,7 @@ describe("runWorkspaceTrellisMaterializedFanout", () => {
         task("task-b", "UI", ["task-a"]),
       ],
       materializedResult: materialized(),
+      verifyAfterRun: false,
       runWaveBatch: async ({ waveIndex, tasks }): Promise<RunSplitTasksOmcBatchResult> => {
         calls.push({ waveIndex, taskIds: tasks.map((item) => item.id) });
         return {
@@ -70,6 +71,62 @@ describe("runWorkspaceTrellisMaterializedFanout", () => {
       "wise:split-todo-count-updated:trellis",
       "wise:omc-batch-runtime-changed:false",
     ]);
+  });
+
+  test("runs trellis-check by default after implementation fan-out succeeds", async () => {
+    const calls: Array<{ stage: string; subagentType: string; taskIds: string[] }> = [];
+
+    const result = await runWorkspaceTrellisMaterializedFanout({
+      facade: {} as never,
+      sessionId: "prd-split:parent",
+      projectId: "p1",
+      projectRootPath: "/work/project",
+      repositoryPath: "/work/project/web",
+      sourceTasks: [
+        task("task-a", "API"),
+        task("task-b", "UI", ["task-a"]),
+      ],
+      materializedResult: materialized(),
+      runWaveBatch: async ({ waveIndex, tasks, subagentType, stage }): Promise<RunSplitTasksOmcBatchResult> => {
+        calls.push({ stage, subagentType, taskIds: tasks.map((item) => item.id) });
+        return {
+          message: `wave ${waveIndex} done`,
+          workflowRunId: "wf-1",
+          taskCount: tasks.length,
+          templateId: "trellis",
+          subagentType,
+          concurrency: tasks.length,
+          doneCount: tasks.length,
+          failedCount: 0,
+        };
+      },
+      runVerifyBatch: async ({ tasks, subagentType, stage }): Promise<RunSplitTasksOmcBatchResult> => {
+        calls.push({ stage, subagentType, taskIds: tasks.map((item) => item.id) });
+        return {
+          message: "verify done",
+          workflowRunId: "wf-1",
+          taskCount: tasks.length,
+          templateId: "trellis",
+          subagentType,
+          concurrency: tasks.length,
+          doneCount: tasks.length,
+          failedCount: 0,
+        };
+      },
+    });
+
+    expect(calls.at(-1)).toEqual({
+      stage: "check",
+      subagentType: "trellis-check",
+      taskIds: [
+        ".trellis/tasks/05-19-prd/05-19-api",
+        ".trellis/tasks/05-19-prd/05-19-ui",
+      ],
+    });
+    expect(result.lifecycleStages).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "verify", status: "done" }),
+      expect.objectContaining({ key: "spec", status: "active" }),
+    ]));
   });
 });
 

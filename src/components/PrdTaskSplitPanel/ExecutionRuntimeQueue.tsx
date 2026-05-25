@@ -52,6 +52,7 @@ export function ExecutionRuntimeQueue({
   const overallStatus = fanoutSnapshot?.status ?? "running";
   const runningCount = fanoutSnapshot?.waves.flatMap((wave) => wave.tasks).filter((task) => task.status === "running").length ?? 0;
   const lifecycleStages = fanoutSnapshot?.lifecycleStages ?? [];
+  const activeLifecycleStage = lifecycleStages.find((stage) => stage.status === "active" || stage.status === "failed") ?? null;
   return (
     <div className="app-prd-task-panel__execution-runtime">
       <header className="app-prd-task-panel__execution-runtime-head">
@@ -69,7 +70,7 @@ export function ExecutionRuntimeQueue({
             <Button size="small" type="primary" onClick={onOpenMainSession}>回主会话</Button>
           ) : null}
           <Button size="small" icon={overallStatus === "running" ? <LoadingOutlined /> : <CheckCircleOutlined />} disabled>
-            {overallStatus === "running" ? "运行中" : overallStatus === "failed" ? "有失败" : "待校验"}
+            {runtimeStatusLabel(overallStatus, activeLifecycleStage?.key)}
           </Button>
         </div>
       </header>
@@ -78,6 +79,7 @@ export function ExecutionRuntimeQueue({
         <RuntimeSummaryItem label="已生成" value={materializedResult?.childTaskNames.length ?? 0} />
         <RuntimeSummaryItem label="执行中" value={runningCount} />
         <RuntimeSummaryItem label="已完成" value={fanoutSnapshot?.doneCount ?? 0} />
+        <RuntimeSummaryItem label="校验通过" value={fanoutSnapshot?.verifyDoneCount ?? 0} />
       </div>
 
       {lifecycleStages.length > 0 ? (
@@ -191,14 +193,23 @@ function RuntimeTaskRow({
 
 function runtimeTitle(status: ExecutionFanoutSnapshot["status"]) {
   if (status === "failed") return "运行有失败";
-  if (status === "succeeded") return "实现运行完成";
+  if (status === "succeeded") return "校验完成";
   return "正在运行任务";
 }
 
 function runtimeMessage(status: ExecutionFanoutSnapshot["status"], message: string | undefined) {
-  if (status === "succeeded") return message ?? "实现运行完成，主会话继续接管 trellis-check 与 trellis-update-spec。";
+  if (status === "succeeded") return message ?? "校验完成，等待主会话接管 Spec 反哺。";
   if (status === "failed") return message ?? "部分任务运行失败，请查看运行透镜定位失败项。";
   return message ?? "任务已生成，正在按执行计划启动实现任务。";
+}
+
+function runtimeStatusLabel(
+  status: ExecutionFanoutSnapshot["status"],
+  activeStage: ExecutionFanoutLoopStageSnapshot["key"] | undefined,
+) {
+  if (status === "running") return activeStage === "verify" ? "校验中" : "运行中";
+  if (status === "failed") return activeStage === "verify" ? "校验失败" : "有失败";
+  return activeStage === "spec" ? "待反哺" : "已完成";
 }
 
 function waveStatusText(status: ExecutionFanoutWaveStatus) {

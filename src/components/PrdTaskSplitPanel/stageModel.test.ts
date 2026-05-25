@@ -45,7 +45,7 @@ describe("buildRequirementAssistantStageItems", () => {
     });
   });
 
-  test("keeps verify active after implementation fanout succeeds", () => {
+  test("keeps verify active when only implementation fanout has succeeded", () => {
     const stages = buildRequirementAssistantStageItems({
       hasInput: true,
       parsing: false,
@@ -68,6 +68,37 @@ describe("buildRequirementAssistantStageItems", () => {
     });
     expect(stages.find((stage) => stage.key === "run")?.label).toBe("实现完成");
     expect(stages.find((stage) => stage.key === "verify")?.label).toBe("待校验");
+  });
+
+  test("follows fanout lifecycle stages after automatic Verify completes", () => {
+    const stages = buildRequirementAssistantStageItems({
+      hasInput: true,
+      parsing: false,
+      hasPlannedSummary: false,
+      hasResult: true,
+      allTasksConfirmed: true,
+      hasMaterializedResult: true,
+      executionStatus: "succeeded",
+      lifecycleStages: [
+        { key: "dispatch", label: "Dispatch", status: "done" },
+        { key: "run", label: "Run", status: "done" },
+        { key: "verify", label: "Verify", status: "done" },
+        { key: "spec", label: "Spec", status: "active" },
+      ],
+    });
+
+    expect(statusByKey(stages)).toMatchObject({
+      write: "done",
+      draft: "done",
+      split: "done",
+      review: "done",
+      plan: "done",
+      run: "done",
+      verify: "done",
+      spec: "active",
+    });
+    expect(stages.find((stage) => stage.key === "verify")?.label).toBe("校验完成");
+    expect(stages.find((stage) => stage.key === "spec")?.label).toBe("Spec 反哺中");
   });
 
   test("keeps execution active and failed when fanout fails", () => {

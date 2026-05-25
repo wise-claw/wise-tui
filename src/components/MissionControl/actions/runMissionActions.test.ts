@@ -113,6 +113,13 @@ const trellisRuntimeUpsertAgentRunSafe = mock(async () => ({}));
 const trellisRuntimeRecordEventSafe = mock(async () => ({}));
 const trellisAgentHeartbeat = mock(async () => true);
 const dispatchWorkspaceTrellisMaterializedFanout = mock(async () => null);
+const recordPrdSplitLoopFeedback = mock(async () => ({
+  relativePath: "guides/prd-assistant-loop-feedback.md",
+  filePath: ".trellis/spec/guides/prd-assistant-loop-feedback.md",
+  revisionId: "rev-1",
+  eventId: "event-spec-1",
+  createdAt: 1,
+}));
 const saveWorkflowGraph = mock(async (input) => ({ graph: input.graph, status: "draft" }));
 const saveWorkflowTemplate = mock(async (input) => ({ id: input.workflowId, name: input.name }));
 const resolveMaterializedFanoutRepositoryTarget = mock(() => ({
@@ -179,6 +186,9 @@ mock.module("../../../services/projectPrdScope", () => ({ addProjectPrdWorkflow:
 mock.module("../../../services/prdSplit/materializedFanoutBridge", () => ({
   dispatchWorkspaceTrellisMaterializedFanout,
   resolveMaterializedFanoutRepositoryTarget,
+}));
+mock.module("../../../services/prdSplit/specFeedback", () => ({
+  recordPrdSplitLoopFeedback,
 }));
 
 function makeCluster(overrides: Partial<ClusterPlanItem> = {}): ClusterPlanItem {
@@ -299,6 +309,7 @@ describe("runMissionActions · runtime ledger parity", () => {
       trellisRuntimeUpsertAgentRunSafe,
       upsertMissionAgentAssignment,
       dispatchWorkspaceTrellisMaterializedFanout,
+      recordPrdSplitLoopFeedback,
       saveWorkflowGraph,
       saveWorkflowTemplate,
     ]) {
@@ -313,6 +324,13 @@ describe("runMissionActions · runtime ledger parity", () => {
       alreadyFinished: false,
     });
     dispatchWorkspaceTrellisMaterializedFanout.mockResolvedValue(null);
+    recordPrdSplitLoopFeedback.mockResolvedValue({
+      relativePath: "guides/prd-assistant-loop-feedback.md",
+      filePath: ".trellis/spec/guides/prd-assistant-loop-feedback.md",
+      revisionId: "rev-1",
+      eventId: "event-spec-1",
+      createdAt: 1,
+    });
   });
 
   test("runMissionClusters stores active mission id before dispatching clusters", async () => {
@@ -656,18 +674,47 @@ describe("runMissionActions · runtime ledger parity", () => {
 
     await writeMissionToTrellis(api);
 
-	    expect(dispatchWorkspaceTrellisMaterializedFanout).toHaveBeenCalledWith(expect.objectContaining({
-	      sessionId: "prd-split:parent",
-	      projectId: "p1",
-	      projectRootPath: "/repo",
-	      repositoryPath: "/repo/web",
+    expect(dispatchWorkspaceTrellisMaterializedFanout).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: "prd-split:parent",
+      projectId: "p1",
+      projectRootPath: "/repo",
+      repositoryPath: "/repo/web",
       sourceTasks: expect.arrayContaining([expect.objectContaining({ id: "task-a" })]),
       materializedResult: expect.objectContaining({ parentTaskName: "parent" }),
       repositoryMetadata: expect.objectContaining({
         ownerRepositoryId: 1,
         ownerRepositoryPath: "/repo/web",
-	      }),
-	    }));
+      }),
+    }));
+    expect(recordPrdSplitLoopFeedback).toHaveBeenCalledWith(expect.objectContaining({
+      project: expect.objectContaining({ id: "p1", rootPath: "/repo" }),
+      missionId: "mission-p1-hash",
+      workflowId: expect.any(String),
+      fanoutFailedCount: 0,
+      clusters: [expect.objectContaining({
+        cluster: expect.objectContaining({ id: "cluster-fe" }),
+        tasks: [expect.objectContaining({
+          sourceTaskId: "task-a",
+          sourceRequirementIds: ["REQ-1"],
+        })],
+      })],
+      writeResults: [expect.objectContaining({
+        clusterId: "cluster-fe",
+        childTasks: [expect.objectContaining({
+          sourceTaskId: "task-a",
+          taskPath: ".trellis/tasks/05-16-parent/task-a-child",
+        })],
+      })],
+    }));
+    expect(createOrResumeMission).toHaveBeenCalledWith(expect.objectContaining({
+      stage: "done",
+      snapshot: expect.objectContaining({
+        specFeedback: expect.objectContaining({
+          filePath: ".trellis/spec/guides/prd-assistant-loop-feedback.md",
+          revisionId: "rev-1",
+        }),
+      }),
+    }));
 	  });
 
   test("writeMissionToTrellis reports fanout failures in write results", async () => {
@@ -729,14 +776,16 @@ describe("runMissionActions · runtime ledger parity", () => {
       totalCount: 1,
       doneCount: 1,
       failedCount: 0,
+      verifyDoneCount: 1,
+      verifyFailedCount: 0,
       waves: [],
       lifecycleStages: [
         { key: "dispatch" as const, label: "Dispatch", status: "done" as const },
         { key: "run" as const, label: "Run", status: "done" as const },
-        { key: "verify" as const, label: "Verify", status: "active" as const },
-        { key: "spec" as const, label: "Spec", status: "waiting" as const },
+        { key: "verify" as const, label: "Verify", status: "done" as const },
+        { key: "spec" as const, label: "Spec", status: "active" as const },
       ],
-      message: "实现运行完成：成功 1，失败 0。",
+      message: "校验完成：通过 1，失败 0。等待 Spec 反哺。",
     };
     dispatchWorkspaceTrellisMaterializedFanout.mockImplementationOnce(async (input: {
       onSnapshot?: (snapshot: typeof fanoutSnapshot) => void;
@@ -793,7 +842,8 @@ describe("runMissionActions · runtime ledger parity", () => {
       fanoutSnapshot: expect.objectContaining({
         workflowRunId: "wf-1",
         lifecycleStages: expect.arrayContaining([
-          expect.objectContaining({ key: "verify", status: "active" }),
+          expect.objectContaining({ key: "verify", status: "done" }),
+          expect.objectContaining({ key: "spec", status: "active" }),
         ]),
       }),
     }));

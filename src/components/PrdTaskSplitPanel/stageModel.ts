@@ -28,6 +28,7 @@ export function buildRequirementAssistantStageItems(input: {
   allTasksConfirmed: boolean;
   hasMaterializedResult: boolean;
   executionStatus: ExecutionFanoutSnapshot["status"] | null;
+  lifecycleStages?: ExecutionFanoutSnapshot["lifecycleStages"];
 }): RequirementAssistantStageItem[] {
   const order: Array<Pick<RequirementAssistantStageItem, "key" | "label">> = [
     { key: "write", label: "写需求" },
@@ -39,6 +40,14 @@ export function buildRequirementAssistantStageItems(input: {
     { key: "verify", label: requirementExecutionStageLabel(input.executionStatus, input.hasMaterializedResult, "verify") },
     { key: "spec", label: requirementExecutionStageLabel(input.executionStatus, input.hasMaterializedResult, "spec") },
   ];
+  if (input.lifecycleStages && input.lifecycleStages.length > 0) {
+    const lifecycleByKey = new Map(input.lifecycleStages.map((stage) => [stage.key, stage.status]));
+    return order.map((item) => ({
+      key: item.key,
+      label: requirementLifecycleStageLabel(item.key, lifecycleByKey.get(item.key as ExecutionFanoutLoopStageKey)) ?? item.label,
+      status: lifecycleByKey.get(item.key as ExecutionFanoutLoopStageKey) ?? inferPreExecutionStatus(input, item.key),
+    }));
+  }
   const activeKey: RequirementAssistantStageKey | null = input.executionStatus === "succeeded"
     ? "verify"
     : input.executionStatus === "running" || input.executionStatus === "failed" || input.hasMaterializedResult
@@ -61,6 +70,38 @@ export function buildRequirementAssistantStageItems(input: {
       ? "failed"
       : index < activeIndex ? "done" : index === activeIndex ? "active" : "waiting",
   }));
+}
+
+function inferPreExecutionStatus(
+  input: Parameters<typeof buildRequirementAssistantStageItems>[0],
+  key: RequirementAssistantStageKey,
+): RequirementAssistantStageStatus {
+  if (key === "write") return input.hasInput ? "done" : "active";
+  if (key === "draft") return input.hasResult || input.hasPlannedSummary || input.parsing ? "done" : input.hasInput ? "active" : "waiting";
+  if (key === "split") return input.hasResult ? "done" : input.parsing || input.hasPlannedSummary ? "active" : "waiting";
+  if (key === "review") return input.allTasksConfirmed ? "done" : input.hasResult ? "active" : "waiting";
+  if (key === "plan") return input.hasMaterializedResult ? "done" : input.allTasksConfirmed ? "active" : "waiting";
+  return "waiting";
+}
+
+function requirementLifecycleStageLabel(
+  key: RequirementAssistantStageKey,
+  status: RequirementAssistantStageStatus | undefined,
+): string | null {
+  if (key === "run") {
+    if (status === "failed") return "执行失败";
+    if (status === "active") return "运行中";
+    if (status === "done") return "实现完成";
+  }
+  if (key === "verify") {
+    if (status === "failed") return "校验失败";
+    if (status === "active") return "校验中";
+    if (status === "done") return "校验完成";
+  }
+  if (key === "spec") {
+    if (status === "active") return "Spec 反哺中";
+  }
+  return null;
 }
 
 export function requirementExecutionStageLabel(

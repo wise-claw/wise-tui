@@ -154,7 +154,7 @@ function resolveConversationTaskToolStatus(
   if (part.status === "pending" || part.status === "running") {
     if (sessionStatus === "cancelled" || sessionStatus === "error") return "failed";
     if (hasSettledAfterToolUse(messages, part.id)) return "completed";
-    if (sessionStatus === "idle" && (merged?.output?.trim() || merged?.status === "completed")) {
+    if (sessionStatus === "idle" && merged?.output?.trim()) {
       return "completed";
     }
     return "running";

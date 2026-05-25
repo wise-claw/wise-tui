@@ -198,13 +198,15 @@ function mergeWriteResultFanoutSnapshots(results: WizardWriteResult[]): Executio
     .filter((snapshot): snapshot is ExecutionFanoutSnapshot => Boolean(snapshot));
   if (snapshots.length === 0) return null;
   const failedCount = snapshots.reduce((count, snapshot) => count + snapshot.failedCount, 0);
+  const verifyDoneCount = snapshots.reduce((count, snapshot) => count + (snapshot.verifyDoneCount ?? 0), 0);
+  const verifyFailedCount = snapshots.reduce((count, snapshot) => count + (snapshot.verifyFailedCount ?? 0), 0);
   const doneCount = snapshots.reduce((count, snapshot) => count + snapshot.doneCount, 0);
   const totalCount = snapshots.reduce((count, snapshot) => count + snapshot.totalCount, 0);
   const workflowRunIds = [...new Set(snapshots.flatMap((snapshot) => [
     ...(snapshot.workflowRunIds ?? []),
     ...(snapshot.workflowRunId ? [snapshot.workflowRunId] : []),
   ]))];
-  const status = failedCount > 0
+  const status = failedCount > 0 || verifyFailedCount > 0 || snapshots.some((snapshot) => snapshot.status === "failed")
     ? "failed"
     : snapshots.some((snapshot) => snapshot.status === "running")
       ? "running"
@@ -217,6 +219,8 @@ function mergeWriteResultFanoutSnapshots(results: WizardWriteResult[]): Executio
     totalCount,
     doneCount,
     failedCount,
+    verifyDoneCount,
+    verifyFailedCount,
     waves: snapshots.flatMap((snapshot) => snapshot.waves).map((wave, waveIndex) => ({
       ...wave,
       waveIndex,

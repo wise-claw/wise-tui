@@ -40,15 +40,19 @@ export interface MaterializedFanoutInput {
   materializedResult: WriteClusterTasksOutput;
   parallelGroups?: string[][];
   subagentType?: string;
+  verifyAfterRun?: boolean;
+  verifySubagentType?: string;
   repositoryMetadata?: MaterializedFanoutRepositoryMetadata;
   onSnapshot?: (snapshot: ExecutionFanoutSnapshot) => void;
   runWaveBatch?: RunWaveBatch;
+  runVerifyBatch?: RunWaveBatch;
 }
 
 export async function runWorkspaceTrellisMaterializedFanout(
   input: MaterializedFanoutInput,
 ): Promise<ExecutionFanoutResult> {
   const subagentType = input.subagentType?.trim() || resolveTrellisSubagentForStage("implement") || "trellis-implement";
+  const verifySubagentType = input.verifySubagentType?.trim() || resolveTrellisSubagentForStage("check") || "trellis-check";
   const parallelGroups = input.parallelGroups && input.parallelGroups.length > 0
     ? input.parallelGroups
     : buildParallelGroups(input.sourceTasks);
@@ -68,12 +72,15 @@ export async function runWorkspaceTrellisMaterializedFanout(
       materializedResult: input.materializedResult,
       parallelGroups,
       subagentType,
+      verifyAfterRun: input.verifyAfterRun ?? true,
+      verifySubagentType,
       repositoryMetadata: {
         ...(input.repositoryMetadata ?? {}),
         ownerRepositoryPath: input.repositoryMetadata?.ownerRepositoryPath ?? input.repositoryPath,
       },
       onSnapshot: input.onSnapshot,
       runWaveBatch: input.runWaveBatch,
+      runVerifyBatch: input.runVerifyBatch,
     });
     emitSplitTodoUpdated(input, false);
     return result;

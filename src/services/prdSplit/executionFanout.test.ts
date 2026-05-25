@@ -45,7 +45,7 @@ describe("buildMaterializedExecutionWaves", () => {
 
 describe("runMaterializedSplitTasksFanout", () => {
   test("runs waves in sequence and reuses the workflowRunId returned by the first wave", async () => {
-    const calls: Array<{ waveIndex: number; taskIds: string[]; boundWorkflowRunId: string | null }> = [];
+    const calls: Array<{ waveIndex: number; taskIds: string[]; boundWorkflowRunId: string | null; stage: string }> = [];
     const snapshots: string[] = [];
 
     const result = await runMaterializedSplitTasksFanout({
@@ -62,8 +62,8 @@ describe("runMaterializedSplitTasksFanout", () => {
       onSnapshot: (snapshot) => {
         snapshots.push(`${snapshot.status}:${snapshot.doneCount}:${snapshot.failedCount}`);
       },
-      runWaveBatch: async ({ tasks, waveIndex, boundWorkflowRunId }) => {
-        calls.push({ waveIndex, taskIds: tasks.map((task) => task.id), boundWorkflowRunId });
+      runWaveBatch: async ({ tasks, waveIndex, boundWorkflowRunId, stage }) => {
+        calls.push({ waveIndex, taskIds: tasks.map((task) => task.id), boundWorkflowRunId, stage });
         return {
           message: `wave ${waveIndex} done`,
           workflowRunId: "wf-1",
@@ -82,11 +82,13 @@ describe("runMaterializedSplitTasksFanout", () => {
         waveIndex: 0,
         taskIds: [".trellis/tasks/05-19-prd/05-19-api"],
         boundWorkflowRunId: null,
+        stage: "implement",
       },
       {
         waveIndex: 1,
         taskIds: [".trellis/tasks/05-19-prd/05-19-ui"],
         boundWorkflowRunId: "wf-1",
+        stage: "implement",
       },
     ]);
     expect(result.status).toBe("succeeded");
@@ -99,6 +101,110 @@ describe("runMaterializedSplitTasksFanout", () => {
       expect.objectContaining({ key: "spec", status: "waiting" }),
     ]));
     expect(snapshots.at(-1)).toBe("succeeded:2:0");
+  });
+
+  test("runs a verify batch after successful implementation when requested", async () => {
+    const verifyCalls: Array<{ stage: string; subagentType: string; taskIds: string[]; boundWorkflowRunId: string | null }> = [];
+
+    const result = await runMaterializedSplitTasksFanout({
+      facade: {} as WorkflowFacade,
+      sessionId: "prd-split:parent",
+      repositoryPath: "/repo/web",
+      projectRootPath: "/work/project",
+      sourceTasks: [
+        task("task-a", "API"),
+        task("task-b", "UI", ["task-a"]),
+      ],
+      materializedResult: materialized(),
+      parallelGroups: [["task-a"], ["task-b"]],
+      verifyAfterRun: true,
+      runWaveBatch: async ({ tasks, waveIndex, boundWorkflowRunId }) => ({
+        message: `wave ${waveIndex} done`,
+        workflowRunId: boundWorkflowRunId ?? "wf-1",
+        taskCount: tasks.length,
+        templateId: "trellis",
+        subagentType: "trellis-implement",
+        concurrency: tasks.length,
+        doneCount: tasks.length,
+        failedCount: 0,
+      }),
+      runVerifyBatch: async ({ tasks, boundWorkflowRunId, stage, subagentType }) => {
+        verifyCalls.push({ stage, subagentType, taskIds: tasks.map((task) => task.id), boundWorkflowRunId });
+        return {
+          message: "verify done",
+          workflowRunId: boundWorkflowRunId,
+          taskCount: tasks.length,
+          templateId: "trellis",
+          subagentType,
+          concurrency: tasks.length,
+          doneCount: tasks.length,
+          failedCount: 0,
+        };
+      },
+    });
+
+    expect(verifyCalls).toEqual([{
+      stage: "check",
+      subagentType: "trellis-check",
+      taskIds: [
+        ".trellis/tasks/05-19-prd/05-19-api",
+        ".trellis/tasks/05-19-prd/05-19-ui",
+      ],
+      boundWorkflowRunId: "wf-1",
+    }]);
+    expect(result.status).toBe("succeeded");
+    expect(result.verifyDoneCount).toBe(2);
+    expect(result.verifyFailedCount).toBe(0);
+    expect(result.lifecycleStages).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "verify", status: "done" }),
+      expect.objectContaining({ key: "spec", status: "active" }),
+    ]));
+  });
+
+  test("keeps Spec waiting when the verify batch fails", async () => {
+    const result = await runMaterializedSplitTasksFanout({
+      facade: {} as WorkflowFacade,
+      sessionId: "prd-split:parent",
+      repositoryPath: "/repo/web",
+      projectRootPath: "/work/project",
+      sourceTasks: [
+        task("task-a", "API"),
+        task("task-b", "UI", ["task-a"]),
+      ],
+      materializedResult: materialized(),
+      parallelGroups: [["task-a"], ["task-b"]],
+      verifyAfterRun: true,
+      runWaveBatch: async ({ tasks, boundWorkflowRunId }) => ({
+        message: "implement done",
+        workflowRunId: boundWorkflowRunId ?? "wf-1",
+        taskCount: tasks.length,
+        templateId: "trellis",
+        subagentType: "trellis-implement",
+        concurrency: tasks.length,
+        doneCount: tasks.length,
+        failedCount: 0,
+      }),
+      runVerifyBatch: async ({ tasks, boundWorkflowRunId, subagentType }) => ({
+        message: "verify failed",
+        workflowRunId: boundWorkflowRunId,
+        taskCount: tasks.length,
+        templateId: "trellis",
+        subagentType,
+        concurrency: tasks.length,
+        doneCount: 1,
+        failedCount: 1,
+      }),
+    });
+
+    expect(result.status).toBe("failed");
+    expect(result.failedCount).toBe(0);
+    expect(result.verifyDoneCount).toBe(1);
+    expect(result.verifyFailedCount).toBe(1);
+    expect(result.lifecycleStages).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "run", status: "done" }),
+      expect.objectContaining({ key: "verify", status: "failed" }),
+      expect.objectContaining({ key: "spec", status: "waiting" }),
+    ]));
   });
 
   test("stops before the next wave when a wave fails", async () => {
@@ -162,7 +268,7 @@ describe("runMaterializedSplitTasksFanout", () => {
 });
 
 describe("buildExecutionFanoutLoopStages", () => {
-  test("keeps verify active after run succeeds", () => {
+  test("keeps verify active after run succeeds without auto-check", () => {
     const stages = buildExecutionFanoutLoopStages("succeeded", "verify");
 
     expect(stages.map((stage) => [stage.key, stage.status])).toEqual([
@@ -170,6 +276,17 @@ describe("buildExecutionFanoutLoopStages", () => {
       ["run", "done"],
       ["verify", "active"],
       ["spec", "waiting"],
+    ]);
+  });
+
+  test("activates Spec after Verify succeeds", () => {
+    const stages = buildExecutionFanoutLoopStages("succeeded", "spec");
+
+    expect(stages.map((stage) => [stage.key, stage.status])).toEqual([
+      ["dispatch", "done"],
+      ["run", "done"],
+      ["verify", "done"],
+      ["spec", "active"],
     ]);
   });
 

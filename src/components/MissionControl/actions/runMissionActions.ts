@@ -21,6 +21,7 @@ import {
   dispatchWorkspaceTrellisMaterializedFanout,
   resolveMaterializedFanoutRepositoryTarget,
 } from "../../../services/prdSplit/materializedFanoutBridge";
+import { recordPrdSplitLoopFeedback } from "../../../services/prdSplit/specFeedback";
 import type { ExecutionFanoutSnapshot } from "../../../services/prdSplit/executionFanout";
 import {
   buildPrdSplitMissionAssignmentId,
@@ -1102,15 +1103,24 @@ export async function writeMissionToTrellis(
     for (const result of writeResults.filter((result) => !result.error)) {
       api.addWriteResult({ ...result });
     }
+    const specFeedback = await recordPrdSplitLoopFeedbackSafe(state, {
+      missionId: mission?.missionId ?? state.activeMissionId,
+      workflowId: workflowGraphResult?.workflowId ?? null,
+      clusters: graphInputs,
+      writeResults,
+      fanoutFailedCount,
+    });
     await persistMissionSnapshot(api, "done", "completed", "mission.write.completed", {
       writeResultCount: writeResults.length,
       workflowId: workflowGraphResult?.workflowId ?? null,
       fanoutFailedCount,
+      specFeedback,
     }, mission?.missionId, {
       stage: "done",
       writeResults,
       workflowGraphResult,
       fanoutFailedCount,
+      specFeedback,
     });
     if (fanoutFailedCount > 0) {
       message.error(`Trellis 任务已落盘，但 ${fanoutFailedCount} 个分组派发失败，请查看运行队列或重试。`);
@@ -1253,6 +1263,32 @@ async function persistMissionWorkflowGraph(
     api.setWorkflowGraphResult(result);
     message.warning(`Trellis 任务已写入，但 workflow graph 保存失败：${errorMessage}`);
     return result;
+  }
+}
+
+async function recordPrdSplitLoopFeedbackSafe(
+  state: UseSplitWizardStateApi["state"],
+  input: {
+    missionId: string | null | undefined;
+    workflowId: string | null;
+    clusters: PrdSplitWorkflowClusterInput[];
+    writeResults: WizardWriteResult[];
+    fanoutFailedCount: number;
+  },
+) {
+  if (!state.project || input.clusters.length === 0) return null;
+  try {
+    return await recordPrdSplitLoopFeedback({
+      project: state.project,
+      missionId: input.missionId ?? null,
+      workflowId: input.workflowId,
+      clusters: input.clusters,
+      writeResults: input.writeResults,
+      fanoutFailedCount: input.fanoutFailedCount,
+    });
+  } catch (error) {
+    console.warn("[MissionControl] failed to record PRD split loop feedback", error);
+    return null;
   }
 }
 

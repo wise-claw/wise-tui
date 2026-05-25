@@ -701,9 +701,11 @@ export function usePrdTaskSplitPanelController({
       ),
       hasMaterializedResult: Boolean(materializedExecutionResult),
       executionStatus: executionFanoutSnapshot?.status ?? null,
+      lifecycleStages: executionFanoutSnapshot?.lifecycleStages,
     }),
     [
       activeResult,
+      executionFanoutSnapshot?.lifecycleStages,
       executionFanoutSnapshot?.status,
       hasInput,
       materializedExecutionResult,
