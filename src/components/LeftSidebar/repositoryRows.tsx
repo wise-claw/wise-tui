@@ -230,6 +230,7 @@ export function RepositoryRow({
   onOpenTaskMode,
   onDetachFromProject,
   onOpenInFinder,
+  onOpenRepositoryInBrowser,
   onOpenRepositoryInEditor,
   onOpenPromptsRepository,
   onOpenRepositoryMainOwner,
@@ -257,6 +258,7 @@ export function RepositoryRow({
   onOpenTaskMode: (repository: Repository, mode: TaskMode) => void;
   onDetachFromProject: (projectId: string, repositoryId: number) => void;
   onOpenInFinder: (repository: Repository) => void;
+  onOpenRepositoryInBrowser: (repository: Repository) => void;
   onOpenRepositoryInEditor: (repository: Repository) => void;
   onOpenPromptsRepository?: (project: Workspace, repository: Repository) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
@@ -394,6 +396,7 @@ export function RepositoryRow({
               onClick: ({ key }) => {
                 if (key === "finder") onOpenInFinder(repository);
                 if (key === "editor") onOpenRepositoryInEditor(repository);
+                if (key === "browser") onOpenRepositoryInBrowser(repository);
                 if (key === "main-owner") onOpenRepositoryMainOwner?.(repository);
                 if (key === "detach") onDetachFromProject(project.id, repository.id);
                 if (key === "prompts") onOpenPromptsRepository?.(project, repository);
@@ -430,6 +433,7 @@ export function FloatingRepositoryRow({
   onRepositorySelect,
   onOpenTaskMode,
   onOpenInFinder,
+  onOpenRepositoryInBrowser,
   onOpenRepositoryInEditor,
   onOpenRepositoryMainOwner,
   onConfigureSddMode,
@@ -458,6 +462,7 @@ export function FloatingRepositoryRow({
   onRepositorySelect: (id: number | null) => void;
   onOpenTaskMode: (repository: Repository, mode: TaskMode) => void;
   onOpenInFinder: (repository: Repository) => void;
+  onOpenRepositoryInBrowser: (repository: Repository) => void;
   onOpenRepositoryInEditor: (repository: Repository) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
   onConfigureSddMode?: (repository: Repository) => void;
@@ -569,6 +574,7 @@ export function FloatingRepositoryRow({
               onClick: ({ key }) => {
                 if (key === "finder") onOpenInFinder(repository);
                 if (key === "editor") onOpenRepositoryInEditor(repository);
+                if (key === "browser") onOpenRepositoryInBrowser(repository);
                 if (key === "main-owner") onOpenRepositoryMainOwner?.(repository);
                 if (key === "sdd-mode") onConfigureSddMode?.(repository);
                 if (key === "trellis-init" && trellisEnabled) void Promise.resolve(onBootstrapTrellis?.(repository));
@@ -612,6 +618,7 @@ export function ProjectRepositoryRows({
   onCreateRepositoryTask,
   onDetachRepositoryFromProject,
   onOpenInFinder,
+  onOpenRepositoryInBrowser,
   openRepositoryInPreferredEditor,
   onOpenPromptsRepository,
   onOpenRepositoryMainOwner,
@@ -642,6 +649,7 @@ export function ProjectRepositoryRows({
   onCreateRepositoryTask: (repository: Repository, mode: TaskMode) => void;
   onDetachRepositoryFromProject: (projectId: string, repositoryId: number) => void;
   onOpenInFinder: (repository: Repository) => void;
+  onOpenRepositoryInBrowser: (repository: Repository) => void;
   openRepositoryInPreferredEditor: (repository: Repository) => void;
   onOpenPromptsRepository?: (project: Workspace, repository: Repository) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
@@ -704,6 +712,7 @@ export function ProjectRepositoryRows({
             onOpenTaskMode={onCreateRepositoryTask}
             onDetachFromProject={onDetachRepositoryFromProject}
             onOpenInFinder={onOpenInFinder}
+            onOpenRepositoryInBrowser={onOpenRepositoryInBrowser}
             onOpenRepositoryInEditor={openRepositoryInPreferredEditor}
             onOpenPromptsRepository={onOpenPromptsRepository}
             onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}

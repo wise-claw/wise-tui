@@ -61,6 +61,7 @@ interface ProjectRepositoryListProps {
   onCreateProjectTask: (project: Workspace, mode: TaskMode) => void;
   onCreateRepositoryTask: (repository: Repository, mode: TaskMode) => void;
   onOpenInFinder: (repository: Repository) => void;
+  onOpenRepositoryInBrowser: (repository: Repository) => void;
   openRepositoryInPreferredEditor: (repository: Repository) => void;
   onOpenPromptsRepository?: (project: Workspace, repository: Repository) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
@@ -128,6 +129,7 @@ export function ProjectRepositoryList({
   onCreateProjectTask,
   onCreateRepositoryTask,
   onOpenInFinder,
+  onOpenRepositoryInBrowser,
   openRepositoryInPreferredEditor,
   onOpenPromptsRepository,
   onOpenRepositoryMainOwner,
@@ -202,6 +204,7 @@ export function ProjectRepositoryList({
                 onRepositorySelect={onRepositorySelect}
                 onOpenTaskMode={onCreateRepositoryTask}
                 onOpenInFinder={onOpenInFinder}
+                onOpenRepositoryInBrowser={onOpenRepositoryInBrowser}
                 onOpenRepositoryInEditor={openRepositoryInPreferredEditor}
                 onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
                 onConfigureSddMode={onConfigureRepositorySddMode}
@@ -263,6 +266,7 @@ export function ProjectRepositoryList({
             onCodeGraphGenerateRepository={onCodeGraphGenerateRepository}
             onCodeGraphViewRepositoryInProject={onCodeGraphViewRepositoryInProject}
             onOpenInFinder={onOpenInFinder}
+            onOpenRepositoryInBrowser={onOpenRepositoryInBrowser}
             openRepositoryInPreferredEditor={openRepositoryInPreferredEditor}
             onOpenPromptsRepository={onOpenPromptsRepository}
             onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
@@ -336,6 +340,7 @@ interface ProjectRowProps {
   onCodeGraphGenerateRepository?: (repository: Repository) => void | Promise<void>;
   onCodeGraphViewRepositoryInProject?: (project: Workspace, repository: Repository) => void;
   onOpenInFinder: (repository: Repository) => void;
+  onOpenRepositoryInBrowser: (repository: Repository) => void;
   openRepositoryInPreferredEditor: (repository: Repository) => void;
   onOpenPromptsRepository?: (project: Workspace, repository: Repository) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
@@ -394,6 +399,7 @@ function ProjectRow({
   onCodeGraphGenerateRepository,
   onCodeGraphViewRepositoryInProject,
   onOpenInFinder,
+  onOpenRepositoryInBrowser,
   openRepositoryInPreferredEditor,
   onOpenPromptsRepository,
   onOpenRepositoryMainOwner,
@@ -610,6 +616,7 @@ function ProjectRow({
             onCreateRepositoryTask={onCreateRepositoryTask}
             onDetachRepositoryFromProject={onDetachRepositoryFromProject}
             onOpenInFinder={onOpenInFinder}
+            onOpenRepositoryInBrowser={onOpenRepositoryInBrowser}
             openRepositoryInPreferredEditor={openRepositoryInPreferredEditor}
             onOpenPromptsRepository={onOpenPromptsRepository}
             onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}

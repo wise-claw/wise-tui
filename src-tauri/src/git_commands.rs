@@ -1,6 +1,6 @@
 use crate::project_workspace_paths::{canonicalize_existing_dir, validate_repository_folder_name};
 use git2::build::CheckoutBuilder;
-use git2::{BranchType, DiffOptions, Repository, Status, StatusOptions};
+use git2::{BranchType, DiffOptions, Oid, Repository, Status, StatusOptions};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::fs;
@@ -76,6 +76,36 @@ fn open_repo(path: &str) -> Result<Repository, String> {
     Repository::open(path).map_err(|e| format!("Failed to open git repo: {}", e))
 }
 
+fn git_cli_combined_output(stdout: &[u8], stderr: &[u8]) -> String {
+    let out = String::from_utf8_lossy(stdout).trim().to_string();
+    let err = String::from_utf8_lossy(stderr).trim().to_string();
+    if out.is_empty() {
+        err
+    } else if err.is_empty() {
+        out
+    } else {
+        format!("{out}\n{err}")
+    }
+}
+
+/// Git 偶发 exit 0 但输出含 rejected / fatal 等失败信号（钩子、托管平台文案）。
+fn git_cli_output_indicates_failure(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    const MARKERS: &[&str] = &[
+        "[rejected]",
+        "[remote rejected]",
+        "! [rejected]",
+        "error: failed to push",
+        "error: failed to pull",
+        "pre-receive hook declined",
+        "remote: error",
+        "push declined",
+        "gh001",
+        "fatal:",
+    ];
+    MARKERS.iter().any(|marker| lower.contains(marker))
+}
+
 fn run_git_command(path: &str, args: &[&str], action: &str) -> Result<(), String> {
     let output = Command::new("git")
         .arg("-C")
@@ -84,13 +114,19 @@ fn run_git_command(path: &str, args: &[&str], action: &str) -> Result<(), String
         .output()
         .map_err(|e| format!("{} failed to start: {}", action, e))?;
 
+    let detail = git_cli_combined_output(&output.stdout, &output.stderr);
+
     if output.status.success() {
+        if git_cli_output_indicates_failure(&detail) {
+            return Err(if detail.is_empty() {
+                format!("{action} failed: remote rejected the update")
+            } else {
+                format!("{action} failed: {detail}")
+            });
+        }
         return Ok(());
     }
 
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    let detail = if !stderr.is_empty() { stderr } else { stdout };
     if detail.is_empty() {
         Err(format!(
             "{} failed with exit code {}",
@@ -99,6 +135,56 @@ fn run_git_command(path: &str, args: &[&str], action: &str) -> Result<(), String
     } else {
         Err(format!("{} failed: {}", action, detail))
     }
+}
+
+fn branch_has_upstream(repo: &Repository) -> bool {
+    let Ok(head) = repo.head() else {
+        return false;
+    };
+    if !head.is_branch() {
+        return false;
+    }
+    git2::Branch::wrap(head).upstream().is_ok()
+}
+
+/// `refs/remotes/origin/feature/foo` → (`origin`, `feature/foo`)
+fn parse_remote_tracking_ref(full_name: &str) -> Option<(String, String)> {
+    let rest = full_name.strip_prefix("refs/remotes/")?;
+    let (remote, branch) = rest.split_once('/')?;
+    if remote.is_empty() || branch.is_empty() {
+        return None;
+    }
+    Some((remote.to_string(), branch.to_string()))
+}
+
+fn tracking_remote_and_short_branch(repo: &Repository) -> Option<(String, String)> {
+    let head = repo.head().ok()?;
+    if !head.is_branch() {
+        return None;
+    }
+    let upstream = git2::Branch::wrap(head).upstream().ok()?;
+    let full = upstream.get().name()?;
+    parse_remote_tracking_ref(full)
+}
+
+fn verify_head_on_remote(
+    repo: &Repository,
+    remote: &str,
+    branch: &str,
+    expected: Oid,
+) -> Result<(), String> {
+    let remote_ref = format!("refs/remotes/{remote}/{branch}");
+    let remote_oid = repo.refname_to_id(&remote_ref).map_err(|_| {
+        format!("推送后未在远程找到分支 {remote}/{branch}，请检查 remote 配置与权限")
+    })?;
+    if remote_oid != expected {
+        return Err(format!(
+            "推送未生效：本地提交 {} 与 {remote}/{branch} ({}) 不一致",
+            &expected.to_string()[..7.min(expected.to_string().len())],
+            &remote_oid.to_string()[..7.min(remote_oid.to_string().len())]
+        ));
+    }
+    Ok(())
 }
 
 fn git_rev_parse_show_toplevel(repo_any_path: &str) -> Result<String, String> {
@@ -452,8 +538,40 @@ pub(crate) fn git_commit(path: String, message: String) -> Result<String, String
 
 #[tauri::command]
 pub(crate) fn git_push(path: String) -> Result<(), String> {
-    open_repo(&path)?;
-    run_git_command(&path, &["push", "origin", "HEAD"], "Push")
+    let repo = open_repo(&path)?;
+    let head = repo.head().map_err(|e| e.to_string())?;
+    if !head.is_branch() {
+        return Err("无法在 detached HEAD 状态下推送，请先切换到分支".to_string());
+    }
+    let branch_name = head
+        .shorthand()
+        .ok_or_else(|| "无法解析当前分支名".to_string())?
+        .to_string();
+    let head_oid = head.target().ok_or_else(|| "HEAD 无有效提交".to_string())?;
+
+    let had_upstream = branch_has_upstream(&repo);
+    let (verify_remote, verify_branch) = tracking_remote_and_short_branch(&repo).unwrap_or_else(|| {
+        ("origin".to_string(), branch_name.clone())
+    });
+
+    if had_upstream {
+        run_git_command(&path, &["push"], "Push")?;
+    } else {
+        run_git_command(
+            &path,
+            &["push", "-u", "origin", branch_name.as_str()],
+            "Push",
+        )?;
+    }
+
+    let _ = run_git_command(
+        &path,
+        &["fetch", verify_remote.as_str(), verify_branch.as_str()],
+        "Fetch",
+    );
+
+    let repo = open_repo(&path)?;
+    verify_head_on_remote(&repo, &verify_remote, &verify_branch, head_oid)
 }
 
 #[tauri::command]
@@ -1012,6 +1130,29 @@ pub async fn git_clone_repository(
     tokio::task::spawn_blocking(move || git_clone_repository_blocking(parent_path, url, folder_name))
         .await
         .map_err(|e| format!("git clone 任务异常: {e}"))?
+}
+
+#[cfg(test)]
+mod git_push_tests {
+    use super::*;
+
+    #[test]
+    fn git_cli_output_indicates_failure_detects_rejected() {
+        assert!(git_cli_output_indicates_failure(
+            "To github.com:org/repo.git\n ! [rejected] main -> main (fetch first)\n"
+        ));
+        assert!(!git_cli_output_indicates_failure(
+            "Everything up-to-date\n"
+        ));
+    }
+
+    #[test]
+    fn parse_remote_tracking_ref_supports_slashed_branch() {
+        assert_eq!(
+            parse_remote_tracking_ref("refs/remotes/origin/feature/foo"),
+            Some(("origin".to_string(), "feature/foo".to_string()))
+        );
+    }
 }
 
 #[cfg(test)]

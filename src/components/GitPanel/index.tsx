@@ -1,8 +1,8 @@
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { safeUnlistenPromise } from "../../utils/safeTauriUnlisten";
-import { Button, Dropdown, Empty, Space, Spin, Tag, message } from "antd";
-import { DownOutlined, FileTextOutlined, HistoryOutlined } from "@ant-design/icons";
+import { Button, Dropdown, Empty, Space, Spin, Tag, Tooltip, message } from "antd";
+import { DownOutlined, FileTextOutlined, GlobalOutlined, HistoryOutlined } from "@ant-design/icons";
 import {
   gitCommit,
   gitDiscard,
@@ -19,6 +19,7 @@ import {
   startGitWatcher,
   stopGitWatcher,
 } from "../../services/git";
+import { openRepositoryRemoteInBrowser } from "../../services/openRepositoryRemote";
 import type { GitLogEntry, GitPanelMode, GitStatusResponse } from "../../types";
 import { DiffMode } from "./DiffMode";
 import { GitSyncActions } from "./GitSyncActions";
@@ -53,6 +54,7 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
     upstream: string | null;
   }>({ entries: [], ahead: 0, behind: 0, upstream: null });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [openingRemote, setOpeningRemote] = useState(false);
   const [loading, setLoading] = useState<Record<string, boolean>>({
     status: false,
     log: false,
@@ -335,6 +337,24 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
     });
   }, [repositoryPath, runAction]);
 
+  const handleOpenRemoteInBrowser = useCallback(() => {
+    if (!repositoryPath || openingRemote) return;
+    setOpeningRemote(true);
+    void openRepositoryRemoteInBrowser(repositoryPath)
+      .then((result) => {
+        if (!result.ok) {
+          message.warning(result.message);
+        }
+      })
+      .catch((e) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        message.error(`打开失败: ${msg}`);
+      })
+      .finally(() => {
+        setOpeningRemote(false);
+      });
+  }, [openingRemote, repositoryPath]);
+
   const isMissingRepo = errors.status?.includes("Failed to open git repo");
   const anyLoading = Object.values(loading).some(Boolean);
   const modeIcon = useMemo(() => {
@@ -353,7 +373,7 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
   return (
     <div className="app-git-panel">
       <div className={`git-panel-loading-bar ${anyLoading ? "git-panel-loading-bar--active" : ""}`} />
-      <div className="git-panel-header" data-tauri-drag-region>
+      <div className="git-panel-header">
         <div className="git-panel-header-left">
           <span className="git-panel-title">GIT</span>
           {status && (
@@ -366,6 +386,17 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
           )}
         </div>
         <div className="git-panel-header-right">
+          <Tooltip title="在浏览器中打开仓库" placement="top">
+            <Button
+              type="text"
+              size="small"
+              className="git-remote-browser-btn"
+              icon={<GlobalOutlined />}
+              aria-label="在浏览器中打开仓库"
+              loading={openingRemote}
+              onClick={handleOpenRemoteInBrowser}
+            />
+          </Tooltip>
           {mode === "diff" && status ? (
             <GitSyncActions
               status={status}

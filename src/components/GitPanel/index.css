@@ -52,33 +52,12 @@
   min-height: 36px;
   box-sizing: border-box;
   border-bottom: 1px solid var(--app-workspace-glass-border, var(--ant-color-border-secondary));
-  cursor: grab;
   position: sticky;
   top: 0;
   z-index: 20;
   background: color-mix(in srgb, var(--ant-color-bg-container) 45%, transparent) !important;
   -webkit-backdrop-filter: var(--app-workspace-glass-blur);
   backdrop-filter: var(--app-workspace-glass-blur);
-}
-
-/*
- * Tauri：`data-tauri-drag-region` 需命中该节点；子层默认拦截鼠标。
- * 左侧整块与标题 tabs 容器不接收事件，空白区可拖窗；按钮/输入/Tag/模式下拉保持可点。
- */
-.git-panel-header-left,
-.git-panel-header .git-panel-title-tabs {
-  pointer-events: none;
-}
-
-.git-panel-header .git-panel-title-tab,
-.git-panel-header .git-panel-files-search,
-.git-panel-header .git-panel-files-search input,
-.git-panel-header .ant-tag,
-.git-panel-header .git-header-sync-actions,
-.git-panel-header .git-header-sync-actions .ant-btn,
-.git-panel-header .git-mode-btn,
-.git-panel-header .ant-dropdown-trigger {
-  pointer-events: auto;
 }
 
 .git-panel-header-left {
@@ -95,7 +74,6 @@
   gap: 2px;
   flex-shrink: 0;
   margin-left: auto;
-  pointer-events: none;
 }
 
 .git-panel-files-search {
@@ -254,10 +232,15 @@
   margin: 0;
 }
 
+.git-panel-header .git-remote-browser-btn.ant-btn-sm,
 .git-panel-header .git-sync-count-btn.ant-btn-sm,
 .git-sync-row .git-sync-count-btn.ant-btn-sm {
   padding-inline: 4px;
   gap: 1px;
+}
+
+.git-panel-header .git-remote-browser-btn.ant-btn-sm .anticon {
+  font-size: 14px;
 }
 
 .git-panel-header .git-sync-count-btn.ant-btn-sm .ant-btn-icon,

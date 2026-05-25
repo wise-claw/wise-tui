@@ -248,7 +248,6 @@
   border-bottom: 1px solid var(--ant-color-border-secondary);
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
-  cursor: grab;
 }
 
 .app-chat-inspector .git-panel-title {

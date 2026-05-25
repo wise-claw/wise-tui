@@ -38,6 +38,7 @@ import {
 import type { AuthorPane } from "./types/viewMode";
 import { useClaudeSessions, type ClaudeTurnCompletePayload } from "./hooks/useClaudeSessions";
 import { useRepositoryList } from "./hooks/useRepositoryList";
+import { openRepositoryRemoteInBrowser } from "./services/openRepositoryRemote";
 import { openInFinder } from "./services/repository";
 import { triggerCodeGraphProjectSearch, triggerCodeGraphReindex } from "./services/codeKnowledgeGraph";
 import { AppWorkspaceLayout } from "./components/AppWorkspaceLayout";
@@ -2202,6 +2203,18 @@ export default function App() {
     });
   }
 
+  function handleOpenRepositoryInBrowser(repository: Repository) {
+    void openRepositoryRemoteInBrowser(repository.path)
+      .then((result) => {
+        if (!result.ok) {
+          message.warning(result.message);
+        }
+      })
+      .catch((err) => {
+        message.error(err instanceof Error ? err.message : String(err));
+      });
+  }
+
   async function refreshWorkflowTemplates() {
     const templates = await listWorkflowTemplates();
     setWorkflowTemplates(templates);
@@ -2531,6 +2544,7 @@ export default function App() {
         onReorderRepositoriesInProject: handleReorderRepositoriesInProject,
         onRepositorySelect: handleSidebarRepositorySelectLeavingMcpHub,
         onOpenInFinder: handleOpenInFinder,
+        onOpenRepositoryInBrowser: handleOpenRepositoryInBrowser,
         onCreateProjectTask: handleCreateProjectTask,
         onCreateRepositoryTask: handleCreateRepositoryTask,
         onOpenProjectTrellis: async (project) => {

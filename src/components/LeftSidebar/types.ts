@@ -102,6 +102,7 @@ export interface LeftSidebarProps {
   onMoveRepositoryToProject?: (targetProjectId: string, repositoryId: number) => void | Promise<void>;
   onRepositorySelect: (id: number | null) => void;
   onOpenInFinder: (repository: Repository) => void;
+  onOpenRepositoryInBrowser: (repository: Repository) => void;
   onCreateProjectTask: (project: ProjectItem, mode: TaskMode) => void;
   onCreateRepositoryTask: (repository: Repository, mode: TaskMode) => void;
   onOpenPromptsProject?: (project: ProjectItem) => void;
