@@ -458,6 +458,7 @@ export interface GitLogResponse {
   ahead: number;
   behind: number;
   upstream: string | null;
+  hasMore: boolean;
 }
 
 export interface GitBranchEntry {

@@ -3928,7 +3928,6 @@ button.app-message-part-header:disabled:hover {
   padding: 6px 10px;
   border-radius: 8px;
   border: 1px solid var(--ant-color-error-border);
-  border-left: 4px solid var(--ant-color-error);
   background: color-mix(in srgb, var(--ant-color-error-bg) 40%, var(--ant-color-bg-container));
   color: var(--ant-color-error-text);
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;

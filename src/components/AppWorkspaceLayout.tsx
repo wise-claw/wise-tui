@@ -484,7 +484,17 @@ export function AppWorkspaceLayout({
   }, [authorMode, authorPanelProps.onBack]);
 
   useEffect(() => {
-    if (missionControlMode) setCockpitShellMounted(true);
+    if (missionControlMode) {
+      setCockpitShellMounted(true);
+      return;
+    }
+    const unmountCockpitShell = () => setCockpitShellMounted(false);
+    if (typeof window.requestIdleCallback === "function") {
+      const idleId = window.requestIdleCallback(unmountCockpitShell, { timeout: 800 });
+      return () => window.cancelIdleCallback(idleId);
+    }
+    const timeoutId = window.setTimeout(unmountCockpitShell, 0);
+    return () => window.clearTimeout(timeoutId);
   }, [missionControlMode]);
 
   const {

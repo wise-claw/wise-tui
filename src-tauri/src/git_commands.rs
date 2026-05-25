@@ -36,12 +36,14 @@ pub(crate) struct GitLogEntry {
 }
 
 #[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct GitLogResponse {
     total: usize,
     entries: Vec<GitLogEntry>,
     ahead: usize,
     behind: usize,
     upstream: Option<String>,
+    has_more: bool,
 }
 
 #[derive(Serialize, Clone)]
@@ -656,9 +658,12 @@ pub(crate) fn git_show_revision(
 }
 
 #[tauri::command]
-pub(crate) fn git_log(path: String, limit: usize) -> Result<GitLogResponse, String> {
+pub(crate) fn git_log(path: String, limit: usize, skip: usize) -> Result<GitLogResponse, String> {
     let repo = open_repo(&path)?;
     let (ahead, behind, upstream) = compute_ahead_behind(&repo).unwrap_or((0, 0, None));
+
+    let limit = limit.clamp(1, 100);
+    let skip = skip.min(usize::MAX / 2);
 
     let head = repo.head().map_err(|e| e.to_string())?;
     let head_oid = head.target().ok_or("HEAD has no target")?;
@@ -666,8 +671,18 @@ pub(crate) fn git_log(path: String, limit: usize) -> Result<GitLogResponse, Stri
     revwalk.push(head_oid).map_err(|e| e.to_string())?;
 
     let mut entries = Vec::new();
-    for oid in revwalk.take(limit) {
+    let mut skipped = 0usize;
+    let mut has_more = false;
+    for oid in revwalk {
         let oid = oid.map_err(|e| e.to_string())?;
+        if skipped < skip {
+            skipped += 1;
+            continue;
+        }
+        if entries.len() >= limit {
+            has_more = true;
+            break;
+        }
         let commit = repo.find_commit(oid).map_err(|e| e.to_string())?;
         entries.push(GitLogEntry {
             sha: oid.to_string(),
@@ -683,6 +698,7 @@ pub(crate) fn git_log(path: String, limit: usize) -> Result<GitLogResponse, Stri
         ahead,
         behind,
         upstream,
+        has_more,
     })
 }
 

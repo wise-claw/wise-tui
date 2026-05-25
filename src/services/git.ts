@@ -60,8 +60,12 @@ export async function gitDiscardAll(path: string): Promise<void> {
   return invoke("git_discard_all", { path });
 }
 
-export async function gitLog(path: string, limit: number): Promise<GitLogResponse> {
-  return invoke<GitLogResponse>("git_log", { path, limit });
+export async function gitLog(
+  path: string,
+  limit: number,
+  skip = 0,
+): Promise<GitLogResponse> {
+  return invoke<GitLogResponse>("git_log", { path, limit, skip });
 }
 
 export async function gitInit(path: string): Promise<string> {

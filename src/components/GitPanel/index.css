@@ -1430,6 +1430,14 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
   margin-top: 3px;
 }
 
+.git-log-list-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 0 14px;
+  min-height: 36px;
+}
+
 /* ── Spinner ── */
 .git-spinner {
   display: inline-block;

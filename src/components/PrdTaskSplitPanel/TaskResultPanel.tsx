@@ -1,7 +1,7 @@
 import { CloseOutlined, HistoryOutlined } from "@ant-design/icons";
 import { Button, Card, Space, Spin, Typography } from "antd";
 import type { MenuProps } from "antd";
-import { useEffect, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import type { SplitResult, TaskApiSpec, TaskExecutionStatus, TaskItem } from "../../types";
 import { ExecutionOrchestrationPanel } from "./ExecutionOrchestrationPanel";
@@ -204,11 +204,23 @@ export function TaskResultPanel({
   onOpenMainSession,
   onOpenRuntimeLens,
 }: Props) {
-  const showRuntime = runtimeVisible && (parsing || filteredTasks.length === 0 || runtimeLogs.length > 0);
+  const [runtimePanelDismissed, setRuntimePanelDismissed] = useState(false);
+  const showRuntime = !runtimePanelDismissed
+    && runtimeVisible
+    && (parsing || filteredTasks.length === 0 || runtimeLogs.length > 0);
   const [resultViewMode, setResultViewMode] = useState<ResultViewMode>("review");
   const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(() => new Set());
   const [runtimeQueueHidden, setRuntimeQueueHidden] = useState(false);
   const previousActiveResultRef = useRef<SplitResult | null>(null);
+
+  useEffect(() => {
+    if (runtimeVisible) setRuntimePanelDismissed(false);
+  }, [runtimeVisible]);
+
+  const handleCloseRuntimePanel = useCallback(() => {
+    setRuntimePanelDismissed(true);
+    startTransition(() => onCloseRuntime());
+  }, [onCloseRuntime]);
   const materializedResult = materializedExecutionResult;
   const hasExecutionRuntime = materializedResult !== null && activeResult !== null;
   const executionRuntimePayload = resultViewMode === "runtime"
@@ -385,7 +397,7 @@ export function TaskResultPanel({
                       size="small"
                       type="text"
                       icon={<CloseOutlined />}
-                      onClick={onCloseRuntime}
+                      onClick={handleCloseRuntimePanel}
                       aria-label="关闭任务生成记录"
                     />
                   </div>

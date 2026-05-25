@@ -280,6 +280,8 @@ export default function App() {
   const [cockpitSurfaceInitialAssistantId, setCockpitSurfaceInitialAssistantId] = useState<string | null>(null);
   const [cockpitActiveAssistantId, setCockpitActiveAssistantId] = useState<string | null>(null);
   const [cockpitResumeAssistantId, setCockpitResumeAssistantId] = useState<string | null>(null);
+  /** 点击返回时立刻撤掉需求拆分全屏叠层，避免等 viewMode 慢更新才消失 */
+  const [prdSplitUiDismissed, setPrdSplitUiDismissed] = useState(false);
   const [authorTrellisProjectId, setAuthorTrellisProjectId] = useState<string | null>(null);
   const [workspaceCreateRequest, setWorkspaceCreateRequest] = useState(0);
   const [standaloneRepoAddRequest, setStandaloneRepoAddRequest] = useState(0);
@@ -1239,14 +1241,18 @@ export default function App() {
     viewMode.enter({ kind: "chat" });
   }, [repositories, setActiveRepositoryWithOwner, viewMode]);
   const workspaceMode = useWorkspaceMode({ activeProjectId, projects });
+  const enterCockpit = useCallback((view = cockpitView()) => {
+    setPrdSplitUiDismissed(false);
+    viewMode.enter(view);
+  }, [viewMode]);
   const openRequirementAssistant = useCallback((detail: OpenAssistantDetail) => {
     setSearchOpen(false);
     setAssistantInitialTarget(detail);
     setCockpitSurfaceInitialAssistantId(null);
     setCockpitResumeAssistantId(DEFAULT_PRD_SPLIT_ASSISTANT_ID);
     setAssistantOpenRequestKey((value) => value + 1);
-    viewMode.enter(cockpitView());
-  }, [viewMode]);
+    enterCockpit();
+  }, [enterCockpit]);
   const openMcpHubFromSidebar = useCallback(() => {
     setSearchOpen(false);
     viewMode.enter(inspectView(mcpHubInspectTool()));
@@ -1257,8 +1263,8 @@ export default function App() {
   }, [viewMode]);
   const openAutomationHubFromSidebar = useCallback(() => {
     setSearchOpen(false);
-    viewMode.enter(cockpitView(undefined, "automation"));
-  }, [viewMode]);
+    enterCockpit(cockpitView(undefined, "automation"));
+  }, [enterCockpit]);
   const openAssistantsFromSidebar = useCallback(() => {
     if (!activeProjectId && activeRepositoryId != null) {
       message.warning("Standalone Repo 不支持工作台配置；升格为 Workspace 后启用");
@@ -1282,16 +1288,19 @@ export default function App() {
     setCockpitSurfaceInitialAssistantId(trimmed);
     setCockpitResumeAssistantId(trimmed);
     setAssistantOpenRequestKey((value) => value + 1);
-    viewMode.enter(cockpitView());
-  }, [viewMode]);
+    enterCockpit();
+  }, [enterCockpit]);
   const exitCockpit = useCallback(() => {
-    startTransition(() => {
+    flushSync(() => {
+      setPrdSplitUiDismissed(true);
+      setCockpitActiveAssistantId(null);
       viewMode.enter({ kind: "chat" });
     });
   }, [viewMode]);
 
   /** 需求拆分助手：fixed 叠层盖住整窗（含左栏） */
   const cockpitPrdSplitFullscreen = useMemo(() => {
+    if (prdSplitUiDismissed) return false;
     if (viewMode.view.kind !== "cockpit") return false;
     const activeId =
       cockpitActiveAssistantId?.trim() || cockpitSurfaceInitialAssistantId?.trim() || "";
@@ -1304,6 +1313,7 @@ export default function App() {
     }
     return false;
   }, [
+    prdSplitUiDismissed,
     viewMode.view.kind,
     cockpitActiveAssistantId,
     cockpitSurfaceInitialAssistantId,

@@ -1,5 +1,5 @@
 import { Col, Layout, Row, Space, Spin } from "antd";
-import { Suspense, useState } from "react";
+import { startTransition, Suspense, useState } from "react";
 import type { ProjectItem, Repository } from "../../types";
 import { savePrdTaskSplitResult } from "../../services/prdTaskSplitStore";
 import { sameStringArray } from "../../utils/anchorStability";
@@ -184,7 +184,7 @@ export function PrdTaskSplitPanel({
     initialProjectId,
     initialRepositoryId,
   });
-  const workspaceStageClass = filteredTasks.length > 0 || plannedMissionSummary || splitRuntimeVisible
+  const workspaceStageClass = filteredTasks.length > 0 || plannedMissionSummary || parsing
     ? "app-prd-task-panel__columns--has-task-flow"
     : "app-prd-task-panel__columns--writing";
 
@@ -470,7 +470,9 @@ export function PrdTaskSplitPanel({
               onMoveTaskInExecutionPlan={(taskId, direction) => void handleMoveTaskInExecutionPlan(taskId, direction)}
               onMoveTaskToExecutionWave={(taskId, waveIndex) => void handleMoveTaskToExecutionWave(taskId, waveIndex)}
               onWorkspaceLayoutChange={setWorkspaceLayout}
-              onCloseRuntime={() => setSplitRuntimeVisible(false)}
+              onCloseRuntime={() => {
+                startTransition(() => setSplitRuntimeVisible(false));
+              }}
               onRetryStage={(phase) => { void handleRetrySplitStage(phase); }}
               onRetryCluster={(clusterId) => { void requirementMission.retryCluster(clusterId); }}
               onCancelCluster={(clusterId) => { void requirementMission.cancelCluster(clusterId); }}

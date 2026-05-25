@@ -38,6 +38,8 @@ const MODE_OPTIONS: { label: string; value: GitPanelMode; icon: React.ReactNode 
   { label: "日志", value: "log", icon: <HistoryOutlined /> },
 ];
 
+const GIT_LOG_PAGE_SIZE = 20;
+
 interface Props {
   repositoryPath: string | undefined;
   repositoryName: string | undefined;
@@ -52,12 +54,15 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
     ahead: number;
     behind: number;
     upstream: string | null;
-  }>({ entries: [], ahead: 0, behind: 0, upstream: null });
+    hasMore: boolean;
+  }>({ entries: [], ahead: 0, behind: 0, upstream: null, hasMore: false });
+  const logLoadingMoreRef = useRef(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [openingRemote, setOpeningRemote] = useState(false);
   const [loading, setLoading] = useState<Record<string, boolean>>({
     status: false,
     log: false,
+    logMore: false,
     stage: false,
     unstage: false,
     commit: false,
@@ -123,13 +128,14 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
       setLoading((prev) => ({ ...prev, log: true }));
     }
     try {
-      const result = await gitLog(repositoryPath, 20);
+      const result = await gitLog(repositoryPath, GIT_LOG_PAGE_SIZE, 0);
       const apply = () => {
         setLogData({
           entries: result.entries,
           ahead: result.ahead,
           behind: result.behind,
           upstream: result.upstream,
+          hasMore: result.hasMore,
         });
       };
       if (silent) {
@@ -143,6 +149,48 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
       if (!silent) {
         setLoading((prev) => ({ ...prev, log: false }));
       }
+    }
+  }, [repositoryPath]);
+
+  const loadMoreLog = useCallback(async () => {
+    if (!repositoryPath || logLoadingMoreRef.current) return;
+
+    let skip = 0;
+    let shouldLoad = false;
+    setLogData((prev) => {
+      if (!prev.hasMore) return prev;
+      skip = prev.entries.length;
+      shouldLoad = true;
+      return prev;
+    });
+    if (!shouldLoad) return;
+
+    logLoadingMoreRef.current = true;
+    setLoading((prev) => ({ ...prev, logMore: true }));
+    try {
+      const result = await gitLog(repositoryPath, GIT_LOG_PAGE_SIZE, skip);
+      const apply = () => {
+        setLogData((prev) => {
+          const seen = new Set(prev.entries.map((e) => e.sha));
+          const merged = [...prev.entries];
+          for (const entry of result.entries) {
+            if (!seen.has(entry.sha)) {
+              merged.push(entry);
+            }
+          }
+          return {
+            ...prev,
+            entries: merged,
+            hasMore: result.hasMore,
+          };
+        });
+      };
+      startTransition(apply);
+    } catch {
+      // Silently fail for log pagination.
+    } finally {
+      logLoadingMoreRef.current = false;
+      setLoading((prev) => ({ ...prev, logMore: false }));
     }
   }, [repositoryPath]);
 
@@ -459,9 +507,12 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
           <LogMode
             entries={logData.entries}
             loading={loading.log}
+            loadingMore={loading.logMore}
+            hasMore={logData.hasMore}
             ahead={logData.ahead}
             behind={logData.behind}
             upstream={logData.upstream}
+            onLoadMore={() => void loadMoreLog()}
           />
         )}
       </div>
