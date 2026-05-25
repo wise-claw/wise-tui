@@ -1247,14 +1247,23 @@ export default function App() {
     setPrdSplitUiDismissed(false);
     viewMode.enter(view);
   }, [viewMode]);
+  /** 侧栏点「工作区/仓库需求」后短暂屏蔽「选工作区 → 回聊天」，避免菜单点击落到行上把 Cockpit 顶掉。 */
+  const suppressProjectSelectToChatRef = useRef(false);
   const openRequirementAssistant = useCallback((detail: OpenAssistantDetail) => {
-    setSearchOpen(false);
-    setAssistantInitialTarget(detail);
-    setCockpitSurfaceInitialAssistantId(null);
-    setCockpitResumeAssistantId(DEFAULT_PRD_SPLIT_ASSISTANT_ID);
-    setAssistantOpenRequestKey((value) => value + 1);
-    enterCockpit();
-  }, [enterCockpit]);
+    suppressProjectSelectToChatRef.current = true;
+    flushSync(() => {
+      setSearchOpen(false);
+      setAssistantInitialTarget(detail);
+      setCockpitSurfaceInitialAssistantId(DEFAULT_PRD_SPLIT_ASSISTANT_ID);
+      setCockpitResumeAssistantId(DEFAULT_PRD_SPLIT_ASSISTANT_ID);
+      setAssistantOpenRequestKey((value) => value + 1);
+      setPrdSplitUiDismissed(false);
+    });
+    viewMode.enter(cockpitView());
+    requestAnimationFrame(() => {
+      suppressProjectSelectToChatRef.current = false;
+    });
+  }, [viewMode]);
   const openMcpHubFromSidebar = useCallback(() => {
     setSearchOpen(false);
     viewMode.enter(inspectView(mcpHubInspectTool()));
@@ -2070,6 +2079,9 @@ export default function App() {
 
   const handleProjectSelectLeavingMcpHub = useCallback(
     (projectId: string) => {
+      if (suppressProjectSelectToChatRef.current) {
+        return;
+      }
       // 选 Workspace → 回到 Operator 主会话（author/inspect 先退出叠层）
       if (viewMode.isAuthor || viewMode.isInspect || viewMode.isCockpit) {
         viewMode.back();
@@ -2099,11 +2111,11 @@ export default function App() {
       await openRepositoryMainSession(repository, { enterChat: true });
       return;
     }
-    setActiveRepositoryWithOwner(repository.id);
     if (mode === "split") {
-      openRequirementAssistant({ repositoryId: repository.id });
+      openRepositoryRequirements(repository);
       return;
     }
+    setActiveRepositoryWithOwner(repository.id);
     // 默认模式（split prompt 执行）保持 per-repo 语义：repo 维度的任务拆分依赖 repo.path 上下文
     const sessionId = await createSession(repository.path, repositorySessionTabDisplayName(repository));
     executeSession(
@@ -2116,7 +2128,34 @@ export default function App() {
     );
   }
 
+  const openWorkspaceRequirements = useCallback(
+    (project: ProjectItem) => {
+      setActiveProjectId(project.id);
+      openRequirementAssistant({
+        projectId: project.id,
+        requirementScope: "workspace",
+      });
+    },
+    [openRequirementAssistant, setActiveProjectId],
+  );
+
+  const openRepositoryRequirements = useCallback(
+    (repository: Repository) => {
+      setActiveRepositoryWithOwner(repository.id);
+      openRequirementAssistant({
+        repositoryId: repository.id,
+        requirementScope: "repository",
+      });
+    },
+    [openRequirementAssistant, setActiveRepositoryWithOwner],
+  );
+
   async function handleCreateProjectTask(project: ProjectItem, mode: TaskMode) {
+    if (mode === "split") {
+      openWorkspaceRequirements(project);
+      return;
+    }
+
     const byId = new Map(repositories.map((repo) => [repo.id, repo]));
     const repos = project.repositoryIds
       .map((id) => byId.get(id))
@@ -2135,10 +2174,6 @@ export default function App() {
     setActiveRepositoryId(primaryRepo.id);
     if (mode === "chat") {
       await openProjectMainSession(project);
-      return;
-    }
-    if (mode === "split") {
-      openRequirementAssistant({ projectId: project.id });
       return;
     }
     const sessionId = await createSession(anchor.path, anchor.displayName);
@@ -2299,9 +2334,9 @@ export default function App() {
     function handleOpenTaskSplitPanel() {
       openRequirementAssistant(
         activeProjectId
-          ? { projectId: activeProjectId }
+          ? { projectId: activeProjectId, requirementScope: "workspace" }
           : activeRepositoryId != null
-            ? { repositoryId: activeRepositoryId }
+            ? { repositoryId: activeRepositoryId, requirementScope: "repository" }
             : {},
       );
     }
@@ -2594,6 +2629,8 @@ export default function App() {
         onOpenScheduledTasksForRepository: openScheduledTasksForRepository,
         onCreateProjectTask: handleCreateProjectTask,
         onCreateRepositoryTask: handleCreateRepositoryTask,
+        onOpenWorkspaceRequirements: openWorkspaceRequirements,
+        onOpenRepositoryRequirements: openRepositoryRequirements,
         onOpenProjectTrellis: async (project) => {
           const targetPath = resolveTrellisBootstrapPath({
             scope: "project",
@@ -3128,6 +3165,7 @@ export default function App() {
         activeRepositoryId,
         initialProjectId: assistantInitialTarget?.projectId ?? null,
         initialRepositoryId: assistantInitialTarget?.repositoryId ?? null,
+        initialRequirementScope: assistantInitialTarget?.requirementScope ?? null,
         onClose: exitCockpit,
         onOpenMainSession: exitCockpit,
         onOpenRuntimeLens: ({ rootPath, projectId }) => {

@@ -470,6 +470,7 @@ export function AppWorkspaceLayout({
   const leftSidebarParked = cockpitPrdSplitFullscreen;
   const [authorShellMounted, setAuthorShellMounted] = useState(authorMode);
   const [cockpitShellMounted, setCockpitShellMounted] = useState(missionControlMode);
+  const showCockpitShell = missionControlMode || cockpitShellMounted;
 
   useEffect(() => {
     if (authorMode) setAuthorShellMounted(true);
@@ -787,7 +788,7 @@ export function AppWorkspaceLayout({
                     ) : null}
                   </div>
 
-                   {cockpitShellMounted ? (
+                   {showCockpitShell ? (
                     <div
                       className={`app-full-width-main app-cockpit-workspace-layer${
                         !missionControlMode ? " app-workspace-layer--parked" : ""

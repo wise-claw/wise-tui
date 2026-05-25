@@ -1,5 +1,12 @@
-import { CheckOutlined, ExclamationCircleOutlined } from "@ant-design/icons";
-import { Space, Tooltip, Typography } from "antd";
+import {
+  CheckOutlined,
+  ExclamationCircleOutlined,
+  FolderOpenOutlined,
+  DatabaseOutlined,
+  InfoCircleOutlined,
+  BranchesOutlined,
+} from "@ant-design/icons";
+import { Tooltip } from "antd";
 import type {
   RequirementAssistantStageItem,
   TrellisTargetSummary,
@@ -11,55 +18,97 @@ interface Props {
 }
 
 export function TrellisMissionStrip({ target, stages }: Props) {
+  const displayPath = target.rootPath ? (
+    target.rootPath.length > 100
+      ? `...${target.rootPath.slice(-95)}`
+      : target.rootPath
+  ) : "未绑定";
+
   return (
-    <section className="app-prd-task-panel__mission-strip" aria-label="需求拆分助手流程状态">
-      <div className="app-prd-task-panel__mission-target">
-        <span
-          className={[
-            "app-prd-task-panel__mission-target-dot",
-            target.healthy ? "is-ready" : "is-blocked",
-          ].join(" ")}
-          aria-hidden
-        />
-        <div className="app-prd-task-panel__mission-target-main">
-          <Space size={6} align="center">
-            <Typography.Text strong className="app-prd-task-panel__mission-target-title">
-              {target.title}
-            </Typography.Text>
-            {target.healthy ? (
-              <Tooltip title="当前目标可用">
-                <CheckOutlined className="app-prd-task-panel__mission-target-ok" />
-              </Tooltip>
-            ) : (
-              <Tooltip title={target.subtitle}>
-                <ExclamationCircleOutlined className="app-prd-task-panel__mission-target-warning" />
-              </Tooltip>
-            )}
-          </Space>
-          <Typography.Text type="secondary" className="app-prd-task-panel__mission-target-subtitle">
-            {target.subtitle}
-          </Typography.Text>
+    <section className="app-prd-task-panel__mission-strip-premium" aria-label="需求拆分助手流程状态">
+      <div className="app-prd-task-panel__mission-header-row">
+        {/* Left Side: Title & Status dot */}
+        <div className="app-prd-task-panel__mission-title-area">
+          <span
+            className={[
+              "app-prd-task-panel__mission-status-dot",
+              target.healthy ? "is-ready" : "is-blocked",
+            ].join(" ")}
+            aria-hidden
+          />
+          <span className="app-prd-task-panel__mission-title-text" title={target.title}>
+            {target.title}
+          </span>
+          {target.subtitle.trim().length > 0 && (
+            <Tooltip title={target.subtitle}>
+              <InfoCircleOutlined className="app-prd-task-panel__mission-info-icon" />
+            </Tooltip>
+          )}
+        </div>
+
+        {/* Right Side: Meta Capsules */}
+        <div className="app-prd-task-panel__mission-meta-group">
+          {target.rootPath && (
+            <Tooltip title={`工作区根路径: ${target.rootPath}`}>
+              <span className="app-prd-task-panel__mission-meta-pill">
+                <FolderOpenOutlined className="app-prd-task-panel__meta-icon" />
+                <span className="app-prd-task-panel__meta-val">{displayPath}</span>
+              </span>
+            </Tooltip>
+          )}
+          {target.repositoryCount > 0 && (
+            <span className="app-prd-task-panel__mission-meta-pill">
+              <DatabaseOutlined className="app-prd-task-panel__meta-icon" />
+              <span className="app-prd-task-panel__meta-val">仓库: {target.repositoryCount}</span>
+            </span>
+          )}
+          {target.activeRepositoryLabel && (
+            <span className="app-prd-task-panel__mission-meta-pill is-active-repo">
+              <BranchesOutlined className="app-prd-task-panel__meta-icon" />
+              <span className="app-prd-task-panel__meta-val">执行: {target.activeRepositoryLabel}</span>
+            </span>
+          )}
+          {target.healthy ? (
+            <span className="app-prd-task-panel__mission-status-badge is-healthy">
+              <CheckOutlined /> 可用
+            </span>
+          ) : (
+            <Tooltip title={target.subtitle}>
+              <span className="app-prd-task-panel__mission-status-badge is-error">
+                <ExclamationCircleOutlined /> 异常
+              </span>
+            </Tooltip>
+          )}
         </div>
       </div>
-      <div className="app-prd-task-panel__mission-meta">
-          <span title={target.rootPath || "未绑定工作目录"}>
-          目录：{target.rootPath || "未绑定"}
-        </span>
-        <span>仓库：{target.repositoryCount}</span>
-        <span title={target.activeRepositoryLabel}>执行：{target.activeRepositoryLabel}</span>
+
+      {/* Stepper Pipeline */}
+      <div className="app-prd-task-panel__mission-stepper">
+        {stages.map((stage, idx) => {
+          const isDone = stage.status === "done";
+
+          return (
+            <div
+              key={stage.key}
+              className={[
+                "app-prd-task-panel__mission-step-item",
+                `is-${stage.status}`,
+              ].join(" ")}
+            >
+              <div className="app-prd-task-panel__mission-step-content">
+                <span className="app-prd-task-panel__mission-step-indicator">
+                  {isDone ? <CheckOutlined className="step-check-icon" /> : (idx + 1)}
+                </span>
+                <span className="app-prd-task-panel__mission-step-label">{stage.label}</span>
+              </div>
+              {idx < stages.length - 1 && (
+                <div className="app-prd-task-panel__mission-step-connector" />
+              )}
+            </div>
+          );
+        })}
       </div>
-      <ol className="app-prd-task-panel__mission-stages">
-        {stages.map((stage) => (
-          <li
-            key={stage.key}
-            className={`app-prd-task-panel__mission-stage is-${stage.status}`}
-            aria-current={stage.status === "active" ? "step" : undefined}
-          >
-            <span className="app-prd-task-panel__mission-stage-dot" aria-hidden />
-            <span>{stage.label}</span>
-          </li>
-        ))}
-      </ol>
     </section>
   );
 }
+

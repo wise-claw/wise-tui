@@ -53,10 +53,14 @@ export const WORKFLOW_UI_EVENT_WORKFLOW_GRAPH_CHANGED = "wise:workflow-graph-cha
 export const WORKFLOW_UI_EVENT_OPEN_REPOSITORY_FILE = "wise:open-repository-file";
 export const WORKFLOW_UI_EVENT_RUN_ASSISTANT_BRIEF = "wise:run-assistant-brief";
 
+/** 需求助手入口粒度：工作区可跨仓下发，仓库仅本仓。 */
+export type RequirementAssistantScope = "workspace" | "repository";
+
 export interface OpenAssistantDetail {
   assistantId?: string | null;
   projectId?: string | null;
   repositoryId?: number | null;
+  requirementScope?: RequirementAssistantScope | null;
 }
 
 export interface SplitTodoCountUpdatedDetail {

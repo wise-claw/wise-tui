@@ -110,6 +110,10 @@ export interface LeftSidebarProps {
   onOpenScheduledTasksForProject?: (project: ProjectItem) => void;
   onCreateProjectTask: (project: ProjectItem, mode: TaskMode) => void;
   onCreateRepositoryTask: (repository: Repository, mode: TaskMode) => void;
+  /** 打开工作区需求拆分助手（勿走「选工作区 → 主会话」路径）。 */
+  onOpenWorkspaceRequirements?: (project: ProjectItem) => void;
+  /** 打开仓库需求拆分助手。 */
+  onOpenRepositoryRequirements?: (repository: Repository) => void;
   onOpenPromptsProject?: (project: ProjectItem) => void;
   onOpenProjectTrellis?: (project: ProjectItem) => void;
   onOpenPromptsRepository?: (project: ProjectItem, repository: Repository) => void;

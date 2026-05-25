@@ -6,6 +6,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { UnlistenFn } from "@tauri-apps/api/event";
+import type { RequirementAssistantScope } from "../../constants/workflowUiEvents";
 import type {
   PrdDocument,
   ProjectItem,
@@ -175,6 +176,7 @@ export interface PrdTaskSplitPanelControllerInput {
   activeRepositoryId: number | null;
   initialProjectId?: string | null;
   initialRepositoryId?: number | null;
+  initialRequirementScope?: RequirementAssistantScope | null;
 }
 
 function scrollToTaskCard(taskId: string) {
@@ -259,6 +261,7 @@ export function usePrdTaskSplitPanelController({
   activeRepositoryId,
   initialProjectId = null,
   initialRepositoryId = null,
+  initialRequirementScope = null,
 }: PrdTaskSplitPanelControllerInput) {
   const { message } = AntdApp.useApp();
   const [parsing, setParsing] = useState(false);
@@ -378,10 +381,13 @@ export function usePrdTaskSplitPanelController({
     [activeRequirementId, requirementHistoryById],
   );
   const requirementEntryScope = useMemo((): "workspace" | "repository" | null => {
+    if (initialRequirementScope === "workspace" || initialRequirementScope === "repository") {
+      return initialRequirementScope;
+    }
     if (initialProjectId?.trim() && initialRepositoryId == null) return "workspace";
     if (initialRepositoryId != null && !initialProjectId?.trim()) return "repository";
     return contextMode === "project" ? "workspace" : contextMode === "repository" ? "repository" : null;
-  }, [contextMode, initialProjectId, initialRepositoryId]);
+  }, [contextMode, initialProjectId, initialRepositoryId, initialRequirementScope]);
 
   const visibleRequirementHistory = useMemo(() => {
     const projectId = linkedProjectId ?? initialProjectId ?? activeProjectId ?? null;
@@ -425,8 +431,8 @@ export function usePrdTaskSplitPanelController({
       : null;
   const hasInput = useMemo(() => inputValue.trim().length > 0, [inputValue]);
   const initialTargetKey = useMemo(
-    () => `${initialProjectId?.trim() ?? ""}:${initialRepositoryId ?? ""}`,
-    [initialProjectId, initialRepositoryId],
+    () => `${initialProjectId?.trim() ?? ""}:${initialRepositoryId ?? ""}:${initialRequirementScope ?? ""}`,
+    [initialProjectId, initialRepositoryId, initialRequirementScope],
   );
   const isUrlInputMode = useMemo(() => {
     if (!inputValue.trim()) return false;
@@ -1172,25 +1178,32 @@ export function usePrdTaskSplitPanelController({
 
   useEffect(() => {
     if (activeProjectId) setLinkedProjectId(activeProjectId);
-    if (activeRepositoryId) setLinkedRepositoryId(activeRepositoryId);
-  }, [activeProjectId, activeRepositoryId]);
+    if (requirementEntryScope === "repository" && activeRepositoryId) {
+      setLinkedRepositoryId(activeRepositoryId);
+    }
+  }, [activeProjectId, activeRepositoryId, requirementEntryScope]);
 
   useEffect(() => {
+    if (initialRequirementScope === "workspace" || initialRequirementScope === "repository") {
+      setContextMode(initialRequirementScope === "workspace" ? "project" : "repository");
+    }
     if (initialProjectId?.trim()) {
       setLinkedProjectId(initialProjectId);
-      setContextMode("project");
-      if (initialRepositoryId == null) {
+      if (initialRequirementScope === "workspace" || (initialRepositoryId == null && !initialRequirementScope)) {
+        setContextMode("project");
         setLinkedRepositoryId(null);
       }
     }
     if (initialRepositoryId != null) {
       setLinkedRepositoryId(initialRepositoryId);
-      if (!initialProjectId?.trim()) {
+      if (initialRequirementScope === "repository" || !initialProjectId?.trim()) {
         setContextMode("repository");
-        setLinkedProjectId(null);
+        if (initialRequirementScope === "repository") {
+          setLinkedProjectId(null);
+        }
       }
     }
-  }, [initialTargetKey, initialProjectId, initialRepositoryId]);
+  }, [initialTargetKey, initialProjectId, initialRepositoryId, initialRequirementScope]);
 
   useEffect(() => {
     if (!activeRequirementId) return;

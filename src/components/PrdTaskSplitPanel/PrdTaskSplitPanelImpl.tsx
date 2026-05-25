@@ -1,5 +1,6 @@
 import { Col, Layout, Row, Space, Spin } from "antd";
 import { startTransition, Suspense, useState } from "react";
+import type { RequirementAssistantScope } from "../../constants/workflowUiEvents";
 import type { ProjectItem, Repository } from "../../types";
 import { savePrdTaskSplitResult } from "../../services/prdTaskSplitStore";
 import { sameStringArray } from "../../utils/anchorStability";
@@ -23,6 +24,7 @@ export interface PrdTaskSplitPanelProps {
   activeRepositoryId: number | null;
   initialProjectId?: string | null;
   initialRepositoryId?: number | null;
+  initialRequirementScope?: RequirementAssistantScope | null;
 }
 
 export function PrdTaskSplitPanel({
@@ -35,6 +37,7 @@ export function PrdTaskSplitPanel({
   activeRepositoryId,
   initialProjectId = null,
   initialRepositoryId = null,
+  initialRequirementScope = null,
 }: PrdTaskSplitPanelProps) {
   const [workspaceLayout, setWorkspaceLayout] = useState<SplitWorkspaceLayout>("review");
   const {
@@ -184,6 +187,7 @@ export function PrdTaskSplitPanel({
     activeRepositoryId,
     initialProjectId,
     initialRepositoryId,
+    initialRequirementScope,
   });
   const workspaceStageClass = filteredTasks.length > 0 || plannedMissionSummary || parsing
     ? "app-prd-task-panel__columns--has-task-flow"

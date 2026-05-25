@@ -60,6 +60,8 @@ interface ProjectRepositoryListProps {
   onOpenFloatingRepositoryTrellis?: (repository: Repository) => void;
   onCreateProjectTask: (project: Workspace, mode: TaskMode) => void;
   onCreateRepositoryTask: (repository: Repository, mode: TaskMode) => void;
+  onOpenWorkspaceRequirements?: (project: Workspace) => void;
+  onOpenRepositoryRequirements?: (repository: Repository) => void;
   onOpenInFinder: (repository: Repository) => void;
   onOpenProjectInFinder?: (project: Workspace) => void;
   onOpenRepositoryInBrowser: (repository: Repository) => void;
@@ -129,6 +131,7 @@ export function ProjectRepositoryList({
   onOpenFloatingRepositoryTrellis,
   onCreateProjectTask,
   onCreateRepositoryTask,
+  onOpenWorkspaceRequirements,
   onOpenInFinder,
   onOpenProjectInFinder,
   onOpenRepositoryInBrowser,
@@ -261,6 +264,7 @@ export function ProjectRepositoryList({
             onAddRepositoryToProject={onAddRepositoryToProjectClick}
             onCreateProjectTask={onCreateProjectTask}
             onCreateRepositoryTask={onCreateRepositoryTask}
+            onOpenWorkspaceRequirements={onOpenWorkspaceRequirements}
             onReconcileProject={onReconcileProject}
             onBootstrapTrellisForProject={onBootstrapTrellisForProject}
             onCodeGraphGenerateProject={onCodeGraphGenerateProject}
@@ -336,6 +340,8 @@ interface ProjectRowProps {
   onAddRepositoryToProject?: (projectId: Workspace["id"]) => void;
   onCreateProjectTask: (project: Workspace, mode: TaskMode) => void;
   onCreateRepositoryTask: (repository: Repository, mode: TaskMode) => void;
+  onOpenWorkspaceRequirements?: (project: Workspace) => void;
+  onOpenRepositoryRequirements?: (repository: Repository) => void;
   onReconcileProject?: (projectId: string, mode: ReconcileProjectMode) => void | Promise<void>;
   onBootstrapTrellisForProject?: (project: Workspace) => void | Promise<void>;
   onCodeGraphGenerateProject?: (project: Workspace) => void | Promise<void>;
@@ -396,6 +402,7 @@ function ProjectRow({
   onAddRepositoryToProject,
   onCreateProjectTask,
   onCreateRepositoryTask,
+  onOpenWorkspaceRequirements,
   onReconcileProject,
   onBootstrapTrellisForProject,
   onCodeGraphGenerateProject,
@@ -436,6 +443,13 @@ function ProjectRow({
 }: ProjectRowProps) {
   const projectTrellisReady = projectTrellisReadyById[project.id] === true;
   const projectTrellisEnabled = project.sddMode !== "project_owned" || projectTrellisReady;
+  const openWorkspaceRequirements = () => {
+    if (onOpenWorkspaceRequirements) {
+      onOpenWorkspaceRequirements(project);
+      return;
+    }
+    onCreateProjectTask(project, "split");
+  };
   const projectHasCodeGraph = project.repositoryIds.some(
     (repositoryId) => codeGraphIndexStatusByRepoId[repositoryId] === "done",
   );
@@ -502,10 +516,12 @@ function ProjectRow({
       <div
         className={`app-repository-item app-repository-item--project${isActiveProject ? " app-repository-item--project-active" : ""}`}
         onClick={(e) => {
+          if (e.defaultPrevented) return;
           const target = e.target as HTMLElement | null;
           if (
             target?.closest(".app-repository-row-actions") ||
-            target?.closest(".app-repository-main-session-running-dot-wrap")
+            target?.closest(".app-repository-main-session-running-dot-wrap") ||
+            target?.closest(".ant-dropdown-menu")
           ) {
             return;
           }
@@ -549,7 +565,7 @@ function ProjectRow({
             <SidebarRequirementAction
               variant="project"
               unsplitCount={projectRequirementUnsplitCount}
-              onOpen={() => onCreateProjectTask(project, "split")}
+              onOpen={openWorkspaceRequirements}
             />
           ) : null}
           {projectHasCodeGraph && onCodeGraphViewProject ? (
@@ -578,13 +594,15 @@ function ProjectRow({
             menu={{
               className: "app-sidebar-more-menu-inner",
               items: projectMoreItems,
-              onClick: ({ key }) => {
+              onClick: ({ key, domEvent }) => {
+                domEvent?.preventDefault();
+                domEvent?.stopPropagation();
                 if (key === "pin") onTogglePinProject(project.id);
                 if (key === "rename") onRenameProject(project);
                 if (key === "open-directory") onOpenProjectInFinder?.(project);
                 if (key === "add-repository") onAddRepositoryToProject?.(project.id);
                 if (key === "scheduled-tasks") onOpenScheduledTasksForProject?.(project);
-                if (key === "requirements" && projectTrellisEnabled) onCreateProjectTask(project, "split");
+                if (key === "requirements" && projectTrellisEnabled) openWorkspaceRequirements();
                 if (key === "executable-tasks" && projectTrellisEnabled) onOpenExecutableTasksForProject?.(project);
                 if (key === "trellis-init") void Promise.resolve(onBootstrapTrellisForProject?.(project));
                 if (key === "reconcile-repos") void Promise.resolve(onReconcileProject?.(project.id, "repos_only"));

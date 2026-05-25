@@ -186,138 +186,284 @@
   font-size: 12px;
 }
 
-.app-prd-task-panel__mission-strip {
-  display: grid;
-  grid-template-columns: minmax(220px, 1.15fr) minmax(260px, 1fr) minmax(260px, 0.95fr);
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  min-height: 42px;
-  padding: 7px 10px;
-  border: 1px solid var(--ant-color-border-secondary);
-  border-radius: var(--ant-border-radius-sm);
-  background: var(--ant-color-bg-container);
-}
-
-.app-prd-task-panel__mission-target {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.app-prd-task-panel__mission-target-dot {
-  flex: 0 0 auto;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--ant-color-warning);
-  box-shadow: 0 0 0 3px var(--ant-color-warning-bg);
-}
-
-.app-prd-task-panel__mission-target-dot.is-ready {
-  background: var(--ant-color-success);
-  box-shadow: 0 0 0 3px var(--ant-color-success-bg);
-}
-
-.app-prd-task-panel__mission-target-main {
-  min-width: 0;
+.app-prd-task-panel__mission-strip-premium {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: var(--ant-border-radius-lg, 8px);
+  background: var(--ant-color-bg-container);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  transition: all 0.2s ease-in-out;
 }
 
-.app-prd-task-panel__mission-target-title {
-  max-width: 280px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-  line-height: 1.3;
-}
-
-.app-prd-task-panel__mission-target-subtitle {
-  max-width: 360px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
-  line-height: 1.3;
-}
-
-.app-prd-task-panel__mission-target-ok {
-  color: var(--ant-color-success);
-  font-size: 11px;
-}
-
-.app-prd-task-panel__mission-target-warning {
-  color: var(--ant-color-warning);
-  font-size: 12px;
-}
-
-.app-prd-task-panel__mission-meta {
+.app-prd-task-panel__mission-header-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 12px;
   min-width: 0;
-  color: var(--ant-color-text-secondary);
-  font-size: 11px;
-  line-height: 1.3;
+  width: 100%;
 }
 
-.app-prd-task-panel__mission-meta > span {
+.app-prd-task-panel__mission-title-area {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 1 auto;
   min-width: 0;
-  max-width: 220px;
+}
+
+.app-prd-task-panel__mission-status-dot {
+  position: relative;
+  flex: 0 0 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ant-color-warning);
+}
+
+.app-prd-task-panel__mission-status-dot.is-ready {
+  background: var(--ant-color-success);
+}
+
+.app-prd-task-panel__mission-status-dot.is-ready::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  border-radius: 50%;
+  border: 1px solid var(--ant-color-success);
+  animation: status-pulsate 2s infinite ease-in-out;
+  opacity: 0;
+}
+
+@keyframes status-pulsate {
+  0% { transform: scale(0.8); opacity: 0.5; }
+  50% { opacity: 0.8; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+.app-prd-task-panel__mission-status-dot.is-blocked {
+  background: var(--ant-color-error);
+}
+
+.app-prd-task-panel__mission-title-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ant-color-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.app-prd-task-panel__mission-stages {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 4px;
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+.app-prd-task-panel__mission-info-icon {
+  font-size: 11px;
+  color: var(--ant-color-text-secondary);
+  cursor: pointer;
+  transition: color 0.2s;
 }
 
-.app-prd-task-panel__mission-stage {
+.app-prd-task-panel__mission-info-icon:hover {
+  color: var(--ant-color-primary);
+}
+
+.app-prd-task-panel__mission-meta-group {
   display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 1 auto;
+  margin-left: auto;
+}
+
+.app-prd-task-panel__mission-meta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: var(--ant-color-fill-tertiary, #f0f0f0);
+  border: 1px solid var(--ant-color-border-secondary, #d9d9d9);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--ant-color-text-secondary, #595959);
+  transition: all 0.2s;
+  max-width: 500px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.app-prd-task-panel__mission-meta-pill:hover {
+  background: var(--ant-color-fill-tertiary);
+  border-color: var(--ant-color-border);
+  color: var(--ant-color-text);
+}
+
+.app-prd-task-panel__mission-meta-pill.is-active-repo {
+  background: rgba(22, 119, 255, 0.06);
+  border-color: rgba(22, 119, 255, 0.15);
+  color: var(--ant-color-primary);
+}
+
+.app-prd-task-panel__mission-meta-pill.is-active-repo:hover {
+  background: rgba(22, 119, 255, 0.1);
+  border-color: rgba(22, 119, 255, 0.3);
+}
+
+.app-prd-task-panel__mission-meta-pill .app-prd-task-panel__meta-icon {
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+.app-prd-task-panel__mission-meta-pill .app-prd-task-panel__meta-val {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-prd-task-panel__mission-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.app-prd-task-panel__mission-status-badge.is-healthy {
+  background: rgba(82, 196, 26, 0.08);
+  color: var(--ant-color-success);
+  border: 1px solid rgba(82, 196, 26, 0.15);
+}
+
+.app-prd-task-panel__mission-status-badge.is-error {
+  background: rgba(255, 77, 79, 0.08);
+  color: var(--ant-color-error);
+  border: 1px solid rgba(255, 77, 79, 0.15);
+}
+
+.app-prd-task-panel__mission-stepper {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  margin-top: 2px;
+  padding: 1px 0;
+}
+
+.app-prd-task-panel__mission-step-item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  position: relative;
+  min-width: 0;
+}
+
+.app-prd-task-panel__mission-step-item:last-child {
+  flex: 0 0 auto;
+}
+
+.app-prd-task-panel__mission-step-content {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  z-index: 1;
+  background: var(--ant-color-bg-container);
+  padding-right: 6px;
+  min-width: 0;
+}
+
+.app-prd-task-panel__mission-step-indicator {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  min-width: 0;
-  height: 24px;
-  border-radius: var(--ant-border-radius-sm);
-  color: var(--ant-color-text-tertiary);
+  font-size: 9px;
+  font-weight: 600;
   background: var(--ant-color-fill-quaternary);
-  font-size: 11px;
-  line-height: 1;
+  color: var(--ant-color-text-quaternary);
+  border: 1px solid var(--ant-color-border-secondary);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
 }
 
-.app-prd-task-panel__mission-stage.is-active {
+.app-prd-task-panel__mission-step-indicator .step-check-icon {
+  font-size: 8px;
+}
+
+.app-prd-task-panel__mission-step-label {
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: all 0.25s;
+}
+
+.app-prd-task-panel__mission-step-connector {
+  flex: 1;
+  height: 1px;
+  background: var(--ant-color-border, #e8e8e8);
+  margin-inline: 4px;
+  transition: all 0.25s;
+}
+
+/* Done State */
+.app-prd-task-panel__mission-step-item.is-done .app-prd-task-panel__mission-step-indicator {
+  background: rgba(82, 196, 26, 0.08);
+  color: var(--ant-color-success);
+  border-color: rgba(82, 196, 26, 0.2);
+}
+
+.app-prd-task-panel__mission-step-item.is-done .app-prd-task-panel__mission-step-label {
+  color: var(--ant-color-success);
+  font-weight: 500;
+}
+
+.app-prd-task-panel__mission-step-item.is-done .app-prd-task-panel__mission-step-connector {
+  background: rgba(82, 196, 26, 0.25);
+}
+
+/* Active State */
+.app-prd-task-panel__mission-step-item.is-active .app-prd-task-panel__mission-step-indicator {
+  background: var(--ant-color-primary);
+  color: var(--ant-color-text-light-solid);
+  border-color: var(--ant-color-primary);
+  box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.12);
+}
+
+.app-prd-task-panel__mission-step-item.is-active .app-prd-task-panel__mission-step-label {
   color: var(--ant-color-primary);
-  background: var(--ant-color-primary-bg);
   font-weight: 600;
 }
 
-.app-prd-task-panel__mission-stage.is-done {
-  color: var(--ant-color-success);
-  background: var(--ant-color-success-bg);
-}
-
-.app-prd-task-panel__mission-stage.is-failed {
+/* Failed State */
+.app-prd-task-panel__mission-step-item.is-failed .app-prd-task-panel__mission-step-indicator {
+  background: rgba(255, 77, 79, 0.08);
   color: var(--ant-color-error);
-  background: var(--ant-color-error-bg);
+  border-color: rgba(255, 77, 79, 0.2);
 }
 
-.app-prd-task-panel__mission-stage-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: currentColor;
+.app-prd-task-panel__mission-step-item.is-failed .app-prd-task-panel__mission-step-label {
+  color: var(--ant-color-error);
+  font-weight: 600;
+}
+
+/* Waiting State */
+.app-prd-task-panel__mission-step-item.is-waiting .app-prd-task-panel__mission-step-indicator {
+  background: var(--ant-color-fill-tertiary, #f0f0f0);
+  color: var(--ant-color-text-secondary, #595959);
+  border-color: var(--ant-color-border-secondary, #d9d9d9);
+}
+
+.app-prd-task-panel__mission-step-item.is-waiting .app-prd-task-panel__mission-step-label {
+  color: var(--ant-color-text-secondary, #595959);
+  opacity: 0.85;
 }
 
 .app-prd-task-panel__columns {
@@ -4347,8 +4493,13 @@
 }
 
 @media (max-width: 1200px) {
-  .app-prd-task-panel__mission-strip {
-    grid-template-columns: 1fr;
+  .app-prd-task-panel__mission-title-row {
+    flex-wrap: wrap;
+  }
+
+  .app-prd-task-panel__mission-meta {
+    width: 100%;
+    margin-left: 0;
   }
 
   .app-prd-task-panel__deepen-layout > .ant-col {

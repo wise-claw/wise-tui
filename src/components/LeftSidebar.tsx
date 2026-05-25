@@ -106,6 +106,8 @@ export function LeftSidebar({
   onOpenScheduledTasksForProject: onOpenScheduledTasksForProjectProp,
   onCreateProjectTask,
   onCreateRepositoryTask,
+  onOpenWorkspaceRequirements,
+  onOpenRepositoryRequirements: onOpenRepositoryRequirementsProp,
   onOpenPromptsProject,
   onOpenProjectTrellis,
   onOpenPromptsRepository,
@@ -596,6 +598,10 @@ export function LeftSidebar({
           onOpenFloatingRepositoryTrellis={onOpenProjectTrellis ? openFloatingRepositoryTrellis : undefined}
           onCreateProjectTask={onCreateProjectTask}
           onCreateRepositoryTask={onCreateRepositoryTask}
+          onOpenWorkspaceRequirements={onOpenWorkspaceRequirements}
+          onOpenRepositoryRequirements={
+            onOpenRepositoryRequirementsProp ?? ((repository) => onCreateRepositoryTask(repository, "split"))
+          }
           onOpenInFinder={onOpenInFinder}
           onOpenProjectInFinder={onOpenProjectInFinder}
           onOpenRepositoryInBrowser={onOpenRepositoryInBrowser}
@@ -640,7 +646,6 @@ export function LeftSidebar({
           executableTasksByRepoId={executableTasksByRepoId}
           onOpenScheduledTasksForRepository={openScheduledTasksForRepository}
           onOpenScheduledTasksForProject={openScheduledTasksForProject}
-          onOpenRepositoryRequirements={(repository) => onCreateRepositoryTask(repository, "split")}
           onOpenExecutableTasksForProject={openExecutableTasksForProject}
           onOpenExecutableTasksForRepository={openExecutableTasksForRepository}
           runningMainSessionByProjectId={runningByProjectId}
