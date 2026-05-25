@@ -188,9 +188,13 @@
   flex-shrink: 0;
 }
 
-.git-panel-header > .ant-btn.ant-btn-text .anticon,
-.git-panel-header .git-mode-btn .anticon {
+.git-panel-header > .ant-btn.ant-btn-text .anticon {
   font-size: 14px;
+  color: var(--ant-color-text);
+}
+
+.git-panel-header .git-mode-btn .ant-btn-icon .anticon {
+  font-size: 12px;
   color: var(--ant-color-text);
 }
 

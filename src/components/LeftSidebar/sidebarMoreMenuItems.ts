@@ -138,7 +138,7 @@ export function buildProjectRepositoryMoreMenuItems(
     sidebarMenuSection([
       { key: "finder", label: "Finder打开" },
       { key: "editor", label: repositoryEditorOpenMenuLabel() },
-      { key: "browser", label: "在浏览器中打开" },
+      { key: "browser", label: "打开 Git 仓库" },
     ]),
     sidebarMenuSection([
       REPOSITORY_MAIN_OWNER_MENU_ENABLED && onOpenRepositoryMainOwner
@@ -213,7 +213,7 @@ export function buildFloatingRepositoryMoreMenuItems(
     sidebarMenuSection([
       { key: "finder", label: "Finder打开" },
       { key: "editor", label: repositoryEditorOpenMenuLabel() },
-      { key: "browser", label: "在浏览器中打开" },
+      { key: "browser", label: "打开 Git 仓库" },
     ]),
     sidebarMenuSection([
       REPOSITORY_MAIN_OWNER_MENU_ENABLED && onOpenRepositoryMainOwner
