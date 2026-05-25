@@ -1,13 +1,19 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { workspaceBootstrapSelectionToSddMode } from "../constants/workspaceBootstrapAddons";
+import { gitCloneRepository, gitInit, prepareEmptyRepositoryDir } from "./git";
 import type {
   AddRepositoryOptions,
   ProjectItem,
   ProjectSddMode,
   Repository,
+  RepositoryAcquireParams,
   SddMode,
 } from "../types";
+import {
+  normalizeRepositoryAcquireParams,
+  type RepositoryAcquireMode,
+} from "../utils/repositoryAcquire";
 
 /**
  * Open native folder picker dialog.
@@ -25,6 +31,58 @@ export async function pickFolder(): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+export type ResolveRepositoryAcquirePathResult =
+  | { ok: true; path: string }
+  | { ok: false; cancelled: boolean; error?: string };
+
+/**
+ * 按关联仓库弹窗所选方式解析最终仓库目录：已有目录选择器、新建空目录+init、或 git clone。
+ */
+export async function resolveRepositoryAcquirePath(
+  acquire: RepositoryAcquireParams | undefined,
+  context?: { defaultParentPath?: string },
+): Promise<ResolveRepositoryAcquirePathResult> {
+  const params = normalizeRepositoryAcquireParams(acquire);
+  const mode: RepositoryAcquireMode = params.mode;
+
+  if (mode === "pick_existing") {
+    const path = await pickFolder();
+    if (!path) return { ok: false, cancelled: true };
+    return { ok: true, path };
+  }
+
+  const parentPath = params.parentPath?.trim() || context?.defaultParentPath?.trim() || "";
+  if (!parentPath) {
+    return { ok: false, cancelled: false, error: "请选择父目录" };
+  }
+
+  try {
+    if (mode === "create_empty") {
+      const folderName = params.folderName?.trim() ?? "";
+      const path = await prepareEmptyRepositoryDir(parentPath, folderName);
+      await gitInit(path);
+      return { ok: true, path };
+    }
+    if (mode === "git_clone") {
+      const url = params.gitUrl?.trim() ?? "";
+      const folderName = params.folderName?.trim();
+      const path = await gitCloneRepository(
+        parentPath,
+        url,
+        folderName && folderName.length > 0 ? folderName : undefined,
+      );
+      return { ok: true, path };
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, cancelled: false, error: message };
+  }
+
+  const path = await pickFolder();
+  if (!path) return { ok: false, cancelled: true };
+  return { ok: true, path };
 }
 
 /**

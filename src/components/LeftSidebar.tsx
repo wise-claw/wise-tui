@@ -307,6 +307,7 @@ export function LeftSidebar({
   );
 
   const repositoryAssociateModal = useRepositoryAssociateModalController({
+    projects,
     onAddFloatingRepository,
     onAddRepositoryToProject,
   });
@@ -742,6 +743,17 @@ export function LeftSidebar({
       <RepositoryAssociateModal
         open={repositoryAssociateModal.open}
         floatingMode={repositoryAssociateModal.floatingMode}
+        submitting={repositoryAssociateModal.submitting}
+        acquireMode={repositoryAssociateModal.acquireMode}
+        onAcquireModeChange={repositoryAssociateModal.setAcquireMode}
+        parentPath={repositoryAssociateModal.parentPath}
+        onParentPathChange={repositoryAssociateModal.setParentPath}
+        onPickParentPath={repositoryAssociateModal.pickParentPath}
+        folderName={repositoryAssociateModal.folderName}
+        onFolderNameChange={repositoryAssociateModal.setFolderName}
+        gitUrl={repositoryAssociateModal.gitUrl}
+        onGitUrlChange={repositoryAssociateModal.setGitUrl}
+        submitOkText={repositoryAssociateModal.submitOkText}
         associateSelectValue={repositoryAssociateModal.associateSelectValue}
         onAssociateSelectValueChange={repositoryAssociateModal.setAssociateSelectValue}
         onRepositoryTypeChange={repositoryAssociateModal.setRepositoryType}

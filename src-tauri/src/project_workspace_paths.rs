@@ -29,6 +29,21 @@ pub fn assert_repo_dir_under_project_root(root: &Path, repo: &Path) -> Result<()
     Err(format!("仓库不在项目根目录下：{}", repo.to_string_lossy()))
 }
 
+/// 校验在父目录下新建的仓库文件夹名（不含路径分隔符）。
+pub fn validate_repository_folder_name(name: &str) -> Result<String, String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err("文件夹名不能为空".to_string());
+    }
+    if trimmed == "." || trimmed == ".." {
+        return Err("文件夹名无效".to_string());
+    }
+    if trimmed.contains('/') || trimmed.contains('\\') {
+        return Err("文件夹名不能包含路径分隔符".to_string());
+    }
+    Ok(trimmed.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

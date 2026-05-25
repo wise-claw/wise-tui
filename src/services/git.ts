@@ -68,6 +68,27 @@ export async function gitInit(path: string): Promise<string> {
   return invoke<string>("git_init", { path });
 }
 
+/** 在父目录下创建空文件夹（尚未 `git init`）。 */
+export async function prepareEmptyRepositoryDir(
+  parentPath: string,
+  folderName: string,
+): Promise<string> {
+  return invoke<string>("prepare_empty_repository_dir", { parentPath, folderName });
+}
+
+/** 在父目录下 `git clone`，返回克隆后的仓库绝对路径。 */
+export async function gitCloneRepository(
+  parentPath: string,
+  url: string,
+  folderName?: string,
+): Promise<string> {
+  return invoke<string>("git_clone_repository", {
+    parentPath,
+    url,
+    folderName: folderName?.trim() ? folderName.trim() : null,
+  });
+}
+
 export async function gitRemoteUrl(path: string): Promise<string | null> {
   return invoke<string | null>("git_remote_url", { path });
 }

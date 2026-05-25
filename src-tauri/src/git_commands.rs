@@ -1,9 +1,10 @@
+use crate::project_workspace_paths::{canonicalize_existing_dir, validate_repository_folder_name};
 use git2::build::CheckoutBuilder;
 use git2::{BranchType, DiffOptions, Repository, Status, StatusOptions};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 #[derive(Serialize, Clone)]
@@ -919,4 +920,103 @@ pub(crate) fn git_worktree_add_omc_batch(
         worktree_path: abs_str,
         branch_name,
     })
+}
+
+fn derive_folder_name_from_git_url(url: &str) -> String {
+    let trimmed = url.trim().trim_end_matches('/');
+    if trimmed.is_empty() {
+        return "repository".to_string();
+    }
+    let without_git = trimmed
+        .strip_suffix(".git")
+        .or_else(|| trimmed.strip_suffix(".GIT"))
+        .unwrap_or(trimmed);
+    let last = without_git
+        .rsplit(&['/', ':'][..])
+        .find(|s| !s.is_empty())
+        .unwrap_or("repository");
+    if last.is_empty() {
+        "repository".to_string()
+    } else {
+        last.to_string()
+    }
+}
+
+/// 在父目录下创建空文件夹，供后续 `git_init` 使用。
+#[tauri::command]
+pub(crate) fn prepare_empty_repository_dir(
+    parent_path: String,
+    folder_name: String,
+) -> Result<String, String> {
+    let parent = canonicalize_existing_dir(&parent_path)?;
+    let folder = validate_repository_folder_name(&folder_name)?;
+    let dest: PathBuf = parent.join(&folder);
+    if dest.exists() {
+        return Err(format!("目标目录已存在: {}", dest.display()));
+    }
+    fs::create_dir_all(&dest).map_err(|e| format!("创建目录失败: {e}"))?;
+    let canon = dest
+        .canonicalize()
+        .map_err(|e| format!("无法解析新建目录: {e}"))?;
+    Ok(canon.to_string_lossy().to_string())
+}
+
+/// 在父目录下执行 `git clone`，返回克隆后的仓库绝对路径。
+#[tauri::command]
+pub(crate) fn git_clone_repository(
+    parent_path: String,
+    url: String,
+    folder_name: Option<String>,
+) -> Result<String, String> {
+    let parent = canonicalize_existing_dir(&parent_path)?;
+    let url_trim = url.trim();
+    if url_trim.is_empty() {
+        return Err("Git 地址不能为空".to_string());
+    }
+    let folder = match folder_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        Some(name) => validate_repository_folder_name(name)?,
+        None => validate_repository_folder_name(&derive_folder_name_from_git_url(url_trim))?,
+    };
+    let dest = parent.join(&folder);
+    if dest.exists() {
+        return Err(format!("目标目录已存在: {}", dest.display()));
+    }
+    let output = Command::new("git")
+        .current_dir(&parent)
+        .args(["clone", url_trim, folder.as_str()])
+        .output()
+        .map_err(|e| format!("git clone 启动失败: {e}"))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let detail = if !stderr.is_empty() { stderr } else { stdout };
+        return Err(if detail.is_empty() {
+            format!("git clone 失败 (exit {})", output.status)
+        } else {
+            format!("git clone 失败: {detail}")
+        });
+    }
+    canonicalize_existing_dir(&dest.to_string_lossy())
+        .map(|p| p.to_string_lossy().to_string())
+}
+
+#[cfg(test)]
+mod repository_acquire_tests {
+    use super::*;
+
+    #[test]
+    fn derive_folder_name_from_urls() {
+        assert_eq!(
+            derive_folder_name_from_git_url("https://github.com/org/wise.git"),
+            "wise"
+        );
+        assert_eq!(
+            derive_folder_name_from_git_url("git@github.com:org/wise.git"),
+            "wise"
+        );
+    }
 }

@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import type { AddRepositoryOptions, ProjectItem, Repository } from "../types";
+import type { AddRepositoryOptions, ProjectItem, Repository, RepositoryAcquireParams } from "../types";
 import {
-  pickFolder,
   createRepositoryFromPathWithType,
   loadRepositories,
   removeRepository,
+  resolveRepositoryAcquirePath,
   updateRepositoryMainOwnerAgent,
   updateProjectSddMode,
   updateRepositorySddMode,
@@ -344,9 +344,18 @@ export function useRepositoryList() {
     projectId: string,
     repositoryType: Repository["repositoryType"],
     options?: AddRepositoryOptions,
+    acquire?: RepositoryAcquireParams,
+    explicitFolderPath?: string,
   ) => {
-    const folderPath = await pickFolder();
-    if (!folderPath) return;
+    let folderPath = explicitFolderPath?.trim() ?? "";
+    if (!folderPath) {
+      const project = projects.find((item) => item.id === projectId);
+      const resolved = await resolveRepositoryAcquirePath(acquire, {
+        defaultParentPath: project?.rootPath,
+      });
+      if (!resolved.ok) return;
+      folderPath = resolved.path;
+    }
     const folderPathKey = normalizeRepositoryPathKey(folderPath);
     let repository =
       repositories.find((item) => normalizeRepositoryPathKey(item.path) === folderPathKey) ?? null;
@@ -364,7 +373,7 @@ export function useRepositoryList() {
     setActiveProjectId(projectId);
     void persistActiveProjectId(projectId);
     setActiveRepositoryId(repositoryId);
-  }, [repositories]);
+  }, [projects, repositories]);
 
   /**
    * 创建不属于任何 project 的 Standalone Repo；选目录后立即在侧栏顶层平铺显示，
@@ -374,9 +383,15 @@ export function useRepositoryList() {
     async (
       repositoryType: Repository["repositoryType"],
       options?: AddRepositoryOptions,
+      acquire?: RepositoryAcquireParams,
+      explicitFolderPath?: string,
     ) => {
-      const folderPath = await pickFolder();
-      if (!folderPath) return;
+      let folderPath = explicitFolderPath?.trim() ?? "";
+      if (!folderPath) {
+        const resolved = await resolveRepositoryAcquirePath(acquire);
+        if (!resolved.ok) return;
+        folderPath = resolved.path;
+      }
       let repository = repositories.find((item) => item.path === folderPath) ?? null;
       if (!repository) {
         if (options?.bootstrap) {

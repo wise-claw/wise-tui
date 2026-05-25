@@ -275,6 +275,8 @@ pub fn run() {
             git_commands::git_discard_all,
             git_commands::git_log,
             git_commands::git_init,
+            git_commands::prepare_empty_repository_dir,
+            git_commands::git_clone_repository,
             git_commands::git_remote_url,
             git_commands::git_list_branches,
             git_commands::git_checkout_branch,

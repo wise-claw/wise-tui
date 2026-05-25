@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { App as AntdApp } from "antd";
-import type { AddRepositoryOptions, Repository, RepositoryAssociatePreset } from "../../types";
+import type { AddRepositoryOptions, ProjectItem, Repository, RepositoryAssociatePreset } from "../../types";
+import type { RepositoryAcquireMode, RepositoryAcquireParams } from "../../utils/repositoryAcquire";
 import { DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION } from "../../constants/workspaceBootstrapAddons";
 import {
   REPOSITORY_ASSOCIATE_PRESETS_MAX,
@@ -19,17 +20,27 @@ import {
   repositoryTypeSolidBadgeColor,
   resolveRepositoryIconColor,
 } from "../../utils/repositoryType";
+import { pickFolder, resolveRepositoryAcquirePath } from "../../services/repository";
+import {
+  deriveFolderNameFromGitUrl,
+  validateRepositoryAcquireParams,
+} from "../../utils/repositoryAcquire";
 import { buildAddRepositoryOptions } from "./RepositoryAssociateModal";
 
 interface UseRepositoryAssociateModalControllerInput {
+  projects?: ProjectItem[];
   onAddRepositoryToProject?: (
     projectId: string,
     repositoryType: Repository["repositoryType"],
     options?: AddRepositoryOptions,
+    acquire?: RepositoryAcquireParams,
+    explicitFolderPath?: string,
   ) => void;
   onAddFloatingRepository?: (
     repositoryType: Repository["repositoryType"],
     options?: AddRepositoryOptions,
+    acquire?: RepositoryAcquireParams,
+    explicitFolderPath?: string,
   ) => void;
 }
 
@@ -39,6 +50,7 @@ interface SelectOptionGroup {
 }
 
 export function useRepositoryAssociateModalController({
+  projects = [],
   onAddRepositoryToProject,
   onAddFloatingRepository,
 }: UseRepositoryAssociateModalControllerInput) {
@@ -53,6 +65,18 @@ export function useRepositoryAssociateModalController({
   const [iconColor, setIconColor] = useState<string | null>(null);
   const [presets, setPresets] = useState<RepositoryAssociatePreset[]>([]);
   const [associateSelectValue, setAssociateSelectValue] = useState<string>("frontend");
+  const [acquireMode, setAcquireMode] = useState<RepositoryAcquireMode>("pick_existing");
+  const [parentPath, setParentPath] = useState("");
+  const [folderName, setFolderName] = useState("");
+  const [gitUrl, setGitUrl] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const pendingProject = useMemo(
+    () => (pendingProjectId ? projects.find((p) => p.id === pendingProjectId) ?? null : null),
+    [pendingProjectId, projects],
+  );
+
+  const defaultParentPath = pendingProject?.rootPath?.trim() ?? "";
 
   const resetDraft = useCallback(() => {
     setAssociateSelectValue("frontend");
@@ -60,6 +84,10 @@ export function useRepositoryAssociateModalController({
     setWorkspaceBootstrapSelection({ ...DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION });
     setIconDisplayName("");
     setIconColor(null);
+    setAcquireMode("pick_existing");
+    setParentPath("");
+    setFolderName("");
+    setGitUrl("");
   }, []);
 
   const refreshPresets = useCallback(async () => {
@@ -129,9 +157,13 @@ export function useRepositoryAssociateModalController({
       setPendingProjectId(projectId);
       setFloatingMode(false);
       resetDraft();
+      const project = projects.find((p) => p.id === projectId);
+      if (project?.rootPath?.trim()) {
+        setParentPath(project.rootPath.trim());
+      }
       void refreshPresets();
     },
-    [refreshPresets, resetDraft],
+    [projects, refreshPresets, resetDraft],
   );
 
   const openAddFloatingRepositoryModal = useCallback(() => {
@@ -144,6 +176,12 @@ export function useRepositoryAssociateModalController({
   const close = useCallback(() => {
     setPendingProjectId(null);
     setFloatingMode(false);
+    setSubmitting(false);
+  }, []);
+
+  const pickParentPath = useCallback(async () => {
+    const picked = await pickFolder();
+    if (picked) setParentPath(picked);
   }, []);
 
   const addPreset = useCallback(async () => {
@@ -179,7 +217,26 @@ export function useRepositoryAssociateModalController({
     }
   }, [iconColor, iconDisplayName, message, presets, repositoryType]);
 
-  const submit = useCallback(() => {
+  const buildAcquireParams = useCallback((): RepositoryAcquireParams => {
+    if (acquireMode === "pick_existing") {
+      return { mode: "pick_existing" };
+    }
+    if (acquireMode === "create_empty") {
+      return {
+        mode: "create_empty",
+        parentPath: parentPath.trim(),
+        folderName: folderName.trim(),
+      };
+    }
+    return {
+      mode: "git_clone",
+      parentPath: parentPath.trim(),
+      gitUrl: gitUrl.trim(),
+      folderName: folderName.trim() || deriveFolderNameFromGitUrl(gitUrl),
+    };
+  }, [acquireMode, folderName, gitUrl, parentPath]);
+
+  const submit = useCallback(async () => {
     if (!pendingProjectId && !floatingMode) return;
     if (isCustomPresetSelectValue(associateSelectValue)) {
       const presetId = associateSelectValue.slice("custom:".length);
@@ -193,25 +250,64 @@ export function useRepositoryAssociateModalController({
       iconColor,
       bootstrap: workspaceBootstrapSelection,
     });
-    if (floatingMode) {
-      if (!onAddFloatingRepository) {
-        message.warning("当前环境未启用「添加单仓」入口");
+    const acquire = buildAcquireParams();
+    const validationError = validateRepositoryAcquireParams(acquire);
+    if (validationError) {
+      message.warning(validationError);
+      return;
+    }
+
+    const dispatch = (explicitFolderPath?: string) => {
+      if (floatingMode) {
+        if (!onAddFloatingRepository) {
+          message.warning("当前环境未启用「添加单仓」入口");
+          return;
+        }
+        void onAddFloatingRepository(repositoryType, options, acquire, explicitFolderPath);
         return;
       }
+      if (!pendingProjectId) return;
+      if (!onAddRepositoryToProject) {
+        message.warning("当前环境未启用「加入工作区」");
+        close();
+        return;
+      }
+      void onAddRepositoryToProject(
+        pendingProjectId,
+        repositoryType,
+        options,
+        acquire,
+        explicitFolderPath,
+      );
+    };
+
+    if (acquire.mode === "pick_existing") {
+      setPendingProjectId(null);
       setFloatingMode(false);
-      void onAddFloatingRepository(repositoryType, options);
+      dispatch();
       return;
     }
-    if (!pendingProjectId) return;
-    if (!onAddRepositoryToProject) {
-      message.warning("当前环境未启用「加入工作区」");
-      close();
-      return;
+
+    setSubmitting(true);
+    try {
+      const resolved = await resolveRepositoryAcquirePath(acquire, {
+        defaultParentPath: defaultParentPath || undefined,
+      });
+      if (!resolved.ok) {
+        if (resolved.error) message.error(resolved.error);
+        return;
+      }
+      setPendingProjectId(null);
+      setFloatingMode(false);
+      dispatch(resolved.path);
+    } finally {
+      setSubmitting(false);
     }
-    setPendingProjectId(null);
-    void onAddRepositoryToProject(pendingProjectId, repositoryType, options);
   }, [
     associateSelectValue,
+    buildAcquireParams,
+    close,
+    defaultParentPath,
     floatingMode,
     iconColor,
     iconDisplayName,
@@ -224,9 +320,30 @@ export function useRepositoryAssociateModalController({
     workspaceBootstrapSelection,
   ]);
 
+  const open = Boolean(pendingProjectId) || floatingMode;
+
+  const submitOkText =
+    acquireMode === "pick_existing"
+      ? "继续选择仓库目录"
+      : acquireMode === "create_empty"
+        ? "创建并关联"
+        : "克隆并关联";
+
   return {
-    open: Boolean(pendingProjectId) || floatingMode,
+    open,
     floatingMode,
+    submitting,
+    acquireMode,
+    setAcquireMode,
+    parentPath,
+    setParentPath,
+    folderName,
+    setFolderName,
+    gitUrl,
+    setGitUrl,
+    defaultParentPath,
+    pickParentPath,
+    submitOkText,
     associateSelectValue,
     setAssociateSelectValue,
     repositoryType,

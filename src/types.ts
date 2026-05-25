@@ -37,6 +37,9 @@ export type SddMode = "auto" | "wise_trellis" | "project_owned" | "off";
 /** Workspace 级 SDD 模式（路径 X 引入）。两值：wise 接管 `.trellis/`，或交给用户自有 SDD 工具。 */
 export type ProjectSddMode = "wise_trellis" | "project_owned";
 
+/** 「关联仓库」弹窗：获取磁盘路径的方式（见 `src/utils/repositoryAcquire.ts`）。 */
+export type { RepositoryAcquireMode, RepositoryAcquireParams } from "./utils/repositoryAcquire";
+
 /** 「关联仓库」弹窗确认后、选择目录并创建条目时传入的展示选项。 */
 export interface AddRepositoryOptions {
   /** 非空则写入角标标题（圆内展示）；省略或空则角标内仅显示角色默认文案。 */

@@ -1948,6 +1948,32 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   margin-top: 6px;
 }
 
+.app-add-repo-acquire-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--ant-color-border-secondary, rgba(0, 0, 0, 0.06));
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary, rgba(0, 0, 0, 0.02));
+}
+
+.app-add-repo-parent-path {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.app-add-repo-parent-path .ant-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-add-repo-acquire-hint {
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .app-add-repo-preset-add-btn {
   margin-top: 6px;
 }

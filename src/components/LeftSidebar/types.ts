@@ -80,11 +80,15 @@ export interface LeftSidebarProps {
   onAddFloatingRepository?: (
     repositoryType: Repository["repositoryType"],
     options?: AddRepositoryOptions,
+    acquire?: import("../../types").RepositoryAcquireParams,
+    explicitFolderPath?: string,
   ) => void;
   onAddRepositoryToProject?: (
     projectId: string,
     repositoryType: Repository["repositoryType"],
     options?: AddRepositoryOptions,
+    acquire?: import("../../types").RepositoryAcquireParams,
+    explicitFolderPath?: string,
   ) => void;
   onPromoteFloatingRepositoryToProject?: (
     repositoryId: number,
