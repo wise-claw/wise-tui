@@ -2228,6 +2228,26 @@ export default function App() {
     });
   }
 
+  const handleOpenProjectInFinder = useCallback(
+    (project: ProjectItem) => {
+      const path = resolveTrellisBootstrapPath({
+        scope: "project",
+        project,
+        repositories,
+        projects,
+      });
+      if (!path) {
+        message.warning("无法解析工作区目录，请先配置工作区根目录或关联仓库");
+        return;
+      }
+      openInFinder(path).catch((err) => {
+        console.error("Failed to open project directory in finder:", err);
+        message.error("打开目录失败");
+      });
+    },
+    [message, projects, repositories],
+  );
+
   function handleOpenRepositoryInBrowser(repository: Repository) {
     void openRepositoryRemoteInBrowser(repository.path)
       .then((result) => {
@@ -2569,6 +2589,7 @@ export default function App() {
         onReorderRepositoriesInProject: handleReorderRepositoriesInProject,
         onRepositorySelect: handleSidebarRepositorySelectLeavingMcpHub,
         onOpenInFinder: handleOpenInFinder,
+        onOpenProjectInFinder: handleOpenProjectInFinder,
         onOpenRepositoryInBrowser: handleOpenRepositoryInBrowser,
         onOpenScheduledTasksForRepository: openScheduledTasksForRepository,
         onCreateProjectTask: handleCreateProjectTask,

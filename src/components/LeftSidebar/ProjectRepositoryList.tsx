@@ -61,6 +61,7 @@ interface ProjectRepositoryListProps {
   onCreateProjectTask: (project: Workspace, mode: TaskMode) => void;
   onCreateRepositoryTask: (repository: Repository, mode: TaskMode) => void;
   onOpenInFinder: (repository: Repository) => void;
+  onOpenProjectInFinder?: (project: Workspace) => void;
   onOpenRepositoryInBrowser: (repository: Repository) => void;
   openRepositoryInPreferredEditor: (repository: Repository) => void;
   onOpenPromptsRepository?: (project: Workspace, repository: Repository) => void;
@@ -129,6 +130,7 @@ export function ProjectRepositoryList({
   onCreateProjectTask,
   onCreateRepositoryTask,
   onOpenInFinder,
+  onOpenProjectInFinder,
   onOpenRepositoryInBrowser,
   openRepositoryInPreferredEditor,
   onOpenPromptsRepository,
@@ -266,6 +268,7 @@ export function ProjectRepositoryList({
             onCodeGraphGenerateRepository={onCodeGraphGenerateRepository}
             onCodeGraphViewRepositoryInProject={onCodeGraphViewRepositoryInProject}
             onOpenInFinder={onOpenInFinder}
+            onOpenProjectInFinder={onOpenProjectInFinder}
             onOpenRepositoryInBrowser={onOpenRepositoryInBrowser}
             openRepositoryInPreferredEditor={openRepositoryInPreferredEditor}
             onOpenPromptsRepository={onOpenPromptsRepository}
@@ -340,6 +343,7 @@ interface ProjectRowProps {
   onCodeGraphGenerateRepository?: (repository: Repository) => void | Promise<void>;
   onCodeGraphViewRepositoryInProject?: (project: Workspace, repository: Repository) => void;
   onOpenInFinder: (repository: Repository) => void;
+  onOpenProjectInFinder?: (project: Workspace) => void;
   onOpenRepositoryInBrowser: (repository: Repository) => void;
   openRepositoryInPreferredEditor: (repository: Repository) => void;
   onOpenPromptsRepository?: (project: Workspace, repository: Repository) => void;
@@ -399,6 +403,7 @@ function ProjectRow({
   onCodeGraphGenerateRepository,
   onCodeGraphViewRepositoryInProject,
   onOpenInFinder,
+  onOpenProjectInFinder,
   onOpenRepositoryInBrowser,
   openRepositoryInPreferredEditor,
   onOpenPromptsRepository,
@@ -449,6 +454,7 @@ function ProjectRow({
     trellisEnabled: projectTrellisEnabled,
     trellisReady: projectTrellisReady,
     onAddRepositoryToProject: Boolean(onAddRepositoryToProject),
+    onOpenProjectDirectory: Boolean(onOpenProjectInFinder),
     onOpenScheduledTasksForProject: Boolean(onOpenScheduledTasksForProject),
     onOpenExecutableTasksForProject: Boolean(onOpenExecutableTasksForProject),
     onReconcileProject: Boolean(onReconcileProject),
@@ -575,6 +581,7 @@ function ProjectRow({
               onClick: ({ key }) => {
                 if (key === "pin") onTogglePinProject(project.id);
                 if (key === "rename") onRenameProject(project);
+                if (key === "open-directory") onOpenProjectInFinder?.(project);
                 if (key === "add-repository") onAddRepositoryToProject?.(project.id);
                 if (key === "scheduled-tasks") onOpenScheduledTasksForProject?.(project);
                 if (key === "requirements" && projectTrellisEnabled) onCreateProjectTask(project, "split");

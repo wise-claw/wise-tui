@@ -111,7 +111,7 @@ export function RepositoryList({
               </span>
             </span>
             <span className="app-repository-name">{repositoryFolderBasename(repository)}</span>
-            <Tooltip title="Finder打开" mouseEnterDelay={0.3}>
+            <Tooltip title="打开目录" mouseEnterDelay={0.3}>
               <span
                 className="app-repository-action"
                 onClick={(e) => {

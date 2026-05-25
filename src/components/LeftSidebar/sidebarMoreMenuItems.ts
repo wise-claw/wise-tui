@@ -38,6 +38,7 @@ export interface BuildProjectMoreMenuItemsInput {
   trellisEnabled?: boolean;
   trellisReady?: boolean;
   onAddRepositoryToProject?: boolean;
+  onOpenProjectDirectory?: boolean;
   onOpenScheduledTasksForProject?: boolean;
   onOpenExecutableTasksForProject?: boolean;
   onReconcileProject?: boolean;
@@ -52,6 +53,7 @@ export function buildProjectMoreMenuItems(input: BuildProjectMoreMenuItemsInput)
     trellisEnabled = false,
     trellisReady = false,
     onAddRepositoryToProject,
+    onOpenProjectDirectory,
     onOpenScheduledTasksForProject,
     onOpenExecutableTasksForProject,
     onReconcileProject,
@@ -63,6 +65,7 @@ export function buildProjectMoreMenuItems(input: BuildProjectMoreMenuItemsInput)
     sidebarMenuSection([
       { key: "pin", label: isPinned ? "取消置顶" : "置顶" },
       { key: "rename", label: "重命名工作区" },
+      onOpenProjectDirectory ? { key: "open-directory", label: "打开目录" } : null,
       onAddRepositoryToProject ? { key: "add-repository", label: "关联仓库" } : null,
     ]),
     sidebarMenuSection([
@@ -136,7 +139,7 @@ export function buildProjectRepositoryMoreMenuItems(
 
   return sidebarMenuWithDividers(
     sidebarMenuSection([
-      { key: "finder", label: "Finder打开" },
+      { key: "finder", label: "打开目录" },
       { key: "editor", label: repositoryEditorOpenMenuLabel() },
       { key: "browser", label: "打开 Git 仓库" },
     ]),
@@ -211,7 +214,7 @@ export function buildFloatingRepositoryMoreMenuItems(
 
   return sidebarMenuWithDividers(
     sidebarMenuSection([
-      { key: "finder", label: "Finder打开" },
+      { key: "finder", label: "打开目录" },
       { key: "editor", label: repositoryEditorOpenMenuLabel() },
       { key: "browser", label: "打开 Git 仓库" },
     ]),

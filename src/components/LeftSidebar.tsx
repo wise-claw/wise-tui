@@ -100,6 +100,7 @@ export function LeftSidebar({
   onMoveRepositoryToProject,
   onRepositorySelect,
   onOpenInFinder,
+  onOpenProjectInFinder,
   onOpenRepositoryInBrowser,
   onOpenScheduledTasksForRepository: onOpenScheduledTasksForRepositoryProp,
   onOpenScheduledTasksForProject: onOpenScheduledTasksForProjectProp,
@@ -596,6 +597,7 @@ export function LeftSidebar({
           onCreateProjectTask={onCreateProjectTask}
           onCreateRepositoryTask={onCreateRepositoryTask}
           onOpenInFinder={onOpenInFinder}
+          onOpenProjectInFinder={onOpenProjectInFinder}
           onOpenRepositoryInBrowser={onOpenRepositoryInBrowser}
           openRepositoryInPreferredEditor={openRepositoryInPreferredEditor}
           onOpenPromptsRepository={onOpenPromptsRepository}

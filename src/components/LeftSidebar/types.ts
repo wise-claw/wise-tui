@@ -102,6 +102,8 @@ export interface LeftSidebarProps {
   onMoveRepositoryToProject?: (targetProjectId: string, repositoryId: number) => void | Promise<void>;
   onRepositorySelect: (id: number | null) => void;
   onOpenInFinder: (repository: Repository) => void;
+  /** 在 Finder 中打开工作区根目录（或单仓工作区的成员仓库目录） */
+  onOpenProjectInFinder?: (project: ProjectItem) => void;
   onOpenRepositoryInBrowser: (repository: Repository) => void;
   /** 打开主区+右栏定时任务叠层（由宿主渲染，与技能市场同构） */
   onOpenScheduledTasksForRepository?: (repository: Repository) => void;
