@@ -81,6 +81,7 @@ import {
   saveRepositorySplitPromptLayers,
 } from "../../services/splitPromptLayersStore";
 import {
+  buildExecutionFanoutLoopStages,
   type ExecutionFanoutSnapshot,
 } from "../../services/prdSplit/executionFanout";
 import { listActivePrdRuns } from "../../services/prdSplit/activeRuns";
@@ -2934,19 +2935,25 @@ export function usePrdTaskSplitPanelController({
       const initialSnapshot: ExecutionFanoutSnapshot = {
         status: "running",
         workflowRunId: null,
+        workflowRunIds: [],
         totalCount: sourceTasks.length,
         doneCount: 0,
         failedCount: 0,
         waves: [],
+        lifecycleStages: buildExecutionFanoutLoopStages("running", "dispatch"),
         message: "任务文件已生成，准备按执行计划开始处理。",
       };
       setExecutionFanoutSnapshot(initialSnapshot);
-      const materialized = await requirementMission.materializeReviewedTasks(sourceTasks.map((task) => task.id));
+      const materialized = await requirementMission.materializeReviewedTasks({
+        sourceTaskIds: sourceTasks.map((task) => task.id),
+        onFanoutSnapshot: (_clusterId, snapshot) => setExecutionFanoutSnapshot(snapshot),
+      });
       if (!materialized) {
         throw new Error("没有可生成的任务文件。");
       }
       setMaterializedExecutionResult(materialized);
-      const finalSnapshot = buildMissionExecutionSnapshot(activeResult, sourceTasks, materialized);
+      const finalSnapshot = materialized.fanoutSnapshot
+        ?? buildMissionExecutionSnapshot(activeResult, sourceTasks, materialized);
       setExecutionFanoutSnapshot(finalSnapshot);
       const result: GenerateExecutableTasksResult = {
         ...finalSnapshot,
@@ -2965,10 +2972,12 @@ export function usePrdTaskSplitPanelController({
         : {
           status: "failed",
           workflowRunId: null,
+          workflowRunIds: [],
           totalCount: sourceTasks.length,
           doneCount: 0,
           failedCount: sourceTasks.length,
           waves: [],
+          lifecycleStages: buildExecutionFanoutLoopStages("failed", "dispatch"),
           message: msg,
         });
       message.error(`开始执行失败：${msg}`);
@@ -3008,13 +3017,18 @@ export function usePrdTaskSplitPanelController({
     return {
       status: failedCount > 0 ? "failed" : "succeeded",
       workflowRunId: null,
+      workflowRunIds: [],
       totalCount: sourceTasks.length,
       doneCount: materialized.childTasks.length,
       failedCount,
       waves,
+      lifecycleStages: buildExecutionFanoutLoopStages(
+        failedCount > 0 ? "failed" : "succeeded",
+        failedCount > 0 ? "run" : "verify",
+      ),
       message: failedCount > 0
         ? "部分任务已生成，但有任务启动失败。"
-        : "任务已生成并开始执行。",
+        : "实现运行已接管，等待主会话进入校验与 Spec 反哺。",
     };
   }
 

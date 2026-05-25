@@ -10,6 +10,7 @@ import { useSplitWizardState } from "../PrdSplitWizard/useSplitWizardState";
 import type { TrellisTarget } from "../PrdSplitWizard/targetModel";
 import type { ClusterRunState, WizardState, WizardWriteResult } from "../PrdSplitWizard/types";
 import type { ClusterPlanItem } from "../../services/prdSplit/clusterPlanner";
+import type { ExecutionFanoutSnapshot } from "../../services/prdSplit/executionFanout";
 import type { SplitResult } from "../../types";
 import {
   mergeClusterSplitResults,
@@ -40,6 +41,12 @@ export interface RequirementMissionMaterializeResult {
   }>;
   failedCount: number;
   fanoutFailedCount: number;
+  fanoutSnapshot: ExecutionFanoutSnapshot | null;
+}
+
+export interface MaterializeReviewedTasksOptions {
+  sourceTaskIds?: readonly string[];
+  onFanoutSnapshot?: (clusterId: string, snapshot: ExecutionFanoutSnapshot) => void;
 }
 
 export function useRequirementMissionController({ target }: RequirementMissionControllerInput) {
@@ -95,11 +102,14 @@ export function useRequirementMissionController({ target }: RequirementMissionCo
   }, [api]);
 
   const materializeReviewedTasks = useCallback(async (
-    sourceTaskIds?: readonly string[],
+    options: MaterializeReviewedTasksOptions = {},
   ): Promise<RequirementMissionMaterializeResult | null> => {
     setBusy(true);
     try {
-      await writeMissionToTrellis(api, { sourceTaskIds });
+      await writeMissionToTrellis(api, {
+        sourceTaskIds: options.sourceTaskIds,
+        onFanoutSnapshot: options.onFanoutSnapshot,
+      });
       return summarizeWriteResults(api.state.writeResults);
     } finally {
       setBusy(false);
@@ -178,6 +188,43 @@ function summarizeWriteResults(writeResults: WizardWriteResult[]): RequirementMi
     childTasks: successful.flatMap((result) => result.childTasks),
     failedCount: failedWriteCount + fanoutFailedCount,
     fanoutFailedCount,
+    fanoutSnapshot: mergeWriteResultFanoutSnapshots(successful),
+  };
+}
+
+function mergeWriteResultFanoutSnapshots(results: WizardWriteResult[]): ExecutionFanoutSnapshot | null {
+  const snapshots = results
+    .map((result) => result.fanoutSnapshot)
+    .filter((snapshot): snapshot is ExecutionFanoutSnapshot => Boolean(snapshot));
+  if (snapshots.length === 0) return null;
+  const failedCount = snapshots.reduce((count, snapshot) => count + snapshot.failedCount, 0);
+  const doneCount = snapshots.reduce((count, snapshot) => count + snapshot.doneCount, 0);
+  const totalCount = snapshots.reduce((count, snapshot) => count + snapshot.totalCount, 0);
+  const workflowRunIds = [...new Set(snapshots.flatMap((snapshot) => [
+    ...(snapshot.workflowRunIds ?? []),
+    ...(snapshot.workflowRunId ? [snapshot.workflowRunId] : []),
+  ]))];
+  const status = failedCount > 0
+    ? "failed"
+    : snapshots.some((snapshot) => snapshot.status === "running")
+      ? "running"
+      : "succeeded";
+  const lastSnapshot = snapshots[snapshots.length - 1]!;
+  return {
+    status,
+    workflowRunId: workflowRunIds[0] ?? lastSnapshot.workflowRunId ?? null,
+    workflowRunIds,
+    totalCount,
+    doneCount,
+    failedCount,
+    waves: snapshots.flatMap((snapshot) => snapshot.waves).map((wave, waveIndex) => ({
+      ...wave,
+      waveIndex,
+    })),
+    lifecycleStages: lastSnapshot.lifecycleStages,
+    message: status === "failed"
+      ? `执行链路有失败：成功 ${doneCount}，失败 ${failedCount}。`
+      : lastSnapshot.message,
   };
 }
 

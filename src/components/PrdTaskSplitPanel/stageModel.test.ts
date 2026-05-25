@@ -19,7 +19,9 @@ describe("buildRequirementAssistantStageItems", () => {
       split: "done",
       review: "active",
       plan: "waiting",
-      execute: "waiting",
+      run: "waiting",
+      verify: "waiting",
+      spec: "waiting",
     });
   });
 
@@ -37,11 +39,13 @@ describe("buildRequirementAssistantStageItems", () => {
     expect(statusByKey(stages)).toMatchObject({
       review: "done",
       plan: "active",
-      execute: "waiting",
+      run: "waiting",
+      verify: "waiting",
+      spec: "waiting",
     });
   });
 
-  test("marks every stage done when execution succeeds", () => {
+  test("keeps verify active after implementation fanout succeeds", () => {
     const stages = buildRequirementAssistantStageItems({
       hasInput: true,
       parsing: false,
@@ -52,8 +56,18 @@ describe("buildRequirementAssistantStageItems", () => {
       executionStatus: "succeeded",
     });
 
-    expect(stages.map((stage) => stage.status)).toEqual(["done", "done", "done", "done", "done", "done"]);
-    expect(stages.at(-1)?.label).toBe("主会话接管");
+    expect(statusByKey(stages)).toMatchObject({
+      write: "done",
+      draft: "done",
+      split: "done",
+      review: "done",
+      plan: "done",
+      run: "done",
+      verify: "active",
+      spec: "waiting",
+    });
+    expect(stages.find((stage) => stage.key === "run")?.label).toBe("实现完成");
+    expect(stages.find((stage) => stage.key === "verify")?.label).toBe("待校验");
   });
 
   test("keeps execution active and failed when fanout fails", () => {
@@ -73,9 +87,11 @@ describe("buildRequirementAssistantStageItems", () => {
       split: "done",
       review: "done",
       plan: "done",
-      execute: "failed",
+      run: "failed",
+      verify: "waiting",
+      spec: "waiting",
     });
-    expect(stages.at(-1)?.label).toBe("派发失败");
+    expect(stages.find((stage) => stage.key === "run")?.label).toBe("执行失败");
   });
 });
 

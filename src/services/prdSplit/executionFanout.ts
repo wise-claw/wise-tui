@@ -7,6 +7,15 @@ import { runSplitTasksOmcBatch } from "../workflow/actions";
 
 export type ExecutionFanoutTaskStatus = "waiting" | "running" | "succeeded" | "failed";
 export type ExecutionFanoutWaveStatus = "waiting" | "running" | "succeeded" | "failed";
+export type ExecutionFanoutLoopStageKey = "dispatch" | "run" | "verify" | "spec";
+export type ExecutionFanoutLoopStageStatus = "waiting" | "active" | "done" | "failed";
+
+export interface ExecutionFanoutLoopStageSnapshot {
+  key: ExecutionFanoutLoopStageKey;
+  label: string;
+  status: ExecutionFanoutLoopStageStatus;
+  message?: string;
+}
 
 export interface ExecutionFanoutTaskSnapshot {
   sourceTaskId: string;
@@ -28,10 +37,12 @@ export interface ExecutionFanoutWaveSnapshot {
 export interface ExecutionFanoutSnapshot {
   status: "idle" | "running" | "succeeded" | "failed";
   workflowRunId: string | null;
+  workflowRunIds?: string[];
   totalCount: number;
   doneCount: number;
   failedCount: number;
   waves: ExecutionFanoutWaveSnapshot[];
+  lifecycleStages?: ExecutionFanoutLoopStageSnapshot[];
   message?: string;
 }
 
@@ -117,31 +128,38 @@ export async function runMaterializedSplitTasksFanout(
   const itemBySourceId = new Map(executionItems.map((item) => [item.sourceTask.id, item]));
   const waves = buildMaterializedExecutionWaves(input);
   let workflowRunId: string | null = null;
+  const workflowRunIds = new Set<string>();
   let doneCount = 0;
   let failedCount = 0;
   let waveSnapshots = buildInitialWaveSnapshots(waves, itemBySourceId);
 
-  const emit = (patch?: Partial<ExecutionFanoutSnapshot>) => {
+  const emit = (
+    patch?: Partial<ExecutionFanoutSnapshot>,
+    activeStage: ExecutionFanoutLoopStageKey = "run",
+  ) => {
     const failed = failedCount > 0;
     const complete = doneCount + failedCount >= executionItems.length;
+    const status = failed ? "failed" : complete ? "succeeded" : "running";
     const snapshot: ExecutionFanoutSnapshot = {
-      status: failed ? "failed" : complete ? "succeeded" : "running",
+      status,
       workflowRunId,
+      workflowRunIds: Array.from(workflowRunIds),
       totalCount: executionItems.length,
       doneCount,
       failedCount,
       waves: waveSnapshots,
+      lifecycleStages: buildExecutionFanoutLoopStages(status, activeStage),
       ...patch,
     };
     input.onSnapshot?.(snapshot);
     return snapshot;
   };
 
-  emit();
+  emit(undefined, "dispatch");
   for (const wave of waves) {
     waveSnapshots = setWaveStatus(waveSnapshots, wave.waveIndex, "running");
     waveSnapshots = setWaveTaskStatus(waveSnapshots, wave.waveIndex, new Set(wave.taskIds), "running");
-    emit({ message: `正在派发第 ${wave.waveIndex + 1} 波。` });
+    emit({ message: `正在派发第 ${wave.waveIndex + 1} 波。` }, "run");
 
     const items = wave.taskIds.map((sourceId) => itemBySourceId.get(sourceId)).filter((item): item is MaterializedTaskForExecution => Boolean(item));
     const batch = await (input.runWaveBatch ?? ((params) => runSplitTasksOmcBatch({
@@ -174,6 +192,7 @@ export async function runMaterializedSplitTasksFanout(
     });
 
     workflowRunId = batch.workflowRunId ?? workflowRunId;
+    if (batch.workflowRunId) workflowRunIds.add(batch.workflowRunId);
     doneCount += batch.doneCount;
     failedCount += batch.failedCount;
     const waveStatus: ExecutionFanoutWaveStatus = batch.failedCount > 0 ? "failed" : "succeeded";
@@ -185,7 +204,7 @@ export async function runMaterializedSplitTasksFanout(
       batch.failedCount > 0 ? "failed" : "succeeded",
       batch.message,
     );
-    emit({ message: batch.message });
+    emit({ message: batch.message }, "run");
     if (batch.failedCount > 0) break;
   }
 
@@ -193,12 +212,45 @@ export async function runMaterializedSplitTasksFanout(
     status: failedCount > 0 ? "failed" : "succeeded",
     message: failedCount > 0
       ? `执行 fan-out 已停止：成功 ${doneCount}，失败 ${failedCount}。`
-      : `执行 fan-out 完成：成功 ${doneCount}，失败 0。`,
-  });
+      : `实现运行完成：成功 ${doneCount}，失败 0。等待主会话进入校验与 Spec 反哺。`,
+  }, failedCount > 0 ? "run" : "verify");
   return {
     ...finalSnapshot,
     materializedResult: input.materializedResult,
   };
+}
+
+export function buildExecutionFanoutLoopStages(
+  status: ExecutionFanoutSnapshot["status"],
+  activeStage: ExecutionFanoutLoopStageKey,
+): ExecutionFanoutLoopStageSnapshot[] {
+  const order: Array<Pick<ExecutionFanoutLoopStageSnapshot, "key" | "label">> = [
+    { key: "dispatch", label: "Dispatch" },
+    { key: "run", label: "Run" },
+    { key: "verify", label: "Verify" },
+    { key: "spec", label: "Spec" },
+  ];
+  const activeIndex = order.findIndex((stage) => stage.key === activeStage);
+  return order.map((stage, index) => {
+    let stageStatus: ExecutionFanoutLoopStageStatus = index < activeIndex ? "done" : index === activeIndex ? "active" : "waiting";
+    if (status === "failed" && stage.key === activeStage) stageStatus = "failed";
+    if (status === "succeeded" && stage.key === "run") stageStatus = "done";
+    return {
+      ...stage,
+      status: stageStatus,
+      message: loopStageMessage(stage.key, stageStatus),
+    };
+  });
+}
+
+function loopStageMessage(
+  stage: ExecutionFanoutLoopStageKey,
+  status: ExecutionFanoutLoopStageStatus,
+): string {
+  if (stage === "dispatch") return status === "done" ? "任务已派发" : "写入并派发任务";
+  if (stage === "run") return status === "done" ? "实现运行完成" : status === "failed" ? "实现运行失败" : "实现运行中";
+  if (stage === "verify") return status === "active" ? "等待校验接续" : "等待校验";
+  return status === "active" ? "等待 Spec 反哺" : "等待反哺";
 }
 
 function assertAllSourceTasksMaterialized(

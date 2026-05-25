@@ -204,6 +204,10 @@ setProjects((prev) => prev.map((p) => (p.id === projectId ? updatedProject : p))
 
 - `WriteClusterTasksOutput.childTasks[]`: `{ sourceTaskId: string; taskName: string; taskPath: string }`
 - `runMaterializedSplitTasksFanout(input) -> ExecutionFanoutResult`
+- `ExecutionFanoutSnapshot.workflowRunId: string | null`
+- `ExecutionFanoutSnapshot.workflowRunIds?: string[]`
+- `ExecutionFanoutSnapshot.lifecycleStages?: ExecutionFanoutLoopStageSnapshot[]`
+- `WriteMissionToTrellisOptions.onFanoutSnapshot?: (clusterId, snapshot) => void`
 - `runSplitTasksOmcBatch({ executionMetadataByTaskId?: Record<string, TrellisExecutionMetadata> })`
 - `TrellisExecutionMetadata.activeTaskPath?: string`
 - `SplitTodoCountUpdatedDetail.focusParentTaskName?: string | null`
@@ -217,7 +221,9 @@ setProjects((prev) => prev.map((p) => (p.id === projectId ? updatedProject : p))
 - `Active task:` in the Claude prompt must use `executionMetadata.activeTaskPath` when present; never pass `task-a`/`task-1` style planning ids as the executable Trellis path.
 - Batch and single-task “落盘执行” entry points must share the same materialize-and-fan-out helper. Single-task execution passes `parallelGroups = [[task.id]]`.
 - Missing `childTasks` mappings are hard failures. Do not silently dispatch fewer tasks than the user confirmed.
-- UI must not present the materialized fan-out handoff as implementation completion. Once `.trellis/tasks` are written and implement agents are dispatched, label the state as main-session handoff / dispatch status and route follow-up observation to the main session plus the Trellis runtime-events inspector.
+- `writeMissionToTrellis` must preserve the service-level fan-out snapshots on each `WizardWriteResult` and stream them upward through `onFanoutSnapshot`. PRD split UI must consume those real snapshots instead of synthesizing success from `childTasks`.
+- `ExecutionFanoutSnapshot.lifecycleStages` is the product-visible Loop state: `Dispatch -> Run -> Verify -> Spec`. A successful implement fan-out marks `Run` done and `Verify` active; it does not mark the whole Loop complete.
+- UI must not present the materialized fan-out handoff as implementation completion. Once `.trellis/tasks` are written and implement agents are dispatched, label the state as main-session handoff / run status and route follow-up observation to the main session plus the Trellis runtime-events inspector.
 - Do not run `.trellis/scripts/add_session.py` directly from PRD split UI. Session record / journal writes remain part of the Trellis finish-work flow unless a dedicated service wrapper is added.
 
 ### 4. Validation & Error Matrix
@@ -227,17 +233,18 @@ setProjects((prev) => prev.map((p) => (p.id === projectId ? updatedProject : p))
 - Missing `sourceTaskId -> taskPath` mapping -> `runMaterializedSplitTasksFanout` throws before `runSplitTasksOmcBatch`.
 - Wave batch returns failures -> mark the wave failed, stop later waves, keep the materialized task focus data visible.
 - Empty executable source task list -> show an info message and do not create a parent task.
-- Fan-out succeeds -> UI status is “main session took over” / dispatch succeeded, not “implementation completed”.
+- Fan-out succeeds -> UI status is “实现运行完成 / 待校验”, with `Verify` active and `Spec` waiting; do not show “闭环完成”.
 - User wants final session record -> return to main session / Trellis finish flow; PRD split UI should not mutate journals directly.
 
 ### 5. Good/Base/Bad Cases
 
 - Good: two source tasks in two waves produce two `.trellis/tasks/...` workflow task ids; the second wave depends on the first materialized ref.
 - Good: a single task card action writes one child task and immediately dispatches exactly one implement subagent.
-- Good: after successful dispatch, the split panel offers “回主会话” and “运行透镜” actions while keeping the execution plan inspectable.
+- Good: after successful run fan-out, the split panel offers “回主会话” and “运行透镜” actions, shows `Run` done / `Verify` active / `Spec` waiting, and keeps the execution plan inspectable.
 - Base: manual OMC batch execution that does not pass `executionMetadataByTaskId` keeps existing task id behavior.
 - Bad: showing “已落盘到 Workspace Trellis” and closing the panel without calling the workflow runner.
 - Bad: using the source id as `Active task:` because the subagent cannot locate the materialized task directory.
+- Bad: rebuilding a local “all succeeded” snapshot from materialized child tasks after `writeMissionToTrellis`; this hides real workflow run ids, wave failures, and the Verify/Spec continuation point.
 - Bad: adding a third “执行完成” product step when no new user-confirmable artifact is created.
 - Bad: calling `add_session.py` from the frontend to simulate `/trellis:finish-work`.
 
@@ -246,6 +253,8 @@ setProjects((prev) => prev.map((p) => (p.id === projectId ? updatedProject : p))
 - Unit test source id to Trellis task ref mapping and dependency remapping.
 - Unit test wave order, workflow run id reuse, and stop-on-failed-wave behavior.
 - Regression test incomplete `childTasks` output rejects before dispatch.
+- Regression test `writeMissionToTrellis` stores fan-out snapshots on write results and invokes `onFanoutSnapshot`.
+- Stage model test successful fan-out keeps `Verify` active and `Spec` waiting.
 - Adapter test `activeTaskPath` appears in `Active task:` while workflow bookkeeping may still keep its own task id.
 - Type check after changing workflow metadata or UI event detail fields.
 
@@ -268,6 +277,15 @@ await runMaterializedSplitTasksFanout({
   materializedResult: output,
   parallelGroups,
   onSnapshot: setExecutionFanoutSnapshot,
+});
+```
+
+```ts
+await writeMissionToTrellis(api, {
+  sourceTaskIds,
+  onFanoutSnapshot: (_clusterId, snapshot) => {
+    setExecutionFanoutSnapshot(snapshot);
+  },
 });
 ```
 

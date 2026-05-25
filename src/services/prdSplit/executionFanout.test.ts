@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { TaskItem } from "../../types";
 import type { WorkflowFacade } from "../../types/workflow";
 import {
+  buildExecutionFanoutLoopStages,
   buildMaterializedExecutionWaves,
   runMaterializedSplitTasksFanout,
 } from "./executionFanout";
@@ -91,6 +92,12 @@ describe("runMaterializedSplitTasksFanout", () => {
     expect(result.status).toBe("succeeded");
     expect(result.doneCount).toBe(2);
     expect(result.workflowRunId).toBe("wf-1");
+    expect(result.workflowRunIds).toEqual(["wf-1"]);
+    expect(result.lifecycleStages).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "run", status: "done" }),
+      expect.objectContaining({ key: "verify", status: "active" }),
+      expect.objectContaining({ key: "spec", status: "waiting" }),
+    ]));
     expect(snapshots.at(-1)).toBe("succeeded:2:0");
   });
 
@@ -126,6 +133,10 @@ describe("runMaterializedSplitTasksFanout", () => {
     expect(calls).toEqual([0]);
     expect(result.status).toBe("failed");
     expect(result.failedCount).toBe(1);
+    expect(result.lifecycleStages).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "run", status: "failed" }),
+      expect.objectContaining({ key: "verify", status: "waiting" }),
+    ]));
   });
 
   test("fails when materialized output does not include every source task", async () => {
@@ -147,6 +158,30 @@ describe("runMaterializedSplitTasksFanout", () => {
         throw new Error("should not dispatch incomplete materialized output");
       },
     })).rejects.toThrow("task-b");
+  });
+});
+
+describe("buildExecutionFanoutLoopStages", () => {
+  test("keeps verify active after run succeeds", () => {
+    const stages = buildExecutionFanoutLoopStages("succeeded", "verify");
+
+    expect(stages.map((stage) => [stage.key, stage.status])).toEqual([
+      ["dispatch", "done"],
+      ["run", "done"],
+      ["verify", "active"],
+      ["spec", "waiting"],
+    ]);
+  });
+
+  test("marks the active stage failed without advancing later stages", () => {
+    const stages = buildExecutionFanoutLoopStages("failed", "run");
+
+    expect(stages.map((stage) => [stage.key, stage.status])).toEqual([
+      ["dispatch", "done"],
+      ["run", "failed"],
+      ["verify", "waiting"],
+      ["spec", "waiting"],
+    ]);
   });
 });
 

@@ -21,6 +21,7 @@ import {
   dispatchWorkspaceTrellisMaterializedFanout,
   resolveMaterializedFanoutRepositoryTarget,
 } from "../../../services/prdSplit/materializedFanoutBridge";
+import type { ExecutionFanoutSnapshot } from "../../../services/prdSplit/executionFanout";
 import {
   buildPrdSplitMissionAssignmentId,
   buildPrdSplitMissionId,
@@ -50,6 +51,7 @@ const SPLITTER_HEARTBEAT_INTERVAL_MS = 30_000;
 
 export interface WriteMissionToTrellisOptions {
   sourceTaskIds?: readonly string[];
+  onFanoutSnapshot?: (clusterId: string, snapshot: ExecutionFanoutSnapshot) => void;
 }
 
 interface SourceTaskSelectionMatch {
@@ -59,7 +61,7 @@ interface SourceTaskSelectionMatch {
 
 interface ClusterFanoutTracker {
   clusterId: string;
-  promise: Promise<unknown>;
+  promise: Promise<ExecutionFanoutSnapshot | null>;
 }
 
 export async function runMissionClusters(api: UseSplitWizardStateApi): Promise<void> {
@@ -1033,6 +1035,17 @@ export async function writeMissionToTrellis(
             sourceTasks: effective.splitTasks,
             materializedResult: out,
             repositoryMetadata: target.repositoryMetadata,
+            onSnapshot: (snapshot) => {
+              const displaySnapshot = mapFanoutSnapshotSourceTaskIds(snapshot, toDisplayTaskId);
+              result.fanoutSnapshot = displaySnapshot;
+              options.onFanoutSnapshot?.(cluster.id, displaySnapshot);
+            },
+          }).then((snapshot) => {
+            result.fanoutSnapshot = snapshot
+              ? mapFanoutSnapshotSourceTaskIds(snapshot, toDisplayTaskId)
+              : result.fanoutSnapshot;
+            if (result.fanoutSnapshot) options.onFanoutSnapshot?.(cluster.id, result.fanoutSnapshot);
+            return result.fanoutSnapshot ?? null;
           }),
         });
         graphInputs.push({
@@ -1070,6 +1083,12 @@ export async function writeMissionToTrellis(
     api.finishWrite();
     const fanoutResults = await Promise.allSettled(fanoutTrackers.map((tracker) => tracker.promise));
     const fanoutFailedCount = fanoutResults.filter((result) => result.status === "rejected").length;
+    for (const [index, settled] of fanoutResults.entries()) {
+      if (settled.status !== "fulfilled" || !settled.value) continue;
+      const clusterId = fanoutTrackers[index]?.clusterId;
+      const writeResult = clusterId ? writeResults.find((result) => result.clusterId === clusterId) : null;
+      if (writeResult) writeResult.fanoutSnapshot = settled.value;
+    }
     if (fanoutFailedCount > 0) {
       const failedClusterIds = fanoutTrackers
         .filter((_, index) => fanoutResults[index]?.status === "rejected")
@@ -1133,6 +1152,22 @@ function collectSelectedClusterTasks(
       };
     })
     .filter((item): item is SourceTaskSelectionMatch => Boolean(item));
+}
+
+function mapFanoutSnapshotSourceTaskIds(
+  snapshot: ExecutionFanoutSnapshot,
+  mapTaskId: (taskId: string) => string,
+): ExecutionFanoutSnapshot {
+  return {
+    ...snapshot,
+    waves: snapshot.waves.map((wave) => ({
+      ...wave,
+      tasks: wave.tasks.map((task) => ({
+        ...task,
+        sourceTaskId: mapTaskId(task.sourceTaskId),
+      })),
+    })),
+  };
 }
 
 function buildOutputTaskIdByUiTaskId(result: Pick<SplitResult, "claudeSplitMapping">): Map<string, string> {

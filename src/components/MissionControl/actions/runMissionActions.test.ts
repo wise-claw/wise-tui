@@ -720,6 +720,85 @@ describe("runMissionActions · runtime ledger parity", () => {
     }));
   });
 
+  test("writeMissionToTrellis stores fanout snapshots and streams them to callers", async () => {
+    const { writeMissionToTrellis } = await import("./runMissionActions");
+    const fanoutSnapshot = {
+      status: "succeeded" as const,
+      workflowRunId: "wf-1",
+      workflowRunIds: ["wf-1"],
+      totalCount: 1,
+      doneCount: 1,
+      failedCount: 0,
+      waves: [],
+      lifecycleStages: [
+        { key: "dispatch" as const, label: "Dispatch", status: "done" as const },
+        { key: "run" as const, label: "Run", status: "done" as const },
+        { key: "verify" as const, label: "Verify", status: "active" as const },
+        { key: "spec" as const, label: "Spec", status: "waiting" as const },
+      ],
+      message: "实现运行完成：成功 1，失败 0。",
+    };
+    dispatchWorkspaceTrellisMaterializedFanout.mockImplementationOnce(async (input: {
+      onSnapshot?: (snapshot: typeof fanoutSnapshot) => void;
+    }) => {
+      input.onSnapshot?.(fanoutSnapshot);
+      return fanoutSnapshot;
+    });
+    const snapshots: string[] = [];
+    const state = makeState({
+      stage: "review",
+      activeMissionId: "mission-p1-hash",
+      clusterRuns: {
+        "cluster-fe": {
+          clusterId: "cluster-fe",
+          parentTaskName: "05-16-parent",
+          parentTaskPath: ".trellis/tasks/05-16-parent",
+          status: "succeeded",
+          errors: [],
+          normalized: {
+            source: makeState().prd!,
+            context: null,
+            splitTasks: [{
+              id: "task-a",
+              title: "Build UI",
+              description: "",
+              role: "frontend",
+              size: "M",
+              estimateDays: 1,
+              dependencies: [],
+              sourceRefs: [],
+              sourceRequirementIds: ["REQ-1"],
+              subtasks: [],
+              dod: [],
+              executionStatus: "executable",
+              flowStatus: "todo",
+            }],
+            executableTasks: [],
+            criticalPath: [],
+            parallelGroups: [],
+            unmetPreconditions: [],
+          },
+        },
+      },
+    });
+    const api = makeApi(state);
+
+    await writeMissionToTrellis(api, {
+      onFanoutSnapshot: (clusterId, snapshot) => snapshots.push(`${clusterId}:${snapshot.workflowRunId}:${snapshot.status}`),
+    });
+
+    expect(snapshots).toContain("cluster-fe:wf-1:succeeded");
+    expect(api.addWriteResult).toHaveBeenCalledWith(expect.objectContaining({
+      clusterId: "cluster-fe",
+      fanoutSnapshot: expect.objectContaining({
+        workflowRunId: "wf-1",
+        lifecycleStages: expect.arrayContaining([
+          expect.objectContaining({ key: "verify", status: "active" }),
+        ]),
+      }),
+    }));
+  });
+
   test("writeMissionToTrellis maps namespaced UI task ids back to cluster output ids before materializing", async () => {
     const { writeMissionToTrellis } = await import("./runMissionActions");
     const state = makeState({

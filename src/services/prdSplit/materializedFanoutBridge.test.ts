@@ -60,6 +60,10 @@ describe("runWorkspaceTrellisMaterializedFanout", () => {
       { waveIndex: 1, taskIds: [".trellis/tasks/05-19-prd/05-19-ui"] },
     ]);
     expect(result.status).toBe("succeeded");
+    expect(result.lifecycleStages).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "verify", status: "active" }),
+      expect.objectContaining({ key: "spec", status: "waiting" }),
+    ]));
     expect(events).toEqual([
       "wise:split-todo-count-updated:trellis",
       "wise:omc-batch-runtime-changed:true",

@@ -3,6 +3,8 @@ import { Button } from "antd";
 import { useMemo } from "react";
 import type { SplitResult } from "../../types";
 import type {
+  ExecutionFanoutLoopStageSnapshot,
+  ExecutionFanoutLoopStageStatus,
   ExecutionFanoutSnapshot,
   ExecutionFanoutTaskSnapshot,
   ExecutionFanoutTaskStatus,
@@ -49,6 +51,7 @@ export function ExecutionRuntimeQueue({
   ), [fanoutSnapshot]);
   const overallStatus = fanoutSnapshot?.status ?? "running";
   const runningCount = fanoutSnapshot?.waves.flatMap((wave) => wave.tasks).filter((task) => task.status === "running").length ?? 0;
+  const lifecycleStages = fanoutSnapshot?.lifecycleStages ?? [];
   return (
     <div className="app-prd-task-panel__execution-runtime">
       <header className="app-prd-task-panel__execution-runtime-head">
@@ -66,7 +69,7 @@ export function ExecutionRuntimeQueue({
             <Button size="small" type="primary" onClick={onOpenMainSession}>回主会话</Button>
           ) : null}
           <Button size="small" icon={overallStatus === "running" ? <LoadingOutlined /> : <CheckCircleOutlined />} disabled>
-            {overallStatus === "running" ? "派发中" : overallStatus === "failed" ? "有失败" : "已接管"}
+            {overallStatus === "running" ? "运行中" : overallStatus === "failed" ? "有失败" : "待校验"}
           </Button>
         </div>
       </header>
@@ -76,6 +79,14 @@ export function ExecutionRuntimeQueue({
         <RuntimeSummaryItem label="执行中" value={runningCount} />
         <RuntimeSummaryItem label="已完成" value={fanoutSnapshot?.doneCount ?? 0} />
       </div>
+
+      {lifecycleStages.length > 0 ? (
+        <ol className="app-prd-task-panel__execution-runtime-lifecycle" aria-label="自动驾驶闭环阶段">
+          {lifecycleStages.map((stage) => (
+            <RuntimeLifecycleStage key={stage.key} stage={stage} />
+          ))}
+        </ol>
+      ) : null}
 
       <div className="app-prd-task-panel__execution-runtime-waves">
         {model.parallelGroups.map((group, index) => {
@@ -120,6 +131,16 @@ function RuntimeSummaryItem({ label, value }: { label: string; value: number }) 
       <strong>{value}</strong>
       <span>{label}</span>
     </div>
+  );
+}
+
+function RuntimeLifecycleStage({ stage }: { stage: ExecutionFanoutLoopStageSnapshot }) {
+  return (
+    <li className={`app-prd-task-panel__execution-runtime-lifecycle-stage is-${stage.status}`}>
+      <span aria-hidden>{lifecycleIcon(stage.status)}</span>
+      <strong>{stage.label}</strong>
+      <small>{stage.message}</small>
+    </li>
   );
 }
 
@@ -169,14 +190,14 @@ function RuntimeTaskRow({
 }
 
 function runtimeTitle(status: ExecutionFanoutSnapshot["status"]) {
-  if (status === "failed") return "派发有失败";
-  if (status === "succeeded") return "已交给主会话";
-  return "正在派发任务";
+  if (status === "failed") return "运行有失败";
+  if (status === "succeeded") return "实现运行完成";
+  return "正在运行任务";
 }
 
 function runtimeMessage(status: ExecutionFanoutSnapshot["status"], message: string | undefined) {
-  if (status === "succeeded") return "任务已写入并派发，后续实现进展在主会话与运行透镜查看。";
-  if (status === "failed") return message ?? "部分任务派发失败，请查看运行透镜定位失败项。";
+  if (status === "succeeded") return message ?? "实现运行完成，主会话继续接管 trellis-check 与 trellis-update-spec。";
+  if (status === "failed") return message ?? "部分任务运行失败，请查看运行透镜定位失败项。";
   return message ?? "任务已生成，正在按执行计划启动实现任务。";
 }
 
@@ -213,4 +234,11 @@ function taskStatusText(status: ExecutionFanoutTaskStatus) {
   if (status === "succeeded") return "完成";
   if (status === "failed") return "失败";
   return "等待";
+}
+
+function lifecycleIcon(status: ExecutionFanoutLoopStageStatus) {
+  if (status === "active") return <LoadingOutlined />;
+  if (status === "done") return <CheckCircleOutlined />;
+  if (status === "failed") return <CloseCircleOutlined />;
+  return <ClockCircleOutlined />;
 }

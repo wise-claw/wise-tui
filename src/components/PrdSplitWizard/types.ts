@@ -8,6 +8,7 @@
 
 import type { PrdDocument, SplitResult, TaskAnchorDescriptor, TaskItem, TaskRole, TaskSplitContext, WorkflowGraph } from "../../types";
 import type { ClusterPlan, ClusterPlanItem, PlannerRepo } from "../../services/prdSplit/clusterPlanner";
+import type { ExecutionFanoutSnapshot } from "../../services/prdSplit/executionFanout";
 import type { RequirementsIndexV2 } from "../../services/prdSplit/requirementsIndexVersion";
 import type {
   ClaudeSplitStrictValidationIssue,
@@ -64,6 +65,7 @@ export interface WizardWriteResult {
     taskPath: string;
   }>;
   fanoutFailedCount?: number;
+  fanoutSnapshot?: ExecutionFanoutSnapshot;
   warnings: string[];
   error?: string;
 }
