@@ -8,6 +8,7 @@
  *      获得该 requirement；分数为 0 的回退到「按多数类型选首仓」；并列分数计入 cross-repo。
  *   3. 每个 cluster 超过 `maxRequirementsPerCluster` 时按 requirementId 顺序二切。
  *   4. `knownRepoDependencies` 映射到 cluster 间 `dependencyClusterIds`。
+ *   5. Spec 反哺只作为当前 requirementId + bodyHash 命中的仓库提示，不能创建需求。
  */
 
 import type { Repository } from "../../types";
@@ -22,6 +23,7 @@ export interface PlannerRepo {
 export interface PlannerRequirement {
   id: string;
   content: string;
+  bodyHash?: string;
 }
 
 export interface PlannerKnownDependency {
@@ -33,6 +35,12 @@ export interface PlannerOptions {
   maxRequirementsPerCluster?: number;
   /** requirementId → repoId，AI 生成的仓库分配，存在时跳过关键词匹配 */
   repoAssignments?: Record<string, number>;
+  /** Verify/Spec 反哺抽取出的仓库提示；只对当前 requirements 生效。 */
+  feedbackHints?: PlannerFeedbackHints;
+}
+
+export interface PlannerFeedbackHints {
+  repoAssignments: Record<string, number>;
 }
 
 export interface ClusterPlanItem {
@@ -77,7 +85,10 @@ export function planClusters(input: {
 }): ClusterPlan {
   const maxPerCluster =
     input.options?.maxRequirementsPerCluster ?? DEFAULT_MAX_REQUIREMENTS_PER_CLUSTER;
-  const assignments = input.options?.repoAssignments;
+  const assignments = mergeRepoAssignments(
+    input.options?.feedbackHints?.repoAssignments,
+    input.options?.repoAssignments,
+  );
 
   if (input.requirements.length === 0) {
     return emptyPlan();
@@ -97,6 +108,53 @@ export function planClusters(input: {
   }
 
   return planMultiRepo(input, maxPerCluster);
+}
+
+export function extractPlannerFeedbackHints(input: {
+  feedback: string;
+  repositories: PlannerRepo[];
+  requirements: PlannerRequirement[];
+  maxAssignments?: number;
+}): PlannerFeedbackHints {
+  const maxAssignments = Math.max(1, input.maxAssignments ?? 100);
+  const requirementById = new Map(input.requirements.map((req) => [req.id, req]));
+  const repoAssignments: Record<string, number> = {};
+  for (const row of parseFeedbackRequirementRows(input.feedback)) {
+    const repoId = inferRepoIdFromFeedbackCluster(row.clusterId, input.repositories);
+    if (repoId == null) continue;
+    for (const requirementId of row.requirementIds) {
+      if (Object.keys(repoAssignments).length >= maxAssignments) {
+        return { repoAssignments };
+      }
+      const requirement = requirementById.get(requirementId);
+      if (!requirement) continue;
+      if (!feedbackAnchorMatchesRequirement(row.anchor, requirement)) continue;
+      repoAssignments[requirementId] = repoId;
+    }
+  }
+  return { repoAssignments };
+}
+
+export function normalizePlannerRepoAssignments(
+  input: unknown,
+  requirements: PlannerRequirement[],
+  repositories: PlannerRepo[],
+): Record<string, number> | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  const allowedRequirementIds = new Set(requirements.map((req) => req.id));
+  const allowedRepoIds = new Set(repositories.map((repo) => repo.id));
+  const out: Record<string, number> = {};
+  for (const [requirementId, rawRepoId] of Object.entries(input)) {
+    if (!allowedRequirementIds.has(requirementId)) continue;
+    const repoId = typeof rawRepoId === "number"
+      ? rawRepoId
+      : typeof rawRepoId === "string" && /^\d+$/.test(rawRepoId)
+        ? Number(rawRepoId)
+        : null;
+    if (repoId == null || !Number.isInteger(repoId) || !allowedRepoIds.has(repoId)) continue;
+    out[requirementId] = repoId;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 function planWithAssignments(
@@ -139,6 +197,17 @@ function planWithAssignments(
       crossRepoRequirements: [],
     },
   };
+}
+
+function mergeRepoAssignments(
+  baseAssignments?: Record<string, number>,
+  overrideAssignments?: Record<string, number>,
+): Record<string, number> | undefined {
+  const merged = {
+    ...(baseAssignments ?? {}),
+    ...(overrideAssignments ?? {}),
+  };
+  return Object.keys(merged).length > 0 ? merged : undefined;
 }
 
 function emptyPlan(): ClusterPlan {
@@ -347,4 +416,67 @@ function applyDependencyEdges(
       }
     }
   }
+}
+
+interface FeedbackRequirementRow {
+  clusterId: string;
+  requirementIds: string[];
+  anchor: string;
+}
+
+function parseFeedbackRequirementRows(feedback: string): FeedbackRequirementRow[] {
+  const rows: FeedbackRequirementRow[] = [];
+  for (const line of feedback.split(/\r?\n/g)) {
+    const cells = splitMarkdownTableRow(line);
+    if (cells.length < 5) continue;
+    const clusterId = cells[0].trim();
+    if (!clusterId.startsWith("cluster-")) continue;
+    const requirementIds = parseRequirementIds(cells[3]);
+    if (requirementIds.length === 0) continue;
+    rows.push({ clusterId, requirementIds, anchor: cells[4].trim() });
+  }
+  return rows;
+}
+
+function splitMarkdownTableRow(line: string): string[] {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("|")) return [];
+  const withoutHead = trimmed.slice(1);
+  const withoutTail = withoutHead.endsWith("|") ? withoutHead.slice(0, -1) : withoutHead;
+  return withoutTail.split("|").map((cell) => cell.trim());
+}
+
+function parseRequirementIds(cell: string): string[] {
+  return uniqueStrings(
+    cell
+      .split(",")
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0 && value !== "missing" && value !== "-"),
+  );
+}
+
+function inferRepoIdFromFeedbackCluster(
+  clusterId: string,
+  repositories: PlannerRepo[],
+): number | null {
+  for (const repo of repositories) {
+    const repoPattern = new RegExp(`^cluster-${escapeRegExp(repo.type)}-${repo.id}(?:-|$)`);
+    const manualPattern = new RegExp(`^cluster-manual-${escapeRegExp(repo.type)}-${repo.id}(?:-|$)`);
+    if (repoPattern.test(clusterId) || manualPattern.test(clusterId)) return repo.id;
+  }
+  return null;
+}
+
+function feedbackAnchorMatchesRequirement(anchor: string, requirement: PlannerRequirement): boolean {
+  const bodyHash = requirement.bodyHash?.trim().toLowerCase();
+  if (!bodyHash || !/^[0-9a-f]{16}$/.test(bodyHash)) return false;
+  return anchor.toLowerCase().includes(bodyHash);
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values)];
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

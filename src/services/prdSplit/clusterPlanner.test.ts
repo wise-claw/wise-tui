@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { planClusters, type PlannerRepo, type PlannerRequirement } from "./clusterPlanner";
+import {
+  extractPlannerFeedbackHints,
+  normalizePlannerRepoAssignments,
+  planClusters,
+  type PlannerRepo,
+  type PlannerRequirement,
+} from "./clusterPlanner";
 
 const REPO_FE: PlannerRepo = { id: 1, name: "web", type: "frontend", path: "/abs/web" };
 const REPO_BE: PlannerRepo = { id: 2, name: "api", type: "backend", path: "/abs/api" };
@@ -133,5 +139,73 @@ describe("planClusters — multi-repo", () => {
       ]),
     });
     expect(plan.clusters.map((c) => c.primaryRepositoryId)).toEqual([1]);
+  });
+});
+
+describe("planClusters — feedback hints", () => {
+  test("routes only current requirement ids when feedback anchor hash matches", () => {
+    const feedback = [
+      "### Requirement To Task Anchors",
+      "",
+      "| Cluster | Task | Trellis task | Requirements | Anchor |",
+      "| --- | --- | --- | --- | --- |",
+      "| cluster-backend-2 | API | .trellis/tasks/p/api | req-functional-1, req-functional-old | aaaaaaaaaaaaaaaa [0, 12] |",
+    ].join("\n");
+    const requirements = [
+      { id: "req-functional-1", content: "新增登录 API", bodyHash: "aaaaaaaaaaaaaaaa" },
+      { id: "req-functional-2", content: "新增前端页面", bodyHash: "bbbbbbbbbbbbbbbb" },
+    ];
+    const feedbackHints = extractPlannerFeedbackHints({
+      feedback,
+      repositories: [REPO_FE, REPO_BE],
+      requirements,
+    });
+
+    const plan = planClusters({
+      repositories: [REPO_FE, REPO_BE],
+      requirements,
+      options: { feedbackHints },
+    });
+
+    expect(feedbackHints.repoAssignments).toEqual({ "req-functional-1": 2 });
+    expect(plan.clusters.find((c) => c.primaryRepositoryId === 2)?.requirementIds).toEqual(["req-functional-1"]);
+    expect(plan.clusters.flatMap((c) => c.requirementIds)).not.toContain("req-functional-old");
+  });
+
+  test("ignores feedback when requirement body hash changed", () => {
+    const feedback = [
+      "| Cluster | Task | Trellis task | Requirements | Anchor |",
+      "| --- | --- | --- | --- | --- |",
+      "| cluster-backend-2 | API | .trellis/tasks/p/api | req-functional-1 | aaaaaaaaaaaaaaaa [0, 12] |",
+    ].join("\n");
+    const requirements = [
+      { id: "req-functional-1", content: "新增前端页面", bodyHash: "bbbbbbbbbbbbbbbb" },
+    ];
+    const feedbackHints = extractPlannerFeedbackHints({
+      feedback,
+      repositories: [REPO_FE, REPO_BE],
+      requirements,
+    });
+
+    expect(feedbackHints.repoAssignments).toEqual({});
+  });
+
+  test("normalizes AI assignments to current requirement and repo ids", () => {
+    const normalized = normalizePlannerRepoAssignments(
+      {
+        "req-functional-1": "2",
+        "req-functional-old": 2,
+        "req-functional-2": 99,
+        "req-functional-3": "backend",
+      },
+      [
+        { id: "req-functional-1", content: "API" },
+        { id: "req-functional-2", content: "UI" },
+        { id: "req-functional-3", content: "Docs" },
+      ],
+      [REPO_FE, REPO_BE],
+    );
+
+    expect(normalized).toEqual({ "req-functional-1": 2 });
   });
 });

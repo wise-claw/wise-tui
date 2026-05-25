@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ClusterPlan, ClusterPlanItem } from "../../services/prdSplit/clusterPlanner";
 import { emptyWizardState } from "./types";
-import { reducer, resolveWizardPlannerOptions } from "./useSplitWizardState";
+import { buildPlannerFeedbackPromptBlock, reducer, resolveWizardPlannerOptions } from "./useSplitWizardState";
 import { emptyClusterPlanEdits } from "./clusterPlanEdits";
 import type { ClusterEditState, WizardState } from "./types";
 
@@ -324,5 +324,28 @@ describe("resolveWizardPlannerOptions", () => {
       maxRequirementsPerCluster: 10,
     });
     expect(resolveWizardPlannerOptions(2, 37)).toBeUndefined();
+  });
+});
+
+describe("buildPlannerFeedbackPromptBlock", () => {
+  test("keeps latest bounded entries for Plan-stage classifier context", () => {
+    const content = [
+      "# PRD Assistant Loop Feedback",
+      "",
+      "## 2026-05-24T08:00:00.000Z - PRD Split Loop Feedback",
+      "old planning boundary",
+      "",
+      "## 2026-05-25T08:00:00.000Z - PRD Split Loop Feedback",
+      "new planning boundary",
+    ].join("\n");
+
+    const block = buildPlannerFeedbackPromptBlock(content, { maxEntries: 1, maxChars: 500 });
+
+    expect(block).toContain("new planning boundary");
+    expect(block).not.toContain("old planning boundary");
+  });
+
+  test("returns none for empty feedback", () => {
+    expect(buildPlannerFeedbackPromptBlock("   ")).toBe("none");
   });
 });

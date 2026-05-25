@@ -5,12 +5,18 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { TaskSplitContext } from "../../types";
-import type { ClusterPlan, ClusterPlanItem, PlannerRepo } from "../../services/prdSplit/clusterPlanner";
-import { planClusters } from "../../services/prdSplit/clusterPlanner";
+import type { ClusterPlan, ClusterPlanItem, PlannerRepo, PlannerRequirement } from "../../services/prdSplit/clusterPlanner";
+import {
+  extractPlannerFeedbackHints,
+  normalizePlannerRepoAssignments,
+  planClusters,
+} from "../../services/prdSplit/clusterPlanner";
 import type { RequirementsIndexV2 } from "../../services/prdSplit/requirementsIndexVersion";
 import { upgradeRequirementsIndex } from "../../services/prdSplit/requirementsIndexVersion";
 import { buildRequirementsIndex } from "../../services/prdRequirementIndex";
 import { prdDocumentFromMarkdownFragment } from "../../services/prdNormalizer";
+import { readTrellisSpecFile } from "../../services/trellisSpecBridge";
+import { PRD_SPLIT_LOOP_FEEDBACK_SPEC_PATH } from "../../services/prdSplit/specFeedback";
 import {
   indexParentsByClusterId,
   scanProjectParentsAcrossRoots,
@@ -432,6 +438,34 @@ function makeIdleRun(clusterId: string): ClusterRunState {
   return { clusterId, parentTaskName: null, parentTaskPath: null, status: "idle", errors: [] };
 }
 
+async function loadPlannerLoopFeedback(rootPath: string): Promise<string | null> {
+  try {
+    const file = await readTrellisSpecFile(rootPath, PRD_SPLIT_LOOP_FEEDBACK_SPEC_PATH);
+    return file.content;
+  } catch {
+    return null;
+  }
+}
+
+export function buildPlannerFeedbackPromptBlock(
+  content: string,
+  options: { maxChars?: number; maxEntries?: number } = {},
+): string {
+  const trimmed = content.trim();
+  if (!trimmed) return "none";
+  const maxEntries = Math.max(1, options.maxEntries ?? 3);
+  const maxChars = Math.max(500, options.maxChars ?? 8_000);
+  const entries = trimmed
+    .split(/\n(?=## \d{4}-\d{2}-\d{2}T[\d:.]+Z - PRD Split Loop Feedback)/g)
+    .filter((entry) => entry.trim().startsWith("## "));
+  const selected = entries.length > 0
+    ? entries.slice(-maxEntries).join("\n").trim()
+    : trimmed;
+  return selected.length > maxChars
+    ? selected.slice(selected.length - maxChars)
+    : selected;
+}
+
 export function resolveWizardPlannerOptions(
   repositoryCount: number,
   requirementCount: number,
@@ -519,6 +553,24 @@ export function useSplitWizardState(): UseSplitWizardStateApi {
       const repos = current.selectedRepositoryIds.length === 0
         ? current.repositories
         : current.repositories.filter((r) => current.selectedRepositoryIds.includes(r.id));
+      const plannerRequirements: PlannerRequirement[] = upgraded.requirements.map((r) => ({
+        id: r.id,
+        content: r.content,
+        bodyHash: r.bodyHash,
+      }));
+      const loopFeedbackContent = current.project?.rootPath
+        ? await loadPlannerLoopFeedback(current.project.rootPath)
+        : null;
+      const plannerFeedbackBlock = loopFeedbackContent
+        ? buildPlannerFeedbackPromptBlock(loopFeedbackContent)
+        : "none";
+      const feedbackHints = plannerFeedbackBlock !== "none"
+        ? extractPlannerFeedbackHints({
+          feedback: plannerFeedbackBlock,
+          repositories: repos,
+          requirements: plannerRequirements,
+        })
+        : undefined;
 
       // 多仓库时用 AI 判断每条需求归属哪个仓库
       let repoAssignments: Record<string, number> | undefined;
@@ -535,7 +587,14 @@ export function useSplitWizardState(): UseSplitWizardStateApi {
             JSON.stringify(upgraded.requirements.map((r) => ({
               id: r.id,
               content: r.content.replace(/\s+/g, " ").trim().slice(0, 200),
+              bodyHash: r.bodyHash,
             }))),
+            "",
+            "历史 Spec 反哺（仅作为仓库边界/锚点经验，不是新需求来源）：",
+            plannerFeedbackBlock,
+            "",
+            "要求：只输出当前需求列表中的 ID；只使用仓库列表中的 ID；当前需求列表始终是范围事实源。",
+            "若历史反哺中的当前 requirementId 与 bodyHash 同时命中，可优先沿用其仓库边界；否则按当前需求文本判断。",
             "",
             "输出纯 JSON 对象，键为需求 ID，值为仓库 ID。不要任何解释或 Markdown。",
             `示例：${JSON.stringify({ [upgraded.requirements[0]?.id ?? "REQ-01"]: repos[0].id })}`,
@@ -547,9 +606,7 @@ export function useSplitWizardState(): UseSplitWizardStateApi {
             timeoutMs: 60_000,
           });
           const parsed = JSON.parse(stdout);
-          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-            repoAssignments = parsed as Record<string, number>;
-          }
+          repoAssignments = normalizePlannerRepoAssignments(parsed, plannerRequirements, repos);
         } catch {
           // AI 分类失败时回退到关键词匹配，静默处理
         }
@@ -557,10 +614,11 @@ export function useSplitWizardState(): UseSplitWizardStateApi {
 
       const plan = planClusters({
         repositories: repos,
-        requirements: upgraded.requirements.map((r) => ({ id: r.id, content: r.content })),
+        requirements: plannerRequirements,
         options: {
           ...resolveWizardPlannerOptions(repos.length, upgraded.requirements.length, options),
           repoAssignments,
+          feedbackHints,
         },
       });
       dispatch({ type: "go-to-plan", plan, prd, index: upgraded });
