@@ -72,4 +72,49 @@ describe("countUnsplitRequirementsInSnapshot", () => {
 
     expect(countUnsplitRequirementsInSnapshot(snapshot)).toBe(1);
   });
+
+  test("workspace scope counts only project-root PRDs", () => {
+    const snapshot: TrellisRequirementWorkspaceSnapshot = {
+      sources: [],
+      prds: [
+        {
+          taskId: "ws-parent",
+          dir: ".trellis/tasks/ws-parent",
+          title: "Workspace PRD",
+          status: "planning",
+          archived: false,
+          rootPath: "/tmp/project",
+          sourceKind: "project",
+          repositoryId: null,
+          clusterId: null,
+          requirementsIndexJson: JSON.stringify({
+            requirements: [{ id: "REQ-WS", content: "Workspace" }],
+          }),
+          prdMarkdown: "# PRD",
+          childTaskIds: [],
+        },
+        {
+          taskId: "repo-parent",
+          dir: ".trellis/tasks/repo-parent",
+          title: "Repo PRD",
+          status: "planning",
+          archived: false,
+          rootPath: "/tmp/repo",
+          sourceKind: "projectRepository",
+          repositoryId: 7,
+          clusterId: null,
+          requirementsIndexJson: JSON.stringify({
+            requirements: [{ id: "REQ-REPO", content: "Repo" }],
+          }),
+          prdMarkdown: "# PRD",
+          childTaskIds: [],
+        },
+      ],
+      tasks: [],
+    };
+
+    expect(countUnsplitRequirementsInSnapshot(snapshot, { kind: "workspace" })).toBe(1);
+    expect(countUnsplitRequirementsInSnapshot(snapshot, { kind: "repository", repositoryId: 7 })).toBe(1);
+    expect(countUnsplitRequirementsInSnapshot(snapshot, { kind: "repository", repositoryId: 9 })).toBe(0);
+  });
 });

@@ -159,18 +159,21 @@ export function SidebarRequirementAction({
 }: {
   unsplitCount: number;
   onOpen: () => void;
+  /** project = 工作区需求（可跨仓下发）；repo = 本仓库需求 */
   variant?: "repo" | "project";
 }) {
   if (unsplitCount <= 0) return null;
 
   const badgeLabel = unsplitCount > 99 ? "99+" : String(unsplitCount);
+  const scopeLabel = variant === "project" ? "工作区需求" : "仓库需求";
+  const tooltip = `${scopeLabel}：${unsplitCount} 条尚未生成任务`;
 
   return (
-    <Tooltip title={`${unsplitCount} 条尚未生成任务的需求`} mouseEnterDelay={0.3}>
+    <Tooltip title={tooltip} mouseEnterDelay={0.3}>
       <button
         type="button"
         className={`app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--requirement${variant === "project" ? " app-repository-action--project-quick" : ""}`}
-        aria-label={`需求（${unsplitCount} 条尚未生成任务）`}
+        aria-label={`${scopeLabel}（${unsplitCount} 条尚未生成任务）`}
         onClick={(e) => {
           e.stopPropagation();
           onOpen();

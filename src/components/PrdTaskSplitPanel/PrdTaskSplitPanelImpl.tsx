@@ -147,6 +147,7 @@ export function PrdTaskSplitPanel({
     setTaskUnmetCollapsedById,
     showUrlAnchorHint,
     sortedRequirementHistory,
+    requirementScopeLabel,
     splitError,
     splitPromptAdjustStarting,
     splitQualityStats,
@@ -240,6 +241,7 @@ export function PrdTaskSplitPanel({
             <RequirementInputCard
               activeRequirementId={activeRequirementId}
               activeRequirement={activeRequirement ?? null}
+              scopeLabel={requirementScopeLabel}
               options={sortedRequirementHistory}
               inputValue={inputValue}
               inputError={inputError}

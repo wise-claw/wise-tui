@@ -58,9 +58,14 @@ export function useSidebarRequirementUnsplitMap(
             ...workspaceInput,
             includeArchived: false,
           });
-          nextProjectUnsplit[project.id] = countUnsplitRequirementsInSnapshot(snapshot);
+          nextProjectUnsplit[project.id] = countUnsplitRequirementsInSnapshot(snapshot, {
+            kind: "workspace",
+          });
           for (const repositoryId of project.repositoryIds) {
-            const count = countUnsplitRequirementsInSnapshot(snapshot, { repositoryId });
+            const count = countUnsplitRequirementsInSnapshot(snapshot, {
+              kind: "repository",
+              repositoryId,
+            });
             if (count > 0) nextRepositoryUnsplit[repositoryId] = count;
             else if (!(repositoryId in nextRepositoryUnsplit)) nextRepositoryUnsplit[repositoryId] = 0;
           }

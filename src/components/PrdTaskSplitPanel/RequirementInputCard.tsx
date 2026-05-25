@@ -24,6 +24,7 @@ interface ActiveRequirementSummary {
 interface Props {
   activeRequirementId: string | null;
   activeRequirement: ActiveRequirementSummary | null;
+  scopeLabel?: string | null;
   options: RequirementOption[];
   inputValue: string;
   inputError: string | null;
@@ -63,6 +64,7 @@ interface Props {
 export function RequirementInputCard({
   activeRequirementId,
   activeRequirement,
+  scopeLabel = null,
   options,
   inputValue,
   inputError,
@@ -105,6 +107,7 @@ export function RequirementInputCard({
         <RequirementBoardHeader
           activeRequirementId={activeRequirementId}
           activeRequirement={activeRequirement}
+          scopeLabel={scopeLabel}
           options={options}
           onPick={onPickRequirement}
           onPin={onPinRequirement}

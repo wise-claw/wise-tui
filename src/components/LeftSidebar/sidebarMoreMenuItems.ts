@@ -69,7 +69,7 @@ export function buildProjectMoreMenuItems(input: BuildProjectMoreMenuItemsInput)
       onAddRepositoryToProject ? { key: "add-repository", label: "关联仓库" } : null,
     ]),
     sidebarMenuSection([
-      trellisEnabled ? { key: "requirements", label: "需求" } : null,
+      trellisEnabled ? { key: "requirements", label: "工作区需求" } : null,
       onOpenScheduledTasksForProject ? { key: "scheduled-tasks", label: "定时任务" } : null,
       trellisEnabled && onOpenExecutableTasksForProject ? { key: "executable-tasks", label: "可执行任务" } : null,
     ]),
@@ -152,7 +152,7 @@ export function buildProjectRepositoryMoreMenuItems(
       onOpenPromptsRepository ? { key: "prompts", label: "提示词" } : null,
     ]),
     sidebarMenuSection([
-      trellisEnabled && onOpenRequirements ? { key: "requirements", label: "需求" } : null,
+      trellisEnabled && onOpenRequirements ? { key: "requirements", label: "仓库需求" } : null,
       onOpenScheduledTasks ? { key: "scheduled-tasks", label: "定时任务" } : null,
       trellisEnabled && onOpenExecutableTasks ? { key: "executable-tasks", label: "可执行任务" } : null,
     ]),
@@ -226,7 +226,7 @@ export function buildFloatingRepositoryMoreMenuItems(
       trellisEnabled && !trellisReady ? { key: "trellis-init", label: "启用 Wise Trellis" } : null,
     ]),
     sidebarMenuSection([
-      trellisEnabled && onOpenRequirements ? { key: "requirements", label: "需求" } : null,
+      trellisEnabled && onOpenRequirements ? { key: "requirements", label: "仓库需求" } : null,
       onOpenScheduledTasks ? { key: "scheduled-tasks", label: "定时任务" } : null,
       trellisEnabled && onOpenExecutableTasks ? { key: "executable-tasks", label: "可执行任务" } : null,
     ]),

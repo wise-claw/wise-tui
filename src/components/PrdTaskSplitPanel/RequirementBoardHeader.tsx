@@ -18,6 +18,8 @@ interface Props {
   activeRequirementId: string | null;
   activeRequirement: ActiveRequirementSummary | null;
   options: RequirementOption[];
+  /** 工作区 / 仓库需求入口标签，用于区分展示与下发范围 */
+  scopeLabel?: string | null;
   onPick: (id: string) => void;
   onPin: () => void;
   onCreate: () => void;
@@ -28,6 +30,7 @@ export function RequirementBoardHeader({
   activeRequirementId,
   activeRequirement,
   options,
+  scopeLabel = null,
   onPick,
   onPin,
   onCreate,
@@ -36,7 +39,7 @@ export function RequirementBoardHeader({
   return (
     <div className="app-prd-task-panel__section-title">
       <div className="app-prd-task-panel__section-title-main">
-        <span>需求</span>
+        <span>{scopeLabel ? `${scopeLabel}` : "需求"}</span>
         <Select
           size="small"
           className="app-prd-task-panel__requirement-select"

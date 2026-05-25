@@ -1,5 +1,8 @@
 import type { TaskItem } from "../types";
-import type { TrellisRequirementTaskRow } from "../services/trellisTaskBridge";
+import type {
+  TrellisRequirementPrdRow,
+  TrellisRequirementTaskRow,
+} from "../services/trellisTaskBridge";
 import {
   countSplitTodoExecutableTasks,
   isRunnableTrellisRequirementTask,
@@ -25,6 +28,20 @@ export function isProjectWorkspaceTrellisTask(task: TrellisRequirementTaskRow): 
 export function isRepositoryWorkspaceTrellisTask(task: TrellisRequirementTaskRow): boolean {
   return task.sourceKind === "projectRepository";
 }
+
+/** 工作区根目录下的需求 PRD（`project` 源，可跨成员仓库下发）。 */
+export function isProjectWorkspaceRequirementPrd(prd: TrellisRequirementPrdRow): boolean {
+  return prd.sourceKind === "project";
+}
+
+/** 成员仓库下的需求 PRD（`projectRepository` 源，仅本仓下发）。 */
+export function isRepositoryWorkspaceRequirementPrd(prd: TrellisRequirementPrdRow): boolean {
+  return prd.sourceKind === "projectRepository";
+}
+
+export type RequirementSnapshotCountScope =
+  | { kind: "workspace" }
+  | { kind: "repository"; repositoryId: number };
 
 function applyTrellisTaskFocus(
   runnable: TrellisRequirementTaskRow[],

@@ -377,15 +377,52 @@ export function usePrdTaskSplitPanelController({
     () => (activeRequirementId ? requirementHistoryById.get(activeRequirementId) ?? null : null),
     [activeRequirementId, requirementHistoryById],
   );
+  const requirementEntryScope = useMemo((): "workspace" | "repository" | null => {
+    if (initialProjectId?.trim() && initialRepositoryId == null) return "workspace";
+    if (initialRepositoryId != null && !initialProjectId?.trim()) return "repository";
+    return contextMode === "project" ? "workspace" : contextMode === "repository" ? "repository" : null;
+  }, [contextMode, initialProjectId, initialRepositoryId]);
+
+  const visibleRequirementHistory = useMemo(() => {
+    const projectId = linkedProjectId ?? initialProjectId ?? activeProjectId ?? null;
+    if (requirementEntryScope === "workspace") {
+      return requirementHistory.filter(
+        (item) => item.contextMode === "project" && (!projectId || item.linkedProjectId === projectId),
+      );
+    }
+    if (requirementEntryScope === "repository") {
+      const repoId = linkedRepositoryId ?? initialRepositoryId ?? activeRepositoryId ?? null;
+      return requirementHistory.filter(
+        (item) => item.contextMode === "repository" && repoId != null && item.linkedRepositoryId === repoId,
+      );
+    }
+    return requirementHistory;
+  }, [
+    activeProjectId,
+    activeRepositoryId,
+    initialProjectId,
+    initialRepositoryId,
+    linkedProjectId,
+    linkedRepositoryId,
+    requirementEntryScope,
+    requirementHistory,
+  ]);
+
   const sortedRequirementHistory = useMemo(
-    () => [...requirementHistory].sort((a, b) => {
+    () => [...visibleRequirementHistory].sort((a, b) => {
       const pinA = a.isPinned ? 1 : 0;
       const pinB = b.isPinned ? 1 : 0;
       if (pinA !== pinB) return pinB - pinA;
       return b.updatedAt - a.updatedAt;
     }),
-    [requirementHistory],
+    [visibleRequirementHistory],
   );
+
+  const requirementScopeLabel = requirementEntryScope === "workspace"
+    ? "工作区需求"
+    : requirementEntryScope === "repository"
+      ? "仓库需求"
+      : null;
   const hasInput = useMemo(() => inputValue.trim().length > 0, [inputValue]);
   const initialTargetKey = useMemo(
     () => `${initialProjectId?.trim() ?? ""}:${initialRepositoryId ?? ""}`,
@@ -411,17 +448,34 @@ export function usePrdTaskSplitPanelController({
     () => (linkedRepositoryId ? repositoriesById.get(linkedRepositoryId) ?? null : null),
     [linkedRepositoryId, repositoriesById],
   );
-  const trellisTargetResolution = useMemo(
-    () => resolveTrellisTarget({
+  const trellisTargetResolution = useMemo(() => {
+    if (contextMode === "repository" && linkedRepositoryId != null) {
+      return resolveTrellisTarget({
+        projects,
+        repositories,
+        activeProjectId: null,
+        activeRepositoryId: null,
+        linkedProjectId: null,
+        linkedRepositoryId,
+      });
+    }
+    return resolveTrellisTarget({
       projects,
       repositories,
       activeProjectId,
       activeRepositoryId,
       linkedProjectId,
       linkedRepositoryId,
-    }),
-    [activeProjectId, activeRepositoryId, linkedProjectId, linkedRepositoryId, projects, repositories],
-  );
+    });
+  }, [
+    activeProjectId,
+    activeRepositoryId,
+    contextMode,
+    linkedProjectId,
+    linkedRepositoryId,
+    projects,
+    repositories,
+  ]);
   const trellisTarget = trellisTargetResolution.ok ? trellisTargetResolution.target : null;
   const trellisTargetError = trellisTargetResolution.ok ? null : trellisTargetResolution.reason;
   const targetProject = useMemo<ProjectItem | null>(() => {
@@ -1122,15 +1176,41 @@ export function usePrdTaskSplitPanelController({
   }, [activeProjectId, activeRepositoryId]);
 
   useEffect(() => {
-    if (initialProjectId) {
+    if (initialProjectId?.trim()) {
       setLinkedProjectId(initialProjectId);
       setContextMode("project");
+      if (initialRepositoryId == null) {
+        setLinkedRepositoryId(null);
+      }
     }
     if (initialRepositoryId != null) {
       setLinkedRepositoryId(initialRepositoryId);
-      if (!initialProjectId) setContextMode("repository");
+      if (!initialProjectId?.trim()) {
+        setContextMode("repository");
+        setLinkedProjectId(null);
+      }
     }
   }, [initialTargetKey, initialProjectId, initialRepositoryId]);
+
+  useEffect(() => {
+    if (!activeRequirementId) return;
+    if (visibleRequirementHistory.some((item) => item.id === activeRequirementId)) return;
+    const fallback = sortedRequirementHistory[0];
+    if (!fallback) {
+      setActiveRequirementId(null);
+      setRequirementDisplayName(null);
+      setInputValue("");
+      setOriginalInputValue(null);
+      return;
+    }
+    setActiveRequirementId(fallback.id);
+    setRequirementDisplayName(fallback.requirementDisplayName);
+    setInputValue(fallback.inputValue);
+    setOriginalInputValue(fallback.originalInputValue ?? null);
+    setContextMode(fallback.contextMode);
+    setLinkedProjectId(fallback.linkedProjectId);
+    setLinkedRepositoryId(fallback.linkedRepositoryId);
+  }, [activeRequirementId, initialTargetKey, sortedRequirementHistory, visibleRequirementHistory, setInputValue]);
 
   useEffect(() => {
     if (!trellisTarget?.rootPath || !inputValue.trim()) return;
@@ -3253,6 +3333,7 @@ export function usePrdTaskSplitPanelController({
     requirementDisplayName,
     requirementEditorShellRef,
     requirementHistoryById,
+    requirementScopeLabel,
     requirementNameInput,
     requirementNameModalMode,
     requirementNameModalOpen,
