@@ -2,6 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import type { PrdDocument, TaskSplitContext } from "../../types";
 import type { RequirementsIndexV2 } from "./requirementsIndexVersion";
 import {
+  buildLoopFeedbackBundleContent,
   composeSplitterPrompt,
   cancelClusterRun,
   dispatchClusterSplit,
@@ -141,7 +142,7 @@ describe("dispatchClusterSplit", () => {
     expect(result.validationIssues).toEqual([]);
     expect(result.normalized?.splitTasks[0]?.sourceRequirementIds).toEqual(["req-functional-1"]);
     expect(result.raw.claudeSessionId).toBe("sid-1");
-    expect(invoke.mock.calls[0]?.[1]).toMatchObject({
+    expect(findDispatchClusterCall(invoke)?.[1]).toMatchObject({
       input: {
         executionRootPath: "/repo/web",
         timeoutMs: 0,
@@ -204,7 +205,7 @@ describe("dispatchClusterSplit", () => {
     expect(result.errors).toEqual([]);
     expect(result.validationIssues).toEqual([]);
     expect(result.normalized?.splitTasks[0]?.sourceRequirementIds).toEqual(["req-functional-2"]);
-    const bundle = invoke.mock.calls[0]?.[1]?.input?.bundle as Record<string, string>;
+    const bundle = findDispatchClusterCall(invoke)?.[1]?.input?.bundle as Record<string, string>;
     const bundledIndex = JSON.parse(bundle["requirements-index.json"]);
     expect(bundledIndex.requirements.map((entry: { id: string }) => entry.id)).toEqual(["req-functional-2"]);
   });
@@ -306,6 +307,98 @@ describe("dispatchClusterSplit", () => {
     expect(result.normalized).toBeNull();
     expect(result.errors.join("\n")).toContain("runDir: /tmp/run-2");
     expect(result.errors.join("\n")).toContain("stdout: /tmp/run-2/claude.stdout.log");
+  });
+
+  test("injects prior PRD loop feedback into the next splitter bundle", async () => {
+    const raw: DispatchClusterRawOutput = {
+      runId: "run-feedback",
+      runDir: "/tmp/run-feedback",
+      exitCode: 0,
+      durationMs: 1,
+      stdoutPath: "/tmp/run-feedback/claude.stdout.log",
+      stderrPath: "/tmp/run-feedback/claude.stderr.log",
+      rawResultPath: "/tmp/run-feedback/split-result.raw.json",
+      claudeSessionId: "sid-feedback",
+      stdoutTruncatedPreview: "",
+      rawOutput: {
+        tasks: [
+          {
+            id: "task-feedback",
+            title: "Apply feedback",
+            description: "Apply prior loop feedback to this split.",
+            role: "frontend",
+            executionStatus: "executable",
+            missingPrerequisites: [],
+            subtasks: ["Apply"],
+            dod: ["Applied"],
+            dependencies: [],
+            sourceRequirementIds: ["req-functional-1"],
+            taskAnchors: {
+              from: 0,
+              to: 18,
+              textHash: "aaaaaaaaaaaaaaaa",
+              contextBefore: "Build selected UI",
+              contextAfter: "Build selected UI",
+            },
+            clusterId: "cluster-fe-1",
+          },
+        ],
+      },
+    };
+    const invoke = mock(async (command: string) => {
+      if (command === "trellis_read_spec_file") {
+        return {
+          relativePath: "guides/prd-assistant-loop-feedback.md",
+          content: [
+            "# PRD Assistant Loop Feedback",
+            "",
+            "## 2026-05-25T08:00:00.000Z - PRD Split Loop Feedback",
+            "",
+            "- Verify: passed 1/1; failed 0",
+            "- Lesson: keep anchors exact",
+          ].join("\n"),
+          sizeBytes: 128,
+        };
+      }
+      return raw;
+    });
+    mock.module("@tauri-apps/api/core", () => ({ invoke }));
+
+    const result = await dispatchClusterSplit({
+      projectRootPath: "/repo",
+      parentTaskPath: ".trellis/tasks/parent",
+      cluster,
+      prd: makePrd(),
+      requirementsIndex: makeRequirementsIndex(),
+      context: null,
+    });
+
+    expect(result.errors).toEqual([]);
+    const dispatchCall = findDispatchClusterCall(invoke);
+    const bundle = dispatchCall?.[1]?.input?.bundle as Record<string, string>;
+    expect(bundle["prd-loop-feedback.md"]).toContain("keep anchors exact");
+    expect(dispatchCall?.[1]?.input?.prompt).toContain("prd-loop-feedback.md");
+    expect(dispatchCall?.[1]?.input?.prompt).toContain("requirements-index.json` remains the source of truth");
+  });
+});
+
+describe("buildLoopFeedbackBundleContent", () => {
+  test("keeps the latest bounded feedback entries as splitter guidance", () => {
+    const content = [
+      "# PRD Assistant Loop Feedback",
+      "",
+      "## 2026-05-24T08:00:00.000Z - PRD Split Loop Feedback",
+      "old lesson",
+      "",
+      "## 2026-05-25T08:00:00.000Z - PRD Split Loop Feedback",
+      "new lesson about anchors",
+    ].join("\n");
+
+    const bundle = buildLoopFeedbackBundleContent(content, { maxEntries: 1, maxChars: 500 });
+
+    expect(bundle).toContain("new lesson about anchors");
+    expect(bundle).not.toContain("old lesson");
+    expect(bundle).toContain("Do not treat this file as a source of new product requirements");
   });
 });
 
@@ -477,4 +570,15 @@ function makeRequirementsIndex(): RequirementsIndexV2 {
       { id: "req-functional-2", content: "Build unrelated backend", bodyHash: "bbbbbbbbbbbbbbbb" },
     ],
   };
+}
+
+function findDispatchClusterCall(
+  invoke: { mock: { calls: unknown[][] } },
+): [string, { input: Record<string, unknown> }] | undefined {
+  return invoke.mock.calls.find((call): call is [string, { input: Record<string, unknown> }] => (
+    call[0] === "prd_split_dispatch_cluster"
+    && Boolean(call[1])
+    && typeof call[1] === "object"
+    && "input" in call[1]
+  ));
 }

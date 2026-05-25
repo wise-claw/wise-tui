@@ -24,7 +24,9 @@ import {
   type ClaudeSplitStrictValidationIssue,
 } from "../claudeSplitOutputNormalize";
 import { readSnapshotFile } from "../materializePrdSnapshot";
+import { readTrellisSpecFile } from "../trellisSpecBridge";
 import type { ClusterPlanItem } from "./clusterPlanner";
+import { PRD_SPLIT_LOOP_FEEDBACK_SPEC_PATH } from "./specFeedback";
 import type { RequirementsIndexV2 } from "./requirementsIndexVersion";
 import { computeIndexVersion } from "./requirementsIndexVersion";
 
@@ -115,6 +117,9 @@ interface RetryRunResultJson {
 
 /** 0 = 无超时，子代理应自行结束或报错 */
 const DEFAULT_SPLITTER_TIMEOUT_MS = 0;
+const LOOP_FEEDBACK_BUNDLE_FILE = "prd-loop-feedback.md";
+const LOOP_FEEDBACK_MAX_CHARS = 12_000;
+const LOOP_FEEDBACK_MAX_ENTRIES = 3;
 
 export async function dispatchClusterSplit(input: DispatchClusterInput): Promise<DispatchClusterResult> {
   const errors: string[] = [];
@@ -150,6 +155,10 @@ export async function dispatchClusterSplit(input: DispatchClusterInput): Promise
     "cluster.json": clusterPayload,
     "requirements-index.json": JSON.stringify(clusterRequirementsIndex, null, 2),
   };
+  const loopFeedback = await loadPrdSplitLoopFeedbackForBundle(input.projectRootPath);
+  if (loopFeedback) {
+    bundle[LOOP_FEEDBACK_BUNDLE_FILE] = loopFeedback;
+  }
 
   const prompt = composeSplitterPrompt({
     parentTaskPath: input.parentTaskPath,
@@ -353,6 +362,10 @@ export function composeSplitterPrompt(input: {
   lines.push("Do not call tools. The complete input bundle is embedded below; use it directly.");
   lines.push("");
   lines.push("See `.trellis/spec/guides/trellis-splitter-prompt.md` for the full protocol.");
+  if (input.bundleFileNames.includes(LOOP_FEEDBACK_BUNDLE_FILE)) {
+    lines.push("Also read `prd-loop-feedback.md` for durable lessons from previous PRD split -> Verify -> Spec loops.");
+    lines.push("Treat that file as guidance only: `requirements-index.json` remains the source of truth for current task scope.");
+  }
   lines.push("");
   lines.push("## Cluster meta");
   lines.push(`- id: \`${input.cluster.id}\``);
@@ -389,8 +402,9 @@ export function composeSplitterPrompt(input: {
   lines.push("3. `taskAnchors` is mandatory for every task and must be an object, never null. At least one of `contextBefore`/`contextAfter` must contain an exact, contiguous substring copied from one of the task's `sourceRequirementIds` contents in `requirements-index.json`.");
   lines.push("4. When `executionStatus = \"executable\"`, `missingPrerequisites` must be empty; otherwise non-empty.");
   lines.push("5. `clusterId` must equal this cluster's id. `repoTarget` defaults are handled locally.");
-  lines.push("6. Output exactly one top-level JSON object. No surrounding text.");
-  lines.push("7. The final assistant response must be the JSON object itself, starting with `{` and ending with `}`.");
+  lines.push("6. If `prd-loop-feedback.md` exists, apply relevant anchor/dependency/runtime lessons without inventing requirements from it.");
+  lines.push("7. Output exactly one top-level JSON object. No surrounding text.");
+  lines.push("8. The final assistant response must be the JSON object itself, starting with `{` and ending with `}`.");
   lines.push("");
   lines.push("## Anchor construction");
   lines.push("- Choose the most specific requirement content for each task from `requirements-index.json`.");
@@ -409,6 +423,42 @@ export function composeSplitterPrompt(input: {
   lines.push("");
   lines.push("Now produce the JSON.");
   return lines.join("\n");
+}
+
+async function loadPrdSplitLoopFeedbackForBundle(projectRootPath: string): Promise<string | null> {
+  try {
+    const file = await readTrellisSpecFile(projectRootPath, PRD_SPLIT_LOOP_FEEDBACK_SPEC_PATH);
+    return buildLoopFeedbackBundleContent(file.content);
+  } catch {
+    return null;
+  }
+}
+
+export function buildLoopFeedbackBundleContent(
+  content: string,
+  options: { maxEntries?: number; maxChars?: number } = {},
+): string | null {
+  const trimmed = content.trim();
+  if (!trimmed) return null;
+  const maxEntries = Math.max(1, options.maxEntries ?? LOOP_FEEDBACK_MAX_ENTRIES);
+  const maxChars = Math.max(500, options.maxChars ?? LOOP_FEEDBACK_MAX_CHARS);
+  const entries = trimmed
+    .split(/\n(?=## \d{4}-\d{2}-\d{2}T[\d:.]+Z - PRD Split Loop Feedback)/g)
+    .filter((entry) => entry.trim().startsWith("## "));
+  const selected = entries.length > 0
+    ? entries.slice(-maxEntries).join("\n").trim()
+    : trimmed;
+  const bounded = selected.length > maxChars
+    ? `> Earlier feedback omitted to keep splitter context bounded.\n\n${selected.slice(selected.length - maxChars)}`
+    : selected;
+  return [
+    "# PRD Split Loop Feedback For This Split",
+    "",
+    "Use these durable lessons from prior Verify/Spec feedback to avoid repeating anchor, dependency, runtime, or handoff defects.",
+    "Do not treat this file as a source of new product requirements; current `requirements-index.json` is authoritative.",
+    "",
+    bounded,
+  ].join("\n");
 }
 
 function formatMissingJsonError(raw: DispatchClusterRawOutput): string {
