@@ -1,3 +1,4 @@
+// @refresh reset
 import { useCallback, useEffect, useRef } from "react";
 import { useTerminalTabs } from "../../hooks/useTerminalTabs";
 import { useTerminalSession } from "../../hooks/useTerminalSession";
@@ -29,6 +30,32 @@ export function TerminalPanel({
     ensureTerminal,
   } = useTerminalTabs();
   const closeTriggeredByButtonRef = useRef(false);
+  const soleTerminalIdRef = useRef<string | null>(null);
+  soleTerminalIdRef.current =
+    terminals.length === 1 ? (terminals[0]?.id ?? null) : null;
+
+  const handleSessionExit = useCallback(
+    (_repositoryId: number, terminalId: string) => {
+      if (
+        soleTerminalIdRef.current === terminalId &&
+        !closeTriggeredByButtonRef.current
+      ) {
+        onClose();
+      }
+      closeTerminal(terminalId);
+      closeTriggeredByButtonRef.current = false;
+    },
+    [closeTerminal, onClose],
+  );
+
+  const handleCloseTerminal = useCallback(
+    (_terminalId: string) => {
+      closeTriggeredByButtonRef.current = true;
+      closeAllTerminals();
+      onClose();
+    },
+    [closeAllTerminals, onClose],
+  );
 
   const activeRepository: Repository | null =
     terminals.length > 0 && activeTerminalId
@@ -48,33 +75,12 @@ export function TerminalPanel({
     activeTerminalId,
     isVisible: true,
     focusRequestVersion: 0,
-    onSessionExit: (_repositoryId, terminalId) => {
-      if (
-        terminals.length === 1 &&
-        terminals[0]?.id === terminalId &&
-        !closeTriggeredByButtonRef.current
-      ) {
-        onClose();
-      }
-      closeTerminal(terminalId);
-      closeTriggeredByButtonRef.current = false;
-    },
+    onSessionExit: handleSessionExit,
   });
 
   useEffect(() => {
     ensureTerminal();
   }, [ensureTerminal]);
-
-  // 标题栏关闭 = 收起整个终端区：须始终 onClose。仅当「最后一个 tab」才 onClose 时，若存在多个 tab
-  //（例如重复 ensure），第一次只会 closeTerminal 切换会话，表现为刷新；第二次才收起。
-  const handleCloseTerminal = useCallback(
-    (_terminalId: string) => {
-      closeTriggeredByButtonRef.current = true;
-      closeAllTerminals();
-      onClose();
-    },
-    [closeAllTerminals, onClose],
-  );
 
   // --- Following refs buildSecondaryNodes: Dock wraps Panel ---
 
@@ -90,6 +96,9 @@ export function TerminalPanel({
     <TerminalDock
       isOpen={true}
       activeTerminalId={activeTerminalId}
+      status={terminalState.status}
+      commandSuggestion={terminalState.commandSuggestion}
+      commandSuggestionSuffix={terminalState.commandSuggestionSuffix}
       onCloseTerminal={handleCloseTerminal}
       terminalNode={terminalPanelNode}
     />

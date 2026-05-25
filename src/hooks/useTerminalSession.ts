@@ -1,3 +1,4 @@
+// @refresh reset — hook 数量变更时需重挂载 TerminalPanel，避免 Fast Refresh 报 hooks 数量不一致
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import { Terminal } from "@xterm/xterm";
@@ -15,8 +16,19 @@ import {
   resizeTerminalSession,
   writeTerminalSession,
 } from "../services/terminal";
-
+import {
+  applyInputToDraft,
+  commitDraftToHistory,
+  historyEntryAt,
+  pickCommandSuggestion,
+  readTerminalInputDraft,
+  resolveTerminalKeydown,
+  suggestionSuffix,
+  TERMINAL_KEY_BYTES,
+} from "./terminalInput";
 const MAX_BUFFER_CHARS = 200_000;
+const TERMINAL_SCROLLBACK = 1500;
+const TERMINAL_RESIZE_DEBOUNCE_MS = 120;
 
 export type TerminalStatus = "idle" | "connecting" | "ready" | "error";
 
@@ -36,6 +48,8 @@ export type TerminalSessionState = {
   containerRef: RefObject<HTMLDivElement | null>;
   hasSession: boolean;
   readyKey: string | null;
+  commandSuggestion: string | null;
+  commandSuggestionSuffix: string;
   cleanupTerminalSession: (repositoryId: number, terminalId: string) => void;
 };
 
@@ -59,6 +73,22 @@ function shouldIgnoreTerminalError(error: unknown) {
     lower.includes("not connected") ||
     lower.includes("closed")
   );
+}
+
+/** 等布局稳定后再 fit，避免容器高度未就绪时多算行数导致 xterm-rows 顶部空行。 */
+function scheduleTerminalFit(fitAddon: FitAddon): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        try {
+          fitAddon.fit();
+        } catch {
+          // 容器仍不可见时 fit 可能失败，ResizeObserver 会再次触发
+        }
+        resolve();
+      });
+    });
+  });
 }
 
 function getTerminalAppearance(container: HTMLElement | null): TerminalAppearance {
@@ -129,11 +159,37 @@ export function useTerminalSession({
   const activeRepositoryRef = useRef<Repository | null>(null);
   const activeTerminalIdRef = useRef<string | null>(null);
   const pendingFocusRef = useRef(false);
+  const pendingOutputRef = useRef("");
+  const outputFlushRafRef = useRef<number | null>(null);
+  const resizeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const commandHistoryRef = useRef<string[]>([]);
+  const historyBrowseIndexRef = useRef(-1);
+  const inputDraftRef = useRef("");
   const [status, setStatus] = useState<TerminalStatus>("idle");
   const [message, setMessage] = useState("Open a terminal to start a session.");
   const [hasSession, setHasSession] = useState(false);
   const [readyKey, setReadyKey] = useState<string | null>(null);
+  const [commandSuggestion, setCommandSuggestion] = useState<string | null>(null);
+  const [commandSuggestionSuffix, setCommandSuggestionSuffix] = useState("");
   const [sessionResetCounter, setSessionResetCounter] = useState(0);
+
+  const syncCommandSuggestion = useCallback((draft: string) => {
+    const suggestion = pickCommandSuggestion(commandHistoryRef.current, draft);
+    setCommandSuggestion(suggestion);
+    setCommandSuggestionSuffix(
+      suggestion ? suggestionSuffix(suggestion, draft) : "",
+    );
+  }, []);
+
+  const syncDraftFromScreen = useCallback(() => {
+    const term = terminalRef.current;
+    if (!term) {
+      return;
+    }
+    const draft = readTerminalInputDraft(term);
+    inputDraftRef.current = draft;
+    syncCommandSuggestion(draft);
+  }, [syncCommandSuggestion]);
 
   const cleanupTerminalSession = useCallback(
     (repositoryId: number, terminalId: string) => {
@@ -147,6 +203,11 @@ export function useTerminalSession({
       setSessionResetCounter((prev) => prev + 1);
       if (activeKeyRef.current === key) {
         terminalRef.current?.reset();
+        commandHistoryRef.current = [];
+        historyBrowseIndexRef.current = -1;
+        inputDraftRef.current = "";
+        setCommandSuggestion(null);
+        setCommandSuggestionSuffix("");
         setHasSession(false);
         setStatus("idle");
         setMessage("Open a terminal to start a session.");
@@ -165,9 +226,66 @@ export function useTerminalSession({
     activeTerminalIdRef.current = activeTerminalId;
   }, [activeKey, activeTerminalId, activeRepository]);
 
-  const writeToTerminal = useCallback((data: string) => {
-    terminalRef.current?.write(data);
-  }, []);
+  const flushPendingOutput = useCallback(() => {
+    outputFlushRafRef.current = null;
+    const term = terminalRef.current;
+    const chunk = pendingOutputRef.current;
+    if (!term || !chunk) {
+      return;
+    }
+    pendingOutputRef.current = "";
+    term.write(chunk);
+    syncDraftFromScreen();
+  }, [syncDraftFromScreen]);
+
+  const sendTerminalInput = useCallback((data: string) => {
+    const repository = activeRepositoryRef.current;
+    const terminalId = activeTerminalIdRef.current;
+    if (!repository || !terminalId) {
+      return;
+    }
+    const key = `${repository.id}:${terminalId}`;
+    if (!openedSessionsRef.current.has(key)) {
+      return;
+    }
+
+    if (data === TERMINAL_KEY_BYTES.enter || data === "\n") {
+      commandHistoryRef.current = commitDraftToHistory(
+        commandHistoryRef.current,
+        inputDraftRef.current,
+      );
+      historyBrowseIndexRef.current = -1;
+      inputDraftRef.current = "";
+      syncCommandSuggestion("");
+    } else {
+      historyBrowseIndexRef.current = -1;
+      inputDraftRef.current = applyInputToDraft(inputDraftRef.current, data);
+      syncCommandSuggestion(inputDraftRef.current);
+    }
+
+    void writeTerminalSession(repository.id.toString(), terminalId, data).catch((error) => {
+      if (shouldIgnoreTerminalError(error)) {
+        openedSessionsRef.current.delete(key);
+      }
+    });
+  }, [syncCommandSuggestion]);
+
+  const enqueueTerminalOutput = useCallback(
+    (key: string, data: string) => {
+      const next = appendBuffer(outputBuffersRef.current.get(key), data);
+      outputBuffersRef.current.set(key, next);
+      if (activeKeyRef.current !== key) {
+        return;
+      }
+      pendingOutputRef.current += data;
+      if (outputFlushRafRef.current === null) {
+        outputFlushRafRef.current = requestAnimationFrame(() => {
+          flushPendingOutput();
+        });
+      }
+    },
+    [flushPendingOutput],
+  );
 
   const focusTerminalIfRequested = useCallback(() => {
     if (!pendingFocusRef.current) {
@@ -177,30 +295,25 @@ export function useTerminalSession({
     terminalRef.current?.focus();
   }, []);
 
-  const refreshTerminal = useCallback(() => {
-    const terminal = terminalRef.current;
-    if (!terminal) {
-      return;
-    }
-    const lastRow = Math.max(0, terminal.rows - 1);
-    terminal.refresh(0, lastRow);
-    focusTerminalIfRequested();
-  }, [focusTerminalIfRequested]);
-
   const syncActiveBuffer = useCallback(
     (key: string) => {
       const term = terminalRef.current;
       if (!term) {
         return;
       }
+      if (outputFlushRafRef.current !== null) {
+        cancelAnimationFrame(outputFlushRafRef.current);
+        outputFlushRafRef.current = null;
+      }
+      pendingOutputRef.current = "";
       term.reset();
       const buffered = outputBuffersRef.current.get(key);
       if (buffered) {
         term.write(buffered);
       }
-      refreshTerminal();
+      focusTerminalIfRequested();
     },
-    [refreshTerminal],
+    [focusTerminalIfRequested],
   );
 
   // Subscribe to terminal output events
@@ -208,11 +321,7 @@ export function useTerminalSession({
     const unlisten = subscribeTerminalOutput(
       (payload: TerminalOutputEvent) => {
         const key = `${payload.workspaceId}:${payload.terminalId}`;
-        const next = appendBuffer(outputBuffersRef.current.get(key), payload.data);
-        outputBuffersRef.current.set(key, next);
-        if (activeKeyRef.current === key) {
-          writeToTerminal(payload.data);
-        }
+        enqueueTerminalOutput(key, payload.data);
       },
       {
         onError: () => {
@@ -223,7 +332,7 @@ export function useTerminalSession({
     return () => {
       unlisten();
     };
-  }, [writeToTerminal]);
+  }, [enqueueTerminalOutput]);
 
   // Subscribe to terminal exit events
   useEffect(() => {
@@ -266,36 +375,88 @@ export function useTerminalSession({
         cursorBlink: true,
         fontSize: 12,
         fontFamily: appearance.fontFamily,
-        allowTransparency: true,
+        /* 透明模式下 block 光标可能只绘空心框，叠在 prompt 字形上会像“遮挡” */
+        allowTransparency: false,
         theme: appearance.theme,
-        scrollback: 5000,
+        scrollback: TERMINAL_SCROLLBACK,
       });
       const fitAddon = new FitAddon();
       terminal.loadAddon(fitAddon);
       terminal.open(containerRef.current);
-      fitAddon.fit();
+      scheduleTerminalFit(fitAddon);
       terminalRef.current = terminal;
       fitAddonRef.current = fitAddon;
 
-      inputDisposableRef.current = terminal.onData((data: string) => {
-        const repository = activeRepositoryRef.current;
-        const terminalId = activeTerminalIdRef.current;
-        if (!repository || !terminalId) {
-          return;
-        }
-        const key = `${repository.id}:${terminalId}`;
-        if (!openedSessionsRef.current.has(key)) {
-          return;
-        }
-        void writeTerminalSession(repository.id.toString(), terminalId, data).catch((error) => {
-          if (shouldIgnoreTerminalError(error)) {
-            openedSessionsRef.current.delete(key);
-            return;
+      terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
+        if (
+          event.type === "keydown" &&
+          event.key === "Tab" &&
+          !event.shiftKey &&
+          !event.ctrlKey &&
+          !event.altKey &&
+          !event.metaKey
+        ) {
+          const suggestion = pickCommandSuggestion(
+            commandHistoryRef.current,
+            inputDraftRef.current,
+          );
+          const suffix = suggestion
+            ? suggestionSuffix(suggestion, inputDraftRef.current)
+            : "";
+          if (suffix) {
+            sendTerminalInput(suffix);
+            return false;
           }
-        });
+        }
+        const action = resolveTerminalKeydown(event);
+        if (!action) {
+          return true;
+        }
+        if (action.kind === "history-prev") {
+          const nextIndex = historyBrowseIndexRef.current + 1;
+          const entry = historyEntryAt(commandHistoryRef.current, nextIndex);
+          if (!entry) {
+            return true;
+          }
+          historyBrowseIndexRef.current = nextIndex;
+          sendTerminalInput(TERMINAL_KEY_BYTES.killLine);
+          sendTerminalInput(entry);
+          inputDraftRef.current = entry;
+          syncCommandSuggestion(entry);
+          return false;
+        }
+        if (action.kind === "history-next") {
+          if (historyBrowseIndexRef.current < 0) {
+            return true;
+          }
+          if (historyBrowseIndexRef.current === 0) {
+            historyBrowseIndexRef.current = -1;
+            sendTerminalInput(TERMINAL_KEY_BYTES.killLine);
+            inputDraftRef.current = "";
+            syncCommandSuggestion("");
+            return false;
+          }
+          const nextIndex = historyBrowseIndexRef.current - 1;
+          const entry = historyEntryAt(commandHistoryRef.current, nextIndex);
+          if (!entry) {
+            return true;
+          }
+          historyBrowseIndexRef.current = nextIndex;
+          sendTerminalInput(TERMINAL_KEY_BYTES.killLine);
+          sendTerminalInput(entry);
+          inputDraftRef.current = entry;
+          syncCommandSuggestion(entry);
+          return false;
+        }
+        sendTerminalInput(action.data);
+        return false;
+      });
+
+      inputDisposableRef.current = terminal.onData((data: string) => {
+        sendTerminalInput(data);
       });
     }
-  }, [isVisible]);
+  }, [isVisible, sendTerminalInput, syncCommandSuggestion]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -333,11 +494,15 @@ export function useTerminalSession({
     }
     const key = `${activeRepository.id}:${activeTerminalId}`;
     const fitAddon = fitAddonRef.current;
-    fitAddon.fit();
 
-    const cols = terminalRef.current.cols;
-    const rows = terminalRef.current.rows;
     const openSession = async () => {
+      await scheduleTerminalFit(fitAddon);
+      const terminal = terminalRef.current;
+      if (!terminal) {
+        return;
+      }
+      const cols = terminal.cols;
+      const rows = terminal.rows;
       if (openedSessionsRef.current.has(key)) {
         setStatus("ready");
         setMessage("Terminal ready.");
@@ -346,8 +511,6 @@ export function useTerminalSession({
         if (renderedKeyRef.current !== key) {
           syncActiveBuffer(key);
           renderedKeyRef.current = key;
-        } else {
-          refreshTerminal();
         }
         return;
       }
@@ -373,9 +536,8 @@ export function useTerminalSession({
         if (renderedKeyRef.current !== key) {
           syncActiveBuffer(key);
           renderedKeyRef.current = key;
-        } else {
-          refreshTerminal();
         }
+        terminal.focus();
       } catch {
         setStatus("error");
         setMessage("Failed to start terminal session.");
@@ -389,7 +551,6 @@ export function useTerminalSession({
     activeTerminalId,
     activeRepository,
     isVisible,
-    refreshTerminal,
     syncActiveBuffer,
     sessionResetCounter,
   ]);
@@ -402,15 +563,6 @@ export function useTerminalSession({
     pendingFocusRef.current = true;
     focusTerminalIfRequested();
   }, [focusRequestVersion, focusTerminalIfRequested, isVisible]);
-
-  // Resize on viewport change
-  useEffect(() => {
-    if (!isVisible || !activeKey || !terminalRef.current || !fitAddonRef.current) {
-      return;
-    }
-    fitAddonRef.current.fit();
-    refreshTerminal();
-  }, [activeKey, isVisible, refreshTerminal]);
 
   // Resize observer
   useEffect(() => {
@@ -430,19 +582,26 @@ export function useTerminalSession({
     }
 
     const resize = () => {
-      fitAddon.fit();
-      const key = `${activeRepository.id}:${activeTerminalId}`;
-      resizeTerminalSession(
-        activeRepository.id.toString(),
-        activeTerminalId,
-        terminal.cols,
-        terminal.rows,
-      ).catch((error) => {
-        if (shouldIgnoreTerminalError(error)) {
-          openedSessionsRef.current.delete(key);
-          return;
-        }
-      });
+      if (resizeDebounceRef.current) {
+        clearTimeout(resizeDebounceRef.current);
+      }
+      resizeDebounceRef.current = setTimeout(() => {
+        resizeDebounceRef.current = null;
+        void scheduleTerminalFit(fitAddon).then(() => {
+          terminal.focus();
+          const key = `${activeRepository.id}:${activeTerminalId}`;
+          resizeTerminalSession(
+            activeRepository.id.toString(),
+            activeTerminalId,
+            terminal.cols,
+            terminal.rows,
+          ).catch((error) => {
+            if (shouldIgnoreTerminalError(error)) {
+              openedSessionsRef.current.delete(key);
+            }
+          });
+        });
+      }, TERMINAL_RESIZE_DEBOUNCE_MS);
     };
 
     const observer = new ResizeObserver(() => {
@@ -456,8 +615,21 @@ export function useTerminalSession({
 
     return () => {
       observer.disconnect();
+      if (resizeDebounceRef.current) {
+        clearTimeout(resizeDebounceRef.current);
+        resizeDebounceRef.current = null;
+      }
     };
   }, [activeTerminalId, activeRepository, hasSession, isVisible]);
+
+  useEffect(() => {
+    return () => {
+      if (outputFlushRafRef.current !== null) {
+        cancelAnimationFrame(outputFlushRafRef.current);
+        outputFlushRafRef.current = null;
+      }
+    };
+  }, []);
 
   return {
     status,
@@ -465,6 +637,8 @@ export function useTerminalSession({
     containerRef,
     hasSession,
     readyKey,
+    commandSuggestion,
+    commandSuggestionSuffix,
     cleanupTerminalSession,
   };
 }

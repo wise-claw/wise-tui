@@ -5,7 +5,19 @@ use tauri::Emitter;
 
 use super::{claude_path_search_prefixes, merge_path_env};
 
+/// PTY shells spawned from the GUI often inherit a weak or missing `TERM` and trigger
+/// zsh `PROMPT_SP` (inverted `%` on its own line) when themes — especially p10k instant
+/// prompt — write startup output without a trailing newline.
+fn apply_embedded_terminal_shell_env(cmd: &mut CommandBuilder) {
+    cmd.env("TERM", "xterm-256color");
+    cmd.env("COLORTERM", "truecolor");
+    cmd.env("WISE_TERMINAL", "1");
+    cmd.env("POWERLEVEL9K_INSTANT_PROMPT", "off");
+    cmd.env("PROMPT_EOL_MARK", "");
+}
+
 struct TerminalSession {
+    master: Box<dyn portable_pty::MasterPty + Send>,
     writer: Box<dyn Write + Send>,
     killer: Box<dyn ChildKiller + Send + Sync>,
 }
@@ -47,8 +59,14 @@ impl TerminalManager {
             })
             .map_err(|e| format!("Failed to open PTY: {}", e))?;
 
-        let shell = if cfg!(windows) { "cmd.exe" } else { "zsh" };
-        let mut cmd = CommandBuilder::new(shell);
+        let mut cmd = if cfg!(windows) {
+            CommandBuilder::new("cmd.exe")
+        } else {
+            let mut zsh = CommandBuilder::new("zsh");
+            zsh.arg("-il");
+            apply_embedded_terminal_shell_env(&mut zsh);
+            zsh
+        };
         cmd.cwd(cwd);
         // GUI 进程继承的 PATH 通常不含 Homebrew / nvm / bun 等，与 `create_claude_command` 一致为 PTY shell 补全 PATH。
         let path_merged = merge_path_env(&claude_path_search_prefixes());
@@ -59,13 +77,12 @@ impl TerminalManager {
             .spawn_command(cmd)
             .map_err(|e| format!("Failed to spawn shell: {}", e))?;
 
-        let mut reader = pair
-            .master
+        let master = pair.master;
+        let mut reader = master
             .try_clone_reader()
             .map_err(|e| format!("Failed to clone PTY reader: {}", e))?;
 
-        let writer = pair
-            .master
+        let writer = master
             .take_writer()
             .map_err(|e| format!("Failed to get PTY writer: {}", e))?;
 
@@ -105,7 +122,7 @@ impl TerminalManager {
         });
 
         self.sessions
-            .insert(key, TerminalSession { writer, killer });
+            .insert(key, TerminalSession { master, writer, killer });
 
         Ok(())
     }
@@ -125,14 +142,25 @@ impl TerminalManager {
 
     fn resize(
         &mut self,
-        _workspace_id: &str,
-        _terminal_id: &str,
-        _cols: u16,
-        _rows: u16,
+        workspace_id: &str,
+        terminal_id: &str,
+        cols: u16,
+        rows: u16,
     ) -> Result<(), String> {
-        // Portable PTY resize is handled at the OS level.
-        // The frontend fit addon handles display sizing.
-        Ok(())
+        let key = format!("{}:{}", workspace_id, terminal_id);
+        let session = self
+            .sessions
+            .get(&key)
+            .ok_or_else(|| format!("Terminal session not found: {}", key))?;
+        session
+            .master
+            .resize(PtySize {
+                rows,
+                cols,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .map_err(|e| format!("Failed to resize PTY: {}", e))
     }
 
     fn close(&mut self, workspace_id: &str, terminal_id: &str) -> Result<(), String> {

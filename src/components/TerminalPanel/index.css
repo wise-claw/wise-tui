@@ -36,17 +36,103 @@
 .terminal-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 6px 12px;
-  font-size: 14px;
-  font-weight: 600;
+  gap: 8px;
+  flex-shrink: 0;
+  min-height: 24px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
   border-bottom: 1px solid var(--ant-color-border-secondary);
 }
 
 .terminal-header-left {
   display: flex;
-  align-items: baseline;
-  gap: 6px;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.terminal-header-center {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.terminal-header-shortcuts {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.terminal-header-shortcut {
+  display: inline-flex;
+  align-items: center;
+  cursor: default;
+}
+
+.terminal-header-shortcut__keys {
+  display: inline-block;
+  min-width: 1.2em;
+  padding: 0 4px;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 16px;
+  font-family: inherit;
+  text-align: center;
+  color: var(--ant-color-text-secondary);
+  background: var(--ant-color-fill-tertiary);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 4px;
+}
+
+.terminal-header-suggest {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 400;
+  font-family: Menlo, Monaco, "Courier New", monospace;
+}
+
+.terminal-header-suggest__label {
+  flex-shrink: 0;
+  color: var(--ant-color-text-tertiary);
+}
+
+.terminal-header-suggest__command {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: inherit;
+  color: var(--ant-color-text);
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.terminal-header-suggest__tab {
+  flex-shrink: 0;
+  padding: 0 4px;
+  font-size: 10px;
+  color: var(--ant-color-text-quaternary);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 4px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.terminal-header-title {
+  line-height: 1.2;
 }
 
 .terminal-header-shell {
@@ -56,13 +142,20 @@
 }
 
 .terminal-header-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  margin: 0;
   border: none;
   background: transparent;
   color: var(--ant-color-text-tertiary);
-  font-size: 18px;
+  font-size: 14px;
   line-height: 1;
   cursor: pointer;
-  padding: 2px 4px;
+  padding: 0;
 }
 
 .terminal-header-close:hover {
@@ -100,6 +193,8 @@
   background: var(--terminal-background);
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   box-sizing: border-box;
+  /* 内边距放在容器上，避免 .xterm 自带 padding 导致 FitAddon 多算行数、顶部出现空行 */
+  padding: 8px 12px;
 }
 
 .terminal-surface .xterm,
@@ -112,11 +207,50 @@
   height: 100%;
   width: 100%;
   box-sizing: border-box;
-  padding: 8px 12px 8px;
 }
 
 .terminal-surface .xterm-viewport {
   height: 100% !important;
+  /* DOM 模式下列宽行会把 .xterm-screen 撑得很宽，限制在视口内横向滚动 */
+  overflow-x: auto;
+}
+
+/*
+ * xterm 用 helper textarea 接键盘/IME，运行时会内联 left/top/width/height（约 20×20）并叠在字符上。
+ * 必须用 !important 压过内联样式，移到屏外且不参与点击，否则会挡住 prompt 里的字形。
+ */
+.terminal-surface .xterm .xterm-helpers {
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.terminal-surface .xterm .xterm-helper-textarea {
+  position: absolute !important;
+  left: -9999px !important;
+  top: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  z-index: -1 !important;
+  opacity: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  margin: 0 !important;
+  outline: none !important;
+  background: transparent !important;
+  color: transparent !important;
+  caret-color: transparent !important;
+  resize: none !important;
+  box-shadow: none !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+  clip-path: none !important;
+}
+
+.terminal-surface .xterm .xterm-helper-textarea:focus {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .terminal-surface .composition-view {
