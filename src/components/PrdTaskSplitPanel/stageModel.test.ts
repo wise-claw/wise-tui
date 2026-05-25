@@ -101,6 +101,31 @@ describe("buildRequirementAssistantStageItems", () => {
     expect(stages.find((stage) => stage.key === "spec")?.label).toBe("Spec 反哺中");
   });
 
+  test("marks Spec done after durable feedback is recorded", () => {
+    const stages = buildRequirementAssistantStageItems({
+      hasInput: true,
+      parsing: false,
+      hasPlannedSummary: false,
+      hasResult: true,
+      allTasksConfirmed: true,
+      hasMaterializedResult: true,
+      executionStatus: "succeeded",
+      lifecycleStages: [
+        { key: "dispatch", label: "Dispatch", status: "done" },
+        { key: "run", label: "Run", status: "done" },
+        { key: "verify", label: "Verify", status: "done" },
+        { key: "spec", label: "Spec", status: "done" },
+      ],
+    });
+
+    expect(statusByKey(stages)).toMatchObject({
+      run: "done",
+      verify: "done",
+      spec: "done",
+    });
+    expect(stages.find((stage) => stage.key === "spec")?.label).toBe("Spec 已反哺");
+  });
+
   test("keeps execution active and failed when fanout fails", () => {
     const stages = buildRequirementAssistantStageItems({
       hasInput: true,

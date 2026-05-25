@@ -230,7 +230,7 @@ setProjects((prev) => prev.map((p) => (p.id === projectId ? updatedProject : p))
 - `writeMissionToTrellis` must preserve the service-level fan-out snapshots on each `WizardWriteResult` and stream them upward through `onFanoutSnapshot`. PRD split UI must consume those real snapshots instead of synthesizing success from `childTasks`.
 - `ExecutionFanoutSnapshot.lifecycleStages` is the product-visible Loop state: `Dispatch -> Run -> Verify -> Spec`. A successful implement fan-out marks `Run` done and starts `Verify`; successful `trellis-check` marks `Verify` done and `Spec` active. Do not mark the whole Loop complete until Spec feedback is durable.
 - After materialized fan-out and Verify settle, `writeMissionToTrellis` records a Spec feedback entry through `recordPrdSplitLoopFeedback`. The entry must include six-step trace evidence, requirement ids, task anchors, materialized Trellis task paths, workflow run ids, Verify counts, and explicit Spec follow-ups.
-- The Spec feedback entry is both a real `.trellis/spec/**` file update and a runtime revision/event (`trellis_spec_revisions` plus `trellis.loop.spec.feedback.recorded`). If recording fails, task materialization must remain successful and only the feedback snapshot is omitted.
+- The Spec feedback entry is both a real `.trellis/spec/**` file update and a runtime revision/event (`trellis_spec_revisions` plus `trellis.loop.spec.feedback.recorded`). If recording succeeds, the emitted fan-out snapshot marks `Spec` done with the feedback file/revision. If recording fails, task materialization must remain successful and only the feedback snapshot is omitted.
 - The next Plan stage should read the durable feedback file as bounded context. Feedback may only bias repository boundary planning when a current `requirementId` and `bodyHash` match prior anchor evidence; it must not create requirements or override the current requirements index.
 - Each later `trellis-splitter` dispatch should read the durable feedback file and inject a bounded `prd-loop-feedback.md` bundle entry. The prompt must frame it as lessons/guidance only; `requirements-index.json` remains the current scope authority and feedback must not create new requirements.
 - UI must not present the materialized fan-out handoff as mission completion. Once `.trellis/tasks` are written and implement agents are dispatched, label the state as run or Verify status and route follow-up observation to the main session plus the Trellis runtime-events inspector.
@@ -246,7 +246,7 @@ setProjects((prev) => prev.map((p) => (p.id === projectId ? updatedProject : p))
 - Implement fan-out succeeds -> `trellis-check` is dispatched against the same materialized Trellis task refs.
 - Verify succeeds -> UI status is `Run` done / `Verify` done / `Spec` active; do not show “闭环完成” until durable feedback succeeds.
 - Verify fails -> UI status is `Run` done / `Verify` failed / `Spec` waiting; keep implementation counts separate from Verify counts.
-- Spec feedback recording succeeds -> Spec timeline shows `.trellis/spec/guides/prd-assistant-loop-feedback.md` and runtime events include `trellis.loop.spec.feedback.recorded`; `Spec` becomes the active continuation point.
+- Spec feedback recording succeeds -> Spec timeline shows `.trellis/spec/guides/prd-assistant-loop-feedback.md`, runtime events include `trellis.loop.spec.feedback.recorded`, and the runtime lifecycle marks `Spec` done with the recorded file/revision.
 - Next plan after feedback -> planner context includes bounded feedback; only current requirement ids with matching body hashes can influence repo assignment.
 - Next split after feedback -> splitter bundle includes bounded `prd-loop-feedback.md`; missing feedback file is non-blocking.
 - User wants final session record -> return to main session / Trellis finish flow; PRD split UI should not mutate journals directly.
@@ -255,7 +255,8 @@ setProjects((prev) => prev.map((p) => (p.id === projectId ? updatedProject : p))
 
 - Good: two source tasks in two waves produce two `.trellis/tasks/...` workflow task ids; the second wave depends on the first materialized ref.
 - Good: a single task card action writes one child task and immediately dispatches exactly one implement subagent.
-- Good: after successful Verify, the split panel offers “回主会话” and “运行透镜” actions, shows `Run` done / `Verify` done / `Spec` active, and keeps the execution plan inspectable.
+- Good: after successful Verify but before feedback recording, the split panel offers “回主会话” and “运行透镜” actions, shows `Run` done / `Verify` done / `Spec` active, and keeps the execution plan inspectable.
+- Good: after durable Spec feedback records, the split panel shows `Run` done / `Verify` done / `Spec` done and the runtime message names the feedback file/revision.
 - Good: each PRD split fan-out appends a compact Spec feedback entry that future agents can read before the next split/development loop.
 - Good: the next Plan stage receives recent Spec feedback as bounded context and reuses prior repo boundaries only for unchanged current requirement anchors.
 - Good: the next `trellis-splitter` run receives recent loop feedback as bounded guidance and still anchors every task to current `requirements-index.json`.
@@ -278,6 +279,7 @@ setProjects((prev) => prev.map((p) => (p.id === projectId ? updatedProject : p))
 - Regression test incomplete `childTasks` output rejects before dispatch.
 - Regression test `writeMissionToTrellis` stores fan-out snapshots on write results and invokes `onFanoutSnapshot`.
 - Regression test `writeMissionToTrellis` records PRD split loop feedback with cluster/task/anchor/runtime evidence.
+- Regression test successful feedback recording pushes a final fan-out snapshot with `Spec` done.
 - Unit test PRD split loop feedback markdown renders the six-step trace and Verify/Spec follow-ups.
 - Unit test Plan-stage feedback hints only route current requirement ids whose body hash still matches the feedback anchor.
 - Unit test next splitter dispatch includes bounded `prd-loop-feedback.md` when feedback exists and treats it as guidance.

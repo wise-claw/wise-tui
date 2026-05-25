@@ -53,6 +53,11 @@ export interface ExecutionFanoutResult extends ExecutionFanoutSnapshot {
   materializedResult: WriteClusterTasksOutput;
 }
 
+export interface SpecFeedbackCompletionRef {
+  filePath: string;
+  revisionId: string;
+}
+
 export interface ExecutionFanoutWaveRun {
   waveIndex: number;
   taskIds: string[];
@@ -298,6 +303,35 @@ export function buildExecutionFanoutLoopStages(
   });
 }
 
+export function markExecutionFanoutSpecFeedbackRecorded(
+  snapshot: ExecutionFanoutSnapshot,
+  feedback: SpecFeedbackCompletionRef,
+): ExecutionFanoutSnapshot {
+  if (!canCompleteSpecStage(snapshot)) return snapshot;
+  const baseStages = snapshot.lifecycleStages && snapshot.lifecycleStages.length > 0
+    ? snapshot.lifecycleStages
+    : buildExecutionFanoutLoopStages(snapshot.status, "spec");
+  const feedbackMessage = `Spec 反哺已记录：${feedback.filePath} (${feedback.revisionId})`;
+  return {
+    ...snapshot,
+    status: "succeeded",
+    lifecycleStages: baseStages.map((stage) => ({
+      ...stage,
+      status: "done",
+      message: stage.key === "spec" ? feedbackMessage : loopStageMessage(stage.key, "done"),
+    })),
+    message: feedbackMessage,
+  };
+}
+
+function canCompleteSpecStage(snapshot: ExecutionFanoutSnapshot): boolean {
+  if (snapshot.status !== "succeeded") return false;
+  if ((snapshot.failedCount ?? 0) > 0 || (snapshot.verifyFailedCount ?? 0) > 0) return false;
+  const lifecycleStages = snapshot.lifecycleStages ?? [];
+  const verifyStage = lifecycleStages.find((stage) => stage.key === "verify");
+  return !verifyStage || verifyStage.status === "done";
+}
+
 function loopStageMessage(
   stage: ExecutionFanoutLoopStageKey,
   status: ExecutionFanoutLoopStageStatus,
@@ -309,6 +343,7 @@ function loopStageMessage(
     if (status === "failed") return "校验失败";
     return status === "active" ? "校验接续中" : "等待校验";
   }
+  if (status === "done") return "Spec 反哺已记录";
   return status === "active" ? "Spec 反哺中" : "等待反哺";
 }
 

@@ -794,6 +794,7 @@ describe("runMissionActions · runtime ledger parity", () => {
       return fanoutSnapshot;
     });
     const snapshots: string[] = [];
+    const specStages: string[] = [];
     const state = makeState({
       stage: "review",
       activeMissionId: "mission-p1-hash",
@@ -833,18 +834,24 @@ describe("runMissionActions · runtime ledger parity", () => {
     const api = makeApi(state);
 
     await writeMissionToTrellis(api, {
-      onFanoutSnapshot: (clusterId, snapshot) => snapshots.push(`${clusterId}:${snapshot.workflowRunId}:${snapshot.status}`),
+      onFanoutSnapshot: (clusterId, snapshot) => {
+        snapshots.push(`${clusterId}:${snapshot.workflowRunId}:${snapshot.status}`);
+        const specStage = snapshot.lifecycleStages?.find((stage) => stage.key === "spec");
+        if (specStage) specStages.push(specStage.status);
+      },
     });
 
     expect(snapshots).toContain("cluster-fe:wf-1:succeeded");
+    expect(specStages).toEqual(["active", "active", "done"]);
     expect(api.addWriteResult).toHaveBeenCalledWith(expect.objectContaining({
       clusterId: "cluster-fe",
       fanoutSnapshot: expect.objectContaining({
         workflowRunId: "wf-1",
         lifecycleStages: expect.arrayContaining([
           expect.objectContaining({ key: "verify", status: "done" }),
-          expect.objectContaining({ key: "spec", status: "active" }),
+          expect.objectContaining({ key: "spec", status: "done" }),
         ]),
+        message: expect.stringContaining("prd-assistant-loop-feedback.md"),
       }),
     }));
   });

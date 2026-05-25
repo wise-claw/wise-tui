@@ -100,6 +100,7 @@ function requirementLifecycleStageLabel(
   }
   if (key === "spec") {
     if (status === "active") return "Spec 反哺中";
+    if (status === "done") return "Spec 已反哺";
   }
   return null;
 }

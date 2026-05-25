@@ -23,6 +23,7 @@ import {
 } from "../../../services/prdSplit/materializedFanoutBridge";
 import { recordPrdSplitLoopFeedback } from "../../../services/prdSplit/specFeedback";
 import type { ExecutionFanoutSnapshot } from "../../../services/prdSplit/executionFanout";
+import { markExecutionFanoutSpecFeedbackRecorded } from "../../../services/prdSplit/executionFanout";
 import {
   buildPrdSplitMissionAssignmentId,
   buildPrdSplitMissionId,
@@ -1100,9 +1101,6 @@ export async function writeMissionToTrellis(
         }
       }
     }
-    for (const result of writeResults.filter((result) => !result.error)) {
-      api.addWriteResult({ ...result });
-    }
     const specFeedback = await recordPrdSplitLoopFeedbackSafe(state, {
       missionId: mission?.missionId ?? state.activeMissionId,
       workflowId: workflowGraphResult?.workflowId ?? null,
@@ -1110,6 +1108,21 @@ export async function writeMissionToTrellis(
       writeResults,
       fanoutFailedCount,
     });
+    if (specFeedback) {
+      for (const result of writeResults) {
+        if (!result.fanoutSnapshot) continue;
+        const completedSnapshot = markExecutionFanoutSpecFeedbackRecorded(result.fanoutSnapshot, {
+          filePath: specFeedback.filePath,
+          revisionId: specFeedback.revisionId,
+        });
+        if (completedSnapshot === result.fanoutSnapshot) continue;
+        result.fanoutSnapshot = completedSnapshot;
+        options.onFanoutSnapshot?.(result.clusterId, completedSnapshot);
+      }
+    }
+    for (const result of writeResults.filter((result) => !result.error)) {
+      api.addWriteResult({ ...result });
+    }
     await persistMissionSnapshot(api, "done", "completed", "mission.write.completed", {
       writeResultCount: writeResults.length,
       workflowId: workflowGraphResult?.workflowId ?? null,

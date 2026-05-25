@@ -4,7 +4,9 @@ import type { WorkflowFacade } from "../../types/workflow";
 import {
   buildExecutionFanoutLoopStages,
   buildMaterializedExecutionWaves,
+  markExecutionFanoutSpecFeedbackRecorded,
   runMaterializedSplitTasksFanout,
+  type ExecutionFanoutSnapshot,
 } from "./executionFanout";
 import type { WriteClusterTasksOutput } from "./trellisWriter";
 
@@ -299,6 +301,58 @@ describe("buildExecutionFanoutLoopStages", () => {
       ["verify", "waiting"],
       ["spec", "waiting"],
     ]);
+  });
+
+  test("marks Spec done only after durable feedback is recorded", () => {
+    const snapshot: ExecutionFanoutSnapshot = {
+      status: "succeeded",
+      workflowRunId: "wf-1",
+      workflowRunIds: ["wf-1"],
+      totalCount: 1,
+      doneCount: 1,
+      failedCount: 0,
+      verifyDoneCount: 1,
+      verifyFailedCount: 0,
+      waves: [],
+      lifecycleStages: buildExecutionFanoutLoopStages("succeeded", "spec"),
+      message: "校验完成：通过 1，失败 0。等待 Spec 反哺。",
+    };
+
+    const completed = markExecutionFanoutSpecFeedbackRecorded(snapshot, {
+      filePath: ".trellis/spec/guides/prd-assistant-loop-feedback.md",
+      revisionId: "rev-1",
+    });
+
+    expect(completed.lifecycleStages?.map((stage) => [stage.key, stage.status])).toEqual([
+      ["dispatch", "done"],
+      ["run", "done"],
+      ["verify", "done"],
+      ["spec", "done"],
+    ]);
+    expect(completed.message).toContain("prd-assistant-loop-feedback.md");
+  });
+
+  test("does not complete Spec when Verify failed", () => {
+    const snapshot: ExecutionFanoutSnapshot = {
+      status: "failed",
+      workflowRunId: "wf-1",
+      workflowRunIds: ["wf-1"],
+      totalCount: 1,
+      doneCount: 1,
+      failedCount: 0,
+      verifyDoneCount: 0,
+      verifyFailedCount: 1,
+      waves: [],
+      lifecycleStages: buildExecutionFanoutLoopStages("failed", "verify"),
+      message: "校验失败",
+    };
+
+    const completed = markExecutionFanoutSpecFeedbackRecorded(snapshot, {
+      filePath: ".trellis/spec/guides/prd-assistant-loop-feedback.md",
+      revisionId: "rev-1",
+    });
+
+    expect(completed).toBe(snapshot);
   });
 });
 
