@@ -249,3 +249,36 @@ Created Trellis target resolver for Workspace/Standalone Repo, connected PrdTask
 ### Next Steps
 
 - None - task complete
+
+
+## Session 8: 需求助手运行闭环状态
+
+**Date**: 2026-05-25
+**Task**: 需求助手运行闭环状态
+**Branch**: `main`
+
+### Summary
+
+打通需求助手落盘后真实 fan-out 快照透传，运行队列展示 Dispatch/Run/Verify/Spec 阶段，并把 Verify active / Spec waiting 契约写回 frontend quality spec。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e3555e9` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
