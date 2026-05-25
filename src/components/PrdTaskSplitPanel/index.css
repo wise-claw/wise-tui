@@ -2241,72 +2241,156 @@
   min-height: 0;
 }
 
-.app-prd-task-panel__task-title-row {
+.app-prd-task-panel__task-header-premium {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding-block: 2px;
+}
+
+.app-prd-task-panel__task-header-title-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
   width: 100%;
+  gap: 8px;
 }
 
-.app-prd-task-panel__task-title-row-main {
-  display: inline-flex;
+.app-prd-task-panel__task-header-title-left {
+  display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
-  flex: 1;
 }
 
-.app-prd-task-panel__task-title-row-main > span:first-child {
-  min-width: 0;
+.app-prd-task-panel__task-header-title-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+  white-space: nowrap;
 }
 
-.app-prd-task-panel__task-title-row-tools {
+.app-prd-task-panel__task-header-badge {
   display: inline-flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-.app-prd-task-panel__task-toolbar-btn.ant-btn-sm {
-  height: 18px;
-  padding-inline: 5px;
+  justify-content: center;
+  padding: 0 6px;
+  height: 16px;
+  border-radius: 8px;
+  background: var(--ant-color-fill-tertiary, #f0f0f0);
+  color: var(--ant-color-text-secondary, #595959);
   font-size: 10px;
-  border-radius: 5px;
+  font-weight: 600;
 }
 
-.app-prd-task-panel__task-toolbar-btn.ant-btn {
+.app-prd-task-panel__unmet-trigger-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  height: 18px;
+  border: 1px solid rgba(255, 77, 79, 0.25);
+  background: rgba(255, 77, 79, 0.05);
+  border-radius: 999px;
+  color: var(--ant-color-error);
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
   line-height: 1;
 }
 
-.app-prd-task-panel__task-toolbar-segmented.ant-segmented {
+.app-prd-task-panel__unmet-trigger-pill:hover {
+  background: rgba(255, 77, 79, 0.10);
+  border-color: rgba(255, 77, 79, 0.45);
+}
+
+.app-prd-task-panel__unmet-dot-anim {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ant-color-error);
+  position: relative;
+  display: inline-block;
+}
+
+.app-prd-task-panel__unmet-dot-anim::after {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  right: -1px;
+  bottom: -1px;
+  border-radius: 50%;
+  border: 1px solid var(--ant-color-error);
+  animation: status-pulsate 1.6s infinite ease-in-out;
+  opacity: 0;
+}
+
+.app-prd-task-panel__task-primary-action-btn.ant-btn-sm {
+  height: 20px;
+  padding-inline: 8px;
   font-size: 11px;
   border-radius: 6px;
+  font-weight: 500;
+  line-height: 1;
 }
 
-.app-prd-task-panel__task-toolbar-segmented.ant-segmented.ant-segmented-sm {
+.app-prd-task-panel__task-header-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.app-prd-task-panel__task-toolbar-segmented-premium.ant-segmented {
+  font-size: 10px;
+  border-radius: 6px;
   padding: 1px;
+  background: var(--ant-color-fill-tertiary, #f0f0f0);
 }
 
-.app-prd-task-panel__task-toolbar-segmented.ant-segmented .ant-segmented-item-label {
+.app-prd-task-panel__task-toolbar-segmented-premium.ant-segmented .ant-segmented-item-label {
   min-height: 16px;
-  padding: 0 5px;
+  padding: 0 4px;
   line-height: 16px;
   font-size: 10px;
 }
 
-.app-prd-task-panel__task-toolbar-segmented.ant-segmented .ant-segmented-thumb {
-  background: rgba(22, 119, 255, 0.18);
+.app-prd-task-panel__task-toolbar-segmented-premium.ant-segmented .ant-segmented-thumb {
+  background: rgba(22, 119, 255, 0.12);
 }
 
-.app-prd-task-panel__task-toolbar-segmented.ant-segmented .ant-segmented-item-selected {
+.app-prd-task-panel__task-toolbar-segmented-premium.ant-segmented .ant-segmented-item-selected {
   color: #1677ff;
   font-weight: 600;
 }
 
-.app-prd-task-panel__task-title-row-tools > .ant-space {
-  min-width: 0;
+.app-prd-task-panel__task-header-buttons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.app-prd-task-panel__task-toolbar-action-btn.ant-btn-sm {
+  height: 18px;
+  padding-inline: 6px;
+  font-size: 10px;
+  border-radius: 5px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-prd-task-panel__task-toolbar-action-btn.is-clear-all.ant-btn-sm {
+  padding-inline: 4px 6px;
+  gap: 2px;
 }
 
 .app-prd-task-panel__unmet-trigger {
