@@ -402,6 +402,7 @@ body {
 /* MCP / skills.sh / 代码图谱：叠在主内容+右栏之上 */
 .app-mcp-hub-overlay,
 .app-skills-hub-overlay,
+.app-scheduled-tasks-overlay,
 .app-code-graph-overlay {
   position: absolute;
   inset: 0;
@@ -454,6 +455,7 @@ body {
 
 .app-mcp-hub-overlay > .app-mcp-hub-root,
 .app-skills-hub-overlay > .app-skills-hub-root,
+.app-scheduled-tasks-overlay > .app-scheduled-tasks-hub-root,
 .app-code-graph-overlay > .app-code-graph-panel,
 .wise-cc-wf-studio-overlay > .wise-cc-wf-studio-overlay-body {
   flex: 1 1 0%;

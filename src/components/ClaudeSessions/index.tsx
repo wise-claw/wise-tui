@@ -1221,6 +1221,8 @@ interface Props {
   onOpenWorkflowConfig?: () => void;
   /** 从会话快捷条「更多」直达指定内置助手对话页 */
   onOpenBuiltinAssistant?: (assistantId: string) => void;
+  /** 打开当前仓库定时任务叠层（主区+右栏，与技能市场同构） */
+  onOpenRepositoryScheduledTasks?: () => void;
   employees?: EmployeeItem[];
   mentionEmployees?: EmployeeItem[];
   composerProjectRoleTagOptions?: ReadonlyArray<import("../../utils/projectRoleTagOptions").RoleTagOption>;
@@ -1335,6 +1337,7 @@ export function ClaudeSessions({
   onAutoFixRunError: onAutoFixRunErrorFromProps,
   onOpenWorkflowConfig,
   onOpenBuiltinAssistant,
+  onOpenRepositoryScheduledTasks,
   employees = [],
   mentionEmployees = [],
   composerProjectRoleTagOptions = [],
@@ -1683,6 +1686,7 @@ export function ClaudeSessions({
                   onSwitchSession={handleSwitchToSession}
                   onCreateNewSession={handleCreateSecondarySession}
                   onOpenBuiltinAssistant={onOpenBuiltinAssistant}
+                  onOpenRepositoryScheduledTasks={onOpenRepositoryScheduledTasks}
                   onSend={onSendMessage}
                   onExecute={onExecuteSession}
                   onSessionModelChange={(model) => onUpdateSessionModel(secondarySession.id, model)}
@@ -1769,6 +1773,7 @@ export function ClaudeSessions({
             onSwitchSession={handleSwitchToSession}
             onCreateNewSession={handleCreatePrimarySession}
             onOpenBuiltinAssistant={onOpenBuiltinAssistant}
+            onOpenRepositoryScheduledTasks={onOpenRepositoryScheduledTasks}
             onSend={onSendMessage}
             onExecute={onExecuteSession}
             onSessionModelChange={(model) => onUpdateSessionModel(activeSession.id, model)}

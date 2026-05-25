@@ -35,6 +35,10 @@ import { ProgressMonitorDrawer } from "./ProgressMonitorDrawer";
 import { RepositoryFileEditorPanel } from "./RepositoryFileEditorPanel";
 import { RepositoryFilePreviewModal } from "./RepositoryFilePreviewModal";
 import { SkillsHub } from "./SkillsHub";
+import {
+  RepositoryScheduledTasksModal,
+  type ScheduledTasksOverlayTarget,
+} from "./RepositoryScheduledTasksModal";
 import { AutomationPanel } from "./AutomationPanel";
 import type * as PrdTaskSplitPanelModule from "./PrdTaskSplitPanel";
 import { resolveCockpitHubPane, type InspectTool, type ViewMode } from "../types/viewMode";
@@ -302,6 +306,11 @@ export interface AppWorkspaceLayoutProps {
   cockpitSurfaceOpenRequestKey: number;
   /** 需求拆分助手全屏：收起左栏，主区仅展示 PRD 拆分面板 */
   cockpitPrdSplitFullscreen?: boolean;
+  scheduledTasksOverlay?: ScheduledTasksOverlayTarget | null;
+  onCloseScheduledTasksOverlay?: () => void;
+  scheduledTasksOverlayEmployees?: EmployeeItem[];
+  scheduledTasksOverlayWorkflowTemplates?: WorkflowTemplateItem[];
+  scheduledTasksOverlayWorkflowGraphsByWorkflowId?: Record<string, WorkflowGraph>;
   onCockpitActiveAssistantIdChange?: (assistantId: string | null) => void;
   commandPaletteProps: ComponentProps<typeof CommandPalette>;
   mcpHubProps: ComponentProps<typeof McpHub>;
@@ -392,6 +401,11 @@ export function AppWorkspaceLayout({
   cockpitSurfaceResumeAssistantId,
   cockpitSurfaceOpenRequestKey,
   cockpitPrdSplitFullscreen = false,
+  scheduledTasksOverlay = null,
+  onCloseScheduledTasksOverlay,
+  scheduledTasksOverlayEmployees = [],
+  scheduledTasksOverlayWorkflowTemplates = [],
+  scheduledTasksOverlayWorkflowGraphsByWorkflowId = {},
   onCockpitActiveAssistantIdChange,
   commandPaletteProps,
   mcpHubProps,
@@ -719,6 +733,22 @@ export function AppWorkspaceLayout({
                       <div className="app-skills-hub-overlay" role="region" aria-label="skills.sh 技能目录">
                         <ErrorBoundary type="local" fallbackTitle="技能目录面板出错">
                           <SkillsHub {...skillsHubProps} />
+                        </ErrorBoundary>
+                      </div>
+                    ) : null}
+                    {scheduledTasksOverlay && onCloseScheduledTasksOverlay ? (
+                      <div className="app-scheduled-tasks-overlay" role="region" aria-label="定时任务">
+                        <ErrorBoundary type="local" fallbackTitle="定时任务面板出错">
+                          <RepositoryScheduledTasksModal
+                            open
+                            presentation="overlay"
+                            onClose={onCloseScheduledTasksOverlay}
+                            repositoryPath={scheduledTasksOverlay.path}
+                            repositoryDisplayName={scheduledTasksOverlay.name}
+                            employees={scheduledTasksOverlayEmployees}
+                            workflowTemplates={scheduledTasksOverlayWorkflowTemplates}
+                            workflowGraphsByWorkflowId={scheduledTasksOverlayWorkflowGraphsByWorkflowId}
+                          />
                         </ErrorBoundary>
                       </div>
                     ) : null}

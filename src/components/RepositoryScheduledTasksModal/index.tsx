@@ -1,5 +1,6 @@
-import { PlusOutlined } from "@ant-design/icons";
+import { CloseOutlined, PlusOutlined } from "@ant-design/icons";
 import { Button, Drawer, Form, Input, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Tooltip, Typography, message } from "antd";
+import { WISE_UI_EVENT_SCHEDULED_TASKS_CHANGED } from "../../constants/workflowUiEvents";
 import type { CcWorkflowListItem } from "../../services/ccWorkflowStudioFiles";
 import { listCcWorkflowStudioWorkflows } from "../../services/ccWorkflowStudioFiles";
 import type { FormInstance } from "antd/es/form";
@@ -31,6 +32,13 @@ import {
 import { ScheduledTaskCronField } from "./ScheduledTaskCronField";
 import "./index.css";
 
+export type ScheduledTasksPresentation = "modal" | "overlay";
+
+export interface ScheduledTasksOverlayTarget {
+  path: string;
+  name: string;
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -39,6 +47,12 @@ interface Props {
   employees: EmployeeItem[];
   workflowTemplates?: WorkflowTemplateItem[];
   workflowGraphsByWorkflowId?: Record<string, WorkflowGraph>;
+  /** 主区+右栏叠层（与技能市场一致）；默认 overlay */
+  presentation?: ScheduledTasksPresentation;
+}
+
+function notifyScheduledTasksChanged(): void {
+  window.dispatchEvent(new CustomEvent(WISE_UI_EVENT_SCHEDULED_TASKS_CHANGED));
 }
 
 function formatNextRunHint(cronExpression: string): string {
@@ -63,9 +77,11 @@ export function RepositoryScheduledTasksModal({
   open,
   onClose,
   repositoryPath,
+  repositoryDisplayName,
   employees,
   workflowTemplates = [],
   workflowGraphsByWorkflowId = {},
+  presentation = "overlay",
 }: Props) {
   const [loading, setLoading] = useState(false);
   const [tasks, setTasks] = useState<RepositoryScheduledClaudeTask[]>([]);
@@ -249,9 +265,15 @@ export function RepositoryScheduledTasksModal({
     setDrawerOpen(true);
   };
 
+  const handleDismiss = useCallback(() => {
+    onClose();
+    notifyScheduledTasksChanged();
+  }, [onClose]);
+
   const persistAll = async (next: RepositoryScheduledClaudeTask[]) => {
     await writeRepositoryScheduledClaudeTasks(repositoryPath.trim(), next);
     setTasks(next);
+    notifyScheduledTasksChanged();
   };
 
   const handleSaveForm = async () => {
@@ -368,6 +390,7 @@ export function RepositoryScheduledTasksModal({
     }
     const next = await patchRepositoryScheduledClaudeTask(repositoryPath.trim(), row.id, patch);
     setTasks(next);
+    notifyScheduledTasksChanged();
   };
 
   const columns: ColumnsType<RepositoryScheduledClaudeTask> = [
@@ -483,42 +506,96 @@ export function RepositoryScheduledTasksModal({
     },
   ];
 
+  const tableScrollY = tableBodyScrollHeight(presentation);
+  const hint = (
+    <Typography.Paragraph className="app-scheduled-tasks-panel__hint" style={{ marginBottom: 0 }}>
+      按 Cron 在后台触发：支持 Claude 提示词、仓库 Shell 脚本、CC Workflow Studio 工作流（Slash）三种方式。Claude / 工作流需绑定主会话且非空闲时跳过；脚本在仓库根目录执行。应用需保持运行。
+    </Typography.Paragraph>
+  );
+  const tableNode = (
+    <Table<RepositoryScheduledClaudeTask>
+      size="small"
+      rowKey="id"
+      loading={loading}
+      className="app-scheduled-tasks-panel__table"
+      tableLayout="fixed"
+      pagination={false}
+      scroll={{ y: tableScrollY }}
+      columns={columns}
+      dataSource={tasks}
+      locale={{ emptyText: "暂无定时任务" }}
+    />
+  );
+
+  const listBody = presentation === "overlay" ? (
+    <div className="app-scheduled-tasks-hub-root">
+      <header className="app-scheduled-tasks-hub-header">
+        <div className="app-scheduled-tasks-hub-header-top">
+          <div className="app-scheduled-tasks-hub-title-wrap">
+            <Typography.Title level={5} className="app-scheduled-tasks-hub-title">
+              定时任务
+            </Typography.Title>
+            {repositoryDisplayName.trim() ? (
+              <Typography.Text type="secondary" className="app-scheduled-tasks-hub-repo" ellipsis>
+                {repositoryDisplayName.trim()}
+              </Typography.Text>
+            ) : null}
+          </div>
+          <Space size={8}>
+            <Button type="primary" size="small" icon={<PlusOutlined />} onClick={openCreate}>
+              新建
+            </Button>
+            <Tooltip title="关闭" mouseEnterDelay={0.35}>
+              <Button
+                type="text"
+                size="small"
+                className="app-scheduled-tasks-hub-close-btn"
+                icon={<CloseOutlined />}
+                aria-label="关闭"
+                onClick={handleDismiss}
+              />
+            </Tooltip>
+          </Space>
+        </div>
+        {hint}
+      </header>
+      <div className="app-scheduled-tasks-hub-main">{tableNode}</div>
+    </div>
+  ) : (
+    <>
+      <div className="app-scheduled-tasks-modal__toolbar">
+        {hint}
+        <Button type="primary" size="small" icon={<PlusOutlined />} onClick={openCreate}>
+          新建
+        </Button>
+      </div>
+      {tableNode}
+    </>
+  );
+
+  if (!open) return null;
+
   return (
     <>
-      <Modal
-        open={open}
-        onCancel={onClose}
-        footer={null}
-        width={Math.min(920, typeof window !== "undefined" ? window.innerWidth - 40 : 920)}
-        destroyOnHidden
-        className="app-scheduled-tasks-modal"
-        title={(
-          <Space orientation="vertical" size={0}>
-            <Typography.Text strong>定时任务</Typography.Text>
-          </Space>
-        )}
-      >
-        <div className="app-scheduled-tasks-modal__toolbar">
-          <Typography.Paragraph className="app-scheduled-tasks-modal__hint" style={{ marginBottom: 0 }}>
-            按 Cron 在后台触发：支持 Claude 提示词、仓库 Shell 脚本、CC Workflow Studio 工作流（Slash）三种方式。Claude / 工作流需绑定主会话且非空闲时跳过；脚本在仓库根目录执行。应用需保持运行。
-          </Typography.Paragraph>
-          <Button type="primary" size="small" icon={<PlusOutlined />} onClick={openCreate}>
-            新建
-          </Button>
-        </div>
-        <Table<RepositoryScheduledClaudeTask>
-          size="small"
-          rowKey="id"
-          loading={loading}
-          className="app-scheduled-tasks-modal__table"
-          tableLayout="fixed"
-          pagination={false}
-          scroll={{ y: minTableBodyHeight() }}
-          columns={columns}
-          dataSource={tasks}
-          locale={{ emptyText: "暂无定时任务" }}
-        />
-      </Modal>
+      {presentation === "modal" ? (
+        <Modal
+          open={open}
+          onCancel={handleDismiss}
+          footer={null}
+          width={Math.min(920, typeof window !== "undefined" ? window.innerWidth - 40 : 920)}
+          destroyOnHidden
+          className="app-scheduled-tasks-modal"
+          title={(
+            <Space orientation="vertical" size={0}>
+              <Typography.Text strong>定时任务</Typography.Text>
+            </Space>
+          )}
+        >
+          {listBody}
+        </Modal>
+      ) : (
+        listBody
+      )}
 
       <Drawer
         title={tasks.some((t) => t.id === editing?.id) ? "编辑定时任务" : "新建定时任务"}
@@ -653,8 +730,11 @@ export function RepositoryScheduledTasksModal({
   );
 }
 
-function minTableBodyHeight(): number {
-  if (typeof window === "undefined") return 320;
+function tableBodyScrollHeight(presentation: ScheduledTasksPresentation): number {
+  if (typeof window === "undefined") return presentation === "overlay" ? 480 : 320;
+  if (presentation === "overlay") {
+    return Math.max(280, window.innerHeight - 240);
+  }
   return Math.max(200, Math.min(400, window.innerHeight - 280));
 }
 

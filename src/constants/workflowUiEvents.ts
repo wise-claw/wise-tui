@@ -1,5 +1,8 @@
 export const WORKFLOW_UI_EVENT_FOCUS_TASK_TOOL = "wise:focus-task-tool";
 
+/** 仓库定时任务列表变更或叠层关闭后，请求侧栏刷新角标汇总 */
+export const WISE_UI_EVENT_SCHEDULED_TASKS_CHANGED = "wise:scheduled-tasks-changed";
+
 export const WORKFLOW_UI_EVENT_APPLY_STARTER_PROMPT = "wise:apply-starter-prompt";
 
 /** CC Workflow Studio AI 编辑一键启动：在 Wise 当前仓库的 Claude 会话中执行 slash skill */

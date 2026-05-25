@@ -1,3 +1,103 @@
+/* 主区+右栏叠层（与技能市场同构） */
+.app-scheduled-tasks-hub-root {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 12px;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  background: var(--ant-color-bg-container);
+}
+
+.app-scheduled-tasks-hub-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--ant-color-fill-quaternary);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.app-scheduled-tasks-hub-header-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.app-scheduled-tasks-hub-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.app-scheduled-tasks-hub-title {
+  margin: 0 !important;
+  font-weight: 700 !important;
+  font-size: 14px !important;
+}
+
+.app-scheduled-tasks-hub-repo {
+  font-size: 12px;
+  max-width: 100%;
+}
+
+.app-scheduled-tasks-hub-close-btn {
+  flex-shrink: 0;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-scheduled-tasks-hub-close-btn:hover {
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-secondary);
+}
+
+.app-scheduled-tasks-hub-main {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0 2px 4px;
+}
+
+.app-scheduled-tasks-panel__hint,
+.app-scheduled-tasks-modal__hint {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ant-color-text-secondary);
+  max-width: 100%;
+}
+
+.app-scheduled-tasks-panel__table .ant-table,
+.app-scheduled-tasks-modal__table .ant-table {
+  font-size: 12px;
+  width: 100%;
+}
+
+.app-scheduled-tasks-panel__table .ant-table-cell,
+.app-scheduled-tasks-modal__table .ant-table-cell {
+  padding: 6px 8px !important;
+}
+
+.app-scheduled-tasks-panel__table .ant-table-content,
+.app-scheduled-tasks-panel__table .ant-table-body,
+.app-scheduled-tasks-modal__table .ant-table-content,
+.app-scheduled-tasks-modal__table .ant-table-body {
+  overflow-x: hidden !important;
+}
+
+.app-scheduled-tasks-panel__table .ant-table-cell-scrollbar,
+.app-scheduled-tasks-modal__table .ant-table-cell-scrollbar {
+  display: none !important;
+}
+
 .app-scheduled-tasks-modal .ant-modal-header {
   padding-bottom: 8px;
 }
@@ -8,31 +108,6 @@
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 10px;
-}
-
-.app-scheduled-tasks-modal__hint {
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--ant-color-text-secondary);
-  max-width: 520px;
-}
-
-.app-scheduled-tasks-modal__table .ant-table {
-  font-size: 12px;
-  width: 100%;
-}
-
-.app-scheduled-tasks-modal__table .ant-table-cell {
-  padding: 6px 8px !important;
-}
-
-.app-scheduled-tasks-modal__table .ant-table-content,
-.app-scheduled-tasks-modal__table .ant-table-body {
-  overflow-x: hidden !important;
-}
-
-.app-scheduled-tasks-modal__table .ant-table-cell-scrollbar {
-  display: none !important;
 }
 
 .app-scheduled-tasks-modal__cron,

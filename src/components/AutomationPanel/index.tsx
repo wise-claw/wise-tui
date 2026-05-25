@@ -265,6 +265,7 @@ export function AutomationPanel({
       {selectedRepository ? (
         <RepositoryScheduledTasksModal
           open={modalOpen}
+          presentation="modal"
           onClose={() => {
             setModalOpen(false);
             void refresh();

@@ -58,7 +58,6 @@ import { executeClaudeCodeAndWait, getClaudeConfigModel } from "../../services/c
 import { scheduleDirectOmcBatchAfterMacrotask } from "../../services/omcDirectBatchExecution";
 import { BackgroundInvocationDock } from "./BackgroundInvocationDock";
 import { PendingTaskQueuePanel } from "./PendingTaskQueuePanel";
-import { RepositoryScheduledTasksModal } from "../RepositoryScheduledTasksModal";
 import { usePendingTaskQueue } from "../../hooks/usePendingTaskQueue";
 import { useQuestionDockTabsForRepository } from "../../hooks/useQuestionDockTabs";
 import { buildClaudeSessionHoverTitle } from "../../utils/claudeSessionIdTooltip";
@@ -220,6 +219,7 @@ interface Props {
   onCreateNewSession?: () => void;
   /** 从快捷条「更多」直达指定内置助手对话页 */
   onOpenBuiltinAssistant?: (assistantId: string) => void;
+  onOpenRepositoryScheduledTasks?: () => void;
   onSend: (prompt: string) => void;
   onExecute: (
     sessionId: string,
@@ -457,6 +457,7 @@ export function ClaudeChat({
   initialNotificationPanelCollapsed = false,
   onCreateNewSession,
   onOpenBuiltinAssistant,
+  onOpenRepositoryScheduledTasks,
   onSend: _onSend,
   onExecute,
   onSessionModelChange,
@@ -1810,7 +1811,6 @@ export function ClaudeChat({
         : null;
 
   const [taskCompletionModalOpen, setTaskCompletionModalOpen] = useState(false);
-  const [scheduledTasksModalOpen, setScheduledTasksModalOpen] = useState(false);
   const [completionSearchText, setCompletionSearchText] = useState("");
   const [completionOwnerFilter, setCompletionOwnerFilter] = useState<TaskCompletionOwnerFilter>("all");
   const [completionStatusFilter, setCompletionStatusFilter] = useState<TaskCompletionStatusFilter>("all");
@@ -3647,7 +3647,8 @@ export function ClaudeChat({
                   type="button"
                   className="app-claude-session-tool-btn"
                   data-ui-anchor="session-scheduled-tasks-btn"
-                  onClick={() => setScheduledTasksModalOpen(true)}
+                  onClick={() => onOpenRepositoryScheduledTasks?.()}
+                  disabled={!onOpenRepositoryScheduledTasks}
                 >
                   <FieldTimeOutlined />
                   <span className="app-claude-session-tool-btn__text">定时任务</span>
@@ -3693,16 +3694,6 @@ export function ClaudeChat({
           </div>
         </div>
       )}
-
-      <RepositoryScheduledTasksModal
-        open={scheduledTasksModalOpen}
-        onClose={() => setScheduledTasksModalOpen(false)}
-        repositoryPath={repositoryScopePath}
-        repositoryDisplayName={sessionRepository?.name ?? session.repositoryName}
-        employees={employees}
-        workflowTemplates={workflowTemplates}
-        workflowGraphsByWorkflowId={workflowGraphsByWorkflowId}
-      />
 
       {SHOW_SESSION_TASK_COMPLETION_FEATURE ? (
         <Modal

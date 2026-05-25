@@ -31,7 +31,6 @@ import {
 import { ProjectNameModals } from "./LeftSidebar/ProjectNameModals";
 import { RepositoryAssociateModal } from "./LeftSidebar/RepositoryAssociateModal";
 import { RepositorySddModeModal } from "./LeftSidebar/RepositorySddModeModal";
-import { RepositoryScheduledTasksModal } from "./RepositoryScheduledTasksModal";
 import { SystemResourceInline } from "./LeftSidebar/SystemResourceInline";
 import type { LeftSidebarProps } from "./LeftSidebar/types";
 import { useProjectRepositorySidebarState } from "./LeftSidebar/useProjectRepositorySidebarState";
@@ -102,6 +101,8 @@ export function LeftSidebar({
   onRepositorySelect,
   onOpenInFinder,
   onOpenRepositoryInBrowser,
+  onOpenScheduledTasksForRepository: onOpenScheduledTasksForRepositoryProp,
+  onOpenScheduledTasksForProject: onOpenScheduledTasksForProjectProp,
   onCreateProjectTask,
   onCreateRepositoryTask,
   onOpenPromptsProject,
@@ -319,7 +320,7 @@ export function LeftSidebar({
   const codeGraphIndexStatusByRepoId = useSidebarCodeGraphIndexMap(
     useMemo(() => repositories.map((repository) => repository.id), [repositories]),
   );
-  const { byId: scheduledTasksByRepoId, refresh: refreshScheduledTasksMap } = useSidebarScheduledTasksMap(
+  const { byId: scheduledTasksByRepoId } = useSidebarScheduledTasksMap(
     repositories,
   );
   const {
@@ -334,22 +335,19 @@ export function LeftSidebar({
     projects,
     repositories,
   );
-  const [scheduledTasksModalRepository, setScheduledTasksModalRepository] = useState<{
-    path: string;
-    name: string;
-  } | null>(null);
-
-  const openScheduledTasksForRepository = useCallback((repository: Repository) => {
-    const path = repository.path?.trim();
-    if (!path) return;
-    setScheduledTasksModalRepository({
-      path,
-      name: repository.name?.trim() || repositoryFolderBasename(repository),
-    });
-  }, []);
+  const openScheduledTasksForRepository = useCallback(
+    (repository: Repository) => {
+      onOpenScheduledTasksForRepositoryProp?.(repository);
+    },
+    [onOpenScheduledTasksForRepositoryProp],
+  );
 
   const openScheduledTasksForProject = useCallback(
     (project: ProjectItem) => {
+      if (onOpenScheduledTasksForProjectProp) {
+        onOpenScheduledTasksForProjectProp(project);
+        return;
+      }
       let target: Repository | undefined;
       for (const repositoryId of project.repositoryIds) {
         const repository = repositories.find((item) => item.id === repositoryId);
@@ -364,7 +362,12 @@ export function LeftSidebar({
       }
       if (target) openScheduledTasksForRepository(target);
     },
-    [openScheduledTasksForRepository, repositories, scheduledTasksByRepoId],
+    [
+      onOpenScheduledTasksForProjectProp,
+      openScheduledTasksForRepository,
+      repositories,
+      scheduledTasksByRepoId,
+    ],
   );
 
   const dispatchOpenExecutableTasksDrawer = useCallback(() => {
@@ -780,18 +783,6 @@ export function LeftSidebar({
         onValueChange={repositorySddModeModal.setValue}
         onCancel={repositorySddModeModal.cancel}
         onSubmit={() => void repositorySddModeModal.submit()}
-      />
-      <RepositoryScheduledTasksModal
-        open={scheduledTasksModalRepository != null}
-        onClose={() => {
-          setScheduledTasksModalRepository(null);
-          void refreshScheduledTasksMap();
-        }}
-        repositoryPath={scheduledTasksModalRepository?.path ?? ""}
-        repositoryDisplayName={scheduledTasksModalRepository?.name ?? ""}
-        employees={employees}
-        workflowTemplates={workflowTemplates}
-        workflowGraphsByWorkflowId={workflowGraphsByWorkflowId}
       />
       <AppSettingsModal open={appSettingsOpen} onClose={() => setAppSettingsOpen(false)} />
     </Layout.Sider>

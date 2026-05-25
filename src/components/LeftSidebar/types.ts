@@ -103,6 +103,9 @@ export interface LeftSidebarProps {
   onRepositorySelect: (id: number | null) => void;
   onOpenInFinder: (repository: Repository) => void;
   onOpenRepositoryInBrowser: (repository: Repository) => void;
+  /** 打开主区+右栏定时任务叠层（由宿主渲染，与技能市场同构） */
+  onOpenScheduledTasksForRepository?: (repository: Repository) => void;
+  onOpenScheduledTasksForProject?: (project: ProjectItem) => void;
   onCreateProjectTask: (project: ProjectItem, mode: TaskMode) => void;
   onCreateRepositoryTask: (repository: Repository, mode: TaskMode) => void;
   onOpenPromptsProject?: (project: ProjectItem) => void;

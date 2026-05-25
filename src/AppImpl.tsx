@@ -42,6 +42,7 @@ import { openRepositoryRemoteInBrowser } from "./services/openRepositoryRemote";
 import { openInFinder } from "./services/repository";
 import { triggerCodeGraphProjectSearch, triggerCodeGraphReindex } from "./services/codeKnowledgeGraph";
 import { AppWorkspaceLayout } from "./components/AppWorkspaceLayout";
+import type { ScheduledTasksOverlayTarget } from "./components/RepositoryScheduledTasksModal";
 import { DEFAULT_PRD_SPLIT_ASSISTANT_ID } from "./services/assistantPromptLayers";
 import {
   readAuthorPaneFromSettings,
@@ -282,6 +283,7 @@ export default function App() {
   const [cockpitResumeAssistantId, setCockpitResumeAssistantId] = useState<string | null>(null);
   /** 点击返回时立刻撤掉需求拆分全屏叠层，避免等 viewMode 慢更新才消失 */
   const [prdSplitUiDismissed, setPrdSplitUiDismissed] = useState(false);
+  const [scheduledTasksOverlay, setScheduledTasksOverlay] = useState<ScheduledTasksOverlayTarget | null>(null);
   const [authorTrellisProjectId, setAuthorTrellisProjectId] = useState<string | null>(null);
   const [workspaceCreateRequest, setWorkspaceCreateRequest] = useState(0);
   const [standaloneRepoAddRequest, setStandaloneRepoAddRequest] = useState(0);
@@ -1297,6 +1299,19 @@ export default function App() {
       viewMode.enter({ kind: "chat" });
     });
   }, [viewMode]);
+
+  const openScheduledTasksForRepository = useCallback((repository: Repository) => {
+    const path = repository.path?.trim();
+    if (!path) return;
+    setScheduledTasksOverlay({
+      path,
+      name: repository.name?.trim() || repositoryFolderBasename(repository),
+    });
+  }, []);
+
+  const closeScheduledTasksOverlay = useCallback(() => {
+    setScheduledTasksOverlay(null);
+  }, []);
 
   /** 需求拆分助手：fixed 叠层盖住整窗（含左栏） */
   const cockpitPrdSplitFullscreen = useMemo(() => {
@@ -2555,6 +2570,7 @@ export default function App() {
         onRepositorySelect: handleSidebarRepositorySelectLeavingMcpHub,
         onOpenInFinder: handleOpenInFinder,
         onOpenRepositoryInBrowser: handleOpenRepositoryInBrowser,
+        onOpenScheduledTasksForRepository: openScheduledTasksForRepository,
         onCreateProjectTask: handleCreateProjectTask,
         onCreateRepositoryTask: handleCreateRepositoryTask,
         onOpenProjectTrellis: async (project) => {
@@ -2928,6 +2944,9 @@ export default function App() {
         terminalCollapsed,
         onOpenWorkflowConfig: openWorkflowConfigFromSidebar,
         onOpenBuiltinAssistant: openBuiltinAssistant,
+        onOpenRepositoryScheduledTasks: activeRepository
+          ? () => openScheduledTasksForRepository(activeRepository)
+          : undefined,
         employees,
         mentionEmployees,
         composerProjectRoleTagOptions,
@@ -3037,6 +3056,11 @@ export default function App() {
       cockpitSurfaceResumeAssistantId={cockpitResumeAssistantId}
       cockpitSurfaceOpenRequestKey={assistantOpenRequestKey}
       cockpitPrdSplitFullscreen={cockpitPrdSplitFullscreen}
+      scheduledTasksOverlay={scheduledTasksOverlay}
+      onCloseScheduledTasksOverlay={closeScheduledTasksOverlay}
+      scheduledTasksOverlayEmployees={employees}
+      scheduledTasksOverlayWorkflowTemplates={workflowTemplates}
+      scheduledTasksOverlayWorkflowGraphsByWorkflowId={workflowGraphsByWorkflowId}
       onCockpitActiveAssistantIdChange={(assistantId) => {
         setCockpitActiveAssistantId(assistantId);
         if (assistantId) setCockpitResumeAssistantId(assistantId);

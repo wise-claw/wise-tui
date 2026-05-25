@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { WISE_UI_EVENT_SCHEDULED_TASKS_CHANGED } from "../../constants/workflowUiEvents";
 import type { Repository } from "../../types";
 import { readRepositoryScheduledClaudeTasks } from "../../services/repositoryScheduledClaudeTasksStore";
 
@@ -64,6 +65,14 @@ export function useSidebarScheduledTasksMap(
       void refresh();
     }, 45_000);
     return () => window.clearInterval(timer);
+  }, [refresh]);
+
+  useEffect(() => {
+    const onChanged = () => {
+      void refresh();
+    };
+    window.addEventListener(WISE_UI_EVENT_SCHEDULED_TASKS_CHANGED, onChanged);
+    return () => window.removeEventListener(WISE_UI_EVENT_SCHEDULED_TASKS_CHANGED, onChanged);
   }, [refresh]);
 
   return { byId, refresh };
