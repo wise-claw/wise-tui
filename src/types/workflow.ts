@@ -1,4 +1,4 @@
-import type { TaskFlowStatus } from "../types";
+import type { TaskAnchorDescriptor, TaskFlowStatus } from "../types";
 
 export type WorkflowStage = "split" | "clarify" | "implement" | "verify" | "review" | "delivery";
 export type WorkflowStatus = "running" | "blocked" | "completed" | "failed" | "cancelled";
@@ -18,6 +18,10 @@ export interface TrellisExecutionMetadata {
   activeTaskPath?: string;
   /** Original PRD split task id before materializing into `.trellis/tasks/`. */
   sourceTaskId?: string;
+  /** Requirement anchors from the current PRD requirements index that produced this task. */
+  sourceRequirementIds?: string[];
+  /** Structured PRD text anchor for tracing execution back to the source requirement span. */
+  prdAnchor?: TaskAnchorDescriptor | null;
   parentTaskName?: string;
   childTaskName?: string;
   waveIndex?: number;

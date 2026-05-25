@@ -68,6 +68,14 @@ describe("TrellisWorkflowAdapter", () => {
       subagentType: "trellis-implement",
       executionMetadata: {
         activeTaskPath: ".trellis/tasks/05-19-prd/05-19-child",
+        sourceRequirementIds: ["REQ-1"],
+        prdAnchor: {
+          from: 12,
+          to: 48,
+          textHash: "req-1-body-hash",
+          contextBefore: "Before",
+          contextAfter: "After",
+        },
       },
       attempt: 7,
     });
@@ -76,6 +84,14 @@ describe("TrellisWorkflowAdapter", () => {
     expect(capturedPrompt.startsWith("Active task: .trellis/tasks/05-19-prd/05-19-child")).toBe(true);
     expect(capturedWorktreeTaskId).toBe("task-1");
     expect(result.artifactRefs).toContain("trellis://task/task-1/implement/attempt-7");
+    expect(result.progressSignals?.[0]?.metadata).toMatchObject({
+      sourceRequirementIds: ["REQ-1"],
+      prdAnchor: {
+        from: 12,
+        to: 48,
+        textHash: "req-1-body-hash",
+      },
+    });
   });
 
 
@@ -110,6 +126,14 @@ describe("TrellisWorkflowAdapter", () => {
           stage?: string;
           subagentType?: string;
           taskId?: string;
+          sourceRequirementIds?: string[];
+          prdAnchor?: {
+            from: number;
+            to: number;
+            textHash: string;
+            contextBefore: string;
+            contextAfter: string;
+          } | null;
         }
       | undefined;
     const adapter = new TrellisWorkflowAdapter({
@@ -133,6 +157,14 @@ describe("TrellisWorkflowAdapter", () => {
         ownerRepositoryName: "frontend app",
         ownerRepositoryPath: "/repo/frontend",
         repositoryType: "frontend",
+        sourceRequirementIds: ["REQ-1"],
+        prdAnchor: {
+          from: 12,
+          to: 48,
+          textHash: "req-1-body-hash",
+          contextBefore: "Before",
+          contextAfter: "After",
+        },
       },
       attempt: 2,
     });
@@ -145,6 +177,12 @@ describe("TrellisWorkflowAdapter", () => {
       stage: "implement",
       subagentType: "trellis-implement",
       taskId: "task-owner-1",
+      sourceRequirementIds: ["REQ-1"],
+      prdAnchor: {
+        from: 12,
+        to: 48,
+        textHash: "req-1-body-hash",
+      },
     });
     expect(capturedStreamUi).toMatchObject({
       ownerKind: "repository",
@@ -154,6 +192,12 @@ describe("TrellisWorkflowAdapter", () => {
       stage: "implement",
       subagentType: "trellis-implement",
       taskId: "task-owner-1",
+      sourceRequirementIds: ["REQ-1"],
+      prdAnchor: {
+        from: 12,
+        to: 48,
+        textHash: "req-1-body-hash",
+      },
     });
   });
 

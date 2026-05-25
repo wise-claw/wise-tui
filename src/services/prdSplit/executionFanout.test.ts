@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { TaskItem } from "../../types";
+import type { TaskAnchorDescriptor, TaskItem } from "../../types";
 import type { WorkflowFacade } from "../../types/workflow";
 import {
   buildExecutionFanoutLoopStages,
@@ -46,6 +46,48 @@ describe("buildMaterializedExecutionWaves", () => {
 });
 
 describe("runMaterializedSplitTasksFanout", () => {
+  test("carries PRD requirement anchors into snapshots and workflow execution metadata", async () => {
+    const capturedExecutions: NonNullable<Parameters<WorkflowFacade["executeTask"]>[0]["executionMetadata"]>[] = [];
+    const snapshots: ExecutionFanoutSnapshot[] = [];
+
+    const result = await runMaterializedSplitTasksFanout({
+      facade: facadeCapturingExecutionMetadata(capturedExecutions),
+      sessionId: "prd-split:parent",
+      repositoryPath: "/repo/web",
+      projectRootPath: "/work/project",
+      sourceTasks: [
+        task("task-a", "API", [], ["REQ-1"], anchor()),
+        task("task-b", "UI", ["task-a"], ["REQ-2"]),
+      ],
+      materializedResult: materialized(),
+      parallelGroups: [["task-a"], ["task-b"]],
+      onSnapshot: (snapshot) => snapshots.push(snapshot),
+    });
+
+    expect(result.waves[0]?.tasks[0]).toMatchObject({
+      sourceTaskId: "task-a",
+      sourceRequirementIds: ["REQ-1"],
+      prdAnchor: {
+        from: 10,
+        to: 42,
+        textHash: "req-1-body-hash",
+      },
+    });
+    expect(snapshots.at(-1)?.waves[0]?.tasks[0]?.sourceRequirementIds).toEqual(["REQ-1"]);
+    expect(capturedExecutions[0]).toMatchObject({
+      activeTaskPath: ".trellis/tasks/05-19-prd/05-19-api",
+      sourceTaskId: "task-a",
+      sourceRequirementIds: ["REQ-1"],
+      prdAnchor: {
+        from: 10,
+        to: 42,
+        textHash: "req-1-body-hash",
+      },
+      childTaskName: "05-19-api",
+      parentTaskName: "05-19-prd",
+    });
+  });
+
   test("runs waves in sequence and reuses the workflowRunId returned by the first wave", async () => {
     const calls: Array<{ waveIndex: number; taskIds: string[]; boundWorkflowRunId: string | null; stage: string }> = [];
     const snapshots: string[] = [];
@@ -376,7 +418,13 @@ function materialized(): WriteClusterTasksOutput {
   };
 }
 
-function task(id: string, title: string, dependencies: string[] = []): TaskItem {
+function task(
+  id: string,
+  title: string,
+  dependencies: string[] = [],
+  sourceRequirementIds: string[] = [],
+  taskAnchors?: TaskAnchorDescriptor,
+): TaskItem {
   return {
     id,
     title,
@@ -386,10 +434,81 @@ function task(id: string, title: string, dependencies: string[] = []): TaskItem 
     estimateDays: 1,
     dependencies,
     sourceRefs: [],
-    sourceRequirementIds: [],
+    sourceRequirementIds,
     subtasks: [],
     dod: [],
     executionStatus: "executable",
     flowStatus: "todo",
+    taskAnchors,
   };
+}
+
+function anchor(): TaskAnchorDescriptor {
+  return {
+    from: 10,
+    to: 42,
+    textHash: "req-1-body-hash",
+    contextBefore: "Before",
+    contextAfter: "After",
+  };
+}
+
+function facadeCapturingExecutionMetadata(
+  capturedExecutions: NonNullable<Parameters<WorkflowFacade["executeTask"]>[0]["executionMetadata"]>[],
+): WorkflowFacade {
+  const run = {
+    workflowRunId: "wf-anchor",
+    sessionId: "prd-split:parent",
+    repositoryPath: "/repo/web",
+    currentStage: "implement" as const,
+    status: "running" as const,
+    startedAt: 1,
+    updatedAt: 1,
+    stageStates: [],
+    tasks: [],
+    taskSnapshotId: "snap-anchor",
+  };
+  return {
+    listRuns: async () => ({ ok: true, data: [] }),
+    createRun: async () => ({ ok: true, data: run }),
+    upsertTasks: async () => ({ ok: true, data: run }),
+    executeTask: async (input) => {
+      if (input.executionMetadata) capturedExecutions.push(input.executionMetadata);
+      return {
+        ok: true,
+        data: {
+          taskRunId: `run-${input.taskId}`,
+          workflowRunId: input.workflowRunId,
+          taskId: input.taskId,
+          templateId: input.templateId ?? "trellis",
+          attempt: input.attemptFrom ?? 1,
+          status: "succeeded",
+          startedAt: 1,
+          endedAt: 2,
+          artifactRefs: [],
+        },
+      };
+    },
+    runGateChecks: async (input) => ({
+      ok: true,
+      data: {
+        workflowRunId: input.workflowRunId,
+        taskId: input.taskId,
+        checks: [],
+        allPassed: true,
+        checkedAt: 2,
+      },
+    }),
+    markTaskDone: async (input) => ({
+      ok: true,
+      data: {
+        taskId: input.taskId,
+        flowStatus: "done",
+        runState: "succeeded",
+        artifactRefs: [],
+        gateSummary: { required: [], passed: [], failed: [] },
+        updatedAt: 2,
+      },
+    }),
+  } as WorkflowFacade;
 }

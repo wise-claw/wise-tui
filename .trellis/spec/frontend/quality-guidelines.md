@@ -216,6 +216,8 @@ setProjects((prev) => prev.map((p) => (p.id === projectId ? updatedProject : p))
 - Next splitter feedback bundle file: `prd-loop-feedback.md`
 - `runSplitTasksOmcBatch({ executionMetadataByTaskId?: Record<string, TrellisExecutionMetadata> })`
 - `TrellisExecutionMetadata.activeTaskPath?: string`
+- `TrellisExecutionMetadata.sourceRequirementIds?: string[]`
+- `TrellisExecutionMetadata.prdAnchor?: TaskAnchorDescriptor | null`
 - `SplitTodoCountUpdatedDetail.focusParentTaskName?: string | null`
 - `SplitTodoCountUpdatedDetail.focusChildTaskNames?: string[]`
 
@@ -225,6 +227,7 @@ setProjects((prev) => prev.map((p) => (p.id === projectId ? updatedProject : p))
 - Workflow task ids for materialized PRD split execution are the real Trellis task refs, for example `.trellis/tasks/05-19-prd/05-19-api`.
 - Dependency ids must be remapped from source task ids to materialized Trellis refs before `facade.upsertTasks`.
 - `Active task:` in the Claude prompt must use `executionMetadata.activeTaskPath` when present; never pass `task-a`/`task-1` style planning ids as the executable Trellis path.
+- Materialized fan-out must carry the current task's `sourceRequirementIds` and `taskAnchors`/`prdAnchor` into both `ExecutionFanoutSnapshot.waves[].tasks[]` and per-task `TrellisExecutionMetadata`, so OMC progress, stream UI, and runtime evidence remain traceable back to PRD anchors.
 - Batch and single-task “落盘执行” entry points must share the same materialize-and-fan-out helper. Single-task execution passes `parallelGroups = [[task.id]]`.
 - Missing `childTasks` mappings are hard failures. Do not silently dispatch fewer tasks than the user confirmed.
 - `writeMissionToTrellis` must preserve the service-level fan-out snapshots on each `WizardWriteResult` and stream them upward through `onFanoutSnapshot`. PRD split UI must consume those real snapshots instead of synthesizing success from `childTasks`.

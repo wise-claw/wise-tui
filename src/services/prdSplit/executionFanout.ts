@@ -1,4 +1,4 @@
-import type { TaskItem, TaskRole } from "../../types";
+import type { TaskAnchorDescriptor, TaskItem, TaskRole } from "../../types";
 import type { RunSplitTasksOmcBatchResult } from "../workflow/actions";
 import type { WorkflowFacade } from "../../types/workflow";
 import type { WriteClusterTasksOutput } from "./trellisWriter";
@@ -26,6 +26,8 @@ export interface ExecutionFanoutTaskSnapshot {
   taskName: string | null;
   taskPath: string | null;
   activeTaskPath: string | null;
+  sourceRequirementIds?: string[];
+  prdAnchor?: TaskAnchorDescriptor | null;
   message?: string;
 }
 
@@ -273,6 +275,8 @@ async function runFanoutBatch(
     executionMetadataByTaskId: Object.fromEntries(params.executionItems.map((item) => [item.workflowTask.id, {
       activeTaskPath: item.activeTaskPath,
       sourceTaskId: item.sourceTask.id,
+      sourceRequirementIds: [...item.sourceTask.sourceRequirementIds],
+      prdAnchor: item.sourceTask.taskAnchors ?? null,
       childTaskName: item.taskName,
     }])),
     concurrency: Math.max(1, params.tasks.length),
@@ -417,6 +421,8 @@ function buildInitialWaveSnapshots(
         taskName: item.taskName,
         taskPath: item.taskPath,
         activeTaskPath: item.activeTaskPath,
+        sourceRequirementIds: [...item.sourceTask.sourceRequirementIds],
+        prdAnchor: item.sourceTask.taskAnchors ?? null,
       })),
   }));
 }
