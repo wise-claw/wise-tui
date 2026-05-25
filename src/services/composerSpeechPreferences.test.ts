@@ -8,6 +8,7 @@ describe("normalizeComposerSpeechPreferences", () => {
       autoSendEndingText: "发送",
       silenceAutoSendIdleMs: 1500,
       speechToRequirementEnabled: false,
+      speechPolishEnabled: true,
     });
   });
 
@@ -21,6 +22,7 @@ describe("normalizeComposerSpeechPreferences", () => {
       autoSendEndingText: "发送",
       silenceAutoSendIdleMs: 1500,
       speechToRequirementEnabled: false,
+      speechPolishEnabled: true,
     });
   });
 
@@ -35,6 +37,17 @@ describe("normalizeComposerSpeechPreferences", () => {
       autoSendEndingText: "提交",
       silenceAutoSendIdleMs: 1500,
       speechToRequirementEnabled: false,
+      speechPolishEnabled: true,
+    });
+  });
+
+  test("disables speechPolish when explicitly false", () => {
+    expect(
+      normalizeComposerSpeechPreferences({
+        speechPolishEnabled: false,
+      }),
+    ).toMatchObject({
+      speechPolishEnabled: false,
     });
   });
 
@@ -77,6 +90,7 @@ describe("normalizeComposerSpeechPreferences", () => {
       autoSendEndingText: "发送",
       silenceAutoSendIdleMs: 1500,
       speechToRequirementEnabled: false,
+      speechPolishEnabled: true,
     });
   });
 });

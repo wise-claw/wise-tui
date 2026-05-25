@@ -38,6 +38,7 @@ export function normalizeComposerSpeechPreferences(
       autoSendEndingText || DEFAULT_COMPOSER_SPEECH_PREFERENCES.autoSendEndingText,
     silenceAutoSendIdleMs: normalizeSilenceAutoSendIdleMs(o.silenceAutoSendIdleMs),
     speechToRequirementEnabled: o.speechToRequirementEnabled === true,
+    speechPolishEnabled: o.speechPolishEnabled !== false,
   };
 }
 

@@ -54,6 +54,7 @@ import { ComposerRuntimeSettingsTrigger } from "./ComposerRuntimeSettingsTrigger
 import { useDefaultClaudeConnectionKind } from "../../hooks/useDefaultClaudeConnectionKind";
 import { useComposerSpeechDictation } from "../../hooks/useComposerSpeechDictation";
 import { useComposerSpeechPreferences } from "../../hooks/useComposerSpeechPreferences";
+import { polishComposerSpeechTranscript } from "../../services/composerSpeechPolish";
 import {
   COMPOSER_SPEECH_SILENCE_AUTO_SEND_IDLE_MS_MAX,
   COMPOSER_SPEECH_SILENCE_AUTO_SEND_IDLE_MS_MIN,
@@ -665,6 +666,10 @@ function ComposerInner({
   const speechIdleAutoSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scheduleSpeechIdleAutoSendRef = useRef<() => void>(() => undefined);
   const triggerSpeechAutoSendRef = useRef<() => void>(() => undefined);
+  const speechPolishSeqRef = useRef(0);
+  const [speechPolishing, setSpeechPolishing] = useState(false);
+  const speechPolishProjectPath =
+    gitRepositoryPath?.trim() || session.repositoryPath?.trim() || "";
   const suffixAutoSendFiredRef = useRef(false);
   const [speechKeepAliveDuringBusy, setSpeechKeepAliveDuringBusy] = useState(false);
   const speechKeepAliveDuringBusyRef = useRef(false);
@@ -710,25 +715,10 @@ function ComposerInner({
 
   useEffect(() => () => clearSpeechIdleAutoSendTimer(), [clearSpeechIdleAutoSendTimer]);
 
-  const handleSpeechTranscriptUpdate = useCallback(
-    ({ text, isFinal: _isFinal }: { text: string; isFinal: boolean }) => {
+  const applySpeechUtteranceToComposer = useCallback(
+    (spokenText: string, shouldAutoSend: boolean) => {
       const surface = plainSurfaceRef.current;
       if (!surface) return;
-
-      lastRawSpeechTranscriptRef.current = text;
-      let delta = extractComposerSpeechTranscriptDelta(
-        speechEngineTranscriptBaselineRef.current,
-        text,
-      );
-      delta = stripComposerSpeechDeltaOverlap(delta, speechLastSentPlainRef.current);
-
-      const isEndingWordMode = speechPrefsRef.current.sendMode === "endingWordAutoSend";
-      const { utterance: spokenText, shouldAutoSend } = isEndingWordMode
-        ? splitUtteranceAtAutoSendEnding(
-            delta,
-            speechPrefsRef.current.autoSendEndingText,
-          )
-        : { utterance: delta, shouldAutoSend: false };
 
       const { plain, cursor } = resolveComposerSpeechDisplayText(spokenText);
       if (plain) {
@@ -757,6 +747,53 @@ function ComposerInner({
       }
     },
     [clearSpeechIdleAutoSendTimer],
+  );
+
+  const handleSpeechTranscriptUpdate = useCallback(
+    ({ text, isFinal }: { text: string; isFinal: boolean }) => {
+      lastRawSpeechTranscriptRef.current = text;
+      let delta = extractComposerSpeechTranscriptDelta(
+        speechEngineTranscriptBaselineRef.current,
+        text,
+      );
+      delta = stripComposerSpeechDeltaOverlap(delta, speechLastSentPlainRef.current);
+
+      const isEndingWordMode = speechPrefsRef.current.sendMode === "endingWordAutoSend";
+      const { utterance: spokenText, shouldAutoSend } = isEndingWordMode
+        ? splitUtteranceAtAutoSendEnding(
+            delta,
+            speechPrefsRef.current.autoSendEndingText,
+          )
+        : { utterance: delta, shouldAutoSend: false };
+
+      if (!spokenText.trim() && !shouldAutoSend) {
+        return;
+      }
+
+      const polishEnabled = speechPrefsRef.current.speechPolishEnabled;
+      if (polishEnabled && !isFinal) {
+        return;
+      }
+
+      if (!polishEnabled) {
+        applySpeechUtteranceToComposer(spokenText, shouldAutoSend);
+        return;
+      }
+
+      const seq = ++speechPolishSeqRef.current;
+      setSpeechPolishing(true);
+      void polishComposerSpeechTranscript(speechPolishProjectPath, spokenText)
+        .then((polished) => {
+          if (seq !== speechPolishSeqRef.current) return;
+          applySpeechUtteranceToComposer(polished, shouldAutoSend);
+        })
+        .finally(() => {
+          if (seq === speechPolishSeqRef.current) {
+            setSpeechPolishing(false);
+          }
+        });
+    },
+    [applySpeechUtteranceToComposer, speechPolishProjectPath],
   );
 
   const handleSpeechSessionEnd = useCallback(() => {
@@ -918,7 +955,7 @@ function ComposerInner({
             ) : (
               <span className="app-claude-composer-voice-menu-check app-claude-composer-voice-menu-check--placeholder" />
             )}
-            手动发送（仅转写）
+            手动发送（整理后录入）
           </span>
         ),
         onClick: () => void updateSpeechPrefs({ sendMode: "manual" }),
@@ -964,6 +1001,22 @@ function ComposerInner({
               size="small"
               checked={speechPrefs.speechToRequirementEnabled}
               onChange={(checked) => void updateSpeechPrefs({ speechToRequirementEnabled: checked })}
+            />
+          </div>
+        ),
+      },
+      {
+        key: "speech-polish",
+        label: (
+          <div
+            className="app-claude-composer-voice-menu-row app-claude-composer-voice-menu-row--switch"
+            onClick={(ev) => ev.stopPropagation()}
+          >
+            <span className="app-claude-composer-voice-menu-row-label">转写整理为清晰表达</span>
+            <Switch
+              size="small"
+              checked={speechPrefs.speechPolishEnabled}
+              onChange={(checked) => void updateSpeechPrefs({ speechPolishEnabled: checked })}
             />
           </div>
         ),
@@ -1052,6 +1105,7 @@ function ComposerInner({
       draftSilenceIdleSeconds,
       silenceIdleSecondsLabel,
       speechPrefs.sendMode,
+      speechPrefs.speechPolishEnabled,
       speechPrefs.speechToRequirementEnabled,
       updateSpeechPrefs,
     ],
@@ -2099,7 +2153,9 @@ function ComposerInner({
               title={
                 speechDictation.transcribing
                   ? "正在本地转写…"
-                  : speechDictation.listening
+                  : speechPolishing
+                    ? "正在整理转写…"
+                    : speechDictation.listening
                     ? speechPrefs.sendMode === "silenceAutoSend"
                       ? `停顿 ${silenceIdleSecondsLabel} 秒无新语音将自动发送；录音持续至点击停止`
                       : speechPrefs.sendMode === "endingWordAutoSend"
@@ -2126,14 +2182,18 @@ function ComposerInner({
                     : "app-claude-composer-voice-btn"
                 }
                 disabled={
-                  (isSessionBusy && !speechKeepAliveDuringBusy) || speechDictation.transcribing
+                  (isSessionBusy && !speechKeepAliveDuringBusy) ||
+                  speechDictation.transcribing ||
+                  speechPolishing
                 }
-                loading={speechDictation.transcribing}
+                loading={speechDictation.transcribing || speechPolishing}
                 aria-pressed={speechDictation.listening}
                 aria-label={
                   speechDictation.transcribing
                     ? "正在转写"
-                    : speechDictation.listening
+                    : speechPolishing
+                      ? "正在整理转写"
+                      : speechDictation.listening
                       ? speechDictation.engine === "local"
                         ? "结束录音并转写"
                         : "停止语音听写"
@@ -2227,6 +2287,7 @@ function ComposerInner({
     speechDictation.transcribing,
     speechKeepAliveDuringBusy,
     speechMenuOpen,
+    speechPolishing,
     speechPrefs.autoSendEndingText,
     speechPrefs.sendMode,
     voiceContextMenuItems,

@@ -236,6 +236,7 @@ pub(crate) async fn run_claude_quick(
     project_path: String,
     prompt: String,
     timeout_ms: Option<u64>,
+    model: Option<String>,
 ) -> Result<String, String> {
     let timeout_ms = timeout_ms.filter(|&t| t > 0);
     let claude_path = find_claude_binary()?;
@@ -245,6 +246,9 @@ pub(crate) async fn run_claude_quick(
     cmd.arg("-p").arg(&prompt);
     cmd.arg("--output-format").arg("text");
     cmd.arg("--permission-mode").arg("bypassPermissions");
+    if let Some(m) = model.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        cmd.arg("--model").arg(m);
+    }
     cmd.env(
         "HOME",
         dirs::home_dir()
