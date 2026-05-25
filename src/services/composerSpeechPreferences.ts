@@ -5,6 +5,7 @@ import {
   type ComposerSpeechSendMode,
 } from "../constants/composerSpeechPreferences";
 import { normalizeComposerSpeechAutoSendEndingText } from "../utils/composerSpeechAutoSendEnding";
+import { normalizeSilenceAutoSendIdleMs } from "../utils/composerSpeechSilenceIdle";
 import { getAppSettingJson, setAppSettingJson } from "./appSettingsStore";
 
 let current: ComposerSpeechPreferencesV1 = { ...DEFAULT_COMPOSER_SPEECH_PREFERENCES };
@@ -35,6 +36,7 @@ export function normalizeComposerSpeechPreferences(
     sendMode: coerceSendMode(o.sendMode),
     autoSendEndingText:
       autoSendEndingText || DEFAULT_COMPOSER_SPEECH_PREFERENCES.autoSendEndingText,
+    silenceAutoSendIdleMs: normalizeSilenceAutoSendIdleMs(o.silenceAutoSendIdleMs),
     speechToRequirementEnabled: o.speechToRequirementEnabled === true,
   };
 }

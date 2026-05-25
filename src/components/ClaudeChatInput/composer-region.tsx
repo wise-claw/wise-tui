@@ -47,15 +47,19 @@ import { TodoDock } from "./dock/todo-dock";
 import { RevertDock } from "./dock/revert-dock";
 import { addToHistory, promptLength, navigatePromptHistory, canNavigateHistoryAtCursor } from "./prompt-history";
 import { CheckOutlined } from "@ant-design/icons";
-import { Dropdown, Button, Empty, Input, Popover, Select, Spin, Switch, Tabs, Tag, Tooltip, message } from "antd";
+import { Dropdown, Button, Empty, Input, InputNumber, Popover, Select, Spin, Switch, Tabs, Tag, Tooltip, message } from "antd";
 import { ContextCompactProgressRing } from "./ContextCompactProgressRing";
 import { useContextBreakdown } from "../../hooks/useContextBreakdown";
 import { ComposerRuntimeSettingsTrigger } from "./ComposerRuntimeSettingsTrigger";
 import { useDefaultClaudeConnectionKind } from "../../hooks/useDefaultClaudeConnectionKind";
 import { useComposerSpeechDictation } from "../../hooks/useComposerSpeechDictation";
 import { useComposerSpeechPreferences } from "../../hooks/useComposerSpeechPreferences";
-import { COMPOSER_SPEECH_IDLE_AUTO_SEND_MS } from "../../constants/composerSpeechPreferences";
-import type { ComposerSpeechSendMode } from "../../constants/composerSpeechPreferences";
+import {
+  COMPOSER_SPEECH_SILENCE_AUTO_SEND_IDLE_MS_MAX,
+  COMPOSER_SPEECH_SILENCE_AUTO_SEND_IDLE_MS_MIN,
+  type ComposerSpeechSendMode,
+} from "../../constants/composerSpeechPreferences";
+import { formatSilenceAutoSendIdleSeconds } from "../../utils/composerSpeechSilenceIdle";
 import { splitUtteranceAtAutoSendEnding } from "../../utils/composerSpeechAutoSendEnding";
 import {
   commitComposerSpeechTranscriptBaselineForSend,
@@ -679,12 +683,23 @@ function ComposerInner({
   const [draftAutoSendEndingText, setDraftAutoSendEndingText] = useState(
     speechPrefs.autoSendEndingText,
   );
+  const [draftSilenceIdleSeconds, setDraftSilenceIdleSeconds] = useState(
+    speechPrefs.silenceAutoSendIdleMs / 1000,
+  );
+  const silenceIdleSecondsLabel = formatSilenceAutoSendIdleSeconds(
+    speechPrefs.silenceAutoSendIdleMs,
+  );
 
   useEffect(() => {
     if (speechMenuOpen) {
       setDraftAutoSendEndingText(speechPrefs.autoSendEndingText);
+      setDraftSilenceIdleSeconds(speechPrefs.silenceAutoSendIdleMs / 1000);
     }
-  }, [speechMenuOpen, speechPrefs.autoSendEndingText]);
+  }, [
+    speechMenuOpen,
+    speechPrefs.autoSendEndingText,
+    speechPrefs.silenceAutoSendIdleMs,
+  ]);
 
   const clearSpeechIdleAutoSendTimer = useCallback(() => {
     if (speechIdleAutoSendTimerRef.current != null) {
@@ -838,7 +853,7 @@ function ComposerInner({
       speechIdleAutoSendTimerRef.current = null;
       if (speechPrefsRef.current.sendMode !== "silenceAutoSend") return;
       triggerComposerSpeechAutoSend();
-    }, COMPOSER_SPEECH_IDLE_AUTO_SEND_MS);
+    }, speechPrefsRef.current.silenceAutoSendIdleMs);
   }, [clearSpeechIdleAutoSendTimer, triggerComposerSpeechAutoSend]);
 
   scheduleSpeechIdleAutoSendRef.current = scheduleSpeechIdleAutoSend;
@@ -917,7 +932,7 @@ function ComposerInner({
             ) : (
               <span className="app-claude-composer-voice-menu-check app-claude-composer-voice-menu-check--placeholder" />
             )}
-            停顿 1 秒无新语音自动发送
+            停顿 {silenceIdleSecondsLabel} 秒无新语音自动发送
           </span>
         ),
         onClick: () => void updateSpeechPrefs({ sendMode: "silenceAutoSend" }),
@@ -955,6 +970,47 @@ function ComposerInner({
       },
       { type: "divider" as const },
       {
+        key: "silence-idle-ms",
+        label: (
+          <div
+            className="app-claude-composer-voice-menu-label"
+            onClick={(ev) => ev.stopPropagation()}
+          >
+            <div className="app-claude-composer-voice-menu-label-title">
+              停顿自动发送时长{" "}
+              <span className="app-claude-composer-voice-menu-label-subtitle">(秒)</span>
+            </div>
+            <div className="app-claude-composer-voice-menu-inline-row">
+              <InputNumber
+                size="small"
+                min={COMPOSER_SPEECH_SILENCE_AUTO_SEND_IDLE_MS_MIN / 1000}
+                max={COMPOSER_SPEECH_SILENCE_AUTO_SEND_IDLE_MS_MAX / 1000}
+                step={0.1}
+                value={draftSilenceIdleSeconds}
+                onChange={(value) => {
+                  if (typeof value === "number" && Number.isFinite(value)) {
+                    setDraftSilenceIdleSeconds(value);
+                  }
+                }}
+                className="app-claude-composer-voice-menu-input"
+              />
+              <Button
+                type="primary"
+                size="small"
+                className="app-claude-composer-voice-menu-save-btn"
+                onClick={() =>
+                  void updateSpeechPrefs({
+                    silenceAutoSendIdleMs: Math.round(draftSilenceIdleSeconds * 1000),
+                  })
+                }
+              >
+                保存
+              </Button>
+            </div>
+          </div>
+        ),
+      },
+      {
         key: "auto-send-ending",
         label: (
           <div
@@ -991,7 +1047,14 @@ function ComposerInner({
         ),
       },
     ],
-    [draftAutoSendEndingText, speechPrefs.sendMode, speechPrefs.speechToRequirementEnabled, updateSpeechPrefs],
+    [
+      draftAutoSendEndingText,
+      draftSilenceIdleSeconds,
+      silenceIdleSecondsLabel,
+      speechPrefs.sendMode,
+      speechPrefs.speechToRequirementEnabled,
+      updateSpeechPrefs,
+    ],
   );
 
   const onCancelRef = useRef(_onCancel);
@@ -2038,14 +2101,14 @@ function ComposerInner({
                   ? "正在本地转写…"
                   : speechDictation.listening
                     ? speechPrefs.sendMode === "silenceAutoSend"
-                      ? "停顿 1 秒无新语音将自动发送；录音持续至点击停止"
+                      ? `停顿 ${silenceIdleSecondsLabel} 秒无新语音将自动发送；录音持续至点击停止`
                       : speechPrefs.sendMode === "endingWordAutoSend"
                         ? `口播「${speechPrefs.autoSendEndingText}」将自动发送；录音持续至点击停止`
                         : speechDictation.engine === "local"
                           ? "点击停止录音并转写"
                           : "点击停止语音听写"
                     : speechPrefs.sendMode === "silenceAutoSend"
-                      ? "点击开始听写，停顿 1 秒自动发送；需点击停止结束录音"
+                      ? `点击开始听写，停顿 ${silenceIdleSecondsLabel} 秒自动发送；需点击停止结束录音`
                       : speechPrefs.sendMode === "endingWordAutoSend"
                         ? `点击开始听写，口播「${speechPrefs.autoSendEndingText}」自动发送；需点击停止结束录音`
                         : speechDictation.engine === "local"

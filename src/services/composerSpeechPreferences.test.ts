@@ -6,6 +6,7 @@ describe("normalizeComposerSpeechPreferences", () => {
     expect(normalizeComposerSpeechPreferences(null)).toEqual({
       sendMode: "manual",
       autoSendEndingText: "发送",
+      silenceAutoSendIdleMs: 1500,
       speechToRequirementEnabled: false,
     });
   });
@@ -18,6 +19,7 @@ describe("normalizeComposerSpeechPreferences", () => {
     ).toEqual({
       sendMode: "silenceAutoSend",
       autoSendEndingText: "发送",
+      silenceAutoSendIdleMs: 1500,
       speechToRequirementEnabled: false,
     });
   });
@@ -31,8 +33,27 @@ describe("normalizeComposerSpeechPreferences", () => {
     ).toEqual({
       sendMode: "silenceAutoSend",
       autoSendEndingText: "提交",
+      silenceAutoSendIdleMs: 1500,
       speechToRequirementEnabled: false,
     });
+  });
+
+  test("clamps and steps silenceAutoSendIdleMs", () => {
+    expect(
+      normalizeComposerSpeechPreferences({
+        silenceAutoSendIdleMs: 1234,
+      }),
+    ).toMatchObject({ silenceAutoSendIdleMs: 1200 });
+    expect(
+      normalizeComposerSpeechPreferences({
+        silenceAutoSendIdleMs: 50,
+      }),
+    ).toMatchObject({ silenceAutoSendIdleMs: 500 });
+    expect(
+      normalizeComposerSpeechPreferences({
+        silenceAutoSendIdleMs: 99_999,
+      }),
+    ).toMatchObject({ silenceAutoSendIdleMs: 10_000 });
   });
 
   test("enables speechToRequirement when true", () => {
@@ -54,6 +75,7 @@ describe("normalizeComposerSpeechPreferences", () => {
     ).toEqual({
       sendMode: "manual",
       autoSendEndingText: "发送",
+      silenceAutoSendIdleMs: 1500,
       speechToRequirementEnabled: false,
     });
   });

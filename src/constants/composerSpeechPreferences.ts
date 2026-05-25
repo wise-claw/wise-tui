@@ -11,6 +11,8 @@ export interface ComposerSpeechPreferencesV1 {
   sendMode: ComposerSpeechSendMode;
   /** 口播该结束词时自动发送；不写入发给 Claude 的正文。 */
   autoSendEndingText: string;
+  /** 停顿自动发送：转写流式更新后，超过该时长（毫秒）无新片段则触发发送。 */
+  silenceAutoSendIdleMs: number;
   /** 开启后会话谈话内容自动追加到当前项目/仓库的需求草稿（与需求拆分助手保存一致）。 */
   speechToRequirementEnabled: boolean;
 }
@@ -18,8 +20,15 @@ export interface ComposerSpeechPreferencesV1 {
 export const DEFAULT_COMPOSER_SPEECH_PREFERENCES: ComposerSpeechPreferencesV1 = {
   sendMode: "manual",
   autoSendEndingText: "发送",
+  silenceAutoSendIdleMs: 1500,
   speechToRequirementEnabled: false,
 };
 
-/** 转写流式更新后，超过该时长无新片段则触发自动发送。 */
-export const COMPOSER_SPEECH_IDLE_AUTO_SEND_MS = 1000;
+/** 停顿自动发送默认可调范围（毫秒）。 */
+export const COMPOSER_SPEECH_SILENCE_AUTO_SEND_IDLE_MS_MIN = 500;
+export const COMPOSER_SPEECH_SILENCE_AUTO_SEND_IDLE_MS_MAX = 10_000;
+export const COMPOSER_SPEECH_SILENCE_AUTO_SEND_IDLE_MS_STEP = 100;
+
+/** @deprecated 使用 `DEFAULT_COMPOSER_SPEECH_PREFERENCES.silenceAutoSendIdleMs`。 */
+export const COMPOSER_SPEECH_IDLE_AUTO_SEND_MS =
+  DEFAULT_COMPOSER_SPEECH_PREFERENCES.silenceAutoSendIdleMs;
