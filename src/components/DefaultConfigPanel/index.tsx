@@ -101,7 +101,7 @@ export function DefaultConfigPanel() {
           <div className="app-default-config-row__main">
             <span className="app-default-config-row__title">FCC 顶栏图标</span>
             <span className="app-default-config-row__hint">
-              控制主会话顶栏 Free Claude Code 服务入口
+              控制主会话顶栏 Free Claude Code 服务入口；默认不显示
             </span>
           </div>
           <div className="app-default-config-row__control">

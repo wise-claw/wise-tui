@@ -41,7 +41,7 @@ export interface WiseDefaultConfigV1 {
   rightPanelDefaultCollapsed: boolean;
   /** 主会话顶栏 LLM 代理图标；默认隐藏。 */
   showLlmProxyTopbar: boolean;
-  /** 主会话顶栏 Free Claude Code 图标；默认显示。 */
+  /** 主会话顶栏 Free Claude Code 图标；默认隐藏。 */
   showFccTopbar: boolean;
   /** 主会话顶栏 FCC 请求流量图标；默认隐藏。 */
   showFccTrafficTopbar: boolean;
@@ -56,7 +56,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   connectionKind: CLAUDE_DEFAULT_CONNECTION_KIND_FALLBACK,
   rightPanelDefaultCollapsed: RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK,
   showLlmProxyTopbar: false,
-  showFccTopbar: true,
+  showFccTopbar: false,
   showFccTrafficTopbar: false,
   showSessionDataLinkTopbar: false,
   leftSidebarHubQuickEntries: [...DEFAULT_LEFT_SIDEBAR_HUB_QUICK_ENTRIES],

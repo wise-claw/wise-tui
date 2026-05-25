@@ -202,7 +202,7 @@ describe("wiseDefaultConfigStore", () => {
     );
     const config = await loadWiseDefaultConfig();
     expect(config.showLlmProxyTopbar).toBe(false);
-    expect(config.showFccTopbar).toBe(true);
+    expect(config.showFccTopbar).toBe(false);
     expect(config.showFccTrafficTopbar).toBe(false);
     expect(config.showSessionDataLinkTopbar).toBe(false);
   });

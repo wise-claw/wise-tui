@@ -7,7 +7,7 @@ import {
 
 export function useTopbarChromeDefaultSetting() {
   const [showLlmProxyTopbar, setShowLlmProxyTopbar] = useState(false);
-  const [showFccTopbar, setShowFccTopbar] = useState(true);
+  const [showFccTopbar, setShowFccTopbar] = useState(false);
   const [showFccTrafficTopbar, setShowFccTrafficTopbar] = useState(false);
   const [showSessionDataLinkTopbar, setShowSessionDataLinkTopbar] = useState(false);
   const [loading, setLoading] = useState(true);
