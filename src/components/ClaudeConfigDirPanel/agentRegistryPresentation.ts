@@ -53,6 +53,8 @@ export function getBuiltinInstallCommand(kind: BuiltinInstallableKind): string {
       return "npm install -g @openai/codex";
     case "gemini":
       return "npm install -g @google/gemini-cli";
+    case "opencode":
+      return "npm install -g opencode-ai@latest";
   }
 }
 
@@ -64,6 +66,8 @@ export function getAgentKindLabel(kind: DetectedAgent["kind"]): string {
       return "Codex";
     case "gemini":
       return "Gemini";
+    case "opencode":
+      return "OpenCode";
     case "custom":
       return "自定义";
   }

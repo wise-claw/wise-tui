@@ -31,6 +31,7 @@ import {
   getBuiltinInstallCommand,
   getEmptyDescription,
   type AgentRegistryFilter,
+  type BuiltinInstallableKind,
 } from "./agentRegistryPresentation";
 import {
   AuthorPanelEmptyShell,
@@ -186,7 +187,7 @@ export function AgentRegistrySection() {
   );
 
   const handleInstall = useCallback(
-    async (agent: DetectedAgent<"claude" | "codex" | "gemini">) => {
+    async (agent: DetectedAgent<BuiltinInstallableKind>) => {
       setInstallingId(agent.id);
       try {
         const next = await installBuiltinAgent(agent.kind);
@@ -398,7 +399,7 @@ interface AgentRegistryRowProps {
   installing: boolean;
   onEdit: (agent: DetectedAgent<"custom">) => void;
   onDelete: (id: string) => void;
-  onInstall: (agent: DetectedAgent<"claude" | "codex" | "gemini">) => void;
+  onInstall: (agent: DetectedAgent<BuiltinInstallableKind>) => void;
 }
 
 function AgentRegistryRow({ agent, busy, installing, onEdit, onDelete, onInstall }: AgentRegistryRowProps) {

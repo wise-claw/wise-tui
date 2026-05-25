@@ -53,6 +53,7 @@ pub enum DetectedAgent {
     Claude(SyntheticAgent),
     Codex(SyntheticAgent),
     Gemini(SyntheticAgent),
+    OpenCode(SyntheticAgent),
     Custom(CustomAgent),
 }
 
@@ -251,7 +252,8 @@ impl DetectedAgent {
         match self {
             DetectedAgent::Claude(agent)
             | DetectedAgent::Codex(agent)
-            | DetectedAgent::Gemini(agent) => &agent.id,
+            | DetectedAgent::Gemini(agent)
+            | DetectedAgent::OpenCode(agent) => &agent.id,
             DetectedAgent::Custom(agent) => &agent.id,
         }
     }
@@ -260,7 +262,8 @@ impl DetectedAgent {
         match self {
             DetectedAgent::Claude(agent)
             | DetectedAgent::Codex(agent)
-            | DetectedAgent::Gemini(agent) => &agent.name,
+            | DetectedAgent::Gemini(agent)
+            | DetectedAgent::OpenCode(agent) => &agent.name,
             DetectedAgent::Custom(agent) => &agent.name,
         }
     }
@@ -269,7 +272,8 @@ impl DetectedAgent {
         match self {
             DetectedAgent::Claude(agent)
             | DetectedAgent::Codex(agent)
-            | DetectedAgent::Gemini(agent) => agent.available,
+            | DetectedAgent::Gemini(agent)
+            | DetectedAgent::OpenCode(agent) => agent.available,
             DetectedAgent::Custom(agent) => agent.available,
         }
     }
@@ -278,7 +282,8 @@ impl DetectedAgent {
         match self {
             DetectedAgent::Claude(agent)
             | DetectedAgent::Codex(agent)
-            | DetectedAgent::Gemini(agent) => &agent.backend,
+            | DetectedAgent::Gemini(agent)
+            | DetectedAgent::OpenCode(agent) => &agent.backend,
             DetectedAgent::Custom(agent) => &agent.backend,
         }
     }
@@ -308,15 +313,22 @@ fn deduplicate_agents(agents: Vec<DetectedAgent>) -> Vec<DetectedAgent> {
 
 async fn detect_builtin_agents(probe: &dyn Probe) -> Vec<DetectedAgent> {
     let empty_env = HashMap::new();
-    let (claude, codex, gemini) = tokio::join!(
+    let (claude, codex, gemini, opencode) = tokio::join!(
         probe_builtin("claude", probe, &empty_env),
         probe_builtin("codex", probe, &empty_env),
         probe_builtin("gemini", probe, &empty_env),
+        probe_builtin("opencode", probe, &empty_env),
     );
     vec![
         DetectedAgent::Claude(synthetic_agent("claude", "Claude Code", "claude", claude)),
         DetectedAgent::Codex(synthetic_agent("codex", "Codex CLI", "codex", codex)),
         DetectedAgent::Gemini(synthetic_agent("gemini", "Gemini CLI", "gemini", gemini)),
+        DetectedAgent::OpenCode(synthetic_agent(
+            "opencode",
+            "OpenCode",
+            "opencode",
+            opencode,
+        )),
     ]
 }
 
@@ -563,6 +575,7 @@ fn builtin_command_name(kind: &str) -> Option<&'static str> {
         "claude" => Some("claude"),
         "codex" => Some("codex"),
         "gemini" => Some("gemini"),
+        "opencode" => Some("opencode"),
         _ => None,
     }
 }
@@ -619,6 +632,7 @@ fn path_search_prefixes() -> &'static [PathBuf] {
         if let Some(home) = dirs::home_dir() {
             prefixes.push(home.join("bin"));
             prefixes.push(home.join(".local/bin"));
+            prefixes.push(home.join(".opencode/bin"));
             prefixes.push(home.join(".volta/bin"));
             prefixes.push(home.join(".bun/bin"));
             prefixes.push(home.join(".npm-global/bin"));
@@ -830,6 +844,9 @@ fn parse_builtin_install_kind(kind: &str) -> Result<BuiltinInstallSpec, String> 
         }),
         "gemini" => Ok(BuiltinInstallSpec {
             npm_package: "@google/gemini-cli",
+        }),
+        "opencode" => Ok(BuiltinInstallSpec {
+            npm_package: "opencode-ai",
         }),
         "" => Err("kind is required".to_string()),
         other => Err(format!("不支持一键安装的运行入口：{other}")),
@@ -1195,6 +1212,12 @@ mod tests {
                 npm_package: "@google/gemini-cli",
             }
         );
+        assert_eq!(
+            parse_builtin_install_kind("opencode").expect("opencode"),
+            BuiltinInstallSpec {
+                npm_package: "opencode-ai",
+            }
+        );
     }
 
     #[test]
@@ -1252,13 +1275,13 @@ mod tests {
             .refresh_all(false, &db, &probe)
             .await
             .expect("first refresh succeeds");
-        assert_eq!(probe.call_count(), 3);
+        assert_eq!(probe.call_count(), 4);
 
         registry
             .refresh_all(false, &db, &probe)
             .await
             .expect("cached refresh succeeds");
-        assert_eq!(probe.call_count(), 3);
+        assert_eq!(probe.call_count(), 4);
     }
 
     #[tokio::test]
@@ -1276,7 +1299,7 @@ mod tests {
             .await
             .expect("forced refresh succeeds");
 
-        assert_eq!(probe.call_count(), 6);
+        assert_eq!(probe.call_count(), 8);
     }
 
     #[tokio::test]
@@ -1348,12 +1371,13 @@ mod tests {
             .await
             .expect("refresh succeeds");
 
-        assert_eq!(agents.len(), 3);
+        assert_eq!(agents.len(), 4);
         for agent in agents {
             match agent {
                 DetectedAgent::Claude(agent)
                 | DetectedAgent::Codex(agent)
-                | DetectedAgent::Gemini(agent) => {
+                | DetectedAgent::Gemini(agent)
+                | DetectedAgent::OpenCode(agent) => {
                     assert!(!agent.available);
                     assert!(agent.failure_reason.is_some());
                 }

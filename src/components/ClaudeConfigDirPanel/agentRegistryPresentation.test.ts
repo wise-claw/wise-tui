@@ -81,7 +81,9 @@ describe("agent registry presentation helpers", () => {
     expect(getAgentKindLabel("claude")).toBe("Claude");
     expect(getAgentKindLabel("codex")).toBe("Codex");
     expect(getAgentKindLabel("gemini")).toBe("Gemini");
+    expect(getAgentKindLabel("opencode")).toBe("OpenCode");
     expect(getAgentKindLabel("custom")).toBe("自定义");
+    expect(getBuiltinInstallCommand("opencode")).toBe("npm install -g opencode-ai@latest");
     expect(getAgentPathLabel(agents[0])).toBe("/usr/local/bin/claude");
     expect(getAgentPathLabel(agents[1])).toBe("command not found");
     expect(getAgentPathLabel(agents[2])).toBe("/opt/wise/local-agent");

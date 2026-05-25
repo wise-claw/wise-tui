@@ -17,6 +17,7 @@ pub const DEFAULT_EXTERNAL_REL_PATHS: &[&str] = &[
     ".claude/skills",
     ".codex/skills",
     ".gemini/skills",
+    ".opencode/skills",
     ".goose/skills",
 ];
 

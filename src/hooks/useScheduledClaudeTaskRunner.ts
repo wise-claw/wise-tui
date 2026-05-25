@@ -27,7 +27,7 @@ interface Params {
       dispatchTarget?: Pick<PendingExecutionTask, "targetType" | "targetEmployeeName" | "targetWorkflowId" | "targetWorkflowName">,
     ) => Promise<boolean>
   >;
-  sendMessageRef: MutableRefObject<(sessionId: string, prompt: string) => Promise<void>>;
+  sendMessageRef: MutableRefObject<(sessionId: string, prompt: string) => void | Promise<void>>;
 }
 
 function truncateMessage(text: string, max = 240): string {
@@ -81,7 +81,7 @@ export function useScheduledClaudeTaskRunner({
           const mainId = resolveBoundMainSessionId(repoPath, bindings, sessions, mainOwnerPick);
           const mainSess = mainId ? sessions.find((s) => s.id === mainId) : undefined;
           const mainSessionBusy =
-            Boolean(mainSess) &&
+            mainSess != null &&
             mainSess.repositoryPath.trim() === repoPath &&
             (mainSess.status === "running" || mainSess.status === "connecting");
 

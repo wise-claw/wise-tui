@@ -1,6 +1,6 @@
 import { App as AntdApp } from "antd";
 import { useCallback, useEffect, useState } from "react";
-import type { Repository } from "../../types";
+import type { Repository, SddMode } from "../../types";
 import {
   sddStackModeFromRepositorySddMode,
   sddStackModeToBootstrap,
@@ -13,7 +13,7 @@ import { runWorkspaceBootstrap } from "../../services/workspaceBootstrap";
 import { workspaceBootstrapNeedsTrellisInit } from "../../constants/workspaceBootstrapAddons";
 
 interface UseRepositorySddModeModalControllerInput {
-  onUpdateRepositorySddMode?: (repositoryId: number, sddMode: Repository["sddMode"]) => void | Promise<void>;
+  onUpdateRepositorySddMode?: (repositoryId: number, sddMode: SddMode) => void | Promise<void>;
 }
 
 const EMPTY_SDD_SIGNALS: SddSignals = {

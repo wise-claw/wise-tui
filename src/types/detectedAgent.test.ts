@@ -28,6 +28,14 @@ const samples = {
     kind: "gemini",
     command: "gemini",
   },
+  opencode: {
+    ...base,
+    id: "opencode",
+    name: "OpenCode",
+    backend: "opencode",
+    kind: "opencode",
+    command: "opencode",
+  },
   custom: {
     ...base,
     id: "custom:local",
