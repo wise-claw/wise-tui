@@ -6,11 +6,11 @@ import {
   buildProjectRequirementWorkspaceInput,
   listTrellisRequirementWorkspace,
 } from "../../services/trellisTaskBridge";
-import { countRunnableTrellisTasksInSnapshot } from "../../utils/requirementWorkspaceExecutable";
+import { countExecutableTrellisTasksInSnapshot } from "../../utils/taskDrawerCounts";
 import { selectFloatingRepositories } from "../../utils/floatingRepositories";
 import { safeUnlisten } from "../../utils/safeTauriUnlisten";
 
-/** 侧栏：按 Workspace / 仓库统计可执行任务数量（Trellis 子任务 + 当前 Workspace 的 Wise 拆分 todo）。 */
+/** 侧栏：按 Workspace / 仓库统计可执行任务（规则与主会话「任务」抽屉一致）。 */
 export function useSidebarExecutableTasksMap(
   projects: ProjectItem[],
   repositories: Repository[],
@@ -56,12 +56,12 @@ export function useSidebarExecutableTasksMap(
             ...workspaceInput,
             includeArchived: false,
           });
-          const trellisCount = countRunnableTrellisTasksInSnapshot(snapshot);
+          const trellisCount = countExecutableTrellisTasksInSnapshot(snapshot);
           const splitTodoCount = project.id === activeProjectId ? globalSplitTodoCount : 0;
           nextProjectExecutable[project.id] = trellisCount + splitTodoCount;
 
           for (const repositoryId of project.repositoryIds) {
-            const count = countRunnableTrellisTasksInSnapshot(snapshot, { repositoryId });
+            const count = countExecutableTrellisTasksInSnapshot(snapshot, { repositoryId });
             if (count > 0) nextRepositoryExecutable[repositoryId] = count;
             else if (!(repositoryId in nextRepositoryExecutable)) nextRepositoryExecutable[repositoryId] = 0;
           }
@@ -84,7 +84,7 @@ export function useSidebarExecutableTasksMap(
             floatingRepositoryPaths: [path],
             includeArchived: false,
           });
-          nextRepositoryExecutable[repository.id] = countRunnableTrellisTasksInSnapshot(snapshot, {
+          nextRepositoryExecutable[repository.id] = countExecutableTrellisTasksInSnapshot(snapshot, {
             repositoryId: repository.id,
           });
         } catch {

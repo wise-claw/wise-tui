@@ -2,10 +2,10 @@ import type { TaskItem, TaskRole } from "../../types";
 import type { WorkflowFacade } from "../../types/workflow";
 import {
   WORKFLOW_UI_EVENT_OMC_BATCH_RUNTIME_CHANGED,
-  WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED,
   type SplitTodoCountUpdatedDetail,
   type WorkflowOmcBatchRuntimeDetail,
 } from "../../constants/workflowUiEvents";
+import { notifySplitTodoCountUpdated } from "../../utils/notifySplitTodoCountUpdated";
 import { buildParallelGroups } from "../taskDependency";
 import { getWorkflowFacade } from "../workflow";
 import { resolveTrellisSubagentForStage } from "../workflow/trellisDefaults";
@@ -120,7 +120,6 @@ export function resolveMaterializedFanoutRepositoryTarget(
 }
 
 function emitSplitTodoUpdated(input: MaterializedFanoutInput, openTaskDrawer: boolean): void {
-  if (typeof window === "undefined") return;
   const detail: SplitTodoCountUpdatedDetail = {
     source: "trellis",
     openTaskDrawer,
@@ -130,7 +129,7 @@ function emitSplitTodoUpdated(input: MaterializedFanoutInput, openTaskDrawer: bo
     focusParentTaskName: input.materializedResult.parentTaskName,
     focusChildTaskNames: input.materializedResult.childTaskNames,
   };
-  window.dispatchEvent(new CustomEvent(WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED, { detail }));
+  notifySplitTodoCountUpdated(detail);
 }
 
 function emitOmcRuntime(detail: Omit<WorkflowOmcBatchRuntimeDetail, "updatedAt">): void {

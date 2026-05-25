@@ -45,8 +45,8 @@ import { useSidebarTrellisReadyMap } from "./LeftSidebar/useSidebarTrellisReadyM
 import { useClaudeProcessWorkspaceLabelCache } from "../hooks/useClaudeProcessWorkspaceLabelCache";
 import { useSystemResourceSessions } from "./LeftSidebar/useSystemResourceSessions";
 import { useSidebarRunningMainSessionIndicators } from "./LeftSidebar/useSidebarRunningMainSessionIndicators";
-import { WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED } from "../constants/workflowUiEvents";
 import type { SplitTodoCountUpdatedDetail } from "../constants/workflowUiEvents";
+import { notifySplitTodoCountUpdated } from "../utils/notifySplitTodoCountUpdated";
 import "./GitPanel/index.css";
 
 export function LeftSidebar({
@@ -367,11 +367,7 @@ export function LeftSidebar({
   );
 
   const dispatchOpenExecutableTasksDrawer = useCallback(() => {
-    window.dispatchEvent(
-      new CustomEvent<SplitTodoCountUpdatedDetail>(WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED, {
-        detail: { openTaskDrawer: true, source: "trellis" },
-      }),
-    );
+    notifySplitTodoCountUpdated({ openTaskDrawer: true, source: "trellis" });
   }, []);
 
   const openFloatingRepositoryTrellis = useCallback(

@@ -166,11 +166,11 @@ export function SidebarRequirementAction({
   const badgeLabel = unsplitCount > 99 ? "99+" : String(unsplitCount);
 
   return (
-    <Tooltip title={`${unsplitCount} 条需求待拆分`} mouseEnterDelay={0.3}>
+    <Tooltip title={`${unsplitCount} 条尚未生成任务的需求`} mouseEnterDelay={0.3}>
       <button
         type="button"
         className={`app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--requirement${variant === "project" ? " app-repository-action--project-quick" : ""}`}
-        aria-label={`需求（${unsplitCount} 条待拆分）`}
+        aria-label={`需求（${unsplitCount} 条尚未生成任务）`}
         onClick={(e) => {
           e.stopPropagation();
           onOpen();

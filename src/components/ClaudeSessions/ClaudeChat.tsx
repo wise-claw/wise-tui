@@ -110,6 +110,11 @@ import {
 import { resolveSessionExecutionEngine } from "../../utils/sessionExecutionEngine";
 import { extractClaudeInvocationFinalText } from "../../utils/claudeInvocationText";
 import { removeSplitResultTasksByIds } from "../../utils/removeSplitResultTasksByIds";
+import { notifySplitTodoCountUpdated } from "../../utils/notifySplitTodoCountUpdated";
+import {
+  countDrawerExecutableTasks,
+  listDrawerTrellisTasks,
+} from "../../utils/taskDrawerCounts";
 import {
   getMessageSenderGroupKey,
   hasRenderableChatMessageBody,
@@ -439,12 +444,6 @@ function buildTrellisTaskExecutionPrompt(task: TrellisRequirementTaskRow): strin
   return lines.join("\n");
 }
 
-function isRunnableTrellisRequirementTask(task: TrellisRequirementTaskRow): boolean {
-  if (task.archived || !task.parent?.trim()) return false;
-  const status = task.status.trim().toLowerCase();
-  return status !== "completed" && status !== "rejected" && status !== "archived";
-}
-
 function getSessionTraceStorageKey(sessionId: string, repositoryPath?: string): string {
   return `wise:claude:session-send-traces:${repositoryPath ?? ""}:${sessionId}`;
 }
@@ -665,28 +664,22 @@ export function ClaudeChat({
     parentTaskName: string | null;
     childTaskNames: string[];
   } | null>(null);
-  /** 「可执行任务」角标：仅统计未完成（todo）条数 */
-  const splitIncompleteTaskCount = useMemo(
-    () => splitTodoTasks.filter((task) => task.flowStatus === "todo").length,
-    [splitTodoTasks],
+  const taskDrawerTrellisScope = useMemo(
+    () => ({
+      repositoryId: activeRepository?.id ?? null,
+      focus: trellisTaskFocus,
+    }),
+    [activeRepository?.id, trellisTaskFocus],
   );
   const visibleTrellisTasks = useMemo(
-    () => {
-      const runnable = trellisTasks.filter(isRunnableTrellisRequirementTask);
-      if (!trellisTaskFocus) return runnable;
-      const parent = trellisTaskFocus.parentTaskName?.trim() ?? "";
-      const children = new Set(trellisTaskFocus.childTaskNames.map((name) => name.trim()).filter(Boolean));
-      const focused = runnable.filter((task) => {
-        const taskId = task.taskId.trim();
-        const parentName = task.parent?.trim() ?? "";
-        if (children.has(taskId)) return true;
-        return parent.length > 0 && parentName === parent;
-      });
-      return focused.length > 0 ? focused : runnable;
-    },
-    [trellisTaskFocus, trellisTasks],
+    () => listDrawerTrellisTasks(trellisTasks, taskDrawerTrellisScope),
+    [taskDrawerTrellisScope, trellisTasks],
   );
-  const taskDrawerCount = splitIncompleteTaskCount + visibleTrellisTasks.length;
+  const taskDrawerCounts = useMemo(
+    () => countDrawerExecutableTasks(splitTodoTasks, trellisTasks, taskDrawerTrellisScope),
+    [splitTodoTasks, taskDrawerTrellisScope, trellisTasks],
+  );
+  const taskDrawerCount = taskDrawerCounts.total;
   const showPendingTaskQueue = pendingTasks.length > 0;
 
   const syncSplitTaskList = useCallback(async () => {
@@ -749,7 +742,7 @@ export function ClaudeChat({
         projects: [project],
         repositories,
       });
-      setTrellisTasks(snapshot.tasks.filter((task) => task.sourceKind === "project"));
+      setTrellisTasks(snapshot.tasks);
     } catch (err) {
       console.warn("syncTrellisTaskList failed:", err);
       setTrellisTasks([]);
@@ -2920,7 +2913,7 @@ export function ClaudeChat({
       onExecutableTaskDoneAfterOmcSuccess: async (taskId: string) => {
         const ok = await persistSplitTaskFlowStatus(taskId, "done");
         if (ok) {
-          window.dispatchEvent(new CustomEvent(WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED, { detail: {} }));
+          notifySplitTodoCountUpdated();
         }
         return ok;
       },
@@ -3047,7 +3040,7 @@ export function ClaudeChat({
         await savePrdTaskSplitResult(next);
         setTaskListSelectedIds((prev) => prev.filter((id) => !unique.includes(id)));
         await syncSplitTaskList();
-        window.dispatchEvent(new CustomEvent(WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED, { detail: {} }));
+        notifySplitTodoCountUpdated();
         return true;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -3122,7 +3115,7 @@ export function ClaudeChat({
         });
         clearTrellisTaskFocusIfNeeded(tasks.filter((task) => removedKeys.includes(trellisTaskRowKey(task))));
         await syncTrellisTaskList();
-        window.dispatchEvent(new CustomEvent(WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED, { detail: {} }));
+        notifySplitTodoCountUpdated();
       }
       return { ok, fail, lastError };
     },
@@ -3827,7 +3820,7 @@ export function ClaudeChat({
       <Drawer
         title={
           taskDrawerCount > 0
-            ? `任务（Wise ${splitIncompleteTaskCount} · Trellis ${visibleTrellisTasks.length}）`
+            ? `任务（Wise ${taskDrawerCounts.wiseTodo} · Trellis ${taskDrawerCounts.trellisRunnable}）`
             : "任务"
         }
         placement="right"

@@ -48,6 +48,7 @@ import { listPrdRequirementIndexEntries } from "../../services/prdRequirementInd
 import { parsePrdInput } from "../../services/prdSource";
 import { savePrdPastedImage } from "../../services/savePrdPastedImage";
 import { validateSplitResult } from "../../services/taskSplitValidator";
+import { notifySplitTodoCountUpdated } from "../../utils/notifySplitTodoCountUpdated";
 import {
   PROMPT_SLOT_PRD_TASK_SPLIT_PHASE1,
   PROMPT_SLOT_PRD_TASK_SPLIT_PHASE2,
@@ -2378,6 +2379,7 @@ export function usePrdTaskSplitPanelController({
             switchToRequirement(nextActive);
           }
           await persistRequirementHistory(nextHistory, nextActiveId, false);
+          notifySplitTodoCountUpdated();
           message.success("已删除需求");
         })();
       },

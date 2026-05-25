@@ -47,7 +47,7 @@ describe("isRunnableTrellisRequirementTask", () => {
 });
 
 describe("countRunnableTrellisTasksInSnapshot", () => {
-  test("filters by repository id", () => {
+  test("legacy helper still counts all runnable tasks in snapshot", () => {
     const snapshot: TrellisRequirementWorkspaceSnapshot = {
       sources: [],
       prds: [],

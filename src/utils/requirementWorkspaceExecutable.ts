@@ -19,7 +19,10 @@ function filterTasksByRepository(
   return tasks.filter((task) => task.repositoryId === repositoryId);
 }
 
-/** 统计 Trellis 工作区中可执行的子任务数量（与 ClaudeChat 任务抽屉 Trellis 部分一致）。 */
+/**
+ * @deprecated 请使用 `countExecutableTrellisTasksInSnapshot`（`taskDrawerCounts.ts`），
+ * 与主会话任务抽屉计数规则一致。
+ */
 export function countRunnableTrellisTasksInSnapshot(
   snapshot: TrellisRequirementWorkspaceSnapshot,
   options?: { repositoryId?: number | null },

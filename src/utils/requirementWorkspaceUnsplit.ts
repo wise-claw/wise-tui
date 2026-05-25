@@ -31,7 +31,7 @@ function buildActiveTaskMap(tasks: TrellisRequirementTaskRow[]): Map<string, Tre
   return new Map(tasks.filter((task) => !task.archived).map((task) => [task.taskId, task]));
 }
 
-/** 统计 requirements-index 中尚未被任何子任务 sourceRequirementIds 覆盖的需求条数。 */
+/** 统计 requirements-index 中尚未被任何子任务 sourceRequirementIds 覆盖的需求条数（未生成过任务）。 */
 export function countUnsplitRequirementsInSnapshot(
   snapshot: TrellisRequirementWorkspaceSnapshot,
   options?: { repositoryId?: number | null },
