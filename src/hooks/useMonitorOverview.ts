@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { listen } from "@tauri-apps/api/event";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { safeUnlisten } from "../utils/safeTauriUnlisten";
 import { pickSessionForRepositorySidebarSelect } from "../utils/claudeSessionSelection";
 import { resolveMainOwnerAgentNameForRepositoryPath } from "../utils/repositoryMainSessionBinding";
 import { OMC_MONITOR_EMPLOYEE_NAME } from "../constants/omcMonitor";
@@ -10,9 +12,10 @@ import {
 } from "../utils/omcUserMessageText";
 import { loadSessionOwnerHints } from "../utils/sessionOwnerHints";
 import { isOmcBatchHistoryStubSessionId } from "../utils/omcEmployeeBatchHistory";
-import type {
-  WorkflowInvocationStreamDetail,
-  WorkflowOmcBatchRuntimeDetail,
+import {
+  WORKFLOW_UI_EVENT_INVOCATION_STREAM,
+  type WorkflowInvocationStreamDetail,
+  type WorkflowOmcBatchRuntimeDetail,
 } from "../constants/workflowUiEvents";
 import {
   getOmcDirectBatchInvocationsSnapshot,
@@ -219,6 +222,41 @@ function isActiveRepositoryMemberSubagent(status: RepositoryMemberMonitorSubagen
   return status === "running" || status === "stale";
 }
 
+/** 数值越小越「已结束」，去重时优先保留已结束条目，避免 invocation 流仍 progress 而 Trellis run 已 succeeded 时显示进行中。 */
+function repositoryMemberSubagentTerminalRank(
+  status: RepositoryMemberMonitorSubagentItem["status"],
+): number {
+  if (status === "running" || status === "stale") return 2;
+  if (status === "failed" || status === "cancelled") return 1;
+  return 0;
+}
+
+function dedupeRepositoryMemberSubagents(
+  subagents: RepositoryMemberMonitorSubagentItem[],
+): RepositoryMemberMonitorSubagentItem[] {
+  const byKey = new Map<string, RepositoryMemberMonitorSubagentItem>();
+  for (const item of subagents) {
+    const key =
+      item.invocationKey.trim() ||
+      item.toolUseId?.trim() ||
+      `${item.subagentType}:${item.stage ?? ""}:${item.taskId ?? ""}`;
+    const prev = byKey.get(key);
+    if (!prev) {
+      byKey.set(key, item);
+      continue;
+    }
+    const pick =
+      repositoryMemberSubagentTerminalRank(item.status) <
+      repositoryMemberSubagentTerminalRank(prev.status)
+        ? item
+        : item.status === prev.status && item.updatedAt >= prev.updatedAt
+          ? { ...prev, ...item }
+          : prev;
+    byKey.set(key, pick);
+  }
+  return [...byKey.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
 /** 仓库成员树不展示 Claude 主会话行（仅展示 Trellis / 子代理等）。 */
 export function isRepositoryMemberMainSessionSubagent(
   subagent: Pick<RepositoryMemberMonitorSubagentItem, "stage" | "subagentType">,
@@ -230,7 +268,9 @@ export function isRepositoryMemberMainSessionSubagent(
 }
 
 function finalizeRepositoryMemberMonitorItem(item: RepositoryMemberMonitorItem): RepositoryMemberMonitorItem {
-  const subagents = item.subagents.filter((entry) => !isRepositoryMemberMainSessionSubagent(entry));
+  const subagents = dedupeRepositoryMemberSubagents(
+    item.subagents.filter((entry) => !isRepositoryMemberMainSessionSubagent(entry)),
+  );
   const activeSubagentCount = subagents.filter((entry) => isActiveRepositoryMemberSubagent(entry.status)).length;
   return {
     ...item,
@@ -920,15 +960,18 @@ export function useMonitorOverview({
     };
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    let lastDigest = "";
-    const POLL_INTERVAL_MS = 8000;
+  const externalTrellisRunsDigestRef = useRef("");
 
-    const refresh = async () => {
+  useEffect(() => {
+    externalTrellisRunsDigestRef.current = "";
+  }, [trellisRuntimeMonitorTargetKey]);
+
+  const refreshExternalTrellisAgentRuns = useCallback(
+    async (isActive: () => boolean = () => true) => {
       const targets = trellisRuntimeMonitorTargets;
       if (targets.length === 0) {
-        lastDigest = "";
+        externalTrellisRunsDigestRef.current = "";
+        if (!isActive()) return;
         setExternalTrellisAgentRuns((prev) => (prev.length === 0 ? prev : []));
         return;
       }
@@ -949,21 +992,28 @@ export function useMonitorOverview({
           return graph?.runs ?? [];
         }),
       );
-      if (cancelled) return;
+      if (!isActive()) return;
       const runs = dedupeTrellisAgentRuns(batches.flat());
       const digest = digestTrellisAgentRuns(runs);
-      if (digest === lastDigest) return;
-      lastDigest = digest;
+      if (digest === externalTrellisRunsDigestRef.current) return;
+      externalTrellisRunsDigestRef.current = digest;
       setExternalTrellisAgentRuns(runs);
-    };
+    },
+    [trellisRuntimeMonitorTargets],
+  );
 
-    void refresh();
+  useEffect(() => {
+    let cancelled = false;
+    const isActive = () => !cancelled;
+    const POLL_INTERVAL_MS = 8000;
+
+    void refreshExternalTrellisAgentRuns(isActive);
     const timer = window.setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-      void refresh();
+      void refreshExternalTrellisAgentRuns(isActive);
     }, POLL_INTERVAL_MS);
     const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") void refresh();
+      if (document.visibilityState === "visible") void refreshExternalTrellisAgentRuns(isActive);
     };
     if (typeof document !== "undefined") {
       document.addEventListener("visibilitychange", onVisibilityChange);
@@ -975,7 +1025,47 @@ export function useMonitorOverview({
         document.removeEventListener("visibilitychange", onVisibilityChange);
       }
     };
-  }, [trellisRuntimeMonitorTargetKey, trellisRuntimeMonitorTargets]);
+  }, [refreshExternalTrellisAgentRuns, trellisRuntimeMonitorTargetKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const isActive = () => !cancelled;
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const cleanups: Array<() => void> = [];
+
+    const scheduleRefresh = () => {
+      if (debounceTimer) window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(() => {
+        debounceTimer = null;
+        void refreshExternalTrellisAgentRuns(isActive);
+      }, 250);
+    };
+
+    void (async () => {
+      const unlisten = await listen("trellis-runtime-event", scheduleRefresh);
+      if (cancelled) {
+        safeUnlisten(unlisten);
+        return;
+      }
+      cleanups.push(() => safeUnlisten(unlisten));
+    })();
+
+    const onInvocationStream = (event: Event) => {
+      const detail = (event as CustomEvent<WorkflowInvocationStreamDetail>).detail;
+      if (detail?.phase !== "complete") return;
+      if (detail.templateId !== "trellis") return;
+      if (detail.ownerKind !== "repository") return;
+      scheduleRefresh();
+    };
+    window.addEventListener(WORKFLOW_UI_EVENT_INVOCATION_STREAM, onInvocationStream);
+    cleanups.push(() => window.removeEventListener(WORKFLOW_UI_EVENT_INVOCATION_STREAM, onInvocationStream));
+
+    return () => {
+      cancelled = true;
+      if (debounceTimer) window.clearTimeout(debounceTimer);
+      cleanups.forEach((cleanup) => cleanup());
+    };
+  }, [refreshExternalTrellisAgentRuns]);
 
   const directBatchInvocationsSnap = useSyncExternalStore(
     subscribeOmcDirectBatchInvocations,

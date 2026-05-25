@@ -170,6 +170,47 @@ function buildAssistantMessage(parts: MessagePart[]): ClaudeMessage {
   };
 }
 
+function isToolResultUpdatePart(part: MessagePart): part is ToolUsePart {
+  if (part.type !== "tool_use") return false;
+  return (
+    part.status === "completed" ||
+    part.status === "error" ||
+    Boolean(part.output?.trim()) ||
+    Boolean(part.error?.trim())
+  );
+}
+
+/** 将 stream-json 中的 tool_result 合并进历史 assistant 消息里对应的 tool_use（按 id）。 */
+export function applyToolResultPartsToSession(session: ClaudeSession, parts: MessagePart[]): ClaudeSession {
+  const updates = parts.filter(isToolResultUpdatePart);
+  if (updates.length === 0) return session;
+  let changed = false;
+  const messages = session.messages.map((message) => {
+    if (message.role !== "assistant") return message;
+    let touched = false;
+    const nextParts = message.parts.map((part) => {
+      if (part.type !== "tool_use") return part;
+      const update = updates.find((u) => u.id === part.id);
+      if (!update) return part;
+      touched = true;
+      return {
+        ...part,
+        ...update,
+        name: part.name.trim() ? part.name : update.name,
+        input: Object.keys(part.input ?? {}).length > 0 ? part.input : update.input,
+      };
+    });
+    if (!touched) return message;
+    changed = true;
+    const textContent = nextParts
+      .filter((p): p is Extract<MessagePart, { type: "text" }> => p.type === "text")
+      .map((p) => p.text)
+      .join("");
+    return { ...message, parts: nextParts, content: textContent };
+  });
+  return changed ? { ...session, messages } : session;
+}
+
 export function appendAssistantStreamParts(session: ClaudeSession, parts: MessagePart[]): ClaudeSession {
   if (parts.length === 0) return session;
   const lastMsg = session.messages[session.messages.length - 1];

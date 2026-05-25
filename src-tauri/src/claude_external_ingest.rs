@@ -458,7 +458,9 @@ fn parse_claude_session_lines(
                 if block.get("type").and_then(Value::as_str) != Some("tool_result") {
                     continue;
                 }
-                let Some(tool_use_id) = string_field(block, "tool_use_id") else {
+                let Some(tool_use_id) = string_field(block, "tool_use_id")
+                    .or_else(|| string_field(block, "toolUseId"))
+                else {
                     continue;
                 };
                 let Some(start) = pending.remove(&tool_use_id) else {

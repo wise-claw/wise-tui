@@ -146,11 +146,17 @@ function resolveConversationTaskToolStatus(
   messages: ClaudeSession["messages"],
   sessionStatus?: ClaudeSession["status"],
 ): SessionConversationTaskItem["status"] | null {
+  const merged = mergeToolUseParts(messages).find((item) => item.id === part.id);
+  if (merged?.status === "error" || merged?.error?.trim()) return "failed";
+  if (merged?.status === "completed" || merged?.output?.trim()) return "completed";
   if (part.status === "error" || part.error?.trim()) return "failed";
   if (part.status === "completed" || part.output?.trim()) return "completed";
   if (part.status === "pending" || part.status === "running") {
     if (sessionStatus === "cancelled" || sessionStatus === "error") return "failed";
     if (hasSettledAfterToolUse(messages, part.id)) return "completed";
+    if (sessionStatus === "idle" && (merged?.output?.trim() || merged?.status === "completed")) {
+      return "completed";
+    }
     return "running";
   }
   return null;

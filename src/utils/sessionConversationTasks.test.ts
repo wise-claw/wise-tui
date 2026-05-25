@@ -247,6 +247,56 @@ describe("buildSessionConversationTasks", () => {
     expect(buildConversationTaskDetailMessages(messages, "agent-1")).toHaveLength(2);
   });
 
+  test("marks subagent completed when user tool_result merged while session idle", () => {
+    const items = buildSessionConversationTasks({
+      session: session({
+        status: "idle",
+        messages: [
+          {
+            id: 1,
+            role: "user",
+            content: "go",
+            timestamp: 50,
+            parts: [{ type: "text", text: "go" }],
+          },
+          {
+            id: 2,
+            role: "assistant",
+            content: "",
+            timestamp: 100,
+            parts: [
+              {
+                type: "tool_use",
+                id: "agent-1",
+                name: "Task",
+                input: { description: "子代理" },
+                status: "running",
+              },
+            ],
+          },
+          {
+            id: 3,
+            role: "user",
+            content: "done",
+            timestamp: 200,
+            parts: [
+              {
+                type: "tool_use",
+                id: "agent-1",
+                name: "",
+                input: {},
+                output: "子代理返回",
+                status: "completed",
+              },
+            ],
+          },
+        ],
+      }),
+    });
+    expect(items[0]?.status).toBe("completed");
+    expect(items[0]?.cancellable).toBe(false);
+  });
+
   test("marks running message tool as stoppable even when session host is idle", () => {
     const items = buildSessionConversationTasks({
       session: session({

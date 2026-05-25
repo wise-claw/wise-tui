@@ -106,6 +106,42 @@ describe("buildRepositoryMemberMonitorItems", () => {
     ]);
   });
 
+  test("dedupes stale running invocation when Trellis agent run already completed", () => {
+    const invocations: WorkflowInvocationStreamDetail[] = [
+      {
+        phase: "progress",
+        invocationKey: "agent-run-1",
+        sessionId: "session-1",
+        repositoryPath: "/repo/frontend",
+        templateId: "trellis",
+        ownerKind: "repository",
+        ownerRepositoryId: 1,
+        subagentType: "Explore",
+        stage: "research",
+      },
+    ];
+    const runs: TrellisAgentRun[] = [
+      agentRun({
+        agentRunId: "agent-run-1",
+        rootPath: "/repo",
+        agentType: "Explore",
+        stage: "research",
+        status: "succeeded",
+        repositoryPath: "/repo/frontend",
+        metadata: { toolUseId: "tool-1", source: "external-claude-cli" },
+      }),
+    ];
+    const items = buildRepositoryMemberMonitorItems(
+      [repo({ id: 1, path: "/repo/frontend" })],
+      invocations,
+      [],
+      runs,
+    );
+    expect(items[0]?.status).toBe("idle");
+    expect(items[0]?.activeSubagentCount).toBe(0);
+    expect(items[0]?.subagents[0]?.status).toBe("completed");
+  });
+
   test("shows idle Wise Trellis repositories as repository members", () => {
     const items = buildRepositoryMemberMonitorItems(
       [

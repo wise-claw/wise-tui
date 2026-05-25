@@ -1,5 +1,42 @@
-import type { MessagePart } from "../types";
+import type { MessagePart, ToolUsePart } from "../types";
 import { unwrapClaudeStreamLineRoot } from "../notifications/streamIngest";
+
+function toolResultPartsFromContentBlocks(blocks: unknown): MessagePart[] {
+  if (!Array.isArray(blocks)) return [];
+  const parts: MessagePart[] = [];
+  for (const raw of blocks) {
+    if (!raw || typeof raw !== "object") continue;
+    const b = raw as Record<string, unknown>;
+    if (b.type !== "tool_result") continue;
+    const toolUseId =
+      (typeof b.tool_use_id === "string" && b.tool_use_id.trim()) ||
+      (typeof b.toolUseId === "string" && b.toolUseId.trim()) ||
+      "";
+    if (!toolUseId) continue;
+    const content = Array.isArray(b.content)
+      ? b.content
+          .filter((c: unknown) => {
+            if (!c || typeof c !== "object") return false;
+            return (c as { type?: unknown }).type === "text";
+          })
+          .map((c: unknown) => ((c as { text?: unknown }).text as string) ?? "")
+          .join("")
+      : b.content;
+    const output =
+      typeof content === "string" ? content : content != null ? JSON.stringify(content) : "";
+    const isError = b.is_error === true;
+    parts.push({
+      type: "tool_use",
+      id: toolUseId,
+      name: typeof b.name === "string" ? b.name : "",
+      input: {},
+      output,
+      status: isError ? "error" : "completed",
+      error: isError ? (typeof output === "string" ? output : undefined) : undefined,
+    } satisfies ToolUsePart);
+  }
+  return parts;
+}
 
 function extractPartsFromStreamDelta(delta: unknown): MessagePart[] {
   if (!delta || typeof delta !== "object") return [];
@@ -104,49 +141,22 @@ export function extractPartsFromStreamLine(line: string): { parts: MessagePart[]
             });
           } else if (b.type === "thinking" && b.thinking) {
             parts.push({ type: "reasoning", text: b.thinking });
+          } else {
+            parts.push(...toolResultPartsFromContentBlocks([b]));
           }
         }
         if (parts.length > 0) return { parts, isInit: false, sessionId: null };
       }
     }
 
-    // Tool result
-    if (json.type === "assistant" && json.message?.content) {
-      const blocks = json.message.content;
-      if (Array.isArray(blocks)) {
-        for (const b of blocks) {
-          if (b.type === "tool_result") {
-            const content = Array.isArray(b.content)
-              ? b.content
-                  .filter((c: unknown) => {
-                    if (!c || typeof c !== "object") return false;
-                    return (c as { type?: unknown }).type === "text";
-                  })
-                  .map((c: unknown) => ((c as { text?: unknown }).text as string) ?? "")
-                  .join("")
-              : b.content || "";
-            return {
-              parts: [{
-                type: "tool_use",
-                id: b.tool_use_id || "",
-                name: "",
-                input: {},
-                output: typeof content === "string" ? content : JSON.stringify(content),
-                status: b.is_error ? "error" : "completed",
-                error: b.is_error ? (typeof content === "string" ? content : undefined) : undefined,
-              }],
-              isInit: false,
-              sessionId: null,
-            };
-          }
-        }
-      }
-    }
-
-    // User message echo
+    // User message echo (Claude Code 子代理 tool_result 通常在 user 行，而非 assistant)
     if (json.type === "user" && json.message?.content) {
       const blocks = json.message.content;
       if (Array.isArray(blocks)) {
+        const toolResults = toolResultPartsFromContentBlocks(blocks);
+        if (toolResults.length > 0) {
+          return { parts: toolResults, isInit: false, sessionId: null };
+        }
         const textParts = blocks
           .filter((b: unknown) => {
             if (!b || typeof b !== "object") return false;

@@ -1,7 +1,11 @@
 import type { MutableRefObject } from "react";
 import { sessionUsesStreamingConnection } from "../constants/claudeConnection";
 import type { ClaudeSession, MessagePart } from "../types";
-import { appendAssistantStreamParts, capAssistantStreamBufferText } from "./claudeStreamAssembler";
+import {
+  appendAssistantStreamParts,
+  applyToolResultPartsToSession,
+  capAssistantStreamBufferText,
+} from "./claudeStreamAssembler";
 import {
   appendSystemMessageBySessionOrClaudeId,
   extractLatestAssistantPlainText,
@@ -173,7 +177,17 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
           setActiveSessionId((aid) => (aid === tid ? realSessionId : aid));
         }
         if (dedupedParts.length > 0 && !isInit) {
-          updated = appendAssistantStreamParts(updated, dedupedParts);
+          const hasToolResults = dedupedParts.some(
+            (part) =>
+              part.type === "tool_use" &&
+              (part.status === "completed" ||
+                part.status === "error" ||
+                Boolean(part.output?.trim()) ||
+                Boolean(part.error?.trim())),
+          );
+          updated = hasToolResults
+            ? applyToolResultPartsToSession(updated, dedupedParts)
+            : appendAssistantStreamParts(updated, dedupedParts);
         }
         return updated;
       }),
@@ -253,7 +267,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       streamingTargetIdRef.current = null;
     }
 
-    if (reloadTranscriptFromDisk && success && !streamingResident) {
+    if (reloadTranscriptFromDisk && success) {
       const stableTabId = session?.id ?? tid;
       const repo = session?.repositoryPath?.trim() ?? "";
       const tidTrim = tid.trim();

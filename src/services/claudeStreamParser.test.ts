@@ -80,6 +80,32 @@ describe("extractPartsFromStreamLine", () => {
       sessionId: null,
     });
   });
+
+  test("parses tool_result on user messages (Claude Code subagent completion)", () => {
+    const result = extractPartsFromStreamLine(
+      JSON.stringify({
+        type: "user",
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_sub_1",
+              content: [{ type: "text", text: "子代理已完成" }],
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(result.parts).toHaveLength(1);
+    expect(result.parts[0]).toMatchObject({
+      type: "tool_use",
+      id: "toolu_sub_1",
+      status: "completed",
+      output: "子代理已完成",
+    });
+  });
 });
 
 describe("stream session id helpers", () => {
