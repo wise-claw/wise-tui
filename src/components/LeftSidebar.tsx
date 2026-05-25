@@ -45,7 +45,6 @@ import { useSidebarTrellisReadyMap } from "./LeftSidebar/useSidebarTrellisReadyM
 import { useClaudeProcessWorkspaceLabelCache } from "../hooks/useClaudeProcessWorkspaceLabelCache";
 import { useSystemResourceSessions } from "./LeftSidebar/useSystemResourceSessions";
 import { useSidebarRunningMainSessionIndicators } from "./LeftSidebar/useSidebarRunningMainSessionIndicators";
-import type { SplitTodoCountUpdatedDetail } from "../constants/workflowUiEvents";
 import { notifySplitTodoCountUpdated } from "../utils/notifySplitTodoCountUpdated";
 import "./GitPanel/index.css";
 
