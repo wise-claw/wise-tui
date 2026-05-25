@@ -4,7 +4,7 @@ import { ContextDetailPopover } from "./ContextDetailPopover";
 import type { ContextBreakdownSnapshot } from "../../services/claudeContextBreakdown";
 
 const RING_SIZE = 14;
-const STROKE_WIDTH = 2.5;
+const STROKE_WIDTH = 3;
 
 export interface ContextCompactProgressRingProps {
   percent: number;
