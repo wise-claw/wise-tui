@@ -73,21 +73,26 @@ export async function openCodeGraphNodeInIde(
     }
 
     const rawPath = node.path.trim();
-    const abs =
+    const rel =
       rawPath === "" || rawPath === "/" || rawPath === "."
-        ? root
-        : joinRepositoryAbsolutePath(root, node.path);
+        ? null
+        : rawPath.replace(/^[/\\]+/, "");
 
     const canGoto =
       (node.kind === "file" || node.kind === "symbol" || node.kind === "api_operation" || node.kind === "schema")
       && Boolean(node.range);
 
-    let gotoLine: number | undefined;
-    let gotoColumn: number | undefined;
+    let gotoLine = 1;
+    let gotoColumn = 1;
     if (canGoto && node.range) {
       gotoLine = node.range.start.line + 1;
       gotoColumn = node.range.start.column + 1;
     }
+
+    const ideOpen =
+      rel != null
+        ? { ideGotoRelative: rel, gotoLine, gotoColumn }
+        : { gotoLine, gotoColumn };
 
     if (target.kind === "command") {
       const cmd = target.command?.trim();
@@ -95,11 +100,10 @@ export async function openCodeGraphNodeInIde(
         message.warning("打开方式未配置有效命令");
         return;
       }
-      await openWorkspaceIn(abs, {
+      await openWorkspaceIn(rel != null ? root : joinRepositoryAbsolutePath(root, node.path), {
         command: cmd,
         args: target.args ?? [],
-        gotoLine,
-        gotoColumn,
+        ...ideOpen,
       });
     } else {
       const appName = target.appName?.trim();
@@ -107,11 +111,10 @@ export async function openCodeGraphNodeInIde(
         message.warning("打开方式未配置有效应用");
         return;
       }
-      await openWorkspaceIn(abs, {
+      await openWorkspaceIn(rel != null ? root : joinRepositoryAbsolutePath(root, node.path), {
         appName,
         args: target.args ?? [],
-        gotoLine,
-        gotoColumn,
+        ...ideOpen,
       });
     }
   } catch (e) {

@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import { Input, Spin } from "antd";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Input, Spin, message } from "antd";
 import { SearchOutlined } from "@ant-design/icons";
-import { openInFinder } from "../../services/repository";
+import { openRepositoryFileWithStoredPreference } from "../../services/openWorkspaceWithPreference";
 import { searchRepositoryFiles } from "../../services/repositoryFiles";
 import "./index.css";
 
@@ -22,6 +22,17 @@ export function CommandPalette({ open, onClose, repositoryPath }: Props) {
   const [results, setResults] = useState<FileResult[]>([]);
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const openSearchResult = useCallback(
+    (relativePath: string) => {
+      if (!repositoryPath) return;
+      onClose();
+      void openRepositoryFileWithStoredPreference(repositoryPath, relativePath).catch((e) => {
+        message.error(e instanceof Error ? e.message : String(e));
+      });
+    },
+    [repositoryPath, onClose],
+  );
 
   useEffect(() => {
     if (open) {
@@ -90,17 +101,16 @@ export function CommandPalette({ open, onClose, repositoryPath }: Props) {
         setActiveIndex((i) => Math.max(i - 1, 0));
       } else if (e.key === "Enter") {
         const item = results[activeIndex];
-        if (item) {
+        if (item && repositoryPath) {
           e.preventDefault();
-          onClose();
-          void openInFinder(`${repositoryPath}/${item.path}`);
+          openSearchResult(item.path);
         }
       }
     }
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, results, activeIndex, onClose, repositoryPath]);
+  }, [open, results, activeIndex, onClose, repositoryPath, openSearchResult]);
 
   if (!open) return null;
 
@@ -140,8 +150,7 @@ export function CommandPalette({ open, onClose, repositoryPath }: Props) {
                 key={item.path}
                 className={`app-command-palette-item ${index === activeIndex ? "app-command-palette-item--active" : ""}`}
                 onClick={() => {
-                  onClose();
-                  void openInFinder(`${repositoryPath}/${item.path}`);
+                  openSearchResult(item.path);
                 }}
                 onMouseEnter={() => setActiveIndex(index)}
               >

@@ -225,7 +225,197 @@ fn is_vscode_family_cli(cmd: &str) -> bool {
     matches!(base.as_str(), "code" | "cursor" | "codium")
 }
 
+fn app_name_to_vscode_cli(app_name: &str) -> Option<&'static str> {
+    let lower = app_name.trim().to_ascii_lowercase();
+    if lower.contains("cursor") {
+        return Some("cursor");
+    }
+    if lower.contains("visual studio code") || lower == "vscode" {
+        return Some("code");
+    }
+    if lower.contains("codium") || lower.contains("vscodium") {
+        return Some("codium");
+    }
+    None
+}
+
+fn vscode_family_cli_on_path(cli: &str) -> bool {
+    #[cfg(windows)]
+    {
+        return std::process::Command::new("where")
+            .arg(cli)
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+    }
+    #[cfg(not(windows))]
+    {
+        return std::process::Command::new("which")
+            .arg(cli)
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn macos_bundle_vscode_cli(cli: &str) -> Option<PathBuf> {
+    let candidates: &[&str] = match cli {
+        "code" => &[
+            "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code",
+            "/Applications/Code.app/Contents/Resources/app/bin/code",
+        ],
+        "cursor" => &["/Applications/Cursor.app/Contents/Resources/app/bin/cursor"],
+        "codium" => &["/Applications/VSCodium.app/Contents/Resources/app/bin/codium"],
+        _ => return None,
+    };
+    for p in candidates {
+        let path = PathBuf::from(p);
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "windows")]
+fn windows_bundle_vscode_cli(cli: &str) -> Option<PathBuf> {
+    let local = std::env::var_os("LOCALAPPDATA")?;
+    let base = PathBuf::from(local);
+    let candidates: Vec<PathBuf> = match cli {
+        "code" => vec![
+            base.join("Programs/Microsoft VS Code/bin/code.cmd"),
+            base.join("Programs/Microsoft VS Code/bin/code.exe"),
+        ],
+        "cursor" => vec![
+            base.join("Programs/cursor/resources/app/bin/cursor.cmd"),
+            base.join("Programs/Cursor/resources/app/bin/cursor.cmd"),
+        ],
+        "codium" => vec![base.join("Programs/VSCodium/bin/codium.cmd")],
+        _ => return None,
+    };
+    candidates.into_iter().find(|p| p.is_file())
+}
+
+/// 解析 VS Code 系 CLI 可执行文件（PATH → macOS/Windows 应用 bundle 内置 bin）
+fn resolve_vscode_family_cli(cli: &str) -> Option<PathBuf> {
+    let direct = PathBuf::from(cli);
+    if direct.is_file() {
+        return Some(direct);
+    }
+    if vscode_family_cli_on_path(cli) {
+        return Some(PathBuf::from(cli));
+    }
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(p) = macos_bundle_vscode_cli(cli) {
+            return Some(p);
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(p) = windows_bundle_vscode_cli(cli) {
+            return Some(p);
+        }
+    }
+    None
+}
+
+fn vscode_cli_failure(cmd: &Path, out: &std::process::Output) -> String {
+    let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+    let label = cmd.to_string_lossy();
+    if err.is_empty() {
+        format!(
+            "命令「{}」执行失败（退出码 {:?}）",
+            label,
+            out.status.code()
+        )
+    } else {
+        format!("命令「{}」失败：{}", label, err)
+    }
+}
+
+/// 在已打开/新窗口中以仓库为工作区并 `-g` 到目标文件（搜索、图谱文件节点）
+fn run_vscode_family_cli_repo_goto(
+    cmd: &Path,
+    root_canon: &Path,
+    goto_arg: &str,
+    file_abs: &Path,
+    args: &[String],
+) -> Result<(), String> {
+    let mut strategies: Vec<std::process::Command> = Vec::new();
+
+    let mut reuse_root_goto = std::process::Command::new(cmd);
+    reuse_root_goto
+        .arg("-r")
+        .arg(root_canon)
+        .arg("-g")
+        .arg(goto_arg)
+        .args(args);
+    strategies.push(reuse_root_goto);
+
+    let mut reuse_goto_only = std::process::Command::new(cmd);
+    reuse_goto_only.arg("-r").arg("-g").arg(goto_arg).args(args);
+    strategies.push(reuse_goto_only);
+
+    let mut reuse_root_file = std::process::Command::new(cmd);
+    reuse_root_file.arg("-r").arg(root_canon).arg(file_abs).args(args);
+    strategies.push(reuse_root_file);
+
+    let mut last_err = String::new();
+    for mut attempt in strategies {
+        let out = attempt
+            .output()
+            .map_err(|e| format!("Failed to run command {}: {}", cmd.display(), e))?;
+        if out.status.success() {
+            return Ok(());
+        }
+        last_err = vscode_cli_failure(cmd, &out);
+    }
+    Err(last_err)
+}
+
+fn open_ide_file_with_vscode_cli(
+    cli: &str,
+    root_canon: &Path,
+    goto_arg: &str,
+    file_abs: &Path,
+    args: &[String],
+) -> Result<(), String> {
+    let exe = resolve_vscode_family_cli(cli).ok_or_else(|| {
+        format!(
+            "未找到「{cli}」命令行工具。请在编辑器中执行 Shell Command: Install '{cli}' command in PATH，或确认已安装对应应用。"
+        )
+    })?;
+    run_vscode_family_cli_repo_goto(&exe, root_canon, goto_arg, file_abs, args)
+}
+
+/// `path` 为仓库根、`relative` 为仓库内相对路径 → (canonical root, canonical file)
+fn resolve_repo_relative_file(
+    root_buf: &Path,
+    relative: &str,
+) -> Result<(PathBuf, PathBuf), String> {
+    if !root_buf.is_dir() {
+        return Err("ideGotoRelative 要求 path 为仓库根目录".to_string());
+    }
+    let root_canon = fs::canonicalize(root_buf).unwrap_or_else(|_| root_buf.to_path_buf());
+    let rel_norm = relative.replace('\\', "/");
+    let file_buf = root_canon.join(rel_norm.trim_start_matches('/'));
+    let file_abs = match fs::canonicalize(&file_buf) {
+        Ok(p) => p,
+        Err(_) => file_buf.clone(),
+    };
+    if !file_abs.starts_with(&root_canon) {
+        return Err("目标文件不在仓库根路径之下".to_string());
+    }
+    if !file_abs.is_file() {
+        return Err(format!("文件不存在: {}", file_abs.display()));
+    }
+    Ok((root_canon, file_abs))
+}
+
 /// `graph_ide_folder_relative`：代码图谱「目录」节点时，`path` 为仓库根、本字段为相对目录，VS Code 系 CLI 使用 `cursor 根 -g 目录下源文件:1:1`。
+/// `ide_goto_relative`：文件搜索等场景，`path` 为仓库根、本字段为要选中的相对文件，VS Code 系使用 `cursor 根 -g 文件:行:列`。
 #[allow(unused_variables)] // goto_* 仅在 command 且 code 系 CLI 分支使用
 #[tauri::command]
 pub(crate) fn open_workspace_in(
@@ -237,10 +427,83 @@ pub(crate) fn open_workspace_in(
     goto_line: Option<u32>,
     goto_column: Option<u32>,
     graph_ide_folder_relative: Option<String>,
+    ide_goto_relative: Option<String>,
 ) -> Result<(), String> {
     let path_buf = std::path::PathBuf::from(&path);
     if !path_buf.exists() {
         return Err(format!("Path does not exist: {}", path));
+    }
+
+    let ide_file_rel = ide_goto_relative
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && *s != "." && *s != "/");
+
+    if let Some(rel) = ide_file_rel {
+        let (root_canon, file_abs) = resolve_repo_relative_file(&path_buf, rel)?;
+        let line = goto_line.unwrap_or(1).max(1);
+        let col = goto_column.unwrap_or(1).max(1);
+        let goto_arg = format!("{}:{}:{}", file_abs.to_string_lossy(), line, col);
+
+        if let Some(cmd) = command.clone() {
+            if is_vscode_family_cli(&cmd) {
+                return open_ide_file_with_vscode_cli(&cmd, &root_canon, &goto_arg, &file_abs, &args);
+            }
+            let out = std::process::Command::new(&cmd)
+                .arg(&root_canon)
+                .args(&args)
+                .output()
+                .map_err(|e| format!("Failed to run command {}: {}", cmd, e))?;
+            if !out.status.success() {
+                let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                return Err(if err.is_empty() {
+                    format!("命令「{}」执行失败（退出码 {:?}）", cmd, out.status.code())
+                } else {
+                    format!("命令「{}」失败：{}", cmd, err)
+                });
+            }
+            return Ok(());
+        }
+
+        if let Some(name) = app_name.clone() {
+            if let Some(cli) = app_name_to_vscode_cli(name.trim()) {
+                return open_ide_file_with_vscode_cli(cli, &root_canon, &goto_arg, &file_abs, &args);
+            }
+            #[cfg(target_os = "macos")]
+            {
+                return macos_open_with_named_app(root_canon.as_path(), name.trim(), &args);
+            }
+            #[cfg(target_os = "windows")]
+            {
+                let path_str = root_canon.to_string_lossy().to_string();
+                let status = std::process::Command::new("cmd")
+                    .args(["/C", "start", "", name.trim(), &path_str])
+                    .status()
+                    .map_err(|e| format!("打开失败: {e}"))?;
+                if !status.success() {
+                    return Err(format!(
+                        "无法使用「{}」打开仓库（退出码 {:?}）。",
+                        name.trim(),
+                        status.code()
+                    ));
+                }
+                return Ok(());
+            }
+            #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+            {
+                let _ = root_canon;
+                let _ = args;
+                return Err(format!(
+                    "指定应用「{}」打开：当前桌面环境请使用命令行方式",
+                    name.trim()
+                ));
+            }
+        }
+
+        return app
+            .opener()
+            .open_path(root_canon.to_string_lossy().as_ref(), None::<String>)
+            .map_err(|e| e.to_string());
     }
 
     let graph_rel = graph_ide_folder_relative

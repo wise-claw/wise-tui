@@ -1,5 +1,6 @@
 import type { OpenAppTarget } from "../types";
 import { DEFAULT_OPEN_APP_ID, DEFAULT_OPEN_APP_TARGETS } from "../components/OpenAppMenu/constants";
+import { joinRepositoryAbsolutePath } from "../utils/repositoryPreviewBinary";
 import { getOpenAppPreferenceSync } from "./openAppPreference";
 import { openInFinder, openWorkspaceIn } from "./repository";
 
@@ -78,4 +79,66 @@ export async function openWorkspaceWithStoredPreference(
     throw new Error(OPEN_WORKSPACE_ERROR.NO_TARGET);
   }
   await openWorkspaceWithOpenAppTarget(workspacePath, t);
+}
+
+/** 使用当前「打开方式」偏好打开仓库：工作区为仓库根，IDE 内定位到相对路径文件（与顶栏 OpenAppMenu 偏好一致） */
+export async function openRepositoryFileWithStoredPreference(
+  repositoryPath: string,
+  relativePath: string,
+  openTargets?: readonly OpenAppTarget[],
+  options?: { line?: number | null; column?: number | null },
+): Promise<void> {
+  const root = repositoryPath.trim();
+  const rel = relativePath.trim();
+  if (!root || !rel) {
+    throw new Error(OPEN_WORKSPACE_ERROR.EMPTY_PATH);
+  }
+  const target = resolveStoredOpenAppTarget(openTargets);
+  if (!target) {
+    throw new Error(OPEN_WORKSPACE_ERROR.NO_TARGET);
+  }
+  const abs = joinRepositoryAbsolutePath(root, rel);
+
+  if (target.kind === "finder") {
+    await openInFinder(abs);
+    return;
+  }
+
+  const gotoLine =
+    options?.line != null && Number.isFinite(options.line) && options.line > 0
+      ? Math.floor(options.line)
+      : 1;
+  const gotoColumn =
+    options?.column != null && Number.isFinite(options.column) && options.column > 0
+      ? Math.floor(options.column)
+      : 1;
+
+  const ideOpen = {
+    ideGotoRelative: rel,
+    gotoLine,
+    gotoColumn,
+  } as const;
+
+  if (target.kind === "command") {
+    const cmd = resolveCommand(target);
+    if (!cmd) {
+      throw new Error(OPEN_WORKSPACE_ERROR.NOT_CONFIGURED);
+    }
+    await openWorkspaceIn(root, {
+      command: cmd,
+      args: target.args ?? [],
+      ...ideOpen,
+    });
+    return;
+  }
+
+  const appName = resolveAppName(target);
+  if (!appName) {
+    throw new Error(OPEN_WORKSPACE_ERROR.NOT_CONFIGURED);
+  }
+  await openWorkspaceIn(root, {
+    appName,
+    args: target.args ?? [],
+    ...ideOpen,
+  });
 }

@@ -243,6 +243,11 @@ export async function openWorkspaceIn(
      * Rust 侧对 VS Code 系 CLI 执行 `cursor 仓库根 -g 目录下首个源文件:1:1`，以整仓打开并靠近该目录。
      */
     graphIdeFolderRelative?: string | null;
+    /**
+     * 文件搜索等：`path` 为仓库根，本字段为要选中的相对文件。
+     * VS Code 系 CLI 执行 `cursor 仓库根 -g 文件:行:列`（整仓为工作区，定位到该文件）。
+     */
+    ideGotoRelative?: string | null;
   },
 ): Promise<void> {
   return invoke("open_workspace_in", {
@@ -253,5 +258,6 @@ export async function openWorkspaceIn(
     gotoLine: options.gotoLine ?? null,
     gotoColumn: options.gotoColumn ?? null,
     graphIdeFolderRelative: options.graphIdeFolderRelative ?? null,
+    ideGotoRelative: options.ideGotoRelative ?? null,
   });
 }
