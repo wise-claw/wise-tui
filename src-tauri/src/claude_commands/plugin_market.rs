@@ -1,10 +1,15 @@
 //! Claude Code plugin marketplaces bootstrap and install/uninstall via the `claude` CLI.
 
 use serde::{Deserialize, Serialize};
+use std::io::Read;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
 use super::{claude_path_search_prefixes, find_claude_binary, merge_path_env};
+
+/// LSP 等插件可能拉取较大依赖；超时后终止子进程并提示用户稍后查看「已安装」。
+const PLUGIN_CLI_TIMEOUT: Duration = Duration::from_secs(600);
 
 const BOOTSTRAP_MARKETPLACES: &[&str] = &[
     "anthropics/claude-code",
@@ -39,25 +44,53 @@ fn home_dir() -> Result<std::path::PathBuf, String> {
 fn run_claude_plugin_cli(home: &Path, args: &[&str]) -> Result<String, String> {
     let bin = find_claude_binary()?;
     let path_merged = merge_path_env(&claude_path_search_prefixes());
-    let out = Command::new(&bin)
+    let mut child = Command::new(&bin)
         .args(args)
         .current_dir(home)
         .env("PATH", &path_merged)
         .env("HOME", home.to_string_lossy().to_string())
         .env("CI", "1")
-        .output()
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
         .map_err(|e| format!("无法启动 claude: {}", e))?;
-    let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
-    if out.status.success() {
-        Ok(if stdout.is_empty() { stderr } else { stdout })
-    } else {
-        Err(format!(
-            "claude plugin 失败（退出码 {:?}）\n{}\n{}",
-            out.status.code(),
-            stderr,
-            stdout
-        ))
+
+    let start = Instant::now();
+    loop {
+        match child
+            .try_wait()
+            .map_err(|e| format!("等待 claude 子进程失败: {e}"))?
+        {
+            Some(status) => {
+                let mut stdout = String::new();
+                let mut stderr = String::new();
+                if let Some(mut pipe) = child.stdout.take() {
+                    let _ = pipe.read_to_string(&mut stdout);
+                }
+                if let Some(mut pipe) = child.stderr.take() {
+                    let _ = pipe.read_to_string(&mut stderr);
+                }
+                let stdout = stdout.trim().to_string();
+                let stderr = stderr.trim().to_string();
+                if status.success() {
+                    return Ok(if stdout.is_empty() { stderr } else { stdout });
+                }
+                return Err(format!(
+                    "claude plugin 失败（退出码 {:?}）\n{stderr}\n{stdout}",
+                    status.code()
+                ));
+            }
+            None => {
+                if start.elapsed() > PLUGIN_CLI_TIMEOUT {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(format!(
+                        "claude plugin 超时（>{PLUGIN_CLI_TIMEOUT:?}）。若网络较慢，可稍后打开「已安装」确认是否已成功，或点击「刷新市场」后重试"
+                    ));
+                }
+                std::thread::sleep(Duration::from_millis(250));
+            }
+        }
     }
 }
 
@@ -195,7 +228,6 @@ pub async fn claude_plugin_install(install_ref: String, scope: String) -> Result
     let home = home_dir()?;
     let install_ref_value = install_ref.trim().to_string();
     spawn_blocking_result("安装插件任务失败", move || {
-        let _ = ensure_marketplaces_sync(&home);
         run_claude_plugin_cli(
             &home,
             &[

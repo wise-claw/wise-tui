@@ -13,14 +13,13 @@ import {
   claudePluginUninstall,
   type ClaudePluginInstalledEntry,
 } from "../../services/claudePluginMarket";
+import { openClaudeLspPluginsDoc } from "../../services/claudeLspUsageGuide";
 
 interface Props {
   active: boolean;
   listSearch: string;
   onCountChange?: (count: number) => void;
 }
-
-const LSP_GUIDE_URL = "https://code.claude.com/docs/zh-CN/plugins";
 
 export function ClaudeLspPanel({ active, listSearch, onCountChange }: Props) {
   const { message } = App.useApp();
@@ -194,7 +193,7 @@ export function ClaudeLspPanel({ active, listSearch, onCountChange }: Props) {
           })}
         </ul>
       )}
-      <Typography.Link href={LSP_GUIDE_URL} target="_blank" rel="noopener noreferrer" className="app-claude-lsp-panel-more">
+      <Typography.Link className="app-claude-lsp-panel-more" onClick={() => openClaudeLspPluginsDoc()}>
         更多语言服务见「创作 → 插件市场 → 语言服务」
       </Typography.Link>
     </div>

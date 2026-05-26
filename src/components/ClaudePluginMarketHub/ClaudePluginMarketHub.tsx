@@ -1,6 +1,6 @@
 import { CloseOutlined, BlockOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
 import { App, Badge, Button, Empty, Input, Segmented, Spin, Tabs, Tag, Tooltip, Typography } from "antd";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CLAUDE_PLUGIN_CATEGORY_LABELS,
   CLAUDE_PLUGIN_MARKET_CATALOG,
@@ -17,6 +17,7 @@ import {
   type ClaudePluginInstalledEntry,
 } from "../../services/claudePluginMarket";
 import { AuthorPanelPageShell } from "../AuthorPanel/AuthorPanelPageShell";
+import { ClaudeLspHelpIcon } from "./claudeLspUsageGuide";
 import "./ClaudePluginMarketHub.css";
 
 interface Props {
@@ -35,8 +36,23 @@ export function ClaudePluginMarketHub({ onClose }: Props) {
   const [installed, setInstalled] = useState<ClaudePluginInstalledEntry[]>([]);
   const [listLoading, setListLoading] = useState(false);
   const [bootstrapping, setBootstrapping] = useState(false);
-  const [busyRef, setBusyRef] = useState<string | null>(null);
+  const [busyRefs, setBusyRefs] = useState<Set<string>>(() => new Set());
+  const [installingLabel, setInstallingLabel] = useState<string | null>(null);
+  const installLockRef = useRef(false);
+  const [installLocked, setInstallLocked] = useState(false);
   const [bootstrapHint, setBootstrapHint] = useState<string | null>(null);
+
+  const setBusy = useCallback((ref: string, busy: boolean) => {
+    setBusyRefs((prev) => {
+      const next = new Set(prev);
+      if (busy) {
+        next.add(ref);
+      } else {
+        next.delete(ref);
+      }
+      return next;
+    });
+  }, []);
 
   const installedById = useMemo(() => {
     const map = new Map<string, ClaudePluginInstalledEntry>();
@@ -78,6 +94,23 @@ export function ClaudePluginMarketHub({ onClose }: Props) {
   useEffect(() => {
     void loadInstalled();
   }, [loadInstalled]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const boot = await claudePluginMarketBootstrap();
+        if (cancelled) return;
+        const hint = boot.log.trim();
+        if (hint) setBootstrapHint(hint);
+      } catch {
+        // 安装失败时再提示用户点「刷新市场」
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!onClose) return;
@@ -126,34 +159,60 @@ export function ClaudePluginMarketHub({ onClose }: Props) {
   const handleInstall = useCallback(
     async (entry: ClaudePluginCatalogEntry) => {
       const ref = claudePluginInstallRef(entry);
-      setBusyRef(ref);
+      if (installLockRef.current) {
+        message.warning("正在安装其他插件，请等待完成后再试");
+        return;
+      }
+      installLockRef.current = true;
+      setInstallLocked(true);
+      setBusy(ref, true);
+      setInstallingLabel(entry.name);
+      const hideLoading = message.loading(`正在安装 ${entry.name}…（LSP 可能需数分钟）`, 0);
       try {
         await claudePluginInstall(ref, "user");
+        hideLoading();
         message.success(`已安装 ${entry.name}`);
         await loadInstalled();
       } catch (e) {
+        hideLoading();
         message.error(e instanceof Error ? e.message : String(e));
       } finally {
-        setBusyRef(null);
+        setBusy(ref, false);
+        setInstallingLabel(null);
+        installLockRef.current = false;
+        setInstallLocked(false);
       }
     },
-    [loadInstalled, message],
+    [loadInstalled, message, setBusy],
   );
 
   const handleUninstall = useCallback(
     async (installRef: string, label: string) => {
-      setBusyRef(installRef);
+      if (installLockRef.current) {
+        message.warning("正在安装其他插件，请稍候");
+        return;
+      }
+      installLockRef.current = true;
+      setInstallLocked(true);
+      setBusy(installRef, true);
+      setInstallingLabel(label);
+      const hideLoading = message.loading(`正在卸载 ${label}…`, 0);
       try {
         await claudePluginUninstall(installRef, "user");
+        hideLoading();
         message.success(`已卸载 ${label}`);
         await loadInstalled();
       } catch (e) {
+        hideLoading();
         message.error(e instanceof Error ? e.message : String(e));
       } finally {
-        setBusyRef(null);
+        setBusy(installRef, false);
+        setInstallingLabel(null);
+        installLockRef.current = false;
+        setInstallLocked(false);
       }
     },
-    [loadInstalled, message],
+    [loadInstalled, message, setBusy],
   );
 
   const installedCount = installed.length;
@@ -167,6 +226,7 @@ export function ClaudePluginMarketHub({ onClose }: Props) {
     oneClickInstall: boolean,
     isInstalled: boolean,
     busy: boolean,
+    actionLocked: boolean,
   ) => {
     if (!oneClickInstall) {
       return (
@@ -193,6 +253,7 @@ export function ClaudePluginMarketHub({ onClose }: Props) {
             danger
             className="app-claude-plugin-hub-card-cta"
             loading={busy}
+            disabled={actionLocked && !busy}
             onClick={() => void handleUninstall(ref, entry.name)}
           >
             卸载
@@ -207,9 +268,10 @@ export function ClaudePluginMarketHub({ onClose }: Props) {
           size="small"
           className="app-claude-plugin-hub-card-cta"
           loading={busy}
+          disabled={actionLocked && !busy}
           onClick={() => void handleInstall(entry)}
         >
-          安装
+          {busy ? "安装中" : "安装"}
         </Button>
       </Tooltip>
     );
@@ -219,12 +281,12 @@ export function ClaudePluginMarketHub({ onClose }: Props) {
     const ref = claudePluginInstallRef(entry);
     const oneClickInstall = entry.oneClickInstall !== false;
     const isInstalled = oneClickInstall && Boolean(installedRow);
-    const busy = busyRef === ref;
+    const busy = busyRefs.has(ref);
     return (
       <article key={ref} className="app-claude-plugin-hub-card">
         <div className="app-claude-plugin-hub-card-title-row">
           <div className="app-claude-plugin-hub-card-name">{entry.name}</div>
-          {renderCardAction(entry, ref, oneClickInstall, isInstalled, busy)}
+          {renderCardAction(entry, ref, oneClickInstall, isInstalled, busy, installLocked)}
         </div>
         <div className="app-claude-plugin-hub-card-ref">{ref}</div>
         {entry.featured ? (
@@ -318,6 +380,23 @@ export function ClaudePluginMarketHub({ onClose }: Props) {
     </>
   );
 
+  const categorySegmentOptions = useMemo(
+    () =>
+      (["all", "featured", "workflow", "superpowers", "integration", "lsp"] as const).map((key) => ({
+        value: key,
+        label:
+          key === "lsp" ? (
+            <span className="app-claude-plugin-hub-category-label">
+              <span>{CLAUDE_PLUGIN_CATEGORY_LABELS[key]}</span>
+              <ClaudeLspHelpIcon />
+            </span>
+          ) : (
+            CLAUDE_PLUGIN_CATEGORY_LABELS[key]
+          ),
+      })),
+    [],
+  );
+
   const headerToolbar = (
     <>
       <Input
@@ -330,24 +409,26 @@ export function ClaudePluginMarketHub({ onClose }: Props) {
         onChange={(e) => setHubSearch(e.target.value)}
       />
       {activeTab === "catalog" ? (
-        <Segmented
-          size="small"
-          className="app-claude-plugin-hub-category"
-          options={(["all", "featured", "workflow", "superpowers", "integration", "lsp"] as const).map(
-            (key) => ({
-              label: CLAUDE_PLUGIN_CATEGORY_LABELS[key],
-              value: key,
-            }),
-          )}
-          value={category}
-          onChange={(v) => setCategory(v as CategoryFilter)}
-        />
+        <div className="app-claude-plugin-hub-category-row">
+          <Segmented
+            size="small"
+            className="app-claude-plugin-hub-category"
+            options={categorySegmentOptions}
+            value={category}
+            onChange={(v) => setCategory(v as CategoryFilter)}
+          />
+        </div>
       ) : null}
     </>
   );
 
   const hubBody = (
     <>
+      {installingLabel ? (
+        <Typography.Text type="secondary" className="app-claude-plugin-hub-install-status">
+          正在处理：{installingLabel}…
+        </Typography.Text>
+      ) : null}
       {bootstrapHint ? (
         <Typography.Text type="secondary" className="app-claude-plugin-hub-bootstrap-hint">
           {bootstrapHint.split("\n").slice(-2).join(" · ")}
