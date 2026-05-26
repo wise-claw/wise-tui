@@ -37,7 +37,7 @@ function McpSection({ title, hint, items, readOnly = false, onDelete, onToggleEn
                     <div className="app-mcp-item-name-row">
                       <span className="app-mcp-item-name-text">{item.name}</span>
                       {item.pluginRef ? (
-                        <Tag variant="filled" className="app-mcp-runtime-tag" title="Claude Code 插件标识">
+                        <Tag variant="filled" className="app-mcp-runtime-tag" title={item.pluginRef}>
                           {item.pluginRef}
                         </Tag>
                       ) : null}

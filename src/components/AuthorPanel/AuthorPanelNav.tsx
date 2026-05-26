@@ -26,9 +26,18 @@ export const AuthorPanelNav = memo(function AuthorPanelNav({
   parked = false,
   siderWidth = MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX,
 }: AuthorPanelNavProps) {
-  const handleBack = useCallback(() => {
-    onBack();
-  }, [onBack]);
+  const handleBackPointerDown = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+    // 避免退出工作台配置时，同一位置的 click 落到刚显示的左栏「新建工作区」按钮上。
+    event.preventDefault();
+  }, []);
+
+  const handleBack = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      event.stopPropagation();
+      onBack();
+    },
+    [onBack],
+  );
 
   const handlePaneChange = useCallback(
     (nextPane: AuthorPane) => {
@@ -56,6 +65,7 @@ export const AuthorPanelNav = memo(function AuthorPanelNav({
           <button
             type="button"
             className="author-panel-nav-item author-panel-nav-item--back"
+            onPointerDown={handleBackPointerDown}
             onClick={handleBack}
             title="关闭工作台配置 (Esc)"
             aria-label="关闭工作台配置 (Esc)"

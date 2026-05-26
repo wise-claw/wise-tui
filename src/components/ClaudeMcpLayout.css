@@ -149,12 +149,13 @@
 .app-mcp-item-name-row {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 6px;
   min-width: 0;
 }
 
 .app-mcp-item-name-text {
+  flex-shrink: 0;
   font-size: 12px;
   font-weight: 600;
   color: var(--ant-color-text);
@@ -166,6 +167,19 @@
   font-size: 10px !important;
   line-height: 1.2 !important;
   padding: 0 5px !important;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+  flex-shrink: 1;
+}
+
+.app-mcp-runtime-tag.ant-tag-success,
+.app-mcp-runtime-tag.ant-tag-error {
+  flex-shrink: 0;
+  max-width: none;
 }
 
 .app-mcp-item-command {

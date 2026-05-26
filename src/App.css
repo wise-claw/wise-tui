@@ -696,6 +696,7 @@ body {
   max-width: 0 !important;
   overflow: hidden;
   transition: none !important;
+  pointer-events: none;
 }
 
 .app-left-sidebar.app-left-sidebar--parked .ant-layout-sider-children {

@@ -4304,7 +4304,7 @@ button.app-message-part-header:disabled:hover {
   border-collapse: collapse;
   width: 100%;
   max-width: 100%;
-  margin: 12px 0;
+  margin: 0;
   font-size: 12.5px;
   table-layout: auto;
   border-radius: 8px;
@@ -4317,7 +4317,7 @@ button.app-message-part-header:disabled:hover {
 .app-markdown td {
   border: none;
   border-bottom: 1px solid var(--ant-color-border-secondary);
-  padding: 8px 12px;
+  padding: 4px 8px;
   text-align: left;
   word-break: break-word;
   overflow-wrap: anywhere;

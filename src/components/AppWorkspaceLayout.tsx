@@ -610,29 +610,26 @@ export function AppWorkspaceLayout({
                 }${workspaceWelcomeFullscreen ? " app-main-layout--welcome-hidden" : ""}`}
                 style={{ minWidth: 0, flex: 1, minHeight: 0, height: "100%" }}
               >
-                {authorMode ? (
-                  authorShellMounted ? (
-                    <AuthorPanelNav
-                      dark={dark}
-                      collapsed={collapsed}
-                      parked={false}
-                      siderWidth={mainLayoutLeftWidthPx}
-                      pane={authorPanelProps.pane}
-                      onPaneChange={authorPanelProps.onPaneChange}
-                      onBack={authorPanelProps.onBack}
-                    />
-                  ) : null
-                ) : (
-                  <ConnectedLeftSidebar
+                <ConnectedLeftSidebar
+                  dark={dark}
+                  collapsed={collapsed}
+                  parked={authorMode || leftSidebarParked}
+                  siderWidth={mainLayoutLeftWidthPx}
+                  compactLayoutMode={compactLayoutMode}
+                  onToggleCompactLayoutMode={onToggleCompactLayoutMode}
+                  leftSidebarProps={leftSidebarProps}
+                />
+                {authorMode && authorShellMounted ? (
+                  <AuthorPanelNav
                     dark={dark}
                     collapsed={collapsed}
-                    parked={leftSidebarParked}
+                    parked={false}
                     siderWidth={mainLayoutLeftWidthPx}
-                    compactLayoutMode={compactLayoutMode}
-                    onToggleCompactLayoutMode={onToggleCompactLayoutMode}
-                    leftSidebarProps={leftSidebarProps}
+                    pane={authorPanelProps.pane}
+                    onPaneChange={authorPanelProps.onPaneChange}
+                    onBack={authorPanelProps.onBack}
                   />
-                )}
+                ) : null}
 
                 {!leftSidebarParked && !collapsed ? (
                   <MainLayoutResizeHandle
