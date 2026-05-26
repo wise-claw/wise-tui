@@ -1,5 +1,6 @@
 import { Tooltip } from "antd";
 import { ClaudeCodeUsageHeaderBtn } from "../ClaudeCodeUsagePopover";
+import { ClaudeCodeToolsTopbarTrigger } from "../ClaudeSessions/ClaudeCodeToolsTopbarTrigger";
 import { ClaudeModelTopbarTrigger } from "../ClaudeSessions/ClaudeModelTopbarTrigger";
 import { useClaudeModelProfileStore } from "../../hooks/useClaudeModelProfileStore";
 import { IconSettings } from "../icons/IconSettings";
@@ -11,6 +12,7 @@ interface LeftSidebarTopbarProps {
   onToggleCompactLayoutMode?: () => void;
   authorDisabled?: boolean;
   authorTooltip?: string;
+  activeRepositoryPath?: string;
   onOpenAuthor: (pane?: AuthorPane) => void;
 }
 
@@ -19,6 +21,7 @@ export function LeftSidebarTopbar({
   onToggleCompactLayoutMode,
   authorDisabled = false,
   authorTooltip = "单仓不支持工作台配置；升格为工作区后启用",
+  activeRepositoryPath,
   onOpenAuthor,
 }: LeftSidebarTopbarProps) {
   const { store: claudeModelStore } = useClaudeModelProfileStore(true);
@@ -65,6 +68,10 @@ export function LeftSidebarTopbar({
         <ClaudeModelTopbarTrigger
           variant="sidebar"
           effectiveModel={claudeModelStore?.effectiveModel ?? null}
+        />
+        <ClaudeCodeToolsTopbarTrigger
+          variant="sidebar"
+          repositoryPath={activeRepositoryPath}
         />
       </div>
     </div>

@@ -9,10 +9,12 @@ const ClaudeCodeToolsPanel = lazy(() =>
 
 interface Props {
   repositoryPath?: string;
+  variant?: "chat" | "sidebar";
 }
 
-export function ClaudeCodeToolsTopbarTrigger({ repositoryPath }: Props) {
+export function ClaudeCodeToolsTopbarTrigger({ repositoryPath, variant = "chat" }: Props) {
   const [open, setOpen] = useState(false);
+  const isSidebar = variant === "sidebar";
 
   const handleOpenChange = useCallback((next: boolean) => {
     setOpen(next);
@@ -21,7 +23,7 @@ export function ClaudeCodeToolsTopbarTrigger({ repositoryPath }: Props) {
   return (
     <Popover
       trigger="click"
-      placement="bottomRight"
+      placement={isSidebar ? "bottomRight" : "bottomRight"}
       open={open}
       onOpenChange={handleOpenChange}
       destroyOnHidden={false}
@@ -38,7 +40,11 @@ export function ClaudeCodeToolsTopbarTrigger({ repositoryPath }: Props) {
     >
       <button
         type="button"
-        className={"app-topbar-btn app-claude-code-tools-topbar-btn" + (open ? " active" : "")}
+        className={
+          (isSidebar ? "app-left-sidebar-topbar-btn" : "app-topbar-btn") +
+          " app-claude-code-tools-topbar-btn" +
+          (open ? (isSidebar ? " app-left-sidebar-topbar-btn--active" : " active") : "")
+        }
         aria-label="Claude Code 工具"
         aria-expanded={open}
         title="Claude Code（MCP、技能、Hooks、子代理）"

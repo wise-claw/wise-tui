@@ -3,6 +3,11 @@
   height: 20px;
 }
 
+.app-left-sidebar-topbar-btn.app-claude-code-tools-topbar-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
 .app-claude-code-tools-topbar-popover {
   max-width: min(94vw, 640px);
 }

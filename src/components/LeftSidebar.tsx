@@ -513,6 +513,7 @@ export function LeftSidebar({
         onToggleCompactLayoutMode={onToggleCompactLayoutMode}
         authorDisabled={authorDisabled}
         authorTooltip={authorDisabledTooltip}
+        activeRepositoryPath={activeRepositoryPath}
         onOpenAuthor={onOpenAuthor}
       />
 
