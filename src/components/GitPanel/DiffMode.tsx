@@ -61,8 +61,8 @@ export function DiffMode({
   const hasStaged = status.staged.length > 0;
   const hasUnstaged = status.unstaged.length > 0;
   const hasChanges = hasStaged || hasUnstaged;
-  const changeFileCount = status.staged.length + status.unstaged.length;
-  const isLargeChangeSet = changeFileCount > GIT_PANEL_LARGE_CHANGE_COUNT;
+  const isLargeChangeSet =
+    status.staged.length + status.unstaged.length > GIT_PANEL_LARGE_CHANGE_COUNT;
   const canCommit = commitMsg.trim().length > 0 && hasChanges && !loading.commit;
 
   useEffect(() => {
@@ -259,12 +259,6 @@ export function DiffMode({
       )}
 
       <div className="git-diff-mode-scroll">
-      {isLargeChangeSet && (
-        <div className="git-large-change-hint" role="status">
-          变更文件较多（{changeFileCount} 个），已启用虚拟列表并跳过逐文件行数统计以提升性能。完整列表可在终端执行{" "}
-          <code>git status</code>。
-        </div>
-      )}
       {hasStaged && (
         <div className={`git-section${stagedCollapsed ? " git-section--collapsed" : ""}`}>
           <div className="git-section-header">

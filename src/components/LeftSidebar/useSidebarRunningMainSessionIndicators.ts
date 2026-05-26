@@ -8,6 +8,7 @@ interface UseSidebarRunningMainSessionIndicatorsInput {
   sessions: ClaudeSession[];
   repositoryMainSessionBindings: Record<string, string>;
   claudeProcesses: ReadonlyArray<ClaudeHostProcess>;
+  registryRunningClaudeSessionIds?: ReadonlySet<string>;
 }
 
 export function useSidebarRunningMainSessionIndicators({
@@ -16,6 +17,7 @@ export function useSidebarRunningMainSessionIndicators({
   sessions,
   repositoryMainSessionBindings,
   claudeProcesses,
+  registryRunningClaudeSessionIds,
 }: UseSidebarRunningMainSessionIndicatorsInput) {
   return useMemo(
     () =>
@@ -25,7 +27,15 @@ export function useSidebarRunningMainSessionIndicators({
         sessions,
         bindings: repositoryMainSessionBindings,
         claudeProcesses,
+        registryRunningClaudeSessionIds,
       }),
-    [projects, repositories, sessions, repositoryMainSessionBindings, claudeProcesses],
+    [
+      projects,
+      repositories,
+      sessions,
+      repositoryMainSessionBindings,
+      claudeProcesses,
+      registryRunningClaudeSessionIds,
+    ],
   );
 }

@@ -1,5 +1,10 @@
-import type { ClaudeSession, Repository } from "../types";
+import type { ClaudeHostProcess, ClaudeSession, Repository } from "../types";
+import { isClaudeSessionRunningInHostOrUi } from "../services/claudeSessionState";
+import { isClaudeSessionRunningByHostProcesses } from "./claudeHostRunningSessionIds";
 import {
+  isProjectRootSessionDisplayName,
+  isRepositoryMainSessionTab,
+  normalizeRepositoryPathKey,
   projectMainSessionBindingKey,
   resolveBoundMainSessionId,
   resolveMainOwnerAgentNameForRepositoryPath,
@@ -10,14 +15,23 @@ export interface SidebarRunningMainSessionMaps {
   runningByRepositoryId: Record<number, boolean>;
 }
 
-import type { ClaudeHostProcess } from "../types";
-import { isClaudeSessionRunningByHostProcesses } from "./claudeHostRunningSessionIds";
+/** 主会话是否仍在跑：本机 PID、宿主注册表、或 UI running/connecting（Hook 启动窗口）。 */
+function isMainSessionConsideredRunning(
+  session: ClaudeSession,
+  claudeProcesses: ReadonlyArray<Pick<ClaudeHostProcess, "sessionId" | "pid" | "projectPath">>,
+  registryRunningClaudeSessionIds: ReadonlySet<string>,
+): boolean {
+  return (
+    isClaudeSessionRunningByHostProcesses(session, claudeProcesses) ||
+    isClaudeSessionRunningInHostOrUi(session, registryRunningClaudeSessionIds)
+  );
+}
 
-/** 绑定主会话的 Claude 会话 ID 是否在本机进程扫描中有对应存活 PID。 */
-function isBoundMainSessionRunningInHost(
+function isBoundMainSessionRunning(
   sessionId: string | null,
   sessions: ClaudeSession[],
   claudeProcesses: ReadonlyArray<Pick<ClaudeHostProcess, "sessionId" | "pid" | "projectPath">>,
+  registryRunningClaudeSessionIds: ReadonlySet<string>,
 ): boolean {
   if (!sessionId) {
     return false;
@@ -26,7 +40,28 @@ function isBoundMainSessionRunningInHost(
   if (!session) {
     return false;
   }
-  return isClaudeSessionRunningByHostProcesses(session, claudeProcesses);
+  return isMainSessionConsideredRunning(session, claudeProcesses, registryRunningClaudeSessionIds);
+}
+
+/**
+ * 绑定指向已 idle 的标签时：同路径其它**非 Project 根**主会话若在跑仍亮绿点。
+ * 不把仅挂在工作区项目绑定上的 `Project: …` 根会话算进成员仓，避免子仓误亮。
+ */
+function isAlternateRepositoryMainSessionRunning(
+  repositoryPathKey: string,
+  mainOwnerAgentName: string | null,
+  boundSessionId: string,
+  sessions: ClaudeSession[],
+  claudeProcesses: ReadonlyArray<Pick<ClaudeHostProcess, "sessionId" | "pid" | "projectPath">>,
+  registryRunningClaudeSessionIds: ReadonlySet<string>,
+): boolean {
+  return sessions.some(
+    (session) =>
+      session.id !== boundSessionId &&
+      !isProjectRootSessionDisplayName(session.repositoryName ?? "") &&
+      isRepositoryMainSessionTab(session, repositoryPathKey, mainOwnerAgentName) &&
+      isMainSessionConsideredRunning(session, claudeProcesses, registryRunningClaudeSessionIds),
+  );
 }
 
 /**
@@ -40,8 +75,16 @@ export function buildSidebarRunningMainSessionMaps(params: {
   sessions: ClaudeSession[];
   bindings: Record<string, string>;
   claudeProcesses: ReadonlyArray<Pick<ClaudeHostProcess, "sessionId" | "pid" | "projectPath">>;
+  registryRunningClaudeSessionIds?: ReadonlySet<string>;
 }): SidebarRunningMainSessionMaps {
-  const { projects, repositories, sessions, bindings, claudeProcesses } = params;
+  const {
+    projects,
+    repositories,
+    sessions,
+    bindings,
+    claudeProcesses,
+    registryRunningClaudeSessionIds = new Set(),
+  } = params;
   const runningByProjectId: Record<string, boolean> = {};
   for (const project of projects) {
     const sessionId = resolveBoundMainSessionId(
@@ -50,15 +93,17 @@ export function buildSidebarRunningMainSessionMaps(params: {
       sessions,
       null,
     );
-    runningByProjectId[project.id] = isBoundMainSessionRunningInHost(
+    runningByProjectId[project.id] = isBoundMainSessionRunning(
       sessionId,
       sessions,
       claudeProcesses,
+      registryRunningClaudeSessionIds,
     );
   }
 
   const runningByRepositoryId: Record<number, boolean> = {};
   for (const repository of repositories) {
+    const repositoryPathKey = normalizeRepositoryPathKey(repository.path);
     const mainOwnerAgentName = resolveMainOwnerAgentNameForRepositoryPath(repositories, repository.path);
     const sessionId = resolveBoundMainSessionId(
       repository.path,
@@ -66,11 +111,20 @@ export function buildSidebarRunningMainSessionMaps(params: {
       sessions,
       mainOwnerAgentName,
     );
-    runningByRepositoryId[repository.id] = isBoundMainSessionRunningInHost(
-      sessionId,
-      sessions,
-      claudeProcesses,
-    );
+    if (!sessionId) {
+      runningByRepositoryId[repository.id] = false;
+      continue;
+    }
+    runningByRepositoryId[repository.id] =
+      isBoundMainSessionRunning(sessionId, sessions, claudeProcesses, registryRunningClaudeSessionIds) ||
+      isAlternateRepositoryMainSessionRunning(
+        repositoryPathKey,
+        mainOwnerAgentName,
+        sessionId,
+        sessions,
+        claudeProcesses,
+        registryRunningClaudeSessionIds,
+      );
   }
 
   return { runningByProjectId, runningByRepositoryId };

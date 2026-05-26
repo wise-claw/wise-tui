@@ -199,6 +199,7 @@ export function LeftSidebar({
     sessions,
     repositoryMainSessionBindings,
     claudeProcesses: systemResourceSessions.systemSummary.claudeProcesses,
+    registryRunningClaudeSessionIds: systemResourceSessions.claudeRegistryRunningIds,
   });
 
   const handleStopBoundMainSession = useCallback(

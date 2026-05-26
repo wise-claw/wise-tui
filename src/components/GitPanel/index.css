@@ -461,17 +461,6 @@
 }
 
 /* ── File List ── */
-.git-large-change-hint {
-  margin: 0 12px 8px;
-  padding: 6px 10px;
-  font-size: 11px;
-  line-height: 1.45;
-  color: var(--ant-color-text-secondary);
-  background: color-mix(in srgb, var(--ant-color-warning) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--ant-color-warning) 28%, transparent);
-  border-radius: 6px;
-}
-
 .git-virtual-file-list {
   max-height: min(360px, 45vh);
   min-height: 120px;

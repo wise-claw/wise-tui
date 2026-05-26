@@ -704,7 +704,7 @@ export default function App() {
           (prevTabId ? sessionsLatestRef.current.find((s) => s.id === prevTabId) : null) ??
           resolveSessionFromBindingValue(prevRaw, sessionsLatestRef.current);
         if (prevSession && prevSession.id !== nextId) {
-          await releaseSessionHostProcessRef.current(prevSession.id);
+          void releaseSessionHostProcessRef.current(prevSession.id);
         }
       }
       setRepositoryMainSessionBindings((prev) => {
@@ -1725,10 +1725,12 @@ export default function App() {
     repository: Repository,
     options?: { enterChat?: boolean },
   ): Promise<string | null> {
-    if (options?.enterChat ?? true) {
-      viewMode.enter({ kind: "chat" });
-    }
     setActiveRepositoryWithOwner(repository.id);
+    if (options?.enterChat ?? true) {
+      startTransition(() => {
+        viewMode.enter({ kind: "chat" });
+      });
+    }
     const target = resolveSidebarSelectionTarget({ repository });
     const mainOwnerPick = resolveMainOwnerAgentNameForRepositoryPath(repositories, target.path);
     const boundId = resolveBoundMainSessionId(
@@ -1748,8 +1750,8 @@ export default function App() {
       { mainOwnerAgentName: mainOwnerPick },
     );
     if (latestForRepo) {
-      await bindRepositoryMainSession(target.path, latestForRepo.id);
       switchSession(latestForRepo.id);
+      void bindRepositoryMainSession(target.path, latestForRepo.id);
       return latestForRepo.id;
     }
     return null;
@@ -1908,22 +1910,30 @@ export default function App() {
   const handleSidebarRepositorySelectLeavingMcpHub = useCallback(
     (repositoryId: number | null) => {
       if (repositoryId == null) {
-        if (viewMode.isCockpit || viewMode.isAuthor || viewMode.isInspect) {
-          viewMode.back();
-        }
+        startTransition(() => {
+          if (viewMode.isCockpit || viewMode.isAuthor || viewMode.isInspect) {
+            viewMode.back();
+          }
+        });
         handleSidebarRepositorySelect(repositoryId);
         return;
-      }
-      if (viewMode.isCockpit || viewMode.isAuthor || viewMode.isInspect) {
-        viewMode.back();
       }
       const repository = repositories.find((item) => item.id === repositoryId);
       if (!repository) {
         return;
       }
+      const leavingOverlay = viewMode.isCockpit || viewMode.isAuthor || viewMode.isInspect;
+      if (!leavingOverlay && viewMode.isChat && activeRepositoryId === repositoryId) {
+        return;
+      }
+      startTransition(() => {
+        if (leavingOverlay) {
+          viewMode.back();
+        }
+      });
       void openRepositoryMainSession(repository, { enterChat: true });
     },
-    [repositories, viewMode],
+    [activeRepositoryId, handleSidebarRepositorySelect, repositories, viewMode],
   );
 
   /** 侧栏「图谱操作 → 查看检索」：与顶栏图谱入口一致，先收敛其它 Hub 再打开覆盖层。 */
@@ -2236,8 +2246,6 @@ export default function App() {
       return null;
     }
     setAuthorTrellisProjectId(null);
-    // 打开项目主会话 → 进入 chat 子模式
-    viewMode.enter({ kind: "chat" });
     const isStandaloneTrellisProject = project.id.startsWith("repo:");
     if (repos[0]) {
       if (isStandaloneTrellisProject) {
@@ -2249,6 +2257,9 @@ export default function App() {
     } else if (!isStandaloneTrellisProject) {
       setActiveProjectId(project.id);
     }
+    startTransition(() => {
+      viewMode.enter({ kind: "chat" });
+    });
 
     const projectBindingKey = projectMainSessionBindingKey(project.id);
     const boundId = resolveBoundMainSessionId(
@@ -2267,8 +2278,8 @@ export default function App() {
       loadSessionOwnerHints(),
     );
     if (latestForProject) {
-      await bindRepositoryMainSession(projectBindingKey, latestForProject.id);
       switchSession(latestForProject.id);
+      void bindRepositoryMainSession(projectBindingKey, latestForProject.id);
       return latestForProject.id;
     }
     return null;

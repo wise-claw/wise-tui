@@ -240,11 +240,7 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
   }, [repositoryPath, mode, loadStatus, loadLog]);
 
   const runAction = useCallback(
-    async (
-      action: string,
-      fn: () => Promise<void>,
-      options?: { successMessage?: string },
-    ) => {
+    async (action: string, fn: () => Promise<void>) => {
       const now = Date.now();
       const lastTime = lastActionTime.current.get(action) || 0;
       if (now - lastTime < DEBOUNCE_MS) return;
@@ -267,9 +263,6 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
           delete next[action];
           return next;
         });
-        if (options?.successMessage) {
-          message.success(options.successMessage);
-        }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         setErrors((prev) => ({ ...prev, [action]: msg }));
@@ -329,13 +322,9 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
 
   const handleCommit = useCallback(
     (msg: string) =>
-      void runAction(
-        "commit",
-        async () => {
-          await gitCommit(repositoryPath!, msg);
-        },
-        { successMessage: "提交成功" },
-      ),
+      void runAction("commit", async () => {
+        await gitCommit(repositoryPath!, msg);
+      }),
     [repositoryPath, runAction],
   );
 
@@ -350,7 +339,6 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
       if (mode === "log") {
         await loadLog({ silent: true });
       }
-      message.success("推送成功");
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       message.error(`推送失败: ${msg}`);

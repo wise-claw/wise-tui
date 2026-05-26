@@ -8,6 +8,7 @@ function session(
   path: string,
   repositoryName: string,
   claudeSessionId: string | null = null,
+  status: ClaudeSession["status"] = "idle",
 ): ClaudeSession {
   return {
     id,
@@ -15,7 +16,7 @@ function session(
     repositoryPath: path,
     repositoryName,
     model: "sonnet",
-    status: "idle",
+    status,
     messages: [],
     createdAt: 1,
     pendingPrompt: "",
@@ -128,6 +129,44 @@ describe("buildSidebarRunningMainSessionMaps", () => {
     });
     expect(maps.runningByRepositoryId[10]).toBe(false);
     expect(maps.runningByRepositoryId[11]).toBe(false);
+  });
+
+  it("marks repository when bound session UI is running but host scan is empty", () => {
+    const repoSession = session("s-repo", "/work/hr/web", "web", null, "running");
+    const maps = buildSidebarRunningMainSessionMaps({
+      projects: [{ id: "hr" }],
+      repositories: repos,
+      sessions: [repoSession],
+      bindings: { "/work/hr/web": "s-repo" },
+      claudeProcesses: [],
+    });
+    expect(maps.runningByRepositoryId[10]).toBe(true);
+  });
+
+  it("marks repository when bound session is in host registry but UI is idle", () => {
+    const repoSession = session("s-repo", "/work/hr/web", "web", "claude-1", "idle");
+    const maps = buildSidebarRunningMainSessionMaps({
+      projects: [{ id: "hr" }],
+      repositories: repos,
+      sessions: [repoSession],
+      bindings: { "/work/hr/web": "s-repo" },
+      claudeProcesses: [],
+      registryRunningClaudeSessionIds: new Set(["claude-1"]),
+    });
+    expect(maps.runningByRepositoryId[10]).toBe(true);
+  });
+
+  it("marks repository when bound session is idle but another main session on path is running", () => {
+    const stale = session("s-stale", "/work/hr/web", "web", null, "idle");
+    const live = session("s-live", "/work/hr/web", "web", null, "running");
+    const maps = buildSidebarRunningMainSessionMaps({
+      projects: [{ id: "hr" }],
+      repositories: repos,
+      sessions: [stale, live],
+      bindings: { "/work/hr/web": "s-stale" },
+      claudeProcesses: [],
+    });
+    expect(maps.runningByRepositoryId[10]).toBe(true);
   });
 
   it("does not mark repository without explicit path binding even if claude runs in that directory", () => {
