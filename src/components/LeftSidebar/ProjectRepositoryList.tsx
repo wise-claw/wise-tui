@@ -89,7 +89,6 @@ interface ProjectRepositoryListProps {
   executableTasksByRepoId?: Record<number, number>;
   onOpenScheduledTasksForRepository?: (repository: Repository) => void;
   onOpenScheduledTasksForProject?: (project: Workspace) => void;
-  onOpenRepositoryRequirements?: (repository: Repository) => void;
   onOpenExecutableTasksForProject?: (project: Workspace) => void;
   onOpenExecutableTasksForRepository?: (repository: Repository) => void;
   runningMainSessionByProjectId?: Record<string, boolean>;
@@ -372,7 +371,6 @@ interface ProjectRowProps {
   executableTasksByRepoId?: Record<number, number>;
   onOpenScheduledTasksForRepository?: (repository: Repository) => void;
   onOpenScheduledTasksForProject?: (project: Workspace) => void;
-  onOpenRepositoryRequirements?: (repository: Repository) => void;
   onOpenExecutableTasksForProject?: (project: Workspace) => void;
   onOpenExecutableTasksForRepository?: (repository: Repository) => void;
   mainSessionRunning?: boolean;

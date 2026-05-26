@@ -1030,7 +1030,7 @@ export function useMonitorOverview({
   useEffect(() => {
     let cancelled = false;
     const isActive = () => !cancelled;
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    let debounceTimer: number | null = null;
     const cleanups: Array<() => void> = [];
 
     const scheduleRefresh = () => {

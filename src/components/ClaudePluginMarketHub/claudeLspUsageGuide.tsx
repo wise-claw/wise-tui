@@ -44,7 +44,7 @@ export function ClaudeLspHelpIcon({ className }: ClaudeLspHelpIconProps) {
       mouseLeaveDelay={0.2}
       styles={{
         root: { pointerEvents: "none" },
-        body: { pointerEvents: "auto" },
+        container: { pointerEvents: "auto" },
       }}
     >
       <span

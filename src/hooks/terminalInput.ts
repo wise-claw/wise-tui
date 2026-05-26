@@ -119,7 +119,7 @@ export function resolveTerminalKeydown(event: KeyboardEvent): TerminalKeyAction 
     return null;
   }
 
-  const { key, ctrlKey, altKey, shiftKey } = event;
+  const { key, ctrlKey, altKey } = event;
 
   if (ctrlKey && !altKey) {
     if (key === "u" || key === "U") {

@@ -41,6 +41,7 @@ import {
 } from "./RepositoryScheduledTasksModal";
 import { AutomationPanel } from "./AutomationPanel";
 import type * as PrdTaskSplitPanelModule from "./PrdTaskSplitPanel";
+import type { EmployeeItem, WorkflowGraph, WorkflowTemplateItem } from "../types";
 import { resolveCockpitHubPane, type InspectTool, type ViewMode } from "../types/viewMode";
 import type { OpenRepositoryFileDetail } from "../constants/workflowUiEvents";
 import { useRepositoryFileEditor } from "../hooks/useRepositoryFileEditor";

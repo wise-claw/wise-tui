@@ -494,7 +494,7 @@ export function ClaudeChat({
   workflowTasks = [],
   taskPendingEmployeesByTaskId = {},
   workflowTemplates = [],
-  workflowGraphsByWorkflowId = {},
+  workflowGraphsByWorkflowId: _workflowGraphsByWorkflowId = {},
   workflowGraphStatusByWorkflowId = {},
   onOpenTaskDetail,
   panelBelowMessages,
