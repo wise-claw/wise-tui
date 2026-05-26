@@ -43,6 +43,7 @@ import { AutomationPanel } from "./AutomationPanel";
 import type * as PrdTaskSplitPanelModule from "./PrdTaskSplitPanel";
 import type { EmployeeItem, WorkflowGraph, WorkflowTemplateItem } from "../types";
 import { resolveCockpitHubPane, type InspectTool, type ViewMode } from "../types/viewMode";
+import { AUTHOR_CONFIG_NAV_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths";
 import type { OpenRepositoryFileDetail } from "../constants/workflowUiEvents";
 import { useRepositoryFileEditor } from "../hooks/useRepositoryFileEditor";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -625,7 +626,7 @@ export function AppWorkspaceLayout({
                     dark={dark}
                     collapsed={collapsed}
                     parked={false}
-                    siderWidth={mainLayoutLeftWidthPx}
+                    siderWidth={AUTHOR_CONFIG_NAV_SIDER_WIDTH_PX}
                     pane={authorPanelProps.pane}
                     onPaneChange={authorPanelProps.onPaneChange}
                     onBack={authorPanelProps.onBack}
@@ -829,7 +830,7 @@ export function AppWorkspaceLayout({
                       className={`app-full-width-main app-author-workspace-layer${!authorMode ? " app-workspace-layer--parked" : ""}`}
                     >
                       <ErrorBoundary type="local" fallbackTitle="协同设计开发面板出错">
-                        <AuthorPanel {...authorPanelProps} />
+                        <AuthorPanel {...authorPanelProps} configLayerActive={authorMode} />
                       </ErrorBoundary>
                     </div>
                   ) : null}

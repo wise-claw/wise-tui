@@ -20,6 +20,10 @@
   height: 100%;
 }
 
+.app-author-config-sider .author-panel__nav {
+  padding: 6px 6px 12px;
+}
+
 .author-panel__nav {
   flex: 1 1 0%;
   width: 100%;
@@ -96,6 +100,11 @@ html.app-host-macos-chrome .app-author-config-sider .author-panel__nav-drag {
   font-weight: 600;
   line-height: 1.2;
   letter-spacing: 0.02em;
+}
+
+.app-author-config-sider .author-panel-nav-item {
+  gap: 6px;
+  padding: 6px 6px;
 }
 
 .author-panel-nav-item {

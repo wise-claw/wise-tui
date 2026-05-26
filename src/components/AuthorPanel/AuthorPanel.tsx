@@ -18,6 +18,7 @@ import { AgentRegistrySection } from "../ClaudeConfigDirPanel/AgentRegistrySecti
 import { ClaudeSandboxHelpPopoverBody } from "../ClaudeSandboxHelpPopoverBody";
 import { EmployeeConfigModal } from "../EmployeeConfigModal";
 import { ExtensionsPanel } from "../ExtensionsPanel";
+import { MyExtensionsPanel } from "../MyExtensionsPanel";
 import { ClaudePluginMarketHub } from "../ClaudePluginMarketHub";
 import { McpHub } from "../McpHub";
 import { SettingsViewModeProvider } from "../SettingsView";
@@ -32,6 +33,7 @@ import "./index.css";
 const PANELS_WITH_OWN_SHELL = new Set<AuthorPane>([
   "workspaces",
   "extensions",
+  "my-extensions",
   "assistants",
   "mcp",
   "skills",
@@ -65,6 +67,8 @@ export interface AuthorPanelProps {
   automationPanelProps: ComponentProps<typeof AutomationPanel>;
   artifactsPanelProps: ComponentProps<typeof ArtifactsPanel>;
   workflowStudioAction?: ReactNode;
+  /** 工作台配置主内容区是否在前台展示 */
+  configLayerActive?: boolean;
 }
 
 export function AuthorPanel({
@@ -81,6 +85,7 @@ export function AuthorPanel({
   automationPanelProps,
   artifactsPanelProps,
   workflowStudioAction,
+  configLayerActive = true,
 }: AuthorPanelProps) {
   const [hooksSearch, setHooksSearch] = useState("");
   const hooksPanelRef = useRef<ClaudeHooksConfigPanelHandle | null>(null);
@@ -180,6 +185,13 @@ export function AuthorPanel({
         return <DefaultConfigPanel />;
       case "claude-config":
         return <ClaudeConfigDirPanel />;
+      case "my-extensions":
+        return (
+          <MyExtensionsPanel
+            repositoryPath={repositoryPath}
+            configLayerActive={configLayerActive}
+          />
+        );
       case "extensions":
         return <ExtensionsPanel />;
       case "assistants":
@@ -225,6 +237,7 @@ export function AuthorPanel({
     workflowConfigProps,
     workflowStudioAction,
     workspacesTabProps,
+    configLayerActive,
   ]);
 
   const wrappedContent =

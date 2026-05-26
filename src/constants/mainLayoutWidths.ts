@@ -1,6 +1,9 @@
 /** 与 `LeftSidebar` 中 `Layout.Sider` 的 `width` 一致。 */
 export const MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX = 260;
 
+/** 工作台配置（Author）左侧导航栏宽度，略窄于主左栏以让出内容区。 */
+export const AUTHOR_CONFIG_NAV_SIDER_WIDTH_PX = 212;
+
 /** 历史左栏默认宽度；持久化值与之相同时归一化为 {@link MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX}。 */
 const MAIN_LAYOUT_LEFT_SIDER_PRIOR_DEFAULT_WIDTHS_PX: readonly number[] = [300, 280, 270];
 

@@ -2,6 +2,7 @@ import {
   ApartmentOutlined,
   ApiOutlined,
   AppstoreAddOutlined,
+  AppstoreOutlined,
   BranchesOutlined,
   FieldTimeOutlined,
   FolderOpenOutlined,
@@ -44,6 +45,12 @@ export const AUTHOR_TAB_GROUPS: Array<{ title: string; items: AuthorTabDefinitio
   {
     title: "生态",
     items: [
+      {
+        key: "my-extensions",
+        label: "我的扩展",
+        description: "全局或仓库级 MCP、技能、插件、Hooks 与脚本",
+        icon: <AppstoreOutlined />,
+      },
       { key: "extensions", label: "扩展市场", description: "本地扩展、远程索引和贡献能力", icon: <AppstoreAddOutlined /> },
       { key: "assistants", label: "助手模板", description: "角色模板、模型和系统提示词", icon: <UserOutlined /> },
       { key: "mcp", label: "MCP 工具", description: "服务器、推荐项和扩展工具协议", icon: <ApiOutlined /> },

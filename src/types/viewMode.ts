@@ -44,6 +44,7 @@ export type AuthorPane =
   | "hooks"
   | "claude-config"
   | "extensions"
+  | "my-extensions"
   | "assistants"
   | "engine-registry"
   | "channels"
@@ -61,6 +62,7 @@ export const WORKSPACE_SCOPED_AUTHOR_PANES: ReadonlySet<AuthorPane> = new Set([
   "mcp",
   "skills",
   "claude-plugins",
+  "my-extensions",
   "hooks",
 ]);
 

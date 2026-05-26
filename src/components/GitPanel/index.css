@@ -1026,6 +1026,31 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
   color: var(--ant-color-warning);
 }
 
+.git-files-capture-ext-modal p {
+  margin: 0 0 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ant-color-text-secondary);
+}
+
+.git-files-capture-ext-modal__meta {
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
+  word-break: break-all;
+}
+
+.git-files-capture-ext-modal__hint {
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
+}
+
+.git-files-capture-ext-modal code {
+  font-size: 11px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--ant-color-fill-quaternary);
+}
+
 .git-files-ctx-backdrop {
   position: fixed;
   inset: 0;

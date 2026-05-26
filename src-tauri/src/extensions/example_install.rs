@@ -5,9 +5,8 @@ use std::path::{Path, PathBuf};
 
 use tauri::{AppHandle, Manager};
 
-use crate::wise_paths;
-
 use super::registry::{ExtensionListEntry, ExtensionRegistry};
+use crate::my_extensions::{paths, InstallScope};
 
 const EXAMPLE_DIR_NAME: &str = "hello-world";
 const MANIFEST_FILE: &str = "wise-extension.json";
@@ -24,10 +23,26 @@ pub fn install_hello_world(
     app: &AppHandle,
     registry: &ExtensionRegistry,
 ) -> Result<InstallHelloWorldResult, String> {
+    install_hello_world_scoped(app, registry, InstallScope::Global, None)
+}
+
+pub fn install_hello_world_scoped(
+    app: &AppHandle,
+    registry: &ExtensionRegistry,
+    scope: InstallScope,
+    repository_path: Option<&Path>,
+) -> Result<InstallHelloWorldResult, String> {
     let source = resolve_hello_world_source(app)?;
-    let dest = wise_paths::wise_dir()?.join("extensions").join(EXAMPLE_DIR_NAME);
+    let dest = paths::extensions_packages_dir(scope, repository_path)?.join(EXAMPLE_DIR_NAME);
     copy_dir_recursive(&source, &dest)?;
-    registry.hot_reload(&[])?;
+    let extra = match scope {
+        InstallScope::Repository => {
+            let repo = repository_path.ok_or_else(|| "缺少 repositoryPath".to_string())?;
+            vec![PathBuf::from(repo).join(".wise").join("extensions")]
+        }
+        InstallScope::Global => vec![],
+    };
+    registry.hot_reload(&extra)?;
     let entry = registry
         .list()
         .into_iter()

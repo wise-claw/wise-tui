@@ -1,7 +1,7 @@
 import { LeftOutlined } from "@ant-design/icons";
 import { Layout } from "antd";
 import { memo, useCallback } from "react";
-import { MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX } from "../../constants/mainLayoutWidths";
+import { AUTHOR_CONFIG_NAV_SIDER_WIDTH_PX } from "../../constants/mainLayoutWidths";
 import { AUTHOR_TAB_GROUPS } from "./AuthorPanelTabs";
 import type { AuthorPane } from "./AuthorPanelTabs";
 import "./index.css";
@@ -24,7 +24,7 @@ export const AuthorPanelNav = memo(function AuthorPanelNav({
   dark = false,
   collapsed = false,
   parked = false,
-  siderWidth = MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX,
+  siderWidth = AUTHOR_CONFIG_NAV_SIDER_WIDTH_PX,
 }: AuthorPanelNavProps) {
   const handleBackPointerDown = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
     // 避免退出工作台配置时，同一位置的 click 落到刚显示的左栏「新建工作区」按钮上。

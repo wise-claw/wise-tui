@@ -22,6 +22,7 @@ import {
   writeExplorerExpandedToSession,
 } from "./explorerUtils";
 import { yieldToPaint } from "./gitPanelUtils";
+import { buildCaptureExtensionContextMenuItems } from "./captureExtensionContextMenu";
 import type { ExplorerContextMenuState, ExplorerInlineCreateState } from "./types";
 
 interface UseRepositoryFilesExplorerInput {
@@ -256,7 +257,20 @@ export function useRepositoryFilesExplorer({
       });
     };
 
+    const captureItems = buildCaptureExtensionContextMenuItems({
+      repositoryPath,
+      relativePath: snap.path,
+      onClose: close,
+      onSuccess: (name) => {
+        message.success(`已录入扩展库：${name}`);
+      },
+      onError: (err) => {
+        message.error(err);
+      },
+    });
+
     const standardItems: NonNullable<MenuProps["items"]> = [
+      ...captureItems,
       {
         key: "nf",
         label: "新建文件",

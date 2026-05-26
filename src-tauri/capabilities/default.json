@@ -13,6 +13,10 @@
         { "path": "$HOME/.wise/prd-runs/**" },
         { "path": "$HOME/.wise/extensions/**" },
         { "path": "$HOME/.wise/extensions" },
+        { "path": "$HOME/.wise/my-extensions/**" },
+        { "path": "$HOME/.wise/my-extensions" },
+        { "path": "$HOME/.wise/extension-library/**" },
+        { "path": "$HOME/.wise/extension-library" },
         { "path": "$HOME/.trellis/**" }
       ]
     },

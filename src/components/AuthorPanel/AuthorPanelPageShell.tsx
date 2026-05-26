@@ -5,7 +5,7 @@ export interface AuthorPanelPageShellProps {
   id?: string;
   icon?: ReactNode;
   title: string;
-  subtitle?: string;
+  subtitle?: ReactNode;
   actions?: ReactNode;
   toolbar?: ReactNode;
   /** 筛选 pill 较多时置于副标题下方整行，避免与副标题横排挤压 */
