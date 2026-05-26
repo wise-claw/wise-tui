@@ -297,6 +297,8 @@ export default function App() {
   /** null: right pane follows the sidebar repository; non-null: right main session is pinned to this repository id. */
   const [dualPaneSecondaryRepositoryId, setDualPaneSecondaryRepositoryId] = useState<number | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  /** 右侧 Inspector 历史会话消息抽屉（由中栏「历史会话」列表打开） */
+  const [inspectorHistorySessionId, setInspectorHistorySessionId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -1644,6 +1646,40 @@ export default function App() {
     setDualPaneSecondarySessionId,
   });
 
+  const handleOpenHistorySessionInInspector = useCallback(
+    (sessionId: string) => {
+      const sid = sessionId.trim();
+      if (!sid) return;
+      setInspectorHistorySessionId(sid);
+      if (effectiveRightCollapsed) {
+        handleToggleRightPanel();
+      }
+    },
+    [effectiveRightCollapsed, handleToggleRightPanel],
+  );
+
+  const handleRestoreHistorySessionAsMain = useCallback(
+    async (sessionId: string) => {
+      const sid = sessionId.trim();
+      if (!sid) return;
+      const target = sessionsLatestRef.current.find((item) => item.id === sid || item.claudeSessionId === sid);
+      if (!target) {
+        message.warning("未找到该会话");
+        return;
+      }
+      if (!target.repositoryPath?.trim()) {
+        message.warning("无法恢复：会话缺少仓库路径");
+        return;
+      }
+      viewMode.enter({ kind: "chat" });
+      await bindRepositoryMainSessionRef.current(target.repositoryPath, target.id);
+      jumpToSessionWithRepositoryRef.current(target.id);
+      setInspectorHistorySessionId(null);
+      message.success("已恢复为主会话");
+    },
+    [viewMode],
+  );
+
   const handleAddWorktreeRepositoryToProject = useCallback(
     async (worktreePath: string) => {
       if (!activeProjectId) {
@@ -2973,6 +3009,8 @@ export default function App() {
         onPrepareFreshOmcEmployeeWorkerForDirectBatch: prepareFreshOmcEmployeeWorkerForDirectBatch,
         onRefreshHistorySessions: handleRefreshHistorySessions,
         onDeleteHistorySession: handleDeleteHistorySession,
+        onOpenHistorySessionInInspector: handleOpenHistorySessionInInspector,
+        onRestoreHistorySessionAsMain: handleRestoreHistorySessionAsMain,
         onRespondToQuestion: respondToQuestion,
         onDismissQuestion: dismissQuestion,
         onRespondToPermission: respondToPermission,
@@ -3086,6 +3124,11 @@ export default function App() {
         onReloadFullDiskTranscript: reloadFullDiskTranscript,
         onCompactSessionHistory: compactSessionHistory,
         hideEmployeeUi: shouldHideEmployeeUi(activeProject),
+        historyDrawerSessionId: inspectorHistorySessionId,
+        onHistoryDrawerSessionIdChange: setInspectorHistorySessionId,
+        onRestoreHistorySessionAsMain: handleRestoreHistorySessionAsMain,
+        repositoryMainBindings: repositoryMainSessionBindings,
+        repositories,
       }}
       cockpitInspectorProps={{
         dark,

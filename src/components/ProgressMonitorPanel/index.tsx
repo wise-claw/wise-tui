@@ -5,11 +5,13 @@ import type {
   ClaudeSession,
   EmployeeMonitorItem,
   MonitorDrawerTarget,
+  Repository,
   RepositoryMemberMonitorItem,
   RepositoryMemberMonitorSubagentItem,
   SessionConversationTaskItem,
   TeamMonitorItem,
 } from "../../types";
+import { isSessionBoundAsRepositoryMain } from "../../utils/repositoryMainSessionBinding";
 import type { WorkflowInvocationStreamDetail } from "../../constants/workflowUiEvents";
 import {
   formatOmcDirectBatchInvocationErrorPreviewLineForList,
@@ -36,6 +38,7 @@ import {
 import { sanitizeOmcDirectBatchPreviewLineForList } from "../../utils/claudeInvocationText";
 import { OmcDirectBatchInvocationDetailDrawer } from "./OmcDirectBatchInvocationDetailDrawer";
 import { MonitorHistorySessionTranscriptDrawer } from "./MonitorHistorySessionTranscriptDrawer";
+import { HistorySessionRestoreButton } from "./HistorySessionRestoreButton";
 import { getSessionPreview } from "./historySessionDrawerChrome";
 import { ClaudeSessionMessagesColumn } from "../ClaudeSessions/ClaudeSessionMessagesColumn";
 
@@ -123,6 +126,13 @@ interface Props {
    */
   transcriptSourceSessions?: ClaudeSession[];
   projectId?: string | null;
+  /** 受控：右侧历史会话消息抽屉当前会话 id */
+  historyDrawerSessionId?: string | null;
+  onHistoryDrawerSessionIdChange?: (sessionId: string | null) => void;
+  /** 将历史会话恢复为当前仓库主会话 */
+  onRestoreHistorySessionAsMain?: (sessionId: string) => void | Promise<void>;
+  repositoryMainBindings?: Record<string, string>;
+  repositories?: Repository[];
 }
 
 interface TeamHistorySessionRow {
@@ -216,6 +226,9 @@ interface HistorySessionPopoverContentProps {
   rows: HistorySessionRow[];
   emptyDescription: string;
   onSelectSession?: (sessionId: string) => void;
+  /** 恢复为主会话（替换当前仓库主会话绑定） */
+  onRestoreSession?: (sessionId: string) => void;
+  canRestoreSession?: (sessionId: string) => boolean;
   /** 列表行右侧「结束」；由调用方按 Wise 标签 / 注册表 / PID 分发终止逻辑 */
   onEndSession?: (sessionId: string) => void;
   searchPlaceholder?: string;
@@ -699,6 +712,8 @@ export function HistorySessionPopoverContent({
   rows,
   emptyDescription,
   onSelectSession,
+  onRestoreSession,
+  canRestoreSession,
   onEndSession,
   searchPlaceholder = "搜索历史会话...",
 }: HistorySessionPopoverContentProps) {
@@ -755,6 +770,16 @@ export function HistorySessionPopoverContent({
                     : new Date(sessionUpdatedAt(row.session)).toLocaleString("zh-CN", { hour12: false })}
                 </span>
               </button>
+              {onRestoreSession ? (
+                <HistorySessionRestoreButton
+                  className="app-monitor-panel__history-popover-restore"
+                  disabled={canRestoreSession ? !canRestoreSession(row.session.id) : false}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onRestoreSession(row.session.id);
+                  }}
+                />
+              ) : null}
               {onEndSession ? (
                 <span className="app-monitor-panel__history-popover-omc-stop-wrap">
                   <button
@@ -810,6 +835,11 @@ export function ProgressMonitorPanel({
   onCompactSessionHistory,
   transcriptSourceSessions,
   projectId,
+  historyDrawerSessionId: historyDrawerSessionIdProp,
+  onHistoryDrawerSessionIdChange,
+  onRestoreHistorySessionAsMain,
+  repositoryMainBindings = {},
+  repositories = [],
 }: Props) {
   const { running: agentAssignments } = useAgentAssignments({ projectId, enabled: Boolean(projectId) });
 
@@ -818,7 +848,20 @@ export function ProgressMonitorPanel({
   const [employeeHistorySearch, setEmployeeHistorySearch] = useState("");
   const [teamHistorySearch, setTeamHistorySearch] = useState("");
   const [teamHistoryEmployeeFilter, setTeamHistoryEmployeeFilter] = useState<string>("all");
-  const [historyMessagesSessionId, setHistoryMessagesSessionId] = useState<string | null>(null);
+  const [internalHistoryMessagesSessionId, setInternalHistoryMessagesSessionId] = useState<string | null>(null);
+  const historyMessagesSessionId =
+    historyDrawerSessionIdProp !== undefined ? historyDrawerSessionIdProp : internalHistoryMessagesSessionId;
+  const setHistoryMessagesSessionId = onHistoryDrawerSessionIdChange ?? setInternalHistoryMessagesSessionId;
+
+  const canRestoreHistorySession = useCallback(
+    (sessionId: string) => {
+      if (!onRestoreHistorySessionAsMain) return false;
+      const session = sessions.find((item) => item.id === sessionId);
+      if (!session) return false;
+      return !isSessionBoundAsRepositoryMain(session, repositoryMainBindings, sessions, repositories);
+    },
+    [onRestoreHistorySessionAsMain, repositoryMainBindings, repositories, sessions],
+  );
   const [omcDirectBatchDetailSnapshot, setOmcDirectBatchDetailSnapshot] = useState<WorkflowInvocationStreamDetail | null>(null);
   const [repositorySubagentDetailTarget, setRepositorySubagentDetailTarget] = useState<RepositorySubagentDetailTarget | null>(null);
   const [sessionConversationTaskDetailTarget, setSessionConversationTaskDetailTarget] =
@@ -1212,6 +1255,14 @@ export function ProgressMonitorPanel({
                           rows={matchedEmployeeSessions.map((session) => ({ session }))}
                           emptyDescription={employeeHistorySearch.trim() ? "未找到匹配会话" : "暂无历史会话"}
                           onSelectSession={(sessionId) => openHistoryMessagesDrawer(sessionId)}
+                          onRestoreSession={
+                            onRestoreHistorySessionAsMain
+                              ? (sessionId) => {
+                                  void Promise.resolve(onRestoreHistorySessionAsMain(sessionId));
+                                }
+                              : undefined
+                          }
+                          canRestoreSession={canRestoreHistorySession}
                         />
                       }
                     >
@@ -1421,6 +1472,14 @@ export function ProgressMonitorPanel({
                           teamHistorySearch.trim() || teamHistoryEmployeeFilter !== "all" ? "未找到匹配会话" : "暂无历史会话"
                         }
                         onSelectSession={(sessionId) => openHistoryMessagesDrawer(sessionId)}
+                        onRestoreSession={
+                          onRestoreHistorySessionAsMain
+                            ? (sessionId) => {
+                                void Promise.resolve(onRestoreHistorySessionAsMain(sessionId));
+                              }
+                            : undefined
+                        }
+                        canRestoreSession={canRestoreHistorySession}
                       />
                     }
                   >
@@ -1456,6 +1515,14 @@ export function ProgressMonitorPanel({
         onCompactSessionHistory={onCompactSessionHistory}
         onCancelSession={onCancelSession}
         onOpenTaskDetail={onOpenTaskDetail}
+        onRestoreSession={
+          onRestoreHistorySessionAsMain
+            ? (sessionId) => {
+                void Promise.resolve(onRestoreHistorySessionAsMain(sessionId));
+              }
+            : undefined
+        }
+        canRestoreSession={canRestoreHistorySession}
       />
 
       <OmcDirectBatchInvocationDetailDrawer

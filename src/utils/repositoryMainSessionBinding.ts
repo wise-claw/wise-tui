@@ -120,6 +120,21 @@ export function resolveBoundMainSessionId(
   return null;
 }
 
+/** 该 Wise 标签是否已是当前仓库（或项目）主会话绑定目标 */
+export function isSessionBoundAsRepositoryMain(
+  session: ClaudeSession,
+  bindings: Record<string, string>,
+  sessions: ClaudeSession[],
+  repositories: Repository[],
+): boolean {
+  const path = session.repositoryPath?.trim();
+  if (!path) {
+    return false;
+  }
+  const mainOwner = resolveMainOwnerAgentNameForRepositoryPath(repositories, path);
+  return resolveBoundMainSessionId(path, bindings, sessions, mainOwner) === session.id;
+}
+
 /** 仅凭 Claude 会话 ID 反查已注册仓库（Wise 标签或主会话绑定表）。 */
 export function resolveRepositoryByClaudeSessionId(params: {
   claudeSessionId: string;

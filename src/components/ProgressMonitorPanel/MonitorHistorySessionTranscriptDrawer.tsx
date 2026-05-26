@@ -7,6 +7,7 @@ import {
   historySessionStatusLabel,
   historySessionStatusTagColor,
 } from "./historySessionDrawerChrome";
+import { HistorySessionRestoreButton } from "./HistorySessionRestoreButton";
 
 export interface MonitorHistorySessionTranscriptDrawerProps {
   open: boolean;
@@ -18,6 +19,8 @@ export interface MonitorHistorySessionTranscriptDrawerProps {
   onCompactSessionHistory?: (sessionId: string) => void | Promise<void>;
   onCancelSession?: (sessionId: string) => void;
   onOpenTaskDetail?: (taskId: string) => void;
+  onRestoreSession?: (sessionId: string) => void;
+  canRestoreSession?: (sessionId: string) => boolean;
 }
 
 export function MonitorHistorySessionTranscriptDrawer({
@@ -29,6 +32,8 @@ export function MonitorHistorySessionTranscriptDrawer({
   onCompactSessionHistory,
   onCancelSession,
   onOpenTaskDetail,
+  onRestoreSession,
+  canRestoreSession,
 }: MonitorHistorySessionTranscriptDrawerProps) {
   const [compactInFlight, setCompactInFlight] = useState(false);
   const drawerWidth = useMemo(
@@ -74,6 +79,10 @@ export function MonitorHistorySessionTranscriptDrawer({
     liveSession.status !== "running" &&
     liveSession.status !== "connecting" &&
     !compactInFlight;
+  const showRestore =
+    Boolean(onRestoreSession) &&
+    liveSession != null &&
+    (canRestoreSession ? canRestoreSession(liveSession.id) : true);
 
   function compactSessionHistory() {
     if (!onCompactSessionHistory || !liveSession || !canCompactSession) return;
@@ -105,6 +114,13 @@ export function MonitorHistorySessionTranscriptDrawer({
             <Tag color={historySessionStatusTagColor(liveSession.status)}>
               {historySessionStatusLabel(liveSession.status)}
             </Tag>
+            {showRestore ? (
+              <HistorySessionRestoreButton
+                onClick={() => {
+                  onRestoreSession?.(liveSession.id);
+                }}
+              />
+            ) : null}
             {onCompactSessionHistory ? (
               <Button
                 size="small"

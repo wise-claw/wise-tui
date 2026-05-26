@@ -129,9 +129,11 @@ import {
 } from "../../hooks/useSpeechToRequirementSync";
 import { buildOmcBatchTaskIntentOneLiner } from "../../utils/omcBatchTaskIntentOneLiner";
 import {
+  isSessionBoundAsRepositoryMain,
   resolveRepositoryMainSessionId,
   resolveMainOwnerAgentNameForRepositoryPath,
 } from "../../utils/repositoryMainSessionBinding";
+import { HistorySessionRestoreButton } from "../ProgressMonitorPanel/HistorySessionRestoreButton";
 import { getAppSetting, setAppSetting } from "../../services/appSettingsStore";
 import {
   CONTEXT_AUTO_COMPACT_BEFORE_SEND_PERCENT,
@@ -311,6 +313,10 @@ interface Props {
   onRefreshHistorySessions?: () => void | Promise<void>;
   /** 历史会话弹窗内删除某条会话（物理删除磁盘 jsonl，不可恢复）。运行中的会话会抛错。 */
   onDeleteHistorySession?: (sessionId: string) => Promise<void>;
+  /** 在右侧 Inspector 打开历史会话消息（只读预览） */
+  onOpenHistorySessionInInspector?: (sessionId: string) => void;
+  /** 将历史会话恢复为当前仓库主会话 */
+  onRestoreHistorySessionAsMain?: (sessionId: string) => void | Promise<void>;
   /** App 侧 `omcBatchRuntime.active`：批量 OMC 调度中（含任务间隙），用于员工空闲判定 */
   omcBatchPipelineActive?: boolean;
   /** 工作树列表：将路径加入当前侧栏项目（由 App 注入） */
@@ -509,6 +515,8 @@ export function ClaudeChat({
   onPrepareFreshOmcEmployeeWorkerForDirectBatch,
   onRefreshHistorySessions,
   onDeleteHistorySession,
+  onOpenHistorySessionInInspector,
+  onRestoreHistorySessionAsMain,
   omcBatchPipelineActive = false,
   onAddWorktreeRepositoryToProject,
   onReloadFullDiskTranscript,
@@ -2589,6 +2597,14 @@ export function ClaudeChat({
     [filteredHistorySessions, historyVisibleCount],
   );
 
+  const canRestoreHistorySession = useCallback(
+    (targetSession: ClaudeSession) => {
+      if (!onRestoreHistorySessionAsMain) return false;
+      return !isSessionBoundAsRepositoryMain(targetSession, repositoryMainBindings, sessions, repositories ?? []);
+    },
+    [onRestoreHistorySessionAsMain, repositoryMainBindings, sessions, repositories],
+  );
+
   const historyRefreshInFlightRef = useRef(false);
   const handleHistorySessionsRefresh = useCallback(() => {
     if (!onRefreshHistorySessions || historyRefreshInFlightRef.current) return;
@@ -3585,7 +3601,7 @@ export function ClaudeChat({
                                     type="button"
                                     className={`app-claude-session-history-popover__item ${active ? "app-claude-session-history-popover__item--active" : ""}`}
                                     onClick={() => {
-                                      onSwitchSession?.(item.id);
+                                      onOpenHistorySessionInInspector?.(item.id);
                                       setHistoryPopoverOpen(false);
                                       setHistorySearchText("");
                                     }}
@@ -3594,6 +3610,16 @@ export function ClaudeChat({
                                     <span className="app-claude-session-history-popover__item-title">{preview}</span>
                                   </button>
                                   </Tooltip>
+                                  {onRestoreHistorySessionAsMain ? (
+                                    <HistorySessionRestoreButton
+                                      className="app-claude-session-history-popover__item-restore"
+                                      disabled={!canRestoreHistorySession(item)}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        void Promise.resolve(onRestoreHistorySessionAsMain(item.id));
+                                      }}
+                                    />
+                                  ) : null}
                                   {onDeleteHistorySession ? (
                                     <Tooltip title="删除该历史会话" mouseEnterDelay={0.35}>
                                       <Button

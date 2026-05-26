@@ -4,6 +4,7 @@ import type {
   EmployeeMonitorItem,
   MonitorDrawerTarget,
   MonitorStats,
+  Repository,
   RepositoryMemberMonitorItem,
   SessionConversationTaskItem,
   TeamMonitorItem,
@@ -56,6 +57,11 @@ export interface ChatInspectorProps {
   onReloadFullDiskTranscript?: (sessionKey: string) => void | Promise<void>;
   onCompactSessionHistory?: (sessionId: string) => void | Promise<void>;
   projectId?: string | null;
+  historyDrawerSessionId?: string | null;
+  onHistoryDrawerSessionIdChange?: (sessionId: string | null) => void;
+  onRestoreHistorySessionAsMain?: (sessionId: string) => void | Promise<void>;
+  repositoryMainBindings?: Record<string, string>;
+  repositories?: Repository[];
 }
 
 /**
@@ -95,6 +101,11 @@ export function ChatInspector({
   onReloadFullDiskTranscript,
   onCompactSessionHistory,
   projectId,
+  historyDrawerSessionId,
+  onHistoryDrawerSessionIdChange,
+  onRestoreHistorySessionAsMain,
+  repositoryMainBindings,
+  repositories,
 }: ChatInspectorProps) {
   const sessionsForMonitor = monitorPanelSessions ?? [];
   const transcriptSessions = monitorTranscriptSourceSessions ?? sessionsForMonitor;
@@ -137,6 +148,11 @@ export function ChatInspector({
                 onCompactSessionHistory={onCompactSessionHistory}
                 transcriptSourceSessions={transcriptSessions}
                 projectId={projectId}
+                historyDrawerSessionId={historyDrawerSessionId}
+                onHistoryDrawerSessionIdChange={onHistoryDrawerSessionIdChange}
+                onRestoreHistorySessionAsMain={onRestoreHistorySessionAsMain}
+                repositoryMainBindings={repositoryMainBindings}
+                repositories={repositories}
               />
             </div>
           ) : null}

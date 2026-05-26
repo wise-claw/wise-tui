@@ -1327,6 +1327,23 @@
   overflow: hidden;
 }
 
+.app-monitor-panel__history-popover-restore {
+  flex-shrink: 0;
+  align-self: center;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-monitor-panel__history-popover-omc-row:hover .app-monitor-panel__history-popover-restore,
+.app-monitor-panel__history-popover-restore:focus-visible {
+  opacity: 1;
+}
+
+.app-monitor-panel__history-popover-restore:hover:not(:disabled) {
+  color: var(--ant-color-primary);
+}
+
 .app-monitor-panel__history-popover-omc-stop-wrap {
   flex-shrink: 0;
   position: relative;
