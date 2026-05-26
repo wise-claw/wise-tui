@@ -367,11 +367,13 @@ export function MyExtensionsPanel({
           installScope: scope,
           repositoryPath: scope === "repository" ? repoPath : null,
         });
-        message.success(
-          scope === "global"
-            ? `已全局安装到 Claude Code：${result.installedPath}`
-            : `已安装到当前仓库：${result.installedPath}`,
-        );
+        const installedHint =
+          item.kind === "mcp"
+            ? `已合并 MCP 配置（保留文件内其它字段）：${result.installedPath}`
+            : scope === "global"
+              ? `已全局安装到 Claude Code：${result.installedPath}`
+              : `已安装到当前仓库：${result.installedPath}`;
+        message.success(installedHint);
       } catch (e) {
         message.error(e instanceof Error ? e.message : String(e));
       } finally {

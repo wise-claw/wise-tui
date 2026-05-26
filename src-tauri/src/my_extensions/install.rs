@@ -10,6 +10,7 @@ use crate::claude_commands::project_skills::validate_claude_skill_name;
 
 use super::inventory::MyExtensionKind;
 use super::library::{copy_dir_recursive, get_item, item_snapshot_path, LibraryItem};
+use super::mcp_config::{merge_mcp_server_into_file, resolve_mcp_install_path_for_server};
 use super::paths::InstallScope;
 
 #[derive(Debug, Deserialize)]
@@ -109,55 +110,9 @@ fn install_mcp(
         .unwrap_or(&item.name)
         .to_string();
 
-    let (path, use_mcp_json) = match scope {
-        InstallScope::Global => {
-            let p = crate::claude_config_dir::user_claude_dir().join("settings.json");
-            (p, false)
-        }
-        InstallScope::Repository => {
-            let repo = repo.ok_or_else(|| "缺少仓库路径".to_string())?;
-            let mcp_json = repo.join(".mcp.json");
-            if mcp_json.exists() || !repo.join(".claude").join("settings.json").exists() {
-                (mcp_json, true)
-            } else {
-                (repo.join(".claude").join("settings.json"), false)
-            }
-        }
-    };
-
-    merge_mcp_entry(&path, &server_name, entry, use_mcp_json)?;
+    let path = resolve_mcp_install_path_for_server(scope, repo, &server_name)?;
+    merge_mcp_server_into_file(&path, &server_name, entry)?;
     Ok(path.display().to_string())
-}
-
-fn merge_mcp_entry(path: &Path, name: &str, entry: Value, mcp_json_root: bool) -> Result<(), String> {
-    let mut root: Value = if path.is_file() {
-        let raw = fs::read_to_string(path).map_err(|e| e.to_string())?;
-        serde_json::from_str(&raw).unwrap_or(json!({}))
-    } else {
-        json!({})
-    };
-    if !root.is_object() {
-        root = json!({});
-    }
-    let obj = root.as_object_mut().unwrap();
-    if mcp_json_root {
-        let servers = obj.entry("mcpServers").or_insert_with(|| json!({}));
-        servers
-            .as_object_mut()
-            .ok_or_else(|| "mcpServers 须为对象".to_string())?
-            .insert(name.to_string(), entry);
-    } else {
-        let servers = obj.entry("mcpServers").or_insert_with(|| json!({}));
-        servers
-            .as_object_mut()
-            .ok_or_else(|| "mcpServers 须为对象".to_string())?
-            .insert(name.to_string(), entry);
-    }
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    let out = serde_json::to_string_pretty(&root).map_err(|e| e.to_string())?;
-    fs::write(path, out).map_err(|e| e.to_string())
 }
 
 fn install_hooks(

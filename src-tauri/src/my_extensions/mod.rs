@@ -6,6 +6,7 @@ mod discover;
 mod install;
 mod inventory;
 pub mod library;
+mod mcp_config;
 pub mod paths;
 
 pub use paths::InstallScope;

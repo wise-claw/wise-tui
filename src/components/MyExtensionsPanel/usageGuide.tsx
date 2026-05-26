@@ -10,7 +10,14 @@ export function MyExtensionsUsageTooltipContent() {
           ，可通过其它入口写入或打开「扩展库目录」手动添加。
         </li>
         <li>左侧选择条目，右侧编辑快照文件并「保存内容」。</li>
-        <li>多文件条目可在类型行切换当前编辑的文件。</li>
+        <li>
+          MCP 安装会合并进 Claude 配置文件：全局写入{" "}
+          <Typography.Text code>~/.claude.json</Typography.Text>（或已有同名 server
+          的 <Typography.Text code>settings.json</Typography.Text>
+          ）；仓库级优先 <Typography.Text code>.mcp.json</Typography.Text>，否则合并{" "}
+          <Typography.Text code>.claude/settings.json</Typography.Text>。同名 server 深度合并，其它字段保留。
+        </li>
+        <li>多文件条目可在目录树中切换当前编辑的文件。</li>
       </ol>
     </div>
   );
