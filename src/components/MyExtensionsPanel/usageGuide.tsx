@@ -17,6 +17,12 @@ export function MyExtensionsUsageTooltipContent() {
           ）；仓库级优先 <Typography.Text code>.mcp.json</Typography.Text>，否则合并{" "}
           <Typography.Text code>.claude/settings.json</Typography.Text>。同名 server 深度合并，其它字段保留。
         </li>
+        <li>
+          Hooks 安装合并进 <Typography.Text code>settings.json</Typography.Text> /{" "}
+          <Typography.Text code>settings.local.json</Typography.Text>
+          ：优先写回收录来源文件；按生命周期事件与 <Typography.Text code>matcher</Typography.Text>{" "}
+          融合命令列表，不覆盖其它顶层配置。
+        </li>
         <li>多文件条目可在目录树中切换当前编辑的文件。</li>
       </ol>
     </div>

@@ -2,7 +2,9 @@
 
 pub mod commands;
 mod capture;
+mod config_file;
 mod discover;
+mod hooks_config;
 mod install;
 mod inventory;
 pub mod library;

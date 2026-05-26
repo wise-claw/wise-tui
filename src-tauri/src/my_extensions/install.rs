@@ -4,10 +4,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::Value;
 
 use crate::claude_commands::project_skills::validate_claude_skill_name;
 
+use super::hooks_config::{merge_hooks_into_file, resolve_hooks_install_path};
 use super::inventory::MyExtensionKind;
 use super::library::{copy_dir_recursive, get_item, item_snapshot_path, LibraryItem};
 use super::mcp_config::{merge_mcp_server_into_file, resolve_mcp_install_path_for_server};
@@ -116,7 +117,7 @@ fn install_mcp(
 }
 
 fn install_hooks(
-    item: &LibraryItem,
+    _item: &LibraryItem,
     snap: &Path,
     scope: InstallScope,
     repo: Option<&Path>,
@@ -132,32 +133,22 @@ fn install_hooks(
         .cloned()
         .ok_or_else(|| "快照中无 hooks 字段".to_string())?;
 
-    let path = match scope {
-        InstallScope::Global => crate::claude_config_dir::user_claude_dir().join("settings.json"),
-        InstallScope::Repository => {
-            let repo = repo.ok_or_else(|| "缺少仓库路径".to_string())?;
-            repo.join(".claude").join("settings.json")
-        }
-    };
+    let source_hint = fs::read_to_string(snap.join("meta.json"))
+        .ok()
+        .and_then(|meta_raw| serde_json::from_str::<serde_json::Value>(&meta_raw).ok())
+        .and_then(|meta| {
+            meta.get("sourcePath")
+                .or_else(|| meta.get("source_path"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+        });
 
-    let mut root: Value = if path.is_file() {
-        let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        serde_json::from_str(&raw).unwrap_or(json!({}))
-    } else {
-        json!({})
-    };
-    if !root.is_object() {
-        root = json!({});
-    }
-    root.as_object_mut()
-        .unwrap()
-        .insert("hooks".to_string(), hooks);
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    let out = serde_json::to_string_pretty(&root).map_err(|e| e.to_string())?;
-    fs::write(&path, out).map_err(|e| e.to_string())?;
-    let _ = item;
+    let path = resolve_hooks_install_path(
+        scope,
+        repo,
+        source_hint.as_deref(),
+    )?;
+    merge_hooks_into_file(&path, hooks)?;
     Ok(path.display().to_string())
 }
 

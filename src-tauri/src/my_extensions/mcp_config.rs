@@ -5,9 +5,9 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Map, Value};
 
+use super::config_file::{deep_merge_json, read_json_root, write_json_root};
 use super::paths::InstallScope;
 use crate::claude_config_dir;
-use crate::wise_paths;
 
 /// 解析 MCP 安装应写入的配置文件路径（优先更新已存在同名 server 的文件）。
 pub fn resolve_mcp_install_path(scope: InstallScope, repo: Option<&Path>) -> Result<PathBuf, String> {
@@ -81,26 +81,6 @@ pub fn resolve_mcp_install_path_for_server(
     Ok(select_mcp_install_path(&candidates))
 }
 
-fn read_json_root(path: &Path) -> Result<Value, String> {
-    if !path.is_file() {
-        return Ok(json!({}));
-    }
-    let raw = fs::read_to_string(path).map_err(|e| format!("读取 {} 失败: {e}", path.display()))?;
-    let v: Value = serde_json::from_str(&raw)
-        .map_err(|e| format!("解析 {} 失败: {e}", path.display()))?;
-    if v.is_object() {
-        Ok(v)
-    } else {
-        Err(format!("{} 根须为 JSON 对象", path.display()))
-    }
-}
-
-fn write_json_root(path: &Path, root: &Value) -> Result<(), String> {
-    let out = serde_json::to_string_pretty(root).map_err(|e| e.to_string())?;
-    let body = format!("{out}\n");
-    wise_paths::write_file_atomic(path, &body)
-}
-
 fn mcp_servers_map(v: &Value) -> Option<&Map<String, Value>> {
     v.get("mcpServers")
         .and_then(|x| x.as_object())
@@ -143,22 +123,6 @@ fn merge_server_into_root(root: &mut Value, name: &str, entry: Value) -> Result<
     };
     servers.insert(name.to_string(), merged);
     Ok(())
-}
-
-fn deep_merge_json(base: Value, overlay: Value) -> Value {
-    match (base, overlay) {
-        (Value::Object(mut b), Value::Object(o)) => {
-            for (k, v) in o {
-                let next = match b.remove(&k) {
-                    Some(existing) => deep_merge_json(existing, v),
-                    None => v,
-                };
-                b.insert(k, next);
-            }
-            Value::Object(b)
-        }
-        (_, overlay) => overlay,
-    }
 }
 
 #[cfg(test)]

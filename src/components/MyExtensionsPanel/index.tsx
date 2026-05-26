@@ -370,9 +370,11 @@ export function MyExtensionsPanel({
         const installedHint =
           item.kind === "mcp"
             ? `已合并 MCP 配置（保留文件内其它字段）：${result.installedPath}`
-            : scope === "global"
-              ? `已全局安装到 Claude Code：${result.installedPath}`
-              : `已安装到当前仓库：${result.installedPath}`;
+            : item.kind === "hook"
+              ? `已合并 Hooks 配置（按事件/matcher 融合，其它字段保留）：${result.installedPath}`
+              : scope === "global"
+                ? `已全局安装到 Claude Code：${result.installedPath}`
+                : `已安装到当前仓库：${result.installedPath}`;
         message.success(installedHint);
       } catch (e) {
         message.error(e instanceof Error ? e.message : String(e));
