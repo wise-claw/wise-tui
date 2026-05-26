@@ -1,5 +1,15 @@
 import type { GitFileStatus, GitStatusResponse } from "../../types";
 
+/** 超过此数量时 Git 面板改用虚拟列表，并默认收起/列表视图。 */
+export const GIT_PANEL_LARGE_CHANGE_COUNT = 200;
+
+/** 虚拟列表行高（px），需与 `.git-file-row` 一致。 */
+export const GIT_PANEL_FILE_ROW_HEIGHT = 28;
+
+export function shouldUseGitVirtualFileList(fileCount: number): boolean {
+  return fileCount > GIT_PANEL_LARGE_CHANGE_COUNT;
+}
+
 export function getStatusSymbol(status: string): string {
   switch (status) {
     case "A":

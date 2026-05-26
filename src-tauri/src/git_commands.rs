@@ -354,13 +354,25 @@ pub(crate) fn git_status(path: String) -> Result<GitStatusResponse, String> {
         .statuses(Some(&mut opts))
         .map_err(|e| format!("Failed to get status: {}", e))?;
 
+    let file_count = statuses
+        .iter()
+        .filter(|entry| !entry.path().unwrap_or("").is_empty())
+        .count();
+    let skip_per_file_stats = file_count > GIT_STATUS_PER_FILE_STATS_LIMIT;
+
     let mut staged: Vec<GitFileStatus> = Vec::new();
     let mut unstaged: Vec<GitFileStatus> = Vec::new();
 
     let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
 
-    let staged_line_stats = collect_staged_line_stats(&repo, head_tree.as_ref());
-    let unstaged_line_stats = collect_unstaged_line_stats(&repo);
+    let (staged_line_stats, unstaged_line_stats) = if skip_per_file_stats {
+        (HashMap::new(), HashMap::new())
+    } else {
+        (
+            collect_staged_line_stats(&repo, head_tree.as_ref()),
+            collect_unstaged_line_stats(&repo),
+        )
+    };
 
     for entry in statuses.iter() {
         let status = entry.status();
@@ -412,7 +424,7 @@ pub(crate) fn git_status(path: String) -> Result<GitStatusResponse, String> {
                 .get(&file_path)
                 .copied()
                 .unwrap_or_else(|| {
-                    if status.is_wt_new() {
+                    if !skip_per_file_stats && status.is_wt_new() {
                         count_file_lines_for_untracked(&path, &file_path)
                     } else {
                         (0, 0)
@@ -426,10 +438,16 @@ pub(crate) fn git_status(path: String) -> Result<GitStatusResponse, String> {
         }
     }
 
-    let total_additions = staged.iter().map(|f| f.additions).sum::<usize>()
-        + unstaged.iter().map(|f| f.additions).sum::<usize>();
-    let total_deletions = staged.iter().map(|f| f.deletions).sum::<usize>()
-        + unstaged.iter().map(|f| f.deletions).sum::<usize>();
+    let (total_additions, total_deletions) = if skip_per_file_stats {
+        collect_aggregate_line_totals(&repo, head_tree.as_ref())
+    } else {
+        (
+            staged.iter().map(|f| f.additions).sum::<usize>()
+                + unstaged.iter().map(|f| f.additions).sum::<usize>(),
+            staged.iter().map(|f| f.deletions).sum::<usize>()
+                + unstaged.iter().map(|f| f.deletions).sum::<usize>(),
+        )
+    };
 
     let (ahead, behind, upstream) = compute_ahead_behind(&repo).unwrap_or((0, 0, None));
 
@@ -466,6 +484,39 @@ fn collect_unstaged_line_stats(repo: &Repository) -> HashMap<String, (usize, usi
         return HashMap::new();
     };
     collect_line_stats_from_diff(&diff)
+}
+
+/// 变更文件过多时跳过逐文件行统计（避免对数十万行做 HashMap 插入）。
+const GIT_STATUS_PER_FILE_STATS_LIMIT: usize = 400;
+
+fn diff_stats_totals(diff: &git2::Diff<'_>) -> (usize, usize) {
+    diff.stats()
+        .map(|stats| (stats.insertions(), stats.deletions()))
+        .unwrap_or((0, 0))
+}
+
+fn collect_aggregate_line_totals(
+    repo: &Repository,
+    head_tree: Option<&git2::Tree<'_>>,
+) -> (usize, usize) {
+    let mut adds = 0usize;
+    let mut dels = 0usize;
+    if let Some(tree) = head_tree {
+        if let Ok(diff) = repo.diff_tree_to_index(Some(tree), None, None) {
+            let (a, d) = diff_stats_totals(&diff);
+            adds += a;
+            dels += d;
+        }
+    }
+    let mut opts = DiffOptions::new();
+    opts.include_untracked(true);
+    opts.recurse_untracked_dirs(true);
+    if let Ok(diff) = repo.diff_index_to_workdir(None, Some(&mut opts)) {
+        let (a, d) = diff_stats_totals(&diff);
+        adds += a;
+        dels += d;
+    }
+    (adds, dels)
 }
 
 fn collect_line_stats_from_diff(diff: &git2::Diff<'_>) -> HashMap<String, (usize, usize)> {

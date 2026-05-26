@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button, Empty, Input, message, Popconfirm, Space, Tooltip, Typography } from "antd";
 import {
   ApartmentOutlined,
@@ -15,7 +15,8 @@ import { extractClaudeInvocationFinalText } from "../../utils/claudeInvocationTe
 import { buildFileTree } from "./fileTree";
 import { FileRow } from "./FileRow";
 import { FileTreeView } from "./FileTreeView";
-import { buildCommitDraftFromStatus } from "./gitPanelUtils";
+import { GitFileListSection } from "./GitFileListSection";
+import { buildCommitDraftFromStatus, GIT_PANEL_LARGE_CHANGE_COUNT } from "./gitPanelUtils";
 import { RevertIcon } from "./RevertIcon";
 import type { FileTreeNode, GitPanelOpenFileOptions, UnstagedViewMode } from "./types";
 
@@ -60,7 +61,19 @@ export function DiffMode({
   const hasStaged = status.staged.length > 0;
   const hasUnstaged = status.unstaged.length > 0;
   const hasChanges = hasStaged || hasUnstaged;
+  const changeFileCount = status.staged.length + status.unstaged.length;
+  const isLargeChangeSet = changeFileCount > GIT_PANEL_LARGE_CHANGE_COUNT;
   const canCommit = commitMsg.trim().length > 0 && hasChanges && !loading.commit;
+
+  useEffect(() => {
+    if (!isLargeChangeSet) {
+      return;
+    }
+    setUnstagedViewMode("list");
+    if (status.staged.length > 80) {
+      setStagedCollapsed(true);
+    }
+  }, [isLargeChangeSet, status.staged.length]);
 
   const unstagedDirPaths = useMemo(() => {
     if (unstagedViewMode !== "tree") return [];
@@ -111,9 +124,16 @@ export function DiffMode({
     setAiSummaryLoading(true);
     try {
       const fallback = buildCommitDraftFromStatus(status);
-      const files = [...status.staged, ...status.unstaged]
+      const allFiles = [...status.staged, ...status.unstaged];
+      const previewLimit = 40;
+      const filesPreview = allFiles
+        .slice(0, previewLimit)
         .map((f) => `- ${f.path} (${f.status}, +${f.additions}, -${f.deletions})`)
         .join("\n");
+      const files =
+        allFiles.length > previewLimit
+          ? `${filesPreview}\n- ... 另有 ${allFiles.length - previewLimit} 个文件未列出`
+          : filesPreview;
       const model = await getClaudeConfigModel(repositoryPath);
       const result = await executeClaudeCodeAndWait({
         repositoryPath,
@@ -217,7 +237,7 @@ export function DiffMode({
               -{status.deletions}
             </Text>
           </Space>
-          {hasUnstaged && (
+          {hasUnstaged && !isLargeChangeSet && (
             <span className="git-view-toggle">
               <Button
                 type={unstagedViewMode === "tree" ? "primary" : "text"}
@@ -239,6 +259,12 @@ export function DiffMode({
       )}
 
       <div className="git-diff-mode-scroll">
+      {isLargeChangeSet && (
+        <div className="git-large-change-hint" role="status">
+          变更文件较多（{changeFileCount} 个），已启用虚拟列表并跳过逐文件行数统计以提升性能。完整列表可在终端执行{" "}
+          <code>git status</code>。
+        </div>
+      )}
       {hasStaged && (
         <div className={`git-section${stagedCollapsed ? " git-section--collapsed" : ""}`}>
           <div className="git-section-header">
@@ -270,16 +296,12 @@ export function DiffMode({
             </Space>
           </div>
           {!stagedCollapsed ? (
-            <div className="git-file-list">
-              {status.staged.map((f) => (
-                <FileRow
-                  key={f.path}
-                  file={f}
-                  section="staged"
-                  onUnstage={onUnstage}
-                />
-              ))}
-            </div>
+            <GitFileListSection
+              files={status.staged}
+              renderRow={(f) => (
+                <FileRow file={f} section="staged" onUnstage={onUnstage} />
+              )}
+            />
           ) : null}
         </div>
       )}
@@ -338,7 +360,7 @@ export function DiffMode({
               </Popconfirm>
             </Space>
           </div>
-          {unstagedViewMode === "tree" ? (
+          {unstagedViewMode === "tree" && !isLargeChangeSet ? (
             <FileTreeView
               files={status.unstaged}
               expandedDirs={expandedDirs}
@@ -349,18 +371,18 @@ export function DiffMode({
               onOpenFile={onOpenFile}
             />
           ) : (
-            <div className="git-file-list">
-              {status.unstaged.map((f) => (
+            <GitFileListSection
+              files={status.unstaged}
+              renderRow={(f) => (
                 <FileRow
-                  key={f.path}
                   file={f}
                   section="unstaged"
                   onStage={onStage}
                   onDiscard={onDiscard}
                   onOpenFile={onOpenFile}
                 />
-              ))}
-            </div>
+              )}
+            />
           )}
         </div>
       )}
