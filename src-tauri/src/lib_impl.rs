@@ -264,6 +264,8 @@ pub fn run() {
             workspace_commands::open_workspace_in,
             git_commands::git_status,
             git_commands::git_stage,
+            git_commands::git_stage_paths,
+            git_commands::git_stage_all,
             git_commands::git_unstage,
             git_commands::git_unstage_all,
             git_commands::git_commit,

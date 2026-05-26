@@ -1,4 +1,4 @@
-import type { GitStatusResponse } from "../../types";
+import type { GitFileStatus, GitStatusResponse } from "../../types";
 
 export function getStatusSymbol(status: string): string {
   switch (status) {
@@ -37,6 +37,15 @@ export function getStatusColor(status: string): string {
     default:
       return "var(--ant-color-text-tertiary)";
   }
+}
+
+/** 未暂存列表中是否存在该目录下的文件（用于目录行批量暂存）。 */
+export function hasUnstagedFilesUnderDirectory(
+  unstaged: GitFileStatus[],
+  dirPath: string,
+): boolean {
+  const prefix = `${dirPath}/`;
+  return unstaged.some((file) => file.path.startsWith(prefix));
 }
 
 export function hasExpandedDescendant(expandedDirs: Set<string>, path: string): boolean {

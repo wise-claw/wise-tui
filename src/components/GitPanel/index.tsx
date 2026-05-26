@@ -13,6 +13,8 @@ import {
   gitPull,
   gitPush,
   gitStage,
+  gitStagePaths,
+  gitStageAll,
   gitStatus,
   gitUnstage,
   gitUnstageAll,
@@ -25,7 +27,7 @@ import { DiffMode } from "./DiffMode";
 import { GitSyncActions } from "./GitSyncActions";
 import { InitMode } from "./InitMode";
 import { LogMode } from "./LogMode";
-import { yieldToPaint } from "./gitPanelUtils";
+import { hasUnstagedFilesUnderDirectory, yieldToPaint } from "./gitPanelUtils";
 import { RepositoryFilesExplorer } from "./RepositoryFilesExplorer";
 import type { GitPanelOpenFileOptions } from "./types";
 import "./index.css";
@@ -280,8 +282,16 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
   );
 
   const handleStage = useCallback(
-    (filePath: string) => runAction("stage", () => gitStage(repositoryPath!, filePath)),
-    [repositoryPath, runAction],
+    (filePath: string) =>
+      void runAction("stage", async () => {
+        if (!repositoryPath) return;
+        if (status && hasUnstagedFilesUnderDirectory(status.unstaged, filePath)) {
+          await gitStagePaths(repositoryPath, [filePath]);
+          return;
+        }
+        await gitStage(repositoryPath, filePath);
+      }),
+    [repositoryPath, status, runAction],
   );
 
   const handleUnstage = useCallback(
@@ -296,12 +306,10 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
 
   const handleStageAll = useCallback(() => {
     void runAction("stageAll", async () => {
-      if (!status) return;
-      for (const file of status.unstaged) {
-        await gitStage(repositoryPath!, file.path);
-      }
+      if (!repositoryPath) return;
+      await gitStageAll(repositoryPath);
     });
-  }, [repositoryPath, status, runAction]);
+  }, [repositoryPath, runAction]);
 
   const handleUnstageAll = useCallback(() => {
     void runAction("unstageAll", async () => {

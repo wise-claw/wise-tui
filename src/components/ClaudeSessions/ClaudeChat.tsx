@@ -52,7 +52,7 @@ import { ClaudeSessionTrajectoryDrawer } from "./ClaudeSessionTrajectoryDrawer";
 import { SessionQuickActionsBar } from "./SessionQuickActionsBar";
 import type { ClaudeSessionConnectionKind } from "../../constants/claudeConnection";
 import { ComposerRegion, type DualPaneComposerRepositoryPickerProps } from "../ClaudeChatInput";
-import { gitCommit, gitPull, gitPush, gitStage, gitStatus, gitWorktreeList, gitWorktreeRemove } from "../../services/git";
+import { gitCommit, gitPull, gitPush, gitStageAll, gitStatus, gitWorktreeList, gitWorktreeRemove } from "../../services/git";
 import { openInFinder } from "../../services/repository";
 import { executeClaudeCodeAndWait, getClaudeConfigModel } from "../../services/claude";
 import { scheduleDirectOmcBatchAfterMacrotask } from "../../services/omcDirectBatchExecution";
@@ -2159,8 +2159,8 @@ export function ClaudeChat({
         setPushPopoverOpen(false);
         return;
       }
-      for (const file of latestStatus.unstaged) {
-        await gitStage(repoPath, file.path);
+      if (latestStatus.unstaged.length > 0) {
+        await gitStageAll(repoPath);
       }
       await gitCommit(repoPath, commitMessage);
       await gitPull(repoPath);

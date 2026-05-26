@@ -19,6 +19,19 @@ export async function gitStage(path: string, filePath: string): Promise<void> {
   return invoke("git_stage", { path, filePath });
 }
 
+/** 按路径/目录批量暂存（目录在后端展开为 `dir/**`，单次 IPC）。 */
+export async function gitStagePaths(path: string, filePaths: string[]): Promise<void> {
+  if (filePaths.length === 0) {
+    return;
+  }
+  return invoke("git_stage_paths", { path, filePaths });
+}
+
+/** 一次性暂存全部未提交改动（单次 IPC，适合大量文件）。 */
+export async function gitStageAll(path: string): Promise<void> {
+  return invoke("git_stage_all", { path });
+}
+
 export async function gitUnstage(path: string, filePath: string): Promise<void> {
   return invoke("git_unstage", { path, filePath });
 }

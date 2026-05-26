@@ -504,12 +504,53 @@ fn count_file_lines_for_untracked(repo_path: &str, rel_path: &str) -> (usize, us
     (content.lines().count(), 0)
 }
 
+/// 将相对路径转为 libgit2 pathspec：目录用 `dir/**` 一次匹配子树，单文件用精确路径。
+fn normalize_stage_pathspec(repo_path: &str, rel_path: &str) -> String {
+    let rel = rel_path.trim();
+    if rel.is_empty() || rel == "." {
+        return ".".to_string();
+    }
+    let rel = rel.trim_end_matches('/');
+    let full = Path::new(repo_path).join(rel);
+    if full.is_dir() {
+        return format!("{rel}/**");
+    }
+    rel.to_string()
+}
+
 #[tauri::command]
 pub(crate) fn git_stage(path: String, file_path: String) -> Result<(), String> {
-    let repo = open_repo(&path)?;
+    let spec = normalize_stage_pathspec(&path, &file_path);
+    git_stage_paths_inner(&path, &[spec.as_str()])
+}
+
+/// 按多个 pathspec 一次性暂存（目录项会展开为 `dir/**`），单次 IPC。
+#[tauri::command]
+pub(crate) fn git_stage_paths(path: String, file_paths: Vec<String>) -> Result<(), String> {
+    if file_paths.is_empty() {
+        return Ok(());
+    }
+    let mut specs: Vec<String> = file_paths
+        .iter()
+        .map(|p| normalize_stage_pathspec(&path, p))
+        .collect();
+    specs.sort();
+    specs.dedup();
+    let refs: Vec<&str> = specs.iter().map(|s| s.as_str()).collect();
+    git_stage_paths_inner(&path, &refs)
+}
+
+/// 一次性暂存工作区全部变更（等价于仓库根目录 `git add .`），避免逐文件 IPC。
+#[tauri::command]
+pub(crate) fn git_stage_all(path: String) -> Result<(), String> {
+    git_stage_paths_inner(&path, &["."])
+}
+
+fn git_stage_paths_inner(path: &str, pathspecs: &[&str]) -> Result<(), String> {
+    let repo = open_repo(path)?;
     let mut index = repo.index().map_err(|e| e.to_string())?;
     index
-        .add_all(&[&file_path], git2::IndexAddOption::DEFAULT, None)
+        .add_all(pathspecs, git2::IndexAddOption::DEFAULT, None)
         .map_err(|e| e.to_string())?;
     index.write().map_err(|e| e.to_string())
 }
