@@ -25,6 +25,27 @@ export function claudePluginInstallRef(entry: ClaudePluginCatalogEntry): string 
   return `${entry.pluginId}@${entry.marketplace}`;
 }
 
+/** Claude Code 官方 LSP 插件：Python / TypeScript / Rust / Java 核心套件。 */
+export const CLAUDE_LSP_CORE_PLUGIN_IDS = [
+  "pyright-lsp",
+  "typescript-lsp",
+  "rust-analyzer-lsp",
+  "jdtls-lsp",
+] as const;
+
+export type ClaudeLspCorePluginId = (typeof CLAUDE_LSP_CORE_PLUGIN_IDS)[number];
+
+export function getClaudeLspCoreCatalogEntries(): ClaudePluginCatalogEntry[] {
+  const byId = new Map(CLAUDE_PLUGIN_MARKET_CATALOG.map((entry) => [entry.pluginId, entry] as const));
+  return CLAUDE_LSP_CORE_PLUGIN_IDS.map((id) => byId.get(id)).filter(
+    (entry): entry is ClaudePluginCatalogEntry => entry != null,
+  );
+}
+
+export function isClaudeLspCorePluginId(pluginId: string): pluginId is ClaudeLspCorePluginId {
+  return (CLAUDE_LSP_CORE_PLUGIN_IDS as readonly string[]).includes(pluginId);
+}
+
 /** 精选市场置顶顺序（其余保持目录原序）。 */
 export const CLAUDE_PLUGIN_PINNED_INSTALL_REFS: readonly string[] = [
   "oh-my-claudecode@omc",
@@ -385,18 +406,20 @@ export const CLAUDE_PLUGIN_MARKET_CATALOG: readonly ClaudePluginCatalogEntry[] =
     category: "integration",
   },
   {
+    pluginId: "pyright-lsp",
+    marketplace: "claude-plugins-official",
+    name: "Pyright LSP",
+    description: "Python 类型检查与语言服务（跳转、引用、诊断）",
+    category: "lsp",
+    featured: true,
+  },
+  {
     pluginId: "typescript-lsp",
     marketplace: "claude-plugins-official",
     name: "TypeScript LSP",
     description: "TypeScript / JavaScript 语言服务",
     category: "lsp",
-  },
-  {
-    pluginId: "pyright-lsp",
-    marketplace: "claude-plugins-official",
-    name: "Pyright LSP",
-    description: "Python 类型检查与语言服务",
-    category: "lsp",
+    featured: true,
   },
   {
     pluginId: "rust-analyzer-lsp",
@@ -404,6 +427,7 @@ export const CLAUDE_PLUGIN_MARKET_CATALOG: readonly ClaudePluginCatalogEntry[] =
     name: "Rust Analyzer",
     description: "Rust 语言服务与诊断",
     category: "lsp",
+    featured: true,
   },
   {
     pluginId: "gopls-lsp",
@@ -432,6 +456,7 @@ export const CLAUDE_PLUGIN_MARKET_CATALOG: readonly ClaudePluginCatalogEntry[] =
     name: "Java LSP",
     description: "Java（Eclipse JDT）语言服务",
     category: "lsp",
+    featured: true,
   },
   {
     pluginId: "kotlin-lsp",

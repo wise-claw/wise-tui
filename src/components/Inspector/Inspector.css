@@ -332,6 +332,10 @@
   background: var(--ant-color-bg-container);
 }
 
+.app-chat-inspector .app-claude-code-tools-head-left {
+  background: var(--ant-color-bg-elevated, var(--ant-color-bg-container));
+}
+
 .app-chat-inspector .app-claude-code-tools-toolbar {
   padding: 0 10px 5px;
   border-bottom: 1px solid var(--ant-color-border-secondary);

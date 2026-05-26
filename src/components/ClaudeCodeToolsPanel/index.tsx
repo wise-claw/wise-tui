@@ -341,6 +341,7 @@ export function ClaudeCodeToolsPanel({
           </Space>
         </div>
       </div>
+
       <div className="app-claude-code-tools-toolbar">
         <div className="app-claude-code-tools-toolbar-left">
           <Button
