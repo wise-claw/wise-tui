@@ -169,6 +169,32 @@ fn tracking_remote_and_short_branch(repo: &Repository) -> Option<(String, String
     parse_remote_tracking_ref(full)
 }
 
+/// 本地分支名与 upstream 不一致时，plain `git push` 会失败；推送到已配置的上游分支。
+fn build_push_git_args(
+    had_upstream: bool,
+    local_branch: &str,
+    tracking: Option<&(String, String)>,
+) -> Vec<String> {
+    if !had_upstream {
+        return vec![
+            "push".to_string(),
+            "-u".to_string(),
+            "origin".to_string(),
+            local_branch.to_string(),
+        ];
+    }
+    match tracking {
+        Some((remote, upstream_branch)) if upstream_branch != local_branch => {
+            vec![
+                "push".to_string(),
+                remote.clone(),
+                format!("HEAD:{upstream_branch}"),
+            ]
+        }
+        _ => vec!["push".to_string()],
+    }
+}
+
 fn verify_head_on_remote(
     repo: &Repository,
     remote: &str,
@@ -556,15 +582,10 @@ pub(crate) fn git_push(path: String) -> Result<(), String> {
         ("origin".to_string(), branch_name.clone())
     });
 
-    if had_upstream {
-        run_git_command(&path, &["push"], "Push")?;
-    } else {
-        run_git_command(
-            &path,
-            &["push", "-u", "origin", branch_name.as_str()],
-            "Push",
-        )?;
-    }
+    let tracking = tracking_remote_and_short_branch(&repo);
+    let push_args = build_push_git_args(had_upstream, &branch_name, tracking.as_ref());
+    let push_arg_refs: Vec<&str> = push_args.iter().map(String::as_str).collect();
+    run_git_command(&path, &push_arg_refs, "Push")?;
 
     let _ = run_git_command(
         &path,
@@ -1167,6 +1188,44 @@ mod git_push_tests {
         assert_eq!(
             parse_remote_tracking_ref("refs/remotes/origin/feature/foo"),
             Some(("origin".to_string(), "feature/foo".to_string()))
+        );
+    }
+
+    #[test]
+    fn build_push_git_args_uses_head_refspec_when_upstream_name_differs() {
+        let tracking = (
+            "origin".to_string(),
+            "sprint_gd-h5_S090011666170_20260520".to_string(),
+        );
+        assert_eq!(
+            build_push_git_args(true, "main", Some(&tracking)),
+            vec![
+                "push".to_string(),
+                "origin".to_string(),
+                "HEAD:sprint_gd-h5_S090011666170_20260520".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn build_push_git_args_plain_push_when_names_match() {
+        let tracking = ("origin".to_string(), "main".to_string());
+        assert_eq!(
+            build_push_git_args(true, "main", Some(&tracking)),
+            vec!["push".to_string()]
+        );
+    }
+
+    #[test]
+    fn build_push_git_args_sets_upstream_when_missing() {
+        assert_eq!(
+            build_push_git_args(false, "feature/foo", None),
+            vec![
+                "push".to_string(),
+                "-u".to_string(),
+                "origin".to_string(),
+                "feature/foo".to_string(),
+            ]
         );
     }
 }
