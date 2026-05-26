@@ -21,9 +21,11 @@ import {
   readExplorerExpandedFromSession,
   writeExplorerExpandedToSession,
 } from "./explorerUtils";
-import { yieldToPaint } from "./gitPanelUtils";
+import { deferAfterPaint, yieldToPaint } from "./gitPanelUtils";
 import { buildCaptureExtensionContextMenuItems } from "./captureExtensionContextMenu";
 import type { ExplorerContextMenuState, ExplorerInlineCreateState } from "./types";
+
+const EMPTY_REPOSITORY_EXPLORER_ENTRIES: RepositoryExplorerEntry[] = [];
 
 interface UseRepositoryFilesExplorerInput {
   repositoryPath: string;
@@ -37,6 +39,8 @@ export function useRepositoryFilesExplorer({
   onClearExplorerSearch,
 }: UseRepositoryFilesExplorerInput) {
   const [loading, setLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [loadedRepositoryPath, setLoadedRepositoryPath] = useState(repositoryPath);
   const [explorerEntries, setExplorerEntries] = useState<RepositoryExplorerEntry[]>([]);
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<{ path: string; isDir: boolean } | null>(null);
@@ -51,7 +55,9 @@ export function useRepositoryFilesExplorer({
   } | null>(null);
   const inlineCreateRef = useRef<ExplorerInlineCreateState | null>(null);
 
-  const tree = useMemo(() => buildRepositoryFileTree(explorerEntries), [explorerEntries]);
+  const treeStale = loadedRepositoryPath !== repositoryPath;
+  const visibleExplorerEntries = treeStale ? EMPTY_REPOSITORY_EXPLORER_ENTRIES : explorerEntries;
+  const tree = useMemo(() => buildRepositoryFileTree(visibleExplorerEntries), [visibleExplorerEntries]);
   const filteredTree = useMemo(() => filterRepositoryTree(tree, search), [tree, search]);
 
   const reloadExplorer = useCallback(
@@ -62,6 +68,7 @@ export function useRepositoryFilesExplorer({
         const entries = await listRepositoryExplorerEntries(repositoryPath);
         startTransition(() => {
           setExplorerEntries(entries);
+          setLoadedRepositoryPath(repositoryPath);
         });
         if (options.expandAll) {
           const allDirs = new Set<string>();
@@ -84,30 +91,35 @@ export function useRepositoryFilesExplorer({
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      setLoading(true);
-      try {
-        await yieldToPaint();
-        const entries = await listRepositoryExplorerEntries(repositoryPath);
-        if (cancelled) {
-          return;
+    const path = repositoryPath;
+    setIsRefreshing(true);
+    const cancelDeferredLoad = deferAfterPaint(() => {
+      void (async () => {
+        try {
+          const entries = await listRepositoryExplorerEntries(path);
+          if (cancelled) {
+            return;
+          }
+          startTransition(() => {
+            setExplorerEntries(entries);
+            setLoadedRepositoryPath(path);
+          });
+          const restored = readExplorerExpandedFromSession(path);
+          setExpandedDirs(restored ?? new Set());
+          setSelected(null);
+          setInlineCreate(null);
+          setDeletePop(null);
+        } finally {
+          if (!cancelled) {
+            setIsRefreshing(false);
+            setLoading(false);
+          }
         }
-        startTransition(() => {
-          setExplorerEntries(entries);
-        });
-        const restored = readExplorerExpandedFromSession(repositoryPath);
-        setExpandedDirs(restored ?? new Set());
-        setSelected(null);
-        setInlineCreate(null);
-        setDeletePop(null);
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    })();
+      })();
+    });
     return () => {
       cancelled = true;
+      cancelDeferredLoad();
     };
   }, [repositoryPath]);
 
@@ -400,7 +412,9 @@ export function useRepositoryFilesExplorer({
 
   return {
     loading,
-    explorerEntries,
+    isRefreshing,
+    treeStale,
+    explorerEntries: visibleExplorerEntries,
     expandedDirs,
     selected,
     inlineCreate,

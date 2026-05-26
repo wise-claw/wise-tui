@@ -98,3 +98,24 @@ export function yieldToPaint(): Promise<void> {
     });
   });
 }
+
+/** Run after the next paint so sidebar selection can update before heavy IPC / session work. */
+export function deferAfterPaint(task: () => void): () => void {
+  let cancelled = false;
+  let secondFrame = 0;
+  const firstFrame = requestAnimationFrame(() => {
+    secondFrame = requestAnimationFrame(() => {
+      if (!cancelled) {
+        task();
+      }
+    });
+  });
+
+  return () => {
+    cancelled = true;
+    cancelAnimationFrame(firstFrame);
+    if (secondFrame) {
+      cancelAnimationFrame(secondFrame);
+    }
+  };
+}

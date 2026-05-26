@@ -41,6 +41,7 @@ export function RepositoryFilesExplorer({
   const rootInline = explorer.inlineCreate?.parentDir === "";
   const treeEmpty = explorer.filteredTree.length === 0 && !rootInline;
   const setSectionCollapsed = onSectionCollapsedChange;
+  const switchingRepositoryTree = explorer.treeStale && explorer.explorerEntries.length === 0;
 
   if (sectionCollapsed && setSectionCollapsed) {
     const label = repositoryLabel || "资源管理器";
@@ -221,13 +222,22 @@ export function RepositoryFilesExplorer({
           </Tooltip>
         </span>
       </div>
-      <div className="git-files-explorer-scroll-region">
-        {explorer.loading && explorer.explorerEntries.length === 0 ? (
+      <div
+        className={`git-files-explorer-scroll-region${explorer.isRefreshing ? " git-files-explorer-scroll-region--refreshing" : ""}`}
+      >
+        {(explorer.loading || explorer.isRefreshing || switchingRepositoryTree) && explorer.explorerEntries.length === 0 ? (
           <div style={{ padding: 24, textAlign: "center" }}>
-            <Spin size="small" description="加载文件中..." />
+            <Spin size="small" description={switchingRepositoryTree ? "切换文件树中..." : "加载文件中..."} />
           </div>
         ) : (
-          treeBody
+          <>
+            {explorer.treeStale ? (
+              <div className="git-files-explorer-stale-hint" aria-live="polite">
+                正在加载文件树…
+              </div>
+            ) : null}
+            {treeBody}
+          </>
         )}
       </div>
       {explorer.explorerCtx ? (

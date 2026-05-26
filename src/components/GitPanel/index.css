@@ -824,6 +824,17 @@
   min-height: 0;
 }
 
+.git-files-explorer-scroll-region--refreshing {
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+.git-files-explorer-stale-hint {
+  padding: 4px 8px 2px;
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
+}
+
 .git-files-explorer-scroll-region {
   flex: 1 1 0;
   min-height: 0;

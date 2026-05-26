@@ -85,6 +85,7 @@ import {
 } from "./services/atMentionDispatch";
 import { resolveProjectMainSessionAnchor } from "./utils/projectSessionAnchor";
 import { resolveTrellisBootstrapPath } from "./utils/trellisBootstrapPath";
+import { deferAfterPaint } from "./components/GitPanel/gitPanelUtils";
 import { resolveSidebarSelectionTarget } from "./utils/sidebarSelectionTarget";
 import { employeeInProjectScope, shouldHideEmployeeUi } from "./utils/projectRepositoryRoles";
 import { buildProjectRoleTagOptions, buildProjectRepositoryMentionOptions } from "./utils/projectRoleTagOptions";
@@ -1720,17 +1721,8 @@ export default function App() {
     return refreshDiskSessionsForRepository(activeRepository.path, activeRepository.name);
   }, [activeRepository, refreshDiskSessionsForRepository]);
 
-  /** 打开/恢复仓库主会话：先读绑定，再挑同路径最近会话；不自动新建。 */
-  async function openRepositoryMainSession(
-    repository: Repository,
-    options?: { enterChat?: boolean },
-  ): Promise<string | null> {
-    setActiveRepositoryWithOwner(repository.id);
-    if (options?.enterChat ?? true) {
-      startTransition(() => {
-        viewMode.enter({ kind: "chat" });
-      });
-    }
+  /** 绑定仓库主会话（不修改侧栏选中态）。 */
+  function bindRepositoryMainSessionTarget(repository: Repository): string | null {
     const target = resolveSidebarSelectionTarget({ repository });
     const mainOwnerPick = resolveMainOwnerAgentNameForRepositoryPath(repositories, target.path);
     const boundId = resolveBoundMainSessionId(
@@ -1755,6 +1747,20 @@ export default function App() {
       return latestForRepo.id;
     }
     return null;
+  }
+
+  /** 打开/恢复仓库主会话：先读绑定，再挑同路径最近会话；不自动新建。 */
+  async function openRepositoryMainSession(
+    repository: Repository,
+    options?: { enterChat?: boolean },
+  ): Promise<string | null> {
+    setActiveRepositoryWithOwner(repository.id);
+    if (options?.enterChat ?? true) {
+      startTransition(() => {
+        viewMode.enter({ kind: "chat" });
+      });
+    }
+    return bindRepositoryMainSessionTarget(repository);
   }
 
   /** 新建主会话前结束仍占着本机 Claude 的上一活动标签（含其它仓库，避免「数量」累加）。 */
@@ -1907,8 +1913,18 @@ export default function App() {
     viewMode,
   ]);
 
+  const pendingSidebarSelectionTaskRef = useRef<(() => void) | null>(null);
+  const pendingSidebarSelectionTokenRef = useRef<object | null>(null);
+  const cancelPendingSidebarSelectionTask = useCallback(() => {
+    pendingSidebarSelectionTaskRef.current?.();
+    pendingSidebarSelectionTaskRef.current = null;
+    pendingSidebarSelectionTokenRef.current = null;
+  }, []);
+  useEffect(() => cancelPendingSidebarSelectionTask, [cancelPendingSidebarSelectionTask]);
+
   const handleSidebarRepositorySelectLeavingMcpHub = useCallback(
     (repositoryId: number | null) => {
+      cancelPendingSidebarSelectionTask();
       if (repositoryId == null) {
         startTransition(() => {
           if (viewMode.isCockpit || viewMode.isAuthor || viewMode.isInspect) {
@@ -1926,14 +1942,34 @@ export default function App() {
       if (!leavingOverlay && viewMode.isChat && activeRepositoryId === repositoryId) {
         return;
       }
+      setActiveRepositoryWithOwner(repository.id);
       startTransition(() => {
         if (leavingOverlay) {
           viewMode.back();
+        } else {
+          viewMode.enter({ kind: "chat" });
         }
       });
-      void openRepositoryMainSession(repository, { enterChat: true });
+      const selectionTaskToken = {};
+      const cancelSelectionTask = deferAfterPaint(() => {
+        if (pendingSidebarSelectionTokenRef.current !== selectionTaskToken) {
+          return;
+        }
+        pendingSidebarSelectionTaskRef.current = null;
+        pendingSidebarSelectionTokenRef.current = null;
+        bindRepositoryMainSessionTarget(repository);
+      });
+      pendingSidebarSelectionTaskRef.current = cancelSelectionTask;
+      pendingSidebarSelectionTokenRef.current = selectionTaskToken;
     },
-    [activeRepositoryId, handleSidebarRepositorySelect, repositories, viewMode],
+    [
+      activeRepositoryId,
+      cancelPendingSidebarSelectionTask,
+      handleSidebarRepositorySelect,
+      repositories,
+      setActiveRepositoryWithOwner,
+      viewMode,
+    ],
   );
 
   /** 侧栏「图谱操作 → 查看检索」：与顶栏图谱入口一致，先收敛其它 Hub 再打开覆盖层。 */
@@ -2123,24 +2159,88 @@ export default function App() {
     [repositories, handleCodeGraphGenerateRepositoryIds, disposeSidebarCodeGraphAssocBatch],
   );
 
+  const bindProjectMainSessionTarget = useCallback(
+    (project: ProjectItem): string | null => {
+      const anchor = resolveProjectMainSessionAnchor(project, repositories);
+      if (!anchor.path) {
+        message.warning("该 Workspace 缺少根目录，请先配置 rootPath");
+        return null;
+      }
+      const projectBindingKey = projectMainSessionBindingKey(project.id);
+      const boundId = resolveBoundMainSessionId(
+        projectBindingKey,
+        repositoryMainSessionBindings,
+        sessions,
+        null,
+      );
+      if (boundId && sessions.some((item) => item.id === boundId)) {
+        switchSession(boundId);
+        return boundId;
+      }
+      const latestForProject = pickProjectMainSessionForSidebarSelect(
+        sessions,
+        anchor.path,
+        loadSessionOwnerHints(),
+      );
+      if (latestForProject) {
+        switchSession(latestForProject.id);
+        void bindRepositoryMainSession(projectBindingKey, latestForProject.id);
+        return latestForProject.id;
+      }
+      return null;
+    },
+    [repositories, repositoryMainSessionBindings, sessions, switchSession],
+  );
+
   const handleProjectSelectLeavingMcpHub = useCallback(
     (projectId: string) => {
+      cancelPendingSidebarSelectionTask();
       if (suppressProjectSelectToChatRef.current) {
         return;
-      }
-      // 选 Workspace → 回到 Operator 主会话（author/inspect 先退出叠层）
-      if (viewMode.isAuthor || viewMode.isInspect || viewMode.isCockpit) {
-        viewMode.back();
       }
       const project = projects.find((p) => p.id === projectId) ?? null;
       if (!project) {
         setActiveProjectId(projectId);
         return;
       }
-      // 进项目即开主会话：与 Trellis Spec / 显式「打开项目会话」共用 openProjectMainSession
-      void openProjectMainSession(project);
+      const leavingOverlay = viewMode.isAuthor || viewMode.isInspect || viewMode.isCockpit;
+      if (
+        !leavingOverlay &&
+        viewMode.isChat &&
+        activeProjectId === projectId &&
+        activeWorkspaceFocus === "project"
+      ) {
+        return;
+      }
+      if (leavingOverlay) {
+        startTransition(() => viewMode.back());
+      }
+      setAuthorTrellisProjectId(null);
+      setActiveProjectId(projectId);
+      startTransition(() => {
+        viewMode.enter({ kind: "chat" });
+      });
+      const selectionTaskToken = {};
+      const cancelSelectionTask = deferAfterPaint(() => {
+        if (pendingSidebarSelectionTokenRef.current !== selectionTaskToken) {
+          return;
+        }
+        pendingSidebarSelectionTaskRef.current = null;
+        pendingSidebarSelectionTokenRef.current = null;
+        bindProjectMainSessionTarget(project);
+      });
+      pendingSidebarSelectionTaskRef.current = cancelSelectionTask;
+      pendingSidebarSelectionTokenRef.current = selectionTaskToken;
     },
-    [projects, setActiveProjectId, viewMode],
+    [
+      activeProjectId,
+      activeWorkspaceFocus,
+      bindProjectMainSessionTarget,
+      cancelPendingSidebarSelectionTask,
+      projects,
+      setActiveProjectId,
+      viewMode,
+    ],
   );
 
   const jumpToSessionLeavingMcpHub = useCallback(
@@ -2261,28 +2361,7 @@ export default function App() {
       viewMode.enter({ kind: "chat" });
     });
 
-    const projectBindingKey = projectMainSessionBindingKey(project.id);
-    const boundId = resolveBoundMainSessionId(
-      projectBindingKey,
-      repositoryMainSessionBindings,
-      sessions,
-      null,
-    );
-    if (boundId && sessions.some((item) => item.id === boundId)) {
-      switchSession(boundId);
-      return boundId;
-    }
-    const latestForProject = pickProjectMainSessionForSidebarSelect(
-      sessions,
-      anchor.path,
-      loadSessionOwnerHints(),
-    );
-    if (latestForProject) {
-      switchSession(latestForProject.id);
-      void bindRepositoryMainSession(projectBindingKey, latestForProject.id);
-      return latestForProject.id;
-    }
-    return null;
+    return bindProjectMainSessionTarget(project);
   }
 
   async function handleRequestSpecAgentUpdate(project: ProjectItem, area: string) {
