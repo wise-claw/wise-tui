@@ -86,4 +86,60 @@ describe("buildSidebarRunningMainSessionMaps", () => {
     });
     expect(maps.runningByRepositoryId[10]).toBe(false);
   });
+
+  it("does not mark child repository when only workspace project binding exists", () => {
+    const childRepo: Repository = {
+      id: 11,
+      name: "api",
+      path: "/work/hr/api",
+      repositoryType: "backend",
+      createdAt: "0",
+      updatedAt: "0",
+    };
+    const projectRootSession = session("s-root", "/work/hr/web", "Project: 华润", "claude-1");
+    const maps = buildSidebarRunningMainSessionMaps({
+      projects: [{ id: "hr" }],
+      repositories: [repos[0], childRepo],
+      sessions: [projectRootSession],
+      bindings: { [projectMainSessionBindingKey("hr")]: "s-root" },
+      claudeProcesses: liveProcesses,
+    });
+    expect(maps.runningByProjectId.hr).toBe(true);
+    expect(maps.runningByRepositoryId[10]).toBe(false);
+    expect(maps.runningByRepositoryId[11]).toBe(false);
+  });
+
+  it("does not mark child repository when only parent path has project-root binding", () => {
+    const childRepo: Repository = {
+      id: 11,
+      name: "api",
+      path: "/work/hr/api",
+      repositoryType: "backend",
+      createdAt: "0",
+      updatedAt: "0",
+    };
+    const projectRootSession = session("s-root", "/work/hr", "Project: 华润", "claude-1");
+    const maps = buildSidebarRunningMainSessionMaps({
+      projects: [{ id: "hr" }],
+      repositories: [repos[0], childRepo],
+      sessions: [projectRootSession],
+      bindings: { "/work/hr": "s-root" },
+      claudeProcesses: liveProcesses,
+    });
+    expect(maps.runningByRepositoryId[10]).toBe(false);
+    expect(maps.runningByRepositoryId[11]).toBe(false);
+  });
+
+  it("does not mark repository without explicit path binding even if claude runs in that directory", () => {
+    const maps = buildSidebarRunningMainSessionMaps({
+      projects: [{ id: "hr" }],
+      repositories: repos,
+      sessions: [],
+      bindings: {},
+      claudeProcesses: [
+        { pid: 99, memoryBytes: 0, sessionId: null, projectPath: "/work/hr/web", sessionSource: "lsof_jsonl" },
+      ],
+    });
+    expect(maps.runningByRepositoryId[10]).toBe(false);
+  });
 });

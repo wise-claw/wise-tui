@@ -3,7 +3,6 @@ import {
   projectMainSessionBindingKey,
   resolveBoundMainSessionId,
   resolveMainOwnerAgentNameForRepositoryPath,
-  resolveRepositoryMainSessionId,
 } from "./repositoryMainSessionBinding";
 
 export interface SidebarRunningMainSessionMaps {
@@ -30,7 +29,11 @@ function isBoundMainSessionRunningInHost(
   return isClaudeSessionRunningByHostProcesses(session, claudeProcesses);
 }
 
-/** 侧栏工作区：按项目/仓库绑定主会话是否在跑（Claude 会话 ID ↔ 本机 PID），供绿色圆点展示。 */
+/**
+ * 侧栏工作区：按项目/仓库**显式绑定**的主会话是否在跑（Claude 会话 ID ↔ 本机 PID），供绿色圆点展示。
+ * 仓库行只用 `resolveBoundMainSessionId`，不用 `resolveRepositoryMainSessionId` 的项目根回退，
+ * 避免「仅工作区/父路径有绑定、子仓从未绑过」时子仓误亮绿点。
+ */
 export function buildSidebarRunningMainSessionMaps(params: {
   projects: ReadonlyArray<{ id: string }>;
   repositories: Repository[];
@@ -57,7 +60,7 @@ export function buildSidebarRunningMainSessionMaps(params: {
   const runningByRepositoryId: Record<number, boolean> = {};
   for (const repository of repositories) {
     const mainOwnerAgentName = resolveMainOwnerAgentNameForRepositoryPath(repositories, repository.path);
-    const sessionId = resolveRepositoryMainSessionId(
+    const sessionId = resolveBoundMainSessionId(
       repository.path,
       bindings,
       sessions,
