@@ -139,7 +139,7 @@ import {
   resolveSessionFromBindingValue,
   isProjectMainSessionBindingKey,
 } from "./utils/repositoryMainSessionBinding";
-import { loadSessionOwnerHints } from "./utils/sessionOwnerHints";
+import { loadSessionOwnerHints, WISE_SESSION_OWNER_HINTS_CHANGED_EVENT } from "./utils/sessionOwnerHints";
 import type { WorkflowGraphRuntimeState } from "./services/workflowGraphRuntime";
 import "./App.css";
 import { toUiErrorMessage } from "./utils/appErrorMessage";
@@ -1721,6 +1721,31 @@ export default function App() {
     return refreshDiskSessionsForRepository(activeRepository.path, activeRepository.name);
   }, [activeRepository, refreshDiskSessionsForRepository]);
 
+  const sessionOwnerHintsRef = useRef(loadSessionOwnerHints());
+  useEffect(() => {
+    const onHintsUpdated = () => {
+      sessionOwnerHintsRef.current = loadSessionOwnerHints();
+    };
+    window.addEventListener(WISE_SESSION_OWNER_HINTS_CHANGED_EVENT, onHintsUpdated);
+    return () => {
+      window.removeEventListener(WISE_SESSION_OWNER_HINTS_CHANGED_EVENT, onHintsUpdated);
+    };
+  }, []);
+
+  const switchSessionIfNeeded = useCallback(
+    (sessionId: string) => {
+      const nextId = sessionId.trim();
+      if (!nextId) {
+        return;
+      }
+      if (activeSessionIdLatestRef.current?.trim() === nextId) {
+        return;
+      }
+      switchSession(nextId);
+    },
+    [switchSession],
+  );
+
   /** 绑定仓库主会话（不修改侧栏选中态）。 */
   function bindRepositoryMainSessionTarget(repository: Repository): string | null {
     const target = resolveSidebarSelectionTarget({ repository });
@@ -1731,18 +1756,18 @@ export default function App() {
       sessions,
       mainOwnerPick,
     );
-    if (boundId && sessions.some((item) => item.id === boundId)) {
-      switchSession(boundId);
+    if (boundId) {
+      switchSessionIfNeeded(boundId);
       return boundId;
     }
     const latestForRepo = pickSessionForRepositorySidebarSelect(
       sessions,
       target.path,
-      loadSessionOwnerHints(),
+      sessionOwnerHintsRef.current,
       { mainOwnerAgentName: mainOwnerPick },
     );
     if (latestForRepo) {
-      switchSession(latestForRepo.id);
+      switchSessionIfNeeded(latestForRepo.id);
       void bindRepositoryMainSession(target.path, latestForRepo.id);
       return latestForRepo.id;
     }
@@ -2173,23 +2198,23 @@ export default function App() {
         sessions,
         null,
       );
-      if (boundId && sessions.some((item) => item.id === boundId)) {
-        switchSession(boundId);
+      if (boundId) {
+        switchSessionIfNeeded(boundId);
         return boundId;
       }
       const latestForProject = pickProjectMainSessionForSidebarSelect(
         sessions,
         anchor.path,
-        loadSessionOwnerHints(),
+        sessionOwnerHintsRef.current,
       );
       if (latestForProject) {
-        switchSession(latestForProject.id);
+        switchSessionIfNeeded(latestForProject.id);
         void bindRepositoryMainSession(projectBindingKey, latestForProject.id);
         return latestForProject.id;
       }
       return null;
     },
-    [repositories, repositoryMainSessionBindings, sessions, switchSession],
+    [repositories, repositoryMainSessionBindings, sessions, switchSessionIfNeeded],
   );
 
   const handleProjectSelectLeavingMcpHub = useCallback(
