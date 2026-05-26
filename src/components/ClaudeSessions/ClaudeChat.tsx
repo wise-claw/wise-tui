@@ -1459,8 +1459,13 @@ export function ClaudeChat({
     userPausedFollowRef.current = false;
     awaitNewMessageBeforeFollowRef.current = false;
     cancelScrollFollowLoop();
-    snapScrollToBottom();
-    ensureScrollFollowLoop();
+    // 等消息 DOM 与块级滚动高度稳定后再贴底，避免 flex 滚动容器在首帧算出过大 scrollHeight
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        snapScrollToBottom();
+        ensureScrollFollowLoop();
+      });
+    });
   }, [session.messages, cancelScrollFollowLoop, snapScrollToBottom, ensureScrollFollowLoop]);
 
   useLayoutEffect(() => {

@@ -27,6 +27,13 @@
   overflow: hidden;
 }
 
+/* 单栏/双栏会话列占满剩余高度，避免底部输入区下方留白 */
+.app-claude-sessions__dual-pane > .app-claude-chat,
+.app-claude-sessions > .app-claude-chat {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
 .app-claude-sessions__dual-divider {
   flex-shrink: 0;
   width: 1px;
@@ -1255,6 +1262,8 @@
 /* 消息区与底部（快捷条 + 输入）的分界 */
 .app-claude-chat-bottom {
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   position: relative;
   background: var(--ant-color-bg-container);
@@ -2984,15 +2993,12 @@
   overflow-x: hidden;
   overflow-y: auto;
   padding: 12px 12px 16px; /* Sniper-snug layout padding */
-  display: flex;
-  flex-direction: column;
-  gap: 0;
+  /* 滚动容器用块级流式布局：避免 column flex 把视口剩余高度算进 scrollHeight，贴底时顶栏被顶出、底部留白 */
+  display: block;
   background: var(--ant-color-bg-container);
   /* 减少滚动链传到外层布局，降低嵌套滚动时的合成/重绘开销 */
   overscroll-behavior: contain;
   overflow-anchor: none;
-  /* 提升为独立合成层，部分设备上纵向滚动更顺滑 */
-  transform: translateZ(0);
   /* 贴底跟随由 JS 缓动驱动；避免与原生 smooth 叠加产生迟滞 */
   scroll-behavior: auto;
   /* 与底部输入区交界（固定在消息视口底缘，不随内容滚动） */
@@ -3034,7 +3040,6 @@
 
 /* 与 `.app-claude-message` 中头像 20px + gap 10px 对齐，使「正在思考」仅在列表末尾出现一条 */
 .app-claude-messages-end-thinking {
-  flex-shrink: 0;
   padding-left: 30px;
 }
 
