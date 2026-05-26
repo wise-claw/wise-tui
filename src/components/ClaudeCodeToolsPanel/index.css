@@ -9,6 +9,27 @@
   gap: 2px;
 }
 
+.app-claude-code-tools--popover {
+  height: min(72vh, 520px);
+  max-height: min(72vh, 520px);
+  width: min(94vw, 640px);
+  box-sizing: border-box;
+  background: var(--ant-color-bg-container) !important;
+  padding: 8px 10px 10px;
+}
+
+.app-claude-code-tools--popover .app-claude-code-tools-tabs {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.app-claude-code-tools--popover .app-claude-code-tools-scroll {
+  max-height: none;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+}
+
 /* 收起态：整区仅一颗按钮，便于右栏底部只占一行 */
 .app-claude-code-tools--collapsed-single-btn {
   height: auto;

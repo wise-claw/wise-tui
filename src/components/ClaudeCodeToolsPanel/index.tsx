@@ -44,16 +44,24 @@ const SubagentsPanel = lazy(() => import("./SubagentsPanel").then((module) => ({
 
 interface Props {
   repositoryPath?: string;
-  /** 收起后仅保留标题栏，Git 区域占满右栏剩余高度 */
+  /** 收起后仅保留标题栏，Git 区域占满右栏剩余高度（仅 inspector 嵌入） */
   sectionCollapsed?: boolean;
   onSectionCollapsedChange?: (collapsed: boolean) => void;
+  /** `popover`：顶栏弹层；`inspector`：右栏嵌入（已弃用，保留兼容） */
+  variant?: "inspector" | "popover";
+  /** 弹层关闭时为 false，避免后台刷新 MCP/技能等 */
+  surfaceActive?: boolean;
 }
 
 export function ClaudeCodeToolsPanel({
   repositoryPath,
   sectionCollapsed = false,
   onSectionCollapsedChange,
+  variant = "inspector",
+  surfaceActive = true,
 }: Props) {
+  const isPopover = variant === "popover";
+  const panelActive = surfaceActive;
   const [tab, setTab] = useState("mcp");
   const [listSearch, setListSearch] = useState("");
   const [loadedTabs, setLoadedTabs] = useState<Set<string>>(() => new Set(["mcp"]));
@@ -86,6 +94,7 @@ export function ClaudeCodeToolsPanel({
   }, []);
 
   useEffect(() => {
+    if (!panelActive) return;
     let cancelled = false;
     async function preloadTabCounts() {
       const [omcRes, mcpRes, hooksRes, subagentsRes, skillsRes, cacheSkillsRes] = await Promise.allSettled([
@@ -135,7 +144,7 @@ export function ClaudeCodeToolsPanel({
     return () => {
       cancelled = true;
     };
-  }, [repositoryPath, omcInstalled]);
+  }, [repositoryPath, omcInstalled, panelActive]);
 
   function withCountLabel(label: string, count: number): string {
     return `${label}·${count}`;
@@ -280,7 +289,7 @@ export function ClaudeCodeToolsPanel({
     });
   }, []);
 
-  if (sectionCollapsed) {
+  if (!isPopover && sectionCollapsed) {
     return (
       <div className="app-claude-code-tools app-claude-code-tools--collapsed-single-btn">
         <Tooltip
@@ -307,7 +316,11 @@ export function ClaudeCodeToolsPanel({
   }
 
   return (
-    <div className="app-claude-code-tools">
+    <div
+      className={
+        "app-claude-code-tools" + (isPopover ? " app-claude-code-tools--popover" : "")
+      }
+    >
       <div className="app-claude-code-tools-head">
         <div className="app-claude-code-tools-head-left">
           {onSectionCollapsedChange ? (
@@ -381,7 +394,7 @@ export function ClaudeCodeToolsPanel({
                   <Suspense fallback={<Empty description="加载中..." image={Empty.PRESENTED_IMAGE_SIMPLE} />}>
                     <SubagentsPanel
                       repositoryPath={repositoryPath}
-                      active={tab === "subagents"}
+                      active={panelActive && tab === "subagents"}
                       omcInstalled={omcInstalled ?? false}
                       listSearch={listSearch}
                       onCountChange={handleSubagentsCountChange}
@@ -404,7 +417,7 @@ export function ClaudeCodeToolsPanel({
                     <Suspense fallback={<Empty description="加载中..." image={Empty.PRESENTED_IMAGE_SIMPLE} />}>
                       <ProjectSkillsPanel
                         repositoryPath={repositoryPath}
-                        active={tab === "skill"}
+                        active={panelActive && tab === "skill"}
                         omcInstalled={omcInstalled ?? false}
                         listSearch={listSearch}
                         onCountChange={handleSkillsCountChange}
@@ -430,7 +443,7 @@ export function ClaudeCodeToolsPanel({
                     <ClaudeMcpConfigPanel
                       ref={mcpPanelRef}
                       repositoryPath={repositoryPath}
-                      active={tab === "mcp"}
+                      active={panelActive && tab === "mcp"}
                       omcInstalled={omcInstalled ?? false}
                       hideToolbar
                       listSearch={listSearch}
@@ -449,7 +462,7 @@ export function ClaudeCodeToolsPanel({
                 <Suspense fallback={<Empty description="加载中..." image={Empty.PRESENTED_IMAGE_SIMPLE} />}>
                   <ClaudeHooksConfigPanel
                     repositoryPath={repositoryPath}
-                    active={tab === "hooks"}
+                    active={panelActive && tab === "hooks"}
                     omcInstalled={omcInstalled ?? false}
                     listSearch={listSearch}
                     onCountChange={handleHooksCountChange}

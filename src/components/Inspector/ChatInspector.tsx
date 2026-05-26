@@ -1,5 +1,4 @@
 import { Layout } from "antd";
-import { useCallback, useState } from "react";
 import type {
   ClaudeSession,
   EmployeeMonitorItem,
@@ -10,19 +9,11 @@ import type {
   TeamMonitorItem,
 } from "../../types";
 import { MAIN_LAYOUT_RIGHT_SIDER_WIDTH_PX } from "../../constants/mainLayoutWidths";
-import { ClaudeCodeToolsPanel } from "../ClaudeCodeToolsPanel";
 import { GitPanel, type GitPanelOpenFileOptions } from "../GitPanel";
 import { ProgressMonitorPanel } from "../ProgressMonitorPanel";
 import "./Inspector.css";
 
 const { Sider } = Layout;
-
-const RIGHT_CLAUDE_TOOLS_COLLAPSED_KEY = "wise.rightPanel.claudeToolsCollapsed";
-
-function readClaudeToolsCollapsedFromStorage(): boolean {
-  if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(RIGHT_CLAUDE_TOOLS_COLLAPSED_KEY) === "1";
-}
 
 export interface ChatInspectorProps {
   dark: boolean;
@@ -68,8 +59,8 @@ export interface ChatInspectorProps {
 }
 
 /**
- * Chat 模式 Inspector：在 chat / inspect 模式下渲染 GitPanel + ProgressMonitorPanel
- * + ClaudeCodeToolsPanel。
+ * Chat 模式 Inspector：在 chat / inspect 模式下渲染 GitPanel + ProgressMonitorPanel。
+ * Claude Code 工具（MCP/技能/Hooks/子代理）已移至会话顶栏图标弹层。
  *
  * 历史名为 `RightPanel`，P1 时按宪法 §4 改名为 ChatInspector。`RightPanel.tsx`
  * 仅保留 re-export 以支持过渡期 import；新代码请直接 import 这里。
@@ -105,17 +96,6 @@ export function ChatInspector({
   onCompactSessionHistory,
   projectId,
 }: ChatInspectorProps) {
-  const [claudeToolsSectionCollapsed, setClaudeToolsSectionCollapsed] = useState(readClaudeToolsCollapsedFromStorage);
-
-  const handleClaudeToolsSectionCollapsedChange = useCallback((next: boolean) => {
-    setClaudeToolsSectionCollapsed(next);
-    try {
-      window.localStorage.setItem(RIGHT_CLAUDE_TOOLS_COLLAPSED_KEY, next ? "1" : "0");
-    } catch {
-      /* ignore quota / private mode */
-    }
-  }, []);
-
   const sessionsForMonitor = monitorPanelSessions ?? [];
   const transcriptSessions = monitorTranscriptSourceSessions ?? sessionsForMonitor;
 
@@ -160,19 +140,6 @@ export function ChatInspector({
               />
             </div>
           ) : null}
-          <div
-            className={
-              "app-chat-inspector-section app-chat-inspector-section--tools" +
-              (claudeToolsSectionCollapsed ? " app-chat-inspector-section--tools-collapsed" : "")
-            }
-            aria-label="Claude Code"
-          >
-            <ClaudeCodeToolsPanel
-              repositoryPath={repositoryPath}
-              sectionCollapsed={claudeToolsSectionCollapsed}
-              onSectionCollapsedChange={handleClaudeToolsSectionCollapsedChange}
-            />
-          </div>
         </div>
       </div>
     </Sider>

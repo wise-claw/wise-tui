@@ -15,7 +15,7 @@ export interface InspectorProps {
  * 顶层 Inspector：按 ViewMode 派发右栏内容（按宪法 §4 的 Inspector 概念）。
  *
  * 路由表（与 P1 PRD §4.3 对齐）：
- *   - `chat` / `inspect`  → ChatInspector（GitPanel + ProgressMonitorPanel + ClaudeCodeToolsPanel）
+ *   - `chat` / `inspect`  → ChatInspector（GitPanel + ProgressMonitorPanel）；Claude Code 工具在会话顶栏弹层
  *   - `cockpit`           → CockpitInspector（Mission 概览 + 子代理活动摘要 + 活动仓库 Git）
  *   - `author`            → null（Author 域占满主屏，无需 Inspector）
  *

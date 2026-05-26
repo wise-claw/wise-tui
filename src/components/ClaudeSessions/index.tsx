@@ -19,6 +19,7 @@ import { OpenAppMenu } from "../OpenAppMenu";
 import { FccTopbarTrigger } from "./FccTopbarTrigger";
 import { FccTrafficTopbarTrigger } from "./FccTrafficTopbarTrigger";
 import { LlmProxyTopbarTrigger } from "./LlmProxyTopbarTrigger";
+import { ClaudeCodeToolsTopbarTrigger } from "./ClaudeCodeToolsTopbarTrigger";
 import { SessionDataLinkTopbarTrigger } from "./SessionDataLinkTopbarTrigger";
 import {
   DEFAULT_OPEN_APP_ID,
@@ -785,6 +786,11 @@ export function Topbar({
         ) : null}
         {activeRepository && topbarChrome.showSessionDataLinkTopbar ? (
           <SessionDataLinkTopbarTrigger mainSession={mainSessionForDataLink} />
+        ) : null}
+        {activeRepository ? (
+          <ClaudeCodeToolsTopbarTrigger
+            repositoryPath={activeSessionRepositoryPath?.trim() || activeRepository.path}
+          />
         ) : null}
         {onSearch && (
           <TopbarBtn icon={<IconSearch />} label="搜索文件 (Cmd+K)" onClick={onSearch} />
