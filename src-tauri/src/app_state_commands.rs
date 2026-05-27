@@ -23,9 +23,9 @@ pub(crate) mod workflow_run_commands;
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct StoredRepository {
-    id: i64,
+    pub(crate) id: i64,
     /// 与 `path` 末段目录名一致（打开的仓库名）。
-    name: String,
+    pub(crate) name: String,
     path: String,
     #[serde(default = "default_repository_type", alias = "repository_type")]
     repository_type: String,
@@ -268,7 +268,7 @@ fn normalize_stored_repository_row(mut r: StoredRepository) -> (StoredRepository
     (r, changed)
 }
 
-fn load_repositories(app: &tauri::AppHandle) -> Vec<StoredRepository> {
+pub(crate) fn load_repositories(app: &tauri::AppHandle) -> Vec<StoredRepository> {
     let _ = migrate_repository_storage(app);
     let path = match wise_repositories_json() {
         Ok(p) => p,

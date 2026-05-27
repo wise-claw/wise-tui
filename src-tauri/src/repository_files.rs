@@ -163,7 +163,7 @@ fn assert_resolved_path_under_repo(repo_canon: &Path, path: &Path) -> Result<(),
 
 /// List files and directories (including empty folders) for explorer tree UI.
 #[tauri::command]
-pub(crate) fn list_repository_explorer_entries(
+pub(crate) async fn list_repository_explorer_entries(
     root: String,
 ) -> Result<Vec<RepositoryExplorerEntry>, String> {
     const MAX_SCAN_ENTRIES: usize = 400_000;
