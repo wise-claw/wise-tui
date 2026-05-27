@@ -105,10 +105,7 @@ pub fn run() {
                 // setup 为同步闭包；延后并切回主线程刷新 dock 菜单，避免无 Tokio runtime 的 panic。
                 std::thread::spawn(move || {
                     std::thread::sleep(std::time::Duration::from_millis(300));
-                    let app_handle = handle.clone();
-                    let _ = handle.run_on_main_thread(move || {
-                        dock_menu::refresh_dock_menu(&app_handle);
-                    });
+                    dock_menu::refresh_dock_menu(&handle);
                 });
             }
 

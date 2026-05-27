@@ -12,11 +12,16 @@ const MAX_DOCK_REPOS: usize = 20;
 const NEW_WINDOW_LABEL_PREFIX: &str = "main-dock";
 
 /// Refresh the macOS dock context menu.
+///
+/// Safe to call from any thread; AppKit work is always scheduled on the main thread.
 pub fn refresh_dock_menu(app: &AppHandle) {
     #[cfg(target_os = "macos")]
     {
-        let repos = load_repositories(app);
-        set_dock_menu(app, &repos);
+        let app_handle = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            let repos = load_repositories(&app_handle);
+            set_dock_menu(&app_handle, &repos);
+        });
     }
     #[cfg(not(target_os = "macos"))]
     let _ = app;
@@ -30,7 +35,10 @@ fn set_dock_menu(app: &AppHandle, repos: &[StoredRepository]) {
     use objc2::rc::Retained;
     use objc2_foundation::{MainThreadMarker, NSString};
 
-    let mtm = MainThreadMarker::new().expect("dock menu must run on main thread");
+    let Some(mtm) = MainThreadMarker::new() else {
+        // Defensive: callers must go through `refresh_dock_menu` (main-thread dispatch).
+        return;
+    };
     let ns_app = NSApplication::sharedApplication(mtm);
 
     // Build menu
