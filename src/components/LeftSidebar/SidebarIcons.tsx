@@ -216,6 +216,38 @@ export function RepositoryTypeIcon({ repository }: { repository: Repository }) {
   );
 }
 
+/** 左栏底栏：Git 变更面板 */
+export function GitBottomTabIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <circle cx="4.75" cy="4.75" r="1.35" stroke="currentColor" strokeWidth="1.15" />
+      <circle cx="4.75" cy="11.25" r="1.35" stroke="currentColor" strokeWidth="1.15" />
+      <circle cx="11.25" cy="8" r="1.35" stroke="currentColor" strokeWidth="1.15" />
+      <path
+        d="M4.75 6.1v3.3M4.75 4.75c0-1.38 1.12-2.5 2.5-2.5h1.25c1.38 0 2.5 1.12 2.5 2.5"
+        stroke="currentColor"
+        strokeWidth="1.15"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+/** 左栏底栏：仓库文件树 */
+export function FilesBottomTabIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <path
+        d="M2.75 4.25h4.1l1.15 1.65h5.25V12H2.75V4.25z"
+        stroke="currentColor"
+        strokeWidth="1.15"
+        strokeLinejoin="round"
+      />
+      <path d="M5.25 7.35h5.5M5.25 9.65h3.75" stroke="currentColor" strokeWidth="1.15" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function RepoDragHandleIcon() {
   return (
     <svg viewBox="0 0 10 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden>

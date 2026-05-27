@@ -84,7 +84,8 @@ export function SystemResourceInline({
 }: SystemResourceInlineProps) {
   return (
     <>
-      <div className="app-left-sidebar-system-inline" title="系统资源状态">
+      <div className="app-left-sidebar-footer">
+        <div className="app-left-sidebar-system-inline" title="系统资源状态">
         {systemSummaryError
           ? "内存:--  claude:--  数量:--"
           : (
@@ -140,6 +141,7 @@ export function SystemResourceInline({
               </Popover>
             </>
           )}
+        </div>
       </div>
 
       <Drawer

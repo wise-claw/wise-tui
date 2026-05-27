@@ -10,7 +10,6 @@ import type {
   TeamMonitorItem,
 } from "../../types";
 import { MAIN_LAYOUT_RIGHT_SIDER_WIDTH_PX } from "../../constants/mainLayoutWidths";
-import { GitPanel, type GitPanelOpenFileOptions } from "../GitPanel";
 import { ProgressMonitorPanel } from "../ProgressMonitorPanel";
 import "./Inspector.css";
 
@@ -21,10 +20,7 @@ export interface ChatInspectorProps {
   collapsed: boolean;
   /** 右栏 `Sider` 宽度（px）；默认 300 */
   siderWidth?: number;
-  repositoryPath?: string;
-  repositoryName?: string;
-  onOpenFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
-  /** 「我的团队」：有数据时显示在 Git 下方 */
+  /** 「我的团队」：有数据时显示在右栏 */
   monitorStats?: MonitorStats | null;
   monitorPanelSessions?: ClaudeSession[];
   monitorTranscriptSourceSessions?: ClaudeSession[];
@@ -75,9 +71,6 @@ export function ChatInspector({
   dark,
   collapsed,
   siderWidth = MAIN_LAYOUT_RIGHT_SIDER_WIDTH_PX,
-  repositoryPath,
-  repositoryName,
-  onOpenFile,
   monitorStats,
   monitorPanelSessions,
   monitorTranscriptSourceSessions,
@@ -120,9 +113,6 @@ export function ChatInspector({
     >
       <div className="app-right-panel-inner app-chat-inspector-inner">
         <div className="app-chat-inspector-card">
-          <div className="app-chat-inspector-section app-chat-inspector-section--git" aria-label="Git">
-            <GitPanel repositoryPath={repositoryPath} repositoryName={repositoryName} onOpenFile={onOpenFile} />
-          </div>
           {monitorStats ? (
             <div className="app-chat-inspector-section app-chat-inspector-section--team" aria-label="我的团队">
               <ProgressMonitorPanel

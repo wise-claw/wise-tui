@@ -1,4 +1,4 @@
-import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { safeUnlistenPromise } from "../../utils/safeTauriUnlisten";
 import { Button, Dropdown, Empty, Space, Spin, Tag, Tooltip, message } from "antd";
@@ -46,9 +46,11 @@ interface Props {
   repositoryPath: string | undefined;
   repositoryName: string | undefined;
   onOpenFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
+  /** 左栏整合头部：Tab 切换等，渲染在 GIT 标题左侧 */
+  headerPrefix?: ReactNode;
 }
 
-export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOpenFile }: Props) {
+export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOpenFile, headerPrefix }: Props) {
   const [mode, setMode] = useState<GitPanelMode>("diff");
   const [status, setStatus] = useState<GitStatusResponse | null>(null);
   const [logData, setLogData] = useState<{
@@ -418,6 +420,7 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
     <div className="app-git-panel">
       <div className={`git-panel-loading-bar ${anyLoading ? "git-panel-loading-bar--active" : ""}`} />
       <div className="git-panel-header">
+        {headerPrefix ? <div className="git-panel-header-prefix">{headerPrefix}</div> : null}
         <div className="git-panel-header-left">
           <span className="git-panel-title">GIT</span>
           {status && (

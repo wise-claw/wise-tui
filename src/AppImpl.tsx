@@ -3270,8 +3270,6 @@ export default function App() {
         collapsed: false,
         projectId: activeProjectId,
         siderWidth: mainLayoutRightWidthPx,
-        repositoryPath: activeRepository?.path,
-        repositoryName: activeRepository?.name,
         monitorStats,
         monitorPanelSessions: monitorPanelSessionsMerged,
         monitorTranscriptSourceSessions: sessions,
@@ -3338,7 +3336,6 @@ export default function App() {
         collapsed: effectiveRightCollapsed,
         siderWidth: mainLayoutRightWidthPx,
         activeProject,
-        activeRepository: activeRepository ?? null,
         employeeMonitorItems,
       }}
       cockpitEmpty={projects.length === 0 && floatingRepositories.length === 0}

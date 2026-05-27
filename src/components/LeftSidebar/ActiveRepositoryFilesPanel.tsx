@@ -1,4 +1,4 @@
-import { Input } from "antd";
+import type { ReactNode } from "react";
 import { RepositoryFilesExplorer, type GitPanelOpenFileOptions } from "../GitPanel";
 
 interface ActiveRepositoryFilesPanelProps {
@@ -9,6 +9,7 @@ interface ActiveRepositoryFilesPanelProps {
   onOpenFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
   sectionCollapsed: boolean;
   onSectionCollapsedChange: (collapsed: boolean) => void;
+  headerPrefix?: ReactNode;
 }
 
 export function ActiveRepositoryFilesPanel({
@@ -19,6 +20,7 @@ export function ActiveRepositoryFilesPanel({
   onOpenFile,
   sectionCollapsed,
   onSectionCollapsedChange,
+  headerPrefix,
 }: ActiveRepositoryFilesPanelProps) {
   return (
     <div
@@ -27,19 +29,9 @@ export function ActiveRepositoryFilesPanel({
         (sectionCollapsed ? " app-left-sidebar-files-explorer--section-collapsed" : "")
       }
     >
-      {!sectionCollapsed ? (
-        <div className="app-left-sidebar-files-explorer-search">
-          <Input
-            size="small"
-            allowClear
-            placeholder="搜索文件..."
-            value={search}
-            onChange={(e) => onSearchChange(e.target.value)}
-          />
-        </div>
-      ) : null}
       <div className="app-left-sidebar-files-explorer-body">
         <RepositoryFilesExplorer
+          headerPrefix={headerPrefix}
           repositoryPath={activeRepositoryPath}
           repositoryLabel={
             activeRepositoryName?.trim() ||
@@ -47,10 +39,13 @@ export function ActiveRepositoryFilesPanel({
             "资源管理器"
           }
           search={search}
+          showSearchField={!sectionCollapsed}
+          onSearchChange={onSearchChange}
           onOpenFile={onOpenFile}
           onClearExplorerSearch={() => onSearchChange("")}
           sectionCollapsed={sectionCollapsed}
           onSectionCollapsedChange={onSectionCollapsedChange}
+          hideCollapsedChrome={sectionCollapsed}
         />
       </div>
     </div>

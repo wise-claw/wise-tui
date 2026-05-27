@@ -60,6 +60,15 @@
   backdrop-filter: var(--app-workspace-glass-blur);
 }
 
+.git-panel-header-prefix {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding-right: 4px;
+  margin-right: 0;
+  border-right: 1px solid var(--ant-color-border-secondary);
+}
+
 .git-panel-header-left {
   display: flex;
   align-items: center;
@@ -846,10 +855,42 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
-  padding: 4px 8px 0;
+  gap: 4px;
+  padding: 2px 6px 0;
   flex-shrink: 0;
+}
+
+.git-files-explorer-bar-prefix {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding-right: 4px;
+  margin-right: 0;
+  border-right: 1px solid var(--ant-color-border-secondary);
+}
+
+.git-files-explorer-search {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px 6px;
   border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+
+.git-files-explorer-search-field {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.git-files-mode--external-header {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.git-files-explorer-search .git-files-explorer-search-field.ant-input-affix-wrapper,
+.git-files-explorer-search .ant-input-affix-wrapper {
+  font-size: 12px;
 }
 .git-files-mode--section-collapsed .git-files-explorer-bar {
   display: none;
@@ -946,10 +987,15 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
 }
 
 .git-files-explorer-actions .ant-btn {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
   padding: 0;
   color: var(--ant-color-text-tertiary);
+}
+
+.git-files-explorer-actions .ant-btn .anticon {
+  font-size: 13px;
 }
 
 .git-files-explorer-actions .ant-btn:hover {

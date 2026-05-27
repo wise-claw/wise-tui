@@ -1,3 +1,4 @@
+import { FolderOpenOutlined } from "@ant-design/icons";
 import { App as AntdApp, Layout } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectItem, Repository } from "../types";
@@ -24,13 +25,19 @@ import { ActiveRepositoryFilesPanel } from "./LeftSidebar/ActiveRepositoryFilesP
 import { LeftSidebarTopbar } from "./LeftSidebar/LeftSidebarTopbar";
 import { LeftSidebarHubQuickEntries } from "./LeftSidebar/LeftSidebarHubQuickEntries";
 import { ProjectRepositoryList } from "./LeftSidebar/ProjectRepositoryList";
+import { GitPanel } from "./GitPanel";
 import {
   readLeftFilesExplorerCollapsedFromStorage,
   writeLeftFilesExplorerCollapsedToStorage,
+  readLeftBottomTabFromStorage,
+  writeLeftBottomTabToStorage,
+  type LeftBottomTab,
 } from "./LeftSidebar/sidebarStorage";
 import { ProjectNameModals } from "./LeftSidebar/ProjectNameModals";
 import { RepositoryAssociateModal } from "./LeftSidebar/RepositoryAssociateModal";
 import { RepositorySddModeModal } from "./LeftSidebar/RepositorySddModeModal";
+import { LeftSidebarBottomTabSwitcher } from "./LeftSidebar/LeftSidebarBottomTabSwitcher";
+import { ExpandIcon } from "./LeftSidebar/SidebarIcons";
 import { SystemResourceInline } from "./LeftSidebar/SystemResourceInline";
 import type { LeftSidebarProps } from "./LeftSidebar/types";
 import { useProjectRepositorySidebarState } from "./LeftSidebar/useProjectRepositorySidebarState";
@@ -165,6 +172,7 @@ export function LeftSidebar({
   const [filesExplorerSectionCollapsed, setFilesExplorerSectionCollapsed] = useState(
     readLeftFilesExplorerCollapsedFromStorage,
   );
+  const [leftBottomTab, setLeftBottomTab] = useState<LeftBottomTab>(readLeftBottomTabFromStorage);
   const projectRepositoryState = useProjectRepositorySidebarState({
     projects,
     repositories,
@@ -414,6 +422,21 @@ export function LeftSidebar({
     writeLeftFilesExplorerCollapsedToStorage(next);
   }, []);
 
+  const handleLeftBottomTabChange = useCallback((tab: LeftBottomTab) => {
+    setLeftBottomTab(tab);
+    writeLeftBottomTabToStorage(tab);
+  }, []);
+
+  const repoPanelTabSwitcher = useMemo(
+    () => (
+      <LeftSidebarBottomTabSwitcher
+        activeTab={leftBottomTab}
+        onChange={handleLeftBottomTabChange}
+      />
+    ),
+    [leftBottomTab, handleLeftBottomTabChange],
+  );
+
   useEffect(() => {
     setRepositoryFileTreeSearch("");
   }, [activeRepositoryPath]);
@@ -657,15 +680,50 @@ export function LeftSidebar({
         />
 
         {activeRepositoryPath ? (
-          <ActiveRepositoryFilesPanel
-            activeRepositoryPath={activeRepositoryPath}
-            activeRepositoryName={activeRepositoryName}
-            search={repositoryFileTreeSearch}
-            onSearchChange={setRepositoryFileTreeSearch}
-            onOpenFile={onOpenActiveRepositoryFile}
-            sectionCollapsed={filesExplorerSectionCollapsed}
-            onSectionCollapsedChange={handleFilesExplorerSectionCollapsedChange}
-          />
+          <div className="app-left-sidebar-bottom-tabs">
+            {leftBottomTab === "files" && filesExplorerSectionCollapsed ? (
+              <div className="app-left-sidebar-repo-panel-header">
+                {repoPanelTabSwitcher}
+                <button
+                  type="button"
+                  className="app-left-sidebar-repo-panel-header__expand"
+                  title={activeRepositoryPath}
+                  onClick={() => handleFilesExplorerSectionCollapsedChange(false)}
+                >
+                  <span className="app-left-sidebar-repo-panel-header__expand-chevron" aria-hidden>
+                    <ExpandIcon expanded={false} />
+                  </span>
+                  <FolderOpenOutlined aria-hidden />
+                  <span className="app-left-sidebar-repo-panel-header__expand-label">
+                    {activeRepositoryName?.trim() ||
+                      activeRepositoryPath.split(/[/\\]/).filter(Boolean).pop() ||
+                      "资源管理器"}
+                  </span>
+                </button>
+              </div>
+            ) : null}
+            <div className="app-left-sidebar-bottom-tab-content">
+              {leftBottomTab === "git" ? (
+                <GitPanel
+                  headerPrefix={repoPanelTabSwitcher}
+                  repositoryPath={activeRepositoryPath}
+                  repositoryName={activeRepositoryName}
+                  onOpenFile={onOpenActiveRepositoryFile}
+                />
+              ) : (
+                <ActiveRepositoryFilesPanel
+                  headerPrefix={filesExplorerSectionCollapsed ? undefined : repoPanelTabSwitcher}
+                  activeRepositoryPath={activeRepositoryPath}
+                  activeRepositoryName={activeRepositoryName}
+                  search={repositoryFileTreeSearch}
+                  onSearchChange={setRepositoryFileTreeSearch}
+                  onOpenFile={onOpenActiveRepositoryFile}
+                  sectionCollapsed={filesExplorerSectionCollapsed}
+                  onSectionCollapsedChange={handleFilesExplorerSectionCollapsedChange}
+                />
+              )}
+            </div>
+          </div>
         ) : null}
       </div>
 

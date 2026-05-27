@@ -2165,13 +2165,243 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   cursor: pointer;
 }
 
-.app-left-sidebar-files-explorer-search {
-  flex-shrink: 0;
-  padding: 2px 6px 4px;
+/* ── 左栏 Git / 文件面板 ─────────────────────────────────────────── */
+.app-left-sidebar-bottom-tabs {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 120px;
+  overflow: hidden;
+  margin-top: 4px;
+  border-top: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 88%, var(--ant-color-border));
 }
 
-.app-left-sidebar-files-explorer-search .ant-input-affix-wrapper {
+.app-left-sidebar-repo-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 2px 6px 2px 2px;
+  min-height: 30px;
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-bg-container);
+}
+
+.app-left-sidebar-repo-panel-header__expand {
+  flex: 1 1 0;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ant-color-text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.app-left-sidebar-repo-panel-header__expand:hover {
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-left-sidebar-repo-panel-header__expand-chevron {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  align-items: center;
+  justify-content: center;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-left-sidebar-repo-panel-header__expand-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-left-sidebar-repo-panel-tabs {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.app-left-sidebar-repo-panel-tab {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ant-color-text-tertiary);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+
+.app-left-sidebar-repo-panel-tab svg {
+  width: 14px;
+  height: 14px;
+}
+
+.app-left-sidebar-repo-panel-tab:hover {
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-left-sidebar-repo-panel-tab--active {
+  color: var(--ant-color-primary);
+  background: color-mix(in srgb, var(--ant-color-primary) 12%, transparent);
+  border-color: color-mix(in srgb, var(--ant-color-primary) 22%, transparent);
+}
+
+.app-left-sidebar-bottom-tab-content {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 左栏 Git / 文件：紧凑顶栏与操作钮 */
+.app-left-sidebar-bottom-tab-content .git-panel-header-prefix,
+.app-left-sidebar-bottom-tab-content .git-files-explorer-bar-prefix {
+  padding-right: 4px;
+  margin-right: 0;
+}
+
+.app-left-sidebar-bottom-tab-content .git-panel-header {
+  min-height: 30px;
+  padding: 0 6px 2px 2px;
+  gap: 4px;
+}
+
+.app-left-sidebar-bottom-tab-content .git-panel-header-left {
+  gap: 6px;
+}
+
+.app-left-sidebar-bottom-tab-content .git-panel-header-right {
+  gap: 0;
+}
+
+.app-left-sidebar-bottom-tab-content .git-panel-header-right .ant-btn.ant-btn-sm,
+.app-left-sidebar-bottom-tab-content .git-panel-header > .ant-btn.ant-btn-text {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  padding: 0;
+}
+
+.app-left-sidebar-bottom-tab-content .git-panel-header-right .ant-btn .anticon,
+.app-left-sidebar-bottom-tab-content .git-panel-header > .ant-btn.ant-btn-text .anticon {
   font-size: 12px;
+}
+
+.app-left-sidebar-bottom-tab-content .git-mode-btn.ant-btn {
+  width: auto;
+  min-width: 0;
+  height: 22px;
+  min-height: 22px;
+  padding: 0 4px !important;
+  padding-inline: 4px !important;
+}
+
+.app-left-sidebar-bottom-tab-content .git-mode-btn-text {
+  font-size: 10px;
+}
+
+.app-left-sidebar-bottom-tab-content .git-panel-title {
+  font-size: 12px;
+}
+
+.app-left-sidebar-bottom-tab-content .git-panel-header-left .ant-tag {
+  font-size: 10px !important;
+  line-height: 14px !important;
+  padding: 0 4px !important;
+  margin-inline-end: 0;
+}
+
+.app-left-sidebar-bottom-tab-content .git-files-explorer-bar {
+  gap: 4px;
+  padding: 2px 6px 0;
+  min-height: 30px;
+  box-sizing: border-box;
+}
+
+.app-left-sidebar-bottom-tab-content .git-files-explorer-title {
+  gap: 3px;
+  font-size: 10px;
+}
+
+.app-left-sidebar-bottom-tab-content .git-files-explorer-title-icon-wrap {
+  font-size: 12px;
+}
+
+.app-left-sidebar-bottom-tab-content .git-files-explorer-expand {
+  width: 12px;
+  height: 12px;
+}
+
+.app-left-sidebar-bottom-tab-content .git-files-explorer-expand svg {
+  width: 9px;
+  height: 9px;
+}
+
+.app-left-sidebar-bottom-tab-content .git-files-explorer-actions .ant-btn {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+}
+
+.app-left-sidebar-bottom-tab-content .git-files-explorer-actions .ant-btn .anticon {
+  font-size: 12px;
+}
+
+.app-left-sidebar-bottom-tab-content .git-files-explorer-search {
+  gap: 1px;
+  padding: 2px 4px 4px;
+}
+
+.app-left-sidebar-bottom-tab-content .git-files-explorer-search .git-files-explorer-search-field.ant-input-affix-wrapper,
+.app-left-sidebar-bottom-tab-content .git-files-explorer-search .ant-input-affix-wrapper {
+  min-height: 22px;
+  height: 22px;
+  font-size: 11px;
+}
+
+/* GitPanel 在左栏 Tab 内填满可用高度 */
+.app-left-sidebar-bottom-tab-content > .app-git-panel {
+  flex: 1 1 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--ant-color-bg-container);
+}
+
+.app-left-sidebar-bottom-tab-content .git-panel-body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 文件树在 Tab 内无需额外 flex，保持原样式 */
+.app-left-sidebar-bottom-tab-content > .app-left-sidebar-files-explorer {
+  flex: 1 1 0;
+  min-height: 0;
+  border-top: none;
+  margin-top: 0;
+  padding-top: 0;
 }
 
 .app-left-sidebar-files-explorer-body {
@@ -2301,10 +2531,21 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   font-weight: 550;
 }
 
-.app-left-sidebar-system-inline {
+.app-left-sidebar-footer {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
   border-top: 1px solid var(--app-workspace-glass-border);
-  padding: 7px 10px;
+  padding: 4px 6px 4px 4px;
+  background: var(--app-workspace-chrome-left);
+}
+
+.app-left-sidebar-system-inline {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 2px 4px;
   font-size: 12px;
   line-height: 1.4;
   color: var(--ant-color-text-tertiary);
@@ -2312,7 +2553,6 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  background: var(--app-workspace-chrome-left);
 }
 
 .app-left-sidebar-system-inline__count-trigger {

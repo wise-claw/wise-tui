@@ -4,9 +4,7 @@ import { MAIN_LAYOUT_RIGHT_SIDER_WIDTH_PX } from "../../constants/mainLayoutWidt
 import type {
   EmployeeMonitorItem,
   ProjectItem,
-  Repository,
 } from "../../types";
-import { GitPanel, type GitPanelOpenFileOptions } from "../GitPanel";
 import "./Inspector.css";
 
 const { Sider } = Layout;
@@ -19,12 +17,8 @@ export interface CockpitInspectorProps {
   siderWidth?: number;
   /** 当前选中项目（用于显示 mission 概览）。 */
   activeProject: ProjectItem | null;
-  /** 当前选中仓库（用于在 Inspector 显示仓库 Diff 上下文）。 */
-  activeRepository?: Repository | null;
   /** 子代理活动列表（来自 monitor overview）。 */
   employeeMonitorItems: EmployeeMonitorItem[];
-  /** 由 layout 注入的文件打开回调。 */
-  onOpenFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
 }
 
 /**
@@ -43,9 +37,7 @@ export function CockpitInspector({
   collapsed,
   siderWidth = MAIN_LAYOUT_RIGHT_SIDER_WIDTH_PX,
   activeProject,
-  activeRepository,
   employeeMonitorItems,
-  onOpenFile,
 }: CockpitInspectorProps) {
   const activeAgents = useMemo(
     () => employeeMonitorItems.filter((item) => item.status === "in_progress"),
@@ -128,21 +120,6 @@ export function CockpitInspector({
           </div>
         </section>
 
-        {activeRepository ? (
-          <section className="app-cockpit-inspector-section app-cockpit-inspector-git" aria-label="活动仓库 Git 状态">
-            <header className="app-cockpit-inspector-section-header">
-              <Text strong>{activeRepository.name}</Text>
-              <Text type="secondary">Git Diff</Text>
-            </header>
-            <div className="app-cockpit-inspector-git-body">
-              <GitPanel
-                repositoryPath={activeRepository.path}
-                repositoryName={activeRepository.name}
-                onOpenFile={onOpenFile}
-              />
-            </div>
-          </section>
-        ) : null}
       </div>
     </Sider>
   );

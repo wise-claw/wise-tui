@@ -1,4 +1,5 @@
-import { Button, Empty, Menu, Popconfirm, Spin, Tooltip } from "antd";
+import type { ReactNode } from "react";
+import { Button, Empty, Input, Menu, Popconfirm, Spin, Tooltip } from "antd";
 import {
   ExclamationCircleOutlined,
   FileAddOutlined,
@@ -22,6 +23,13 @@ export interface RepositoryFilesExplorerProps {
   /** Similar to the right Claude Code section: collapse to a title bar and click the repository name to expand. */
   sectionCollapsed?: boolean;
   onSectionCollapsedChange?: (collapsed: boolean) => void;
+  /** 在仓库标题栏与文件树之间显示搜索框（左栏文件 Tab） */
+  showSearchField?: boolean;
+  onSearchChange?: (value: string) => void;
+  /** 左栏整合头部：Tab 切换等，渲染在仓库标题左侧 */
+  headerPrefix?: ReactNode;
+  /** 收起态由外部头部承接时，不再渲染内置收起行 */
+  hideCollapsedChrome?: boolean;
 }
 
 export function RepositoryFilesExplorer({
@@ -32,6 +40,10 @@ export function RepositoryFilesExplorer({
   onClearExplorerSearch,
   sectionCollapsed = false,
   onSectionCollapsedChange,
+  showSearchField = false,
+  onSearchChange,
+  headerPrefix,
+  hideCollapsedChrome = false,
 }: RepositoryFilesExplorerProps) {
   const explorer = useRepositoryFilesExplorer({
     repositoryPath,
@@ -44,6 +56,9 @@ export function RepositoryFilesExplorer({
   const switchingRepositoryTree = explorer.treeStale && explorer.explorerEntries.length === 0;
 
   if (sectionCollapsed && setSectionCollapsed) {
+    if (hideCollapsedChrome) {
+      return <div className="git-files-mode git-files-mode--section-collapsed git-files-mode--external-header" />;
+    }
     const label = repositoryLabel || "资源管理器";
     return (
       <div className="git-files-mode git-files-mode--section-collapsed">
@@ -155,9 +170,52 @@ export function RepositoryFilesExplorer({
     </div>
   );
 
+  const toolbarInSearchRow = Boolean(showSearchField && onSearchChange);
+  const explorerToolbarActions = (
+    <span className="git-files-explorer-actions">
+      <Tooltip title="新建文件">
+        <Button
+          type="text"
+          size="small"
+          icon={<FileAddOutlined />}
+          onClick={explorer.handleToolbarNewFile}
+          aria-label="新建文件"
+        />
+      </Tooltip>
+      <Tooltip title="新建文件夹">
+        <Button
+          type="text"
+          size="small"
+          icon={<FolderAddOutlined />}
+          onClick={explorer.handleToolbarNewFolder}
+          aria-label="新建文件夹"
+        />
+      </Tooltip>
+      <Tooltip title="刷新">
+        <Button
+          type="text"
+          size="small"
+          icon={<ReloadOutlined />}
+          onClick={explorer.handleRefresh}
+          aria-label="刷新"
+        />
+      </Tooltip>
+      <Tooltip title="全部收起">
+        <Button
+          type="text"
+          size="small"
+          icon={<MinusSquareOutlined />}
+          onClick={explorer.handleCollapseAll}
+          aria-label="全部收起"
+        />
+      </Tooltip>
+    </span>
+  );
+
   return (
     <div className="git-files-mode">
       <div className="git-files-explorer-bar">
+        {headerPrefix ? <div className="git-files-explorer-bar-prefix">{headerPrefix}</div> : null}
         {setSectionCollapsed ? (
           <Tooltip title="点击收起文件树" mouseEnterDelay={0.35}>
             <button
@@ -183,45 +241,21 @@ export function RepositoryFilesExplorer({
             <span className="git-files-explorer-title-text">{repositoryLabel || "资源管理器"}</span>
           </span>
         )}
-        <span className="git-files-explorer-actions">
-          <Tooltip title="新建文件">
-            <Button
-              type="text"
-              size="small"
-              icon={<FileAddOutlined />}
-              onClick={explorer.handleToolbarNewFile}
-              aria-label="新建文件"
-            />
-          </Tooltip>
-          <Tooltip title="新建文件夹">
-            <Button
-              type="text"
-              size="small"
-              icon={<FolderAddOutlined />}
-              onClick={explorer.handleToolbarNewFolder}
-              aria-label="新建文件夹"
-            />
-          </Tooltip>
-          <Tooltip title="刷新">
-            <Button
-              type="text"
-              size="small"
-              icon={<ReloadOutlined />}
-              onClick={explorer.handleRefresh}
-              aria-label="刷新"
-            />
-          </Tooltip>
-          <Tooltip title="全部收起">
-            <Button
-              type="text"
-              size="small"
-              icon={<MinusSquareOutlined />}
-              onClick={explorer.handleCollapseAll}
-              aria-label="全部收起"
-            />
-          </Tooltip>
-        </span>
+        {!toolbarInSearchRow ? explorerToolbarActions : null}
       </div>
+      {toolbarInSearchRow ? (
+        <div className="git-files-explorer-search">
+          <Input
+            className="git-files-explorer-search-field"
+            size="small"
+            allowClear
+            placeholder="搜索文件..."
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+          />
+          {explorerToolbarActions}
+        </div>
+      ) : null}
       <div
         className={`git-files-explorer-scroll-region${explorer.isRefreshing ? " git-files-explorer-scroll-region--refreshing" : ""}`}
       >

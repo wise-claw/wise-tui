@@ -87,8 +87,8 @@ type LeftSidebarProps = Omit<
 >;
 type AuthorPanelProps = ComponentProps<typeof AuthorPanel>;
 type PrdTaskSplitPanelProps = ComponentProps<typeof PrdTaskSplitPanelModule.PrdTaskSplitPanel>;
-type RightPanelProps = Omit<ChatInspectorProps, "onOpenFile">;
-type InspectorCockpitProps = Omit<CockpitInspectorProps, "onOpenFile">;
+type RightPanelProps = ChatInspectorProps;
+type InspectorCockpitProps = CockpitInspectorProps;
 
 type OpenRepositoryFileHandler = (path: string, options?: GitPanelOpenFileOptions) => void;
 
@@ -196,12 +196,11 @@ const ConnectedInspector = memo(function ConnectedInspector({
   chatInspectorProps: RightPanelProps;
   cockpitInspectorProps: InspectorCockpitProps;
 }) {
-  const openRepositoryFile = useRepositoryFileEditorOpenFile();
   return (
     <MemoInspector
       viewMode={viewMode}
-      chatInspectorProps={{ ...chatInspectorProps, onOpenFile: openRepositoryFile }}
-      cockpitInspectorProps={{ ...cockpitInspectorProps, onOpenFile: openRepositoryFile }}
+      chatInspectorProps={chatInspectorProps}
+      cockpitInspectorProps={cockpitInspectorProps}
     />
   );
 });
