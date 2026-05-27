@@ -22,6 +22,10 @@ import {
   writeExplorerExpandedToSession,
 } from "./explorerUtils";
 import { deferAfterPaint, yieldToPaint } from "./gitPanelUtils";
+import {
+  getCachedRepositoryExplorerEntries,
+  setCachedRepositoryExplorerEntries,
+} from "./repositoryExplorerEntryCache";
 import { buildCaptureExtensionContextMenuItems } from "./captureExtensionContextMenu";
 import type { ExplorerContextMenuState, ExplorerInlineCreateState } from "./types";
 
@@ -66,6 +70,7 @@ export function useRepositoryFilesExplorer({
       try {
         await yieldToPaint();
         const entries = await listRepositoryExplorerEntries(repositoryPath);
+        setCachedRepositoryExplorerEntries(repositoryPath, entries);
         startTransition(() => {
           setExplorerEntries(entries);
           setLoadedRepositoryPath(repositoryPath);
@@ -92,23 +97,43 @@ export function useRepositoryFilesExplorer({
   useEffect(() => {
     let cancelled = false;
     const path = repositoryPath;
-    setIsRefreshing(true);
+    const cached = getCachedRepositoryExplorerEntries(path);
+    if (cached) {
+      setExplorerEntries(cached);
+      setLoadedRepositoryPath(path);
+      setExpandedDirs(readExplorerExpandedFromSession(path) ?? new Set());
+      setSelected(null);
+      setInlineCreate(null);
+      setDeletePop(null);
+      setIsRefreshing(false);
+      setLoading(false);
+    } else {
+      setIsRefreshing(true);
+    }
+
+    const applyEntries = (entries: RepositoryExplorerEntry[]) => {
+      if (cancelled) {
+        return;
+      }
+      setCachedRepositoryExplorerEntries(path, entries);
+      startTransition(() => {
+        setExplorerEntries(entries);
+        setLoadedRepositoryPath(path);
+      });
+      if (!cached) {
+        const restored = readExplorerExpandedFromSession(path);
+        setExpandedDirs(restored ?? new Set());
+        setSelected(null);
+        setInlineCreate(null);
+        setDeletePop(null);
+      }
+    };
+
     const cancelDeferredLoad = deferAfterPaint(() => {
       void (async () => {
         try {
           const entries = await listRepositoryExplorerEntries(path);
-          if (cancelled) {
-            return;
-          }
-          startTransition(() => {
-            setExplorerEntries(entries);
-            setLoadedRepositoryPath(path);
-          });
-          const restored = readExplorerExpandedFromSession(path);
-          setExpandedDirs(restored ?? new Set());
-          setSelected(null);
-          setInlineCreate(null);
-          setDeletePop(null);
+          applyEntries(entries);
         } finally {
           if (!cancelled) {
             setIsRefreshing(false);

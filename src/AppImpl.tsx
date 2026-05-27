@@ -87,6 +87,11 @@ import { resolveProjectMainSessionAnchor } from "./utils/projectSessionAnchor";
 import { resolveTrellisBootstrapPath } from "./utils/trellisBootstrapPath";
 import { deferAfterPaint } from "./components/GitPanel/gitPanelUtils";
 import { resolveSidebarSelectionTarget } from "./utils/sidebarSelectionTarget";
+import {
+  findOwnerProjectForRepositoryId,
+  isMultiRepoProject,
+  shouldSidebarRepositorySelectOnlyUpdateFocus,
+} from "./utils/workspaceMode";
 import { employeeInProjectScope, shouldHideEmployeeUi } from "./utils/projectRepositoryRoles";
 import { buildProjectRoleTagOptions, buildProjectRepositoryMentionOptions } from "./utils/projectRoleTagOptions";
 import {
@@ -1780,6 +1785,14 @@ export default function App() {
     options?: { enterChat?: boolean },
   ): Promise<string | null> {
     setActiveRepositoryWithOwner(repository.id);
+    if (shouldSidebarRepositorySelectOnlyUpdateFocus(repository, projects)) {
+      if (options?.enterChat ?? true) {
+        startTransition(() => {
+          viewMode.enter({ kind: "chat" });
+        });
+      }
+      return null;
+    }
     if (options?.enterChat ?? true) {
       startTransition(() => {
         viewMode.enter({ kind: "chat" });
@@ -1911,32 +1924,7 @@ export default function App() {
     [repositories, setActiveRepositoryId, setActiveRepositoryWithOwner],
   );
 
-  /**
-   * 进入应用：仓库与会话 hydrated 后，对 `useRepositoryList` 通过 lastSession 或首项策略
-   * 选出的 `activeRepositoryId` 打开/恢复主会话（不再要求首项必须是 project，游离 repo 同样适用）。
-   */
   const startupFirstProjectRepoSessionAppliedRef = useRef(false);
-  useEffect(() => {
-    if (repositoryListLoading || !tabsHydrated) return;
-    if (startupFirstProjectRepoSessionAppliedRef.current) return;
-    if (activeRepositoryId == null) return;
-    if (!repositories.some((r) => r.id === activeRepositoryId)) return;
-    startupFirstProjectRepoSessionAppliedRef.current = true;
-    handleSidebarRepositorySelect(activeRepositoryId);
-    // P1: Standalone Repo 启动时自动进 chat（宪法 §6：Standalone Repo 不进 cockpit）
-    const ownerProject = projects.find((p) => p.repositoryIds.includes(activeRepositoryId));
-    if (!ownerProject) {
-      viewMode.enter({ kind: "chat" });
-    }
-  }, [
-    activeRepositoryId,
-    handleSidebarRepositorySelect,
-    projects,
-    repositories,
-    repositoryListLoading,
-    tabsHydrated,
-    viewMode,
-  ]);
 
   const pendingSidebarSelectionTaskRef = useRef<(() => void) | null>(null);
   const pendingSidebarSelectionTokenRef = useRef<object | null>(null);
@@ -1964,7 +1952,13 @@ export default function App() {
         return;
       }
       const leavingOverlay = viewMode.isCockpit || viewMode.isAuthor || viewMode.isInspect;
-      if (!leavingOverlay && viewMode.isChat && activeRepositoryId === repositoryId) {
+      // 选工作区时会把 activeRepositoryId 设为首个成员仓且 focus=project；点同一仓仍需切到 repository 焦点。
+      if (
+        !leavingOverlay &&
+        viewMode.isChat &&
+        activeRepositoryId === repositoryId &&
+        activeWorkspaceFocus !== "project"
+      ) {
         return;
       }
       setActiveRepositoryWithOwner(repository.id);
@@ -1975,6 +1969,9 @@ export default function App() {
           viewMode.enter({ kind: "chat" });
         }
       });
+      if (shouldSidebarRepositorySelectOnlyUpdateFocus(repository, projects)) {
+        return;
+      }
       const selectionTaskToken = {};
       const cancelSelectionTask = deferAfterPaint(() => {
         if (pendingSidebarSelectionTokenRef.current !== selectionTaskToken) {
@@ -1989,8 +1986,10 @@ export default function App() {
     },
     [
       activeRepositoryId,
+      activeWorkspaceFocus,
       cancelPendingSidebarSelectionTask,
       handleSidebarRepositorySelect,
+      projects,
       repositories,
       setActiveRepositoryWithOwner,
       viewMode,
@@ -2217,6 +2216,42 @@ export default function App() {
     [repositories, repositoryMainSessionBindings, sessions, switchSessionIfNeeded],
   );
 
+  /**
+   * 进入应用：仓库与会话 hydrated 后，对 `useRepositoryList` 通过 lastSession 或首项策略
+   * 选出的 `activeRepositoryId` 打开/恢复主会话（不再要求首项必须是 project，游离 repo 同样适用）。
+   */
+  useEffect(() => {
+    if (repositoryListLoading || !tabsHydrated) return;
+    if (startupFirstProjectRepoSessionAppliedRef.current) return;
+    if (activeRepositoryId == null) return;
+    if (!repositories.some((r) => r.id === activeRepositoryId)) return;
+    startupFirstProjectRepoSessionAppliedRef.current = true;
+    const startupRepo = repositories.find((r) => r.id === activeRepositoryId) ?? null;
+    const ownerProject = startupRepo
+      ? findOwnerProjectForRepositoryId(startupRepo.id, projects)
+      : null;
+    if (startupRepo && isMultiRepoProject(ownerProject, projects) && ownerProject) {
+      setActiveRepositoryWithOwner(startupRepo.id);
+      bindProjectMainSessionTarget(ownerProject);
+    } else {
+      handleSidebarRepositorySelect(activeRepositoryId);
+    }
+    // P1: Standalone Repo 启动时自动进 chat（宪法 §6：Standalone Repo 不进 cockpit）
+    if (!ownerProject) {
+      viewMode.enter({ kind: "chat" });
+    }
+  }, [
+    activeRepositoryId,
+    bindProjectMainSessionTarget,
+    handleSidebarRepositorySelect,
+    projects,
+    repositories,
+    repositoryListLoading,
+    setActiveRepositoryWithOwner,
+    tabsHydrated,
+    viewMode,
+  ]);
+
   const handleProjectSelectLeavingMcpHub = useCallback(
     (projectId: string) => {
       cancelPendingSidebarSelectionTask();
@@ -2279,6 +2314,12 @@ export default function App() {
 
   async function handleCreateRepositoryTask(repository: Repository, mode: TaskMode) {
     if (mode === "chat") {
+      const ownerProject = findOwnerProjectForRepositoryId(repository.id, projects);
+      if (isMultiRepoProject(ownerProject, projects) && ownerProject) {
+        await openProjectMainSession(ownerProject);
+        setActiveRepositoryWithOwner(repository.id);
+        return;
+      }
       await openRepositoryMainSession(repository, { enterChat: true });
       return;
     }

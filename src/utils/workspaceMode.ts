@@ -1,4 +1,4 @@
-import type { ProjectItem } from "../types";
+import type { ProjectItem, Repository } from "../types";
 
 export type WorkspaceMode = "single_repo" | "multi_repo";
 
@@ -29,4 +29,32 @@ export function resolveWorkspaceMode(input: WorkspaceModeInput): WorkspaceMode {
   if (memberCount >= 2) return "multi_repo";
   if (hasRootPath) return "multi_repo";
   return "single_repo";
+}
+
+export function findOwnerProjectForRepositoryId(
+  repositoryId: number,
+  projects: ReadonlyArray<ProjectItem>,
+): ProjectItem | null {
+  return projects.find((project) => project.repositoryIds.includes(repositoryId)) ?? null;
+}
+
+export function isMultiRepoProject(
+  project: ProjectItem | null | undefined,
+  projects: ReadonlyArray<ProjectItem>,
+): boolean {
+  if (!project) {
+    return false;
+  }
+  return resolveWorkspaceMode({ activeProjectId: project.id, projects }) === "multi_repo";
+}
+
+/**
+ * 多仓工作区内点仓库行：只更新侧栏高亮与文件树，不 bind / 切换 per-repo 主会话。
+ */
+export function shouldSidebarRepositorySelectOnlyUpdateFocus(
+  repository: Repository,
+  projects: ReadonlyArray<ProjectItem>,
+): boolean {
+  const owner = findOwnerProjectForRepositoryId(repository.id, projects);
+  return isMultiRepoProject(owner, projects);
 }

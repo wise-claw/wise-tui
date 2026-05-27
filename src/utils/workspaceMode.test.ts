@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import type { ProjectItem } from "../types";
-import { resolveWorkspaceMode } from "./workspaceMode";
+import type { ProjectItem, Repository } from "../types";
+import {
+  findOwnerProjectForRepositoryId,
+  isMultiRepoProject,
+  resolveWorkspaceMode,
+  shouldSidebarRepositorySelectOnlyUpdateFocus,
+} from "./workspaceMode";
 
 function project(input: Partial<ProjectItem> & Pick<ProjectItem, "id">): ProjectItem {
   return {
@@ -73,5 +78,28 @@ describe("resolveWorkspaceMode", () => {
     expect(resolveWorkspaceMode({ activeProjectId: "p1", projects: [p] })).toBe(
       "single_repo",
     );
+  });
+});
+
+describe("multi-repo sidebar repository select", () => {
+  const repo = (id: number): Repository => ({
+    id,
+    name: `repo-${id}`,
+    path: `/work/repo-${id}`,
+    repositoryType: "frontend",
+    createdAt: 0,
+    updatedAt: 0,
+  });
+
+  test("two-repo project → sidebar repo click only updates focus", () => {
+    const projects = [project({ id: "eco", repositoryIds: [1, 2] })];
+    expect(shouldSidebarRepositorySelectOnlyUpdateFocus(repo(1), projects)).toBe(true);
+    expect(findOwnerProjectForRepositoryId(2, projects)?.id).toBe("eco");
+    expect(isMultiRepoProject(projects[0], projects)).toBe(true);
+  });
+
+  test("floating repo → per-repo session bind still allowed", () => {
+    const projects = [project({ id: "other", repositoryIds: [99] })];
+    expect(shouldSidebarRepositorySelectOnlyUpdateFocus(repo(1), projects)).toBe(false);
   });
 });
