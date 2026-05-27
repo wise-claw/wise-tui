@@ -4,9 +4,10 @@ import {
   loadRightPanelDefaultCollapsedFromStore as loadRightPanelDefaultCollapsed,
   saveRightPanelDefaultCollapsedToStore as saveRightPanelDefaultCollapsed,
 } from "../../services/wiseDefaultConfigStore";
+import { RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK } from "../../utils/rightPanelStorage";
 
 export function useRightPanelDefaultSetting() {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 

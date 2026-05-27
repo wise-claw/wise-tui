@@ -35,6 +35,7 @@ import {
   resolveRepositoryForSession,
 } from "../../utils/repositoryMainSessionBinding";
 import { resolveWorkspaceMainSession } from "../../utils/resolveWorkspaceMainSession";
+import { RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK } from "../../utils/rightPanelStorage";
 import { loadSessionOwnerHints } from "../../utils/sessionOwnerHints";
 import type { WorkspaceMode, WorkspaceFocus } from "../../utils/workspaceMode";
 import "./index.css";
@@ -355,7 +356,7 @@ export function Topbar({
   mainSessionForDataLink = null,
   onToggleSidebar,
   onToggleRightPanel,
-  rightPanelDefaultCollapsed = false,
+  rightPanelDefaultCollapsed = true,
   onSetRightPanelDefaultCollapsed,
   onToggleTerminal,
   onSearch,
@@ -380,7 +381,9 @@ export function Topbar({
   const [runErrorMonitorEnabled, setRunErrorMonitorEnabled] = useState(false);
   const [runAutoOpenPageEnabled, setRunAutoOpenPageEnabled] = useState(true);
   const [rightPanelDefaultPopoverOpen, setRightPanelDefaultPopoverOpen] = useState(false);
-  const [rightPanelDefaultDraftCollapsed, setRightPanelDefaultDraftCollapsed] = useState(false);
+  const [rightPanelDefaultDraftCollapsed, setRightPanelDefaultDraftCollapsed] = useState(
+    rightPanelDefaultCollapsed ?? RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK,
+  );
   const runLogTailRef = useRef("");
   const runChunkBufferRef = useRef("");
   const idleTimerRef = useRef<number | null>(null);
@@ -1088,11 +1091,11 @@ export function Topbar({
                   onClick={(event) => event.stopPropagation()}
                 >
                   <div className="app-topbar-right-panel-default-popover__row">
-                    <span className="app-topbar-right-panel-default-popover__label">启动默认展开</span>
+                    <span className="app-topbar-right-panel-default-popover__label">启动默认收起</span>
                     <Switch
                       size="small"
-                      checked={!rightPanelDefaultDraftCollapsed}
-                      onChange={(expandByDefault) => setRightPanelDefaultDraftCollapsed(!expandByDefault)}
+                      checked={rightPanelDefaultDraftCollapsed}
+                      onChange={setRightPanelDefaultDraftCollapsed}
                     />
                   </div>
                   <footer className="app-topbar-right-panel-default-popover__footer">
