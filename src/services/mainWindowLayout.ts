@@ -2,10 +2,13 @@ import { LogicalSize, PhysicalSize } from "@tauri-apps/api/dpi";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   computeDualPaneTargetCenterLogical,
+  computeMultiPaneTargetCenterLogical,
   MAIN_LAYOUT_DUAL_EXPAND_INNER_WIDTH_BUFFER_PX,
   MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX,
+  MAIN_LAYOUT_MULTI_PANE_EXPAND_BUFFER_PX,
   MAIN_LAYOUT_RESIZE_HANDLE_PX,
   MAIN_LAYOUT_RIGHT_SIDER_WIDTH_PX,
+  type PaneCount,
 } from "../constants/mainLayoutWidths";
 
 /** 等待布局提交后再量 DOM（双栏切换、挂载后需要多帧）。 */
@@ -116,6 +119,35 @@ export async function expandMainWindowByDualPaneCenterDelta(
   if (centerBeforeLogical <= 0) return 0;
   const centerAfter =
     computeDualPaneTargetCenterLogical(centerBeforeLogical) + MAIN_LAYOUT_DUAL_EXPAND_INNER_WIDTH_BUFFER_PX;
+  const deltaLogical = Math.max(0, Math.ceil(centerAfter - centerBeforeLogical));
+  if (deltaLogical <= 0) return 0;
+  try {
+    if (options?.shouldAbort?.()) return 0;
+    if (typeof window === "undefined") return 0;
+    const nextW = window.innerWidth + deltaLogical;
+    const nextH = window.innerHeight;
+    if (options?.shouldAbort?.()) return 0;
+    await setMainWindowLogicalInnerSize(nextW, nextH);
+    return deltaLogical;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * 多屏模式通用窗口展开：根据目标屏数计算主内容区目标宽度并调整窗口。
+ * 返回逻辑增量（关闭/切换时用于缩回）。
+ */
+export async function expandMainWindowForPaneCount(
+  count: PaneCount,
+  centerBeforeLogical: number,
+  options?: { shouldAbort?: () => boolean },
+): Promise<number> {
+  await waitLayoutFrames(1);
+  if (options?.shouldAbort?.()) return 0;
+  if (centerBeforeLogical <= 0 || count <= 1) return 0;
+  const centerAfter =
+    computeMultiPaneTargetCenterLogical(count, centerBeforeLogical) + MAIN_LAYOUT_MULTI_PANE_EXPAND_BUFFER_PX;
   const deltaLogical = Math.max(0, Math.ceil(centerAfter - centerBeforeLogical));
   if (deltaLogical <= 0) return 0;
   try {

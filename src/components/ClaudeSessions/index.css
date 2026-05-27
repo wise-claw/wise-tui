@@ -40,6 +40,33 @@
   background: var(--ant-color-split);
 }
 
+/* ── Multi-pane grid (2/4/6/8) ── */
+
+.app-claude-sessions__multi-panes {
+  /* 与 `src/constants/mainLayoutWidths.ts` 中 MAIN_LAYOUT_MULTI_PANE_MIN_WIDTH_PX 一致 */
+  --app-multi-pane-min-width: 460px;
+  display: grid;
+  gap: 1px;
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  background: var(--ant-color-split);
+}
+
+.app-claude-sessions__pane {
+  min-width: var(--app-multi-pane-min-width);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--ant-color-bg-container);
+}
+
+.app-claude-sessions__pane > .app-claude-chat {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
 /* ── Empty State ── */
 
 .app-claude-session-empty {
@@ -94,6 +121,62 @@
   gap: 8px;
   flex-wrap: wrap;
   margin-top: 12px;
+}
+
+.app-claude-session-empty__repo-select {
+  width: 100%;
+  max-width: 320px;
+}
+
+.app-claude-session-empty__repo-node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  width: 100%;
+}
+
+.app-claude-session-empty__repo-node-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-claude-session-empty__repo-node-create {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--ant-color-border);
+  background: var(--ant-color-bg-container);
+  color: var(--ant-color-text-secondary);
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.app-claude-session-empty__repo-node-create:hover {
+  color: var(--ant-color-primary);
+  border-color: var(--ant-color-primary);
+  background: var(--ant-color-primary-bg);
+}
+
+.app-claude-session-empty__repo-node-create:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  color: var(--ant-color-text-tertiary);
+  border-color: var(--ant-color-border);
+  background: var(--ant-color-fill-tertiary);
+}
+
+.app-claude-session-empty__repo-node-create svg {
+  width: 14px;
+  height: 14px;
+  display: block;
 }
 
 .app-claude-sessions-terminal-lazy-fallback {

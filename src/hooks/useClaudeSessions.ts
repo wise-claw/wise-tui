@@ -2,6 +2,7 @@ import {
   useState,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   type MutableRefObject,
 } from "react";
@@ -464,7 +465,9 @@ interface UseClaudeSessionsOptions {
   claudeSpawnExtrasContextRef?: MutableRefObject<
     ((session: ClaudeSession) => Promise<ClaudeSpawnCliExtras | null>) | null
   >;
-  /** 双栏模式下右侧栏绑定的会话 id，用于磁盘 JSONL 拉取与运行态探测 */
+  /** 多屏模式下额外窗格绑定的会话 id 列表，用于磁盘 JSONL 拉取与运行态探测 */
+  companionSessionIds?: string[];
+  /** @deprecated 使用 companionSessionIds；保留向后兼容 */
   companionSessionId?: string | null;
   /** 流式 init 将临时 tab id 合并为真实 `session_id` 时回调（同步双栏右侧绑定） */
   onSessionTabIdMigrated?: (fromTabId: string, toClaudeSessionId: string) => void;
@@ -535,7 +538,16 @@ interface UseClaudeSessionsReturn {
 }
 
 export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaudeSessionsReturn {
-  const companionSessionId = options?.companionSessionId ?? null;
+  const companionSessionIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (options?.companionSessionIds) {
+      for (const id of options.companionSessionIds) {
+        if (id) ids.add(id);
+      }
+    }
+    if (options?.companionSessionId) ids.add(options.companionSessionId);
+    return Array.from(ids);
+  }, [options?.companionSessionIds, options?.companionSessionId]);
   const [sessions, setSessions] = useState<ClaudeSession[]>([]);
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
@@ -1649,45 +1661,51 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   }, [activeSessionId]);
 
   useEffect(() => {
-    if (!companionSessionId) return;
-    const s = sessionsRef.current.find((x) => x.id === companionSessionId);
-    if (!s?.claudeSessionId || s.messages.length > 0) return;
-    if (s.status === "running" || s.status === "connecting") return;
-    if (diskLoadDoneRef.current.has(s.id)) return;
-    diskLoadDoneRef.current.add(s.id);
-    const loadKey = s.id;
+    if (companionSessionIds.length === 0) return;
+    const cleanups: Array<() => void> = [];
+    for (const cid of companionSessionIds) {
+      const s = sessionsRef.current.find((x) => x.id === cid);
+      if (!s?.claudeSessionId || s.messages.length > 0) continue;
+      if (s.status === "running" || s.status === "connecting") continue;
+      if (diskLoadDoneRef.current.has(s.id)) continue;
+      diskLoadDoneRef.current.add(s.id);
+      const loadKey = s.id;
 
-    let cancelled = false;
-    void (async () => {
-      try {
-        const lines = await loadClaudeSessionJsonl(s.repositoryPath, s.claudeSessionId!, {
-          tailLines: CLAUDE_DISK_JSONL_TAIL_LINES_INITIAL,
-        });
-        if (cancelled) return;
-        const messages = parseClaudeSessionJsonlLines(lines);
-        const partial = lines.length >= CLAUDE_DISK_JSONL_TAIL_LINES_INITIAL;
-        setSessions((prev) =>
-          prev.map((sess) =>
-            sess.id === loadKey ? { ...sess, messages, diskTranscriptPartial: partial } : sess,
-          ),
-        );
-      } catch {
+      let cancelled = false;
+      void (async () => {
+        try {
+          const lines = await loadClaudeSessionJsonl(s.repositoryPath, s.claudeSessionId!, {
+            tailLines: CLAUDE_DISK_JSONL_TAIL_LINES_INITIAL,
+          });
+          if (cancelled) return;
+          const messages = parseClaudeSessionJsonlLines(lines);
+          const partial = lines.length >= CLAUDE_DISK_JSONL_TAIL_LINES_INITIAL;
+          setSessions((prev) =>
+            prev.map((sess) =>
+              sess.id === loadKey ? { ...sess, messages, diskTranscriptPartial: partial } : sess,
+            ),
+          );
+        } catch {
+          diskLoadDoneRef.current.delete(loadKey);
+        }
+      })();
+
+      cleanups.push(() => {
+        cancelled = true;
         diskLoadDoneRef.current.delete(loadKey);
-      }
-    })();
-
+      });
+    }
     return () => {
-      cancelled = true;
-      diskLoadDoneRef.current.delete(loadKey);
+      for (const fn of cleanups) fn();
     };
-  }, [companionSessionId]);
+  }, [companionSessionIds]);
 
-  /** 非活动/非双栏伴生标签：丢弃正文，仅保留元数据；切回时再从磁盘懒加载（running 与无磁盘 id 的纯本地草稿保留） */
+  /** 非活动/非多屏伴生标签：丢弃正文，仅保留元数据；切回时再从磁盘懒加载（running 与无磁盘 id 的纯本地草稿保留） */
   useEffect(() => {
     if (!tabsHydrated) return;
     const keep = new Set<string>();
     if (activeSessionId) keep.add(activeSessionId);
-    if (companionSessionId) keep.add(companionSessionId);
+    for (const cid of companionSessionIds) keep.add(cid);
     setSessions((prev) => {
       let changed = false;
       const next = prev.map((s) => {
@@ -1701,7 +1719,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       });
       return changed ? next : prev;
     });
-  }, [tabsHydrated, activeSessionId, companionSessionId]);
+  }, [tabsHydrated, activeSessionId, companionSessionIds]);
 
   /** 主会话 / 员工 / 团队等全部标签：定期与 Claude Code 宿主注册表对齐执行态（不限于当前活动标签）。 */
   useEffect(() => {

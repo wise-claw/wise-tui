@@ -663,8 +663,8 @@ export function AppWorkspaceLayout({
                         rightCollapsed={claudeSessionsProps.rightCollapsed}
                         terminalCollapsed={claudeSessionsProps.terminalCollapsed}
                         onAutoFixRunError={claudeSessionsProps.onAutoFixRunError}
-                        dualPaneEnabled={claudeSessionsProps.dualPaneEnabled}
-                        onToggleDualPane={claudeSessionsProps.onToggleDualPane}
+                        paneCount={claudeSessionsProps.paneCount}
+                        onChangePaneCount={claudeSessionsProps.onChangePaneCount}
                       />
                     )}
 

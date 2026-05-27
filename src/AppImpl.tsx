@@ -36,6 +36,7 @@ import {
   useViewMode,
 } from "./hooks/useViewMode";
 import type { AuthorPane } from "./types/viewMode";
+import type { PaneCount, PaneSlot } from "./constants/mainLayoutWidths";
 import { useClaudeSessions, type ClaudeTurnCompletePayload } from "./hooks/useClaudeSessions";
 import { useRepositoryList } from "./hooks/useRepositoryList";
 import { openRepositoryRemoteInBrowser } from "./services/openRepositoryRemote";
@@ -298,10 +299,10 @@ export default function App() {
   const [dark, _setDark] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [terminalCollapsed, setTerminalCollapsed] = useState(true);
-  const [dualPaneEnabled, setDualPaneEnabled] = useState(false);
-  const [dualPaneSecondarySessionId, setDualPaneSecondarySessionId] = useState<string | null>(null);
-  /** null: right pane follows the sidebar repository; non-null: right main session is pinned to this repository id. */
-  const [dualPaneSecondaryRepositoryId, setDualPaneSecondaryRepositoryId] = useState<number | null>(null);
+  /** 中栏多屏模式屏数：1=单屏（关闭），2/4/6/8=多屏。 */
+  const [paneCount, setPaneCount] = useState<PaneCount>(1);
+  /** 多屏模式下额外窗格槽位（Pane 0 始终是 activeSession）。 */
+  const [extraPanes, setExtraPanes] = useState<PaneSlot[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
   /** 右侧 Inspector 历史会话消息抽屉（由中栏「历史会话」列表打开） */
   const [inspectorHistorySessionId, setInspectorHistorySessionId] = useState<string | null>(null);
@@ -669,7 +670,17 @@ export default function App() {
 
   const handleSessionTabIdMigrated = useCallback(
     (fromTabId: string, toClaudeSessionId: string) => {
-      setDualPaneSecondarySessionId((prev) => (prev === fromTabId ? toClaudeSessionId : prev));
+      setExtraPanes((prev) => {
+        let changed = false;
+        const next = prev.map((slot) => {
+          if (slot.sessionId === fromTabId) {
+            changed = true;
+            return { ...slot, sessionId: toClaudeSessionId };
+          }
+          return slot;
+        });
+        return changed ? next : prev;
+      });
       migrateRepositoryMainSessionBindingTabIds(fromTabId, toClaudeSessionId);
       void migratePromptContextSessionKey(fromTabId, toClaudeSessionId);
       moveWorkflowAutomationSessionIdRef.current(fromTabId, toClaudeSessionId);
@@ -719,7 +730,7 @@ export default function App() {
     onClaudeSpawnBlocked: (blockedMessage) => {
       message.warning(blockedMessage);
     },
-    companionSessionId: dualPaneEnabled ? dualPaneSecondarySessionId : null,
+    companionSessionIds: paneCount > 1 ? extraPanes.filter((p) => p.sessionId).map((p) => p.sessionId!) : [],
     onSessionTabIdMigrated: handleSessionTabIdMigrated,
   });
 
@@ -1671,10 +1682,11 @@ export default function App() {
   const {
     compactLayoutMode,
     effectiveRightCollapsed,
-    handleDualPaneSecondaryRepositorySelect,
-    handleNewSecondarySession,
+    handlePaneRepositorySelect,
+    handlePaneProjectNewSession,
+    handleNewPaneSession,
+    handleChangePaneCount,
     handleToggleCompactLayoutMode,
-    handleToggleDualPane,
     handleToggleRightPanel,
     handleSetRightPanelDefaultCollapsed,
     rightPanelDefaultCollapsed,
@@ -1688,15 +1700,14 @@ export default function App() {
     activeSessionId,
     collapsed,
     createSession,
-    dualPaneEnabled,
-    dualPaneSecondarySessionId,
+    paneCount,
+    extraPanes,
     repositories,
     repositoryMainSessionBindings,
     sessions,
     setActiveRepositoryId,
-    setDualPaneEnabled,
-    setDualPaneSecondaryRepositoryId,
-    setDualPaneSecondarySessionId,
+    setPaneCount,
+    setExtraPanes,
   });
 
   const handleOpenHistorySessionInInspector = useCallback(
@@ -3237,6 +3248,7 @@ export default function App() {
         activeRepositoryId,
         workspaceMode,
         activeProject,
+        projects,
         activeWorkspaceFocus,
         onSelectRepository: setActiveRepositoryId,
         onUpdateSessionModel: updateSessionModel,
@@ -3277,12 +3289,12 @@ export default function App() {
         onClearRevertItems: clearRevertItems,
         onSendFollowup: sendFollowup,
         onRestoreRevert: restoreRevert,
-        dualPaneEnabled,
-        onToggleDualPane: handleToggleDualPane,
-        secondarySessionId: dualPaneSecondarySessionId,
-        dualPaneSecondaryRepositoryId,
-        onDualPaneSecondaryRepositorySelect: handleDualPaneSecondaryRepositorySelect,
-        onNewSecondarySession: handleNewSecondarySession,
+        paneCount,
+        extraPanes,
+        onChangePaneCount: handleChangePaneCount,
+        onPaneRepositorySelect: handlePaneRepositorySelect,
+        onPaneProjectNewSession: handlePaneProjectNewSession,
+        onNewPaneSession: handleNewPaneSession,
         onToggleSidebar: () => setCollapsed((c) => !c),
         onToggleRightPanel: handleToggleRightPanel,
         rightPanelDefaultCollapsed,

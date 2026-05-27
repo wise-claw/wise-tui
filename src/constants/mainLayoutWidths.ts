@@ -143,42 +143,67 @@ export function clampMainLayoutRightWidthPx(width: number, ctx: MainLayoutSiderC
   );
 }
 
-/**
- * 与 `ClaudeSessions/index.css` 中 `--app-dual-pane-session-min-width` 一致
- *（单路会话在双栏模式下的最小宽度）。
- */
-export const MAIN_LAYOUT_DUAL_SESSION_MIN_WIDTH_PX = 460;
+// ── Multi-pane (2/4/6/8) ──
 
-/** 与 `ClaudeSessions/index.css` 中 `.app-claude-sessions__dual-divider` 的 `width` 一致。 */
-export const MAIN_LAYOUT_DUAL_PANES_DIVIDER_PX = 1;
+/** 中栏多屏模式可选的屏数。1 表示单屏（关闭多屏）。 */
+export type PaneCount = 1 | 2 | 4 | 6 | 8;
 
-/** 双栏打开时，在理论最小宽度上预留的缓冲（边框/舍入误差）。 */
-export const MAIN_LAYOUT_DUAL_EXPAND_INNER_WIDTH_BUFFER_PX = 8;
-
-/** 双栏时主内容区（`Layout.Content`）所需最小逻辑宽度：两路会话 min + 分隔条。 */
-export function computeMinLogicalCenterWidthForDualPane(): number {
-  return MAIN_LAYOUT_DUAL_SESSION_MIN_WIDTH_PX * 2 + MAIN_LAYOUT_DUAL_PANES_DIVIDER_PX;
+/** 多屏模式下额外窗格槽位（Pane 0 始终是 activeSession，不在数组中）。 */
+export interface PaneSlot {
+  /** 唯一槽位 id，用于 React key 和稳定引用。 */
+  slotId: string;
+  /** 该窗格绑定的 session id；null 表示空屏。 */
+  sessionId: string | null;
+  /** 该窗格绑定的 repository id；null 表示未选择。 */
+  repositoryId: number | null;
 }
 
-/**
- * 开启双栏后主内容区目标逻辑宽度：在「保留现有中栏宽度」的前提下再容纳一路最小会话宽 + 分隔；
- * 且不低于绝对最小双栏中栏宽度。
- */
-export function computeDualPaneTargetCenterLogical(centerBeforeLogical: number): number {
-  const minTotal = computeMinLogicalCenterWidthForDualPane();
-  const withSecondColumn =
-    centerBeforeLogical + MAIN_LAYOUT_DUAL_SESSION_MIN_WIDTH_PX + MAIN_LAYOUT_DUAL_PANES_DIVIDER_PX;
-  return Math.max(minTotal, withSecondColumn);
+/** 多屏模式下的有效屏数列表（用于 UI 枚举）。 */
+export const PANE_COUNT_OPTIONS: readonly PaneCount[] = [1, 2, 4, 6, 8] as const;
+
+/** 多屏循环切换顺序（Alt+K）：1→2→4→6→8→1。 */
+export const PANE_COUNT_CYCLE_ORDER: readonly PaneCount[] = [1, 2, 4, 6, 8] as const;
+
+/** 多屏模式下每个窗格的最小宽度（与 CSS --app-multi-pane-min-width 一致）。 */
+export const MAIN_LAYOUT_MULTI_PANE_MIN_WIDTH_PX = 460;
+
+/** 窗格之间的分隔间距（CSS grid gap）。 */
+export const MAIN_LAYOUT_MULTI_PANE_GAP_PX = 1;
+
+/** 窗口展开时，在理论最小宽度上预留的缓冲（边框/舍入误差）。 */
+export const MAIN_LAYOUT_MULTI_PANE_EXPAND_BUFFER_PX = 8;
+
+/** 多屏网格维度：行数 × 列数。2→1×2, 4→2×2, 6→2×3, 8→2×4。 */
+export function paneGridDimensions(count: PaneCount): { rows: number; cols: number } {
+  if (count <= 1) return { rows: 1, cols: 1 };
+  if (count === 2) return { rows: 1, cols: 2 };
+  return { rows: 2, cols: count / 2 };
 }
 
-export function computeMinLogicalInnerWidthForDualPaneLayout(options: {
-  leftCollapsed: boolean;
-  rightCollapsed: boolean;
-  /** 可选：当前左栏宽度；未传则用默认常量。 */
-  leftWidthPx?: number;
-  /** 可选：当前右栏宽度；未传则用默认常量。 */
-  rightWidthPx?: number;
-}): number {
+/** 指定屏数时主内容区（Layout.Content）所需最小逻辑宽度。 */
+export function computeMinLogicalCenterWidthForPaneCount(count: PaneCount): number {
+  const { cols } = paneGridDimensions(count);
+  return MAIN_LAYOUT_MULTI_PANE_MIN_WIDTH_PX * cols + MAIN_LAYOUT_MULTI_PANE_GAP_PX * Math.max(0, cols - 1);
+}
+
+/** 开启多屏后主内容区目标逻辑宽度：取当前中栏宽度与最小宽度的较大值。 */
+export function computeMultiPaneTargetCenterLogical(
+  count: PaneCount,
+  centerBeforeLogical: number,
+): number {
+  const minTotal = computeMinLogicalCenterWidthForPaneCount(count);
+  return Math.max(minTotal, centerBeforeLogical);
+}
+
+export function computeMinLogicalInnerWidthForMultiPaneLayout(
+  count: PaneCount,
+  options: {
+    leftCollapsed: boolean;
+    rightCollapsed: boolean;
+    leftWidthPx?: number;
+    rightWidthPx?: number;
+  },
+): number {
   const left = options.leftCollapsed
     ? 0
     : (options.leftWidthPx ?? MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX);
@@ -188,7 +213,44 @@ export function computeMinLogicalInnerWidthForDualPaneLayout(options: {
   const handleGutter =
     (!options.leftCollapsed ? MAIN_LAYOUT_RESIZE_HANDLE_PX : 0) +
     (!options.rightCollapsed ? MAIN_LAYOUT_RESIZE_HANDLE_PX : 0);
-  const center =
-    MAIN_LAYOUT_DUAL_SESSION_MIN_WIDTH_PX * 2 + MAIN_LAYOUT_DUAL_PANES_DIVIDER_PX;
+  const center = computeMinLogicalCenterWidthForPaneCount(count);
   return left + center + right + handleGutter;
+}
+
+/** 根据当前屏数计算下一个循环屏数（Alt+K）。 */
+export function nextPaneCountInCycle(current: PaneCount): PaneCount {
+  const idx = PANE_COUNT_CYCLE_ORDER.indexOf(current);
+  const nextIdx = (idx + 1) % PANE_COUNT_CYCLE_ORDER.length;
+  return PANE_COUNT_CYCLE_ORDER[nextIdx];
+}
+
+// ── Dual-pane aliases (backward compat) ──
+
+/** @deprecated 使用 {@link MAIN_LAYOUT_MULTI_PANE_MIN_WIDTH_PX} */
+export const MAIN_LAYOUT_DUAL_SESSION_MIN_WIDTH_PX = MAIN_LAYOUT_MULTI_PANE_MIN_WIDTH_PX;
+
+/** @deprecated 使用 {@link MAIN_LAYOUT_MULTI_PANE_GAP_PX} */
+export const MAIN_LAYOUT_DUAL_PANES_DIVIDER_PX = MAIN_LAYOUT_MULTI_PANE_GAP_PX;
+
+/** @deprecated 使用 {@link MAIN_LAYOUT_MULTI_PANE_EXPAND_BUFFER_PX} */
+export const MAIN_LAYOUT_DUAL_EXPAND_INNER_WIDTH_BUFFER_PX = MAIN_LAYOUT_MULTI_PANE_EXPAND_BUFFER_PX;
+
+/** @deprecated 使用 {@link computeMinLogicalCenterWidthForPaneCount}(2) */
+export function computeMinLogicalCenterWidthForDualPane(): number {
+  return computeMinLogicalCenterWidthForPaneCount(2);
+}
+
+/** @deprecated 使用 {@link computeMultiPaneTargetCenterLogical}(2, centerBeforeLogical) */
+export function computeDualPaneTargetCenterLogical(centerBeforeLogical: number): number {
+  return computeMultiPaneTargetCenterLogical(2, centerBeforeLogical);
+}
+
+/** @deprecated 使用 {@link computeMinLogicalInnerWidthForMultiPaneLayout}(2, options) */
+export function computeMinLogicalInnerWidthForDualPaneLayout(options: {
+  leftCollapsed: boolean;
+  rightCollapsed: boolean;
+  leftWidthPx?: number;
+  rightWidthPx?: number;
+}): number {
+  return computeMinLogicalInnerWidthForMultiPaneLayout(2, options);
 }
