@@ -1531,7 +1531,7 @@ export function ClaudeSessions({
         selectable: true,
         nodeType: "project",
         projectId: p.id,
-        projectRootPath: p.rootPath ?? null,
+        projectRootPath: p.rootPath ?? undefined,
         children,
       });
     }
@@ -1997,7 +1997,7 @@ export function ClaudeSessions({
                           extraContent={
                             (onPaneRepositorySelect || onPaneProjectNewSession) &&
                             (paneRepoTreeData.length > 0 || (repositories && repositories.length > 0)) ? (
-                              <TreeSelect<PaneRepoTreeNode>
+                              <TreeSelect
                                 className="app-claude-session-empty__repo-select"
                                 placeholder="选择工作区 / 仓库"
                                 value={
@@ -2016,6 +2016,7 @@ export function ClaudeSessions({
                                 }}
                                 dropdownClassName="app-claude-session-empty__repo-select-dropdown"
                                 treeTitleRender={(node) => {
+                                  const treeNode = node as unknown as PaneRepoTreeNode;
                                   const nodeValue = String(node.value ?? "");
                                   const repoIdFromValue = nodeValue.startsWith("repo:")
                                     ? Number(nodeValue.slice(5))
@@ -2025,9 +2026,9 @@ export function ClaudeSessions({
                                     : null;
                                   const projectRootPath =
                                     projectsById.get((projectIdFromValue ?? "").trim())?.rootPath?.trim() ||
-                                    node.projectRootPath?.trim() ||
+                                    treeNode.projectRootPath?.trim() ||
                                     null;
-                                  const projectName = String(node.title ?? "").trim() || null;
+                                  const projectName = String(treeNode.title ?? "").trim() || null;
                                   const canCreate =
                                     repoIdFromValue != null
                                       ? Boolean(onNewPaneSession)
@@ -2037,14 +2038,14 @@ export function ClaudeSessions({
                                   const slotCreating = Boolean(creatingPaneSlots[paneIdx]);
                                   return (
                                     <div className="app-claude-session-empty__repo-node">
-                                      <span className="app-claude-session-empty__repo-node-title">{node.title}</span>
+                                      <span className="app-claude-session-empty__repo-node-title">{String(treeNode.title ?? "")}</span>
                                       {canCreate ? (
                                         <button
                                           type="button"
                                           className="app-claude-session-empty__repo-node-create"
                                           disabled={slotCreating}
-                                          aria-label={`新建${node.nodeType === "project" ? "工作区" : "仓库"}执行会话`}
-                                          title={`新建${node.nodeType === "project" ? "工作区" : "仓库"}执行会话`}
+                                          aria-label={`新建${treeNode.nodeType === "project" ? "工作区" : "仓库"}执行会话`}
+                                          title={`新建${treeNode.nodeType === "project" ? "工作区" : "仓库"}执行会话`}
                                           onClick={(event) => {
                                             event.preventDefault();
                                             event.stopPropagation();
@@ -2094,29 +2095,30 @@ export function ClaudeSessions({
                                     </div>
                                   );
                                 }}
-                                onSelect={(value: string) => {
+                                onSelect={(value) => {
+                                  const selected = String(value ?? "");
                                   if (creatingPaneSlots[paneIdx]) return;
-                                  if (!value || typeof value !== "string") return;
+                                  if (!selected) return;
                                   setPaneRepoPickerOpenBySlot((prev) => ({ ...prev, [paneIdx]: false }));
                                   setCreatingPaneSlots((prev) => ({ ...prev, [paneIdx]: true }));
-                                  if (value.startsWith("repo:")) {
+                                  if (selected.startsWith("repo:")) {
                                     if (onPaneRepositorySelect) {
                                       void withMinDuration(
-                                        Promise.resolve(onPaneRepositorySelect(paneIdx, Number(value.slice(5)))),
+                                        Promise.resolve(onPaneRepositorySelect(paneIdx, Number(selected.slice(5)))),
                                         PANE_CREATE_MIN_LOADING_MS,
                                       ).finally(() => {
                                         setCreatingPaneSlots((prev) => ({ ...prev, [paneIdx]: false }));
                                       });
                                       return;
                                     }
-                                  } else if (value.startsWith("project:")) {
+                                  } else if (selected.startsWith("project:")) {
                                     if (onPaneProjectNewSession) {
-                                      const pickedProject = projectsById.get(value.slice(8).trim());
+                                      const pickedProject = projectsById.get(selected.slice(8).trim());
                                       void withMinDuration(
                                         Promise.resolve(
                                           onPaneProjectNewSession(
                                             paneIdx,
-                                            value.slice(8),
+                                            selected.slice(8),
                                             pickedProject ? [pickedProject] : (projects ?? []),
                                             {
                                               rootPath: pickedProject?.rootPath ?? null,

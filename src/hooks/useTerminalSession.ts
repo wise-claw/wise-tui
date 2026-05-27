@@ -131,6 +131,17 @@ function getTerminalAppearance(container: HTMLElement | null): TerminalAppearanc
   };
 }
 
+async function copyTextToClipboard(text: string): Promise<boolean> {
+  const value = text.trim();
+  if (!value) return false;
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 type UseTerminalSessionOptions = {
   activeRepository: Repository | null;
   activeTerminalId: string | null;
@@ -388,6 +399,17 @@ export function useTerminalSession({
       fitAddonRef.current = fitAddon;
 
       terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
+        if (event.type === "keydown") {
+          const hasSelection = terminal.hasSelection();
+          const isMacCopy = event.metaKey && !event.ctrlKey && !event.altKey && event.key.toLowerCase() === "c";
+          const isWinLinuxCopy =
+            !event.metaKey && event.ctrlKey && event.shiftKey && !event.altKey && event.key.toLowerCase() === "c";
+          if (hasSelection && (isMacCopy || isWinLinuxCopy)) {
+            event.preventDefault();
+            void copyTextToClipboard(terminal.getSelection());
+            return false;
+          }
+        }
         if (
           event.type === "keydown" &&
           event.key === "Tab" &&
