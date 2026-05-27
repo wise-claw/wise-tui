@@ -26,6 +26,8 @@ import { LeftSidebarTopbar } from "./LeftSidebar/LeftSidebarTopbar";
 import { LeftSidebarHubQuickEntries } from "./LeftSidebar/LeftSidebarHubQuickEntries";
 import { ProjectRepositoryList } from "./LeftSidebar/ProjectRepositoryList";
 import { GitPanel } from "./GitPanel";
+import { SessionConversationTasksPanel } from "./LeftSidebar/SessionConversationTasksPanel";
+import { ProgressMonitorPanel } from "./ProgressMonitorPanel";
 import {
   readLeftFilesExplorerCollapsedFromStorage,
   writeLeftFilesExplorerCollapsedToStorage,
@@ -123,6 +125,8 @@ export function LeftSidebar({
   repositoryMainSessionBindings,
   activeSessionId: _activeSessionId,
   onSelectSession: _onSelectSession,
+  sessionConversationTaskItems,
+  onStopSessionConversationTask,
   employees: _employees = [],
   employeeTaskCounts: _employeeTaskCounts = [],
   workflowTemplates: _workflowTemplates = [],
@@ -131,6 +135,24 @@ export function LeftSidebar({
   onCancelSessionFromMonitor,
   onOpenTaskDetailFromMonitor,
   onReloadFullDiskTranscript,
+  projectId,
+  employeeMonitorItems = [],
+  repositoryMemberMonitorItems = [],
+  teamMonitorItems = [],
+  monitorActiveTarget,
+  onOpenTeamMonitorDetail,
+  onOpenEmployeeConfig,
+  onOpenWorkflowConfig,
+  onStopEmployeeMonitor,
+  onStopTeamMonitor,
+  hideEmployeeUi = false,
+  monitorClaudeConcurrency = null,
+  onOpenOmcBatchInvocationDetail,
+  onCancelOmcDirectBatchInvocation,
+  onCompactSessionHistory,
+  historyDrawerSessionId,
+  onHistoryDrawerSessionIdChange,
+  onRestoreHistorySessionAsMain,
   activeRepositoryPath,
   activeRepositoryName,
   onOpenActiveRepositoryFile,
@@ -559,6 +581,40 @@ export function LeftSidebar({
         onOpenClaudePluginsHub={onOpenClaudePluginsHub}
       />
 
+      {!(leftBottomTab === "git" && activeRepositoryPath) ? (
+        <div className="app-left-sidebar-monitor-panel">
+          <ProgressMonitorPanel
+            employeeItems={employeeMonitorItems}
+            repositoryMemberItems={repositoryMemberMonitorItems}
+            sessionConversationTaskItems={[]}
+            teamItems={teamMonitorItems}
+            sessions={sessions}
+            activeTarget={monitorActiveTarget}
+            onOpenTeamDetail={(workflowId) => onOpenTeamMonitorDetail?.(workflowId)}
+            onOpenEmployeeConfig={onOpenEmployeeConfig}
+            onOpenWorkflowConfig={onOpenWorkflowConfig}
+            onStopEmployee={(employeeId) => onStopEmployeeMonitor?.(employeeId)}
+            onStopTeam={(workflowId) => onStopTeamMonitor?.(workflowId)}
+            hideEmployeeUi={hideEmployeeUi}
+            claudeConcurrency={monitorClaudeConcurrency}
+            onCancelSession={onCancelSessionFromMonitor}
+            onOpenTaskDetail={onOpenTaskDetailFromMonitor}
+            onOpenOmcBatchInvocationDetail={onOpenOmcBatchInvocationDetail}
+            onCancelOmcDirectBatchInvocation={onCancelOmcDirectBatchInvocation}
+            onStopSessionConversationTask={onStopSessionConversationTask}
+            onReloadFullDiskTranscript={onReloadFullDiskTranscript}
+            onCompactSessionHistory={onCompactSessionHistory}
+            transcriptSourceSessions={sessions}
+            projectId={projectId}
+            historyDrawerSessionId={historyDrawerSessionId}
+            onHistoryDrawerSessionIdChange={onHistoryDrawerSessionIdChange}
+            onRestoreHistorySessionAsMain={onRestoreHistorySessionAsMain}
+            repositoryMainBindings={repositoryMainSessionBindings}
+            repositories={repositories}
+          />
+        </div>
+      ) : null}
+
       <div
         className="app-left-sidebar-project-and-files"
         data-has-files-explorer={activeRepositoryPath ? "true" : "false"}
@@ -704,12 +760,50 @@ export function LeftSidebar({
             ) : null}
             <div className="app-left-sidebar-bottom-tab-content">
               {leftBottomTab === "git" ? (
-                <GitPanel
-                  headerPrefix={repoPanelTabSwitcher}
-                  repositoryPath={activeRepositoryPath}
-                  repositoryName={activeRepositoryName}
-                  onOpenFile={onOpenActiveRepositoryFile}
-                />
+                <div className="app-left-sidebar-git-stack">
+                  <GitPanel
+                    headerPrefix={repoPanelTabSwitcher}
+                    repositoryPath={activeRepositoryPath}
+                    repositoryName={activeRepositoryName}
+                    onOpenFile={onOpenActiveRepositoryFile}
+                  />
+                  <SessionConversationTasksPanel
+                    sessions={sessions}
+                    sessionConversationTaskItems={sessionConversationTaskItems ?? []}
+                    onStopSessionConversationTask={onStopSessionConversationTask}
+                  />
+                  <div className="app-left-sidebar-run-panel">
+                    <ProgressMonitorPanel
+                      employeeItems={employeeMonitorItems}
+                      repositoryMemberItems={repositoryMemberMonitorItems}
+                      sessionConversationTaskItems={[]}
+                      teamItems={teamMonitorItems}
+                      sessions={sessions}
+                      activeTarget={monitorActiveTarget}
+                      onOpenTeamDetail={(workflowId) => onOpenTeamMonitorDetail?.(workflowId)}
+                      onOpenEmployeeConfig={onOpenEmployeeConfig}
+                      onOpenWorkflowConfig={onOpenWorkflowConfig}
+                      onStopEmployee={(employeeId) => onStopEmployeeMonitor?.(employeeId)}
+                      onStopTeam={(workflowId) => onStopTeamMonitor?.(workflowId)}
+                      hideEmployeeUi={hideEmployeeUi}
+                      claudeConcurrency={monitorClaudeConcurrency}
+                      onCancelSession={onCancelSessionFromMonitor}
+                      onOpenTaskDetail={onOpenTaskDetailFromMonitor}
+                      onOpenOmcBatchInvocationDetail={onOpenOmcBatchInvocationDetail}
+                      onCancelOmcDirectBatchInvocation={onCancelOmcDirectBatchInvocation}
+                      onStopSessionConversationTask={onStopSessionConversationTask}
+                      onReloadFullDiskTranscript={onReloadFullDiskTranscript}
+                      onCompactSessionHistory={onCompactSessionHistory}
+                      transcriptSourceSessions={sessions}
+                      projectId={projectId}
+                      historyDrawerSessionId={historyDrawerSessionId}
+                      onHistoryDrawerSessionIdChange={onHistoryDrawerSessionIdChange}
+                      onRestoreHistorySessionAsMain={onRestoreHistorySessionAsMain}
+                      repositoryMainBindings={repositoryMainSessionBindings}
+                      repositories={repositories}
+                    />
+                  </div>
+                </div>
               ) : (
                 <ActiveRepositoryFilesPanel
                   headerPrefix={filesExplorerSectionCollapsed ? undefined : repoPanelTabSwitcher}

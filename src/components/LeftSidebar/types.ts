@@ -1,11 +1,16 @@
 import type {
   AddRepositoryOptions,
   ClaudeSession,
+  EmployeeMonitorItem,
   EmployeeItem,
   EmployeeTaskCountItem,
+  MonitorDrawerTarget,
   ProjectItem,
+  RepositoryMemberMonitorItem,
+  SessionConversationTaskItem,
   Repository,
   SddMode,
+  TeamMonitorItem,
   TaskMode,
   WorkflowGraph,
   WorkflowTemplateItem,
@@ -122,6 +127,9 @@ export interface LeftSidebarProps {
   repositoryMainSessionBindings: Record<string, string>;
   activeSessionId: string | null;
   onSelectSession: (sessionId: string) => void;
+  /** 当前对话内的子代理 / 后台任务执行态（左栏 Git 模块下方展示） */
+  sessionConversationTaskItems?: readonly SessionConversationTaskItem[];
+  onStopSessionConversationTask?: (item: SessionConversationTaskItem) => void;
   employees?: EmployeeItem[];
   employeeTaskCounts?: EmployeeTaskCountItem[];
   workflowTemplates?: WorkflowTemplateItem[];
@@ -130,6 +138,32 @@ export interface LeftSidebarProps {
   onCancelSessionFromMonitor?: (sessionId: string) => void;
   onOpenTaskDetailFromMonitor?: (taskId: string) => void;
   onReloadFullDiskTranscript?: (sessionKey: string) => void | Promise<void>;
+  projectId?: string | null;
+  employeeMonitorItems?: EmployeeMonitorItem[];
+  repositoryMemberMonitorItems?: RepositoryMemberMonitorItem[];
+  teamMonitorItems?: TeamMonitorItem[];
+  monitorActiveTarget?: MonitorDrawerTarget | null;
+  onOpenTeamMonitorDetail?: (workflowId: string) => void;
+  onOpenEmployeeConfig?: () => void;
+  onOpenWorkflowConfig?: () => void;
+  onStopEmployeeMonitor?: (employeeId: string) => void;
+  onStopTeamMonitor?: (workflowId: string) => void;
+  hideEmployeeUi?: boolean;
+  monitorClaudeConcurrency?: {
+    activeCount: number;
+    limit: number;
+    onLimitChange: (value: number) => void | Promise<void>;
+  } | null;
+  onOpenOmcBatchInvocationDetail?: (input: {
+    sessionId: string;
+    repositoryPath: string;
+    invocationKey: string;
+  }) => void;
+  onCancelOmcDirectBatchInvocation?: (invocationKey: string) => void;
+  onCompactSessionHistory?: (sessionId: string) => void | Promise<void>;
+  historyDrawerSessionId?: string | null;
+  onHistoryDrawerSessionIdChange?: (sessionId: string | null) => void;
+  onRestoreHistorySessionAsMain?: (sessionId: string) => void | Promise<void>;
   activeRepositoryPath?: string;
   activeRepositoryName?: string;
   onOpenActiveRepositoryFile?: (path: string, options?: GitPanelOpenFileOptions) => void;

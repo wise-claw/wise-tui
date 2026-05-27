@@ -1119,7 +1119,7 @@ export function ProgressMonitorPanel({
       ) : null}
       <div className="app-monitor-panel__head">
         <div className="app-monitor-panel__head-start">
-          <div className="app-monitor-panel__title">我的团队</div>
+          <div className="app-monitor-panel__title">运行面板</div>
           <div className="app-monitor-panel__config-btns">
             {onOpenEmployeeConfig ? (
               <button

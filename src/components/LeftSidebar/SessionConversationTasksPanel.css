@@ -1,0 +1,46 @@
+.app-left-sidebar-session-tasks-panel {
+  flex: 0 0 260px;
+  min-height: 180px;
+  max-height: 42%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-left-sidebar-git-stack {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-left-sidebar-git-stack > .app-git-panel {
+  height: auto;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-left-sidebar-run-panel {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  padding-top: 0;
+}
+
+.app-left-sidebar-session-tasks-panel .app-monitor-panel {
+  border-top: none;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  flex: 1 1 0;
+}
+
+.app-left-sidebar-session-tasks-panel__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 0 0 0;
+}
+

@@ -1190,7 +1190,7 @@ export default function App() {
   ]);
 
   const { omcInstalled } = useOmcPluginInstalled(true);
-  const { employeeMonitorItems, repositoryMemberMonitorItems, teamMonitorItems, stats: monitorStats } = useMonitorOverview({
+  const { employeeMonitorItems, repositoryMemberMonitorItems, teamMonitorItems } = useMonitorOverview({
     employees,
     repositories,
     projects,
@@ -2915,6 +2915,57 @@ export default function App() {
         repositoryMainSessionBindings,
         activeSessionId,
         onSelectSession: jumpToSessionLeavingMcpHub,
+        sessionConversationTaskItems,
+        onStopSessionConversationTask: handleStopSessionConversationTask,
+        projectId: activeProjectId,
+        employeeMonitorItems: teamPanelEmployeeMonitorItems,
+        repositoryMemberMonitorItems: scopedRepositoryMemberMonitorItems,
+        teamMonitorItems,
+        monitorActiveTarget: monitorDrawerTarget,
+        onOpenTeamMonitorDetail: (workflowId) => {
+          setMonitorDrawerTarget({ type: "team", workflowId });
+        },
+        onOpenEmployeeConfig: () => {
+          void openEmployeeConfigWithContext();
+        },
+        onOpenWorkflowConfig: openWorkflowConfigFromSidebar,
+        onStopEmployeeMonitor: (employeeId) => handleStopEmployeeMonitorRef.current(employeeId),
+        onStopTeamMonitor: (workflowId) => {
+          const item = teamMonitorItems.find((entry) => entry.workflowId === workflowId);
+          if (!item?.activeTaskId) return;
+          const targetTaskId = item.activeTaskId;
+          const task = workflowTasks.find((entry) => entry.id === targetTaskId);
+          if (task?.creator) {
+            cancelSession(task.creator);
+          }
+          void endWorkflowTask({
+            taskId: targetTaskId,
+            reason: "在监控面板中手动结束团队任务",
+          })
+            .then(async (updatedTask) => {
+              setWorkflowTasks((prev) =>
+                prev.map((entry) => (entry.id === updatedTask.id ? updatedTask : entry)),
+              );
+              const [events, pendingEmployees] = await Promise.all([
+                listTaskEvents(updatedTask.id),
+                listTaskPendingEmployees(updatedTask.id),
+              ]);
+              setWorkflowTaskEventsByTaskId((prev) => ({ ...prev, [updatedTask.id]: events }));
+              setTaskPendingEmployeesByTaskId((prev) => ({ ...prev, [updatedTask.id]: pendingEmployees }));
+            })
+            .catch((error) => {
+              console.error("Failed to end team workflow task:", error);
+              message.error("结束团队任务失败");
+            });
+        },
+        monitorClaudeConcurrency,
+        onOpenOmcBatchInvocationDetail: handleOpenOmcBatchInvocationDetail,
+        onCancelOmcDirectBatchInvocation: handleCancelOmcDirectBatchInvocation,
+        onCompactSessionHistory: compactSessionHistory,
+        hideEmployeeUi: shouldHideEmployeeUi(activeProject),
+        historyDrawerSessionId: inspectorHistorySessionId,
+        onHistoryDrawerSessionIdChange: setInspectorHistorySessionId,
+        onRestoreHistorySessionAsMain: handleRestoreHistorySessionAsMain,
         employees,
         employeeTaskCounts,
         workflowTemplates,
@@ -3270,66 +3321,7 @@ export default function App() {
         collapsed: false,
         projectId: activeProjectId,
         siderWidth: mainLayoutRightWidthPx,
-        monitorStats,
-        monitorPanelSessions: monitorPanelSessionsMerged,
-        monitorTranscriptSourceSessions: sessions,
-        employeeMonitorItems: teamPanelEmployeeMonitorItems,
-        repositoryMemberMonitorItems: scopedRepositoryMemberMonitorItems,
-        sessionConversationTaskItems,
-        teamMonitorItems,
-        monitorActiveTarget: monitorDrawerTarget,
-        onOpenTeamMonitorDetail: (workflowId) => {
-          setMonitorDrawerTarget({ type: "team", workflowId });
-        },
-        onOpenEmployeeConfig: () => {
-          void openEmployeeConfigWithContext();
-        },
-        onOpenWorkflowConfig: openWorkflowConfigFromSidebar,
-        onStopEmployeeMonitor: (employeeId) => handleStopEmployeeMonitorRef.current(employeeId),
-        onStopTeamMonitor: (workflowId) => {
-          const item = teamMonitorItems.find((entry) => entry.workflowId === workflowId);
-          if (!item?.activeTaskId) return;
-          const targetTaskId = item.activeTaskId;
-          const task = workflowTasks.find((entry) => entry.id === targetTaskId);
-          if (task?.creator) {
-            cancelSession(task.creator);
-          }
-          void endWorkflowTask({
-            taskId: targetTaskId,
-            reason: "在监控面板中手动结束团队任务",
-          })
-            .then(async (updatedTask) => {
-              setWorkflowTasks((prev) =>
-                prev.map((entry) => (entry.id === updatedTask.id ? updatedTask : entry)),
-              );
-              const [events, pendingEmployees] = await Promise.all([
-                listTaskEvents(updatedTask.id),
-                listTaskPendingEmployees(updatedTask.id),
-              ]);
-              setWorkflowTaskEventsByTaskId((prev) => ({ ...prev, [updatedTask.id]: events }));
-              setTaskPendingEmployeesByTaskId((prev) => ({ ...prev, [updatedTask.id]: pendingEmployees }));
-            })
-            .catch((error) => {
-              console.error("Failed to end team workflow task:", error);
-              message.error("结束团队任务失败");
-            });
-        },
-        monitorClaudeConcurrency,
-        onCancelSessionFromMonitor: cancelSession,
-        onOpenTaskDetailFromMonitor: (taskId) => {
-          setMonitorDrawerTarget({ type: "task", taskId });
-        },
-        onOpenOmcBatchInvocationDetail: handleOpenOmcBatchInvocationDetail,
-        onCancelOmcDirectBatchInvocation: handleCancelOmcDirectBatchInvocation,
-        onStopSessionConversationTask: handleStopSessionConversationTask,
-        onReloadFullDiskTranscript: reloadFullDiskTranscript,
-        onCompactSessionHistory: compactSessionHistory,
-        hideEmployeeUi: shouldHideEmployeeUi(activeProject),
-        historyDrawerSessionId: inspectorHistorySessionId,
-        onHistoryDrawerSessionIdChange: setInspectorHistorySessionId,
-        onRestoreHistorySessionAsMain: handleRestoreHistorySessionAsMain,
-        repositoryMainBindings: repositoryMainSessionBindings,
-        repositories,
+        monitorStats: null,
       }}
       cockpitInspectorProps={{
         dark,

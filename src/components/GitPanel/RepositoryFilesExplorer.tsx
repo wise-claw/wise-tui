@@ -251,7 +251,7 @@ export function RepositoryFilesExplorer({
             allowClear
             placeholder="搜索文件..."
             value={search}
-            onChange={(e) => onSearchChange(e.target.value)}
+            onChange={(e) => onSearchChange?.(e.target.value)}
           />
           {explorerToolbarActions}
         </div>
