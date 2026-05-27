@@ -1,8 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import {
-  notifyExtensionLibraryChanged,
-  type ExtensionLibraryChangedDetail,
-} from "../constants/extensionLibraryUiEvents";
+import { notifyExtensionLibraryChanged } from "../constants/extensionLibraryUiEvents";
 import type {
   DiscoverCandidate,
   ExtensionLibraryContent,
