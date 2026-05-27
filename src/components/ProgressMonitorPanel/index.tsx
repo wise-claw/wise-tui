@@ -96,6 +96,8 @@ interface Props {
   teamItems: TeamMonitorItem[];
   /** 当前对话子代理 / 任务（显示在「我的团队」上方） */
   sessionConversationTaskItems?: SessionConversationTaskItem[];
+  /** 强制展示「子代理 / 任务」区块：即便列表为空也展示区块头（默认：仅当有数据时展示）。 */
+  showSessionConversationTasks?: boolean;
   sessions: ClaudeSession[];
   activeTarget?: MonitorDrawerTarget | null;
   onOpenTeamDetail: (workflowId: string) => void;
@@ -817,6 +819,7 @@ export function ProgressMonitorPanel({
   repositoryMemberItems,
   teamItems,
   sessionConversationTaskItems = [],
+  showSessionConversationTasks = false,
   sessions,
   activeTarget,
   onOpenTeamDetail,
@@ -1046,8 +1049,11 @@ export function ProgressMonitorPanel({
     [sessionConversationTaskItems],
   );
 
+  const shouldShowSessionConversationTasks =
+    showSessionConversationTasks || sessionConversationTaskItems.length > 0;
+
   const panelHasListContent =
-    sessionConversationTaskItems.length > 0 ||
+    shouldShowSessionConversationTasks ||
     employeeItems.length > 0 ||
     runningRepositoryMemberItems.length > 0 ||
     agentAssignments.length > 0 ||
@@ -1055,68 +1061,6 @@ export function ProgressMonitorPanel({
 
   return (
     <div className="app-monitor-panel">
-      {sessionConversationTaskItems.length > 0 ? (
-        <div className="app-monitor-panel__section app-monitor-panel__section--session-tasks">
-          <div className="app-monitor-panel__section-head">
-            <div className="app-monitor-panel__section-title-wrap">
-              <Typography.Text className="app-monitor-panel__section-title">
-                <span className="app-monitor-panel__section-icon"><RepositoryMiniIcon /></span>
-                子代理 / 任务
-              </Typography.Text>
-              <Typography.Text className="app-monitor-panel__meta">
-                {runningSessionConversationTasks.length > 0
-                  ? `进行中 ${runningSessionConversationTasks.length}`
-                  : `共 ${sessionConversationTaskItems.length} 项`}
-              </Typography.Text>
-            </div>
-          </div>
-          <div className="app-monitor-panel__subagent-tree" aria-label="当前对话子代理与任务">
-            {sessionConversationTaskItems.map((item) => {
-              const showStop = canStopSessionConversationTask(item, {
-                onCancelSession,
-                onCancelOmcDirectBatchInvocation,
-                onStopSessionConversationTask,
-              });
-              return (
-              <div className="app-monitor-panel__session-task-row" key={item.key}>
-                <button
-                  type="button"
-                  className="app-monitor-panel__subagent-row app-monitor-panel__subagent-row--clickable app-monitor-panel__session-task-row-main"
-                  title={item.previewText}
-                  onClick={() => openSessionConversationTaskDetail(item)}
-                >
-                  <span className="app-monitor-panel__subagent-branch" aria-hidden />
-                  <span className="app-monitor-panel__subagent-main">
-                    <span className="app-monitor-panel__subagent-name">{item.label}</span>
-                    {item.subtitle ? (
-                      <span className="app-monitor-panel__subagent-stage">{item.subtitle}</span>
-                    ) : null}
-                  </span>
-                </button>
-                <span className="app-monitor-panel__session-task-actions">
-                  {showStop ? (
-                    <Tooltip title="结束执行">
-                      <button
-                        type="button"
-                        className="app-monitor-panel__session-task-stop"
-                        aria-label="结束执行"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          stopSessionConversationTask(item);
-                        }}
-                      >
-                        ■
-                      </button>
-                    </Tooltip>
-                  ) : null}
-                  <SubagentStatusIndicator status={item.status} />
-                </span>
-              </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
       <div className="app-monitor-panel__head">
         <div className="app-monitor-panel__head-start">
           <div className="app-monitor-panel__title">运行面板</div>
@@ -1166,6 +1110,75 @@ export function ProgressMonitorPanel({
             >
               {hideEmployeeUi ? "配置成员" : "配置终端"}
             </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {shouldShowSessionConversationTasks ? (
+        <div
+          className={`app-monitor-panel__section app-monitor-panel__section--session-tasks${
+            sessionConversationTaskItems.length === 0 ? " app-monitor-panel__section--session-tasks-empty" : ""
+          }`}
+        >
+          <div className="app-monitor-panel__section-head">
+            <div className="app-monitor-panel__section-title-wrap">
+              <Typography.Text className="app-monitor-panel__section-title">
+                <span className="app-monitor-panel__section-icon"><RepositoryMiniIcon /></span>
+                子代理 / 任务
+              </Typography.Text>
+              <Typography.Text className="app-monitor-panel__meta">
+                {runningSessionConversationTasks.length > 0
+                  ? `进行中 ${runningSessionConversationTasks.length}`
+                  : `共 ${sessionConversationTaskItems.length} 项`}
+              </Typography.Text>
+            </div>
+          </div>
+          {sessionConversationTaskItems.length > 0 ? (
+            <div className="app-monitor-panel__subagent-tree" aria-label="当前对话子代理与任务">
+              {sessionConversationTaskItems.map((item) => {
+                const showStop = canStopSessionConversationTask(item, {
+                  onCancelSession,
+                  onCancelOmcDirectBatchInvocation,
+                  onStopSessionConversationTask,
+                });
+                return (
+                  <div className="app-monitor-panel__session-task-row" key={item.key}>
+                    <button
+                      type="button"
+                      className="app-monitor-panel__subagent-row app-monitor-panel__subagent-row--clickable app-monitor-panel__session-task-row-main"
+                      title={item.previewText}
+                      onClick={() => openSessionConversationTaskDetail(item)}
+                    >
+                      <span className="app-monitor-panel__subagent-branch" aria-hidden />
+                      <span className="app-monitor-panel__subagent-main">
+                        <span className="app-monitor-panel__subagent-name">{item.label}</span>
+                        {item.subtitle ? (
+                          <span className="app-monitor-panel__subagent-stage">{item.subtitle}</span>
+                        ) : null}
+                      </span>
+                    </button>
+                    <span className="app-monitor-panel__session-task-actions">
+                      {showStop ? (
+                        <Tooltip title="结束执行">
+                          <button
+                            type="button"
+                            className="app-monitor-panel__session-task-stop"
+                            aria-label="结束执行"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              stopSessionConversationTask(item);
+                            }}
+                          >
+                            ■
+                          </button>
+                        </Tooltip>
+                      ) : null}
+                      <SubagentStatusIndicator status={item.status} />
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
           ) : null}
         </div>
       ) : null}

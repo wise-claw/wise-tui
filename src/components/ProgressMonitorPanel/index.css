@@ -742,6 +742,11 @@
   border-bottom: 1px solid var(--ant-color-border-secondary);
 }
 
+.app-monitor-panel__section--session-tasks-empty {
+  margin-bottom: 4px;
+  padding-bottom: 4px;
+}
+
 .app-monitor-panel__session-task-row {
   display: flex;
   align-items: center;
