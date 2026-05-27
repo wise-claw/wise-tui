@@ -108,7 +108,9 @@ export function useRepositoryFilesExplorer({
       setIsRefreshing(false);
       setLoading(false);
     } else {
-      setIsRefreshing(true);
+      startTransition(() => {
+        setIsRefreshing(true);
+      });
     }
 
     const applyEntries = (entries: RepositoryExplorerEntry[]) => {

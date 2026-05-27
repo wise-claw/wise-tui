@@ -1961,14 +1961,14 @@ export default function App() {
       ) {
         return;
       }
-      setActiveRepositoryWithOwner(repository.id);
-      startTransition(() => {
-        if (leavingOverlay) {
-          viewMode.back();
-        } else {
-          viewMode.enter({ kind: "chat" });
-        }
+      flushSync(() => {
+        setActiveRepositoryWithOwner(repository.id);
       });
+      if (leavingOverlay) {
+        startTransition(() => viewMode.back());
+      } else if (!viewMode.isChat) {
+        startTransition(() => viewMode.enter({ kind: "chat" }));
+      }
       if (shouldSidebarRepositorySelectOnlyUpdateFocus(repository, projects)) {
         return;
       }
