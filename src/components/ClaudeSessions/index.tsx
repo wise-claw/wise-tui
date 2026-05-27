@@ -11,7 +11,7 @@ import type {
 } from "../../types";
 import { Button, Dropdown, Empty, Input, message, Popover, Spin, Switch, Tooltip, TreeSelect, type TooltipProps } from "antd";
 import { LoadingOutlined } from "@ant-design/icons";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type PointerEvent as ReactPointerEvent } from "react";
 import { useDockSlice } from "../../hooks/useDockSlice";
 import { useWiseTopbarChromeVisibility } from "../../hooks/useWiseTopbarChromeVisibility";
 import { ClaudeChat } from "./ClaudeChat";
@@ -32,6 +32,7 @@ import { pickSessionForRepositorySidebarSelect } from "../../utils/claudeSession
 import { filterSessionsForWorkspace } from "../../utils/projectSessionPanelFilter";
 import {
   resolveBoundMainSessionId,
+  isProjectRootSessionDisplayName,
   resolveMainOwnerAgentNameForRepositoryPath,
   resolveRepositoryForSession,
 } from "../../utils/repositoryMainSessionBinding";
@@ -49,6 +50,7 @@ const TerminalPanelLazy = lazy(() =>
 const RUN_ERROR_MONITOR_DEDUP_WINDOW_MS = 60_000;
 const runErrorMonitorSentAtByKey = new Map<string, number>();
 const PANE_CREATE_MIN_LOADING_MS = 220;
+const TWO_PANE_MIN_WIDTH_PX = 460;
 
 function buildRunErrorMonitorDedupKey(runCwd: string, command: string, tailText: string): string {
   const normalizedTail = tailText
@@ -1565,6 +1567,8 @@ export function ClaudeSessions({
   >(null);
   const [paneRepoPickerOpenBySlot, setPaneRepoPickerOpenBySlot] = useState<Record<number, boolean>>({});
   const [creatingPaneSlots, setCreatingPaneSlots] = useState<Record<number, boolean>>({});
+  const multiPanesRef = useRef<HTMLDivElement | null>(null);
+  const [twoPaneLeftWidthPx, setTwoPaneLeftWidthPx] = useState<number | null>(null);
   const mainSessionForDataLink = useMemo(
     () =>
       resolveWorkspaceMainSession({
@@ -1672,6 +1676,65 @@ export function ClaudeSessions({
     [activeRepository, creatingPaneSlots, onNewPaneSession, resolvedPaneRepositories],
   );
 
+  const resolveTwoPaneLeftWidthPx = useCallback(() => {
+    const containerWidth = multiPanesRef.current?.clientWidth ?? 0;
+    if (containerWidth <= 0) return null;
+    const min = TWO_PANE_MIN_WIDTH_PX;
+    const max = Math.max(min, containerWidth - TWO_PANE_MIN_WIDTH_PX);
+    const fallback = Math.round(containerWidth / 2);
+    const base = twoPaneLeftWidthPx ?? fallback;
+    return Math.min(max, Math.max(min, base));
+  }, [twoPaneLeftWidthPx]);
+
+  const handleResetTwoPaneSplit = useCallback(() => {
+    if (paneCount !== 2) return;
+    const containerWidth = multiPanesRef.current?.clientWidth ?? 0;
+    if (containerWidth <= 0) return;
+    setTwoPaneLeftWidthPx(Math.round(containerWidth / 2));
+  }, [paneCount]);
+
+  const handleStartTwoPaneResize = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (paneCount !== 2) return;
+      const container = multiPanesRef.current;
+      if (!container) return;
+      const containerWidth = container.clientWidth;
+      if (containerWidth <= 0) return;
+      const min = TWO_PANE_MIN_WIDTH_PX;
+      const max = Math.max(min, containerWidth - TWO_PANE_MIN_WIDTH_PX);
+      const startLeft = resolveTwoPaneLeftWidthPx() ?? Math.round(containerWidth / 2);
+      const startX = event.clientX;
+      const pointerId = event.pointerId;
+      event.preventDefault();
+      container.setPointerCapture(pointerId);
+      const previousUserSelect = document.body.style.userSelect;
+      document.body.style.userSelect = "none";
+      const onMove = (moveEvent: PointerEvent) => {
+        const delta = moveEvent.clientX - startX;
+        const next = Math.min(max, Math.max(min, Math.round(startLeft + delta)));
+        setTwoPaneLeftWidthPx(next);
+      };
+      const finish = () => {
+        document.body.style.userSelect = previousUserSelect;
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+      };
+      const onUp = () => finish();
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp, { once: true });
+    },
+    [paneCount, resolveTwoPaneLeftWidthPx],
+  );
+
+  useEffect(() => {
+    if (paneCount !== 2) {
+      setTwoPaneLeftWidthPx(null);
+      return;
+    }
+    const next = resolveTwoPaneLeftWidthPx();
+    if (next != null) setTwoPaneLeftWidthPx(next);
+  }, [paneCount, resolveTwoPaneLeftWidthPx]);
+
   const handleSwitchToSession = useCallback(
     (sessionId: string, options?: { collapseSessionNotificationPanel?: boolean }) => {
       if (options?.collapseSessionNotificationPanel) {
@@ -1745,11 +1808,16 @@ export function ClaudeSessions({
         paneCount > 1 ? (
           (() => {
             const { rows, cols } = paneGridDimensions(paneCount);
+            const twoPaneLeft = paneCount === 2 ? resolveTwoPaneLeftWidthPx() : null;
             return (
               <div
+                ref={multiPanesRef}
                 className="app-claude-sessions__multi-panes"
                 style={{
-                  gridTemplateColumns: `repeat(${cols}, 1fr)`,
+                  gridTemplateColumns:
+                    paneCount === 2 && twoPaneLeft
+                      ? `${twoPaneLeft}px minmax(${TWO_PANE_MIN_WIDTH_PX}px, 1fr)`
+                      : `repeat(${cols}, 1fr)`,
                   gridTemplateRows: rows > 1 ? `repeat(${rows}, 1fr)` : undefined,
                 }}
               >
@@ -1893,10 +1961,30 @@ export function ClaudeSessions({
                             onPaneRepositorySelect && paneRepo
                               ? {
                                   repositories: repositories ?? [],
-                                  valueRepositoryId: paneRepo.id,
+                                  projects: projects ?? [],
+                                  valueKey: (() => {
+                                    const sessionPath = (paneSession.repositoryPath ?? "").trim();
+                                    if (isProjectRootSessionDisplayName(paneSession.repositoryName ?? "")) {
+                                      const byPath = (projects ?? []).find(
+                                        (project) => (project.rootPath ?? "").trim() === sessionPath,
+                                      );
+                                      if (byPath) return `project:${byPath.id}`;
+                                      const byName = (projects ?? []).find(
+                                        (project) =>
+                                          (paneSession.repositoryName ?? "").trim() === `Project: ${project.name}`,
+                                      );
+                                      if (byName) return `project:${byName.id}`;
+                                    }
+                                    return `repo:${paneRepo.id}`;
+                                  })(),
                                   onSelectRepositoryId: (id) => {
                                     void onPaneRepositorySelect(paneIdx, id);
                                   },
+                                  onSelectProjectId: onPaneProjectNewSession
+                                    ? (projectId) => {
+                                        void onPaneProjectNewSession(paneIdx, projectId, projects ?? []);
+                                      }
+                                    : undefined,
                                 }
                               : undefined
                           }
@@ -2064,6 +2152,17 @@ export function ClaudeSessions({
                     </div>
                   );
                 })}
+                {paneCount === 2 ? (
+                  <div
+                    className="app-claude-sessions__two-pane-resizer"
+                    style={{ left: twoPaneLeft ? `${twoPaneLeft}px` : "50%" }}
+                    onPointerDown={handleStartTwoPaneResize}
+                    onDoubleClick={handleResetTwoPaneSplit}
+                    role="separator"
+                    aria-orientation="vertical"
+                    aria-label="调整双屏分栏宽度"
+                  />
+                ) : null}
               </div>
             );
           })()

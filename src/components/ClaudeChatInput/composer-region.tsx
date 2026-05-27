@@ -23,6 +23,7 @@ import type {
   PermissionRequest,
   PendingExecutionTask,
   Prompt,
+  ProjectItem,
   Repository,
   SessionExecutionEngine,
 } from "../../types";
@@ -47,7 +48,7 @@ import { TodoDock } from "./dock/todo-dock";
 import { RevertDock } from "./dock/revert-dock";
 import { addToHistory, promptLength, navigatePromptHistory, canNavigateHistoryAtCursor } from "./prompt-history";
 import { CheckOutlined } from "@ant-design/icons";
-import { Dropdown, Button, Empty, Input, InputNumber, Popover, Select, Spin, Switch, Tabs, Tag, Tooltip, message } from "antd";
+import { Dropdown, Button, Empty, Input, InputNumber, Popover, Select, Spin, Switch, Tabs, Tag, Tooltip, TreeSelect, message } from "antd";
 import { ContextCompactProgressRing } from "./ContextCompactProgressRing";
 import { useContextBreakdown } from "../../hooks/useContextBreakdown";
 import { ComposerRuntimeSettingsTrigger } from "./ComposerRuntimeSettingsTrigger";
@@ -116,8 +117,10 @@ export interface ComposerCompactContextProps {
 /** 双栏右侧主会话：输入框底栏在截屏按钮旁选择目标仓库 */
 export interface DualPaneComposerRepositoryPickerProps {
   repositories: Repository[];
-  valueRepositoryId: number;
+  projects?: ProjectItem[];
+  valueKey: string;
   onSelectRepositoryId: (repositoryId: number) => void;
+  onSelectProjectId?: (projectId: string) => void;
 }
 
 // ── Inner component (has access to prompt context) ──
@@ -2229,23 +2232,73 @@ function ComposerInner({
           </Dropdown>
         ) : null}
         {dualPaneRepositoryPicker ? (
-          <Select
+          <TreeSelect
             size="small"
             variant="borderless"
             className="app-claude-dual-pane-repo-picker"
-            classNames={{ popup: { root: "app-claude-dual-pane-repo-picker-dropdown" } }}
+            popupClassName="app-claude-dual-pane-repo-picker-dropdown"
             popupMatchSelectWidth={false}
             showSearch
-            optionFilterProp="label"
-            title="右侧 Repo 执行会话目标仓库"
-            aria-label="选择仓库"
-            value={dualPaneRepositoryPicker.valueRepositoryId}
-            options={dualPaneRepositoryPicker.repositories.map((r) => ({
-              value: r.id,
-              label: r.name,
-            }))}
-            onChange={(v) => dualPaneRepositoryPicker.onSelectRepositoryId(Number(v))}
-            placeholder="仓库"
+            treeNodeFilterProp="title"
+            title="右侧执行会话目标（工作区 / 仓库）"
+            aria-label="选择工作区或仓库"
+            value={dualPaneRepositoryPicker.valueKey}
+            treeData={(() => {
+              const repositories = dualPaneRepositoryPicker.repositories ?? [];
+              const projects = dualPaneRepositoryPicker.projects ?? [];
+              if (!projects.length) {
+                return repositories.map((repo) => ({
+                  title: repo.name || repo.path,
+                  value: `repo:${repo.id}`,
+                }));
+              }
+              const repoById = new Map(repositories.map((repo) => [repo.id, repo] as const));
+              const assignedRepoIds = new Set<number>();
+              const tree: Array<{
+                title: string;
+                value: string;
+                selectable?: boolean;
+                children?: Array<{ title: string; value: string }>;
+              }> = [];
+              for (const project of projects) {
+                const children: Array<{ title: string; value: string }> = [];
+                for (const repoId of project.repositoryIds ?? []) {
+                  const repo = repoById.get(repoId);
+                  if (!repo) continue;
+                  children.push({ title: repo.name || repo.path, value: `repo:${repo.id}` });
+                  assignedRepoIds.add(repo.id);
+                }
+                tree.push({
+                  title: project.name || "未命名工作区",
+                  value: `project:${project.id}`,
+                  selectable: true,
+                  children,
+                });
+              }
+              const standalone = repositories
+                .filter((repo) => !assignedRepoIds.has(repo.id))
+                .map((repo) => ({ title: repo.name || repo.path, value: `repo:${repo.id}` }));
+              if (standalone.length > 0) {
+                tree.push({
+                  title: "独立仓库",
+                  value: "__standalone__",
+                  selectable: false,
+                  children: standalone,
+                });
+              }
+              return tree;
+            })()}
+            onChange={(value) => {
+              const raw = String(value ?? "");
+              if (raw.startsWith("repo:")) {
+                dualPaneRepositoryPicker.onSelectRepositoryId(Number(raw.slice(5)));
+                return;
+              }
+              if (raw.startsWith("project:")) {
+                dualPaneRepositoryPicker.onSelectProjectId?.(raw.slice(8));
+              }
+            }}
+            placeholder="工作区 / 仓库"
           />
         ) : null}
         {branchPickerInFooterToolbar}

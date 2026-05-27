@@ -351,13 +351,7 @@ export function useMainLayoutModes({
         return;
       }
       try {
-        const pathSource = preferredRootPath
-          ? "workspace.rootPath"
-          : projectRootAnchorPath
-            ? "project anchor root"
-            : "common parent";
         const sessionId = await createSession(createPath, createDisplayName, { skipActivate: true });
-        message.info(`已按工作区路径创建会话（${pathSource}）：${createPath}`);
         setExtraPanes((prev) => {
           const next = [...prev];
           if (next[slotIndex]) {

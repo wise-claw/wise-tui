@@ -45,12 +45,38 @@
 .app-claude-sessions__multi-panes {
   /* 与 `src/constants/mainLayoutWidths.ts` 中 MAIN_LAYOUT_MULTI_PANE_MIN_WIDTH_PX 一致 */
   --app-multi-pane-min-width: 460px;
+  position: relative;
   display: grid;
   gap: 1px;
   flex: 1 1 0;
   min-height: 0;
   min-width: 0;
   background: var(--ant-color-split);
+}
+
+.app-claude-sessions__two-pane-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  transform: translateX(-50%);
+  cursor: col-resize;
+  z-index: 5;
+}
+
+.app-claude-sessions__two-pane-resizer::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--ant-color-border-secondary);
+}
+
+.app-claude-sessions__two-pane-resizer:hover::before {
+  background: var(--ant-color-primary);
 }
 
 .app-claude-sessions__pane {
