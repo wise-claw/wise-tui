@@ -192,6 +192,43 @@ type SidebarReindexBatchState = {
   unlistenError: () => void;
 };
 
+const MULTI_PANE_LAYOUT_STATE_STORAGE_KEY = "wise.mainLayout.multiPaneState.v1";
+
+interface PersistedMultiPaneSlotV1 {
+  slotId?: string;
+  sessionId?: string | null;
+  repositoryId?: number | null;
+}
+
+interface PersistedMultiPaneStateV1 {
+  version: 1;
+  paneCount: PaneCount;
+  extraPanes: PersistedMultiPaneSlotV1[];
+}
+
+function normalizePersistedPaneCount(raw: unknown): PaneCount {
+  return raw === 1 || raw === 2 || raw === 4 || raw === 6 || raw === 8 ? raw : 1;
+}
+
+function normalizePersistedExtraPanes(raw: unknown, paneCount: PaneCount): PaneSlot[] {
+  const needed = Math.max(0, paneCount - 1);
+  const rows = Array.isArray(raw) ? raw : [];
+  const out: PaneSlot[] = [];
+  for (let i = 0; i < needed; i += 1) {
+    const row = (rows[i] ?? {}) as PersistedMultiPaneSlotV1;
+    const slotIdRaw = typeof row.slotId === "string" ? row.slotId.trim() : "";
+    out.push({
+      slotId: slotIdRaw || `pane-restored-${Date.now()}-${i}`,
+      sessionId: typeof row.sessionId === "string" && row.sessionId.trim() ? row.sessionId : null,
+      repositoryId:
+        typeof row.repositoryId === "number" && Number.isFinite(row.repositoryId)
+          ? row.repositoryId
+          : null,
+    });
+  }
+  return out;
+}
+
 function presentSidebarCodeGraphReindexModal(repositories: Repository[], outcomes: SidebarReindexOutcome[]): void {
   if (outcomes.length === 0) return;
   const repoLabel = (id: number) => repositories.find((r) => r.id === id)?.name ?? `仓库 #${id}`;
@@ -303,6 +340,7 @@ export default function App() {
   const [paneCount, setPaneCount] = useState<PaneCount>(1);
   /** 多屏模式下额外窗格槽位（Pane 0 始终是 activeSession）。 */
   const [extraPanes, setExtraPanes] = useState<PaneSlot[]>([]);
+  const paneLayoutHydratedRef = useRef(false);
   const [searchOpen, setSearchOpen] = useState(false);
   /** 右侧 Inspector 历史会话消息抽屉（由中栏「历史会话」列表打开） */
   const [inspectorHistorySessionId, setInspectorHistorySessionId] = useState<string | null>(null);
@@ -317,6 +355,44 @@ export default function App() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const raw = (await getAppSetting(MULTI_PANE_LAYOUT_STATE_STORAGE_KEY))?.trim();
+        if (!raw || cancelled) return;
+        const parsed = JSON.parse(raw) as Partial<PersistedMultiPaneStateV1>;
+        const restoredPaneCount = normalizePersistedPaneCount(parsed.paneCount);
+        const restoredExtraPanes = normalizePersistedExtraPanes(parsed.extraPanes, restoredPaneCount);
+        if (cancelled) return;
+        setPaneCount(restoredPaneCount);
+        setExtraPanes(restoredExtraPanes);
+      } catch {
+        // 自愈：损坏 payload 自动清理，避免后续启动重复失败
+        void deleteAppSetting(MULTI_PANE_LAYOUT_STATE_STORAGE_KEY);
+      } finally {
+        paneLayoutHydratedRef.current = true;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!paneLayoutHydratedRef.current) return;
+    const payload: PersistedMultiPaneStateV1 = {
+      version: 1,
+      paneCount,
+      extraPanes: extraPanes.map((slot) => ({
+        slotId: slot.slotId,
+        sessionId: slot.sessionId,
+        repositoryId: slot.repositoryId,
+      })),
+    };
+    void setAppSetting(MULTI_PANE_LAYOUT_STATE_STORAGE_KEY, JSON.stringify(payload));
+  }, [paneCount, extraPanes]);
 
   useEffect(() => {
     void loadWiseDefaultConfig().catch(() => {

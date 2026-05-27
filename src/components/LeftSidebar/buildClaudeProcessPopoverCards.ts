@@ -145,7 +145,19 @@ export function buildClaudeProcessPopoverCards(
   },
 ): ClaudeProcessPopoverCard[] {
   const keyword = normalizeSearchKeyword(ctx.searchKeyword);
-  return matchedSessions
+  const cards = matchedSessions
     .map((session) => buildClaudeProcessPopoverCard(session, ctx))
     .filter((card) => matchClaudeProcessPopoverCard(card, keyword));
+
+  const isUnbound = (card: ClaudeProcessPopoverCard): boolean =>
+    !(card.projectName?.trim() || card.repositoryName?.trim());
+
+  cards.sort((a, b) => {
+    const aUnbound = isUnbound(a);
+    const bUnbound = isUnbound(b);
+    if (aUnbound !== bUnbound) return aUnbound ? -1 : 1;
+    return b.updatedAt - a.updatedAt;
+  });
+
+  return cards;
 }
