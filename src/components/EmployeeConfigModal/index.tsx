@@ -137,6 +137,7 @@ export function EmployeeConfigModal({
     return merged.map((value) => ({ value, label: value }));
   }, [agentTypeOptions, employees]);
   const hideRepositorySelector = defaultRepositoryIds.length > 0;
+  const creatingEmployee = editingEmployee == null;
   /** Workspace 需求面板或侧栏仓库：展示 Owner 列与「仓库」表单项 */
   const projectOwnerPickMode =
     defaultRepositoryIds.length > 0 &&
@@ -301,12 +302,15 @@ export function EmployeeConfigModal({
         return;
       }
       const selectedRepositoryIds: number[] = values.repositoryIds ?? defaultRepositoryIds;
-      const mergedRepositoryIds = Array.from(new Set([...defaultRepositoryIds, ...selectedRepositoryIds]));
+      const mergedRepositoryIds = creatingEmployee
+        ? []
+        : Array.from(new Set([...defaultRepositoryIds, ...selectedRepositoryIds]));
       await onCreate({
         name: values.name,
         agentType: values.agentType,
         enabled: true,
         repositoryIds: mergedRepositoryIds,
+        projectIds: creatingEmployee ? [] : (values.projectIds ?? []),
         executionEngine,
       });
       closeFormModal();
@@ -357,7 +361,7 @@ export function EmployeeConfigModal({
         }}
         className="app-employee-config-form--modal"
       >
-        {projects && projects.length > 0 && !repositoryOwnerScopeOnly && !singleProjectScopeId ? (
+        {projects && projects.length > 0 && !repositoryOwnerScopeOnly && !singleProjectScopeId && !creatingEmployee ? (
           <Form.Item name="projectIds" label="所属工作区">
             <Select
               mode="multiple"
@@ -371,7 +375,7 @@ export function EmployeeConfigModal({
             />
           </Form.Item>
         ) : null}
-        {(!hideRepositorySelector || repositoryOwnerScopeOnly) ? (
+        {(!hideRepositorySelector || repositoryOwnerScopeOnly) && !creatingEmployee ? (
           <Form.Item name="repositoryIds" label="关联仓库">
             <Select
               mode="multiple"
