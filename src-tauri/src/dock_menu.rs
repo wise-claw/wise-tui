@@ -4,12 +4,12 @@
 //! Built at startup (async) and refreshed on `dock-menu-refresh` events from the frontend.
 //! Clicking a repository emits `dock-menu-switch-repository` to the frontend.
 
-use tauri::{AppHandle, Emitter, Listener};
+use tauri::{AppHandle, Listener};
 
 use crate::app_state_commands::{StoredRepository, load_repositories};
-use crate::wise_mascot::wise_main_window_focus;
 
 const MAX_DOCK_REPOS: usize = 20;
+const NEW_WINDOW_LABEL_PREFIX: &str = "main-dock";
 
 /// Refresh the macOS dock context menu.
 pub fn refresh_dock_menu(app: &AppHandle) {
@@ -35,6 +35,7 @@ fn set_dock_menu(app: &AppHandle, repos: &[StoredRepository]) {
 
     // Build menu
     let menu = NSMenu::new(mtm);
+    let _: () = unsafe { msg_send![&menu, setAutoenablesItems: false] };
 
     for repo in repos.iter().take(MAX_DOCK_REPOS) {
         let item = unsafe {
@@ -46,6 +47,7 @@ fn set_dock_menu(app: &AppHandle, repos: &[StoredRepository]) {
             )
         };
         let _: () = unsafe { msg_send![&item, setTag: repo.id] };
+        let _: () = unsafe { msg_send![&item, setEnabled: true] };
         menu.addItem(&item);
     }
 
@@ -61,7 +63,9 @@ fn set_dock_menu(app: &AppHandle, repos: &[StoredRepository]) {
             &NSString::new(),
         )
     };
+    let _: () = unsafe { msg_send![&nw, setAction: Some(objc2::sel!(dockMenuAction:))] };
     let _: () = unsafe { msg_send![&nw, setTag: -1i64] };
+    let _: () = unsafe { msg_send![&nw, setEnabled: true] };
     menu.addItem(&nw);
 
     // Set as dock menu via [NSApp setDockMenu:]
@@ -95,11 +99,10 @@ extern "C-unwind" fn dockMenuAction(sender: &objc2::runtime::AnyObject) {
     let Some(app) = app else { return };
 
     if tag == -1 {
+        let _ = open_main_window(&app, None);
         return;
     }
-
-    let _ = wise_main_window_focus(app.clone());
-    let _ = app.emit("dock-menu-switch-repository", tag);
+    let _ = open_main_window(&app, Some(tag));
 }
 
 /// Install the event listener that refreshes the dock menu on `dock-menu-refresh`.
@@ -108,4 +111,27 @@ pub fn setup_dock_menu_events(app: &AppHandle) {
     app.listen("dock-menu-refresh", move |_event| {
         refresh_dock_menu(&handle);
     });
+}
+
+fn open_main_window(app: &AppHandle, repository_id: Option<i64>) -> Result<(), String> {
+    let label = format!(
+        "{NEW_WINDOW_LABEL_PREFIX}-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| e.to_string())?
+            .as_millis()
+    );
+    let mut route = String::from("index.html");
+    if let Some(repo_id) = repository_id {
+        route.push_str(&format!("?dockRepoId={repo_id}"));
+    }
+    let win = tauri::WebviewWindowBuilder::new(app, label, tauri::WebviewUrl::App(route.into()))
+        .title("Wise")
+        .inner_size(1400.0, 900.0)
+        .build()
+        .map_err(|e| e.to_string())?;
+    let _ = win.unminimize();
+    let _ = win.show();
+    let _ = win.set_focus();
+    Ok(())
 }

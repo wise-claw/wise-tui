@@ -116,8 +116,8 @@ export function WorkflowNodeEditModal({
             </div>
           </div>
         </Form.Item>
-        <Form.Item label="执行智能体角色" name="employeeId" rules={[{ required: true, message: "请选择执行智能体角色" }]}>
-          <Select size="small" allowClear showSearch options={employeeOptions} placeholder="请选择智能体角色" />
+        <Form.Item label="执行终端" name="employeeId" rules={[{ required: true, message: "请选择执行终端" }]}>
+          <Select size="small" allowClear showSearch options={employeeOptions} placeholder="请选择终端" />
         </Form.Item>
         <div className="app-workflow-node-edit-form__field-header">
           <span className="app-workflow-node-edit-form__field-title app-workflow-node-edit-form__field-title--with-hint">

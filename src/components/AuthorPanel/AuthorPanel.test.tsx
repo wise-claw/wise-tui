@@ -330,7 +330,7 @@ describe("AuthorPanel", () => {
     const html = renderAuthorPanel(props);
     for (const label of [
       "工作区",
-      "智能体角色",
+      "终端",
       "工作流",
       "MCP 工具",
       "技能市场",

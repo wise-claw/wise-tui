@@ -437,6 +437,7 @@ export default function App() {
   // macOS dock menu: listen for repository switch requests from the dock context menu.
   const switchRepoRef = useRef(setActiveRepositoryWithOwner);
   switchRepoRef.current = setActiveRepositoryWithOwner;
+  const dockQueryAppliedRef = useRef(false);
   useEffect(() => {
     let cancelled = false;
     let unlisten: (() => void) | undefined;
@@ -455,6 +456,30 @@ export default function App() {
   useEffect(() => {
     void emit("dock-menu-refresh");
   }, [repositories]);
+
+  useEffect(() => {
+    if (dockQueryAppliedRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const raw = params.get("dockRepoId");
+    if (!raw) return;
+    const parsed = Number(raw);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      dockQueryAppliedRef.current = true;
+      params.delete("dockRepoId");
+      const next = params.toString();
+      const newUrl = `${window.location.pathname}${next ? `?${next}` : ""}${window.location.hash}`;
+      window.history.replaceState(null, "", newUrl);
+      return;
+    }
+    const hasRepo = repositories.some((repo) => repo.id === parsed);
+    if (!hasRepo) return;
+    dockQueryAppliedRef.current = true;
+    setActiveRepositoryWithOwner(parsed);
+    params.delete("dockRepoId");
+    const next = params.toString();
+    const newUrl = `${window.location.pathname}${next ? `?${next}` : ""}${window.location.hash}`;
+    window.history.replaceState(null, "", newUrl);
+  }, [repositories, setActiveRepositoryWithOwner]);
 
   const handleOpenExecutionEnvironment = useCallback(() => {
     if (!activeProjectId && activeRepositoryId != null) {
