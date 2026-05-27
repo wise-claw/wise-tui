@@ -485,8 +485,6 @@ export interface GitWorktreeAddOmcBatchResult {
   branchName: string;
 }
 
-export type GitPanelMode = "diff" | "log";
-
 // ── Prompt / Composer Types ──
 
 interface PromptPartBase {

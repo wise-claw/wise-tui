@@ -97,16 +97,6 @@
   box-sizing: border-box;
 }
 
-.git-mode-btn.ant-btn {
-  height: 28px;
-  min-height: 28px;
-  padding: 0 4px !important;
-  padding-inline: 4px !important;
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-}
-
 /* ── Loading Bar ── */
 .git-panel-loading-bar {
   position: relative;
@@ -142,11 +132,6 @@
   }
 }
 
-.git-mode-btn-text {
-  font-size: 11px;
-  padding: 0;
-}
-
 .git-panel-header .ant-space .anticon {
   font-size: 13px;
   color: var(--ant-color-text);
@@ -161,49 +146,8 @@
   flex-shrink: 0;
 }
 
-.git-panel-title-tabs {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.git-panel-title-tab {
-  width: 24px;
-  height: 24px;
-  border: none;
-  border-radius: 6px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--ant-color-text-tertiary);
-  background: transparent;
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.git-panel-title-tab:hover {
-  color: var(--ant-color-text);
-  background: var(--ant-color-fill-content);
-}
-
-.git-panel-title-tab--active {
-  color: var(--ant-color-text);
-  background: var(--ant-color-fill-secondary);
-}
-
-.git-panel-title-tab svg {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-}
-
 .git-panel-header > .ant-btn.ant-btn-text .anticon {
   font-size: 14px;
-  color: var(--ant-color-text);
-}
-
-.git-panel-header .git-mode-btn .ant-btn-icon .anticon {
-  font-size: 12px;
   color: var(--ant-color-text);
 }
 
@@ -854,10 +798,19 @@
 .git-files-explorer-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 4px;
   padding: 2px 6px 0;
   flex-shrink: 0;
+}
+
+.git-files-explorer-bar .git-files-explorer-title,
+.git-files-explorer-bar button.git-files-explorer-title--toggle {
+  margin-left: auto;
+  flex: 0 1 auto;
+  max-width: min(100%, 12rem);
+  justify-content: flex-end;
+  text-align: right;
 }
 
 .git-files-explorer-bar-prefix {
@@ -951,19 +904,20 @@ button.git-files-explorer-title.git-files-explorer-title--with-expand {
 button.git-files-explorer-title.git-files-explorer-title--toggle {
   border: none;
   margin: 0;
+  margin-left: auto;
   padding: 0;
   background: transparent;
   cursor: pointer;
-  flex: 1 1 0;
+  flex: 0 1 auto;
   min-width: 0;
-  max-width: 100%;
+  max-width: min(100%, 12rem);
   font: inherit;
   letter-spacing: inherit;
   text-transform: inherit;
-  text-align: left;
+  text-align: right;
   color: inherit;
   border-radius: 4px;
-  justify-content: flex-start;
+  justify-content: flex-end;
 }
 
 button.git-files-explorer-title.git-files-explorer-title--toggle:focus-visible {

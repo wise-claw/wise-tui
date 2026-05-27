@@ -1,15 +1,14 @@
-import { startTransition, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { startTransition, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { safeUnlistenPromise } from "../../utils/safeTauriUnlisten";
-import { Button, Dropdown, Empty, Space, Spin, Tag, Tooltip, message } from "antd";
-import { DownOutlined, FileTextOutlined, GlobalOutlined, HistoryOutlined } from "@ant-design/icons";
+import { Button, Empty, Spin, Tooltip, message } from "antd";
+import { GlobalOutlined } from "@ant-design/icons";
 import {
   gitCommit,
   gitDiscard,
   gitDiscardAll,
   gitFetch,
   gitInit,
-  gitLog,
   gitPull,
   gitPush,
   gitStage,
@@ -22,11 +21,10 @@ import {
   stopGitWatcher,
 } from "../../services/git";
 import { openRepositoryRemoteInBrowser } from "../../services/openRepositoryRemote";
-import type { GitLogEntry, GitPanelMode, GitStatusResponse } from "../../types";
+import type { GitStatusResponse } from "../../types";
 import { DiffMode } from "./DiffMode";
 import { GitSyncActions } from "./GitSyncActions";
 import { InitMode } from "./InitMode";
-import { LogMode } from "./LogMode";
 import { hasUnstagedFilesUnderDirectory, yieldToPaint } from "./gitPanelUtils";
 import { RepositoryFilesExplorer } from "./RepositoryFilesExplorer";
 import type { GitPanelOpenFileOptions } from "./types";
@@ -34,13 +32,6 @@ import "./index.css";
 
 export { RepositoryFilesExplorer };
 export type { GitPanelOpenFileOptions };
-
-const MODE_OPTIONS: { label: string; value: GitPanelMode; icon: React.ReactNode }[] = [
-  { label: "变更", value: "diff", icon: <FileTextOutlined /> },
-  { label: "日志", value: "log", icon: <HistoryOutlined /> },
-];
-
-const GIT_LOG_PAGE_SIZE = 20;
 
 interface Props {
   repositoryPath: string | undefined;
@@ -51,22 +42,11 @@ interface Props {
 }
 
 export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOpenFile, headerPrefix }: Props) {
-  const [mode, setMode] = useState<GitPanelMode>("diff");
   const [status, setStatus] = useState<GitStatusResponse | null>(null);
-  const [logData, setLogData] = useState<{
-    entries: GitLogEntry[];
-    ahead: number;
-    behind: number;
-    upstream: string | null;
-    hasMore: boolean;
-  }>({ entries: [], ahead: 0, behind: 0, upstream: null, hasMore: false });
-  const logLoadingMoreRef = useRef(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [openingRemote, setOpeningRemote] = useState(false);
   const [loading, setLoading] = useState<Record<string, boolean>>({
     status: false,
-    log: false,
-    logMore: false,
     stage: false,
     unstage: false,
     commit: false,
@@ -125,87 +105,11 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
     }
   }, [repositoryPath]);
 
-  const loadLog = useCallback(async (opts?: { silent?: boolean }) => {
-    if (!repositoryPath) return;
-    const silent = opts?.silent ?? false;
-    if (!silent) {
-      setLoading((prev) => ({ ...prev, log: true }));
-    }
-    try {
-      const result = await gitLog(repositoryPath, GIT_LOG_PAGE_SIZE, 0);
-      const apply = () => {
-        setLogData({
-          entries: result.entries,
-          ahead: result.ahead,
-          behind: result.behind,
-          upstream: result.upstream,
-          hasMore: result.hasMore,
-        });
-      };
-      if (silent) {
-        startTransition(apply);
-      } else {
-        apply();
-      }
-    } catch {
-      // Silently fail for log.
-    } finally {
-      if (!silent) {
-        setLoading((prev) => ({ ...prev, log: false }));
-      }
-    }
-  }, [repositoryPath]);
-
-  const loadMoreLog = useCallback(async () => {
-    if (!repositoryPath || logLoadingMoreRef.current) return;
-
-    let skip = 0;
-    let shouldLoad = false;
-    setLogData((prev) => {
-      if (!prev.hasMore) return prev;
-      skip = prev.entries.length;
-      shouldLoad = true;
-      return prev;
-    });
-    if (!shouldLoad) return;
-
-    logLoadingMoreRef.current = true;
-    setLoading((prev) => ({ ...prev, logMore: true }));
-    try {
-      const result = await gitLog(repositoryPath, GIT_LOG_PAGE_SIZE, skip);
-      const apply = () => {
-        setLogData((prev) => {
-          const seen = new Set(prev.entries.map((e) => e.sha));
-          const merged = [...prev.entries];
-          for (const entry of result.entries) {
-            if (!seen.has(entry.sha)) {
-              merged.push(entry);
-            }
-          }
-          return {
-            ...prev,
-            entries: merged,
-            hasMore: result.hasMore,
-          };
-        });
-      };
-      startTransition(apply);
-    } catch {
-      // Silently fail for log pagination.
-    } finally {
-      logLoadingMoreRef.current = false;
-      setLoading((prev) => ({ ...prev, logMore: false }));
-    }
-  }, [repositoryPath]);
-
   useEffect(() => {
     if (repositoryPath) {
       void loadStatus();
-      if (mode === "log") {
-        void loadLog();
-      }
     }
-  }, [repositoryPath, mode, loadStatus, loadLog]);
+  }, [repositoryPath, loadStatus]);
 
   useEffect(() => {
     if (!repositoryPath) {
@@ -225,9 +129,6 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
       watcherRefreshTimer.current = setTimeout(() => {
         watcherRefreshTimer.current = null;
         void loadStatus({ silent: true });
-        if (mode === "log") {
-          void loadLog({ silent: true });
-        }
       }, WATCHER_REFRESH_MS);
     });
 
@@ -239,7 +140,7 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
       safeUnlistenPromise(unlisten);
       void stopGitWatcher().catch(() => { });
     };
-  }, [repositoryPath, mode, loadStatus, loadLog]);
+  }, [repositoryPath, loadStatus]);
 
   const runAction = useCallback(
     async (action: string, fn: () => Promise<void>) => {
@@ -256,9 +157,6 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
         await yieldToPaint();
         await fn();
         await loadStatus({ silent: true });
-        if (mode === "log") {
-          await loadLog({ silent: true });
-        }
         setErrors((prev) => {
           if (!prev[action]) return prev;
           const next = { ...prev };
@@ -273,7 +171,7 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
         setLoading((prev) => ({ ...prev, [action]: false }));
       }
     },
-    [mode, loadStatus, loadLog],
+    [loadStatus],
   );
 
   const handleStage = useCallback(
@@ -338,9 +236,6 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
       await yieldToPaint();
       await gitPush(repositoryPath!);
       await loadStatus({ silent: true });
-      if (mode === "log") {
-        await loadLog({ silent: true });
-      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       message.error(`推送失败: ${msg}`);
@@ -348,7 +243,7 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
       runningActions.current.delete("push");
       setLoading((prev) => ({ ...prev, push: false }));
     }
-  }, [repositoryPath, mode, loadStatus, loadLog]);
+  }, [repositoryPath, loadStatus]);
 
   const handlePull = useCallback(async () => {
     if (runningActions.current.has("pull")) return;
@@ -358,9 +253,6 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
       await yieldToPaint();
       await gitPull(repositoryPath!);
       await loadStatus({ silent: true });
-      if (mode === "log") {
-        await loadLog({ silent: true });
-      }
       message.success("拉取成功");
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -369,7 +261,7 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
       runningActions.current.delete("pull");
       setLoading((prev) => ({ ...prev, pull: false }));
     }
-  }, [repositoryPath, mode, loadStatus, loadLog]);
+  }, [repositoryPath, loadStatus]);
 
   const handleFetch = useCallback(
     () => void runAction("fetch", () => gitFetch(repositoryPath!)),
@@ -403,11 +295,6 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
 
   const isMissingRepo = errors.status?.includes("Failed to open git repo");
   const anyLoading = Object.values(loading).some(Boolean);
-  const modeIcon = useMemo(() => {
-    const opt = MODE_OPTIONS.find((option) => option.value === mode);
-    return opt?.icon;
-  }, [mode]);
-
   if (!repositoryPath) {
     return (
       <div className="app-git-panel">
@@ -423,14 +310,6 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
         {headerPrefix ? <div className="git-panel-header-prefix">{headerPrefix}</div> : null}
         <div className="git-panel-header-left">
           <span className="git-panel-title">GIT</span>
-          {status && (
-            <Tag
-              color={mode === "diff" ? "blue" : mode === "log" ? "green" : "default"}
-              style={{ fontSize: 10, padding: "0 5px", lineHeight: "16px", borderRadius: 3 }}
-            >
-              {mode === "diff" ? `${status.staged.length + status.unstaged.length} 个变更` : `${logData.entries.length} 条记录`}
-            </Tag>
-          )}
         </div>
         <div className="git-panel-header-right">
           <Tooltip title="在浏览器中打开仓库" placement="top">
@@ -444,7 +323,7 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
               onClick={handleOpenRemoteInBrowser}
             />
           </Tooltip>
-          {mode === "diff" && status ? (
+          {status ? (
             <GitSyncActions
               status={status}
               loading={loading}
@@ -453,28 +332,6 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
               onPush={() => void handlePush()}
             />
           ) : null}
-          <Dropdown
-            menu={{
-              items: MODE_OPTIONS.map((option) => ({
-                key: option.value,
-                label: (
-                  <Space size={6}>
-                    {option.icon}
-                    {option.label}
-                  </Space>
-                ),
-              })),
-              onClick: ({ key }) => setMode(key as GitPanelMode),
-              selectedKeys: [mode],
-            }}
-            placement="bottomRight"
-            trigger={["click"]}
-          >
-            <Button type="text" size="small" icon={modeIcon} className="git-mode-btn">
-              <span className="git-mode-btn-text">{mode === "diff" ? "变更" : "日志"}</span>
-              <DownOutlined style={{ fontSize: 10 }} />
-            </Button>
-          </Dropdown>
         </div>
       </div>
 
@@ -485,7 +342,7 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
           </div>
         ) : isMissingRepo ? (
           <InitMode onInit={handleInit} loading={loading.init} />
-        ) : mode === "diff" ? (
+        ) : (
           status && (
             <DiffMode
               repositoryPath={repositoryPath}
@@ -498,21 +355,10 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
               onStageAll={handleStageAll}
               onUnstageAll={handleUnstageAll}
               onDiscardAll={handleDiscardAll}
-            onCommit={handleCommit}
-            onOpenFile={onOpenFile}
+              onCommit={handleCommit}
+              onOpenFile={onOpenFile}
             />
           )
-        ) : (
-          <LogMode
-            entries={logData.entries}
-            loading={loading.log}
-            loadingMore={loading.logMore}
-            hasMore={logData.hasMore}
-            ahead={logData.ahead}
-            behind={logData.behind}
-            upstream={logData.upstream}
-            onLoadMore={() => void loadMoreLog()}
-          />
         )}
       </div>
     </div>

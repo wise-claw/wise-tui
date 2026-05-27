@@ -2189,10 +2189,13 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 .app-left-sidebar-repo-panel-header__expand {
-  flex: 1 1 0;
+  margin-left: auto;
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: min(100%, 12rem);
   display: inline-flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 6px;
   padding: 2px 6px;
   border: none;
@@ -2308,28 +2311,8 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   font-size: 12px;
 }
 
-.app-left-sidebar-bottom-tab-content .git-mode-btn.ant-btn {
-  width: auto;
-  min-width: 0;
-  height: 22px;
-  min-height: 22px;
-  padding: 0 4px !important;
-  padding-inline: 4px !important;
-}
-
-.app-left-sidebar-bottom-tab-content .git-mode-btn-text {
-  font-size: 10px;
-}
-
 .app-left-sidebar-bottom-tab-content .git-panel-title {
   font-size: 12px;
-}
-
-.app-left-sidebar-bottom-tab-content .git-panel-header-left .ant-tag {
-  font-size: 10px !important;
-  line-height: 14px !important;
-  padding: 0 4px !important;
-  margin-inline-end: 0;
 }
 
 .app-left-sidebar-bottom-tab-content .git-files-explorer-bar {
@@ -2402,6 +2385,11 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   border-top: none;
   margin-top: 0;
   padding-top: 0;
+  background: var(--ant-color-bg-container);
+}
+
+.app-left-sidebar-bottom-tab-content > .app-left-sidebar-files-explorer .app-left-sidebar-files-explorer-body {
+  background: var(--ant-color-bg-container);
 }
 
 .app-left-sidebar-files-explorer-body {

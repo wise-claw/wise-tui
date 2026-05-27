@@ -244,19 +244,6 @@
   line-height: 1.1;
 }
 
-.app-chat-inspector .git-panel-title-tab {
-  width: 22px;
-  height: 22px;
-}
-
-.app-chat-inspector .git-mode-btn.ant-btn {
-  height: 24px;
-  min-height: 24px;
-  padding: 0 2px !important;
-  padding-inline: 2px !important;
-  gap: 1px;
-}
-
 .app-chat-inspector .git-commit-section {
   padding: 5px 8px 6px;
   background: var(--ant-color-bg-container) !important;
