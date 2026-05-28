@@ -161,6 +161,29 @@ fn assert_resolved_path_under_repo(repo_canon: &Path, path: &Path) -> Result<(),
     Ok(())
 }
 
+/// Whether `path` exists on this machine and is a directory (used before opening file tree).
+#[tauri::command]
+pub(crate) fn path_is_accessible_directory(path: String) -> bool {
+    let trimmed = path.trim();
+    !trimmed.is_empty() && Path::new(trimmed).is_dir()
+}
+
+fn explorer_root_error_message(root: &str, root_path: &Path) -> String {
+    let display = root.trim();
+    if display.is_empty() {
+        return "仓库路径为空".to_string();
+    }
+    if !root_path.exists() {
+        return format!(
+            "仓库路径在本机不存在：{display}。若刚换电脑或复制了 ~/.wise，请在本机重新选择该仓库文件夹（侧栏添加/关联仓库）。"
+        );
+    }
+    if !root_path.is_dir() {
+        return format!("路径不是目录：{display}");
+    }
+    format!("无法打开仓库目录：{display}")
+}
+
 /// List files and directories (including empty folders) for explorer tree UI.
 #[tauri::command]
 pub(crate) async fn list_repository_explorer_entries(
@@ -169,11 +192,13 @@ pub(crate) async fn list_repository_explorer_entries(
     const MAX_SCAN_ENTRIES: usize = 400_000;
     const MAX_RESULTS: usize = 30_000;
 
-    let root_path = PathBuf::from(&root);
+    let root_path = PathBuf::from(root.trim());
     if !root_path.is_dir() {
-        return Err("Not a directory".to_string());
+        return Err(explorer_root_error_message(&root, &root_path));
     }
-    let root_path = root_path.canonicalize().map_err(|e| e.to_string())?;
+    let root_path = root_path
+        .canonicalize()
+        .map_err(|e| explorer_root_error_message(&root, &root_path) + &format!(" ({e})"))?;
 
     let walker = WalkDir::new(&root_path)
         .follow_links(false)

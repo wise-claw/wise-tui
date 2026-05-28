@@ -212,6 +212,17 @@ export async function loadRepositories(): Promise<Repository[]> {
   }
 }
 
+/** 当前机器上路径是否存在且为目录（换机后用于判断 ~/.wise 里旧绝对路径是否仍有效）。 */
+export async function pathIsAccessibleDirectory(path: string): Promise<boolean> {
+  const trimmed = path.trim();
+  if (!trimmed) return false;
+  try {
+    return await invoke<boolean>("path_is_accessible_directory", { path: trimmed });
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Remove a repository by its id.
  */

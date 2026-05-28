@@ -14,6 +14,7 @@ import { ExplorerInlineCreateRow } from "./ExplorerInlineCreateRow";
 import { RepositoryTreeNode } from "./RepositoryTreeNode";
 import type { GitPanelOpenFileOptions } from "./types";
 import { useRepositoryFilesExplorer } from "./useRepositoryFilesExplorer";
+import { formatRepositoryExplorerLoadError } from "../../utils/repositoryPathAccessibility";
 
 type WorkspaceSelectorProps = Omit<GitPanelWorkspaceSelectorProps, "activeRepositoryPath">;
 
@@ -141,7 +142,7 @@ export function RepositoryFilesExplorer({
 
   const treeBody = explorer.loadError ? (
     <Empty
-      description={`文件树加载失败：${explorer.loadError}`}
+      description={formatRepositoryExplorerLoadError(explorer.loadError, trimmedRepositoryPath)}
       style={{ padding: "24px 0" }}
       image={Empty.PRESENTED_IMAGE_SIMPLE}
     />

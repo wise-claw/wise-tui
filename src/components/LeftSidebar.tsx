@@ -21,7 +21,7 @@ import {
   resolveRepositoryMainSessionId,
 } from "../utils/repositoryMainSessionBinding";
 import { endClaudeProcessRow } from "./LeftSidebar/endClaudeProcessRow";
-import { pickFolder } from "../services/repository";
+import { pathIsAccessibleDirectory, pickFolder } from "../services/repository";
 import {
   OPEN_WORKSPACE_ERROR,
   openWorkspaceWithStoredPreference,
@@ -539,7 +539,67 @@ export function LeftSidebar({
     activeRepositoryName?.trim() ||
     activeSession?.repositoryName?.trim() ||
     repositoryFolderBasename({ path: repoPanelRepositoryPath, name: activeRepositoryName ?? "" });
-  const showRepoPanel = Boolean(repoPanelRepositoryPath.trim());
+  const [accessibleRepoPanelPath, setAccessibleRepoPanelPath] = useState(repoPanelRepositoryPath);
+
+  useEffect(() => {
+    let cancelled = false;
+    const candidate = repoPanelRepositoryPath.trim();
+    void (async () => {
+      if (!candidate) {
+        if (!cancelled) setAccessibleRepoPanelPath("");
+        return;
+      }
+      if (await pathIsAccessibleDirectory(candidate)) {
+        if (!cancelled) setAccessibleRepoPanelPath(candidate);
+        return;
+      }
+      const projectIdForFallback =
+        repoPanelTreeView?.activeProjectId ?? activeProjectId ?? null;
+      const project = projectIdForFallback
+        ? (projects.find((item) => item.id === projectIdForFallback) ?? null)
+        : null;
+      if (project) {
+        const repoById = new Map(repositories.map((repo) => [repo.id, repo] as const));
+        for (const repoId of project.repositoryIds ?? []) {
+          const memberPath = repoById.get(repoId)?.path?.trim() ?? "";
+          if (memberPath && (await pathIsAccessibleDirectory(memberPath))) {
+            if (!cancelled) setAccessibleRepoPanelPath(memberPath);
+            return;
+          }
+        }
+      }
+      if (
+        activeSessionRepositoryPath &&
+        activeSessionRepositoryPath !== candidate &&
+        (await pathIsAccessibleDirectory(activeSessionRepositoryPath))
+      ) {
+        if (!cancelled) setAccessibleRepoPanelPath(activeSessionRepositoryPath);
+        return;
+      }
+      for (const repo of repositories) {
+        const memberPath = repo.path?.trim() ?? "";
+        if (!memberPath || memberPath === candidate) continue;
+        if (await pathIsAccessibleDirectory(memberPath)) {
+          if (!cancelled) setAccessibleRepoPanelPath(memberPath);
+          return;
+        }
+      }
+      if (!cancelled) setAccessibleRepoPanelPath(candidate);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    repoPanelRepositoryPath,
+    repoPanelTreeView?.activeProjectId,
+    activeProjectId,
+    projects,
+    repositories,
+    activeSessionRepositoryPath,
+  ]);
+
+  const effectiveRepoPanelPath = accessibleRepoPanelPath.trim() || repoPanelRepositoryPath.trim();
+  const showRepoPanel = Boolean(effectiveRepoPanelPath);
 
   const repoPanelWorkspaceSelectorProps = useMemo(
     () => ({
@@ -568,7 +628,7 @@ export function LeftSidebar({
 
   useEffect(() => {
     setRepositoryFileTreeSearch("");
-  }, [repoPanelRepositoryPath]);
+  }, [effectiveRepoPanelPath]);
 
   const lastHandledWorkspaceCreateRequestRef = useRef(0);
   const lastHandledStandaloneRepoAddRequestRef = useRef(0);
@@ -857,7 +917,7 @@ export function LeftSidebar({
                 <div className="app-left-sidebar-repo-panel-header__selector">
                   <GitPanelWorkspaceSelector
                     {...repoPanelWorkspaceSelectorProps}
-                    activeRepositoryPath={repoPanelRepositoryPath}
+                    activeRepositoryPath={effectiveRepoPanelPath}
                   />
                 </div>
                 <Tooltip title="展开文件树" mouseEnterDelay={0.35}>
@@ -876,7 +936,7 @@ export function LeftSidebar({
               {leftBottomTab === "git" ? (
                 <GitPanel
                   headerPrefix={repoPanelTabSwitcher}
-                  repositoryPath={repoPanelRepositoryPath}
+                  repositoryPath={effectiveRepoPanelPath}
                   repositoryName={repoPanelRepositoryName}
                   onOpenFile={onOpenActiveRepositoryFile}
                   {...repoPanelWorkspaceSelectorProps}
@@ -884,7 +944,7 @@ export function LeftSidebar({
               ) : (
                 <ActiveRepositoryFilesPanel
                   headerPrefix={filesExplorerSectionCollapsed ? undefined : repoPanelTabSwitcher}
-                  activeRepositoryPath={repoPanelRepositoryPath}
+                  activeRepositoryPath={effectiveRepoPanelPath}
                   activeRepositoryName={repoPanelRepositoryName}
                   search={repositoryFileTreeSearch}
                   onSearchChange={setRepositoryFileTreeSearch}
