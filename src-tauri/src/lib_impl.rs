@@ -9,6 +9,8 @@ use crate::{
     trellis_bridge,
     trellis_runtime, wise_db, wise_mascot, wise_paths, wise_push, workspace_commands,
 };
+#[cfg(target_os = "macos")]
+use crate::macos_terminal_detect;
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
 
@@ -273,6 +275,8 @@ pub fn run() {
             workspace_commands::open_claude_user_agents_dir,
             workspace_commands::get_claude_user_agents_dir,
             workspace_commands::open_workspace_in,
+            #[cfg(target_os = "macos")]
+            macos_terminal_detect::macos_detect_terminals,
             git_commands::git_status,
             git_commands::git_stage,
             git_commands::git_stage_paths,

@@ -43,6 +43,7 @@ import { openRepositoryRemoteInBrowser } from "./services/openRepositoryRemote";
 import { openInFinder } from "./services/repository";
 import { triggerCodeGraphProjectSearch, triggerCodeGraphReindex } from "./services/codeKnowledgeGraph";
 import { AppWorkspaceLayout } from "./components/AppWorkspaceLayout";
+import { useMacTerminalDetectionBootstrap } from "./hooks/useMacTerminalDetectionBootstrap";
 import type { ScheduledTasksOverlayTarget } from "./components/RepositoryScheduledTasksModal";
 import { DEFAULT_PRD_SPLIT_ASSISTANT_ID } from "./services/assistantPromptLayers";
 import {
@@ -304,6 +305,7 @@ export default function App() {
    * 从 `viewMode` 派生这些布尔，AppImpl 不再依赖 legacy 别名。
    */
   const viewMode = useViewMode();
+  useMacTerminalDetectionBootstrap();
   /** 侧栏「查看检索」打开时为 true：图谱面板不在 idle 时自动 `triggerCodeGraphReindex`；顶栏入口为 false。 */
   const codeGraphSuppressIdleAutoReindex =
     viewMode.view.kind === "inspect" && viewMode.view.tool.kind === "code-graph"

@@ -40,7 +40,13 @@ const ICON_MAP: Record<string, string> = {
   cursor: CURSOR_ICON,
   finder: FINDER_ICON,
   terminal: TERMINAL_ICON,
+  iterm: TERMINAL_ICON,
   ghostty: GHOSTTY_ICON,
+  warp: TERMINAL_ICON,
+  kitty: TERMINAL_ICON,
+  alacritty: TERMINAL_ICON,
+  wezterm: TERMINAL_ICON,
+  hyper: TERMINAL_ICON,
   intellij: INTELLIJ_ICON,
 };
 

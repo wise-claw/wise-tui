@@ -1,7 +1,14 @@
 import { Button, Dropdown, Tooltip } from "antd";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { OpenAppTarget } from "../../types";
 import { canOpenAppTarget, openWorkspaceWithOpenAppTarget } from "../../services/openWorkspaceWithPreference";
+import {
+  ensureMacTerminalsDetected,
+  isMacPlatform,
+  isTerminalOpenAppId,
+} from "../../services/macosTerminal";
+import { setTerminalAppPreference } from "../../services/terminalAppPreference";
+import { mergeMacOpenAppTargets } from "../../utils/macosOpenAppTargets";
 import {
   DEFAULT_OPEN_APP_ID,
   DEFAULT_OPEN_APP_TARGETS,
@@ -39,10 +46,26 @@ export function OpenAppMenu({
   onSelectOpenAppId,
 }: Props) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [macMergedTargets, setMacMergedTargets] = useState<readonly OpenAppTarget[] | null>(null);
+
+  useEffect(() => {
+    if (!isMacPlatform()) return;
+    let cancelled = false;
+    void ensureMacTerminalsDetected().then((detected) => {
+      if (cancelled || detected.length === 0) return;
+      setMacMergedTargets(mergeMacOpenAppTargets(detected));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const availableTargets =
     openTargets && openTargets.length > 0
       ? openTargets
-      : DEFAULT_OPEN_APP_TARGETS;
+      : macMergedTargets && macMergedTargets.length > 0
+        ? macMergedTargets
+        : DEFAULT_OPEN_APP_TARGETS;
 
   const resolvedOpenAppId =
     availableTargets.find((t) => t.id === selectedOpenAppId)?.id ??
@@ -81,6 +104,9 @@ export function OpenAppMenu({
     if (!canOpenTarget(target)) return;
     onSelectOpenAppId(target.id);
     void setOpenAppPreference(target.id);
+    if (isTerminalOpenAppId(target.id)) {
+      void setTerminalAppPreference(target.id);
+    }
     setDropdownOpen(false);
     await openWorkspaceWithOpenAppTarget(path, target.target);
   }

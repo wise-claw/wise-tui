@@ -1,4 +1,4 @@
-import { Checkbox, Typography } from "antd";
+import { Button, Checkbox, Select, Typography } from "antd";
 import type { ClaudeSessionConnectionKind } from "../../constants/claudeConnection";
 import { LEFT_SIDEBAR_HUB_QUICK_ENTRY_LABELS } from "../../constants/leftSidebarHubQuickEntries";
 import type { LeftSidebarHubQuickEntryId } from "../../constants/leftSidebarHubQuickEntries";
@@ -7,10 +7,12 @@ import { DefaultConfigOptionPick } from "./DefaultConfigOptionPick";
 import { useLeftSidebarHubQuickEntriesSetting } from "./useLeftSidebarHubQuickEntriesSetting";
 import { useRightPanelDefaultSetting } from "./useRightPanelDefaultSetting";
 import { useTopbarChromeDefaultSetting } from "./useTopbarChromeDefaultSetting";
+import { useDefaultTerminalSetting } from "./useDefaultTerminalSetting";
 import "./index.css";
 
 const DEFAULT_CONFIG_NOTES = [
   "设置写入 SQLite app_settings（wise.defaultConfig.v1），保存后立即作用于主会话顶栏与左栏快捷入口。",
+  "默认终端（macOS）写入 wise.ui.default-terminal.v1，用于在资源管理器、Git 面板等位置「在外部终端打开」目录。",
   "Free Claude Code 的安装、启停与 Claude 对齐请在主会话顶栏 FCC 图标弹窗中操作；此处仅控制图标是否显示。",
   "长驻模式使用 --input-format stream-json，与终端 CLI 共享 MCP / Skills / Hooks。",
   "OMC 直连批量、PRD 拆分等编排仍使用独立 -p 子进程，不受会话默认影响。",
@@ -24,6 +26,7 @@ export function DefaultConfigPanel() {
   const rightPanel = useRightPanelDefaultSetting();
   const topbarChrome = useTopbarChromeDefaultSetting();
   const hubQuickEntries = useLeftSidebarHubQuickEntriesSetting();
+  const defaultTerminal = useDefaultTerminalSetting();
 
   return (
     <div className="app-default-config-panel">
@@ -188,6 +191,67 @@ export function DefaultConfigPanel() {
             />
           </div>
         </div>
+
+        {defaultTerminal.isMac ? (
+          <div
+            className="app-default-config-row app-default-config-row--terminal"
+            aria-label="默认终端"
+          >
+            <div className="app-default-config-row__main">
+              <span className="app-default-config-row__title">默认终端</span>
+              <span className="app-default-config-row__hint">
+                在外部打开仓库目录时使用的 macOS 终端；可从本机已检测到的应用中任选一项
+              </span>
+            </div>
+            <div className="app-default-config-row__control app-default-config-row__control--terminal">
+              {defaultTerminal.detected.length > 0 ? (
+                <div className="app-default-config-terminal-picker">
+                  <Select
+                    className="app-default-config-terminal-select"
+                    aria-label="默认终端"
+                    placeholder="选择终端"
+                    loading={defaultTerminal.loading}
+                    disabled={defaultTerminal.loading || defaultTerminal.saving}
+                    value={defaultTerminal.selectedId ?? undefined}
+                    options={defaultTerminal.options}
+                    onChange={(value) => {
+                      void defaultTerminal.save(String(value));
+                    }}
+                  />
+                  <Button
+                    type="link"
+                    size="small"
+                    className="app-default-config-terminal-rescan"
+                    disabled={defaultTerminal.loading || defaultTerminal.saving}
+                    onClick={() => {
+                      void defaultTerminal.refresh();
+                    }}
+                  >
+                    重新检测
+                  </Button>
+                </div>
+              ) : (
+                <div className="app-default-config-terminal-picker">
+                  <Typography.Text type="secondary" className="app-default-config-terminal-empty">
+                    {defaultTerminal.loading ? "正在检测终端…" : "未检测到可用的终端应用"}
+                  </Typography.Text>
+                  {!defaultTerminal.loading ? (
+                    <Button
+                      type="link"
+                      size="small"
+                      className="app-default-config-terminal-rescan"
+                      onClick={() => {
+                        void defaultTerminal.refresh();
+                      }}
+                    >
+                      重新检测
+                    </Button>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <aside className="app-default-config-panel__notes" aria-label="默认配置说明">

@@ -113,6 +113,47 @@
   white-space: nowrap;
 }
 
+.app-default-config-row--terminal {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.app-default-config-row--terminal .app-default-config-row__main {
+  flex: none;
+  width: 100%;
+}
+
+.app-default-config-row--terminal .app-default-config-row__control--terminal {
+  width: 100%;
+  max-width: none;
+  padding-top: 2px;
+  border-top: 1px dashed var(--ant-color-border-secondary);
+}
+
+.app-default-config-terminal-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  width: 100%;
+}
+
+.app-default-config-terminal-select {
+  min-width: min(100%, 220px);
+  flex: 1 1 180px;
+}
+
+.app-default-config-terminal-rescan.ant-btn {
+  padding-inline: 0;
+  height: auto;
+  font-size: 12px;
+}
+
+.app-default-config-terminal-empty {
+  font-size: 12px;
+}
+
 .app-default-config-choice.ant-radio-group {
   display: inline-flex;
   flex-wrap: nowrap;
