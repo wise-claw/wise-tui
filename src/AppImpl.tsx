@@ -1688,6 +1688,11 @@ export default function App() {
 
   const activeRepository = repositories.find((p) => p.id === activeRepositoryId);
 
+  useEffect(() => {
+    if (!tabsHydrated || !activeRepository) return;
+    void refreshDiskSessionsForRepository(activeRepository.path, activeRepository.name);
+  }, [activeRepository, refreshDiskSessionsForRepository, tabsHydrated]);
+
   const {
     ccWfStudioSessionPath,
     onCloseCcWorkflowStudio,
@@ -1923,12 +1928,17 @@ export default function App() {
     [projects, repositories, claudeConcurrencyLimitsMap, activeProjectId],
   );
 
-  const handleRefreshHistorySessions = useCallback(() => {
-    if (!activeRepository) {
-      return Promise.resolve();
-    }
-    return refreshDiskSessionsForRepository(activeRepository.path, activeRepository.name);
-  }, [activeRepository, refreshDiskSessionsForRepository]);
+  const handleRefreshHistorySessions = useCallback(
+    (scope: { repositoryPath: string; repositoryName: string }) => {
+      const path = scope.repositoryPath.trim();
+      if (!path) {
+        return Promise.resolve();
+      }
+      const name = scope.repositoryName.trim() || activeRepository?.name || path;
+      return refreshDiskSessionsForRepository(path, name);
+    },
+    [activeRepository?.name, refreshDiskSessionsForRepository],
+  );
 
   const sessionOwnerHintsRef = useRef(loadSessionOwnerHints());
   useEffect(() => {

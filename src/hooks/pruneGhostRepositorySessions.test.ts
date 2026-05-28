@@ -24,7 +24,9 @@ describe("pruneGhostRepositorySessions", () => {
     const ghostId = "0123456789abcdef0123456789abcdef";
     const kept = session({ id: "session_local", claudeSessionId: null });
     const ghost = session({ id: ghostId, claudeSessionId: ghostId, status: "idle" });
-    const disk: ClaudeDiskSessionItem[] = [];
+    const disk: ClaudeDiskSessionItem[] = [
+      { sessionId: "fedcba9876543210fedcba9876543210", updatedAtMs: 1, preview: "" },
+    ];
 
     const next = pruneGhostRepositorySessions([kept, ghost], REPO, disk);
     expect(next.map((s) => s.id)).toEqual(["session_local"]);
@@ -40,6 +42,23 @@ describe("pruneGhostRepositorySessions", () => {
 
     const next = pruneGhostRepositorySessions([withMessages], REPO, []);
     expect(next).toHaveLength(1);
+  });
+
+  test("does not prune when disk list is empty (avoid false delete on list failure)", () => {
+    const ghostId = "0123456789abcdef0123456789abcdef";
+    const ghost = session({ id: ghostId, claudeSessionId: ghostId, status: "idle" });
+    const next = pruneGhostRepositorySessions([ghost], REPO, []);
+    expect(next).toHaveLength(1);
+  });
+
+  test("matches repository path with trailing slash", () => {
+    const ghostId = "0123456789abcdef0123456789abcdef";
+    const ghost = session({ id: ghostId, claudeSessionId: ghostId, status: "idle", repositoryPath: `${REPO}/` });
+    const disk: ClaudeDiskSessionItem[] = [
+      { sessionId: "fedcba9876543210fedcba9876543210", updatedAtMs: 1, preview: "" },
+    ];
+    const next = pruneGhostRepositorySessions([ghost], REPO, disk);
+    expect(next).toHaveLength(0);
   });
 
   test("keeps running session even when disk entry is missing", () => {

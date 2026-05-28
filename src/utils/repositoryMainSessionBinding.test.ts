@@ -3,6 +3,7 @@ import type { ClaudeSession, Repository } from "../types";
 import {
   isRepositoryMainSessionTab,
   projectMainSessionBindingKey,
+  repositoryPathsMatch,
   resolveBoundMainSessionId,
   resolveRepositoryByClaudeSessionId,
   resolveRepositoryForSession,
@@ -168,5 +169,13 @@ describe("binding value as claudeSessionId", () => {
         sessions: [],
       })?.name,
     ).toBe("vocs-web");
+  });
+});
+
+describe("repositoryPathsMatch", () => {
+  it("treats trailing slash and backslashes as same repo", () => {
+    expect(repositoryPathsMatch("/work/repo/", "/work/repo")).toBe(true);
+    expect(repositoryPathsMatch("C:\\work\\repo", "C:/work/repo")).toBe(true);
+    expect(repositoryPathsMatch("/work/a", "/work/b")).toBe(false);
   });
 });

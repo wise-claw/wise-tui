@@ -41,7 +41,12 @@ import {
   type ClaudeSessionConnectionKind,
 } from "../constants/claudeConnection";
 import type { ClaudeSpawnCliExtras } from "../services/claudeSpawnExtras";
-import { deleteClaudeDiskSession, listClaudeDiskSessions, loadClaudeSessionJsonl } from "../services/claudeDisk";
+import { deleteClaudeDiskSession, loadClaudeSessionJsonl } from "../services/claudeDisk";
+import { normalizeRepositoryPathKey, repositoryPathsMatch } from "../utils/repositoryMainSessionBinding";
+import {
+  listClaudeDiskSessionsForRepositoryScope,
+  normalizeSessionRepositoryPath,
+} from "../utils/sessionHistoryScope";
 import { loadSessionTabsState, saveSessionTabsState } from "../services/tabsStore";
 import {
   CLAUDE_DISK_JSONL_TAIL_LINES_INITIAL,
@@ -363,9 +368,13 @@ export function pruneGhostRepositorySessions(
   repositoryPath: string,
   disk: ClaudeDiskSessionItem[],
 ): ClaudeSession[] {
+  // 列表失败或尚未扫描时不裁剪，避免误删仍存在于 ~/.claude/projects 的会话标签。
+  if (disk.length === 0) {
+    return sessions;
+  }
   const diskIds = new Set(disk.map((d) => d.sessionId));
   return sessions.filter((s) => {
-    if (s.repositoryPath !== repositoryPath) return true;
+    if (!repositoryPathsMatch(s.repositoryPath, repositoryPath)) return true;
     if (s.status === "running" || s.status === "connecting") return true;
     const claudeId = s.claudeSessionId?.trim();
     if (!claudeId) return true;
@@ -382,11 +391,12 @@ function mergeRepositoryDiskSessions(
   disk: ClaudeDiskSessionItem[],
   configFallbackModel: string,
 ): ClaudeSession[] {
-  const pruned = pruneGhostRepositorySessions(prev, repositoryPath, disk);
+  const canonicalPath = normalizeRepositoryPathKey(repositoryPath) || repositoryPath.trim();
+  const pruned = pruneGhostRepositorySessions(prev, canonicalPath, disk);
   const copy = pruned.map((s) => ({ ...s }));
 
   for (let i = 0; i < copy.length; i++) {
-    if (copy[i].repositoryPath !== repositoryPath) continue;
+    if (!repositoryPathsMatch(copy[i].repositoryPath, canonicalPath)) continue;
     const s = copy[i];
     const item = disk.find((d) => sessionMatchesDiskId(s, d.sessionId));
     if (item) {
@@ -394,16 +404,19 @@ function mergeRepositoryDiskSessions(
         ...s,
         id: item.sessionId,
         claudeSessionId: item.sessionId,
+        repositoryPath: canonicalPath,
         repositoryName: shouldPreserveRepositoryDisplayName(s.repositoryName) ? s.repositoryName : repositoryName,
         model: item.modelHint ?? s.model,
         diskPreview: item.preview || s.diskPreview,
         createdAt: Math.min(s.createdAt, item.updatedAtMs),
       };
+    } else {
+      copy[i] = { ...s, repositoryPath: canonicalPath };
     }
   }
 
   const toAdd = disk.filter(
-    (d) => !copy.some((s) => s.repositoryPath === repositoryPath && sessionMatchesDiskId(s, d.sessionId)),
+    (d) => !copy.some((s) => repositoryPathsMatch(s.repositoryPath, canonicalPath) && sessionMatchesDiskId(s, d.sessionId)),
   );
   if (toAdd.length === 0) {
     return copy;
@@ -412,7 +425,7 @@ function mergeRepositoryDiskSessions(
   const newRows: ClaudeSession[] = toAdd.map((item) => ({
     id: item.sessionId,
     claudeSessionId: item.sessionId,
-    repositoryPath,
+    repositoryPath: canonicalPath,
     repositoryName,
     model: item.modelHint ?? configFallbackModel,
     status: "completed" as const,
@@ -424,7 +437,7 @@ function mergeRepositoryDiskSessions(
 
   let lastIdx = -1;
   for (let i = 0; i < copy.length; i++) {
-    if (copy[i].repositoryPath === repositoryPath) lastIdx = i;
+    if (repositoryPathsMatch(copy[i].repositoryPath, canonicalPath)) lastIdx = i;
   }
   if (lastIdx === -1) {
     return [...copy, ...newRows];
@@ -1372,6 +1385,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           const normalized = data.sessions.map((s) => {
             const base = {
               ...s,
+              repositoryPath: normalizeSessionRepositoryPath(s.repositoryPath),
               status:
                 s.status === "running" || s.status === "connecting" ? ("idle" as const) : s.status,
             };
@@ -1590,10 +1604,22 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   ]);
 
   const refreshDiskSessionsForRepository = useCallback(async (repositoryPath: string, repositoryName: string) => {
-    const disk = await listClaudeDiskSessions(repositoryPath);
+    const trimmedPath = repositoryPath.trim();
+    if (!trimmedPath) return;
+    let disk: ClaudeDiskSessionItem[];
+    let mergePath = normalizeSessionRepositoryPath(trimmedPath);
+    try {
+      const listed = await listClaudeDiskSessionsForRepositoryScope(trimmedPath, sessionsRef.current);
+      disk = listed.disk;
+      mergePath = listed.listingPath;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      message.warning(`读取 Claude 历史会话失败：${msg}`);
+      return;
+    }
     // 先合并磁盘标签，避免再等 getClaudeConfigModel 才 setSessions（多仓库并发刷新时易卡顿）。
     setSessions((prev) => {
-      const next = mergeRepositoryDiskSessions(prev, repositoryPath, repositoryName, disk, "sonnet");
+      const next = mergeRepositoryDiskSessions(prev, mergePath, repositoryName, disk, "sonnet");
       sessionsRef.current = next;
       return next;
     });
@@ -1601,7 +1627,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     void (async () => {
       let resolved: string | null = null;
       try {
-        const fromCfg = await getClaudeConfigModel(repositoryPath);
+        const fromCfg = await getClaudeConfigModel(mergePath);
         if (fromCfg?.trim()) resolved = fromCfg.trim();
       } catch {
         return;
@@ -1615,7 +1641,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
       setSessions((prev) => {
         const next = prev.map((s) => {
-          if (s.repositoryPath !== repositoryPath) return s;
+          if (!repositoryPathsMatch(s.repositoryPath, mergePath)) return s;
           const sid = s.claudeSessionId ?? s.id;
           if (!idsNeedingConfigModel.has(s.id) && !idsNeedingConfigModel.has(sid)) return s;
           return { ...s, model: resolved };
@@ -1840,7 +1866,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const newSession: ClaudeSession = {
         id,
         claudeSessionId: null,
-        repositoryPath,
+        repositoryPath: normalizeRepositoryPathKey(repositoryPath) || repositoryPath.trim(),
         repositoryName,
         model: "sonnet",
         status: "idle",
@@ -2596,7 +2622,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             rest.messages.length <= PERSIST_SESSION_MESSAGES_MAX
               ? rest.messages
               : rest.messages.slice(-PERSIST_SESSION_MESSAGES_MAX);
-          return { ...rest, messages };
+          return {
+            ...rest,
+            repositoryPath: normalizeSessionRepositoryPath(rest.repositoryPath),
+            messages,
+          };
         }),
       });
     }, 450);

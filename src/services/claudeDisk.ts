@@ -2,11 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { ClaudeDiskSessionItem } from "../types";
 
 export async function listClaudeDiskSessions(repositoryPath: string): Promise<ClaudeDiskSessionItem[]> {
-  try {
-    return await invoke<ClaudeDiskSessionItem[]>("list_claude_disk_sessions", { projectPath: repositoryPath });
-  } catch {
-    return [];
-  }
+  return invoke<ClaudeDiskSessionItem[]>("list_claude_disk_sessions", { projectPath: repositoryPath });
 }
 
 export type LoadClaudeSessionJsonlOptions = {

@@ -1,4 +1,5 @@
 import type { ClaudeSession, GitStatusResponse, TaskFlowStatus, TaskItem } from "../../types";
+import { repositoryPathsMatch } from "../../utils/repositoryMainSessionBinding";
 import { stripRedundantRepoBracketPrefix } from "../../utils/sessionRepositoryDisplay";
 import {
   messageTextLooksLikeOmcDispatch,
@@ -113,7 +114,7 @@ export function notificationConversationInSessionInboxScope(
   if (!c) return false;
   const owner = allSessions.find((s) => s.id === c || (s.claudeSessionId?.trim() && s.claudeSessionId.trim() === c));
   if (owner) {
-    return owner.repositoryPath === sess.repositoryPath;
+    return repositoryPathsMatch(owner.repositoryPath, sess.repositoryPath);
   }
   return notificationInboxConversationMatchesSession(c, sess, allSessions);
 }

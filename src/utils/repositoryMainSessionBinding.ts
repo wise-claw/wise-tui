@@ -18,6 +18,13 @@ export function normalizeRepositoryPathKey(path: string): string {
   return path.trim().replace(/\\/g, "/").replace(/\/+$/, "");
 }
 
+/** 比较仓库路径是否指向同一目录（忽略尾部斜杠与 Windows 分隔符）。 */
+export function repositoryPathsMatch(a: string, b: string): boolean {
+  const left = normalizeRepositoryPathKey(a);
+  const right = normalizeRepositoryPathKey(b);
+  return left.length > 0 && left === right;
+}
+
 export function isProjectRootSessionDisplayName(repositoryName: string): boolean {
   return repositoryName.trim().startsWith("Project: ");
 }

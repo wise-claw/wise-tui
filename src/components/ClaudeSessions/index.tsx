@@ -740,7 +740,7 @@ interface Props {
     repositoryDisplayName: string;
   }) => void | Promise<void>;
   /** 从历史会话弹窗重新扫描当前仓库磁盘上的 Claude 会话 */
-  onRefreshHistorySessions?: () => void | Promise<void>;
+  onRefreshHistorySessions?: (scope: import("./ClaudeChat").RefreshHistorySessionsScope) => void | Promise<void>;
   /** 历史会话弹窗内删除某条会话（物理删除 jsonl + 内存清理）。运行中状态会被拒绝，由调用方做二次确认。 */
   onDeleteHistorySession?: (sessionId: string) => Promise<void>;
   /** 在右侧 Inspector 打开历史会话消息抽屉 */
@@ -1223,6 +1223,7 @@ export function ClaudeSessions({
                     key={activeSession.id}
                     session={activeSession}
                     sessions={sessions}
+                    allSessionsForHistory={incomingSessions}
                     repositories={repositories}
                     activeRepository={activeRepository}
                     activeProject={activeProject}
@@ -1295,6 +1296,7 @@ export function ClaudeSessions({
                           key={paneSession.id}
                           session={paneSession}
                           sessions={sessions}
+                          allSessionsForHistory={incomingSessions}
                           repositories={repositories}
                           activeRepository={paneRepo ?? activeRepository}
                           activeProject={activeProject}
@@ -1569,6 +1571,7 @@ export function ClaudeSessions({
             key={activeSession.id}
             session={activeSession}
             sessions={sessions}
+            allSessionsForHistory={incomingSessions}
             repositories={repositories}
             activeRepository={activeRepository}
             activeProject={activeProject}

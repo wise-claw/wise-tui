@@ -1,12 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { ClaudeSession, PersistedTabsState } from "../types";
+import { normalizeSessionRepositoryPath } from "../utils/sessionHistoryScope";
 
 function normalizePersistedSession(raw: unknown): ClaudeSession {
   const v = raw as Record<string, unknown>;
   const out = { ...v } as Record<string, unknown>;
   delete out.projectPath;
   delete out.projectName;
-  out.repositoryPath = (typeof v.repositoryPath === "string" && v.repositoryPath) || String(v.projectPath ?? "");
+  const rawPath = (typeof v.repositoryPath === "string" && v.repositoryPath) || String(v.projectPath ?? "");
+  out.repositoryPath = normalizeSessionRepositoryPath(rawPath);
   out.repositoryName = (typeof v.repositoryName === "string" && v.repositoryName) || String(v.projectName ?? "");
   if (v.connectionKind === "streaming" || v.connectionKind === "oneshot") {
     out.connectionKind = v.connectionKind;

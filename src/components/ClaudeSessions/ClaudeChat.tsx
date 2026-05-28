@@ -124,9 +124,15 @@ import {
 import { buildOmcBatchTaskIntentOneLiner } from "../../utils/omcBatchTaskIntentOneLiner";
 import {
   isSessionBoundAsRepositoryMain,
+  repositoryPathsMatch,
   resolveRepositoryMainSessionId,
   resolveMainOwnerAgentNameForRepositoryPath,
 } from "../../utils/repositoryMainSessionBinding";
+import {
+  dedupeClaudeSessionsByIdentity,
+  listSessionsForRepositoryPath,
+  normalizeSessionRepositoryPath,
+} from "../../utils/sessionHistoryScope";
 import { HistorySessionRestoreButton } from "../ProgressMonitorPanel/HistorySessionRestoreButton";
 import { getAppSetting, setAppSetting } from "../../services/appSettingsStore";
 import {
@@ -201,9 +207,16 @@ function logWorkflowTrace(step: string, payload: Record<string, unknown>) {
 /** 主 Claude Code 从 running/connecting 进入空闲后，自动出队待发送任务前等待，减轻与子进程收尾的竞态 */
 const POST_CLAUDE_IDLE_PENDING_DISPATCH_DELAY_MS = 500;
 
+export type RefreshHistorySessionsScope = {
+  repositoryPath: string;
+  repositoryName: string;
+};
+
 interface Props {
   session: ClaudeSession;
   sessions?: ClaudeSession[];
+  /** 未按工作区焦点过滤的完整会话列表，供历史会话弹窗按仓库路径检索 */
+  allSessionsForHistory?: ClaudeSession[];
   repositories?: Repository[];
   activeRepository?: Repository;
   onSwitchSession?: (
@@ -304,7 +317,7 @@ interface Props {
     repositoryDisplayName: string;
   }) => void | Promise<void>;
   /** 从历史会话弹窗重新扫描磁盘上的 Claude 会话并合并到标签列表 */
-  onRefreshHistorySessions?: () => void | Promise<void>;
+  onRefreshHistorySessions?: (scope: RefreshHistorySessionsScope) => void | Promise<void>;
   /** 历史会话弹窗内删除某条会话（物理删除磁盘 jsonl，不可恢复）。运行中的会话会抛错。 */
   onDeleteHistorySession?: (sessionId: string) => Promise<void>;
   /** 在右侧 Inspector 打开历史会话消息（只读预览） */
@@ -451,6 +464,7 @@ function getSessionTraceStorageKey(sessionId: string, repositoryPath?: string): 
 export function ClaudeChat({
   session,
   sessions = [],
+  allSessionsForHistory,
   repositories = [],
   activeRepository,
   onSwitchSession,
@@ -656,7 +670,9 @@ export function ClaudeChat({
       ) ?? null,
     [activeRepository, repositories, session.repositoryPath],
   );
-  const repositoryScopePath = sessionRepository?.path?.trim() || session.repositoryPath.trim();
+  const repositoryScopePath = normalizeSessionRepositoryPath(
+    sessionRepository?.path?.trim() || session.repositoryPath.trim(),
+  );
   const gitRepositoryPath = sessionRepository?.path?.trim() || session.repositoryPath.trim();
   const omcBatchUserAbortRef = useRef(false);
   const omcBatchInFlightRef = useRef(false);
@@ -1778,7 +1794,10 @@ export function ClaudeChat({
       return null;
     }
     const candidates = sessions
-      .filter((item) => item.id !== session.id && item.repositoryPath === session.repositoryPath)
+      .filter(
+        (item) =>
+          item.id !== session.id && repositoryPathsMatch(item.repositoryPath, session.repositoryPath),
+      )
       .map((item) => ({
         session: item,
         ownerInfo: resolveSessionOwnerInfo({
@@ -1820,7 +1839,7 @@ export function ClaudeChat({
 
   const repositorySessionExecutionRows = useMemo((): RepositorySessionExecutionRow[] => {
     const path = session.repositoryPath;
-    const sameRepo = sessions.filter((s) => s.repositoryPath === path);
+    const sameRepo = sessions.filter((s) => repositoryPathsMatch(s.repositoryPath, path));
     const rows: RepositorySessionExecutionRow[] = sameRepo.map((s) => {
       const owner = resolveSessionOwnerInfo({
         session: s,
@@ -2553,15 +2572,13 @@ export function ClaudeChat({
     }
   }, [sessionUnreadNotificationRows.length]);
 
+  const historySessionSource = allSessionsForHistory ?? sessions;
   const repositoryHistorySessions = useMemo(
     () =>
-      sessions
-        .filter((item) => {
-          const path = item.repositoryPath?.trim() ?? "";
-          return path === repositoryScopePath;
-        })
-        .sort((a, b) => getSessionUpdatedAt(b) - getSessionUpdatedAt(a)),
-    [sessions, repositoryScopePath],
+      dedupeClaudeSessionsByIdentity(listSessionsForRepositoryPath(historySessionSource, repositoryScopePath)).sort(
+        (a, b) => getSessionUpdatedAt(b) - getSessionUpdatedAt(a),
+      ),
+    [historySessionSource, repositoryScopePath],
   );
 
   const filteredHistorySessions = useMemo(() => {
@@ -2595,9 +2612,16 @@ export function ClaudeChat({
   const historyRefreshInFlightRef = useRef(false);
   const handleHistorySessionsRefresh = useCallback(() => {
     if (!onRefreshHistorySessions || historyRefreshInFlightRef.current) return;
+    const scopePath = repositoryScopePath.trim();
+    if (!scopePath) return;
     historyRefreshInFlightRef.current = true;
     setHistorySessionsRefreshing(true);
-    void Promise.resolve(onRefreshHistorySessions())
+    void Promise.resolve(
+      onRefreshHistorySessions({
+        repositoryPath: scopePath,
+        repositoryName: sessionRepository?.name?.trim() || session.repositoryName.trim() || scopePath,
+      }),
+    )
       .catch(() => {
         message.error("刷新历史会话失败");
       })
@@ -2605,7 +2629,7 @@ export function ClaudeChat({
         historyRefreshInFlightRef.current = false;
         setHistorySessionsRefreshing(false);
       });
-  }, [onRefreshHistorySessions]);
+  }, [onRefreshHistorySessions, repositoryScopePath, session.repositoryName, sessionRepository?.name]);
 
   /**
    * 历史会话弹窗内删除一条会话：先 `Modal.confirm` 二次确认，再调 hook 的 `deleteSession`。
