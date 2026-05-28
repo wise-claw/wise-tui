@@ -68,12 +68,14 @@ export function SessionConversationTasksPanel({
                     <button
                       type="button"
                       className="app-monitor-panel__subagent-row app-monitor-panel__subagent-row--clickable app-monitor-panel__session-task-row-main"
-                      title={item.previewText}
+                      title={item.label}
                       onClick={() => openDetail(item)}
                     >
                       <span className="app-monitor-panel__subagent-branch" aria-hidden />
                       <span className="app-monitor-panel__subagent-main">
-                        <span className="app-monitor-panel__subagent-name">{item.label}</span>
+                        <span className="app-monitor-panel__subagent-name" title={item.label}>
+                          {item.label}
+                        </span>
                         {item.subtitle ? (
                           <span className="app-monitor-panel__subagent-stage">{item.subtitle}</span>
                         ) : null}

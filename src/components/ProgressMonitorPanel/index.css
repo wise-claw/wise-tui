@@ -564,15 +564,17 @@
 }
 
 .app-monitor-panel__subagent-main {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 4px;
   min-width: 0;
-  flex: 1;
+  flex: 1 1 auto;
+  overflow: hidden;
 }
 
 .app-monitor-panel__subagent-name {
   min-width: 0;
+  flex: 1 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -587,6 +589,13 @@
   font-size: 10px;
   line-height: 14px;
   color: var(--ant-color-text-tertiary);
+}
+
+.app-monitor-panel__subagent-stage {
+  max-width: 42%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-monitor-panel__subagent-status {
@@ -751,11 +760,14 @@
   display: flex;
   align-items: center;
   gap: 2px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .app-monitor-panel__session-task-row-main {
   flex: 1 1 auto;
   min-width: 0;
+  overflow: hidden;
 }
 
 .app-monitor-panel__session-task-actions {

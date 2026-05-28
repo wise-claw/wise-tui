@@ -1,6 +1,10 @@
 import type { ClaudeDiskSessionItem, ClaudeSession } from "../types";
 import { listClaudeDiskSessions } from "../services/claudeDisk";
-import { normalizeRepositoryPathKey, repositoryPathsMatch } from "./repositoryMainSessionBinding";
+import {
+  normalizeRepositoryPathKey,
+  repositoryPathsMatch,
+  sessionMatchesRepositoryScope,
+} from "./repositoryMainSessionBinding";
 
 export function normalizeSessionRepositoryPath(path: string): string {
   return normalizeRepositoryPathKey(path) || path.trim();
@@ -34,7 +38,7 @@ export function listSessionsForRepositoryPath(
   sessions: ReadonlyArray<ClaudeSession>,
   repositoryPath: string,
 ): ClaudeSession[] {
-  return sessions.filter((session) => repositoryPathsMatch(session.repositoryPath ?? "", repositoryPath));
+  return sessions.filter((session) => sessionMatchesRepositoryScope(session, repositoryPath));
 }
 
 export function collectRepositoryPathListingCandidates(

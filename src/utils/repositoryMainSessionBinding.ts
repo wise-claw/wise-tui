@@ -44,6 +44,14 @@ function isProjectRootedSessionForRepository(
   return isNestedRepositoryPath(repositoryPathKey, sessionPathKey);
 }
 
+/** 历史会话 / 磁盘扫描：成员仓视图下也包含挂在工作区根目录的项目级会话。 */
+export function sessionMatchesRepositoryScope(session: ClaudeSession, repositoryPath: string): boolean {
+  const scopeKey = normalizeRepositoryPathKey(repositoryPath);
+  if (!scopeKey) return false;
+  if (repositoryPathsMatch(session.repositoryPath ?? "", repositoryPath)) return true;
+  return isProjectRootedSessionForRepository(session, scopeKey);
+}
+
 export function parseRepositoryMainSessionBindings(raw: string | null | undefined): Record<string, string> {
   if (!raw?.trim()) return {};
   try {

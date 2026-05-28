@@ -34,6 +34,21 @@ describe("sessionHistoryScope", () => {
     expect(listSessionsForRepositoryPath(sessions, "/work/repo").map((s) => s.id)).toEqual(["a"]);
   });
 
+  it("listSessionsForRepositoryPath includes project-rooted session for member repo scope", () => {
+    const sessions = [
+      session({
+        id: "project-main",
+        repositoryPath: "/eco",
+        repositoryName: "Project: eco",
+      }),
+      session({ id: "member", repositoryPath: "/eco/eco-ai-web" }),
+    ];
+    expect(listSessionsForRepositoryPath(sessions, "/eco/eco-ai-web").map((s) => s.id).sort()).toEqual([
+      "member",
+      "project-main",
+    ]);
+  });
+
   it("dedupeClaudeSessionsByIdentity keeps richer row", () => {
     const sid = "0123456789abcdef0123456789abcdef";
     const sparse = session({

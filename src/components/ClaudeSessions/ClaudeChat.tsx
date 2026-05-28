@@ -159,7 +159,7 @@ import {
   sessionRepoPathKey,
   splitTaskListBinaryLabel,
 } from "./claudeChatHelpers";
-import { getSessionUpdatedAt, groupSessionsByDay } from "./sessionGrouping";
+import { getSessionUpdatedAt, groupSessionsByDay, sliceGroupedSessions } from "./sessionGrouping";
 import {
   SESSION_NOTIFICATION_UI_EVENT_OPEN_PANEL,
   WORKFLOW_UI_EVENT_FOCUS_TASK_TOOL,
@@ -2597,7 +2597,7 @@ export function ClaudeChat({
   filteredHistoryLengthRef.current = filteredHistorySessions.length;
 
   const groupedHistorySessions = useMemo(
-    () => groupSessionsByDay(filteredHistorySessions.slice(0, historyVisibleCount)),
+    () => sliceGroupedSessions(groupSessionsByDay(filteredHistorySessions), historyVisibleCount),
     [filteredHistorySessions, historyVisibleCount],
   );
 

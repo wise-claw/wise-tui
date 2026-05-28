@@ -4,6 +4,7 @@ import {
   isRepositoryMainSessionTab,
   projectMainSessionBindingKey,
   repositoryPathsMatch,
+  sessionMatchesRepositoryScope,
   resolveBoundMainSessionId,
   resolveRepositoryByClaudeSessionId,
   resolveRepositoryForSession,
@@ -169,6 +170,25 @@ describe("binding value as claudeSessionId", () => {
         sessions: [],
       })?.name,
     ).toBe("vocs-web");
+  });
+});
+
+describe("sessionMatchesRepositoryScope", () => {
+  it("matches member repo and project-rooted parent session", () => {
+    const projectSession: ClaudeSession = {
+      id: "p1",
+      claudeSessionId: null,
+      repositoryPath: "/eco",
+      repositoryName: "Project: eco",
+      model: "sonnet",
+      status: "idle",
+      messages: [],
+      createdAt: 0,
+      pendingPrompt: "",
+    };
+    expect(sessionMatchesRepositoryScope(projectSession, "/eco/eco-ai-web")).toBe(true);
+    expect(sessionMatchesRepositoryScope(projectSession, "/eco/other-repo")).toBe(true);
+    expect(sessionMatchesRepositoryScope(projectSession, "/other")).toBe(false);
   });
 });
 
