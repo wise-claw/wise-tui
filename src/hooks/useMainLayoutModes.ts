@@ -40,7 +40,6 @@ import {
 import { RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK } from "../utils/rightPanelStorage";
 import { planNextPaneSlotPlacement } from "../utils/multiPaneSlots";
 import { resolveTrellisBootstrapPath } from "../utils/trellisBootstrapPath";
-import { resolveTrellisBootstrapPath } from "../utils/trellisBootstrapPath";
 
 const COMPACT_LAYOUT_WINDOW_WIDTH_PX = 700;
 const COMPACT_LAYOUT_WINDOW_HEIGHT_PX = 600;

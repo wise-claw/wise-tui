@@ -2978,7 +2978,9 @@ export default function App() {
         onRemoveRepository: handleRemoveRepository,
         onDetachRepositoryFromProject: handleDetachRepositoryFromProject,
         onUpdateRepositorySddMode: handleUpdateRepositorySddMode,
-        onUpdateProjectSddMode: handleUpdateProjectSddMode,
+        onUpdateProjectSddMode: async (projectId, sddMode) => {
+          await handleUpdateProjectSddMode(projectId, sddMode);
+        },
         onNewPaneSessionForRepository: handleNewPaneSessionForRepository,
         onNewPaneSessionForProject: handleNewPaneSessionForProject,
         onReorderRepositoriesInProject: handleReorderRepositoriesInProject,

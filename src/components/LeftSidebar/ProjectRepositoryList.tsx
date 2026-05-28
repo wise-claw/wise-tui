@@ -252,7 +252,6 @@ export function ProjectRepositoryList({
             projectRepos={project.repositoryIds
               .map((id) => repositoriesById.get(id))
               .filter((item): item is Repository => Boolean(item))}
-            activeProjectId={activeProjectId}
             isActiveProject={project.id === activeProjectId && activeWorkspaceFocus === "project"}
             activeRepositoryId={activeRepositoryId}
             activeWorkspaceFocus={activeWorkspaceFocus}
@@ -332,7 +331,6 @@ function ProjectTrellisAction({ onOpen }: { onOpen: () => void }) {
 interface ProjectRowProps {
   project: Workspace;
   projectRepos: Repository[];
-  activeProjectId: string | null;
   isActiveProject: boolean;
   activeRepositoryId: number | null;
   activeWorkspaceFocus: WorkspaceFocus;
@@ -397,7 +395,6 @@ interface ProjectRowProps {
 function ProjectRow({
   project,
   projectRepos,
-  activeProjectId,
   isActiveProject,
   activeRepositoryId,
   activeWorkspaceFocus,
