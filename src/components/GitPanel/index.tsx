@@ -27,6 +27,9 @@ import { GitSyncActions } from "./GitSyncActions";
 import { InitMode } from "./InitMode";
 import { hasUnstagedFilesUnderDirectory, yieldToPaint } from "./gitPanelUtils";
 import { RepositoryFilesExplorer } from "./RepositoryFilesExplorer";
+import { GitPanelWorkspaceSelector } from "./GitPanelWorkspaceSelector";
+import type { ProjectItem, Repository } from "../../types";
+import type { WorkspaceFocus } from "../../utils/workspaceMode";
 import type { GitPanelOpenFileOptions } from "./types";
 import "./index.css";
 
@@ -37,11 +40,30 @@ interface Props {
   repositoryPath: string | undefined;
   repositoryName: string | undefined;
   onOpenFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
-  /** 左栏整合头部：Tab 切换等，渲染在 GIT 标题左侧 */
+  /** 左栏整合头部：Tab 切换等，渲染在上下文选择器左侧 */
   headerPrefix?: ReactNode;
+  projects?: ProjectItem[];
+  repositories?: Repository[];
+  activeProjectId?: string | null;
+  activeRepositoryId?: number | null;
+  activeWorkspaceFocus?: WorkspaceFocus;
+  onRepositorySelect?: (repositoryId: number) => void;
+  onProjectSelect?: (projectId: string) => void;
 }
 
-export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOpenFile, headerPrefix }: Props) {
+export function GitPanel({
+  repositoryPath,
+  repositoryName: _repositoryName,
+  onOpenFile,
+  headerPrefix,
+  projects = [],
+  repositories = [],
+  activeProjectId = null,
+  activeRepositoryId = null,
+  activeWorkspaceFocus = "repository",
+  onRepositorySelect,
+  onProjectSelect,
+}: Props) {
   const [status, setStatus] = useState<GitStatusResponse | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [openingRemote, setOpeningRemote] = useState(false);
@@ -309,7 +331,20 @@ export function GitPanel({ repositoryPath, repositoryName: _repositoryName, onOp
       <div className="git-panel-header">
         {headerPrefix ? <div className="git-panel-header-prefix">{headerPrefix}</div> : null}
         <div className="git-panel-header-left">
-          <span className="git-panel-title">GIT</span>
+          {onRepositorySelect && repositoryPath ? (
+            <GitPanelWorkspaceSelector
+              projects={projects}
+              repositories={repositories}
+              activeProjectId={activeProjectId}
+              activeRepositoryId={activeRepositoryId}
+              activeWorkspaceFocus={activeWorkspaceFocus}
+              activeRepositoryPath={repositoryPath}
+              onRepositorySelect={onRepositorySelect}
+              onProjectSelect={onProjectSelect}
+            />
+          ) : (
+            <span className="git-panel-title">GIT</span>
+          )}
         </div>
         <div className="git-panel-header-right">
           <Tooltip title="在浏览器中打开仓库" placement="top">

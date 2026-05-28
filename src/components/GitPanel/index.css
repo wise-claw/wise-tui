@@ -146,6 +146,128 @@
   flex-shrink: 0;
 }
 
+.git-panel-workspace-selector {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.git-panel-workspace-selector__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  padding: 2px 6px 2px 2px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  color: var(--ant-color-text);
+  font: inherit;
+  text-align: left;
+}
+
+.git-panel-workspace-selector__trigger:hover {
+  background: var(--ant-color-fill-tertiary);
+}
+
+.git-panel-workspace-selector__trigger-icon {
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--ant-color-text-secondary);
+}
+
+.git-panel-workspace-selector__trigger-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.git-panel-workspace-selector__popover .ant-popover-inner {
+  padding: 6px 4px;
+}
+
+.git-panel-workspace-selector__tree {
+  min-width: 220px;
+  max-width: min(360px, 72vw);
+  max-height: 320px;
+  overflow: auto;
+}
+
+.git-panel-workspace-selector__tree .ant-tree-node-content-wrapper {
+  font-size: 12px;
+}
+
+.git-panel-workspace-selector__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-panel-workspace-selector__tree-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding-right: 2px;
+}
+
+.git-panel-workspace-selector__tree-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-panel-workspace-selector__tree-open {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0.72;
+}
+
+.git-panel-workspace-selector__tree-open:hover {
+  opacity: 1;
+  background: var(--ant-color-fill-tertiary);
+}
+
+.git-panel-workspace-selector__tree-open-icon {
+  width: 14px;
+  height: 14px;
+  display: block;
+  border-radius: 3px;
+}
+
+.git-panel-workspace-selector__tree .ant-tree-node-content-wrapper {
+  flex: 1;
+  min-width: 0;
+}
+
+
 .git-panel-header > .ant-btn.ant-btn-text .anticon {
   font-size: 14px;
   color: var(--ant-color-text);
@@ -820,6 +942,23 @@
   padding-right: 4px;
   margin-right: 0;
   border-right: 1px solid var(--ant-color-border-secondary);
+}
+
+.git-files-explorer-workspace-selector {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.git-files-explorer-workspace-selector .git-panel-workspace-selector {
+  width: 100%;
+}
+
+.git-files-explorer-section-collapse.ant-btn {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  padding: 0;
 }
 
 .git-files-explorer-search {

@@ -9,10 +9,13 @@ import {
   ReloadOutlined,
 } from "@ant-design/icons";
 import { ExpandIcon } from "../LeftSidebar/SidebarIcons";
+import { GitPanelWorkspaceSelector, type GitPanelWorkspaceSelectorProps } from "./GitPanelWorkspaceSelector";
 import { ExplorerInlineCreateRow } from "./ExplorerInlineCreateRow";
 import { RepositoryTreeNode } from "./RepositoryTreeNode";
 import type { GitPanelOpenFileOptions } from "./types";
 import { useRepositoryFilesExplorer } from "./useRepositoryFilesExplorer";
+
+type WorkspaceSelectorProps = Omit<GitPanelWorkspaceSelectorProps, "activeRepositoryPath">;
 
 export interface RepositoryFilesExplorerProps {
   repositoryPath: string;
@@ -30,6 +33,8 @@ export interface RepositoryFilesExplorerProps {
   headerPrefix?: ReactNode;
   /** 收起态由外部头部承接时，不再渲染内置收起行 */
   hideCollapsedChrome?: boolean;
+  /** 与 Git 面板一致的工作区 / 仓库选择器 */
+  workspaceSelector?: WorkspaceSelectorProps;
 }
 
 export function RepositoryFilesExplorer({
@@ -44,6 +49,7 @@ export function RepositoryFilesExplorer({
   onSearchChange,
   headerPrefix,
   hideCollapsedChrome = false,
+  workspaceSelector,
 }: RepositoryFilesExplorerProps) {
   const explorer = useRepositoryFilesExplorer({
     repositoryPath,
@@ -216,7 +222,14 @@ export function RepositoryFilesExplorer({
     <div className="git-files-mode">
       <div className="git-files-explorer-bar">
         {headerPrefix ? <div className="git-files-explorer-bar-prefix">{headerPrefix}</div> : null}
-        {setSectionCollapsed ? (
+        {workspaceSelector ? (
+          <div className="git-files-explorer-workspace-selector">
+            <GitPanelWorkspaceSelector
+              {...workspaceSelector}
+              activeRepositoryPath={repositoryPath}
+            />
+          </div>
+        ) : setSectionCollapsed ? (
           <Tooltip title="点击收起文件树" mouseEnterDelay={0.35}>
             <button
               type="button"
@@ -241,6 +254,18 @@ export function RepositoryFilesExplorer({
             <span className="git-files-explorer-title-text">{repositoryLabel || "资源管理器"}</span>
           </span>
         )}
+        {workspaceSelector && setSectionCollapsed ? (
+          <Tooltip title="收起文件树" mouseEnterDelay={0.35}>
+            <Button
+              type="text"
+              size="small"
+              className="git-files-explorer-section-collapse"
+              aria-label="收起文件树"
+              icon={<ExpandIcon expanded />}
+              onClick={() => setSectionCollapsed(true)}
+            />
+          </Tooltip>
+        ) : null}
         {!toolbarInSearchRow ? explorerToolbarActions : null}
       </div>
       {toolbarInSearchRow ? (

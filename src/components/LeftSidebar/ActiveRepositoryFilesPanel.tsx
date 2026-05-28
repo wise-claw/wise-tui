@@ -1,5 +1,9 @@
 import type { ReactNode } from "react";
-import { RepositoryFilesExplorer, type GitPanelOpenFileOptions } from "../GitPanel";
+import {
+  RepositoryFilesExplorer,
+  type GitPanelOpenFileOptions,
+} from "../GitPanel";
+import type { GitPanelWorkspaceSelectorProps } from "../GitPanel/GitPanelWorkspaceSelector";
 
 interface ActiveRepositoryFilesPanelProps {
   activeRepositoryPath: string;
@@ -10,6 +14,7 @@ interface ActiveRepositoryFilesPanelProps {
   sectionCollapsed: boolean;
   onSectionCollapsedChange: (collapsed: boolean) => void;
   headerPrefix?: ReactNode;
+  workspaceSelector: Omit<GitPanelWorkspaceSelectorProps, "activeRepositoryPath">;
 }
 
 export function ActiveRepositoryFilesPanel({
@@ -21,6 +26,7 @@ export function ActiveRepositoryFilesPanel({
   sectionCollapsed,
   onSectionCollapsedChange,
   headerPrefix,
+  workspaceSelector,
 }: ActiveRepositoryFilesPanelProps) {
   return (
     <div
@@ -46,6 +52,7 @@ export function ActiveRepositoryFilesPanel({
           sectionCollapsed={sectionCollapsed}
           onSectionCollapsedChange={onSectionCollapsedChange}
           hideCollapsedChrome={sectionCollapsed}
+          workspaceSelector={workspaceSelector}
         />
       </div>
     </div>

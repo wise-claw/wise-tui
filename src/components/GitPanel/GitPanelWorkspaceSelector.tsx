@@ -1,0 +1,234 @@
+import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { App, Popover, Tree } from "antd";
+import type { DataNode } from "antd/es/tree";
+import { FolderOpenOutlined } from "@ant-design/icons";
+import type { ProjectItem, Repository } from "../../types";
+import {
+  buildWorkspaceRepositoryTreeData,
+  findProjectOwningRepository,
+  formatWorkspaceRepositoryContextLabel,
+  parseWorkspaceRepositoryTreeValue,
+  resolveGitPanelContextOpenPath,
+  resolveTreeNodeOpenPath,
+  type WorkspaceRepositoryTreeNode,
+} from "../../utils/workspaceRepositoryTreeSelect";
+import type { WorkspaceFocus } from "../../utils/workspaceMode";
+import { getKnownOpenAppIcon } from "../OpenAppMenu/openAppIcons";
+import { DEFAULT_OPEN_APP_ID } from "../OpenAppMenu/constants";
+import { getOpenAppPreferenceSync } from "../../services/openAppPreference";
+import {
+  OPEN_WORKSPACE_ERROR,
+  openWorkspaceWithStoredPreference,
+} from "../../services/openWorkspaceWithPreference";
+import { repositoryEditorOpenMenuLabel } from "../LeftSidebar/sidebarMoreMenuItems";
+
+export interface GitPanelWorkspaceSelectorProps {
+  projects: ProjectItem[];
+  repositories: Repository[];
+  activeProjectId: string | null;
+  activeRepositoryId: number | null;
+  activeWorkspaceFocus: WorkspaceFocus;
+  activeRepositoryPath: string;
+  onRepositorySelect: (repositoryId: number) => void;
+  onProjectSelect?: (projectId: string) => void;
+}
+
+function buildTreeDataWithOpenActions(
+  nodes: WorkspaceRepositoryTreeNode[],
+  projects: ProjectItem[],
+  repositories: Repository[],
+  openIconSrc: string,
+  openActionLabel: string,
+  onOpenPath: (path: string) => void,
+): DataNode[] {
+  return nodes.map((node) => {
+    const openPath = resolveTreeNodeOpenPath(node, projects, repositories);
+    const title: ReactNode = (
+      <div className="git-panel-workspace-selector__tree-row">
+        <span className="git-panel-workspace-selector__tree-label">{node.title}</span>
+        {openPath ? (
+          <button
+            type="button"
+            className="git-panel-workspace-selector__tree-open"
+            title={`${openActionLabel}：${node.title}`}
+            aria-label={`${openActionLabel}：${node.title}`}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onOpenPath(openPath);
+            }}
+          >
+            <img className="git-panel-workspace-selector__tree-open-icon" src={openIconSrc} alt="" aria-hidden />
+          </button>
+        ) : null}
+      </div>
+    );
+
+    return {
+      key: node.value,
+      title,
+      selectable: node.selectable,
+      disabled: !node.selectable,
+      children: node.children
+        ? buildTreeDataWithOpenActions(
+            node.children,
+            projects,
+            repositories,
+            openIconSrc,
+            openActionLabel,
+            onOpenPath,
+          )
+        : undefined,
+    };
+  });
+}
+
+export function GitPanelWorkspaceSelector({
+  projects,
+  repositories,
+  activeProjectId,
+  activeRepositoryId,
+  activeWorkspaceFocus,
+  activeRepositoryPath,
+  onRepositorySelect,
+  onProjectSelect,
+}: GitPanelWorkspaceSelectorProps) {
+  const { message } = App.useApp();
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const openAppId = getOpenAppPreferenceSync().trim() || DEFAULT_OPEN_APP_ID;
+  const openIconSrc = getKnownOpenAppIcon(openAppId) ?? "";
+  const openActionLabel = repositoryEditorOpenMenuLabel();
+
+  const handleOpenPath = useCallback(
+    (path: string) => {
+      void openWorkspaceWithStoredPreference(path).catch((err: unknown) => {
+        const code = err instanceof Error ? err.message : "";
+        if (code === OPEN_WORKSPACE_ERROR.NOT_CONFIGURED) {
+          message.warning("未配置可用的编辑器或命令，请在中栏顶部「打开方式」中选择");
+        } else if (code === OPEN_WORKSPACE_ERROR.EMPTY_PATH) {
+          message.warning("目录路径为空");
+        } else if (code === OPEN_WORKSPACE_ERROR.NO_TARGET) {
+          message.warning("未找到可用的打开方式");
+        } else {
+          message.error("编辑器打开失败");
+          console.error(err);
+        }
+      });
+    },
+    [message],
+  );
+
+  const treeNodes = useMemo(
+    () => buildWorkspaceRepositoryTreeData(projects, repositories),
+    [projects, repositories],
+  );
+
+  const antTreeData = useMemo(
+    () =>
+      buildTreeDataWithOpenActions(
+        treeNodes,
+        projects,
+        repositories,
+        openIconSrc,
+        openActionLabel,
+        handleOpenPath,
+      ),
+    [treeNodes, projects, repositories, openIconSrc, openActionLabel, handleOpenPath],
+  );
+
+  const activeRepository = useMemo(
+    () => repositories.find((item) => item.id === activeRepositoryId) ?? null,
+    [repositories, activeRepositoryId],
+  );
+
+  const activeProject = useMemo(() => {
+    if (activeProjectId) {
+      const fromId = projects.find((item) => item.id === activeProjectId);
+      if (fromId) return fromId;
+    }
+    if (activeRepositoryId != null) {
+      return findProjectOwningRepository(projects, activeRepositoryId);
+    }
+    return null;
+  }, [activeProjectId, activeRepositoryId, projects]);
+
+  const contextLabel = formatWorkspaceRepositoryContextLabel(activeProject, activeRepository, {
+    workspaceFocus: activeWorkspaceFocus,
+  });
+
+  const openPath = useMemo(
+    () =>
+      resolveGitPanelContextOpenPath({
+        activeWorkspaceFocus,
+        activeProject,
+        activeRepositoryPath,
+        repositories,
+      }),
+    [activeWorkspaceFocus, activeProject, activeRepositoryPath, repositories],
+  );
+
+  const selectedKeys = useMemo(() => {
+    if (activeWorkspaceFocus === "project" && activeProjectId) {
+      return [`project:${activeProjectId}`];
+    }
+    if (activeRepositoryId != null) {
+      return [`repo:${activeRepositoryId}`];
+    }
+    return [];
+  }, [activeWorkspaceFocus, activeProjectId, activeRepositoryId]);
+
+  const picker = (
+    <Tree
+      className="git-panel-workspace-selector__tree"
+      blockNode
+      showLine
+      defaultExpandAll
+      selectedKeys={selectedKeys}
+      treeData={antTreeData}
+      onSelect={(keys) => {
+        const raw = String(keys[0] ?? "");
+        const parsed = parseWorkspaceRepositoryTreeValue(raw);
+        if (!parsed) return;
+        if (parsed.kind === "project") {
+          onProjectSelect?.(parsed.projectId);
+        } else {
+          onRepositorySelect(parsed.repositoryId);
+        }
+        setPickerOpen(false);
+      }}
+    />
+  );
+
+  if (treeNodes.length === 0) {
+    return (
+      <span className="git-panel-workspace-selector__label" title={openPath || activeRepositoryPath}>
+        {contextLabel}
+      </span>
+    );
+  }
+
+  return (
+    <div className="git-panel-workspace-selector">
+      <Popover
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        trigger="click"
+        placement="bottomLeft"
+        overlayClassName="git-panel-workspace-selector__popover"
+        content={picker}
+      >
+        <button
+          type="button"
+          className="git-panel-workspace-selector__trigger"
+          title={openPath || activeRepositoryPath}
+          aria-label={`当前：${contextLabel}，点击切换工作区或仓库`}
+          aria-expanded={pickerOpen}
+        >
+          <FolderOpenOutlined className="git-panel-workspace-selector__trigger-icon" aria-hidden />
+          <span className="git-panel-workspace-selector__trigger-text">{contextLabel}</span>
+        </button>
+      </Popover>
+    </div>
+  );
+}

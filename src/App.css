@@ -2231,6 +2231,36 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   white-space: nowrap;
 }
 
+.app-left-sidebar-repo-panel-header__selector {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.app-left-sidebar-repo-panel-header__selector .git-panel-workspace-selector {
+  width: 100%;
+}
+
+.app-left-sidebar-repo-panel-header__expand-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ant-color-text-tertiary);
+  cursor: pointer;
+}
+
+.app-left-sidebar-repo-panel-header__expand-icon:hover {
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-quaternary);
+}
+
 .app-left-sidebar-repo-panel-tabs {
   display: flex;
   align-items: center;
@@ -2320,6 +2350,10 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   padding: 2px 6px 0;
   min-height: 30px;
   box-sizing: border-box;
+}
+
+.app-left-sidebar-bottom-tab-content .git-files-explorer-workspace-selector .git-panel-workspace-selector__trigger-text {
+  font-size: 12px;
 }
 
 .app-left-sidebar-bottom-tab-content .git-files-explorer-title {

@@ -1,5 +1,4 @@
-import { FolderOpenOutlined } from "@ant-design/icons";
-import { App as AntdApp, Layout } from "antd";
+import { App as AntdApp, Layout, Tooltip } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectItem, Repository } from "../types";
 import { repositoryFolderBasename } from "../utils/repositoryType";
@@ -26,6 +25,7 @@ import { LeftSidebarTopbar } from "./LeftSidebar/LeftSidebarTopbar";
 import { LeftSidebarHubQuickEntries } from "./LeftSidebar/LeftSidebarHubQuickEntries";
 import { ProjectRepositoryList } from "./LeftSidebar/ProjectRepositoryList";
 import { GitPanel } from "./GitPanel";
+import { GitPanelWorkspaceSelector } from "./GitPanel/GitPanelWorkspaceSelector";
 import { ProgressMonitorPanel } from "./ProgressMonitorPanel";
 import {
   readLeftFilesExplorerCollapsedFromStorage,
@@ -468,6 +468,27 @@ export function LeftSidebar({
     [leftBottomTab, handleLeftBottomTabChange],
   );
 
+  const repoPanelWorkspaceSelectorProps = useMemo(
+    () => ({
+      projects,
+      repositories,
+      activeProjectId,
+      activeRepositoryId,
+      activeWorkspaceFocus,
+      onRepositorySelect: (repositoryId: number) => onRepositorySelect(repositoryId),
+      onProjectSelect,
+    }),
+    [
+      projects,
+      repositories,
+      activeProjectId,
+      activeRepositoryId,
+      activeWorkspaceFocus,
+      onRepositorySelect,
+      onProjectSelect,
+    ],
+  );
+
   useEffect(() => {
     setRepositoryFileTreeSearch("");
   }, [activeRepositoryPath]);
@@ -751,22 +772,22 @@ export function LeftSidebar({
             {leftBottomTab === "files" && filesExplorerSectionCollapsed ? (
               <div className="app-left-sidebar-repo-panel-header">
                 {repoPanelTabSwitcher}
-                <button
-                  type="button"
-                  className="app-left-sidebar-repo-panel-header__expand"
-                  title={activeRepositoryPath}
-                  onClick={() => handleFilesExplorerSectionCollapsedChange(false)}
-                >
-                  <span className="app-left-sidebar-repo-panel-header__expand-chevron" aria-hidden>
+                <div className="app-left-sidebar-repo-panel-header__selector">
+                  <GitPanelWorkspaceSelector
+                    {...repoPanelWorkspaceSelectorProps}
+                    activeRepositoryPath={activeRepositoryPath}
+                  />
+                </div>
+                <Tooltip title="展开文件树" mouseEnterDelay={0.35}>
+                  <button
+                    type="button"
+                    className="app-left-sidebar-repo-panel-header__expand-icon"
+                    aria-label="展开文件树"
+                    onClick={() => handleFilesExplorerSectionCollapsedChange(false)}
+                  >
                     <ExpandIcon expanded={false} />
-                  </span>
-                  <FolderOpenOutlined aria-hidden />
-                  <span className="app-left-sidebar-repo-panel-header__expand-label">
-                    {activeRepositoryName?.trim() ||
-                      activeRepositoryPath.split(/[/\\]/).filter(Boolean).pop() ||
-                      "资源管理器"}
-                  </span>
-                </button>
+                  </button>
+                </Tooltip>
               </div>
             ) : null}
             <div className="app-left-sidebar-bottom-tab-content">
@@ -776,6 +797,7 @@ export function LeftSidebar({
                   repositoryPath={activeRepositoryPath}
                   repositoryName={activeRepositoryName}
                   onOpenFile={onOpenActiveRepositoryFile}
+                  {...repoPanelWorkspaceSelectorProps}
                 />
               ) : (
                 <ActiveRepositoryFilesPanel
@@ -787,6 +809,7 @@ export function LeftSidebar({
                   onOpenFile={onOpenActiveRepositoryFile}
                   sectionCollapsed={filesExplorerSectionCollapsed}
                   onSectionCollapsedChange={handleFilesExplorerSectionCollapsedChange}
+                  workspaceSelector={repoPanelWorkspaceSelectorProps}
                 />
               )}
             </div>
