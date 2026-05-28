@@ -572,6 +572,12 @@ export function useWorkflowTeamAutomation({
             executeAfterCreate = deferExecute;
           }
           if (!targetEmployee) {
+            if (explicitTargetEmployeeName) {
+              const warningText = `未找到终端「${explicitTargetEmployeeName}」，请检查终端名称后重试。`;
+              message.warning(warningText);
+              appendSystemMessage(sessionId, warningText);
+              return false;
+            }
             return runExecute(sessionId, executePrompt) !== false;
           }
           appendSystemMessage(
@@ -698,7 +704,7 @@ export function useWorkflowTeamAutomation({
                   } catch (runtimeEventError) {
                     console.error("Failed to persist workflow runtime dispatch snapshot:", runtimeEventError);
                   }
-                  await dispatchTeamStepToEmployeeSession({
+                  const dispatched = await dispatchTeamStepToEmployeeSession({
                     task,
                     dispatch: {
                       employeeId: firstStep.dispatch.employeeId,
@@ -709,8 +715,17 @@ export function useWorkflowTeamAutomation({
                     previousNodeLabel: "开始",
                     attachExecutorToSnapshotId: dispatchSnapshot.id,
                   });
+                  if (!dispatched) {
+                    const warningText = `团队流程「${mentionedTeam.name}」首步派发失败，请检查终端配置或执行引擎。`;
+                    message.warning(warningText);
+                    appendSystemMessage(sessionId, warningText);
+                    return false;
+                  }
                 } else {
-                  appendSystemMessage(sessionId, `团队流程「${mentionedTeam.name}」未找到可执行节点。`);
+                  const warningText = `团队流程「${mentionedTeam.name}」未找到可执行节点。`;
+                  message.warning(warningText);
+                  appendSystemMessage(sessionId, warningText);
+                  return false;
                 }
               }
             } catch (runtimeError) {

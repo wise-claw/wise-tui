@@ -1,6 +1,6 @@
 import type { ClaudeHostProcess, ClaudeSession, ProjectItem, Repository } from "../../types";
 import type { ClaudeProcessWorkspaceLabelCacheHandle } from "../../hooks/useClaudeProcessWorkspaceLabelCache";
-import { sessionUpdatedAt } from "../ProgressMonitorPanel";
+import { normalizeSearchKeyword, sessionUpdatedAt } from "../ProgressMonitorPanel/progressMonitorSearch";
 import {
   enrichSessionWithHostProcessPath,
   isResolvedClaudeProcessScopeTitle,
@@ -8,7 +8,6 @@ import {
 } from "../../utils/claudeProcessWorkspaceLabelCache";
 import { normalizeRepositoryPathKey } from "../../utils/repositoryMainSessionBinding";
 import { resolveClaudeProcessWorkspaceLabels } from "../../utils/resolveClaudeProcessWorkspaceLabels";
-import { normalizeSearchKeyword } from "../ProgressMonitorPanel";
 import {
   HOST_PROCESS_ROW_ID_PREFIX,
   REGISTRY_ORPHAN_ROW_ID_PREFIX,

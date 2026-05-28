@@ -4,11 +4,11 @@ import { listRunningClaudeSessions } from "../../services/claude";
 import { isClaudeSessionRunningInHostOrUi } from "../../services/claudeSessionState";
 import { getSystemResourceSnapshot } from "../../services/systemResource";
 import {
-  getSessionPreview,
   matchSessionByKeyword,
   normalizeSearchKeyword,
   sessionUpdatedAt,
-} from "../ProgressMonitorPanel";
+} from "../ProgressMonitorPanel/progressMonitorSearch";
+import { getSessionPreview } from "../ProgressMonitorPanel";
 import {
   buildHostClaudeProcessSession,
   buildRegistryOrphanClaudeSession,

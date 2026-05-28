@@ -3061,12 +3061,20 @@ export function ClaudeChat({
   ]);
 
   const handleRunTaskInMainSession = useCallback(async (task: TaskItem) => {
-    onExecute(session.id, buildTaskExecutionPrompt(task));
+    const ok = await Promise.resolve(onExecute(session.id, buildTaskExecutionPrompt(task)));
+    if (ok === false) {
+      void message.error(`任务 ${task.id} 启动失败，请检查会话状态后重试。`);
+      return;
+    }
     void message.success(`任务 ${task.id} 已在主会话开始执行（仍为未完成，完成后请标记已完成）。`);
   }, [onExecute, session.id]);
 
   const handleRunTrellisTaskInMainSession = useCallback(async (task: TrellisRequirementTaskRow) => {
-    onExecute(session.id, buildTrellisTaskExecutionPrompt(task));
+    const ok = await Promise.resolve(onExecute(session.id, buildTrellisTaskExecutionPrompt(task)));
+    if (ok === false) {
+      void message.error(`Trellis 任务 ${task.taskId} 启动失败，请检查会话状态后重试。`);
+      return;
+    }
     void message.success(`Trellis 任务 ${task.taskId} 已发送到主会话。`);
   }, [onExecute, session.id]);
 
@@ -3077,10 +3085,14 @@ export function ClaudeChat({
         void message.info("请先选择员工。");
         return;
       }
-      onExecute(session.id, buildTrellisTaskExecutionPrompt(task), {
+      const ok = await Promise.resolve(onExecute(session.id, buildTrellisTaskExecutionPrompt(task), {
         targetType: "employee",
         targetEmployeeName: employeeName,
-      });
+      }));
+      if (ok === false) {
+        void message.error(`Trellis 任务 ${task.taskId} 派发失败，请检查终端状态后重试。`);
+        return;
+      }
       void message.success(`Trellis 任务 ${task.taskId} 已派发给员工 ${employeeName}。`);
     },
     [onExecute, session.id, trellisTaskEmployeeByKey],
@@ -3092,10 +3104,14 @@ export function ClaudeChat({
       void message.info("请先选择员工（选择会立即保存到拆分结果）。");
       return;
     }
-    onExecute(session.id, buildTaskExecutionPrompt(task), {
+    const ok = await Promise.resolve(onExecute(session.id, buildTaskExecutionPrompt(task), {
       targetType: "employee",
       targetEmployeeName: employeeName,
-    });
+    }));
+    if (ok === false) {
+      void message.error(`任务 ${task.id} 派发失败，请检查终端状态后重试。`);
+      return;
+    }
     void message.success(`任务 ${task.id} 已派发给员工 ${employeeName}（仍为未完成，完成后请标记已完成）。`);
   }, [onExecute, session.id]);
 
@@ -3106,11 +3122,15 @@ export function ClaudeChat({
       void message.info("请先选择团队流程（选择会立即保存到拆分结果）。");
       return;
     }
-    onExecute(session.id, buildTaskExecutionPrompt(task), {
+    const ok = await Promise.resolve(onExecute(session.id, buildTaskExecutionPrompt(task), {
       targetType: "team",
       targetWorkflowId: workflowId,
       targetWorkflowName: workflowName,
-    });
+    }));
+    if (ok === false) {
+      void message.error(`任务 ${task.id} 派发失败：团队流程未实际启动。`);
+      return;
+    }
     void message.success(`任务 ${task.id} 已派发到团队 ${workflowName}（仍为未完成，完成后请标记已完成）。`);
   }, [onExecute, session.id, taskListTeamOptions]);
 
