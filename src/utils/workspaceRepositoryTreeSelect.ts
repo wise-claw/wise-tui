@@ -54,6 +54,24 @@ export function resolveProjectDirectoryOpenPath(
   return resolveProjectMainSessionAnchor(project, repositories).path.trim();
 }
 
+/**
+ * 文件树 / Git 面板用的工作区目录：在会话锚点为空时回退到首个成员仓库路径，
+ * 避免多仓无公共父路径时左栏完全不展示。
+ */
+export function resolveProjectExplorerOpenPath(
+  project: ProjectItem,
+  repositories: readonly Repository[],
+): string {
+  const anchorPath = resolveProjectDirectoryOpenPath(project, repositories);
+  if (anchorPath) return anchorPath;
+  const repoById = new Map(repositories.map((repo) => [repo.id, repo] as const));
+  for (const repoId of project.repositoryIds ?? []) {
+    const path = repoById.get(repoId)?.path?.trim() ?? "";
+    if (path) return path;
+  }
+  return "";
+}
+
 export function resolveGitPanelContextOpenPath(input: {
   activeWorkspaceFocus: WorkspaceFocus;
   activeProject: ProjectItem | null;
@@ -61,7 +79,7 @@ export function resolveGitPanelContextOpenPath(input: {
   repositories: readonly Repository[];
 }): string {
   if (input.activeWorkspaceFocus === "project" && input.activeProject) {
-    const projectPath = resolveProjectDirectoryOpenPath(input.activeProject, input.repositories);
+    const projectPath = resolveProjectExplorerOpenPath(input.activeProject, input.repositories);
     if (projectPath) return projectPath;
   }
   return input.activeRepositoryPath.trim();
@@ -134,7 +152,7 @@ export function resolveTreeNodeOpenPath(
   if (node.nodeType === "project" && node.projectId) {
     const project = projects.find((item) => item.id === node.projectId);
     if (!project) return "";
-    return resolveProjectDirectoryOpenPath(project, repositories);
+    return resolveProjectExplorerOpenPath(project, repositories);
   }
   if (node.nodeType === "repo" && node.repositoryId != null) {
     return repositories.find((item) => item.id === node.repositoryId)?.path.trim() ?? "";
@@ -188,7 +206,7 @@ export function resolveWorkspaceRepositoryTreeSelectionView(
   if (selection.kind === "project") {
     const project = projects.find((item) => item.id === selection.projectId);
     if (!project) return null;
-    const path = resolveProjectDirectoryOpenPath(project, repositories);
+    const path = resolveProjectExplorerOpenPath(project, repositories);
     const firstRepoId = project.repositoryIds?.[0];
     const firstRepo =
       firstRepoId != null ? (repositories.find((item) => item.id === firstRepoId) ?? null) : null;

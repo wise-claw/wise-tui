@@ -44,6 +44,7 @@ export function useRepositoryFilesExplorer({
 }: UseRepositoryFilesExplorerInput) {
   const [loading, setLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [loadedRepositoryPath, setLoadedRepositoryPath] = useState(repositoryPath);
   const [explorerEntries, setExplorerEntries] = useState<RepositoryExplorerEntry[]>([]);
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
@@ -96,7 +97,16 @@ export function useRepositoryFilesExplorer({
 
   useEffect(() => {
     let cancelled = false;
-    const path = repositoryPath;
+    const path = repositoryPath.trim();
+    if (!path) {
+      setExplorerEntries([]);
+      setLoadedRepositoryPath("");
+      setLoadError(null);
+      setIsRefreshing(false);
+      setLoading(false);
+      return;
+    }
+    setLoadError(null);
     const cached = getCachedRepositoryExplorerEntries(path);
     if (cached) {
       setExplorerEntries(cached);
@@ -136,6 +146,16 @@ export function useRepositoryFilesExplorer({
         try {
           const entries = await listRepositoryExplorerEntries(path);
           applyEntries(entries);
+          if (!cancelled) {
+            setLoadError(null);
+          }
+        } catch (error) {
+          if (!cancelled) {
+            const msg = error instanceof Error ? error.message : String(error);
+            setLoadError(msg);
+            setExplorerEntries([]);
+            setLoadedRepositoryPath(path);
+          }
         } finally {
           if (!cancelled) {
             setIsRefreshing(false);
@@ -440,6 +460,7 @@ export function useRepositoryFilesExplorer({
   return {
     loading,
     isRefreshing,
+    loadError,
     treeStale,
     explorerEntries: visibleExplorerEntries,
     expandedDirs,

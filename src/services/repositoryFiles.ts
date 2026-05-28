@@ -28,13 +28,9 @@ export async function searchRepositoryFiles(
 export async function listRepositoryExplorerEntries(
   repositoryRoot: string,
 ): Promise<RepositoryExplorerEntry[]> {
-  try {
-    return await invoke<RepositoryExplorerEntry[]>("list_repository_explorer_entries", {
-      root: repositoryRoot,
-    });
-  } catch {
-    return [];
-  }
+  return invoke<RepositoryExplorerEntry[]>("list_repository_explorer_entries", {
+    root: repositoryRoot,
+  });
 }
 
 /**

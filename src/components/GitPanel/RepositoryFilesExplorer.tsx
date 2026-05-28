@@ -51,13 +51,22 @@ export function RepositoryFilesExplorer({
   hideCollapsedChrome = false,
   workspaceSelector,
 }: RepositoryFilesExplorerProps) {
+  const trimmedRepositoryPath = repositoryPath.trim();
   const explorer = useRepositoryFilesExplorer({
-    repositoryPath,
+    repositoryPath: trimmedRepositoryPath,
     search,
     onClearExplorerSearch,
   });
   const rootInline = explorer.inlineCreate?.parentDir === "";
   const treeEmpty = explorer.filteredTree.length === 0 && !rootInline;
+
+  if (!trimmedRepositoryPath) {
+    return (
+      <div className="git-files-mode">
+        <Empty description="请选择仓库以浏览文件" style={{ padding: "40px 0" }} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+      </div>
+    );
+  }
   const setSectionCollapsed = onSectionCollapsedChange;
   const switchingRepositoryTree = explorer.treeStale && explorer.explorerEntries.length === 0;
 
@@ -130,7 +139,13 @@ export function RepositoryFilesExplorer({
     );
   }
 
-  const treeBody = treeEmpty ? (
+  const treeBody = explorer.loadError ? (
+    <Empty
+      description={`文件树加载失败：${explorer.loadError}`}
+      style={{ padding: "24px 0" }}
+      image={Empty.PRESENTED_IMAGE_SIMPLE}
+    />
+  ) : treeEmpty ? (
     <Empty
       description={search.trim() ? "未找到匹配文件" : "暂无文件"}
       style={{ padding: "24px 0" }}

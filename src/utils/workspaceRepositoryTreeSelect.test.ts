@@ -8,6 +8,7 @@ import {
   parseWorkspaceRepositoryTreeValue,
   resolveGitPanelContextOpenPath,
   resolveProjectDirectoryOpenPath,
+  resolveProjectExplorerOpenPath,
   resolveTreeNodeOpenPath,
   resolveWorkspaceRepositoryTreeSelectionView,
 } from "./workspaceRepositoryTreeSelect";
@@ -103,6 +104,21 @@ describe("workspaceRepositoryTreeSelect", () => {
         activeRepositoryId: 1,
       }),
     ).toEqual({ kind: "repository", repositoryId: 1 });
+  });
+
+  test("resolveProjectExplorerOpenPath falls back to first member when anchor is empty", () => {
+    const multi: ProjectItem = {
+      id: "p2",
+      name: "Split",
+      repositoryIds: [1, 2],
+      createdAt: 0,
+      updatedAt: 0,
+      rootPath: "",
+    };
+    const a = { ...repo, id: 1, path: "/work/p/a", name: "a" };
+    const b = { ...repo, id: 2, path: "/other/p/b", name: "b" };
+    expect(resolveProjectExplorerOpenPath(multi, [a, b])).toBe("/work/p/a");
+    expect(resolveProjectDirectoryOpenPath(multi, [a, b])).toBe("");
   });
 
   test("resolves file-tree-only selection view without changing global ids", () => {

@@ -7,6 +7,8 @@ import {
   resolveWorkspaceRepositoryTreeSelectionView,
   type WorkspaceRepositoryTreeSelection,
 } from "../utils/workspaceRepositoryTreeSelect";
+import { normalizeSessionRepositoryPath } from "../utils/sessionHistoryScope";
+import { resolveRepositoryForSession } from "../utils/repositoryMainSessionBinding";
 import { AppSettingsModal } from "./AppSettingsModal";
 import { MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths";
 import { DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION } from "../constants/workspaceBootstrapAddons";
@@ -137,7 +139,7 @@ export function LeftSidebar({
   onStopRepositoryRunCommand,
   sessions,
   repositoryMainSessionBindings,
-  activeSessionId: _activeSessionId,
+  activeSessionId,
   onSelectSession: _onSelectSession,
   sessionConversationTaskItems,
   onStopSessionConversationTask,
@@ -491,9 +493,33 @@ export function LeftSidebar({
     [activeWorkspaceFocus, activeProjectId, activeRepositoryId],
   );
 
+  const activeSession = useMemo(
+    () => (activeSessionId ? (sessions.find((s) => s.id === activeSessionId) ?? null) : null),
+    [sessions, activeSessionId],
+  );
+
+  const activeSessionRepositoryPath = useMemo(() => {
+    const raw = activeSession?.repositoryPath?.trim();
+    if (!raw) return "";
+    return normalizeSessionRepositoryPath(raw);
+  }, [activeSession?.repositoryPath]);
+
+  const sessionDerivedTreeSelection = useMemo((): WorkspaceRepositoryTreeSelection | null => {
+    if (!activeSession?.repositoryPath?.trim()) return null;
+    const repo = resolveRepositoryForSession({
+      session: activeSession,
+      repositories,
+      bindings: repositoryMainSessionBindings,
+      sessions,
+      preferredRepositoryId: activeRepositoryId ?? undefined,
+    });
+    if (repo) return { kind: "repository", repositoryId: repo.id };
+    return null;
+  }, [activeSession, repositories, repositoryMainSessionBindings, sessions, activeRepositoryId]);
+
   useEffect(() => {
-    setRepoPanelTreeSelection(globalWorkspaceTreeSelection);
-  }, [globalWorkspaceTreeSelection]);
+    setRepoPanelTreeSelection(globalWorkspaceTreeSelection ?? sessionDerivedTreeSelection);
+  }, [globalWorkspaceTreeSelection, sessionDerivedTreeSelection]);
 
   const repoPanelTreeView = useMemo(() => {
     if (!repoPanelTreeSelection) return null;
@@ -504,8 +530,16 @@ export function LeftSidebar({
     );
   }, [repoPanelTreeSelection, projects, repositories]);
 
-  const repoPanelRepositoryPath = repoPanelTreeView?.path.trim() || activeRepositoryPath || "";
-  const repoPanelRepositoryName = repoPanelTreeView?.label.trim() || activeRepositoryName;
+  const repoPanelRepositoryPath =
+    repoPanelTreeView?.path.trim() ||
+    activeSessionRepositoryPath ||
+    (activeRepositoryPath?.trim() ? normalizeSessionRepositoryPath(activeRepositoryPath) : "");
+  const repoPanelRepositoryName =
+    repoPanelTreeView?.label.trim() ||
+    activeRepositoryName?.trim() ||
+    activeSession?.repositoryName?.trim() ||
+    repositoryFolderBasename({ path: repoPanelRepositoryPath, name: activeRepositoryName ?? "" });
+  const showRepoPanel = Boolean(repoPanelRepositoryPath.trim());
 
   const repoPanelWorkspaceSelectorProps = useMemo(
     () => ({
@@ -656,9 +690,9 @@ export function LeftSidebar({
 
       <div
         className="app-left-sidebar-project-and-files"
-        data-has-files-explorer={activeRepositoryPath ? "true" : "false"}
+        data-has-files-explorer={showRepoPanel ? "true" : "false"}
         data-files-explorer-section-collapsed={
-          activeRepositoryPath && filesExplorerSectionCollapsed ? "true" : undefined
+          showRepoPanel && filesExplorerSectionCollapsed ? "true" : undefined
         }
       >
         <ProjectRepositoryList
@@ -815,7 +849,7 @@ export function LeftSidebar({
           />
         </div>
 
-        {activeRepositoryPath ? (
+        {showRepoPanel ? (
           <div className="app-left-sidebar-bottom-tabs">
             {leftBottomTab === "files" && filesExplorerSectionCollapsed ? (
               <div className="app-left-sidebar-repo-panel-header">

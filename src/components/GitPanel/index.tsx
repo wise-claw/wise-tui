@@ -423,6 +423,12 @@ export function GitPanel({
           </div>
         ) : isMissingRepo ? (
           <InitMode onInit={handleInit} loading={loading.init} />
+        ) : errors.status && !status ? (
+          <Empty
+            description={`Git 状态加载失败：${errors.status}`}
+            style={{ padding: "24px 0" }}
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+          />
         ) : (
           status && (
             <DiffMode
