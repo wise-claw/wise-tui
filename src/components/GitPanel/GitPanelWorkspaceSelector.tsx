@@ -31,6 +31,8 @@ export interface GitPanelWorkspaceSelectorProps {
   activeRepositoryPath: string;
   onRepositorySelect: (repositoryId: number) => void;
   onProjectSelect?: (projectId: string) => void;
+  /** 仅切换文件树目录，不联动全局工作区（左栏文件 Tab）。 */
+  directoryOnly?: boolean;
 }
 
 function buildTreeDataWithOpenActions(
@@ -92,6 +94,7 @@ export function GitPanelWorkspaceSelector({
   activeRepositoryPath,
   onRepositorySelect,
   onProjectSelect,
+  directoryOnly = false,
 }: GitPanelWorkspaceSelectorProps) {
   const { message } = App.useApp();
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -222,7 +225,11 @@ export function GitPanelWorkspaceSelector({
           type="button"
           className="git-panel-workspace-selector__trigger"
           title={openPath || activeRepositoryPath}
-          aria-label={`当前：${contextLabel}，点击切换工作区或仓库`}
+          aria-label={
+            directoryOnly
+              ? `当前目录：${contextLabel}，点击切换文件树目录`
+              : `当前：${contextLabel}，点击切换工作区或仓库`
+          }
           aria-expanded={pickerOpen}
         >
           <FolderOpenOutlined className="git-panel-workspace-selector__trigger-icon" aria-hidden />

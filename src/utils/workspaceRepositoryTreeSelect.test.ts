@@ -4,10 +4,12 @@ import {
   buildWorkspaceRepositoryTreeData,
   findProjectOwningRepository,
   formatWorkspaceRepositoryContextLabel,
+  globalWorkspaceToTreeSelection,
   parseWorkspaceRepositoryTreeValue,
   resolveGitPanelContextOpenPath,
   resolveProjectDirectoryOpenPath,
   resolveTreeNodeOpenPath,
+  resolveWorkspaceRepositoryTreeSelectionView,
 } from "./workspaceRepositoryTreeSelect";
 
 const project: ProjectItem = {
@@ -28,11 +30,14 @@ const repo: Repository = {
 
 describe("workspaceRepositoryTreeSelect", () => {
   test("formats workspace and repository label", () => {
-    expect(formatWorkspaceRepositoryContextLabel(project, repo)).toBe("eco / eco-ai-web");
+    expect(formatWorkspaceRepositoryContextLabel(project, repo)).toBe("eco-ai-web");
     expect(formatWorkspaceRepositoryContextLabel(null, repo)).toBe("eco-ai-web");
     expect(
       formatWorkspaceRepositoryContextLabel(project, repo, { workspaceFocus: "project" }),
     ).toBe("eco");
+    expect(
+      formatWorkspaceRepositoryContextLabel(project, repo, { workspaceFocus: "repository" }),
+    ).toBe("eco-ai-web");
   });
 
   test("builds nested tree with standalone group", () => {
@@ -81,5 +86,35 @@ describe("workspaceRepositoryTreeSelect", () => {
     const repoNode = projectNode.children![0]!;
     expect(resolveTreeNodeOpenPath(projectNode, [project], [repo])).toBe("/eco");
     expect(resolveTreeNodeOpenPath(repoNode, [project], [repo])).toBe("/eco/eco-ai-web");
+  });
+
+  test("maps global workspace focus to tree selection", () => {
+    expect(
+      globalWorkspaceToTreeSelection({
+        activeWorkspaceFocus: "project",
+        activeProjectId: "p1",
+        activeRepositoryId: 1,
+      }),
+    ).toEqual({ kind: "project", projectId: "p1" });
+    expect(
+      globalWorkspaceToTreeSelection({
+        activeWorkspaceFocus: "repository",
+        activeProjectId: "p1",
+        activeRepositoryId: 1,
+      }),
+    ).toEqual({ kind: "repository", repositoryId: 1 });
+  });
+
+  test("resolves file-tree-only selection view without changing global ids", () => {
+    const sibling: Repository = { ...repo, id: 2, name: "eco-ai", path: "/eco/eco-ai" };
+    const view = resolveWorkspaceRepositoryTreeSelectionView(
+      { kind: "repository", repositoryId: 2 },
+      [project],
+      [repo, sibling],
+    );
+    expect(view?.path).toBe("/eco/eco-ai");
+    expect(view?.label).toBe("eco-ai");
+    expect(view?.activeRepositoryId).toBe(2);
+    expect(view?.activeWorkspaceFocus).toBe("repository");
   });
 });

@@ -49,6 +49,8 @@ interface Props {
   activeWorkspaceFocus?: WorkspaceFocus;
   onRepositorySelect?: (repositoryId: number) => void;
   onProjectSelect?: (projectId: string) => void;
+  /** 仅切换 Git 面板目录，不联动全局工作区。 */
+  directoryOnly?: boolean;
 }
 
 export function GitPanel({
@@ -63,6 +65,7 @@ export function GitPanel({
   activeWorkspaceFocus = "repository",
   onRepositorySelect,
   onProjectSelect,
+  directoryOnly,
 }: Props) {
   const [status, setStatus] = useState<GitStatusResponse | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -341,6 +344,7 @@ export function GitPanel({
               activeRepositoryPath={repositoryPath}
               onRepositorySelect={onRepositorySelect}
               onProjectSelect={onProjectSelect}
+              directoryOnly={directoryOnly}
             />
           ) : (
             <span className="git-panel-title">GIT</span>

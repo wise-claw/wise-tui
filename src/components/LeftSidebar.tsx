@@ -2,6 +2,11 @@ import { App as AntdApp, Layout, Tooltip } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectItem, Repository } from "../types";
 import { repositoryFolderBasename } from "../utils/repositoryType";
+import {
+  globalWorkspaceToTreeSelection,
+  resolveWorkspaceRepositoryTreeSelectionView,
+  type WorkspaceRepositoryTreeSelection,
+} from "../utils/workspaceRepositoryTreeSelect";
 import { AppSettingsModal } from "./AppSettingsModal";
 import { MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths";
 import { DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION } from "../constants/workspaceBootstrapAddons";
@@ -195,6 +200,9 @@ export function LeftSidebar({
   const [promotingFloatingRepoName, setPromotingFloatingRepoName] = useState("");
   const [appSettingsOpen, setAppSettingsOpen] = useState(false);
   const [repositoryFileTreeSearch, setRepositoryFileTreeSearch] = useState("");
+  /** 左下 Git/文件 Tab 目录选择器上下文：仅切换面板目录，不联动全局工作区/会话。 */
+  const [repoPanelTreeSelection, setRepoPanelTreeSelection] =
+    useState<WorkspaceRepositoryTreeSelection | null>(null);
   const [filesExplorerSectionCollapsed, setFilesExplorerSectionCollapsed] = useState(
     readLeftFilesExplorerCollapsedFromStorage,
   );
@@ -468,30 +476,60 @@ export function LeftSidebar({
     [leftBottomTab, handleLeftBottomTabChange],
   );
 
+  const globalWorkspaceTreeSelection = useMemo(
+    () =>
+      globalWorkspaceToTreeSelection({
+        activeWorkspaceFocus,
+        activeProjectId,
+        activeRepositoryId,
+      }),
+    [activeWorkspaceFocus, activeProjectId, activeRepositoryId],
+  );
+
+  useEffect(() => {
+    setRepoPanelTreeSelection(globalWorkspaceTreeSelection);
+  }, [globalWorkspaceTreeSelection]);
+
+  const repoPanelTreeView = useMemo(() => {
+    if (!repoPanelTreeSelection) return null;
+    return resolveWorkspaceRepositoryTreeSelectionView(
+      repoPanelTreeSelection,
+      projects,
+      repositories,
+    );
+  }, [repoPanelTreeSelection, projects, repositories]);
+
+  const repoPanelRepositoryPath = repoPanelTreeView?.path.trim() || activeRepositoryPath;
+  const repoPanelRepositoryName = repoPanelTreeView?.label.trim() || activeRepositoryName;
+
   const repoPanelWorkspaceSelectorProps = useMemo(
     () => ({
       projects,
       repositories,
-      activeProjectId,
-      activeRepositoryId,
-      activeWorkspaceFocus,
-      onRepositorySelect: (repositoryId: number) => onRepositorySelect(repositoryId),
-      onProjectSelect,
+      directoryOnly: true as const,
+      activeProjectId: repoPanelTreeView?.activeProjectId ?? activeProjectId,
+      activeRepositoryId: repoPanelTreeView?.activeRepositoryId ?? activeRepositoryId,
+      activeWorkspaceFocus: repoPanelTreeView?.activeWorkspaceFocus ?? activeWorkspaceFocus,
+      onRepositorySelect: (repositoryId: number) => {
+        setRepoPanelTreeSelection({ kind: "repository", repositoryId });
+      },
+      onProjectSelect: (projectId: string) => {
+        setRepoPanelTreeSelection({ kind: "project", projectId });
+      },
     }),
     [
       projects,
       repositories,
+      repoPanelTreeView,
       activeProjectId,
       activeRepositoryId,
       activeWorkspaceFocus,
-      onRepositorySelect,
-      onProjectSelect,
     ],
   );
 
   useEffect(() => {
     setRepositoryFileTreeSearch("");
-  }, [activeRepositoryPath]);
+  }, [repoPanelRepositoryPath]);
 
   const lastHandledWorkspaceCreateRequestRef = useRef(0);
   const lastHandledStandaloneRepoAddRequestRef = useRef(0);
@@ -775,7 +813,7 @@ export function LeftSidebar({
                 <div className="app-left-sidebar-repo-panel-header__selector">
                   <GitPanelWorkspaceSelector
                     {...repoPanelWorkspaceSelectorProps}
-                    activeRepositoryPath={activeRepositoryPath}
+                    activeRepositoryPath={repoPanelRepositoryPath}
                   />
                 </div>
                 <Tooltip title="展开文件树" mouseEnterDelay={0.35}>
@@ -794,16 +832,16 @@ export function LeftSidebar({
               {leftBottomTab === "git" ? (
                 <GitPanel
                   headerPrefix={repoPanelTabSwitcher}
-                  repositoryPath={activeRepositoryPath}
-                  repositoryName={activeRepositoryName}
+                  repositoryPath={repoPanelRepositoryPath}
+                  repositoryName={repoPanelRepositoryName}
                   onOpenFile={onOpenActiveRepositoryFile}
                   {...repoPanelWorkspaceSelectorProps}
                 />
               ) : (
                 <ActiveRepositoryFilesPanel
                   headerPrefix={filesExplorerSectionCollapsed ? undefined : repoPanelTabSwitcher}
-                  activeRepositoryPath={activeRepositoryPath}
-                  activeRepositoryName={activeRepositoryName}
+                  activeRepositoryPath={repoPanelRepositoryPath}
+                  activeRepositoryName={repoPanelRepositoryName}
                   search={repositoryFileTreeSearch}
                   onSearchChange={setRepositoryFileTreeSearch}
                   onOpenFile={onOpenActiveRepositoryFile}

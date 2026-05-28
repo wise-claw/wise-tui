@@ -43,11 +43,7 @@ export function formatWorkspaceRepositoryContextLabel(
   if (options?.workspaceFocus === "project" && projectName) {
     return projectName;
   }
-  const repoLabel = repositoryDisplayName(repository ?? null);
-  if (projectName) {
-    return `${projectName} / ${repoLabel}`;
-  }
-  return repoLabel;
+  return repositoryDisplayName(repository ?? null);
 }
 
 /** 工作区在 IDE / 打开方式菜单中使用的目录（rootPath 或成员仓公共父路径）。 */
@@ -158,4 +154,67 @@ export function parseWorkspaceRepositoryTreeValue(raw: string): WorkspaceReposit
     return { kind: "project", projectId };
   }
   return null;
+}
+
+export function globalWorkspaceToTreeSelection(input: {
+  activeWorkspaceFocus: WorkspaceFocus;
+  activeProjectId: string | null;
+  activeRepositoryId: number | null;
+}): WorkspaceRepositoryTreeSelection | null {
+  if (input.activeWorkspaceFocus === "project" && input.activeProjectId) {
+    return { kind: "project", projectId: input.activeProjectId };
+  }
+  if (input.activeRepositoryId != null) {
+    return { kind: "repository", repositoryId: input.activeRepositoryId };
+  }
+  return null;
+}
+
+export interface WorkspaceRepositoryTreeSelectionView {
+  selection: WorkspaceRepositoryTreeSelection;
+  path: string;
+  label: string;
+  activeProjectId: string | null;
+  activeRepositoryId: number | null;
+  activeWorkspaceFocus: WorkspaceFocus;
+}
+
+/** 将树选择解析为文件树展示路径与选择器高亮状态（不触发全局工作区切换）。 */
+export function resolveWorkspaceRepositoryTreeSelectionView(
+  selection: WorkspaceRepositoryTreeSelection,
+  projects: readonly ProjectItem[],
+  repositories: readonly Repository[],
+): WorkspaceRepositoryTreeSelectionView | null {
+  if (selection.kind === "project") {
+    const project = projects.find((item) => item.id === selection.projectId);
+    if (!project) return null;
+    const path = resolveProjectDirectoryOpenPath(project, repositories);
+    const firstRepoId = project.repositoryIds?.[0];
+    const firstRepo =
+      firstRepoId != null ? (repositories.find((item) => item.id === firstRepoId) ?? null) : null;
+    return {
+      selection,
+      path,
+      label: formatWorkspaceRepositoryContextLabel(project, firstRepo, {
+        workspaceFocus: "project",
+      }),
+      activeProjectId: project.id,
+      activeRepositoryId: firstRepoId ?? null,
+      activeWorkspaceFocus: "project",
+    };
+  }
+
+  const repository = repositories.find((item) => item.id === selection.repositoryId);
+  if (!repository) return null;
+  const project = findProjectOwningRepository(projects, repository.id);
+  return {
+    selection,
+    path: repository.path.trim(),
+    label: formatWorkspaceRepositoryContextLabel(project, repository, {
+      workspaceFocus: "repository",
+    }),
+    activeProjectId: project?.id ?? null,
+    activeRepositoryId: repository.id,
+    activeWorkspaceFocus: "repository",
+  };
 }
