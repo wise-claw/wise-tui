@@ -131,6 +131,12 @@ export interface LeftSidebarProps {
   onOpenProjectTrellis?: (project: ProjectItem) => void;
   onOpenPromptsRepository?: (project: ProjectItem, repository: Repository) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
+  /** 打开仓库运行指令配置弹窗 */
+  onConfigureRepositoryMainSessionRun?: (repository: Repository) => void;
+  /** 启动仓库运行指令（与顶栏「运行」一致） */
+  onStartRepositoryRunCommand?: (repository: Repository) => void;
+  /** 停止仓库运行指令（与顶栏「停止运行」一致） */
+  onStopRepositoryRunCommand?: (repository: Repository) => void;
   sessions: ClaudeSession[];
   repositoryMainSessionBindings: Record<string, string>;
   activeSessionId: string | null;

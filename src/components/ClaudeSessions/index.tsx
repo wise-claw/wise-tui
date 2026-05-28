@@ -9,7 +9,7 @@ import type {
   WorkflowTaskItem,
   WorkflowTemplateItem,
 } from "../../types";
-import { Button, Dropdown, Empty, Input, message, Popover, Spin, Switch, Tooltip, TreeSelect, type TooltipProps } from "antd";
+import { Button, Dropdown, Empty, message, Popover, Spin, Switch, Tooltip, TreeSelect, type TooltipProps } from "antd";
 import { LoadingOutlined } from "@ant-design/icons";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type PointerEvent as ReactPointerEvent } from "react";
 import { useDockSlice } from "../../hooks/useDockSlice";
@@ -25,9 +25,8 @@ import {
   DEFAULT_OPEN_APP_ID,
 } from "../OpenAppMenu/constants";
 import { getOpenAppPreferenceSync, hydrateOpenAppPreference } from "../../services/openAppPreference";
-import { openTerminalSession, writeTerminalSession } from "../../services/terminal";
-import { subscribeTerminalExit, subscribeTerminalOutput } from "../../services/events";
-import { openExternalUrl } from "../../services/openExternal";
+import { useRepositoryRunCommand } from "../../hooks/useRepositoryRunCommand";
+import { RunCommandPanel } from "../RunCommand";
 import { pickSessionForRepositorySidebarSelect } from "../../utils/claudeSessionSelection";
 import { filterSessionsForWorkspace } from "../../utils/projectSessionPanelFilter";
 import {
@@ -47,37 +46,8 @@ const TerminalPanelLazy = lazy(() =>
   import("../TerminalPanel").then((module) => ({ default: module.TerminalPanel })),
 );
 
-const RUN_ERROR_MONITOR_DEDUP_WINDOW_MS = 60_000;
-const runErrorMonitorSentAtByKey = new Map<string, number>();
 const PANE_CREATE_MIN_LOADING_MS = 220;
 const TWO_PANE_MIN_WIDTH_PX = 460;
-
-function buildRunErrorMonitorDedupKey(runCwd: string, command: string, tailText: string): string {
-  const normalizedTail = tailText
-    .replace(/\u001b\[[0-9;]*[A-Za-z]/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase()
-    .slice(-800);
-  return `${runCwd.trim().toLowerCase()}|${command.trim().toLowerCase()}|${normalizedTail}`;
-}
-
-function shouldSkipRunErrorMonitorSend(dedupKey: string, now: number): boolean {
-  const lastAt = runErrorMonitorSentAtByKey.get(dedupKey);
-  if (lastAt && now - lastAt < RUN_ERROR_MONITOR_DEDUP_WINDOW_MS) {
-    return true;
-  }
-  runErrorMonitorSentAtByKey.set(dedupKey, now);
-  if (runErrorMonitorSentAtByKey.size > 200) {
-    const expireBefore = now - RUN_ERROR_MONITOR_DEDUP_WINDOW_MS;
-    for (const [key, sentAt] of runErrorMonitorSentAtByKey.entries()) {
-      if (sentAt < expireBefore) {
-        runErrorMonitorSentAtByKey.delete(key);
-      }
-    }
-  }
-  return false;
-}
 
 async function withMinDuration<T>(task: Promise<T>, minMs: number): Promise<T> {
   const startedAt = Date.now();
@@ -163,40 +133,6 @@ interface PaneRepoTreeNode {
   projectRootPath?: string;
   repositoryId?: number;
   children?: PaneRepoTreeNode[];
-}
-
-/** 仅从终端输出识别本机 dev 地址：localhost / 127.0.0.1 / 0.0.0.0 / IPv4 / 方括号 IPv6，不匹配任意域名。 */
-const RUN_LOG_URL_REGEX =
-  /(https?:\/\/(?:(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)?|\[[0-9a-fA-F:]+\](?::\d+)?|(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?)(?:\/[^\s]*)?)/i;
-const RUN_LOG_HOST_PORT_REGEX =
-  /\b(localhost|127\.0\.0\.1|0\.0\.0\.0|(?:\d{1,3}\.){3}\d{1,3}):(\d{2,5})(\/[^\s]*)?\b/i;
-const RUN_LOG_IPV6_BRACKET_PORT_REGEX = /\[([0-9a-fA-F:]+)\]:(\d{2,5})(\/[^\s]*)?\b/i;
-
-function detectRunUrlFromLogText(text: string): string | null {
-  const plain = text
-    .replace(/\u001b\[[0-9;]*[A-Za-z]/g, "")
-    .replace(/\r\n/g, "\n")
-    .replace(/\r/g, "\n");
-  const direct = plain.match(RUN_LOG_URL_REGEX)?.[1];
-  if (direct) {
-    return direct
-      .replace("0.0.0.0", "localhost")
-      .replace("127.0.0.1", "localhost");
-  }
-  const hostPort = plain.match(RUN_LOG_HOST_PORT_REGEX);
-  if (hostPort?.[1] && hostPort?.[2]) {
-    const host = hostPort[1]
-      .replace("0.0.0.0", "localhost")
-      .replace("127.0.0.1", "localhost");
-    const suffix = hostPort[3] ?? "";
-    return `http://${host}:${hostPort[2]}${suffix}`;
-  }
-  const v6 = plain.match(RUN_LOG_IPV6_BRACKET_PORT_REGEX);
-  if (v6?.[1] && v6?.[2]) {
-    const suffix = v6[3] ?? "";
-    return `http://[${v6[1]}]:${v6[2]}${suffix}`;
-  }
-  return null;
 }
 
 // ── SVG Icons ──
@@ -422,96 +358,19 @@ export function Topbar({
     return getOpenAppPreferenceSync() || DEFAULT_OPEN_APP_ID;
   });
   const [runPopoverOpen, setRunPopoverOpen] = useState(false);
-  const [runCommand, setRunCommand] = useState("");
-  const [runPreferredUrl, setRunPreferredUrl] = useState("");
-  const [runStatus, setRunStatus] = useState<"idle" | "running" | "stopping">("idle");
-  const [runStatusHint, setRunStatusHint] = useState("未运行");
-  const [runOutputPreview, setRunOutputPreview] = useState<Array<{ text: string; isError: boolean }>>([]);
-  const [runDetectedUrl, setRunDetectedUrl] = useState<string | null>(null);
-  const [runErrorMonitorEnabled, setRunErrorMonitorEnabled] = useState(false);
-  const [runAutoOpenPageEnabled, setRunAutoOpenPageEnabled] = useState(true);
   const [rightPanelDefaultPopoverOpen, setRightPanelDefaultPopoverOpen] = useState(false);
   const [rightPanelDefaultDraftCollapsed, setRightPanelDefaultDraftCollapsed] = useState(
     rightPanelDefaultCollapsed ?? RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK,
   );
-  const runLogTailRef = useRef("");
-  const runChunkBufferRef = useRef("");
-  const idleTimerRef = useRef<number | null>(null);
-  const autoOpenFallbackTimerRef = useRef<number | null>(null);
-  const autoOpenedRunUrlRef = useRef(false);
-  const errorDetectedRef = useRef(false);
-  const autoFixSentRef = useRef(false);
 
-  const RUNNER_TERMINAL_ID = "topbar-runner";
-  const runCwd = activeSessionRepositoryPath?.trim() || "";
-  const runKey = runCwd ? `wise.topbar.run-command:${runCwd}` : null;
-  const runUrlKey = runCwd ? `wise.topbar.run-open-url:${runCwd}` : null;
-  const runAutoOpenKey = runCwd ? `wise.topbar.run-auto-open:${runCwd}` : null;
-  const RUN_ERROR_REGEX = /(error|failed|exception|traceback|npm err|build failed|编译失败|报错|panic)/i;
-
-  const readRunAutoOpenPageEnabled = useCallback((storageKey: string | null): boolean => {
-    if (!storageKey) return true;
-    const raw = window.localStorage.getItem(storageKey);
-    if (raw === null) return true;
-    return raw === "1" || raw === "true";
-  }, []);
-
-  const normalizeOpenUrl = useCallback((raw: string): string | null => {
-    const input = raw.trim();
-    if (!input) return null;
-    // 本地路径不是访问地址（例如 /Users/...）
-    if (
-      input.startsWith("/") ||
-      input.startsWith("./") ||
-      input.startsWith("../") ||
-      input.startsWith("~")
-    ) {
-      return null;
-    }
-    const withProtocol = /^https?:\/\//i.test(input) ? input : `http://${input}`;
-    try {
-      const url = new URL(withProtocol);
-      if (url.protocol !== "http:" && url.protocol !== "https:") return null;
-      const host = url.hostname
-        .replace("0.0.0.0", "localhost")
-        .replace("127.0.0.1", "localhost");
-      const pathname = url.pathname === "/" ? "" : url.pathname;
-      return `${url.protocol}//${host}${url.port ? `:${url.port}` : ""}${pathname}${url.search}${url.hash}`;
-    } catch {
-      return null;
-    }
-  }, []);
-
-  const clearIdleTimer = useCallback(() => {
-    if (idleTimerRef.current != null) {
-      window.clearTimeout(idleTimerRef.current);
-      idleTimerRef.current = null;
-    }
-  }, []);
-
-  const clearAutoOpenFallbackTimer = useCallback(() => {
-    if (autoOpenFallbackTimerRef.current != null) {
-      window.clearTimeout(autoOpenFallbackTimerRef.current);
-      autoOpenFallbackTimerRef.current = null;
-    }
-  }, []);
-
-  const appendRunOutputPreview = useCallback((chunk: string) => {
-    // Remove ANSI escape sequences and normalize CR/LF.
-    const plain = chunk
-      .replace(/\u001b\[[0-9;]*[A-Za-z]/g, "")
-      .replace(/\r\n/g, "\n")
-      .replace(/\r/g, "\n");
-    const mixed = `${runChunkBufferRef.current}${plain}`;
-    const parts = mixed.split("\n");
-    runChunkBufferRef.current = parts.pop() ?? "";
-    const nextLines = parts
-      .map((line) => line.trim())
-      .filter(Boolean);
-    if (nextLines.length === 0) return;
-    const mapped = nextLines.map((line) => ({ text: line, isError: RUN_ERROR_REGEX.test(line) }));
-    setRunOutputPreview((prev) => [...prev, ...mapped].slice(-8));
-  }, []);
+  const runCwd = activeSessionRepositoryPath?.trim() || activeRepository?.path?.trim() || "";
+  const repositoryRunCommand = useRepositoryRunCommand({
+    repository: activeRepository ?? null,
+    runCwd,
+    onAutoFixRunError,
+    onRequestOpenPanel: () => setRunPopoverOpen(true),
+    onRunStarted: () => setRunPopoverOpen(false),
+  });
 
   useEffect(() => {
     void (async () => {
@@ -519,257 +378,6 @@ export function Topbar({
       setSelectedOpenAppId(getOpenAppPreferenceSync() || DEFAULT_OPEN_APP_ID);
     })();
   }, []);
-
-  useEffect(() => {
-    if (!runKey) {
-      setRunCommand("");
-      return;
-    }
-    setRunCommand(window.localStorage.getItem(runKey) ?? "");
-  }, [runKey]);
-
-  useEffect(() => {
-    if (!runUrlKey) {
-      setRunPreferredUrl("");
-      return;
-    }
-    setRunPreferredUrl(window.localStorage.getItem(runUrlKey) ?? "");
-  }, [runUrlKey]);
-
-  useEffect(() => {
-    setRunAutoOpenPageEnabled(readRunAutoOpenPageEnabled(runAutoOpenKey));
-  }, [readRunAutoOpenPageEnabled, runAutoOpenKey]);
-
-  const handleRunAutoOpenPageChange = useCallback(
-    (checked: boolean) => {
-      setRunAutoOpenPageEnabled(checked);
-      if (!runAutoOpenKey) return;
-      window.localStorage.setItem(runAutoOpenKey, checked ? "1" : "0");
-    },
-    [runAutoOpenKey],
-  );
-
-  const saveRunCommand = useCallback(() => {
-    if (!runKey) return;
-    const next = runCommand.trim();
-    if (!next) {
-      message.warning("请输入运行指令");
-      return;
-    }
-    window.localStorage.setItem(runKey, next);
-    setRunCommand(next);
-    setRunStatusHint("指令已保存");
-    message.success("运行指令已保存");
-  }, [runCommand, runKey]);
-
-  const saveRunOpenUrl = useCallback(() => {
-    if (!runUrlKey) return;
-    const next = runPreferredUrl.trim();
-    if (!next) {
-      window.localStorage.removeItem(runUrlKey);
-      setRunPreferredUrl("");
-      setRunStatusHint("已清空指定地址，将自动使用检测/默认地址");
-      message.success("已清空指定打开地址");
-      return;
-    }
-    const normalized = normalizeOpenUrl(next);
-    if (!normalized) {
-      message.warning("请输入有效的访问地址（http/https），不能是仓库本地路径。");
-      return;
-    }
-    window.localStorage.setItem(runUrlKey, normalized);
-    setRunPreferredUrl(normalized);
-    setRunStatusHint("指定地址已保存");
-    message.success("指定打开地址已保存");
-  }, [normalizeOpenUrl, runPreferredUrl, runUrlKey]);
-
-  const inferDefaultRunUrl = useCallback((): string => {
-    const cmd = runCommand.trim();
-    const portByFlag = cmd.match(/(?:--port|-p)\s*(\d{2,5})/i)?.[1];
-    const portByEnv = cmd.match(/PORT=(\d{2,5})/i)?.[1];
-    const port = portByFlag || portByEnv || "16088";
-    return `http://localhost:${port}`;
-  }, [runCommand]);
-
-  const resolveOpenUrl = useCallback((): string => {
-    const preferred = normalizeOpenUrl(runPreferredUrl);
-    if (preferred) return preferred;
-    if (runDetectedUrl) return runDetectedUrl;
-    return inferDefaultRunUrl();
-  }, [inferDefaultRunUrl, normalizeOpenUrl, runDetectedUrl, runPreferredUrl]);
-
-  const startRun = useCallback(async () => {
-    if (!activeRepository || !runCwd) return;
-    const cmd = runCommand.trim();
-    if (!cmd) {
-      setRunPopoverOpen(true);
-      return;
-    }
-    try {
-      await openTerminalSession(
-        String(activeRepository.id),
-        RUNNER_TERMINAL_ID,
-        120,
-        36,
-        runCwd,
-      ).catch(() => {
-        // ignore "already opened" and continue
-      });
-      errorDetectedRef.current = false;
-      autoFixSentRef.current = false;
-      autoOpenedRunUrlRef.current = false;
-      runLogTailRef.current = "";
-      runChunkBufferRef.current = "";
-      setRunOutputPreview([]);
-      setRunDetectedUrl(null);
-      setRunStatusHint("启动中...");
-      clearIdleTimer();
-      clearAutoOpenFallbackTimer();
-      await writeTerminalSession(String(activeRepository.id), RUNNER_TERMINAL_ID, `${cmd}\n`);
-      setRunStatus("running");
-      setRunStatusHint("运行中");
-      setRunPopoverOpen(false);
-      // 若日志迟迟未打印 URL，则兜底自动打开默认地址（或指定地址）。
-      if (runAutoOpenPageEnabled) {
-        autoOpenFallbackTimerRef.current = window.setTimeout(() => {
-          if (autoOpenedRunUrlRef.current) return;
-          const fallbackUrl = resolveOpenUrl();
-          autoOpenedRunUrlRef.current = true;
-          void openExternalUrl(fallbackUrl);
-          setRunStatusHint(`已自动打开地址：${fallbackUrl}`);
-        }, 4500);
-      } else {
-        setRunStatusHint("运行中（未开启自动打开页面）");
-      }
-    } catch (error) {
-      const msgText = error instanceof Error ? error.message : String(error);
-      message.error(`运行失败: ${msgText}`);
-      setRunStatus("idle");
-      setRunStatusHint("启动失败");
-    }
-  }, [
-    activeRepository,
-    clearAutoOpenFallbackTimer,
-    clearIdleTimer,
-    resolveOpenUrl,
-    runAutoOpenPageEnabled,
-    runCommand,
-    runCwd,
-  ]);
-
-  const stopRun = useCallback(async () => {
-    if (!activeRepository) return;
-    setRunStatus("stopping");
-    setRunStatusHint("停止中...");
-    try {
-      await writeTerminalSession(String(activeRepository.id), RUNNER_TERMINAL_ID, "\u0003");
-      setRunStatus("idle");
-      setRunStatusHint("已停止");
-      clearIdleTimer();
-      clearAutoOpenFallbackTimer();
-    } catch (error) {
-      const msgText = error instanceof Error ? error.message : String(error);
-      message.error(`停止失败: ${msgText}`);
-      setRunStatus("idle");
-      setRunStatusHint("停止失败");
-    }
-  }, [activeRepository, clearAutoOpenFallbackTimer, clearIdleTimer]);
-
-  const handleRunButtonClick = useCallback(() => {
-    if (!runCwd) {
-      message.warning("当前会话未绑定仓库路径，无法运行。请先切换到具体仓库会话。");
-      return;
-    }
-    const cmd = runCommand.trim();
-    if (!cmd) {
-      setRunPopoverOpen(true);
-      return;
-    }
-    if (runStatus === "running" || runStatus === "stopping") {
-      void stopRun();
-      return;
-    }
-    void startRun();
-  }, [runCwd, runCommand, runStatus, startRun, stopRun]);
-
-  useEffect(() => {
-    const unlistenOutput = subscribeTerminalOutput((payload) => {
-      if (!activeRepository) return;
-      if (payload.workspaceId !== String(activeRepository.id) || payload.terminalId !== RUNNER_TERMINAL_ID) return;
-      const nextTail = `${runLogTailRef.current}${payload.data}`.slice(-10_000);
-      runLogTailRef.current = nextTail;
-      appendRunOutputPreview(payload.data);
-      const detected = detectRunUrlFromLogText(payload.data) ?? detectRunUrlFromLogText(nextTail);
-      if (detected) {
-        setRunDetectedUrl(detected);
-        if (runAutoOpenPageEnabled && !autoOpenedRunUrlRef.current) {
-          autoOpenedRunUrlRef.current = true;
-          clearAutoOpenFallbackTimer();
-          const preferred = normalizeOpenUrl(runPreferredUrl);
-          const urlToOpen = preferred ?? detected;
-          void openExternalUrl(urlToOpen);
-          setRunStatusHint(`已自动打开地址：${urlToOpen}`);
-        }
-      }
-      if (RUN_ERROR_REGEX.test(payload.data) && runErrorMonitorEnabled) {
-        errorDetectedRef.current = true;
-        setRunPopoverOpen(true);
-        setRunStatusHint("检测到报错，等待自动处理...");
-      }
-      clearIdleTimer();
-      idleTimerRef.current = window.setTimeout(() => {
-        if (!errorDetectedRef.current || autoFixSentRef.current) return;
-        autoFixSentRef.current = true;
-        if (!onAutoFixRunError) return;
-        const command = runCommand.trim();
-        const dedupKey = buildRunErrorMonitorDedupKey(runCwd, command, nextTail);
-        if (shouldSkipRunErrorMonitorSend(dedupKey, Date.now())) {
-          setRunStatusHint("检测到重复报错，已跳过重复发送");
-          return;
-        }
-        const prompt = [
-          "请根据以下运行报错日志定位问题并直接给出修复方案，然后在仓库内执行修复。",
-          `运行命令：${command || "(未记录)"}`,
-          "最近日志：",
-          nextTail || "(无)",
-        ].join("\n\n");
-        onAutoFixRunError(prompt);
-        setRunStatusHint("已交给 Claude Code 自动修复");
-        message.info("检测到报错，已自动交给 Claude Code 处理。");
-      }, 5000);
-    });
-    const unlistenExit = subscribeTerminalExit((payload) => {
-      if (!activeRepository) return;
-      if (payload.workspaceId !== String(activeRepository.id) || payload.terminalId !== RUNNER_TERMINAL_ID) return;
-      clearIdleTimer();
-      clearAutoOpenFallbackTimer();
-      const remain = runChunkBufferRef.current.trim();
-      if (remain) {
-        setRunOutputPreview((prev) => [...prev, { text: remain, isError: RUN_ERROR_REGEX.test(remain) }].slice(-8));
-      }
-      runChunkBufferRef.current = "";
-      setRunStatus("idle");
-      setRunStatusHint(payload.exitCode === 0 ? "运行结束" : `已退出（code ${payload.exitCode}）`);
-    });
-    return () => {
-      unlistenOutput();
-      unlistenExit();
-      clearIdleTimer();
-      clearAutoOpenFallbackTimer();
-    };
-  }, [
-    activeRepository,
-    appendRunOutputPreview,
-    clearAutoOpenFallbackTimer,
-    clearIdleTimer,
-    normalizeOpenUrl,
-    onAutoFixRunError,
-    runCommand,
-    runCwd,
-    runAutoOpenPageEnabled,
-    runErrorMonitorEnabled,
-    runPreferredUrl,
-  ]);
 
   const topbarShowsProject = activeWorkspaceFocus === "project" && activeProject != null;
   const topbarLabel = topbarShowsProject ? activeProject.name : activeRepository?.name;
@@ -849,240 +457,18 @@ export function Topbar({
           onOpenChange={setRunPopoverOpen}
           overlayClassName="app-run-command-popover"
           content={
-            <div className="app-run-command-popover__content">
-              <header className="app-run-command-popover__header">
-                <span className="app-run-command-popover__title">运行指令</span>
-                <Tooltip
-                  title="日志自动识别仅限 localhost / 本机 IP；已保存指定地址时自动打开始终用该地址。优先级：指定 > 检测 > 默认"
-                  placement="topLeft"
-                >
-                  <button
-                    type="button"
-                    className="app-run-command-popover__hint-btn"
-                    aria-label="运行指令说明"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                    }}
-                  >
-                    <svg
-                      className="app-run-command-popover__hint-icon"
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                      aria-hidden
-                    >
-                      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.75" />
-                      <path
-                        d="M9.75 9.75a2.25 2.25 0 0 1 4.35 1.125c0 1.5-2.1 2.062-2.1 3.375V14.25M12 16.5h.01"
-                        stroke="currentColor"
-                        strokeWidth="1.75"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </button>
-                </Tooltip>
-              </header>
-
-              <section className="app-run-command-popover__section app-run-command-popover__section--form">
-                <label className="app-run-command-popover__row">
-                  <span className="app-run-command-popover__field-label">运行命令</span>
-                  <Input
-                    size="small"
-                    value={runCommand}
-                    onChange={(event) => setRunCommand(event.target.value)}
-                    placeholder="bun run dev"
-                    disabled={!runCwd || runStatus === "stopping"}
-                    onPressEnter={() => {
-                      saveRunCommand();
-                    }}
-                    suffix={
-                      <Tooltip title="保存指令" mouseEnterDelay={0.3}>
-                        <button
-                          type="button"
-                          className="app-run-command-popover__suffix-btn"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            saveRunCommand();
-                          }}
-                          disabled={!runCwd || runStatus === "stopping"}
-                        >
-                          <svg
-                            width="12"
-                            height="12"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2.2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-                            <polyline points="17 21 17 13 7 13 7 21" />
-                            <polyline points="7 3 7 8 15 8" />
-                          </svg>
-                        </button>
-                      </Tooltip>
-                    }
-                  />
-                </label>
-                <label className="app-run-command-popover__row">
-                  <span className="app-run-command-popover__field-label">打开地址</span>
-                  <Input
-                    size="small"
-                    value={runPreferredUrl}
-                    onChange={(event) => setRunPreferredUrl(event.target.value)}
-                    placeholder="localhost:5173"
-                    disabled={!runCwd || runStatus === "stopping"}
-                    onPressEnter={() => {
-                      saveRunOpenUrl();
-                    }}
-                    suffix={
-                      <Tooltip title="保存地址" mouseEnterDelay={0.3}>
-                        <button
-                          type="button"
-                          className="app-run-command-popover__suffix-btn"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            saveRunOpenUrl();
-                          }}
-                          disabled={!runCwd || runStatus === "stopping"}
-                        >
-                          <svg
-                            width="12"
-                            height="12"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2.2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-                            <polyline points="17 21 17 13 7 13 7 21" />
-                            <polyline points="7 3 7 8 15 8" />
-                          </svg>
-                        </button>
-                      </Tooltip>
-                    }
-                  />
-                </label>
-                <div className="app-run-command-popover__options-row">
-                  <div className="app-run-command-popover__option-item">
-                    <Switch
-                      size="small"
-                      checked={runAutoOpenPageEnabled}
-                      onChange={handleRunAutoOpenPageChange}
-                    />
-                    <span className="app-run-command-popover__option-text">自动打开页面</span>
-                  </div>
-                  <div className="app-run-command-popover__option-item">
-                    <Switch
-                      size="small"
-                      checked={runErrorMonitorEnabled}
-                      onChange={setRunErrorMonitorEnabled}
-                    />
-                    <span className="app-run-command-popover__option-text">AI 报错监控</span>
-                  </div>
-                </div>
-              </section>
-
-              <section className="app-run-command-popover__section app-run-command-popover__section--dock">
-                <div className="app-run-command-popover__dock">
-                  <div className="app-run-command-popover__dock-row">
-                    <span className="app-run-command-popover__dock-label">运行状态</span>
-                    <span
-                      className={`app-run-command-popover__status-badge app-run-command-popover__status-badge--${runStatus}`}
-                    >
-                      {runStatusHint}
-                    </span>
-                  </div>
-                  <div className="app-run-command-popover__dock-row">
-                    <span className="app-run-command-popover__dock-label">
-                      {runDetectedUrl ? "检测地址" : "默认地址"}
-                    </span>
-                    <button
-                      type="button"
-                      className="app-run-command-popover__dock-url-link"
-                      onClick={() => void openExternalUrl(resolveOpenUrl())}
-                      title={resolveOpenUrl()}
-                    >
-                      <span className="app-run-command-popover__dock-url-text">{resolveOpenUrl()}</span>
-                      <svg
-                        className="app-run-command-popover__link-icon"
-                        width="10"
-                        height="10"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                        <polyline points="15 3 21 3 21 9" />
-                        <line x1="10" y1="14" x2="21" y2="3" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              </section>
-
-              {runOutputPreview.length > 0 ? (
-                <section className="app-run-command-popover__section app-run-command-popover__section--logs">
-                  <div className="app-run-command-popover__logs">
-                    {runOutputPreview.map((line, index) => (
-                      <div
-                        key={`${index}-${line.text}`}
-                        className={`app-run-command-popover__log-line${line.isError ? " app-run-command-popover__log-line--error" : ""}`}
-                      >
-                        {line.text}
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              ) : null}
-
-              <footer className="app-run-command-popover__footer">
-                <button
-                  type="button"
-                  className="app-run-command-popover__btn app-run-command-popover__btn--ghost"
-                  onClick={() => setRunPopoverOpen(false)}
-                >
-                  关闭
-                </button>
-                {runStatus === "running" || runStatus === "stopping" ? (
-                  <button
-                    type="button"
-                    className="app-run-command-popover__btn app-run-command-popover__btn--danger app-run-command-popover__btn--footer-main"
-                    onClick={() => void stopRun()}
-                    disabled={!runCwd || runStatus === "stopping"}
-                  >
-                    {runStatus === "stopping" ? "停止中…" : "停止运行"}
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="app-run-command-popover__btn app-run-command-popover__btn--primary app-run-command-popover__btn--footer-main"
-                    onClick={() => void startRun()}
-                    disabled={!runCwd}
-                  >
-                    运行
-                  </button>
-                )}
-              </footer>
-            </div>
+            <RunCommandPanel
+              {...repositoryRunCommand}
+              onClose={() => setRunPopoverOpen(false)}
+            />
           }
         >
           <Tooltip
             title={
               !runCwd
                 ? "当前会话未绑定仓库路径，无法运行"
-                : runStatus === "running" || runStatus === "stopping"
+                : repositoryRunCommand.runStatus === "running" ||
+                    repositoryRunCommand.runStatus === "stopping"
                   ? "点击停止（右键配置指令）"
                   : "点击运行（右键配置指令）"
             }
@@ -1091,16 +477,26 @@ export function Topbar({
             <span className="app-topbar-run-trigger-wrap">
               <button
                 type="button"
-                className={`app-topbar-btn app-topbar-btn--run ${runStatus === "running" || runStatus === "stopping" ? "active" : ""}`}
-                onClick={handleRunButtonClick}
+                className={`app-topbar-btn app-topbar-btn--run ${repositoryRunCommand.runStatus === "running" || repositoryRunCommand.runStatus === "stopping" ? "active" : ""}`}
+                onClick={repositoryRunCommand.handleRunButtonClick}
                 onContextMenu={(event) => {
                   event.preventDefault();
                   setRunPopoverOpen(true);
                 }}
                 disabled={!runCwd}
-                aria-label={runStatus === "running" || runStatus === "stopping" ? "停止命令" : "运行命令"}
+                aria-label={
+                  repositoryRunCommand.runStatus === "running" ||
+                  repositoryRunCommand.runStatus === "stopping"
+                    ? "停止命令"
+                    : "运行命令"
+                }
               >
-                {runStatus === "running" || runStatus === "stopping" ? <IconStop /> : <IconPlay />}
+                {repositoryRunCommand.runStatus === "running" ||
+                repositoryRunCommand.runStatus === "stopping" ? (
+                  <IconStop />
+                ) : (
+                  <IconPlay />
+                )}
               </button>
             </span>
           </Tooltip>

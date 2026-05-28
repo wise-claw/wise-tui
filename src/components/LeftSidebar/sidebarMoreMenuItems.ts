@@ -128,6 +128,9 @@ export interface BuildProjectRepositoryMoreMenuItemsInput {
   onOpenRepositoryMainOwner?: boolean;
   onOpenPromptsRepository?: boolean;
   onConfigureSddMode?: boolean;
+  /** 仓库运行指令（顶栏运行指令同款） */
+  onMainSessionRun?: boolean;
+  runCommandRunning?: boolean;
   onNewPaneSession?: boolean;
   onOpenScheduledTasks?: boolean;
   onOpenRequirements?: boolean;
@@ -135,6 +138,31 @@ export interface BuildProjectRepositoryMoreMenuItemsInput {
   onCodeGraphGenerateRepository?: boolean;
   onCodeGraphViewRepositoryInProject?: boolean;
   onOpenRepositoryInTerminal?: boolean;
+}
+
+function repositoryMainSessionRunMenuItem(input: {
+  onMainSessionRun?: boolean;
+  runCommandRunning?: boolean;
+}): MenuItem | null {
+  if (!input.onMainSessionRun) return null;
+  return {
+    key: "run-submenu",
+    label: "运行",
+    popupClassName: "app-sidebar-more-menu-submenu",
+    children: [
+      { key: "run-configure", label: "配置" },
+      {
+        key: "run-start",
+        label: "启动",
+        disabled: input.runCommandRunning,
+      },
+      {
+        key: "run-stop",
+        label: "停止",
+        disabled: !input.runCommandRunning,
+      },
+    ],
+  };
 }
 
 /** 项目内仓库行「更多」菜单，按功能分组。 */
@@ -148,6 +176,8 @@ export function buildProjectRepositoryMoreMenuItems(
     trellisRootActionEnabled = trellisEnabled,
     onOpenPromptsRepository,
     onConfigureSddMode,
+    onMainSessionRun,
+    runCommandRunning = false,
     onNewPaneSession,
     onOpenScheduledTasks,
     onOpenRequirements,
@@ -173,6 +203,7 @@ export function buildProjectRepositoryMoreMenuItems(
         ? { key: "main-owner", label: "配置 Owner" }
         : null,
       onConfigureSddMode ? { key: "sdd-mode", label: "配置 Claude 插件" } : null,
+      repositoryMainSessionRunMenuItem({ onMainSessionRun, runCommandRunning }),
       trellisRootActionEnabled && !trellisReady ? { key: "trellis-init", label: "启用 Wise Trellis" } : null,
       onOpenPromptsRepository ? { key: "prompts", label: "提示词" } : null,
     ]),
@@ -204,6 +235,8 @@ export interface BuildFloatingRepositoryMoreMenuItemsInput {
   trellisReady?: boolean;
   onOpenRepositoryMainOwner?: boolean;
   onConfigureSddMode?: boolean;
+  onMainSessionRun?: boolean;
+  runCommandRunning?: boolean;
   onNewPaneSession?: boolean;
   onOpenScheduledTasks?: boolean;
   onOpenRequirements?: boolean;
@@ -234,6 +267,8 @@ export function buildFloatingRepositoryMoreMenuItems(
     onPromoteToNewProject,
     onJoinExistingProject,
     onOpenRepositoryInTerminal,
+    onMainSessionRun,
+    runCommandRunning = false,
   } = input;
 
   const showTerminalOpen =
@@ -257,6 +292,7 @@ export function buildFloatingRepositoryMoreMenuItems(
         ? { key: "main-owner", label: "主 Owner 智能体…" }
         : null,
       onConfigureSddMode ? { key: "sdd-mode", label: "配置 Claude 插件" } : null,
+      repositoryMainSessionRunMenuItem({ onMainSessionRun, runCommandRunning }),
       trellisEnabled && !trellisReady ? { key: "trellis-init", label: "启用 Wise Trellis" } : null,
     ]),
     sidebarMenuSection([

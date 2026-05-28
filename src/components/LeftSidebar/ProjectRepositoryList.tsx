@@ -70,6 +70,9 @@ interface ProjectRepositoryListProps {
   openRepositoryInPreferredEditor: (repository: Repository) => void;
   onOpenPromptsRepository?: (project: Workspace, repository: Repository) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
+  onConfigureRepositoryMainSessionRun?: (repository: Repository) => void;
+  onStartRepositoryRunCommand?: (repository: Repository) => void;
+  onStopRepositoryRunCommand?: (repository: Repository) => void;
   onConfigureRepositorySddMode?: (repository: Repository) => void;
   onConfigureProjectSddMode?: (project: Workspace) => void;
   onNewPaneSessionForRepository?: (repository: Repository) => void;
@@ -144,6 +147,9 @@ export function ProjectRepositoryList({
   openRepositoryInPreferredEditor,
   onOpenPromptsRepository,
   onOpenRepositoryMainOwner,
+  onConfigureRepositoryMainSessionRun,
+  onStartRepositoryRunCommand,
+  onStopRepositoryRunCommand,
   onConfigureRepositorySddMode,
   onConfigureProjectSddMode,
   onNewPaneSessionForRepository,
@@ -172,9 +178,7 @@ export function ProjectRepositoryList({
   onOpenExecutableTasksForProject,
   onOpenExecutableTasksForRepository,
   runningMainSessionByProjectId = {},
-  runningMainSessionByRepositoryId = {},
   onStopProjectMainSession,
-  onStopRepositoryMainSession,
 }: ProjectRepositoryListProps) {
   return (
     <>
@@ -222,6 +226,9 @@ export function ProjectRepositoryList({
                 onOpenRepositoryInBrowser={onOpenRepositoryInBrowser}
                 onOpenRepositoryInEditor={openRepositoryInPreferredEditor}
                 onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
+                onConfigureRepositoryMainSessionRun={onConfigureRepositoryMainSessionRun}
+                onStartRepositoryRunCommand={onStartRepositoryRunCommand}
+                onStopRepositoryRunCommand={onStopRepositoryRunCommand}
                 onConfigureSddMode={onConfigureRepositorySddMode}
                 onNewPaneSession={onNewPaneSessionForRepository}
                 onBootstrapTrellis={onBootstrapTrellisForRepository}
@@ -240,12 +247,6 @@ export function ProjectRepositoryList({
                 onOpenScheduledTasks={onOpenScheduledTasksForRepository}
                 onOpenRequirements={onOpenRepositoryRequirements}
                 onOpenExecutableTasks={onOpenExecutableTasksForRepository}
-                mainSessionRunning={runningMainSessionByRepositoryId[repository.id] === true}
-                onStopMainSession={
-                  runningMainSessionByRepositoryId[repository.id] === true && onStopRepositoryMainSession
-                    ? () => onStopRepositoryMainSession(repository)
-                    : undefined
-                }
               />
             ))}
           </div>
@@ -290,6 +291,7 @@ export function ProjectRepositoryList({
             openRepositoryInPreferredEditor={openRepositoryInPreferredEditor}
             onOpenPromptsRepository={onOpenPromptsRepository}
             onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
+            onConfigureRepositoryMainSessionRun={onConfigureRepositoryMainSessionRun}
             onConfigureRepositorySddMode={onConfigureRepositorySddMode}
             onConfigureProjectSddMode={onConfigureProjectSddMode}
             onNewPaneSessionForRepository={onNewPaneSessionForRepository}
@@ -315,9 +317,9 @@ export function ProjectRepositoryList({
             onOpenExecutableTasksForProject={onOpenExecutableTasksForProject}
             onOpenExecutableTasksForRepository={onOpenExecutableTasksForRepository}
             mainSessionRunning={runningMainSessionByProjectId[project.id] === true}
-            runningMainSessionByRepositoryId={runningMainSessionByRepositoryId}
+            onStartRepositoryRunCommand={onStartRepositoryRunCommand}
+            onStopRepositoryRunCommand={onStopRepositoryRunCommand}
             onStopProjectMainSession={onStopProjectMainSession}
-            onStopRepositoryMainSession={onStopRepositoryMainSession}
           />
         ))}
         {projects.length === 0 && floatingRepositories.length === 0 && (
@@ -372,6 +374,9 @@ interface ProjectRowProps {
   openRepositoryInPreferredEditor: (repository: Repository) => void;
   onOpenPromptsRepository?: (project: Workspace, repository: Repository) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
+  onConfigureRepositoryMainSessionRun?: (repository: Repository) => void;
+  onStartRepositoryRunCommand?: (repository: Repository) => void;
+  onStopRepositoryRunCommand?: (repository: Repository) => void;
   onConfigureRepositorySddMode?: (repository: Repository) => void;
   onConfigureProjectSddMode?: (project: Workspace) => void;
   onNewPaneSessionForRepository?: (repository: Repository) => void;
@@ -396,9 +401,7 @@ interface ProjectRowProps {
   onOpenExecutableTasksForProject?: (project: Workspace) => void;
   onOpenExecutableTasksForRepository?: (repository: Repository) => void;
   mainSessionRunning?: boolean;
-  runningMainSessionByRepositoryId?: Record<number, boolean>;
   onStopProjectMainSession?: (projectId: string) => void;
-  onStopRepositoryMainSession?: (repository: Repository) => void;
 }
 
 function ProjectRow({
@@ -437,6 +440,9 @@ function ProjectRow({
   openRepositoryInPreferredEditor,
   onOpenPromptsRepository,
   onOpenRepositoryMainOwner,
+  onConfigureRepositoryMainSessionRun,
+  onStartRepositoryRunCommand,
+  onStopRepositoryRunCommand,
   onConfigureRepositorySddMode,
   onConfigureProjectSddMode,
   onNewPaneSessionForRepository,
@@ -462,9 +468,7 @@ function ProjectRow({
   onOpenExecutableTasksForProject,
   onOpenExecutableTasksForRepository,
   mainSessionRunning = false,
-  runningMainSessionByRepositoryId = {},
   onStopProjectMainSession,
-  onStopRepositoryMainSession,
 }: ProjectRowProps) {
   const projectTrellisReady = projectTrellisReadyById[project.id] === true;
   const projectTrellisEnabled = project.sddMode !== "project_owned" || projectTrellisReady;
@@ -680,6 +684,7 @@ function ProjectRow({
             onReorderRepositoriesInProject={onReorderRepositoriesInProject}
             onMoveRepositoryToProject={onMoveRepositoryToProjectWithExpand}
             onConfigureSddMode={onConfigureRepositorySddMode}
+            onConfigureRepositoryMainSessionRun={onConfigureRepositoryMainSessionRun}
             onNewPaneSession={onNewPaneSessionForRepository}
             onCodeGraphGenerateRepository={onCodeGraphGenerateRepository}
             onCodeGraphViewRepositoryInProject={onCodeGraphViewRepositoryInProject}
@@ -699,8 +704,8 @@ function ProjectRow({
             onOpenScheduledTasks={onOpenScheduledTasksForRepository}
             onOpenRepositoryRequirements={onOpenRepositoryRequirements}
             onOpenRepositoryExecutableTasks={onOpenExecutableTasksForRepository}
-            runningMainSessionByRepositoryId={runningMainSessionByRepositoryId}
-            onStopRepositoryMainSession={onStopRepositoryMainSession}
+            onStartRepositoryRunCommand={onStartRepositoryRunCommand}
+            onStopRepositoryRunCommand={onStopRepositoryRunCommand}
           />
         </div>
       ) : null}

@@ -1,0 +1,13 @@
+.app-run-command-modal .ant-modal-content {
+  padding: 0;
+  overflow: hidden;
+}
+
+.app-run-command-modal .ant-modal-body {
+  padding: 0;
+}
+
+.app-run-command-modal .app-run-command-popover__content {
+  width: 100%;
+  max-width: none;
+}

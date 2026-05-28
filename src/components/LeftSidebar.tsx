@@ -132,6 +132,9 @@ export function LeftSidebar({
   onOpenProjectTrellis,
   onOpenPromptsRepository,
   onOpenRepositoryMainOwner,
+  onConfigureRepositoryMainSessionRun,
+  onStartRepositoryRunCommand,
+  onStopRepositoryRunCommand,
   sessions,
   repositoryMainSessionBindings,
   activeSessionId: _activeSessionId,
@@ -501,7 +504,7 @@ export function LeftSidebar({
     );
   }, [repoPanelTreeSelection, projects, repositories]);
 
-  const repoPanelRepositoryPath = repoPanelTreeView?.path.trim() || activeRepositoryPath;
+  const repoPanelRepositoryPath = repoPanelTreeView?.path.trim() || activeRepositoryPath || "";
   const repoPanelRepositoryName = repoPanelTreeView?.label.trim() || activeRepositoryName;
 
   const repoPanelWorkspaceSelectorProps = useMemo(
@@ -727,6 +730,9 @@ export function LeftSidebar({
           openRepositoryInPreferredEditor={openRepositoryInPreferredEditor}
           onOpenPromptsRepository={onOpenPromptsRepository}
           onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
+          onConfigureRepositoryMainSessionRun={onConfigureRepositoryMainSessionRun}
+          onStartRepositoryRunCommand={onStartRepositoryRunCommand}
+          onStopRepositoryRunCommand={onStopRepositoryRunCommand}
           onConfigureRepositorySddMode={onUpdateRepositorySddMode ? repositorySddModeModal.open : undefined}
           onConfigureProjectSddMode={onUpdateProjectSddMode ? projectSddModeModal.open : undefined}
           onNewPaneSessionForRepository={onNewPaneSessionForRepository}

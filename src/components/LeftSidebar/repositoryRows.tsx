@@ -34,11 +34,58 @@ import {
   RequirementIcon,
   TrellisIcon,
 } from "./SidebarIcons";
-import { RunningMainSessionDot } from "./RunningMainSessionDot";
+import { useIsRepositoryRunCommandRunning } from "../../hooks/useIsRepositoryRunCommandRunning";
 import { RepositorySddStackBadge } from "./RepositorySddStackBadge";
 
 function repositoryTrellisEntrypointsEnabled(repository: Repository, trellisReady: boolean): boolean {
   return repository.sddMode !== "off" && (trellisReady || repository.sddMode !== "project_owned");
+}
+
+function RunCommandStopIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <rect
+        x="5"
+        y="5"
+        width="14"
+        height="14"
+        rx="2"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="currentColor"
+        fillOpacity="0.12"
+      />
+    </svg>
+  );
+}
+
+/** 仓库行快捷区：运行指令执行中的停止按钮（与顶栏停止态一致）。 */
+function RepositoryRunCommandRunningAction({
+  repositoryId,
+  onStop,
+}: {
+  repositoryId: number;
+  onStop?: () => void;
+}) {
+  const running = useIsRepositoryRunCommandRunning(repositoryId);
+  if (!running || !onStop) return null;
+  return (
+    <Tooltip title="停止运行" mouseEnterDelay={0.2}>
+      <button
+        type="button"
+        className="app-repository-action app-repository-action--run-stop"
+        aria-label="停止运行"
+        onClick={(event) => {
+          event.stopPropagation();
+          onStop();
+        }}
+      >
+        <RunCommandStopIcon />
+      </button>
+    </Tooltip>
+  );
 }
 
 export function RepositoryConversationAction({ onOpen }: { onOpen: () => void }) {
@@ -239,6 +286,7 @@ export function RepositoryRow({
   onOpenPromptsRepository,
   onOpenRepositoryMainOwner,
   onConfigureSddMode,
+  onConfigureRepositoryMainSessionRun,
   onNewPaneSession,
   onCodeGraphGenerateRepository,
   onCodeGraphViewRepositoryInProject,
@@ -253,8 +301,8 @@ export function RepositoryRow({
   onOpenScheduledTasks,
   onOpenRequirements,
   onOpenExecutableTasks,
-  mainSessionRunning = false,
-  onStopMainSession,
+  onStartRepositoryRunCommand,
+  onStopRepositoryRunCommand,
 }: {
   project: Workspace;
   repository: Repository;
@@ -269,6 +317,7 @@ export function RepositoryRow({
   onOpenPromptsRepository?: (project: Workspace, repository: Repository) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
   onConfigureSddMode?: (repository: Repository) => void;
+  onConfigureRepositoryMainSessionRun?: (repository: Repository) => void;
   onNewPaneSession?: (repository: Repository) => void;
   onCodeGraphGenerateRepository?: (repository: Repository) => void | Promise<void>;
   onCodeGraphViewRepositoryInProject?: (project: Workspace, repository: Repository) => void;
@@ -283,9 +332,10 @@ export function RepositoryRow({
   onOpenScheduledTasks?: (repository: Repository) => void;
   onOpenRequirements?: (repository: Repository) => void;
   onOpenExecutableTasks?: (repository: Repository) => void;
-  mainSessionRunning?: boolean;
-  onStopMainSession?: () => void;
+  onStartRepositoryRunCommand?: (repository: Repository) => void;
+  onStopRepositoryRunCommand?: (repository: Repository) => void;
 }) {
+  const runCommandRunning = useIsRepositoryRunCommandRunning(repository.id);
   const workspaceTrellisEnabled = project.sddMode !== "project_owned" || trellisReady;
   const moreItems = buildProjectRepositoryMoreMenuItems({
     trellisEnabled: workspaceTrellisEnabled,
@@ -294,6 +344,8 @@ export function RepositoryRow({
     onOpenRepositoryMainOwner: Boolean(onOpenRepositoryMainOwner),
     onOpenPromptsRepository: Boolean(onOpenPromptsRepository),
     onConfigureSddMode: Boolean(onConfigureSddMode),
+    onMainSessionRun: true,
+    runCommandRunning,
     onNewPaneSession: Boolean(onNewPaneSession),
     onOpenRepositoryInTerminal: Boolean(onOpenInTerminal),
     onOpenScheduledTasks: Boolean(onOpenScheduledTasks),
@@ -334,7 +386,7 @@ export function RepositoryRow({
           const target = e.target as HTMLElement | null;
           if (
             target?.closest(".app-repository-row-actions") ||
-            target?.closest(".app-repository-main-session-running-dot-wrap")
+            target?.closest(".app-repository-row-running-status")
           ) {
             return;
           }
@@ -372,12 +424,17 @@ export function RepositoryRow({
         </span>
         <span className="app-repository-name-block">
           <span className="app-repository-name">{repositoryFolderBasename(repository)}</span>
-          {mainSessionRunning ? <RunningMainSessionDot onStop={onStopMainSession} /> : null}
         </span>
         <div
           className="app-repository-row-actions"
           onClick={(e) => e.stopPropagation()}
         >
+          <RepositoryRunCommandRunningAction
+            repositoryId={repository.id}
+            onStop={
+              onStopRepositoryRunCommand ? () => onStopRepositoryRunCommand(repository) : undefined
+            }
+          />
           {hideChatAction ? null : (
             <RepositoryConversationAction onOpen={() => onOpenTaskMode(repository, "chat")} />
           )}
@@ -420,6 +477,9 @@ export function RepositoryRow({
                 if (key === "detach") onDetachFromProject(project.id, repository.id);
                 if (key === "prompts") onOpenPromptsRepository?.(project, repository);
                 if (key === "sdd-mode") onConfigureSddMode?.(repository);
+                if (key === "run-configure") onConfigureRepositoryMainSessionRun?.(repository);
+                if (key === "run-start") onStartRepositoryRunCommand?.(repository);
+                if (key === "run-stop") onStopRepositoryRunCommand?.(repository);
                 if (key === "new-session") onNewPaneSession?.(repository);
                 if (key === "scheduled-tasks") onOpenScheduledTasks?.(repository);
                 if (key === "requirements" && workspaceTrellisEnabled) onOpenRequirements?.(repository);
@@ -458,6 +518,7 @@ export function FloatingRepositoryRow({
   onOpenRepositoryInEditor,
   onOpenRepositoryMainOwner,
   onConfigureSddMode,
+  onConfigureRepositoryMainSessionRun,
   onNewPaneSession,
   onBootstrapTrellis,
   onCodeGraphGenerateRepository,
@@ -475,8 +536,8 @@ export function FloatingRepositoryRow({
   onOpenScheduledTasks,
   onOpenRequirements,
   onOpenExecutableTasks,
-  mainSessionRunning = false,
-  onStopMainSession,
+  onStartRepositoryRunCommand,
+  onStopRepositoryRunCommand,
 }: {
   repository: StandaloneRepo;
   isActiveRepository: boolean;
@@ -489,6 +550,7 @@ export function FloatingRepositoryRow({
   onOpenRepositoryInEditor: (repository: Repository) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
   onConfigureSddMode?: (repository: Repository) => void;
+  onConfigureRepositoryMainSessionRun?: (repository: Repository) => void;
   onNewPaneSession?: (repository: Repository) => void;
   onBootstrapTrellis?: (repository: Repository) => void | Promise<void>;
   onCodeGraphGenerateRepository?: (repository: Repository) => void | Promise<void>;
@@ -506,9 +568,10 @@ export function FloatingRepositoryRow({
   onOpenScheduledTasks?: (repository: Repository) => void;
   onOpenRequirements?: (repository: Repository) => void;
   onOpenExecutableTasks?: (repository: Repository) => void;
-  mainSessionRunning?: boolean;
-  onStopMainSession?: () => void;
+  onStartRepositoryRunCommand?: (repository: Repository) => void;
+  onStopRepositoryRunCommand?: (repository: Repository) => void;
 }) {
+  const runCommandRunning = useIsRepositoryRunCommandRunning(repository.id);
   const hasMainOwner = Boolean(repository.mainOwnerAgentName?.trim());
   const [optimisticActive, setOptimisticActive] = useState(false);
   const showActiveRepository = isActiveRepository || optimisticActive;
@@ -526,6 +589,8 @@ export function FloatingRepositoryRow({
     trellisReady,
     onOpenRepositoryMainOwner: Boolean(onOpenRepositoryMainOwner),
     onConfigureSddMode: Boolean(onConfigureSddMode),
+    onMainSessionRun: true,
+    runCommandRunning,
     onNewPaneSession: Boolean(onNewPaneSession),
     onOpenRepositoryInTerminal: Boolean(onOpenInTerminal),
     onOpenScheduledTasks: Boolean(onOpenScheduledTasks),
@@ -545,7 +610,7 @@ export function FloatingRepositoryRow({
           const target = e.target as HTMLElement | null;
           if (
             target?.closest(".app-repository-row-actions") ||
-            target?.closest(".app-repository-main-session-running-dot-wrap")
+            target?.closest(".app-repository-row-running-status")
           ) {
             return;
           }
@@ -569,12 +634,17 @@ export function FloatingRepositoryRow({
         </span>
         <span className="app-repository-name-block">
           <span className="app-repository-name">{repositoryFolderBasename(repository)}</span>
-          {mainSessionRunning ? <RunningMainSessionDot onStop={onStopMainSession} /> : null}
         </span>
         <div
           className="app-repository-row-actions"
           onClick={(e) => e.stopPropagation()}
         >
+          <RepositoryRunCommandRunningAction
+            repositoryId={repository.id}
+            onStop={
+              onStopRepositoryRunCommand ? () => onStopRepositoryRunCommand(repository) : undefined
+            }
+          />
           <RepositoryConversationAction onOpen={() => onOpenTaskMode(repository, "chat")} />
           {trellisEnabled && trellisReady && onOpenFloatingRepositoryTrellis ? (
             <RepositoryTrellisAction onOpen={() => onOpenFloatingRepositoryTrellis(repository)} />
@@ -614,6 +684,9 @@ export function FloatingRepositoryRow({
                 if (key === "browser") onOpenRepositoryInBrowser(repository);
                 if (key === "main-owner") onOpenRepositoryMainOwner?.(repository);
                 if (key === "sdd-mode") onConfigureSddMode?.(repository);
+                if (key === "run-configure") onConfigureRepositoryMainSessionRun?.(repository);
+                if (key === "run-start") onStartRepositoryRunCommand?.(repository);
+                if (key === "run-stop") onStopRepositoryRunCommand?.(repository);
                 if (key === "new-session") onNewPaneSession?.(repository);
                 if (key === "trellis-init" && trellisEnabled) void Promise.resolve(onBootstrapTrellis?.(repository));
                 if (key === "scheduled-tasks") onOpenScheduledTasks?.(repository);
@@ -664,6 +737,7 @@ export function ProjectRepositoryRows({
   onReorderRepositoriesInProject,
   onMoveRepositoryToProject,
   onConfigureSddMode,
+  onConfigureRepositoryMainSessionRun,
   onNewPaneSession,
   onCodeGraphGenerateRepository,
   onCodeGraphViewRepositoryInProject,
@@ -678,8 +752,8 @@ export function ProjectRepositoryRows({
   onOpenScheduledTasks,
   onOpenRepositoryRequirements,
   onOpenRepositoryExecutableTasks,
-  runningMainSessionByRepositoryId = {},
-  onStopRepositoryMainSession,
+  onStartRepositoryRunCommand,
+  onStopRepositoryRunCommand,
 }: {
   project: Workspace;
   projectRepos: Repository[];
@@ -697,6 +771,7 @@ export function ProjectRepositoryRows({
   onReorderRepositoriesInProject?: (projectId: string, repositoryIds: number[]) => void | Promise<void>;
   onMoveRepositoryToProject?: (targetProjectId: string, repositoryId: number) => void | Promise<void>;
   onConfigureSddMode?: (repository: Repository) => void;
+  onConfigureRepositoryMainSessionRun?: (repository: Repository) => void;
   onNewPaneSession?: (repository: Repository) => void;
   onCodeGraphGenerateRepository?: (repository: Repository) => void | Promise<void>;
   onCodeGraphViewRepositoryInProject?: (project: Workspace, repository: Repository) => void;
@@ -711,8 +786,8 @@ export function ProjectRepositoryRows({
   onOpenScheduledTasks?: (repository: Repository) => void;
   onOpenRepositoryRequirements?: (repository: Repository) => void;
   onOpenRepositoryExecutableTasks?: (repository: Repository) => void;
-  runningMainSessionByRepositoryId?: Record<number, boolean>;
-  onStopRepositoryMainSession?: (repository: Repository) => void;
+  onStartRepositoryRunCommand?: (repository: Repository) => void;
+  onStopRepositoryRunCommand?: (repository: Repository) => void;
 }) {
   const { message } = AntdApp.useApp();
   const [dropHint, setDropHint] = useState<{ anchorRepositoryId: number; placement: "before" | "after" } | null>(
@@ -760,6 +835,7 @@ export function ProjectRepositoryRows({
             onOpenPromptsRepository={onOpenPromptsRepository}
             onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
             onConfigureSddMode={onConfigureSddMode}
+            onConfigureRepositoryMainSessionRun={onConfigureRepositoryMainSessionRun}
             onNewPaneSession={onNewPaneSession}
             onCodeGraphGenerateRepository={onCodeGraphGenerateRepository}
             onCodeGraphViewRepositoryInProject={onCodeGraphViewRepositoryInProject}
@@ -774,12 +850,8 @@ export function ProjectRepositoryRows({
             onOpenScheduledTasks={onOpenScheduledTasks}
             onOpenRequirements={onOpenRepositoryRequirements}
             onOpenExecutableTasks={onOpenRepositoryExecutableTasks}
-            mainSessionRunning={runningMainSessionByRepositoryId[repository.id] === true}
-            onStopMainSession={
-              runningMainSessionByRepositoryId[repository.id] === true && onStopRepositoryMainSession
-                ? () => onStopRepositoryMainSession(repository)
-                : undefined
-            }
+            onStartRepositoryRunCommand={onStartRepositoryRunCommand}
+            onStopRepositoryRunCommand={onStopRepositoryRunCommand}
           />
         );
       })}
