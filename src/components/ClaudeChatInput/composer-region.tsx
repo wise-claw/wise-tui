@@ -2589,7 +2589,7 @@ function ComposerInner({
             <div ref={shellRef} className="app-claude-semi-chat-input-wrap" style={{ width: "100%" }}>
               <AIChatInput
                 ref={aiChatRef}
-                placeholder="@ 员工/团队/仓库/文件，/ 命令，Enter 发送，Shift+Enter 换行，Esc 撤销"
+                placeholder="@ 员工/团队/文件，/ 命令，Enter 发送，Shift+Enter 换行，Esc 撤销"
                 keepSkillAfterSend={false}
                 showUploadButton={false}
                 showUploadFile={false}

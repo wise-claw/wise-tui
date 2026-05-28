@@ -3,7 +3,7 @@ import { Spin } from "antd";
 import { listClaudePluginCacheSkills, listClaudeProjectSkills } from "../../services/claude";
 import { searchRepositoryFiles } from "../../services/repositoryFiles";
 import type { ClaudeProjectSkill } from "../../types";
-import type { RoleTagOption, RepositoryMentionOption } from "../../utils/projectRoleTagOptions";
+import type { RepositoryMentionOption } from "../../utils/projectRoleTagOptions";
 import type { TriggerInfo } from "./slash-trigger";
 import { CLAUDE_BUILTIN_SLASH_COMMANDS } from "../../constants/claudeCodeSlashCommands";
 import {
@@ -14,17 +14,13 @@ import {
 } from "./composer-plain-utils";
 
 export interface SlashOption {
-  type: "agent" | "team" | "file" | "command" | "roleTag" | "repository";
+  type: "agent" | "team" | "file" | "command";
   label: string;
   description?: string;
   path?: string;
   name?: string;
   workflowId?: string;
   group?: "omc" | "claude" | "skill";
-  /** roleTag 类型携带的覆盖仓库数；UI 行尾展示。 */
-  repoCount?: number;
-  /** roleTag 类型携带的覆盖仓库列表；供 title / 后续扩展使用。 */
-  repoNames?: string[];
 }
 
 /** 与 Semi AIChatInput 搭配：用纯文本 + 光标操作 @ / 补全，不再依赖 contentEditable DOM。 */
@@ -44,9 +40,9 @@ interface SlashPopoverProps {
   repositoryPath?: string;
   employeeOptions?: Array<{ id: string; name: string }>;
   teamOptions?: Array<{ id: string; name: string }>;
-  /** wise_trellis 项目下注入的角色标签选项；其他项目省略。 */
-  projectRoleTagOptions?: ReadonlyArray<RoleTagOption>;
-  /** wise_trellis 项目下可 @ 的仓库列表。 */
+  /** wise_trellis 项目下注入的角色标签选项；当前 @ 面板暂不展示。 */
+  projectRoleTagOptions?: ReadonlyArray<unknown>;
+  /** wise_trellis 项目下可 @ 的仓库列表（暂不在 @ 面板展示）。 */
   projectRepositoryMentionOptions?: ReadonlyArray<RepositoryMentionOption>;
   /** 当 wise_trellis 项目隐藏员工 UI 时，把 @-mode 的员工行一并去除。 */
   hideEmployeesInAtMode?: boolean;
@@ -201,8 +197,8 @@ export function SlashPopover({
   repositoryPath,
   employeeOptions = [],
   teamOptions = [],
-  projectRoleTagOptions = [],
-  projectRepositoryMentionOptions = [],
+  projectRoleTagOptions: _projectRoleTagOptions = [],
+  projectRepositoryMentionOptions: _projectRepositoryMentionOptions = [],
   hideEmployeesInAtMode = false,
 }: SlashPopoverProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -281,8 +277,6 @@ export function SlashPopover({
     employeeOptions,
     teamOptions,
     skillSlashOptions,
-    projectRoleTagOptions,
-    projectRepositoryMentionOptions,
     hideEmployeesInAtMode,
   );
 
@@ -306,10 +300,6 @@ export function SlashPopover({
         } else if (option.type === "agent" && option.name) {
           ({ plain, cursor } = insertPlainAt(plain, cursor, `@${option.name}`));
         } else if (option.type === "team" && option.name) {
-          ({ plain, cursor } = insertPlainAt(plain, cursor, `@${option.name}`));
-        } else if (option.type === "roleTag" && option.name) {
-          ({ plain, cursor } = insertPlainAt(plain, cursor, `@${option.name}`));
-        } else if (option.type === "repository" && option.name) {
           ({ plain, cursor } = insertPlainAt(plain, cursor, `@${option.name}`));
         }
         ({ plain, cursor } = ensureSpaceAfterAtInsert(plain, cursor));
@@ -473,28 +463,6 @@ export function SlashPopover({
   );
 }
 
-function MentionKindRepositoryIcon() {
-  return (
-    <svg
-      className="app-claude-slash-popover__kind-svg"
-      width="16"
-      height="16"
-      viewBox="0 0 20 20"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      role="img"
-      aria-label="仓库"
-    >
-      <path d="M3.5 4.5h13v11h-13z" />
-      <path d="M3.5 8h13" />
-      <path d="M7 4.5V16" />
-    </svg>
-  );
-}
-
 function renderOptionContent(opt: SlashOption) {
   return (
     <>
@@ -541,24 +509,6 @@ function renderOptionContent(opt: SlashOption) {
               <path d="M2.5 17c0-2 2.5-3.5 4.5-3.5s4.5 1.5 4.5 3.5" />
               <path d="M16.5 17c0-1.5-1.27-2.73-3-3" />
             </svg>
-          ) : opt.type === "roleTag" ? (
-            <span
-              className="app-claude-slash-popover__roletag-glyph"
-              aria-hidden
-              style={{
-                fontSize: "13px",
-                fontWeight: 600,
-                lineHeight: 1,
-                color: "var(--ant-color-primary)",
-                display: "inline-flex",
-                width: "16px",
-                justifyContent: "center",
-              }}
-            >
-              #
-            </span>
-          ) : opt.type === "repository" ? (
-            <MentionKindRepositoryIcon />
           ) : (
             // Lightning bolt SVG fallback
             <svg
@@ -657,51 +607,6 @@ function renderOptionContent(opt: SlashOption) {
             <MentionKindTeamIcon />
           </span>
         )}
-        {opt.type === "roleTag" && (
-          <>
-            <span
-              style={{
-                color: "var(--ant-color-text-tertiary)",
-                fontSize: "12px",
-                marginLeft: "12px",
-                flex: "1 1 0%",
-                minWidth: 0,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {opt.description}
-            </span>
-            <span
-              className="app-claude-slash-popover__kind"
-              title={
-                opt.repoNames && opt.repoNames.length > 0
-                  ? `角色标签：覆盖 ${opt.repoCount ?? 0} 个仓库\n${opt.repoNames.join(", ")}`
-                  : `角色标签：覆盖 ${opt.repoCount ?? 0} 个仓库`
-              }
-              style={{ fontSize: "11px", color: "var(--ant-color-text-tertiary)" }}
-            >
-              {`· ${opt.repoCount ?? 0} ${opt.repoCount === 1 ? "repo" : "repos"}`}
-            </span>
-          </>
-        )}
-        {opt.type === "repository" && opt.description && (
-          <span
-            style={{
-              color: "var(--ant-color-text-tertiary)",
-              fontSize: "12px",
-              marginLeft: "12px",
-              flex: "1 1 0%",
-              minWidth: 0,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {opt.description}
-          </span>
-        )}
       </span>
     </>
   );
@@ -714,8 +619,6 @@ function getFilteredOptions(
   employeeOptions: Array<{ id: string; name: string }>,
   teamOptions: Array<{ id: string; name: string }>,
   skillSlashOptions: SlashOption[],
-  projectRoleTagOptions: ReadonlyArray<RoleTagOption> = [],
-  projectRepositoryMentionOptions: ReadonlyArray<RepositoryMentionOption> = [],
   hideEmployeesInAtMode = false,
 ): SlashOption[] {
   if (!mode) return [];
@@ -734,22 +637,6 @@ function getFilteredOptions(
     return [...builtinsFiltered, ...skillsFiltered];
   }
 
-  const repositoryRows: SlashOption[] = projectRepositoryMentionOptions.map((repo) => ({
-    type: "repository" as const,
-    label: repo.label,
-    name: repo.mention,
-    description: repo.description,
-  }));
-
-  const roleTagRows: SlashOption[] = projectRoleTagOptions.map((tag) => ({
-    type: "roleTag" as const,
-    label: tag.label,
-    name: tag.tag,
-    description: tag.description,
-    repoCount: tag.repoCount,
-    repoNames: tag.repoNames,
-  }));
-
   const teams: SlashOption[] = teamOptions.map((team) => ({
     type: "team" as const,
     label: team.name,
@@ -767,8 +654,6 @@ function getFilteredOptions(
 
   const q = query.toLowerCase();
   const filtered = [
-    ...repositoryRows.filter((r) => !q || r.label.toLowerCase().includes(q)),
-    ...roleTagRows.filter((r) => !q || r.label.toLowerCase().includes(q)),
     ...agents.filter((a) => !q || a.label.toLowerCase().includes(q)),
     ...teams.filter((t) => !q || t.label.toLowerCase().includes(q)),
     ...fileResults.filter((f) => !q || f.label.toLowerCase().includes(q) || (f.description ?? "").toLowerCase().includes(q)),

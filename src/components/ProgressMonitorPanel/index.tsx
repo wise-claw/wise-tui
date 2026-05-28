@@ -485,13 +485,6 @@ function taskResultTag(status?: EmployeeMonitorItem["latestTaskStatus"]) {
   );
 }
 
-function repositoryTypeLabel(value: RepositoryMemberMonitorItem["repositoryType"]): string {
-  if (value === "frontend") return "前端";
-  if (value === "backend") return "后端";
-  if (value === "document") return "文档";
-  return value;
-}
-
 function subagentStatusLabel(status: RepositoryMemberMonitorSubagentItem["status"]): string {
   if (status === "running") return "运行中";
   if (status === "stale") return "疑似断连";
@@ -804,10 +797,10 @@ export function HistorySessionPopoverContent({
 
 export function ProgressMonitorPanel({
   employeeItems,
-  repositoryMemberItems,
+  repositoryMemberItems: _repositoryMemberItems,
   teamItems,
   sessionConversationTaskItems = [],
-  showSessionConversationTasks = false,
+  showSessionConversationTasks: _showSessionConversationTasks = false,
   sessions,
   activeTarget,
   onOpenTeamDetail,
@@ -908,11 +901,6 @@ export function ProgressMonitorPanel({
     () => teamItems.filter((item) => item.status === "in_progress").length,
     [teamItems],
   );
-  const runningRepositoryMemberItems = useMemo(
-    () => repositoryMemberItems.filter((item) => item.status === "in_progress"),
-    [repositoryMemberItems],
-  );
-
   const teamHistorySessionsByWorkflowId = useMemo(() => {
     const map = new Map<string, TeamHistorySessionRow[]>();
     for (const teamItem of teamItems) {
@@ -947,13 +935,6 @@ export function ProgressMonitorPanel({
 
   function closeHistoryMessagesDrawer() {
     setHistoryMessagesSessionId(null);
-  }
-
-  function openRepositorySubagentDetail(
-    repository: RepositoryMemberMonitorItem,
-    subagent: RepositoryMemberMonitorSubagentItem,
-  ) {
-    setRepositorySubagentDetailTarget({ repository, subagent });
   }
 
   const handleOmcBatchInvocationSelect = useCallback(
@@ -1037,13 +1018,12 @@ export function ProgressMonitorPanel({
     [sessionConversationTaskItems],
   );
 
-  const shouldShowSessionConversationTasks =
-    showSessionConversationTasks || sessionConversationTaskItems.length > 0;
+  // 临时隐藏「子代理 / 任务」区块（即使有数据也不展示）
+  const shouldShowSessionConversationTasks = false;
 
   const panelHasListContent =
     shouldShowSessionConversationTasks ||
     employeeItems.length > 0 ||
-    runningRepositoryMemberItems.length > 0 ||
     agentAssignments.length > 0 ||
     teamItems.length > 0;
 
@@ -1285,63 +1265,6 @@ export function ProgressMonitorPanel({
             );
           })}
       </div>
-      ) : null}
-
-      {runningRepositoryMemberItems.length > 0 ? (
-        <div className="app-monitor-panel__section app-monitor-panel__section--repo-members">
-          <div className="app-monitor-panel__section-head">
-            <div className="app-monitor-panel__section-title-wrap">
-              <Typography.Text className="app-monitor-panel__section-title">
-                <span className="app-monitor-panel__section-icon"><RepositoryMiniIcon /></span>
-                仓库成员
-              </Typography.Text>
-              <Typography.Text className="app-monitor-panel__meta">
-                进行中 {runningRepositoryMemberItems.length}
-              </Typography.Text>
-            </div>
-          </div>
-          {runningRepositoryMemberItems.map((item) => (
-            <div key={item.repositoryId} className="app-monitor-panel__item app-monitor-panel__item--readonly">
-              <div className="app-monitor-panel__item-row">
-                <span className="app-monitor-panel__item-name-wrap">
-                  <Tooltip title={item.repositoryPath}>
-                    <span className="app-monitor-panel__item-name">{item.repositoryName}</span>
-                  </Tooltip>
-                  <span className="app-monitor-panel__repo-type">{repositoryTypeLabel(item.repositoryType)}</span>
-                  {statusText(item.status)}
-                </span>
-                <span className="app-monitor-panel__item-actions">
-                  <span className="app-monitor-panel__result-pill">
-                    子进程 {item.activeSubagentCount}/{item.subagents.length}
-                  </span>
-                </span>
-              </div>
-              {item.subagents.length > 0 ? (
-              <div className="app-monitor-panel__subagent-tree" aria-label={`${item.repositoryName} Trellis 子进程`}>
-                {item.subagents.slice(0, 3).map((subagent) => (
-                  <button
-                    key={subagent.invocationKey}
-                    type="button"
-                    className="app-monitor-panel__subagent-row app-monitor-panel__subagent-row--clickable"
-                    title={subagent.previewText}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      openRepositorySubagentDetail(item, subagent);
-                    }}
-                  >
-                    <span className="app-monitor-panel__subagent-branch" aria-hidden />
-                    <span className="app-monitor-panel__subagent-main">
-                      <span className="app-monitor-panel__subagent-name">{subagent.subagentType}</span>
-                      {subagent.stage ? <span className="app-monitor-panel__subagent-stage">{subagent.stage}</span> : null}
-                    </span>
-                    <SubagentStatusIndicator status={subagent.status} label={subagentStatusLabel(subagent.status)} />
-                  </button>
-                ))}
-              </div>
-              ) : null}
-            </div>
-          ))}
-        </div>
       ) : null}
 
       {agentAssignments.length > 0 ? (

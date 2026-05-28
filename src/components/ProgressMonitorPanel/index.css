@@ -1,5 +1,4 @@
 .app-monitor-panel {
-  padding: 0 0 10px;
   border-top: 1px solid var(--app-workspace-glass-border, var(--ant-color-border-secondary));
   background: transparent;
   margin-top: 0;

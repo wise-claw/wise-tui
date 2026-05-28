@@ -2580,23 +2580,28 @@ export function ClaudeChat({
       ),
     [historySessionSource, repositoryScopePath],
   );
-
-  const repositoryHistorySessionsWithMessages = useMemo(
-    () => repositoryHistorySessions.filter((item) => item.messages.length > 0),
+  const repositoryHistorySessionsForDisplay = useMemo(
+    () =>
+      repositoryHistorySessions.filter((item) => {
+        if (item.messages.length > 0) {
+          return true;
+        }
+        return Boolean(item.diskPreview?.trim());
+      }),
     [repositoryHistorySessions],
   );
 
   const filteredHistorySessions = useMemo(() => {
     const keyword = historySearchText.trim().toLocaleLowerCase("zh-CN");
     if (!keyword) {
-      return repositoryHistorySessionsWithMessages;
+      return repositoryHistorySessionsForDisplay;
     }
-    return repositoryHistorySessionsWithMessages.filter((item) => {
+    return repositoryHistorySessionsForDisplay.filter((item) => {
       const preview = getSessionPreview(item).toLocaleLowerCase("zh-CN");
       const repositoryName = item.repositoryName.toLocaleLowerCase("zh-CN");
       return preview.includes(keyword) || repositoryName.includes(keyword);
     });
-  }, [repositoryHistorySessionsWithMessages, historySearchText]);
+  }, [repositoryHistorySessionsForDisplay, historySearchText]);
 
   const filteredHistoryLengthRef = useRef(0);
   filteredHistoryLengthRef.current = filteredHistorySessions.length;

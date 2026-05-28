@@ -1,7 +1,11 @@
 import { useMemo, useRef, type RefObject } from "react";
 import type { ClaudeSession } from "../../types";
-import { shouldShowListEndThinkingHint } from "../../utils/claudeChatMessageListRows";
-import { ClaudeVirtualMessageList } from "./ClaudeVirtualMessageList";
+import {
+  buildChatMessageListRows,
+  shouldShowListEndThinkingHint,
+} from "../../utils/claudeChatMessageListRows";
+import { ClaudeSessionMonitorMessageRow } from "./ClaudeSessionMonitorMessageRow";
+import { StreamingReplyHint } from "./Markdown";
 import "./index.css";
 
 interface Props {
@@ -25,22 +29,49 @@ export function ClaudeSessionMessagesColumn({
     () => shouldShowListEndThinkingHint(session.messages, session.status),
     [session.messages, session.status],
   );
+  const rows = useMemo(
+    () =>
+      buildChatMessageListRows(session.messages, {
+        sessionStatus: session.status,
+        showListEndThinkingHint,
+      }),
+    [session.messages, session.status, showListEndThinkingHint],
+  );
 
   return (
     <div className="app-claude-chat app-claude-session-messages-column">
       <div ref={scrollRef} className="app-claude-messages">
-        {session.messages.length === 0 ? (
+        {rows.length === 0 ? (
           <div className="app-claude-messages-empty">
             <p>暂无消息</p>
           </div>
         ) : (
-          <ClaudeVirtualMessageList
-            session={session}
-            showListEndThinkingHint={showListEndThinkingHint}
-            scrollContainerRef={scrollRef}
-            onOpenTaskDetail={onOpenTaskDetail}
-            listVariant="monitor"
-          />
+          rows.map((row, index) => {
+            const classNames = ["app-claude-messages-virtual-row"];
+            if (index > 0 && row.kind !== "thinking-hint" && !row.mergedWithPrevious) {
+              classNames.push("app-claude-messages-virtual-row--group-start");
+            }
+            if (row.kind === "message" && row.mergedWithPrevious) {
+              classNames.push("app-claude-messages-virtual-row--merged");
+            }
+            return (
+              <div key={row.key} className={classNames.join(" ")}>
+                {row.kind === "thinking-hint" ? (
+                  <div className="app-claude-messages-end-thinking">
+                    <StreamingReplyHint />
+                  </div>
+                ) : (
+                  <ClaudeSessionMonitorMessageRow
+                    msg={row.msg}
+                    streamingThisBubble={row.streamingThisBubble}
+                    mergedWithPrevious={row.mergedWithPrevious}
+                    toolUser={row.toolUser}
+                    onOpenTaskDetail={onOpenTaskDetail}
+                  />
+                )}
+              </div>
+            );
+          })
         )}
       </div>
     </div>
