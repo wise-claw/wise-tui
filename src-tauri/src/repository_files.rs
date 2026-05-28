@@ -1,3 +1,4 @@
+use crate::project_workspace_paths::expand_tilde_in_path;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::fs;
@@ -165,7 +166,7 @@ fn assert_resolved_path_under_repo(repo_canon: &Path, path: &Path) -> Result<(),
 #[tauri::command]
 pub(crate) fn path_is_accessible_directory(path: String) -> bool {
     let trimmed = path.trim();
-    !trimmed.is_empty() && Path::new(trimmed).is_dir()
+    !trimmed.is_empty() && expand_tilde_in_path(trimmed).is_dir()
 }
 
 fn explorer_root_error_message(root: &str, root_path: &Path) -> String {
@@ -192,7 +193,7 @@ pub(crate) async fn list_repository_explorer_entries(
     const MAX_SCAN_ENTRIES: usize = 400_000;
     const MAX_RESULTS: usize = 30_000;
 
-    let root_path = PathBuf::from(root.trim());
+    let root_path = expand_tilde_in_path(&root);
     if !root_path.is_dir() {
         return Err(explorer_root_error_message(&root, &root_path));
     }

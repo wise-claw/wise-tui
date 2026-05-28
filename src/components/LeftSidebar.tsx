@@ -214,6 +214,7 @@ export function LeftSidebar({
     readLeftFilesExplorerCollapsedFromStorage,
   );
   const [leftBottomTab, setLeftBottomTab] = useState<LeftBottomTab>(readLeftBottomTabFromStorage);
+  const expandedFilesPanelOnMountRef = useRef(false);
   const projectRepositoryState = useProjectRepositorySidebarState({
     projects,
     repositories,
@@ -468,10 +469,23 @@ export function LeftSidebar({
     writeLeftFilesExplorerCollapsedToStorage(next);
   }, []);
 
-  const handleLeftBottomTabChange = useCallback((tab: LeftBottomTab) => {
-    setLeftBottomTab(tab);
-    writeLeftBottomTabToStorage(tab);
-  }, []);
+  const handleLeftBottomTabChange = useCallback(
+    (tab: LeftBottomTab) => {
+      setLeftBottomTab(tab);
+      writeLeftBottomTabToStorage(tab);
+      if (tab === "files" && filesExplorerSectionCollapsed) {
+        handleFilesExplorerSectionCollapsedChange(false);
+      }
+    },
+    [filesExplorerSectionCollapsed, handleFilesExplorerSectionCollapsedChange],
+  );
+
+  useEffect(() => {
+    if (expandedFilesPanelOnMountRef.current) return;
+    if (leftBottomTab !== "files" || !filesExplorerSectionCollapsed) return;
+    expandedFilesPanelOnMountRef.current = true;
+    handleFilesExplorerSectionCollapsedChange(false);
+  }, [leftBottomTab, filesExplorerSectionCollapsed, handleFilesExplorerSectionCollapsedChange]);
 
   const repoPanelTabSwitcher = useMemo(
     () => (
@@ -517,9 +531,24 @@ export function LeftSidebar({
     return null;
   }, [activeSession, repositories, repositoryMainSessionBindings, sessions, activeRepositoryId]);
 
+  const repoPanelTreeSelectionSource = useMemo((): WorkspaceRepositoryTreeSelection | null => {
+    if (leftBottomTab === "files" && activeRepositoryId != null) {
+      return { kind: "repository", repositoryId: activeRepositoryId };
+    }
+    if (activeRepositoryId != null && globalWorkspaceTreeSelection?.kind === "project") {
+      return { kind: "repository", repositoryId: activeRepositoryId };
+    }
+    return globalWorkspaceTreeSelection ?? sessionDerivedTreeSelection ?? null;
+  }, [
+    leftBottomTab,
+    activeRepositoryId,
+    globalWorkspaceTreeSelection,
+    sessionDerivedTreeSelection,
+  ]);
+
   useEffect(() => {
-    setRepoPanelTreeSelection(globalWorkspaceTreeSelection ?? sessionDerivedTreeSelection);
-  }, [globalWorkspaceTreeSelection, sessionDerivedTreeSelection]);
+    setRepoPanelTreeSelection(repoPanelTreeSelectionSource);
+  }, [repoPanelTreeSelectionSource]);
 
   const repoPanelTreeView = useMemo(() => {
     if (!repoPanelTreeSelection) return null;
@@ -540,6 +569,13 @@ export function LeftSidebar({
     activeSession?.repositoryName?.trim() ||
     repositoryFolderBasename({ path: repoPanelRepositoryPath, name: activeRepositoryName ?? "" });
   const [accessibleRepoPanelPath, setAccessibleRepoPanelPath] = useState(repoPanelRepositoryPath);
+
+  useEffect(() => {
+    const candidate = repoPanelRepositoryPath.trim();
+    if (candidate) {
+      setAccessibleRepoPanelPath(candidate);
+    }
+  }, [repoPanelRepositoryPath]);
 
   useEffect(() => {
     let cancelled = false;

@@ -119,7 +119,10 @@ export function useRepositoryFilesExplorer({
       setLoading(false);
     } else {
       startTransition(() => {
+        setExplorerEntries([]);
+        setLoadedRepositoryPath("");
         setIsRefreshing(true);
+        setLoading(true);
       });
     }
 

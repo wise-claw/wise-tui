@@ -2,13 +2,27 @@
 
 use std::path::{Path, PathBuf};
 
+/// 展开前导 `~` / `~/`（Rust `Path` 不会自动处理，macOS 配置里常见）。
+pub fn expand_tilde_in_path(path: &str) -> PathBuf {
+    let trimmed = path.trim();
+    if trimmed == "~" {
+        return dirs::home_dir().unwrap_or_else(|| PathBuf::from("~"));
+    }
+    if let Some(rest) = trimmed.strip_prefix("~/") {
+        if let Some(home) = dirs::home_dir() {
+            return home.join(rest);
+        }
+    }
+    PathBuf::from(trimmed)
+}
+
 /// 将已存在的目录规范为绝对路径（解析符号链接等）。
 pub fn canonicalize_existing_dir(path: &str) -> Result<PathBuf, String> {
     let trimmed = path.trim();
     if trimmed.is_empty() {
         return Err("路径为空".to_string());
     }
-    let p = Path::new(trimmed);
+    let p = expand_tilde_in_path(trimmed);
     if !p.exists() {
         return Err("路径不存在".to_string());
     }

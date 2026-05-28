@@ -300,7 +300,11 @@ export function RepositoryFilesExplorer({
       <div
         className={`git-files-explorer-scroll-region${explorer.isRefreshing ? " git-files-explorer-scroll-region--refreshing" : ""}`}
       >
-        {(explorer.loading || explorer.isRefreshing || switchingRepositoryTree) && explorer.explorerEntries.length === 0 ? (
+        {(explorer.loading ||
+          explorer.isRefreshing ||
+          switchingRepositoryTree ||
+          (explorer.treeStale && !explorer.loadError)) &&
+        explorer.filteredTree.length === 0 ? (
           <div style={{ padding: 24, textAlign: "center" }}>
             <Spin size="small" description={switchingRepositoryTree ? "切换文件树中..." : "加载文件中..."} />
           </div>
