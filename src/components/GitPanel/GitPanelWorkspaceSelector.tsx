@@ -13,14 +13,19 @@ import {
   type WorkspaceRepositoryTreeNode,
 } from "../../utils/workspaceRepositoryTreeSelect";
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
-import { getKnownOpenAppIcon } from "../OpenAppMenu/openAppIcons";
+import { getDefaultTerminalActionIcon, getKnownOpenAppIcon } from "../OpenAppMenu/openAppIcons";
 import { DEFAULT_OPEN_APP_ID } from "../OpenAppMenu/constants";
 import { getOpenAppPreferenceSync } from "../../services/openAppPreference";
 import {
   OPEN_WORKSPACE_ERROR,
   openWorkspaceWithStoredPreference,
 } from "../../services/openWorkspaceWithPreference";
+import { tryOpenWorkspaceInDefaultTerminal } from "../../services/openWorkspaceWithTerminalPreference";
 import { repositoryEditorOpenMenuLabel } from "../LeftSidebar/sidebarMoreMenuItems";
+import {
+  repositoryTerminalOpenMenuLabel,
+  showRepositoryTerminalOpenMenuItem,
+} from "../../utils/repositoryTerminalOpenMenu";
 
 export interface GitPanelWorkspaceSelectorProps {
   projects: ProjectItem[];
@@ -35,33 +40,68 @@ export interface GitPanelWorkspaceSelectorProps {
   directoryOnly?: boolean;
 }
 
+interface TreeOpenActionsOptions {
+  projects: ProjectItem[];
+  repositories: Repository[];
+  editorIconSrc: string;
+  editorActionLabel: string;
+  onOpenEditorPath: (path: string) => void;
+  showTerminalOpen: boolean;
+  terminalIconSrc: string;
+  terminalActionLabel: string;
+  onOpenTerminalPath: (path: string) => void;
+}
+
 function buildTreeDataWithOpenActions(
   nodes: WorkspaceRepositoryTreeNode[],
-  projects: ProjectItem[],
-  repositories: Repository[],
-  openIconSrc: string,
-  openActionLabel: string,
-  onOpenPath: (path: string) => void,
+  options: TreeOpenActionsOptions,
 ): DataNode[] {
   return nodes.map((node) => {
-    const openPath = resolveTreeNodeOpenPath(node, projects, repositories);
+    const openPath = resolveTreeNodeOpenPath(node, options.projects, options.repositories);
     const title: ReactNode = (
       <div className="git-panel-workspace-selector__tree-row">
         <span className="git-panel-workspace-selector__tree-label">{node.title}</span>
         {openPath ? (
-          <button
-            type="button"
-            className="git-panel-workspace-selector__tree-open"
-            title={`${openActionLabel}：${node.title}`}
-            aria-label={`${openActionLabel}：${node.title}`}
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              onOpenPath(openPath);
-            }}
-          >
-            <img className="git-panel-workspace-selector__tree-open-icon" src={openIconSrc} alt="" aria-hidden />
-          </button>
+          <div className="git-panel-workspace-selector__tree-actions">
+            <button
+              type="button"
+              className="git-panel-workspace-selector__tree-open"
+              title={`${options.editorActionLabel}：${node.title}`}
+              aria-label={`${options.editorActionLabel}：${node.title}`}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                options.onOpenEditorPath(openPath);
+              }}
+            >
+              <img
+                className="git-panel-workspace-selector__tree-open-icon"
+                src={options.editorIconSrc}
+                alt=""
+                aria-hidden
+              />
+            </button>
+            {options.showTerminalOpen ? (
+              <button
+                type="button"
+                className="git-panel-workspace-selector__tree-open git-panel-workspace-selector__tree-open--terminal"
+                title={`${options.terminalActionLabel}：${node.title}`}
+                aria-label={`${options.terminalActionLabel}：${node.title}`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  options.onOpenTerminalPath(openPath);
+                }}
+              >
+                <img
+                  className="git-panel-workspace-selector__tree-open-icon"
+                  src={options.terminalIconSrc}
+                  alt=""
+                  aria-hidden
+                />
+              </button>
+            ) : null}
+          </div>
         ) : null}
       </div>
     );
@@ -71,16 +111,7 @@ function buildTreeDataWithOpenActions(
       title,
       selectable: node.selectable,
       disabled: !node.selectable,
-      children: node.children
-        ? buildTreeDataWithOpenActions(
-            node.children,
-            projects,
-            repositories,
-            openIconSrc,
-            openActionLabel,
-            onOpenPath,
-          )
-        : undefined,
+      children: node.children ? buildTreeDataWithOpenActions(node.children, options) : undefined,
     };
   });
 }
@@ -100,10 +131,13 @@ export function GitPanelWorkspaceSelector({
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const openAppId = getOpenAppPreferenceSync().trim() || DEFAULT_OPEN_APP_ID;
-  const openIconSrc = getKnownOpenAppIcon(openAppId) ?? "";
-  const openActionLabel = repositoryEditorOpenMenuLabel();
+  const editorIconSrc = getKnownOpenAppIcon(openAppId) ?? "";
+  const editorActionLabel = repositoryEditorOpenMenuLabel();
+  const terminalIconSrc = getDefaultTerminalActionIcon();
+  const terminalActionLabel = repositoryTerminalOpenMenuLabel();
+  const showTerminalOpen = showRepositoryTerminalOpenMenuItem();
 
-  const handleOpenPath = useCallback(
+  const handleOpenEditorPath = useCallback(
     (path: string) => {
       void openWorkspaceWithStoredPreference(path).catch((err: unknown) => {
         const code = err instanceof Error ? err.message : "";
@@ -122,6 +156,17 @@ export function GitPanelWorkspaceSelector({
     [message],
   );
 
+  const handleOpenTerminalPath = useCallback(
+    (path: string) => {
+      void tryOpenWorkspaceInDefaultTerminal(path).then((result) => {
+        if (!result.ok) {
+          message.warning(result.message);
+        }
+      });
+    },
+    [message],
+  );
+
   const treeNodes = useMemo(
     () => buildWorkspaceRepositoryTreeData(projects, repositories),
     [projects, repositories],
@@ -129,15 +174,29 @@ export function GitPanelWorkspaceSelector({
 
   const antTreeData = useMemo(
     () =>
-      buildTreeDataWithOpenActions(
-        treeNodes,
+      buildTreeDataWithOpenActions(treeNodes, {
         projects,
         repositories,
-        openIconSrc,
-        openActionLabel,
-        handleOpenPath,
-      ),
-    [treeNodes, projects, repositories, openIconSrc, openActionLabel, handleOpenPath],
+        editorIconSrc,
+        editorActionLabel,
+        onOpenEditorPath: handleOpenEditorPath,
+        showTerminalOpen,
+        terminalIconSrc,
+        terminalActionLabel,
+        onOpenTerminalPath: handleOpenTerminalPath,
+      }),
+    [
+      treeNodes,
+      projects,
+      repositories,
+      editorIconSrc,
+      editorActionLabel,
+      handleOpenEditorPath,
+      showTerminalOpen,
+      terminalIconSrc,
+      terminalActionLabel,
+      handleOpenTerminalPath,
+    ],
   );
 
   const activeRepository = useMemo(

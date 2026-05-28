@@ -2,6 +2,10 @@ import type { MenuProps } from "antd";
 import type { Workspace } from "../../types";
 import { DEFAULT_OPEN_APP_ID, DEFAULT_OPEN_APP_TARGETS } from "../OpenAppMenu/constants";
 import { getOpenAppPreferenceSync } from "../../services/openAppPreference";
+import {
+  repositoryTerminalOpenMenuLabel,
+  showRepositoryTerminalOpenMenuItem,
+} from "../../utils/repositoryTerminalOpenMenu";
 
 type MenuItem = NonNullable<MenuProps["items"]>[number];
 
@@ -46,6 +50,7 @@ export interface BuildProjectMoreMenuItemsInput {
   onReconcileProject?: boolean;
   onCodeGraphGenerateProject?: boolean;
   onCodeGraphViewProject?: boolean;
+  onOpenProjectInTerminal?: boolean;
 }
 
 /** Workspace 行「更多」菜单，按功能分组。 */
@@ -63,7 +68,11 @@ export function buildProjectMoreMenuItems(input: BuildProjectMoreMenuItemsInput)
     onReconcileProject,
     onCodeGraphGenerateProject,
     onCodeGraphViewProject,
+    onOpenProjectInTerminal,
   } = input;
+
+  const showTerminalOpen =
+    Boolean(onOpenProjectInTerminal) && showRepositoryTerminalOpenMenuItem();
 
   return sidebarMenuWithDividers(
     sidebarMenuSection([
@@ -73,6 +82,7 @@ export function buildProjectMoreMenuItems(input: BuildProjectMoreMenuItemsInput)
       onAddRepositoryToProject ? { key: "add-repository", label: "关联仓库" } : null,
       onConfigureSddMode ? { key: "sdd-mode", label: "配置 Claude 插件" } : null,
       onNewPaneSession ? { key: "new-session", label: "新开会话" } : null,
+      showTerminalOpen ? { key: "open-terminal", label: repositoryTerminalOpenMenuLabel() } : null,
     ]),
     sidebarMenuSection([
       trellisEnabled ? { key: "requirements", label: "工作区需求" } : null,
@@ -124,6 +134,7 @@ export interface BuildProjectRepositoryMoreMenuItemsInput {
   onOpenExecutableTasks?: boolean;
   onCodeGraphGenerateRepository?: boolean;
   onCodeGraphViewRepositoryInProject?: boolean;
+  onOpenRepositoryInTerminal?: boolean;
 }
 
 /** 项目内仓库行「更多」菜单，按功能分组。 */
@@ -143,12 +154,17 @@ export function buildProjectRepositoryMoreMenuItems(
     onOpenExecutableTasks,
     onCodeGraphGenerateRepository,
     onCodeGraphViewRepositoryInProject,
+    onOpenRepositoryInTerminal,
   } = input;
+
+  const showTerminalOpen =
+    Boolean(onOpenRepositoryInTerminal) && showRepositoryTerminalOpenMenuItem();
 
   return sidebarMenuWithDividers(
     sidebarMenuSection([
       { key: "finder", label: "打开目录" },
       { key: "editor", label: repositoryEditorOpenMenuLabel() },
+      showTerminalOpen ? { key: "open-terminal", label: repositoryTerminalOpenMenuLabel() } : null,
       { key: "browser", label: "打开 Git 仓库" },
       onNewPaneSession ? { key: "new-session", label: "新开会话" } : null,
     ]),
@@ -196,6 +212,7 @@ export interface BuildFloatingRepositoryMoreMenuItemsInput {
   onCodeGraphViewFloatingRepository?: boolean;
   onPromoteToNewProject?: boolean;
   onJoinExistingProject?: boolean;
+  onOpenRepositoryInTerminal?: boolean;
 }
 
 /** 游离仓库行「更多」菜单，按功能分组。 */
@@ -216,7 +233,11 @@ export function buildFloatingRepositoryMoreMenuItems(
     onCodeGraphViewFloatingRepository,
     onPromoteToNewProject,
     onJoinExistingProject,
+    onOpenRepositoryInTerminal,
   } = input;
+
+  const showTerminalOpen =
+    Boolean(onOpenRepositoryInTerminal) && showRepositoryTerminalOpenMenuItem();
 
   const joinChildren: MenuItem[] = joinableProjects.map((project) => ({
     key: `join-${project.id}`,
@@ -227,6 +248,7 @@ export function buildFloatingRepositoryMoreMenuItems(
     sidebarMenuSection([
       { key: "finder", label: "打开目录" },
       { key: "editor", label: repositoryEditorOpenMenuLabel() },
+      showTerminalOpen ? { key: "open-terminal", label: repositoryTerminalOpenMenuLabel() } : null,
       { key: "browser", label: "打开 Git 仓库" },
       onNewPaneSession ? { key: "new-session", label: "新开会话" } : null,
     ]),

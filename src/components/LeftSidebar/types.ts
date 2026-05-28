@@ -113,6 +113,10 @@ export interface LeftSidebarProps {
   onOpenInFinder: (repository: Repository) => void;
   /** 在 Finder 中打开工作区根目录（或单仓工作区的成员仓库目录） */
   onOpenProjectInFinder?: (project: ProjectItem) => void;
+  /** 在默认终端中打开仓库目录（macOS） */
+  onOpenInTerminal?: (repository: Repository) => void;
+  /** 在默认终端中打开工作区目录（macOS） */
+  onOpenProjectInTerminal?: (project: ProjectItem) => void;
   onOpenRepositoryInBrowser: (repository: Repository) => void;
   /** 打开主区+右栏定时任务叠层（由宿主渲染，与技能市场同构） */
   onOpenScheduledTasksForRepository?: (repository: Repository) => void;

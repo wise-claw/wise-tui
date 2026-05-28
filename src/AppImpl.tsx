@@ -41,6 +41,7 @@ import { useClaudeSessions, type ClaudeTurnCompletePayload } from "./hooks/useCl
 import { useRepositoryList } from "./hooks/useRepositoryList";
 import { openRepositoryRemoteInBrowser } from "./services/openRepositoryRemote";
 import { openInFinder } from "./services/repository";
+import { tryOpenWorkspaceInDefaultTerminal } from "./services/openWorkspaceWithTerminalPreference";
 import { triggerCodeGraphProjectSearch, triggerCodeGraphReindex } from "./services/codeKnowledgeGraph";
 import { AppWorkspaceLayout } from "./components/AppWorkspaceLayout";
 import { useMacTerminalDetectionBootstrap } from "./hooks/useMacTerminalDetectionBootstrap";
@@ -2642,6 +2643,45 @@ export default function App() {
     [message, projects, repositories],
   );
 
+  const openPathInDefaultTerminal = useCallback(
+    async (path: string | null | undefined, emptyMessage: string) => {
+      const trimmed = path?.trim() ?? "";
+      if (!trimmed) {
+        message.warning(emptyMessage);
+        return;
+      }
+      const result = await tryOpenWorkspaceInDefaultTerminal(trimmed);
+      if (!result.ok) {
+        message.warning(result.message);
+        return;
+      }
+    },
+    [message],
+  );
+
+  const handleOpenInTerminal = useCallback(
+    (repository: Repository) => {
+      void openPathInDefaultTerminal(repository.path, "仓库路径为空");
+    },
+    [openPathInDefaultTerminal],
+  );
+
+  const handleOpenProjectInTerminal = useCallback(
+    (project: ProjectItem) => {
+      const path = resolveTrellisBootstrapPath({
+        scope: "project",
+        project,
+        repositories,
+        projects,
+      });
+      void openPathInDefaultTerminal(
+        path,
+        "无法解析工作区目录，请先配置工作区根目录或关联仓库",
+      );
+    },
+    [openPathInDefaultTerminal, projects, repositories],
+  );
+
   function handleOpenRepositoryInBrowser(repository: Repository) {
     void openRepositoryRemoteInBrowser(repository.path)
       .then((result) => {
@@ -2989,6 +3029,8 @@ export default function App() {
         onRepositorySelect: handleSidebarRepositorySelectLeavingMcpHub,
         onOpenInFinder: handleOpenInFinder,
         onOpenProjectInFinder: handleOpenProjectInFinder,
+        onOpenInTerminal: handleOpenInTerminal,
+        onOpenProjectInTerminal: handleOpenProjectInTerminal,
         onOpenRepositoryInBrowser: handleOpenRepositoryInBrowser,
         onOpenScheduledTasksForRepository: openScheduledTasksForRepository,
         onCreateProjectTask: handleCreateProjectTask,

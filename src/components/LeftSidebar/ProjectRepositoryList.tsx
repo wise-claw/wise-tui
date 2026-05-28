@@ -64,6 +64,8 @@ interface ProjectRepositoryListProps {
   onOpenRepositoryRequirements?: (repository: Repository) => void;
   onOpenInFinder: (repository: Repository) => void;
   onOpenProjectInFinder?: (project: Workspace) => void;
+  onOpenInTerminal?: (repository: Repository) => void;
+  onOpenProjectInTerminal?: (project: Workspace) => void;
   onOpenRepositoryInBrowser: (repository: Repository) => void;
   openRepositoryInPreferredEditor: (repository: Repository) => void;
   onOpenPromptsRepository?: (project: Workspace, repository: Repository) => void;
@@ -136,6 +138,8 @@ export function ProjectRepositoryList({
   onOpenWorkspaceRequirements,
   onOpenInFinder,
   onOpenProjectInFinder,
+  onOpenInTerminal,
+  onOpenProjectInTerminal,
   onOpenRepositoryInBrowser,
   openRepositoryInPreferredEditor,
   onOpenPromptsRepository,
@@ -214,6 +218,7 @@ export function ProjectRepositoryList({
                 onRepositorySelect={onRepositorySelect}
                 onOpenTaskMode={onCreateRepositoryTask}
                 onOpenInFinder={onOpenInFinder}
+                onOpenInTerminal={onOpenInTerminal}
                 onOpenRepositoryInBrowser={onOpenRepositoryInBrowser}
                 onOpenRepositoryInEditor={openRepositoryInPreferredEditor}
                 onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
@@ -279,6 +284,8 @@ export function ProjectRepositoryList({
             onCodeGraphViewRepositoryInProject={onCodeGraphViewRepositoryInProject}
             onOpenInFinder={onOpenInFinder}
             onOpenProjectInFinder={onOpenProjectInFinder}
+            onOpenInTerminal={onOpenInTerminal}
+            onOpenProjectInTerminal={onOpenProjectInTerminal}
             onOpenRepositoryInBrowser={onOpenRepositoryInBrowser}
             openRepositoryInPreferredEditor={openRepositoryInPreferredEditor}
             onOpenPromptsRepository={onOpenPromptsRepository}
@@ -359,6 +366,8 @@ interface ProjectRowProps {
   onCodeGraphViewRepositoryInProject?: (project: Workspace, repository: Repository) => void;
   onOpenInFinder: (repository: Repository) => void;
   onOpenProjectInFinder?: (project: Workspace) => void;
+  onOpenInTerminal?: (repository: Repository) => void;
+  onOpenProjectInTerminal?: (project: Workspace) => void;
   onOpenRepositoryInBrowser: (repository: Repository) => void;
   openRepositoryInPreferredEditor: (repository: Repository) => void;
   onOpenPromptsRepository?: (project: Workspace, repository: Repository) => void;
@@ -422,6 +431,8 @@ function ProjectRow({
   onCodeGraphViewRepositoryInProject,
   onOpenInFinder,
   onOpenProjectInFinder,
+  onOpenInTerminal,
+  onOpenProjectInTerminal,
   onOpenRepositoryInBrowser,
   openRepositoryInPreferredEditor,
   onOpenPromptsRepository,
@@ -483,6 +494,7 @@ function ProjectRow({
     trellisReady: projectTrellisReady,
     onAddRepositoryToProject: Boolean(onAddRepositoryToProject),
     onOpenProjectDirectory: Boolean(onOpenProjectInFinder),
+    onOpenProjectInTerminal: Boolean(onOpenProjectInTerminal),
     onConfigureSddMode: Boolean(onConfigureProjectSddMode),
     onNewPaneSession: Boolean(onNewPaneSessionForProject),
     onOpenScheduledTasksForProject: Boolean(onOpenScheduledTasksForProject),
@@ -619,6 +631,7 @@ function ProjectRow({
                 if (key === "add-repository") onAddRepositoryToProject?.(project.id);
                 if (key === "sdd-mode") onConfigureProjectSddMode?.(project);
                 if (key === "new-session") onNewPaneSessionForProject?.(project);
+                if (key === "open-terminal") onOpenProjectInTerminal?.(project);
                 if (key === "scheduled-tasks") onOpenScheduledTasksForProject?.(project);
                 if (key === "requirements" && projectTrellisEnabled) openWorkspaceRequirements();
                 if (key === "executable-tasks" && projectTrellisEnabled) onOpenExecutableTasksForProject?.(project);
@@ -659,6 +672,7 @@ function ProjectRow({
             onCreateRepositoryTask={onCreateRepositoryTask}
             onDetachRepositoryFromProject={onDetachRepositoryFromProject}
             onOpenInFinder={onOpenInFinder}
+            onOpenInTerminal={onOpenInTerminal}
             onOpenRepositoryInBrowser={onOpenRepositoryInBrowser}
             openRepositoryInPreferredEditor={openRepositoryInPreferredEditor}
             onOpenPromptsRepository={onOpenPromptsRepository}

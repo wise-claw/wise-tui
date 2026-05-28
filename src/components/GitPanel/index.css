@@ -234,6 +234,13 @@
   white-space: nowrap;
 }
 
+.git-panel-workspace-selector__tree-actions {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .git-panel-workspace-selector__tree-open {
   flex-shrink: 0;
   display: inline-flex;

@@ -53,3 +53,8 @@ const ICON_MAP: Record<string, string> = {
 export function getKnownOpenAppIcon(id: string): string | null {
   return ICON_MAP[id] ?? null;
 }
+
+/** 目录树 / 工具栏等「用默认终端打开」操作的通用终端图标。 */
+export function getDefaultTerminalActionIcon(): string {
+  return TERMINAL_ICON;
+}
