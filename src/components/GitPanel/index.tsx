@@ -25,7 +25,7 @@ import type { GitStatusResponse } from "../../types";
 import { DiffMode } from "./DiffMode";
 import { GitSyncActions } from "./GitSyncActions";
 import { InitMode } from "./InitMode";
-import { hasUnstagedFilesUnderDirectory, yieldToPaint } from "./gitPanelUtils";
+import { hasUnstagedFilesUnderDirectory } from "./gitPanelUtils";
 import { RepositoryFilesExplorer } from "./RepositoryFilesExplorer";
 import { GitPanelWorkspaceSelector } from "./GitPanelWorkspaceSelector";
 import type { ProjectItem, Repository } from "../../types";
@@ -88,6 +88,8 @@ export function GitPanel({
   const runningActions = useRef(new Set<string>());
   const lastActionTime = useRef(new Map<string, number>());
   const watcherRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const syncOpsInFlightRef = useRef(0);
+  const pendingSilentRefreshRef = useRef(false);
   const DEBOUNCE_MS = 400;
   const WATCHER_REFRESH_MS = 120;
 
@@ -130,6 +132,18 @@ export function GitPanel({
     }
   }, [repositoryPath]);
 
+  const beginGitSyncOperation = useCallback(() => {
+    syncOpsInFlightRef.current += 1;
+  }, []);
+
+  const endGitSyncOperation = useCallback(() => {
+    syncOpsInFlightRef.current = Math.max(0, syncOpsInFlightRef.current - 1);
+    if (syncOpsInFlightRef.current === 0 && pendingSilentRefreshRef.current) {
+      pendingSilentRefreshRef.current = false;
+      void loadStatus({ silent: true });
+    }
+  }, [loadStatus]);
+
   useEffect(() => {
     if (repositoryPath) {
       void loadStatus();
@@ -148,11 +162,19 @@ export function GitPanel({
 
     void startGitWatcher(repositoryPath).catch(() => { });
     const unlisten = listen("git-changed", () => {
+      if (syncOpsInFlightRef.current > 0) {
+        pendingSilentRefreshRef.current = true;
+        return;
+      }
       if (watcherRefreshTimer.current) {
         clearTimeout(watcherRefreshTimer.current);
       }
       watcherRefreshTimer.current = setTimeout(() => {
         watcherRefreshTimer.current = null;
+        if (syncOpsInFlightRef.current > 0) {
+          pendingSilentRefreshRef.current = true;
+          return;
+        }
         void loadStatus({ silent: true });
       }, WATCHER_REFRESH_MS);
     });
@@ -171,15 +193,17 @@ export function GitPanel({
     async (action: string, fn: () => Promise<void>) => {
       const now = Date.now();
       const lastTime = lastActionTime.current.get(action) || 0;
-      if (now - lastTime < DEBOUNCE_MS) return;
+      if (action !== "commit" && now - lastTime < DEBOUNCE_MS) return;
       if (runningActions.current.has(action)) return;
 
       runningActions.current.add(action);
       lastActionTime.current.set(action, now);
       setLoading((prev) => ({ ...prev, [action]: true }));
 
+      const tracksSync = action === "commit" || action === "fetch";
+      if (tracksSync) beginGitSyncOperation();
+
       try {
-        await yieldToPaint();
         await fn();
         await loadStatus({ silent: true });
         setErrors((prev) => {
@@ -192,11 +216,12 @@ export function GitPanel({
         const msg = e instanceof Error ? e.message : String(e);
         setErrors((prev) => ({ ...prev, [action]: msg }));
       } finally {
+        if (tracksSync) endGitSyncOperation();
         runningActions.current.delete(action);
         setLoading((prev) => ({ ...prev, [action]: false }));
       }
     },
-    [loadStatus],
+    [beginGitSyncOperation, endGitSyncOperation, loadStatus],
   );
 
   const handleStage = useCallback(
@@ -248,7 +273,19 @@ export function GitPanel({
   const handleCommit = useCallback(
     (msg: string) =>
       void runAction("commit", async () => {
-        await gitCommit(repositoryPath!, msg);
+        if (!repositoryPath) return;
+        const trimmed = msg.trim();
+        if (!trimmed) return;
+        let latest = await gitStatus(repositoryPath);
+        if (latest.staged.length === 0 && latest.unstaged.length > 0) {
+          await gitStageAll(repositoryPath);
+          latest = await gitStatus(repositoryPath);
+        }
+        if (latest.staged.length === 0) {
+          throw new Error("没有可提交的改动");
+        }
+        await gitCommit(repositoryPath, trimmed);
+        message.success("提交成功");
       }),
     [repositoryPath, runAction],
   );
@@ -257,25 +294,27 @@ export function GitPanel({
     if (runningActions.current.has("push")) return;
     runningActions.current.add("push");
     setLoading((prev) => ({ ...prev, push: true }));
+    beginGitSyncOperation();
     try {
-      await yieldToPaint();
       await gitPush(repositoryPath!);
       await loadStatus({ silent: true });
+      message.success("推送成功");
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       message.error(`推送失败: ${msg}`);
     } finally {
+      endGitSyncOperation();
       runningActions.current.delete("push");
       setLoading((prev) => ({ ...prev, push: false }));
     }
-  }, [repositoryPath, loadStatus]);
+  }, [beginGitSyncOperation, endGitSyncOperation, repositoryPath, loadStatus]);
 
   const handlePull = useCallback(async () => {
     if (runningActions.current.has("pull")) return;
     runningActions.current.add("pull");
     setLoading((prev) => ({ ...prev, pull: true }));
+    beginGitSyncOperation();
     try {
-      await yieldToPaint();
       await gitPull(repositoryPath!);
       await loadStatus({ silent: true });
       message.success("拉取成功");
@@ -283,10 +322,11 @@ export function GitPanel({
       const msg = e instanceof Error ? e.message : String(e);
       message.error(`拉取失败: ${msg}`);
     } finally {
+      endGitSyncOperation();
       runningActions.current.delete("pull");
       setLoading((prev) => ({ ...prev, pull: false }));
     }
-  }, [repositoryPath, loadStatus]);
+  }, [beginGitSyncOperation, endGitSyncOperation, repositoryPath, loadStatus]);
 
   const handleFetch = useCallback(
     () => void runAction("fetch", () => gitFetch(repositoryPath!)),
@@ -319,7 +359,9 @@ export function GitPanel({
   }, [openingRemote, repositoryPath]);
 
   const isMissingRepo = errors.status?.includes("Failed to open git repo");
-  const anyLoading = Object.values(loading).some(Boolean);
+  const showPanelLoadingBar = Object.entries(loading).some(
+    ([key, busy]) => busy && key !== "push" && key !== "pull" && key !== "fetch",
+  );
   if (!repositoryPath) {
     return (
       <div className="app-git-panel">
@@ -330,7 +372,7 @@ export function GitPanel({
 
   return (
     <div className="app-git-panel">
-      <div className={`git-panel-loading-bar ${anyLoading ? "git-panel-loading-bar--active" : ""}`} />
+      <div className={`git-panel-loading-bar ${showPanelLoadingBar ? "git-panel-loading-bar--active" : ""}`} />
       <div className="git-panel-header">
         {headerPrefix ? <div className="git-panel-header-prefix">{headerPrefix}</div> : null}
         <div className="git-panel-header-left">

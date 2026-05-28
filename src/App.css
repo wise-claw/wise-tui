@@ -159,42 +159,6 @@ body {
   background: var(--ant-color-bg-layout);
 }
 
-/* 液体玻璃 2.0 流动液态背景 blobs */
-.app-main-layout.ant-layout::after {
-  content: "";
-  position: absolute;
-  width: 150%;
-  height: 150%;
-  top: -25%;
-  left: -25%;
-  z-index: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(
-      circle 650px at 15% 25%,
-      color-mix(in srgb, var(--ant-color-primary) 2.5%, transparent),
-      transparent 80%
-    ),
-    radial-gradient(
-      circle 550px at 85% 15%,
-      color-mix(in srgb, #9d4edd 2%, transparent),
-      transparent 80%
-    ),
-    radial-gradient(
-      circle 750px at 25% 85%,
-      color-mix(in srgb, #00b4d8 2.2%, transparent),
-      transparent 80%
-    ),
-    radial-gradient(
-      circle 550px at 85% 85%,
-      color-mix(in srgb, var(--ant-color-success) 2%, transparent),
-      transparent 80%
-    );
-  filter: blur(80px) saturate(1.1);
-  animation: liquid-flow 45s infinite alternate ease-in-out;
-  transform-origin: center center;
-}
-
 @keyframes liquid-flow {
   0% {
     transform: rotate(0deg) scale(1);

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, Empty, Input, message, Popconfirm, Space, Tooltip, Typography } from "antd";
 import {
   ApartmentOutlined,
@@ -58,12 +58,23 @@ export function DiffMode({
   const [treeAllExpanded, setTreeAllExpanded] = useState(false);
   const [stagedCollapsed, setStagedCollapsed] = useState(false);
   const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
+  const commitMsgRef = useRef(commitMsg);
+  const hasChangesRef = useRef(false);
+  const commitSubmitLockRef = useRef(false);
+  commitMsgRef.current = commitMsg;
   const hasStaged = status.staged.length > 0;
   const hasUnstaged = status.unstaged.length > 0;
   const hasChanges = hasStaged || hasUnstaged;
+  hasChangesRef.current = hasChanges;
   const isLargeChangeSet =
     status.staged.length + status.unstaged.length > GIT_PANEL_LARGE_CHANGE_COUNT;
   const canCommit = commitMsg.trim().length > 0 && hasChanges && !loading.commit;
+
+  useEffect(() => {
+    if (!loading.commit) {
+      commitSubmitLockRef.current = false;
+    }
+  }, [loading.commit]);
 
   useEffect(() => {
     if (!isLargeChangeSet) {
@@ -166,6 +177,16 @@ export function DiffMode({
     }
   }, [aiSummaryLoading, repositoryPath, status]);
 
+  /** 在 TextArea blur 之前于 pointerdown 触发，避免「第一次点击只失焦不提交」。 */
+  const submitCommit = useCallback(() => {
+    if (loading.commit || commitSubmitLockRef.current) return;
+    const trimmed = commitMsgRef.current.trim();
+    if (!trimmed || !hasChangesRef.current) return;
+    commitSubmitLockRef.current = true;
+    onCommit(trimmed);
+    setCommitMsg("");
+  }, [loading.commit, onCommit]);
+
   return (
     <div className="git-diff-mode">
       {errors.commit && (
@@ -182,13 +203,24 @@ export function DiffMode({
 
       {hasChanges && (
         <div className="git-commit-section">
-          <div className="git-commit-card">
+          <form
+            className="git-commit-card"
+            onSubmit={(event) => {
+              event.preventDefault();
+              submitCommit();
+            }}
+          >
             <TextArea
               className="git-commit-card__input"
               variant="borderless"
               placeholder="提交信息..."
               value={commitMsg}
               onChange={(e) => setCommitMsg(e.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
+                event.preventDefault();
+                submitCommit();
+              }}
               rows={1}
               autoSize={{ minRows: 1, maxRows: 2 }}
             />
@@ -198,6 +230,7 @@ export function DiffMode({
                 size="small"
                 className="git-ai-summary-btn"
                 title="根据当前变更 AI 生成提交信息"
+                onMouseDown={(event) => event.preventDefault()}
                 onClick={() => void handleGenerateCommitByAi()}
                 loading={aiSummaryLoading}
                 disabled={aiSummaryLoading}
@@ -205,23 +238,22 @@ export function DiffMode({
                 AI 生成
               </Button>
               <Button
+                htmlType="button"
                 type="text"
                 size="small"
                 className="git-commit-btn"
-                onClick={() => {
-                  if (canCommit) {
-                    onCommit(commitMsg);
-                    setCommitMsg("");
-                  }
-                }}
-                disabled={!canCommit}
-                loading={loading.commit}
+                disabled={!canCommit || loading.commit}
                 icon={<CheckOutlined />}
+                onPointerDown={(event) => {
+                  if (event.button !== 0) return;
+                  event.preventDefault();
+                  submitCommit();
+                }}
               >
                 {loading.commit ? "提交中..." : "提交"}
               </Button>
             </div>
-          </div>
+          </form>
         </div>
       )}
 

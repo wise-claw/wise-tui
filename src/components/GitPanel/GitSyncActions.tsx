@@ -1,10 +1,5 @@
 import { Button, Space, Tooltip } from "antd";
-import {
-  ArrowDownOutlined,
-  ArrowUpOutlined,
-  CheckOutlined,
-  ReloadOutlined,
-} from "@ant-design/icons";
+import { ArrowDownOutlined, ArrowUpOutlined, CheckOutlined, ReloadOutlined } from "@ant-design/icons";
 import type { GitStatusResponse } from "../../types";
 
 interface GitSyncActionsProps {
@@ -39,8 +34,8 @@ export function GitSyncActions({ status, loading, onFetch, onPull, onPush }: Git
         <Button
           type="text"
           size="small"
-          className="git-sync-count-btn"
-          icon={loading.pull ? <ReloadOutlined spin /> : <ArrowDownOutlined />}
+          className={`git-sync-count-btn${loading.pull ? " git-sync-count-btn--busy" : ""}`}
+          icon={<ArrowDownOutlined />}
           onClick={onPull}
           disabled={loading.pull || loading.fetch}
         >
@@ -53,8 +48,9 @@ export function GitSyncActions({ status, loading, onFetch, onPull, onPush }: Git
         <Button
           type="text"
           size="small"
-          className="git-sync-count-btn"
-          icon={loading.push ? <ReloadOutlined spin /> : <ArrowUpOutlined />}
+          className={`git-sync-count-btn${loading.push ? " git-sync-count-btn--busy" : ""}`}
+          icon={<ArrowUpOutlined />}
+          onMouseDown={(event) => event.preventDefault()}
           onClick={onPush}
           disabled={loading.push || loading.pull}
         >

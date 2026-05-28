@@ -577,12 +577,11 @@ export default function App() {
   }, [activeProjectId, activeRepositoryId, enterAuthorPane]);
 
   const openRepositoryRunCommandConfigure = useCallback((repository: Pick<Repository, "id" | "path">) => {
-    setActiveRepositoryWithOwner(repository.id);
     openRepositoryRunCommandModal({
       repositoryId: repository.id,
       repositoryPath: repository.path,
     });
-  }, [setActiveRepositoryWithOwner]);
+  }, []);
 
   useEffect(() => {
     setRepositoryRunCommandConfigureHandler(openRepositoryRunCommandConfigure);
@@ -591,21 +590,19 @@ export default function App() {
 
   const handleStartRepositoryRunCommand = useCallback(
     (repository: Repository) => {
-      setActiveRepositoryWithOwner(repository.id);
       void startRepositoryRunCommand({
         repository,
         onRequestConfigure: () => openRepositoryRunCommandConfigure(repository),
       });
     },
-    [openRepositoryRunCommandConfigure, setActiveRepositoryWithOwner],
+    [openRepositoryRunCommandConfigure],
   );
 
   const handleStopRepositoryRunCommand = useCallback(
     (repository: Repository) => {
-      setActiveRepositoryWithOwner(repository.id);
       void stopRepositoryRunCommand(repository);
     },
-    [setActiveRepositoryWithOwner],
+    [],
   );
 
   const sidebarCodeGraphReindexBatchRef = useRef<SidebarReindexBatchState | null>(null);

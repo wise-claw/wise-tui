@@ -329,6 +329,25 @@
   font-size: 14px;
 }
 
+.git-sync-count-btn--busy {
+  opacity: 0.55;
+  cursor: default !important;
+}
+
+.git-sync-count-btn--busy .anticon {
+  cursor: default !important;
+}
+
+.app-git-panel .git-sync-count-btn.ant-btn,
+.app-git-panel .git-sync-count-btn.ant-btn .anticon {
+  cursor: pointer;
+}
+
+.app-git-panel .git-sync-count-btn.ant-btn-disabled,
+.app-git-panel .git-sync-count-btn.ant-btn-disabled .anticon {
+  cursor: default !important;
+}
+
 .git-panel-header .git-sync-count-btn.ant-btn-sm .ant-btn-icon,
 .git-sync-row .git-sync-count-btn.ant-btn-sm .ant-btn-icon {
   margin-inline-end: 1px;
