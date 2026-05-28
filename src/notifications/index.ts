@@ -11,4 +11,5 @@ export {
   buildPermissionStdinLine,
   buildQuestionStdinLine,
   ingestClaudeStreamLineForHub,
+  ingestAskUserQuestionFromMessageParts,
 } from "./streamIngest";

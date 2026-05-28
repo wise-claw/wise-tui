@@ -33,6 +33,7 @@ interface RuntimeDeps {
   setSessions: SetSessions;
   setActiveSessionId: SetActiveSessionId;
   ingestClaudeStreamLineForHub: (sessionId: string, line: string) => void;
+  ingestAskUserQuestionFromMessageParts: (sessionId: string, parts: readonly MessagePart[]) => void;
   ingestStreamAssistText: (sessionId: string, text: string) => void;
   migrateSessionKey: (from: string, to: string) => void;
   notifyCompletion: (payload: { tid: string; success: boolean; nonce: number; previewRaw: string; structuredVerdict?: unknown }) => void;
@@ -86,6 +87,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     setSessions,
     setActiveSessionId,
     ingestClaudeStreamLineForHub,
+    ingestAskUserQuestionFromMessageParts,
     ingestStreamAssistText,
     migrateSessionKey,
     notifyCompletion,
@@ -149,6 +151,9 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       lastStreamTextBySessionRef.current.set(tid, { text: normalized, at: now });
       return true;
     });
+    if (dedupedParts.length > 0) {
+      ingestAskUserQuestionFromMessageParts(tid, dedupedParts);
+    }
 
     const prevAssist = assistantStreamTextByTabRef.current.get(tid) ?? "";
     let nextAssist = prevAssist;

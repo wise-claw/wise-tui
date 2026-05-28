@@ -8,7 +8,7 @@
  * 同一桶内连续多道 AskUserQuestion 由 Hub 入 FIFO 队列（见 `setQuestionRequest`）。
  */
 
-import type { PermissionRequest, QuestionRequest } from "../types";
+import type { MessagePart, PermissionRequest, QuestionRequest } from "../types";
 import { notificationHub } from "./hub";
 
 function asRecord(v: unknown): Record<string, unknown> | null {
@@ -183,6 +183,28 @@ function ingestAskUserQuestionFromAssistantToolUse(sessionId: string, j: Record<
 
     // 仅靠 id 去重在「同一 AskUserQuestion 通过 tool_use + sdk_control_request 双通道并发到达」时无效，
     // 让 Hub.setQuestionRequest 按 id+内容签名一并去重；这里继续按 id 命中再写入即可。
+    notificationHub.setQuestionRequest(sessionId, payload);
+    return;
+  }
+}
+
+/**
+ * 兜底：从已解析的 message parts 中提取 AskUserQuestion（当控制行缺字段或缺失时）。
+ * 典型场景：UI 已出现 `tool_use AskUserQuestion`，但 `sdk_control_request` 未携带可用 `tool_input`。
+ */
+export function ingestAskUserQuestionFromMessageParts(sessionId: string, parts: readonly MessagePart[]): void {
+  if (!sessionId || parts.length === 0) return;
+  for (const part of parts) {
+    if (part.type !== "tool_use") continue;
+    if (!isAskUserQuestionName(part.name)) continue;
+    const requestId = typeof part.id === "string" ? part.id.trim() : "";
+    if (!requestId) continue;
+    const input = asRecord(part.input) ?? {};
+    let payload = buildQuestionRequestFromAskUserFields(requestId, {}, input, false);
+    if (!payload) {
+      payload = buildQuestionRequestFromAskUserFields(requestId, {}, input, true);
+    }
+    if (!payload) continue;
     notificationHub.setQuestionRequest(sessionId, payload);
     return;
   }

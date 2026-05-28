@@ -60,6 +60,7 @@ import {
 import {
   buildPermissionStdinLine,
   buildQuestionStdinLine,
+  ingestAskUserQuestionFromMessageParts,
   ingestClaudeStreamLineForHub,
   notificationHub,
 } from "../notifications";
@@ -1487,6 +1488,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       setSessions: commitSessions,
       setActiveSessionId,
       ingestClaudeStreamLineForHub,
+      ingestAskUserQuestionFromMessageParts,
       ingestStreamAssistText: (sessionId, text) => notificationHub.ingestStreamAssistText(sessionId, text),
       migrateSessionKey: (from, to) => notificationHub.migrateSessionKey(from, to),
       notifyCompletion: ({ tid, success, nonce, previewRaw, structuredVerdict }) => {

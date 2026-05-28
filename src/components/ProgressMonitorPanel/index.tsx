@@ -827,7 +827,7 @@ export function ProgressMonitorPanel({
   onOpenWorkflowConfig,
   onStopEmployee,
   onStopTeam,
-  hideEmployeeUi = false,
+  hideEmployeeUi: _hideEmployeeUi = false,
   claudeConcurrency = null,
   onCancelSession,
   onOpenTaskDetail,
@@ -1071,7 +1071,7 @@ export function ProgressMonitorPanel({
                 className="app-monitor-panel__config-btn"
                 onClick={() => onOpenEmployeeConfig()}
               >
-                {hideEmployeeUi ? "成员" : "终端"}
+                终端
               </button>
             ) : null}
             <button
@@ -1101,14 +1101,14 @@ export function ProgressMonitorPanel({
 
       {!panelHasListContent ? (
         <div className="app-monitor-panel__empty app-monitor-panel__empty--with-action">
-          <span>{hideEmployeeUi ? "暂无成员" : "暂无终端"}</span>
+          <span>暂无终端</span>
           {onOpenEmployeeConfig ? (
             <button
               type="button"
               className="app-monitor-panel__empty-add-btn"
               onClick={() => onOpenEmployeeConfig()}
             >
-              {hideEmployeeUi ? "配置成员" : "配置终端"}
+              配置终端
             </button>
           ) : null}
         </div>
@@ -1191,7 +1191,7 @@ export function ProgressMonitorPanel({
           <div className="app-monitor-panel__section-title-wrap">
             <Typography.Text className="app-monitor-panel__section-title">
               <span className="app-monitor-panel__section-icon"><EmployeeMiniIcon /></span>
-              {hideEmployeeUi ? "成员" : "终端"}
+              终端
             </Typography.Text>
             <Typography.Text className="app-monitor-panel__meta">
               总数 {employeeItems.length} · 进行中 {employeeInProgress} · 空闲 {employeeItems.length - employeeInProgress}
