@@ -26,20 +26,8 @@ export function snapshotWorkflowDispatchInput(text: string): string {
   return t || "(空)";
 }
 
-export function buildTeamWorkerExecutePrompt(dispatchInput: string, agentType: string | undefined): string {
-  const normalizedDispatchInput = dispatchInput.trim();
-  let autoPrompt = [...(normalizedDispatchInput ? ["", normalizedDispatchInput] : [])]
-    .filter((line, index, lines) => {
-      if (line.trim().length > 0) return true;
-      const prev = lines[index - 1];
-      return Boolean(prev && prev.trim().length > 0);
-    })
-    .join("\n");
-  const trimmedAgent = agentType?.trim();
-  if (trimmedAgent && !autoPrompt.trimStart().startsWith("/")) {
-    autoPrompt = `/${trimmedAgent}\n${autoPrompt}`;
-  }
-  return autoPrompt;
+export function buildTeamWorkerExecutePrompt(dispatchInput: string, _agentType?: string): string {
+  return dispatchInput.trim();
 }
 
 export function resolveTeamDispatchTargetEmployee(

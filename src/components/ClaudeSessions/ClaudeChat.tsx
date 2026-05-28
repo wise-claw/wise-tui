@@ -916,7 +916,7 @@ export function ClaudeChat({
           return;
         }
       }
-      onExecute(sessionId, prompt, undefined, executeOptions);
+      onExecute(sessionId, prompt, dispatchTarget, executeOptions);
     },
     [dispatchPendingTask, onExecute, removeTask],
   );

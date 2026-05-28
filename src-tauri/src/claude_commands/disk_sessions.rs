@@ -252,6 +252,11 @@ fn resolve_session_jsonl_path(
     Ok((dir_canon, path_canon))
 }
 
+/// 仅用于 resume 前快速探测：该项目作用域下是否存在目标会话 jsonl。
+pub(crate) fn claude_session_jsonl_exists(project_path: &str, session_id: &str) -> bool {
+    resolve_session_jsonl_path(project_path, session_id).is_ok()
+}
+
 #[tauri::command]
 pub(crate) fn load_claude_session_jsonl(
     project_path: String,

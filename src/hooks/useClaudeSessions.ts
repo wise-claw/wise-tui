@@ -80,8 +80,10 @@ import {
   setSessionRunningReplacingLastUserBubble,
   setSessionRunningReplacingUserBubbleAtIndex,
   setSessionRunningWithUserPrompt,
+  beginSessionTurnWithUserPrompt,
 } from "../services/claudeSessionState";
 import { markSessionToolUseStopped } from "../utils/sessionConversationTasks";
+import { isTerminalWorkerWiseTab, sanitizeTerminalWorkerTranscriptMessages } from "../services/terminalDispatch";
 import { createClaudeStreamRuntime } from "../services/claudeStreamRuntime";
 import {
   extractPartsFromStreamLine,
@@ -102,6 +104,12 @@ import {
 } from "../services/claudeSessionContext";
 
 type ClaudeStreamRuntimeHandlers = ReturnType<typeof createClaudeStreamRuntime>;
+
+function isClaudeConversationMissingError(error: unknown): boolean {
+  const text = error instanceof Error ? error.message : String(error ?? "");
+  if (!text) return false;
+  return /no conversation found with session id/i.test(text);
+}
 
 /**
  * oneshot + invocationKey 时 Rust 只发 invocation 通道；按发送时的 tab id 订阅，避免多会话抢 `streamingTargetIdRef`。
@@ -384,7 +392,8 @@ export function pruneGhostRepositorySessions(
   });
 }
 
-function mergeRepositoryDiskSessions(
+/** @internal Exported for unit tests. */
+export function mergeRepositoryDiskSessions(
   prev: ClaudeSession[],
   repositoryPath: string,
   repositoryName: string,
@@ -400,9 +409,10 @@ function mergeRepositoryDiskSessions(
     const s = copy[i];
     const item = disk.find((d) => sessionMatchesDiskId(s, d.sessionId));
     if (item) {
+      const preserveWiseTabId = isTerminalWorkerWiseTab(s);
       copy[i] = {
         ...s,
-        id: item.sessionId,
+        id: preserveWiseTabId ? s.id : item.sessionId,
         claudeSessionId: item.sessionId,
         repositoryPath: canonicalPath,
         repositoryName: shouldPreserveRepositoryDisplayName(s.repositoryName) ? s.repositoryName : repositoryName,
@@ -490,8 +500,14 @@ interface UseClaudeSessionsOptions {
   >;
 }
 
+type SessionExecuteOpts = ClaudeComposerExecuteBubbleOptions & {
+  /** 仅 `executeTerminalSession` 使用：强制新 Claude 回合。 */
+  terminalFreshTurn?: boolean;
+};
+
 interface UseClaudeSessionsReturn {
   sessions: ClaudeSession[];
+  sessionsLiveRef: MutableRefObject<ClaudeSession[]>;
   activeSessionId: string | null;
   createSession: (
     repositoryPath: string,
@@ -506,6 +522,11 @@ interface UseClaudeSessionsReturn {
   ) => Promise<void>;
   /** 返回 false 表示未启动（例如并发门闸拦截）；其余路径为 true（含已安排重试的暂不可见会话）。 */
   executeSession: (sessionId: string, prompt: string, opts?: ClaudeComposerExecuteBubbleOptions) => boolean;
+  executeTerminalSession: (
+    sessionId: string,
+    outboundPrompt: string,
+    opts?: { userBubblePrompt?: string },
+  ) => boolean;
   appendSystemMessage: (sessionId: string, text: string) => void;
   /** 仅写入用户气泡（不调用 Claude），供批量 OMC 等在标签内展示派发正文 */
   appendUserMessage: (sessionId: string, text: string) => void;
@@ -785,18 +806,37 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const cliExtras = await resolveSpawnExtrasForTab(tabSessionId);
       try {
         if (resumeClaudeSid) {
-          await resumeClaudeCode(
-            repositoryPath,
-            resumeClaudeSid,
-            prompt,
-            modelArg,
-            invocationKey,
-            "oneshot",
-            sk,
-            lim,
-            resolveTrellisContextId(tabSessionId, resumeClaudeSid),
-            cliExtras,
-          );
+          try {
+            await resumeClaudeCode(
+              repositoryPath,
+              resumeClaudeSid,
+              prompt,
+              modelArg,
+              invocationKey,
+              "oneshot",
+              sk,
+              lim,
+              resolveTrellisContextId(tabSessionId, resumeClaudeSid),
+              cliExtras,
+            );
+          } catch (resumeError) {
+            if (!isClaudeConversationMissingError(resumeError)) {
+              throw resumeError;
+            }
+            // Claude 侧会话可能已被清理；自动回退到新会话启动，避免用户手动重发。
+            await executeClaudeCode(
+              repositoryPath,
+              prompt,
+              modelArg,
+              invocationKey,
+              "oneshot",
+              sk,
+              lim,
+              undefined,
+              resolveTrellisContextId(tabSessionId),
+              cliExtras,
+            );
+          }
         } else {
           await executeClaudeCode(
             repositoryPath,
@@ -957,11 +997,13 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           const errText = err instanceof Error ? err.message : String(err);
           const stdinGone =
             errText.includes("没有可写 stdin") || errText.includes("stdin");
-          if (!stdinGone) {
+          const conversationMissing = isClaudeConversationMissingError(err);
+          if (!stdinGone && !conversationMissing) {
             streamingProcessByTabRef.current.delete(tabSessionId);
             throw err;
           }
-          // 长驻子进程可能已在首轮后退出；回退为 resume spawn，勿让用户卡死。
+          // 长驻子进程可能已退出，或 Claude 侧会话已清理（No conversation found）；
+          // 回退为新一轮 spawn，避免用户手动重发。
         }
       }
 
@@ -1185,7 +1227,10 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             const match =
               sess.id === tab || sess.claudeSessionId === cc || sess.id === cc || sess.claudeSessionId === tab;
             if (!match) return sess;
-            return { ...sess, messages, diskTranscriptPartial: false };
+            const nextMessages = isTerminalWorkerWiseTab(sess)
+              ? sanitizeTerminalWorkerTranscriptMessages(messages)
+              : messages;
+            return { ...sess, messages: nextMessages, diskTranscriptPartial: false };
           }),
         );
       } catch {
@@ -1207,6 +1252,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       prompt: string;
       modelArg: string | undefined;
       resumeClaudeSid: string | null;
+      /** 终端强制新回合等场景：不得用标签上残留的 `claudeSessionId` 覆盖显式 null。 */
+      forceNewClaudeConversation?: boolean;
     }) => {
       const { tabSessionId, prompt, repositoryPath, ...invokeRest } = params;
       const session = sessionsRef.current.find((s) => s.id === tabSessionId);
@@ -1249,7 +1296,9 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       }
 
       const runOnce = async (outbound: string) => {
-        const cc = resolveClaudeSid();
+        const cc = params.forceNewClaudeConversation
+          ? null
+          : (params.resumeClaudeSid ?? resolveClaudeSid());
         await invokeClaudeTurn({
           ...invokeRest,
           tabSessionId,
@@ -1299,9 +1348,12 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         const lines = await loadClaudeSessionJsonl(rp, cc);
         const messages = parseClaudeSessionJsonlLines(lines);
         if (messages.length === 0) return;
+        const nextMessages = isTerminalWorkerWiseTab(s)
+          ? sanitizeTerminalWorkerTranscriptMessages(messages)
+          : messages;
         setSessions((prev) =>
           prev.map((sess) =>
-            sess.id === tid ? { ...sess, messages, diskTranscriptPartial: false } : sess,
+            sess.id === tid ? { ...sess, messages: nextMessages, diskTranscriptPartial: false } : sess,
           ),
         );
       } catch {
@@ -1554,7 +1606,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       resolveSuccessFromCompletePayload: resolveClaudeCompleteSuccess,
       extractSystemErrorMessageFromStreamLine,
       extractPartsFromStreamLine,
+      onClaudeSessionIdAssigned: (_tabId, claudeSessionId) => {
+        markClaudeRegistryBootstrapWarmup(registryBootstrapDeadlineByClaudeSidRef, claudeSessionId);
+      },
       onSessionTabIdMigrated: (fromTabId, toClaudeSessionId) => {
+        markClaudeRegistryBootstrapWarmup(registryBootstrapDeadlineByClaudeSidRef, toClaudeSessionId);
         const nonceMap = expectedTurnNonceByTabIdRef.current;
         const pendingNonce = nonceMap.get(fromTabId);
         if (pendingNonce !== undefined) {
@@ -1668,9 +1724,12 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         const lines = await loadClaudeSessionJsonl(s.repositoryPath, s.claudeSessionId!);
         if (cancelled) return;
         const messages = parseClaudeSessionJsonlLines(lines);
+        const nextMessages = isTerminalWorkerWiseTab(s)
+          ? sanitizeTerminalWorkerTranscriptMessages(messages)
+          : messages;
         setSessions((prev) =>
           prev.map((sess) =>
-            sess.id === loadKey ? { ...sess, messages, diskTranscriptPartial: false } : sess,
+            sess.id === loadKey ? { ...sess, messages: nextMessages, diskTranscriptPartial: false } : sess,
           ),
         );
       } catch {
@@ -1701,9 +1760,12 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           const lines = await loadClaudeSessionJsonl(s.repositoryPath, s.claudeSessionId!);
           if (cancelled) return;
           const messages = parseClaudeSessionJsonlLines(lines);
+          const nextMessages = isTerminalWorkerWiseTab(s)
+            ? sanitizeTerminalWorkerTranscriptMessages(messages)
+            : messages;
           setSessions((prev) =>
             prev.map((sess) =>
-              sess.id === loadKey ? { ...sess, messages, diskTranscriptPartial: false } : sess,
+              sess.id === loadKey ? { ...sess, messages: nextMessages, diskTranscriptPartial: false } : sess,
             ),
           );
         } catch {
@@ -1731,6 +1793,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       let changed = false;
       const next = prev.map((s) => {
         if (keep.has(s.id)) return s;
+        if (isTerminalWorkerWiseTab(s)) return s;
         if (s.status === "running" || s.status === "connecting") return s;
         const hasDisk = Boolean(s.claudeSessionId?.trim());
         if (!hasDisk && s.messages.length > 0) return s;
@@ -1929,7 +1992,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     (
       sessionId: string,
       prompt: string,
-      opts?: ClaudeComposerExecuteBubbleOptions,
+      opts?: SessionExecuteOpts,
     ): boolean => {
       const session = sessionsRef.current.find((s) => s.id === sessionId);
       if (!session) {
@@ -1942,15 +2005,27 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         } else {
           executeSessionRetryCountRef.current.delete(sessionId);
         }
-        return true;
+        return false;
       }
       executeSessionRetryCountRef.current.delete(sessionId);
 
-      const claudeSid =
+      const forceFreshClaudeSession = opts?.terminalFreshTurn === true;
+      if (forceFreshClaudeSession) {
+        sessionIdMapRef.current.delete(sessionId);
+        const staleClaudeSid = session.claudeSessionId?.trim();
+        if (staleClaudeSid) {
+          void cancelClaudeExecution(staleClaudeSid).catch(() => {});
+          streamingProcessByTabRef.current.delete(sessionId);
+        }
+      }
+      const claudeSidRaw =
         session.claudeSessionId ?? sessionIdMapRef.current.get(sessionId) ?? null;
+      const claudeSid = forceFreshClaudeSession ? null : claudeSidRaw;
 
-      // 首轮已启动但尚未收到 stream-json 的 session_id 时，避免再 spawn 第二个进程
-      if (!claudeSid && session.status === "running") {
+      const liveSession = sessionsRef.current.find((s) => s.id === sessionId) ?? session;
+      // 首轮已启动但尚未收到 stream-json 的 session_id 时，避免再 spawn 第二个进程。
+      // 终端派发强制新回合时已主动取消旧进程并重置为 idle，不得在此阻塞。
+      if (!claudeSid && liveSession.status === "running" && !forceFreshClaudeSession) {
         const retried = executeSessionRetryCountRef.current.get(sessionId) ?? 0;
         if (retried < 20) {
           executeSessionRetryCountRef.current.set(sessionId, retried + 1);
@@ -1959,6 +2034,16 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           }, 80);
         } else {
           executeSessionRetryCountRef.current.delete(sessionId);
+          commitSessions((prev) =>
+            appendSystemMessageBySessionId(
+              prev.map((s) =>
+                s.id === sessionId ? { ...s, status: "error" as const } : s,
+              ),
+              sessionId,
+              "会话仍在启动中，请稍后再试或先停止当前执行。",
+            ),
+          );
+          return false;
         }
         return true;
       }
@@ -1968,12 +2053,15 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       lastUserSendNonceRef.current = streamTurnSeqRef.current;
       assistantStreamTextByTabRef.current.set(sessionId, "");
 
+      const spawnSession =
+        sessionsRef.current.find((s) => s.id === sessionId) ?? liveSession;
+
       const modelArg =
-        session.model.trim().length > 0 ? session.model : undefined;
+        spawnSession.model.trim().length > 0 ? spawnSession.model : undefined;
 
       const checker = claudeSessionsOptionsRef.current?.beforeSpawnClaudeRef?.current;
       if (checker) {
-        const gate = checker(session);
+        const gate = checker(spawnSession);
         if (!gate.ok) {
           claudeSessionsOptionsRef.current?.onClaudeSpawnBlocked?.(gate.message);
           return false;
@@ -1982,15 +2070,32 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
       expectedTurnNonceByTabIdRef.current.set(sessionId, lastUserSendNonceRef.current);
       markClaudeRegistryBootstrapWarmup(registryBootstrapDeadlineByClaudeSidRef, claudeSid);
-      commitSessions((prev) =>
-        opts?.replaceUserBubbleAtIndex !== undefined && Number.isFinite(opts.replaceUserBubbleAtIndex)
-          ? setSessionRunningReplacingUserBubbleAtIndex(prev, sessionId, opts.replaceUserBubbleAtIndex, prompt)
-          : opts?.replaceLastUserBubble
-            ? setSessionRunningReplacingLastUserBubble(prev, sessionId, prompt)
-            : opts?.replaceFirstUserBubble
-              ? setSessionRunningReplacingFirstUserBubble(prev, sessionId, prompt)
-              : setSessionRunningWithUserPrompt(prev, sessionId, prompt),
-      );
+      const bubblePrompt = opts?.userBubblePrompt?.trim() ? opts.userBubblePrompt : prompt;
+      commitSessions((prev) => {
+        if (
+          opts?.replaceUserBubbleAtIndex !== undefined &&
+          Number.isFinite(opts.replaceUserBubbleAtIndex)
+        ) {
+          return setSessionRunningReplacingUserBubbleAtIndex(
+            prev,
+            sessionId,
+            opts.replaceUserBubbleAtIndex,
+            bubblePrompt,
+          );
+        }
+        if (opts?.replaceLastUserBubble) {
+          return setSessionRunningReplacingLastUserBubble(prev, sessionId, bubblePrompt);
+        }
+        if (opts?.replaceFirstUserBubble) {
+          return setSessionRunningReplacingFirstUserBubble(prev, sessionId, bubblePrompt);
+        }
+        if (forceFreshClaudeSession) {
+          return beginSessionTurnWithUserPrompt(prev, sessionId, bubblePrompt, {
+            forceFreshClaudeSession: true,
+          });
+        }
+        return setSessionRunningWithUserPrompt(prev, sessionId, bubblePrompt);
+      });
       scheduleStreamStallTimer(sessionId);
 
       const invokeConc =
@@ -2004,10 +2109,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             tabSessionId: sessionId,
             turnNonce,
             invokeConc,
-            repositoryPath: session.repositoryPath,
+            repositoryPath: spawnSession.repositoryPath,
             prompt,
             modelArg,
             resumeClaudeSid: claudeSid,
+            forceNewClaudeConversation: forceFreshClaudeSession,
           });
         } catch (err) {
           clearStreamStallTimer(sessionId);
@@ -2026,6 +2132,19 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       return true;
     },
     [clearStreamStallTimer, commitSessions, runClaudeTurnWithContextGuard, scheduleStreamStallTimer],
+  );
+
+  const executeTerminalSession = useCallback(
+    (
+      sessionId: string,
+      outboundPrompt: string,
+      bubbleOpts?: { userBubblePrompt?: string },
+    ): boolean =>
+      executeSession(sessionId, outboundPrompt, {
+        terminalFreshTurn: true,
+        userBubblePrompt: bubbleOpts?.userBubblePrompt,
+      }),
+    [executeSession],
   );
 
   const appendSystemMessage = useCallback((sessionId: string, text: string) => {
@@ -2630,11 +2749,14 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
   return {
     sessions,
+    /** 与 `commitSessions` / `createSession` 同步更新的会话列表；派发终端 worker 须读此 ref，勿用滞后一帧的 `sessions` prop。 */
+    sessionsLiveRef: sessionsRef,
     activeSessionId,
     createSession,
     updateSessionModel,
     updateSessionConnectionKind,
     executeSession,
+    executeTerminalSession,
     appendSystemMessage,
     appendUserMessage,
     sendMessage,

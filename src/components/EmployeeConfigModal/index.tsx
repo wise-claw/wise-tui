@@ -263,17 +263,24 @@ export function EmployeeConfigModal({
     singleProjectScopeId,
   ]);
 
+  const defaultCreateAgentType = "executor";
+
   async function handleSubmit() {
     try {
-      const values = await form.validateFields(["name", "agentType", "executionEngine"]);
+      const values = await form.validateFields(
+        editingEmployee ? ["name", "agentType", "executionEngine"] : ["name", "executionEngine"],
+      );
       const executionEngine = (values.executionEngine as SessionExecutionEngine | undefined) ?? "claude";
+      const agentType = editingEmployee
+        ? (values.agentType as string)
+        : defaultCreateAgentType;
       if (editingEmployee) {
         const nextRepositoryIds =
           hideRepositorySelector ? editingEmployee.repositoryIds : (values.repositoryIds ?? defaultRepositoryIds);
         await onUpdate({
           employeeId: editingEmployee.id,
           name: values.name,
-          agentType: values.agentType,
+          agentType,
           enabled: editingEmployee.enabled,
           repositoryIds: nextRepositoryIds,
           projectIds: values.projectIds ?? editingEmployee.projectIds,
@@ -292,7 +299,7 @@ export function EmployeeConfigModal({
         }
         await onCreate({
           name: values.name,
-          agentType: values.agentType,
+          agentType,
           enabled: true,
           repositoryIds: [ownerRid],
           ownerRepositoryId: ownerRid,
@@ -307,7 +314,7 @@ export function EmployeeConfigModal({
         : Array.from(new Set([...defaultRepositoryIds, ...selectedRepositoryIds]));
       await onCreate({
         name: values.name,
-        agentType: values.agentType,
+        agentType,
         enabled: true,
         repositoryIds: mergedRepositoryIds,
         projectIds: creatingEmployee ? [] : (values.projectIds ?? []),
@@ -393,14 +400,16 @@ export function EmployeeConfigModal({
         <Form.Item name="name" label="终端名称" rules={[{ required: true, message: "请输入终端名称" }]}>
           <Input placeholder="终端名称" allowClear />
         </Form.Item>
-        <Form.Item name="agentType" label="智能体" rules={[{ required: true, message: "请选择智能体" }]}>
-          <Select
-            showSearch
-            placeholder="选择智能体"
-            options={selectableAgentTypeOptions}
-            optionFilterProp="label"
-          />
-        </Form.Item>
+        {editingEmployee ? (
+          <Form.Item name="agentType" label="智能体" rules={[{ required: true, message: "请选择智能体" }]}>
+            <Select
+              showSearch
+              placeholder="选择智能体"
+              options={selectableAgentTypeOptions}
+              optionFilterProp="label"
+            />
+          </Form.Item>
+        ) : null}
         <Form.Item
           name="executionEngine"
           label="执行引擎"
@@ -501,14 +510,6 @@ export function EmployeeConfigModal({
                     <span className="app-employee-role-name">{row.name}</span>
                   </div>
                 );
-              },
-            },
-            {
-              title: "智能体",
-              key: "agentType",
-              render: (_, row) => {
-                const name = isRepoOwnerGapRow(row) ? row.agentName : row.agentType;
-                return <code className="app-employee-agent-badge">{name}</code>;
               },
             },
             {

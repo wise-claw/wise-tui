@@ -1526,28 +1526,43 @@ function ComposerInner({
         targetWorkflowId?: string;
         targetWorkflowName?: string;
       } = { targetType: "main" };
-      if (onEnqueueAsPendingTask) {
-        const inferredTarget = inferPendingQueueTargetFromPrompt(
-          promptSnap,
-          modelDisplayLabel,
-          employeesForDispatchRoute,
-        );
-        const fallbackTarget = resolveTextMentionTarget(logicalSnap, employeeMentions, teamMentions);
-        const target =
-          inferredTarget.targetType === "main" && fallbackTarget
-            ? {
-                ...inferredTarget,
-                ...fallbackTarget,
-              }
-            : inferredTarget;
-        dispatchTargetForExecute = {
-          targetType: target.targetType,
-          targetEmployeeName: target.targetEmployeeName,
-          targetWorkflowId: target.targetWorkflowId,
-          targetWorkflowName: target.targetWorkflowName,
-        };
-        dispatchPromptText =
-          stripDispatchMentions(outbound, target.targetType, employeeMentions, teamMentions) || outbound;
+      const inferredTargetEarly = inferPendingQueueTargetFromPrompt(
+        promptSnap,
+        modelDisplayLabel,
+        employeesForDispatchRoute,
+      );
+      const fallbackTargetEarly = resolveTextMentionTarget(
+        logicalSnap,
+        employeeMentions,
+        teamMentions,
+      );
+      const resolvedDispatchTarget =
+        inferredTargetEarly.targetType === "main" && fallbackTargetEarly
+          ? {
+              ...inferredTargetEarly,
+              ...fallbackTargetEarly,
+            }
+          : inferredTargetEarly;
+      dispatchTargetForExecute = {
+        targetType: resolvedDispatchTarget.targetType,
+        targetEmployeeName: resolvedDispatchTarget.targetEmployeeName,
+        targetWorkflowId: resolvedDispatchTarget.targetWorkflowId,
+        targetWorkflowName: resolvedDispatchTarget.targetWorkflowName,
+      };
+      dispatchPromptText =
+        stripDispatchMentions(
+          outbound,
+          resolvedDispatchTarget.targetType,
+          employeeMentions,
+          teamMentions,
+        ) || outbound;
+
+      // @终端 必须立即派发，不能仅入队等待主会话空闲（否则运行面板长期空闲）。
+      const bypassPendingQueueForTerminal =
+        resolvedDispatchTarget.targetType === "employee";
+
+      if (onEnqueueAsPendingTask && !bypassPendingQueueForTerminal) {
+        const target = resolvedDispatchTarget;
         consumePending = onEnqueueAsPendingTask({ promptText: dispatchPromptText, ...target });
         sendFlowNodes.push({
           label: "加入待执行队列",
@@ -2589,7 +2604,7 @@ function ComposerInner({
             <div ref={shellRef} className="app-claude-semi-chat-input-wrap" style={{ width: "100%" }}>
               <AIChatInput
                 ref={aiChatRef}
-                placeholder="@ 员工/团队/文件，/ 命令，Enter 发送，Shift+Enter 换行，Esc 撤销"
+                placeholder="@ 终端/工作流/文件，/ 命令，Enter 发送，Shift+Enter 换行，Esc 撤销"
                 keepSkillAfterSend={false}
                 showUploadButton={false}
                 showUploadFile={false}
@@ -2776,14 +2791,37 @@ function resolveTextMentionTarget(
   | undefined {
   const normalized = text.trim();
   if (!normalized) return undefined;
+  const mentionIndex = (value: string): number => {
+    const name = value.trim();
+    if (!name) return -1;
+    const matches: number[] = [];
+    for (const prefix of ["@", "＠"]) {
+      let from = 0;
+      while (from < normalized.length) {
+        const idx = normalized.indexOf(`${prefix}${name}`, from);
+        if (idx < 0) break;
+        const tail = normalized[idx + prefix.length + name.length] ?? "";
+        if (!tail || !/[\p{L}\p{N}_-]/u.test(tail)) {
+          matches.push(idx);
+        }
+        from = idx + prefix.length + name.length;
+      }
+    }
+    if (matches.length === 0) return -1;
+    return Math.min(...matches);
+  };
   let employeeMatch: { name: string; index: number } | undefined;
   for (const item of employees) {
     const name = item.name.trim();
     if (!name) continue;
     if (isOmcMonitorDispatchMentionName(name)) continue;
-    const idx = normalized.indexOf(`@${name}`);
+    const idx = mentionIndex(name);
     if (idx < 0) continue;
-    if (!employeeMatch || idx < employeeMatch.index) {
+    if (
+      !employeeMatch ||
+      idx < employeeMatch.index ||
+      (idx === employeeMatch.index && name.length > employeeMatch.name.length)
+    ) {
       employeeMatch = { name, index: idx };
     }
   }
@@ -2791,13 +2829,17 @@ function resolveTextMentionTarget(
   for (const item of teams) {
     const name = item.name.trim();
     if (!name) continue;
-    const idx = normalized.indexOf(`@${name}`);
+    const idx = mentionIndex(name);
     if (idx < 0) continue;
-    if (!teamMatch || idx < teamMatch.index) {
+    if (
+      !teamMatch ||
+      idx < teamMatch.index ||
+      (idx === teamMatch.index && name.length > teamMatch.name.length)
+    ) {
       teamMatch = { id: item.id, name, index: idx };
     }
   }
-  const genericTeamMentionIndex = normalized.indexOf("@团队");
+  const genericTeamMentionIndex = Math.max(normalized.indexOf("@团队"), normalized.indexOf("＠团队"));
   if (employeeMatch && (!teamMatch || employeeMatch.index <= teamMatch.index)) {
     return {
       executorLabel: `@${employeeMatch.name}`,

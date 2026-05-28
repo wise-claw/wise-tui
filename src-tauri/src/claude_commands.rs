@@ -31,6 +31,7 @@ use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Child;
 use tokio::sync::Mutex as TokioMutex;
+use self::disk_sessions::claude_session_jsonl_exists;
 
 // ── Claude Code Process Management ──
 
@@ -2127,20 +2128,37 @@ pub(crate) async fn resume_claude_code(
 ) -> Result<(), String> {
     let process_state = app.state::<ClaudeProcessState>();
     kill_active_claude_run_for_session(&process_state, &session_id).await;
+    let resume_sid = session_id.trim().to_string();
+    if resume_sid.is_empty() {
+        return Err("session_id 不能为空".to_string());
+    }
 
     let registry = app.state::<ClaudeSessionRegistry>();
     let app_clone = app.clone();
     let model_for_cmd = model.as_deref().and_then(trim_model_cli_arg);
     let extras = cli_extras.unwrap_or_default();
-    let cmd = create_claude_command(
-        &project_path,
-        &prompt,
-        model_for_cmd,
-        &["-r", &session_id],
-        false,
-        trellis_context_id.as_deref(),
-        &extras,
-    )?;
+    let can_resume = claude_session_jsonl_exists(&project_path, &resume_sid);
+    let cmd = if can_resume {
+        create_claude_command(
+            &project_path,
+            &prompt,
+            model_for_cmd,
+            &["-r", &resume_sid],
+            false,
+            trellis_context_id.as_deref(),
+            &extras,
+        )?
+    } else {
+        create_claude_command(
+            &project_path,
+            &prompt,
+            model_for_cmd,
+            &[],
+            false,
+            trellis_context_id.as_deref(),
+            &extras,
+        )?
+    };
     let model_label = model
         .as_deref()
         .map(str::trim)

@@ -617,6 +617,8 @@ export interface ClaudeComposerExecuteBubbleOptions {
   replaceLastUserBubble?: boolean;
   /** 按 `messages` 下标改写对应用户气泡（须为可展示的非纯 tool 用户消息）。 */
   replaceUserBubbleAtIndex?: number;
+  /** 写入会话用户气泡的正文；省略则与发给 Claude 的 `prompt` 相同（终端派发用于隐藏 `/${agent}` 前缀）。 */
+  userBubblePrompt?: string;
 }
 
 export interface PendingExecutionTask {

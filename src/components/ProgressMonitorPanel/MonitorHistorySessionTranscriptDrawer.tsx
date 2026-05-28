@@ -148,6 +148,17 @@ export function MonitorHistorySessionTranscriptDrawer({
     >
       {!liveSession ? (
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未找到该会话" />
+      ) : liveSession.messages.length === 0 &&
+        liveSession.status !== "running" &&
+        liveSession.status !== "connecting" ? (
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description={
+            liveSession.claudeSessionId?.trim()
+              ? "该会话暂无消息，可能任务未成功启动或 transcript 尚未落盘"
+              : "暂无消息"
+          }
+        />
       ) : (
         <div className="app-monitor-panel__history-session-drawer-scroll">
           <ClaudeSessionMessagesColumn

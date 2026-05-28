@@ -26,6 +26,7 @@ import {
   buildMonitorEmployeeHistorySessionsByName,
   monitorEmployeeHistoryStructureFingerprint,
   normalizeMonitorEmployeeName,
+  pickLatestMonitorEmployeeHistorySession,
 } from "../../utils/omcEmployeeMonitorHistory";
 import {
   pickSubagentTranscriptSession,
@@ -974,6 +975,48 @@ export function ProgressMonitorPanel({
     setOmcDirectBatchDetailSnapshot(inv);
   }, []);
 
+  const activateEmployeeTerminalRow = useCallback(
+    (item: EmployeeMonitorItem) => {
+      if (item.employeeId === "omc-worker") {
+        const latestInvocation =
+          omcDirectBatchInvocationsLive.length > 0
+            ? omcDirectBatchInvocationsLive[omcDirectBatchInvocationsLive.length - 1]
+            : undefined;
+        if (latestInvocation) {
+          const subprocessSid = latestInvocation.subprocessSessionId?.trim();
+          if (subprocessSid) {
+            openHistoryMessagesDrawer(subprocessSid);
+            return;
+          }
+          handleOmcDirectBatchRowActivate(latestInvocation);
+          return;
+        }
+        const boundSid = item.sessionId?.trim();
+        if (boundSid) {
+          openHistoryMessagesDrawer(boundSid);
+          return;
+        }
+        setEmployeeHistoryPopoverId(item.employeeId);
+        setEmployeeHistorySearch("");
+        return;
+      }
+
+      const latestSession = pickLatestMonitorEmployeeHistorySession(employeeHistorySessionsByName, item.name);
+      if (latestSession) {
+        openHistoryMessagesDrawer(latestSession.id);
+        return;
+      }
+      const activeSid = item.sessionId?.trim();
+      if (activeSid && sessions.some((session) => session.id === activeSid)) {
+        openHistoryMessagesDrawer(activeSid);
+        return;
+      }
+      setEmployeeHistoryPopoverId(item.employeeId);
+      setEmployeeHistorySearch("");
+    },
+    [employeeHistorySessionsByName, handleOmcDirectBatchRowActivate, omcDirectBatchInvocationsLive, sessions],
+  );
+
   const stopSessionConversationTask = useCallback(
     (item: SessionConversationTaskItem) => {
       if (
@@ -1200,12 +1243,19 @@ export function ProgressMonitorPanel({
                 ? historySessions.filter((session) => matchSessionByKeyword(session, keyword)).slice(0, 30)
                 : [];
             return (
-              <div key={item.employeeId} className="app-monitor-panel__item app-monitor-panel__item--readonly">
-              <div className="app-monitor-panel__item-row">
-                <span className="app-monitor-panel__item-name-wrap">
-                  <span className="app-monitor-panel__item-name">{item.name}</span>
-                  {statusText(item.status)}
-                </span>
+              <div key={item.employeeId} className="app-monitor-panel__item app-monitor-panel__item--terminal-row">
+              <div className="app-monitor-panel__item-row app-monitor-panel__item-row--terminal">
+                <button
+                  type="button"
+                  className="app-monitor-panel__item-row-main app-monitor-panel__subagent-row--clickable"
+                  title="打开最新会话消息"
+                  onClick={() => activateEmployeeTerminalRow(item)}
+                >
+                  <span className="app-monitor-panel__item-name-wrap">
+                    <span className="app-monitor-panel__item-name">{item.name}</span>
+                    {statusText(item.status)}
+                  </span>
+                </button>
                 <span className="app-monitor-panel__item-actions">
                   {item.status === "in_progress" ? (
                     <button

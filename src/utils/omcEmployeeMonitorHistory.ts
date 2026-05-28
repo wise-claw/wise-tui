@@ -1,4 +1,5 @@
 import type { ClaudeSession } from "../types";
+import { isDiskOnlyTerminalWorkerTab } from "../services/terminalDispatch";
 import { isOmcBatchHistoryStubSessionId } from "./omcEmployeeBatchHistory";
 
 /** 员工名归一化：兼容 `终端01` 与 `终端1`。 */
@@ -19,14 +20,26 @@ function sessionUpdatedAtForSort(session: ClaudeSession): number {
   return typeof lastTimestamp === "number" ? lastTimestamp : session.createdAt;
 }
 
-/** 历史列表仅展示可读会话：有消息；或仍在进行中的占位会话（仅 diskPreview）。 */
+/**
+ * 历史列表纳入规则：
+ * - 内存中有消息；
+ * - 或终端 Wise 标签已绑定 Claude session（正文可能被非活动标签回收，打开抽屉时从磁盘补全）；
+ * - 或执行中/连接中（非磁盘空壳）。
+ * 排除：`id === claudeSessionId` 且无消息的空壳（磁盘索引占位）。
+ */
 function shouldIncludeMonitorHistorySession(session: ClaudeSession): boolean {
+  if (isDiskOnlyTerminalWorkerTab(session)) {
+    return false;
+  }
   if (session.messages.length > 0) {
     return true;
   }
-  // 占位会话仅在活跃态可见；异常/结束态若仍无消息会造成“点开即空白”的误导。
   if (session.status === "running" || session.status === "connecting") {
-    return Boolean(session.diskPreview?.trim());
+    return true;
+  }
+  const claudeId = session.claudeSessionId?.trim();
+  if (claudeId && session.id !== claudeId) {
+    return true;
   }
   return false;
 }
@@ -62,6 +75,14 @@ export function buildMonitorEmployeeHistorySessionsByName(sessions: ClaudeSessio
     list.sort((a, b) => sessionUpdatedAtForSort(b) - sessionUpdatedAtForSort(a));
   }
   return map;
+}
+
+/** 运行面板终端行：取该员工名下最近更新的可展示历史会话（已按时间降序）。 */
+export function pickLatestMonitorEmployeeHistorySession(
+  sessionsByName: Map<string, ClaudeSession[]>,
+  employeeDisplayName: string,
+): ClaudeSession | undefined {
+  return sessionsByName.get(normalizeMonitorEmployeeName(employeeDisplayName))?.[0];
 }
 
 /**

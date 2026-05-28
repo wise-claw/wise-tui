@@ -145,6 +145,24 @@ export function setSessionRunningWithUserPrompt(
   });
 }
 
+/** 终端派发等强制新回合：单次提交里清空旧 `claudeSessionId` 并写入用户气泡，避免分两次 setState 竞态。 */
+export function beginSessionTurnWithUserPrompt(
+  sessions: ClaudeSession[],
+  sessionId: string,
+  prompt: string,
+  opts?: { forceFreshClaudeSession?: boolean },
+): ClaudeSession[] {
+  return sessions.map((session) => {
+    if (session.id !== sessionId) return session;
+    return {
+      ...session,
+      status: "running",
+      claudeSessionId: opts?.forceFreshClaudeSession ? null : session.claudeSessionId,
+      messages: [...session.messages, createUserTextMessage(prompt)],
+    };
+  });
+}
+
 /**
  * 与 `setSessionRunningWithUserPrompt` 相同地把会话标为 running 并准备新一轮 invoke，
  * 但若已有「首条可展示用户消息」（非纯 tool_use），则改写其正文而非再追加一条，供顶部 sticky 编辑后重发。

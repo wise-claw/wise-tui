@@ -11,6 +11,7 @@ import {
   extractLatestAssistantPlainText,
   finalizeSessionAfterComplete,
 } from "./claudeSessionState";
+import { isTerminalWorkerWiseTab } from "./terminalDispatch";
 
 type SetSessions = (updater: (prev: ClaudeSession[]) => ClaudeSession[]) => void;
 type SetActiveSessionId = (updater: (prev: string | null) => string | null) => void;
@@ -53,6 +54,8 @@ interface RuntimeDeps {
   extractPartsFromStreamLine: (line: string) => ExtractPartsResult;
   /** 临时 tab id 合并为 Claude `session_id` 时通知宿主（用于双栏右侧绑定 id 同步） */
   onSessionTabIdMigrated?: (fromTabId: string, toClaudeSessionId: string) => void;
+  /** `system.init` 绑定 Claude `session_id`（含保留 Wise 标签 id 的终端 worker） */
+  onClaudeSessionIdAssigned?: (tabId: string, claudeSessionId: string) => void;
   /** 与 `executeSession` 写入的轮次 nonce 对齐；全局 `claude-complete` 用于通知去重，避免误用「当前最新」nonce */
   expectedTurnNonceByTabIdRef?: MutableRefObject<Map<string, number>>;
   /** 任意 stdout 行到达时重置「无可见输出」看门狗（Hook 阶段可能尚无助手正文）。 */
@@ -98,6 +101,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     extractSystemErrorMessageFromStreamLine,
     extractPartsFromStreamLine,
     onSessionTabIdMigrated,
+    onClaudeSessionIdAssigned,
     reloadTranscriptFromDisk,
     expectedTurnNonceByTabIdRef,
     onStreamActivity,
@@ -175,11 +179,17 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
         let updated = { ...s };
         if (isInit && realSessionId) {
           sessionIdMapRef.current.set(tid, realSessionId);
-          updated = { ...updated, id: realSessionId, claudeSessionId: realSessionId };
-          if (opts.syncStreamingTargetRefOnInit) {
-            streamingTargetIdRef.current = realSessionId;
+          onClaudeSessionIdAssigned?.(tid, realSessionId);
+          const preserveWiseTabId = isTerminalWorkerWiseTab(updated);
+          if (preserveWiseTabId) {
+            updated = { ...updated, claudeSessionId: realSessionId };
+          } else {
+            updated = { ...updated, id: realSessionId, claudeSessionId: realSessionId };
+            if (opts.syncStreamingTargetRefOnInit) {
+              streamingTargetIdRef.current = realSessionId;
+            }
+            setActiveSessionId((aid) => (aid === tid ? realSessionId : aid));
           }
-          setActiveSessionId((aid) => (aid === tid ? realSessionId : aid));
         }
         if (dedupedParts.length > 0 && !isInit) {
           const hasToolResults = dedupedParts.some(
@@ -199,13 +209,22 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     );
 
     if (isInit && realSessionId) {
+      const sessionForTid =
+        sessionsRef.current.find((s) => s.id === tid || s.claudeSessionId === tid) ?? null;
+      const preserveWiseTabId =
+        sessionForTid != null && isTerminalWorkerWiseTab(sessionForTid);
       migrateSessionKey(tid, realSessionId);
       const buf = assistantStreamTextByTabRef.current.get(tid);
       if (buf !== undefined) {
         assistantStreamTextByTabRef.current.delete(tid);
-        assistantStreamTextByTabRef.current.set(realSessionId, capAssistantStreamBufferText(buf));
+        assistantStreamTextByTabRef.current.set(
+          preserveWiseTabId ? tid : realSessionId,
+          capAssistantStreamBufferText(buf),
+        );
       }
-      onSessionTabIdMigrated?.(tid, realSessionId);
+      if (!preserveWiseTabId) {
+        onSessionTabIdMigrated?.(tid, realSessionId);
+      }
     }
   }
 
@@ -229,10 +248,27 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     }
   }
 
+  function turnNonceStillExpectedForTab(tabId: string, turnNonce: number): boolean {
+    const map = expectedTurnNonceByTabIdRef?.current;
+    if (!map) return false;
+    const session = sessionsRef.current.find((s) => s.id === tabId || s.claudeSessionId === tabId);
+    const keys = new Set<string>([tabId]);
+    if (session?.id) keys.add(session.id);
+    const cc = session?.claudeSessionId?.trim();
+    if (cc) keys.add(cc);
+    for (const key of keys) {
+      if (map.get(key) === turnNonce) return true;
+    }
+    return false;
+  }
+
   function applySessionComplete(tid: string, payload: unknown, turnNonce: number) {
     const session = sessionsRef.current.find((s) => s.id === tid || s.claudeSessionId === tid);
     if (session) {
-      if (session.status !== "running" && session.status !== "connecting") {
+      const uiBusy = session.status === "running" || session.status === "connecting";
+      const awaitingThisTurn = turnNonceStillExpectedForTab(tid, turnNonce);
+      // 注册表轮询可能先于 `claude-complete` 把 oneshot 标成 idle；仍须消费本轮完成并补盘 jsonl。
+      if (!uiBusy && !awaitingThisTurn) {
         clearAssistBufferKeysForTab(session, tid);
         return;
       }

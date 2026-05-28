@@ -160,7 +160,7 @@ function MentionKindEmployeeIcon() {
       strokeLinecap="round"
       strokeLinejoin="round"
       role="img"
-      aria-label="员工"
+      aria-label="终端"
     >
       <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
       <circle cx="12" cy="7" r="4" />
@@ -179,7 +179,7 @@ function MentionKindTeamIcon() {
       strokeLinecap="round"
       strokeLinejoin="round"
       role="img"
-      aria-label="团队"
+      aria-label="工作流"
     >
       <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
       <circle cx="9" cy="7" r="4" />
@@ -598,12 +598,12 @@ function renderOptionContent(opt: SlashOption) {
           </span>
         )}
         {opt.type === "agent" && (
-          <span className="app-claude-slash-popover__kind" title="员工">
+          <span className="app-claude-slash-popover__kind" title="终端">
             <MentionKindEmployeeIcon />
           </span>
         )}
         {opt.type === "team" && (
-          <span className="app-claude-slash-popover__kind" title="团队">
+          <span className="app-claude-slash-popover__kind" title="工作流">
             <MentionKindTeamIcon />
           </span>
         )}

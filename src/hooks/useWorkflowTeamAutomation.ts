@@ -1,4 +1,4 @@
-import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { flushSync } from "react-dom";
 import { message } from "antd";
 import type {
@@ -63,18 +63,16 @@ import {
 import { extractLatestAssistantPlainText, mergeAssistantPlainTextPreferLonger } from "../services/claudeSessionState";
 import {
   extractRepositoryBoundEmployeeName,
-  isOmcMonitorEmployeeRecord,
   omcWorkerRepositoryBoundNameMatchers,
   resolveConfiguredOmcEmployee,
 } from "../utils/omcMonitorEmployeeSession";
-import {
-  isRepositoryMainSessionTab,
-  normalizeRepositoryPathKey as normalizeRepositoryPathForMatch,
-  resolveBoundMainSessionId,
-  resolveMainOwnerAgentNameForRepositoryPath,
-} from "../utils/repositoryMainSessionBinding";
-import { extractBoundEmployeeNameFromDisplay } from "../utils/sessionOwnerHints";
+import { normalizeRepositoryPathKey as normalizeRepositoryPathForMatch } from "../utils/repositoryMainSessionBinding";
 import type { WorkflowVerdictMode } from "../constants/workflowVerdictMode";
+import {
+  dispatchTerminalFromMainSession,
+  resolveOrCreateTerminalWorkerTab,
+  type TerminalDispatchDeps,
+} from "../services/terminalDispatch";
 
 type CreateSession = (
   repositoryPath: string,
@@ -86,6 +84,12 @@ type ExecuteSession = (
   sessionId: string,
   prompt: string,
   opts?: ClaudeComposerExecuteBubbleOptions,
+) => boolean;
+
+type ExecuteTerminalSession = (
+  sessionId: string,
+  outboundPrompt: string,
+  opts?: { userBubblePrompt?: string },
 ) => boolean;
 
 type WorkflowEventMap = Record<string, WorkflowTaskEventItem[]>;
@@ -107,10 +111,12 @@ interface UseWorkflowTeamAutomationOptions {
   createSession: CreateSession;
   employees: EmployeeItem[];
   executeSession: ExecuteSession;
+  executeTerminalSession: ExecuteTerminalSession;
   flushDingTalkAutomationReplyForTurn: (input: FlushDingTalkAutomationReplyForTurnInput) => boolean;
   repositoryMainSessionBindings: Record<string, string>;
   repositories: Repository[];
   sessions: ClaudeSession[];
+  sessionsLiveRef: MutableRefObject<ClaudeSession[]>;
   setEmployeeTaskCounts: Dispatch<SetStateAction<EmployeeTaskCountItem[]>>;
   setEmployees: Dispatch<SetStateAction<EmployeeItem[]>>;
   setTaskPendingEmployeesByTaskId: Dispatch<SetStateAction<PendingEmployeeMap>>;
@@ -162,10 +168,12 @@ export function useWorkflowTeamAutomation({
   createSession,
   employees,
   executeSession,
+  executeTerminalSession,
   flushDingTalkAutomationReplyForTurn,
   repositoryMainSessionBindings,
   repositories,
   sessions,
+  sessionsLiveRef,
   setEmployeeTaskCounts,
   setEmployees,
   setTaskPendingEmployeesByTaskId,
@@ -181,8 +189,6 @@ export function useWorkflowTeamAutomation({
   workflowTemplates,
   workflowVerdictMode,
 }: UseWorkflowTeamAutomationOptions) {
-  const employeeSessionIdByKeyRef = useRef<Map<string, string>>(new Map());
-  const employeeSessionCreateByKeyRef = useRef<Map<string, Promise<string>>>(new Map());
   const workflowTaskByWorkerSessionRef = useRef<Map<string, string>>(new Map());
   const acceptanceCompletionGuardRef = useRef<Set<string>>(new Set());
 
@@ -206,68 +212,47 @@ export function useWorkflowTeamAutomation({
   workflowTaskEventsByTaskIdRef.current = workflowTaskEventsByTaskId;
   workflowTasksRef.current = workflowTasks;
 
+  const terminalDispatchDeps = useRef<TerminalDispatchDeps>({
+    getSessions: () => sessionsLiveRef.current,
+    employees,
+    repositories,
+    repositoryMainSessionBindings,
+    createSession,
+    executeTerminalSession,
+    appendSystemMessage,
+    closeWorkerTab: closeSession,
+  });
+  terminalDispatchDeps.current = {
+    getSessions: () => sessionsLiveRef.current,
+    employees,
+    repositories,
+    repositoryMainSessionBindings,
+    createSession,
+    executeTerminalSession,
+    appendSystemMessage,
+    closeWorkerTab: closeSession,
+  };
+
+  const dispatchTerminal = useCallback(
+    (input: Parameters<typeof dispatchTerminalFromMainSession>[1]) =>
+      dispatchTerminalFromMainSession(terminalDispatchDeps.current, input),
+    [],
+  );
+
   const refreshEmployeeData = useCallback(async () => {
     const [employeeList, counts] = await Promise.all([listEmployees(), listEmployeeTaskCounts()]);
     setEmployees(employeeList);
     setEmployeeTaskCounts(counts);
   }, [setEmployeeTaskCounts, setEmployees]);
 
-  const moveWorkflowAutomationSessionId = useCallback((fromTabId: string, toClaudeSessionId: string) => {
-    const empMap = employeeSessionIdByKeyRef.current;
-    for (const [k, v] of [...empMap.entries()]) {
-      if (v === fromTabId) {
-        empMap.set(k, toClaudeSessionId);
-      }
+  const moveWorkflowAutomationSessionId = useCallback((fromTabId: string, toTabId: string) => {
+    const map = workflowTaskByWorkerSessionRef.current;
+    const taskId = map.get(fromTabId);
+    if (taskId) {
+      map.delete(fromTabId);
+      map.set(toTabId, taskId);
     }
   }, []);
-
-  const ensureEmployeeWorkerTabSessionId = useCallback(
-    async (
-      repositoryPath: string,
-      repositoryName: string,
-      employee: EmployeeItem,
-    ): Promise<{ sessionId: string; deferExecute: boolean }> => {
-      const key = `${repositoryPath}::${employee.id}`;
-      const sessionsNow = sessionsRef.current;
-      const cachedId = employeeSessionIdByKeyRef.current.get(key);
-      if (cachedId) {
-        const hit = sessionsNow.find((item) => item.id === cachedId || item.claudeSessionId === cachedId);
-        if (hit) {
-          if (hit.id !== cachedId) {
-            employeeSessionIdByKeyRef.current.set(key, hit.id);
-          }
-          return { sessionId: hit.id, deferExecute: false };
-        }
-        const migratedHit = sessionsNow.find(
-          (item) =>
-            item.repositoryPath === repositoryPath &&
-            extractBoundEmployeeNameFromSessionRepositoryName(item.repositoryName) === employee.name.trim(),
-        );
-        if (migratedHit) {
-          employeeSessionIdByKeyRef.current.set(key, migratedHit.id);
-          return { sessionId: migratedHit.id, deferExecute: false };
-        }
-        employeeSessionIdByKeyRef.current.delete(key);
-      }
-      const inflight = employeeSessionCreateByKeyRef.current.get(key);
-      if (inflight) {
-        const sessionId = await inflight;
-        return { sessionId, deferExecute: true };
-      }
-      const createPromise = (async (): Promise<string> => {
-        const createdSessionId = await createSession(repositoryPath, `${repositoryName}/员工:${employee.name}`, { skipActivate: true });
-        employeeSessionIdByKeyRef.current.set(key, createdSessionId);
-        return createdSessionId;
-      })();
-      employeeSessionCreateByKeyRef.current.set(key, createPromise);
-      void createPromise.finally(() => {
-        employeeSessionCreateByKeyRef.current.delete(key);
-      });
-      const sessionId = await createPromise;
-      return { sessionId, deferExecute: true };
-    },
-    [createSession],
-  );
 
   const prepareFreshOmcEmployeeWorkerForDirectBatch = useCallback(
     async (input: { repositoryPath: string; repositoryDisplayName: string }) => {
@@ -292,13 +277,10 @@ export function useWorkflowTeamAutomation({
       }
       const employee = resolveConfiguredOmcEmployee(employeesRef.current);
       if (!employee) return;
-      const mapKey = `${rp}::${employee.id}`;
-      employeeSessionIdByKeyRef.current.delete(mapKey);
-      employeeSessionCreateByKeyRef.current.delete(mapKey);
       const disp = input.repositoryDisplayName.trim() || rp;
-      await ensureEmployeeWorkerTabSessionId(rp, disp, employee);
+      await resolveOrCreateTerminalWorkerTab(terminalDispatchDeps.current, rp, disp, employee);
     },
-    [closeSession, ensureEmployeeWorkerTabSessionId],
+    [closeSession],
   );
 
   const notifyOmcEmployeeDirectBatchTaskDone = useCallback(
@@ -313,8 +295,13 @@ export function useWorkflowTeamAutomation({
         const pathKey = normalizeRepositoryPathForMatch(rp);
         const omcBoundNames = omcWorkerRepositoryBoundNameMatchers(employeesRef.current);
         if (employee) {
-          const { sessionId } = await ensureEmployeeWorkerTabSessionId(rp, disp, employee);
-          targetSessionId = sessionId;
+          const { workerTabId } = await resolveOrCreateTerminalWorkerTab(
+            terminalDispatchDeps.current,
+            rp,
+            disp,
+            employee,
+          );
+          targetSessionId = workerTabId;
         } else {
           for (const s of sessionsRef.current) {
             if (normalizeRepositoryPathForMatch(s.repositoryPath ?? "") !== pathKey) continue;
@@ -329,7 +316,7 @@ export function useWorkflowTeamAutomation({
         appendSystemMessage(targetSessionId, text);
       })();
     },
-    [appendSystemMessage, ensureEmployeeWorkerTabSessionId],
+    [appendSystemMessage],
   );
 
   const persistRuntimeSnapshotExecutor = useCallback(
@@ -425,7 +412,8 @@ export function useWorkflowTeamAutomation({
         }
         return false;
       }
-      const { sessionId: targetSessionId, deferExecute: executeAfterCreate } = await ensureEmployeeWorkerTabSessionId(
+      const { workerTabId: targetSessionId, created } = await resolveOrCreateTerminalWorkerTab(
+        terminalDispatchDeps.current,
         ownerSession.repositoryPath,
         ownerSession.repositoryName,
         targetEmployee,
@@ -442,27 +430,29 @@ export function useWorkflowTeamAutomation({
         });
       }
       const autoPrompt = buildTeamWorkerExecutePrompt(dispatch.input, targetEmployee.agentType?.trim());
+      const userBubblePrompt = dispatch.input.trim();
       workflowTaskByWorkerSessionRef.current.set(targetSessionId, task.id);
       const targetSession = sessionsRef.current.find((item) => item.id === targetSessionId);
       const targetClaudeSessionId = targetSession?.claudeSessionId?.trim();
       if (targetClaudeSessionId) {
         workflowTaskByWorkerSessionRef.current.set(targetClaudeSessionId, task.id);
       }
-      if (executeAfterCreate) {
+      const runTeamWorker = () =>
+        executeTerminalSession(targetSessionId, autoPrompt, { userBubblePrompt });
+      if (created) {
         return await new Promise<boolean>((resolve) => {
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
-              resolve(executeSession(targetSessionId, autoPrompt) !== false);
+              resolve(runTeamWorker());
             });
           });
         });
       }
-      return executeSession(targetSessionId, autoPrompt) !== false;
+      return runTeamWorker();
     },
     [
       appendSystemMessage,
-      ensureEmployeeWorkerTabSessionId,
-      executeSession,
+      executeTerminalSession,
       persistRuntimeSnapshotExecutor,
       setWorkflowRuntimeSnapshotsByTaskId,
       setWorkflowTaskEventsByTaskId,
@@ -502,105 +492,23 @@ export function useWorkflowTeamAutomation({
       };
       notificationHub.setControlDockMirror(sessionId, null);
 
-      const applyEmployeeControlDockMirror = (targetTid: string, dispatchFromTid: string) => {
-        const targetSess = sessionsRef.current.find((item) => item.id === targetTid);
-        if (!targetSess) return;
-        if (!extractBoundEmployeeNameFromDisplay(targetSess.repositoryName ?? "")) return;
-        const pathKey = normalizeRepositoryPathForMatch(targetSess.repositoryPath);
-        const mainOwner = resolveMainOwnerAgentNameForRepositoryPath(
-          repositoriesRef.current,
-          targetSess.repositoryPath,
-        );
-        let viewer: string | null =
-          resolveBoundMainSessionId(
-            targetSess.repositoryPath,
-            repositoryMainSessionBindingsRef.current,
-            sessionsRef.current,
-            mainOwner,
-          ) ?? null;
-        if (!viewer || viewer === targetTid) {
-          const fb = sessionsRef.current.find(
-            (s) => isRepositoryMainSessionTab(s, pathKey, mainOwner) && s.id !== targetTid,
-          );
-          viewer = fb?.id ?? null;
-        }
-        if (!viewer || viewer === targetTid) {
-          if (dispatchFromTid !== targetTid) viewer = dispatchFromTid;
-          else return;
-        }
-        notificationHub.setControlDockMirror(viewer, targetTid);
-      };
-
-      let executePrompt = prompt;
-      let targetSessionId = sessionId;
       const session = sessionsRef.current.find((item) => item.id === sessionId);
       if (session) {
-        const mentionedEmployees = employeesRef.current
-          .filter((employee) => !isOmcMonitorEmployeeRecord(employee))
-          .map((employee) => ({
-            employee,
-            mentionIndex: prompt.indexOf(`@${employee.name}`),
-          }))
-          .filter((entry) => entry.mentionIndex >= 0)
-          .sort((left, right) => left.mentionIndex - right.mentionIndex)
-          .map((entry) => entry.employee);
         const explicitTargetType = dispatchTarget?.targetType ?? "main";
         const explicitTargetEmployeeName = dispatchTarget?.targetEmployeeName?.trim();
         const explicitTargetWorkflowId = dispatchTarget?.targetWorkflowId?.trim();
         const explicitTargetWorkflowName = dispatchTarget?.targetWorkflowName?.trim();
+
         if (explicitTargetType === "employee") {
-          const targetEmployeeRaw =
-            (explicitTargetEmployeeName
-              ? employeesRef.current.find((employee) => employee.name.trim() === explicitTargetEmployeeName)
-              : undefined) ?? mentionedEmployees[0];
-          const targetEmployee =
-            targetEmployeeRaw && !isOmcMonitorEmployeeRecord(targetEmployeeRaw) ? targetEmployeeRaw : undefined;
-          let executeAfterCreate = false;
-          if (targetEmployee) {
-            const agentType = targetEmployee.agentType?.trim();
-            const trimmedPrompt = executePrompt.trimStart();
-            const hasLeadingSlashCommand = trimmedPrompt.startsWith("/");
-            if (agentType && !hasLeadingSlashCommand) {
-              executePrompt = `/${agentType}\n${executePrompt}`;
-            }
-            const { sessionId: resolvedEmployeeSessionId, deferExecute } = await ensureEmployeeWorkerTabSessionId(
-              session.repositoryPath,
-              session.repositoryName,
-              targetEmployee,
-            );
-            targetSessionId = resolvedEmployeeSessionId;
-            executeAfterCreate = deferExecute;
-          }
-          if (!targetEmployee) {
-            if (explicitTargetEmployeeName) {
-              const warningText = `未找到终端「${explicitTargetEmployeeName}」，请检查终端名称后重试。`;
-              message.warning(warningText);
-              appendSystemMessage(sessionId, warningText);
-              return false;
-            }
-            return runExecute(sessionId, executePrompt) !== false;
-          }
-          appendSystemMessage(
-            sessionId,
-            [
-              "任务分发记录",
-              `- 类型：员工独立会话`,
-              `- 目标：${targetEmployee.name}`,
-              `- 分发会话：${targetSessionId}`,
-              `- 时间：${new Date().toLocaleString("zh-CN", { hour12: false })}`,
-            ].join("\n"),
-          );
-          applyEmployeeControlDockMirror(targetSessionId, sessionId);
-          if (executeAfterCreate) {
-            return await new Promise<boolean>((resolve) => {
-              requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                  resolve(runExecute(targetSessionId, executePrompt) !== false);
-                });
-              });
-            });
-          }
-          return runExecute(targetSessionId, executePrompt) !== false;
+          const terminalResult = await dispatchTerminal({
+            mainSessionId: sessionId,
+            prompt,
+            explicitTerminalName: explicitTargetEmployeeName,
+          });
+          if (terminalResult === "ok") return true;
+          if (terminalResult === "failed") return false;
+          if (explicitTargetEmployeeName) return false;
+          return runExecute(sessionId, prompt) !== false;
         }
 
         const templatesByNameLen = [...workflowTemplates].sort((a, b) => b.name.length - a.name.length);
@@ -740,24 +648,23 @@ export function useWorkflowTeamAutomation({
             return false;
           }
           return true;
-        } else if (mentionedEmployees.length > 0) {
-          const targetEmployee = mentionedEmployees[0];
-          const agentType = targetEmployee?.agentType?.trim();
-          const trimmedPrompt = executePrompt.trimStart();
-          const hasLeadingSlashCommand = trimmedPrompt.startsWith("/");
-          if (agentType && !hasLeadingSlashCommand) {
-            executePrompt = `/${agentType}\n${executePrompt}`;
-          }
         }
+
+        const mentionDispatch = await dispatchTerminal({
+          mainSessionId: sessionId,
+          prompt,
+        });
+        if (mentionDispatch === "ok") return true;
+        if (mentionDispatch === "failed") return false;
       }
-      applyEmployeeControlDockMirror(targetSessionId, sessionId);
-      return runExecute(targetSessionId, executePrompt) !== false;
+      return runExecute(sessionId, prompt) !== false;
     },
     [
       appendSystemMessage,
       dispatchTeamStepToEmployeeSession,
-      ensureEmployeeWorkerTabSessionId,
+      dispatchTerminal,
       executeSession,
+      executeTerminalSession,
       setTaskPendingEmployeesByTaskId,
       setWorkflowRuntimeSnapshotsByTaskId,
       setWorkflowRuntimeStateByTaskId,
