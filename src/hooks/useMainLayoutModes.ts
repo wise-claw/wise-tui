@@ -38,6 +38,9 @@ import {
   WISE_RIGHT_PANEL_DEFAULT_CHANGED,
 } from "../services/wiseDefaultConfigStore";
 import { RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK } from "../utils/rightPanelStorage";
+import { planNextPaneSlotPlacement } from "../utils/multiPaneSlots";
+import { resolveTrellisBootstrapPath } from "../utils/trellisBootstrapPath";
+import { resolveTrellisBootstrapPath } from "../utils/trellisBootstrapPath";
 
 const COMPACT_LAYOUT_WINDOW_WIDTH_PX = 700;
 const COMPACT_LAYOUT_WINDOW_HEIGHT_PX = 600;
@@ -55,6 +58,7 @@ interface UseMainLayoutModesOptions {
   createSession: CreateSession;
   paneCount: PaneCount;
   extraPanes: PaneSlot[];
+  projects: ProjectItem[];
   repositories: Repository[];
   repositoryMainSessionBindings: Record<string, string>;
   sessions: ClaudeSession[];
@@ -66,7 +70,11 @@ interface UseMainLayoutModesOptions {
 let paneSlotCounter = 0;
 function createPaneSlot(): PaneSlot {
   paneSlotCounter += 1;
-  return { slotId: `pane-${Date.now()}-${paneSlotCounter}`, sessionId: null, repositoryId: null };
+  return {
+    slotId: `pane-${Date.now()}-${paneSlotCounter}`,
+    sessionId: null,
+    repositoryId: null,
+  };
 }
 
 export function useMainLayoutModes({
@@ -76,6 +84,7 @@ export function useMainLayoutModes({
   createSession,
   paneCount,
   extraPanes,
+  projects,
   repositories,
   repositoryMainSessionBindings,
   sessions,
@@ -417,6 +426,121 @@ export function useMainLayoutModes({
     [createSession, paneCount, setActiveRepositoryId, setExtraPanes, setPaneCount],
   );
 
+  /** 侧栏「新开会话」：按多屏规则占用下一空窗格并创建执行会话。 */
+  const handleNewPaneSessionInNextSlot = useCallback(
+    async (repository: Repository, sessionPath?: string) => {
+      const path = (sessionPath ?? repository.path).trim();
+      if (!path) {
+        message.warning("仓库路径为空");
+        return;
+      }
+      setActiveRepositoryId(repository.id);
+      try {
+        const sessionId = await createSession(path, repositorySessionTabDisplayName(repository), {
+          skipActivate: true,
+        });
+
+        if (paneCount === 1) {
+          const slot = createPaneSlot();
+          slot.sessionId = sessionId;
+          slot.repositoryId = null;
+          setExtraPanes([slot]);
+          multiPaneAccumulatedDeltaRef.current = 0;
+          try {
+            singlePaneWindowSnapshotRef.current = await readMainWindowInnerSize();
+          } catch {
+            singlePaneWindowSnapshotRef.current = null;
+          }
+          setPaneCount(2);
+          await waitLayoutFrames(2);
+          if (typeof window !== "undefined") {
+            const expandPx = 461;
+            try {
+              await setMainWindowLogicalInnerSize(window.innerWidth + expandPx, window.innerHeight);
+              multiPaneAccumulatedDeltaRef.current = expandPx;
+            } catch {
+              /* 浏览器 dev / 非 Tauri */
+            }
+          }
+          return;
+        }
+
+        const plan = planNextPaneSlotPlacement({
+          paneCount,
+          extraPanes,
+          createSlot: createPaneSlot,
+        });
+        if (plan.nextPaneCount !== paneCount) {
+          await handleChangePaneCount(plan.nextPaneCount);
+        }
+        setExtraPanes((prev) => {
+          const base =
+            plan.nextPaneCount !== paneCount || prev.length !== plan.nextExtraPanes.length
+              ? plan.nextExtraPanes
+              : prev;
+          const next = [...base];
+          if (next[plan.slotIndex]) {
+            next[plan.slotIndex] = {
+              ...next[plan.slotIndex],
+              sessionId,
+              repositoryId: null,
+            };
+          }
+          return next;
+        });
+      } catch (error) {
+        console.error("Failed to create pane session in next slot:", error);
+        message.error("新开会话失败");
+      }
+    },
+    [createSession, extraPanes, handleChangePaneCount, paneCount, setActiveRepositoryId, setExtraPanes, setPaneCount],
+  );
+
+  /** 工作区侧栏「新开会话」：在工作区根目录创建会话并占用下一窗格。 */
+  const handleNewPaneProjectSessionInNextSlot = useCallback(
+    async (project: ProjectItem) => {
+      const anchorRepo = project.repositoryIds
+        .map((repositoryId) => repositories.find((item) => item.id === repositoryId))
+        .find((item): item is Repository => Boolean(item));
+      if (anchorRepo) {
+        setActiveRepositoryId(anchorRepo.id);
+      }
+      const plan = planNextPaneSlotPlacement({
+        paneCount,
+        extraPanes,
+        createSlot: createPaneSlot,
+      });
+      if (plan.nextPaneCount !== paneCount) {
+        if (paneCount === 1 && !activeRepository && !anchorRepo) {
+          message.warning("请先选择仓库");
+          return;
+        }
+        await handleChangePaneCount(plan.nextPaneCount);
+      }
+      const slotIndex = paneCount === 1 ? 0 : plan.slotIndex;
+      const rootPath = resolveTrellisBootstrapPath({
+        scope: "project",
+        project,
+        repositories,
+        projects,
+      });
+      await handlePaneProjectNewSession(slotIndex, project.id, projects, {
+        rootPath: rootPath ?? undefined,
+        projectName: project.name,
+      });
+    },
+    [
+      activeRepository,
+      extraPanes,
+      handleChangePaneCount,
+      handlePaneProjectNewSession,
+      paneCount,
+      projects,
+      repositories,
+      setActiveRepositoryId,
+    ],
+  );
+
   // 清理已不存在的 session 引用
   useEffect(() => {
     const sessionIds = new Set(sessions.map((s) => s.id));
@@ -574,6 +698,8 @@ export function useMainLayoutModes({
     handlePaneRepositorySelect,
     handlePaneProjectNewSession,
     handleNewPaneSession,
+    handleNewPaneSessionInNextSlot,
+    handleNewPaneProjectSessionInNextSlot,
     handleChangePaneCount,
     handleCyclePaneCount,
     handleToggleCompactLayoutMode,

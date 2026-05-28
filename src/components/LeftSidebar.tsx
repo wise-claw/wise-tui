@@ -37,12 +37,14 @@ import {
 import { ProjectNameModals } from "./LeftSidebar/ProjectNameModals";
 import { RepositoryAssociateModal } from "./LeftSidebar/RepositoryAssociateModal";
 import { RepositorySddModeModal } from "./LeftSidebar/RepositorySddModeModal";
+import { WorkspaceSddModeModal } from "./LeftSidebar/WorkspaceSddModeModal";
 import { LeftSidebarBottomTabSwitcher } from "./LeftSidebar/LeftSidebarBottomTabSwitcher";
 import { ExpandIcon } from "./LeftSidebar/SidebarIcons";
 import { SystemResourceInline } from "./LeftSidebar/SystemResourceInline";
 import type { LeftSidebarProps } from "./LeftSidebar/types";
 import { useProjectRepositorySidebarState } from "./LeftSidebar/useProjectRepositorySidebarState";
 import { useRepositoryAssociateModalController } from "./LeftSidebar/useRepositoryAssociateModalController";
+import { useProjectSddModeModalController } from "./LeftSidebar/useProjectSddModeModalController";
 import { useRepositorySddModeModalController } from "./LeftSidebar/useRepositorySddModeModalController";
 import { useSidebarCodeGraphIndexMap } from "./LeftSidebar/useSidebarCodeGraphIndexMap";
 import { useSidebarScheduledTasksMap } from "./LeftSidebar/useSidebarScheduledTasksMap";
@@ -104,6 +106,9 @@ export function LeftSidebar({
   onRemoveRepository,
   onDetachRepositoryFromProject,
   onUpdateRepositorySddMode,
+  onUpdateProjectSddMode,
+  onNewPaneSessionForRepository,
+  onNewPaneSessionForProject,
   onReorderRepositoriesInProject,
   onMoveRepositoryToProject,
   onRepositorySelect,
@@ -349,6 +354,11 @@ export function LeftSidebar({
   const { openAddFloatingRepositoryModal, openAddRepositoryModal } = repositoryAssociateModal;
   const repositorySddModeModal = useRepositorySddModeModalController({
     onUpdateRepositorySddMode,
+  });
+  const projectSddModeModal = useProjectSddModeModalController({
+    projects,
+    repositories,
+    onUpdateProjectSddMode,
   });
   const codeGraphIndexStatusByRepoId = useSidebarCodeGraphIndexMap(
     useMemo(() => repositories.map((repository) => repository.id), [repositories]),
@@ -655,6 +665,9 @@ export function LeftSidebar({
           onOpenPromptsRepository={onOpenPromptsRepository}
           onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
           onConfigureRepositorySddMode={onUpdateRepositorySddMode ? repositorySddModeModal.open : undefined}
+          onConfigureProjectSddMode={onUpdateProjectSddMode ? projectSddModeModal.open : undefined}
+          onNewPaneSessionForRepository={onNewPaneSessionForRepository}
+          onNewPaneSessionForProject={onNewPaneSessionForProject}
           onPromoteFloatingRepository={
             onPromoteFloatingRepositoryToProject
               ? (repo) => {
@@ -904,6 +917,16 @@ export function LeftSidebar({
         onValueChange={repositorySddModeModal.setValue}
         onCancel={repositorySddModeModal.cancel}
         onSubmit={() => void repositorySddModeModal.submit()}
+      />
+      <WorkspaceSddModeModal
+        project={projectSddModeModal.project}
+        value={projectSddModeModal.value}
+        signals={projectSddModeModal.signals}
+        saving={projectSddModeModal.saving}
+        canSave={projectSddModeModal.canSave}
+        onValueChange={projectSddModeModal.setValue}
+        onCancel={projectSddModeModal.cancel}
+        onSubmit={() => void projectSddModeModal.submit()}
       />
       <AppSettingsModal open={appSettingsOpen} onClose={() => setAppSettingsOpen(false)} />
     </Layout.Sider>

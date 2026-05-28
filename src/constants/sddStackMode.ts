@@ -1,8 +1,10 @@
-import type { SddMode } from "../types";
+import type { ProjectSddMode, SddMode } from "../types";
 import {
   DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION,
+  workspaceBootstrapSelectionToSddMode,
   type WorkspaceBootstrapSelection,
 } from "./workspaceBootstrapAddons";
+import { resolveAutoSddMode, type SddSignals } from "../services/trellis/sddModeDetector";
 
 /** 仓库 SDD / 内置能力栈：用于「配置 Claude 插件」与创建时引导。 */
 export type SddStackMode =
@@ -99,4 +101,22 @@ export function sddStackModeFromRepositorySddMode(sddMode: SddMode | undefined):
     default:
       return "auto";
   }
+}
+
+export function sddStackModeFromProjectSddMode(sddMode: ProjectSddMode | undefined): SddStackMode {
+  if (sddMode === "wise_trellis") return "wise_trellis";
+  if (sddMode === "project_owned") return "project_owned";
+  return "wise_trellis";
+}
+
+/** 将栈模式保存为工作区级 `ProjectSddMode`（无 `auto` / `off` 持久化字段）。 */
+export function resolveProjectSddModeForStack(
+  mode: SddStackMode,
+  signals: SddSignals,
+): ProjectSddMode {
+  if (mode === "auto") {
+    const resolved = resolveAutoSddMode(signals);
+    return resolved === "wise_trellis" ? "wise_trellis" : "project_owned";
+  }
+  return workspaceBootstrapSelectionToSddMode(sddStackModeToBootstrap(mode)) as ProjectSddMode;
 }

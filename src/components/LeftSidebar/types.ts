@@ -6,6 +6,7 @@ import type {
   EmployeeTaskCountItem,
   MonitorDrawerTarget,
   ProjectItem,
+  ProjectSddMode,
   RepositoryMemberMonitorItem,
   SessionConversationTaskItem,
   Repository,
@@ -103,6 +104,9 @@ export interface LeftSidebarProps {
   onRemoveRepository?: (repository: Repository) => void | Promise<void>;
   onDetachRepositoryFromProject: (projectId: string, repositoryId: number) => void;
   onUpdateRepositorySddMode?: (repositoryId: number, sddMode: SddMode) => void | Promise<void>;
+  onUpdateProjectSddMode?: (projectId: string, sddMode: ProjectSddMode) => void | Promise<void>;
+  onNewPaneSessionForRepository?: (repository: Repository) => void;
+  onNewPaneSessionForProject?: (project: ProjectItem) => void;
   onReorderRepositoriesInProject?: (projectId: string, repositoryIds: number[]) => void | Promise<void>;
   onMoveRepositoryToProject?: (targetProjectId: string, repositoryId: number) => void | Promise<void>;
   onRepositorySelect: (id: number | null) => void;

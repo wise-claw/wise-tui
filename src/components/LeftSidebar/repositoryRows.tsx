@@ -238,6 +238,7 @@ export function RepositoryRow({
   onOpenPromptsRepository,
   onOpenRepositoryMainOwner,
   onConfigureSddMode,
+  onNewPaneSession,
   onCodeGraphGenerateRepository,
   onCodeGraphViewRepositoryInProject,
   repositoryReorder,
@@ -266,6 +267,7 @@ export function RepositoryRow({
   onOpenPromptsRepository?: (project: Workspace, repository: Repository) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
   onConfigureSddMode?: (repository: Repository) => void;
+  onNewPaneSession?: (repository: Repository) => void;
   onCodeGraphGenerateRepository?: (repository: Repository) => void | Promise<void>;
   onCodeGraphViewRepositoryInProject?: (project: Workspace, repository: Repository) => void;
   repositoryReorder?: RepositoryReorderUi;
@@ -290,6 +292,7 @@ export function RepositoryRow({
     onOpenRepositoryMainOwner: Boolean(onOpenRepositoryMainOwner),
     onOpenPromptsRepository: Boolean(onOpenPromptsRepository),
     onConfigureSddMode: Boolean(onConfigureSddMode),
+    onNewPaneSession: Boolean(onNewPaneSession),
     onOpenScheduledTasks: Boolean(onOpenScheduledTasks),
     onOpenRequirements: Boolean(onOpenRequirements),
     onOpenExecutableTasks: Boolean(onOpenExecutableTasks),
@@ -413,6 +416,7 @@ export function RepositoryRow({
                 if (key === "detach") onDetachFromProject(project.id, repository.id);
                 if (key === "prompts") onOpenPromptsRepository?.(project, repository);
                 if (key === "sdd-mode") onConfigureSddMode?.(repository);
+                if (key === "new-session") onNewPaneSession?.(repository);
                 if (key === "scheduled-tasks") onOpenScheduledTasks?.(repository);
                 if (key === "requirements" && workspaceTrellisEnabled) onOpenRequirements?.(repository);
                 if (key === "executable-tasks" && workspaceTrellisEnabled) onOpenExecutableTasks?.(repository);
@@ -449,6 +453,7 @@ export function FloatingRepositoryRow({
   onOpenRepositoryInEditor,
   onOpenRepositoryMainOwner,
   onConfigureSddMode,
+  onNewPaneSession,
   onBootstrapTrellis,
   onCodeGraphGenerateRepository,
   onCodeGraphViewFloatingRepository,
@@ -478,6 +483,7 @@ export function FloatingRepositoryRow({
   onOpenRepositoryInEditor: (repository: Repository) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
   onConfigureSddMode?: (repository: Repository) => void;
+  onNewPaneSession?: (repository: Repository) => void;
   onBootstrapTrellis?: (repository: Repository) => void | Promise<void>;
   onCodeGraphGenerateRepository?: (repository: Repository) => void | Promise<void>;
   onCodeGraphViewFloatingRepository?: (repository: Repository) => void;
@@ -514,6 +520,7 @@ export function FloatingRepositoryRow({
     trellisReady,
     onOpenRepositoryMainOwner: Boolean(onOpenRepositoryMainOwner),
     onConfigureSddMode: Boolean(onConfigureSddMode),
+    onNewPaneSession: Boolean(onNewPaneSession),
     onOpenScheduledTasks: Boolean(onOpenScheduledTasks),
     onOpenRequirements: Boolean(onOpenRequirements),
     onOpenExecutableTasks: Boolean(onOpenExecutableTasks),
@@ -599,6 +606,7 @@ export function FloatingRepositoryRow({
                 if (key === "browser") onOpenRepositoryInBrowser(repository);
                 if (key === "main-owner") onOpenRepositoryMainOwner?.(repository);
                 if (key === "sdd-mode") onConfigureSddMode?.(repository);
+                if (key === "new-session") onNewPaneSession?.(repository);
                 if (key === "trellis-init" && trellisEnabled) void Promise.resolve(onBootstrapTrellis?.(repository));
                 if (key === "scheduled-tasks") onOpenScheduledTasks?.(repository);
                 if (key === "requirements" && trellisEnabled) onOpenRequirements?.(repository);
@@ -647,6 +655,7 @@ export function ProjectRepositoryRows({
   onReorderRepositoriesInProject,
   onMoveRepositoryToProject,
   onConfigureSddMode,
+  onNewPaneSession,
   onCodeGraphGenerateRepository,
   onCodeGraphViewRepositoryInProject,
   repoSidebarDragRef,
@@ -678,6 +687,7 @@ export function ProjectRepositoryRows({
   onReorderRepositoriesInProject?: (projectId: string, repositoryIds: number[]) => void | Promise<void>;
   onMoveRepositoryToProject?: (targetProjectId: string, repositoryId: number) => void | Promise<void>;
   onConfigureSddMode?: (repository: Repository) => void;
+  onNewPaneSession?: (repository: Repository) => void;
   onCodeGraphGenerateRepository?: (repository: Repository) => void | Promise<void>;
   onCodeGraphViewRepositoryInProject?: (project: Workspace, repository: Repository) => void;
   repoSidebarDragRef: React.MutableRefObject<{ sourceProjectId: string; repositoryId: number } | null>;
@@ -739,6 +749,7 @@ export function ProjectRepositoryRows({
             onOpenPromptsRepository={onOpenPromptsRepository}
             onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
             onConfigureSddMode={onConfigureSddMode}
+            onNewPaneSession={onNewPaneSession}
             onCodeGraphGenerateRepository={onCodeGraphGenerateRepository}
             onCodeGraphViewRepositoryInProject={onCodeGraphViewRepositoryInProject}
             repositoryReorder={reorderUi}

@@ -1761,6 +1761,8 @@ export default function App() {
     handlePaneRepositorySelect,
     handlePaneProjectNewSession,
     handleNewPaneSession,
+    handleNewPaneSessionInNextSlot,
+    handleNewPaneProjectSessionInNextSlot,
     handleChangePaneCount,
     handleToggleCompactLayoutMode,
     handleToggleRightPanel,
@@ -1778,6 +1780,7 @@ export default function App() {
     createSession,
     paneCount,
     extraPanes,
+    projects,
     repositories,
     repositoryMainSessionBindings,
     sessions,
@@ -1785,6 +1788,34 @@ export default function App() {
     setPaneCount,
     setExtraPanes,
   });
+
+  const handleNewPaneSessionForRepository = useCallback(
+    (repository: Repository) => {
+      void handleNewPaneSessionInNextSlot(repository, repository.path);
+    },
+    [handleNewPaneSessionInNextSlot],
+  );
+
+  const handleNewPaneSessionForProject = useCallback(
+    (project: ProjectItem) => {
+      const rootPath = resolveTrellisBootstrapPath({
+        scope: "project",
+        project,
+        repositories,
+        projects,
+      });
+      if (!rootPath) {
+        message.warning("无法解析工作区目录，请先配置工作区根目录或关联仓库");
+        return;
+      }
+      if (project.repositoryIds.length === 0) {
+        message.warning("该工作区下暂无仓库，请先关联仓库");
+        return;
+      }
+      void handleNewPaneProjectSessionInNextSlot(project);
+    },
+    [handleNewPaneProjectSessionInNextSlot, message, projects, repositories],
+  );
 
   const handleOpenHistorySessionInInspector = useCallback(
     (sessionId: string) => {
@@ -2947,6 +2978,9 @@ export default function App() {
         onRemoveRepository: handleRemoveRepository,
         onDetachRepositoryFromProject: handleDetachRepositoryFromProject,
         onUpdateRepositorySddMode: handleUpdateRepositorySddMode,
+        onUpdateProjectSddMode: handleUpdateProjectSddMode,
+        onNewPaneSessionForRepository: handleNewPaneSessionForRepository,
+        onNewPaneSessionForProject: handleNewPaneSessionForProject,
         onReorderRepositoriesInProject: handleReorderRepositoriesInProject,
         onRepositorySelect: handleSidebarRepositorySelectLeavingMcpHub,
         onOpenInFinder: handleOpenInFinder,

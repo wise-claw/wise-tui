@@ -69,6 +69,9 @@ interface ProjectRepositoryListProps {
   onOpenPromptsRepository?: (project: Workspace, repository: Repository) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
   onConfigureRepositorySddMode?: (repository: Repository) => void;
+  onConfigureProjectSddMode?: (project: Workspace) => void;
+  onNewPaneSessionForRepository?: (repository: Repository) => void;
+  onNewPaneSessionForProject?: (project: Workspace) => void;
   onPromoteFloatingRepository?: (repository: StandaloneRepo) => void;
   onJoinFloatingRepository?: (repository: StandaloneRepo, projectId: string) => void;
   onRemoveFloatingRepository: (repository: StandaloneRepo) => void;
@@ -138,6 +141,9 @@ export function ProjectRepositoryList({
   onOpenPromptsRepository,
   onOpenRepositoryMainOwner,
   onConfigureRepositorySddMode,
+  onConfigureProjectSddMode,
+  onNewPaneSessionForRepository,
+  onNewPaneSessionForProject,
   onPromoteFloatingRepository,
   onJoinFloatingRepository,
   onRemoveFloatingRepository,
@@ -212,6 +218,7 @@ export function ProjectRepositoryList({
                 onOpenRepositoryInEditor={openRepositoryInPreferredEditor}
                 onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
                 onConfigureSddMode={onConfigureRepositorySddMode}
+                onNewPaneSession={onNewPaneSessionForRepository}
                 onBootstrapTrellis={onBootstrapTrellisForRepository}
                 onCodeGraphGenerateRepository={onCodeGraphGenerateRepository}
                 onCodeGraphViewFloatingRepository={onCodeGraphViewFloatingRepository}
@@ -245,6 +252,7 @@ export function ProjectRepositoryList({
             projectRepos={project.repositoryIds
               .map((id) => repositoriesById.get(id))
               .filter((item): item is Repository => Boolean(item))}
+            activeProjectId={activeProjectId}
             isActiveProject={project.id === activeProjectId && activeWorkspaceFocus === "project"}
             activeRepositoryId={activeRepositoryId}
             activeWorkspaceFocus={activeWorkspaceFocus}
@@ -277,6 +285,9 @@ export function ProjectRepositoryList({
             onOpenPromptsRepository={onOpenPromptsRepository}
             onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
             onConfigureRepositorySddMode={onConfigureRepositorySddMode}
+            onConfigureProjectSddMode={onConfigureProjectSddMode}
+            onNewPaneSessionForRepository={onNewPaneSessionForRepository}
+            onNewPaneSessionForProject={onNewPaneSessionForProject}
             onDetachRepositoryFromProject={onDetachRepositoryFromProject}
             onReorderRepositoriesInProject={onReorderRepositoriesInProject}
             onMoveRepositoryToProject={onMoveRepositoryToProject}
@@ -321,6 +332,7 @@ function ProjectTrellisAction({ onOpen }: { onOpen: () => void }) {
 interface ProjectRowProps {
   project: Workspace;
   projectRepos: Repository[];
+  activeProjectId: string | null;
   isActiveProject: boolean;
   activeRepositoryId: number | null;
   activeWorkspaceFocus: WorkspaceFocus;
@@ -354,6 +366,9 @@ interface ProjectRowProps {
   onOpenPromptsRepository?: (project: Workspace, repository: Repository) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
   onConfigureRepositorySddMode?: (repository: Repository) => void;
+  onConfigureProjectSddMode?: (project: Workspace) => void;
+  onNewPaneSessionForRepository?: (repository: Repository) => void;
+  onNewPaneSessionForProject?: (project: Workspace) => void;
   onDetachRepositoryFromProject: (projectId: string, repositoryId: number) => void;
   onReorderRepositoriesInProject?: (projectId: string, repositoryIds: number[]) => void | Promise<void>;
   onMoveRepositoryToProject?: (targetProjectId: string, repositoryId: number) => void | Promise<void>;
@@ -382,6 +397,7 @@ interface ProjectRowProps {
 function ProjectRow({
   project,
   projectRepos,
+  activeProjectId,
   isActiveProject,
   activeRepositoryId,
   activeWorkspaceFocus,
@@ -414,6 +430,9 @@ function ProjectRow({
   onOpenPromptsRepository,
   onOpenRepositoryMainOwner,
   onConfigureRepositorySddMode,
+  onConfigureProjectSddMode,
+  onNewPaneSessionForRepository,
+  onNewPaneSessionForProject,
   onDetachRepositoryFromProject,
   onReorderRepositoriesInProject,
   onMoveRepositoryToProject,
@@ -467,6 +486,8 @@ function ProjectRow({
     trellisReady: projectTrellisReady,
     onAddRepositoryToProject: Boolean(onAddRepositoryToProject),
     onOpenProjectDirectory: Boolean(onOpenProjectInFinder),
+    onConfigureSddMode: Boolean(onConfigureProjectSddMode),
+    onNewPaneSession: Boolean(onNewPaneSessionForProject),
     onOpenScheduledTasksForProject: Boolean(onOpenScheduledTasksForProject),
     onOpenExecutableTasksForProject: Boolean(onOpenExecutableTasksForProject),
     onReconcileProject: Boolean(onReconcileProject),
@@ -599,6 +620,8 @@ function ProjectRow({
                 if (key === "rename") onRenameProject(project);
                 if (key === "open-directory") onOpenProjectInFinder?.(project);
                 if (key === "add-repository") onAddRepositoryToProject?.(project.id);
+                if (key === "sdd-mode") onConfigureProjectSddMode?.(project);
+                if (key === "new-session") onNewPaneSessionForProject?.(project);
                 if (key === "scheduled-tasks") onOpenScheduledTasksForProject?.(project);
                 if (key === "requirements" && projectTrellisEnabled) openWorkspaceRequirements();
                 if (key === "executable-tasks" && projectTrellisEnabled) onOpenExecutableTasksForProject?.(project);
@@ -646,6 +669,7 @@ function ProjectRow({
             onReorderRepositoriesInProject={onReorderRepositoriesInProject}
             onMoveRepositoryToProject={onMoveRepositoryToProjectWithExpand}
             onConfigureSddMode={onConfigureRepositorySddMode}
+            onNewPaneSession={onNewPaneSessionForRepository}
             onCodeGraphGenerateRepository={onCodeGraphGenerateRepository}
             onCodeGraphViewRepositoryInProject={onCodeGraphViewRepositoryInProject}
             repoSidebarDragRef={repoSidebarDragRef}

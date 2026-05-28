@@ -1,11 +1,10 @@
-import type { Repository } from "../../types";
-import { repositoryFolderBasename } from "../../utils/repositoryType";
+import type { ProjectItem } from "../../types";
 import { SddStackModeConfigModal } from "./SddStackModeConfigModal";
 import type { SddSignals } from "../../services/trellis/sddModeDetector";
 import type { SddStackMode } from "../../constants/sddStackMode";
 
-interface RepositorySddModeModalProps {
-  repository: Repository | null;
+interface WorkspaceSddModeModalProps {
+  project: ProjectItem | null;
   value: SddStackMode;
   signals: SddSignals | null;
   saving: boolean;
@@ -15,8 +14,8 @@ interface RepositorySddModeModalProps {
   onSubmit: () => void;
 }
 
-export function RepositorySddModeModal({
-  repository,
+export function WorkspaceSddModeModal({
+  project,
   value,
   signals,
   saving,
@@ -24,12 +23,12 @@ export function RepositorySddModeModal({
   onValueChange,
   onCancel,
   onSubmit,
-}: RepositorySddModeModalProps) {
+}: WorkspaceSddModeModalProps) {
   return (
     <SddStackModeConfigModal
-      open={Boolean(repository)}
-      title="仓库 SDD 模式"
-      targetLabel={repository ? repositoryFolderBasename(repository) : ""}
+      open={Boolean(project)}
+      title="工作区 SDD 模式"
+      targetLabel={project?.name ?? ""}
       value={value}
       signals={signals}
       saving={saving}

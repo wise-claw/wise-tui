@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
+  resolveProjectSddModeForStack,
+  sddStackModeFromProjectSddMode,
   sddStackModeFromRepositorySddMode,
   sddStackModeToBootstrap,
   sddStackModeToSddMode,
@@ -19,5 +21,18 @@ describe("sddStackMode", () => {
     expect(sddStackModeFromRepositorySddMode("wise_trellis")).toBe("wise_trellis");
     expect(sddStackModeFromRepositorySddMode("off")).toBe("off");
     expect(sddStackModeFromRepositorySddMode(undefined)).toBe("auto");
+  });
+
+  test("maps project sddMode and stack save", () => {
+    expect(sddStackModeFromProjectSddMode("wise_trellis")).toBe("wise_trellis");
+    expect(sddStackModeFromProjectSddMode("project_owned")).toBe("project_owned");
+    expect(
+      resolveProjectSddModeForStack("omc", {
+        hasTrellisTasks: false,
+        hasTrellisSpec: false,
+        hasOpenSpec: false,
+        hasGenericSpec: false,
+      }),
+    ).toBe("project_owned");
   });
 });

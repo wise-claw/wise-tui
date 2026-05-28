@@ -39,6 +39,8 @@ export interface BuildProjectMoreMenuItemsInput {
   trellisReady?: boolean;
   onAddRepositoryToProject?: boolean;
   onOpenProjectDirectory?: boolean;
+  onConfigureSddMode?: boolean;
+  onNewPaneSession?: boolean;
   onOpenScheduledTasksForProject?: boolean;
   onOpenExecutableTasksForProject?: boolean;
   onReconcileProject?: boolean;
@@ -54,6 +56,8 @@ export function buildProjectMoreMenuItems(input: BuildProjectMoreMenuItemsInput)
     trellisReady = false,
     onAddRepositoryToProject,
     onOpenProjectDirectory,
+    onConfigureSddMode,
+    onNewPaneSession,
     onOpenScheduledTasksForProject,
     onOpenExecutableTasksForProject,
     onReconcileProject,
@@ -67,6 +71,8 @@ export function buildProjectMoreMenuItems(input: BuildProjectMoreMenuItemsInput)
       { key: "rename", label: "重命名工作区" },
       onOpenProjectDirectory ? { key: "open-directory", label: "打开目录" } : null,
       onAddRepositoryToProject ? { key: "add-repository", label: "关联仓库" } : null,
+      onConfigureSddMode ? { key: "sdd-mode", label: "配置 Claude 插件" } : null,
+      onNewPaneSession ? { key: "new-session", label: "新开会话" } : null,
     ]),
     sidebarMenuSection([
       trellisEnabled ? { key: "requirements", label: "工作区需求" } : null,
@@ -112,6 +118,7 @@ export interface BuildProjectRepositoryMoreMenuItemsInput {
   onOpenRepositoryMainOwner?: boolean;
   onOpenPromptsRepository?: boolean;
   onConfigureSddMode?: boolean;
+  onNewPaneSession?: boolean;
   onOpenScheduledTasks?: boolean;
   onOpenRequirements?: boolean;
   onOpenExecutableTasks?: boolean;
@@ -130,6 +137,7 @@ export function buildProjectRepositoryMoreMenuItems(
     trellisRootActionEnabled = trellisEnabled,
     onOpenPromptsRepository,
     onConfigureSddMode,
+    onNewPaneSession,
     onOpenScheduledTasks,
     onOpenRequirements,
     onOpenExecutableTasks,
@@ -142,6 +150,7 @@ export function buildProjectRepositoryMoreMenuItems(
       { key: "finder", label: "打开目录" },
       { key: "editor", label: repositoryEditorOpenMenuLabel() },
       { key: "browser", label: "打开 Git 仓库" },
+      onNewPaneSession ? { key: "new-session", label: "新开会话" } : null,
     ]),
     sidebarMenuSection([
       REPOSITORY_MAIN_OWNER_MENU_ENABLED && onOpenRepositoryMainOwner
@@ -179,6 +188,7 @@ export interface BuildFloatingRepositoryMoreMenuItemsInput {
   trellisReady?: boolean;
   onOpenRepositoryMainOwner?: boolean;
   onConfigureSddMode?: boolean;
+  onNewPaneSession?: boolean;
   onOpenScheduledTasks?: boolean;
   onOpenRequirements?: boolean;
   onOpenExecutableTasks?: boolean;
@@ -198,6 +208,7 @@ export function buildFloatingRepositoryMoreMenuItems(
     trellisReady = false,
     onOpenRepositoryMainOwner,
     onConfigureSddMode,
+    onNewPaneSession,
     onOpenScheduledTasks,
     onOpenRequirements,
     onOpenExecutableTasks,
@@ -217,6 +228,7 @@ export function buildFloatingRepositoryMoreMenuItems(
       { key: "finder", label: "打开目录" },
       { key: "editor", label: repositoryEditorOpenMenuLabel() },
       { key: "browser", label: "打开 Git 仓库" },
+      onNewPaneSession ? { key: "new-session", label: "新开会话" } : null,
     ]),
     sidebarMenuSection([
       REPOSITORY_MAIN_OWNER_MENU_ENABLED && onOpenRepositoryMainOwner
