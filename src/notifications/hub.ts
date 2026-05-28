@@ -33,13 +33,43 @@ const EMPTY_SLICE: SessionDockSlice = {
   permissionRequest: null,
 };
 
+/**
+ * 内容签名（不含 id / arrivedAt）：用于把同一 AskUserQuestion 在 `assistant.tool_use` 与 `sdk_control_request`
+ * 两条独立流上写来的不同 request_id 合并为一项题卡。
+ */
+function questionContentSig(q: QuestionRequest): string {
+  const opts = q.options.map((o) => `${o.label.trim()}\u0001${(o.value ?? "").trim()}`).join("\u0002");
+  return `${q.question.trim()}\u0003${q.multiSelect ? "1" : "0"}\u0003${opts}`;
+}
+
+function questionRequestIdPriority(requestId: string): number {
+  const id = requestId.trim().toLowerCase();
+  // Claude assistant tool_use id（如 toolu_xxx）通常不是 stdin control_response 期望的 request_id。
+  if (id.startsWith("toolu_") || id.startsWith("tool_")) return 0;
+  // control_request / sdk_control_request 的 request_id 优先保留。
+  return 1;
+}
+
+function preferIncomingQuestionRequest(current: QuestionRequest, incoming: QuestionRequest): boolean {
+  const cp = questionRequestIdPriority(current.id);
+  const ip = questionRequestIdPriority(incoming.id);
+  if (ip !== cp) return ip > cp;
+  // 同优先级时保留最新到达，允许后续通道补齐内容。
+  return true;
+}
+
 /** 合并两道流式桶上的 AskUserQuestion，按队首→队尾去重，避免 tab id 迁移时丢题 */
 function mergeQuestionRacks(to: SessionNotificationBucket, from: SessionNotificationBucket): void {
-  const seen = new Set<string>();
+  const seenIds = new Set<string>();
+  const seenSigs = new Set<string>();
   const ordered: QuestionRequest[] = [];
   const push = (q: QuestionRequest | null | undefined) => {
-    if (!q || seen.has(q.id)) return;
-    seen.add(q.id);
+    if (!q) return;
+    if (seenIds.has(q.id)) return;
+    const sig = questionContentSig(q);
+    if (seenSigs.has(sig)) return;
+    seenIds.add(q.id);
+    seenSigs.add(sig);
     ordered.push(q);
   };
   push(to.questionRequest);
@@ -575,6 +605,7 @@ class NotificationHub {
     this.discardNonPendingQuestionHeads(b);
     this.upsertRequestLifecycle(q.id, sessionId, "question", "pending");
     if (!b.questionRequestQueue) b.questionRequestQueue = [];
+    const newSig = questionContentSig(q);
     const head = b.questionRequest;
     if (!head) {
       b.questionRequest = q;
@@ -588,10 +619,37 @@ class NotificationHub {
       this.bumpDockForStorageSession(sessionId);
       return;
     }
+    // 内容签名相同但 id 不同：同一 AskUserQuestion 经 `assistant.tool_use` 与 `sdk_control_request` 双通道到达，
+    // 用最新 payload 覆盖（让 control_response 使用最新 request_id，旧 id 标 answered 防止角标残留）。
+    if (questionContentSig(head) === newSig) {
+      if (preferIncomingQuestionRequest(head, q)) {
+        this.upsertRequestLifecycle(head.id, sessionId, "question", "answered");
+        b.questionRequest = q;
+      } else {
+        this.upsertRequestLifecycle(q.id, sessionId, "question", "answered");
+      }
+      this.bumpGlobal();
+      this.bumpDockForStorageSession(sessionId);
+      return;
+    }
     const qi = b.questionRequestQueue.findIndex((x) => x.id === q.id);
     if (qi >= 0) {
       b.questionRequestQueue = [...b.questionRequestQueue];
       b.questionRequestQueue[qi] = q;
+      this.bumpGlobal();
+      this.bumpDockForStorageSession(sessionId);
+      return;
+    }
+    const qiBySig = b.questionRequestQueue.findIndex((x) => questionContentSig(x) === newSig);
+    if (qiBySig >= 0) {
+      const replaced = b.questionRequestQueue[qiBySig]!;
+      b.questionRequestQueue = [...b.questionRequestQueue];
+      if (preferIncomingQuestionRequest(replaced, q)) {
+        this.upsertRequestLifecycle(replaced.id, sessionId, "question", "answered");
+        b.questionRequestQueue[qiBySig] = q;
+      } else {
+        this.upsertRequestLifecycle(q.id, sessionId, "question", "answered");
+      }
       this.bumpGlobal();
       this.bumpDockForStorageSession(sessionId);
       return;

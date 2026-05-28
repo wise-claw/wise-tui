@@ -90,7 +90,8 @@ function buildQuestionRequestFromAskUserFields(
     }
   }
 
-  if (!question.trim()) question = "请选择一项";
+  const hasRealQuestion = question.trim().length > 0;
+  if (!hasRealQuestion) question = "请选择一项";
 
   let parsedOpts = rawOpts;
   if (typeof parsedOpts === "string" && parsedOpts.trim().startsWith("[")) {
@@ -103,6 +104,10 @@ function buildQuestionRequestFromAskUserFields(
 
   let options = normalizeAskUserOptions(parsedOpts, requestId);
   if (options.length === 0 && defaultOkOption) {
+    // 与同一 AskUserQuestion 的 `assistant.tool_use` / `sdk_control_request` 双通道协同：
+    // 若 control 通道仅作占位（既无题干又无选项），别造「请选择一项 + 确定」假题，
+    // 避免在真正的题卡之外再多塞一个无意义的「确认弹窗」。
+    if (!hasRealQuestion) return null;
     options = [{ value: "ok", label: "确定" }];
   }
   if (options.length === 0) return null;
@@ -176,10 +181,8 @@ function ingestAskUserQuestionFromAssistantToolUse(sessionId: string, j: Record<
     }
     if (!payload) continue;
 
-    const slice = notificationHub.getDockSlice(sessionId);
-    if (slice.questionRequest?.id === requestId) continue;
-    if (slice.questionRequestQueue.some((x) => x.id === requestId)) continue;
-
+    // 仅靠 id 去重在「同一 AskUserQuestion 通过 tool_use + sdk_control_request 双通道并发到达」时无效，
+    // 让 Hub.setQuestionRequest 按 id+内容签名一并去重；这里继续按 id 命中再写入即可。
     notificationHub.setQuestionRequest(sessionId, payload);
     return;
   }

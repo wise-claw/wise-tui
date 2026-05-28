@@ -2581,17 +2581,22 @@ export function ClaudeChat({
     [historySessionSource, repositoryScopePath],
   );
 
+  const repositoryHistorySessionsWithMessages = useMemo(
+    () => repositoryHistorySessions.filter((item) => item.messages.length > 0),
+    [repositoryHistorySessions],
+  );
+
   const filteredHistorySessions = useMemo(() => {
     const keyword = historySearchText.trim().toLocaleLowerCase("zh-CN");
     if (!keyword) {
-      return repositoryHistorySessions;
+      return repositoryHistorySessionsWithMessages;
     }
-    return repositoryHistorySessions.filter((item) => {
+    return repositoryHistorySessionsWithMessages.filter((item) => {
       const preview = getSessionPreview(item).toLocaleLowerCase("zh-CN");
       const repositoryName = item.repositoryName.toLocaleLowerCase("zh-CN");
       return preview.includes(keyword) || repositoryName.includes(keyword);
     });
-  }, [repositoryHistorySessions, historySearchText]);
+  }, [repositoryHistorySessionsWithMessages, historySearchText]);
 
   const filteredHistoryLengthRef = useRef(0);
   filteredHistoryLengthRef.current = filteredHistorySessions.length;
