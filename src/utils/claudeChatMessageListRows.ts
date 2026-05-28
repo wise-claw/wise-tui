@@ -53,13 +53,15 @@ export function buildChatMessageListRows(
     const toolUser = isToolOnlyUserMessage(msg);
     const prevRenderableIndex = indexOfPreviousRenderableMessage(messages, originalIndex);
     const prevInSession = prevRenderableIndex >= 0 ? messages[prevRenderableIndex] : undefined;
+    const shouldMergeSystemMessages = msg.role !== "system" && prevInSession?.role !== "system";
     const mergedWithPrevious =
+      shouldMergeSystemMessages &&
       prevInSession !== undefined &&
       getMessageSenderGroupKey(prevInSession) === getMessageSenderGroupKey(msg);
 
     rows.push({
       kind: "message",
-      key: String(msg.id),
+      key: `${String(msg.id)}:${originalIndex}`,
       originalIndex,
       msg,
       streamingThisBubble,

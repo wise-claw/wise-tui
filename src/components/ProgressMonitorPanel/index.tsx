@@ -25,6 +25,7 @@ import {
 import {
   buildMonitorEmployeeHistorySessionsByName,
   monitorEmployeeHistoryStructureFingerprint,
+  normalizeMonitorEmployeeName,
 } from "../../utils/omcEmployeeMonitorHistory";
 import {
   pickSubagentTranscriptSession,
@@ -155,6 +156,13 @@ interface HistorySessionRow {
 interface RepositorySubagentDetailTarget {
   repository: RepositoryMemberMonitorItem;
   subagent: RepositoryMemberMonitorSubagentItem;
+}
+
+function extractTrailingNumber(value: string | undefined): number | null {
+  const m = value?.match(/(\d+)\s*$/);
+  if (!m) return null;
+  const n = Number.parseInt(m[1] ?? "", 10);
+  return Number.isFinite(n) ? n : null;
 }
 
 function findSubagentSession(
@@ -897,6 +905,18 @@ export function ProgressMonitorPanel({
     () => employeeItems.filter((item) => item.status === "in_progress").length,
     [employeeItems],
   );
+  const sortedEmployeeItems = useMemo(() => {
+    return [...employeeItems].sort((a, b) => {
+      const aNum = extractTrailingNumber(a.name) ?? extractTrailingNumber(a.employeeId);
+      const bNum = extractTrailingNumber(b.name) ?? extractTrailingNumber(b.employeeId);
+      if (aNum !== null && bNum !== null && aNum !== bNum) {
+        return aNum - bNum;
+      }
+      if (aNum !== null && bNum === null) return -1;
+      if (aNum === null && bNum !== null) return 1;
+      return a.name.localeCompare(b.name, "zh-CN", { numeric: true, sensitivity: "base" });
+    });
+  }, [employeeItems]);
   const teamInProgress = useMemo(
     () => teamItems.filter((item) => item.status === "in_progress").length,
     [teamItems],
@@ -905,7 +925,7 @@ export function ProgressMonitorPanel({
     const map = new Map<string, TeamHistorySessionRow[]>();
     for (const teamItem of teamItems) {
       const normalizedMemberNames = (teamItem.memberNames ?? [])
-        .map((name) => name.trim())
+        .map((name) => normalizeMonitorEmployeeName(name))
         .filter((name) => name.length > 0);
       const rows: TeamHistorySessionRow[] = [];
       const visitedSessionIds = new Set<string>();
@@ -1166,14 +1186,14 @@ export function ProgressMonitorPanel({
             </Typography.Text>
           </div>
         </div>
-          {employeeItems.map((item) => {
+          {sortedEmployeeItems.map((item) => {
             const isOmcWorker = item.employeeId === "omc-worker";
             const employeePopoverOpen = employeeHistoryPopoverId === item.employeeId;
             const keyword =
               employeePopoverOpen && !isOmcWorker ? normalizeSearchKeyword(employeeHistorySearch) : "";
             const historySessions =
               employeePopoverOpen && !isOmcWorker
-                ? (employeeHistorySessionsByName.get(item.name.trim()) ?? [])
+                ? (employeeHistorySessionsByName.get(normalizeMonitorEmployeeName(item.name)) ?? [])
                 : [];
             const matchedEmployeeSessions =
               employeePopoverOpen && !isOmcWorker

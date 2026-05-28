@@ -49,7 +49,6 @@ import {
 } from "../utils/sessionHistoryScope";
 import { loadSessionTabsState, saveSessionTabsState } from "../services/tabsStore";
 import {
-  CLAUDE_DISK_JSONL_TAIL_LINES_INITIAL,
   PERSIST_SESSION_MESSAGES_MAX,
 } from "../constants/claudeMessageListWindow";
 import { wiseNotificationIngest } from "../services/wiseMascot";
@@ -1666,15 +1665,12 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     let cancelled = false;
     void (async () => {
       try {
-        const lines = await loadClaudeSessionJsonl(s.repositoryPath, s.claudeSessionId!, {
-          tailLines: CLAUDE_DISK_JSONL_TAIL_LINES_INITIAL,
-        });
+        const lines = await loadClaudeSessionJsonl(s.repositoryPath, s.claudeSessionId!);
         if (cancelled) return;
         const messages = parseClaudeSessionJsonlLines(lines);
-        const partial = lines.length >= CLAUDE_DISK_JSONL_TAIL_LINES_INITIAL;
         setSessions((prev) =>
           prev.map((sess) =>
-            sess.id === loadKey ? { ...sess, messages, diskTranscriptPartial: partial } : sess,
+            sess.id === loadKey ? { ...sess, messages, diskTranscriptPartial: false } : sess,
           ),
         );
       } catch {
@@ -1702,15 +1698,12 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       let cancelled = false;
       void (async () => {
         try {
-          const lines = await loadClaudeSessionJsonl(s.repositoryPath, s.claudeSessionId!, {
-            tailLines: CLAUDE_DISK_JSONL_TAIL_LINES_INITIAL,
-          });
+          const lines = await loadClaudeSessionJsonl(s.repositoryPath, s.claudeSessionId!);
           if (cancelled) return;
           const messages = parseClaudeSessionJsonlLines(lines);
-          const partial = lines.length >= CLAUDE_DISK_JSONL_TAIL_LINES_INITIAL;
           setSessions((prev) =>
             prev.map((sess) =>
-              sess.id === loadKey ? { ...sess, messages, diskTranscriptPartial: partial } : sess,
+              sess.id === loadKey ? { ...sess, messages, diskTranscriptPartial: false } : sess,
             ),
           );
         } catch {
