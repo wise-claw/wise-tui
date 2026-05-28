@@ -411,7 +411,7 @@ const RETURN_MAIN_SESSION_KEY = "wise:return-main-session-id";
 const TASK_LIST_MAX_SELECTED = 50;
 
 /** 中栏「历史会话」「完成任务」：首屏条数与滚动加载步长 */
-const FEATURE_SESSION_LIST_PAGE_SIZE = 50;
+const FEATURE_SESSION_LIST_PAGE_SIZE = 20;
 
 /** 设为 true 时显示会话特性面板「完成任务」入口与弹窗 */
 const SHOW_SESSION_TASK_COMPLETION_FEATURE = false;
@@ -1643,6 +1643,8 @@ export function ClaudeChat({
   const [historyVisibleCount, setHistoryVisibleCount] = useState(FEATURE_SESSION_LIST_PAGE_SIZE);
   const [historySessionsRefreshing, setHistorySessionsRefreshing] = useState(false);
   const historyPopoverScrollRef = useRef<HTMLDivElement>(null);
+  const historyLoadMoreRafRef = useRef<number | null>(null);
+  const historyLoadMoreLockedRef = useRef(false);
   /** 历史会话删除二次确认 Modal 打开期间，忽略 Popover 的外部点击关闭 */
   const historyPopoverCloseGuardRef = useRef(false);
   const [sessionTraceDrawerOpen, setSessionTraceDrawerOpen] = useState(false);
@@ -2606,9 +2608,13 @@ export function ClaudeChat({
   const filteredHistoryLengthRef = useRef(0);
   filteredHistoryLengthRef.current = filteredHistorySessions.length;
 
+  const groupedHistorySessionsAll = useMemo(
+    () => groupSessionsByDay(filteredHistorySessions),
+    [filteredHistorySessions],
+  );
   const groupedHistorySessions = useMemo(
-    () => sliceGroupedSessions(groupSessionsByDay(filteredHistorySessions), historyVisibleCount),
-    [filteredHistorySessions, historyVisibleCount],
+    () => sliceGroupedSessions(groupedHistorySessionsAll, historyVisibleCount),
+    [groupedHistorySessionsAll, historyVisibleCount],
   );
 
   const canRestoreHistorySession = useCallback(
@@ -2705,24 +2711,59 @@ export function ClaudeChat({
   }, [historySearchText]);
 
   useEffect(() => {
+    historyLoadMoreLockedRef.current = false;
+  }, [historyVisibleCount, filteredHistorySessions.length, historyPopoverOpen]);
+
+  useEffect(() => {
     if (!historyPopoverOpen) return;
-    let el: HTMLDivElement | null = null;
-    const handler = () => {
-      if (!el) return;
+    const el = historyPopoverScrollRef.current;
+    if (!el) return;
+    const tryLoadMore = () => {
       const max = filteredHistoryLengthRef.current;
-      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 24) {
-        setHistoryVisibleCount((n) => Math.min(n + FEATURE_SESSION_LIST_PAGE_SIZE, max));
+      if (max <= 0) return;
+      const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 24;
+      if (!nearBottom) {
+        historyLoadMoreLockedRef.current = false;
+        return;
+      }
+      if (historyLoadMoreLockedRef.current) {
+        return;
+      }
+      historyLoadMoreLockedRef.current = true;
+      setHistoryVisibleCount((n) => {
+        const next = Math.min(n + FEATURE_SESSION_LIST_PAGE_SIZE, max);
+        if (next === n) {
+          historyLoadMoreLockedRef.current = false;
+        }
+        return next;
+      });
+    };
+    const handler = () => {
+      if (historyLoadMoreRafRef.current !== null) return;
+      historyLoadMoreRafRef.current = window.requestAnimationFrame(() => {
+        historyLoadMoreRafRef.current = null;
+        tryLoadMore();
+      });
+    };
+    tryLoadMore();
+    el.addEventListener("scroll", handler, { passive: true });
+    return () => {
+      el.removeEventListener("scroll", handler);
+      if (historyLoadMoreRafRef.current !== null) {
+        window.cancelAnimationFrame(historyLoadMoreRafRef.current);
+        historyLoadMoreRafRef.current = null;
       }
     };
-    const timer = window.setTimeout(() => {
-      el = historyPopoverScrollRef.current;
-      el?.addEventListener("scroll", handler);
-    }, 50);
+  }, [historyPopoverOpen, filteredHistorySessions.length]);
+
+  useEffect(() => {
     return () => {
-      window.clearTimeout(timer);
-      el?.removeEventListener("scroll", handler);
+      if (historyLoadMoreRafRef.current !== null) {
+        window.cancelAnimationFrame(historyLoadMoreRafRef.current);
+        historyLoadMoreRafRef.current = null;
+      }
     };
-  }, [historyPopoverOpen, groupedHistorySessions.length, historyVisibleCount, filteredHistorySessions.length]);
+  }, []);
 
   const publishedTeamMentions = useMemo(
     () =>
@@ -3637,10 +3678,10 @@ export function ClaudeChat({
                               const sessionHoverTitle = buildClaudeSessionHoverTitle(item);
                               return (
                                 <div key={item.id} className="app-claude-session-history-popover__item-row">
-                                  <Tooltip title={sessionHoverTitle} mouseEnterDelay={0.35}>
                                   <button
                                     type="button"
                                     className={`app-claude-session-history-popover__item ${active ? "app-claude-session-history-popover__item--active" : ""}`}
+                                    title={sessionHoverTitle}
                                     onClick={() => {
                                       onOpenHistorySessionInInspector?.(item.id);
                                       setHistoryPopoverOpen(false);
@@ -3650,7 +3691,6 @@ export function ClaudeChat({
                                     <span className="app-claude-session-history-popover__item-dot" />
                                     <span className="app-claude-session-history-popover__item-title">{preview}</span>
                                   </button>
-                                  </Tooltip>
                                   {onRestoreHistorySessionAsMain ? (
                                     <HistorySessionRestoreButton
                                       className="app-claude-session-history-popover__item-restore"

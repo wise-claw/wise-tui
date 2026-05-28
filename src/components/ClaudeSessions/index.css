@@ -1876,7 +1876,7 @@
   position: sticky;
   top: 0;
   z-index: 1;
-  padding: 8px 10px;
+  padding: 8px 0;
   border-bottom: 1px solid var(--ant-color-border-secondary);
   background: var(--ant-color-bg-elevated);
 }
@@ -1972,15 +1972,13 @@
 .app-claude-session-history-popover__item-restore,
 .app-claude-session-history-popover__item-delete {
   flex-shrink: 0;
-  opacity: 0;
-  transition: opacity 0.15s ease;
+  opacity: 1;
+  transition: color 0.15s ease;
   margin-right: 4px;
   color: var(--ant-color-text-tertiary);
 }
 
-.app-claude-session-history-popover__item-row:hover .app-claude-session-history-popover__item-restore,
 .app-claude-session-history-popover__item-restore:focus-visible,
-.app-claude-session-history-popover__item-row:hover .app-claude-session-history-popover__item-delete,
 .app-claude-session-history-popover__item-delete:focus-visible {
   opacity: 1;
 }
