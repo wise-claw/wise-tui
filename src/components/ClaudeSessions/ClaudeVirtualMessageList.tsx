@@ -5,14 +5,15 @@ import {
   buildChatMessageListRows,
   type ChatMessageListRow,
 } from "../../utils/claudeChatMessageListRows";
+import {
+  buildVirtualMessageListStructureFingerprint,
+  estimateVirtualChatRowSize,
+} from "../../utils/claudeVirtualMessageRowEstimate";
 import { ClaudeChatMessageRow } from "./ClaudeChatMessageRow";
 import { ClaudeSessionMonitorMessageRow } from "./ClaudeSessionMonitorMessageRow";
 import { StreamingReplyHint } from "./Markdown";
 
 const VIRTUAL_OVERSCAN = 8;
-const ESTIMATE_SIZE_CHAT = 72;
-const ESTIMATE_SIZE_MONITOR = 88;
-const ESTIMATE_SIZE_THINKING = 36;
 
 interface Props {
   session: ClaudeSession;
@@ -23,11 +24,15 @@ interface Props {
   listVariant?: "chat" | "monitor";
 }
 
-function rowGroupStartClass(row: ChatMessageListRow, index: number): string {
-  if (index === 0) return "";
-  if (row.kind === "thinking-hint") return "";
-  if (row.mergedWithPrevious) return "";
-  return " app-claude-messages-virtual-row--group-start";
+function virtualRowClassName(row: ChatMessageListRow, index: number): string {
+  const parts = ["app-claude-messages-virtual-row"];
+  if (index > 0 && row.kind !== "thinking-hint" && !row.mergedWithPrevious) {
+    parts.push("app-claude-messages-virtual-row--group-start");
+  }
+  if (row.kind === "message" && row.mergedWithPrevious) {
+    parts.push("app-claude-messages-virtual-row--merged");
+  }
+  return parts.join(" ");
 }
 
 export function ClaudeVirtualMessageList({
@@ -46,26 +51,18 @@ export function ClaudeVirtualMessageList({
     [session.messages, session.status, showListEndThinkingHint],
   );
 
-  const measureFingerprint = useMemo(() => {
-    if (session.messages.length === 0) return "empty";
-    const last = session.messages[session.messages.length - 1]!;
-    const partsTextLen =
-      last.parts?.reduce((sum, part) => {
-        if (part.type === "text" || part.type === "reasoning") return sum + part.text.length;
-        return sum;
-      }, 0) ?? 0;
-    return `${rows.length}:${last.id}:${last.content.length}:${partsTextLen}:${showListEndThinkingHint}`;
-  }, [session.messages, rows.length, showListEndThinkingHint]);
-
-  const estimateSize = listVariant === "monitor" ? ESTIMATE_SIZE_MONITOR : ESTIMATE_SIZE_CHAT;
+  const listStructureFingerprint = useMemo(
+    () => buildVirtualMessageListStructureFingerprint(rows, showListEndThinkingHint),
+    [rows, showListEndThinkingHint],
+  );
 
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollContainerRef.current,
     estimateSize: (index) => {
       const row = rows[index];
-      if (!row) return estimateSize;
-      return row.kind === "thinking-hint" ? ESTIMATE_SIZE_THINKING : estimateSize;
+      if (!row) return estimateVirtualChatRowSize({ kind: "thinking-hint", key: "thinking-hint" }, listVariant);
+      return estimateVirtualChatRowSize(row, listVariant);
     },
     overscan: VIRTUAL_OVERSCAN,
     getItemKey: (index) => rows[index]!.key,
@@ -73,7 +70,7 @@ export function ClaudeVirtualMessageList({
 
   useLayoutEffect(() => {
     virtualizer.measure();
-  }, [measureFingerprint, virtualizer]);
+  }, [listStructureFingerprint, virtualizer]);
 
   if (rows.length === 0) {
     return null;
@@ -96,7 +93,7 @@ export function ClaudeVirtualMessageList({
             key={virtualRow.key}
             data-index={virtualRow.index}
             ref={virtualizer.measureElement}
-            className={`app-claude-messages-virtual-row${rowGroupStartClass(row, virtualRow.index)}`}
+            className={virtualRowClassName(row, virtualRow.index)}
             style={{
               position: "absolute",
               top: 0,
