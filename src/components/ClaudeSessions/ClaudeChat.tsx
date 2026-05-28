@@ -46,8 +46,7 @@ import type {
   PermissionRequest,
 } from "../../types";
 import type { ControlRequestStatus } from "../../notifications";
-import { StreamingReplyHint } from "./Markdown";
-import { ClaudeChatMessageRow } from "./ClaudeChatMessageRow";
+import { ClaudeVirtualMessageList } from "./ClaudeVirtualMessageList";
 import { ClaudeSessionTrajectoryDrawer } from "./ClaudeSessionTrajectoryDrawer";
 import { SessionQuickActionsBar } from "./SessionQuickActionsBar";
 import type { ClaudeSessionConnectionKind } from "../../constants/claudeConnection";
@@ -114,13 +113,8 @@ import {
   countDrawerExecutableTasks,
   listDrawerTrellisTasks,
 } from "../../utils/taskDrawerCounts";
-import {
-  getMessageSenderGroupKey,
-  hasRenderableChatMessageBody,
-  indexOfPreviousRenderableMessage,
-  isToolOnlyUserMessage,
-  userMessagePlainTextForDisplay,
-} from "../../utils/claudeChatMessageDisplay";
+import { isToolOnlyUserMessage, userMessagePlainTextForDisplay } from "../../utils/claudeChatMessageDisplay";
+import { shouldShowListEndThinkingHint } from "../../utils/claudeChatMessageListRows";
 import { pickSessionForRepositorySidebarSelect } from "../../utils/claudeSessionSelection";
 import { useComposerSpeechPreferences } from "../../hooks/useComposerSpeechPreferences";
 import {
@@ -1435,16 +1429,9 @@ export function ClaudeChat({
     return true;
   }, [cancelScrollFollowLoop]);
 
-  const tailMessageForThinkingHint = useMemo(
-    () => (session.messages.length > 0 ? session.messages[session.messages.length - 1]! : null),
-    [session.messages],
-  );
   const showListEndThinkingHint = useMemo(
-    () =>
-      session.status === "running" &&
-      tailMessageForThinkingHint !== null &&
-      (tailMessageForThinkingHint.role === "user" || tailMessageForThinkingHint.role === "assistant"),
-    [session.status, tailMessageForThinkingHint],
+    () => shouldShowListEndThinkingHint(session.messages, session.status),
+    [session.messages, session.status],
   );
 
   useEffect(() => {
@@ -4630,40 +4617,12 @@ export function ClaudeChat({
               <p>发送消息开始与 Claude Code 对话</p>
             </div>
           ) : (
-            <>
-              {session.messages.flatMap((msg, originalIndex) => {
-                if (!hasRenderableChatMessageBody(msg)) return [];
-                const streamingThisBubble =
-                  session.status === "running" &&
-                  msg.role === "assistant" &&
-                  originalIndex === session.messages.length - 1;
-                const toolUser = isToolOnlyUserMessage(msg);
-                const prevRenderableIndex = indexOfPreviousRenderableMessage(
-                  session.messages,
-                  originalIndex,
-                );
-                const prevInSession =
-                  prevRenderableIndex >= 0 ? session.messages[prevRenderableIndex] : undefined;
-                const mergedWithPrevious =
-                  prevInSession !== undefined &&
-                  getMessageSenderGroupKey(prevInSession) === getMessageSenderGroupKey(msg);
-                return [
-                  <ClaudeChatMessageRow
-                    key={msg.id}
-                    msg={msg}
-                    streamingThisBubble={streamingThisBubble}
-                    mergedWithPrevious={mergedWithPrevious}
-                    toolUser={toolUser}
-                    onOpenTaskDetail={onOpenTaskDetail}
-                  />,
-                ];
-              })}
-              {showListEndThinkingHint ? (
-                <div className="app-claude-messages-end-thinking">
-                  <StreamingReplyHint />
-                </div>
-              ) : null}
-            </>
+            <ClaudeVirtualMessageList
+              session={session}
+              showListEndThinkingHint={showListEndThinkingHint}
+              scrollContainerRef={messagesScrollRef}
+              onOpenTaskDetail={onOpenTaskDetail}
+            />
           )}
         </div>
       )}

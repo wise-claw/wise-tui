@@ -3172,9 +3172,14 @@
 }
 
 /* 新发送者一组：仅留白区隔，无顶部分隔线 */
-.app-claude-messages > .app-claude-message + .app-claude-message:not(.app-claude-message--merged) {
+.app-claude-messages > .app-claude-message + .app-claude-message:not(.app-claude-message--merged),
+.app-claude-messages-virtual-row--group-start {
   margin-top: 8px; /* Snugger breathing space between different messages */
   padding-top: 0;
+}
+
+.app-claude-messages-virtual-inner {
+  width: 100%;
 }
 
 /* 与上一条同发送者：不再重复头像与时间，仅保留内容以纵向成组 */
