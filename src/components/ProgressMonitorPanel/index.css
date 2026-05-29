@@ -4,6 +4,20 @@
   margin-top: 0;
 }
 
+/* 左栏运行面板：内容超出时在面板内滚动 */
+.app-left-sidebar-monitor-panel {
+  flex: 0 0 auto;
+  max-height: 210px;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.app-left-sidebar-monitor-panel .app-monitor-panel {
+  max-height: none;
+}
+
 .app-completed-task-panel {
   margin-top: 0;
 }
