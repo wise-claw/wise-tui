@@ -427,6 +427,10 @@ fn list_claude_skills_under_dir(
             continue;
         }
         let (has_skill_md, description) = read_claude_skill_entry(&entry.path());
+        // 用户级 ~/.claude/skills：无 SKILL.md / skill.md 的目录不视为技能（避免空目录占位）。
+        if skill_scope == Some("user") && !has_skill_md {
+            continue;
+        }
         let file_count = count_skill_files_recursive(&entry.path());
         let path = entry.path();
         let (skill_source, _) = crate::skills::source::classify(&path);
