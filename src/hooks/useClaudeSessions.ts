@@ -53,6 +53,8 @@ import {
 } from "../constants/claudeMessageListWindow";
 import { wiseNotificationIngest } from "../services/wiseMascot";
 import {
+  buildQuestionFallbackUserPrompt,
+  buildQuestionResumeUserPrompt,
   hasLiveStreamingClaudeProcess,
   isQuestionStdinUnavailableError,
   isToolUseQuestionRequestId,
@@ -218,18 +220,6 @@ function trellisContextIdForTab(tabSessionId: string): string {
 }
 
 const TRELLIS_CONTEXT_BINDING_STORAGE_KEY = "wise.claudeTrellisContextBindings.v1";
-
-/** stdin 已不可写时，将选择题答案改写成一条用户消息，走 resume/execute 继续同一会话（正文仅含所选文案，便于模型直接接着做） */
-function buildQuestionFallbackUserPrompt(qr: QuestionRequest, answers: string[], customAnswer?: string): string {
-  const byValue = new Map(qr.options.map((o) => [o.value, o.label.trim() || o.value]));
-  const chosen = answers.map((v) => byValue.get(v) ?? v).filter(Boolean);
-  const selection = chosen.length > 0 ? chosen.join("、") : "";
-  const extra = customAnswer?.trim();
-  if (selection && extra) return `${selection}\n${extra}`;
-  if (selection) return selection;
-  if (extra) return extra;
-  return "（跳过）";
-}
 
 const WORKFLOW_BINDING_STORAGE_KEY = "wise.workflow.sessionRunBindings.v1";
 const CONTROL_REQUEST_EXPIRE_MS = 60 * 60 * 1000;
@@ -2701,13 +2691,13 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         message.warning("找不到对应会话标签，无法以 resume 接续。");
         return false;
       }
-      const fallback = buildQuestionFallbackUserPrompt(qr, answers, customAnswer);
+      const resumePrompt = buildQuestionResumeUserPrompt(qr, answers, customAnswer);
       try {
-        const sendPromise = sendMessageToSession(ownerSessionId, fallback);
+        notificationHub.markRequestAnswered(qr.id);
+        notificationHub.clearQuestion(ownerSessionId);
+        const sendPromise = sendMessageToSession(ownerSessionId, resumePrompt);
         void syncSessionStatusesWithHostRegistry();
         await sendPromise;
-        notificationHub.clearQuestion(ownerSessionId);
-        message.success("已把你的选择作为新用户消息发出，并以 resume 重启该会话子进程。");
         if (session) {
           const facade = getWorkflowFacade();
           const workflowRunId = (await ensureWorkflowRunId(session)) ?? `session:${session.id}`;

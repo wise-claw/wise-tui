@@ -1,5 +1,5 @@
 import { sessionUsesStreamingConnection, type ClaudeSessionConnectionKind } from "../constants/claudeConnection";
-import type { ClaudeSession } from "../types";
+import type { ClaudeSession, QuestionRequest } from "../types";
 import type { ControlRequestLifecycle } from "../notifications";
 
 /** Claude stdin 已关闭或目标会话不可写时，应改走 resume 用户消息续跑。 */
@@ -10,6 +10,38 @@ export function isQuestionStdinUnavailableError(message: string): boolean {
   const msg = message.trim();
   if (!msg) return false;
   return QUESTION_STDIN_UNAVAILABLE_RE.test(msg);
+}
+
+/** stdin 不可用或代理续跑时，用户消息正文（仅所选文案）。 */
+export function buildQuestionFallbackUserPrompt(
+  qr: Pick<QuestionRequest, "options">,
+  answers: string[],
+  customAnswer?: string,
+): string {
+  const byValue = new Map(qr.options.map((o) => [o.value, o.label.trim() || o.value]));
+  const chosen = answers.map((v) => byValue.get(v) ?? v).filter(Boolean);
+  const selection = chosen.length > 0 ? chosen.join("、") : "";
+  const extra = customAnswer?.trim();
+  if (selection && extra) return `${selection}\n${extra}`;
+  if (selection) return selection;
+  if (extra) return extra;
+  return "（跳过）";
+}
+
+/** resume 续跑：附带题干并明确要求勿重复 AskUserQuestion（Qwen 等代理易二次提问）。 */
+export function buildQuestionResumeUserPrompt(
+  qr: Pick<QuestionRequest, "question" | "options">,
+  answers: string[],
+  customAnswer?: string,
+): string {
+  const choice = buildQuestionFallbackUserPrompt(qr, answers, customAnswer);
+  const stem = qr.question.trim() || "（无题干）";
+  return [
+    "【AskUserQuestion 已作答】",
+    `题目：${stem}`,
+    `我的选择：${choice}`,
+    "请根据上述选择继续完成原先任务，不要再次调用 AskUserQuestion 重复询问同一题。",
+  ].join("\n");
 }
 
 /** `assistant.tool_use` 的 id（如 toolu_）通常不是 stdin `control_response` 的 request_id。 */

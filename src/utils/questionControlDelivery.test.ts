@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { ClaudeSession } from "../types";
 import {
+  buildQuestionFallbackUserPrompt,
+  buildQuestionResumeUserPrompt,
   hasLiveStreamingClaudeProcess,
   isQuestionStdinUnavailableError,
   shouldDeliverQuestionViaResume,
@@ -35,6 +37,20 @@ describe("isQuestionStdinUnavailableError", () => {
 
   test("ignores unrelated errors", () => {
     expect(isQuestionStdinUnavailableError("network timeout")).toBe(false);
+  });
+});
+
+describe("buildQuestionResumeUserPrompt", () => {
+  test("includes stem, choice, and no-repeat instruction", () => {
+    const qr = {
+      question: "你想测试哪种场景？",
+      options: [{ value: "a", label: "单选题" }],
+    };
+    const text = buildQuestionResumeUserPrompt(qr, ["a"]);
+    expect(text).toContain("AskUserQuestion 已作答");
+    expect(text).toContain("你想测试哪种场景？");
+    expect(text).toContain("单选题");
+    expect(text).toContain("不要再次调用 AskUserQuestion");
   });
 });
 
