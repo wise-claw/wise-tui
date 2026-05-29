@@ -5,6 +5,7 @@ import type {
   EmployeeMonitorItem,
   ProjectItem,
 } from "../../types";
+import { WorkspaceMemosPanel } from "./WorkspaceMemosPanel";
 import { WorkspaceQuickActionsPanel } from "./WorkspaceQuickActionsPanel";
 import "./Inspector.css";
 
@@ -63,12 +64,14 @@ export function CockpitInspector({
       className="app-right-panel app-cockpit-inspector"
       theme={dark ? "dark" : "light"}
     >
-      <div className="app-right-panel-inner">
+      <div className="app-right-panel-inner app-cockpit-inspector-inner">
         <WorkspaceQuickActionsPanel
           projectId={activeProjectId ?? activeProject?.id ?? null}
-          projectName={activeProject?.name ?? null}
           repositoryId={activeRepositoryId}
-          repositoryName={activeRepositoryName}
+        />
+        <WorkspaceMemosPanel
+          projectId={activeProjectId ?? activeProject?.id ?? null}
+          repositoryId={activeRepositoryId}
         />
         <section className="app-cockpit-inspector-section" aria-label="Mission 概览">
           <header className="app-cockpit-inspector-section-header">

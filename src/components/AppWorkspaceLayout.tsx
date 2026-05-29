@@ -46,8 +46,13 @@ import type { EmployeeItem, WorkflowGraph, WorkflowTemplateItem } from "../types
 import { resolveCockpitHubPane, type InspectTool, type ViewMode } from "../types/viewMode";
 import { AUTHOR_CONFIG_NAV_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths";
 import type { OpenRepositoryFileDetail } from "../constants/workflowUiEvents";
+import {
+  WorkspaceMemoEditorVisibilityContext,
+  WorkspaceMemosProvider,
+} from "../contexts/WorkspaceMemosContext";
 import { useRepositoryFileEditor } from "../hooks/useRepositoryFileEditor";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { WorkspaceMemoEditorPanel } from "./WorkspaceMemoEditorPanel";
 
 const Inspector = lazy(() => import("./Inspector").then((module) => ({ default: module.Inspector })));
 const CockpitSurface = lazy(() =>
@@ -174,17 +179,43 @@ const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
   mainLayoutContentRef,
   panelBelowMessages,
 }: ConnectedClaudeSessionsProps) {
-  const editorVisible = useContext(RepositoryFileEditorVisibilityContext);
+  const fileEditorVisible = useContext(RepositoryFileEditorVisibilityContext);
+  const memoEditorVisible = useContext(WorkspaceMemoEditorVisibilityContext);
+  const centerAuxVisible = fileEditorVisible || memoEditorVisible;
   return (
     <Layout.Content ref={mainLayoutContentRef} className="app-main-layout-content">
       <MemoClaudeSessions
         {...claudeSessionsProps}
-        hideMessages={editorVisible}
-        hideSessionTools={editorVisible}
+        hideMessages={centerAuxVisible}
+        hideSessionTools={centerAuxVisible}
         panelBelowMessages={panelBelowMessages}
         hideTopbar={true}
       />
     </Layout.Content>
+  );
+});
+
+const ConnectedWorkspaceMemoEditorPanel = memo(function ConnectedWorkspaceMemoEditorPanel() {
+  const visible = useContext(WorkspaceMemoEditorVisibilityContext);
+  if (!visible) return null;
+  return <WorkspaceMemoEditorPanel />;
+});
+
+const ConnectedCenterAuxPanels = memo(function ConnectedCenterAuxPanels({
+  fileEditorNode,
+}: {
+  fileEditorNode: ReactNode;
+}) {
+  const fileEditorVisible = useContext(RepositoryFileEditorVisibilityContext);
+  const memoEditorVisible = useContext(WorkspaceMemoEditorVisibilityContext);
+  if (!fileEditorVisible && !memoEditorVisible) {
+    return null;
+  }
+  return (
+    <div className="app-center-aux-panels">
+      <ConnectedWorkspaceMemoEditorPanel />
+      {fileEditorNode}
+    </div>
   );
 });
 
@@ -326,6 +357,9 @@ export interface AppWorkspaceLayoutProps {
   onRightWidthChange: (widthPx: number) => void;
   onConsumeRepositoryFileOpenRequest: () => void;
   repositoryFileOpenRequest?: OpenRepositoryFileDetail | null;
+  workspaceMemosProjectId?: string | null;
+  workspaceMemosRepositoryId?: number | null;
+  onEnsureChatModeForMemo?: () => void;
 }
 
 function PanelLoadingFallback() {
@@ -422,6 +456,9 @@ export function AppWorkspaceLayout({
   onRightWidthChange,
   onConsumeRepositoryFileOpenRequest,
   repositoryFileOpenRequest,
+  workspaceMemosProjectId = null,
+  workspaceMemosRepositoryId = null,
+  onEnsureChatModeForMemo,
 }: AppWorkspaceLayoutProps) {
   const algorithm = dark ? theme.darkAlgorithm : theme.defaultAlgorithm;
 
@@ -576,6 +613,10 @@ export function AppWorkspaceLayout({
     ],
   );
   const editorPanelNode = useMemo(() => <ConnectedRepositoryFileEditorPanel dark={dark} />, [dark]);
+  const centerAuxPanelsNode = useMemo(
+    () => <ConnectedCenterAuxPanels fileEditorNode={editorPanelNode} />,
+    [editorPanelNode],
+  );
 
   useEffect(() => {
     const request = repositoryFileOpenRequest;
@@ -588,10 +629,15 @@ export function AppWorkspaceLayout({
   }, [activeRepositoryPath, onConsumeRepositoryFileOpenRequest, openRepositoryFile, repositoryFileOpenRequest]);
 
   return (
-    <RepositoryFileEditorOpenFileContext.Provider value={openRepositoryFile}>
-      <RepositoryFileEditorVisibilityContext.Provider value={editorVisible}>
-        <RepositoryFileEditorPanelContext.Provider value={editorPanelContextValue}>
-          <ConfigProvider
+    <WorkspaceMemosProvider
+      projectId={workspaceMemosProjectId}
+      repositoryId={workspaceMemosRepositoryId}
+      onEnsureChatMode={onEnsureChatModeForMemo}
+    >
+      <RepositoryFileEditorOpenFileContext.Provider value={openRepositoryFile}>
+        <RepositoryFileEditorVisibilityContext.Provider value={editorVisible}>
+          <RepositoryFileEditorPanelContext.Provider value={editorPanelContextValue}>
+            <ConfigProvider
             locale={zhCN}
             theme={{
               algorithm,
@@ -685,7 +731,7 @@ export function AppWorkspaceLayout({
                         <ConnectedClaudeSessions
                           claudeSessionsProps={claudeSessionsProps}
                           mainLayoutContentRef={mainLayoutContentRef}
-                          panelBelowMessages={editorPanelNode}
+                          panelBelowMessages={centerAuxPanelsNode}
                         />
                       </ErrorBoundary>
 
@@ -847,8 +893,9 @@ export function AppWorkspaceLayout({
 
             </AntdApp>
           </ConfigProvider>
-        </RepositoryFileEditorPanelContext.Provider>
-      </RepositoryFileEditorVisibilityContext.Provider>
-    </RepositoryFileEditorOpenFileContext.Provider>
+          </RepositoryFileEditorPanelContext.Provider>
+        </RepositoryFileEditorVisibilityContext.Provider>
+      </RepositoryFileEditorOpenFileContext.Provider>
+    </WorkspaceMemosProvider>
   );
 }

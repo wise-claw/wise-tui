@@ -6,7 +6,7 @@ import {
   PlusOutlined,
 } from "@ant-design/icons";
 import { App, Button, Empty, Spin, Tag, Tooltip, Typography } from "antd";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { openExternalUrl } from "../../services/openExternal";
 import { openInFinder } from "../../services/repository";
 import { useWorkspaceQuickActions } from "../../hooks/useWorkspaceQuickActions";
@@ -21,9 +21,7 @@ import "./WorkspaceQuickActionsPanel.css";
 
 export interface WorkspaceQuickActionsPanelProps {
   projectId: string | null;
-  projectName?: string | null;
   repositoryId: number | null;
-  repositoryName?: string | null;
 }
 
 type EditState =
@@ -32,9 +30,7 @@ type EditState =
 
 export function WorkspaceQuickActionsPanel({
   projectId,
-  projectName,
   repositoryId,
-  repositoryName,
 }: WorkspaceQuickActionsPanelProps) {
   const { message, modal } = App.useApp();
   const quickActions = useWorkspaceQuickActions({ projectId, repositoryId });
@@ -43,17 +39,6 @@ export function WorkspaceQuickActionsPanel({
   const allowProjectScope = Boolean(projectId?.trim());
   const allowRepositoryScope = repositoryId != null;
   const defaultScope: WorkspaceQuickActionScope = allowRepositoryScope ? "repository" : "project";
-
-  const scopeHint = useMemo(() => {
-    const parts: string[] = [];
-    if (allowProjectScope && projectName?.trim()) {
-      parts.push(`工作区「${projectName.trim()}」`);
-    }
-    if (allowRepositoryScope && repositoryName?.trim()) {
-      parts.push(`仓库「${repositoryName.trim()}」`);
-    }
-    return parts.length > 0 ? parts.join(" · ") : "未选择工作区或仓库";
-  }, [allowProjectScope, allowRepositoryScope, projectName, repositoryName]);
 
   const upsertItem = useCallback(
     async (
@@ -131,14 +116,9 @@ export function WorkspaceQuickActionsPanel({
   return (
     <section className="app-workspace-quick-actions-panel" aria-label="快捷操作">
       <header className="app-workspace-quick-actions-panel__head">
-        <div className="app-workspace-quick-actions-panel__head-main">
-          <Typography.Text strong className="app-workspace-quick-actions-panel__title">
-            快捷操作
-          </Typography.Text>
-          <Typography.Text type="secondary" className="app-workspace-quick-actions-panel__hint">
-            {scopeHint}
-          </Typography.Text>
-        </div>
+        <Typography.Text strong className="app-workspace-quick-actions-panel__title">
+          快捷操作
+        </Typography.Text>
         <Tooltip title="添加链接或本地目录" mouseEnterDelay={0.35}>
           <Button
             type="text"

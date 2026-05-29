@@ -74,6 +74,14 @@
   flex-shrink: 0;
 }
 
+.app-default-config-row__control--monitor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 /* 多选项占宽，与右侧单选行不同：标题说明在上、勾选在下 */
 .app-default-config-row--hub-quick {
   flex-direction: column;

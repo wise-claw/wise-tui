@@ -5,14 +5,14 @@ import type { LeftSidebarHubQuickEntryId } from "../../constants/leftSidebarHubQ
 import { useClaudeConnectionModeSetting } from "../ClaudeConfigDirPanel/useClaudeConnectionModeSetting";
 import { DefaultConfigOptionPick } from "./DefaultConfigOptionPick";
 import { useLeftSidebarHubQuickEntriesSetting } from "./useLeftSidebarHubQuickEntriesSetting";
-import { useLeftSidebarMonitorPanelSetting } from "./useLeftSidebarMonitorPanelSetting";
+import { useMonitorPanelSetting } from "./useMonitorPanelSetting";
 import { useRightPanelDefaultSetting } from "./useRightPanelDefaultSetting";
 import { useTopbarChromeDefaultSetting } from "./useTopbarChromeDefaultSetting";
 import { useDefaultTerminalSetting } from "./useDefaultTerminalSetting";
 import "./index.css";
 
 const DEFAULT_CONFIG_NOTES = [
-  "设置写入 SQLite app_settings（wise.defaultConfig.v1），保存后立即作用于主会话顶栏、左栏运行面板与左栏快捷入口。",
+  "设置写入 SQLite app_settings（wise.defaultConfig.v1），保存后立即作用于主会话顶栏、运行面板栏位与左栏快捷入口。",
   "默认终端（macOS）写入 wise.ui.default-terminal.v1，用于在资源管理器、Git 面板等位置「在外部终端打开」目录。",
   "Free Claude Code 的安装、启停与 Claude 对齐请在主会话顶栏 FCC 图标弹窗中操作；此处仅控制图标是否显示。",
   "长驻模式使用 --input-format stream-json，与终端 CLI 共享 MCP / Skills / Hooks。",
@@ -27,7 +27,7 @@ export function DefaultConfigPanel() {
   const rightPanel = useRightPanelDefaultSetting();
   const topbarChrome = useTopbarChromeDefaultSetting();
   const hubQuickEntries = useLeftSidebarHubQuickEntriesSetting();
-  const monitorPanel = useLeftSidebarMonitorPanelSetting();
+  const monitorPanel = useMonitorPanelSetting();
   const defaultTerminal = useDefaultTerminalSetting();
 
   return (
@@ -83,10 +83,10 @@ export function DefaultConfigPanel() {
           <div className="app-default-config-row__main">
             <span className="app-default-config-row__title">运行面板</span>
             <span className="app-default-config-row__hint">
-              控制左侧栏终端、工作流与并发运行态区域是否显示
+              控制终端、工作流与并发运行态区域是否显示，以及默认展示在左栏或右栏
             </span>
           </div>
-          <div className="app-default-config-row__control">
+          <div className="app-default-config-row__control app-default-config-row__control--monitor">
             <DefaultConfigOptionPick<"visible" | "hidden">
               aria-label="运行面板默认显示"
               disabled={monitorPanel.loading || monitorPanel.saving}
@@ -96,7 +96,19 @@ export function DefaultConfigPanel() {
                 { label: "隐藏", value: "hidden" },
               ]}
               onChange={(value) => {
-                void monitorPanel.save(value === "visible");
+                void monitorPanel.saveVisible(value === "visible");
+              }}
+            />
+            <DefaultConfigOptionPick<"left" | "right">
+              aria-label="运行面板默认栏位"
+              disabled={monitorPanel.loading || monitorPanel.saving || !monitorPanel.visible}
+              value={monitorPanel.placement}
+              options={[
+                { label: "左栏", value: "left" },
+                { label: "右栏", value: "right" },
+              ]}
+              onChange={(value) => {
+                void monitorPanel.savePlacement(value);
               }}
             />
           </div>

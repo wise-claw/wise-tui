@@ -37,6 +37,10 @@ export const WISE_LEFT_SIDEBAR_HUB_QUICK_ENTRIES_CHANGED = "wise:left-sidebar-hu
 
 export const WISE_LEFT_SIDEBAR_MONITOR_PANEL_CHANGED = "wise:left-sidebar-monitor-panel-changed";
 
+export const WISE_MONITOR_PANEL_PLACEMENT_CHANGED = "wise:monitor-panel-placement-changed";
+
+export type MonitorPanelPlacement = "left" | "right";
+
 export interface WiseDefaultConfigV1 {
   version: 1;
   connectionKind: ClaudeSessionConnectionKind;
@@ -51,8 +55,10 @@ export interface WiseDefaultConfigV1 {
   showSessionDataLinkTopbar: boolean;
   /** 左栏 AI 工作台快捷入口；默认 MCP、技能、自动化。 */
   leftSidebarHubQuickEntries: LeftSidebarHubQuickEntryId[];
-  /** 左栏运行面板（终端 / 工作流运行态）；默认显示。 */
+  /** 运行面板（终端 / 工作流运行态）是否显示；默认显示。 */
   showLeftSidebarMonitorPanel: boolean;
+  /** 运行面板默认栏位；默认左栏。 */
+  monitorPanelPlacement: MonitorPanelPlacement;
 }
 
 const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
@@ -65,7 +71,12 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   showSessionDataLinkTopbar: false,
   leftSidebarHubQuickEntries: [...DEFAULT_LEFT_SIDEBAR_HUB_QUICK_ENTRIES],
   showLeftSidebarMonitorPanel: true,
+  monitorPanelPlacement: "left",
 };
+
+function normalizeMonitorPanelPlacement(raw: unknown): MonitorPanelPlacement | null {
+  return raw === "left" || raw === "right" ? raw : null;
+}
 
 function normalizeBoolean(raw: unknown, fallback = false): boolean {
   if (raw === true || raw === false) return raw;
@@ -112,6 +123,9 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
         parsed.showLeftSidebarMonitorPanel === undefined
           ? DEFAULT_CONFIG.showLeftSidebarMonitorPanel
           : normalizeBoolean(parsed.showLeftSidebarMonitorPanel, DEFAULT_CONFIG.showLeftSidebarMonitorPanel),
+      monitorPanelPlacement:
+        normalizeMonitorPanelPlacement(parsed.monitorPanelPlacement) ??
+        DEFAULT_CONFIG.monitorPanelPlacement,
     };
   } catch {
     return null;
@@ -221,6 +235,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     showSessionDataLinkTopbar: DEFAULT_CONFIG.showSessionDataLinkTopbar,
     leftSidebarHubQuickEntries: [...DEFAULT_LEFT_SIDEBAR_HUB_QUICK_ENTRIES],
     showLeftSidebarMonitorPanel: DEFAULT_CONFIG.showLeftSidebarMonitorPanel,
+    monitorPanelPlacement: DEFAULT_CONFIG.monitorPanelPlacement,
   };
 }
 
@@ -238,6 +253,15 @@ function dispatchLeftSidebarMonitorPanelChanged(visible: boolean): void {
   window.dispatchEvent(
     new CustomEvent(WISE_LEFT_SIDEBAR_MONITOR_PANEL_CHANGED, {
       detail: { showLeftSidebarMonitorPanel: visible },
+    }),
+  );
+}
+
+function dispatchMonitorPanelPlacementChanged(placement: MonitorPanelPlacement): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_MONITOR_PANEL_PLACEMENT_CHANGED, {
+      detail: { monitorPanelPlacement: placement },
     }),
   );
 }
@@ -284,6 +308,7 @@ export async function saveWiseDefaultConfig(
       | "showSessionDataLinkTopbar"
       | "leftSidebarHubQuickEntries"
       | "showLeftSidebarMonitorPanel"
+      | "monitorPanelPlacement"
     >
   >,
 ): Promise<WiseDefaultConfigV1> {
@@ -304,6 +329,7 @@ export async function saveWiseDefaultConfig(
         : current.leftSidebarHubQuickEntries,
     showLeftSidebarMonitorPanel:
       patch.showLeftSidebarMonitorPanel ?? current.showLeftSidebarMonitorPanel,
+    monitorPanelPlacement: patch.monitorPanelPlacement ?? current.monitorPanelPlacement,
   };
   if (patch.connectionKind !== undefined) {
     next.connectionKind = normalizeConnectionKind(patch.connectionKind) ?? current.connectionKind;
@@ -325,6 +351,10 @@ export async function saveWiseDefaultConfig(
   }
   if (patch.showLeftSidebarMonitorPanel !== undefined) {
     next.showLeftSidebarMonitorPanel = normalizeBoolean(patch.showLeftSidebarMonitorPanel);
+  }
+  if (patch.monitorPanelPlacement !== undefined) {
+    next.monitorPanelPlacement =
+      normalizeMonitorPanelPlacement(patch.monitorPanelPlacement) ?? current.monitorPanelPlacement;
   }
   await persistConfig(next);
   await deleteLegacyAppSettings();
@@ -371,6 +401,12 @@ export async function saveWiseDefaultConfig(
   ) {
     dispatchLeftSidebarMonitorPanelChanged(next.showLeftSidebarMonitorPanel);
   }
+  if (
+    patch.monitorPanelPlacement !== undefined &&
+    next.monitorPanelPlacement !== current.monitorPanelPlacement
+  ) {
+    dispatchMonitorPanelPlacementChanged(next.monitorPanelPlacement);
+  }
 
   return next;
 }
@@ -391,6 +427,29 @@ export async function loadLeftSidebarMonitorPanelVisibleFromStore(): Promise<boo
 
 export async function saveLeftSidebarMonitorPanelVisibleToStore(visible: boolean): Promise<void> {
   await saveWiseDefaultConfig({ showLeftSidebarMonitorPanel: visible });
+}
+
+export async function loadMonitorPanelPlacementFromStore(): Promise<MonitorPanelPlacement> {
+  return (await loadWiseDefaultConfig()).monitorPanelPlacement;
+}
+
+export async function saveMonitorPanelPlacementToStore(
+  placement: MonitorPanelPlacement,
+): Promise<void> {
+  const normalized = normalizeMonitorPanelPlacement(placement);
+  if (!normalized) return;
+  await saveWiseDefaultConfig({ monitorPanelPlacement: normalized });
+}
+
+export async function loadMonitorPanelDefaultFromStore(): Promise<{
+  visible: boolean;
+  placement: MonitorPanelPlacement;
+}> {
+  const config = await loadWiseDefaultConfig();
+  return {
+    visible: config.showLeftSidebarMonitorPanel,
+    placement: config.monitorPanelPlacement,
+  };
 }
 
 export async function loadDefaultClaudeConnectionKindFromStore(): Promise<ClaudeSessionConnectionKind> {

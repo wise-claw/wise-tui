@@ -1,0 +1,149 @@
+.app-workspace-memos-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-bg-container);
+}
+
+.app-workspace-memos-panel--list-only {
+  flex: 1 1 0;
+  min-height: 120px;
+}
+
+.app-workspace-memos-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px 8px 5px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  flex-shrink: 0;
+}
+
+.app-workspace-memos-panel__title {
+  font-size: 12px;
+  line-height: 1.25;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.app-workspace-memos-panel__head-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.app-workspace-memos-panel__scope-pick .ant-segmented-item-label {
+  font-size: 10px;
+  padding: 0 6px;
+  line-height: 20px;
+}
+
+.app-workspace-memos-panel__body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-workspace-memos-panel__loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.app-workspace-memos-panel__list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.app-workspace-memos-panel__list-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 16px 8px;
+}
+
+.app-workspace-memos-panel__list-item {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 4px 6px;
+  width: 100%;
+  margin: 0;
+  padding: 5px 8px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  border-radius: 0;
+}
+
+.app-workspace-memos-panel__list-item:hover {
+  background: var(--ant-color-fill-tertiary);
+}
+
+.app-workspace-memos-panel__list-item--active,
+.app-workspace-memos-panel__list-item--open {
+  background: var(--ant-color-primary-bg);
+}
+
+.app-workspace-memos-panel__list-icon {
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-workspace-memos-panel__list-title {
+  font-size: 11px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-workspace-memos-panel__list-time {
+  font-size: 10px;
+  color: var(--ant-color-text-quaternary);
+}
+
+.app-workspace-memos-panel__list-tag {
+  margin: 0;
+  font-size: 10px;
+  line-height: 16px;
+  padding: 0 4px;
+}
+
+.app-chat-inspector-inner .app-workspace-memos-panel {
+  flex: 1 1 0;
+  min-height: 120px;
+}
+
+.app-cockpit-inspector .app-right-panel-inner {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-cockpit-inspector .app-workspace-memos-panel {
+  flex: 1 1 0;
+  min-height: 120px;
+}
+
+.app-cockpit-inspector .app-cockpit-inspector-section {
+  flex-shrink: 0;
+}

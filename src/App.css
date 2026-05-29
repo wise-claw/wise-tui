@@ -1302,6 +1302,154 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   justify-content: center;
 }
 
+.app-center-aux-panels {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-center-aux-panels .app-memo-editor-panel,
+.app-center-aux-panels .app-file-editor-panel {
+  flex: 1 1 0;
+  min-height: 160px;
+}
+
+.app-memo-editor-panel {
+  flex: 1 1 0;
+  min-height: 220px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-bg-container);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-memo-editor-header {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-memo-editor-tab-bar {
+  display: flex;
+  align-items: stretch;
+  min-height: 28px;
+  background: var(--ant-color-fill-quaternary);
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-memo-editor-tabs-scroll {
+  display: flex;
+  align-items: flex-end;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0 0 0 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.app-memo-editor-tab-bar-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+  border-left: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-memo-editor-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 180px;
+  padding: 3px 2px 3px 6px;
+  margin: 2px 1px 0 0;
+  border: 1px solid transparent;
+  border-radius: 4px 4px 0 0;
+  font-size: 11px;
+  color: var(--ant-color-text-secondary);
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.app-memo-editor-tab--active {
+  color: var(--ant-color-text);
+  background: var(--ant-color-bg-container);
+  border-color: var(--ant-color-border-secondary);
+  border-bottom-color: var(--ant-color-bg-container);
+  margin-bottom: -1px;
+  padding-bottom: 4px;
+}
+
+.app-memo-editor-tab-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-memo-editor-tab-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: none;
+  border-radius: 3px;
+  font-size: 9px;
+  color: var(--ant-color-text-tertiary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.app-memo-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  min-height: 32px;
+}
+
+.app-memo-editor-title-input {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.app-memo-editor-body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-memo-editor-body .app-milkdown-anchor-host {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.app-memo-editor-body .app-milkdown-viewer .milkdown .ProseMirror,
+.app-memo-editor-body .app-milkdown-viewer [data-milkdown-root] > .ProseMirror {
+  min-height: 100%;
+  padding: 12px 16px 24px 48px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.app-memo-editor-loading {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .app-file-editor-monaco-wrap {
   height: 100%;
   min-height: 0;

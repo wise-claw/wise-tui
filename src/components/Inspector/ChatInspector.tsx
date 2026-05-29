@@ -11,6 +11,7 @@ import type {
 } from "../../types";
 import { MAIN_LAYOUT_RIGHT_SIDER_WIDTH_PX } from "../../constants/mainLayoutWidths";
 import { ProgressMonitorPanel } from "../ProgressMonitorPanel";
+import { WorkspaceMemosPanel } from "./WorkspaceMemosPanel";
 import { WorkspaceQuickActionsPanel } from "./WorkspaceQuickActionsPanel";
 import "./Inspector.css";
 
@@ -122,17 +123,17 @@ export function ChatInspector({
       <div className="app-right-panel-inner app-chat-inspector-inner">
         <WorkspaceQuickActionsPanel
           projectId={projectId ?? null}
-          projectName={activeProjectName}
           repositoryId={activeRepositoryId}
-          repositoryName={activeRepositoryName}
         />
-        <div className="app-chat-inspector-card">
+        <WorkspaceMemosPanel projectId={projectId ?? null} repositoryId={activeRepositoryId} />
+        <div className="app-chat-inspector-card app-chat-inspector-card--secondary">
           {monitorStats ? (
             <div className="app-chat-inspector-section app-chat-inspector-section--team" aria-label="我的团队">
               <ProgressMonitorPanel
                 employeeItems={employeeMonitorItems}
                 repositoryMemberItems={repositoryMemberMonitorItems}
                 sessionConversationTaskItems={sessionConversationTaskItems}
+                showSessionConversationTasks
                 teamItems={teamMonitorItems}
                 sessions={sessionsForMonitor}
                 activeTarget={monitorActiveTarget}

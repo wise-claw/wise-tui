@@ -20,6 +20,7 @@ import {
   WISE_DEFAULT_CONFIG_KEY,
   WISE_DEFAULT_CONFIG_ONESHOT_TO_STREAMING_MIGRATION_KEY,
   WISE_LEFT_SIDEBAR_MONITOR_PANEL_CHANGED,
+  WISE_MONITOR_PANEL_PLACEMENT_CHANGED,
   WISE_RIGHT_PANEL_DEFAULT_CHANGED,
   WISE_TOPBAR_CHROME_DEFAULT_CHANGED,
 } from "./wiseDefaultConfigStore";
@@ -89,6 +90,7 @@ describe("wiseDefaultConfigStore", () => {
     expect(config.showLlmProxyTopbar).toBe(false);
     expect(config.leftSidebarHubQuickEntries).toEqual(["mcp", "skills", "automation"]);
     expect(config.showLeftSidebarMonitorPanel).toBe(true);
+    expect(config.monitorPanelPlacement).toBe("left");
     expect(setAppSetting).toHaveBeenCalled();
     const payload = JSON.parse(String(setAppSetting.mock.calls[0]?.[1]));
     expect(payload).toMatchObject({
@@ -98,6 +100,7 @@ describe("wiseDefaultConfigStore", () => {
       showLlmProxyTopbar: false,
       leftSidebarHubQuickEntries: ["mcp", "skills", "automation"],
       showLeftSidebarMonitorPanel: true,
+      monitorPanelPlacement: "left",
     });
   });
 
@@ -205,6 +208,7 @@ describe("wiseDefaultConfigStore", () => {
     );
     const config = await loadWiseDefaultConfig();
     expect(config.showLeftSidebarMonitorPanel).toBe(true);
+    expect(config.monitorPanelPlacement).toBe("left");
   });
 
   test("save monitor panel visibility dispatches event", async () => {
@@ -228,6 +232,29 @@ describe("wiseDefaultConfigStore", () => {
     });
     await saveWiseDefaultConfig({ showLeftSidebarMonitorPanel: false });
     expect(seen).toEqual([false]);
+  });
+
+  test("save monitor panel placement dispatches event", async () => {
+    getAppSetting.mockImplementation(async (key: string) => {
+      if (key === WISE_DEFAULT_CONFIG_ONESHOT_TO_STREAMING_MIGRATION_KEY) return "1";
+      if (key === WISE_DEFAULT_CONFIG_KEY) {
+        return JSON.stringify({
+          version: 1,
+          connectionKind: "streaming",
+          rightPanelDefaultCollapsed: false,
+          monitorPanelPlacement: "left",
+        });
+      }
+      return null;
+    });
+    const seen: string[] = [];
+    window.addEventListener(WISE_MONITOR_PANEL_PLACEMENT_CHANGED, (e: Event) => {
+      const placement = (e as CustomEvent<{ monitorPanelPlacement?: string }>).detail
+        ?.monitorPanelPlacement;
+      if (placement === "left" || placement === "right") seen.push(placement);
+    });
+    await saveWiseDefaultConfig({ monitorPanelPlacement: "right" });
+    expect(seen).toEqual(["right"]);
   });
 
   test("load backfills missing topbar chrome fields with product defaults", async () => {

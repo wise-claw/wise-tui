@@ -113,7 +113,7 @@ import {
 import { useSessionConversationTasks } from "./hooks/useSessionConversationTasks";
 import { useIntervalSyncedState } from "./hooks/useIntervalSyncedState";
 import { useLeftSidebarHubQuickEntries } from "./hooks/useLeftSidebarHubQuickEntries";
-import { useLeftSidebarMonitorPanelVisible } from "./hooks/useLeftSidebarMonitorPanelVisible";
+import { useMonitorPanelDefault } from "./hooks/useMonitorPanelDefault";
 import { useScheduledClaudeTaskRunner } from "./hooks/useScheduledClaudeTaskRunner";
 import { MONITOR_SESSIONS_SYNC_INTERVAL_MS } from "./constants/monitorUi";
 import { invalidateWorkflowRunCacheForRepository } from "./hooks/useWorkflowRun";
@@ -1325,7 +1325,12 @@ export default function App() {
   ]);
 
   const { omcInstalled } = useOmcPluginInstalled(true);
-  const { employeeMonitorItems, repositoryMemberMonitorItems, teamMonitorItems } = useMonitorOverview({
+  const {
+    employeeMonitorItems,
+    repositoryMemberMonitorItems,
+    teamMonitorItems,
+    stats: monitorOverviewStats,
+  } = useMonitorOverview({
     employees,
     repositories,
     projects,
@@ -1481,7 +1486,11 @@ export default function App() {
     enterAuthorPane("claude-plugins");
   }, [activeProjectId, activeRepositoryId, enterAuthorPane]);
   const leftSidebarHubQuickEntries = useLeftSidebarHubQuickEntries();
-  const leftSidebarMonitorPanel = useLeftSidebarMonitorPanelVisible();
+  const monitorPanelDefault = useMonitorPanelDefault();
+  const showMonitorOnLeft =
+    monitorPanelDefault.visible && monitorPanelDefault.placement === "left";
+  const showMonitorOnRight =
+    monitorPanelDefault.visible && monitorPanelDefault.placement === "right";
   const openBuiltinAssistant = useCallback((assistantId: string) => {
     const trimmed = assistantId.trim();
     if (!trimmed) return;
@@ -1876,12 +1885,21 @@ export default function App() {
       const sid = sessionId.trim();
       if (!sid) return;
       setInspectorHistorySessionId(sid);
-      // 仅当默认配置为「展开右栏」时，才在打开历史会话时自动展开右栏；默认收起时由左侧运行面板抽屉展示。
-      if (!rightPanelDefaultCollapsed && effectiveRightCollapsed) {
+      // 运行面板在右栏且默认展开右栏时，打开历史会话自动展开右栏；左栏展示时由运行面板内抽屉承接。
+      if (
+        showMonitorOnRight &&
+        !rightPanelDefaultCollapsed &&
+        effectiveRightCollapsed
+      ) {
         handleToggleRightPanel();
       }
     },
-    [effectiveRightCollapsed, handleToggleRightPanel, rightPanelDefaultCollapsed],
+    [
+      effectiveRightCollapsed,
+      handleToggleRightPanel,
+      rightPanelDefaultCollapsed,
+      showMonitorOnRight,
+    ],
   );
 
   const canRestoreHistorySessionForDrawer = useCallback(
@@ -2961,6 +2979,9 @@ export default function App() {
       mainLayoutRightWidthPx={mainLayoutRightWidthPx}
       repositoryFileOpenRequest={repositoryFileOpenRequest}
       onConsumeRepositoryFileOpenRequest={() => setRepositoryFileOpenRequest(null)}
+      workspaceMemosProjectId={activeProjectId}
+      workspaceMemosRepositoryId={activeRepositoryId}
+      onEnsureChatModeForMemo={() => viewMode.enter({ kind: "chat" })}
       onToggleCompactLayoutMode={handleToggleCompactLayoutMode}
       onLeftWidthChange={setMainLayoutLeftWidthPx}
       onRightWidthChange={setMainLayoutRightWidthPx}
@@ -2981,7 +3002,7 @@ export default function App() {
           enterAuthorPane(lastAuthorPane);
         },
         leftSidebarHubQuickEntryIds: leftSidebarHubQuickEntries.enabledEntryIds,
-        showLeftSidebarMonitorPanel: leftSidebarMonitorPanel.visible,
+        showLeftSidebarMonitorPanel: showMonitorOnLeft,
         mcpHubActive:
           viewMode.view.kind === "inspect" && viewMode.view.tool.kind === "mcp-hub",
         onOpenMcpHub: openMcpHubFromSidebar,
@@ -3585,7 +3606,66 @@ export default function App() {
         activeRepositoryId,
         activeRepositoryName: activeRepository?.name ?? null,
         siderWidth: mainLayoutRightWidthPx,
-        monitorStats: null,
+        monitorStats: showMonitorOnRight ? monitorOverviewStats : null,
+        monitorPanelSessions: monitorPanelSessionsMerged,
+        monitorTranscriptSourceSessions: sessions,
+        employeeMonitorItems: teamPanelEmployeeMonitorItems,
+        repositoryMemberMonitorItems: scopedRepositoryMemberMonitorItems,
+        sessionConversationTaskItems,
+        teamMonitorItems,
+        monitorActiveTarget: monitorDrawerTarget,
+        onOpenTeamMonitorDetail: (workflowId) => {
+          setMonitorDrawerTarget({ type: "team", workflowId });
+        },
+        onOpenEmployeeConfig: () => {
+          void openEmployeeConfigWithContext();
+        },
+        onOpenWorkflowConfig: openWorkflowConfigFromSidebar,
+        onStopEmployeeMonitor: (employeeId) => handleStopEmployeeMonitorRef.current(employeeId),
+        onStopTeamMonitor: (workflowId) => {
+          const item = teamMonitorItems.find((entry) => entry.workflowId === workflowId);
+          if (!item?.activeTaskId) return;
+          const targetTaskId = item.activeTaskId;
+          const task = workflowTasks.find((entry) => entry.id === targetTaskId);
+          if (task?.creator) {
+            cancelSession(task.creator);
+          }
+          void endWorkflowTask({
+            taskId: targetTaskId,
+            reason: "在监控面板中手动结束团队任务",
+          })
+            .then(async (updatedTask) => {
+              setWorkflowTasks((prev) =>
+                prev.map((entry) => (entry.id === updatedTask.id ? updatedTask : entry)),
+              );
+              const [events, pendingEmployees] = await Promise.all([
+                listTaskEvents(updatedTask.id),
+                listTaskPendingEmployees(updatedTask.id),
+              ]);
+              setWorkflowTaskEventsByTaskId((prev) => ({ ...prev, [updatedTask.id]: events }));
+              setTaskPendingEmployeesByTaskId((prev) => ({ ...prev, [updatedTask.id]: pendingEmployees }));
+            })
+            .catch((error) => {
+              console.error("Failed to end team workflow task:", error);
+              message.error("结束团队任务失败");
+            });
+        },
+        hideEmployeeUi: shouldHideEmployeeUi(activeProject),
+        monitorClaudeConcurrency,
+        onCancelSessionFromMonitor: cancelSession,
+        onOpenTaskDetailFromMonitor: (taskId) => {
+          setMonitorDrawerTarget({ type: "task", taskId });
+        },
+        onOpenOmcBatchInvocationDetail: handleOpenOmcBatchInvocationDetail,
+        onCancelOmcDirectBatchInvocation: handleCancelOmcDirectBatchInvocation,
+        onStopSessionConversationTask: handleStopSessionConversationTask,
+        onReloadFullDiskTranscript: reloadFullDiskTranscript,
+        onCompactSessionHistory: compactSessionHistory,
+        historyDrawerSessionId: inspectorHistorySessionId,
+        onHistoryDrawerSessionIdChange: setInspectorHistorySessionId,
+        onRestoreHistorySessionAsMain: handleRestoreHistorySessionAsMain,
+        repositoryMainBindings: repositoryMainSessionBindings,
+        repositories,
       }}
       cockpitInspectorProps={{
         dark,
