@@ -854,6 +854,10 @@ export interface ClaudeProjectSkill {
   source?: "builtin" | "custom" | "extension";
   /** 该 skill 条目是否是符号链接（用于 wise 内的 import-symlink 识别）。 */
   isSymlink?: boolean;
+  /** `project` = 仓库技能；`user` = 用户级 `~/.claude/skills`（或自定义 Claude 配置目录）。 */
+  skillScope?: "project" | "user" | null;
+  /** 技能目录绝对路径（用户级或仓库内 skills 子目录）。 */
+  skillRootPath?: string | null;
 }
 
 /** One node under a skill directory (relative path uses `/`). */

@@ -19,6 +19,7 @@ import {
   listClaudePluginCacheSkills,
   listClaudeProjectSkills,
   listClaudeSubagents,
+  listClaudeUserSkills,
 } from "../../services/claude";
 import { useOmcPluginInstalled } from "../../hooks/useOmcPluginInstalled";
 import {
@@ -97,12 +98,14 @@ export function ClaudeCodeToolsPanel({
     if (!panelActive) return;
     let cancelled = false;
     async function preloadTabCounts() {
-      const [omcRes, mcpRes, hooksRes, subagentsRes, skillsRes, cacheSkillsRes] = await Promise.allSettled([
+      const [omcRes, mcpRes, hooksRes, subagentsRes, skillsRes, userSkillsRes, cacheSkillsRes] =
+        await Promise.allSettled([
         isOmcPluginInstalled(),
         getClaudeMcpStatus(repositoryPath ?? null),
         getClaudeHooksStatus(repositoryPath ?? null),
         listClaudeSubagents(repositoryPath ?? null),
         repositoryPath ? listClaudeProjectSkills(repositoryPath) : Promise.resolve([]),
+        listClaudeUserSkills(),
         listClaudePluginCacheSkills(),
       ]);
       if (cancelled) return;
@@ -131,11 +134,18 @@ export function ClaudeCodeToolsPanel({
             ? subagentsRes.value.length
             : subagentsRes.value.filter((item) => !isOmcSubagentItem(item)).length;
         }
-        if (skillsRes.status === "fulfilled" || cacheSkillsRes.status === "fulfilled") {
-          const nProj = skillsRes.status === "fulfilled" ? skillsRes.value.length : 0;
+        if (
+          skillsRes.status === "fulfilled" ||
+          userSkillsRes.status === "fulfilled" ||
+          cacheSkillsRes.status === "fulfilled"
+        ) {
+          const projectList = skillsRes.status === "fulfilled" ? skillsRes.value : [];
+          const userList = userSkillsRes.status === "fulfilled" ? userSkillsRes.value : [];
+          const seen = new Set(projectList.map((s) => s.name.toLowerCase()));
+          const userOnly = userList.filter((s) => !seen.has(s.name.toLowerCase()));
           const cacheList = cacheSkillsRes.status === "fulfilled" ? cacheSkillsRes.value : [];
           const nCache = showOmc ? cacheList.length : cacheList.filter((s) => !isOmcPluginCacheSkill(s)).length;
-          next.skill = nProj + nCache;
+          next.skill = projectList.length + userOnly.length + nCache;
         }
         return next;
       });

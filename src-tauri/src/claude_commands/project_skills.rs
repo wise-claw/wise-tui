@@ -354,6 +354,10 @@ fn list_claude_command_skills_under_dir(commands_dir: &Path) -> Result<Vec<Claud
                 .ok()
                 .and_then(|text| skill_preview_from_markdown(&text));
             let is_symlink = crate::skills::source::is_symlink(&path);
+            let skill_root = path
+                .parent()
+                .map(skill_dir_root_path)
+                .or_else(|| Some(skill_dir_root_path(&path)));
             out.push(ClaudeProjectSkill {
                 name,
                 has_skill_md: false,
@@ -363,6 +367,8 @@ fn list_claude_command_skills_under_dir(commands_dir: &Path) -> Result<Vec<Claud
                 plugin_cache_root: None,
                 source: Some(crate::skills::source::SkillSource::Custom),
                 is_symlink,
+                skill_scope: Some("project".to_string()),
+                skill_root_path: skill_root,
             });
         }
         Ok(())
@@ -388,9 +394,25 @@ pub(crate) struct ClaudeProjectSkill {
     source: Option<crate::skills::source::SkillSource>,
     #[serde(skip_serializing_if = "std::ops::Not::not", default)]
     is_symlink: bool,
+    /// `project` = 仓库 `.claude/skills`；`user` = 用户级 `~/.claude/skills`（或自定义配置目录下 `skills`）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    skill_scope: Option<String>,
+    /// 技能目录绝对路径，便于前端打开文件夹与展示路径。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    skill_root_path: Option<String>,
 }
 
-fn list_claude_skills_under_dir(skills_dir: &Path) -> Result<Vec<ClaudeProjectSkill>, String> {
+fn skill_dir_root_path(path: &Path) -> String {
+    fs::canonicalize(path)
+        .unwrap_or_else(|_| path.to_path_buf())
+        .to_string_lossy()
+        .into_owned()
+}
+
+fn list_claude_skills_under_dir(
+    skills_dir: &Path,
+    skill_scope: Option<&str>,
+) -> Result<Vec<ClaudeProjectSkill>, String> {
     if !skills_dir.is_dir() {
         return Ok(Vec::new());
     }
@@ -418,6 +440,8 @@ fn list_claude_skills_under_dir(skills_dir: &Path) -> Result<Vec<ClaudeProjectSk
             plugin_cache_root: None,
             source: Some(skill_source),
             is_symlink,
+            skill_scope: skill_scope.map(str::to_string),
+            skill_root_path: Some(skill_dir_root_path(&path)),
         });
     }
     out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
@@ -430,7 +454,7 @@ pub(crate) fn list_claude_project_skills(
 ) -> Result<Vec<ClaudeProjectSkill>, String> {
     let skills_dir = project_claude_skills_dir(&project_path)?;
     let commands_dir = project_claude_commands_dir(&project_path)?;
-    let mut out = list_claude_skills_under_dir(&skills_dir)?;
+    let mut out = list_claude_skills_under_dir(&skills_dir, Some("project"))?;
     let mut seen: HashSet<String> = out.iter().map(|s| s.name.to_lowercase()).collect();
     for cmd in list_claude_command_skills_under_dir(&commands_dir)? {
         let key = cmd.name.to_lowercase();
@@ -446,7 +470,7 @@ pub(crate) fn list_claude_project_skills(
 #[tauri::command]
 pub(crate) fn list_claude_user_skills() -> Result<Vec<ClaudeProjectSkill>, String> {
     let skills_dir = crate::claude_config_dir::user_claude_dir().join("skills");
-    list_claude_skills_under_dir(&skills_dir)
+    list_claude_skills_under_dir(&skills_dir, Some("user"))
 }
 
 /// Wise 不从 `~/.claude/plugins/**` 枚举插件包内 skills/；请使用 `list_claude_user_skills` / `list_claude_project_skills`。
