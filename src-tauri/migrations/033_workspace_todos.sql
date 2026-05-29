@@ -1,4 +1,4 @@
--- 右栏 Inspector：工作区/仓库级提醒事项（待办）
+-- 右栏 Inspector：工作区/仓库级待办事项
 
 CREATE TABLE IF NOT EXISTS workspace_todos (
   scope_kind TEXT NOT NULL CHECK (scope_kind IN ('project', 'repository')),

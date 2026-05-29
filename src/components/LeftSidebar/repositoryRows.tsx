@@ -285,7 +285,7 @@ export function SidebarWorkspaceRemindersAction({
 
   const badgeLabel = incompleteCount > 99 ? "99+" : String(incompleteCount);
   const scopeLabel = variant === "project" ? "工作区" : "仓库";
-  const tooltip = `${scopeLabel}提醒事项：${incompleteCount} 条未完成`;
+  const tooltip = `${scopeLabel}待办事项：${incompleteCount} 条未完成`;
 
   return (
     <Tooltip title={tooltip} mouseEnterDelay={0.3}>

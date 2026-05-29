@@ -93,7 +93,7 @@ export function ExecutableTasksIcon() {
   );
 }
 
-/** 侧栏快捷入口：提醒事项（类似 Apple 提醒列表） */
+/** 侧栏快捷入口：待办事项（类似 Apple 提醒列表） */
 export function WorkspaceRemindersIcon() {
   return (
     <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>

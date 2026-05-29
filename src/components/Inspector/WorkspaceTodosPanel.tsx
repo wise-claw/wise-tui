@@ -81,7 +81,7 @@ function TodoRow({ item, onToggle, onTitleChange, onDelete }: TodoRowProps) {
           size="small"
           className="app-workspace-todos-panel__delete"
           icon={<DeleteOutlined />}
-          aria-label="删除提醒"
+          aria-label="删除待办"
           onClick={onDelete}
         />
       </Tooltip>
@@ -146,7 +146,7 @@ export function WorkspaceTodosPanel({ projectId, repositoryId }: WorkspaceTodosP
     };
     todos.setItemsForScope(scope, [...getScopeItems(scope), item]);
     setDraftTitle("");
-    message.success("已添加提醒");
+    message.success("已添加待办");
     addInputRef.current?.focus();
   };
 
@@ -174,10 +174,10 @@ export function WorkspaceTodosPanel({ projectId, repositoryId }: WorkspaceTodosP
   };
 
   return (
-    <section className="app-workspace-todos-panel" aria-label="提醒事项">
+    <section className="app-workspace-todos-panel" aria-label="待办事项">
       <header className="app-workspace-todos-panel__head">
         <Typography.Text strong className="app-workspace-todos-panel__title">
-          提醒事项
+          待办事项
         </Typography.Text>
         <div className="app-workspace-todos-panel__head-actions">
           {completedItems.length > 0 ? (
@@ -246,7 +246,7 @@ export function WorkspaceTodosPanel({ projectId, repositoryId }: WorkspaceTodosP
                 ref={addInputRef}
                 size="small"
                 className="app-workspace-todos-panel__add-input"
-                placeholder="新建提醒"
+                placeholder="新建待办"
                 value={draftTitle}
                 disabled={!todos.hasScope}
                 onChange={(e) => setDraftTitle(e.target.value)}
@@ -256,7 +256,7 @@ export function WorkspaceTodosPanel({ projectId, repositoryId }: WorkspaceTodosP
                 type="text"
                 size="small"
                 icon={<PlusOutlined />}
-                aria-label="添加提醒"
+                aria-label="添加待办"
                 disabled={!todos.hasScope}
                 onClick={addTodo}
               />

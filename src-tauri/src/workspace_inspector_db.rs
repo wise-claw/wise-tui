@@ -1,4 +1,4 @@
-//! 右栏 Inspector：快捷操作、备忘录与提醒事项的 SQLite 持久化。
+//! 右栏 Inspector：快捷操作、备忘录与待办事项的 SQLite 持久化。
 
 use crate::wise_db::WiseDb;
 use rusqlite::{params, Connection, OptionalExtension};

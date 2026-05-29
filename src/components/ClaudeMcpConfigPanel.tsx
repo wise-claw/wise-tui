@@ -1,5 +1,5 @@
 import { DeleteOutlined, FolderOpenOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
-import { Button, Empty, Space, Spin, Switch, Tag } from "antd";
+import { Button, Empty, Space, Spin, Switch } from "antd";
 import { forwardRef, useCallback, useImperativeHandle, useMemo, useState } from "react";
 import type { ClaudeMcpItem, ClaudeMcpStatusResponse } from "../types";
 import { useClaudeMcpList } from "../hooks/useClaudeMcpList";

@@ -16,7 +16,7 @@ import {
 const PERSIST_DEBOUNCE_MS = 480;
 
 function persistErrorText(error: unknown): string {
-  return error instanceof Error ? error.message : "提醒事项保存失败";
+  return error instanceof Error ? error.message : "待办事项保存失败";
 }
 
 export interface UseWorkspaceTodosInput {
