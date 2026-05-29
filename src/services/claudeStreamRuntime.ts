@@ -36,6 +36,7 @@ interface RuntimeDeps {
   ingestClaudeStreamLineForHub: (sessionId: string, line: string) => void;
   ingestAskUserQuestionFromMessageParts: (sessionId: string, parts: readonly MessagePart[]) => void;
   ingestStreamAssistText: (sessionId: string, text: string) => void;
+  ingestTodosFromSessionMessages: (sessionId: string, messages: ClaudeSession["messages"]) => void;
   migrateSessionKey: (from: string, to: string) => void;
   notifyCompletion: (payload: { tid: string; success: boolean; nonce: number; previewRaw: string; structuredVerdict?: unknown }) => void;
   parseStreamLineSessionId: (line: string) => string | null;
@@ -92,6 +93,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     ingestClaudeStreamLineForHub,
     ingestAskUserQuestionFromMessageParts,
     ingestStreamAssistText,
+    ingestTodosFromSessionMessages,
     migrateSessionKey,
     notifyCompletion,
     parseStreamLineSessionId,
@@ -203,6 +205,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
           updated = hasToolResults
             ? applyToolResultPartsToSession(updated, dedupedParts)
             : appendAssistantStreamParts(updated, dedupedParts);
+          ingestTodosFromSessionMessages(tid, updated.messages);
         }
         return updated;
       }),

@@ -264,6 +264,9 @@ interface Props {
   dismissQuestionAt: (sessionId: string) => void;
   onRespondToPermission: (response: "allow_once" | "allow_always" | "deny") => void;
   onClearTodos: () => void;
+  onToggleTodo?: (todoId: string) => void;
+  /** Hub 无 todo 时从 transcript 恢复（重开会话等） */
+  onRestoreTodosFromTranscript?: () => void;
   onClearFollowups: () => void;
   onClearRevertItems: () => void;
   onSendFollowup: (id: string) => void;
@@ -495,6 +498,8 @@ export function ClaudeChat({
   dismissQuestionAt,
   onRespondToPermission,
   onClearTodos,
+  onToggleTodo,
+  onRestoreTodosFromTranscript,
   onClearFollowups,
   onClearRevertItems,
   onSendFollowup,
@@ -545,6 +550,11 @@ export function ClaudeChat({
     [activeProject?.id, activeRepository?.id, missionContext?.projectId],
   );
   useSpeechToRequirementSync(speechPrefs.speechToRequirementEnabled, speechToRequirementScope, session);
+
+  useEffect(() => {
+    if (todos.length > 0) return;
+    onRestoreTodosFromTranscript?.();
+  }, [session.id, session.messages.length, todos.length, onRestoreTodosFromTranscript]);
 
   useLayoutEffect(() => {
     const root = chatRootRef.current;
@@ -5050,6 +5060,7 @@ export function ClaudeChat({
           dismissQuestionAt={dismissQuestionAt}
           onRespondToPermission={onRespondToPermission}
           onClearTodos={onClearTodos}
+          onToggleTodo={onToggleTodo}
           onClearFollowups={onClearFollowups}
           onClearRevertItems={onClearRevertItems}
           onSendFollowup={onSendFollowup}

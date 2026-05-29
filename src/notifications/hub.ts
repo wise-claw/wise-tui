@@ -12,6 +12,7 @@ import type {
   SessionDockSlice,
   SessionNotificationBucket,
 } from "./types";
+import { mergeTodoLists, todosSnapshotEqual } from "./todoIngest";
 
 function emptyBucket(): SessionNotificationBucket {
   return {
@@ -81,11 +82,7 @@ function mergeQuestionRacks(to: SessionNotificationBucket, from: SessionNotifica
 }
 
 function mergeTodos(a: TodoItem[], b: TodoItem[]): TodoItem[] {
-  const byContent = new Map<string, TodoItem>();
-  for (const t of [...a, ...b]) {
-    if (!byContent.has(t.content)) byContent.set(t.content, t);
-  }
-  return [...byContent.values()];
+  return mergeTodoLists(a, b, true);
 }
 
 function mergeFollowups(a: FollowupItem[], b: FollowupItem[]): FollowupItem[] {
@@ -354,11 +351,20 @@ class NotificationHub {
       foundTodos.push({ id: `todo_${match[2].slice(0, 20)}`, content: match[2], status });
     }
     if (foundTodos.length > 0) {
-      const existingIds = new Set(b.todos.map((t) => t.content));
-      const newItems = foundTodos.filter((t) => !existingIds.has(t.content));
-      if (newItems.length > 0) {
-        b.todos = [...b.todos, ...newItems];
-        changed = true;
+      const byContent = new Map(b.todos.map((t) => [t.content.trim(), t]));
+      for (const ft of foundTodos) {
+        const key = ft.content.trim();
+        const prev = byContent.get(key);
+        if (!prev) {
+          byContent.set(key, ft);
+          changed = true;
+        } else if (prev.status !== ft.status) {
+          byContent.set(key, { ...prev, id: prev.id, status: ft.status });
+          changed = true;
+        }
+      }
+      if (changed) {
+        b.todos = [...byContent.values()];
       }
     }
 
@@ -440,6 +446,46 @@ class NotificationHub {
       this.bumpGlobal();
       this.bumpDockForAllSubscribedSessions();
     }
+  }
+
+  /** 应用 TodoWrite 工具结果；merge=false 时整表替换。 */
+  applyTodoWrite(sessionId: string, items: TodoItem[], merge: boolean) {
+    if (!sessionId || items.length === 0) return;
+    const b = this.getOrCreate(sessionId);
+    const next = merge ? mergeTodoLists(b.todos, items, true) : items;
+    if (todosSnapshotEqual(next, b.todos)) return;
+    b.todos = next;
+    this.bumpGlobal();
+    this.bumpDockForStorageSession(sessionId);
+  }
+
+  toggleTodoItem(sessionId: string, todoId: string) {
+    if (!sessionId || !todoId) return;
+    const b = this.buckets.get(sessionId);
+    if (!b) return;
+    const idx = b.todos.findIndex((t) => t.id === todoId);
+    if (idx < 0) return;
+    const current = b.todos[idx];
+    const nextStatus: TodoItem["status"] =
+      current.status === "pending"
+        ? "in_progress"
+        : current.status === "in_progress"
+          ? "completed"
+          : "pending";
+    if (current.status === nextStatus) return;
+    const next = [...b.todos];
+    next[idx] = { ...current, status: nextStatus };
+    b.todos = next;
+    this.bumpGlobal();
+    this.bumpDockForStorageSession(sessionId);
+  }
+
+  /** 从 transcript 恢复 Dock（Hub 为空时，例如重开会话或刷新后）。 */
+  restoreTodosFromTranscript(sessionId: string, items: TodoItem[], merge: boolean) {
+    if (!sessionId || items.length === 0) return;
+    const b = this.buckets.get(sessionId);
+    if (b && b.todos.length > 0) return;
+    this.applyTodoWrite(sessionId, items, merge);
   }
 
   clearTodos(sessionId: string | null) {

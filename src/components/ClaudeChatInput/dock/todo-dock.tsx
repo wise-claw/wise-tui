@@ -1,5 +1,10 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "antd";
+import {
+  computeTodoProgress,
+  pickActiveTodoTitle,
+  truncateTodoTitle,
+} from "../../../notifications";
 import { DOCK_SPACING } from "./shared-styles";
 
 interface TodoItem {
@@ -15,131 +20,120 @@ interface TodoDockProps {
   onClose?: () => void;
 }
 
+function TodoStatusIcon({ status }: { status: TodoItem["status"] }) {
+  if (status === "completed") {
+    return (
+      <span className="app-todo-item__icon app-todo-item__icon--done" aria-hidden>
+        ✓
+      </span>
+    );
+  }
+  if (status === "in_progress") {
+    return (
+      <span className="app-todo-item__icon app-todo-item__icon--active" aria-hidden>
+        ›
+      </span>
+    );
+  }
+  return <span className="app-todo-item__icon app-todo-item__icon--pending" aria-hidden />;
+}
+
 export function TodoDock({ items, onToggle, onClose }: TodoDockProps) {
   const [collapsed, setCollapsed] = useState(true);
+  const prevProgressedRef = useRef(0);
+  const prevCountRef = useRef(0);
+
+  const { progressed, total, allCompleted } = computeTodoProgress(items);
+  const progress = total > 0 ? progressed / total : 0;
+  const activeTitle = pickActiveTodoTitle(items);
+  const headerTitle = activeTitle ? truncateTodoTitle(activeTitle) : "任务列表";
+
+  useEffect(() => {
+    const prevProgressed = prevProgressedRef.current;
+    const prevCount = prevCountRef.current;
+    prevProgressedRef.current = progressed;
+    prevCountRef.current = items.length;
+
+    if (items.length === 0) {
+      setCollapsed(true);
+      return;
+    }
+    if (prevCount === 0 && items.length > 0) {
+      setCollapsed(false);
+      return;
+    }
+    if (progressed > prevProgressed) {
+      setCollapsed(false);
+    }
+  }, [items.length, progressed]);
+
+  useEffect(() => {
+    if (!allCompleted || items.length === 0) return;
+    const timer = window.setTimeout(() => setCollapsed(true), 2500);
+    return () => window.clearTimeout(timer);
+  }, [allCompleted, items.length]);
 
   if (items.length === 0) return null;
 
-  const completed = items.filter((t) => t.status === "completed").length;
-  const progress = items.length > 0 ? completed / items.length : 0;
-
   return (
     <div className="app-claude-dock app-claude-dock--todo" style={{ marginBottom: DOCK_SPACING.tight }}>
-      {/* Progress bar */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "6px",
-          padding: "4px 8px",
-          background: "var(--ant-color-bg-elevated)",
-          border: "1px solid var(--ant-color-border-secondary)",
-          borderRadius: "6px 6px 0 0",
-          cursor: "pointer",
-          fontSize: "11px",
-          lineHeight: 1.25,
-          color: "var(--ant-color-text-secondary)",
-        }}
-        onClick={() => setCollapsed(!collapsed)}
-      >
-        <div style={{
-          width: "56px",
-          height: "3px",
-          background: "var(--ant-color-fill)",
-          borderRadius: "2px",
-          overflow: "hidden",
-          flexShrink: 0,
-        }}>
-          <div style={{
-            width: `${progress * 100}%`,
-            height: "100%",
-            background: "var(--ant-color-primary)",
-            borderRadius: "2px",
-            transition: "width 0.3s",
-          }} />
-        </div>
-        <span>{completed}/{items.length}</span>
-        <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: "0" }}>
-          {onClose ? (
-            <Button
-              type="text"
-              size="small"
-              title="关闭任务列表"
-              aria-label="关闭任务列表"
-              onClick={(e) => {
-                e.stopPropagation();
-                onClose();
-              }}
-              style={{
-                minWidth: 20,
-                width: 20,
-                height: 20,
-                padding: 0,
-                marginInlineEnd: 2,
-                color: "var(--ant-color-text-tertiary)",
-                fontSize: 12,
-                lineHeight: 1,
-              }}
-            >
-              ×
-            </Button>
-          ) : null}
-          <span style={{ fontSize: "9px", opacity: 0.75 }}>{collapsed ? "▼" : "▲"}</span>
-        </span>
+      <div className="app-todo-head">
+        <button
+          type="button"
+          className="app-todo-head__main"
+          onClick={() => setCollapsed(!collapsed)}
+        >
+          <span
+            className="app-todo-head__progress"
+            style={{ width: `${Math.round(progress * 100)}%` }}
+            aria-hidden
+          />
+          <span className="app-todo-head__meta">
+            <span className="app-todo-head__count">
+              {progressed}/{total}
+            </span>
+            <span className="app-todo-head__title" title={activeTitle ?? undefined}>
+              {headerTitle}
+            </span>
+          </span>
+          <span className="app-todo-head__chevron" aria-hidden>
+            {collapsed ? "▼" : "▲"}
+          </span>
+        </button>
+        {onClose ? (
+          <Button
+            type="text"
+            size="small"
+            title="关闭任务列表"
+            aria-label="关闭任务列表"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
+            className="app-todo-head__close"
+          >
+            ×
+          </Button>
+        ) : null}
       </div>
 
-      {!collapsed && (
-        <div style={{
-          background: "var(--ant-color-bg-elevated)",
-          border: "1px solid var(--ant-color-border-secondary)",
-          borderTop: "none",
-          borderRadius: "0 0 6px 6px",
-          padding: "2px",
-          maxHeight: "160px",
-          overflowY: "auto",
-        }}>
+      {!collapsed ? (
+        <div className="app-todo-list">
           {items.map((item) => (
-            <div
+            <button
               key={item.id}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-                padding: "3px 6px",
-                fontSize: "11px",
-                lineHeight: 1.35,
-                opacity: item.status === "completed" ? 0.6 : 1,
-                cursor: "pointer",
-              }}
+              type="button"
+              className={`app-todo-item app-todo-item--${item.status}`}
               onClick={() => onToggle(item.id)}
             >
-              <span style={{
-                width: "12px",
-                height: "12px",
-                borderRadius: "2px",
-                border: "1px solid",
-                borderColor: item.status === "completed" ? "var(--ant-color-success)" : "var(--ant-color-border)",
-                background: item.status === "completed" ? "var(--ant-color-success)" : "transparent",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-                fontSize: "8px",
-                color: "var(--ant-color-text-light-solid)",
-              }}>
-                {item.status === "completed" ? "✓" : item.status === "in_progress" ? "•" : ""}
-              </span>
-              <span style={{
-                flex: 1,
-                textDecoration: item.status === "completed" ? "line-through" : "none",
-                color: "var(--ant-color-text)",
-              }}>
+              <TodoStatusIcon status={item.status} />
+              <span className="app-todo-item__text" title={item.content}>
                 {item.content}
               </span>
-            </div>
+            </button>
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

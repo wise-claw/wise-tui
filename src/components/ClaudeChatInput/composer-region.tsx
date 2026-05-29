@@ -166,6 +166,7 @@ interface ComposerInnerProps {
   dismissQuestionAt: (ownerSessionId: string) => void;
   onRespondToPermission: (response: "allow_once" | "allow_always" | "deny") => void;
   onClearTodos?: () => void;
+  onToggleTodo?: (todoId: string) => void;
   onSendFollowup: (id: string) => void;
   onClearFollowups?: () => void;
   onRestoreRevert: (id: string) => void;
@@ -402,7 +403,8 @@ function ComposerInner({
   respondQuestionAt,
   dismissQuestionAt,
   onRespondToPermission,
-  onClearTodos: _onClearTodos,
+  onClearTodos,
+  onToggleTodo,
   onSendFollowup,
   onClearFollowups,
   onRestoreRevert,
@@ -2473,11 +2475,12 @@ function ComposerInner({
     });
   }, [session.id]);
 
-  const handleTodoToggle = useCallback((id: string) => {
-    // Update todo status — in a real app this would sync with backend
-    const el = document.querySelector(`[data-todo-id="${id}"]`);
-    el?.dispatchEvent(new CustomEvent("todo-toggle", { detail: { id } }));
-  }, []);
+  const handleTodoToggle = useCallback(
+    (id: string) => {
+      onToggleTodo?.(id);
+    },
+    [onToggleTodo],
+  );
 
   const showQuestionChrome = Boolean(useAggregatedQuestionDock || questionRequest);
 
@@ -2588,7 +2591,7 @@ function ComposerInner({
           )}
 
           {/* Todo dock */}
-          <TodoDock items={todos} onToggle={handleTodoToggle} />
+          <TodoDock items={todos} onToggle={handleTodoToggle} onClose={onClearTodos} />
 
           {/* Revert dock */}
           <RevertDock items={revertItems} onRestore={onRestoreRevert} onClose={onClearRevertItems} />
@@ -2729,6 +2732,7 @@ export interface ComposerRegionProps {
   dismissQuestionAt: (ownerSessionId: string) => void;
   onRespondToPermission: (response: "allow_once" | "allow_always" | "deny") => void;
   onClearTodos?: () => void;
+  onToggleTodo?: (todoId: string) => void;
   onSendFollowup: (id: string) => void;
   onClearFollowups?: () => void;
   onRestoreRevert: (id: string) => void;

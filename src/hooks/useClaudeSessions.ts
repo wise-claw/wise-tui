@@ -65,6 +65,7 @@ import {
   buildPermissionStdinLine,
   buildQuestionStdinLine,
   ingestAskUserQuestionFromMessageParts,
+  extractLatestTodoWriteFromMessages,
   ingestClaudeStreamLineForHub,
   notificationHub,
 } from "../notifications";
@@ -556,6 +557,8 @@ interface UseClaudeSessionsReturn {
   dismissQuestion: (sessionId: string) => void;
   respondToPermission: (sessionId: string, response: "allow_once" | "allow_always" | "deny") => void;
   clearTodos: (sessionId: string) => void;
+  restoreTodosFromTranscript: (sessionId: string) => void;
+  toggleTodo: (sessionId: string, todoId: string) => void;
   clearFollowups: (sessionId: string) => void;
   clearRevertItems: (sessionId: string) => void;
   sendFollowup: (sessionId: string, id: string) => void;
@@ -1605,6 +1608,12 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       ingestClaudeStreamLineForHub,
       ingestAskUserQuestionFromMessageParts,
       ingestStreamAssistText: (sessionId, text) => notificationHub.ingestStreamAssistText(sessionId, text),
+      ingestTodosFromSessionMessages: (sessionId, messages) => {
+        const batch = extractLatestTodoWriteFromMessages(messages);
+        if (batch) {
+          notificationHub.applyTodoWrite(sessionId, batch.items, batch.merge);
+        }
+      },
       migrateSessionKey: (from, to) => notificationHub.migrateSessionKey(from, to),
       notifyCompletion: ({ tid, success, nonce, previewRaw, structuredVerdict }) => {
         clearStreamStallTimer(tid);
@@ -2248,6 +2257,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const session = sessionsRef.current.find((s) => s.id === sessionId);
       if (!session) return Promise.resolve();
 
+      notificationHub.clearTodos(sessionId);
+      if (session.claudeSessionId && session.claudeSessionId !== sessionId) {
+        notificationHub.clearTodos(session.claudeSessionId);
+      }
+
       const claudeSessionId =
         session.claudeSessionId ?? sessionIdMapRef.current.get(sessionId) ?? null;
 
@@ -2793,13 +2807,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           : null;
       try {
         appendUserMessage(tabSessionId, userAnswerText);
-        if (nextTurnNonce !== null) {
+        if (nextTurnNonce !== null && claudeSid) {
           expectedTurnNonceByTabIdRef.current.set(tabSessionId, nextTurnNonce);
           streamingTargetIdRef.current = tabSessionId;
-          if (claudeSid) {
-            markClaudeRegistryBootstrapWarmup(registryBootstrapDeadlineByClaudeSidRef, claudeSid);
-            streamingProcessByTabRef.current.set(tabSessionId, { claudeSessionId: claudeSid });
-          }
+          markClaudeRegistryBootstrapWarmup(registryBootstrapDeadlineByClaudeSidRef, claudeSid);
+          streamingProcessByTabRef.current.set(tabSessionId, { claudeSessionId: claudeSid });
           commitSessions((prev) =>
             prev.map((s) =>
               s.id === tabSessionId ? { ...s, status: "running" as const } : s,
@@ -2943,6 +2955,21 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     notificationHub.clearTodos(sessionId);
   }, []);
 
+  const restoreTodosFromTranscript = useCallback((sessionId: string) => {
+    const session = sessionsRef.current.find((s) => s.id === sessionId || s.claudeSessionId === sessionId);
+    if (!session) return;
+    const batch = extractLatestTodoWriteFromMessages(session.messages);
+    if (!batch) return;
+    notificationHub.restoreTodosFromTranscript(sessionId, batch.items, batch.merge);
+    if (session.claudeSessionId && session.claudeSessionId !== sessionId) {
+      notificationHub.restoreTodosFromTranscript(session.claudeSessionId, batch.items, batch.merge);
+    }
+  }, []);
+
+  const toggleTodo = useCallback((sessionId: string, todoId: string) => {
+    notificationHub.toggleTodoItem(sessionId, todoId);
+  }, []);
+
   const clearFollowups = useCallback((sessionId: string) => {
     notificationHub.clearFollowups(sessionId);
   }, []);
@@ -3040,6 +3067,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     dismissQuestion,
     respondToPermission,
     clearTodos,
+    restoreTodosFromTranscript,
+    toggleTodo,
     clearFollowups,
     clearRevertItems,
     sendFollowup,

@@ -10,6 +10,7 @@
 
 import type { MessagePart, PermissionRequest, QuestionRequest } from "../types";
 import { notificationHub } from "./hub";
+import { extractTodoWriteFromMessageParts, isTodoWriteToolName, parseTodoWriteInput } from "./todoIngest";
 
 function asRecord(v: unknown): Record<string, unknown> | null {
   return v !== null && typeof v === "object" ? (v as Record<string, unknown>) : null;
@@ -151,6 +152,22 @@ function ingestAskUserQuestionFromAssistantToolUse(sessionId: string, j: Record<
   for (const block of content) {
     const b = asRecord(block);
     if (!b || b.type !== "tool_use") continue;
+    if (isTodoWriteToolName(str(b.name))) {
+      let todoInput: unknown = b.input;
+      if (typeof todoInput === "string") {
+        try {
+          todoInput = JSON.parse(todoInput) as unknown;
+        } catch {
+          todoInput = null;
+        }
+      }
+      const parsed = parseTodoWriteInput(todoInput);
+      if (parsed) {
+        notificationHub.applyTodoWrite(sessionId, parsed.items, parsed.merge);
+      }
+      continue;
+    }
+
     if (!isAskUserQuestionName(b.name)) continue;
 
     const requestId = str(b.id)?.trim();
@@ -192,8 +209,16 @@ function ingestAskUserQuestionFromAssistantToolUse(sessionId: string, j: Record<
  * 兜底：从已解析的 message parts 中提取 AskUserQuestion（当控制行缺字段或缺失时）。
  * 典型场景：UI 已出现 `tool_use AskUserQuestion`，但 `sdk_control_request` 未携带可用 `tool_input`。
  */
+export function ingestTodoWriteFromMessageParts(sessionId: string, parts: readonly MessagePart[]): void {
+  if (!sessionId || parts.length === 0) return;
+  const batch = extractTodoWriteFromMessageParts(parts);
+  if (!batch) return;
+  notificationHub.applyTodoWrite(sessionId, batch.items, batch.merge);
+}
+
 export function ingestAskUserQuestionFromMessageParts(sessionId: string, parts: readonly MessagePart[]): void {
   if (!sessionId || parts.length === 0) return;
+  ingestTodoWriteFromMessageParts(sessionId, parts);
   for (const part of parts) {
     if (part.type !== "tool_use") continue;
     if (!isAskUserQuestionName(part.name)) continue;

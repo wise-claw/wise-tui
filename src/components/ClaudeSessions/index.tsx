@@ -660,6 +660,8 @@ interface Props {
   onDismissQuestion: (sessionId: string) => void;
   onRespondToPermission: (sessionId: string, response: "allow_once" | "allow_always" | "deny") => void;
   onClearTodos: (sessionId: string) => void;
+  onToggleTodo: (sessionId: string, todoId: string) => void;
+  onRestoreTodosFromTranscript: (sessionId: string) => void;
   onClearFollowups: (sessionId: string) => void;
   onClearRevertItems: (sessionId: string) => void;
   onSendFollowup: (sessionId: string, id: string) => void;
@@ -790,6 +792,8 @@ export function ClaudeSessions({
   onDismissQuestion,
   onRespondToPermission,
   onClearTodos,
+  onToggleTodo,
+  onRestoreTodosFromTranscript,
   onClearFollowups,
   onClearRevertItems,
   onSendFollowup,
@@ -1248,6 +1252,8 @@ export function ClaudeSessions({
                     dismissQuestionAt={onDismissQuestion}
                     onRespondToPermission={(response) => onRespondToPermission(activeSession.id, response)}
                     onClearTodos={() => onClearTodos(activeSession.id)}
+                    onToggleTodo={(todoId) => onToggleTodo(activeSession.id, todoId)}
+                    onRestoreTodosFromTranscript={() => onRestoreTodosFromTranscript(activeSession.id)}
                     onClearFollowups={() => onClearFollowups(activeSession.id)}
                     onClearRevertItems={() => onClearRevertItems(activeSession.id)}
                     onSendFollowup={(id) => onSendFollowup(activeSession.id, id)}
@@ -1322,6 +1328,8 @@ export function ClaudeSessions({
                           dismissQuestionAt={onDismissQuestion}
                           onRespondToPermission={(response) => onRespondToPermission(paneSession.id, response)}
                           onClearTodos={() => onClearTodos(paneSession.id)}
+                          onToggleTodo={(todoId) => onToggleTodo(paneSession.id, todoId)}
+                          onRestoreTodosFromTranscript={() => onRestoreTodosFromTranscript(paneSession.id)}
                           onClearFollowups={() => onClearFollowups(paneSession.id)}
                           onClearRevertItems={() => onClearRevertItems(paneSession.id)}
                           onSendFollowup={(id) => onSendFollowup(paneSession.id, id)}
@@ -1597,6 +1605,8 @@ export function ClaudeSessions({
             dismissQuestionAt={onDismissQuestion}
             onRespondToPermission={(response) => onRespondToPermission(activeSession.id, response)}
             onClearTodos={() => onClearTodos(activeSession.id)}
+            onToggleTodo={(todoId) => onToggleTodo(activeSession.id, todoId)}
+            onRestoreTodosFromTranscript={() => onRestoreTodosFromTranscript(activeSession.id)}
             onClearFollowups={() => onClearFollowups(activeSession.id)}
             onClearRevertItems={() => onClearRevertItems(activeSession.id)}
             onSendFollowup={(id) => onSendFollowup(activeSession.id, id)}
