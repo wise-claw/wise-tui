@@ -35,6 +35,7 @@ import {
   TrellisIcon,
 } from "./SidebarIcons";
 import { useIsRepositoryRunCommandRunning } from "../../hooks/useIsRepositoryRunCommandRunning";
+import { RunningMainSessionDot } from "./RunningMainSessionDot";
 import { RepositorySddStackBadge } from "./RepositorySddStackBadge";
 
 function repositoryTrellisEntrypointsEnabled(repository: Repository, trellisReady: boolean): boolean {
@@ -303,6 +304,8 @@ export function RepositoryRow({
   onOpenExecutableTasks,
   onStartRepositoryRunCommand,
   onStopRepositoryRunCommand,
+  mainSessionRunning = false,
+  onStopMainSession,
 }: {
   project: Workspace;
   repository: Repository;
@@ -334,6 +337,8 @@ export function RepositoryRow({
   onOpenExecutableTasks?: (repository: Repository) => void;
   onStartRepositoryRunCommand?: (repository: Repository) => void;
   onStopRepositoryRunCommand?: (repository: Repository) => void;
+  mainSessionRunning?: boolean;
+  onStopMainSession?: () => void;
 }) {
   const runCommandRunning = useIsRepositoryRunCommandRunning(repository.id);
   const workspaceTrellisEnabled = project.sddMode !== "project_owned" || trellisReady;
@@ -424,6 +429,13 @@ export function RepositoryRow({
         </span>
         <span className="app-repository-name-block">
           <span className="app-repository-name">{repositoryFolderBasename(repository)}</span>
+          {mainSessionRunning ? (
+            <RunningMainSessionDot
+              runningTitle="长驻会话运行中"
+              stopTitle="结束长驻会话"
+              onStop={onStopMainSession}
+            />
+          ) : null}
         </span>
         <div
           className="app-repository-row-actions"
@@ -538,6 +550,8 @@ export function FloatingRepositoryRow({
   onOpenExecutableTasks,
   onStartRepositoryRunCommand,
   onStopRepositoryRunCommand,
+  mainSessionRunning = false,
+  onStopMainSession,
 }: {
   repository: StandaloneRepo;
   isActiveRepository: boolean;
@@ -570,6 +584,8 @@ export function FloatingRepositoryRow({
   onOpenExecutableTasks?: (repository: Repository) => void;
   onStartRepositoryRunCommand?: (repository: Repository) => void;
   onStopRepositoryRunCommand?: (repository: Repository) => void;
+  mainSessionRunning?: boolean;
+  onStopMainSession?: () => void;
 }) {
   const runCommandRunning = useIsRepositoryRunCommandRunning(repository.id);
   const hasMainOwner = Boolean(repository.mainOwnerAgentName?.trim());
@@ -634,6 +650,13 @@ export function FloatingRepositoryRow({
         </span>
         <span className="app-repository-name-block">
           <span className="app-repository-name">{repositoryFolderBasename(repository)}</span>
+          {mainSessionRunning ? (
+            <RunningMainSessionDot
+              runningTitle="长驻会话运行中"
+              stopTitle="结束长驻会话"
+              onStop={onStopMainSession}
+            />
+          ) : null}
         </span>
         <div
           className="app-repository-row-actions"
@@ -754,6 +777,8 @@ export function ProjectRepositoryRows({
   onOpenRepositoryExecutableTasks,
   onStartRepositoryRunCommand,
   onStopRepositoryRunCommand,
+  runningMainSessionByRepositoryId = {},
+  onStopRepositoryMainSession,
 }: {
   project: Workspace;
   projectRepos: Repository[];
@@ -788,6 +813,8 @@ export function ProjectRepositoryRows({
   onOpenRepositoryExecutableTasks?: (repository: Repository) => void;
   onStartRepositoryRunCommand?: (repository: Repository) => void;
   onStopRepositoryRunCommand?: (repository: Repository) => void;
+  runningMainSessionByRepositoryId?: Record<number, boolean>;
+  onStopRepositoryMainSession?: (repository: Repository) => void;
 }) {
   const { message } = AntdApp.useApp();
   const [dropHint, setDropHint] = useState<{ anchorRepositoryId: number; placement: "before" | "after" } | null>(
@@ -852,6 +879,12 @@ export function ProjectRepositoryRows({
             onOpenExecutableTasks={onOpenRepositoryExecutableTasks}
             onStartRepositoryRunCommand={onStartRepositoryRunCommand}
             onStopRepositoryRunCommand={onStopRepositoryRunCommand}
+            mainSessionRunning={runningMainSessionByRepositoryId[repository.id] === true}
+            onStopMainSession={
+              onStopRepositoryMainSession
+                ? () => onStopRepositoryMainSession(repository)
+                : undefined
+            }
           />
         );
       })}

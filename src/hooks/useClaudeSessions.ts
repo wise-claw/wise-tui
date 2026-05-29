@@ -13,6 +13,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import type {
   ClaudeComposerExecuteBubbleOptions,
   ClaudeDiskSessionItem,
+  ClaudeHostProcess,
   ClaudeSession,
   QuestionRequest,
   SessionConversationTaskItem,
@@ -100,6 +101,7 @@ import {
 import { getAppSetting, setAppSetting } from "../services/appSettingsStore";
 import { stopClaudeMainSession } from "../services/stopClaudeMainSession";
 import { getSystemResourceSnapshot } from "../services/systemResource";
+import { isClaudeSessionRunningByHostProcesses } from "../utils/claudeHostRunningSessionIds";
 import {
   buildAutoCompactSystemMessage,
   buildContextOverflowRetrySystemMessage,
@@ -116,6 +118,37 @@ function isClaudeConversationMissingError(error: unknown): boolean {
   const text = error instanceof Error ? error.message : String(error ?? "");
   if (!text) return false;
   return /no conversation found with session id/i.test(text);
+}
+
+function hydrateStreamingProcessRegistryFromHost(
+  sessions: ClaudeSession[],
+  claudeProcesses: ReadonlyArray<Pick<ClaudeHostProcess, "sessionId" | "pid" | "projectPath">>,
+  streamingProcessByTab: Map<string, { claudeSessionId: string | null }>,
+  defaultConnectionKind: ClaudeSessionConnectionKind,
+): void {
+  for (const session of sessions) {
+    if (!sessionUsesStreamingConnection(session, defaultConnectionKind)) continue;
+    if (!isClaudeSessionRunningByHostProcesses(session, claudeProcesses)) continue;
+    const sid =
+      session.claudeSessionId?.trim() ??
+      streamingProcessByTab.get(session.id)?.claudeSessionId ??
+      null;
+    streamingProcessByTab.set(session.id, { claudeSessionId: sid });
+  }
+}
+
+function applyStreamingResidentUiStatuses(
+  sessions: ClaudeSession[],
+  streamingProcessByTab: Map<string, { claudeSessionId: string | null }>,
+  defaultConnectionKind: ClaudeSessionConnectionKind,
+): ClaudeSession[] {
+  return sessions.map((session) => {
+    if (session.status === "running" || session.status === "connecting") return session;
+    if (!streamingProcessByTab.has(session.id)) return session;
+    if (!sessionUsesStreamingConnection(session, defaultConnectionKind)) return session;
+    if (!session.claudeSessionId?.trim()) return session;
+    return { ...session, status: "running" as const };
+  });
 }
 
 /**
@@ -1905,8 +1938,21 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
     const tick = async () => {
       try {
-        const list = await listRunningClaudeSessions();
+        const [listResult, snapshotResult] = await Promise.allSettled([
+          listRunningClaudeSessions(),
+          getSystemResourceSnapshot(),
+        ]);
         if (cancelled) return;
+        if (listResult.status !== "fulfilled") return;
+        const list = listResult.value;
+        const claudeProcesses =
+          snapshotResult.status === "fulfilled" ? snapshotResult.value.claudeProcesses ?? [] : [];
+        hydrateStreamingProcessRegistryFromHost(
+          sessionsRef.current,
+          claudeProcesses,
+          streamingProcessByTabRef.current,
+          defaultConnectionKindRef.current,
+        );
         const knownIds = new Set(
           list.map((item) => item.session_id.trim()).filter((id) => id.length > 0),
         );
@@ -1917,14 +1963,19 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             .filter((id) => id.length > 0),
         );
         pruneClaudeRegistryBootstrapWarmup(registryBootstrapDeadlineByClaudeSidRef, runningIds);
-        setSessions((prev) =>
-          reconcileSessionStatusesWithRunningRegistry(
+        setSessions((prev) => {
+          const reconciled = reconcileSessionStatusesWithRunningRegistry(
             prev,
             runningIds,
             registryBootstrapDeadlineByClaudeSidRef.current,
             knownIds,
-          ),
-        );
+          );
+          return applyStreamingResidentUiStatuses(
+            reconciled,
+            streamingProcessByTabRef.current,
+            defaultConnectionKindRef.current,
+          );
+        });
       } catch {
         /* 与流式事件并存：拉取失败则保持当前 UI */
       }
@@ -2656,7 +2707,20 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
    */
   const syncSessionStatusesWithHostRegistry = useCallback(async () => {
     try {
-      const list = await listRunningClaudeSessions();
+      const [listResult, snapshotResult] = await Promise.allSettled([
+        listRunningClaudeSessions(),
+        getSystemResourceSnapshot(),
+      ]);
+      if (listResult.status !== "fulfilled") return;
+      const list = listResult.value;
+      const claudeProcesses =
+        snapshotResult.status === "fulfilled" ? snapshotResult.value.claudeProcesses ?? [] : [];
+      hydrateStreamingProcessRegistryFromHost(
+        sessionsRef.current,
+        claudeProcesses,
+        streamingProcessByTabRef.current,
+        defaultConnectionKindRef.current,
+      );
       const knownIds = new Set(
         list.map((item) => item.session_id.trim()).filter((id) => id.length > 0),
       );
@@ -2668,22 +2732,17 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       );
       pruneClaudeRegistryBootstrapWarmup(registryBootstrapDeadlineByClaudeSidRef, runningIds);
       setSessions((prev) => {
-        let next = reconcileSessionStatusesWithRunningRegistry(
+        const reconciled = reconcileSessionStatusesWithRunningRegistry(
           prev,
           runningIds,
           registryBootstrapDeadlineByClaudeSidRef.current,
           knownIds,
         );
-        // 长驻单轮 complete 后注册表常为 completed；AskUserQuestion 续答刚 mark_running 前不要被 reconcile 打成 idle。
-        next = next.map((s) => {
-          if (s.status === "running" || s.status === "connecting") return s;
-          if (!streamingProcessByTabRef.current.has(s.id)) return s;
-          if (!sessionUsesStreamingConnection(s, defaultConnectionKindRef.current)) return s;
-          const sid = s.claudeSessionId?.trim();
-          if (!sid) return s;
-          return { ...s, status: "running" as const };
-        });
-        return next;
+        return applyStreamingResidentUiStatuses(
+          reconciled,
+          streamingProcessByTabRef.current,
+          defaultConnectionKindRef.current,
+        );
       });
     } catch {
       /* 与定时 tick 一致：拉取失败则保持当前 UI */
