@@ -2,6 +2,7 @@ import { MoreOutlined } from "@ant-design/icons";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Dropdown, Input, Modal, message, type MenuProps } from "antd";
 import type { PendingExecutionTask } from "../../types";
+import { findHeadTaskPerLane } from "../../utils/pendingQueueLanes";
 
 // ── Icons ──
 
@@ -143,10 +144,22 @@ export function PendingTaskQueuePanel({
   };
 
   const count = tasks.length;
-  const headTask = tasks[0];
-  const headDispatchState = headTask ? taskDispatchStateById[headTask.id] : undefined;
+  const laneHeads = [...findHeadTaskPerLane(tasks).values()];
+  const waitingLaneHeads = laneHeads.filter((t) => taskDispatchStateById[t.id]?.tone === "waiting");
+  const readyLaneHeads = laneHeads.filter((t) => taskDispatchStateById[t.id]?.tone === "ready");
   const headDispatchHint =
-    headDispatchState?.tone === "waiting" ? `队首阻塞：${headDispatchState.label}` : headDispatchState?.label ?? "";
+    waitingLaneHeads.length === 0
+      ? readyLaneHeads.length > 0
+        ? `${readyLaneHeads.length} 路可出队`
+        : ""
+      : waitingLaneHeads.length === 1 && laneHeads.length === 1
+        ? `队首阻塞：${taskDispatchStateById[waitingLaneHeads[0]!.id]?.label ?? ""}`
+        : [
+            readyLaneHeads.length > 0 ? `${readyLaneHeads.length} 路可出队` : null,
+            ...waitingLaneHeads.map((t) => taskDispatchStateById[t.id]?.label ?? t.executorLabel),
+          ]
+            .filter(Boolean)
+            .join("；");
 
   const headRight = (
     <div className="app-pending-task-queue-panel__head-right">
@@ -187,7 +200,7 @@ export function PendingTaskQueuePanel({
       <span className="app-pending-task-queue-panel__title">{count} 项排队</span>
       {headDispatchHint ? (
         <span
-          className={`app-pending-task-queue-panel__head-hint app-pending-task-queue-panel__head-hint--${headDispatchState?.tone ?? "ready"}`}
+          className={`app-pending-task-queue-panel__head-hint app-pending-task-queue-panel__head-hint--${waitingLaneHeads.length > 0 ? "waiting" : "ready"}`}
           title={headDispatchHint}
         >
           {headDispatchHint}

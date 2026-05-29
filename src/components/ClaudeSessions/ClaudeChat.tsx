@@ -177,6 +177,12 @@ import {
   subscribeOmcDirectBatchInvocations,
 } from "../../stores/omcDirectBatchInvocationsStore";
 import { isOmcDirectBatchInvocationRunning } from "../../utils/omcDirectBatchInvocationDisplay";
+import {
+  findDispatchableHeadTasksPerLane,
+  findMainLaneHead,
+  findNextDispatchableLaneHead,
+  pendingTaskExecutorLaneKey,
+} from "../../utils/pendingQueueLanes";
 import type {
   EmployeeItem,
   PendingExecutionTask,
@@ -828,8 +834,8 @@ export function ClaudeChat({
 
   const pendingTasksRef = useRef(pendingTasks);
   pendingTasksRef.current = pendingTasks;
-  /** 待办出队串行：一次只派发一条；onExecute 同步返回后释放门闸，后续项由会话占用态与 findFirstDispatchableTask 门控 */
-  const pendingQueueDispatchInFlightRef = useRef(false);
+  /** 各执行体车道独立出队（主会话 / 终端 / 团队），互不争用全局门闸 */
+  const pendingQueueDispatchInFlightLanesRef = useRef<Set<string>>(new Set());
 
   const wasRunningRef = useRef(session.status === "running");
   const deferredSendNextRef = useRef(false);
@@ -837,14 +843,16 @@ export function ClaudeChat({
 
   const dispatchPendingTask = useCallback(
     (task: PendingExecutionTask) => {
-      if (pendingQueueDispatchInFlightRef.current) {
+      const laneKey = pendingTaskExecutorLaneKey(task);
+      if (pendingQueueDispatchInFlightLanesRef.current.has(laneKey)) {
         return;
       }
-      pendingQueueDispatchInFlightRef.current = true;
+      pendingQueueDispatchInFlightLanesRef.current.add(laneKey);
       const { id, promptText, targetType, targetEmployeeName, targetWorkflowId, targetWorkflowName, executorLabel } = task;
       logWorkflowTrace("queue.dispatch.consume", {
         sessionId: session.id,
         taskId: id,
+        laneKey,
         targetType: targetType ?? "main",
         targetEmployeeName: targetEmployeeName ?? "",
         targetWorkflowId: targetWorkflowId ?? "",
@@ -872,7 +880,8 @@ export function ClaudeChat({
           });
           void message.error("任务分发失败，已重新加入待办队列。");
         } finally {
-          pendingQueueDispatchInFlightRef.current = false;
+          pendingQueueDispatchInFlightLanesRef.current.delete(laneKey);
+          queueMicrotask(() => flushPendingLaneDispatchesRef.current());
         }
       })();
     },
@@ -883,7 +892,7 @@ export function ClaudeChat({
     session.status === "running" || session.status === "connecting",
   );
   const idlePendingDispatchHoldUntilRef = useRef(0);
-  const idlePendingDispatchTimerRef = useRef<number | null>(null);
+  const idlePendingDispatchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearIdlePendingDispatchTimer = useCallback(() => {
     if (idlePendingDispatchTimerRef.current !== null) {
@@ -1034,50 +1043,52 @@ export function ClaudeChat({
     [isMainIdle, isEmployeeIdle, isTeamIdle],
   );
 
-  const findFirstDispatchableTask = useCallback(
-    (tasks: PendingExecutionTask[]): { task: PendingExecutionTask; index: number } | null => {
-      for (let i = 0; i < tasks.length; i += 1) {
-        const task = tasks[i];
-        if (canDispatchHead(task)) {
-          return { task, index: i };
-        }
-      }
-      return null;
-    },
-    [canDispatchHead],
-  );
+  const flushPendingLaneDispatchesRef = useRef<() => void>(() => {});
 
-  /** 须在 findFirstDispatchableTask 之后定义：延迟窗口内可重算队首，避免 latch 吞调度或闭包仍指向已删任务 */
-  const scheduleIdleAwarePendingDispatch = useCallback(
-    (task: PendingExecutionTask) => {
-      const holdUntil = idlePendingDispatchHoldUntilRef.current;
-      const delay = Math.max(0, holdUntil - Date.now());
-      if (delay <= 0) {
-        clearIdlePendingDispatchTimer();
-        dispatchPendingTask(task);
-        return;
+  const flushPendingLaneDispatches = useCallback(() => {
+    const tasks = pendingTasksRef.current;
+    const dispatchable = findDispatchableHeadTasksPerLane(tasks, (task) => canDispatchHead(task));
+    if (dispatchable.length === 0) {
+      return;
+    }
+
+    let mainHoldDelay = 0;
+    for (const task of dispatchable) {
+      const laneKey = pendingTaskExecutorLaneKey(task);
+      if (pendingQueueDispatchInFlightLanesRef.current.has(laneKey)) {
+        continue;
       }
-      // 始终用最新入参替换尚未触发的定时器，避免旧闭包仍指向已删项或吞掉重调度
+      if (laneKey === "main" && deferredSendNextRef.current) {
+        continue;
+      }
+      if (laneKey === "main") {
+        mainHoldDelay = Math.max(mainHoldDelay, Math.max(0, idlePendingDispatchHoldUntilRef.current - Date.now()));
+      }
+    }
+
+    if (mainHoldDelay > 0) {
       clearIdlePendingDispatchTimer();
-      const scheduledId = task.id;
-      idlePendingDispatchTimerRef.current = window.setTimeout(() => {
+      idlePendingDispatchTimerRef.current = setTimeout(() => {
         idlePendingDispatchTimerRef.current = null;
-        if (pendingQueueDispatchInFlightRef.current) {
-          return;
-        }
-        const next = findFirstDispatchableTask(pendingTasksRef.current);
-        if (!next) return;
-        if (next.task.id !== scheduledId) {
-          queueMicrotask(() => {
-            scheduleIdleAwarePendingDispatch(next.task);
-          });
-          return;
-        }
-        dispatchPendingTask(next.task);
-      }, delay);
-    },
-    [clearIdlePendingDispatchTimer, dispatchPendingTask, findFirstDispatchableTask],
-  );
+        flushPendingLaneDispatchesRef.current();
+      }, mainHoldDelay);
+      return;
+    }
+
+    clearIdlePendingDispatchTimer();
+    for (const task of dispatchable) {
+      const laneKey = pendingTaskExecutorLaneKey(task);
+      if (pendingQueueDispatchInFlightLanesRef.current.has(laneKey)) {
+        continue;
+      }
+      if (laneKey === "main" && deferredSendNextRef.current) {
+        continue;
+      }
+      dispatchPendingTask(task);
+    }
+  }, [canDispatchHead, clearIdlePendingDispatchTimer, dispatchPendingTask]);
+
+  flushPendingLaneDispatchesRef.current = flushPendingLaneDispatches;
 
   const getPendingTaskDispatchState = useCallback(
     (task: PendingExecutionTask): { label: string; tone: "ready" | "waiting" } => {
@@ -1110,27 +1121,33 @@ export function ClaudeChat({
   );
 
   const handleSendNextFromQueue = useCallback(() => {
-    const first = pendingTasks[0];
-    if (!first) {
+    if (pendingTasks.length === 0) {
       message.warning("队列为空");
       return;
     }
-    const targetType = first.targetType ?? "main";
-    if (session.status === "running" && targetType === "main") {
+    const mainLaneHead = findMainLaneHead(pendingTasks);
+    if (session.status === "running" && mainLaneHead) {
       deferredSendNextRef.current = true;
       setDeferredSendQueued(true);
       void writeDeferredSendNext(session.id, session.repositoryPath, true);
-      message.info("当前有任务在执行，队首将在本轮结束后自动发送。");
+      message.info("当前主会话有任务在执行，主会话队首将在本轮结束后自动发送（终端/团队队列不受影响）。");
       return;
     }
-    if (targetType === "team") {
-      const workflowId = first.targetWorkflowId?.trim();
+    const next = findNextDispatchableLaneHead(pendingTasks, (task) => canDispatchHead(task));
+    if (!next) {
+      const first = pendingTasks[0];
+      const dispatchState = first ? getPendingTaskDispatchState(first) : { label: "暂无可派发任务" };
+      message.info(dispatchState.label);
+      return;
+    }
+    if (next.targetType === "team") {
+      const workflowId = next.targetWorkflowId?.trim();
       const status = workflowId ? (workflowGraphStatusByWorkflowId[workflowId] ?? "").toLowerCase() : "";
       if (status !== "published") {
-        const teamName = first.targetWorkflowName?.trim() || first.executorLabel;
+        const teamName = next.targetWorkflowName?.trim() || next.executorLabel;
         logWorkflowTrace("queue.dispatch.blocked_unpublished", {
           sessionId: session.id,
-          queueTaskId: first.id,
+          queueTaskId: next.id,
           workflowId: workflowId ?? "",
           teamName,
         });
@@ -1146,21 +1163,12 @@ export function ClaudeChat({
         return;
       }
     }
-    const dispatchable = findFirstDispatchableTask(pendingTasks);
-    if (!dispatchable) {
-      const dispatchState = getPendingTaskDispatchState(first);
-      message.info(dispatchState.label);
-      return;
-    }
-    if (dispatchable.index > 0) {
-      message.info(`队首暂不可执行，已调度第 ${dispatchable.index + 1} 项任务。`);
-    }
-    dispatchPendingTask(dispatchable.task);
+    dispatchPendingTask(next);
   }, [
     session.status,
     session.repositoryPath,
     pendingTasks,
-    findFirstDispatchableTask,
+    canDispatchHead,
     getPendingTaskDispatchState,
     dispatchPendingTask,
     workflowGraphStatusByWorkflowId,
@@ -1192,15 +1200,15 @@ export function ClaudeChat({
       return;
     }
 
-    const dispatchable = findFirstDispatchableTask(pendingTasksRef.current);
+    const dispatchable = findNextDispatchableLaneHead(pendingTasksRef.current, (task) => canDispatchHead(task));
     if (!dispatchable) return;
-    scheduleIdleAwarePendingDispatch(dispatchable.task);
+    flushPendingLaneDispatches();
   }, [
     session.status,
     session.id,
     session.repositoryPath,
-    scheduleIdleAwarePendingDispatch,
-    findFirstDispatchableTask,
+    flushPendingLaneDispatches,
+    canDispatchHead,
   ]);
 
   useEffect(() => {
@@ -1212,12 +1220,8 @@ export function ClaudeChat({
   }, [pendingTasks.length, deferredSendQueued, session.id, session.repositoryPath]);
 
   useEffect(() => {
-    if (pendingQueueDispatchInFlightRef.current) return;
-    if (deferredSendNextRef.current) return;
-    const dispatchable = findFirstDispatchableTask(pendingTasks);
-    if (!dispatchable) return;
-    scheduleIdleAwarePendingDispatch(dispatchable.task);
-  }, [pendingTasks, findFirstDispatchableTask, session.id, scheduleIdleAwarePendingDispatch]);
+    flushPendingLaneDispatches();
+  }, [pendingTasks, session.id, flushPendingLaneDispatches]);
 
   useEffect(() => {
     const sid = session.id;
@@ -1248,13 +1252,13 @@ export function ClaudeChat({
           message.warning("检测到上次「本轮结束后发送」预约，但会话未成功结束，已取消自动发送。");
           return;
         }
-        const dispatchable = findFirstDispatchableTask(pendingTasks);
+        const dispatchable = findNextDispatchableLaneHead(pendingTasks, (task) => canDispatchHead(task));
         if (dispatchable) {
           await writeDeferredSendNext(sid, rp, false);
           if (cancelled) return;
           deferredSendNextRef.current = false;
           setDeferredSendQueued(false);
-          queueMicrotask(() => scheduleIdleAwarePendingDispatch(dispatchable.task));
+          queueMicrotask(() => flushPendingLaneDispatches());
         }
       }
     })();
@@ -1266,8 +1270,8 @@ export function ClaudeChat({
     session.repositoryPath,
     session.status,
     pendingTasks,
-    scheduleIdleAwarePendingDispatch,
-    findFirstDispatchableTask,
+    flushPendingLaneDispatches,
+    canDispatchHead,
   ]);
 
   // Auto-scroll messages：默认贴底跟随；用户手动滚动后暂停，失焦仅重新武装跟随，有新内容再贴底

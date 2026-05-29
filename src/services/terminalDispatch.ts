@@ -217,7 +217,9 @@ export type TerminalDispatchDeps = {
   appendSystemMessage: (sessionId: string, text: string) => void;
   /** 关闭磁盘空壳标签，避免同一终端堆积多个无效 tab。 */
   closeWorkerTab?: (tabId: string) => void;
-  /** 派发成功后回调，用于自动切换到终端 worker 标签让用户看到执行过程。 */
+  /**
+   * 派发成功后的可选回调（默认不切换中栏主会话；终端在后台执行，运行态见侧栏运行面板）。
+   */
   onDispatched?: (workerTabId: string) => void;
 };
 

@@ -1449,6 +1449,40 @@ function ComposerInner({
             : inferredTarget;
         const dispatchPromptText =
           stripDispatchMentions(outbound, target.targetType, employeeMentions, teamMentions) || outbound;
+
+        // 主会话占用时：终端/团队仍立即派发，各自独立执行体不入主会话 FIFO。
+        if (target.targetType === "employee" || target.targetType === "team") {
+          sendFlowNodes.push({
+            label: "主会话占用中立即派发",
+            timestamp: Date.now(),
+            detail:
+              target.targetType === "employee"
+                ? `员工独立会话: ${target.targetEmployeeName?.trim() || target.executorLabel}`
+                : `团队流程: ${target.targetWorkflowName?.trim() || target.executorLabel}`,
+          });
+          onTrackSendFlow?.({
+            sessionId: session.id,
+            composerText: logicalSnap.trim(),
+            outboundText: dispatchPromptText,
+            nodes: sendFlowNodes,
+          });
+          recordMissionMessage(logicalSnap);
+          postSendEscUndoRef.current = rollbackDraft;
+          finalizeSpeechTranscriptBaselineAfterSend();
+          onExecute(
+            session.id,
+            dispatchPromptText,
+            undefined,
+            {
+              targetType: target.targetType,
+              targetEmployeeName: target.targetEmployeeName,
+              targetWorkflowId: target.targetWorkflowId,
+              targetWorkflowName: target.targetWorkflowName,
+            },
+          );
+          return;
+        }
+
         const consumePending = onEnqueueAsPendingTask({ promptText: dispatchPromptText, ...target });
         sendFlowNodes.push({
           label: "加入待执行队列",
@@ -1457,16 +1491,10 @@ function ComposerInner({
             ? `任务ID: ${typeof consumePending === "string" ? consumePending : consumePending.id}`
             : "未返回任务ID",
         });
-        const dispatchTargetDetail =
-          target.targetType === "employee"
-            ? `员工独立会话: ${target.targetEmployeeName?.trim() || target.executorLabel}`
-            : target.targetType === "team"
-              ? `团队流程: ${target.targetWorkflowName?.trim() || target.executorLabel}`
-              : "主会话";
         sendFlowNodes.push({
           label: "分发执行目标",
           timestamp: Date.now(),
-          detail: dispatchTargetDetail,
+          detail: "主会话",
         });
         onTrackSendFlow?.({
           sessionId: session.id,
@@ -1559,11 +1587,12 @@ function ComposerInner({
           teamMentions,
         ) || outbound;
 
-      // @终端 必须立即派发，不能仅入队等待主会话空闲（否则运行面板长期空闲）。
-      const bypassPendingQueueForTerminal =
-        resolvedDispatchTarget.targetType === "employee";
+      // @终端 / @团队 立即派发，不与其他执行体共用 FIFO（避免主会话排队阻塞终端/工作流）。
+      const bypassPendingQueueForIndependentExecutor =
+        resolvedDispatchTarget.targetType === "employee" ||
+        resolvedDispatchTarget.targetType === "team";
 
-      if (onEnqueueAsPendingTask && !bypassPendingQueueForTerminal) {
+      if (onEnqueueAsPendingTask && !bypassPendingQueueForIndependentExecutor) {
         const target = resolvedDispatchTarget;
         consumePending = onEnqueueAsPendingTask({ promptText: dispatchPromptText, ...target });
         sendFlowNodes.push({
