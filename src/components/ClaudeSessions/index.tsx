@@ -342,7 +342,7 @@ export function Topbar({
   mainSessionForDataLink = null,
   onToggleSidebar,
   onToggleRightPanel,
-  rightPanelDefaultCollapsed = true,
+  rightPanelDefaultCollapsed = RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK,
   onSetRightPanelDefaultCollapsed,
   onToggleTerminal,
   onSearch,

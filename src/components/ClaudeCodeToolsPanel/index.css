@@ -10,12 +10,11 @@
 }
 
 .app-claude-code-tools--popover {
-  height: min(72vh, 520px);
-  max-height: min(72vh, 520px);
-  width: min(94vw, 640px);
+  height: min(58vh, 400px);
+  max-height: min(58vh, 400px);
   box-sizing: border-box;
   background: var(--ant-color-bg-container) !important;
-  padding: 8px 10px 10px;
+  padding: 6px 8px 8px;
 }
 
 .app-claude-code-tools--popover .app-claude-code-tools-tabs {
@@ -541,7 +540,7 @@
   font-size: 12px;
   font-weight: 500;
   line-height: 1.45;
-  color: var(--ant-color-text);
+  color: var(--ant-color-text-secondary);
   word-break: break-word;
   white-space: pre-wrap;
 }

@@ -86,7 +86,7 @@ describe("wiseDefaultConfigStore", () => {
   test("load persists code defaults when unset", async () => {
     const config = await loadWiseDefaultConfig();
     expect(config.connectionKind).toBe("streaming");
-    expect(config.rightPanelDefaultCollapsed).toBe(true);
+    expect(config.rightPanelDefaultCollapsed).toBe(false);
     expect(config.showLlmProxyTopbar).toBe(false);
     expect(config.leftSidebarHubQuickEntries).toEqual(["mcp", "skills", "automation"]);
     expect(config.showLeftSidebarMonitorPanel).toBe(true);
@@ -96,7 +96,7 @@ describe("wiseDefaultConfigStore", () => {
     expect(payload).toMatchObject({
       version: 1,
       connectionKind: "streaming",
-      rightPanelDefaultCollapsed: true,
+      rightPanelDefaultCollapsed: false,
       showLlmProxyTopbar: false,
       leftSidebarHubQuickEntries: ["mcp", "skills", "automation"],
       showLeftSidebarMonitorPanel: true,

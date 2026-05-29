@@ -1,4 +1,4 @@
-use super::mcp::discover_plugin_roots_under_claude_cache;
+use super::mcp::discover_plugin_roots_under_claude_cache_for_skills_and_agents;
 use serde::Serialize;
 use std::fs;
 use std::io::Write;
@@ -322,7 +322,7 @@ pub(crate) fn list_claude_user_skills() -> Result<Vec<ClaudeProjectSkill>, Strin
 #[tauri::command]
 pub(crate) fn list_claude_plugin_cache_skills() -> Result<Vec<ClaudeProjectSkill>, String> {
     let mut out: Vec<ClaudeProjectSkill> = Vec::new();
-    for (plugin_rel, root) in discover_plugin_roots_under_claude_cache() {
+    for (plugin_rel, root) in discover_plugin_roots_under_claude_cache_for_skills_and_agents() {
         let skills_dir = root.join("skills");
         if !skills_dir.is_dir() {
             continue;
