@@ -15,7 +15,7 @@ function extFromMime(m: string): string {
 }
 
 /**
- * 将钉钉自动化载荷中的正文与 data URL 图片，组装为发往 Claude Code 的 `-p` 字符串（含 `@.wise/composer-attachments/` 附图）。
+ * 将钉钉自动化载荷中的正文与 data URL 图片，组装为发往 Claude Code 的 `-p` 字符串（含 `~/.wise/composer-images/` 附图）。
  */
 export async function buildDingTalkAutomationExecutePrompt(input: {
   repositoryPath: string;

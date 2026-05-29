@@ -142,6 +142,7 @@ Application-owned durable data lives under `~/.wise/`:
 - `repositories.json`: registered repositories.
 - `tabs.json`: tab session state.
 - `prd-images/`: materialized PRD images.
+- `composer-images/`: Claude composer screenshots, paste, and upload images (per-repository buckets).
 - `prd-runs/`: per-cluster PRD split run artifacts.
 
 Do not store durable project/workflow/session metadata in browser `localStorage` unless an existing compatibility path explicitly requires it.

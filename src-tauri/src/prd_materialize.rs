@@ -76,10 +76,16 @@ fn file_url_to_path(url: &str) -> Option<PathBuf> {
     Some(path)
 }
 
-fn is_allowed_image_source(src: &Path, prd_images_root: &Path, project: &Path) -> bool {
+fn is_allowed_image_source(
+    src: &Path,
+    prd_images_root: &Path,
+    composer_images_root: &Path,
+    project: &Path,
+) -> bool {
     let project_wise = project.join(".wise");
     let roots = [
         prd_images_root.to_path_buf(),
+        composer_images_root.to_path_buf(),
         project_wise.join("composer-attachments"),
         project_wise.join("prd-runs"),
     ];
@@ -124,6 +130,7 @@ fn rewrite_markdown_images(
     project: &Path,
     assets_dir: &Path,
     prd_images_root: &Path,
+    composer_images_root: &Path,
 ) -> Result<String, String> {
     let mut out = String::new();
     let mut cursor = 0usize;
@@ -146,7 +153,12 @@ fn rewrite_markdown_images(
                     asset_like_url_to_path(url).or_else(|| file_url_to_path(url))
                 {
                     if src_path.is_file()
-                        && is_allowed_image_source(&src_path, prd_images_root, project)
+                        && is_allowed_image_source(
+                            &src_path,
+                            prd_images_root,
+                            composer_images_root,
+                            project,
+                        )
                     {
                         let dest_name = next_image_dest_name(img_counter, &src_path);
                         img_counter += 1;
@@ -460,11 +472,18 @@ pub fn materialize_prd_snapshot(
 
     let run_id = sanitize_run_id(run_id);
     let prd_images_root = crate::wise_dir()?.join("prd-images");
+    let composer_images_root = crate::wise_dir()?.join("composer-images");
     let run_dir = crate::wise_dir()?.join("prd-runs").join(&run_id);
     let assets_dir = run_dir.join("assets");
     fs::create_dir_all(&assets_dir).map_err(|e| format!("创建快照目录失败: {e}"))?;
 
-    let prd_body = rewrite_markdown_images(&prd_markdown, &project, &assets_dir, &prd_images_root)?;
+    let prd_body = rewrite_markdown_images(
+        &prd_markdown,
+        &project,
+        &assets_dir,
+        &prd_images_root,
+        &composer_images_root,
+    )?;
     let prd_path = run_dir.join("prd.md");
     fs::write(&prd_path, prd_body).map_err(|e| format!("写入 prd.md 失败: {e}"))?;
 

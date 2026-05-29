@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
-/** 将 data URL 解码后的 base64 写入仓库 `.wise/composer-attachments/`，返回相对路径（POSIX） */
-export async function saveComposerImageToRepository(
+/** 将 data URL 解码后的 base64 写入 ~/.wise/composer-images/<仓库>/，返回绝对路径供 `@` 引用 */
+export async function saveComposerImage(
   repositoryPath: string,
   filename: string,
   dataUrl: string,
@@ -22,3 +22,6 @@ export async function saveComposerImageToRepository(
     return null;
   }
 }
+
+/** @deprecated 使用 {@link saveComposerImage} */
+export const saveComposerImageToRepository = saveComposerImage;

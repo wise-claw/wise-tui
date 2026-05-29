@@ -9,6 +9,6 @@ export interface WiseDingTalkAutomationV1Payload {
   repositoryName?: string | null;
   /** 文本指令；可与 `imageDataUrls` 同时存在。可与图片二选一（自建网关时可仅传 `imageDataUrls`）。 */
   prompt?: string | null;
-  /** 来自钉钉 Stream 网关拉取的图片（data URL），由主窗落盘为 `@.wise/composer-attachments/…` 后发给 Claude。 */
+  /** 来自钉钉 Stream 网关拉取的图片（data URL），由主窗落盘为 `~/.wise/composer-images/…` 后发给 Claude。 */
   imageDataUrls?: string[] | null;
 }

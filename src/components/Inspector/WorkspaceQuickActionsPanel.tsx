@@ -5,7 +5,7 @@ import {
   LinkOutlined,
   PlusOutlined,
 } from "@ant-design/icons";
-import { App, Button, Empty, Spin, Tag, Tooltip, Typography } from "antd";
+import { App, Button, Spin, Tag, Tooltip, Typography } from "antd";
 import { useCallback, useState } from "react";
 import { openExternalUrl } from "../../services/openExternal";
 import { openInFinder } from "../../services/repository";
@@ -137,12 +137,12 @@ export function WorkspaceQuickActionsPanel({
             <Spin size="small" />
           </div>
         ) : !quickActions.hasScope ? (
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description="请先在左侧选择工作区或仓库"
-          />
+          <div className="app-workspace-quick-actions-panel__list-empty">
+            <Typography.Text type="secondary">请先在左侧选择工作区或仓库</Typography.Text>
+          </div>
         ) : quickActions.displayItems.length === 0 ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无快捷操作，点击 + 添加">
+          <div className="app-workspace-quick-actions-panel__list-empty">
+            <Typography.Text type="secondary">暂无快捷操作</Typography.Text>
             <Button
               type="link"
               size="small"
@@ -151,7 +151,7 @@ export function WorkspaceQuickActionsPanel({
             >
               添加
             </Button>
-          </Empty>
+          </div>
         ) : (
           <ul className="app-workspace-quick-actions-panel__list">
             {quickActions.displayItems.map((item) => (

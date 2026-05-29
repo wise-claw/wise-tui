@@ -85,10 +85,10 @@ pub(crate) struct ScreenshotResult {
     base64_data: String,
 }
 
-// ── Composer attachments (images → project files for @ mention) ──
+// ── Composer attachments (images → ~/.wise for @ mention) ──
 
-/// Writes base64 file bytes under `{project}/.wise/composer-attachments/`.
-/// Returns POSIX-style relative path for use in prompts (e.g. `@.wise/...`).
+/// Writes base64 image bytes under `~/.wise/composer-images/<repository-key>/`.
+/// Returns absolute POSIX path for Claude Code `@` mentions.
 #[tauri::command]
 pub(crate) fn save_composer_image(
     project_path: String,
@@ -106,25 +106,23 @@ pub(crate) fn save_composer_image(
     if safe_name.is_empty() {
         return Err("invalid filename".into());
     }
+
+    let bucket = repository_bucket_key(&project_path);
+    let base_dir = wise_dir()?.join("composer-images").join(bucket);
+    fs::create_dir_all(&base_dir).map_err(|e| e.to_string())?;
+
     let id = Uuid::new_v4();
-    let rel = format!(".wise/composer-attachments/{id}-{safe_name}");
-    let dest = project.join(&rel);
-    if let Some(parent) = dest.parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
+    let final_name = format!("{id}-{safe_name}");
+    let dest = base_dir.join(final_name);
+
     let cleaned = base64_data
         .chars()
         .filter(|c| !c.is_whitespace())
         .collect::<String>();
     let bytes = B64.decode(cleaned).map_err(|e| format!("base64: {e}"))?;
     fs::write(&dest, bytes).map_err(|e| e.to_string())?;
-    let canon_proj = fs::canonicalize(&project).map_err(|e| e.to_string())?;
-    let canon_dest = fs::canonicalize(&dest).map_err(|e| e.to_string())?;
-    if !canon_dest.starts_with(&canon_proj) {
-        let _ = fs::remove_file(&dest);
-        return Err("attachment path outside project".into());
-    }
-    Ok(rel.replace('\\', "/"))
+
+    Ok(dest.to_string_lossy().to_string())
 }
 
 fn repository_bucket_key(repository_path: &str) -> String {

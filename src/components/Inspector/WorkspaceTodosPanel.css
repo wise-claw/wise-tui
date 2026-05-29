@@ -50,7 +50,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  padding: 6px 0;
 }
 
 .app-workspace-todos-panel__list {
@@ -61,19 +61,20 @@
   min-height: 0;
 }
 
+.app-workspace-todos-panel__list-empty,
 .app-workspace-todos-panel__empty-hint {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 6px;
-  padding: 12px 8px;
-  color: var(--ant-color-text-quaternary);
-  font-size: 11px;
+  justify-content: center;
+  padding: 4px 8px;
+  list-style: none;
 }
 
-.app-workspace-todos-panel__empty-hint .anticon {
-  font-size: 18px;
-  opacity: 0.45;
+.app-workspace-todos-panel__list-empty .ant-typography,
+.app-workspace-todos-panel__empty-hint .ant-typography {
+  font-size: 11px;
+  line-height: 20px;
 }
 
 .app-workspace-todos-panel__row {

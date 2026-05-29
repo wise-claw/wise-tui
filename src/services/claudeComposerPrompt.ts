@@ -3,7 +3,7 @@ import {
   mergeContextFileMentions,
   serializePromptPartsToClaudeString,
 } from "../utils/serializeClaudePrompt";
-import { saveComposerImageToRepository } from "./saveComposerImage";
+import { saveComposerImage } from "./saveComposerImage";
 
 export interface BuildClaudeOutgoingPromptOptions {
   prompt: Prompt;
@@ -14,7 +14,7 @@ export interface BuildClaudeOutgoingPromptOptions {
 
 /**
  * 组装发往 Claude Code CLI 的完整 `-p` 字符串：
- * 编辑器正文（含 `/` 命令与 `@` 药丸）→ 合并上下文条中的文件 → 图片落盘为 `@.wise/composer-attachments/...`
+ * 编辑器正文（含 `/` 命令与 `@` 药丸）→ 合并上下文条中的文件 → 图片落盘为 `~/.wise/composer-images/...`（绝对路径 `@`）
  */
 export async function buildClaudeOutgoingPrompt(
   opts: BuildClaudeOutgoingPromptOptions,
@@ -24,11 +24,11 @@ export async function buildClaudeOutgoingPrompt(
 
   const imageBits: string[] = [];
   for (const img of opts.images) {
-    const rel = await saveComposerImageToRepository(opts.repositoryPath, img.filename, img.dataUrl);
-    if (rel) {
-      imageBits.push(`@${rel}`);
+    const absPath = await saveComposerImage(opts.repositoryPath, img.filename, img.dataUrl);
+    if (absPath) {
+      imageBits.push(`@${absPath}`);
     } else if (img.filename) {
-      imageBits.push(`（图片 ${img.filename} 未能写入仓库，请用文字描述或保存到磁盘后再 @ 引用）`);
+      imageBits.push(`（图片 ${img.filename} 未能写入 ~/.wise，请用文字描述或保存到磁盘后再 @ 引用）`);
     }
   }
 

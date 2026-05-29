@@ -1,5 +1,5 @@
-import { CheckCircleFilled, DeleteOutlined, PlusOutlined } from "@ant-design/icons";
-import { App, Button, Checkbox, Empty, Input, Segmented, Spin, Tag, Tooltip, Typography } from "antd";
+import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
+import { App, Button, Checkbox, Input, Segmented, Spin, Tag, Tooltip, Typography } from "antd";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useWorkspaceTodos } from "../../hooks/useWorkspaceTodos";
 import {
@@ -75,7 +75,7 @@ function TodoRow({ item, onToggle, onTitleChange, onDelete }: TodoRowProps) {
       <Tag bordered={false} className="app-workspace-todos-panel__scope-tag">
         {item.scope === "project" ? "工作区" : "仓库"}
       </Tag>
-      <Tooltip title="删除">
+      <Tooltip title="删除" placement="topRight" mouseEnterDelay={0.3}>
         <Button
           type="text"
           size="small"
@@ -199,14 +199,15 @@ export function WorkspaceTodosPanel({ projectId, repositoryId }: WorkspaceTodosP
             <Spin size="small" />
           </div>
         ) : !todos.hasScope ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="请先在左侧选择工作区或仓库" />
+          <div className="app-workspace-todos-panel__list-empty">
+            <Typography.Text type="secondary">请先在左侧选择工作区或仓库</Typography.Text>
+          </div>
         ) : (
           <>
             <ul className="app-workspace-todos-panel__list">
               {activeItems.length === 0 && !showCompleted ? (
                 <li className="app-workspace-todos-panel__empty-hint">
-                  <CheckCircleFilled aria-hidden />
-                  <Typography.Text type="secondary">暂无待办，在下方添加一条提醒</Typography.Text>
+                  <Typography.Text type="secondary">暂无待办</Typography.Text>
                 </li>
               ) : null}
               {activeItems.map((item) => (

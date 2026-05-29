@@ -43,7 +43,29 @@
 .app-workspace-quick-actions-panel__loading {
   display: flex;
   justify-content: center;
-  padding: 10px 0;
+  padding: 6px 0;
+}
+
+.app-workspace-quick-actions-panel__list-empty {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 2px 4px;
+  padding: 4px 8px;
+}
+
+.app-workspace-quick-actions-panel__list-empty .ant-typography {
+  font-size: 11px;
+  line-height: 20px;
+}
+
+.app-workspace-quick-actions-panel__list-empty .ant-btn-link {
+  height: 20px;
+  padding: 0 2px;
+  font-size: 11px;
+  line-height: 20px;
 }
 
 .app-workspace-quick-actions-panel__list {
