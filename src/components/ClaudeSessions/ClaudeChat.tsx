@@ -330,7 +330,7 @@ interface Props {
   onRefreshHistorySessions?: (scope: RefreshHistorySessionsScope) => void | Promise<void>;
   /** 历史会话弹窗内删除某条会话（物理删除磁盘 jsonl，不可恢复）。运行中的会话会抛错。 */
   onDeleteHistorySession?: (sessionId: string) => Promise<void>;
-  /** 在右侧 Inspector 打开历史会话消息（只读预览） */
+  /** 打开历史会话 transcript 抽屉；是否自动展开右栏由「默认配置 → 右侧面板」决定 */
   onOpenHistorySessionInInspector?: (sessionId: string) => void;
   /** 将历史会话恢复为当前仓库主会话 */
   onRestoreHistorySessionAsMain?: (sessionId: string) => void | Promise<void>;

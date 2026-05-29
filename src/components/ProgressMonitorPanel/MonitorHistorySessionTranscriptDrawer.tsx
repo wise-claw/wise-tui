@@ -1,5 +1,6 @@
-import { Button, Drawer, Empty, Space, Tag, message } from "antd";
-import { useEffect, useMemo, useState } from "react";
+import { Button, Drawer, Empty, Space, Tag, Tooltip, message } from "antd";
+import { ReloadOutlined } from "@ant-design/icons";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ClaudeSession } from "../../types";
 import { ClaudeSessionMessagesColumn } from "../ClaudeSessions/ClaudeSessionMessagesColumn";
 import {
@@ -23,6 +24,26 @@ export interface MonitorHistorySessionTranscriptDrawerProps {
   canRestoreSession?: (sessionId: string) => boolean;
 }
 
+function cloneSessionForDrawerSnapshot(session: ClaudeSession): ClaudeSession {
+  return {
+    ...session,
+    messages: session.messages.map((msg) => ({
+      ...msg,
+      parts: msg.parts?.map((part) => ({ ...part })),
+    })),
+  };
+}
+
+function resolveLiveSession(
+  sessionId: string | null,
+  transcriptSourceSessions: ClaudeSession[],
+): ClaudeSession | undefined {
+  if (!sessionId) return undefined;
+  return transcriptSourceSessions.find(
+    (item) => item.id === sessionId || item.claudeSessionId === sessionId,
+  );
+}
+
 export function MonitorHistorySessionTranscriptDrawer({
   open,
   sessionId,
@@ -36,17 +57,48 @@ export function MonitorHistorySessionTranscriptDrawer({
   canRestoreSession,
 }: MonitorHistorySessionTranscriptDrawerProps) {
   const [compactInFlight, setCompactInFlight] = useState(false);
+  const [drawerSessionSnapshot, setDrawerSessionSnapshot] = useState<ClaudeSession | null>(null);
+  const openedSessionIdRef = useRef<string | null>(null);
+  const diskReloadAttemptedRef = useRef<string | null>(null);
+
   const drawerWidth = useMemo(
     () => Math.min(560, typeof window !== "undefined" ? window.innerWidth - 24 : 560),
     [],
   );
 
-  const liveSession = useMemo(() => {
-    if (!sessionId) return undefined;
-    return transcriptSourceSessions.find(
-      (item) => item.id === sessionId || item.claudeSessionId === sessionId,
-    );
-  }, [sessionId, transcriptSourceSessions]);
+  const liveSession = useMemo(
+    () => resolveLiveSession(sessionId, transcriptSourceSessions),
+    [sessionId, transcriptSourceSessions],
+  );
+
+  useEffect(() => {
+    if (!open || !sessionId) {
+      openedSessionIdRef.current = null;
+      diskReloadAttemptedRef.current = null;
+      setDrawerSessionSnapshot(null);
+      return;
+    }
+    if (openedSessionIdRef.current === sessionId) {
+      return;
+    }
+    openedSessionIdRef.current = sessionId;
+    diskReloadAttemptedRef.current = null;
+    const found = resolveLiveSession(sessionId, transcriptSourceSessions);
+    setDrawerSessionSnapshot(found ? cloneSessionForDrawerSnapshot(found) : null);
+  }, [open, sessionId, transcriptSourceSessions]);
+
+  useEffect(() => {
+    if (!open || !sessionId || !liveSession) return;
+    setDrawerSessionSnapshot((prev) => {
+      if (prev && prev.id === liveSession.id && prev.messages.length > 0) {
+        return prev;
+      }
+      if (liveSession.messages.length === 0) {
+        return prev;
+      }
+      return cloneSessionForDrawerSnapshot(liveSession);
+    });
+  }, [open, sessionId, liveSession?.id, liveSession?.messages.length, liveSession?.status]);
 
   const peekTranscriptTargetId = liveSession?.id ?? null;
   const peekTranscriptMessagesLen = liveSession?.messages.length ?? 0;
@@ -54,12 +106,15 @@ export function MonitorHistorySessionTranscriptDrawer({
   const peekTranscriptClaudeId = liveSession?.claudeSessionId?.trim() ?? "";
 
   useEffect(() => {
-    if (!sessionId || !onReloadFullDiskTranscript || !peekTranscriptTargetId) return;
+    if (!open || !sessionId || !onReloadFullDiskTranscript || !peekTranscriptTargetId) return;
+    if (diskReloadAttemptedRef.current === sessionId) return;
     if (peekTranscriptMessagesLen > 0) return;
     if (peekTranscriptStatus === "running" || peekTranscriptStatus === "connecting") return;
     if (!peekTranscriptClaudeId) return;
+    diskReloadAttemptedRef.current = sessionId;
     void onReloadFullDiskTranscript(peekTranscriptTargetId);
   }, [
+    open,
     sessionId,
     onReloadFullDiskTranscript,
     peekTranscriptTargetId,
@@ -67,6 +122,23 @@ export function MonitorHistorySessionTranscriptDrawer({
     peekTranscriptStatus,
     peekTranscriptClaudeId,
   ]);
+
+  const refreshDrawerSnapshot = useCallback(() => {
+    if (!sessionId) return;
+    const found = resolveLiveSession(sessionId, transcriptSourceSessions);
+    if (!found) {
+      message.warning("未找到该会话");
+      return;
+    }
+    setDrawerSessionSnapshot(cloneSessionForDrawerSnapshot(found));
+  }, [sessionId, transcriptSourceSessions]);
+
+  const displaySession = drawerSessionSnapshot ?? liveSession;
+  const liveStatus = liveSession?.status;
+  const snapshotFrozen =
+    Boolean(drawerSessionSnapshot) &&
+    liveStatus != null &&
+    (liveStatus === "running" || liveStatus === "connecting");
 
   const canStopLiveSession =
     Boolean(onCancelSession) &&
@@ -90,6 +162,7 @@ export function MonitorHistorySessionTranscriptDrawer({
     void Promise.resolve(onCompactSessionHistory(liveSession.id))
       .then(() => {
         message.success("会话历史已压缩");
+        refreshDrawerSnapshot();
       })
       .catch(() => {
         /* 失败说明已由会话系统消息记录。 */
@@ -101,7 +174,7 @@ export function MonitorHistorySessionTranscriptDrawer({
 
   return (
     <Drawer
-      title={<HistorySessionDrawerTitle session={liveSession} />}
+      title={<HistorySessionDrawerTitle session={displaySession ?? liveSession} />}
       open={open}
       onClose={onClose}
       placement="right"
@@ -114,6 +187,18 @@ export function MonitorHistorySessionTranscriptDrawer({
             <Tag color={historySessionStatusTagColor(liveSession.status)}>
               {historySessionStatusLabel(liveSession.status)}
             </Tag>
+            {snapshotFrozen ? (
+              <Tag color="default">已冻结快照</Tag>
+            ) : null}
+            <Tooltip title="从当前会话状态重新抓取消息列表">
+              <Button
+                type="text"
+                size="small"
+                icon={<ReloadOutlined />}
+                aria-label="刷新消息列表"
+                onClick={refreshDrawerSnapshot}
+              />
+            </Tooltip>
             {showRestore ? (
               <HistorySessionRestoreButton
                 onClick={() => {
@@ -146,15 +231,15 @@ export function MonitorHistorySessionTranscriptDrawer({
         ) : null
       }
     >
-      {!liveSession ? (
+      {!displaySession ? (
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="未找到该会话" />
-      ) : liveSession.messages.length === 0 &&
-        liveSession.status !== "running" &&
-        liveSession.status !== "connecting" ? (
+      ) : displaySession.messages.length === 0 &&
+        displaySession.status !== "running" &&
+        displaySession.status !== "connecting" ? (
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
           description={
-            liveSession.claudeSessionId?.trim()
+            displaySession.claudeSessionId?.trim()
               ? "该会话暂无消息，可能任务未成功启动或 transcript 尚未落盘"
               : "暂无消息"
           }
@@ -162,7 +247,7 @@ export function MonitorHistorySessionTranscriptDrawer({
       ) : (
         <div className="app-monitor-panel__history-session-drawer-scroll">
           <ClaudeSessionMessagesColumn
-            session={liveSession}
+            session={displaySession}
             onOpenTaskDetail={onOpenTaskDetail}
             showAllMessages
           />

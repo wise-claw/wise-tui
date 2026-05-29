@@ -352,7 +352,7 @@ export default function App() {
   const [extraPanes, setExtraPanes] = useState<PaneSlot[]>([]);
   const paneLayoutHydratedRef = useRef(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  /** 右侧 Inspector 历史会话消息抽屉（由中栏「历史会话」列表打开） */
+  /** 右侧 Inspector 历史会话消息抽屉（由中栏「历史会话」列表打开；默认收起右栏时不强制展开） */
   const [inspectorHistorySessionId, setInspectorHistorySessionId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -1873,11 +1873,12 @@ export default function App() {
       const sid = sessionId.trim();
       if (!sid) return;
       setInspectorHistorySessionId(sid);
-      if (effectiveRightCollapsed) {
+      // 仅当默认配置为「展开右栏」时，才在打开历史会话时自动展开右栏；默认收起时由左侧运行面板抽屉展示。
+      if (!rightPanelDefaultCollapsed && effectiveRightCollapsed) {
         handleToggleRightPanel();
       }
     },
-    [effectiveRightCollapsed, handleToggleRightPanel],
+    [effectiveRightCollapsed, handleToggleRightPanel, rightPanelDefaultCollapsed],
   );
 
   const handleRestoreHistorySessionAsMain = useCallback(
