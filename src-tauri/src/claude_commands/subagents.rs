@@ -1,4 +1,3 @@
-use super::mcp::discover_plugin_roots_under_claude_cache_for_skills_and_agents;
 use super::shared::{canonicalize_existing_project_dir, resolve_omc_plugin_root};
 use crate::subagents_parser::{parse_subagent_markdown, validate_claude_subagent_name};
 use serde::Serialize;
@@ -249,22 +248,6 @@ pub(crate) fn list_claude_subagents(
             "plugin",
             &omc_root.join("agents"),
         ));
-    }
-    {
-        let omc_canon = resolve_omc_plugin_root().and_then(|p| fs::canonicalize(p).ok());
-        for (_rel, root) in discover_plugin_roots_under_claude_cache_for_skills_and_agents() {
-            if let Some(ref oc) = omc_canon {
-                if let Ok(rc) = fs::canonicalize(&root) {
-                    if rc == *oc {
-                        continue;
-                    }
-                }
-            }
-            let agents_dir = root.join("agents");
-            if agents_dir.is_dir() {
-                candidates.extend(list_subagent_files_from_dir("plugin", &agents_dir));
-            }
-        }
     }
     if let Some(project_root) = canonicalize_existing_project_dir(project_path.as_deref()) {
         let project_agents_dir = project_root.join(".claude").join("agents");

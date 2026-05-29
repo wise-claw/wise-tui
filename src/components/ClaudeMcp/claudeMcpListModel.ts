@@ -92,11 +92,6 @@ export const MCP_SECTIONS: {
 }[] = [
   { key: "user", title: "用户范围", hint: "~/.claude.json · 本机全部工作区" },
   { key: "local", title: "当前仓库 · 本地", hint: "~/.claude.json · 仅本仓库（不提交 Git）" },
-  {
-    key: "pluginMcp",
-    title: "已安装插件",
-    hint: "~/.claude/settings.json（plugin@marketplace 启用 → extraKnownMarketplaces / plugins/<插件>）+ installed_plugins + plugins/cache 递归（只读，不扫 marketplaces）",
-  },
   { key: "projectShared", title: "当前仓库 · 团队共享", hint: "仓库根目录 .mcp.json" },
   { key: "legacyUserSettings", title: "兼容 · 用户 settings", hint: "~/.claude/settings.json（旧式 MCP 块）" },
   {

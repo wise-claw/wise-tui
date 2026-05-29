@@ -1,4 +1,3 @@
-use super::mcp::discover_plugin_roots_under_claude_cache_for_skills_and_agents;
 use serde::Serialize;
 use std::fs;
 use std::io::Write;
@@ -319,47 +318,10 @@ pub(crate) fn list_claude_user_skills() -> Result<Vec<ClaudeProjectSkill>, Strin
     list_claude_skills_under_dir(&skills_dir)
 }
 
+/// Wise 不从 `~/.claude/plugins/**` 枚举插件包内 skills/；请使用 `list_claude_user_skills` / `list_claude_project_skills`。
 #[tauri::command]
 pub(crate) fn list_claude_plugin_cache_skills() -> Result<Vec<ClaudeProjectSkill>, String> {
-    let mut out: Vec<ClaudeProjectSkill> = Vec::new();
-    for (plugin_rel, root) in discover_plugin_roots_under_claude_cache_for_skills_and_agents() {
-        let skills_dir = root.join("skills");
-        if !skills_dir.is_dir() {
-            continue;
-        }
-        for entry in fs::read_dir(&skills_dir).map_err(|e| e.to_string())? {
-            let entry = entry.map_err(|e| e.to_string())?;
-            if !entry.file_type().map_err(|e| e.to_string())?.is_dir() {
-                continue;
-            }
-            let name = entry.file_name().to_string_lossy().to_string();
-            if validate_claude_skill_name(&name).is_err() {
-                continue;
-            }
-            let (has_skill_md, description) = read_claude_skill_entry(&entry.path());
-            let file_count = count_skill_files_recursive(&entry.path());
-            let root_str = root.to_string_lossy().to_string();
-            let path = entry.path();
-            let is_symlink = crate::skills::source::is_symlink(&path);
-            out.push(ClaudeProjectSkill {
-                name,
-                has_skill_md,
-                description,
-                file_count,
-                plugin_cache_rel_path: Some(plugin_rel.clone()),
-                plugin_cache_root: Some(root_str),
-                source: Some(crate::skills::source::SkillSource::Builtin),
-                is_symlink,
-            });
-        }
-    }
-    out.sort_by(|a, b| {
-        let ar = a.plugin_cache_rel_path.as_deref().unwrap_or("");
-        let br = b.plugin_cache_rel_path.as_deref().unwrap_or("");
-        ar.cmp(br)
-            .then(a.name.to_lowercase().cmp(&b.name.to_lowercase()))
-    });
-    Ok(out)
+    Ok(Vec::new())
 }
 
 #[tauri::command]

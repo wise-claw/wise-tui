@@ -742,7 +742,7 @@ export async function listClaudeUserSkills(): Promise<ClaudeProjectSkill[]> {
   return invoke<ClaudeProjectSkill[]>("list_claude_user_skills");
 }
 
-/** 枚举 ~/.claude/plugins/cache 下各插件包内的 skills/（只读） */
+/** 保留 IPC；Wise 不从 ~/.claude/plugins 枚举技能（恒返回空列表）。 */
 export async function listClaudePluginCacheSkills(): Promise<ClaudeProjectSkill[]> {
   return invoke<ClaudeProjectSkill[]>("list_claude_plugin_cache_skills");
 }
