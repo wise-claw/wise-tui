@@ -10,6 +10,13 @@
 
 import type { MessagePart, PermissionRequest, QuestionRequest } from "../types";
 import { notificationHub } from "./hub";
+import {
+  buildPermissionRequestFromControl,
+  buildPermissionRequestFromToolUsePart,
+  extractPendingExitPlanModeFromMessages,
+  isExitPlanModeTool,
+  resolveControlRequestId,
+} from "./permissionIngest";
 import { extractTodoWriteFromMessageParts, isTodoWriteToolName, parseTodoWriteInput } from "./todoIngest";
 
 function asRecord(v: unknown): Record<string, unknown> | null {
@@ -59,6 +66,28 @@ function normalizeAskUserOptions(rawOpts: unknown, requestId: string): { value: 
 function isAskUserQuestionName(name: unknown): boolean {
   const n = typeof name === "string" ? name : "";
   return n === "AskUserQuestion" || n.includes("AskUserQuestion") || n.includes("AskUser");
+}
+
+function ingestPermissionControlRequest(
+  sessionId: string,
+  root: Record<string, unknown>,
+  req: Record<string, unknown>,
+  opts: { controlSubtype: PermissionRequest["controlSubtype"]; isCanUseTool: boolean },
+): void {
+  const sub = str(req.subtype) ?? "";
+  const toolName = str(req.tool_name) ?? str(req.toolName) ?? "";
+  const subLower = sub.toLowerCase();
+  const toolLower = toolName.toLowerCase();
+  const isPermissionControl =
+    sub === "permission" ||
+    subLower.includes("permission") ||
+    toolLower.includes("permission");
+
+  if (!opts.isCanUseTool && !isPermissionControl) return;
+
+  const payload = buildPermissionRequestFromControl(root, req, opts.controlSubtype);
+  if (!payload) return;
+  notificationHub.setPermissionRequest(sessionId, payload);
 }
 
 /**
@@ -168,6 +197,18 @@ function ingestAskUserQuestionFromAssistantToolUse(sessionId: string, j: Record<
       continue;
     }
 
+    if (isExitPlanModeTool(b.name)) {
+      const payload = buildPermissionRequestFromToolUsePart({
+        type: "tool_use",
+        id: str(b.id)?.trim() || `tool_${Date.now()}`,
+        name: "ExitPlanMode",
+        input: asRecord(b.input) ?? {},
+        status: "running",
+      });
+      if (payload) notificationHub.setPermissionRequest(sessionId, payload);
+      continue;
+    }
+
     if (!isAskUserQuestionName(b.name)) continue;
 
     const requestId = str(b.id)?.trim();
@@ -221,6 +262,11 @@ export function ingestAskUserQuestionFromMessageParts(sessionId: string, parts: 
   ingestTodoWriteFromMessageParts(sessionId, parts);
   for (const part of parts) {
     if (part.type !== "tool_use") continue;
+    if (isExitPlanModeTool(part.name)) {
+      const payload = buildPermissionRequestFromToolUsePart(part);
+      if (payload) notificationHub.setPermissionRequest(sessionId, payload);
+      continue;
+    }
     if (!isAskUserQuestionName(part.name)) continue;
     const requestId = typeof part.id === "string" ? part.id.trim() : "";
     if (!requestId) continue;
@@ -257,6 +303,14 @@ export function ingestClaudeStreamLineForHub(sessionId: string, line: string): v
     const sub = str(req.subtype) ?? "";
     const toolName = str(req.tool_name) ?? str(req.toolName) ?? "";
 
+    if (sub === "can_use_tool") {
+      ingestPermissionControlRequest(sessionId, j, req, {
+        controlSubtype: "can_use_tool",
+        isCanUseTool: true,
+      });
+      return;
+    }
+
     // MCP / 插件工具名常为 `mcp__*`、`plugin:*`，一般仍带 `subtype: "permission"`；兼容带 `permission` 子串的 subtype 变体。
     const subLower = sub.toLowerCase();
     const toolLower = toolName.toLowerCase();
@@ -265,24 +319,10 @@ export function ingestClaudeStreamLineForHub(sessionId: string, line: string): v
       subLower.includes("permission") ||
       toolLower.includes("permission");
     if (isPermissionControl) {
-      const requestId = str(req.request_id) ?? str(req.requestId);
-      if (!requestId) return;
-
-      const tool = toolName || "unknown";
-      const toolInput = req.tool_input ?? req.toolInput;
-      const description =
-        typeof toolInput === "object" && toolInput !== null
-          ? JSON.stringify(toolInput, null, 0).slice(0, 2000)
-          : str(toolInput) ?? "需要确认的工具调用";
-
-      const payload: PermissionRequest = {
-        id: requestId,
-        tool,
-        description,
-        filePatterns: undefined,
-      };
-
-      notificationHub.setPermissionRequest(sessionId, payload);
+      ingestPermissionControlRequest(sessionId, j, req, {
+        controlSubtype: "permission",
+        isCanUseTool: false,
+      });
       return;
     }
 
@@ -292,7 +332,7 @@ export function ingestClaudeStreamLineForHub(sessionId: string, line: string): v
       toolName === "AskUserQuestion" ||
       toolName.includes("AskUser")
     ) {
-      const requestId = str(req.request_id) ?? str(req.requestId) ?? `question_${Date.now()}`;
+      const requestId = resolveControlRequestId(j, req) ?? `question_${Date.now()}`;
       const toolInput = asRecord(req.tool_input ?? req.toolInput) ?? {};
       const payload = buildQuestionRequestFromAskUserFields(requestId, req, toolInput, true);
       if (payload) {
@@ -309,6 +349,8 @@ export function ingestClaudeStreamLineForHub(sessionId: string, line: string): v
 export function buildPermissionStdinLine(
   requestId: string,
   decision: "allow_once" | "allow_always" | "deny",
+  toolInput?: Record<string, unknown>,
+  toolUseId?: string,
 ): string {
   if (decision === "deny") {
     return JSON.stringify({
@@ -316,19 +358,38 @@ export function buildPermissionStdinLine(
       response: {
         subtype: "success",
         request_id: requestId,
-        response: { behavior: "deny", message: "用户已拒绝" },
+        response: {
+          behavior: "deny",
+          message: "用户已拒绝",
+          ...(toolUseId ? { toolUseID: toolUseId } : {}),
+        },
       },
     });
   }
-  // allow_once / allow_always：CLI 侧暂不区分「始终」持久化，先统一为 allow
   return JSON.stringify({
     type: "control_response",
     response: {
       subtype: "success",
       request_id: requestId,
-      response: { behavior: "allow" },
+      response: {
+        behavior: "allow",
+        updatedInput: toolInput ?? {},
+        ...(toolUseId ? { toolUseID: toolUseId } : {}),
+      },
     },
   });
+}
+
+export function ingestPendingPermissionsFromSessionMessages(
+  sessionId: string,
+  messages: readonly import("../types").ClaudeMessage[],
+): void {
+  if (!sessionId) return;
+  const slice = notificationHub.getDockSlice(sessionId);
+  if (slice.permissionRequest) return;
+  const pending = extractPendingExitPlanModeFromMessages(messages);
+  if (!pending) return;
+  notificationHub.setPermissionRequest(sessionId, pending);
 }
 
 /**

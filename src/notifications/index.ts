@@ -12,8 +12,16 @@ export {
   buildQuestionStdinLine,
   ingestClaudeStreamLineForHub,
   ingestAskUserQuestionFromMessageParts,
+  ingestPendingPermissionsFromSessionMessages,
   ingestTodoWriteFromMessageParts,
 } from "./streamIngest";
+export {
+  buildPermissionDescription,
+  buildPermissionRequestFromControl,
+  extractPendingExitPlanModeFromMessages,
+  isExitPlanModeTool,
+  mergePermissionRequestUpdate,
+} from "./permissionIngest";
 export {
   computeTodoProgress,
   extractLatestTodoWriteFromMessages,

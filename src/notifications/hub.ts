@@ -12,6 +12,7 @@ import type {
   SessionDockSlice,
   SessionNotificationBucket,
 } from "./types";
+import { mergePermissionRequestUpdate } from "./permissionIngest";
 import { mergeTodoLists, todosSnapshotEqual } from "./todoIngest";
 
 function emptyBucket(): SessionNotificationBucket {
@@ -708,9 +709,22 @@ class NotificationHub {
   setPermissionRequest(sessionId: string, p: PermissionRequest | null) {
     const b = this.getOrCreate(sessionId);
     if (p) {
-      this.upsertRequestLifecycle(p.id, sessionId, "permission", "pending");
+      const merged = mergePermissionRequestUpdate(b.permissionRequest, p);
+      if (
+        b.permissionRequest &&
+        b.permissionRequest.id === merged.id &&
+        b.permissionRequest.description === merged.description &&
+        b.permissionRequest.tool === merged.tool &&
+        b.permissionRequest.controlSubtype === merged.controlSubtype &&
+        b.permissionRequest.toolUseId === merged.toolUseId
+      ) {
+        return;
+      }
+      this.upsertRequestLifecycle(merged.id, sessionId, "permission", "pending");
+      b.permissionRequest = merged;
+    } else {
+      b.permissionRequest = null;
     }
-    b.permissionRequest = p;
     this.bumpGlobal();
     this.bumpDockForStorageSession(sessionId);
   }

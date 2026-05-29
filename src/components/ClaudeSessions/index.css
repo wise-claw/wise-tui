@@ -6838,6 +6838,20 @@ button.app-message-part-header:disabled:hover {
   box-shadow: none;
 }
 
+.app-claude-composer--pending-permission > div:first-child {
+  padding-bottom: 2px;
+}
+
+.app-claude-composer--pending-permission .app-claude-input-container:not(:focus-within) {
+  border-color: var(--ant-color-warning-border);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ant-color-warning) 18%, transparent);
+}
+
+.app-claude-dock--permission-exit-plan {
+  border-color: color-mix(in srgb, var(--ant-color-primary) 35%, var(--ant-color-border-secondary));
+  background: color-mix(in srgb, var(--ant-color-primary-bg) 55%, var(--ant-color-bg-elevated));
+}
+
 /* 同仓库多会话 AskUserQuestion：Tabs 嵌在题卡顶栏，不占卡片外第二道框 */
 .app-claude-dock--question__header-tabs-inner .ant-tabs-nav {
   margin-bottom: 0;

@@ -67,6 +67,7 @@ import {
   ingestAskUserQuestionFromMessageParts,
   extractLatestTodoWriteFromMessages,
   ingestClaudeStreamLineForHub,
+  ingestPendingPermissionsFromSessionMessages,
   notificationHub,
 } from "../notifications";
 import { parseClaudeSessionJsonlLines } from "../utils/claudeSessionJsonl";
@@ -558,6 +559,7 @@ interface UseClaudeSessionsReturn {
   respondToPermission: (sessionId: string, response: "allow_once" | "allow_always" | "deny") => void;
   clearTodos: (sessionId: string) => void;
   restoreTodosFromTranscript: (sessionId: string) => void;
+  restorePendingPermissionFromTranscript: (sessionId: string) => void;
   toggleTodo: (sessionId: string, todoId: string) => void;
   clearFollowups: (sessionId: string) => void;
   clearRevertItems: (sessionId: string) => void;
@@ -1613,6 +1615,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         if (batch) {
           notificationHub.applyTodoWrite(sessionId, batch.items, batch.merge);
         }
+        ingestPendingPermissionsFromSessionMessages(sessionId, messages);
       },
       migrateSessionKey: (from, to) => notificationHub.migrateSessionKey(from, to),
       notifyCompletion: ({ tid, success, nonce, previewRaw, structuredVerdict }) => {
@@ -2894,7 +2897,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const ownerSessionId = notificationHub.findRequestSessionId(pr.id) ?? sessionId;
       const session = sessionsRef.current.find((s) => s.id === ownerSessionId || s.claudeSessionId === ownerSessionId);
       const targetSessionId = session?.claudeSessionId ?? session?.id ?? ownerSessionId;
-      const payload = buildPermissionStdinLine(pr.id, response);
+      const payload = buildPermissionStdinLine(pr.id, response, pr.toolInput, pr.toolUseId);
       const tabSessionId = session?.id ?? ownerSessionId;
       const claudeSid =
         session?.claudeSessionId?.trim() ??
@@ -2963,6 +2966,15 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     notificationHub.restoreTodosFromTranscript(sessionId, batch.items, batch.merge);
     if (session.claudeSessionId && session.claudeSessionId !== sessionId) {
       notificationHub.restoreTodosFromTranscript(session.claudeSessionId, batch.items, batch.merge);
+    }
+  }, []);
+
+  const restorePendingPermissionFromTranscript = useCallback((sessionId: string) => {
+    const session = sessionsRef.current.find((s) => s.id === sessionId || s.claudeSessionId === sessionId);
+    if (!session) return;
+    ingestPendingPermissionsFromSessionMessages(sessionId, session.messages);
+    if (session.claudeSessionId && session.claudeSessionId !== sessionId) {
+      ingestPendingPermissionsFromSessionMessages(session.claudeSessionId, session.messages);
     }
   }, []);
 
@@ -3068,6 +3080,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     respondToPermission,
     clearTodos,
     restoreTodosFromTranscript,
+    restorePendingPermissionFromTranscript,
     toggleTodo,
     clearFollowups,
     clearRevertItems,

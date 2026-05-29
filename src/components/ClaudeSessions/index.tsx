@@ -662,6 +662,7 @@ interface Props {
   onClearTodos: (sessionId: string) => void;
   onToggleTodo: (sessionId: string, todoId: string) => void;
   onRestoreTodosFromTranscript: (sessionId: string) => void;
+  onRestorePendingPermissionFromTranscript: (sessionId: string) => void;
   onClearFollowups: (sessionId: string) => void;
   onClearRevertItems: (sessionId: string) => void;
   onSendFollowup: (sessionId: string, id: string) => void;
@@ -794,6 +795,7 @@ export function ClaudeSessions({
   onClearTodos,
   onToggleTodo,
   onRestoreTodosFromTranscript,
+  onRestorePendingPermissionFromTranscript,
   onClearFollowups,
   onClearRevertItems,
   onSendFollowup,
@@ -1254,6 +1256,9 @@ export function ClaudeSessions({
                     onClearTodos={() => onClearTodos(activeSession.id)}
                     onToggleTodo={(todoId) => onToggleTodo(activeSession.id, todoId)}
                     onRestoreTodosFromTranscript={() => onRestoreTodosFromTranscript(activeSession.id)}
+                    onRestorePendingPermissionFromTranscript={() =>
+                      onRestorePendingPermissionFromTranscript(activeSession.id)
+                    }
                     onClearFollowups={() => onClearFollowups(activeSession.id)}
                     onClearRevertItems={() => onClearRevertItems(activeSession.id)}
                     onSendFollowup={(id) => onSendFollowup(activeSession.id, id)}
@@ -1330,6 +1335,9 @@ export function ClaudeSessions({
                           onClearTodos={() => onClearTodos(paneSession.id)}
                           onToggleTodo={(todoId) => onToggleTodo(paneSession.id, todoId)}
                           onRestoreTodosFromTranscript={() => onRestoreTodosFromTranscript(paneSession.id)}
+                          onRestorePendingPermissionFromTranscript={() =>
+                            onRestorePendingPermissionFromTranscript(paneSession.id)
+                          }
                           onClearFollowups={() => onClearFollowups(paneSession.id)}
                           onClearRevertItems={() => onClearRevertItems(paneSession.id)}
                           onSendFollowup={(id) => onSendFollowup(paneSession.id, id)}
@@ -1607,6 +1615,9 @@ export function ClaudeSessions({
             onClearTodos={() => onClearTodos(activeSession.id)}
             onToggleTodo={(todoId) => onToggleTodo(activeSession.id, todoId)}
             onRestoreTodosFromTranscript={() => onRestoreTodosFromTranscript(activeSession.id)}
+            onRestorePendingPermissionFromTranscript={() =>
+              onRestorePendingPermissionFromTranscript(activeSession.id)
+            }
             onClearFollowups={() => onClearFollowups(activeSession.id)}
             onClearRevertItems={() => onClearRevertItems(activeSession.id)}
             onSendFollowup={(id) => onSendFollowup(activeSession.id, id)}

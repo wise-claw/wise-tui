@@ -1609,7 +1609,10 @@ async fn maybe_ack_control_initialize(
     if req.get("subtype").and_then(|s| s.as_str()) != Some("initialize") {
         return;
     }
-    let Some(rid) = req.get("request_id").and_then(|s| s.as_str()) else {
+    let rid = v.get("request_id")
+        .and_then(|s| s.as_str())
+        .or_else(|| req.get("request_id").and_then(|s| s.as_str()));
+    let Some(rid) = rid else {
         return;
     };
     let body = serde_json::json!({
@@ -1934,6 +1937,12 @@ async fn spawn_claude_process(
             loop {
                 match lines.next_line().await {
                     Ok(Some(line)) => {
+                        maybe_ack_control_initialize(
+                            &line,
+                            &pending_stdin_by_spawn_clone,
+                            spawn_id,
+                        )
+                        .await;
                         if let Ok(json) = serde_json::from_str::<serde_json::Value>(&line) {
                             if let Some(turn_ok) = streaming_turn_success_from_result(&json) {
                                 let sid_for_turn = real_session_id.as_deref().unwrap_or("unknown");

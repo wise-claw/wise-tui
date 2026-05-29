@@ -267,6 +267,7 @@ interface Props {
   onToggleTodo?: (todoId: string) => void;
   /** Hub 无 todo 时从 transcript 恢复（重开会话等） */
   onRestoreTodosFromTranscript?: () => void;
+  onRestorePendingPermissionFromTranscript?: () => void;
   onClearFollowups: () => void;
   onClearRevertItems: () => void;
   onSendFollowup: (id: string) => void;
@@ -500,6 +501,7 @@ export function ClaudeChat({
   onClearTodos,
   onToggleTodo,
   onRestoreTodosFromTranscript,
+  onRestorePendingPermissionFromTranscript,
   onClearFollowups,
   onClearRevertItems,
   onSendFollowup,
@@ -555,6 +557,18 @@ export function ClaudeChat({
     if (todos.length > 0) return;
     onRestoreTodosFromTranscript?.();
   }, [session.id, session.messages.length, todos.length, onRestoreTodosFromTranscript]);
+
+  useEffect(() => {
+    if (permissionRequest) return;
+    if (session.status !== "running" && session.status !== "connecting") return;
+    onRestorePendingPermissionFromTranscript?.();
+  }, [
+    session.id,
+    session.messages.length,
+    session.status,
+    permissionRequest,
+    onRestorePendingPermissionFromTranscript,
+  ]);
 
   useLayoutEffect(() => {
     const root = chatRootRef.current;

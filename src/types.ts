@@ -570,6 +570,12 @@ export interface PermissionRequest {
   tool: string;
   description: string;
   filePatterns?: string[];
+  /** `can_use_tool` 控制请求的 tool input，allow 时需原样回传 `updatedInput`。 */
+  toolInput?: Record<string, unknown>;
+  /** `can_use_tool` 携带的 tool_use_id，allow 回包时一并带上。 */
+  toolUseId?: string;
+  /** stream-json 控制子类型；默认按 permission 处理。 */
+  controlSubtype?: "permission" | "can_use_tool";
 }
 
 // ── Claude Code Types ──

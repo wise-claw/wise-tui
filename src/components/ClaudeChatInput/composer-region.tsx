@@ -2483,11 +2483,12 @@ function ComposerInner({
   );
 
   const showQuestionChrome = Boolean(useAggregatedQuestionDock || questionRequest);
+  const showPermissionChrome = Boolean(permissionRequest);
 
   return (
     <div
       ref={composerEscapeRootRef}
-      className={`app-claude-composer${showQuestionChrome ? " app-claude-composer--pending-question" : ""}`}
+      className={`app-claude-composer${showQuestionChrome ? " app-claude-composer--pending-question" : ""}${showPermissionChrome ? " app-claude-composer--pending-permission" : ""}`}
       data-wise-composer-root=""
       data-session-id={session.id}
       onFocusCapture={() => noteComposerScreenshotFocus(session.id)}
