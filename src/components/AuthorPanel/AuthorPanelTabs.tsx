@@ -70,7 +70,7 @@ export const AUTHOR_TAB_GROUPS: Array<{ title: string; items: AuthorTabDefinitio
       {
         key: "defaults",
         label: "默认配置",
-        description: "主会话连接方式、右侧面板与顶栏工具显示",
+        description: "主会话连接方式、运行面板、右侧面板与顶栏工具显示",
         icon: <SlidersOutlined />,
       },
       { key: "automation", label: "定时自动化", description: "Cron、Mission 和会话续跑", icon: <FieldTimeOutlined /> },

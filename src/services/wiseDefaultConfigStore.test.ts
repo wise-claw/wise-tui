@@ -19,6 +19,7 @@ import {
   saveWiseDefaultConfig,
   WISE_DEFAULT_CONFIG_KEY,
   WISE_DEFAULT_CONFIG_ONESHOT_TO_STREAMING_MIGRATION_KEY,
+  WISE_LEFT_SIDEBAR_MONITOR_PANEL_CHANGED,
   WISE_RIGHT_PANEL_DEFAULT_CHANGED,
   WISE_TOPBAR_CHROME_DEFAULT_CHANGED,
 } from "./wiseDefaultConfigStore";
@@ -87,6 +88,7 @@ describe("wiseDefaultConfigStore", () => {
     expect(config.rightPanelDefaultCollapsed).toBe(true);
     expect(config.showLlmProxyTopbar).toBe(false);
     expect(config.leftSidebarHubQuickEntries).toEqual(["mcp", "skills", "automation"]);
+    expect(config.showLeftSidebarMonitorPanel).toBe(true);
     expect(setAppSetting).toHaveBeenCalled();
     const payload = JSON.parse(String(setAppSetting.mock.calls[0]?.[1]));
     expect(payload).toMatchObject({
@@ -95,6 +97,7 @@ describe("wiseDefaultConfigStore", () => {
       rightPanelDefaultCollapsed: true,
       showLlmProxyTopbar: false,
       leftSidebarHubQuickEntries: ["mcp", "skills", "automation"],
+      showLeftSidebarMonitorPanel: true,
     });
   });
 
@@ -188,6 +191,43 @@ describe("wiseDefaultConfigStore", () => {
       rightPanelDefaultCollapsed: true,
     });
     expect(storage?.getItem(RIGHT_PANEL_DEFAULT_COLLAPSED_KEY)).toBeNull();
+  });
+
+  test("load backfills missing monitor panel visibility with product default", async () => {
+    getAppSetting.mockImplementation(async (key: string) =>
+      key === WISE_DEFAULT_CONFIG_KEY
+        ? JSON.stringify({
+            version: 1,
+            connectionKind: "streaming",
+            rightPanelDefaultCollapsed: false,
+          })
+        : null,
+    );
+    const config = await loadWiseDefaultConfig();
+    expect(config.showLeftSidebarMonitorPanel).toBe(true);
+  });
+
+  test("save monitor panel visibility dispatches event", async () => {
+    getAppSetting.mockImplementation(async (key: string) => {
+      if (key === WISE_DEFAULT_CONFIG_ONESHOT_TO_STREAMING_MIGRATION_KEY) return "1";
+      if (key === WISE_DEFAULT_CONFIG_KEY) {
+        return JSON.stringify({
+          version: 1,
+          connectionKind: "streaming",
+          rightPanelDefaultCollapsed: false,
+          showLeftSidebarMonitorPanel: true,
+        });
+      }
+      return null;
+    });
+    const seen: boolean[] = [];
+    window.addEventListener(WISE_LEFT_SIDEBAR_MONITOR_PANEL_CHANGED, (e: Event) => {
+      const visible = (e as CustomEvent<{ showLeftSidebarMonitorPanel?: boolean }>).detail
+        ?.showLeftSidebarMonitorPanel;
+      if (typeof visible === "boolean") seen.push(visible);
+    });
+    await saveWiseDefaultConfig({ showLeftSidebarMonitorPanel: false });
+    expect(seen).toEqual([false]);
   });
 
   test("load backfills missing topbar chrome fields with product defaults", async () => {

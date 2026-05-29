@@ -427,6 +427,7 @@ describe("AuthorPanel", () => {
     const { props } = buildProps({ pane: "defaults" });
     const html = renderAuthorPanel(props);
     expect(html).toContain("会话处理方式");
+    expect(html).toContain("运行面板");
     expect(html).toContain("右侧面板");
     expect(html).toContain("FCC 顶栏图标");
     expect(html).toContain("FCC 请求流量");

@@ -80,6 +80,7 @@ export function LeftSidebar({
   authorDisabledTooltip,
   onOpenAuthor,
   leftSidebarHubQuickEntryIds = [],
+  showLeftSidebarMonitorPanel = true,
   mcpHubActive = false,
   onOpenMcpHub,
   skillsHubActive = false,
@@ -912,38 +913,42 @@ export function LeftSidebar({
           onStopRepositoryMainSession={handleStopRepositoryMainSession}
         />
 
-        <div className="app-left-sidebar-monitor-panel">
-          <ProgressMonitorPanel
-            employeeItems={employeeMonitorItems}
-            repositoryMemberItems={repositoryMemberMonitorItems}
-            sessionConversationTaskItems={sessionConversationTaskItems ? [...sessionConversationTaskItems] : []}
-            showSessionConversationTasks
-            teamItems={teamMonitorItems}
-            sessions={sessions}
-            activeTarget={monitorActiveTarget}
-            onOpenTeamDetail={(workflowId) => onOpenTeamMonitorDetail?.(workflowId)}
-            onOpenEmployeeConfig={onOpenEmployeeConfig}
-            onOpenWorkflowConfig={onOpenWorkflowConfig}
-            onStopEmployee={(employeeId) => onStopEmployeeMonitor?.(employeeId)}
-            onStopTeam={(workflowId) => onStopTeamMonitor?.(workflowId)}
-            hideEmployeeUi={hideEmployeeUi}
-            claudeConcurrency={monitorClaudeConcurrency}
-            onCancelSession={onCancelSessionFromMonitor}
-            onOpenTaskDetail={onOpenTaskDetailFromMonitor}
-            onOpenOmcBatchInvocationDetail={onOpenOmcBatchInvocationDetail}
-            onCancelOmcDirectBatchInvocation={onCancelOmcDirectBatchInvocation}
-            onStopSessionConversationTask={onStopSessionConversationTask}
-            onReloadFullDiskTranscript={onReloadFullDiskTranscript}
-            onCompactSessionHistory={onCompactSessionHistory}
-            transcriptSourceSessions={sessions}
-            projectId={projectId}
-            historyDrawerSessionId={historyDrawerSessionId}
-            onHistoryDrawerSessionIdChange={onHistoryDrawerSessionIdChange}
-            onRestoreHistorySessionAsMain={onRestoreHistorySessionAsMain}
-            repositoryMainBindings={repositoryMainSessionBindings}
-            repositories={repositories}
-          />
-        </div>
+        {showLeftSidebarMonitorPanel ? (
+          <div className="app-left-sidebar-monitor-panel">
+            <ProgressMonitorPanel
+              employeeItems={employeeMonitorItems}
+              repositoryMemberItems={repositoryMemberMonitorItems}
+              sessionConversationTaskItems={
+                sessionConversationTaskItems ? [...sessionConversationTaskItems] : []
+              }
+              showSessionConversationTasks
+              teamItems={teamMonitorItems}
+              sessions={sessions}
+              activeTarget={monitorActiveTarget}
+              onOpenTeamDetail={(workflowId) => onOpenTeamMonitorDetail?.(workflowId)}
+              onOpenEmployeeConfig={onOpenEmployeeConfig}
+              onOpenWorkflowConfig={onOpenWorkflowConfig}
+              onStopEmployee={(employeeId) => onStopEmployeeMonitor?.(employeeId)}
+              onStopTeam={(workflowId) => onStopTeamMonitor?.(workflowId)}
+              hideEmployeeUi={hideEmployeeUi}
+              claudeConcurrency={monitorClaudeConcurrency}
+              onCancelSession={onCancelSessionFromMonitor}
+              onOpenTaskDetail={onOpenTaskDetailFromMonitor}
+              onOpenOmcBatchInvocationDetail={onOpenOmcBatchInvocationDetail}
+              onCancelOmcDirectBatchInvocation={onCancelOmcDirectBatchInvocation}
+              onStopSessionConversationTask={onStopSessionConversationTask}
+              onReloadFullDiskTranscript={onReloadFullDiskTranscript}
+              onCompactSessionHistory={onCompactSessionHistory}
+              transcriptSourceSessions={sessions}
+              projectId={projectId}
+              historyDrawerSessionId={historyDrawerSessionId}
+              onHistoryDrawerSessionIdChange={onHistoryDrawerSessionIdChange}
+              onRestoreHistorySessionAsMain={onRestoreHistorySessionAsMain}
+              repositoryMainBindings={repositoryMainSessionBindings}
+              repositories={repositories}
+            />
+          </div>
+        ) : null}
 
         {showRepoPanel ? (
           <div className="app-left-sidebar-bottom-tabs">

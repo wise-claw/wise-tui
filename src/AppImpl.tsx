@@ -112,6 +112,7 @@ import {
 import { useSessionConversationTasks } from "./hooks/useSessionConversationTasks";
 import { useIntervalSyncedState } from "./hooks/useIntervalSyncedState";
 import { useLeftSidebarHubQuickEntries } from "./hooks/useLeftSidebarHubQuickEntries";
+import { useLeftSidebarMonitorPanelVisible } from "./hooks/useLeftSidebarMonitorPanelVisible";
 import { useScheduledClaudeTaskRunner } from "./hooks/useScheduledClaudeTaskRunner";
 import { MONITOR_SESSIONS_SYNC_INTERVAL_MS } from "./constants/monitorUi";
 import { invalidateWorkflowRunCacheForRepository } from "./hooks/useWorkflowRun";
@@ -1479,6 +1480,7 @@ export default function App() {
     enterAuthorPane("claude-plugins");
   }, [activeProjectId, activeRepositoryId, enterAuthorPane]);
   const leftSidebarHubQuickEntries = useLeftSidebarHubQuickEntries();
+  const leftSidebarMonitorPanel = useLeftSidebarMonitorPanelVisible();
   const openBuiltinAssistant = useCallback((assistantId: string) => {
     const trimmed = assistantId.trim();
     if (!trimmed) return;
@@ -2964,6 +2966,7 @@ export default function App() {
           enterAuthorPane(lastAuthorPane);
         },
         leftSidebarHubQuickEntryIds: leftSidebarHubQuickEntries.enabledEntryIds,
+        showLeftSidebarMonitorPanel: leftSidebarMonitorPanel.visible,
         mcpHubActive:
           viewMode.view.kind === "inspect" && viewMode.view.tool.kind === "mcp-hub",
         onOpenMcpHub: openMcpHubFromSidebar,

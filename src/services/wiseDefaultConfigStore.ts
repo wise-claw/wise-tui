@@ -35,6 +35,8 @@ export const WISE_TOPBAR_CHROME_DEFAULT_CHANGED = "wise:topbar-chrome-default-ch
 
 export const WISE_LEFT_SIDEBAR_HUB_QUICK_ENTRIES_CHANGED = "wise:left-sidebar-hub-quick-entries-changed";
 
+export const WISE_LEFT_SIDEBAR_MONITOR_PANEL_CHANGED = "wise:left-sidebar-monitor-panel-changed";
+
 export interface WiseDefaultConfigV1 {
   version: 1;
   connectionKind: ClaudeSessionConnectionKind;
@@ -49,6 +51,8 @@ export interface WiseDefaultConfigV1 {
   showSessionDataLinkTopbar: boolean;
   /** 左栏 AI 工作台快捷入口；默认 MCP、技能、自动化。 */
   leftSidebarHubQuickEntries: LeftSidebarHubQuickEntryId[];
+  /** 左栏运行面板（终端 / 工作流运行态）；默认显示。 */
+  showLeftSidebarMonitorPanel: boolean;
 }
 
 const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
@@ -60,6 +64,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   showFccTrafficTopbar: false,
   showSessionDataLinkTopbar: false,
   leftSidebarHubQuickEntries: [...DEFAULT_LEFT_SIDEBAR_HUB_QUICK_ENTRIES],
+  showLeftSidebarMonitorPanel: true,
 };
 
 function normalizeBoolean(raw: unknown, fallback = false): boolean {
@@ -103,6 +108,10 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
       showFccTrafficTopbar: normalizeBoolean(parsed.showFccTrafficTopbar),
       showSessionDataLinkTopbar: normalizeBoolean(parsed.showSessionDataLinkTopbar),
       leftSidebarHubQuickEntries: normalizeLeftSidebarHubQuickEntries(parsed.leftSidebarHubQuickEntries),
+      showLeftSidebarMonitorPanel:
+        parsed.showLeftSidebarMonitorPanel === undefined
+          ? DEFAULT_CONFIG.showLeftSidebarMonitorPanel
+          : normalizeBoolean(parsed.showLeftSidebarMonitorPanel, DEFAULT_CONFIG.showLeftSidebarMonitorPanel),
     };
   } catch {
     return null;
@@ -211,6 +220,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     showFccTrafficTopbar: DEFAULT_CONFIG.showFccTrafficTopbar,
     showSessionDataLinkTopbar: DEFAULT_CONFIG.showSessionDataLinkTopbar,
     leftSidebarHubQuickEntries: [...DEFAULT_LEFT_SIDEBAR_HUB_QUICK_ENTRIES],
+    showLeftSidebarMonitorPanel: DEFAULT_CONFIG.showLeftSidebarMonitorPanel,
   };
 }
 
@@ -219,6 +229,15 @@ function dispatchLeftSidebarHubQuickEntriesChanged(entries: LeftSidebarHubQuickE
   window.dispatchEvent(
     new CustomEvent(WISE_LEFT_SIDEBAR_HUB_QUICK_ENTRIES_CHANGED, {
       detail: { leftSidebarHubQuickEntries: entries },
+    }),
+  );
+}
+
+function dispatchLeftSidebarMonitorPanelChanged(visible: boolean): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_LEFT_SIDEBAR_MONITOR_PANEL_CHANGED, {
+      detail: { showLeftSidebarMonitorPanel: visible },
     }),
   );
 }
@@ -264,6 +283,7 @@ export async function saveWiseDefaultConfig(
       | "showFccTrafficTopbar"
       | "showSessionDataLinkTopbar"
       | "leftSidebarHubQuickEntries"
+      | "showLeftSidebarMonitorPanel"
     >
   >,
 ): Promise<WiseDefaultConfigV1> {
@@ -282,6 +302,8 @@ export async function saveWiseDefaultConfig(
       patch.leftSidebarHubQuickEntries !== undefined
         ? normalizeLeftSidebarHubQuickEntries(patch.leftSidebarHubQuickEntries)
         : current.leftSidebarHubQuickEntries,
+    showLeftSidebarMonitorPanel:
+      patch.showLeftSidebarMonitorPanel ?? current.showLeftSidebarMonitorPanel,
   };
   if (patch.connectionKind !== undefined) {
     next.connectionKind = normalizeConnectionKind(patch.connectionKind) ?? current.connectionKind;
@@ -300,6 +322,9 @@ export async function saveWiseDefaultConfig(
   }
   if (patch.leftSidebarHubQuickEntries !== undefined) {
     next.leftSidebarHubQuickEntries = normalizeLeftSidebarHubQuickEntries(patch.leftSidebarHubQuickEntries);
+  }
+  if (patch.showLeftSidebarMonitorPanel !== undefined) {
+    next.showLeftSidebarMonitorPanel = normalizeBoolean(patch.showLeftSidebarMonitorPanel);
   }
   await persistConfig(next);
   await deleteLegacyAppSettings();
@@ -340,6 +365,12 @@ export async function saveWiseDefaultConfig(
   ) {
     dispatchLeftSidebarHubQuickEntriesChanged(next.leftSidebarHubQuickEntries);
   }
+  if (
+    patch.showLeftSidebarMonitorPanel !== undefined &&
+    next.showLeftSidebarMonitorPanel !== current.showLeftSidebarMonitorPanel
+  ) {
+    dispatchLeftSidebarMonitorPanelChanged(next.showLeftSidebarMonitorPanel);
+  }
 
   return next;
 }
@@ -352,6 +383,14 @@ export async function saveLeftSidebarHubQuickEntriesToStore(
   entries: LeftSidebarHubQuickEntryId[],
 ): Promise<void> {
   await saveWiseDefaultConfig({ leftSidebarHubQuickEntries: entries });
+}
+
+export async function loadLeftSidebarMonitorPanelVisibleFromStore(): Promise<boolean> {
+  return (await loadWiseDefaultConfig()).showLeftSidebarMonitorPanel;
+}
+
+export async function saveLeftSidebarMonitorPanelVisibleToStore(visible: boolean): Promise<void> {
+  await saveWiseDefaultConfig({ showLeftSidebarMonitorPanel: visible });
 }
 
 export async function loadDefaultClaudeConnectionKindFromStore(): Promise<ClaudeSessionConnectionKind> {
