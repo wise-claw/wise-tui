@@ -1805,6 +1805,8 @@ async fn spawn_claude_process(
         let suppress_shared_stdout = invocation_key_clone.is_some()
             && (connection_mode_stdout == ClaudeConnectionMode::Oneshot
                 || connection_mode_stdout == ClaudeConnectionMode::Streaming);
+        let mut active_invocation_key = invocation_key_clone.clone();
+        let mut active_suppress_shared = suppress_shared_stdout;
 
         while let Ok(Some(line)) = lines.next_line().await {
             maybe_ack_control_initialize(&line, &pending_stdin_by_spawn_clone, spawn_id).await;
@@ -1888,10 +1890,11 @@ async fn spawn_claude_process(
                             sid_for_turn,
                             turn_ok,
                             turn_verdict,
-                            invocation_key_clone.as_deref(),
-                            suppress_shared_stdout,
+                            active_invocation_key.as_deref(),
+                            active_suppress_shared,
                         ) {
                             streaming_turn_complete_sent = true;
+                            active_suppress_shared = false;
                         }
                     }
                 }
@@ -1904,9 +1907,78 @@ async fn spawn_claude_process(
                 sid,
                 &line,
                 connection_mode_stdout,
-                invocation_key_clone.as_deref(),
-                suppress_shared_stdout,
+                active_invocation_key.as_deref(),
+                active_suppress_shared,
             );
+        }
+
+        let child_still_running_after_stdout = {
+            let mut slot = wait_child_mutex_clone.lock().await;
+            match slot.as_mut() {
+                Some(c) if c.id() == Some(spawned_pid_stdout) => c
+                    .try_wait()
+                    .ok()
+                    .flatten()
+                    .is_none(),
+                _ => false,
+            }
+        };
+
+        // 长驻 streaming：单轮 result 后 stdout 可能暂时无新行（AskUserQuestion 等 stdin 续答前），继续读直到子进程退出。
+        if connection_mode_stdout == ClaudeConnectionMode::Streaming
+            && streaming_turn_complete_sent
+            && child_still_running_after_stdout
+        {
+            pending_stdin_by_spawn_clone.lock().await.remove(&spawn_id);
+            release_claude_spawn_slot(&slots_mtx_clone, acquired_scope_clone.clone()).await;
+            loop {
+                match lines.next_line().await {
+                    Ok(Some(line)) => {
+                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&line) {
+                            if let Some(turn_ok) = streaming_turn_success_from_result(&json) {
+                                let sid_for_turn = real_session_id.as_deref().unwrap_or("unknown");
+                                let turn_verdict = extract_structured_verdict_candidate(&json);
+                                let _ = emit_streaming_turn_complete_events(
+                                    &app_clone,
+                                    &registry_clone,
+                                    sid_for_turn,
+                                    turn_ok,
+                                    turn_verdict,
+                                    None,
+                                    false,
+                                );
+                            }
+                        }
+                        let sid = real_session_id.as_deref().unwrap_or("unknown");
+                        emit_claude_stdout_line(
+                            &app_clone,
+                            sid,
+                            &line,
+                            connection_mode_stdout,
+                            active_invocation_key.as_deref(),
+                            false,
+                        );
+                    }
+                    Ok(None) => {
+                        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                        let still = {
+                            let mut slot = wait_child_mutex_clone.lock().await;
+                            match slot.as_mut() {
+                                Some(c) if c.id() == Some(spawned_pid_stdout) => c
+                                    .try_wait()
+                                    .ok()
+                                    .flatten()
+                                    .is_none(),
+                                _ => false,
+                            }
+                        };
+                        if !still {
+                            break;
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
         }
 
         // Process finished — 只 wait 本 stdout 对应的子进程。Persistent 下新 spawn 会替换全局槽位并 kill 旧进程，
@@ -1943,13 +2015,8 @@ async fn spawn_claude_process(
 
         let sid = real_session_id.as_deref().unwrap_or("unknown");
 
-        // 长驻 streaming：单轮 result 已发过 turn complete；子进程仍存活则保留 stdin 供下一轮。
+        // 长驻 streaming：单轮 result 已发过 turn complete；子进程已退出则清理 stdin / registry。
         if connection_mode_stdout == ClaudeConnectionMode::Streaming && streaming_turn_complete_sent {
-            if child_still_running {
-                pending_stdin_by_spawn_clone.lock().await.remove(&spawn_id);
-                release_claude_spawn_slot(&slots_mtx_clone, acquired_scope_clone.clone()).await;
-                return;
-            }
             if real_session_id.is_some() {
                 registry_clone.remove(sid);
             }
@@ -2288,6 +2355,7 @@ pub(crate) async fn get_claude_spawn_slot_count(
 
 #[tauri::command]
 pub(crate) async fn claude_submit_stdin_line(
+    app: tauri::AppHandle,
     process_state: tauri::State<'_, ClaudeProcessState>,
     line: String,
     session_id: Option<String>,
@@ -2317,6 +2385,9 @@ pub(crate) async fn claude_submit_stdin_line(
         .map_err(|e| e.to_string())?;
     sin.write_all(b"\n").await.map_err(|e| e.to_string())?;
     sin.flush().await.map_err(|e| e.to_string())?;
+    drop(stdin_map);
+    let registry = app.state::<ClaudeSessionRegistry>();
+    registry.mark_running(&resolved_sid);
     Ok(())
 }
 

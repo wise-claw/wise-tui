@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { ClaudeSession } from "../types";
 import {
+  hasLiveStreamingClaudeProcess,
   isQuestionStdinUnavailableError,
   shouldDeliverQuestionViaResume,
+  shouldPreferStreamUserMessageForQuestion,
+  shouldUseProxyQuestionResumeDelivery,
 } from "./questionControlDelivery";
 
 function session(status: ClaudeSession["status"]): ClaudeSession {
@@ -35,6 +38,24 @@ describe("isQuestionStdinUnavailableError", () => {
   });
 });
 
+describe("shouldPreferStreamUserMessageForQuestion", () => {
+  test("matches Qwen family model ids", () => {
+    expect(shouldPreferStreamUserMessageForQuestion("qwen3.7")).toBe(true);
+    expect(shouldPreferStreamUserMessageForQuestion("Qwen3.7")).toBe(true);
+    expect(shouldPreferStreamUserMessageForQuestion("bailian_coding_plan/qwen")).toBe(true);
+  });
+
+  test("ignores native Claude model ids", () => {
+    expect(shouldPreferStreamUserMessageForQuestion("sonnet")).toBe(false);
+    expect(shouldPreferStreamUserMessageForQuestion("claude-opus-4")).toBe(false);
+  });
+
+  test("detects proxy from config model when session model is still sonnet", () => {
+    expect(shouldUseProxyQuestionResumeDelivery("sonnet", "qwen3.7-plus")).toBe(true);
+    expect(shouldUseProxyQuestionResumeDelivery("sonnet", null)).toBe(false);
+  });
+});
+
 describe("shouldDeliverQuestionViaResume", () => {
   test("expired or failed lifecycle uses resume", () => {
     expect(shouldDeliverQuestionViaResume({ status: "expired" } as never, session("running"))).toBe(
@@ -61,5 +82,39 @@ describe("shouldDeliverQuestionViaResume", () => {
     expect(shouldDeliverQuestionViaResume({ status: "pending" } as never, session("cancelled"))).toBe(
       true,
     );
+  });
+
+  test("expired lifecycle on idle streaming tab still prefers stdin when child process is live", () => {
+    const idleStreaming = {
+      ...session("idle"),
+      connectionKind: "streaming" as const,
+      claudeSessionId: "claude-sid-1",
+    };
+    expect(
+      hasLiveStreamingClaudeProcess({
+        session: idleStreaming,
+        streamingTabTracked: true,
+        streamingProcessClaudeSessionId: "claude-sid-1",
+      }),
+    ).toBe(true);
+    expect(
+      hasLiveStreamingClaudeProcess({
+        session: idleStreaming,
+        streamingTabTracked: true,
+        streamingProcessClaudeSessionId: null,
+      }),
+    ).toBe(true);
+    expect(
+      hasLiveStreamingClaudeProcess({
+        session: idleStreaming,
+        streamingTabTracked: false,
+        streamingProcessClaudeSessionId: "claude-sid-1",
+      }),
+    ).toBe(false);
+    expect(
+      shouldDeliverQuestionViaResume({ status: "expired" } as never, idleStreaming, {
+        preferStdinControlResponse: true,
+      }),
+    ).toBe(false);
   });
 });
