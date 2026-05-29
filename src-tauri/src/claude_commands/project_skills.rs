@@ -1,4 +1,5 @@
 use serde::Serialize;
+use std::collections::HashSet;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -34,6 +35,19 @@ fn project_claude_skills_dir(project_path: &str) -> Result<PathBuf, String> {
     }
     let canon = fs::canonicalize(&root).map_err(|e| format!("无法解析项目路径: {}", e))?;
     Ok(canon.join(".claude").join("skills"))
+}
+
+fn project_claude_commands_dir(project_path: &str) -> Result<PathBuf, String> {
+    let p = project_path.trim();
+    if p.is_empty() {
+        return Err("项目路径无效".to_string());
+    }
+    let root = PathBuf::from(p);
+    if !root.is_dir() {
+        return Err("项目目录不存在".to_string());
+    }
+    let canon = fs::canonicalize(&root).map_err(|e| format!("无法解析项目路径: {}", e))?;
+    Ok(canon.join(".claude").join("commands"))
 }
 
 fn skill_preview_from_markdown(text: &str) -> Option<String> {
@@ -252,6 +266,91 @@ fn count_skill_files_recursive(dir: &Path) -> usize {
     total
 }
 
+fn command_skill_name_from_relative(rel: &Path) -> Option<String> {
+    let rel_no_ext = rel.with_extension("");
+    let mut out = String::new();
+    let mut prev_dash = false;
+    for ch in rel_no_ext.to_string_lossy().chars() {
+        let mapped = if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' {
+            ch
+        } else {
+            '-'
+        };
+        if mapped == '-' {
+            if prev_dash {
+                continue;
+            }
+            prev_dash = true;
+            out.push('-');
+        } else {
+            prev_dash = false;
+            out.push(mapped);
+        }
+    }
+    let out = out.trim_matches('-').to_string();
+    if out.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
+}
+
+fn list_claude_command_skills_under_dir(commands_dir: &Path) -> Result<Vec<ClaudeProjectSkill>, String> {
+    if !commands_dir.is_dir() {
+        return Ok(Vec::new());
+    }
+    let mut out = Vec::new();
+
+    fn walk(root: &Path, dir: &Path, out: &mut Vec<ClaudeProjectSkill>) -> Result<(), String> {
+        for entry in fs::read_dir(dir).map_err(|e| e.to_string())? {
+            let entry = entry.map_err(|e| e.to_string())?;
+            let path = entry.path();
+            let ft = entry.file_type().map_err(|e| e.to_string())?;
+            if ft.is_dir() {
+                walk(root, &path, out)?;
+                continue;
+            }
+            if !ft.is_file() {
+                continue;
+            }
+            let is_md = path
+                .extension()
+                .and_then(|x| x.to_str())
+                .map(|x| x.eq_ignore_ascii_case("md"))
+                .unwrap_or(false);
+            if !is_md {
+                continue;
+            }
+            let rel = match path.strip_prefix(root) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            let Some(name) = command_skill_name_from_relative(rel) else {
+                continue;
+            };
+            let description = fs::read_to_string(&path)
+                .ok()
+                .and_then(|text| skill_preview_from_markdown(&text));
+            let is_symlink = crate::skills::source::is_symlink(&path);
+            out.push(ClaudeProjectSkill {
+                name,
+                has_skill_md: false,
+                description,
+                file_count: 1,
+                plugin_cache_rel_path: None,
+                plugin_cache_root: None,
+                source: Some(crate::skills::source::SkillSource::Custom),
+                is_symlink,
+            });
+        }
+        Ok(())
+    }
+
+    walk(commands_dir, commands_dir, &mut out)?;
+    out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    Ok(out)
+}
+
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ClaudeProjectSkill {
@@ -308,7 +407,17 @@ pub(crate) fn list_claude_project_skills(
     project_path: String,
 ) -> Result<Vec<ClaudeProjectSkill>, String> {
     let skills_dir = project_claude_skills_dir(&project_path)?;
-    list_claude_skills_under_dir(&skills_dir)
+    let commands_dir = project_claude_commands_dir(&project_path)?;
+    let mut out = list_claude_skills_under_dir(&skills_dir)?;
+    let mut seen: HashSet<String> = out.iter().map(|s| s.name.to_lowercase()).collect();
+    for cmd in list_claude_command_skills_under_dir(&commands_dir)? {
+        let key = cmd.name.to_lowercase();
+        if seen.insert(key) {
+            out.push(cmd);
+        }
+    }
+    out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    Ok(out)
 }
 
 /// 用户级 `~/.claude/skills/`（与官方 `skills` CLI `-g` 一致；自定义目录时同步切换）。
