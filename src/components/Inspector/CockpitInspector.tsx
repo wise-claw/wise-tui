@@ -6,6 +6,7 @@ import type {
   ProjectItem,
 } from "../../types";
 import { WorkspaceMemosPanel } from "./WorkspaceMemosPanel";
+import { WorkspaceTodosPanel } from "./WorkspaceTodosPanel";
 import { WorkspaceQuickActionsPanel } from "./WorkspaceQuickActionsPanel";
 import "./Inspector.css";
 
@@ -70,6 +71,10 @@ export function CockpitInspector({
           repositoryId={activeRepositoryId}
         />
         <WorkspaceMemosPanel
+          projectId={activeProjectId ?? activeProject?.id ?? null}
+          repositoryId={activeRepositoryId}
+        />
+        <WorkspaceTodosPanel
           projectId={activeProjectId ?? activeProject?.id ?? null}
           repositoryId={activeRepositoryId}
         />

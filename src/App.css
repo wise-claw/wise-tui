@@ -3133,6 +3133,43 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   height: 7px;
 }
 
+.app-repository-icon-todo-count-badge {
+  position: absolute;
+  top: -5px;
+  right: -6px;
+  z-index: 2;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--ant-color-error);
+  color: var(--ant-color-text-light-solid);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 14px;
+  text-align: center;
+  box-shadow: 0 0 0 1px var(--ant-color-bg-layout);
+  pointer-events: none;
+}
+
+.app-repository-icon-wrap--workspace {
+  margin-right: 2px;
+}
+
+.app-repository-icon--workspace {
+  color: var(--ant-color-text-secondary);
+}
+
+.app-repository-item--project .app-repository-icon-wrap--workspace {
+  flex-shrink: 0;
+}
+
+.app-repository-icon-wrap:has(.app-repository-icon-todo-count-badge) .app-repository-main-owner-badge {
+  top: auto;
+  bottom: -5px;
+  right: -5px;
+}
+
 .app-repository-icon svg {
   width: 14px;
   height: 14px;
@@ -3358,6 +3395,33 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 
 .app-repository-action-count-badge--executable {
   background: var(--ant-color-error);
+}
+
+.app-repository-action-count-badge--workspace-reminders {
+  background: var(--ant-color-error);
+}
+
+.app-repository-action--workspace-reminders {
+  width: 18px;
+  min-width: 18px;
+  max-width: 18px;
+  color: var(--ant-color-text-tertiary);
+  background: transparent;
+}
+
+.app-repository-action--workspace-reminders:hover {
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-content);
+}
+
+.app-left-sidebar .app-repository-item--project .app-repository-action--project-quick.app-repository-action--workspace-reminders {
+  color: var(--ant-color-text-tertiary);
+  background: transparent;
+}
+
+.app-left-sidebar .app-repository-item--project .app-repository-action--project-quick.app-repository-action--workspace-reminders:hover {
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-content);
 }
 
 .app-left-sidebar .app-repository-item--project .app-repository-action--project-quick.app-repository-action--requirement {

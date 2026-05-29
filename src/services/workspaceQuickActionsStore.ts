@@ -4,26 +4,20 @@ import {
   type WorkspaceQuickActionItem,
   type WorkspaceQuickActionsPayloadV1,
 } from "../types/workspaceQuickActions";
-import { deleteAppSetting, getAppSetting, setAppSettingJson } from "./appSettingsStore";
-
-const PROJECT_KEY_PREFIX = "wise.workspaceQuickActions.project:" as const;
-const REPOSITORY_KEY_PREFIX = "wise.workspaceQuickActions.repository:" as const;
-const KEY_SUFFIX = ".v1" as const;
-
-function projectKey(projectId: string): string {
-  return `${PROJECT_KEY_PREFIX}${projectId.trim()}${KEY_SUFFIX}`;
-}
-
-function repositoryKey(repositoryId: number): string {
-  return `${REPOSITORY_KEY_PREFIX}${repositoryId}${KEY_SUFFIX}`;
-}
+import {
+  listProjectWorkspaceQuickActionsDb,
+  listRepositoryWorkspaceQuickActionsDb,
+  saveProjectWorkspaceQuickActionsDb,
+  saveRepositoryWorkspaceQuickActionsDb,
+} from "./workspaceInspectorDb";
 
 export async function loadProjectWorkspaceQuickActions(
   projectId: string,
 ): Promise<WorkspaceQuickActionsPayloadV1> {
   const id = projectId.trim();
   if (!id) return { version: 1, items: [] };
-  return parseWorkspaceQuickActionsPayload(await getAppSetting(projectKey(id)));
+  const payload = await listProjectWorkspaceQuickActionsDb(id);
+  return parseWorkspaceQuickActionsPayload(JSON.stringify(payload));
 }
 
 export async function saveProjectWorkspaceQuickActions(
@@ -33,14 +27,15 @@ export async function saveProjectWorkspaceQuickActions(
   const id = projectId.trim();
   if (!id) return;
   const payload = mergeWorkspaceQuickActionsPayload(items);
-  await setAppSettingJson(projectKey(id), payload);
+  await saveProjectWorkspaceQuickActionsDb(id, payload.items);
 }
 
 export async function loadRepositoryWorkspaceQuickActions(
   repositoryId: number,
 ): Promise<WorkspaceQuickActionsPayloadV1> {
   if (!Number.isFinite(repositoryId)) return { version: 1, items: [] };
-  return parseWorkspaceQuickActionsPayload(await getAppSetting(repositoryKey(repositoryId)));
+  const payload = await listRepositoryWorkspaceQuickActionsDb(repositoryId);
+  return parseWorkspaceQuickActionsPayload(JSON.stringify(payload));
 }
 
 export async function saveRepositoryWorkspaceQuickActions(
@@ -49,16 +44,13 @@ export async function saveRepositoryWorkspaceQuickActions(
 ): Promise<void> {
   if (!Number.isFinite(repositoryId)) return;
   const payload = mergeWorkspaceQuickActionsPayload(items);
-  await setAppSettingJson(repositoryKey(repositoryId), payload);
+  await saveRepositoryWorkspaceQuickActionsDb(repositoryId, payload.items);
 }
 
-export async function deleteProjectWorkspaceQuickActions(projectId: string): Promise<void> {
-  const id = projectId.trim();
-  if (!id) return;
-  await deleteAppSetting(projectKey(id)).catch(() => {});
+export async function deleteProjectWorkspaceQuickActions(_projectId: string): Promise<void> {
+  /* 删除工作区时由 Rust `delete_project_scoped_rows` 级联清理表行。 */
 }
 
-export async function deleteRepositoryWorkspaceQuickActions(repositoryId: number): Promise<void> {
-  if (!Number.isFinite(repositoryId)) return;
-  await deleteAppSetting(repositoryKey(repositoryId)).catch(() => {});
+export async function deleteRepositoryWorkspaceQuickActions(_repositoryId: number): Promise<void> {
+  /* 删除仓库时由 Rust `purge_repository_database_refs` 级联清理表行。 */
 }

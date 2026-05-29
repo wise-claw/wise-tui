@@ -1,15 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
 
-const getAppSetting = mock(async () => null as string | null);
-const setAppSetting = mock(async () => undefined);
+const invoke = mock(async () => ({ version: 1, items: [], lastSelectedId: null }));
 
-mock.module("./appSettingsStore", () => ({
-  getAppSetting,
-  setAppSetting,
-  setAppSettingJson: async (key: string, payload: unknown) => {
-    await setAppSetting(key, JSON.stringify(payload));
-  },
-  deleteAppSetting: async () => undefined,
+mock.module("@tauri-apps/api/core", () => ({
+  invoke,
 }));
 
 import { parseWorkspaceMemoTabKey, workspaceMemoTabKey } from "../types/workspaceMemos";
@@ -25,11 +19,26 @@ describe("workspaceMemosStore", () => {
   });
 
   test("round-trip project memos", async () => {
-    const store = new Map<string, string>();
-    getAppSetting.mockImplementation(async (key: string) => store.get(key) ?? null);
-    setAppSetting.mockImplementation(async (key: string, value: string) => {
-      store.set(key, value);
-    });
+    const saved: { items: unknown[]; lastSelectedId: string | null } = {
+      items: [],
+      lastSelectedId: null,
+    };
+    invoke.mockImplementation(
+      async (
+        cmd: string,
+        args?: { items?: unknown[]; lastSelectedId?: string | null },
+      ) => {
+        if (cmd === "save_project_workspace_memos") {
+          saved.items = args?.items ?? [];
+          saved.lastSelectedId = args?.lastSelectedId ?? null;
+          return undefined;
+        }
+        if (cmd === "list_project_workspace_memos") {
+          return { version: 1, items: saved.items, lastSelectedId: saved.lastSelectedId };
+        }
+        return { version: 1, items: [], lastSelectedId: null };
+      },
+    );
     await saveProjectWorkspaceMemos(
       "proj-a",
       [

@@ -54,6 +54,8 @@ mod wise_mascot;
 mod wise_paths;
 mod wise_push;
 mod workspace_commands;
+mod workspace_inspector_commands;
+mod workspace_inspector_db;
 
 pub(crate) use claude_commands::validate_claude_skill_name;
 pub use lib_impl::run;

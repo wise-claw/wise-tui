@@ -1,0 +1,231 @@
+.app-workspace-todos-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-bg-container);
+}
+
+.app-workspace-todos-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 4px 6px 3px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  flex-shrink: 0;
+}
+
+.app-workspace-todos-panel__title {
+  font-size: 12px;
+  line-height: 1.25;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.app-workspace-todos-panel__head-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.app-workspace-todos-panel__toggle-done {
+  font-size: 11px;
+  padding: 0 4px;
+  height: auto;
+}
+
+.app-workspace-todos-panel__body {
+  flex: 0 0 auto;
+  max-height: min(280px, 38vh);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-workspace-todos-panel__loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.app-workspace-todos-panel__list {
+  list-style: none;
+  margin: 0;
+  padding: 1px 0 0;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.app-workspace-todos-panel__empty-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 8px;
+  color: var(--ant-color-text-quaternary);
+  font-size: 11px;
+}
+
+.app-workspace-todos-panel__empty-hint .anticon {
+  font-size: 18px;
+  opacity: 0.45;
+}
+
+.app-workspace-todos-panel__row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto 20px;
+  align-items: center;
+  gap: 0 4px;
+  min-height: 24px;
+  padding: 2px 4px 2px 2px;
+  border-radius: 4px;
+}
+
+.app-workspace-todos-panel__row:hover {
+  background: var(--ant-color-fill-tertiary);
+}
+
+.app-workspace-todos-panel__row--done .app-workspace-todos-panel__title-btn {
+  text-decoration: line-through;
+  color: var(--ant-color-text-quaternary);
+}
+
+.app-workspace-todos-panel__row--overdue .app-workspace-todos-panel__due {
+  color: var(--ant-color-error);
+}
+
+.app-workspace-todos-panel__check {
+  align-self: center;
+  line-height: 1;
+}
+
+.app-workspace-todos-panel__check .ant-checkbox {
+  top: 0;
+}
+
+.app-workspace-todos-panel__check .ant-checkbox-inner {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+}
+
+.app-workspace-todos-panel__check .ant-checkbox-inner::after {
+  inset-inline-start: 20%;
+  top: 44%;
+  width: 4px;
+  height: 7px;
+}
+
+.app-workspace-todos-panel__check.ant-checkbox-checked .ant-checkbox-inner {
+  background: var(--ant-color-primary);
+  border-color: var(--ant-color-primary);
+}
+
+.app-workspace-todos-panel__row-main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0;
+  min-width: 0;
+  min-height: 20px;
+}
+
+.app-workspace-todos-panel__title-btn {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  font: inherit;
+  font-size: 11px;
+  line-height: 20px;
+  height: 20px;
+  color: inherit;
+  cursor: text;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-workspace-todos-panel__title-input {
+  font-size: 11px;
+  padding-block: 0;
+  min-height: 20px;
+}
+
+.app-workspace-todos-panel__due {
+  font-size: 10px;
+  color: var(--ant-color-text-tertiary);
+  line-height: 1.2;
+}
+
+.app-workspace-todos-panel__scope-tag {
+  margin: 0;
+  font-size: 10px;
+  line-height: 14px;
+  padding: 0 3px;
+  align-self: center;
+}
+
+.app-workspace-todos-panel__delete {
+  opacity: 0;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px !important;
+  height: 20px !important;
+  min-width: 20px !important;
+  padding: 0 !important;
+  font-size: 11px;
+}
+
+.app-workspace-todos-panel__row:hover .app-workspace-todos-panel__delete,
+.app-workspace-todos-panel__delete:focus-visible {
+  opacity: 1;
+}
+
+.app-workspace-todos-panel__composer {
+  flex-shrink: 0;
+  padding: 4px 6px 6px;
+  border-top: 1px solid var(--ant-color-border-secondary);
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  background: color-mix(in srgb, var(--ant-color-bg-layout) 40%, transparent);
+}
+
+.app-workspace-todos-panel__scope-pick {
+  flex: 0 0 auto;
+}
+
+.app-workspace-todos-panel__scope-pick .ant-segmented-item-label {
+  font-size: 10px;
+  padding: 0 5px;
+  line-height: 18px;
+}
+
+.app-workspace-todos-panel__add-input {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 11px;
+  min-height: 24px;
+  border-radius: 6px;
+}
+
+.app-workspace-todos-panel__composer > .ant-btn {
+  flex: 0 0 auto;
+  padding: 0 4px;
+}
+
+.app-chat-inspector-inner .app-workspace-todos-panel,
+.app-cockpit-inspector-inner .app-workspace-todos-panel {
+  flex: 0 0 auto;
+}

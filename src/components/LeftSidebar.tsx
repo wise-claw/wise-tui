@@ -55,6 +55,7 @@ import { useProjectSddModeModalController } from "./LeftSidebar/useProjectSddMod
 import { useRepositorySddModeModalController } from "./LeftSidebar/useRepositorySddModeModalController";
 import { useSidebarCodeGraphIndexMap } from "./LeftSidebar/useSidebarCodeGraphIndexMap";
 import { useSidebarScheduledTasksMap } from "./LeftSidebar/useSidebarScheduledTasksMap";
+import { useSidebarWorkspaceTodoCounts } from "../hooks/useSidebarWorkspaceTodoCounts";
 import { useSidebarRequirementUnsplitMap } from "./LeftSidebar/useSidebarRequirementUnsplitMap";
 import { useSidebarExecutableTasksMap } from "./LeftSidebar/useSidebarExecutableTasksMap";
 import { useSidebarTrellisReadyMap } from "./LeftSidebar/useSidebarTrellisReadyMap";
@@ -380,6 +381,8 @@ export function LeftSidebar({
   const codeGraphIndexStatusByRepoId = useSidebarCodeGraphIndexMap(
     useMemo(() => repositories.map((repository) => repository.id), [repositories]),
   );
+  const { byProjectId: incompleteTodoCountByProjectId, byRepositoryId: incompleteTodoCountByRepositoryId } =
+    useSidebarWorkspaceTodoCounts(projects, floatingRepositories);
   const { byId: scheduledTasksByRepoId } = useSidebarScheduledTasksMap(
     repositories,
   );
@@ -903,6 +906,8 @@ export function LeftSidebar({
           requirementUnsplitByRepoId={requirementUnsplitByRepoId}
           executableTasksByProjectId={executableTasksByProjectId}
           executableTasksByRepoId={executableTasksByRepoId}
+          incompleteTodoCountByProjectId={incompleteTodoCountByProjectId}
+          incompleteTodoCountByRepositoryId={incompleteTodoCountByRepositoryId}
           onOpenScheduledTasksForRepository={openScheduledTasksForRepository}
           onOpenScheduledTasksForProject={openScheduledTasksForProject}
           onOpenExecutableTasksForProject={openExecutableTasksForProject}

@@ -8,6 +8,7 @@ use crate::{
     openspec_bootstrap, prd_url_fetch, remote_channels, repository_files, skills, skills_sh, system_resource, task_artifact, trellis_bootstrap,
     trellis_bridge,
     trellis_runtime, wise_db, wise_mascot, wise_paths, wise_push, workspace_commands,
+    workspace_inspector_commands,
 };
 #[cfg(target_os = "macos")]
 use crate::macos_terminal_detect;
@@ -234,6 +235,18 @@ pub fn run() {
             app_state_commands::settings_commands::get_app_setting,
             app_state_commands::settings_commands::set_app_setting,
             app_state_commands::settings_commands::delete_app_setting,
+            workspace_inspector_commands::list_project_workspace_quick_actions,
+            workspace_inspector_commands::save_project_workspace_quick_actions,
+            workspace_inspector_commands::list_repository_workspace_quick_actions,
+            workspace_inspector_commands::save_repository_workspace_quick_actions,
+            workspace_inspector_commands::list_project_workspace_memos,
+            workspace_inspector_commands::save_project_workspace_memos,
+            workspace_inspector_commands::list_repository_workspace_memos,
+            workspace_inspector_commands::save_repository_workspace_memos,
+            workspace_inspector_commands::list_project_workspace_todos,
+            workspace_inspector_commands::save_project_workspace_todos,
+            workspace_inspector_commands::list_repository_workspace_todos,
+            workspace_inspector_commands::save_repository_workspace_todos,
             app_state_commands::settings_commands::get_prd_task_split_result,
             app_state_commands::settings_commands::get_prd_executable_tasks_result,
             app_state_commands::settings_commands::set_prd_task_split_result,

@@ -48,6 +48,8 @@ const MIGRATION_028: &str = include_str!("../migrations/028_assistant_overrides.
 const MIGRATION_029: &str =
     include_str!("../migrations/029_migrate_prompt_layers_into_assistant_overrides.sql");
 const MIGRATION_030: &str = include_str!("../migrations/030_employee_execution_engine.sql");
+const MIGRATION_031: &str = include_str!("../migrations/031_workspace_inspector.sql");
+const MIGRATION_033: &str = include_str!("../migrations/033_workspace_todos.sql");
 const PLATFORM_SPLIT_PROMPT_SEED_JSON: &str =
     include_str!("../migrations/005_platform_split_prompt_seed.json");
 
@@ -181,6 +183,18 @@ const MIGRATIONS: &[Migration] = &[
     Migration {
         name: "030_employee_execution_engine",
         action: MigrationAction::Sql(MIGRATION_030),
+    },
+    Migration {
+        name: "031_workspace_inspector",
+        action: MigrationAction::Sql(MIGRATION_031),
+    },
+    Migration {
+        name: "032_migrate_workspace_inspector_from_app_settings",
+        action: MigrationAction::Seed(crate::workspace_inspector_db::seed_migrate_workspace_inspector_from_app_settings),
+    },
+    Migration {
+        name: "033_workspace_todos",
+        action: MigrationAction::Sql(MIGRATION_033),
     },
 ];
 
@@ -1964,6 +1978,15 @@ fn delete_project_scoped_rows_conn(conn: &Connection, project_id: &str) -> Resul
         params![project_scope],
     )
     .map_err(|e| e.to_string())?;
+    for sql in [
+        "DELETE FROM workspace_quick_actions WHERE scope_kind = 'project' AND scope_id = ?1",
+        "DELETE FROM workspace_memos WHERE scope_kind = 'project' AND scope_id = ?1",
+        "DELETE FROM workspace_memo_scope_prefs WHERE scope_kind = 'project' AND scope_id = ?1",
+        "DELETE FROM workspace_todos WHERE scope_kind = 'project' AND scope_id = ?1",
+    ] {
+        conn.execute(sql, params![project_id])
+            .map_err(|e| e.to_string())?;
+    }
     Ok(())
 }
 
@@ -1982,6 +2005,16 @@ fn purge_repository_database_refs_conn(
         params![repository_scope],
     )
     .map_err(|e| e.to_string())?;
+    let scope_id = repository_id.to_string();
+    for sql in [
+        "DELETE FROM workspace_quick_actions WHERE scope_kind = 'repository' AND scope_id = ?1",
+        "DELETE FROM workspace_memos WHERE scope_kind = 'repository' AND scope_id = ?1",
+        "DELETE FROM workspace_memo_scope_prefs WHERE scope_kind = 'repository' AND scope_id = ?1",
+        "DELETE FROM workspace_todos WHERE scope_kind = 'repository' AND scope_id = ?1",
+    ] {
+        conn.execute(sql, params![scope_id])
+            .map_err(|e| e.to_string())?;
+    }
     crate::code_knowledge_graph::storage::clear_repository_graph_index(conn, repository_id)?;
     Ok(())
 }

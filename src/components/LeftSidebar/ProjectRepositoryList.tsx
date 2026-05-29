@@ -24,6 +24,7 @@ import {
   SidebarExecutableTasksAction,
   SidebarRequirementAction,
   SidebarScheduledTasksAction,
+  SidebarWorkspaceRemindersAction,
 } from "./repositoryRows";
 import { RunningMainSessionDot } from "./RunningMainSessionDot";
 
@@ -95,6 +96,8 @@ interface ProjectRepositoryListProps {
   requirementUnsplitByRepoId?: Record<number, number>;
   executableTasksByProjectId?: Record<string, number>;
   executableTasksByRepoId?: Record<number, number>;
+  incompleteTodoCountByProjectId?: Record<string, number>;
+  incompleteTodoCountByRepositoryId?: Record<number, number>;
   onOpenScheduledTasksForRepository?: (repository: Repository) => void;
   onOpenScheduledTasksForProject?: (project: Workspace) => void;
   onOpenExecutableTasksForProject?: (project: Workspace) => void;
@@ -172,6 +175,8 @@ export function ProjectRepositoryList({
   requirementUnsplitByRepoId = {},
   executableTasksByProjectId = {},
   executableTasksByRepoId = {},
+  incompleteTodoCountByProjectId = {},
+  incompleteTodoCountByRepositoryId = {},
   onOpenScheduledTasksForRepository,
   onOpenScheduledTasksForProject,
   onOpenRepositoryRequirements,
@@ -246,6 +251,7 @@ export function ProjectRepositoryList({
                 scheduledTasksEnabledCount={scheduledTasksByRepoId[repository.id]?.enabled ?? 0}
                 requirementUnsplitCount={requirementUnsplitByRepoId[repository.id] ?? 0}
                 executableTaskCount={executableTasksByRepoId[repository.id] ?? 0}
+                incompleteTodoCount={incompleteTodoCountByRepositoryId[repository.id] ?? 0}
                 onOpenScheduledTasks={onOpenScheduledTasksForRepository}
                 onOpenRequirements={onOpenRepositoryRequirements}
                 onOpenExecutableTasks={onOpenExecutableTasksForRepository}
@@ -322,6 +328,8 @@ export function ProjectRepositoryList({
             onOpenRepositoryRequirements={onOpenRepositoryRequirements}
             executableTasksByProjectId={executableTasksByProjectId}
             executableTasksByRepoId={executableTasksByRepoId}
+            incompleteTodoCountByProjectId={incompleteTodoCountByProjectId}
+            incompleteTodoCountByRepositoryId={incompleteTodoCountByRepositoryId}
             onOpenExecutableTasksForProject={onOpenExecutableTasksForProject}
             onOpenExecutableTasksForRepository={onOpenExecutableTasksForRepository}
             mainSessionRunning={runningMainSessionByProjectId[project.id] === true}
@@ -406,6 +414,8 @@ interface ProjectRowProps {
   requirementUnsplitByRepoId?: Record<number, number>;
   executableTasksByProjectId?: Record<string, number>;
   executableTasksByRepoId?: Record<number, number>;
+  incompleteTodoCountByProjectId?: Record<string, number>;
+  incompleteTodoCountByRepositoryId?: Record<number, number>;
   onOpenScheduledTasksForRepository?: (repository: Repository) => void;
   onOpenScheduledTasksForProject?: (project: Workspace) => void;
   onOpenExecutableTasksForProject?: (project: Workspace) => void;
@@ -474,6 +484,8 @@ function ProjectRow({
   requirementUnsplitByRepoId = {},
   executableTasksByProjectId = {},
   executableTasksByRepoId = {},
+  incompleteTodoCountByProjectId = {},
+  incompleteTodoCountByRepositoryId = {},
   onOpenScheduledTasksForRepository,
   onOpenScheduledTasksForProject,
   onOpenRepositoryRequirements,
@@ -506,6 +518,7 @@ function ProjectRow({
   );
   const projectRequirementUnsplitCount = requirementUnsplitByProjectId[project.id] ?? 0;
   const projectExecutableTaskCount = executableTasksByProjectId[project.id] ?? 0;
+  const projectIncompleteTodoCount = incompleteTodoCountByProjectId[project.id] ?? 0;
   const projectMoreItems = buildProjectMoreMenuItems({
     isPinned,
     trellisEnabled: projectTrellisEnabled,
@@ -635,6 +648,10 @@ function ProjectRow({
               onOpen={() => onOpenExecutableTasksForProject(project)}
             />
           ) : null}
+          <SidebarWorkspaceRemindersAction
+            variant="project"
+            incompleteCount={projectIncompleteTodoCount}
+          />
           <Dropdown
             rootClassName="app-sidebar-more-menu-dropdown"
             menu={{
@@ -715,6 +732,7 @@ function ProjectRow({
             scheduledTasksByRepoId={scheduledTasksByRepoId}
             requirementUnsplitByRepoId={requirementUnsplitByRepoId}
             executableTasksByRepoId={executableTasksByRepoId}
+            incompleteTodoCountByRepositoryId={incompleteTodoCountByRepositoryId}
             onOpenScheduledTasks={onOpenScheduledTasksForRepository}
             onOpenRepositoryRequirements={onOpenRepositoryRequirements}
             onOpenRepositoryExecutableTasks={onOpenExecutableTasksForRepository}

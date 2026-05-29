@@ -93,6 +93,18 @@ export function ExecutableTasksIcon() {
   );
 }
 
+/** 侧栏快捷入口：提醒事项（类似 Apple 提醒列表） */
+export function WorkspaceRemindersIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <circle cx="4.75" cy="4.75" r="1.35" stroke="currentColor" strokeWidth="1.1" />
+      <circle cx="4.75" cy="8" r="1.35" stroke="currentColor" strokeWidth="1.1" />
+      <circle cx="4.75" cy="11.25" r="1.35" stroke="currentColor" strokeWidth="1.1" />
+      <path d="M7.25 4.75h5M7.25 8h5M7.25 11.25h3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function ChatIcon() {
   return (
     <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>

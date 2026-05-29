@@ -1,15 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
 
-const getAppSetting = mock(async () => null as string | null);
-const setAppSetting = mock(async () => undefined);
+const invoke = mock(async () => ({ version: 1, items: [] }));
 
-mock.module("./appSettingsStore", () => ({
-  getAppSetting,
-  setAppSetting,
-  setAppSettingJson: async (key: string, payload: unknown) => {
-    await setAppSetting(key, JSON.stringify(payload));
-  },
-  deleteAppSetting: async () => undefined,
+mock.module("@tauri-apps/api/core", () => ({
+  invoke,
 }));
 
 import {
@@ -20,16 +14,25 @@ import {
 
 describe("workspaceQuickActionsStore", () => {
   test("load returns empty payload when unset", async () => {
-    getAppSetting.mockImplementation(async () => null);
+    invoke.mockImplementation(async () => ({ version: 1, items: [] }));
     const payload = await loadProjectWorkspaceQuickActions("proj-1");
     expect(payload).toEqual({ version: 1, items: [] });
+    expect(invoke).toHaveBeenCalledWith("list_project_workspace_quick_actions", {
+      projectId: "proj-1",
+    });
   });
 
   test("save and load round-trip project items", async () => {
-    const store = new Map<string, string>();
-    getAppSetting.mockImplementation(async (key: string) => store.get(key) ?? null);
-    setAppSetting.mockImplementation(async (key: string, value: string) => {
-      store.set(key, value);
+    const saved: { items: unknown[] } = { items: [] };
+    invoke.mockImplementation(async (cmd: string, args?: { items?: unknown[] }) => {
+      if (cmd === "save_project_workspace_quick_actions") {
+        saved.items = args?.items ?? [];
+        return undefined;
+      }
+      if (cmd === "list_project_workspace_quick_actions") {
+        return { version: 1, items: saved.items };
+      }
+      return { version: 1, items: [] };
     });
     await saveProjectWorkspaceQuickActions("proj-1", [
       {
@@ -47,12 +50,10 @@ describe("workspaceQuickActionsStore", () => {
   });
 
   test("parse rejects invalid items", async () => {
-    getAppSetting.mockImplementation(async () =>
-      JSON.stringify({
-        version: 1,
-        items: [{ id: "", kind: "link", label: "x", target: "https://x.com" }],
-      }),
-    );
+    invoke.mockImplementation(async () => ({
+      version: 1,
+      items: [{ id: "", kind: "link", label: "x", target: "https://x.com" }],
+    }));
     const loaded = await loadRepositoryWorkspaceQuickActions(42);
     expect(loaded.items).toHaveLength(0);
   });

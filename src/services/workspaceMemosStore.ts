@@ -4,24 +4,18 @@ import {
   type WorkspaceMemoItem,
   type WorkspaceMemosPayloadV1,
 } from "../types/workspaceMemos";
-import { deleteAppSetting, getAppSetting, setAppSettingJson } from "./appSettingsStore";
-
-const PROJECT_KEY_PREFIX = "wise.workspaceMemos.project:" as const;
-const REPOSITORY_KEY_PREFIX = "wise.workspaceMemos.repository:" as const;
-const KEY_SUFFIX = ".v1" as const;
-
-function projectKey(projectId: string): string {
-  return `${PROJECT_KEY_PREFIX}${projectId.trim()}${KEY_SUFFIX}`;
-}
-
-function repositoryKey(repositoryId: number): string {
-  return `${REPOSITORY_KEY_PREFIX}${repositoryId}${KEY_SUFFIX}`;
-}
+import {
+  listProjectWorkspaceMemosDb,
+  listRepositoryWorkspaceMemosDb,
+  saveProjectWorkspaceMemosDb,
+  saveRepositoryWorkspaceMemosDb,
+} from "./workspaceInspectorDb";
 
 export async function loadProjectWorkspaceMemos(projectId: string): Promise<WorkspaceMemosPayloadV1> {
   const id = projectId.trim();
   if (!id) return { version: 1, items: [] };
-  return parseWorkspaceMemosPayload(await getAppSetting(projectKey(id)));
+  const payload = await listProjectWorkspaceMemosDb(id);
+  return parseWorkspaceMemosPayload(JSON.stringify(payload));
 }
 
 export async function saveProjectWorkspaceMemos(
@@ -31,14 +25,16 @@ export async function saveProjectWorkspaceMemos(
 ): Promise<void> {
   const id = projectId.trim();
   if (!id) return;
-  await setAppSettingJson(projectKey(id), mergeWorkspaceMemosPayload(items, lastSelectedId));
+  const payload = mergeWorkspaceMemosPayload(items, lastSelectedId);
+  await saveProjectWorkspaceMemosDb(id, payload.items, payload.lastSelectedId);
 }
 
 export async function loadRepositoryWorkspaceMemos(
   repositoryId: number,
 ): Promise<WorkspaceMemosPayloadV1> {
   if (!Number.isFinite(repositoryId)) return { version: 1, items: [] };
-  return parseWorkspaceMemosPayload(await getAppSetting(repositoryKey(repositoryId)));
+  const payload = await listRepositoryWorkspaceMemosDb(repositoryId);
+  return parseWorkspaceMemosPayload(JSON.stringify(payload));
 }
 
 export async function saveRepositoryWorkspaceMemos(
@@ -47,16 +43,14 @@ export async function saveRepositoryWorkspaceMemos(
   lastSelectedId?: string | null,
 ): Promise<void> {
   if (!Number.isFinite(repositoryId)) return;
-  await setAppSettingJson(repositoryKey(repositoryId), mergeWorkspaceMemosPayload(items, lastSelectedId));
+  const payload = mergeWorkspaceMemosPayload(items, lastSelectedId);
+  await saveRepositoryWorkspaceMemosDb(repositoryId, payload.items, payload.lastSelectedId);
 }
 
-export async function deleteProjectWorkspaceMemos(projectId: string): Promise<void> {
-  const id = projectId.trim();
-  if (!id) return;
-  await deleteAppSetting(projectKey(id)).catch(() => {});
+export async function deleteProjectWorkspaceMemos(_projectId: string): Promise<void> {
+  /* 删除工作区时由 Rust 级联清理。 */
 }
 
-export async function deleteRepositoryWorkspaceMemos(repositoryId: number): Promise<void> {
-  if (!Number.isFinite(repositoryId)) return;
-  await deleteAppSetting(repositoryKey(repositoryId)).catch(() => {});
+export async function deleteRepositoryWorkspaceMemos(_repositoryId: number): Promise<void> {
+  /* 删除仓库时由 Rust 级联清理。 */
 }

@@ -33,6 +33,7 @@ import {
   ScheduledTasksIcon,
   RequirementIcon,
   TrellisIcon,
+  WorkspaceRemindersIcon,
 } from "./SidebarIcons";
 import { useIsRepositoryRunCommandRunning } from "../../hooks/useIsRepositoryRunCommandRunning";
 import { RunningMainSessionDot } from "./RunningMainSessionDot";
@@ -273,6 +274,40 @@ export function SidebarExecutableTasksAction({
   );
 }
 
+export function SidebarWorkspaceRemindersAction({
+  incompleteCount,
+  variant = "repo",
+}: {
+  incompleteCount: number;
+  variant?: "repo" | "project";
+}) {
+  if (incompleteCount <= 0) return null;
+
+  const badgeLabel = incompleteCount > 99 ? "99+" : String(incompleteCount);
+  const scopeLabel = variant === "project" ? "工作区" : "仓库";
+  const tooltip = `${scopeLabel}提醒事项：${incompleteCount} 条未完成`;
+
+  return (
+    <Tooltip title={tooltip} mouseEnterDelay={0.3}>
+      <button
+        type="button"
+        className={`app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--workspace-reminders${variant === "project" ? " app-repository-action--project-quick" : ""}`}
+        aria-label={tooltip}
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+      >
+        <span className="app-repository-action-icon-wrap">
+          <WorkspaceRemindersIcon />
+          <span className="app-repository-action-count-badge app-repository-action-count-badge--workspace-reminders">
+            {badgeLabel}
+          </span>
+        </span>
+      </button>
+    </Tooltip>
+  );
+}
+
 export function RepositoryRow({
   project,
   repository,
@@ -299,6 +334,7 @@ export function RepositoryRow({
   scheduledTasksEnabledCount = 0,
   requirementUnsplitCount = 0,
   executableTaskCount = 0,
+  incompleteTodoCount = 0,
   onOpenScheduledTasks,
   onOpenRequirements,
   onOpenExecutableTasks,
@@ -332,6 +368,7 @@ export function RepositoryRow({
   scheduledTasksEnabledCount?: number;
   requirementUnsplitCount?: number;
   executableTaskCount?: number;
+  incompleteTodoCount?: number;
   onOpenScheduledTasks?: (repository: Repository) => void;
   onOpenRequirements?: (repository: Repository) => void;
   onOpenExecutableTasks?: (repository: Repository) => void;
@@ -474,6 +511,7 @@ export function RepositoryRow({
               onOpen={() => onOpenExecutableTasks(repository)}
             />
           ) : null}
+          <SidebarWorkspaceRemindersAction incompleteCount={incompleteTodoCount} />
           <RepositorySddStackBadge repository={repository} />
           <Dropdown
             rootClassName="app-sidebar-more-menu-dropdown"
@@ -545,6 +583,7 @@ export function FloatingRepositoryRow({
   scheduledTasksEnabledCount = 0,
   requirementUnsplitCount = 0,
   executableTaskCount = 0,
+  incompleteTodoCount = 0,
   onOpenScheduledTasks,
   onOpenRequirements,
   onOpenExecutableTasks,
@@ -579,6 +618,7 @@ export function FloatingRepositoryRow({
   scheduledTasksEnabledCount?: number;
   requirementUnsplitCount?: number;
   executableTaskCount?: number;
+  incompleteTodoCount?: number;
   onOpenScheduledTasks?: (repository: Repository) => void;
   onOpenRequirements?: (repository: Repository) => void;
   onOpenExecutableTasks?: (repository: Repository) => void;
@@ -694,6 +734,7 @@ export function FloatingRepositoryRow({
               onOpen={() => onOpenExecutableTasks(repository)}
             />
           ) : null}
+          <SidebarWorkspaceRemindersAction incompleteCount={incompleteTodoCount} />
           <RepositorySddStackBadge repository={repository} />
           <Dropdown
             rootClassName="app-sidebar-more-menu-dropdown"
@@ -772,6 +813,7 @@ export function ProjectRepositoryRows({
   scheduledTasksByRepoId = {},
   requirementUnsplitByRepoId = {},
   executableTasksByRepoId = {},
+  incompleteTodoCountByRepositoryId = {},
   onOpenScheduledTasks,
   onOpenRepositoryRequirements,
   onOpenRepositoryExecutableTasks,
@@ -808,6 +850,7 @@ export function ProjectRepositoryRows({
   scheduledTasksByRepoId?: Record<number, { total: number; enabled: number }>;
   requirementUnsplitByRepoId?: Record<number, number>;
   executableTasksByRepoId?: Record<number, number>;
+  incompleteTodoCountByRepositoryId?: Record<number, number>;
   onOpenScheduledTasks?: (repository: Repository) => void;
   onOpenRepositoryRequirements?: (repository: Repository) => void;
   onOpenRepositoryExecutableTasks?: (repository: Repository) => void;
@@ -874,6 +917,7 @@ export function ProjectRepositoryRows({
             scheduledTasksEnabledCount={scheduledTasksByRepoId[repository.id]?.enabled ?? 0}
             requirementUnsplitCount={requirementUnsplitByRepoId[repository.id] ?? 0}
             executableTaskCount={executableTasksByRepoId[repository.id] ?? 0}
+            incompleteTodoCount={incompleteTodoCountByRepositoryId[repository.id] ?? 0}
             onOpenScheduledTasks={onOpenScheduledTasks}
             onOpenRequirements={onOpenRepositoryRequirements}
             onOpenExecutableTasks={onOpenRepositoryExecutableTasks}
