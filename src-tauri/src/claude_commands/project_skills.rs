@@ -234,11 +234,33 @@ fn parse_skill_md_frontmatter_description(text: &str) -> Option<String> {
     None
 }
 
-fn read_claude_skill_entry(skill_dir: &Path) -> (bool, Option<String>) {
-    let md = skill_dir.join("SKILL.md");
-    if !md.is_file() {
-        return (false, None);
+fn resolve_skill_markdown_path(skill_dir: &Path) -> Option<PathBuf> {
+    let canonical = skill_dir.join("SKILL.md");
+    if canonical.is_file() {
+        return Some(canonical);
     }
+    let Ok(entries) = fs::read_dir(skill_dir) else {
+        return None;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if name.eq_ignore_ascii_case("skill.md") {
+            return Some(path);
+        }
+    }
+    None
+}
+
+fn read_claude_skill_entry(skill_dir: &Path) -> (bool, Option<String>) {
+    let Some(md) = resolve_skill_markdown_path(skill_dir) else {
+        return (false, None);
+    };
     let Ok(text) = fs::read_to_string(&md) else {
         return (true, None);
     };
