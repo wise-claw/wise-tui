@@ -179,6 +179,8 @@ export function MonitorHistorySessionTranscriptDrawer({
       onClose={onClose}
       placement="right"
       destroyOnHidden
+      getContainer={() => document.body}
+      zIndex={1200}
       size={drawerWidth}
       classNames={{ body: "app-monitor-panel__history-session-drawer-body" }}
       extra={

@@ -3774,6 +3774,10 @@ export function ClaudeChat({
                                     type="button"
                                     className={`app-claude-session-history-popover__item ${active ? "app-claude-session-history-popover__item--active" : ""}`}
                                     title={sessionHoverTitle}
+                                    onMouseDown={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                    }}
                                     onClick={() => {
                                       onOpenHistorySessionInInspector?.(item.id);
                                       setHistoryPopoverOpen(false);

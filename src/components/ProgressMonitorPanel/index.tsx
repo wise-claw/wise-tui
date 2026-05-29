@@ -39,7 +39,6 @@ import {
 } from "../../services/claudeConcurrencyLimits";
 import { sanitizeOmcDirectBatchPreviewLineForList } from "../../utils/claudeInvocationText";
 import { OmcDirectBatchInvocationDetailDrawer } from "./OmcDirectBatchInvocationDetailDrawer";
-import { MonitorHistorySessionTranscriptDrawer } from "./MonitorHistorySessionTranscriptDrawer";
 import { HistorySessionRestoreButton } from "./HistorySessionRestoreButton";
 import { getSessionPreview } from "./historySessionDrawerChrome";
 import {
@@ -748,6 +747,10 @@ export function HistorySessionPopoverContent({
               <button
                 type="button"
                 className="app-monitor-panel__history-popover-item app-monitor-panel__history-popover-item--grow"
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
                 onClick={(event) => {
                   event.stopPropagation();
                   onSelectSession?.(row.session.id);
@@ -820,15 +823,15 @@ export function ProgressMonitorPanel({
   hideEmployeeUi: _hideEmployeeUi = false,
   claudeConcurrency = null,
   onCancelSession,
-  onOpenTaskDetail,
+  onOpenTaskDetail: _onOpenTaskDetail,
   onOpenOmcBatchInvocationDetail,
   onCancelOmcDirectBatchInvocation,
   onStopSessionConversationTask,
   onReloadFullDiskTranscript,
-  onCompactSessionHistory,
+  onCompactSessionHistory: _onCompactSessionHistory,
   transcriptSourceSessions,
   projectId,
-  historyDrawerSessionId: historyDrawerSessionIdProp,
+  historyDrawerSessionId: _historyDrawerSessionIdProp,
   onHistoryDrawerSessionIdChange,
   onRestoreHistorySessionAsMain,
   repositoryMainBindings = {},
@@ -841,9 +844,7 @@ export function ProgressMonitorPanel({
   const [employeeHistorySearch, setEmployeeHistorySearch] = useState("");
   const [teamHistorySearch, setTeamHistorySearch] = useState("");
   const [teamHistoryEmployeeFilter, setTeamHistoryEmployeeFilter] = useState<string>("all");
-  const [internalHistoryMessagesSessionId, setInternalHistoryMessagesSessionId] = useState<string | null>(null);
-  const historyMessagesSessionId =
-    historyDrawerSessionIdProp !== undefined ? historyDrawerSessionIdProp : internalHistoryMessagesSessionId;
+  const [, setInternalHistoryMessagesSessionId] = useState<string | null>(null);
   const setHistoryMessagesSessionId = onHistoryDrawerSessionIdChange ?? setInternalHistoryMessagesSessionId;
 
   const canRestoreHistorySession = useCallback(
@@ -952,10 +953,6 @@ export function ProgressMonitorPanel({
     setEmployeeHistoryPopoverId(null);
     setTeamHistoryPopoverId(null);
     setHistoryMessagesSessionId(sessionId);
-  }
-
-  function closeHistoryMessagesDrawer() {
-    setHistoryMessagesSessionId(null);
   }
 
   const handleOmcBatchInvocationSelect = useCallback(
@@ -1501,25 +1498,6 @@ export function ProgressMonitorPanel({
           })}
       </div>
       ) : null}
-
-      <MonitorHistorySessionTranscriptDrawer
-        open={historyMessagesSessionId !== null}
-        sessionId={historyMessagesSessionId}
-        onClose={closeHistoryMessagesDrawer}
-        transcriptSourceSessions={sessionsForHistoryTranscript}
-        onReloadFullDiskTranscript={onReloadFullDiskTranscript}
-        onCompactSessionHistory={onCompactSessionHistory}
-        onCancelSession={onCancelSession}
-        onOpenTaskDetail={onOpenTaskDetail}
-        onRestoreSession={
-          onRestoreHistorySessionAsMain
-            ? (sessionId) => {
-                void Promise.resolve(onRestoreHistorySessionAsMain(sessionId));
-              }
-            : undefined
-        }
-        canRestoreSession={canRestoreHistorySession}
-      />
 
       <OmcDirectBatchInvocationDetailDrawer
         open={omcDirectBatchDetailSnapshot !== null}

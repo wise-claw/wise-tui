@@ -23,6 +23,7 @@ import {
   repositorySessionTabDisplayName,
   repositoryTypeChineseLabel,
 } from "./utils/repositoryType";
+import { isSessionBoundAsRepositoryMain } from "./utils/repositoryMainSessionBinding";
 import { resolveSessionExecutionEngine } from "./utils/sessionExecutionEngine";
 import { useAgentRegistryCodexAvailable } from "./hooks/useAgentRegistryCodexAvailable";
 import { useCcWorkflowStudioWorkspace } from "./hooks/useCcWorkflowStudioWorkspace";
@@ -1883,6 +1884,20 @@ export default function App() {
     [effectiveRightCollapsed, handleToggleRightPanel, rightPanelDefaultCollapsed],
   );
 
+  const canRestoreHistorySessionForDrawer = useCallback(
+    (sessionId: string) => {
+      const session = sessionsLatestRef.current.find((item) => item.id === sessionId);
+      if (!session) return false;
+      return !isSessionBoundAsRepositoryMain(
+        session,
+        repositoryMainBindingsLatestRef.current,
+        sessionsLatestRef.current,
+        repositories,
+      );
+    },
+    [repositories],
+  );
+
   const handleRestoreHistorySessionAsMain = useCallback(
     async (sessionId: string) => {
       const sid = sessionId.trim();
@@ -3656,6 +3671,20 @@ export default function App() {
             projectId,
           }));
         },
+      }}
+      historyTranscriptDrawerProps={{
+        open: inspectorHistorySessionId !== null,
+        sessionId: inspectorHistorySessionId,
+        onClose: () => setInspectorHistorySessionId(null),
+        transcriptSourceSessions: sessions,
+        onReloadFullDiskTranscript: reloadFullDiskTranscript,
+        onCompactSessionHistory: compactSessionHistory,
+        onCancelSession: cancelSession,
+        onOpenTaskDetail: (taskId) => {
+          setMonitorDrawerTarget({ type: "task", taskId });
+        },
+        onRestoreSession: handleRestoreHistorySessionAsMain,
+        canRestoreSession: canRestoreHistorySessionForDrawer,
       }}
       progressMonitorDrawerProps={{
         open: monitorDrawerTarget != null,

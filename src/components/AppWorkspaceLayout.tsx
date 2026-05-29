@@ -32,6 +32,7 @@ import { LeftSidebar } from "./LeftSidebar";
 import { MainLayoutResizeHandle } from "./MainLayoutResizeHandle";
 import { McpHub } from "./McpHub";
 import { ProgressMonitorDrawer } from "./ProgressMonitorDrawer";
+import { MonitorHistorySessionTranscriptDrawer } from "./ProgressMonitorPanel/MonitorHistorySessionTranscriptDrawer";
 import { RepositoryFileEditorPanel } from "./RepositoryFileEditorPanel";
 import { RepositoryFilePreviewModal } from "./RepositoryFilePreviewModal";
 import { SkillsHub } from "./SkillsHub";
@@ -319,6 +320,7 @@ export interface AppWorkspaceLayoutProps {
   codeKnowledgeGraphProps: CodeKnowledgeGraphPanelProps;
   prdTaskSplitPanelProps: PrdTaskSplitPanelProps;
   progressMonitorDrawerProps: ComponentProps<typeof ProgressMonitorDrawer>;
+  historyTranscriptDrawerProps: ComponentProps<typeof MonitorHistorySessionTranscriptDrawer>;
   onToggleCompactLayoutMode: () => void;
   onLeftWidthChange: (widthPx: number) => void;
   onRightWidthChange: (widthPx: number) => void;
@@ -414,6 +416,7 @@ export function AppWorkspaceLayout({
   codeKnowledgeGraphProps,
   prdTaskSplitPanelProps,
   progressMonitorDrawerProps,
+  historyTranscriptDrawerProps,
   onToggleCompactLayoutMode,
   onLeftWidthChange,
   onRightWidthChange,
@@ -839,6 +842,8 @@ export function AppWorkspaceLayout({
               <ConnectedRepositoryFilePreviewModal />
 
               <ProgressMonitorDrawer {...progressMonitorDrawerProps} />
+
+              <MonitorHistorySessionTranscriptDrawer {...historyTranscriptDrawerProps} />
 
             </AntdApp>
           </ConfigProvider>
