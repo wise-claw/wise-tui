@@ -3579,8 +3579,11 @@ export default function App() {
       }}
       chatInspectorProps={{
         dark,
-        collapsed: false,
+        collapsed: effectiveRightCollapsed,
         projectId: activeProjectId,
+        activeProjectName: activeProject?.name ?? null,
+        activeRepositoryId,
+        activeRepositoryName: activeRepository?.name ?? null,
         siderWidth: mainLayoutRightWidthPx,
         monitorStats: null,
       }}
@@ -3589,6 +3592,9 @@ export default function App() {
         collapsed: effectiveRightCollapsed,
         siderWidth: mainLayoutRightWidthPx,
         activeProject,
+        activeProjectId,
+        activeRepositoryId,
+        activeRepositoryName: activeRepository?.name ?? null,
         employeeMonitorItems,
       }}
       cockpitEmpty={projects.length === 0 && floatingRepositories.length === 0}

@@ -11,6 +11,7 @@ import type {
 } from "../../types";
 import { MAIN_LAYOUT_RIGHT_SIDER_WIDTH_PX } from "../../constants/mainLayoutWidths";
 import { ProgressMonitorPanel } from "../ProgressMonitorPanel";
+import { WorkspaceQuickActionsPanel } from "./WorkspaceQuickActionsPanel";
 import "./Inspector.css";
 
 const { Sider } = Layout;
@@ -58,6 +59,10 @@ export interface ChatInspectorProps {
   onRestoreHistorySessionAsMain?: (sessionId: string) => void | Promise<void>;
   repositoryMainBindings?: Record<string, string>;
   repositories?: Repository[];
+  /** 右栏快捷操作：关联当前工作区 / 仓库 */
+  activeProjectName?: string | null;
+  activeRepositoryName?: string | null;
+  activeRepositoryId?: number | null;
 }
 
 /**
@@ -99,6 +104,9 @@ export function ChatInspector({
   onRestoreHistorySessionAsMain,
   repositoryMainBindings,
   repositories,
+  activeProjectName,
+  activeRepositoryName,
+  activeRepositoryId = null,
 }: ChatInspectorProps) {
   const sessionsForMonitor = monitorPanelSessions ?? [];
   const transcriptSessions = monitorTranscriptSourceSessions ?? sessionsForMonitor;
@@ -112,6 +120,12 @@ export function ChatInspector({
       theme={dark ? "dark" : "light"}
     >
       <div className="app-right-panel-inner app-chat-inspector-inner">
+        <WorkspaceQuickActionsPanel
+          projectId={projectId ?? null}
+          projectName={activeProjectName}
+          repositoryId={activeRepositoryId}
+          repositoryName={activeRepositoryName}
+        />
         <div className="app-chat-inspector-card">
           {monitorStats ? (
             <div className="app-chat-inspector-section app-chat-inspector-section--team" aria-label="我的团队">

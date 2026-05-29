@@ -5,6 +5,7 @@ import type {
   EmployeeMonitorItem,
   ProjectItem,
 } from "../../types";
+import { WorkspaceQuickActionsPanel } from "./WorkspaceQuickActionsPanel";
 import "./Inspector.css";
 
 const { Sider } = Layout;
@@ -19,6 +20,9 @@ export interface CockpitInspectorProps {
   activeProject: ProjectItem | null;
   /** 子代理活动列表（来自 monitor overview）。 */
   employeeMonitorItems: EmployeeMonitorItem[];
+  activeProjectId?: string | null;
+  activeRepositoryId?: number | null;
+  activeRepositoryName?: string | null;
 }
 
 /**
@@ -38,6 +42,9 @@ export function CockpitInspector({
   siderWidth = MAIN_LAYOUT_RIGHT_SIDER_WIDTH_PX,
   activeProject,
   employeeMonitorItems,
+  activeProjectId,
+  activeRepositoryId = null,
+  activeRepositoryName,
 }: CockpitInspectorProps) {
   const activeAgents = useMemo(
     () => employeeMonitorItems.filter((item) => item.status === "in_progress"),
@@ -57,6 +64,12 @@ export function CockpitInspector({
       theme={dark ? "dark" : "light"}
     >
       <div className="app-right-panel-inner">
+        <WorkspaceQuickActionsPanel
+          projectId={activeProjectId ?? activeProject?.id ?? null}
+          projectName={activeProject?.name ?? null}
+          repositoryId={activeRepositoryId}
+          repositoryName={activeRepositoryName}
+        />
         <section className="app-cockpit-inspector-section" aria-label="Mission 概览">
           <header className="app-cockpit-inspector-section-header">
             <Text strong>Mission 概览</Text>
