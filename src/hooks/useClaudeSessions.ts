@@ -2948,12 +2948,12 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     async (sessionId: string, response: "allow_once" | "allow_always" | "deny") => {
       const pr = notificationHub.getDockSlice(sessionId).permissionRequest;
       if (!pr) return;
+      const ownerSessionId = notificationHub.findRequestSessionId(pr.id) ?? sessionId;
       const prLife = notificationHub.getRequestLifecycle(pr.id);
       if (prLife?.status === "expired") {
-        message.warning("该权限请求已随上一轮进程结束，无法提交。请重新发起对话后再操作。");
+        notificationHub.clearPermission(ownerSessionId);
         return;
       }
-      const ownerSessionId = notificationHub.findRequestSessionId(pr.id) ?? sessionId;
       const session = sessionsRef.current.find((s) => s.id === ownerSessionId || s.claudeSessionId === ownerSessionId);
       const targetSessionId = session?.claudeSessionId ?? session?.id ?? ownerSessionId;
       const payload = buildPermissionStdinLine(pr.id, response, pr.toolInput, pr.toolUseId);

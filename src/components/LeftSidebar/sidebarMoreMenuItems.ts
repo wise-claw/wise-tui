@@ -48,8 +48,6 @@ export interface BuildProjectMoreMenuItemsInput {
   onOpenScheduledTasksForProject?: boolean;
   onOpenExecutableTasksForProject?: boolean;
   onReconcileProject?: boolean;
-  onCodeGraphGenerateProject?: boolean;
-  onCodeGraphViewProject?: boolean;
   onOpenProjectInTerminal?: boolean;
 }
 
@@ -66,8 +64,6 @@ export function buildProjectMoreMenuItems(input: BuildProjectMoreMenuItemsInput)
     onOpenScheduledTasksForProject,
     onOpenExecutableTasksForProject,
     onReconcileProject,
-    onCodeGraphGenerateProject,
-    onCodeGraphViewProject,
     onOpenProjectInTerminal,
   } = input;
 
@@ -104,17 +100,6 @@ export function buildProjectMoreMenuItems(input: BuildProjectMoreMenuItemsInput)
             ],
           }
         : null,
-      onCodeGraphGenerateProject && onCodeGraphViewProject
-        ? {
-            key: "code-graph-submenu",
-            label: "图谱操作",
-            popupClassName: "app-sidebar-more-menu-submenu",
-            children: [
-              { key: "code-graph-generate-project", label: "生成工作区索引" },
-              { key: "code-graph-view-project", label: "查看检索" },
-            ],
-          }
-        : null,
       { key: "prompts", label: "提示词" },
     ]),
     sidebarMenuSection([{ key: "delete", label: "删除工作区", danger: true }]),
@@ -135,8 +120,6 @@ export interface BuildProjectRepositoryMoreMenuItemsInput {
   onOpenScheduledTasks?: boolean;
   onOpenRequirements?: boolean;
   onOpenExecutableTasks?: boolean;
-  onCodeGraphGenerateRepository?: boolean;
-  onCodeGraphViewRepositoryInProject?: boolean;
   onOpenRepositoryInTerminal?: boolean;
 }
 
@@ -182,8 +165,6 @@ export function buildProjectRepositoryMoreMenuItems(
     onOpenScheduledTasks,
     onOpenRequirements,
     onOpenExecutableTasks,
-    onCodeGraphGenerateRepository,
-    onCodeGraphViewRepositoryInProject,
     onOpenRepositoryInTerminal,
   } = input;
 
@@ -212,19 +193,6 @@ export function buildProjectRepositoryMoreMenuItems(
       onOpenScheduledTasks ? { key: "scheduled-tasks", label: "定时任务" } : null,
       trellisEnabled && onOpenExecutableTasks ? { key: "executable-tasks", label: "可执行任务" } : null,
     ]),
-    sidebarMenuSection([
-      onCodeGraphGenerateRepository && onCodeGraphViewRepositoryInProject
-        ? {
-            key: "code-graph-submenu",
-            label: "图谱操作",
-            popupClassName: "app-sidebar-more-menu-submenu",
-            children: [
-              { key: "code-graph-generate-repo", label: "生成检索" },
-              { key: "code-graph-view-repo", label: "查看检索" },
-            ],
-          }
-        : null,
-    ]),
     sidebarMenuSection([{ key: "detach", label: "移出工作区", danger: true }]),
   );
 }
@@ -241,8 +209,6 @@ export interface BuildFloatingRepositoryMoreMenuItemsInput {
   onOpenScheduledTasks?: boolean;
   onOpenRequirements?: boolean;
   onOpenExecutableTasks?: boolean;
-  onCodeGraphGenerateRepository?: boolean;
-  onCodeGraphViewFloatingRepository?: boolean;
   onPromoteToNewProject?: boolean;
   onJoinExistingProject?: boolean;
   onOpenRepositoryInTerminal?: boolean;
@@ -262,8 +228,6 @@ export function buildFloatingRepositoryMoreMenuItems(
     onOpenScheduledTasks,
     onOpenRequirements,
     onOpenExecutableTasks,
-    onCodeGraphGenerateRepository,
-    onCodeGraphViewFloatingRepository,
     onPromoteToNewProject,
     onJoinExistingProject,
     onOpenRepositoryInTerminal,
@@ -299,19 +263,6 @@ export function buildFloatingRepositoryMoreMenuItems(
       trellisEnabled && onOpenRequirements ? { key: "requirements", label: "仓库需求" } : null,
       onOpenScheduledTasks ? { key: "scheduled-tasks", label: "定时任务" } : null,
       trellisEnabled && onOpenExecutableTasks ? { key: "executable-tasks", label: "可执行任务" } : null,
-    ]),
-    sidebarMenuSection([
-      onCodeGraphGenerateRepository && onCodeGraphViewFloatingRepository
-        ? {
-            key: "code-graph-submenu",
-            label: "图谱操作",
-            popupClassName: "app-sidebar-more-menu-submenu",
-            children: [
-              { key: "code-graph-generate-repo", label: "生成检索" },
-              { key: "code-graph-view-repo", label: "查看检索" },
-            ],
-          }
-        : null,
     ]),
     sidebarMenuSection([
       onPromoteToNewProject ? { key: "promote", label: "升格为工作区…" } : null,

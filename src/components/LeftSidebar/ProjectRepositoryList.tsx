@@ -2,7 +2,6 @@ import type { MutableRefObject } from "react";
 import { Dropdown, Tooltip, Typography } from "antd";
 import type { ReconcileProjectMode } from "../../constants/reconcileProjectMode";
 import type { Repository, StandaloneRepo, TaskMode, Workspace } from "../../types";
-import type { SidebarCodeGraphIndexStatus } from "./useSidebarCodeGraphIndexMap";
 import {
   sumProjectScheduledTasksEnabled,
   sumProjectScheduledTasksTotal,
@@ -19,7 +18,6 @@ import {
 import {
   FloatingRepositoryRow,
   ProjectRepositoryRows,
-  RepositoryCodeGraphAction,
   RepositoryTrellisAction,
   SidebarExecutableTasksAction,
   SidebarRequirementAction,
@@ -47,11 +45,6 @@ interface ProjectRepositoryListProps {
   onReconcileProject?: (projectId: string, mode: ReconcileProjectMode) => void | Promise<void>;
   onBootstrapTrellisForProject?: (project: Workspace) => void | Promise<void>;
   onBootstrapTrellisForRepository?: (repository: Repository) => void | Promise<void>;
-  onCodeGraphGenerateProject?: (project: Workspace) => void | Promise<void>;
-  onCodeGraphViewProject?: (project: Workspace) => void;
-  onCodeGraphGenerateRepository?: (repository: Repository) => void | Promise<void>;
-  onCodeGraphViewRepositoryInProject?: (project: Workspace, repository: Repository) => void;
-  onCodeGraphViewFloatingRepository?: (repository: Repository) => void;
   onToggleProjectExpand: (projectId: string) => void;
   onTogglePinProject: (projectId: string) => void;
   onRenameProject: (project: Workspace) => void;
@@ -88,7 +81,6 @@ interface ProjectRepositoryListProps {
   onProjectDropTargetChange: (projectId: string | null | ((cur: string | null) => string | null)) => void;
   onClearRepoSidebarDrag: () => void;
   onMoveRepositoryError: (message: string, err: unknown) => void;
-  codeGraphIndexStatusByRepoId?: Record<number, SidebarCodeGraphIndexStatus>;
   projectTrellisReadyById?: Record<string, boolean>;
   repositoryTrellisReadyById?: Record<number, boolean>;
   scheduledTasksByRepoId?: Record<number, SidebarScheduledTasksSummary>;
@@ -127,11 +119,6 @@ export function ProjectRepositoryList({
   onReconcileProject,
   onBootstrapTrellisForProject,
   onBootstrapTrellisForRepository,
-  onCodeGraphGenerateProject,
-  onCodeGraphViewProject,
-  onCodeGraphGenerateRepository,
-  onCodeGraphViewRepositoryInProject,
-  onCodeGraphViewFloatingRepository,
   onToggleProjectExpand,
   onTogglePinProject,
   onRenameProject,
@@ -167,7 +154,6 @@ export function ProjectRepositoryList({
   onProjectDropTargetChange,
   onClearRepoSidebarDrag,
   onMoveRepositoryError,
-  codeGraphIndexStatusByRepoId = {},
   projectTrellisReadyById = {},
   repositoryTrellisReadyById = {},
   scheduledTasksByRepoId = {},
@@ -239,12 +225,9 @@ export function ProjectRepositoryList({
                 onConfigureSddMode={onConfigureRepositorySddMode}
                 onNewPaneSession={onNewPaneSessionForRepository}
                 onBootstrapTrellis={onBootstrapTrellisForRepository}
-                onCodeGraphGenerateRepository={onCodeGraphGenerateRepository}
-                onCodeGraphViewFloatingRepository={onCodeGraphViewFloatingRepository}
                 onPromoteToNewProject={onPromoteFloatingRepository}
                 onJoinExistingProject={onJoinFloatingRepository}
                 onRemove={onRemoveFloatingRepository}
-                codeGraphIndexed={codeGraphIndexStatusByRepoId[repository.id] === "done"}
                 trellisReady={repositoryTrellisReadyById[repository.id] === true}
                 onOpenFloatingRepositoryTrellis={onOpenFloatingRepositoryTrellis}
                 scheduledTasksTotalCount={scheduledTasksByRepoId[repository.id]?.total ?? 0}
@@ -293,10 +276,6 @@ export function ProjectRepositoryList({
             onOpenWorkspaceRequirements={onOpenWorkspaceRequirements}
             onReconcileProject={onReconcileProject}
             onBootstrapTrellisForProject={onBootstrapTrellisForProject}
-            onCodeGraphGenerateProject={onCodeGraphGenerateProject}
-            onCodeGraphViewProject={onCodeGraphViewProject}
-            onCodeGraphGenerateRepository={onCodeGraphGenerateRepository}
-            onCodeGraphViewRepositoryInProject={onCodeGraphViewRepositoryInProject}
             onOpenInFinder={onOpenInFinder}
             onOpenProjectInFinder={onOpenProjectInFinder}
             onOpenInTerminal={onOpenInTerminal}
@@ -317,7 +296,6 @@ export function ProjectRepositoryList({
             onProjectDropTargetChange={onProjectDropTargetChange}
             onClearRepoSidebarDrag={onClearRepoSidebarDrag}
             onMoveRepositoryError={onMoveRepositoryError}
-            codeGraphIndexStatusByRepoId={codeGraphIndexStatusByRepoId}
             projectTrellisReadyById={projectTrellisReadyById}
             repositoryTrellisReadyById={repositoryTrellisReadyById}
             scheduledTasksByRepoId={scheduledTasksByRepoId}
@@ -380,10 +358,6 @@ interface ProjectRowProps {
   onOpenRepositoryRequirements?: (repository: Repository) => void;
   onReconcileProject?: (projectId: string, mode: ReconcileProjectMode) => void | Promise<void>;
   onBootstrapTrellisForProject?: (project: Workspace) => void | Promise<void>;
-  onCodeGraphGenerateProject?: (project: Workspace) => void | Promise<void>;
-  onCodeGraphViewProject?: (project: Workspace) => void;
-  onCodeGraphGenerateRepository?: (repository: Repository) => void | Promise<void>;
-  onCodeGraphViewRepositoryInProject?: (project: Workspace, repository: Repository) => void;
   onOpenInFinder: (repository: Repository) => void;
   onOpenProjectInFinder?: (project: Workspace) => void;
   onOpenInTerminal?: (repository: Repository) => void;
@@ -406,7 +380,6 @@ interface ProjectRowProps {
   onProjectDropTargetChange: (projectId: string | null | ((cur: string | null) => string | null)) => void;
   onClearRepoSidebarDrag: () => void;
   onMoveRepositoryError: (message: string, err: unknown) => void;
-  codeGraphIndexStatusByRepoId?: Record<number, SidebarCodeGraphIndexStatus>;
   projectTrellisReadyById?: Record<string, boolean>;
   repositoryTrellisReadyById?: Record<number, boolean>;
   scheduledTasksByRepoId?: Record<number, SidebarScheduledTasksSummary>;
@@ -450,10 +423,6 @@ function ProjectRow({
   onOpenWorkspaceRequirements,
   onReconcileProject,
   onBootstrapTrellisForProject,
-  onCodeGraphGenerateProject,
-  onCodeGraphViewProject,
-  onCodeGraphGenerateRepository,
-  onCodeGraphViewRepositoryInProject,
   onOpenInFinder,
   onOpenProjectInFinder,
   onOpenInTerminal,
@@ -476,7 +445,6 @@ function ProjectRow({
   onProjectDropTargetChange,
   onClearRepoSidebarDrag,
   onMoveRepositoryError,
-  codeGraphIndexStatusByRepoId = {},
   projectTrellisReadyById = {},
   repositoryTrellisReadyById = {},
   scheduledTasksByRepoId = {},
@@ -505,9 +473,6 @@ function ProjectRow({
     }
     onCreateProjectTask(project, "split");
   };
-  const projectHasCodeGraph = project.repositoryIds.some(
-    (repositoryId) => codeGraphIndexStatusByRepoId[repositoryId] === "done",
-  );
   const projectScheduledTasksEnabled = sumProjectScheduledTasksEnabled(
     project.repositoryIds,
     scheduledTasksByRepoId,
@@ -531,8 +496,6 @@ function ProjectRow({
     onOpenScheduledTasksForProject: Boolean(onOpenScheduledTasksForProject),
     onOpenExecutableTasksForProject: Boolean(onOpenExecutableTasksForProject),
     onReconcileProject: Boolean(onReconcileProject),
-    onCodeGraphGenerateProject: Boolean(onCodeGraphGenerateProject),
-    onCodeGraphViewProject: Boolean(onCodeGraphViewProject),
   });
 
   return (
@@ -627,12 +590,6 @@ function ProjectRow({
               onOpen={openWorkspaceRequirements}
             />
           ) : null}
-          {projectHasCodeGraph && onCodeGraphViewProject ? (
-            <RepositoryCodeGraphAction
-              variant="project"
-              onOpen={() => onCodeGraphViewProject(project)}
-            />
-          ) : null}
           {onOpenScheduledTasksForProject ? (
             <SidebarScheduledTasksAction
               variant="project"
@@ -675,8 +632,6 @@ function ProjectRow({
                 if (key === "reconcile-repos-graphs") {
                   void Promise.resolve(onReconcileProject?.(project.id, "repos_and_graphs"));
                 }
-                if (key === "code-graph-generate-project") void Promise.resolve(onCodeGraphGenerateProject?.(project));
-                if (key === "code-graph-view-project") onCodeGraphViewProject?.(project);
                 if (key === "prompts") onOpenPromptsProject?.(project);
                 if (key === "delete") onDeleteProject(project);
               },
@@ -717,8 +672,6 @@ function ProjectRow({
             onConfigureSddMode={onConfigureRepositorySddMode}
             onConfigureRepositoryMainSessionRun={onConfigureRepositoryMainSessionRun}
             onNewPaneSession={onNewPaneSessionForRepository}
-            onCodeGraphGenerateRepository={onCodeGraphGenerateRepository}
-            onCodeGraphViewRepositoryInProject={onCodeGraphViewRepositoryInProject}
             repoSidebarDragRef={repoSidebarDragRef}
             onRepoSidebarDragEnd={onClearRepoSidebarDrag}
             hideChatAction={
@@ -727,7 +680,6 @@ function ProjectRow({
                 projects: [project],
               }) === "multi_repo"
             }
-            codeGraphIndexStatusByRepoId={codeGraphIndexStatusByRepoId}
             repositoryTrellisReadyById={repositoryTrellisReadyById}
             scheduledTasksByRepoId={scheduledTasksByRepoId}
             requirementUnsplitByRepoId={requirementUnsplitByRepoId}

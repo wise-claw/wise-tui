@@ -75,16 +75,6 @@ export interface LeftSidebarProps {
   onBootstrapTrellisForProject?: (project: ProjectItem) => void | Promise<void>;
   /** 在仓库目录执行 `trellis init -y`（已存在则跳过）。 */
   onBootstrapTrellisForRepository?: (repository: Repository) => void | Promise<void>;
-  /** Workspace 菜单「图谱操作 → 生成 Workspace 索引」：多仓时并行启动各仓代码图谱检索 + GitNexus 仓库组同步；单仓仅本机检索 */
-  onCodeGraphGenerateProject?: (project: ProjectItem) => void | Promise<void>;
-  /** Workspace 菜单「图谱操作 → 查看检索」：打开代码图谱覆盖层（多仓时以当前 Workspace 为搜索范围） */
-  onCodeGraphViewProject?: (project: ProjectItem) => void;
-  /** 仓库菜单「图谱操作 → 生成检索」 */
-  onCodeGraphGenerateRepository?: (repository: Repository) => void | Promise<void>;
-  /** Workspace 内仓库「图谱操作 → 查看检索」 */
-  onCodeGraphViewRepositoryInProject?: (project: ProjectItem, repository: Repository) => void;
-  /** Standalone Repo「图谱操作 → 查看检索」 */
-  onCodeGraphViewFloatingRepository?: (repository: Repository) => void;
   onAddFloatingRepository?: (
     repositoryType: Repository["repositoryType"],
     options?: AddRepositoryOptions,

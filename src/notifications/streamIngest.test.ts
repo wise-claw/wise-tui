@@ -27,6 +27,32 @@ describe("ingestClaudeStreamLineForHub can_use_tool", () => {
     expect(slice.permissionRequest?.controlSubtype).toBe("can_use_tool");
     expect(slice.permissionRequest?.description).toContain("退出规划模式");
   });
+
+  it("clears expired permission dock after process end (expire_keep_visible)", () => {
+    const sessionId = "tab-test-permission-expired-dismiss";
+    notificationHub.clearPermission(sessionId);
+
+    ingestClaudeStreamLineForHub(
+      sessionId,
+      JSON.stringify({
+        type: "control_request",
+        request_id: "req-exit-plan-expired",
+        request: {
+          subtype: "can_use_tool",
+          tool_name: "ExitPlanMode",
+          input: {},
+        },
+      }),
+    );
+    notificationHub.invalidateControlRequestsForSession(sessionId, "进程已结束", "expire_keep_visible");
+
+    expect(notificationHub.getDockSlice(sessionId).permissionRequest?.id).toBe("req-exit-plan-expired");
+    expect(notificationHub.getRequestLifecycle("req-exit-plan-expired")?.status).toBe("expired");
+
+    notificationHub.clearPermission(sessionId);
+
+    expect(notificationHub.getDockSlice(sessionId).permissionRequest).toBeNull();
+  });
 });
 
 describe("buildPermissionStdinLine", () => {

@@ -53,7 +53,6 @@ import { useProjectRepositorySidebarState } from "./LeftSidebar/useProjectReposi
 import { useRepositoryAssociateModalController } from "./LeftSidebar/useRepositoryAssociateModalController";
 import { useProjectSddModeModalController } from "./LeftSidebar/useProjectSddModeModalController";
 import { useRepositorySddModeModalController } from "./LeftSidebar/useRepositorySddModeModalController";
-import { useSidebarCodeGraphIndexMap } from "./LeftSidebar/useSidebarCodeGraphIndexMap";
 import { useSidebarScheduledTasksMap } from "./LeftSidebar/useSidebarScheduledTasksMap";
 import { useSidebarWorkspaceTodoCounts } from "../hooks/useSidebarWorkspaceTodoCounts";
 import { useSidebarRequirementUnsplitMap } from "./LeftSidebar/useSidebarRequirementUnsplitMap";
@@ -103,11 +102,6 @@ export function LeftSidebar({
   onReconcileProject,
   onBootstrapTrellisForProject,
   onBootstrapTrellisForRepository,
-  onCodeGraphGenerateProject,
-  onCodeGraphViewProject,
-  onCodeGraphGenerateRepository,
-  onCodeGraphViewRepositoryInProject,
-  onCodeGraphViewFloatingRepository,
   onAddFloatingRepository,
   onAddRepositoryToProject,
   onPromoteFloatingRepositoryToProject,
@@ -378,9 +372,6 @@ export function LeftSidebar({
     repositories,
     onUpdateProjectSddMode,
   });
-  const codeGraphIndexStatusByRepoId = useSidebarCodeGraphIndexMap(
-    useMemo(() => repositories.map((repository) => repository.id), [repositories]),
-  );
   const { byProjectId: incompleteTodoCountByProjectId, byRepositoryId: incompleteTodoCountByRepositoryId } =
     useSidebarWorkspaceTodoCounts(projects, floatingRepositories);
   const { byId: scheduledTasksByRepoId } = useSidebarScheduledTasksMap(
@@ -823,12 +814,6 @@ export function LeftSidebar({
           onReconcileProject={onReconcileProject}
           onBootstrapTrellisForProject={onBootstrapTrellisForProject}
           onBootstrapTrellisForRepository={onBootstrapTrellisForRepository}
-          onCodeGraphGenerateProject={onCodeGraphGenerateProject}
-          onCodeGraphViewProject={onCodeGraphViewProject}
-          onCodeGraphGenerateRepository={onCodeGraphGenerateRepository}
-          onCodeGraphViewRepositoryInProject={onCodeGraphViewRepositoryInProject}
-          onCodeGraphViewFloatingRepository={onCodeGraphViewFloatingRepository}
-          codeGraphIndexStatusByRepoId={codeGraphIndexStatusByRepoId}
           projectTrellisReadyById={projectTrellisReadyById}
           repositoryTrellisReadyById={repositoryTrellisReadyById}
           onToggleProjectExpand={projectRepositoryState.toggleProjectExpand}
