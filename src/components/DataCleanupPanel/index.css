@@ -1,0 +1,122 @@
+.app-data-cleanup-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(240px, 0.85fr);
+  gap: 10px;
+  width: 100%;
+  align-items: start;
+}
+
+.app-data-cleanup-panel__main {
+  min-width: 0;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
+  overflow: hidden;
+}
+
+.app-data-cleanup-panel__toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-data-cleanup-panel__bulk {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-data-cleanup-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+}
+
+.app-data-cleanup-row + .app-data-cleanup-row {
+  border-top: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-data-cleanup-row__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-data-cleanup-row__title {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--ant-color-text);
+}
+
+.app-data-cleanup-row__hint {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-data-cleanup-row__usage {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.app-data-cleanup-row__control {
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+
+.app-data-cleanup-panel__notes {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-data-cleanup-panel__notes-title {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--ant-color-text);
+}
+
+.app-data-cleanup-panel__notes-list {
+  margin: 0;
+  padding-left: 1.1em;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-data-cleanup-panel__notes-list li + li {
+  margin-top: 6px;
+}
+
+.author-panel-page--data-cleanup {
+  width: 100%;
+  max-width: none;
+}
+
+.author-panel-page--data-cleanup .author-panel-page__head {
+  --author-panel-page-head-padding-top: 16px;
+  --author-panel-page-head-padding-bottom: 8px;
+}
+
+@media (max-width: 760px) {
+  .app-data-cleanup-panel {
+    grid-template-columns: 1fr;
+  }
+}

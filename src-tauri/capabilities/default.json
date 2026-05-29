@@ -10,7 +10,13 @@
     {
       "identifier": "opener:allow-open-path",
       "allow": [
+        { "path": "$HOME/.wise" },
+        { "path": "$HOME/.wise/**" },
         { "path": "$HOME/.wise/prd-runs/**" },
+        { "path": "$HOME/.wise/composer-images/**" },
+        { "path": "$HOME/.wise/composer-images" },
+        { "path": "$HOME/.wise/prd-images/**" },
+        { "path": "$HOME/.wise/prd-images" },
         { "path": "$HOME/.wise/extensions/**" },
         { "path": "$HOME/.wise/extensions" },
         { "path": "$HOME/.wise/my-extensions/**" },

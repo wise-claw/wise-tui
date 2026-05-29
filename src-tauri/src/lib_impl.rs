@@ -7,7 +7,8 @@ use crate::{
     mission_control, mcp, my_extensions,
     openspec_bootstrap, prd_url_fetch, remote_channels, repository_files, skills, skills_sh, system_resource, task_artifact, trellis_bootstrap,
     trellis_bridge,
-    trellis_runtime, wise_db, wise_mascot, wise_paths, wise_push, workspace_commands,
+    trellis_runtime, wise_data_cleanup, wise_db, wise_mascot, wise_paths, wise_push,
+    workspace_commands,
     workspace_inspector_commands,
 };
 #[cfg(target_os = "macos")]
@@ -481,6 +482,9 @@ pub fn run() {
             claude_commands::prd_split_pipeline::prd_split_list_legacy_runs,
             claude_commands::prd_split_pipeline::prd_split_read_legacy_run,
             claude_commands::attachments::capture_screenshot,
+            wise_data_cleanup::open_wise_home_dir,
+            wise_data_cleanup::list_wise_data_cleanup_categories,
+            wise_data_cleanup::cleanup_wise_data_categories,
             app_state_commands::load_session_tabs,
             app_state_commands::save_session_tabs,
             wise_mascot::wise_mascot_show,

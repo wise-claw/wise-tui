@@ -13,6 +13,7 @@ import { AutomationPanel } from "../AutomationPanel";
 import { ChannelsPanel } from "../ChannelsPanel";
 import { ClaudeHooksConfigPanel, type ClaudeHooksConfigPanelHandle } from "../ClaudeHooksConfigPanel";
 import { ClaudeConfigDirPanel } from "../ClaudeConfigDirPanel";
+import { DataCleanupPanel } from "../DataCleanupPanel";
 import { DefaultConfigPanel } from "../DefaultConfigPanel";
 import { AgentRegistrySection } from "../ClaudeConfigDirPanel/AgentRegistrySection";
 import { ClaudeSandboxHelpPopoverBody } from "../ClaudeSandboxHelpPopoverBody";
@@ -183,6 +184,8 @@ export function AuthorPanel({
         );
       case "defaults":
         return <DefaultConfigPanel />;
+      case "data-cleanup":
+        return <DataCleanupPanel />;
       case "claude-config":
         return <ClaudeConfigDirPanel />;
       case "my-extensions":
@@ -246,7 +249,13 @@ export function AuthorPanel({
         icon={activeTab.icon}
         title={activeTab.label}
         subtitle={activeTab.description}
-        className={pane === "defaults" ? "author-panel-page--default-config" : undefined}
+        className={
+          pane === "defaults"
+            ? "author-panel-page--default-config"
+            : pane === "data-cleanup"
+              ? "author-panel-page--data-cleanup"
+              : undefined
+        }
       >
         {content}
       </AuthorPanelPageShell>

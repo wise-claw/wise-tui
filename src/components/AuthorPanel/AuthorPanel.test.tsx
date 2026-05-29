@@ -443,9 +443,18 @@ describe("AuthorPanel", () => {
     expect(html).toContain("wise.defaultConfig.v1");
   });
 
+  test("data-cleanup pane renders wise cache cleanup", () => {
+    const { props } = buildProps({ pane: "data-cleanup" });
+    const html = renderAuthorPanel(props);
+    expect(html).toContain("数据清理");
+    expect(html).toContain("清理全部图片");
+    expect(html).toContain("Composer 图片");
+  });
+
   test("application setting panes mount inside configuration center", () => {
     for (const pane of [
       "defaults",
+      "data-cleanup",
       "claude-config",
       "assistants",
       "engine-registry",
