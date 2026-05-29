@@ -1346,7 +1346,8 @@ export function useMonitorOverview({
       employeeMonitorItems.push(omcMonitorItem);
     }
 
-    const workflowIds = Array.from(new Set([...workflowTemplates.map((item) => item.id), ...workflowTasks.map((item) => item.workflowId)]));
+    /** 运行面板「工作流」仅展示配置中心仍存在的模板；历史 task 上的 orphan workflowId 不再占位。 */
+    const workflowIds = workflowTemplates.map((item) => item.id);
     const teamMonitorItems: TeamMonitorItem[] = workflowIds.map((workflowId) => {
       const template = templateById.get(workflowId);
       const tasks = workflowTasks.filter((task) => task.workflowId === workflowId);

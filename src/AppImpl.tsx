@@ -1548,7 +1548,7 @@ export default function App() {
     [employeeMonitorItems],
   );
   useEffect(() => {
-    const workflowIds = Array.from(new Set([...workflowTemplates.map((item) => item.id), ...workflowTasks.map((item) => item.workflowId)]));
+    const workflowIds = workflowTemplates.map((item) => item.id);
     const missingIds = workflowIds.filter((workflowId) => !workflowGraphsByWorkflowId[workflowId]);
     if (missingIds.length === 0) {
       return;
@@ -3403,6 +3403,21 @@ export default function App() {
             try {
               await deleteWorkflowTemplate(workflowId);
               await refreshWorkflowTemplates();
+              setWorkflowGraphsByWorkflowId((prev) => {
+                if (!(workflowId in prev)) return prev;
+                const next = { ...prev };
+                delete next[workflowId];
+                return next;
+              });
+              setWorkflowGraphStatusByWorkflowId((prev) => {
+                if (!(workflowId in prev)) return prev;
+                const next = { ...prev };
+                delete next[workflowId];
+                return next;
+              });
+              setMonitorDrawerTarget((prev) =>
+                prev?.type === "team" && prev.workflowId === workflowId ? null : prev,
+              );
               message.success("团队已删除");
             } catch (error) {
               const messageText = toUiErrorMessage(error);
