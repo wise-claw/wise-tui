@@ -46,7 +46,6 @@ export function CockpitInspector({
   employeeMonitorItems,
   activeProjectId,
   activeRepositoryId = null,
-  activeRepositoryName,
 }: CockpitInspectorProps) {
   const activeAgents = useMemo(
     () => employeeMonitorItems.filter((item) => item.status === "in_progress"),

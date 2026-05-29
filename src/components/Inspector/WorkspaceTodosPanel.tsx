@@ -1,5 +1,6 @@
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import { App, Button, Checkbox, Input, Segmented, Spin, Tag, Tooltip, Typography } from "antd";
+import type { InputRef } from "antd";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useWorkspaceTodos } from "../../hooks/useWorkspaceTodos";
 import {
@@ -95,7 +96,7 @@ export function WorkspaceTodosPanel({ projectId, repositoryId }: WorkspaceTodosP
   const [newScope, setNewScope] = useState<WorkspaceTodoScope>("repository");
   const [draftTitle, setDraftTitle] = useState("");
   const [showCompleted, setShowCompleted] = useState(false);
-  const addInputRef = useRef<HTMLInputElement>(null);
+  const addInputRef = useRef<InputRef>(null);
 
   const allowProjectScope = Boolean(projectId?.trim());
   const allowRepositoryScope = repositoryId != null;
