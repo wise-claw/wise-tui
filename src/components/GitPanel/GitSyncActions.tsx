@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { Button, Space, Tooltip } from "antd";
 import { ArrowDownOutlined, ArrowUpOutlined, CheckOutlined, ReloadOutlined } from "@ant-design/icons";
 import type { GitStatusResponse } from "../../types";
@@ -13,6 +14,18 @@ interface GitSyncActionsProps {
 export function GitSyncActions({ status, loading, onFetch, onPull, onPush }: GitSyncActionsProps) {
   const ahead = status.ahead ?? 0;
   const behind = status.behind ?? 0;
+  const pushDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handlePushClick = () => {
+    if (loading.push || loading.pull) return;
+    if (pushDebounceRef.current != null) {
+      clearTimeout(pushDebounceRef.current);
+    }
+    pushDebounceRef.current = setTimeout(() => {
+      pushDebounceRef.current = null;
+      onPush();
+    }, 350);
+  };
 
   if (!status.branch && !loading.fetch) {
     return null;
@@ -51,7 +64,7 @@ export function GitSyncActions({ status, loading, onFetch, onPull, onPush }: Git
           className={`git-sync-count-btn${loading.push ? " git-sync-count-btn--busy" : ""}`}
           icon={<ArrowUpOutlined />}
           onMouseDown={(event) => event.preventDefault()}
-          onClick={onPush}
+          onClick={handlePushClick}
           disabled={loading.push || loading.pull}
         >
           {!loading.push && ahead > 0 && (

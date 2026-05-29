@@ -1689,6 +1689,9 @@ export function ClaudeChat({
   const [pushSummaryLoading, setPushSummaryLoading] = useState(false);
   const [pushSummaryPhase, setPushSummaryPhase] = useState<string>("");
   const [pushSubmitting, setPushSubmitting] = useState(false);
+  const pushSummaryLoadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pushSummaryLoadSeqRef = useRef(0);
+  const pushSubmitInFlightRef = useRef(false);
   const [gitWorktreePopoverOpen, setGitWorktreePopoverOpen] = useState(false);
   const [workTrajectoryDrawerOpen, setWorkTrajectoryDrawerOpen] = useState(false);
   const [linkedWorktrees, setLinkedWorktrees] = useState<GitWorktreeEntry[]>([]);
@@ -2114,65 +2117,114 @@ export function ClaudeChat({
     return () => window.clearTimeout(t);
   }, [stats.additions, stats.deletions]);
 
-  const loadPushSummaryDraft = useCallback(async () => {
-    if (!gitRepositoryPath) return;
-    setPushSummaryLoading(true);
-    setPushSummaryPhase("读取 Git 变更中...");
-    try {
-      const status = await gitStatus(gitRepositoryPath);
-      const fallback = buildAiCommitSummary(status);
-      const changedFiles = [...status.staged, ...status.unstaged]
-        .map((item) => `- ${item.path} (${item.status}, +${item.additions}, -${item.deletions})`)
-        .join("\n");
-      setPushSummaryPhase("调用 Claude Code 生成总结...");
-      const prompt = [
-        "你是资深工程师，请基于以下 git 改动生成一段简洁的中文提交总结草稿。",
-        "要求：",
-        "1) 2-4 行；",
-        "2) 第一行说明本次改动目标；",
-        "3) 后续行按要点概述影响范围；",
-        "4) 不要使用 markdown 标题，不要输出解释。",
-        "",
-        `仓库路径: ${gitRepositoryPath}`,
-        `分支: ${status.branch ?? "(unknown)"}`,
-        `总计: +${Math.max(0, status.additions || 0)} / -${Math.max(0, status.deletions || 0)}`,
-        `暂存文件数: ${status.staged.length}, 未暂存文件数: ${status.unstaged.length}`,
-        "文件清单：",
-        changedFiles || "- 无",
-        "",
-        "请仅输出最终提交总结正文。",
-      ].join("\n");
-      const configuredModel = await getClaudeConfigModel(gitRepositoryPath);
-      const result = await executeClaudeCodeAndWait({
-        repositoryPath: gitRepositoryPath,
-        prompt,
-        model: configuredModel ?? undefined,
-        timeoutMs: 45_000,
-        connectionMode: "oneshot",
-      });
-      setPushSummaryPhase("整理生成结果...");
-      if (!result.success) {
-        setPushSummaryDraft(fallback);
+  const cancelScheduledPushSummaryLoad = useCallback(() => {
+    if (pushSummaryLoadTimerRef.current != null) {
+      clearTimeout(pushSummaryLoadTimerRef.current);
+      pushSummaryLoadTimerRef.current = null;
+    }
+  }, []);
+
+  const loadPushSummaryDraft = useCallback(
+    async (seq: number) => {
+      if (!gitRepositoryPath) return;
+
+      setPushSummaryLoading(true);
+      setPushSummaryPhase("读取 Git 变更中...");
+
+      let status: Awaited<ReturnType<typeof gitStatus>> | null = null;
+      try {
+        status = await gitStatus(gitRepositoryPath);
+        if (seq !== pushSummaryLoadSeqRef.current) return;
+        setPushSummaryDraft(buildAiCommitSummary(status));
+      } catch {
+        if (seq !== pushSummaryLoadSeqRef.current) return;
+        setPushSummaryDraft("");
+        setPushSummaryLoading(false);
+        setPushSummaryPhase("");
         return;
       }
-      const cleaned = extractClaudeInvocationFinalText(result.outputLines);
-      setPushSummaryDraft(cleaned || fallback);
-    } catch {
-      setPushSummaryPhase("生成失败，使用默认模板...");
-      const status = await gitStatus(gitRepositoryPath).catch(() => null);
-      setPushSummaryDraft(status ? buildAiCommitSummary(status) : "");
-    } finally {
-      setPushSummaryLoading(false);
-      setPushSummaryPhase("");
-    }
-  }, [gitRepositoryPath]);
 
-  useEffect(() => {
-    if (!pushPopoverOpen) return;
-    void loadPushSummaryDraft();
-  }, [pushPopoverOpen, loadPushSummaryDraft]);
+      setPushSummaryPhase("AI 生成总结中（后台）...");
+      try {
+        const fallback = buildAiCommitSummary(status);
+        const changedFiles = [...status.staged, ...status.unstaged]
+          .map((item) => `- ${item.path} (${item.status}, +${item.additions}, -${item.deletions})`)
+          .join("\n");
+        const prompt = [
+          "你是资深工程师，请基于以下 git 改动生成一段简洁的中文提交总结草稿。",
+          "要求：",
+          "1) 2-4 行；",
+          "2) 第一行说明本次改动目标；",
+          "3) 后续行按要点概述影响范围；",
+          "4) 不要使用 markdown 标题，不要输出解释。",
+          "",
+          `仓库路径: ${gitRepositoryPath}`,
+          `分支: ${status.branch ?? "(unknown)"}`,
+          `总计: +${Math.max(0, status.additions || 0)} / -${Math.max(0, status.deletions || 0)}`,
+          `暂存文件数: ${status.staged.length}, 未暂存文件数: ${status.unstaged.length}`,
+          "文件清单：",
+          changedFiles || "- 无",
+          "",
+          "请仅输出最终提交总结正文。",
+        ].join("\n");
+        const configuredModel = await getClaudeConfigModel(gitRepositoryPath);
+        if (seq !== pushSummaryLoadSeqRef.current) return;
+
+        const result = await executeClaudeCodeAndWait({
+          repositoryPath: gitRepositoryPath,
+          prompt,
+          model: configuredModel ?? undefined,
+          timeoutMs: 45_000,
+          connectionMode: "oneshot",
+        });
+        if (seq !== pushSummaryLoadSeqRef.current) return;
+
+        if (!result.success) {
+          setPushSummaryDraft(fallback);
+          return;
+        }
+        const cleaned = extractClaudeInvocationFinalText(result.outputLines);
+        setPushSummaryDraft(cleaned || fallback);
+      } catch {
+        if (seq !== pushSummaryLoadSeqRef.current) return;
+        setPushSummaryPhase("AI 生成失败，保留本地模板");
+      } finally {
+        if (seq === pushSummaryLoadSeqRef.current) {
+          setPushSummaryLoading(false);
+          setPushSummaryPhase("");
+        }
+      }
+    },
+    [gitRepositoryPath],
+  );
+
+  const schedulePushSummaryLoad = useCallback(() => {
+    cancelScheduledPushSummaryLoad();
+    pushSummaryLoadSeqRef.current += 1;
+    const seq = pushSummaryLoadSeqRef.current;
+    pushSummaryLoadTimerRef.current = setTimeout(() => {
+      pushSummaryLoadTimerRef.current = null;
+      void loadPushSummaryDraft(seq);
+    }, 350);
+  }, [cancelScheduledPushSummaryLoad, loadPushSummaryDraft]);
+
+  const handlePushPopoverOpenChange = useCallback(
+    (open: boolean) => {
+      setPushPopoverOpen(open);
+      if (!open) {
+        cancelScheduledPushSummaryLoad();
+        pushSummaryLoadSeqRef.current += 1;
+        return;
+      }
+      schedulePushSummaryLoad();
+    },
+    [cancelScheduledPushSummaryLoad, schedulePushSummaryLoad],
+  );
+
+  useEffect(() => () => cancelScheduledPushSummaryLoad(), [cancelScheduledPushSummaryLoad]);
 
   const handlePushSubmit = useCallback(async () => {
+    if (pushSubmitInFlightRef.current) return;
     const repoPath = gitRepositoryPath;
     const commitMessage = pushSummaryDraft.trim();
     if (!repoPath) {
@@ -2183,6 +2235,8 @@ export function ClaudeChat({
       message.warning("请先填写提交总结");
       return;
     }
+
+    pushSubmitInFlightRef.current = true;
     setPushSubmitting(true);
     try {
       const latestStatus = await gitStatus(repoPath);
@@ -2207,34 +2261,44 @@ export function ClaudeChat({
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
       message.error(`推送失败: ${errMsg}`);
-      try {
-        const latest = await gitStatus(repoPath).catch(() => null);
-        const stagedFiles = latest?.staged.map((f) => `${f.path}(${f.status}, +${f.additions}, -${f.deletions})`) ?? [];
-        const unstagedFiles = latest?.unstaged.map((f) => `${f.path}(${f.status}, +${f.additions}, -${f.deletions})`) ?? [];
-        const autoFixPrompt = [
-          "下面是一次 git 提交/同步/推送流程失败日志，请直接定位问题并修改代码后再次验证。",
-          "优先处理 pre-commit、husky、lint、typecheck 或测试失败。",
-          "",
-          `仓库路径：${repoPath}`,
-          `分支：${latest?.branch ?? "unknown"}`,
-          `提交信息：${commitMessage}`,
-          `变更统计：+${Math.max(0, latest?.additions || 0)} / -${Math.max(0, latest?.deletions || 0)}`,
-          `暂存文件：${stagedFiles.length > 0 ? stagedFiles.join("、") : "(无)"}`,
-          `未暂存文件：${unstagedFiles.length > 0 ? unstagedFiles.join("、") : "(无)"}`,
-          "",
-          "失败日志：",
-          "```text",
-          errMsg,
-          "```",
-          "",
-          "请输出并执行修复步骤，完成后给出简短结果说明。",
-        ].join("\n");
-        _onSend(autoFixPrompt);
-        message.info("已将失败日志交给 Claude Code 自动修复。");
-      } catch {
-        // ignore auto-fix dispatch failure
-      }
+      const repoPathForFix = repoPath;
+      const commitMessageForFix = commitMessage;
+      const sendAutoFix = _onSend;
+      window.setTimeout(() => {
+        void (async () => {
+          try {
+            const latest = await gitStatus(repoPathForFix).catch(() => null);
+            const stagedFiles =
+              latest?.staged.map((f) => `${f.path}(${f.status}, +${f.additions}, -${f.deletions})`) ?? [];
+            const unstagedFiles =
+              latest?.unstaged.map((f) => `${f.path}(${f.status}, +${f.additions}, -${f.deletions})`) ?? [];
+            const autoFixPrompt = [
+              "下面是一次 git 提交/同步/推送流程失败日志，请直接定位问题并修改代码后再次验证。",
+              "优先处理 pre-commit、husky、lint、typecheck 或测试失败。",
+              "",
+              `仓库路径：${repoPathForFix}`,
+              `分支：${latest?.branch ?? "unknown"}`,
+              `提交信息：${commitMessageForFix}`,
+              `变更统计：+${Math.max(0, latest?.additions || 0)} / -${Math.max(0, latest?.deletions || 0)}`,
+              `暂存文件：${stagedFiles.length > 0 ? stagedFiles.join("、") : "(无)"}`,
+              `未暂存文件：${unstagedFiles.length > 0 ? unstagedFiles.join("、") : "(无)"}`,
+              "",
+              "失败日志：",
+              "```text",
+              errMsg,
+              "```",
+              "",
+              "请输出并执行修复步骤，完成后给出简短结果说明。",
+            ].join("\n");
+            sendAutoFix?.(autoFixPrompt);
+            message.info("已将失败日志交给 Claude Code 自动修复。");
+          } catch {
+            /* ignore auto-fix dispatch failure */
+          }
+        })();
+      }, 0);
     } finally {
+      pushSubmitInFlightRef.current = false;
       setPushSubmitting(false);
     }
   }, [_onSend, pushSummaryDraft, gitRepositoryPath]);
@@ -4910,7 +4974,7 @@ export function ClaudeChat({
             trigger="click"
             placement="topLeft"
             open={pushPopoverOpen}
-            onOpenChange={(open) => setPushPopoverOpen(open)}
+            onOpenChange={handlePushPopoverOpenChange}
             overlayClassName="app-push-popover"
             content={
               <div className="app-push-popover__content">
@@ -4944,6 +5008,8 @@ export function ClaudeChat({
             <button
               type="button"
               className="app-session-quick-pill app-session-quick-pill--push"
+              disabled={pushSubmitting}
+              aria-busy={pushSubmitting}
             >
               <span className="app-session-quick-pill__icon app-session-quick-pill__icon--green" aria-hidden>
                 <CloudUploadOutlined />

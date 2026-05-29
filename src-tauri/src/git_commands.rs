@@ -7,6 +7,17 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+/// 在后台线程执行 Git 阻塞操作，避免 `git push` / `commit` 等卡住 WebView 主线程。
+async fn run_git_blocking<T, F>(label: &'static str, f: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    tokio::task::spawn_blocking(f)
+        .await
+        .map_err(|e| format!("{label} 任务异常: {e}"))?
+}
+
 #[derive(Serialize, Clone)]
 pub(crate) struct GitFileStatus {
     path: String,
@@ -593,7 +604,11 @@ pub(crate) fn git_stage_paths(path: String, file_paths: Vec<String>) -> Result<(
 
 /// 一次性暂存工作区全部变更（等价于仓库根目录 `git add .`），避免逐文件 IPC。
 #[tauri::command]
-pub(crate) fn git_stage_all(path: String) -> Result<(), String> {
+pub(crate) async fn git_stage_all(path: String) -> Result<(), String> {
+    run_git_blocking("git_stage_all", move || git_stage_all_blocking(path)).await
+}
+
+fn git_stage_all_blocking(path: String) -> Result<(), String> {
     git_stage_paths_inner(&path, &["."])
 }
 
@@ -632,7 +647,11 @@ pub(crate) fn git_unstage_all(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub(crate) fn git_commit(path: String, message: String) -> Result<String, String> {
+pub(crate) async fn git_commit(path: String, message: String) -> Result<String, String> {
+    run_git_blocking("git_commit", move || git_commit_blocking(path, message)).await
+}
+
+fn git_commit_blocking(path: String, message: String) -> Result<String, String> {
     let repo = open_repo(&path)?;
     let sig = repo
         .signature()
@@ -657,7 +676,11 @@ pub(crate) fn git_commit(path: String, message: String) -> Result<String, String
 }
 
 #[tauri::command]
-pub(crate) fn git_push(path: String) -> Result<(), String> {
+pub(crate) async fn git_push(path: String) -> Result<(), String> {
+    run_git_blocking("git_push", move || git_push_blocking(path)).await
+}
+
+fn git_push_blocking(path: String) -> Result<(), String> {
     let repo = open_repo(&path)?;
     let head = repo.head().map_err(|e| e.to_string())?;
     if !head.is_branch() {
@@ -690,7 +713,11 @@ pub(crate) fn git_push(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub(crate) fn git_pull(path: String) -> Result<(), String> {
+pub(crate) async fn git_pull(path: String) -> Result<(), String> {
+    run_git_blocking("git_pull", move || git_pull_blocking(path)).await
+}
+
+fn git_pull_blocking(path: String) -> Result<(), String> {
     open_repo(&path)?;
     run_git_command(&path, &["pull", "--no-rebase"], "Pull")
 }
