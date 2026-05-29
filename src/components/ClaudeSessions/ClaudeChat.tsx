@@ -1459,11 +1459,11 @@ export function ClaudeChat({
     lastUserMessagePinIdRef.current = null;
   }, [session.id, cancelScrollFollowLoop]);
 
-  /** 用户新发出一条 user 消息时恢复贴底，便于立刻看到自己发送的内容 */
+  /** 用户新发出一条 user 消息或追加 system 消息（如派发记录）时恢复贴底 */
   useEffect(() => {
     if (session.messages.length === 0) return;
     const last = session.messages[session.messages.length - 1]!;
-    if (last.role !== "user") return;
+    if (last.role !== "user" && last.role !== "system") return;
     if (lastUserMessagePinIdRef.current === last.id) return;
     lastUserMessagePinIdRef.current = last.id;
     pinToBottomRef.current = true;

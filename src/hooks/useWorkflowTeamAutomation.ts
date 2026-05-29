@@ -124,6 +124,8 @@ interface UseWorkflowTeamAutomationOptions {
   setWorkflowRuntimeStateByTaskId: Dispatch<SetStateAction<RuntimeStateMap>>;
   setWorkflowTaskEventsByTaskId: Dispatch<SetStateAction<WorkflowEventMap>>;
   setWorkflowTasks: Dispatch<SetStateAction<WorkflowTaskItem[]>>;
+  /** 员工派发成功后自动切换到目标会话标签，让用户直接看到执行过程和结果。 */
+  switchSession?: (sessionId: string) => void;
   taskPendingEmployeesByTaskId: PendingEmployeeMap;
   workflowGraphStatusByWorkflowId: Record<string, string>;
   workflowGraphsByWorkflowId: Record<string, WorkflowGraph>;
@@ -181,6 +183,7 @@ export function useWorkflowTeamAutomation({
   setWorkflowRuntimeStateByTaskId,
   setWorkflowTaskEventsByTaskId,
   setWorkflowTasks,
+  switchSession,
   taskPendingEmployeesByTaskId,
   workflowGraphStatusByWorkflowId,
   workflowRuntimeStateByTaskId,
@@ -221,6 +224,7 @@ export function useWorkflowTeamAutomation({
     executeTerminalSession,
     appendSystemMessage,
     closeWorkerTab: closeSession,
+    onDispatched: switchSession,
   });
   terminalDispatchDeps.current = {
     getSessions: () => sessionsLiveRef.current,
@@ -231,6 +235,7 @@ export function useWorkflowTeamAutomation({
     executeTerminalSession,
     appendSystemMessage,
     closeWorkerTab: closeSession,
+    onDispatched: switchSession,
   };
 
   const dispatchTerminal = useCallback(

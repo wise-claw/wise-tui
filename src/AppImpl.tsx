@@ -1139,6 +1139,7 @@ export default function App() {
     setWorkflowRuntimeStateByTaskId,
     setWorkflowTaskEventsByTaskId,
     setWorkflowTasks,
+    switchSession: jumpToSessionWithRepository,
     taskPendingEmployeesByTaskId,
     workflowGraphStatusByWorkflowId,
     workflowGraphsByWorkflowId,
