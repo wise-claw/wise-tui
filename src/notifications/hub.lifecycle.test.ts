@@ -25,3 +25,18 @@ describe("notificationHub expireStaleRequests", () => {
     notificationHub.removeSession(sessionId);
   });
 });
+
+describe("notificationHub pruneOrphanSessions", () => {
+  test("removes buckets for sessions no longer in live set", () => {
+    const liveId = `live-${Date.now()}`;
+    const deadId = `dead-${Date.now()}`;
+    notificationHub.applyTodoWrite(deadId, [{ id: "t1", content: "x", status: "pending" }], false);
+    notificationHub.applyTodoWrite(liveId, [{ id: "t2", content: "y", status: "pending" }], false);
+
+    notificationHub.pruneOrphanSessions(new Set([liveId]));
+
+    expect(notificationHub.getDockSlice(deadId).todos).toEqual([]);
+    expect(notificationHub.getDockSlice(liveId).todos.length).toBe(1);
+    notificationHub.removeSession(liveId);
+  });
+});

@@ -7,7 +7,8 @@ import { deleteAppSetting, getAppSetting, setAppSettingJson } from "./appSetting
 
 /** 与 `get_app_setting` 键一致；`localStorage` 使用同一键名 */
 const STORAGE_KEY = "wise.omcDirectBatchInvocations.v1";
-const MAX_PERSISTED_ITEMS = 40;
+export const MAX_PERSISTED_OMC_DIRECT_BATCH_ITEMS = 40;
+const MAX_PERSISTED_ITEMS = MAX_PERSISTED_OMC_DIRECT_BATCH_ITEMS;
 const MAX_DISPATCH_PROMPT_CHARS = 48_000;
 
 let persistDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -19,6 +20,24 @@ export function sortOmcDirectBatchInvocationsForStore(list: WorkflowInvocationSt
     const tb = typeof b.attempt === "number" ? b.attempt : 0;
     return ta - tb;
   });
+}
+
+/** 内存 Map 与持久化层共用同一上限，避免 direct batch invocation 只增不减。 */
+export function trimOmcDirectBatchInvocationMap(
+  map: Map<string, WorkflowInvocationStreamDetail>,
+  maxItems: number = MAX_PERSISTED_ITEMS,
+): void {
+  if (map.size <= maxItems) return;
+  const keepKeys = new Set(
+    sortOmcDirectBatchInvocationsForStore([...map.values()])
+      .slice(-maxItems)
+      .map((inv) => inv.invocationKey),
+  );
+  for (const key of [...map.keys()]) {
+    if (!keepKeys.has(key)) {
+      map.delete(key);
+    }
+  }
 }
 
 export function digestOmcDirectBatchInvocationsList(list: WorkflowInvocationStreamDetail[]): string {

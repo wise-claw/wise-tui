@@ -28,6 +28,15 @@ export function GitMultiRepoPanel({
   const watcherRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingRefreshPathsRef = useRef(new Set<string>());
 
+  useEffect(() => {
+    const validPaths = new Set(repositoryEntries.map((entry) => entry.path).filter(Boolean));
+    for (const path of [...refreshByPathRef.current.keys()]) {
+      if (!validPaths.has(path)) {
+        refreshByPathRef.current.delete(path);
+      }
+    }
+  }, [repositoryEntries]);
+
   const handleExpandedChange = useCallback((path: string, expanded: boolean) => {
     setExpandedPaths((prev) => {
       const next = new Set(prev);

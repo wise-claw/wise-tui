@@ -26,6 +26,7 @@ import {
   loadOmcDirectBatchInvocationsPersisted,
   schedulePersistOmcDirectBatchInvocations,
   sortOmcDirectBatchInvocationsForStore,
+  trimOmcDirectBatchInvocationMap,
 } from "../services/omcDirectBatchInvocationsPersistence";
 import {
   resetOmcDirectBatchInvocationsStore,
@@ -136,6 +137,7 @@ export function useOmcRuntime({
       const merged = mergeHydratedInvocation(prev, inv);
       omcDirectBatchInvocationRef.current.set(k, merged);
     }
+    trimOmcDirectBatchInvocationMap(omcDirectBatchInvocationRef.current);
     const list = sortOmcDirectBatchInvocationsForStore([...omcDirectBatchInvocationRef.current.values()]);
     setOmcDirectBatchInvocationsStore(list, digestOmcDirectBatchInvocationsList(list));
   }, []);
@@ -242,6 +244,7 @@ export function useOmcRuntime({
     };
 
     const applyDirectBatchInvocationUi = (persistMode: "debounced" | "immediate") => {
+      trimOmcDirectBatchInvocationMap(omcDirectBatchInvocationRef.current);
       const list = sortOmcDirectBatchInvocationsForStore([...omcDirectBatchInvocationRef.current.values()]);
       const digest = digestOmcDirectBatchInvocationsList(list);
       setOmcDirectBatchInvocationsStore(list, digest);
@@ -403,7 +406,11 @@ export function useOmcRuntime({
       }
 
       if (detail.templateId === "trellis" && detail.ownerKind === "repository") {
-        repositoryMemberInvocationRef.current.set(detail.invocationKey, detail);
+        if (detail.phase === "complete") {
+          repositoryMemberInvocationRef.current.delete(detail.invocationKey);
+        } else {
+          repositoryMemberInvocationRef.current.set(detail.invocationKey, detail);
+        }
       }
       if (!isOmcLikeInvocation(detail)) return;
       const invSidRaw = typeof detail.sessionId === "string" ? detail.sessionId.trim() : "";

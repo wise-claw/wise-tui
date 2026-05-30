@@ -805,6 +805,20 @@ class NotificationHub {
     }
     return out;
   }
+
+  /** 磁盘索引裁剪 / 关标签后，清掉已无对应 Claude 标签的通知桶。 */
+  pruneOrphanSessions(liveSessionIds: ReadonlySet<string>): void {
+    for (const sessionId of [...this.buckets.keys()]) {
+      if (!liveSessionIds.has(sessionId)) {
+        this.removeSession(sessionId);
+      }
+    }
+    for (const [requestId, lifecycle] of [...this.requestLifecycles.entries()]) {
+      if (liveSessionIds.has(lifecycle.sessionId)) continue;
+      if (lifecycle.status === "pending") continue;
+      this.requestLifecycles.delete(requestId);
+    }
+  }
 }
 
 export const notificationHub = new NotificationHub();

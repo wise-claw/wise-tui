@@ -167,7 +167,37 @@ export function extractRuntimeSnapshotsFromEvents(events: WorkflowTaskEventItem[
       snapshot.executorSessionId = patch.executorSessionId;
     }
   }
-  return sortWorkflowRuntimeSnapshotsChronological(snapshots);
+  return capWorkflowRuntimeSnapshots(sortWorkflowRuntimeSnapshotsChronological(snapshots));
+}
+
+/** 单任务 runtime 快照在内存中最多保留条数；preview 字段字符上限。 */
+export const WORKFLOW_RUNTIME_SNAPSHOTS_IN_MEMORY_MAX = 60;
+export const WORKFLOW_RUNTIME_SNAPSHOT_PREVIEW_MAX = 8_000;
+
+export function capWorkflowRuntimeSnapshots(
+  snapshots: readonly WorkflowRuntimeStepSnapshot[],
+  max: number = WORKFLOW_RUNTIME_SNAPSHOTS_IN_MEMORY_MAX,
+): WorkflowRuntimeStepSnapshot[] {
+  const sliced = snapshots.length <= max ? snapshots : snapshots.slice(-max);
+  const next = sliced.map((snap) => {
+    let inputPreview = snap.inputPreview;
+    let outputPreview = snap.outputPreview;
+    let changed = false;
+    if (inputPreview.length > WORKFLOW_RUNTIME_SNAPSHOT_PREVIEW_MAX) {
+      inputPreview = inputPreview.slice(-WORKFLOW_RUNTIME_SNAPSHOT_PREVIEW_MAX);
+      changed = true;
+    }
+    if (outputPreview.length > WORKFLOW_RUNTIME_SNAPSHOT_PREVIEW_MAX) {
+      outputPreview = outputPreview.slice(-WORKFLOW_RUNTIME_SNAPSHOT_PREVIEW_MAX);
+      changed = true;
+    }
+    return changed ? { ...snap, inputPreview, outputPreview } : snap;
+  });
+  if (next.length !== snapshots.length) return next;
+  for (let i = 0; i < next.length; i++) {
+    if (next[i] !== snapshots[i]) return next;
+  }
+  return snapshots as WorkflowRuntimeStepSnapshot[];
 }
 
 export function lastUserPlainText(session: ClaudeSession | undefined): string {

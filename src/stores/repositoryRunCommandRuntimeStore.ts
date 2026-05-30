@@ -262,6 +262,8 @@ function ensureTerminalListeners(): void {
     patchRepoState(repositoryId, {
       status: "idle",
       statusHint: payload.exitCode === 0 ? "运行结束" : `已退出（code ${payload.exitCode}）`,
+      outputPreview: [],
+      detectedUrl: null,
     });
   });
 }
@@ -286,6 +288,18 @@ export function isRepositoryRunCommandActive(repositoryId: number): boolean {
 
 export function getRepositoryRunCommandRunningByRepositoryId(): Record<number, boolean> {
   return runningByRepositoryIdSnapshot;
+}
+
+/** 移除非当前仓库列表里、且已 idle 的运行状态条目，避免 Map 只增不减。 */
+export function pruneRepositoryRunCommandRuntime(liveRepositoryIds: ReadonlySet<number>): void {
+  let changed = false;
+  for (const [repositoryId, state] of [...repoStateById.entries()]) {
+    if (liveRepositoryIds.has(repositoryId)) continue;
+    if (state.status === "running" || state.status === "stopping") continue;
+    repoStateById.delete(repositoryId);
+    changed = true;
+  }
+  if (changed) publish();
 }
 
 export function setRepositoryRunCommandAutoFixHandler(

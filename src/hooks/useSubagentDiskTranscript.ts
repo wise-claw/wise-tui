@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import type { ClaudeSession } from "../types";
+import { CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD } from "../constants/claudeMessageListWindow";
 import { loadClaudeSessionJsonl } from "../services/claudeDisk";
-import { parseClaudeSessionJsonlLines } from "../utils/claudeSessionJsonl";
+import { sessionMessagesFromJsonlLines } from "../utils/sessionMessagesMemory";
 
 const RUNNING_POLL_MS = 3000;
 
@@ -58,9 +59,13 @@ export function useSubagentDiskTranscript(params: {
     const load = async () => {
       setLoading(true);
       try {
-        const lines = await loadClaudeSessionJsonl(rp, cc);
+        const lines = await loadClaudeSessionJsonl(rp, cc, {
+          tailLines: CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD,
+        });
         if (cancelled) return;
-        const messages = parseClaudeSessionJsonlLines(lines);
+        const { messages, diskTranscriptPartial } = sessionMessagesFromJsonlLines(lines, {
+          tailRequestLines: CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD,
+        });
         if (messages.length === 0) {
           setSession(null);
           return;
@@ -75,7 +80,7 @@ export function useSubagentDiskTranscript(params: {
           createdAt: createdAt ?? Date.now(),
           pendingPrompt: "",
           messages,
-          diskTranscriptPartial: false,
+          diskTranscriptPartial,
         });
       } catch {
         if (!cancelled) setSession(null);

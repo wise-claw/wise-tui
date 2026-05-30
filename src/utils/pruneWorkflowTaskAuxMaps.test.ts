@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import type { WorkflowTaskItem } from "../types";
+import type { WorkflowTaskEventItem, WorkflowTaskItem } from "../types";
 import {
   mergeWorkflowTasksForSession,
+  capWorkflowTaskEvents,
   pruneRecordByTaskIds,
   removeWorkflowTasksForSessionCreators,
+  WORKFLOW_TASK_EVENTS_IN_MEMORY_MAX,
 } from "./pruneWorkflowTaskAuxMaps";
 
 function task(id: string, creator: string, status: WorkflowTaskItem["status"], updatedAt: number): WorkflowTaskItem {
@@ -51,5 +53,21 @@ describe("removeWorkflowTasksForSessionCreators", () => {
     const tasks = [task("t1", "sess-a", "completed", 1), task("t2", "sess-b", "completed", 2)];
     const next = removeWorkflowTasksForSessionCreators(tasks, new Set(["sess-a"]));
     expect(next.map((t) => t.id)).toEqual(["t2"]);
+  });
+});
+
+describe("capWorkflowTaskEvents", () => {
+  test("keeps tail events only when over max", () => {
+    const events = Array.from({ length: WORKFLOW_TASK_EVENTS_IN_MEMORY_MAX + 5 }, (_, index) => ({
+      id: `e-${index}`,
+      taskId: "t1",
+      type: "task.run.progressed",
+      timestamp: index,
+      payload: {},
+    })) as WorkflowTaskEventItem[];
+    const capped = capWorkflowTaskEvents(events);
+    expect(capped.length).toBe(WORKFLOW_TASK_EVENTS_IN_MEMORY_MAX);
+    expect(capped[0]?.id).toBe("e-5");
+    expect(capped.at(-1)?.id).toBe(`e-${WORKFLOW_TASK_EVENTS_IN_MEMORY_MAX + 4}`);
   });
 });

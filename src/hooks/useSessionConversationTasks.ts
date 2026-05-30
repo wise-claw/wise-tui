@@ -5,6 +5,27 @@ import {
 } from "../constants/workflowUiEvents";
 import { readInvocationSnapshotBundle } from "../services/backgroundInvocationSnapshot";
 import type { BackgroundInvocationSnapshot } from "../services/backgroundInvocationSnapshot";
+
+/** 会话任务列表仅需快照元数据，不必把 stdout/stderr 大数组常驻 React state。 */
+function bundleSnapshotsForConversationTasks(
+  items: Record<string, BackgroundInvocationSnapshot>,
+): BackgroundInvocationSnapshot[] {
+  return Object.values(items).map((snap) => ({
+    invocationKey: snap.invocationKey,
+    taskId: snap.taskId,
+    templateId: snap.templateId,
+    attempt: snap.attempt,
+    phase: snap.phase,
+    success: snap.success,
+    lineCount: snap.lineCount,
+    errCount: snap.errCount,
+    previewLine: snap.previewLine,
+    dispatchPrompt: snap.dispatchPrompt,
+    updatedAt: snap.updatedAt,
+    stdoutLines: [],
+    stderrLines: [],
+  }));
+}
 import {
   getOmcDirectBatchInvocationsSnapshot,
   subscribeOmcDirectBatchInvocations,
@@ -47,7 +68,7 @@ export function useSessionConversationTasks(
     const load = async () => {
       const bundle = await readInvocationSnapshotBundle(session.id, session.repositoryPath);
       if (cancelled) return;
-      setBundleSnapshots(Object.values(bundle.items));
+      setBundleSnapshots(bundleSnapshotsForConversationTasks(bundle.items));
     };
     void load();
 

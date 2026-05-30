@@ -27,6 +27,7 @@ import { runWhenIdle } from "./utils/deferIdle";
 import { isSessionBoundAsRepositoryMain } from "./utils/repositoryMainSessionBinding";
 import { resolveSessionExecutionEngine } from "./utils/sessionExecutionEngine";
 import {
+  capWorkflowTaskEvents,
   collectLiveWorkflowTaskIds,
   mergeWorkflowTasksForSession,
   pruneRecordByTaskIds,
@@ -53,6 +54,7 @@ import { AppWorkspaceLayout } from "./components/AppWorkspaceLayout";
 import { RepositoryRunCommandModal } from "./components/RunCommand";
 import { openRepositoryRunCommandModal } from "./stores/repositoryRunCommandModalStore";
 import {
+  pruneRepositoryRunCommandRuntime,
   setRepositoryRunCommandConfigureHandler,
   startRepositoryRunCommand,
   stopRepositoryRunCommand,
@@ -379,6 +381,27 @@ export default function App() {
   const [workflowTemplates, setWorkflowTemplates] = useState<WorkflowTemplateItem[]>([]);
   const [workflowTasks, setWorkflowTasks] = useState<WorkflowTaskItem[]>([]);
   const [workflowTaskEventsByTaskId, setWorkflowTaskEventsByTaskId] = useState<Record<string, WorkflowTaskEventItem[]>>({});
+  const commitWorkflowTaskEventsByTaskId = useCallback(
+    (action: React.SetStateAction<Record<string, WorkflowTaskEventItem[]>>) => {
+      setWorkflowTaskEventsByTaskId((prev) => {
+        const raw = typeof action === "function" ? action(prev) : action;
+        let changed = raw !== prev;
+        const next: Record<string, WorkflowTaskEventItem[]> = {};
+        for (const [taskId, events] of Object.entries(raw)) {
+          const capped = capWorkflowTaskEvents(events);
+          next[taskId] = capped;
+          if (prev[taskId] !== capped || capped.length !== events.length) {
+            changed = true;
+          }
+        }
+        if (Object.keys(prev).length !== Object.keys(next).length) {
+          changed = true;
+        }
+        return changed ? next : prev;
+      });
+    },
+    [],
+  );
   const [taskPendingEmployeesByTaskId, setTaskPendingEmployeesByTaskId] = useState<Record<string, Array<{ employeeId: string; name: string }>>>({});
   const [workflowRuntimeStateByTaskId, setWorkflowRuntimeStateByTaskId] = useState<Record<string, WorkflowGraphRuntimeState>>({});
   const [workflowRuntimeSnapshotsByTaskId, setWorkflowRuntimeSnapshotsByTaskId] = useState<Record<string, WorkflowRuntimeStepSnapshot[]>>({});
@@ -411,14 +434,14 @@ export default function App() {
         ([taskId, events]) => [taskId, extractRuntimeSnapshotsFromEvents(events)] as const,
       );
       setWorkflowTasks(merged);
-      setWorkflowTaskEventsByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds, eventEntries));
+      commitWorkflowTaskEventsByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds, eventEntries));
       setWorkflowRuntimeSnapshotsByTaskId((prev) =>
         pruneRecordByTaskIds(prev, liveTaskIds, snapshotEntries),
       );
       setTaskPendingEmployeesByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds, pendingEntries));
       setWorkflowRuntimeStateByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds));
     },
-    [],
+    [commitWorkflowTaskEventsByTaskId],
   );
   const [workflowGraphsByWorkflowId, setWorkflowGraphsByWorkflowId] = useState<Record<string, WorkflowGraph>>({});
   const [workflowGraphStatusByWorkflowId, setWorkflowGraphStatusByWorkflowId] = useState<Record<string, string>>({});
@@ -497,6 +520,10 @@ export default function App() {
   // macOS dock menu: refresh when repository list changes.
   useEffect(() => {
     void emit("dock-menu-refresh");
+  }, [repositories]);
+
+  useEffect(() => {
+    pruneRepositoryRunCommandRuntime(new Set(repositories.map((repo) => repo.id)));
   }, [repositories]);
 
   useEffect(() => {
@@ -874,7 +901,7 @@ export default function App() {
       const nextTasks = removeWorkflowTasksForSessionCreators(workflowTasksRef.current, creatorIds);
       const liveTaskIds = collectLiveWorkflowTaskIds(nextTasks);
       setWorkflowTasks(nextTasks);
-      setWorkflowTaskEventsByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds));
+      commitWorkflowTaskEventsByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds));
       setWorkflowRuntimeSnapshotsByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds));
       setTaskPendingEmployeesByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds));
       setWorkflowRuntimeStateByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds));
@@ -1045,7 +1072,7 @@ export default function App() {
     setTaskPendingEmployeesByTaskId,
     setWorkflowRuntimeSnapshotsByTaskId,
     setWorkflowRuntimeStateByTaskId,
-    setWorkflowTaskEventsByTaskId,
+    setWorkflowTaskEventsByTaskId: commitWorkflowTaskEventsByTaskId,
     setWorkflowTasks,
     taskPendingEmployeesByTaskId,
     workflowGraphStatusByWorkflowId,
@@ -2663,7 +2690,7 @@ export default function App() {
           listTaskEvents(updatedTask.id),
           listTaskPendingEmployees(updatedTask.id),
         ]);
-        setWorkflowTaskEventsByTaskId((prev) => ({ ...prev, [updatedTask.id]: events }));
+        commitWorkflowTaskEventsByTaskId((prev) => ({ ...prev, [updatedTask.id]: events }));
         setTaskPendingEmployeesByTaskId((prev) => ({ ...prev, [updatedTask.id]: pendingEmployees }));
       })
       .catch((error) => {
@@ -2929,7 +2956,7 @@ export default function App() {
                 listTaskEvents(updatedTask.id),
                 listTaskPendingEmployees(updatedTask.id),
               ]);
-              setWorkflowTaskEventsByTaskId((prev) => ({ ...prev, [updatedTask.id]: events }));
+              commitWorkflowTaskEventsByTaskId((prev) => ({ ...prev, [updatedTask.id]: events }));
               setTaskPendingEmployeesByTaskId((prev) => ({ ...prev, [updatedTask.id]: pendingEmployees }));
             })
             .catch((error) => {
@@ -3327,7 +3354,7 @@ export default function App() {
                 listTaskEvents(updatedTask.id),
                 listTaskPendingEmployees(updatedTask.id),
               ]);
-              setWorkflowTaskEventsByTaskId((prev) => ({ ...prev, [updatedTask.id]: events }));
+              commitWorkflowTaskEventsByTaskId((prev) => ({ ...prev, [updatedTask.id]: events }));
               setTaskPendingEmployeesByTaskId((prev) => ({ ...prev, [updatedTask.id]: pendingEmployees }));
             })
             .catch((error) => {

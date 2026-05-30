@@ -1007,23 +1007,31 @@ export function useMonitorOverview({
 
   useEffect(() => {
     let cancelled = false;
+    let timer: ReturnType<typeof setInterval> | null = null;
     const isActive = () => !cancelled;
-    const POLL_INTERVAL_MS = 8000;
+
+    const scheduleTimer = () => {
+      if (timer != null) window.clearInterval(timer);
+      timer = window.setInterval(() => {
+        if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+        void refreshExternalTrellisAgentRuns(isActive);
+      }, readVisiblePollIntervalMs(8000, 20000));
+    };
 
     void refreshExternalTrellisAgentRuns(isActive);
-    const timer = window.setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-      void refreshExternalTrellisAgentRuns(isActive);
-    }, POLL_INTERVAL_MS);
+    scheduleTimer();
     const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") void refreshExternalTrellisAgentRuns(isActive);
+      if (document.visibilityState === "visible") {
+        void refreshExternalTrellisAgentRuns(isActive);
+        scheduleTimer();
+      }
     };
     if (typeof document !== "undefined") {
       document.addEventListener("visibilitychange", onVisibilityChange);
     }
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      if (timer != null) window.clearInterval(timer);
       if (typeof document !== "undefined") {
         document.removeEventListener("visibilitychange", onVisibilityChange);
       }

@@ -20,4 +20,12 @@ describe("mergeFccTraceEntries", () => {
     expect(merged.map((r) => r.id)).toEqual(["b", "a", "c"]);
     expect(merged[0]?.timestampMs).toBe(250);
   });
+
+  test("caps retained rows to FCC_TRACES_IN_MEMORY_MAX", () => {
+    const existing = Array.from({ length: 200 }, (_, index) => row(`old-${index}`, index));
+    const incoming = Array.from({ length: 200 }, (_, index) => row(`new-${index}`, 10_000 + index));
+    const merged = mergeFccTraceEntries(existing, incoming);
+    expect(merged.length).toBe(250);
+    expect(merged[0]?.id.startsWith("new-")).toBe(true);
+  });
 });

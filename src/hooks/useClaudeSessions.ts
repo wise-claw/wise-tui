@@ -44,7 +44,11 @@ import {
 } from "../constants/claudeConnection";
 import type { ClaudeSpawnCliExtras } from "../services/claudeSpawnExtras";
 import { deleteClaudeDiskSession, loadClaudeSessionJsonl } from "../services/claudeDisk";
-import { clearInvocationSnapshotBundle } from "../services/backgroundInvocationSnapshot";
+import {
+  clearInvocationSnapshotBundle,
+  collectInvocationSnapshotMemoryKeys,
+  pruneInvocationSnapshotMemory,
+} from "../services/backgroundInvocationSnapshot";
 import { normalizeRepositoryPathKey, repositoryPathsMatch } from "../utils/repositoryMainSessionBinding";
 import {
   listClaudeDiskSessionsForRepositoryScope,
@@ -86,6 +90,10 @@ import {
   capSessionMessagesForMemory,
   sessionMessagesFromJsonlLines,
 } from "../utils/sessionMessagesMemory";
+import {
+  collectLiveSessionSidecarKeys,
+  pruneOrphanClaudeSessionSidecarMaps,
+} from "../utils/claudeSessionSidecarMaps";
 import { getSessionUpdatedAt } from "../components/ClaudeSessions/sessionGrouping";
 import { resolveClaudeCompleteSuccess } from "../utils/resolveClaudeCompleteSuccess";
 import { notificationBodyPrefixInRepositoryContext } from "../utils/sessionRepositoryDisplay";
@@ -1384,6 +1392,39 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   const registryBootstrapDeadlineByClaudeSidRef = useRef<Map<string, number>>(new Map());
   const diskLoadDoneRef = useRef<Set<string>>(new Set());
   const diskTailLinesBySessionRef = useRef(new Map<string, number>());
+
+  const pruneLiveSessionSidecars = useCallback((liveSessions: readonly ClaudeSession[]) => {
+    const liveKeys = collectLiveSessionSidecarKeys(liveSessions);
+    let sidecarChanged = pruneOrphanClaudeSessionSidecarMaps(
+      {
+        sessionIdMap: sessionIdMapRef.current,
+        expectedTurnNonceByTabId: expectedTurnNonceByTabIdRef.current,
+        assistantStreamTextByTab: assistantStreamTextByTabRef.current,
+        lastStreamLineBySession: lastStreamLineBySessionRef.current,
+        lastStreamTextBySession: lastStreamTextBySessionRef.current,
+        registryBootstrapDeadlineByClaudeSid: registryBootstrapDeadlineByClaudeSidRef.current,
+        streamingProcessByTab: streamingProcessByTabRef.current,
+        streamingSessionStreamDetachByTab: streamingSessionStreamDetachByTabRef.current,
+        diskLoadDone: diskLoadDoneRef.current,
+        diskTailLinesBySession: diskTailLinesBySessionRef.current,
+        executeSessionRetryCount: executeSessionRetryCountRef.current,
+        workflowRunBySession: workflowRunBySessionRef.current,
+        trellisContextIdBySession: trellisContextIdBySessionRef.current,
+        streamStallHookExtendedByTab: streamStallHookExtendedByTabRef.current,
+      },
+      liveKeys,
+    );
+    for (const [inv, meta] of [...claudeInvocationInflightRef.current.entries()]) {
+      if (!liveKeys.has(meta.tabId)) {
+        meta.detach();
+        claudeInvocationInflightRef.current.delete(inv);
+        sidecarChanged = true;
+      }
+    }
+    notificationHub.pruneOrphanSessions(new Set(liveSessions.map((session) => session.id)));
+    pruneInvocationSnapshotMemory(collectInvocationSnapshotMemoryKeys(liveSessions));
+    return sidecarChanged;
+  }, []);
   /** Tauri 主窗口是否在前台（与 `document.hidden` 组合判断 Phase 4 桌面摘要）。 */
   const mainWinFocusedRef = useRef(true);
 
@@ -2180,6 +2221,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       if (cancelIdle) cancelIdle();
       cancelIdle = runWhenIdle(() => {
+        pruneLiveSessionSidecars(sessionsRef.current);
         setSessions((prev) => {
           const capped = applySessionsMemoryCap(prev, {
             keepSessionIds: buildMemoryKeepSessionIds(prev),
@@ -2192,7 +2234,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       window.clearInterval(timer);
       if (cancelIdle) cancelIdle();
     };
-  }, [tabsHydrated, setSessions, buildMemoryKeepSessionIds]);
+  }, [tabsHydrated, setSessions, buildMemoryKeepSessionIds, pruneLiveSessionSidecars]);
 
   /** 主会话 / 员工 / 团队等全部标签：定期与 Claude Code 宿主注册表对齐执行态（不限于当前活动标签）。 */
   useEffect(() => {
@@ -3363,21 +3405,10 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   useEffect(() => {
     if (!tabsHydrated) return;
     const t = window.setTimeout(() => {
-      const liveSessionIds = new Set(sessions.map((s) => s.id));
-      let workflowBindingsChanged = false;
-      for (const key of [...workflowRunBySessionRef.current.keys()]) {
-        if (!liveSessionIds.has(key)) {
-          workflowRunBySessionRef.current.delete(key);
-          workflowBindingsChanged = true;
-        }
-      }
-      if (workflowBindingsChanged) {
+      const bindingsChanged = pruneLiveSessionSidecars(sessions);
+      if (bindingsChanged) {
         persistWorkflowBindings(workflowRunBySessionRef.current);
-      }
-      for (const key of [...diskLoadDoneRef.current]) {
-        if (!liveSessionIds.has(key)) {
-          diskLoadDoneRef.current.delete(key);
-        }
+        persistTrellisContextBindings(trellisContextIdBySessionRef.current);
       }
       void saveSessionTabsState({
         version: 1,
@@ -3397,7 +3428,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       });
     }, 450);
     return () => window.clearTimeout(t);
-  }, [sessions, activeSessionId, tabsHydrated]);
+  }, [sessions, activeSessionId, tabsHydrated, pruneLiveSessionSidecars]);
 
   return {
     sessions,

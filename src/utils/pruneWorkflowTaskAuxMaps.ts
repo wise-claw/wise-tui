@@ -1,7 +1,10 @@
-import type { WorkflowTaskItem } from "../types";
+import type { WorkflowTaskEventItem, WorkflowTaskItem } from "../types";
 
 const DEFAULT_STALE_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_MAX_TASKS = 120;
+
+/** 单任务 workflow 事件在内存中最多保留条数（尾部），避免长跑团队任务撑爆堆。 */
+export const WORKFLOW_TASK_EVENTS_IN_MEMORY_MAX = 200;
 
 export function collectLiveWorkflowTaskIds(tasks: readonly WorkflowTaskItem[]): Set<string> {
   return new Set(tasks.map((task) => task.id));
@@ -28,6 +31,14 @@ export function pruneRecordByTaskIds<T>(
   }
 
   return changed ? next : prev;
+}
+
+export function capWorkflowTaskEvents(
+  events: readonly WorkflowTaskEventItem[],
+  max: number = WORKFLOW_TASK_EVENTS_IN_MEMORY_MAX,
+): WorkflowTaskEventItem[] {
+  if (events.length <= max) return events as WorkflowTaskEventItem[];
+  return events.slice(-max) as WorkflowTaskEventItem[];
 }
 
 /** 合并当前会话任务，并淘汰其它会话里过旧/过多的 completed 任务，避免 workflow 辅助 Map 无限增长。 */

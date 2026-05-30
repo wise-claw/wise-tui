@@ -61,6 +61,34 @@ function keyOf(sessionId: string, repositoryPath: string): string {
   return `${sessionId}@@${repositoryPath}`;
 }
 
+/** 去掉已关闭会话对应的 bundle / 单条快照内存缓存（磁盘 settings 不受影响）。 */
+export function pruneInvocationSnapshotMemory(liveBundleKeys: ReadonlySet<string>): void {
+  for (const key of [...memoryBundle.keys()]) {
+    if (!liveBundleKeys.has(key)) {
+      memoryBundle.delete(key);
+    }
+  }
+  for (const key of [...memory.keys()]) {
+    if (!liveBundleKeys.has(key)) {
+      memory.delete(key);
+    }
+  }
+}
+
+export function collectInvocationSnapshotMemoryKeys(
+  sessions: ReadonlyArray<{ id: string; repositoryPath?: string; claudeSessionId?: string | null }>,
+): Set<string> {
+  const keys = new Set<string>();
+  for (const session of sessions) {
+    const rp = session.repositoryPath?.trim();
+    if (!rp) continue;
+    keys.add(keyOf(session.id, rp));
+    const claudeSid = session.claudeSessionId?.trim();
+    if (claudeSid) keys.add(keyOf(claudeSid, rp));
+  }
+  return keys;
+}
+
 export async function readBackgroundInvocationSnapshot(
   sessionId: string,
   repositoryPath: string,

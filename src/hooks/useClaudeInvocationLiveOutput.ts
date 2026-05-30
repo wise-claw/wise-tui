@@ -50,11 +50,12 @@ export function useClaudeInvocationLiveOutput(
   const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!enabled || !key) {
+    if (!enabled || !key || parentInvocationFinished) {
       stdoutRef.current = [];
       stderrRef.current = [];
       setStdoutLines([]);
       setStderrLines([]);
+      setLocalComplete(parentInvocationFinished);
       return;
     }
 
@@ -136,7 +137,7 @@ export function useClaudeInvocationLiveOutput(
       stdoutRef.current = [];
       stderrRef.current = [];
     };
-  }, [enabled, key]);
+  }, [enabled, key, parentInvocationFinished]);
 
   const invocationComplete = parentInvocationFinished || localComplete;
 

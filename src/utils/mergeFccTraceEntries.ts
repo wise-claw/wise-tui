@@ -1,4 +1,5 @@
 import type { FccTraceEntry } from "../types/fccTrace";
+import { FCC_TRACES_IN_MEMORY_MAX } from "../constants/fccTraces";
 
 /** 按时间降序合并 trace，以 `id` 去重。 */
 export function mergeFccTraceEntries(
@@ -12,5 +13,7 @@ export function mergeFccTraceEntries(
   for (const row of incoming) {
     byId.set(row.id, row);
   }
-  return [...byId.values()].sort((a, b) => b.timestampMs - a.timestampMs);
+  return [...byId.values()]
+    .sort((a, b) => b.timestampMs - a.timestampMs)
+    .slice(0, FCC_TRACES_IN_MEMORY_MAX);
 }

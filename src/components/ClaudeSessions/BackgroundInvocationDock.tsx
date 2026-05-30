@@ -120,9 +120,32 @@ export function BackgroundInvocationDock({ session }: Props) {
   const sessionRef = useRef(session);
   const invocationMapRef = useRef<InvocationMap>({});
   const preferredOpenKeyRef = useRef<string | null>(null);
+  const drawerOpenRef = useRef(drawerOpen);
+  const selectedKeyRef = useRef(selectedKey);
+  /** 运行中 flush 不复制大数组到 state；抽屉打开时 bump 以从 buffersRef 重读 */
+  const [bufferDisplayNonce, setBufferDisplayNonce] = useState(0);
 
   sessionRef.current = session;
   invocationMapRef.current = invocationMap;
+  drawerOpenRef.current = drawerOpen;
+  selectedKeyRef.current = selectedKey;
+
+  const readLineBuffersForKey = useCallback(
+    (invocationKey: string, inv: ActiveInvocation | null | undefined): { stdoutLines: string[]; stderrLines: string[] } => {
+      if (!inv) return { stdoutLines: [], stderrLines: [] };
+      if (inv.phase === "running") {
+        const buf = buffersRef.current[invocationKey];
+        if (buf) {
+          return {
+            stdoutLines: buf.stdout.slice(-MAX_LINES_CAPTURE),
+            stderrLines: buf.stderr.slice(-Math.floor(MAX_LINES_CAPTURE / 2)),
+          };
+        }
+      }
+      return { stdoutLines: inv.stdoutLines, stderrLines: inv.stderrLines };
+    },
+    [],
+  );
 
   const stopFlushTimer = useCallback(() => {
     if (flushTimerRef.current != null) {
@@ -174,24 +197,41 @@ export function BackgroundInvocationDock({ session }: Props) {
       const previewLineRaw = stdoutLines.length > 0 ? stdoutLines[stdoutLines.length - 1] : undefined;
       const previewLine =
         previewLineRaw && previewLineRaw.length > 140 ? `${previewLineRaw.slice(0, 140)}…` : previewLineRaw;
+      const includeLinesInState = phase !== "running";
       setInvocationMap((prev) => {
         const cur = prev[invocationKey];
         if (!cur) return prev;
+        const nextEntry: ActiveInvocation = {
+          ...cur,
+          phase,
+          success: success ?? cur.success,
+          lineCount: buffers.stdout.length,
+          errCount: buffers.stderr.length,
+          previewLine,
+          dispatchPrompt: meta.dispatchPrompt ?? cur.dispatchPrompt,
+          stdoutLines: includeLinesInState ? stdoutLines : cur.stdoutLines,
+          stderrLines: includeLinesInState ? stderrLines : cur.stderrLines,
+        };
+        if (
+          cur.phase === nextEntry.phase &&
+          cur.success === nextEntry.success &&
+          cur.lineCount === nextEntry.lineCount &&
+          cur.errCount === nextEntry.errCount &&
+          cur.previewLine === nextEntry.previewLine &&
+          cur.dispatchPrompt === nextEntry.dispatchPrompt &&
+          (!includeLinesInState ||
+            (cur.stdoutLines === nextEntry.stdoutLines && cur.stderrLines === nextEntry.stderrLines))
+        ) {
+          return prev;
+        }
         return {
           ...prev,
-          [invocationKey]: {
-            ...cur,
-            phase,
-            success: success ?? cur.success,
-            stdoutLines,
-            stderrLines,
-            lineCount: buffers.stdout.length,
-            errCount: buffers.stderr.length,
-            previewLine,
-            dispatchPrompt: meta.dispatchPrompt ?? cur.dispatchPrompt,
-          },
+          [invocationKey]: nextEntry,
         };
       });
+      if (phase === "running" && drawerOpenRef.current && selectedKeyRef.current === invocationKey) {
+        setBufferDisplayNonce((n) => n + 1);
+      }
       persistKey(invocationKey, phase, success);
     },
     [persistKey],
@@ -294,16 +334,18 @@ export function BackgroundInvocationDock({ session }: Props) {
       );
       for (let i = 0; i < snaps.length; i++) {
         const snap = snaps[i]!;
-        buffersRef.current[snap.invocationKey] = {
-          stdout: [...snap.stdoutLines],
-          stderr: [...snap.stderrLines],
-        };
         metaByKeyRef.current[snap.invocationKey] = {
           taskId: snap.taskId,
           templateId: snap.templateId,
           attempt: snap.attempt,
           dispatchPrompt: snap.dispatchPrompt,
         };
+        if (snap.phase === "running") {
+          buffersRef.current[snap.invocationKey] = {
+            stdout: [...snap.stdoutLines],
+            stderr: [...snap.stderrLines],
+          };
+        }
         next[snap.invocationKey] = {
           invocationKey: snap.invocationKey,
           taskId: snap.taskId,
@@ -315,8 +357,8 @@ export function BackgroundInvocationDock({ session }: Props) {
           errCount: snap.errCount,
           previewLine: snap.previewLine,
           dispatchPrompt: snap.dispatchPrompt,
-          stdoutLines: [...snap.stdoutLines],
-          stderrLines: [...snap.stderrLines],
+          stdoutLines: snap.phase === "running" ? [] : [...snap.stdoutLines],
+          stderrLines: snap.phase === "running" ? [] : [...snap.stderrLines],
         };
         if (snap.phase === "running") {
           attachTauriBuffersForKey(snap.invocationKey);
@@ -514,16 +556,18 @@ export function BackgroundInvocationDock({ session }: Props) {
         const next: InvocationMap = {};
         for (let i = 0; i < snaps.length; i++) {
           const snap = snaps[i]!;
-          buffersRef.current[snap.invocationKey] = {
-            stdout: [...snap.stdoutLines],
-            stderr: [...snap.stderrLines],
-          };
           metaByKeyRef.current[snap.invocationKey] = {
             taskId: snap.taskId,
             templateId: snap.templateId,
             attempt: snap.attempt,
             dispatchPrompt: snap.dispatchPrompt,
           };
+          if (snap.phase === "running") {
+            buffersRef.current[snap.invocationKey] = {
+              stdout: [...snap.stdoutLines],
+              stderr: [...snap.stderrLines],
+            };
+          }
           next[snap.invocationKey] = {
             invocationKey: snap.invocationKey,
             taskId: snap.taskId,
@@ -535,8 +579,8 @@ export function BackgroundInvocationDock({ session }: Props) {
             errCount: snap.errCount,
             previewLine: snap.previewLine,
             dispatchPrompt: snap.dispatchPrompt,
-            stdoutLines: [...snap.stdoutLines],
-            stderrLines: [...snap.stderrLines],
+            stdoutLines: snap.phase === "running" ? [] : [...snap.stdoutLines],
+            stderrLines: snap.phase === "running" ? [] : [...snap.stderrLines],
           };
           if (snap.phase === "running") {
             attachTauriBuffersForKey(snap.invocationKey);
@@ -619,25 +663,30 @@ export function BackgroundInvocationDock({ session }: Props) {
     }
   }, [invocationMap, selectedKey, sortedInvocationKeys]);
 
+  const activeLineBuffers = useMemo(() => {
+    if (!selectedKey || !active) return { stdoutLines: [] as string[], stderrLines: [] as string[] };
+    return readLineBuffersForKey(selectedKey, active);
+  }, [active, selectedKey, bufferDisplayNonce, readLineBuffersForKey]);
+
   const stdoutParts = useMemo(
     () =>
       assemblePartsFromStdoutLinesForDisplay(
-        (active?.stdoutLines ?? []).slice(-MAX_STDOUT_LINES_FOR_STREAM_PARTS),
+        activeLineBuffers.stdoutLines.slice(-MAX_STDOUT_LINES_FOR_STREAM_PARTS),
       ),
-    [active?.stdoutLines],
+    [activeLineBuffers.stdoutLines],
   );
   const stderrParts = useMemo(
     () =>
       assemblePartsFromStdoutLines(
-        (active?.stderrLines ?? []).slice(-Math.floor(MAX_STDOUT_LINES_FOR_STREAM_PARTS / 2)),
+        activeLineBuffers.stderrLines.slice(-Math.floor(MAX_STDOUT_LINES_FOR_STREAM_PARTS / 2)),
       ),
-    [active?.stderrLines],
+    [activeLineBuffers.stderrLines],
   );
 
   const drawerTabItems = useMemo(() => {
     if (!active) return [];
-    const stdoutLabel = `标准输出 (${active.stdoutLines.length})`;
-    const stderrLabel = `标准错误 (${active.stderrLines.length})`;
+    const stdoutLabel = `标准输出 (${activeLineBuffers.stdoutLines.length})`;
+    const stderrLabel = `标准错误 (${activeLineBuffers.stderrLines.length})`;
     const stdoutChild: ReactNode =
       stdoutParts.length > 0 ? (
         <div className="app-background-invocation-drawer__parsed" tabIndex={0}>
@@ -645,7 +694,7 @@ export function BackgroundInvocationDock({ session }: Props) {
         </div>
       ) : (
         <pre className="app-background-invocation-drawer__pre" tabIndex={0}>
-          {active.stdoutLines.join("\n") || "（暂无）"}
+          {activeLineBuffers.stdoutLines.join("\n") || "（暂无）"}
         </pre>
       );
     const stderrChild: ReactNode =
@@ -659,7 +708,7 @@ export function BackgroundInvocationDock({ session }: Props) {
       ) : (
         <div className="app-background-invocation-drawer__pre-wrap">
           <LinkifiedPre
-            text={active.stderrLines.join("\n") || "（暂无）"}
+            text={activeLineBuffers.stderrLines.join("\n") || "（暂无）"}
             className="app-background-invocation-drawer__pre-linkified"
           />
         </div>
@@ -668,7 +717,7 @@ export function BackgroundInvocationDock({ session }: Props) {
       { key: "stdout", label: stdoutLabel, children: stdoutChild },
       { key: "stderr", label: stderrLabel, children: stderrChild },
     ];
-  }, [active, stdoutParts, stderrParts]);
+  }, [active, activeLineBuffers.stderrLines, activeLineBuffers.stdoutLines, stdoutParts, stderrParts]);
 
   if (sortedInvocationKeys.length === 0 && !drawerOpen) return null;
 
@@ -740,7 +789,7 @@ export function BackgroundInvocationDock({ session }: Props) {
                       type="default"
                       size="small"
                       onClick={() => {
-                        void copyToClipboard("标准输出", active.stdoutLines.join("\n"));
+                        void copyToClipboard("标准输出", activeLineBuffers.stdoutLines.join("\n"));
                       }}
                     >
                       复制标准输出
@@ -749,7 +798,7 @@ export function BackgroundInvocationDock({ session }: Props) {
                       type="default"
                       size="small"
                       onClick={() => {
-                        void copyToClipboard("标准错误", active.stderrLines.join("\n"));
+                        void copyToClipboard("标准错误", activeLineBuffers.stderrLines.join("\n"));
                       }}
                     >
                       复制标准错误
@@ -760,10 +809,10 @@ export function BackgroundInvocationDock({ session }: Props) {
                       onClick={() => {
                         const block = [
                           "--- 标准输出 ---",
-                          active.stdoutLines.join("\n"),
+                          activeLineBuffers.stdoutLines.join("\n"),
                           "",
                           "--- 标准错误 ---",
-                          active.stderrLines.join("\n"),
+                          activeLineBuffers.stderrLines.join("\n"),
                         ].join("\n");
                         void copyToClipboard("标准输出+标准错误", block);
                       }}

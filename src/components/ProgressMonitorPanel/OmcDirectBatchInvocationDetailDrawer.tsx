@@ -16,6 +16,7 @@ import {
 } from "../../utils/backgroundInvocationStdoutParts";
 import { formatOmcDirectBatchInvocationListTitle } from "../../utils/omcDirectBatchInvocationDisplay";
 import { getMessageSenderGroupKey, isToolOnlyUserMessage } from "../../utils/claudeChatMessageDisplay";
+import { isWebViewDevToolsLikelyOpen } from "../../utils/adaptivePoll";
 import { useClaudeInvocationLiveOutput } from "../../hooks/useClaudeInvocationLiveOutput";
 import { ClaudeSessionMessagesColumn } from "../ClaudeSessions/ClaudeSessionMessagesColumn";
 import { ClaudeChatMessageRow } from "../ClaudeSessions/ClaudeChatMessageRow";
@@ -191,41 +192,47 @@ export function OmcDirectBatchInvocationDetailDrawer({
     stderr: [],
   });
 
-  /** 与 `executeClaudeCodeAndWait` 内环形缓冲同步；解决晚开抽屉时 Tauri 监听收不到历史行、界面像被清空的问题 */
-  const [executionRingBuffer, setExecutionRingBuffer] = useState<{ stdout: string[]; stderr: string[] }>({
-    stdout: [],
-    stderr: [],
-  });
+  /** 与 `executeClaudeCodeAndWait` 内环形缓冲同步；用 ref 避免每 400ms 复制大数组进 React state */
+  const executionRingRef = useRef<{ stdout: string[]; stderr: string[] }>({ stdout: [], stderr: [] });
+  const [executionRingTick, setExecutionRingTick] = useState(0);
   useLayoutEffect(() => {
     if (!open || !isDirectBatch || parentFinished || !ik.trim()) {
-      setExecutionRingBuffer({ stdout: [], stderr: [] });
+      executionRingRef.current = { stdout: [], stderr: [] };
+      setExecutionRingTick((n) => n + 1);
       return;
     }
     const r = peekDirectBatchInvocationRingSnapshot(ik.trim());
-    setExecutionRingBuffer({ stdout: [...r.stdoutLines], stderr: [...r.stderrLines] });
+    executionRingRef.current = { stdout: r.stdoutLines, stderr: r.stderrLines };
+    setExecutionRingTick((n) => n + 1);
   }, [open, isDirectBatch, parentFinished, ik]);
   useEffect(() => {
     if (!open || !isDirectBatch || parentFinished || !ik.trim()) return;
+    const pollMs = isWebViewDevToolsLikelyOpen() ? 900 : 450;
     const id = window.setInterval(() => {
       const r = peekDirectBatchInvocationRingSnapshot(ik.trim());
-      setExecutionRingBuffer((prev) => {
-        if (prev.stdout.length === r.stdoutLines.length && prev.stderr.length === r.stderrLines.length) {
-          return prev;
-        }
-        return { stdout: r.stdoutLines, stderr: r.stderrLines };
-      });
-    }, 400);
+      const prev = executionRingRef.current;
+      if (
+        prev.stdout.length === r.stdoutLines.length &&
+        prev.stderr.length === r.stderrLines.length &&
+        prev.stdout.at(-1) === r.stdoutLines.at(-1) &&
+        prev.stderr.at(-1) === r.stderrLines.at(-1)
+      ) {
+        return;
+      }
+      executionRingRef.current = { stdout: r.stdoutLines, stderr: r.stderrLines };
+      setExecutionRingTick((n) => n + 1);
+    }, pollMs);
     return () => window.clearInterval(id);
   }, [open, isDirectBatch, parentFinished, ik]);
 
   /** 实时监听、bundle 落盘、进行中环形缓冲三路合并，取长的一侧以免截断 */
   const effectiveStdoutLines = useMemo(() => {
-    return longestLineArray(stdoutLines, bundlePersistedLines.stdout, executionRingBuffer.stdout);
-  }, [stdoutLines, bundlePersistedLines.stdout, executionRingBuffer.stdout]);
+    return longestLineArray(stdoutLines, bundlePersistedLines.stdout, executionRingRef.current.stdout);
+  }, [stdoutLines, bundlePersistedLines.stdout, executionRingTick]);
 
   const effectiveStderrLines = useMemo(() => {
-    return longestLineArray(stderrLines, bundlePersistedLines.stderr, executionRingBuffer.stderr);
-  }, [stderrLines, bundlePersistedLines.stderr, executionRingBuffer.stderr]);
+    return longestLineArray(stderrLines, bundlePersistedLines.stderr, executionRingRef.current.stderr);
+  }, [stderrLines, bundlePersistedLines.stderr, executionRingTick]);
 
   /** 锚点 bundle 仅在子进程完成时写入；侧栏 `phase` 可能仍为 started，据此推断已结束，避免重开时底部「正在思考」假阳性 */
   const hasLoadedPersistedStream =
@@ -328,8 +335,12 @@ export function OmcDirectBatchInvocationDetailDrawer({
       if (cancelled) return;
       const snap = bundle.items[invocationKey];
       setBundlePersistedLines({
-        stdout: snap?.stdoutLines?.length ? [...snap.stdoutLines] : [],
-        stderr: snap?.stderrLines?.length ? [...snap.stderrLines] : [],
+        stdout: snap?.stdoutLines?.length
+          ? snap.stdoutLines.slice(-DIRECT_BATCH_INVOCATION_STDOUT_RETENTION_LINES)
+          : [],
+        stderr: snap?.stderrLines?.length
+          ? snap.stderrLines.slice(-DIRECT_BATCH_INVOCATION_STDERR_RETENTION_LINES)
+          : [],
       });
       const extracted =
         snap?.stdoutLines && snap.stdoutLines.length > 0
@@ -400,7 +411,7 @@ export function OmcDirectBatchInvocationDetailDrawer({
       size={width}
       open={open}
       onClose={onClose}
-      destroyOnHidden={false}
+      destroyOnHidden
       classNames={{
         header: "app-omc-direct-batch-inv-detail-drawer-header",
         body: "app-omc-direct-batch-inv-detail-drawer-body",
