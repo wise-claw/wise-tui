@@ -2,9 +2,15 @@ import { useEffect, useState } from "react";
 import type { ClaudeSession } from "../types";
 import { CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD } from "../constants/claudeMessageListWindow";
 import { loadClaudeSessionJsonl } from "../services/claudeDisk";
-import { sessionMessagesFromJsonlLines } from "../utils/sessionMessagesMemory";
+import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
+import {
+  capSessionMessagesForMemory,
+  sessionMessagesFromJsonlLines,
+  trimMessagePartsForMemory,
+} from "../utils/sessionMessagesMemory";
 
-const RUNNING_POLL_MS = 3000;
+const RUNNING_POLL_MS = 5000;
+const RUNNING_POLL_MS_HIDDEN = 15000;
 
 export function pickSubagentTranscriptSession(
   disk: ClaudeSession | null | undefined,
@@ -70,6 +76,7 @@ export function useSubagentDiskTranscript(params: {
           setSession(null);
           return;
         }
+        const memoryMessages = trimMessagePartsForMemory(capSessionMessagesForMemory(messages));
         setSession({
           id: cc,
           claudeSessionId: cc,
@@ -79,7 +86,7 @@ export function useSubagentDiskTranscript(params: {
           status,
           createdAt: createdAt ?? Date.now(),
           pendingPrompt: "",
-          messages,
+          messages: memoryMessages,
           diskTranscriptPartial,
         });
       } catch {
@@ -92,8 +99,9 @@ export function useSubagentDiskTranscript(params: {
     void load();
     if (pollWhileRunning && (status === "running" || status === "connecting")) {
       timer = window.setInterval(() => {
+        if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
         void load();
-      }, RUNNING_POLL_MS);
+      }, readVisiblePollIntervalMs(RUNNING_POLL_MS, RUNNING_POLL_MS_HIDDEN));
     }
 
     return () => {

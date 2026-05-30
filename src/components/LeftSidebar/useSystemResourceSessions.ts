@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ClaudeHostProcess, ClaudeSession, ClaudeSessionInfo } from "../../types";
 import { listRunningClaudeSessions } from "../../services/claude";
 import { isClaudeSessionRunningInHostOrUi } from "../../services/claudeSessionState";
@@ -41,17 +41,30 @@ export function useSystemResourceSessions({
   const [claudeCountPopoverOpen, setClaudeCountPopoverOpen] = useState(false);
   const [claudeSystemSessionSearch, setClaudeSystemSessionSearch] = useState("");
   const [systemSessionDrawerId, setSystemSessionDrawerId] = useState<string | null>(null);
+  const claudeCountPopoverOpenRef = useRef(false);
+  const systemSessionDrawerIdRef = useRef<string | null>(null);
+  claudeCountPopoverOpenRef.current = claudeCountPopoverOpen;
+  systemSessionDrawerIdRef.current = systemSessionDrawerId;
 
   useEffect(() => {
     let cancelled = false;
+    let tickCounter = 0;
 
     async function refreshSystemSummary() {
+      tickCounter += 1;
+      const detailOpen =
+        claudeCountPopoverOpenRef.current || systemSessionDrawerIdRef.current != null;
+      const includeSnapshot = detailOpen || tickCounter % 5 === 1;
+      const registryPromise = listRunningClaudeSessions();
+      const snapshotPromise = includeSnapshot
+        ? getSystemResourceSnapshot()
+        : Promise.resolve(null);
       const [snapshotResult, registryResult] = await Promise.allSettled([
-        getSystemResourceSnapshot(),
-        listRunningClaudeSessions(),
+        snapshotPromise,
+        registryPromise,
       ]);
       if (cancelled) return;
-      if (snapshotResult.status === "fulfilled") {
+      if (snapshotResult.status === "fulfilled" && snapshotResult.value) {
         const snap = snapshotResult.value;
         setSystemSummary((prev) => {
           const next = {
@@ -76,7 +89,7 @@ export function useSystemResourceSessions({
           return next;
         });
         setSystemSummaryError(false);
-      } else {
+      } else if (includeSnapshot && snapshotResult.status === "rejected") {
         setSystemSummaryError(true);
       }
       if (registryResult.status === "fulfilled") {
@@ -99,10 +112,12 @@ export function useSystemResourceSessions({
     let timer: ReturnType<typeof setInterval> | null = null;
     const scheduleTimer = () => {
       if (timer != null) window.clearInterval(timer);
+      const detailOpen =
+        claudeCountPopoverOpenRef.current || systemSessionDrawerIdRef.current != null;
       timer = window.setInterval(() => {
         if (document.visibilityState !== "visible") return;
         void refreshSystemSummary();
-      }, readVisiblePollIntervalMs(8000, 20000));
+      }, readVisiblePollIntervalMs(detailOpen ? 8000 : 22000, detailOpen ? 20000 : 90000));
     };
     scheduleTimer();
     const onVisibilityChange = () => {

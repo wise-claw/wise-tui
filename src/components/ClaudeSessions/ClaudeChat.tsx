@@ -357,6 +357,8 @@ interface Props {
     projectId?: string | null;
     rootPath?: string | null;
   };
+  /** 工作区当前焦点标签；配合会话状态决定 BackgroundInvocationDock 是否挂载 */
+  activeSessionId?: string | null;
 }
 
 interface SessionSendTraceEntry {
@@ -555,6 +557,7 @@ export function ClaudeChat({
   dualPaneRepositoryPicker,
   missionContext,
   activeProject,
+  activeSessionId = null,
 }: Props) {
   const chatRootRef = useRef<HTMLDivElement>(null);
   const composerTrayRef = useRef<HTMLDivElement>(null);
@@ -568,6 +571,12 @@ export function ClaudeChat({
     [activeProject?.id, activeRepository?.id, missionContext?.projectId],
   );
   useSpeechToRequirementSync(speechPrefs.speechToRequirementEnabled, speechToRequirementScope, session);
+
+  const backgroundInvocationDockEnabled = useMemo(() => {
+    if (session.status === "running" || session.status === "connecting") return true;
+    if (activeSessionId != null && session.id === activeSessionId) return true;
+    return false;
+  }, [activeSessionId, session.id, session.status]);
 
   useEffect(() => {
     if (todos.length > 0) return;
@@ -5116,7 +5125,7 @@ export function ClaudeChat({
 
       {/* Composer：高度写入 --app-composer-tray-h，供快捷条定位；后台 invocation 仅保留抽屉（无浮层摘要） */}
       <div ref={composerTrayRef} className="app-claude-composer-tray">
-        <BackgroundInvocationDock session={session} />
+        <BackgroundInvocationDock session={session} enabled={backgroundInvocationDockEnabled} />
 
         <ComposerRegion
           session={session}

@@ -1,5 +1,6 @@
 import { Modal, message } from "antd";
 import { useCallback, useEffect, useState } from "react";
+import { readVisiblePollIntervalMs } from "../../utils/adaptivePoll";
 import {
   applyFreeClaudeCodeClaudeSettings,
   getFreeClaudeCodeStatus,
@@ -31,10 +32,11 @@ export function useFreeClaudeCodeSetting() {
   useEffect(() => {
     void refresh();
     const timer = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       void getFreeClaudeCodeStatus()
         .then(setStatus)
         .catch(() => undefined);
-    }, 5000);
+    }, readVisiblePollIntervalMs(8000, 30000));
     return () => window.clearInterval(timer);
   }, [refresh]);
 

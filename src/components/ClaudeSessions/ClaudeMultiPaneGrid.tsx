@@ -196,6 +196,7 @@ export interface MultiPaneSharedChatProps {
 
 interface MultiPanePrimaryPaneProps {
   session: ClaudeSession;
+  activeSessionId: string;
   activeRepository: Repository;
   workflowTasks: WorkflowTaskItem[];
   shared: MultiPaneSharedChatProps;
@@ -206,6 +207,7 @@ interface MultiPanePrimaryPaneProps {
 
 const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
   session,
+  activeSessionId,
   activeRepository,
   workflowTasks,
   shared,
@@ -236,6 +238,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
       <ClaudeSessionChatWithDock
         key={sessionId}
         session={session}
+        activeSessionId={activeSessionId}
         sessions={shared.sessions}
         allSessionsForHistory={shared.allSessionsForHistory}
         repositories={shared.repositories}
@@ -316,6 +319,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
 interface MultiPaneExtraPaneCellProps {
   slot: PaneSlot;
   paneIdx: number;
+  activeSessionId: string;
   paneSession: ClaudeSession | null;
   paneRepo: Repository | null;
   activeRepository: Repository;
@@ -343,6 +347,7 @@ interface MultiPaneExtraPaneCellProps {
 const MultiPaneExtraPaneCell = memo(
   function MultiPaneExtraPaneCell({
     paneIdx,
+    activeSessionId,
     paneSession,
     paneRepo,
     activeRepository,
@@ -399,6 +404,7 @@ const MultiPaneExtraPaneCell = memo(
           <ClaudeSessionChatWithDock
             key={sessionId}
             session={paneSession}
+            activeSessionId={activeSessionId}
             sessions={shared.sessions}
             allSessionsForHistory={shared.allSessionsForHistory}
             repositories={shared.repositories}
@@ -770,6 +776,7 @@ export function ClaudeMultiPaneGrid({
     >
       <MultiPanePrimaryPane
         session={activeSession}
+        activeSessionId={activeSession.id}
         activeRepository={activeRepository}
         workflowTasks={activeSessionWorkflowTasks}
         shared={shared}
@@ -784,6 +791,7 @@ export function ClaudeMultiPaneGrid({
           key={slot.slotId}
           slot={slot}
           paneIdx={paneIdx}
+          activeSessionId={activeSession.id}
           paneSession={resolvedPaneSessions[paneIdx] ?? null}
           paneRepo={resolvedPaneRepositories[paneIdx] ?? activeRepository}
           activeRepository={activeRepository}

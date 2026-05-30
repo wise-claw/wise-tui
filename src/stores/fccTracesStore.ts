@@ -4,8 +4,9 @@ import { getFreeClaudeCodeStatus } from "../services/freeClaudeCode";
 import { clearFccTraces, listFccTraces } from "../services/fccTraces";
 import type { FccTraceEntry } from "../types/fccTrace";
 import { mergeFccTraceEntries } from "../utils/mergeFccTraceEntries";
+import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
 
-const POLL_MS = 2000;
+const POLL_MS = readVisiblePollIntervalMs(2000, 10000);
 
 type Listener = () => void;
 
@@ -121,6 +122,7 @@ export function startFccTracesPolling(): void {
   if (pollTimer) return;
   void refreshFccTracesStore();
   pollTimer = setInterval(() => {
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
     void refreshFccTracesStore();
   }, POLL_MS);
 }

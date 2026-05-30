@@ -1284,6 +1284,7 @@ export function ClaudeSessions({
           <ClaudeSessionChatWithDock
             key={activeSession.id}
             session={activeSession}
+            activeSessionId={activeSession.id}
             sessions={sessions}
             allSessionsForHistory={incomingSessions}
             repositories={repositories}

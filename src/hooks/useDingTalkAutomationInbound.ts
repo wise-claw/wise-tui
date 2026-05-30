@@ -50,6 +50,10 @@ function makeRuntimeId(prefix: string): string {
     : `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
+const DINGTALK_INBOUND_JOB_TIMEOUT_MS = 20 * 60 * 1000;
+const DINGTALK_PENDING_STALE_MS = 25 * 60 * 1000;
+const DINGTALK_PENDING_SWEEP_MS = 60_000;
+
 export function useDingTalkAutomationInbound({
   activeProjectId,
   activeRepositoryId,
@@ -91,6 +95,7 @@ export function useDingTalkAutomationInbound({
         dingTalkUserId: string;
         uxMessageKey: string;
         dingTalkInboundJobId?: string;
+        createdAt: number;
       }
     >(),
   );
@@ -111,6 +116,26 @@ export function useDingTalkAutomationInbound({
       }
     }
   }, []);
+
+  useEffect(() => {
+    const sweep = () => {
+      const now = Date.now();
+      for (const [tabKey, pending] of [...pendingRef.current.entries()]) {
+        if (now - pending.createdAt < DINGTALK_PENDING_STALE_MS) continue;
+        message.destroy(pending.uxMessageKey);
+        clearPendingAndResolveInboundJob(tabKey);
+      }
+      for (const jobId of [...inboundJobResolversRef.current.keys()]) {
+        if (!jobId.includes("dingtalk-inbound")) continue;
+        const stillPending = [...pendingRef.current.values()].some((entry) => entry.dingTalkInboundJobId === jobId);
+        if (!stillPending) {
+          inboundJobResolversRef.current.delete(jobId);
+        }
+      }
+    };
+    const timer = window.setInterval(sweep, DINGTALK_PENDING_SWEEP_MS);
+    return () => window.clearInterval(timer);
+  }, [clearPendingAndResolveInboundJob]);
 
   const moveDingTalkAutomationPendingSessionId = useCallback((fromTabId: string, toClaudeSessionId: string) => {
     const pending = pendingRef.current.get(fromTabId);
@@ -385,6 +410,7 @@ export function useDingTalkAutomationInbound({
         dingTalkUserId: dingTalkUserId.trim(),
         uxMessageKey,
         dingTalkInboundJobId: inboundJobId,
+        createdAt: Date.now(),
       });
 
       void message.open({
@@ -429,7 +455,20 @@ export function useDingTalkAutomationInbound({
       }
 
       await new Promise<void>((resolve) => {
-        inboundJobResolversRef.current.set(inboundJobId, resolve);
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          window.clearTimeout(timeoutId);
+          inboundJobResolversRef.current.delete(inboundJobId);
+          resolve();
+        };
+        const timeoutId = window.setTimeout(() => {
+          clearPendingAndResolveInboundJob(targetId);
+          message.destroy(uxMessageKey);
+          finish();
+        }, DINGTALK_INBOUND_JOB_TIMEOUT_MS);
+        inboundJobResolversRef.current.set(inboundJobId, finish);
       });
     }
 

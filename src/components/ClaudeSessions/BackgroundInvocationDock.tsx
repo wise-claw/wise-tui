@@ -37,6 +37,8 @@ import { StreamJsonStdoutHelpButton } from "../StreamJsonStdoutHelpButton";
 
 interface Props {
   session: ClaudeSession;
+  /** 为 false 时不挂载监听与 bundle 恢复（非焦点 idle 窗格省内存） */
+  enabled?: boolean;
 }
 
 interface ActiveInvocation {
@@ -105,7 +107,12 @@ function buildSnapshotFromBuffers(
   };
 }
 
-export function BackgroundInvocationDock({ session }: Props) {
+export function BackgroundInvocationDock({ session, enabled = true }: Props) {
+  if (!enabled) return null;
+  return <BackgroundInvocationDockInner session={session} />;
+}
+
+function BackgroundInvocationDockInner({ session }: { session: ClaudeSession }) {
   const [invocationMap, setInvocationMap] = useState<InvocationMap>({});
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -239,17 +246,29 @@ export function BackgroundInvocationDock({ session }: Props) {
 
   const ensureFlushTimer = useCallback(() => {
     if (flushTimerRef.current != null) return;
-    const intervalMs = document.hidden ? 1500 : isWebViewDevToolsLikelyOpen() ? 1200 : 800;
+    const intervalMs = document.hidden
+      ? 2000
+      : isWebViewDevToolsLikelyOpen()
+        ? 1500
+        : drawerOpenRef.current
+          ? 800
+          : 2500;
     flushTimerRef.current = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       const keys = Object.keys(unsubsByKeyRef.current);
+      let hasRunning = false;
       for (const invocationKey of keys) {
         const inv = invocationMapRef.current[invocationKey];
         if (inv?.phase === "running") {
+          hasRunning = true;
           flushKeyFromBuffers(invocationKey, "running");
         }
       }
+      if (!hasRunning) {
+        stopFlushTimer();
+      }
     }, intervalMs);
-  }, [flushKeyFromBuffers]);
+  }, [flushKeyFromBuffers, stopFlushTimer]);
 
   const attachTauriBuffersForKey = useCallback(
     (invocationKey: string) => {

@@ -24,6 +24,7 @@ import {
   repositoryTypeChineseLabel,
 } from "./utils/repositoryType";
 import { runWhenIdle } from "./utils/deferIdle";
+import { readVisiblePollIntervalMs } from "./utils/adaptivePoll";
 import { isSessionBoundAsRepositoryMain } from "./utils/repositoryMainSessionBinding";
 import { resolveSessionExecutionEngine } from "./utils/sessionExecutionEngine";
 import {
@@ -181,6 +182,7 @@ import {
   type WorkflowVerdictMode,
 } from "./constants/workflowVerdictMode";
 import {
+  capWorkflowRuntimeSnapshots,
   extractRuntimeSnapshotsFromEvents,
 } from "./services/workflowGraphHelpers";
 import { useMainLayoutModes } from "./hooks/useMainLayoutModes";
@@ -405,6 +407,27 @@ export default function App() {
   const [taskPendingEmployeesByTaskId, setTaskPendingEmployeesByTaskId] = useState<Record<string, Array<{ employeeId: string; name: string }>>>({});
   const [workflowRuntimeStateByTaskId, setWorkflowRuntimeStateByTaskId] = useState<Record<string, WorkflowGraphRuntimeState>>({});
   const [workflowRuntimeSnapshotsByTaskId, setWorkflowRuntimeSnapshotsByTaskId] = useState<Record<string, WorkflowRuntimeStepSnapshot[]>>({});
+  const commitWorkflowRuntimeSnapshotsByTaskId = useCallback(
+    (action: React.SetStateAction<Record<string, WorkflowRuntimeStepSnapshot[]>>) => {
+      setWorkflowRuntimeSnapshotsByTaskId((prev) => {
+        const raw = typeof action === "function" ? action(prev) : action;
+        let changed = raw !== prev;
+        const next: Record<string, WorkflowRuntimeStepSnapshot[]> = {};
+        for (const [taskId, snapshots] of Object.entries(raw)) {
+          const capped = capWorkflowRuntimeSnapshots(snapshots);
+          next[taskId] = capped;
+          if (prev[taskId] !== capped) {
+            changed = true;
+          }
+        }
+        if (Object.keys(prev).length !== Object.keys(next).length) {
+          changed = true;
+        }
+        return changed ? next : prev;
+      });
+    },
+    [],
+  );
   /** 供团队自动推进异步回调读取最新状态，避免驳回回退后闭包内 task 阶段索引滞后误判「未推进」而提前 return。 */
   const workflowTasksRef = useRef(workflowTasks);
   workflowTasksRef.current = workflowTasks;
@@ -435,13 +458,13 @@ export default function App() {
       );
       setWorkflowTasks(merged);
       commitWorkflowTaskEventsByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds, eventEntries));
-      setWorkflowRuntimeSnapshotsByTaskId((prev) =>
+      commitWorkflowRuntimeSnapshotsByTaskId((prev) =>
         pruneRecordByTaskIds(prev, liveTaskIds, snapshotEntries),
       );
       setTaskPendingEmployeesByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds, pendingEntries));
       setWorkflowRuntimeStateByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds));
     },
-    [commitWorkflowTaskEventsByTaskId],
+    [commitWorkflowTaskEventsByTaskId, commitWorkflowRuntimeSnapshotsByTaskId],
   );
   const [workflowGraphsByWorkflowId, setWorkflowGraphsByWorkflowId] = useState<Record<string, WorkflowGraph>>({});
   const [workflowGraphStatusByWorkflowId, setWorkflowGraphStatusByWorkflowId] = useState<Record<string, string>>({});
@@ -902,7 +925,7 @@ export default function App() {
       const liveTaskIds = collectLiveWorkflowTaskIds(nextTasks);
       setWorkflowTasks(nextTasks);
       commitWorkflowTaskEventsByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds));
-      setWorkflowRuntimeSnapshotsByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds));
+      commitWorkflowRuntimeSnapshotsByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds));
       setTaskPendingEmployeesByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds));
       setWorkflowRuntimeStateByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds));
       purgeWorkflowWorkerSessionBindingsRef.current(creatorIds);
@@ -1070,7 +1093,7 @@ export default function App() {
     setEmployeeTaskCounts,
     setEmployees,
     setTaskPendingEmployeesByTaskId,
-    setWorkflowRuntimeSnapshotsByTaskId,
+    setWorkflowRuntimeSnapshotsByTaskId: commitWorkflowRuntimeSnapshotsByTaskId,
     setWorkflowRuntimeStateByTaskId,
     setWorkflowTaskEventsByTaskId: commitWorkflowTaskEventsByTaskId,
     setWorkflowTasks,
@@ -1208,8 +1231,9 @@ export default function App() {
 
     void tick();
     const timer = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       void tick();
-    }, 1200);
+    }, readVisiblePollIntervalMs(3000, 15000));
     return () => {
       cancelled = true;
       window.clearInterval(timer);
@@ -1274,6 +1298,7 @@ export default function App() {
     workflowGraphsByWorkflowId,
     omcBatchRuntime,
     omcInstalled: omcInstalled === true,
+    monitorDrawerOpen: monitorDrawerTarget != null,
   });
   const scopedRepositoryMemberMonitorItems = useMemo(
     () =>

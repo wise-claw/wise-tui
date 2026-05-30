@@ -19,7 +19,7 @@ export const CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD = 400;
 export const IN_MEMORY_SESSION_MESSAGES_MAX = 80;
 
 /** 全部标签合计最多保留的消息条数（超出时优先清空非活动/非运行会话正文） */
-export const IN_MEMORY_GLOBAL_MESSAGES_BUDGET = 240;
+export const IN_MEMORY_GLOBAL_MESSAGES_BUDGET = 180;
 
 /** 单条 message part 文本/tool 输出在内存中的字符上限 */
 export const IN_MEMORY_MESSAGE_PART_TEXT_MAX = 12_000;

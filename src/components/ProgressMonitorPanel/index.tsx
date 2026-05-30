@@ -548,8 +548,17 @@ function RepositorySubagentDetailDrawer({
   const matchedSessionId = matchedSession?.id ?? null;
   useEffect(() => {
     if (!target || !onReloadFullDiskTranscript || !matchedSessionId || !claudeSessionId) return;
+    if ((matchedSession?.messages.length ?? 0) > 0) return;
+    if ((diskTranscriptSession?.messages.length ?? 0) > 0) return;
     void onReloadFullDiskTranscript(matchedSessionId);
-  }, [target, onReloadFullDiskTranscript, matchedSessionId, claudeSessionId]);
+  }, [
+    target,
+    onReloadFullDiskTranscript,
+    matchedSessionId,
+    claudeSessionId,
+    matchedSession?.messages.length,
+    diskTranscriptSession?.messages.length,
+  ]);
 
   return (
     <Drawer

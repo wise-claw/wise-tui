@@ -2229,7 +2229,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           return capped === prev ? prev : capped;
         });
       }, { timeoutMs: 4000 });
-    }, 45_000);
+    }, readVisiblePollIntervalMs(45_000, 120_000));
     return () => {
       window.clearInterval(timer);
       if (cancelIdle) cancelIdle();
@@ -3397,13 +3397,16 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
   useEffect(() => {
     const timer = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       notificationHub.expireStaleRequests(CONTROL_REQUEST_EXPIRE_MS);
-    }, 60_000);
+    }, readVisiblePollIntervalMs(60_000, 180_000));
     return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
     if (!tabsHydrated) return;
+    const debounceMs =
+      typeof document !== "undefined" && document.visibilityState !== "visible" ? 3000 : 450;
     const t = window.setTimeout(() => {
       const bindingsChanged = pruneLiveSessionSidecars(sessions);
       if (bindingsChanged) {
@@ -3426,7 +3429,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           };
         }),
       });
-    }, 450);
+    }, debounceMs);
     return () => window.clearTimeout(t);
   }, [sessions, activeSessionId, tabsHydrated, pruneLiveSessionSidecars]);
 

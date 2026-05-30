@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { WISE_UI_EVENT_SCHEDULED_TASKS_CHANGED } from "../../constants/workflowUiEvents";
 import type { Repository } from "../../types";
 import { runWhenIdle } from "../../utils/deferIdle";
+import { readVisiblePollIntervalMs } from "../../utils/adaptivePoll";
 import { readRepositoryScheduledClaudeTasks } from "../../services/repositoryScheduledClaudeTasksStore";
 
 export interface SidebarScheduledTasksSummary {
@@ -89,8 +90,9 @@ export function useSidebarScheduledTasksMap(
 
   useEffect(() => {
     const timer = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       void refresh();
-    }, 45_000);
+    }, readVisiblePollIntervalMs(45_000, 120_000));
     return () => window.clearInterval(timer);
   }, [refresh]);
 

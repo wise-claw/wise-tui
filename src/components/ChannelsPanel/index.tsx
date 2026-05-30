@@ -20,6 +20,7 @@ import {
   type DingTalkStreamGatewayStatus,
 } from "../../services/dingtalkStreamGateway";
 import { genericWsStatus, type GenericWsStatus } from "../../services/remoteChannels";
+import { readVisiblePollIntervalMs } from "../../utils/adaptivePoll";
 import { FeishuChannelBody } from "./FeishuChannelBody";
 import { WecomChannelBody } from "./WecomChannelBody";
 import { TelegramChannelBody } from "./TelegramChannelBody";
@@ -77,10 +78,14 @@ export function ChannelsPanel() {
   }, []);
 
   useEffect(() => {
+    if (activeKey !== "dingtalk") return;
     void refreshDingtalk();
-    const id = window.setInterval(() => void refreshDingtalk(), 3000);
+    const id = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      void refreshDingtalk();
+    }, readVisiblePollIntervalMs(5000, 20000));
     return () => window.clearInterval(id);
-  }, [refreshDingtalk]);
+  }, [activeKey, refreshDingtalk]);
 
   // 初次进入页面时主动同步一次通用 WS 真实状态（避免事件流尚未抵达时显示 stopped）
   useEffect(() => {

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { writeProjectRelativeFile } from "../../services/materializePrdSnapshot";
+import { readVisiblePollIntervalMs } from "../../utils/adaptivePoll";
 import {
   contextPercentToneClassName,
   estimateContextPercent,
@@ -193,8 +194,18 @@ export function ClaudeStatusPanel({ repositoryPath, session }: ClaudeStatusPanel
 
     refresh();
     const timer = window.setInterval(() => {
+      if (
+        typeof document !== "undefined" &&
+        document.visibilityState !== "visible" &&
+        !isSessionActive
+      ) {
+        return;
+      }
       refresh();
-    }, isSessionActive ? PANEL_REFRESH_MS : PANEL_IDLE_REFRESH_MS);
+    }, readVisiblePollIntervalMs(
+      isSessionActive ? PANEL_REFRESH_MS : PANEL_IDLE_REFRESH_MS,
+      isSessionActive ? 8000 : 180_000,
+    ));
 
     return () => {
       window.clearInterval(timer);

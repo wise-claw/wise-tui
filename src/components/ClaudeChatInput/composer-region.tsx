@@ -62,6 +62,7 @@ import {
   type ComposerSpeechSendMode,
 } from "../../constants/composerSpeechPreferences";
 import { formatSilenceAutoSendIdleSeconds } from "../../utils/composerSpeechSilenceIdle";
+import { readVisiblePollIntervalMs } from "../../utils/adaptivePoll";
 import { splitUtteranceAtAutoSendEnding } from "../../utils/composerSpeechAutoSendEnding";
 import {
   commitComposerSpeechTranscriptBaselineForSend,
@@ -1235,8 +1236,9 @@ function ComposerInner({
   useEffect(() => {
     void loadActiveBranch();
     const timer = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       void loadActiveBranch();
-    }, 30_000);
+    }, readVisiblePollIntervalMs(30_000, 120_000));
     return () => window.clearInterval(timer);
   }, [loadActiveBranch]);
   useEffect(() => {

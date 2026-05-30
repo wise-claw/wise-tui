@@ -1,6 +1,7 @@
 import { message, Switch, Tooltip } from "antd";
 import { isTauri } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
+import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
 import {
   dingtalkStreamGatewayIsRunning,
   dingtalkStreamGatewayStart,
@@ -26,7 +27,10 @@ export function DingTalkStreamGatewayTopbarSwitch() {
   useEffect(() => {
     if (!isTauri()) return;
     void refresh();
-    const id = window.setInterval(() => void refresh(), POLL_MS);
+    const id = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      void refresh();
+    }, readVisiblePollIntervalMs(POLL_MS, 15000));
     return () => window.clearInterval(id);
   }, [refresh]);
 

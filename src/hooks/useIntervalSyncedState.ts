@@ -19,8 +19,24 @@ export function useIntervalSyncedState<T>(source: T, intervalMs: number, syncKey
       });
     }
     tick();
-    const id = window.setInterval(tick, intervalMs);
-    return () => window.clearInterval(id);
+    const id = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      tick();
+    }, intervalMs);
+    const onVisibilityChange = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        tick();
+      }
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibilityChange);
+    }
+    return () => {
+      window.clearInterval(id);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+      }
+    };
   }, [intervalMs, syncKey]);
 
   return synced;
