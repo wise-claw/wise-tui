@@ -27,7 +27,9 @@ function sidebarMenuSection(children: Array<MenuItem | false | null | undefined>
 }
 
 /** 多段菜单项之间用分隔线连接，跳过空段与连续分隔线。 */
-function sidebarMenuWithDividers(...sections: Array<MenuItem[] | null | undefined>): MenuProps["items"] {
+function sidebarMenuWithDividers(
+  ...sections: Array<MenuItem[] | null | undefined>
+): MenuProps["items"] {
   const result: MenuItem[] = [];
   for (const section of sections) {
     if (!section || section.length === 0) continue;
@@ -35,6 +37,126 @@ function sidebarMenuWithDividers(...sections: Array<MenuItem[] | null | undefine
     result.push(...section);
   }
   return result;
+}
+
+/** 分段菜单 + 末尾危险项（分隔线隔开）。 */
+function sidebarMenuWithSectionsAndDanger(
+  sections: Array<MenuItem[] | null | undefined>,
+  dangerItems?: Array<MenuItem | false | null | undefined>,
+): MenuProps["items"] {
+  const result = sidebarMenuWithDividers(...sections) ?? [];
+  const danger = compactItems(dangerItems ?? []);
+  if (danger.length > 0) {
+    if (result.length > 0) result.push({ type: "divider" });
+    result.push(...danger);
+  }
+  return result;
+}
+
+function repositoryOpenMenuItems(input: {
+  directoryKey?: string;
+  onOpenDirectory?: boolean;
+  onOpenInEditor?: boolean;
+  onOpenInTerminal?: boolean;
+  includeBrowser?: boolean;
+  onNewPaneSession?: boolean;
+}): MenuItem[] {
+  const {
+    directoryKey = "finder",
+    onOpenDirectory = true,
+    onOpenInEditor = true,
+    onOpenInTerminal = false,
+    includeBrowser = false,
+    onNewPaneSession = false,
+  } = input;
+  const showTerminalOpen = onOpenInTerminal && showRepositoryTerminalOpenMenuItem();
+
+  return compactItems([
+    onOpenDirectory ? { key: directoryKey, label: "打开目录" } : null,
+    onOpenInEditor ? { key: "editor", label: repositoryEditorOpenMenuLabel() } : null,
+    showTerminalOpen ? { key: "open-terminal", label: repositoryTerminalOpenMenuLabel() } : null,
+    includeBrowser ? { key: "browser", label: "打开 Git 仓库" } : null,
+    onNewPaneSession ? { key: "new-session", label: "新开会话" } : null,
+  ]);
+}
+
+function repositoryTaskMenuItems(input: {
+  trellisEnabled?: boolean;
+  requirementsLabel?: string;
+  onOpenRequirements?: boolean;
+  onOpenScheduledTasks?: boolean;
+  onOpenExecutableTasks?: boolean;
+}): MenuItem[] {
+  const {
+    trellisEnabled = false,
+    requirementsLabel = "仓库需求",
+    onOpenRequirements = false,
+    onOpenScheduledTasks = false,
+    onOpenExecutableTasks = false,
+  } = input;
+
+  return compactItems([
+    trellisEnabled && onOpenRequirements ? { key: "requirements", label: requirementsLabel } : null,
+    onOpenScheduledTasks ? { key: "scheduled-tasks", label: "定时任务" } : null,
+    trellisEnabled && onOpenExecutableTasks ? { key: "executable-tasks", label: "可执行任务" } : null,
+  ]);
+}
+
+function repositoryMainSessionRunMenuItem(input: {
+  onMainSessionRun?: boolean;
+  runCommandRunning?: boolean;
+}): MenuItem | null {
+  if (!input.onMainSessionRun) return null;
+  return {
+    key: "run-submenu",
+    label: "运行",
+    popupClassName: "app-sidebar-more-menu-submenu",
+    children: [
+      { key: "run-configure", label: "配置" },
+      {
+        key: "run-start",
+        label: "启动",
+        disabled: input.runCommandRunning,
+      },
+      {
+        key: "run-stop",
+        label: "停止",
+        disabled: !input.runCommandRunning,
+      },
+    ],
+  };
+}
+
+function repositoryConfigureMenuItems(input: {
+  onOpenRepositoryMainOwner?: boolean;
+  mainOwnerLabel?: string;
+  onConfigureSddMode?: boolean;
+  onMainSessionRun?: boolean;
+  runCommandRunning?: boolean;
+  trellisRootActionEnabled?: boolean;
+  trellisReady?: boolean;
+  onOpenPromptsRepository?: boolean;
+}): MenuItem[] {
+  const {
+    onOpenRepositoryMainOwner,
+    mainOwnerLabel = "配置 Owner",
+    onConfigureSddMode,
+    onMainSessionRun,
+    runCommandRunning = false,
+    trellisRootActionEnabled = false,
+    trellisReady = false,
+    onOpenPromptsRepository,
+  } = input;
+
+  return compactItems([
+    REPOSITORY_MAIN_OWNER_MENU_ENABLED && onOpenRepositoryMainOwner
+      ? { key: "main-owner", label: mainOwnerLabel }
+      : null,
+    onConfigureSddMode ? { key: "sdd-mode", label: "配置 Claude 插件" } : null,
+    repositoryMainSessionRunMenuItem({ onMainSessionRun, runCommandRunning }),
+    trellisRootActionEnabled && !trellisReady ? { key: "trellis-init", label: "启用 Wise Trellis" } : null,
+    onOpenPromptsRepository ? { key: "prompts", label: "提示词" } : null,
+  ]);
 }
 
 export interface BuildProjectMoreMenuItemsInput {
@@ -69,43 +191,51 @@ export function buildProjectMoreMenuItems(input: BuildProjectMoreMenuItemsInput)
     onOpenProjectInTerminal,
   } = input;
 
-  const showTerminalOpen =
-    Boolean(onOpenProjectInTerminal) && showRepositoryTerminalOpenMenuItem();
-
-  return sidebarMenuWithDividers(
-    sidebarMenuSection([
-      { key: "pin", label: isPinned ? "取消置顶" : "置顶" },
-      { key: "rename", label: "重命名工作区" },
-      onOpenProjectDirectory ? { key: "open-directory", label: "打开目录" } : null,
-      onOpenProjectInEditor ? { key: "editor", label: repositoryEditorOpenMenuLabel() } : null,
-      onAddRepositoryToProject ? { key: "add-repository", label: "关联仓库" } : null,
-      onConfigureSddMode ? { key: "sdd-mode", label: "配置 Claude 插件" } : null,
-      onNewPaneSession ? { key: "new-session", label: "新开会话" } : null,
-      showTerminalOpen ? { key: "open-terminal", label: repositoryTerminalOpenMenuLabel() } : null,
-    ]),
-    sidebarMenuSection([
-      trellisEnabled ? { key: "requirements", label: "工作区需求" } : null,
-      onOpenScheduledTasksForProject ? { key: "scheduled-tasks", label: "定时任务" } : null,
-      trellisEnabled && onOpenExecutableTasksForProject ? { key: "executable-tasks", label: "可执行任务" } : null,
-    ]),
-    trellisEnabled && !trellisReady
-      ? sidebarMenuSection([{ key: "trellis-init", label: "启用 Wise Trellis" }])
-      : null,
-    sidebarMenuSection([
-      onReconcileProject
-        ? {
-            key: "reconcile-submenu",
-            label: "重新初始化",
-            popupClassName: "app-sidebar-more-menu-submenu",
-            children: [
-              { key: "reconcile-repos", label: "仅同步仓库" },
-              { key: "reconcile-repos-graphs", label: "同步并重绘流程图（草稿）" },
-            ],
-          }
+  return sidebarMenuWithSectionsAndDanger(
+    [
+      sidebarMenuSection([
+        { key: "pin", label: isPinned ? "取消置顶" : "置顶" },
+        { key: "rename", label: "重命名工作区" },
+        onAddRepositoryToProject ? { key: "add-repository", label: "关联仓库" } : null,
+      ]),
+      sidebarMenuSection(
+        repositoryOpenMenuItems({
+          directoryKey: "open-directory",
+          onOpenDirectory: Boolean(onOpenProjectDirectory),
+          onOpenInEditor: Boolean(onOpenProjectInEditor),
+          onOpenInTerminal: Boolean(onOpenProjectInTerminal),
+        }),
+      ),
+      onNewPaneSession
+        ? sidebarMenuSection([{ key: "new-session", label: "新开会话" }])
         : null,
-      { key: "prompts", label: "提示词" },
-    ]),
-    sidebarMenuSection([{ key: "delete", label: "删除工作区", danger: true }]),
+      sidebarMenuSection([
+        onConfigureSddMode ? { key: "sdd-mode", label: "配置 Claude 插件" } : null,
+        { key: "prompts", label: "提示词" },
+        onReconcileProject
+          ? {
+              key: "reconcile-submenu",
+              label: "重新初始化",
+              popupClassName: "app-sidebar-more-menu-submenu",
+              children: [
+                { key: "reconcile-repos", label: "仅同步仓库" },
+                { key: "reconcile-repos-graphs", label: "同步并重绘流程图（草稿）" },
+              ],
+            }
+          : null,
+        trellisEnabled && !trellisReady ? { key: "trellis-init", label: "启用 Wise Trellis" } : null,
+      ]),
+      sidebarMenuSection(
+        repositoryTaskMenuItems({
+          trellisEnabled,
+          requirementsLabel: "工作区需求",
+          onOpenRequirements: trellisEnabled,
+          onOpenScheduledTasks: Boolean(onOpenScheduledTasksForProject),
+          onOpenExecutableTasks: Boolean(onOpenExecutableTasksForProject),
+        }),
+      ),
+    ],
+    [{ key: "delete", label: "删除工作区", danger: true }],
   );
 }
 
@@ -124,31 +254,6 @@ export interface BuildProjectRepositoryMoreMenuItemsInput {
   onOpenRequirements?: boolean;
   onOpenExecutableTasks?: boolean;
   onOpenRepositoryInTerminal?: boolean;
-}
-
-function repositoryMainSessionRunMenuItem(input: {
-  onMainSessionRun?: boolean;
-  runCommandRunning?: boolean;
-}): MenuItem | null {
-  if (!input.onMainSessionRun) return null;
-  return {
-    key: "run-submenu",
-    label: "运行",
-    popupClassName: "app-sidebar-more-menu-submenu",
-    children: [
-      { key: "run-configure", label: "配置" },
-      {
-        key: "run-start",
-        label: "启动",
-        disabled: input.runCommandRunning,
-      },
-      {
-        key: "run-stop",
-        label: "停止",
-        disabled: !input.runCommandRunning,
-      },
-    ],
-  };
 }
 
 /** 项目内仓库行「更多」菜单，按功能分组。 */
@@ -171,32 +276,39 @@ export function buildProjectRepositoryMoreMenuItems(
     onOpenRepositoryInTerminal,
   } = input;
 
-  const showTerminalOpen =
-    Boolean(onOpenRepositoryInTerminal) && showRepositoryTerminalOpenMenuItem();
+  const openItems = repositoryOpenMenuItems({
+    onOpenInTerminal: Boolean(onOpenRepositoryInTerminal),
+    includeBrowser: true,
+    onNewPaneSession: Boolean(onNewPaneSession),
+  });
+  const sessionItems = openItems.filter((item) => item.key === "new-session");
+  const accessItems = openItems.filter((item) => item.key !== "new-session");
 
-  return sidebarMenuWithDividers(
-    sidebarMenuSection([
-      { key: "finder", label: "打开目录" },
-      { key: "editor", label: repositoryEditorOpenMenuLabel() },
-      showTerminalOpen ? { key: "open-terminal", label: repositoryTerminalOpenMenuLabel() } : null,
-      { key: "browser", label: "打开 Git 仓库" },
-      onNewPaneSession ? { key: "new-session", label: "新开会话" } : null,
-    ]),
-    sidebarMenuSection([
-      REPOSITORY_MAIN_OWNER_MENU_ENABLED && onOpenRepositoryMainOwner
-        ? { key: "main-owner", label: "配置 Owner" }
-        : null,
-      onConfigureSddMode ? { key: "sdd-mode", label: "配置 Claude 插件" } : null,
-      repositoryMainSessionRunMenuItem({ onMainSessionRun, runCommandRunning }),
-      trellisRootActionEnabled && !trellisReady ? { key: "trellis-init", label: "启用 Wise Trellis" } : null,
-      onOpenPromptsRepository ? { key: "prompts", label: "提示词" } : null,
-    ]),
-    sidebarMenuSection([
-      trellisEnabled && onOpenRequirements ? { key: "requirements", label: "仓库需求" } : null,
-      onOpenScheduledTasks ? { key: "scheduled-tasks", label: "定时任务" } : null,
-      trellisEnabled && onOpenExecutableTasks ? { key: "executable-tasks", label: "可执行任务" } : null,
-    ]),
-    sidebarMenuSection([{ key: "detach", label: "移出工作区", danger: true }]),
+  return sidebarMenuWithSectionsAndDanger(
+    [
+      sidebarMenuSection(accessItems),
+      sessionItems.length > 0 ? sidebarMenuSection(sessionItems) : null,
+      sidebarMenuSection(
+        repositoryConfigureMenuItems({
+          onOpenRepositoryMainOwner,
+          onConfigureSddMode,
+          onMainSessionRun,
+          runCommandRunning,
+          trellisRootActionEnabled,
+          trellisReady,
+          onOpenPromptsRepository,
+        }),
+      ),
+      sidebarMenuSection(
+        repositoryTaskMenuItems({
+          trellisEnabled,
+          onOpenRequirements,
+          onOpenScheduledTasks: Boolean(onOpenScheduledTasks),
+          onOpenExecutableTasks: Boolean(onOpenExecutableTasks),
+        }),
+      ),
+    ],
+    [{ key: "detach", label: "移出工作区", danger: true }],
   );
 }
 
@@ -238,46 +350,54 @@ export function buildFloatingRepositoryMoreMenuItems(
     runCommandRunning = false,
   } = input;
 
-  const showTerminalOpen =
-    Boolean(onOpenRepositoryInTerminal) && showRepositoryTerminalOpenMenuItem();
+  const openItems = repositoryOpenMenuItems({
+    onOpenInTerminal: Boolean(onOpenRepositoryInTerminal),
+    includeBrowser: true,
+    onNewPaneSession: Boolean(onNewPaneSession),
+  });
+  const sessionItems = openItems.filter((item) => item.key === "new-session");
+  const accessItems = openItems.filter((item) => item.key !== "new-session");
 
   const joinChildren: MenuItem[] = joinableProjects.map((project) => ({
     key: `join-${project.id}`,
     label: project.name,
   }));
 
-  return sidebarMenuWithDividers(
-    sidebarMenuSection([
-      { key: "finder", label: "打开目录" },
-      { key: "editor", label: repositoryEditorOpenMenuLabel() },
-      showTerminalOpen ? { key: "open-terminal", label: repositoryTerminalOpenMenuLabel() } : null,
-      { key: "browser", label: "打开 Git 仓库" },
-      onNewPaneSession ? { key: "new-session", label: "新开会话" } : null,
-    ]),
-    sidebarMenuSection([
-      REPOSITORY_MAIN_OWNER_MENU_ENABLED && onOpenRepositoryMainOwner
-        ? { key: "main-owner", label: "主 Owner 智能体…" }
-        : null,
-      onConfigureSddMode ? { key: "sdd-mode", label: "配置 Claude 插件" } : null,
-      repositoryMainSessionRunMenuItem({ onMainSessionRun, runCommandRunning }),
-      trellisEnabled && !trellisReady ? { key: "trellis-init", label: "启用 Wise Trellis" } : null,
-    ]),
-    sidebarMenuSection([
-      trellisEnabled && onOpenRequirements ? { key: "requirements", label: "仓库需求" } : null,
-      onOpenScheduledTasks ? { key: "scheduled-tasks", label: "定时任务" } : null,
-      trellisEnabled && onOpenExecutableTasks ? { key: "executable-tasks", label: "可执行任务" } : null,
-    ]),
-    sidebarMenuSection([
-      onPromoteToNewProject ? { key: "promote", label: "升格为工作区…" } : null,
-      onJoinExistingProject && joinChildren.length > 0
-        ? {
-            key: "join",
-            label: "加入工作区",
-            popupClassName: "app-sidebar-more-menu-submenu",
-            children: joinChildren,
-          }
-        : null,
-    ]),
-    sidebarMenuSection([{ key: "remove", label: "移除仓库", danger: true }]),
+  return sidebarMenuWithSectionsAndDanger(
+    [
+      sidebarMenuSection(accessItems),
+      sessionItems.length > 0 ? sidebarMenuSection(sessionItems) : null,
+      sidebarMenuSection(
+        repositoryConfigureMenuItems({
+          onOpenRepositoryMainOwner,
+          mainOwnerLabel: "主 Owner 智能体…",
+          onConfigureSddMode,
+          onMainSessionRun,
+          runCommandRunning,
+          trellisRootActionEnabled: trellisEnabled,
+          trellisReady,
+        }),
+      ),
+      sidebarMenuSection(
+        repositoryTaskMenuItems({
+          trellisEnabled,
+          onOpenRequirements,
+          onOpenScheduledTasks: Boolean(onOpenScheduledTasks),
+          onOpenExecutableTasks: Boolean(onOpenExecutableTasks),
+        }),
+      ),
+      sidebarMenuSection([
+        onPromoteToNewProject ? { key: "promote", label: "升格为工作区…" } : null,
+        onJoinExistingProject && joinChildren.length > 0
+          ? {
+              key: "join",
+              label: "加入工作区",
+              popupClassName: "app-sidebar-more-menu-submenu",
+              children: joinChildren,
+            }
+          : null,
+      ]),
+    ],
+    [{ key: "remove", label: "移除仓库", danger: true }],
   );
 }

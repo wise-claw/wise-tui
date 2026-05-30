@@ -1,7 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { buildProjectMoreMenuItems, buildProjectRepositoryMoreMenuItems } from "./sidebarMoreMenuItems";
+import {
+  buildFloatingRepositoryMoreMenuItems,
+  buildProjectMoreMenuItems,
+  buildProjectRepositoryMoreMenuItems,
+} from "./sidebarMoreMenuItems";
 
-function menuLabels(items: ReturnType<typeof buildProjectRepositoryMoreMenuItems>): string[] {
+type MenuItems = ReturnType<typeof buildProjectRepositoryMoreMenuItems>;
+
+function menuLabels(items: MenuItems): string[] {
   const labels: string[] = [];
   for (const item of items ?? []) {
     if (!item || typeof item !== "object") continue;
@@ -18,6 +24,12 @@ function menuLabels(items: ReturnType<typeof buildProjectRepositoryMoreMenuItems
   return labels;
 }
 
+function dividerCount(items: MenuItems): number {
+  return (items ?? []).filter(
+    (item) => item && typeof item === "object" && "type" in item && item.type === "divider",
+  ).length;
+}
+
 describe("buildProjectMoreMenuItems", () => {
   test("includes preferred editor open action when handler is available", () => {
     const labels = menuLabels(
@@ -28,9 +40,46 @@ describe("buildProjectMoreMenuItems", () => {
     );
     expect(labels.some((label) => label.startsWith("在 ") && label.endsWith(" 中打开"))).toBe(true);
   });
+
+  test("separates workspace sections with dividers instead of group titles", () => {
+    const items = buildProjectMoreMenuItems({
+      isPinned: false,
+      trellisEnabled: true,
+      onAddRepositoryToProject: true,
+      onOpenProjectDirectory: true,
+      onOpenProjectInEditor: true,
+      onOpenProjectInTerminal: true,
+      onConfigureSddMode: true,
+      onNewPaneSession: true,
+      onOpenScheduledTasksForProject: true,
+      onOpenExecutableTasksForProject: true,
+      onReconcileProject: true,
+    });
+    const labels = menuLabels(items);
+    expect(labels.some((label) => label.startsWith("["))).toBe(false);
+    expect(dividerCount(items)).toBeGreaterThan(0);
+    expect(labels).toContain("删除工作区");
+  });
 });
 
 describe("buildProjectRepositoryMoreMenuItems", () => {
+  test("separates repository sections with dividers instead of group titles", () => {
+    const items = buildProjectRepositoryMoreMenuItems({
+      trellisEnabled: true,
+      onConfigureSddMode: true,
+      onMainSessionRun: true,
+      onNewPaneSession: true,
+      onOpenScheduledTasks: true,
+      onOpenRequirements: true,
+      onOpenExecutableTasks: true,
+      onOpenRepositoryInTerminal: true,
+    });
+    const labels = menuLabels(items);
+    expect(labels.some((label) => label.startsWith("["))).toBe(false);
+    expect(dividerCount(items)).toBeGreaterThan(0);
+    expect(labels).toContain("移出工作区");
+  });
+
   test("includes run control even when chat quick action is hidden in multi-repo workspace", () => {
     const labels = menuLabels(
       buildProjectRepositoryMoreMenuItems({
@@ -65,5 +114,20 @@ describe("buildProjectRepositoryMoreMenuItems", () => {
     expect(labels).toContain("运行");
     expect(labels).toContain("停止");
     expect(labels).not.toContain("停止运行");
+  });
+});
+
+describe("buildFloatingRepositoryMoreMenuItems", () => {
+  test("includes membership actions for standalone repositories", () => {
+    const labels = menuLabels(
+      buildFloatingRepositoryMoreMenuItems({
+        joinableProjects: [{ id: "p1", name: "eco", repositoryIds: [] } as never],
+        onPromoteToNewProject: true,
+        onJoinExistingProject: true,
+      }),
+    );
+    expect(labels).toContain("升格为工作区…");
+    expect(labels).toContain("加入工作区");
+    expect(labels).toContain("移除仓库");
   });
 });
