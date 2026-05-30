@@ -27,6 +27,55 @@
   margin-left: 6px;
 }
 
+.git-workspace-sync-btn.ant-btn-sm {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  padding: 0;
+}
+
+.git-workspace-sync-popover .ant-popover-inner {
+  padding: 0;
+}
+
+.git-workspace-sync-popover__content {
+  width: min(360px, calc(100vw - 32px));
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.git-workspace-sync-popover__title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.git-workspace-sync-popover__meta {
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
+}
+
+.git-workspace-sync-popover__loading {
+  display: flex;
+  align-items: center;
+  min-height: 20px;
+}
+
+.git-workspace-sync-popover__textarea {
+  font-size: 12px;
+}
+
+.git-workspace-sync-popover__progress {
+  font-size: 11px;
+  color: var(--ant-color-text-secondary);
+}
+
+.git-workspace-sync-popover__footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .git-panel-multi-body {
   flex: 1 1 0;
   min-height: 0;

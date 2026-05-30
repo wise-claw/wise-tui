@@ -1,5 +1,5 @@
 import { listen } from "@tauri-apps/api/event";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, type ReactNode } from "react";
 import { safeUnlistenPromise } from "../../utils/safeTauriUnlisten";
 import { startGitWatcher, stopGitWatcher } from "../../services/git";
 import type { GitPanelRepositoryEntry } from "../../utils/workspaceRepositoryTreeSelect";
@@ -8,6 +8,7 @@ import {
   GIT_MULTI_REPO_WATCHER_REFRESH_MS,
 } from "./gitPanelUtils";
 import { GitRepoSection } from "./GitRepoSection";
+import { GitWorkspaceCommitPush } from "./GitWorkspaceCommitPush";
 import type { GitPanelOpenFileOptions } from "./types";
 
 interface Props {
@@ -23,7 +24,6 @@ export function GitMultiRepoPanel({
   headerPrefix,
   onOpenFile,
 }: Props) {
-  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => new Set());
   const refreshByPathRef = useRef(new Map<string, () => void>());
   const watcherRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingRefreshPathsRef = useRef(new Set<string>());
@@ -37,23 +37,17 @@ export function GitMultiRepoPanel({
     }
   }, [repositoryEntries]);
 
-  const handleExpandedChange = useCallback((path: string, expanded: boolean) => {
-    setExpandedPaths((prev) => {
-      const next = new Set(prev);
-      if (expanded) {
-        next.add(path);
-      } else {
-        next.delete(path);
-      }
-      return next;
-    });
-  }, []);
-
   const registerRefresh = useCallback((path: string, refresh: () => void) => {
     refreshByPathRef.current.set(path, refresh);
     return () => {
       refreshByPathRef.current.delete(path);
     };
+  }, []);
+
+  const refreshAllRepositories = useCallback(() => {
+    for (const refresh of refreshByPathRef.current.values()) {
+      refresh();
+    }
   }, []);
 
   useEffect(() => {
@@ -109,6 +103,12 @@ export function GitMultiRepoPanel({
           <span className="git-panel-title">{contextTitle}</span>
           <span className="git-panel-multi-count">{repositoryEntries.length} 个仓库</span>
         </div>
+        <div className="git-panel-header-right">
+          <GitWorkspaceCommitPush
+            repositoryEntries={repositoryEntries}
+            onAfterSync={refreshAllRepositories}
+          />
+        </div>
       </div>
       <div className="git-panel-multi-body">
         {repositoryEntries.map((entry, index) => (
@@ -118,7 +118,6 @@ export function GitMultiRepoPanel({
             defaultExpanded={false}
             loadDelayMs={index * GIT_MULTI_REPO_LOAD_STAGGER_MS}
             registerRefresh={registerRefresh}
-            onExpandedChange={handleExpandedChange}
             onOpenFile={onOpenFile}
           />
         ))}
