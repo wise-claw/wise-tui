@@ -9,9 +9,18 @@ interface GitSyncActionsProps {
   onFetch: () => void;
   onPull: () => void;
   onPush: () => void;
+  /** 多仓区块头部等窄区域：隐藏「待提交」角标（左侧已有变更数）。 */
+  hideStagedCount?: boolean;
 }
 
-export function GitSyncActions({ status, loading, onFetch, onPull, onPush }: GitSyncActionsProps) {
+export function GitSyncActions({
+  status,
+  loading,
+  onFetch,
+  onPull,
+  onPush,
+  hideStagedCount = false,
+}: GitSyncActionsProps) {
   const ahead = status.ahead ?? 0;
   const behind = status.behind ?? 0;
   const pushDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -72,7 +81,7 @@ export function GitSyncActions({ status, loading, onFetch, onPull, onPush }: Git
           )}
         </Button>
       </Tooltip>
-      {status.staged.length > 0 && (
+      {status.staged.length > 0 && !hideStagedCount && (
         <Tooltip title="待提交" placement="top">
           <Button
             type="text"

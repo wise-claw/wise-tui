@@ -1,8 +1,8 @@
-import { startTransition, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { startTransition, useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { safeUnlistenPromise } from "../../utils/safeTauriUnlisten";
 import { Button, Empty, Spin, Tooltip, message } from "antd";
-import { GlobalOutlined } from "@ant-design/icons";
+import { DownOutlined, GlobalOutlined, RightOutlined } from "@ant-design/icons";
 import {
   gitCommit,
   gitDiscard,
@@ -17,8 +17,6 @@ import {
   gitStatus,
   gitUnstage,
   gitUnstageAll,
-  startGitWatcher,
-  stopGitWatcher,
 } from "../../services/git";
 import { openRepositoryRemoteInBrowser } from "../../services/openRepositoryRemote";
 import type { GitStatusResponse } from "../../types";
@@ -26,68 +24,41 @@ import { DiffMode } from "./DiffMode";
 import { GitSyncActions } from "./GitSyncActions";
 import { InitMode } from "./InitMode";
 import { hasUnstagedFilesUnderDirectory } from "./gitPanelUtils";
-import { RepositoryFilesExplorer } from "./RepositoryFilesExplorer";
-import { GitMultiRepoPanel } from "./GitMultiRepoPanel";
-import type { GitPanelRepositoryEntry } from "../../utils/workspaceRepositoryTreeSelect";
-import { GitPanelWorkspaceSelector } from "./GitPanelWorkspaceSelector";
-import type { ProjectItem, Repository } from "../../types";
-import type { WorkspaceFocus } from "../../utils/workspaceMode";
 import type { GitPanelOpenFileOptions } from "./types";
-import "./index.css";
 
-export { RepositoryFilesExplorer };
-export type { GitPanelOpenFileOptions };
+export interface GitRepoSectionEntry {
+  repositoryId: number;
+  path: string;
+  name: string;
+}
 
 interface Props {
-  repositoryPath: string | undefined;
-  repositoryName: string | undefined;
-  /** 多仓库模式：一次展示工作区内全部 Git 仓库（≥2 时启用）。 */
-  repositoryEntries?: GitPanelRepositoryEntry[];
-  /** 多仓库模式标题（通常为工作区名）。 */
-  multiRepoContextTitle?: string;
+  entry: GitRepoSectionEntry;
+  defaultExpanded?: boolean;
   onOpenFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
-  /** 左栏整合头部：Tab 切换等，渲染在上下文选择器左侧 */
-  headerPrefix?: ReactNode;
-  projects?: ProjectItem[];
-  repositories?: Repository[];
-  activeProjectId?: string | null;
-  activeRepositoryId?: number | null;
-  activeWorkspaceFocus?: WorkspaceFocus;
-  onRepositorySelect?: (repositoryId: number) => void;
-  onProjectSelect?: (projectId: string) => void;
-  /** 仅切换 Git 面板目录，不联动全局工作区。 */
-  directoryOnly?: boolean;
 }
 
-export function GitPanel(props: Props) {
-  if ((props.repositoryEntries?.length ?? 0) >= 2) {
-    return (
-      <GitMultiRepoPanel
-        repositoryEntries={props.repositoryEntries!}
-        contextTitle={props.multiRepoContextTitle}
-        headerPrefix={props.headerPrefix}
-        onOpenFile={props.onOpenFile}
-      />
-    );
-  }
-  return <GitSingleRepoPanel {...props} />;
+function formatBranchLabel(status: GitStatusResponse | null): string {
+  const branch = status?.branch?.trim();
+  if (!branch) return "Git";
+  const dirty =
+    (status?.staged.length ?? 0) > 0 ||
+    (status?.unstaged.length ?? 0) > 0;
+  const ahead = status?.ahead ?? 0;
+  const behind = status?.behind ?? 0;
+  let suffix = "";
+  if (dirty) suffix += "*";
+  if (ahead > 0 || behind > 0) suffix += "+";
+  return `${branch}${suffix}`;
 }
 
-function GitSingleRepoPanel({
-  repositoryPath,
-  repositoryName: _repositoryName,
-  repositoryEntries: _repositoryEntries = [],
+export function GitRepoSection({
+  entry,
+  defaultExpanded = true,
   onOpenFile,
-  headerPrefix,
-  projects = [],
-  repositories = [],
-  activeProjectId = null,
-  activeRepositoryId = null,
-  activeWorkspaceFocus = "repository",
-  onRepositorySelect,
-  onProjectSelect,
-  directoryOnly,
 }: Props) {
+  const repositoryPath = entry.path;
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const [status, setStatus] = useState<GitStatusResponse | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [openingRemote, setOpeningRemote] = useState(false);
@@ -166,22 +137,10 @@ function GitSingleRepoPanel({
   }, [loadStatus]);
 
   useEffect(() => {
-    if (repositoryPath) {
-      void loadStatus();
-    }
-  }, [repositoryPath, loadStatus]);
+    void loadStatus();
+  }, [loadStatus]);
 
   useEffect(() => {
-    if (!repositoryPath) {
-      if (watcherRefreshTimer.current) {
-        clearTimeout(watcherRefreshTimer.current);
-        watcherRefreshTimer.current = null;
-      }
-      void stopGitWatcher().catch(() => { });
-      return;
-    }
-
-    void startGitWatcher(repositoryPath).catch(() => { });
     const unlisten = listen<{ path?: string }>("git-changed", (event) => {
       const changedPath = event.payload?.path?.trim();
       if (changedPath && changedPath !== repositoryPath) return;
@@ -208,9 +167,8 @@ function GitSingleRepoPanel({
         watcherRefreshTimer.current = null;
       }
       safeUnlistenPromise(unlisten);
-      void stopGitWatcher().catch(() => { });
     };
-  }, [repositoryPath, loadStatus]);
+  }, [loadStatus, repositoryPath]);
 
   const runAction = useCallback(
     async (action: string, fn: () => Promise<void>) => {
@@ -380,41 +338,33 @@ function GitSingleRepoPanel({
   }, [openingRemote, repositoryPath]);
 
   const isMissingRepo = errors.status?.includes("Failed to open git repo");
-  const showPanelLoadingBar = Object.entries(loading).some(
-    ([key, busy]) => busy && key !== "push" && key !== "pull" && key !== "fetch",
-  );
-
-  if (!repositoryPath) {
-    return (
-      <div className="app-git-panel">
-        <Empty description="请选择仓库以查看 Git 状态" style={{ padding: "40px 0" }} image={Empty.PRESENTED_IMAGE_SIMPLE} />
-      </div>
-    );
-  }
+  const changeCount = (status?.staged.length ?? 0) + (status?.unstaged.length ?? 0);
 
   return (
-    <div className="app-git-panel">
-      <div className={`git-panel-loading-bar ${showPanelLoadingBar ? "git-panel-loading-bar--active" : ""}`} />
-      <div className="git-panel-header">
-        {headerPrefix ? <div className="git-panel-header-prefix">{headerPrefix}</div> : null}
-        <div className="git-panel-header-left">
-          {onRepositorySelect && repositoryPath ? (
-            <GitPanelWorkspaceSelector
-              projects={projects}
-              repositories={repositories}
-              activeProjectId={activeProjectId}
-              activeRepositoryId={activeRepositoryId}
-              activeWorkspaceFocus={activeWorkspaceFocus}
-              activeRepositoryPath={repositoryPath}
-              onRepositorySelect={onRepositorySelect}
-              onProjectSelect={onProjectSelect}
-              directoryOnly={directoryOnly}
-            />
-          ) : (
-            <span className="git-panel-title">GIT</span>
-          )}
-        </div>
-        <div className="git-panel-header-right">
+    <section
+      className={`git-repo-section${expanded ? " git-repo-section--expanded" : ""}`}
+      data-repository-path={repositoryPath}
+    >
+      <div className="git-repo-section__header">
+        <button
+          type="button"
+          className="git-repo-section__toggle"
+          aria-expanded={expanded}
+          aria-label={`${entry.name} ${formatBranchLabel(status)}`}
+          onClick={() => setExpanded((prev) => !prev)}
+        >
+          <span className="git-repo-section__chevron" aria-hidden>
+            {expanded ? <DownOutlined /> : <RightOutlined />}
+          </span>
+          <span className="git-repo-section__name" title={entry.name}>
+            {entry.name}
+          </span>
+          <span className="git-repo-section__branch">{formatBranchLabel(status)}</span>
+          {changeCount > 0 ? (
+            <span className="git-repo-section__change-count">{changeCount}</span>
+          ) : null}
+        </button>
+        <div className="git-repo-section__actions">
           <Tooltip title="在浏览器中打开仓库" placement="top">
             <Button
               type="text"
@@ -430,6 +380,7 @@ function GitSingleRepoPanel({
             <GitSyncActions
               status={status}
               loading={loading}
+              hideStagedCount
               onFetch={handleFetch}
               onPull={() => void handlePull()}
               onPush={() => void handlePush()}
@@ -438,38 +389,40 @@ function GitSingleRepoPanel({
         </div>
       </div>
 
-      <div className="git-panel-body">
-        {loading.status && !status && !isMissingRepo ? (
-          <div style={{ padding: 24, textAlign: "center" }}>
-            <Spin size="small" description="加载中..." />
-          </div>
-        ) : isMissingRepo ? (
-          <InitMode onInit={handleInit} loading={loading.init} />
-        ) : errors.status && !status ? (
-          <Empty
-            description={`Git 状态加载失败：${errors.status}`}
-            style={{ padding: "24px 0" }}
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-          />
-        ) : (
-          status && (
-            <DiffMode
-              repositoryPath={repositoryPath}
-              status={status}
-              loading={loading}
-              errors={errors}
-              onStage={handleStage}
-              onUnstage={handleUnstage}
-              onDiscard={handleDiscard}
-              onStageAll={handleStageAll}
-              onUnstageAll={handleUnstageAll}
-              onDiscardAll={handleDiscardAll}
-              onCommit={handleCommit}
-              onOpenFile={onOpenFile}
+      {expanded ? (
+        <div className="git-repo-section__body">
+          {loading.status && !status && !isMissingRepo ? (
+            <div style={{ padding: 16, textAlign: "center" }}>
+              <Spin size="small" description="加载中..." />
+            </div>
+          ) : isMissingRepo ? (
+            <InitMode onInit={handleInit} loading={loading.init} />
+          ) : errors.status && !status ? (
+            <Empty
+              description={`Git 状态加载失败：${errors.status}`}
+              style={{ padding: "16px 0" }}
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
             />
-          )
-        )}
-      </div>
-    </div>
+          ) : (
+            status && (
+              <DiffMode
+                repositoryPath={repositoryPath}
+                status={status}
+                loading={loading}
+                errors={errors}
+                onStage={handleStage}
+                onUnstage={handleUnstage}
+                onDiscard={handleDiscard}
+                onStageAll={handleStageAll}
+                onUnstageAll={handleUnstageAll}
+                onDiscardAll={handleDiscardAll}
+                onCommit={handleCommit}
+                onOpenFile={onOpenFile}
+              />
+            )
+          )}
+        </div>
+      ) : null}
+    </section>
   );
 }

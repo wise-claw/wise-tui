@@ -1,4 +1,5 @@
 import type { ProjectItem, Repository } from "../types";
+import { repositoryFolderBasename } from "./repositoryType";
 import { resolveProjectMainSessionAnchor } from "./projectSessionAnchor";
 import type { WorkspaceFocus } from "./workspaceMode";
 
@@ -83,6 +84,76 @@ export function resolveGitPanelContextOpenPath(input: {
     if (projectPath) return projectPath;
   }
   return input.activeRepositoryPath.trim();
+}
+
+export interface GitPanelRepositoryEntry {
+  repositoryId: number;
+  path: string;
+  name: string;
+}
+
+/**
+ * 解析 Git 面板应展示的仓库列表。
+ * - 选中工作区 → 仅该工作区成员仓库
+ * - 选中仓库 → 仅该仓库
+ */
+export function resolveGitPanelRepositoryEntries(input: {
+  treeSelection: WorkspaceRepositoryTreeSelection | null;
+  projects: readonly ProjectItem[];
+  repositories: readonly Repository[];
+  fallbackPath?: string;
+  fallbackName?: string;
+  fallbackRepositoryId?: number | null;
+}): GitPanelRepositoryEntry[] {
+  const {
+    treeSelection,
+    projects,
+    repositories,
+    fallbackPath = "",
+    fallbackName = "",
+    fallbackRepositoryId = null,
+  } = input;
+  const repoById = new Map(repositories.map((repo) => [repo.id, repo] as const));
+
+  if (treeSelection?.kind === "project") {
+    const project = projects.find((item) => item.id === treeSelection.projectId) ?? null;
+    if (!project) return [];
+    return (project.repositoryIds ?? [])
+      .map((repoId) => repoById.get(repoId))
+      .filter((repo): repo is Repository => Boolean(repo?.path?.trim()))
+      .map((repo) => ({
+        repositoryId: repo.id,
+        path: repo.path.trim(),
+        name: repositoryDisplayName(repo),
+      }));
+  }
+
+  if (treeSelection?.kind === "repository") {
+    const repo = repoById.get(treeSelection.repositoryId);
+    if (repo?.path?.trim()) {
+      return [
+        {
+          repositoryId: repo.id,
+          path: repo.path.trim(),
+          name: repositoryDisplayName(repo),
+        },
+      ];
+    }
+    return [];
+  }
+
+  const trimmedFallback = fallbackPath.trim();
+  if (trimmedFallback) {
+    return [
+      {
+        repositoryId: fallbackRepositoryId ?? -1,
+        path: trimmedFallback,
+        name: fallbackName.trim() || repositoryFolderBasename({ path: trimmedFallback, name: "" }),
+      },
+    ];
+  }
+
+  return [];
 }
 
 export function buildWorkspaceRepositoryTreeData(

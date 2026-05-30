@@ -7,6 +7,7 @@ import {
   globalWorkspaceToTreeSelection,
   parseWorkspaceRepositoryTreeValue,
   resolveGitPanelContextOpenPath,
+  resolveGitPanelRepositoryEntries,
   resolveProjectDirectoryOpenPath,
   resolveProjectExplorerOpenPath,
   resolveTreeNodeOpenPath,
@@ -27,6 +28,22 @@ const repo: Repository = {
   name: "eco-ai-web",
   path: "/eco/eco-ai-web",
   repositoryType: "git",
+};
+
+const repo2: Repository = {
+  id: 2,
+  name: "eco-ai",
+  path: "/eco/eco-ai",
+  repositoryType: "git",
+};
+
+const multiRepoProject: ProjectItem = {
+  id: "p2",
+  name: "eco-suite",
+  repositoryIds: [1, 2],
+  createdAt: 0,
+  updatedAt: 0,
+  rootPath: "/eco",
 };
 
 describe("workspaceRepositoryTreeSelect", () => {
@@ -132,5 +149,32 @@ describe("workspaceRepositoryTreeSelect", () => {
     expect(view?.label).toBe("eco-ai");
     expect(view?.activeRepositoryId).toBe(2);
     expect(view?.activeWorkspaceFocus).toBe("repository");
+  });
+
+  test("resolveGitPanelRepositoryEntries scopes by workspace or repository selection", () => {
+    expect(
+      resolveGitPanelRepositoryEntries({
+        treeSelection: { kind: "project", projectId: "p2" },
+        projects: [multiRepoProject],
+        repositories: [repo, repo2],
+      }),
+    ).toEqual([
+      { repositoryId: 1, path: "/eco/eco-ai-web", name: "eco-ai-web" },
+      { repositoryId: 2, path: "/eco/eco-ai", name: "eco-ai" },
+    ]);
+    expect(
+      resolveGitPanelRepositoryEntries({
+        treeSelection: { kind: "repository", repositoryId: 1 },
+        projects: [multiRepoProject],
+        repositories: [repo, repo2],
+      }),
+    ).toEqual([{ repositoryId: 1, path: "/eco/eco-ai-web", name: "eco-ai-web" }]);
+    expect(
+      resolveGitPanelRepositoryEntries({
+        treeSelection: { kind: "project", projectId: "p1" },
+        projects: [project, multiRepoProject],
+        repositories: [repo, repo2],
+      }),
+    ).toEqual([{ repositoryId: 1, path: "/eco/eco-ai-web", name: "eco-ai-web" }]);
   });
 });

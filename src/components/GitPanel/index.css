@@ -17,6 +17,134 @@
   overflow: hidden;
 }
 
+.app-git-panel--multi {
+  min-height: 0;
+}
+
+.git-panel-multi-count {
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
+  margin-left: 6px;
+}
+
+.git-panel-multi-body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+}
+
+.git-repo-section {
+  border-bottom: 1px solid var(--app-workspace-glass-border, var(--ant-color-border-secondary));
+}
+
+.git-repo-section:last-child {
+  border-bottom: none;
+}
+
+.git-repo-section__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px 4px 4px;
+  min-height: 32px;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 72%, transparent);
+}
+
+.git-repo-section__toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 0;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  padding: 4px 6px;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+}
+
+.git-repo-section__chevron {
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: 12px;
+  font-size: 10px;
+  color: var(--ant-color-text-tertiary);
+}
+
+.git-repo-section__name {
+  flex: 1 1 0;
+  min-width: 48px;
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-repo-section__branch {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--ant-color-text-secondary);
+}
+
+.git-repo-section__change-count {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
+}
+
+.git-repo-section__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+.app-git-panel--multi .git-repo-section__actions .git-sync-count-btn.ant-btn-sm {
+  padding-inline: 4px;
+  min-width: 22px;
+}
+
+.git-repo-section__body {
+  min-height: 0;
+}
+
+/* 多仓模式：由外层 git-panel-multi-body 统一滚动，区块内按内容撑开 */
+.app-git-panel--multi .git-repo-section__body .git-diff-mode {
+  flex: none;
+  min-height: auto;
+  height: auto;
+  overflow: visible;
+}
+
+.app-git-panel--multi .git-repo-section__body .git-diff-mode-scroll {
+  flex: none;
+  min-height: auto;
+  max-height: none;
+  overflow: visible;
+}
+
+/* 超大变更集虚拟列表仍需局部滚动高度 */
+.app-git-panel--multi .git-repo-section__body .git-virtual-file-list {
+  max-height: min(360px, 45vh);
+  min-height: 120px;
+  overflow-y: auto;
+}
+
+.git-repo-section__body .git-diff-mode {
+  max-height: none;
+}
+
+.git-repo-section:not(.git-repo-section--expanded) .git-repo-section__body {
+  display: none;
+}
+
 /* ── Diff mode：表头/提交区固定，变更列表在内部滚动 ── */
 .git-diff-mode {
   display: flex;

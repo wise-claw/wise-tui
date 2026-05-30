@@ -171,8 +171,12 @@ export async function gitWorktreeAddOmcBatch(
   return result;
 }
 
-export async function startGitWatcher(path: string): Promise<void> {
-  return invoke("start_git_watcher", { path });
+export async function startGitWatcher(paths: string | string[]): Promise<void> {
+  const normalized = (Array.isArray(paths) ? paths : [paths])
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (normalized.length === 0) return;
+  return invoke("start_git_watcher", { paths: normalized });
 }
 
 export async function stopGitWatcher(): Promise<void> {

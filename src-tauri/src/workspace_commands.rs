@@ -702,62 +702,88 @@ pub(crate) fn open_workspace_in(
 
 pub(crate) struct GitWatcherState {
     watcher: Option<RecommendedWatcher>,
-    watched_path: Option<String>,
+    watched_paths: Vec<String>,
 }
 
 impl GitWatcherState {
     pub(crate) fn new() -> Self {
         Self {
             watcher: None,
-            watched_path: None,
+            watched_paths: Vec::new(),
         }
     }
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct GitChangedPayload {
+    path: String,
 }
 
 #[tauri::command]
 pub(crate) fn start_git_watcher(
     state: tauri::State<Mutex<GitWatcherState>>,
     app: tauri::AppHandle,
-    path: String,
+    paths: Vec<String>,
 ) -> Result<(), String> {
+    let mut normalized: Vec<String> = paths
+        .into_iter()
+        .map(|path| path.trim().to_string())
+        .filter(|path| !path.is_empty())
+        .collect();
+    normalized.sort();
+    normalized.dedup();
+
     let mut state = state.lock().map_err(|e| e.to_string())?;
 
-    // If already watching the same path, skip
-    if let Some(ref watched) = state.watched_path {
-        if *watched == path {
-            return Ok(());
-        }
-    }
-
-    // Stop existing watcher if any
-    state.watcher = None;
-    state.watched_path = None;
-
-    let project_path = PathBuf::from(&path);
-    let git_path = project_path.join(".git");
-
-    // Build list of paths to watch: project root + .git (if it exists)
-    let mut watch_paths: Vec<PathBuf> = Vec::new();
-    if project_path.exists() {
-        watch_paths.push(project_path.clone());
-    }
-    if git_path.exists() {
-        watch_paths.push(git_path);
-    }
-
-    if watch_paths.is_empty() {
+    if normalized == state.watched_paths {
         return Ok(());
     }
 
+    state.watcher = None;
+    state.watched_paths.clear();
+
+    if normalized.is_empty() {
+        return Ok(());
+    }
+
+    let mut watch_targets: Vec<(PathBuf, String)> = Vec::new();
+    for repo_path in &normalized {
+        let project_path = PathBuf::from(repo_path);
+        let git_path = project_path.join(".git");
+        if project_path.exists() {
+            watch_targets.push((project_path.clone(), repo_path.clone()));
+        }
+        if git_path.exists() {
+            watch_targets.push((git_path, repo_path.clone()));
+        }
+    }
+
+    if watch_targets.is_empty() {
+        return Ok(());
+    }
+
+    let watch_targets_for_emit = watch_targets.clone();
     let app_handle = app.clone();
     let mut watcher: RecommendedWatcher = RecommendedWatcher::new(
         move |result: notify::Result<notify::Event>| {
             if let Ok(event) = result {
-                // Only care about modify/create/remove events
                 let is_relevant =
                     event.kind.is_modify() || event.kind.is_create() || event.kind.is_remove();
-                if is_relevant {
-                    let _ = app_handle.emit("git-changed", &());
+                if !is_relevant {
+                    return;
+                }
+                for watch_path in &event.paths {
+                    let watch_str = watch_path.to_string_lossy();
+                    for (target_path, repo_path) in &watch_targets_for_emit {
+                        if watch_str.starts_with(target_path.to_string_lossy().as_ref()) {
+                            let payload = GitChangedPayload {
+                                path: repo_path.clone(),
+                            };
+                            let _ = app_handle.emit("git-changed", payload);
+                            return;
+                        }
+                    }
                 }
             }
         },
@@ -765,12 +791,12 @@ pub(crate) fn start_git_watcher(
     )
     .map_err(|e| format!("Failed to create watcher: {}", e))?;
 
-    for watch_path in watch_paths {
-        let _ = watcher.watch(&watch_path, RecursiveMode::Recursive);
+    for (watch_path, _) in &watch_targets {
+        let _ = watcher.watch(watch_path, RecursiveMode::Recursive);
     }
 
     state.watcher = Some(watcher);
-    state.watched_path = Some(path);
+    state.watched_paths = normalized;
 
     Ok(())
 }
@@ -779,7 +805,7 @@ pub(crate) fn start_git_watcher(
 pub(crate) fn stop_git_watcher(state: tauri::State<Mutex<GitWatcherState>>) -> Result<(), String> {
     let mut state = state.lock().map_err(|e| e.to_string())?;
     state.watcher = None;
-    state.watched_path = None;
+    state.watched_paths.clear();
     Ok(())
 }
 

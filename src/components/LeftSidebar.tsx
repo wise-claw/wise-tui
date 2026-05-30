@@ -4,6 +4,7 @@ import type { ProjectItem, Repository } from "../types";
 import { repositoryFolderBasename } from "../utils/repositoryType";
 import {
   globalWorkspaceToTreeSelection,
+  resolveGitPanelRepositoryEntries,
   resolveWorkspaceRepositoryTreeSelectionView,
   type WorkspaceRepositoryTreeSelection,
 } from "../utils/workspaceRepositoryTreeSelect";
@@ -661,6 +662,38 @@ export function LeftSidebar({
   const effectiveRepoPanelPath = accessibleRepoPanelPath.trim() || repoPanelRepositoryPath.trim();
   const showRepoPanel = Boolean(effectiveRepoPanelPath);
 
+  const gitPanelTreeSelection = useMemo(
+    () => globalWorkspaceTreeSelection ?? sessionDerivedTreeSelection ?? null,
+    [globalWorkspaceTreeSelection, sessionDerivedTreeSelection],
+  );
+
+  const gitPanelRepositoryEntries = useMemo(
+    () =>
+      resolveGitPanelRepositoryEntries({
+        treeSelection: gitPanelTreeSelection,
+        projects,
+        repositories,
+        fallbackPath: effectiveRepoPanelPath,
+        fallbackName: repoPanelRepositoryName,
+        fallbackRepositoryId: repoPanelTreeView?.activeRepositoryId ?? activeRepositoryId,
+      }),
+    [
+      gitPanelTreeSelection,
+      projects,
+      repositories,
+      effectiveRepoPanelPath,
+      repoPanelRepositoryName,
+      repoPanelTreeView?.activeRepositoryId,
+      activeRepositoryId,
+    ],
+  );
+
+  const gitPanelContextTitle = useMemo(() => {
+    if (gitPanelTreeSelection?.kind !== "project") return "变更";
+    const project = projects.find((item) => item.id === gitPanelTreeSelection.projectId);
+    return project?.name?.trim() || "变更";
+  }, [gitPanelTreeSelection, projects]);
+
   const repoPanelWorkspaceSelectorProps = useMemo(
     () => ({
       projects,
@@ -999,6 +1032,8 @@ export function LeftSidebar({
                   headerPrefix={repoPanelTabSwitcher}
                   repositoryPath={effectiveRepoPanelPath}
                   repositoryName={repoPanelRepositoryName}
+                  repositoryEntries={gitPanelRepositoryEntries}
+                  multiRepoContextTitle={gitPanelContextTitle}
                   onOpenFile={onOpenActiveRepositoryFile}
                   {...repoPanelWorkspaceSelectorProps}
                 />
