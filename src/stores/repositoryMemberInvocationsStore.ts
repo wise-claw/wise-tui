@@ -1,4 +1,8 @@
 import type { WorkflowInvocationStreamDetail } from "../constants/workflowUiEvents";
+import {
+  capWorkflowInvocationStreamDetailsForMemory,
+  MAX_REPOSITORY_MEMBER_INVOCATIONS_IN_MEMORY,
+} from "../services/omcDirectBatchInvocationsPersistence";
 
 type Listener = () => void;
 
@@ -46,9 +50,15 @@ export function digestRepositoryMemberInvocations(list: WorkflowInvocationStream
 }
 
 export function setRepositoryMemberInvocationsStore(list: WorkflowInvocationStreamDetail[], digest: string): void {
-  if (digest === snapshotDigest) return;
-  snapshotDigest = digest;
-  snapshot = list;
+  const capped = capWorkflowInvocationStreamDetailsForMemory(
+    list,
+    MAX_REPOSITORY_MEMBER_INVOCATIONS_IN_MEMORY,
+  );
+  const cappedDigest =
+    capped.length === list.length ? digest : digestRepositoryMemberInvocations(capped);
+  if (cappedDigest === snapshotDigest) return;
+  snapshotDigest = cappedDigest;
+  snapshot = capped;
   notify();
 }
 

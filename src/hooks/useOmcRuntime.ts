@@ -27,6 +27,8 @@ import {
   schedulePersistOmcDirectBatchInvocations,
   sortOmcDirectBatchInvocationsForStore,
   trimOmcDirectBatchInvocationMap,
+  trimOmcWorkflowInvocationRuntimeMap,
+  trimRepositoryMemberInvocationMap,
 } from "../services/omcDirectBatchInvocationsPersistence";
 import {
   resetOmcDirectBatchInvocationsStore,
@@ -194,6 +196,8 @@ export function useOmcRuntime({
     };
 
     const applyInvocationRuntime = () => {
+      trimRepositoryMemberInvocationMap(repositoryMemberInvocationRef.current);
+      trimOmcWorkflowInvocationRuntimeMap(omcInvocationRuntimeRef.current);
       const repositoryMemberInvocations = Array.from(repositoryMemberInvocationRef.current.values()).sort((a, b) => {
         const ta = typeof a.attempt === "number" ? a.attempt : 0;
         const tb = typeof b.attempt === "number" ? b.attempt : 0;

@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { WorkflowInvocationStreamDetail } from "../constants/workflowUiEvents";
 import {
+  capWorkflowInvocationStreamDetailsForMemory,
   digestOmcDirectBatchInvocationsList,
   parsePersistedOmcDirectBatchInvocationRow,
   serializeOmcDirectBatchInvocationForPersistence,
+  trimRepositoryMemberInvocationMap,
 } from "./omcDirectBatchInvocationsPersistence";
 
 describe("omcDirectBatchInvocationsPersistence", () => {
@@ -57,5 +59,46 @@ describe("omcDirectBatchInvocationsPersistence", () => {
     ).not.toBe(
       digestOmcDirectBatchInvocationsList([{ ...base, ownerRepositoryId: 8, subagentType: "trellis-check" }]),
     );
+  });
+
+  test("trimRepositoryMemberInvocationMap keeps running and drops oldest completed", () => {
+    const map = new Map<string, WorkflowInvocationStreamDetail>();
+    map.set("run-1", {
+      phase: "started",
+      invocationKey: "run-1",
+      sessionId: "s1",
+      repositoryPath: "/r",
+      attempt: 99,
+    });
+    for (let i = 0; i < 50; i += 1) {
+      map.set(`done-${i}`, {
+        phase: "complete",
+        invocationKey: `done-${i}`,
+        sessionId: "s1",
+        repositoryPath: "/r",
+        attempt: i,
+      });
+    }
+    trimRepositoryMemberInvocationMap(map, 10);
+    expect(map.has("run-1")).toBe(true);
+    expect(map.size).toBe(10);
+    expect(map.has("done-49")).toBe(true);
+    expect(map.has("done-0")).toBe(false);
+  });
+
+  test("capWorkflowInvocationStreamDetailsForMemory preserves running rows", () => {
+    const list: WorkflowInvocationStreamDetail[] = [
+      { phase: "started", invocationKey: "a", sessionId: "s", repositoryPath: "/r" },
+      ...Array.from({ length: 60 }, (_, i) => ({
+        phase: "complete" as const,
+        invocationKey: `c-${i}`,
+        sessionId: "s",
+        repositoryPath: "/r",
+        attempt: i,
+      })),
+    ];
+    const capped = capWorkflowInvocationStreamDetailsForMemory(list, 5);
+    expect(capped.filter((row) => row.phase !== "complete")).toHaveLength(1);
+    expect(capped).toHaveLength(5);
   });
 });

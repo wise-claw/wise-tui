@@ -2,22 +2,36 @@ import { pathIsAccessibleDirectory } from "../services/repository";
 
 const resolved = new Map<string, boolean>();
 const inflight = new Map<string, Promise<boolean>>();
+const MAX_RESOLVED_PATH_ACCESSIBILITY_CACHE = 200;
+
+function rememberResolved(key: string, ok: boolean): void {
+  resolved.delete(key);
+  resolved.set(key, ok);
+  while (resolved.size > MAX_RESOLVED_PATH_ACCESSIBILITY_CACHE) {
+    const oldest = resolved.keys().next().value;
+    if (oldest === undefined) break;
+    resolved.delete(oldest);
+  }
+}
 
 export async function pathIsAccessibleDirectoryCached(path: string): Promise<boolean> {
   const key = path.trim();
   if (!key) return false;
   const hit = resolved.get(key);
-  if (hit !== undefined) return hit;
+  if (hit !== undefined) {
+    rememberResolved(key, hit);
+    return hit;
+  }
   const pending = inflight.get(key);
   if (pending) return pending;
   const promise = pathIsAccessibleDirectory(key)
     .then((ok) => {
-      resolved.set(key, ok);
+      rememberResolved(key, ok);
       inflight.delete(key);
       return ok;
     })
     .catch(() => {
-      resolved.set(key, false);
+      rememberResolved(key, false);
       inflight.delete(key);
       return false;
     });

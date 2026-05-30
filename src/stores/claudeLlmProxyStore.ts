@@ -1,4 +1,5 @@
 import { listen } from "@tauri-apps/api/event";
+import type { UnlistenFn } from "@tauri-apps/api/event";
 import {
   clearClaudeLlmProxyRecords,
   getClaudeLlmProxyConfig,
@@ -8,9 +9,10 @@ import {
   type ClaudeLlmProxyRecord,
   type ClaudeLlmProxyStatus,
 } from "../services/claudeLlmProxy";
+import { safeUnlisten } from "../utils/safeTauriUnlisten";
 import { tryIngestStreamJsonLineForLlmProxy } from "../utils/streamJsonLlmProxyIngest";
 
-const MAX_RECORDS = 200;
+const MAX_RECORDS = 120;
 
 type Listener = () => void;
 
@@ -26,6 +28,8 @@ let snapshot: StoreSnapshot = { records, status };
 
 let initialized = false;
 let initPromise: Promise<void> | null = null;
+let recordsUnlisten: UnlistenFn | null = null;
+let claudeOutputUnlisten: UnlistenFn | null = null;
 const listeners = new Set<Listener>();
 
 function statusFieldsEqual(
@@ -80,12 +84,20 @@ async function ensureInitialized(): Promise<void> {
       ]);
       records = loaded.slice(0, MAX_RECORDS);
       status = st;
-      await subscribeClaudeLlmProxyRecords(upsertRecord);
-      await listen<string>("claude-output", (ev) => {
+      const nextRecordsUnlisten = await subscribeClaudeLlmProxyRecords(upsertRecord);
+      const nextClaudeOutputUnlisten = await listen<string>("claude-output", (ev) => {
         const line = typeof ev.payload === "string" ? ev.payload : String(ev.payload ?? "");
         const rec = tryIngestStreamJsonLineForLlmProxy(line);
         if (rec) upsertRecord(rec);
       });
+      if (listeners.size === 0) {
+        safeUnlisten(nextRecordsUnlisten);
+        safeUnlisten(nextClaudeOutputUnlisten);
+        initPromise = null;
+        return;
+      }
+      recordsUnlisten = nextRecordsUnlisten;
+      claudeOutputUnlisten = nextClaudeOutputUnlisten;
       initialized = true;
       publish();
     } catch {
@@ -95,10 +107,26 @@ async function ensureInitialized(): Promise<void> {
   return initPromise;
 }
 
+function teardownRuntimeIfIdle(): void {
+  if (listeners.size > 0) return;
+  safeUnlisten(recordsUnlisten);
+  safeUnlisten(claudeOutputUnlisten);
+  recordsUnlisten = null;
+  claudeOutputUnlisten = null;
+  initialized = false;
+  initPromise = null;
+  records = [];
+  status = null;
+  snapshot = { records, status };
+}
+
 export function subscribeClaudeLlmProxyStore(listener: Listener): () => void {
   void ensureInitialized();
   listeners.add(listener);
-  return () => listeners.delete(listener);
+  return () => {
+    listeners.delete(listener);
+    teardownRuntimeIfIdle();
+  };
 }
 
 export function getClaudeLlmProxyStoreSnapshot(): StoreSnapshot {

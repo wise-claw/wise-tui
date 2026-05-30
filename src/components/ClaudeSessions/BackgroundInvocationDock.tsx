@@ -58,6 +58,8 @@ interface ActiveInvocation {
 }
 
 const MAX_LINES_CAPTURE = 3500;
+/** 已完成 invocation 在 React state 中最多保留条数（running 全保留） */
+const MAX_DONE_INVOCATIONS_IN_UI = 24;
 /** 快照中单次 prompt 上限，避免 settings 写入失败 */
 const MAX_SNAPSHOT_PROMPT_CHARS = 100_000;
 
@@ -105,6 +107,25 @@ function buildSnapshotFromBuffers(
     stderrLines,
     updatedAt: Date.now(),
   };
+}
+
+function trimBackgroundInvocationMap(map: InvocationMap): InvocationMap {
+  const entries = Object.entries(map);
+  const running = entries.filter(([, inv]) => inv.phase === "running");
+  const done = entries
+    .filter(([, inv]) => inv.phase === "done")
+    .sort((a, b) => (b[1].attempt ?? 0) - (a[1].attempt ?? 0));
+  if (done.length <= MAX_DONE_INVOCATIONS_IN_UI) {
+    return map;
+  }
+  const next: InvocationMap = {};
+  for (const [key, inv] of running) {
+    next[key] = inv;
+  }
+  for (const [key, inv] of done.slice(0, MAX_DONE_INVOCATIONS_IN_UI)) {
+    next[key] = inv;
+  }
+  return next;
 }
 
 export function BackgroundInvocationDock({ session, enabled = true }: Props) {
@@ -231,10 +252,11 @@ function BackgroundInvocationDockInner({ session }: { session: ClaudeSession }) 
         ) {
           return prev;
         }
-        return {
+        const merged: InvocationMap = {
           ...prev,
           [invocationKey]: nextEntry,
         };
+        return phase === "done" ? trimBackgroundInvocationMap(merged) : merged;
       });
       if (phase === "running" && drawerOpenRef.current && selectedKeyRef.current === invocationKey) {
         setBufferDisplayNonce((n) => n + 1);
@@ -388,18 +410,20 @@ function BackgroundInvocationDockInner({ session }: { session: ClaudeSession }) 
         }
       }
       const keys = Object.keys(next);
+      const trimmed = trimBackgroundInvocationMap(next);
       startTransition(() => {
-        invocationMapRef.current = next;
+        invocationMapRef.current = trimmed;
         setRestored(keys.length > 0);
-        setInvocationMap(next);
+        setInvocationMap(trimmed);
         setDrawerOpen(false);
         if (keys.length > 0) {
           const preferred = preferredOpenKeyRef.current;
           preferredOpenKeyRef.current = null;
           const pick =
-            preferred && next[preferred]
+            preferred && trimmed[preferred]
               ? preferred
-              : [...keys].sort((a, b) => (next[b]?.lineCount ?? 0) - (next[a]?.lineCount ?? 0))[0] ?? keys[0];
+              : [...Object.keys(trimmed)].sort((a, b) => (trimmed[b]?.lineCount ?? 0) - (trimmed[a]?.lineCount ?? 0))[0] ??
+                Object.keys(trimmed)[0];
           setSelectedKey(pick ?? null);
         } else {
           setSelectedKey(null);

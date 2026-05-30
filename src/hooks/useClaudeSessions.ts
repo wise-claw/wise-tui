@@ -1421,10 +1421,16 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         sidecarChanged = true;
       }
     }
+    for (const key of [...streamStallTimerByTabRef.current.keys()]) {
+      if (!liveKeys.has(key)) {
+        clearStreamStallTimer(key);
+        sidecarChanged = true;
+      }
+    }
     notificationHub.pruneOrphanSessions(new Set(liveSessions.map((session) => session.id)));
     pruneInvocationSnapshotMemory(collectInvocationSnapshotMemoryKeys(liveSessions));
     return sidecarChanged;
-  }, []);
+  }, [clearStreamStallTimer]);
   /** Tauri 主窗口是否在前台（与 `document.hidden` 组合判断 Phase 4 桌面摘要）。 */
   const mainWinFocusedRef = useRef(true);
 

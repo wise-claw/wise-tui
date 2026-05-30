@@ -9,6 +9,12 @@ import { deleteAppSetting, getAppSetting, setAppSettingJson } from "./appSetting
 const STORAGE_KEY = "wise.omcDirectBatchInvocations.v1";
 export const MAX_PERSISTED_OMC_DIRECT_BATCH_ITEMS = 40;
 const MAX_PERSISTED_ITEMS = MAX_PERSISTED_OMC_DIRECT_BATCH_ITEMS;
+
+/** 仓库成员 invocation 内存 store 上限（保留全部 running + 最近 complete） */
+export const MAX_REPOSITORY_MEMBER_INVOCATIONS_IN_MEMORY = 48;
+
+/** OMC workflow 批量 runtime Map 上限 */
+export const MAX_OMC_WORKFLOW_INVOCATIONS_IN_MEMORY = 32;
 const MAX_DISPATCH_PROMPT_CHARS = 48_000;
 
 let persistDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -38,6 +44,62 @@ export function trimOmcDirectBatchInvocationMap(
       map.delete(key);
     }
   }
+}
+
+function isInvocationRunning(inv: WorkflowInvocationStreamDetail): boolean {
+  return inv.phase !== "complete";
+}
+
+function trimInvocationDetailMap(
+  map: Map<string, WorkflowInvocationStreamDetail>,
+  maxItems: number,
+): void {
+  if (map.size <= maxItems) return;
+  const running: WorkflowInvocationStreamDetail[] = [];
+  const completed: WorkflowInvocationStreamDetail[] = [];
+  for (const inv of map.values()) {
+    if (isInvocationRunning(inv)) {
+      running.push(inv);
+    } else {
+      completed.push(inv);
+    }
+  }
+  completed.sort((a, b) => (b.attempt ?? 0) - (a.attempt ?? 0));
+  const maxCompleted = Math.max(0, maxItems - running.length);
+  const keepKeys = new Set(
+    [...running, ...completed.slice(0, maxCompleted)].map((inv) => inv.invocationKey),
+  );
+  for (const key of [...map.keys()]) {
+    if (!keepKeys.has(key)) {
+      map.delete(key);
+    }
+  }
+}
+
+export function trimRepositoryMemberInvocationMap(
+  map: Map<string, WorkflowInvocationStreamDetail>,
+  maxItems: number = MAX_REPOSITORY_MEMBER_INVOCATIONS_IN_MEMORY,
+): void {
+  trimInvocationDetailMap(map, maxItems);
+}
+
+export function trimOmcWorkflowInvocationRuntimeMap(
+  map: Map<string, WorkflowInvocationStreamDetail>,
+  maxItems: number = MAX_OMC_WORKFLOW_INVOCATIONS_IN_MEMORY,
+): void {
+  trimInvocationDetailMap(map, maxItems);
+}
+
+export function capWorkflowInvocationStreamDetailsForMemory(
+  list: WorkflowInvocationStreamDetail[],
+  maxItems: number = MAX_REPOSITORY_MEMBER_INVOCATIONS_IN_MEMORY,
+): WorkflowInvocationStreamDetail[] {
+  if (list.length <= maxItems) return list;
+  const running = list.filter(isInvocationRunning);
+  const completed = list.filter((inv) => !isInvocationRunning(inv));
+  completed.sort((a, b) => (b.attempt ?? 0) - (a.attempt ?? 0));
+  const maxCompleted = Math.max(0, maxItems - running.length);
+  return [...running, ...completed.slice(0, maxCompleted)];
 }
 
 export function digestOmcDirectBatchInvocationsList(list: WorkflowInvocationStreamDetail[]): string {

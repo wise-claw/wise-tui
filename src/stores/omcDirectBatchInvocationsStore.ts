@@ -1,4 +1,9 @@
 import type { WorkflowInvocationStreamDetail } from "../constants/workflowUiEvents";
+import {
+  digestOmcDirectBatchInvocationsList,
+  sortOmcDirectBatchInvocationsForStore,
+  MAX_PERSISTED_OMC_DIRECT_BATCH_ITEMS,
+} from "../services/omcDirectBatchInvocationsPersistence";
 
 type Listener = () => void;
 
@@ -33,11 +38,14 @@ function notify(): void {
  * 直连批量 OMC 的 invocation 列表仅由此更新；勿在 React 根上 setState，否则会与高频 progress 叠加导致整应用卡死。
  */
 export function setOmcDirectBatchInvocationsStore(list: WorkflowInvocationStreamDetail[], digest: string): void {
-  if (digest === snapshotDigest) {
+  const capped = sortOmcDirectBatchInvocationsForStore(list).slice(-MAX_PERSISTED_OMC_DIRECT_BATCH_ITEMS);
+  const cappedDigest =
+    capped.length === list.length ? digest : digestOmcDirectBatchInvocationsList(capped);
+  if (cappedDigest === snapshotDigest) {
     return;
   }
-  snapshotDigest = digest;
-  snapshot = list;
+  snapshotDigest = cappedDigest;
+  snapshot = capped;
   notify();
 }
 

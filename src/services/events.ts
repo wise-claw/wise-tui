@@ -16,7 +16,7 @@ function createEventHub<T>(event: string) {
     if (setupPromise) return setupPromise;
     setupPromise = (async () => {
       try {
-        unlisten = await listen<T>(event, ({ payload }) => {
+        const nextUnlisten = await listen<T>(event, ({ payload }) => {
           for (const fn of listeners) {
             try {
               fn(payload);
@@ -25,11 +25,24 @@ function createEventHub<T>(event: string) {
             }
           }
         });
+        if (listeners.size === 0) {
+          safeUnlisten(nextUnlisten);
+          if (setupPromise) setupPromise = null;
+          return;
+        }
+        unlisten = nextUnlisten;
       } catch (error) {
         onError?.(error);
       }
     })();
     return setupPromise;
+  }
+
+  function teardownIfIdle(): void {
+    if (listeners.size > 0) return;
+    safeUnlisten(unlisten);
+    unlisten = null;
+    setupPromise = null;
   }
 
   return {
@@ -41,6 +54,7 @@ function createEventHub<T>(event: string) {
       void setup(options.onError);
       return () => {
         listeners.delete(onEvent);
+        teardownIfIdle();
       };
     },
     teardown(): void {

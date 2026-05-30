@@ -35,6 +35,10 @@ const EMPTY_SLICE: SessionDockSlice = {
   permissionRequest: null,
 };
 
+const MAX_FOLLOWUP_ITEMS_PER_SESSION = 20;
+const MAX_REVERT_ITEMS_PER_SESSION = 12;
+const MAX_QUESTION_QUEUE_PER_SESSION = 8;
+
 /**
  * 内容签名（不含 id / arrivedAt）：用于把同一 AskUserQuestion 在 `assistant.tool_use` 与 `sdk_control_request`
  * 两条独立流上写来的不同 request_id 合并为一项题卡。
@@ -95,7 +99,7 @@ function mergeFollowups(a: FollowupItem[], b: FollowupItem[]): FollowupItem[] {
       out.push(x);
     }
   }
-  return out;
+  return out.slice(-MAX_FOLLOWUP_ITEMS_PER_SESSION);
 }
 
 function mergeReverts(a: RevertItem[], b: RevertItem[]): RevertItem[] {
@@ -107,7 +111,7 @@ function mergeReverts(a: RevertItem[], b: RevertItem[]): RevertItem[] {
       out.push(x);
     }
   }
-  return out;
+  return out.slice(-MAX_REVERT_ITEMS_PER_SESSION);
 }
 
 class NotificationHub {
@@ -378,7 +382,7 @@ class NotificationHub {
       const existingTexts = new Set(b.followupItems.map((f) => f.text));
       const newItems = followups.filter((f) => !existingTexts.has(f.text));
       if (newItems.length > 0) {
-        b.followupItems = [...b.followupItems, ...newItems];
+        b.followupItems = [...b.followupItems, ...newItems].slice(-MAX_FOLLOWUP_ITEMS_PER_SESSION);
         changed = true;
       }
     }
@@ -392,7 +396,7 @@ class NotificationHub {
       const existingTexts = new Set(b.revertItems.map((r) => r.text));
       const newItems = reverts.filter((r) => !existingTexts.has(r.text));
       if (newItems.length > 0) {
-        b.revertItems = [...b.revertItems, ...newItems];
+        b.revertItems = [...b.revertItems, ...newItems].slice(-MAX_REVERT_ITEMS_PER_SESSION);
         changed = true;
       }
     }
@@ -703,7 +707,7 @@ class NotificationHub {
       this.bumpDockForStorageSession(sessionId);
       return;
     }
-    b.questionRequestQueue = [...b.questionRequestQueue, q];
+    b.questionRequestQueue = [...b.questionRequestQueue, q].slice(-MAX_QUESTION_QUEUE_PER_SESSION);
     this.bumpGlobal();
     this.bumpDockForStorageSession(sessionId);
   }
@@ -811,6 +815,21 @@ class NotificationHub {
     for (const sessionId of [...this.buckets.keys()]) {
       if (!liveSessionIds.has(sessionId)) {
         this.removeSession(sessionId);
+      }
+    }
+    for (const sessionId of [...this.dockSliceGenBySession.keys()]) {
+      if (!liveSessionIds.has(sessionId) && !this.dockListenersBySession.has(sessionId)) {
+        this.dockSliceGenBySession.delete(sessionId);
+      }
+    }
+    for (const sessionId of [...this.controlDockMirrorViewerToSource.keys()]) {
+      if (!liveSessionIds.has(sessionId)) {
+        this.stripControlDockMirrorsInvolving(sessionId);
+      }
+    }
+    for (const sessionId of [...this.controlDockMirrorSourceToViewers.keys()]) {
+      if (!liveSessionIds.has(sessionId)) {
+        this.stripControlDockMirrorsInvolving(sessionId);
       }
     }
     for (const [requestId, lifecycle] of [...this.requestLifecycles.entries()]) {
