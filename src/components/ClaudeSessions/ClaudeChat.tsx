@@ -2255,7 +2255,6 @@ export function ClaudeChat({
       await gitCommit(repoPath, commitMessage);
       await gitPull(repoPath);
       await gitPush(repoPath);
-      message.success("提交并推送成功");
       setPushPopoverOpen(false);
       const refreshed = await gitStatus(repoPath);
       setStats({

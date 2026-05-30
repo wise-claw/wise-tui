@@ -64,23 +64,6 @@ export {
   historySessionStatusTagColor,
 } from "./historySessionDrawerChrome";
 
-function EmployeeMiniIcon() {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden>
-      <path d="M8 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Zm-4 5.5c0-2.2 1.8-4 4-4s4 1.8 4 4" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function TeamMiniIcon() {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden>
-      <path d="M3 3h4v4H3zM9 9h4v4H9zM9 3h4v4H9zM3 9h4v4H3z" fill="none" stroke="currentColor" strokeWidth="1.1" />
-      <path d="M7 5h2M5 7v2M11 7v2M7 11h2" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 function RepositoryMiniIcon() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden>
@@ -903,10 +886,6 @@ export function ProgressMonitorPanel({
     return map;
   }, [sessions]);
 
-  const employeeInProgress = useMemo(
-    () => employeeItems.filter((item) => item.status === "in_progress").length,
-    [employeeItems],
-  );
   const sortedEmployeeItems = useMemo(() => {
     return [...employeeItems].sort((a, b) => {
       const aNum = extractTrailingNumber(a.name) ?? extractTrailingNumber(a.employeeId);
@@ -919,10 +898,6 @@ export function ProgressMonitorPanel({
       return a.name.localeCompare(b.name, "zh-CN", { numeric: true, sensitivity: "base" });
     });
   }, [employeeItems]);
-  const teamInProgress = useMemo(
-    () => teamItems.filter((item) => item.status === "in_progress").length,
-    [teamItems],
-  );
   const teamHistorySessionsByWorkflowId = useMemo(() => {
     const map = new Map<string, TeamHistorySessionRow[]>();
     for (const teamItem of teamItems) {
@@ -1215,17 +1190,6 @@ export function ProgressMonitorPanel({
 
       {employeeItems.length > 0 ? (
       <div className="app-monitor-panel__section">
-        <div className="app-monitor-panel__section-head">
-          <div className="app-monitor-panel__section-title-wrap">
-            <Typography.Text className="app-monitor-panel__section-title">
-              <span className="app-monitor-panel__section-icon"><EmployeeMiniIcon /></span>
-              终端
-            </Typography.Text>
-            <Typography.Text className="app-monitor-panel__meta">
-              总数 {employeeItems.length} · 进行中 {employeeInProgress} · 空闲 {employeeItems.length - employeeInProgress}
-            </Typography.Text>
-          </div>
-        </div>
           {sortedEmployeeItems.map((item) => {
             const isOmcWorker = item.employeeId === "omc-worker";
             const employeePopoverOpen = employeeHistoryPopoverId === item.employeeId;
@@ -1387,17 +1351,6 @@ export function ProgressMonitorPanel({
 
       {teamItems.length > 0 ? (
       <div className="app-monitor-panel__section">
-        <div className="app-monitor-panel__section-head">
-          <div className="app-monitor-panel__section-title-wrap">
-            <Typography.Text className="app-monitor-panel__section-title">
-              <span className="app-monitor-panel__section-icon"><TeamMiniIcon /></span>
-              工作流
-            </Typography.Text>
-            <Typography.Text className="app-monitor-panel__meta">
-              总数 {teamItems.length} · 进行中 {teamInProgress} · 空闲 {teamItems.length - teamInProgress}
-            </Typography.Text>
-          </div>
-        </div>
           {teamItems.map((item) => {
             const teamPopoverOpen = teamHistoryPopoverId === item.workflowId;
             const keyword = teamPopoverOpen ? normalizeSearchKeyword(teamHistorySearch) : "";

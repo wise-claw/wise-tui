@@ -285,7 +285,6 @@ export function GitPanel({
           throw new Error("没有可提交的改动");
         }
         await gitCommit(repositoryPath, trimmed);
-        message.success("提交成功");
       }),
     [repositoryPath, runAction],
   );
@@ -298,7 +297,6 @@ export function GitPanel({
     try {
       await gitPush(repositoryPath!);
       await loadStatus({ silent: true });
-      message.success("推送成功");
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       message.error(`推送失败: ${msg}`);

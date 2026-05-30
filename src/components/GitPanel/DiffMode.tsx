@@ -86,10 +86,10 @@ export function DiffMode({
     }
   }, [isLargeChangeSet, status.staged.length]);
 
-  const unstagedDirPaths = useMemo(() => {
+  const treeDirPaths = useMemo(() => {
     if (unstagedViewMode !== "tree") return [];
     const dirs: string[] = [];
-    const tree = buildFileTree(status.unstaged);
+    const tree = buildFileTree([...status.staged, ...status.unstaged]);
     function collect(node: FileTreeNode) {
       if (node.isDir) {
         dirs.push(node.path);
@@ -98,12 +98,12 @@ export function DiffMode({
     }
     tree.forEach(collect);
     return dirs;
-  }, [status.unstaged, unstagedViewMode]);
+  }, [status.staged, status.unstaged, unstagedViewMode]);
 
   const handleExpandAll = useCallback(() => {
-    setExpandedDirs(new Set(unstagedDirPaths));
+    setExpandedDirs(new Set(treeDirPaths));
     setTreeAllExpanded(true);
-  }, [unstagedDirPaths]);
+  }, [treeDirPaths]);
 
   const handleCollapseAll = useCallback(() => {
     setExpandedDirs(new Set());
@@ -269,7 +269,7 @@ export function DiffMode({
               -{status.deletions}
             </Text>
           </Space>
-          {hasUnstaged && !isLargeChangeSet && (
+          {hasChanges && !isLargeChangeSet && (
             <span className="git-view-toggle">
               <Button
                 type={unstagedViewMode === "tree" ? "primary" : "text"}
@@ -298,6 +298,17 @@ export function DiffMode({
               已暂存 ({status.staged.length})
             </Text>
             <Space size={4} className="git-section-header-actions-space">
+              {unstagedViewMode === "tree" && !isLargeChangeSet && (
+                <Tooltip title={treeAllExpanded ? "收起目录树" : "展开目录树"} placement="top">
+                  <Button
+                    type="text"
+                    size="small"
+                    className="git-section-action-btn"
+                    icon={treeAllExpanded ? <VerticalAlignBottomOutlined /> : <VerticalAlignTopOutlined />}
+                    onClick={handleToggleTree}
+                  />
+                </Tooltip>
+              )}
               <Tooltip title={stagedCollapsed ? "展开已暂存" : "收起已暂存"} placement="top">
                 <Button
                   type="text"
@@ -322,12 +333,23 @@ export function DiffMode({
             </Space>
           </div>
           {!stagedCollapsed ? (
-            <GitFileListSection
-              files={status.staged}
-              renderRow={(f) => (
-                <FileRow file={f} section="staged" onUnstage={onUnstage} />
-              )}
-            />
+            unstagedViewMode === "tree" && !isLargeChangeSet ? (
+              <FileTreeView
+                files={status.staged}
+                section="staged"
+                expandedDirs={expandedDirs}
+                onToggleDir={handleToggleDir}
+                onUnstage={onUnstage}
+                onOpenFile={onOpenFile}
+              />
+            ) : (
+              <GitFileListSection
+                files={status.staged}
+                renderRow={(f) => (
+                  <FileRow file={f} section="staged" onUnstage={onUnstage} onOpenFile={onOpenFile} />
+                )}
+              />
+            )
           ) : null}
         </div>
       )}
@@ -389,10 +411,10 @@ export function DiffMode({
           {unstagedViewMode === "tree" && !isLargeChangeSet ? (
             <FileTreeView
               files={status.unstaged}
+              section="unstaged"
               expandedDirs={expandedDirs}
               onToggleDir={handleToggleDir}
               onStage={onStage}
-              onUnstage={onUnstage}
               onDiscard={onDiscard}
               onOpenFile={onOpenFile}
             />
