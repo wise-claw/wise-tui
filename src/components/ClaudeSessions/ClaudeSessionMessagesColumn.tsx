@@ -4,14 +4,13 @@ import {
   buildChatMessageListRows,
   shouldShowListEndThinkingHint,
 } from "../../utils/claudeChatMessageListRows";
-import { ClaudeSessionMonitorMessageRow } from "./ClaudeSessionMonitorMessageRow";
-import { StreamingReplyHint } from "./Markdown";
+import { ChatMessageListVirtualBody } from "./ChatMessageListVirtualBody";
 import "./index.css";
 
 interface Props {
   session: ClaudeSession;
   onOpenTaskDetail?: (taskId: string) => void;
-  /** @deprecated 虚拟列表已渲染全部可展示消息，该开关保留仅为兼容旧调用方 */
+  /** @deprecated 虚拟列表按条数阈值自动启用，该开关保留仅为兼容旧调用方 */
   showAllMessages?: boolean;
   /** 绑定到消息滚动容器，供父组件在内容增高时 `scrollTop = scrollHeight` */
   scrollContainerRef?: RefObject<HTMLDivElement | null>;
@@ -46,32 +45,13 @@ export function ClaudeSessionMessagesColumn({
             <p>暂无消息</p>
           </div>
         ) : (
-          rows.map((row, index) => {
-            const classNames = ["app-claude-messages-virtual-row"];
-            if (index > 0 && row.kind !== "thinking-hint" && !row.mergedWithPrevious) {
-              classNames.push("app-claude-messages-virtual-row--group-start");
-            }
-            if (row.kind === "message" && row.mergedWithPrevious) {
-              classNames.push("app-claude-messages-virtual-row--merged");
-            }
-            return (
-              <div key={row.key} className={classNames.join(" ")}>
-                {row.kind === "thinking-hint" ? (
-                  <div className="app-claude-messages-end-thinking">
-                    <StreamingReplyHint />
-                  </div>
-                ) : (
-                  <ClaudeSessionMonitorMessageRow
-                    msg={row.msg}
-                    streamingThisBubble={row.streamingThisBubble}
-                    mergedWithPrevious={row.mergedWithPrevious}
-                    toolUser={row.toolUser}
-                    onOpenTaskDetail={onOpenTaskDetail}
-                  />
-                )}
-              </div>
-            );
-          })
+          <ChatMessageListVirtualBody
+            rows={rows}
+            scrollContainerRef={scrollRef}
+            listResetKey={session.id}
+            listVariant="monitor"
+            onOpenTaskDetail={onOpenTaskDetail}
+          />
         )}
       </div>
     </div>

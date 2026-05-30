@@ -46,7 +46,10 @@ import type {
   PermissionRequest,
 } from "../../types";
 import type { ControlRequestStatus } from "../../notifications";
-import { ClaudeVirtualMessageList } from "./ClaudeVirtualMessageList";
+import {
+  ClaudeVirtualMessageList,
+  type ChatMessageListNavigationHandle,
+} from "./ClaudeVirtualMessageList";
 import { ClaudeSessionTrajectoryDrawer } from "./ClaudeSessionTrajectoryDrawer";
 import { SessionQuickActionsBar } from "./SessionQuickActionsBar";
 import type { ClaudeSessionConnectionKind } from "../../constants/claudeConnection";
@@ -1280,6 +1283,8 @@ export function ClaudeChat({
 
   /** 消息列表滚动容器：用 scrollTop 贴底，避免 scrollIntoView 触发布局与祖先滚动链，减轻手动滚动时卡顿 */
   const messagesScrollRef = useRef<HTMLDivElement>(null);
+  /** 长会话虚拟列表：DOM 未挂载时按 messageId 定位 */
+  const messageListNavRef = useRef<ChatMessageListNavigationHandle>(null);
   /** 是否允许自动贴底（用户手动翻历史并仍聚焦消息区时为 false） */
   const pinToBottomRef = useRef(true);
   /** 记录上一次的 scrollTop，用于判断用户滚动方向 */
@@ -1453,6 +1458,13 @@ export function ClaudeChat({
 
   const [fullTranscriptLoading, setFullTranscriptLoading] = useState(false);
 
+  const pauseFollowForMessageNavigation = useCallback(() => {
+    userPausedFollowRef.current = true;
+    pinToBottomRef.current = false;
+    awaitNewMessageBeforeFollowRef.current = false;
+    cancelScrollFollowLoop();
+  }, [cancelScrollFollowLoop]);
+
   const scrollMessageTargetIntoView = useCallback((target: Element | null, behavior: ScrollBehavior = "smooth") => {
     const sc = messagesScrollRef.current;
     if (!sc || !(target instanceof HTMLElement) || !sc.contains(target)) {
@@ -1464,14 +1476,11 @@ export function ClaudeChat({
       sc.scrollTop + targetRect.top - scRect.top - Math.max(0, (sc.clientHeight - targetRect.height) / 2);
     const maxTop = Math.max(0, sc.scrollHeight - sc.clientHeight);
     const nextTop = Math.max(0, Math.min(maxTop, targetTop));
-    userPausedFollowRef.current = true;
-    pinToBottomRef.current = false;
-    awaitNewMessageBeforeFollowRef.current = false;
-    cancelScrollFollowLoop();
+    pauseFollowForMessageNavigation();
     sc.scrollTo({ top: nextTop, behavior });
     lastScrollTopRef.current = nextTop;
     return true;
-  }, [cancelScrollFollowLoop]);
+  }, [pauseFollowForMessageNavigation]);
 
   const showListEndThinkingHint = useMemo(
     () => shouldShowListEndThinkingHint(session.messages, session.status),
@@ -1785,7 +1794,8 @@ export function ClaudeChat({
   const scrollToSessionMessageId = useCallback((messageId: number) => {
     window.setTimeout(() => {
       const row = document.querySelector(`[data-message-id="${CSS.escape(String(messageId))}"]`);
-      scrollMessageTargetIntoView(row);
+      if (scrollMessageTargetIntoView(row)) return;
+      messageListNavRef.current?.scrollToMessageId(messageId);
     }, 50);
   }, [scrollMessageTargetIntoView]);
 
@@ -3615,16 +3625,29 @@ export function ClaudeChat({
         rawId !== ""
           ? session.messages.findIndex((m) => String(m.id) === rawId)
           : session.messages.findIndex((m) => String(m.id) === target?.getAttribute("data-message-id"));
-      if (scrollIndex >= 0) {
-        const msg = session.messages[scrollIndex];
-        const row =
-          msg != null
-            ? document.querySelector(`[data-message-id="${CSS.escape(String(msg.id))}"]`)
-            : null;
-        scrollMessageTargetIntoView(row);
-      } else {
-        scrollMessageTargetIntoView(target);
+      const msg = scrollIndex >= 0 ? session.messages[scrollIndex] : undefined;
+      const messageIdForScroll = rawId || (msg != null ? String(msg.id) : "");
+      const row =
+        msg != null
+          ? document.querySelector(`[data-message-id="${CSS.escape(String(msg.id))}"]`)
+          : null;
+      if (scrollMessageTargetIntoView(row)) {
+        try {
+          sessionStorage.removeItem(WISE_PENDING_NOTIFICATION_SCROLL_STORAGE_KEY);
+        } catch {
+          /* ignore */
+        }
+        return;
       }
+      if (messageIdForScroll && messageListNavRef.current?.scrollToMessageId(messageIdForScroll)) {
+        try {
+          sessionStorage.removeItem(WISE_PENDING_NOTIFICATION_SCROLL_STORAGE_KEY);
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
+      scrollMessageTargetIntoView(target);
       try {
         sessionStorage.removeItem(WISE_PENDING_NOTIFICATION_SCROLL_STORAGE_KEY);
       } catch {
@@ -4807,10 +4830,12 @@ export function ClaudeChat({
             </div>
           ) : (
             <ClaudeVirtualMessageList
+              ref={messageListNavRef}
               session={session}
               showListEndThinkingHint={showListEndThinkingHint}
               scrollContainerRef={messagesScrollRef}
               onOpenTaskDetail={onOpenTaskDetail}
+              onNavigate={pauseFollowForMessageNavigation}
             />
           )}
         </div>

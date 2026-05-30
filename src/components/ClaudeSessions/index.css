@@ -3113,6 +3113,8 @@
   /* 滚动容器用块级流式布局：避免 column flex 把视口剩余高度算进 scrollHeight，贴底时顶栏被顶出、底部留白 */
   display: block;
   background: var(--ant-color-bg-container);
+  /* 多屏窗格父级可能设 content-visibility:auto，消息区必须始终绘制 */
+  content-visibility: visible;
   /* 减少滚动链传到外层布局，降低嵌套滚动时的合成/重绘开销 */
   overscroll-behavior: contain;
   overflow-anchor: none;
@@ -3155,7 +3157,15 @@
   border-color: var(--ant-color-primary);
 }
 
-/* 与 `.app-claude-message` 中头像 20px + gap 10px 对齐，使「正在思考」仅在列表末尾出现一条 */
+/* 组间距：wrapper 不命中 .app-claude-message 相邻选择器 */
+.app-claude-messages-virtual-row {
+  contain: layout style;
+}
+
+.app-claude-messages-virtual-row--group-start {
+  padding-top: 8px;
+}
+
 .app-claude-messages-end-thinking {
   padding-left: 30px;
 }
