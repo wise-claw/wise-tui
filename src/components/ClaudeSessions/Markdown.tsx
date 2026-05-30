@@ -59,13 +59,21 @@ export function Markdown({ text, streaming, showPendingHint, className }: Props)
   const copyTimeoutsRef = useRef<Map<HTMLButtonElement, ReturnType<typeof setTimeout>>>(new Map());
   const renderRafRef = useRef<number | null>(null);
 
+  const lastRenderedTextRef = useRef<string | null>(null);
+
   const updateDOM = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
     if (!text) {
-      container.innerHTML = "";
+      if (lastRenderedTextRef.current !== "") {
+        container.innerHTML = "";
+        lastRenderedTextRef.current = "";
+      }
       return;
     }
+
+    // 内容未变时跳过完整的 marked+DOMPurify+DOM 管线
+    if (text === lastRenderedTextRef.current) return;
 
     const html = renderMarkdown(text);
     const temp = document.createElement("div");
@@ -135,7 +143,9 @@ export function Markdown({ text, streaming, showPendingHint, className }: Props)
       }
     });
 
-    container.innerHTML = temp.innerHTML;
+    // 直接移动子节点而非序列化/反序列化 innerHTML，减少一次完整 DOM 克隆开销
+    container.replaceChildren(...temp.childNodes);
+    lastRenderedTextRef.current = text;
   }, [text]);
 
   useEffect(() => {

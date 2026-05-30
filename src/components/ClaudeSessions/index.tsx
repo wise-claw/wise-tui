@@ -10,7 +10,7 @@ import type {
   WorkflowTemplateItem,
 } from "../../types";
 import { Button, Dropdown, Empty, message, Popover, Spin, Switch, Tooltip, type TooltipProps } from "antd";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useWiseTopbarChromeVisibility } from "../../hooks/useWiseTopbarChromeVisibility";
 import { DingTalkStreamGatewayTopbarSwitch } from "../DingTalkStreamGatewayTopbarSwitch";
 import { OpenAppMenu } from "../OpenAppMenu";
@@ -1100,7 +1100,11 @@ export function ClaudeSessions({
     ],
   );
 
-  const multiPaneSharedChat = useMemo((): MultiPaneSharedChatProps => ({
+  // 用 ref 持有最新的 shared 数据，保持 shared 引用稳定，
+  // 避免 sessions/incomingSessions 高频变化时触发所有窗格 memo 比较器失效。
+  // 各窗格通过自身 session prop 独立驱动重渲染；读取 shared ref 总是拿到最新值。
+  const multiPaneSharedChatRef = useRef<MultiPaneSharedChatProps>(null!);
+  multiPaneSharedChatRef.current = {
     sessions,
     allSessionsForHistory: incomingSessions,
     repositories,
@@ -1158,65 +1162,9 @@ export function ClaudeSessions({
     onLoadMoreTranscriptFromDisk,
     onCompactSessionHistory,
     missionContext,
-  }), [
-    sessions,
-    incomingSessions,
-    repositories,
-    activeProject,
-    handleSwitchToSession,
-    onSendMessage,
-    onExecuteSession,
-    onUpdateSessionModel,
-    onUpdateSessionConnectionKind,
-    onUpdateRepositoryExecutionEngine,
-    onUpdateEmployeeExecutionEngine,
-    codexAvailable,
-    onOpenExecutionEnvironment,
-    onCancelSession,
-    onRespondToQuestion,
-    onDismissQuestion,
-    onRespondToPermission,
-    onClearTodos,
-    onToggleTodo,
-    onRestoreTodosFromTranscript,
-    onRestorePendingPermissionFromTranscript,
-    onClearFollowups,
-    onClearRevertItems,
-    onSendFollowup,
-    onRestoreRevert,
-    onOpenWorkflowConfig,
-    onOpenBuiltinAssistant,
-    onOpenRepositoryScheduledTasks,
-    employees,
-    mentionEmployees,
-    composerProjectRoleTagOptions,
-    composerProjectRepositoryMentionOptions,
-    composerHideEmployeesInAtMode,
-    taskPendingEmployeesByTaskId,
-    workflowTemplates,
-    workflowGraphsByWorkflowId,
-    workflowGraphStatusByWorkflowId,
-    onOpenTaskDetail,
-    hideMessages,
-    hideSessionTools,
-    taskListConcurrentCapacity,
-    resolveTaskListOmcInvokeConcurrency,
-    repositoryMainBindings,
-    onAppendSystemMessage,
-    onAppendUserMessage,
-    onNotifyOmcEmployeeDirectBatchTaskDone,
-    onPrepareFreshOmcEmployeeWorkerForDirectBatch,
-    onRefreshHistorySessions,
-    onDeleteHistorySession,
-    onOpenHistorySessionInInspector,
-    onRestoreHistorySessionAsMain,
-    omcBatchPipelineActive,
-    onAddWorktreeRepositoryToProject,
-    onReloadFullDiskTranscript,
-    onLoadMoreTranscriptFromDisk,
-    onCompactSessionHistory,
-    missionContext,
-  ]);
+  };
+  // 首次渲染时初始化，后续保持引用稳定
+  const [multiPaneSharedChat] = useState(() => multiPaneSharedChatRef.current);
 
   useEffect(() => {
     if (

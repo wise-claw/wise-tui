@@ -671,7 +671,7 @@ export interface ClaudeMultiPaneGridProps {
   panelBelowMessages?: ReactNode;
 }
 
-export function ClaudeMultiPaneGrid({
+export const ClaudeMultiPaneGrid = memo(function ClaudeMultiPaneGrid({
   paneCount,
   activeSession,
   activeRepository,
@@ -826,6 +826,6 @@ export function ClaudeMultiPaneGrid({
       ) : null}
     </div>
   );
-}
+});
 
 export type { PaneRepoTreeNode };

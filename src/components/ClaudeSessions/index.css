@@ -1360,6 +1360,8 @@
   min-height: 0;
   min-width: 0;
   overflow: hidden;
+  /* 隔离消息区子树的布局/绘制，降低多屏 WebKit compositing 递归深度 */
+  contain: content;
 }
 
 .app-claude-chat-main {
@@ -1369,6 +1371,7 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  contain: layout style;
 }
 
 /* 消息区与底部（快捷条 + 输入）的分界 */
@@ -1379,6 +1382,7 @@
   min-width: 0;
   position: relative;
   background: var(--ant-color-bg-container);
+  contain: layout style;
 }
 
 .app-claude-chat-bottom::before {
@@ -3108,6 +3112,8 @@
   /* 与 .app-claude-chat 一致：flex 子项默认可收缩为 0，否则内部 overflow 无法获得稳定滚动视口 */
   min-height: 0;
   overflow-x: hidden;
+  /* 强化滚动容器的绘制隔离，减少多屏 compositing 递归 */
+  contain: content;
   overflow-y: auto;
   padding: 12px 12px 16px; /* Sniper-snug layout padding */
   /* 滚动容器用块级流式布局：避免 column flex 把视口剩余高度算进 scrollHeight，贴底时顶栏被顶出、底部留白 */
@@ -3159,7 +3165,8 @@
 
 /* 组间距：wrapper 不命中 .app-claude-message 相邻选择器 */
 .app-claude-messages-virtual-row {
-  contain: layout style;
+  /* 强化每条消息的布局/样式隔离，阻止 compositing 递归穿透 */
+  contain: layout style paint;
 }
 
 .app-claude-messages-virtual-row--group-start {

@@ -626,6 +626,8 @@ export function ClaudeChat({
     function syncSessionOwnerAnchor() {
       const el = chatRootRef.current;
       if (!el) return;
+      // 页面不可见时跳过布局读取，减少多屏后台标签页的强制 reflow
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       const r = el.getBoundingClientRect();
       el.style.setProperty("--app-session-owner-anchor-left", `${r.left}px`);
       el.style.setProperty("--app-session-owner-anchor-width", `${r.width}px`);
@@ -1614,6 +1616,8 @@ export function ClaudeChat({
 
     let raf = 0;
     const mo = new MutationObserver(() => {
+      // 流式期间 scroll-follow RAF 循环已持续贴底，跳过 MutationObserver 回调减轻多屏开销
+      if (isSessionStreaming()) return;
       if (raf !== 0) return;
       raf = window.requestAnimationFrame(() => {
         raf = 0;
@@ -4754,6 +4758,16 @@ export function ClaudeChat({
         diskTranscriptPartial={session.diskTranscriptPartial}
       />
 
+      {!hideMessages ? (
+        sessionOwnerInfo.type === "main" ? (
+          sessionOwnerPanel
+        ) : (
+          <Tooltip title={buildClaudeSessionHoverTitle(session)} placement="top" mouseEnterDelay={0.35}>
+            {sessionOwnerPanel}
+          </Tooltip>
+        )
+      ) : null}
+
       <div className="app-claude-chat-body">
         <div className="app-claude-chat-main">
 
@@ -4848,16 +4862,6 @@ export function ClaudeChat({
             onClearAll={clearAllPendingAndDeferred}
           />
         </div>
-      ) : null}
-
-      {!hideMessages ? (
-        sessionOwnerInfo.type === "main" ? (
-          sessionOwnerPanel
-        ) : (
-          <Tooltip title={buildClaudeSessionHoverTitle(session)} placement="top" mouseEnterDelay={0.35}>
-            {sessionOwnerPanel}
-          </Tooltip>
-        )
       ) : null}
 
       {sessionUnreadNotificationRows.length > 0 ? (

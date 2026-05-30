@@ -51,8 +51,14 @@ export function useDockSlice(sessionId: string | null): DockSliceWithLifecycle {
     const pr = slice.permissionRequest;
     const questionRequestLifecycle = qr ? notificationHub.getRequestLifecycle(qr.id) : null;
     const permissionRequestLifecycle = pr ? notificationHub.getRequestLifecycle(pr.id) : null;
+    // 直接构造新对象而非展开 slice，减少中间对象分配
     return {
-      ...slice,
+      todos: slice.todos,
+      followupItems: slice.followupItems,
+      revertItems: slice.revertItems,
+      questionRequest: slice.questionRequest,
+      questionRequestQueue: slice.questionRequestQueue,
+      permissionRequest: slice.permissionRequest,
       questionRequestStatus: questionRequestLifecycle?.status ?? null,
       questionRequestError: questionRequestLifecycle?.lastError ?? null,
       permissionRequestStatus: permissionRequestLifecycle?.status ?? null,
