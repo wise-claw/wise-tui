@@ -86,6 +86,29 @@ export function gitStatusSnapshotEqual(
   return true;
 }
 
+export interface GitStatusHeaderSnapshot {
+  branch: string | null;
+  ahead: number;
+  behind: number;
+  stagedCount: number;
+  unstagedCount: number;
+}
+
+/** 比较多仓折叠 header 快照，避免 watcher 刷新触发无效重渲染。 */
+export function gitStatusHeaderSnapshotEqual(
+  prev: GitStatusHeaderSnapshot | null,
+  next: GitStatusHeaderSnapshot,
+): boolean {
+  if (!prev) return false;
+  return (
+    prev.branch === next.branch &&
+    prev.ahead === next.ahead &&
+    prev.behind === next.behind &&
+    prev.stagedCount === next.stagedCount &&
+    prev.unstagedCount === next.unstagedCount
+  );
+}
+
 export function buildCommitDraftFromStatus(status: GitStatusResponse): string {
   const files = [...status.staged, ...status.unstaged];
   const topFiles = Array.from(new Set(files.map((item) => item.path))).slice(0, 4);

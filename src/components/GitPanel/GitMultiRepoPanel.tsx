@@ -57,8 +57,7 @@ export function GitMultiRepoPanel({
   }, []);
 
   useEffect(() => {
-    const validPaths = new Set(repositoryEntries.map((entry) => entry.path).filter(Boolean));
-    const paths = [...expandedPaths].filter((path) => validPaths.has(path));
+    const paths = repositoryEntries.map((entry) => entry.path).filter(Boolean);
     if (paths.length === 0) {
       void stopGitWatcher().catch(() => {});
       return;
@@ -67,7 +66,7 @@ export function GitMultiRepoPanel({
     return () => {
       void stopGitWatcher().catch(() => {});
     };
-  }, [repositoryEntries, expandedPaths]);
+  }, [repositoryEntries]);
 
   useEffect(() => {
     const unlisten = listen<{ path?: string }>("git-changed", (event) => {

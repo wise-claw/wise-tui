@@ -27,8 +27,10 @@ import { GitSyncActions } from "./GitSyncActions";
 import { InitMode } from "./InitMode";
 import {
   GIT_WATCHER_REFRESH_MS,
+  gitStatusHeaderSnapshotEqual,
   gitStatusSnapshotEqual,
   hasUnstagedFilesUnderDirectory,
+  type GitStatusHeaderSnapshot,
 } from "./gitPanelUtils";
 import type { GitPanelOpenFileOptions } from "./types";
 
@@ -45,17 +47,9 @@ interface Props {
   loadDelayMs?: number;
   /** 多仓面板统一注册 watcher 刷新，避免每仓独立监听。 */
   registerRefresh?: (path: string, refresh: () => void) => () => void;
-  /** 多仓面板按展开状态限制 file watcher 范围。 */
+  /** 多仓面板展开状态变更回调（用于按需加载 diff 详情）。 */
   onExpandedChange?: (path: string, expanded: boolean) => void;
   onOpenFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
-}
-
-interface GitStatusHeaderSnapshot {
-  branch: string | null;
-  ahead: number;
-  behind: number;
-  stagedCount: number;
-  unstagedCount: number;
 }
 
 function formatBranchLabel(
@@ -186,6 +180,9 @@ function GitRepoSectionInner({
         unstagedCount: result.unstagedCount,
       };
       const apply = () => {
+        if (gitStatusHeaderSnapshotEqual(headerSnapshotRef.current, snapshot)) {
+          return;
+        }
         headerSnapshotRef.current = snapshot;
         setHeaderSnapshot(snapshot);
         setErrors((prev) => {
@@ -229,12 +226,12 @@ function GitRepoSectionInner({
       void loadStatus({ silent: true });
       return;
     }
-    if (isMultiRepo && shouldLoadHeader) {
+    if (isMultiRepo) {
       void loadSummary({ silent: true });
       return;
     }
     void loadStatus({ silent: true });
-  }, [expanded, isMultiRepo, loadStatus, loadSummary, shouldLoadHeader]);
+  }, [expanded, isMultiRepo, loadStatus, loadSummary]);
 
   const beginGitSyncOperation = useCallback(() => {
     syncOpsInFlightRef.current += 1;

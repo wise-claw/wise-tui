@@ -3,6 +3,7 @@ import type { GitStatusResponse } from "../../types";
 import {
   GIT_PANEL_LARGE_CHANGE_COUNT,
   GIT_PANEL_VIRTUAL_LIST_THRESHOLD,
+  gitStatusHeaderSnapshotEqual,
   gitStatusSnapshotEqual,
   shouldUseGitVirtualFileList,
 } from "./gitPanelUtils";
@@ -32,6 +33,25 @@ describe("gitStatusSnapshotEqual", () => {
       gitStatusSnapshotEqual(status, {
         ...status,
         unstaged: [{ path: "b.ts", status: "M", additions: 0, deletions: 0 }],
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("gitStatusHeaderSnapshotEqual", () => {
+  it("detects identical git status header snapshots", () => {
+    const snapshot = {
+      branch: "master",
+      ahead: 0,
+      behind: 0,
+      stagedCount: 1,
+      unstagedCount: 3,
+    };
+    expect(gitStatusHeaderSnapshotEqual(snapshot, { ...snapshot })).toBe(true);
+    expect(
+      gitStatusHeaderSnapshotEqual(snapshot, {
+        ...snapshot,
+        unstagedCount: 5,
       }),
     ).toBe(false);
   });
