@@ -48,6 +48,7 @@ export interface BuildProjectMoreMenuItemsInput {
   onOpenScheduledTasksForProject?: boolean;
   onOpenExecutableTasksForProject?: boolean;
   onReconcileProject?: boolean;
+  onOpenProjectInEditor?: boolean;
   onOpenProjectInTerminal?: boolean;
 }
 
@@ -64,6 +65,7 @@ export function buildProjectMoreMenuItems(input: BuildProjectMoreMenuItemsInput)
     onOpenScheduledTasksForProject,
     onOpenExecutableTasksForProject,
     onReconcileProject,
+    onOpenProjectInEditor,
     onOpenProjectInTerminal,
   } = input;
 
@@ -75,6 +77,7 @@ export function buildProjectMoreMenuItems(input: BuildProjectMoreMenuItemsInput)
       { key: "pin", label: isPinned ? "取消置顶" : "置顶" },
       { key: "rename", label: "重命名工作区" },
       onOpenProjectDirectory ? { key: "open-directory", label: "打开目录" } : null,
+      onOpenProjectInEditor ? { key: "editor", label: repositoryEditorOpenMenuLabel() } : null,
       onAddRepositoryToProject ? { key: "add-repository", label: "关联仓库" } : null,
       onConfigureSddMode ? { key: "sdd-mode", label: "配置 Claude 插件" } : null,
       onNewPaneSession ? { key: "new-session", label: "新开会话" } : null,

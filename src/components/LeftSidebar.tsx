@@ -8,6 +8,7 @@ import {
   type WorkspaceRepositoryTreeSelection,
 } from "../utils/workspaceRepositoryTreeSelect";
 import { normalizeSessionRepositoryPath } from "../utils/sessionHistoryScope";
+import { resolveTrellisBootstrapPath } from "../utils/trellisBootstrapPath";
 import { resolveRepositoryForSession } from "../utils/repositoryMainSessionBinding";
 import { AppSettingsModal } from "./AppSettingsModal";
 import { MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths";
@@ -172,14 +173,19 @@ export function LeftSidebar({
 }: LeftSidebarProps) {
   const { message, modal } = AntdApp.useApp();
 
-  const openRepositoryInPreferredEditor = useCallback(
-    (repository: Repository) => {
-      void openWorkspaceWithStoredPreference(repository.path).catch((err: unknown) => {
+  const openPathInPreferredEditor = useCallback(
+    (path: string | null | undefined, emptyMessage: string) => {
+      const trimmed = path?.trim() ?? "";
+      if (!trimmed) {
+        message.warning(emptyMessage);
+        return;
+      }
+      void openWorkspaceWithStoredPreference(trimmed).catch((err: unknown) => {
         const code = err instanceof Error ? err.message : "";
         if (code === OPEN_WORKSPACE_ERROR.NOT_CONFIGURED) {
           message.warning("未配置可用的编辑器或命令，请在中栏顶部「打开方式」中选择");
         } else if (code === OPEN_WORKSPACE_ERROR.EMPTY_PATH) {
-          message.warning("仓库路径为空");
+          message.warning(emptyMessage);
         } else if (code === OPEN_WORKSPACE_ERROR.NO_TARGET) {
           message.warning("未找到可用的打开方式");
         } else {
@@ -189,6 +195,29 @@ export function LeftSidebar({
       });
     },
     [message],
+  );
+
+  const openRepositoryInPreferredEditor = useCallback(
+    (repository: Repository) => {
+      openPathInPreferredEditor(repository.path, "仓库路径为空");
+    },
+    [openPathInPreferredEditor],
+  );
+
+  const openProjectInPreferredEditor = useCallback(
+    (project: ProjectItem) => {
+      const path = resolveTrellisBootstrapPath({
+        scope: "project",
+        project,
+        repositories,
+        projects,
+      });
+      openPathInPreferredEditor(
+        path,
+        "无法解析工作区目录，请先配置工作区根目录或关联仓库",
+      );
+    },
+    [openPathInPreferredEditor, projects, repositories],
   );
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
   const [createProjectRootPath, setCreateProjectRootPath] = useState("");
@@ -847,6 +876,7 @@ export function LeftSidebar({
           onOpenProjectInTerminal={onOpenProjectInTerminal}
           onOpenRepositoryInBrowser={onOpenRepositoryInBrowser}
           openRepositoryInPreferredEditor={openRepositoryInPreferredEditor}
+          openProjectInPreferredEditor={openProjectInPreferredEditor}
           onOpenPromptsRepository={onOpenPromptsRepository}
           onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
           onConfigureRepositoryMainSessionRun={onConfigureRepositoryMainSessionRun}

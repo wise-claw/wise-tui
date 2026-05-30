@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildProjectRepositoryMoreMenuItems } from "./sidebarMoreMenuItems";
+import { buildProjectMoreMenuItems, buildProjectRepositoryMoreMenuItems } from "./sidebarMoreMenuItems";
 
 function menuLabels(items: ReturnType<typeof buildProjectRepositoryMoreMenuItems>): string[] {
   const labels: string[] = [];
@@ -17,6 +17,18 @@ function menuLabels(items: ReturnType<typeof buildProjectRepositoryMoreMenuItems
   }
   return labels;
 }
+
+describe("buildProjectMoreMenuItems", () => {
+  test("includes preferred editor open action when handler is available", () => {
+    const labels = menuLabels(
+      buildProjectMoreMenuItems({
+        isPinned: false,
+        onOpenProjectInEditor: true,
+      }),
+    );
+    expect(labels.some((label) => label.startsWith("在 ") && label.endsWith(" 中打开"))).toBe(true);
+  });
+});
 
 describe("buildProjectRepositoryMoreMenuItems", () => {
   test("includes run control even when chat quick action is hidden in multi-repo workspace", () => {

@@ -62,6 +62,7 @@ interface ProjectRepositoryListProps {
   onOpenProjectInTerminal?: (project: Workspace) => void;
   onOpenRepositoryInBrowser: (repository: Repository) => void;
   openRepositoryInPreferredEditor: (repository: Repository) => void;
+  openProjectInPreferredEditor?: (project: Workspace) => void;
   onOpenPromptsRepository?: (project: Workspace, repository: Repository) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
   onConfigureRepositoryMainSessionRun?: (repository: Repository) => void;
@@ -135,6 +136,7 @@ export function ProjectRepositoryList({
   onOpenProjectInTerminal,
   onOpenRepositoryInBrowser,
   openRepositoryInPreferredEditor,
+  openProjectInPreferredEditor,
   onOpenPromptsRepository,
   onOpenRepositoryMainOwner,
   onConfigureRepositoryMainSessionRun,
@@ -282,6 +284,7 @@ export function ProjectRepositoryList({
             onOpenProjectInTerminal={onOpenProjectInTerminal}
             onOpenRepositoryInBrowser={onOpenRepositoryInBrowser}
             openRepositoryInPreferredEditor={openRepositoryInPreferredEditor}
+            openProjectInPreferredEditor={openProjectInPreferredEditor}
             onOpenPromptsRepository={onOpenPromptsRepository}
             onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
             onConfigureRepositoryMainSessionRun={onConfigureRepositoryMainSessionRun}
@@ -364,6 +367,7 @@ interface ProjectRowProps {
   onOpenProjectInTerminal?: (project: Workspace) => void;
   onOpenRepositoryInBrowser: (repository: Repository) => void;
   openRepositoryInPreferredEditor: (repository: Repository) => void;
+  openProjectInPreferredEditor?: (project: Workspace) => void;
   onOpenPromptsRepository?: (project: Workspace, repository: Repository) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
   onConfigureRepositoryMainSessionRun?: (repository: Repository) => void;
@@ -429,6 +433,7 @@ function ProjectRow({
   onOpenProjectInTerminal,
   onOpenRepositoryInBrowser,
   openRepositoryInPreferredEditor,
+  openProjectInPreferredEditor,
   onOpenPromptsRepository,
   onOpenRepositoryMainOwner,
   onConfigureRepositoryMainSessionRun,
@@ -490,6 +495,7 @@ function ProjectRow({
     trellisReady: projectTrellisReady,
     onAddRepositoryToProject: Boolean(onAddRepositoryToProject),
     onOpenProjectDirectory: Boolean(onOpenProjectInFinder),
+    onOpenProjectInEditor: Boolean(openProjectInPreferredEditor),
     onOpenProjectInTerminal: Boolean(onOpenProjectInTerminal),
     onConfigureSddMode: Boolean(onConfigureProjectSddMode),
     onNewPaneSession: Boolean(onNewPaneSessionForProject),
@@ -620,6 +626,7 @@ function ProjectRow({
                 if (key === "pin") onTogglePinProject(project.id);
                 if (key === "rename") onRenameProject(project);
                 if (key === "open-directory") onOpenProjectInFinder?.(project);
+                if (key === "editor") openProjectInPreferredEditor?.(project);
                 if (key === "add-repository") onAddRepositoryToProject?.(project.id);
                 if (key === "sdd-mode") onConfigureProjectSddMode?.(project);
                 if (key === "new-session") onNewPaneSessionForProject?.(project);
@@ -665,6 +672,7 @@ function ProjectRow({
             onOpenInTerminal={onOpenInTerminal}
             onOpenRepositoryInBrowser={onOpenRepositoryInBrowser}
             openRepositoryInPreferredEditor={openRepositoryInPreferredEditor}
+            openProjectInPreferredEditor={openProjectInPreferredEditor}
             onOpenPromptsRepository={onOpenPromptsRepository}
             onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
             onReorderRepositoriesInProject={onReorderRepositoriesInProject}
