@@ -36,39 +36,51 @@ function MascotApp() {
   const unsubsRef = useRef<UnlistenFn[]>([]);
 
   useEffect(() => {
-    unsubsRef.current = [];
+    let cancelled = false;
+    const unsubs: UnlistenFn[] = [];
     void (async () => {
-      unsubsRef.current.push(
-        await listen<{ total: number }>("wise-unread-changed", (e) => {
-          setTotal(Number(e.payload.total ?? 0));
-        }),
-      );
-      unsubsRef.current.push(
-        await listen<{ title: string; body: string }>("wise-toast", (e) => {
-          const { title, body } = e.payload;
-          setToast({ title, body });
-          if (toastTimer.current) clearTimeout(toastTimer.current);
-          toastTimer.current = setTimeout(() => setToast(null), 4200);
-        }),
-      );
+      const u1 = await listen<{ total: number }>("wise-unread-changed", (e) => {
+        setTotal(Number(e.payload.total ?? 0));
+      });
+      if (cancelled) {
+        safeUnlisten(u1);
+        return;
+      }
+      unsubs.push(u1);
+
+      const u2 = await listen<{ title: string; body: string }>("wise-toast", (e) => {
+        const { title, body } = e.payload;
+        setToast({ title, body });
+        if (toastTimer.current) clearTimeout(toastTimer.current);
+        toastTimer.current = setTimeout(() => setToast(null), 4200);
+      });
+      if (cancelled) {
+        safeUnlisten(u2);
+        return;
+      }
+      unsubs.push(u2);
+
       const win = getCurrentWindow();
-      unsubsRef.current.push(
-        await win.onMoved(({ payload: pos }) => {
-          if (moveTimer.current) clearTimeout(moveTimer.current);
-          moveTimer.current = setTimeout(() => {
-            void wiseMascotSavePosition(pos.x, pos.y);
-          }, 280);
-        }),
-      );
+      const u3 = await win.onMoved(({ payload: pos }) => {
+        if (moveTimer.current) clearTimeout(moveTimer.current);
+        moveTimer.current = setTimeout(() => {
+          void wiseMascotSavePosition(pos.x, pos.y);
+        }, 280);
+      });
+      if (cancelled) {
+        safeUnlisten(u3);
+        return;
+      }
+      unsubs.push(u3);
     })();
 
     return () => {
+      cancelled = true;
       if (toastTimer.current) clearTimeout(toastTimer.current);
       if (moveTimer.current) clearTimeout(moveTimer.current);
-      for (const u of unsubsRef.current) {
+      for (const u of unsubs) {
         safeUnlisten(u);
       }
-      unsubsRef.current = [];
     };
   }, []);
 

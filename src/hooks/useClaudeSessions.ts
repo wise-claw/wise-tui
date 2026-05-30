@@ -273,9 +273,15 @@ async function attachClaudeInvocationStream(
       }
     }),
   ]);
-  uo = uo0;
-  ue = ue0;
-  uc = uc0;
+  if (cleaned) {
+    safeUnlisten(uo0);
+    safeUnlisten(ue0);
+    safeUnlisten(uc0);
+  } else {
+    uo = uo0;
+    ue = ue0;
+    uc = uc0;
+  }
   return cleanup;
 }
 
@@ -322,9 +328,15 @@ async function attachClaudeSessionStreamForTurn(
       }
     }),
   ]);
-  uo = uo0;
-  ue = ue0;
-  uc = uc0;
+  if (cleaned) {
+    safeUnlisten(uo0);
+    safeUnlisten(ue0);
+    safeUnlisten(uc0);
+  } else {
+    uo = uo0;
+    ue = ue0;
+    uc = uc0;
+  }
   return cleanup;
 }
 

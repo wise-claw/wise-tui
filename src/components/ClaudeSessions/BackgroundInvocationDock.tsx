@@ -314,6 +314,11 @@ function BackgroundInvocationDockInner({ session }: { session: ClaudeSession }) 
               buf.stderr.splice(0, buf.stderr.length - Math.floor(MAX_LINES_CAPTURE / 2));
             }
           });
+          if (!buffersRef.current[invocationKey]) {
+            safeUnlisten(uo);
+            safeUnlisten(ue);
+            return;
+          }
           unsubsByKeyRef.current[invocationKey] = [...(unsubsByKeyRef.current[invocationKey] ?? []), uo, ue];
         } catch {
           /* 浏览器 / 无 Tauri */

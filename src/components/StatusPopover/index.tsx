@@ -11,15 +11,26 @@ function useWiseUnreadBadge(): number {
   const [n, setN] = useState(0);
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
+    let cancelled = false;
     void wiseNotificationUnreadTotal()
-      .then((t) => setN(Number(t) || 0))
-      .catch(() => setN(0));
+      .then((t) => {
+        if (!cancelled) setN(Number(t) || 0);
+      })
+      .catch(() => {
+        if (!cancelled) setN(0);
+      });
     void (async () => {
-      unlisten = await listen<{ total?: number }>("wise-unread-changed", (e) => {
+      const u = await listen<{ total?: number }>("wise-unread-changed", (e) => {
         setN(Number(e.payload.total ?? 0));
       });
+      if (cancelled) {
+        safeUnlisten(u);
+        return;
+      }
+      unlisten = u;
     })();
     return () => {
+      cancelled = true;
       safeUnlisten(unlisten);
     };
   }, []);

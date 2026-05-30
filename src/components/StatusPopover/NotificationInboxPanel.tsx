@@ -58,12 +58,19 @@ export function NotificationInboxPanel({
 
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
+    let cancelled = false;
     void (async () => {
-      unlisten = await listen("wise-unread-changed", () => {
+      const u = await listen("wise-unread-changed", () => {
         if (active) void load();
       });
+      if (cancelled) {
+        safeUnlisten(u);
+        return;
+      }
+      unlisten = u;
     })();
     return () => {
+      cancelled = true;
       safeUnlisten(unlisten);
     };
   }, [active, load]);

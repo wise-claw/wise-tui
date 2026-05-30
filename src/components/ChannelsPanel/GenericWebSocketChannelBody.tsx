@@ -102,19 +102,32 @@ export function GenericWebSocketChannelBody({
   useEffect(() => {
     let statusUnlisten: UnlistenFn | null = null;
     let messageUnlisten: UnlistenFn | null = null;
+    let cancelled = false;
     void (async () => {
-      statusUnlisten = await listen<GenericWsStatus>("wise:generic-ws:status", (event) => {
+      const u1 = await listen<GenericWsStatus>("wise:generic-ws:status", (event) => {
         setStatus(event.payload);
         onStatusChange?.(event.payload);
       });
-      messageUnlisten = await listen<GenericWsInboundEvent>("wise:generic-ws:message", (event) => {
+      if (cancelled) {
+        u1();
+        return;
+      }
+      statusUnlisten = u1;
+
+      const u2 = await listen<GenericWsInboundEvent>("wise:generic-ws:message", (event) => {
         setInboundLog((prev) => {
           const next = [event.payload, ...prev];
           return next.slice(0, MAX_INBOUND_LOG);
         });
       });
+      if (cancelled) {
+        u2();
+        return;
+      }
+      messageUnlisten = u2;
     })();
     return () => {
+      cancelled = true;
       statusUnlisten?.();
       messageUnlisten?.();
     };

@@ -2609,11 +2609,17 @@ export function ClaudeChat({
       return;
     }
     let unlisten: UnlistenFn | undefined;
+    let cancelled = false;
     void loadNotificationRows();
     void (async () => {
-      unlisten = await listen("wise-unread-changed", () => {
+      const u = await listen("wise-unread-changed", () => {
         void loadNotificationRows({ quiet: true });
       });
+      if (cancelled) {
+        safeUnlisten(u);
+        return;
+      }
+      unlisten = u;
     })();
 
     function handleOpenSessionNotificationPanel(event: Event) {
@@ -2631,6 +2637,7 @@ export function ClaudeChat({
     }
     window.addEventListener(SESSION_NOTIFICATION_UI_EVENT_OPEN_PANEL, handleOpenSessionNotificationPanel);
     return () => {
+      cancelled = true;
       safeUnlisten(unlisten);
       window.removeEventListener(SESSION_NOTIFICATION_UI_EVENT_OPEN_PANEL, handleOpenSessionNotificationPanel);
     };
