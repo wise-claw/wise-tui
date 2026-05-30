@@ -90,19 +90,23 @@ export interface ContextOverheadEstimate {
   subagents: number;
 }
 
+export function getDefaultContextOverheadEstimate(): ContextOverheadEstimate {
+  return {
+    systemPrompt: BASELINE_SYSTEM_PROMPT_TOKENS,
+    toolDefinitions: BASELINE_TOOL_DEFINITIONS_TOKENS,
+    rules: 0,
+    skills: 0,
+    mcp: 0,
+    subagents: 0,
+  };
+}
+
 export async function loadContextOverheadEstimate(
   repositoryPath: string,
 ): Promise<ContextOverheadEstimate> {
   const trimmed = repositoryPath.trim();
   if (!trimmed) {
-    return {
-      systemPrompt: BASELINE_SYSTEM_PROMPT_TOKENS,
-      toolDefinitions: BASELINE_TOOL_DEFINITIONS_TOKENS,
-      rules: 0,
-      skills: 0,
-      mcp: 0,
-      subagents: 0,
-    };
+    return getDefaultContextOverheadEstimate();
   }
 
   const [claudeMd, agentsMd, skills, subagents, mcpStatus] = await Promise.all([

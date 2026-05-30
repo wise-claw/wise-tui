@@ -7,13 +7,11 @@ import {
 export interface ContextDetailPopoverProps {
   breakdown: ContextBreakdownSnapshot | null;
   loading?: boolean;
-  compactHint?: string;
 }
 
 export function ContextDetailPopover({
   breakdown,
   loading = false,
-  compactHint,
 }: ContextDetailPopoverProps) {
   if (loading && !breakdown) {
     return (
@@ -93,10 +91,6 @@ export function ContextDetailPopover({
         底栏圆环按对话约 {formatContextTokenCount(conversationTokens)} tokens；
         合计含启动项。终端执行 <code>/context</code> 可看 Claude 官方实测。
       </p>
-
-      {compactHint ? (
-        <p className="app-claude-context-detail__hint">{compactHint}</p>
-      ) : null}
     </div>
   );
 }

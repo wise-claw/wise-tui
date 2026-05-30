@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { Popover } from "antd";
+import { useMemo, useState } from "react";
+import { Button, Popover } from "antd";
 import { ContextDetailPopover } from "./ContextDetailPopover";
 import type { ContextBreakdownSnapshot } from "../../services/claudeContextBreakdown";
 
@@ -11,32 +11,25 @@ export interface ContextCompactProgressRingProps {
   toneClassName: string;
   /** 与底栏状态行 `ctx:…` 片段一致，用于详情面板摘要 */
   ctxStatusLine?: string;
-  disabled?: boolean;
-  inFlight?: boolean;
-  tooltip: string;
-  onClick: () => void;
   className?: string;
   "data-ui-anchor"?: string;
   breakdown?: ContextBreakdownSnapshot | null;
   breakdownLoading?: boolean;
-  onBreakdownHover?: () => void;
+  onBreakdownOpen?: () => void;
 }
 
-/** 输入框底栏：上下文占用圆环（悬停详情，点击 /compact） */
+/** 输入框底栏：上下文占用圆环（点击查看详情） */
 export function ContextCompactProgressRing({
   percent,
   toneClassName,
   ctxStatusLine,
-  disabled = false,
-  inFlight = false,
-  tooltip,
-  onClick,
   className,
   "data-ui-anchor": dataUiAnchor,
   breakdown,
   breakdownLoading = false,
-  onBreakdownHover,
+  onBreakdownOpen,
 }: ContextCompactProgressRingProps) {
+  const [open, setOpen] = useState(false);
   const pct = Math.min(100, Math.max(0, Math.round(percent)));
   const { radius, circumference, dashOffset, center } = useMemo(() => {
     const r = (RING_SIZE - STROKE_WIDTH) / 2;
@@ -49,87 +42,75 @@ export function ContextCompactProgressRing({
     };
   }, [pct]);
 
-  const ringButton = (
-    <button
-      type="button"
-      className={[
-        "app-claude-context-compact-ring",
-        toneClassName,
-        inFlight ? "app-claude-context-compact-ring--in-flight" : "",
-        className,
-      ]
-        .filter(Boolean)
-        .join(" ")}
-      data-ui-anchor={dataUiAnchor}
-      disabled={disabled}
-      aria-busy={inFlight}
-      aria-label={`上下文约 ${pct}%，点击可手动压缩`}
-      title={tooltip}
-      onClick={onClick}
-    >
-      <svg
-        className="app-claude-context-compact-ring__svg"
-        width={RING_SIZE}
-        height={RING_SIZE}
-        viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}
-        aria-hidden
-      >
-        <circle
-          className="app-claude-context-compact-ring__track"
-          cx={center}
-          cy={center}
-          r={radius}
-          fill="none"
-          strokeWidth={STROKE_WIDTH}
-        />
-        <circle
-          className="app-claude-context-compact-ring__progress"
-          cx={center}
-          cy={center}
-          r={radius}
-          fill="none"
-          strokeWidth={STROKE_WIDTH}
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={dashOffset}
-          transform={`rotate(-90 ${center} ${center})`}
-        />
-      </svg>
-    </button>
-  );
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) {
+      onBreakdownOpen?.();
+    }
+    setOpen(nextOpen);
+  };
 
   return (
     <Popover
-      trigger="hover"
+      trigger="click"
       placement="topLeft"
-      mouseEnterDelay={0.2}
+      open={open}
       destroyOnHidden
       overlayClassName="app-claude-context-detail-popover"
-      onOpenChange={(open) => {
-        if (open) onBreakdownHover?.();
-      }}
+      onOpenChange={handleOpenChange}
       content={
         <ContextDetailPopover
           breakdown={breakdown ?? null}
           loading={breakdownLoading}
-          compactHint={tooltip}
         />
       }
     >
-      <span
+      <Button
+        type="text"
+        size="small"
         className={[
-          "app-claude-context-compact-ring-wrap",
-          disabled ? "app-claude-context-compact-ring-wrap--disabled" : "",
+          "app-claude-context-compact-ring",
+          toneClassName,
+          className,
         ]
           .filter(Boolean)
           .join(" ")}
-        onMouseEnter={() => onBreakdownHover?.()}
+        data-ui-anchor={dataUiAnchor}
+        aria-label={`上下文约 ${pct}%，点击查看详情`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
       >
-        {ringButton}
+        <svg
+          className="app-claude-context-compact-ring__svg"
+          width={RING_SIZE}
+          height={RING_SIZE}
+          viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}
+          aria-hidden
+        >
+          <circle
+            className="app-claude-context-compact-ring__track"
+            cx={center}
+            cy={center}
+            r={radius}
+            fill="none"
+            strokeWidth={STROKE_WIDTH}
+          />
+          <circle
+            className="app-claude-context-compact-ring__progress"
+            cx={center}
+            cy={center}
+            r={radius}
+            fill="none"
+            strokeWidth={STROKE_WIDTH}
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={dashOffset}
+            transform={`rotate(-90 ${center} ${center})`}
+          />
+        </svg>
         {ctxStatusLine ? (
           <span className="app-claude-context-compact-ring__sr-only">{ctxStatusLine}</span>
         ) : null}
-      </span>
+      </Button>
     </Popover>
   );
 }

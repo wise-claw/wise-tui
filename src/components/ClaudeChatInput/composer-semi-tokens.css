@@ -246,8 +246,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   flex-shrink: 0;
   line-height: 0;
 }
@@ -295,13 +295,14 @@
   opacity: 0.92;
 }
 
-/* 上下文占用圆环：细描边进度，点击执行 /compact */
+/* 上下文占用圆环：细描边进度，点击查看详情 */
 .app-claude-context-compact-ring {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
   margin: 0;
   padding: 0;
   border: none;

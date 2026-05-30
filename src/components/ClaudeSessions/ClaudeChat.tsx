@@ -141,11 +141,6 @@ import {
 import { HistorySessionRestoreButton } from "../ProgressMonitorPanel/HistorySessionRestoreButton";
 import { getAppSetting, setAppSetting } from "../../services/appSettingsStore";
 import {
-  CONTEXT_AUTO_COMPACT_BEFORE_SEND_PERCENT,
-  CONTEXT_WARN_PERCENT,
-  getSessionContextMetrics,
-} from "../../services/claudeSessionContext";
-import {
   buildAiCommitSummary,
   buildTaskExecutionPrompt,
   countSessionUnreadNotifications,
@@ -554,7 +549,7 @@ export function ClaudeChat({
   onAddWorktreeRepositoryToProject,
   onReloadFullDiskTranscript,
   onLoadMoreTranscriptFromDisk,
-  onCompactSessionHistory,
+  onCompactSessionHistory: _onCompactSessionHistory,
   dualPaneRepositoryPicker,
   missionContext,
   activeProject,
@@ -3647,50 +3642,6 @@ export function ClaudeChat({
     };
   }, [sessionSendTraces, sessionTraceStorageKey]);
 
-  const sessionContextMetrics = useMemo(() => getSessionContextMetrics(session), [session.messages]);
-  const [compactHistoryInFlight, setCompactHistoryInFlight] = useState(false);
-  const isSessionBusy =
-    session.status === "running" || session.status === "connecting";
-  const canCompactSessionHistory =
-    Boolean(onCompactSessionHistory) &&
-    Boolean(session.claudeSessionId?.trim()) &&
-    !isSessionBusy &&
-    !compactHistoryInFlight;
-
-  const handleCompactSessionHistory = useCallback(() => {
-    if (!onCompactSessionHistory || !canCompactSessionHistory) return;
-    setCompactHistoryInFlight(true);
-    void Promise.resolve(onCompactSessionHistory(session.id))
-      .then(() => {
-        message.success("会话历史已压缩");
-      })
-      .catch(() => {
-        /* 失败说明已由 hook 写入会话系统消息 */
-      })
-      .finally(() => {
-        setCompactHistoryInFlight(false);
-      });
-  }, [canCompactSessionHistory, onCompactSessionHistory, session.id]);
-
-  const compactSessionTooltip = useMemo(() => {
-    if (!session.claudeSessionId?.trim()) {
-      return "会话尚未建立 Claude session_id，暂无法压缩";
-    }
-    if (isSessionBusy) {
-      return "会话运行中，请结束当前轮次后再压缩";
-    }
-    const { ctxPercent, estimatedTokens } = sessionContextMetrics;
-    const autoNote =
-      ctxPercent >= CONTEXT_AUTO_COMPACT_BEFORE_SEND_PERCENT
-        ? "；发送新消息前也会自动压缩"
-        : "";
-    const clickHint = "；点击可手动压缩上下文";
-    if (ctxPercent >= CONTEXT_WARN_PERCENT) {
-      return `上下文约 ${ctxPercent}%（~${estimatedTokens.toLocaleString("zh-CN")} tokens）${clickHint}（/compact 压缩磁盘历史${autoNote}）`;
-    }
-    return `点击可手动压缩上下文（Claude Code /compact 压缩对话历史${autoNote}）`;
-  }, [isSessionBusy, session.claudeSessionId, sessionContextMetrics]);
-
   return (
     <div
       ref={chatRootRef}
@@ -5188,17 +5139,6 @@ export function ClaudeChat({
           }}
           dualPaneRepositoryPicker={dualPaneRepositoryPicker}
           missionContext={missionContext}
-          compactContext={
-            onCompactSessionHistory
-              ? {
-                  canCompact: canCompactSessionHistory,
-                  inFlight: compactHistoryInFlight,
-                  ctxPercent: sessionContextMetrics.ctxPercent,
-                  tooltip: compactSessionTooltip,
-                  onCompact: handleCompactSessionHistory,
-                }
-              : undefined
-          }
         />
 
       </div>

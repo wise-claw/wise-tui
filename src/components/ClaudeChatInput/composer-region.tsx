@@ -106,15 +106,6 @@ import { buildClaudeSessionHoverTitle } from "../../utils/claudeSessionIdTooltip
 import { WORKFLOW_UI_EVENT_APPLY_STARTER_PROMPT } from "../../constants/workflowUiEvents";
 import type { GitBranchEntry } from "../../types";
 
-/** 输入框底栏：分支后的「压缩上下文」（Claude Code `/compact`） */
-export interface ComposerCompactContextProps {
-  canCompact: boolean;
-  inFlight: boolean;
-  ctxPercent: number;
-  tooltip: string;
-  onCompact: () => void;
-}
-
 /** 双栏右侧主会话：输入框底栏在截屏按钮旁选择目标仓库 */
 export interface DualPaneComposerRepositoryPickerProps {
   repositories: Repository[];
@@ -204,7 +195,6 @@ interface ComposerInnerProps {
     projectId?: string | null;
     rootPath?: string | null;
   };
-  compactContext?: ComposerCompactContextProps;
 }
 
 interface LastSentComposerDraft {
@@ -421,7 +411,6 @@ function ComposerInner({
   pendingExecutionTaskCount = 0,
   dualPaneRepositoryPicker,
   missionContext,
-  compactContext,
 }: ComposerInnerProps) {
   const { breakdown, loading: contextBreakdownLoading, ensureBreakdown } =
     useContextBreakdown(session);
@@ -2350,22 +2339,16 @@ function ComposerInner({
           />
         ) : null}
         {branchPickerInFooterToolbar}
-        {compactContext ? (
-          <ContextCompactProgressRing
-            className="app-claude-semi-footer-compact-context"
-            data-ui-anchor="session-compact-context-btn"
-            percent={bottomStatus.ctxPercent}
-            toneClassName={bottomStatus.ctxToneClass}
-            ctxStatusLine={bottomStatus.ctxSegment}
-            disabled={!compactContext.canCompact}
-            inFlight={compactContext.inFlight}
-            tooltip={compactContext.tooltip}
-            onClick={compactContext.onCompact}
-            breakdown={breakdown}
-            breakdownLoading={contextBreakdownLoading}
-            onBreakdownHover={() => void ensureBreakdown()}
-          />
-        ) : null}
+        <ContextCompactProgressRing
+          className="app-claude-semi-footer-compact-context"
+          data-ui-anchor="session-context-ring-btn"
+          percent={bottomStatus.ctxPercent}
+          toneClassName={bottomStatus.ctxToneClass}
+          ctxStatusLine={bottomStatus.ctxSegment}
+          breakdown={breakdown}
+          breakdownLoading={contextBreakdownLoading}
+          onBreakdownOpen={() => void ensureBreakdown()}
+        />
       </div>
     );
   }, [
@@ -2374,7 +2357,6 @@ function ComposerInner({
     bottomStatus.ctxToneClass,
     branchPickerInFooterToolbar,
     breakdown,
-    compactContext,
     contextBreakdownLoading,
     dualPaneRepositoryPicker,
     ensureBreakdown,
@@ -2801,7 +2783,6 @@ export interface ComposerRegionProps {
     projectId?: string | null;
     rootPath?: string | null;
   };
-  compactContext?: ComposerCompactContextProps;
 }
 
 export function ComposerRegion({ session, draftBucketKey, ...rest }: ComposerRegionProps) {
