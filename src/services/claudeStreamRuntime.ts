@@ -79,6 +79,23 @@ function extractStructuredVerdictFromCompletePayload(payload: unknown): unknown 
   return obj.structuredVerdict ?? obj.workflowAcceptanceVerdictPayload ?? obj.verdictPayload;
 }
 
+function isDocumentHidden(): boolean {
+  return typeof document !== "undefined" && document.visibilityState !== "visible";
+}
+
+let hiddenUiFlushHandler: (() => void) | null = null;
+let hiddenUiVisibilityListenerReady = false;
+
+function ensureHiddenUiVisibilityListener(): void {
+  if (hiddenUiVisibilityListenerReady || typeof document === "undefined") return;
+  hiddenUiVisibilityListenerReady = true;
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      hiddenUiFlushHandler?.();
+    }
+  });
+}
+
 export function createClaudeStreamRuntime(deps: RuntimeDeps) {
   const {
     sessionsRef,
@@ -108,6 +125,58 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     expectedTurnNonceByTabIdRef,
     onStreamActivity,
   } = deps;
+
+  const deferredStreamTabIds = new Set<string>();
+  const deferredSystemErrors: Array<{ tid: string; msg: string }> = [];
+  const deferredStderrErrors: Array<{ tid: string; msg: string }> = [];
+  const deferredCompletes: Array<{ tid: string; payload: unknown; turnNonce: number }> = [];
+
+  function looksLikeClaudeUuid(s: string): boolean {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s.trim());
+  }
+
+  function reloadTranscriptForTab(tid: string): void {
+    if (!reloadTranscriptFromDisk) return;
+    const session = sessionsRef.current.find((s) => s.id === tid || s.claudeSessionId === tid);
+    if (!session) return;
+    const stableTabId = session.id;
+    const repo = session.repositoryPath?.trim() ?? "";
+    const tidTrim = tid.trim();
+    const ccid =
+      session.claudeSessionId?.trim() ||
+      sessionIdMapRef.current.get(stableTabId)?.trim() ||
+      sessionIdMapRef.current.get(tidTrim)?.trim() ||
+      (looksLikeClaudeUuid(tidTrim) ? tidTrim : "");
+    if (!repo || !ccid) return;
+    void reloadTranscriptFromDisk({ tabId: stableTabId, repositoryPath: repo, claudeSessionId: ccid });
+  }
+
+  function flushHiddenUiIfNeeded(): void {
+    if (isDocumentHidden()) return;
+
+    for (const { tid, msg } of deferredSystemErrors) {
+      setSessions((prev) => appendSystemMessageBySessionOrClaudeId(prev, tid, msg));
+    }
+    deferredSystemErrors.length = 0;
+
+    for (const { tid, msg } of deferredStderrErrors) {
+      setSessions((prev) => appendSystemMessageBySessionOrClaudeId(prev, tid, msg));
+    }
+    deferredStderrErrors.length = 0;
+
+    for (const item of deferredCompletes) {
+      applySessionComplete(item.tid, item.payload, item.turnNonce, { uiOnly: true });
+    }
+    deferredCompletes.length = 0;
+
+    for (const tid of deferredStreamTabIds) {
+      reloadTranscriptForTab(tid);
+    }
+    deferredStreamTabIds.clear();
+  }
+
+  hiddenUiFlushHandler = flushHiddenUiIfNeeded;
+  ensureHiddenUiVisibilityListener();
 
   /** 多标签并行时：用 invocation 通道回退到发送时的 tab id，且勿写全局 `streamingTargetIdRef`（否则后发送会话会抢走先发送会话的流式路由）。 */
   function handleOutputForSendTab(
@@ -144,7 +213,11 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     ingestClaudeStreamLineForHub(tid, line);
     const systemErrMsg = extractSystemErrorMessageFromStreamLine(line);
     if (systemErrMsg) {
-      setSessions((prev) => appendSystemMessageBySessionOrClaudeId(prev, tid, systemErrMsg));
+      if (isDocumentHidden()) {
+        deferredSystemErrors.push({ tid, msg: systemErrMsg });
+      } else {
+        setSessions((prev) => appendSystemMessageBySessionOrClaudeId(prev, tid, systemErrMsg));
+      }
     }
     const { parts, isInit, sessionId: realSessionId } = extractPartsFromStreamLine(line);
     const dedupedParts = parts.filter((part) => {
@@ -176,41 +249,47 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       assistantStreamTextByTabRef.current.set(tid, capAssistantStreamBufferText(nextAssist));
     }
 
-    setSessions((prev) =>
-      prev.map((s) => {
-        if (s.id !== tid && s.claudeSessionId !== tid) return s;
-        let updated = { ...s };
-        if (isInit && realSessionId) {
-          sessionIdMapRef.current.set(tid, realSessionId);
-          onClaudeSessionIdAssigned?.(tid, realSessionId);
-          const preserveWiseTabId = isTerminalWorkerWiseTab(updated);
-          if (preserveWiseTabId) {
-            updated = { ...updated, claudeSessionId: realSessionId };
-          } else {
-            updated = { ...updated, id: realSessionId, claudeSessionId: realSessionId };
-            if (opts.syncStreamingTargetRefOnInit) {
-              streamingTargetIdRef.current = realSessionId;
+    const hasStreamUiUpdate = dedupedParts.length > 0 && !isInit;
+    const mustPublishInit = Boolean(isInit && realSessionId);
+    if (isDocumentHidden() && hasStreamUiUpdate && !mustPublishInit) {
+      deferredStreamTabIds.add(tid);
+    } else {
+      setSessions((prev) =>
+        prev.map((s) => {
+          if (s.id !== tid && s.claudeSessionId !== tid) return s;
+          let updated = { ...s };
+          if (isInit && realSessionId) {
+            sessionIdMapRef.current.set(tid, realSessionId);
+            onClaudeSessionIdAssigned?.(tid, realSessionId);
+            const preserveWiseTabId = isTerminalWorkerWiseTab(updated);
+            if (preserveWiseTabId) {
+              updated = { ...updated, claudeSessionId: realSessionId };
+            } else {
+              updated = { ...updated, id: realSessionId, claudeSessionId: realSessionId };
+              if (opts.syncStreamingTargetRefOnInit) {
+                streamingTargetIdRef.current = realSessionId;
+              }
+              setActiveSessionId((aid) => (aid === tid ? realSessionId : aid));
             }
-            setActiveSessionId((aid) => (aid === tid ? realSessionId : aid));
           }
-        }
-        if (dedupedParts.length > 0 && !isInit) {
-          const hasToolResults = dedupedParts.some(
-            (part) =>
-              part.type === "tool_use" &&
-              (part.status === "completed" ||
-                part.status === "error" ||
-                Boolean(part.output?.trim()) ||
-                Boolean(part.error?.trim())),
-          );
-          updated = hasToolResults
-            ? applyToolResultPartsToSession(updated, dedupedParts)
-            : appendAssistantStreamParts(updated, dedupedParts);
-          ingestTodosFromSessionMessages(tid, updated.messages);
-        }
-        return updated;
-      }),
-    );
+          if (dedupedParts.length > 0 && !isInit) {
+            const hasToolResults = dedupedParts.some(
+              (part) =>
+                part.type === "tool_use" &&
+                (part.status === "completed" ||
+                  part.status === "error" ||
+                  Boolean(part.output?.trim()) ||
+                  Boolean(part.error?.trim())),
+            );
+            updated = hasToolResults
+              ? applyToolResultPartsToSession(updated, dedupedParts)
+              : appendAssistantStreamParts(updated, dedupedParts);
+            ingestTodosFromSessionMessages(tid, updated.messages);
+          }
+          return updated;
+        }),
+      );
+    }
 
     if (isInit && realSessionId) {
       const sessionForTid =
@@ -239,10 +318,6 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     handleOutputForSendTab(refTid, payload, { syncStreamingTargetRefOnInit: true });
   }
 
-  function looksLikeClaudeUuid(s: string): boolean {
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s.trim());
-  }
-
   function clearAssistBufferKeysForTab(session: ClaudeSession | undefined, tid: string) {
     assistantStreamTextByTabRef.current.delete(tid);
     if (session) {
@@ -266,7 +341,12 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     return false;
   }
 
-  function applySessionComplete(tid: string, payload: unknown, turnNonce: number) {
+  function applySessionComplete(
+    tid: string,
+    payload: unknown,
+    turnNonce: number,
+    opts?: { uiOnly?: boolean },
+  ) {
     const session = sessionsRef.current.find((s) => s.id === tid || s.claudeSessionId === tid);
     if (session) {
       const uiBusy = session.status === "running" || session.status === "connecting";
@@ -292,7 +372,13 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     const noAssistantReply = previewRaw.length === 0;
     clearAssistBufferKeysForTab(session, tid);
     const structuredVerdict = extractStructuredVerdictFromCompletePayload(payload);
-    notifyCompletion({ tid, success, nonce: turnNonce, previewRaw, structuredVerdict });
+    if (!opts?.uiOnly) {
+      notifyCompletion({ tid, success, nonce: turnNonce, previewRaw, structuredVerdict });
+      if (isDocumentHidden()) {
+        deferredCompletes.push({ tid, payload, turnNonce });
+        return;
+      }
+    }
     setSessions((prev) =>
       finalizeSessionAfterComplete({
         sessions: prev,
@@ -318,19 +404,9 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
         session.messages.length > 0 &&
         (streamingResident || Boolean(session.diskTranscriptPartial));
       if (!skipDiskReload) {
-        const stableTabId = session?.id ?? tid;
-        const repo = session?.repositoryPath?.trim() ?? "";
-        const tidTrim = tid.trim();
-        const ccid =
-          session?.claudeSessionId?.trim() ||
-          sessionIdMapRef.current.get(stableTabId)?.trim() ||
-          sessionIdMapRef.current.get(tidTrim)?.trim() ||
-          (looksLikeClaudeUuid(tidTrim) ? tidTrim : "");
-        if (repo && ccid) {
-          window.setTimeout(() => {
-            void reloadTranscriptFromDisk({ tabId: stableTabId, repositoryPath: repo, claudeSessionId: ccid });
-          }, 120);
-        }
+        window.setTimeout(() => {
+          reloadTranscriptForTab(tid);
+        }, 120);
       }
     }
   }
@@ -368,7 +444,22 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     const session = sessionsRef.current.find((s) => s.id === mapped || s.claudeSessionId === mapped);
     const tid = session?.id ?? mapped;
     const errorMsg = typeof payload === "string" ? payload : JSON.stringify(payload);
-    setSessions((prev) => appendSystemMessageBySessionOrClaudeId(prev, tid, `Claude stderr: ${errorMsg}`));
+    const fullMsg = `Claude stderr: ${errorMsg}`;
+    if (isDocumentHidden()) {
+      deferredStderrErrors.push({ tid, msg: fullMsg });
+      return;
+    }
+    setSessions((prev) => appendSystemMessageBySessionOrClaudeId(prev, tid, fullMsg));
+  }
+
+  function dispose(): void {
+    if (hiddenUiFlushHandler === flushHiddenUiIfNeeded) {
+      hiddenUiFlushHandler = null;
+    }
+    deferredStreamTabIds.clear();
+    deferredSystemErrors.length = 0;
+    deferredStderrErrors.length = 0;
+    deferredCompletes.length = 0;
   }
 
   return {
@@ -378,6 +469,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     handleOutputForSendTab,
     handleCompleteForSendTab,
     handleErrorForSendTab,
+    dispose,
   };
 }
 

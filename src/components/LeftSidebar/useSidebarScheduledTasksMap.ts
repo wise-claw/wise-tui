@@ -98,6 +98,7 @@ export function useSidebarScheduledTasksMap(
 
   useEffect(() => {
     const onChanged = () => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       void refresh();
     };
     window.addEventListener(WISE_UI_EVENT_SCHEDULED_TASKS_CHANGED, onChanged);

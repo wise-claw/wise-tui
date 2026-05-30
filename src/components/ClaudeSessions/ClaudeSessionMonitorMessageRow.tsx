@@ -8,6 +8,7 @@ import {
   parseDispatchRecord,
   systemMessagePlainText,
 } from "../../utils/claudeChatMessageDisplay";
+import { UserMessageCollapsibleBody } from "./UserMessageCollapsibleBody";
 
 interface Props {
   msg: ClaudeMessage;
@@ -24,6 +25,27 @@ function ClaudeSessionMonitorMessageRowInner({
   toolUser,
   onOpenTaskDetail,
 }: Props) {
+  function renderChatBody() {
+    if (msg.parts && msg.parts.length > 0) {
+      return (
+        <MessagePartsDisplay parts={msg.parts} streaming={streamingThisBubble} inlinePendingHint={false} />
+      );
+    }
+    return (
+      <div className="app-message-part app-message-part--text">
+        <Markdown text={msg.content} streaming={streamingThisBubble} showPendingHint={false} />
+      </div>
+    );
+  }
+
+  function renderNonSystemContent() {
+    const body = renderChatBody();
+    if (msg.role === "user" && !toolUser) {
+      return <UserMessageCollapsibleBody>{body}</UserMessageCollapsibleBody>;
+    }
+    return body;
+  }
+
   return (
     <div
       data-message-id={String(msg.id)}
@@ -86,13 +108,7 @@ function ClaudeSessionMonitorMessageRowInner({
                   </div>
                 );
               })()
-            : msg.parts && msg.parts.length > 0 ? (
-              <MessagePartsDisplay parts={msg.parts} streaming={streamingThisBubble} inlinePendingHint={false} />
-            ) : (
-              <div className="app-message-part app-message-part--text">
-                <Markdown text={msg.content} streaming={streamingThisBubble} showPendingHint={false} />
-              </div>
-            )}
+            : renderNonSystemContent()}
         </div>
       </div>
     </div>

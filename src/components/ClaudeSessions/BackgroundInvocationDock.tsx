@@ -268,6 +268,7 @@ function BackgroundInvocationDockInner({ session }: { session: ClaudeSession }) 
 
   const ensureFlushTimer = useCallback(() => {
     if (flushTimerRef.current != null) return;
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
     const intervalMs = document.hidden
       ? 2000
       : isWebViewDevToolsLikelyOpen()

@@ -2075,6 +2075,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     return () => {
       cancelled = true;
       streamRuntimeRef.current = null;
+      runtime.dispose();
       // 勿在此处 detach invocation：React StrictMode 会先卸载再挂载，会误断用户进行中的流式。
       // invocation 监听由 `closeSession` 与单轮 `onCleaned` 释放。
       unlisteners.forEach((u) => safeUnlisten(u));

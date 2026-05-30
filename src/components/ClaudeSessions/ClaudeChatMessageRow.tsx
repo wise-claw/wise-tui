@@ -7,6 +7,7 @@ import {
   parseDispatchRecord,
   systemMessagePlainText,
 } from "../../utils/claudeChatMessageDisplay";
+import { UserMessageCollapsibleBody } from "./UserMessageCollapsibleBody";
 
 interface Props {
   msg: ClaudeMessage;
@@ -67,6 +68,27 @@ function ClaudeChatMessageRowInner({
 
   const showSender = !mergedWithPrevious && (toolUser || (msg.role !== "user" && msg.role !== "assistant"));
 
+  function renderChatBody() {
+    if (msg.parts && msg.parts.length > 0) {
+      return (
+        <MessagePartsDisplay parts={msg.parts} streaming={streamingThisBubble} inlinePendingHint={false} />
+      );
+    }
+    return (
+      <div className="app-message-part app-message-part--text">
+        <Markdown text={msg.content} streaming={streamingThisBubble} showPendingHint={false} />
+      </div>
+    );
+  }
+
+  function renderNonSystemContent() {
+    const body = renderChatBody();
+    if (msg.role === "user" && !toolUser) {
+      return <UserMessageCollapsibleBody>{body}</UserMessageCollapsibleBody>;
+    }
+    return body;
+  }
+
   return (
     <div
       data-message-id={String(msg.id)}
@@ -84,15 +106,7 @@ function ClaudeChatMessageRowInner({
           </div>
         )}
         <div className="app-claude-message-content">
-          {msg.role === "system" ? (
-            renderSystemBody()
-          ) : msg.parts && msg.parts.length > 0 ? (
-            <MessagePartsDisplay parts={msg.parts} streaming={streamingThisBubble} inlinePendingHint={false} />
-          ) : (
-            <div className="app-message-part app-message-part--text">
-              <Markdown text={msg.content} streaming={streamingThisBubble} showPendingHint={false} />
-            </div>
-          )}
+          {msg.role === "system" ? renderSystemBody() : renderNonSystemContent()}
         </div>
       </div>
     </div>

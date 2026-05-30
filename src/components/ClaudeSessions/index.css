@@ -3590,6 +3590,46 @@
   border: none;
 }
 
+.app-claude-user-message-collapsible {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.app-claude-user-message-collapsible__body {
+  max-height: min(36vh, 260px);
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.app-claude-user-message-collapsible:not(.app-claude-user-message-collapsible--expanded)
+  .app-claude-user-message-collapsible__body {
+  -webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 72%, transparent 100%);
+}
+
+.app-claude-user-message-collapsible--expanded .app-claude-user-message-collapsible__body {
+  max-height: min(65vh, 480px);
+  overflow-y: auto;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.app-claude-user-message-collapsible__toggle {
+  margin-top: 4px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--ant-color-primary);
+  font-size: 11px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.app-claude-user-message-collapsible__toggle:hover {
+  color: var(--ant-color-primary-hover);
+  text-decoration: underline;
+}
+
 /* 主列表：思考过程独占一行展示，精简柔和，避免喧宾夺主 */
 .app-claude-messages .app-message-part--reasoning {
   border: none;
