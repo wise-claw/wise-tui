@@ -539,13 +539,11 @@ function GitRepoSectionInner({
           className="git-repo-section__toggle"
           aria-expanded={expanded}
           aria-label={`${entry.name} ${formatBranchLabel(status, headerSnapshot)}`}
-          onClick={() =>
-            setExpanded((prev) => {
-              const next = !prev;
-              onExpandedChange?.(repositoryPath, next);
-              return next;
-            })
-          }
+          onClick={() => {
+            const next = !expanded;
+            setExpanded(next);
+            onExpandedChange?.(repositoryPath, next);
+          }}
         >
           <span className="git-repo-section__chevron" aria-hidden>
             {expanded ? <DownOutlined /> : <RightOutlined />}

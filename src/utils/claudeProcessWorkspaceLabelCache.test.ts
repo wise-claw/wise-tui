@@ -3,6 +3,7 @@ import {
   cacheKeyForPid,
   createClaudeProcessWorkspaceLabelCache,
   lookupClaudeProcessLabelCache,
+  pruneClaudeProcessLabelCache,
   rememberClaudeProcessLabelCache,
 } from "./claudeProcessWorkspaceLabelCache";
 
@@ -67,5 +68,24 @@ describe("claudeProcessWorkspaceLabelCache", () => {
       updatedAt: 1,
     });
     expect(lookupClaudeProcessLabelCache(state, { pid: 9 })).toBeNull();
+  });
+
+  it("pruneClaudeProcessLabelCache keeps newest entries only", () => {
+    const state = createClaudeProcessWorkspaceLabelCache();
+    for (let i = 0; i < 100; i += 1) {
+      state.byKey.set(cacheKeyForPid(i + 1), {
+        scopeTitle: `repo-${i}`,
+        scopeSubtitle: null,
+        projectName: null,
+        repositoryName: null,
+        repositoryPathKey: null,
+        updatedAt: i,
+      });
+    }
+    expect(state.byKey.size).toBe(100);
+    expect(pruneClaudeProcessLabelCache(state, 96)).toBe(true);
+    expect(state.byKey.size).toBe(96);
+    expect(lookupClaudeProcessLabelCache(state, { pid: 100 })?.scopeTitle).toBe("repo-99");
+    expect(lookupClaudeProcessLabelCache(state, { pid: 1 })).toBeNull();
   });
 });

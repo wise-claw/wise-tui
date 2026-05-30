@@ -11,6 +11,9 @@ export { GENERIC_CLAUDE_PROCESS_SCOPE_TITLE };
 export const CLAUDE_PROCESS_WORKSPACE_LABEL_CACHE_KEY =
   "wise.claudeProcessWorkspaceLabelCache.v1";
 
+/** 内存中最多保留的进程标签缓存条目（按 updatedAt 保留最新） */
+export const CLAUDE_PROCESS_LABEL_CACHE_MAX_ENTRIES = 96;
+
 const PLACEHOLDER_PATH_KEYS = new Set(["—", "-", ""]);
 
 export interface ClaudeProcessLabelCacheEntry {
@@ -127,7 +130,7 @@ export function entryFromWorkspaceLabels(
   };
 }
 
-const MAX_CACHE_ENTRIES = 320;
+const MAX_CACHE_ENTRIES = CLAUDE_PROCESS_LABEL_CACHE_MAX_ENTRIES;
 
 function trimClaudeProcessLabelCache(state: ClaudeProcessWorkspaceLabelCacheState): void {
   if (state.byKey.size <= MAX_CACHE_ENTRIES) {
@@ -140,6 +143,23 @@ function trimClaudeProcessLabelCache(state: ClaudeProcessWorkspaceLabelCacheStat
       state.byKey.delete(key);
     }
   }
+}
+
+/** @internal test helper — 返回是否删除了条目 */
+export function pruneClaudeProcessLabelCache(
+  state: ClaudeProcessWorkspaceLabelCacheState,
+  maxEntries: number = CLAUDE_PROCESS_LABEL_CACHE_MAX_ENTRIES,
+): boolean {
+  if (state.byKey.size <= maxEntries) return false;
+  const ranked = [...state.byKey.entries()].sort((a, b) => b[1].updatedAt - a[1].updatedAt);
+  const keep = new Set(ranked.slice(0, maxEntries).map(([key]) => key));
+  let changed = false;
+  for (const key of [...state.byKey.keys()]) {
+    if (keep.has(key)) continue;
+    state.byKey.delete(key);
+    changed = true;
+  }
+  return changed;
 }
 
 export function rememberClaudeProcessLabelCache(
@@ -334,6 +354,8 @@ export function syncClaudeProcessLabelCacheFromRuntime(
       pathKey && !isPlaceholderPathKey(pathKey) ? pathKey : null,
     );
   }
+
+  trimClaudeProcessLabelCache(state);
 
   return dirty;
 }

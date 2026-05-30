@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { listRecentMissions } from "../../services/missionControlBackend";
 import type { MissionSnapshotRecord } from "../../services/missionControlBackend";
+import { readVisiblePollIntervalMs } from "../../utils/adaptivePoll";
 
 interface UseMissionLedgerOptions {
   projectId?: string | null;
@@ -24,6 +25,7 @@ export function useMissionLedger(options: UseMissionLedgerOptions = {}) {
 
     const fetch = () => {
       if (cancelled) return;
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       setLoading(true);
       listRecentMissions({ projectId, limit: 1 })
         .then((missions) => {
@@ -38,10 +40,21 @@ export function useMissionLedger(options: UseMissionLedgerOptions = {}) {
     };
 
     fetch();
-    const timer = setInterval(fetch, pollIntervalMs);
+    const timer = setInterval(fetch, readVisiblePollIntervalMs(pollIntervalMs, pollIntervalMs * 3));
+    const onVisibilityChange = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        fetch();
+      }
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibilityChange);
+    }
     return () => {
       cancelled = true;
       clearInterval(timer);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+      }
     };
   }, [projectId, pollIntervalMs]);
 

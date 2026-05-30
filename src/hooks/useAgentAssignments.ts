@@ -3,6 +3,7 @@ import {
   listMissionAgentAssignments,
   type MissionAgentAssignment,
 } from "../services/missionControlBackend";
+import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
 
 interface UseAgentAssignmentsOptions {
   /** 按项目过滤 */
@@ -39,6 +40,7 @@ export function useAgentAssignments(options: UseAgentAssignmentsOptions = {}) {
 
     const fetch = () => {
       if (cancelled) return;
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       setLoading(true);
       listMissionAgentAssignments({
         missionId: missionId ?? null,
@@ -57,10 +59,21 @@ export function useAgentAssignments(options: UseAgentAssignmentsOptions = {}) {
     };
 
     fetch();
-    const timer = setInterval(fetch, pollIntervalMs);
+    const timer = setInterval(fetch, readVisiblePollIntervalMs(pollIntervalMs, pollIntervalMs * 3));
+    const onVisibilityChange = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        fetch();
+      }
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibilityChange);
+    }
     return () => {
       cancelled = true;
       clearInterval(timer);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+      }
     };
   }, [projectId, missionId, includeCompleted, pollIntervalMs, enabled]);
 

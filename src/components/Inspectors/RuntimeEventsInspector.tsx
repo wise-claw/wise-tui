@@ -50,7 +50,12 @@ export function RuntimeEventsInspector({
           graph={runtime.agentGraph}
           loading={runtime.loading}
         />
-        <RuntimeEventFeed rootPath={rootPath} projectId={projectId} />
+        <RuntimeEventFeed
+          rootPath={rootPath}
+          projectId={projectId}
+          events={runtime.events}
+          loading={runtime.loading}
+        />
       </div>
     </div>
   );

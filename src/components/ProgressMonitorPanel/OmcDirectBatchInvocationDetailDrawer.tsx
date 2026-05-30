@@ -209,6 +209,7 @@ export function OmcDirectBatchInvocationDetailDrawer({
     if (!open || !isDirectBatch || parentFinished || !ik.trim()) return;
     const pollMs = isWebViewDevToolsLikelyOpen() ? 900 : 450;
     const id = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       const r = peekDirectBatchInvocationRingSnapshot(ik.trim());
       const prev = executionRingRef.current;
       if (

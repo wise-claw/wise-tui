@@ -21,6 +21,7 @@ import {
   triggerCodeGraphReindex,
 } from "../../services/codeKnowledgeGraph";
 import { filterGraphNodesForSearch } from "../../utils/codeGraphNodeSearch";
+import { readVisiblePollIntervalMs } from "../../utils/adaptivePoll";
 import { computeSelectedNodeNeighbors } from "../../utils/codeGraphSelectedNeighbors";
 import {
   parseCodeGraphNodeSearchResponse,
@@ -294,8 +295,9 @@ export function CodeKnowledgeGraphPanel({
         pollRef.current = null;
       } else if ((projectSearchActive || anyIndexing) && !pollRef.current) {
         pollRef.current = setInterval(() => {
+          if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
           void fetchStatus();
-        }, 1500);
+        }, readVisiblePollIntervalMs(1500, 6000));
       }
     } catch (e) {
       console.warn("[code-graph] getCodeGraphIndexStatus failed", e);

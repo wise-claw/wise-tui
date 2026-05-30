@@ -4,7 +4,7 @@ export const CLAUDE_MESSAGE_LIST_INITIAL_VISIBLE = 80;
 export const CLAUDE_MESSAGE_LIST_LOAD_MORE_STEP = 80;
 
 /** 切 tab / 伴生窗格首次懒加载：只读 jsonl 尾部少量行 */
-export const CLAUDE_DISK_JSONL_TAIL_LINES_LAZY = 300;
+export const CLAUDE_DISK_JSONL_TAIL_LINES_LAZY = 250;
 
 /** 用户点击「加载更早轮次」时每次追加读取的行数 */
 export const CLAUDE_DISK_JSONL_TAIL_LINES_LOAD_MORE = 350;

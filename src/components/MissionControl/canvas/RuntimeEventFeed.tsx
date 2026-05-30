@@ -13,11 +13,15 @@ import {
   listTrellisRuntimeEvents,
   type TrellisRuntimeEvent,
 } from "../../../services/trellisRuntime";
+import { readVisiblePollIntervalMs } from "../../../utils/adaptivePoll";
 
 interface RuntimeEventFeedProps {
   rootPath?: string | null;
   projectId?: string | null;
   limit?: number;
+  /** 父级已拉取事件时跳过内部轮询，避免与 `useTrellisRuntime` 重复 ingest */
+  events?: readonly TrellisRuntimeEvent[] | null;
+  loading?: boolean;
 }
 
 const KIND_ICON: Record<string, React.ReactNode> = {
@@ -51,43 +55,75 @@ function kindLabel(kind: string): string {
   return kind.replace("trellis.", "").replace("runtime.", "");
 }
 
-export function RuntimeEventFeed({ rootPath, projectId, limit = 30 }: RuntimeEventFeedProps) {
+export function RuntimeEventFeed({
+  rootPath,
+  projectId,
+  limit = 30,
+  events: externalEvents,
+  loading: externalLoading,
+}: RuntimeEventFeedProps) {
   const [events, setEvents] = useState<TrellisRuntimeEvent[]>([]);
   const [loading, setLoading] = useState(false);
+  const useExternal = externalEvents != null;
 
   useEffect(() => {
-    if (!rootPath) { setEvents([]); return; }
+    if (useExternal || !rootPath) {
+      if (!useExternal) setEvents([]);
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     const fetch = () => {
       if (cancelled) return;
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       listTrellisRuntimeEvents({ projectId, rootPath, limit })
-        .then((list) => { if (!cancelled) setEvents(list); })
+        .then((list) => {
+          if (!cancelled) setEvents(list);
+        })
         .catch(() => {})
-        .finally(() => { if (!cancelled) setLoading(false); });
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
     };
     fetch();
-    const timer = setInterval(fetch, 6_000);
-    return () => { cancelled = true; clearInterval(timer); };
-  }, [rootPath, limit]);
+    const timer = setInterval(fetch, readVisiblePollIntervalMs(6000, 24000));
+    const onVisibilityChange = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        fetch();
+      }
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibilityChange);
+    }
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+      }
+    };
+  }, [rootPath, projectId, limit, useExternal]);
 
   if (!rootPath) return null;
+
+  const displayEvents = useExternal ? [...externalEvents] : events;
+  const displayLoading = useExternal ? (externalLoading ?? false) : loading;
 
   return (
     <section className="runtime-feed">
       <div className="runtime-feed__header">
         <ThunderboltOutlined />
         <Typography.Text strong style={{ fontSize: 12 }}>Runtime 事件</Typography.Text>
-        <Tag style={{ fontSize: 10 }}>{events.length}</Tag>
+        <Tag style={{ fontSize: 10 }}>{displayEvents.length}</Tag>
       </div>
       <div className="runtime-feed__scroll">
-        {loading && events.length === 0 ? (
+        {displayLoading && displayEvents.length === 0 ? (
           <div style={{ padding: 16, textAlign: "center" }}><Spin size="small" /></div>
-        ) : events.length === 0 ? (
+        ) : displayEvents.length === 0 ? (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无运行时事件" />
         ) : (
           <div className="runtime-feed__list">
-            {events.map((ev) => (
+            {displayEvents.map((ev) => (
               <div
                 key={ev.eventId}
                 className={`runtime-event ${ev.eventKind === "trellis.agent.stale" ? "runtime-event--stale" : ""}`}

@@ -10,6 +10,11 @@ import {
   type TrellisOnboardingState,
   type TrellisReplayEntry,
 } from "../services/trellisRuntime";
+import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
+
+const TRELLIS_RUNTIME_INGEST_TAIL_LINES = 1600;
+const TRELLIS_RUNTIME_INGEST_TAIL_LINES_BACKGROUND = 400;
+const TRELLIS_RUNTIME_EVENTS_IN_MEMORY_MAX = 50;
 
 /** Shared hook: Trellis Runtime observability. Polls agent graph + events. */
 export function useTrellisRuntime(options: {
@@ -37,36 +42,73 @@ export function useTrellisRuntime(options: {
     }
 
     let cancelled = false;
+    let timer: ReturnType<typeof setInterval> | null = null;
 
     const fetch = async () => {
       if (cancelled) return;
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+        return;
+      }
       setLoading(true);
-      const ingested = await ingestExternalClaudeCliSessions({
-        projectId,
-        rootPath: rootPath ?? "",
-        missionId,
-        sessionIds: sessionId ? [sessionId] : null,
-        maxSessions: sessionId ? 1 : 12,
-        tailLines: 1_600,
-      }).catch(() => null);
+      const fullIngest =
+        typeof document === "undefined" || document.visibilityState === "visible";
+      const ingested = fullIngest
+        ? await ingestExternalClaudeCliSessions({
+            projectId,
+            rootPath: rootPath ?? "",
+            missionId,
+            sessionIds: sessionId ? [sessionId] : null,
+            maxSessions: sessionId ? 1 : 12,
+            tailLines: fullIngest
+              ? TRELLIS_RUNTIME_INGEST_TAIL_LINES
+              : TRELLIS_RUNTIME_INGEST_TAIL_LINES_BACKGROUND,
+          }).catch(() => null)
+        : null;
       if (cancelled) return;
       const effectiveRootPath = ingested?.rootPath ?? rootPath;
       const [graph, evts] = await Promise.all([
         getTrellisAgentOwnershipGraph({ projectId, rootPath: effectiveRootPath, sessionId, taskPath })
           .catch(() => null),
-        listTrellisRuntimeEvents({ projectId, rootPath: effectiveRootPath, sessionId, taskPath, limit: 50 })
+        listTrellisRuntimeEvents({ projectId, rootPath: effectiveRootPath, sessionId, taskPath, limit: TRELLIS_RUNTIME_EVENTS_IN_MEMORY_MAX })
           .catch(() => [] as TrellisRuntimeEvent[]),
       ]);
       if (!cancelled) {
         setAgentGraph(graph);
-        setEvents(evts);
+        setEvents(evts.slice(0, TRELLIS_RUNTIME_EVENTS_IN_MEMORY_MAX));
         setLoading(false);
       }
     };
 
-    fetch();
-    const timer = setInterval(fetch, pollIntervalMs);
-    return () => { cancelled = true; clearInterval(timer); };
+    const scheduleTimer = () => {
+      if (timer != null) clearInterval(timer);
+      timer = setInterval(() => {
+        void fetch();
+      }, readVisiblePollIntervalMs(pollIntervalMs, pollIntervalMs * 4));
+    };
+
+    void fetch();
+    scheduleTimer();
+    const onVisibilityChange = () => {
+      if (typeof document === "undefined") return;
+      if (document.visibilityState === "visible") {
+        void fetch();
+        scheduleTimer();
+      } else {
+        setAgentGraph(null);
+        setEvents([]);
+        setLoading(false);
+      }
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibilityChange);
+    }
+    return () => {
+      cancelled = true;
+      if (timer != null) clearInterval(timer);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+      }
+    };
   }, [projectId, rootPath, sessionId, missionId, taskPath, pollIntervalMs, enabled]);
 
   // Onboarding — fetch once on mount

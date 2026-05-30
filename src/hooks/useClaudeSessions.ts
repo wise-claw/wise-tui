@@ -2254,7 +2254,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     const tick = async () => {
       try {
         registryPollTickRef.value += 1;
-        const includeHostSnapshot = registryPollTickRef.value % 3 === 1;
+        const includeHostSnapshot = registryPollTickRef.value % 5 === 1;
         const listPromise = listRunningClaudeSessions();
         const snapshotPromise = includeHostSnapshot ? getSystemResourceSnapshot() : Promise.resolve(null);
         const [listResult, snapshotResult] = await Promise.allSettled([listPromise, snapshotPromise]);
