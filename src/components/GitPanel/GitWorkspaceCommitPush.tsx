@@ -3,8 +3,7 @@ import { Button, Input, Popover, Spin, Tooltip, message } from "antd";
 import { CloudUploadOutlined } from "@ant-design/icons";
 import {
   commitAndPushWorkspaceRepositories,
-  hasGitWorkspaceChanges,
-  loadGitWorkspaceRepoStatuses,
+  countGitWorkspaceDirtyRepositories,
   summarizeGitWorkspaceSyncResults,
   type GitWorkspaceRepositoryRef,
 } from "../../services/gitWorkspaceSync";
@@ -35,9 +34,9 @@ export function GitWorkspaceCommitPush({ repositoryEntries, onAfterSync }: Props
         path: entry.path,
         name: entry.name,
       }));
-      const statuses = await loadGitWorkspaceRepoStatuses(refs);
+      const dirtyCount = await countGitWorkspaceDirtyRepositories(refs);
       if (seq !== loadSeqRef.current) return;
-      setDirtyRepoCount(statuses.filter((item) => hasGitWorkspaceChanges(item.status)).length);
+      setDirtyRepoCount(dirtyCount);
     } catch (error) {
       if (seq !== loadSeqRef.current) return;
       setDirtyRepoCount(0);

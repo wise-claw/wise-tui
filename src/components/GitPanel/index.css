@@ -110,6 +110,17 @@
   background: color-mix(in srgb, var(--ant-color-bg-container) 72%, transparent);
 }
 
+.git-repo-section--placeholder .git-repo-section__header--placeholder {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 0.72;
+}
+
+.git-repo-section--placeholder .git-repo-section__name {
+  font-weight: 500;
+}
+
 .git-repo-section__toggle {
   display: flex;
   align-items: center;

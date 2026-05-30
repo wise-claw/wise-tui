@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import type { GitStatusResponse } from "../types";
 import { hasGitWorkspaceChanges } from "./gitWorkspaceSync";
+import type { GitStatusResponse } from "../types";
 
 function makeStatus(partial: Partial<GitStatusResponse> = {}): GitStatusResponse {
   return {

@@ -68,6 +68,15 @@ export function GitPanel(props: Props) {
         contextTitle={props.multiRepoContextTitle}
         headerPrefix={props.headerPrefix}
         onOpenFile={props.onOpenFile}
+        projects={props.projects}
+        repositories={props.repositories}
+        activeProjectId={props.activeProjectId}
+        activeRepositoryId={props.activeRepositoryId}
+        activeWorkspaceFocus={props.activeWorkspaceFocus}
+        activeRepositoryPath={props.repositoryPath}
+        onRepositorySelect={props.onRepositorySelect}
+        onProjectSelect={props.onProjectSelect}
+        directoryOnly={props.directoryOnly}
       />
     );
   }

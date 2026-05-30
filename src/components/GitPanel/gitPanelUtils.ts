@@ -32,6 +32,12 @@ export const GIT_MULTI_REPO_WATCHER_REFRESH_MS = 1500;
 /** 多仓模式下各仓库 status 初始加载的错峰间隔（ms）。 */
 export const GIT_MULTI_REPO_LOAD_STAGGER_MS = 280;
 
+/** 多仓 lazy 区块滚出视口后延迟卸载（ms），避免快速滚动时反复挂载。 */
+export const GIT_MULTI_REPO_LAZY_UNMOUNT_MS = 900;
+
+/** 多仓 file watcher 路径集合变更后的合并重启延迟（ms）。 */
+export const GIT_MULTI_REPO_WATCHER_RESTART_MS = 180;
+
 /** 虚拟列表行高（px），需与 `.git-file-row` 一致。 */
 export const GIT_PANEL_FILE_ROW_HEIGHT = 28;
 

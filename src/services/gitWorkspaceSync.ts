@@ -1,16 +1,10 @@
 import type { GitStatusResponse } from "../types";
 import { refreshGitRepositoryStats } from "../stores/gitRepositoryStatsStore";
-import { gitCommit, gitPull, gitPush, gitStageAll, gitStatus } from "./git";
+import { gitCommit, gitPull, gitPush, gitStageAll, gitStatus, gitStatusSummary } from "./git";
 
 export interface GitWorkspaceRepositoryRef {
   path: string;
   name: string;
-}
-
-export interface GitWorkspaceRepoStatus {
-  path: string;
-  name: string;
-  status: GitStatusResponse;
 }
 
 export interface GitWorkspaceRepoSyncResult {
@@ -25,16 +19,22 @@ export function hasGitWorkspaceChanges(status: GitStatusResponse): boolean {
   return status.staged.length > 0 || status.unstaged.length > 0;
 }
 
-export async function loadGitWorkspaceRepoStatuses(
+/** 轻量统计：有改动的仓库数量（不含文件列表）。 */
+export async function countGitWorkspaceDirtyRepositories(
   entries: readonly GitWorkspaceRepositoryRef[],
-): Promise<GitWorkspaceRepoStatus[]> {
-  const results = await Promise.all(
+): Promise<number> {
+  if (entries.length === 0) return 0;
+  const flags = await Promise.all(
     entries.map(async (entry) => {
-      const status = await gitStatus(entry.path);
-      return { path: entry.path, name: entry.name, status };
+      try {
+        const summary = await gitStatusSummary(entry.path);
+        return summary.stagedCount > 0 || summary.unstagedCount > 0;
+      } catch {
+        return false;
+      }
     }),
   );
-  return results;
+  return flags.filter(Boolean).length;
 }
 
 export async function commitAndPushWorkspaceRepositories(

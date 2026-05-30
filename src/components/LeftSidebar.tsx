@@ -657,15 +657,10 @@ export function LeftSidebar({
   const effectiveRepoPanelPath = accessibleRepoPanelPath.trim() || repoPanelRepositoryPath.trim();
   const showRepoPanel = Boolean(effectiveRepoPanelPath);
 
-  const gitPanelTreeSelection = useMemo(
-    () => globalWorkspaceTreeSelection ?? sessionDerivedTreeSelection ?? null,
-    [globalWorkspaceTreeSelection, sessionDerivedTreeSelection],
-  );
-
   const gitPanelRepositoryEntries = useMemo(
     () =>
       resolveGitPanelRepositoryEntries({
-        treeSelection: gitPanelTreeSelection,
+        treeSelection: repoPanelTreeSelection,
         projects,
         repositories,
         fallbackPath: effectiveRepoPanelPath,
@@ -673,7 +668,7 @@ export function LeftSidebar({
         fallbackRepositoryId: repoPanelTreeView?.activeRepositoryId ?? activeRepositoryId,
       }),
     [
-      gitPanelTreeSelection,
+      repoPanelTreeSelection,
       projects,
       repositories,
       effectiveRepoPanelPath,
@@ -684,10 +679,13 @@ export function LeftSidebar({
   );
 
   const gitPanelContextTitle = useMemo(() => {
-    if (gitPanelTreeSelection?.kind !== "project") return "变更";
-    const project = projects.find((item) => item.id === gitPanelTreeSelection.projectId);
-    return project?.name?.trim() || "变更";
-  }, [gitPanelTreeSelection, projects]);
+    if (repoPanelTreeView?.label.trim()) return repoPanelTreeView.label.trim();
+    if (repoPanelTreeSelection?.kind === "project") {
+      const project = projects.find((item) => item.id === repoPanelTreeSelection.projectId);
+      return project?.name?.trim() || "变更";
+    }
+    return "变更";
+  }, [repoPanelTreeSelection, repoPanelTreeView?.label, projects]);
 
   const repoPanelWorkspaceSelectorProps = useMemo(
     () => ({

@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { Button, Space, Tooltip } from "antd";
 import { ArrowDownOutlined, ArrowUpOutlined, CheckOutlined, ReloadOutlined } from "@ant-design/icons";
 import type { GitStatusResponse } from "../../types";
@@ -24,6 +24,16 @@ export function GitSyncActions({
   const ahead = status.ahead ?? 0;
   const behind = status.behind ?? 0;
   const pushDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (pushDebounceRef.current != null) {
+        clearTimeout(pushDebounceRef.current);
+        pushDebounceRef.current = null;
+      }
+    },
+    [],
+  );
 
   const handlePushClick = () => {
     if (loading.push || loading.pull) return;

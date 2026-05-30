@@ -1,4 +1,4 @@
-import { memo, startTransition, useCallback, useEffect, useRef, useState } from "react";
+import { memo, startTransition, useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { useInView, useInViewActive } from "../../hooks/useInView";
 import { listen } from "@tauri-apps/api/event";
 import { safeUnlistenPromise } from "../../utils/safeTauriUnlisten";
@@ -47,8 +47,13 @@ interface Props {
   loadDelayMs?: number;
   /** 多仓面板统一注册 watcher 刷新，避免每仓独立监听。 */
   registerRefresh?: (path: string, refresh: () => void) => () => void;
+  /** 多仓面板按可见/展开范围注册 file watcher。 */
+  onWatchScopeChange?: (path: string, shouldWatch: boolean) => void;
   /** 多仓面板展开状态变更回调（用于按需加载 diff 详情）。 */
   onExpandedChange?: (path: string, expanded: boolean) => void;
+  /** 多仓 lazy 容器注入的视口状态，避免重复 IntersectionObserver。 */
+  externalInView?: boolean;
+  externalSectionRef?: RefObject<HTMLElement | null>;
   onOpenFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
 }
 
@@ -74,15 +79,19 @@ function GitRepoSectionInner({
   defaultExpanded = true,
   loadDelayMs = 0,
   registerRefresh,
+  onWatchScopeChange,
   onExpandedChange,
+  externalInView,
+  externalSectionRef,
   onOpenFile,
 }: Props) {
   const repositoryPath = entry.path;
   const isMultiRepo = Boolean(registerRefresh);
-  const [sectionRefSticky, inViewSticky] = useInView("160px");
-  const [sectionRefActive, inViewActive] = useInViewActive("160px");
-  const sectionRef = isMultiRepo ? sectionRefActive : sectionRefSticky;
-  const inView = isMultiRepo ? inViewActive : inViewSticky;
+  const useExternalInView = externalInView !== undefined;
+  const [sectionRefSticky, inViewSticky] = useInView("160px", !isMultiRepo && !useExternalInView);
+  const [sectionRefActive, inViewActive] = useInViewActive("160px", isMultiRepo && !useExternalInView);
+  const sectionRef = externalSectionRef ?? (isMultiRepo ? sectionRefActive : sectionRefSticky);
+  const inView = useExternalInView ? externalInView : isMultiRepo ? inViewActive : inViewSticky;
   const [expanded, setExpanded] = useState(defaultExpanded);
   const shouldLoadHeader = expanded || inView;
   const [status, setStatus] = useState<GitStatusResponse | null>(null);
@@ -112,7 +121,19 @@ function GitRepoSectionInner({
   const syncOpsInFlightRef = useRef(0);
   const pendingSilentRefreshRef = useRef(false);
   const loadRequestIdRef = useRef(0);
+  const shouldLoadHeaderRef = useRef(shouldLoadHeader);
+  shouldLoadHeaderRef.current = shouldLoadHeader;
+  const silentRefreshRef = useRef<() => void>(() => {});
+  const mountedRef = useRef(true);
   const DEBOUNCE_MS = 400;
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      loadRequestIdRef.current += 1;
+    };
+  }, [repositoryPath]);
 
   const loadStatus = useCallback(async (opts?: { silent?: boolean }) => {
     if (!repositoryPath) return;
@@ -123,8 +144,9 @@ function GitRepoSectionInner({
     }
     try {
       const result = await gitStatus(repositoryPath);
-      if (requestId !== loadRequestIdRef.current) return;
+      if (requestId !== loadRequestIdRef.current || !mountedRef.current) return;
       const apply = () => {
+        if (!mountedRef.current) return;
         if (gitStatusSnapshotEqual(statusRef.current, result)) {
           return;
         }
@@ -143,9 +165,10 @@ function GitRepoSectionInner({
         apply();
       }
     } catch (e) {
-      if (requestId !== loadRequestIdRef.current) return;
+      if (requestId !== loadRequestIdRef.current || !mountedRef.current) return;
       const msg = e instanceof Error ? e.message : String(e);
       const applyErr = () => {
+        if (!mountedRef.current) return;
         statusRef.current = null;
         setErrors((prev) => ({ ...prev, status: msg }));
         setStatus(null);
@@ -156,7 +179,7 @@ function GitRepoSectionInner({
         applyErr();
       }
     } finally {
-      if (requestId === loadRequestIdRef.current && !silent) {
+      if (requestId === loadRequestIdRef.current && !silent && mountedRef.current) {
         setLoading((prev) => ({ ...prev, status: false }));
       }
     }
@@ -171,7 +194,7 @@ function GitRepoSectionInner({
     }
     try {
       const result = await gitStatusSummary(repositoryPath);
-      if (requestId !== loadRequestIdRef.current) return;
+      if (requestId !== loadRequestIdRef.current || !mountedRef.current) return;
       const snapshot: GitStatusHeaderSnapshot = {
         branch: result.branch,
         ahead: result.ahead,
@@ -180,6 +203,7 @@ function GitRepoSectionInner({
         unstagedCount: result.unstagedCount,
       };
       const apply = () => {
+        if (!mountedRef.current) return;
         if (gitStatusHeaderSnapshotEqual(headerSnapshotRef.current, snapshot)) {
           return;
         }
@@ -198,9 +222,10 @@ function GitRepoSectionInner({
         apply();
       }
     } catch (e) {
-      if (requestId !== loadRequestIdRef.current) return;
+      if (requestId !== loadRequestIdRef.current || !mountedRef.current) return;
       const msg = e instanceof Error ? e.message : String(e);
       const applyErr = () => {
+        if (!mountedRef.current) return;
         headerSnapshotRef.current = null;
         setErrors((prev) => ({ ...prev, status: msg }));
         setHeaderSnapshot(null);
@@ -211,13 +236,14 @@ function GitRepoSectionInner({
         applyErr();
       }
     } finally {
-      if (requestId === loadRequestIdRef.current && !silent) {
+      if (requestId === loadRequestIdRef.current && !silent && mountedRef.current) {
         setLoading((prev) => ({ ...prev, status: false }));
       }
     }
   }, [repositoryPath]);
 
   const silentRefresh = useCallback(() => {
+    if (!shouldLoadHeaderRef.current) return;
     if (syncOpsInFlightRef.current > 0) {
       pendingSilentRefreshRef.current = true;
       return;
@@ -232,6 +258,12 @@ function GitRepoSectionInner({
     }
     void loadStatus({ silent: true });
   }, [expanded, isMultiRepo, loadStatus, loadSummary]);
+
+  silentRefreshRef.current = silentRefresh;
+
+  const silentRefreshForRegistry = useCallback(() => {
+    silentRefreshRef.current();
+  }, []);
 
   const beginGitSyncOperation = useCallback(() => {
     syncOpsInFlightRef.current += 1;
@@ -279,13 +311,27 @@ function GitRepoSectionInner({
 
   useEffect(() => {
     if (shouldLoadHeader) return;
-    if (isMultiRepo) return;
     loadRequestIdRef.current += 1;
     statusRef.current = null;
     headerSnapshotRef.current = null;
     setStatus(null);
     setHeaderSnapshot(null);
-  }, [shouldLoadHeader, isMultiRepo]);
+    setErrors({});
+  }, [shouldLoadHeader]);
+
+  useEffect(() => {
+    if (!isMultiRepo || !expanded || inView) return;
+    setExpanded(false);
+    onExpandedChange?.(repositoryPath, false);
+  }, [isMultiRepo, expanded, inView, onExpandedChange, repositoryPath]);
+
+  useEffect(() => {
+    if (!onWatchScopeChange) return;
+    onWatchScopeChange(repositoryPath, shouldLoadHeader);
+    return () => {
+      onWatchScopeChange(repositoryPath, false);
+    };
+  }, [onWatchScopeChange, repositoryPath, shouldLoadHeader]);
 
   useEffect(() => {
     if (expanded) return;
@@ -306,7 +352,7 @@ function GitRepoSectionInner({
 
   useEffect(() => {
     if (registerRefresh) {
-      return registerRefresh(repositoryPath, silentRefresh);
+      return registerRefresh(repositoryPath, silentRefreshForRegistry);
     }
 
     const unlisten = listen<{ path?: string }>("git-changed", (event) => {
@@ -336,7 +382,7 @@ function GitRepoSectionInner({
       }
       safeUnlistenPromise(unlisten);
     };
-  }, [loadStatus, registerRefresh, repositoryPath, silentRefresh]);
+  }, [loadStatus, registerRefresh, repositoryPath, silentRefreshForRegistry]);
 
   const runAction = useCallback(
     async (action: string, fn: () => Promise<void>) => {
