@@ -186,6 +186,7 @@ export interface MultiPaneSharedChatProps {
   omcBatchPipelineActive: boolean;
   onAddWorktreeRepositoryToProject?: (worktreePath: string) => void | Promise<void>;
   onReloadFullDiskTranscript?: (sessionId: string) => void | Promise<void>;
+  onLoadMoreTranscriptFromDisk?: (sessionId: string) => void | Promise<void>;
   onCompactSessionHistory?: (sessionId: string) => void | Promise<void>;
   missionContext?: {
     projectId?: string | null;
@@ -296,6 +297,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
         omcBatchPipelineActive={shared.omcBatchPipelineActive}
         onAddWorktreeRepositoryToProject={shared.onAddWorktreeRepositoryToProject}
         onReloadFullDiskTranscript={shared.onReloadFullDiskTranscript}
+        onLoadMoreTranscriptFromDisk={shared.onLoadMoreTranscriptFromDisk}
         onCompactSessionHistory={shared.onCompactSessionHistory}
         missionContext={shared.missionContext}
       />
@@ -458,6 +460,7 @@ const MultiPaneExtraPaneCell = memo(
             omcBatchPipelineActive={shared.omcBatchPipelineActive}
             onAddWorktreeRepositoryToProject={shared.onAddWorktreeRepositoryToProject}
             onReloadFullDiskTranscript={shared.onReloadFullDiskTranscript}
+            onLoadMoreTranscriptFromDisk={shared.onLoadMoreTranscriptFromDisk}
             onCompactSessionHistory={shared.onCompactSessionHistory}
             dualPaneRepositoryPicker={dualPaneRepositoryPicker}
             missionContext={shared.missionContext}

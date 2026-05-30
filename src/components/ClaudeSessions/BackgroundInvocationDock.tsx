@@ -32,6 +32,7 @@ import {
   readInvocationSnapshotBundle,
   type BackgroundInvocationSnapshot,
 } from "../../services/backgroundInvocationSnapshot";
+import { isWebViewDevToolsLikelyOpen } from "../../utils/adaptivePoll";
 import { StreamJsonStdoutHelpButton } from "../StreamJsonStdoutHelpButton";
 
 interface Props {
@@ -198,6 +199,7 @@ export function BackgroundInvocationDock({ session }: Props) {
 
   const ensureFlushTimer = useCallback(() => {
     if (flushTimerRef.current != null) return;
+    const intervalMs = document.hidden ? 1500 : isWebViewDevToolsLikelyOpen() ? 1200 : 800;
     flushTimerRef.current = window.setInterval(() => {
       const keys = Object.keys(unsubsByKeyRef.current);
       for (const invocationKey of keys) {
@@ -206,7 +208,7 @@ export function BackgroundInvocationDock({ session }: Props) {
           flushKeyFromBuffers(invocationKey, "running");
         }
       }
-    }, document.hidden ? 1200 : 320);
+    }, intervalMs);
   }, [flushKeyFromBuffers]);
 
   const attachTauriBuffersForKey = useCallback(

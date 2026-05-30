@@ -282,12 +282,13 @@ function GitRepoSectionInner({
 
   useEffect(() => {
     if (shouldLoadHeader) return;
+    if (isMultiRepo) return;
     loadRequestIdRef.current += 1;
     statusRef.current = null;
     headerSnapshotRef.current = null;
     setStatus(null);
     setHeaderSnapshot(null);
-  }, [shouldLoadHeader]);
+  }, [shouldLoadHeader, isMultiRepo]);
 
   useEffect(() => {
     if (expanded) return;

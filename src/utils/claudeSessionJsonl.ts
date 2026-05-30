@@ -9,7 +9,7 @@ function parseTimestamp(v: unknown): number {
   return Date.now();
 }
 
-function blocksToParts(content: unknown): MessagePart[] {
+function blocksToParts(content: unknown, textMax = 12_000): MessagePart[] {
   if (!Array.isArray(content)) return [];
   const parts: MessagePart[] = [];
   for (const b of content) {
@@ -17,9 +17,11 @@ function blocksToParts(content: unknown): MessagePart[] {
     const block = b as Record<string, unknown>;
     const t = block.type;
     if (t === "text" && typeof block.text === "string") {
-      parts.push({ type: "text", text: block.text });
+      const text = block.text.length > textMax ? block.text.slice(-textMax) : block.text;
+      parts.push({ type: "text", text });
     } else if (t === "thinking" && typeof block.thinking === "string") {
-      parts.push({ type: "reasoning", text: block.thinking });
+      const text = block.thinking.length > textMax ? block.thinking.slice(-textMax) : block.thinking;
+      parts.push({ type: "reasoning", text });
     } else if (t === "tool_use") {
       parts.push({
         type: "tool_use",
@@ -81,7 +83,7 @@ export function parseClaudeSessionJsonlLines(lines: string[]): ClaudeMessage[] {
           for (const c of blocks.filter((x) => x.type === "tool_result")) {
             const raw = toolResultToText(c).trim();
             if (!raw) continue;
-            const excerpt = raw.length > 8000 ? `${raw.slice(0, 8000)}…` : raw;
+            const excerpt = raw.length > 4000 ? `${raw.slice(0, 4000)}…` : raw;
             const err = c.is_error === true;
             const idStr =
               typeof c.tool_use_id === "string" && c.tool_use_id.trim()

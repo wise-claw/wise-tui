@@ -45,7 +45,7 @@ const BUNDLE_PREFIX = "wise.bgInvocationBundle.v1:";
 const memoryBundle = new Map<string, InvocationSnapshotBundle>();
 const MAX_BUNDLE_ITEMS = BACKGROUND_INVOCATION_BUNDLE_MAX_ITEMS;
 /** 模块内 LRU：限制同时驻留的「会话+仓库」快照键数量，避免切会话后内存只增不减。 */
-const MAX_CACHED_SESSION_KEYS = 32;
+const MAX_CACHED_SESSION_KEYS = 16;
 
 function touchLruCache<K, V>(map: Map<K, V>, key: K, value: V): void {
   map.delete(key);

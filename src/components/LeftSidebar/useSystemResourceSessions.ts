@@ -3,6 +3,7 @@ import type { ClaudeHostProcess, ClaudeSession, ClaudeSessionInfo } from "../../
 import { listRunningClaudeSessions } from "../../services/claude";
 import { isClaudeSessionRunningInHostOrUi } from "../../services/claudeSessionState";
 import { getSystemResourceSnapshot } from "../../services/systemResource";
+import { readVisiblePollIntervalMs } from "../../utils/adaptivePoll";
 import {
   matchSessionByKeyword,
   normalizeSearchKeyword,
@@ -43,8 +44,6 @@ export function useSystemResourceSessions({
 
   useEffect(() => {
     let cancelled = false;
-    const visiblePollIntervalMs = 8000;
-    const hiddenPollIntervalMs = 20000;
 
     async function refreshSystemSummary() {
       const [snapshotResult, registryResult] = await Promise.allSettled([
@@ -54,37 +53,68 @@ export function useSystemResourceSessions({
       if (cancelled) return;
       if (snapshotResult.status === "fulfilled") {
         const snap = snapshotResult.value;
-        setSystemSummary({
-          ...snap,
-          claudeProcesses: snap.claudeProcesses ?? [],
+        setSystemSummary((prev) => {
+          const next = {
+            ...snap,
+            claudeProcesses: snap.claudeProcesses ?? [],
+          };
+          if (
+            prev.systemTotalBytes === next.systemTotalBytes &&
+            prev.systemUsedBytes === next.systemUsedBytes &&
+            prev.appMemoryBytes === next.appMemoryBytes &&
+            prev.claudeProcessCount === next.claudeProcessCount &&
+            prev.claudeMemoryBytes === next.claudeMemoryBytes &&
+            prev.claudeProcesses.length === next.claudeProcesses.length &&
+            prev.claudeProcesses.every(
+              (proc, index) =>
+                proc.pid === next.claudeProcesses[index]?.pid &&
+                proc.sessionId === next.claudeProcesses[index]?.sessionId,
+            )
+          ) {
+            return prev;
+          }
+          return next;
         });
         setSystemSummaryError(false);
       } else {
         setSystemSummaryError(true);
       }
       if (registryResult.status === "fulfilled") {
-        setRegistryRunningClaude(
-          registryResult.value.filter((item) => item.status === "running"),
-        );
+        const nextRunning = registryResult.value.filter((item) => item.status === "running");
+        setRegistryRunningClaude((prev) => {
+          if (
+            prev.length === nextRunning.length &&
+            prev.every((item, index) => item.session_id === nextRunning[index]?.session_id)
+          ) {
+            return prev;
+          }
+          return nextRunning;
+        });
       } else {
-        setRegistryRunningClaude([]);
+        setRegistryRunningClaude((prev) => (prev.length === 0 ? prev : []));
       }
     }
 
     void refreshSystemSummary();
-    const timer = window.setInterval(() => {
-      if (document.visibilityState !== "visible") return;
-      void refreshSystemSummary();
-    }, document.visibilityState === "visible" ? visiblePollIntervalMs : hiddenPollIntervalMs);
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const scheduleTimer = () => {
+      if (timer != null) window.clearInterval(timer);
+      timer = window.setInterval(() => {
+        if (document.visibilityState !== "visible") return;
+        void refreshSystemSummary();
+      }, readVisiblePollIntervalMs(8000, 20000));
+    };
+    scheduleTimer();
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         void refreshSystemSummary();
+        scheduleTimer();
       }
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      if (timer != null) window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, []);

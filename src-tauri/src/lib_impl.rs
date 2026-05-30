@@ -19,6 +19,8 @@ use tauri::{Emitter, Manager};
 /// 系统菜单「功能 → 打开 WebView 控制台…」项 id（与 `on_menu_event` 匹配）。
 #[cfg(desktop)]
 const MENU_ID_OPEN_WEBVIEW_DEVTOOLS: &str = "wise/open-webview-devtools";
+#[cfg(desktop)]
+const MENU_ID_CLOSE_WEBVIEW_DEVTOOLS: &str = "wise/close-webview-devtools";
 
 // ── App Entry ──
 
@@ -151,7 +153,14 @@ pub fn run() {
                     true,
                     None::<&str>,
                 )?;
-                let utilities = Submenu::with_items(app, "功能", true, &[&open_console])?;
+                let close_console = MenuItem::with_id(
+                    app,
+                    MENU_ID_CLOSE_WEBVIEW_DEVTOOLS,
+                    "关闭 WebView 控制台",
+                    true,
+                    None::<&str>,
+                )?;
+                let utilities = Submenu::with_items(app, "功能", true, &[&open_console, &close_console])?;
                 menu.append(&utilities)?;
                 Ok(menu)
             })
@@ -159,6 +168,10 @@ pub fn run() {
                 if event.id() == MENU_ID_OPEN_WEBVIEW_DEVTOOLS {
                     if let Some(win) = app.get_webview_window("main") {
                         win.open_devtools();
+                    }
+                } else if event.id() == MENU_ID_CLOSE_WEBVIEW_DEVTOOLS {
+                    if let Some(win) = app.get_webview_window("main") {
+                        win.close_devtools();
                     }
                 }
             })

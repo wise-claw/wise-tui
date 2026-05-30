@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import type { ProjectItem, Repository } from "../../types";
+import { runWhenIdle } from "../../utils/deferIdle";
 import { countGlobalSplitTodoExecutableTasks } from "../../services/prdTaskSplitStore";
 import {
   buildProjectRequirementWorkspaceInput,
@@ -10,6 +11,32 @@ import { countExecutableTrellisTasksInSnapshot } from "../../utils/taskDrawerCou
 import { selectFloatingRepositories } from "../../utils/floatingRepositories";
 import { safeUnlisten } from "../../utils/safeTauriUnlisten";
 
+function stringNumberRecordEqual(
+  left: Record<string, number>,
+  right: Record<string, number>,
+): boolean {
+  const leftKeys = Object.keys(left);
+  if (leftKeys.length !== Object.keys(right).length) return false;
+  for (const key of leftKeys) {
+    if (left[key] !== right[key]) return false;
+  }
+  return true;
+}
+
+function idNumberRecordEqual(
+  left: Record<number, number>,
+  right: Record<number, number>,
+): boolean {
+  const leftKeys = Object.keys(left);
+  if (leftKeys.length !== Object.keys(right).length) return false;
+  for (const key of leftKeys) {
+    if (left[Number(key)] !== right[Number(key)]) return false;
+  }
+  return true;
+}
+
+const SIDEBAR_TRELLIS_REFRESH_DEBOUNCE_MS = 900;
+
 /** 侧栏：按 Workspace / 仓库统计可执行任务（规则与主会话「任务」抽屉一致）。 */
 export function useSidebarExecutableTasksMap(
   projects: ProjectItem[],
@@ -18,6 +45,12 @@ export function useSidebarExecutableTasksMap(
 ) {
   const [projectExecutableById, setProjectExecutableById] = useState<Record<string, number>>({});
   const [repositoryExecutableById, setRepositoryExecutableById] = useState<Record<number, number>>({});
+  const projectsRef = useRef(projects);
+  const repositoriesRef = useRef(repositories);
+  const activeProjectIdRef = useRef(activeProjectId);
+  projectsRef.current = projects;
+  repositoriesRef.current = repositories;
+  activeProjectIdRef.current = activeProjectId;
 
   const projectKey = useMemo(
     () =>
@@ -32,16 +65,20 @@ export function useSidebarExecutableTasksMap(
   );
 
   const refresh = useCallback(async () => {
+    const currentProjects = projectsRef.current;
+    const currentRepositories = repositoriesRef.current;
+    const currentActiveProjectId = activeProjectIdRef.current;
+
     const nextProjectExecutable: Record<string, number> = {};
     const nextRepositoryExecutable: Record<number, number> = {};
     const globalSplitTodoCount = await countGlobalSplitTodoExecutableTasks().catch(() => 0);
 
     await Promise.all(
-      projects.map(async (project) => {
+      currentProjects.map(async (project) => {
         const workspaceInput = buildProjectRequirementWorkspaceInput({
           project,
-          projects,
-          repositories,
+          projects: currentProjects,
+          repositories: currentRepositories,
         });
         const hasScope =
           Boolean(workspaceInput.projectRootPath?.trim()) ||
@@ -57,7 +94,7 @@ export function useSidebarExecutableTasksMap(
             includeArchived: false,
           });
           const trellisCount = countExecutableTrellisTasksInSnapshot(snapshot);
-          const splitTodoCount = project.id === activeProjectId ? globalSplitTodoCount : 0;
+          const splitTodoCount = project.id === currentActiveProjectId ? globalSplitTodoCount : 0;
           nextProjectExecutable[project.id] = trellisCount + splitTodoCount;
 
           for (const repositoryId of project.repositoryIds) {
@@ -71,7 +108,7 @@ export function useSidebarExecutableTasksMap(
       }),
     );
 
-    const floatingRepositories = selectFloatingRepositories(projects, repositories);
+    const floatingRepositories = selectFloatingRepositories(currentProjects, currentRepositories);
     await Promise.all(
       floatingRepositories.map(async (repository) => {
         const path = repository.path?.trim();
@@ -93,23 +130,38 @@ export function useSidebarExecutableTasksMap(
       }),
     );
 
-    setProjectExecutableById(nextProjectExecutable);
-    setRepositoryExecutableById(nextRepositoryExecutable);
-  }, [activeProjectId, projects, repositories]);
+    setProjectExecutableById((prev) =>
+      stringNumberRecordEqual(prev, nextProjectExecutable) ? prev : nextProjectExecutable,
+    );
+    setRepositoryExecutableById((prev) =>
+      idNumberRecordEqual(prev, nextRepositoryExecutable) ? prev : nextRepositoryExecutable,
+    );
+  }, []);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh, projectKey, repositoryKey, activeProjectId]);
+    const cancelIdle = runWhenIdle(() => {
+      void refresh();
+    }, { timeoutMs: 1800 });
+    return cancelIdle;
+  }, [projectKey, repositoryKey, activeProjectId, refresh]);
 
   useEffect(() => {
     let cancelled = false;
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const cleanups: Array<() => void> = [];
+
+    const scheduleRefresh = () => {
+      if (cancelled) return;
+      if (debounceTimer != null) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        debounceTimer = null;
+        if (!cancelled) void refresh();
+      }, SIDEBAR_TRELLIS_REFRESH_DEBOUNCE_MS);
+    };
 
     void (async () => {
       const attach = async (eventName: string) => {
-        const unlisten = await listen(eventName, () => {
-          if (!cancelled) void refresh();
-        });
+        const unlisten = await listen(eventName, scheduleRefresh);
         if (cancelled) {
           safeUnlisten(unlisten);
           return;
@@ -124,6 +176,7 @@ export function useSidebarExecutableTasksMap(
 
     return () => {
       cancelled = true;
+      if (debounceTimer != null) clearTimeout(debounceTimer);
       cleanups.forEach((cleanup) => cleanup());
     };
   }, [refresh]);

@@ -1,4 +1,4 @@
-import { CLAUDE_DISK_JSONL_TAIL_LINES_INITIAL } from "../constants/claudeMessageListWindow";
+import { CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD } from "../constants/claudeMessageListWindow";
 import type { ClaudeSession } from "../types";
 import { parseClaudeSessionJsonlLines } from "../utils/claudeSessionJsonl";
 
@@ -94,7 +94,7 @@ export function shouldLoadDiskForContextEstimate(session: ClaudeSession): boolea
   if (!claudeSid || !session.repositoryPath?.trim()) return false;
   if (session.messages.length === 0) return true;
   if (session.diskTranscriptPartial) return true;
-  return getSessionContextMetrics(session).ctxPercent >= CONTEXT_WARN_PERCENT;
+  return getSessionContextMetrics(session).ctxPercent >= CONTEXT_AUTO_COMPACT_BEFORE_SEND_PERCENT;
 }
 
 export async function resolveSessionContextMetricsForSend(
@@ -109,10 +109,10 @@ export async function resolveSessionContextMetricsForSend(
   const rp = session.repositoryPath.trim();
   try {
     const tailLines = await loadJsonl(rp, cc, {
-      tailLines: CLAUDE_DISK_JSONL_TAIL_LINES_INITIAL,
+      tailLines: CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD,
     });
     let diskTokens = estimateTokensFromJsonlLines(tailLines);
-    const tailSaturated = tailLines.length >= CLAUDE_DISK_JSONL_TAIL_LINES_INITIAL;
+    const tailSaturated = tailLines.length >= CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD;
     if (tailSaturated) {
       diskTokens = Math.max(diskTokens, estimateTokensFromJsonlLines(tailLines));
     }

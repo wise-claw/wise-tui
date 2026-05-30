@@ -1,6 +1,7 @@
 import { startTransition, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { safeUnlistenPromise } from "../../utils/safeTauriUnlisten";
+import { runWhenIdle } from "../../utils/deferIdle";
 import { Button, Empty, Spin, Tooltip, message } from "antd";
 import { GlobalOutlined } from "@ant-design/icons";
 import {
@@ -172,9 +173,11 @@ function GitSingleRepoPanel({
 
   useEffect(() => {
     statusRef.current = null;
-    if (repositoryPath) {
+    if (!repositoryPath) return;
+    const cancelIdle = runWhenIdle(() => {
       void loadStatus();
-    }
+    }, { timeoutMs: 1200 });
+    return cancelIdle;
   }, [repositoryPath, loadStatus]);
 
   useEffect(() => {

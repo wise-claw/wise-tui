@@ -703,6 +703,8 @@ interface Props {
   onAddWorktreeRepositoryToProject?: (worktreePath: string) => void | Promise<void>;
   /** 从磁盘加载完整 jsonl 覆盖指定标签消息（尾部懒加载后补齐） */
   onReloadFullDiskTranscript?: (sessionId: string) => void | Promise<void>;
+  /** 渐进加载更早 jsonl 尾部 */
+  onLoadMoreTranscriptFromDisk?: (sessionId: string) => void | Promise<void>;
   /** 手动执行 `/compact` 压缩指定标签会话历史 */
   onCompactSessionHistory?: (sessionId: string) => void | Promise<void>;
   missionContext?: {
@@ -794,6 +796,7 @@ export function ClaudeSessions({
   omcBatchPipelineActive = false,
   onAddWorktreeRepositoryToProject,
   onReloadFullDiskTranscript,
+  onLoadMoreTranscriptFromDisk,
   onCompactSessionHistory,
   missionContext,
 }: Props) {
@@ -1152,6 +1155,7 @@ export function ClaudeSessions({
     omcBatchPipelineActive,
     onAddWorktreeRepositoryToProject,
     onReloadFullDiskTranscript,
+    onLoadMoreTranscriptFromDisk,
     onCompactSessionHistory,
     missionContext,
   }), [
@@ -1209,6 +1213,7 @@ export function ClaudeSessions({
     omcBatchPipelineActive,
     onAddWorktreeRepositoryToProject,
     onReloadFullDiskTranscript,
+    onLoadMoreTranscriptFromDisk,
     onCompactSessionHistory,
     missionContext,
   ]);
@@ -1344,6 +1349,7 @@ export function ClaudeSessions({
             omcBatchPipelineActive={omcBatchPipelineActive}
             onAddWorktreeRepositoryToProject={onAddWorktreeRepositoryToProject}
             onReloadFullDiskTranscript={onReloadFullDiskTranscript}
+            onLoadMoreTranscriptFromDisk={onLoadMoreTranscriptFromDisk}
             onCompactSessionHistory={onCompactSessionHistory}
             missionContext={missionContext}
           />

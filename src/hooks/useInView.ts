@@ -34,6 +34,8 @@ export function useInView(rootMargin = "120px"): [RefObject<HTMLElement | null>,
 export function useInViewActive(rootMargin = "120px"): [RefObject<HTMLElement | null>, boolean] {
   const ref = useRef<HTMLElement | null>(null);
   const [inView, setInView] = useState(false);
+  const observerInViewRef = useRef(false);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const el = ref.current;
@@ -44,14 +46,35 @@ export function useInViewActive(rootMargin = "120px"): [RefObject<HTMLElement | 
       return;
     }
 
+    const commitInView = (next: boolean) => {
+      if (debounceTimerRef.current != null) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+      const delayMs = next ? 80 : 650;
+      debounceTimerRef.current = setTimeout(() => {
+        debounceTimerRef.current = null;
+        setInView(observerInViewRef.current);
+      }, delayMs);
+    };
+
     const observer = new IntersectionObserver(
       (entries) => {
-        setInView(entries.some((entry) => entry.isIntersecting));
+        const next = entries.some((entry) => entry.isIntersecting);
+        if (next === observerInViewRef.current) return;
+        observerInViewRef.current = next;
+        commitInView(next);
       },
       { rootMargin },
     );
     observer.observe(el);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (debounceTimerRef.current != null) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+    };
   }, [rootMargin]);
 
   return [ref, inView];

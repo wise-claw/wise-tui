@@ -23,6 +23,7 @@ import {
   repositorySessionTabDisplayName,
   repositoryTypeChineseLabel,
 } from "./utils/repositoryType";
+import { runWhenIdle } from "./utils/deferIdle";
 import { isSessionBoundAsRepositoryMain } from "./utils/repositoryMainSessionBinding";
 import { resolveSessionExecutionEngine } from "./utils/sessionExecutionEngine";
 import {
@@ -153,6 +154,7 @@ import {
   normalizeRepositoryPathKey as normalizeRepositoryPathForMatch,
   parseRepositoryMainSessionBindings,
   projectMainSessionBindingKey,
+  repositoryPathsMatch,
   REPOSITORY_MAIN_SESSION_BINDING_STORAGE_KEY,
   resolveRepositoryForSession,
   resolveBoundMainSessionId,
@@ -714,6 +716,11 @@ export default function App() {
     [migrateRepositoryMainSessionBindingTabIds],
   );
 
+  const companionSessionIds = useMemo(() => {
+    if (paneCount <= 1) return [];
+    return extraPanes.map((p) => p.sessionId).filter((id): id is string => Boolean(id));
+  }, [paneCount, extraPanes]);
+
   const {
     sessions,
     sessionsLiveRef,
@@ -745,6 +752,7 @@ export default function App() {
     refreshDiskSessionsForRepository,
     tabsHydrated,
     reloadFullDiskTranscript,
+    loadMoreTranscriptFromDisk,
     compactSessionHistory,
     releaseSessionHostProcess,
   } = useClaudeSessions({
@@ -758,7 +766,7 @@ export default function App() {
     onClaudeSpawnBlocked: (blockedMessage) => {
       message.warning(blockedMessage);
     },
-    companionSessionIds: paneCount > 1 ? extraPanes.filter((p) => p.sessionId).map((p) => p.sessionId!) : [],
+    companionSessionIds,
     onSessionTabIdMigrated: handleSessionTabIdMigrated,
   });
 
@@ -1495,21 +1503,39 @@ export default function App() {
     })();
   }, [workflowTemplates, workflowTasks, workflowGraphsByWorkflowId]);
 
-  const repositoriesRefreshKey = useMemo(
-    () =>
-      repositories
-        .map((p) => `${p.id}:${p.path}`)
-        .sort()
-        .join("|"),
-    [repositories],
-  );
+  const openSessionRepositoryPathsKey = useMemo(() => {
+    const paths = new Set<string>();
+    for (const session of sessions) {
+      const path = session.repositoryPath?.trim();
+      if (path) paths.add(path);
+    }
+    return [...paths].sort().join("|");
+  }, [sessions]);
 
   useEffect(() => {
-    if (!tabsHydrated || !repositoriesRefreshKey) return;
-    for (const p of repositories) {
-      void refreshDiskSessionsForRepository(p.path, p.name);
+    if (!tabsHydrated || !openSessionRepositoryPathsKey) return;
+    let cancelled = false;
+    const cleanups: Array<() => void> = [];
+    const paths = openSessionRepositoryPathsKey.split("|").filter(Boolean);
+    for (let index = 0; index < paths.length; index += 1) {
+      const path = paths[index]!;
+      const repo = repositories.find((item) => repositoryPathsMatch(item.path, path));
+      const name = repo?.name?.trim() || repositoryFolderBasename(path);
+      cleanups.push(
+        runWhenIdle(
+          () => {
+            if (cancelled) return;
+            void refreshDiskSessionsForRepository(path, name);
+          },
+          { timeoutMs: 1200 + index * 500 },
+        ),
+      );
     }
-  }, [repositories, repositoriesRefreshKey, refreshDiskSessionsForRepository, tabsHydrated]);
+    return () => {
+      cancelled = true;
+      for (const cleanup of cleanups) cleanup();
+    };
+  }, [openSessionRepositoryPathsKey, repositories, refreshDiskSessionsForRepository, tabsHydrated]);
 
   useEffect(() => {
     void (async () => {
@@ -1580,8 +1606,13 @@ export default function App() {
   const activeRepository = repositories.find((p) => p.id === activeRepositoryId);
 
   useEffect(() => {
-    if (!tabsHydrated || !activeRepository) return;
-    void refreshDiskSessionsForRepository(activeRepository.path, activeRepository.name);
+    if (!tabsHydrated || !activeRepository?.path?.trim()) return;
+    const repoPath = activeRepository.path.trim();
+    const repoName = activeRepository.name?.trim() || repositoryFolderBasename(activeRepository);
+    const cancelIdle = runWhenIdle(() => {
+      void refreshDiskSessionsForRepository(repoPath, repoName);
+    }, { timeoutMs: 800 });
+    return cancelIdle;
   }, [activeRepository, refreshDiskSessionsForRepository, tabsHydrated]);
 
   const {
@@ -2927,6 +2958,7 @@ export default function App() {
           setMonitorDrawerTarget({ type: "task", taskId });
         },
         onReloadFullDiskTranscript: reloadFullDiskTranscript,
+        onLoadMoreTranscriptFromDisk: loadMoreTranscriptFromDisk,
         activeRepositoryPath: activeRepository?.path,
         activeRepositoryName: activeRepository?.name,
       }}
@@ -3159,6 +3191,7 @@ export default function App() {
         sessions,
         activeSessionId,
         onReloadFullDiskTranscript: reloadFullDiskTranscript,
+        onLoadMoreTranscriptFromDisk: loadMoreTranscriptFromDisk,
         onCompactSessionHistory: compactSessionHistory,
         omcBatchPipelineActive: Boolean(omcBatchRuntime?.active),
         onAddWorktreeRepositoryToProject: handleAddWorktreeRepositoryToProject,
@@ -3312,6 +3345,7 @@ export default function App() {
         onCancelOmcDirectBatchInvocation: handleCancelOmcDirectBatchInvocation,
         onStopSessionConversationTask: handleStopSessionConversationTask,
         onReloadFullDiskTranscript: reloadFullDiskTranscript,
+        onLoadMoreTranscriptFromDisk: loadMoreTranscriptFromDisk,
         onCompactSessionHistory: compactSessionHistory,
         historyDrawerSessionId: inspectorHistorySessionId,
         onHistoryDrawerSessionIdChange: setInspectorHistorySessionId,
@@ -3416,6 +3450,7 @@ export default function App() {
         onClose: () => setInspectorHistorySessionId(null),
         transcriptSourceSessions: sessions,
         onReloadFullDiskTranscript: reloadFullDiskTranscript,
+        onLoadMoreTranscriptFromDisk: loadMoreTranscriptFromDisk,
         onCompactSessionHistory: compactSessionHistory,
         onCancelSession: cancelSession,
         onOpenTaskDetail: (taskId) => {
@@ -3449,6 +3484,7 @@ export default function App() {
           setMonitorDrawerTarget(null);
         },
         onReloadFullDiskTranscript: reloadFullDiskTranscript,
+        onLoadMoreTranscriptFromDisk: loadMoreTranscriptFromDisk,
         onCompactSessionHistory: compactSessionHistory,
         onCancelSession: cancelSession,
         onOpenTaskDetail: (taskId) => {

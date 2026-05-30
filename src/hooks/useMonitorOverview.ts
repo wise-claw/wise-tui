@@ -1,6 +1,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
+import { readVisiblePollIntervalMs, stringSetEqual } from "../utils/adaptivePoll";
 import { pickSessionForRepositorySidebarSelect } from "../utils/claudeSessionSelection";
 import { resolveMainOwnerAgentNameForRepositoryPath } from "../utils/repositoryMainSessionBinding";
 import { OMC_MONITOR_EMPLOYEE_NAME } from "../constants/omcMonitor";
@@ -919,8 +920,7 @@ export function useMonitorOverview({
 
   useEffect(() => {
     let cancelled = false;
-    const VISIBLE_POLL_INTERVAL_MS = 8000;
-    const HIDDEN_POLL_INTERVAL_MS = 20000;
+    let timer: ReturnType<typeof setInterval> | null = null;
     const tick = async () => {
       try {
         const list = await listRunningClaudeSessions();
@@ -931,29 +931,32 @@ export function useMonitorOverview({
             .map((item) => item.session_id.trim())
             .filter((id) => id.length > 0),
         );
-        setRegistryRunningClaudeSessionIds(ids);
+        setRegistryRunningClaudeSessionIds((prev) => (stringSetEqual(prev, ids) ? prev : ids));
       } catch {
         /* 与侧栏一致：失败时保留上一轮，避免误判闪断 */
       }
     };
+    const scheduleTimer = () => {
+      if (timer != null) window.clearInterval(timer);
+      timer = window.setInterval(() => {
+        if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+        void tick();
+      }, readVisiblePollIntervalMs(8000, 20000));
+    };
     void tick();
-    const intervalMs =
-      typeof document !== "undefined" && document.visibilityState === "visible"
-        ? VISIBLE_POLL_INTERVAL_MS
-        : HIDDEN_POLL_INTERVAL_MS;
-    const timer = window.setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-      void tick();
-    }, intervalMs);
+    scheduleTimer();
     const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") void tick();
+      if (document.visibilityState === "visible") {
+        void tick();
+        scheduleTimer();
+      }
     };
     if (typeof document !== "undefined") {
       document.addEventListener("visibilitychange", onVisibilityChange);
     }
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      if (timer != null) window.clearInterval(timer);
       if (typeof document !== "undefined") {
         document.removeEventListener("visibilitychange", onVisibilityChange);
       }

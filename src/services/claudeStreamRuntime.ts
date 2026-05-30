@@ -314,7 +314,9 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
 
     if (reloadTranscriptFromDisk && success) {
       const skipDiskReload =
-        streamingResident && session != null && session.messages.length > 0;
+        session != null &&
+        session.messages.length > 0 &&
+        (streamingResident || Boolean(session.diskTranscriptPartial));
       if (!skipDiskReload) {
         const stableTabId = session?.id ?? tid;
         const repo = session?.repositoryPath?.trim() ?? "";

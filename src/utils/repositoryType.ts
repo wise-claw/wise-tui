@@ -15,13 +15,26 @@ export function repositoryTypeBadgeLetter(type: Repository["repositoryType"]): s
 }
 
 /** 从路径解析末段目录名（与后端 `repository_folder_label_from_path` 语义一致）。 */
-export function repositoryFolderBasename(repository: Pick<Repository, "path" | "name">): string {
-  const raw = repository.path.trim().replace(/\\/g, "/");
+export function repositoryFolderBasename(path: string): string;
+export function repositoryFolderBasename(
+  repository: Pick<Repository, "path" | "name"> | null | undefined,
+): string;
+export function repositoryFolderBasename(
+  repositoryOrPath: Pick<Repository, "path" | "name"> | string | null | undefined,
+): string {
+  if (repositoryOrPath == null) return "未命名仓库";
+  if (typeof repositoryOrPath === "string") {
+    const raw = repositoryOrPath.trim().replace(/\\/g, "/");
+    const parts = raw.split("/").filter(Boolean);
+    const tail = parts.length > 0 ? parts[parts.length - 1] : "";
+    return tail.trim() || "未命名仓库";
+  }
+  const raw = (repositoryOrPath.path ?? "").trim().replace(/\\/g, "/");
   const parts = raw.split("/").filter(Boolean);
   const tail = parts.length > 0 ? parts[parts.length - 1] : "";
   const fromPath = tail.trim();
   if (fromPath.length > 0) return fromPath;
-  return repository.name.trim() || "未命名仓库";
+  return (repositoryOrPath.name ?? "").trim() || "未命名仓库";
 }
 
 /** 新建 Claude 标签时：主 Owner 为子代理时的 `repositoryName`（与 `…/员工:姓名` 规则一致）。 */

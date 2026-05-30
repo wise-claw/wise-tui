@@ -53,11 +53,15 @@ import {
 import { loadSessionTabsState, saveSessionTabsState } from "../services/tabsStore";
 import {
   CLAUDE_DISK_JSONL_TAIL_LINES_INITIAL,
+  CLAUDE_DISK_JSONL_TAIL_LINES_LAZY,
+  CLAUDE_DISK_JSONL_TAIL_LINES_LOAD_MORE,
   CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD,
   IN_MEMORY_SESSION_MESSAGES_MAX,
   MAX_REPO_DISK_INDEX_SESSIONS,
   PERSIST_SESSION_MESSAGES_MAX,
 } from "../constants/claudeMessageListWindow";
+import { runWhenIdle } from "../utils/deferIdle";
+import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
 import { wiseNotificationIngest } from "../services/wiseMascot";
 import {
   buildQuestionFallbackUserPrompt,
@@ -713,6 +717,8 @@ interface UseClaudeSessionsReturn {
   tabsHydrated: boolean;
   /** 从磁盘读取完整 jsonl 覆盖该标签的 messages（`sessionKey` 可为标签 id 或 `claudeSessionId`） */
   reloadFullDiskTranscript: (sessionKey: string) => Promise<void>;
+  /** 渐进加载更早 jsonl 尾部（未达上限前不读全文件） */
+  loadMoreTranscriptFromDisk: (sessionKey: string) => Promise<void>;
   /** 手动触发 Claude Code `/compact` 压缩会话历史 */
   compactSessionHistory: (sessionId: string) => Promise<void>;
   /**
@@ -734,18 +740,37 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     if (options?.companionSessionId) ids.add(options.companionSessionId);
     return Array.from(ids);
   }, [companionSessionIdsJoinKey, options?.companionSessionId]);
+
   const [sessions, setSessionsRaw] = useState<ClaudeSession[]>([]);
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
+  const memoryKeepSessionIdsRef = useRef<Set<string>>(new Set());
+
+  const buildMemoryKeepSessionIds = useCallback((list: ClaudeSession[]) => {
+    const keep = new Set(memoryKeepSessionIdsRef.current);
+    for (const session of list) {
+      if (session.status === "running" || session.status === "connecting") {
+        keep.add(session.id);
+      }
+      if (isTerminalWorkerWiseTab(session)) {
+        keep.add(session.id);
+      }
+    }
+    return keep;
+  }, []);
+
   const setSessions = useCallback((action: SetStateAction<ClaudeSession[]>) => {
     setSessionsRaw((prev) => {
       const next = typeof action === "function" ? action(prev) : action;
-      const capped = applySessionsMemoryCap(next);
+      if (next === prev) return prev;
+      const capped = applySessionsMemoryCap(next, {
+        keepSessionIds: buildMemoryKeepSessionIds(next),
+      });
       if (capped === prev) return prev;
       sessionsRef.current = capped;
       return capped;
     });
-  }, []);
+  }, [buildMemoryKeepSessionIds]);
   /** 流式事件可能在同一帧连发多行；须在 `setSessions` updater 内同步 ref，避免 init 后 assistant 行因 ref 过期被丢弃。 */
   const commitSessions = useCallback((updater: (prev: ClaudeSession[]) => ClaudeSession[]) => {
     setSessions(updater);
@@ -758,6 +783,14 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   const claudeSessionsOptionsRef = useRef(options);
   claudeSessionsOptionsRef.current = options;
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const keep = new Set<string>();
+    if (activeSessionId) keep.add(activeSessionId);
+    for (const id of companionSessionIds) keep.add(id);
+    memoryKeepSessionIdsRef.current = keep;
+  }, [activeSessionId, companionSessionIds, companionSessionIdsJoinKey]);
+
   const [tabsHydrated, setTabsHydrated] = useState(false);
   const workflowRunBySessionRef = useRef<Map<string, string>>(new Map());
   const sessionIdMapRef = useRef<Map<string, string>>(new Map());
@@ -1350,6 +1383,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   /** Claude `session_id` → 在此之前不因「宿主 registry 暂无该 sid」将 running 降级为 idle */
   const registryBootstrapDeadlineByClaudeSidRef = useRef<Map<string, number>>(new Map());
   const diskLoadDoneRef = useRef<Set<string>>(new Set());
+  const diskTailLinesBySessionRef = useRef(new Map<string, number>());
   /** Tauri 主窗口是否在前台（与 `document.hidden` 组合判断 Phase 4 桌面摘要）。 */
   const mainWinFocusedRef = useRef(true);
 
@@ -1466,6 +1500,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             const match =
               sess.id === tab || sess.claudeSessionId === cc || sess.id === cc || sess.claudeSessionId === tab;
             if (!match) return sess;
+            diskTailLinesBySessionRef.current.set(sess.id, CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD);
             const nextMessages = isTerminalWorkerWiseTab(sess)
               ? sanitizeTerminalWorkerTranscriptMessages(messages)
               : messages;
@@ -1585,6 +1620,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       if (!rp || !cc) return;
       try {
         const lines = await loadClaudeSessionJsonl(rp, cc);
+        diskTailLinesBySessionRef.current.set(tid, lines.length);
         const { messages, diskTranscriptPartial } = sessionMessagesFromJsonlLines(lines, {
           tailRequestLines: Math.max(lines.length, 1),
         });
@@ -1602,6 +1638,54 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       }
     },
     [setSessions],
+  );
+
+  const applyDiskTranscriptTail = useCallback(
+    async (session: ClaudeSession, tailLines: number) => {
+      const rp = session.repositoryPath?.trim();
+      const cc = session.claudeSessionId?.trim();
+      if (!rp || !cc) return;
+      const lines = await loadClaudeSessionJsonl(rp, cc, { tailLines });
+      const { messages, diskTranscriptPartial } = sessionMessagesFromJsonlLines(lines, {
+        tailRequestLines: tailLines,
+      });
+      if (messages.length === 0) return;
+      const nextMessages = isTerminalWorkerWiseTab(session)
+        ? sanitizeTerminalWorkerTranscriptMessages(messages)
+        : messages;
+      diskTailLinesBySessionRef.current.set(session.id, tailLines);
+      setSessions((prev) =>
+        prev.map((sess) =>
+          sess.id === session.id ? { ...sess, messages: nextMessages, diskTranscriptPartial } : sess,
+        ),
+      );
+    },
+    [setSessions],
+  );
+
+  const loadMoreTranscriptFromDisk = useCallback(
+    async (sessionKey: string) => {
+      const raw = sessionKey.trim();
+      if (!raw) return;
+      const s = sessionsRef.current.find((x) => x.id === raw || x.claudeSessionId === raw);
+      if (!s?.claudeSessionId?.trim()) return;
+      const prevTail =
+        diskTailLinesBySessionRef.current.get(s.id) ?? CLAUDE_DISK_JSONL_TAIL_LINES_LAZY;
+      if (prevTail >= CLAUDE_DISK_JSONL_TAIL_LINES_INITIAL) {
+        await reloadFullDiskTranscript(s.id);
+        return;
+      }
+      const nextTail = Math.min(
+        prevTail + CLAUDE_DISK_JSONL_TAIL_LINES_LOAD_MORE,
+        CLAUDE_DISK_JSONL_TAIL_LINES_INITIAL,
+      );
+      try {
+        await applyDiskTranscriptTail(s, nextTail);
+      } catch {
+        /* ignore */
+      }
+    },
+    [applyDiskTranscriptTail, reloadFullDiskTranscript],
   );
 
   useEffect(() => {
@@ -2001,79 +2085,54 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     if (diskLoadDoneRef.current.has(s.id)) return;
     diskLoadDoneRef.current.add(s.id);
     const loadKey = s.id;
+    const snapshot = s;
 
     let cancelled = false;
-    void (async () => {
-      try {
-        const lines = await loadClaudeSessionJsonl(s.repositoryPath, s.claudeSessionId!, {
-          tailLines: CLAUDE_DISK_JSONL_TAIL_LINES_INITIAL,
-        });
-        if (cancelled) return;
-        const { messages, diskTranscriptPartial } = sessionMessagesFromJsonlLines(lines, {
-          tailRequestLines: CLAUDE_DISK_JSONL_TAIL_LINES_INITIAL,
-        });
-        const nextMessages = isTerminalWorkerWiseTab(s)
-          ? sanitizeTerminalWorkerTranscriptMessages(messages)
-          : messages;
-        setSessions((prev) =>
-          prev.map((sess) =>
-            sess.id === loadKey ? { ...sess, messages: nextMessages, diskTranscriptPartial } : sess,
-          ),
-        );
-      } catch {
+    const cancelIdle = runWhenIdle(() => {
+      if (cancelled) return;
+      void applyDiskTranscriptTail(snapshot, CLAUDE_DISK_JSONL_TAIL_LINES_LAZY).catch(() => {
         diskLoadDoneRef.current.delete(loadKey);
-      }
-    })();
+      });
+    }, { timeoutMs: 900 });
 
     return () => {
       cancelled = true;
+      cancelIdle();
       diskLoadDoneRef.current.delete(loadKey);
     };
-  }, [activeSessionId]);
+  }, [activeSessionId, applyDiskTranscriptTail]);
 
   useEffect(() => {
     if (companionSessionIds.length === 0) return;
-    const cleanups: Array<() => void> = [];
-    for (const cid of companionSessionIds) {
-      const s = sessionsRef.current.find((x) => x.id === cid);
-      if (!s?.claudeSessionId || s.messages.length > 0) continue;
-      if (s.status === "running" || s.status === "connecting") continue;
-      if (diskLoadDoneRef.current.has(s.id)) continue;
-      diskLoadDoneRef.current.add(s.id);
-      const loadKey = s.id;
+    let cancelled = false;
+    const idleCleanups: Array<() => void> = [];
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+      for (const cid of companionSessionIds) {
+        const s = sessionsRef.current.find((x) => x.id === cid);
+        if (!s?.claudeSessionId || s.messages.length > 0) continue;
+        if (s.status === "running" || s.status === "connecting") continue;
+        if (diskLoadDoneRef.current.has(s.id)) continue;
+        diskLoadDoneRef.current.add(s.id);
+        const loadKey = s.id;
+        const snapshot = s;
+        idleCleanups.push(
+          runWhenIdle(() => {
+            if (cancelled) return;
+            void applyDiskTranscriptTail(snapshot, CLAUDE_DISK_JSONL_TAIL_LINES_LAZY).catch(() => {
+              diskLoadDoneRef.current.delete(loadKey);
+            });
+          }, { timeoutMs: 3000 }),
+        );
+      }
+    }, 1800);
 
-      let cancelled = false;
-      void (async () => {
-        try {
-          const lines = await loadClaudeSessionJsonl(s.repositoryPath, s.claudeSessionId!, {
-            tailLines: CLAUDE_DISK_JSONL_TAIL_LINES_INITIAL,
-          });
-          if (cancelled) return;
-          const { messages, diskTranscriptPartial } = sessionMessagesFromJsonlLines(lines, {
-            tailRequestLines: CLAUDE_DISK_JSONL_TAIL_LINES_INITIAL,
-          });
-          const nextMessages = isTerminalWorkerWiseTab(s)
-            ? sanitizeTerminalWorkerTranscriptMessages(messages)
-            : messages;
-          setSessions((prev) =>
-            prev.map((sess) =>
-              sess.id === loadKey ? { ...sess, messages: nextMessages, diskTranscriptPartial } : sess,
-            ),
-          );
-        } catch {
-          diskLoadDoneRef.current.delete(loadKey);
-        }
-      })();
-
-      cleanups.push(() => {
-        cancelled = true;
-        diskLoadDoneRef.current.delete(loadKey);
-      });
-    }
     return () => {
-      for (const fn of cleanups) fn();
+      cancelled = true;
+      window.clearTimeout(timer);
+      for (const cleanup of idleCleanups) cleanup();
     };
-  }, [companionSessionIds]);
+  }, [companionSessionIdsJoinKey, applyDiskTranscriptTail, companionSessionIds]);
 
   /** 非活动/非多屏伴生标签：丢弃正文，仅保留元数据；切回时再从磁盘懒加载（running 与无磁盘 id 的纯本地草稿保留） */
   useEffect(() => {
@@ -2111,31 +2170,67 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       });
       return changed ? next : prev;
     });
-  }, [tabsHydrated, activeSessionId, companionSessionIds]);
+  }, [tabsHydrated, activeSessionId, companionSessionIdsJoinKey]);
+
+  /** 周期性收紧全局消息预算（避免流式/多标签在 cap 之外缓慢涨内存） */
+  useEffect(() => {
+    if (!tabsHydrated) return;
+    let cancelIdle: (() => void) | null = null;
+    const timer = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      if (cancelIdle) cancelIdle();
+      cancelIdle = runWhenIdle(() => {
+        setSessions((prev) => {
+          const capped = applySessionsMemoryCap(prev, {
+            keepSessionIds: buildMemoryKeepSessionIds(prev),
+          });
+          return capped === prev ? prev : capped;
+        });
+      }, { timeoutMs: 4000 });
+    }, 45_000);
+    return () => {
+      window.clearInterval(timer);
+      if (cancelIdle) cancelIdle();
+    };
+  }, [tabsHydrated, setSessions, buildMemoryKeepSessionIds]);
 
   /** 主会话 / 员工 / 团队等全部标签：定期与 Claude Code 宿主注册表对齐执行态（不限于当前活动标签）。 */
   useEffect(() => {
     let cancelled = false;
-    const VISIBLE_POLL_MS = 8000;
-    const HIDDEN_POLL_MS = 20000;
+    let timer: ReturnType<typeof setInterval> | null = null;
+    let cancelIdle: (() => void) | null = null;
+    const registryPollTickRef = { value: 0 };
+
+    const scheduleTimer = () => {
+      if (timer != null) window.clearInterval(timer);
+      timer = window.setInterval(() => {
+        if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+        void tick();
+      }, readVisiblePollIntervalMs(8000, 20000));
+    };
 
     const tick = async () => {
       try {
-        const [listResult, snapshotResult] = await Promise.allSettled([
-          listRunningClaudeSessions(),
-          getSystemResourceSnapshot(),
-        ]);
+        registryPollTickRef.value += 1;
+        const includeHostSnapshot = registryPollTickRef.value % 3 === 1;
+        const listPromise = listRunningClaudeSessions();
+        const snapshotPromise = includeHostSnapshot ? getSystemResourceSnapshot() : Promise.resolve(null);
+        const [listResult, snapshotResult] = await Promise.allSettled([listPromise, snapshotPromise]);
         if (cancelled) return;
         if (listResult.status !== "fulfilled") return;
         const list = listResult.value;
         const claudeProcesses =
-          snapshotResult.status === "fulfilled" ? snapshotResult.value.claudeProcesses ?? [] : [];
-        hydrateStreamingProcessRegistryFromHost(
-          sessionsRef.current,
-          claudeProcesses,
-          streamingProcessByTabRef.current,
-          defaultConnectionKindRef.current,
-        );
+          snapshotResult.status === "fulfilled" && snapshotResult.value
+            ? snapshotResult.value.claudeProcesses ?? []
+            : [];
+        if (includeHostSnapshot) {
+          hydrateStreamingProcessRegistryFromHost(
+            sessionsRef.current,
+            claudeProcesses,
+            streamingProcessByTabRef.current,
+            defaultConnectionKindRef.current,
+          );
+        }
         const knownIds = new Set(
           list.map((item) => item.session_id.trim()).filter((id) => id.length > 0),
         );
@@ -2153,35 +2248,41 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             registryBootstrapDeadlineByClaudeSidRef.current,
             knownIds,
           );
-          return applyStreamingResidentUiStatuses(
-            reconciled,
-            streamingProcessByTabRef.current,
-            defaultConnectionKindRef.current,
-          );
+          const next = includeHostSnapshot
+            ? applyStreamingResidentUiStatuses(
+                reconciled,
+                streamingProcessByTabRef.current,
+                defaultConnectionKindRef.current,
+              )
+            : reconciled;
+          return next === prev ? prev : next;
         });
       } catch {
         /* 与流式事件并存：拉取失败则保持当前 UI */
       }
     };
 
-    void tick();
-    const intervalMs =
-      typeof document !== "undefined" && document.visibilityState === "visible"
-        ? VISIBLE_POLL_MS
-        : HIDDEN_POLL_MS;
-    const timer = window.setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-      void tick();
-    }, intervalMs);
+    const runTick = () => {
+      if (cancelIdle) cancelIdle();
+      cancelIdle = runWhenIdle(() => {
+        if (!cancelled) void tick();
+      }, { timeoutMs: 2500 });
+    };
 
+    runTick();
+    scheduleTimer();
     const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") void tick();
+      if (document.visibilityState === "visible") {
+        runTick();
+        scheduleTimer();
+      }
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      if (timer != null) window.clearInterval(timer);
+      if (cancelIdle) cancelIdle();
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, []);
@@ -2697,6 +2798,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     streamingSessionStreamDetachByTabRef.current.get(sessionId)?.();
     streamingSessionStreamDetachByTabRef.current.delete(sessionId);
     diskLoadDoneRef.current.delete(sessionId);
+    diskTailLinesBySessionRef.current.delete(sessionId);
     notificationHub.removeSession(sessionId);
     if (victim?.repositoryPath?.trim()) {
       void clearInvocationSnapshotBundle(sessionId, victim.repositoryPath);
@@ -2903,11 +3005,12 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           registryBootstrapDeadlineByClaudeSidRef.current,
           knownIds,
         );
-        return applyStreamingResidentUiStatuses(
+        const next = applyStreamingResidentUiStatuses(
           reconciled,
           streamingProcessByTabRef.current,
           defaultConnectionKindRef.current,
         );
+        return next === prev ? prev : next;
       });
     } catch {
       /* 与定时 tick 一致：拉取失败则保持当前 UI */
@@ -3329,6 +3432,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     refreshDiskSessionsForRepository,
     tabsHydrated,
     reloadFullDiskTranscript,
+    loadMoreTranscriptFromDisk,
     compactSessionHistory,
     releaseSessionHostProcess,
   };

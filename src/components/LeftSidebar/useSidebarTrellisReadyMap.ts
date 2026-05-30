@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectItem, Repository } from "../../types";
+import { runWhenIdle } from "../../utils/deferIdle";
 import { TRELLIS_UI_EVENT_BOOTSTRAP_COMPLETE } from "../../constants/trellisUiEvents";
 import { trellisTaskPyExistsAtPath } from "../../services/trellisBootstrap";
 import { selectFloatingRepositories } from "../../utils/floatingRepositories";
@@ -15,6 +16,27 @@ async function pathHasTrellis(path: string | null): Promise<boolean> {
   }
 }
 
+function stringBoolRecordEqual(
+  left: Record<string, boolean>,
+  right: Record<string, boolean>,
+): boolean {
+  const leftKeys = Object.keys(left);
+  if (leftKeys.length !== Object.keys(right).length) return false;
+  for (const key of leftKeys) {
+    if (left[key] !== right[key]) return false;
+  }
+  return true;
+}
+
+function idBoolRecordEqual(left: Record<number, boolean>, right: Record<number, boolean>): boolean {
+  const leftKeys = Object.keys(left);
+  if (leftKeys.length !== Object.keys(right).length) return false;
+  for (const key of leftKeys) {
+    if (left[Number(key)] !== right[Number(key)]) return false;
+  }
+  return true;
+}
+
 /** Sidebar: track Trellis init (.trellis/scripts/task.py) per workspace and repository. */
 export function useSidebarTrellisReadyMap(
   projects: ProjectItem[],
@@ -22,6 +44,10 @@ export function useSidebarTrellisReadyMap(
 ) {
   const [projectReadyById, setProjectReadyById] = useState<Record<string, boolean>>({});
   const [repositoryReadyById, setRepositoryReadyById] = useState<Record<number, boolean>>({});
+  const projectsRef = useRef(projects);
+  const repositoriesRef = useRef(repositories);
+  projectsRef.current = projects;
+  repositoriesRef.current = repositories;
 
   const scopeKey = useMemo(() => {
     const projectPart = projects
@@ -32,17 +58,19 @@ export function useSidebarTrellisReadyMap(
   }, [projects, repositories]);
 
   const refresh = useCallback(async () => {
-    const repoById = new Map(repositories.map((repository) => [repository.id, repository] as const));
+    const currentProjects = projectsRef.current;
+    const currentRepositories = repositoriesRef.current;
+    const repoById = new Map(currentRepositories.map((repository) => [repository.id, repository] as const));
     const nextProjectReady: Record<string, boolean> = {};
     const nextRepositoryReady: Record<number, boolean> = {};
 
     await Promise.all(
-      projects.map(async (project) => {
+      currentProjects.map(async (project) => {
         const projectPath = resolveTrellisBootstrapPath({
           scope: "project",
           project,
-          repositories,
-          projects,
+          repositories: currentRepositories,
+          projects: currentProjects,
         });
         nextProjectReady[project.id] = await pathHasTrellis(projectPath);
 
@@ -54,8 +82,8 @@ export function useSidebarTrellisReadyMap(
               scope: "repository",
               project,
               repository,
-              repositories,
-              projects,
+              repositories: currentRepositories,
+              projects: currentProjects,
             });
             nextRepositoryReady[repositoryId] = await pathHasTrellis(repositoryPath);
           }),
@@ -63,26 +91,33 @@ export function useSidebarTrellisReadyMap(
       }),
     );
 
-    const floatingRepositories = selectFloatingRepositories(projects, repositories);
+    const floatingRepositories = selectFloatingRepositories(currentProjects, currentRepositories);
     await Promise.all(
       floatingRepositories.map(async (repository) => {
         const repositoryPath = resolveTrellisBootstrapPath({
           scope: "repository",
           repository,
-          repositories,
-          projects,
+          repositories: currentRepositories,
+          projects: currentProjects,
         });
         nextRepositoryReady[repository.id] = await pathHasTrellis(repositoryPath);
       }),
     );
 
-    setProjectReadyById(nextProjectReady);
-    setRepositoryReadyById(nextRepositoryReady);
-  }, [projects, repositories]);
+    setProjectReadyById((prev) =>
+      stringBoolRecordEqual(prev, nextProjectReady) ? prev : nextProjectReady,
+    );
+    setRepositoryReadyById((prev) =>
+      idBoolRecordEqual(prev, nextRepositoryReady) ? prev : nextRepositoryReady,
+    );
+  }, []);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh, scopeKey]);
+    const cancelIdle = runWhenIdle(() => {
+      void refresh();
+    }, { timeoutMs: 1800 });
+    return cancelIdle;
+  }, [scopeKey, refresh]);
 
   useEffect(() => {
     const onBootstrapComplete = () => {

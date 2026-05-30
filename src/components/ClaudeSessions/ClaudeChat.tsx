@@ -346,6 +346,8 @@ interface Props {
   onAddWorktreeRepositoryToProject?: (worktreePath: string) => void | Promise<void>;
   /** 从磁盘读取完整 jsonl 覆盖当前标签消息（`diskTranscriptPartial` 时） */
   onReloadFullDiskTranscript?: (sessionId: string) => void | Promise<void>;
+  /** 渐进加载更早 jsonl 尾部（未达上限前不读全文件） */
+  onLoadMoreTranscriptFromDisk?: (sessionId: string) => void | Promise<void>;
   /** 手动执行 Claude Code `/compact` 压缩会话历史 */
   onCompactSessionHistory?: (sessionId: string) => void | Promise<void>;
   /** 双栏右侧主会话：输入框底栏仓库选择（由父级仅在右侧注入） */
@@ -548,6 +550,7 @@ export function ClaudeChat({
   omcBatchPipelineActive = false,
   onAddWorktreeRepositoryToProject,
   onReloadFullDiskTranscript,
+  onLoadMoreTranscriptFromDisk,
   onCompactSessionHistory,
   dualPaneRepositoryPicker,
   missionContext,
@@ -1461,6 +1464,7 @@ export function ClaudeChat({
   ]);
 
   const [fullTranscriptLoading, setFullTranscriptLoading] = useState(false);
+  const [loadMoreTranscriptLoading, setLoadMoreTranscriptLoading] = useState(false);
 
   const pauseFollowForMessageNavigation = useCallback(() => {
     userPausedFollowRef.current = true;
@@ -4754,26 +4758,42 @@ export function ClaudeChat({
           }}
           onBlur={handleMessagesBlur}
         >
-          {session.diskTranscriptPartial && onReloadFullDiskTranscript ? (
+          {session.diskTranscriptPartial && (onLoadMoreTranscriptFromDisk || onReloadFullDiskTranscript) ? (
             <Alert
               className="app-claude-messages-disk-partial-alert"
               type="info"
               showIcon
-              message="当前为磁盘会话记录的尾部加载（节省内存）。若需查看更早轮次，可加载完整历史。"
+              message="当前为磁盘会话记录的尾部加载（节省内存）。若需查看更早轮次，可逐步加载或读取完整历史。"
               action={
                 <Space>
-                  <Button
-                    size="small"
-                    loading={fullTranscriptLoading}
-                    onClick={() => {
-                      setFullTranscriptLoading(true);
-                      void Promise.resolve(onReloadFullDiskTranscript(session.id)).finally(() => {
-                        setFullTranscriptLoading(false);
-                      });
-                    }}
-                  >
-                    加载完整历史
-                  </Button>
+                  {onLoadMoreTranscriptFromDisk ? (
+                    <Button
+                      size="small"
+                      loading={loadMoreTranscriptLoading}
+                      onClick={() => {
+                        setLoadMoreTranscriptLoading(true);
+                        void Promise.resolve(onLoadMoreTranscriptFromDisk(session.id)).finally(() => {
+                          setLoadMoreTranscriptLoading(false);
+                        });
+                      }}
+                    >
+                      加载更早轮次
+                    </Button>
+                  ) : null}
+                  {onReloadFullDiskTranscript ? (
+                    <Button
+                      size="small"
+                      loading={fullTranscriptLoading}
+                      onClick={() => {
+                        setFullTranscriptLoading(true);
+                        void Promise.resolve(onReloadFullDiskTranscript(session.id)).finally(() => {
+                          setFullTranscriptLoading(false);
+                        });
+                      }}
+                    >
+                      加载完整历史
+                    </Button>
+                  ) : null}
                 </Space>
               }
             />

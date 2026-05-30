@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import type { ProjectItem, Repository } from "../../types";
+import { runWhenIdle } from "../../utils/deferIdle";
 import {
   buildProjectRequirementWorkspaceInput,
   listTrellisRequirementWorkspace,
@@ -115,18 +116,29 @@ export function useSidebarRequirementUnsplitMap(
   }, []);
 
   useEffect(() => {
-    void refresh();
+    const cancelIdle = runWhenIdle(() => {
+      void refresh();
+    }, { timeoutMs: 1800 });
+    return cancelIdle;
   }, [projectKey, repositoryKey, refresh]);
 
   useEffect(() => {
     let cancelled = false;
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const cleanups: Array<() => void> = [];
+
+    const scheduleRefresh = () => {
+      if (cancelled) return;
+      if (debounceTimer != null) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        debounceTimer = null;
+        if (!cancelled) void refresh();
+      }, 900);
+    };
 
     void (async () => {
       const attach = async (eventName: string) => {
-        const unlisten = await listen(eventName, () => {
-          if (!cancelled) void refresh();
-        });
+        const unlisten = await listen(eventName, scheduleRefresh);
         if (cancelled) {
           safeUnlisten(unlisten);
           return;
@@ -141,6 +153,7 @@ export function useSidebarRequirementUnsplitMap(
 
     return () => {
       cancelled = true;
+      if (debounceTimer != null) clearTimeout(debounceTimer);
       cleanups.forEach((cleanup) => cleanup());
     };
   }, [refresh]);

@@ -1,4 +1,5 @@
 import { gitStatusSummary } from "../services/git";
+import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
 
 const VISIBLE_POLL_INTERVAL_MS = 10000;
 const HIDDEN_POLL_INTERVAL_MS = 30000;
@@ -66,8 +67,7 @@ function refreshAllPaths(): void {
 }
 
 function pollIntervalMs(): number {
-  if (typeof document === "undefined") return VISIBLE_POLL_INTERVAL_MS;
-  return document.visibilityState === "visible" ? VISIBLE_POLL_INTERVAL_MS : HIDDEN_POLL_INTERVAL_MS;
+  return readVisiblePollIntervalMs(VISIBLE_POLL_INTERVAL_MS, HIDDEN_POLL_INTERVAL_MS);
 }
 
 function restartPollTimer(): void {
