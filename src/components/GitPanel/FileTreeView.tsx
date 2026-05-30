@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { Button, Space, Tooltip } from "antd";
 import { MinusOutlined, PlusOutlined } from "@ant-design/icons";
 import type { GitFileStatus } from "../../types";
@@ -110,7 +110,7 @@ function FileTreeNodeComponent({
         {isExpanded && node.children && (
           <div className="git-tree-children">
             {node.children.map((child) => (
-              <FileTreeNodeComponent
+              <MemoFileTreeNode
                 key={child.path}
                 node={child}
                 section={section}
@@ -147,6 +147,8 @@ function FileTreeNodeComponent({
   );
 }
 
+const MemoFileTreeNode = memo(FileTreeNodeComponent);
+
 interface FileTreeViewProps {
   files: GitFileStatus[];
   section: "staged" | "unstaged";
@@ -173,7 +175,7 @@ export function FileTreeView({
   return (
     <div className="git-file-list">
       {tree.map((node) => (
-        <FileTreeNodeComponent
+        <MemoFileTreeNode
           key={node.path}
           node={node}
           section={section}

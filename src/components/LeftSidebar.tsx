@@ -23,7 +23,9 @@ import {
   resolveRepositoryMainSessionId,
 } from "../utils/repositoryMainSessionBinding";
 import { endClaudeProcessRow } from "./LeftSidebar/endClaudeProcessRow";
-import { pathIsAccessibleDirectory, pickFolder } from "../services/repository";
+import { pickFolder } from "../services/repository";
+import { useDebouncedValue } from "../hooks/useDebouncedValue";
+import { pathIsAccessibleDirectoryCached } from "../utils/pathAccessibilityCache";
 import {
   OPEN_WORKSPACE_ERROR,
   openWorkspaceWithStoredPreference,
@@ -233,6 +235,7 @@ export function LeftSidebar({
   const [promotingFloatingRepoName, setPromotingFloatingRepoName] = useState("");
   const [appSettingsOpen, setAppSettingsOpen] = useState(false);
   const [repositoryFileTreeSearch, setRepositoryFileTreeSearch] = useState("");
+  const debouncedRepositoryFileTreeSearch = useDebouncedValue(repositoryFileTreeSearch, 250);
   /** 左下 Git/文件 Tab 目录选择器上下文：仅切换面板目录，不联动全局工作区/会话。 */
   const [repoPanelTreeSelection, setRepoPanelTreeSelection] =
     useState<WorkspaceRepositoryTreeSelection | null>(null);
@@ -610,7 +613,7 @@ export function LeftSidebar({
         if (!cancelled) setAccessibleRepoPanelPath("");
         return;
       }
-      if (await pathIsAccessibleDirectory(candidate)) {
+      if (await pathIsAccessibleDirectoryCached(candidate)) {
         if (!cancelled) setAccessibleRepoPanelPath(candidate);
         return;
       }
@@ -623,7 +626,7 @@ export function LeftSidebar({
         const repoById = new Map(repositories.map((repo) => [repo.id, repo] as const));
         for (const repoId of project.repositoryIds ?? []) {
           const memberPath = repoById.get(repoId)?.path?.trim() ?? "";
-          if (memberPath && (await pathIsAccessibleDirectory(memberPath))) {
+          if (memberPath && (await pathIsAccessibleDirectoryCached(memberPath))) {
             if (!cancelled) setAccessibleRepoPanelPath(memberPath);
             return;
           }
@@ -632,18 +635,10 @@ export function LeftSidebar({
       if (
         activeSessionRepositoryPath &&
         activeSessionRepositoryPath !== candidate &&
-        (await pathIsAccessibleDirectory(activeSessionRepositoryPath))
+        (await pathIsAccessibleDirectoryCached(activeSessionRepositoryPath))
       ) {
         if (!cancelled) setAccessibleRepoPanelPath(activeSessionRepositoryPath);
         return;
-      }
-      for (const repo of repositories) {
-        const memberPath = repo.path?.trim() ?? "";
-        if (!memberPath || memberPath === candidate) continue;
-        if (await pathIsAccessibleDirectory(memberPath)) {
-          if (!cancelled) setAccessibleRepoPanelPath(memberPath);
-          return;
-        }
       }
       if (!cancelled) setAccessibleRepoPanelPath(candidate);
     })();
@@ -1042,7 +1037,7 @@ export function LeftSidebar({
                   headerPrefix={filesExplorerSectionCollapsed ? undefined : repoPanelTabSwitcher}
                   activeRepositoryPath={effectiveRepoPanelPath}
                   activeRepositoryName={repoPanelRepositoryName}
-                  search={repositoryFileTreeSearch}
+                  search={debouncedRepositoryFileTreeSearch}
                   onSearchChange={setRepositoryFileTreeSearch}
                   onOpenFile={onOpenActiveRepositoryFile}
                   sectionCollapsed={filesExplorerSectionCollapsed}

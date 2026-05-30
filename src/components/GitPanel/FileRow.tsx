@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Button, Space, Tooltip } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
 import type { GitFileStatus } from "../../types";
@@ -16,7 +17,7 @@ interface FileRowProps {
   onOpenFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
 }
 
-export function FileRow({
+export const FileRow = memo(function FileRow({
   file,
   section,
   onStage,
@@ -127,4 +128,4 @@ export function FileRow({
       </div>
     </div>
   );
-}
+});

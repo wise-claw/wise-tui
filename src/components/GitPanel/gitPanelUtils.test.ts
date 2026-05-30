@@ -1,12 +1,38 @@
 import { describe, expect, it } from "bun:test";
+import type { GitStatusResponse } from "../../types";
 import {
   GIT_PANEL_LARGE_CHANGE_COUNT,
+  GIT_PANEL_VIRTUAL_LIST_THRESHOLD,
+  gitStatusSnapshotEqual,
   shouldUseGitVirtualFileList,
 } from "./gitPanelUtils";
 
 describe("shouldUseGitVirtualFileList", () => {
-  it("enables virtualization above the large-change threshold", () => {
-    expect(shouldUseGitVirtualFileList(GIT_PANEL_LARGE_CHANGE_COUNT)).toBe(false);
+  it("enables virtualization above the virtual-list threshold", () => {
+    expect(shouldUseGitVirtualFileList(GIT_PANEL_VIRTUAL_LIST_THRESHOLD)).toBe(false);
+    expect(shouldUseGitVirtualFileList(GIT_PANEL_VIRTUAL_LIST_THRESHOLD + 1)).toBe(true);
     expect(shouldUseGitVirtualFileList(GIT_PANEL_LARGE_CHANGE_COUNT + 1)).toBe(true);
+  });
+});
+
+describe("gitStatusSnapshotEqual", () => {
+  it("detects identical git status snapshots", () => {
+    const status: GitStatusResponse = {
+      staged: [{ path: "a.ts", status: "M", additions: 1, deletions: 0 }],
+      unstaged: [],
+      branch: "main",
+      additions: 1,
+      deletions: 0,
+      ahead: 0,
+      behind: 0,
+      upstream: null,
+    };
+    expect(gitStatusSnapshotEqual(status, { ...status })).toBe(true);
+    expect(
+      gitStatusSnapshotEqual(status, {
+        ...status,
+        unstaged: [{ path: "b.ts", status: "M", additions: 0, deletions: 0 }],
+      }),
+    ).toBe(false);
   });
 });

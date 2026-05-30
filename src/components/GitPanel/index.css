@@ -36,8 +36,15 @@
   -webkit-overflow-scrolling: touch;
 }
 
+.git-files-explorer-tree,
+.repo-tree-list {
+  content-visibility: auto;
+}
+
 .git-repo-section {
   border-bottom: 1px solid var(--app-workspace-glass-border, var(--ant-color-border-secondary));
+  content-visibility: auto;
+  contain-intrinsic-size: auto 36px;
 }
 
 .git-repo-section:last-child {

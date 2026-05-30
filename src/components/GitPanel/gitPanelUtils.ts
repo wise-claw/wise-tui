@@ -1,13 +1,39 @@
+import type { RepositoryExplorerEntry } from "../../services/repositoryFiles";
 import type { GitFileStatus, GitStatusResponse } from "../../types";
+
+export function repositoryExplorerEntriesEqual(
+  left: readonly RepositoryExplorerEntry[],
+  right: readonly RepositoryExplorerEntry[],
+): boolean {
+  if (left.length !== right.length) return false;
+  for (let i = 0; i < left.length; i += 1) {
+    const a = left[i]!;
+    const b = right[i]!;
+    if (a.path !== b.path || a.isDir !== b.isDir) return false;
+  }
+  return true;
+}
 
 /** 超过此数量时 Git 面板改用虚拟列表，并默认收起/列表视图。 */
 export const GIT_PANEL_LARGE_CHANGE_COUNT = 200;
+
+/** 超过此数量时 Git 变更列表启用虚拟滚动（多仓展开场景）。 */
+export const GIT_PANEL_VIRTUAL_LIST_THRESHOLD = 48;
+
+/** 超过此数量时 Git 面板默认使用列表视图而非目录树。 */
+export const GIT_PANEL_LIST_VIEW_THRESHOLD = 48;
+
+/** 文件 watcher 触发 git status 刷新的防抖间隔（ms）。 */
+export const GIT_WATCHER_REFRESH_MS = 450;
+
+/** 多仓模式下各仓库 status 初始加载的错峰间隔（ms）。 */
+export const GIT_MULTI_REPO_LOAD_STAGGER_MS = 280;
 
 /** 虚拟列表行高（px），需与 `.git-file-row` 一致。 */
 export const GIT_PANEL_FILE_ROW_HEIGHT = 28;
 
 export function shouldUseGitVirtualFileList(fileCount: number): boolean {
-  return fileCount > GIT_PANEL_LARGE_CHANGE_COUNT;
+  return fileCount > GIT_PANEL_VIRTUAL_LIST_THRESHOLD;
 }
 
 export function getStatusSymbol(status: string): string {
@@ -25,6 +51,36 @@ export function getStatusSymbol(status: string): string {
     default:
       return "?";
   }
+}
+
+/** 比较 git status 快照，避免 watcher 刷新触发无效重渲染。 */
+export function gitStatusSnapshotEqual(
+  prev: GitStatusResponse | null,
+  next: GitStatusResponse,
+): boolean {
+  if (!prev) return false;
+  if (
+    prev.branch !== next.branch ||
+    prev.ahead !== next.ahead ||
+    prev.behind !== next.behind ||
+    prev.additions !== next.additions ||
+    prev.deletions !== next.deletions ||
+    prev.staged.length !== next.staged.length ||
+    prev.unstaged.length !== next.unstaged.length
+  ) {
+    return false;
+  }
+  for (let i = 0; i < prev.staged.length; i += 1) {
+    const a = prev.staged[i]!;
+    const b = next.staged[i]!;
+    if (a.path !== b.path || a.status !== b.status) return false;
+  }
+  for (let i = 0; i < prev.unstaged.length; i += 1) {
+    const a = prev.unstaged[i]!;
+    const b = next.unstaged[i]!;
+    if (a.path !== b.path || a.status !== b.status) return false;
+  }
+  return true;
 }
 
 export function buildCommitDraftFromStatus(status: GitStatusResponse): string {

@@ -1,4 +1,5 @@
-import { startTransition, useCallback, useEffect, useRef, useState } from "react";
+import { memo, startTransition, useCallback, useEffect, useRef, useState } from "react";
+import { useInView } from "../../hooks/useInView";
 import { listen } from "@tauri-apps/api/event";
 import { safeUnlistenPromise } from "../../utils/safeTauriUnlisten";
 import { Button, Empty, Spin, Tooltip, message } from "antd";
@@ -23,7 +24,11 @@ import type { GitStatusResponse } from "../../types";
 import { DiffMode } from "./DiffMode";
 import { GitSyncActions } from "./GitSyncActions";
 import { InitMode } from "./InitMode";
-import { hasUnstagedFilesUnderDirectory } from "./gitPanelUtils";
+import {
+  GIT_WATCHER_REFRESH_MS,
+  gitStatusSnapshotEqual,
+  hasUnstagedFilesUnderDirectory,
+} from "./gitPanelUtils";
 import type { GitPanelOpenFileOptions } from "./types";
 
 export interface GitRepoSectionEntry {
@@ -35,15 +40,17 @@ export interface GitRepoSectionEntry {
 interface Props {
   entry: GitRepoSectionEntry;
   defaultExpanded?: boolean;
+  /** 多仓模式下错峰加载 header 状态，展开时立即加载。 */
+  loadDelayMs?: number;
+  /** 多仓面板统一注册 watcher 刷新，避免每仓独立监听。 */
+  registerRefresh?: (path: string, refresh: () => void) => () => void;
   onOpenFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
 }
 
 function formatBranchLabel(status: GitStatusResponse | null): string {
   const branch = status?.branch?.trim();
   if (!branch) return "Git";
-  const dirty =
-    (status?.staged.length ?? 0) > 0 ||
-    (status?.unstaged.length ?? 0) > 0;
+  const dirty = (status?.staged.length ?? 0) > 0 || (status?.unstaged.length ?? 0) > 0;
   const ahead = status?.ahead ?? 0;
   const behind = status?.behind ?? 0;
   let suffix = "";
@@ -52,13 +59,17 @@ function formatBranchLabel(status: GitStatusResponse | null): string {
   return `${branch}${suffix}`;
 }
 
-export function GitRepoSection({
+function GitRepoSectionInner({
   entry,
   defaultExpanded = true,
+  loadDelayMs = 0,
+  registerRefresh,
   onOpenFile,
 }: Props) {
   const repositoryPath = entry.path;
+  const [sectionRef, inView] = useInView("160px");
   const [expanded, setExpanded] = useState(defaultExpanded);
+  const shouldLoadStatus = expanded || inView;
   const [status, setStatus] = useState<GitStatusResponse | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [openingRemote, setOpeningRemote] = useState(false);
@@ -77,25 +88,33 @@ export function GitRepoSection({
     init: false,
   });
 
+  const statusRef = useRef<GitStatusResponse | null>(null);
   const runningActions = useRef(new Set<string>());
   const lastActionTime = useRef(new Map<string, number>());
   const watcherRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const syncOpsInFlightRef = useRef(0);
   const pendingSilentRefreshRef = useRef(false);
+  const loadRequestIdRef = useRef(0);
   const DEBOUNCE_MS = 400;
-  const WATCHER_REFRESH_MS = 120;
 
   const loadStatus = useCallback(async (opts?: { silent?: boolean }) => {
     if (!repositoryPath) return;
     const silent = opts?.silent ?? false;
+    const requestId = ++loadRequestIdRef.current;
     if (!silent) {
       setLoading((prev) => ({ ...prev, status: true }));
     }
     try {
       const result = await gitStatus(repositoryPath);
+      if (requestId !== loadRequestIdRef.current) return;
       const apply = () => {
+        if (gitStatusSnapshotEqual(statusRef.current, result)) {
+          return;
+        }
+        statusRef.current = result;
         setStatus(result);
         setErrors((prev) => {
+          if (!prev.status) return prev;
           const next = { ...prev };
           delete next.status;
           return next;
@@ -107,8 +126,10 @@ export function GitRepoSection({
         apply();
       }
     } catch (e) {
+      if (requestId !== loadRequestIdRef.current) return;
       const msg = e instanceof Error ? e.message : String(e);
       const applyErr = () => {
+        statusRef.current = null;
         setErrors((prev) => ({ ...prev, status: msg }));
         setStatus(null);
       };
@@ -118,11 +139,19 @@ export function GitRepoSection({
         applyErr();
       }
     } finally {
-      if (!silent) {
+      if (requestId === loadRequestIdRef.current && !silent) {
         setLoading((prev) => ({ ...prev, status: false }));
       }
     }
   }, [repositoryPath]);
+
+  const silentRefresh = useCallback(() => {
+    if (syncOpsInFlightRef.current > 0) {
+      pendingSilentRefreshRef.current = true;
+      return;
+    }
+    void loadStatus({ silent: true });
+  }, [loadStatus]);
 
   const beginGitSyncOperation = useCallback(() => {
     syncOpsInFlightRef.current += 1;
@@ -137,10 +166,31 @@ export function GitRepoSection({
   }, [loadStatus]);
 
   useEffect(() => {
-    void loadStatus();
-  }, [loadStatus]);
+    statusRef.current = null;
+    setStatus(null);
+  }, [repositoryPath]);
 
   useEffect(() => {
+    if (!shouldLoadStatus) return;
+    if (statusRef.current) return;
+    let cancelled = false;
+    const delay = expanded ? 0 : loadDelayMs;
+    const timer = window.setTimeout(() => {
+      if (!cancelled) {
+        void loadStatus({ silent: delay > 0 });
+      }
+    }, delay);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [shouldLoadStatus, expanded, loadDelayMs, loadStatus]);
+
+  useEffect(() => {
+    if (registerRefresh) {
+      return registerRefresh(repositoryPath, silentRefresh);
+    }
+
     const unlisten = listen<{ path?: string }>("git-changed", (event) => {
       const changedPath = event.payload?.path?.trim();
       if (changedPath && changedPath !== repositoryPath) return;
@@ -158,7 +208,7 @@ export function GitRepoSection({
           return;
         }
         void loadStatus({ silent: true });
-      }, WATCHER_REFRESH_MS);
+      }, GIT_WATCHER_REFRESH_MS);
     });
 
     return () => {
@@ -168,7 +218,7 @@ export function GitRepoSection({
       }
       safeUnlistenPromise(unlisten);
     };
-  }, [loadStatus, repositoryPath]);
+  }, [loadStatus, registerRefresh, repositoryPath, silentRefresh]);
 
   const runAction = useCallback(
     async (action: string, fn: () => Promise<void>) => {
@@ -342,6 +392,7 @@ export function GitRepoSection({
 
   return (
     <section
+      ref={sectionRef}
       className={`git-repo-section${expanded ? " git-repo-section--expanded" : ""}`}
       data-repository-path={repositoryPath}
     >
@@ -426,3 +477,5 @@ export function GitRepoSection({
     </section>
   );
 }
+
+export const GitRepoSection = memo(GitRepoSectionInner);

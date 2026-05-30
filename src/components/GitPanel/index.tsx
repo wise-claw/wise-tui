@@ -25,7 +25,7 @@ import type { GitStatusResponse } from "../../types";
 import { DiffMode } from "./DiffMode";
 import { GitSyncActions } from "./GitSyncActions";
 import { InitMode } from "./InitMode";
-import { hasUnstagedFilesUnderDirectory } from "./gitPanelUtils";
+import { hasUnstagedFilesUnderDirectory, GIT_WATCHER_REFRESH_MS, gitStatusSnapshotEqual } from "./gitPanelUtils";
 import { RepositoryFilesExplorer } from "./RepositoryFilesExplorer";
 import { GitMultiRepoPanel } from "./GitMultiRepoPanel";
 import type { GitPanelRepositoryEntry } from "../../utils/workspaceRepositoryTreeSelect";
@@ -111,8 +111,8 @@ function GitSingleRepoPanel({
   const watcherRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const syncOpsInFlightRef = useRef(0);
   const pendingSilentRefreshRef = useRef(false);
+  const statusRef = useRef<GitStatusResponse | null>(null);
   const DEBOUNCE_MS = 400;
-  const WATCHER_REFRESH_MS = 120;
 
   const loadStatus = useCallback(async (opts?: { silent?: boolean }) => {
     if (!repositoryPath) return;
@@ -123,6 +123,10 @@ function GitSingleRepoPanel({
     try {
       const result = await gitStatus(repositoryPath);
       const apply = () => {
+        if (gitStatusSnapshotEqual(statusRef.current, result)) {
+          return;
+        }
+        statusRef.current = result;
         setStatus(result);
         setErrors((prev) => {
           const next = { ...prev };
@@ -138,6 +142,7 @@ function GitSingleRepoPanel({
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       const applyErr = () => {
+        statusRef.current = null;
         setErrors((prev) => ({ ...prev, status: msg }));
         setStatus(null);
       };
@@ -166,6 +171,7 @@ function GitSingleRepoPanel({
   }, [loadStatus]);
 
   useEffect(() => {
+    statusRef.current = null;
     if (repositoryPath) {
       void loadStatus();
     }
@@ -199,7 +205,7 @@ function GitSingleRepoPanel({
           return;
         }
         void loadStatus({ silent: true });
-      }, WATCHER_REFRESH_MS);
+      }, GIT_WATCHER_REFRESH_MS);
     });
 
     return () => {

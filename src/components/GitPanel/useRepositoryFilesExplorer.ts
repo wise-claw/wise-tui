@@ -21,7 +21,7 @@ import {
   readExplorerExpandedFromSession,
   writeExplorerExpandedToSession,
 } from "./explorerUtils";
-import { deferAfterPaint, yieldToPaint } from "./gitPanelUtils";
+import { deferAfterPaint, repositoryExplorerEntriesEqual, yieldToPaint } from "./gitPanelUtils";
 import {
   getCachedRepositoryExplorerEntries,
   setCachedRepositoryExplorerEntries,
@@ -91,7 +91,7 @@ export function useRepositoryFilesExplorer({
   useEffect(() => {
     const timer = window.setTimeout(() => {
       writeExplorerExpandedToSession(repositoryPath, expandedDirs);
-    }, 320);
+    }, 600);
     return () => window.clearTimeout(timer);
   }, [repositoryPath, expandedDirs]);
 
@@ -126,8 +126,16 @@ export function useRepositoryFilesExplorer({
       });
     }
 
-    const applyEntries = (entries: RepositoryExplorerEntry[]) => {
+    const applyEntries = (entries: RepositoryExplorerEntry[], options?: { silent?: boolean }) => {
       if (cancelled) {
+        return;
+      }
+      const previous = getCachedRepositoryExplorerEntries(path);
+      if (previous && repositoryExplorerEntriesEqual(previous, entries)) {
+        if (!options?.silent) {
+          setIsRefreshing(false);
+          setLoading(false);
+        }
         return;
       }
       setCachedRepositoryExplorerEntries(path, entries);
@@ -148,12 +156,12 @@ export function useRepositoryFilesExplorer({
       void (async () => {
         try {
           const entries = await listRepositoryExplorerEntries(path);
-          applyEntries(entries);
+          applyEntries(entries, { silent: Boolean(cached) });
           if (!cancelled) {
             setLoadError(null);
           }
         } catch (error) {
-          if (!cancelled) {
+          if (!cancelled && !cached) {
             const msg = error instanceof Error ? error.message : String(error);
             setLoadError(msg);
             setExplorerEntries([]);
@@ -174,12 +182,27 @@ export function useRepositoryFilesExplorer({
   }, [repositoryPath]);
 
   useEffect(() => {
-    if (!search.trim()) {
+    const q = search.trim();
+    if (!q) {
       return;
     }
-    const matchedDirs = new Set<string>();
-    collectDirectoryPaths(filteredTree, matchedDirs);
-    setExpandedDirs((prev) => new Set([...prev, ...matchedDirs]));
+    const timer = window.setTimeout(() => {
+      const matchedDirs = new Set<string>();
+      collectDirectoryPaths(filteredTree, matchedDirs);
+      if (matchedDirs.size === 0) return;
+      setExpandedDirs((prev) => {
+        let changed = false;
+        const next = new Set(prev);
+        for (const dir of matchedDirs) {
+          if (!next.has(dir)) {
+            next.add(dir);
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    }, 120);
+    return () => window.clearTimeout(timer);
   }, [search, filteredTree]);
 
   useEffect(() => {
