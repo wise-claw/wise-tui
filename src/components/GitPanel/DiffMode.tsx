@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
-import { Button, Empty, Input, message, Popconfirm, Space, Tooltip, Typography } from "antd";
+import { Button, Input, message, Popconfirm, Space, Tooltip, Typography } from "antd";
 import {
   ApartmentOutlined,
   CheckOutlined,
@@ -442,9 +442,11 @@ function DiffModeInner({
         </div>
       )}
 
-      {!hasChanges && status.branch && (
-        <Empty description="没有检测到变更" style={{ padding: "24px 0" }} image={Empty.PRESENTED_IMAGE_SIMPLE} />
-      )}
+      {!hasChanges && status.branch ? (
+        <div className="git-diff-mode__empty" role="status">
+          没有检测到变更
+        </div>
+      ) : null}
       </div>
     </div>
   );

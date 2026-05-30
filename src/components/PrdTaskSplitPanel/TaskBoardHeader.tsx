@@ -54,7 +54,7 @@ export function TaskBoardHeader({
               trigger={["click"]}
               placement="bottomLeft"
               menu={{ items: unmetMenuItems }}
-              overlayClassName="app-prd-task-panel__unmet-dropdown-root"
+              classNames={{ root: "app-prd-task-panel__unmet-dropdown-root" }}
             >
               <button
                 type="button"

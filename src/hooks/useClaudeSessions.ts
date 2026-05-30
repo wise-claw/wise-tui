@@ -836,6 +836,25 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   const streamStallTimerByTabRef = useRef<Map<string, number>>(new Map());
   /** 已对「Hook 进行中」放过一次 45s 宽限的标签 */
   const streamStallHookExtendedByTabRef = useRef<Set<string>>(new Set());
+  /** 与本轮用户发送绑定，用于 `serverMsgId` 去重（单调递增，避免多会话同时发送撞号）。 */
+  const lastUserSendNonceRef = useRef(0);
+  /** 按标签会话 id 累积流式助手可见文本（完成时写入通知库），支持多会话并行。 */
+  const assistantStreamTextByTabRef = useRef<Map<string, string>>(new Map());
+  /** 防重：同一会话短时间内收到完全相同行时直接丢弃（监听重复注册/重复派发兜底）。 */
+  const lastStreamLineBySessionRef = useRef<Map<string, { line: string; at: number }>>(new Map());
+  /** 防重：同一会话短时间内收到相同长文本片段时丢弃（应对不同事件形态的重复内容）。 */
+  const lastStreamTextBySessionRef = useRef<Map<string, { text: string; at: number }>>(new Map());
+  /** Claude `session_id` → 在此之前不因「宿主 registry 暂无该 sid」将 running 降级为 idle */
+  const registryBootstrapDeadlineByClaudeSidRef = useRef<Map<string, number>>(new Map());
+  const diskLoadDoneRef = useRef<Set<string>>(new Set());
+  const diskTailLinesBySessionRef = useRef(new Map<string, number>());
+  const pruneLiveSessionSidecarsRef = useRef<(liveSessions: readonly ClaudeSession[]) => boolean>(() => false);
+  /** Tauri 主窗口是否在前台（与 `document.hidden` 组合判断 Phase 4 桌面摘要）。 */
+  const mainWinFocusedRef = useRef(true);
+  /** 供 stream runtime `notifyCompletion` 在 AskUserQuestion 等待续答时挂载 session 通道监听。 */
+  const prepareStreamingControlResponseListenerRef = useRef<
+    (tabSessionId: string, claudeSessionId: string, turnNonce?: number) => Promise<void>
+  >(() => Promise.resolve());
 
   const clearStreamStallTimer = useCallback((tabId: string) => {
     const key = tabId.trim();
@@ -1372,40 +1391,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     [runClaudeStreamingWithInvocation, runClaudeOneshotWithInvocation, runCodexOneshotWithInvocation],
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    void loadDefaultClaudeConnectionKind().then((kind) => {
-      if (!cancelled) defaultConnectionKindRef.current = kind;
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    const onKindChanged = (event: Event) => {
-      const detail = (event as CustomEvent<{ kind?: ClaudeSessionConnectionKind }>).detail;
-      if (detail?.kind === "streaming" || detail?.kind === "oneshot") {
-        defaultConnectionKindRef.current = detail.kind;
-      }
-    };
-    window.addEventListener(WISE_CLAUDE_CONNECTION_KIND_CHANGED, onKindChanged);
-    return () => window.removeEventListener(WISE_CLAUDE_CONNECTION_KIND_CHANGED, onKindChanged);
-  }, []);
-
-  /** 与本轮用户发送绑定，用于 `serverMsgId` 去重（单调递增，避免多会话同时发送撞号）。 */
-  const lastUserSendNonceRef = useRef(0);
-  /** 按标签会话 id 累积流式助手可见文本（完成时写入通知库），支持多会话并行。 */
-  const assistantStreamTextByTabRef = useRef<Map<string, string>>(new Map());
-  /** 防重：同一会话短时间内收到完全相同行时直接丢弃（监听重复注册/重复派发兜底）。 */
-  const lastStreamLineBySessionRef = useRef<Map<string, { line: string; at: number }>>(new Map());
-  /** 防重：同一会话短时间内收到相同长文本片段时丢弃（应对不同事件形态的重复内容）。 */
-  const lastStreamTextBySessionRef = useRef<Map<string, { text: string; at: number }>>(new Map());
-  /** Claude `session_id` → 在此之前不因「宿主 registry 暂无该 sid」将 running 降级为 idle */
-  const registryBootstrapDeadlineByClaudeSidRef = useRef<Map<string, number>>(new Map());
-  const diskLoadDoneRef = useRef<Set<string>>(new Set());
-  const diskTailLinesBySessionRef = useRef(new Map<string, number>());
-
   const pruneLiveSessionSidecars = useCallback((liveSessions: readonly ClaudeSession[]) => {
     const liveKeys = collectLiveSessionSidecarKeys(liveSessions);
     let sidecarChanged = pruneOrphanClaudeSessionSidecarMaps(
@@ -1444,6 +1429,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     pruneInvocationSnapshotMemory(collectInvocationSnapshotMemoryKeys(liveSessions));
     return sidecarChanged;
   }, [clearStreamStallTimer]);
+  pruneLiveSessionSidecarsRef.current = pruneLiveSessionSidecars;
 
   const purgeSessionsMemoryWhenHidden = useCallback(() => {
     if (typeof document !== "undefined" && document.visibilityState === "visible") return;
@@ -1459,7 +1445,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         lastStreamTextBySessionRef.current.delete(key);
       }
     }
-    pruneLiveSessionSidecars(sessionsRef.current);
+    pruneLiveSessionSidecarsRef.current(sessionsRef.current);
     setSessions((prev) => {
       const capped = applySessionsMemoryCap(prev, {
         keepSessionIds: buildMemoryKeepSessionIds(prev),
@@ -1468,9 +1454,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       });
       return capped === prev ? prev : capped;
     });
-  }, [buildMemoryKeepSessionIds, pruneLiveSessionSidecars, setSessions]);
-  /** Tauri 主窗口是否在前台（与 `document.hidden` 组合判断 Phase 4 桌面摘要）。 */
-  const mainWinFocusedRef = useRef(true);
+  }, [buildMemoryKeepSessionIds, setSessions]);
 
   const purgeStreamSidecarsForSession = useCallback((sessionId: string, claudeSessionId?: string | null) => {
     return purgeClaudeSessionStreamSidecarRefs(
@@ -1775,6 +1759,27 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     },
     [applyDiskTranscriptTail, reloadFullDiskTranscript],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadDefaultClaudeConnectionKind().then((kind) => {
+      if (!cancelled) defaultConnectionKindRef.current = kind;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const onKindChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ kind?: ClaudeSessionConnectionKind }>).detail;
+      if (detail?.kind === "streaming" || detail?.kind === "oneshot") {
+        defaultConnectionKindRef.current = detail.kind;
+      }
+    };
+    window.addEventListener(WISE_CLAUDE_CONNECTION_KIND_CHANGED, onKindChanged);
+    return () => window.removeEventListener(WISE_CLAUDE_CONNECTION_KIND_CHANGED, onKindChanged);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -2999,11 +3004,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     );
     return true;
   }, []);
-
-  /** 供 stream runtime `notifyCompletion` 在 AskUserQuestion 等待续答时挂载 session 通道监听。 */
-  const prepareStreamingControlResponseListenerRef = useRef<
-    (tabSessionId: string, claudeSessionId: string, turnNonce?: number) => Promise<void>
-  >(() => Promise.resolve());
 
   const ensureStreamingSessionStreamListening = useCallback(
     async (tabSessionId: string, claudeSessionId: string, turnNonceOverride?: number) => {

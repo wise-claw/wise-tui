@@ -2425,7 +2425,7 @@ function ComposerInner({
           onConnectionKindChange={onSessionConnectionKindChange}
         />
         <Dropdown
-          overlayClassName="app-claude-model-picker-dropdown"
+          classNames={{ root: "app-claude-model-picker-dropdown" }}
           menu={{
             items: modelMenuItems,
             selectable: true,

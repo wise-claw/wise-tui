@@ -2442,9 +2442,9 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 
 .app-left-sidebar-bottom-tab-content .git-panel-header-right .ant-btn.ant-btn-sm,
 .app-left-sidebar-bottom-tab-content .git-panel-header > .ant-btn.ant-btn-text {
-  width: 22px;
-  height: 22px;
-  min-width: 22px;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
   padding: 0;
 }
 
@@ -2491,6 +2491,23 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   width: 22px;
   height: 22px;
   min-width: 22px;
+}
+
+.app-left-sidebar-bottom-tab-content .git-repo-section__actions .ant-btn.ant-btn-sm {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  max-width: 20px;
+  padding: 0;
+}
+
+.app-left-sidebar-bottom-tab-content .git-repo-section__actions .ant-btn .anticon {
+  font-size: 11px;
+}
+
+.app-left-sidebar-bottom-tab-content .git-repo-section__actions .git-header-sync-actions.ant-space {
+  column-gap: 0 !important;
+  gap: 0 !important;
 }
 
 .app-left-sidebar-bottom-tab-content .git-files-explorer-actions .ant-btn .anticon {
