@@ -1399,6 +1399,7 @@ async function upsertSplitterAgentRunSafe(
 function startSplitterHeartbeat(agentRunId: string | null): () => void {
   if (!agentRunId) return () => {};
   const timer = globalThis.setInterval(() => {
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
     trellisAgentHeartbeat(agentRunId).catch((error) => {
       console.warn("[MissionControl] splitter heartbeat failed", error);
     });

@@ -46,6 +46,22 @@ const memoryBundle = new Map<string, InvocationSnapshotBundle>();
 const MAX_BUNDLE_ITEMS = BACKGROUND_INVOCATION_BUNDLE_MAX_ITEMS;
 /** 模块内 LRU：限制同时驻留的「会话+仓库」快照键数量，避免切会话后内存只增不减。 */
 const MAX_CACHED_SESSION_KEYS = 12;
+const MAX_RECONCILE_BUNDLE_CACHE = 24;
+
+function rememberReconcileBundleCache(
+  cache: Map<string, InvocationSnapshotBundle>,
+  key: string,
+  bundle: InvocationSnapshotBundle,
+): InvocationSnapshotBundle {
+  cache.delete(key);
+  cache.set(key, bundle);
+  while (cache.size > MAX_RECONCILE_BUNDLE_CACHE) {
+    const oldest = cache.keys().next().value;
+    if (oldest === undefined) break;
+    cache.delete(oldest);
+  }
+  return bundle;
+}
 
 function touchLruCache<K, V>(map: Map<K, V>, key: K, value: V): void {
   map.delete(key);
@@ -288,7 +304,7 @@ export async function reconcileDirectBatchInvocationRowsWithBundles(
     let b = bundleCache.get(k);
     if (!b) {
       b = await readInvocationSnapshotBundle(sid, rp);
-      bundleCache.set(k, b);
+      rememberReconcileBundleCache(bundleCache, k, b);
     }
     return b;
   }

@@ -11,8 +11,10 @@ import {
   ccWorkflowSlashCommand,
   resolveScheduledTaskExecutionKind,
 } from "../utils/scheduledTaskExecution";
+import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
 
 const TICK_MS = 45_000;
+const TICK_MS_HIDDEN = 180_000;
 
 interface Params {
   repositoriesRef: MutableRefObject<Repository[]>;
@@ -304,12 +306,24 @@ export function useScheduledClaudeTaskRunner({
     };
 
     const id = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       void tick();
-    }, TICK_MS);
+    }, readVisiblePollIntervalMs(TICK_MS, TICK_MS_HIDDEN));
     void tick();
+    const onVisibilityChange = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        void tick();
+      }
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibilityChange);
+    }
     return () => {
       cancelled = true;
       window.clearInterval(id);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+      }
     };
   }, [bindingsRef, employeesRef, executeRef, repositoriesRef, sendMessageRef, sessionsRef, workflowTemplatesRef]);
 }

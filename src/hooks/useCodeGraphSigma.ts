@@ -360,7 +360,7 @@ export function useCodeGraphSigma(options: UseCodeGraphSigmaOptions = {}): UseCo
     if (!el) return;
 
     let disposed = false;
-    let pollId: ReturnType<typeof setInterval> | null = null;
+    let pollId: ReturnType<typeof setTimeout> | null = null;
 
     const tryInit = () => {
       if (disposed || sigmaRef.current || !containerRef.current) return;
@@ -478,8 +478,8 @@ export function useCodeGraphSigma(options: UseCodeGraphSigmaOptions = {}): UseCo
       });
 
       setSigmaReady(true);
-      if (pollId) {
-        clearInterval(pollId);
+      if (pollId != null) {
+        window.clearTimeout(pollId);
         pollId = null;
       }
 
@@ -519,12 +519,23 @@ export function useCodeGraphSigma(options: UseCodeGraphSigmaOptions = {}): UseCo
     });
     ro.observe(el);
     tryInit();
-    pollId = setInterval(tryInit, 100);
+    let pollDelayMs = 100;
+    const scheduleInitPoll = () => {
+      pollId = window.setTimeout(() => {
+        pollId = null;
+        if (disposed || sigmaRef.current) return;
+        tryInit();
+        if (disposed || sigmaRef.current) return;
+        pollDelayMs = Math.min(pollDelayMs * 2, 800);
+        scheduleInitPoll();
+      }, pollDelayMs);
+    };
+    scheduleInitPoll();
 
     return () => {
       disposed = true;
       ro.disconnect();
-      if (pollId) clearInterval(pollId);
+      if (pollId != null) window.clearTimeout(pollId);
       if (layoutTimeoutRef.current) {
         clearTimeout(layoutTimeoutRef.current);
         layoutTimeoutRef.current = null;

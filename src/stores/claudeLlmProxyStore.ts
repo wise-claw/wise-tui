@@ -86,6 +86,7 @@ async function ensureInitialized(): Promise<void> {
       status = st;
       const nextRecordsUnlisten = await subscribeClaudeLlmProxyRecords(upsertRecord);
       const nextClaudeOutputUnlisten = await listen<string>("claude-output", (ev) => {
+        if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
         const line = typeof ev.payload === "string" ? ev.payload : String(ev.payload ?? "");
         const rec = tryIngestStreamJsonLineForLlmProxy(line);
         if (rec) upsertRecord(rec);

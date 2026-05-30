@@ -55,6 +55,8 @@ let runningByRepositoryIdCacheKey = "";
 let globalOnAutoFixRunError: ((prompt: string) => void) | undefined;
 let globalOnRequestConfigure: ((repository: Pick<Repository, "id" | "path">) => void) | undefined;
 let terminalListenersReady = false;
+let hiddenPublishPending = false;
+let visibilityListenerReady = false;
 
 function refreshRunningByRepositoryIdSnapshot(): void {
   const activeIds: number[] = [];
@@ -101,7 +103,27 @@ function getOrCreateRepoState(repositoryId: number): RepoRuntimeState {
 function patchRepoState(repositoryId: number, patch: Partial<RepoRuntimeState>): void {
   const prev = getOrCreateRepoState(repositoryId);
   repoStateById.set(repositoryId, { ...prev, ...patch });
+  if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+    hiddenPublishPending = true;
+    return;
+  }
   publish();
+}
+
+function flushHiddenPublishIfNeeded(): void {
+  if (!hiddenPublishPending) return;
+  hiddenPublishPending = false;
+  publish();
+}
+
+function ensureVisibilityFlushListener(): void {
+  if (visibilityListenerReady || typeof document === "undefined") return;
+  visibilityListenerReady = true;
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      flushHiddenPublishIfNeeded();
+    }
+  });
 }
 
 function getOrCreateInternals(repositoryId: number, runCwd: string): RepoRuntimeInternals {
@@ -184,6 +206,7 @@ function refreshInternalsFromStorage(internals: RepoRuntimeInternals, runCwd: st
 function ensureTerminalListeners(): void {
   if (terminalListenersReady) return;
   terminalListenersReady = true;
+  ensureVisibilityFlushListener();
 
   subscribeTerminalOutput((payload) => {
     const repositoryId = Number(payload.workspaceId);

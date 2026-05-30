@@ -17,6 +17,7 @@ import { pickSessionForRepositorySidebarSelect } from "../utils/claudeSessionSel
 import { repositorySessionTabDisplayName } from "../utils/repositoryType";
 import { loadSessionOwnerHints } from "../utils/sessionOwnerHints";
 import { resolveBoundMainSessionId, resolveMainOwnerAgentNameForRepositoryPath } from "../utils/repositoryMainSessionBinding";
+import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
 
 type CreateSession = (
   repositoryPath: string,
@@ -133,7 +134,10 @@ export function useDingTalkAutomationInbound({
         }
       }
     };
-    const timer = window.setInterval(sweep, DINGTALK_PENDING_SWEEP_MS);
+    const timer = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      sweep();
+    }, readVisiblePollIntervalMs(DINGTALK_PENDING_SWEEP_MS, DINGTALK_PENDING_SWEEP_MS * 3));
     return () => window.clearInterval(timer);
   }, [clearPendingAndResolveInboundJob]);
 
