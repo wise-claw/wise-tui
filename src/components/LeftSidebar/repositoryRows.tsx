@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { UserOutlined } from "@ant-design/icons";
 import { App as AntdApp, Dropdown, Tooltip } from "antd";
 import type { Repository, StandaloneRepo, TaskMode, Workspace } from "../../types";
@@ -372,14 +372,7 @@ export function RepositoryRow({
   const foreignDropClass =
     repositoryReorder?.foreignDropRowId === repository.id ? " app-repository-row--foreign-drop" : "";
   const hasMainOwner = Boolean(repository.mainOwnerAgentName?.trim());
-  const [optimisticActive, setOptimisticActive] = useState(false);
-  const showActiveRepository = isActiveRepository || optimisticActive;
-
-  useEffect(() => {
-    if (isActiveRepository) {
-      setOptimisticActive(false);
-    }
-  }, [isActiveRepository]);
+  const showActiveRepository = isActiveRepository;
 
   return (
     <div
@@ -398,7 +391,6 @@ export function RepositoryRow({
           ) {
             return;
           }
-          setOptimisticActive(true);
           onRepositorySelect(repository.id);
         }}
       >
@@ -582,14 +574,7 @@ export function FloatingRepositoryRow({
 }) {
   const runCommandRunning = useIsRepositoryRunCommandRunning(repository.id);
   const hasMainOwner = Boolean(repository.mainOwnerAgentName?.trim());
-  const [optimisticActive, setOptimisticActive] = useState(false);
-  const showActiveRepository = isActiveRepository || optimisticActive;
-
-  useEffect(() => {
-    if (isActiveRepository) {
-      setOptimisticActive(false);
-    }
-  }, [isActiveRepository]);
+  const showActiveRepository = isActiveRepository;
 
   const trellisEnabled = repositoryTrellisEntrypointsEnabled(repository, trellisReady);
   const moreItems = buildFloatingRepositoryMoreMenuItems({
@@ -621,7 +606,6 @@ export function FloatingRepositoryRow({
           ) {
             return;
           }
-          setOptimisticActive(true);
           onRepositorySelect(repository.id);
         }}
       >

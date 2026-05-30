@@ -89,26 +89,6 @@ export function Markdown({ text, streaming, showPendingHint, className }: Props)
       copyBtn.setAttribute("aria-label", "复制");
       copyBtn.setAttribute("data-tooltip", "复制");
       copyBtn.innerHTML = `<span class="copy-icon">${COPY_ICON}</span><span class="check-icon">${CHECK_ICON}</span>`;
-      copyBtn.addEventListener("click", () => {
-        const code = wrapper.querySelector("code");
-        if (!code) return;
-        navigator.clipboard
-          .writeText(code.textContent ?? "")
-          .then(() => {
-            message.success("已复制到剪贴板");
-            copyBtn.setAttribute("data-copied", "true");
-            copyBtn.setAttribute("data-tooltip", "已复制");
-            const existing = copyTimeoutsRef.current.get(copyBtn);
-            if (existing) clearTimeout(existing);
-            const t = setTimeout(() => {
-              copyBtn.removeAttribute("data-copied");
-              copyBtn.setAttribute("data-tooltip", "复制");
-              copyTimeoutsRef.current.delete(copyBtn);
-            }, 2000);
-            copyTimeoutsRef.current.set(copyBtn, t);
-          })
-          .catch(() => message.error("复制失败"));
-      });
       const parent = pre.parentElement;
       if (parent) {
         parent.replaceChild(wrapper, pre);
@@ -167,7 +147,41 @@ export function Markdown({ text, streaming, showPendingHint, className }: Props)
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    return attachExternalLinkDelegation(container);
+
+    const handleCopyClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const copyBtn = target.closest(".app-markdown-copy-btn") as HTMLButtonElement | null;
+      if (!copyBtn || !container.contains(copyBtn)) return;
+
+      const wrapper = copyBtn.closest(".app-markdown-code");
+      const code = wrapper?.querySelector("code");
+      if (!code) return;
+
+      navigator.clipboard
+        .writeText(code.textContent ?? "")
+        .then(() => {
+          message.success("已复制到剪贴板");
+          copyBtn.setAttribute("data-copied", "true");
+          copyBtn.setAttribute("data-tooltip", "已复制");
+          const existing = copyTimeoutsRef.current.get(copyBtn);
+          if (existing) clearTimeout(existing);
+          const t = setTimeout(() => {
+            copyBtn.removeAttribute("data-copied");
+            copyBtn.setAttribute("data-tooltip", "复制");
+            copyTimeoutsRef.current.delete(copyBtn);
+          }, 2000);
+          copyTimeoutsRef.current.set(copyBtn, t);
+        })
+        .catch(() => message.error("复制失败"));
+    };
+
+    container.addEventListener("click", handleCopyClick);
+    const linkUnsub = attachExternalLinkDelegation(container);
+
+    return () => {
+      container.removeEventListener("click", handleCopyClick);
+      if (linkUnsub) linkUnsub();
+    };
   }, []);
 
   useEffect(() => {

@@ -10,6 +10,7 @@ import {
 } from "./gitPanelUtils";
 import { GitPanelWorkspaceSelector } from "./GitPanelWorkspaceSelector";
 import { GitMultiRepoLazySection } from "./GitMultiRepoLazySection";
+import { GitRepoSection } from "./GitRepoSection";
 import { GitWorkspaceCommitPush } from "./GitWorkspaceCommitPush";
 import type { GitPanelOpenFileOptions } from "./types";
 import type { ProjectItem, Repository } from "../../types";
@@ -29,6 +30,7 @@ interface Props {
   onRepositorySelect?: (repositoryId: number) => void;
   onProjectSelect?: (projectId: string) => void;
   directoryOnly?: boolean;
+  lazyMount?: boolean;
 }
 
 export function GitMultiRepoPanel({
@@ -45,6 +47,7 @@ export function GitMultiRepoPanel({
   onRepositorySelect,
   onProjectSelect,
   directoryOnly,
+  lazyMount = true,
 }: Props) {
   const refreshByPathRef = useRef(new Map<string, () => void>());
   const watchedPathsRef = useRef(new Set<string>());
@@ -204,17 +207,26 @@ export function GitMultiRepoPanel({
         </div>
       </div>
       <div className="git-panel-multi-body">
-        {repositoryEntries.map((entry, index) => (
-          <GitMultiRepoLazySection
-            key={entry.path}
-            entry={entry}
-            defaultExpanded={false}
-            loadDelayMs={index * GIT_MULTI_REPO_LOAD_STAGGER_MS}
-            registerRefresh={registerRefresh}
-            onWatchScopeChange={handleWatchScopeChange}
-            onOpenFile={onOpenFile}
-          />
-        ))}
+        {repositoryEntries.map((entry, index) => {
+          const sectionProps = {
+            entry,
+            defaultExpanded: !lazyMount,
+            loadDelayMs: lazyMount ? index * GIT_MULTI_REPO_LOAD_STAGGER_MS : 0,
+            registerRefresh,
+            onWatchScopeChange: handleWatchScopeChange,
+            onOpenFile,
+          };
+          if (lazyMount) {
+            return <GitMultiRepoLazySection key={entry.path} {...sectionProps} />;
+          }
+          return (
+            <GitRepoSection
+              key={entry.path}
+              {...sectionProps}
+              externalInView
+            />
+          );
+        })}
       </div>
     </div>
   );

@@ -11,6 +11,7 @@ import {
   resolveGitPanelContextOpenPath,
   resolveTreeNodeOpenPath,
   type WorkspaceRepositoryTreeNode,
+  type WorkspaceRepositoryTreeSelection,
 } from "../../utils/workspaceRepositoryTreeSelect";
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
 import { getDefaultTerminalActionIcon, getKnownOpenAppIcon } from "../OpenAppMenu/openAppIcons";
@@ -38,6 +39,8 @@ export interface GitPanelWorkspaceSelectorProps {
   onProjectSelect?: (projectId: string) => void;
   /** 仅切换文件树目录，不联动全局工作区（左栏文件 Tab）。 */
   directoryOnly?: boolean;
+  /** 左栏 Git/文件面板当前树选择（优先于 active* 推导）。 */
+  treeSelection?: WorkspaceRepositoryTreeSelection | null;
 }
 
 interface TreeOpenActionsOptions {
@@ -126,6 +129,7 @@ export function GitPanelWorkspaceSelector({
   onRepositorySelect,
   onProjectSelect,
   directoryOnly = false,
+  treeSelection = null,
 }: GitPanelWorkspaceSelectorProps) {
   const { message } = App.useApp();
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -231,6 +235,12 @@ export function GitPanelWorkspaceSelector({
   );
 
   const selectedKeys = useMemo(() => {
+    if (treeSelection?.kind === "project") {
+      return [`project:${treeSelection.projectId}`];
+    }
+    if (treeSelection?.kind === "repository") {
+      return [`repo:${treeSelection.repositoryId}`];
+    }
     if (activeWorkspaceFocus === "project" && activeProjectId) {
       return [`project:${activeProjectId}`];
     }
@@ -238,7 +248,7 @@ export function GitPanelWorkspaceSelector({
       return [`repo:${activeRepositoryId}`];
     }
     return [];
-  }, [activeWorkspaceFocus, activeProjectId, activeRepositoryId]);
+  }, [treeSelection, activeWorkspaceFocus, activeProjectId, activeRepositoryId]);
 
   const picker = (
     <Tree

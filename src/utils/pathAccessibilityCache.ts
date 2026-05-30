@@ -14,12 +14,21 @@ function rememberResolved(key: string, ok: boolean): void {
   }
 }
 
-export async function pathIsAccessibleDirectoryCached(path: string): Promise<boolean> {
+/** 同步读取已缓存的路径可访问性；未缓存时返回 undefined。 */
+export function readPathAccessibilityCache(path: string): boolean | undefined {
   const key = path.trim();
   if (!key) return false;
   const hit = resolved.get(key);
+  if (hit === undefined) return undefined;
+  rememberResolved(key, hit);
+  return hit;
+}
+
+export async function pathIsAccessibleDirectoryCached(path: string): Promise<boolean> {
+  const key = path.trim();
+  if (!key) return false;
+  const hit = readPathAccessibilityCache(key);
   if (hit !== undefined) {
-    rememberResolved(key, hit);
     return hit;
   }
   const pending = inflight.get(key);

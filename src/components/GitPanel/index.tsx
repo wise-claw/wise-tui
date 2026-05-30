@@ -58,6 +58,8 @@ interface Props {
   onProjectSelect?: (projectId: string) => void;
   /** 仅切换 Git 面板目录，不联动全局工作区。 */
   directoryOnly?: boolean;
+  /** 侧栏等窄容器内关闭 lazy 挂载，避免 IntersectionObserver 检测不到滚动区。 */
+  lazyMount?: boolean;
 }
 
 export function GitPanel(props: Props) {
@@ -77,6 +79,7 @@ export function GitPanel(props: Props) {
         onRepositorySelect={props.onRepositorySelect}
         onProjectSelect={props.onProjectSelect}
         directoryOnly={props.directoryOnly}
+        lazyMount={props.lazyMount}
       />
     );
   }

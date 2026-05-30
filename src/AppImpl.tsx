@@ -104,7 +104,6 @@ import {
 } from "./services/atMentionDispatch";
 import { resolveProjectMainSessionAnchor } from "./utils/projectSessionAnchor";
 import { resolveTrellisBootstrapPath } from "./utils/trellisBootstrapPath";
-import { deferAfterPaint } from "./components/GitPanel/gitPanelUtils";
 import { resolveSidebarSelectionTarget } from "./utils/sidebarSelectionTarget";
 import {
   findOwnerProjectForRepositoryId,
@@ -1963,8 +1962,8 @@ export default function App() {
     [switchSession],
   );
 
-  /** 绑定仓库主会话（不修改侧栏选中态）。 */
-  function bindRepositoryMainSessionTarget(repository: Repository): string | null {
+  /** 多仓工作区内点仓库行：仅切换展示会话，不更新 per-repo 主会话绑定。 */
+  function switchRepositoryDisplaySession(repository: Repository): string | null {
     const target = resolveSidebarSelectionTarget({ repository });
     const mainOwnerPick = resolveMainOwnerAgentNameForRepositoryPath(repositories, target.path);
     const boundId = resolveBoundMainSessionId(
@@ -1985,10 +1984,19 @@ export default function App() {
     );
     if (latestForRepo) {
       switchSessionIfNeeded(latestForRepo.id);
-      void bindRepositoryMainSession(target.path, latestForRepo.id);
       return latestForRepo.id;
     }
     return null;
+  }
+
+  /** 绑定仓库主会话（不修改侧栏选中态）。 */
+  function bindRepositoryMainSessionTarget(repository: Repository): string | null {
+    const target = resolveSidebarSelectionTarget({ repository });
+    const sessionId = switchRepositoryDisplaySession(repository);
+    if (sessionId) {
+      void bindRepositoryMainSession(target.path, sessionId);
+    }
+    return sessionId;
   }
 
   /** 打开/恢复仓库主会话：先读绑定，再挑同路径最近会话；不自动新建。 */
@@ -2138,18 +2146,10 @@ export default function App() {
 
   const startupFirstProjectRepoSessionAppliedRef = useRef(false);
 
-  const pendingSidebarSelectionTaskRef = useRef<(() => void) | null>(null);
-  const pendingSidebarSelectionTokenRef = useRef<object | null>(null);
-  const cancelPendingSidebarSelectionTask = useCallback(() => {
-    pendingSidebarSelectionTaskRef.current?.();
-    pendingSidebarSelectionTaskRef.current = null;
-    pendingSidebarSelectionTokenRef.current = null;
-  }, []);
-  useEffect(() => cancelPendingSidebarSelectionTask, [cancelPendingSidebarSelectionTask]);
+  const sidebarSelectionEpochRef = useRef(0);
 
   const handleSidebarRepositorySelectLeavingMcpHub = useCallback(
     (repositoryId: number | null) => {
-      cancelPendingSidebarSelectionTask();
       if (repositoryId == null) {
         startTransition(() => {
           if (viewMode.isCockpit || viewMode.isAuthor || viewMode.isInspect) {
@@ -2173,6 +2173,7 @@ export default function App() {
       ) {
         return;
       }
+      const selectionEpoch = ++sidebarSelectionEpochRef.current;
       flushSync(() => {
         setActiveRepositoryWithOwner(repository.id);
       });
@@ -2181,25 +2182,18 @@ export default function App() {
       } else if (!viewMode.isChat) {
         startTransition(() => viewMode.enter({ kind: "chat" }));
       }
-      if (shouldSidebarRepositorySelectOnlyUpdateFocus(repository, projects)) {
+      if (sidebarSelectionEpochRef.current !== selectionEpoch) {
         return;
       }
-      const selectionTaskToken = {};
-      const cancelSelectionTask = deferAfterPaint(() => {
-        if (pendingSidebarSelectionTokenRef.current !== selectionTaskToken) {
-          return;
-        }
-        pendingSidebarSelectionTaskRef.current = null;
-        pendingSidebarSelectionTokenRef.current = null;
-        bindRepositoryMainSessionTarget(repository);
-      });
-      pendingSidebarSelectionTaskRef.current = cancelSelectionTask;
-      pendingSidebarSelectionTokenRef.current = selectionTaskToken;
+      if (shouldSidebarRepositorySelectOnlyUpdateFocus(repository, projects)) {
+        switchRepositoryDisplaySession(repository);
+        return;
+      }
+      bindRepositoryMainSessionTarget(repository);
     },
     [
       activeRepositoryId,
       activeWorkspaceFocus,
-      cancelPendingSidebarSelectionTask,
       handleSidebarRepositorySelect,
       projects,
       repositories,
@@ -2279,13 +2273,14 @@ export default function App() {
 
   const handleProjectSelectLeavingMcpHub = useCallback(
     (projectId: string) => {
-      cancelPendingSidebarSelectionTask();
       if (suppressProjectSelectToChatRef.current) {
         return;
       }
       const project = projects.find((p) => p.id === projectId) ?? null;
       if (!project) {
-        setActiveProjectId(projectId);
+        flushSync(() => {
+          setActiveProjectId(projectId);
+        });
         return;
       }
       const leavingOverlay = viewMode.isAuthor || viewMode.isInspect || viewMode.isCockpit;
@@ -2297,31 +2292,26 @@ export default function App() {
       ) {
         return;
       }
+      const selectionEpoch = ++sidebarSelectionEpochRef.current;
+      flushSync(() => {
+        setAuthorTrellisProjectId(null);
+        setActiveProjectId(projectId);
+      });
       if (leavingOverlay) {
         startTransition(() => viewMode.back());
       }
-      setAuthorTrellisProjectId(null);
-      setActiveProjectId(projectId);
       startTransition(() => {
         viewMode.enter({ kind: "chat" });
       });
-      const selectionTaskToken = {};
-      const cancelSelectionTask = deferAfterPaint(() => {
-        if (pendingSidebarSelectionTokenRef.current !== selectionTaskToken) {
-          return;
-        }
-        pendingSidebarSelectionTaskRef.current = null;
-        pendingSidebarSelectionTokenRef.current = null;
-        bindProjectMainSessionTarget(project);
-      });
-      pendingSidebarSelectionTaskRef.current = cancelSelectionTask;
-      pendingSidebarSelectionTokenRef.current = selectionTaskToken;
+      if (sidebarSelectionEpochRef.current !== selectionEpoch) {
+        return;
+      }
+      bindProjectMainSessionTarget(project);
     },
     [
       activeProjectId,
       activeWorkspaceFocus,
       bindProjectMainSessionTarget,
-      cancelPendingSidebarSelectionTask,
       projects,
       setActiveProjectId,
       viewMode,

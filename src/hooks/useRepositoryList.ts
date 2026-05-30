@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { runWhenIdle } from "../utils/deferIdle";
 import type { AddRepositoryOptions, ProjectItem, Repository, RepositoryAcquireParams } from "../types";
 import {
   createRepositoryFromPathWithType,
@@ -77,6 +78,22 @@ export function useRepositoryList() {
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [activeWorkspaceFocus, setActiveWorkspaceFocus] = useState<WorkspaceFocus>("repository");
   const [loading, setLoading] = useState(true);
+  const persistActiveProjectIdleCleanupRef = useRef<(() => void) | null>(null);
+
+  const schedulePersistActiveProjectId = useCallback((projectId: string | null) => {
+    persistActiveProjectIdleCleanupRef.current?.();
+    persistActiveProjectIdleCleanupRef.current = runWhenIdle(() => {
+      persistActiveProjectIdleCleanupRef.current = null;
+      void persistActiveProjectId(projectId);
+    }, { timeoutMs: 3000 });
+  }, []);
+
+  useEffect(
+    () => () => {
+      persistActiveProjectIdleCleanupRef.current?.();
+    },
+    [],
+  );
 
   useEffect(() => {
     void (async () => {
@@ -299,8 +316,8 @@ export function useRepositoryList() {
     setActiveWorkspaceFocus("project");
     const selected = projects.find((project) => project.id === projectId) ?? null;
     setActiveRepositoryId(selected?.repositoryIds[0] ?? null);
-    void persistActiveProjectId(projectId);
-  }, [projects]);
+    schedulePersistActiveProjectId(projectId);
+  }, [projects, schedulePersistActiveProjectId]);
 
   const togglePinProject = useCallback((projectId: string) => {
     setPinnedProjectIds((prevPins) => {
@@ -319,8 +336,8 @@ export function useRepositoryList() {
     setActiveProjectId(projectId);
     setActiveRepositoryId(repositoryId);
     setActiveWorkspaceFocus("repository");
-    void persistActiveProjectId(projectId);
-  }, []);
+    schedulePersistActiveProjectId(projectId);
+  }, [schedulePersistActiveProjectId]);
 
   /**
    * 选中 repo 并把 activeProjectId 同步到其 owner project（Standalone Repo 时清空）。
@@ -335,9 +352,9 @@ export function useRepositoryList() {
       setActiveProjectId(ownerProjectId);
       setActiveRepositoryId(repositoryId);
       setActiveWorkspaceFocus("repository");
-      void persistActiveProjectId(ownerProjectId);
+      schedulePersistActiveProjectId(ownerProjectId);
     },
-    [projects],
+    [projects, schedulePersistActiveProjectId],
   );
 
   const handleAddRepositoryToProject = useCallback(async (

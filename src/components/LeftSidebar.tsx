@@ -11,6 +11,8 @@ import {
 import { normalizeSessionRepositoryPath } from "../utils/sessionHistoryScope";
 import { resolveTrellisBootstrapPath } from "../utils/trellisBootstrapPath";
 import { resolveRepositoryForSession } from "../utils/repositoryMainSessionBinding";
+import { isMultiRepoProject } from "../utils/workspaceMode";
+import { runWhenIdle } from "../utils/deferIdle";
 import { AppSettingsModal } from "./AppSettingsModal";
 import { MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths";
 import { DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION } from "../constants/workspaceBootstrapAddons";
@@ -25,7 +27,10 @@ import {
 import { endClaudeProcessRow } from "./LeftSidebar/endClaudeProcessRow";
 import { pickFolder } from "../services/repository";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
-import { pathIsAccessibleDirectoryCached } from "../utils/pathAccessibilityCache";
+import {
+  pathIsAccessibleDirectoryCached,
+  readPathAccessibilityCache,
+} from "../utils/pathAccessibilityCache";
 import {
   OPEN_WORKSPACE_ERROR,
   openWorkspaceWithStoredPreference,
@@ -239,6 +244,7 @@ export function LeftSidebar({
   /** 左下 Git/文件 Tab 目录选择器上下文：仅切换面板目录，不联动全局工作区/会话。 */
   const [repoPanelTreeSelection, setRepoPanelTreeSelection] =
     useState<WorkspaceRepositoryTreeSelection | null>(null);
+  const lastSyncedGlobalSelectionKeyRef = useRef<string | null>(null);
   const [filesExplorerSectionCollapsed, setFilesExplorerSectionCollapsed] = useState(
     readLeftFilesExplorerCollapsedFromStorage,
   );
@@ -563,20 +569,37 @@ export function LeftSidebar({
     if (leftBottomTab === "files" && activeRepositoryId != null) {
       return { kind: "repository", repositoryId: activeRepositoryId };
     }
-    if (activeRepositoryId != null && globalWorkspaceTreeSelection?.kind === "project") {
-      return { kind: "repository", repositoryId: activeRepositoryId };
+    // 多仓工作区：Git 面板保持工作区级多仓视图，切成员仓时不 remount 整块面板。
+    if (leftBottomTab === "git" && activeProjectId) {
+      const project = projects.find((item) => item.id === activeProjectId) ?? null;
+      if (project && isMultiRepoProject(project, projects)) {
+        return { kind: "project", projectId: project.id };
+      }
     }
     return globalWorkspaceTreeSelection ?? sessionDerivedTreeSelection ?? null;
   }, [
     leftBottomTab,
+    activeProjectId,
     activeRepositoryId,
+    projects,
     globalWorkspaceTreeSelection,
     sessionDerivedTreeSelection,
   ]);
 
-  useEffect(() => {
-    setRepoPanelTreeSelection(repoPanelTreeSelectionSource);
+  const globalSelectionSyncKey = useMemo(() => {
+    const selection = repoPanelTreeSelectionSource;
+    if (!selection) return null;
+    return selection.kind === "project"
+      ? `project:${selection.projectId}`
+      : `repo:${selection.repositoryId}`;
   }, [repoPanelTreeSelectionSource]);
+
+  useEffect(() => {
+    if (!globalSelectionSyncKey) return;
+    if (globalSelectionSyncKey === lastSyncedGlobalSelectionKeyRef.current) return;
+    lastSyncedGlobalSelectionKeyRef.current = globalSelectionSyncKey;
+    setRepoPanelTreeSelection(repoPanelTreeSelectionSource);
+  }, [globalSelectionSyncKey, repoPanelTreeSelectionSource]);
 
   const repoPanelTreeView = useMemo(() => {
     if (!repoPanelTreeSelection) return null;
@@ -608,15 +631,22 @@ export function LeftSidebar({
   useEffect(() => {
     let cancelled = false;
     const candidate = repoPanelRepositoryPath.trim();
-    void (async () => {
-      if (!candidate) {
-        if (!cancelled) setAccessibleRepoPanelPath("");
-        return;
-      }
-      if (await pathIsAccessibleDirectoryCached(candidate)) {
-        if (!cancelled) setAccessibleRepoPanelPath(candidate);
-        return;
-      }
+    if (!candidate) {
+      setAccessibleRepoPanelPath("");
+      return;
+    }
+    const cachedAccessible = readPathAccessibilityCache(candidate);
+    if (cachedAccessible === true) {
+      setAccessibleRepoPanelPath(candidate);
+      return;
+    }
+    const cancelIdle = runWhenIdle(() => {
+      if (cancelled) return;
+      void (async () => {
+        if (cachedAccessible !== false && (await pathIsAccessibleDirectoryCached(candidate))) {
+          if (!cancelled) setAccessibleRepoPanelPath(candidate);
+          return;
+        }
       const projectIdForFallback =
         repoPanelTreeView?.activeProjectId ?? activeProjectId ?? null;
       const project = projectIdForFallback
@@ -641,9 +671,11 @@ export function LeftSidebar({
         return;
       }
       if (!cancelled) setAccessibleRepoPanelPath(candidate);
-    })();
+      })();
+    }, { timeoutMs: 1200 });
     return () => {
       cancelled = true;
+      cancelIdle();
     };
   }, [
     repoPanelRepositoryPath,
@@ -692,6 +724,7 @@ export function LeftSidebar({
       projects,
       repositories,
       directoryOnly: true as const,
+      treeSelection: repoPanelTreeSelection,
       activeProjectId: repoPanelTreeView?.activeProjectId ?? activeProjectId,
       activeRepositoryId: repoPanelTreeView?.activeRepositoryId ?? activeRepositoryId,
       activeWorkspaceFocus: repoPanelTreeView?.activeWorkspaceFocus ?? activeWorkspaceFocus,
@@ -705,6 +738,7 @@ export function LeftSidebar({
     [
       projects,
       repositories,
+      repoPanelTreeSelection,
       repoPanelTreeView,
       activeProjectId,
       activeRepositoryId,
@@ -1028,6 +1062,7 @@ export function LeftSidebar({
                   repositoryEntries={gitPanelRepositoryEntries}
                   multiRepoContextTitle={gitPanelContextTitle}
                   onOpenFile={onOpenActiveRepositoryFile}
+                  lazyMount={false}
                   {...repoPanelWorkspaceSelectorProps}
                 />
               ) : (
