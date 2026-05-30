@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 import type { PaneSlot } from "../constants/mainLayoutWidths";
 import {
   findFirstEmptyExtraPaneIndex,
+  isSessionBoundInPanes,
   minPaneCountForOccupiedExtras,
+  normalizeExtraPanesToPaneCount,
   planNextPaneSlotPlacement,
 } from "./multiPaneSlots";
 
@@ -38,5 +40,29 @@ describe("multiPaneSlots", () => {
     });
     expect(plan.nextPaneCount).toBe(4);
     expect(plan.slotIndex).toBe(1);
+  });
+
+  test("normalizeExtraPanesToPaneCount pads and truncates slots", () => {
+    const slots: PaneSlot[] = [
+      slot({ slotId: "a", sessionId: "s1" }),
+      slot({ slotId: "b" }),
+      slot({ slotId: "c" }),
+    ];
+    const padded = normalizeExtraPanesToPaneCount(4, slots.slice(0, 1), () => slot({ slotId: "new" }));
+    expect(padded).toHaveLength(3);
+    expect(padded[0]?.sessionId).toBe("s1");
+    expect(padded[1]?.slotId).toBe("new");
+
+    const truncated = normalizeExtraPanesToPaneCount(2, slots, () => slot({ slotId: "x" }));
+    expect(truncated).toHaveLength(1);
+    expect(truncated[0]?.sessionId).toBe("s1");
+  });
+
+  test("isSessionBoundInPanes detects active and extra pane collisions", () => {
+    const extras: PaneSlot[] = [slot({ slotId: "a", sessionId: "s-extra" })];
+    expect(isSessionBoundInPanes("s-main", "s-main", extras)).toBe(true);
+    expect(isSessionBoundInPanes("s-extra", "s-main", extras)).toBe(true);
+    expect(isSessionBoundInPanes("s-extra", "s-main", extras, 0)).toBe(false);
+    expect(isSessionBoundInPanes("s-free", "s-main", extras)).toBe(false);
   });
 });

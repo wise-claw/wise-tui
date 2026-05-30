@@ -71,7 +71,7 @@ pub fn run() {
                 .on_shortcut(toggle_dual_pane_shortcut, |_app, _shortcut, event| {
                     if event.state() == ShortcutState::Pressed {
                         let _ = wise_mascot::wise_main_window_focus(_app.clone());
-                        let _ = _app.emit("global-toggle-dual-pane", ());
+                        let _ = _app.emit("global-cycle-multi-pane", ());
                     }
                 })
                 .map_err(|e| e.to_string())?;

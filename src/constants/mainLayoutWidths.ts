@@ -170,6 +170,10 @@ export const MAIN_LAYOUT_MULTI_PANE_MIN_WIDTH_PX = 460;
 /** 窗格之间的分隔间距（CSS grid gap）。 */
 export const MAIN_LAYOUT_MULTI_PANE_GAP_PX = 1;
 
+/** 每增加一列时窗口宽度增量（min-width + gap）。 */
+export const MAIN_LAYOUT_MULTI_PANE_UNIT_PX =
+  MAIN_LAYOUT_MULTI_PANE_MIN_WIDTH_PX + MAIN_LAYOUT_MULTI_PANE_GAP_PX;
+
 /** 窗口展开时，在理论最小宽度上预留的缓冲（边框/舍入误差）。 */
 export const MAIN_LAYOUT_MULTI_PANE_EXPAND_BUFFER_PX = 8;
 
@@ -222,6 +226,15 @@ export function nextPaneCountInCycle(current: PaneCount): PaneCount {
   const idx = PANE_COUNT_CYCLE_ORDER.indexOf(current);
   const nextIdx = (idx + 1) % PANE_COUNT_CYCLE_ORDER.length;
   return PANE_COUNT_CYCLE_ORDER[nextIdx];
+}
+
+export function isPaneCount(value: unknown): value is PaneCount {
+  return value === 1 || value === 2 || value === 4 || value === 6 || value === 8;
+}
+
+/** 多屏网格列数（用于窗口宽度增减）。 */
+export function columnCountForPaneCount(count: PaneCount): number {
+  return paneGridDimensions(count).cols;
 }
 
 // ── Dual-pane aliases (backward compat) ──

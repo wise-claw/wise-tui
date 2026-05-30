@@ -9,12 +9,9 @@ import type {
   WorkflowTaskItem,
   WorkflowTemplateItem,
 } from "../../types";
-import { Button, Dropdown, Empty, message, Popover, Spin, Switch, Tooltip, TreeSelect, type TooltipProps } from "antd";
-import { LoadingOutlined } from "@ant-design/icons";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type PointerEvent as ReactPointerEvent } from "react";
-import { useDockSlice } from "../../hooks/useDockSlice";
+import { Button, Dropdown, Empty, message, Popover, Spin, Switch, Tooltip, type TooltipProps } from "antd";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useWiseTopbarChromeVisibility } from "../../hooks/useWiseTopbarChromeVisibility";
-import { ClaudeChat } from "./ClaudeChat";
 import { DingTalkStreamGatewayTopbarSwitch } from "../DingTalkStreamGatewayTopbarSwitch";
 import { OpenAppMenu } from "../OpenAppMenu";
 import { FccTopbarTrigger } from "./FccTopbarTrigger";
@@ -31,7 +28,6 @@ import { pickSessionForRepositorySidebarSelect } from "../../utils/claudeSession
 import { filterSessionsForWorkspace } from "../../utils/projectSessionPanelFilter";
 import {
   resolveBoundMainSessionId,
-  isProjectRootSessionDisplayName,
   resolveMainOwnerAgentNameForRepositoryPath,
   resolveRepositoryForSession,
 } from "../../utils/repositoryMainSessionBinding";
@@ -39,7 +35,9 @@ import { resolveWorkspaceMainSession } from "../../utils/resolveWorkspaceMainSes
 import { RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK } from "../../utils/rightPanelStorage";
 import { loadSessionOwnerHints } from "../../utils/sessionOwnerHints";
 import type { WorkspaceMode, WorkspaceFocus } from "../../utils/workspaceMode";
-import { PANE_COUNT_OPTIONS, paneGridDimensions, type PaneCount, type PaneSlot } from "../../constants/mainLayoutWidths";
+import { PANE_COUNT_OPTIONS, isPaneCount, type PaneCount, type PaneSlot } from "../../constants/mainLayoutWidths";
+import { ClaudeMultiPaneGrid, type MultiPaneSharedChatProps, type PaneRepoTreeNode } from "./ClaudeMultiPaneGrid";
+import { ClaudeSessionChatWithDock } from "./ClaudeSessionChatWithDock";
 import "./index.css";
 
 const TerminalPanelLazy = lazy(() =>
@@ -47,7 +45,6 @@ const TerminalPanelLazy = lazy(() =>
 );
 
 const PANE_CREATE_MIN_LOADING_MS = 220;
-const TWO_PANE_MIN_WIDTH_PX = 460;
 
 async function withMinDuration<T>(task: Promise<T>, minMs: number): Promise<T> {
   const startedAt = Date.now();
@@ -124,17 +121,6 @@ function SessionEmptyState({
   );
 }
 
-interface PaneRepoTreeNode {
-  title: string;
-  value: string;
-  selectable: boolean;
-  nodeType: "project" | "repo" | "group";
-  projectId?: string;
-  projectRootPath?: string;
-  repositoryId?: number;
-  children?: PaneRepoTreeNode[];
-}
-
 // ── SVG Icons ──
 
 function IconSearch() {
@@ -178,15 +164,6 @@ function IconStop() {
         fill="currentColor"
         fillOpacity="0.05"
       />
-    </svg>
-  );
-}
-
-function IconNewSession() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-      <rect x="4" y="4" width="16" height="16" rx="3" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M12 8v8M8 12h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }
@@ -235,40 +212,6 @@ function IconRightPanel({ collapsed }: { collapsed: boolean }) {
         <path d="M8 9l3 3-3 3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
       )}
     </svg>
-  );
-}
-
-type ClaudeSessionChatWithDockProps = Omit<
-  ComponentProps<typeof ClaudeChat>,
-  | "todos"
-  | "questionRequest"
-  | "questionRequestQueueLength"
-  | "questionRequestStatus"
-  | "questionRequestError"
-  | "permissionRequest"
-  | "permissionRequestStatus"
-  | "permissionRequestError"
-  | "followupItems"
-  | "revertItems"
->;
-
-/** 在子树内 `useDockSlice`，避免双栏时一侧通知桶更新导致另一侧整棵 `ClaudeChat` 跟着 reconcile。 */
-function ClaudeSessionChatWithDock(props: ClaudeSessionChatWithDockProps) {
-  const dock = useDockSlice(props.session.id);
-  return (
-    <ClaudeChat
-      {...props}
-      todos={dock.todos}
-      questionRequest={dock.questionRequest}
-      questionRequestQueueLength={dock.questionRequestQueue.length}
-      questionRequestStatus={dock.questionRequestStatus}
-      questionRequestError={dock.questionRequestError}
-      permissionRequest={dock.permissionRequest}
-      permissionRequestStatus={dock.permissionRequestStatus}
-      permissionRequestError={dock.permissionRequestError}
-      followupItems={dock.followupItems}
-      revertItems={dock.revertItems}
-    />
   );
 }
 
@@ -509,7 +452,11 @@ export function Topbar({
                 key: String(count),
                 label: count === 1 ? "1屏（关闭多屏）" : `${count}屏`,
               })),
-              onClick: ({ key }) => onChangePaneCount(Number(key) as PaneCount),
+              onClick: ({ key }) => {
+                const count = Number(key);
+                if (!isPaneCount(count)) return;
+                onChangePaneCount(count);
+              },
             }}
             trigger={["click"]}
           >
@@ -870,6 +817,29 @@ export function ClaudeSessions({
     ],
   );
 
+  const sessionById = useMemo(() => {
+    const map = new Map<string, ClaudeSession>();
+    for (const session of incomingSessions) {
+      map.set(session.id, session);
+    }
+    return map;
+  }, [incomingSessions]);
+
+  const workflowTasksByCreator = useMemo(() => {
+    const map = new Map<string, WorkflowTaskItem[]>();
+    for (const task of workflowTasks) {
+      const creator = task.creator?.trim();
+      if (!creator) continue;
+      const bucket = map.get(creator);
+      if (bucket) {
+        bucket.push(task);
+      } else {
+        map.set(creator, [task]);
+      }
+    }
+    return map;
+  }, [workflowTasks]);
+
   const activeSession =
     activeRepository == null
       ? undefined
@@ -893,9 +863,9 @@ export function ClaudeSessions({
   const resolvedPaneSessions = useMemo(() => {
     return extraPanes.map((slot) => {
       if (!slot.sessionId) return null;
-      return incomingSessions.find((s) => s.id === slot.sessionId) ?? null;
+      return sessionById.get(slot.sessionId) ?? null;
     });
-  }, [extraPanes, incomingSessions]);
+  }, [extraPanes, sessionById]);
 
   /** 解析每个窗格对应的仓库。 */
   const resolvedPaneRepositories = useMemo(() => {
@@ -969,8 +939,6 @@ export function ClaudeSessions({
   >(null);
   const [paneRepoPickerOpenBySlot, setPaneRepoPickerOpenBySlot] = useState<Record<number, boolean>>({});
   const [creatingPaneSlots, setCreatingPaneSlots] = useState<Record<number, boolean>>({});
-  const multiPanesRef = useRef<HTMLDivElement | null>(null);
-  const [twoPaneLeftWidthPx, setTwoPaneLeftWidthPx] = useState<number | null>(null);
   const mainSessionForDataLink = useMemo(
     () =>
       resolveWorkspaceMainSession({
@@ -994,15 +962,15 @@ export function ClaudeSessions({
   );
 
   const activeSessionWorkflowTasks = useMemo(
-    () => workflowTasks.filter((task) => task.creator === activeSession?.id),
-    [workflowTasks, activeSession?.id],
+    () => (activeSession?.id ? workflowTasksByCreator.get(activeSession.id) ?? [] : []),
+    [workflowTasksByCreator, activeSession?.id],
   );
   /** 各额外窗格的 workflow tasks。 */
   const paneWorkflowTasks = useMemo(() => {
     return extraPanes.map((slot) =>
-      workflowTasks.filter((task) => task.creator === slot.sessionId),
+      slot.sessionId ? workflowTasksByCreator.get(slot.sessionId) ?? [] : [],
     );
-  }, [extraPanes, workflowTasks]);
+  }, [extraPanes, workflowTasksByCreator]);
 
   const handleCreateActiveRepositorySession = useCallback(() => {
     if (!activeRepository) {
@@ -1078,64 +1046,13 @@ export function ClaudeSessions({
     [activeRepository, creatingPaneSlots, onNewPaneSession, resolvedPaneRepositories],
   );
 
-  const resolveTwoPaneLeftWidthPx = useCallback(() => {
-    const containerWidth = multiPanesRef.current?.clientWidth ?? 0;
-    if (containerWidth <= 0) return null;
-    const min = TWO_PANE_MIN_WIDTH_PX;
-    const max = Math.max(min, containerWidth - TWO_PANE_MIN_WIDTH_PX);
-    const fallback = Math.round(containerWidth / 2);
-    const base = twoPaneLeftWidthPx ?? fallback;
-    return Math.min(max, Math.max(min, base));
-  }, [twoPaneLeftWidthPx]);
+  const handlePanePickerOpenChange = useCallback((paneIdx: number, open: boolean) => {
+    setPaneRepoPickerOpenBySlot((prev) => ({ ...prev, [paneIdx]: open }));
+  }, []);
 
-  const handleResetTwoPaneSplit = useCallback(() => {
-    if (paneCount !== 2) return;
-    const containerWidth = multiPanesRef.current?.clientWidth ?? 0;
-    if (containerWidth <= 0) return;
-    setTwoPaneLeftWidthPx(Math.round(containerWidth / 2));
-  }, [paneCount]);
-
-  const handleStartTwoPaneResize = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (paneCount !== 2) return;
-      const container = multiPanesRef.current;
-      if (!container) return;
-      const containerWidth = container.clientWidth;
-      if (containerWidth <= 0) return;
-      const min = TWO_PANE_MIN_WIDTH_PX;
-      const max = Math.max(min, containerWidth - TWO_PANE_MIN_WIDTH_PX);
-      const startLeft = resolveTwoPaneLeftWidthPx() ?? Math.round(containerWidth / 2);
-      const startX = event.clientX;
-      const pointerId = event.pointerId;
-      event.preventDefault();
-      container.setPointerCapture(pointerId);
-      const previousUserSelect = document.body.style.userSelect;
-      document.body.style.userSelect = "none";
-      const onMove = (moveEvent: PointerEvent) => {
-        const delta = moveEvent.clientX - startX;
-        const next = Math.min(max, Math.max(min, Math.round(startLeft + delta)));
-        setTwoPaneLeftWidthPx(next);
-      };
-      const finish = () => {
-        document.body.style.userSelect = previousUserSelect;
-        window.removeEventListener("pointermove", onMove);
-        window.removeEventListener("pointerup", onUp);
-      };
-      const onUp = () => finish();
-      window.addEventListener("pointermove", onMove);
-      window.addEventListener("pointerup", onUp, { once: true });
-    },
-    [paneCount, resolveTwoPaneLeftWidthPx],
-  );
-
-  useEffect(() => {
-    if (paneCount !== 2) {
-      setTwoPaneLeftWidthPx(null);
-      return;
-    }
-    const next = resolveTwoPaneLeftWidthPx();
-    if (next != null) setTwoPaneLeftWidthPx(next);
-  }, [paneCount, resolveTwoPaneLeftWidthPx]);
+  const handleSetCreatingPaneSlot = useCallback((paneIdx: number, creating: boolean) => {
+    setCreatingPaneSlots((prev) => ({ ...prev, [paneIdx]: creating }));
+  }, []);
 
   const handleSwitchToSession = useCallback(
     (sessionId: string, options?: { collapseSessionNotificationPanel?: boolean }) => {
@@ -1170,6 +1087,122 @@ export function ClaudeSessions({
       onSwitchSession,
     ],
   );
+
+  const multiPaneSharedChat = useMemo((): MultiPaneSharedChatProps => ({
+    sessions,
+    allSessionsForHistory: incomingSessions,
+    repositories,
+    activeProject,
+    onSwitchSession: handleSwitchToSession,
+    onSend: onSendMessage,
+    onExecute: onExecuteSession,
+    onUpdateSessionModel,
+    onUpdateSessionConnectionKind,
+    onUpdateRepositoryExecutionEngine,
+    onUpdateEmployeeExecutionEngine,
+    codexAvailable,
+    onOpenExecutionEnvironment,
+    onCancelSession,
+    onRespondToQuestion,
+    onDismissQuestion,
+    onRespondToPermission,
+    onClearTodos,
+    onToggleTodo,
+    onRestoreTodosFromTranscript,
+    onRestorePendingPermissionFromTranscript,
+    onClearFollowups,
+    onClearRevertItems,
+    onSendFollowup,
+    onRestoreRevert,
+    onOpenWorkflowConfig,
+    onOpenBuiltinAssistant,
+    onOpenRepositoryScheduledTasks,
+    employees,
+    mentionEmployees,
+    composerProjectRoleTagOptions,
+    composerProjectRepositoryMentionOptions,
+    composerHideEmployeesInAtMode,
+    taskPendingEmployeesByTaskId,
+    workflowTemplates,
+    workflowGraphsByWorkflowId,
+    workflowGraphStatusByWorkflowId,
+    onOpenTaskDetail,
+    hideMessages,
+    hideSessionTools,
+    taskListConcurrentCapacity,
+    resolveTaskListOmcInvokeConcurrency,
+    repositoryMainBindings,
+    onAppendSystemMessage,
+    onAppendUserMessage,
+    onNotifyOmcEmployeeDirectBatchTaskDone,
+    onPrepareFreshOmcEmployeeWorkerForDirectBatch,
+    onRefreshHistorySessions,
+    onDeleteHistorySession,
+    onOpenHistorySessionInInspector,
+    onRestoreHistorySessionAsMain,
+    omcBatchPipelineActive,
+    onAddWorktreeRepositoryToProject,
+    onReloadFullDiskTranscript,
+    onCompactSessionHistory,
+    missionContext,
+  }), [
+    sessions,
+    incomingSessions,
+    repositories,
+    activeProject,
+    handleSwitchToSession,
+    onSendMessage,
+    onExecuteSession,
+    onUpdateSessionModel,
+    onUpdateSessionConnectionKind,
+    onUpdateRepositoryExecutionEngine,
+    onUpdateEmployeeExecutionEngine,
+    codexAvailable,
+    onOpenExecutionEnvironment,
+    onCancelSession,
+    onRespondToQuestion,
+    onDismissQuestion,
+    onRespondToPermission,
+    onClearTodos,
+    onToggleTodo,
+    onRestoreTodosFromTranscript,
+    onRestorePendingPermissionFromTranscript,
+    onClearFollowups,
+    onClearRevertItems,
+    onSendFollowup,
+    onRestoreRevert,
+    onOpenWorkflowConfig,
+    onOpenBuiltinAssistant,
+    onOpenRepositoryScheduledTasks,
+    employees,
+    mentionEmployees,
+    composerProjectRoleTagOptions,
+    composerProjectRepositoryMentionOptions,
+    composerHideEmployeesInAtMode,
+    taskPendingEmployeesByTaskId,
+    workflowTemplates,
+    workflowGraphsByWorkflowId,
+    workflowGraphStatusByWorkflowId,
+    onOpenTaskDetail,
+    hideMessages,
+    hideSessionTools,
+    taskListConcurrentCapacity,
+    resolveTaskListOmcInvokeConcurrency,
+    repositoryMainBindings,
+    onAppendSystemMessage,
+    onAppendUserMessage,
+    onNotifyOmcEmployeeDirectBatchTaskDone,
+    onPrepareFreshOmcEmployeeWorkerForDirectBatch,
+    onRefreshHistorySessions,
+    onDeleteHistorySession,
+    onOpenHistorySessionInInspector,
+    onRestoreHistorySessionAsMain,
+    omcBatchPipelineActive,
+    onAddWorktreeRepositoryToProject,
+    onReloadFullDiskTranscript,
+    onCompactSessionHistory,
+    missionContext,
+  ]);
 
   useEffect(() => {
     if (
@@ -1208,380 +1241,31 @@ export function ClaudeSessions({
       {/* Session Tabs - 会话标签栏 */}
       {!activeRepository ? null : activeSession ? (
         paneCount > 1 ? (
-          (() => {
-            const { rows, cols } = paneGridDimensions(paneCount);
-            const twoPaneLeft = paneCount === 2 ? resolveTwoPaneLeftWidthPx() : null;
-            return (
-              <div
-                ref={multiPanesRef}
-                className="app-claude-sessions__multi-panes"
-                style={{
-                  gridTemplateColumns:
-                    paneCount === 2 && twoPaneLeft
-                      ? `${twoPaneLeft}px minmax(${TWO_PANE_MIN_WIDTH_PX}px, 1fr)`
-                      : `repeat(${cols}, 1fr)`,
-                  gridTemplateRows: rows > 1 ? `repeat(${rows}, 1fr)` : undefined,
-                }}
-              >
-                {/* Pane 0: active session */}
-                <div className="app-claude-sessions__pane">
-                  <ClaudeSessionChatWithDock
-                    key={activeSession.id}
-                    session={activeSession}
-                    sessions={sessions}
-                    allSessionsForHistory={incomingSessions}
-                    repositories={repositories}
-                    activeRepository={activeRepository}
-                    activeProject={activeProject}
-                    initialNotificationPanelCollapsed={
-                      pendingCollapseNotificationForSessionId === activeSession.id
-                    }
-                    onSwitchSession={handleSwitchToSession}
-                    onCreateNewSession={handleCreatePrimarySession}
-                    onOpenBuiltinAssistant={onOpenBuiltinAssistant}
-                    onSend={onSendMessage}
-                    onExecute={onExecuteSession}
-                    onSessionModelChange={(model) => onUpdateSessionModel(activeSession.id, model)}
-                    onSessionConnectionKindChange={(kind) =>
-                      void onUpdateSessionConnectionKind(activeSession.id, kind)
-                    }
-                    onUpdateRepositoryExecutionEngine={onUpdateRepositoryExecutionEngine}
-                    onUpdateEmployeeExecutionEngine={onUpdateEmployeeExecutionEngine}
-                    codexAvailable={codexAvailable}
-                    onOpenExecutionEnvironment={onOpenExecutionEnvironment}
-                    onCancel={(opts) => onCancelSession(activeSession.id, opts)}
-                    respondQuestionAt={onRespondToQuestion}
-                    dismissQuestionAt={onDismissQuestion}
-                    onRespondToPermission={(response) => onRespondToPermission(activeSession.id, response)}
-                    onClearTodos={() => onClearTodos(activeSession.id)}
-                    onToggleTodo={(todoId) => onToggleTodo(activeSession.id, todoId)}
-                    onRestoreTodosFromTranscript={() => onRestoreTodosFromTranscript(activeSession.id)}
-                    onRestorePendingPermissionFromTranscript={() =>
-                      onRestorePendingPermissionFromTranscript(activeSession.id)
-                    }
-                    onClearFollowups={() => onClearFollowups(activeSession.id)}
-                    onClearRevertItems={() => onClearRevertItems(activeSession.id)}
-                    onSendFollowup={(id) => onSendFollowup(activeSession.id, id)}
-                    onRestoreRevert={(id) => onRestoreRevert(activeSession.id, id)}
-                    onOpenWorkflowConfig={onOpenWorkflowConfig}
-                    employees={employees}
-                    mentionEmployees={mentionEmployees}
-                    projectRoleTagOptions={composerProjectRoleTagOptions}
-                    projectRepositoryMentionOptions={composerProjectRepositoryMentionOptions}
-                    hideEmployeesInAtMode={composerHideEmployeesInAtMode}
-                    workflowTasks={activeSessionWorkflowTasks}
-                    taskPendingEmployeesByTaskId={taskPendingEmployeesByTaskId}
-                    workflowTemplates={workflowTemplates}
-                    workflowGraphsByWorkflowId={workflowGraphsByWorkflowId}
-                    workflowGraphStatusByWorkflowId={workflowGraphStatusByWorkflowId}
-                    onOpenTaskDetail={onOpenTaskDetail}
-                    panelBelowMessages={panelBelowMessages}
-                    hideMessages={hideMessages}
-                    hideSessionTools={hideSessionTools}
-                    taskListConcurrentCapacity={taskListConcurrentCapacity}
-                    resolveTaskListOmcInvokeConcurrency={resolveTaskListOmcInvokeConcurrency}
-                    repositoryMainBindings={repositoryMainBindings}
-                    onAppendSystemMessage={onAppendSystemMessage}
-                    onAppendUserMessage={onAppendUserMessage}
-                    onNotifyOmcEmployeeDirectBatchTaskDone={onNotifyOmcEmployeeDirectBatchTaskDone}
-                    onPrepareFreshOmcEmployeeWorkerForDirectBatch={onPrepareFreshOmcEmployeeWorkerForDirectBatch}
-                    onRefreshHistorySessions={onRefreshHistorySessions}
-                    onDeleteHistorySession={onDeleteHistorySession}
-                    onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
-                    onRestoreHistorySessionAsMain={onRestoreHistorySessionAsMain}
-                    omcBatchPipelineActive={omcBatchPipelineActive}
-                    onAddWorktreeRepositoryToProject={onAddWorktreeRepositoryToProject}
-                    onReloadFullDiskTranscript={onReloadFullDiskTranscript}
-                    onCompactSessionHistory={onCompactSessionHistory}
-                    missionContext={missionContext}
-                  />
-                </div>
-                {/* Pane 1..N-1: extra panes */}
-                {extraPanes.map((slot, paneIdx) => {
-                  const paneSession = resolvedPaneSessions[paneIdx] ?? null;
-                  const paneRepo = resolvedPaneRepositories[paneIdx] ?? activeRepository;
-                  return (
-                    <div key={slot.slotId} className="app-claude-sessions__pane">
-                      {paneSession ? (
-                        <ClaudeSessionChatWithDock
-                          key={paneSession.id}
-                          session={paneSession}
-                          sessions={sessions}
-                          allSessionsForHistory={incomingSessions}
-                          repositories={repositories}
-                          activeRepository={paneRepo ?? activeRepository}
-                          activeProject={activeProject}
-                          initialNotificationPanelCollapsed={
-                            pendingCollapseNotificationForSessionId === paneSession.id
-                          }
-                          onSwitchSession={handleSwitchToSession}
-                          onCreateNewSession={() => handleCreatePaneSession(paneIdx)}
-                          onOpenBuiltinAssistant={onOpenBuiltinAssistant}
-                          onOpenRepositoryScheduledTasks={onOpenRepositoryScheduledTasks}
-                          onSend={onSendMessage}
-                          onExecute={onExecuteSession}
-                          onSessionModelChange={(model) => onUpdateSessionModel(paneSession.id, model)}
-                          onSessionConnectionKindChange={(kind) =>
-                            void onUpdateSessionConnectionKind(paneSession.id, kind)
-                          }
-                          onUpdateRepositoryExecutionEngine={onUpdateRepositoryExecutionEngine}
-                          onUpdateEmployeeExecutionEngine={onUpdateEmployeeExecutionEngine}
-                          codexAvailable={codexAvailable}
-                          onOpenExecutionEnvironment={onOpenExecutionEnvironment}
-                          onCancel={(opts) => onCancelSession(paneSession.id, opts)}
-                          respondQuestionAt={onRespondToQuestion}
-                          dismissQuestionAt={onDismissQuestion}
-                          onRespondToPermission={(response) => onRespondToPermission(paneSession.id, response)}
-                          onClearTodos={() => onClearTodos(paneSession.id)}
-                          onToggleTodo={(todoId) => onToggleTodo(paneSession.id, todoId)}
-                          onRestoreTodosFromTranscript={() => onRestoreTodosFromTranscript(paneSession.id)}
-                          onRestorePendingPermissionFromTranscript={() =>
-                            onRestorePendingPermissionFromTranscript(paneSession.id)
-                          }
-                          onClearFollowups={() => onClearFollowups(paneSession.id)}
-                          onClearRevertItems={() => onClearRevertItems(paneSession.id)}
-                          onSendFollowup={(id) => onSendFollowup(paneSession.id, id)}
-                          onRestoreRevert={(id) => onRestoreRevert(paneSession.id, id)}
-                          onOpenWorkflowConfig={onOpenWorkflowConfig}
-                          employees={employees}
-                          mentionEmployees={mentionEmployees}
-                          projectRoleTagOptions={composerProjectRoleTagOptions}
-                          projectRepositoryMentionOptions={composerProjectRepositoryMentionOptions}
-                          hideEmployeesInAtMode={composerHideEmployeesInAtMode}
-                          workflowTasks={paneWorkflowTasks[paneIdx] ?? []}
-                          taskPendingEmployeesByTaskId={taskPendingEmployeesByTaskId}
-                          workflowTemplates={workflowTemplates}
-                          workflowGraphsByWorkflowId={workflowGraphsByWorkflowId}
-                          workflowGraphStatusByWorkflowId={workflowGraphStatusByWorkflowId}
-                          onOpenTaskDetail={onOpenTaskDetail}
-                          hideMessages={hideMessages}
-                          hideSessionTools={hideSessionTools}
-                          taskListConcurrentCapacity={taskListConcurrentCapacity}
-                          resolveTaskListOmcInvokeConcurrency={resolveTaskListOmcInvokeConcurrency}
-                          repositoryMainBindings={repositoryMainBindings}
-                          onAppendSystemMessage={onAppendSystemMessage}
-                          onAppendUserMessage={onAppendUserMessage}
-                          onNotifyOmcEmployeeDirectBatchTaskDone={onNotifyOmcEmployeeDirectBatchTaskDone}
-                          onPrepareFreshOmcEmployeeWorkerForDirectBatch={onPrepareFreshOmcEmployeeWorkerForDirectBatch}
-                          onRefreshHistorySessions={onRefreshHistorySessions}
-                          onDeleteHistorySession={onDeleteHistorySession}
-                          onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
-                          onRestoreHistorySessionAsMain={onRestoreHistorySessionAsMain}
-                          omcBatchPipelineActive={omcBatchPipelineActive}
-                          onAddWorktreeRepositoryToProject={onAddWorktreeRepositoryToProject}
-                          onReloadFullDiskTranscript={onReloadFullDiskTranscript}
-                          onCompactSessionHistory={onCompactSessionHistory}
-                          dualPaneRepositoryPicker={
-                            onPaneRepositorySelect && paneRepo
-                              ? {
-                                  repositories: repositories ?? [],
-                                  projects: projects ?? [],
-                                  valueKey: (() => {
-                                    const sessionPath = (paneSession.repositoryPath ?? "").trim();
-                                    if (isProjectRootSessionDisplayName(paneSession.repositoryName ?? "")) {
-                                      const byPath = (projects ?? []).find(
-                                        (project) => (project.rootPath ?? "").trim() === sessionPath,
-                                      );
-                                      if (byPath) return `project:${byPath.id}`;
-                                      const byName = (projects ?? []).find(
-                                        (project) =>
-                                          (paneSession.repositoryName ?? "").trim() === `Project: ${project.name}`,
-                                      );
-                                      if (byName) return `project:${byName.id}`;
-                                    }
-                                    return `repo:${paneRepo.id}`;
-                                  })(),
-                                  onSelectRepositoryId: (id) => {
-                                    void onPaneRepositorySelect(paneIdx, id);
-                                  },
-                                  onSelectProjectId: onPaneProjectNewSession
-                                    ? (projectId) => {
-                                        void onPaneProjectNewSession(paneIdx, projectId, projects ?? []);
-                                      }
-                                    : undefined,
-                                }
-                              : undefined
-                          }
-                          missionContext={missionContext}
-                        />
-                      ) : (
-                        <SessionEmptyState
-                          title="窗格执行会话尚未就绪"
-                          hint="选择仓库后自动创建隔离会话，或点击下方按钮新建。"
-                          extraContent={
-                            (onPaneRepositorySelect || onPaneProjectNewSession) &&
-                            (paneRepoTreeData.length > 0 || (repositories && repositories.length > 0)) ? (
-                              <TreeSelect
-                                className="app-claude-session-empty__repo-select"
-                                placeholder="选择工作区 / 仓库"
-                                value={
-                                  paneRepo?.id != null ? `repo:${paneRepo.id}` : undefined
-                                }
-                                open={paneRepoPickerOpenBySlot[paneIdx]}
-                                disabled={Boolean(creatingPaneSlots[paneIdx])}
-                                treeData={paneRepoTreeData}
-                                treeLine
-                                showSearch
-                                treeNodeFilterProp="title"
-                                popupMatchSelectWidth={false}
-                                listHeight={320}
-                                onOpenChange={(open) => {
-                                  setPaneRepoPickerOpenBySlot((prev) => ({ ...prev, [paneIdx]: open }));
-                                }}
-                                dropdownClassName="app-claude-session-empty__repo-select-dropdown"
-                                treeTitleRender={(node) => {
-                                  const treeNode = node as unknown as PaneRepoTreeNode;
-                                  const nodeValue = String(node.value ?? "");
-                                  const repoIdFromValue = nodeValue.startsWith("repo:")
-                                    ? Number(nodeValue.slice(5))
-                                    : null;
-                                  const projectIdFromValue = nodeValue.startsWith("project:")
-                                    ? nodeValue.slice(8)
-                                    : null;
-                                  const projectRootPath =
-                                    projectsById.get((projectIdFromValue ?? "").trim())?.rootPath?.trim() ||
-                                    treeNode.projectRootPath?.trim() ||
-                                    null;
-                                  const projectName = String(treeNode.title ?? "").trim() || null;
-                                  const canCreate =
-                                    repoIdFromValue != null
-                                      ? Boolean(onNewPaneSession)
-                                      : projectIdFromValue != null
-                                        ? Boolean(onPaneProjectNewSession)
-                                        : false;
-                                  const slotCreating = Boolean(creatingPaneSlots[paneIdx]);
-                                  return (
-                                    <div className="app-claude-session-empty__repo-node">
-                                      <span className="app-claude-session-empty__repo-node-title">{String(treeNode.title ?? "")}</span>
-                                      {canCreate ? (
-                                        <button
-                                          type="button"
-                                          className="app-claude-session-empty__repo-node-create"
-                                          disabled={slotCreating}
-                                          aria-label={`新建${treeNode.nodeType === "project" ? "工作区" : "仓库"}执行会话`}
-                                          title={`新建${treeNode.nodeType === "project" ? "工作区" : "仓库"}执行会话`}
-                                          onClick={(event) => {
-                                            event.preventDefault();
-                                            event.stopPropagation();
-                                            if (slotCreating) return;
-                                            setPaneRepoPickerOpenBySlot((prev) => ({ ...prev, [paneIdx]: false }));
-                                            setCreatingPaneSlots((prev) => ({ ...prev, [paneIdx]: true }));
-                                            if (repoIdFromValue != null && onNewPaneSession) {
-                                              const selectedRepo = (repositories ?? []).find(
-                                                (repo) => repo.id === repoIdFromValue,
-                                              );
-                                              if (selectedRepo) {
-                                                void withMinDuration(
-                                                  Promise.resolve(onNewPaneSession(paneIdx, selectedRepo)),
-                                                  PANE_CREATE_MIN_LOADING_MS,
-                                                ).finally(() => {
-                                                  setCreatingPaneSlots((prev) => ({ ...prev, [paneIdx]: false }));
-                                                });
-                                              } else {
-                                                setCreatingPaneSlots((prev) => ({ ...prev, [paneIdx]: false }));
-                                                message.warning("未找到所选仓库");
-                                              }
-                                              return;
-                                            }
-                                            if (projectIdFromValue && onPaneProjectNewSession) {
-                                              const pickedProject = projectsById.get(projectIdFromValue.trim());
-                                              void withMinDuration(
-                                                Promise.resolve(
-                                                  onPaneProjectNewSession(
-                                                    paneIdx,
-                                                    projectIdFromValue,
-                                                    pickedProject ? [pickedProject] : (projects ?? []),
-                                                    { rootPath: projectRootPath, projectName },
-                                                  ),
-                                                ),
-                                                PANE_CREATE_MIN_LOADING_MS,
-                                              ).finally(() => {
-                                                setCreatingPaneSlots((prev) => ({ ...prev, [paneIdx]: false }));
-                                              });
-                                              return;
-                                            }
-                                            setCreatingPaneSlots((prev) => ({ ...prev, [paneIdx]: false }));
-                                          }}
-                                        >
-                                          {slotCreating ? <LoadingOutlined /> : <IconNewSession />}
-                                        </button>
-                                      ) : null}
-                                    </div>
-                                  );
-                                }}
-                                onSelect={(value) => {
-                                  const selected = String(value ?? "");
-                                  if (creatingPaneSlots[paneIdx]) return;
-                                  if (!selected) return;
-                                  setPaneRepoPickerOpenBySlot((prev) => ({ ...prev, [paneIdx]: false }));
-                                  setCreatingPaneSlots((prev) => ({ ...prev, [paneIdx]: true }));
-                                  if (selected.startsWith("repo:")) {
-                                    if (onPaneRepositorySelect) {
-                                      void withMinDuration(
-                                        Promise.resolve(onPaneRepositorySelect(paneIdx, Number(selected.slice(5)))),
-                                        PANE_CREATE_MIN_LOADING_MS,
-                                      ).finally(() => {
-                                        setCreatingPaneSlots((prev) => ({ ...prev, [paneIdx]: false }));
-                                      });
-                                      return;
-                                    }
-                                  } else if (selected.startsWith("project:")) {
-                                    if (onPaneProjectNewSession) {
-                                      const pickedProject = projectsById.get(selected.slice(8).trim());
-                                      void withMinDuration(
-                                        Promise.resolve(
-                                          onPaneProjectNewSession(
-                                            paneIdx,
-                                            selected.slice(8),
-                                            pickedProject ? [pickedProject] : (projects ?? []),
-                                            {
-                                              rootPath: pickedProject?.rootPath ?? null,
-                                              projectName: pickedProject?.name ?? null,
-                                            },
-                                          ),
-                                        ),
-                                        PANE_CREATE_MIN_LOADING_MS,
-                                      ).finally(() => {
-                                        setCreatingPaneSlots((prev) => ({ ...prev, [paneIdx]: false }));
-                                      });
-                                      return;
-                                    }
-                                  }
-                                  setCreatingPaneSlots((prev) => ({ ...prev, [paneIdx]: false }));
-                                }}
-                                style={{ width: "100%", marginBottom: 12 }}
-                              />
-                            ) : undefined
-                          }
-                          primaryAction={
-                            onNewPaneSession && (paneRepo ?? activeRepository)
-                              ? {
-                                  label: creatingPaneSlots[paneIdx] ? "创建中..." : "新建执行会话",
-                                  onClick: () => handleCreatePaneSession(paneIdx),
-                                  loading: Boolean(creatingPaneSlots[paneIdx]),
-                                  disabled: Boolean(creatingPaneSlots[paneIdx]),
-                                }
-                              : undefined
-                          }
-                        />
-                      )}
-                    </div>
-                  );
-                })}
-                {paneCount === 2 ? (
-                  <div
-                    className="app-claude-sessions__two-pane-resizer"
-                    style={{ left: twoPaneLeft ? `${twoPaneLeft}px` : "50%" }}
-                    onPointerDown={handleStartTwoPaneResize}
-                    onDoubleClick={handleResetTwoPaneSplit}
-                    role="separator"
-                    aria-orientation="vertical"
-                    aria-label="调整双屏分栏宽度"
-                  />
-                ) : null}
-              </div>
-            );
-          })()
+          <ClaudeMultiPaneGrid
+            paneCount={paneCount}
+            activeSession={activeSession}
+            activeRepository={activeRepository}
+            extraPanes={extraPanes}
+            resolvedPaneSessions={resolvedPaneSessions}
+            resolvedPaneRepositories={resolvedPaneRepositories}
+            activeSessionWorkflowTasks={activeSessionWorkflowTasks}
+            paneWorkflowTasks={paneWorkflowTasks}
+            shared={multiPaneSharedChat}
+            projects={projects ?? []}
+            paneRepoTreeData={paneRepoTreeData}
+            projectsById={projectsById}
+            pendingCollapseNotificationForSessionId={pendingCollapseNotificationForSessionId}
+            creatingPaneSlots={creatingPaneSlots}
+            paneRepoPickerOpenBySlot={paneRepoPickerOpenBySlot}
+            onCreatePrimarySession={handleCreatePrimarySession}
+            onCreatePaneSession={handleCreatePaneSession}
+            onPickerOpenChange={handlePanePickerOpenChange}
+            onSetCreatingPaneSlot={handleSetCreatingPaneSlot}
+            onPaneRepositorySelect={onPaneRepositorySelect}
+            onPaneProjectNewSession={onPaneProjectNewSession}
+            onNewPaneSession={onNewPaneSession}
+            panelBelowMessages={panelBelowMessages}
+          />
         ) : (
           <ClaudeSessionChatWithDock
             key={activeSession.id}

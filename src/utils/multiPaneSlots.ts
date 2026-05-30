@@ -4,6 +4,40 @@ export function isPaneSlotEmpty(slot: PaneSlot): boolean {
   return !slot.sessionId?.trim();
 }
 
+/** 会话是否已被主窗格或其它额外窗格占用。 */
+export function isSessionBoundInPanes(
+  sessionId: string,
+  activeSessionId: string | null | undefined,
+  extraPanes: readonly PaneSlot[],
+  exceptSlotIndex?: number,
+): boolean {
+  const id = sessionId.trim();
+  if (!id) return false;
+  if (activeSessionId?.trim() === id) return true;
+  return extraPanes.some((slot, index) => {
+    if (exceptSlotIndex != null && index === exceptSlotIndex) return false;
+    return slot.sessionId?.trim() === id;
+  });
+}
+
+/** 将 extraPanes 长度对齐到 paneCount - 1，不足补空槽、超出截断。 */
+export function normalizeExtraPanesToPaneCount(
+  paneCount: PaneCount,
+  extraPanes: readonly PaneSlot[],
+  createSlot: () => PaneSlot,
+): PaneSlot[] {
+  const needed = Math.max(0, paneCount - 1);
+  if (extraPanes.length === needed) {
+    return extraPanes as PaneSlot[];
+  }
+  if (extraPanes.length > needed) return extraPanes.slice(0, needed).map((slot) => ({ ...slot }));
+  const next = extraPanes.map((slot) => ({ ...slot }));
+  while (next.length < needed) {
+    next.push(createSlot());
+  }
+  return next;
+}
+
 export function countOccupiedExtraPanes(extraPanes: readonly PaneSlot[]): number {
   return extraPanes.filter((slot) => !isPaneSlotEmpty(slot)).length;
 }

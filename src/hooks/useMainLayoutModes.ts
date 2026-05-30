@@ -11,8 +11,10 @@ import {
   waitLayoutFrames,
 } from "../services/mainWindowLayout";
 import {
+  columnCountForPaneCount,
   computeMinLogicalCenterWidthForPaneCount,
   MAIN_LAYOUT_MULTI_PANE_EXPAND_BUFFER_PX,
+  MAIN_LAYOUT_MULTI_PANE_UNIT_PX,
   nextPaneCountInCycle,
   type PaneCount,
   type PaneSlot,
@@ -38,7 +40,7 @@ import {
   WISE_RIGHT_PANEL_DEFAULT_CHANGED,
 } from "../services/wiseDefaultConfigStore";
 import { RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK } from "../utils/rightPanelStorage";
-import { planNextPaneSlotPlacement } from "../utils/multiPaneSlots";
+import { planNextPaneSlotPlacement, isSessionBoundInPanes, normalizeExtraPanesToPaneCount } from "../utils/multiPaneSlots";
 import { resolveTrellisBootstrapPath } from "../utils/trellisBootstrapPath";
 
 const COMPACT_LAYOUT_WINDOW_WIDTH_PX = 700;
@@ -118,10 +120,15 @@ export function useMainLayoutModes({
   const singlePaneWindowSnapshotRef = useRef<{ width: number; height: number } | null>(null);
   /** 累计从单屏基准扩展的逻辑像素增量，关闭多屏时按此值缩回。 */
   const multiPaneAccumulatedDeltaRef = useRef<number>(0);
+  const paneChangeInFlightRef = useRef(false);
+  const paneCountRef = useRef(paneCount);
+  paneCountRef.current = paneCount;
   const mainLayoutContentRef = useRef<HTMLElement | null>(null);
 
   const sessionsLatestRef = useRef(sessions);
   sessionsLatestRef.current = sessions;
+  const extraPanesLatestRef = useRef(extraPanes);
+  extraPanesLatestRef.current = extraPanes;
   const activeSessionIdLatestRef = useRef(activeSessionId);
   activeSessionIdLatestRef.current = activeSessionId;
   const repositoryMainBindingsLatestRef = useRef(repositoryMainSessionBindings);
@@ -130,8 +137,12 @@ export function useMainLayoutModes({
   /** 切换到指定屏数，每次切换都会自适应调整窗口宽度。 */
   const handleChangePaneCount = useCallback(
     async (targetCount: PaneCount) => {
-      if (targetCount === paneCount) return;
+      if (paneChangeInFlightRef.current) return;
+      if (targetCount === paneCountRef.current) return;
+      paneChangeInFlightRef.current = true;
+      const currentPaneCount = paneCountRef.current;
 
+      try {
       // 关闭多屏 → 恢复到单屏快照
       if (targetCount === 1) {
         setPaneCount(1);
@@ -159,7 +170,7 @@ export function useMainLayoutModes({
       }
 
       // 从单屏进入多屏：先快照窗口尺寸
-      if (paneCount === 1) {
+      if (currentPaneCount === 1) {
         if (!activeRepository) {
           message.warning("请先选择仓库");
           return;
@@ -173,26 +184,12 @@ export function useMainLayoutModes({
       }
 
       // 计算列数变化量（用于窗口宽度增减）
-      const oldCols = paneCount <= 2 ? paneCount : paneCount / 2;
-      const newCols = targetCount <= 2 ? targetCount : targetCount / 2;
+      const oldCols = columnCountForPaneCount(currentPaneCount);
+      const newCols = columnCountForPaneCount(targetCount);
       const colDelta = newCols - oldCols;
-      const PANE_UNIT_PX = 461; // MAIN_LAYOUT_MULTI_PANE_MIN_WIDTH_PX(460) + gap(1)
 
       // 调整 extraPanes 数组长度
-      const neededExtra = targetCount - 1;
-      setExtraPanes((prev) => {
-        if (prev.length === neededExtra) return prev;
-        if (prev.length > neededExtra) {
-          // 截断多余窗格（不删除 session）
-          return prev.slice(0, neededExtra);
-        }
-        // 追加空窗格
-        const next = [...prev];
-        while (next.length < neededExtra) {
-          next.push(createPaneSlot());
-        }
-        return next;
-      });
+      setExtraPanes((prev) => normalizeExtraPanesToPaneCount(targetCount, prev, createPaneSlot));
 
       setPaneCount(targetCount);
 
@@ -200,7 +197,7 @@ export function useMainLayoutModes({
       await waitLayoutFrames(2);
       if (colDelta > 0 && typeof window !== "undefined") {
         // 增加列数：扩展窗口
-        const expandPx = colDelta * PANE_UNIT_PX;
+        const expandPx = colDelta * MAIN_LAYOUT_MULTI_PANE_UNIT_PX;
         try {
           await setMainWindowLogicalInnerSize(window.innerWidth + expandPx, window.innerHeight);
           multiPaneAccumulatedDeltaRef.current += expandPx;
@@ -209,7 +206,7 @@ export function useMainLayoutModes({
         }
       } else if (colDelta < 0 && typeof window !== "undefined") {
         // 减少列数：收缩窗口
-        const shrinkPx = Math.abs(colDelta) * PANE_UNIT_PX;
+        const shrinkPx = Math.abs(colDelta) * MAIN_LAYOUT_MULTI_PANE_UNIT_PX;
         try {
           const nextW = Math.max(
             computeMinLogicalCenterWidthForPaneCount(targetCount) + MAIN_LAYOUT_MULTI_PANE_EXPAND_BUFFER_PX + 600,
@@ -221,8 +218,11 @@ export function useMainLayoutModes({
           /* 浏览器 dev / 非 Tauri */
         }
       }
+      } finally {
+        paneChangeInFlightRef.current = false;
+      }
     },
-    [activeRepository, paneCount, setExtraPanes, setPaneCount],
+    [activeRepository, setExtraPanes, setPaneCount],
   );
 
   const handleChangePaneCountRef = useRef(handleChangePaneCount);
@@ -276,6 +276,11 @@ export function useMainLayoutModes({
           message.error("切换窗格仓库失败");
           return;
         }
+      }
+
+      if (isSessionBoundInPanes(nextSessionId, leftId, extraPanesLatestRef.current, slotIndex)) {
+        message.warning("该会话已在其它窗格中打开");
+        return;
       }
 
       setExtraPanes((prev) => {
@@ -400,7 +405,7 @@ export function useMainLayoutModes({
           await waitLayoutFrames(2);
           // 2屏=1×2，需要增加1列
           if (typeof window !== "undefined") {
-            const expandPx = 461; // 460 + 1 gap
+            const expandPx = MAIN_LAYOUT_MULTI_PANE_UNIT_PX;
             try {
               await setMainWindowLogicalInnerSize(window.innerWidth + expandPx, window.innerHeight);
               multiPaneAccumulatedDeltaRef.current = expandPx;
@@ -409,6 +414,10 @@ export function useMainLayoutModes({
             }
           }
         } else {
+          if (isSessionBoundInPanes(id, activeSessionIdLatestRef.current, extraPanesLatestRef.current, slotIndex)) {
+            message.warning("该会话已在其它窗格中打开");
+            return;
+          }
           setExtraPanes((prev) => {
             const next = [...prev];
             if (next[slotIndex]) {
@@ -453,7 +462,7 @@ export function useMainLayoutModes({
           setPaneCount(2);
           await waitLayoutFrames(2);
           if (typeof window !== "undefined") {
-            const expandPx = 461;
+            const expandPx = MAIN_LAYOUT_MULTI_PANE_UNIT_PX;
             try {
               await setMainWindowLogicalInnerSize(window.innerWidth + expandPx, window.innerHeight);
               multiPaneAccumulatedDeltaRef.current = expandPx;
@@ -461,6 +470,11 @@ export function useMainLayoutModes({
               /* 浏览器 dev / 非 Tauri */
             }
           }
+          return;
+        }
+
+        if (isSessionBoundInPanes(sessionId, activeSessionIdLatestRef.current, extraPanesLatestRef.current)) {
+          message.warning("该会话已在其它窗格中打开");
           return;
         }
 
@@ -542,17 +556,24 @@ export function useMainLayoutModes({
 
   // 清理已不存在的 session 引用
   useEffect(() => {
-    const sessionIds = new Set(sessions.map((s) => s.id));
-    let changed = false;
-    const cleaned = extraPanes.map((slot) => {
-      if (slot.sessionId && !sessionIds.has(slot.sessionId)) {
-        changed = true;
-        return { ...slot, sessionId: null };
-      }
-      return slot;
+    setExtraPanes((prev) => {
+      const sessionIds = new Set(sessions.map((s) => s.id));
+      let changed = false;
+      const cleaned = prev.map((slot) => {
+        if (slot.sessionId && !sessionIds.has(slot.sessionId)) {
+          changed = true;
+          return { ...slot, sessionId: null };
+        }
+        return slot;
+      });
+      return changed ? cleaned : prev;
     });
-    if (changed) setExtraPanes(cleaned);
-  }, [sessions, extraPanes, setExtraPanes]);
+  }, [sessions, setExtraPanes]);
+
+  // 持久化恢复或异常状态下，将 extraPanes 长度与 paneCount 对齐
+  useEffect(() => {
+    setExtraPanes((prev) => normalizeExtraPanesToPaneCount(paneCount, prev, createPaneSlot));
+  }, [paneCount, setExtraPanes]);
 
   const exitCompactLayoutMode = useCallback(async () => {
     const snap = compactLayoutSnapshotRef.current;
@@ -622,8 +643,8 @@ export function useMainLayoutModes({
     })
       .then((fn) => {
         if (!cancelled) {
+          // 两个事件语义相同，只保留一个 listener 避免 Alt+K 双触发
           if (unlistenDual) {
-            // 已经监听了旧事件，取消新的以避免双重触发
             safeUnlisten(fn);
           } else {
             unlistenDual = fn;
