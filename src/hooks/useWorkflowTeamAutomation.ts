@@ -254,6 +254,16 @@ export function useWorkflowTeamAutomation({
     }
   }, []);
 
+  const purgeWorkflowWorkerSessionBindings = useCallback((sessionIds: ReadonlySet<string>) => {
+    if (sessionIds.size === 0) return;
+    const map = workflowTaskByWorkerSessionRef.current;
+    for (const key of [...map.keys()]) {
+      if (sessionIds.has(key)) {
+        map.delete(key);
+      }
+    }
+  }, []);
+
   const prepareFreshOmcEmployeeWorkerForDirectBatch = useCallback(
     async (input: { repositoryPath: string; repositoryDisplayName: string }) => {
       const rp = input.repositoryPath.trim();
@@ -1533,6 +1543,7 @@ export function useWorkflowTeamAutomation({
     moveWorkflowAutomationSessionId,
     notifyOmcEmployeeDirectBatchTaskDone,
     prepareFreshOmcEmployeeWorkerForDirectBatch,
+    purgeWorkflowWorkerSessionBindings,
     refreshEmployeeData,
   };
 }

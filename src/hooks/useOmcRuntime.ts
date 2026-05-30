@@ -21,6 +21,7 @@ import {
   clearOmcDirectBatchInvocationsPersisted,
   digestOmcDirectBatchInvocationsList,
   flushPersistOmcDirectBatchInvocations,
+  flushPersistOmcDirectBatchInvocationsLocal,
   loadOmcDirectBatchInvocationsFromLocalStorageSync,
   loadOmcDirectBatchInvocationsPersisted,
   schedulePersistOmcDirectBatchInvocations,
@@ -158,17 +159,21 @@ export function useOmcRuntime({
   }, [applyHydratedRows]);
 
   useEffect(() => {
-    function persistDirectBatchRefSnapshot() {
+    function persistDirectBatchRefSnapshot(localOnly = false) {
       const list = sortOmcDirectBatchInvocationsForStore([...omcDirectBatchInvocationRef.current.values()]);
+      if (localOnly) {
+        flushPersistOmcDirectBatchInvocationsLocal(list);
+        return;
+      }
       void flushPersistOmcDirectBatchInvocations(list);
     }
     function onVisibility() {
       if (document.visibilityState === "hidden") {
-        persistDirectBatchRefSnapshot();
+        persistDirectBatchRefSnapshot(true);
       }
     }
     function onPageHide() {
-      persistDirectBatchRefSnapshot();
+      persistDirectBatchRefSnapshot(true);
     }
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pagehide", onPageHide);

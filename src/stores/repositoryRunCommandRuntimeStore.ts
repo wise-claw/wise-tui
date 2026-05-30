@@ -258,6 +258,7 @@ function ensureTerminalListeners(): void {
       });
     }
     internals.runChunkBuffer = "";
+    repoInternalsById.delete(repositoryId);
     patchRepoState(repositoryId, {
       status: "idle",
       statusHint: payload.exitCode === 0 ? "运行结束" : `已退出（code ${payload.exitCode}）`,

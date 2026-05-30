@@ -200,7 +200,7 @@ export function SessionExecutionEngineChip({
 
   return (
     <Dropdown
-      overlayClassName="app-claude-connection-kind-dropdown"
+      classNames={{ root: "app-claude-connection-kind-dropdown" }}
       menu={{
         items: menuItems,
         selectable: true,
@@ -216,7 +216,7 @@ export function SessionExecutionEngineChip({
       disabled={disabled}
       open={menuOpen}
       onOpenChange={setMenuOpen}
-      dropdownRender={(menu) => (
+      popupRender={(menu) => (
         <div className="app-claude-connection-kind-dropdown-container">
           <div className="app-claude-connection-kind-dropdown-header">
             <span className="app-claude-connection-kind-dropdown-header-title">执行环境</span>

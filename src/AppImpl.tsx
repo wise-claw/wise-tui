@@ -25,6 +25,12 @@ import {
 } from "./utils/repositoryType";
 import { isSessionBoundAsRepositoryMain } from "./utils/repositoryMainSessionBinding";
 import { resolveSessionExecutionEngine } from "./utils/sessionExecutionEngine";
+import {
+  collectLiveWorkflowTaskIds,
+  mergeWorkflowTasksForSession,
+  pruneRecordByTaskIds,
+  removeWorkflowTasksForSessionCreators,
+} from "./utils/pruneWorkflowTaskAuxMaps";
 import { useAgentRegistryCodexAvailable } from "./hooks/useAgentRegistryCodexAvailable";
 import { useCcWorkflowStudioWorkspace } from "./hooks/useCcWorkflowStudioWorkspace";
 import {
@@ -385,6 +391,33 @@ export default function App() {
   workflowTaskEventsByTaskIdRef.current = workflowTaskEventsByTaskId;
   const workflowRuntimeSnapshotsByTaskIdRef = useRef(workflowRuntimeSnapshotsByTaskId);
   workflowRuntimeSnapshotsByTaskIdRef.current = workflowRuntimeSnapshotsByTaskId;
+  const applyWorkflowTasksForSession = useCallback(
+    (
+      sessionId: string,
+      tasks: WorkflowTaskItem[],
+      eventEntries: ReadonlyArray<readonly [string, WorkflowTaskEventItem[]]>,
+      pendingEntries: ReadonlyArray<readonly [string, Array<{ employeeId: string; name: string }>]>,
+      options?: { dropCreatorIds?: ReadonlySet<string> },
+    ) => {
+      let baseTasks = workflowTasksRef.current;
+      if (options?.dropCreatorIds?.size) {
+        baseTasks = removeWorkflowTasksForSessionCreators(baseTasks, options.dropCreatorIds);
+      }
+      const merged = mergeWorkflowTasksForSession(baseTasks, sessionId, tasks);
+      const liveTaskIds = collectLiveWorkflowTaskIds(merged);
+      const snapshotEntries = eventEntries.map(
+        ([taskId, events]) => [taskId, extractRuntimeSnapshotsFromEvents(events)] as const,
+      );
+      setWorkflowTasks(merged);
+      setWorkflowTaskEventsByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds, eventEntries));
+      setWorkflowRuntimeSnapshotsByTaskId((prev) =>
+        pruneRecordByTaskIds(prev, liveTaskIds, snapshotEntries),
+      );
+      setTaskPendingEmployeesByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds, pendingEntries));
+      setWorkflowRuntimeStateByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds));
+    },
+    [],
+  );
   const [workflowGraphsByWorkflowId, setWorkflowGraphsByWorkflowId] = useState<Record<string, WorkflowGraph>>({});
   const [workflowGraphStatusByWorkflowId, setWorkflowGraphStatusByWorkflowId] = useState<Record<string, string>>({});
   const moveOmcRuntimeSessionIdRef = useRef<(fromTabId: string, toClaudeSessionId: string) => void>(() => {});
@@ -654,6 +687,7 @@ export default function App() {
 
   const moveDingTalkAutomationPendingSessionIdRef = useRef<(fromTabId: string, toClaudeSessionId: string) => void>(() => {});
   const moveWorkflowAutomationSessionIdRef = useRef<(fromTabId: string, toClaudeSessionId: string) => void>(() => {});
+  const purgeWorkflowWorkerSessionBindingsRef = useRef<(sessionIds: ReadonlySet<string>) => void>(() => {});
   /** 在 `sessionsLatestRef` 就绪后每帧赋值：DB 迁移 workflow 会话引用 + 刷新任务列表（见 `handleSessionTabIdMigrated`）。 */
   const postSessionTabMigrationRef = useRef<(fromTabId: string, toClaudeSessionId: string) => void>(() => {});
 
@@ -807,36 +841,14 @@ export default function App() {
       }
       try {
         const tasks = await listWorkflowTasks(toClaudeSessionId);
-        setWorkflowTasks((prev) => {
-          const untouched = prev.filter((t) => t.creator !== toClaudeSessionId && t.creator !== fromTabId);
-          return [...untouched, ...tasks];
-        });
         const eventEntries = await Promise.all(
           tasks.slice(0, 8).map(async (task) => [task.id, await listTaskEvents(task.id)] as const),
         );
         const pendingEntries = await Promise.all(
           tasks.slice(0, 8).map(async (task) => [task.id, await listTaskPendingEmployees(task.id)] as const),
         );
-        setWorkflowTaskEventsByTaskId((prev) => {
-          const next = { ...prev };
-          for (const [taskId, events] of eventEntries) {
-            next[taskId] = events;
-          }
-          return next;
-        });
-        setWorkflowRuntimeSnapshotsByTaskId((prev) => {
-          const next = { ...prev };
-          for (const [taskId, events] of eventEntries) {
-            next[taskId] = extractRuntimeSnapshotsFromEvents(events);
-          }
-          return next;
-        });
-        setTaskPendingEmployeesByTaskId((prev) => {
-          const next = { ...prev };
-          for (const [taskId, employees] of pendingEntries) {
-            next[taskId] = employees;
-          }
-          return next;
+        applyWorkflowTasksForSession(toClaudeSessionId, tasks, eventEntries, pendingEntries, {
+          dropCreatorIds: new Set([fromTabId]),
         });
       } catch (error) {
         console.error("Reload workflow tasks after session tab id migration failed:", error);
@@ -847,6 +859,18 @@ export default function App() {
   const handleCloseSession = useCallback(
     (sessionId: string) => {
       const session = sessionsLatestRef.current.find((s) => s.id === sessionId);
+      const creatorIds = new Set<string>([sessionId]);
+      if (session?.claudeSessionId?.trim()) {
+        creatorIds.add(session.claudeSessionId.trim());
+      }
+      const nextTasks = removeWorkflowTasksForSessionCreators(workflowTasksRef.current, creatorIds);
+      const liveTaskIds = collectLiveWorkflowTaskIds(nextTasks);
+      setWorkflowTasks(nextTasks);
+      setWorkflowTaskEventsByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds));
+      setWorkflowRuntimeSnapshotsByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds));
+      setTaskPendingEmployeesByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds));
+      setWorkflowRuntimeStateByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds));
+      purgeWorkflowWorkerSessionBindingsRef.current(creatorIds);
       if (session?.repositoryPath) {
         const key = normalizeRepositoryPathForMatch(session.repositoryPath);
         setRepositoryMainSessionBindings((prev) => {
@@ -917,9 +941,7 @@ export default function App() {
         preferredRepositoryId: activeRepositoryId,
       });
       if (repo) {
-        flushSync(() => {
-          setActiveRepositoryWithOwner(repo.id);
-        });
+        setActiveRepositoryWithOwner(repo.id);
       }
       switchSession(canonicalId);
     },
@@ -995,6 +1017,7 @@ export default function App() {
     moveWorkflowAutomationSessionId,
     notifyOmcEmployeeDirectBatchTaskDone,
     prepareFreshOmcEmployeeWorkerForDirectBatch,
+    purgeWorkflowWorkerSessionBindings,
     refreshEmployeeData,
   } = useWorkflowTeamAutomation({
     activeSessionId,
@@ -1027,6 +1050,7 @@ export default function App() {
     workflowVerdictMode,
   });
   moveWorkflowAutomationSessionIdRef.current = moveWorkflowAutomationSessionId;
+  purgeWorkflowWorkerSessionBindingsRef.current = purgeWorkflowWorkerSessionBindings;
   advanceTeamAfterTurnRef.current = handleClaudeTurnComplete;
 
   const handleComposerExecuteRef = useRef(handleComposerExecute);
@@ -1540,42 +1564,18 @@ export default function App() {
     void (async () => {
       try {
         const tasks = await listWorkflowTasks(activeSessionId);
-        setWorkflowTasks((prev) => {
-          const untouched = prev.filter((item) => item.creator !== activeSessionId);
-          return [...untouched, ...tasks];
-        });
         const eventEntries = await Promise.all(
           tasks.slice(0, 8).map(async (task) => [task.id, await listTaskEvents(task.id)] as const),
         );
         const pendingEntries = await Promise.all(
           tasks.slice(0, 8).map(async (task) => [task.id, await listTaskPendingEmployees(task.id)] as const),
         );
-        setWorkflowTaskEventsByTaskId((prev) => {
-          const next = { ...prev };
-          for (const [taskId, events] of eventEntries) {
-            next[taskId] = events;
-          }
-          return next;
-        });
-        setWorkflowRuntimeSnapshotsByTaskId((prev) => {
-          const next = { ...prev };
-          for (const [taskId, events] of eventEntries) {
-            next[taskId] = extractRuntimeSnapshotsFromEvents(events);
-          }
-          return next;
-        });
-        setTaskPendingEmployeesByTaskId((prev) => {
-          const next = { ...prev };
-          for (const [taskId, employees] of pendingEntries) {
-            next[taskId] = employees;
-          }
-          return next;
-        });
+        applyWorkflowTasksForSession(activeSessionId, tasks, eventEntries, pendingEntries);
       } catch (error) {
         console.error("Failed to load workflow tasks:", error);
       }
     })();
-  }, [activeSessionId]);
+  }, [activeSessionId, applyWorkflowTasksForSession]);
 
   const activeRepository = repositories.find((p) => p.id === activeRepositoryId);
 

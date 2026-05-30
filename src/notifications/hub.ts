@@ -447,6 +447,8 @@ class NotificationHub {
       this.bumpGlobal();
       this.bumpDockForAllSubscribedSessions();
     }
+    this.dockListenersBySession.delete(sessionId);
+    this.dockSliceGenBySession.delete(sessionId);
   }
 
   /** 应用 TodoWrite 工具结果；merge=false 时整表替换。 */
@@ -775,6 +777,13 @@ class NotificationHub {
         status: "expired",
         updatedAt: now,
       });
+      changed = true;
+    }
+    const pruneBefore = now - maxAgeMs * 2;
+    for (const [requestId, lifecycle] of [...this.requestLifecycles.entries()]) {
+      if (lifecycle.status === "pending") continue;
+      if (lifecycle.updatedAt >= pruneBefore) continue;
+      this.requestLifecycles.delete(requestId);
       changed = true;
     }
     if (changed) {

@@ -353,7 +353,7 @@ export function EmployeeConfigModal({
       width={400}
       destroyOnHidden
       wrapClassName="app-employee-config-form-modal"
-      maskClosable={false}
+      mask={{ closable: false }}
     >
       <Form
         form={form}

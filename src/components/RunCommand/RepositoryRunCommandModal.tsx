@@ -52,7 +52,7 @@ export function RepositoryRunCommandModal({
       destroyOnHidden
       className="app-run-command-modal"
       title={null}
-      maskClosable
+      mask={{ closable: true }}
     >
       <RunCommandPanel {...run} onClose={closeRepositoryRunCommandModal} />
     </Modal>

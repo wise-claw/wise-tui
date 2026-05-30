@@ -153,7 +153,7 @@ export function ClaudeConnectionKindChip({
 
   return (
     <Dropdown
-      overlayClassName="app-claude-connection-kind-dropdown"
+      classNames={{ root: "app-claude-connection-kind-dropdown" }}
       menu={{
         items: menuItems,
         selectable: true,
@@ -168,7 +168,7 @@ export function ClaudeConnectionKindChip({
       trigger={["click"]}
       placement="top"
       disabled={disabled}
-      dropdownRender={(menu) => (
+      popupRender={(menu) => (
         <div className="app-claude-connection-kind-dropdown-container">
           <div className="app-claude-connection-kind-dropdown-header">
             <span className="app-claude-connection-kind-dropdown-header-title">连接方式</span>

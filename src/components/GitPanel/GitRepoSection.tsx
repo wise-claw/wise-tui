@@ -1,5 +1,5 @@
 import { memo, startTransition, useCallback, useEffect, useRef, useState } from "react";
-import { useInView } from "../../hooks/useInView";
+import { useInView, useInViewActive } from "../../hooks/useInView";
 import { listen } from "@tauri-apps/api/event";
 import { safeUnlistenPromise } from "../../utils/safeTauriUnlisten";
 import { Button, Empty, Spin, Tooltip, message } from "antd";
@@ -16,6 +16,7 @@ import {
   gitStagePaths,
   gitStageAll,
   gitStatus,
+  gitStatusSummary,
   gitUnstage,
   gitUnstageAll,
 } from "../../services/git";
@@ -44,15 +45,30 @@ interface Props {
   loadDelayMs?: number;
   /** 多仓面板统一注册 watcher 刷新，避免每仓独立监听。 */
   registerRefresh?: (path: string, refresh: () => void) => () => void;
+  /** 多仓面板按展开状态限制 file watcher 范围。 */
+  onExpandedChange?: (path: string, expanded: boolean) => void;
   onOpenFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
 }
 
-function formatBranchLabel(status: GitStatusResponse | null): string {
-  const branch = status?.branch?.trim();
+interface GitStatusHeaderSnapshot {
+  branch: string | null;
+  ahead: number;
+  behind: number;
+  stagedCount: number;
+  unstagedCount: number;
+}
+
+function formatBranchLabel(
+  status: GitStatusResponse | null,
+  header: GitStatusHeaderSnapshot | null,
+): string {
+  const branch = status?.branch?.trim() ?? header?.branch?.trim();
   if (!branch) return "Git";
-  const dirty = (status?.staged.length ?? 0) > 0 || (status?.unstaged.length ?? 0) > 0;
-  const ahead = status?.ahead ?? 0;
-  const behind = status?.behind ?? 0;
+  const stagedLen = status?.staged.length ?? header?.stagedCount ?? 0;
+  const unstagedLen = status?.unstaged.length ?? header?.unstagedCount ?? 0;
+  const dirty = stagedLen > 0 || unstagedLen > 0;
+  const ahead = status?.ahead ?? header?.ahead ?? 0;
+  const behind = status?.behind ?? header?.behind ?? 0;
   let suffix = "";
   if (dirty) suffix += "*";
   if (ahead > 0 || behind > 0) suffix += "+";
@@ -64,13 +80,19 @@ function GitRepoSectionInner({
   defaultExpanded = true,
   loadDelayMs = 0,
   registerRefresh,
+  onExpandedChange,
   onOpenFile,
 }: Props) {
   const repositoryPath = entry.path;
-  const [sectionRef, inView] = useInView("160px");
+  const isMultiRepo = Boolean(registerRefresh);
+  const [sectionRefSticky, inViewSticky] = useInView("160px");
+  const [sectionRefActive, inViewActive] = useInViewActive("160px");
+  const sectionRef = isMultiRepo ? sectionRefActive : sectionRefSticky;
+  const inView = isMultiRepo ? inViewActive : inViewSticky;
   const [expanded, setExpanded] = useState(defaultExpanded);
-  const shouldLoadStatus = expanded || inView;
+  const shouldLoadHeader = expanded || inView;
   const [status, setStatus] = useState<GitStatusResponse | null>(null);
+  const [headerSnapshot, setHeaderSnapshot] = useState<GitStatusHeaderSnapshot | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [openingRemote, setOpeningRemote] = useState(false);
   const [loading, setLoading] = useState<Record<string, boolean>>({
@@ -89,6 +111,7 @@ function GitRepoSectionInner({
   });
 
   const statusRef = useRef<GitStatusResponse | null>(null);
+  const headerSnapshotRef = useRef<GitStatusHeaderSnapshot | null>(null);
   const runningActions = useRef(new Set<string>());
   const lastActionTime = useRef(new Map<string, number>());
   const watcherRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -145,13 +168,73 @@ function GitRepoSectionInner({
     }
   }, [repositoryPath]);
 
+  const loadSummary = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!repositoryPath) return;
+    const silent = opts?.silent ?? false;
+    const requestId = ++loadRequestIdRef.current;
+    if (!silent) {
+      setLoading((prev) => ({ ...prev, status: true }));
+    }
+    try {
+      const result = await gitStatusSummary(repositoryPath);
+      if (requestId !== loadRequestIdRef.current) return;
+      const snapshot: GitStatusHeaderSnapshot = {
+        branch: result.branch,
+        ahead: result.ahead,
+        behind: result.behind,
+        stagedCount: result.stagedCount,
+        unstagedCount: result.unstagedCount,
+      };
+      const apply = () => {
+        headerSnapshotRef.current = snapshot;
+        setHeaderSnapshot(snapshot);
+        setErrors((prev) => {
+          if (!prev.status) return prev;
+          const next = { ...prev };
+          delete next.status;
+          return next;
+        });
+      };
+      if (silent) {
+        startTransition(apply);
+      } else {
+        apply();
+      }
+    } catch (e) {
+      if (requestId !== loadRequestIdRef.current) return;
+      const msg = e instanceof Error ? e.message : String(e);
+      const applyErr = () => {
+        headerSnapshotRef.current = null;
+        setErrors((prev) => ({ ...prev, status: msg }));
+        setHeaderSnapshot(null);
+      };
+      if (silent) {
+        startTransition(applyErr);
+      } else {
+        applyErr();
+      }
+    } finally {
+      if (requestId === loadRequestIdRef.current && !silent) {
+        setLoading((prev) => ({ ...prev, status: false }));
+      }
+    }
+  }, [repositoryPath]);
+
   const silentRefresh = useCallback(() => {
     if (syncOpsInFlightRef.current > 0) {
       pendingSilentRefreshRef.current = true;
       return;
     }
+    if (expanded) {
+      void loadStatus({ silent: true });
+      return;
+    }
+    if (isMultiRepo && shouldLoadHeader) {
+      void loadSummary({ silent: true });
+      return;
+    }
     void loadStatus({ silent: true });
-  }, [loadStatus]);
+  }, [expanded, isMultiRepo, loadStatus, loadSummary, shouldLoadHeader]);
 
   const beginGitSyncOperation = useCallback(() => {
     syncOpsInFlightRef.current += 1;
@@ -167,24 +250,61 @@ function GitRepoSectionInner({
 
   useEffect(() => {
     statusRef.current = null;
+    headerSnapshotRef.current = null;
     setStatus(null);
+    setHeaderSnapshot(null);
   }, [repositoryPath]);
 
   useEffect(() => {
-    if (!shouldLoadStatus) return;
-    if (statusRef.current) return;
+    if (!shouldLoadHeader) return;
+    if (expanded) {
+      if (statusRef.current) return;
+    } else if (isMultiRepo) {
+      if (headerSnapshotRef.current) return;
+    } else if (statusRef.current) {
+      return;
+    }
     let cancelled = false;
     const delay = expanded ? 0 : loadDelayMs;
     const timer = window.setTimeout(() => {
-      if (!cancelled) {
+      if (cancelled) return;
+      if (expanded || !isMultiRepo) {
         void loadStatus({ silent: delay > 0 });
+      } else {
+        void loadSummary({ silent: delay > 0 });
       }
     }, delay);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [shouldLoadStatus, expanded, loadDelayMs, loadStatus]);
+  }, [shouldLoadHeader, expanded, isMultiRepo, loadDelayMs, loadStatus, loadSummary]);
+
+  useEffect(() => {
+    if (shouldLoadHeader) return;
+    loadRequestIdRef.current += 1;
+    statusRef.current = null;
+    headerSnapshotRef.current = null;
+    setStatus(null);
+    setHeaderSnapshot(null);
+  }, [shouldLoadHeader]);
+
+  useEffect(() => {
+    if (expanded) return;
+    if (!statusRef.current) return;
+    const current = statusRef.current;
+    const snapshot: GitStatusHeaderSnapshot = {
+      branch: current.branch,
+      ahead: current.ahead,
+      behind: current.behind,
+      stagedCount: current.staged.length,
+      unstagedCount: current.unstaged.length,
+    };
+    headerSnapshotRef.current = snapshot;
+    setHeaderSnapshot(snapshot);
+    statusRef.current = null;
+    setStatus(null);
+  }, [expanded]);
 
   useEffect(() => {
     if (registerRefresh) {
@@ -388,7 +508,23 @@ function GitRepoSectionInner({
   }, [openingRemote, repositoryPath]);
 
   const isMissingRepo = errors.status?.includes("Failed to open git repo");
-  const changeCount = (status?.staged.length ?? 0) + (status?.unstaged.length ?? 0);
+  const changeCount =
+    (status?.staged.length ?? headerSnapshot?.stagedCount ?? 0) +
+    (status?.unstaged.length ?? headerSnapshot?.unstagedCount ?? 0);
+  const syncStatus: GitStatusResponse | null =
+    status ??
+    (headerSnapshot
+      ? {
+          branch: headerSnapshot.branch,
+          ahead: headerSnapshot.ahead,
+          behind: headerSnapshot.behind,
+          additions: 0,
+          deletions: 0,
+          upstream: null,
+          staged: [],
+          unstaged: [],
+        }
+      : null);
 
   return (
     <section
@@ -401,8 +537,14 @@ function GitRepoSectionInner({
           type="button"
           className="git-repo-section__toggle"
           aria-expanded={expanded}
-          aria-label={`${entry.name} ${formatBranchLabel(status)}`}
-          onClick={() => setExpanded((prev) => !prev)}
+          aria-label={`${entry.name} ${formatBranchLabel(status, headerSnapshot)}`}
+          onClick={() =>
+            setExpanded((prev) => {
+              const next = !prev;
+              onExpandedChange?.(repositoryPath, next);
+              return next;
+            })
+          }
         >
           <span className="git-repo-section__chevron" aria-hidden>
             {expanded ? <DownOutlined /> : <RightOutlined />}
@@ -410,7 +552,7 @@ function GitRepoSectionInner({
           <span className="git-repo-section__name" title={entry.name}>
             {entry.name}
           </span>
-          <span className="git-repo-section__branch">{formatBranchLabel(status)}</span>
+          <span className="git-repo-section__branch">{formatBranchLabel(status, headerSnapshot)}</span>
           {changeCount > 0 ? (
             <span className="git-repo-section__change-count">{changeCount}</span>
           ) : null}
@@ -427,9 +569,9 @@ function GitRepoSectionInner({
               onClick={handleOpenRemoteInBrowser}
             />
           </Tooltip>
-          {status ? (
+          {syncStatus ? (
             <GitSyncActions
-              status={status}
+              status={syncStatus}
               loading={loading}
               hideStagedCount
               onFetch={handleFetch}

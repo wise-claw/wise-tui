@@ -2717,7 +2717,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   cursor: grab;
   opacity: 0;
   border-radius: 4px;
-  transition: opacity 0.15s, color 0.15s, background 0.15s;
+  transition: opacity 0.08s ease, color 0.1s ease, background 0.1s ease;
 }
 
 .app-repository-drag-handle svg {
@@ -2767,7 +2767,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   font-size: 12px;
   line-height: 1.35;
   border: 1px solid transparent;
-  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: background 0.1s ease, border-color 0.1s ease, box-shadow 0.1s ease;
 }
 
 .app-repository-item:hover .app-repository-action {
@@ -2781,7 +2781,6 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 
 .app-repository-item:hover {
   background: color-mix(in srgb, var(--ant-color-text) 6%, transparent);
-  transform: translateX(2px) translateZ(0);
 }
 
 .app-repository-item--project {
@@ -3030,7 +3029,6 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   background: color-mix(in srgb, var(--ant-color-primary) 16%, transparent) !important;
   border-color: color-mix(in srgb, var(--ant-color-primary) 28%, transparent) !important;
   box-shadow: var(--app-workspace-active-glow), 0 4px 12px color-mix(in srgb, var(--ant-color-primary) 10%, transparent) !important;
-  transform: translateX(4px) translateZ(0) scale(1.01);
 }
 
 .app-repository-item--repo.app-repository-item--repo-active:hover {
@@ -3219,7 +3217,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   flex-shrink: 0;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.15s, color 0.15s;
+  transition: opacity 0.08s ease, color 0.1s ease, background 0.1s ease;
   border-radius: 4px;
   cursor: pointer;
 }

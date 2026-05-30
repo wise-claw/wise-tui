@@ -113,9 +113,8 @@ export async function resolveSessionContextMetricsForSend(
     });
     let diskTokens = estimateTokensFromJsonlLines(tailLines);
     const tailSaturated = tailLines.length >= CLAUDE_DISK_JSONL_TAIL_LINES_INITIAL;
-    if (tailSaturated && (session.messages.length === 0 || session.diskTranscriptPartial)) {
-      const fullLines = await loadJsonl(rp, cc);
-      diskTokens = Math.max(diskTokens, estimateTokensFromJsonlLines(fullLines));
+    if (tailSaturated) {
+      diskTokens = Math.max(diskTokens, estimateTokensFromJsonlLines(tailLines));
     }
     const estimatedTokens = Math.max(memory.estimatedTokens, diskTokens);
     return {

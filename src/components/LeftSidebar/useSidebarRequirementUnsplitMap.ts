@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import type { ProjectItem, Repository } from "../../types";
 import {
@@ -8,6 +8,30 @@ import {
 import { countUnsplitRequirementsInSnapshot } from "../../utils/requirementWorkspaceUnsplit";
 import { safeUnlisten } from "../../utils/safeTauriUnlisten";
 
+function stringNumberRecordEqual(
+  left: Record<string, number>,
+  right: Record<string, number>,
+): boolean {
+  const leftKeys = Object.keys(left);
+  if (leftKeys.length !== Object.keys(right).length) return false;
+  for (const key of leftKeys) {
+    if (left[key] !== right[key]) return false;
+  }
+  return true;
+}
+
+function idNumberRecordEqual(
+  left: Record<number, number>,
+  right: Record<number, number>,
+): boolean {
+  const leftKeys = Object.keys(left);
+  if (leftKeys.length !== Object.keys(right).length) return false;
+  for (const key of leftKeys) {
+    if (left[Number(key)] !== right[Number(key)]) return false;
+  }
+  return true;
+}
+
 /** 侧栏：按 Workspace / 仓库统计尚未拆分为任务的 demand 条数。 */
 export function useSidebarRequirementUnsplitMap(
   projects: ProjectItem[],
@@ -15,6 +39,10 @@ export function useSidebarRequirementUnsplitMap(
 ) {
   const [projectUnsplitById, setProjectUnsplitById] = useState<Record<string, number>>({});
   const [repositoryUnsplitById, setRepositoryUnsplitById] = useState<Record<number, number>>({});
+  const projectsRef = useRef(projects);
+  const repositoriesRef = useRef(repositories);
+  projectsRef.current = projects;
+  repositoriesRef.current = repositories;
 
   const projectKey = useMemo(
     () =>
@@ -29,9 +57,12 @@ export function useSidebarRequirementUnsplitMap(
   );
 
   const refresh = useCallback(async () => {
-    if (projects.length === 0) {
-      setProjectUnsplitById({});
-      setRepositoryUnsplitById({});
+    const currentProjects = projectsRef.current;
+    const currentRepositories = repositoriesRef.current;
+
+    if (currentProjects.length === 0) {
+      setProjectUnsplitById((prev) => (Object.keys(prev).length === 0 ? prev : {}));
+      setRepositoryUnsplitById((prev) => (Object.keys(prev).length === 0 ? prev : {}));
       return;
     }
 
@@ -39,11 +70,11 @@ export function useSidebarRequirementUnsplitMap(
     const nextRepositoryUnsplit: Record<number, number> = {};
 
     await Promise.all(
-      projects.map(async (project) => {
+      currentProjects.map(async (project) => {
         const workspaceInput = buildProjectRequirementWorkspaceInput({
           project,
-          projects,
-          repositories,
+          projects: currentProjects,
+          repositories: currentRepositories,
         });
         const hasScope =
           Boolean(workspaceInput.projectRootPath?.trim()) ||
@@ -75,13 +106,17 @@ export function useSidebarRequirementUnsplitMap(
       }),
     );
 
-    setProjectUnsplitById(nextProjectUnsplit);
-    setRepositoryUnsplitById(nextRepositoryUnsplit);
-  }, [projects, repositories]);
+    setProjectUnsplitById((prev) =>
+      stringNumberRecordEqual(prev, nextProjectUnsplit) ? prev : nextProjectUnsplit,
+    );
+    setRepositoryUnsplitById((prev) =>
+      idNumberRecordEqual(prev, nextRepositoryUnsplit) ? prev : nextRepositoryUnsplit,
+    );
+  }, []);
 
   useEffect(() => {
     void refresh();
-  }, [refresh, projectKey, repositoryKey]);
+  }, [projectKey, repositoryKey, refresh]);
 
   useEffect(() => {
     let cancelled = false;

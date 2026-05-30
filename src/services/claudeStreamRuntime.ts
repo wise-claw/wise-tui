@@ -135,11 +135,12 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     opts: { syncStreamingTargetRefOnInit: boolean },
   ) {
     const now = Date.now();
+    const lineForDedup = line.length > 8192 ? line.slice(-8192) : line;
     const prevLine = lastStreamLineBySessionRef.current.get(tid);
-    if (prevLine && prevLine.line === line && now - prevLine.at < 1500) {
+    if (prevLine && prevLine.line === lineForDedup && now - prevLine.at < 1500) {
       return;
     }
-    lastStreamLineBySessionRef.current.set(tid, { line, at: now });
+    lastStreamLineBySessionRef.current.set(tid, { line: lineForDedup, at: now });
     ingestClaudeStreamLineForHub(tid, line);
     const systemErrMsg = extractSystemErrorMessageFromStreamLine(line);
     if (systemErrMsg) {
@@ -312,18 +313,22 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     }
 
     if (reloadTranscriptFromDisk && success) {
-      const stableTabId = session?.id ?? tid;
-      const repo = session?.repositoryPath?.trim() ?? "";
-      const tidTrim = tid.trim();
-      const ccid =
-        session?.claudeSessionId?.trim() ||
-        sessionIdMapRef.current.get(stableTabId)?.trim() ||
-        sessionIdMapRef.current.get(tidTrim)?.trim() ||
-        (looksLikeClaudeUuid(tidTrim) ? tidTrim : "");
-      if (repo && ccid) {
-        window.setTimeout(() => {
-          void reloadTranscriptFromDisk({ tabId: stableTabId, repositoryPath: repo, claudeSessionId: ccid });
-        }, 120);
+      const skipDiskReload =
+        streamingResident && session != null && session.messages.length > 0;
+      if (!skipDiskReload) {
+        const stableTabId = session?.id ?? tid;
+        const repo = session?.repositoryPath?.trim() ?? "";
+        const tidTrim = tid.trim();
+        const ccid =
+          session?.claudeSessionId?.trim() ||
+          sessionIdMapRef.current.get(stableTabId)?.trim() ||
+          sessionIdMapRef.current.get(tidTrim)?.trim() ||
+          (looksLikeClaudeUuid(tidTrim) ? tidTrim : "");
+        if (repo && ccid) {
+          window.setTimeout(() => {
+            void reloadTranscriptFromDisk({ tabId: stableTabId, repositoryPath: repo, claudeSessionId: ccid });
+          }, 120);
+        }
       }
     }
   }

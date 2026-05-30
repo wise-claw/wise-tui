@@ -215,28 +215,50 @@ export async function clearOmcDirectBatchInvocationsPersisted(): Promise<void> {
   }
 }
 
-export function cancelOmcDirectBatchInvocationsPersistSchedule(): void {
-  if (persistDebounceTimer != null) {
-    clearTimeout(persistDebounceTimer);
-    persistDebounceTimer = null;
+function buildPersistedOmcDirectBatchJson(
+  list: WorkflowInvocationStreamDetail[],
+): { json: string; slim: WorkflowInvocationStreamDetail[] } | null {
+  const sorted = sortOmcDirectBatchInvocationsForStore(list).slice(-MAX_PERSISTED_ITEMS);
+  const slim = sorted.map(serializeOmcDirectBatchInvocationForPersistence);
+  if (slim.length === 0) return null;
+  try {
+    return { json: JSON.stringify(slim), slim };
+  } catch {
+    return null;
   }
 }
 
-export async function flushPersistOmcDirectBatchInvocations(list: WorkflowInvocationStreamDetail[]): Promise<void> {
+/** 同步写入 localStorage；pagehide / visibility hidden 时使用，避免 unload 阶段 IPC 被拦截。 */
+export function flushPersistOmcDirectBatchInvocationsLocal(list: WorkflowInvocationStreamDetail[]): void {
   cancelOmcDirectBatchInvocationsPersistSchedule();
-  const sorted = sortOmcDirectBatchInvocationsForStore(list).slice(-MAX_PERSISTED_ITEMS);
-  const slim = sorted.map(serializeOmcDirectBatchInvocationForPersistence);
-  if (slim.length === 0) {
-    await clearOmcDirectBatchInvocationsPersisted();
+  const payload = buildPersistedOmcDirectBatchJson(list);
+  if (!payload) {
+    removeLocalStorageRaw();
     return;
   }
-  let json: string;
-  try {
-    json = JSON.stringify(slim);
-  } catch {
+  writeLocalStorageRaw(payload.json);
+}
+
+export async function flushPersistOmcDirectBatchInvocations(
+  list: WorkflowInvocationStreamDetail[],
+  options?: { persistAppSetting?: boolean },
+): Promise<void> {
+  cancelOmcDirectBatchInvocationsPersistSchedule();
+  const payload = buildPersistedOmcDirectBatchJson(list);
+  if (!payload) {
+    removeLocalStorageRaw();
+    if (options?.persistAppSetting !== false) {
+      try {
+        await deleteAppSetting(STORAGE_KEY);
+      } catch {
+        /* noop */
+      }
+    }
     return;
   }
-  writeLocalStorageRaw(json);
+  writeLocalStorageRaw(payload.json);
+  if (options?.persistAppSetting === false) return;
+  const { slim } = payload;
   try {
     await setAppSettingJson(STORAGE_KEY, slim);
   } catch {
@@ -254,6 +276,13 @@ export async function flushPersistOmcDirectBatchInvocations(list: WorkflowInvoca
     } catch {
       /* 应用设置失败时仍保留 localStorage */
     }
+  }
+}
+
+export function cancelOmcDirectBatchInvocationsPersistSchedule(): void {
+  if (persistDebounceTimer != null) {
+    clearTimeout(persistDebounceTimer);
+    persistDebounceTimer = null;
   }
 }
 

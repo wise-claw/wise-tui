@@ -44,6 +44,18 @@ const STORAGE_PREFIX = "wise.bgInvocation.v1:";
 const BUNDLE_PREFIX = "wise.bgInvocationBundle.v1:";
 const memoryBundle = new Map<string, InvocationSnapshotBundle>();
 const MAX_BUNDLE_ITEMS = BACKGROUND_INVOCATION_BUNDLE_MAX_ITEMS;
+/** 模块内 LRU：限制同时驻留的「会话+仓库」快照键数量，避免切会话后内存只增不减。 */
+const MAX_CACHED_SESSION_KEYS = 32;
+
+function touchLruCache<K, V>(map: Map<K, V>, key: K, value: V): void {
+  map.delete(key);
+  map.set(key, value);
+  while (map.size > MAX_CACHED_SESSION_KEYS) {
+    const oldest = map.keys().next().value;
+    if (oldest === undefined) break;
+    map.delete(oldest);
+  }
+}
 
 function keyOf(sessionId: string, repositoryPath: string): string {
   return `${sessionId}@@${repositoryPath}`;
@@ -55,13 +67,16 @@ export async function readBackgroundInvocationSnapshot(
 ): Promise<BackgroundInvocationSnapshot | null> {
   const key = keyOf(sessionId, repositoryPath);
   const fromMem = memory.get(key);
-  if (fromMem) return fromMem;
+  if (fromMem) {
+    touchLruCache(memory, key, fromMem);
+    return fromMem;
+  }
   try {
     const raw = await getAppSetting(STORAGE_PREFIX + key);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as BackgroundInvocationSnapshot;
     if (!parsed || typeof parsed !== "object" || typeof parsed.invocationKey !== "string") return null;
-    memory.set(key, parsed);
+    touchLruCache(memory, key, parsed);
     return parsed;
   } catch {
     return null;
@@ -74,7 +89,7 @@ export async function writeBackgroundInvocationSnapshot(
   snapshot: BackgroundInvocationSnapshot,
 ): Promise<void> {
   const key = keyOf(sessionId, repositoryPath);
-  memory.set(key, snapshot);
+  touchLruCache(memory, key, snapshot);
   try {
     await setAppSettingJson(STORAGE_PREFIX + key, snapshot);
   } catch {
@@ -104,13 +119,16 @@ export async function clearBackgroundInvocationSnapshot(sessionId: string, repos
 export async function readInvocationSnapshotBundle(sessionId: string, repositoryPath: string): Promise<InvocationSnapshotBundle> {
   const key = keyOf(sessionId, repositoryPath);
   const fromMem = memoryBundle.get(key);
-  if (fromMem) return fromMem;
+  if (fromMem) {
+    touchLruCache(memoryBundle, key, fromMem);
+    return fromMem;
+  }
   try {
     const raw = await getAppSetting(BUNDLE_PREFIX + key);
     if (raw) {
       const parsed = JSON.parse(raw) as InvocationSnapshotBundle;
       if (parsed && typeof parsed.items === "object" && parsed.items !== null) {
-        memoryBundle.set(key, parsed);
+        touchLruCache(memoryBundle, key, parsed);
         return parsed;
       }
     }
@@ -120,7 +138,7 @@ export async function readInvocationSnapshotBundle(sessionId: string, repository
   const legacy = await readBackgroundInvocationSnapshot(sessionId, repositoryPath);
   if (legacy) {
     const bundle: InvocationSnapshotBundle = { items: { [legacy.invocationKey]: legacy } };
-    memoryBundle.set(key, bundle);
+    touchLruCache(memoryBundle, key, bundle);
     return bundle;
   }
   return { items: {} };
@@ -132,7 +150,7 @@ export async function writeInvocationSnapshotBundle(
   bundle: InvocationSnapshotBundle,
 ): Promise<void> {
   const key = keyOf(sessionId, repositoryPath);
-  memoryBundle.set(key, bundle);
+  touchLruCache(memoryBundle, key, bundle);
   try {
     await setAppSettingJson(BUNDLE_PREFIX + key, bundle);
   } catch {

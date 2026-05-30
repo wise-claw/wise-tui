@@ -26,6 +26,9 @@ export const GIT_PANEL_LIST_VIEW_THRESHOLD = 48;
 /** 文件 watcher 触发 git status 刷新的防抖间隔（ms）。 */
 export const GIT_WATCHER_REFRESH_MS = 450;
 
+/** 多仓面板 watcher 刷新防抖（更长，避免多仓同时全量 status）。 */
+export const GIT_MULTI_REPO_WATCHER_REFRESH_MS = 1500;
+
 /** 多仓模式下各仓库 status 初始加载的错峰间隔（ms）。 */
 export const GIT_MULTI_REPO_LOAD_STAGGER_MS = 280;
 

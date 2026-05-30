@@ -120,6 +120,7 @@ import { isToolOnlyUserMessage, userMessagePlainTextForDisplay } from "../../uti
 import { shouldShowListEndThinkingHint } from "../../utils/claudeChatMessageListRows";
 import { pickSessionForRepositorySidebarSelect } from "../../utils/claudeSessionSelection";
 import { useComposerSpeechPreferences } from "../../hooks/useComposerSpeechPreferences";
+import { useGitRepositoryStats } from "../../hooks/useGitRepositoryStats";
 import {
   buildSpeechToRequirementScope,
   useSpeechToRequirementSync,
@@ -298,6 +299,8 @@ interface Props {
   panelBelowMessages?: React.ReactNode;
   hideMessages?: boolean;
   hideSessionTools?: boolean;
+  /** 多屏副窗格设为 false，避免重复订阅通知 feed 与 IPC 拉取。 */
+  enableSessionNotificationFeed?: boolean;
   /**
    * 侧栏展示的「当前仓库 Claude 槽位剩余」估算（并发上限 − 运行中会话数），仅作提示，不再限制可执行任务多选条数。
    */
@@ -530,6 +533,7 @@ export function ClaudeChat({
   panelBelowMessages,
   hideMessages = false,
   hideSessionTools = false,
+  enableSessionNotificationFeed = true,
   taskListConcurrentCapacity,
   resolveTaskListOmcInvokeConcurrency,
   repositoryMainBindings = {},
@@ -1589,82 +1593,30 @@ export function ClaudeChat({
     cancelScrollFollowLoop,
   ]);
 
-  /** 尾部内容增高（Markdown/代码块）时贴底 */
+  /** 尾部内容增高（Markdown/代码块）时贴底；只观察 scroll 容器 subtree，避免对每个子节点挂 ResizeObserver 导致内存暴涨。 */
   useLayoutEffect(() => {
     if (hideMessages) return;
     const sc = messagesScrollRef.current;
     if (!sc) return;
 
-    const ro = new ResizeObserver(() => {
-      scheduleScrollToBottom();
-    });
-
-    const observeChildren = () => {
-      ro.disconnect();
-      for (const child of sc.children) {
-        ro.observe(child);
-      }
-    };
-    observeChildren();
-
+    let raf = 0;
     const mo = new MutationObserver(() => {
-      observeChildren();
-      if (shouldAutoFollow()) scheduleScrollToBottom();
+      if (raf !== 0) return;
+      raf = window.requestAnimationFrame(() => {
+        raf = 0;
+        if (shouldAutoFollow()) scheduleScrollToBottom();
+      });
     });
-    mo.observe(sc, { childList: true });
+    mo.observe(sc, { childList: true, subtree: true, characterData: true });
 
     return () => {
-      ro.disconnect();
       mo.disconnect();
+      if (raf !== 0) window.cancelAnimationFrame(raf);
     };
-  }, [session.id, hideMessages, scheduleScrollToBottom]);
+  }, [session.id, hideMessages, scheduleScrollToBottom, shouldAutoFollow]);
 
   useEffect(() => () => cancelScrollFollowLoop(), [cancelScrollFollowLoop]);
-  const [stats, setStats] = useState({ additions: 0, deletions: 0 });
-
-  useEffect(() => {
-    let cancelled = false;
-    const VISIBLE_POLL_INTERVAL_MS = 5000;
-    const HIDDEN_POLL_INTERVAL_MS = 15000;
-
-    async function refreshStats() {
-      try {
-        if (!gitRepositoryPath) throw new Error("missing_git_repository_path");
-        const status = await gitStatus(gitRepositoryPath);
-        if (cancelled) return;
-        setStats({
-          additions: Math.max(0, status.additions || 0),
-          deletions: Math.max(0, status.deletions || 0),
-        });
-      } catch {
-        if (cancelled) return;
-        setStats({ additions: 0, deletions: 0 });
-      }
-    }
-
-    const tick = () => {
-      if (document.visibilityState === "visible") {
-        void refreshStats();
-      }
-    };
-
-    void refreshStats();
-    const timer = window.setInterval(() => {
-      tick();
-    }, document.visibilityState === "visible" ? VISIBLE_POLL_INTERVAL_MS : HIDDEN_POLL_INTERVAL_MS);
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        void refreshStats();
-      }
-    };
-    document.addEventListener("visibilitychange", onVisibilityChange);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, [gitRepositoryPath]);
+  const stats = useGitRepositoryStats(gitRepositoryPath);
 
   const [taskListDrawerOpen, setTaskListDrawerOpen] = useState(false);
   const [taskListSelectedIds, setTaskListSelectedIds] = useState<string[]>([]);
@@ -1719,6 +1671,9 @@ export function ClaudeChat({
   sessionForNotificationPanelRef.current = session;
   const sessionsForNotificationMatchRef = useRef(sessions);
   sessionsForNotificationMatchRef.current = sessions;
+  /** 每实例固定（主栏 true / 多屏副窗 false）；用 ref 保持 effect deps 长度稳定，避免 HMR 改 deps 时报错。 */
+  const enableSessionNotificationFeedRef = useRef(enableSessionNotificationFeed);
+  enableSessionNotificationFeedRef.current = enableSessionNotificationFeed;
 
   useEffect(() => {
     const onHintsExternal = () => setSessionOwnerHints(loadSessionOwnerHints());
@@ -2637,6 +2592,9 @@ export function ClaudeChat({
   }, [hideSessionTools]);
 
   useEffect(() => {
+    if (!enableSessionNotificationFeedRef.current) {
+      return;
+    }
     let unlisten: UnlistenFn | undefined;
     void loadNotificationRows();
     void (async () => {
@@ -2644,12 +2602,7 @@ export function ClaudeChat({
         void loadNotificationRows({ quiet: true });
       });
     })();
-    return () => {
-      safeUnlisten(unlisten);
-    };
-  }, [loadNotificationRows]);
 
-  useEffect(() => {
     function handleOpenSessionNotificationPanel(event: Event) {
       const custom = event as CustomEvent<{ conversationId?: string }>;
       const conversationId = custom.detail?.conversationId;
@@ -2665,6 +2618,7 @@ export function ClaudeChat({
     }
     window.addEventListener(SESSION_NOTIFICATION_UI_EVENT_OPEN_PANEL, handleOpenSessionNotificationPanel);
     return () => {
+      safeUnlisten(unlisten);
       window.removeEventListener(SESSION_NOTIFICATION_UI_EVENT_OPEN_PANEL, handleOpenSessionNotificationPanel);
     };
   }, [loadNotificationRows]);
@@ -3745,7 +3699,7 @@ export function ClaudeChat({
                     setHistorySearchText("");
                   }
                 }}
-                overlayClassName="app-claude-session-history-popover"
+                classNames={{ root: "app-claude-session-history-popover" }}
                 content={
                   <div ref={historyPopoverScrollRef} className="app-claude-session-history-popover__content">
                     <div className="app-claude-session-history-popover__search-wrap">
@@ -3871,7 +3825,7 @@ export function ClaudeChat({
                     setHistorySearchText("");
                   }
                 }}
-                overlayClassName="app-claude-session-user-questions-popover"
+                classNames={{ root: "app-claude-session-user-questions-popover" }}
                 content={
                   <div className="app-claude-session-user-questions-popover__content">
                     {sessionUserQuestionsForPopover.length === 0 ? (
@@ -4192,7 +4146,7 @@ export function ClaudeChat({
                   open={omcBatchPopoverOpen}
                   onOpenChange={setOmcBatchPopoverOpen}
                   placement="bottomLeft"
-                  overlayClassName="app-claude-task-list__omc-popover-root"
+                  classNames={{ root: "app-claude-task-list__omc-popover-root" }}
                   content={(
                     <div className="app-claude-task-list__omc-popover">
                       <div className="app-claude-task-list__omc-field">
@@ -4275,7 +4229,7 @@ export function ClaudeChat({
                         <Popover
                           trigger="click"
                           placement="leftTop"
-                          overlayClassName="app-claude-task-list__detail-popover"
+                          classNames={{ root: "app-claude-task-list__detail-popover" }}
                           content={(
                             <div className="app-claude-task-list__detail-content">
                               <div className="app-claude-task-list__content-block">
@@ -4568,7 +4522,7 @@ export function ClaudeChat({
                             <Popover
                               trigger="click"
                               placement="leftTop"
-                              overlayClassName="app-claude-task-list__detail-popover"
+                              classNames={{ root: "app-claude-task-list__detail-popover" }}
                               content={(
                                 <div className="app-claude-task-list__detail-content">
                                   <div className="app-claude-task-list__content-block">
@@ -5007,7 +4961,7 @@ export function ClaudeChat({
             placement="topLeft"
             open={pushPopoverOpen}
             onOpenChange={handlePushPopoverOpenChange}
-            overlayClassName="app-push-popover"
+            classNames={{ root: "app-push-popover" }}
             content={
               <div className="app-push-popover__content">
                 <div className="app-push-popover__title">推送前提交总结（AI 生成草稿）</div>

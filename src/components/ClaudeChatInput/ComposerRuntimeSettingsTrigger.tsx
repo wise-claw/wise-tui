@@ -152,7 +152,7 @@ export function ComposerRuntimeSettingsTrigger({
 
   return (
     <Dropdown
-      overlayClassName="app-claude-connection-kind-dropdown app-composer-runtime-settings-dropdown"
+      classNames={{ root: "app-claude-connection-kind-dropdown app-composer-runtime-settings-dropdown" }}
       menu={{
         items: menuItems,
         selectable: true,
@@ -178,7 +178,7 @@ export function ComposerRuntimeSettingsTrigger({
       disabled={disabled}
       open={menuOpen}
       onOpenChange={setMenuOpen}
-      dropdownRender={(menu) => (
+      popupRender={(menu) => (
         <div className="app-claude-connection-kind-dropdown-container app-composer-runtime-settings-popover">
           {menu ?? null}
         </div>

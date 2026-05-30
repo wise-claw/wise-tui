@@ -1,9 +1,12 @@
 import { listen } from "@tauri-apps/api/event";
-import { useCallback, useEffect, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { safeUnlistenPromise } from "../../utils/safeTauriUnlisten";
 import { startGitWatcher, stopGitWatcher } from "../../services/git";
 import type { GitPanelRepositoryEntry } from "../../utils/workspaceRepositoryTreeSelect";
-import { GIT_MULTI_REPO_LOAD_STAGGER_MS, GIT_WATCHER_REFRESH_MS } from "./gitPanelUtils";
+import {
+  GIT_MULTI_REPO_LOAD_STAGGER_MS,
+  GIT_MULTI_REPO_WATCHER_REFRESH_MS,
+} from "./gitPanelUtils";
 import { GitRepoSection } from "./GitRepoSection";
 import type { GitPanelOpenFileOptions } from "./types";
 
@@ -20,9 +23,22 @@ export function GitMultiRepoPanel({
   headerPrefix,
   onOpenFile,
 }: Props) {
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => new Set());
   const refreshByPathRef = useRef(new Map<string, () => void>());
   const watcherRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingRefreshPathsRef = useRef(new Set<string>());
+
+  const handleExpandedChange = useCallback((path: string, expanded: boolean) => {
+    setExpandedPaths((prev) => {
+      const next = new Set(prev);
+      if (expanded) {
+        next.add(path);
+      } else {
+        next.delete(path);
+      }
+      return next;
+    });
+  }, []);
 
   const registerRefresh = useCallback((path: string, refresh: () => void) => {
     refreshByPathRef.current.set(path, refresh);
@@ -32,13 +48,17 @@ export function GitMultiRepoPanel({
   }, []);
 
   useEffect(() => {
-    const paths = repositoryEntries.map((entry) => entry.path).filter(Boolean);
-    if (paths.length === 0) return;
+    const validPaths = new Set(repositoryEntries.map((entry) => entry.path).filter(Boolean));
+    const paths = [...expandedPaths].filter((path) => validPaths.has(path));
+    if (paths.length === 0) {
+      void stopGitWatcher().catch(() => {});
+      return;
+    }
     void startGitWatcher(paths).catch(() => {});
     return () => {
       void stopGitWatcher().catch(() => {});
     };
-  }, [repositoryEntries]);
+  }, [repositoryEntries, expandedPaths]);
 
   useEffect(() => {
     const unlisten = listen<{ path?: string }>("git-changed", (event) => {
@@ -60,7 +80,7 @@ export function GitMultiRepoPanel({
         for (const path of paths) {
           refreshByPathRef.current.get(path)?.();
         }
-      }, GIT_WATCHER_REFRESH_MS);
+      }, GIT_MULTI_REPO_WATCHER_REFRESH_MS);
     });
 
     return () => {
@@ -90,6 +110,7 @@ export function GitMultiRepoPanel({
             defaultExpanded={false}
             loadDelayMs={index * GIT_MULTI_REPO_LOAD_STAGGER_MS}
             registerRefresh={registerRefresh}
+            onExpandedChange={handleExpandedChange}
             onOpenFile={onOpenFile}
           />
         ))}

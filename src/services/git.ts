@@ -5,6 +5,7 @@ import {
 } from "../constants/workflowUiEvents";
 import type {
   GitStatusResponse,
+  GitStatusSummaryResponse,
   GitLogResponse,
   GitBranchEntry,
   GitWorktreeEntry,
@@ -13,6 +14,10 @@ import type {
 
 export async function gitStatus(path: string): Promise<GitStatusResponse> {
   return invoke<GitStatusResponse>("git_status", { path });
+}
+
+export async function gitStatusSummary(path: string): Promise<GitStatusSummaryResponse> {
+  return invoke<GitStatusSummaryResponse>("git_status_summary", { path });
 }
 
 export async function gitStage(path: string, filePath: string): Promise<void> {

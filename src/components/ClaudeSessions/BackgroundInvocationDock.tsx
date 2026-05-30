@@ -435,6 +435,8 @@ export function BackgroundInvocationDock({ session }: Props) {
           stopFlushTimer();
         }
         flushKeyFromBuffers(invocationKey, "done", detail.success);
+        delete buffersRef.current[invocationKey];
+        delete metaByKeyRef.current[invocationKey];
       }
     }
 

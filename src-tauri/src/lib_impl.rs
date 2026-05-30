@@ -292,6 +292,7 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             macos_terminal_detect::macos_detect_terminals,
             git_commands::git_status,
+            git_commands::git_status_summary,
             git_commands::git_stage,
             git_commands::git_stage_paths,
             git_commands::git_stage_all,

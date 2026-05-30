@@ -218,7 +218,7 @@ export function SessionQuickActionsBar({
               menu={{ items: overflowMenuItems, className: "app-session-quick-more-menu-inner" }}
               trigger={["click"]}
               placement="topRight"
-              overlayClassName="app-session-quick-more-dropdown"
+              classNames={{ root: "app-session-quick-more-dropdown" }}
             >
               <button
                 type="button"

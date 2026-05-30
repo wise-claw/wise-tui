@@ -398,7 +398,7 @@ export function Topbar({
           placement="bottomRight"
           open={runPopoverOpen}
           onOpenChange={setRunPopoverOpen}
-          overlayClassName="app-run-command-popover"
+          classNames={{ root: "app-run-command-popover" }}
           content={
             <RunCommandPanel
               {...repositoryRunCommand}
@@ -488,7 +488,7 @@ export function Topbar({
               }
             }}
             placement="bottomRight"
-            overlayClassName="app-topbar-right-panel-default-popover"
+            classNames={{ root: "app-topbar-right-panel-default-popover" }}
             content={
               onSetRightPanelDefaultCollapsed ? (
                 <div
@@ -998,30 +998,39 @@ export function ClaudeSessions({
       return;
     }
 
-    const mainOwnerPick = resolveMainOwnerAgentNameForRepositoryPath(
-      repositories ?? [],
-      activeRepository.path,
-    );
-    const boundId = resolveBoundMainSessionId(
-      activeRepository.path,
-      repositoryMainBindings,
-      incomingSessions,
-      mainOwnerPick,
-    );
-    if (boundId && sessions.some((item) => item.id === boundId)) {
-      onSwitchSession(boundId);
-      return;
-    }
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
 
-    const picked = pickSessionForRepositorySidebarSelect(
-      sessions,
-      activeRepository.path,
-      loadSessionOwnerHints(),
-      { mainOwnerAgentName: mainOwnerPick },
-    );
-    if (picked) {
-      onSwitchSession(picked.id);
-    }
+      const mainOwnerPick = resolveMainOwnerAgentNameForRepositoryPath(
+        repositories ?? [],
+        activeRepository.path,
+      );
+      const boundId = resolveBoundMainSessionId(
+        activeRepository.path,
+        repositoryMainBindings,
+        incomingSessions,
+        mainOwnerPick,
+      );
+      if (boundId && sessions.some((item) => item.id === boundId)) {
+        onSwitchSession(boundId);
+        return;
+      }
+
+      const picked = pickSessionForRepositorySidebarSelect(
+        sessions,
+        activeRepository.path,
+        loadSessionOwnerHints(),
+        { mainOwnerAgentName: mainOwnerPick },
+      );
+      if (picked) {
+        onSwitchSession(picked.id);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [
     activeRepository,
     activeSession,

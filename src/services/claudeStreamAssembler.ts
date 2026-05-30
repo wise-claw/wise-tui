@@ -3,10 +3,10 @@ import type { ClaudeMessage, ClaudeSession, MessagePart } from "../types";
 type ToolUsePart = Extract<MessagePart, { type: "tool_use" }>;
 
 /** 单轮助手消息中 text+reasoning 合计上限，避免流式拼接撑爆主线程内存 */
-export const MAX_ASSISTANT_TEXT_REASONING_CHARS = 600_000;
+export const MAX_ASSISTANT_TEXT_REASONING_CHARS = 96_000;
 
 /** 单条 tool_use 的 output 字符串上限（error 同理），避免巨型工具回包常驻内存 */
-const MAX_TOOL_PART_OUTPUT_CHARS = 400_000;
+const MAX_TOOL_PART_OUTPUT_CHARS = 48_000;
 
 /**
  * 为截断提示预留空间：strip 后 text+reasoning 不超过 (MAX - TEXT_REASONING_HEADROOM)，再 prepend 提示后仍 ≤ MAX。
@@ -214,6 +214,7 @@ export function applyToolResultPartsToSession(session: ClaudeSession, parts: Mes
 export function appendAssistantStreamParts(session: ClaudeSession, parts: MessagePart[]): ClaudeSession {
   if (parts.length === 0) return session;
   const lastMsg = session.messages[session.messages.length - 1];
+  let nextMessages: ClaudeSession["messages"];
   if (lastMsg?.role === "assistant") {
     const mergedParts = mergeAssistantParts(lastMsg.parts, parts);
     const merged: ClaudeMessage = {
@@ -222,15 +223,14 @@ export function appendAssistantStreamParts(session: ClaudeSession, parts: Messag
       content: textContentFromParts(mergedParts),
     };
     const capped = enforceAssistantMessageMemoryLimits(merged);
-    return {
-      ...session,
-      messages: [...session.messages.slice(0, -1), capped],
-    };
+    nextMessages = [...session.messages.slice(0, -1), capped];
+  } else {
+    const built = buildAssistantMessage(parts);
+    const cappedNew = enforceAssistantMessageMemoryLimits(built);
+    nextMessages = [...session.messages, cappedNew];
   }
-  const built = buildAssistantMessage(parts);
-  const cappedNew = enforceAssistantMessageMemoryLimits(built);
   return {
     ...session,
-    messages: [...session.messages, cappedNew],
+    messages: nextMessages,
   };
 }

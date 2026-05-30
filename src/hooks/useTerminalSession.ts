@@ -27,6 +27,7 @@ import {
   TERMINAL_KEY_BYTES,
 } from "./terminalInput";
 const MAX_BUFFER_CHARS = 200_000;
+const MAX_CACHED_TERMINAL_KEYS = 6;
 const TERMINAL_SCROLLBACK = 1500;
 const TERMINAL_RESIZE_DEBOUNCE_MS = 120;
 
@@ -165,6 +166,7 @@ export function useTerminalSession({
   /** 防止 Strict Mode / 依赖重跑时并发两次 openTerminalSession（opened 只在 await 之后才写入）。 */
   const openingSessionKeysRef = useRef<Set<string>>(new Set());
   const outputBuffersRef = useRef<Map<string, string>>(new Map());
+  const terminalKeyLruRef = useRef<string[]>([]);
   const activeKeyRef = useRef<string | null>(null);
   const renderedKeyRef = useRef<string | null>(null);
   const activeRepositoryRef = useRef<Repository | null>(null);
@@ -192,6 +194,20 @@ export function useTerminalSession({
     );
   }, []);
 
+  const touchTerminalKeyCache = useCallback((key: string) => {
+    const lru = terminalKeyLruRef.current;
+    const idx = lru.indexOf(key);
+    if (idx >= 0) lru.splice(idx, 1);
+    lru.push(key);
+    while (lru.length > MAX_CACHED_TERMINAL_KEYS) {
+      const evict = lru.shift();
+      if (!evict || evict === activeKeyRef.current) continue;
+      outputBuffersRef.current.delete(evict);
+      openedSessionsRef.current.delete(evict);
+      openingSessionKeysRef.current.delete(evict);
+    }
+  }, []);
+
   const syncDraftFromScreen = useCallback(() => {
     const term = terminalRef.current;
     if (!term) {
@@ -208,6 +224,9 @@ export function useTerminalSession({
       outputBuffersRef.current.delete(key);
       openedSessionsRef.current.delete(key);
       openingSessionKeysRef.current.delete(key);
+      const lru = terminalKeyLruRef.current;
+      const idx = lru.indexOf(key);
+      if (idx >= 0) lru.splice(idx, 1);
       if (readyKey === key) {
         setReadyKey(null);
       }
@@ -283,6 +302,7 @@ export function useTerminalSession({
 
   const enqueueTerminalOutput = useCallback(
     (key: string, data: string) => {
+      touchTerminalKeyCache(key);
       const next = appendBuffer(outputBuffersRef.current.get(key), data);
       outputBuffersRef.current.set(key, next);
       if (activeKeyRef.current !== key) {
@@ -295,7 +315,7 @@ export function useTerminalSession({
         });
       }
     },
-    [flushPendingOutput],
+    [flushPendingOutput, touchTerminalKeyCache],
   );
 
   const focusTerminalIfRequested = useCallback(() => {
@@ -526,6 +546,7 @@ export function useTerminalSession({
       const cols = terminal.cols;
       const rows = terminal.rows;
       if (openedSessionsRef.current.has(key)) {
+        touchTerminalKeyCache(key);
         setStatus("ready");
         setMessage("Terminal ready.");
         setHasSession(true);
@@ -551,6 +572,7 @@ export function useTerminalSession({
           activeRepository.path,
         );
         openedSessionsRef.current.add(key);
+        touchTerminalKeyCache(key);
         setStatus("ready");
         setMessage("Terminal ready.");
         setHasSession(true);
@@ -575,6 +597,7 @@ export function useTerminalSession({
     isVisible,
     syncActiveBuffer,
     sessionResetCounter,
+    touchTerminalKeyCache,
   ]);
 
   // Focus on request

@@ -445,6 +445,17 @@ export interface GitStatusResponse {
   upstream: string | null;
 }
 
+/** 轻量 git status：不含文件列表，供轮询与多仓折叠 header 使用。 */
+export interface GitStatusSummaryResponse {
+  branch: string | null;
+  additions: number;
+  deletions: number;
+  ahead: number;
+  behind: number;
+  stagedCount: number;
+  unstagedCount: number;
+}
+
 export interface GitLogEntry {
   sha: string;
   summary: string;
