@@ -57,9 +57,9 @@ interface ActiveInvocation {
   stderrLines: string[];
 }
 
-const MAX_LINES_CAPTURE = 3500;
+const MAX_LINES_CAPTURE = 2800;
 /** 已完成 invocation 在 React state 中最多保留条数（running 全保留） */
-const MAX_DONE_INVOCATIONS_IN_UI = 24;
+const MAX_DONE_INVOCATIONS_IN_UI = 18;
 /** 快照中单次 prompt 上限，避免 settings 写入失败 */
 const MAX_SNAPSHOT_PROMPT_CHARS = 100_000;
 

@@ -237,9 +237,12 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
 
     const prevAssist = assistantStreamTextByTabRef.current.get(tid) ?? "";
     let nextAssist = prevAssist;
+    const hidden = isDocumentHidden();
     for (const part of dedupedParts) {
       if (part.type === "text" && part.text) {
-        ingestStreamAssistText(tid, part.text);
+        if (!hidden) {
+          ingestStreamAssistText(tid, part.text);
+        }
         nextAssist += part.text;
       } else if (part.type === "reasoning" && part.text) {
         nextAssist += part.text;

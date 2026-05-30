@@ -3,10 +3,10 @@ import type { ClaudeMessage, ClaudeSession, MessagePart } from "../types";
 type ToolUsePart = Extract<MessagePart, { type: "tool_use" }>;
 
 /** 单轮助手消息中 text+reasoning 合计上限，避免流式拼接撑爆主线程内存 */
-export const MAX_ASSISTANT_TEXT_REASONING_CHARS = 48_000;
+export const MAX_ASSISTANT_TEXT_REASONING_CHARS = 36_000;
 
 /** 单条 tool_use 的 output 字符串上限（error 同理），避免巨型工具回包常驻内存 */
-const MAX_TOOL_PART_OUTPUT_CHARS = 24_000;
+const MAX_TOOL_PART_OUTPUT_CHARS = 18_000;
 
 /**
  * 为截断提示预留空间：strip 后 text+reasoning 不超过 (MAX - TEXT_REASONING_HEADROOM)，再 prepend 提示后仍 ≤ MAX。

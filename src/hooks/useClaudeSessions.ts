@@ -60,6 +60,7 @@ import {
   CLAUDE_DISK_JSONL_TAIL_LINES_LAZY,
   CLAUDE_DISK_JSONL_TAIL_LINES_LOAD_MORE,
   CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD,
+  IN_MEMORY_GLOBAL_MESSAGES_BUDGET,
   IN_MEMORY_SESSION_MESSAGES_MAX,
   MAX_REPO_DISK_INDEX_SESSIONS,
   PERSIST_SESSION_MESSAGES_MAX,
@@ -1443,6 +1444,31 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     pruneInvocationSnapshotMemory(collectInvocationSnapshotMemoryKeys(liveSessions));
     return sidecarChanged;
   }, [clearStreamStallTimer]);
+
+  const purgeSessionsMemoryWhenHidden = useCallback(() => {
+    if (typeof document !== "undefined" && document.visibilityState === "visible") return;
+    const now = Date.now();
+    const streamDedupTtlMs = 120_000;
+    for (const [key, entry] of [...lastStreamLineBySessionRef.current.entries()]) {
+      if (now - entry.at > streamDedupTtlMs) {
+        lastStreamLineBySessionRef.current.delete(key);
+      }
+    }
+    for (const [key, entry] of [...lastStreamTextBySessionRef.current.entries()]) {
+      if (now - entry.at > streamDedupTtlMs) {
+        lastStreamTextBySessionRef.current.delete(key);
+      }
+    }
+    pruneLiveSessionSidecars(sessionsRef.current);
+    setSessions((prev) => {
+      const capped = applySessionsMemoryCap(prev, {
+        keepSessionIds: buildMemoryKeepSessionIds(prev),
+        globalMessagesBudget: Math.max(48, Math.floor(IN_MEMORY_GLOBAL_MESSAGES_BUDGET * 0.55)),
+        perSessionMax: Math.max(32, Math.floor(IN_MEMORY_SESSION_MESSAGES_MAX * 0.7)),
+      });
+      return capped === prev ? prev : capped;
+    });
+  }, [buildMemoryKeepSessionIds, pruneLiveSessionSidecars, setSessions]);
   /** Tauri 主窗口是否在前台（与 `document.hidden` 组合判断 Phase 4 桌面摘要）。 */
   const mainWinFocusedRef = useRef(true);
 
@@ -1496,6 +1522,9 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     const onVisibility = () => {
       if (typeof document !== "undefined" && document.hidden) {
         flushBlockingDesktopIfHidden();
+        runWhenIdle(() => {
+          purgeSessionsMemoryWhenHidden();
+        }, { timeoutMs: 600 });
       }
     };
     if (typeof document !== "undefined") {
@@ -1527,7 +1556,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       unlistenHub?.();
       safeUnlisten(unlistenFocus);
     };
-  }, [flushBlockingDesktopIfHidden]);
+  }, [flushBlockingDesktopIfHidden, purgeSessionsMemoryWhenHidden]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2237,18 +2266,24 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     if (!tabsHydrated) return;
     let cancelIdle: (() => void) | null = null;
     const timer = window.setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      const hidden = typeof document !== "undefined" && document.visibilityState !== "visible";
       if (cancelIdle) cancelIdle();
       cancelIdle = runWhenIdle(() => {
         pruneLiveSessionSidecars(sessionsRef.current);
         setSessions((prev) => {
           const capped = applySessionsMemoryCap(prev, {
             keepSessionIds: buildMemoryKeepSessionIds(prev),
+            ...(hidden
+              ? {
+                  globalMessagesBudget: Math.max(48, Math.floor(IN_MEMORY_GLOBAL_MESSAGES_BUDGET * 0.6)),
+                  perSessionMax: Math.max(32, Math.floor(IN_MEMORY_SESSION_MESSAGES_MAX * 0.75)),
+                }
+              : {}),
           });
           return capped === prev ? prev : capped;
         });
-      }, { timeoutMs: 4000 });
-    }, readVisiblePollIntervalMs(45_000, 120_000));
+      }, { timeoutMs: hidden ? 1200 : 4000 });
+    }, readVisiblePollIntervalMs(45_000, 60_000));
     return () => {
       window.clearInterval(timer);
       if (cancelIdle) cancelIdle();
