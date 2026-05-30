@@ -54,6 +54,7 @@ export interface ChatInspectorProps {
   onCancelOmcDirectBatchInvocation?: (invocationKey: string) => void;
   onStopSessionConversationTask?: (item: SessionConversationTaskItem) => void;
   onReloadFullDiskTranscript?: (sessionKey: string) => void | Promise<void>;
+  onLoadMoreTranscriptFromDisk?: (sessionId: string) => void | Promise<void>;
   onCompactSessionHistory?: (sessionId: string) => void | Promise<void>;
   projectId?: string | null;
   historyDrawerSessionId?: string | null;

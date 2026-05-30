@@ -121,6 +121,7 @@ import { shouldShowListEndThinkingHint } from "../../utils/claudeChatMessageList
 import { pickSessionForRepositorySidebarSelect } from "../../utils/claudeSessionSelection";
 import { useComposerSpeechPreferences } from "../../hooks/useComposerSpeechPreferences";
 import { useGitRepositoryStats } from "../../hooks/useGitRepositoryStats";
+import { refreshGitRepositoryStats } from "../../stores/gitRepositoryStatsStore";
 import {
   buildSpeechToRequirementScope,
   useSpeechToRequirementSync,
@@ -2238,11 +2239,7 @@ export function ClaudeChat({
       await gitPull(repoPath);
       await gitPush(repoPath);
       setPushPopoverOpen(false);
-      const refreshed = await gitStatus(repoPath);
-      setStats({
-        additions: Math.max(0, refreshed.additions || 0),
-        deletions: Math.max(0, refreshed.deletions || 0),
-      });
+      refreshGitRepositoryStats(repoPath);
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
       message.error(`推送失败: ${errMsg}`);

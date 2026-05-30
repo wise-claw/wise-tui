@@ -158,6 +158,12 @@ export function getGitRepositoryStatsSnapshot(path: string): GitRepositoryStats 
   return entriesByPath.get(pathKey)?.stats ?? { ...EMPTY_STATS };
 }
 
+export function refreshGitRepositoryStats(path: string): void {
+  const pathKey = normalizePath(path);
+  if (!pathKey) return;
+  void refreshPath(pathKey);
+}
+
 export function getGitRepositoryStatsGeneration(path: string): number {
   const pathKey = normalizePath(path);
   if (!pathKey) return 0;

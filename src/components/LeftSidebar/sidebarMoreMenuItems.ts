@@ -281,8 +281,8 @@ export function buildProjectRepositoryMoreMenuItems(
     includeBrowser: true,
     onNewPaneSession: Boolean(onNewPaneSession),
   });
-  const sessionItems = openItems.filter((item) => item.key === "new-session");
-  const accessItems = openItems.filter((item) => item.key !== "new-session");
+  const sessionItems = openItems.filter((item) => item != null && item.key === "new-session");
+  const accessItems = openItems.filter((item) => item != null && item.key !== "new-session");
 
   return sidebarMenuWithSectionsAndDanger(
     [
@@ -355,8 +355,8 @@ export function buildFloatingRepositoryMoreMenuItems(
     includeBrowser: true,
     onNewPaneSession: Boolean(onNewPaneSession),
   });
-  const sessionItems = openItems.filter((item) => item.key === "new-session");
-  const accessItems = openItems.filter((item) => item.key !== "new-session");
+  const sessionItems = openItems.filter((item) => item != null && item.key === "new-session");
+  const accessItems = openItems.filter((item) => item != null && item.key !== "new-session");
 
   const joinChildren: MenuItem[] = joinableProjects.map((project) => ({
     key: `join-${project.id}`,

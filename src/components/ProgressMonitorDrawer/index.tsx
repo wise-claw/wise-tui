@@ -156,6 +156,7 @@ interface Props {
   onOpenOmcBatchInvocationDetail?: (input: { sessionId: string; repositoryPath: string; invocationKey: string }) => void;
   onCancelOmcDirectBatchInvocation?: (invocationKey: string) => void;
   onReloadFullDiskTranscript?: (sessionKey: string) => void | Promise<void>;
+  onLoadMoreTranscriptFromDisk?: (sessionId: string) => void | Promise<void>;
   onCompactSessionHistory?: (sessionId: string) => void | Promise<void>;
   /** 历史执行会话消息抽屉：应用实时会话列表解析正文，避免与节流 `sessions` 不同步导致消息闪没 */
   transcriptSourceSessions?: ClaudeSession[];

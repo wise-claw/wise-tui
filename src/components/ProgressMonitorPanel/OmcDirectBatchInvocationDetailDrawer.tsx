@@ -215,8 +215,8 @@ export function OmcDirectBatchInvocationDetailDrawer({
       if (
         prev.stdout.length === r.stdoutLines.length &&
         prev.stderr.length === r.stderrLines.length &&
-        prev.stdout.at(-1) === r.stdoutLines.at(-1) &&
-        prev.stderr.at(-1) === r.stderrLines.at(-1)
+        prev.stdout[prev.stdout.length - 1] === r.stdoutLines[r.stdoutLines.length - 1] &&
+        prev.stderr[prev.stderr.length - 1] === r.stderrLines[r.stderrLines.length - 1]
       ) {
         return;
       }

@@ -990,7 +990,7 @@ export function useMonitorOverview({
       return;
     }
     let cancelled = false;
-    let timer: ReturnType<typeof setInterval> | null = null;
+    let timer: number | null = null;
     const tick = async () => {
       try {
         const list = await listRunningClaudeSessions();
@@ -1101,7 +1101,7 @@ export function useMonitorOverview({
 
   useEffect(() => {
     let cancelled = false;
-    let timer: ReturnType<typeof setInterval> | null = null;
+    let timer: number | null = null;
     const isActive = () => !cancelled;
 
     const scheduleTimer = () => {

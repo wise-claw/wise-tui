@@ -17,6 +17,7 @@ export interface MonitorHistorySessionTranscriptDrawerProps {
   /** 与监控台一致：用于解析抽屉内会话（可与节流列表分离） */
   transcriptSourceSessions: ClaudeSession[];
   onReloadFullDiskTranscript?: (sessionKey: string) => void | Promise<void>;
+  onLoadMoreTranscriptFromDisk?: (sessionId: string) => void | Promise<void>;
   onCompactSessionHistory?: (sessionId: string) => void | Promise<void>;
   onCancelSession?: (sessionId: string) => void;
   onOpenTaskDetail?: (taskId: string) => void;

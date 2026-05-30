@@ -109,7 +109,7 @@ export function useSystemResourceSessions({
     }
 
     void refreshSystemSummary();
-    let timer: ReturnType<typeof setInterval> | null = null;
+    let timer: number | null = null;
     const scheduleTimer = () => {
       if (timer != null) window.clearInterval(timer);
       const detailOpen =

@@ -33,8 +33,6 @@ function MascotApp() {
     void refreshTotal();
   }, [refreshTotal]);
 
-  const unsubsRef = useRef<UnlistenFn[]>([]);
-
   useEffect(() => {
     let cancelled = false;
     const unsubs: UnlistenFn[] = [];

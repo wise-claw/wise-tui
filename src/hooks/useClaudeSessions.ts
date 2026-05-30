@@ -2301,7 +2301,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   /** 主会话 / 员工 / 团队等全部标签：定期与 Claude Code 宿主注册表对齐执行态（不限于当前活动标签）。 */
   useEffect(() => {
     let cancelled = false;
-    let timer: ReturnType<typeof setInterval> | null = null;
+    let timer: number | null = null;
     let cancelIdle: (() => void) | null = null;
     const registryPollTickRef = { value: 0 };
 

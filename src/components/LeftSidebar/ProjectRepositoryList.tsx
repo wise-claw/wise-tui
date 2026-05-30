@@ -672,7 +672,6 @@ function ProjectRow({
             onOpenInTerminal={onOpenInTerminal}
             onOpenRepositoryInBrowser={onOpenRepositoryInBrowser}
             openRepositoryInPreferredEditor={openRepositoryInPreferredEditor}
-            openProjectInPreferredEditor={openProjectInPreferredEditor}
             onOpenPromptsRepository={onOpenPromptsRepository}
             onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
             onReorderRepositoriesInProject={onReorderRepositoriesInProject}

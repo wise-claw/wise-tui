@@ -360,7 +360,7 @@ export function useCodeGraphSigma(options: UseCodeGraphSigmaOptions = {}): UseCo
     if (!el) return;
 
     let disposed = false;
-    let pollId: ReturnType<typeof setTimeout> | null = null;
+    let pollId: number | null = null;
 
     const tryInit = () => {
       if (disposed || sigmaRef.current || !containerRef.current) return;
