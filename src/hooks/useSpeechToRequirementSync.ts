@@ -40,11 +40,11 @@ export function useSpeechToRequirementSync(
   scope: SpeechToRequirementScope | null,
   session: ClaudeSession,
 ): void {
-  const syncedIdsRef = useRef<Set<number>>(new Set());
+  const syncedMaxIdRef = useRef<number>(0);
   const seededSessionRef = useRef<string | null>(null);
 
   useEffect(() => {
-    syncedIdsRef.current = new Set();
+    syncedMaxIdRef.current = 0;
     seededSessionRef.current = null;
   }, [session.id]);
 
@@ -56,7 +56,7 @@ export function useSpeechToRequirementSync(
     if (seededSessionRef.current === session.id) return;
     seededSessionRef.current = session.id;
     for (const msg of session.messages) {
-      syncedIdsRef.current.add(msg.id);
+      syncedMaxIdRef.current = Math.max(syncedMaxIdRef.current, msg.id);
     }
   }, [enabled, session.id, session.messages]);
 
@@ -68,7 +68,7 @@ export function useSpeechToRequirementSync(
 
     for (let i = 0; i < session.messages.length; i += 1) {
       const msg = session.messages[i]!;
-      if (syncedIdsRef.current.has(msg.id)) continue;
+      if (msg.id <= syncedMaxIdRef.current) continue;
       if (!hasRenderableChatMessageBody(msg)) continue;
       if (msg.role !== "user" && msg.role !== "assistant") continue;
       if (msg.role === "user" && isToolOnlyUserMessage(msg)) continue;
@@ -80,17 +80,17 @@ export function useSpeechToRequirementSync(
 
       const text = messagePlainTextForCapture(msg);
       if (!text.trim()) {
-        syncedIdsRef.current.add(msg.id);
+        syncedMaxIdRef.current = Math.max(syncedMaxIdRef.current, msg.id);
         continue;
       }
 
-      syncedIdsRef.current.add(msg.id);
+      syncedMaxIdRef.current = Math.max(syncedMaxIdRef.current, msg.id);
       void appendConversationTurnToPrdRequirement(scope, {
         role: msg.role,
         text,
         at: msg.timestamp,
       }).catch(() => {
-        syncedIdsRef.current.delete(msg.id);
+        /* no rollback — threshold-based tracking is not per-id */
       });
     }
   }, [enabled, scope, session.messages, session.status]);

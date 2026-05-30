@@ -55,6 +55,8 @@ let runningByRepositoryIdCacheKey = "";
 let globalOnAutoFixRunError: ((prompt: string) => void) | undefined;
 let globalOnRequestConfigure: ((repository: Pick<Repository, "id" | "path">) => void) | undefined;
 let terminalListenersReady = false;
+let terminalOutputUnlisten: (() => void) | null = null;
+let terminalExitUnlisten: (() => void) | null = null;
 let hiddenPublishPending = false;
 let visibilityListenerReady = false;
 
@@ -208,7 +210,7 @@ function ensureTerminalListeners(): void {
   terminalListenersReady = true;
   ensureVisibilityFlushListener();
 
-  subscribeTerminalOutput((payload) => {
+  terminalOutputUnlisten = subscribeTerminalOutput((payload) => {
     const repositoryId = Number(payload.workspaceId);
     if (!Number.isFinite(repositoryId)) return;
     if (payload.terminalId !== REPOSITORY_RUNNER_TERMINAL_ID) return;
@@ -262,7 +264,7 @@ function ensureTerminalListeners(): void {
     }, 5000);
   });
 
-  subscribeTerminalExit((payload) => {
+  terminalExitUnlisten = subscribeTerminalExit((payload) => {
     const repositoryId = Number(payload.workspaceId);
     if (!Number.isFinite(repositoryId)) return;
     if (payload.terminalId !== REPOSITORY_RUNNER_TERMINAL_ID) return;
@@ -313,6 +315,15 @@ export function getRepositoryRunCommandRunningByRepositoryId(): Record<number, b
   return runningByRepositoryIdSnapshot;
 }
 
+/** Dispose all terminal event listeners and reset state. */
+export function disposeTerminalListeners(): void {
+  terminalOutputUnlisten?.();
+  terminalOutputUnlisten = null;
+  terminalExitUnlisten?.();
+  terminalExitUnlisten = null;
+  terminalListenersReady = false;
+}
+
 /** 移除非当前仓库列表里、且已 idle 的运行状态条目，避免 Map 只增不减。 */
 export function pruneRepositoryRunCommandRuntime(liveRepositoryIds: ReadonlySet<number>): void {
   let changed = false;
@@ -321,6 +332,15 @@ export function pruneRepositoryRunCommandRuntime(liveRepositoryIds: ReadonlySet<
     if (state.status === "running" || state.status === "stopping") continue;
     repoStateById.delete(repositoryId);
     changed = true;
+  }
+  for (const [repositoryId] of [...repoInternalsById.entries()]) {
+    if (!liveRepositoryIds.has(repositoryId)) {
+      const internals = repoInternalsById.get(repositoryId)!;
+      clearIdleTimer(internals);
+      clearAutoOpenFallbackTimer(internals);
+      repoInternalsById.delete(repositoryId);
+      changed = true;
+    }
   }
   if (changed) publish();
 }

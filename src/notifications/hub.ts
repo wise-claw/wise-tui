@@ -114,6 +114,8 @@ function mergeReverts(a: RevertItem[], b: RevertItem[]): RevertItem[] {
   return out.slice(-MAX_REVERT_ITEMS_PER_SESSION);
 }
 
+const MAX_LIFECYCLE_ENTRIES = 500;
+
 class NotificationHub {
   private buckets = new Map<string, SessionNotificationBucket>();
   private requestLifecycles = new Map<string, ControlRequestLifecycle>();
@@ -505,6 +507,23 @@ class NotificationHub {
     }
   }
 
+  /** 会话轮次成功结束后，将仍未勾选的 todo 标记为 completed（Agent 常遗漏最终 TodoWrite）。 */
+  completeRemainingTodos(sessionId: string) {
+    if (!sessionId) return;
+    const b = this.buckets.get(sessionId);
+    if (!b || b.todos.length === 0) return;
+    let changed = false;
+    const next = b.todos.map((item) => {
+      if (item.status === "completed") return item;
+      changed = true;
+      return { ...item, status: "completed" as const };
+    });
+    if (!changed) return;
+    b.todos = next;
+    this.bumpGlobal();
+    this.bumpDockForStorageSession(sessionId);
+  }
+
   clearFollowups(sessionId: string | null) {
     if (!sessionId) return;
     const b = this.buckets.get(sessionId);
@@ -789,6 +808,17 @@ class NotificationHub {
       if (lifecycle.updatedAt >= pruneBefore) continue;
       this.requestLifecycles.delete(requestId);
       changed = true;
+    }
+    // Count-based cap: remove oldest non-pending entries when exceeding limit
+    const nonPendingEntries = [...this.requestLifecycles.entries()]
+      .filter(([, lc]) => lc.status !== "pending")
+      .sort((a, b) => a[1].updatedAt - b[1].updatedAt);
+    if (nonPendingEntries.length > MAX_LIFECYCLE_ENTRIES) {
+      const toRemove = nonPendingEntries.length - MAX_LIFECYCLE_ENTRIES;
+      for (let i = 0; i < toRemove; i++) {
+        this.requestLifecycles.delete(nonPendingEntries[i]![0]);
+        changed = true;
+      }
     }
     if (changed) {
       this.bumpGlobal();

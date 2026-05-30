@@ -60,6 +60,7 @@ import {
   CLAUDE_DISK_JSONL_TAIL_LINES_LAZY,
   CLAUDE_DISK_JSONL_TAIL_LINES_LOAD_MORE,
   CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD,
+  IN_MEMORY_COMPANION_SESSION_MESSAGES_MAX,
   IN_MEMORY_GLOBAL_MESSAGES_BUDGET,
   IN_MEMORY_SESSION_MESSAGES_MAX,
   MAX_REPO_DISK_INDEX_SESSIONS,
@@ -1579,6 +1580,10 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             const nextMessages = isTerminalWorkerWiseTab(sess)
               ? sanitizeTerminalWorkerTranscriptMessages(messages)
               : messages;
+            const batch = extractLatestTodoWriteFromMessages(nextMessages);
+            if (batch) {
+              notificationHub.applyTodoWrite(sess.id, batch.items, batch.merge);
+            }
             return { ...sess, messages: nextMessages, diskTranscriptPartial };
           }),
         );
@@ -1989,6 +1994,13 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         }
         ingestPendingPermissionsFromSessionMessages(sessionId, messages);
       },
+      finalizeTodosAfterSuccessfulTurn: (sessionId, messages) => {
+        const batch = extractLatestTodoWriteFromMessages(messages);
+        if (batch) {
+          notificationHub.applyTodoWrite(sessionId, batch.items, batch.merge);
+        }
+        notificationHub.completeRemainingTodos(sessionId);
+      },
       migrateSessionKey: (from, to) => notificationHub.migrateSessionKey(from, to),
       notifyCompletion: ({ tid, success, nonce, previewRaw, structuredVerdict }) => {
         clearStreamStallTimer(tid);
@@ -2241,11 +2253,15 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       let changed = false;
       const next = prev.map((s) => {
         if (keep.has(s.id)) {
-          if (s.messages.length <= IN_MEMORY_SESSION_MESSAGES_MAX) return s;
+          const perSessionMax =
+            s.id === activeSessionId
+              ? IN_MEMORY_SESSION_MESSAGES_MAX
+              : IN_MEMORY_COMPANION_SESSION_MESSAGES_MAX;
+          if (s.messages.length <= perSessionMax) return s;
           changed = true;
           return {
             ...s,
-            messages: capSessionMessagesForMemory(s.messages),
+            messages: capSessionMessagesForMemory(s.messages, perSessionMax),
             diskTranscriptPartial: true,
           };
         }

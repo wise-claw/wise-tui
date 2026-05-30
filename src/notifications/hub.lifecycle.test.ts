@@ -24,6 +24,55 @@ describe("notificationHub expireStaleRequests", () => {
     expect(notificationHub.getRequestLifecycle(requestId)).toBeNull();
     notificationHub.removeSession(sessionId);
   });
+
+  test("caps non-pending lifecycle count after expiry pass", () => {
+    const sessionId = `lifecycle-cap-${Date.now()}`;
+    for (let i = 0; i < 520; i += 1) {
+      const requestId = `req-cap-${i}`;
+      notificationHub.setPermissionRequest(sessionId, {
+        id: requestId,
+        tool: "Bash",
+        description: `run ${i}`,
+      });
+      notificationHub.markRequestAnswered(requestId);
+      const lifecycle = notificationHub.getRequestLifecycle(requestId);
+      if (lifecycle) {
+        lifecycle.updatedAt = Date.now() - 30_000;
+      }
+    }
+
+    notificationHub.expireStaleRequests(60_000);
+
+    let nonPending = 0;
+    for (let i = 0; i < 520; i += 1) {
+      const lc = notificationHub.getRequestLifecycle(`req-cap-${i}`);
+      if (lc && lc.status !== "pending") nonPending += 1;
+    }
+    expect(nonPending).toBeLessThanOrEqual(500);
+
+    notificationHub.removeSession(sessionId);
+  });
+});
+
+describe("notificationHub completeRemainingTodos", () => {
+  test("marks pending and in_progress todos as completed", () => {
+    const sessionId = `todo-complete-${Date.now()}`;
+    notificationHub.applyTodoWrite(
+      sessionId,
+      [
+        { id: "a", content: "task a", status: "pending" },
+        { id: "b", content: "task b", status: "in_progress" },
+        { id: "c", content: "task c", status: "completed" },
+      ],
+      false,
+    );
+
+    notificationHub.completeRemainingTodos(sessionId);
+
+    const todos = notificationHub.getDockSlice(sessionId).todos;
+    expect(todos.every((t) => t.status === "completed")).toBe(true);
+    notificationHub.removeSession(sessionId);
+  });
 });
 
 describe("notificationHub pruneOrphanSessions", () => {

@@ -1,4 +1,4 @@
-import { FCC_TRACES_FETCH_LIMIT } from "../constants/fccTraces";
+import { FCC_TRACES_FETCH_LIMIT, FCC_TRACES_IN_MEMORY_MAX } from "../constants/fccTraces";
 import type { FreeClaudeCodeStatus } from "../services/freeClaudeCode";
 import { getFreeClaudeCodeStatus } from "../services/freeClaudeCode";
 import { clearFccTraces, listFccTraces } from "../services/fccTraces";
@@ -86,13 +86,21 @@ async function refreshFccTracesStore(): Promise<void> {
       listFccTraces({ limit: FCC_TRACES_FETCH_LIMIT }),
     ]);
     const merged = mergeFccTraceEntries(traces, newest);
+    const overCap = merged.length > FCC_TRACES_IN_MEMORY_MAX;
+    if (overCap) {
+      merged.splice(0, merged.length - FCC_TRACES_IN_MEMORY_MAX);
+    }
     const changed =
       !statusFieldsEqual(status, nextStatus) || !tracesEqual(traces, merged);
     status = nextStatus;
     traces = merged;
-    const onlyInitialWindow = traces.length <= newest.length;
-    if (onlyInitialWindow) {
-      hasMore = newest.length >= FCC_TRACES_FETCH_LIMIT;
+    if (overCap) {
+      hasMore = false;
+    } else {
+      const onlyInitialWindow = traces.length <= newest.length;
+      if (onlyInitialWindow) {
+        hasMore = newest.length >= FCC_TRACES_FETCH_LIMIT;
+      }
     }
     if (changed || loading) {
       loading = false;
@@ -152,8 +160,13 @@ export async function loadMoreFccTraces(): Promise<void> {
       beforeMs: oldest,
     });
     const merged = mergeFccTraceEntries(traces, older);
+    if (merged.length > FCC_TRACES_IN_MEMORY_MAX) {
+      merged.splice(0, merged.length - FCC_TRACES_IN_MEMORY_MAX);
+      hasMore = false;
+    } else {
+      hasMore = older.length >= FCC_TRACES_FETCH_LIMIT;
+    }
     traces = merged;
-    hasMore = older.length >= FCC_TRACES_FETCH_LIMIT;
     publish();
   } catch {
     publish();

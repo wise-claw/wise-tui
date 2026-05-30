@@ -18,6 +18,9 @@ export const CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD = 320;
 /** React 内存中每会话最多保留的消息条数（超出标记 partial，UI 可提示加载更早） */
 export const IN_MEMORY_SESSION_MESSAGES_MAX = 64;
 
+/** 多屏模式下非当前活动窗格：保留更少正文，切回时从磁盘懒加载 */
+export const IN_MEMORY_COMPANION_SESSION_MESSAGES_MAX = 24;
+
 /** 全部标签合计最多保留的消息条数（超出时优先清空非活动/非运行会话正文） */
 export const IN_MEMORY_GLOBAL_MESSAGES_BUDGET = 128;
 

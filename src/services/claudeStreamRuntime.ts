@@ -37,6 +37,7 @@ interface RuntimeDeps {
   ingestAskUserQuestionFromMessageParts: (sessionId: string, parts: readonly MessagePart[]) => void;
   ingestStreamAssistText: (sessionId: string, text: string) => void;
   ingestTodosFromSessionMessages: (sessionId: string, messages: ClaudeSession["messages"]) => void;
+  finalizeTodosAfterSuccessfulTurn: (sessionId: string, messages: ClaudeSession["messages"]) => void;
   migrateSessionKey: (from: string, to: string) => void;
   notifyCompletion: (payload: { tid: string; success: boolean; nonce: number; previewRaw: string; structuredVerdict?: unknown }) => void;
   parseStreamLineSessionId: (line: string) => string | null;
@@ -126,6 +127,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     ingestAskUserQuestionFromMessageParts,
     ingestStreamAssistText,
     ingestTodosFromSessionMessages,
+    finalizeTodosAfterSuccessfulTurn,
     migrateSessionKey,
     notifyCompletion,
     parseStreamLineSessionId,
@@ -145,6 +147,11 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
   const deferredSystemErrors: Array<{ tid: string; msg: string }> = [];
   const deferredStderrErrors: Array<{ tid: string; msg: string }> = [];
   const deferredCompletes: Array<{ tid: string; payload: unknown; turnNonce: number }> = [];
+  const DEFERRED_MAX = 256;
+  function pushDeferred<T>(arr: T[], item: T): void {
+    if (arr.length >= DEFERRED_MAX) arr.shift();
+    arr.push(item);
+  }
 
   function looksLikeClaudeUuid(s: string): boolean {
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s.trim());
@@ -225,7 +232,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       deferredStreamTabIds.add(tid);
       const systemErrMsg = extractSystemErrorMessageFromStreamLine(line);
       if (systemErrMsg) {
-        deferredSystemErrors.push({ tid, msg: systemErrMsg });
+        pushDeferred(deferredSystemErrors, { tid, msg: systemErrMsg });
       }
       return;
     }
@@ -242,7 +249,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     const systemErrMsg = extractSystemErrorMessageFromStreamLine(line);
     if (systemErrMsg) {
       if (isDocumentHidden()) {
-        deferredSystemErrors.push({ tid, msg: systemErrMsg });
+        pushDeferred(deferredSystemErrors, { tid, msg: systemErrMsg });
       } else {
         setSessions((prev) => appendSystemMessageBySessionOrClaudeId(prev, tid, systemErrMsg));
       }
@@ -405,7 +412,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     if (!opts?.uiOnly) {
       notifyCompletion({ tid, success, nonce: turnNonce, previewRaw, structuredVerdict });
       if (isDocumentHidden()) {
-        deferredCompletes.push({ tid, payload, turnNonce });
+        pushDeferred(deferredCompletes, { tid, payload, turnNonce });
         return;
       }
     }
@@ -418,6 +425,9 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
         streamingResident,
       }),
     );
+    if (success && session) {
+      finalizeTodosAfterSuccessfulTurn(session.id, session.messages);
+    }
     // 多员工/多会话并行时：仅当「当前仍指向本会话」时才清空，避免误清其它仍在流式中的标签
     const refT = streamingTargetIdRef.current;
     if (
@@ -476,7 +486,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     const errorMsg = typeof payload === "string" ? payload : JSON.stringify(payload);
     const fullMsg = `Claude stderr: ${errorMsg}`;
     if (isDocumentHidden()) {
-      deferredStderrErrors.push({ tid, msg: fullMsg });
+      pushDeferred(deferredStderrErrors, { tid, msg: fullMsg });
       return;
     }
     setSessions((prev) => appendSystemMessageBySessionOrClaudeId(prev, tid, fullMsg));
