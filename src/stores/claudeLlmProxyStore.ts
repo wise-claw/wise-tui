@@ -12,7 +12,7 @@ import {
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
 import { tryIngestStreamJsonLineForLlmProxy } from "../utils/streamJsonLlmProxyIngest";
 
-const MAX_RECORDS = 120;
+const MAX_RECORDS = 80;
 
 type Listener = () => void;
 

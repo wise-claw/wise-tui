@@ -45,8 +45,8 @@ const BUNDLE_PREFIX = "wise.bgInvocationBundle.v1:";
 const memoryBundle = new Map<string, InvocationSnapshotBundle>();
 const MAX_BUNDLE_ITEMS = BACKGROUND_INVOCATION_BUNDLE_MAX_ITEMS;
 /** 模块内 LRU：限制同时驻留的「会话+仓库」快照键数量，避免切会话后内存只增不减。 */
-const MAX_CACHED_SESSION_KEYS = 12;
-const MAX_RECONCILE_BUNDLE_CACHE = 24;
+const MAX_CACHED_SESSION_KEYS = 8;
+const MAX_RECONCILE_BUNDLE_CACHE = 16;
 
 function rememberReconcileBundleCache(
   cache: Map<string, InvocationSnapshotBundle>,

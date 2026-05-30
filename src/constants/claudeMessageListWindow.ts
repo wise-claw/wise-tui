@@ -4,7 +4,7 @@ export const CLAUDE_MESSAGE_LIST_INITIAL_VISIBLE = 60;
 export const CLAUDE_MESSAGE_LIST_LOAD_MORE_STEP = 60;
 
 /** 切 tab / 伴生窗格首次懒加载：只读 jsonl 尾部少量行 */
-export const CLAUDE_DISK_JSONL_TAIL_LINES_LAZY = 250;
+export const CLAUDE_DISK_JSONL_TAIL_LINES_LAZY = 200;
 
 /** 用户点击「加载更早轮次」时每次追加读取的行数 */
 export const CLAUDE_DISK_JSONL_TAIL_LINES_LOAD_MORE = 350;
@@ -13,7 +13,7 @@ export const CLAUDE_DISK_JSONL_TAIL_LINES_LOAD_MORE = 350;
 export const CLAUDE_DISK_JSONL_TAIL_LINES_INITIAL = 1000;
 
 /** 回合结束后与磁盘对齐时只读尾部行数，避免长会话全量 jsonl 反复进内存 */
-export const CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD = 400;
+export const CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD = 320;
 
 /** React 内存中每会话最多保留的消息条数（超出标记 partial，UI 可提示加载更早） */
 export const IN_MEMORY_SESSION_MESSAGES_MAX = 64;

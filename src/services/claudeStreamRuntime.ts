@@ -83,6 +83,21 @@ function isDocumentHidden(): boolean {
   return typeof document !== "undefined" && document.visibilityState !== "visible";
 }
 
+/** 窗口 hidden 时仍须解析 Hub 的行（权限 / 追问 / init 等）。 */
+function streamLineNeedsHubWhileHidden(line: string): boolean {
+  return (
+    line.includes("control_request") ||
+    line.includes("sdk_control_request") ||
+    line.includes("AskUserQuestion") ||
+    line.includes('"can_use_tool"') ||
+    line.includes("ExitPlanMode")
+  );
+}
+
+function streamLineMayInit(line: string): boolean {
+  return line.includes('"init"') || line.includes("system.init");
+}
+
 let hiddenUiFlushHandler: (() => void) | null = null;
 let hiddenUiVisibilityListenerReady = false;
 
@@ -203,14 +218,27 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     line: string,
     opts: { syncStreamingTargetRefOnInit: boolean },
   ) {
+    const hidden = isDocumentHidden();
     const now = Date.now();
+
+    if (hidden && !streamLineNeedsHubWhileHidden(line) && !streamLineMayInit(line)) {
+      deferredStreamTabIds.add(tid);
+      const systemErrMsg = extractSystemErrorMessageFromStreamLine(line);
+      if (systemErrMsg) {
+        deferredSystemErrors.push({ tid, msg: systemErrMsg });
+      }
+      return;
+    }
+
     const lineForDedup = line.length > 8192 ? line.slice(-8192) : line;
     const prevLine = lastStreamLineBySessionRef.current.get(tid);
     if (prevLine && prevLine.line === lineForDedup && now - prevLine.at < 1500) {
       return;
     }
     lastStreamLineBySessionRef.current.set(tid, { line: lineForDedup, at: now });
-    ingestClaudeStreamLineForHub(tid, line);
+    if (!hidden || streamLineNeedsHubWhileHidden(line)) {
+      ingestClaudeStreamLineForHub(tid, line);
+    }
     const systemErrMsg = extractSystemErrorMessageFromStreamLine(line);
     if (systemErrMsg) {
       if (isDocumentHidden()) {
@@ -235,26 +263,25 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       ingestAskUserQuestionFromMessageParts(tid, dedupedParts);
     }
 
-    const prevAssist = assistantStreamTextByTabRef.current.get(tid) ?? "";
-    let nextAssist = prevAssist;
-    const hidden = isDocumentHidden();
-    for (const part of dedupedParts) {
-      if (part.type === "text" && part.text) {
-        if (!hidden) {
+    if (!hidden) {
+      const prevAssist = assistantStreamTextByTabRef.current.get(tid) ?? "";
+      let nextAssist = prevAssist;
+      for (const part of dedupedParts) {
+        if (part.type === "text" && part.text) {
           ingestStreamAssistText(tid, part.text);
+          nextAssist += part.text;
+        } else if (part.type === "reasoning" && part.text) {
+          nextAssist += part.text;
         }
-        nextAssist += part.text;
-      } else if (part.type === "reasoning" && part.text) {
-        nextAssist += part.text;
       }
-    }
-    if (nextAssist !== prevAssist) {
-      assistantStreamTextByTabRef.current.set(tid, capAssistantStreamBufferText(nextAssist));
+      if (nextAssist !== prevAssist) {
+        assistantStreamTextByTabRef.current.set(tid, capAssistantStreamBufferText(nextAssist));
+      }
     }
 
     const hasStreamUiUpdate = dedupedParts.length > 0 && !isInit;
     const mustPublishInit = Boolean(isInit && realSessionId);
-    if (isDocumentHidden() && hasStreamUiUpdate && !mustPublishInit) {
+    if (hidden && hasStreamUiUpdate && !mustPublishInit) {
       deferredStreamTabIds.add(tid);
     } else {
       setSessions((prev) =>

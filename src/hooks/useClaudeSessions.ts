@@ -1433,18 +1433,21 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
   const purgeSessionsMemoryWhenHidden = useCallback(() => {
     if (typeof document !== "undefined" && document.visibilityState === "visible") return;
-    const now = Date.now();
-    const streamDedupTtlMs = 120_000;
-    for (const [key, entry] of [...lastStreamLineBySessionRef.current.entries()]) {
-      if (now - entry.at > streamDedupTtlMs) {
-        lastStreamLineBySessionRef.current.delete(key);
+    lastStreamLineBySessionRef.current.clear();
+    lastStreamTextBySessionRef.current.clear();
+    const liveRunningKeys = new Set<string>();
+    for (const session of sessionsRef.current) {
+      if (session.status !== "running" && session.status !== "connecting") continue;
+      liveRunningKeys.add(session.id);
+      const cc = session.claudeSessionId?.trim();
+      if (cc) liveRunningKeys.add(cc);
+    }
+    for (const key of [...assistantStreamTextByTabRef.current.keys()]) {
+      if (!liveRunningKeys.has(key)) {
+        assistantStreamTextByTabRef.current.delete(key);
       }
     }
-    for (const [key, entry] of [...lastStreamTextBySessionRef.current.entries()]) {
-      if (now - entry.at > streamDedupTtlMs) {
-        lastStreamTextBySessionRef.current.delete(key);
-      }
-    }
+    notificationHub.expireStaleRequests(60 * 60 * 1000);
     pruneLiveSessionSidecarsRef.current(sessionsRef.current);
     setSessions((prev) => {
       const capped = applySessionsMemoryCap(prev, {
