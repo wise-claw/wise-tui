@@ -32,7 +32,7 @@ export function useContextBreakdown(session: ClaudeSession) {
 
   const repositoryPath = session.repositoryPath.trim();
   const messageFingerprint = useMemo(() => {
-    const last = session.messages.at(-1);
+    const last = session.messages[session.messages.length - 1];
     return `${session.messages.length}:${last?.id ?? ""}:${String(last?.content ?? "").length}`;
   }, [session.messages]);
 
