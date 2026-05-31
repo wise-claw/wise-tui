@@ -8,7 +8,7 @@ import {
   readProjectRelativeFileBase64,
   writeProjectRelativeFile,
 } from "../services/materializePrdSnapshot";
-import { joinRepositoryAbsolutePath } from "../utils/repositoryPreviewBinary";
+import { base64ToArrayBuffer, joinRepositoryAbsolutePath } from "../utils/repositoryPreviewBinary";
 import { openInFinder } from "../services/repository";
 import {
   isDocxFilePath,
