@@ -13,6 +13,11 @@ use crate::codex_config_dir::{
     parse_codex_profile_envelope, read_codex_profile_envelope,
     read_effective_codex_model_from_envelope,
 };
+use crate::opencode_config_dir::{
+    apply_opencode_profile_settings, effective_opencode_model_from_disk,
+    opencode_config_json_to_pretty, read_effective_opencode_model, read_opencode_config_json,
+    validate_opencode_settings_json, write_opencode_config_json,
+};
 use crate::wise_db::WiseDb;
 
 const STORE_SETTINGS_KEY: &str = "claude_model_profiles_v1";
@@ -28,7 +33,7 @@ pub struct ClaudeModelProfile {
     pub model_id: String,
     /// Claude：`settings.json`；Codex：`{ auth, config }` envelope（与 CC Switch 一致）。
     pub settings_json: String,
-    /// 运行引擎：`claude` | `codex`。
+    /// 运行引擎：`claude` | `codex` | `opencode`。
     #[serde(default = "default_profile_engine")]
     pub engine: String,
     pub created_at_ms: i64,
@@ -42,6 +47,7 @@ fn default_profile_engine() -> String {
 fn normalize_profile_engine(raw: &str) -> &str {
     match raw.trim().to_lowercase().as_str() {
         "codex" => "codex",
+        "opencode" => "opencode",
         _ => "claude",
     }
 }
@@ -57,6 +63,8 @@ pub(crate) struct ClaudeModelProfileStore {
     active_profile_id: Option<String>,
     #[serde(default)]
     active_codex_profile_id: Option<String>,
+    #[serde(default)]
+    active_opencode_profile_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,8 +73,10 @@ pub struct ClaudeModelProfileStoreView {
     pub profiles: Vec<ClaudeModelProfile>,
     pub active_profile_id: Option<String>,
     pub active_codex_profile_id: Option<String>,
+    pub active_opencode_profile_id: Option<String>,
     pub effective_model: Option<String>,
     pub effective_codex_model: Option<String>,
+    pub effective_opencode_model: Option<String>,
 }
 
 fn now_ms() -> i64 {
@@ -270,6 +280,21 @@ fn resolve_profile_model_id(profile: &ClaudeModelProfile) -> Result<String, Stri
             .ok_or_else(|| "Codex 档案中未找到 model（请检查 config TOML）".to_string());
     }
 
+    if profile_engine(profile) == "opencode" {
+        let parsed = validate_opencode_settings_json(&profile.settings_json)?;
+        return read_effective_opencode_model(&parsed)
+            .filter(|s| !s.is_empty())
+            .or_else(|| {
+                let mid = profile.model_id.trim();
+                if mid.is_empty() {
+                    None
+                } else {
+                    Some(mid.to_string())
+                }
+            })
+            .ok_or_else(|| "OpenCode 档案中未找到 model（格式 provider/model）".to_string());
+    }
+
     let parsed: serde_json::Value =
         serde_json::from_str(profile.settings_json.trim()).map_err(|e| format!("档案 settingsJson 无效: {e}"))?;
     read_effective_model(&parsed)
@@ -289,6 +314,25 @@ fn apply_profile_to_disk(profile: &ClaudeModelProfile) -> Result<(), String> {
     if profile_engine(profile) == "codex" {
         let envelope = parse_codex_profile_envelope(&profile.settings_json)?;
         return apply_codex_profile_envelope(&envelope);
+    }
+
+    if profile_engine(profile) == "opencode" {
+        let profile_val = validate_opencode_settings_json(&profile.settings_json)?;
+        let current = read_opencode_config_json();
+        let model_id = read_effective_opencode_model(&profile_val)
+            .filter(|s| !s.is_empty())
+            .or_else(|| {
+                let mid = profile.model_id.trim();
+                if mid.is_empty() {
+                    None
+                } else {
+                    Some(mid.to_string())
+                }
+            })
+            .ok_or_else(|| "OpenCode 档案中未找到 model（格式 provider/model）".to_string())?;
+        let merged = apply_opencode_profile_settings(current, &profile_val, &model_id)?;
+        write_opencode_config_json(&merged)?;
+        return Ok(());
     }
 
     let path = user_claude_dir().join("settings.json");
@@ -319,8 +363,10 @@ pub(crate) fn store_view_from_store(store: &ClaudeModelProfileStore) -> ClaudeMo
         profiles: store.profiles.clone(),
         active_profile_id: store.active_profile_id.clone(),
         active_codex_profile_id: store.active_codex_profile_id.clone(),
+        active_opencode_profile_id: store.active_opencode_profile_id.clone(),
         effective_model: effective_model_from_disk(),
         effective_codex_model: effective_codex_model_from_disk(),
+        effective_opencode_model: effective_opencode_model_from_disk(),
     }
 }
 
@@ -353,6 +399,8 @@ pub(crate) fn upsert_claude_model_profile(
     }
     if profile_engine(&profile) == "codex" {
         parse_codex_profile_envelope(&profile.settings_json)?;
+    } else if profile_engine(&profile) == "opencode" {
+        validate_opencode_settings_json(&profile.settings_json)?;
     } else {
         let _: serde_json::Value = serde_json::from_str(profile.settings_json.trim())
             .map_err(|e| format!("settingsJson 不是合法 JSON: {e}"))?;
@@ -410,6 +458,9 @@ pub(crate) fn delete_claude_model_profile(
     if store.active_codex_profile_id.as_deref() == Some(id) {
         store.active_codex_profile_id = None;
     }
+    if store.active_opencode_profile_id.as_deref() == Some(id) {
+        store.active_opencode_profile_id = None;
+    }
     save_store(&db, &store)?;
     Ok(store_view_from_store(&store))
 }
@@ -431,6 +482,8 @@ pub(crate) fn apply_claude_model_profile(
     let mut next = store;
     if profile_engine(&profile) == "codex" {
         next.active_codex_profile_id = Some(id.to_string());
+    } else if profile_engine(&profile) == "opencode" {
+        next.active_opencode_profile_id = Some(id.to_string());
     } else {
         next.active_profile_id = Some(id.to_string());
     }
@@ -442,6 +495,11 @@ pub(crate) fn apply_claude_model_profile(
     }
     save_store(&db, &next)?;
     Ok(store_view_from_store(&next))
+}
+
+#[tauri::command]
+pub(crate) fn get_opencode_user_settings_json() -> Result<String, String> {
+    opencode_config_json_to_pretty(&read_opencode_config_json())
 }
 
 #[tauri::command]
@@ -515,6 +573,13 @@ pub(crate) fn create_claude_model_profile(
         let envelope = parse_codex_profile_envelope(trimmed)?;
         let pretty = codex_profile_envelope_to_json(&envelope)?;
         let mid = read_effective_codex_model_from_envelope(&envelope)
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "custom".to_string());
+        (pretty, mid)
+    } else if engine_key == "opencode" {
+        let v = validate_opencode_settings_json(trimmed)?;
+        let pretty = opencode_config_json_to_pretty(&v)?;
+        let mid = read_effective_opencode_model(&v)
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| "custom".to_string());
         (pretty, mid)

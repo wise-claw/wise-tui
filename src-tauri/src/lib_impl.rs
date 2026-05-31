@@ -415,6 +415,7 @@ pub fn run() {
             claude_model_profiles::create_claude_model_profile_from_current,
             claude_model_profiles::get_claude_user_settings_json,
             claude_model_profiles::get_codex_user_settings_json,
+            claude_model_profiles::get_opencode_user_settings_json,
             claude_model_profiles::save_claude_user_settings_json,
             cc_switch_import::sync_claude_model_profiles_from_cc_switch,
             claude_commands::mcp::get_claude_mcp_status,

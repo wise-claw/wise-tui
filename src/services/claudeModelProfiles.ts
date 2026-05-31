@@ -78,6 +78,10 @@ export async function getCodexUserSettingsJson(): Promise<string> {
   return invoke<string>("get_codex_user_settings_json");
 }
 
+export async function getOpencodeUserSettingsJson(): Promise<string> {
+  return invoke<string>("get_opencode_user_settings_json");
+}
+
 export async function saveClaudeUserSettingsJson(
   settingsJson: string,
   profileId?: string | null,

@@ -8,6 +8,7 @@ import {
   getClaudeModelProfileStore,
   getClaudeUserSettingsJson,
   getCodexUserSettingsJson,
+  getOpencodeUserSettingsJson,
   upsertClaudeModelProfile,
   syncClaudeModelProfilesFromCcSwitch,
   dispatchClaudeUserSettingsChanged,
@@ -15,6 +16,9 @@ import {
 import type { ClaudeModelProfile, ClaudeModelProfileStoreView } from "../../types/claudeModelProfile";
 import {
   normalizeModelProfileEngine,
+  resolveActiveModelProfileId,
+  resolveEffectiveModelForProfileEngine,
+  modelProfileEngineLabel,
   type ModelProfileEngine,
 } from "../../types/claudeModelProfile";
 import { formatClaudeModelLabel } from "../../utils/claudeModel";
@@ -45,6 +49,12 @@ function validateSettingsJson(text: string, engine: ModelProfileEngine): string 
       const obj = v as Record<string, unknown>;
       if (!("auth" in obj) && !("config" in obj)) {
         return "Codex 配置需包含 auth 与 config 字段（与 CC Switch 一致）";
+      }
+    }
+    if (engine === "opencode") {
+      const obj = v as Record<string, unknown>;
+      if (!("model" in obj) && !("provider" in obj)) {
+        return "OpenCode 配置建议包含 model（provider/model）或 provider 字段";
       }
     }
     return null;
@@ -99,6 +109,9 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
         const draft = parseCodexProfileEnvelopeJson(text);
         setAddCodexAuthJson(draft.authJson);
         setAddCodexConfigToml(draft.configToml);
+      } else if (panelEngine === "opencode") {
+        const text = await getOpencodeUserSettingsJson();
+        setAddSettingsJson(text);
       } else {
         const text = await getClaudeUserSettingsJson();
         setAddSettingsJson(text);
@@ -126,14 +139,15 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
         const next = await applyClaudeModelProfile(profileId);
         setStore(next);
         const effective =
-          (panelEngine === "codex" ? next.effectiveCodexModel : next.effectiveModel)?.trim() ||
-          null;
+          resolveEffectiveModelForProfileEngine(panelEngine, next)?.trim() || null;
         message.success(
           effective
             ? `已切换模型配置，当前模型：${formatClaudeModelLabel(effective)}`
             : panelEngine === "codex"
               ? "已切换并写入 Codex 全局 auth.json / config.toml"
-              : "已切换并替换 Claude Code 全局 settings.json",
+              : panelEngine === "opencode"
+                ? "已切换并写入 OpenCode 全局 opencode.json"
+                : "已切换并替换 Claude Code 全局 settings.json",
         );
         dispatchClaudeUserSettingsChanged({ effectiveModel: effective });
         onApplied?.();
@@ -261,20 +275,18 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
       const next = await upsertClaudeModelProfile(updatedProfile);
       setStore(next);
       message.success(
-        (profileEngine === "codex" ? next.effectiveCodexModel : next.effectiveModel)?.trim()
+        resolveEffectiveModelForProfileEngine(profileEngine, next)?.trim()
           ? `已保存全局配置，当前模型：${formatClaudeModelLabel(
-              (profileEngine === "codex"
-                ? next.effectiveCodexModel
-                : next.effectiveModel)!.trim(),
+              resolveEffectiveModelForProfileEngine(profileEngine, next)!.trim(),
             )}`
           : profileEngine === "codex"
             ? "已保存 Codex 档案"
-            : "已保存到数据库并写入 Claude Code 全局 settings.json",
+            : profileEngine === "opencode"
+              ? "已保存 OpenCode 档案"
+              : "已保存到数据库并写入 Claude Code 全局 settings.json",
       );
       dispatchClaudeUserSettingsChanged({
-        effectiveModel:
-          (profileEngine === "codex" ? next.effectiveCodexModel : next.effectiveModel)?.trim() ||
-          null,
+        effectiveModel: resolveEffectiveModelForProfileEngine(profileEngine, next)?.trim() || null,
       });
       setConfigOpen(false);
       setConfigProfile(null);
@@ -316,11 +328,9 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
       ),
     [panelEngine, store?.profiles],
   );
-  const activeProfileId =
-    panelEngine === "codex" ? store?.activeCodexProfileId : store?.activeProfileId;
-  const effective =
-    (panelEngine === "codex" ? store?.effectiveCodexModel : store?.effectiveModel)?.trim() || "—";
-  const engineLabel = panelEngine === "codex" ? "Codex" : "Claude Code";
+  const activeProfileId = resolveActiveModelProfileId(panelEngine, store);
+  const effective = resolveEffectiveModelForProfileEngine(panelEngine, store)?.trim() || "—";
+  const engineLabel = modelProfileEngineLabel(panelEngine);
   const editingCodexProfile =
     configProfile != null && normalizeModelProfileEngine(configProfile.engine) === "codex";
 
@@ -350,6 +360,7 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
           options={[
             { label: "Claude", value: "claude" },
             { label: "Codex", value: "codex" },
+            { label: "OpenCode", value: "opencode" },
           ]}
           onChange={(value) => setPanelEngine(value as ModelProfileEngine)}
         />
@@ -501,6 +512,12 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
                     <Typography.Text code>config.toml</Typography.Text>；保存后写入{" "}
                     <Typography.Text code>~/.codex/</Typography.Text>（与 CC Switch 相同）。
                   </>
+                ) : panelEngine === "opencode" ? (
+                  <>
+                    完整 OpenCode 用户级 <Typography.Text code>opencode.json</Typography.Text>
+                    ；切换时合并 <Typography.Text code>provider</Typography.Text> /{" "}
+                    <Typography.Text code>model</Typography.Text>，保留 MCP 与插件配置。
+                  </>
                 ) : (
                   <>
                     完整 Claude Code 用户级 <Typography.Text code>settings.json</Typography.Text>
@@ -582,6 +599,12 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
                   <>
                     分别编辑 <Typography.Text code>auth.json</Typography.Text> 与{" "}
                     <Typography.Text code>config.toml</Typography.Text>，保存后更新档案。
+                  </>
+                ) : normalizeModelProfileEngine(configProfile?.engine) === "opencode" ? (
+                  <>
+                    编辑后将合并写入用户级 OpenCode{" "}
+                    <Typography.Text code>~/.config/opencode/opencode.json</Typography.Text>
+                    ，并更新该档案。
                   </>
                 ) : (
                   <>
