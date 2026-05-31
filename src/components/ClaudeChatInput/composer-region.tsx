@@ -1655,13 +1655,8 @@ function ComposerInner({
         ) || outbound;
 
       let executeOptions: ClaudeComposerExecuteBubbleOptions | undefined;
-      if (cursorSendPayload) {
-        executeOptions = {
-          userBubblePrompt: cursorSendPayload.userBubblePrompt,
-          ...(cursorSendPayload.cursorAttachments.length > 0
-            ? { cursorAttachments: cursorSendPayload.cursorAttachments }
-            : {}),
-        };
+      if (cursorSendPayload?.cursorAttachments.length) {
+        executeOptions = { cursorAttachments: cursorSendPayload.cursorAttachments };
       }
 
       // @终端 / @团队 立即派发，不与其他执行体共用 FIFO（避免主会话排队阻塞终端/工作流）。

@@ -35,7 +35,10 @@ import {
 import { executeCodexCode } from "../services/codex";
 import { executeCursorCode } from "../services/cursorAgentExecution";
 import { buildCursorMcpServersForSpawn } from "../services/cursorMcpConfig";
-import type { CursorSdkAttachment } from "../services/cursorComposerPrompt";
+import {
+  buildCursorUserBubblePrompt,
+  type CursorSdkAttachment,
+} from "../services/cursorComposerPrompt";
 import { CURSOR_SDK_DEFAULT_MODEL } from "../constants/cursorSdk";
 import { resolveCursorLocalModelId } from "../utils/cursorModel";
 import { resolveCursorResumeAgentId } from "../utils/cursorAgentId";
@@ -2890,7 +2893,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
       expectedTurnNonceByTabIdRef.current.set(sessionId, lastUserSendNonceRef.current);
       markClaudeRegistryBootstrapWarmup(registryBootstrapDeadlineByClaudeSidRef, claudeSid);
-      const bubblePrompt = opts?.userBubblePrompt?.trim() ? opts.userBubblePrompt : prompt;
+      const bubblePrompt = opts?.userBubblePrompt?.trim()
+        ? opts.userBubblePrompt
+        : opts?.cursorAttachments && opts.cursorAttachments.length > 0
+          ? buildCursorUserBubblePrompt(prompt, opts.cursorAttachments)
+          : prompt;
       commitSessions((prev) => {
         if (
           opts?.replaceUserBubbleAtIndex !== undefined &&

@@ -8,6 +8,7 @@
  */
 
 import { resolveCursorLocalModelId } from "./cursorSdkModel.ts";
+import { bridgeImagesToSdkRefs, type CursorSdkImageRef } from "./cursorSdkImages.ts";
 import { sdkMessageToClaudeStreamLines } from "./cursorSdkStream.ts";
 import {
   installCursorSdkStderrFilter,
@@ -41,11 +42,6 @@ type CursorMcpServerConfig = {
   cwd?: string;
   url?: string;
   headers?: Record<string, string>;
-};
-
-type CursorBridgeImage = {
-  path?: string;
-  mimeType?: string;
 };
 
 type CursorSettingSource = "project" | "user" | "team" | "mdm" | "plugins" | "all";
@@ -93,40 +89,10 @@ function parseSettingSourcesParam(
   return out.length > 0 ? out : DEFAULT_SETTING_SOURCES;
 }
 
-async function loadSdkImages(raw: unknown): Promise<
-  Array<{ data: string; mimeType: string }>
-> {
-  if (!Array.isArray(raw)) return [];
-  const out: Array<{ data: string; mimeType: string }> = [];
-  for (const item of raw) {
-    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
-    const path =
-      typeof (item as CursorBridgeImage).path === "string"
-        ? (item as CursorBridgeImage).path!.trim()
-        : "";
-    const mimeType =
-      typeof (item as CursorBridgeImage).mimeType === "string" &&
-      (item as CursorBridgeImage).mimeType!.trim().length > 0
-        ? (item as CursorBridgeImage).mimeType!.trim()
-        : "image/png";
-    if (!path) continue;
-    try {
-      const bytes = await Bun.file(path).arrayBuffer();
-      out.push({
-        data: Buffer.from(bytes).toString("base64"),
-        mimeType,
-      });
-    } catch {
-      // 跳过无法读取的本地图片。
-    }
-  }
-  return out;
-}
-
 async function buildSendMessage(
   prompt: string,
-  images: Array<{ data: string; mimeType: string }>,
-): Promise<string | { text: string; images: Array<{ data: string; mimeType: string }> }> {
+  images: CursorSdkImageRef[],
+): Promise<string | { text: string; images: CursorSdkImageRef[] }> {
   if (images.length === 0) return prompt;
   const text = prompt.trim() || "请查看附图。";
   return { text, images };
@@ -218,17 +184,16 @@ async function handlePrompt(params: Record<string, unknown> | undefined): Promis
   );
   const mcpServers = parseMcpServersParam(params);
   const settingSources = parseSettingSourcesParam(params);
-  const sdkImages = await loadSdkImages(params?.images);
+  const sdkImages = bridgeImagesToSdkRefs(params?.images);
   const message = await buildSendMessage(prompt, sdkImages);
 
   try {
     const { Agent } = await import("@cursor/sdk");
-    const result = await Agent.prompt(typeof message === "string" ? message : message.text, {
+    const result = await Agent.prompt(message, {
       apiKey,
       model: { id: modelId },
       local: { cwd, settingSources },
       ...(mcpServers ? { mcpServers } : {}),
-      ...(typeof message === "object" ? { images: message.images } : {}),
     });
     return {
       ok: true,
@@ -274,7 +239,7 @@ async function handleExecute(params: Record<string, unknown> | undefined): Promi
     );
     const mcpServers = parseMcpServersParam(params);
     const settingSources = parseSettingSourcesParam(params);
-    const sdkImages = await loadSdkImages(params?.images);
+    const sdkImages = bridgeImagesToSdkRefs(params?.images);
     const message = await buildSendMessage(prompt, sdkImages);
     const resumeAgentId =
       typeof params?.agentId === "string" && params.agentId.trim().length > 0
