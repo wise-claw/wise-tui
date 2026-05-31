@@ -64,6 +64,12 @@ const MONACO_SUPPORTED_FILENAMES = new Set([
 
 const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "avif"]);
 
+const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "webm", "avi", "mkv", "m4v", "wmv", "flv", "mpeg", "mpg"]);
+
+const EXCEL_EXTENSIONS = new Set(["xlsx", "xls", "xlsm", "xlsb", "csv"]);
+
+const PPT_EXTENSIONS = new Set(["pptx", "ppt", "ppsx", "pps"]);
+
 export type RepositoryBinaryPreviewState =
   | { kind: "image"; relativePath: string; src: string }
   | { kind: "pdf"; relativePath: string; blobUrl: string }
@@ -122,6 +128,23 @@ export function isLegacyDocFilePath(path: string): boolean {
   return getPathExt(path) === "doc";
 }
 
+export function isVideoFilePath(path: string): boolean {
+  return VIDEO_EXTENSIONS.has(getPathExt(path));
+}
+
+export function isExcelFilePath(path: string): boolean {
+  return EXCEL_EXTENSIONS.has(getPathExt(path));
+}
+
+export function isPptFilePath(path: string): boolean {
+  return PPT_EXTENSIONS.has(getPathExt(path));
+}
+
+/** 点击后交给系统默认应用打开（视频 / Excel / PPT 等），不用 Monaco。 */
+export function isRepositoryExternalDefaultAppPath(path: string): boolean {
+  return isVideoFilePath(path) || isExcelFilePath(path) || isPptFilePath(path);
+}
+
 export function isRepositoryBinaryPreviewPath(path: string): boolean {
   return (
     isImageFilePath(path) ||
@@ -131,16 +154,13 @@ export function isRepositoryBinaryPreviewPath(path: string): boolean {
   );
 }
 
+/** 是否应在内置 Monaco 编辑器中打开（非图片/PDF/Office/视频等专用路径）。 */
+export function shouldOpenRepositoryFileInMonaco(path: string): boolean {
+  return !isRepositoryBinaryPreviewPath(path) && !isRepositoryExternalDefaultAppPath(path);
+}
+
 export function isMonacoSupportedFilePath(path: string): boolean {
-  const fileName = getPathName(path);
-  if (fileName === ".env" || fileName.startsWith(".env.")) {
-    return true;
-  }
-  if (MONACO_SUPPORTED_FILENAMES.has(fileName)) {
-    return true;
-  }
-  const ext = getPathExt(path);
-  return ext.length > 0 && MONACO_SUPPORTED_EXTENSIONS.has(ext);
+  return shouldOpenRepositoryFileInMonaco(path);
 }
 
 export function monacoLanguageFromRepositoryPath(path: string | null): string {
@@ -149,10 +169,13 @@ export function monacoLanguageFromRepositoryPath(path: string | null): string {
   if (fileName === ".env" || fileName.startsWith(".env.")) {
     return "plaintext";
   }
-  const ext = getPathExt(path);
   if (["dockerfile", "makefile"].includes(fileName)) {
     return fileName === "dockerfile" ? "dockerfile" : "makefile";
   }
+  if (MONACO_SUPPORTED_FILENAMES.has(fileName)) {
+    return "plaintext";
+  }
+  const ext = getPathExt(path);
   if (["md", "markdown"].includes(ext)) return "markdown";
   if (["js", "mjs", "cjs", "jsx"].includes(ext)) return "javascript";
   if (["ts", "mts", "cts", "tsx"].includes(ext)) return "typescript";
@@ -169,5 +192,8 @@ export function monacoLanguageFromRepositoryPath(path: string | null): string {
   if (ext === "vue") return "html";
   if (ext === "rs") return "rust";
   if (ext === "go") return "go";
+  if (MONACO_SUPPORTED_EXTENSIONS.has(ext)) {
+    return ext;
+  }
   return "plaintext";
 }

@@ -8,15 +8,17 @@ import {
   readProjectRelativeFileBase64,
   writeProjectRelativeFile,
 } from "../services/materializePrdSnapshot";
-import { base64ToArrayBuffer, joinRepositoryAbsolutePath } from "../utils/repositoryPreviewBinary";
+import { joinRepositoryAbsolutePath } from "../utils/repositoryPreviewBinary";
+import { openInFinder } from "../services/repository";
 import {
   isDocxFilePath,
   isImageFilePath,
   isLegacyDocFilePath,
-  isMonacoSupportedFilePath,
   isPdfFilePath,
   isRepositoryBinaryPreviewPath,
+  isRepositoryExternalDefaultAppPath,
   mimeTypeForImagePath,
+  shouldOpenRepositoryFileInMonaco,
   type RepositoryBinaryPreviewState,
 } from "../utils/repositoryFilePreview";
 import { toUiErrorMessage } from "../utils/appErrorMessage";
@@ -131,6 +133,23 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
     [repositoryPath],
   );
 
+  const openRepositoryExternalFile = useCallback(
+    async (relativePath: string) => {
+      if (!repositoryPath) {
+        message.warning("请先选择仓库");
+        return;
+      }
+      try {
+        const absPath = joinRepositoryAbsolutePath(repositoryPath, relativePath);
+        await openInFinder(absPath);
+      } catch (error) {
+        console.error("Open repository file externally failed:", error);
+        message.error(`打开失败：${toUiErrorMessage(error)}`);
+      }
+    },
+    [repositoryPath],
+  );
+
   const removeFileEditorTab = useCallback((relativePath: string) => {
     setFileEditorTabs((prevTabs) => {
       const idx = prevTabs.findIndex((t) => t.relativePath === relativePath);
@@ -154,8 +173,7 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
         message.warning("请先选择仓库");
         return;
       }
-      if (!isMonacoSupportedFilePath(relativePath)) {
-        message.info("该文件类型暂不支持内置打开");
+      if (!shouldOpenRepositoryFileInMonaco(relativePath)) {
         return;
       }
 
@@ -208,6 +226,8 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
       } catch (error) {
         console.error("Failed to read file:", error);
         message.error(`读取文件失败：${relativePath}`);
+        const absPath = joinRepositoryAbsolutePath(repositoryPath, relativePath);
+        void openInFinder(absPath).catch(() => undefined);
         setFileEditorTabs((prev) => {
           const nextTabs = prev.filter((t) => t.relativePath !== relativePath);
           setFileEditorActivePath((cur) => {
@@ -229,8 +249,7 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
         message.warning("请先选择仓库");
         return;
       }
-      if (!isMonacoSupportedFilePath(relativePath)) {
-        message.info("该文件类型暂不支持内置打开");
+      if (!shouldOpenRepositoryFileInMonaco(relativePath)) {
         return;
       }
 
@@ -302,13 +321,17 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
         void openRepositoryBinaryPreview(relativePath);
         return;
       }
+      if (isRepositoryExternalDefaultAppPath(relativePath)) {
+        void openRepositoryExternalFile(relativePath);
+        return;
+      }
       if (opts?.fromGitChanges) {
         void loadGitDiffFile(relativePath, opts.fromGitChanges);
         return;
       }
       void loadEditorFile(relativePath, { line: opts?.line ?? null });
     },
-    [loadEditorFile, loadGitDiffFile, openRepositoryBinaryPreview],
+    [loadEditorFile, loadGitDiffFile, openRepositoryBinaryPreview, openRepositoryExternalFile],
   );
 
   const closeFileEditorPanel = useCallback(() => {

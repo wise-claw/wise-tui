@@ -18,9 +18,10 @@ import {
   isDocxFilePath,
   isImageFilePath,
   isLegacyDocFilePath,
-  isMonacoSupportedFilePath,
   isPdfFilePath,
   isRepositoryBinaryPreviewPath,
+  isRepositoryExternalDefaultAppPath,
+  shouldOpenRepositoryFileInMonaco,
 } from "../../utils/repositoryFilePreview";
 import {
   AuthorPanelEmptyShell,
@@ -66,7 +67,11 @@ const PREVIEW_LANES: PreviewLane[] = [
 ];
 
 function isPreviewablePath(path: string): boolean {
-  return isRepositoryBinaryPreviewPath(path) || isMonacoSupportedFilePath(path);
+  return (
+    isRepositoryBinaryPreviewPath(path) ||
+    isRepositoryExternalDefaultAppPath(path) ||
+    shouldOpenRepositoryFileInMonaco(path)
+  );
 }
 
 function getPathExt(path: string): string {
