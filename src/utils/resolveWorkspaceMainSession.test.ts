@@ -68,9 +68,23 @@ describe("resolveWorkspaceMainSession", () => {
       bindings,
       repositories,
       activeRepository: repositories[0],
-      activeProject: { id: "p1", name: "HR", path: "/work" },
+      activeProject: { id: "p1", name: "HR", repositoryIds: [1], createdAt: 0, updatedAt: 0, rootPath: "/work" },
       activeWorkspaceFocus: "project",
     });
     expect(resolved?.id).toBe(projectMain.id);
+  });
+
+  test("project focus without activeRepository falls back to activeSessionId Project tab", () => {
+    const projectMain = session("s-proj", "/work", "Project: HR");
+    const resolved = resolveWorkspaceMainSession({
+      sessions: [projectMain],
+      bindings: {},
+      repositories,
+      activeRepository: null,
+      activeProject: { id: "p1", name: "HR", repositoryIds: [1], createdAt: 0, updatedAt: 0, rootPath: "/work" },
+      activeWorkspaceFocus: "project",
+      activeSessionId: "s-proj",
+    });
+    expect(resolved?.id).toBe("s-proj");
   });
 });

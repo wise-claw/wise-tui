@@ -2245,12 +2245,25 @@ export default function App() {
   );
 
   /**
-   * 进入应用：仓库与会话 hydrated 后，对 `useRepositoryList` 通过 lastSession 或首项策略
-   * 选出的 `activeRepositoryId` 打开/恢复主会话（不再要求首项必须是 project，游离 repo 同样适用）。
+   * 进入应用：仓库与会话 hydrated 后恢复侧栏选中态对应的主会话。
+   * - 工作区焦点 → 项目主会话（不要求 activeRepositoryId）
+   * - 仓库焦点 → 仓库主会话（含多仓工作区内的 per-repo 路径）
    */
   useEffect(() => {
     if (repositoryListLoading || !tabsHydrated) return;
     if (startupFirstProjectRepoSessionAppliedRef.current) return;
+
+    if (activeWorkspaceFocus === "project" && activeProjectId) {
+      const startupProject = projects.find((p) => p.id === activeProjectId) ?? null;
+      if (!startupProject) return;
+      startupFirstProjectRepoSessionAppliedRef.current = true;
+      bindProjectMainSessionTarget(startupProject);
+      if (!viewMode.isChat) {
+        viewMode.enter({ kind: "chat" });
+      }
+      return;
+    }
+
     if (activeRepositoryId == null) return;
     if (!repositories.some((r) => r.id === activeRepositoryId)) return;
     startupFirstProjectRepoSessionAppliedRef.current = true;
@@ -2269,7 +2282,9 @@ export default function App() {
       viewMode.enter({ kind: "chat" });
     }
   }, [
+    activeProjectId,
     activeRepositoryId,
+    activeWorkspaceFocus,
     bindProjectMainSessionTarget,
     handleSidebarRepositorySelect,
     projects,

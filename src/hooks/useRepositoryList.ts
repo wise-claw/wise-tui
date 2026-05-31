@@ -42,9 +42,12 @@ import {
 } from "../utils/projectPinOrder";
 import type { WorkspaceFocus } from "../utils/workspaceMode";
 import {
+  WORKSPACE_LAST_SELECTION_STORAGE_KEY,
   WORKSPACE_LAST_SESSION_REPO_ID_STORAGE_KEY,
+  parseWorkspaceLastSelection,
   resolveStartupSelection,
 } from "../utils/startupRepoSelection";
+import { buildWorkspaceLastSelection } from "../utils/workspaceSelectionState";
 import type { ReconcileProjectMode } from "../constants/reconcileProjectMode";
 import { resolveProjectCreationSeedRepository } from "../utils/projectCreationContext";
 
@@ -98,11 +101,13 @@ export function useRepositoryList() {
   useEffect(() => {
     void (async () => {
       try {
-        const [repositoryList, dbProjects, rawPins, rawLastSessionRepoId] = await Promise.all([
+        const [repositoryList, dbProjects, rawPins, rawLastSessionRepoId, rawLastSelection] =
+          await Promise.all([
           loadRepositories(),
           listProjects(),
           getAppSetting(PINNED_PROJECT_IDS_STORAGE_KEY),
           getAppSetting(WORKSPACE_LAST_SESSION_REPO_ID_STORAGE_KEY),
+          getAppSetting(WORKSPACE_LAST_SELECTION_STORAGE_KEY),
         ]);
         let projectList = dbProjects;
 
@@ -150,7 +155,9 @@ export function useRepositoryList() {
         const sortedProjects = sortProjectsByPinOrder(projectList, pins);
 
         const parsedLastSessionRepoId = parseLastSessionRepoId(rawLastSessionRepoId);
+        const parsedLastSelection = parseWorkspaceLastSelection(rawLastSelection);
         const startup = resolveStartupSelection({
+          lastSelection: parsedLastSelection,
           lastSessionRepoId: parsedLastSessionRepoId,
           projects: sortedProjects,
           repositories: repositoryList,
@@ -162,6 +169,7 @@ export function useRepositoryList() {
         setRepositories(repositoryList);
         setPinnedProjectIds(pins);
         setProjects(sortedProjects);
+        setActiveWorkspaceFocus(startup.workspaceFocus);
         setActiveProjectId(startup.projectId);
         await persistActiveProjectId(startup.projectId);
         setActiveRepositoryId(startup.repositoryId);
@@ -177,7 +185,7 @@ export function useRepositoryList() {
   );
 
   /**
-   * 持久化 activeRepositoryId 为 lastSessionRepoId。
+   * 持久化侧栏选中态（工作区焦点 / 仓库焦点 + id）。
    * 初次启动由 loader 直接装填，effect 跳过首次以避免覆盖 loader 的恢复结果。
    */
   const lastSessionPersistInitialRef = useRef(true);
@@ -187,15 +195,25 @@ export function useRepositoryList() {
       lastSessionPersistInitialRef.current = false;
       return;
     }
-    if (activeRepositoryId == null) {
-      void deleteAppSetting(WORKSPACE_LAST_SESSION_REPO_ID_STORAGE_KEY);
-    } else {
+    void setAppSetting(
+      WORKSPACE_LAST_SELECTION_STORAGE_KEY,
+      JSON.stringify(
+        buildWorkspaceLastSelection({
+          focus: activeWorkspaceFocus,
+          projectId: activeProjectId,
+          repositoryId: activeRepositoryId,
+        }),
+      ),
+    );
+    if (activeWorkspaceFocus === "repository" && activeRepositoryId != null) {
       void setAppSetting(
         WORKSPACE_LAST_SESSION_REPO_ID_STORAGE_KEY,
         String(activeRepositoryId),
       );
+    } else {
+      void deleteAppSetting(WORKSPACE_LAST_SESSION_REPO_ID_STORAGE_KEY);
     }
-  }, [activeRepositoryId, loading]);
+  }, [activeWorkspaceFocus, activeProjectId, activeRepositoryId, loading]);
 
   const projectRepositories = useMemo(() => {
     if (!activeProject) return [];
@@ -297,27 +315,37 @@ export function useRepositoryList() {
     const validIds = new Set(repositoryList.map((r) => r.id));
     const nextActive = activeProjectId === projectId ? (nextProjects[0]?.id ?? null) : activeProjectId;
     const nextActiveProj = nextActive ? (nextProjects.find((project) => project.id === nextActive) ?? null) : null;
-    const nextRepoId =
+    const keepRepoId =
       activeRepositoryId != null &&
       validIds.has(activeRepositoryId) &&
       (!nextActiveProj || nextActiveProj.repositoryIds.includes(activeRepositoryId))
         ? activeRepositoryId
-        : nextActiveProj?.repositoryIds[0] ?? null;
+        : null;
     setPinnedProjectIds(nextPins);
     setProjects(nextProjects);
     setRepositories(repositoryList);
-    setActiveProjectId(nextActive);
-    setActiveRepositoryId(nextRepoId);
+    if (!nextActive) {
+      setActiveProjectId(null);
+      setActiveRepositoryId(null);
+      setActiveWorkspaceFocus("repository");
+    } else if (keepRepoId != null) {
+      setActiveProjectId(nextActive);
+      setActiveRepositoryId(keepRepoId);
+      setActiveWorkspaceFocus("repository");
+    } else {
+      setActiveProjectId(nextActive);
+      setActiveRepositoryId(null);
+      setActiveWorkspaceFocus("project");
+    }
     void persistActiveProjectId(nextActive);
   }, [activeProjectId, activeRepositoryId, projects, pinnedProjectIds]);
 
   const handleSelectProject = useCallback((projectId: string) => {
     setActiveProjectId(projectId);
     setActiveWorkspaceFocus("project");
-    const selected = projects.find((project) => project.id === projectId) ?? null;
-    setActiveRepositoryId(selected?.repositoryIds[0] ?? null);
+    setActiveRepositoryId(null);
     schedulePersistActiveProjectId(projectId);
-  }, [projects, schedulePersistActiveProjectId]);
+  }, [schedulePersistActiveProjectId]);
 
   const togglePinProject = useCallback((projectId: string) => {
     setPinnedProjectIds((prevPins) => {

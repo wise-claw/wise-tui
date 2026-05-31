@@ -31,7 +31,12 @@ import {
   resolveMainOwnerAgentNameForRepositoryPath,
   resolveRepositoryForSession,
 } from "../../utils/repositoryMainSessionBinding";
-import { resolveWorkspaceMainSession } from "../../utils/resolveWorkspaceMainSession";
+import {
+  isChatSurfaceReady,
+  resolveClaudePanelActiveSession,
+  resolveClaudeWorkspaceMainSession,
+  resolveProjectComposerRepository,
+} from "../../utils/workspaceSelectionState";
 import { RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK } from "../../utils/rightPanelStorage";
 import { loadSessionOwnerHints } from "../../utils/sessionOwnerHints";
 import type { WorkspaceMode, WorkspaceFocus } from "../../utils/workspaceMode";
@@ -813,6 +818,19 @@ export function ClaudeSessions({
     return map;
   }, [incomingSessions]);
 
+  const projectComposerRepository = useMemo(
+    () => resolveProjectComposerRepository(activeProject, repositories ?? []),
+    [activeProject, repositories],
+  );
+
+  const chatContextRepository = activeRepository ?? projectComposerRepository;
+
+  const chatSurfaceReady = isChatSurfaceReady({
+    activeRepository,
+    activeWorkspaceFocus,
+    activeProject,
+  });
+
   const workflowTasksByCreator = useMemo(() => {
     const map = new Map<string, WorkflowTaskItem[]>();
     for (const task of workflowTasks) {
@@ -828,24 +846,53 @@ export function ClaudeSessions({
     return map;
   }, [workflowTasks]);
 
-  const activeSession =
-    activeRepository == null
-      ? undefined
-      : sessions.find((s) => {
-          if (s.id !== activeSessionId) return false;
-          if (activeWorkspaceFocus === "project") {
-            return (s.repositoryName ?? "").trim().startsWith("Project: ");
-          }
-          return (
-            resolveRepositoryForSession({
-              session: s,
-              repositories: repositories ?? [],
-              bindings: repositoryMainBindings,
-              sessions,
-              preferredRepositoryId: activeRepository.id,
-            })?.id === activeRepository.id
-          );
-        });
+  const mainSessionForDataLink = useMemo(
+    () =>
+      resolveClaudeWorkspaceMainSession({
+        sessions: incomingSessions,
+        repositoryMainBindings,
+        repositories: repositories ?? [],
+        activeRepository,
+        activeProject,
+        activeWorkspaceFocus,
+        activeSessionId,
+      }),
+    [
+      incomingSessions,
+      repositoryMainBindings,
+      repositories,
+      activeRepository,
+      activeProject,
+      activeWorkspaceFocus,
+      activeSessionId,
+    ],
+  );
+
+  const activeSession = useMemo(
+    () =>
+      resolveClaudePanelActiveSession({
+        sessions,
+        allSessions: incomingSessions,
+        activeSessionId,
+        activeWorkspaceFocus,
+        activeProject,
+        activeRepository,
+        repositories: repositories ?? [],
+        repositoryMainBindings,
+        workspaceMainSession: mainSessionForDataLink,
+      }),
+    [
+      sessions,
+      incomingSessions,
+      activeSessionId,
+      activeWorkspaceFocus,
+      activeProject,
+      activeRepository,
+      repositories,
+      repositoryMainBindings,
+      mainSessionForDataLink,
+    ],
+  );
 
   /** 解析每个额外窗格对应的实际会话对象。 */
   const resolvedPaneSessions = useMemo(() => {
@@ -927,28 +974,6 @@ export function ClaudeSessions({
   >(null);
   const [paneRepoPickerOpenBySlot, setPaneRepoPickerOpenBySlot] = useState<Record<number, boolean>>({});
   const [creatingPaneSlots, setCreatingPaneSlots] = useState<Record<number, boolean>>({});
-  const mainSessionForDataLink = useMemo(
-    () =>
-      resolveWorkspaceMainSession({
-        sessions: incomingSessions,
-        bindings: repositoryMainBindings,
-        repositories: repositories ?? [],
-        activeRepository,
-        activeProject,
-        activeWorkspaceFocus,
-        activeSessionId,
-      }),
-    [
-      incomingSessions,
-      repositoryMainBindings,
-      repositories,
-      activeRepository,
-      activeProject,
-      activeWorkspaceFocus,
-      activeSessionId,
-    ],
-  );
-
   const activeSessionWorkflowTasks = useMemo(
     () => (activeSession?.id ? workflowTasksByCreator.get(activeSession.id) ?? [] : []),
     [workflowTasksByCreator, activeSession?.id],
@@ -993,13 +1018,24 @@ export function ClaudeSessions({
 
   /** 打开仓库/项目时仅恢复已有主会话绑定，不自动新建（新建仅走「新建会话」按钮）。 */
   useEffect(() => {
-    if (!activeRepository || activeSession) {
+    if (activeSession) {
       return;
     }
 
     let cancelled = false;
     queueMicrotask(() => {
       if (cancelled) return;
+
+      if (activeWorkspaceFocus === "project" && activeProject) {
+        if (mainSessionForDataLink) {
+          onSwitchSession(mainSessionForDataLink.id);
+        }
+        return;
+      }
+
+      if (!activeRepository) {
+        return;
+      }
 
       const mainOwnerPick = resolveMainOwnerAgentNameForRepositoryPath(
         repositories ?? [],
@@ -1031,9 +1067,12 @@ export function ClaudeSessions({
       cancelled = true;
     };
   }, [
+    activeProject,
     activeRepository,
     activeSession,
+    activeWorkspaceFocus,
     incomingSessions,
+    mainSessionForDataLink,
     onSwitchSession,
     repositories,
     repositoryMainBindings,
@@ -1171,8 +1210,10 @@ export function ClaudeSessions({
         <Topbar
           activeProject={activeProject}
           activeWorkspaceFocus={activeWorkspaceFocus}
-          activeRepository={activeRepository}
-          activeSessionRepositoryPath={activeRepository?.path}
+          activeRepository={chatContextRepository}
+          activeSessionRepositoryPath={
+            activeSession?.repositoryPath?.trim() || chatContextRepository?.path
+          }
           mainSessionForDataLink={mainSessionForDataLink}
           onToggleSidebar={onToggleSidebar}
           onToggleRightPanel={onToggleRightPanel}
@@ -1190,12 +1231,12 @@ export function ClaudeSessions({
       )}
 
       {/* Session Tabs - 会话标签栏 */}
-      {!activeRepository ? null : activeSession ? (
+      {!chatSurfaceReady ? null : activeSession ? (
         paneCount > 1 ? (
           <ClaudeMultiPaneGrid
             paneCount={paneCount}
             activeSession={activeSession}
-            activeRepository={activeRepository}
+            activeRepository={chatContextRepository}
             extraPanes={extraPanes}
             resolvedPaneSessions={resolvedPaneSessions}
             resolvedPaneRepositories={resolvedPaneRepositories}
@@ -1225,7 +1266,7 @@ export function ClaudeSessions({
             sessions={sessions}
             allSessionsForHistory={incomingSessions}
             repositories={repositories}
-            activeRepository={activeRepository}
+            activeRepository={chatContextRepository}
             activeProject={activeProject}
             initialNotificationPanelCollapsed={
               pendingCollapseNotificationForSessionId === activeSession.id
@@ -1307,7 +1348,7 @@ export function ClaudeSessions({
       )}
 
       {/* Terminal Panel：按需加载 xterm，避免进入会话页即拉取 terminal-vendor */}
-      {!terminalCollapsed && activeRepository && onToggleTerminal && (
+      {!terminalCollapsed && chatContextRepository && onToggleTerminal && (
         <Suspense
           fallback={
             <div className="app-claude-sessions-terminal-lazy-fallback" role="status" aria-label="终端加载中">
@@ -1316,9 +1357,9 @@ export function ClaudeSessions({
           }
         >
           <TerminalPanelLazy
-            repositoryPath={activeRepository.path}
-            repositoryName={activeRepository.name}
-            branch={activeRepository.branch}
+            repositoryPath={chatContextRepository.path}
+            repositoryName={chatContextRepository.name}
+            branch={chatContextRepository.branch}
             dirty={false}
             onClose={onToggleTerminal}
           />

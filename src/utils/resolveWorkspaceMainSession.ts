@@ -5,6 +5,7 @@ import {
   pickSessionForRepositorySidebarSelect,
 } from "./claudeSessionSelection";
 import {
+  isProjectRootSessionDisplayName,
   normalizeRepositoryPathKey,
   projectMainSessionBindingKey,
   resolveBoundMainSessionId,
@@ -24,6 +25,23 @@ export interface ResolveWorkspaceMainSessionInput {
   activeWorkspaceFocus?: WorkspaceFocus;
   /** 当前活动标签；绑定/侧栏 pick 未命中时，若归属本仓库/项目则作为主会话 */
   activeSessionId?: string | null;
+}
+
+function fallbackActiveSessionForProject(
+  list: ClaudeSession[],
+  activeSessionId: string | null | undefined,
+): ClaudeSession | null {
+  if (!activeSessionId?.trim()) {
+    return null;
+  }
+  const active = list.find((session) => session.id === activeSessionId);
+  if (!active) {
+    return null;
+  }
+  if (isProjectRootSessionDisplayName(active.repositoryName ?? "")) {
+    return active;
+  }
+  return null;
 }
 
 function fallbackActiveSessionForRepository(
@@ -90,7 +108,10 @@ export function resolveWorkspaceMainSession(input: ResolveWorkspaceMainSessionIn
     if (picked) {
       return picked;
     }
-    return fallbackActiveSessionForRepository(list, input);
+    return (
+      fallbackActiveSessionForProject(list, input.activeSessionId) ??
+      fallbackActiveSessionForRepository(list, input)
+    );
   }
 
   if (!activeRepository) {

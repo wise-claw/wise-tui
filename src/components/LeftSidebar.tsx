@@ -566,7 +566,11 @@ export function LeftSidebar({
   }, [activeSession, repositories, repositoryMainSessionBindings, sessions, activeRepositoryId]);
 
   const repoPanelTreeSelectionSource = useMemo((): WorkspaceRepositoryTreeSelection | null => {
-    if (leftBottomTab === "files" && activeRepositoryId != null) {
+    if (
+      leftBottomTab === "files" &&
+      activeWorkspaceFocus === "repository" &&
+      activeRepositoryId != null
+    ) {
       return { kind: "repository", repositoryId: activeRepositoryId };
     }
     // 多仓工作区：Git 面板保持工作区级多仓视图，切成员仓时不 remount 整块面板。
@@ -581,6 +585,7 @@ export function LeftSidebar({
     leftBottomTab,
     activeProjectId,
     activeRepositoryId,
+    activeWorkspaceFocus,
     projects,
     globalWorkspaceTreeSelection,
     sessionDerivedTreeSelection,
