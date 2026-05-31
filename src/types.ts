@@ -636,6 +636,8 @@ export interface ClaudeComposerExecuteBubbleOptions {
   replaceUserBubbleAtIndex?: number;
   /** 写入会话用户气泡的正文；省略则与发给 Claude 的 `prompt` 相同（终端派发用于隐藏 `/${agent}` 前缀）。 */
   userBubblePrompt?: string;
+  /** Cursor SDK 附图（已落盘绝对路径）；仅 executionEngine=cursor 时使用。 */
+  cursorAttachments?: Array<{ path: string; mimeType?: string }>;
 }
 
 export interface PendingExecutionTask {
@@ -652,6 +654,8 @@ export interface PendingExecutionTask {
   targetWorkflowId?: string;
   /** 团队目标名称（仅展示/兜底） */
   targetWorkflowName?: string;
+  /** Composer 气泡改写与 Cursor 附图；待执行队列派发时需原样传给 executeSession。 */
+  executeBubbleOptions?: ClaudeComposerExecuteBubbleOptions;
   createdAt: number;
 }
 

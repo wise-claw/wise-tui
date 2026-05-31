@@ -555,7 +555,16 @@ export function ClaudeChat({
         return;
       }
       pendingQueueDispatchInFlightLanesRef.current.add(laneKey);
-      const { id, promptText, targetType, targetEmployeeName, targetWorkflowId, targetWorkflowName, executorLabel } = task;
+      const {
+        id,
+        promptText,
+        targetType,
+        targetEmployeeName,
+        targetWorkflowId,
+        targetWorkflowName,
+        executorLabel,
+        executeBubbleOptions,
+      } = task;
       logWorkflowTrace("queue.dispatch.consume", {
         sessionId: session.id,
         taskId: id,
@@ -568,7 +577,12 @@ export function ClaudeChat({
       void (async () => {
         try {
           const started = await Promise.resolve(
-            onExecute(session.id, promptText, { targetType, targetEmployeeName, targetWorkflowId, targetWorkflowName }),
+            onExecute(
+              session.id,
+              promptText,
+              { targetType, targetEmployeeName, targetWorkflowId, targetWorkflowName },
+              executeBubbleOptions,
+            ),
           );
           if (started === false) {
             // 并发门闸：`executeSession` 内已 `onClaudeSpawnBlocked`，此处不再重复 toast
@@ -645,7 +659,10 @@ export function ClaudeChat({
             ? consumePending
             : pendingTasksRef.current.find((item) => item.id === consumePending);
         if (queued) {
-          dispatchPendingTask(queued);
+          dispatchPendingTask({
+            ...queued,
+            executeBubbleOptions: executeOptions ?? queued.executeBubbleOptions,
+          });
           return;
         }
         if (typeof consumePending === "string") {

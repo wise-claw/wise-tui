@@ -67,6 +67,8 @@ export function parseClaudeSessionJsonlLines(lines: string[]): ClaudeMessage[] {
     }
 
     const rowType = row.type;
+    if (rowType === "cursor_complete") continue;
+
     if (rowType === "user") {
       if (row.isMeta === true) continue;
       const msg = row.message as Record<string, unknown> | undefined;
@@ -119,8 +121,14 @@ export function parseClaudeSessionJsonlLines(lines: string[]): ClaudeMessage[] {
           continue;
         }
         const text = blocks
-          .filter((c) => c.type === "text")
-          .map((c) => (typeof c.text === "string" ? c.text : ""))
+          .filter((c) => c.type === "text" || c.type === "cursor_attachment")
+          .map((c) => {
+            if (c.type === "cursor_attachment") {
+              const path = typeof c.path === "string" ? c.path.trim() : "";
+              return path ? `[附图 ${path}]` : "";
+            }
+            return typeof c.text === "string" ? c.text : "";
+          })
           .join("");
         if (!text.trim()) continue;
         if (text.includes("<local-command-caveat>")) continue;

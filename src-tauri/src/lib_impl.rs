@@ -619,6 +619,7 @@ pub fn run() {
             cursor_agent::cursor_agent_probe,
             cursor_agent::cursor_agent_list_models,
             cursor_agent::cursor_agent_read_spawn_mcp_servers,
+            cursor_agent::load_cursor_session_jsonl_command,
             cursor_agent::execute_cursor_code,
             mcp::commands::mcp_list_servers,
             mcp::commands::mcp_save_server,

@@ -488,17 +488,21 @@ export function useWorkflowTeamAutomation({
           executeOptions?.replaceLastUserBubble === true && sameTab && replaceAt === undefined;
         const replaceFirst =
           executeOptions?.replaceFirstUserBubble === true && sameTab && !replaceLast && replaceAt === undefined;
-        return executeSession(
-          targetSid,
-          promptText,
-          replaceAt !== undefined
-            ? { replaceUserBubbleAtIndex: replaceAt }
-            : replaceLast
-              ? { replaceLastUserBubble: true }
-              : replaceFirst
-                ? { replaceFirstUserBubble: true }
-                : undefined,
-        );
+        let opts: ClaudeComposerExecuteBubbleOptions | undefined;
+        if (replaceAt !== undefined) {
+          opts = { replaceUserBubbleAtIndex: replaceAt };
+        } else if (replaceLast) {
+          opts = { replaceLastUserBubble: true };
+        } else if (replaceFirst) {
+          opts = { replaceFirstUserBubble: true };
+        }
+        if (executeOptions?.userBubblePrompt?.trim() && sameTab) {
+          opts = { ...opts, userBubblePrompt: executeOptions.userBubblePrompt };
+        }
+        if (executeOptions?.cursorAttachments && executeOptions.cursorAttachments.length > 0) {
+          opts = { ...opts, cursorAttachments: executeOptions.cursorAttachments };
+        }
+        return executeSession(targetSid, promptText, opts);
       };
       notificationHub.setControlDockMirror(sessionId, null);
 

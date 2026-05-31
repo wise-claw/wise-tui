@@ -75,6 +75,7 @@ import {
 import type { MenuProps } from "antd";
 import { logClaudeDrop } from "./drop-debug";
 import { buildClaudeOutgoingPrompt } from "../../services/claudeComposerPrompt";
+import { buildCursorComposerSendPayload } from "../../services/cursorComposerPrompt";
 import {
   contextPercentToneClassName,
   formatContextStatusHint,
@@ -178,6 +179,7 @@ interface ComposerInnerProps {
     targetEmployeeName?: string;
     targetWorkflowId?: string;
     targetWorkflowName?: string;
+    executeBubbleOptions?: ClaudeComposerExecuteBubbleOptions;
   }) => PendingExecutionTask;
   employeeMentions?: Array<{ id: string; name: string }>;
   teamMentions?: Array<{ id: string; name: string }>;
@@ -1572,13 +1574,24 @@ function ComposerInner({
       clearComposerSurfaceSync(logicalSnap.trim());
 
       let outbound: string;
+      let cursorSendPayload: Awaited<ReturnType<typeof buildCursorComposerSendPayload>> | null = null;
       try {
-        outbound = await buildClaudeOutgoingPrompt({
-          prompt: promptSnap,
-          contextItems: contextSnap,
-          images: imagesSnap,
-          repositoryPath: session.repositoryPath,
-        });
+        if (isCursorEngine && imagesSnap.length > 0) {
+          cursorSendPayload = await buildCursorComposerSendPayload({
+            prompt: promptSnap,
+            contextItems: contextSnap,
+            images: imagesSnap,
+            repositoryPath: session.repositoryPath,
+          });
+          outbound = cursorSendPayload.outbound;
+        } else {
+          outbound = await buildClaudeOutgoingPrompt({
+            prompt: promptSnap,
+            contextItems: contextSnap,
+            images: imagesSnap,
+            repositoryPath: session.repositoryPath,
+          });
+        }
       } catch (e) {
         message.error(`发送准备失败: ${e instanceof Error ? e.message : String(e)}`);
         const draft = lastSentDraftRef.current;
@@ -1641,6 +1654,16 @@ function ComposerInner({
           teamMentions,
         ) || outbound;
 
+      let executeOptions: ClaudeComposerExecuteBubbleOptions | undefined;
+      if (cursorSendPayload) {
+        executeOptions = {
+          userBubblePrompt: cursorSendPayload.userBubblePrompt,
+          ...(cursorSendPayload.cursorAttachments.length > 0
+            ? { cursorAttachments: cursorSendPayload.cursorAttachments }
+            : {}),
+        };
+      }
+
       // @终端 / @团队 立即派发，不与其他执行体共用 FIFO（避免主会话排队阻塞终端/工作流）。
       const bypassPendingQueueForIndependentExecutor =
         resolvedDispatchTarget.targetType === "employee" ||
@@ -1648,7 +1671,11 @@ function ComposerInner({
 
       if (onEnqueueAsPendingTask && !bypassPendingQueueForIndependentExecutor) {
         const target = resolvedDispatchTarget;
-        consumePending = onEnqueueAsPendingTask({ promptText: dispatchPromptText, ...target });
+        consumePending = onEnqueueAsPendingTask({
+          promptText: dispatchPromptText,
+          executeBubbleOptions: executeOptions,
+          ...target,
+        });
         sendFlowNodes.push({
           label: "加入待执行队列",
           timestamp: Date.now(),
@@ -1701,7 +1728,7 @@ function ComposerInner({
       lastSentDraftRef.current = null;
       postSendEscUndoRef.current = rollbackDraft;
       finalizeSpeechTranscriptBaselineAfterSend();
-      onExecute(session.id, dispatchPromptText, consumePending, dispatchTargetForExecute);
+      onExecute(session.id, dispatchPromptText, consumePending, dispatchTargetForExecute, executeOptions);
     },
     [
       isSessionBusy,
@@ -1712,6 +1739,7 @@ function ComposerInner({
       setImages,
       onEnqueueAsPendingTask,
       pendingExecutionTaskCount,
+      isCursorEngine,
       modelDisplayLabel,
       onTrackSendFlow,
       onExecute,
@@ -2825,6 +2853,7 @@ export interface ComposerRegionProps {
     targetEmployeeName?: string;
     targetWorkflowId?: string;
     targetWorkflowName?: string;
+    executeBubbleOptions?: ClaudeComposerExecuteBubbleOptions;
   }) => PendingExecutionTask;
   employeeMentions?: Array<{ id: string; name: string }>;
   teamMentions?: Array<{ id: string; name: string }>;

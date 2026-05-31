@@ -21,6 +21,7 @@ describe("cursorAgentExecution service", () => {
       "agent-1",
       "ctx-1",
       { demo: { type: "stdio", command: "echo", args: [] } },
+      [{ path: "/tmp/a.png", mimeType: "image/png" }],
     );
 
     expect(invoke).toHaveBeenCalledWith("execute_cursor_code", {
@@ -28,6 +29,7 @@ describe("cursorAgentExecution service", () => {
       prompt: "fix bug",
       model: "composer-2.5",
       mcpServers: { demo: { type: "stdio", command: "echo", args: [] } },
+      cursorAttachments: [{ path: "/tmp/a.png", mimeType: "image/png" }],
       invocationKey: "inv-1",
       tabSessionId: "tab-1",
       cursorAgentId: "agent-1",

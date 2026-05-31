@@ -2,6 +2,10 @@
 //!
 //! Spawns `scripts/cursor-sdk-bridge.ts` via Bun and stores `CURSOR_API_KEY` in SQLite.
 
+use crate::cursor_disk::{
+    append_cursor_session_line, build_cursor_user_turn_line, load_cursor_session_jsonl,
+};
+
 use crate::agent_registry::{Probe, ProbeResult};
 use crate::claude_commands::{ClaudeProcessState, ClaudeSessionRegistry};
 use crate::wise_db;
@@ -102,12 +106,21 @@ fn emit_cursor_complete(
     }
 }
 
+fn parse_cursor_stream_event(line: &str) -> Option<CursorStreamEvent> {
+    let trimmed = line.trim();
+    if trimmed.is_empty() || !trimmed.starts_with('{') {
+        return None;
+    }
+    serde_json::from_str(trimmed).ok()
+}
+
 fn handle_cursor_stream_event(
     app: &AppHandle,
     tab_session_id: &str,
     invocation_key: Option<&str>,
     event: CursorStreamEvent,
     cursor_agent_id: &mut Option<String>,
+    disk_project_path: Option<&str>,
 ) -> bool {
     match event.event_type.as_str() {
         "agent" => {
@@ -147,6 +160,9 @@ fn handle_cursor_stream_event(
                 .filter(|value| !value.is_empty());
             if let Some(line) = line {
                 emit_cursor_stdout_line(app, tab_session_id, line, invocation_key);
+                if let Some(project_path) = disk_project_path {
+                    let _ = append_cursor_session_line(project_path, tab_session_id, line);
+                }
             }
             true
         }
@@ -600,6 +616,27 @@ pub async fn cursor_agent_read_spawn_mcp_servers(
     .map_err(|e| format!("cursor_agent_read_spawn_mcp_servers: {e}"))?
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CursorAttachmentInput {
+    path: String,
+    #[serde(default)]
+    mime_type: Option<String>,
+}
+
+#[tauri::command]
+pub async fn load_cursor_session_jsonl_command(
+    project_path: String,
+    tab_session_id: String,
+    tail_lines: Option<usize>,
+) -> Result<Vec<String>, String> {
+    let project = project_path.trim().to_string();
+    let tab = tab_session_id.trim().to_string();
+    tokio::task::spawn_blocking(move || load_cursor_session_jsonl(&project, &tab, tail_lines))
+        .await
+        .map_err(|e| format!("load_cursor_session_jsonl: {e}"))?
+}
+
 #[tauri::command]
 pub(crate) async fn execute_cursor_code(
     app: tauri::AppHandle,
@@ -608,6 +645,7 @@ pub(crate) async fn execute_cursor_code(
     prompt: String,
     model: Option<String>,
     mcp_servers: Option<serde_json::Value>,
+    cursor_attachments: Option<Vec<CursorAttachmentInput>>,
     invocation_key: Option<String>,
     tab_session_id: Option<String>,
     cursor_agent_id: Option<String>,
@@ -628,12 +666,54 @@ pub(crate) async fn execute_cursor_code(
         .unwrap_or_else(|| format!("cursor-{}", Uuid::new_v4().simple()));
 
     let bridge = resolve_bridge_script(&app)?;
+    let attachment_pairs: Vec<(String, String)> = cursor_attachments
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|item| {
+            let path = item.path.trim();
+            if path.is_empty() {
+                return None;
+            }
+            Some((
+                path.to_string(),
+                item.mime_type
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .unwrap_or("image/png")
+                    .to_string(),
+            ))
+        })
+        .collect();
+    let user_turn_line = build_cursor_user_turn_line(
+        prompt.trim(),
+        if attachment_pairs.is_empty() {
+            None
+        } else {
+            Some(attachment_pairs.as_slice())
+        },
+    );
+    let _ = append_cursor_session_line(&project_path, &session_id, &user_turn_line);
+
+    let bridge_images: Vec<serde_json::Value> = attachment_pairs
+        .iter()
+        .map(|(path, mime)| {
+            serde_json::json!({
+                "path": path,
+                "mimeType": mime,
+            })
+        })
+        .collect();
     let mut bridge_params = serde_json::json!({
         "prompt": prompt,
         "cwd": project_path,
         "model": model.as_deref().unwrap_or("default"),
         "agentId": cursor_agent_id.as_deref().filter(|value| !value.trim().is_empty()),
+        "settingSources": ["project", "user"],
     });
+    if !bridge_images.is_empty() {
+        bridge_params["images"] = serde_json::Value::Array(bridge_images);
+    }
     if let Some(servers) = mcp_servers {
         if servers.is_object() && !servers.as_object().map(|o| o.is_empty()).unwrap_or(true) {
             bridge_params["mcpServers"] = servers;
@@ -702,6 +782,8 @@ pub(crate) async fn execute_cursor_code(
     let stream_success = Arc::new(AtomicBool::new(true));
     let cursor_agent_id_stdout = cursor_agent_id_shared.clone();
     let stream_success_stdout = stream_success.clone();
+    let disk_project_path_stdout = project_path.clone();
+    let disk_session_id_stdout = session_id.clone();
 
     tokio::spawn(async move {
         let reader = BufReader::new(stdout);
@@ -711,20 +793,15 @@ pub(crate) async fn execute_cursor_code(
             if trimmed.is_empty() {
                 continue;
             }
-            let parsed: CursorStreamEvent = match serde_json::from_str(trimmed) {
-                Ok(value) => value,
-                Err(error) => {
-                    emit_cursor_stdout_line(
-                        &app_stdout,
-                        &session_id_stdout,
-                        &cursor_assistant_stream_line(&format!(
-                            "[cursor-sdk] 无法解析 bridge 输出: {error}"
-                        )),
-                        invocation_key_stdout.as_deref(),
-                    );
-                    stream_success_stdout.store(false, Ordering::SeqCst);
-                    continue;
+            if trimmed.is_empty() || !trimmed.starts_with('{') {
+                continue;
+            }
+            let Some(parsed) = parse_cursor_stream_event(trimmed) else {
+                #[cfg(debug_assertions)]
+                if std::env::var("WISE_CURSOR_BRIDGE_DEBUG").ok().as_deref() == Some("1") {
+                    eprintln!("[cursor-sdk-bridge stdout skip] {trimmed}");
                 }
+                continue;
             };
             if parsed.event_type == "complete" {
                 if parsed.success == Some(false) {
@@ -738,6 +815,7 @@ pub(crate) async fn execute_cursor_code(
                 invocation_key_stdout.as_deref(),
                 parsed,
                 &mut guard,
+                Some(disk_project_path_stdout.as_str()),
             ) {
                 stream_success_stdout.store(false, Ordering::SeqCst);
             }
@@ -769,6 +847,8 @@ pub(crate) async fn execute_cursor_code(
     let invocation_tab_session_by_key = process_state.invocation_tab_session_by_key.clone();
     let cursor_agent_id_wait = cursor_agent_id_shared.clone();
     let stream_success_wait = stream_success.clone();
+    let disk_project_path_wait = project_path.clone();
+    let disk_session_id_wait = session_id.clone();
 
     tokio::spawn(async move {
         let exit_status = {
@@ -791,6 +871,17 @@ pub(crate) async fn execute_cursor_code(
         let final_success =
             stream_success_wait.load(Ordering::SeqCst) && exit_success;
         let cursor_agent_id = cursor_agent_id_wait.lock().await.clone();
+        let complete_line = serde_json::json!({
+            "type": "cursor_complete",
+            "success": final_success,
+            "cursorAgentId": cursor_agent_id,
+        })
+        .to_string();
+        let _ = append_cursor_session_line(
+            &disk_project_path_wait,
+            &disk_session_id_wait,
+            &complete_line,
+        );
         registry_wait.mark_completed(&session_id_wait, final_success);
         emit_cursor_complete(
             &app_wait,

@@ -9,7 +9,11 @@
 
 import { resolveCursorLocalModelId } from "./cursorSdkModel.ts";
 import { sdkMessageToClaudeStreamLines } from "./cursorSdkStream.ts";
-import { installCursorSdkStderrFilter } from "./cursorSdkStderrFilter.ts";
+import {
+  installCursorSdkStderrFilter,
+  installCursorSdkStdoutGuard,
+  withBridgeStdoutWrite,
+} from "./cursorSdkStderrFilter.ts";
 
 type BridgeRequest = {
   method: "probe" | "models.list" | "prompt" | "execute";
@@ -39,8 +43,19 @@ type CursorMcpServerConfig = {
   headers?: Record<string, string>;
 };
 
+type CursorBridgeImage = {
+  path?: string;
+  mimeType?: string;
+};
+
+type CursorSettingSource = "project" | "user" | "team" | "mdm" | "plugins" | "all";
+
+const DEFAULT_SETTING_SOURCES: CursorSettingSource[] = ["project", "user"];
+
 function emitStream(event: StreamEvent): void {
-  process.stdout.write(`${JSON.stringify(event)}\n`);
+  withBridgeStdoutWrite(() => {
+    process.stdout.write(`${JSON.stringify(event)}\n`);
+  });
 }
 
 function emitClaudeStreamLines(event: {
@@ -56,6 +71,65 @@ function emitClaudeStreamLines(event: {
   for (const line of sdkMessageToClaudeStreamLines(event)) {
     emitStream({ type: "stream_line", line: JSON.stringify(line) });
   }
+}
+
+function parseSettingSourcesParam(
+  params: Record<string, unknown> | undefined,
+): CursorSettingSource[] {
+  const raw = params?.settingSources;
+  if (!Array.isArray(raw)) return DEFAULT_SETTING_SOURCES;
+  const allowed = new Set<CursorSettingSource>([
+    "project",
+    "user",
+    "team",
+    "mdm",
+    "plugins",
+    "all",
+  ]);
+  const out = raw.filter(
+    (value): value is CursorSettingSource =>
+      typeof value === "string" && allowed.has(value as CursorSettingSource),
+  );
+  return out.length > 0 ? out : DEFAULT_SETTING_SOURCES;
+}
+
+async function loadSdkImages(raw: unknown): Promise<
+  Array<{ data: string; mimeType: string }>
+> {
+  if (!Array.isArray(raw)) return [];
+  const out: Array<{ data: string; mimeType: string }> = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const path =
+      typeof (item as CursorBridgeImage).path === "string"
+        ? (item as CursorBridgeImage).path!.trim()
+        : "";
+    const mimeType =
+      typeof (item as CursorBridgeImage).mimeType === "string" &&
+      (item as CursorBridgeImage).mimeType!.trim().length > 0
+        ? (item as CursorBridgeImage).mimeType!.trim()
+        : "image/png";
+    if (!path) continue;
+    try {
+      const bytes = await Bun.file(path).arrayBuffer();
+      out.push({
+        data: Buffer.from(bytes).toString("base64"),
+        mimeType,
+      });
+    } catch {
+      // 跳过无法读取的本地图片。
+    }
+  }
+  return out;
+}
+
+async function buildSendMessage(
+  prompt: string,
+  images: Array<{ data: string; mimeType: string }>,
+): Promise<string | { text: string; images: Array<{ data: string; mimeType: string }> }> {
+  if (images.length === 0) return prompt;
+  const text = prompt.trim() || "请查看附图。";
+  return { text, images };
 }
 
 function parseMcpServersParam(
@@ -85,7 +159,9 @@ function readRequest(): BridgeRequest {
 }
 
 function respond(payload: BridgeResponse): void {
-  process.stdout.write(`${JSON.stringify(payload)}\n`);
+  withBridgeStdoutWrite(() => {
+    process.stdout.write(`${JSON.stringify(payload)}\n`);
+  });
 }
 
 async function handleProbe(): Promise<BridgeResponse> {
@@ -141,14 +217,18 @@ async function handlePrompt(params: Record<string, unknown> | undefined): Promis
     typeof params?.model === "string" ? params.model : undefined,
   );
   const mcpServers = parseMcpServersParam(params);
+  const settingSources = parseSettingSourcesParam(params);
+  const sdkImages = await loadSdkImages(params?.images);
+  const message = await buildSendMessage(prompt, sdkImages);
 
   try {
     const { Agent } = await import("@cursor/sdk");
-    const result = await Agent.prompt(prompt, {
+    const result = await Agent.prompt(typeof message === "string" ? message : message.text, {
       apiKey,
       model: { id: modelId },
-      local: { cwd, settingSources: [] },
+      local: { cwd, settingSources },
       ...(mcpServers ? { mcpServers } : {}),
+      ...(typeof message === "object" ? { images: message.images } : {}),
     });
     return {
       ok: true,
@@ -166,6 +246,7 @@ async function handlePrompt(params: Record<string, unknown> | undefined): Promis
 
 async function handleExecute(params: Record<string, unknown> | undefined): Promise<number> {
   const restoreStderr = installCursorSdkStderrFilter();
+  const restoreStdout = installCursorSdkStdoutGuard();
   const onCancelSignal = () => {
     emitStream({ type: "error", message: "cancelled" });
     process.exit(130);
@@ -192,6 +273,9 @@ async function handleExecute(params: Record<string, unknown> | undefined): Promi
       typeof params?.model === "string" ? params.model : undefined,
     );
     const mcpServers = parseMcpServersParam(params);
+    const settingSources = parseSettingSourcesParam(params);
+    const sdkImages = await loadSdkImages(params?.images);
+    const message = await buildSendMessage(prompt, sdkImages);
     const resumeAgentId =
       typeof params?.agentId === "string" && params.agentId.trim().length > 0
         ? params.agentId.trim()
@@ -202,13 +286,13 @@ async function handleExecute(params: Record<string, unknown> | undefined): Promi
       const agent = resumeAgentId
         ? await Agent.resume(resumeAgentId, {
             apiKey,
-            local: { cwd, settingSources: [] },
+            local: { cwd, settingSources },
             ...(mcpServers ? { mcpServers } : {}),
           })
         : await Agent.create({
             apiKey,
             model: { id: modelId },
-            local: { cwd, settingSources: [] },
+            local: { cwd, settingSources },
             ...(mcpServers ? { mcpServers } : {}),
           });
 
@@ -220,18 +304,13 @@ async function handleExecute(params: Record<string, unknown> | undefined): Promi
           emitStream({ type: "agent", agentId });
         }
 
-        const run = await agent.send(prompt, {
+        const run = await agent.send(message, {
           model: { id: modelId },
           ...(mcpServers ? { mcpServers } : {}),
         });
         for await (const event of run.stream()) {
           if (event.type === "assistant") {
             emitClaudeStreamLines(event);
-            for (const block of event.message.content) {
-              if (block.type === "text" && block.text) {
-                emitStream({ type: "assistant", text: block.text });
-              }
-            }
             continue;
           }
           if (
@@ -266,6 +345,7 @@ async function handleExecute(params: Record<string, unknown> | undefined): Promi
       return 1;
     }
   } finally {
+    restoreStdout();
     restoreStderr();
   }
 }

@@ -22,6 +22,61 @@ export function isCursorSdkNoiseStderr(text: string): boolean {
   return false;
 }
 
+/** SDK / Connect 偶发把长度前缀、纯数字等噪声写到 stdout，Rust 侧只认 NDJSON 事件。 */
+export function isCursorSdkNoiseStdout(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return true;
+  if (!trimmed.startsWith("{")) return true;
+  if (/^\d+$/.test(trimmed)) return true;
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return true;
+    const type = (parsed as { type?: unknown }).type;
+    return typeof type !== "string" || type.trim().length === 0;
+  } catch {
+    return true;
+  }
+}
+
+let bridgeStdoutWriteDepth = 0;
+
+export function withBridgeStdoutWrite<T>(fn: () => T): T {
+  bridgeStdoutWriteDepth += 1;
+  try {
+    return fn();
+  } finally {
+    bridgeStdoutWriteDepth -= 1;
+  }
+}
+
+export function installCursorSdkStdoutGuard(): () => void {
+  const original = process.stdout.write.bind(process.stdout);
+  process.stdout.write = ((
+    chunk: string | Uint8Array,
+    encoding?: BufferEncoding | ((err?: Error) => void),
+    cb?: (err?: Error) => void,
+  ) => {
+    if (bridgeStdoutWriteDepth > 0) {
+      return original(chunk, encoding as BufferEncoding, cb);
+    }
+    const text = typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
+    if (isCursorSdkNoiseStdout(text)) {
+      if (typeof encoding === "function") encoding();
+      else if (cb) cb();
+      return true;
+    }
+    if (process.env.WISE_CURSOR_BRIDGE_DEBUG === "1") {
+      return original(chunk, encoding as BufferEncoding, cb);
+    }
+    if (typeof encoding === "function") encoding();
+    else if (cb) cb();
+    return true;
+  }) as typeof process.stdout.write;
+  return () => {
+    process.stdout.write = original as typeof process.stdout.write;
+  };
+}
+
 export function installCursorSdkStderrFilter(): () => void {
   const original = process.stderr.write.bind(process.stderr);
   process.stderr.write = ((
