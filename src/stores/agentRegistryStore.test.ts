@@ -4,6 +4,7 @@ import {
   getAgentRegistrySnapshot,
   publishAgentRegistry,
   selectCodexAvailable,
+  selectCursorAvailable,
 } from "./agentRegistryStore";
 
 const codexReady = {
@@ -24,6 +25,16 @@ const codexMissing = {
   failureReason: "binary not found on PATH",
 } satisfies DetectedAgent<"codex">;
 
+const cursorReady = {
+  id: "cursor",
+  name: "Cursor SDK",
+  kind: "cursor",
+  available: true,
+  backend: "cursor",
+  command: "cursor-sdk",
+  detectedAt: "2026-05-24T00:00:00.000Z",
+} satisfies DetectedAgent<"cursor">;
+
 describe("agentRegistryStore", () => {
   beforeEach(() => {
     publishAgentRegistry([]);
@@ -37,5 +48,11 @@ describe("agentRegistryStore", () => {
 
     publishAgentRegistry([codexReady]);
     expect(selectCodexAvailable(getAgentRegistrySnapshot())).toBe(true);
+  });
+
+  test("selectCursorAvailable reflects cursor availability after publish", () => {
+    expect(selectCursorAvailable(getAgentRegistrySnapshot())).toBe(false);
+    publishAgentRegistry([cursorReady]);
+    expect(selectCursorAvailable(getAgentRegistrySnapshot())).toBe(true);
   });
 });

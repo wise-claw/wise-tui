@@ -26,7 +26,10 @@ import {
 import { runWhenIdle } from "./utils/deferIdle";
 import { readVisiblePollIntervalMs } from "./utils/adaptivePoll";
 import { isSessionBoundAsRepositoryMain } from "./utils/repositoryMainSessionBinding";
-import { resolveSessionExecutionEngine } from "./utils/sessionExecutionEngine";
+import {
+  resolveEngineForSession,
+  resolveRepositoryPathForSessionExecution,
+} from "./utils/sessionExecutionEngine";
 import {
   capWorkflowTaskEvents,
   collectLiveWorkflowTaskIds,
@@ -35,6 +38,7 @@ import {
   removeWorkflowTasksForSessionCreators,
 } from "./utils/pruneWorkflowTaskAuxMaps";
 import { useAgentRegistryCodexAvailable } from "./hooks/useAgentRegistryCodexAvailable";
+import { useAgentRegistryCursorAvailable } from "./hooks/useAgentRegistryCursorAvailable";
 import { useCcWorkflowStudioWorkspace } from "./hooks/useCcWorkflowStudioWorkspace";
 import {
   authorView,
@@ -709,11 +713,43 @@ export default function App() {
     ((session: ClaudeSession) => import("./types").SessionExecutionEngine) | null
   >(null);
 
+  const resolveExecutionRepositoryPathRef = useRef<
+    ((session: ClaudeSession) => string) | null
+  >(null);
+
   const codexAvailable = useAgentRegistryCodexAvailable();
+  const cursorAvailable = useAgentRegistryCursorAvailable();
+
+  const activeRepositoryIdLatestRef = useRef(activeRepositoryId);
+  activeRepositoryIdLatestRef.current = activeRepositoryId;
 
   useEffect(() => {
-    resolveExecutionEngineRef.current = (session) =>
-      resolveSessionExecutionEngine(session, repositoriesLatestRef.current, employeesLatestRef.current);
+    resolveExecutionEngineRef.current = (session) => {
+      const repos = repositoriesLatestRef.current;
+      const activeRepo =
+        activeRepositoryIdLatestRef.current != null
+          ? repos.find((item) => item.id === activeRepositoryIdLatestRef.current) ?? null
+          : null;
+      return resolveEngineForSession(
+        session,
+        repos,
+        employeesLatestRef.current,
+        activeRepo,
+      );
+    };
+    resolveExecutionRepositoryPathRef.current = (session) => {
+      const repos = repositoriesLatestRef.current;
+      const activeRepo =
+        activeRepositoryIdLatestRef.current != null
+          ? repos.find((item) => item.id === activeRepositoryIdLatestRef.current) ?? null
+          : null;
+      return resolveRepositoryPathForSessionExecution(
+        session,
+        repos,
+        employeesLatestRef.current,
+        activeRepo,
+      );
+    };
   });
 
   const handleUpdateEmployeeExecutionEngine = useCallback(
@@ -814,6 +850,7 @@ export default function App() {
     claudeConcurrencyInvokeContextRef,
     claudeSpawnExtrasContextRef,
     resolveExecutionEngineRef,
+    resolveExecutionRepositoryPathRef,
     onClaudeSpawnBlocked: (blockedMessage) => {
       message.warning(blockedMessage);
     },
@@ -3274,6 +3311,7 @@ export default function App() {
         onUpdateRepositoryExecutionEngine: handleUpdateRepositoryExecutionEngine,
         onUpdateEmployeeExecutionEngine: handleUpdateEmployeeExecutionEngine,
         codexAvailable,
+        cursorAvailable,
         onOpenExecutionEnvironment: handleOpenExecutionEnvironment,
         onExecuteSession: handleComposerExecute,
         onSendMessage: handleSendMessageWithAtMention,

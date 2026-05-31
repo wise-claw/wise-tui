@@ -137,6 +137,7 @@ interface ComposerInnerProps {
   onSessionConnectionKindChange?: (kind: ClaudeSessionConnectionKind) => void;
   sessionExecutionEngine?: SessionExecutionEngine;
   codexAvailable?: boolean;
+  cursorAvailable?: boolean;
   onSessionExecutionEngineChange?: (engine: SessionExecutionEngine) => void;
   onOpenExecutionEnvironment?: () => void;
   /** `retractLastUserTurn`：Esc 撤回刚发时从 transcript 去掉本轮 user/assistant 并杀进程 */
@@ -377,6 +378,7 @@ function ComposerInner({
   onSessionConnectionKindChange,
   sessionExecutionEngine = "claude",
   codexAvailable = true,
+  cursorAvailable = true,
   onSessionExecutionEngineChange,
   onOpenExecutionEnvironment,
   onCancel: _onCancel,
@@ -2386,7 +2388,7 @@ function ComposerInner({
         onClick={(e) => e.stopPropagation()}
       >
         {isSessionBusy ? (
-          <Tooltip title="结束当前 Claude Code 运行" placement="top">
+          <Tooltip title="结束当前运行" placement="top">
             <Button
               type="text"
               size="small"
@@ -2401,6 +2403,7 @@ function ComposerInner({
         <ComposerRuntimeSettingsTrigger
           engine={sessionExecutionEngine}
           codexAvailable={codexAvailable}
+          cursorAvailable={cursorAvailable}
           disabled={isSessionBusy}
           onEngineChange={onSessionExecutionEngineChange}
           onOpenExecutionEnvironment={onOpenExecutionEnvironment}
@@ -2456,6 +2459,7 @@ function ComposerInner({
       onSessionConnectionKindChange,
       sessionExecutionEngine,
       codexAvailable,
+      cursorAvailable,
       onSessionExecutionEngineChange,
       onOpenExecutionEnvironment,
       model,
@@ -2727,6 +2731,7 @@ export interface ComposerRegionProps {
   onSessionConnectionKindChange?: (kind: ClaudeSessionConnectionKind) => void;
   sessionExecutionEngine?: SessionExecutionEngine;
   codexAvailable?: boolean;
+  cursorAvailable?: boolean;
   onSessionExecutionEngineChange?: (engine: SessionExecutionEngine) => void;
   onOpenExecutionEnvironment?: () => void;
   /** `retractLastUserTurn`：Esc 撤回刚发时从 transcript 去掉本轮 user/assistant 并杀进程 */

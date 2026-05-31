@@ -62,7 +62,7 @@ export const AUTHOR_TAB_GROUPS: Array<{ title: string; items: AuthorTabDefinitio
         description: "精选 50+ 插件，一键安装 oh-my-claudecode 等",
         icon: <BlockOutlined />,
       },
-      { key: "engine-registry", label: "执行环境", description: "本机 Claude Code 与预留运行入口", icon: <ThunderboltOutlined /> },
+      { key: "engine-registry", label: "执行环境", description: "本机 CLI 与 Cursor SDK 可编程引擎", icon: <ThunderboltOutlined /> },
     ],
   },
   {

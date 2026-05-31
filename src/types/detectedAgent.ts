@@ -3,7 +3,7 @@
  * possibly remote endpoints later. Assistants are configuration presets that
  * reference an engine; keep detection and assistant configuration separate.
  */
-export type DetectedAgentKind = "claude" | "codex" | "gemini" | "opencode" | "custom";
+export type DetectedAgentKind = "claude" | "codex" | "gemini" | "opencode" | "cursor" | "custom";
 
 type SharedFields = {
   id: string;
@@ -21,6 +21,7 @@ type KindFields = {
   codex: { command: "codex" };
   gemini: { command: "gemini" };
   opencode: { command: "opencode" };
+  cursor: { command: "cursor-sdk" };
   custom: {
     command: string;
     args: string[];

@@ -41,7 +41,7 @@ pub(crate) struct StoredRepository {
     /// 主 Owner 子代理展示名（与 `repositoryName` 中 `…/员工:姓名` 的姓名一致）；未设置则为人类主会话逻辑。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     main_owner_agent_name: Option<String>,
-    /// 主会话执行引擎：`claude` | `codex`。
+    /// 主会话执行引擎：`claude` | `codex` | `cursor`。
     #[serde(default = "default_execution_engine", alias = "execution_engine")]
     execution_engine: String,
     branch: Option<String>,
@@ -64,6 +64,7 @@ fn default_execution_engine() -> String {
 fn normalize_execution_engine(raw: Option<String>) -> String {
     match raw.as_deref().map(str::trim) {
         Some("codex") => "codex".to_string(),
+        Some("cursor") => "cursor".to_string(),
         _ => "claude".to_string(),
     }
 }

@@ -127,6 +127,7 @@ export interface MultiPaneSharedChatProps {
     engine: SessionExecutionEngine,
   ) => void | Promise<void>;
   codexAvailable: boolean;
+  cursorAvailable: boolean;
   onOpenExecutionEnvironment?: () => void;
   onCancelSession: (sessionId: string, opts?: { retractLastUserTurn?: boolean }) => void;
   onRespondToQuestion: (sessionId: string, answers: string[], customAnswer?: string) => void;
@@ -248,6 +249,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
         onUpdateRepositoryExecutionEngine={shared.onUpdateRepositoryExecutionEngine}
         onUpdateEmployeeExecutionEngine={shared.onUpdateEmployeeExecutionEngine}
         codexAvailable={shared.codexAvailable}
+        cursorAvailable={shared.cursorAvailable}
         onOpenExecutionEnvironment={shared.onOpenExecutionEnvironment}
         onCancel={onCancel}
         respondQuestionAt={shared.onRespondToQuestion}
@@ -462,6 +464,7 @@ const MultiPaneExtraPaneCell = memo(
             onUpdateRepositoryExecutionEngine={shared.onUpdateRepositoryExecutionEngine}
             onUpdateEmployeeExecutionEngine={shared.onUpdateEmployeeExecutionEngine}
             codexAvailable={shared.codexAvailable}
+        cursorAvailable={shared.cursorAvailable}
             onOpenExecutionEnvironment={shared.onOpenExecutionEnvironment}
             onCancel={(opts) => shared.onCancelSession(sessionId, opts)}
             respondQuestionAt={shared.onRespondToQuestion}

@@ -7,6 +7,10 @@ import {
   capAssistantStreamBufferText,
 } from "./claudeStreamAssembler";
 import {
+  extractCursorAgentIdFromCompletePayload,
+  extractCursorAgentIdFromStreamLine,
+} from "./claudeStreamParser";
+import {
   appendSystemMessageBySessionOrClaudeId,
   extractLatestAssistantPlainText,
   finalizeSessionAfterComplete,
@@ -254,6 +258,17 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
         setSessions((prev) => appendSystemMessageBySessionOrClaudeId(prev, tid, systemErrMsg));
       }
     }
+    const cursorAgentId = extractCursorAgentIdFromStreamLine(line);
+    if (cursorAgentId) {
+      onStreamActivity?.(tid);
+      setSessions((prev) =>
+        prev.map((s) => {
+          if (s.id !== tid && s.claudeSessionId !== tid) return s;
+          return { ...s, claudeSessionId: cursorAgentId };
+        }),
+      );
+      onClaudeSessionIdAssigned?.(tid, cursorAgentId);
+    }
     const { parts, isInit, sessionId: realSessionId } = extractPartsFromStreamLine(line);
     const dedupedParts = parts.filter((part) => {
       if (part.type !== "text") return true;
@@ -418,7 +433,12 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     }
     setSessions((prev) =>
       finalizeSessionAfterComplete({
-        sessions: prev,
+        sessions: prev.map((s) => {
+          if (s.id !== tid && s.claudeSessionId !== tid) return s;
+          const boundCursorAgentId = extractCursorAgentIdFromCompletePayload(payload);
+          if (!boundCursorAgentId) return s;
+          return { ...s, claudeSessionId: boundCursorAgentId };
+        }),
         targetId: tid,
         success,
         noAssistantReply,

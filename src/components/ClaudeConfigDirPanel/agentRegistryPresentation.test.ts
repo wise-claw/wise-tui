@@ -77,11 +77,24 @@ describe("agent registry presentation helpers", () => {
     expect(canInstallBuiltinAgent(agents[0])).toBe(false);
     expect(canInstallBuiltinAgent(agents[1])).toBe(true);
     expect(canInstallBuiltinAgent(agents[2])).toBe(false);
+    expect(
+      canInstallBuiltinAgent({
+        id: "cursor",
+        name: "Cursor SDK",
+        kind: "cursor",
+        available: false,
+        backend: "cursor",
+        command: "cursor-sdk",
+        detectedAt: "2026-05-17T00:00:00.000Z",
+        failureReason: "未配置 Cursor API Key",
+      }),
+    ).toBe(false);
     expect(getBuiltinInstallCommand("codex")).toBe("npm install -g @openai/codex");
     expect(getAgentKindLabel("claude")).toBe("Claude");
     expect(getAgentKindLabel("codex")).toBe("Codex");
     expect(getAgentKindLabel("gemini")).toBe("Gemini");
     expect(getAgentKindLabel("opencode")).toBe("OpenCode");
+    expect(getAgentKindLabel("cursor")).toBe("Cursor SDK");
     expect(getAgentKindLabel("custom")).toBe("自定义");
     expect(getBuiltinInstallCommand("opencode")).toBe("npm install -g opencode-ai@latest");
     expect(getAgentPathLabel(agents[0])).toBe("/usr/local/bin/claude");

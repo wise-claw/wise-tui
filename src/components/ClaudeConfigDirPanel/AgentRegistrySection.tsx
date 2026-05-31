@@ -4,6 +4,7 @@ import {
   CopyOutlined,
   DeleteOutlined,
   EditOutlined,
+  KeyOutlined,
   PlusOutlined,
   ReloadOutlined,
   SearchOutlined,
@@ -41,6 +42,7 @@ import {
   AuthorPanelPageShell,
 } from "../AuthorPanel/AuthorPanelPageShell";
 import "./index.css";
+import { CursorSdkConfigModal } from "./CursorSdkConfigModal";
 
 interface CustomAgentFormValues {
   id?: string;
@@ -63,6 +65,7 @@ export function AgentRegistrySection() {
   const [testedFingerprint, setTestedFingerprint] = useState<string | null>(null);
   const [draftFingerprint, setDraftFingerprint] = useState("");
   const [installingId, setInstallingId] = useState<string | null>(null);
+  const [cursorModalOpen, setCursorModalOpen] = useState(false);
   const [form] = Form.useForm<CustomAgentFormValues>();
   const aliveRef = useRef(true);
 
@@ -217,7 +220,7 @@ export function AgentRegistrySection() {
       className="app-agent-registry-section"
       icon={<ThunderboltOutlined />}
       title="执行环境"
-      subtitle="本机 Claude Code 探测与未来运行入口预留"
+      subtitle="本机 CLI 与 Cursor SDK 可编程引擎探测"
       actions={
         <Space size={8} wrap>
           <Input
@@ -322,6 +325,7 @@ export function AgentRegistrySection() {
                 onEdit={openEditModal}
                 onDelete={(id) => void handleDelete(id)}
                 onInstall={(entry) => void handleInstall(entry)}
+                onConfigureCursor={() => setCursorModalOpen(true)}
               />
             ))}
           </div>
@@ -389,6 +393,12 @@ export function AgentRegistrySection() {
           />
         ) : null}
       </Modal>
+
+      <CursorSdkConfigModal
+        open={cursorModalOpen}
+        onClose={() => setCursorModalOpen(false)}
+        onSaved={() => reload(true)}
+      />
     </AuthorPanelPageShell>
   );
 }
@@ -400,9 +410,10 @@ interface AgentRegistryRowProps {
   onEdit: (agent: DetectedAgent<"custom">) => void;
   onDelete: (id: string) => void;
   onInstall: (agent: DetectedAgent<BuiltinInstallableKind>) => void;
+  onConfigureCursor: () => void;
 }
 
-function AgentRegistryRow({ agent, busy, installing, onEdit, onDelete, onInstall }: AgentRegistryRowProps) {
+function AgentRegistryRow({ agent, busy, installing, onEdit, onDelete, onInstall, onConfigureCursor }: AgentRegistryRowProps) {
   const pathText = getAgentPathLabel(agent);
 
   const handleCopy = useCallback(() => {
@@ -496,6 +507,19 @@ function AgentRegistryRow({ agent, busy, installing, onEdit, onDelete, onInstall
                 删除
               </Button>
             </Popconfirm>
+          </Space>
+        ) : isAgentKind(agent, "cursor") ? (
+          <Space size={4} className="app-agent-registry-card__actions">
+            <Button
+              size="small"
+              type="primary"
+              ghost
+              icon={<KeyOutlined />}
+              disabled={busy}
+              onClick={onConfigureCursor}
+            >
+              配置 API Key
+            </Button>
           </Space>
         ) : canInstallBuiltinAgent(agent) ? (
           <Space size={4} className="app-agent-registry-card__actions">

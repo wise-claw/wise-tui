@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { EmployeeItem, Repository } from "../types";
-import { resolveSessionExecutionEngine } from "./sessionExecutionEngine";
+import {
+  resolveEngineForSession,
+  resolveSessionExecutionEngine,
+  resolveExecutionRepositoryPath,
+} from "./sessionExecutionEngine";
 
 const repo = (overrides: Partial<Repository> = {}): Repository =>
   ({
@@ -48,6 +52,16 @@ describe("resolveSessionExecutionEngine", () => {
     ).toBe("codex");
   });
 
+  test("uses cursor executionEngine when configured", () => {
+    expect(
+      resolveSessionExecutionEngine(
+        { repositoryPath: "/repo/demo", repositoryName: "demo" },
+        [repo({ executionEngine: "cursor" })],
+        [],
+      ),
+    ).toBe("cursor");
+  });
+
   test("uses employee executionEngine for employee session", () => {
     expect(
       resolveSessionExecutionEngine(
@@ -56,5 +70,47 @@ describe("resolveSessionExecutionEngine", () => {
         [employee({ executionEngine: "codex" })],
       ),
     ).toBe("codex");
+  });
+
+  test("uses activeRepository for project-root session", () => {
+    expect(
+      resolveSessionExecutionEngine(
+        { repositoryPath: "/work/eco", repositoryName: "Project: eco" },
+        [
+          repo({ id: 1, name: "eco-ai-web", path: "/work/eco/eco-ai-web", executionEngine: "claude" }),
+          repo({ id: 2, name: "eco-ai", path: "/work/eco/eco-ai", executionEngine: "codex" }),
+        ],
+        [],
+        repo({ id: 2, name: "eco-ai", path: "/work/eco/eco-ai", executionEngine: "codex" }),
+      ),
+    ).toBe("codex");
+  });
+
+  test("resolveEngineForSession matches composer when project session uses sidebar repo", () => {
+    const ecoAiWeb = repo({
+      id: 1,
+      name: "eco-ai-web",
+      path: "/work/eco/eco-ai-web",
+      executionEngine: "cursor",
+    });
+    expect(
+      resolveEngineForSession(
+        { repositoryPath: "/work/eco", repositoryName: "Project: eco" },
+        [ecoAiWeb],
+        [],
+        ecoAiWeb,
+      ),
+    ).toBe("cursor");
+  });
+
+  test("resolves execution repository path from activeRepository for project session", () => {
+    expect(
+      resolveExecutionRepositoryPath(
+        { repositoryPath: "/work/eco", repositoryName: "Project: eco" },
+        [repo({ id: 1, name: "eco-ai-web", path: "/work/eco/eco-ai-web" })],
+        [],
+        repo({ id: 1, name: "eco-ai-web", path: "/work/eco/eco-ai-web" }),
+      ),
+    ).toBe("/work/eco/eco-ai-web");
   });
 });

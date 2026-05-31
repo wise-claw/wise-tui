@@ -35,3 +35,8 @@ export function selectCodexAvailable(snap: AgentRegistryStoreSnapshot): boolean 
   if (!snap.loaded) return false;
   return snap.agents.some((agent) => isAgentKind(agent, "codex") && agent.available);
 }
+
+export function selectCursorAvailable(snap: AgentRegistryStoreSnapshot): boolean {
+  if (!snap.loaded) return false;
+  return snap.agents.some((agent) => isAgentKind(agent, "cursor") && agent.available);
+}

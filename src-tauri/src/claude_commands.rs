@@ -49,11 +49,13 @@ pub(crate) struct ClaudeProcessState {
     /// 当前可写 stdin 所属的 Claude session_id（用于前端定向回包校验）。
     current_session_id: Arc<TokioMutex<Option<String>>>,
     /// Oneshot 等「非 current_process 托管」子进程：按 Claude session_id 保存 wait 句柄，供 cancel / 同会话再次 resume 时 kill。
-    active_child_by_claude_session:
+    pub(crate) active_child_by_claude_session:
         Arc<TokioMutex<HashMap<String, Arc<TokioMutex<Option<Child>>>>>>,
     /// Oneshot invocation 早于 `system.init.session_id` 可见；按 invocation_key 保存 wait 句柄，支持精准取消。
     pub(crate) active_child_by_invocation_key:
         Arc<TokioMutex<HashMap<String, Arc<TokioMutex<Option<Child>>>>>>,
+    /// invocation_key → Wise tab session id（Cursor/Codex oneshot 取消时补发 complete）。
+    pub(crate) invocation_tab_session_by_key: Arc<TokioMutex<HashMap<String, String>>>,
     /// 与前端「项目+仓库并发」一致：按 `projectId:repositoryId` 计数当前已占用的 Claude spawn 槽位。
     spawn_slots_by_scope: Arc<TokioMutex<HashMap<String, u32>>>,
 }
@@ -67,6 +69,7 @@ impl Default for ClaudeProcessState {
             current_session_id: Arc::new(TokioMutex::new(None)),
             active_child_by_claude_session: Arc::new(TokioMutex::new(HashMap::new())),
             active_child_by_invocation_key: Arc::new(TokioMutex::new(HashMap::new())),
+            invocation_tab_session_by_key: Arc::new(TokioMutex::new(HashMap::new())),
             spawn_slots_by_scope: Arc::new(TokioMutex::new(HashMap::new())),
         }
     }
@@ -2234,6 +2237,10 @@ pub(crate) async fn cancel_claude_invocation(
     if inv.is_empty() {
         return Err("invocation_key 不能为空".to_string());
     }
+    let tab_session_id = {
+        let mut m = process_state.invocation_tab_session_by_key.lock().await;
+        m.remove(inv)
+    };
     let killed = {
         let mut m = process_state.active_child_by_invocation_key.lock().await;
         m.remove(inv)
@@ -2244,6 +2251,20 @@ pub(crate) async fn cancel_claude_invocation(
             let _ = proc.kill().await;
         }
         *slot = None;
+        let complete_payload = ClaudeCompletePayload {
+            session_id: tab_session_id
+                .clone()
+                .unwrap_or_else(|| inv.to_string()),
+            success: false,
+            structured_verdict: None,
+        };
+        let _ = app.emit(
+            &format!("claude-complete:invocation:{}", inv),
+            &complete_payload,
+        );
+        if let Some(sid) = tab_session_id {
+            let _ = app.emit(&format!("claude-complete:{}", sid), &complete_payload);
+        }
         Ok(true)
     } else {
         Ok(false)

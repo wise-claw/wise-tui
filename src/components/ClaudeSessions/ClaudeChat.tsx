@@ -63,7 +63,7 @@ import {
   resolveOwnerHintForSession,
   WISE_SESSION_OWNER_HINTS_CHANGED_EVENT,
 } from "../../utils/sessionOwnerHints";
-import { resolveSessionExecutionEngine } from "../../utils/sessionExecutionEngine";
+import { resolveEngineForSession } from "../../utils/sessionExecutionEngine";
 import { pickSessionForRepositorySidebarSelect } from "../../utils/claudeSessionSelection";
 import { useComposerSpeechPreferences } from "../../hooks/useComposerSpeechPreferences";
 import {
@@ -169,6 +169,7 @@ interface Props {
     engine: SessionExecutionEngine,
   ) => void | Promise<void>;
   codexAvailable?: boolean;
+  cursorAvailable?: boolean;
   onOpenExecutionEnvironment?: () => void;
   onCancel: (opts?: { retractLastUserTurn?: boolean }) => void;
   // Dock props
@@ -300,6 +301,7 @@ export function ClaudeChat({
   onUpdateRepositoryExecutionEngine,
   onUpdateEmployeeExecutionEngine,
   codexAvailable = true,
+  cursorAvailable = true,
   onOpenExecutionEnvironment,
   onCancel,
   todos,
@@ -1055,8 +1057,8 @@ export function ClaudeChat({
   const questionDockTabs = useQuestionDockTabsForRepository(session, sessions, sessionOwnerHints);
 
   const sessionExecutionEngine = useMemo(
-    () => resolveSessionExecutionEngine(session, repositories, employees),
-    [session, repositories, employees],
+    () => resolveEngineForSession(session, repositories, employees, sessionRepository),
+    [session, repositories, employees, sessionRepository],
   );
 
   const handleSessionExecutionEngineChange = useCallback(
@@ -1071,25 +1073,17 @@ export function ClaudeChat({
           return;
         }
       }
-      const repo =
-        activeRepository ??
-        repositories.find(
-          (item) =>
-            item.path.trim() === session.repositoryPath.trim() ||
-            item.name.trim() === session.repositoryName.split("/")[0]?.trim(),
-        );
+      const repo = sessionRepository;
       if (repo) {
         void onUpdateRepositoryExecutionEngine?.(repo.id, engine);
       }
     },
     [
-      activeRepository,
       employees,
       onUpdateEmployeeExecutionEngine,
       onUpdateRepositoryExecutionEngine,
-      repositories,
       session.repositoryName,
-      session.repositoryPath,
+      sessionRepository,
     ],
   );
 
@@ -1736,6 +1730,7 @@ export function ClaudeChat({
           onSessionConnectionKindChange={onSessionConnectionKindChange}
           sessionExecutionEngine={sessionExecutionEngine}
           codexAvailable={codexAvailable}
+          cursorAvailable={cursorAvailable}
           onOpenExecutionEnvironment={onOpenExecutionEnvironment}
           onSessionExecutionEngineChange={handleSessionExecutionEngineChange}
           onCancel={onCancel}

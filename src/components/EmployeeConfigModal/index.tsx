@@ -417,7 +417,7 @@ export function EmployeeConfigModal({
           initialValue="claude"
         >
           <Select
-            options={(["claude", "codex"] as const).map((key) => ({
+            options={(["claude", "codex", "cursor"] as const).map((key) => ({
               value: key,
               label: SESSION_EXECUTION_ENGINE_LABELS[key].title,
             }))}

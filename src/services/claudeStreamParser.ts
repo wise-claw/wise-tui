@@ -58,6 +58,32 @@ function extractPartsFromStreamDelta(delta: unknown): MessagePart[] {
  * Extract structured parts from a Claude stream-json line。
  * 与 Hub 一致地对 `stream_event` 等外壳解包，避免仅 Hub 能解析 AskUserQuestion 而 UI 气泡已展示、Dock 未写入。
  */
+export function extractCursorAgentIdFromStreamLine(line: string): string | null {
+  try {
+    const parsed: unknown = JSON.parse(line);
+    const json =
+      parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : null;
+    if (!json || json.type !== "cursor_agent") return null;
+    const raw = json.agentId ?? json.agent_id;
+    if (typeof raw !== "string") return null;
+    const trimmed = raw.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  } catch {
+    return null;
+  }
+}
+
+export function extractCursorAgentIdFromCompletePayload(payload: unknown): string | null {
+  if (payload === null || typeof payload !== "object" || Array.isArray(payload)) return null;
+  const raw = (payload as Record<string, unknown>).cursorAgentId
+    ?? (payload as Record<string, unknown>).cursor_agent_id;
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 export function extractPartsFromStreamLine(line: string): { parts: MessagePart[]; isInit: boolean; sessionId: string | null } {
   try {
     const parsed: unknown = JSON.parse(line);

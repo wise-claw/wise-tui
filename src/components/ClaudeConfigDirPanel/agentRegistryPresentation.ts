@@ -1,6 +1,6 @@
 import { isAgentKind, type DetectedAgent, type DetectedAgentKind } from "../../types/detectedAgent";
 
-export type BuiltinInstallableKind = Exclude<DetectedAgentKind, "custom">;
+export type BuiltinInstallableKind = Exclude<DetectedAgentKind, "custom" | "cursor">;
 
 export type AgentRegistryFilter = "all" | "available" | "custom" | "errors";
 
@@ -42,7 +42,11 @@ export function getEmptyDescription(filter: AgentRegistryFilter, query: string):
 export function canInstallBuiltinAgent(
   agent: DetectedAgent,
 ): agent is DetectedAgent<BuiltinInstallableKind> {
-  return agent.kind !== "custom" && !agent.available;
+  return (
+    agent.kind !== "custom" &&
+    agent.kind !== "cursor" &&
+    !agent.available
+  );
 }
 
 export function getBuiltinInstallCommand(kind: BuiltinInstallableKind): string {
@@ -68,6 +72,8 @@ export function getAgentKindLabel(kind: DetectedAgent["kind"]): string {
       return "Gemini";
     case "opencode":
       return "OpenCode";
+    case "cursor":
+      return "Cursor SDK";
     case "custom":
       return "自定义";
   }
@@ -85,7 +91,12 @@ export function describeAgentRuntime(agent: DetectedAgent): string {
     const env = Object.keys(agent.env).length;
     return `预留命令 · ${args} · ${env} 个环境变量`;
   }
-  const runtimeScope = agent.kind === "claude" ? "当前主运行时" : "未来运行入口预留";
+  const runtimeScope =
+    agent.kind === "claude"
+      ? "当前主运行时"
+      : agent.kind === "cursor"
+        ? "Cursor SDK 可编程引擎"
+        : "未来运行入口预留";
   return `自动探测 · ${agent.command} · ${runtimeScope} · ${agent.available ? "本机命令就绪" : "等待本机命令就绪"}`;
 }
 

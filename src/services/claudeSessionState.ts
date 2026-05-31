@@ -352,6 +352,15 @@ export function isClaudeSessionRunningInHostOrUi(
  * `registryKnownSessionIds`：宿主在 `mark_completed` 之后、`remove` 之前会短暂保留 `status: completed/cancelled`
  * 的条目；若降级判断仅用 `status===running` 的集合，会把该 sid 当成「已不在表」而误把 UI 打成 idle。
  */
+function sessionRegistryIds(session: ClaudeSession): string[] {
+  const ids = new Set<string>();
+  const claudeSid = (session.claudeSessionId ?? "").trim();
+  const tabId = session.id.trim();
+  if (claudeSid) ids.add(claudeSid);
+  if (tabId) ids.add(tabId);
+  return [...ids];
+}
+
 export function reconcileSessionStatusesWithRunningRegistry(
   sessions: ClaudeSession[],
   runningClaudeSessionIds: ReadonlySet<string>,
@@ -361,15 +370,21 @@ export function reconcileSessionStatusesWithRunningRegistry(
   const now = Date.now();
   let changed = false;
   const next = sessions.map((s) => {
-    const sid = (s.claudeSessionId ?? "").trim();
-    if (!sid) return s;
-    const inRunningRegistry = runningClaudeSessionIds.has(sid);
-    const knownInRegistry =
-      registryKnownSessionIds != null ? registryKnownSessionIds.has(sid) : inRunningRegistry;
+    const registryIds = sessionRegistryIds(s);
+    if (registryIds.length === 0) return s;
+    const inRunningRegistry = registryIds.some((id) => runningClaudeSessionIds.has(id));
+    const knownInRegistry = registryIds.some((id) =>
+      registryKnownSessionIds != null
+        ? registryKnownSessionIds.has(id)
+        : runningClaudeSessionIds.has(id),
+    );
     const uiBusy = s.status === "running" || s.status === "connecting";
     if (!knownInRegistry && uiBusy) {
-      const until = registryBootstrapDeadlineBySid?.get(sid);
-      if (until !== undefined && now < until) {
+      const hasBootstrapGrace = registryIds.some((id) => {
+        const until = registryBootstrapDeadlineBySid?.get(id);
+        return until !== undefined && now < until;
+      });
+      if (hasBootstrapGrace) {
         return s;
       }
       changed = true;

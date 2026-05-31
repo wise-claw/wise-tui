@@ -54,6 +54,7 @@ pub enum DetectedAgent {
     Codex(SyntheticAgent),
     Gemini(SyntheticAgent),
     OpenCode(SyntheticAgent),
+    Cursor(SyntheticAgent),
     Custom(CustomAgent),
 }
 
@@ -155,7 +156,7 @@ impl AgentRegistry {
         }
 
         let custom_records = load_custom_agents(db)?;
-        let mut agents = detect_builtin_agents(probe).await;
+        let mut agents = detect_builtin_agents(probe, db).await;
         agents.extend(detect_custom_agents(custom_records, probe).await);
         let agents = deduplicate_agents(agents);
         self.replace_agents(agents)
@@ -165,13 +166,14 @@ impl AgentRegistry {
     pub async fn refresh_builtin(
         &self,
         force: bool,
+        db: &Mutex<Connection>,
         probe: &dyn Probe,
     ) -> Result<Vec<DetectedAgent>, String> {
         if let Some(cached) = self.cached_snapshot(force)? {
             return Ok(cached);
         }
 
-        let mut agents = detect_builtin_agents(probe).await;
+        let mut agents = detect_builtin_agents(probe, db).await;
         agents.extend(
             self.snapshot()?
                 .into_iter()
@@ -198,7 +200,7 @@ impl AgentRegistry {
             .filter(|agent| !matches!(agent, DetectedAgent::Custom(_)))
             .collect();
         if agents.is_empty() {
-            agents = detect_builtin_agents(probe).await;
+            agents = detect_builtin_agents(probe, db).await;
         }
         agents.extend(detect_custom_agents(custom_records, probe).await);
         let agents = deduplicate_agents(agents);
@@ -253,7 +255,8 @@ impl DetectedAgent {
             DetectedAgent::Claude(agent)
             | DetectedAgent::Codex(agent)
             | DetectedAgent::Gemini(agent)
-            | DetectedAgent::OpenCode(agent) => &agent.id,
+            | DetectedAgent::OpenCode(agent)
+            | DetectedAgent::Cursor(agent) => &agent.id,
             DetectedAgent::Custom(agent) => &agent.id,
         }
     }
@@ -263,7 +266,8 @@ impl DetectedAgent {
             DetectedAgent::Claude(agent)
             | DetectedAgent::Codex(agent)
             | DetectedAgent::Gemini(agent)
-            | DetectedAgent::OpenCode(agent) => &agent.name,
+            | DetectedAgent::OpenCode(agent)
+            | DetectedAgent::Cursor(agent) => &agent.name,
             DetectedAgent::Custom(agent) => &agent.name,
         }
     }
@@ -273,7 +277,8 @@ impl DetectedAgent {
             DetectedAgent::Claude(agent)
             | DetectedAgent::Codex(agent)
             | DetectedAgent::Gemini(agent)
-            | DetectedAgent::OpenCode(agent) => agent.available,
+            | DetectedAgent::OpenCode(agent)
+            | DetectedAgent::Cursor(agent) => agent.available,
             DetectedAgent::Custom(agent) => agent.available,
         }
     }
@@ -283,7 +288,8 @@ impl DetectedAgent {
             DetectedAgent::Claude(agent)
             | DetectedAgent::Codex(agent)
             | DetectedAgent::Gemini(agent)
-            | DetectedAgent::OpenCode(agent) => &agent.backend,
+            | DetectedAgent::OpenCode(agent)
+            | DetectedAgent::Cursor(agent) => &agent.backend,
             DetectedAgent::Custom(agent) => &agent.backend,
         }
     }
@@ -311,13 +317,14 @@ fn deduplicate_agents(agents: Vec<DetectedAgent>) -> Vec<DetectedAgent> {
     out
 }
 
-async fn detect_builtin_agents(probe: &dyn Probe) -> Vec<DetectedAgent> {
+async fn detect_builtin_agents(probe: &dyn Probe, db: &Mutex<Connection>) -> Vec<DetectedAgent> {
     let empty_env = HashMap::new();
-    let (claude, codex, gemini, opencode) = tokio::join!(
+    let (claude, codex, gemini, opencode, cursor) = tokio::join!(
         probe_builtin("claude", probe, &empty_env),
         probe_builtin("codex", probe, &empty_env),
         probe_builtin("gemini", probe, &empty_env),
         probe_builtin("opencode", probe, &empty_env),
+        crate::cursor_agent::probe_cursor_registry(db, probe),
     );
     vec![
         DetectedAgent::Claude(synthetic_agent("claude", "Claude Code", "claude", claude)),
@@ -328,6 +335,12 @@ async fn detect_builtin_agents(probe: &dyn Probe) -> Vec<DetectedAgent> {
             "OpenCode",
             "opencode",
             opencode,
+        )),
+        DetectedAgent::Cursor(synthetic_agent(
+            "cursor",
+            "Cursor SDK",
+            "cursor-sdk",
+            cursor,
         )),
     ]
 }
@@ -1223,6 +1236,7 @@ mod tests {
     #[test]
     fn parse_builtin_install_kind_rejects_custom_and_empty() {
         assert!(parse_builtin_install_kind("custom").is_err());
+        assert!(parse_builtin_install_kind("cursor").is_err());
         assert!(parse_builtin_install_kind("").is_err());
     }
 
@@ -1275,13 +1289,13 @@ mod tests {
             .refresh_all(false, &db, &probe)
             .await
             .expect("first refresh succeeds");
-        assert_eq!(probe.call_count(), 4);
+        assert_eq!(probe.call_count(), 5);
 
         registry
             .refresh_all(false, &db, &probe)
             .await
             .expect("cached refresh succeeds");
-        assert_eq!(probe.call_count(), 4);
+        assert_eq!(probe.call_count(), 5);
     }
 
     #[tokio::test]
@@ -1299,7 +1313,7 @@ mod tests {
             .await
             .expect("forced refresh succeeds");
 
-        assert_eq!(probe.call_count(), 8);
+        assert_eq!(probe.call_count(), 10);
     }
 
     #[tokio::test]
@@ -1371,13 +1385,14 @@ mod tests {
             .await
             .expect("refresh succeeds");
 
-        assert_eq!(agents.len(), 4);
+        assert_eq!(agents.len(), 5);
         for agent in agents {
             match agent {
                 DetectedAgent::Claude(agent)
                 | DetectedAgent::Codex(agent)
                 | DetectedAgent::Gemini(agent)
-                | DetectedAgent::OpenCode(agent) => {
+                | DetectedAgent::OpenCode(agent)
+                | DetectedAgent::Cursor(agent) => {
                     assert!(!agent.available);
                     assert!(agent.failure_reason.is_some());
                 }

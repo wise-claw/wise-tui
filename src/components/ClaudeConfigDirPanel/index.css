@@ -1072,6 +1072,11 @@
   box-shadow: 0 8px 24px rgba(114, 46, 209, 0.08);
 }
 
+.app-agent-registry-card--cursor:hover {
+  border-color: rgba(99, 102, 241, 0.5);
+  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.08);
+}
+
 .app-agent-registry-card--custom:hover {
   border-color: rgba(250, 140, 22, 0.5);
   box-shadow: 0 8px 24px rgba(250, 140, 22, 0.08);
@@ -1119,6 +1124,11 @@
 .app-agent-registry-card__avatar--opencode {
   background: rgba(114, 46, 209, 0.12);
   color: #722ed1;
+}
+
+.app-agent-registry-card__avatar--cursor {
+  background: rgba(99, 102, 241, 0.12);
+  color: #6366f1;
 }
 
 .app-agent-registry-card__avatar--custom {

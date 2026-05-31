@@ -580,6 +580,7 @@ interface Props {
     engine: import("../../types").SessionExecutionEngine,
   ) => void | Promise<void>;
   codexAvailable?: boolean;
+  cursorAvailable?: boolean;
   onOpenExecutionEnvironment?: () => void;
   onExecuteSession: (
     sessionId: string,
@@ -720,6 +721,7 @@ export function ClaudeSessions({
   onUpdateRepositoryExecutionEngine,
   onUpdateEmployeeExecutionEngine,
   codexAvailable = true,
+  cursorAvailable = true,
   onOpenExecutionEnvironment,
   onExecuteSession,
   onSendMessage,
@@ -1146,6 +1148,7 @@ export function ClaudeSessions({
     onUpdateRepositoryExecutionEngine,
     onUpdateEmployeeExecutionEngine,
     codexAvailable,
+    cursorAvailable,
     onOpenExecutionEnvironment,
     onCancelSession,
     onRespondToQuestion,
@@ -1286,6 +1289,7 @@ export function ClaudeSessions({
             onUpdateRepositoryExecutionEngine={onUpdateRepositoryExecutionEngine}
             onUpdateEmployeeExecutionEngine={onUpdateEmployeeExecutionEngine}
             codexAvailable={codexAvailable}
+            cursorAvailable={cursorAvailable}
             onOpenExecutionEnvironment={onOpenExecutionEnvironment}
             onCancel={(opts) => onCancelSession(activeSession.id, opts)}
             respondQuestionAt={onRespondToQuestion}

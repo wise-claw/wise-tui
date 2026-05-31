@@ -126,6 +126,13 @@ pub(crate) async fn execute_codex_code(
             .await
             .insert(inv.to_string(), wait_child.clone());
     }
+    if !session_id.is_empty() {
+        process_state
+            .active_child_by_claude_session
+            .lock()
+            .await
+            .insert(session_id.clone(), wait_child.clone());
+    }
 
     let model_label = normalize_codex_model(model.as_deref()).unwrap_or_else(|| "codex".to_string());
     emit_codex_stdout_line(
@@ -180,6 +187,7 @@ pub(crate) async fn execute_codex_code(
     let session_id_wait = session_id.clone();
     let invocation_key_wait = invocation_key.clone();
     let active_child_by_invocation = process_state.active_child_by_invocation_key.clone();
+    let active_child_by_session = process_state.active_child_by_claude_session.clone();
 
     tokio::spawn(async move {
         let exit_status = {
@@ -192,6 +200,9 @@ pub(crate) async fn execute_codex_code(
 
         if let Some(inv) = invocation_key_wait.as_deref().filter(|s| !s.is_empty()) {
             active_child_by_invocation.lock().await.remove(inv);
+        }
+        if !session_id_wait.is_empty() {
+            active_child_by_session.lock().await.remove(&session_id_wait);
         }
 
         let success = exit_status.map(|status| status.success()).unwrap_or(false);

@@ -1,12 +1,37 @@
 import { describe, expect, test } from "bun:test";
 import {
   extractInitSessionIdFromInvocationStdoutLines,
+  extractCursorAgentIdFromCompletePayload,
+  extractCursorAgentIdFromStreamLine,
   extractPartsFromStreamLine,
   extractSystemErrorMessageFromStreamLine,
   parseStreamLineSessionId,
 } from "./claudeStreamParser";
 
 describe("extractPartsFromStreamLine", () => {
+  test("parses cursor agent bind without treating it as Claude init", () => {
+    expect(extractCursorAgentIdFromStreamLine(JSON.stringify({
+      type: "cursor_agent",
+      agentId: "agent-123",
+    }))).toBe("agent-123");
+    expect(extractPartsFromStreamLine(JSON.stringify({
+      type: "cursor_agent",
+      agentId: "agent-123",
+    }))).toEqual({
+      parts: [],
+      isInit: false,
+      sessionId: null,
+    });
+  });
+
+  test("parses cursor complete payload agent id", () => {
+    expect(extractCursorAgentIdFromCompletePayload({
+      sessionId: "tab-1",
+      success: true,
+      cursorAgentId: "agent-456",
+    })).toBe("agent-456");
+  });
+
   test("parses init lines and trims the session id", () => {
     const result = extractPartsFromStreamLine(JSON.stringify({
       type: "system",

@@ -36,6 +36,14 @@ const samples = {
     kind: "opencode",
     command: "opencode",
   },
+  cursor: {
+    ...base,
+    id: "cursor",
+    name: "Cursor SDK",
+    backend: "cursor",
+    kind: "cursor",
+    command: "cursor-sdk",
+  },
   custom: {
     ...base,
     id: "custom:local",

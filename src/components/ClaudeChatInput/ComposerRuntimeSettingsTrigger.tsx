@@ -8,6 +8,7 @@ import {
   type ClaudeSessionConnectionKind,
 } from "../../constants/claudeConnection";
 import {
+  isSessionExecutionEngine,
   normalizeSessionExecutionEngine,
   SESSION_EXECUTION_ENGINE_LABELS,
   type SessionExecutionEngine,
@@ -18,6 +19,7 @@ import { buildSessionExecutionEngineMenuItems } from "./SessionExecutionEngineCh
 interface Props {
   engine: SessionExecutionEngine;
   codexAvailable?: boolean;
+  cursorAvailable?: boolean;
   onEngineChange?: (engine: SessionExecutionEngine) => void;
   onOpenExecutionEnvironment?: () => void;
   connectionKind?: ClaudeSessionConnectionKind | null;
@@ -53,7 +55,7 @@ function RuntimeSettingsIcon() {
 }
 
 function isSessionExecutionEngineKey(key: string): key is SessionExecutionEngine {
-  return key === "claude" || key === "codex";
+  return isSessionExecutionEngine(key);
 }
 
 function isConnectionKindKey(key: string): key is ClaudeSessionConnectionKind {
@@ -63,6 +65,7 @@ function isConnectionKindKey(key: string): key is ClaudeSessionConnectionKind {
 export function ComposerRuntimeSettingsTrigger({
   engine: engineProp,
   codexAvailable = true,
+  cursorAvailable = true,
   onEngineChange,
   onOpenExecutionEnvironment,
   connectionKind,
@@ -73,12 +76,12 @@ export function ComposerRuntimeSettingsTrigger({
   const [menuOpen, setMenuOpen] = useState(false);
   const engine = normalizeSessionExecutionEngine(engineProp);
 
-  const showEngine = codexAvailable && Boolean(onEngineChange);
+  const showEngine = (codexAvailable || cursorAvailable) && Boolean(onEngineChange);
   const showConnection = engine === "claude" && Boolean(onConnectionKindChange);
 
   const resolvedConnectionKind = resolveSessionConnectionKind(connectionKind, defaultConnectionKind);
   const hasConnectionOverride = isTabConnectionKindOverride(connectionKind);
-  const hasActiveOverride = engine === "codex" || hasConnectionOverride;
+  const hasActiveOverride = engine === "codex" || engine === "cursor" || hasConnectionOverride;
 
   const tooltip = useMemo(() => {
     const parts: string[] = [];
@@ -98,6 +101,7 @@ export function ComposerRuntimeSettingsTrigger({
       const engineItems = buildSessionExecutionEngineMenuItems({
         engine,
         codexAvailable,
+        cursorAvailable,
         onOpenExecutionEnvironment,
         onProbeClick: () => setMenuOpen(false),
       });
@@ -127,6 +131,7 @@ export function ComposerRuntimeSettingsTrigger({
     return items;
   }, [
     codexAvailable,
+    cursorAvailable,
     defaultConnectionKind,
     engine,
     onOpenExecutionEnvironment,
