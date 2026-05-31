@@ -70,6 +70,24 @@ export interface PlanNextPaneSlotPlacementResult {
 }
 
 /** 按行优先网格为下一窗格分配槽位（与多屏 2×2 等布局一致）。 */
+/** 在已对齐长度的 extraPanes 上写入 session，优先第一个空槽。 */
+export function assignSessionToNormalizedExtraPanes(
+  paneCount: PaneCount,
+  extraPanes: readonly PaneSlot[],
+  sessionId: string,
+  createSlot: () => PaneSlot,
+  fallbackSlotIndex: number,
+): PaneSlot[] {
+  const base = normalizeExtraPanesToPaneCount(paneCount, extraPanes, createSlot);
+  const slotIndex =
+    findFirstEmptyExtraPaneIndex(base) ?? Math.min(fallbackSlotIndex, Math.max(0, base.length - 1));
+  const next = base.map((slot) => ({ ...slot }));
+  if (next[slotIndex]) {
+    next[slotIndex] = { ...next[slotIndex], sessionId, repositoryId: null };
+  }
+  return next;
+}
+
 export function planNextPaneSlotPlacement(
   input: PlanNextPaneSlotPlacementInput,
 ): PlanNextPaneSlotPlacementResult {

@@ -2,7 +2,6 @@ import { Tooltip } from "antd";
 import { ClaudeCodeUsageHeaderBtn } from "../ClaudeCodeUsagePopover";
 import { ClaudeCodeToolsTopbarTrigger } from "../ClaudeSessions/ClaudeCodeToolsTopbarTrigger";
 import { ClaudeModelTopbarTrigger } from "../ClaudeSessions/ClaudeModelTopbarTrigger";
-import { useClaudeModelProfileStore } from "../../hooks/useClaudeModelProfileStore";
 import { IconSettings } from "../icons/IconSettings";
 import { IconCompactLayout } from "./SidebarIcons";
 import type { AuthorPane } from "../../types/viewMode";
@@ -24,8 +23,6 @@ export function LeftSidebarTopbar({
   activeRepositoryPath,
   onOpenAuthor,
 }: LeftSidebarTopbarProps) {
-  const { store: claudeModelStore } = useClaudeModelProfileStore(true);
-
   return (
     <div className="app-left-sidebar-topbar">
       <div className="app-left-sidebar-topbar-brand app-logo-draggable" data-tauri-drag-region>
@@ -65,10 +62,7 @@ export function LeftSidebarTopbar({
           </Tooltip>
         ) : null}
         <ClaudeCodeUsageHeaderBtn />
-        <ClaudeModelTopbarTrigger
-          variant="sidebar"
-          effectiveModel={claudeModelStore?.effectiveModel ?? null}
-        />
+        <ClaudeModelTopbarTrigger variant="sidebar" />
         <ClaudeCodeToolsTopbarTrigger
           variant="sidebar"
           repositoryPath={activeRepositoryPath}

@@ -585,12 +585,14 @@ function ComposerInner({
 
   useEffect(() => {
     const onSettingsChanged = (event: Event) => {
-      refreshClaudeModelPicker();
       const detail = (event as CustomEvent<ClaudeUserSettingsChangedDetail>).detail;
       const fromProfile = detail?.effectiveModel?.trim();
       if (fromProfile) {
         setModel(fromProfile);
         onSessionModelChange(fromProfile);
+      }
+      if (detail?.skipComposerPickerRefresh !== true) {
+        refreshClaudeModelPicker();
       }
     };
     window.addEventListener(WISE_CLAUDE_USER_SETTINGS_CHANGED, onSettingsChanged);

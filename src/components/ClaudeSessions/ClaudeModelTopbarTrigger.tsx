@@ -1,5 +1,7 @@
 import { Popover, Tooltip } from "antd";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useModelProfileSwitcher } from "../../hooks/useClaudeModelProfileStore";
+import { pickBadgeEffectiveModel } from "../../types/claudeModelProfile";
 import { ClaudeModelTopbarPanel } from "./ClaudeModelTopbarPanel";
 import "./ClaudeModelTopbarTrigger.css";
 
@@ -24,19 +26,24 @@ function IconClaudeModel() {
 }
 
 interface Props {
-  effectiveModel?: string | null;
   /** 左栏顶栏与主会话顶栏按钮样式 */
   variant?: "sidebar" | "chat";
 }
 
-export function ClaudeModelTopbarTrigger({ effectiveModel, variant = "chat" }: Props) {
+export function ClaudeModelTopbarTrigger({ variant = "chat" }: Props) {
   const [open, setOpen] = useState(false);
+  const { effectiveModels, store, setStore, loading } = useModelProfileSwitcher(open);
 
   const handleOpenChange = useCallback((next: boolean) => {
     setOpen(next);
   }, []);
 
-  const showBadge = Boolean(effectiveModel?.trim());
+  const effectiveModel = useMemo(
+    () => pickBadgeEffectiveModel(effectiveModels),
+    [effectiveModels],
+  );
+
+  const showBadge = Boolean(effectiveModel);
   const isSidebar = variant === "sidebar";
   const btnClass =
     (isSidebar ? "app-left-sidebar-topbar-btn" : "app-topbar-btn") +
@@ -50,14 +57,24 @@ export function ClaudeModelTopbarTrigger({ effectiveModel, variant = "chat" }: P
       arrow={!isSidebar}
       open={open}
       onOpenChange={handleOpenChange}
+      destroyOnHidden
       classNames={{ root: "app-claude-model-topbar-popover" }}
       styles={{
         container: { padding: 0 },
         content: { padding: 0 },
       }}
-      content={<ClaudeModelTopbarPanel onApplied={() => setOpen(false)} />}
+      content={
+        open ? (
+          <ClaudeModelTopbarPanel
+            store={store}
+            setStore={setStore}
+            loading={loading}
+            onApplied={() => setOpen(false)}
+          />
+        ) : null
+      }
     >
-      <Tooltip title="模型切换（Claude Code 全局 settings）" mouseEnterDelay={0.35}>
+      <Tooltip title="模型切换（Claude / Codex / OpenCode）" mouseEnterDelay={0.35}>
         <button
           type="button"
           className={btnClass}

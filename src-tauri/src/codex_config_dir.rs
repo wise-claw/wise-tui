@@ -31,6 +31,7 @@ struct CodexDiskCache {
     auth_mtime: Option<SystemTime>,
     config_mtime: Option<SystemTime>,
     envelope: CodexProfileEnvelope,
+    pretty: String,
 }
 
 static CODEX_DISK_CACHE: Mutex<Option<CodexDiskCache>> = Mutex::new(None);
@@ -81,11 +82,13 @@ pub fn read_codex_profile_envelope() -> CodexProfileEnvelope {
     }
 
     let envelope = read_codex_profile_envelope_fresh();
+    let pretty = codex_profile_envelope_to_json(&envelope).unwrap_or_else(|_| "{}".to_string());
     if let Ok(mut guard) = CODEX_DISK_CACHE.lock() {
         *guard = Some(CodexDiskCache {
             auth_mtime,
             config_mtime,
             envelope: envelope.clone(),
+            pretty,
         });
     }
     envelope
@@ -140,6 +143,84 @@ pub fn read_effective_codex_model_from_envelope(envelope: &CodexProfileEnvelope)
     read_effective_codex_model(&envelope.config)
 }
 
+fn auth_maps_equal(a: &Map<String, Value>, b: &Map<String, Value>) -> bool {
+    a == b
+}
+
+/// 档案 config 是否仅含 model 行（忽略注释与空行）。
+fn is_model_only_codex_config(config: &str) -> bool {
+    let mut has_model = false;
+    for line in config.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if trimmed.starts_with("model") && trimmed.contains('=') {
+            if has_model {
+                return false;
+            }
+            has_model = true;
+        } else {
+            return false;
+        }
+    }
+    has_model
+}
+
+/// 在现有 `config.toml` 中替换或插入 `model = "..."` 行，保留其余配置。
+pub fn patch_codex_config_model(config: &str, new_model: &str) -> String {
+    let model = new_model.trim();
+    let mut replaced = false;
+    let mut lines: Vec<String> = config.lines().map(str::to_string).collect();
+    for line in lines.iter_mut() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if trimmed.starts_with("model") && trimmed.contains('=') {
+            *line = format!("model = \"{model}\"");
+            replaced = true;
+            break;
+        }
+    }
+    if !replaced {
+        lines.insert(0, format!("model = \"{model}\""));
+    }
+    let mut out = lines.join("\n");
+    if config.ends_with('\n') && !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out
+}
+
+fn apply_codex_profile_envelope_inner(envelope: &CodexProfileEnvelope) -> Result<(), String> {
+    let current = read_codex_profile_envelope();
+    if auth_maps_equal(&current.auth, &envelope.auth)
+        && is_model_only_codex_config(&envelope.config)
+        && !current.config.trim().is_empty()
+    {
+        if let Some(new_model) = read_effective_codex_model(&envelope.config) {
+            let patched = patch_codex_config_model(&current.config, &new_model);
+            if patched != current.config {
+                write_config_toml(&patched)?;
+                let merged = CodexProfileEnvelope {
+                    auth: current.auth,
+                    config: patched,
+                };
+                return warm_codex_disk_cache(&merged);
+            }
+            return warm_codex_disk_cache(&current);
+        }
+    }
+    write_auth_json(&envelope.auth)?;
+    write_config_toml(&envelope.config)?;
+    warm_codex_disk_cache(envelope)
+}
+
+pub fn apply_codex_profile_envelope(envelope: &CodexProfileEnvelope) -> Result<(), String> {
+    apply_codex_profile_envelope_inner(envelope)
+}
+
 fn write_auth_json(auth: &Map<String, Value>) -> Result<(), String> {
     let path = user_codex_dir().join("auth.json");
     if let Some(parent) = path.parent() {
@@ -157,15 +238,52 @@ fn write_config_toml(config: &str) -> Result<(), String> {
     crate::wise_paths::write_file_atomic(&path, config)
 }
 
-pub fn apply_codex_profile_envelope(envelope: &CodexProfileEnvelope) -> Result<(), String> {
-    write_auth_json(&envelope.auth)?;
-    write_config_toml(&envelope.config)?;
-    invalidate_codex_disk_cache();
+fn warm_codex_disk_cache(envelope: &CodexProfileEnvelope) -> Result<(), String> {
+    let dir = user_codex_dir();
+    let auth_mtime = file_mtime(&dir.join("auth.json"));
+    let config_mtime = file_mtime(&dir.join("config.toml"));
+    let pretty = codex_profile_envelope_to_json(envelope)?;
+    if let Ok(mut guard) = CODEX_DISK_CACHE.lock() {
+        *guard = Some(CodexDiskCache {
+            auth_mtime,
+            config_mtime,
+            envelope: envelope.clone(),
+            pretty,
+        });
+    }
     Ok(())
 }
 
 pub fn effective_codex_model_from_disk() -> Option<String> {
     read_effective_codex_model_from_envelope(&read_codex_profile_envelope())
+}
+
+pub fn read_codex_user_settings_pretty() -> String {
+    let dir = user_codex_dir();
+    let auth_path = dir.join("auth.json");
+    let config_path = dir.join("config.toml");
+    let auth_mtime = file_mtime(&auth_path);
+    let config_mtime = file_mtime(&config_path);
+    if let Ok(guard) = CODEX_DISK_CACHE.lock() {
+        if let Some(cache) = guard.as_ref() {
+            if cache.auth_mtime == auth_mtime && cache.config_mtime == config_mtime {
+                if cache.pretty.ends_with('\n') {
+                    return cache.pretty.clone();
+                }
+                return format!("{}\n", cache.pretty);
+            }
+        }
+    }
+    let _ = read_codex_profile_envelope();
+    if let Ok(guard) = CODEX_DISK_CACHE.lock() {
+        if let Some(cache) = guard.as_ref() {
+            if cache.pretty.ends_with('\n') {
+                return cache.pretty.clone();
+            }
+            return format!("{}\n", cache.pretty);
+        }
+    }
+    "{}\n".to_string()
 }
 
 #[cfg(test)]
@@ -194,5 +312,20 @@ model_reasoning_effort = "medium"
             read_effective_codex_model_from_envelope(&envelope).as_deref(),
             Some("qwen3.5-plus")
         );
+    }
+
+    #[test]
+    fn patch_codex_config_model_replaces_existing_line() {
+        let config = "model = \"old\"\nmodel_reasoning_effort = \"medium\"\n";
+        let patched = patch_codex_config_model(config, "gpt-5.4");
+        assert!(patched.contains("model = \"gpt-5.4\""));
+        assert!(patched.contains("model_reasoning_effort"));
+        assert!(!patched.contains("old"));
+    }
+
+    #[test]
+    fn is_model_only_codex_config_detects_minimal_profile() {
+        assert!(is_model_only_codex_config("model = \"gpt-5.4\"\n"));
+        assert!(!is_model_only_codex_config("model = \"a\"\nother = 1\n"));
     }
 }

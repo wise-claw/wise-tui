@@ -13,6 +13,7 @@ import {
 import {
   columnCountForPaneCount,
   computeMinLogicalCenterWidthForPaneCount,
+  computeRestoreMultiPaneLogicalWidth,
   MAIN_LAYOUT_MULTI_PANE_EXPAND_BUFFER_PX,
   MAIN_LAYOUT_MULTI_PANE_UNIT_PX,
   nextPaneCountInCycle,
@@ -40,11 +41,19 @@ import {
   WISE_RIGHT_PANEL_DEFAULT_CHANGED,
 } from "../services/wiseDefaultConfigStore";
 import { RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK } from "../utils/rightPanelStorage";
-import { planNextPaneSlotPlacement, isSessionBoundInPanes, normalizeExtraPanesToPaneCount } from "../utils/multiPaneSlots";
+import {
+  assignSessionToNormalizedExtraPanes,
+  findFirstEmptyExtraPaneIndex,
+  planNextPaneSlotPlacement,
+  isSessionBoundInPanes,
+  normalizeExtraPanesToPaneCount,
+} from "../utils/multiPaneSlots";
 import { resolveTrellisBootstrapPath } from "../utils/trellisBootstrapPath";
 
 const COMPACT_LAYOUT_WINDOW_WIDTH_PX = 700;
 const COMPACT_LAYOUT_WINDOW_HEIGHT_PX = 600;
+/** 多屏切换 in-flight 超时：防止 Tauri resize 挂起导致后续操作永久无响应。 */
+const PANE_CHANGE_IN_FLIGHT_TIMEOUT_MS = 8000;
 
 type CreateSession = (
   repositoryPath: string,
@@ -66,6 +75,8 @@ interface UseMainLayoutModesOptions {
   setActiveRepositoryId: (repositoryId: number | null) => void;
   setPaneCount: (count: PaneCount) => void;
   setExtraPanes: (panes: PaneSlot[] | ((prev: PaneSlot[]) => PaneSlot[])) => void;
+  /** AppImpl 多屏布局持久化 hydration 完成后为 true。 */
+  paneLayoutHydrated?: boolean;
 }
 
 let paneSlotCounter = 0;
@@ -92,6 +103,7 @@ export function useMainLayoutModes({
   setActiveRepositoryId,
   setPaneCount,
   setExtraPanes,
+  paneLayoutHydrated = false,
 }: UseMainLayoutModesOptions) {
   const [rightCollapsed, setRightCollapsed] = useState(RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK);
   const [rightPanelDefaultCollapsed, setRightPanelDefaultCollapsed] = useState(
@@ -121,6 +133,7 @@ export function useMainLayoutModes({
   /** 累计从单屏基准扩展的逻辑像素增量，关闭多屏时按此值缩回。 */
   const multiPaneAccumulatedDeltaRef = useRef<number>(0);
   const paneChangeInFlightRef = useRef(false);
+  const multiPaneRestoreExpandDoneRef = useRef(false);
   const paneCountRef = useRef(paneCount);
   paneCountRef.current = paneCount;
   const mainLayoutContentRef = useRef<HTMLElement | null>(null);
@@ -134,13 +147,22 @@ export function useMainLayoutModes({
   const repositoryMainBindingsLatestRef = useRef(repositoryMainSessionBindings);
   repositoryMainBindingsLatestRef.current = repositoryMainSessionBindings;
 
-  /** 切换到指定屏数，每次切换都会自适应调整窗口宽度。 */
+  /** 切换到指定屏数，每次切换都会自适应调整窗口宽度。成功返回 true。 */
   const handleChangePaneCount = useCallback(
-    async (targetCount: PaneCount) => {
-      if (paneChangeInFlightRef.current) return;
-      if (targetCount === paneCountRef.current) return;
+    async (targetCount: PaneCount): Promise<boolean> => {
+      if (paneChangeInFlightRef.current) {
+        message.info("正在调整多屏布局，请稍候");
+        return false;
+      }
+      if (targetCount === paneCountRef.current) return false;
       paneChangeInFlightRef.current = true;
       const currentPaneCount = paneCountRef.current;
+      const timeoutId = window.setTimeout(() => {
+        if (paneChangeInFlightRef.current) {
+          paneChangeInFlightRef.current = false;
+          message.warning("多屏切换超时，已恢复操作");
+        }
+      }, PANE_CHANGE_IN_FLIGHT_TIMEOUT_MS);
 
       try {
       // 关闭多屏 → 恢复到单屏快照
@@ -166,14 +188,14 @@ export function useMainLayoutModes({
         await waitLayoutFrames(1);
         await shrinkMainWindowToRemoveHorizontalSlack();
         await shrinkMainWindowToRemoveHorizontalSlack();
-        return;
+        return true;
       }
 
       // 从单屏进入多屏：先快照窗口尺寸
       if (currentPaneCount === 1) {
         if (!activeRepository) {
           message.warning("请先选择仓库");
-          return;
+          return false;
         }
         multiPaneAccumulatedDeltaRef.current = 0;
         try {
@@ -218,11 +240,27 @@ export function useMainLayoutModes({
           /* 浏览器 dev / 非 Tauri */
         }
       }
+      return true;
       } finally {
+        window.clearTimeout(timeoutId);
         paneChangeInFlightRef.current = false;
       }
     },
     [activeRepository, setExtraPanes, setPaneCount],
+  );
+
+  /** 单屏下为首个额外窗格写入 session 并切到双屏（复用 handleChangePaneCount 与 in-flight 锁）。 */
+  const promoteToDualPaneWithSession = useCallback(
+    async (sessionId: string): Promise<boolean> => {
+      setExtraPanes(() => {
+        const slot = createPaneSlot();
+        slot.sessionId = sessionId;
+        slot.repositoryId = null;
+        return [slot];
+      });
+      return handleChangePaneCount(2);
+    },
+    [handleChangePaneCount, setExtraPanes],
   );
 
   const handleChangePaneCountRef = useRef(handleChangePaneCount);
@@ -390,29 +428,8 @@ export function useMainLayoutModes({
         });
 
         // 若当前是单屏，先切到双屏
-        if (paneCount === 1) {
-          const slot = createPaneSlot();
-          slot.sessionId = id;
-          slot.repositoryId = null;
-          setExtraPanes([slot]);
-          multiPaneAccumulatedDeltaRef.current = 0;
-          try {
-            singlePaneWindowSnapshotRef.current = await readMainWindowInnerSize();
-          } catch {
-            singlePaneWindowSnapshotRef.current = null;
-          }
-          setPaneCount(2);
-          await waitLayoutFrames(2);
-          // 2屏=1×2，需要增加1列
-          if (typeof window !== "undefined") {
-            const expandPx = MAIN_LAYOUT_MULTI_PANE_UNIT_PX;
-            try {
-              await setMainWindowLogicalInnerSize(window.innerWidth + expandPx, window.innerHeight);
-              multiPaneAccumulatedDeltaRef.current = expandPx;
-            } catch {
-              /* 浏览器 dev / 非 Tauri */
-            }
-          }
+        if (paneCountRef.current === 1) {
+          await promoteToDualPaneWithSession(id);
         } else {
           if (isSessionBoundInPanes(id, activeSessionIdLatestRef.current, extraPanesLatestRef.current, slotIndex)) {
             message.warning("该会话已在其它窗格中打开");
@@ -431,7 +448,7 @@ export function useMainLayoutModes({
         message.error("创建窗格执行会话失败");
       }
     },
-    [createSession, paneCount, setActiveRepositoryId, setExtraPanes, setPaneCount],
+    [createSession, promoteToDualPaneWithSession, setActiveRepositoryId, setExtraPanes],
   );
 
   /** 侧栏「新开会话」：按多屏规则占用下一空窗格并创建执行会话。 */
@@ -448,28 +465,8 @@ export function useMainLayoutModes({
           skipActivate: true,
         });
 
-        if (paneCount === 1) {
-          const slot = createPaneSlot();
-          slot.sessionId = sessionId;
-          slot.repositoryId = null;
-          setExtraPanes([slot]);
-          multiPaneAccumulatedDeltaRef.current = 0;
-          try {
-            singlePaneWindowSnapshotRef.current = await readMainWindowInnerSize();
-          } catch {
-            singlePaneWindowSnapshotRef.current = null;
-          }
-          setPaneCount(2);
-          await waitLayoutFrames(2);
-          if (typeof window !== "undefined") {
-            const expandPx = MAIN_LAYOUT_MULTI_PANE_UNIT_PX;
-            try {
-              await setMainWindowLogicalInnerSize(window.innerWidth + expandPx, window.innerHeight);
-              multiPaneAccumulatedDeltaRef.current = expandPx;
-            } catch {
-              /* 浏览器 dev / 非 Tauri */
-            }
-          }
+        if (paneCountRef.current === 1) {
+          await promoteToDualPaneWithSession(sessionId);
           return;
         }
 
@@ -479,34 +476,32 @@ export function useMainLayoutModes({
         }
 
         const plan = planNextPaneSlotPlacement({
-          paneCount,
-          extraPanes,
+          paneCount: paneCountRef.current,
+          extraPanes: extraPanesLatestRef.current,
           createSlot: createPaneSlot,
         });
-        if (plan.nextPaneCount !== paneCount) {
-          await handleChangePaneCount(plan.nextPaneCount);
-        }
-        setExtraPanes((prev) => {
-          const base =
-            plan.nextPaneCount !== paneCount || prev.length !== plan.nextExtraPanes.length
-              ? plan.nextExtraPanes
-              : prev;
-          const next = [...base];
-          if (next[plan.slotIndex]) {
-            next[plan.slotIndex] = {
-              ...next[plan.slotIndex],
-              sessionId,
-              repositoryId: null,
-            };
+        if (plan.nextPaneCount !== paneCountRef.current) {
+          const expanded = await handleChangePaneCount(plan.nextPaneCount);
+          if (!expanded && plan.nextPaneCount !== paneCountRef.current) {
+            message.warning("正在切换屏数，请稍后再试");
+            return;
           }
-          return next;
-        });
+        }
+        setExtraPanes((prev) =>
+          assignSessionToNormalizedExtraPanes(
+            paneCountRef.current,
+            prev,
+            sessionId,
+            createPaneSlot,
+            plan.slotIndex,
+          ),
+        );
       } catch (error) {
         console.error("Failed to create pane session in next slot:", error);
         message.error("新开会话失败");
       }
     },
-    [createSession, extraPanes, handleChangePaneCount, paneCount, setActiveRepositoryId, setExtraPanes, setPaneCount],
+    [createSession, handleChangePaneCount, promoteToDualPaneWithSession, setActiveRepositoryId, setExtraPanes],
   );
 
   /** 工作区侧栏「新开会话」：在工作区根目录创建会话并占用下一窗格。 */
@@ -519,18 +514,25 @@ export function useMainLayoutModes({
         setActiveRepositoryId(anchorRepo.id);
       }
       const plan = planNextPaneSlotPlacement({
-        paneCount,
-        extraPanes,
+        paneCount: paneCountRef.current,
+        extraPanes: extraPanesLatestRef.current,
         createSlot: createPaneSlot,
       });
-      if (plan.nextPaneCount !== paneCount) {
-        if (paneCount === 1 && !activeRepository && !anchorRepo) {
+      if (plan.nextPaneCount !== paneCountRef.current) {
+        if (paneCountRef.current === 1 && !activeRepository && !anchorRepo) {
           message.warning("请先选择仓库");
           return;
         }
-        await handleChangePaneCount(plan.nextPaneCount);
+        const expanded = await handleChangePaneCount(plan.nextPaneCount);
+        if (!expanded && plan.nextPaneCount !== paneCountRef.current) {
+          message.warning("正在切换屏数，请稍后再试");
+          return;
+        }
       }
-      const slotIndex = paneCount === 1 ? 0 : plan.slotIndex;
+      const slotIndex =
+        paneCountRef.current === 1
+          ? 0
+          : (findFirstEmptyExtraPaneIndex(extraPanesLatestRef.current) ?? plan.slotIndex);
       const rootPath = resolveTrellisBootstrapPath({
         scope: "project",
         project,
@@ -544,15 +546,53 @@ export function useMainLayoutModes({
     },
     [
       activeRepository,
-      extraPanes,
       handleChangePaneCount,
       handlePaneProjectNewSession,
-      paneCount,
       projects,
       repositories,
       setActiveRepositoryId,
     ],
   );
+
+  // 持久化恢复多屏后补一次窗口扩宽，避免 min-width 挤压导致启动卡顿
+  useEffect(() => {
+    if (!paneLayoutHydrated) return;
+    if (multiPaneRestoreExpandDoneRef.current) return;
+    multiPaneRestoreExpandDoneRef.current = true;
+    const restoredCount = paneCountRef.current;
+    if (restoredCount <= 1) return;
+
+    void (async () => {
+      if (paneChangeInFlightRef.current) return;
+      paneChangeInFlightRef.current = true;
+      const timeoutId = window.setTimeout(() => {
+        paneChangeInFlightRef.current = false;
+      }, PANE_CHANGE_IN_FLIGHT_TIMEOUT_MS);
+      try {
+        multiPaneAccumulatedDeltaRef.current = 0;
+        try {
+          singlePaneWindowSnapshotRef.current = await readMainWindowInnerSize();
+        } catch {
+          singlePaneWindowSnapshotRef.current = null;
+        }
+        await waitLayoutFrames(2);
+        if (typeof window === "undefined") return;
+        const currentWidth = window.innerWidth;
+        const targetWidth = computeRestoreMultiPaneLogicalWidth(restoredCount, currentWidth);
+        if (targetWidth != null) {
+          try {
+            await setMainWindowLogicalInnerSize(targetWidth, window.innerHeight);
+            multiPaneAccumulatedDeltaRef.current += Math.max(0, targetWidth - currentWidth);
+          } catch {
+            /* 浏览器 dev / 非 Tauri */
+          }
+        }
+      } finally {
+        window.clearTimeout(timeoutId);
+        paneChangeInFlightRef.current = false;
+      }
+    })();
+  }, [paneLayoutHydrated]);
 
   // 清理已不存在的 session 引用
   useEffect(() => {
@@ -615,8 +655,12 @@ export function useMainLayoutModes({
 
   useEffect(() => {
     let unlistenCompact: (() => void) | undefined;
-    let unlistenDual: (() => void) | undefined;
+    let unlistenMultiPane: (() => void) | undefined;
+    let unlistenLegacyDualPane: (() => void) | undefined;
     let cancelled = false;
+    const onCycleMultiPane = () => {
+      handleCyclePaneCountRef.current();
+    };
     void listen("global-toggle-compact-layout", () => {
       handleToggleCompactLayoutModeRef.current();
     })
@@ -627,31 +671,19 @@ export function useMainLayoutModes({
       .catch(() => {
         /* non-Tauri / event unavailable */
       });
-    // 兼容旧事件名 + 新事件名
-    void listen("global-toggle-dual-pane", () => {
-      handleCyclePaneCountRef.current();
-    })
+    void listen("global-cycle-multi-pane", onCycleMultiPane)
       .then((fn) => {
-        if (!cancelled) unlistenDual = fn;
+        if (!cancelled) unlistenMultiPane = fn;
         else safeUnlisten(fn);
       })
       .catch(() => {
         /* non-Tauri / event unavailable */
       });
-    void listen("global-cycle-multi-pane", () => {
-      handleCyclePaneCountRef.current();
-    })
+    // 兼容旧事件名（与 global-cycle-multi-pane 语义相同，各自独立监听）
+    void listen("global-toggle-dual-pane", onCycleMultiPane)
       .then((fn) => {
-        if (!cancelled) {
-          // 两个事件语义相同，只保留一个 listener 避免 Alt+K 双触发
-          if (unlistenDual) {
-            safeUnlisten(fn);
-          } else {
-            unlistenDual = fn;
-          }
-        } else {
-          safeUnlisten(fn);
-        }
+        if (!cancelled) unlistenLegacyDualPane = fn;
+        else safeUnlisten(fn);
       })
       .catch(() => {
         /* non-Tauri / event unavailable */
@@ -659,7 +691,8 @@ export function useMainLayoutModes({
     return () => {
       cancelled = true;
       safeUnlisten(unlistenCompact);
-      safeUnlisten(unlistenDual);
+      safeUnlisten(unlistenMultiPane);
+      safeUnlisten(unlistenLegacyDualPane);
     };
   }, []);
 

@@ -282,6 +282,7 @@ export default function App() {
   /** 多屏模式下额外窗格槽位（Pane 0 始终是 activeSession）。 */
   const [extraPanes, setExtraPanes] = useState<PaneSlot[]>([]);
   const paneLayoutHydratedRef = useRef(false);
+  const [paneLayoutHydrated, setPaneLayoutHydrated] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   /** 右侧 Inspector 历史会话消息抽屉（由中栏「历史会话」列表打开；默认收起右栏时不强制展开） */
   const [inspectorHistorySessionId, setInspectorHistorySessionId] = useState<string | null>(null);
@@ -314,6 +315,7 @@ export default function App() {
         void deleteAppSetting(MULTI_PANE_LAYOUT_STATE_STORAGE_KEY);
       } finally {
         paneLayoutHydratedRef.current = true;
+        setPaneLayoutHydrated(true);
       }
     })();
     return () => {
@@ -1810,6 +1812,7 @@ export default function App() {
     setActiveRepositoryId,
     setPaneCount,
     setExtraPanes,
+    paneLayoutHydrated,
   });
 
   const handleNewPaneSessionForRepository = useCallback(

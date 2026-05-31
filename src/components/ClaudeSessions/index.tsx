@@ -38,27 +38,12 @@ import type { WorkspaceMode, WorkspaceFocus } from "../../utils/workspaceMode";
 import { PANE_COUNT_OPTIONS, isPaneCount, type PaneCount, type PaneSlot } from "../../constants/mainLayoutWidths";
 import { ClaudeMultiPaneGrid, type MultiPaneSharedChatProps, type PaneRepoTreeNode } from "./ClaudeMultiPaneGrid";
 import { ClaudeSessionChatWithDock } from "./ClaudeSessionChatWithDock";
+import { runPaneCreateTask } from "./paneCreateLoading";
 import "./index.css";
 
 const TerminalPanelLazy = lazy(() =>
   import("../TerminalPanel").then((module) => ({ default: module.TerminalPanel })),
 );
-
-const PANE_CREATE_MIN_LOADING_MS = 220;
-
-async function withMinDuration<T>(task: Promise<T>, minMs: number): Promise<T> {
-  const startedAt = Date.now();
-  try {
-    return await task;
-  } finally {
-    const elapsed = Date.now() - startedAt;
-    if (elapsed < minMs) {
-      await new Promise<void>((resolve) => {
-        window.setTimeout(resolve, minMs - elapsed);
-      });
-    }
-  }
-}
 
 interface SessionEmptyStateProps {
   title: string;
@@ -1061,20 +1046,13 @@ export function ClaudeSessions({
       if (!repo || !onNewPaneSession) return;
       if (creatingPaneSlots[slotIndex]) return;
       setPaneRepoPickerOpenBySlot((prev) => ({ ...prev, [slotIndex]: false }));
-      setCreatingPaneSlots((prev) => ({ ...prev, [slotIndex]: true }));
-      void withMinDuration(Promise.resolve(onNewPaneSession(slotIndex, repo)), PANE_CREATE_MIN_LOADING_MS).finally(() => {
-        setCreatingPaneSlots((prev) => ({ ...prev, [slotIndex]: false }));
-      });
+      runPaneCreateTask(Promise.resolve(onNewPaneSession(slotIndex, repo)), slotIndex, setCreatingPaneSlots);
     },
     [activeRepository, creatingPaneSlots, onNewPaneSession, resolvedPaneRepositories],
   );
 
   const handlePanePickerOpenChange = useCallback((paneIdx: number, open: boolean) => {
     setPaneRepoPickerOpenBySlot((prev) => ({ ...prev, [paneIdx]: open }));
-  }, []);
-
-  const handleSetCreatingPaneSlot = useCallback((paneIdx: number, creating: boolean) => {
-    setCreatingPaneSlots((prev) => ({ ...prev, [paneIdx]: creating }));
   }, []);
 
   const handleSwitchToSession = useCallback(
@@ -1233,7 +1211,7 @@ export function ClaudeSessions({
             onCreatePrimarySession={handleCreatePrimarySession}
             onCreatePaneSession={handleCreatePaneSession}
             onPickerOpenChange={handlePanePickerOpenChange}
-            onSetCreatingPaneSlot={handleSetCreatingPaneSlot}
+            setCreatingPaneSlots={setCreatingPaneSlots}
             onPaneRepositorySelect={onPaneRepositorySelect}
             onPaneProjectNewSession={onPaneProjectNewSession}
             onNewPaneSession={onNewPaneSession}

@@ -26,6 +26,12 @@ export interface ClaudeModelProfileStoreView {
   effectiveOpencodeModel: string | null;
 }
 
+export interface ModelProfileEffectiveModels {
+  effectiveModel: string | null;
+  effectiveCodexModel: string | null;
+  effectiveOpencodeModel: string | null;
+}
+
 export function normalizeModelProfileEngine(
   engine: string | undefined | null,
 ): ModelProfileEngine {
@@ -59,4 +65,44 @@ export function modelProfileEngineLabel(engine: ModelProfileEngine): string {
   if (engine === "codex") return "Codex";
   if (engine === "opencode") return "OpenCode";
   return "Claude Code";
+}
+
+export function extractEffectiveModelsFromStore(
+  store: ClaudeModelProfileStoreView,
+): ModelProfileEffectiveModels {
+  return {
+    effectiveModel: store.effectiveModel,
+    effectiveCodexModel: store.effectiveCodexModel,
+    effectiveOpencodeModel: store.effectiveOpencodeModel,
+  };
+}
+
+export function pickBadgeEffectiveModel(
+  models: ModelProfileEffectiveModels | null | undefined,
+): string | null {
+  const claude = models?.effectiveModel?.trim();
+  if (claude) return claude;
+  const codex = models?.effectiveCodexModel?.trim();
+  if (codex) return codex;
+  return models?.effectiveOpencodeModel?.trim() || null;
+}
+
+/** 切换档案前的乐观 store 视图（IPC 返回前即时更新 active / effective）。 */
+export function buildOptimisticApplyStoreView(
+  store: ClaudeModelProfileStoreView,
+  profileId: string,
+): ClaudeModelProfileStoreView | null {
+  const profile = store.profiles.find((p) => p.id === profileId);
+  if (!profile) return null;
+  const engine = normalizeModelProfileEngine(profile.engine);
+  const modelId = profile.modelId?.trim() || null;
+  return {
+    ...store,
+    activeProfileId: engine === "claude" ? profileId : store.activeProfileId,
+    activeCodexProfileId: engine === "codex" ? profileId : store.activeCodexProfileId,
+    activeOpencodeProfileId: engine === "opencode" ? profileId : store.activeOpencodeProfileId,
+    effectiveModel: engine === "claude" ? modelId : store.effectiveModel,
+    effectiveCodexModel: engine === "codex" ? modelId : store.effectiveCodexModel,
+    effectiveOpencodeModel: engine === "opencode" ? modelId : store.effectiveOpencodeModel,
+  };
 }

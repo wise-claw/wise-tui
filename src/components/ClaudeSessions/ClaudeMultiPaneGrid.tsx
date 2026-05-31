@@ -18,8 +18,10 @@ import {
   useMemo,
   useRef,
   useState,
+  type Dispatch,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type SetStateAction,
 } from "react";
 import type { ClaudeSessionConnectionKind } from "../../constants/claudeConnection";
 import type { SessionExecutionEngine } from "../../types";
@@ -27,24 +29,10 @@ import type { RoleTagOption, RepositoryMentionOption } from "../../utils/project
 import { paneGridDimensions, type PaneCount, type PaneSlot } from "../../constants/mainLayoutWidths";
 import { isProjectRootSessionDisplayName } from "../../utils/repositoryMainSessionBinding";
 import { ClaudeSessionChatWithDock } from "./ClaudeSessionChatWithDock";
+import { runPaneCreateTask } from "./paneCreateLoading";
 import type { RefreshHistorySessionsScope } from "./ClaudeChat";
 
-const PANE_CREATE_MIN_LOADING_MS = 220;
 const TWO_PANE_MIN_WIDTH_PX = 460;
-
-async function withMinDuration<T>(task: Promise<T>, minMs: number): Promise<T> {
-  const startedAt = Date.now();
-  try {
-    return await task;
-  } finally {
-    const elapsed = Date.now() - startedAt;
-    if (elapsed < minMs) {
-      await new Promise<void>((resolve) => {
-        window.setTimeout(resolve, minMs - elapsed);
-      });
-    }
-  }
-}
 
 interface PaneRepoTreeNode {
   title: string;
@@ -333,7 +321,7 @@ interface MultiPaneExtraPaneCellProps {
   projectsById: Map<string, ProjectItem>;
   onCreatePaneSession: (paneIdx: number) => void;
   onPickerOpenChange: (paneIdx: number, open: boolean) => void;
-  onSetCreating: (paneIdx: number, creating: boolean) => void;
+  setCreatingPaneSlots: Dispatch<SetStateAction<Record<number, boolean>>>;
   onPaneRepositorySelect?: (slotIndex: number, repositoryId: number) => void | Promise<void>;
   onPaneProjectNewSession?: (
     slotIndex: number,
@@ -361,7 +349,7 @@ const MultiPaneExtraPaneCell = memo(
     projectsById,
     onCreatePaneSession,
     onPickerOpenChange,
-    onSetCreating,
+    setCreatingPaneSlots,
     onPaneRepositorySelect,
     onPaneProjectNewSession,
     onNewPaneSession,
@@ -530,25 +518,24 @@ const MultiPaneExtraPaneCell = memo(
                             event.stopPropagation();
                             if (isCreating) return;
                             onPickerOpenChange(paneIdx, false);
-                            onSetCreating(paneIdx, true);
                             if (repoIdFromValue != null && onNewPaneSession) {
                               const selectedRepo = (shared.repositories ?? []).find(
                                 (repo) => repo.id === repoIdFromValue,
                               );
                               if (selectedRepo) {
-                                void withMinDuration(
+                                runPaneCreateTask(
                                   Promise.resolve(onNewPaneSession(paneIdx, selectedRepo)),
-                                  PANE_CREATE_MIN_LOADING_MS,
-                                ).finally(() => onSetCreating(paneIdx, false));
+                                  paneIdx,
+                                  setCreatingPaneSlots,
+                                );
                               } else {
-                                onSetCreating(paneIdx, false);
                                 message.warning("未找到所选仓库");
                               }
                               return;
                             }
                             if (projectIdFromValue && onPaneProjectNewSession) {
                               const pickedProject = projectsById.get(projectIdFromValue.trim());
-                              void withMinDuration(
+                              runPaneCreateTask(
                                 Promise.resolve(
                                   onPaneProjectNewSession(
                                     paneIdx,
@@ -557,10 +544,9 @@ const MultiPaneExtraPaneCell = memo(
                                     { rootPath: projectRootPath, projectName },
                                   ),
                                 ),
-                                PANE_CREATE_MIN_LOADING_MS,
-                              ).finally(() => onSetCreating(paneIdx, false));
-                            } else {
-                              onSetCreating(paneIdx, false);
+                                paneIdx,
+                                setCreatingPaneSlots,
+                              );
                             }
                           }}
                         >
@@ -574,21 +560,19 @@ const MultiPaneExtraPaneCell = memo(
                   const selected = String(value ?? "");
                   if (isCreating || !selected) return;
                   onPickerOpenChange(paneIdx, false);
-                  onSetCreating(paneIdx, true);
                   if (selected.startsWith("repo:")) {
                     if (onPaneRepositorySelect) {
-                      void withMinDuration(
+                      runPaneCreateTask(
                         Promise.resolve(onPaneRepositorySelect(paneIdx, Number(selected.slice(5)))),
-                        PANE_CREATE_MIN_LOADING_MS,
-                      ).finally(() => onSetCreating(paneIdx, false));
-                    } else {
-                      onSetCreating(paneIdx, false);
+                        paneIdx,
+                        setCreatingPaneSlots,
+                      );
                     }
                     return;
                   }
                   if (selected.startsWith("project:") && onPaneProjectNewSession) {
                     const pickedProject = projectsById.get(selected.slice(8).trim());
-                    void withMinDuration(
+                    runPaneCreateTask(
                       Promise.resolve(
                         onPaneProjectNewSession(
                           paneIdx,
@@ -600,11 +584,10 @@ const MultiPaneExtraPaneCell = memo(
                           },
                         ),
                       ),
-                      PANE_CREATE_MIN_LOADING_MS,
-                    ).finally(() => onSetCreating(paneIdx, false));
-                    return;
+                      paneIdx,
+                      setCreatingPaneSlots,
+                    );
                   }
-                  onSetCreating(paneIdx, false);
                 }}
                 style={{ width: "100%", marginBottom: 12 }}
               />
@@ -659,7 +642,7 @@ export interface ClaudeMultiPaneGridProps {
   onCreatePrimarySession: () => void;
   onCreatePaneSession: (paneIdx: number) => void;
   onPickerOpenChange: (paneIdx: number, open: boolean) => void;
-  onSetCreatingPaneSlot: (paneIdx: number, creating: boolean) => void;
+  setCreatingPaneSlots: Dispatch<SetStateAction<Record<number, boolean>>>;
   onPaneRepositorySelect?: (slotIndex: number, repositoryId: number) => void | Promise<void>;
   onPaneProjectNewSession?: (
     slotIndex: number,
@@ -690,7 +673,7 @@ export const ClaudeMultiPaneGrid = memo(function ClaudeMultiPaneGrid({
   onCreatePrimarySession,
   onCreatePaneSession,
   onPickerOpenChange,
-  onSetCreatingPaneSlot,
+  setCreatingPaneSlots,
   onPaneRepositorySelect,
   onPaneProjectNewSession,
   onNewPaneSession,
@@ -745,10 +728,19 @@ export const ClaudeMultiPaneGrid = memo(function ClaudeMultiPaneGrid({
         document.body.style.userSelect = previousUserSelect;
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onUp);
+        try {
+          if (container.hasPointerCapture(pointerId)) {
+            container.releasePointerCapture(pointerId);
+          }
+        } catch {
+          /* pointer already released */
+        }
       };
       const onUp = () => finish();
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp, { once: true });
+      window.addEventListener("pointercancel", onUp, { once: true });
     },
     [paneCount, resolveTwoPaneLeftWidthPx],
   );
@@ -807,7 +799,7 @@ export const ClaudeMultiPaneGrid = memo(function ClaudeMultiPaneGrid({
           projectsById={projectsById}
           onCreatePaneSession={onCreatePaneSession}
           onPickerOpenChange={onPickerOpenChange}
-          onSetCreating={onSetCreatingPaneSlot}
+          setCreatingPaneSlots={setCreatingPaneSlots}
           onPaneRepositorySelect={onPaneRepositorySelect}
           onPaneProjectNewSession={onPaneProjectNewSession}
           onNewPaneSession={onNewPaneSession}

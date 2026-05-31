@@ -10,13 +10,13 @@ use uuid::Uuid;
 use crate::claude_config_dir::user_claude_dir;
 use crate::codex_config_dir::{
     apply_codex_profile_envelope, codex_profile_envelope_to_json, effective_codex_model_from_disk,
-    parse_codex_profile_envelope, read_codex_profile_envelope,
-    read_effective_codex_model_from_envelope,
+    parse_codex_profile_envelope, read_codex_profile_envelope, read_codex_user_settings_pretty,
+    read_effective_codex_model_from_envelope, user_codex_dir,
 };
 use crate::opencode_config_dir::{
-    apply_opencode_profile_settings, effective_opencode_model_from_disk,
-    opencode_config_json_to_pretty, read_effective_opencode_model, read_opencode_config_json,
-    validate_opencode_settings_json, write_opencode_config_json,
+    apply_opencode_profile_to_disk, effective_opencode_model_from_disk,
+    opencode_config_json_to_pretty, read_effective_opencode_model,
+    read_opencode_user_settings_pretty, user_opencode_config_path, validate_opencode_settings_json,
 };
 use crate::wise_db::WiseDb;
 
@@ -79,6 +79,80 @@ pub struct ClaudeModelProfileStoreView {
     pub effective_opencode_model: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProfileEffectiveModels {
+    pub effective_model: Option<String>,
+    pub effective_codex_model: Option<String>,
+    pub effective_opencode_model: Option<String>,
+}
+
+fn effective_models_from_disk() -> ModelProfileEffectiveModels {
+    let mtimes = model_profile_disk_mtimes();
+    if let Ok(guard) = EFFECTIVE_MODELS_SNAPSHOT.lock() {
+        if let Some(snapshot) = guard.as_ref() {
+            if snapshot.mtimes.matches(&mtimes) {
+                return snapshot.models.clone();
+            }
+        }
+    }
+    let models = ModelProfileEffectiveModels {
+        effective_model: effective_model_from_disk(),
+        effective_codex_model: effective_codex_model_from_disk(),
+        effective_opencode_model: effective_opencode_model_from_disk(),
+    };
+    if let Ok(mut guard) = EFFECTIVE_MODELS_SNAPSHOT.lock() {
+        *guard = Some(EffectiveModelsSnapshot {
+            mtimes,
+            models: models.clone(),
+        });
+    }
+    models
+}
+
+#[derive(Clone, Copy)]
+struct ModelProfileDiskMtimes {
+    claude_settings: Option<SystemTime>,
+    codex_auth: Option<SystemTime>,
+    codex_config: Option<SystemTime>,
+    opencode_config: Option<SystemTime>,
+}
+
+impl ModelProfileDiskMtimes {
+    fn matches(self, other: &Self) -> bool {
+        self.claude_settings == other.claude_settings
+            && self.codex_auth == other.codex_auth
+            && self.codex_config == other.codex_config
+            && self.opencode_config == other.opencode_config
+    }
+}
+
+#[derive(Clone)]
+struct EffectiveModelsSnapshot {
+    mtimes: ModelProfileDiskMtimes,
+    models: ModelProfileEffectiveModels,
+}
+
+static EFFECTIVE_MODELS_SNAPSHOT: Mutex<Option<EffectiveModelsSnapshot>> = Mutex::new(None);
+
+fn model_profile_disk_mtimes() -> ModelProfileDiskMtimes {
+    let codex_dir = user_codex_dir();
+    ModelProfileDiskMtimes {
+        claude_settings: file_mtime(&user_claude_dir().join("settings.json")),
+        codex_auth: file_mtime(&codex_dir.join("auth.json")),
+        codex_config: file_mtime(&codex_dir.join("config.toml")),
+        opencode_config: file_mtime(&user_opencode_config_path()),
+    }
+}
+
+#[derive(Clone)]
+struct ProfileStoreCache {
+    raw: String,
+    store: ClaudeModelProfileStore,
+}
+
+static PROFILE_STORE_CACHE: Mutex<Option<ProfileStoreCache>> = Mutex::new(None);
+
 fn now_ms() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -87,15 +161,42 @@ fn now_ms() -> i64 {
 }
 
 pub(crate) fn load_store(db: &WiseDb) -> ClaudeModelProfileStore {
-    let Ok(Some(raw)) = db.get_setting(STORE_SETTINGS_KEY) else {
-        return ClaudeModelProfileStore::default();
+    let raw = db
+        .get_setting(STORE_SETTINGS_KEY)
+        .ok()
+        .flatten()
+        .unwrap_or_default();
+    if let Ok(guard) = PROFILE_STORE_CACHE.lock() {
+        if let Some(cache) = guard.as_ref() {
+            if cache.raw == raw {
+                return cache.store.clone();
+            }
+        }
+    }
+    let store: ClaudeModelProfileStore = if raw.is_empty() {
+        ClaudeModelProfileStore::default()
+    } else {
+        serde_json::from_str(&raw).unwrap_or_default()
     };
-    serde_json::from_str(&raw).unwrap_or_default()
+    if let Ok(mut guard) = PROFILE_STORE_CACHE.lock() {
+        *guard = Some(ProfileStoreCache {
+            raw,
+            store: store.clone(),
+        });
+    }
+    store
 }
 
 pub(crate) fn save_store(db: &WiseDb, store: &ClaudeModelProfileStore) -> Result<(), String> {
     let raw = serde_json::to_string(store).map_err(|e| e.to_string())?;
-    db.set_setting(STORE_SETTINGS_KEY, &raw)
+    db.set_setting(STORE_SETTINGS_KEY, &raw)?;
+    if let Ok(mut guard) = PROFILE_STORE_CACHE.lock() {
+        *guard = Some(ProfileStoreCache {
+            raw,
+            store: store.clone(),
+        });
+    }
+    Ok(())
 }
 
 fn read_json_file(path: &Path) -> Option<serde_json::Value> {
@@ -118,10 +219,49 @@ struct ClaudeEffectiveModelCache {
 
 static CLAUDE_EFFECTIVE_MODEL_CACHE: Mutex<Option<ClaudeEffectiveModelCache>> = Mutex::new(None);
 
+#[derive(Clone)]
+struct ClaudeSettingsPrettyCache {
+    mtime: Option<SystemTime>,
+    pretty: String,
+}
+
+static CLAUDE_SETTINGS_PRETTY_CACHE: Mutex<Option<ClaudeSettingsPrettyCache>> = Mutex::new(None);
+
 fn invalidate_claude_effective_model_cache() {
     if let Ok(mut guard) = CLAUDE_EFFECTIVE_MODEL_CACHE.lock() {
         *guard = None;
     }
+    if let Ok(mut guard) = CLAUDE_SETTINGS_PRETTY_CACHE.lock() {
+        *guard = None;
+    }
+}
+
+fn read_claude_user_settings_pretty() -> Result<String, String> {
+    let path = user_claude_dir().join("settings.json");
+    if !path.is_file() {
+        return Ok("{\n}\n".to_string());
+    }
+    let mtime = file_mtime(&path);
+    if let Ok(guard) = CLAUDE_SETTINGS_PRETTY_CACHE.lock() {
+        if let Some(cache) = guard.as_ref() {
+            if cache.mtime == mtime {
+                return Ok(cache.pretty.clone());
+            }
+        }
+    }
+    let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    if text.trim().is_empty() {
+        return Ok("{\n}\n".to_string());
+    }
+    let v: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    let pretty = format!(
+        "{}\n",
+        serde_json::to_string_pretty(&v).map_err(|e| e.to_string())?
+    );
+    if let Ok(mut guard) = CLAUDE_SETTINGS_PRETTY_CACHE.lock() {
+        *guard = Some(ClaudeSettingsPrettyCache { mtime, pretty: pretty.clone() });
+    }
+    Ok(pretty)
 }
 
 /// 与 Claude Code / CC Switch 一致：优先 `env.ANTHROPIC_MODEL`，其次其他 `env.*MODEL*` 与顶层 `model`。
@@ -253,6 +393,21 @@ fn apply_profile_settings_to_value(_root: serde_json::Value, profile: &ClaudeMod
     Ok(parsed)
 }
 
+fn warm_claude_settings_disk_cache(value: &serde_json::Value, path: &Path) {
+    let mtime = file_mtime(path);
+    let model = read_effective_model(value);
+    let pretty = match serde_json::to_string_pretty(value) {
+        Ok(text) => format!("{text}\n"),
+        Err(_) => "{\n}\n".to_string(),
+    };
+    if let Ok(mut guard) = CLAUDE_EFFECTIVE_MODEL_CACHE.lock() {
+        *guard = Some(ClaudeEffectiveModelCache { mtime, model });
+    }
+    if let Ok(mut guard) = CLAUDE_SETTINGS_PRETTY_CACHE.lock() {
+        *guard = Some(ClaudeSettingsPrettyCache { mtime, pretty });
+    }
+}
+
 fn write_user_settings_json(value: &serde_json::Value) -> Result<(), String> {
     let path = user_claude_dir().join("settings.json");
     if let Some(parent) = path.parent() {
@@ -260,7 +415,7 @@ fn write_user_settings_json(value: &serde_json::Value) -> Result<(), String> {
     }
     let out = serde_json::to_string_pretty(value).map_err(|e| e.to_string())?;
     crate::wise_paths::write_file_atomic(&path, &out)?;
-    invalidate_claude_effective_model_cache();
+    warm_claude_settings_disk_cache(value, &path);
     Ok(())
 }
 
@@ -318,7 +473,6 @@ fn apply_profile_to_disk(profile: &ClaudeModelProfile) -> Result<(), String> {
 
     if profile_engine(profile) == "opencode" {
         let profile_val = validate_opencode_settings_json(&profile.settings_json)?;
-        let current = read_opencode_config_json();
         let model_id = read_effective_opencode_model(&profile_val)
             .filter(|s| !s.is_empty())
             .or_else(|| {
@@ -330,9 +484,7 @@ fn apply_profile_to_disk(profile: &ClaudeModelProfile) -> Result<(), String> {
                 }
             })
             .ok_or_else(|| "OpenCode 档案中未找到 model（格式 provider/model）".to_string())?;
-        let merged = apply_opencode_profile_settings(current, &profile_val, &model_id)?;
-        write_opencode_config_json(&merged)?;
-        return Ok(());
+        return apply_opencode_profile_to_disk(&profile_val, &model_id);
     }
 
     let path = user_claude_dir().join("settings.json");
@@ -358,20 +510,48 @@ fn effective_model_from_disk() -> Option<String> {
     model
 }
 
-pub(crate) fn store_view_from_store(store: &ClaudeModelProfileStore) -> ClaudeModelProfileStoreView {
+fn seed_effective_models_snapshot(models: &ModelProfileEffectiveModels) {
+    let mtimes = model_profile_disk_mtimes();
+    if let Ok(mut guard) = EFFECTIVE_MODELS_SNAPSHOT.lock() {
+        *guard = Some(EffectiveModelsSnapshot {
+            mtimes,
+            models: models.clone(),
+        });
+    }
+}
+
+fn build_store_view(
+    store: &ClaudeModelProfileStore,
+    effective: ModelProfileEffectiveModels,
+) -> ClaudeModelProfileStoreView {
     ClaudeModelProfileStoreView {
         profiles: store.profiles.clone(),
         active_profile_id: store.active_profile_id.clone(),
         active_codex_profile_id: store.active_codex_profile_id.clone(),
         active_opencode_profile_id: store.active_opencode_profile_id.clone(),
-        effective_model: effective_model_from_disk(),
-        effective_codex_model: effective_codex_model_from_disk(),
-        effective_opencode_model: effective_opencode_model_from_disk(),
+        effective_model: effective.effective_model,
+        effective_codex_model: effective.effective_codex_model,
+        effective_opencode_model: effective.effective_opencode_model,
     }
+}
+
+fn store_view_after_disk_write(store: &ClaudeModelProfileStore) -> ClaudeModelProfileStoreView {
+    let effective = effective_models_from_disk();
+    seed_effective_models_snapshot(&effective);
+    build_store_view(store, effective)
+}
+
+pub(crate) fn store_view_from_store(store: &ClaudeModelProfileStore) -> ClaudeModelProfileStoreView {
+    build_store_view(store, effective_models_from_disk())
 }
 
 pub(crate) fn store_view(db: &WiseDb) -> ClaudeModelProfileStoreView {
     store_view_from_store(&load_store(db))
+}
+
+#[tauri::command]
+pub(crate) fn get_model_profile_effective_models() -> ModelProfileEffectiveModels {
+    effective_models_from_disk()
 }
 
 #[tauri::command]
@@ -437,8 +617,31 @@ pub(crate) fn upsert_claude_model_profile(
             updated_at_ms: now,
         });
     }
+
+    let saved = store
+        .profiles
+        .iter()
+        .find(|p| p.id == id)
+        .ok_or_else(|| "档案保存后未找到".to_string())?
+        .clone();
+    apply_profile_to_disk(&saved)?;
+
+    if profile_engine(&saved) == "codex" {
+        store.active_codex_profile_id = Some(id.clone());
+    } else if profile_engine(&saved) == "opencode" {
+        store.active_opencode_profile_id = Some(id.clone());
+    } else {
+        store.active_profile_id = Some(id.clone());
+    }
+    if let Some(slot) = store.profiles.iter_mut().find(|p| p.id == id) {
+        if let Ok(mid) = resolve_profile_model_id(slot) {
+            slot.model_id = mid;
+            slot.updated_at_ms = now_ms();
+        }
+    }
+
     save_store(&db, &store)?;
-    Ok(store_view_from_store(&store))
+    Ok(store_view_after_disk_write(&store))
 }
 
 #[tauri::command]
@@ -494,32 +697,22 @@ pub(crate) fn apply_claude_model_profile(
         }
     }
     save_store(&db, &next)?;
-    Ok(store_view_from_store(&next))
+    Ok(store_view_after_disk_write(&next))
 }
 
 #[tauri::command]
 pub(crate) fn get_opencode_user_settings_json() -> Result<String, String> {
-    opencode_config_json_to_pretty(&read_opencode_config_json())
+    Ok(read_opencode_user_settings_pretty())
 }
 
 #[tauri::command]
 pub(crate) fn get_codex_user_settings_json() -> Result<String, String> {
-    let envelope = read_codex_profile_envelope();
-    codex_profile_envelope_to_json(&envelope)
+    Ok(read_codex_user_settings_pretty())
 }
 
 #[tauri::command]
 pub(crate) fn get_claude_user_settings_json() -> Result<String, String> {
-    let path = user_claude_dir().join("settings.json");
-    if !path.is_file() {
-        return Ok("{\n}\n".to_string());
-    }
-    let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    if text.trim().is_empty() {
-        return Ok("{\n}\n".to_string());
-    }
-    let v: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
-    serde_json::to_string_pretty(&v).map_err(|e| e.to_string())
+    read_claude_user_settings_pretty()
 }
 
 #[tauri::command]
@@ -545,10 +738,10 @@ pub(crate) fn save_claude_user_settings_json(
             }
             slot.updated_at_ms = now_ms();
             save_store(&db, &store)?;
-            return Ok(store_view_from_store(&store));
+            return Ok(store_view_after_disk_write(&store));
         }
     }
-    Ok(store_view(&db))
+    Ok(store_view_after_disk_write(&load_store(&db)))
 }
 
 #[tauri::command]

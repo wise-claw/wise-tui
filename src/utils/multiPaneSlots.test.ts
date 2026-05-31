@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { PaneSlot } from "../constants/mainLayoutWidths";
 import {
+  assignSessionToNormalizedExtraPanes,
   findFirstEmptyExtraPaneIndex,
   isSessionBoundInPanes,
   minPaneCountForOccupiedExtras,
@@ -64,5 +65,29 @@ describe("multiPaneSlots", () => {
     expect(isSessionBoundInPanes("s-extra", "s-main", extras)).toBe(true);
     expect(isSessionBoundInPanes("s-extra", "s-main", extras, 0)).toBe(false);
     expect(isSessionBoundInPanes("s-free", "s-main", extras)).toBe(false);
+  });
+
+  test("assignSessionToNormalizedExtraPanes prefers first empty slot in row-major grid", () => {
+    const extraPanes: PaneSlot[] = [
+      slot({ slotId: "a", sessionId: "s1", repositoryId: 1 }),
+      slot({ slotId: "b" }),
+      slot({ slotId: "c" }),
+    ];
+    const next = assignSessionToNormalizedExtraPanes(4, extraPanes, "s-new", () => slot({ slotId: "x" }), 2);
+    expect(next).toHaveLength(3);
+    expect(next[1]?.sessionId).toBe("s-new");
+    expect(next[2]?.sessionId).toBeNull();
+  });
+
+  test("assignSessionToNormalizedExtraPanes pads slots when paneCount increases", () => {
+    const next = assignSessionToNormalizedExtraPanes(
+      4,
+      [slot({ slotId: "a", sessionId: "s1" })],
+      "s2",
+      () => slot({ slotId: "new" }),
+      0,
+    );
+    expect(next).toHaveLength(3);
+    expect(next.filter((row) => row.sessionId === "s2")).toHaveLength(1);
   });
 });

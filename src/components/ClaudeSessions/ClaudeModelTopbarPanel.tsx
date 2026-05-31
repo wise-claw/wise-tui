@@ -1,17 +1,16 @@
-import { CloudSyncOutlined, DeleteOutlined, PlusOutlined, SettingOutlined } from "@ant-design/icons";
+import { CloudSyncOutlined, PlusOutlined } from "@ant-design/icons";
 import { Button, Empty, Input, List, Modal, Segmented, Typography, message } from "antd";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   applyClaudeModelProfile,
   createClaudeModelProfile,
   deleteClaudeModelProfile,
-  getClaudeModelProfileStore,
   getClaudeUserSettingsJson,
   getCodexUserSettingsJson,
   getOpencodeUserSettingsJson,
   upsertClaudeModelProfile,
   syncClaudeModelProfilesFromCcSwitch,
-  dispatchClaudeUserSettingsChanged,
+  dispatchModelProfileStoreChanged,
 } from "../../services/claudeModelProfiles";
 import type { ClaudeModelProfile, ClaudeModelProfileStoreView } from "../../types/claudeModelProfile";
 import {
@@ -19,6 +18,7 @@ import {
   resolveActiveModelProfileId,
   resolveEffectiveModelForProfileEngine,
   modelProfileEngineLabel,
+  buildOptimisticApplyStoreView,
   type ModelProfileEngine,
 } from "../../types/claudeModelProfile";
 import { formatClaudeModelLabel } from "../../utils/claudeModel";
@@ -31,9 +31,13 @@ import {
 } from "../../utils/codexProfileEnvelope";
 import { ClaudeSettingsJsonEditor } from "./ClaudeSettingsJsonEditor";
 import { CodexProfileSettingsEditor } from "./CodexProfileSettingsEditor";
+import { ModelProfileListRow } from "./ModelProfileListRow";
 import "./ClaudeModelTopbarTrigger.css";
 
 interface Props {
+  store: ClaudeModelProfileStoreView | null;
+  setStore: React.Dispatch<React.SetStateAction<ClaudeModelProfileStoreView | null>>;
+  loading: boolean;
   onApplied?: () => void;
 }
 
@@ -63,10 +67,8 @@ function validateSettingsJson(text: string, engine: ModelProfileEngine): string 
   }
 }
 
-export function ClaudeModelTopbarPanel({ onApplied }: Props) {
+export function ClaudeModelTopbarPanel({ store, setStore, loading, onApplied }: Props) {
   const [panelEngine, setPanelEngine] = useState<ModelProfileEngine>("claude");
-  const [store, setStore] = useState<ClaudeModelProfileStoreView | null>(null);
-  const [loading, setLoading] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [addCompany, setAddCompany] = useState("");
   const [addName, setAddName] = useState("");
@@ -84,22 +86,7 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
   const [configCodexConfigToml, setConfigCodexConfigToml] = useState(EMPTY_CODEX_CONFIG_TOML);
   const [savingConfig, setSavingConfig] = useState(false);
   const [syncingCcSwitch, setSyncingCcSwitch] = useState(false);
-
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    try {
-      const next = await getClaudeModelProfileStore();
-      setStore(next);
-    } catch (e) {
-      message.error(typeof e === "string" ? e : "加载模型配置失败");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  const [applyingProfileId, setApplyingProfileId] = useState<string | null>(null);
 
   const loadGlobalSettingsIntoAdd = useCallback(async () => {
     setAddLoadingJson(true);
@@ -135,6 +122,13 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
 
   const handleApply = useCallback(
     async (profileId: string) => {
+      if (!store) return;
+      const previous = store;
+      const optimistic = buildOptimisticApplyStoreView(store, profileId);
+      if (optimistic) {
+        setStore(optimistic);
+        setApplyingProfileId(profileId);
+      }
       try {
         const next = await applyClaudeModelProfile(profileId);
         setStore(next);
@@ -149,13 +143,23 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
                 ? "已切换并写入 OpenCode 全局 opencode.json"
                 : "已切换并替换 Claude Code 全局 settings.json",
         );
-        dispatchClaudeUserSettingsChanged({ effectiveModel: effective });
+        dispatchModelProfileStoreChanged(next, { engine: panelEngine, effectiveModel: effective });
         onApplied?.();
       } catch (e) {
+        setStore(previous);
         message.error(typeof e === "string" ? e : "切换失败");
+      } finally {
+        setApplyingProfileId(null);
       }
     },
-    [onApplied, panelEngine],
+    [onApplied, panelEngine, setStore, store],
+  );
+
+  const handleApplyById = useCallback(
+    (profileId: string) => {
+      void handleApply(profileId);
+    },
+    [handleApply],
   );
 
   const handleAdd = useCallback(async () => {
@@ -194,6 +198,10 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
     try {
       const next = await createClaudeModelProfile(addCompany, name, settingsPayload, panelEngine);
       setStore(next);
+      dispatchModelProfileStoreChanged(next, {
+        engine: panelEngine,
+        skipComposerPickerRefresh: true,
+      });
       setAddOpen(false);
       setAddCompany("");
       setAddName("");
@@ -285,9 +293,7 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
               ? "已保存 OpenCode 档案"
               : "已保存到数据库并写入 Claude Code 全局 settings.json",
       );
-      dispatchClaudeUserSettingsChanged({
-        effectiveModel: resolveEffectiveModelForProfileEngine(profileEngine, next)?.trim() || null,
-      });
+      dispatchModelProfileStoreChanged(next, { engine: profileEngine });
       setConfigOpen(false);
       setConfigProfile(null);
       onApplied?.();
@@ -303,23 +309,38 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
     try {
       const result = await syncClaudeModelProfilesFromCcSwitch();
       setStore(result.store);
+      dispatchModelProfileStoreChanged(result.store, {
+        engine: panelEngine,
+        skipComposerPickerRefresh: true,
+      });
       message.success(result.message);
     } catch (e) {
       message.error(typeof e === "string" ? e : "同步 CC Switch 配置失败");
     } finally {
       setSyncingCcSwitch(false);
     }
-  }, []);
+  }, [panelEngine, setStore]);
 
   const handleDelete = useCallback(async (profileId: string) => {
     try {
       const next = await deleteClaudeModelProfile(profileId);
       setStore(next);
+      dispatchModelProfileStoreChanged(next, {
+        engine: panelEngine,
+        skipComposerPickerRefresh: true,
+      });
       message.success("已删除");
     } catch (e) {
       message.error(typeof e === "string" ? e : "删除失败");
     }
-  }, []);
+  }, [panelEngine, setStore]);
+
+  const handleDeleteById = useCallback(
+    (profileId: string) => {
+      void handleDelete(profileId);
+    },
+    [handleDelete],
+  );
 
   const profiles = useMemo(
     () =>
@@ -378,77 +399,17 @@ export function ClaudeModelTopbarPanel({ onApplied }: Props) {
           className="app-claude-model-topbar-panel__list"
           dataSource={profiles}
           loading={loading}
-          renderItem={(item) => {
-            const active = activeProfileId === item.id;
-            return (
-              <List.Item
-                className={
-                  "app-claude-model-topbar-panel__item" +
-                  (active ? " app-claude-model-topbar-panel__item--active" : "")
-                }
-                actions={[
-                  <span key="actions" className="app-claude-model-topbar-panel__item-actions">
-                    <Button
-                      type="text"
-                      size="small"
-                      icon={<SettingOutlined />}
-                      aria-label={`配置 ${item.name}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openConfig(item);
-                      }}
-                    />
-                    <Button
-                      type="text"
-                      size="small"
-                      danger
-                      icon={<DeleteOutlined />}
-                      aria-label={`删除 ${item.name}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void handleDelete(item.id);
-                      }}
-                    />
-                  </span>,
-                ]}
-              >
-                <button
-                  type="button"
-                  className="app-claude-model-topbar-panel__item-main"
-                  onClick={() => void handleApply(item.id)}
-                  title={
-                    item.company.trim()
-                      ? `${item.company.trim()} ${formatClaudeModelLabel(item.modelId)}`
-                      : item.name
-                  }
-                >
-                  <span className="app-claude-model-topbar-panel__item-label">
-                    {item.company.trim() ? (
-                      <>
-                        <span className="app-claude-model-topbar-panel__item-company">
-                          {item.company.trim()}
-                        </span>
-                        <span className="app-claude-model-topbar-panel__item-model">
-                          {formatClaudeModelLabel(item.modelId)}
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="app-claude-model-topbar-panel__item-name">
-                          {item.name.trim() || formatClaudeModelLabel(item.modelId)}
-                        </span>
-                        {item.name.trim() ? (
-                          <span className="app-claude-model-topbar-panel__item-model">
-                            {formatClaudeModelLabel(item.modelId)}
-                          </span>
-                        ) : null}
-                      </>
-                    )}
-                  </span>
-                </button>
-              </List.Item>
-            );
-          }}
+          rowKey="id"
+          renderItem={(item) => (
+            <ModelProfileListRow
+              item={item}
+              active={activeProfileId === item.id}
+              applying={applyingProfileId === item.id}
+              onApply={handleApplyById}
+              onConfigure={openConfig}
+              onDelete={handleDeleteById}
+            />
+          )}
         />
       )}
 

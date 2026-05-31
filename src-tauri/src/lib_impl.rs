@@ -408,6 +408,7 @@ pub fn run() {
             fcc_traces::list_fcc_traces,
             fcc_traces::clear_fcc_traces,
             claude_model_profiles::get_claude_model_profile_store,
+            claude_model_profiles::get_model_profile_effective_models,
             claude_model_profiles::upsert_claude_model_profile,
             claude_model_profiles::delete_claude_model_profile,
             claude_model_profiles::apply_claude_model_profile,

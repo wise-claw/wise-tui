@@ -121,6 +121,15 @@
   background: color-mix(in srgb, var(--ant-color-primary) 10%, transparent) !important;
 }
 
+.app-claude-model-topbar-panel__item--applying {
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.app-claude-model-topbar-panel__item--applying .app-claude-model-topbar-panel__item-main {
+  cursor: wait;
+}
+
 .app-claude-model-topbar-panel__list .ant-list-item-action {
   margin-inline-start: 4px !important;
   display: flex;

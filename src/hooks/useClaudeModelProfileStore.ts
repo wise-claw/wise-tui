@@ -1,37 +1,160 @@
-import { useCallback, useEffect, useState } from "react";
-import { getClaudeModelProfileStore } from "../services/claudeModelProfiles";
-import type { ClaudeModelProfileStoreView } from "../types/claudeModelProfile";
-import { WISE_CLAUDE_USER_SETTINGS_CHANGED } from "../services/claudeModelProfiles";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  getClaudeModelProfileStore,
+  getModelProfileEffectiveModels,
+  WISE_CLAUDE_USER_SETTINGS_CHANGED,
+  type ClaudeUserSettingsChangedDetail,
+} from "../services/claudeModelProfiles";
+import type {
+  ClaudeModelProfileStoreView,
+  ModelProfileEffectiveModels,
+} from "../types/claudeModelProfile";
+import { extractEffectiveModelsFromStore } from "../types/claudeModelProfile";
 
-/** 顶栏模型切换：读取档案库与当前生效模型。 */
-export function useClaudeModelProfileStore(enabled = true) {
-  const [store, setStore] = useState<ClaudeModelProfileStoreView | null>(null);
+const SETTINGS_REFRESH_DEBOUNCE_MS = 150;
+const LOADING_INDICATOR_DELAY_MS = 200;
+
+function useDebouncedSettingsRefresh(
+  refresh: () => void,
+  applyStoreSnapshot: (snapshot: ClaudeModelProfileStoreView) => void,
+  enabled: boolean,
+) {
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
+  const applySnapshotRef = useRef(applyStoreSnapshot);
+  applySnapshotRef.current = applyStoreSnapshot;
+  const timerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const onChanged = (event: Event) => {
+      const detail = (event as CustomEvent<ClaudeUserSettingsChangedDetail>).detail;
+      if (detail?.storeSnapshot) {
+        if (timerRef.current != null) {
+          window.clearTimeout(timerRef.current);
+          timerRef.current = null;
+        }
+        applySnapshotRef.current(detail.storeSnapshot);
+        return;
+      }
+      if (timerRef.current != null) {
+        window.clearTimeout(timerRef.current);
+      }
+      timerRef.current = window.setTimeout(() => {
+        timerRef.current = null;
+        refreshRef.current();
+      }, SETTINGS_REFRESH_DEBOUNCE_MS);
+    };
+    window.addEventListener(WISE_CLAUDE_USER_SETTINGS_CHANGED, onChanged);
+    return () => {
+      window.removeEventListener(WISE_CLAUDE_USER_SETTINGS_CHANGED, onChanged);
+      if (timerRef.current != null) {
+        window.clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [enabled]);
+}
+
+/** 模型切换弹层：单监听、按开闭状态选择轻/完整 IPC，并同步角标生效模型。 */
+export function useModelProfileSwitcher(popoverOpen: boolean) {
+  const [effectiveModels, setEffectiveModels] = useState<ModelProfileEffectiveModels | null>(null);
+  const [store, setStoreInternal] = useState<ClaudeModelProfileStoreView | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [showLoading, setShowLoading] = useState(false);
+  const loadingDelayRef = useRef<number | null>(null);
+  const requestSeqRef = useRef(0);
+
+  const applyStore = useCallback(
+    (next: ClaudeModelProfileStoreView) => {
+      setStoreInternal((prev) => (popoverOpen ? next : prev));
+      setEffectiveModels(extractEffectiveModelsFromStore(next));
+    },
+    [popoverOpen],
+  );
+
+  const setStore = useCallback(
+    (value: React.SetStateAction<ClaudeModelProfileStoreView | null>) => {
+      setStoreInternal((prev) => {
+        const next = typeof value === "function" ? value(prev) : value;
+        if (next) {
+          setEffectiveModels(extractEffectiveModelsFromStore(next));
+        }
+        return next;
+      });
+    },
+    [],
+  );
 
   const refresh = useCallback(async () => {
-    if (!enabled) {
-      setStore(null);
+    const requestId = ++requestSeqRef.current;
+    const clearLoadingDelay = () => {
+      if (loadingDelayRef.current != null) {
+        window.clearTimeout(loadingDelayRef.current);
+        loadingDelayRef.current = null;
+      }
+    };
+
+    if (!popoverOpen) {
+      clearLoadingDelay();
+      setLoading(false);
+      setShowLoading(false);
+      try {
+        const next = await getModelProfileEffectiveModels();
+        if (requestId !== requestSeqRef.current) return;
+        setEffectiveModels(next);
+      } catch {
+        if (requestId !== requestSeqRef.current) return;
+        setEffectiveModels(null);
+      }
       return;
     }
+
+    setLoading(true);
+    setShowLoading(false);
+    clearLoadingDelay();
+    loadingDelayRef.current = window.setTimeout(() => {
+      loadingDelayRef.current = null;
+      if (requestId === requestSeqRef.current) {
+        setShowLoading(true);
+      }
+    }, LOADING_INDICATOR_DELAY_MS);
+
     try {
       const next = await getClaudeModelProfileStore();
-      setStore(next);
+      if (requestId !== requestSeqRef.current) return;
+      applyStore(next);
     } catch {
-      setStore(null);
+      if (requestId !== requestSeqRef.current) return;
+      setStoreInternal(null);
+    } finally {
+      if (requestId !== requestSeqRef.current) return;
+      clearLoadingDelay();
+      setLoading(false);
+      setShowLoading(false);
     }
-  }, [enabled]);
+  }, [applyStore, popoverOpen]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  useEffect(() => {
-    if (!enabled) return;
-    const onChanged = () => {
+  useDebouncedSettingsRefresh(
+    () => {
       void refresh();
-    };
-    window.addEventListener(WISE_CLAUDE_USER_SETTINGS_CHANGED, onChanged);
-    return () => window.removeEventListener(WISE_CLAUDE_USER_SETTINGS_CHANGED, onChanged);
-  }, [enabled, refresh]);
+    },
+    applyStore,
+    true,
+  );
 
-  return { store, refresh };
+  useEffect(
+    () => () => {
+      if (loadingDelayRef.current != null) {
+        window.clearTimeout(loadingDelayRef.current);
+      }
+    },
+    [],
+  );
+
+  return { effectiveModels, store, setStore, loading: showLoading && loading, refresh };
 }

@@ -17,46 +17,61 @@ fn file_mtime(path: &Path) -> Option<SystemTime> {
 }
 
 #[derive(Clone)]
-struct OpencodeDiskCache {
+struct OpencodeDiskState {
     mtime: Option<SystemTime>,
     config: Value,
+    pretty: String,
+    effective_model: Option<String>,
 }
 
-static OPENCODE_DISK_CACHE: Mutex<Option<OpencodeDiskCache>> = Mutex::new(None);
+static OPENCODE_DISK_STATE: Mutex<Option<OpencodeDiskState>> = Mutex::new(None);
 
 pub(crate) fn invalidate_opencode_disk_cache() {
-    if let Ok(mut guard) = OPENCODE_DISK_CACHE.lock() {
+    if let Ok(mut guard) = OPENCODE_DISK_STATE.lock() {
         *guard = None;
     }
 }
 
-fn read_opencode_config_fresh() -> Value {
-    let path = user_opencode_config_path();
-    let text = std::fs::read_to_string(&path).unwrap_or_default();
-    if text.trim().is_empty() {
-        return json!({});
-    }
-    serde_json::from_str(&text).unwrap_or_else(|_| json!({}))
-}
-
-pub fn read_opencode_config_json() -> Value {
+fn read_opencode_config_fresh() -> OpencodeDiskState {
     let path = user_opencode_config_path();
     let mtime = file_mtime(&path);
-    if let Ok(guard) = OPENCODE_DISK_CACHE.lock() {
-        if let Some(cache) = guard.as_ref() {
-            if cache.mtime == mtime {
-                return cache.config.clone();
+    let text = std::fs::read_to_string(&path).unwrap_or_default();
+    let config = if text.trim().is_empty() {
+        json!({})
+    } else {
+        serde_json::from_str(&text).unwrap_or_else(|_| json!({}))
+    };
+    let effective_model = read_effective_opencode_model(&config);
+    let pretty = serde_json::to_string_pretty(&config).unwrap_or_else(|_| "{}".to_string());
+    OpencodeDiskState {
+        mtime,
+        config,
+        pretty,
+        effective_model,
+    }
+}
+
+fn load_opencode_disk_state(force_refresh: bool) -> OpencodeDiskState {
+    let path = user_opencode_config_path();
+    let mtime = file_mtime(&path);
+    if !force_refresh {
+        if let Ok(guard) = OPENCODE_DISK_STATE.lock() {
+            if let Some(state) = guard.as_ref() {
+                if state.mtime == mtime {
+                    return state.clone();
+                }
             }
         }
     }
-    let config = read_opencode_config_fresh();
-    if let Ok(mut guard) = OPENCODE_DISK_CACHE.lock() {
-        *guard = Some(OpencodeDiskCache {
-            mtime,
-            config: config.clone(),
-        });
+    let state = read_opencode_config_fresh();
+    if let Ok(mut guard) = OPENCODE_DISK_STATE.lock() {
+        *guard = Some(state.clone());
     }
-    config
+    state
+}
+
+pub fn read_opencode_config_json() -> Value {
+    load_opencode_disk_state(false).config
 }
 
 pub fn read_effective_opencode_model(value: &Value) -> Option<String> {
@@ -69,7 +84,7 @@ pub fn read_effective_opencode_model(value: &Value) -> Option<String> {
 }
 
 pub fn effective_opencode_model_from_disk() -> Option<String> {
-    read_effective_opencode_model(&read_opencode_config_json())
+    load_opencode_disk_state(false).effective_model
 }
 
 pub fn validate_opencode_settings_json(raw: &str) -> Result<Value, String> {
@@ -155,12 +170,42 @@ pub fn write_opencode_config_json(value: &Value) -> Result<(), String> {
     }
     let out = serde_json::to_string_pretty(value).map_err(|e| e.to_string())?;
     crate::wise_paths::write_file_atomic(&path, &format!("{out}\n"))?;
-    invalidate_opencode_disk_cache();
+    warm_opencode_disk_cache(value, &path);
     Ok(())
+}
+
+fn warm_opencode_disk_cache(value: &Value, path: &Path) {
+    let mtime = file_mtime(path);
+    let effective_model = read_effective_opencode_model(value);
+    let pretty = serde_json::to_string_pretty(value).unwrap_or_else(|_| "{}".to_string());
+    if let Ok(mut guard) = OPENCODE_DISK_STATE.lock() {
+        *guard = Some(OpencodeDiskState {
+            mtime,
+            config: value.clone(),
+            pretty,
+            effective_model,
+        });
+    }
+}
+
+/// 合并并写入 OpenCode 全局配置（复用内存缓存中的 current，避免重复读盘）。
+pub fn apply_opencode_profile_to_disk(profile: &Value, model_id: &str) -> Result<(), String> {
+    let current = read_opencode_config_json();
+    let merged = apply_opencode_profile_settings(current, profile, model_id)?;
+    write_opencode_config_json(&merged)
 }
 
 pub fn opencode_config_json_to_pretty(value: &Value) -> Result<String, String> {
     serde_json::to_string_pretty(value).map_err(|e| e.to_string())
+}
+
+pub fn read_opencode_user_settings_pretty() -> String {
+    let state = load_opencode_disk_state(false);
+    if state.pretty.ends_with('\n') {
+        state.pretty
+    } else {
+        format!("{}\n", state.pretty)
+    }
 }
 
 #[cfg(test)]
@@ -197,6 +242,16 @@ mod tests {
         assert!(merged.get("mcp").is_some());
         assert_eq!(merged["plugin"][0].as_str(), Some("oh-my-openagent@latest"));
         assert!(merged["provider"]["minimax"].is_object());
+        assert_eq!(
+            merged["model"].as_str(),
+            Some("minimax/MiniMax-M2.7-highspeed")
+        );
+    }
+
+    #[test]
+    fn apply_profile_settings_sets_model_from_profile_json() {
+        let profile = json!({ "model": "minimax/MiniMax-M2.7-highspeed" });
+        let merged = apply_opencode_profile_settings(json!({}), &profile, "fallback/model").unwrap();
         assert_eq!(
             merged["model"].as_str(),
             Some("minimax/MiniMax-M2.7-highspeed")

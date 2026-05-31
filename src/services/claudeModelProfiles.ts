@@ -2,6 +2,13 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   ClaudeModelProfile,
   ClaudeModelProfileStoreView,
+  ModelProfileEffectiveModels,
+  ModelProfileEngine,
+} from "../types/claudeModelProfile";
+import {
+  extractEffectiveModelsFromStore,
+  pickBadgeEffectiveModel,
+  resolveEffectiveModelForProfileEngine,
 } from "../types/claudeModelProfile";
 
 /** 全局 `settings.json` 已变更（模型切换或配置保存后派发）。 */
@@ -10,6 +17,10 @@ export const WISE_CLAUDE_USER_SETTINGS_CHANGED = "wise-claude-user-settings-chan
 export interface ClaudeUserSettingsChangedDetail {
   /** 写入磁盘后的生效模型（`env.ANTHROPIC_MODEL` 或 `model`）。 */
   effectiveModel?: string | null;
+  /** 完整 store 快照；监听方可直接合并，跳过 debounce refresh。 */
+  storeSnapshot?: ClaudeModelProfileStoreView;
+  /** 仅 SQLite 档案变更、未写全局 settings 时为 true。 */
+  skipComposerPickerRefresh?: boolean;
 }
 
 export function dispatchClaudeUserSettingsChanged(
@@ -22,8 +33,34 @@ export function dispatchClaudeUserSettingsChanged(
   );
 }
 
+/** 模型档案 mutating 后广播：携带 store 快照，避免监听方 debounce refresh。 */
+export function dispatchModelProfileStoreChanged(
+  store: ClaudeModelProfileStoreView,
+  options?: {
+    engine?: ModelProfileEngine;
+    effectiveModel?: string | null;
+    /** 未改写 Claude/Codex/OpenCode 全局配置时设为 true。 */
+    skipComposerPickerRefresh?: boolean;
+  },
+): void {
+  const effectiveModel =
+    options?.effectiveModel?.trim() ||
+    (options?.engine
+      ? resolveEffectiveModelForProfileEngine(options.engine, store)?.trim() || null
+      : pickBadgeEffectiveModel(extractEffectiveModelsFromStore(store)));
+  dispatchClaudeUserSettingsChanged({
+    effectiveModel,
+    storeSnapshot: store,
+    skipComposerPickerRefresh: options?.skipComposerPickerRefresh,
+  });
+}
+
 export async function getClaudeModelProfileStore(): Promise<ClaudeModelProfileStoreView> {
   return invoke<ClaudeModelProfileStoreView>("get_claude_model_profile_store");
+}
+
+export async function getModelProfileEffectiveModels(): Promise<ModelProfileEffectiveModels> {
+  return invoke<ModelProfileEffectiveModels>("get_model_profile_effective_models");
 }
 
 export async function createClaudeModelProfile(

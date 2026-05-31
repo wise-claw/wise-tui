@@ -237,6 +237,26 @@ export function columnCountForPaneCount(count: PaneCount): number {
   return paneGridDimensions(count).cols;
 }
 
+/** 持久化恢复多屏时，侧栏/手柄占用的逻辑宽度估算（与 useMainLayoutModes 一致）。 */
+export const MAIN_LAYOUT_MULTI_PANE_RESTORE_SIDE_GUTTER_PX = 600;
+
+/**
+ * 持久化恢复多屏后，若当前 inner 宽度不足以容纳网格 min-width，返回目标逻辑宽度；否则 null。
+ */
+export function computeRestoreMultiPaneLogicalWidth(
+  paneCount: PaneCount,
+  currentInnerWidth: number,
+  sideGutterPx: number = MAIN_LAYOUT_MULTI_PANE_RESTORE_SIDE_GUTTER_PX,
+): number | null {
+  if (paneCount <= 1) return null;
+  const minCenter = computeMinLogicalCenterWidthForPaneCount(paneCount);
+  const cols = columnCountForPaneCount(paneCount);
+  const expandPx = Math.max(0, (cols - 1) * MAIN_LAYOUT_MULTI_PANE_UNIT_PX);
+  const neededWidth = minCenter + sideGutterPx;
+  if (expandPx <= 0 || currentInnerWidth >= neededWidth) return null;
+  return Math.max(neededWidth, currentInnerWidth + expandPx);
+}
+
 // ── Dual-pane aliases (backward compat) ──
 
 /** @deprecated 使用 {@link MAIN_LAYOUT_MULTI_PANE_MIN_WIDTH_PX} */
