@@ -52,6 +52,17 @@ export async function readProjectRelativeFileBase64(
   });
 }
 
+/** 列出仓库内相对目录下的文件名（单层，不递归）。 */
+export async function listProjectRelativeDirectory(
+  repositoryPath: string,
+  relativePath: string,
+): Promise<string[]> {
+  return invoke<string[]>("list_project_relative_directory", {
+    projectPath: repositoryPath,
+    relativePath,
+  });
+}
+
 /** 覆盖写入仓库根目录下相对路径 UTF-8 文件（由 Tauri 侧做路径安全校验）。 */
 export async function writeProjectRelativeFile(
   repositoryPath: string,

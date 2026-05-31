@@ -23,8 +23,13 @@ export type RunCommandPanelProps = {
   saveRunOpenUrl: () => void;
   resolveOpenUrl: () => string;
   detectedProfile?: RepositoryRunProfile | null;
+  detectedProfiles?: RepositoryRunProfile[];
   detectingProfile?: boolean;
-  applyDetectedProfile?: () => void;
+  applyDetectedProfile?: (profile?: RepositoryRunProfile) => void;
+  selectDetectedProfile?: (profile: RepositoryRunProfile) => void;
+  refreshDetectedProfiles?: () => void;
+  resolvedDebugCommand?: string | null;
+  runCommandLooksStale?: boolean;
   startRun: (options?: { debug?: boolean }) => void | Promise<void>;
   stopRun: () => void | Promise<void>;
   onClose: () => void;
@@ -48,36 +53,60 @@ export function RunCommandPanel({
   saveRunOpenUrl,
   resolveOpenUrl,
   detectedProfile = null,
+  detectedProfiles = [],
   detectingProfile = false,
   applyDetectedProfile,
+  selectDetectedProfile,
+  refreshDetectedProfiles,
+  resolvedDebugCommand = null,
+  runCommandLooksStale = false,
   startRun,
   stopRun,
   onClose,
 }: RunCommandPanelProps) {
   const inputsDisabled = !runCwd || runStatus === "stopping";
   const showDetectedBanner =
-    detectedProfile != null && runCommand.trim() !== detectedProfile.runCommand.trim();
-  const canDebug = Boolean(detectedProfile?.debugCommand);
+    detectedProfile != null &&
+    (runCommandLooksStale || runCommand.trim() !== detectedProfile.runCommand.trim());
+  const canDebug = Boolean(resolvedDebugCommand);
   const commandPlaceholder = getRunCommandPlaceholder(detectedProfile);
   const debugHint = getRunDebugHint(detectedProfile);
   const stackLabel = detectedProfile?.stack === "java" ? "Java" : detectedProfile?.stack === "node" ? "Node" : null;
+  const hasProfileChoices = detectedProfiles.length > 1;
 
   return (
     <div className="app-run-command-popover__content">
       <header className="app-run-command-popover__header">
         <span className="app-run-command-popover__title">运行指令</span>
-        <Tooltip
-          title="日志自动识别仅限 localhost / 本机 IP；已保存指定地址时自动打开始终用该地址。优先级：指定 > 检测 > 默认"
-          placement="topLeft"
-        >
-          <button
-            type="button"
-            className="app-run-command-popover__hint-btn"
-            aria-label="运行指令说明"
-            onClick={(event) => {
-              event.stopPropagation();
-            }}
+        <div className="app-run-command-popover__header-actions">
+          {refreshDetectedProfiles ? (
+            <Tooltip title="重新检测 Java / Node 运行配置" mouseEnterDelay={0.3}>
+              <button
+                type="button"
+                className="app-run-command-popover__hint-btn"
+                aria-label="重新检测"
+                disabled={detectingProfile || !runCwd}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  refreshDetectedProfiles();
+                }}
+              >
+                ↻
+              </button>
+            </Tooltip>
+          ) : null}
+          <Tooltip
+            title="日志自动识别仅限 localhost / 本机 IP；已保存指定地址时自动打开始终用该地址。优先级：指定 > 检测 > 默认"
+            placement="topLeft"
           >
+            <button
+              type="button"
+              className="app-run-command-popover__hint-btn"
+              aria-label="运行指令说明"
+              onClick={(event) => {
+                event.stopPropagation();
+              }}
+            >
             <svg
               className="app-run-command-popover__hint-icon"
               width="14"
@@ -98,12 +127,13 @@ export function RunCommandPanel({
             </svg>
           </button>
         </Tooltip>
+        </div>
       </header>
 
       {detectingProfile ? (
         <div className="app-run-command-popover__detect-hint">正在检测项目运行配置…</div>
       ) : detectedProfile ? (
-        <div className="app-run-command-popover__detect-banner">
+        <div className={`app-run-command-popover__detect-banner${runCommandLooksStale ? " app-run-command-popover__detect-banner--stale" : ""}`}>
           <div className="app-run-command-popover__detect-copy">
             <div className="app-run-command-popover__detect-head">
               <span className="app-run-command-popover__detect-label">已检测</span>
@@ -125,17 +155,46 @@ export function RunCommandPanel({
             {detectedProfile.activeProfiles ? (
               <span className="app-run-command-popover__detect-meta">profile: {detectedProfile.activeProfiles}</span>
             ) : null}
+            {runCommandLooksStale ? (
+              <span className="app-run-command-popover__detect-meta app-run-command-popover__detect-meta--warn">
+                当前命令与检测结果不一致，建议应用新配置
+              </span>
+            ) : null}
           </div>
           {showDetectedBanner && applyDetectedProfile ? (
             <button
               type="button"
               className="app-run-command-popover__detect-apply"
-              onClick={applyDetectedProfile}
+              onClick={() => applyDetectedProfile(detectedProfile)}
               disabled={inputsDisabled}
             >
               应用
             </button>
           ) : null}
+        </div>
+      ) : null}
+
+      {hasProfileChoices ? (
+        <div className="app-run-command-popover__profile-switch">
+          {detectedProfiles.map((profile) => {
+            const active = profile.runCommand === detectedProfile?.runCommand && profile.stack === detectedProfile?.stack;
+            return (
+              <button
+                key={`${profile.stack}-${profile.source}-${profile.runCommand}`}
+                type="button"
+                className={`app-run-command-popover__profile-chip${active ? " is-active" : ""}`}
+                onClick={() => {
+                  selectDetectedProfile?.(profile);
+                  applyDetectedProfile?.(profile);
+                }}
+                disabled={inputsDisabled}
+              >
+                {profile.stack === "java" ? "Java" : "Node"}
+                <span className="app-run-command-popover__profile-chip-sep">·</span>
+                {profile.label.replace(/^(Maven Spring Boot|Spring Boot|Gradle Spring Boot|npm|pnpm|yarn|bun)\s·\s/i, "")}
+              </button>
+            );
+          })}
         </div>
       ) : null}
 

@@ -476,6 +476,7 @@ pub fn run() {
             claude_commands::attachments::materialize_prd_snapshot,
             claude_commands::attachments::read_project_relative_file,
             claude_commands::attachments::read_project_relative_file_base64,
+            claude_commands::attachments::list_project_relative_directory,
             claude_commands::attachments::read_snapshot_file,
             claude_commands::attachments::append_project_relative_file,
             claude_commands::attachments::write_project_relative_file,

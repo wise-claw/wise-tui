@@ -615,6 +615,12 @@
   border-bottom: 1px solid var(--ant-color-border-secondary);
 }
 
+.app-run-command-popover__header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .app-run-command-popover__title {
   font-size: 12px;
   font-weight: 600;
@@ -694,6 +700,53 @@
 .app-run-command-popover__detect-stack--node {
   color: #047857;
   background: rgba(4, 120, 87, 0.12);
+}
+
+.app-run-command-popover__detect-banner--stale {
+  border-color: rgba(250, 173, 20, 0.45);
+  background: rgba(250, 173, 20, 0.08);
+}
+
+.app-run-command-popover__detect-meta--warn {
+  color: var(--ant-color-warning);
+}
+
+.app-run-command-popover__profile-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0 10px 6px;
+}
+
+.app-run-command-popover__profile-chip {
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 999px;
+  background: var(--ant-color-bg-container);
+  color: var(--ant-color-text-secondary);
+  font-size: 10px;
+  line-height: 1.2;
+  padding: 2px 8px;
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-run-command-popover__profile-chip.is-active {
+  border-color: var(--ant-color-primary);
+  color: var(--ant-color-primary);
+  background: var(--ant-color-primary-bg);
+}
+
+.app-run-command-popover__profile-chip:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.app-run-command-popover__profile-chip-sep {
+  opacity: 0.55;
+  padding: 0 2px;
 }
 
 .app-run-command-popover__detect-label {

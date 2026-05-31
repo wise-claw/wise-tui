@@ -309,6 +309,50 @@ pub fn read_project_relative_file(
     fs::read_to_string(&canon).map_err(|e| format!("读取文件失败: {e}"))
 }
 
+const MAX_LIST_DIR_ENTRIES: usize = 200;
+
+/// 列出仓库内某相对目录下的文件名（不递归；用于 `.idea/runConfigurations` 等点目录）。
+pub fn list_project_relative_directory(
+    project_path: String,
+    relative_path: String,
+) -> Result<Vec<String>, String> {
+    let project = PathBuf::from(&project_path);
+    if !project.is_dir() {
+        return Err("仓库路径无效或不是目录".into());
+    }
+    let base = project
+        .canonicalize()
+        .map_err(|e| format!("解析仓库路径失败: {e}"))?;
+    let candidate = safe_join_under_project(&base, relative_path.trim())?;
+    let meta = fs::metadata(&candidate).map_err(|e| format!("目录不存在或无法访问: {e}"))?;
+    if !meta.is_dir() {
+        return Err("目标不是目录".into());
+    }
+    let canon_dir = candidate
+        .canonicalize()
+        .map_err(|e| format!("解析目录路径失败: {e}"))?;
+    if !canon_dir.starts_with(&base) {
+        return Err("路径越界".into());
+    }
+
+    let mut entries: Vec<String> = Vec::new();
+    for entry in fs::read_dir(&canon_dir).map_err(|e| format!("读取目录失败: {e}"))? {
+        let entry = entry.map_err(|e| format!("读取目录项失败: {e}"))?;
+        let file_type = entry
+            .file_type()
+            .map_err(|e| format!("读取文件类型失败: {e}"))?;
+        if !file_type.is_file() {
+            continue;
+        }
+        entries.push(entry.file_name().to_string_lossy().to_string());
+        if entries.len() >= MAX_LIST_DIR_ENTRIES {
+            break;
+        }
+    }
+    entries.sort();
+    Ok(entries)
+}
+
 /// 读取仓库内文件的原始字节并返回 Base64，供前端 `data:` URL / Blob 预览（不受 asset protocol `scope` 限制）。
 const MAX_BINARY_PREVIEW_BYTES: u64 = 45 * 1024 * 1024;
 

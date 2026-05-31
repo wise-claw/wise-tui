@@ -1,13 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import {
+  dedupeRunProfiles,
+  deriveDebugCommandFromRunCommand,
   detectRepositoryRunProfileFromFiles,
   inferNodeDefaultPort,
+  isRunCommandStale,
   parseApplicationServerPort,
   parseIntellijSpringBootRunConfiguration,
   parseMavenSpringBootFromPoms,
   parsePackageJsonRunProfile,
   parseSpringActiveProfile,
   parseViteConfigPort,
+  pickPrimaryRunProfile,
   resolveNodePackageManager,
 } from "./detectRepositoryRunProfile";
 
@@ -174,5 +178,63 @@ describe("detectRepositoryRunProfile", () => {
         viteConfig: "export default { server: { port: 16088 } }",
       }),
     ).toBe(16088);
+  });
+
+  test("deriveDebugCommandFromRunCommand injects jdwp and inspect", () => {
+    expect(
+      deriveDebugCommandFromRunCommand("./mvnw -pl yudao-server -am spring-boot:run", null)?.includes("jdwp"),
+    ).toBe(true);
+    expect(
+      deriveDebugCommandFromRunCommand("bun run dev", null)?.includes("9229"),
+    ).toBe(true);
+  });
+
+  test("isRunCommandStale detects wrong java module", () => {
+    expect(
+      isRunCommandStale("mvn -pl yudao-module-ai spring-boot:run", {
+        kind: "maven-spring-boot",
+        stack: "java",
+        label: "Maven Spring Boot · yudao-server",
+        runCommand: "./mvnw -pl yudao-server -am spring-boot:run",
+        debugCommand: null,
+        defaultUrl: "http://localhost:48080",
+        activeProfiles: null,
+        mainClass: null,
+        modulePath: "yudao-server",
+        source: "pom.xml",
+      }),
+    ).toBe(true);
+  });
+
+  test("pickPrimaryRunProfile prefers saved stack", () => {
+    const profiles = [
+      {
+        kind: "maven-spring-boot" as const,
+        stack: "java" as const,
+        label: "Java",
+        runCommand: "./mvnw spring-boot:run",
+        debugCommand: null,
+        defaultUrl: null,
+        activeProfiles: null,
+        mainClass: null,
+        modulePath: null,
+        source: "pom.xml",
+      },
+      {
+        kind: "bun" as const,
+        stack: "node" as const,
+        label: "Node",
+        runCommand: "bun run dev",
+        debugCommand: null,
+        defaultUrl: null,
+        activeProfiles: null,
+        mainClass: null,
+        modulePath: null,
+        source: "package.json",
+      },
+    ];
+    expect(pickPrimaryRunProfile(profiles, "bun run dev")?.stack).toBe("node");
+    expect(pickPrimaryRunProfile(profiles, null)?.stack).toBe("java");
+    expect(dedupeRunProfiles([...profiles, profiles[1]])).toHaveLength(2);
   });
 });

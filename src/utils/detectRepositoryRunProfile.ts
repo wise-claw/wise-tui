@@ -19,6 +19,7 @@ export type RepositoryRunProfile = {
   activeProfiles: string | null;
   mainClass: string | null;
   modulePath: string | null;
+  scanRoot?: string | null;
   source: string;
 };
 
@@ -637,4 +638,95 @@ export function getRunDebugHint(profile: RepositoryRunProfile | null): string {
     return `以 JDWP ${JDWP_DEBUG_PORT} 启动，请在 IDE 中 Attach Remote JVM`;
   }
   return `以 Node inspect ${NODE_INSPECT_PORT} 启动，请在 IDE 中 Attach Node 调试器`;
+}
+
+export function dedupeRunProfiles(profiles: RepositoryRunProfile[]): RepositoryRunProfile[] {
+  const seen = new Set<string>();
+  const out: RepositoryRunProfile[] = [];
+  for (const profile of profiles) {
+    const key = `${profile.stack}|${profile.runCommand}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(profile);
+  }
+  return out;
+}
+
+export function pickPrimaryRunProfile(
+  profiles: RepositoryRunProfile[],
+  savedRunCommand: string | null | undefined,
+): RepositoryRunProfile | null {
+  if (profiles.length === 0) return null;
+  if (profiles.length === 1) return profiles[0] ?? null;
+
+  const saved = savedRunCommand?.trim();
+  if (saved) {
+    const exact = profiles.find((profile) => profile.runCommand.trim() === saved);
+    if (exact) return exact;
+    if (/spring-boot:run|bootRun|\bmvn(w)?\b|\bgradle(w)?\b/i.test(saved)) {
+      return profiles.find((profile) => profile.stack === "java") ?? profiles[0] ?? null;
+    }
+    if (/\b(npm|pnpm|yarn|bun)\s+run\b|\bvite\b|\bnext\b/i.test(saved)) {
+      return profiles.find((profile) => profile.stack === "node") ?? profiles[0] ?? null;
+    }
+  }
+
+  const java = profiles.find((profile) => profile.stack === "java");
+  const node = profiles.find((profile) => profile.stack === "node");
+  if (java && node) return java;
+  return profiles[0] ?? null;
+}
+
+export function isRunCommandStale(
+  savedRunCommand: string,
+  detectedProfile: RepositoryRunProfile | null,
+): boolean {
+  const saved = savedRunCommand.trim();
+  if (!saved || !detectedProfile) return false;
+  if (saved === detectedProfile.runCommand.trim()) return false;
+  if (detectedProfile.stack !== "java") return false;
+  if (/module-(?:api|ai|biz|infra|system)/i.test(saved) && /server|admin|gateway/i.test(detectedProfile.modulePath ?? "")) {
+    return true;
+  }
+  if (detectedProfile.modulePath && !saved.includes(detectedProfile.modulePath)) {
+    return /spring-boot:run|bootRun/i.test(saved);
+  }
+  return false;
+}
+
+export function deriveDebugCommandFromRunCommand(
+  runCommand: string,
+  profile: RepositoryRunProfile | null,
+): string | null {
+  const cmd = runCommand.trim();
+  if (!cmd) return profile?.debugCommand ?? null;
+  if (profile?.debugCommand && profile.debugCommand.trim() === cmd) return cmd;
+  if (profile?.debugCommand && profile.runCommand.trim() === cmd) return profile.debugCommand;
+
+  if (/spring-boot:run/i.test(cmd)) {
+    if (/jdwp|jvmArguments/i.test(cmd)) return cmd;
+    const jvmArgs = `-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:${JDWP_DEBUG_PORT}`;
+    return `${cmd} -Dspring-boot.run.jvmArguments="${jvmArgs}"`;
+  }
+  if (/\bbootRun\b/i.test(cmd)) {
+    return /--debug-jvm/i.test(cmd) ? cmd : `${cmd} --debug-jvm`;
+  }
+  if (/\b(npm|pnpm|yarn|bun)\s+run\b/i.test(cmd)) {
+    if (/inspect/i.test(cmd)) return cmd;
+    return `NODE_OPTIONS='--inspect=127.0.0.1:${NODE_INSPECT_PORT}' ${cmd}`;
+  }
+  return profile?.debugCommand ?? null;
+}
+
+export function adaptProfileToScanRoot(profile: RepositoryRunProfile, scanRoot: string): RepositoryRunProfile {
+  if (!scanRoot) return profile;
+  const wrap = (command: string) => `(cd ${scanRoot} && ${command})`;
+  return {
+    ...profile,
+    scanRoot,
+    label: `${profile.label} · ${scanRoot}`,
+    source: `${scanRoot}/${profile.source}`,
+    runCommand: wrap(profile.runCommand),
+    debugCommand: profile.debugCommand ? wrap(profile.debugCommand) : deriveDebugCommandFromRunCommand(wrap(profile.runCommand), profile),
+  };
 }

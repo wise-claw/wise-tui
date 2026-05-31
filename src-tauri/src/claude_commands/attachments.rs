@@ -273,6 +273,14 @@ pub(crate) fn read_project_relative_file_base64(
 }
 
 #[tauri::command]
+pub(crate) fn list_project_relative_directory(
+    project_path: String,
+    relative_path: String,
+) -> Result<Vec<String>, String> {
+    prd_materialize::list_project_relative_directory(project_path, relative_path)
+}
+
+#[tauri::command]
 pub(crate) fn read_snapshot_file(file_path: String) -> Result<String, String> {
     prd_materialize::read_snapshot_file(file_path)
 }

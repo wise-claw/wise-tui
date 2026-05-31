@@ -1,8 +1,12 @@
 import { message } from "antd";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Repository } from "../types";
-import { detectRepositoryRunProfile } from "../services/repositoryRunProfileDetect";
+import { detectRepositoryRunProfiles } from "../services/repositoryRunProfileDetect";
 import type { RepositoryRunProfile } from "../utils/detectRepositoryRunProfile";
+import {
+  deriveDebugCommandFromRunCommand,
+  isRunCommandStale,
+} from "../utils/detectRepositoryRunProfile";
 import {
   getRepositoryRunCommandState,
   startRepositoryRunCommand,
@@ -84,64 +88,83 @@ export function useRepositoryRunCommand({
   );
   const [runErrorMonitorEnabled, setRunErrorMonitorEnabled] = useState(false);
   const [detectedProfile, setDetectedProfile] = useState<RepositoryRunProfile | null>(null);
+  const [detectedProfiles, setDetectedProfiles] = useState<RepositoryRunProfile[]>([]);
   const [detectingProfile, setDetectingProfile] = useState(false);
   const autoAppliedProfileSourceRef = useRef<string | null>(null);
 
-  useEffect(() => {
+  const loadDetectedProfiles = useCallback(async () => {
     if (!trimmedCwd) {
       setDetectedProfile(null);
+      setDetectedProfiles([]);
       setDetectingProfile(false);
       autoAppliedProfileSourceRef.current = null;
       return;
     }
 
-    let cancelled = false;
     setDetectingProfile(true);
-    void detectRepositoryRunProfile(trimmedCwd)
-      .then((profile) => {
-        if (cancelled) return;
-        setDetectedProfile(profile);
-        setDetectingProfile(false);
-        if (!profile || runKey == null) return;
-        const saved = window.localStorage.getItem(runKey)?.trim();
-        if (saved) return;
-        if (autoAppliedProfileSourceRef.current === profile.source) return;
-        autoAppliedProfileSourceRef.current = profile.source;
-        setRunCommand(profile.runCommand);
-        window.localStorage.setItem(runKey, profile.runCommand);
-        if (profile.defaultUrl && runUrlKey) {
-          const existingUrl = window.localStorage.getItem(runUrlKey)?.trim();
-          if (!existingUrl) {
-            window.localStorage.setItem(runUrlKey, profile.defaultUrl);
-            setRunPreferredUrl(profile.defaultUrl);
-          }
-        }
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setDetectedProfile(null);
-        setDetectingProfile(false);
-      });
+    try {
+      const saved = runKey ? window.localStorage.getItem(runKey)?.trim() : "";
+      const result = await detectRepositoryRunProfiles(trimmedCwd, saved);
+      setDetectedProfiles(result.profiles);
+      setDetectedProfile(result.primary);
+      const profile = result.primary;
+      if (!profile || runKey == null) return;
 
-    return () => {
-      cancelled = true;
-    };
+      if (saved && !isRunCommandStale(saved, profile)) return;
+      if (autoAppliedProfileSourceRef.current === profile.source) return;
+
+      autoAppliedProfileSourceRef.current = profile.source;
+      setRunCommand(profile.runCommand);
+      window.localStorage.setItem(runKey, profile.runCommand);
+      if (profile.defaultUrl && runUrlKey) {
+        const existingUrl = window.localStorage.getItem(runUrlKey)?.trim();
+        if (!existingUrl || isRunCommandStale(saved, profile)) {
+          window.localStorage.setItem(runUrlKey, profile.defaultUrl);
+          setRunPreferredUrl(profile.defaultUrl);
+        }
+      }
+    } catch {
+      setDetectedProfile(null);
+      setDetectedProfiles([]);
+    } finally {
+      setDetectingProfile(false);
+    }
   }, [runKey, runUrlKey, setRunCommand, setRunPreferredUrl, trimmedCwd]);
+
+  useEffect(() => {
+    void loadDetectedProfiles();
+  }, [loadDetectedProfiles]);
 
   useEffect(() => {
     setRunAutoOpenPageEnabled(readRunAutoOpenPageEnabled(runAutoOpenKey));
   }, [runAutoOpenKey]);
 
-  const applyDetectedProfile = useCallback(() => {
-    if (!detectedProfile || !runKey) return;
-    setRunCommand(detectedProfile.runCommand);
-    window.localStorage.setItem(runKey, detectedProfile.runCommand);
-    if (detectedProfile.defaultUrl && runUrlKey) {
-      window.localStorage.setItem(runUrlKey, detectedProfile.defaultUrl);
-      setRunPreferredUrl(detectedProfile.defaultUrl);
-    }
-    message.success(`已应用检测到的运行配置（${detectedProfile.label}）`);
-  }, [detectedProfile, runKey, runUrlKey, setRunCommand, setRunPreferredUrl]);
+  const applyDetectedProfile = useCallback(
+    (profile: RepositoryRunProfile | null = detectedProfile) => {
+      if (!profile || !runKey) return;
+      setDetectedProfile(profile);
+      setRunCommand(profile.runCommand);
+      window.localStorage.setItem(runKey, profile.runCommand);
+      if (profile.defaultUrl && runUrlKey) {
+        window.localStorage.setItem(runUrlKey, profile.defaultUrl);
+        setRunPreferredUrl(profile.defaultUrl);
+      }
+      message.success(`已应用运行配置（${profile.label}）`);
+    },
+    [detectedProfile, runKey, runUrlKey, setRunCommand, setRunPreferredUrl],
+  );
+
+  const selectDetectedProfile = useCallback((profile: RepositoryRunProfile) => {
+    setDetectedProfile(profile);
+  }, []);
+
+  const refreshDetectedProfiles = useCallback(() => {
+    autoAppliedProfileSourceRef.current = null;
+    void loadDetectedProfiles();
+  }, [loadDetectedProfiles]);
+
+  const resolvedDebugCommand = deriveDebugCommandFromRunCommand(runCommand, detectedProfile);
+  const runCommandLooksStale = isRunCommandStale(runCommand, detectedProfile);
 
   useEffect(() => {
     if (repositoryId == null || !trimmedCwd) return;
@@ -220,7 +243,7 @@ export function useRepositoryRunCommand({
     async (options?: { debug?: boolean }) => {
       if (!repository || !trimmedCwd) return;
       const commandOverride =
-        options?.debug && detectedProfile?.debugCommand ? detectedProfile.debugCommand : undefined;
+        options?.debug && resolvedDebugCommand ? resolvedDebugCommand : undefined;
       await startRepositoryRunCommand({
         repository: { id: repository.id, path: trimmedCwd },
         commandOverride,
@@ -228,7 +251,7 @@ export function useRepositoryRunCommand({
         onRunStarted,
       });
     },
-    [detectedProfile?.debugCommand, onRequestOpenPanel, onRunStarted, repository, trimmedCwd],
+    [onRequestOpenPanel, onRunStarted, repository, resolvedDebugCommand, trimmedCwd],
   );
 
   const stopRun = useCallback(async () => {
@@ -267,8 +290,13 @@ export function useRepositoryRunCommand({
     saveRunOpenUrl,
     resolveOpenUrl,
     detectedProfile,
+    detectedProfiles,
     detectingProfile,
     applyDetectedProfile,
+    selectDetectedProfile,
+    refreshDetectedProfiles,
+    resolvedDebugCommand,
+    runCommandLooksStale,
     startRun,
     stopRun,
     handleRunButtonClick,
