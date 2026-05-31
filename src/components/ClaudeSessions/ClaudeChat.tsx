@@ -232,6 +232,8 @@ interface Props {
   /** 由父级在「返回主会话」等场景传入，使重挂载后面板默认收起 */
   initialNotificationPanelCollapsed?: boolean;
   onCreateNewSession?: () => void;
+  /** 新建主会话进行中 */
+  creatingNewSession?: boolean;
   /** 从快捷条「更多」直达指定内置助手对话页 */
   onOpenBuiltinAssistant?: (assistantId: string) => void;
   onOpenRepositoryScheduledTasks?: () => void;
@@ -486,6 +488,7 @@ export function ClaudeChat({
   onSwitchSession,
   initialNotificationPanelCollapsed = false,
   onCreateNewSession,
+  creatingNewSession = false,
   onOpenBuiltinAssistant,
   onOpenRepositoryScheduledTasks,
   onSend: _onSend,
@@ -4936,6 +4939,7 @@ export function ClaudeChat({
       <div className="app-claude-chat-bottom">
       <SessionQuickActionsBar
         onCreateNewSession={onCreateNewSession}
+        creatingNewSession={creatingNewSession}
         onOpenBuiltinAssistant={onOpenBuiltinAssistant}
         onOpenWorkTrajectory={() => setWorkTrajectoryDrawerOpen(true)}
         showWorktreeInMore={Boolean(session.repositoryPath)}
@@ -4970,6 +4974,7 @@ export function ClaudeChat({
                   <button
                     type="button"
                     className="app-push-popover__submit"
+                    onMouseDown={(event) => event.preventDefault()}
                     onClick={() => void handlePushSubmit()}
                     disabled={pushSummaryLoading || pushSubmitting}
                   >

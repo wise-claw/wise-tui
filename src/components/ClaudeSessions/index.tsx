@@ -601,7 +601,7 @@ interface Props {
   onCancelSession: (sessionId: string, opts?: { retractLastUserTurn?: boolean }) => void;
   onCloseSession: (sessionId: string) => void;
   onSwitchSession: (sessionId: string) => void;
-  onNewSession: (repository: Repository) => void;
+  onNewSession: (repository: Repository) => void | Promise<void>;
   onNewProjectSession?: (project: ProjectItem) => void | Promise<void>;
   onRespondToQuestion: (sessionId: string, answers: string[], customAnswer?: string) => void;
   onDismissQuestion: (sessionId: string) => void;
@@ -975,24 +975,35 @@ export function ClaudeSessions({
     );
   }, [extraPanes, workflowTasksByCreator]);
 
-  const handleCreateActiveRepositorySession = useCallback(() => {
-    if (!activeRepository) {
-      return;
-    }
-    onNewSession(activeRepository);
-  }, [activeRepository, onNewSession]);
+  const [creatingPrimarySession, setCreatingPrimarySession] = useState(false);
+  const creatingPrimarySessionRef = useRef(false);
 
   const handleCreatePrimarySession = useCallback(() => {
-    if (activeWorkspaceFocus === "project" && activeProject && onNewProjectSession) {
-      void onNewProjectSession(activeProject);
+    if (creatingPrimarySessionRef.current) {
       return;
     }
-    handleCreateActiveRepositorySession();
+    creatingPrimarySessionRef.current = true;
+    setCreatingPrimarySession(true);
+    const finish = () => {
+      creatingPrimarySessionRef.current = false;
+      setCreatingPrimarySession(false);
+    };
+
+    if (activeWorkspaceFocus === "project" && activeProject && onNewProjectSession) {
+      void Promise.resolve(onNewProjectSession(activeProject)).finally(finish);
+      return;
+    }
+    if (!activeRepository) {
+      finish();
+      return;
+    }
+    void Promise.resolve(onNewSession(activeRepository)).finally(finish);
   }, [
     activeProject,
+    activeRepository,
     activeWorkspaceFocus,
-    handleCreateActiveRepositorySession,
     onNewProjectSession,
+    onNewSession,
   ]);
 
   /** 打开仓库/项目时仅恢复已有主会话绑定，不自动新建（新建仅走「新建会话」按钮）。 */
@@ -1243,6 +1254,7 @@ export function ClaudeSessions({
             }
             onSwitchSession={handleSwitchToSession}
             onCreateNewSession={handleCreatePrimarySession}
+            creatingNewSession={creatingPrimarySession}
             onOpenBuiltinAssistant={onOpenBuiltinAssistant}
             onOpenRepositoryScheduledTasks={onOpenRepositoryScheduledTasks}
             onSend={onSendMessage}
@@ -1307,7 +1319,12 @@ export function ClaudeSessions({
         <SessionEmptyState
           title="暂无 Claude Code 会话"
           hint="使用下方「新建会话」开始对话，或从「历史会话」恢复已有会话。"
-          primaryAction={{ label: "新建会话", onClick: handleCreatePrimarySession }}
+          primaryAction={{
+            label: "新建会话",
+            onClick: handleCreatePrimarySession,
+            loading: creatingPrimarySession,
+            disabled: creatingPrimarySession,
+          }}
         />
       )}
 

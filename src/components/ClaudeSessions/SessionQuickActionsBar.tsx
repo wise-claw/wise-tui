@@ -26,6 +26,8 @@ import { SessionQuickActionsCustomizeModal } from "./SessionQuickActionsCustomiz
 
 export interface SessionQuickActionsBarProps {
   onCreateNewSession?: () => void;
+  /** 新建主会话进行中：禁用按钮并显示加载态，避免重复点击 */
+  creatingNewSession?: boolean;
   onOpenBuiltinAssistant?: (assistantId: string) => void;
   onOpenWorkTrajectory: () => void;
   onOpenWorktreeMenu?: () => void;
@@ -54,6 +56,7 @@ function isBuiltinAssistantQuickAction(id: SessionQuickActionId): boolean {
 
 export function SessionQuickActionsBar({
   onCreateNewSession,
+  creatingNewSession = false,
   onOpenBuiltinAssistant,
   onOpenWorkTrajectory,
   onOpenWorktreeMenu,
@@ -84,13 +87,21 @@ export function SessionQuickActionsBar({
         <button
           key={id}
           type="button"
-          className="app-session-quick-pill"
-          onClick={() => onCreateNewSession?.()}
+          className={`app-session-quick-pill${creatingNewSession ? " app-session-quick-pill--loading" : ""}`}
+          disabled={creatingNewSession}
+          aria-busy={creatingNewSession}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => {
+            if (creatingNewSession) return;
+            onCreateNewSession?.();
+          }}
         >
           <span className="app-session-quick-pill__icon app-session-quick-pill__icon--blue" aria-hidden>
             <CommentOutlined />
           </span>
-          <span className="app-session-quick-pill__label">{meta.pillLabel}</span>
+          <span className="app-session-quick-pill__label">
+            {creatingNewSession ? "创建中..." : meta.pillLabel}
+          </span>
         </button>
       );
     }
@@ -173,9 +184,13 @@ export function SessionQuickActionsBar({
       if (id === "new-session") {
         return {
           key: id,
-          label: meta.label,
+          label: creatingNewSession ? "创建中..." : meta.label,
           icon: ACTION_MENU_ICONS[id],
-          onClick: () => onCreateNewSession?.(),
+          disabled: creatingNewSession,
+          onClick: () => {
+            if (creatingNewSession) return;
+            onCreateNewSession?.();
+          },
         };
       }
       if (id === "push") {
@@ -199,6 +214,7 @@ export function SessionQuickActionsBar({
     return items;
   }, [
     overflow,
+    creatingNewSession,
     onCreateNewSession,
     onOpenBuiltinAssistant,
     onOpenWorkTrajectory,

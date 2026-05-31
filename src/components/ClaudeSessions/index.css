@@ -5442,6 +5442,8 @@ button.app-message-part-header:disabled:hover {
   align-items: center;
   gap: 6px;
   min-width: 0;
+  position: relative;
+  z-index: 3;
 }
 
 .app-session-quick-actions__primary {
@@ -5651,19 +5653,31 @@ button.app-message-part-header:disabled:hover {
   line-height: 1.15;
   cursor: pointer;
   white-space: nowrap;
+  touch-action: manipulation;
   backdrop-filter: var(--app-workspace-glass-blur) !important;
   -webkit-backdrop-filter: var(--app-workspace-glass-blur) !important;
-  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    box-shadow 0.12s ease,
+    transform 0.08s ease,
+    opacity 0.12s ease !important;
 }
 
-.app-session-quick-pill:hover {
+.app-session-quick-pill:disabled,
+.app-session-quick-pill--loading {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.app-session-quick-pill:hover:not(:disabled) {
   background: color-mix(in srgb, var(--ant-color-fill-secondary) 60%, transparent) !important;
   border-color: color-mix(in srgb, var(--ant-color-primary) 32%, transparent) !important;
   transform: translateY(-0.8px) scale(1.02);
   box-shadow: 0 4px 12px color-mix(in srgb, var(--ant-color-primary) 8%, transparent) !important;
 }
 
-.app-session-quick-pill:active {
+.app-session-quick-pill:active:not(:disabled) {
   transform: scale(0.96);
 }
 

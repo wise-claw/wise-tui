@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button, Input, Popover, Spin, Tooltip, message } from "antd";
+import { Button, Input, Popover, Spin, message } from "antd";
 import { CloudUploadOutlined } from "@ant-design/icons";
 import {
   commitAndPushWorkspaceRepositories,
@@ -24,6 +24,9 @@ export function GitWorkspaceCommitPush({ repositoryEntries, onAfterSync }: Props
   const [progressLabel, setProgressLabel] = useState("");
   const [dirtyRepoCount, setDirtyRepoCount] = useState(0);
   const loadSeqRef = useRef(0);
+  const draftRef = useRef(draft);
+  const submitLockRef = useRef(false);
+  draftRef.current = draft;
 
   const loadDirtyRepoCount = useCallback(async (seq: number) => {
     if (repositoryEntries.length === 0) return;
@@ -51,6 +54,7 @@ export function GitWorkspaceCommitPush({ repositoryEntries, onAfterSync }: Props
 
   const handleOpenChange = useCallback(
     (nextOpen: boolean) => {
+      if (!nextOpen && submitting) return;
       setOpen(nextOpen);
       if (!nextOpen) {
         loadSeqRef.current += 1;
@@ -59,11 +63,12 @@ export function GitWorkspaceCommitPush({ repositoryEntries, onAfterSync }: Props
         return;
       }
       setDraft("");
+      setProgressLabel("");
       loadSeqRef.current += 1;
       const seq = loadSeqRef.current;
       void loadDirtyRepoCount(seq);
     },
-    [loadDirtyRepoCount],
+    [loadDirtyRepoCount, submitting],
   );
 
   useEffect(
@@ -73,8 +78,15 @@ export function GitWorkspaceCommitPush({ repositoryEntries, onAfterSync }: Props
     [],
   );
 
+  useEffect(() => {
+    if (!submitting) {
+      submitLockRef.current = false;
+    }
+  }, [submitting]);
+
   const handleSubmit = useCallback(async () => {
-    const commitMessage = draft.trim();
+    if (submitting || submitLockRef.current) return;
+    const commitMessage = draftRef.current.trim();
     if (!commitMessage) {
       message.warning("请先填写提交信息");
       return;
@@ -83,6 +95,8 @@ export function GitWorkspaceCommitPush({ repositoryEntries, onAfterSync }: Props
       message.warning("当前工作区没有可提交的仓库");
       return;
     }
+
+    submitLockRef.current = true;
 
     const refs: GitWorkspaceRepositoryRef[] = repositoryEntries.map((entry) => ({
       path: entry.path,
@@ -122,13 +136,11 @@ export function GitWorkspaceCommitPush({ repositoryEntries, onAfterSync }: Props
       setSubmitting(false);
       setProgressLabel("");
     }
-  }, [draft, onAfterSync, repositoryEntries]);
+  }, [onAfterSync, repositoryEntries, submitting]);
 
   if (repositoryEntries.length === 0) {
     return null;
   }
-
-  const canSubmit = draft.trim().length > 0 && !loadingDraft && !submitting;
 
   return (
     <Popover
@@ -136,9 +148,16 @@ export function GitWorkspaceCommitPush({ repositoryEntries, onAfterSync }: Props
       placement="bottomRight"
       open={open}
       onOpenChange={handleOpenChange}
+      destroyOnHidden
       classNames={{ root: "git-workspace-sync-popover" }}
       content={
-        <div className="git-workspace-sync-popover__content">
+        <form
+          className="git-workspace-sync-popover__content"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleSubmit();
+          }}
+        >
           <div className="git-workspace-sync-popover__title">工作区提交并推送</div>
           <div className="git-workspace-sync-popover__meta">
             {loadingDraft
@@ -159,34 +178,45 @@ export function GitWorkspaceCommitPush({ repositoryEntries, onAfterSync }: Props
             placeholder="提交信息..."
             disabled={loadingDraft || submitting}
             autoSize={{ minRows: 3, maxRows: 6 }}
+            autoFocus
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+              if (!event.metaKey && !event.ctrlKey) return;
+              event.preventDefault();
+              void handleSubmit();
+            }}
           />
           {progressLabel ? (
             <div className="git-workspace-sync-popover__progress">{progressLabel}</div>
           ) : null}
           <div className="git-workspace-sync-popover__footer">
             <Button
+              htmlType="button"
               type="primary"
               size="small"
               loading={submitting}
-              disabled={!canSubmit}
-              onClick={() => void handleSubmit()}
+              onMouseDown={(event) => event.preventDefault()}
+              onPointerDown={(event) => {
+                if (event.button !== 0 || submitting) return;
+                event.preventDefault();
+                void handleSubmit();
+              }}
             >
               {submitting ? "提交推送中..." : "提交并推送全部"}
             </Button>
           </div>
-        </div>
+        </form>
       }
     >
-      <Tooltip title="工作区提交并推送" placement="top">
-        <Button
-          type="text"
-          size="small"
-          className="git-workspace-sync-btn"
-          icon={<CloudUploadOutlined />}
-          aria-label="工作区提交并推送"
-          disabled={submitting}
-        />
-      </Tooltip>
+      <Button
+        type="text"
+        size="small"
+        className="git-workspace-sync-btn"
+        icon={<CloudUploadOutlined />}
+        aria-label="工作区提交并推送"
+        title="工作区提交并推送"
+        disabled={submitting}
+      />
     </Popover>
   );
 }

@@ -2082,14 +2082,14 @@ export default function App() {
     const priorActiveId = activeSessionIdLatestRef.current;
     setActiveRepositoryWithOwner(repository.id);
     const id = await createSession(target.path, target.displayName);
-    await releaseScopedClaudeHostsBeforeNewMain({
+    switchSession(id);
+    await bindRepositoryMainSession(target.path, id);
+    void releaseScopedClaudeHostsBeforeNewMain({
       kind: "repository",
       repositoryPath: target.path,
       newSessionId: id,
       priorActiveId,
     });
-    await bindRepositoryMainSession(target.path, id);
-    switchSession(id);
     return id;
   }
 
@@ -2118,14 +2118,14 @@ export default function App() {
     }
     const priorActiveId = activeSessionIdLatestRef.current;
     const id = await createSession(anchor.path, anchor.displayName);
-    await releaseScopedClaudeHostsBeforeNewMain({
+    switchSession(id);
+    await bindRepositoryMainSession(projectMainSessionBindingKey(project.id), id);
+    void releaseScopedClaudeHostsBeforeNewMain({
       kind: "project",
       project,
       newSessionId: id,
       priorActiveId,
     });
-    await bindRepositoryMainSession(projectMainSessionBindingKey(project.id), id);
-    switchSession(id);
     return id;
   }
 
