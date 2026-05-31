@@ -32,6 +32,7 @@ interface Props {
   /** 自定义行渲染；提供时覆盖 listVariant 默认内容 */
   renderRow?: (row: ChatMessageListRow, index: number) => ReactNode;
   onNavigate?: () => void;
+  messageListProfile?: "primary" | "companion";
 }
 
 function scrollElementIntoScrollContainer(
@@ -60,6 +61,7 @@ export const ChatMessageListVirtualBody = forwardRef<ChatMessageListNavigationHa
       onOpenTaskDetail,
       renderRow,
       onNavigate,
+      messageListProfile = "primary",
     },
     ref,
   ) {
@@ -73,7 +75,7 @@ export const ChatMessageListVirtualBody = forwardRef<ChatMessageListNavigationHa
       queueScrollToMessageId,
       pendingScrollMessageIdRef,
       scrollGeneration,
-    } = useChatMessageListWindow({ rows, scrollContainerRef, listResetKey });
+    } = useChatMessageListWindow({ rows, scrollContainerRef, listResetKey, profile: messageListProfile });
 
     const scrollFn = useCallback(
       (sc: HTMLDivElement, target: HTMLElement, behavior?: ScrollBehavior) => {

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import {
+  CHAT_MESSAGE_LIST_COMPANION_INITIAL_VISIBLE,
+  CHAT_MESSAGE_LIST_COMPANION_LOAD_STEP,
   CHAT_MESSAGE_LIST_INITIAL_VISIBLE,
   CHAT_MESSAGE_LIST_LOAD_STEP,
   CHAT_MESSAGE_LIST_SCROLL_LOAD_PX,
@@ -18,22 +20,39 @@ interface Options {
   scrollContainerRef: RefObject<HTMLDivElement | null>;
   /** 切换会话时重置窗口 */
   listResetKey?: string;
+  /** 主窗格 vs 多屏伴生窗格：伴生窗格使用更小的尾部窗口 */
+  profile?: "primary" | "companion";
+}
+
+function resolveWindowSizing(profile: Options["profile"]) {
+  if (profile === "companion") {
+    return {
+      initialVisible: CHAT_MESSAGE_LIST_COMPANION_INITIAL_VISIBLE,
+      loadStep: CHAT_MESSAGE_LIST_COMPANION_LOAD_STEP,
+    };
+  }
+  return {
+    initialVisible: CHAT_MESSAGE_LIST_INITIAL_VISIBLE,
+    loadStep: CHAT_MESSAGE_LIST_LOAD_STEP,
+  };
 }
 
 export function useChatMessageListWindow({
   rows,
   scrollContainerRef,
   listResetKey,
+  profile = "primary",
 }: Options) {
-  const [visibleCount, setVisibleCount] = useState(CHAT_MESSAGE_LIST_INITIAL_VISIBLE);
+  const { initialVisible, loadStep } = resolveWindowSizing(profile);
+  const [visibleCount, setVisibleCount] = useState(initialVisible);
   const loadLockedRef = useRef(false);
   const prevRowsLengthRef = useRef(rows.length);
 
   useEffect(() => {
-    setVisibleCount(CHAT_MESSAGE_LIST_INITIAL_VISIBLE);
+    setVisibleCount(initialVisible);
     loadLockedRef.current = false;
     prevRowsLengthRef.current = rows.length;
-  }, [listResetKey]);
+  }, [initialVisible, listResetKey]);
 
   const slice = sliceChatMessageListRows(rows, visibleCount);
 
@@ -57,7 +76,7 @@ export function useChatMessageListWindow({
     const prevScrollHeight = sc?.scrollHeight ?? 0;
     const prevScrollTop = sc?.scrollTop ?? 0;
 
-    setVisibleCount((current) => nextChatMessageVisibleCount(current, rows.length, CHAT_MESSAGE_LIST_LOAD_STEP));
+    setVisibleCount((current) => nextChatMessageVisibleCount(current, rows.length, loadStep));
 
     requestAnimationFrame(() => {
       if (sc) {
@@ -65,7 +84,7 @@ export function useChatMessageListWindow({
       }
       loadLockedRef.current = false;
     });
-  }, [rows.length, scrollContainerRef, slice.hiddenRowCount, slice.windowActive]);
+  }, [loadStep, rows.length, scrollContainerRef, slice.hiddenRowCount, slice.windowActive]);
 
   useEffect(() => {
     if (!slice.windowActive || slice.hiddenRowCount <= 0) return;

@@ -96,6 +96,10 @@ import {
   collectLiveSessionSidecarKeys,
   pruneOrphanClaudeSessionSidecarMaps,
 } from "../utils/claudeSessionSidecarMaps";
+import {
+  resolveCompanionSessionMessagesMax,
+  resolveGlobalMessagesBudget,
+} from "../utils/multiPanePerformance";
 import { getSessionUpdatedAt } from "../components/ClaudeSessions/sessionGrouping";
 import { resolveClaudeCompleteSuccess } from "../utils/resolveClaudeCompleteSuccess";
 import { notificationBodyPrefixInRepositoryContext } from "../utils/sessionRepositoryDisplay";
@@ -764,6 +768,14 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     return Array.from(ids);
   }, [companionSessionIdsJoinKey, options?.companionSessionId]);
 
+  const companionMemoryLimits = useMemo(
+    () => ({
+      companionMax: resolveCompanionSessionMessagesMax(companionSessionIds.length),
+      globalBudget: resolveGlobalMessagesBudget(companionSessionIds.length),
+    }),
+    [companionSessionIds.length, companionSessionIdsJoinKey],
+  );
+
   const [sessions, setSessionsRaw] = useState<ClaudeSession[]>([]);
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
@@ -788,12 +800,13 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       if (next === prev) return prev;
       const capped = applySessionsMemoryCap(next, {
         keepSessionIds: buildMemoryKeepSessionIds(next),
+        globalMessagesBudget: companionMemoryLimits.globalBudget,
       });
       if (capped === prev) return prev;
       sessionsRef.current = capped;
       return capped;
     });
-  }, [buildMemoryKeepSessionIds]);
+  }, [buildMemoryKeepSessionIds, companionMemoryLimits.globalBudget]);
   /** 流式事件可能在同一帧连发多行；须在 `setSessions` updater 内同步 ref，避免 init 后 assistant 行因 ref 过期被丢弃。 */
   const commitSessions = useCallback((updater: (prev: ClaudeSession[]) => ClaudeSession[]) => {
     setSessions(updater);
@@ -1454,12 +1467,12 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     setSessions((prev) => {
       const capped = applySessionsMemoryCap(prev, {
         keepSessionIds: buildMemoryKeepSessionIds(prev),
-        globalMessagesBudget: Math.max(48, Math.floor(IN_MEMORY_GLOBAL_MESSAGES_BUDGET * 0.55)),
+        globalMessagesBudget: Math.max(48, Math.floor(companionMemoryLimits.globalBudget * 0.55)),
         perSessionMax: Math.max(32, Math.floor(IN_MEMORY_SESSION_MESSAGES_MAX * 0.7)),
       });
       return capped === prev ? prev : capped;
     });
-  }, [buildMemoryKeepSessionIds, setSessions]);
+  }, [buildMemoryKeepSessionIds, companionMemoryLimits.globalBudget, setSessions]);
 
   const purgeStreamSidecarsForSession = useCallback((sessionId: string, claudeSessionId?: string | null) => {
     return purgeClaudeSessionStreamSidecarRefs(
@@ -2257,7 +2270,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           const perSessionMax =
             s.id === activeSessionId
               ? IN_MEMORY_SESSION_MESSAGES_MAX
-              : IN_MEMORY_COMPANION_SESSION_MESSAGES_MAX;
+              : companionMemoryLimits.companionMax;
           if (s.messages.length <= perSessionMax) return s;
           changed = true;
           return {
@@ -2284,7 +2297,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       });
       return changed ? next : prev;
     });
-  }, [tabsHydrated, activeSessionId, companionSessionIdsJoinKey]);
+  }, [companionMemoryLimits.companionMax, tabsHydrated, activeSessionId, companionSessionIdsJoinKey]);
 
   /** 周期性收紧全局消息预算（避免流式/多标签在 cap 之外缓慢涨内存） */
   useEffect(() => {
@@ -2298,9 +2311,13 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         setSessions((prev) => {
           const capped = applySessionsMemoryCap(prev, {
             keepSessionIds: buildMemoryKeepSessionIds(prev),
+            globalMessagesBudget: companionMemoryLimits.globalBudget,
             ...(hidden
               ? {
-                  globalMessagesBudget: Math.max(48, Math.floor(IN_MEMORY_GLOBAL_MESSAGES_BUDGET * 0.6)),
+                  globalMessagesBudget: Math.max(
+                    48,
+                    Math.floor(companionMemoryLimits.globalBudget * 0.6),
+                  ),
                   perSessionMax: Math.max(32, Math.floor(IN_MEMORY_SESSION_MESSAGES_MAX * 0.75)),
                 }
               : {}),
@@ -2313,7 +2330,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       window.clearInterval(timer);
       if (cancelIdle) cancelIdle();
     };
-  }, [tabsHydrated, setSessions, buildMemoryKeepSessionIds, pruneLiveSessionSidecars]);
+  }, [buildMemoryKeepSessionIds, companionMemoryLimits.globalBudget, pruneLiveSessionSidecars, setSessions, tabsHydrated]);
 
   /** 主会话 / 员工 / 团队等全部标签：定期与 Claude Code 宿主注册表对齐执行态（不限于当前活动标签）。 */
   useEffect(() => {

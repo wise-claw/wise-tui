@@ -16,6 +16,8 @@ interface Props {
   /** 主会话气泡 vs 监控/只读列（含时间戳头） */
   listVariant?: "chat" | "monitor";
   onNavigate?: () => void;
+  /** 主窗格 vs 多屏伴生窗格 */
+  messageListProfile?: "primary" | "companion";
 }
 
 export const ClaudeVirtualMessageList = forwardRef<ChatMessageListNavigationHandle, Props>(
@@ -27,6 +29,7 @@ export const ClaudeVirtualMessageList = forwardRef<ChatMessageListNavigationHand
       onOpenTaskDetail,
       listVariant = "chat",
       onNavigate,
+      messageListProfile = "primary",
     },
     ref,
   ) {
@@ -52,6 +55,7 @@ export const ClaudeVirtualMessageList = forwardRef<ChatMessageListNavigationHand
         listVariant={listVariant}
         onOpenTaskDetail={onOpenTaskDetail}
         onNavigate={onNavigate}
+        messageListProfile={messageListProfile}
       />
     );
   },

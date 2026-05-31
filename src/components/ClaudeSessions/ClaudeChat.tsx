@@ -271,6 +271,10 @@ interface Props {
   };
   /** 工作区当前焦点标签；配合会话状态决定 BackgroundInvocationDock 是否挂载 */
   activeSessionId?: string | null;
+  /** 多屏离屏窗格：跳过语音同步、ResizeObserver 等非必要副作用 */
+  deferHeavySubtree?: boolean;
+  /** 主窗格 vs 多屏伴生窗格的消息列表窗口配置 */
+  messageListProfile?: "primary" | "companion";
 }
 
 const RETURN_MAIN_SESSION_KEY = "wise:return-main-session-id";
@@ -355,6 +359,8 @@ export function ClaudeChat({
   missionContext,
   activeProject,
   activeSessionId = null,
+  deferHeavySubtree = false,
+  messageListProfile = "primary",
 }: Props) {
   const chatRootRef = useRef<HTMLDivElement>(null);
   const composerTrayRef = useRef<HTMLDivElement>(null);
@@ -367,7 +373,11 @@ export function ClaudeChat({
       }),
     [activeProject?.id, activeRepository?.id, missionContext?.projectId],
   );
-  useSpeechToRequirementSync(speechPrefs.speechToRequirementEnabled, speechToRequirementScope, session);
+  useSpeechToRequirementSync(
+    speechPrefs.speechToRequirementEnabled && !deferHeavySubtree,
+    speechToRequirementScope,
+    session,
+  );
 
   const backgroundInvocationDockEnabled = useMemo(() => {
     if (session.status === "running" || session.status === "connecting") return true;
@@ -393,6 +403,7 @@ export function ClaudeChat({
   ]);
 
   useLayoutEffect(() => {
+    if (deferHeavySubtree) return;
     const root = chatRootRef.current;
     const tray = composerTrayRef.current;
     if (!root || !tray) return;
@@ -413,9 +424,10 @@ export function ClaudeChat({
     return () => {
       ro.disconnect();
     };
-  }, [session.id]);
+  }, [deferHeavySubtree, session.id]);
 
   useLayoutEffect(() => {
+    if (deferHeavySubtree || hideMessages) return;
     const root = chatRootRef.current;
     if (!root) return;
     let rafId: number | null = null;
@@ -452,7 +464,7 @@ export function ClaudeChat({
         window.cancelAnimationFrame(rafId);
       }
     };
-  }, [session.id, hideMessages, hideSessionTools]);
+  }, [deferHeavySubtree, hideMessages, hideSessionTools, session.id]);
 
   const sessionBusyForEscRef = useRef(false);
   sessionBusyForEscRef.current = session.status === "running" || session.status === "connecting";
@@ -975,7 +987,7 @@ export function ClaudeChat({
     scrollToSessionMessageId,
     scrollMessageTargetIntoView,
     showListEndThinkingHint,
-  } = useClaudeChatMessageScroll({ session, hideMessages });
+  } = useClaudeChatMessageScroll({ session, hideMessages: hideMessages || deferHeavySubtree });
 
   const [fullTranscriptLoading, setFullTranscriptLoading] = useState(false);
   const [loadMoreTranscriptLoading, setLoadMoreTranscriptLoading] = useState(false);
@@ -1659,6 +1671,7 @@ export function ClaudeChat({
           onLoadMoreTranscriptEnd={handleLoadMoreTranscriptEnd}
           onFullTranscriptStart={handleFullTranscriptStart}
           onFullTranscriptEnd={handleFullTranscriptEnd}
+          messageListProfile={messageListProfile}
         />
       )}
       {panelBelowMessages}

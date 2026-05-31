@@ -27,7 +27,12 @@ import type { ClaudeSessionConnectionKind } from "../../constants/claudeConnecti
 import type { SessionExecutionEngine } from "../../types";
 import type { RoleTagOption, RepositoryMentionOption } from "../../utils/projectRoleTagOptions";
 import { paneGridDimensions, type PaneCount, type PaneSlot } from "../../constants/mainLayoutWidths";
+import { useInViewActive } from "../../hooks/useInView";
 import { isProjectRootSessionDisplayName } from "../../utils/repositoryMainSessionBinding";
+import {
+  MULTI_PANE_LAZY_UNMOUNT_MS,
+  shouldLazyMountMultiPaneExtraCells,
+} from "../../utils/multiPanePerformance";
 import { ClaudeSessionChatWithDock } from "./ClaudeSessionChatWithDock";
 import { runPaneCreateTask } from "./paneCreateLoading";
 import type { RefreshHistorySessionsScope } from "./ClaudeChat";
@@ -307,6 +312,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
 interface MultiPaneExtraPaneCellProps {
   slot: PaneSlot;
   paneIdx: number;
+  paneCount: PaneCount;
   activeSessionId: string;
   paneSession: ClaudeSession | null;
   paneRepo: Repository | null;
@@ -335,6 +341,7 @@ interface MultiPaneExtraPaneCellProps {
 const MultiPaneExtraPaneCell = memo(
   function MultiPaneExtraPaneCell({
     paneIdx,
+    paneCount,
     activeSessionId,
     paneSession,
     paneRepo,
@@ -355,6 +362,27 @@ const MultiPaneExtraPaneCell = memo(
     onNewPaneSession,
   }: MultiPaneExtraPaneCellProps) {
     const resolvedRepo = paneRepo ?? activeRepository;
+    const lazyEnabled = shouldLazyMountMultiPaneExtraCells(paneCount);
+    const mustStayMounted =
+      paneSession?.status === "running" || paneSession?.status === "connecting";
+    const [paneRef, inView] = useInViewActive("80px", lazyEnabled && Boolean(paneSession), null);
+    const [mounted, setMounted] = useState(!lazyEnabled || inView);
+
+    useEffect(() => {
+      if (!lazyEnabled) {
+        setMounted(true);
+        return;
+      }
+      if (inView || mustStayMounted) {
+        setMounted(true);
+        return;
+      }
+      const timer = window.setTimeout(() => setMounted(false), MULTI_PANE_LAZY_UNMOUNT_MS);
+      return () => window.clearTimeout(timer);
+    }, [inView, lazyEnabled, mustStayMounted]);
+
+    const deferHeavySubtree = lazyEnabled && mounted && !inView && Boolean(mustStayMounted);
+    const hidePaneMessages = shared.hideMessages || deferHeavySubtree;
 
     const dualPaneRepositoryPicker = useMemo(() => {
       if (!paneSession || !onPaneRepositorySelect || !resolvedRepo) return undefined;
@@ -387,8 +415,24 @@ const MultiPaneExtraPaneCell = memo(
 
     if (paneSession) {
       const sessionId = paneSession.id;
+      if (lazyEnabled && !mounted) {
+        return (
+          <div
+            ref={paneRef}
+            className="app-claude-sessions__pane app-claude-sessions__pane--lazy-placeholder"
+            data-pane-session-id={sessionId}
+          >
+            <div className="app-claude-sessions__pane-lazy-copy">
+              <span className="app-claude-sessions__pane-lazy-title">
+                {paneSession.repositoryName?.trim() || resolvedRepo.name || "执行会话"}
+              </span>
+              <span className="app-claude-sessions__pane-lazy-hint">窗格在视口外，已暂停渲染以节省内存</span>
+            </div>
+          </div>
+        );
+      }
       return (
-        <div className="app-claude-sessions__pane">
+        <div ref={lazyEnabled ? paneRef : undefined} className="app-claude-sessions__pane">
           <ClaudeSessionChatWithDock
             key={sessionId}
             session={paneSession}
@@ -437,7 +481,7 @@ const MultiPaneExtraPaneCell = memo(
             workflowGraphsByWorkflowId={shared.workflowGraphsByWorkflowId}
             workflowGraphStatusByWorkflowId={shared.workflowGraphStatusByWorkflowId}
             onOpenTaskDetail={shared.onOpenTaskDetail}
-            hideMessages={shared.hideMessages}
+            hideMessages={hidePaneMessages}
             hideSessionTools={shared.hideSessionTools}
             enableSessionNotificationFeed={false}
             taskListConcurrentCapacity={shared.taskListConcurrentCapacity}
@@ -458,6 +502,8 @@ const MultiPaneExtraPaneCell = memo(
             onCompactSessionHistory={shared.onCompactSessionHistory}
             dualPaneRepositoryPicker={dualPaneRepositoryPicker}
             missionContext={shared.missionContext}
+            deferHeavySubtree={deferHeavySubtree}
+            messageListProfile="companion"
           />
         </div>
       );
@@ -609,6 +655,7 @@ const MultiPaneExtraPaneCell = memo(
   },
   (prev, next) =>
     prev.paneIdx === next.paneIdx &&
+    prev.paneCount === next.paneCount &&
     prev.slot.slotId === next.slot.slotId &&
     prev.slot.sessionId === next.slot.sessionId &&
     prev.slot.repositoryId === next.slot.repositoryId &&
@@ -783,6 +830,7 @@ export const ClaudeMultiPaneGrid = memo(function ClaudeMultiPaneGrid({
           key={slot.slotId}
           slot={slot}
           paneIdx={paneIdx}
+          paneCount={paneCount}
           activeSessionId={activeSession.id}
           paneSession={resolvedPaneSessions[paneIdx] ?? null}
           paneRepo={resolvedPaneRepositories[paneIdx] ?? activeRepository}

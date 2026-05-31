@@ -12,3 +12,9 @@ export const CHAT_MESSAGE_LIST_LOAD_STEP = 28;
 
 /** 滚到距顶部小于该值时自动加载更早消息 */
 export const CHAT_MESSAGE_LIST_SCROLL_LOAD_PX = 160;
+
+/** 多屏伴生窗格：更小的尾部窗口，减轻 6/8 屏 DOM 压力 */
+export const CHAT_MESSAGE_LIST_COMPANION_INITIAL_VISIBLE = 24;
+
+/** 多屏伴生窗格：每次加载更早消息的条数 */
+export const CHAT_MESSAGE_LIST_COMPANION_LOAD_STEP = 16;
