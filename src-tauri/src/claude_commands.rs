@@ -10,6 +10,7 @@ use tauri::Manager;
 
 pub(crate) mod attachments;
 pub(crate) mod disk_sessions;
+pub(crate) mod hooks_discovery;
 pub(crate) mod mcp;
 pub(crate) mod plugin_market;
 pub(crate) mod prd_split;
@@ -18,6 +19,9 @@ pub(crate) mod project_skills;
 pub(crate) mod shared;
 pub(crate) mod subagents;
 pub(crate) mod terminal;
+use self::hooks_discovery::{
+    build_hook_scope_data_from_path, enrich_project_hooks_from_claude_hooks_dir,
+};
 use self::shared::{canonicalize_existing_project_dir, read_json_file, resolve_omc_plugin_root};
 pub(crate) use project_skills::validate_claude_skill_name;
 pub(crate) use terminal::TerminalManager;
@@ -796,117 +800,7 @@ fn write_json_pretty(path: &Path, value: &serde_json::Value) -> Result<(), Strin
 }
 
 fn build_hook_scope_data(path: &Path) -> ClaudeHookScopeData {
-    let mut event_map: HashMap<String, Vec<ClaudeHookMatcherGroup>> = HashMap::new();
-    let mut disable_all_hooks = false;
-    if let Some(v) = read_json_file(path) {
-        disable_all_hooks = v
-            .get("disableAllHooks")
-            .and_then(|x| x.as_bool())
-            .unwrap_or(false);
-        if let Some(hooks_obj) = v.get("hooks").and_then(|x| x.as_object()) {
-            for (event_name, groups_val) in hooks_obj {
-                let Some(groups_arr) = groups_val.as_array() else {
-                    continue;
-                };
-                let mut groups: Vec<ClaudeHookMatcherGroup> = Vec::new();
-                for (g_idx, g_val) in groups_arr.iter().enumerate() {
-                    let Some(g_obj) = g_val.as_object() else {
-                        continue;
-                    };
-                    let matcher = g_obj
-                        .get("matcher")
-                        .and_then(|x| x.as_str())
-                        .map(|s| s.to_string());
-                    let mut handlers: Vec<ClaudeHookHandler> = Vec::new();
-                    if let Some(hooks_arr) = g_obj.get("hooks").and_then(|x| x.as_array()) {
-                        for (h_idx, h_val) in hooks_arr.iter().enumerate() {
-                            let Some(h_obj) = h_val.as_object() else {
-                                continue;
-                            };
-                            let ty = h_obj
-                                .get("type")
-                                .and_then(|x| x.as_str())
-                                .unwrap_or("command")
-                                .to_string();
-                            let headers = h_obj
-                                .get("headers")
-                                .and_then(|x| x.as_object())
-                                .map(|m| {
-                                    let mut out = HashMap::new();
-                                    for (k, v) in m {
-                                        if let Some(s) = v.as_str() {
-                                            out.insert(k.clone(), s.to_string());
-                                        }
-                                    }
-                                    out
-                                })
-                                .filter(|m: &HashMap<String, String>| !m.is_empty());
-                            let allowed_env_vars = h_obj
-                                .get("allowedEnvVars")
-                                .and_then(|x| x.as_array())
-                                .map(|a| {
-                                    a.iter()
-                                        .filter_map(|x| x.as_str())
-                                        .map(|s| s.to_string())
-                                        .collect::<Vec<_>>()
-                                })
-                                .filter(|a| !a.is_empty());
-                            handlers.push(ClaudeHookHandler {
-                                id: format!("{}:{}:{}", event_name, g_idx, h_idx),
-                                r#type: ty,
-                                r#if: h_obj
-                                    .get("if")
-                                    .and_then(|x| x.as_str())
-                                    .map(|s| s.to_string()),
-                                timeout: h_obj.get("timeout").and_then(|x| x.as_i64()),
-                                status_message: h_obj
-                                    .get("statusMessage")
-                                    .and_then(|x| x.as_str())
-                                    .map(|s| s.to_string()),
-                                shell: h_obj
-                                    .get("shell")
-                                    .and_then(|x| x.as_str())
-                                    .map(|s| s.to_string()),
-                                r#async: h_obj.get("async").and_then(|x| x.as_bool()),
-                                async_rewake: h_obj.get("asyncRewake").and_then(|x| x.as_bool()),
-                                command: h_obj
-                                    .get("command")
-                                    .and_then(|x| x.as_str())
-                                    .map(|s| s.to_string()),
-                                url: h_obj
-                                    .get("url")
-                                    .and_then(|x| x.as_str())
-                                    .map(|s| s.to_string()),
-                                headers,
-                                allowed_env_vars,
-                                prompt: h_obj
-                                    .get("prompt")
-                                    .and_then(|x| x.as_str())
-                                    .map(|s| s.to_string()),
-                                model: h_obj
-                                    .get("model")
-                                    .and_then(|x| x.as_str())
-                                    .map(|s| s.to_string()),
-                            });
-                        }
-                    }
-                    groups.push(ClaudeHookMatcherGroup {
-                        id: format!("{}:{}", event_name, g_idx),
-                        matcher,
-                        hooks: handlers,
-                    });
-                }
-                if !groups.is_empty() {
-                    event_map.insert(event_name.to_string(), groups);
-                }
-            }
-        }
-    }
-    ClaudeHookScopeData {
-        source_path: path.to_string_lossy().to_string(),
-        disable_all_hooks,
-        hooks: event_map,
-    }
+    build_hook_scope_data_from_path(path, "")
 }
 
 fn hooks_settings_path_for_scope(
@@ -1057,12 +951,20 @@ pub(crate) fn get_claude_hooks_status(
     let omc_hooks_file =
         resolve_omc_plugin_root().map(|root| root.join("hooks").join("hooks.json"));
 
+    let project = project_root.as_ref().map(|root| {
+        let settings = root.join(".claude").join("settings.json");
+        let base = build_hook_scope_data(&settings);
+        enrich_project_hooks_from_claude_hooks_dir(base, root)
+    });
+
     Ok(ClaudeHooksStatusResponse {
         user: build_hook_scope_data(&user_path),
-        project: build_hook_scope_data(
-            &project_path_file
-                .unwrap_or_else(|| PathBuf::from("<请选择项目后可查看 project hooks>")),
-        ),
+        project: project.unwrap_or_else(|| {
+            build_hook_scope_data(
+                &project_path_file
+                    .unwrap_or_else(|| PathBuf::from("<请选择项目后可查看 project hooks>")),
+            )
+        }),
         local: build_hook_scope_data(
             &local_path_file.unwrap_or_else(|| PathBuf::from("<请选择项目后可查看 local hooks>")),
         ),

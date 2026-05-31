@@ -173,6 +173,40 @@ fn discover_project_hooks(
             );
         }
     }
+
+    let hooks_dir = root.join(".claude").join("hooks");
+    if hooks_dir.is_dir() {
+        let has_hooks_json = hooks_dir.join("hooks.json").is_file();
+        let has_scripts = fs::read_dir(&hooks_dir)
+            .ok()
+            .into_iter()
+            .flatten()
+            .flatten()
+            .any(|entry| {
+                let path = entry.path();
+                if !path.is_file() {
+                    return false;
+                }
+                let name = entry.file_name().to_string_lossy().to_lowercase();
+                name.ends_with(".py")
+                    || name.ends_with(".sh")
+                    || name.ends_with(".bash")
+                    || name.ends_with(".zsh")
+                    || name.ends_with(".js")
+                    || name.ends_with(".ts")
+            });
+        if has_hooks_json || has_scripts {
+            push_candidate(
+                out,
+                library,
+                MyExtensionKind::Hook,
+                "project-hooks-dir",
+                Some("项目 hooks 目录（.claude/hooks）".to_string()),
+                hooks_dir,
+                "project",
+            );
+        }
+    }
     Ok(())
 }
 

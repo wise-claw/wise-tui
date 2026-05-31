@@ -1,4 +1,4 @@
-import { Popover, Tooltip } from "antd";
+import { Popover } from "antd";
 import { useCallback, useMemo, useState } from "react";
 import { useModelProfileSwitcher } from "../../hooks/useClaudeModelProfileStore";
 import { pickBadgeEffectiveModel } from "../../types/claudeModelProfile";
@@ -57,34 +57,31 @@ export function ClaudeModelTopbarTrigger({ variant = "chat" }: Props) {
       arrow={!isSidebar}
       open={open}
       onOpenChange={handleOpenChange}
-      destroyOnHidden
+      destroyOnHidden={false}
       classNames={{ root: "app-claude-model-topbar-popover" }}
       styles={{
         container: { padding: 0 },
         content: { padding: 0 },
       }}
       content={
-        open ? (
-          <ClaudeModelTopbarPanel
-            store={store}
-            setStore={setStore}
-            loading={loading}
-            onApplied={() => setOpen(false)}
-          />
-        ) : null
+        <ClaudeModelTopbarPanel
+          store={store}
+          setStore={setStore}
+          loading={loading}
+          onApplied={() => setOpen(false)}
+        />
       }
     >
-      <Tooltip title="模型切换（Claude / Codex / OpenCode）" mouseEnterDelay={0.35}>
-        <button
-          type="button"
-          className={btnClass}
-          aria-label="模型切换"
-          aria-expanded={open}
-        >
-          <IconClaudeModel />
-          {showBadge ? <span className="app-claude-model-topbar-btn__badge" aria-hidden /> : null}
-        </button>
-      </Tooltip>
+      <button
+        type="button"
+        className={btnClass}
+        aria-label="模型切换"
+        aria-expanded={open}
+        title="模型切换（Claude / Codex / OpenCode）"
+      >
+        <IconClaudeModel />
+        {showBadge ? <span className="app-claude-model-topbar-btn__badge" aria-hidden /> : null}
+      </button>
     </Popover>
   );
 }

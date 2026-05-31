@@ -1707,6 +1707,7 @@
   color: var(--ant-color-text-quaternary);
   font-family: var(--app-workspace-code-font, monospace);
   word-break: break-all;
+  white-space: pre-line;
   display: block;
 }
 

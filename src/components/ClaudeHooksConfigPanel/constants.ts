@@ -107,6 +107,7 @@ export const EVENT_HELP_TEXT: Record<string, string> = {
   Elicitation: "MCP 请求用户输入时触发，可编程接管交互输入。",
   ElicitationResult: "用户对 MCP 输入响应后触发，可修改或拦截结果。",
   SessionEnd: "会话终止时触发，适合做收尾清理和统计。",
+  HookScripts: "来自仓库 `.claude/hooks/` 目录的脚本；尚未在 settings.json 中注册时会在此展示。",
 };
 
 const EVENT_SUPPORTED_TYPES: Record<string, ClaudeHookHandler["type"][]> = {

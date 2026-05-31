@@ -9,21 +9,31 @@
 }
 
 .app-claude-code-tools-topbar-popover {
-  max-width: min(92vw, 500px);
+  width: 420px;
+  max-width: 420px;
 }
 
+.app-claude-code-tools-topbar-popover .ant-popover-container,
 .app-claude-code-tools-topbar-popover .ant-popover-inner {
   padding: 0 !important;
   overflow: hidden;
-  width: min(92vw, 500px) !important;
-  max-width: min(92vw, 500px) !important;
+  width: 420px !important;
+  max-width: 420px !important;
   box-sizing: border-box;
 }
 
+.app-claude-code-tools-topbar-popover .ant-popover-content,
 .app-claude-code-tools-topbar-popover .ant-popover-inner-content {
   padding: 0 !important;
+  width: 100%;
   max-width: 100%;
   overflow: hidden;
+  box-sizing: border-box;
+}
+
+.app-claude-code-tools--popover {
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .app-claude-code-tools-topbar-popover-loading {

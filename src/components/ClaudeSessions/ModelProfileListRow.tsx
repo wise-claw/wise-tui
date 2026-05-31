@@ -21,9 +21,9 @@ function ModelProfileListRowInner({
   onConfigure,
   onDelete,
 }: Props) {
-  const company = item.company.trim();
-  const name = item.name.trim();
-  const modelLabel = formatClaudeModelLabel(item.modelId);
+  const company = (item.company ?? "").trim();
+  const name = (item.name ?? "").trim();
+  const modelLabel = formatClaudeModelLabel(item.modelId ?? "");
 
   return (
     <List.Item

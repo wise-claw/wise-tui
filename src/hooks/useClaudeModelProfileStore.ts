@@ -64,14 +64,15 @@ export function useModelProfileSwitcher(popoverOpen: boolean) {
   const [showLoading, setShowLoading] = useState(false);
   const loadingDelayRef = useRef<number | null>(null);
   const requestSeqRef = useRef(0);
+  const popoverOpenRef = useRef(popoverOpen);
+  popoverOpenRef.current = popoverOpen;
 
-  const applyStore = useCallback(
-    (next: ClaudeModelProfileStoreView) => {
-      setStoreInternal((prev) => (popoverOpen ? next : prev));
-      setEffectiveModels(extractEffectiveModelsFromStore(next));
-    },
-    [popoverOpen],
-  );
+  const applyStore = useCallback((next: ClaudeModelProfileStoreView) => {
+    if (popoverOpenRef.current) {
+      setStoreInternal(next);
+    }
+    setEffectiveModels(extractEffectiveModelsFromStore(next));
+  }, []);
 
   const setStore = useCallback(
     (value: React.SetStateAction<ClaudeModelProfileStoreView | null>) => {
