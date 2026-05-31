@@ -55,12 +55,10 @@ export function GitMultiRepoPanel({
   const watcherRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const watcherRestartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingRefreshPathsRef = useRef(new Set<string>());
-  const scrollBodyRef = useRef<HTMLDivElement>(null);
   const [scrollRoot, setScrollRoot] = useState<HTMLElement | null>(null);
-
-  useEffect(() => {
-    setScrollRoot(scrollBodyRef.current);
-  }, [repositoryEntries.length, lazyMount]);
+  const setScrollBodyRef = useCallback((node: HTMLDivElement | null) => {
+    setScrollRoot(node);
+  }, []);
 
   useEffect(() => {
     const validPaths = new Set(repositoryEntries.map((entry) => entry.path).filter(Boolean));
@@ -212,7 +210,7 @@ export function GitMultiRepoPanel({
           />
         </div>
       </div>
-      <div ref={scrollBodyRef} className="git-panel-multi-body">
+      <div ref={setScrollBodyRef} className="git-panel-multi-body">
         {repositoryEntries.map((entry, index) => {
           const sectionProps = {
             entry,

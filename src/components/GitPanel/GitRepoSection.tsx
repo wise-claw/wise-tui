@@ -1,4 +1,4 @@
-import { memo, startTransition, useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { memo, startTransition, useCallback, useEffect, useRef, useState, type Ref } from "react";
 import { useInView, useInViewActive } from "../../hooks/useInView";
 import { listen } from "@tauri-apps/api/event";
 import { safeUnlistenPromise } from "../../utils/safeTauriUnlisten";
@@ -53,7 +53,7 @@ interface Props {
   onExpandedChange?: (path: string, expanded: boolean) => void;
   /** 多仓 lazy 容器注入的视口状态，避免重复 IntersectionObserver。 */
   externalInView?: boolean;
-  externalSectionRef?: RefObject<HTMLElement | null>;
+  externalSectionRef?: Ref<HTMLElement | null>;
   onOpenFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
 }
 
