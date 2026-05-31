@@ -103,7 +103,7 @@ export function useRepositoryRunCommand({
 
     setDetectingProfile(true);
     try {
-      const saved = runKey ? window.localStorage.getItem(runKey)?.trim() : "";
+      const saved = (runKey ? window.localStorage.getItem(runKey)?.trim() : "") ?? "";
       const result = await detectRepositoryRunProfiles(trimmedCwd, saved);
       setDetectedProfiles(result.profiles);
       setDetectedProfile(result.primary);
