@@ -1,6 +1,8 @@
 import { Input, Switch, Tooltip } from "antd";
 import { openExternalUrl } from "../../services/openExternal";
 import type { RunCommandOutputLine, RepositoryRunStatus } from "../../hooks/useRepositoryRunCommand";
+import type { RepositoryRunProfile } from "../../utils/detectRepositoryRunProfile";
+import { getRunCommandPlaceholder, getRunDebugHint } from "../../utils/detectRepositoryRunProfile";
 import "../ClaudeSessions/index.css";
 
 export type RunCommandPanelProps = {
@@ -20,7 +22,10 @@ export type RunCommandPanelProps = {
   saveRunCommand: () => void;
   saveRunOpenUrl: () => void;
   resolveOpenUrl: () => string;
-  startRun: () => void | Promise<void>;
+  detectedProfile?: RepositoryRunProfile | null;
+  detectingProfile?: boolean;
+  applyDetectedProfile?: () => void;
+  startRun: (options?: { debug?: boolean }) => void | Promise<void>;
   stopRun: () => void | Promise<void>;
   onClose: () => void;
 };
@@ -42,11 +47,20 @@ export function RunCommandPanel({
   saveRunCommand,
   saveRunOpenUrl,
   resolveOpenUrl,
+  detectedProfile = null,
+  detectingProfile = false,
+  applyDetectedProfile,
   startRun,
   stopRun,
   onClose,
 }: RunCommandPanelProps) {
   const inputsDisabled = !runCwd || runStatus === "stopping";
+  const showDetectedBanner =
+    detectedProfile != null && runCommand.trim() !== detectedProfile.runCommand.trim();
+  const canDebug = Boolean(detectedProfile?.debugCommand);
+  const commandPlaceholder = getRunCommandPlaceholder(detectedProfile);
+  const debugHint = getRunDebugHint(detectedProfile);
+  const stackLabel = detectedProfile?.stack === "java" ? "Java" : detectedProfile?.stack === "node" ? "Node" : null;
 
   return (
     <div className="app-run-command-popover__content">
@@ -86,6 +100,45 @@ export function RunCommandPanel({
         </Tooltip>
       </header>
 
+      {detectingProfile ? (
+        <div className="app-run-command-popover__detect-hint">正在检测项目运行配置…</div>
+      ) : detectedProfile ? (
+        <div className="app-run-command-popover__detect-banner">
+          <div className="app-run-command-popover__detect-copy">
+            <div className="app-run-command-popover__detect-head">
+              <span className="app-run-command-popover__detect-label">已检测</span>
+              {stackLabel ? (
+                <span
+                  className={`app-run-command-popover__detect-stack app-run-command-popover__detect-stack--${detectedProfile.stack}`}
+                >
+                  {stackLabel}
+                </span>
+              ) : null}
+            </div>
+            <span className="app-run-command-popover__detect-title">{detectedProfile.label}</span>
+            {detectedProfile.modulePath ? (
+              <span className="app-run-command-popover__detect-meta">模块: {detectedProfile.modulePath}</span>
+            ) : null}
+            {detectedProfile.defaultUrl ? (
+              <span className="app-run-command-popover__detect-meta">{detectedProfile.defaultUrl}</span>
+            ) : null}
+            {detectedProfile.activeProfiles ? (
+              <span className="app-run-command-popover__detect-meta">profile: {detectedProfile.activeProfiles}</span>
+            ) : null}
+          </div>
+          {showDetectedBanner && applyDetectedProfile ? (
+            <button
+              type="button"
+              className="app-run-command-popover__detect-apply"
+              onClick={applyDetectedProfile}
+              disabled={inputsDisabled}
+            >
+              应用
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
       <section className="app-run-command-popover__section app-run-command-popover__section--form">
         <label className="app-run-command-popover__row">
           <span className="app-run-command-popover__field-label">运行命令</span>
@@ -93,7 +146,7 @@ export function RunCommandPanel({
             size="small"
             value={runCommand}
             onChange={(event) => setRunCommand(event.target.value)}
-            placeholder="bun run dev"
+            placeholder={commandPlaceholder}
             disabled={inputsDisabled}
             onPressEnter={() => {
               saveRunCommand();
@@ -211,25 +264,41 @@ export function RunCommandPanel({
         >
           关闭
         </button>
-        {runStatus === "running" || runStatus === "stopping" ? (
-          <button
-            type="button"
-            className="app-run-command-popover__btn app-run-command-popover__btn--danger app-run-command-popover__btn--footer-main"
-            onClick={() => void stopRun()}
-            disabled={!runCwd || runStatus === "stopping"}
-          >
-            {runStatus === "stopping" ? "停止中…" : "停止运行"}
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="app-run-command-popover__btn app-run-command-popover__btn--primary app-run-command-popover__btn--footer-main"
-            onClick={() => void startRun()}
-            disabled={!runCwd}
-          >
-            运行
-          </button>
-        )}
+        <div className="app-run-command-popover__footer-actions">
+          {runStatus === "running" || runStatus === "stopping" ? (
+            <button
+              type="button"
+              className="app-run-command-popover__btn app-run-command-popover__btn--danger app-run-command-popover__btn--footer-main"
+              onClick={() => void stopRun()}
+              disabled={!runCwd || runStatus === "stopping"}
+            >
+              {runStatus === "stopping" ? "停止中…" : "停止运行"}
+            </button>
+          ) : (
+            <>
+              {canDebug ? (
+                <Tooltip title={debugHint} placement="top">
+                  <button
+                    type="button"
+                    className="app-run-command-popover__btn app-run-command-popover__btn--ghost app-run-command-popover__btn--footer-main"
+                    onClick={() => void startRun({ debug: true })}
+                    disabled={!runCwd}
+                  >
+                    调试
+                  </button>
+                </Tooltip>
+              ) : null}
+              <button
+                type="button"
+                className="app-run-command-popover__btn app-run-command-popover__btn--primary app-run-command-popover__btn--footer-main"
+                onClick={() => void startRun()}
+                disabled={!runCwd}
+              >
+                运行
+              </button>
+            </>
+          )}
+        </div>
       </footer>
     </div>
   );

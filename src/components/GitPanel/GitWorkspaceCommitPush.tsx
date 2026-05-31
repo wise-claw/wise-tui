@@ -176,7 +176,7 @@ export function GitWorkspaceCommitPush({ repositoryEntries, onAfterSync }: Props
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             placeholder="提交信息..."
-            disabled={loadingDraft || submitting}
+            disabled={submitting}
             autoSize={{ minRows: 3, maxRows: 6 }}
             autoFocus
             onKeyDown={(event) => {

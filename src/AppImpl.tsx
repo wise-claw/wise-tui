@@ -1279,6 +1279,12 @@ export default function App() {
   ]);
 
   const { omcInstalled } = useOmcPluginInstalled(true);
+  const monitorPanelDefault = useMonitorPanelDefault();
+  const monitorOverviewActive =
+    (monitorPanelDefault.visible &&
+      (monitorPanelDefault.placement === "left" || monitorPanelDefault.placement === "right")) ||
+    monitorDrawerTarget != null ||
+    viewMode.view.kind === "inspect";
   const {
     employeeMonitorItems,
     repositoryMemberMonitorItems,
@@ -1298,6 +1304,7 @@ export default function App() {
     omcBatchRuntime,
     omcInstalled: omcInstalled === true,
     monitorDrawerOpen: monitorDrawerTarget != null,
+    monitorOverviewActive,
   });
   const scopedRepositoryMemberMonitorItems = useMemo(
     () =>
@@ -1441,7 +1448,6 @@ export default function App() {
     enterAuthorPane("claude-plugins");
   }, [activeProjectId, activeRepositoryId, enterAuthorPane]);
   const leftSidebarHubQuickEntries = useLeftSidebarHubQuickEntries();
-  const monitorPanelDefault = useMonitorPanelDefault();
   const showMonitorOnLeft =
     monitorPanelDefault.visible && monitorPanelDefault.placement === "left";
   const showMonitorOnRight =

@@ -8,11 +8,13 @@ type GitRepoSectionProps = ComponentProps<typeof GitRepoSection>;
 
 interface Props extends Omit<GitRepoSectionProps, "externalInView" | "externalSectionRef"> {
   entry: GitRepoSectionProps["entry"];
+  /** 多仓列表滚动容器，作为 IntersectionObserver root（侧栏内 lazy 挂载必需）。 */
+  scrollRoot?: Element | null;
 }
 
 /** 多仓列表 lazy 挂载：离屏仓库仅保留占位行，进入视口后再挂载完整 Git 区块。 */
-export function GitMultiRepoLazySection({ entry, ...sectionProps }: Props) {
-  const [sectionRef, inView] = useInViewActive("240px");
+export function GitMultiRepoLazySection({ entry, scrollRoot = null, ...sectionProps }: Props) {
+  const [sectionRef, inView] = useInViewActive("240px", true, scrollRoot);
   const [mounted, setMounted] = useState(inView);
 
   useEffect(() => {

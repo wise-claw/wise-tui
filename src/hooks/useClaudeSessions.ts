@@ -125,6 +125,7 @@ import {
 } from "../services/claudeStreamParser";
 import { getAppSetting, setAppSetting } from "../services/appSettingsStore";
 import { stopClaudeMainSession } from "../services/stopClaudeMainSession";
+import { publishRunningClaudeSessionIds } from "../stores/claudeRunningSessionsRegistryStore";
 import { getSystemResourceSnapshot } from "../services/systemResource";
 import { isClaudeSessionRunningByHostProcesses } from "../utils/claudeHostRunningSessionIds";
 import {
@@ -2360,6 +2361,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             .map((item) => item.session_id.trim())
             .filter((id) => id.length > 0),
         );
+        publishRunningClaudeSessionIds(runningIds);
         pruneClaudeRegistryBootstrapWarmup(registryBootstrapDeadlineByClaudeSidRef, runningIds);
         setSessions((prev) => {
           const reconciled = reconcileSessionStatusesWithRunningRegistry(
@@ -3478,8 +3480,15 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
   useEffect(() => {
     if (!tabsHydrated) return;
+    const hasActiveStream = sessions.some(
+      (item) => item.status === "running" || item.status === "connecting",
+    );
     const debounceMs =
-      typeof document !== "undefined" && document.visibilityState !== "visible" ? 3000 : 450;
+      typeof document !== "undefined" && document.visibilityState !== "visible"
+        ? 3000
+        : hasActiveStream
+          ? 2000
+          : 450;
     const t = window.setTimeout(() => {
       const bindingsChanged = pruneLiveSessionSidecars(sessions);
       if (bindingsChanged) {

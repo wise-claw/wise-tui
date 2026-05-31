@@ -58,7 +58,7 @@ interface Props {
   onProjectSelect?: (projectId: string) => void;
   /** 仅切换 Git 面板目录，不联动全局工作区。 */
   directoryOnly?: boolean;
-  /** 侧栏等窄容器内关闭 lazy 挂载，避免 IntersectionObserver 检测不到滚动区。 */
+  /** 多仓 Git 面板是否 lazy 挂载各仓库区块（侧栏需配合 scrollRoot，见 GitMultiRepoPanel）。 */
   lazyMount?: boolean;
 }
 

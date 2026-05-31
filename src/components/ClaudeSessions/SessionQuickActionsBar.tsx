@@ -13,7 +13,7 @@ import {
   UnorderedListOutlined,
 } from "@ant-design/icons";
 import { Dropdown, type MenuProps } from "antd";
-import { useMemo, useState, type ReactNode } from "react";
+import { memo, useMemo, useState, type ReactNode } from "react";
 import {
   partitionSessionQuickActions,
   SESSION_QUICK_ACTION_META,
@@ -54,7 +54,7 @@ function isBuiltinAssistantQuickAction(id: SessionQuickActionId): boolean {
   return isSessionQuickBuiltinAssistantId(id);
 }
 
-export function SessionQuickActionsBar({
+export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
   onCreateNewSession,
   creatingNewSession = false,
   onOpenBuiltinAssistant,
@@ -266,4 +266,4 @@ export function SessionQuickActionsBar({
       />
     </>
   );
-}
+});

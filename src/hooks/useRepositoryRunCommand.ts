@@ -1,6 +1,8 @@
 import { message } from "antd";
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Repository } from "../types";
+import { detectRepositoryRunProfile } from "../services/repositoryRunProfileDetect";
+import type { RepositoryRunProfile } from "../utils/detectRepositoryRunProfile";
 import {
   getRepositoryRunCommandState,
   startRepositoryRunCommand,
@@ -81,10 +83,65 @@ export function useRepositoryRunCommand({
     readRunAutoOpenPageEnabled(runAutoOpenKey),
   );
   const [runErrorMonitorEnabled, setRunErrorMonitorEnabled] = useState(false);
+  const [detectedProfile, setDetectedProfile] = useState<RepositoryRunProfile | null>(null);
+  const [detectingProfile, setDetectingProfile] = useState(false);
+  const autoAppliedProfileSourceRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!trimmedCwd) {
+      setDetectedProfile(null);
+      setDetectingProfile(false);
+      autoAppliedProfileSourceRef.current = null;
+      return;
+    }
+
+    let cancelled = false;
+    setDetectingProfile(true);
+    void detectRepositoryRunProfile(trimmedCwd)
+      .then((profile) => {
+        if (cancelled) return;
+        setDetectedProfile(profile);
+        setDetectingProfile(false);
+        if (!profile || runKey == null) return;
+        const saved = window.localStorage.getItem(runKey)?.trim();
+        if (saved) return;
+        if (autoAppliedProfileSourceRef.current === profile.source) return;
+        autoAppliedProfileSourceRef.current = profile.source;
+        setRunCommand(profile.runCommand);
+        window.localStorage.setItem(runKey, profile.runCommand);
+        if (profile.defaultUrl && runUrlKey) {
+          const existingUrl = window.localStorage.getItem(runUrlKey)?.trim();
+          if (!existingUrl) {
+            window.localStorage.setItem(runUrlKey, profile.defaultUrl);
+            setRunPreferredUrl(profile.defaultUrl);
+          }
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDetectedProfile(null);
+        setDetectingProfile(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [runKey, runUrlKey, setRunCommand, setRunPreferredUrl, trimmedCwd]);
 
   useEffect(() => {
     setRunAutoOpenPageEnabled(readRunAutoOpenPageEnabled(runAutoOpenKey));
   }, [runAutoOpenKey]);
+
+  const applyDetectedProfile = useCallback(() => {
+    if (!detectedProfile || !runKey) return;
+    setRunCommand(detectedProfile.runCommand);
+    window.localStorage.setItem(runKey, detectedProfile.runCommand);
+    if (detectedProfile.defaultUrl && runUrlKey) {
+      window.localStorage.setItem(runUrlKey, detectedProfile.defaultUrl);
+      setRunPreferredUrl(detectedProfile.defaultUrl);
+    }
+    message.success(`已应用检测到的运行配置（${detectedProfile.label}）`);
+  }, [detectedProfile, runKey, runUrlKey, setRunCommand, setRunPreferredUrl]);
 
   useEffect(() => {
     if (repositoryId == null || !trimmedCwd) return;
@@ -135,12 +192,13 @@ export function useRepositoryRunCommand({
   }, [runPreferredUrl, runUrlKey, setRunPreferredUrl]);
 
   const inferDefaultRunUrl = useCallback((): string => {
+    if (detectedProfile?.defaultUrl) return detectedProfile.defaultUrl;
     const cmd = runCommand.trim();
     const portByFlag = cmd.match(/(?:--port|-p)\s*(\d{2,5})/i)?.[1];
     const portByEnv = cmd.match(/PORT=(\d{2,5})/i)?.[1];
     const port = portByFlag || portByEnv || "16088";
     return `http://localhost:${port}`;
-  }, [runCommand]);
+  }, [detectedProfile?.defaultUrl, runCommand]);
 
   const resolveOpenUrl = useCallback((): string => {
     const preferred = normalizeRunOpenUrl(runPreferredUrl);
@@ -158,14 +216,20 @@ export function useRepositoryRunCommand({
     [runAutoOpenKey],
   );
 
-  const startRun = useCallback(async () => {
-    if (!repository || !trimmedCwd) return;
-    await startRepositoryRunCommand({
-      repository: { id: repository.id, path: trimmedCwd },
-      onRequestConfigure: onRequestOpenPanel,
-      onRunStarted,
-    });
-  }, [onRequestOpenPanel, onRunStarted, repository, trimmedCwd]);
+  const startRun = useCallback(
+    async (options?: { debug?: boolean }) => {
+      if (!repository || !trimmedCwd) return;
+      const commandOverride =
+        options?.debug && detectedProfile?.debugCommand ? detectedProfile.debugCommand : undefined;
+      await startRepositoryRunCommand({
+        repository: { id: repository.id, path: trimmedCwd },
+        commandOverride,
+        onRequestConfigure: onRequestOpenPanel,
+        onRunStarted,
+      });
+    },
+    [detectedProfile?.debugCommand, onRequestOpenPanel, onRunStarted, repository, trimmedCwd],
+  );
 
   const stopRun = useCallback(async () => {
     if (!repository) return;
@@ -202,6 +266,9 @@ export function useRepositoryRunCommand({
     saveRunCommand,
     saveRunOpenUrl,
     resolveOpenUrl,
+    detectedProfile,
+    detectingProfile,
+    applyDetectedProfile,
     startRun,
     stopRun,
     handleRunButtonClick,

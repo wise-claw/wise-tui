@@ -1062,7 +1062,7 @@ export function LeftSidebar({
                   repositoryEntries={gitPanelRepositoryEntries}
                   multiRepoContextTitle={gitPanelContextTitle}
                   onOpenFile={onOpenActiveRepositoryFile}
-                  lazyMount={false}
+                  lazyMount
                   {...repoPanelWorkspaceSelectorProps}
                 />
               ) : (

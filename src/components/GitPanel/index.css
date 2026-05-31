@@ -289,9 +289,7 @@
   position: sticky;
   top: 0;
   z-index: 20;
-  background: color-mix(in srgb, var(--ant-color-bg-container) 45%, transparent) !important;
-  -webkit-backdrop-filter: var(--app-workspace-glass-blur);
-  backdrop-filter: var(--app-workspace-glass-blur);
+  background: var(--ant-color-bg-container) !important;
 }
 
 .git-panel-header-prefix {

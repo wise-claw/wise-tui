@@ -119,6 +119,12 @@ export function notificationConversationInSessionInboxScope(
   return notificationInboxConversationMatchesSession(c, sess, allSessions);
 }
 
+export function buildSessionsNotificationScopeFingerprint(sessions: ClaudeSession[]): string {
+  return sessions
+    .map((s) => `${s.id}\0${s.repositoryPath ?? ""}\0${s.claudeSessionId ?? ""}`)
+    .join("\n");
+}
+
 export function notificationRowInSessionInboxScope(
   row: NotificationInboxRow,
   sess: ClaudeSession,

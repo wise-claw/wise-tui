@@ -376,6 +376,7 @@ export function syncRepositoryRunCommandFormState(
 
 export async function startRepositoryRunCommand(input: {
   repository: Pick<Repository, "id" | "path">;
+  commandOverride?: string;
   onRequestConfigure?: () => void;
   onRunStarted?: () => void;
 }): Promise<void> {
@@ -388,7 +389,7 @@ export async function startRepositoryRunCommand(input: {
   }
   const internals = getOrCreateInternals(repository.id, runCwd);
   refreshInternalsFromStorage(internals, runCwd);
-  const cmd = internals.runCommand.trim();
+  const cmd = (input.commandOverride ?? internals.runCommand).trim();
   if (!cmd) {
     input.onRequestConfigure?.() ?? globalOnRequestConfigure?.(repository);
     return;

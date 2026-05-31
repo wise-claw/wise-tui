@@ -642,6 +642,99 @@
   display: block;
 }
 
+.app-run-command-popover__detect-hint,
+.app-run-command-popover__detect-banner {
+  margin: 0 10px 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--ant-color-fill-quaternary);
+  border: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-run-command-popover__detect-hint {
+  font-size: 11px;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-run-command-popover__detect-banner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.app-run-command-popover__detect-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.app-run-command-popover__detect-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.app-run-command-popover__detect-stack {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.app-run-command-popover__detect-stack--java {
+  color: #b45309;
+  background: rgba(180, 83, 9, 0.12);
+}
+
+.app-run-command-popover__detect-stack--node {
+  color: #047857;
+  background: rgba(4, 120, 87, 0.12);
+}
+
+.app-run-command-popover__detect-label {
+  font-size: 10px;
+  color: var(--ant-color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.app-run-command-popover__detect-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+}
+
+.app-run-command-popover__detect-meta {
+  font-size: 10px;
+  color: var(--ant-color-text-secondary);
+  word-break: break-all;
+}
+
+.app-run-command-popover__detect-apply {
+  flex-shrink: 0;
+  border: none;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  color: var(--ant-color-primary);
+  background: var(--ant-color-primary-bg);
+}
+
+.app-run-command-popover__detect-apply:hover:not(:disabled) {
+  background: var(--ant-color-primary-bg-hover);
+}
+
+.app-run-command-popover__detect-apply:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .app-run-command-popover__section {
   display: flex;
   flex-direction: column;
@@ -824,14 +917,23 @@
 }
 
 .app-run-command-popover__footer {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 6px;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin-top: auto;
   padding: 6px 10px 8px;
   border-top: 1px solid var(--ant-color-border-secondary);
   background: var(--ant-color-bg-container);
+}
+
+.app-run-command-popover__footer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
 }
 
 .app-run-command-popover__logs {
@@ -885,8 +987,9 @@
 }
 
 .app-run-command-popover__btn--footer-main {
-  width: 100%;
   min-height: 24px;
+  min-width: 52px;
+  padding: 0 10px;
   font-weight: 500;
 }
 
@@ -5654,8 +5757,7 @@ button.app-message-part-header:disabled:hover {
   cursor: pointer;
   white-space: nowrap;
   touch-action: manipulation;
-  backdrop-filter: var(--app-workspace-glass-blur) !important;
-  -webkit-backdrop-filter: var(--app-workspace-glass-blur) !important;
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 72%, var(--ant-color-bg-container)) !important;
   transition:
     background 0.12s ease,
     border-color 0.12s ease,
@@ -6383,7 +6485,7 @@ button.app-message-part-header:disabled:hover {
   line-height: 1;
   padding: 7px 14px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
 }
 
 .app-push-popover__submit:hover:not(:disabled) {

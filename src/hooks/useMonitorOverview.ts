@@ -1,7 +1,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
-import { readVisiblePollIntervalMs, stringSetEqual } from "../utils/adaptivePoll";
+import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
 import { pickSessionForRepositorySidebarSelect } from "../utils/claudeSessionSelection";
 import { resolveMainOwnerAgentNameForRepositoryPath } from "../utils/repositoryMainSessionBinding";
 import { OMC_MONITOR_EMPLOYEE_NAME } from "../constants/omcMonitor";
@@ -41,7 +41,10 @@ import {
 import { sanitizeOmcDirectBatchPreviewLineForList } from "../utils/claudeInvocationText";
 import { isOmcDirectBatchInvocationRunning } from "../utils/omcDirectBatchInvocationDisplay";
 import { isOmcMonitorEmployeeRecord, omcWorkerRepositoryBoundNameMatchers } from "../utils/omcMonitorEmployeeSession";
-import { listRunningClaudeSessions } from "../services/claude";
+import {
+  getRunningClaudeSessionIdsSnapshot,
+  subscribeRunningClaudeSessionIds,
+} from "../stores/claudeRunningSessionsRegistryStore";
 import { isClaudeSessionRunningInHostOrUi } from "../services/claudeSessionState";
 import type {
   ClaudeSession,
@@ -81,6 +84,8 @@ interface UseMonitorOverviewInput {
   omcInstalled?: boolean;
   /** 监控抽屉打开时启用 Trellis 全量 ingest；关闭时仅轻量 graph 同步 */
   monitorDrawerOpen?: boolean;
+  /** 监控/Inspector 侧栏或 Drawer 可见时为 true；false 时跳过巨型 memo 重算并返回缓存快照 */
+  monitorOverviewActive?: boolean;
 }
 
 interface MonitorLookup {
@@ -941,6 +946,214 @@ function extractOmcProgressText(
   return undefined;
 }
 
+function collectTeamEmployeeIds(
+  workflowTemplates: WorkflowTemplateItem[],
+  workflowGraphsByWorkflowId: Record<string, WorkflowGraph>,
+  workflowTasks: WorkflowTaskItem[],
+  workflowTaskEventsByTaskId: Record<string, WorkflowTaskEventItem[]>,
+): Set<string> {
+  const teamEmployeeIds = new Set<string>();
+  for (const template of workflowTemplates) {
+    for (const stage of template.stages) {
+      for (const assignee of stage.assignees) {
+        if (assignee.employeeId?.trim()) {
+          teamEmployeeIds.add(assignee.employeeId);
+        }
+      }
+    }
+  }
+  for (const graph of Object.values(workflowGraphsByWorkflowId)) {
+    for (const node of graph.nodes ?? []) {
+      const employeeId = typeof node.data?.employeeId === "string" ? node.data.employeeId.trim() : "";
+      if (employeeId) {
+        teamEmployeeIds.add(employeeId);
+      }
+    }
+  }
+  for (const task of workflowTasks) {
+    const events = workflowTaskEventsByTaskId[task.id] ?? [];
+    for (const event of events) {
+      const payload = parseEventPayload(event);
+      if (!payload) continue;
+      if (typeof payload.employeeId === "string" && payload.employeeId.trim()) {
+        teamEmployeeIds.add(payload.employeeId);
+      }
+    }
+  }
+  return teamEmployeeIds;
+}
+
+function buildCoreEmployeeMonitorItems(input: {
+  employees: EmployeeItem[];
+  sessions: ClaudeSession[];
+  workflowTasks: WorkflowTaskItem[];
+  workflowTaskEventsByTaskId: Record<string, WorkflowTaskEventItem[]>;
+  workflowRuntimeSnapshotsByTaskId: Record<string, WorkflowRuntimeStepSnapshot[]>;
+  taskPendingEmployeesByTaskId: Record<string, Array<{ employeeId: string; name: string }>>;
+  registryRunningClaudeSessionIds: ReadonlySet<string>;
+  teamEmployeeIds: Set<string>;
+  showOmcEmployee: boolean;
+}): { employeeMonitorItems: EmployeeMonitorItem[]; employeeById: Map<string, EmployeeItem> } {
+  const {
+    employees,
+    sessions,
+    workflowTasks,
+    workflowTaskEventsByTaskId,
+    workflowRuntimeSnapshotsByTaskId,
+    taskPendingEmployeesByTaskId,
+    registryRunningClaudeSessionIds,
+    teamEmployeeIds,
+    showOmcEmployee,
+  } = input;
+  const employeeById = new Map(employees.map((item) => [item.id, item] as const));
+  const monitoredEmployees = employees.filter(
+    (item) =>
+      item.enabled &&
+      !teamEmployeeIds.has(item.id) &&
+      (showOmcEmployee || !isOmcMonitorEmployeeRecord(item)),
+  );
+  const sessionsById = new Map(sessions.map((item) => [item.id, item] as const));
+  const runningEmployeeSessionByName = new Map<string, ClaudeSession>();
+  const allEmployeeSessionsByName = new Map<string, ClaudeSession[]>();
+  for (const session of sessions) {
+    if (isOmcBatchHistoryStubSessionId(session.id)) continue;
+    const employeeName = extractBoundEmployeeName(session.repositoryName);
+    if (employeeName) {
+      const rows = allEmployeeSessionsByName.get(employeeName) ?? [];
+      rows.push(session);
+      allEmployeeSessionsByName.set(employeeName, rows);
+    }
+    if (!isClaudeSessionRunningInHostOrUi(session, registryRunningClaudeSessionIds)) continue;
+    if (!employeeName) continue;
+    const previous = runningEmployeeSessionByName.get(employeeName);
+    if (!previous || getSessionUpdatedAt(session) > getSessionUpdatedAt(previous)) {
+      runningEmployeeSessionByName.set(employeeName, session);
+    }
+  }
+
+  const employeeMonitorItems: EmployeeMonitorItem[] = monitoredEmployees.map((employee) => {
+    const inProgressTasksByEmployee = workflowTasks.filter((task) => {
+      if (task.status !== "in_progress") return false;
+      const pending = taskPendingEmployeesByTaskId[task.id] ?? [];
+      if (pending.some((person) => person.employeeId === employee.id)) {
+        return true;
+      }
+      const fallbackEmployeeId = extractLatestEventEmployeeId(workflowTaskEventsByTaskId[task.id] ?? []);
+      return fallbackEmployeeId === employee.id;
+    });
+    const activeTask = inProgressTasksByEmployee.sort((a, b) => b.updatedAt - a.updatedAt)[0];
+    const runningEmployeeSession = runningEmployeeSessionByName.get(employee.name.trim());
+    const completedTasksByEmployee = workflowTasks
+      .filter((task) => {
+        if (task.status === "in_progress") return false;
+        const pending = taskPendingEmployeesByTaskId[task.id] ?? [];
+        if (pending.some((person) => person.employeeId === employee.id)) {
+          return true;
+        }
+        const fallbackEmployeeId = extractLatestEventEmployeeId(workflowTaskEventsByTaskId[task.id] ?? []);
+        return fallbackEmployeeId === employee.id;
+      })
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+    const latestCompletedTaskAt = completedTasksByEmployee[0]?.updatedAt;
+    const latestSettledTaskStatus = completedTasksByEmployee[0]?.status;
+    const employeeSessions = allEmployeeSessionsByName.get(employee.name.trim()) ?? [];
+    const latestSettledSessionAt = employeeSessions
+      .filter((item) => !isClaudeSessionRunningInHostOrUi(item, registryRunningClaudeSessionIds))
+      .map((item) => getSessionUpdatedAt(item))
+      .sort((a, b) => b - a)[0];
+    const session = activeTask ? sessionsById.get(activeTask.creator) : undefined;
+    const previewSession = session ?? runningEmployeeSession;
+    return {
+      employeeId: employee.id,
+      name: employee.name,
+      agentType: employee.agentType,
+      status: activeTask || runningEmployeeSession ? "in_progress" : "idle",
+      executionSource: activeTask ? "workflow" : runningEmployeeSession ? "employee_session" : undefined,
+      latestTaskStatus: activeTask?.status ?? latestSettledTaskStatus,
+      lastCompletedTaskAt:
+        latestCompletedTaskAt && latestSettledSessionAt
+          ? Math.max(latestCompletedTaskAt, latestSettledSessionAt)
+          : latestCompletedTaskAt ?? latestSettledSessionAt,
+      previewText: activeTask
+        ? findEmployeePreviewText({
+            activeTask,
+            workflowRuntimeSnapshotsByTaskId,
+            sessionsById,
+          })
+        : extractSessionPreview(previewSession),
+      activeTaskId: activeTask?.id,
+      sessionId: activeTask?.creator ?? runningEmployeeSession?.id,
+      repositoryPath: previewSession?.repositoryPath,
+      repositoryName: previewSession?.repositoryName,
+      updatedAt: activeTask?.updatedAt ?? (previewSession ? getSessionUpdatedAt(previewSession) : employee.updatedAt),
+    };
+  });
+
+  return { employeeMonitorItems, employeeById };
+}
+
+function buildInactiveMonitorOverview(input: {
+  employees: EmployeeItem[];
+  sessions: ClaudeSession[];
+  workflowTasks: WorkflowTaskItem[];
+  workflowTaskEventsByTaskId: Record<string, WorkflowTaskEventItem[]>;
+  workflowRuntimeSnapshotsByTaskId: Record<string, WorkflowRuntimeStepSnapshot[]>;
+  workflowGraphsByWorkflowId: Record<string, WorkflowGraph>;
+  workflowTemplates: WorkflowTemplateItem[];
+  taskPendingEmployeesByTaskId: Record<string, Array<{ employeeId: string; name: string }>>;
+  registryRunningClaudeSessionIds: ReadonlySet<string>;
+  omcInstalled: boolean;
+  cachedLookup: UseMonitorOverviewResult["lookup"];
+}): UseMonitorOverviewResult {
+  const teamEmployeeIds = collectTeamEmployeeIds(
+    input.workflowTemplates,
+    input.workflowGraphsByWorkflowId,
+    input.workflowTasks,
+    input.workflowTaskEventsByTaskId,
+  );
+  const showOmcEmployee = input.omcInstalled === true;
+  const { employeeMonitorItems, employeeById } = buildCoreEmployeeMonitorItems({
+    employees: input.employees,
+    sessions: input.sessions,
+    workflowTasks: input.workflowTasks,
+    workflowTaskEventsByTaskId: input.workflowTaskEventsByTaskId,
+    workflowRuntimeSnapshotsByTaskId: input.workflowRuntimeSnapshotsByTaskId,
+    taskPendingEmployeesByTaskId: input.taskPendingEmployeesByTaskId,
+    registryRunningClaudeSessionIds: input.registryRunningClaudeSessionIds,
+    teamEmployeeIds,
+    showOmcEmployee,
+  });
+  if (showOmcEmployee) {
+    employeeMonitorItems.push({
+      employeeId: "omc-worker",
+      name: OMC_MONITOR_EMPLOYEE_NAME,
+      agentType: "omc",
+      status: "idle",
+      previewText: "暂无运行中的 OMC 任务",
+      updatedAt: 0,
+    });
+  }
+  const sortedEmployeeMonitorItems = sortEmployeeMonitorItems(employeeMonitorItems);
+  const employeesInProgress = sortedEmployeeMonitorItems.filter((item) => item.status === "in_progress").length;
+  return {
+    employeeMonitorItems: sortedEmployeeMonitorItems,
+    repositoryMemberMonitorItems: [],
+    teamMonitorItems: [],
+    stats: {
+      activeEmployees: sortedEmployeeMonitorItems.length,
+      employeesInProgress,
+      employeesIdle: sortedEmployeeMonitorItems.length - employeesInProgress,
+      teamsTotal: 0,
+      teamsInProgress: 0,
+      teamsIdle: 0,
+    },
+    lookup: {
+      employeeById,
+      teamByWorkflowId: input.cachedLookup.teamByWorkflowId,
+    },
+  };
+}
+
 export function useMonitorOverview({
   employees,
   repositories,
@@ -955,13 +1168,35 @@ export function useMonitorOverview({
   omcBatchRuntime = null,
   omcInstalled = false,
   monitorDrawerOpen = false,
+  monitorOverviewActive = true,
 }: UseMonitorOverviewInput): UseMonitorOverviewResult {
-  const [registryRunningClaudeSessionIds, setRegistryRunningClaudeSessionIds] = useState<ReadonlySet<string>>(
-    () => new Set(),
+  const cachedOverviewRef = useRef<UseMonitorOverviewResult>({
+    employeeMonitorItems: [],
+    repositoryMemberMonitorItems: [],
+    teamMonitorItems: [],
+    stats: {
+      activeEmployees: 0,
+      employeesInProgress: 0,
+      employeesIdle: 0,
+      teamsTotal: 0,
+      teamsInProgress: 0,
+      teamsIdle: 0,
+    },
+    lookup: {
+      employeeById: new Map(),
+      teamByWorkflowId: new Map(),
+    },
+  });
+  const registryRunningClaudeSessionIds = useSyncExternalStore(
+    subscribeRunningClaudeSessionIds,
+    getRunningClaudeSessionIdsSnapshot,
+    getRunningClaudeSessionIdsSnapshot,
   );
   const [externalTrellisAgentRuns, setExternalTrellisAgentRuns] = useState<TrellisAgentRun[]>([]);
   const monitorDrawerOpenRef = useRef(monitorDrawerOpen);
   monitorDrawerOpenRef.current = monitorDrawerOpen;
+  const monitorOverviewActiveRef = useRef(monitorOverviewActive);
+  monitorOverviewActiveRef.current = monitorOverviewActive;
 
   const directBatchInvocationsSnap = useSyncExternalStore(
     subscribeOmcDirectBatchInvocations,
@@ -985,55 +1220,33 @@ export function useMonitorOverview({
     [trellisRuntimeMonitorTargets],
   );
 
+  const externalTrellisRunsDigestRef = useRef("");
+
   useEffect(() => {
-    if (trellisRuntimeMonitorTargets.length === 0 && !monitorDrawerOpen) {
+    if (monitorOverviewActive) return;
+    const cached = cachedOverviewRef.current;
+    if (cached.repositoryMemberMonitorItems.length === 0 && cached.teamMonitorItems.length === 0) {
+      externalTrellisRunsDigestRef.current = "";
+      setExternalTrellisAgentRuns((prev) => (prev.length === 0 ? prev : []));
       return;
     }
-    let cancelled = false;
-    let timer: number | null = null;
-    const tick = async () => {
-      try {
-        const list = await listRunningClaudeSessions();
-        if (cancelled) return;
-        const ids = new Set(
-          list
-            .filter((item) => item.status === "running")
-            .map((item) => item.session_id.trim())
-            .filter((id) => id.length > 0),
-        );
-        setRegistryRunningClaudeSessionIds((prev) => (stringSetEqual(prev, ids) ? prev : ids));
-      } catch {
-        /* 与侧栏一致：失败时保留上一轮，避免误判闪断 */
-      }
+    const employeesInProgress = cached.employeeMonitorItems.filter((item) => item.status === "in_progress").length;
+    cachedOverviewRef.current = {
+      ...cached,
+      repositoryMemberMonitorItems: [],
+      teamMonitorItems: [],
+      stats: {
+        activeEmployees: cached.employeeMonitorItems.length,
+        employeesInProgress,
+        employeesIdle: cached.employeeMonitorItems.length - employeesInProgress,
+        teamsTotal: 0,
+        teamsInProgress: 0,
+        teamsIdle: 0,
+      },
     };
-    const scheduleTimer = () => {
-      if (timer != null) window.clearInterval(timer);
-      timer = window.setInterval(() => {
-        if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-        void tick();
-      }, readVisiblePollIntervalMs(monitorDrawerOpen ? 12_000 : 28_000, monitorDrawerOpen ? 45_000 : 120_000));
-    };
-    void tick();
-    scheduleTimer();
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        void tick();
-        scheduleTimer();
-      }
-    };
-    if (typeof document !== "undefined") {
-      document.addEventListener("visibilitychange", onVisibilityChange);
-    }
-    return () => {
-      cancelled = true;
-      if (timer != null) window.clearInterval(timer);
-      if (typeof document !== "undefined") {
-        document.removeEventListener("visibilitychange", onVisibilityChange);
-      }
-    };
-  }, [monitorDrawerOpen, trellisRuntimeMonitorTargets.length]);
-
-  const externalTrellisRunsDigestRef = useRef("");
+    externalTrellisRunsDigestRef.current = "";
+    setExternalTrellisAgentRuns((prev) => (prev.length === 0 ? prev : []));
+  }, [monitorOverviewActive]);
 
   useEffect(() => {
     externalTrellisRunsDigestRef.current = "";
@@ -1100,6 +1313,9 @@ export function useMonitorOverview({
   );
 
   useEffect(() => {
+    if (!monitorOverviewActive) {
+      return;
+    }
     let cancelled = false;
     let timer: number | null = null;
     const isActive = () => !cancelled;
@@ -1130,7 +1346,7 @@ export function useMonitorOverview({
         document.removeEventListener("visibilitychange", onVisibilityChange);
       }
     };
-  }, [monitorDrawerOpen, refreshExternalTrellisAgentRuns, trellisRuntimeMonitorTargetKey]);
+  }, [monitorOverviewActive, monitorDrawerOpen, refreshExternalTrellisAgentRuns, trellisRuntimeMonitorTargetKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1173,7 +1389,56 @@ export function useMonitorOverview({
   }, [refreshExternalTrellisAgentRuns]);
 
   const hasRunningDirectBatchInvocationRows = directBatchInvocationsSnap.some(isOmcDirectBatchInvocationRunning);
+  const heavyOverviewDeps = [
+    employees,
+    repositories,
+    projects,
+    sessions,
+    taskPendingEmployeesByTaskId,
+    workflowRuntimeSnapshotsByTaskId,
+    workflowTaskEventsByTaskId,
+    workflowTasks,
+    workflowTemplates,
+    workflowGraphsByWorkflowId,
+    omcBatchRuntime,
+    directBatchInvocationsSnap,
+    repositoryMemberInvocationsSnap,
+    externalTrellisAgentRuns,
+    registryRunningClaudeSessionIds,
+    omcInstalled,
+  ] as const;
+  const lightOverviewDeps = [
+    monitorOverviewActive,
+    employees,
+    sessions,
+    taskPendingEmployeesByTaskId,
+    workflowRuntimeSnapshotsByTaskId,
+    workflowTaskEventsByTaskId,
+    workflowTasks,
+    workflowTemplates,
+    workflowGraphsByWorkflowId,
+    registryRunningClaudeSessionIds,
+    omcInstalled,
+  ] as const;
+
   return useMemo(() => {
+    if (!monitorOverviewActive) {
+      const result = buildInactiveMonitorOverview({
+        employees,
+        sessions,
+        workflowTasks,
+        workflowTaskEventsByTaskId,
+        workflowRuntimeSnapshotsByTaskId,
+        workflowGraphsByWorkflowId,
+        workflowTemplates,
+        taskPendingEmployeesByTaskId,
+        registryRunningClaudeSessionIds,
+        omcInstalled,
+        cachedLookup: cachedOverviewRef.current.lookup,
+      });
+      cachedOverviewRef.current = result;
+      return result;
+    }
     const directBatchTaskIdBySessionId = (() => {
       const m = new Map<string, string>();
       for (const inv of directBatchInvocationsSnap) {
@@ -1185,120 +1450,27 @@ export function useMonitorOverview({
       }
       return m;
     })();
-    const employeeById = new Map(employees.map((item) => [item.id, item] as const));
-    const employeeByName = new Map(employees.map((item) => [item.name.trim(), item] as const));
-    const teamEmployeeIds = new Set<string>();
-    for (const template of workflowTemplates) {
-      for (const stage of template.stages) {
-        for (const assignee of stage.assignees) {
-          if (assignee.employeeId?.trim()) {
-            teamEmployeeIds.add(assignee.employeeId);
-          }
-        }
-      }
-    }
-    for (const graph of Object.values(workflowGraphsByWorkflowId)) {
-      for (const node of graph.nodes ?? []) {
-        const employeeId = typeof node.data?.employeeId === "string" ? node.data.employeeId.trim() : "";
-        if (employeeId) {
-          teamEmployeeIds.add(employeeId);
-        }
-      }
-    }
-    for (const task of workflowTasks) {
-      const events = workflowTaskEventsByTaskId[task.id] ?? [];
-      for (const event of events) {
-        const payload = parseEventPayload(event);
-        if (!payload) continue;
-        if (typeof payload.employeeId === "string" && payload.employeeId.trim()) {
-          teamEmployeeIds.add(payload.employeeId);
-        }
-      }
-    }
-    const showOmcEmployee = omcInstalled === true;
-    const monitoredEmployees = employees.filter(
-      (item) =>
-        item.enabled &&
-        !teamEmployeeIds.has(item.id) &&
-        (showOmcEmployee || !isOmcMonitorEmployeeRecord(item)),
+    const teamEmployeeIds = collectTeamEmployeeIds(
+      workflowTemplates,
+      workflowGraphsByWorkflowId,
+      workflowTasks,
+      workflowTaskEventsByTaskId,
     );
-    const sessionsById = new Map(sessions.map((item) => [item.id, item] as const));
-    const runningEmployeeSessionByName = new Map<string, ClaudeSession>();
-    const allEmployeeSessionsByName = new Map<string, ClaudeSession[]>();
-    for (const session of sessions) {
-      if (isOmcBatchHistoryStubSessionId(session.id)) continue;
-      const employeeName = extractBoundEmployeeName(session.repositoryName);
-      if (employeeName) {
-        const rows = allEmployeeSessionsByName.get(employeeName) ?? [];
-        rows.push(session);
-        allEmployeeSessionsByName.set(employeeName, rows);
-      }
-      if (!isClaudeSessionRunningInHostOrUi(session, registryRunningClaudeSessionIds)) continue;
-      if (!employeeName) continue;
-      const previous = runningEmployeeSessionByName.get(employeeName);
-      if (!previous || getSessionUpdatedAt(session) > getSessionUpdatedAt(previous)) {
-        runningEmployeeSessionByName.set(employeeName, session);
-      }
-    }
-    const templateById = new Map(workflowTemplates.map((item) => [item.id, item] as const));
-
-    const employeeMonitorItems: EmployeeMonitorItem[] = monitoredEmployees.map((employee) => {
-      const inProgressTasksByEmployee = workflowTasks.filter((task) => {
-        if (task.status !== "in_progress") return false;
-        const pending = taskPendingEmployeesByTaskId[task.id] ?? [];
-        if (pending.some((person) => person.employeeId === employee.id)) {
-          return true;
-        }
-        const fallbackEmployeeId = extractLatestEventEmployeeId(workflowTaskEventsByTaskId[task.id] ?? []);
-        return fallbackEmployeeId === employee.id;
-      });
-      const activeTask = inProgressTasksByEmployee.sort((a, b) => b.updatedAt - a.updatedAt)[0];
-      const runningEmployeeSession = runningEmployeeSessionByName.get(employee.name.trim());
-      const completedTasksByEmployee = workflowTasks
-        .filter((task) => {
-          if (task.status === "in_progress") return false;
-          const pending = taskPendingEmployeesByTaskId[task.id] ?? [];
-          if (pending.some((person) => person.employeeId === employee.id)) {
-            return true;
-          }
-          const fallbackEmployeeId = extractLatestEventEmployeeId(workflowTaskEventsByTaskId[task.id] ?? []);
-          return fallbackEmployeeId === employee.id;
-        })
-        .sort((a, b) => b.updatedAt - a.updatedAt);
-      const latestCompletedTaskAt = completedTasksByEmployee[0]?.updatedAt;
-      const latestSettledTaskStatus = completedTasksByEmployee[0]?.status;
-      const employeeSessions = allEmployeeSessionsByName.get(employee.name.trim()) ?? [];
-      const latestSettledSessionAt = employeeSessions
-        .filter((item) => !isClaudeSessionRunningInHostOrUi(item, registryRunningClaudeSessionIds))
-        .map((item) => getSessionUpdatedAt(item))
-        .sort((a, b) => b - a)[0];
-      const session = activeTask ? sessionsById.get(activeTask.creator) : undefined;
-      const previewSession = session ?? runningEmployeeSession;
-      return {
-        employeeId: employee.id,
-        name: employee.name,
-        agentType: employee.agentType,
-        status: activeTask || runningEmployeeSession ? "in_progress" : "idle",
-        executionSource: activeTask ? "workflow" : runningEmployeeSession ? "employee_session" : undefined,
-        latestTaskStatus: activeTask?.status ?? latestSettledTaskStatus,
-        lastCompletedTaskAt:
-          latestCompletedTaskAt && latestSettledSessionAt
-            ? Math.max(latestCompletedTaskAt, latestSettledSessionAt)
-            : latestCompletedTaskAt ?? latestSettledSessionAt,
-        previewText: activeTask
-          ? findEmployeePreviewText({
-              activeTask,
-              workflowRuntimeSnapshotsByTaskId,
-              sessionsById,
-            })
-          : extractSessionPreview(previewSession),
-        activeTaskId: activeTask?.id,
-        sessionId: activeTask?.creator ?? runningEmployeeSession?.id,
-        repositoryPath: previewSession?.repositoryPath,
-        repositoryName: previewSession?.repositoryName,
-        updatedAt: activeTask?.updatedAt ?? (previewSession ? getSessionUpdatedAt(previewSession) : employee.updatedAt),
-      };
+    const showOmcEmployee = omcInstalled === true;
+    const { employeeMonitorItems, employeeById } = buildCoreEmployeeMonitorItems({
+      employees,
+      sessions,
+      workflowTasks,
+      workflowTaskEventsByTaskId,
+      workflowRuntimeSnapshotsByTaskId,
+      taskPendingEmployeesByTaskId,
+      registryRunningClaudeSessionIds,
+      teamEmployeeIds,
+      showOmcEmployee,
     });
+    const employeeByName = new Map(employees.map((item) => [item.name.trim(), item] as const));
+    const sessionsById = new Map(sessions.map((item) => [item.id, item] as const));
+    const templateById = new Map(workflowTemplates.map((item) => [item.id, item] as const));
 
     const omcTaskSignals: TaggedOmcSignal[] = workflowTasks
       .map((task) => extractOmcActiveSignal(task, workflowTaskEventsByTaskId[task.id] ?? []))
@@ -1591,7 +1763,7 @@ export function useMonitorOverview({
       teamsIdle: teamMonitorItems.length - teamsInProgress,
     };
 
-    return {
+    const result: UseMonitorOverviewResult = {
       employeeMonitorItems,
       repositoryMemberMonitorItems,
       teamMonitorItems,
@@ -1601,22 +1773,7 @@ export function useMonitorOverview({
         teamByWorkflowId: templateById,
       },
     };
-  }, [
-    employees,
-    repositories,
-    projects,
-    sessions,
-    taskPendingEmployeesByTaskId,
-    workflowRuntimeSnapshotsByTaskId,
-    workflowTaskEventsByTaskId,
-    workflowTasks,
-    workflowTemplates,
-    workflowGraphsByWorkflowId,
-    omcBatchRuntime,
-    directBatchInvocationsSnap,
-    repositoryMemberInvocationsSnap,
-    externalTrellisAgentRuns,
-    registryRunningClaudeSessionIds,
-    omcInstalled,
-  ]);
+    cachedOverviewRef.current = result;
+    return result;
+  }, monitorOverviewActive ? [monitorOverviewActive, ...heavyOverviewDeps] : lightOverviewDeps);
 }

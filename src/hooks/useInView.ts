@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 
+type InViewRoot = Element | null;
+
 /** 元素进入视口（含 rootMargin）后返回 true，用于懒加载 Git / 文件树。 */
 export function useInView(
   rootMargin = "120px",
   enabled = true,
+  root: InViewRoot = null,
 ): [RefObject<HTMLElement | null>, boolean] {
   const ref = useRef<HTMLElement | null>(null);
   const [inView, setInView] = useState(false);
@@ -28,11 +31,11 @@ export function useInView(
           observer.disconnect();
         }
       },
-      { rootMargin },
+      { rootMargin, root },
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [enabled, inView, rootMargin]);
+  }, [enabled, inView, root, rootMargin]);
 
   return [ref, enabled ? inView : false];
 }
@@ -41,6 +44,7 @@ export function useInView(
 export function useInViewActive(
   rootMargin = "120px",
   enabled = true,
+  root: InViewRoot = null,
 ): [RefObject<HTMLElement | null>, boolean] {
   const ref = useRef<HTMLElement | null>(null);
   const [inView, setInView] = useState(false);
@@ -80,7 +84,7 @@ export function useInViewActive(
         observerInViewRef.current = next;
         commitInView(next);
       },
-      { rootMargin },
+      { rootMargin, root },
     );
     observer.observe(el);
     return () => {
@@ -90,7 +94,7 @@ export function useInViewActive(
         debounceTimerRef.current = null;
       }
     };
-  }, [enabled, rootMargin]);
+  }, [enabled, root, rootMargin]);
 
   return [ref, enabled ? inView : false];
 }
