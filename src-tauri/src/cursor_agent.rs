@@ -40,6 +40,8 @@ struct CursorStreamEvent {
     #[serde(default)]
     text: Option<String>,
     #[serde(default)]
+    line: Option<String>,
+    #[serde(default)]
     message: Option<String>,
     #[serde(default)]
     success: Option<bool>,
@@ -134,6 +136,17 @@ fn handle_cursor_stream_event(
                     &cursor_assistant_stream_line(&text),
                     invocation_key,
                 );
+            }
+            true
+        }
+        "stream_line" => {
+            let line = event
+                .line
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty());
+            if let Some(line) = line {
+                emit_cursor_stdout_line(app, tab_session_id, line, invocation_key);
             }
             true
         }
@@ -480,6 +493,113 @@ pub async fn cursor_agent_probe(
     cursor_agent_get_status(app, db).await
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CursorModelListItem {
+    pub id: String,
+    pub display_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub aliases: Vec<String>,
+}
+
+#[tauri::command]
+pub async fn cursor_agent_list_models(
+    app: tauri::AppHandle,
+    db: tauri::State<'_, wise_db::WiseDb>,
+) -> Result<Vec<CursorModelListItem>, String> {
+    let api_key = load_cursor_api_key(&db.0).ok_or_else(|| {
+        "未配置 Cursor API Key，请在执行环境中完成配置".to_string()
+    })?;
+    let response = run_bridge(
+        &app,
+        "models.list",
+        None,
+        Some(api_key.as_str()),
+    )
+    .await?;
+    if !response.ok {
+        return Err(response
+            .error
+            .unwrap_or_else(|| "Cursor models.list 失败".to_string()));
+    }
+    let models = response
+        .result
+        .as_ref()
+        .and_then(|value| value.get("models"))
+        .and_then(|value| value.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let mut out = Vec::new();
+    for item in models {
+        let id = item
+            .get("id")
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        let Some(id) = id else {
+            continue;
+        };
+        let display_name = item
+            .get("displayName")
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or(id)
+            .to_string();
+        let description = item
+            .get("description")
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string);
+        let aliases = item
+            .get("aliases")
+            .and_then(|value| value.as_array())
+            .map(|values| {
+                values
+                    .iter()
+                    .filter_map(|value| value.as_str().map(str::trim).filter(|s| !s.is_empty()))
+                    .map(str::to_string)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        out.push(CursorModelListItem {
+            id: id.to_string(),
+            display_name,
+            description,
+            aliases,
+        });
+    }
+    Ok(out)
+}
+
+#[tauri::command]
+pub async fn cursor_agent_read_spawn_mcp_servers(
+    config_path: String,
+) -> Result<std::collections::HashMap<String, serde_json::Value>, String> {
+    let path = config_path.trim().to_string();
+    if path.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+    tokio::task::spawn_blocking(move || {
+        let content = std::fs::read_to_string(&path).map_err(|e| format!("读取 MCP 配置失败: {e}"))?;
+        let json: serde_json::Value =
+            serde_json::from_str(&content).map_err(|e| format!("解析 MCP 配置失败: {e}"))?;
+        let servers = json
+            .get("mcpServers")
+            .and_then(|value| value.as_object())
+            .ok_or_else(|| "MCP 配置缺少 mcpServers 对象".to_string())?;
+        Ok(servers
+            .iter()
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect())
+    })
+    .await
+    .map_err(|e| format!("cursor_agent_read_spawn_mcp_servers: {e}"))?
+}
+
 #[tauri::command]
 pub(crate) async fn execute_cursor_code(
     app: tauri::AppHandle,
@@ -487,6 +607,7 @@ pub(crate) async fn execute_cursor_code(
     project_path: String,
     prompt: String,
     model: Option<String>,
+    mcp_servers: Option<serde_json::Value>,
     invocation_key: Option<String>,
     tab_session_id: Option<String>,
     cursor_agent_id: Option<String>,
@@ -507,14 +628,20 @@ pub(crate) async fn execute_cursor_code(
         .unwrap_or_else(|| format!("cursor-{}", Uuid::new_v4().simple()));
 
     let bridge = resolve_bridge_script(&app)?;
+    let mut bridge_params = serde_json::json!({
+        "prompt": prompt,
+        "cwd": project_path,
+        "model": model.as_deref().unwrap_or("default"),
+        "agentId": cursor_agent_id.as_deref().filter(|value| !value.trim().is_empty()),
+    });
+    if let Some(servers) = mcp_servers {
+        if servers.is_object() && !servers.as_object().map(|o| o.is_empty()).unwrap_or(true) {
+            bridge_params["mcpServers"] = servers;
+        }
+    }
     let request = serde_json::json!({
         "method": "execute",
-        "params": {
-            "prompt": prompt,
-            "cwd": project_path,
-            "model": model.as_deref().unwrap_or("default"),
-            "agentId": cursor_agent_id.as_deref().filter(|value| !value.trim().is_empty()),
-        }
+        "params": bridge_params,
     });
 
     let mut cmd = Command::new(resolve_bun_binary_async().await);

@@ -34,7 +34,9 @@ import {
 } from "../services/claude";
 import { executeCodexCode } from "../services/codex";
 import { executeCursorCode } from "../services/cursorAgentExecution";
+import { buildCursorMcpServersForSpawn } from "../services/cursorMcpConfig";
 import { CURSOR_SDK_DEFAULT_MODEL } from "../constants/cursorSdk";
+import { resolveCursorLocalModelId } from "../utils/cursorModel";
 import { resolveCursorResumeAgentId } from "../utils/cursorAgentId";
 import {
   CLAUDE_CONNECTION_KIND_LABELS,
@@ -1272,7 +1274,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       modelArg: string | undefined;
       cursorAgentId: string | null;
     }) => {
-      const { tabSessionId, turnNonce, repositoryPath, prompt, cursorAgentId } = params;
+      const { tabSessionId, turnNonce, repositoryPath, prompt, modelArg, cursorAgentId } = params;
       if (!streamRuntimeRef.current) {
         const deadline = Date.now() + CLAUDE_STREAM_RUNTIME_READY_WAIT_MS;
         while (!streamRuntimeRef.current && Date.now() < deadline) {
@@ -1317,22 +1319,26 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         }
       }
       const invocationKey = detach ? inv : undefined;
+      const resolvedModel = resolveCursorLocalModelId(modelArg ?? CURSOR_SDK_DEFAULT_MODEL);
+      const spawnExtras = await resolveSpawnExtrasForTab(tabSessionId);
+      const mcpServers = await buildCursorMcpServersForSpawn({ spawnExtras });
       try {
         await executeCursorCode(
           repositoryPath,
           prompt,
-          CURSOR_SDK_DEFAULT_MODEL,
+          resolvedModel,
           invocationKey,
           tabSessionId,
           cursorAgentId ?? undefined,
           resolveTrellisContextId(tabSessionId),
+          mcpServers,
         );
       } catch (e) {
         detach?.();
         throw e;
       }
     },
-    [commitSessions, resolveTrellisContextId],
+    [commitSessions, resolveSpawnExtrasForTab, resolveTrellisContextId],
   );
 
   const runClaudeStreamingWithInvocation = useCallback(

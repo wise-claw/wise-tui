@@ -5165,25 +5165,36 @@ button.app-message-part-header:disabled:hover {
   opacity: 0.72;
 }
 
-/* 模型下拉：极低行高 + 略大字号（覆盖 Ant 默认 menu 行高） */
+/* 模型下拉：scroll 在 overlay 根节点，避免 menu item 叠层 */
+.app-claude-model-picker-dropdown {
+  max-height: min(280px, 42vh);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
 .app-claude-model-picker-dropdown .ant-dropdown-menu {
-  min-width: 88px;
-  max-width: 168px;
-  padding: 1px;
+  min-width: 96px;
+  max-width: 176px;
+  padding: 2px;
+  box-shadow: none;
 }
 
 .app-claude-model-picker-dropdown .ant-dropdown-menu-item,
 .app-claude-model-picker-dropdown .ant-dropdown-menu-submenu-title {
+  position: relative;
   display: flex;
   align-items: center;
-  min-height: 24px !important;
-  height: 24px;
-  padding-block: 0 !important;
-  padding-inline: 5px;
+  box-sizing: border-box;
+  min-height: 26px !important;
+  height: auto !important;
+  padding-block: 3px !important;
+  padding-inline: 6px;
   margin: 0;
   font-size: 11px;
-  line-height: 24px;
+  line-height: 1.25;
   border-radius: 2px;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .app-claude-model-picker-dropdown .ant-dropdown-menu-item + .ant-dropdown-menu-item {
@@ -5191,8 +5202,13 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-claude-model-picker-dropdown .ant-dropdown-menu-title-content {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 11px;
-  line-height: 24px;
+  line-height: 1.25;
 }
 
 .app-claude-model-picker-dropdown .ant-dropdown-menu-item .ant-dropdown-menu-item-icon {

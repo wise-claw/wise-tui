@@ -20,12 +20,14 @@ describe("cursorAgentExecution service", () => {
       "tab-1",
       "agent-1",
       "ctx-1",
+      { demo: { type: "stdio", command: "echo", args: [] } },
     );
 
     expect(invoke).toHaveBeenCalledWith("execute_cursor_code", {
       projectPath: "/repo/demo",
       prompt: "fix bug",
       model: "composer-2.5",
+      mcpServers: { demo: { type: "stdio", command: "echo", args: [] } },
       invocationKey: "inv-1",
       tabSessionId: "tab-1",
       cursorAgentId: "agent-1",

@@ -82,6 +82,8 @@ import {
   getSessionContextMetrics,
 } from "../../services/claudeSessionContext";
 import { getClaudeModelPickerOptions } from "../../services/claude";
+import { listCursorModels, type CursorModelListItem } from "../../services/cursorAgent";
+import { CURSOR_SDK_DEFAULT_MODEL } from "../../constants/cursorSdk";
 import {
   WISE_CLAUDE_USER_SETTINGS_CHANGED,
   type ClaudeUserSettingsChangedDetail,
@@ -89,6 +91,10 @@ import {
 import { promptToLogicalPlainString } from "../../utils/serializeClaudePrompt";
 import { getWiseRepositoryFileDragPaths, isWiseRepositoryFileDrag } from "../../utils/repositoryFileDrag";
 import { formatClaudeModelLabel } from "../../utils/claudeModel";
+import {
+  buildCursorModelPickerOptions,
+  formatCursorModelLabel,
+} from "../../utils/cursorModel";
 import { inferPendingQueueTargetFromPrompt } from "../../utils/pendingQueueExecutor";
 import { isOmcMonitorDispatchMentionName } from "../../utils/omcMonitorEmployeeSession";
 import { captureScreenshot, screenshotResultToImagePart } from "../../services/screenshot";
@@ -433,6 +439,8 @@ function ComposerInner({
     defaultModel: string | null;
     availableModels: string[];
   } | null>(null);
+  const [cursorModels, setCursorModels] = useState<CursorModelListItem[] | null>(null);
+  const isCursorEngine = sessionExecutionEngine === "cursor";
   const [model, setModel] = useState(() => session.model?.trim() || "sonnet");
   const defaultConnectionKind = useDefaultClaudeConnectionKind();
   const [activeBranch, setActiveBranch] = useState<string>("-");
@@ -578,12 +586,36 @@ function ComposerInner({
   }, [session.id, set]);
 
   const refreshClaudeModelPicker = useCallback(() => {
+    if (isCursorEngine) {
+      void listCursorModels().then(setCursorModels);
+      return;
+    }
     void getClaudeModelPickerOptions(session.repositoryPath).then(setClaudePicker);
-  }, [session.repositoryPath]);
+  }, [isCursorEngine, session.repositoryPath]);
 
   useEffect(() => {
     refreshClaudeModelPicker();
   }, [refreshClaudeModelPicker]);
+
+  useEffect(() => {
+    if (!isCursorEngine) return;
+    const fromSession = session.model?.trim();
+    const looksLikeCursorModel =
+      Boolean(fromSession) &&
+      (fromSession === CURSOR_SDK_DEFAULT_MODEL ||
+        fromSession.startsWith("composer-") ||
+        fromSession.startsWith("claude-") ||
+        fromSession.startsWith("gpt-") ||
+        cursorModels?.some(
+          (item) => item.id === fromSession || (item.aliases ?? []).includes(fromSession),
+        ));
+    const nextModel =
+      looksLikeCursorModel && fromSession ? fromSession : CURSOR_SDK_DEFAULT_MODEL;
+    setModel(nextModel);
+    if (fromSession !== nextModel) {
+      onSessionModelChange(nextModel);
+    }
+  }, [isCursorEngine, session.id, session.model, cursorModels, onSessionModelChange]);
 
   useEffect(() => {
     const onSettingsChanged = (event: Event) => {
@@ -605,20 +637,40 @@ function ComposerInner({
   const pickerAllowlist = claudePicker?.availableModels;
 
   useEffect(() => {
+    if (isCursorEngine) return;
     const fromSession = session.model?.trim();
     const fromCfg = claudeSettingsModel;
     setModel(fromSession || fromCfg || "sonnet");
-  }, [session.id, session.model, claudeSettingsModel]);
+  }, [session.id, session.model, claudeSettingsModel, isCursorEngine]);
 
   const modelOptions = useMemo(() => {
     const opts: { value: string; label: string }[] = [];
     const seen = new Set<string>();
-    const push = (value: string) => {
+    const push = (value: string, label?: string) => {
       const v = value.trim();
       if (!v || seen.has(v)) return;
       seen.add(v);
-      opts.push({ value: v, label: formatClaudeModelLabel(v) });
+      opts.push({
+        value: v,
+        label: label ?? (isCursorEngine ? formatCursorModelLabel(v) : formatClaudeModelLabel(v)),
+      });
     };
+
+    if (isCursorEngine) {
+      if (cursorModels && cursorModels.length > 0) {
+        for (const item of buildCursorModelPickerOptions(cursorModels)) {
+          push(item.value, item.label);
+        }
+      } else {
+        push(CURSOR_SDK_DEFAULT_MODEL);
+        push("composer-2.5");
+      }
+      if (session.model?.trim()) push(session.model.trim());
+      if (model.trim()) push(model.trim());
+      if (opts.length === 0) push(CURSOR_SDK_DEFAULT_MODEL);
+      return opts;
+    }
+
     if (pickerAllowlist && pickerAllowlist.length > 0) {
       for (const id of pickerAllowlist) push(id);
     } else {
@@ -632,7 +684,14 @@ function ComposerInner({
     if (model.trim()) push(model.trim());
     if (opts.length === 0) push("sonnet");
     return opts;
-  }, [pickerAllowlist, claudeSettingsModel, session.model, model]);
+  }, [
+    isCursorEngine,
+    cursorModels,
+    pickerAllowlist,
+    claudeSettingsModel,
+    session.model,
+    model,
+  ]);
 
   const modelDisplayLabel = useMemo(
     () => modelOptions.find((o) => o.value === model)?.label ?? model,

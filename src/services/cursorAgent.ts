@@ -12,6 +12,21 @@ export interface CursorAgentStatus {
   failureReason?: string;
 }
 
+export interface CursorModelListItem {
+  id: string;
+  displayName: string;
+  description?: string | null;
+  aliases?: string[];
+}
+
+export async function listCursorModels(): Promise<CursorModelListItem[]> {
+  try {
+    return await invoke<CursorModelListItem[]>("cursor_agent_list_models");
+  } catch {
+    return [];
+  }
+}
+
 export async function getCursorAgentStatus(): Promise<CursorAgentStatus> {
   return invoke<CursorAgentStatus>("cursor_agent_get_status");
 }

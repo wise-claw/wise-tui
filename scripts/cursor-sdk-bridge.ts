@@ -8,6 +8,7 @@
  */
 
 import { resolveCursorLocalModelId } from "./cursorSdkModel.ts";
+import { sdkMessageToClaudeStreamLines } from "./cursorSdkStream.ts";
 import { installCursorSdkStderrFilter } from "./cursorSdkStderrFilter.ts";
 
 type BridgeRequest = {
@@ -24,11 +25,51 @@ type BridgeResponse = {
 type StreamEvent =
   | { type: "agent"; agentId: string }
   | { type: "assistant"; text: string }
+  | { type: "stream_line"; line: string }
   | { type: "complete"; success: boolean; agentId?: string; status?: string }
   | { type: "error"; message: string };
 
+type CursorMcpServerConfig = {
+  type?: string;
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  cwd?: string;
+  url?: string;
+  headers?: Record<string, string>;
+};
+
 function emitStream(event: StreamEvent): void {
   process.stdout.write(`${JSON.stringify(event)}\n`);
+}
+
+function emitClaudeStreamLines(event: {
+  type: string;
+  message?: { role?: string; content?: unknown[] };
+  call_id?: string;
+  name?: string;
+  status?: string;
+  args?: unknown;
+  result?: unknown;
+  text?: string;
+}): void {
+  for (const line of sdkMessageToClaudeStreamLines(event)) {
+    emitStream({ type: "stream_line", line: JSON.stringify(line) });
+  }
+}
+
+function parseMcpServersParam(
+  params: Record<string, unknown> | undefined,
+): Record<string, CursorMcpServerConfig> | undefined {
+  const raw = params?.mcpServers;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const out: Record<string, CursorMcpServerConfig> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    const name = key.trim();
+    if (!name || !value || typeof value !== "object" || Array.isArray(value)) continue;
+    out[name] = value as CursorMcpServerConfig;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 function readRequest(): BridgeRequest {
@@ -65,7 +106,18 @@ async function handleModelsList(): Promise<BridgeResponse> {
   try {
     const { Cursor } = await import("@cursor/sdk");
     const models = await Cursor.models.list({ apiKey });
-    return { ok: true, result: { modelCount: models.length } };
+    return {
+      ok: true,
+      result: {
+        modelCount: models.length,
+        models: models.map((item) => ({
+          id: item.id,
+          displayName: item.displayName,
+          description: item.description ?? null,
+          aliases: item.aliases ?? [],
+        })),
+      },
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return { ok: false, error: message };
@@ -88,6 +140,7 @@ async function handlePrompt(params: Record<string, unknown> | undefined): Promis
   const modelId = resolveCursorLocalModelId(
     typeof params?.model === "string" ? params.model : undefined,
   );
+  const mcpServers = parseMcpServersParam(params);
 
   try {
     const { Agent } = await import("@cursor/sdk");
@@ -95,6 +148,7 @@ async function handlePrompt(params: Record<string, unknown> | undefined): Promis
       apiKey,
       model: { id: modelId },
       local: { cwd, settingSources: [] },
+      ...(mcpServers ? { mcpServers } : {}),
     });
     return {
       ok: true,
@@ -137,6 +191,7 @@ async function handleExecute(params: Record<string, unknown> | undefined): Promi
     const modelId = resolveCursorLocalModelId(
       typeof params?.model === "string" ? params.model : undefined,
     );
+    const mcpServers = parseMcpServersParam(params);
     const resumeAgentId =
       typeof params?.agentId === "string" && params.agentId.trim().length > 0
         ? params.agentId.trim()
@@ -148,11 +203,13 @@ async function handleExecute(params: Record<string, unknown> | undefined): Promi
         ? await Agent.resume(resumeAgentId, {
             apiKey,
             local: { cwd, settingSources: [] },
+            ...(mcpServers ? { mcpServers } : {}),
           })
         : await Agent.create({
             apiKey,
             model: { id: modelId },
             local: { cwd, settingSources: [] },
+            ...(mcpServers ? { mcpServers } : {}),
           });
 
       try {
@@ -163,13 +220,25 @@ async function handleExecute(params: Record<string, unknown> | undefined): Promi
           emitStream({ type: "agent", agentId });
         }
 
-        const run = await agent.send(prompt, { model: { id: modelId } });
+        const run = await agent.send(prompt, {
+          model: { id: modelId },
+          ...(mcpServers ? { mcpServers } : {}),
+        });
         for await (const event of run.stream()) {
-          if (event.type !== "assistant") continue;
-          for (const block of event.message.content) {
-            if (block.type === "text" && block.text) {
-              emitStream({ type: "assistant", text: block.text });
+          if (event.type === "assistant") {
+            emitClaudeStreamLines(event);
+            for (const block of event.message.content) {
+              if (block.type === "text" && block.text) {
+                emitStream({ type: "assistant", text: block.text });
+              }
             }
+            continue;
+          }
+          if (
+            event.type === "tool_call" ||
+            event.type === "thinking"
+          ) {
+            emitClaudeStreamLines(event);
           }
         }
 
