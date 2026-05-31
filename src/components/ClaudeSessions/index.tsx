@@ -819,11 +819,12 @@ export function ClaudeSessions({
   }, [incomingSessions]);
 
   const projectComposerRepository = useMemo(
-    () => resolveProjectComposerRepository(activeProject, repositories ?? []),
+    () => resolveProjectComposerRepository(activeProject, repositories ?? []) ?? undefined,
     [activeProject, repositories],
   );
 
-  const chatContextRepository = activeRepository ?? projectComposerRepository;
+  const chatContextRepository: Repository | undefined =
+    activeRepository ?? projectComposerRepository;
 
   const chatSurfaceReady = isChatSurfaceReady({
     activeRepository,
@@ -1232,7 +1233,7 @@ export function ClaudeSessions({
 
       {/* Session Tabs - 会话标签栏 */}
       {!chatSurfaceReady ? null : activeSession ? (
-        paneCount > 1 ? (
+        paneCount > 1 && chatContextRepository ? (
           <ClaudeMultiPaneGrid
             paneCount={paneCount}
             activeSession={activeSession}
