@@ -366,6 +366,14 @@ const MultiPaneExtraPaneCell = memo(
     const mustStayMounted =
       paneSession?.status === "running" || paneSession?.status === "connecting";
     const [paneRef, inView] = useInViewActive("80px", lazyEnabled && Boolean(paneSession), null);
+    const setPaneDivRef = useCallback(
+      (node: HTMLDivElement | null) => {
+        if (typeof paneRef === "function") {
+          paneRef(node);
+        }
+      },
+      [paneRef],
+    );
     const [mounted, setMounted] = useState(!lazyEnabled || inView);
 
     useEffect(() => {
@@ -418,7 +426,7 @@ const MultiPaneExtraPaneCell = memo(
       if (lazyEnabled && !mounted) {
         return (
           <div
-            ref={paneRef}
+            ref={setPaneDivRef}
             className="app-claude-sessions__pane app-claude-sessions__pane--lazy-placeholder"
             data-pane-session-id={sessionId}
           >
@@ -432,7 +440,7 @@ const MultiPaneExtraPaneCell = memo(
         );
       }
       return (
-        <div ref={lazyEnabled ? paneRef : undefined} className="app-claude-sessions__pane">
+        <div ref={lazyEnabled ? setPaneDivRef : undefined} className="app-claude-sessions__pane">
           <ClaudeSessionChatWithDock
             key={sessionId}
             session={paneSession}
