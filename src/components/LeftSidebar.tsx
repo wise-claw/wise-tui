@@ -755,6 +755,31 @@ export function LeftSidebar({
     setRepositoryFileTreeSearch("");
   }, [effectiveRepoPanelPath]);
 
+  /**
+   * 侧栏工作区/仓库点击需要立即驱动左下 Git/文件树目录同步，
+   * 不能仅依赖全局 active* 变化（同 key 点击时不会触发）。
+   */
+  const handleProjectSelectAndSyncRepoPanel = useCallback(
+    (projectId: string) => {
+      setRepoPanelTreeSelection({ kind: "project", projectId });
+      onProjectSelect(projectId);
+    },
+    [onProjectSelect],
+  );
+
+  const handleRepositorySelectAndSyncRepoPanel = useCallback(
+    (repositoryId: number | null) => {
+      if (repositoryId == null) {
+        setRepoPanelTreeSelection(null);
+        onRepositorySelect(null);
+        return;
+      }
+      setRepoPanelTreeSelection({ kind: "repository", repositoryId });
+      onRepositorySelect(repositoryId);
+    },
+    [onRepositorySelect],
+  );
+
   const lastHandledWorkspaceCreateRequestRef = useRef(0);
   const lastHandledStandaloneRepoAddRequestRef = useRef(0);
 
@@ -891,8 +916,8 @@ export function LeftSidebar({
           expandedProjects={projectRepositoryState.expandedProjects}
           projectDropTargetId={projectRepositoryState.projectDropTargetId}
           repoSidebarDragRef={projectRepositoryState.repoSidebarDragRef}
-          onProjectSelect={onProjectSelect}
-          onRepositorySelect={onRepositorySelect}
+          onProjectSelect={handleProjectSelectAndSyncRepoPanel}
+          onRepositorySelect={handleRepositorySelectAndSyncRepoPanel}
           onCreateProjectClick={() => {
             setProjectNameInput("");
             setCreateProjectRootPath("");
