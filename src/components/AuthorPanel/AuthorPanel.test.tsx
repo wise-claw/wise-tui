@@ -443,6 +443,18 @@ describe("AuthorPanel", () => {
     expect(html).toContain("wise.defaultConfig.v1");
   });
 
+  test("cursor-sdk-diagnostic pane renders embedded diagnostic panel", () => {
+    const { props } = buildProps({
+      pane: "cursor-sdk-diagnostic",
+      repositoryPath: "/tmp/wise-repo",
+    });
+    const html = renderAuthorPanel(props);
+    expect(html).toContain("Cursor SDK 诊断");
+    expect(html).toContain("重新探测 SDK");
+    expect(html).toContain('value="/tmp/wise-repo"');
+    expect(html).not.toContain("<iframe");
+  });
+
   test("data-cleanup pane renders wise cache cleanup", () => {
     const { props } = buildProps({ pane: "data-cleanup" });
     const html = renderAuthorPanel(props);
@@ -458,6 +470,7 @@ describe("AuthorPanel", () => {
       "claude-config",
       "assistants",
       "engine-registry",
+      "cursor-sdk-diagnostic",
       "shortcuts",
       "sandbox",
       "extensions",

@@ -1,8 +1,8 @@
 import { CURSOR_SDK_DEFAULT_MODEL } from "../constants/cursorSdk";
 
 const LOCAL_MODEL_ALIAS_TO_ID: Record<string, string> = {
-  auto: CURSOR_SDK_DEFAULT_MODEL,
-  default: CURSOR_SDK_DEFAULT_MODEL,
+  auto: "default",
+  default: "default",
 };
 
 /** 将 Composer / session.model 解析为 Cursor Local Agent 可用的 model id。 */

@@ -16,8 +16,23 @@ import {
   withBridgeStdoutWrite,
 } from "./cursorSdkStderrFilter.ts";
 
+import {
+  ensurePublicDir,
+  runAgentWriteProbe,
+} from "./cursorSdkAgentWriteProbe.ts";
+import { withWiseCursorExecutePreamble } from "./cursorSdkExecutePreamble.ts";
+import { runCursorSdkDeepProbe } from "./cursorSdkProbe.ts";
+import { probeRepositoryFiles } from "./cursorSdkRepositoryFiles.ts";
+
 type BridgeRequest = {
-  method: "probe" | "models.list" | "prompt" | "execute";
+  method:
+    | "probe"
+    | "probe.deep"
+    | "probe.repository"
+    | "probe.agentWrite"
+    | "models.list"
+    | "prompt"
+    | "execute";
   params?: Record<string, unknown>;
 };
 
@@ -46,7 +61,16 @@ type CursorMcpServerConfig = {
 
 type CursorSettingSource = "project" | "user" | "team" | "mdm" | "plugins" | "all";
 
-const DEFAULT_SETTING_SOURCES: CursorSettingSource[] = ["project", "user"];
+/** Wise 无头 bridge 默认不加载仓库 project 层，避免目标仓 `.cursor/sandbox.json` / hooks 禁用写盘。 */
+const DEFAULT_SETTING_SOURCES: CursorSettingSource[] = [];
+
+function buildLocalAgentOptions(cwd: string, settingSources: CursorSettingSource[]) {
+  return {
+    cwd,
+    settingSources,
+    sandboxOptions: { enabled: false },
+  };
+}
 
 function emitStream(event: StreamEvent): void {
   withBridgeStdoutWrite(() => {
@@ -140,6 +164,56 @@ async function handleProbe(): Promise<BridgeResponse> {
   }
 }
 
+async function handleProbeRepository(
+  params: Record<string, unknown> | undefined,
+): Promise<BridgeResponse> {
+  const repositoryPath =
+    typeof params?.repositoryPath === "string" ? params.repositoryPath.trim() : "";
+  if (!repositoryPath) {
+    return { ok: false, error: "params.repositoryPath is required" };
+  }
+  const targetRelativePath =
+    typeof params?.targetRelativePath === "string" ? params.targetRelativePath : undefined;
+  return { ok: true, result: probeRepositoryFiles({ repositoryPath, targetRelativePath }) };
+}
+
+async function handleProbeAgentWrite(
+  params: Record<string, unknown> | undefined,
+): Promise<BridgeResponse> {
+  const apiKey = process.env.CURSOR_API_KEY?.trim();
+  if (!apiKey) {
+    return { ok: false, error: "CURSOR_API_KEY 未配置" };
+  }
+  const repositoryPath =
+    typeof params?.repositoryPath === "string" ? params.repositoryPath.trim() : "";
+  if (!repositoryPath) {
+    return { ok: false, error: "params.repositoryPath is required" };
+  }
+  const model =
+    typeof params?.model === "string" ? params.model : undefined;
+  try {
+    ensurePublicDir(repositoryPath);
+    const result = await runAgentWriteProbe({ apiKey, repositoryPath, model });
+    return { ok: true, result };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, error: message };
+  }
+}
+
+async function handleProbeDeep(
+  params: Record<string, unknown> | undefined,
+): Promise<BridgeResponse> {
+  const sdkRoot =
+    typeof params?.sdkRoot === "string" && params.sdkRoot.trim().length > 0
+      ? params.sdkRoot.trim()
+      : (process.env.WISE_CURSOR_SDK_ROOT?.trim() || process.cwd());
+  const repositoryPath =
+    typeof params?.repositoryPath === "string" ? params.repositoryPath : undefined;
+  const result = runCursorSdkDeepProbe({ sdkRoot, repositoryPath });
+  return { ok: true, result };
+}
+
 async function handleModelsList(): Promise<BridgeResponse> {
   const apiKey = process.env.CURSOR_API_KEY?.trim();
   if (!apiKey) {
@@ -189,10 +263,11 @@ async function handlePrompt(params: Record<string, unknown> | undefined): Promis
 
   try {
     const { Agent } = await import("@cursor/sdk");
-    const result = await Agent.prompt(message, {
+    const result = await Agent.prompt(withWiseCursorExecutePreamble(prompt), {
       apiKey,
       model: { id: modelId },
-      local: { cwd, settingSources },
+      mode: "agent",
+      local: buildLocalAgentOptions(cwd, settingSources),
       ...(mcpServers ? { mcpServers } : {}),
     });
     return {
@@ -220,11 +295,12 @@ async function handleExecute(params: Record<string, unknown> | undefined): Promi
   process.once("SIGINT", onCancelSignal);
 
   try {
-    const prompt = typeof params?.prompt === "string" ? params.prompt.trim() : "";
-    if (!prompt) {
+    const rawPrompt = typeof params?.prompt === "string" ? params.prompt.trim() : "";
+    if (!rawPrompt) {
       emitStream({ type: "error", message: "params.prompt is required" });
       return 1;
     }
+    const prompt = withWiseCursorExecutePreamble(rawPrompt);
     const apiKey = process.env.CURSOR_API_KEY?.trim();
     if (!apiKey) {
       emitStream({ type: "error", message: "CURSOR_API_KEY 未配置" });
@@ -251,13 +327,14 @@ async function handleExecute(params: Record<string, unknown> | undefined): Promi
       const agent = resumeAgentId
         ? await Agent.resume(resumeAgentId, {
             apiKey,
-            local: { cwd, settingSources },
+            local: buildLocalAgentOptions(cwd, settingSources),
             ...(mcpServers ? { mcpServers } : {}),
           })
         : await Agent.create({
             apiKey,
             model: { id: modelId },
-            local: { cwd, settingSources },
+            mode: "agent",
+            local: buildLocalAgentOptions(cwd, settingSources),
             ...(mcpServers ? { mcpServers } : {}),
           });
 
@@ -270,6 +347,7 @@ async function handleExecute(params: Record<string, unknown> | undefined): Promi
         }
 
         const run = await agent.send(message, {
+          mode: "agent",
           model: { id: modelId },
           ...(mcpServers ? { mcpServers } : {}),
         });
@@ -337,6 +415,15 @@ async function main(): Promise<void> {
     switch (request.method) {
       case "probe":
         response = await handleProbe();
+        break;
+      case "probe.deep":
+        response = await handleProbeDeep(request.params);
+        break;
+      case "probe.repository":
+        response = await handleProbeRepository(request.params);
+        break;
+      case "probe.agentWrite":
+        response = await handleProbeAgentWrite(request.params);
         break;
       case "models.list":
         response = await handleModelsList();

@@ -617,6 +617,8 @@ pub fn run() {
             cursor_agent::cursor_agent_set_api_key,
             cursor_agent::cursor_agent_clear_api_key,
             cursor_agent::cursor_agent_probe,
+            cursor_agent::cursor_agent_probe_repository_files,
+            cursor_agent::cursor_agent_probe_agent_write,
             cursor_agent::cursor_agent_list_models,
             cursor_agent::cursor_agent_read_spawn_mcp_servers,
             cursor_agent::load_cursor_session_jsonl_command,

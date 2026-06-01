@@ -56,6 +56,8 @@ export default defineConfig(async () => ({
       input: {
         main: resolve(root, "index.html"),
         mascot: resolve(root, "mascot.html"),
+        /** 独立诊断页：开发时 http://localhost:16088/demo.html，不经过 Vue 入口 */
+        demo: resolve(root, "public/demo.html"),
       },
       output: {
         manualChunks(id) {

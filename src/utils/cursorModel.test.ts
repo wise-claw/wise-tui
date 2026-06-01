@@ -8,7 +8,8 @@ import {
 
 describe("resolveCursorLocalModelId", () => {
   test("maps auto alias to default", () => {
-    expect(resolveCursorLocalModelId("auto")).toBe(CURSOR_SDK_DEFAULT_MODEL);
+    expect(resolveCursorLocalModelId("auto")).toBe("default");
+    expect(resolveCursorLocalModelId(undefined)).toBe(CURSOR_SDK_DEFAULT_MODEL);
     expect(resolveCursorLocalModelId("composer-2.5")).toBe("composer-2.5");
   });
 });

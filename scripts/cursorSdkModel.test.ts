@@ -5,8 +5,9 @@ import {
 } from "./cursorSdkModel.ts";
 
 describe("resolveCursorLocalModelId", () => {
-  test("maps auto alias to default model id", () => {
-    expect(resolveCursorLocalModelId("auto")).toBe(CURSOR_SDK_LOCAL_DEFAULT_MODEL_ID);
+  test("maps auto alias to Local SDK default id", () => {
+    expect(resolveCursorLocalModelId("auto")).toBe("default");
+    expect(CURSOR_SDK_LOCAL_DEFAULT_MODEL_ID).toBe("default");
   });
 
   test("keeps explicit model ids", () => {

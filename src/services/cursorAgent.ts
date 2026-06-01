@@ -9,6 +9,11 @@ export interface CursorAgentStatus {
   sdkAvailable: boolean;
   apiKeyConfigured: boolean;
   apiKeyValid?: boolean;
+  toolsAvailable?: boolean;
+  filesystemAccessOk?: boolean;
+  repositoryReadOk?: boolean;
+  repositoryWriteOk?: boolean;
+  sdkPackageInstalled?: boolean;
   failureReason?: string;
 }
 
@@ -27,12 +32,93 @@ export async function listCursorModels(): Promise<CursorModelListItem[]> {
   }
 }
 
-export async function getCursorAgentStatus(): Promise<CursorAgentStatus> {
-  return invoke<CursorAgentStatus>("cursor_agent_get_status");
+export async function getCursorAgentStatus(
+  repositoryPath?: string | null,
+): Promise<CursorAgentStatus> {
+  const normalized = repositoryPath?.trim() || null;
+  return invoke<CursorAgentStatus>("cursor_agent_get_status", {
+    repositoryPath: normalized,
+  });
 }
 
-export async function probeCursorAgent(): Promise<CursorAgentStatus> {
-  return invoke<CursorAgentStatus>("cursor_agent_probe");
+export async function probeCursorAgent(
+  repositoryPath?: string | null,
+): Promise<CursorAgentStatus> {
+  const normalized = repositoryPath?.trim() || null;
+  return invoke<CursorAgentStatus>("cursor_agent_probe", {
+    repositoryPath: normalized,
+  });
+}
+
+export interface CursorRepositoryFilesProbeResult {
+  repositoryPath: string;
+  targetRelativePath: string;
+  targetExists: boolean;
+  targetSizeBytes?: number | null;
+  targetPreview?: string | null;
+  repositoryReadOk: boolean;
+  repositoryWriteOk: boolean;
+  writeProbeRelativePath: string;
+  writeProbeVerified: boolean;
+  errors: string[];
+}
+
+/** 不经过 Agent，由 bridge 子进程直接检查/试写仓库文件（可确认 demo.html 是否落盘）。 */
+export async function probeCursorRepositoryFiles(
+  repositoryPath: string,
+  targetRelativePath = "public/demo.html",
+): Promise<CursorRepositoryFilesProbeResult> {
+  const repo = repositoryPath.trim();
+  if (!repo) {
+    throw new Error("repositoryPath 不能为空");
+  }
+  return invoke<CursorRepositoryFilesProbeResult>("cursor_agent_probe_repository_files", {
+    repositoryPath: repo,
+    targetRelativePath: targetRelativePath.trim() || "public/demo.html",
+  });
+}
+
+export interface CursorAgentWriteToolCall {
+  callId: string;
+  name: string;
+  status: string;
+}
+
+export interface CursorAgentWriteToolCallSummary {
+  total: number;
+  running: number;
+  completed: number;
+  error: number;
+  uniqueNames: string[];
+}
+
+export interface CursorAgentWriteProbeResult {
+  modelId: string;
+  runStatus: string;
+  runResultText?: string | null;
+  toolsAtInit: string[];
+  toolCalls: CursorAgentWriteToolCall[];
+  toolCallSummary: CursorAgentWriteToolCallSummary;
+  targetRelativePath: string;
+  fileCreated: boolean;
+  fileContent: string | null;
+  agentWriteOk: boolean;
+  errors: string[];
+}
+
+/** 真实 Agent.prompt 写盘自检（约 30–90s，需 API Key）。 */
+export async function probeCursorAgentWrite(
+  repositoryPath: string,
+  model?: string | null,
+): Promise<CursorAgentWriteProbeResult> {
+  const repo = repositoryPath.trim();
+  if (!repo) {
+    throw new Error("repositoryPath 不能为空");
+  }
+  return invoke<CursorAgentWriteProbeResult>("cursor_agent_probe_agent_write", {
+    repositoryPath: repo,
+    model: model?.trim() || null,
+  });
 }
 
 export async function setCursorApiKey(apiKey: string): Promise<void> {
@@ -73,6 +159,15 @@ export function describeCursorAgentStatus(status: CursorAgentStatus): string {
   }
   if (status.apiKeyValid === false) {
     return status.failureReason ?? "Cursor API Key 校验失败";
+  }
+  if (status.sdkPackageInstalled === false) {
+    return status.failureReason ?? "未找到 @cursor/sdk 依赖目录";
+  }
+  if (status.repositoryWriteOk === false) {
+    return status.failureReason ?? "无法在目标仓库写入文件";
+  }
+  if (status.toolsAvailable === false) {
+    return status.failureReason ?? "本地文件/搜索工具不可用";
   }
   return status.failureReason ?? "Cursor SDK 暂不可用";
 }

@@ -12,7 +12,7 @@ use crate::wise_db;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -199,6 +199,16 @@ pub struct CursorAgentStatus {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub api_key_valid: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools_available: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filesystem_access_ok: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repository_read_ok: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repository_write_ok: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sdk_package_installed: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub failure_reason: Option<String>,
 }
 
@@ -253,6 +263,35 @@ pub fn clear_cursor_api_key(db: &Mutex<Connection>) -> Result<(), String> {
     )
     .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// Directory that contains `node_modules/@cursor/sdk` (Wise repo root by default).
+pub fn resolve_sdk_root(bridge: &Path) -> PathBuf {
+    if let Ok(raw) = std::env::var("WISE_CURSOR_SDK_ROOT") {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed);
+        }
+    }
+    let embedded = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
+    if sdk_package_dir(&embedded).is_dir() {
+        return embedded;
+    }
+    bridge
+        .parent()
+        .and_then(|scripts| scripts.parent())
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| bridge.parent().unwrap_or(bridge).to_path_buf())
+}
+
+fn sdk_package_dir(sdk_root: &Path) -> PathBuf {
+    sdk_root.join("node_modules").join("@cursor").join("sdk")
+}
+
+fn apply_bridge_process_env(cmd: &mut Command, bridge: &Path) {
+    let sdk_root = resolve_sdk_root(bridge);
+    cmd.current_dir(&sdk_root);
+    cmd.env("WISE_CURSOR_SDK_ROOT", sdk_root.as_os_str());
 }
 
 pub fn resolve_bridge_script(app: &AppHandle) -> Result<PathBuf, String> {
@@ -358,6 +397,7 @@ async fn run_bridge(
     cmd.stdin(Stdio::null());
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
+    apply_bridge_process_env(&mut cmd, &bridge);
     if let Some(key) = api_key.map(str::trim).filter(|value| !value.is_empty()) {
         cmd.env("CURSOR_API_KEY", key);
     }
@@ -392,6 +432,7 @@ pub async fn build_cursor_agent_status(
     app: &AppHandle,
     db: &Mutex<Connection>,
     probe: &dyn Probe,
+    repository_path: Option<&str>,
 ) -> Result<CursorAgentStatus, String> {
     let empty_env = HashMap::new();
     let bun = probe.probe("bun", &empty_env).await;
@@ -401,7 +442,16 @@ pub async fn build_cursor_agent_status(
 
     let mut sdk_available = false;
     let mut api_key_valid = None;
+    let mut tools_available = None;
+    let mut filesystem_access_ok = None;
+    let mut repository_read_ok = None;
+    let mut repository_write_ok = None;
+    let mut sdk_package_installed = None;
     let mut failure_reason = None;
+    let repository_path = repository_path
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
 
     if !bun.ok {
         failure_reason = Some(
@@ -413,48 +463,117 @@ pub async fn build_cursor_agent_status(
         failure_reason = Some("未找到 cursor-sdk-bridge.ts".to_string());
     } else if !api_key_configured {
         failure_reason = Some("未配置 Cursor API Key".to_string());
-    } else {
-        match run_bridge(app, "probe", None, None).await {
-            Ok(probe_resp) => {
-                sdk_available = probe_resp
-                    .result
-                    .as_ref()
-                    .and_then(|value| value.get("sdkAvailable"))
-                    .and_then(|value| value.as_bool())
-                    .unwrap_or(false);
-                if !sdk_available {
-                    failure_reason = Some(
-                        probe_resp
-                            .result
-                            .as_ref()
-                            .and_then(|value| value.get("error"))
-                            .and_then(|value| value.as_str())
-                            .map(str::to_string)
-                            .unwrap_or_else(|| "@cursor/sdk 不可用".to_string()),
-                    );
-                }
-            }
-            Err(error) => failure_reason = Some(error),
+    } else if let Ok(bridge_path) = resolve_bridge_script(app) {
+        let sdk_root = resolve_sdk_root(&bridge_path);
+        if !sdk_package_dir(&sdk_root).is_dir() {
+            failure_reason = Some(format!(
+                "未在 {} 找到 @cursor/sdk；安装包请设置环境变量 WISE_CURSOR_SDK_ROOT 指向已执行 bun install 的 Wise 目录",
+                sdk_root.display()
+            ));
+            sdk_package_installed = Some(false);
+            tools_available = Some(false);
+        } else {
+            sdk_package_installed = Some(true);
         }
 
-        if sdk_available {
-            match run_bridge(
-                app,
-                "models.list",
-                None,
-                api_key.as_deref(),
-            )
-            .await
-            {
-                Ok(models_resp) => {
-                    api_key_valid = Some(models_resp.ok);
-                    if !models_resp.ok {
-                        failure_reason = models_resp.error.or(failure_reason);
+        if sdk_package_installed != Some(false) {
+            match run_bridge(app, "probe", None, None).await {
+                Ok(probe_resp) => {
+                    sdk_available = probe_resp
+                        .result
+                        .as_ref()
+                        .and_then(|value| value.get("sdkAvailable"))
+                        .and_then(|value| value.as_bool())
+                        .unwrap_or(false);
+                    if !sdk_available {
+                        failure_reason = Some(
+                            probe_resp
+                                .result
+                                .as_ref()
+                                .and_then(|value| value.get("error"))
+                                .and_then(|value| value.as_str())
+                                .map(str::to_string)
+                                .unwrap_or_else(|| "@cursor/sdk 不可用".to_string()),
+                        );
                     }
                 }
-                Err(error) => {
-                    api_key_valid = Some(false);
-                    failure_reason = Some(error);
+                Err(error) => failure_reason = Some(error),
+            }
+
+            if sdk_available {
+                match run_bridge(
+                    app,
+                    "models.list",
+                    None,
+                    api_key.as_deref(),
+                )
+                .await
+                {
+                    Ok(models_resp) => {
+                        api_key_valid = Some(models_resp.ok);
+                        if !models_resp.ok {
+                            failure_reason = models_resp.error.or(failure_reason);
+                        }
+                    }
+                    Err(error) => {
+                        api_key_valid = Some(false);
+                        failure_reason = Some(error);
+                    }
+                }
+            }
+
+            if sdk_available && api_key_valid == Some(true) {
+                let mut deep_params = serde_json::json!({
+                    "sdkRoot": sdk_root.to_string_lossy(),
+                });
+                if let Some(repo) = repository_path.as_deref() {
+                    deep_params["repositoryPath"] = serde_json::Value::String(repo.to_string());
+                }
+                match run_bridge(app, "probe.deep", Some(deep_params), None).await {
+                    Ok(deep_resp) => {
+                        if let Some(result) = deep_resp.result.as_ref() {
+                            tools_available = result
+                                .get("toolsAvailable")
+                                .and_then(|v| v.as_bool());
+                            filesystem_access_ok = result
+                                .get("filesystemOk")
+                                .and_then(|v| v.as_bool());
+                            repository_read_ok = result
+                                .get("repositoryAccessOk")
+                                .and_then(|v| v.as_bool());
+                            repository_write_ok = result
+                                .get("repositoryWriteOk")
+                                .and_then(|v| v.as_bool());
+                            if let Some(pkg_ok) =
+                                result.get("sdkPackageOk").and_then(|v| v.as_bool())
+                            {
+                                sdk_package_installed = Some(pkg_ok);
+                            }
+                            if tools_available == Some(false) {
+                                let errors = result
+                                    .get("errors")
+                                    .and_then(|v| v.as_array())
+                                    .map(|items| {
+                                        items
+                                            .iter()
+                                            .filter_map(|v| v.as_str())
+                                            .collect::<Vec<_>>()
+                                            .join("；")
+                                    })
+                                    .filter(|s| !s.is_empty());
+                                failure_reason = errors.or(failure_reason).or_else(|| {
+                                    Some(
+                                        "本地文件工具不可用（请为 Wise 开启完全磁盘访问权限）"
+                                            .to_string(),
+                                    )
+                                });
+                            }
+                        }
+                    }
+                    Err(error) => {
+                        tools_available = Some(false);
+                        failure_reason = Some(error);
+                    }
                 }
             }
         }
@@ -464,7 +583,8 @@ pub async fn build_cursor_agent_status(
         && bridge_available
         && api_key_configured
         && sdk_available
-        && api_key_valid.unwrap_or(false);
+        && api_key_valid.unwrap_or(false)
+        && tools_available.unwrap_or(true);
 
     Ok(CursorAgentStatus {
         available,
@@ -473,6 +593,11 @@ pub async fn build_cursor_agent_status(
         sdk_available,
         api_key_configured,
         api_key_valid,
+        tools_available,
+        filesystem_access_ok,
+        repository_read_ok,
+        repository_write_ok,
+        sdk_package_installed,
         failure_reason,
     })
 }
@@ -481,9 +606,16 @@ pub async fn build_cursor_agent_status(
 pub async fn cursor_agent_get_status(
     app: tauri::AppHandle,
     db: tauri::State<'_, wise_db::WiseDb>,
+    repository_path: Option<String>,
 ) -> Result<CursorAgentStatus, String> {
     let probe = crate::agent_registry::OsProbe;
-    build_cursor_agent_status(&app, &db.0, &probe).await
+    build_cursor_agent_status(
+        &app,
+        &db.0,
+        &probe,
+        repository_path.as_deref(),
+    )
+    .await
 }
 
 #[tauri::command]
@@ -505,8 +637,137 @@ pub async fn cursor_agent_clear_api_key(
 pub async fn cursor_agent_probe(
     app: tauri::AppHandle,
     db: tauri::State<'_, wise_db::WiseDb>,
+    repository_path: Option<String>,
 ) -> Result<CursorAgentStatus, String> {
-    cursor_agent_get_status(app, db).await
+    cursor_agent_get_status(app, db, repository_path).await
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CursorRepositoryFilesProbeResult {
+    pub repository_path: String,
+    pub target_relative_path: String,
+    pub target_exists: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_size_bytes: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_preview: Option<String>,
+    pub repository_read_ok: bool,
+    pub repository_write_ok: bool,
+    pub write_probe_relative_path: String,
+    pub write_probe_verified: bool,
+    #[serde(default)]
+    pub errors: Vec<String>,
+}
+
+#[tauri::command]
+pub async fn cursor_agent_probe_repository_files(
+    app: tauri::AppHandle,
+    repository_path: String,
+    target_relative_path: Option<String>,
+) -> Result<CursorRepositoryFilesProbeResult, String> {
+    let repo = repository_path.trim().to_string();
+    if repo.is_empty() {
+        return Err("repositoryPath 不能为空".to_string());
+    }
+    let target = target_relative_path
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("public/demo.html")
+        .to_string();
+    let params = serde_json::json!({
+        "repositoryPath": repo,
+        "targetRelativePath": target,
+    });
+    let response = run_bridge(&app, "probe.repository", Some(params), None).await?;
+    if !response.ok {
+        return Err(response
+            .error
+            .unwrap_or_else(|| "probe.repository 失败".to_string()));
+    }
+    let result = response
+        .result
+        .ok_or_else(|| "probe.repository 未返回 result".to_string())?;
+    serde_json::from_value(result).map_err(|e| format!("probe.repository 解析失败: {e}"))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CursorAgentWriteProbeResult {
+    pub model_id: String,
+    pub run_status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run_result_text: Option<String>,
+    pub tools_at_init: Vec<String>,
+    pub tool_calls: Vec<CursorAgentWriteToolCall>,
+    pub tool_call_summary: CursorAgentWriteToolCallSummary,
+    pub target_relative_path: String,
+    pub file_created: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_content: Option<String>,
+    pub agent_write_ok: bool,
+    #[serde(default)]
+    pub errors: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CursorAgentWriteToolCall {
+    pub call_id: String,
+    pub name: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CursorAgentWriteToolCallSummary {
+    pub total: u32,
+    pub running: u32,
+    pub completed: u32,
+    pub error: u32,
+    pub unique_names: Vec<String>,
+}
+
+#[tauri::command]
+pub async fn cursor_agent_probe_agent_write(
+    app: tauri::AppHandle,
+    db: tauri::State<'_, wise_db::WiseDb>,
+    repository_path: String,
+    model: Option<String>,
+) -> Result<CursorAgentWriteProbeResult, String> {
+    let repo = repository_path.trim().to_string();
+    if repo.is_empty() {
+        return Err("repositoryPath 不能为空".to_string());
+    }
+    let api_key = load_cursor_api_key(&db.0)
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "请先在设置中配置 Cursor API Key".to_string())?;
+    let mut params = serde_json::json!({
+        "repositoryPath": repo,
+        "model": model
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("composer-2.5"),
+    });
+    let response = run_bridge(
+        &app,
+        "probe.agentWrite",
+        Some(params),
+        Some(api_key.as_str()),
+    )
+    .await?;
+    if !response.ok {
+        return Err(response
+            .error
+            .unwrap_or_else(|| "probe.agentWrite 失败".to_string()));
+    }
+    let result = response
+        .result
+        .ok_or_else(|| "probe.agentWrite 未返回 result".to_string())?;
+    serde_json::from_value(result).map_err(|e| format!("probe.agentWrite 解析失败: {e}"))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -707,9 +968,9 @@ pub(crate) async fn execute_cursor_code(
     let mut bridge_params = serde_json::json!({
         "prompt": prompt,
         "cwd": project_path,
-        "model": model.as_deref().unwrap_or("default"),
+        "model": model.as_deref().unwrap_or("auto"),
         "agentId": cursor_agent_id.as_deref().filter(|value| !value.trim().is_empty()),
-        "settingSources": ["project", "user"],
+        "settingSources": [],
     });
     if !bridge_images.is_empty() {
         bridge_params["images"] = serde_json::Value::Array(bridge_images);
@@ -728,7 +989,7 @@ pub(crate) async fn execute_cursor_code(
     cmd.arg(&bridge);
     cmd.arg(request.to_string());
     cmd.env("CURSOR_API_KEY", api_key);
-    cmd.current_dir(&project_path);
+    apply_bridge_process_env(&mut cmd, &bridge);
     cmd.stdin(Stdio::null());
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());

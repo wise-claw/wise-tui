@@ -3349,8 +3349,10 @@
 
 /* 组间距：wrapper 不命中 .app-claude-message 相邻选择器 */
 .app-claude-messages-virtual-row {
-  /* 强化每条消息的布局/样式隔离，阻止 compositing 递归穿透 */
-  contain: layout style paint;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  /* 不用 layout/paint contain：在 flex 子项上会算成极窄宽度，中文会逐字竖排 */
 }
 
 .app-claude-messages-virtual-row--group-start {
@@ -3365,7 +3367,9 @@
   display: flex;
   align-items: flex-start;
   gap: 10px; /* Snugger Slack-like spacing */
+  width: 100%;
   max-width: 100%;
+  box-sizing: border-box;
   padding: 0;
   background: transparent;
   border: none;
@@ -3424,13 +3428,16 @@
 }
 
 .app-claude-message-body {
-  flex: 1 1 0;
+  flex: 1 1 auto;
   min-width: 0;
+  width: 0;
+  max-width: 100%;
 }
 
 .app-claude-message-content {
   min-width: 0;
   max-width: 100%;
+  width: 100%;
 }
 
 .app-claude-message-header {
@@ -3743,6 +3750,7 @@
   gap: 0;
   min-width: 0;
   max-width: 100%;
+  width: 100%;
 }
 
 .app-claude-messages .app-message-parts {
@@ -3767,6 +3775,7 @@
 /* 主会话消息列表：正文无边框气泡，靠发送者与排版区分 */
 .app-claude-messages .app-message-part--text {
   display: block;
+  width: 100%;
   max-width: 100%;
   padding: 0;
   border: none;
@@ -4455,6 +4464,8 @@ button.app-message-part-header:disabled:hover {
 
 .app-markdown-host {
   min-width: 0;
+  max-width: 100%;
+  width: 100%;
 }
 
 .app-markdown-streaming-hint {
@@ -4557,6 +4568,9 @@ button.app-message-part-header:disabled:hover {
   color: var(--ant-color-text);
   min-width: 0;
   max-width: 100%;
+  width: 100%;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .app-markdown p {
@@ -4648,7 +4662,8 @@ button.app-message-part-header:disabled:hover {
   text-decoration: underline;
   text-underline-offset: 2px;
   text-decoration-color: color-mix(in srgb, var(--ant-color-primary) 50%, transparent);
-  word-break: break-all;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .app-markdown a:hover,

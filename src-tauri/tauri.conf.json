@@ -54,6 +54,15 @@
       "icons/icon.ico"
     ],
     "resources": [
+      "../scripts/cursor-sdk-bridge.ts",
+      "../scripts/cursorSdkModel.ts",
+      "../scripts/cursorSdkImages.ts",
+      "../scripts/cursorSdkStream.ts",
+      "../scripts/cursorSdkStderrFilter.ts",
+      "../scripts/cursorSdkProbe.ts",
+      "../scripts/cursorSdkRepositoryFiles.ts",
+      "../scripts/cursorSdkAgentWriteProbe.ts",
+      "../scripts/cursorSdkExecutePreamble.ts",
       "../scripts/cc-workflow-studio-mcp/http-server.mjs",
       "../scripts/cc-workflow-studio-mcp/wise-bridge.mjs",
       "../scripts/cc-workflow-studio-mcp/register-tools.mjs",

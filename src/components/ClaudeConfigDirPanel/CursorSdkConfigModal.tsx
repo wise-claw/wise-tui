@@ -123,7 +123,13 @@ export function CursorSdkConfigModal({ open, onClose, onSaved }: CursorSdkConfig
       ]}
     >
       <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
-        Cursor SDK 通过 Bun sidecar 运行 Local Agent。请在
+        Cursor SDK 通过 Bun sidecar 运行 Local Agent；默认<strong>不</strong>加载目标仓库的
+        project 设置层，以免仓库内沙箱/钩子禁用写盘。安装包需本机存在已执行{" "}
+        <Typography.Text code>bun install</Typography.Text> 的 Wise 目录（或{" "}
+        <Typography.Text code>WISE_CURSOR_SDK_ROOT</Typography.Text>
+        ）。若 Agent 仍报无法写文件，请用{" "}
+        <Typography.Link href="/demo.html">/demo.html</Typography.Link>
+        {" "}检查仓库落盘（不依赖 Agent 自述）。macOS 请为 Wise 开启「完全磁盘访问权限」。请在
         {" "}
         <Typography.Link
           href="https://cursor.com/cn/dashboard/api?section=user-keys#user-api-keys"
@@ -161,10 +167,28 @@ export function CursorSdkConfigModal({ open, onClose, onSaved }: CursorSdkConfig
               <StatusLine label="Bun" ok={status.bunAvailable} />
               <StatusLine label="Bridge 脚本" ok={status.bridgeAvailable} />
               <StatusLine label="@cursor/sdk" ok={status.sdkAvailable} />
+              {status.sdkPackageInstalled != null ? (
+                <StatusLine label="SDK 依赖目录" ok={status.sdkPackageInstalled} />
+              ) : null}
               <StatusLine label="API Key" ok={status.apiKeyConfigured} />
               {status.apiKeyValid != null ? (
                 <StatusLine label="Key 校验" ok={status.apiKeyValid} />
               ) : null}
+              {status.filesystemAccessOk != null ? (
+                <StatusLine label="子进程文件读写" ok={status.filesystemAccessOk} />
+              ) : null}
+              {status.repositoryReadOk != null ? (
+                <StatusLine label="目标仓库可读" ok={status.repositoryReadOk} />
+              ) : null}
+              {status.repositoryWriteOk != null ? (
+                <StatusLine label="目标仓库可写" ok={status.repositoryWriteOk} />
+              ) : null}
+              {status.toolsAvailable != null ? (
+                <StatusLine label="本地读盘/搜索工具" ok={status.toolsAvailable} />
+              ) : null}
+              <Typography.Link href="/demo.html">
+                打开 Cursor SDK 诊断页（/demo.html）
+              </Typography.Link>
               {!status.available && status.failureReason ? (
                 <Typography.Text type="secondary">{status.failureReason}</Typography.Text>
               ) : null}

@@ -1,5 +1,8 @@
-/** Cursor Local SDK 的 Auto 模型 id 为 `default`（`auto` 只是 alias，不能传给 Local Agent）。 */
+/** Cursor Local SDK Auto 的真实 model id（`auto` 仅为 alias，须映射为 `default`）。 */
 export const CURSOR_SDK_LOCAL_DEFAULT_MODEL_ID = "default";
+
+/** Agent 写盘自检固定使用的模型（避免 `default` 路由导致工具不落盘）。 */
+export const CURSOR_SDK_AGENT_WRITE_PROBE_MODEL_ID = "composer-2.5";
 
 const LOCAL_MODEL_ALIAS_TO_ID: Record<string, string> = {
   auto: CURSOR_SDK_LOCAL_DEFAULT_MODEL_ID,

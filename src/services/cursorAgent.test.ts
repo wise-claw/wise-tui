@@ -15,8 +15,8 @@ describe("cursorAgent service", () => {
     await getCursorAgentStatus();
     await probeCursorAgent();
 
-    expect(invoke).toHaveBeenCalledWith("cursor_agent_get_status");
-    expect(invoke).toHaveBeenCalledWith("cursor_agent_probe");
+    expect(invoke).toHaveBeenCalledWith("cursor_agent_get_status", { repositoryPath: null });
+    expect(invoke).toHaveBeenCalledWith("cursor_agent_probe", { repositoryPath: null });
   });
 
   test("wraps api key commands with trimmed payload", async () => {

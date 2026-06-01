@@ -47,6 +47,7 @@ export type AuthorPane =
   | "my-extensions"
   | "assistants"
   | "engine-registry"
+  | "cursor-sdk-diagnostic"
   | "channels"
   | "automation"
   | "artifacts"
