@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { attachExternalLinkDelegation } from "../../services/openExternal";
+import { HTTP_URL_BODY_RE, isValidHttpUrl, normalizeAutolinkUrl } from "../../utils/autolinkUrl";
 
 function escapeHtmlPlain(s: string) {
   return s
@@ -11,15 +12,13 @@ function escapeHtmlPlain(s: string) {
 }
 
 function linkifyEscapedPlain(escaped: string): string {
-  return escaped.replace(/https?:\/\/[^\s<&]+/gi, (raw) => {
-    const href = raw.replace(/[),.;!?]+$/g, "");
-    if (!/^https?:\/\//i.test(href)) return raw;
-    try {
-      new URL(href);
-    } catch {
-      return raw;
-    }
-    return `<a href="${escapeHtmlPlain(href)}" rel="noopener noreferrer" class="app-markdown-link">${raw}</a>`;
+  HTTP_URL_BODY_RE.lastIndex = 0;
+  return escaped.replace(HTTP_URL_BODY_RE, (raw) => {
+    const href = normalizeAutolinkUrl(raw);
+    if (!isValidHttpUrl(href)) return raw;
+    const suffix = raw.slice(href.length);
+    const link = `<a href="${escapeHtmlPlain(href)}" rel="noopener noreferrer" class="app-markdown-link">${escapeHtmlPlain(href)}</a>`;
+    return suffix ? `${link}${escapeHtmlPlain(suffix)}` : link;
   });
 }
 

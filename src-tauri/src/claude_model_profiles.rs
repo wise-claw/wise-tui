@@ -160,6 +160,28 @@ fn now_ms() -> i64 {
         .unwrap_or(0)
 }
 
+const PROFILE_LABEL_MAX_LEN: usize = 80;
+
+/// 公司/名称展示标签：允许数字、点、横线等；禁止路径分隔符与控制字符。
+fn validate_profile_label(value: &str, field: &str, required: bool) -> Result<(), String> {
+    let trimmed = value.trim();
+    if required && trimmed.is_empty() {
+        return Err(format!("{field}不能为空"));
+    }
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+    if trimmed.chars().count() > PROFILE_LABEL_MAX_LEN {
+        return Err(format!("{field}不能超过 {PROFILE_LABEL_MAX_LEN} 个字符"));
+    }
+    if trimmed.chars().any(|c| {
+        c.is_control() || matches!(c, '/' | '\\' | '<' | '>' | '|')
+    }) {
+        return Err(format!("{field}不能包含 / \\ < > | 或不可见控制字符"));
+    }
+    Ok(())
+}
+
 pub(crate) fn load_store(db: &WiseDb) -> ClaudeModelProfileStore {
     let raw = db
         .get_setting(STORE_SETTINGS_KEY)
@@ -566,11 +588,10 @@ pub(crate) fn upsert_claude_model_profile(
     db: tauri::State<'_, WiseDb>,
     profile: ClaudeModelProfile,
 ) -> Result<ClaudeModelProfileStoreView, String> {
+    validate_profile_label(&profile.company, "公司", false)?;
     let name = profile.name.trim();
+    validate_profile_label(name, "名称", true)?;
     let model_id = profile.model_id.trim();
-    if name.is_empty() {
-        return Err("名称不能为空".to_string());
-    }
     if model_id.is_empty() {
         return Err("模型 ID 不能为空".to_string());
     }
@@ -753,10 +774,9 @@ pub(crate) fn create_claude_model_profile(
     engine: Option<String>,
 ) -> Result<ClaudeModelProfileStoreView, String> {
     let vendor = company.unwrap_or_default().trim().to_string();
+    validate_profile_label(&vendor, "公司", false)?;
     let label = name.trim();
-    if label.is_empty() {
-        return Err("名称不能为空".to_string());
-    }
+    validate_profile_label(label, "名称", true)?;
     let trimmed = settings_json.trim();
     if trimmed.is_empty() {
         return Err("配置 JSON 不能为空".to_string());
@@ -813,10 +833,9 @@ pub(crate) fn create_claude_model_profile_from_current(
     model_id: Option<String>,
 ) -> Result<ClaudeModelProfileStoreView, String> {
     let vendor = company.unwrap_or_default().trim().to_string();
+    validate_profile_label(&vendor, "公司", false)?;
     let label = name.trim();
-    if label.is_empty() {
-        return Err("名称不能为空".to_string());
-    }
+    validate_profile_label(label, "名称", true)?;
     let path = user_claude_dir().join("settings.json");
     let current = read_json_file(&path).unwrap_or_else(|| serde_json::json!({}));
     let settings_json = serde_json::to_string_pretty(&current).map_err(|e| e.to_string())?;

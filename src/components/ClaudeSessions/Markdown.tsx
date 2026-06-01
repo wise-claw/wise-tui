@@ -3,11 +3,20 @@ import { message } from "antd";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { attachExternalLinkDelegation } from "../../services/openExternal";
+import { isValidHttpUrl, normalizeAutolinkUrl } from "../../utils/autolinkUrl";
 
 // ── Markdown Renderer ──
 
 const COPY_ICON = '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6.25 6.25V2.92h10.83v10.83h-3.33M13.75 6.25v10.83H2.92V6.25h10.83z"/></svg>';
 const CHECK_ICON = '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square"><path d="M5 12l3.38 2.79L15 5.83"/></svg>';
+
+function tryDecodeUriForDisplay(href: string): string {
+  try {
+    return decodeURIComponent(href);
+  } catch {
+    return href;
+  }
+}
 
 function escapeHtml(text: string) {
   return text
@@ -100,8 +109,9 @@ export function Markdown({ text, streaming, showPendingHint, className }: Props)
     // Convert URL-like inline code to links
     const inlineCodes = temp.querySelectorAll(":not(pre) > code");
     inlineCodes.forEach((code) => {
-      const href = code.textContent?.trim().replace(/[),.;!?]+$/, "");
-      if (href && /^https?:\/\//.test(href)) {
+      const raw = code.textContent?.trim() ?? "";
+      const href = normalizeAutolinkUrl(raw);
+      if (href && /^https?:\/\//i.test(href) && isValidHttpUrl(href)) {
         try {
           const url = new URL(href);
           const link = document.createElement("a");
@@ -109,6 +119,7 @@ export function Markdown({ text, streaming, showPendingHint, className }: Props)
           link.className = "app-markdown-link";
           link.target = "_blank";
           link.rel = "noopener noreferrer";
+          code.textContent = href;
           code.parentNode?.replaceChild(link, code);
           link.appendChild(code);
         } catch { /* ignore */ }
@@ -116,6 +127,19 @@ export function Markdown({ text, streaming, showPendingHint, className }: Props)
     });
 
     temp.querySelectorAll("a[href]").forEach((anchor) => {
+      const rawHref = anchor.getAttribute("href") ?? "";
+      if (/^https?:\/\//i.test(rawHref)) {
+        const href = normalizeAutolinkUrl(rawHref);
+        if (isValidHttpUrl(href)) {
+          anchor.setAttribute("href", href);
+          const text = anchor.textContent ?? "";
+          if (text === rawHref || text === tryDecodeUriForDisplay(rawHref)) {
+            anchor.textContent = href;
+          } else if (text.startsWith(rawHref)) {
+            anchor.textContent = href + text.slice(rawHref.length);
+          }
+        }
+      }
       anchor.classList.add("app-markdown-link");
       if (!anchor.getAttribute("target")) {
         anchor.setAttribute("target", "_blank");

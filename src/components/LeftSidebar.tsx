@@ -566,14 +566,11 @@ export function LeftSidebar({
   }, [activeSession, repositories, repositoryMainSessionBindings, sessions, activeRepositoryId]);
 
   const repoPanelTreeSelectionSource = useMemo((): WorkspaceRepositoryTreeSelection | null => {
-    if (
-      leftBottomTab === "files" &&
-      activeWorkspaceFocus === "repository" &&
-      activeRepositoryId != null
-    ) {
+    // 侧栏选中具体仓库时，Git/文件树默认对齐该仓库（含多仓工作区成员仓）。
+    if (activeWorkspaceFocus === "repository" && activeRepositoryId != null) {
       return { kind: "repository", repositoryId: activeRepositoryId };
     }
-    // 多仓工作区：Git 面板保持工作区级多仓视图，切成员仓时不 remount 整块面板。
+    // 多仓工作区 + 工作区焦点：Git 面板保持工作区级多仓视图。
     if (leftBottomTab === "git" && activeProjectId) {
       const project = projects.find((item) => item.id === activeProjectId) ?? null;
       if (project && isMultiRepoProject(project, projects)) {

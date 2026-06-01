@@ -23,6 +23,10 @@ import {
 } from "../../types/claudeModelProfile";
 import { formatClaudeModelLabel } from "../../utils/claudeModel";
 import {
+  normalizeModelProfileLabelInput,
+  validateModelProfileLabel,
+} from "../../utils/modelProfileLabel";
+import {
   EMPTY_CODEX_AUTH_JSON,
   EMPTY_CODEX_CONFIG_TOML,
   parseCodexProfileEnvelopeJson,
@@ -163,11 +167,17 @@ export function ClaudeModelTopbarPanel({ store, setStore, loading, onApplied }: 
   );
 
   const handleAdd = useCallback(async () => {
-    const name = addName.trim();
-    if (!name) {
-      message.warning("请输入配置名称");
+    const companyErr = validateModelProfileLabel(addCompany, { field: "公司" });
+    if (companyErr) {
+      message.warning(companyErr);
       return;
     }
+    const nameErr = validateModelProfileLabel(addName, { field: "名称", required: true });
+    if (nameErr) {
+      message.warning(nameErr);
+      return;
+    }
+    const name = addName.trim();
     let settingsPayload = addSettingsJson;
     if (panelEngine === "codex") {
       const codexErr = validateCodexProfileDraft({
@@ -238,11 +248,17 @@ export function ClaudeModelTopbarPanel({ store, setStore, loading, onApplied }: 
 
   const handleSaveConfig = useCallback(async () => {
     if (!configProfile) return;
-    const name = configName.trim();
-    if (!name) {
-      message.warning("请输入配置名称");
+    const companyErr = validateModelProfileLabel(configCompany, { field: "公司" });
+    if (companyErr) {
+      message.warning(companyErr);
       return;
     }
+    const nameErr = validateModelProfileLabel(configName, { field: "名称", required: true });
+    if (nameErr) {
+      message.warning(nameErr);
+      return;
+    }
+    const name = configName.trim();
     const profileEngine = normalizeModelProfileEngine(configProfile.engine);
     let settingsJson = settingsDraft;
     if (profileEngine === "codex") {
@@ -445,16 +461,20 @@ export function ClaudeModelTopbarPanel({ store, setStore, loading, onApplied }: 
               <label className="app-claude-model-topbar-panel__label">公司</label>
               <Input
                 value={addCompany}
-                onChange={(e) => setAddCompany(e.target.value)}
-                placeholder="例如：百炼"
+                onChange={(e) =>
+                  setAddCompany(normalizeModelProfileLabelInput(e.target.value))
+                }
+                placeholder="例如：百炼 / Bailian-v2.0"
+                maxLength={80}
               />
             </div>
             <div className="app-claude-model-topbar-panel__form-field">
               <label className="app-claude-model-topbar-panel__label">名称</label>
               <Input
                 value={addName}
-                onChange={(e) => setAddName(e.target.value)}
-                placeholder="例如：Qwen 配置"
+                onChange={(e) => setAddName(normalizeModelProfileLabelInput(e.target.value))}
+                placeholder="例如：Qwen-3.6 / glm-5.1"
+                maxLength={80}
               />
             </div>
           </div>
@@ -537,16 +557,22 @@ export function ClaudeModelTopbarPanel({ store, setStore, loading, onApplied }: 
               <label className="app-claude-model-topbar-panel__label">公司</label>
               <Input
                 value={configCompany}
-                onChange={(e) => setConfigCompany(e.target.value)}
-                placeholder="例如：百炼"
+                onChange={(e) =>
+                  setConfigCompany(normalizeModelProfileLabelInput(e.target.value))
+                }
+                placeholder="例如：百炼 / Bailian-v2.0"
+                maxLength={80}
               />
             </div>
             <div className="app-claude-model-topbar-panel__form-field">
               <label className="app-claude-model-topbar-panel__label">名称</label>
               <Input
                 value={configName}
-                onChange={(e) => setConfigName(e.target.value)}
-                placeholder="例如：Qwen 配置"
+                onChange={(e) =>
+                  setConfigName(normalizeModelProfileLabelInput(e.target.value))
+                }
+                placeholder="例如：Qwen-3.6 / glm-5.1"
+                maxLength={80}
               />
             </div>
           </div>
