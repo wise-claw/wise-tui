@@ -1,5 +1,5 @@
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
-import { App, Button, Checkbox, Input, Segmented, Spin, Tag, Tooltip, Typography } from "antd";
+import { Button, Checkbox, Input, Segmented, Spin, Tag, Tooltip, Typography } from "antd";
 import type { InputRef } from "antd";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useWorkspaceTodos } from "../../hooks/useWorkspaceTodos";
@@ -91,7 +91,6 @@ function TodoRow({ item, onToggle, onTitleChange, onDelete }: TodoRowProps) {
 }
 
 export function WorkspaceTodosPanel({ projectId, repositoryId }: WorkspaceTodosPanelProps) {
-  const { message } = App.useApp();
   const todos = useWorkspaceTodos({ projectId, repositoryId });
   const [newScope, setNewScope] = useState<WorkspaceTodoScope>("repository");
   const [draftTitle, setDraftTitle] = useState("");
@@ -124,12 +123,9 @@ export function WorkspaceTodosPanel({ projectId, repositoryId }: WorkspaceTodosP
   const getScopeItems = (scope: WorkspaceTodoScope) =>
     todos.displayItems.filter((row) => row.scope === scope).map(({ scope: _s, ...rest }) => rest);
 
-  const addTodo = () => {
+  const commitNewTodo = (refocus = false) => {
     const title = draftTitle.trim();
-    if (!title) {
-      addInputRef.current?.focus();
-      return;
-    }
+    if (!title) return;
     const scope =
       allowProjectScope && allowRepositoryScope
         ? newScope
@@ -147,8 +143,7 @@ export function WorkspaceTodosPanel({ projectId, repositoryId }: WorkspaceTodosP
     };
     todos.setItemsForScope(scope, [...getScopeItems(scope), item]);
     setDraftTitle("");
-    message.success("已添加待办");
-    addInputRef.current?.focus();
+    if (refocus) addInputRef.current?.focus();
   };
 
   const toggleTodo = (item: WorkspaceTodoDisplayItem) => {
@@ -251,7 +246,7 @@ export function WorkspaceTodosPanel({ projectId, repositoryId }: WorkspaceTodosP
                 value={draftTitle}
                 disabled={!todos.hasScope}
                 onChange={(e) => setDraftTitle(e.target.value)}
-                onPressEnter={addTodo}
+                onBlur={() => commitNewTodo(false)}
               />
               <Button
                 type="text"
@@ -259,7 +254,8 @@ export function WorkspaceTodosPanel({ projectId, repositoryId }: WorkspaceTodosP
                 icon={<PlusOutlined />}
                 aria-label="添加待办"
                 disabled={!todos.hasScope}
-                onClick={addTodo}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => commitNewTodo(true)}
               />
             </div>
           </>

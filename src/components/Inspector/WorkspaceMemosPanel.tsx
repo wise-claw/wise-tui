@@ -1,5 +1,5 @@
 import { FileTextOutlined, PlusOutlined } from "@ant-design/icons";
-import { App, Button, Empty, Segmented, Spin, Tag, Tooltip, Typography } from "antd";
+import { Button, Empty, Segmented, Spin, Tag, Tooltip, Typography } from "antd";
 import { useEffect, useState } from "react";
 import { useWorkspaceMemosContextOptional } from "../../contexts/WorkspaceMemosContext";
 import type { WorkspaceMemoScope } from "../../types/workspaceMemos";
@@ -37,7 +37,6 @@ function WorkspaceMemosPanelFallback() {
 }
 
 function WorkspaceMemosPanelInner({ projectId, repositoryId }: WorkspaceMemosPanelProps) {
-  const { message } = App.useApp();
   const memos = useWorkspaceMemosContextOptional();
   const [newScope, setNewScope] = useState<WorkspaceMemoScope>("repository");
 
@@ -65,7 +64,6 @@ function WorkspaceMemosPanelInner({ projectId, repositoryId }: WorkspaceMemosPan
         : (newScopeOptions[0]?.value ?? defaultNewScope);
     const created = memos.createMemo(scope);
     if (created) {
-      message.success("已新建备忘录");
     }
   };
 
