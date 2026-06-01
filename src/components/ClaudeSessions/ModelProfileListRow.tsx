@@ -1,8 +1,10 @@
-import { DeleteOutlined, SettingOutlined } from "@ant-design/icons";
+import { DeleteOutlined, GlobalOutlined, SettingOutlined } from "@ant-design/icons";
 import { Button, List } from "antd";
 import { memo } from "react";
+import { openExternalUrl } from "../../services/openExternal";
 import type { ClaudeModelProfile } from "../../types/claudeModelProfile";
 import { formatClaudeModelLabel } from "../../utils/claudeModel";
+import { normalizeModelProfileOfficialWebsite } from "../../utils/modelProfileOfficialWebsite";
 
 interface Props {
   item: ClaudeModelProfile;
@@ -24,6 +26,7 @@ function ModelProfileListRowInner({
   const company = (item.company ?? "").trim();
   const name = (item.name ?? "").trim();
   const modelLabel = formatClaudeModelLabel(item.modelId ?? "");
+  const officialWebsiteUrl = normalizeModelProfileOfficialWebsite(item.officialWebsiteUrl ?? "");
 
   return (
     <List.Item
@@ -34,6 +37,20 @@ function ModelProfileListRowInner({
       }
       actions={[
         <span key="actions" className="app-claude-model-topbar-panel__item-actions">
+          {officialWebsiteUrl ? (
+            <Button
+              type="text"
+              size="small"
+              icon={<GlobalOutlined />}
+              aria-label={`打开 ${item.name} 官网`}
+              title="打开官网"
+              className="app-claude-model-topbar-panel__item-website"
+              onClick={(e) => {
+                e.stopPropagation();
+                void openExternalUrl(officialWebsiteUrl);
+              }}
+            />
+          ) : null}
           <Button
             type="text"
             size="small"

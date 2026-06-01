@@ -27,6 +27,11 @@ import {
   validateModelProfileLabel,
 } from "../../utils/modelProfileLabel";
 import {
+  normalizeModelProfileOfficialWebsite,
+  normalizeModelProfileOfficialWebsiteInput,
+  validateModelProfileOfficialWebsite,
+} from "../../utils/modelProfileOfficialWebsite";
+import {
   EMPTY_CODEX_AUTH_JSON,
   EMPTY_CODEX_CONFIG_TOML,
   parseCodexProfileEnvelopeJson,
@@ -76,6 +81,7 @@ export function ClaudeModelTopbarPanel({ store, setStore, loading, onApplied }: 
   const [addOpen, setAddOpen] = useState(false);
   const [addCompany, setAddCompany] = useState("");
   const [addName, setAddName] = useState("");
+  const [addOfficialWebsite, setAddOfficialWebsite] = useState("");
   const [addSettingsJson, setAddSettingsJson] = useState("{\n}\n");
   const [addCodexAuthJson, setAddCodexAuthJson] = useState(EMPTY_CODEX_AUTH_JSON);
   const [addCodexConfigToml, setAddCodexConfigToml] = useState(EMPTY_CODEX_CONFIG_TOML);
@@ -85,6 +91,7 @@ export function ClaudeModelTopbarPanel({ store, setStore, loading, onApplied }: 
   const [configProfile, setConfigProfile] = useState<ClaudeModelProfile | null>(null);
   const [configCompany, setConfigCompany] = useState("");
   const [configName, setConfigName] = useState("");
+  const [configOfficialWebsite, setConfigOfficialWebsite] = useState("");
   const [settingsDraft, setSettingsDraft] = useState("");
   const [configCodexAuthJson, setConfigCodexAuthJson] = useState(EMPTY_CODEX_AUTH_JSON);
   const [configCodexConfigToml, setConfigCodexConfigToml] = useState(EMPTY_CODEX_CONFIG_TOML);
@@ -117,6 +124,7 @@ export function ClaudeModelTopbarPanel({ store, setStore, loading, onApplied }: 
   const openAddModal = useCallback(() => {
     setAddCompany("");
     setAddName("");
+    setAddOfficialWebsite("");
     setAddSettingsJson("{\n}\n");
     setAddCodexAuthJson(EMPTY_CODEX_AUTH_JSON);
     setAddCodexConfigToml(EMPTY_CODEX_CONFIG_TOML);
@@ -177,6 +185,13 @@ export function ClaudeModelTopbarPanel({ store, setStore, loading, onApplied }: 
       message.warning(nameErr);
       return;
     }
+    const websiteErr = validateModelProfileOfficialWebsite(addOfficialWebsite);
+    if (websiteErr) {
+      message.warning(websiteErr);
+      return;
+    }
+    const officialWebsiteUrl =
+      normalizeModelProfileOfficialWebsite(addOfficialWebsite) ?? undefined;
     const name = addName.trim();
     let settingsPayload = addSettingsJson;
     if (panelEngine === "codex") {
@@ -206,7 +221,13 @@ export function ClaudeModelTopbarPanel({ store, setStore, loading, onApplied }: 
     }
     setAddSaving(true);
     try {
-      const next = await createClaudeModelProfile(addCompany, name, settingsPayload, panelEngine);
+      const next = await createClaudeModelProfile(
+        addCompany,
+        name,
+        settingsPayload,
+        panelEngine,
+        officialWebsiteUrl,
+      );
       setStore(next);
       dispatchModelProfileStoreChanged(next, {
         engine: panelEngine,
@@ -215,18 +236,20 @@ export function ClaudeModelTopbarPanel({ store, setStore, loading, onApplied }: 
       setAddOpen(false);
       setAddCompany("");
       setAddName("");
+      setAddOfficialWebsite("");
       message.success("已保存模型配置");
     } catch (e) {
       message.error(typeof e === "string" ? e : "新增失败");
     } finally {
       setAddSaving(false);
     }
-  }, [addCompany, addName, addSettingsJson, addCodexAuthJson, addCodexConfigToml, panelEngine]);
+  }, [addCompany, addName, addOfficialWebsite, addSettingsJson, addCodexAuthJson, addCodexConfigToml, panelEngine]);
 
   const openConfig = useCallback((profile: ClaudeModelProfile) => {
     setConfigProfile(profile);
     setConfigCompany(profile.company?.trim() || profile.name?.trim() || "");
     setConfigName(profile.name || "");
+    setConfigOfficialWebsite(profile.officialWebsiteUrl?.trim() || "");
     if (normalizeModelProfileEngine(profile.engine) === "codex") {
       try {
         const draft = parseCodexProfileEnvelopeJson(profile.settingsJson);
@@ -258,6 +281,13 @@ export function ClaudeModelTopbarPanel({ store, setStore, loading, onApplied }: 
       message.warning(nameErr);
       return;
     }
+    const websiteErr = validateModelProfileOfficialWebsite(configOfficialWebsite);
+    if (websiteErr) {
+      message.warning(websiteErr);
+      return;
+    }
+    const officialWebsiteUrl =
+      normalizeModelProfileOfficialWebsite(configOfficialWebsite) ?? "";
     const name = configName.trim();
     const profileEngine = normalizeModelProfileEngine(configProfile.engine);
     let settingsJson = settingsDraft;
@@ -292,6 +322,7 @@ export function ClaudeModelTopbarPanel({ store, setStore, loading, onApplied }: 
         ...configProfile,
         company: configCompany.trim(),
         name,
+        officialWebsiteUrl,
         settingsJson,
         engine: profileEngine,
         updatedAtMs: Date.now(),
@@ -318,7 +349,7 @@ export function ClaudeModelTopbarPanel({ store, setStore, loading, onApplied }: 
     } finally {
       setSavingConfig(false);
     }
-  }, [configProfile, configCompany, configName, settingsDraft, configCodexAuthJson, configCodexConfigToml, onApplied]);
+  }, [configProfile, configCompany, configName, configOfficialWebsite, settingsDraft, configCodexAuthJson, configCodexConfigToml, onApplied]);
 
   const handleSyncFromCcSwitch = useCallback(async () => {
     setSyncingCcSwitch(true);
@@ -478,6 +509,17 @@ export function ClaudeModelTopbarPanel({ store, setStore, loading, onApplied }: 
               />
             </div>
           </div>
+          <div className="app-claude-model-topbar-panel__form-field">
+            <label className="app-claude-model-topbar-panel__label">官网地址</label>
+            <Input
+              value={addOfficialWebsite}
+              onChange={(e) =>
+                setAddOfficialWebsite(normalizeModelProfileOfficialWebsiteInput(e.target.value))
+              }
+              placeholder="例如：https://dashscope.aliyun.com（可选）"
+              maxLength={512}
+            />
+          </div>
           <div className="app-claude-model-topbar-panel__json-head">
             <div className="app-claude-model-topbar-panel__json-head-text">
               <label className="app-claude-model-topbar-panel__label">
@@ -575,6 +617,19 @@ export function ClaudeModelTopbarPanel({ store, setStore, loading, onApplied }: 
                 maxLength={80}
               />
             </div>
+          </div>
+          <div className="app-claude-model-topbar-panel__form-field">
+            <label className="app-claude-model-topbar-panel__label">官网地址</label>
+            <Input
+              value={configOfficialWebsite}
+              onChange={(e) =>
+                setConfigOfficialWebsite(
+                  normalizeModelProfileOfficialWebsiteInput(e.target.value),
+                )
+              }
+              placeholder="例如：https://dashscope.aliyun.com（可选）"
+              maxLength={512}
+            />
           </div>
           <div className="app-claude-model-topbar-panel__json-head">
             <div className="app-claude-model-topbar-panel__json-head-text">

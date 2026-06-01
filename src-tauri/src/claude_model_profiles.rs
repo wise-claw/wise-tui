@@ -30,6 +30,9 @@ pub struct ClaudeModelProfile {
     #[serde(default)]
     pub company: String,
     pub name: String,
+    /// 模型供应商官网（可选），列表中可一键跳转。
+    #[serde(default)]
+    pub official_website_url: String,
     pub model_id: String,
     /// Claude：`settings.json`；Codex：`{ auth, config }` envelope（与 CC Switch 一致）。
     pub settings_json: String,
@@ -178,6 +181,24 @@ fn validate_profile_label(value: &str, field: &str, required: bool) -> Result<()
         c.is_control() || matches!(c, '/' | '\\' | '<' | '>' | '|')
     }) {
         return Err(format!("{field}不能包含 / \\ < > | 或不可见控制字符"));
+    }
+    Ok(())
+}
+
+fn validate_official_website_url(value: &str) -> Result<(), String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+    if trimmed.chars().count() > 512 {
+        return Err("官网地址不能超过 512 个字符".to_string());
+    }
+    let lower = trimmed.to_lowercase();
+    if !lower.starts_with("http://") && !lower.starts_with("https://") {
+        return Err("官网地址需以 http:// 或 https:// 开头".to_string());
+    }
+    if trimmed.chars().any(|c| c.is_control()) {
+        return Err("官网地址不能包含不可见控制字符".to_string());
     }
     Ok(())
 }
@@ -591,6 +612,7 @@ pub(crate) fn upsert_claude_model_profile(
     validate_profile_label(&profile.company, "公司", false)?;
     let name = profile.name.trim();
     validate_profile_label(name, "名称", true)?;
+    validate_official_website_url(&profile.official_website_url)?;
     let model_id = profile.model_id.trim();
     if model_id.is_empty() {
         return Err("模型 ID 不能为空".to_string());
@@ -618,6 +640,7 @@ pub(crate) fn upsert_claude_model_profile(
     if let Some(slot) = store.profiles.iter_mut().find(|p| p.id == id) {
         slot.company = profile.company.trim().to_string();
         slot.name = name.to_string();
+        slot.official_website_url = profile.official_website_url.trim().to_string();
         slot.model_id = model_id.to_string();
         slot.settings_json = profile.settings_json;
         slot.engine = profile.engine.trim().to_string();
@@ -627,6 +650,7 @@ pub(crate) fn upsert_claude_model_profile(
             id: id.clone(),
             company: profile.company.trim().to_string(),
             name: name.to_string(),
+            official_website_url: profile.official_website_url.trim().to_string(),
             model_id: model_id.to_string(),
             settings_json: profile.settings_json,
             engine: if profile.engine.trim().is_empty() {
@@ -772,11 +796,14 @@ pub(crate) fn create_claude_model_profile(
     name: String,
     settings_json: String,
     engine: Option<String>,
+    official_website_url: Option<String>,
 ) -> Result<ClaudeModelProfileStoreView, String> {
     let vendor = company.unwrap_or_default().trim().to_string();
     validate_profile_label(&vendor, "公司", false)?;
     let label = name.trim();
     validate_profile_label(label, "名称", true)?;
+    let website = official_website_url.unwrap_or_default();
+    validate_official_website_url(&website)?;
     let trimmed = settings_json.trim();
     if trimmed.is_empty() {
         return Err("配置 JSON 不能为空".to_string());
@@ -813,6 +840,7 @@ pub(crate) fn create_claude_model_profile(
         id: Uuid::new_v4().to_string(),
         company: vendor,
         name: label.to_string(),
+        official_website_url: website.trim().to_string(),
         model_id: mid,
         settings_json: pretty,
         engine: engine_key,
@@ -849,6 +877,7 @@ pub(crate) fn create_claude_model_profile_from_current(
         id: Uuid::new_v4().to_string(),
         company: vendor,
         name: label.to_string(),
+        official_website_url: String::new(),
         model_id: mid,
         settings_json,
         engine: default_profile_engine(),
@@ -871,6 +900,7 @@ mod tests {
             id: "p1".into(),
             company: "Bailian".into(),
             name: "Test".into(),
+            official_website_url: String::new(),
             model_id: "stale-wrong-id".into(),
             settings_json: r#"{
               "env": {
@@ -899,6 +929,7 @@ mod tests {
             id: "p1".into(),
             company: "".into(),
             name: "Test".into(),
+            official_website_url: String::new(),
             model_id: "qwen3.6-plus".into(),
             settings_json: r#"{"env":{"ANTHROPIC_BASE_URL":"http://127.0.0.1:8082"}}"#.into(),
             engine: default_profile_engine(),

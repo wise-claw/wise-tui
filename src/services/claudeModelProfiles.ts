@@ -68,12 +68,14 @@ export async function createClaudeModelProfile(
   name: string,
   settingsJson: string,
   engine: import("../types/claudeModelProfile").ModelProfileEngine = "claude",
+  officialWebsiteUrl?: string | null,
 ): Promise<ClaudeModelProfileStoreView> {
   return invoke<ClaudeModelProfileStoreView>("create_claude_model_profile", {
     company: company.trim() || null,
     name,
     settingsJson,
     engine,
+    officialWebsiteUrl: officialWebsiteUrl?.trim() || null,
   });
 }
 

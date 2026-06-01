@@ -186,6 +186,10 @@
   color: var(--ant-color-text);
 }
 
+.app-claude-model-topbar-panel__item-website:hover {
+  color: var(--ant-color-primary) !important;
+}
+
 .app-claude-model-topbar-panel__item-actions .ant-btn-dangerous:hover,
 .app-claude-model-topbar-panel__item-actions .ant-btn-dangerous:focus,
 .app-claude-model-topbar-panel__item-actions .ant-btn-dangerous:active,
@@ -199,14 +203,8 @@
   outline: none;
 }
 
-/* Hide actions until item hovered */
+/* 操作按钮始终可见 */
 .app-claude-model-topbar-panel__list .ant-list-item .ant-list-item-action {
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.12s ease;
-}
-
-.app-claude-model-topbar-panel__list .ant-list-item:hover .ant-list-item-action {
   opacity: 1;
   pointer-events: auto;
 }

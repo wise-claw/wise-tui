@@ -7,6 +7,8 @@ export interface ClaudeModelProfile {
   /** 供应商/公司（与 CC Switch 供应商名称或预设一致）。 */
   company: string;
   name: string;
+  /** 模型供应商官网，列表中可一键跳转。 */
+  officialWebsiteUrl?: string;
   modelId: string;
   /** Claude / OpenCode：`settings.json` / `opencode.json`；Codex：`{ auth, config }` envelope。 */
   settingsJson: string;

@@ -258,6 +258,7 @@ fn merge_imported_into_store(
                 id: Uuid::new_v4().to_string(),
                 company: item.company,
                 name: item.name,
+                official_website_url: String::new(),
                 model_id: item.model_id,
                 settings_json: item.settings_json,
                 engine: item.engine,
