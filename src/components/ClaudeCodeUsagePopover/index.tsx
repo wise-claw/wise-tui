@@ -36,6 +36,68 @@ function formatTokensShort(n: number): string {
   return String(Math.round(n));
 }
 
+function formatCacheHitRate(rate: number | null | undefined): string {
+  if (rate == null || !Number.isFinite(rate)) return "—";
+  return `${(rate * 100).toFixed(1)}%`;
+}
+
+function cacheInputDenom(b: ClaudeUsageBucket): number {
+  return b.inputTokens + b.cacheCreationTokens + b.cacheReadTokens;
+}
+
+function hasCacheInputActivity(b: ClaudeUsageBucket | null | undefined): boolean {
+  if (!b) return false;
+  return cacheInputDenom(b) > 0;
+}
+
+/** 与 Rust / ccusage 一致的命中率公式（展示用） */
+const CACHE_HIT_RATE_FORMULA =
+  "命中率 = 缓存读 ÷ (未缓存 + 缓存写 + 缓存读)";
+
+const CACHE_HIT_RATE_FORMULA_FIELDS =
+  "cache_read_input_tokens ÷ (input_tokens + cache_creation_input_tokens + cache_read_input_tokens)";
+
+function formatCacheHitFormulaSubstitution(
+  cacheRead: number,
+  input: number,
+  cacheCreate: number,
+): string {
+  const denom = input + cacheCreate + cacheRead;
+  if (denom <= 0) return "";
+  return `${formatTokensShort(cacheRead)} ÷ (${formatTokensShort(input)} + ${formatTokensShort(cacheCreate)} + ${formatTokensShort(cacheRead)})`;
+}
+
+function seriesHasCacheInput(series: ClaudeUsageSeriesPayload | null | undefined): boolean {
+  if (!series) return false;
+  return series.totalInputTokens + series.totalCacheCreationTokens + series.totalCacheReadTokens > 0;
+}
+
+function CacheHitRateFormulaBlock({
+  cacheRead,
+  input,
+  cacheCreate,
+  hitRate,
+}: {
+  cacheRead: number;
+  input: number;
+  cacheCreate: number;
+  hitRate: number | null;
+}) {
+  const substitution = formatCacheHitFormulaSubstitution(cacheRead, input, cacheCreate);
+  return (
+    <div className="app-cc-usage-cache-formula">
+      <div>{CACHE_HIT_RATE_FORMULA}</div>
+      <div className="app-cc-usage-cache-formula-fields">{CACHE_HIT_RATE_FORMULA_FIELDS}</div>
+      {substitution ? (
+        <div className="app-cc-usage-cache-formula-calc">
+          = {substitution}
+          {hitRate != null ? ` = ${formatCacheHitRate(hitRate)}` : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /** ISO 周年 `isoY`、周序号 `week`（1–53）→ 该周周一（本地时区），与 Rust `iso_week` 语义一致。 */
 function isoWeekMondayLocal(isoY: number, week: number): Date {
   const jan4 = new Date(isoY, 0, 4);
@@ -139,6 +201,15 @@ function ClaudeCodeUsagePopoverContent({
   const active: ClaudeUsageBucket | null =
     activeIdx !== null && activeIdx >= 0 && activeIdx < buckets.length ? buckets[activeIdx]! : null;
 
+  const activeCacheCalc = useMemo(() => {
+    if (!active || !hasCacheInputActivity(active)) return "";
+    return formatCacheHitFormulaSubstitution(
+      active.cacheReadTokens,
+      active.inputTokens,
+      active.cacheCreationTokens,
+    );
+  }, [active]);
+
   return (
     <div className="app-cc-usage-popover">
       <Segmented<ClaudeUsageGranularity>
@@ -187,17 +258,49 @@ function ClaudeCodeUsagePopoverContent({
                 : ""}
           </div>
           {active ? (
-            <div className="app-cc-usage-detail">
-              {usageLabelFromSortKey(granularity, active.sortKey)}：{formatUsd(active.costUsd)} ·{" "}
-              {formatTokensShort(active.totalTokens)} tokens
-            </div>
+            <>
+              <div className="app-cc-usage-detail">
+                {usageLabelFromSortKey(granularity, active.sortKey)}：{formatUsd(active.costUsd)} ·{" "}
+                {formatTokensShort(active.totalTokens)} tokens
+              </div>
+              {hasCacheInputActivity(active) ? (
+                <div className="app-cc-usage-cache">
+                  缓存命中 {formatCacheHitRate(active.cacheHitRate)} · 读{" "}
+                  {formatTokensShort(active.cacheReadTokens)} · 写{" "}
+                  {formatTokensShort(active.cacheCreationTokens)} · 未缓存{" "}
+                  {formatTokensShort(active.inputTokens)}
+                  {activeCacheCalc ? (
+                    <>
+                      <br />
+                      <span className="app-cc-usage-cache-calc">
+                        = {activeCacheCalc} = {formatCacheHitRate(active.cacheHitRate)}
+                      </span>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+            </>
           ) : (
             <div className="app-cc-usage-detail">暂无数据</div>
           )}
           <div className="app-cc-usage-total">
             合计（{series?.periodCaption ?? "—"}）：{formatUsd(series?.totalCostUsd ?? 0)} ·{" "}
             {formatTokensShort(series?.totalTokens ?? 0)} tokens
+            {series && (series.cacheHitRate != null || series.totalCacheReadTokens > 0) ? (
+              <>
+                {" "}
+                · 缓存命中 {formatCacheHitRate(series.cacheHitRate)}
+              </>
+            ) : null}
           </div>
+          {seriesHasCacheInput(series) ? (
+            <CacheHitRateFormulaBlock
+              cacheRead={series!.totalCacheReadTokens}
+              input={series!.totalInputTokens}
+              cacheCreate={series!.totalCacheCreationTokens}
+              hitRate={series!.cacheHitRate}
+            />
+          ) : null}
           {snapshot?.hint ? <div className="app-cc-usage-hint">{snapshot.hint}</div> : null}
           {snapshot && !snapshotLoading ? (
             <div className="app-cc-usage-refresh">

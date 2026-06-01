@@ -10,6 +10,8 @@ export interface ClaudeUsageBucket {
   cacheCreationTokens: number;
   cacheReadTokens: number;
   totalTokens: number;
+  /** `cacheRead / (input + cacheCreation + cacheRead)`，无输入侧 token 时为 null */
+  cacheHitRate: number | null;
   costUsd: number;
   costEntries: number;
 }
@@ -17,6 +19,10 @@ export interface ClaudeUsageBucket {
 export interface ClaudeUsageSeriesPayload {
   buckets: ClaudeUsageBucket[];
   totalTokens: number;
+  totalInputTokens: number;
+  totalCacheCreationTokens: number;
+  totalCacheReadTokens: number;
+  cacheHitRate: number | null;
   totalCostUsd: number;
   totalCostEntries: number;
   periodCaption: string;

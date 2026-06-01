@@ -26,6 +26,8 @@ pub struct ClaudeUsageBucket {
     pub cache_creation_tokens: u64,
     pub cache_read_tokens: u64,
     pub total_tokens: u64,
+    /// `cache_read / (input + cache_creation + cache_read)`，与 ccusage / Claude API 口径一致。
+    pub cache_hit_rate: Option<f64>,
     pub cost_usd: f64,
     pub cost_entries: u64,
 }
@@ -35,6 +37,10 @@ pub struct ClaudeUsageBucket {
 pub struct ClaudeUsageSeriesPayload {
     pub buckets: Vec<ClaudeUsageBucket>,
     pub total_tokens: u64,
+    pub total_input_tokens: u64,
+    pub total_cache_creation_tokens: u64,
+    pub total_cache_read_tokens: u64,
+    pub cache_hit_rate: Option<f64>,
     pub total_cost_usd: f64,
     pub total_cost_entries: u64,
     pub period_caption: String,
@@ -394,6 +400,15 @@ fn distinct_month_keys_back(anchor: NaiveDate, max_days_back: i64, take: usize) 
     set.into_iter().rev().take(take).rev().collect()
 }
 
+/// 输入侧缓存命中率：`cache_read / (input + cache_creation + cache_read)`。
+fn cache_hit_rate(input: u64, cache_create: u64, cache_read: u64) -> Option<f64> {
+    let denom = input.saturating_add(cache_create).saturating_add(cache_read);
+    if denom == 0 {
+        return None;
+    }
+    Some(cache_read as f64 / denom as f64)
+}
+
 fn acc_to_bucket(sort_key: String, label: String, acc: Acc) -> ClaudeUsageBucket {
     let total = acc.total_tokens();
     ClaudeUsageBucket {
@@ -405,32 +420,54 @@ fn acc_to_bucket(sort_key: String, label: String, acc: Acc) -> ClaudeUsageBucket
         cache_creation_tokens: acc.cache_create,
         cache_read_tokens: acc.cache_read,
         total_tokens: total,
+        cache_hit_rate: cache_hit_rate(acc.input, acc.cache_create, acc.cache_read),
         sort_key,
     }
 }
 
-fn series_totals(buckets: &[ClaudeUsageBucket]) -> (u64, f64, u64) {
-    let mut total_tokens = 0u64;
-    let mut total_cost = 0.0f64;
-    let mut total_cost_entries = 0u64;
+struct SeriesTotals {
+    total_tokens: u64,
+    total_input: u64,
+    total_cache_create: u64,
+    total_cache_read: u64,
+    total_cost: f64,
+    total_cost_entries: u64,
+}
+
+fn series_totals(buckets: &[ClaudeUsageBucket]) -> SeriesTotals {
+    let mut out = SeriesTotals {
+        total_tokens: 0,
+        total_input: 0,
+        total_cache_create: 0,
+        total_cache_read: 0,
+        total_cost: 0.0,
+        total_cost_entries: 0,
+    };
     for b in buckets {
-        total_tokens += b.total_tokens;
-        total_cost += b.cost_usd;
-        total_cost_entries += b.cost_entries;
+        out.total_tokens += b.total_tokens;
+        out.total_input += b.input_tokens;
+        out.total_cache_create += b.cache_creation_tokens;
+        out.total_cache_read += b.cache_read_tokens;
+        out.total_cost += b.cost_usd;
+        out.total_cost_entries += b.cost_entries;
     }
-    (total_tokens, total_cost, total_cost_entries)
+    out
 }
 
 fn build_series_payload(
     buckets: Vec<ClaudeUsageBucket>,
     period_caption: String,
 ) -> ClaudeUsageSeriesPayload {
-    let (total_tokens, total_cost_usd, total_cost_entries) = series_totals(&buckets);
+    let t = series_totals(&buckets);
     ClaudeUsageSeriesPayload {
         buckets,
-        total_tokens,
-        total_cost_usd,
-        total_cost_entries,
+        total_tokens: t.total_tokens,
+        total_input_tokens: t.total_input,
+        total_cache_creation_tokens: t.total_cache_create,
+        total_cache_read_tokens: t.total_cache_read,
+        cache_hit_rate: cache_hit_rate(t.total_input, t.total_cache_create, t.total_cache_read),
+        total_cost_usd: t.total_cost,
+        total_cost_entries: t.total_cost_entries,
         period_caption,
     }
 }
@@ -513,7 +550,7 @@ fn build_snapshot_inner() -> Result<ClaudeUsageSnapshotResponse, String> {
     let week = build_series_payload(week_buckets, "近 12 周".into());
     let month = build_series_payload(month_buckets, "近半年".into());
 
-    let (_, _, cost_entries_day) = series_totals(&day.buckets);
+    let cost_entries_day = series_totals(&day.buckets).total_cost_entries;
     let hint = if lines_ok == 0 {
         Some("未解析到 assistant 用量行。请确认本机已用 Claude Code 产生会话 JSONL。".into())
     } else if cost_entries_day == 0 {
@@ -543,4 +580,33 @@ pub async fn get_claude_code_usage_snapshot() -> Result<ClaudeUsageSnapshotRespo
     tokio::task::spawn_blocking(build_snapshot_inner)
         .await
         .map_err(|e| format!("用量统计任务异常: {}", e))?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cache_hit_rate_matches_ccusage_formula() {
+        assert_eq!(cache_hit_rate(0, 0, 0), None);
+        assert_eq!(cache_hit_rate(100, 0, 0), Some(0.0));
+        assert_eq!(cache_hit_rate(10, 5, 85), Some(0.85));
+        let r = cache_hit_rate(11_042, 128_295, 2_147_336).unwrap();
+        assert!((r - 0.939).abs() < 0.001);
+    }
+
+    #[test]
+    fn bucket_exposes_hit_rate_from_acc() {
+        let b = acc_to_bucket(
+            "2026-01-01".into(),
+            "1/1".into(),
+            Acc {
+                input: 100,
+                cache_create: 50,
+                cache_read: 850,
+                ..Default::default()
+            },
+        );
+        assert_eq!(b.cache_hit_rate, Some(0.85));
+    }
 }
