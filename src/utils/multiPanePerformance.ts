@@ -18,6 +18,11 @@ export function shouldLazyMountMultiPaneExtraCells(paneCount: number): boolean {
   return paneCount > 2;
 }
 
+/** 4+ 屏离屏运行窗格使用精简壳层，避免挂载完整 ClaudeChat。 */
+export function shouldUseOffscreenRunningShell(paneCount: number): boolean {
+  return paneCount > 2;
+}
+
 /** 伴生窗格按数量分摊全局消息预算，避免 6/8 屏时内存线性膨胀。 */
 export function resolveCompanionSessionMessagesMax(companionCount: number): number {
   if (companionCount <= 0) return IN_MEMORY_COMPANION_SESSION_MESSAGES_MAX;

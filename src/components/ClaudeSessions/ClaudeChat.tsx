@@ -1638,19 +1638,21 @@ export function ClaudeChat({
       tabIndex={-1}
       onPointerDownCapture={onChatPointerDownCapture}
     >
-      {!hideSessionTools ? (
+      {!hideSessionTools && !deferHeavySubtree ? (
         <ClaudeChatSessionFeaturePanel {...featurePanelProps} />
       ) : null}
 
-      <ClaudeSessionTrajectoryDrawer
-        open={workTrajectoryDrawerOpen}
-        onClose={() => setWorkTrajectoryDrawerOpen(false)}
-        messages={session.messages}
-        wiseTabSessionId={session.id}
-        repositoryPath={session.repositoryPath}
-        claudeSessionId={session.claudeSessionId}
-        diskTranscriptPartial={session.diskTranscriptPartial}
-      />
+      {!deferHeavySubtree ? (
+        <ClaudeSessionTrajectoryDrawer
+          open={workTrajectoryDrawerOpen}
+          onClose={() => setWorkTrajectoryDrawerOpen(false)}
+          messages={session.messages}
+          wiseTabSessionId={session.id}
+          repositoryPath={session.repositoryPath}
+          claudeSessionId={session.claudeSessionId}
+          diskTranscriptPartial={session.diskTranscriptPartial}
+        />
+      ) : null}
 
       {!hideMessages ? (
         <ClaudeChatSessionOwnerBar
@@ -1709,36 +1711,40 @@ export function ClaudeChat({
         </div>
       ) : null}
 
-      <ClaudeChatNotificationDock
-        session={session}
-        sessions={sessions}
-        rows={sessionUnreadNotificationRows}
-        unreadCount={sessionUnreadCount}
-        collapsed={notificationPanelCollapsed}
-        loading={notificationLoading}
-        badgePulse={notificationBadgePulse}
-        titleCountPulse={notificationTitleCountPulse}
-        bubbleEnterIds={notificationBubbleEnterIds}
-        onCollapse={handleNotificationDockCollapse}
-        onExpand={handleNotificationDockExpand}
-        onRefresh={handleNotificationDockRefresh}
-        onMarkAllRead={handleNotificationMarkAllRead}
-        onMarkRead={handleNotificationMarkRead}
-        onJump={handleNotificationJump}
-      />
+      {enableSessionNotificationFeed ? (
+        <ClaudeChatNotificationDock
+          session={session}
+          sessions={sessions}
+          rows={sessionUnreadNotificationRows}
+          unreadCount={sessionUnreadCount}
+          collapsed={notificationPanelCollapsed}
+          loading={notificationLoading}
+          badgePulse={notificationBadgePulse}
+          titleCountPulse={notificationTitleCountPulse}
+          bubbleEnterIds={notificationBubbleEnterIds}
+          onCollapse={handleNotificationDockCollapse}
+          onExpand={handleNotificationDockExpand}
+          onRefresh={handleNotificationDockRefresh}
+          onMarkAllRead={handleNotificationMarkAllRead}
+          onMarkRead={handleNotificationMarkRead}
+          onJump={handleNotificationJump}
+        />
+      ) : null}
 
       <div className="app-claude-chat-bottom">
-        <ClaudeChatQuickActionsChrome
-          sessionId={session.id}
-          gitRepositoryPath={gitRepositoryPath}
-          sessionRepositoryPath={session.repositoryPath ?? ""}
-          onCreateNewSession={onCreateNewSession}
-          creatingNewSession={creatingNewSession}
-          onOpenBuiltinAssistant={onOpenBuiltinAssistant}
-          onOpenWorkTrajectory={handleOpenWorkTrajectory}
-          onSend={_onSend}
-          onAddWorktreeRepositoryToProject={onAddWorktreeRepositoryToProject}
-        />
+        {!deferHeavySubtree ? (
+          <ClaudeChatQuickActionsChrome
+            sessionId={session.id}
+            gitRepositoryPath={gitRepositoryPath}
+            sessionRepositoryPath={session.repositoryPath ?? ""}
+            onCreateNewSession={onCreateNewSession}
+            creatingNewSession={creatingNewSession}
+            onOpenBuiltinAssistant={onOpenBuiltinAssistant}
+            onOpenWorkTrajectory={handleOpenWorkTrajectory}
+            onSend={_onSend}
+            onAddWorktreeRepositoryToProject={onAddWorktreeRepositoryToProject}
+          />
+        ) : null}
         <ClaudeChatComposerTray
           composerTrayRef={composerTrayRef}
           backgroundInvocationDockEnabled={backgroundInvocationDockEnabled}

@@ -28,13 +28,16 @@ import type { SessionExecutionEngine } from "../../types";
 import type { RoleTagOption, RepositoryMentionOption } from "../../utils/projectRoleTagOptions";
 import { paneGridDimensions, type PaneCount, type PaneSlot } from "../../constants/mainLayoutWidths";
 import { useInViewActive } from "../../hooks/useInView";
+import { useDockSlice } from "../../hooks/useDockSlice";
 import { isProjectRootSessionDisplayName } from "../../utils/repositoryMainSessionBinding";
 import {
   MULTI_PANE_LAZY_UNMOUNT_MS,
   resolveCompanionMessageListWindow,
   shouldLazyMountMultiPaneExtraCells,
+  shouldUseOffscreenRunningShell,
 } from "../../utils/multiPanePerformance";
 import { ClaudeSessionChatWithDock } from "./ClaudeSessionChatWithDock";
+import { MultiPaneOffscreenRunningPane } from "./MultiPaneOffscreenRunningPane";
 import { runPaneCreateTask } from "./paneCreateLoading";
 import type { RefreshHistorySessionsScope } from "./ClaudeChat";
 
@@ -368,6 +371,7 @@ const MultiPaneExtraPaneCell = memo(
     const lazyEnabled = shouldLazyMountMultiPaneExtraCells(paneCount);
     const mustStayMounted =
       paneSession?.status === "running" || paneSession?.status === "connecting";
+    const offscreenDock = useDockSlice(lazyEnabled && paneSession ? paneSession.id : null);
     const [paneRef, inView] = useInViewActive("80px", lazyEnabled && Boolean(paneSession), null);
     const setPaneDivRef = useCallback(
       (node: HTMLDivElement | null) => {
@@ -394,6 +398,13 @@ const MultiPaneExtraPaneCell = memo(
 
     const deferHeavySubtree = lazyEnabled && mounted && !inView && Boolean(mustStayMounted);
     const hidePaneMessages = shared.hideMessages || deferHeavySubtree;
+    const useOffscreenRunningShell =
+      lazyEnabled &&
+      !inView &&
+      Boolean(mustStayMounted) &&
+      shouldUseOffscreenRunningShell(paneCount) &&
+      Boolean(paneSession) &&
+      !offscreenDock.questionRequest;
     const companionMessageListWindow = useMemo(
       () => resolveCompanionMessageListWindow(paneCount),
       [paneCount],
@@ -430,6 +441,22 @@ const MultiPaneExtraPaneCell = memo(
 
     if (paneSession) {
       const sessionId = paneSession.id;
+      if (useOffscreenRunningShell) {
+        return (
+          <div
+            ref={setPaneDivRef}
+            className="app-claude-sessions__pane app-claude-sessions__pane--offscreen-running-host"
+            data-pane-session-id={sessionId}
+          >
+            <MultiPaneOffscreenRunningPane
+              session={paneSession}
+              permissionRequest={offscreenDock.permissionRequest}
+              onCancel={(opts) => shared.onCancelSession(sessionId, opts)}
+              onRespondToPermission={(response) => shared.onRespondToPermission(sessionId, response)}
+            />
+          </div>
+        );
+      }
       if (lazyEnabled && !mounted) {
         return (
           <div

@@ -10,6 +10,7 @@ import {
   resolveCompanionSessionMessagesMax,
   resolveGlobalMessagesBudget,
   shouldLazyMountMultiPaneExtraCells,
+  shouldUseOffscreenRunningShell,
 } from "./multiPanePerformance";
 
 describe("multiPanePerformance", () => {
@@ -18,6 +19,12 @@ describe("multiPanePerformance", () => {
     expect(shouldLazyMountMultiPaneExtraCells(2)).toBe(false);
     expect(shouldLazyMountMultiPaneExtraCells(4)).toBe(true);
     expect(shouldLazyMountMultiPaneExtraCells(8)).toBe(true);
+  });
+
+  test("offscreen running shell only when pane count exceeds 2", () => {
+    expect(shouldUseOffscreenRunningShell(2)).toBe(false);
+    expect(shouldUseOffscreenRunningShell(4)).toBe(true);
+    expect(shouldUseOffscreenRunningShell(8)).toBe(true);
   });
 
   test("companion per-session cap shrinks as pane count grows", () => {
