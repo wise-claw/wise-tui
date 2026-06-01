@@ -5331,33 +5331,6 @@ button.app-message-part-header:disabled:hover {
   gap: 4px;
 }
 
-.app-claude-branch-popover__action-tabs.ant-tabs-top > .ant-tabs-nav {
-  margin-bottom: 2px !important;
-}
-
-.app-claude-branch-popover__action-tabs .ant-tabs-nav {
-  min-height: 0;
-}
-
-.app-claude-branch-popover__action-tabs .ant-tabs-nav::before {
-  border-color: var(--ant-color-border-secondary);
-}
-
-.app-claude-branch-popover__action-tabs .ant-tabs-nav-wrap {
-  min-height: 22px;
-}
-
-.app-claude-branch-popover__action-tabs .ant-tabs-tab {
-  padding: 0 0 3px !important;
-  margin: 0 10px 0 0 !important;
-  font-size: 11px;
-  line-height: 1.25;
-}
-
-.app-claude-branch-popover__action-tabs .ant-tabs-content-holder {
-  padding-top: 0;
-}
-
 /* 极简水平单行控制行 */
 .app-claude-branch-popover__create-inline-row {
   display: flex;
@@ -5367,6 +5340,17 @@ button.app-message-part-header:disabled:hover {
   border: 1px solid var(--ant-color-border-secondary);
   border-radius: 5px;
   background: var(--ant-color-fill-quaternary);
+}
+
+.app-claude-branch-popover__no-track-option {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-claude-branch-popover__no-track-option .ant-checkbox + span {
+  padding-inline-start: 4px;
 }
 
 .app-claude-branch-popover__branch-name-input.ant-input {
@@ -5387,8 +5371,7 @@ button.app-message-part-header:disabled:hover {
   min-width: 0;
 }
 
-.app-claude-branch-popover__from-select .ant-select-selector,
-.app-claude-branch-popover__detached-select .ant-select-selector {
+.app-claude-branch-popover__from-select .ant-select-selector {
   border: none !important;
   background: transparent !important;
   border-radius: 0 !important;
@@ -5399,12 +5382,6 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-claude-branch-popover__from-select .ant-select-selector {
-  border-right: 1px solid var(--ant-color-border-secondary) !important;
-}
-
-.app-claude-branch-popover__detached-select {
-  flex: 2;
-  min-width: 0;
   border-right: 1px solid var(--ant-color-border-secondary) !important;
 }
 

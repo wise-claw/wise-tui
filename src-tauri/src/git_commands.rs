@@ -984,9 +984,10 @@ pub(crate) fn git_list_branches(path: String) -> Result<Vec<GitBranchEntry>, Str
     }
 
     out.sort_by(|a, b| {
-        let ka = (!a.is_current, a.is_remote, a.name.to_lowercase());
-        let kb = (!b.is_current, b.is_remote, b.name.to_lowercase());
-        ka.cmp(&kb)
+        let ta = a.last_commit_timestamp.unwrap_or(0);
+        let tb = b.last_commit_timestamp.unwrap_or(0);
+        tb.cmp(&ta)
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
     });
 
     Ok(out)
@@ -1014,6 +1015,7 @@ pub(crate) fn git_create_branch(
     branch_name: String,
     from_ref: Option<String>,
     checkout: Option<bool>,
+    no_track: Option<bool>,
 ) -> Result<(), String> {
     open_repo(&path)?;
     let name = branch_name.trim();
@@ -1028,34 +1030,28 @@ pub(crate) fn git_create_branch(
         .map(|v| v.trim())
         .filter(|v| !v.is_empty());
     let should_checkout = checkout.unwrap_or(true);
+    let should_no_track = no_track.unwrap_or(true);
 
     if should_checkout {
         let mut args: Vec<&str> = vec!["checkout", "-b", name];
+        if should_no_track {
+            args.push("--no-track");
+        }
         if let Some(from_name) = from {
             args.push(from_name);
         }
         run_git_command(&path, &args, "Create branch")
     } else {
-        let mut args: Vec<&str> = vec!["branch", name];
+        let mut args: Vec<&str> = vec!["branch"];
+        if should_no_track {
+            args.push("--no-track");
+        }
+        args.push(name);
         if let Some(from_name) = from {
             args.push(from_name);
         }
         run_git_command(&path, &args, "Create branch")
     }
-}
-
-#[tauri::command]
-pub(crate) fn git_checkout_detached(path: String, target_ref: String) -> Result<(), String> {
-    open_repo(&path)?;
-    let target = target_ref.trim();
-    if target.is_empty() {
-        return Err("Target ref is empty".to_string());
-    }
-    run_git_command(
-        &path,
-        &["checkout", "--detach", target],
-        "Checkout detached",
-    )
 }
 
 fn parse_git_worktree_porcelain(

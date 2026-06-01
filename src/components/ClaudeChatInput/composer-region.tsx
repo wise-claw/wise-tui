@@ -48,7 +48,7 @@ import { TodoDock } from "./dock/todo-dock";
 import { RevertDock } from "./dock/revert-dock";
 import { addToHistory, promptLength, navigatePromptHistory, canNavigateHistoryAtCursor } from "./prompt-history";
 import { CheckOutlined } from "@ant-design/icons";
-import { Dropdown, Button, Empty, Input, InputNumber, Popover, Select, Spin, Switch, Tabs, Tag, Tooltip, TreeSelect, message } from "antd";
+import { Checkbox, Dropdown, Button, Empty, Input, InputNumber, Popover, Select, Spin, Switch, Tabs, Tag, Tooltip, TreeSelect, message } from "antd";
 import { ContextCompactProgressRing } from "./ContextCompactProgressRing";
 import { useContextBreakdown } from "../../hooks/useContextBreakdown";
 import { ComposerRuntimeSettingsTrigger } from "./ComposerRuntimeSettingsTrigger";
@@ -105,7 +105,7 @@ import {
   registerGlobalScreenshotRecipient,
 } from "../../services/globalScreenshotHotkey";
 import { wiseMainWindowFocus } from "../../services/wiseMascot";
-import { gitCheckoutBranch, gitCheckoutDetached, gitCreateBranch, gitListBranches, gitStatus } from "../../services/git";
+import { gitCheckoutBranch, gitCreateBranch, gitListBranches, gitStatus } from "../../services/git";
 import { recordMissionComposerMessage } from "./missionMentionHook";
 import type { ControlRequestStatus } from "../../notifications";
 import type { QuestionDockTabSpec } from "../../hooks/useQuestionDockTabs";
@@ -447,11 +447,10 @@ function ComposerInner({
   const defaultConnectionKind = useDefaultClaudeConnectionKind();
   const [activeBranch, setActiveBranch] = useState<string>("-");
   const [branchPopoverOpen, setBranchPopoverOpen] = useState(false);
-  const [branchActionTab, setBranchActionTab] = useState<"create" | "detached">("create");
   const [branchQuery, setBranchQuery] = useState("");
   const [branchCreateName, setBranchCreateName] = useState("");
   const [branchCreateFromRef, setBranchCreateFromRef] = useState<string | undefined>(undefined);
-  const [detachedTargetRef, setDetachedTargetRef] = useState("");
+  const [branchCreateNoTrack, setBranchCreateNoTrack] = useState(true);
   const [branchListLoading, setBranchListLoading] = useState(false);
   const [branchActionLoading, setBranchActionLoading] = useState(false);
   const [branches, setBranches] = useState<GitBranchEntry[]>([]);
@@ -1238,9 +1237,14 @@ function ComposerInner({
     }
     setBranchActionLoading(true);
     try {
-      await gitCreateBranch(gitRepositoryPath, name, branchCreateFromRef ?? null, true);
+      await gitCreateBranch(
+        gitRepositoryPath,
+        name,
+        branchCreateFromRef ?? null,
+        true,
+        branchCreateNoTrack,
+      );
       setBranchCreateName("");
-      setDetachedTargetRef("");
       setActiveBranch(name);
       await loadBranches();
       message.success(`已创建并切换到分支: ${name}`);
@@ -1250,30 +1254,7 @@ function ComposerInner({
     } finally {
       setBranchActionLoading(false);
     }
-  }, [branchCreateName, branchCreateFromRef, gitRepositoryPath, loadBranches]);
-  const handleCheckoutDetached = useCallback(async () => {
-    const target = detachedTargetRef.trim();
-    if (!target) {
-      message.warning("请输入目标分支/标签/提交");
-      return;
-    }
-    if (!gitRepositoryPath) {
-      message.warning("当前会话未绑定 Git 仓库，无法切换 detached 引用");
-      return;
-    }
-    setBranchActionLoading(true);
-    try {
-      await gitCheckoutDetached(gitRepositoryPath, target);
-      setActiveBranch("(detached)");
-      await loadBranches();
-      message.success(`已 detached checkout: ${target}`);
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      message.error(`Detached checkout 失败: ${msg}`);
-      } finally {
-        setBranchActionLoading(false);
-      }
-  }, [detachedTargetRef, gitRepositoryPath, loadBranches]);
+  }, [branchCreateName, branchCreateFromRef, branchCreateNoTrack, gitRepositoryPath, loadBranches]);
   const filteredBranches = useMemo(() => {
     const keyword = branchQuery.trim().toLowerCase();
     if (!keyword) return branches;
@@ -2040,8 +2021,6 @@ function ComposerInner({
             setBranchQuery("");
             setBranchCreateName("");
             setBranchCreateFromRef(undefined);
-            setDetachedTargetRef("");
-            setBranchActionTab("create");
           }
         }}
         overlayClassName="app-claude-branch-popover"
@@ -2055,89 +2034,49 @@ function ComposerInner({
                 value={branchQuery}
                 onChange={(event) => setBranchQuery(event.target.value)}
               />
-              <Tabs
-                size="small"
-                tabBarGutter={10}
-                activeKey={branchActionTab}
-                onChange={(key) => setBranchActionTab(key === "detached" ? "detached" : "create")}
-                className="app-claude-branch-popover__action-tabs"
-                items={[
-                  {
-                    key: "create",
-                    label: "创建分支",
-                    children: (
-                      <div className="app-claude-branch-popover__create-inline-row">
-                        <Input
-                          size="small"
-                          placeholder="新分支名"
-                          className="app-claude-branch-popover__branch-name-input"
-                          value={branchCreateName}
-                          onChange={(event) => setBranchCreateName(event.target.value)}
-                          onPressEnter={() => void handleCreateBranch()}
-                          disabled={branchActionLoading}
-                        />
-                        <Select
-                          size="small"
-                          allowClear
-                          placeholder="基线(可选)"
-                          className="app-claude-branch-popover__from-select"
-                          value={branchCreateFromRef}
-                          onChange={(value) => setBranchCreateFromRef(value)}
-                          options={branches.map((item) => ({ value: item.name, label: item.name }))}
-                          disabled={branchActionLoading || branchListLoading}
-                          showSearch
-                          optionFilterProp="label"
-                          popupMatchSelectWidth={false}
-                          popupClassName="app-claude-branch-popover__select-dropdown"
-                        />
-                        <Button
-                          size="small"
-                          type="primary"
-                          className="app-claude-branch-popover__action-btn"
-                          onClick={() => void handleCreateBranch()}
-                          loading={branchActionLoading}
-                        >
-                          新建
-                        </Button>
-                      </div>
-                    ),
-                  },
-                  {
-                    key: "detached",
-                    label: "分离检出",
-                    children: (
-                      <div className="app-claude-branch-popover__create-inline-row">
-                        <Select
-                          size="small"
-                          showSearch
-                          placeholder="checkout... (分支/标签/提交)"
-                          className="app-claude-branch-popover__detached-select"
-                          value={detachedTargetRef || undefined}
-                          onChange={(value) => setDetachedTargetRef(value ?? "")}
-                          onSearch={(value) => setDetachedTargetRef(value)}
-                          options={branches.map((item) => ({
-                            value: item.name,
-                            label: item.name,
-                          }))}
-                          disabled={branchActionLoading || branchListLoading}
-                          optionFilterProp="label"
-                          popupMatchSelectWidth={false}
-                          popupClassName="app-claude-branch-popover__select-dropdown"
-                        />
-                        <Button
-                          size="small"
-                          type="primary"
-                          className="app-claude-branch-popover__action-btn"
-                          onClick={() => void handleCheckoutDetached()}
-                          loading={branchActionLoading}
-                        >
-                          检出
-                        </Button>
-                      </div>
-                    ),
-                  },
-                ]}
-              />
+              <div className="app-claude-branch-popover__section-title">创建分支</div>
+              <div className="app-claude-branch-popover__create-inline-row">
+                <Input
+                  size="small"
+                  placeholder="新分支名"
+                  className="app-claude-branch-popover__branch-name-input"
+                  value={branchCreateName}
+                  onChange={(event) => setBranchCreateName(event.target.value)}
+                  onPressEnter={() => void handleCreateBranch()}
+                  disabled={branchActionLoading}
+                />
+                <Select
+                  size="small"
+                  allowClear
+                  placeholder="基线(可选)"
+                  className="app-claude-branch-popover__from-select"
+                  value={branchCreateFromRef}
+                  onChange={(value) => setBranchCreateFromRef(value)}
+                  options={branches.map((item) => ({ value: item.name, label: item.name }))}
+                  disabled={branchActionLoading || branchListLoading}
+                  showSearch
+                  optionFilterProp="label"
+                  popupMatchSelectWidth={false}
+                  popupClassName="app-claude-branch-popover__select-dropdown"
+                />
+                <Button
+                  size="small"
+                  type="primary"
+                  className="app-claude-branch-popover__action-btn"
+                  onClick={() => void handleCreateBranch()}
+                  loading={branchActionLoading}
+                >
+                  新建
+                </Button>
+              </div>
+              <Checkbox
+                className="app-claude-branch-popover__no-track-option"
+                checked={branchCreateNoTrack}
+                onChange={(event) => setBranchCreateNoTrack(event.target.checked)}
+                disabled={branchActionLoading}
+              >
+                不设置上游跟踪（--no-track）
+              </Checkbox>
             </div>
             <div className="app-claude-branch-popover__list">
               {branchListLoading ? (
@@ -2216,17 +2155,15 @@ function ComposerInner({
     [
       activeBranch,
       branchActionLoading,
-      branchActionTab,
       branchCreateFromRef,
       branchCreateName,
+      branchCreateNoTrack,
       branchListLoading,
       branchPopoverOpen,
       branchQuery,
       branches,
-      detachedTargetRef,
       filteredBranches,
       handleCheckoutBranch,
-      handleCheckoutDetached,
       handleCreateBranch,
       localBranches,
       remoteBranches,

@@ -128,17 +128,15 @@ export async function gitCreateBranch(
   branchName: string,
   fromRef?: string | null,
   checkout = true,
+  noTrack = true,
 ): Promise<void> {
   return invoke<void>("git_create_branch", {
     path,
     branchName,
     fromRef: fromRef ?? null,
     checkout,
+    noTrack,
   });
-}
-
-export async function gitCheckoutDetached(path: string, targetRef: string): Promise<void> {
-  return invoke<void>("git_checkout_detached", { path, targetRef });
 }
 
 export async function gitWorktreeList(path: string): Promise<GitWorktreeEntry[]> {
