@@ -33,6 +33,7 @@ interface Props {
   renderRow?: (row: ChatMessageListRow, index: number) => ReactNode;
   onNavigate?: () => void;
   messageListProfile?: "primary" | "companion";
+  companionMessageListWindow?: { initialVisible: number; loadStep: number };
 }
 
 function scrollElementIntoScrollContainer(
@@ -62,6 +63,7 @@ export const ChatMessageListVirtualBody = forwardRef<ChatMessageListNavigationHa
       renderRow,
       onNavigate,
       messageListProfile = "primary",
+      companionMessageListWindow,
     },
     ref,
   ) {
@@ -75,7 +77,13 @@ export const ChatMessageListVirtualBody = forwardRef<ChatMessageListNavigationHa
       queueScrollToMessageId,
       pendingScrollMessageIdRef,
       scrollGeneration,
-    } = useChatMessageListWindow({ rows, scrollContainerRef, listResetKey, profile: messageListProfile });
+    } = useChatMessageListWindow({
+      rows,
+      scrollContainerRef,
+      listResetKey,
+      profile: messageListProfile,
+      companionMessageListWindow,
+    });
 
     const scrollFn = useCallback(
       (sc: HTMLDivElement, target: HTMLElement, behavior?: ScrollBehavior) => {

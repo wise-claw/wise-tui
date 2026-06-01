@@ -31,6 +31,7 @@ import { useInViewActive } from "../../hooks/useInView";
 import { isProjectRootSessionDisplayName } from "../../utils/repositoryMainSessionBinding";
 import {
   MULTI_PANE_LAZY_UNMOUNT_MS,
+  resolveCompanionMessageListWindow,
   shouldLazyMountMultiPaneExtraCells,
 } from "../../utils/multiPanePerformance";
 import { ClaudeSessionChatWithDock } from "./ClaudeSessionChatWithDock";
@@ -393,6 +394,10 @@ const MultiPaneExtraPaneCell = memo(
 
     const deferHeavySubtree = lazyEnabled && mounted && !inView && Boolean(mustStayMounted);
     const hidePaneMessages = shared.hideMessages || deferHeavySubtree;
+    const companionMessageListWindow = useMemo(
+      () => resolveCompanionMessageListWindow(paneCount),
+      [paneCount],
+    );
 
     const dualPaneRepositoryPicker = useMemo(() => {
       if (!paneSession || !onPaneRepositorySelect || !resolvedRepo) return undefined;
@@ -515,6 +520,7 @@ const MultiPaneExtraPaneCell = memo(
             missionContext={shared.missionContext}
             deferHeavySubtree={deferHeavySubtree}
             messageListProfile="companion"
+            companionMessageListWindow={companionMessageListWindow}
           />
         </div>
       );

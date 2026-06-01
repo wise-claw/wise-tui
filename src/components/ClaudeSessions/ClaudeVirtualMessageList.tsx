@@ -18,6 +18,7 @@ interface Props {
   onNavigate?: () => void;
   /** 主窗格 vs 多屏伴生窗格 */
   messageListProfile?: "primary" | "companion";
+  companionMessageListWindow?: { initialVisible: number; loadStep: number };
 }
 
 export const ClaudeVirtualMessageList = forwardRef<ChatMessageListNavigationHandle, Props>(
@@ -30,6 +31,7 @@ export const ClaudeVirtualMessageList = forwardRef<ChatMessageListNavigationHand
       listVariant = "chat",
       onNavigate,
       messageListProfile = "primary",
+      companionMessageListWindow,
     },
     ref,
   ) {
@@ -56,6 +58,7 @@ export const ClaudeVirtualMessageList = forwardRef<ChatMessageListNavigationHand
         onOpenTaskDetail={onOpenTaskDetail}
         onNavigate={onNavigate}
         messageListProfile={messageListProfile}
+        companionMessageListWindow={companionMessageListWindow}
       />
     );
   },

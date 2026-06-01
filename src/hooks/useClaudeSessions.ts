@@ -108,6 +108,8 @@ import {
 import {
   resolveCompanionSessionMessagesMax,
   resolveGlobalMessagesBudget,
+  resolveCompanionDiskTranscriptTailLines,
+  resolveCompanionDiskLoadStaggerMs,
 } from "../utils/multiPanePerformance";
 import { getSessionUpdatedAt } from "../components/ClaudeSessions/sessionGrouping";
 import { resolveClaudeCompleteSuccess } from "../utils/resolveClaudeCompleteSuccess";
@@ -2471,34 +2473,38 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     if (companionSessionIds.length === 0) return;
     let cancelled = false;
     const idleCleanups: Array<() => void> = [];
-    const timer = window.setTimeout(() => {
-      if (cancelled) return;
-      for (const cid of companionSessionIds) {
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const companionDiskTailLines = resolveCompanionDiskTranscriptTailLines(companionSessionIds.length);
+
+    for (const [index, cid] of companionSessionIds.entries()) {
+      const timer = setTimeout(() => {
+        if (cancelled) return;
         const s = sessionsRef.current.find((x) => x.id === cid);
-        if (!s || s.messages.length > 0) continue;
+        if (!s || s.messages.length > 0) return;
         const engine = resolveSessionExecutionEngine(s);
         const hasDisk =
           engine === "cursor" ? Boolean(s.id.trim()) : Boolean(s.claudeSessionId?.trim());
-        if (!hasDisk) continue;
-        if (s.status === "running" || s.status === "connecting") continue;
-        if (diskLoadDoneRef.current.has(s.id)) continue;
+        if (!hasDisk) return;
+        if (s.status === "running" || s.status === "connecting") return;
+        if (diskLoadDoneRef.current.has(s.id)) return;
         diskLoadDoneRef.current.add(s.id);
         const loadKey = s.id;
         const snapshot = s;
         idleCleanups.push(
           runWhenIdle(() => {
             if (cancelled) return;
-            void applyDiskTranscriptTail(snapshot, CLAUDE_DISK_JSONL_TAIL_LINES_LAZY).catch(() => {
+            void applyDiskTranscriptTail(snapshot, companionDiskTailLines).catch(() => {
               diskLoadDoneRef.current.delete(loadKey);
             });
           }, { timeoutMs: 3000 }),
         );
-      }
-    }, 1800);
+      }, resolveCompanionDiskLoadStaggerMs(index));
+      timers.push(timer);
+    }
 
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
+      for (const timer of timers) clearTimeout(timer);
       for (const cleanup of idleCleanups) cleanup();
     };
   }, [companionSessionIdsJoinKey, applyDiskTranscriptTail, companionSessionIds, resolveSessionExecutionEngine]);

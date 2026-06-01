@@ -23,6 +23,7 @@ export interface ClaudeChatMessagesPaneProps {
   onFullTranscriptStart: () => void;
   onFullTranscriptEnd: () => void;
   messageListProfile?: "primary" | "companion";
+  companionMessageListWindow?: { initialVisible: number; loadStep: number };
 }
 
 export const ClaudeChatMessagesPane = memo(function ClaudeChatMessagesPane({
@@ -42,6 +43,7 @@ export const ClaudeChatMessagesPane = memo(function ClaudeChatMessagesPane({
   onFullTranscriptStart,
   onFullTranscriptEnd,
   messageListProfile = "primary",
+  companionMessageListWindow,
 }: ClaudeChatMessagesPaneProps) {
   return (
     <div
@@ -108,6 +110,7 @@ export const ClaudeChatMessagesPane = memo(function ClaudeChatMessagesPane({
           onOpenTaskDetail={onOpenTaskDetail}
           onNavigate={onNavigateMessage}
           messageListProfile={messageListProfile}
+          companionMessageListWindow={companionMessageListWindow}
         />
       )}
     </div>

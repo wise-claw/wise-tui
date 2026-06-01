@@ -276,6 +276,8 @@ interface Props {
   deferHeavySubtree?: boolean;
   /** 主窗格 vs 多屏伴生窗格的消息列表窗口配置 */
   messageListProfile?: "primary" | "companion";
+  /** 伴生窗格按屏数缩小的消息列表尾部窗口 */
+  companionMessageListWindow?: { initialVisible: number; loadStep: number };
 }
 
 const RETURN_MAIN_SESSION_KEY = "wise:return-main-session-id";
@@ -363,6 +365,7 @@ export function ClaudeChat({
   activeSessionId = null,
   deferHeavySubtree = false,
   messageListProfile = "primary",
+  companionMessageListWindow,
 }: Props) {
   const chatRootRef = useRef<HTMLDivElement>(null);
   const composerTrayRef = useRef<HTMLDivElement>(null);
@@ -1683,6 +1686,7 @@ export function ClaudeChat({
           onFullTranscriptStart={handleFullTranscriptStart}
           onFullTranscriptEnd={handleFullTranscriptEnd}
           messageListProfile={messageListProfile}
+          companionMessageListWindow={companionMessageListWindow}
         />
       )}
       {panelBelowMessages}

@@ -22,14 +22,21 @@ interface Options {
   listResetKey?: string;
   /** 主窗格 vs 多屏伴生窗格：伴生窗格使用更小的尾部窗口 */
   profile?: "primary" | "companion";
+  /** 伴生窗格 profile 下按屏数覆盖尾部窗口大小 */
+  companionMessageListWindow?: { initialVisible: number; loadStep: number };
 }
 
-function resolveWindowSizing(profile: Options["profile"]) {
+function resolveWindowSizing(
+  profile: Options["profile"],
+  companionMessageListWindow?: Options["companionMessageListWindow"],
+) {
   if (profile === "companion") {
-    return {
-      initialVisible: CHAT_MESSAGE_LIST_COMPANION_INITIAL_VISIBLE,
-      loadStep: CHAT_MESSAGE_LIST_COMPANION_LOAD_STEP,
-    };
+    return (
+      companionMessageListWindow ?? {
+        initialVisible: CHAT_MESSAGE_LIST_COMPANION_INITIAL_VISIBLE,
+        loadStep: CHAT_MESSAGE_LIST_COMPANION_LOAD_STEP,
+      }
+    );
   }
   return {
     initialVisible: CHAT_MESSAGE_LIST_INITIAL_VISIBLE,
@@ -42,8 +49,9 @@ export function useChatMessageListWindow({
   scrollContainerRef,
   listResetKey,
   profile = "primary",
+  companionMessageListWindow,
 }: Options) {
-  const { initialVisible, loadStep } = resolveWindowSizing(profile);
+  const { initialVisible, loadStep } = resolveWindowSizing(profile, companionMessageListWindow);
   const [visibleCount, setVisibleCount] = useState(initialVisible);
   const loadLockedRef = useRef(false);
   const prevRowsLengthRef = useRef(rows.length);

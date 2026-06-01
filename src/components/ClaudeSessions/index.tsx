@@ -1131,11 +1131,10 @@ export function ClaudeSessions({
     ],
   );
 
-  // 用 ref 持有最新的 shared 数据，保持 shared 引用稳定，
-  // 避免 sessions/incomingSessions 高频变化时触发所有窗格 memo 比较器失效。
-  // 各窗格通过自身 session prop 独立驱动重渲染；读取 shared ref 总是拿到最新值。
-  const multiPaneSharedChatRef = useRef<MultiPaneSharedChatProps>(null!);
-  multiPaneSharedChatRef.current = {
+  // 用 ref + Object.assign 保持 shared 引用稳定且数据始终最新，
+  // 避免 sessions 高频变化时触发所有窗格 memo 比较器失效。
+  const multiPaneSharedChatRef = useRef<MultiPaneSharedChatProps>({} as MultiPaneSharedChatProps);
+  Object.assign(multiPaneSharedChatRef.current, {
     sessions,
     allSessionsForHistory: incomingSessions,
     repositories,
@@ -1194,9 +1193,7 @@ export function ClaudeSessions({
     onLoadMoreTranscriptFromDisk,
     onCompactSessionHistory,
     missionContext,
-  };
-  // 首次渲染时初始化，后续保持引用稳定
-  const [multiPaneSharedChat] = useState(() => multiPaneSharedChatRef.current);
+  });
 
   useEffect(() => {
     if (
@@ -1246,7 +1243,7 @@ export function ClaudeSessions({
             resolvedPaneRepositories={resolvedPaneRepositories}
             activeSessionWorkflowTasks={activeSessionWorkflowTasks}
             paneWorkflowTasks={paneWorkflowTasks}
-            shared={multiPaneSharedChat}
+            shared={multiPaneSharedChatRef.current}
             projects={projects ?? []}
             paneRepoTreeData={paneRepoTreeData}
             projectsById={projectsById}
