@@ -5,6 +5,7 @@ import {
   useMemo,
   useEffect,
   useLayoutEffect,
+  type MouseEvent,
 } from "react";
 import { flushSync } from "react-dom";
 import { AIChatInput, ConfigProvider as SemiConfigProvider } from "@douyinfe/semi-ui";
@@ -451,6 +452,16 @@ function ComposerInner({
   const [branchCreateName, setBranchCreateName] = useState("");
   const [branchCreateFromRef, setBranchCreateFromRef] = useState<string | undefined>(undefined);
   const [branchCreateNoTrack, setBranchCreateNoTrack] = useState(true);
+  const branchCreateDraftRef = useRef({
+    name: "",
+    fromRef: undefined as string | undefined,
+    noTrack: true,
+  });
+  branchCreateDraftRef.current = {
+    name: branchCreateName,
+    fromRef: branchCreateFromRef,
+    noTrack: branchCreateNoTrack,
+  };
   const [branchListLoading, setBranchListLoading] = useState(false);
   const [branchActionLoading, setBranchActionLoading] = useState(false);
   const [branches, setBranches] = useState<GitBranchEntry[]>([]);
@@ -1226,7 +1237,8 @@ function ComposerInner({
     [gitRepositoryPath, loadBranches],
   );
   const handleCreateBranch = useCallback(async () => {
-    const name = branchCreateName.trim();
+    const draft = branchCreateDraftRef.current;
+    const name = draft.name.trim();
     if (!name) {
       message.warning("请输入新分支名称");
       return;
@@ -1240,9 +1252,9 @@ function ComposerInner({
       await gitCreateBranch(
         gitRepositoryPath,
         name,
-        branchCreateFromRef ?? null,
+        draft.fromRef ?? null,
         true,
-        branchCreateNoTrack,
+        draft.noTrack,
       );
       setBranchCreateName("");
       setActiveBranch(name);
@@ -1254,7 +1266,10 @@ function ComposerInner({
     } finally {
       setBranchActionLoading(false);
     }
-  }, [branchCreateName, branchCreateFromRef, branchCreateNoTrack, gitRepositoryPath, loadBranches]);
+  }, [gitRepositoryPath, loadBranches]);
+  const stopBranchPopoverPointerToComposer = useCallback((event: MouseEvent) => {
+    event.stopPropagation();
+  }, []);
   const filteredBranches = useMemo(() => {
     const keyword = branchQuery.trim().toLowerCase();
     if (!keyword) return branches;
@@ -2008,9 +2023,8 @@ function ComposerInner({
     });
   }, []);
 
-  /** 与附件、截屏同一行，位于模型选择左侧 */
-  const branchPickerInFooterToolbar = useMemo(
-    () => (
+  /** 与附件、截屏同一行，位于模型选择左侧（勿 useMemo：Popover portal + Semi focusEditor 会导致首击失效） */
+  const renderBranchPickerInFooterToolbar = () => (
       <Popover
         trigger="click"
         placement="topLeft"
@@ -2025,7 +2039,11 @@ function ComposerInner({
         }}
         overlayClassName="app-claude-branch-popover"
         content={
-          <div className="app-claude-branch-popover__content">
+          <div
+            className="app-claude-branch-popover__content"
+            onMouseDown={stopBranchPopoverPointerToComposer}
+            onClick={stopBranchPopoverPointerToComposer}
+          >
             <div className="app-claude-branch-popover__controls">
               <Input
                 size="small"
@@ -2062,8 +2080,13 @@ function ComposerInner({
                 <Button
                   size="small"
                   type="primary"
+                  htmlType="button"
                   className="app-claude-branch-popover__action-btn"
-                  onClick={() => void handleCreateBranch()}
+                  onMouseDown={stopBranchPopoverPointerToComposer}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void handleCreateBranch();
+                  }}
                   loading={branchActionLoading}
                 >
                   新建
@@ -2151,23 +2174,6 @@ function ComposerInner({
           </svg>
         </Button>
       </Popover>
-    ),
-    [
-      activeBranch,
-      branchActionLoading,
-      branchCreateFromRef,
-      branchCreateName,
-      branchCreateNoTrack,
-      branchListLoading,
-      branchPopoverOpen,
-      branchQuery,
-      branches,
-      filteredBranches,
-      handleCheckoutBranch,
-      handleCreateBranch,
-      localBranches,
-      remoteBranches,
-    ],
   );
 
   /** 与 Semi 底栏同一行：左侧附件 / 截屏 / 分支 */
@@ -2176,6 +2182,7 @@ function ComposerInner({
       <div
         className="app-claude-semi-footer-toolbar-left"
         /* Semi AIChatInput 根节点 onClick 会对「非富文本区」调用 focusEditor()，会抢走 Select/Dropdown 的焦点；阻止冒泡到底栏外层的 Semi 容器 */
+        onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
         <Button
@@ -2361,7 +2368,7 @@ function ComposerInner({
             placeholder="工作区 / 仓库"
           />
         ) : null}
-        {branchPickerInFooterToolbar}
+        {renderBranchPickerInFooterToolbar()}
         <ContextCompactProgressRing
           className="app-claude-semi-footer-compact-context"
           data-ui-anchor="session-context-ring-btn"
@@ -2378,7 +2385,21 @@ function ComposerInner({
     bottomStatus.ctxPercent,
     bottomStatus.ctxSegment,
     bottomStatus.ctxToneClass,
-    branchPickerInFooterToolbar,
+    activeBranch,
+    branchActionLoading,
+    branchCreateFromRef,
+    branchCreateName,
+    branchCreateNoTrack,
+    branchListLoading,
+    branchPopoverOpen,
+    branchQuery,
+    branches,
+    filteredBranches,
+    handleCheckoutBranch,
+    handleCreateBranch,
+    localBranches,
+    remoteBranches,
+    stopBranchPopoverPointerToComposer,
     breakdown,
     contextBreakdownLoading,
     dualPaneRepositoryPicker,
