@@ -114,8 +114,6 @@ function stableToolKey(name: string, input: Record<string, unknown>): string {
   }
 }
 
-import { isSkillToolPart, skillToolDisplayName } from "./skillToolPart";
-
 function isSubagentTaskPart(part: ToolUsePart): boolean {
   const n = part.name.trim().toLowerCase();
   if (n === "task" || n.includes("subagent")) return true;
