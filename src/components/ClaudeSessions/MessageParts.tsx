@@ -2,6 +2,7 @@ import { memo, useMemo, useState } from "react";
 import { message } from "antd";
 import type { MessagePart, TextPart, ToolUsePart, ReasoningPart } from "../../types";
 import { isRenderableMessagePart } from "../../utils/claudeChatMessageDisplay";
+import { isSkillToolPart, skillToolDisplayName } from "../../utils/skillToolPart";
 import { LinkifiedPre } from "./LinkifiedPre";
 import { Markdown, StreamingReplyHint, usePacedText } from "./Markdown";
 import { WORKFLOW_UI_EVENT_FOCUS_TASK_TOOL } from "../../constants/workflowUiEvents";
@@ -207,6 +208,12 @@ export function getToolDisplayInfo(part: ToolUsePart): { label: string; subtitle
       };
     }
     default:
+      if (isSkillToolPart(part)) {
+        return {
+          label: "Skill",
+          subtitle: skillToolDisplayName(part),
+        };
+      }
       return {
         label: n || part.name,
         subtitle: pickInputString(input, [
@@ -241,6 +248,8 @@ function getToolMetaTags(part: ToolUsePart): string[] {
 }
 
 export function shouldRenderOutputAsMarkdown(part: ToolUsePart): boolean {
+  if (isSkillToolPart(part)) return true;
+
   const name = part.name.trim().toLowerCase();
   // If the name is empty or it is a generic "工具结果" or a subagent/task tool
   if (!name || name === "task" || name === "subagent" || name === "agent") {
@@ -282,6 +291,7 @@ export function shouldRenderOutputAsMarkdown(part: ToolUsePart): boolean {
 }
 
 const ToolUsePartDisplay = memo(function ToolUsePartDisplay({ part }: { part: ToolUsePart }) {
+  const isSkill = isSkillToolPart(part);
   const info = useMemo(() => getToolDisplayInfo(part), [part]);
   const isBashOrExec = part.name.toLowerCase() === "bash" || part.name.toLowerCase() === "exec";
   const hasExpandableBody = Boolean(
@@ -289,7 +299,9 @@ const ToolUsePartDisplay = memo(function ToolUsePartDisplay({ part }: { part: To
       part.error?.trim() ||
       (isBashOrExec && info.subtitle?.trim())
   );
-  const [expanded, setExpanded] = useState(part.status === "error" || Boolean(part.error?.trim()));
+  const [expanded, setExpanded] = useState(
+    isSkill ? false : part.status === "error" || Boolean(part.error?.trim()),
+  );
   const tags = useMemo(() => getToolMetaTags(part), [part]);
   const input = part.input as Record<string, unknown>;
   const taskId =
@@ -330,7 +342,10 @@ const ToolUsePartDisplay = memo(function ToolUsePartDisplay({ part }: { part: To
     );
 
   return (
-    <div className={`app-message-part app-message-part--tool${expanded ? " app-message-part--expanded" : ""}`} data-task-id={taskId || undefined}>
+    <div
+      className={`app-message-part app-message-part--tool${isSkill ? " app-message-part--skill" : ""}${expanded ? " app-message-part--expanded" : ""}`}
+      data-task-id={taskId || undefined}
+    >
       <div className="app-message-part-tool-head">
         <button
           type="button"

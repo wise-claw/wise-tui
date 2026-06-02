@@ -46,6 +46,34 @@ describe("shouldRenderOutputAsMarkdown", () => {
   test("returns false for plain text with no markdown cues", () => {
     expect(shouldRenderOutputAsMarkdown(buildPart("custom_workflow", "Just standard plain text without any markdown elements."))).toBe(false);
   });
+
+  test("always renders Skill tool output as markdown", () => {
+    const part: ToolUsePart = {
+      id: "s1",
+      type: "tool_use",
+      name: "Skill",
+      input: { skill: "demo" },
+      output: "Plain skill body without markdown cues.",
+      status: "completed",
+    };
+    expect(shouldRenderOutputAsMarkdown(part)).toBe(true);
+  });
+});
+
+describe("getToolDisplayInfo skill", () => {
+  test("uses skill name in subtitle without dumping output", () => {
+    const part: ToolUsePart = {
+      id: "s1",
+      type: "tool_use",
+      name: "Skill",
+      input: { skill: "trellis-before-dev" },
+      output: "# Skill\n\nLong markdown body…",
+      status: "completed",
+    };
+    const info = getToolDisplayInfo(part);
+    expect(info.label).toBe("Skill");
+    expect(info.subtitle).toBe("trellis-before-dev");
+  });
 });
 
 describe("getToolDisplayInfo fallback", () => {

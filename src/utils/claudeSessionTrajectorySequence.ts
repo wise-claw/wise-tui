@@ -7,6 +7,7 @@ import {
 } from "./sequenceEventHttpEnrichment";
 import { unwrapClaudeStreamLineRoot } from "../notifications/streamIngest";
 import { isToolOnlyUserMessage, userMessagePlainTextForDisplay } from "./claudeChatMessageDisplay";
+import { isSkillToolPart, skillToolDisplayName } from "./skillToolPart";
 
 export const TRAJECTORY_LANE_IDS = ["user", "claude_code", "model"] as const;
 export type TrajectoryLaneId = (typeof TRAJECTORY_LANE_IDS)[number];
@@ -113,12 +114,7 @@ function stableToolKey(name: string, input: Record<string, unknown>): string {
   }
 }
 
-function isSkillToolPart(part: ToolUsePart): boolean {
-  const n = part.name.trim().toLowerCase();
-  if (n === "skill" || n.includes("skill")) return true;
-  const sk = part.input && typeof part.input === "object" && !Array.isArray(part.input) ? (part.input as Record<string, unknown>).skill : undefined;
-  return typeof sk === "string" && sk.trim().length > 0;
-}
+import { isSkillToolPart, skillToolDisplayName } from "./skillToolPart";
 
 function isSubagentTaskPart(part: ToolUsePart): boolean {
   const n = part.name.trim().toLowerCase();
@@ -160,12 +156,7 @@ const TOOL_USE_LABELS: Record<ClassifiedToolKind, string> = {
 
 function toolUseSubtitle(part: ToolUsePart, kind: ClassifiedToolKind): string {
   if (kind === "skill") {
-    const skillName =
-      (typeof part.input.skill === "string" && part.input.skill) ||
-      (typeof (part.input as { skill_name?: unknown }).skill_name === "string" &&
-        String((part.input as { skill_name: string }).skill_name)) ||
-      part.name;
-    return String(skillName);
+    return skillToolDisplayName(part);
   }
   if (kind === "mcp") {
     const server =
