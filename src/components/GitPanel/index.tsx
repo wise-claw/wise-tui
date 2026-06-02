@@ -127,48 +127,74 @@ function GitSingleRepoPanel({
   const syncOpsInFlightRef = useRef(0);
   const pendingSilentRefreshRef = useRef(false);
   const statusRef = useRef<GitStatusResponse | null>(null);
+  const statusLoadInFlightRef = useRef<Promise<void> | null>(null);
+  const lastStatusLoadedAtRef = useRef(0);
   const DEBOUNCE_MS = 400;
+  const STATUS_SILENT_MIN_INTERVAL_MS = 320;
 
   const loadStatus = useCallback(async (opts?: { silent?: boolean }) => {
     if (!repositoryPath) return;
     const silent = opts?.silent ?? false;
-    if (!silent) {
-      setLoading((prev) => ({ ...prev, status: true }));
+    if (silent) {
+      if (statusLoadInFlightRef.current) {
+        await statusLoadInFlightRef.current;
+        return;
+      }
+      if (Date.now() - lastStatusLoadedAtRef.current < STATUS_SILENT_MIN_INTERVAL_MS) {
+        return;
+      }
+    } else if (statusLoadInFlightRef.current) {
+      await statusLoadInFlightRef.current;
+      return;
     }
-    try {
-      const result = await gitStatus(repositoryPath);
-      const apply = () => {
-        if (gitStatusSnapshotEqual(statusRef.current, result)) {
-          return;
-        }
-        statusRef.current = result;
-        setStatus(result);
-        setErrors((prev) => {
-          const next = { ...prev };
-          delete next.status;
-          return next;
-        });
-      };
-      if (silent) {
-        startTransition(apply);
-      } else {
-        apply();
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      const applyErr = () => {
-        statusRef.current = null;
-        setErrors((prev) => ({ ...prev, status: msg }));
-        setStatus(null);
-      };
-      if (silent) {
-        startTransition(applyErr);
-      } else {
-        applyErr();
-      }
-    } finally {
+    const run = (async () => {
       if (!silent) {
-        setLoading((prev) => ({ ...prev, status: false }));
+        setLoading((prev) => ({ ...prev, status: true }));
+      }
+      try {
+        const result = await gitStatus(repositoryPath);
+        const apply = () => {
+          if (gitStatusSnapshotEqual(statusRef.current, result)) {
+            return;
+          }
+          statusRef.current = result;
+          setStatus(result);
+          setErrors((prev) => {
+            const next = { ...prev };
+            delete next.status;
+            return next;
+          });
+        };
+        if (silent) {
+          startTransition(apply);
+        } else {
+          apply();
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        const applyErr = () => {
+          statusRef.current = null;
+          setErrors((prev) => ({ ...prev, status: msg }));
+          setStatus(null);
+        };
+        if (silent) {
+          startTransition(applyErr);
+        } else {
+          applyErr();
+        }
+      } finally {
+        lastStatusLoadedAtRef.current = Date.now();
+        if (!silent) {
+          setLoading((prev) => ({ ...prev, status: false }));
+        }
+      }
+    })();
+    statusLoadInFlightRef.current = run;
+    try {
+      await run;
+    } finally {
+      if (statusLoadInFlightRef.current === run) {
+        statusLoadInFlightRef.current = null;
       }
     }
   }, [repositoryPath]);

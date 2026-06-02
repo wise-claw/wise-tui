@@ -45,6 +45,7 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
   const [editorSaving, setEditorSaving] = useState(false);
   const fileEditorTabsRef = useRef<FileEditorTab[]>([]);
   fileEditorTabsRef.current = fileEditorTabs;
+  const gitDiffLoadGenerationRef = useRef(0);
 
   const editorVisible = fileEditorTabs.length > 0;
   const activeFileEditorTab = useMemo(
@@ -253,6 +254,18 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
         return;
       }
 
+      const existing = fileEditorTabsRef.current.find((t) => t.relativePath === relativePath);
+      if (
+        existing &&
+        existing.gitDiffSection === section &&
+        !existing.loading &&
+        existing.diffOriginal !== undefined
+      ) {
+        setFileEditorActivePath(relativePath);
+        return;
+      }
+
+      const loadGeneration = ++gitDiffLoadGenerationRef.current;
       const norm = relativePath.replace(/\\/g, "/");
 
       setFileEditorTabs((prev) => {
@@ -282,6 +295,9 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
           left = await gitShowRevision(repositoryPath, `HEAD:${norm}`);
           right = await gitShowRevision(repositoryPath, `:${norm}`);
         }
+        if (loadGeneration !== gitDiffLoadGenerationRef.current) {
+          return;
+        }
         setFileEditorTabs((prev) =>
           prev.map((t) =>
             t.relativePath === relativePath
@@ -298,6 +314,9 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
           ),
         );
       } catch (error) {
+        if (loadGeneration !== gitDiffLoadGenerationRef.current) {
+          return;
+        }
         console.error("Failed to load git diff:", error);
         message.error(`无法加载 diff：${relativePath}`);
         setFileEditorTabs((prev) => {

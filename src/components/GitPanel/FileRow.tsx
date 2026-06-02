@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { Button, Space, Tooltip } from "antd";
+import { Button, Space } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
 import type { GitFileStatus } from "../../types";
 import { setWiseRepositoryFileDragData } from "../../utils/repositoryFileDrag";
@@ -77,46 +77,46 @@ export const FileRow = memo(function FileRow({
           onClick={(e) => e.stopPropagation()}
         >
           {section === "unstaged" && onStage && (
-            <Tooltip title="暂存" placement="top">
-              <Button
-                type="text"
-                size="small"
-                icon={<PlusOutlined />}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onStage(file.path);
-                }}
-              />
-            </Tooltip>
+            <Button
+              type="text"
+              size="small"
+              title="暂存"
+              aria-label="暂存"
+              icon={<PlusOutlined />}
+              onClick={(e) => {
+                e.stopPropagation();
+                onStage(file.path);
+              }}
+            />
           )}
           {section === "staged" && onUnstage && (
-            <Tooltip title="取消暂存" placement="top">
-              <Button
-                type="text"
-                size="small"
-                icon={<span style={{ fontSize: 12 }}>-</span>}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onUnstage(file.path);
-                }}
-              />
-            </Tooltip>
+            <Button
+              type="text"
+              size="small"
+              title="取消暂存"
+              aria-label="取消暂存"
+              icon={<span style={{ fontSize: 12 }}>-</span>}
+              onClick={(e) => {
+                e.stopPropagation();
+                onUnstage(file.path);
+              }}
+            />
           )}
           {section === "unstaged" && onDiscard && (
             <DiscardFilePopconfirm
               filePath={file.path}
               onConfirm={() => onDiscard(file.path)}
             >
-              <Tooltip title="放弃更改" placement="top">
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<RevertIcon />}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                  }}
-                />
-              </Tooltip>
+              <Button
+                type="text"
+                size="small"
+                title="放弃更改"
+                aria-label="放弃更改"
+                icon={<RevertIcon />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                }}
+              />
             </DiscardFilePopconfirm>
           )}
         </Space>

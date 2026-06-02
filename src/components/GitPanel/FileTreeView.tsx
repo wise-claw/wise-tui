@@ -1,5 +1,5 @@
 import { memo, useMemo } from "react";
-import { Button, Space, Tooltip } from "antd";
+import { Button, Space } from "antd";
 import { MinusOutlined, PlusOutlined } from "@ant-design/icons";
 import type { GitFileStatus } from "../../types";
 import { buildFileTree } from "./fileTree";
@@ -58,46 +58,46 @@ function FileTreeNodeComponent({
           >{node.name}</span>
           <Space size={0} className="git-tree-node-actions">
             {section === "unstaged" && onStage ? (
-              <Tooltip title="暂存" placement="top">
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<PlusOutlined />}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onStage(node.path);
-                  }}
-                />
-              </Tooltip>
+              <Button
+                type="text"
+                size="small"
+                title="暂存"
+                aria-label="暂存"
+                icon={<PlusOutlined />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onStage(node.path);
+                }}
+              />
             ) : null}
             {section === "staged" && onUnstage ? (
-              <Tooltip title="取消暂存" placement="top">
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<MinusOutlined />}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onUnstage(node.path);
-                  }}
-                />
-              </Tooltip>
+              <Button
+                type="text"
+                size="small"
+                title="取消暂存"
+                aria-label="取消暂存"
+                icon={<MinusOutlined />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onUnstage(node.path);
+                }}
+              />
             ) : null}
             {section === "unstaged" && onDiscard ? (
               <DiscardFilePopconfirm
                 filePath={node.path}
                 onConfirm={() => onDiscard(node.path)}
               >
-                <Tooltip title="放弃更改" placement="top">
-                  <Button
-                    type="text"
-                    size="small"
-                    icon={<RevertIcon />}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                    }}
-                  />
-                </Tooltip>
+                <Button
+                  type="text"
+                  size="small"
+                  title="放弃更改"
+                  aria-label="放弃更改"
+                  icon={<RevertIcon />}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                  }}
+                />
               </DiscardFilePopconfirm>
             ) : null}
           </Space>

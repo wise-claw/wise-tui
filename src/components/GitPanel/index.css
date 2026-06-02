@@ -863,6 +863,7 @@
   border-radius: 6px;
   font-size: 12px;
   cursor: default;
+  contain: layout style;
   transition: background 0.12s;
 }
 
@@ -948,12 +949,17 @@
 .git-file-actions {
   display: flex;
   opacity: 0;
-  transition: opacity 0.15s;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.12s, visibility 0.12s;
   margin-right: 4px;
 }
 
-.git-file-row:hover .git-file-actions {
+.git-file-row:hover .git-file-actions,
+.git-file-row:focus-within .git-file-actions {
   opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
 }
 
 .git-file-actions .ant-btn {

@@ -42,6 +42,7 @@ export function RepositoryFileEditorPanel({
   onSave,
   onTabContentChange,
 }: Props) {
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const monacoRef = useRef<typeof Monaco | null>(null);
   const editorRef = useRef<MonacoEditorNamespace.IStandaloneCodeEditor | null>(null);
   const lastAppliedFocusRef = useRef<string | null>(null);
@@ -97,8 +98,33 @@ export function RepositoryFileEditorPanel({
     });
   }, [activeTab?.relativePath, activeTab?.loading, activeTab?.diffOriginal, activeTab?.focusLine]);
 
+  useEffect(() => {
+    function handleCloseTabShortcut(event: KeyboardEvent) {
+      const mod = event.metaKey || event.ctrlKey;
+      if (!mod || event.shiftKey || event.altKey) {
+        return;
+      }
+      if (event.key !== "w" && event.key !== "W" && event.code !== "KeyW") {
+        return;
+      }
+      if (!activePath || tabs.length === 0) {
+        return;
+      }
+      const panel = panelRef.current;
+      const target = event.target;
+      if (!panel || !(target instanceof Node) || !panel.contains(target)) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      onCloseTab(activePath);
+    }
+    window.addEventListener("keydown", handleCloseTabShortcut, { capture: true });
+    return () => window.removeEventListener("keydown", handleCloseTabShortcut, { capture: true });
+  }, [activePath, onCloseTab, tabs.length]);
+
   return (
-    <div className="app-file-editor-panel">
+    <div ref={panelRef} className="app-file-editor-panel">
       <div className="app-file-editor-header">
         <div className="app-file-editor-tab-bar">
           <div className="app-file-editor-tabs-scroll" role="tablist" aria-label="已打开文件">

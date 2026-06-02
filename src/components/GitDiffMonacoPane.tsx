@@ -46,7 +46,7 @@ export function GitDiffMonacoPane({
       }
     >
       <DiffEditor
-        key={`wise-git-diff:${relativePath}:${readOnly ? "ro" : "rw"}`}
+        key={readOnly ? "wise-git-diff-ro" : "wise-git-diff-rw"}
         height="100%"
         className="app-file-editor-monaco app-file-editor-monaco--diff"
         theme={dark ? "vs-dark" : "vs"}
