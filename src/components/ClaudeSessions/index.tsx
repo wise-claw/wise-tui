@@ -254,6 +254,8 @@ export interface TopbarProps {
   activeSessionRepositoryPath?: string;
   /** 当前项目/仓库主会话；全链路分析固定分析此会话，非活动标签 */
   mainSessionForDataLink?: ClaudeSession | null;
+  /** 全链路洞察 AI 深度解读：向主会话发送分析 prompt */
+  onSessionInsightsAiAnalysis?: (prompt: string) => void | Promise<void>;
   onToggleSidebar?: () => void;
   onToggleRightPanel?: () => void;
   rightPanelDefaultCollapsed?: boolean;
@@ -276,6 +278,7 @@ export function Topbar({
   repositories = [],
   activeSessionRepositoryPath,
   mainSessionForDataLink = null,
+  onSessionInsightsAiAnalysis,
   onToggleSidebar,
   onToggleRightPanel,
   rightPanelDefaultCollapsed = RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK,
@@ -398,7 +401,10 @@ export function Topbar({
           <LlmProxyTopbarTrigger repositoryPath={topbarOpenPath} />
         ) : null}
         {topbarToolsReady && topbarChrome.showSessionDataLinkTopbar ? (
-          <SessionDataLinkTopbarTrigger mainSession={mainSessionForDataLink} />
+          <SessionDataLinkTopbarTrigger
+            mainSession={mainSessionForDataLink}
+            onRequestAiAnalysis={onSessionInsightsAiAnalysis}
+          />
         ) : null}
         {onSearch && (
           <TopbarBtn icon={<IconSearch />} label="搜索文件 (Cmd+K)" onClick={onSearch} />
@@ -1237,6 +1243,14 @@ export function ClaudeSessions({
             activeSession?.repositoryPath?.trim() || chatContextRepository?.path
           }
           mainSessionForDataLink={mainSessionForDataLink}
+          onSessionInsightsAiAnalysis={
+            mainSessionForDataLink
+              ? async (prompt) => {
+                  onSwitchSession(mainSessionForDataLink.id);
+                  await onExecuteSession(mainSessionForDataLink.id, prompt);
+                }
+              : undefined
+          }
           onToggleSidebar={onToggleSidebar}
           onToggleRightPanel={onToggleRightPanel}
           rightPanelDefaultCollapsed={rightPanelDefaultCollapsed}

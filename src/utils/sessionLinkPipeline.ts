@@ -2,6 +2,7 @@ import type { ClaudeMessage } from "../types";
 import type { ClaudeLlmProxyRecord } from "../services/claudeLlmProxy";
 import type { FccTraceEntry } from "../types/fccTrace";
 import type { SessionLinkRecord } from "../types/sessionLink";
+import type { SequenceEvent } from "./claudeSessionTrajectorySequence";
 import { buildSessionLinkRecords } from "./buildSessionLinkRecords";
 import { buildTrajectorySequenceModel } from "./claudeSessionTrajectorySequence";
 
@@ -54,14 +55,12 @@ export interface BuildSessionLinkRecordsInput {
   fccTraces?: readonly FccTraceEntry[];
 }
 
-/** 统一入口：轨迹 + LLM 代理 + FCC trace → 链路记录（已去重推断 HTTP）。 */
-export function buildSessionLinkRecordsFromSources(input: BuildSessionLinkRecordsInput): SessionLinkRecord[] {
-  const fcc = input.fccTraces ?? [];
-  const llm = input.llmProxyRecords ?? [];
-  const events = buildTrajectorySequenceModel(input.messages, input.jsonlLines ?? undefined, {
-    fccTraces: fcc.length > 0 ? fcc : undefined,
-    llmProxyRecords: llm.length > 0 ? llm : undefined,
-  });
+/** 由已构建的序列事件生成链路记录（避免重复跑 trajectory 模型）。 */
+export function buildSessionLinkRecordsFromEvents(
+  events: readonly SequenceEvent[],
+  options?: { fccTraces?: readonly FccTraceEntry[] },
+): SessionLinkRecord[] {
+  const fcc = options?.fccTraces ?? [];
   let records = buildSessionLinkRecords(events);
 
   for (const trace of fcc) {
@@ -76,4 +75,32 @@ export function buildSessionLinkRecordsFromSources(input: BuildSessionLinkRecord
   });
 
   return suppressInferredHttpWhenObserved(records);
+}
+
+/** 统一入口：轨迹 + LLM 代理 + FCC trace → 链路记录（已去重推断 HTTP）。 */
+export function buildSessionLinkRecordsFromSources(input: BuildSessionLinkRecordsInput): SessionLinkRecord[] {
+  const fcc = input.fccTraces ?? [];
+  const llm = input.llmProxyRecords ?? [];
+  const events = buildTrajectorySequenceModel(input.messages, input.jsonlLines ?? undefined, {
+    fccTraces: fcc.length > 0 ? fcc : undefined,
+    llmProxyRecords: llm.length > 0 ? llm : undefined,
+  });
+  return buildSessionLinkRecordsFromEvents(events, { fccTraces: fcc });
+}
+
+/** 一次构建 trajectory 事件 + 链路记录（供全链路抽屉复用，避免双份 trajectory 计算）。 */
+export function buildSessionLinkPipeline(input: BuildSessionLinkRecordsInput): {
+  events: SequenceEvent[];
+  records: SessionLinkRecord[];
+} {
+  const fcc = input.fccTraces ?? [];
+  const llm = input.llmProxyRecords ?? [];
+  const events = buildTrajectorySequenceModel(input.messages, input.jsonlLines ?? undefined, {
+    fccTraces: fcc.length > 0 ? fcc : undefined,
+    llmProxyRecords: llm.length > 0 ? llm : undefined,
+  });
+  return {
+    events,
+    records: buildSessionLinkRecordsFromEvents(events, { fccTraces: fcc }),
+  };
 }

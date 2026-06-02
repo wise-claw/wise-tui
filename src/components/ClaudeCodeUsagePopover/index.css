@@ -2,6 +2,22 @@
   width: min(300px, 86vw);
 }
 
+.app-cc-usage-scope {
+  margin-bottom: 8px;
+}
+
+.app-cc-usage-popover--compact {
+  width: 100%;
+}
+
+.app-cc-usage-popover--compact .app-cc-usage-chart {
+  height: 72px;
+}
+
+.app-cc-usage-popover--compact .app-cc-usage-cache-formula {
+  display: none;
+}
+
 .app-cc-usage-popover .ant-segmented {
   margin-bottom: 10px;
 }

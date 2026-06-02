@@ -8,6 +8,7 @@
 | [EXECUTION-PLAN.md](./EXECUTION-PLAN.md) | 分阶段落地（统一时间线 → FCC HTTP → 分析视图）、验收标准 |
 | [CURRENT-STATE.md](./CURRENT-STATE.md) | 与现有代码/路径对照表（工作轨迹、JSONL、LLM 代理、FCC 集成） |
 | [LLM-PROXY-ANALYSIS.md](./LLM-PROXY-ANALYSIS.md) | 分析期用 LLM 代理上游=FCC 抓 HTTP |
+| [USAGE-INSIGHTS.md](./USAGE-INSIGHTS.md) | AI 使用洞察视图（速度 / Token / 优化建议） |
 | [FCC-TRACE-FORMAT.md](./FCC-TRACE-FORMAT.md) | `~/.fcc/traces/` 文件契约（Phase 2） |
 
 ## 问题陈述
@@ -57,4 +58,4 @@
 | 方案文档（本目录） | 已定稿 |
 | Phase 1 统一时间线 | **已落地**（`sessionLinkPipeline`、导出、工作轨迹导出、推断 HTTP 样式） |
 | Phase 2 FCC HTTP | **Wise 侧已落地**（`list_fcc_traces` + `~/.fcc/traces/`）；FCC 写入待上游 |
-| Phase 3 分析视图 | **部分落地**（轮次指标、过滤、元数据导出；用量交叉链待做） |
+| Phase 3 分析视图 | **部分落地**（轮次指标、过滤、元数据导出、**洞察 Tab**；用量交叉链、AI 解读待做） |

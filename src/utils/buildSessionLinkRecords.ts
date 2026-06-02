@@ -1,6 +1,7 @@
 import type { ClaudeLlmProxyRecord } from "../services/claudeLlmProxy";
 import type { SessionLinkLayer, SessionLinkObservedSource, SessionLinkRecord } from "../types/sessionLink";
 import type { SequenceEvent, SequenceEventKind } from "./claudeSessionTrajectorySequence";
+import { resolveProxyTtftMs } from "./llmProxyTtft";
 
 function layerForKind(kind: SequenceEventKind): SessionLinkLayer {
   switch (kind) {
@@ -77,15 +78,27 @@ function sequenceEventToRecord(ev: SequenceEvent, turnIndex: number): SessionLin
   };
 }
 
+function formatProxyLatencyMs(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
 function llmProxyToRecord(rec: ClaudeLlmProxyRecord, turnIndex: number): SessionLinkRecord {
   const path = rec.path?.trim() || "/";
+  const ttft = resolveProxyTtftMs(rec);
+  const latencyHint =
+    ttft != null
+      ? ` · TTFT ${formatProxyLatencyMs(ttft)}`
+      : rec.durationMs > 0
+        ? ` · ${rec.durationMs}ms`
+        : "";
   return {
     id: `llm-${rec.id}`,
     timestampMs: rec.timestampMs,
     layer: "http",
     kind: "http_request",
     turnIndex,
-    summary: `${rec.method} ${path}${rec.statusCode != null ? ` · ${rec.statusCode}` : ""}`,
+    summary: `${rec.method} ${path}${rec.statusCode != null ? ` · ${rec.statusCode}` : ""}${latencyHint}`,
     detail: [
       rec.upstreamUrl?.trim() ? `upstream: ${rec.upstreamUrl}` : `upstream: ${rec.upstream}`,
       rec.requestBodyPreview?.trim() ? `request:\n${rec.requestBodyPreview}` : "",

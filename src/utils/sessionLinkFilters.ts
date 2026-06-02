@@ -61,6 +61,77 @@ export interface SessionLinkTurnMetric {
   httpInferred: number;
 }
 
+export function aggregateSessionLinkRecords(records: readonly SessionLinkRecord[]): {
+  stats: {
+    turns: number;
+    tools: number;
+    httpObserved: number;
+    httpInferred: number;
+  };
+  turnMetrics: SessionLinkTurnMetric[];
+} {
+  let turns = 0;
+  let tools = 0;
+  let httpObserved = 0;
+  let httpInferred = 0;
+
+  type TurnAcc = {
+    times: number[];
+    inputCount: number;
+    toolCount: number;
+    httpObserved: number;
+    httpInferred: number;
+  };
+  const byTurn = new Map<number, TurnAcc>();
+
+  for (const r of records) {
+    if (r.layer === "input") turns += 1;
+    if (r.layer === "tool") tools += 1;
+    if (r.layer === "http") {
+      if (r.observed) httpObserved += 1;
+      else httpInferred += 1;
+    }
+
+    const acc = byTurn.get(r.turnIndex) ?? {
+      times: [],
+      inputCount: 0,
+      toolCount: 0,
+      httpObserved: 0,
+      httpInferred: 0,
+    };
+    acc.times.push(r.timestampMs);
+    if (r.layer === "input") acc.inputCount += 1;
+    if (r.layer === "tool") acc.toolCount += 1;
+    if (r.layer === "http") {
+      if (r.observed) acc.httpObserved += 1;
+      else acc.httpInferred += 1;
+    }
+    byTurn.set(r.turnIndex, acc);
+  }
+
+  const turnMetrics = [...byTurn.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([turnIndex, acc]) => {
+      const startMs = Math.min(...acc.times);
+      const endMs = Math.max(...acc.times);
+      return {
+        turnIndex,
+        startMs,
+        endMs,
+        durationMs: Math.max(0, endMs - startMs),
+        inputCount: acc.inputCount,
+        toolCount: acc.toolCount,
+        httpObserved: acc.httpObserved,
+        httpInferred: acc.httpInferred,
+      };
+    });
+
+  return {
+    stats: { turns, tools, httpObserved, httpInferred },
+    turnMetrics,
+  };
+}
+
 export function computeSessionLinkTurnMetrics(
   records: readonly SessionLinkRecord[],
 ): SessionLinkTurnMetric[] {

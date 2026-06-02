@@ -61,7 +61,7 @@ export function LeftSidebarTopbar({
             </button>
           </Tooltip>
         ) : null}
-        <ClaudeCodeUsageHeaderBtn />
+        <ClaudeCodeUsageHeaderBtn repositoryPath={activeRepositoryPath} />
         <ClaudeModelTopbarTrigger variant="sidebar" />
         <ClaudeCodeToolsTopbarTrigger
           variant="sidebar"

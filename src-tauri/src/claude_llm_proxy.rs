@@ -79,6 +79,12 @@ pub struct ClaudeLlmProxyRecord {
     pub request_bytes: u64,
     pub response_bytes: u64,
     pub duration_ms: u64,
+    /// 上游首字节到达代理的延迟（毫秒）；流式与非流式均可观测。
+    #[serde(default)]
+    pub first_byte_ms: Option<u64>,
+    /// 流式 SSE 中首个模型输出 token（text/thinking delta）到达延迟（毫秒）。
+    #[serde(default)]
+    pub ttft_ms: Option<u64>,
     pub is_streaming: bool,
     pub request_truncated: bool,
     pub response_truncated: bool,
@@ -460,6 +466,26 @@ fn http_response_prefix(status: u16, headers: &HeaderMap, body_len: usize) -> Ve
     out.into_bytes()
 }
 
+fn sse_capture_has_first_token(capture: &[u8]) -> bool {
+    let s = String::from_utf8_lossy(capture);
+    if s.contains("text_delta") {
+        return true;
+    }
+    if s.contains("thinking_delta") {
+        return true;
+    }
+    if s.contains("content_block_delta")
+        && (s.contains("\"text\"") || s.contains("thinking"))
+    {
+        return true;
+    }
+    // OpenAI 兼容流
+    if s.contains(r#""delta":{"content""#) || s.contains(r#""delta": {"content""#) {
+        return true;
+    }
+    false
+}
+
 async fn handle_proxy_connection(
     mut socket: tokio::net::TcpStream,
     inner: Arc<ProxyInner>,
@@ -536,6 +562,8 @@ async fn handle_proxy_connection(
                 request_bytes,
                 response_bytes: 0,
                 duration_ms: started.elapsed().as_millis() as u64,
+                first_byte_ms: None,
+                ttft_ms: None,
                 is_streaming: is_streaming_req,
                 request_truncated: req_truncated,
                 response_truncated: false,
@@ -575,6 +603,8 @@ async fn handle_proxy_connection(
     let mut total_response_bytes: u64 = 0;
     let mut stream = resp.bytes_stream();
     let mut status_line_written = false;
+    let mut first_byte_ms: Option<u64> = None;
+    let mut ttft_ms: Option<u64> = None;
 
     while let Some(chunk) = stream.next().await {
         let chunk = match chunk {
@@ -589,6 +619,9 @@ async fn handle_proxy_connection(
                 break;
             }
         };
+        if first_byte_ms.is_none() {
+            first_byte_ms = Some(started.elapsed().as_millis() as u64);
+        }
         if capture.len() < MAX_BODY_CAPTURE {
             let remain = MAX_BODY_CAPTURE - capture.len();
             let take = chunk.len().min(remain);
@@ -598,6 +631,15 @@ async fn handle_proxy_connection(
             }
         } else {
             resp_truncated = true;
+        }
+        if ttft_ms.is_none() {
+            if is_streaming_resp {
+                if sse_capture_has_first_token(&capture) {
+                    ttft_ms = Some(started.elapsed().as_millis() as u64);
+                }
+            } else if !capture.is_empty() {
+                ttft_ms = first_byte_ms;
+            }
         }
         total_response_bytes += chunk.len() as u64;
 
@@ -636,6 +678,8 @@ async fn handle_proxy_connection(
             request_bytes,
             response_bytes: total_response_bytes,
             duration_ms: started.elapsed().as_millis() as u64,
+            first_byte_ms,
+            ttft_ms,
             is_streaming: is_streaming_resp,
             request_truncated: req_truncated,
             response_truncated: resp_truncated,
@@ -672,6 +716,14 @@ mod tests {
             &Method::POST,
             "https://api.anthropic.com/v1/messages"
         ));
+    }
+
+    #[test]
+    fn sse_capture_detects_text_delta() {
+        let sample = br#"event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hi"}}"#;
+        assert!(sse_capture_has_first_token(sample));
+        assert!(!sse_capture_has_first_token(b"event: message_start\ndata: {}\n\n"));
     }
 }
 

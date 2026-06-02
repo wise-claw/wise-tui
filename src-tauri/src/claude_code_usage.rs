@@ -10,6 +10,8 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
+use crate::claude_commands::disk_sessions::encoded_claude_project_dir;
+
 const MAX_JSONL_FILES: usize = 5000;
 const MAX_LINE_BYTES: usize = 4 * 1024 * 1024;
 const READ_BUF_CAP: usize = 256 * 1024;
@@ -472,7 +474,7 @@ fn build_series_payload(
     }
 }
 
-fn build_snapshot_inner() -> Result<ClaudeUsageSnapshotResponse, String> {
+fn build_snapshot_inner(project_path_filter: Option<&str>) -> Result<ClaudeUsageSnapshotResponse, String> {
     let bases = claude_code_base_dirs();
     if bases.is_empty() {
         let empty = || build_series_payload(vec![], String::new());
@@ -490,14 +492,29 @@ fn build_snapshot_inner() -> Result<ClaudeUsageSnapshotResponse, String> {
         });
     }
 
+    let encoded_project = project_path_filter
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|p| encoded_claude_project_dir(Path::new(p)))
+        .transpose()?;
+
     let mut files: Vec<PathBuf> = Vec::new();
     for b in &bases {
         let projects = b.join("projects");
-        collect_jsonl_paths(
-            &projects,
-            MAX_JSONL_FILES.saturating_sub(files.len()),
-            &mut files,
-        );
+        if let Some(ref enc) = encoded_project {
+            let scoped = projects.join(enc);
+            collect_jsonl_paths(
+                &scoped,
+                MAX_JSONL_FILES.saturating_sub(files.len()),
+                &mut files,
+            );
+        } else {
+            collect_jsonl_paths(
+                &projects,
+                MAX_JSONL_FILES.saturating_sub(files.len()),
+                &mut files,
+            );
+        }
         if files.len() >= MAX_JSONL_FILES {
             break;
         }
@@ -551,12 +568,26 @@ fn build_snapshot_inner() -> Result<ClaudeUsageSnapshotResponse, String> {
     let month = build_series_payload(month_buckets, "近半年".into());
 
     let cost_entries_day = series_totals(&day.buckets).total_cost_entries;
+    let scope_hint = encoded_project.as_ref().map(|_| {
+        format!(
+            "仅统计当前仓库 JSONL（{}）",
+            project_path_filter.unwrap_or("").trim()
+        )
+    });
     let hint = if lines_ok == 0 {
-        Some("未解析到 assistant 用量行。请确认本机已用 Claude Code 产生会话 JSONL。".into())
+        Some(if encoded_project.is_some() {
+            "该仓库暂无 Claude Code 会话 JSONL，或未解析到 assistant 用量行。".into()
+        } else {
+            "未解析到 assistant 用量行。请确认本机已用 Claude Code 产生会话 JSONL。".into()
+        })
     } else if cost_entries_day == 0 {
-        Some("当前 JSONL 无 costUSD 字段；费用为 0。完整费用估算可使用终端：npx ccusage@latest（本面板仅统计近半年）。".into())
+        Some(format!(
+            "{}{}",
+            scope_hint.as_deref().map(|s| format!("{s} · ")).unwrap_or_default(),
+            "当前 JSONL 无 costUSD 字段；费用为 0。完整费用估算可使用终端：npx ccusage@latest（本面板仅统计近半年）。"
+        ))
     } else {
-        None
+        scope_hint
     };
 
     let data_roots: Vec<String> = bases
@@ -576,8 +607,11 @@ fn build_snapshot_inner() -> Result<ClaudeUsageSnapshotResponse, String> {
 }
 
 #[tauri::command]
-pub async fn get_claude_code_usage_snapshot() -> Result<ClaudeUsageSnapshotResponse, String> {
-    tokio::task::spawn_blocking(build_snapshot_inner)
+pub async fn get_claude_code_usage_snapshot(
+    project_path: Option<String>,
+) -> Result<ClaudeUsageSnapshotResponse, String> {
+    let filter = project_path.filter(|s| !s.trim().is_empty());
+    tokio::task::spawn_blocking(move || build_snapshot_inner(filter.as_deref()))
         .await
         .map_err(|e| format!("用量统计任务异常: {}", e))?
 }

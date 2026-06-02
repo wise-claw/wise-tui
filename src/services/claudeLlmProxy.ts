@@ -16,6 +16,10 @@ export interface ClaudeLlmProxyRecord {
   requestBytes: number;
   responseBytes: number;
   durationMs: number;
+  /** 上游首字节到达代理（毫秒） */
+  firstByteMs?: number | null;
+  /** 流式首个 text/thinking token（毫秒） */
+  ttftMs?: number | null;
   isStreaming: boolean;
   requestTruncated: boolean;
   responseTruncated: boolean;

@@ -9,7 +9,7 @@ fn claude_projects_root() -> Result<PathBuf, String> {
 }
 
 /// Encodes an absolute project path into Claude Code's directory name under `~/.claude/projects/`.
-fn encoded_claude_project_dir(project_path: &Path) -> Result<String, String> {
+pub(crate) fn encoded_claude_project_dir(project_path: &Path) -> Result<String, String> {
     let canon = fs::canonicalize(project_path)
         .map_err(|e| format!("cannot canonicalize project path: {}", e))?;
     let s = canon.to_string_lossy().to_string();

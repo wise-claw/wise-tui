@@ -1,6 +1,11 @@
 import { Tooltip } from "antd";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { ClaudeSession } from "../../types";
+import {
+  getClaudeUsageUiStoreSnapshot,
+  subscribeClaudeUsageUiStore,
+  type SessionDataLinkOpenView,
+} from "../../stores/claudeUsageUiStore";
 import { SessionDataLinkDrawer } from "./SessionDataLinkDrawer";
 import "./SessionDataLinkTopbarTrigger.css";
 
@@ -25,14 +30,32 @@ export function IconSessionDataLink() {
 interface Props {
   /** 当前项目/仓库主会话（与侧栏「主会话」绑定一致） */
   mainSession: ClaudeSession | null;
+  onRequestAiAnalysis?: (prompt: string) => void | Promise<void>;
 }
 
-export function SessionDataLinkTopbarTrigger({ mainSession }: Props) {
+export function SessionDataLinkTopbarTrigger({ mainSession, onRequestAiAnalysis }: Props) {
+  const uiSnap = useSyncExternalStore(
+    subscribeClaudeUsageUiStore,
+    getClaudeUsageUiStoreSnapshot,
+    getClaudeUsageUiStoreSnapshot,
+  );
+  const lastLinkOpenNonce = useRef(uiSnap.sessionDataLinkOpenNonce);
+
   const [open, setOpen] = useState(false);
+  const [initialViewMode, setInitialViewMode] = useState<SessionDataLinkOpenView>("list");
   const disabled = !mainSession;
+
+  useEffect(() => {
+    if (uiSnap.sessionDataLinkOpenNonce === lastLinkOpenNonce.current) return;
+    lastLinkOpenNonce.current = uiSnap.sessionDataLinkOpenNonce;
+    if (!mainSession) return;
+    setInitialViewMode(uiSnap.sessionDataLinkInitialView);
+    setOpen(true);
+  }, [uiSnap.sessionDataLinkOpenNonce, uiSnap.sessionDataLinkInitialView, mainSession]);
 
   const handleClick = useCallback(() => {
     if (!mainSession) return;
+    setInitialViewMode("list");
     setOpen(true);
   }, [mainSession]);
 
@@ -56,7 +79,13 @@ export function SessionDataLinkTopbarTrigger({ mainSession }: Props) {
           <IconSessionDataLink />
         </button>
       </Tooltip>
-      <SessionDataLinkDrawer open={open} onClose={() => setOpen(false)} session={mainSession} />
+      <SessionDataLinkDrawer
+        open={open}
+        onClose={() => setOpen(false)}
+        session={mainSession}
+        initialViewMode={initialViewMode}
+        onRequestAiAnalysis={onRequestAiAnalysis}
+      />
     </>
   );
 }

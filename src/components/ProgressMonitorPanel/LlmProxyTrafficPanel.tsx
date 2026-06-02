@@ -16,6 +16,7 @@ import {
   subscribeClaudeLlmProxyStore,
 } from "../../stores/claudeLlmProxyStore";
 import { filterLlmProxyRecordsForDisplay } from "../../utils/llmProxyTrafficDisplay";
+import { resolveProxyTtftMs } from "../../utils/llmProxyTtft";
 import { HttpBodyJsonViewer } from "./HttpBodyJsonViewer";
 import "./LlmProxyTrafficPanel.css";
 
@@ -41,6 +42,7 @@ function formatTime(ts: number): string {
 function RecordSummary({ record }: { record: ClaudeLlmProxyRecord }) {
   const isSuccess = record.statusCode != null && record.statusCode >= 200 && record.statusCode < 300;
   const isError = record.statusCode != null && record.statusCode >= 400;
+  const ttftMs = resolveProxyTtftMs(record);
 
   const methodColors: Record<string, { bg: string; text: string; border: string }> = {
     POST: {
@@ -115,6 +117,16 @@ function RecordSummary({ record }: { record: ClaudeLlmProxyRecord }) {
             <ThunderboltOutlined style={{ fontSize: 9, color: "#eab308", opacity: 0.9 }} />
             <span>{record.durationMs}ms</span>
           </span>
+
+          {ttftMs != null ? (
+            <span
+              className="app-llm-proxy-record__metric-item"
+              title={`首 Token (TTFT): ${ttftMs}ms`}
+            >
+              <span className="app-llm-proxy-record__ttft-label">TTFT</span>
+              <span>{ttftMs}ms</span>
+            </span>
+          ) : null}
 
           {record.statusCode != null ? (
             <span

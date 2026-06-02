@@ -36,26 +36,30 @@ import {
   refreshClaudeLlmProxyStatus,
   subscribeClaudeLlmProxyStore,
 } from "../../stores/claudeLlmProxyStore";
-import { countSessionLinkStats } from "../../utils/buildSessionLinkRecords";
+import {
+  SESSION_LINK_FILTER_OPTIONS,
+  aggregateSessionLinkRecords,
+  filterSessionLinkRecords,
+  type SessionLinkFilterPreset,
+} from "../../utils/sessionLinkFilters";
 import {
   formatHttpBodyJsonForDisplay,
   formatHttpTraceDetailForDisplay,
 } from "../../utils/formatHttpBodyJson";
 import { filterLlmProxyRecordsForDisplay } from "../../utils/llmProxyTrafficDisplay";
-import {
-  SESSION_LINK_FILTER_OPTIONS,
-  computeSessionLinkTurnMetrics,
-  filterSessionLinkRecords,
-  type SessionLinkFilterPreset,
-} from "../../utils/sessionLinkFilters";
-import { buildSessionLinkRecordsFromSources } from "../../utils/sessionLinkPipeline";
+import { buildSessionLinkPipeline } from "../../utils/sessionLinkPipeline";
 import {
   buildSessionLinkExportBundle,
   serializeSessionLinkExportBundle,
   stripSessionLinkDetailsForMetadataExport,
 } from "../../utils/sessionLinkExport";
 import {
-  buildTrajectorySequenceModel,
+  computeSessionInsights,
+  filterJsonlLinesForUsageScan,
+} from "../../utils/sessionInsights";
+import type { SessionDataLinkOpenView } from "../../stores/claudeUsageUiStore";
+import { SessionInsightsPanel } from "./SessionInsightsPanel";
+import {
   filterSequenceEventsForTurn,
 } from "../../utils/claudeSessionTrajectorySequence";
 import { ClaudeSessionSequenceDiagram } from "./ClaudeSessionSequenceDiagram";
@@ -63,7 +67,8 @@ import "./SessionDataLinkDrawer.css";
 
 const { Text } = Typography;
 
-const JSONL_TAIL = 8000;
+const JSONL_TAIL_FULL = 8000;
+const JSONL_TAIL_LIGHT = 1200;
 
 const LAYER_LABELS: Record<SessionLinkRecord["layer"], string> = {
   input: "输入",
@@ -203,16 +208,26 @@ interface Props {
   open: boolean;
   onClose: () => void;
   session: ClaudeSession | null;
+  initialViewMode?: SessionDataLinkOpenView;
+  /** 将 AI 深度解读 prompt 发往主会话（通常关闭抽屉并 execute） */
+  onRequestAiAnalysis?: (prompt: string) => void | Promise<void>;
 }
 
-export function SessionDataLinkDrawer({ open, onClose, session }: Props) {
-  const [viewMode, setViewMode] = useState<"list" | "diagram">("list");
+export function SessionDataLinkDrawer({
+  open,
+  onClose,
+  session,
+  initialViewMode = "list",
+  onRequestAiAnalysis,
+}: Props) {
+  const [viewMode, setViewMode] = useState<"list" | "diagram" | "insights">("list");
   const [filterPreset, setFilterPreset] = useState<SessionLinkFilterPreset>("all");
   const [jsonlLines, setJsonlLines] = useState<string[] | null>(null);
   const [jsonlLoading, setJsonlLoading] = useState(false);
   const [jsonlError, setJsonlError] = useState<string | null>(null);
   const [headerCopied, setHeaderCopied] = useState(false);
   const [turnDiagramTurn, setTurnDiagramTurn] = useState<number | null>(null);
+  const [activeTurnKeys, setActiveTurnKeys] = useState<string[]>([]);
   const [proxySnap, setProxySnap] = useState(getClaudeLlmProxyStoreSnapshot);
 
   const messages = session?.messages ?? [];
@@ -229,20 +244,25 @@ export function SessionDataLinkDrawer({ open, onClose, session }: Props) {
   }, [open, repositoryPath]);
 
   useEffect(() => {
-    if (!open) {
-      setViewMode("list");
-      setFilterPreset("all");
+    if (open) {
+      setViewMode(initialViewMode);
+      return;
     }
-  }, [open]);
+    setViewMode("list");
+    setFilterPreset("all");
+    setActiveTurnKeys([]);
+  }, [open, initialViewMode]);
 
   useEffect(() => {
     if (!open) return;
     setJsonlLines(null);
     setJsonlError(null);
     if (!canLoadDisk) return;
+    const tailLines =
+      session?.diskTranscriptPartial || messages.length < 80 ? JSONL_TAIL_FULL : JSONL_TAIL_LIGHT;
     let cancelled = false;
     setJsonlLoading(true);
-    void loadClaudeSessionJsonl(repositoryPath, claudeSessionId, { tailLines: JSONL_TAIL })
+    void loadClaudeSessionJsonl(repositoryPath, claudeSessionId, { tailLines })
       .then((lines) => {
         if (!cancelled) setJsonlLines(lines);
       })
@@ -255,7 +275,7 @@ export function SessionDataLinkDrawer({ open, onClose, session }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [open, canLoadDisk, repositoryPath, claudeSessionId]);
+  }, [open, canLoadDisk, repositoryPath, claudeSessionId, session?.diskTranscriptPartial, messages.length]);
 
   const fccSinceMs = session?.createdAt ? session.createdAt - 60_000 : undefined;
   const { fccAligned, traces: fccTraces, loading: fccLoading } = useFccSessionTraces({
@@ -269,9 +289,9 @@ export function SessionDataLinkDrawer({ open, onClose, session }: Props) {
     [proxySnap.records],
   );
 
-  const linkRecords = useMemo(
+  const linkPipeline = useMemo(
     () =>
-      buildSessionLinkRecordsFromSources({
+      buildSessionLinkPipeline({
         messages,
         jsonlLines: jsonlLines ?? undefined,
         llmProxyRecords,
@@ -280,23 +300,44 @@ export function SessionDataLinkDrawer({ open, onClose, session }: Props) {
     [messages, jsonlLines, llmProxyRecords, fccAligned, fccTraces],
   );
 
+  const linkRecords = linkPipeline.records;
+  const events = linkPipeline.events;
+
+  const { stats, turnMetrics } = useMemo(
+    () => aggregateSessionLinkRecords(linkRecords),
+    [linkRecords],
+  );
+
+  const jsonlUsageLines = useMemo(
+    () => filterJsonlLinesForUsageScan(jsonlLines),
+    [jsonlLines],
+  );
+
   const filteredRecords = useMemo(
     () => filterSessionLinkRecords(linkRecords, filterPreset),
     [linkRecords, filterPreset],
   );
 
-  const turnMetrics = useMemo(() => computeSessionLinkTurnMetrics(linkRecords), [linkRecords]);
-
-  const stats = useMemo(() => countSessionLinkStats(linkRecords), [linkRecords]);
-
-  const events = useMemo(
-    () =>
-      buildTrajectorySequenceModel(messages, jsonlLines ?? undefined, {
-        fccTraces: fccAligned ? fccTraces : undefined,
-        llmProxyRecords: llmProxyRecords.length > 0 ? llmProxyRecords : undefined,
-      }),
-    [messages, jsonlLines, fccAligned, fccTraces, llmProxyRecords],
-  );
+  const sessionInsights = useMemo(() => {
+    if (viewMode !== "insights") return null;
+    return computeSessionInsights({
+      linkRecords,
+      turnMetrics,
+      llmProxyRecords,
+      fccTraces: fccAligned ? fccTraces : undefined,
+      jsonlUsageLines,
+      llmProxyListening: proxySnap.status?.listening ?? false,
+    });
+  }, [
+    viewMode,
+    linkRecords,
+    turnMetrics,
+    llmProxyRecords,
+    fccAligned,
+    fccTraces,
+    jsonlUsageLines,
+    proxySnap.status?.listening,
+  ]);
 
   const buildExportBundle = useCallback(
     (records: readonly SessionLinkRecord[]) => {
@@ -320,10 +361,30 @@ export function SessionDataLinkDrawer({ open, onClose, session }: Props) {
     [buildExportBundle, filteredRecords],
   );
 
+  const resolveLinkMetaBundle = useCallback(() => {
+    const bundle = buildExportBundle(linkRecords);
+    return bundle ? stripSessionLinkDetailsForMetadataExport(bundle) : null;
+  }, [buildExportBundle, linkRecords]);
+
+  const handleInsightsAiAnalysis = useCallback(
+    async (prompt: string) => {
+      if (!onRequestAiAnalysis) return;
+      onClose();
+      await onRequestAiAnalysis(prompt);
+    },
+    [onClose, onRequestAiAnalysis],
+  );
+
   const turnDiagramEvents = useMemo(() => {
     if (turnDiagramTurn == null) return [];
     return filterSequenceEventsForTurn(events, turnDiagramTurn);
   }, [events, turnDiagramTurn]);
+
+  const handleJumpTurnFromInsights = useCallback((turn: number) => {
+    setViewMode("list");
+    setFilterPreset("all");
+    setActiveTurnKeys([String(turn)]);
+  }, []);
 
   const openTurnDiagram = useCallback((turn: number, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -425,9 +486,10 @@ export function SessionDataLinkDrawer({ open, onClose, session }: Props) {
   }, [filteredRecords, turnMetrics, openTurnDiagram]);
 
   const defaultActiveTurnKeys = useMemo(() => {
+    if (activeTurnKeys.length > 0) return activeTurnKeys;
     if (collapseItems.length === 0) return [];
     return [collapseItems[collapseItems.length - 1]!.key];
-  }, [collapseItems]);
+  }, [activeTurnKeys, collapseItems]);
 
   const diskStatusLine = useMemo(() => {
     if (!canLoadDisk) return null;
@@ -501,10 +563,11 @@ export function SessionDataLinkDrawer({ open, onClose, session }: Props) {
                 <Segmented
                   size="small"
                   value={viewMode}
-                  onChange={(v) => setViewMode(v as "list" | "diagram")}
+                  onChange={(v) => setViewMode(v as "list" | "diagram" | "insights")}
                   options={[
                     { label: "链路列表", value: "list" },
                     { label: "序列图", value: "diagram" },
+                    { label: "洞察", value: "insights" },
                   ]}
                 />
                 {viewMode === "list" ? (
@@ -599,7 +662,21 @@ export function SessionDataLinkDrawer({ open, onClose, session }: Props) {
             ) : null}
 
             <div className="app-session-data-link__body">
-              {viewMode === "list" ? (
+              {viewMode === "insights" ? (
+                sessionInsights ? (
+                  <SessionInsightsPanel
+                    insights={sessionInsights}
+                    sessionLabel={session.repositoryName.trim() || undefined}
+                    claudeSessionId={session.claudeSessionId}
+                    resolveLinkMetaBundle={resolveLinkMetaBundle}
+                    repositoryPath={session.repositoryPath}
+                    onJumpTurn={handleJumpTurnFromInsights}
+                    onRequestAiAnalysis={onRequestAiAnalysis ? handleInsightsAiAnalysis : undefined}
+                  />
+                ) : (
+                  <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="正在计算洞察…" />
+                )
+              ) : viewMode === "list" ? (
                 filteredRecords.length === 0 ? (
                   <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无链路记录" />
                 ) : (
@@ -607,7 +684,8 @@ export function SessionDataLinkDrawer({ open, onClose, session }: Props) {
                     size="small"
                     className="app-session-data-link__collapse"
                     items={collapseItems}
-                    defaultActiveKey={defaultActiveTurnKeys}
+                    activeKey={defaultActiveTurnKeys}
+                    onChange={(keys) => setActiveTurnKeys(Array.isArray(keys) ? keys.map(String) : [String(keys)])}
                   />
                 )
               ) : events.length === 0 ? (
