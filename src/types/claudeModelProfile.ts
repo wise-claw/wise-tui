@@ -23,6 +23,8 @@ export interface ClaudeModelProfileStoreView {
   activeProfileId: string | null;
   activeCodexProfileId: string | null;
   activeOpencodeProfileId: string | null;
+  /** 限流 / API 错误时自动切换到同引擎下一档案，缺省 true。 */
+  autoFailoverEnabled?: boolean;
   effectiveModel: string | null;
   effectiveCodexModel: string | null;
   effectiveOpencodeModel: string | null;
@@ -32,6 +34,15 @@ export interface ModelProfileEffectiveModels {
   effectiveModel: string | null;
   effectiveCodexModel: string | null;
   effectiveOpencodeModel: string | null;
+}
+
+/** 限流/API 错误后自动切换到同引擎下一个模型档案的结果。 */
+export interface ModelProfileFailoverResult {
+  store: ClaudeModelProfileStoreView;
+  appliedProfileId: string;
+  profileName: string;
+  modelId: string;
+  engine: ModelProfileEngine;
 }
 
 export function normalizeModelProfileEngine(
@@ -107,4 +118,10 @@ export function buildOptimisticApplyStoreView(
     effectiveCodexModel: engine === "codex" ? modelId : store.effectiveCodexModel,
     effectiveOpencodeModel: engine === "opencode" ? modelId : store.effectiveOpencodeModel,
   };
+}
+
+export function isModelProfileAutoFailoverEnabled(
+  store: ClaudeModelProfileStoreView | null | undefined,
+): boolean {
+  return store?.autoFailoverEnabled !== false;
 }

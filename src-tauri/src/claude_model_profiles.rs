@@ -47,6 +47,10 @@ fn default_profile_engine() -> String {
     "claude".to_string()
 }
 
+fn default_auto_failover_enabled() -> bool {
+    true
+}
+
 fn normalize_profile_engine(raw: &str) -> &str {
     match raw.trim().to_lowercase().as_str() {
         "codex" => "codex",
@@ -68,6 +72,9 @@ pub(crate) struct ClaudeModelProfileStore {
     active_codex_profile_id: Option<String>,
     #[serde(default)]
     active_opencode_profile_id: Option<String>,
+    /// 限流 / API 错误时自动切换到同引擎下一档案。
+    #[serde(default = "default_auto_failover_enabled")]
+    auto_failover_enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -77,6 +84,8 @@ pub struct ClaudeModelProfileStoreView {
     pub active_profile_id: Option<String>,
     pub active_codex_profile_id: Option<String>,
     pub active_opencode_profile_id: Option<String>,
+    #[serde(default = "default_auto_failover_enabled")]
+    pub auto_failover_enabled: bool,
     pub effective_model: Option<String>,
     pub effective_codex_model: Option<String>,
     pub effective_opencode_model: Option<String>,
@@ -88,6 +97,16 @@ pub struct ModelProfileEffectiveModels {
     pub effective_model: Option<String>,
     pub effective_codex_model: Option<String>,
     pub effective_opencode_model: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProfileFailoverResult {
+    pub store: ClaudeModelProfileStoreView,
+    pub applied_profile_id: String,
+    pub profile_name: String,
+    pub model_id: String,
+    pub engine: String,
 }
 
 fn effective_models_from_disk() -> ModelProfileEffectiveModels {
@@ -572,6 +591,7 @@ fn build_store_view(
         active_profile_id: store.active_profile_id.clone(),
         active_codex_profile_id: store.active_codex_profile_id.clone(),
         active_opencode_profile_id: store.active_opencode_profile_id.clone(),
+        auto_failover_enabled: store.auto_failover_enabled,
         effective_model: effective.effective_model,
         effective_codex_model: effective.effective_codex_model,
         effective_opencode_model: effective.effective_opencode_model,
@@ -711,6 +731,186 @@ pub(crate) fn delete_claude_model_profile(
     }
     save_store(&db, &store)?;
     Ok(store_view_from_store(&store))
+}
+
+fn active_profile_id_for_engine<'a>(
+    store: &'a ClaudeModelProfileStore,
+    engine: &str,
+) -> Option<&'a String> {
+    match normalize_profile_engine(engine) {
+        "codex" => store.active_codex_profile_id.as_ref(),
+        "opencode" => store.active_opencode_profile_id.as_ref(),
+        _ => store.active_profile_id.as_ref(),
+    }
+}
+
+fn pick_next_failover_profile(
+    store: &ClaudeModelProfileStore,
+    engine: &str,
+    exclude_profile_ids: &[String],
+) -> Option<ClaudeModelProfile> {
+    let engine_norm = normalize_profile_engine(engine);
+    let exclude: std::collections::HashSet<&str> = exclude_profile_ids
+        .iter()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect();
+    let ordered: Vec<&ClaudeModelProfile> = store
+        .profiles
+        .iter()
+        .filter(|p| profile_engine(p) == engine_norm)
+        .collect();
+    if ordered.is_empty() {
+        return None;
+    }
+    let active_idx = active_profile_id_for_engine(store, engine_norm)
+        .and_then(|active_id| ordered.iter().position(|p| p.id == *active_id))
+        .unwrap_or(0);
+    for offset in 1..=ordered.len() {
+        let idx = (active_idx + offset) % ordered.len();
+        let candidate = ordered[idx];
+        if !exclude.contains(candidate.id.as_str()) {
+            return Some(candidate.clone());
+        }
+    }
+    None
+}
+
+fn reorder_profiles_for_engine(
+    store: &mut ClaudeModelProfileStore,
+    engine: &str,
+    ordered_profile_ids: &[String],
+) -> Result<(), String> {
+    let engine_norm = normalize_profile_engine(engine);
+    let engine_profiles: Vec<ClaudeModelProfile> = store
+        .profiles
+        .iter()
+        .filter(|p| profile_engine(p) == engine_norm)
+        .cloned()
+        .collect();
+    if engine_profiles.is_empty() {
+        return Err("当前引擎没有可排序的模型档案".to_string());
+    }
+    let expected_ids: std::collections::HashSet<&str> =
+        engine_profiles.iter().map(|p| p.id.as_str()).collect();
+    let mut seen = std::collections::HashSet::new();
+    let mut reordered = Vec::with_capacity(engine_profiles.len());
+    for raw_id in ordered_profile_ids {
+        let id = raw_id.trim();
+        if id.is_empty() {
+            continue;
+        }
+        if !expected_ids.contains(id) {
+            return Err(format!("排序列表包含不属于 {engine_norm} 的档案: {id}"));
+        }
+        if !seen.insert(id) {
+            return Err(format!("排序列表包含重复档案: {id}"));
+        }
+        let profile = engine_profiles
+            .iter()
+            .find(|p| p.id == id)
+            .cloned()
+            .ok_or_else(|| format!("未找到模型档案: {id}"))?;
+        reordered.push(profile);
+    }
+    if reordered.len() != engine_profiles.len() {
+        return Err("排序列表必须包含当前引擎的全部模型档案".to_string());
+    }
+    let mut reorder_iter = reordered.into_iter();
+    store.profiles = store
+        .profiles
+        .iter()
+        .map(|profile| {
+            if profile_engine(profile) == engine_norm {
+                reorder_iter
+                    .next()
+                    .unwrap_or_else(|| profile.clone())
+            } else {
+                profile.clone()
+            }
+        })
+        .collect();
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) fn set_claude_model_profile_auto_failover(
+    db: tauri::State<'_, WiseDb>,
+    enabled: bool,
+) -> Result<ClaudeModelProfileStoreView, String> {
+    let mut store = load_store(&db);
+    store.auto_failover_enabled = enabled;
+    save_store(&db, &store)?;
+    Ok(store_view_from_store(&store))
+}
+
+#[tauri::command]
+pub(crate) fn reorder_claude_model_profiles(
+    db: tauri::State<'_, WiseDb>,
+    engine: String,
+    ordered_profile_ids: Vec<String>,
+) -> Result<ClaudeModelProfileStoreView, String> {
+    let mut store = load_store(&db);
+    reorder_profiles_for_engine(&mut store, &engine, &ordered_profile_ids)?;
+    save_store(&db, &store)?;
+    Ok(store_view_from_store(&store))
+}
+
+#[tauri::command]
+pub(crate) fn failover_to_next_model_profile(
+    db: tauri::State<'_, WiseDb>,
+    engine: String,
+    exclude_profile_ids: Option<Vec<String>>,
+) -> Result<ModelProfileFailoverResult, String> {
+    let engine_norm = normalize_profile_engine(&engine);
+    let exclude = exclude_profile_ids.unwrap_or_default();
+    let store = load_store(&db);
+    if !store.auto_failover_enabled {
+        return Err("自动切换已关闭".to_string());
+    }
+    let mut exclude_all = exclude;
+    if let Some(active_id) = active_profile_id_for_engine(&store, engine_norm) {
+        if !exclude_all.iter().any(|id| id == active_id) {
+            exclude_all.push(active_id.clone());
+        }
+    }
+    let profile = pick_next_failover_profile(&store, engine_norm, &exclude_all)
+        .ok_or_else(|| "没有可切换的备用模型档案".to_string())?;
+    apply_profile_to_disk(&profile)?;
+    let mut next = store;
+    if profile_engine(&profile) == "codex" {
+        next.active_codex_profile_id = Some(profile.id.clone());
+    } else if profile_engine(&profile) == "opencode" {
+        next.active_opencode_profile_id = Some(profile.id.clone());
+    } else {
+        next.active_profile_id = Some(profile.id.clone());
+    }
+    if let Some(slot) = next.profiles.iter_mut().find(|p| p.id == profile.id) {
+        if let Ok(mid) = resolve_profile_model_id(slot) {
+            slot.model_id = mid.clone();
+            slot.updated_at_ms = now_ms();
+        }
+    }
+    save_store(&db, &next)?;
+    let store_view = store_view_after_disk_write(&next);
+    let trimmed_model_id = profile.model_id.trim();
+    let model_id = if !trimmed_model_id.is_empty() {
+        trimmed_model_id.to_string()
+    } else {
+        store_view
+            .effective_model
+            .clone()
+            .or(store_view.effective_codex_model.clone())
+            .or(store_view.effective_opencode_model.clone())
+            .unwrap_or_default()
+    };
+    Ok(ModelProfileFailoverResult {
+        store: store_view,
+        applied_profile_id: profile.id.clone(),
+        profile_name: profile.name.clone(),
+        model_id,
+        engine: profile_engine(&profile).to_string(),
+    })
 }
 
 #[tauri::command]
@@ -921,6 +1121,107 @@ mod tests {
             Some("kimi-k2")
         );
         assert_eq!(out["model"].as_str(), Some("kimi-k2"));
+    }
+
+    #[test]
+    fn reorder_profiles_for_engine_updates_same_engine_order_only() {
+        let mut store = ClaudeModelProfileStore {
+            profiles: vec![
+                ClaudeModelProfile {
+                    id: "c1".into(),
+                    company: "A".into(),
+                    name: "C1".into(),
+                    official_website_url: String::new(),
+                    model_id: "m1".into(),
+                    settings_json: r#"{}"#.into(),
+                    engine: default_profile_engine(),
+                    created_at_ms: 0,
+                    updated_at_ms: 0,
+                },
+                ClaudeModelProfile {
+                    id: "x1".into(),
+                    company: "X".into(),
+                    name: "Codex".into(),
+                    official_website_url: String::new(),
+                    model_id: "cx".into(),
+                    settings_json: r#"{}"#.into(),
+                    engine: "codex".into(),
+                    created_at_ms: 0,
+                    updated_at_ms: 0,
+                },
+                ClaudeModelProfile {
+                    id: "c2".into(),
+                    company: "B".into(),
+                    name: "C2".into(),
+                    official_website_url: String::new(),
+                    model_id: "m2".into(),
+                    settings_json: r#"{}"#.into(),
+                    engine: default_profile_engine(),
+                    created_at_ms: 0,
+                    updated_at_ms: 0,
+                },
+            ],
+            active_profile_id: Some("c1".into()),
+            active_codex_profile_id: None,
+            active_opencode_profile_id: None,
+            auto_failover_enabled: true,
+        };
+        reorder_profiles_for_engine(&mut store, "claude", &["c2".into(), "c1".into()])
+            .expect("reorder");
+        let ids: Vec<_> = store.profiles.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(ids, vec!["c2", "x1", "c1"]);
+    }
+
+    #[test]
+    fn pick_next_failover_profile_skips_excluded_and_rotates() {
+        let store = ClaudeModelProfileStore {
+            profiles: vec![
+                ClaudeModelProfile {
+                    id: "p1".into(),
+                    company: "A".into(),
+                    name: "Profile A".into(),
+                    official_website_url: String::new(),
+                    model_id: "model-a".into(),
+                    settings_json: r#"{}"#.into(),
+                    engine: default_profile_engine(),
+                    created_at_ms: 0,
+                    updated_at_ms: 0,
+                },
+                ClaudeModelProfile {
+                    id: "p2".into(),
+                    company: "B".into(),
+                    name: "Profile B".into(),
+                    official_website_url: String::new(),
+                    model_id: "model-b".into(),
+                    settings_json: r#"{}"#.into(),
+                    engine: default_profile_engine(),
+                    created_at_ms: 0,
+                    updated_at_ms: 0,
+                },
+                ClaudeModelProfile {
+                    id: "p3".into(),
+                    company: "C".into(),
+                    name: "Profile C".into(),
+                    official_website_url: String::new(),
+                    model_id: "model-c".into(),
+                    settings_json: r#"{}"#.into(),
+                    engine: "codex".into(),
+                    created_at_ms: 0,
+                    updated_at_ms: 0,
+                },
+            ],
+            active_profile_id: Some("p1".into()),
+            active_codex_profile_id: None,
+            active_opencode_profile_id: None,
+            auto_failover_enabled: true,
+        };
+        let next = pick_next_failover_profile(&store, "claude", &["p1".into()])
+            .expect("p2");
+        assert_eq!(next.id, "p2");
+        assert!(
+            pick_next_failover_profile(&store, "claude", &["p1".into(), "p2".into()]).is_none()
+        );
+        assert!(pick_next_failover_profile(&store, "codex", &["p3".into()]).is_none());
     }
 
     #[test]

@@ -152,8 +152,30 @@ import {
   planAutoCompactBeforeSend,
   resolveSessionContextMetricsForSend,
 } from "../services/claudeSessionContext";
+import {
+  applyModelProfileFailover,
+  resolveModelProfileEngineForExecution,
+} from "../services/modelProfileFailover";
+import { isRetryableModelApiError } from "../utils/retryableModelApiError";
 
 type ClaudeStreamRuntimeHandlers = ReturnType<typeof createClaudeStreamRuntime>;
+
+type PendingTurnFailoverContext = {
+  tabSessionId: string;
+  turnNonce: number;
+  invokeConc:
+    | { concurrencyScopeKey: string; concurrencyLimit: number }
+    | null
+    | undefined;
+  repositoryPath: string;
+  prompt: string;
+  modelArg: string | undefined;
+  resumeClaudeSid: string | null;
+  forceNewClaudeConversation?: boolean;
+  cursorAttachments?: CursorSdkAttachment[];
+  engine: SessionExecutionEngine;
+  triedProfileIds: string[];
+};
 
 function isClaudeConversationMissingError(error: unknown): boolean {
   const text = error instanceof Error ? error.message : String(error ?? "");
@@ -862,6 +884,10 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   const workflowRunBySessionRef = useRef<Map<string, string>>(new Map());
   const sessionIdMapRef = useRef<Map<string, string>>(new Map());
   const executeSessionRetryCountRef = useRef<Map<string, number>>(new Map());
+  const pendingTurnFailoverRef = useRef<PendingTurnFailoverContext | null>(null);
+  const attemptTurnFailoverAndRetryRef = useRef<
+    (ctx: PendingTurnFailoverContext, errorPreview: string) => Promise<boolean>
+  >(async () => false);
   /** Which session tab receives stdout until `claude-complete` / `claude-error`. */
   const streamingTargetIdRef = useRef<string | null>(null);
   /** 长驻 streaming 子进程：tab id → 已知 Claude session_id（init 前可为 null）。 */
@@ -1813,6 +1839,70 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     [setSessions],
   );
 
+  const attemptTurnFailoverAndRetry = useCallback(
+    async (ctx: PendingTurnFailoverContext, _errorPreview: string): Promise<boolean> => {
+      const profileEngine = resolveModelProfileEngineForExecution(ctx.engine);
+      if (!profileEngine) {
+        pendingTurnFailoverRef.current = null;
+        return false;
+      }
+
+      const failover = await applyModelProfileFailover(profileEngine, ctx.triedProfileIds);
+      if (!failover) {
+        pendingTurnFailoverRef.current = null;
+        return false;
+      }
+
+      ctx.triedProfileIds.push(failover.result.appliedProfileId);
+      const nextModel = failover.result.modelId.trim();
+
+      commitSessions((prev) =>
+        appendSystemMessageBySessionId(
+          prev.map((s) =>
+            s.id === ctx.tabSessionId
+              ? {
+                  ...s,
+                  status: "running" as const,
+                  ...(nextModel ? { model: nextModel } : {}),
+                }
+              : s,
+          ),
+          ctx.tabSessionId,
+          failover.systemMessage,
+        ),
+      );
+
+      scheduleStreamStallTimer(ctx.tabSessionId);
+      streamingTargetIdRef.current = ctx.tabSessionId;
+
+      try {
+        await invokeClaudeTurn({
+          tabSessionId: ctx.tabSessionId,
+          turnNonce: ctx.turnNonce,
+          invokeConc: ctx.invokeConc,
+          repositoryPath: ctx.repositoryPath,
+          prompt: ctx.prompt,
+          modelArg: nextModel || ctx.modelArg,
+          resumeClaudeSid: ctx.forceNewClaudeConversation ? null : ctx.resumeClaudeSid,
+          cursorAttachments: ctx.cursorAttachments,
+        });
+        return true;
+      } catch (err) {
+        const errText = err instanceof Error ? err.message : String(err);
+        if (isRetryableModelApiError(errText)) {
+          return attemptTurnFailoverAndRetryRef.current(ctx, errText);
+        }
+        pendingTurnFailoverRef.current = null;
+        throw err;
+      }
+    },
+    [commitSessions, invokeClaudeTurn, scheduleStreamStallTimer],
+  );
+
+  useEffect(() => {
+    attemptTurnFailoverAndRetryRef.current = attemptTurnFailoverAndRetry;
+  }, [attemptTurnFailoverAndRetry]);
+
   const runClaudeTurnWithContextGuard = useCallback(
     async (params: {
       tabSessionId: string;
@@ -1922,6 +2012,15 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         await runOnce(prompt);
       } catch (err) {
         const errText = err instanceof Error ? err.message : String(err);
+        const ctx = pendingTurnFailoverRef.current;
+        if (
+          ctx &&
+          ctx.tabSessionId === tabSessionId &&
+          isRetryableModelApiError(errText)
+        ) {
+          const retried = await attemptTurnFailoverAndRetryRef.current(ctx, errText);
+          if (retried) return;
+        }
         const canRetry =
           !isCompactSlashPrompt(prompt) &&
           looksLikeContextOverflowError(errText) &&
@@ -2260,6 +2359,32 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         clearStreamStallTimer(tid);
         const session = sessionsRef.current.find((s) => s.id === tid || s.claudeSessionId === tid);
         const tabSessionId = session?.id ?? tid;
+        const ctx = pendingTurnFailoverRef.current;
+        if (ctx && ctx.tabSessionId === tabSessionId && ctx.turnNonce === nonce) {
+          if (success) {
+            pendingTurnFailoverRef.current = null;
+          } else if (isRetryableModelApiError(previewRaw)) {
+            void (async () => {
+              try {
+                await attemptTurnFailoverAndRetryRef.current(ctx, previewRaw);
+              } catch (err) {
+                pendingTurnFailoverRef.current = null;
+                commitSessions((prev) =>
+                  appendSystemMessageBySessionId(
+                    prev.map((s) =>
+                      s.id === tabSessionId ? { ...s, status: "error" as const } : s,
+                    ),
+                    tabSessionId,
+                    `发送失败: ${err instanceof Error ? err.message : String(err)}`,
+                  ),
+                );
+              }
+            })();
+            return;
+          } else {
+            pendingTurnFailoverRef.current = null;
+          }
+        }
         // 勿在单轮 complete 时清空 Dock：子进程若先于 UI 帧结束，会擦掉刚写入的 AskUserQuestion，导致弹窗永远不出现。
         notificationHub.invalidateControlRequestsForSession(tabSessionId, "进程已结束", "expire_keep_visible");
         if (session?.claudeSessionId && session.claudeSessionId !== tabSessionId) {
@@ -2936,6 +3061,20 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
       const turnNonce = lastUserSendNonceRef.current;
 
+      pendingTurnFailoverRef.current = {
+        tabSessionId: sessionId,
+        turnNonce,
+        invokeConc,
+        repositoryPath: spawnSession.repositoryPath,
+        prompt,
+        modelArg,
+        resumeClaudeSid: claudeSid,
+        forceNewClaudeConversation: forceFreshClaudeSession,
+        cursorAttachments: opts?.cursorAttachments,
+        engine: resolveSessionExecutionEngine(spawnSession),
+        triedProfileIds: [],
+      };
+
       void (async () => {
         try {
           await runClaudeTurnWithContextGuard({
@@ -2951,6 +3090,17 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           });
         } catch (err) {
           clearStreamStallTimer(sessionId);
+          const ctx = pendingTurnFailoverRef.current;
+          const errText = err instanceof Error ? err.message : String(err);
+          if (ctx?.tabSessionId === sessionId && isRetryableModelApiError(errText)) {
+            try {
+              const retried = await attemptTurnFailoverAndRetryRef.current(ctx, errText);
+              if (retried) return;
+            } catch {
+              /* fall through to error UI */
+            }
+          }
+          pendingTurnFailoverRef.current = null;
           if (claudeSid?.trim()) {
             registryBootstrapDeadlineByClaudeSidRef.current.delete(claudeSid.trim());
           }
@@ -2965,7 +3115,13 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       })();
       return true;
     },
-    [clearStreamStallTimer, commitSessions, runClaudeTurnWithContextGuard, scheduleStreamStallTimer],
+    [
+      clearStreamStallTimer,
+      commitSessions,
+      resolveSessionExecutionEngine,
+      runClaudeTurnWithContextGuard,
+      scheduleStreamStallTimer,
+    ],
   );
 
   const executeTerminalSession = useCallback(
@@ -3043,6 +3199,18 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const modelArg =
         session.model.trim().length > 0 ? session.model : undefined;
 
+      pendingTurnFailoverRef.current = {
+        tabSessionId: sessionId,
+        turnNonce,
+        invokeConc,
+        repositoryPath: session.repositoryPath,
+        prompt,
+        modelArg,
+        resumeClaudeSid: claudeSessionId,
+        engine: resolveSessionExecutionEngine(session),
+        triedProfileIds: [],
+      };
+
       return (async () => {
         try {
           await runClaudeTurnWithContextGuard({
@@ -3055,6 +3223,17 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             resumeClaudeSid: claudeSessionId,
           });
         } catch (err) {
+          const ctx = pendingTurnFailoverRef.current;
+          const errText = err instanceof Error ? err.message : String(err);
+          if (ctx?.tabSessionId === sessionId && isRetryableModelApiError(errText)) {
+            try {
+              const retried = await attemptTurnFailoverAndRetryRef.current(ctx, errText);
+              if (retried) return;
+            } catch {
+              /* fall through */
+            }
+          }
+          pendingTurnFailoverRef.current = null;
           if (claudeSessionId?.trim()) {
             registryBootstrapDeadlineByClaudeSidRef.current.delete(claudeSessionId.trim());
           }
@@ -3069,7 +3248,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         }
       })();
     },
-    [runClaudeTurnWithContextGuard],
+    [resolveSessionExecutionEngine, runClaudeTurnWithContextGuard],
   );
 
   const compactSessionHistory = useCallback(

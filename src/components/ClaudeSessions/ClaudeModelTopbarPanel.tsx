@@ -1,5 +1,5 @@
 import { CloudSyncOutlined, PlusOutlined } from "@ant-design/icons";
-import { Button, Empty, Input, List, Modal, Segmented, Typography, message } from "antd";
+import { Button, Empty, Input, List, Modal, Segmented, Switch, Typography, message } from "antd";
 import { useCallback, useMemo, useState } from "react";
 import {
   applyClaudeModelProfile,
@@ -11,6 +11,8 @@ import {
   upsertClaudeModelProfile,
   syncClaudeModelProfilesFromCcSwitch,
   dispatchModelProfileStoreChanged,
+  setClaudeModelProfileAutoFailover,
+  reorderClaudeModelProfiles,
 } from "../../services/claudeModelProfiles";
 import type { ClaudeModelProfile, ClaudeModelProfileStoreView } from "../../types/claudeModelProfile";
 import {
@@ -19,6 +21,7 @@ import {
   resolveEffectiveModelForProfileEngine,
   modelProfileEngineLabel,
   buildOptimisticApplyStoreView,
+  isModelProfileAutoFailoverEnabled,
   type ModelProfileEngine,
 } from "../../types/claudeModelProfile";
 import { formatClaudeModelLabel } from "../../utils/claudeModel";
@@ -98,6 +101,10 @@ export function ClaudeModelTopbarPanel({ store, setStore, loading, onApplied }: 
   const [savingConfig, setSavingConfig] = useState(false);
   const [syncingCcSwitch, setSyncingCcSwitch] = useState(false);
   const [applyingProfileId, setApplyingProfileId] = useState<string | null>(null);
+  const [reordering, setReordering] = useState(false);
+  const [autoFailoverSaving, setAutoFailoverSaving] = useState(false);
+  const [dragSourceIndex, setDragSourceIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   const loadGlobalSettingsIntoAdd = useCallback(async () => {
     setAddLoadingJson(true);
@@ -396,6 +403,62 @@ export function ClaudeModelTopbarPanel({ store, setStore, loading, onApplied }: 
       ),
     [panelEngine, store?.profiles],
   );
+
+  const handleAutoFailoverChange = useCallback(
+    async (enabled: boolean) => {
+      if (!store) return;
+      const previous = store;
+      setStore({ ...store, autoFailoverEnabled: enabled });
+      setAutoFailoverSaving(true);
+      try {
+        const next = await setClaudeModelProfileAutoFailover(enabled);
+        setStore(next);
+        dispatchModelProfileStoreChanged(next, { skipComposerPickerRefresh: true });
+        message.success(enabled ? "已开启限流自动切换" : "已关闭限流自动切换");
+      } catch (e) {
+        setStore(previous);
+        message.error(typeof e === "string" ? e : "保存失败");
+      } finally {
+        setAutoFailoverSaving(false);
+      }
+    },
+    [setStore, store],
+  );
+
+  const handleReorderProfiles = useCallback(
+    async (fromIndex: number, toIndex: number) => {
+      if (!store || reordering || fromIndex === toIndex) return;
+      if (fromIndex < 0 || toIndex < 0 || fromIndex >= profiles.length || toIndex >= profiles.length) {
+        return;
+      }
+      const reordered = [...profiles];
+      const [moved] = reordered.splice(fromIndex, 1);
+      reordered.splice(toIndex, 0, moved);
+      setReordering(true);
+      try {
+        const next = await reorderClaudeModelProfiles(
+          panelEngine,
+          reordered.map((profile) => profile.id),
+        );
+        setStore(next);
+        dispatchModelProfileStoreChanged(next, { skipComposerPickerRefresh: true });
+      } catch (e) {
+        message.error(typeof e === "string" ? e : "调整顺序失败");
+      } finally {
+        setReordering(false);
+      }
+    },
+    [panelEngine, profiles, reordering, setStore, store],
+  );
+
+  const clearDragState = useCallback(() => {
+    setDragSourceIndex(null);
+    setDragOverIndex(null);
+  }, []);
+
+  const sortableProfiles =
+    profiles.length >= 2 && isModelProfileAutoFailoverEnabled(store);
+
   const activeProfileId = resolveActiveModelProfileId(panelEngine, store);
   const effective = resolveEffectiveModelForProfileEngine(panelEngine, store)?.trim() || "—";
   const engineLabel = modelProfileEngineLabel(panelEngine);
@@ -432,6 +495,22 @@ export function ClaudeModelTopbarPanel({ store, setStore, loading, onApplied }: 
           ]}
           onChange={(value) => setPanelEngine(value as ModelProfileEngine)}
         />
+        <div className="app-claude-model-topbar-panel__failover-row">
+          <Switch
+            size="small"
+            checked={isModelProfileAutoFailoverEnabled(store)}
+            loading={autoFailoverSaving}
+            onChange={(checked) => void handleAutoFailoverChange(checked)}
+          />
+          <Typography.Text type="secondary" className="app-claude-model-topbar-panel__failover-label">
+            限流时自动切换备用
+          </Typography.Text>
+        </div>
+        {sortableProfiles ? (
+          <Typography.Text type="secondary" className="app-claude-model-topbar-panel__failover-hint">
+            拖拽左侧手柄调整自动切换优先级（越靠上越优先）
+          </Typography.Text>
+        ) : null}
       </header>
 
       {profiles.length === 0 ? (
@@ -447,14 +526,40 @@ export function ClaudeModelTopbarPanel({ store, setStore, loading, onApplied }: 
           dataSource={profiles}
           loading={loading}
           rowKey="id"
-          renderItem={(item) => (
+          renderItem={(item, index) => (
             <ModelProfileListRow
               item={item}
               active={activeProfileId === item.id}
               applying={applyingProfileId === item.id}
+              sortable={sortableProfiles}
+              dragging={dragSourceIndex === index}
+              dragOver={dragOverIndex === index && dragSourceIndex !== index}
+              reordering={reordering}
               onApply={handleApplyById}
               onConfigure={openConfig}
               onDelete={handleDeleteById}
+              onDragHandleStart={(event) => {
+                setDragSourceIndex(index);
+                event.dataTransfer.setData("text/plain", item.id);
+                event.dataTransfer.effectAllowed = "move";
+              }}
+              onDragHandleEnd={clearDragState}
+              onRowDragOver={(event) => {
+                if (dragSourceIndex == null) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+                setDragOverIndex(index);
+              }}
+              onRowDrop={(event) => {
+                event.preventDefault();
+                if (dragSourceIndex != null) {
+                  void handleReorderProfiles(dragSourceIndex, index);
+                }
+                clearDragState();
+              }}
+              onRowDragLeave={() => {
+                setDragOverIndex((current) => (current === index ? null : current));
+              }}
             />
           )}
         />

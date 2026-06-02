@@ -109,6 +109,24 @@ export async function applyClaudeModelProfile(
   return invoke<ClaudeModelProfileStoreView>("apply_claude_model_profile", { profileId });
 }
 
+export async function setClaudeModelProfileAutoFailover(
+  enabled: boolean,
+): Promise<ClaudeModelProfileStoreView> {
+  return invoke<ClaudeModelProfileStoreView>("set_claude_model_profile_auto_failover", {
+    enabled,
+  });
+}
+
+export async function reorderClaudeModelProfiles(
+  engine: import("../types/claudeModelProfile").ModelProfileEngine,
+  orderedProfileIds: string[],
+): Promise<ClaudeModelProfileStoreView> {
+  return invoke<ClaudeModelProfileStoreView>("reorder_claude_model_profiles", {
+    engine,
+    orderedProfileIds,
+  });
+}
+
 export async function getClaudeUserSettingsJson(): Promise<string> {
   return invoke<string>("get_claude_user_settings_json");
 }

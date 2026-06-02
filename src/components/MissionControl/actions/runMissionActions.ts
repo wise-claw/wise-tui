@@ -1,4 +1,6 @@
 import { message } from "antd";
+import { applyModelProfileFailover } from "../../../services/modelProfileFailover";
+import { isRetryableModelApiError } from "../../../utils/retryableModelApiError";
 import type { ClusterPlanItem } from "../../../services/prdSplit/clusterPlanner";
 import { buildClusterDispatchContext } from "../../../services/prdSplit/clusterDispatchContext";
 import {
@@ -272,7 +274,9 @@ export async function runSingleCluster(
   const stopHeartbeat = startSplitterHeartbeat(assignmentId);
   const isCancelledDuringDispatch = () => api.state.clusterRuns[cluster.id]?.status === "cancelled";
   try {
-    const result = await dispatchWithRetry(cluster.id, async (attempt) => {
+    const result = await dispatchWithRetry(
+      cluster.id,
+      async (attempt) => {
       if (isCancelledDuringDispatch()) {
         throw new Error("PRD split run cancelled by user");
       }
@@ -296,7 +300,14 @@ export async function runSingleCluster(
           repositories: state.repositories,
         }),
       });
-    });
+    },
+      (failoverMessage) => {
+        api.patchClusterRun(cluster.id, {
+          status: "dispatching",
+          errors: [failoverMessage],
+        });
+      },
+    );
     if (isCancelledDuringDispatch()) {
       return api.state.clusterRuns[cluster.id] ?? null;
     }
@@ -891,53 +902,52 @@ export async function cancelClusterDispatch(
 // ── Retry logic for API errors ──────────────────────────────────────
 
 const MAX_RETRIES = 3;
-const API_ERROR_PATTERNS = [
-  /429/i,                        // Too Many Requests
-  /rate.?limit/i,                // Rate limit exceeded
-  /500|502|503|504/i,            // Server errors
-  /overload/i,                   // Overloaded
-  /service.?unavailable/i,       // Service unavailable
-  /too many requests/i,
-  /try again/i,                  // Generic retry request
-  /timeout|timed.?out/i,         // Network timeout
-  /ECONNREFUSED|ECONNRESET|ETIMEDOUT/i, // Network errors
-  /connection.*error/i,
-  /internal.*server.*error/i,
-];
 
 function isRetryableApiError(result: DispatchClusterResult): boolean {
   const text = [
     ...result.errors,
     result.raw?.stdoutTruncatedPreview ?? "",
   ].join("\n");
-  return API_ERROR_PATTERNS.some((pattern) => pattern.test(text));
+  return isRetryableModelApiError(text);
 }
 
 async function dispatchWithRetry(
   clusterId: string,
   dispatch: (attempt: number) => Promise<DispatchClusterResult>,
+  onFailover?: (message: string) => void,
 ): Promise<DispatchClusterResult> {
   let lastResult: DispatchClusterResult | null = null;
+  const triedProfileIds: string[] = [];
+  let sameProfileRetries = 0;
 
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    const result = await dispatch(attempt);
+  for (;;) {
+    const result = await dispatch(sameProfileRetries);
     lastResult = result;
 
-    // Success
     if (result.normalized && result.errors.length === 0) {
       return result;
     }
 
-    // Don't retry on the last attempt
-    if (attempt >= MAX_RETRIES) break;
-
-    // Only retry on API-level errors, not validation/parsing errors
     if (!isRetryableApiError(result)) {
       return result;
     }
 
+    const failover = await applyModelProfileFailover("claude", triedProfileIds);
+    if (failover) {
+      triedProfileIds.push(failover.result.appliedProfileId);
+      sameProfileRetries = 0;
+      onFailover?.(failover.systemMessage);
+      console.warn(
+        `[dispatchWithRetry] cluster=${clusterId} failover → ${failover.result.profileName}`,
+      );
+      continue;
+    }
+
+    if (sameProfileRetries >= MAX_RETRIES) break;
+
+    sameProfileRetries += 1;
     console.warn(
-      `[dispatchWithRetry] cluster=${clusterId} attempt=${attempt + 1}/${MAX_RETRIES + 1} — API error detected, retrying`,
+      `[dispatchWithRetry] cluster=${clusterId} attempt=${sameProfileRetries}/${MAX_RETRIES} — API error detected, retrying`,
     );
   }
 

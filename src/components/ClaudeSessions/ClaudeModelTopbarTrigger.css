@@ -12,6 +12,25 @@
   justify-content: center;
 }
 
+.app-claude-model-topbar-panel__failover-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.app-claude-model-topbar-panel__failover-label {
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.app-claude-model-topbar-panel__failover-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
 .app-claude-model-topbar-btn {
   position: relative;
 }
@@ -128,6 +147,46 @@
 
 .app-claude-model-topbar-panel__item--applying .app-claude-model-topbar-panel__item-main {
   cursor: wait;
+}
+
+.app-claude-model-topbar-panel__item--dragging {
+  opacity: 0.55;
+}
+
+.app-claude-model-topbar-panel__item--drag-over {
+  background: color-mix(in srgb, var(--ant-color-primary) 12%, transparent) !important;
+  outline: 1px dashed var(--ant-color-primary-border);
+  outline-offset: -1px;
+}
+
+.app-claude-model-topbar-panel__item-body {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.app-claude-model-topbar-panel__item-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 20px;
+  flex-shrink: 0;
+  color: var(--ant-color-text-quaternary);
+  cursor: grab;
+  border-radius: 4px;
+  touch-action: none;
+}
+
+.app-claude-model-topbar-panel__item-drag-handle:hover {
+  color: var(--ant-color-text-secondary);
+  background: var(--ant-color-fill-content);
+}
+
+.app-claude-model-topbar-panel__item-drag-handle:active {
+  cursor: grabbing;
 }
 
 .app-claude-model-topbar-panel__list .ant-list-item-action {
