@@ -101,7 +101,6 @@ export function MonitorHistorySessionTranscriptDrawer({
   }, [open, sessionId, liveSession?.id, liveSession?.status]);
 
   const peekTranscriptTargetId = liveSession?.id ?? null;
-  const peekTranscriptMessagesLen = liveSession?.messages.length ?? 0;
   const peekTranscriptStatus = liveSession?.status;
   const peekTranscriptClaudeId = liveSession?.claudeSessionId?.trim() ?? "";
   const peekNeedsFullTranscript = !liveSession?.transcriptMemoryUnlimited;
