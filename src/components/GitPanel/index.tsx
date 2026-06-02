@@ -23,6 +23,7 @@ import {
 } from "../../services/git";
 import { openRepositoryRemoteInBrowser } from "../../services/openRepositoryRemote";
 import type { GitStatusResponse } from "../../types";
+import { runGitSyncAction, type GitSyncActionKind } from "./gitSyncActionRunner";
 import { DiffMode } from "./DiffMode";
 import { GitSyncActions } from "./GitSyncActions";
 import { InitMode } from "./InitMode";
@@ -120,6 +121,7 @@ function GitSingleRepoPanel({
   });
 
   const runningActions = useRef(new Set<string>());
+  const gitSyncActiveRef = useRef<GitSyncActionKind | null>(null);
   const lastActionTime = useRef(new Map<string, number>());
   const watcherRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const syncOpsInFlightRef = useRef(0);
@@ -333,47 +335,50 @@ function GitSingleRepoPanel({
     [repositoryPath, runAction],
   );
 
-  const handlePush = useCallback(async () => {
-    if (runningActions.current.has("push")) return;
-    runningActions.current.add("push");
-    setLoading((prev) => ({ ...prev, push: true }));
-    beginGitSyncOperation();
-    try {
-      await gitPush(repositoryPath!);
-      await loadStatus({ silent: true });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      message.error(`推送失败: ${msg}`);
-    } finally {
-      endGitSyncOperation();
-      runningActions.current.delete("push");
-      setLoading((prev) => ({ ...prev, push: false }));
-    }
-  }, [beginGitSyncOperation, endGitSyncOperation, repositoryPath, loadStatus]);
-
-  const handlePull = useCallback(async () => {
-    if (runningActions.current.has("pull")) return;
-    runningActions.current.add("pull");
-    setLoading((prev) => ({ ...prev, pull: true }));
-    beginGitSyncOperation();
-    try {
-      await gitPull(repositoryPath!);
-      await loadStatus({ silent: true });
-      message.success("拉取成功");
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      message.error(`拉取失败: ${msg}`);
-    } finally {
-      endGitSyncOperation();
-      runningActions.current.delete("pull");
-      setLoading((prev) => ({ ...prev, pull: false }));
-    }
-  }, [beginGitSyncOperation, endGitSyncOperation, repositoryPath, loadStatus]);
-
-  const handleFetch = useCallback(
-    () => void runAction("fetch", () => gitFetch(repositoryPath!)),
-    [repositoryPath, runAction],
+  const runGitSync = useCallback(
+    (kind: GitSyncActionKind, work: () => Promise<void>, onErrorMessage: (msg: string) => void) => {
+      void runGitSyncAction({
+        kind,
+        activeKindRef: gitSyncActiveRef,
+        runningActions,
+        setLoading,
+        beginGitSyncOperation,
+        endGitSyncOperation,
+        refresh: () => loadStatus({ silent: true }),
+        work,
+        onError: onErrorMessage,
+        onSuccess:
+          kind === "fetch"
+            ? () => {
+                setErrors((prev) => {
+                  if (!prev.fetch) return prev;
+                  const next = { ...prev };
+                  delete next.fetch;
+                  return next;
+                });
+              }
+            : undefined,
+      });
+    },
+    [beginGitSyncOperation, endGitSyncOperation, loadStatus],
   );
+
+  const handlePush = useCallback(() => {
+    if (!repositoryPath) return;
+    runGitSync("push", () => gitPush(repositoryPath), (msg) => message.error(`推送失败: ${msg}`));
+  }, [repositoryPath, runGitSync]);
+
+  const handlePull = useCallback(() => {
+    if (!repositoryPath) return;
+    runGitSync("pull", () => gitPull(repositoryPath), (msg) => message.error(`拉取失败: ${msg}`));
+  }, [repositoryPath, runGitSync]);
+
+  const handleFetch = useCallback(() => {
+    if (!repositoryPath) return;
+    runGitSync("fetch", () => gitFetch(repositoryPath), (msg) =>
+      setErrors((prev) => ({ ...prev, fetch: msg })),
+    );
+  }, [repositoryPath, runGitSync]);
 
   const handleInit = useCallback(() => {
     void runAction("init", async () => {
@@ -452,8 +457,8 @@ function GitSingleRepoPanel({
               status={status}
               loading={loading}
               onFetch={handleFetch}
-              onPull={() => void handlePull()}
-              onPush={() => void handlePush()}
+              onPull={handlePull}
+              onPush={handlePush}
             />
           ) : null}
         </div>

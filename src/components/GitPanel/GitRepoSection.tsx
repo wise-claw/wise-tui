@@ -25,6 +25,7 @@ import type { GitStatusResponse } from "../../types";
 import { DiffMode } from "./DiffMode";
 import { GitSyncActions } from "./GitSyncActions";
 import { InitMode } from "./InitMode";
+import { runGitSyncAction, type GitSyncActionKind } from "./gitSyncActionRunner";
 import {
   GIT_WATCHER_REFRESH_MS,
   gitStatusHeaderSnapshotEqual,
@@ -74,6 +75,19 @@ function formatBranchLabel(
   return `${branch}${suffix}`;
 }
 
+function emptyGitSyncStatus(): GitStatusResponse {
+  return {
+    branch: "",
+    ahead: 0,
+    behind: 0,
+    additions: 0,
+    deletions: 0,
+    upstream: null,
+    staged: [],
+    unstaged: [],
+  };
+}
+
 function GitRepoSectionInner({
   entry,
   defaultExpanded = true,
@@ -93,7 +107,8 @@ function GitRepoSectionInner({
   const sectionRef = externalSectionRef ?? (isMultiRepo ? sectionRefActive : sectionRefSticky);
   const inView = useExternalInView ? externalInView : isMultiRepo ? inViewActive : inViewSticky;
   const [expanded, setExpanded] = useState(defaultExpanded);
-  const shouldLoadHeader = expanded || inView;
+  const [headerReady, setHeaderReady] = useState(false);
+  const shouldLoadHeader = expanded || inView || (isMultiRepo && headerReady);
   const [status, setStatus] = useState<GitStatusResponse | null>(null);
   const [headerSnapshot, setHeaderSnapshot] = useState<GitStatusHeaderSnapshot | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -116,6 +131,7 @@ function GitRepoSectionInner({
   const statusRef = useRef<GitStatusResponse | null>(null);
   const headerSnapshotRef = useRef<GitStatusHeaderSnapshot | null>(null);
   const runningActions = useRef(new Set<string>());
+  const gitSyncActiveRef = useRef<GitSyncActionKind | null>(null);
   const lastActionTime = useRef(new Map<string, number>());
   const watcherRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const syncOpsInFlightRef = useRef(0);
@@ -129,6 +145,9 @@ function GitRepoSectionInner({
 
   useEffect(() => {
     mountedRef.current = true;
+    setHeaderReady(false);
+    gitSyncActiveRef.current = null;
+    runningActions.current.clear();
     return () => {
       mountedRef.current = false;
       loadRequestIdRef.current += 1;
@@ -152,6 +171,7 @@ function GitRepoSectionInner({
         }
         statusRef.current = result;
         setStatus(result);
+        setHeaderReady(true);
         setErrors((prev) => {
           if (!prev.status) return prev;
           const next = { ...prev };
@@ -209,6 +229,7 @@ function GitRepoSectionInner({
         }
         headerSnapshotRef.current = snapshot;
         setHeaderSnapshot(snapshot);
+        setHeaderReady(true);
         setErrors((prev) => {
           if (!prev.status) return prev;
           const next = { ...prev };
@@ -311,13 +332,15 @@ function GitRepoSectionInner({
 
   useEffect(() => {
     if (shouldLoadHeader) return;
+    if (isMultiRepo) return;
     loadRequestIdRef.current += 1;
     statusRef.current = null;
     headerSnapshotRef.current = null;
     setStatus(null);
     setHeaderSnapshot(null);
+    setHeaderReady(false);
     setErrors({});
-  }, [shouldLoadHeader]);
+  }, [isMultiRepo, shouldLoadHeader]);
 
   useEffect(() => {
     if (!isMultiRepo || !expanded || inView) return;
@@ -484,47 +507,58 @@ function GitRepoSectionInner({
     [repositoryPath, runAction],
   );
 
-  const handlePush = useCallback(async () => {
-    if (runningActions.current.has("push")) return;
-    runningActions.current.add("push");
-    setLoading((prev) => ({ ...prev, push: true }));
-    beginGitSyncOperation();
-    try {
-      await gitPush(repositoryPath!);
-      await loadStatus({ silent: true });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      message.error(`推送失败: ${msg}`);
-    } finally {
-      endGitSyncOperation();
-      runningActions.current.delete("push");
-      setLoading((prev) => ({ ...prev, push: false }));
+  const refreshAfterGitSync = useCallback(async () => {
+    if (isMultiRepo && !expanded) {
+      await loadSummary({ silent: true });
+      return;
     }
-  }, [beginGitSyncOperation, endGitSyncOperation, repositoryPath, loadStatus]);
+    await loadStatus({ silent: true });
+  }, [expanded, isMultiRepo, loadStatus, loadSummary]);
 
-  const handlePull = useCallback(async () => {
-    if (runningActions.current.has("pull")) return;
-    runningActions.current.add("pull");
-    setLoading((prev) => ({ ...prev, pull: true }));
-    beginGitSyncOperation();
-    try {
-      await gitPull(repositoryPath!);
-      await loadStatus({ silent: true });
-      message.success("拉取成功");
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      message.error(`拉取失败: ${msg}`);
-    } finally {
-      endGitSyncOperation();
-      runningActions.current.delete("pull");
-      setLoading((prev) => ({ ...prev, pull: false }));
-    }
-  }, [beginGitSyncOperation, endGitSyncOperation, repositoryPath, loadStatus]);
-
-  const handleFetch = useCallback(
-    () => void runAction("fetch", () => gitFetch(repositoryPath!)),
-    [repositoryPath, runAction],
+  const runGitSync = useCallback(
+    (kind: GitSyncActionKind, work: () => Promise<void>, onErrorMessage: (msg: string) => void) => {
+      void runGitSyncAction({
+        kind,
+        activeKindRef: gitSyncActiveRef,
+        runningActions,
+        setLoading,
+        beginGitSyncOperation,
+        endGitSyncOperation,
+        refresh: refreshAfterGitSync,
+        work,
+        onError: onErrorMessage,
+        onSuccess:
+          kind === "fetch"
+            ? () => {
+                setErrors((prev) => {
+                  if (!prev.fetch) return prev;
+                  const next = { ...prev };
+                  delete next.fetch;
+                  return next;
+                });
+              }
+            : undefined,
+      });
+    },
+    [beginGitSyncOperation, endGitSyncOperation, refreshAfterGitSync],
   );
+
+  const handlePush = useCallback(() => {
+    if (!repositoryPath) return;
+    runGitSync("push", () => gitPush(repositoryPath), (msg) => message.error(`推送失败: ${msg}`));
+  }, [repositoryPath, runGitSync]);
+
+  const handlePull = useCallback(() => {
+    if (!repositoryPath) return;
+    runGitSync("pull", () => gitPull(repositoryPath), (msg) => message.error(`拉取失败: ${msg}`));
+  }, [repositoryPath, runGitSync]);
+
+  const handleFetch = useCallback(() => {
+    if (!repositoryPath) return;
+    runGitSync("fetch", () => gitFetch(repositoryPath), (msg) =>
+      setErrors((prev) => ({ ...prev, fetch: msg })),
+    );
+  }, [repositoryPath, runGitSync]);
 
   const handleInit = useCallback(() => {
     void runAction("init", async () => {
@@ -599,7 +633,11 @@ function GitRepoSectionInner({
             <span className="git-repo-section__change-count">{changeCount}</span>
           ) : null}
         </button>
-        <div className="git-repo-section__actions">
+        <div
+          className="git-repo-section__actions"
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+        >
           <Tooltip title="在浏览器中打开仓库" placement="top">
             <Button
               type="text"
@@ -611,14 +649,14 @@ function GitRepoSectionInner({
               onClick={handleOpenRemoteInBrowser}
             />
           </Tooltip>
-          {syncStatus ? (
+          {(syncStatus || loading.fetch || loading.pull || loading.push) ? (
             <GitSyncActions
-              status={syncStatus}
+              status={syncStatus ?? emptyGitSyncStatus()}
               loading={loading}
               hideStagedCount
               onFetch={handleFetch}
-              onPull={() => void handlePull()}
-              onPush={() => void handlePush()}
+              onPull={handlePull}
+              onPush={handlePush}
             />
           ) : null}
         </div>

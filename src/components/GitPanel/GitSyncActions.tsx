@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import type { MouseEvent } from "react";
 import { Button, Space, Tooltip } from "antd";
 import { ArrowDownOutlined, ArrowUpOutlined, CheckOutlined, ReloadOutlined } from "@ant-design/icons";
 import type { GitStatusResponse } from "../../types";
@@ -13,6 +13,20 @@ interface GitSyncActionsProps {
   hideStagedCount?: boolean;
 }
 
+function invokeSyncAction(
+  event: MouseEvent<HTMLElement>,
+  kind: "fetch" | "pull" | "push",
+  loading: Record<string, boolean>,
+  invoke: () => void,
+) {
+  event.preventDefault();
+  event.stopPropagation();
+  if (loading[kind]) return;
+  const busyKind = loading.fetch ? "fetch" : loading.pull ? "pull" : loading.push ? "push" : null;
+  if (busyKind && busyKind !== kind) return;
+  invoke();
+}
+
 export function GitSyncActions({
   status,
   loading,
@@ -23,87 +37,71 @@ export function GitSyncActions({
 }: GitSyncActionsProps) {
   const ahead = status.ahead ?? 0;
   const behind = status.behind ?? 0;
-  const pushDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(
-    () => () => {
-      if (pushDebounceRef.current != null) {
-        clearTimeout(pushDebounceRef.current);
-        pushDebounceRef.current = null;
-      }
-    },
-    [],
-  );
-
-  const handlePushClick = () => {
-    if (loading.push || loading.pull) return;
-    if (pushDebounceRef.current != null) {
-      clearTimeout(pushDebounceRef.current);
-    }
-    pushDebounceRef.current = setTimeout(() => {
-      pushDebounceRef.current = null;
-      onPush();
-    }, 350);
-  };
-
-  if (!status.branch && !loading.fetch) {
-    return null;
-  }
 
   return (
     <Space size={2} className="git-header-sync-actions">
-      <Tooltip title="获取远程" placement="top">
-        <Button
-          type="text"
-          size="small"
-          className="git-sync-count-btn"
-          icon={<ReloadOutlined spin={loading.fetch} />}
-          onClick={onFetch}
-          disabled={loading.fetch}
-        />
-      </Tooltip>
-      <Tooltip title="拉取" placement="top">
-        <Button
-          type="text"
-          size="small"
-          className={`git-sync-count-btn${loading.pull ? " git-sync-count-btn--busy" : ""}`}
-          icon={<ArrowDownOutlined />}
-          onClick={onPull}
-          disabled={loading.pull || loading.fetch}
-        >
-          {!loading.pull && behind > 0 && (
-            <span className="sync-count sync-count--behind">{behind}</span>
-          )}
-        </Button>
-      </Tooltip>
-      <Tooltip title="推送" placement="top">
-        <Button
-          type="text"
-          size="small"
-          className={`git-sync-count-btn${loading.push ? " git-sync-count-btn--busy" : ""}`}
-          icon={<ArrowUpOutlined />}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={handlePushClick}
-          disabled={loading.push || loading.pull}
-        >
-          {!loading.push && ahead > 0 && (
-            <span className="sync-count sync-count--ahead">{ahead}</span>
-          )}
-        </Button>
-      </Tooltip>
-      {status.staged.length > 0 && !hideStagedCount && (
-        <Tooltip title="待提交" placement="top">
+      <Tooltip title="获取远程" placement="top" mouseEnterDelay={0.45}>
+        <span className="git-sync-count-btn-wrap">
           <Button
             type="text"
             size="small"
-            className="git-sync-count-btn"
-            icon={<CheckOutlined />}
-            disabled
+            className={`git-sync-count-btn${loading.fetch ? " git-sync-count-btn--busy" : ""}`}
+            icon={<ReloadOutlined spin={loading.fetch} />}
+            aria-label="获取远程"
+            aria-busy={loading.fetch}
+            onMouseDown={(event) => invokeSyncAction(event, "fetch", loading, onFetch)}
+          />
+        </span>
+      </Tooltip>
+      <Tooltip title="拉取" placement="top" mouseEnterDelay={0.45}>
+        <span className="git-sync-count-btn-wrap">
+          <Button
+            type="text"
+            size="small"
+            className={`git-sync-count-btn${loading.pull ? " git-sync-count-btn--busy" : ""}`}
+            icon={loading.pull ? <ReloadOutlined spin /> : <ArrowDownOutlined />}
+            aria-label="拉取"
+            aria-busy={loading.pull}
+            onMouseDown={(event) => invokeSyncAction(event, "pull", loading, onPull)}
           >
-            <span className="sync-count sync-count--staged">{status.staged.length}</span>
+            {!loading.pull && behind > 0 ? (
+              <span className="sync-count sync-count--behind">{behind}</span>
+            ) : null}
           </Button>
+        </span>
+      </Tooltip>
+      <Tooltip title="推送" placement="top" mouseEnterDelay={0.45}>
+        <span className="git-sync-count-btn-wrap">
+          <Button
+            type="text"
+            size="small"
+            className={`git-sync-count-btn${loading.push ? " git-sync-count-btn--busy" : ""}`}
+            icon={loading.push ? <ReloadOutlined spin /> : <ArrowUpOutlined />}
+            aria-label="推送"
+            aria-busy={loading.push}
+            onMouseDown={(event) => invokeSyncAction(event, "push", loading, onPush)}
+          >
+            {!loading.push && ahead > 0 ? (
+              <span className="sync-count sync-count--ahead">{ahead}</span>
+            ) : null}
+          </Button>
+        </span>
+      </Tooltip>
+      {status.staged.length > 0 && !hideStagedCount ? (
+        <Tooltip title="待提交" placement="top" mouseEnterDelay={0.45}>
+          <span className="git-sync-count-btn-wrap">
+            <Button
+              type="text"
+              size="small"
+              className="git-sync-count-btn"
+              icon={<CheckOutlined />}
+              disabled
+            >
+              <span className="sync-count sync-count--staged">{status.staged.length}</span>
+            </Button>
+          </span>
         </Tooltip>
-      )}
+      ) : null}
     </Space>
   );
 }
