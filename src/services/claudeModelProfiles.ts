@@ -10,6 +10,7 @@ import {
   pickBadgeEffectiveModel,
   resolveEffectiveModelForProfileEngine,
 } from "../types/claudeModelProfile";
+import { seedModelProfileStoreCache } from "../stores/modelProfileStoreCache";
 
 /** 全局 `settings.json` 已变更（模型切换或配置保存后派发）。 */
 export const WISE_CLAUDE_USER_SETTINGS_CHANGED = "wise-claude-user-settings-changed";
@@ -43,6 +44,7 @@ export function dispatchModelProfileStoreChanged(
     skipComposerPickerRefresh?: boolean;
   },
 ): void {
+  seedModelProfileStoreCache(store);
   const effectiveModel =
     options?.effectiveModel?.trim() ||
     (options?.engine
@@ -56,7 +58,9 @@ export function dispatchModelProfileStoreChanged(
 }
 
 export async function getClaudeModelProfileStore(): Promise<ClaudeModelProfileStoreView> {
-  return invoke<ClaudeModelProfileStoreView>("get_claude_model_profile_store");
+  const store = await invoke<ClaudeModelProfileStoreView>("get_claude_model_profile_store");
+  seedModelProfileStoreCache(store);
+  return store;
 }
 
 export async function getModelProfileEffectiveModels(): Promise<ModelProfileEffectiveModels> {

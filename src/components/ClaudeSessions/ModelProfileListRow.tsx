@@ -8,11 +8,10 @@ import { normalizeModelProfileOfficialWebsite } from "../../utils/modelProfileOf
 
 interface Props {
   item: ClaudeModelProfile;
+  index: number;
   active: boolean;
   applying?: boolean;
   sortable?: boolean;
-  dragging?: boolean;
-  dragOver?: boolean;
   reordering?: boolean;
   onApply: (profileId: string) => void;
   onConfigure: (profile: ClaudeModelProfile) => void;
@@ -26,11 +25,10 @@ interface Props {
 
 function ModelProfileListRowInner({
   item,
+  index,
   active,
   applying = false,
   sortable = false,
-  dragging = false,
-  dragOver = false,
   reordering = false,
   onApply,
   onConfigure,
@@ -48,12 +46,11 @@ function ModelProfileListRowInner({
 
   return (
     <List.Item
+      data-profile-index={index}
       className={
         "app-claude-model-topbar-panel__item" +
         (active ? " app-claude-model-topbar-panel__item--active" : "") +
-        (applying ? " app-claude-model-topbar-panel__item--applying" : "") +
-        (dragging ? " app-claude-model-topbar-panel__item--dragging" : "") +
-        (dragOver ? " app-claude-model-topbar-panel__item--drag-over" : "")
+        (applying ? " app-claude-model-topbar-panel__item--applying" : "")
       }
       onDragOver={sortable ? onRowDragOver : undefined}
       onDrop={sortable ? onRowDrop : undefined}

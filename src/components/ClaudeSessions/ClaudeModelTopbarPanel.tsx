@@ -1,5 +1,5 @@
 import { CloudSyncOutlined, PlusOutlined } from "@ant-design/icons";
-import { Button, Empty, Input, List, Modal, Segmented, Switch, Typography, message } from "antd";
+import { Button, Empty, Input, Modal, Segmented, Switch, Typography, message } from "antd";
 import { useCallback, useMemo, useState } from "react";
 import {
   applyClaudeModelProfile,
@@ -43,7 +43,7 @@ import {
 } from "../../utils/codexProfileEnvelope";
 import { ClaudeSettingsJsonEditor } from "./ClaudeSettingsJsonEditor";
 import { CodexProfileSettingsEditor } from "./CodexProfileSettingsEditor";
-import { ModelProfileListRow } from "./ModelProfileListRow";
+import { ModelProfileSortableList } from "./ModelProfileSortableList";
 import "./ClaudeModelTopbarTrigger.css";
 
 interface Props {
@@ -103,8 +103,6 @@ export function ClaudeModelTopbarPanel({ store, setStore, loading, onApplied }: 
   const [applyingProfileId, setApplyingProfileId] = useState<string | null>(null);
   const [reordering, setReordering] = useState(false);
   const [autoFailoverSaving, setAutoFailoverSaving] = useState(false);
-  const [dragSourceIndex, setDragSourceIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   const loadGlobalSettingsIntoAdd = useCallback(async () => {
     setAddLoadingJson(true);
@@ -451,11 +449,6 @@ export function ClaudeModelTopbarPanel({ store, setStore, loading, onApplied }: 
     [panelEngine, profiles, reordering, setStore, store],
   );
 
-  const clearDragState = useCallback(() => {
-    setDragSourceIndex(null);
-    setDragOverIndex(null);
-  }, []);
-
   const sortableProfiles =
     profiles.length >= 2 && isModelProfileAutoFailoverEnabled(store);
 
@@ -520,48 +513,17 @@ export function ClaudeModelTopbarPanel({ store, setStore, loading, onApplied }: 
           className="app-claude-model-topbar-panel__empty"
         />
       ) : (
-        <List
-          size="small"
-          className="app-claude-model-topbar-panel__list"
-          dataSource={profiles}
+        <ModelProfileSortableList
+          profiles={profiles}
+          activeProfileId={activeProfileId}
+          applyingProfileId={applyingProfileId}
+          sortable={sortableProfiles}
+          reordering={reordering}
           loading={loading}
-          rowKey="id"
-          renderItem={(item, index) => (
-            <ModelProfileListRow
-              item={item}
-              active={activeProfileId === item.id}
-              applying={applyingProfileId === item.id}
-              sortable={sortableProfiles}
-              dragging={dragSourceIndex === index}
-              dragOver={dragOverIndex === index && dragSourceIndex !== index}
-              reordering={reordering}
-              onApply={handleApplyById}
-              onConfigure={openConfig}
-              onDelete={handleDeleteById}
-              onDragHandleStart={(event) => {
-                setDragSourceIndex(index);
-                event.dataTransfer.setData("text/plain", item.id);
-                event.dataTransfer.effectAllowed = "move";
-              }}
-              onDragHandleEnd={clearDragState}
-              onRowDragOver={(event) => {
-                if (dragSourceIndex == null) return;
-                event.preventDefault();
-                event.dataTransfer.dropEffect = "move";
-                setDragOverIndex(index);
-              }}
-              onRowDrop={(event) => {
-                event.preventDefault();
-                if (dragSourceIndex != null) {
-                  void handleReorderProfiles(dragSourceIndex, index);
-                }
-                clearDragState();
-              }}
-              onRowDragLeave={() => {
-                setDragOverIndex((current) => (current === index ? null : current));
-              }}
-            />
-          )}
+          onApply={handleApplyById}
+          onConfigure={openConfig}
+          onDelete={handleDeleteById}
+          onReorder={(fromIndex, toIndex) => void handleReorderProfiles(fromIndex, toIndex)}
         />
       )}
 

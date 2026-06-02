@@ -33,6 +33,7 @@ import {
 } from "../../utils/repositoryMainSessionBinding";
 import {
   isChatSurfaceReady,
+  resolveChatTopbarContext,
   resolveClaudePanelActiveSession,
   resolveClaudeWorkspaceMainSession,
   resolveProjectComposerRepository,
@@ -249,6 +250,7 @@ export interface TopbarProps {
   activeProject?: ProjectItem | null;
   activeWorkspaceFocus?: WorkspaceFocus;
   activeRepository?: Repository;
+  repositories?: Repository[];
   activeSessionRepositoryPath?: string;
   /** 当前项目/仓库主会话；全链路分析固定分析此会话，非活动标签 */
   mainSessionForDataLink?: ClaudeSession | null;
@@ -271,6 +273,7 @@ export function Topbar({
   activeProject,
   activeWorkspaceFocus = "repository",
   activeRepository,
+  repositories = [],
   activeSessionRepositoryPath,
   mainSessionForDataLink = null,
   onToggleSidebar,
@@ -296,10 +299,29 @@ export function Topbar({
     rightPanelDefaultCollapsed ?? RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK,
   );
 
-  const runCwd = activeSessionRepositoryPath?.trim() || activeRepository?.path?.trim() || "";
+  const topbarContext = useMemo(
+    () =>
+      resolveChatTopbarContext({
+        activeRepository,
+        activeProject,
+        activeWorkspaceFocus,
+        repositories,
+        sessionRepositoryPath: activeSessionRepositoryPath,
+      }),
+    [
+      activeRepository,
+      activeProject,
+      activeWorkspaceFocus,
+      repositories,
+      activeSessionRepositoryPath,
+    ],
+  );
+  const { contextRepository, openPath: topbarOpenPath } = topbarContext;
+  const topbarToolsReady = topbarOpenPath.length > 0;
+
   const repositoryRunCommand = useRepositoryRunCommand({
-    repository: activeRepository ?? null,
-    runCwd,
+    repository: contextRepository,
+    runCwd: topbarOpenPath,
     onAutoFixRunError,
     onRequestOpenPanel: () => setRunPopoverOpen(true),
     onRunStarted: () => setRunPopoverOpen(false),
@@ -361,23 +383,21 @@ export function Topbar({
         </div>
       </div>
       <div className="app-chat-topbar-right">
-        {activeRepository && (
+        {topbarToolsReady ? (
           <OpenAppMenu
-            path={activeRepository.path}
+            path={topbarOpenPath}
             selectedOpenAppId={selectedOpenAppId}
             onSelectOpenAppId={setSelectedOpenAppId}
           />
-        )}
-        {activeRepository && topbarChrome.showFccTopbar ? <FccTopbarTrigger /> : null}
-        {activeRepository && topbarChrome.showFccTrafficTopbar ? (
+        ) : null}
+        {topbarToolsReady && topbarChrome.showFccTopbar ? <FccTopbarTrigger /> : null}
+        {topbarToolsReady && topbarChrome.showFccTrafficTopbar ? (
           <FccTrafficTopbarTrigger />
         ) : null}
-        {activeRepository && topbarChrome.showLlmProxyTopbar ? (
-          <LlmProxyTopbarTrigger
-            repositoryPath={activeSessionRepositoryPath?.trim() || activeRepository.path}
-          />
+        {topbarToolsReady && topbarChrome.showLlmProxyTopbar ? (
+          <LlmProxyTopbarTrigger repositoryPath={topbarOpenPath} />
         ) : null}
-        {activeRepository && topbarChrome.showSessionDataLinkTopbar ? (
+        {topbarToolsReady && topbarChrome.showSessionDataLinkTopbar ? (
           <SessionDataLinkTopbarTrigger mainSession={mainSessionForDataLink} />
         ) : null}
         {onSearch && (
@@ -398,7 +418,7 @@ export function Topbar({
         >
           <Tooltip
             title={
-              !runCwd
+              !topbarOpenPath
                 ? "当前会话未绑定仓库路径，无法运行"
                 : repositoryRunCommand.runStatus === "running" ||
                     repositoryRunCommand.runStatus === "stopping"
@@ -416,7 +436,7 @@ export function Topbar({
                   event.preventDefault();
                   setRunPopoverOpen(true);
                 }}
-                disabled={!runCwd}
+                disabled={!topbarOpenPath}
                 aria-label={
                   repositoryRunCommand.runStatus === "running" ||
                   repositoryRunCommand.runStatus === "stopping"
@@ -1211,7 +1231,8 @@ export function ClaudeSessions({
         <Topbar
           activeProject={activeProject}
           activeWorkspaceFocus={activeWorkspaceFocus}
-          activeRepository={chatContextRepository}
+          activeRepository={activeRepository}
+          repositories={repositories ?? []}
           activeSessionRepositoryPath={
             activeSession?.repositoryPath?.trim() || chatContextRepository?.path
           }

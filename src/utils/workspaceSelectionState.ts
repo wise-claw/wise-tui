@@ -6,6 +6,7 @@ import {
 import { resolveWorkspaceMainSession } from "./resolveWorkspaceMainSession";
 import type { WorkspaceFocus } from "./workspaceMode";
 import type { WorkspaceLastSelection } from "./startupRepoSelection";
+import { resolveProjectExplorerOpenPath } from "./workspaceRepositoryTreeSelect";
 
 export interface BuildWorkspaceLastSelectionInput {
   focus: WorkspaceFocus;
@@ -22,6 +23,38 @@ export function buildWorkspaceLastSelection(
     projectId: input.projectId,
     repositoryId: input.focus === "repository" ? input.repositoryId : null,
   };
+}
+
+export interface ChatTopbarContext {
+  /** 成员仓回退；运行指令等需要 repository id 的场景使用。 */
+  contextRepository: Repository | null;
+  /** IDE 打开、LLM 代理、运行 cwd 等使用的目录。 */
+  openPath: string;
+}
+
+/** 主会话顶栏工具区：工作区焦点与仓库焦点统一的目录与仓库解析。 */
+export function resolveChatTopbarContext(input: {
+  activeRepository: Repository | null | undefined;
+  activeProject: ProjectItem | null | undefined;
+  activeWorkspaceFocus: WorkspaceFocus;
+  repositories: ReadonlyArray<Repository>;
+  sessionRepositoryPath?: string | null;
+}): ChatTopbarContext {
+  const contextRepository =
+    input.activeRepository ??
+    resolveProjectComposerRepository(input.activeProject, input.repositories) ??
+    null;
+
+  const sessionPath = input.sessionRepositoryPath?.trim() ?? "";
+  let openPath = "";
+  if (input.activeWorkspaceFocus === "project" && input.activeProject) {
+    openPath = resolveProjectExplorerOpenPath(input.activeProject, input.repositories).trim();
+  }
+  if (!openPath) {
+    openPath = sessionPath || contextRepository?.path?.trim() || "";
+  }
+
+  return { contextRepository, openPath };
 }
 
 /** 工作区焦点下 composer/终端 用的成员仓回退（不改变侧栏仓库选中）。 */

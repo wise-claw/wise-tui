@@ -10,6 +10,7 @@ import type {
   ModelProfileEffectiveModels,
 } from "../types/claudeModelProfile";
 import { extractEffectiveModelsFromStore } from "../types/claudeModelProfile";
+import { seedModelProfileStoreCache } from "../stores/modelProfileStoreCache";
 
 const SETTINGS_REFRESH_DEBOUNCE_MS = 150;
 const LOADING_INDICATOR_DELAY_MS = 200;
@@ -68,6 +69,7 @@ export function useModelProfileSwitcher(popoverOpen: boolean) {
   popoverOpenRef.current = popoverOpen;
 
   const applyStore = useCallback((next: ClaudeModelProfileStoreView) => {
+    seedModelProfileStoreCache(next);
     if (popoverOpenRef.current) {
       setStoreInternal(next);
     }
@@ -79,6 +81,7 @@ export function useModelProfileSwitcher(popoverOpen: boolean) {
       setStoreInternal((prev) => {
         const next = typeof value === "function" ? value(prev) : value;
         if (next) {
+          seedModelProfileStoreCache(next);
           setEffectiveModels(extractEffectiveModelsFromStore(next));
         }
         return next;
@@ -135,6 +138,10 @@ export function useModelProfileSwitcher(popoverOpen: boolean) {
       setShowLoading(false);
     }
   }, [applyStore, popoverOpen]);
+
+  useEffect(() => {
+    void getClaudeModelProfileStore().catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     void refresh();

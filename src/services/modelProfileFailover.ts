@@ -3,9 +3,12 @@ import type {
   ModelProfileEngine,
   ModelProfileFailoverResult,
 } from "../types/claudeModelProfile";
-import { isModelProfileAutoFailoverEnabled } from "../types/claudeModelProfile";
 import type { SessionExecutionEngine } from "../types";
-import { dispatchModelProfileStoreChanged, getClaudeModelProfileStore } from "./claudeModelProfiles";
+import { dispatchModelProfileStoreChanged } from "./claudeModelProfiles";
+import {
+  isCachedModelProfileAutoFailoverEnabled,
+  seedModelProfileStoreCache,
+} from "../stores/modelProfileStoreCache";
 
 export function resolveModelProfileEngineForExecution(
   engine: SessionExecutionEngine,
@@ -42,12 +45,12 @@ export async function applyModelProfileFailover(
   engine: ModelProfileEngine,
   excludeProfileIds: string[] = [],
 ): Promise<{ result: ModelProfileFailoverResult; systemMessage: string } | null> {
-  const currentStore = await getClaudeModelProfileStore().catch(() => null);
-  if (!isModelProfileAutoFailoverEnabled(currentStore)) {
+  if (!isCachedModelProfileAutoFailoverEnabled()) {
     return null;
   }
   const result = await failoverToNextModelProfile(engine, excludeProfileIds);
   if (!result) return null;
+  seedModelProfileStoreCache(result.store);
   dispatchModelProfileStoreChanged(result.store, {
     engine: result.engine,
     effectiveModel: result.modelId,

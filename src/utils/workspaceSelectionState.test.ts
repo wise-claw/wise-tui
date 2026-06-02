@@ -4,6 +4,7 @@ import { projectMainSessionBindingKey } from "./repositoryMainSessionBinding";
 import {
   buildWorkspaceLastSelection,
   isChatSurfaceReady,
+  resolveChatTopbarContext,
   resolveClaudePanelActiveSession,
   resolveClaudeWorkspaceMainSession,
   resolveProjectComposerRepository,
@@ -76,6 +77,35 @@ describe("resolveProjectComposerRepository", () => {
     const repositories = [repo(1), repo(2), repo(3)];
     const eco = project({ id: "eco", repositoryIds: [2, 1, 3] });
     expect(resolveProjectComposerRepository(eco, repositories)?.id).toBe(2);
+  });
+});
+
+describe("resolveChatTopbarContext", () => {
+  const repositories = [repo(1, "/eco/web"), repo(2, "/eco/ai")];
+
+  test("project focus prefers workspace rootPath for openPath", () => {
+    const eco = project({ id: "eco", repositoryIds: [1, 2], rootPath: "/eco" });
+    const resolved = resolveChatTopbarContext({
+      activeRepository: null,
+      activeProject: eco,
+      activeWorkspaceFocus: "project",
+      repositories,
+      sessionRepositoryPath: "/eco",
+    });
+    expect(resolved.openPath).toBe("/eco");
+    expect(resolved.contextRepository?.id).toBe(1);
+  });
+
+  test("repository focus uses active repository path", () => {
+    const eco = project({ id: "eco", repositoryIds: [1, 2], rootPath: "/eco" });
+    const resolved = resolveChatTopbarContext({
+      activeRepository: repositories[1],
+      activeProject: eco,
+      activeWorkspaceFocus: "repository",
+      repositories,
+    });
+    expect(resolved.openPath).toBe("/eco/ai");
+    expect(resolved.contextRepository?.id).toBe(2);
   });
 });
 

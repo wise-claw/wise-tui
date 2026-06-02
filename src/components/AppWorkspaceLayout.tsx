@@ -700,7 +700,11 @@ export function AppWorkspaceLayout({
                         activeProject={claudeSessionsProps.activeProject}
                         activeWorkspaceFocus={claudeSessionsProps.activeWorkspaceFocus}
                         activeRepository={claudeSessionsProps.activeRepository}
-                        activeSessionRepositoryPath={claudeSessionsProps.activeRepository?.path}
+                        repositories={claudeSessionsProps.repositories ?? []}
+                        activeSessionRepositoryPath={
+                          mainSessionForDataLink?.repositoryPath?.trim() ||
+                          claudeSessionsProps.activeRepository?.path
+                        }
                         mainSessionForDataLink={mainSessionForDataLink}
                         onToggleSidebar={claudeSessionsProps.onToggleSidebar}
                         onToggleRightPanel={claudeSessionsProps.onToggleRightPanel}

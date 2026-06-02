@@ -157,6 +157,7 @@ import {
   resolveModelProfileEngineForExecution,
 } from "../services/modelProfileFailover";
 import { isRetryableModelApiError } from "../utils/retryableModelApiError";
+import { isCachedModelProfileAutoFailoverEnabled } from "../stores/modelProfileStoreCache";
 
 type ClaudeStreamRuntimeHandlers = ReturnType<typeof createClaudeStreamRuntime>;
 
@@ -174,6 +175,7 @@ type PendingTurnFailoverContext = {
   forceNewClaudeConversation?: boolean;
   cursorAttachments?: CursorSdkAttachment[];
   engine: SessionExecutionEngine;
+  autoFailoverEnabled: boolean;
   triedProfileIds: string[];
 };
 
@@ -1841,6 +1843,10 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
   const attemptTurnFailoverAndRetry = useCallback(
     async (ctx: PendingTurnFailoverContext, _errorPreview: string): Promise<boolean> => {
+      if (!ctx.autoFailoverEnabled) {
+        pendingTurnFailoverRef.current = null;
+        return false;
+      }
       const profileEngine = resolveModelProfileEngineForExecution(ctx.engine);
       if (!profileEngine) {
         pendingTurnFailoverRef.current = null;
@@ -2018,6 +2024,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           ctx.tabSessionId === tabSessionId &&
           isRetryableModelApiError(errText)
         ) {
+          if (!ctx.autoFailoverEnabled) throw err;
           const retried = await attemptTurnFailoverAndRetryRef.current(ctx, errText);
           if (retried) return;
         }
@@ -2363,7 +2370,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         if (ctx && ctx.tabSessionId === tabSessionId && ctx.turnNonce === nonce) {
           if (success) {
             pendingTurnFailoverRef.current = null;
-          } else if (isRetryableModelApiError(previewRaw)) {
+          } else if (isRetryableModelApiError(previewRaw) && ctx.autoFailoverEnabled) {
             void (async () => {
               try {
                 await attemptTurnFailoverAndRetryRef.current(ctx, previewRaw);
@@ -3072,6 +3079,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         forceNewClaudeConversation: forceFreshClaudeSession,
         cursorAttachments: opts?.cursorAttachments,
         engine: resolveSessionExecutionEngine(spawnSession),
+        autoFailoverEnabled: isCachedModelProfileAutoFailoverEnabled(),
         triedProfileIds: [],
       };
 
@@ -3092,7 +3100,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           clearStreamStallTimer(sessionId);
           const ctx = pendingTurnFailoverRef.current;
           const errText = err instanceof Error ? err.message : String(err);
-          if (ctx?.tabSessionId === sessionId && isRetryableModelApiError(errText)) {
+          if (
+            ctx?.tabSessionId === sessionId &&
+            ctx.autoFailoverEnabled &&
+            isRetryableModelApiError(errText)
+          ) {
             try {
               const retried = await attemptTurnFailoverAndRetryRef.current(ctx, errText);
               if (retried) return;
@@ -3208,6 +3220,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         modelArg,
         resumeClaudeSid: claudeSessionId,
         engine: resolveSessionExecutionEngine(session),
+        autoFailoverEnabled: isCachedModelProfileAutoFailoverEnabled(),
         triedProfileIds: [],
       };
 
@@ -3225,7 +3238,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         } catch (err) {
           const ctx = pendingTurnFailoverRef.current;
           const errText = err instanceof Error ? err.message : String(err);
-          if (ctx?.tabSessionId === sessionId && isRetryableModelApiError(errText)) {
+          if (
+            ctx?.tabSessionId === sessionId &&
+            ctx.autoFailoverEnabled &&
+            isRetryableModelApiError(errText)
+          ) {
             try {
               const retried = await attemptTurnFailoverAndRetryRef.current(ctx, errText);
               if (retried) return;
