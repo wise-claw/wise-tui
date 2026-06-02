@@ -6,6 +6,7 @@ mod cc_workflow_studio;
 mod claude_code_usage;
 mod claude_commands;
 mod codex_commands;
+mod codex_stream_adapter;
 mod cursor_agent;
 mod cursor_disk;
 mod claude_config_dir;

@@ -1,6 +1,7 @@
 //! OpenAI Codex CLI execution (`codex exec`) for Wise main / member sessions.
 
 use crate::claude_commands::{ClaudeProcessState, ClaudeSessionRegistry};
+use crate::codex_stream_adapter::{map_codex_exec_stdout_line, CodexStdoutMap};
 use serde::Serialize;
 use std::path::Path;
 use std::process::Stdio;
@@ -208,6 +209,8 @@ pub(crate) async fn execute_codex_code(
     let codex_path = find_codex_binary()?;
     let mut cmd = Command::new(&codex_path);
     cmd.arg("exec");
+    cmd.arg("--json");
+    cmd.arg("--color").arg("never");
     cmd.arg("--skip-git-repo-check");
     cmd.arg("-s").arg(WISE_CODEX_EXEC_SANDBOX);
     if let Some(model_name) = normalize_codex_model(model.as_deref()) {
@@ -275,12 +278,19 @@ pub(crate) async fn execute_codex_code(
             if line.trim().is_empty() {
                 continue;
             }
-            emit_codex_stdout_line(
-                &app_stdout,
-                &session_id_stdout,
-                &codex_assistant_stream_line(&line),
-                invocation_key_stdout.as_deref(),
-            );
+            let stream_lines = match map_codex_exec_stdout_line(&line) {
+                CodexStdoutMap::PlainText => vec![codex_assistant_stream_line(&line)],
+                CodexStdoutMap::StreamLines(mapped) if mapped.is_empty() => continue,
+                CodexStdoutMap::StreamLines(mapped) => mapped,
+            };
+            for stream_line in stream_lines {
+                emit_codex_stdout_line(
+                    &app_stdout,
+                    &session_id_stdout,
+                    &stream_line,
+                    invocation_key_stdout.as_deref(),
+                );
+            }
         }
     });
 
