@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Modal, Button, message, Segmented } from "antd";
+import { Modal, Button, Segmented } from "antd";
 import type { ImageAttachmentPart } from "../../types";
 
 export type ImageRedBoxCropModalProps = {
@@ -291,12 +291,10 @@ export function ImageRedBoxCropModal({ open, image, onClose, onApply }: ImageRed
     const img = imgRef.current;
     if (!img || !image) return;
     if (!a || !b) {
-      message.warning("请先拖动鼠标绘制红框选择要保留的区域");
       return;
     }
     const crop = clientPointsToNaturalRect(img, a, b, 4, 2);
     if (!crop) {
-      message.warning("框选区域过小，请拖大一点");
       return;
     }
     const canvas = document.createElement("canvas");
@@ -304,7 +302,6 @@ export function ImageRedBoxCropModal({ open, image, onClose, onApply }: ImageRed
     canvas.height = crop.sh;
     const ctx = canvas.getContext("2d");
     if (!ctx) {
-      message.error("无法创建画布");
       return;
     }
     ctx.drawImage(img, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, crop.sw, crop.sh);
@@ -326,12 +323,10 @@ export function ImageRedBoxCropModal({ open, image, onClose, onApply }: ImageRed
     const img = imgRef.current;
     if (!img || !image) return;
     if (rectAnnots.length === 0 && lineStrokes.length === 0) {
-      message.warning("请先绘制红框标注或划线");
       return;
     }
     const dataUrl = renderAnnotationsToCanvas(img, rectAnnots, lineStrokes);
     if (!dataUrl) {
-      message.error("无法导出标注图");
       return;
     }
     const base = image.filename.replace(/\.[^.]+$/, "") || "image";

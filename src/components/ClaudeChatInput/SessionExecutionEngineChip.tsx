@@ -37,7 +37,6 @@ function unavailableDescription(
 }
 
 function visibleExecutionEngines(
-  codexAvailable: boolean,
   cursorAvailable: boolean,
 ): readonly SessionExecutionEngine[] {
   return SESSION_EXECUTION_ENGINES.filter((key) => {
@@ -53,7 +52,7 @@ export function buildSessionExecutionEngineMenuItems({
   onOpenExecutionEnvironment,
   onProbeClick,
 }: PickerSectionProps & { onProbeClick?: () => void }): MenuProps["items"] {
-  return visibleExecutionEngines(codexAvailable, cursorAvailable).map((key) => {
+  return visibleExecutionEngines(cursorAvailable).map((key) => {
     const itemMeta = SESSION_EXECUTION_ENGINE_LABELS[key];
     const itemDisabled = !isEngineAvailable(key, codexAvailable, cursorAvailable);
     const isSelected = engine === key;

@@ -49,7 +49,7 @@ import { TodoDock } from "./dock/todo-dock";
 import { RevertDock } from "./dock/revert-dock";
 import { addToHistory, promptLength, navigatePromptHistory, canNavigateHistoryAtCursor } from "./prompt-history";
 import { CheckOutlined } from "@ant-design/icons";
-import { Checkbox, Dropdown, Button, Empty, Input, InputNumber, Popover, Select, Spin, Switch, Tabs, Tag, Tooltip, TreeSelect, message } from "antd";
+import { Checkbox, Dropdown, Button, Empty, Input, InputNumber, Popover, Select, Spin, Switch, Tabs, Tag, Tooltip, TreeSelect } from "antd";
 import { ContextCompactProgressRing } from "./ContextCompactProgressRing";
 import { useContextBreakdown } from "../../hooks/useContextBreakdown";
 import { ComposerRuntimeSettingsTrigger } from "./ComposerRuntimeSettingsTrigger";
@@ -882,9 +882,7 @@ function ComposerInner({
       isAutoSendSpeechMode(speechPrefsRef.current.sendMode),
     onTranscriptUpdate: handleSpeechTranscriptUpdate,
     onSessionEnd: handleSpeechSessionEnd,
-    onError: (msg) => {
-      if (msg) message.warning(msg);
-    },
+    onError: () => {},
   });
 
   const speechDictationRef = useRef(speechDictation);
@@ -1211,9 +1209,7 @@ function ComposerInner({
       } else {
         await loadActiveBranch();
       }
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      message.error(`读取分支失败: ${msg}`);
+    } catch {
     } finally {
       setBranchListLoading(false);
     }
@@ -1226,10 +1222,7 @@ function ComposerInner({
         await gitCheckoutBranch(gitRepositoryPath, name.trim());
         setActiveBranch(name.trim());
         await loadBranches();
-        message.success(`已切换到分支: ${name.trim()}`);
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        message.error(`切换分支失败: ${msg}`);
+      } catch {
       } finally {
         setBranchActionLoading(false);
       }
@@ -1240,11 +1233,9 @@ function ComposerInner({
     const draft = branchCreateDraftRef.current;
     const name = draft.name.trim();
     if (!name) {
-      message.warning("请输入新分支名称");
       return;
     }
     if (!gitRepositoryPath) {
-      message.warning("当前会话未绑定 Git 仓库，无法创建分支");
       return;
     }
     setBranchActionLoading(true);
@@ -1259,10 +1250,7 @@ function ComposerInner({
       setBranchCreateName("");
       setActiveBranch(name);
       await loadBranches();
-      message.success(`已创建并切换到分支: ${name}`);
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      message.error(`创建分支失败: ${msg}`);
+    } catch {
     } finally {
       setBranchActionLoading(false);
     }
@@ -1449,7 +1437,6 @@ function ComposerInner({
 
       if (isSessionBusy) {
         if (!onEnqueueAsPendingTask) {
-          message.warning("当前正在执行，无法加入待办队列。");
           return;
         }
         const sendFlowNodes: Array<{ label: string; timestamp: number; detail?: string }> = [];
@@ -1467,8 +1454,7 @@ function ComposerInner({
             images: imagesSnap,
             repositoryPath: session.repositoryPath,
           });
-        } catch (e) {
-          message.error(`发送准备失败: ${e instanceof Error ? e.message : String(e)}`);
+        } catch {
           restoreComposerDraft(rollbackDraft);
           return;
         }
@@ -1478,7 +1464,6 @@ function ComposerInner({
           detail: outbound.trim() || "(空)",
         });
         if (!outbound.trim()) {
-          message.warning("未能构建有效发送内容。");
           restoreComposerDraft(rollbackDraft);
           return;
         }
@@ -1588,8 +1573,7 @@ function ComposerInner({
             repositoryPath: session.repositoryPath,
           });
         }
-      } catch (e) {
-        message.error(`发送准备失败: ${e instanceof Error ? e.message : String(e)}`);
+      } catch {
         const draft = lastSentDraftRef.current;
         lastSentDraftRef.current = null;
         if (draft) restoreComposerDraft(draft);
@@ -1601,7 +1585,6 @@ function ComposerInner({
         detail: outbound.trim() || "(空)",
       });
       if (!outbound.trim()) {
-        message.warning("未能构建有效发送内容。");
         const draft = lastSentDraftRef.current;
         lastSentDraftRef.current = null;
         if (draft) restoreComposerDraft(draft);
