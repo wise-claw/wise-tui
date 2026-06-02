@@ -151,15 +151,6 @@ export function ClaudeModelTopbarPanel({ store, setStore, loading, onApplied }: 
         setStore(next);
         const effective =
           resolveEffectiveModelForProfileEngine(panelEngine, next)?.trim() || null;
-        message.success(
-          effective
-            ? `已切换模型配置，当前模型：${formatClaudeModelLabel(effective)}`
-            : panelEngine === "codex"
-              ? "已切换并写入 Codex 全局 auth.json / config.toml"
-              : panelEngine === "opencode"
-                ? "已切换并写入 OpenCode 全局 opencode.json"
-                : "已切换并替换 Claude Code 全局 settings.json",
-        );
         dispatchModelProfileStoreChanged(next, { engine: panelEngine, effectiveModel: effective });
         onApplied?.();
       } catch (e) {

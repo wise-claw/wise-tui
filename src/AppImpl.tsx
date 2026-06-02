@@ -1932,10 +1932,17 @@ export default function App() {
       viewMode.enter({ kind: "chat" });
       await bindRepositoryMainSessionRef.current(target.repositoryPath, target.id);
       jumpToSessionWithRepositoryRef.current(target.id);
+      if (target.claudeSessionId?.trim() || target.id.trim()) {
+        try {
+          await reloadFullDiskTranscript(target.id);
+        } catch {
+          /* 落盘略晚时不阻断恢复 */
+        }
+      }
       setInspectorHistorySessionId(null);
       message.success("已恢复为主会话");
     },
-    [viewMode],
+    [reloadFullDiskTranscript, viewMode],
   );
 
   const handleAddWorktreeRepositoryToProject = useCallback(

@@ -678,6 +678,11 @@ export interface ClaudeSession {
    */
   diskTranscriptPartial?: boolean;
   /**
+   * 为 true 时跳过 `IN_MEMORY_SESSION_MESSAGES_MAX` 条数截断（历史/全量 jsonl 恢复后设置）。
+   * 不落盘，仅运行时。
+   */
+  transcriptMemoryUnlimited?: boolean;
+  /**
    * 会话连接方式：
    * - `"streaming"` 长驻进程 + `--input-format stream-json`（全局默认，见默认配置）
    * - `"oneshot"` 逐轮 `claude -p`

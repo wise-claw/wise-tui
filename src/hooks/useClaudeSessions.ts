@@ -1831,7 +1831,12 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             if (batch) {
               notificationHub.applyTodoWrite(sess.id, batch.items, batch.merge);
             }
-            return { ...sess, messages: nextMessages, diskTranscriptPartial };
+            return {
+              ...sess,
+              messages: nextMessages,
+              diskTranscriptPartial,
+              transcriptMemoryUnlimited: false,
+            };
           }),
         );
       } catch {
@@ -2058,6 +2063,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         diskTailLinesBySessionRef.current.set(tid, lines.length);
         const { messages, diskTranscriptPartial } = sessionMessagesFromJsonlLines(lines, {
           tailRequestLines: Math.max(lines.length, 1),
+          fullTranscript: true,
+          unlimitedMessageCount: true,
         });
         if (messages.length === 0) return;
         const nextMessages = isTerminalWorkerWiseTab(s)
@@ -2065,7 +2072,14 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           : messages;
         setSessions((prev) =>
           prev.map((sess) =>
-            sess.id === tid ? { ...sess, messages: nextMessages, diskTranscriptPartial } : sess,
+            sess.id === tid
+              ? {
+                  ...sess,
+                  messages: nextMessages,
+                  diskTranscriptPartial,
+                  transcriptMemoryUnlimited: true,
+                }
+              : sess,
           ),
         );
       } catch {
@@ -2092,7 +2106,14 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       diskTailLinesBySessionRef.current.set(session.id, tailLines);
       setSessions((prev) =>
         prev.map((sess) =>
-          sess.id === session.id ? { ...sess, messages: nextMessages, diskTranscriptPartial } : sess,
+          sess.id === session.id
+            ? {
+                ...sess,
+                messages: nextMessages,
+                diskTranscriptPartial,
+                transcriptMemoryUnlimited: false,
+              }
+            : sess,
         ),
       );
     },
@@ -2589,7 +2610,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     let cancelled = false;
     const cancelIdle = runWhenIdle(() => {
       if (cancelled) return;
-      void applyDiskTranscriptTail(snapshot, CLAUDE_DISK_JSONL_TAIL_LINES_LAZY).catch(() => {
+      void reloadFullDiskTranscript(snapshot.id).catch(() => {
         diskLoadDoneRef.current.delete(loadKey);
       });
     }, { timeoutMs: 900 });
@@ -2599,7 +2620,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       cancelIdle();
       diskLoadDoneRef.current.delete(loadKey);
     };
-  }, [activeSessionId, applyDiskTranscriptTail, resolveSessionExecutionEngine]);
+  }, [activeSessionId, reloadFullDiskTranscript, resolveSessionExecutionEngine]);
 
   useEffect(() => {
     if (companionSessionIds.length === 0) return;
@@ -2651,6 +2672,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       let changed = false;
       const next = prev.map((s) => {
         if (keep.has(s.id)) {
+          if (s.transcriptMemoryUnlimited) return s;
           const perSessionMax =
             s.id === activeSessionId
               ? IN_MEMORY_SESSION_MESSAGES_MAX
@@ -2661,6 +2683,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             ...s,
             messages: capSessionMessagesForMemory(s.messages, perSessionMax),
             diskTranscriptPartial: true,
+            transcriptMemoryUnlimited: false,
           };
         }
         if (isTerminalWorkerWiseTab(s)) return s;
@@ -2677,7 +2700,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         if (!hasDisk && s.messages.length > 0) return s;
         if (s.messages.length === 0) return s;
         changed = true;
-        return { ...s, messages: [], diskTranscriptPartial: false };
+        return { ...s, messages: [], diskTranscriptPartial: false, transcriptMemoryUnlimited: false };
       });
       return changed ? next : prev;
     });
@@ -3984,7 +4007,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         version: 1,
         activeSessionId,
         sessions: sessions.map((s) => {
-          const { diskTranscriptPartial: _omitPartial, ...rest } = s;
+          const {
+            diskTranscriptPartial: _omitPartial,
+            transcriptMemoryUnlimited: _omitUnlimited,
+            ...rest
+          } = s;
           const messages =
             rest.messages.length <= PERSIST_SESSION_MESSAGES_MAX
               ? rest.messages

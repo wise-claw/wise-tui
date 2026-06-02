@@ -69,6 +69,11 @@ export function applySessionMemoryCap(
   session: ClaudeSession,
   max: number = IN_MEMORY_SESSION_MESSAGES_MAX,
 ): ClaudeSession {
+  if (session.transcriptMemoryUnlimited) {
+    const trimmed = trimMessagePartsForMemory(session.messages);
+    if (trimmed === session.messages) return session;
+    return { ...session, messages: trimmed };
+  }
   let messages = session.messages;
   let partial = session.diskTranscriptPartial ?? false;
   if (messages.length > max) {
@@ -108,6 +113,7 @@ function enforceGlobalMessagesBudget(
     .filter(
       (session) =>
         session.messages.length > 0 &&
+        !session.transcriptMemoryUnlimited &&
         !keepSessionIds.has(session.id) &&
         session.status !== "running" &&
         session.status !== "connecting",
@@ -169,13 +175,22 @@ export function sessionMessagesFromJsonlLines(
   options: {
     tailRequestLines: number;
     memoryMax?: number;
+    /** 全量 jsonl（非尾部窗口）时不因行数饱和标记 partial */
+    fullTranscript?: boolean;
+    /** 历史恢复：保留解析出的全部消息条数，不受 64 条 cap */
+    unlimitedMessageCount?: boolean;
   },
 ): { messages: ClaudeMessage[]; diskTranscriptPartial: boolean } {
   const parsed = parseClaudeSessionJsonlLines(lines as string[]);
-  const memoryMax = options.memoryMax ?? IN_MEMORY_SESSION_MESSAGES_MAX;
-  const messages = trimMessagePartsForMemory(capSessionMessagesForMemory(parsed, memoryMax));
-  const tailSaturated = lines.length >= options.tailRequestLines;
-  const memoryTruncated = parsed.length > messages.length;
+  const unlimited = options.unlimitedMessageCount === true;
+  const messages = unlimited
+    ? trimMessagePartsForMemory(parsed)
+    : trimMessagePartsForMemory(
+        capSessionMessagesForMemory(parsed, options.memoryMax ?? IN_MEMORY_SESSION_MESSAGES_MAX),
+      );
+  const tailSaturated =
+    !options.fullTranscript && lines.length >= options.tailRequestLines;
+  const memoryTruncated = !unlimited && parsed.length > messages.length;
   return {
     messages,
     diskTranscriptPartial: tailSaturated || memoryTruncated,

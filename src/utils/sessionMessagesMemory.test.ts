@@ -33,6 +33,48 @@ describe("sessionMessagesMemory", () => {
     expect(result.diskTranscriptPartial).toBe(true);
   });
 
+  test("sessionMessagesFromJsonlLines unlimited keeps all parsed messages on full transcript", () => {
+    const lines = Array.from({ length: 120 }, (_, i) =>
+      JSON.stringify({
+        type: "user",
+        message: { role: "user", content: `m${i}` },
+      }),
+    );
+    const result = sessionMessagesFromJsonlLines(lines, {
+      tailRequestLines: lines.length,
+      fullTranscript: true,
+      unlimitedMessageCount: true,
+    });
+    expect(result.messages.length).toBe(120);
+    expect(result.diskTranscriptPartial).toBe(false);
+  });
+
+  test("applySessionMemoryCap skips message count when transcriptMemoryUnlimited", () => {
+    const sessions = [
+      {
+        id: "a",
+        claudeSessionId: "a",
+        repositoryPath: "/r",
+        repositoryName: "r",
+        model: "sonnet",
+        status: "completed" as const,
+        transcriptMemoryUnlimited: true,
+        messages: Array.from({ length: 200 }, (_, i) => ({
+          id: i,
+          role: "user" as const,
+          content: `m${i}`,
+          parts: [],
+          timestamp: i,
+        })),
+        createdAt: 1,
+        pendingPrompt: "",
+      },
+    ];
+    const next = applySessionsMemoryCap(sessions);
+    expect(next[0]?.messages.length).toBe(200);
+    expect(next[0]?.diskTranscriptPartial).toBeFalsy();
+  });
+
   test("applySessionsMemoryCap marks partial when truncated", () => {
     const sessions = [
       {

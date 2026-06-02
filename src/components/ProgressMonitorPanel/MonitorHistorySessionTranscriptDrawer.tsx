@@ -90,26 +90,26 @@ export function MonitorHistorySessionTranscriptDrawer({
 
   useEffect(() => {
     if (!open || !sessionId || !liveSession) return;
+    if (liveSession.status !== "running" && liveSession.status !== "connecting") {
+      setDrawerSessionSnapshot(null);
+      return;
+    }
     setDrawerSessionSnapshot((prev) => {
-      if (prev && prev.id === liveSession.id && prev.messages.length > 0) {
-        return prev;
-      }
-      if (liveSession.messages.length === 0) {
-        return prev;
-      }
+      if (prev?.id === liveSession.id) return prev;
       return cloneSessionForDrawerSnapshot(liveSession);
     });
-  }, [open, sessionId, liveSession?.id, liveSession?.messages.length, liveSession?.status]);
+  }, [open, sessionId, liveSession?.id, liveSession?.status]);
 
   const peekTranscriptTargetId = liveSession?.id ?? null;
   const peekTranscriptMessagesLen = liveSession?.messages.length ?? 0;
   const peekTranscriptStatus = liveSession?.status;
   const peekTranscriptClaudeId = liveSession?.claudeSessionId?.trim() ?? "";
+  const peekNeedsFullTranscript = !liveSession?.transcriptMemoryUnlimited;
 
   useEffect(() => {
     if (!open || !sessionId || !onReloadFullDiskTranscript || !peekTranscriptTargetId) return;
     if (diskReloadAttemptedRef.current === sessionId) return;
-    if (peekTranscriptMessagesLen > 0) return;
+    if (!peekNeedsFullTranscript) return;
     if (peekTranscriptStatus === "running" || peekTranscriptStatus === "connecting") return;
     if (!peekTranscriptClaudeId) return;
     diskReloadAttemptedRef.current = sessionId;
@@ -119,7 +119,7 @@ export function MonitorHistorySessionTranscriptDrawer({
     sessionId,
     onReloadFullDiskTranscript,
     peekTranscriptTargetId,
-    peekTranscriptMessagesLen,
+    peekNeedsFullTranscript,
     peekTranscriptStatus,
     peekTranscriptClaudeId,
   ]);
@@ -131,16 +131,19 @@ export function MonitorHistorySessionTranscriptDrawer({
       message.warning("未找到该会话");
       return;
     }
+    if (onReloadFullDiskTranscript && found.claudeSessionId?.trim()) {
+      diskReloadAttemptedRef.current = null;
+      void onReloadFullDiskTranscript(found.id);
+      return;
+    }
     setDrawerSessionSnapshot(cloneSessionForDrawerSnapshot(found));
-  }, [sessionId, transcriptSourceSessions]);
+  }, [sessionId, transcriptSourceSessions, onReloadFullDiskTranscript]);
 
-  const displaySession = drawerSessionSnapshot ?? liveSession;
   const liveStatus = liveSession?.status;
   const snapshotFrozen =
-    Boolean(drawerSessionSnapshot) &&
-    liveStatus != null &&
-    (liveStatus === "running" || liveStatus === "connecting");
-
+    liveStatus === "running" || liveStatus === "connecting";
+  const displaySession =
+    snapshotFrozen && drawerSessionSnapshot ? drawerSessionSnapshot : liveSession;
   const canStopLiveSession =
     Boolean(onCancelSession) &&
     liveSession != null &&
