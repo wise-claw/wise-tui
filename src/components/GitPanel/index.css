@@ -277,8 +277,21 @@
   -webkit-overflow-scrolling: touch;
 }
 
+.git-diff-mode-scroll--pending {
+  opacity: 0.72;
+  pointer-events: none;
+}
+
 .git-diff-mode__empty {
   padding: 6px 10px 8px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--ant-color-text-tertiary);
+  text-align: center;
+}
+
+.git-panel-body-placeholder {
+  padding: 10px 12px 12px;
   font-size: 11px;
   line-height: 1.35;
   color: var(--ant-color-text-tertiary);
@@ -815,6 +828,13 @@
   overflow-y: auto;
   scrollbar-gutter: stable;
   -webkit-overflow-scrolling: touch;
+}
+
+/* 与 git-diff-mode-scroll 共用滚动条，不再嵌套 overflow */
+.git-virtual-file-list--flow {
+  max-height: none;
+  min-height: 0;
+  overflow: visible;
 }
 
 .git-virtual-file-list__spacer {

@@ -1389,7 +1389,8 @@ export function useMonitorOverview({
   }, [refreshExternalTrellisAgentRuns]);
 
   const hasRunningDirectBatchInvocationRows = directBatchInvocationsSnap.some(isOmcDirectBatchInvocationRunning);
-  const heavyOverviewDeps = [
+  const overviewDeps = [
+    monitorOverviewActive,
     employees,
     repositories,
     projects,
@@ -1404,19 +1405,6 @@ export function useMonitorOverview({
     directBatchInvocationsSnap,
     repositoryMemberInvocationsSnap,
     externalTrellisAgentRuns,
-    registryRunningClaudeSessionIds,
-    omcInstalled,
-  ] as const;
-  const lightOverviewDeps = [
-    monitorOverviewActive,
-    employees,
-    sessions,
-    taskPendingEmployeesByTaskId,
-    workflowRuntimeSnapshotsByTaskId,
-    workflowTaskEventsByTaskId,
-    workflowTasks,
-    workflowTemplates,
-    workflowGraphsByWorkflowId,
     registryRunningClaudeSessionIds,
     omcInstalled,
   ] as const;
@@ -1775,5 +1763,5 @@ export function useMonitorOverview({
     };
     cachedOverviewRef.current = result;
     return result;
-  }, monitorOverviewActive ? [monitorOverviewActive, ...heavyOverviewDeps] : lightOverviewDeps);
+  }, overviewDeps);
 }

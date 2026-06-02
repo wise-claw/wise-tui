@@ -4,7 +4,6 @@ import {
   useEffect,
   useMemo,
   useRef,
-  type MutableRefObject,
   type SetStateAction,
 } from "react";
 import { message } from "antd";
@@ -14,7 +13,6 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import type {
   ClaudeComposerExecuteBubbleOptions,
   ClaudeDiskSessionItem,
-  ClaudeHostProcess,
   ClaudeSession,
   QuestionRequest,
   SessionConversationTaskItem,
@@ -67,12 +65,8 @@ import {
 } from "../utils/sessionHistoryScope";
 import { loadSessionTabsState, saveSessionTabsState } from "../services/tabsStore";
 import {
-  CLAUDE_DISK_JSONL_TAIL_LINES_INITIAL,
-  CLAUDE_DISK_JSONL_TAIL_LINES_LAZY,
-  CLAUDE_DISK_JSONL_TAIL_LINES_LOAD_MORE,
   CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD,
   IN_MEMORY_SESSION_MESSAGES_MAX,
-  MAX_REPO_DISK_INDEX_SESSIONS,
   PERSIST_SESSION_MESSAGES_MAX,
 } from "../constants/claudeMessageListWindow";
 import { runWhenIdle } from "../utils/deferIdle";
@@ -111,7 +105,6 @@ import {
   resolveCompanionDiskTranscriptTailLines,
   resolveCompanionDiskLoadStaggerMs,
 } from "../utils/multiPanePerformance";
-import { getSessionUpdatedAt } from "../components/ClaudeSessions/sessionGrouping";
 import { resolveClaudeCompleteSuccess } from "../utils/resolveClaudeCompleteSuccess";
 import { notificationBodyPrefixInRepositoryContext } from "../utils/sessionRepositoryDisplay";
 import {
@@ -142,7 +135,6 @@ import { getAppSetting, setAppSetting } from "../services/appSettingsStore";
 import { stopClaudeMainSession } from "../services/stopClaudeMainSession";
 import { publishRunningClaudeSessionIds } from "../stores/claudeRunningSessionsRegistryStore";
 import { getSystemResourceSnapshot } from "../services/systemResource";
-import { isClaudeSessionRunningByHostProcesses } from "../utils/claudeHostRunningSessionIds";
 import {
   buildAutoCompactSystemMessage,
   buildContextOverflowRetrySystemMessage,
@@ -158,657 +150,72 @@ import {
 } from "../services/modelProfileFailover";
 import { isRetryableModelApiError } from "../utils/retryableModelApiError";
 import { isCachedModelProfileAutoFailoverEnabled } from "../stores/modelProfileStoreCache";
+import {
+  applyDiskTranscriptTail as applyDiskTranscriptTailHelper,
+  loadMoreTranscriptByKey,
+  reloadFullDiskTranscriptByKey,
+} from "./useClaudeSessions.transcript";
+import { restoreRevertById, sendFollowupById } from "./useClaudeSessions.dock";
+import {
+  dismissQuestionBySession,
+  restorePendingPermissionFromTranscriptBySession,
+  restoreTodosFromTranscriptBySession,
+} from "./useClaudeSessions.control";
+import {
+  consumeNextTurnNonce,
+  handleProxyStreamingQuestionBranch,
+  resolveControlSessionContext,
+  submitQuestionViaStdin,
+  shouldPreferQuestionStdinControl,
+} from "./useClaudeSessions.qa";
 
-type ClaudeStreamRuntimeHandlers = ReturnType<typeof createClaudeStreamRuntime>;
+import {
+  CLAUDE_STREAM_RUNTIME_READY_POLL_MS,
+  CLAUDE_STREAM_RUNTIME_READY_WAIT_MS,
+  CLAUDE_STREAM_STALL_HOOK_EXTEND_MS,
+  CLAUDE_STREAM_STALL_MS,
+  CONTROL_REQUEST_EXPIRE_MS,
+  CURSOR_STREAM_STALL_MS,
+  TRELLIS_CONTEXT_BINDING_STORAGE_KEY,
+  WORKFLOW_BINDING_STORAGE_KEY,
+  applyStreamingResidentUiStatuses,
+  attachClaudeInvocationStream,
+  attachClaudeSessionStreamForTurn,
+  collectClaudeSessionSidecarIds,
+  generateId,
+  hydrateStreamingProcessRegistryFromHost,
+  isClaudeConversationMissingError,
+  markClaudeRegistryBootstrapWarmup,
+  mergeRepositoryDiskSessions,
+  modelsForRepositoryPaths,
+  persistTrellisContextBindings,
+  persistWorkflowBindings,
+  pruneClaudeRegistryBootstrapWarmup,
+  pruneGhostRepositorySessions,
+  pruneRepoDiskIndexSessions,
+  purgeClaudeSessionStreamSidecarRefs,
+  resolveTabIdForClaudeStream,
+  resolveTabIdFromCompletePayload,
+  sessionHasHookSystemActivity,
+  sessionHasVisibleStreamProgress,
+  trellisContextIdForTab,
+  type ClaudeStreamRuntimeHandlers,
+} from "./useClaudeSessions.helpers";
+import type {
+  PendingTurnFailoverContext,
+  SessionExecuteOpts,
+  UseClaudeSessionsOptions,
+  UseClaudeSessionsReturn,
+} from "./useClaudeSessions.types";
 
-type PendingTurnFailoverContext = {
-  tabSessionId: string;
-  turnNonce: number;
-  invokeConc:
-    | { concurrencyScopeKey: string; concurrencyLimit: number }
-    | null
-    | undefined;
-  repositoryPath: string;
-  prompt: string;
-  modelArg: string | undefined;
-  resumeClaudeSid: string | null;
-  forceNewClaudeConversation?: boolean;
-  cursorAttachments?: CursorSdkAttachment[];
-  engine: SessionExecutionEngine;
-  autoFailoverEnabled: boolean;
-  triedProfileIds: string[];
+export {
+  collectClaudeSessionSidecarIds,
+  mergeRepositoryDiskSessions,
+  pruneGhostRepositorySessions,
+  pruneRepoDiskIndexSessions,
+  purgeClaudeSessionStreamSidecarRefs,
 };
-
-function isClaudeConversationMissingError(error: unknown): boolean {
-  const text = error instanceof Error ? error.message : String(error ?? "");
-  if (!text) return false;
-  return /no conversation found with session id/i.test(text);
-}
-
-function hydrateStreamingProcessRegistryFromHost(
-  sessions: ClaudeSession[],
-  claudeProcesses: ReadonlyArray<Pick<ClaudeHostProcess, "sessionId" | "pid" | "projectPath">>,
-  streamingProcessByTab: Map<string, { claudeSessionId: string | null }>,
-  defaultConnectionKind: ClaudeSessionConnectionKind,
-): void {
-  for (const session of sessions) {
-    if (!sessionUsesStreamingConnection(session, defaultConnectionKind)) continue;
-    if (!isClaudeSessionRunningByHostProcesses(session, claudeProcesses)) continue;
-    const sid =
-      session.claudeSessionId?.trim() ??
-      streamingProcessByTab.get(session.id)?.claudeSessionId ??
-      null;
-    streamingProcessByTab.set(session.id, { claudeSessionId: sid });
-  }
-}
-
-function applyStreamingResidentUiStatuses(
-  sessions: ClaudeSession[],
-  streamingProcessByTab: Map<string, { claudeSessionId: string | null }>,
-  defaultConnectionKind: ClaudeSessionConnectionKind,
-): ClaudeSession[] {
-  let changed = false;
-  const next = sessions.map((session) => {
-    if (session.status === "running" || session.status === "connecting") return session;
-    if (!streamingProcessByTab.has(session.id)) return session;
-    if (!sessionUsesStreamingConnection(session, defaultConnectionKind)) return session;
-    if (!session.claudeSessionId?.trim()) return session;
-    changed = true;
-    return { ...session, status: "running" as const };
-  });
-  return changed ? next : sessions;
-}
-
-/** @internal Exported for unit tests. */
-export function collectClaudeSessionSidecarIds(
-  closedId: string,
-  sessionIdMap: ReadonlyMap<string, string>,
-  claudeSessionId?: string | null,
-): Set<string> {
-  const ids = new Set<string>([closedId]);
-  const mapped = sessionIdMap.get(closedId);
-  if (mapped) ids.add(mapped);
-  for (const [temp, real] of sessionIdMap.entries()) {
-    if (real === closedId || temp === closedId) {
-      ids.add(temp);
-      ids.add(real);
-    }
-  }
-  const sid = claudeSessionId?.trim();
-  if (sid) ids.add(sid);
-  return ids;
-}
-
-interface ClaudeSessionStreamSidecarRefs {
-  sessionIdMap: Map<string, string>;
-  expectedTurnNonceByTabId: Map<string, number>;
-  assistantStreamTextByTab: Map<string, string>;
-  lastStreamLineBySession: Map<string, { line: string; at: number }>;
-  lastStreamTextBySession: Map<string, { text: string; at: number }>;
-  registryBootstrapDeadlineByClaudeSid: Map<string, number>;
-}
-
-/** @internal Exported for unit tests. */
-export function purgeClaudeSessionStreamSidecarRefs(
-  sessionId: string,
-  refs: ClaudeSessionStreamSidecarRefs,
-  streamingTargetIdRef: MutableRefObject<string | null>,
-  claudeSessionId?: string | null,
-): Set<string> {
-  const sidecarIds = collectClaudeSessionSidecarIds(sessionId, refs.sessionIdMap, claudeSessionId);
-  for (const id of sidecarIds) {
-    refs.expectedTurnNonceByTabId.delete(id);
-    refs.assistantStreamTextByTab.delete(id);
-    refs.lastStreamLineBySession.delete(id);
-    refs.lastStreamTextBySession.delete(id);
-    refs.registryBootstrapDeadlineByClaudeSid.delete(id);
-  }
-  for (const [temp, real] of [...refs.sessionIdMap.entries()]) {
-    if (sidecarIds.has(temp) || sidecarIds.has(real)) {
-      refs.sessionIdMap.delete(temp);
-    }
-  }
-  const refT = streamingTargetIdRef.current;
-  if (refT !== null && sidecarIds.has(refT)) {
-    streamingTargetIdRef.current = null;
-  }
-  return sidecarIds;
-}
-
-/**
- * oneshot + invocationKey 时 Rust 只发 invocation 通道；按发送时的 tab id 订阅，避免多会话抢 `streamingTargetIdRef`。
- * `onCleaned` 在反注册监听后调用（完成 / 手动 cleanup / 关标签），用于释放 inflight 索引。
- */
-async function attachClaudeInvocationStream(
-  inv: string,
-  stableTabId: string,
-  rt: ClaudeStreamRuntimeHandlers,
-  turnNonce: number,
-  onCleaned?: () => void,
-  resolveTurnNonce?: (stableTabId: string, boundNonce: number) => number,
-  shouldKeepListeningAfterTurnComplete?: (stableTabId: string) => boolean,
-): Promise<() => void> {
-  let cleaned = false;
-  let unlisteners: UnlistenFn[] = [];
-  const cleanup = () => {
-    if (cleaned) return;
-    cleaned = true;
-    for (const unlisten of unlisteners) {
-      safeUnlisten(unlisten);
-    }
-    unlisteners = [];
-    onCleaned?.();
-  };
-  const attach = (event: string, handler: (payload: unknown) => void) =>
-    listen(event, (e) => handler(e.payload));
-  const pending = await Promise.all([
-    attach(`claude-output:invocation:${inv}`, (payload) => {
-      rt.handleOutputForSendTab(stableTabId, payload);
-    }),
-    attach(`claude-error:invocation:${inv}`, (payload) => {
-      rt.handleErrorForSendTab(stableTabId, payload);
-    }),
-    attach(`claude-complete:invocation:${inv}`, (payload) => {
-      const nonce = resolveTurnNonce?.(stableTabId, turnNonce) ?? turnNonce;
-      rt.handleCompleteForSendTab(stableTabId, payload, nonce);
-      if (!shouldKeepListeningAfterTurnComplete?.(stableTabId)) {
-        cleanup();
-      }
-    }),
-    attach(`claude-output:${stableTabId}`, (payload) => {
-      rt.handleOutputForSendTab(stableTabId, payload);
-    }),
-    attach(`claude-error:${stableTabId}`, (payload) => {
-      rt.handleErrorForSendTab(stableTabId, payload);
-    }),
-    attach(`claude-complete:${stableTabId}`, (payload) => {
-      const nonce = resolveTurnNonce?.(stableTabId, turnNonce) ?? turnNonce;
-      rt.handleCompleteForSendTab(stableTabId, payload, nonce);
-      if (!shouldKeepListeningAfterTurnComplete?.(stableTabId)) {
-        cleanup();
-      }
-    }),
-  ]);
-  if (cleaned) {
-    for (const unlisten of pending) {
-      safeUnlisten(unlisten);
-    }
-  } else {
-    unlisteners = pending;
-  }
-  return cleanup;
-}
-
-/**
- * Streaming 后续轮次无新 invocation_key，按 Claude `session_id` 订阅 stdout/complete。
- */
-async function attachClaudeSessionStreamForTurn(
-  claudeSessionId: string,
-  stableTabId: string,
-  rt: ClaudeStreamRuntimeHandlers,
-  turnNonce: number,
-  onCleaned?: () => void,
-  resolveTurnNonce?: (stableTabId: string, boundNonce: number) => number,
-  shouldKeepListeningAfterTurnComplete?: (stableTabId: string) => boolean,
-): Promise<() => void> {
-  const sid = claudeSessionId.trim();
-  if (!sid) {
-    return () => {};
-  }
-  let cleaned = false;
-  let uo: UnlistenFn = () => {};
-  let ue: UnlistenFn = () => {};
-  let uc: UnlistenFn = () => {};
-  const cleanup = () => {
-    if (cleaned) return;
-    cleaned = true;
-    safeUnlisten(uo);
-    safeUnlisten(ue);
-    safeUnlisten(uc);
-    onCleaned?.();
-  };
-  const [uo0, ue0, uc0] = await Promise.all([
-    listen(`claude-output:${sid}`, (e) => {
-      rt.handleOutputForSendTab(stableTabId, e.payload);
-    }),
-    listen(`claude-error:${sid}`, (e) => {
-      rt.handleErrorForSendTab(stableTabId, e.payload);
-    }),
-    listen(`claude-complete:${sid}`, (e) => {
-      const nonce = resolveTurnNonce?.(stableTabId, turnNonce) ?? turnNonce;
-      rt.handleCompleteForSendTab(stableTabId, e.payload, nonce);
-      if (!shouldKeepListeningAfterTurnComplete?.(stableTabId)) {
-        cleanup();
-      }
-    }),
-  ]);
-  if (cleaned) {
-    safeUnlisten(uo0);
-    safeUnlisten(ue0);
-    safeUnlisten(uc0);
-  } else {
-    uo = uo0;
-    ue = ue0;
-    uc = uc0;
-  }
-  return cleanup;
-}
-
-function generateId() {
-  return `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function trellisContextIdForTab(tabSessionId: string): string {
-  return `wise_${tabSessionId}`;
-}
-
-const TRELLIS_CONTEXT_BINDING_STORAGE_KEY = "wise.claudeTrellisContextBindings.v1";
-
-const WORKFLOW_BINDING_STORAGE_KEY = "wise.workflow.sessionRunBindings.v1";
-const CONTROL_REQUEST_EXPIRE_MS = 60 * 60 * 1000;
-/** resume 子进程从 spawn 到首行 init 写入宿主 registry 的窗口；此期间不因「注册表暂无 sid」把 running 打成 idle */
-const CLAUDE_REGISTRY_BOOTSTRAP_WARMUP_MS = 60_000;
-/** 全局 `claude-*` 监听挂载晚于首帧时，避免无监听就 `invoke` 导致丢流 */
-const CLAUDE_STREAM_RUNTIME_READY_WAIT_MS = 12_000;
-const CLAUDE_STREAM_RUNTIME_READY_POLL_MS = 40;
-/** 无助手正文时的首轮无输出告警（自上次流式活动起算） */
-const CLAUDE_STREAM_STALL_MS = 45_000;
-const CURSOR_STREAM_STALL_MS = 120_000;
-/** Hook 已启动但助手正文仍迟迟未到时，再给一轮宽限 */
-const CLAUDE_STREAM_STALL_HOOK_EXTEND_MS = 75_000;
-
-function sessionHasVisibleStreamProgress(session: ClaudeSession): boolean {
-  return session.messages.some((m) => {
-    if (m.role === "assistant") {
-      return m.content.trim().length > 0 || (m.parts?.length ?? 0) > 0;
-    }
-    if (m.role === "system" && m.content.trim().length > 0) {
-      if (m.content.trim() === "Cursor SDK 执行中…") return false;
-      return true;
-    }
-    return false;
-  });
-}
-
-function sessionHasHookSystemActivity(session: ClaudeSession): boolean {
-  return session.messages.some(
-    (m) => m.role === "system" && /Hook|hook|启动中/.test(m.content),
-  );
-}
-
-function persistWorkflowBindings(map: Map<string, string>): void {
-  const payload = Object.fromEntries(Array.from(map.entries()));
-  void setAppSetting(WORKFLOW_BINDING_STORAGE_KEY, JSON.stringify(payload));
-}
-
-function persistTrellisContextBindings(map: Map<string, string>): void {
-  const payload = Object.fromEntries(Array.from(map.entries()));
-  void setAppSetting(TRELLIS_CONTEXT_BINDING_STORAGE_KEY, JSON.stringify(payload));
-}
-
-function markClaudeRegistryBootstrapWarmup(
-  mapRef: MutableRefObject<Map<string, number>>,
-  claudeSessionId: string | null | undefined,
-) {
-  const sid = claudeSessionId?.trim();
-  if (!sid) return;
-  mapRef.current.set(sid, Date.now() + CLAUDE_REGISTRY_BOOTSTRAP_WARMUP_MS);
-}
-
-function pruneClaudeRegistryBootstrapWarmup(
-  mapRef: MutableRefObject<Map<string, number>>,
-  runningIds: ReadonlySet<string>,
-) {
-  const m = mapRef.current;
-  const now = Date.now();
-  for (const [k, until] of m) {
-    if (until <= now || runningIds.has(k)) {
-      m.delete(k);
-    }
-  }
-}
-
-function resolveTabIdForClaudeStream(
-  sessions: ClaudeSession[],
-  lineSid: string | null,
-  refTid: string | null,
-  sessionIdMap?: Map<string, string>,
-): string | null {
-  if (lineSid) {
-    const bySid = sessions.find((s) => s.claudeSessionId === lineSid || s.id === lineSid);
-    if (bySid) return bySid.id;
-    if (sessionIdMap) {
-      for (const s of sessions) {
-        if (sessionIdMap.get(s.id) === lineSid) return s.id;
-      }
-    }
-  }
-  if (refTid) {
-    const byRef = sessions.find((s) => s.id === refTid || s.claudeSessionId === refTid);
-    if (byRef) return byRef.id;
-    if (sessionIdMap) {
-      const mapped = sessionIdMap.get(refTid);
-      if (mapped) {
-        const byMapped = sessions.find((s) => s.id === mapped || s.claudeSessionId === mapped);
-        if (byMapped) return byMapped.id;
-      }
-      for (const s of sessions) {
-        if (sessionIdMap.get(s.id) === refTid) return s.id;
-      }
-    }
-    return refTid;
-  }
-  return null;
-}
-
-/** 与 Rust `ClaudeCompletePayload`（camelCase）及旧版 boolean 兼容。 */
-function resolveTabIdFromCompletePayload(
-  payload: unknown,
-  sessions: ClaudeSession[],
-  refTid: string | null,
-  sessionIdMap?: Map<string, string>,
-): string | null {
-  if (payload !== null && typeof payload === "object" && !Array.isArray(payload)) {
-    const o = payload as Record<string, unknown>;
-    const raw = o.sessionId ?? o.session_id;
-    const sid = typeof raw === "string" ? raw.trim() : "";
-    if (sid && sid !== "unknown") {
-      const match = sessions.find((s) => s.claudeSessionId === sid || s.id === sid);
-      if (match) return match.id;
-      if (sessionIdMap) {
-        for (const s of sessions) {
-          if (sessionIdMap.get(s.id) === sid) return s.id;
-        }
-      }
-      return sid;
-    }
-  }
-  if (typeof payload === "boolean") {
-    return refTid ? resolveTabIdForClaudeStream(sessions, null, refTid, sessionIdMap) : null;
-  }
-  return refTid ? resolveTabIdForClaudeStream(sessions, null, refTid, sessionIdMap) : null;
-}
-
-function sessionMatchesDiskId(s: ClaudeSession, diskSessionId: string): boolean {
-  return s.claudeSessionId === diskSessionId || s.id === diskSessionId;
-}
-
-/** 员工独立会话的展示名形如 `仓库名/员工:张三`，磁盘合并时不能用裸仓库名覆盖，否则归属与通知前缀会错乱。 */
-function shouldPreserveRepositoryDisplayName(previous: string): boolean {
-  const marker = "员工:";
-  const idx = previous.lastIndexOf(marker);
-  if (idx < 0) {
-    return false;
-  }
-  return previous.slice(idx + marker.length).trim().length > 0;
-}
-
-/** Merges disk index into `prev` without reordering existing tabs; appends new disk-only sessions after the last tab of this repository. */
-async function modelsForRepositoryPaths(paths: string[]): Promise<Map<string, string>> {
-  const unique = [...new Set(paths.map((p) => p.trim()).filter(Boolean))];
-  const map = new Map<string, string>();
-  await Promise.all(
-    unique.map(async (p) => {
-      try {
-        const m = await getClaudeConfigModel(p);
-        if (m?.trim()) map.set(p, m.trim());
-      } catch {
-        /* ignore */
-      }
-    }),
-  );
-  return map;
-}
-
-/** 刷新磁盘索引后，去掉「已有 Claude session_id 但 jsonl 已不在磁盘、且无本地消息」的幽灵标签。 */
-export function pruneGhostRepositorySessions(
-  sessions: ClaudeSession[],
-  repositoryPath: string,
-  disk: ClaudeDiskSessionItem[],
-): ClaudeSession[] {
-  // 列表失败或尚未扫描时不裁剪，避免误删仍存在于 ~/.claude/projects 的会话标签。
-  if (disk.length === 0) {
-    return sessions;
-  }
-  const diskIds = new Set(disk.map((d) => d.sessionId));
-  return sessions.filter((s) => {
-    if (!repositoryPathsMatch(s.repositoryPath, repositoryPath)) return true;
-    if (s.status === "running" || s.status === "connecting") return true;
-    const claudeId = s.claudeSessionId?.trim();
-    if (!claudeId) return true;
-    if (diskIds.has(claudeId) || diskIds.has(s.id)) return true;
-    if (s.messages.length > 0) return true;
-    return false;
-  });
-}
-
-/** 限制单仓库「仅磁盘索引、无消息」的历史标签数量，避免 sessions 数组无限膨胀。 */
-export function pruneRepoDiskIndexSessions(
-  sessions: ClaudeSession[],
-  repositoryPath: string,
-  maxDiskIndexSessions: number = MAX_REPO_DISK_INDEX_SESSIONS,
-): ClaudeSession[] {
-  const canonicalPath = normalizeRepositoryPathKey(repositoryPath) || repositoryPath.trim();
-  const indexed: ClaudeSession[] = [];
-  const rest: ClaudeSession[] = [];
-  for (const session of sessions) {
-    if (!repositoryPathsMatch(session.repositoryPath, canonicalPath)) {
-      rest.push(session);
-      continue;
-    }
-    const isDiskIndexOnly =
-      session.messages.length === 0 &&
-      session.status !== "running" &&
-      session.status !== "connecting" &&
-      Boolean(session.claudeSessionId?.trim() || session.diskPreview?.trim());
-    if (isDiskIndexOnly) {
-      indexed.push(session);
-    } else {
-      rest.push(session);
-    }
-  }
-  if (indexed.length <= maxDiskIndexSessions) return sessions;
-  indexed.sort((a, b) => getSessionUpdatedAt(b) - getSessionUpdatedAt(a));
-  const keptIndexed = indexed.slice(0, maxDiskIndexSessions);
-  const keptIds = new Set(keptIndexed.map((s) => s.id));
-  const droppedIds = new Set(indexed.filter((s) => !keptIds.has(s.id)).map((s) => s.id));
-  if (droppedIds.size === 0) return sessions;
-  return sessions.filter((s) => !droppedIds.has(s.id));
-}
-
-/** @internal Exported for unit tests. */
-export function mergeRepositoryDiskSessions(
-  prev: ClaudeSession[],
-  repositoryPath: string,
-  repositoryName: string,
-  disk: ClaudeDiskSessionItem[],
-  configFallbackModel: string,
-): ClaudeSession[] {
-  const canonicalPath = normalizeRepositoryPathKey(repositoryPath) || repositoryPath.trim();
-  const pruned = pruneGhostRepositorySessions(prev, canonicalPath, disk);
-  const copy = pruned.map((s) => ({ ...s }));
-
-  for (let i = 0; i < copy.length; i++) {
-    if (!repositoryPathsMatch(copy[i].repositoryPath, canonicalPath)) continue;
-    const s = copy[i];
-    const item = disk.find((d) => sessionMatchesDiskId(s, d.sessionId));
-    if (item) {
-      const preserveWiseTabId = isTerminalWorkerWiseTab(s);
-      copy[i] = {
-        ...s,
-        id: preserveWiseTabId ? s.id : item.sessionId,
-        claudeSessionId: item.sessionId,
-        repositoryPath: canonicalPath,
-        repositoryName: shouldPreserveRepositoryDisplayName(s.repositoryName) ? s.repositoryName : repositoryName,
-        model: item.modelHint ?? s.model,
-        diskPreview: item.preview || s.diskPreview,
-        createdAt: Math.min(s.createdAt, item.updatedAtMs),
-      };
-    } else {
-      copy[i] = { ...s, repositoryPath: canonicalPath };
-    }
-  }
-
-  const toAdd = disk
-    .filter(
-      (d) => !copy.some((s) => repositoryPathsMatch(s.repositoryPath, canonicalPath) && sessionMatchesDiskId(s, d.sessionId)),
-    )
-    .sort((a, b) => b.updatedAtMs - a.updatedAtMs)
-    .slice(0, MAX_REPO_DISK_INDEX_SESSIONS);
-  if (toAdd.length === 0) {
-    return pruneRepoDiskIndexSessions(copy, canonicalPath);
-  }
-
-  const newRows: ClaudeSession[] = toAdd.map((item) => ({
-    id: item.sessionId,
-    claudeSessionId: item.sessionId,
-    repositoryPath: canonicalPath,
-    repositoryName,
-    model: item.modelHint ?? configFallbackModel,
-    status: "completed" as const,
-    messages: [],
-    createdAt: item.updatedAtMs,
-    pendingPrompt: "",
-    diskPreview: item.preview,
-  }));
-
-  let lastIdx = -1;
-  for (let i = 0; i < copy.length; i++) {
-    if (repositoryPathsMatch(copy[i].repositoryPath, canonicalPath)) lastIdx = i;
-  }
-  if (lastIdx === -1) {
-    return pruneRepoDiskIndexSessions([...copy, ...newRows], canonicalPath);
-  }
-  return pruneRepoDiskIndexSessions(
-    [...copy.slice(0, lastIdx + 1), ...newRows, ...copy.slice(lastIdx + 1)],
-    canonicalPath,
-  );
-}
-
-export interface ClaudeTurnCompletePayload {
-  sessionId: string;
-  success: boolean;
-  assistantPreviewRaw: string;
-  /** T5: Tool/Structured 主路径可直接携带机器可读 verdict。 */
-  structuredVerdict?: unknown;
-}
-
-interface UseClaudeSessionsOptions {
-  /** 一轮 Claude 输出结束（成功或失败）时调用；用于团队流程自动推进 */
-  onClaudeTurnComplete?: (payload: ClaudeTurnCompletePayload) => void;
-  /**
-   * 在即将 `executeClaudeCode` / `resumeClaudeCode` 启动子进程前调用（oneshot 下每轮都会起进程）。
-   * 由 App 注入：按项目+仓库并发上限拦截。
-   */
-  beforeSpawnClaudeRef?: MutableRefObject<
-    ((session: ClaudeSession) => { ok: true } | { ok: false; message: string }) | null
-  >;
-  /** `beforeSpawnClaudeRef` 返回 `ok: false` 时展示 */
-  onClaudeSpawnBlocked?: (message: string) => void;
-  /**
-   * 传给 `execute_claude_code` / `resume_claude_code` 的并发槽位（Rust 侧与侧栏上限一致）。
-   * 由 App 注入；无法解析仓库归属时可返回 null（不占用后台槽位）。
-   */
-  claudeConcurrencyInvokeContextRef?: MutableRefObject<
-    ((session: ClaudeSession) => { concurrencyScopeKey: string; concurrencyLimit: number } | null) | null
-  >;
-  /**
-   * 主会话 spawn 前解析 CLI 扩展（助手 tools / systemPrompt 等）；省略则仅使用 Claude Code 默认配置。
-   */
-  claudeSpawnExtrasContextRef?: MutableRefObject<
-    ((session: ClaudeSession) => Promise<ClaudeSpawnCliExtras | null>) | null
-  >;
-  /** 多屏模式下额外窗格绑定的会话 id 列表，用于磁盘 JSONL 拉取与运行态探测 */
-  companionSessionIds?: string[];
-  /** @deprecated 使用 companionSessionIds；保留向后兼容 */
-  companionSessionId?: string | null;
-  /** 流式 init 将临时 tab id 合并为真实 `session_id` 时回调（同步双栏右侧绑定） */
-  onSessionTabIdMigrated?: (fromTabId: string, toClaudeSessionId: string) => void;
-  /** 解析会话应使用的执行引擎（主会话读仓库配置，成员会话读员工配置）。 */
-  resolveExecutionEngineRef?: MutableRefObject<
-    ((session: ClaudeSession) => SessionExecutionEngine) | null
-  >;
-  /** 解析 Cursor/Codex 等工作目录（项目级会话回退到 activeRepository）。 */
-  resolveExecutionRepositoryPathRef?: MutableRefObject<
-    ((session: ClaudeSession) => string) | null
-  >;
-}
-
-type SessionExecuteOpts = ClaudeComposerExecuteBubbleOptions & {
-  /** 仅 `executeTerminalSession` 使用：强制新 Claude 回合。 */
-  terminalFreshTurn?: boolean;
-};
-
-interface UseClaudeSessionsReturn {
-  sessions: ClaudeSession[];
-  sessionsLiveRef: MutableRefObject<ClaudeSession[]>;
-  activeSessionId: string | null;
-  createSession: (
-    repositoryPath: string,
-    repositoryName: string,
-    opts?: { skipActivate?: boolean; connectionKind?: ClaudeSessionConnectionKind },
-  ) => Promise<string>;
-  updateSessionModel: (sessionId: string, model: string) => void;
-  /** 切换本标签连接方式；运行中拒绝；会结束长驻子进程以便下一条按新模式拉起。 */
-  updateSessionConnectionKind: (
-    sessionId: string,
-    kind: ClaudeSessionConnectionKind,
-  ) => Promise<void>;
-  /** 返回 false 表示未启动（例如并发门闸拦截）；其余路径为 true（含已安排重试的暂不可见会话）。 */
-  executeSession: (sessionId: string, prompt: string, opts?: ClaudeComposerExecuteBubbleOptions) => boolean;
-  executeTerminalSession: (
-    sessionId: string,
-    outboundPrompt: string,
-    opts?: { userBubblePrompt?: string },
-  ) => boolean;
-  appendSystemMessage: (sessionId: string, text: string) => void;
-  /** 仅写入用户气泡（不调用 Claude），供批量 OMC 等在标签内展示派发正文 */
-  appendUserMessage: (sessionId: string, text: string) => void;
-  sendMessage: (prompt: string) => void;
-  sendMessageToSession: (sessionId: string, prompt: string, opts?: ClaudeComposerExecuteBubbleOptions) => void;
-  closeSession: (sessionId: string) => void;
-  /**
-   * 物理删除磁盘 jsonl（`~/.claude/projects/<encoded>/<sid>.jsonl`）并清理内存标签。
-   *
-   * 行为：
-   * - 运行中 / 连接中（status === "running" | "connecting"）会拒绝并抛错；
-   * - 仅存在于内存的草稿（无 `claudeSessionId`）不会调用后端，但仍会触发 `closeSession`；
-   * - 后端 IPC 失败时抛错，标签不会被清掉，便于上层 toast 后用户重试。
-   *
-   * 调用方必须先做二次确认（jsonl 删除不可恢复）。
-   */
-  deleteSession: (sessionId: string) => Promise<void>;
-  switchSession: (sessionId: string) => void;
-  cancelSession: (sessionId: string, opts?: { retractLastUserTurn?: boolean }) => void;
-  /** 结束当前对话子代理 / 任务：标记 tool_use、取消 Claude 执行并刷新会话状态 */
-  stopSessionConversationTask: (item: SessionConversationTaskItem) => boolean;
-  respondToQuestion: (sessionId: string, answers: string[], customAnswer?: string) => void;
-  /** 关闭选择题 Dock：已过期/失败则仅收起；仍可操作时等同于跳过（空选提交） */
-  dismissQuestion: (sessionId: string) => void;
-  respondToPermission: (sessionId: string, response: "allow_once" | "allow_always" | "deny") => void;
-  clearTodos: (sessionId: string) => void;
-  restoreTodosFromTranscript: (sessionId: string) => void;
-  restorePendingPermissionFromTranscript: (sessionId: string) => void;
-  toggleTodo: (sessionId: string, todoId: string) => void;
-  clearFollowups: (sessionId: string) => void;
-  clearRevertItems: (sessionId: string) => void;
-  sendFollowup: (sessionId: string, id: string) => void;
-  restoreRevert: (sessionId: string, itemId: string) => Promise<void>;
-  refreshDiskSessionsForRepository: (repositoryPath: string, repositoryName: string) => Promise<void>;
-  /** False until ~/.wise/tabs.json has been read (or missing); gate disk refresh until then. */
-  tabsHydrated: boolean;
-  /** 从磁盘读取完整 jsonl 覆盖该标签的 messages（`sessionKey` 可为标签 id 或 `claudeSessionId`） */
-  reloadFullDiskTranscript: (sessionKey: string) => Promise<void>;
-  /** 渐进加载更早 jsonl 尾部（未达上限前不读全文件） */
-  loadMoreTranscriptFromDisk: (sessionKey: string) => Promise<void>;
-  /** 手动触发 Claude Code `/compact` 压缩会话历史 */
-  compactSessionHistory: (sessionId: string) => Promise<void>;
-  /**
-   * 结束指定标签对应的本机长驻/逐轮子进程（不关标签、不删绑定）。
-   * 用于仓库/项目主会话换绑前释放旧进程，保证同一绑定仅一个长驻子进程。
-   */
-  releaseSessionHostProcess: (sessionId: string) => Promise<void>;
-}
+export type { ClaudeTurnCompletePayload } from "./useClaudeSessions.types";
 
 export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaudeSessionsReturn {
   const companionSessionIdsJoinKey = options?.companionSessionIds?.join("\0") ?? "";
@@ -922,6 +329,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   const registryBootstrapDeadlineByClaudeSidRef = useRef<Map<string, number>>(new Map());
   const diskLoadDoneRef = useRef<Set<string>>(new Set());
   const diskTailLinesBySessionRef = useRef(new Map<string, number>());
+  const claudeConfigModelByRepoPathRef = useRef<Map<string, string | null>>(new Map());
   const pruneLiveSessionSidecarsRef = useRef<(liveSessions: readonly ClaudeSession[]) => boolean>(() => false);
   /** Tauri 主窗口是否在前台（与 `document.hidden` 组合判断 Phase 4 桌面摘要）。 */
   const mainWinFocusedRef = useRef(true);
@@ -1119,6 +527,23 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     },
     [resolveSessionExecutionEngine],
   );
+
+  const getCachedClaudeConfigModel = useCallback(async (repositoryPath: string): Promise<string | null> => {
+    const path = repositoryPath.trim();
+    if (!path) return null;
+    const cache = claudeConfigModelByRepoPathRef.current;
+    if (cache.has(path)) {
+      return cache.get(path) ?? null;
+    }
+    try {
+      const model = (await getClaudeConfigModel(path))?.trim() ?? null;
+      cache.set(path, model);
+      return model;
+    } catch {
+      cache.set(path, null);
+      return null;
+    }
+  }, []);
 
   const resolveSpawnExtrasForTab = useCallback(
     async (tabSessionId: string): Promise<ClaudeSpawnCliExtras | null> => {
@@ -2049,39 +1474,15 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
   const reloadFullDiskTranscript = useCallback(
     async (sessionKey: string) => {
-      const raw = sessionKey.trim();
-      if (!raw) return;
-      const s = sessionsRef.current.find((x) => x.id === raw || x.claudeSessionId === raw);
-      if (!s) return;
-      const tid = s.id;
-      const rp = s.repositoryPath?.trim();
-      const engine = resolveSessionExecutionEngine(s);
-      const diskKey = engine === "cursor" ? tid : s.claudeSessionId?.trim() ?? "";
-      if (!rp || !diskKey) return;
       try {
-        const lines = await loadSessionTranscriptLines(s, diskKey, null);
-        diskTailLinesBySessionRef.current.set(tid, lines.length);
-        const { messages, diskTranscriptPartial } = sessionMessagesFromJsonlLines(lines, {
-          tailRequestLines: Math.max(lines.length, 1),
-          fullTranscript: true,
-          unlimitedMessageCount: true,
+        await reloadFullDiskTranscriptByKey({
+          sessionKey,
+          sessions: sessionsRef.current,
+          setSessions,
+          diskTailLinesBySession: diskTailLinesBySessionRef.current,
+          resolveSessionExecutionEngine,
+          loadSessionTranscriptLines,
         });
-        if (messages.length === 0) return;
-        const nextMessages = isTerminalWorkerWiseTab(s)
-          ? sanitizeTerminalWorkerTranscriptMessages(messages)
-          : messages;
-        setSessions((prev) =>
-          prev.map((sess) =>
-            sess.id === tid
-              ? {
-                  ...sess,
-                  messages: nextMessages,
-                  diskTranscriptPartial,
-                  transcriptMemoryUnlimited: true,
-                }
-              : sess,
-          ),
-        );
       } catch {
         /* ignore */
       }
@@ -2091,57 +1492,29 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
   const applyDiskTranscriptTail = useCallback(
     async (session: ClaudeSession, tailLines: number) => {
-      const rp = session.repositoryPath?.trim();
-      const engine = resolveSessionExecutionEngine(session);
-      const diskKey = engine === "cursor" ? session.id.trim() : session.claudeSessionId?.trim() ?? "";
-      if (!rp || !diskKey) return;
-      const lines = await loadSessionTranscriptLines(session, diskKey, tailLines);
-      const { messages, diskTranscriptPartial } = sessionMessagesFromJsonlLines(lines, {
-        tailRequestLines: tailLines,
+      await applyDiskTranscriptTailHelper({
+        session,
+        tailLines,
+        setSessions,
+        diskTailLinesBySession: diskTailLinesBySessionRef.current,
+        resolveSessionExecutionEngine,
+        loadSessionTranscriptLines,
       });
-      if (messages.length === 0) return;
-      const nextMessages = isTerminalWorkerWiseTab(session)
-        ? sanitizeTerminalWorkerTranscriptMessages(messages)
-        : messages;
-      diskTailLinesBySessionRef.current.set(session.id, tailLines);
-      setSessions((prev) =>
-        prev.map((sess) =>
-          sess.id === session.id
-            ? {
-                ...sess,
-                messages: nextMessages,
-                diskTranscriptPartial,
-                transcriptMemoryUnlimited: false,
-              }
-            : sess,
-        ),
-      );
     },
     [loadSessionTranscriptLines, resolveSessionExecutionEngine, setSessions],
   );
 
   const loadMoreTranscriptFromDisk = useCallback(
     async (sessionKey: string) => {
-      const raw = sessionKey.trim();
-      if (!raw) return;
-      const s = sessionsRef.current.find((x) => x.id === raw || x.claudeSessionId === raw);
-      if (!s) return;
-      const engine = resolveSessionExecutionEngine(s);
-      const hasDisk =
-        engine === "cursor" ? Boolean(s.id.trim()) : Boolean(s.claudeSessionId?.trim());
-      if (!hasDisk) return;
-      const prevTail =
-        diskTailLinesBySessionRef.current.get(s.id) ?? CLAUDE_DISK_JSONL_TAIL_LINES_LAZY;
-      if (prevTail >= CLAUDE_DISK_JSONL_TAIL_LINES_INITIAL) {
-        await reloadFullDiskTranscript(s.id);
-        return;
-      }
-      const nextTail = Math.min(
-        prevTail + CLAUDE_DISK_JSONL_TAIL_LINES_LOAD_MORE,
-        CLAUDE_DISK_JSONL_TAIL_LINES_INITIAL,
-      );
       try {
-        await applyDiskTranscriptTail(s, nextTail);
+        await loadMoreTranscriptByKey({
+          sessionKey,
+          sessions: sessionsRef.current,
+          diskTailLinesBySession: diskTailLinesBySessionRef.current,
+          resolveSessionExecutionEngine,
+          reloadFullDiskTranscript,
+          applyDiskTranscriptTail,
+        });
       } catch {
         /* ignore */
       }
@@ -2566,13 +1939,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     });
 
     void (async () => {
-      let resolved: string | null = null;
-      try {
-        const fromCfg = await getClaudeConfigModel(mergePath);
-        if (fromCfg?.trim()) resolved = fromCfg.trim();
-      } catch {
-        return;
-      }
+      const resolved = await getCachedClaudeConfigModel(mergePath);
       if (!resolved || resolved === "sonnet") return;
 
       const idsNeedingConfigModel = new Set(
@@ -2591,7 +1958,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         return next;
       });
     })();
-  }, []);
+  }, [getCachedClaudeConfigModel]);
 
   useEffect(() => {
     if (!activeSessionId) return;
@@ -2925,9 +2292,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
       void (async () => {
         try {
-          const fromCfg = await getClaudeConfigModel(repositoryPath);
-          if (!fromCfg?.trim()) return;
-          const model = fromCfg.trim();
+          const model = await getCachedClaudeConfigModel(repositoryPath);
+          if (!model?.trim()) return;
           setSessions((prev) => {
             const next = prev.map((s) => (s.id === id ? { ...s, model } : s));
             sessionsRef.current = next;
@@ -2940,7 +2306,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
       return id;
     },
-    [],
+    [getCachedClaudeConfigModel],
   );
 
   const ensureWorkflowRunId = useCallback(async (session: ClaudeSession): Promise<string | null> => {
@@ -3694,14 +3060,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       if (!qr) return;
       const qrLife = notificationHub.getRequestLifecycle(qr.id);
       const ownerSessionId = notificationHub.findRequestSessionId(qr.id) ?? sessionId;
-      const session = sessionsRef.current.find(
-        (s) => s.id === ownerSessionId || s.claudeSessionId === ownerSessionId,
-      );
-      const tabSessionId = session?.id ?? ownerSessionId;
-      const claudeSid =
-        session?.claudeSessionId?.trim() ??
-        sessionIdMapRef.current.get(tabSessionId)?.trim() ??
-        null;
+      const { session, tabSessionId, claudeSid } = resolveControlSessionContext({
+        ownerSessionId,
+        sessions: sessionsRef.current,
+        sessionIdMap: sessionIdMapRef.current,
+      });
       const liveStreamingProcess = hasLiveStreamingClaudeProcess({
         session,
         defaultConnectionKind: defaultConnectionKindRef.current,
@@ -3709,39 +3072,38 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         streamingProcessClaudeSessionId: streamingProcessByTabRef.current.get(tabSessionId)?.claudeSessionId,
       });
       const userAnswerText = buildQuestionFallbackUserPrompt(qr, answers, customAnswer);
-      const preferStdinControlResponse =
-        liveStreamingProcess ||
-        Boolean(
-          session &&
-            sessionUsesStreamingConnection(session, defaultConnectionKindRef.current) &&
-            claudeSid,
-        );
+      const preferStdinControlResponse = shouldPreferQuestionStdinControl({
+        session,
+        claudeSid,
+        defaultConnectionKind: defaultConnectionKindRef.current,
+        hasLiveStreamingProcess: liveStreamingProcess,
+        sessionUsesStreamingConnection,
+      });
 
       let configModel: string | null = null;
       if (session?.repositoryPath?.trim()) {
-        try {
-          configModel = (await getClaudeConfigModel(session.repositoryPath))?.trim() ?? null;
-        } catch {
-          configModel = null;
-        }
+        configModel = await getCachedClaudeConfigModel(session.repositoryPath);
       }
       const proxyStreamingQuestion =
         session &&
         sessionUsesStreamingConnection(session, defaultConnectionKindRef.current) &&
         shouldUseProxyQuestionResumeDelivery(session.model, configModel);
 
-      // Qwen 等代理：长驻子进程在 AskUserQuestion 后无法靠 control_response / 同进程 user 行续跑，须结束旧进程再以 resume 起新轮。
-      if (proxyStreamingQuestion) {
-        if (claudeSid) {
-          await closeStreamingSession(claudeSid).catch(() => {
-            /* 可能已退出 */
-          });
-        }
-        streamingProcessByTabRef.current.delete(tabSessionId);
-        streamingSessionStreamDetachByTabRef.current.get(tabSessionId)?.();
-        streamingSessionStreamDetachByTabRef.current.delete(tabSessionId);
-        detachClaudeInvocationStreamsForTab(tabSessionId);
-        await deliverQuestionAnswerViaResume(ownerSessionId, qr, answers, customAnswer);
+      const handledByProxyBranch = await handleProxyStreamingQuestionBranch({
+        proxyStreamingQuestion: Boolean(proxyStreamingQuestion),
+        claudeSid,
+        tabSessionId,
+        closeStreamingSession,
+        streamingProcessByTab: streamingProcessByTabRef.current,
+        streamingSessionStreamDetachByTab: streamingSessionStreamDetachByTabRef.current,
+        detachClaudeInvocationStreamsForTab,
+        deliverQuestionAnswerViaResume,
+        ownerSessionId,
+        qr,
+        answers,
+        customAnswer,
+      });
+      if (handledByProxyBranch) {
         return;
       }
 
@@ -3753,39 +3115,48 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       }
 
       const targetSessionId = claudeSid ?? session?.id ?? ownerSessionId;
-      const nextTurnNonce =
-        preferStdinControlResponse && claudeSid
-          ? (() => {
-              streamTurnSeqRef.current += 1;
-              return streamTurnSeqRef.current;
-            })()
-          : null;
+      const nextTurnNonceState = consumeNextTurnNonce(
+        streamTurnSeqRef.current,
+        Boolean(preferStdinControlResponse && claudeSid),
+      );
+      streamTurnSeqRef.current = nextTurnNonceState.nextSeq;
+      const nextTurnNonce = nextTurnNonceState.turnNonce;
       try {
-        appendUserMessage(tabSessionId, userAnswerText);
-        if (nextTurnNonce !== null && claudeSid) {
-          expectedTurnNonceByTabIdRef.current.set(tabSessionId, nextTurnNonce);
-          streamingTargetIdRef.current = tabSessionId;
-          markClaudeRegistryBootstrapWarmup(registryBootstrapDeadlineByClaudeSidRef, claudeSid);
-          streamingProcessByTabRef.current.set(tabSessionId, { claudeSessionId: claudeSid });
-          commitSessions((prev) =>
-            prev.map((s) =>
-              s.id === tabSessionId ? { ...s, status: "running" as const } : s,
-            ),
-          );
-          await prepareStreamingControlResponseListener(tabSessionId, claudeSid, nextTurnNonce);
-          scheduleStreamStallTimer(tabSessionId);
-        }
-        await submitClaudeStdinLine(buildQuestionStdinLine(qr.id, answers, customAnswer, qr), targetSessionId);
-        const needsStreamUserFallback =
-          preferStdinControlResponse &&
-          claudeSid &&
-          userAnswerText.trim().length > 0 &&
-          isToolUseQuestionRequestId(qr.id);
-        if (needsStreamUserFallback) {
-          await sendStreamingUserMessage(claudeSid, userAnswerText).catch(() => {
-            /* control_response 已写入时忽略重复用户行失败 */
-          });
-        }
+        await submitQuestionViaStdin({
+          tabSessionId,
+          claudeSid,
+          targetSessionId,
+          nextTurnNonce,
+          qr,
+          answers,
+          customAnswer,
+          userAnswerText,
+          preferStdinControlResponse,
+          appendUserMessage,
+          expectedTurnNonceByTabId: expectedTurnNonceByTabIdRef.current,
+          setStreamingTargetId: (id) => {
+            streamingTargetIdRef.current = id;
+          },
+          markClaudeRegistryBootstrapWarmup: (sid) => {
+            markClaudeRegistryBootstrapWarmup(registryBootstrapDeadlineByClaudeSidRef, sid);
+          },
+          setStreamingProcessByTab: (tabId, sid) => {
+            streamingProcessByTabRef.current.set(tabId, { claudeSessionId: sid });
+          },
+          setSessionRunning: (runningTabId) => {
+            commitSessions((prev) =>
+              prev.map((s) =>
+                s.id === runningTabId ? { ...s, status: "running" as const } : s,
+              ),
+            );
+          },
+          prepareStreamingControlResponseListener,
+          scheduleStreamStallTimer,
+          submitClaudeStdinLine,
+          buildQuestionStdinLine,
+          isToolUseQuestionRequestId,
+          sendStreamingUserMessage,
+        });
         notificationHub.markRequestAnswered(qr.id);
         notificationHub.clearQuestion(ownerSessionId);
         void syncSessionStatusesWithHostRegistry();
@@ -3816,6 +3187,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       deliverQuestionAnswerViaResume,
       detachClaudeInvocationStreamsForTab,
       ensureWorkflowRunId,
+      getCachedClaudeConfigModel,
       prepareStreamingControlResponseListener,
       scheduleStreamStallTimer,
       syncSessionStatusesWithHostRegistry,
@@ -3824,15 +3196,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
   const dismissQuestion = useCallback(
     (sessionId: string) => {
-      const qr = notificationHub.getDockSlice(sessionId).questionRequest;
-      if (!qr) return;
-      const life = notificationHub.getRequestLifecycle(qr.id)?.status;
-      const ownerSessionId = notificationHub.findRequestSessionId(qr.id) ?? sessionId;
-      if (life === "expired" || life === "failed") {
-        notificationHub.userDismissNonPendingQuestionHeadAt(ownerSessionId);
-        return;
-      }
-      void respondToQuestion(sessionId, []);
+      dismissQuestionBySession({ sessionId, respondToQuestion });
     },
     [respondToQuestion],
   );
@@ -3847,24 +3211,20 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         notificationHub.clearPermission(ownerSessionId);
         return;
       }
-      const session = sessionsRef.current.find((s) => s.id === ownerSessionId || s.claudeSessionId === ownerSessionId);
+      const { session, tabSessionId, claudeSid } = resolveControlSessionContext({
+        ownerSessionId,
+        sessions: sessionsRef.current,
+        sessionIdMap: sessionIdMapRef.current,
+      });
       const targetSessionId = session?.claudeSessionId ?? session?.id ?? ownerSessionId;
       const payload = buildPermissionStdinLine(pr.id, response, pr.toolInput, pr.toolUseId);
-      const tabSessionId = session?.id ?? ownerSessionId;
-      const claudeSid =
-        session?.claudeSessionId?.trim() ??
-        sessionIdMapRef.current.get(tabSessionId)?.trim() ??
-        null;
       const preferStdin =
         session &&
         claudeSid &&
         sessionUsesStreamingConnection(session, defaultConnectionKindRef.current);
-      const nextTurnNonce = preferStdin
-        ? (() => {
-            streamTurnSeqRef.current += 1;
-            return streamTurnSeqRef.current;
-          })()
-        : null;
+      const nextTurnNonceState = consumeNextTurnNonce(streamTurnSeqRef.current, Boolean(preferStdin));
+      streamTurnSeqRef.current = nextTurnNonceState.nextSeq;
+      const nextTurnNonce = nextTurnNonceState.turnNonce;
       try {
         if (nextTurnNonce !== null && claudeSid) {
           expectedTurnNonceByTabIdRef.current.set(tabSessionId, nextTurnNonce);
@@ -3911,23 +3271,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   }, []);
 
   const restoreTodosFromTranscript = useCallback((sessionId: string) => {
-    const session = sessionsRef.current.find((s) => s.id === sessionId || s.claudeSessionId === sessionId);
-    if (!session) return;
-    const batch = extractLatestTodoWriteFromMessages(session.messages);
-    if (!batch) return;
-    notificationHub.restoreTodosFromTranscript(sessionId, batch.items, batch.merge);
-    if (session.claudeSessionId && session.claudeSessionId !== sessionId) {
-      notificationHub.restoreTodosFromTranscript(session.claudeSessionId, batch.items, batch.merge);
-    }
+    restoreTodosFromTranscriptBySession({ sessionId, sessions: sessionsRef.current });
   }, []);
 
   const restorePendingPermissionFromTranscript = useCallback((sessionId: string) => {
-    const session = sessionsRef.current.find((s) => s.id === sessionId || s.claudeSessionId === sessionId);
-    if (!session) return;
-    ingestPendingPermissionsFromSessionMessages(sessionId, session.messages);
-    if (session.claudeSessionId && session.claudeSessionId !== sessionId) {
-      ingestPendingPermissionsFromSessionMessages(session.claudeSessionId, session.messages);
-    }
+    restorePendingPermissionFromTranscriptBySession({ sessionId, sessions: sessionsRef.current });
   }, []);
 
   const toggleTodo = useCallback((sessionId: string, todoId: string) => {
@@ -3944,36 +3292,19 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
   const sendFollowup = useCallback(
     (sessionId: string, id: string) => {
-      const item = notificationHub.getDockSlice(sessionId).followupItems.find((f) => f.id === id);
-      if (item) {
-        sendMessageToSession(sessionId, item.text);
-        notificationHub.removeFollowupItem(sessionId, id);
-      }
+      sendFollowupById({ sessionId, followupId: id, sendMessageToSession });
     },
     [sendMessageToSession],
   );
 
   const restoreRevert = useCallback(
     async (sessionId: string, itemId: string) => {
-      const tabSession = sessionsRef.current.find((s) => s.id === sessionId);
-      if (!tabSession) return;
-
-      const item = notificationHub.getDockSlice(sessionId).revertItems.find((r) => r.id === itemId);
-      if (!item) return;
-
-      const body = item.text.trim();
-      if (!body) {
-        notificationHub.removeRevertItem(sessionId, itemId);
-        return;
-      }
-
-      const prompt = `请按此前给出的回退点执行恢复：\n${body}`;
-      try {
-        await sendMessageToSession(sessionId, prompt);
-        notificationHub.removeRevertItem(sessionId, itemId);
-      } catch {
-        /* sendMessageToSession 已将失败写入会话；保留 Dock 条目便于重试 */
-      }
+      await restoreRevertById({
+        sessionId,
+        itemId,
+        sessions: sessionsRef.current,
+        sendMessageToSession,
+      });
     },
     [sendMessageToSession],
   );
