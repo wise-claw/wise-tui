@@ -4,6 +4,10 @@ import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { attachExternalLinkDelegation } from "../../services/openExternal";
 import { isValidHttpUrl, normalizeAutolinkUrl } from "../../utils/autolinkUrl";
+import {
+  sanitizeRichMessageHtml,
+  splitRichMessageContent,
+} from "../../utils/richMessageHtml";
 
 // ── Markdown Renderer ──
 
@@ -38,6 +42,22 @@ function renderMarkdown(text: string) {
   } catch {
     return escapeHtml(text).replace(/\n/g, "<br>");
   }
+}
+
+function renderRichMessageInnerHtml(text: string): string {
+  const split = splitRichMessageContent(text);
+  if (split.kind === "markdown") {
+    return renderMarkdown(split.markdown);
+  }
+  if (split.kind === "html") {
+    return `<div class="app-markdown-html-embed">${sanitizeRichMessageHtml(split.html)}</div>`;
+  }
+  const mdHtml = split.markdown ? renderMarkdown(split.markdown) : "";
+  const docHtml = sanitizeRichMessageHtml(split.html);
+  const embed = docHtml
+    ? `<div class="app-markdown-html-embed">${docHtml}</div>`
+    : "";
+  return `${mdHtml}${embed}`;
 }
 
 export function StreamingReplyHint() {
@@ -84,7 +104,7 @@ export function Markdown({ text, streaming, showPendingHint, className }: Props)
     // 内容未变时跳过完整的 marked+DOMPurify+DOM 管线
     if (text === lastRenderedTextRef.current) return;
 
-    const html = renderMarkdown(text);
+    const html = renderRichMessageInnerHtml(text);
     const temp = document.createElement("div");
     temp.innerHTML = html;
 

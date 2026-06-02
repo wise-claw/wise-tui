@@ -926,6 +926,20 @@ fn run_npm_global_install(
         .map_err(|e| format!("执行 npm install -g {package} 失败: {e}"))
 }
 
+fn run_npm_global_uninstall(
+    npm_bin: &Path,
+    home: &str,
+    path_env: &str,
+    package: &str,
+) -> Result<std::process::Output, String> {
+    Command::new(npm_bin)
+        .args(["uninstall", "-g", package])
+        .env("HOME", home)
+        .env("PATH", path_env)
+        .output()
+        .map_err(|e| format!("执行 npm uninstall -g {package} 失败: {e}"))
+}
+
 pub(crate) fn delete_custom_agent(db: &Mutex<Connection>, id: &str) -> Result<(), String> {
     let row_id = strip_custom_prefix(id.trim()).trim();
     if row_id.is_empty() {
@@ -995,6 +1009,59 @@ pub async fn agent_registry_install_builtin(
             "安装 {} 失败（退出码 {:?}）\n{stdout}\n{stderr}{eexist_hint}",
             spec.npm_package,
             install_output.status.code()
+        ));
+    }
+
+    let probe = OsProbe;
+    registry.refresh_all(true, &db.0, &probe).await
+}
+
+fn parse_builtin_uninstall_kind(kind: &str) -> Result<BuiltinInstallSpec, String> {
+    match kind.trim().to_lowercase().as_str() {
+        "claude" | "codex" | "gemini" | "opencode" => parse_builtin_install_kind(kind),
+        "cursor" => Ok(BuiltinInstallSpec {
+            npm_package: "@cursor/sdk",
+        }),
+        "" => Err("kind is required".to_string()),
+        other => Err(format!("不支持一键卸载的运行入口：{other}")),
+    }
+}
+
+#[tauri::command]
+pub async fn agent_registry_uninstall_builtin(
+    kind: String,
+    registry: tauri::State<'_, AgentRegistry>,
+    db: tauri::State<'_, wise_db::WiseDb>,
+) -> Result<Vec<DetectedAgent>, String> {
+    let normalized_kind = kind.trim().to_lowercase();
+    let spec = parse_builtin_uninstall_kind(&normalized_kind)?;
+
+    if normalized_kind == "cursor" {
+        crate::cursor_agent::clear_cursor_api_key(&db.0)?;
+        let probe = OsProbe;
+        return registry.refresh_all(true, &db.0, &probe).await;
+    }
+
+    let home = dirs::home_dir().ok_or_else(|| "无法解析用户主目录".to_string())?;
+    let home_s = home.to_string_lossy().to_string();
+    let path_env =
+        crate::claude_commands::merge_path_env(&crate::claude_commands::claude_path_search_prefixes());
+    let package = spec.npm_package.to_string();
+
+    let uninstall_output = tokio::task::spawn_blocking(move || {
+        let npm = resolve_npm_binary(&path_env)?;
+        run_npm_global_uninstall(&npm, &home_s, &path_env, &package)
+    })
+    .await
+    .map_err(|e| format!("卸载任务被中断: {e}"))??;
+
+    let stdout = String::from_utf8_lossy(&uninstall_output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&uninstall_output.stderr).to_string();
+    if !uninstall_output.status.success() {
+        return Err(format!(
+            "卸载 {} 失败（退出码 {:?}）\n{stdout}\n{stderr}",
+            spec.npm_package,
+            uninstall_output.status.code()
         ));
     }
 
@@ -1238,6 +1305,23 @@ mod tests {
         assert!(parse_builtin_install_kind("custom").is_err());
         assert!(parse_builtin_install_kind("cursor").is_err());
         assert!(parse_builtin_install_kind("").is_err());
+    }
+
+    #[test]
+    fn parse_builtin_uninstall_kind_accepts_cursor_and_builtin_cli() {
+        assert_eq!(
+            parse_builtin_uninstall_kind("cursor").expect("cursor"),
+            BuiltinInstallSpec {
+                npm_package: "@cursor/sdk",
+            }
+        );
+        assert_eq!(
+            parse_builtin_uninstall_kind("codex").expect("codex"),
+            BuiltinInstallSpec {
+                npm_package: "@openai/codex",
+            }
+        );
+        assert!(parse_builtin_uninstall_kind("custom").is_err());
     }
 
     #[test]

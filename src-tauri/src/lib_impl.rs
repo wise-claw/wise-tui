@@ -615,6 +615,7 @@ pub fn run() {
             agent_registry::agent_registry_save_custom,
             agent_registry::agent_registry_delete_custom,
             agent_registry::agent_registry_install_builtin,
+            agent_registry::agent_registry_uninstall_builtin,
             cursor_agent::cursor_agent_get_status,
             cursor_agent::cursor_agent_set_api_key,
             cursor_agent::cursor_agent_clear_api_key,

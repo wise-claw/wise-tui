@@ -1,6 +1,7 @@
 import { isAgentKind, type DetectedAgent, type DetectedAgentKind } from "../../types/detectedAgent";
 
 export type BuiltinInstallableKind = Exclude<DetectedAgentKind, "custom" | "cursor">;
+export type BuiltinUninstallableKind = Exclude<DetectedAgentKind, "custom">;
 
 export type AgentRegistryFilter = "all" | "available" | "custom" | "errors";
 
@@ -39,14 +40,24 @@ export function getEmptyDescription(filter: AgentRegistryFilter, query: string):
   return "暂未探测到 Claude Code 运行入口";
 }
 
-export function canInstallBuiltinAgent(
+export function isBuiltinInstallableAgent(
   agent: DetectedAgent,
 ): agent is DetectedAgent<BuiltinInstallableKind> {
-  return (
-    agent.kind !== "custom" &&
-    agent.kind !== "cursor" &&
-    !agent.available
-  );
+  return agent.kind !== "custom" && agent.kind !== "cursor";
+}
+
+export function isBuiltinUninstallableAgent(
+  agent: DetectedAgent,
+): agent is DetectedAgent<BuiltinUninstallableKind> {
+  return agent.kind !== "custom";
+}
+
+export function canInstallBuiltinAgent(agent: DetectedAgent): boolean {
+  return isBuiltinInstallableAgent(agent) && !agent.available;
+}
+
+export function canUninstallBuiltinAgent(agent: DetectedAgent): boolean {
+  return isBuiltinUninstallableAgent(agent) && agent.available;
 }
 
 export function getBuiltinInstallCommand(kind: BuiltinInstallableKind): string {
@@ -60,6 +71,13 @@ export function getBuiltinInstallCommand(kind: BuiltinInstallableKind): string {
     case "opencode":
       return "npm install -g opencode-ai@latest";
   }
+}
+
+export function getBuiltinUninstallCommand(kind: BuiltinUninstallableKind): string {
+  if (kind === "cursor") {
+    return "清除 Cursor API Key（本地 app_settings）";
+  }
+  return getBuiltinInstallCommand(kind).replace("npm install -g", "npm uninstall -g");
 }
 
 export function getAgentKindLabel(kind: DetectedAgent["kind"]): string {

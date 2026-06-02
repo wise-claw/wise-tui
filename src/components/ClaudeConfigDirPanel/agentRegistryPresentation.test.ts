@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { DetectedAgent } from "../../types/detectedAgent";
 import {
   canInstallBuiltinAgent,
+  canUninstallBuiltinAgent,
   deriveAgentRegistryStats,
   describeAgentRuntime,
   filterAgents,
@@ -9,6 +10,7 @@ import {
   getAgentKindLabel,
   getAgentPathLabel,
   getBuiltinInstallCommand,
+  getBuiltinUninstallCommand,
   getEmptyDescription,
 } from "./agentRegistryPresentation";
 
@@ -90,6 +92,8 @@ describe("agent registry presentation helpers", () => {
       }),
     ).toBe(false);
     expect(getBuiltinInstallCommand("codex")).toBe("npm install -g @openai/codex");
+    expect(getBuiltinUninstallCommand("codex")).toBe("npm uninstall -g @openai/codex");
+    expect(getBuiltinUninstallCommand("cursor")).toBe("清除 Cursor API Key（本地 app_settings）");
     expect(getAgentKindLabel("claude")).toBe("Claude");
     expect(getAgentKindLabel("codex")).toBe("Codex");
     expect(getAgentKindLabel("gemini")).toBe("Gemini");
@@ -105,5 +109,16 @@ describe("agent registry presentation helpers", () => {
     expect(describeAgentRuntime(agents[1])).toContain("等待本机命令就绪");
     expect(describeAgentRuntime(agents[2])).toBe("预留命令 · 3 个默认参数 · 1 个环境变量");
     expect(formatDetectedAt("not-a-date")).toBe("未记录");
+    expect(
+      canUninstallBuiltinAgent({
+        id: "cursor",
+        name: "Cursor SDK",
+        kind: "cursor",
+        available: true,
+        backend: "cursor",
+        command: "cursor-sdk",
+        detectedAt: "2026-05-17T00:00:00.000Z",
+      }),
+    ).toBe(true);
   });
 });

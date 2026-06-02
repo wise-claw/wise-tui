@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 mock.module("../../services/agentRegistry", () => ({
   deleteCustomAgent: mock(async () => undefined),
   installBuiltinAgent: mock(async () => []),
+  uninstallBuiltinAgent: mock(async () => []),
   listAgents: mock(async () => []),
   refreshAgents: mock(async () => []),
   saveCustomAgent: mock(async () => ({

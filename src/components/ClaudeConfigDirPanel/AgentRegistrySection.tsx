@@ -19,10 +19,12 @@ import {
   refreshAgents,
   saveCustomAgent,
   testCustomAgent,
+  uninstallBuiltinAgent,
 } from "../../services/agentRegistry";
 import { isAgentKind, type CustomAgentInput, type DetectedAgent, type ProbeResult } from "../../types/detectedAgent";
 import {
   canInstallBuiltinAgent,
+  canUninstallBuiltinAgent,
   deriveAgentRegistryStats,
   describeAgentRuntime,
   filterAgents,
@@ -30,9 +32,13 @@ import {
   getAgentKindLabel,
   getAgentPathLabel,
   getBuiltinInstallCommand,
+  getBuiltinUninstallCommand,
+  isBuiltinInstallableAgent,
+  isBuiltinUninstallableAgent,
   getEmptyDescription,
   type AgentRegistryFilter,
   type BuiltinInstallableKind,
+  type BuiltinUninstallableKind,
 } from "./agentRegistryPresentation";
 import {
   AuthorPanelEmptyShell,
@@ -65,6 +71,7 @@ export function AgentRegistrySection() {
   const [testedFingerprint, setTestedFingerprint] = useState<string | null>(null);
   const [draftFingerprint, setDraftFingerprint] = useState("");
   const [installingId, setInstallingId] = useState<string | null>(null);
+  const [uninstallingId, setUninstallingId] = useState<string | null>(null);
   const [cursorModalOpen, setCursorModalOpen] = useState(false);
   const [form] = Form.useForm<CustomAgentFormValues>();
   const aliveRef = useRef(true);
@@ -211,6 +218,28 @@ export function AgentRegistrySection() {
     [],
   );
 
+  const handleUninstall = useCallback(
+    async (agent: DetectedAgent<BuiltinUninstallableKind>) => {
+      setUninstallingId(agent.id);
+      try {
+        const next = await uninstallBuiltinAgent(agent.kind);
+        if (!aliveRef.current) return;
+        setAgents(next);
+        const refreshed = next.find((entry) => entry.id === agent.id);
+        if (!refreshed?.available) {
+          message.success(`${agent.name} 卸载成功`);
+        } else {
+          message.warning("卸载命令执行完成，但入口仍可用，请手动检查本机环境");
+        }
+      } catch (e) {
+        message.error(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (aliveRef.current) setUninstallingId(null);
+      }
+    },
+    [],
+  );
+
   const canSave = Boolean(testResult?.ok && testedFingerprint === draftFingerprint && draftFingerprint);
   const stats = useMemo(() => deriveAgentRegistryStats(agents), [agents]);
   const filteredAgents = useMemo(() => filterAgents(agents, filter, query), [agents, filter, query]);
@@ -322,9 +351,11 @@ export function AgentRegistrySection() {
                 agent={agent}
                 busy={loading}
                 installing={installingId === agent.id}
+                uninstalling={uninstallingId === agent.id}
                 onEdit={openEditModal}
                 onDelete={(id) => void handleDelete(id)}
                 onInstall={(entry) => void handleInstall(entry)}
+                onUninstall={(entry) => void handleUninstall(entry)}
                 onConfigureCursor={() => setCursorModalOpen(true)}
               />
             ))}
@@ -407,13 +438,25 @@ interface AgentRegistryRowProps {
   agent: DetectedAgent;
   busy: boolean;
   installing: boolean;
+  uninstalling: boolean;
   onEdit: (agent: DetectedAgent<"custom">) => void;
   onDelete: (id: string) => void;
   onInstall: (agent: DetectedAgent<BuiltinInstallableKind>) => void;
+  onUninstall: (agent: DetectedAgent<BuiltinUninstallableKind>) => void;
   onConfigureCursor: () => void;
 }
 
-function AgentRegistryRow({ agent, busy, installing, onEdit, onDelete, onInstall, onConfigureCursor }: AgentRegistryRowProps) {
+function AgentRegistryRow({
+  agent,
+  busy,
+  installing,
+  uninstalling,
+  onEdit,
+  onDelete,
+  onInstall,
+  onUninstall,
+  onConfigureCursor,
+}: AgentRegistryRowProps) {
   const pathText = getAgentPathLabel(agent);
 
   const handleCopy = useCallback(() => {
@@ -520,8 +563,22 @@ function AgentRegistryRow({ agent, busy, installing, onEdit, onDelete, onInstall
             >
               配置 API Key
             </Button>
+            {isBuiltinUninstallableAgent(agent) ? (
+              <Popconfirm
+                title={`卸载 ${agent.name}`}
+                description="将清除本地保存的 Cursor API Key，卸载后该入口会回到待就绪状态。"
+                okText="确认卸载"
+                cancelText="取消"
+                okButtonProps={{ danger: true, loading: uninstalling }}
+                onConfirm={() => onUninstall(agent)}
+              >
+                <Button size="small" danger icon={<DeleteOutlined />} disabled={busy || uninstalling}>
+                  一键卸载
+                </Button>
+              </Popconfirm>
+            ) : null}
           </Space>
-        ) : canInstallBuiltinAgent(agent) ? (
+        ) : isBuiltinInstallableAgent(agent) && canInstallBuiltinAgent(agent) ? (
           <Space size={4} className="app-agent-registry-card__actions">
             <Tooltip title={getBuiltinInstallCommand(agent.kind)}>
               <Button
@@ -535,6 +592,23 @@ function AgentRegistryRow({ agent, busy, installing, onEdit, onDelete, onInstall
               >
                 一键安装
               </Button>
+            </Tooltip>
+          </Space>
+        ) : isBuiltinUninstallableAgent(agent) && canUninstallBuiltinAgent(agent) ? (
+          <Space size={4} className="app-agent-registry-card__actions">
+            <Tooltip title={getBuiltinUninstallCommand(agent.kind)}>
+              <Popconfirm
+                title={`卸载 ${agent.name}`}
+                description="将执行全局 npm 卸载命令，卸载后该入口会回到待就绪状态。"
+                okText="确认卸载"
+                cancelText="取消"
+                okButtonProps={{ danger: true, loading: uninstalling }}
+                onConfirm={() => onUninstall(agent)}
+              >
+                <Button size="small" danger icon={<DeleteOutlined />} disabled={busy || uninstalling}>
+                  一键卸载
+                </Button>
+              </Popconfirm>
             </Tooltip>
           </Space>
         ) : null}

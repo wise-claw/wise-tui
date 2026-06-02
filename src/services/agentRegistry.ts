@@ -36,9 +36,16 @@ export async function deleteCustomAgent(id: string): Promise<void> {
 }
 
 export type BuiltinInstallableKind = Exclude<DetectedAgentKind, "custom" | "cursor">;
+export type BuiltinUninstallableKind = Exclude<DetectedAgentKind, "custom">;
 
 export async function installBuiltinAgent(kind: BuiltinInstallableKind): Promise<DetectedAgent[]> {
   const agents = await invoke<DetectedAgent[]>("agent_registry_install_builtin", { kind });
+  publishAgentRegistry(agents);
+  return agents;
+}
+
+export async function uninstallBuiltinAgent(kind: BuiltinUninstallableKind): Promise<DetectedAgent[]> {
+  const agents = await invoke<DetectedAgent[]>("agent_registry_uninstall_builtin", { kind });
   publishAgentRegistry(agents);
   return agents;
 }
