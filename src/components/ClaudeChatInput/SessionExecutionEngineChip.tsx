@@ -33,8 +33,17 @@ function unavailableDescription(
   key: SessionExecutionEngine,
 ): string {
   if (key === "codex") return "未检测到 Codex CLI，点击右侧探测";
-  if (key === "cursor") return "Cursor SDK 未就绪，点击右侧配置 API Key";
   return SESSION_EXECUTION_ENGINE_LABELS[key].description;
+}
+
+function visibleExecutionEngines(
+  codexAvailable: boolean,
+  cursorAvailable: boolean,
+): readonly SessionExecutionEngine[] {
+  return SESSION_EXECUTION_ENGINES.filter((key) => {
+    if (key === "cursor" && !cursorAvailable) return false;
+    return true;
+  });
 }
 
 export function buildSessionExecutionEngineMenuItems({
@@ -44,13 +53,13 @@ export function buildSessionExecutionEngineMenuItems({
   onOpenExecutionEnvironment,
   onProbeClick,
 }: PickerSectionProps & { onProbeClick?: () => void }): MenuProps["items"] {
-  return SESSION_EXECUTION_ENGINES.map((key) => {
+  return visibleExecutionEngines(codexAvailable, cursorAvailable).map((key) => {
     const itemMeta = SESSION_EXECUTION_ENGINE_LABELS[key];
     const itemDisabled = !isEngineAvailable(key, codexAvailable, cursorAvailable);
     const isSelected = engine === key;
 
     const probeAction =
-      itemDisabled && onOpenExecutionEnvironment && key !== "claude" ? (
+      itemDisabled && onOpenExecutionEnvironment && key === "codex" ? (
         <button
           type="button"
           className="app-claude-connection-kind-menu-item__probe"
@@ -61,7 +70,7 @@ export function buildSessionExecutionEngineMenuItems({
             onOpenExecutionEnvironment();
           }}
         >
-          {key === "cursor" ? "配置" : "探测"}
+          探测
         </button>
       ) : null;
 
@@ -195,7 +204,7 @@ export function SessionExecutionEngineChip({
   const chipTooltip =
     !engineReady
       ? engine === "cursor"
-        ? "Cursor SDK 未就绪；可在下拉菜单中点击「配置」"
+        ? "Cursor SDK 未就绪；请在配置中心配置 API Key"
         : "未检测到 Codex CLI；可在下拉菜单中点击「探测」"
       : `执行引擎：${meta.title}；点击切换`;
 

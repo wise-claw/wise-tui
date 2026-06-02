@@ -60,7 +60,7 @@
 
 .app-claude-semi-chat-input-wrap .semi-aiChatInput-footer-action {
   flex-shrink: 0;
-  column-gap: 4px;
+  column-gap: 8px;
 }
 
 .app-claude-semi-chat-input-wrap .semi-aiChatInput-footer-action-button {
@@ -512,6 +512,7 @@
 
 .app-claude-semi-footer-toolbar-right {
   align-items: center;
+  gap: 8px;
 }
 
 .app-claude-semi-footer-stop-btn {
@@ -541,6 +542,32 @@
   color: var(--ant-color-text-tertiary);
   cursor: pointer;
   transition: color 0.15s ease, background 0.15s ease;
+}
+
+.app-composer-runtime-settings-btn--with-engine {
+  width: auto;
+  max-width: 160px;
+  gap: 4px;
+  padding: 0 2px;
+  font-family: inherit;
+}
+
+.app-composer-runtime-settings-btn__engine-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 14px;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-composer-runtime-settings-btn--with-engine:hover:not(:disabled) .app-composer-runtime-settings-btn__engine-label {
+  color: var(--ant-color-text);
+}
+
+.app-composer-runtime-settings-btn--with-engine.app-composer-runtime-settings-btn--active .app-composer-runtime-settings-btn__engine-label {
+  color: var(--ant-color-primary);
 }
 
 .app-composer-runtime-settings-btn:hover:not(:disabled) {

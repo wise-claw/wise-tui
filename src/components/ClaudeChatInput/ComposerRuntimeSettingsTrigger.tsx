@@ -155,6 +155,8 @@ export function ComposerRuntimeSettingsTrigger({
     return null;
   }
 
+  const engineLabel = showEngine ? SESSION_EXECUTION_ENGINE_LABELS[engine].title : null;
+
   return (
     <Dropdown
       classNames={{ root: "app-claude-connection-kind-dropdown app-composer-runtime-settings-dropdown" }}
@@ -194,12 +196,15 @@ export function ComposerRuntimeSettingsTrigger({
           type="button"
           className={`app-composer-runtime-settings-btn${
             hasActiveOverride ? " app-composer-runtime-settings-btn--active" : ""
-          }`}
+          }${engineLabel ? " app-composer-runtime-settings-btn--with-engine" : ""}`}
           aria-label={tooltip}
           aria-haspopup="menu"
           aria-expanded={menuOpen}
           disabled={disabled}
         >
+          {engineLabel ? (
+            <span className="app-composer-runtime-settings-btn__engine-label">{engineLabel}</span>
+          ) : null}
           <RuntimeSettingsIcon />
         </button>
       </Tooltip>
