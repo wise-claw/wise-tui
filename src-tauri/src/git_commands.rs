@@ -462,7 +462,7 @@ pub(crate) fn git_status(path: String) -> Result<GitStatusResponse, String> {
     }
 
     let (total_additions, total_deletions) = if skip_per_file_stats {
-        collect_aggregate_line_totals(&repo, head_tree.as_ref())
+        collect_aggregate_line_totals(&repo, &path, head_tree.as_ref())
     } else {
         (
             staged.iter().map(|f| f.additions).sum::<usize>()
@@ -529,7 +529,7 @@ pub(crate) fn git_status_summary(path: String) -> Result<GitStatusSummaryRespons
     }
 
     let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
-    let (additions, deletions) = collect_aggregate_line_totals(&repo, head_tree.as_ref());
+    let (additions, deletions) = collect_aggregate_line_totals(&repo, &path, head_tree.as_ref());
     let (ahead, behind, _upstream) = compute_ahead_behind(&repo).unwrap_or((0, 0, None));
 
     Ok(GitStatusSummaryResponse {
@@ -575,8 +575,36 @@ fn diff_stats_totals(diff: &git2::Diff<'_>) -> (usize, usize) {
         .unwrap_or((0, 0))
 }
 
+/// 纯未跟踪文件（工作区新增、尚未 `git add`）的行数。
+/// libgit2 `diff_index_to_workdir` 的 `stats()` 不会计入这类文件，需与 `git_status` 逐文件逻辑对齐。
+fn collect_pure_untracked_line_totals(repo: &Repository, repo_path: &str) -> (usize, usize) {
+    let mut adds = 0usize;
+    let mut dels = 0usize;
+    let mut opts = StatusOptions::new();
+    opts.include_untracked(true);
+    opts.include_ignored(false);
+    opts.recurse_untracked_dirs(true);
+    let Ok(statuses) = repo.statuses(Some(&mut opts)) else {
+        return (0, 0);
+    };
+    for entry in statuses.iter() {
+        let status = entry.status();
+        let file_path = entry.path().unwrap_or("");
+        if file_path.is_empty() {
+            continue;
+        }
+        if status.is_wt_new() && !status.is_index_new() {
+            let (a, d) = count_file_lines_for_untracked(repo_path, file_path);
+            adds += a;
+            dels += d;
+        }
+    }
+    (adds, dels)
+}
+
 fn collect_aggregate_line_totals(
     repo: &Repository,
+    repo_path: &str,
     head_tree: Option<&git2::Tree<'_>>,
 ) -> (usize, usize) {
     let mut adds = 0usize;
@@ -596,6 +624,9 @@ fn collect_aggregate_line_totals(
         adds += a;
         dels += d;
     }
+    let (ut_adds, ut_dels) = collect_pure_untracked_line_totals(repo, repo_path);
+    adds += ut_adds;
+    dels += ut_dels;
     (adds, dels)
 }
 
@@ -1411,6 +1442,89 @@ mod git_push_tests {
                 "feature/foo".to_string(),
             ]
         );
+    }
+}
+
+#[cfg(test)]
+mod git_status_line_totals_tests {
+    use super::*;
+    use git2::{Repository, Signature};
+    use std::fs;
+    use std::process::Command;
+    use tempfile::tempdir;
+
+    fn write_and_commit(repo: &Repository, rel_path: &str, content: &str) {
+        let workdir = repo.workdir().expect("workdir");
+        let full = workdir.join(rel_path);
+        if let Some(parent) = full.parent() {
+            fs::create_dir_all(parent).expect("mkdir");
+        }
+        fs::write(&full, content).expect("write");
+        let mut index = repo.index().expect("index");
+        index
+            .add_path(Path::new(rel_path))
+            .expect("index add");
+        index.write().expect("index write");
+        let tree_id = index.write_tree().expect("tree");
+        let tree = repo.find_tree(tree_id).expect("find tree");
+        let sig = Signature::now("wise", "wise@test").expect("sig");
+        let parent = repo.head().ok().and_then(|h| h.peel_to_commit().ok());
+        if let Some(parent) = parent {
+            repo.commit(
+                Some("HEAD"),
+                &sig,
+                &sig,
+                "commit",
+                &tree,
+                &[&parent],
+            )
+            .expect("commit");
+        } else {
+            repo.commit(Some("HEAD"), &sig, &sig, "init", &tree, &[])
+                .expect("initial commit");
+        }
+    }
+
+    #[test]
+    fn git_status_summary_includes_pure_untracked_line_counts() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().to_string_lossy().to_string();
+        let repo = Repository::init(dir.path()).expect("init");
+        write_and_commit(&repo, "tracked.txt", "line1\nline2\n");
+        drop(repo);
+
+        let tracked_path = dir.path().join("tracked.txt");
+        fs::write(&tracked_path, "line1\nline2\nline3-staged\n").expect("write tracked");
+        Command::new("git")
+            .args(["add", "tracked.txt"])
+            .current_dir(dir.path())
+            .output()
+            .expect("git add");
+
+        fs::write(dir.path().join("new.txt"), "a\nb\nc\n").expect("write untracked");
+
+        let status = git_status(path.clone()).expect("git_status");
+        let summary = git_status_summary(path).expect("git_status_summary");
+
+        assert_eq!(
+            summary.additions, status.additions,
+            "summary should match full status additions (incl. untracked)"
+        );
+        assert_eq!(
+            summary.deletions, status.deletions,
+            "summary should match full status deletions"
+        );
+        assert!(
+            status.additions >= 4,
+            "expected staged + untracked additions, got {}",
+            status.additions
+        );
+        let untracked = status
+            .unstaged
+            .iter()
+            .find(|f| f.path == "new.txt")
+            .expect("untracked file in unstaged list");
+        assert_eq!(untracked.additions, 3, "new.txt line count");
     }
 }
 

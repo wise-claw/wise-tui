@@ -1,4 +1,5 @@
-import { Alert, Button, Space } from "antd";
+import { InfoCircleOutlined } from "@ant-design/icons";
+import { Button } from "antd";
 import { memo, type FocusEvent, type RefObject } from "react";
 import type { ClaudeSession } from "../../types";
 import {
@@ -66,40 +67,40 @@ export const ClaudeChatMessagesPane = memo(function ClaudeChatMessagesPane({
       onBlur={onMessagesBlur}
     >
       {session.diskTranscriptPartial && (onLoadMoreTranscriptFromDisk || onReloadFullDiskTranscript) ? (
-        <Alert
-          className="app-claude-messages-disk-partial-alert"
-          type="info"
-          showIcon
-          message="当前为磁盘会话记录的尾部加载（节省内存）。若需查看更早轮次，可逐步加载或读取完整历史。"
-          action={
-            <Space>
-              {onLoadMoreTranscriptFromDisk ? (
-                <Button
-                  size="small"
-                  loading={loadMoreTranscriptLoading}
-                  onClick={() => {
-                    onLoadMoreTranscriptStart();
-                    void Promise.resolve(onLoadMoreTranscriptFromDisk(session.id)).finally(onLoadMoreTranscriptEnd);
-                  }}
-                >
-                  加载更早轮次
-                </Button>
-              ) : null}
-              {onReloadFullDiskTranscript ? (
-                <Button
-                  size="small"
-                  loading={fullTranscriptLoading}
-                  onClick={() => {
-                    onFullTranscriptStart();
-                    void Promise.resolve(onReloadFullDiskTranscript(session.id)).finally(onFullTranscriptEnd);
-                  }}
-                >
-                  加载完整历史
-                </Button>
-              ) : null}
-            </Space>
-          }
-        />
+        <div className="app-claude-messages-disk-partial" role="status">
+          <InfoCircleOutlined className="app-claude-messages-disk-partial__icon" aria-hidden />
+          <span className="app-claude-messages-disk-partial__label">
+            磁盘会话尾部加载（省内存），可逐步加载更早内容或读取完整历史。
+          </span>
+          <span className="app-claude-messages-disk-partial__actions">
+            {onLoadMoreTranscriptFromDisk ? (
+              <Button
+                type="link"
+                size="small"
+                loading={loadMoreTranscriptLoading}
+                onClick={() => {
+                  onLoadMoreTranscriptStart();
+                  void Promise.resolve(onLoadMoreTranscriptFromDisk(session.id)).finally(onLoadMoreTranscriptEnd);
+                }}
+              >
+                加载更早轮次
+              </Button>
+            ) : null}
+            {onReloadFullDiskTranscript ? (
+              <Button
+                type="link"
+                size="small"
+                loading={fullTranscriptLoading}
+                onClick={() => {
+                  onFullTranscriptStart();
+                  void Promise.resolve(onReloadFullDiskTranscript(session.id)).finally(onFullTranscriptEnd);
+                }}
+              >
+                加载完整历史
+              </Button>
+            ) : null}
+          </span>
+        </div>
       ) : null}
       {session.messages.length === 0 ? (
         <div className="app-claude-messages-empty">
