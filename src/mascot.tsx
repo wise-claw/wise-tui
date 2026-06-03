@@ -30,8 +30,19 @@ function MascotApp() {
   }, []);
 
   useEffect(() => {
-    void refreshTotal();
-  }, [refreshTotal]);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const n = await wiseNotificationUnreadTotal();
+        if (!cancelled) setTotal(Number(n));
+      } catch {
+        if (!cancelled) setTotal(0);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
