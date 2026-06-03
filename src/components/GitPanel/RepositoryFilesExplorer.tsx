@@ -11,7 +11,9 @@ import {
 import { ExpandIcon } from "../LeftSidebar/SidebarIcons";
 import { GitPanelWorkspaceSelector, type GitPanelWorkspaceSelectorProps } from "./GitPanelWorkspaceSelector";
 import { ExplorerInlineCreateRow } from "./ExplorerInlineCreateRow";
+import { ExplorerSearchResultList } from "./ExplorerSearchResultList";
 import { RepositoryTreeNode } from "./RepositoryTreeNode";
+import { MIN_EXPLORER_SEARCH_QUERY_LEN } from "./fileTree";
 import type { GitPanelOpenFileOptions } from "./types";
 import { useRepositoryFilesExplorer } from "./useRepositoryFilesExplorer";
 import { formatRepositoryExplorerLoadError } from "../../utils/repositoryPathAccessibility";
@@ -58,8 +60,18 @@ export function RepositoryFilesExplorer({
     search,
     onClearExplorerSearch,
   });
-  const rootInline = explorer.inlineCreate?.parentDir === "";
-  const treeEmpty = explorer.filteredTree.length === 0 && !rootInline;
+  const trimmedSearch = search.trim();
+  const searchActive = trimmedSearch.length > 0;
+  const rootInline = explorer.inlineCreate?.parentDir === "" && !searchActive;
+  const treeEmpty =
+    !searchActive && explorer.filteredTree.length === 0 && !rootInline;
+  const searchListEmpty =
+    searchActive &&
+    !explorer.explorerSearchTooShort &&
+    !explorer.explorerSearchPending &&
+    !explorer.loading &&
+    !explorer.isRefreshing &&
+    explorer.searchResultRows.length === 0;
 
   if (!trimmedRepositoryPath) {
     return (
@@ -146,9 +158,36 @@ export function RepositoryFilesExplorer({
       style={{ padding: "24px 0" }}
       image={Empty.PRESENTED_IMAGE_SIMPLE}
     />
+  ) : searchActive && trimmedSearch.length < MIN_EXPLORER_SEARCH_QUERY_LEN ? (
+    <Empty
+      description={`至少输入 ${MIN_EXPLORER_SEARCH_QUERY_LEN} 个字符`}
+      style={{ padding: "24px 0" }}
+      image={Empty.PRESENTED_IMAGE_SIMPLE}
+    />
+  ) : searchActive ? (
+    searchListEmpty ? (
+      <Empty
+        description="未找到匹配文件"
+        style={{ padding: "24px 0" }}
+        image={Empty.PRESENTED_IMAGE_SIMPLE}
+      />
+    ) : (
+      <div
+        className="repo-search-results-wrap"
+        onContextMenu={explorer.handleExplorerContextMenu}
+      >
+        <ExplorerSearchResultList
+          rows={explorer.searchResultRows}
+          pending={explorer.explorerSearchPending}
+          selectedPath={explorer.selected?.path ?? null}
+          onSelect={explorer.handleSelectNode}
+          onOpenFile={onOpenFile}
+        />
+      </div>
+    )
   ) : treeEmpty ? (
     <Empty
-      description={search.trim() ? "未找到匹配文件" : "暂无文件"}
+      description="暂无文件"
       style={{ padding: "24px 0" }}
       image={Empty.PRESENTED_IMAGE_SIMPLE}
     />
@@ -272,14 +311,14 @@ export function RepositoryFilesExplorer({
         )}
         {workspaceSelector && setSectionCollapsed ? (
           <Tooltip title="收起文件树" mouseEnterDelay={0.35}>
-            <Button
-              type="text"
-              size="small"
+            <button
+              type="button"
               className="git-files-explorer-section-collapse"
               aria-label="收起文件树"
-              icon={<ExpandIcon expanded />}
               onClick={() => setSectionCollapsed(true)}
-            />
+            >
+              <ExpandIcon expanded />
+            </button>
           </Tooltip>
         ) : null}
         {!toolbarInSearchRow ? explorerToolbarActions : null}
@@ -313,6 +352,11 @@ export function RepositoryFilesExplorer({
             {explorer.treeStale ? (
               <div className="git-files-explorer-stale-hint" aria-live="polite">
                 正在加载文件树…
+              </div>
+            ) : null}
+            {searchActive && explorer.explorerSearchTruncated ? (
+              <div className="git-files-explorer-stale-hint" aria-live="polite">
+                匹配结果过多，仅显示前 500 项，请细化关键词
               </div>
             ) : null}
             {treeBody}

@@ -1,0 +1,115 @@
+.app-inspector-collapsible-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+
+.app-inspector-collapsible-section__head .ant-typography {
+  text-align: left;
+}
+
+.app-inspector-collapsible-section__head-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.app-inspector-collapsible-section__collapse-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ant-color-text-tertiary);
+  cursor: pointer;
+}
+
+.app-inspector-collapsible-section__collapse-btn:hover {
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-inspector-collapsible-section__collapse-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.app-inspector-collapsible-section__collapsed-row {
+  padding: 2px 6px 3px;
+}
+
+.app-inspector-collapsible-section__collapsed-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 24px;
+  margin: 0;
+  padding: 3px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary);
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  transition: background 0.15s ease, transform 0.15s ease, color 0.15s ease;
+}
+
+.app-inspector-collapsible-section__collapsed-main:hover {
+  background: color-mix(in srgb, var(--ant-color-text) 6%, transparent);
+  transform: translateX(2px) translateZ(0);
+}
+
+.app-inspector-collapsible-section__expand {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--ant-color-text-quaternary);
+}
+
+.app-inspector-collapsible-section__collapsed-title {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-inspector-collapsible-section__collapsed-main:hover .app-inspector-collapsible-section__collapsed-title {
+  color: var(--ant-color-text);
+}
+
+.app-inspector-collapsible-section__collapsed-meta {
+  flex-shrink: 0;
+  font-size: 10px;
+  line-height: 16px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--ant-color-fill-secondary);
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-workspace-quick-actions-panel--section-collapsed,
+.app-workspace-memos-panel--section-collapsed,
+.app-workspace-todos-panel--section-collapsed {
+  flex: 0 0 auto;
+}
+
+.app-workspace-quick-actions-panel--section-collapsed {
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-workspace-memos-panel--section-collapsed,
+.app-workspace-todos-panel--section-collapsed {
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+}

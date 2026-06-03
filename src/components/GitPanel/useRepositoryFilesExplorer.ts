@@ -1,4 +1,4 @@
-import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import type { MenuProps } from "antd";
 import { message } from "antd";
@@ -11,7 +11,13 @@ import {
 } from "../../services/repositoryFiles";
 import { openInFinder, openWorkspaceIn } from "../../services/repository";
 import { joinRepositoryAbsolutePath } from "../../utils/repositoryPreviewBinary";
-import { buildRepositoryFileTree, collectDirectoryPaths, filterRepositoryTree } from "./fileTree";
+import { useDebouncedValue } from "../../hooks/useDebouncedValue";
+import {
+  buildExplorerEntryIndex,
+  buildRepositoryFileTree,
+  collectDirectoryPaths,
+  sliceExplorerEntriesForSearch,
+} from "./fileTree";
 import {
   clampExplorerMenuPosition,
   explorerTargetDirForCreate,
@@ -62,8 +68,41 @@ export function useRepositoryFilesExplorer({
 
   const treeStale = loadedRepositoryPath !== repositoryPath;
   const visibleExplorerEntries = treeStale ? EMPTY_REPOSITORY_EXPLORER_ENTRIES : explorerEntries;
-  const tree = useMemo(() => buildRepositoryFileTree(visibleExplorerEntries), [visibleExplorerEntries]);
-  const filteredTree = useMemo(() => filterRepositoryTree(tree, search), [tree, search]);
+  const debouncedSearch = useDebouncedValue(search, 150);
+  const searchQuery = debouncedSearch.trim();
+  const deferredSearchQuery = useDeferredValue(searchQuery);
+  const explorerSearchPending = deferredSearchQuery !== searchQuery;
+
+  const entryIndex = useMemo(
+    () => buildExplorerEntryIndex(visibleExplorerEntries),
+    [visibleExplorerEntries],
+  );
+
+  const searchSlice = useMemo(() => {
+    if (!deferredSearchQuery) {
+      return null;
+    }
+    return sliceExplorerEntriesForSearch(entryIndex, deferredSearchQuery);
+  }, [deferredSearchQuery, entryIndex]);
+
+  const filteredTree = useMemo(
+    () => buildRepositoryFileTree(visibleExplorerEntries),
+    [visibleExplorerEntries],
+  );
+
+  const prevSearchQueryRef = useRef("");
+  useEffect(() => {
+    const prev = prevSearchQueryRef.current;
+    prevSearchQueryRef.current = searchQuery;
+    if (prev && !searchQuery) {
+      const restored = readExplorerExpandedFromSession(repositoryPath);
+      if (restored) {
+        startTransition(() => {
+          setExpandedDirs(restored);
+        });
+      }
+    }
+  }, [repositoryPath, searchQuery]);
 
   const reloadExplorer = useCallback(
     async (options: { expandAll: boolean }) => {
@@ -180,30 +219,6 @@ export function useRepositoryFilesExplorer({
       cancelDeferredLoad();
     };
   }, [repositoryPath]);
-
-  useEffect(() => {
-    const q = search.trim();
-    if (!q) {
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      const matchedDirs = new Set<string>();
-      collectDirectoryPaths(filteredTree, matchedDirs);
-      if (matchedDirs.size === 0) return;
-      setExpandedDirs((prev) => {
-        let changed = false;
-        const next = new Set(prev);
-        for (const dir of matchedDirs) {
-          if (!next.has(dir)) {
-            next.add(dir);
-            changed = true;
-          }
-        }
-        return changed ? next : prev;
-      });
-    }, 120);
-    return () => window.clearTimeout(timer);
-  }, [search, filteredTree]);
 
   useEffect(() => {
     inlineCreateRef.current = inlineCreate;
@@ -498,6 +513,10 @@ export function useRepositoryFilesExplorer({
     deletePop,
     setDeletePop,
     filteredTree,
+    searchResultRows: searchSlice?.rows ?? [],
+    explorerSearchTruncated: searchSlice?.truncated ?? false,
+    explorerSearchTooShort: searchSlice?.tooShort ?? false,
+    explorerSearchPending,
     explorerContextMenuItems,
     handleToggleDir,
     handleRefresh,

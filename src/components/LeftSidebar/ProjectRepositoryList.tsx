@@ -1,4 +1,5 @@
 import type { MutableRefObject } from "react";
+import { useMemo } from "react";
 import { Dropdown, Tooltip, Typography } from "antd";
 import type { ReconcileProjectMode } from "../../constants/reconcileProjectMode";
 import type { Repository, StandaloneRepo, TaskMode, Workspace } from "../../types";
@@ -99,6 +100,8 @@ interface ProjectRepositoryListProps {
   runningMainSessionByRepositoryId?: Record<number, boolean>;
   onStopProjectMainSession?: (projectId: string) => void;
   onStopRepositoryMainSession?: (repository: Repository) => void;
+  sectionCollapsed?: boolean;
+  onSectionCollapsedChange?: (collapsed: boolean) => void;
 }
 
 export function ProjectRepositoryList({
@@ -174,7 +177,40 @@ export function ProjectRepositoryList({
   runningMainSessionByRepositoryId = {},
   onStopProjectMainSession,
   onStopRepositoryMainSession,
+  sectionCollapsed = false,
+  onSectionCollapsedChange,
 }: ProjectRepositoryListProps) {
+  const workspaceEntryCount = projects.length + floatingRepositories.length;
+  const collapsedSummaryLabel = useMemo(() => {
+    if (activeWorkspaceFocus === "project" && activeProjectId) {
+      const project = projects.find((item) => item.id === activeProjectId);
+      if (project?.name?.trim()) return project.name.trim();
+    }
+    if (activeRepositoryId != null) {
+      const repository = repositoriesById.get(activeRepositoryId);
+      if (repository) {
+        const parentProject = projects.find((item) => item.repositoryIds.includes(activeRepositoryId));
+        const repoLabel =
+          repository.name?.trim() ||
+          repository.path.split(/[/\\]/).filter(Boolean).pop() ||
+          "仓库";
+        if (parentProject?.name?.trim()) {
+          return `${parentProject.name.trim()} · ${repoLabel}`;
+        }
+        return repoLabel;
+      }
+    }
+    return "工作区";
+  }, [
+    activeProjectId,
+    activeRepositoryId,
+    activeWorkspaceFocus,
+    projects,
+    repositoriesById,
+  ]);
+
+  const setSectionCollapsed = onSectionCollapsedChange;
+
   return (
     <>
       <div className="app-repository-header">
@@ -202,9 +238,69 @@ export function ProjectRepositoryList({
               <ProjectIcon />
             </button>
           </Tooltip>
+          {setSectionCollapsed && !sectionCollapsed ? (
+            <Tooltip title="收起工作区列表" mouseEnterDelay={0.35}>
+              <button
+                type="button"
+                className="app-repository-header-btn"
+                aria-label="收起工作区列表"
+                onClick={() => setSectionCollapsed(true)}
+              >
+                <ExpandIcon expanded />
+              </button>
+            </Tooltip>
+          ) : null}
         </div>
       </div>
 
+      {sectionCollapsed && setSectionCollapsed ? (
+        <div className="app-repository-row app-left-sidebar-workspace-list-collapsed-row">
+          <div className="app-repository-item app-repository-item--project app-repository-item--workspace-list-collapsed">
+            <span
+              className="app-repository-expand"
+              role="button"
+              tabIndex={0}
+              aria-expanded={false}
+              aria-label="展开工作区列表"
+              onClick={(event) => {
+                event.stopPropagation();
+                setSectionCollapsed(false);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setSectionCollapsed(false);
+                }
+              }}
+            >
+              <ExpandIcon expanded={false} />
+            </span>
+            <span
+              className="app-repository-name-block app-left-sidebar-workspace-list-collapsed-hit"
+              role="button"
+              tabIndex={0}
+              aria-label={`展开工作区列表：${collapsedSummaryLabel}`}
+              onClick={() => setSectionCollapsed(false)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setSectionCollapsed(false);
+                }
+              }}
+            >
+              <span className="app-repository-name">{collapsedSummaryLabel}</span>
+              {workspaceEntryCount > 0 ? (
+                <span className="app-repository-meta" aria-label={`${workspaceEntryCount} 项`}>
+                  {workspaceEntryCount}
+                </span>
+              ) : null}
+            </span>
+          </div>
+        </div>
+      ) : null}
+
+      {!sectionCollapsed ? (
       <div className="app-repository-list">
         {floatingRepositories.length > 0 ? (
           <div className="app-repository-floating-group" aria-label="单仓">
@@ -328,6 +424,7 @@ export function ProjectRepositoryList({
           </div>
         )}
       </div>
+      ) : null}
     </>
   );
 }

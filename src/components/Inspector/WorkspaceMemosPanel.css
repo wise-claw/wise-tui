@@ -11,7 +11,8 @@
   flex: 0 0 auto;
 }
 
-.app-workspace-memos-panel__head {
+.app-workspace-memos-panel__head,
+.app-workspace-memos-panel .app-inspector-collapsible-section__head {
   display: flex;
   align-items: center;
   justify-content: space-between;

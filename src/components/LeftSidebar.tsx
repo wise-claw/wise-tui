@@ -25,7 +25,6 @@ import {
 } from "../utils/repositoryMainSessionBinding";
 import { endClaudeProcessRow } from "./LeftSidebar/endClaudeProcessRow";
 import { pickFolder } from "../services/repository";
-import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import {
   pathIsAccessibleDirectoryCached,
   readPathAccessibilityCache,
@@ -43,6 +42,10 @@ import { GitPanelWorkspaceSelector } from "./GitPanel/GitPanelWorkspaceSelector"
 import {
   readLeftFilesExplorerCollapsedFromStorage,
   writeLeftFilesExplorerCollapsedToStorage,
+  readLeftWorkspaceListCollapsedFromStorage,
+  writeLeftWorkspaceListCollapsedToStorage,
+  readLeftMonitorPanelCollapsedFromStorage,
+  writeLeftMonitorPanelCollapsedToStorage,
   readLeftBottomTabFromStorage,
   writeLeftBottomTabToStorage,
   type LeftBottomTab,
@@ -247,13 +250,18 @@ export function LeftSidebar({
   const [promotingFloatingRepoName, setPromotingFloatingRepoName] = useState("");
   const [appSettingsOpen, setAppSettingsOpen] = useState(false);
   const [repositoryFileTreeSearch, setRepositoryFileTreeSearch] = useState("");
-  const debouncedRepositoryFileTreeSearch = useDebouncedValue(repositoryFileTreeSearch, 250);
   /** 左下 Git/文件 Tab 目录选择器上下文：仅切换面板目录，不联动全局工作区/会话。 */
   const [repoPanelTreeSelection, setRepoPanelTreeSelection] =
     useState<WorkspaceRepositoryTreeSelection | null>(null);
   const lastSyncedGlobalSelectionKeyRef = useRef<string | null>(null);
   const [filesExplorerSectionCollapsed, setFilesExplorerSectionCollapsed] = useState(
     readLeftFilesExplorerCollapsedFromStorage,
+  );
+  const [workspaceListSectionCollapsed, setWorkspaceListSectionCollapsed] = useState(
+    readLeftWorkspaceListCollapsedFromStorage,
+  );
+  const [monitorPanelSectionCollapsed, setMonitorPanelSectionCollapsed] = useState(
+    readLeftMonitorPanelCollapsedFromStorage,
   );
   const [leftBottomTab, setLeftBottomTab] = useState<LeftBottomTab>(readLeftBottomTabFromStorage);
   const [monitorPanelMounted, setMonitorPanelMounted] = useState(false);
@@ -524,6 +532,16 @@ export function LeftSidebar({
   const handleFilesExplorerSectionCollapsedChange = useCallback((next: boolean) => {
     setFilesExplorerSectionCollapsed(next);
     writeLeftFilesExplorerCollapsedToStorage(next);
+  }, []);
+
+  const handleWorkspaceListSectionCollapsedChange = useCallback((next: boolean) => {
+    setWorkspaceListSectionCollapsed(next);
+    writeLeftWorkspaceListCollapsedToStorage(next);
+  }, []);
+
+  const handleMonitorPanelSectionCollapsedChange = useCallback((next: boolean) => {
+    setMonitorPanelSectionCollapsed(next);
+    writeLeftMonitorPanelCollapsedToStorage(next);
   }, []);
 
   const handleLeftBottomTabChange = useCallback(
@@ -924,6 +942,12 @@ export function LeftSidebar({
         data-files-explorer-section-collapsed={
           showRepoPanel && filesExplorerSectionCollapsed ? "true" : undefined
         }
+        data-workspace-list-section-collapsed={
+          showRepoPanel && workspaceListSectionCollapsed ? "true" : undefined
+        }
+        data-monitor-panel-section-collapsed={
+          showLeftSidebarMonitorPanel && monitorPanelSectionCollapsed ? "true" : undefined
+        }
       >
         <ProjectRepositoryList
           projects={projects}
@@ -1041,12 +1065,23 @@ export function LeftSidebar({
           runningMainSessionByRepositoryId={runningByRepositoryId}
           onStopProjectMainSession={handleStopProjectMainSession}
           onStopRepositoryMainSession={handleStopRepositoryMainSession}
+          sectionCollapsed={showRepoPanel ? workspaceListSectionCollapsed : false}
+          onSectionCollapsedChange={
+            showRepoPanel ? handleWorkspaceListSectionCollapsedChange : undefined
+          }
         />
 
         {showLeftSidebarMonitorPanel && monitorPanelMounted ? (
-          <div className="app-left-sidebar-monitor-panel">
+          <div
+            className={
+              "app-left-sidebar-monitor-panel" +
+              (monitorPanelSectionCollapsed ? " app-left-sidebar-monitor-panel--section-collapsed" : "")
+            }
+          >
             <Suspense fallback={null}>
             <ProgressMonitorPanelLazy
+              sectionCollapsed={monitorPanelSectionCollapsed}
+              onSectionCollapsedChange={handleMonitorPanelSectionCollapsedChange}
               employeeItems={employeeMonitorItems}
               repositoryMemberItems={repositoryMemberMonitorItems}
               sessionConversationTaskItems={
@@ -1093,12 +1128,44 @@ export function LeftSidebar({
                     activeRepositoryPath={effectiveRepoPanelPath}
                   />
                 </div>
+                {workspaceListSectionCollapsed ? (
+                  <Tooltip title="展开工作区列表" mouseEnterDelay={0.35}>
+                    <button
+                      type="button"
+                      className="app-left-sidebar-repo-panel-header__expand-icon"
+                      aria-label="展开工作区列表"
+                      onClick={() => handleWorkspaceListSectionCollapsedChange(false)}
+                    >
+                      <ExpandIcon expanded={false} />
+                    </button>
+                  </Tooltip>
+                ) : null}
                 <Tooltip title="展开文件树" mouseEnterDelay={0.35}>
                   <button
                     type="button"
                     className="app-left-sidebar-repo-panel-header__expand-icon"
                     aria-label="展开文件树"
                     onClick={() => handleFilesExplorerSectionCollapsedChange(false)}
+                  >
+                    <ExpandIcon expanded={false} />
+                  </button>
+                </Tooltip>
+              </div>
+            ) : leftBottomTab === "git" && workspaceListSectionCollapsed ? (
+              <div className="app-left-sidebar-repo-panel-header">
+                {repoPanelTabSwitcher}
+                <div className="app-left-sidebar-repo-panel-header__selector">
+                  <GitPanelWorkspaceSelector
+                    {...repoPanelWorkspaceSelectorProps}
+                    activeRepositoryPath={effectiveRepoPanelPath}
+                  />
+                </div>
+                <Tooltip title="展开工作区列表" mouseEnterDelay={0.35}>
+                  <button
+                    type="button"
+                    className="app-left-sidebar-repo-panel-header__expand-icon"
+                    aria-label="展开工作区列表"
+                    onClick={() => handleWorkspaceListSectionCollapsedChange(false)}
                   >
                     <ExpandIcon expanded={false} />
                   </button>
@@ -1115,7 +1182,7 @@ export function LeftSidebar({
                   }
                 >
                   <GitPanelLazy
-                    headerPrefix={repoPanelTabSwitcher}
+                    headerPrefix={workspaceListSectionCollapsed ? undefined : repoPanelTabSwitcher}
                     repositoryPath={effectiveRepoPanelPath}
                     repositoryName={repoPanelRepositoryName}
                     repositoryEntries={gitPanelRepositoryEntries}
@@ -1130,7 +1197,7 @@ export function LeftSidebar({
                   headerPrefix={filesExplorerSectionCollapsed ? undefined : repoPanelTabSwitcher}
                   activeRepositoryPath={effectiveRepoPanelPath}
                   activeRepositoryName={repoPanelRepositoryName}
-                  search={debouncedRepositoryFileTreeSearch}
+                  search={repositoryFileTreeSearch}
                   onSearchChange={setRepositoryFileTreeSearch}
                   onOpenFile={onOpenActiveRepositoryFile}
                   sectionCollapsed={filesExplorerSectionCollapsed}

@@ -34,11 +34,13 @@ interface Props {
 
 export function ClaudeModelTopbarTrigger({ variant = "chat" }: Props) {
   const [open, setOpen] = useState(false);
+  const [panelMounted, setPanelMounted] = useState(false);
   const { effectiveModels, store, setStore, loading } = useModelProfileSwitcher(open);
 
   const handleOpenChange = useCallback((next: boolean) => {
     setOpen(next);
     if (next) {
+      setPanelMounted(true);
       void claudeModelTopbarPanelChunk;
     }
   }, []);
@@ -62,14 +64,15 @@ export function ClaudeModelTopbarTrigger({ variant = "chat" }: Props) {
       arrow={!isSidebar}
       open={open}
       onOpenChange={handleOpenChange}
-      destroyOnHidden
+      destroyOnHidden={false}
+      getPopupContainer={() => document.body}
       classNames={{ root: "app-claude-model-topbar-popover" }}
       styles={{
         container: { padding: 0 },
         content: { padding: 0 },
       }}
       content={
-        open ? (
+        panelMounted ? (
           <Suspense
             fallback={
               <div className="app-claude-model-topbar-panel app-claude-model-topbar-panel--loading">
@@ -84,7 +87,11 @@ export function ClaudeModelTopbarTrigger({ variant = "chat" }: Props) {
               onApplied={() => setOpen(false)}
             />
           </Suspense>
-        ) : null
+        ) : (
+          <div className="app-claude-model-topbar-panel app-claude-model-topbar-panel--loading">
+            <Spin />
+          </div>
+        )
       }
     >
       <button

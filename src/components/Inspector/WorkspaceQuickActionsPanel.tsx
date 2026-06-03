@@ -17,6 +17,7 @@ import {
   type WorkspaceQuickActionScope,
 } from "../../types/workspaceQuickActions";
 import { WorkspaceQuickActionsEditModal } from "./WorkspaceQuickActionsEditModal";
+import { InspectorCollapsibleSection } from "./InspectorCollapsibleSection";
 import "./WorkspaceQuickActionsPanel.css";
 
 export interface WorkspaceQuickActionsPanelProps {
@@ -114,11 +115,15 @@ export function WorkspaceQuickActionsPanel({
   );
 
   return (
-    <section className="app-workspace-quick-actions-panel" aria-label="快捷操作">
-      <header className="app-workspace-quick-actions-panel__head">
-        <Typography.Text strong className="app-workspace-quick-actions-panel__title">
-          快捷操作
-        </Typography.Text>
+    <InspectorCollapsibleSection
+      sectionId="quickActions"
+      className="app-workspace-quick-actions-panel"
+      ariaLabel="快捷操作"
+      title="快捷操作"
+      summaryMeta={
+        quickActions.displayItems.length > 0 ? String(quickActions.displayItems.length) : null
+      }
+      headActions={
         <Tooltip title="添加链接或本地目录" mouseEnterDelay={0.35}>
           <Button
             type="text"
@@ -129,8 +134,33 @@ export function WorkspaceQuickActionsPanel({
             onClick={() => setEditState({ mode: "create" })}
           />
         </Tooltip>
-      </header>
-
+      }
+      trailing={
+        <WorkspaceQuickActionsEditModal
+          open={editState != null}
+          mode={editState?.mode === "edit" ? "edit" : "create"}
+          initialItem={editState?.mode === "edit" ? editState.item : null}
+          initialScope={editState?.mode === "edit" ? editState.scope : undefined}
+          defaultScope={defaultScope}
+          allowProjectScope={allowProjectScope}
+          allowRepositoryScope={allowRepositoryScope}
+          onClose={() => setEditState(null)}
+          onSubmit={async (input) => {
+            if (editState?.mode === "edit" && editState.scope !== input.scope) {
+              const oldSource =
+                editState.scope === "project"
+                  ? quickActions.projectItemsRef.current
+                  : quickActions.repositoryItemsRef.current;
+              const without = oldSource.filter((row) => row.id !== editState.item.id);
+              quickActions.setItemsForScope(editState.scope, without);
+              await quickActions.flushPersist(editState.scope, without);
+            }
+            const existingId = editState?.mode === "edit" ? editState.item.id : undefined;
+            await upsertItem(input.scope, input, existingId);
+          }}
+        />
+      }
+    >
       <div className="app-workspace-quick-actions-panel__body">
         {quickActions.loading ? (
           <div className="app-workspace-quick-actions-panel__loading">
@@ -199,30 +229,6 @@ export function WorkspaceQuickActionsPanel({
           </ul>
         )}
       </div>
-
-      <WorkspaceQuickActionsEditModal
-        open={editState != null}
-        mode={editState?.mode === "edit" ? "edit" : "create"}
-        initialItem={editState?.mode === "edit" ? editState.item : null}
-        initialScope={editState?.mode === "edit" ? editState.scope : undefined}
-        defaultScope={defaultScope}
-        allowProjectScope={allowProjectScope}
-        allowRepositoryScope={allowRepositoryScope}
-        onClose={() => setEditState(null)}
-        onSubmit={async (input) => {
-          if (editState?.mode === "edit" && editState.scope !== input.scope) {
-            const oldSource =
-              editState.scope === "project"
-                ? quickActions.projectItemsRef.current
-                : quickActions.repositoryItemsRef.current;
-            const without = oldSource.filter((row) => row.id !== editState.item.id);
-            quickActions.setItemsForScope(editState.scope, without);
-            await quickActions.flushPersist(editState.scope, without);
-          }
-          const existingId = editState?.mode === "edit" ? editState.item.id : undefined;
-          await upsertItem(input.scope, input, existingId);
-        }}
-      />
-    </section>
+    </InspectorCollapsibleSection>
   );
 }

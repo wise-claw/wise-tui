@@ -2212,6 +2212,120 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   flex-shrink: 0;
 }
 
+/* 工作区列表收起：仅保留标题行 + 摘要行，下方 Git/文件面板占满剩余高度 */
+.app-left-sidebar-project-and-files[data-workspace-list-section-collapsed="true"] {
+  gap: 0;
+}
+
+.app-left-sidebar-project-and-files[data-workspace-list-section-collapsed="true"] > .app-left-sidebar-bottom-tabs {
+  flex: 1 1 0;
+  min-height: 0;
+  margin-top: 0;
+}
+
+.app-left-sidebar-project-and-files[data-monitor-panel-section-collapsed="true"] > .app-left-sidebar-bottom-tabs {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.app-left-sidebar-workspace-list-collapsed-row {
+  margin: 0;
+  padding: 0 6px 2px;
+  flex-shrink: 0;
+}
+
+.app-left-sidebar-workspace-list-collapsed-row .app-repository-item--workspace-list-collapsed {
+  margin: 2px 0;
+  padding: 3px 8px;
+  background: var(--ant-color-fill-quaternary) !important;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  box-sizing: border-box;
+  box-shadow: none;
+  transform: none;
+  transition: background 0.15s ease, transform 0.15s ease, color 0.15s ease;
+}
+
+.app-left-sidebar-workspace-list-collapsed-row
+  .app-repository-item--workspace-list-collapsed:hover {
+  background: color-mix(in srgb, var(--ant-color-text) 6%, transparent) !important;
+  border-color: transparent;
+  box-shadow: none;
+  transform: translateX(2px) translateZ(0);
+}
+
+.app-left-sidebar-workspace-list-collapsed-row
+  .app-repository-item--workspace-list-collapsed
+  .app-repository-name {
+  font-weight: 500;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-left-sidebar-workspace-list-collapsed-row
+  .app-repository-item--workspace-list-collapsed:hover
+  .app-repository-name {
+  color: var(--ant-color-text);
+}
+
+.app-left-sidebar-workspace-list-collapsed-row
+  .app-repository-item--workspace-list-collapsed
+  .app-repository-expand {
+  color: var(--ant-color-text-quaternary);
+}
+
+.app-left-sidebar-workspace-list-collapsed-hit {
+  cursor: pointer;
+}
+
+.app-left-sidebar-monitor-panel-collapsed-row {
+  margin: 0;
+  padding: 0 6px 2px;
+  flex-shrink: 0;
+}
+
+.app-left-sidebar-monitor-panel-collapsed-row .app-repository-item--monitor-panel-collapsed {
+  margin: 2px 0;
+  padding: 3px 8px;
+  background: var(--ant-color-fill-quaternary) !important;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  box-sizing: border-box;
+  box-shadow: none;
+  transform: none;
+  transition: background 0.15s ease, transform 0.15s ease, color 0.15s ease;
+}
+
+.app-left-sidebar-monitor-panel-collapsed-row
+  .app-repository-item--monitor-panel-collapsed:hover {
+  background: color-mix(in srgb, var(--ant-color-text) 6%, transparent) !important;
+  border-color: transparent;
+  box-shadow: none;
+  transform: translateX(2px) translateZ(0);
+}
+
+.app-left-sidebar-monitor-panel-collapsed-row
+  .app-repository-item--monitor-panel-collapsed
+  .app-repository-name {
+  font-weight: 500;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-left-sidebar-monitor-panel-collapsed-row
+  .app-repository-item--monitor-panel-collapsed:hover
+  .app-repository-name {
+  color: var(--ant-color-text);
+}
+
+.app-left-sidebar-monitor-panel-collapsed-row
+  .app-repository-item--monitor-panel-collapsed
+  .app-repository-expand {
+  color: var(--ant-color-text-quaternary);
+}
+
+.app-left-sidebar-monitor-panel-collapsed-hit {
+  cursor: pointer;
+}
+
 /* 共用布局；顶部分隔线与工作区列表区分；仅展开态吃掉剩余高度 */
 .app-left-sidebar-files-explorer {
   display: flex;
@@ -2294,7 +2408,22 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 .app-left-sidebar-files-explorer-collapsed-row .app-repository-item--files-root-collapsed .app-repository-expand {
-  color: var(--ant-color-text-quaternary);
+  color: var(--ant-color-text-secondary);
+}
+
+.app-left-sidebar-files-explorer-collapsed-row
+  .app-repository-item--files-root-collapsed:hover
+  .app-repository-expand {
+  color: var(--ant-color-text);
+}
+
+.app-left-sidebar-files-explorer-collapsed-row .app-repository-item--files-root-collapsed .app-repository-expand svg {
+  width: 12px;
+  height: 12px;
+}
+
+.app-left-sidebar-files-explorer-collapsed-row .app-repository-item--files-root-collapsed .app-repository-expand svg path {
+  stroke: currentColor;
 }
 
 .app-left-sidebar-files-explorer-collapsed-hit {
@@ -2388,8 +2517,17 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: var(--ant-color-text-tertiary);
+  color: var(--ant-color-text-secondary);
   cursor: pointer;
+}
+
+.app-left-sidebar-repo-panel-header__expand-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.app-left-sidebar-repo-panel-header__expand-icon svg path {
+  stroke: currentColor;
 }
 
 .app-left-sidebar-repo-panel-header__expand-icon:hover {
@@ -2502,19 +2640,38 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 .app-left-sidebar-bottom-tab-content .git-files-explorer-expand {
+  width: 14px;
+  height: 14px;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-left-sidebar-bottom-tab-content .git-files-explorer-expand svg {
   width: 12px;
   height: 12px;
 }
 
-.app-left-sidebar-bottom-tab-content .git-files-explorer-expand svg {
-  width: 9px;
-  height: 9px;
+.app-left-sidebar-bottom-tab-content .git-files-explorer-expand svg path {
+  stroke: currentColor;
 }
 
 .app-left-sidebar-bottom-tab-content .git-files-explorer-actions .ant-btn {
   width: 22px;
   height: 22px;
   min-width: 22px;
+}
+
+.app-left-sidebar-bottom-tab-content .git-files-explorer-section-collapse {
+  color: var(--ant-color-text-secondary);
+}
+
+.app-left-sidebar-bottom-tab-content .git-files-explorer-section-collapse:hover {
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-left-sidebar-bottom-tab-content .git-files-explorer-section-collapse svg {
+  width: 14px;
+  height: 14px;
 }
 
 .app-left-sidebar-bottom-tab-content .git-repo-section__actions .ant-btn.ant-btn-sm {

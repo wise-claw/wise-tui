@@ -168,6 +168,119 @@ export function collectDirectoryPaths(nodes: RepositoryFileTreeNode[], out: Set<
   }
 }
 
+/** Min query length before running explorer search (avoids ultra-broad single-char scans). */
+export const MIN_EXPLORER_SEARCH_QUERY_LEN = 2;
+
+/** Max rows shown in flat explorer search results. */
+export const EXPLORER_SEARCH_MAX_MATCHES = 500;
+
+export interface ExplorerSearchResultRow {
+  path: string;
+  isDir: boolean;
+  name: string;
+  parentPath: string;
+  score: number;
+}
+
+export interface ExplorerEntryIndexRow {
+  entry: RepositoryExplorerEntry;
+  pathLower: string;
+  nameLower: string;
+}
+
+export interface ExplorerEntryIndex {
+  entries: RepositoryExplorerEntry[];
+  byPath: Map<string, RepositoryExplorerEntry>;
+  rows: ExplorerEntryIndexRow[];
+}
+
+export interface ExplorerSearchSlice {
+  rows: ExplorerSearchResultRow[];
+  truncated: boolean;
+  tooShort: boolean;
+}
+
+export function buildExplorerEntryIndex(entries: RepositoryExplorerEntry[]): ExplorerEntryIndex {
+  const byPath = new Map<string, RepositoryExplorerEntry>();
+  const rows: ExplorerEntryIndexRow[] = [];
+  for (const entry of entries) {
+    byPath.set(entry.path, entry);
+    const slash = entry.path.lastIndexOf("/");
+    const name = slash >= 0 ? entry.path.slice(slash + 1) : entry.path;
+    rows.push({
+      entry,
+      pathLower: entry.path.toLowerCase(),
+      nameLower: name.toLowerCase(),
+    });
+  }
+  return { entries, byPath, rows };
+}
+
+function explorerSearchMatchScore(nameLower: string, pathLower: string, q: string): number | null {
+  if (nameLower.startsWith(q)) {
+    return 0;
+  }
+  if (nameLower.includes(q)) {
+    return 1;
+  }
+  if (pathLower.includes(q)) {
+    return 2;
+  }
+  return null;
+}
+
+/**
+ * Indexed flat scan for explorer search — builds ranked rows for a compact result list.
+ */
+export function sliceExplorerEntriesForSearch(
+  index: ExplorerEntryIndex,
+  query: string,
+): ExplorerSearchSlice {
+  const q = query.trim().toLowerCase();
+  if (!q) {
+    return { rows: [], truncated: false, tooShort: false };
+  }
+  if (q.length < MIN_EXPLORER_SEARCH_QUERY_LEN) {
+    return { rows: [], truncated: false, tooShort: true };
+  }
+
+  const scored: ExplorerSearchResultRow[] = [];
+
+  for (const row of index.rows) {
+    const score = explorerSearchMatchScore(row.nameLower, row.pathLower, q);
+    if (score == null) {
+      continue;
+    }
+    const slash = row.entry.path.lastIndexOf("/");
+    const name = slash >= 0 ? row.entry.path.slice(slash + 1) : row.entry.path;
+    const parentPath = slash >= 0 ? row.entry.path.slice(0, slash) : "";
+    scored.push({
+      path: row.entry.path,
+      isDir: row.entry.isDir,
+      name,
+      parentPath,
+      score,
+    });
+  }
+
+  scored.sort((left, right) => {
+    if (left.score !== right.score) {
+      return left.score - right.score;
+    }
+    if (left.path.length !== right.path.length) {
+      return left.path.length - right.path.length;
+    }
+    return left.path.localeCompare(right.path);
+  });
+
+  const truncated = scored.length > EXPLORER_SEARCH_MAX_MATCHES;
+  if (truncated) {
+    scored.length = EXPLORER_SEARCH_MAX_MATCHES;
+  }
+
+  return { rows: scored, truncated, tooShort: false };
+}
+
 export function filterRepositoryTree(
   nodes: RepositoryFileTreeNode[],
   query: string,

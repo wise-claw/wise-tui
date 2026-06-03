@@ -18,6 +18,16 @@
   max-height: none;
 }
 
+.app-left-sidebar-monitor-panel--section-collapsed {
+  flex: 0 0 auto;
+  max-height: none;
+  overflow: visible;
+}
+
+.app-left-sidebar-monitor-panel--section-collapsed .app-monitor-panel {
+  border-top: none;
+}
+
 .app-completed-task-panel {
   margin-top: 0;
 }
@@ -77,8 +87,34 @@
 .app-monitor-panel__head-concurrency {
   display: flex;
   align-items: center;
+  gap: 2px;
   flex-shrink: 0;
   margin-left: auto;
+}
+
+.app-monitor-panel__section-collapse-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ant-color-text-tertiary);
+  cursor: pointer;
+}
+
+.app-monitor-panel__section-collapse-btn:hover {
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-monitor-panel__section-collapse-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 .app-monitor-panel__filters {

@@ -10,6 +10,7 @@ import {
   type WorkspaceTodoDisplayItem,
   type WorkspaceTodoScope,
 } from "../../types/workspaceTodos";
+import { InspectorCollapsibleSection } from "./InspectorCollapsibleSection";
 import "./WorkspaceTodosPanel.css";
 
 export interface WorkspaceTodosPanelProps {
@@ -169,14 +170,18 @@ export function WorkspaceTodosPanel({ projectId, repositoryId }: WorkspaceTodosP
     todos.setItemsForScope(item.scope, scopeRows);
   };
 
+  const incompleteCount = activeItems.length;
+
   return (
-    <section className="app-workspace-todos-panel" aria-label="待办事项">
-      <header className="app-workspace-todos-panel__head">
-        <Typography.Text strong className="app-workspace-todos-panel__title">
-          待办事项
-        </Typography.Text>
-        <div className="app-workspace-todos-panel__head-actions">
-          {completedItems.length > 0 ? (
+    <InspectorCollapsibleSection
+      sectionId="todos"
+      className="app-workspace-todos-panel"
+      ariaLabel="待办事项"
+      title="待办事项"
+      summaryMeta={incompleteCount > 0 ? String(incompleteCount) : null}
+      headActions={
+        completedItems.length > 0 ? (
+          <div className="app-workspace-todos-panel__head-actions">
             <Button
               type="link"
               size="small"
@@ -185,10 +190,10 @@ export function WorkspaceTodosPanel({ projectId, repositoryId }: WorkspaceTodosP
             >
               {showCompleted ? "隐藏已完成" : `已完成 ${completedItems.length}`}
             </Button>
-          ) : null}
-        </div>
-      </header>
-
+          </div>
+        ) : null
+      }
+    >
       <div className="app-workspace-todos-panel__body">
         {todos.loading ? (
           <div className="app-workspace-todos-panel__loading">
@@ -261,6 +266,6 @@ export function WorkspaceTodosPanel({ projectId, repositoryId }: WorkspaceTodosP
           </>
         )}
       </div>
-    </section>
+    </InspectorCollapsibleSection>
   );
 }

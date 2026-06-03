@@ -49,6 +49,7 @@ import {
 import { ClaudeSessionMessagesColumn } from "../ClaudeSessions/ClaudeSessionMessagesColumn";
 
 import { useAgentAssignments } from "../../hooks/useAgentAssignments";
+import { ExpandIcon } from "../LeftSidebar/SidebarIcons";
 import { SubagentStatusIndicator } from "./SubagentStatusIndicator";
 import { canStopSessionConversationTask } from "../../utils/sessionConversationTasks";
 import {
@@ -124,6 +125,8 @@ interface Props {
   onRestoreHistorySessionAsMain?: (sessionId: string) => void | Promise<void>;
   repositoryMainBindings?: Record<string, string>;
   repositories?: Repository[];
+  sectionCollapsed?: boolean;
+  onSectionCollapsedChange?: (collapsed: boolean) => void;
 }
 
 interface TeamHistorySessionRow {
@@ -828,8 +831,11 @@ export function ProgressMonitorPanel({
   onRestoreHistorySessionAsMain,
   repositoryMainBindings = {},
   repositories = [],
+  sectionCollapsed = false,
+  onSectionCollapsedChange,
 }: Props) {
   const { running: agentAssignments } = useAgentAssignments({ projectId, enabled: Boolean(projectId) });
+  const setSectionCollapsed = onSectionCollapsedChange;
 
   const [employeeHistoryPopoverId, setEmployeeHistoryPopoverId] = useState<string | null>(null);
   const [teamHistoryPopoverId, setTeamHistoryPopoverId] = useState<string | null>(null);
@@ -1071,6 +1077,98 @@ export function ProgressMonitorPanel({
     agentAssignments.length > 0 ||
     teamItems.length > 0;
 
+  const collapsedSummaryMeta = useMemo(() => {
+    if (claudeConcurrency) {
+      return `${claudeConcurrency.activeCount}/${claudeConcurrency.limit}`;
+    }
+    const runningTerminals = employeeItems.filter((item) => item.status === "in_progress").length;
+    const runningTeams = teamItems.filter((item) => item.status === "in_progress").length;
+    const activeCount = runningTerminals + runningTeams + agentAssignments.length;
+    return activeCount > 0 ? `${activeCount} 活跃` : null;
+  }, [agentAssignments.length, claudeConcurrency, employeeItems, teamItems]);
+
+  const monitorDrawers = (
+    <>
+      <OmcDirectBatchInvocationDetailDrawer
+        open={omcDirectBatchDetailSnapshot !== null}
+        snapshot={omcDirectBatchDetailSnapshot}
+        sessions={sessions}
+        onClose={() => setOmcDirectBatchDetailSnapshot(null)}
+        onOpenInMainSessionBackground={onOpenOmcBatchInvocationDetail ? handleOmcBatchInvocationSelect : undefined}
+      />
+
+      <SessionConversationTaskDetailDrawer
+        target={sessionConversationTaskDetailTarget}
+        sessions={sessionsForHistoryTranscript}
+        sessionConversationTaskItems={sessionConversationTaskItems ?? []}
+        onClose={() => setSessionConversationTaskDetailTarget(null)}
+        onStopTask={stopSessionConversationTask}
+        onCancelSession={onCancelSession}
+        onCancelOmcDirectBatchInvocation={onCancelOmcDirectBatchInvocation}
+        onStopSessionConversationTask={onStopSessionConversationTask}
+      />
+
+      <RepositorySubagentDetailDrawer
+        target={repositorySubagentDetailTarget}
+        sessions={sessionsForHistoryTranscript}
+        onReloadFullDiskTranscript={onReloadFullDiskTranscript}
+        onClose={() => setRepositorySubagentDetailTarget(null)}
+      />
+    </>
+  );
+
+  if (sectionCollapsed && setSectionCollapsed) {
+    return (
+      <div className="app-monitor-panel app-monitor-panel--section-collapsed">
+        <div className="app-repository-row app-left-sidebar-monitor-panel-collapsed-row">
+          <div className="app-repository-item app-repository-item--project app-repository-item--monitor-panel-collapsed">
+            <span
+              className="app-repository-expand"
+              role="button"
+              tabIndex={0}
+              aria-expanded={false}
+              aria-label="展开运行面板"
+              onClick={(event) => {
+                event.stopPropagation();
+                setSectionCollapsed(false);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setSectionCollapsed(false);
+                }
+              }}
+            >
+              <ExpandIcon expanded={false} />
+            </span>
+            <span
+              className="app-repository-name-block app-left-sidebar-monitor-panel-collapsed-hit"
+              role="button"
+              tabIndex={0}
+              aria-label="展开运行面板"
+              onClick={() => setSectionCollapsed(false)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setSectionCollapsed(false);
+                }
+              }}
+            >
+              <span className="app-repository-name">运行面板</span>
+              {collapsedSummaryMeta ? (
+                <span className="app-repository-meta" aria-label={collapsedSummaryMeta}>
+                  {collapsedSummaryMeta}
+                </span>
+              ) : null}
+            </span>
+          </div>
+        </div>
+        {monitorDrawers}
+      </div>
+    );
+  }
+
   return (
     <div className="app-monitor-panel">
       <div className="app-monitor-panel__head">
@@ -1108,6 +1206,18 @@ export function ProgressMonitorPanel({
               <span className="app-monitor-panel__concurrency-placeholder">—</span>
             </span>
           )}
+          {setSectionCollapsed ? (
+            <Tooltip title="收起运行面板" mouseEnterDelay={0.35}>
+              <button
+                type="button"
+                className="app-monitor-panel__section-collapse-btn"
+                aria-label="收起运行面板"
+                onClick={() => setSectionCollapsed(true)}
+              >
+                <ExpandIcon expanded />
+              </button>
+            </Tooltip>
+          ) : null}
         </div>
       </div>
 
@@ -1461,31 +1571,7 @@ export function ProgressMonitorPanel({
       </div>
       ) : null}
 
-      <OmcDirectBatchInvocationDetailDrawer
-        open={omcDirectBatchDetailSnapshot !== null}
-        snapshot={omcDirectBatchDetailSnapshot}
-        sessions={sessions}
-        onClose={() => setOmcDirectBatchDetailSnapshot(null)}
-        onOpenInMainSessionBackground={onOpenOmcBatchInvocationDetail ? handleOmcBatchInvocationSelect : undefined}
-      />
-
-      <SessionConversationTaskDetailDrawer
-        target={sessionConversationTaskDetailTarget}
-        sessions={sessionsForHistoryTranscript}
-        sessionConversationTaskItems={sessionConversationTaskItems ?? []}
-        onClose={() => setSessionConversationTaskDetailTarget(null)}
-        onStopTask={stopSessionConversationTask}
-        onCancelSession={onCancelSession}
-        onCancelOmcDirectBatchInvocation={onCancelOmcDirectBatchInvocation}
-        onStopSessionConversationTask={onStopSessionConversationTask}
-      />
-
-      <RepositorySubagentDetailDrawer
-        target={repositorySubagentDetailTarget}
-        sessions={sessionsForHistoryTranscript}
-        onReloadFullDiskTranscript={onReloadFullDiskTranscript}
-        onClose={() => setRepositorySubagentDetailTarget(null)}
-      />
+      {monitorDrawers}
     </div>
   );
 }

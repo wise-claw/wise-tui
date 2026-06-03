@@ -3,6 +3,7 @@ import { Button, Empty, Segmented, Spin, Tag, Tooltip, Typography } from "antd";
 import { useEffect, useState } from "react";
 import { useWorkspaceMemosContextOptional } from "../../contexts/WorkspaceMemosContext";
 import type { WorkspaceMemoScope } from "../../types/workspaceMemos";
+import { InspectorCollapsibleSection } from "./InspectorCollapsibleSection";
 import "./WorkspaceMemosPanel.css";
 
 export interface WorkspaceMemosPanelProps {
@@ -68,11 +69,14 @@ function WorkspaceMemosPanelInner({ projectId, repositoryId }: WorkspaceMemosPan
   };
 
   return (
-    <section className="app-workspace-memos-panel app-workspace-memos-panel--list-only" aria-label="备忘录">
-      <header className="app-workspace-memos-panel__head">
-        <Typography.Text strong className="app-workspace-memos-panel__title">
-          备忘录
-        </Typography.Text>
+    <InspectorCollapsibleSection
+      sectionId="memos"
+      className="app-workspace-memos-panel app-workspace-memos-panel--list-only"
+      panelClassName="app-workspace-memos-panel"
+      ariaLabel="备忘录"
+      title="备忘录"
+      summaryMeta={memos.displayItems.length > 0 ? String(memos.displayItems.length) : null}
+      headActions={
         <div className="app-workspace-memos-panel__head-actions">
           {newScopeOptions.length > 1 ? (
             <Segmented
@@ -94,8 +98,8 @@ function WorkspaceMemosPanelInner({ projectId, repositoryId }: WorkspaceMemosPan
             />
           </Tooltip>
         </div>
-      </header>
-
+      }
+    >
       <div className="app-workspace-memos-panel__body">
         {memos.loading ? (
           <div className="app-workspace-memos-panel__loading">
@@ -140,7 +144,7 @@ function WorkspaceMemosPanelInner({ projectId, repositoryId }: WorkspaceMemosPan
           </ul>
         )}
       </div>
-    </section>
+    </InspectorCollapsibleSection>
   );
 }
 
