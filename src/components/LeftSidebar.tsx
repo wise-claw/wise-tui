@@ -259,7 +259,10 @@ export function LeftSidebar({
   const [monitorPanelMounted, setMonitorPanelMounted] = useState(false);
 
   useEffect(() => {
-    if (!showLeftSidebarMonitorPanel) return;
+    if (!showLeftSidebarMonitorPanel) {
+      setMonitorPanelMounted(false);
+      return;
+    }
     const cancel = runWhenIdle(() => setMonitorPanelMounted(true), { timeoutMs: 500 });
     return cancel;
   }, [showLeftSidebarMonitorPanel]);

@@ -1,6 +1,6 @@
 import { CheckOutlined, CopyOutlined, DownOutlined, RightOutlined } from "@ant-design/icons";
 import { Button } from "antd";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { JsonSyntaxHighlight } from "../ClaudeSessions/systemMessageJson";
 import {
   formatHttpBodyJsonForDisplay,
@@ -34,7 +34,17 @@ export function HttpBodyJsonViewer({
   emptyHint,
 }: HttpBodyJsonViewerProps) {
   const [copied, setCopied] = useState(false);
+  const copyResetTimerRef = useRef<number | null>(null);
   const [expanded, setExpanded] = useState(defaultExpanded);
+
+  useEffect(
+    () => () => {
+      if (copyResetTimerRef.current != null) {
+        window.clearTimeout(copyResetTimerRef.current);
+      }
+    },
+    [],
+  );
   const prettyJson = useMemo(() => formatHttpBodyJsonForDisplay(rawContent), [rawContent]);
   const formatted = prettyJson !== rawContent.trim() && prettyJson.trim().length > 0;
   const hasBody = prettyJson.trim().length > 0;
@@ -45,7 +55,13 @@ export function HttpBodyJsonViewer({
       e.stopPropagation();
       void navigator.clipboard.writeText(prettyJson).then(() => {
         setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        if (copyResetTimerRef.current != null) {
+          window.clearTimeout(copyResetTimerRef.current);
+        }
+        copyResetTimerRef.current = window.setTimeout(() => {
+          copyResetTimerRef.current = null;
+          setCopied(false);
+        }, 2000);
       });
     },
     [prettyJson],

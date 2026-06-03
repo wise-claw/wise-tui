@@ -114,7 +114,15 @@ export function useTrellisRuntime(options: {
   // Onboarding — fetch once on mount
   useEffect(() => {
     if (!rootPath) return;
-    getTrellisOnboardingState({ projectId, rootPath }).then(setOnboarding).catch(() => {});
+    let cancelled = false;
+    void getTrellisOnboardingState({ projectId, rootPath })
+      .then((state) => {
+        if (!cancelled) setOnboarding(state);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, [projectId, rootPath]);
 
   // Replay — fetch when tab changes

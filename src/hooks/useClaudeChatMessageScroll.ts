@@ -21,6 +21,7 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
   const awaitNewMessageBeforeFollowRef = useRef(false);
   const followFingerprintAtBlurRef = useRef("");
   const scrollFollowLoopRafRef = useRef<number | null>(null);
+  const scrollNavTimeoutRef = useRef<number | null>(null);
   const sessionStatusRef = useRef(session.status);
   sessionStatusRef.current = session.status;
   const lastUserMessagePinIdRef = useRef<number | null>(null);
@@ -205,7 +206,11 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
 
   const scrollToSessionMessageId = useCallback(
     (messageId: number) => {
-      window.setTimeout(() => {
+      if (scrollNavTimeoutRef.current != null) {
+        window.clearTimeout(scrollNavTimeoutRef.current);
+      }
+      scrollNavTimeoutRef.current = window.setTimeout(() => {
+        scrollNavTimeoutRef.current = null;
         const row = document.querySelector(`[data-message-id="${CSS.escape(String(messageId))}"]`);
         if (scrollMessageTargetIntoView(row)) return;
         messageListNavRef.current?.scrollToMessageId(messageId);
@@ -221,6 +226,10 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
 
   useEffect(() => {
     cancelScrollFollowLoop();
+    if (scrollNavTimeoutRef.current != null) {
+      window.clearTimeout(scrollNavTimeoutRef.current);
+      scrollNavTimeoutRef.current = null;
+    }
     pinToBottomRef.current = true;
     userPausedFollowRef.current = false;
     awaitNewMessageBeforeFollowRef.current = false;
@@ -337,7 +346,16 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
     };
   }, [session.id, hideMessages, scheduleScrollToBottom, shouldAutoFollow, isSessionStreaming]);
 
-  useEffect(() => () => cancelScrollFollowLoop(), [cancelScrollFollowLoop]);
+  useEffect(
+    () => () => {
+      cancelScrollFollowLoop();
+      if (scrollNavTimeoutRef.current != null) {
+        window.clearTimeout(scrollNavTimeoutRef.current);
+        scrollNavTimeoutRef.current = null;
+      }
+    },
+    [cancelScrollFollowLoop],
+  );
 
   return {
     messagesScrollRef,

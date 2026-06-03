@@ -489,6 +489,14 @@ export function useDingTalkAutomationInbound({
     return () => {
       cancelled = true;
       safeUnlisten(unlisten);
+      for (const finish of [...inboundJobResolversRef.current.values()]) {
+        finish();
+      }
+      inboundJobResolversRef.current.clear();
+      for (const pending of pendingRef.current.values()) {
+        message.destroy(pending.uxMessageKey);
+      }
+      pendingRef.current.clear();
     };
   }, [clearPendingAndResolveInboundJob]);
 

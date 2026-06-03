@@ -25,7 +25,7 @@ import {
   RightOutlined,
 } from "@ant-design/icons";
 import { save } from "@tauri-apps/plugin-dialog";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ClaudeSession } from "../../types";
 import type { SessionLinkRecord } from "../../types/sessionLink";
 import { loadClaudeSessionJsonl } from "../../services/claudeDisk";
@@ -117,6 +117,16 @@ interface RecordItemProps {
 function RecordItem({ record }: RecordItemProps) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const copyResetTimerRef = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (copyResetTimerRef.current != null) {
+        window.clearTimeout(copyResetTimerRef.current);
+      }
+    },
+    [],
+  );
 
   const detailText = record.detail?.trim() ?? "";
 
@@ -125,7 +135,13 @@ function RecordItem({ record }: RecordItemProps) {
     try {
       await navigator.clipboard.writeText(detailText);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      if (copyResetTimerRef.current != null) {
+        window.clearTimeout(copyResetTimerRef.current);
+      }
+      copyResetTimerRef.current = window.setTimeout(() => {
+        copyResetTimerRef.current = null;
+        setCopied(false);
+      }, 2000);
     } catch {
       message.error("复制失败");
     }
@@ -226,6 +242,7 @@ export function SessionDataLinkDrawer({
   const [jsonlLoading, setJsonlLoading] = useState(false);
   const [jsonlError, setJsonlError] = useState<string | null>(null);
   const [headerCopied, setHeaderCopied] = useState(false);
+  const headerCopyResetTimerRef = useRef<number | null>(null);
   const [turnDiagramTurn, setTurnDiagramTurn] = useState<number | null>(null);
   const [activeTurnKeys, setActiveTurnKeys] = useState<string[]>([]);
   const [proxySnap, setProxySnap] = useState(getClaudeLlmProxyStoreSnapshot);
@@ -415,13 +432,28 @@ export function SessionDataLinkDrawer({
     [exportBundle, session],
   );
 
+  useEffect(
+    () => () => {
+      if (headerCopyResetTimerRef.current != null) {
+        window.clearTimeout(headerCopyResetTimerRef.current);
+      }
+    },
+    [],
+  );
+
   const handleCopyExport = useCallback(async () => {
     if (!exportBundle) return;
     const text = serializeSessionLinkExportBundle(exportBundle);
     try {
       await navigator.clipboard.writeText(text);
       setHeaderCopied(true);
-      setTimeout(() => setHeaderCopied(false), 2000);
+      if (headerCopyResetTimerRef.current != null) {
+        window.clearTimeout(headerCopyResetTimerRef.current);
+      }
+      headerCopyResetTimerRef.current = window.setTimeout(() => {
+        headerCopyResetTimerRef.current = null;
+        setHeaderCopied(false);
+      }, 2000);
       message.success("已复制当前筛选结果的链路 JSON");
     } catch {
       message.error("复制失败");

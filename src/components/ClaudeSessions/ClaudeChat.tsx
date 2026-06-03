@@ -1302,18 +1302,22 @@ export function ClaudeChat({
 
   const loadNotificationRows = useCallback(async (options?: { quiet?: boolean }) => {
     const quiet = options?.quiet === true;
+    const loadScopeId = sessionForNotificationPanelRef.current.id;
     if (!quiet) {
       setNotificationLoading(true);
     }
     try {
       const rows = await wiseNotificationListRecent(NOTIFICATION_INBOX_FETCH_LIMIT);
+      if (sessionForNotificationPanelRef.current.id !== loadScopeId) {
+        return;
+      }
       setNotificationRows(rows);
     } catch {
-      if (!quiet) {
+      if (!quiet && sessionForNotificationPanelRef.current.id === loadScopeId) {
         setNotificationRows([]);
       }
     } finally {
-      if (!quiet) {
+      if (!quiet && sessionForNotificationPanelRef.current.id === loadScopeId) {
         setNotificationLoading(false);
       }
     }
@@ -1568,19 +1572,26 @@ export function ClaudeChat({
       return;
     }
 
+    const scrollTimeouts: number[] = [];
+    const scheduleScroll = (fn: () => void) => {
+      scrollTimeouts.push(window.setTimeout(fn, 50));
+    };
+
     const taskIdHint = pending.taskId?.trim();
     if (taskIdHint) {
       const byTask = document.querySelector(`[data-task-id="${CSS.escape(taskIdHint)}"]`);
       if (byTask) {
-        window.setTimeout(() => {
+        scheduleScroll(() => {
           scrollMessageTargetIntoView(byTask);
           try {
             sessionStorage.removeItem(WISE_PENDING_NOTIFICATION_SCROLL_STORAGE_KEY);
           } catch {
             /* ignore */
           }
-        }, 50);
-        return;
+        });
+        return () => {
+          scrollTimeouts.forEach((id) => window.clearTimeout(id));
+        };
       }
     }
 
@@ -1609,7 +1620,7 @@ export function ClaudeChat({
     if (!target) {
       return;
     }
-    window.setTimeout(() => {
+    scheduleScroll(() => {
       const rawId = (pending.messageId ?? "").trim();
       const scrollIndex =
         rawId !== ""
@@ -1643,8 +1654,11 @@ export function ClaudeChat({
       } catch {
         /* ignore */
       }
-    }, 50);
-  }, [session.id, session.claudeSessionId, session.messages]);
+    });
+    return () => {
+      scrollTimeouts.forEach((id) => window.clearTimeout(id));
+    };
+  }, [session.id, session.claudeSessionId, session.messages, scrollMessageTargetIntoView]);
 
 
   return (

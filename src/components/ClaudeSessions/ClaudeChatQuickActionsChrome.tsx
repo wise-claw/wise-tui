@@ -60,6 +60,8 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
   const [pushSubmitting, setPushSubmitting] = useState(false);
   const pushSummaryLoadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pushSummaryLoadSeqRef = useRef(0);
+  const pushAutoFixTimerRef = useRef<number | null>(null);
+  const gitWorktreeLoadSeqRef = useRef(0);
   const pushSubmitInFlightRef = useRef(false);
 
   const [gitWorktreePopoverOpen, setGitWorktreePopoverOpen] = useState(false);
@@ -77,6 +79,11 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
     setPushSummaryPhase("");
     setGitWorktreePopoverOpen(false);
     pushSummaryLoadSeqRef.current += 1;
+    gitWorktreeLoadSeqRef.current += 1;
+    if (pushAutoFixTimerRef.current != null) {
+      window.clearTimeout(pushAutoFixTimerRef.current);
+      pushAutoFixTimerRef.current = null;
+    }
   }, [sessionId]);
 
   useEffect(() => {
@@ -196,7 +203,16 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
     [cancelScheduledPushSummaryLoad, schedulePushSummaryLoad],
   );
 
-  useEffect(() => () => cancelScheduledPushSummaryLoad(), [cancelScheduledPushSummaryLoad]);
+  useEffect(
+    () => () => {
+      cancelScheduledPushSummaryLoad();
+      if (pushAutoFixTimerRef.current != null) {
+        window.clearTimeout(pushAutoFixTimerRef.current);
+        pushAutoFixTimerRef.current = null;
+      }
+    },
+    [cancelScheduledPushSummaryLoad],
+  );
 
   const handlePushSubmit = useCallback(async () => {
     if (pushSubmitInFlightRef.current) return;
@@ -234,7 +250,11 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
       const repoPathForFix = repoPath;
       const commitMessageForFix = commitMessage;
       const sendAutoFix = onSend;
-      window.setTimeout(() => {
+      if (pushAutoFixTimerRef.current != null) {
+        window.clearTimeout(pushAutoFixTimerRef.current);
+      }
+      pushAutoFixTimerRef.current = window.setTimeout(() => {
+        pushAutoFixTimerRef.current = null;
         void (async () => {
           try {
             const latest = await gitStatus(repoPathForFix).catch(() => null);
@@ -279,9 +299,11 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
       setLinkedWorktrees([]);
       return;
     }
+    const seq = ++gitWorktreeLoadSeqRef.current;
     setGitWorktreeLoading(true);
     try {
       const list = await gitWorktreeList(p);
+      if (seq !== gitWorktreeLoadSeqRef.current) return;
       const extras = list.filter((w) => !w.isPrimary);
       const seen = new Set<string>();
       const deduped: GitWorktreeEntry[] = [];
@@ -293,7 +315,9 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
       }
       setLinkedWorktrees(deduped);
     } finally {
-      setGitWorktreeLoading(false);
+      if (seq === gitWorktreeLoadSeqRef.current) {
+        setGitWorktreeLoading(false);
+      }
     }
   }, [gitRepositoryPath]);
 

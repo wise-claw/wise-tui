@@ -595,7 +595,9 @@ function BackgroundInvocationDockInner({ session }: { session: ClaudeSession }) 
 
       void (async () => {
         const bundle = await readInvocationSnapshotBundle(session.id, session.repositoryPath);
+        if (cancelled) return;
         await yieldToBrowser();
+        if (cancelled) return;
         const snaps = Object.values(bundle.items).filter((s): s is BackgroundInvocationSnapshot =>
           Boolean(s?.invocationKey),
         );
@@ -636,9 +638,12 @@ function BackgroundInvocationDockInner({ session }: { session: ClaudeSession }) 
           }
           if (snaps.length > 3 && i < snaps.length - 1 && (i + 1) % 2 === 0) {
             await new Promise<void>((r) => window.setTimeout(r, 0));
+            if (cancelled) return;
           }
         }
+        if (cancelled) return;
         startTransition(() => {
+          if (cancelled) return;
           invocationMapRef.current = next;
           setInvocationMap(next);
           setRestored(true);
@@ -658,8 +663,10 @@ function BackgroundInvocationDockInner({ session }: { session: ClaudeSession }) 
         });
       })();
     }
+    let cancelled = false;
     window.addEventListener(WORKFLOW_UI_EVENT_OPEN_BACKGROUND_INVOCATION_DRAWER, onRequestOpenDrawer as EventListener);
     return () => {
+      cancelled = true;
       window.removeEventListener(WORKFLOW_UI_EVENT_OPEN_BACKGROUND_INVOCATION_DRAWER, onRequestOpenDrawer as EventListener);
     };
   }, [session.id, session.repositoryPath, session.claudeSessionId, flushKeyFromBuffers, attachTauriBuffersForKey]);

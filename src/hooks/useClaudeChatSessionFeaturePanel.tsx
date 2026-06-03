@@ -353,6 +353,7 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
     const historyLoadMoreLockedRef = useRef(false);
     /** 历史会话删除二次确认 Modal 打开期间，忽略 Popover 的外部点击关闭 */
     const historyPopoverCloseGuardRef = useRef(false);
+    const focusTaskScrollTimeoutRef = useRef<number | null>(null);
     const [sessionTraceDrawerOpen, setSessionTraceDrawerOpen] = useState(false);
     const [sessionSendTraces, setSessionSendTraces] = useState<SessionSendTraceEntry[]>([]);
     const [taskCompletionModalOpen, setTaskCompletionModalOpen] = useState(false);
@@ -1409,6 +1410,10 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
         const taskId = custom.detail?.taskId?.trim();
         if (!taskId) return;
         const id = taskId;
+        if (focusTaskScrollTimeoutRef.current != null) {
+          window.clearTimeout(focusTaskScrollTimeoutRef.current);
+          focusTaskScrollTimeoutRef.current = null;
+        }
 
         function tryScroll(): boolean {
           const target = document.querySelector(`[data-task-id="${CSS.escape(id)}"]`);
@@ -1438,13 +1443,18 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
 
         setTaskListStatusFilter("all");
         setTaskListDrawerOpen(true);
-        window.setTimeout(() => {
+        focusTaskScrollTimeoutRef.current = window.setTimeout(() => {
+          focusTaskScrollTimeoutRef.current = null;
           tryScroll();
         }, 280);
       }
       window.addEventListener(WORKFLOW_UI_EVENT_FOCUS_TASK_TOOL, handleFocusTaskTool as EventListener);
       return () => {
         window.removeEventListener(WORKFLOW_UI_EVENT_FOCUS_TASK_TOOL, handleFocusTaskTool as EventListener);
+        if (focusTaskScrollTimeoutRef.current != null) {
+          window.clearTimeout(focusTaskScrollTimeoutRef.current);
+          focusTaskScrollTimeoutRef.current = null;
+        }
       };
     }, [scrollMessageTargetIntoView]);
     const sessionUserQuestions = useMemo((): SessionUserQuestionRow[] => {

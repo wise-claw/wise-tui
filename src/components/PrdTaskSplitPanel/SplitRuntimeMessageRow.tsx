@@ -1,6 +1,6 @@
 import { CopyOutlined } from "@ant-design/icons";
 import { Button } from "antd";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { LinkifiedPre } from "../ClaudeSessions/LinkifiedPre";
 import type { SplitRetryPhase, SplitRuntimeLogItem } from "./types";
 
@@ -12,6 +12,16 @@ interface Props {
 
 export function SplitRuntimeMessageRow({ log, retryingPhase, onRetryStage }: Props) {
   const [copied, setCopied] = useState(false);
+  const copyResetTimerRef = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (copyResetTimerRef.current != null) {
+        window.clearTimeout(copyResetTimerRef.current);
+      }
+    },
+    [],
+  );
   const scope = log.scope ?? (log.role === "assistant" ? "subagent" : "main");
   const status = log.status ?? (log.role === "error" ? "failed" : "info");
   const agentName = log.agentName ?? (scope === "subagent" ? "trellis-splitter" : "主会话");
@@ -40,10 +50,19 @@ export function SplitRuntimeMessageRow({ log, retryingPhase, onRetryStage }: Pro
       .join("\n");
     const content = [log.title, log.text, detailText].filter(Boolean).join("\n");
     if (!content.trim()) return;
+    const scheduleCopyReset = () => {
+      if (copyResetTimerRef.current != null) {
+        window.clearTimeout(copyResetTimerRef.current);
+      }
+      copyResetTimerRef.current = window.setTimeout(() => {
+        copyResetTimerRef.current = null;
+        setCopied(false);
+      }, 1400);
+    };
     try {
       await navigator.clipboard.writeText(content);
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 1400);
+      scheduleCopyReset();
     } catch {
       const ta = document.createElement("textarea");
       ta.value = content;
@@ -55,7 +74,7 @@ export function SplitRuntimeMessageRow({ log, retryingPhase, onRetryStage }: Pro
       document.body.removeChild(ta);
       if (ok) {
         setCopied(true);
-        window.setTimeout(() => setCopied(false), 1400);
+        scheduleCopyReset();
       }
     }
   }, [log.details, log.text, log.title]);

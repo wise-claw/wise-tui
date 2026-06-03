@@ -3358,6 +3358,14 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     return () => window.clearTimeout(t);
   }, [sessions, activeSessionId, tabsHydrated, pruneLiveSessionSidecars]);
 
+  useEffect(() => {
+    return () => {
+      for (const key of [...streamStallTimerByTabRef.current.keys()]) {
+        clearStreamStallTimer(key);
+      }
+    };
+  }, [clearStreamStallTimer]);
+
   return {
     sessions,
     /** 与 `commitSessions` / `createSession` 同步更新的会话列表；派发终端 worker 须读此 ref，勿用滞后一帧的 `sessions` prop。 */

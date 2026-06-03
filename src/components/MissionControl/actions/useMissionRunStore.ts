@@ -53,8 +53,9 @@ export function useMissionRunStore() {
   }, [refreshBackgroundRuns]);
 
   useEffect(() => {
+    let cancelled = false;
     const unlisteners: UnlistenFn[] = [];
-    listen<SplitterCompleteEvent>("splitter-complete", (event) => {
+    void listen<SplitterCompleteEvent>("splitter-complete", (event) => {
       const { clusterId, runId, status } = event.payload;
       setBackgroundRuns((prev) => {
         const next = { ...prev };
@@ -75,9 +76,16 @@ export function useMissionRunStore() {
         }
         return next;
       });
-    }).then((fn) => unlisteners.push(fn));
+    }).then((fn) => {
+      if (cancelled) {
+        safeUnlisten(fn);
+        return;
+      }
+      unlisteners.push(fn);
+    });
 
     return () => {
+      cancelled = true;
       for (const fn of unlisteners) safeUnlisten(fn);
     };
   }, []);

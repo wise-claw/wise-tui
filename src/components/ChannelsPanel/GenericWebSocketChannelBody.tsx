@@ -8,6 +8,7 @@ import {
   StopOutlined,
 } from "@ant-design/icons";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { safeUnlisten } from "../../utils/safeTauriUnlisten";
 import {
   genericWsSendText,
   genericWsStart,
@@ -78,8 +79,10 @@ export function GenericWebSocketChannelBody({
   const hasUrl = url.trim().length > 0;
 
   useEffect(() => {
+    let cancelled = false;
     void (async () => {
       const cfg = await loadGenericWsConfig();
+      if (cancelled) return;
       if (cfg) {
         setLoaded(cfg);
         setUrl(cfg.url ?? "");
@@ -91,12 +94,16 @@ export function GenericWebSocketChannelBody({
       }
       try {
         const live = await genericWsStatus();
+        if (cancelled) return;
         setStatus(live);
         onStatusChange?.(live);
       } catch {
         /* ignore */
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [onConfiguredChange, onStatusChange]);
 
   useEffect(() => {
@@ -109,7 +116,7 @@ export function GenericWebSocketChannelBody({
         onStatusChange?.(event.payload);
       });
       if (cancelled) {
-        u1();
+        safeUnlisten(u1);
         return;
       }
       statusUnlisten = u1;
@@ -121,15 +128,15 @@ export function GenericWebSocketChannelBody({
         });
       });
       if (cancelled) {
-        u2();
+        safeUnlisten(u2);
         return;
       }
       messageUnlisten = u2;
     })();
     return () => {
       cancelled = true;
-      statusUnlisten?.();
-      messageUnlisten?.();
+      if (statusUnlisten) safeUnlisten(statusUnlisten);
+      if (messageUnlisten) safeUnlisten(messageUnlisten);
     };
   }, [onStatusChange]);
 

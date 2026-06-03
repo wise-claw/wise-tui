@@ -89,9 +89,15 @@ export function ChannelsPanel() {
 
   // 初次进入页面时主动同步一次通用 WS 真实状态（避免事件流尚未抵达时显示 stopped）
   useEffect(() => {
+    let cancelled = false;
     void genericWsStatus()
-      .then((s) => setWsStatus(s))
+      .then((s) => {
+        if (!cancelled) setWsStatus(s);
+      })
       .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleToggleDingTalk = useCallback(

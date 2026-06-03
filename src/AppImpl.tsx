@@ -2655,12 +2655,6 @@ export default function App() {
             : {},
       );
     }
-    window.addEventListener(WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL, handleOpenTaskSplitPanel as EventListener);
-    window.addEventListener(WORKFLOW_UI_EVENT_OPEN_ASSISTANT, handleOpenAssistantEvent as EventListener);
-    return () => {
-      window.removeEventListener(WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL, handleOpenTaskSplitPanel as EventListener);
-      window.removeEventListener(WORKFLOW_UI_EVENT_OPEN_ASSISTANT, handleOpenAssistantEvent as EventListener);
-    };
     function handleOpenAssistantEvent(event: Event) {
       const detail = (event as CustomEvent<OpenAssistantDetail>).detail ?? {};
       if (typeof detail.assistantId === "string" && detail.assistantId.trim()) {
@@ -2669,9 +2663,16 @@ export default function App() {
       }
       openRequirementAssistant(detail);
     }
+    window.addEventListener(WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL, handleOpenTaskSplitPanel as EventListener);
+    window.addEventListener(WORKFLOW_UI_EVENT_OPEN_ASSISTANT, handleOpenAssistantEvent as EventListener);
+    return () => {
+      window.removeEventListener(WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL, handleOpenTaskSplitPanel as EventListener);
+      window.removeEventListener(WORKFLOW_UI_EVENT_OPEN_ASSISTANT, handleOpenAssistantEvent as EventListener);
+    };
   }, [activeProjectId, activeRepositoryId, openBuiltinAssistant, openRequirementAssistant]);
 
   useEffect(() => {
+    let cancelled = false;
     function handleWorkflowConfigEvent(event: Event) {
       const detail = (event as CustomEvent<OpenWorkflowConfigDetail>).detail;
       const workflowId = detail?.workflowId?.trim() ?? "";
@@ -2690,6 +2691,7 @@ export default function App() {
             listWorkflowTemplates(),
             getWorkflowGraph({ workflowId }),
           ]);
+          if (cancelled) return;
           setWorkflowTemplates(templates);
           if (graphItem?.graph) {
             setWorkflowGraphsByWorkflowId((prev) => ({ ...prev, [workflowId]: graphItem.graph }));
@@ -2712,6 +2714,7 @@ export default function App() {
     window.addEventListener(WORKFLOW_UI_EVENT_WORKFLOW_GRAPH_CHANGED, handleWorkflowGraphChanged as EventListener);
     window.addEventListener(WORKFLOW_UI_EVENT_OPEN_REPOSITORY_FILE, handleOpenRepositoryFileEvent as EventListener);
     return () => {
+      cancelled = true;
       window.removeEventListener(WORKFLOW_UI_EVENT_OPEN_WORKFLOW_CONFIG, handleWorkflowConfigEvent as EventListener);
       window.removeEventListener(WORKFLOW_UI_EVENT_WORKFLOW_GRAPH_CHANGED, handleWorkflowGraphChanged as EventListener);
       window.removeEventListener(WORKFLOW_UI_EVENT_OPEN_REPOSITORY_FILE, handleOpenRepositoryFileEvent as EventListener);
