@@ -16,31 +16,21 @@ import {
 } from "react";
 import { App as AntdApp, ConfigProvider, Layout, Spin, theme } from "antd";
 import zhCN from "antd/locale/zh_CN";
-import { AuthorPanel } from "./AuthorPanel/AuthorPanel";
-import { AuthorPanelNav } from "./AuthorPanel/AuthorPanelNav";
-import { ClaudeSessions, Topbar } from "./ClaudeSessions";
-import { resolveWorkspaceMainSession } from "../utils/resolveWorkspaceMainSession";
-import { CockpitOnboarding, type CockpitOnboardingProps } from "./Cockpit";
-import {
-  WorkspaceWelcomeLanding,
-  type WorkspaceWelcomeLandingProps,
-} from "./WorkspaceWelcomeLanding";
-import { CommandPalette } from "./CommandPalette";
+import type { AuthorPanelProps } from "./AuthorPanel/AuthorPanel";
+import type { CockpitOnboardingProps } from "./Cockpit/CockpitOnboarding";
+import type { WorkspaceWelcomeLandingProps } from "./WorkspaceWelcomeLanding";
+import type { CommandPalette } from "./CommandPalette";
 import type { GitPanelOpenFileOptions } from "./GitPanel";
 import { type ChatInspectorProps, type CockpitInspectorProps } from "./Inspector";
-import { LeftSidebar } from "./LeftSidebar";
 import { MainLayoutResizeHandle } from "./MainLayoutResizeHandle";
-import { McpHub } from "./McpHub";
-import { ProgressMonitorDrawer } from "./ProgressMonitorDrawer";
-import { MonitorHistorySessionTranscriptDrawer } from "./ProgressMonitorPanel/MonitorHistorySessionTranscriptDrawer";
-import { RepositoryFileEditorPanel } from "./RepositoryFileEditorPanel";
-import { RepositoryFilePreviewModal } from "./RepositoryFilePreviewModal";
-import { SkillsHub } from "./SkillsHub";
-import {
-  RepositoryScheduledTasksModal,
-  type ScheduledTasksOverlayTarget,
-} from "./RepositoryScheduledTasksModal";
-import { AutomationPanel } from "./AutomationPanel";
+import type { McpHub } from "./McpHub";
+import type { ProgressMonitorDrawer } from "./ProgressMonitorDrawer";
+import type { MonitorHistorySessionTranscriptDrawer } from "./ProgressMonitorPanel/MonitorHistorySessionTranscriptDrawer";
+import type { RepositoryFileEditorPanel } from "./RepositoryFileEditorPanel";
+import type { RepositoryFilePreviewModal } from "./RepositoryFilePreviewModal";
+import type { SkillsHub } from "./SkillsHub";
+import type { ScheduledTasksOverlayTarget } from "./RepositoryScheduledTasksModal";
+import { resolveWorkspaceMainSession } from "../utils/resolveWorkspaceMainSession";
 import type * as PrdTaskSplitPanelModule from "./PrdTaskSplitPanel";
 import type { EmployeeItem, WorkflowGraph, WorkflowTemplateItem } from "../types";
 import { resolveCockpitHubPane, type InspectTool, type ViewMode } from "../types/viewMode";
@@ -52,7 +42,60 @@ import {
 } from "../contexts/WorkspaceMemosContext";
 import { useRepositoryFileEditor } from "../hooks/useRepositoryFileEditor";
 import { ErrorBoundary } from "./ErrorBoundary";
-import { WorkspaceMemoEditorPanel } from "./WorkspaceMemoEditorPanel";
+import { WorkspaceViewportLoading } from "./WorkspaceViewportLoading";
+/** 与 AppWorkspaceLayout 求值并行预拉取首屏关键子 chunk。 */
+const leftSidebarChunk = import("./LeftSidebar");
+const claudeSessionsChunk = import("./ClaudeSessions");
+
+const LazyLeftSidebar = lazy(() =>
+  leftSidebarChunk.then((module) => ({ default: module.LeftSidebar })),
+);
+const LazyClaudeSessions = lazy(() =>
+  claudeSessionsChunk.then((module) => ({ default: module.ClaudeSessions })),
+);
+const LazyTopbar = lazy(() => claudeSessionsChunk.then((module) => ({ default: module.Topbar })));
+const LazyAuthorPanel = lazy(() =>
+  import("./AuthorPanel/AuthorPanel").then((module) => ({ default: module.AuthorPanel })),
+);
+const LazyAuthorPanelNav = lazy(() =>
+  import("./AuthorPanel/AuthorPanelNav").then((module) => ({ default: module.AuthorPanelNav })),
+);
+const LazyCockpitOnboarding = lazy(() =>
+  import("./Cockpit/CockpitOnboarding").then((module) => ({ default: module.CockpitOnboarding })),
+);
+const LazyWorkspaceWelcomeLanding = lazy(() =>
+  import("./WorkspaceWelcomeLanding").then((module) => ({ default: module.WorkspaceWelcomeLanding })),
+);
+const LazyCommandPalette = lazy(() =>
+  import("./CommandPalette").then((module) => ({ default: module.CommandPalette })),
+);
+const LazyMcpHub = lazy(() => import("./McpHub").then((module) => ({ default: module.McpHub })));
+const LazySkillsHub = lazy(() => import("./SkillsHub").then((module) => ({ default: module.SkillsHub })));
+const LazyAutomationPanel = lazy(() =>
+  import("./AutomationPanel").then((module) => ({ default: module.AutomationPanel })),
+);
+const LazyRepositoryScheduledTasksModal = lazy(() =>
+  import("./RepositoryScheduledTasksModal").then((module) => ({
+    default: module.RepositoryScheduledTasksModal,
+  })),
+);
+const LazyProgressMonitorDrawer = lazy(() =>
+  import("./ProgressMonitorDrawer").then((module) => ({ default: module.ProgressMonitorDrawer })),
+);
+const LazyMonitorHistorySessionTranscriptDrawer = lazy(() =>
+  import("./ProgressMonitorPanel/MonitorHistorySessionTranscriptDrawer").then((module) => ({
+    default: module.MonitorHistorySessionTranscriptDrawer,
+  })),
+);
+const LazyRepositoryFileEditorPanel = lazy(() =>
+  import("./RepositoryFileEditorPanel").then((module) => ({ default: module.RepositoryFileEditorPanel })),
+);
+const LazyRepositoryFilePreviewModal = lazy(() =>
+  import("./RepositoryFilePreviewModal").then((module) => ({ default: module.RepositoryFilePreviewModal })),
+);
+const LazyWorkspaceMemoEditorPanel = lazy(() =>
+  import("./WorkspaceMemoEditorPanel").then((module) => ({ default: module.WorkspaceMemoEditorPanel })),
+);
 
 const Inspector = lazy(() => import("./Inspector").then((module) => ({ default: module.Inspector })));
 const CockpitSurface = lazy(() =>
@@ -74,16 +117,16 @@ const LazyCodeKnowledgeGraphPanel = lazy(() =>
   import("./CodeKnowledgeGraph").then((m) => ({ default: m.CodeKnowledgeGraphPanel })),
 );
 type CodeKnowledgeGraphPanelProps = ComponentProps<typeof LazyCodeKnowledgeGraphPanel>;
-const MemoLeftSidebar = memo(LeftSidebar);
-const MemoClaudeSessions = memo(ClaudeSessions);
+const MemoLeftSidebar = memo(LazyLeftSidebar);
+const MemoClaudeSessions = memo(LazyClaudeSessions);
 const MemoInspector = memo(Inspector);
 
 type ClaudeSessionsProps = Omit<
-  ComponentProps<typeof ClaudeSessions>,
+  ComponentProps<typeof LazyClaudeSessions>,
   "panelBelowMessages" | "hideMessages" | "hideSessionTools"
 >;
 type LeftSidebarProps = Omit<
-  ComponentProps<typeof LeftSidebar>,
+  ComponentProps<typeof LazyLeftSidebar>,
   | "dark"
   | "collapsed"
   | "siderWidth"
@@ -91,7 +134,6 @@ type LeftSidebarProps = Omit<
   | "onToggleCompactLayoutMode"
   | "onOpenActiveRepositoryFile"
 >;
-type AuthorPanelProps = ComponentProps<typeof AuthorPanel>;
 type PrdTaskSplitPanelProps = ComponentProps<typeof PrdTaskSplitPanelModule.PrdTaskSplitPanel>;
 type RightPanelProps = ChatInspectorProps;
 type InspectorCockpitProps = CockpitInspectorProps;
@@ -198,7 +240,11 @@ const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
 const ConnectedWorkspaceMemoEditorPanel = memo(function ConnectedWorkspaceMemoEditorPanel() {
   const visible = useContext(WorkspaceMemoEditorVisibilityContext);
   if (!visible) return null;
-  return <WorkspaceMemoEditorPanel />;
+  return (
+    <Suspense fallback={<PanelLoadingFallback />}>
+      <LazyWorkspaceMemoEditorPanel />
+    </Suspense>
+  );
 });
 
 const ConnectedCenterAuxPanels = memo(function ConnectedCenterAuxPanels({
@@ -275,25 +321,27 @@ const ConnectedRepositoryFileEditorPanel = memo(function ConnectedRepositoryFile
     return null;
   }
   return (
-    <RepositoryFileEditorPanel
-      activePath={activePath}
-      dark={dark}
-      dirty={dirty}
-      repositoryPath={repositoryPath}
-      saving={saving}
-      tabs={tabs}
-      onActivePathChange={onActivePathChange}
-      onClosePanel={onClosePanel}
-      onCloseTab={onCloseTab}
-      onSave={onSave}
-      onTabContentChange={onTabContentChange}
-    />
+    <Suspense fallback={<PanelLoadingFallback />}>
+      <LazyRepositoryFileEditorPanel
+        activePath={activePath}
+        dark={dark}
+        dirty={dirty}
+        repositoryPath={repositoryPath}
+        saving={saving}
+        tabs={tabs}
+        onActivePathChange={onActivePathChange}
+        onClosePanel={onClosePanel}
+        onCloseTab={onCloseTab}
+        onSave={onSave}
+        onTabContentChange={onTabContentChange}
+      />
+    </Suspense>
   );
 });
 
 const ConnectedRepositoryFilePreviewModal = memo(function ConnectedRepositoryFilePreviewModal() {
   const { onClosePreview, preview } = useRepositoryFileEditorPanelContextValue();
-  return <RepositoryFilePreviewModal preview={preview} onClose={onClosePreview} />;
+  return <LazyRepositoryFilePreviewModal preview={preview} onClose={onClosePreview} />;
 });
 
 export interface AppWorkspaceLayoutProps {
@@ -651,7 +699,9 @@ export function AppWorkspaceLayout({
             <AntdApp>
               {workspaceWelcomeFullscreen && workspaceWelcomeProps ? (
                 <div className="app-workspace-welcome-fullscreen">
-                  <WorkspaceWelcomeLanding {...workspaceWelcomeProps} />
+                  <Suspense fallback={<PanelLoadingFallback />}>
+                    <LazyWorkspaceWelcomeLanding {...workspaceWelcomeProps} />
+                  </Suspense>
                 </div>
               ) : null}
               <Layout
@@ -660,25 +710,29 @@ export function AppWorkspaceLayout({
                 }${workspaceWelcomeFullscreen ? " app-main-layout--welcome-hidden" : ""}`}
                 style={{ minWidth: 0, flex: 1, minHeight: 0, height: "100%" }}
               >
-                <ConnectedLeftSidebar
-                  dark={dark}
-                  collapsed={collapsed}
-                  parked={authorMode || leftSidebarParked}
-                  siderWidth={mainLayoutLeftWidthPx}
-                  compactLayoutMode={compactLayoutMode}
-                  onToggleCompactLayoutMode={onToggleCompactLayoutMode}
-                  leftSidebarProps={leftSidebarProps}
-                />
-                {authorMode && authorShellMounted ? (
-                  <AuthorPanelNav
+                <Suspense fallback={null}>
+                  <ConnectedLeftSidebar
                     dark={dark}
                     collapsed={collapsed}
-                    parked={false}
-                    siderWidth={AUTHOR_CONFIG_NAV_SIDER_WIDTH_PX}
-                    pane={authorPanelProps.pane}
-                    onPaneChange={authorPanelProps.onPaneChange}
-                    onBack={authorPanelProps.onBack}
+                    parked={authorMode || leftSidebarParked}
+                    siderWidth={mainLayoutLeftWidthPx}
+                    compactLayoutMode={compactLayoutMode}
+                    onToggleCompactLayoutMode={onToggleCompactLayoutMode}
+                    leftSidebarProps={leftSidebarProps}
                   />
+                </Suspense>
+                {authorMode && authorShellMounted ? (
+                  <Suspense fallback={null}>
+                    <LazyAuthorPanelNav
+                      dark={dark}
+                      collapsed={collapsed}
+                      parked={false}
+                      siderWidth={AUTHOR_CONFIG_NAV_SIDER_WIDTH_PX}
+                      pane={authorPanelProps.pane}
+                      onPaneChange={authorPanelProps.onPaneChange}
+                      onBack={authorPanelProps.onBack}
+                    />
+                  </Suspense>
                 ) : null}
 
                 {!leftSidebarParked && !collapsed ? (
@@ -695,31 +749,33 @@ export function AppWorkspaceLayout({
                       authorMode || missionControlMode ? " app-workspace-layer--parked" : ""
                     }`}
                   >
-                    {chatRightRailMode && (
-                      <Topbar
-                        activeProject={claudeSessionsProps.activeProject}
-                        activeWorkspaceFocus={claudeSessionsProps.activeWorkspaceFocus}
-                        activeRepository={claudeSessionsProps.activeRepository}
-                        repositories={claudeSessionsProps.repositories ?? []}
-                        activeSessionRepositoryPath={
-                          mainSessionForDataLink?.repositoryPath?.trim() ||
-                          claudeSessionsProps.activeRepository?.path
-                        }
-                        mainSessionForDataLink={mainSessionForDataLink}
-                        onToggleSidebar={claudeSessionsProps.onToggleSidebar}
-                        onToggleRightPanel={claudeSessionsProps.onToggleRightPanel}
-                        rightPanelDefaultCollapsed={claudeSessionsProps.rightPanelDefaultCollapsed}
-                        onSetRightPanelDefaultCollapsed={claudeSessionsProps.onSetRightPanelDefaultCollapsed}
-                        onToggleTerminal={claudeSessionsProps.onToggleTerminal}
-                        onSearch={claudeSessionsProps.onSearch}
-                        collapsed={claudeSessionsProps.collapsed}
-                        rightCollapsed={claudeSessionsProps.rightCollapsed}
-                        terminalCollapsed={claudeSessionsProps.terminalCollapsed}
-                        onAutoFixRunError={claudeSessionsProps.onAutoFixRunError}
-                        paneCount={claudeSessionsProps.paneCount}
-                        onChangePaneCount={claudeSessionsProps.onChangePaneCount}
-                      />
-                    )}
+                    {chatRightRailMode ? (
+                      <Suspense fallback={null}>
+                        <LazyTopbar
+                          activeProject={claudeSessionsProps.activeProject}
+                          activeWorkspaceFocus={claudeSessionsProps.activeWorkspaceFocus}
+                          activeRepository={claudeSessionsProps.activeRepository}
+                          repositories={claudeSessionsProps.repositories ?? []}
+                          activeSessionRepositoryPath={
+                            mainSessionForDataLink?.repositoryPath?.trim() ||
+                            claudeSessionsProps.activeRepository?.path
+                          }
+                          mainSessionForDataLink={mainSessionForDataLink}
+                          onToggleSidebar={claudeSessionsProps.onToggleSidebar}
+                          onToggleRightPanel={claudeSessionsProps.onToggleRightPanel}
+                          rightPanelDefaultCollapsed={claudeSessionsProps.rightPanelDefaultCollapsed}
+                          onSetRightPanelDefaultCollapsed={claudeSessionsProps.onSetRightPanelDefaultCollapsed}
+                          onToggleTerminal={claudeSessionsProps.onToggleTerminal}
+                          onSearch={claudeSessionsProps.onSearch}
+                          collapsed={claudeSessionsProps.collapsed}
+                          rightCollapsed={claudeSessionsProps.rightCollapsed}
+                          terminalCollapsed={claudeSessionsProps.terminalCollapsed}
+                          onAutoFixRunError={claudeSessionsProps.onAutoFixRunError}
+                          paneCount={claudeSessionsProps.paneCount}
+                          onChangePaneCount={claudeSessionsProps.onChangePaneCount}
+                        />
+                      </Suspense>
+                    ) : null}
 
                     <div
                       className="app-main-chat-and-rail-body"
@@ -731,12 +787,14 @@ export function AppWorkspaceLayout({
                           : undefined
                       }
                     >
-                       <ErrorBoundary type="local" fallbackTitle="智能对话会话模块出错">
-                        <ConnectedClaudeSessions
-                          claudeSessionsProps={claudeSessionsProps}
-                          mainLayoutContentRef={mainLayoutContentRef}
-                          panelBelowMessages={centerAuxPanelsNode}
-                        />
+                      <ErrorBoundary type="local" fallbackTitle="智能对话会话模块出错">
+                        <Suspense fallback={<WorkspaceViewportLoading />}>
+                          <ConnectedClaudeSessions
+                            claudeSessionsProps={claudeSessionsProps}
+                            mainLayoutContentRef={mainLayoutContentRef}
+                            panelBelowMessages={centerAuxPanelsNode}
+                          />
+                        </Suspense>
                       </ErrorBoundary>
 
                       {chatRightRailMode ? (
@@ -773,34 +831,42 @@ export function AppWorkspaceLayout({
                       ) : null}
                     </div>
 
-                    <CommandPalette {...commandPaletteProps} />
+                    <Suspense fallback={null}>
+                      <LazyCommandPalette {...commandPaletteProps} />
+                    </Suspense>
                     {mcpHubMode ? (
                       <div className="app-mcp-hub-overlay" role="region" aria-label="MCP 管理">
                         <ErrorBoundary type="local" fallbackTitle="MCP 管理面板出错">
-                          <McpHub {...mcpHubProps} />
+                          <Suspense fallback={<PanelLoadingFallback />}>
+                            <LazyMcpHub {...mcpHubProps} />
+                          </Suspense>
                         </ErrorBoundary>
                       </div>
                     ) : null}
                     {skillsHubMode ? (
                       <div className="app-skills-hub-overlay" role="region" aria-label="skills.sh 技能目录">
                         <ErrorBoundary type="local" fallbackTitle="技能目录面板出错">
-                          <SkillsHub {...skillsHubProps} />
+                          <Suspense fallback={<PanelLoadingFallback />}>
+                            <LazySkillsHub {...skillsHubProps} />
+                          </Suspense>
                         </ErrorBoundary>
                       </div>
                     ) : null}
                     {scheduledTasksOverlay && onCloseScheduledTasksOverlay ? (
                       <div className="app-scheduled-tasks-overlay" role="region" aria-label="定时任务">
                         <ErrorBoundary type="local" fallbackTitle="定时任务面板出错">
-                          <RepositoryScheduledTasksModal
-                            open
-                            presentation="overlay"
-                            onClose={onCloseScheduledTasksOverlay}
-                            repositoryPath={scheduledTasksOverlay.path}
-                            repositoryDisplayName={scheduledTasksOverlay.name}
-                            employees={scheduledTasksOverlayEmployees}
-                            workflowTemplates={scheduledTasksOverlayWorkflowTemplates}
-                            workflowGraphsByWorkflowId={scheduledTasksOverlayWorkflowGraphsByWorkflowId}
-                          />
+                          <Suspense fallback={<PanelLoadingFallback />}>
+                            <LazyRepositoryScheduledTasksModal
+                              open
+                              presentation="overlay"
+                              onClose={onCloseScheduledTasksOverlay}
+                              repositoryPath={scheduledTasksOverlay.path}
+                              repositoryDisplayName={scheduledTasksOverlay.name}
+                              employees={scheduledTasksOverlayEmployees}
+                              workflowTemplates={scheduledTasksOverlayWorkflowTemplates}
+                              workflowGraphsByWorkflowId={scheduledTasksOverlayWorkflowGraphsByWorkflowId}
+                            />
+                          </Suspense>
                         </ErrorBoundary>
                       </div>
                     ) : null}
@@ -848,16 +914,24 @@ export function AppWorkspaceLayout({
                       <Layout.Content className="app-main-layout-content">
                         <ErrorBoundary type="local" fallbackTitle="需求与自动化调度面板出错">
                           {cockpitEmpty ? (
-                            <CockpitOnboarding {...cockpitOnboardingProps} />
+                            <Suspense fallback={<PanelLoadingFallback />}>
+                              <LazyCockpitOnboarding {...cockpitOnboardingProps} />
+                            </Suspense>
                           ) : cockpitHubPane === "mcp" ? (
-                            <McpHub {...mcpHubProps} />
+                            <Suspense fallback={<PanelLoadingFallback />}>
+                              <LazyMcpHub {...mcpHubProps} />
+                            </Suspense>
                           ) : cockpitHubPane === "skills" ? (
-                            <SkillsHub {...skillsHubProps} />
+                            <Suspense fallback={<PanelLoadingFallback />}>
+                              <LazySkillsHub {...skillsHubProps} />
+                            </Suspense>
                           ) : cockpitHubPane === "automation" ? (
-                            <AutomationPanel
-                              {...authorPanelProps.automationPanelProps}
-                              onClose={onCloseCockpitAutomationHub}
-                            />
+                            <Suspense fallback={<PanelLoadingFallback />}>
+                              <LazyAutomationPanel
+                                {...authorPanelProps.automationPanelProps}
+                                onClose={onCloseCockpitAutomationHub}
+                              />
+                            </Suspense>
                           ) : (
                             <Suspense fallback={<PanelLoadingFallback />}>
                               <CockpitSurface
@@ -882,18 +956,26 @@ export function AppWorkspaceLayout({
                       className={`app-full-width-main app-author-workspace-layer${!authorMode ? " app-workspace-layer--parked" : ""}`}
                     >
                       <ErrorBoundary type="local" fallbackTitle="协同设计开发面板出错">
-                        <AuthorPanel {...authorPanelProps} configLayerActive={authorMode} />
+                        <Suspense fallback={<PanelLoadingFallback />}>
+                          <LazyAuthorPanel {...authorPanelProps} configLayerActive={authorMode} />
+                        </Suspense>
                       </ErrorBoundary>
                     </div>
                   ) : null}
                 </div>
               </Layout>
 
-              <ConnectedRepositoryFilePreviewModal />
+              <Suspense fallback={null}>
+                <ConnectedRepositoryFilePreviewModal />
+              </Suspense>
 
-              <ProgressMonitorDrawer {...progressMonitorDrawerProps} />
+              <Suspense fallback={null}>
+                <LazyProgressMonitorDrawer {...progressMonitorDrawerProps} />
+              </Suspense>
 
-              <MonitorHistorySessionTranscriptDrawer {...historyTranscriptDrawerProps} />
+              <Suspense fallback={null}>
+                <LazyMonitorHistorySessionTranscriptDrawer {...historyTranscriptDrawerProps} />
+              </Suspense>
 
             </AntdApp>
           </ConfigProvider>

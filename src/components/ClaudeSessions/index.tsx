@@ -23,7 +23,6 @@ import {
 } from "../OpenAppMenu/constants";
 import { getOpenAppPreferenceSync, hydrateOpenAppPreference } from "../../services/openAppPreference";
 import { useRepositoryRunCommand } from "../../hooks/useRepositoryRunCommand";
-import { RunCommandPanel } from "../RunCommand";
 import { pickSessionForRepositorySidebarSelect } from "../../utils/claudeSessionSelection";
 import { filterSessionsForWorkspace } from "../../utils/projectSessionPanelFilter";
 import {
@@ -42,14 +41,28 @@ import { RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK } from "../../utils/rightPanelSt
 import { loadSessionOwnerHints } from "../../utils/sessionOwnerHints";
 import type { WorkspaceMode, WorkspaceFocus } from "../../utils/workspaceMode";
 import { PANE_COUNT_OPTIONS, isPaneCount, type PaneCount, type PaneSlot } from "../../constants/mainLayoutWidths";
-import { ClaudeMultiPaneGrid, type MultiPaneSharedChatProps, type PaneRepoTreeNode } from "./ClaudeMultiPaneGrid";
-import { ClaudeSessionChatWithDock } from "./ClaudeSessionChatWithDock";
+import type { MultiPaneSharedChatProps, PaneRepoTreeNode } from "./ClaudeMultiPaneGrid";
 import { runPaneCreateTask } from "./paneCreateLoading";
+import { WorkspaceViewportLoading } from "../WorkspaceViewportLoading";
 import "./index.css";
 
 const TerminalPanelLazy = lazy(() =>
   import("../TerminalPanel").then((module) => ({ default: module.TerminalPanel })),
 );
+const RunCommandPanelLazy = lazy(() =>
+  import("../RunCommand").then((module) => ({ default: module.RunCommandPanel })),
+);
+const ClaudeMultiPaneGridLazy = lazy(() =>
+  import("./ClaudeMultiPaneGrid").then((module) => ({ default: module.ClaudeMultiPaneGrid })),
+);
+const ClaudeSessionChatWithDockLazy = lazy(() =>
+  import("./ClaudeSessionChatWithDock").then((module) => ({
+    default: module.ClaudeSessionChatWithDock,
+  })),
+);
+
+const claudeChatSurfaceChunk = import("./ClaudeSessionChatWithDock");
+const claudeMultiPaneChunk = import("./ClaudeMultiPaneGrid");
 
 interface SessionEmptyStateProps {
   title: string;
@@ -416,10 +429,12 @@ export function Topbar({
           onOpenChange={setRunPopoverOpen}
           classNames={{ root: "app-run-command-popover" }}
           content={
-            <RunCommandPanel
-              {...repositoryRunCommand}
-              onClose={() => setRunPopoverOpen(false)}
-            />
+            <Suspense fallback={<Spin size="small" />}>
+              <RunCommandPanelLazy
+                {...repositoryRunCommand}
+                onClose={() => setRunPopoverOpen(false)}
+              />
+            </Suspense>
           }
         >
           <Tooltip
@@ -860,6 +875,14 @@ export function ClaudeSessions({
     activeProject,
   });
 
+  useEffect(() => {
+    if (!chatSurfaceReady) return;
+    void claudeChatSurfaceChunk;
+    if (paneCount > 1) {
+      void claudeMultiPaneChunk;
+    }
+  }, [chatSurfaceReady, paneCount]);
+
   const workflowTasksByCreator = useMemo(() => {
     const map = new Map<string, WorkflowTaskItem[]>();
     for (const task of workflowTasks) {
@@ -1268,8 +1291,9 @@ export function ClaudeSessions({
 
       {/* Session Tabs - 会话标签栏 */}
       {!chatSurfaceReady ? null : activeSession ? (
-        paneCount > 1 && chatContextRepository ? (
-          <ClaudeMultiPaneGrid
+        <Suspense fallback={<WorkspaceViewportLoading />}>
+        {paneCount > 1 && chatContextRepository ? (
+          <ClaudeMultiPaneGridLazy
             paneCount={paneCount}
             activeSession={activeSession}
             activeRepository={chatContextRepository}
@@ -1295,7 +1319,7 @@ export function ClaudeSessions({
             panelBelowMessages={panelBelowMessages}
           />
         ) : (
-          <ClaudeSessionChatWithDock
+          <ClaudeSessionChatWithDockLazy
             key={activeSession.id}
             session={activeSession}
             activeSessionId={activeSession.id}
@@ -1370,7 +1394,8 @@ export function ClaudeSessions({
             onCompactSessionHistory={onCompactSessionHistory}
             missionContext={missionContext}
           />
-        )
+        )}
+        </Suspense>
       ) : (
         <SessionEmptyState
           title="暂无 Claude Code 会话"

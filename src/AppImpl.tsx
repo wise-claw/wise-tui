@@ -1,4 +1,4 @@
-import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { emit, listen } from "@tauri-apps/api/event";
 import { safeUnlisten } from "./utils/safeTauriUnlisten";
@@ -55,7 +55,8 @@ import { useRepositoryList } from "./hooks/useRepositoryList";
 import { openRepositoryRemoteInBrowser } from "./services/openRepositoryRemote";
 import { openInFinder } from "./services/repository";
 import { tryOpenWorkspaceInDefaultTerminal } from "./services/openWorkspaceWithTerminalPreference";
-import { AppWorkspaceLayout } from "./components/AppWorkspaceLayout";
+import { LazyAppWorkspaceLayout } from "./components/AppWorkspaceLayout.lazy";
+import { AppWorkspaceLayoutShell } from "./components/AppWorkspaceLayoutShell";
 import { RepositoryRunCommandModal } from "./components/RunCommand";
 import { openRepositoryRunCommandModal } from "./stores/repositoryRunCommandModalStore";
 import {
@@ -71,7 +72,7 @@ import {
   readAuthorPaneFromSettings,
   readAuthorPaneFromStorage,
   resolveAuthorNavPane,
-} from "./components/AuthorPanel";
+} from "./components/AuthorPanel/authorPaneStorage";
 import { reloadAppWindow } from "./services/window";
 import { wiseMascotShow } from "./services/wiseMascot";
 import { getTaskTemplate, setTaskTemplate } from "./services/projectState";
@@ -2790,7 +2791,10 @@ export default function App() {
 
   return (
     <>
-    <AppWorkspaceLayout
+    <Suspense
+      fallback={<AppWorkspaceLayoutShell />}
+    >
+    <LazyAppWorkspaceLayout
       dark={dark}
       collapsed={collapsed}
       viewMode={viewMode.view}
@@ -3603,6 +3607,7 @@ export default function App() {
         },
       }}
     />
+    </Suspense>
     <RepositoryRunCommandModal repositories={repositories} />
     </>
   );

@@ -133,6 +133,30 @@ body {
   background-color: color-mix(in srgb, var(--ant-color-text) 52%, transparent);
 }
 
+/* 工作区壳懒加载占位 */
+.app-workspace-layout-shell {
+  position: relative;
+  background: var(--app-workspace-stage-bg, var(--ant-color-bg-layout));
+}
+
+/* 相对整个 Wise 主窗口视口居中，不受左栏宽度影响 */
+.app-workspace-loading-overlay--viewport {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  background: var(--app-workspace-stage-bg, var(--ant-color-bg-layout));
+}
+
+.app-left-sidebar-loading {
+  min-height: 0;
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--ant-color-bg-layout) 92%, var(--ant-color-fill-secondary));
+}
+
 /* 主壳 Layout：占满 .ant-app，含侧栏 + 主区时横向 flex */
 .app-main-layout--welcome-hidden {
   visibility: hidden;
