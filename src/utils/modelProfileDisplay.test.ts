@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { ClaudeModelProfileStoreView } from "../types/claudeModelProfile";
 import {
   formatModelProfileDisplayLabel,
+  resolveActiveModelProfileComposerBarLabel,
   resolveActiveModelProfileDisplayLabel,
 } from "./modelProfileDisplay.ts";
 
@@ -44,6 +45,35 @@ describe("resolveActiveModelProfileDisplayLabel", () => {
   it("uses active profile name for claude engine", () => {
     expect(resolveActiveModelProfileDisplayLabel("claude", store)).toBe(
       "glm5.1",
+    );
+  });
+});
+
+describe("resolveActiveModelProfileComposerBarLabel", () => {
+  const store: ClaudeModelProfileStoreView = {
+    profiles: [
+      {
+        id: "p1",
+        company: "火山",
+        name: "glm5.1",
+        modelId: "glm",
+        settingsJson: "{}",
+        engine: "claude",
+        createdAtMs: 1,
+        updatedAtMs: 1,
+      },
+    ],
+    activeProfileId: "p1",
+    activeCodexProfileId: null,
+    activeOpencodeProfileId: null,
+    effectiveModel: "glm",
+    effectiveCodexModel: null,
+    effectiveOpencodeModel: null,
+  };
+
+  it("includes company prefix like model switcher list", () => {
+    expect(resolveActiveModelProfileComposerBarLabel("claude", store)).toBe(
+      "火山 glm5.1",
     );
   });
 });

@@ -103,9 +103,16 @@ import { getClaudeModelPickerOptions } from "../../services/claude";
 import { listCursorModels, type CursorModelListItem } from "../../services/cursorAgent";
 import { CURSOR_SDK_DEFAULT_MODEL } from "../../constants/cursorSdk";
 import {
+  getClaudeModelProfileStore,
   WISE_CLAUDE_USER_SETTINGS_CHANGED,
   type ClaudeUserSettingsChangedDetail,
 } from "../../services/claudeModelProfiles";
+import { getCachedModelProfileStore, seedModelProfileStoreCache } from "../../stores/modelProfileStoreCache";
+import type { ModelProfileEngine } from "../../types/claudeModelProfile";
+import {
+  resolveActiveModelProfileComposerBarLabel,
+  resolveModelProfileComposerBarLabelByModelId,
+} from "../../utils/modelProfileDisplay";
 import { promptToLogicalPlainString } from "../../utils/serializeClaudePrompt";
 import { getWiseRepositoryFileDragPaths, isWiseRepositoryFileDrag } from "../../utils/repositoryFileDrag";
 import { formatClaudeModelLabel } from "../../utils/claudeModel";
@@ -504,6 +511,7 @@ function ComposerInner({
   const [cursorModels, setCursorModels] = useState<CursorModelListItem[] | null>(null);
   const isCursorEngine = sessionExecutionEngine === "cursor";
   const [model, setModel] = useState(() => session.model?.trim() || "sonnet");
+  const [profileStoreRevision, setProfileStoreRevision] = useState(0);
   const defaultConnectionKind = useDefaultClaudeConnectionKind();
   const [activeBranch, setActiveBranch] = useState<string>("-");
   const [branchPopoverOpen, setBranchPopoverOpen] = useState(false);
@@ -681,8 +689,21 @@ function ComposerInner({
   }, [isCursorEngine, session.id, session.model, cursorModels, onSessionModelChange]);
 
   useEffect(() => {
+    void getClaudeModelProfileStore()
+      .then((store) => {
+        seedModelProfileStoreCache(store);
+        setProfileStoreRevision((n) => n + 1);
+      })
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
     const onSettingsChanged = (event: Event) => {
       const detail = (event as CustomEvent<ClaudeUserSettingsChangedDetail>).detail;
+      if (detail?.storeSnapshot) {
+        seedModelProfileStoreCache(detail.storeSnapshot);
+        setProfileStoreRevision((n) => n + 1);
+      }
       const fromProfile = detail?.effectiveModel?.trim();
       if (fromProfile) {
         setModel(fromProfile);
@@ -706,16 +727,29 @@ function ComposerInner({
     setModel(fromSession || fromCfg || "sonnet");
   }, [session.id, session.model, claudeSettingsModel, isCursorEngine]);
 
+  const profileEngineForPicker: ModelProfileEngine | null = isCursorEngine
+    ? null
+    : sessionExecutionEngine === "codex"
+      ? "codex"
+      : "claude";
+
   const modelOptions = useMemo(() => {
+    const profileStore = getCachedModelProfileStore();
     const opts: { value: string; label: string }[] = [];
     const seen = new Set<string>();
     const push = (value: string, label?: string) => {
       const v = value.trim();
       if (!v || seen.has(v)) return;
       seen.add(v);
+      const fromProfile =
+        profileEngineForPicker &&
+        resolveModelProfileComposerBarLabelByModelId(profileEngineForPicker, v, profileStore);
       opts.push({
         value: v,
-        label: label ?? (isCursorEngine ? formatCursorModelLabel(v) : formatClaudeModelLabel(v)),
+        label:
+          label ??
+          fromProfile ??
+          (isCursorEngine ? formatCursorModelLabel(v) : formatClaudeModelLabel(v)),
       });
     };
 
@@ -754,12 +788,20 @@ function ComposerInner({
     claudeSettingsModel,
     session.model,
     model,
+    profileEngineForPicker,
+    profileStoreRevision,
   ]);
 
-  const modelDisplayLabel = useMemo(
-    () => modelOptions.find((o) => o.value === model)?.label ?? model,
-    [modelOptions, model],
-  );
+  const modelDisplayLabel = useMemo(() => {
+    if (profileEngineForPicker) {
+      const fromActive = resolveActiveModelProfileComposerBarLabel(
+        profileEngineForPicker,
+        getCachedModelProfileStore(),
+      );
+      if (fromActive) return fromActive;
+    }
+    return modelOptions.find((o) => o.value === model)?.label ?? model;
+  }, [modelOptions, model, profileEngineForPicker, profileStoreRevision]);
 
   const modelMenuItems: MenuProps["items"] = useMemo(
     () =>
