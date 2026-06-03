@@ -24,6 +24,31 @@ export function singleTextPrompt(plain: string): Prompt {
   return [{ type: "text", text: t, start: 0, end: t.length }];
 }
 
+function currentLineBeforeCursor(text: string, cursor: number): string {
+  const beforeCursor = text.substring(0, cursor);
+  const lineStart = beforeCursor.lastIndexOf("\n") + 1;
+  return beforeCursor.substring(lineStart);
+}
+
+/** 行内 `/` 触发：允许「sds/」这类前缀，但排除 URL/path 里的 `://` 与 `//`。 */
+function matchInlineSlashTrigger(currentLine: string): RegExpMatchArray | null {
+  const lastBreak = Math.max(currentLine.lastIndexOf(" "), currentLine.lastIndexOf("\t"));
+  const token = lastBreak >= 0 ? currentLine.slice(lastBreak + 1) : currentLine;
+  if ((token.match(/\//g) ?? []).length !== 1) return null;
+
+  const match = token.match(/\/(\S*)$/);
+  if (!match) return null;
+
+  const slashIndex = currentLine.length - match[0].length;
+  if (slashIndex > 0 && currentLine[slashIndex - 1] === ":") return null;
+  return match;
+}
+
+/** 行内 `@` 触发：光标前当前行以 `@query` 结尾即可（不要求行首）。 */
+function matchInlineAtTrigger(currentLine: string): RegExpMatchArray | null {
+  return currentLine.match(/@(\S*)$/);
+}
+
 export function reportAtSlashTriggerFromPlain(
   plain: string,
   cursor: number,
@@ -33,12 +58,10 @@ export function reportAtSlashTriggerFromPlain(
   if (!onTriggerChange) return;
   const text = plain.replace(/\u200B/g, "");
   const safeCursor = Math.max(0, Math.min(cursor, text.length));
-  const beforeCursor = text.substring(0, safeCursor);
-  const lineStart = beforeCursor.lastIndexOf("\n") + 1;
-  const currentLine = beforeCursor.substring(lineStart);
+  const currentLine = currentLineBeforeCursor(text, safeCursor);
 
-  const atMatch = beforeCursor.match(/@(\S*)$/);
-  const slashMatch = currentLine.match(/^\/(\S*)$/);
+  const atMatch = matchInlineAtTrigger(currentLine);
+  const slashMatch = matchInlineSlashTrigger(currentLine);
 
   if (atMatch) {
     onTriggerChange({ mode: "at", query: atMatch[1], rect });
@@ -108,10 +131,14 @@ export function replaceSlashCommandLine(
   const before = plain.slice(0, Math.min(cursor, plain.length));
   const lineStart = before.lastIndexOf("\n") + 1;
   const lineText = before.slice(lineStart);
-  const m = lineText.match(/^\/(\S*)$/);
+  const m = matchInlineSlashTrigger(lineText);
   if (!m) return { plain, cursor: Math.min(cursor, plain.length) };
-  const slashLen = m[0].length;
-  const slashStart = before.length - slashLen;
+
+  const lastBreak = Math.max(lineText.lastIndexOf(" "), lineText.lastIndexOf("\t"));
+  const tokenStartOnLine = lastBreak >= 0 ? lastBreak + 1 : 0;
+  const token = lineText.slice(tokenStartOnLine);
+  const slashIndexOnLine = tokenStartOnLine + token.length - m[0].length;
+  const slashStart = lineStart + slashIndexOnLine;
   const insertion = `/${commandLabel} `;
   const next = plain.slice(0, slashStart) + insertion + plain.slice(before.length);
   return { plain: next, cursor: slashStart + insertion.length };
