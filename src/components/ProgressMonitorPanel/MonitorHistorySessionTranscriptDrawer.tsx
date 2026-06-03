@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ClaudeSession } from "../../types";
 import { ClaudeSessionMessagesColumn } from "../ClaudeSessions/ClaudeSessionMessagesColumn";
 import {
+  HistorySessionDrawerContextBar,
   HistorySessionDrawerTitle,
   historySessionStatusLabel,
   historySessionStatusTagColor,
@@ -185,7 +186,10 @@ export function MonitorHistorySessionTranscriptDrawer({
       getContainer={() => document.body}
       zIndex={1200}
       size={drawerWidth}
-      classNames={{ body: "app-monitor-panel__history-session-drawer-body" }}
+      classNames={{
+        header: "app-monitor-panel__history-session-drawer-header",
+        body: "app-monitor-panel__history-session-drawer-body",
+      }}
       extra={
         liveSession ? (
           <Space size="small" wrap align="center">
@@ -250,12 +254,15 @@ export function MonitorHistorySessionTranscriptDrawer({
           }
         />
       ) : (
-        <div className="app-monitor-panel__history-session-drawer-scroll">
-          <ClaudeSessionMessagesColumn
-            session={displaySession}
-            onOpenTaskDetail={onOpenTaskDetail}
-            showAllMessages
-          />
+        <div className="app-monitor-panel__history-session-drawer-inner">
+          <HistorySessionDrawerContextBar session={displaySession} />
+          <div className="app-monitor-panel__history-session-drawer-scroll">
+            <ClaudeSessionMessagesColumn
+              session={displaySession}
+              onOpenTaskDetail={onOpenTaskDetail}
+              showAllMessages
+            />
+          </div>
         </div>
       )}
     </Drawer>

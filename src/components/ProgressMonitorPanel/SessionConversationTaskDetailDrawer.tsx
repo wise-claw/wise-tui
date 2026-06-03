@@ -86,7 +86,7 @@ export const SessionConversationTaskDetailDrawer = memo(function SessionConversa
 
   return (
     <Drawer
-      title={task ? `${task.label} · 子代理执行` : "子代理执行详情"}
+      title={task ? `${task.label} · 会话记录` : "会话记录"}
       placement="right"
       size={width}
       open={target !== null}

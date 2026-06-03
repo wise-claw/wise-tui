@@ -41,6 +41,7 @@ import { sanitizeOmcDirectBatchPreviewLineForList } from "../../utils/claudeInvo
 import { OmcDirectBatchInvocationDetailDrawer } from "./OmcDirectBatchInvocationDetailDrawer";
 import { HistorySessionRestoreButton } from "./HistorySessionRestoreButton";
 import { getSessionPreview } from "./historySessionDrawerChrome";
+import { buildMonitorSessionListRowModel } from "./monitorSessionDisplay";
 import {
   matchSessionByKeyword,
   normalizeSearchKeyword,
@@ -233,6 +234,41 @@ interface HistorySessionPopoverContentProps {
   /** 列表行右侧「结束」；由调用方按 Wise 标签 / 注册表 / PID 分发终止逻辑 */
   onEndSession?: (sessionId: string) => void;
   searchPlaceholder?: string;
+  listTitle?: string;
+  memberFilterAllLabel?: string;
+}
+
+function HistorySessionPopoverListRow({
+  row,
+  showTerminalLabel,
+}: {
+  row: HistorySessionRow;
+  showTerminalLabel: boolean;
+}) {
+  const model = buildMonitorSessionListRowModel(row.session, { employeeName: row.employeeName });
+  return (
+    <>
+      <div className="app-monitor-panel__history-popover-item-head">
+        <Tag bordered={false} color={model.statusColor} className="app-monitor-panel__history-popover-status-tag">
+          {model.statusLabel}
+        </Tag>
+        {showTerminalLabel && model.terminalLabel ? (
+          <span className="app-monitor-panel__history-popover-item-terminal" title={model.terminalLabel}>
+            {model.terminalLabel}
+          </span>
+        ) : null}
+        <span className="app-monitor-panel__history-popover-item-time" title={model.updatedAtText}>
+          {model.relativeUpdatedAtText}
+        </span>
+      </div>
+      <span className="app-monitor-panel__history-popover-item-title" title={model.preview}>
+        {model.preview}
+      </span>
+      <span className="app-monitor-panel__history-popover-item-sub" title={model.repoShort}>
+        {model.repoShort}
+      </span>
+    </>
+  );
 }
 
 function ConcurrencyControl({ activeCount, limit, onLimitChange }: MonitorClaudeConcurrencyProps) {
@@ -565,7 +601,7 @@ function RepositorySubagentDetailDrawer({
 
   return (
     <Drawer
-      title={subagent ? `${subagent.subagentType} · 执行记录` : "子进程执行记录"}
+      title={subagent ? `${subagent.subagentType} · 子进程记录` : "子进程记录"}
       placement="right"
       size={width}
       open={target !== null}
@@ -701,10 +737,13 @@ export function HistorySessionPopoverContent({
   onRestoreSession,
   canRestoreSession,
   onEndSession,
-  searchPlaceholder = "搜索历史会话...",
+  searchPlaceholder = "搜索会话摘要或仓库名…",
+  listTitle = "历史会话",
+  memberFilterAllLabel = "全部成员",
 }: HistorySessionPopoverContentProps) {
   const showEmployeeFilter = Boolean(onEmployeeFilterChange);
   const hasRows = rows.length > 0;
+  const showTerminalLabelInRows = showEmployeeFilter;
   return (
     <div className="app-monitor-panel__history-popover-content">
       <div className="app-monitor-panel__history-popover-search-wrap">
@@ -715,7 +754,7 @@ export function HistorySessionPopoverContent({
             className="app-monitor-panel__history-popover-member-select"
             onClick={(event) => event.stopPropagation()}
           >
-            <option value="all">全部员工</option>
+            <option value="all">{memberFilterAllLabel}</option>
             {(employeeOptions ?? []).map((name) => {
               const value = name.trim();
               if (!value) return null;
@@ -735,6 +774,10 @@ export function HistorySessionPopoverContent({
           onClick={(event) => event.stopPropagation()}
         />
       </div>
+      <div className="app-monitor-panel__history-popover-list-head">
+        <span className="app-monitor-panel__history-popover-list-title">{listTitle}</span>
+        <span className="app-monitor-panel__history-popover-list-count">{hasRows ? `${rows.length} 条` : "无记录"}</span>
+      </div>
       {hasRows ? (
         <div className="app-monitor-panel__history-popover-list">
           {rows.map((row) => (
@@ -751,14 +794,7 @@ export function HistorySessionPopoverContent({
                   onSelectSession?.(row.session.id);
                 }}
               >
-                <span className="app-monitor-panel__history-popover-item-title">
-                  {getSessionPreview(row.session)}
-                </span>
-                <span className="app-monitor-panel__history-popover-item-time">
-                  {row.employeeName
-                    ? `${row.employeeName} · ${new Date(sessionUpdatedAt(row.session)).toLocaleString("zh-CN", { hour12: false })}`
-                    : new Date(sessionUpdatedAt(row.session)).toLocaleString("zh-CN", { hour12: false })}
-                </span>
+                <HistorySessionPopoverListRow row={row} showTerminalLabel={showTerminalLabelInRows} />
               </button>
               {onRestoreSession ? (
                 <HistorySessionRestoreButton
@@ -1328,7 +1364,7 @@ export function ProgressMonitorPanel({
                 <button
                   type="button"
                   className="app-monitor-panel__item-row-main app-monitor-panel__subagent-row--clickable"
-                  title="打开最新会话消息"
+                  title={`打开 ${item.name} 最新会话记录`}
                   onClick={() => activateEmployeeTerminalRow(item)}
                 >
                   <span className="app-monitor-panel__item-name-wrap">
@@ -1385,8 +1421,12 @@ export function ProgressMonitorPanel({
                         <HistorySessionPopoverContent
                           searchValue={employeeHistorySearch}
                           onSearchChange={setEmployeeHistorySearch}
-                          rows={matchedEmployeeSessions.map((session) => ({ session }))}
-                          emptyDescription={employeeHistorySearch.trim() ? "未找到匹配会话" : "暂无历史会话"}
+                          rows={matchedEmployeeSessions.map((session) => ({
+                            session,
+                            employeeName: item.name,
+                          }))}
+                          listTitle={`${item.name} · 历史会话`}
+                          emptyDescription={employeeHistorySearch.trim() ? "未找到匹配会话" : "该终端暂无历史会话"}
                           onSelectSession={(sessionId) => openHistoryMessagesDrawer(sessionId)}
                           onRestoreSession={
                             onRestoreHistorySessionAsMain
@@ -1533,8 +1573,12 @@ export function ProgressMonitorPanel({
                         onEmployeeFilterChange={setTeamHistoryEmployeeFilter}
                         employeeOptions={item.memberNames ?? []}
                         rows={matchedTeamSessions}
+                        listTitle={`${item.workflowName} · 历史会话`}
+                        memberFilterAllLabel="全部终端"
                         emptyDescription={
-                          teamHistorySearch.trim() || teamHistoryEmployeeFilter !== "all" ? "未找到匹配会话" : "暂无历史会话"
+                          teamHistorySearch.trim() || teamHistoryEmployeeFilter !== "all"
+                            ? "未找到匹配会话"
+                            : "该工作流暂无历史会话"
                         }
                         onSelectSession={(sessionId) => openHistoryMessagesDrawer(sessionId)}
                         onRestoreSession={

@@ -216,7 +216,10 @@ interface Props {
   panelBelowMessages?: React.ReactNode;
   hideMessages?: boolean;
   hideSessionTools?: boolean;
-  /** 多屏副窗格设为 false，避免重复订阅通知 feed 与 IPC 拉取。 */
+  /**
+   * 中栏「消息通知」浮层；默认关闭（有未读也不展示）。顶栏铃铛收件箱不受影响。
+   * 多屏副窗格应设为 false，避免重复订阅通知 feed 与 IPC 拉取。
+   */
   enableSessionNotificationFeed?: boolean;
   /**
    * 侧栏展示的「当前仓库 Claude 槽位剩余」估算（并发上限 − 运行中会话数），仅作提示，不再限制可执行任务多选条数。
@@ -346,7 +349,7 @@ export function ClaudeChat({
   panelBelowMessages,
   hideMessages = false,
   hideSessionTools = false,
-  enableSessionNotificationFeed = true,
+  enableSessionNotificationFeed = false,
   taskListConcurrentCapacity,
   resolveTaskListOmcInvokeConcurrency,
   repositoryMainBindings = {},

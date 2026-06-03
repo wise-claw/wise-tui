@@ -1,5 +1,9 @@
 import { Typography } from "antd";
 import type { ClaudeSession } from "../../types";
+import {
+  buildMonitorSessionDrawerContextModel,
+  buildMonitorSessionDrawerHeadline,
+} from "./monitorSessionDisplay";
 
 export function getSessionPreview(session: ClaudeSession): string {
   const fallback = session.diskPreview?.trim() || "新会话";
@@ -8,10 +12,10 @@ export function getSessionPreview(session: ClaudeSession): string {
     if (msg.role !== "user" && msg.role !== "assistant") continue;
     const text = msg.content.trim();
     if (text) {
-      return text.length > 42 ? `${text.slice(0, 42)}...` : text;
+      return text.length > 80 ? `${text.slice(0, 80)}…` : text;
     }
   }
-  return fallback.length > 42 ? `${fallback.slice(0, 42)}...` : fallback;
+  return fallback.length > 80 ? `${fallback.slice(0, 80)}…` : fallback;
 }
 
 export function historySessionStatusLabel(status: ClaudeSession["status"]): string {
@@ -32,24 +36,49 @@ export function historySessionStatusTagColor(
   return "default";
 }
 
-/** 历史会话抽屉标题：展示仓库/标签名 + 可复制的 Claude Code 会话 id（无落盘 id 时退回 Wise 标签 id） */
-export function HistorySessionDrawerTitle({ session }: { session: ClaudeSession | undefined }) {
+/** 抽屉顶栏：仅一行主标题 */
+export function HistorySessionDrawerTitle({
+  session,
+  terminalName,
+}: {
+  session: ClaudeSession | undefined;
+  terminalName?: string;
+}) {
   if (!session) {
-    return <span>会话消息</span>;
+    return <span className="app-monitor-panel__history-drawer-headline">会话记录</span>;
   }
-  const name = session.repositoryName?.trim();
-  const primary = name && name.length > 0 ? name : getSessionPreview(session);
-  const claudeId = session.claudeSessionId?.trim();
-  const copyText = claudeId && claudeId.length > 0 ? claudeId : session.id;
   return (
-    <div className="app-monitor-panel__history-drawer-title">
-      <div className="app-monitor-panel__history-drawer-title__primary">{primary}</div>
+    <span className="app-monitor-panel__history-drawer-headline">
+      {buildMonitorSessionDrawerHeadline(session, { terminalName })}
+    </span>
+  );
+}
+
+/** 正文上方元信息条：仓库、时间、会话 ID（不挤在标题里） */
+export function HistorySessionDrawerContextBar({
+  session,
+}: {
+  session: ClaudeSession;
+}) {
+  const ctx = buildMonitorSessionDrawerContextModel(session);
+  return (
+    <div className="app-monitor-panel__history-drawer-context" aria-label="会话元信息">
+      <span className="app-monitor-panel__history-drawer-context__chip" title={session.repositoryName}>
+        {ctx.repoShort}
+      </span>
+      <span className="app-monitor-panel__history-drawer-context__sep" aria-hidden>
+        ·
+      </span>
+      <span className="app-monitor-panel__history-drawer-context__chip">{ctx.updatedAtText}</span>
+      <span className="app-monitor-panel__history-drawer-context__sep" aria-hidden>
+        ·
+      </span>
       <Typography.Text
         type="secondary"
-        className="app-monitor-panel__history-drawer-title__session-id"
-        copyable={{ text: copyText, tooltips: ["复制 Claude Code 会话 ID", "已复制"] }}
+        className="app-monitor-panel__history-drawer-context__session-id"
+        copyable={{ text: ctx.sessionIdCopy, tooltips: ["复制会话 ID", "已复制"] }}
       >
-        Claude Code 会话：{copyText}
+        会话 ID {ctx.sessionIdDisplay}
       </Typography.Text>
     </div>
   );
