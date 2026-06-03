@@ -149,6 +149,19 @@ describe("resolveChatMessageComposerInsertPayload", () => {
     expect(payload?.attachmentPaths).toEqual([path]);
     expect(payload?.fullText).toContain(path);
   });
+
+  test("inline space 附图 is stripped from composerMain for insert", () => {
+    const path = "/Users/sjl/.wise/composer-images/wise/demo-image.png";
+    const msg: ClaudeMessage = {
+      id: 10,
+      role: "user",
+      content: `你好 附图：@${path}。`,
+      timestamp: 0,
+    };
+    const payload = resolveChatMessageComposerInsertPayload(msg);
+    expect(payload?.composerMain).toBe("你好");
+    expect(payload?.attachmentPaths).toEqual([path]);
+  });
 });
 
 describe("hasRenderableChatMessageBody", () => {

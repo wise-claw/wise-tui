@@ -17,6 +17,16 @@ describe("claudeComposerPrompt dedupe", () => {
     const main = "你好\n\n附图：@/tmp/a.png";
     expect(stripComposerAttachedImageSuffix(main)).toBe("你好");
     expect(stripComposerAttachedImageSuffix("你好\n\n附图:@/tmp/a.png")).toBe("你好");
+    expect(
+      stripComposerAttachedImageSuffix(
+        "你好 附图：@/Users/sjl/.wise/composer-images/wise/demo-image.png。",
+      ),
+    ).toBe("你好");
+    expect(
+      stripComposerAttachedImageSuffix(
+        "终端01 在 2026/6/3 22:44:53 执行 你好 附图：@/tmp/a.png。",
+      ),
+    ).toBe("终端01 在 2026/6/3 22:44:53 执行 你好");
   });
 
   test("collapseRepeatedComposerMain folds duplicated body", () => {
@@ -60,6 +70,10 @@ describe("claudeComposerPrompt dedupe", () => {
     );
     expect(composerMain).toBe("你好");
     expect(attachmentPaths).toEqual([path]);
+
+    const inline = buildComposerInsertFromPlainText(`你好 附图：@${path}。`);
+    expect(inline.composerMain).toBe("你好");
+    expect(inline.attachmentPaths).toEqual([path]);
   });
 
   test("buildClaudeComposerSendPayload does not duplicate 附图 when main already has suffix", async () => {

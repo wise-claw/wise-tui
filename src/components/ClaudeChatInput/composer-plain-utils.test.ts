@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  detectAtSlashTrigger,
   replaceSlashCommandLine,
   reportAtSlashTriggerFromPlain,
 } from "./composer-plain-utils";
@@ -55,6 +56,34 @@ describe("reportAtSlashTriggerFromPlain", () => {
 
   test("at wins over slash when both could match at cursor", () => {
     expect(collectTrigger("@/", 2)).toEqual({ mode: "at", query: "/", rect: null });
+  });
+});
+
+describe("detectAtSlashTrigger", () => {
+  test("returns triggerStart at @ character", () => {
+    expect(detectAtSlashTrigger("hello @foo", 10)).toEqual({
+      mode: "at",
+      query: "foo",
+      triggerStart: 6,
+    });
+    expect(detectAtSlashTrigger("@", 1)).toEqual({
+      mode: "at",
+      query: "",
+      triggerStart: 0,
+    });
+  });
+
+  test("returns triggerStart at / for slash mode", () => {
+    expect(detectAtSlashTrigger("/autopilot", 11)).toEqual({
+      mode: "slash",
+      query: "autopilot",
+      triggerStart: 0,
+    });
+    expect(detectAtSlashTrigger("请先 /aut", 8)).toEqual({
+      mode: "slash",
+      query: "aut",
+      triggerStart: 3,
+    });
   });
 });
 

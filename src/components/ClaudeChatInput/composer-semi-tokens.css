@@ -1,5 +1,6 @@
 /* 将 Semi AIChatInput 用到的语义 token 接到 Ant Design 全局 CSS 变量，随主题 / 暗色模式一致 */
 .app-claude-semi-chat-input-wrap {
+  position: relative;
   --semi-color-border: var(--ant-color-border-secondary);
   --semi-color-text-0: var(--ant-color-text);
   --semi-color-text-1: var(--ant-color-text-secondary);

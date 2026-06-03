@@ -33,12 +33,18 @@ import type { TriggerInfo } from "./slash-trigger";
 import type { ComposerPlainSurface } from "./slash-popover";
 import {
   contentsToPlain,
+  detectAtSlashTrigger,
   ensureSpaceAfterAtInsert,
   promptToDisplayPlain,
   reportAtSlashTriggerFromPlain,
   singleTextPrompt,
   insertPlainAt,
 } from "./composer-plain-utils";
+import {
+  getComposerEditorCaretRectAtPlainOffset,
+  resolveComposerProseMirrorView,
+  type ComposerProseMirrorEditor,
+} from "./composer-trigger-anchor";
 import { ContextItems } from "./context-items";
 import { SlashPopover } from "./slash-popover";
 import { ImageThumbnails } from "./attachment-manager";
@@ -78,6 +84,7 @@ import { logClaudeDrop } from "./drop-debug";
 import {
   buildClaudeComposerSendPayload,
   normalizeComposerPlainMain,
+  stripComposerAttachedImageSuffix,
 } from "../../services/claudeComposerPrompt";
 import {
   attachDiskPathsToComposerImages,
@@ -232,6 +239,32 @@ function isNativeFileDrag(e: React.DragEvent): boolean {
 
 function isComposerFileLikeDrag(e: React.DragEvent): boolean {
   return isNativeFileDrag(e) || isWiseRepositoryFileDrag(e);
+}
+
+function resolveAtSlashTriggerAnchorRect(
+  aiChat: InstanceType<typeof AIChatInput> | null,
+  shell: HTMLDivElement | null,
+  plain: string,
+  cursor: number,
+): DOMRect | null {
+  const detected = detectAtSlashTrigger(plain, cursor);
+  if (!detected) return null;
+  const rawEd = aiChat?.getEditor?.();
+  const view = resolveComposerProseMirrorView(rawEd);
+  if (
+    view &&
+    rawEd &&
+    typeof rawEd === "object" &&
+    "state" in rawEd &&
+    (rawEd as ComposerProseMirrorEditor).state?.doc
+  ) {
+    const caret = getComposerEditorCaretRectAtPlainOffset(
+      { state: (rawEd as ComposerProseMirrorEditor).state, view },
+      detected.triggerStart,
+    );
+    if (caret) return caret;
+  }
+  return shell?.getBoundingClientRect() ?? null;
 }
 
 function dedupeComposerImages(images: ImageAttachmentPart[]): ImageAttachmentPart[] {
@@ -520,6 +553,11 @@ function ComposerInner({
 
   plainSurfaceRef.current = {
     anchorEl: () => shellRef.current,
+    resolveTriggerAnchorRect: () => {
+      const plain = promptToDisplayPlain(prompt);
+      const cursor = plainSurfaceRef.current?.getCursor() ?? cursorRef.current;
+      return resolveAtSlashTriggerAnchorRect(aiChatRef.current, shellRef.current, plain, cursor);
+    },
     getPlain: () => promptToDisplayPlain(prompt),
     getCursor: () => {
       const ed = aiChatRef.current?.getEditor?.();
@@ -1377,8 +1415,15 @@ function ComposerInner({
       const custom = event as CustomEvent<ApplyStarterPromptDetail>;
       const targetSessionId = custom.detail?.sessionId?.trim();
       if (!targetSessionId || targetSessionId !== session.id) return;
-      const composerMain = (custom.detail?.composerMain ?? custom.detail?.prompt ?? "").trim();
       const attachmentPaths = custom.detail?.attachmentPaths ?? [];
+      const rawMain = (custom.detail?.composerMain ?? custom.detail?.prompt ?? "").trim();
+      const composerMain =
+        attachmentPaths.length > 0
+          ? normalizeComposerPlainMain(
+              stripComposerAttachedImageSuffix(rawMain),
+              true,
+            )
+          : rawMain;
       if (!composerMain && attachmentPaths.length === 0) return;
       const entryPrompt = singleTextPrompt(composerMain);
       if (attachmentPaths.length > 0) {
@@ -2853,6 +2898,18 @@ function ComposerInner({
           {/* Semi AIChatInput（替换原 contentEditable app-claude-editor） */}
           <SemiConfigProvider locale={semiLocaleZhCN}>
             <div ref={shellRef} className="app-claude-semi-chat-input-wrap" style={{ width: "100%" }}>
+              <SlashPopover
+                surfaceRef={plainSurfaceRef}
+                trigger={trigger}
+                onDismiss={() => setTrigger({ mode: null, query: "", rect: null })}
+                onSelect={() => {}}
+                repositoryPath={session.repositoryPath}
+                employeeOptions={employeeMentions}
+                teamOptions={teamMentions}
+                projectRoleTagOptions={projectRoleTagOptions}
+                projectRepositoryMentionOptions={projectRepositoryMentionOptions}
+                hideEmployeesInAtMode={hideEmployeesInAtMode}
+              />
               <AIChatInput
                 ref={aiChatRef}
                 placeholder="@ 终端/工作流/文件，/ 命令，Enter 发送，Shift+Enter 换行，↑/Esc 恢复上条（含图片）"
@@ -2901,7 +2958,12 @@ function ComposerInner({
                   cursorRef.current = c;
                   lastEditorPlainRef.current = plain;
                   set(singleTextPrompt(plain), c);
-                  reportAtSlashTriggerFromPlain(plain, c, setTrigger, shellRef.current?.getBoundingClientRect() ?? null);
+                  reportAtSlashTriggerFromPlain(
+                    plain,
+                    c,
+                    setTrigger,
+                    resolveAtSlashTriggerAnchorRect(aiChatRef.current, shellRef.current, plain, c),
+                  );
                   if (plain.endsWith(" ")) {
                     queueMicrotask(() => {
                       repairTiptapTrailingSpaceIfNeeded(aiChatRef.current, plain);
@@ -2924,19 +2986,6 @@ function ComposerInner({
         </div>
       </div>
 
-      {/* Slash/At Popover */}
-      <SlashPopover
-        surfaceRef={plainSurfaceRef}
-        trigger={trigger}
-        onDismiss={() => setTrigger({ mode: null, query: "", rect: null })}
-        onSelect={() => {}}
-        repositoryPath={session.repositoryPath}
-        employeeOptions={employeeMentions}
-        teamOptions={teamMentions}
-        projectRoleTagOptions={projectRoleTagOptions}
-        projectRepositoryMentionOptions={projectRepositoryMentionOptions}
-        hideEmployeesInAtMode={hideEmployeesInAtMode}
-      />
     </div>
   );
 }

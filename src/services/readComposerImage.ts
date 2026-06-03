@@ -12,12 +12,16 @@ export async function readComposerImageAsDataUrl(absPath: string): Promise<strin
   }
 }
 
+function trimComposerAttachmentPath(raw: string): string {
+  return raw.trim().replace(/[。．.，,；;！!？?）)\]」』"'`]+$/u, "");
+}
+
 /** 从发送消息 / 用户气泡正文中解析 `附图：@/path/to/file` 里的绝对路径。 */
 export function extractComposerAttachmentPathsFromText(text: string): string[] {
   const paths: string[] = [];
   const re = /附图[：:][^\n]*?@(\/[^\s\n]+)/gu;
   for (const match of text.matchAll(re)) {
-    const p = match[1]?.trim();
+    const p = trimComposerAttachmentPath(match[1] ?? "");
     if (p && !paths.includes(p)) paths.push(p);
   }
   return paths;

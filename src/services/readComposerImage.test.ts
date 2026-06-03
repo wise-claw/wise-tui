@@ -9,4 +9,9 @@ describe("extractComposerAttachmentPathsFromText", () => {
       "/Users/sjl/.wise/composer-images/wise/281aed2b-e313-48aa-874c-0484ceaaf5c3-image.png",
     ]);
   });
+
+  test("strips trailing sentence punctuation after image path", () => {
+    const path = "/tmp/wise/demo-image.png";
+    expect(extractComposerAttachmentPathsFromText(`你好 附图：@${path}。`)).toEqual([path]);
+  });
 });

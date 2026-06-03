@@ -49,6 +49,41 @@ function matchInlineAtTrigger(currentLine: string): RegExpMatchArray | null {
   return currentLine.match(/@(\S*)$/);
 }
 
+export function detectAtSlashTrigger(
+  plain: string,
+  cursor: number,
+): { mode: "at" | "slash"; query: string; triggerStart: number } | null {
+  const text = plain.replace(/\u200B/g, "");
+  const safeCursor = Math.max(0, Math.min(cursor, text.length));
+  const lineStart = text.lastIndexOf("\n", safeCursor - 1) + 1;
+  const currentLine = text.substring(lineStart, safeCursor);
+
+  const atMatch = matchInlineAtTrigger(currentLine);
+  if (atMatch) {
+    const tokenLen = atMatch[0].length;
+    return {
+      mode: "at",
+      query: atMatch[1] ?? "",
+      triggerStart: lineStart + currentLine.length - tokenLen,
+    };
+  }
+
+  const slashMatch = matchInlineSlashTrigger(currentLine);
+  if (slashMatch) {
+    const lastBreak = Math.max(currentLine.lastIndexOf(" "), currentLine.lastIndexOf("\t"));
+    const tokenStartOnLine = lastBreak >= 0 ? lastBreak + 1 : 0;
+    const token = currentLine.slice(tokenStartOnLine);
+    const slashIndexOnLine = tokenStartOnLine + token.length - slashMatch[0].length;
+    return {
+      mode: "slash",
+      query: slashMatch[1] ?? "",
+      triggerStart: lineStart + slashIndexOnLine,
+    };
+  }
+
+  return null;
+}
+
 export function reportAtSlashTriggerFromPlain(
   plain: string,
   cursor: number,
@@ -56,17 +91,9 @@ export function reportAtSlashTriggerFromPlain(
   rect: DOMRect | null,
 ) {
   if (!onTriggerChange) return;
-  const text = plain.replace(/\u200B/g, "");
-  const safeCursor = Math.max(0, Math.min(cursor, text.length));
-  const currentLine = currentLineBeforeCursor(text, safeCursor);
-
-  const atMatch = matchInlineAtTrigger(currentLine);
-  const slashMatch = matchInlineSlashTrigger(currentLine);
-
-  if (atMatch) {
-    onTriggerChange({ mode: "at", query: atMatch[1], rect });
-  } else if (slashMatch) {
-    onTriggerChange({ mode: "slash", query: slashMatch[1], rect });
+  const detected = detectAtSlashTrigger(plain, cursor);
+  if (detected) {
+    onTriggerChange({ mode: detected.mode, query: detected.query, rect });
   } else {
     onTriggerChange({ mode: null, query: "", rect: null });
   }

@@ -5881,11 +5881,13 @@ button.app-message-part-header:disabled:hover {
 /* Slash popover */
 
 .app-claude-slash-popover {
+  position: absolute;
   background: var(--ant-color-bg-elevated);
   border: 1px solid var(--ant-color-border-secondary);
   border-radius: 8px;
   box-shadow: var(--ant-box-shadow-secondary);
   padding: 4px;
+  pointer-events: auto;
 }
 
 .app-claude-slash-popover-item {

@@ -12,6 +12,7 @@ import {
   removeAtTriggerFromPlain,
   replaceSlashCommandLine,
 } from "./composer-plain-utils";
+import { computeSlashPopoverPlacement } from "./composer-trigger-anchor";
 
 export interface SlashOption {
   type: "agent" | "team" | "file" | "command";
@@ -26,6 +27,8 @@ export interface SlashOption {
 /** 与 Semi AIChatInput 搭配：用纯文本 + 光标操作 @ / 补全，不再依赖 contentEditable DOM。 */
 export interface ComposerPlainSurface {
   anchorEl: () => HTMLElement | null;
+  /** 渲染弹出框时刷新 @ / 触发字符的视口锚点 */
+  resolveTriggerAnchorRect?: () => DOMRect | null;
   getPlain: () => string;
   getCursor: () => number;
   setPlainAndCursor: (plain: string, cursor: number) => void;
@@ -358,18 +361,29 @@ export function SlashPopover({
 
   if (!mode) return null;
 
-  const anchorRect = surfaceRef.current?.anchorEl()?.getBoundingClientRect();
+  const positionRoot = surfaceRef.current?.anchorEl();
+  const caretRect =
+    surfaceRef.current?.resolveTriggerAnchorRect?.() ?? trigger.rect ?? null;
+  const placement =
+    positionRoot && caretRect
+      ? computeSlashPopoverPlacement(positionRoot, caretRect)
+      : null;
+  if (!placement) return null;
+
+  const popoverBaseStyle: React.CSSProperties = {
+    position: "absolute",
+    left: `${placement.left}px`,
+    bottom: `${placement.bottom}px`,
+    zIndex: 1000,
+    width: "480px",
+  };
+
   if (mode === "at" && fileLoading && options.length === 0) {
-    if (!anchorRect) return null;
     return (
       <div
         className="app-claude-slash-popover"
         style={{
-          position: "fixed",
-          bottom: `${window.innerHeight - anchorRect.top + 4}px`,
-          left: `${anchorRect.left + 12}px`,
-          zIndex: 1000,
-          width: "480px",
+          ...popoverBaseStyle,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -381,8 +395,6 @@ export function SlashPopover({
     );
   }
   if (options.length === 0) return null;
-
-  const left = anchorRect ? anchorRect.left + 12 : 0;
 
   const groupedCommandOptions =
     mode === "slash"
@@ -396,11 +408,7 @@ export function SlashPopover({
     <div
       className="app-claude-slash-popover"
       style={{
-        position: "fixed",
-        bottom: anchorRect ? `${window.innerHeight - anchorRect.top + 4}px` : "auto",
-        left: `${left}px`,
-        zIndex: 1000,
-        width: "480px",
+        ...popoverBaseStyle,
         maxHeight: "400px",
         overflowY: "auto",
         background: "var(--ant-color-bg-elevated)",

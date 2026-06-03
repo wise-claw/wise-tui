@@ -47,7 +47,8 @@ export interface ClaudeComposerSendPayload {
   imageDiskPaths: Array<string | null>;
 }
 
-const COMPOSER_ATTACHED_IMAGE_SUFFIX_RE = /\n\n附图[：:][\s\S]*$/u;
+/** 发送/恢复时去掉末尾附图块：`\\n\\n附图` 或 ` 附图`（系统派发句内常见）及之后路径、句号等。 */
+const COMPOSER_ATTACHED_IMAGE_SUFFIX_RE = /(?:\s|[\n\r\u2028\u2029])+附图[：:][\s\S]*$/u;
 
 /** 去掉正文末尾已拼接的附图块（上键恢复后重发、粘贴历史 outbound 时防重复）。 */
 export function stripComposerAttachedImageSuffix(text: string): string {
