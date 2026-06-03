@@ -7,6 +7,7 @@ import { StreamingReplyHint } from "./Markdown";
 
 interface Props {
   row: ChatMessageListRow;
+  sessionId?: string;
   listVariant?: "chat" | "monitor";
   onOpenTaskDetail?: (taskId: string) => void;
   onOpenHistorySessionInInspector?: (sessionId: string) => void;
@@ -15,6 +16,7 @@ interface Props {
 
 function ChatMessageListRowContentInner({
   row,
+  sessionId,
   listVariant = "chat",
   onOpenTaskDetail,
   onOpenHistorySessionInInspector,
@@ -30,6 +32,7 @@ function ChatMessageListRowContentInner({
   if (listVariant === "monitor") {
     return (
       <ClaudeSessionMonitorMessageRow
+        sessionId={sessionId}
         msg={row.msg}
         streamingThisBubble={row.streamingThisBubble}
         mergedWithPrevious={row.mergedWithPrevious}
@@ -42,6 +45,7 @@ function ChatMessageListRowContentInner({
   }
   return (
     <ClaudeChatMessageRow
+      sessionId={sessionId}
       msg={row.msg}
       streamingThisBubble={row.streamingThisBubble}
       mergedWithPrevious={row.mergedWithPrevious}
@@ -54,6 +58,7 @@ function ChatMessageListRowContentInner({
 }
 
 function rowContentEqual(prev: Readonly<Props>, next: Readonly<Props>): boolean {
+  if (prev.sessionId !== next.sessionId) return false;
   if (prev.listVariant !== next.listVariant) return false;
   if (prev.onOpenTaskDetail !== next.onOpenTaskDetail) return false;
   if (prev.onOpenHistorySessionInInspector !== next.onOpenHistorySessionInInspector) return false;

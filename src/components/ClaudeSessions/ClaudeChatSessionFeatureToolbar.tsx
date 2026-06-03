@@ -3,6 +3,7 @@ import {
   CommentOutlined,
   CopyOutlined,
   DeleteOutlined,
+  EditOutlined,
   FieldTimeOutlined,
   QuestionCircleOutlined,
   ReloadOutlined,
@@ -29,6 +30,7 @@ import {
 } from "./claudeChatHelpers";
 import { buildClaudeSessionHoverTitle } from "../../utils/claudeSessionIdTooltip";
 import type { SessionGroup } from "./sessionGrouping";
+import { applyStarterPromptToComposer } from "../../constants/workflowUiEvents";
 import {
   FEATURE_SESSION_LIST_PAGE_SIZE,
   SHOW_SESSION_TASK_COMPLETION_FEATURE,
@@ -56,6 +58,11 @@ function copySessionUserQuestionText(text: string) {
     () => message.success("已复制到剪贴板"),
     () => message.error("复制失败"),
   );
+}
+
+function insertSessionUserQuestionIntoComposer(sessionId: string, text: string) {
+  if (!text.trim()) return;
+  applyStarterPromptToComposer({ sessionId, prompt: text });
 }
 
 export interface ClaudeChatSessionFeatureToolbarProps {
@@ -320,19 +327,35 @@ export const ClaudeChatSessionFeatureToolbar = memo(function ClaudeChatSessionFe
                               {formatShortQuestionTime(row.timestamp)}
                             </span>
                           </button>
-                          <Tooltip title="复制消息内容" mouseEnterDelay={0.35}>
-                            <Button
-                              type="text"
-                              size="small"
-                              className="app-claude-session-user-questions-popover__item-copy"
-                              icon={<CopyOutlined />}
-                              aria-label="复制消息内容"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                copySessionUserQuestionText(row.text);
-                              }}
-                            />
-                          </Tooltip>
+                          <span className="app-claude-session-user-questions-popover__item-actions">
+                            <Tooltip title="填入输入框" mouseEnterDelay={0.35}>
+                              <Button
+                                type="text"
+                                size="small"
+                                className="app-claude-message-action app-claude-message-action--insert app-claude-session-user-questions-popover__item-action"
+                                icon={<EditOutlined />}
+                                aria-label="填入会话输入框"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  insertSessionUserQuestionIntoComposer(sessionId, row.text);
+                                  setUserQuestionsPopoverOpen(false);
+                                }}
+                              />
+                            </Tooltip>
+                            <Tooltip title="复制" mouseEnterDelay={0.35}>
+                              <Button
+                                type="text"
+                                size="small"
+                                className="app-claude-message-action app-claude-session-user-questions-popover__item-action"
+                                icon={<CopyOutlined />}
+                                aria-label="复制消息内容"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  copySessionUserQuestionText(row.text);
+                                }}
+                              />
+                            </Tooltip>
+                          </span>
                         </div>
                       ))
                     )}

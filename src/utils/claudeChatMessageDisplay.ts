@@ -236,18 +236,42 @@ export function chatMessagePlainTextForCopy(msg: ClaudeMessage): string {
   return content;
 }
 
-/** 列表复制按钮使用的最终文本（系统派发记录取展示句）。 */
+/** 系统消息复制/填入：派发记录取可执行正文，其余取原始系统文本。 */
+function resolveSystemSessionActionText(
+  msg: ClaudeMessage,
+  sessions?: readonly ClaudeSession[],
+): string {
+  const raw = systemMessagePlainText(msg).trim();
+  const dispatch = parseDispatchRecord(raw);
+  if (dispatch) {
+    const enriched = enrichDispatchRecordMeta(dispatch, sessions);
+    return normalizedDispatchContentForSentence(enriched.dispatchContent) ?? "";
+  }
+  return raw;
+}
+
+/** 列表复制按钮使用的最终文本（终端/团队派发记录与填入输入框一致，取可执行正文）。 */
 export function resolveChatMessageCopyText(
   msg: ClaudeMessage,
   sessions?: readonly ClaudeSession[],
 ): string {
   if (msg.role === "system") {
-    const raw = systemMessagePlainText(msg).trim();
-    const dispatch = parseDispatchRecord(raw);
-    if (dispatch) {
-      return formatDispatchRecordSentence(enrichDispatchRecordMeta(dispatch, sessions));
-    }
-    return raw;
+    return resolveSystemSessionActionText(msg, sessions);
   }
   return chatMessagePlainTextForCopy(msg);
+}
+
+/** 填入会话输入框的正文：用户消息取原文；系统派发记录同 {@link resolveChatMessageCopyText}。 */
+export function resolveChatMessageComposerInsertText(
+  msg: ClaudeMessage,
+  sessions?: readonly ClaudeSession[],
+): string {
+  if (msg.role === "user") {
+    if (isToolOnlyUserMessage(msg)) return "";
+    return userMessagePlainTextForDisplay(msg);
+  }
+  if (msg.role === "system") {
+    return resolveSystemSessionActionText(msg, sessions);
+  }
+  return "";
 }

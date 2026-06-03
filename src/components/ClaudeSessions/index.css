@@ -2126,18 +2126,16 @@
   cursor: pointer;
 }
 
-.app-claude-session-user-questions-popover__item-copy {
+.app-claude-session-user-questions-popover__item-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   flex-shrink: 0;
   margin-right: 4px;
-  color: var(--ant-color-text-tertiary);
 }
 
-.app-claude-session-user-questions-popover__item-copy:hover {
-  color: var(--ant-color-primary);
-}
-
-.app-claude-session-user-questions-popover__item-copy:focus-visible {
-  color: var(--ant-color-primary);
+.app-claude-session-user-questions-popover__item-action.app-claude-message-action {
+  opacity: 1;
 }
 
 .app-claude-session-user-questions-popover__item-text {
@@ -3593,49 +3591,72 @@
   position: relative;
 }
 
-.app-claude-message-header-actions {
+.app-claude-message-header-leading {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-left: auto;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.app-claude-message-header-actions,
+.app-claude-message-floating-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   flex-shrink: 0;
 }
 
-.app-claude-message-copy-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: none;
-  border-radius: 4px;
-  background: var(--ant-color-bg-container);
-  color: var(--ant-color-text-tertiary);
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
-}
-
-.app-claude-message-body > .app-claude-message-copy-btn {
+.app-claude-message-floating-actions {
   position: absolute;
   top: 0;
   right: 0;
   z-index: 1;
 }
 
-.app-claude-message:hover .app-claude-message-copy-btn,
-.app-claude-message-copy-btn:hover,
-.app-claude-message-copy-btn:focus-visible {
+/* 消息行 / 历史消息：复制、填入输入框等轻量操作（Ant text btn） */
+.app-claude-message-action.ant-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--ant-border-radius-sm);
+  background: transparent;
+  color: var(--ant-color-text-tertiary);
+  box-shadow: none;
+  opacity: 0;
+  transition:
+    opacity 0.15s ease,
+    color 0.15s ease,
+    background 0.15s ease;
+}
+
+.app-claude-message-action.ant-btn .ant-btn-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.app-claude-message:hover .app-claude-message-action.ant-btn,
+.app-claude-message-action.ant-btn:hover,
+.app-claude-message-action.ant-btn:focus-visible {
   opacity: 1;
 }
 
-.app-claude-message-copy-btn:hover {
+.app-claude-message-action.ant-btn:hover {
   color: var(--ant-color-text);
-  background: var(--ant-color-fill-secondary);
+  background: var(--ant-color-fill-tertiary);
 }
 
-.app-claude-message-copy-btn[data-copied="true"] {
+.app-claude-message-action--insert.ant-btn:hover {
+  color: var(--ant-color-primary);
+}
+
+.app-claude-message-action--copied.ant-btn,
+.app-claude-message-action--copied.ant-btn:hover {
   color: var(--ant-color-success);
 }
 

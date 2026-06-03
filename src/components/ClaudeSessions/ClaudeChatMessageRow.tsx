@@ -9,10 +9,11 @@ import {
 } from "../../utils/claudeChatMessageDisplay";
 import { DispatchRecordMessage } from "./DispatchRecordMessage";
 import { UserMessageCollapsibleBody } from "./UserMessageCollapsibleBody";
-import { ChatMessageCopyButton } from "./ChatMessageCopyButton";
+import { ChatMessageRowActions } from "./ChatMessageRowActions";
 import { useChatMessageCopyText } from "./useChatMessageCopyText";
 
 interface Props {
+  sessionId?: string;
   msg: ClaudeMessage;
   streamingThisBubble: boolean;
   mergedWithPrevious: boolean;
@@ -23,6 +24,7 @@ interface Props {
 }
 
 function ClaudeChatMessageRowInner({
+  sessionId,
   msg,
   streamingThisBubble,
   mergedWithPrevious,
@@ -83,15 +85,28 @@ function ClaudeChatMessageRowInner({
       <div className="app-claude-message-body">
         {showSender ? (
           <div className="app-claude-message-header">
-            <span className="app-claude-message-sender">
-              {toolUser ? "工具" : "系统"}
-            </span>
-            <span className="app-claude-message-header-actions">
-              <ChatMessageCopyButton text={copyText} />
-            </span>
+            <div className="app-claude-message-header-leading">
+              <span className="app-claude-message-sender">
+                {toolUser ? "工具" : "系统"}
+              </span>
+              <ChatMessageRowActions
+                sessionId={sessionId}
+                msg={msg}
+                copyText={copyText}
+                toolUser={toolUser}
+                sessionsForDispatchLookup={sessionsForDispatchLookup}
+              />
+            </div>
           </div>
         ) : (
-          <ChatMessageCopyButton text={copyText} />
+          <ChatMessageRowActions
+            sessionId={sessionId}
+            msg={msg}
+            copyText={copyText}
+            toolUser={toolUser}
+            sessionsForDispatchLookup={sessionsForDispatchLookup}
+            floating
+          />
         )}
         <div className="app-claude-message-content">
           {msg.role === "system" ? renderSystemBody() : renderNonSystemContent()}
@@ -106,6 +121,7 @@ function rowPropsEqual(prev: Readonly<Props>, next: Readonly<Props>): boolean {
     prev.msg === next.msg &&
     prev.streamingThisBubble === next.streamingThisBubble &&
     prev.mergedWithPrevious === next.mergedWithPrevious &&
+    prev.sessionId === next.sessionId &&
     prev.toolUser === next.toolUser &&
     prev.onOpenTaskDetail === next.onOpenTaskDetail &&
     prev.onOpenHistorySessionInInspector === next.onOpenHistorySessionInInspector &&

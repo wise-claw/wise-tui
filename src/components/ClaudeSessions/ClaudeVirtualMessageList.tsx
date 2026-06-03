@@ -47,6 +47,7 @@ export const ClaudeVirtualMessageList = forwardRef<ChatMessageListNavigationHand
       <ChatMessageListVirtualBody
         ref={ref}
         rows={rows}
+        sessionId={session.id}
         scrollContainerRef={scrollContainerRef}
         listResetKey={session.id}
         listVariant={listVariant}

@@ -10,10 +10,11 @@ import {
 } from "../../utils/claudeChatMessageDisplay";
 import { DispatchRecordMessage } from "./DispatchRecordMessage";
 import { UserMessageCollapsibleBody } from "./UserMessageCollapsibleBody";
-import { ChatMessageCopyButton } from "./ChatMessageCopyButton";
+import { ChatMessageRowActions } from "./ChatMessageRowActions";
 import { useChatMessageCopyText } from "./useChatMessageCopyText";
 
 interface Props {
+  sessionId?: string;
   msg: ClaudeMessage;
   streamingThisBubble: boolean;
   mergedWithPrevious: boolean;
@@ -24,6 +25,7 @@ interface Props {
 }
 
 function ClaudeSessionMonitorMessageRowInner({
+  sessionId,
   msg,
   streamingThisBubble,
   mergedWithPrevious,
@@ -65,17 +67,30 @@ function ClaudeSessionMonitorMessageRowInner({
       </div>
       <div className="app-claude-message-body">
         {mergedWithPrevious ? (
-          <ChatMessageCopyButton text={copyText} />
+          <ChatMessageRowActions
+            sessionId={sessionId}
+            msg={msg}
+            copyText={copyText}
+            toolUser={toolUser}
+            sessionsForDispatchLookup={sessionsForDispatchLookup}
+            floating
+          />
         ) : (
           <div className="app-claude-message-header">
-            <span className="app-claude-message-sender">
-              {toolUser ? "工具" : msg.role === "user" ? "我" : msg.role === "assistant" ? "Claude" : "系统"}
-            </span>
-            <span className="app-claude-message-header-actions">
-              <ChatMessageCopyButton text={copyText} />
-              <span className="app-claude-message-time" title={new Date(msg.timestamp).toLocaleString("zh-CN")}>
-                {formatChatMessageListTime(msg.timestamp)}
+            <div className="app-claude-message-header-leading">
+              <span className="app-claude-message-sender">
+                {toolUser ? "工具" : msg.role === "user" ? "我" : msg.role === "assistant" ? "Claude" : "系统"}
               </span>
+              <ChatMessageRowActions
+                sessionId={sessionId}
+                msg={msg}
+                copyText={copyText}
+                toolUser={toolUser}
+                sessionsForDispatchLookup={sessionsForDispatchLookup}
+              />
+            </div>
+            <span className="app-claude-message-time" title={new Date(msg.timestamp).toLocaleString("zh-CN")}>
+              {formatChatMessageListTime(msg.timestamp)}
             </span>
           </div>
         )}

@@ -25,6 +25,7 @@ export interface ChatMessageListNavigationHandle {
 
 interface Props {
   rows: ChatMessageListRow[];
+  sessionId?: string;
   scrollContainerRef: RefObject<HTMLDivElement | null>;
   /** 切换会话时重置尾部窗口 */
   listResetKey?: string;
@@ -59,6 +60,7 @@ export const ChatMessageListVirtualBody = forwardRef<ChatMessageListNavigationHa
   function ChatMessageListVirtualBody(
     {
       rows,
+      sessionId,
       scrollContainerRef,
       listResetKey,
       listVariant = "chat",
@@ -175,6 +177,7 @@ export const ChatMessageListVirtualBody = forwardRef<ChatMessageListNavigationHa
               ) : (
                 <ChatMessageListRowContent
                   row={row}
+                  sessionId={sessionId}
                   listVariant={listVariant}
                   onOpenTaskDetail={onOpenTaskDetail}
                   onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}

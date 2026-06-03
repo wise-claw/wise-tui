@@ -5,6 +5,23 @@ export const WISE_UI_EVENT_SCHEDULED_TASKS_CHANGED = "wise:scheduled-tasks-chang
 
 export const WORKFLOW_UI_EVENT_APPLY_STARTER_PROMPT = "wise:apply-starter-prompt";
 
+export interface ApplyStarterPromptDetail {
+  sessionId: string;
+  prompt: string;
+}
+
+/** 将文本写入指定会话 composer 并聚焦输入框（由 `ComposerRegion` 监听）。 */
+export function applyStarterPromptToComposer(detail: ApplyStarterPromptDetail): void {
+  const sessionId = detail.sessionId.trim();
+  const prompt = detail.prompt;
+  if (!sessionId || !prompt.trim()) return;
+  window.dispatchEvent(
+    new CustomEvent<ApplyStarterPromptDetail>(WORKFLOW_UI_EVENT_APPLY_STARTER_PROMPT, {
+      detail: { sessionId, prompt },
+    }),
+  );
+}
+
 /** CC Workflow Studio AI 编辑一键启动：在 Wise 当前仓库的 Claude 会话中执行 slash skill */
 export const WORKFLOW_UI_EVENT_CC_WF_STUDIO_LAUNCH_AI_EDITING = "wise:cc-wf-studio-launch-ai-editing";
 

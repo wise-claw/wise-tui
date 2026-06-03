@@ -10,6 +10,7 @@ import {
   isSystemMessageDisplayNoiseText,
   parseDispatchRecord,
   resolveChatMessageCopyText,
+  resolveChatMessageComposerInsertText,
 } from "./claudeChatMessageDisplay";
 
 describe("isAssistantDisplayNoiseText", () => {
@@ -115,7 +116,7 @@ describe("chatMessagePlainTextForCopy", () => {
     );
   });
 
-  test("resolveChatMessageCopyText uses dispatch sentence for system records", () => {
+  test("resolveChatMessageCopyText uses dispatch executable body for system records", () => {
     const msg: ClaudeMessage = {
       id: 2,
       role: "system",
@@ -128,9 +129,8 @@ describe("chatMessagePlainTextForCopy", () => {
       ].join("\n"),
       timestamp: 0,
     };
-    expect(resolveChatMessageCopyText(msg)).toBe(
-      "终端01 在 2026/6/3 17:58:06 执行 /add-dir 你好。",
-    );
+    expect(resolveChatMessageCopyText(msg)).toBe("/add-dir 你好");
+    expect(resolveChatMessageComposerInsertText(msg)).toBe("/add-dir 你好");
   });
 });
 

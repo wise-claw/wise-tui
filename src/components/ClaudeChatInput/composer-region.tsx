@@ -586,10 +586,17 @@ function ComposerInner({
     function handleApplyStarterPrompt(event: Event) {
       const custom = event as CustomEvent<{ sessionId?: string; prompt?: string }>;
       const targetSessionId = custom.detail?.sessionId?.trim();
-      const starterPrompt = custom.detail?.prompt?.trim();
-      if (!targetSessionId || targetSessionId !== session.id || !starterPrompt) return;
-      set([{ type: "text", text: starterPrompt, start: 0, end: starterPrompt.length }], starterPrompt.length);
-      queueMicrotask(() => aiChatRef.current?.focusEditor?.("end"));
+      const starterPrompt = custom.detail?.prompt ?? "";
+      if (!targetSessionId || targetSessionId !== session.id || !starterPrompt.trim()) return;
+      ignoreNextContentSyncRef.current = true;
+      lastEditorPlainRef.current = starterPrompt;
+      cursorRef.current = starterPrompt.length;
+      set(singleTextPrompt(starterPrompt), starterPrompt.length);
+      scheduleSafeAiChatSetContent(() => aiChatRef.current, starterPrompt, () => {
+        repairTiptapTrailingSpaceIfNeeded(aiChatRef.current, starterPrompt);
+        aiChatRef.current?.focusEditor?.("end");
+        composerEscapeRootRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      });
     }
     window.addEventListener(WORKFLOW_UI_EVENT_APPLY_STARTER_PROMPT, handleApplyStarterPrompt as EventListener);
     return () => {
