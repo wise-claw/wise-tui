@@ -335,6 +335,7 @@ pub fn run() {
             repository_files::search_repository_files,
             repository_files::path_is_accessible_directory,
             repository_files::list_repository_explorer_entries,
+            repository_files::list_repository_explorer_children,
             repository_files::create_repository_file,
             repository_files::create_repository_directory,
             repository_files::delete_repository_entry,

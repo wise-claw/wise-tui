@@ -1,21 +1,27 @@
 import type { RepositoryExplorerEntry } from "../../services/repositoryFiles";
 
 const MAX_CACHED_REPOSITORIES = 8;
-const cache = new Map<string, RepositoryExplorerEntry[]>();
 
-export function getCachedRepositoryExplorerEntries(
+interface CachedExplorerSnapshot {
+  rootChildren: RepositoryExplorerEntry[];
+  fetchedAt: number;
+}
+
+const cache = new Map<string, CachedExplorerSnapshot>();
+
+export function getCachedRepositoryExplorerRootChildren(
   repositoryPath: string,
 ): RepositoryExplorerEntry[] | undefined {
   const key = repositoryPath.trim();
   if (!key) {
     return undefined;
   }
-  return cache.get(key);
+  return cache.get(key)?.rootChildren;
 }
 
-export function setCachedRepositoryExplorerEntries(
+export function setCachedRepositoryExplorerRootChildren(
   repositoryPath: string,
-  entries: RepositoryExplorerEntry[],
+  rootChildren: RepositoryExplorerEntry[],
 ): void {
   const key = repositoryPath.trim();
   if (!key) {
@@ -27,5 +33,19 @@ export function setCachedRepositoryExplorerEntries(
       cache.delete(oldest);
     }
   }
-  cache.set(key, entries);
+  cache.set(key, { rootChildren, fetchedAt: Date.now() });
+}
+
+/** @deprecated Use root children cache; kept for search / legacy callers. */
+export function getCachedRepositoryExplorerEntries(
+  repositoryPath: string,
+): RepositoryExplorerEntry[] | undefined {
+  return getCachedRepositoryExplorerRootChildren(repositoryPath);
+}
+
+export function setCachedRepositoryExplorerEntries(
+  repositoryPath: string,
+  entries: RepositoryExplorerEntry[],
+): void {
+  setCachedRepositoryExplorerRootChildren(repositoryPath, entries);
 }

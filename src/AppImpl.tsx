@@ -3513,6 +3513,15 @@ export default function App() {
         open: searchOpen,
         onClose: () => setSearchOpen(false),
         repositoryPath: activeRepository?.path,
+        onOpenInApp: (relativePath) => {
+          if (!activeRepository) return;
+          openRepositoryFileByEvent({
+            repositoryId: activeRepository.id,
+            repositoryPath: activeRepository.path,
+            relativePath,
+            line: null,
+          });
+        },
       }}
       mcpHubProps={{
         repositoryPath: activeRepository?.path ?? null,

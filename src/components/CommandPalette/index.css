@@ -31,9 +31,50 @@
   font-size: 13px;
 }
 
+.app-command-palette-input .ant-input-affix-wrapper {
+  padding-inline: 0;
+}
+
 .app-command-palette-input .ant-input {
   font-size: 13px;
   color: var(--ant-color-text);
+}
+
+.app-command-palette-shortcuts {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  margin-inline-start: 8px;
+  pointer-events: none;
+  user-select: none;
+}
+
+.app-command-palette-shortcut {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.app-command-palette-shortcut__keys {
+  display: inline-block;
+  min-width: 1.2em;
+  padding: 0 4px;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 16px;
+  font-family: inherit;
+  text-align: center;
+  color: var(--ant-color-text-secondary);
+  background: var(--ant-color-fill-tertiary);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 4px;
+}
+
+.app-command-palette-shortcut__label {
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
 }
 
 .app-command-palette-input .ant-input::placeholder {

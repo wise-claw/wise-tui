@@ -185,6 +185,71 @@ fn explorer_root_error_message(root: &str, root_path: &Path) -> String {
     format!("无法打开仓库目录：{display}")
 }
 
+fn explorer_join_dir(repo_root: &Path, relative_dir: &str) -> Result<PathBuf, String> {
+    let rel = relative_dir.trim().trim_start_matches('/').trim_end_matches('/');
+    if rel.is_empty() {
+        Ok(repo_root.to_path_buf())
+    } else {
+        safe_join_repository_root(repo_root, rel)
+    }
+}
+
+/// List immediate children of one directory for lazy explorer tree expansion.
+#[tauri::command]
+pub(crate) async fn list_repository_explorer_children(
+    root: String,
+    relative_dir: String,
+) -> Result<Vec<RepositoryExplorerEntry>, String> {
+    const MAX_CHILDREN: usize = 4_000;
+
+    let root_path = expand_tilde_in_path(&root);
+    if !root_path.is_dir() {
+        return Err(explorer_root_error_message(&root, &root_path));
+    }
+    // Avoid canonicalize on every expand — it blocks the IPC thread on large / network volumes.
+    let dir_path = explorer_join_dir(&root_path, &relative_dir)?;
+    if !dir_path.is_dir() {
+        return Err("目录不存在".into());
+    }
+    assert_resolved_path_under_repo(&root_path, &dir_path)?;
+
+    let mut out: Vec<RepositoryExplorerEntry> = Vec::new();
+    let read_dir = fs::read_dir(&dir_path).map_err(|e| format!("读取目录失败: {e}"))?;
+    for entry in read_dir {
+        if out.len() >= MAX_CHILDREN {
+            break;
+        }
+        let entry = entry.map_err(|e| format!("读取目录项失败: {e}"))?;
+        let file_type = entry.file_type().map_err(|e| format!("读取类型失败: {e}"))?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.is_empty() || name == "." || name == ".." {
+            continue;
+        }
+        if file_type.is_dir() && should_skip_walk_dir(&name) {
+            continue;
+        }
+        let rel = if relative_dir.trim().trim_matches('/').is_empty() {
+            name.clone()
+        } else {
+            format!(
+                "{}/{}",
+                relative_dir.trim().trim_matches('/'),
+                name
+            )
+        };
+        out.push(RepositoryExplorerEntry {
+            path: rel,
+            is_dir: file_type.is_dir(),
+        });
+    }
+
+    out.sort_by(|a, b| match a.path.cmp(&b.path) {
+        std::cmp::Ordering::Equal => a.is_dir.cmp(&b.is_dir),
+        o => o,
+    });
+    Ok(out)
+}
+
 /// List files and directories (including empty folders) for explorer tree UI.
 #[tauri::command]
 pub(crate) async fn list_repository_explorer_entries(

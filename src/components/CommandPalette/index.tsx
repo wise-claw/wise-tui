@@ -9,6 +9,8 @@ interface Props {
   open: boolean;
   onClose: () => void;
   repositoryPath: string | undefined;
+  /** Enter / 单击：在 Wise 内打开仓库文件 */
+  onOpenInApp: (relativePath: string) => void;
 }
 
 interface FileResult {
@@ -16,14 +18,38 @@ interface FileResult {
   display: string;
 }
 
-export function CommandPalette({ open, onClose, repositoryPath }: Props) {
+function CommandPaletteShortcutHints() {
+  return (
+    <div className="app-command-palette-shortcuts" aria-label="打开快捷键">
+      <span className="app-command-palette-shortcut" title="在 Wise 内打开文件">
+        <kbd className="app-command-palette-shortcut__keys">Enter</kbd>
+        <span className="app-command-palette-shortcut__label">应用内</span>
+      </span>
+      <span className="app-command-palette-shortcut" title="按顶栏打开方式偏好在外部打开">
+        <kbd className="app-command-palette-shortcut__keys">⇧Enter</kbd>
+        <span className="app-command-palette-shortcut__label">外部</span>
+      </span>
+    </div>
+  );
+}
+
+export function CommandPalette({ open, onClose, repositoryPath, onOpenInApp }: Props) {
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const [results, setResults] = useState<FileResult[]>([]);
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const openSearchResult = useCallback(
+  const openSearchResultInApp = useCallback(
+    (relativePath: string) => {
+      if (!repositoryPath) return;
+      onClose();
+      onOpenInApp(relativePath);
+    },
+    [repositoryPath, onClose, onOpenInApp],
+  );
+
+  const openSearchResultExternal = useCallback(
     (relativePath: string) => {
       if (!repositoryPath) return;
       onClose();
@@ -103,14 +129,26 @@ export function CommandPalette({ open, onClose, repositoryPath }: Props) {
         const item = results[activeIndex];
         if (item && repositoryPath) {
           e.preventDefault();
-          openSearchResult(item.path);
+          if (e.shiftKey) {
+            openSearchResultExternal(item.path);
+          } else {
+            openSearchResultInApp(item.path);
+          }
         }
       }
     }
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, results, activeIndex, onClose, repositoryPath, openSearchResult]);
+  }, [
+    open,
+    results,
+    activeIndex,
+    onClose,
+    repositoryPath,
+    openSearchResultInApp,
+    openSearchResultExternal,
+  ]);
 
   if (!open) return null;
 
@@ -135,7 +173,8 @@ export function CommandPalette({ open, onClose, repositoryPath }: Props) {
             autoCapitalize="off"
             spellCheck={false}
             variant="borderless"
-            placeholder="输入"
+            placeholder="输入文件名"
+            suffix={<CommandPaletteShortcutHints />}
             autoFocus
           />
         </div>
@@ -150,7 +189,7 @@ export function CommandPalette({ open, onClose, repositoryPath }: Props) {
                 key={item.path}
                 className={`app-command-palette-item ${index === activeIndex ? "app-command-palette-item--active" : ""}`}
                 onClick={() => {
-                  openSearchResult(item.path);
+                  openSearchResultInApp(item.path);
                 }}
                 onMouseEnter={() => setActiveIndex(index)}
               >

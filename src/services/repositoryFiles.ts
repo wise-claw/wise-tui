@@ -33,6 +33,17 @@ export async function listRepositoryExplorerEntries(
   });
 }
 
+/** List one directory level for lazy file-tree expansion (`relativeDir` empty = repo root). */
+export async function listRepositoryExplorerChildren(
+  repositoryRoot: string,
+  relativeDir = "",
+): Promise<RepositoryExplorerEntry[]> {
+  return invoke<RepositoryExplorerEntry[]>("list_repository_explorer_children", {
+    root: repositoryRoot,
+    relativeDir,
+  });
+}
+
 /**
  * Create an empty file at a path relative to the repository root.
  */

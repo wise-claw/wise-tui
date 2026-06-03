@@ -175,3 +175,10 @@ cross-panel event wiring.
 - Runtime stream hook: `src/hooks/useClaudeSessions.ts`.
 - Pure tested domain logic: `src/services/workflow/engine.ts`.
 - Runtime JSON validation: `src/services/workflow/acceptanceVerdict.ts`.
+- Lazy repository file tree (`src/components/GitPanel/`): keep
+  `loadedChildrenByDir` as the only mutable tree cache (`""` = repo root);
+  derive UI tree via `buildLazyRepositoryFileTree`; load children only through
+  `listRepositoryExplorerChildren` on user expand (see `repositoryExplorerToggle.ts`,
+  `useRepositoryFilesExplorer.ts`). Do not reintroduce full-repo
+  `list_repository_explorer_entries` walks, mount-time child preload, duplicate
+  tree state, or virtual-scroll layers on this surface.

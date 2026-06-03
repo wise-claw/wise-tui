@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { Button, Empty, Input, Menu, Popconfirm, Spin, Tooltip } from "antd";
 import {
   ExclamationCircleOutlined,
@@ -12,7 +12,8 @@ import { ExpandIcon } from "../LeftSidebar/SidebarIcons";
 import { GitPanelWorkspaceSelector, type GitPanelWorkspaceSelectorProps } from "./GitPanelWorkspaceSelector";
 import { ExplorerInlineCreateRow } from "./ExplorerInlineCreateRow";
 import { ExplorerSearchResultList } from "./ExplorerSearchResultList";
-import { RepositoryTreeNode } from "./RepositoryTreeNode";
+import { RepositoryExplorerTreeActionsProvider } from "./RepositoryExplorerTreeActionsContext";
+import { RepositoryTreeList } from "./RepositoryTreeList";
 import { MIN_EXPLORER_SEARCH_QUERY_LEN } from "./fileTree";
 import type { GitPanelOpenFileOptions } from "./types";
 import { useRepositoryFilesExplorer } from "./useRepositoryFilesExplorer";
@@ -64,7 +65,10 @@ export function RepositoryFilesExplorer({
   const searchActive = trimmedSearch.length > 0;
   const rootInline = explorer.inlineCreate?.parentDir === "" && !searchActive;
   const treeEmpty =
-    !searchActive && explorer.filteredTree.length === 0 && !rootInline;
+    !searchActive &&
+    !explorer.hasRootLoaded &&
+    !explorer.loading &&
+    !rootInline;
   const searchListEmpty =
     searchActive &&
     !explorer.explorerSearchTooShort &&
@@ -72,6 +76,25 @@ export function RepositoryFilesExplorer({
     !explorer.loading &&
     !explorer.isRefreshing &&
     explorer.searchResultRows.length === 0;
+
+  const treeActions = useMemo(
+    () => ({
+      onToggleDir: explorer.handleToggleDir,
+      onSelectNode: explorer.handleSelectNode,
+      onOpenFile,
+      onInlineValueChange: explorer.handleInlineValueChange,
+      onInlineCommit: explorer.handleInlineCommit,
+      onInlineCancel: explorer.cancelInlineCreate,
+    }),
+    [
+      explorer.handleToggleDir,
+      explorer.handleSelectNode,
+      explorer.handleInlineValueChange,
+      explorer.handleInlineCommit,
+      explorer.cancelInlineCreate,
+      onOpenFile,
+    ],
+  );
 
   if (!trimmedRepositoryPath) {
     return (
@@ -81,7 +104,7 @@ export function RepositoryFilesExplorer({
     );
   }
   const setSectionCollapsed = onSectionCollapsedChange;
-  const switchingRepositoryTree = explorer.treeStale && explorer.explorerEntries.length === 0;
+  const switchingRepositoryTree = explorer.treeStale && !explorer.hasRootLoaded;
 
   if (sectionCollapsed && setSectionCollapsed) {
     if (hideCollapsedChrome) {
@@ -212,22 +235,17 @@ export function RepositoryFilesExplorer({
           onCancel={explorer.cancelInlineCreate}
         />
       ) : null}
-      {explorer.filteredTree.map((node) => (
-        <RepositoryTreeNode
-          key={node.path}
-          node={node}
+      <RepositoryExplorerTreeActionsProvider value={treeActions}>
+        <RepositoryTreeList
+          nodes={explorer.filteredTree}
           expandedDirs={explorer.expandedDirs}
+          expandEpoch={explorer.expandEpoch}
+          lastExpandPath={explorer.lastExpandPath}
           selectedPath={explorer.selected?.path ?? null}
-          onToggleDir={explorer.handleToggleDir}
-          onOpenFile={onOpenFile}
-          depth={0}
-          onSelectNode={explorer.handleSelectNode}
           inlineCreate={explorer.inlineCreate}
-          onInlineValueChange={explorer.handleInlineValueChange}
-          onInlineCommit={explorer.handleInlineCommit}
-          onInlineCancel={explorer.cancelInlineCreate}
+          loadingDirPath={explorer.loadingDirPath}
         />
-      ))}
+      </RepositoryExplorerTreeActionsProvider>
     </div>
   );
 
@@ -337,7 +355,11 @@ export function RepositoryFilesExplorer({
         </div>
       ) : null}
       <div
-        className={`git-files-explorer-scroll-region${explorer.isRefreshing ? " git-files-explorer-scroll-region--refreshing" : ""}`}
+        className={`git-files-explorer-scroll-region${
+          explorer.isRefreshing && explorer.filteredTree.length === 0
+            ? " git-files-explorer-scroll-region--refreshing"
+            : ""
+        }`}
       >
         {(explorer.loading ||
           explorer.isRefreshing ||
