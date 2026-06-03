@@ -1,18 +1,11 @@
 import type { ClaudeSession } from "../types";
 import { isDiskOnlyTerminalWorkerTab } from "../services/terminalDispatch";
+import { normalizeEmployeeBindingName } from "./employeeBindingName";
 import { isOmcBatchHistoryStubSessionId } from "./omcEmployeeBatchHistory";
 
 /** 员工名归一化：兼容 `终端01` 与 `终端1`。 */
 export function normalizeMonitorEmployeeName(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed) return "";
-  const match = trimmed.match(/^(.*?)(\d+)$/);
-  if (!match) return trimmed;
-  const prefix = match[1] ?? "";
-  const digits = match[2] ?? "";
-  const normalizedNumber = String(Number.parseInt(digits, 10));
-  if (!Number.isFinite(Number.parseInt(digits, 10))) return trimmed;
-  return `${prefix}${normalizedNumber}`;
+  return normalizeEmployeeBindingName(value);
 }
 
 function sessionUpdatedAtForSort(session: ClaudeSession): number {

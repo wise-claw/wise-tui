@@ -181,6 +181,7 @@ import {
   CLAUDE_STREAM_RUNTIME_READY_WAIT_MS,
   CLAUDE_STREAM_STALL_HOOK_EXTEND_MS,
   CLAUDE_STREAM_STALL_MS,
+  CODEX_STREAM_STALL_MS,
   CONTROL_REQUEST_EXPIRE_MS,
   CURSOR_STREAM_STALL_MS,
   TRELLIS_CONTEXT_BINDING_STORAGE_KEY,
@@ -416,7 +417,12 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const engineResolver = claudeSessionsOptionsRef.current?.resolveExecutionEngineRef?.current;
       const engine: SessionExecutionEngine =
         session && engineResolver ? engineResolver(session) : "claude";
-      const stallMs = engine === "cursor" ? CURSOR_STREAM_STALL_MS : CLAUDE_STREAM_STALL_MS;
+      const stallMs =
+        engine === "cursor"
+          ? CURSOR_STREAM_STALL_MS
+          : engine === "codex"
+            ? CODEX_STREAM_STALL_MS
+            : CLAUDE_STREAM_STALL_MS;
       const timer = window.setTimeout(fireStallCheck, stallMs);
       streamStallTimerByTabRef.current.set(key, timer);
     },
@@ -750,6 +756,14 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         contextExecutionEngine,
         store: getCachedModelProfileStore(),
       });
+      const codexModelLabel = codexModel?.trim() || "默认";
+      commitSessions((prev) =>
+        appendSystemMessageBySessionId(
+          prev,
+          tabSessionId,
+          `Codex 执行中（模型：${codexModelLabel}）…`,
+        ),
+      );
       try {
         await executeCodexCode(
           repositoryPath,
@@ -764,7 +778,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         throw e;
       }
     },
-    [resolveTrellisContextId],
+    [commitSessions, resolveTrellisContextId],
   );
 
   const runCursorOneshotWithInvocation = useCallback(

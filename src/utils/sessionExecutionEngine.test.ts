@@ -75,6 +75,16 @@ describe("resolveSessionExecutionEngine", () => {
     ).toBe("codex");
   });
 
+  test("matches terminal employee binding with normalized numeric suffix", () => {
+    expect(
+      resolveSessionExecutionEngine(
+        { repositoryPath: "/repo/demo", repositoryName: "demo/员工:终端01" },
+        [repo({ executionEngine: "claude" })],
+        [employee({ name: "终端1", executionEngine: "codex" })],
+      ),
+    ).toBe("codex");
+  });
+
   test("uses activeRepository for project-root session", () => {
     expect(
       resolveSessionExecutionEngine(

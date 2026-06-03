@@ -1,7 +1,20 @@
 import { normalizeSessionExecutionEngine, type SessionExecutionEngine } from "../constants/sessionExecutionEngine";
 import type { EmployeeItem, Repository } from "../types";
+import { normalizeEmployeeBindingName } from "./employeeBindingName";
 import { isProjectRootSessionDisplayName, normalizeRepositoryPathKey } from "./repositoryMainSessionBinding";
 import { extractBoundEmployeeNameFromDisplay } from "./sessionOwnerHints";
+
+function findEnabledEmployeeByBindingName(
+  employees: readonly EmployeeItem[],
+  bindingName: string,
+): EmployeeItem | undefined {
+  const target = normalizeEmployeeBindingName(bindingName);
+  if (!target) return undefined;
+  return employees.find(
+    (employee) =>
+      employee.enabled && normalizeEmployeeBindingName(employee.name) === target,
+  );
+}
 
 type ClaudeSessionLike = {
   repositoryPath: string;
@@ -49,10 +62,7 @@ export function resolveExecutionEngineRepository(
 ): Repository | null {
   const employeeName = extractBoundEmployeeNameFromDisplay(session.repositoryName ?? "");
   if (employeeName) {
-    const match = employees.find(
-      (employee) => employee.enabled && employee.name.trim() === employeeName.trim(),
-    );
-    if (match) return null;
+    if (findEnabledEmployeeByBindingName(employees, employeeName)) return null;
   }
 
   const pathKey = normalizeRepositoryPathKey(session.repositoryPath ?? "");
@@ -78,9 +88,7 @@ export function resolveSessionExecutionEngine(
 ): SessionExecutionEngine {
   const employeeName = extractBoundEmployeeNameFromDisplay(session.repositoryName ?? "");
   if (employeeName) {
-    const match = employees.find(
-      (employee) => employee.enabled && employee.name.trim() === employeeName.trim(),
-    );
+    const match = findEnabledEmployeeByBindingName(employees, employeeName);
     if (match) {
       return normalizeSessionExecutionEngine(match.executionEngine);
     }

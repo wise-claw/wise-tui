@@ -527,6 +527,24 @@ fn resolve_profile_model_id(profile: &ClaudeModelProfile) -> Result<String, Stri
         .ok_or_else(|| "档案中未找到模型 ID（请检查 env.ANTHROPIC_MODEL 等）".to_string())
 }
 
+/// 在 spawn `codex exec` 前将 Wise 当前激活的 Codex 档案写入 `~/.codex`（auth + config）。
+pub(crate) fn ensure_active_codex_profile_applied(db: &WiseDb) -> Result<(), String> {
+    let store = load_store(db);
+    let active_id = match store.active_codex_profile_id.as_deref() {
+        Some(id) if !id.trim().is_empty() => id.trim().to_string(),
+        _ => return Ok(()),
+    };
+    let profile = store
+        .profiles
+        .iter()
+        .find(|p| p.id == active_id)
+        .ok_or_else(|| format!("未找到 Codex 模型档案: {active_id}"))?;
+    if profile_engine(profile) != "codex" {
+        return Ok(());
+    }
+    apply_profile_to_disk(profile)
+}
+
 fn apply_profile_to_disk(profile: &ClaudeModelProfile) -> Result<(), String> {
     if profile_engine(profile) == "codex" {
         let envelope = parse_codex_profile_envelope(&profile.settings_json)?;

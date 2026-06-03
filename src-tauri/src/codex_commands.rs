@@ -1,7 +1,9 @@
 //! OpenAI Codex CLI execution (`codex exec`) for Wise main / member sessions.
 
 use crate::claude_commands::{ClaudeProcessState, ClaudeSessionRegistry};
+use crate::claude_model_profiles::ensure_active_codex_profile_applied;
 use crate::codex_stream_adapter::{map_codex_exec_stdout_line, CodexStdoutMap};
+use crate::wise_db::WiseDb;
 use serde::Serialize;
 use std::path::Path;
 use std::process::Stdio;
@@ -190,6 +192,7 @@ fn emit_codex_complete(app: &AppHandle, sid: &str, success: bool, invocation_key
 #[tauri::command]
 pub(crate) async fn execute_codex_code(
     app: tauri::AppHandle,
+    db: tauri::State<'_, WiseDb>,
     project_path: String,
     prompt: String,
     model: Option<String>,
@@ -197,6 +200,8 @@ pub(crate) async fn execute_codex_code(
     tab_session_id: Option<String>,
     trellis_context_id: Option<String>,
 ) -> Result<(), String> {
+    ensure_active_codex_profile_applied(&db)?;
+
     let registry = app.state::<ClaudeSessionRegistry>();
     let process_state = app.state::<ClaudeProcessState>();
     let session_id = tab_session_id

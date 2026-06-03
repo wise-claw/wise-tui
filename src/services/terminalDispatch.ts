@@ -14,18 +14,11 @@ import {
   resolveMainOwnerAgentNameForRepositoryPath,
 } from "../utils/repositoryMainSessionBinding";
 import { notificationHub } from "../notifications";
+import { normalizeEmployeeBindingName } from "../utils/employeeBindingName";
 
 /** 终端派发名称规范化：`终端01` 与 `终端1` 视为同一终端。 */
 export function normalizeTerminalDispatchName(name: string): string {
-  const trimmed = name.trim();
-  if (!trimmed) return "";
-  const match = trimmed.match(/^(.*?)(\d+)$/);
-  if (!match) return trimmed;
-  const prefix = match[1] ?? "";
-  const digits = match[2] ?? "";
-  const parsed = Number.parseInt(digits, 10);
-  if (!Number.isFinite(parsed)) return trimmed;
-  return `${prefix}${parsed}`;
+  return normalizeEmployeeBindingName(name);
 }
 
 export function isAtMentionBoundary(text: string, index: number): boolean {
