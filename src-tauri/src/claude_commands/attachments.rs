@@ -125,6 +125,47 @@ pub(crate) fn save_composer_image(
     Ok(dest.to_string_lossy().to_string())
 }
 
+/// 读取 `~/.wise/composer-images/` 下已落盘图片，返回 `data:*;base64,...` 供 Composer 缩略图恢复。
+#[tauri::command]
+pub(crate) fn read_composer_image(abs_path: String) -> Result<String, String> {
+    let path = PathBuf::from(abs_path.trim());
+    if !path.is_absolute() {
+        return Err("abs_path must be absolute".into());
+    }
+    let wise_root = wise_dir()?;
+    let composer_root = wise_root.join("composer-images");
+    if !path.starts_with(&composer_root) {
+        return Err("path outside ~/.wise/composer-images".into());
+    }
+    if !path.is_file() {
+        return Err("composer image not found".into());
+    }
+    let bytes = fs::read(&path).map_err(|e| e.to_string())?;
+    let mime = composer_image_mime_from_path(&path);
+    let b64 = B64.encode(bytes);
+    Ok(format!("data:{mime};base64,{b64}"))
+}
+
+fn composer_image_mime_from_path(path: &Path) -> &'static str {
+    match path
+        .extension()
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("png") => "image/png",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("gif") => "image/gif",
+        Some("webp") => "image/webp",
+        Some("svg") => "image/svg+xml",
+        Some("bmp") => "image/bmp",
+        Some("ico") => "image/x-icon",
+        Some("avif") => "image/avif",
+        Some("heic") | Some("heif") => "image/heic",
+        _ => "application/octet-stream",
+    }
+}
+
 fn repository_bucket_key(repository_path: &str) -> String {
     let repo_name = Path::new(repository_path)
         .file_name()

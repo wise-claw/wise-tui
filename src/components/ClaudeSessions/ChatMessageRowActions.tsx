@@ -1,6 +1,6 @@
 import { memo, useMemo } from "react";
 import type { ClaudeMessage, ClaudeSession } from "../../types";
-import { resolveChatMessageComposerInsertText } from "../../utils/claudeChatMessageDisplay";
+import { resolveChatMessageComposerInsertPayload } from "../../utils/claudeChatMessageDisplay";
 import { ChatMessageCopyButton } from "./ChatMessageCopyButton";
 import { ChatMessageInsertComposerButton } from "./ChatMessageInsertComposerButton";
 
@@ -22,15 +22,17 @@ function ChatMessageRowActionsInner({
   sessionsForDispatchLookup,
   floating = false,
 }: Props) {
-  const insertText = useMemo(
-    () => (sessionId ? resolveChatMessageComposerInsertText(msg, sessionsForDispatchLookup) : ""),
+  const insertPayload = useMemo(
+    () => (sessionId ? resolveChatMessageComposerInsertPayload(msg, sessionsForDispatchLookup) : null),
     [sessionId, msg, sessionsForDispatchLookup],
   );
-  const showInsert = Boolean(insertText.trim());
+  const showInsert = Boolean(insertPayload);
 
   const actions = (
     <>
-      {showInsert ? <ChatMessageInsertComposerButton sessionId={sessionId!} text={insertText} /> : null}
+      {showInsert ? (
+        <ChatMessageInsertComposerButton sessionId={sessionId!} insert={insertPayload!} />
+      ) : null}
       <ChatMessageCopyButton text={copyText} />
     </>
   );

@@ -10,6 +10,7 @@ import {
   isSystemMessageDisplayNoiseText,
   parseDispatchRecord,
   resolveChatMessageCopyText,
+  resolveChatMessageComposerInsertPayload,
   resolveChatMessageComposerInsertText,
 } from "./claudeChatMessageDisplay";
 
@@ -131,6 +132,22 @@ describe("chatMessagePlainTextForCopy", () => {
     };
     expect(resolveChatMessageCopyText(msg)).toBe("/add-dir 你好");
     expect(resolveChatMessageComposerInsertText(msg)).toBe("/add-dir 你好");
+  });
+});
+
+describe("resolveChatMessageComposerInsertPayload", () => {
+  test("user message with 附图 splits main text and disk paths", () => {
+    const path = "/Users/sjl/.wise/composer-images/wise/demo-image.png";
+    const msg: ClaudeMessage = {
+      id: 9,
+      role: "user",
+      content: `你好\n\n附图：@${path}`,
+      timestamp: 0,
+    };
+    const payload = resolveChatMessageComposerInsertPayload(msg);
+    expect(payload?.composerMain).toBe("你好");
+    expect(payload?.attachmentPaths).toEqual([path]);
+    expect(payload?.fullText).toContain(path);
   });
 });
 

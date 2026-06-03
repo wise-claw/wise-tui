@@ -1,3 +1,4 @@
+import { buildComposerInsertFromPlainText } from "../services/claudeComposerPrompt";
 import type { ClaudeMessage, ClaudeSession, MessagePart } from "../types";
 
 export function isToolOnlyUserMessage(msg: ClaudeMessage): boolean {
@@ -266,12 +267,35 @@ export function resolveChatMessageComposerInsertText(
   msg: ClaudeMessage,
   sessions?: readonly ClaudeSession[],
 ): string {
+  const payload = resolveChatMessageComposerInsertPayload(msg, sessions);
+  return payload?.composerMain ?? "";
+}
+
+export interface ChatMessageComposerInsertPayload {
+  /** 会话气泡/历史列表中的完整纯文本（含 `附图：@` 行，供复制等沿用） */
+  fullText: string;
+  /** 填入 Semi 编辑器的正文（有附图时已去掉尾缀） */
+  composerMain: string;
+  attachmentPaths: string[];
+}
+
+/** 消息行「填入输入框」：正文 + 从 `附图：@` 解析的落盘路径。 */
+export function resolveChatMessageComposerInsertPayload(
+  msg: ClaudeMessage,
+  sessions?: readonly ClaudeSession[],
+): ChatMessageComposerInsertPayload | null {
+  let fullText = "";
   if (msg.role === "user") {
-    if (isToolOnlyUserMessage(msg)) return "";
-    return userMessagePlainTextForDisplay(msg);
+    if (isToolOnlyUserMessage(msg)) return null;
+    fullText = userMessagePlainTextForDisplay(msg);
+  } else if (msg.role === "system") {
+    fullText = resolveSystemSessionActionText(msg, sessions);
+  } else {
+    return null;
   }
-  if (msg.role === "system") {
-    return resolveSystemSessionActionText(msg, sessions);
-  }
-  return "";
+  const trimmed = fullText.trim();
+  if (!trimmed) return null;
+  const { composerMain, attachmentPaths } = buildComposerInsertFromPlainText(trimmed);
+  if (!composerMain.trim() && attachmentPaths.length === 0) return null;
+  return { fullText: trimmed, composerMain, attachmentPaths };
 }

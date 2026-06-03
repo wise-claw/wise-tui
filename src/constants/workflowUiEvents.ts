@@ -7,17 +7,29 @@ export const WORKFLOW_UI_EVENT_APPLY_STARTER_PROMPT = "wise:apply-starter-prompt
 
 export interface ApplyStarterPromptDetail {
   sessionId: string;
+  /** 完整纯文本（兼容旧调用方；与 `composerMain` 相同时可只传此项） */
   prompt: string;
+  /** 填入编辑器的正文；有附图时应为去掉 `附图：@` 尾缀后的文本 */
+  composerMain?: string;
+  /** `~/.wise/composer-images/` 下已落盘绝对路径，与消息气泡 `附图：@` 一致 */
+  attachmentPaths?: string[];
 }
 
-/** 将文本写入指定会话 composer 并聚焦输入框（由 `ComposerRegion` 监听）。 */
+/** 将文本（及可选附图路径）写入指定会话 composer 并聚焦输入框（由 `ComposerRegion` 监听）。 */
 export function applyStarterPromptToComposer(detail: ApplyStarterPromptDetail): void {
   const sessionId = detail.sessionId.trim();
-  const prompt = detail.prompt;
-  if (!sessionId || !prompt.trim()) return;
+  const prompt = detail.prompt ?? "";
+  const composerMain = detail.composerMain?.trim() ?? prompt.trim();
+  const attachmentPaths = detail.attachmentPaths ?? [];
+  if (!sessionId || (!composerMain && attachmentPaths.length === 0 && !prompt.trim())) return;
   window.dispatchEvent(
     new CustomEvent<ApplyStarterPromptDetail>(WORKFLOW_UI_EVENT_APPLY_STARTER_PROMPT, {
-      detail: { sessionId, prompt },
+      detail: {
+        sessionId,
+        prompt,
+        composerMain: composerMain || prompt.trim(),
+        attachmentPaths,
+      },
     }),
   );
 }

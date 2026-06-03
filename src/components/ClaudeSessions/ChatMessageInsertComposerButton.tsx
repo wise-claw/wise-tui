@@ -1,25 +1,29 @@
 import { EditOutlined } from "@ant-design/icons";
 import { memo, useCallback } from "react";
 import { applyStarterPromptToComposer } from "../../constants/workflowUiEvents";
+import type { ChatMessageComposerInsertPayload } from "../../utils/claudeChatMessageDisplay";
 import { ChatMessageActionButton } from "./ChatMessageActionButton";
 
 interface Props {
   sessionId: string;
-  text: string;
+  insert: ChatMessageComposerInsertPayload;
 }
 
-function ChatMessageInsertComposerButtonInner({ sessionId, text }: Props) {
+function ChatMessageInsertComposerButtonInner({ sessionId, insert }: Props) {
   const handleInsert = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
       event.stopPropagation();
-      const trimmed = text.trim();
-      if (!trimmed) return;
-      applyStarterPromptToComposer({ sessionId, prompt: text });
+      applyStarterPromptToComposer({
+        sessionId,
+        prompt: insert.fullText,
+        composerMain: insert.composerMain,
+        attachmentPaths: insert.attachmentPaths,
+      });
     },
-    [sessionId, text],
+    [sessionId, insert],
   );
 
-  if (!text.trim()) return null;
+  if (!insert.composerMain.trim() && insert.attachmentPaths.length === 0) return null;
 
   return (
     <ChatMessageActionButton

@@ -477,6 +477,7 @@ pub fn run() {
             claude_commands::disk_sessions::load_claude_session_jsonl,
             claude_commands::disk_sessions::delete_claude_disk_session,
             claude_commands::attachments::save_composer_image,
+            claude_commands::attachments::read_composer_image,
             claude_commands::attachments::save_prd_pasted_image,
             claude_commands::attachments::materialize_prd_snapshot,
             claude_commands::attachments::read_project_relative_file,

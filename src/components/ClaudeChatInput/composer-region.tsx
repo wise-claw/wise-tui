@@ -75,7 +75,16 @@ import {
 } from "../../utils/composerSpeechStreaming";
 import type { MenuProps } from "antd";
 import { logClaudeDrop } from "./drop-debug";
-import { buildClaudeOutgoingPrompt } from "../../services/claudeComposerPrompt";
+import {
+  buildClaudeComposerSendPayload,
+  normalizeComposerPlainMain,
+} from "../../services/claudeComposerPrompt";
+import {
+  attachDiskPathsToComposerImages,
+  extractComposerAttachmentPathsFromText,
+  hydrateComposerImagesForRestore,
+} from "../../services/readComposerImage";
+import { userMessagePlainTextForDisplay } from "../../utils/claudeChatMessageDisplay";
 import { buildCursorComposerSendPayload } from "../../services/cursorComposerPrompt";
 import {
   contextPercentToneClassName,
@@ -111,7 +120,10 @@ import { recordMissionComposerMessage } from "./missionMentionHook";
 import type { ControlRequestStatus } from "../../notifications";
 import type { QuestionDockTabSpec } from "../../hooks/useQuestionDockTabs";
 import { buildClaudeSessionHoverTitle } from "../../utils/claudeSessionIdTooltip";
-import { WORKFLOW_UI_EVENT_APPLY_STARTER_PROMPT } from "../../constants/workflowUiEvents";
+import {
+  WORKFLOW_UI_EVENT_APPLY_STARTER_PROMPT,
+  type ApplyStarterPromptDetail,
+} from "../../constants/workflowUiEvents";
 import type { GitBranchEntry } from "../../types";
 
 /** 双栏右侧主会话：输入框底栏在截屏按钮旁选择目标仓库 */
@@ -220,6 +232,18 @@ function isNativeFileDrag(e: React.DragEvent): boolean {
 
 function isComposerFileLikeDrag(e: React.DragEvent): boolean {
   return isNativeFileDrag(e) || isWiseRepositoryFileDrag(e);
+}
+
+function dedupeComposerImages(images: ImageAttachmentPart[]): ImageAttachmentPart[] {
+  const seen = new Set<string>();
+  const out: ImageAttachmentPart[] = [];
+  for (const img of images) {
+    const key = img.id.trim() || img.dataUrl || img.diskPath?.trim() || "";
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(img);
+  }
+  return out;
 }
 
 function isImageFile(file: File): boolean {
@@ -432,6 +456,8 @@ function ComposerInner({
   const plainSurfaceRef = useRef<ComposerPlainSurface | null>(null);
   const lastEditorPlainRef = useRef("");
   const ignoreNextContentSyncRef = useRef(false);
+  const skipContentSyncRemainingRef = useRef(0);
+  const composerSendInFlightRef = useRef(false);
   const cursorRef = useRef(0);
   const dragOverLoggedRef = useRef(false);
   const [trigger, setTrigger] = useState<TriggerInfo>({ mode: null, query: "", rect: null });
@@ -468,6 +494,8 @@ function ComposerInner({
   const lastSentDraftRef = useRef<LastSentComposerDraft | null>(null);
   /** 发送成功后、输入区为空时按 Esc 可恢复的草稿（与占位符「Esc 撤销」一致；开始新输入后自动失效） */
   const postSendEscUndoRef = useRef<LastSentComposerDraft | null>(null);
+  /** 上键浏览历史前暂存的当前草稿（下键回到 index -1 时恢复） */
+  const promptHistorySavedRef = useRef<{ prompt: Prompt; images: ImageAttachmentPart[] } | null>(null);
 
   const dockTabs = questionDockTabs ?? [];
   const useAggregatedQuestionDock = dockTabs.length >= 1;
@@ -581,28 +609,6 @@ function ComposerInner({
       repairTiptapTrailingSpaceIfNeeded(aiChatRef.current, displayPlain);
     });
   }, [displayPlain]);
-
-  useEffect(() => {
-    function handleApplyStarterPrompt(event: Event) {
-      const custom = event as CustomEvent<{ sessionId?: string; prompt?: string }>;
-      const targetSessionId = custom.detail?.sessionId?.trim();
-      const starterPrompt = custom.detail?.prompt ?? "";
-      if (!targetSessionId || targetSessionId !== session.id || !starterPrompt.trim()) return;
-      ignoreNextContentSyncRef.current = true;
-      lastEditorPlainRef.current = starterPrompt;
-      cursorRef.current = starterPrompt.length;
-      set(singleTextPrompt(starterPrompt), starterPrompt.length);
-      scheduleSafeAiChatSetContent(() => aiChatRef.current, starterPrompt, () => {
-        repairTiptapTrailingSpaceIfNeeded(aiChatRef.current, starterPrompt);
-        aiChatRef.current?.focusEditor?.("end");
-        composerEscapeRootRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-      });
-    }
-    window.addEventListener(WORKFLOW_UI_EVENT_APPLY_STARTER_PROMPT, handleApplyStarterPrompt as EventListener);
-    return () => {
-      window.removeEventListener(WORKFLOW_UI_EVENT_APPLY_STARTER_PROMPT, handleApplyStarterPrompt as EventListener);
-    };
-  }, [session.id, set]);
 
   const refreshClaudeModelPicker = useCallback(() => {
     if (isCursorEngine) {
@@ -1317,27 +1323,166 @@ function ComposerInner({
     [logicalPlain, images.length, contextItems.length],
   );
 
-  const restoreComposerDraft = useCallback((draft: LastSentComposerDraft) => {
-    rollbackSpeechTranscriptBaselineOnSendFailure();
-    const display = promptToDisplayPlain(draft.prompt);
-    ignoreNextContentSyncRef.current = true;
-    lastEditorPlainRef.current = display;
-    cursorRef.current = promptLength(draft.prompt);
-    speechStreamAnchorRef.current = null;
-    flushSync(() => {
-      set(draft.prompt, promptLength(draft.prompt));
-      setImages(draft.images.map((img) => ({ ...img })));
-    });
-    for (const item of draft.contextItems) {
-      contextAdd(item);
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
+
+  /** 将正文、附图缩略图同步回 React 与 Semi 编辑器（上键历史 / Esc 撤回共用）。 */
+  const restoreComposerSurface = useCallback(
+    (
+      entryPrompt: Prompt,
+      entryImages: ImageAttachmentPart[],
+      opts?: {
+        contextItems?: ContextItem[];
+        rollbackSpeechBaseline?: boolean;
+        fallbackPathsFromText?: string[];
+      },
+    ) => {
+      void (async () => {
+        const hydrated = await hydrateComposerImagesForRestore(
+          entryImages.map((img) => ({ ...img })),
+          opts?.fallbackPathsFromText,
+        );
+        if (opts?.rollbackSpeechBaseline) {
+          rollbackSpeechTranscriptBaselineOnSendFailure();
+        }
+        const display = promptToDisplayPlain(entryPrompt);
+        ignoreNextContentSyncRef.current = true;
+        skipContentSyncRemainingRef.current = 3;
+        lastEditorPlainRef.current = display;
+        cursorRef.current = promptLength(entryPrompt);
+        speechStreamAnchorRef.current = null;
+        flushSync(() => {
+          set(entryPrompt, promptLength(entryPrompt));
+          setImages(dedupeComposerImages(hydrated));
+        });
+        if (opts?.contextItems?.length) {
+          for (const item of opts.contextItems) {
+            contextAdd(item);
+          }
+        }
+        queueMicrotask(() => {
+          scheduleSafeAiChatSetContent(() => aiChatRef.current, display, () => {
+            repairTiptapTrailingSpaceIfNeeded(aiChatRef.current, display);
+            aiChatRef.current?.focusEditor?.("end");
+            composerEscapeRootRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          });
+        });
+      })();
+    },
+    [set, setImages, contextAdd, rollbackSpeechTranscriptBaselineOnSendFailure],
+  );
+
+  useEffect(() => {
+    function handleApplyStarterPrompt(event: Event) {
+      const custom = event as CustomEvent<ApplyStarterPromptDetail>;
+      const targetSessionId = custom.detail?.sessionId?.trim();
+      if (!targetSessionId || targetSessionId !== session.id) return;
+      const composerMain = (custom.detail?.composerMain ?? custom.detail?.prompt ?? "").trim();
+      const attachmentPaths = custom.detail?.attachmentPaths ?? [];
+      if (!composerMain && attachmentPaths.length === 0) return;
+      const entryPrompt = singleTextPrompt(composerMain);
+      if (attachmentPaths.length > 0) {
+        restoreComposerSurface(entryPrompt, [], { fallbackPathsFromText: attachmentPaths });
+      } else {
+        ignoreNextContentSyncRef.current = true;
+        lastEditorPlainRef.current = composerMain;
+        cursorRef.current = composerMain.length;
+        set(entryPrompt, composerMain.length);
+        scheduleSafeAiChatSetContent(() => aiChatRef.current, composerMain, () => {
+          repairTiptapTrailingSpaceIfNeeded(aiChatRef.current, composerMain);
+          aiChatRef.current?.focusEditor?.("end");
+          composerEscapeRootRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        });
+      }
     }
-    queueMicrotask(() => {
-      scheduleSafeAiChatSetContent(() => aiChatRef.current, display, () => {
-        repairTiptapTrailingSpaceIfNeeded(aiChatRef.current, display);
-        aiChatRef.current?.focusEditor?.("end");
+    window.addEventListener(WORKFLOW_UI_EVENT_APPLY_STARTER_PROMPT, handleApplyStarterPrompt as EventListener);
+    return () => {
+      window.removeEventListener(WORKFLOW_UI_EVENT_APPLY_STARTER_PROMPT, handleApplyStarterPrompt as EventListener);
+    };
+  }, [session.id, set, restoreComposerSurface]);
+
+  const lastUserMessageAttachmentPaths = useCallback((): string[] => {
+    const messages = sessionRef.current.messages;
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const msg = messages[i]!;
+      if (msg.role !== "user") continue;
+      return extractComposerAttachmentPathsFromText(userMessagePlainTextForDisplay(msg));
+    }
+    return [];
+  }, []);
+
+  const restoreComposerDraft = useCallback(
+    (draft: LastSentComposerDraft) => {
+      restoreComposerSurface(draft.prompt, draft.images, {
+        contextItems: draft.contextItems,
+        rollbackSpeechBaseline: true,
+        fallbackPathsFromText: lastUserMessageAttachmentPaths(),
       });
+    },
+    [restoreComposerSurface, lastUserMessageAttachmentPaths],
+  );
+
+  const historyIndexRef = useRef(historyIndex);
+  historyIndexRef.current = historyIndex;
+  const promptRef = useRef(prompt);
+  promptRef.current = prompt;
+  const imagesRef = useRef(images);
+  imagesRef.current = images;
+
+  const tryPromptHistoryNavigationRef = useRef<(direction: "up" | "down") => boolean>(() => false);
+  tryPromptHistoryNavigationRef.current = (direction: "up" | "down"): boolean => {
+    if (triggerRef.current.mode) return false;
+    const surface = plainSurfaceRef.current;
+    const plain = (surface?.getPlain() ?? promptToLogicalPlainString(promptRef.current)).replace(
+      /\u200B/g,
+      "",
+    );
+    const cur = surface?.getCursor() ?? cursorRef.current;
+    if (!canNavigateHistoryAtCursor(cur, plain)) return false;
+    if (direction === "down" && historyIndexRef.current === -1) return false;
+
+    const attachmentFallback = lastUserMessageAttachmentPaths();
+
+    if (direction === "up" && historyIndexRef.current === -1) {
+      const snap = postSendEscUndoRef.current;
+      if (snap) {
+        restoreComposerSurface(snap.prompt, snap.images, {
+          contextItems: snap.contextItems,
+          fallbackPathsFromText: attachmentFallback,
+        });
+        return true;
+      }
+    }
+
+    const result = navigatePromptHistory(
+      direction,
+      promptRef.current,
+      historyIndexRef.current,
+      "normal",
+      imagesRef.current,
+    );
+    if (direction === "up") {
+      if (result.savedCurrent) {
+        promptHistorySavedRef.current = {
+          prompt: result.savedCurrent.prompt,
+          images: (result.savedCurrent.images ?? []).map((img) => ({ ...img })),
+        };
+      }
+    } else if (result.index === -1 && promptHistorySavedRef.current) {
+      const saved = promptHistorySavedRef.current;
+      promptHistorySavedRef.current = null;
+      restoreComposerSurface(saved.prompt, saved.images, {
+        fallbackPathsFromText: attachmentFallback,
+      });
+      setHistoryIndex(-1);
+      return true;
+    }
+    restoreComposerSurface(result.prompt, result.images, {
+      fallbackPathsFromText: attachmentFallback,
     });
-  }, [set, setImages, contextAdd, rollbackSpeechTranscriptBaselineOnSendFailure]);
+    setHistoryIndex(result.index);
+    return true;
+  };
 
   const triggerRef = useRef(trigger);
   triggerRef.current = trigger;
@@ -1360,15 +1505,20 @@ function ComposerInner({
     if (!isEscapeTargetInsideComposerRoot(composerEscapeRootRef.current, target)) return false;
     if (triggerRef.current.mode) return false;
     /** 必须先于 Tiptap undo：清空编辑器会产生可撤销步骤，若先 undo 只会还原正文、不会还原 React 侧缩略图 */
-    const snap = postSendEscUndoRef.current;
-    if (snap && !hasComposerPayloadRef.current) {
-      postSendEscUndoRef.current = null;
-      restoreComposerDraft(snap);
-      if (isSessionBusyRef.current) {
-        onCancelRef.current({ retractLastUserTurn: true });
+    if (!hasComposerPayloadRef.current) {
+      const snap = postSendEscUndoRef.current;
+      if (snap) {
+        postSendEscUndoRef.current = null;
+        restoreComposerDraft(snap);
+        if (isSessionBusyRef.current) {
+          onCancelRef.current({ retractLastUserTurn: true });
+        }
+        setHistoryIndex(-1);
+        return true;
       }
-      setHistoryIndex(-1);
-      return true;
+      if (tryPromptHistoryNavigationRef.current("up")) {
+        return true;
+      }
     }
     if (tryComposerTiptapUndo(aiChatRef.current)) {
       setHistoryIndex(-1);
@@ -1379,6 +1529,7 @@ function ComposerInner({
 
   useEffect(() => {
     postSendEscUndoRef.current = null;
+    promptHistorySavedRef.current = null;
   }, [session.id, draftBucketKey]);
 
   useEffect(() => {
@@ -1403,20 +1554,46 @@ function ComposerInner({
     return () => window.removeEventListener("keydown", onWindowEscapeCapture, { capture: true });
   }, []);
 
+  /** 编辑器聚焦时优先拦截 ↑/↓，避免 Tiptap 抢走历史恢复（输入区为空时生效）。 */
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.shiftKey) return;
+      if (e.key === "ArrowUp" && tryPromptHistoryNavigationRef.current("up")) {
+        e.preventDefault();
+        e.stopPropagation();
+      } else if (e.key === "ArrowDown" && tryPromptHistoryNavigationRef.current("down")) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    shell.addEventListener("keydown", onKeyDown, { capture: true });
+    return () => shell.removeEventListener("keydown", onKeyDown, { capture: true });
+  }, [session.id]);
+
   const handleSend = useCallback(
     async (plainFromEditor?: string) => {
+      if (composerSendInFlightRef.current) return;
+      composerSendInFlightRef.current = true;
+      try {
       clearSpeechIdleAutoSendTimer();
       const promptSnap: Prompt =
         plainFromEditor !== undefined ? singleTextPrompt(plainFromEditor) : prompt.map((part) => ({ ...part }));
-      const logicalSnap = promptToLogicalPlainString(promptSnap).replace(/\u200B/g, "");
+      const logicalSnap = normalizeComposerPlainMain(
+        promptToLogicalPlainString(promptSnap),
+        images.length > 0,
+      );
       const contextSnap = contextItems.map((c) => ({ ...c }));
-      const imagesSnap = images.map((img) => ({ ...img }));
+      const imagesSnap = dedupeComposerImages(images.map((img) => ({ ...img })));
       const hasSnapPayload =
         logicalSnap.trim().length > 0 || imagesSnap.length > 0 || contextSnap.length > 0;
       if (!hasSnapPayload) return;
 
+      const historyPrompt =
+        imagesSnap.length > 0 ? singleTextPrompt(logicalSnap) : promptSnap;
       const rollbackDraft: LastSentComposerDraft = {
-        prompt: promptSnap.map((part) => ({ ...part })),
+        prompt: historyPrompt.map((part) => ({ ...part })),
         images: imagesSnap.map((img) => ({ ...img })),
         contextItems: contextSnap.map((c) => ({ ...c })),
       };
@@ -1454,13 +1631,21 @@ function ComposerInner({
         });
         clearComposerSurfaceSync(logicalSnap.trim());
         let outbound: string;
+        let userBubblePrompt: string;
         try {
-          outbound = await buildClaudeOutgoingPrompt({
+          const payload = await buildClaudeComposerSendPayload({
             prompt: promptSnap,
             contextItems: contextSnap,
             images: imagesSnap,
             repositoryPath: session.repositoryPath,
+            userBubbleMain: logicalSnap,
           });
+          outbound = payload.outbound;
+          userBubblePrompt = payload.userBubblePrompt;
+          rollbackDraft.images = attachDiskPathsToComposerImages(
+            imagesSnap,
+            payload.imageDiskPaths,
+          ).map((img) => ({ ...img }));
         } catch {
           restoreComposerDraft(rollbackDraft);
           return;
@@ -1475,7 +1660,7 @@ function ComposerInner({
           return;
         }
 
-        addToHistory(promptSnap, "normal");
+        addToHistory(historyPrompt, "normal", undefined, rollbackDraft.images);
         setHistoryIndex(-1);
 
         const inferredTarget = inferPendingQueueTargetFromPrompt(
@@ -1523,11 +1708,16 @@ function ComposerInner({
               targetWorkflowId: target.targetWorkflowId,
               targetWorkflowName: target.targetWorkflowName,
             },
+            { userBubblePrompt },
           );
           return;
         }
 
-        const consumePending = onEnqueueAsPendingTask({ promptText: dispatchPromptText, ...target });
+        const consumePending = onEnqueueAsPendingTask({
+          promptText: dispatchPromptText,
+          executeBubbleOptions: { userBubblePrompt },
+          ...target,
+        });
         sendFlowNodes.push({
           label: "加入待执行队列",
           timestamp: Date.now(),
@@ -1558,10 +1748,10 @@ function ComposerInner({
         timestamp: Date.now(),
         detail: "用户点击发送按钮或按下 Enter 触发发送。",
       });
-      lastSentDraftRef.current = rollbackDraft;
       clearComposerSurfaceSync(logicalSnap.trim());
 
       let outbound: string;
+      let userBubblePrompt: string | undefined;
       let cursorSendPayload: Awaited<ReturnType<typeof buildCursorComposerSendPayload>> | null = null;
       try {
         if (isCursorEngine && imagesSnap.length > 0) {
@@ -1572,14 +1762,27 @@ function ComposerInner({
             repositoryPath: session.repositoryPath,
           });
           outbound = cursorSendPayload.outbound;
+          const paths = extractComposerAttachmentPathsFromText(outbound);
+          rollbackDraft.images = attachDiskPathsToComposerImages(
+            imagesSnap,
+            imagesSnap.map((_, i) => paths[i] ?? null),
+          ).map((img) => ({ ...img }));
         } else {
-          outbound = await buildClaudeOutgoingPrompt({
+          const payload = await buildClaudeComposerSendPayload({
             prompt: promptSnap,
             contextItems: contextSnap,
             images: imagesSnap,
             repositoryPath: session.repositoryPath,
+            userBubbleMain: logicalSnap,
           });
+          outbound = payload.outbound;
+          userBubblePrompt = payload.userBubblePrompt;
+          rollbackDraft.images = attachDiskPathsToComposerImages(
+            imagesSnap,
+            payload.imageDiskPaths,
+          ).map((img) => ({ ...img }));
         }
+        lastSentDraftRef.current = rollbackDraft;
       } catch {
         const draft = lastSentDraftRef.current;
         lastSentDraftRef.current = null;
@@ -1598,7 +1801,7 @@ function ComposerInner({
         return;
       }
 
-      addToHistory(promptSnap, "normal");
+      addToHistory(historyPrompt, "normal", undefined, rollbackDraft.images);
       setHistoryIndex(-1);
 
       let consumePending: string | PendingExecutionTask | undefined;
@@ -1643,6 +1846,8 @@ function ComposerInner({
       let executeOptions: ClaudeComposerExecuteBubbleOptions | undefined;
       if (cursorSendPayload?.cursorAttachments.length) {
         executeOptions = { cursorAttachments: cursorSendPayload.cursorAttachments };
+      } else if (userBubblePrompt) {
+        executeOptions = { userBubblePrompt };
       }
 
       // @终端 / @团队 立即派发，不与其他执行体共用 FIFO（避免主会话排队阻塞终端/工作流）。
@@ -1710,6 +1915,9 @@ function ComposerInner({
       postSendEscUndoRef.current = rollbackDraft;
       finalizeSpeechTranscriptBaselineAfterSend();
       onExecute(session.id, dispatchPromptText, consumePending, dispatchTargetForExecute, executeOptions);
+      } finally {
+        composerSendInFlightRef.current = false;
+      }
     },
     [
       isSessionBusy,
@@ -1745,24 +1953,14 @@ function ComposerInner({
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (trigger.mode) return;
-      if (e.key === "ArrowUp" && !e.shiftKey) {
-        if (canNavigateHistoryAtCursor(cursor, logicalPlain)) {
-          e.preventDefault();
-          const result = navigatePromptHistory("up", prompt, historyIndex, "normal");
-          set(result.prompt, promptLength(result.prompt));
-          setHistoryIndex(result.index);
-        }
-      } else if (e.key === "ArrowDown" && !e.shiftKey && historyIndex !== -1) {
-        if (canNavigateHistoryAtCursor(cursor, logicalPlain)) {
-          e.preventDefault();
-          const result = navigatePromptHistory("down", prompt, historyIndex, "normal");
-          set(result.prompt, promptLength(result.prompt));
-          setHistoryIndex(result.index);
-        }
+      if (e.shiftKey) return;
+      if (e.key === "ArrowUp" && tryPromptHistoryNavigationRef.current("up")) {
+        e.preventDefault();
+      } else if (e.key === "ArrowDown" && tryPromptHistoryNavigationRef.current("down")) {
+        e.preventDefault();
       }
     },
-    [trigger.mode, logicalPlain, cursor, historyIndex, prompt, set, setHistoryIndex],
+    [],
   );
 
   const removeImage = useCallback((id: string) => {
@@ -2657,7 +2855,7 @@ function ComposerInner({
             <div ref={shellRef} className="app-claude-semi-chat-input-wrap" style={{ width: "100%" }}>
               <AIChatInput
                 ref={aiChatRef}
-                placeholder="@ 终端/工作流/文件，/ 命令，Enter 发送，Shift+Enter 换行，Esc 撤销"
+                placeholder="@ 终端/工作流/文件，/ 命令，Enter 发送，Shift+Enter 换行，↑/Esc 恢复上条（含图片）"
                 keepSkillAfterSend={false}
                 showUploadButton={false}
                 showUploadFile={false}
@@ -2674,6 +2872,10 @@ function ComposerInner({
                   void handleSendRef.current(plain);
                 }}
                 onContentChange={(contents: Content[]) => {
+                  if (skipContentSyncRemainingRef.current > 0) {
+                    skipContentSyncRemainingRef.current -= 1;
+                    return;
+                  }
                   if (ignoreNextContentSyncRef.current) {
                     ignoreNextContentSyncRef.current = false;
                     return;

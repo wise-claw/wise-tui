@@ -1,5 +1,5 @@
 import type { ClaudeMessage, ClaudeSession } from "../types";
-import { isToolOnlyUserMessage } from "../utils/claudeChatMessageDisplay";
+import { isToolOnlyUserMessage, userMessagePlainTextForDisplay } from "../utils/claudeChatMessageDisplay";
 
 /** 单条助手气泡：取 `parts` 中**最后一条** `type === "text"` 的可见内容；若无则退回 `content`。 */
 export function assistantMessageVisiblePlainText(msg: ClaudeMessage): string {
@@ -135,12 +135,20 @@ export function setSessionRunningWithUserPrompt(
   sessionId: string,
   prompt: string,
 ): ClaudeSession[] {
+  const trimmed = prompt.trim();
+  if (!trimmed) return sessions;
   return sessions.map((session) => {
     if (session.id !== sessionId) return session;
+    const last = session.messages[session.messages.length - 1];
+    if (last?.role === "user" && !isToolOnlyUserMessage(last)) {
+      if (userMessagePlainTextForDisplay(last).trim() === trimmed) {
+        return { ...session, status: "running" as const };
+      }
+    }
     return {
       ...session,
       status: "running",
-      messages: [...session.messages, createUserTextMessage(prompt)],
+      messages: [...session.messages, createUserTextMessage(trimmed)],
     };
   });
 }

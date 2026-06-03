@@ -543,6 +543,8 @@ export interface ImageAttachmentPart {
   filename: string;
   mime: string;
   dataUrl: string;
+  /** 发送落盘后的绝对路径；历史持久化优先存路径，恢复时再读回 dataUrl */
+  diskPath?: string;
 }
 
 export type ContextItem = {

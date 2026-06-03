@@ -31,6 +31,7 @@ import {
 import { buildClaudeSessionHoverTitle } from "../../utils/claudeSessionIdTooltip";
 import type { SessionGroup } from "./sessionGrouping";
 import { applyStarterPromptToComposer } from "../../constants/workflowUiEvents";
+import { buildComposerInsertFromPlainText } from "../../services/claudeComposerPrompt";
 import {
   FEATURE_SESSION_LIST_PAGE_SIZE,
   SHOW_SESSION_TASK_COMPLETION_FEATURE,
@@ -61,8 +62,15 @@ function copySessionUserQuestionText(text: string) {
 }
 
 function insertSessionUserQuestionIntoComposer(sessionId: string, text: string) {
-  if (!text.trim()) return;
-  applyStarterPromptToComposer({ sessionId, prompt: text });
+  const trimmed = text.trim();
+  if (!trimmed) return;
+  const { composerMain, attachmentPaths } = buildComposerInsertFromPlainText(trimmed);
+  applyStarterPromptToComposer({
+    sessionId,
+    prompt: trimmed,
+    composerMain,
+    attachmentPaths,
+  });
 }
 
 export interface ClaudeChatSessionFeatureToolbarProps {

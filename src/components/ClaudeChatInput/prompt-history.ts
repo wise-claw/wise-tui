@@ -1,4 +1,4 @@
-import type { ContentPart, Prompt, FileSelection } from "../../types";
+import type { ContentPart, Prompt, FileSelection, ImageAttachmentPart } from "../../types";
 import { DEFAULT_PROMPT as _DEFAULT_PROMPT } from "../../types";
 import { deleteAppSetting, getAppSetting, setAppSetting } from "../../services/appSettingsStore";
 
@@ -115,7 +115,22 @@ const MAX_HISTORY = 100;
 interface HistoryEntry {
   prompt: Prompt;
   comments: { path: string; selection?: FileSelection; text: string }[];
+  /** 发送时 Composer 缩略图（含 dataUrl）；旧记录可能缺失 */
+  images?: ImageAttachmentPart[];
   timestamp: number;
+}
+
+function cloneImagePart(img: ImageAttachmentPart): ImageAttachmentPart {
+  const diskPath = img.diskPath?.trim();
+  return {
+    ...img,
+    dataUrl: diskPath ? "" : img.dataUrl,
+    diskPath,
+  };
+}
+
+function entryImages(entry: HistoryEntry): ImageAttachmentPart[] {
+  return (entry.images ?? []).map(cloneImagePart);
 }
 
 const historyCache: Record<"normal" | "shell", HistoryEntry[]> = {
@@ -176,11 +191,27 @@ function saveHistory(mode: "normal" | "shell", entries: HistoryEntry[]) {
   void setAppSetting(keyByMode(mode), JSON.stringify(next));
 }
 
-export function addToHistory(prompt: Prompt, mode: "normal" | "shell", comments?: { path: string; selection?: FileSelection; text: string }[]) {
-  if (isPromptEqual(prompt, _DEFAULT_PROMPT)) return;
+export function addToHistory(
+  prompt: Prompt,
+  mode: "normal" | "shell",
+  comments?: { path: string; selection?: FileSelection; text: string }[],
+  images?: ImageAttachmentPart[],
+) {
+  if (isPromptEqual(prompt, _DEFAULT_PROMPT) && (images?.length ?? 0) === 0) return;
   const history = loadHistory(mode);
-  if (history.length > 0 && isPromptEqual(history[0].prompt, prompt)) return;
-  history.unshift({ prompt, comments: comments ?? [], timestamp: Date.now() });
+  if (history.length > 0 && isPromptEqual(history[0].prompt, prompt)) {
+    if ((images?.length ?? 0) > 0) {
+      history[0]!.images = (images ?? []).map(cloneImagePart);
+      saveHistory(mode, history);
+    }
+    return;
+  }
+  history.unshift({
+    prompt,
+    comments: comments ?? [],
+    images: (images ?? []).map(cloneImagePart),
+    timestamp: Date.now(),
+  });
   saveHistory(mode, history);
 }
 
@@ -189,34 +220,52 @@ export function navigatePromptHistory(
   currentPrompt: Prompt,
   currentIndex: number,
   mode: "normal" | "shell",
-): { prompt: Prompt; index: number; savedCurrent: HistoryEntry | null } {
+  currentImages: ImageAttachmentPart[] = [],
+): { prompt: Prompt; images: ImageAttachmentPart[]; index: number; savedCurrent: HistoryEntry | null } {
   const history = loadHistory(mode);
   let index = currentIndex;
   let savedCurrent: HistoryEntry | null = null;
 
   if (direction === "up") {
-    if (index === -1 && history.length === 0) return { prompt: currentPrompt, index: -1, savedCurrent: null };
+    if (index === -1 && history.length === 0) {
+      return { prompt: currentPrompt, images: currentImages.map(cloneImagePart), index: -1, savedCurrent: null };
+    }
     if (index === -1) {
-      savedCurrent = { prompt: currentPrompt, comments: [], timestamp: Date.now() };
+      savedCurrent = {
+        prompt: currentPrompt,
+        comments: [],
+        images: currentImages.map(cloneImagePart),
+        timestamp: Date.now(),
+      };
       index = 0;
     } else {
       index = Math.min(index + 1, history.length - 1);
     }
-    return { prompt: history[index].prompt, index, savedCurrent };
+    const entry = history[index]!;
+    return { prompt: entry.prompt, images: entryImages(entry), index, savedCurrent };
   }
 
   if (direction === "down") {
-    if (index === -1) return { prompt: currentPrompt, index: -1, savedCurrent: null };
+    if (index === -1) {
+      return { prompt: currentPrompt, images: currentImages.map(cloneImagePart), index: -1, savedCurrent: null };
+    }
     if (index === 0) {
-      index = -1;
-      return { prompt: currentPrompt, index: -1, savedCurrent: null };
+      return { prompt: currentPrompt, images: currentImages.map(cloneImagePart), index: -1, savedCurrent: null };
     }
     index = index - 1;
-    if (index === -1) return { prompt: currentPrompt, index: -1, savedCurrent: null };
-    return { prompt: history[index].prompt, index, savedCurrent: null };
+    const entry = history[index]!;
+    return { prompt: entry.prompt, images: entryImages(entry), index, savedCurrent: null };
   }
 
-  return { prompt: currentPrompt, index: -1, savedCurrent: null };
+  return { prompt: currentPrompt, images: currentImages.map(cloneImagePart), index: -1, savedCurrent: null };
+}
+
+/** @internal 单测重置内存历史，避免用例间污染 */
+export function resetPromptHistoryCacheForTests(): void {
+  historyCache.normal = [];
+  historyCache.shell = [];
+  historyHydrated = true;
+  historyHydrating = false;
 }
 
 export function canNavigateHistoryAtCursor(cursorPos: number, promptText: string): boolean {

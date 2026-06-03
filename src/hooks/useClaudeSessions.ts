@@ -301,6 +301,10 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   const workflowRunBySessionRef = useRef<Map<string, string>>(new Map());
   const sessionIdMapRef = useRef<Map<string, string>>(new Map());
   const executeSessionRetryCountRef = useRef<Map<string, number>>(new Map());
+  /** 防止同一会话在极短时间内重复追加相同用户气泡（双触发发送兜底）。 */
+  const recentExecutePromptBySessionRef = useRef<Map<string, { prompt: string; at: number }>>(
+    new Map(),
+  );
   const pendingTurnFailoverRef = useRef<PendingTurnFailoverContext | null>(null);
   const attemptTurnFailoverAndRetryRef = useRef<
     (ctx: PendingTurnFailoverContext, errorPreview: string) => Promise<boolean>
@@ -2382,6 +2386,18 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         return false;
       }
       executeSessionRetryCountRef.current.delete(sessionId);
+
+      const trimmedPrompt = prompt.trim();
+      if (trimmedPrompt) {
+        const recent = recentExecutePromptBySessionRef.current.get(sessionId);
+        if (recent && recent.prompt === trimmedPrompt && Date.now() - recent.at < 900) {
+          return true;
+        }
+        recentExecutePromptBySessionRef.current.set(sessionId, {
+          prompt: trimmedPrompt,
+          at: Date.now(),
+        });
+      }
 
       const forceFreshClaudeSession = opts?.terminalFreshTurn === true;
       const engineResolverEarly = claudeSessionsOptionsRef.current?.resolveExecutionEngineRef?.current;
