@@ -1,6 +1,6 @@
 import { CloudSyncOutlined, PlusOutlined } from "@ant-design/icons";
 import { Button, Empty, Input, Modal, Segmented, Switch, Typography, message } from "antd";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   applyClaudeModelProfile,
   createClaudeModelProfile,
@@ -81,6 +81,20 @@ function validateSettingsJson(text: string, engine: ModelProfileEngine): string 
 
 export function ClaudeModelTopbarPanel({ store, setStore, loading, onApplied }: Props) {
   const [panelEngine, setPanelEngine] = useState<ModelProfileEngine>("claude");
+  const engineInitializedRef = useRef(false);
+
+  useEffect(() => {
+    if (engineInitializedRef.current || !store) return;
+    const engines: ModelProfileEngine[] = ["claude", "codex", "opencode"];
+    for (const engine of engines) {
+      if (resolveActiveModelProfileId(engine, store)) {
+        setPanelEngine(engine);
+        break;
+      }
+    }
+    engineInitializedRef.current = true;
+  }, [store]);
+
   const [addOpen, setAddOpen] = useState(false);
   const [addCompany, setAddCompany] = useState("");
   const [addName, setAddName] = useState("");
@@ -140,6 +154,8 @@ export function ClaudeModelTopbarPanel({ store, setStore, loading, onApplied }: 
   const handleApply = useCallback(
     async (profileId: string) => {
       if (!store) return;
+      const profile = store.profiles.find((p) => p.id === profileId);
+      const appliedEngine = profile ? normalizeModelProfileEngine(profile.engine) : panelEngine;
       const previous = store;
       const optimistic = buildOptimisticApplyStoreView(store, profileId);
       if (optimistic) {
@@ -149,9 +165,10 @@ export function ClaudeModelTopbarPanel({ store, setStore, loading, onApplied }: 
       try {
         const next = await applyClaudeModelProfile(profileId);
         setStore(next);
+        setPanelEngine(appliedEngine);
         const effective =
-          resolveEffectiveModelForProfileEngine(panelEngine, next)?.trim() || null;
-        dispatchModelProfileStoreChanged(next, { engine: panelEngine, effectiveModel: effective });
+          resolveEffectiveModelForProfileEngine(appliedEngine, next)?.trim() || null;
+        dispatchModelProfileStoreChanged(next, { engine: appliedEngine, effectiveModel: effective });
         onApplied?.();
       } catch (e) {
         setStore(previous);
