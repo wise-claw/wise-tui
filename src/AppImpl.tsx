@@ -3583,6 +3583,7 @@ export default function App() {
         onOpenTaskDetail: (taskId) => {
           setMonitorDrawerTarget({ type: "task", taskId });
         },
+        onOpenHistorySessionInInspector: handleOpenHistorySessionInInspector,
         onRestoreSession: handleRestoreHistorySessionAsMain,
         canRestoreSession: canRestoreHistorySessionForDrawer,
       }}

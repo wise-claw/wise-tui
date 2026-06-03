@@ -16,6 +16,8 @@ export interface ClaudeChatMessagesPaneProps {
   onLoadMoreTranscriptFromDisk?: (sessionId: string) => void | Promise<void>;
   onReloadFullDiskTranscript?: (sessionId: string) => void | Promise<void>;
   onOpenTaskDetail?: (taskId: string) => void;
+  onOpenHistorySessionInInspector?: (sessionId: string) => void;
+  sessionsForDispatchLookup?: readonly ClaudeSession[];
   onMessagesBlur: (event: FocusEvent<HTMLDivElement>) => void;
   onNavigateMessage: () => void;
   onLoadMoreTranscriptStart: () => void;
@@ -36,6 +38,8 @@ export const ClaudeChatMessagesPane = memo(function ClaudeChatMessagesPane({
   onLoadMoreTranscriptFromDisk,
   onReloadFullDiskTranscript,
   onOpenTaskDetail,
+  onOpenHistorySessionInInspector,
+  sessionsForDispatchLookup,
   onMessagesBlur,
   onNavigateMessage,
   onLoadMoreTranscriptStart,
@@ -108,6 +112,8 @@ export const ClaudeChatMessagesPane = memo(function ClaudeChatMessagesPane({
           showListEndThinkingHint={showListEndThinkingHint}
           scrollContainerRef={messagesScrollRef}
           onOpenTaskDetail={onOpenTaskDetail}
+          onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
+          sessionsForDispatchLookup={sessionsForDispatchLookup}
           onNavigate={onNavigateMessage}
           messageListProfile={messageListProfile}
           companionMessageListWindow={companionMessageListWindow}

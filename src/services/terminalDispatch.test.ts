@@ -80,9 +80,11 @@ describe("terminalDispatch", () => {
     expect(hits.map((item) => item.id)).toEqual(["b", "a"]);
   });
 
-  test("formatTerminalDispatchRecord includes execution engine", () => {
-    const record = formatTerminalDispatchRecord("终端01", "tab-1", "codex");
+  test("formatTerminalDispatchRecord includes dispatch content and session id", () => {
+    const record = formatTerminalDispatchRecord("终端01", "tab-1", "请检查天气接口", "codex");
     expect(record).toContain("Codex");
     expect(record).toContain("终端01");
+    expect(record).toContain("- 正文：请检查天气接口");
+    expect(record).toContain("- 分发会话：tab-1");
   });
 });

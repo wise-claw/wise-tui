@@ -1,4 +1,4 @@
-import type { ClaudeMessage, MessagePart } from "../types";
+import type { ClaudeMessage, ClaudeSession, MessagePart } from "../types";
 
 export function isToolOnlyUserMessage(msg: ClaudeMessage): boolean {
   const parts = msg.parts;
@@ -118,6 +118,8 @@ export interface DispatchRecordMeta {
   targetSessionId?: string;
   taskId?: string;
   dispatchTime?: string;
+  /** 终端派发时写入的可执行正文摘要 */
+  dispatchContent?: string;
 }
 
 export function parseDispatchRecord(text: string): DispatchRecordMeta | null {
@@ -137,6 +139,58 @@ export function parseDispatchRecord(text: string): DispatchRecordMeta | null {
     if (key === "分发会话") meta.targetSessionId = value;
     if (key === "任务ID") meta.taskId = value;
     if (key === "时间") meta.dispatchTime = value;
+    if (key === "正文") meta.dispatchContent = value;
   }
   return meta;
+}
+
+const DISPATCH_CONTENT_PLACEHOLDER = "（无正文）";
+
+function normalizedDispatchContentForSentence(raw: string | undefined): string | undefined {
+  const trimmed = raw?.trim();
+  if (!trimmed || trimmed === DISPATCH_CONTENT_PLACEHOLDER) return undefined;
+  return trimmed;
+}
+
+/** 从终端 worker 会话首条可展示用户消息回填派发正文（兼容无「正文」字段的历史记录）。 */
+export function resolveDispatchContentFromWorkerSession(
+  sessions: readonly ClaudeSession[],
+  workerSessionId: string,
+): string | undefined {
+  const key = workerSessionId.trim();
+  if (!key) return undefined;
+  const worker = sessions.find((item) => item.id === key || item.claudeSessionId === key);
+  if (!worker) return undefined;
+  const idx = indexOfFirstRenderableUserMessage(worker.messages);
+  if (idx < 0) return undefined;
+  const text = userMessagePlainTextForDisplay(worker.messages[idx]!);
+  const collapsed = text.replace(/\s+/g, " ").trim();
+  return collapsed || undefined;
+}
+
+export function enrichDispatchRecordMeta(
+  meta: DispatchRecordMeta,
+  sessions?: readonly ClaudeSession[],
+): DispatchRecordMeta {
+  if (normalizedDispatchContentForSentence(meta.dispatchContent)) return meta;
+  const workerId = meta.targetSessionId?.trim();
+  if (!workerId || !sessions?.length) return meta;
+  const fromWorker = resolveDispatchContentFromWorkerSession(sessions, workerId);
+  if (!fromWorker) return meta;
+  return { ...meta, dispatchContent: fromWorker };
+}
+
+/** 主会话系统气泡：任务分发记录展示句（与存储正文一致，不含「任务分发记录」标题行）。 */
+export function formatDispatchRecordSentence(meta: DispatchRecordMeta): string {
+  const target = meta.targetName?.trim() || "未知目标";
+  const time = meta.dispatchTime?.trim() || "";
+  const timePart = time ? `在${time}` : "";
+  const content = normalizedDispatchContentForSentence(meta.dispatchContent);
+  if (content) {
+    return `${target}${timePart}执行${content}。`;
+  }
+  if (meta.dispatchType === "团队流程") {
+    return `${target}${timePart}发起了团队流程任务。`;
+  }
+  return `${target}${timePart}执行了任务。`;
 }

@@ -1211,6 +1211,10 @@ export function ProgressMonitorDrawer({
       onCompactSessionHistory={onCompactSessionHistory}
       onCancelSession={onCancelSession}
       onOpenTaskDetail={onOpenTaskDetail}
+      onOpenHistorySessionInInspector={(sessionId) => {
+        const sid = sessionId.trim();
+        if (sid) setHistoryPeekSessionId(sid);
+      }}
     />
     </>
   );

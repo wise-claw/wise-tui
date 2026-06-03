@@ -152,22 +152,35 @@ export function sanitizeTerminalWorkerTranscriptMessages(
   });
 }
 
+function formatTerminalDispatchRecordTime(date: Date): string {
+  return date.toLocaleString("zh-CN", { hour12: false });
+}
+
+function normalizeTerminalDispatchRecordContent(text: string): string {
+  const collapsed = text.replace(/\s+/g, " ").trim();
+  return collapsed || "（无正文）";
+}
+
 export function formatTerminalDispatchRecord(
   terminalName: string,
   workerTabId: string,
+  dispatchContent: string,
   executionEngine?: EmployeeItem["executionEngine"],
+  dispatchedAt: Date = new Date(),
 ): string {
   const engineLabel =
     SESSION_EXECUTION_ENGINE_LABELS[
       normalizeSessionExecutionEngine(executionEngine)
     ].short;
+  const content = normalizeTerminalDispatchRecordContent(dispatchContent);
   return [
     "任务分发记录",
     `- 类型：终端独立会话`,
     `- 目标：${terminalName}`,
-    `- 执行引擎：${engineLabel}`,
+    `- 时间：${formatTerminalDispatchRecordTime(dispatchedAt)}`,
+    `- 正文：${content}`,
     `- 分发会话：${workerTabId}`,
-    `- 时间：${new Date().toLocaleString("zh-CN", { hour12: false })}`,
+    `- 执行引擎：${engineLabel}`,
   ].join("\n");
 }
 
@@ -412,7 +425,12 @@ export async function dispatchTerminalFromMainSession(
 
   deps.appendSystemMessage(
     input.mainSessionId,
-    formatTerminalDispatchRecord(terminal.name, workerTabId, terminal.executionEngine),
+    formatTerminalDispatchRecord(
+      terminal.name,
+      workerTabId,
+      userBubblePrompt,
+      terminal.executionEngine,
+    ),
   );
   mirrorTerminalToControlDock(deps, workerTabId, input.mainSessionId);
   deps.onDispatched?.(workerTabId);

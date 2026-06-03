@@ -9,6 +9,7 @@ import {
   useChatMessageListPendingScroll,
   useChatMessageListWindow,
 } from "../../hooks/useChatMessageListWindow";
+import type { ClaudeSession } from "../../types";
 import type { ChatMessageListRow } from "../../utils/claudeChatMessageListRows";
 import { findChatMessageRowIndexByMessageId } from "../../utils/chatMessageListWindow";
 import { ChatMessageListRowContent } from "./ChatMessageListRowContent";
@@ -29,6 +30,8 @@ interface Props {
   listResetKey?: string;
   listVariant?: "chat" | "monitor";
   onOpenTaskDetail?: (taskId: string) => void;
+  onOpenHistorySessionInInspector?: (sessionId: string) => void;
+  sessionsForDispatchLookup?: readonly ClaudeSession[];
   /** 自定义行渲染；提供时覆盖 listVariant 默认内容 */
   renderRow?: (row: ChatMessageListRow, index: number) => ReactNode;
   onNavigate?: () => void;
@@ -60,6 +63,8 @@ export const ChatMessageListVirtualBody = forwardRef<ChatMessageListNavigationHa
       listResetKey,
       listVariant = "chat",
       onOpenTaskDetail,
+      onOpenHistorySessionInInspector,
+      sessionsForDispatchLookup,
       renderRow,
       onNavigate,
       messageListProfile = "primary",
@@ -172,6 +177,8 @@ export const ChatMessageListVirtualBody = forwardRef<ChatMessageListNavigationHa
                   row={row}
                   listVariant={listVariant}
                   onOpenTaskDetail={onOpenTaskDetail}
+                  onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
+                  sessionsForDispatchLookup={sessionsForDispatchLookup}
                 />
               )}
             </div>

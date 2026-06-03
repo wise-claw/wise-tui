@@ -1714,6 +1714,8 @@ export function ClaudeChat({
           onLoadMoreTranscriptFromDisk={onLoadMoreTranscriptFromDisk}
           onReloadFullDiskTranscript={onReloadFullDiskTranscript}
           onOpenTaskDetail={onOpenTaskDetail}
+          onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
+          sessionsForDispatchLookup={sessions}
           onMessagesBlur={handleMessagesBlur}
           onNavigateMessage={pauseFollowForMessageNavigation}
           onLoadMoreTranscriptStart={handleLoadMoreTranscriptStart}

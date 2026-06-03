@@ -1,4 +1,5 @@
 import { memo } from "react";
+import type { ClaudeSession } from "../../types";
 import type { ChatMessageListRow } from "../../utils/claudeChatMessageListRows";
 import { ClaudeChatMessageRow } from "./ClaudeChatMessageRow";
 import { ClaudeSessionMonitorMessageRow } from "./ClaudeSessionMonitorMessageRow";
@@ -8,9 +9,17 @@ interface Props {
   row: ChatMessageListRow;
   listVariant?: "chat" | "monitor";
   onOpenTaskDetail?: (taskId: string) => void;
+  onOpenHistorySessionInInspector?: (sessionId: string) => void;
+  sessionsForDispatchLookup?: readonly ClaudeSession[];
 }
 
-function ChatMessageListRowContentInner({ row, listVariant = "chat", onOpenTaskDetail }: Props) {
+function ChatMessageListRowContentInner({
+  row,
+  listVariant = "chat",
+  onOpenTaskDetail,
+  onOpenHistorySessionInInspector,
+  sessionsForDispatchLookup,
+}: Props) {
   if (row.kind === "thinking-hint") {
     return (
       <div className="app-claude-messages-end-thinking">
@@ -26,6 +35,8 @@ function ChatMessageListRowContentInner({ row, listVariant = "chat", onOpenTaskD
         mergedWithPrevious={row.mergedWithPrevious}
         toolUser={row.toolUser}
         onOpenTaskDetail={onOpenTaskDetail}
+        onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
+        sessionsForDispatchLookup={sessionsForDispatchLookup}
       />
     );
   }
@@ -36,6 +47,8 @@ function ChatMessageListRowContentInner({ row, listVariant = "chat", onOpenTaskD
       mergedWithPrevious={row.mergedWithPrevious}
       toolUser={row.toolUser}
       onOpenTaskDetail={onOpenTaskDetail}
+      onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
+      sessionsForDispatchLookup={sessionsForDispatchLookup}
     />
   );
 }
@@ -43,6 +56,8 @@ function ChatMessageListRowContentInner({ row, listVariant = "chat", onOpenTaskD
 function rowContentEqual(prev: Readonly<Props>, next: Readonly<Props>): boolean {
   if (prev.listVariant !== next.listVariant) return false;
   if (prev.onOpenTaskDetail !== next.onOpenTaskDetail) return false;
+  if (prev.onOpenHistorySessionInInspector !== next.onOpenHistorySessionInInspector) return false;
+  if (prev.sessionsForDispatchLookup !== next.sessionsForDispatchLookup) return false;
   if (prev.row === next.row) return true;
   if (prev.row.kind !== next.row.kind) return false;
   if (prev.row.kind === "thinking-hint" || next.row.kind === "thinking-hint") {

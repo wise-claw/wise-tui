@@ -3827,6 +3827,41 @@
   text-decoration: underline;
 }
 
+.app-system-dispatch-card--sentence {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+
+.app-system-dispatch-card__sentence,
+.app-system-dispatch-card__sentence-link {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ant-color-text-secondary);
+  word-break: break-word;
+}
+
+.app-system-dispatch-card__sentence-link {
+  display: inline;
+  border: none;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  color: var(--ant-color-primary);
+}
+
+.app-system-dispatch-card__sentence-link:hover {
+  color: var(--ant-color-primary-hover);
+  text-decoration: underline;
+}
+
+.app-system-dispatch-card--sentence .app-system-dispatch-card__actions {
+  margin-top: 6px;
+}
+
 /* ── Message Parts ── */
 
 .app-message-parts {

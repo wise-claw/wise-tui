@@ -1,5 +1,5 @@
 import { memo, type ReactNode } from "react";
-import type { ClaudeMessage } from "../../types";
+import type { ClaudeMessage, ClaudeSession } from "../../types";
 import { MessagePartsDisplay } from "./MessageParts";
 import { Markdown } from "./Markdown";
 import { SystemMessageContent } from "./SystemMessageContent";
@@ -7,6 +7,7 @@ import {
   parseDispatchRecord,
   systemMessagePlainText,
 } from "../../utils/claudeChatMessageDisplay";
+import { DispatchRecordMessage } from "./DispatchRecordMessage";
 import { UserMessageCollapsibleBody } from "./UserMessageCollapsibleBody";
 
 interface Props {
@@ -15,6 +16,8 @@ interface Props {
   mergedWithPrevious: boolean;
   toolUser: boolean;
   onOpenTaskDetail?: (taskId: string) => void;
+  onOpenHistorySessionInInspector?: (sessionId: string) => void;
+  sessionsForDispatchLookup?: readonly ClaudeSession[];
 }
 
 function ClaudeChatMessageRowInner({
@@ -23,6 +26,8 @@ function ClaudeChatMessageRowInner({
   mergedWithPrevious,
   toolUser,
   onOpenTaskDetail,
+  onOpenHistorySessionInInspector,
+  sessionsForDispatchLookup,
 }: Props) {
   function renderSystemBody(): ReactNode {
     const raw = systemMessagePlainText(msg);
@@ -31,38 +36,12 @@ function ClaudeChatMessageRowInner({
       return <SystemMessageContent text={raw} />;
     }
     return (
-      <div className="app-system-dispatch-card">
-        <div className="app-system-dispatch-card__head">
-          <div className="app-system-dispatch-card__title">任务分发记录</div>
-        </div>
-        <div className="app-system-dispatch-card__meta">
-          <div className="app-system-dispatch-card__meta-row">
-            <span className="app-system-dispatch-card__meta-label">类型</span>
-            <span className="app-system-dispatch-card__meta-value">{dispatch.dispatchType ?? "-"}</span>
-          </div>
-          <div className="app-system-dispatch-card__meta-row">
-            <span className="app-system-dispatch-card__meta-label">目标</span>
-            <span className="app-system-dispatch-card__meta-value">{dispatch.targetName ?? "-"}</span>
-          </div>
-          {dispatch.dispatchTime ? (
-            <div className="app-system-dispatch-card__meta-row">
-              <span className="app-system-dispatch-card__meta-label">时间</span>
-              <span className="app-system-dispatch-card__meta-value">{dispatch.dispatchTime}</span>
-            </div>
-          ) : null}
-        </div>
-        <div className="app-system-dispatch-card__actions">
-          {dispatch.taskId ? (
-            <button
-              type="button"
-              className="app-system-dispatch-card__btn"
-              onClick={() => onOpenTaskDetail?.(dispatch.taskId!)}
-            >
-              查看任务详情
-            </button>
-          ) : null}
-        </div>
-      </div>
+      <DispatchRecordMessage
+        dispatch={dispatch}
+        sessionsForDispatchLookup={sessionsForDispatchLookup}
+        onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
+        onOpenTaskDetail={onOpenTaskDetail}
+      />
     );
   }
 
@@ -119,7 +98,9 @@ function rowPropsEqual(prev: Readonly<Props>, next: Readonly<Props>): boolean {
     prev.streamingThisBubble === next.streamingThisBubble &&
     prev.mergedWithPrevious === next.mergedWithPrevious &&
     prev.toolUser === next.toolUser &&
-    prev.onOpenTaskDetail === next.onOpenTaskDetail
+    prev.onOpenTaskDetail === next.onOpenTaskDetail &&
+    prev.onOpenHistorySessionInInspector === next.onOpenHistorySessionInInspector &&
+    prev.sessionsForDispatchLookup === next.sessionsForDispatchLookup
   );
 }
 

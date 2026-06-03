@@ -22,6 +22,7 @@ export interface MonitorHistorySessionTranscriptDrawerProps {
   onCompactSessionHistory?: (sessionId: string) => void | Promise<void>;
   onCancelSession?: (sessionId: string) => void;
   onOpenTaskDetail?: (taskId: string) => void;
+  onOpenHistorySessionInInspector?: (sessionId: string) => void;
   onRestoreSession?: (sessionId: string) => void;
   canRestoreSession?: (sessionId: string) => boolean;
 }
@@ -55,6 +56,7 @@ export function MonitorHistorySessionTranscriptDrawer({
   onCompactSessionHistory,
   onCancelSession,
   onOpenTaskDetail,
+  onOpenHistorySessionInInspector,
   onRestoreSession,
   canRestoreSession,
 }: MonitorHistorySessionTranscriptDrawerProps) {
@@ -260,6 +262,8 @@ export function MonitorHistorySessionTranscriptDrawer({
             <ClaudeSessionMessagesColumn
               session={displaySession}
               onOpenTaskDetail={onOpenTaskDetail}
+              onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
+              sessionsForDispatchLookup={transcriptSourceSessions}
               showAllMessages
             />
           </div>

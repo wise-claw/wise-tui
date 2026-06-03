@@ -13,6 +13,8 @@ interface Props {
   showListEndThinkingHint: boolean;
   scrollContainerRef: RefObject<HTMLDivElement | null>;
   onOpenTaskDetail?: (taskId: string) => void;
+  onOpenHistorySessionInInspector?: (sessionId: string) => void;
+  sessionsForDispatchLookup?: readonly ClaudeSession[];
   /** 主会话气泡 vs 监控/只读列（含时间戳头） */
   listVariant?: "chat" | "monitor";
   onNavigate?: () => void;
@@ -28,6 +30,8 @@ export const ClaudeVirtualMessageList = forwardRef<ChatMessageListNavigationHand
       showListEndThinkingHint,
       scrollContainerRef,
       onOpenTaskDetail,
+      onOpenHistorySessionInInspector,
+      sessionsForDispatchLookup,
       listVariant = "chat",
       onNavigate,
       messageListProfile = "primary",
@@ -56,6 +60,8 @@ export const ClaudeVirtualMessageList = forwardRef<ChatMessageListNavigationHand
         listResetKey={session.id}
         listVariant={listVariant}
         onOpenTaskDetail={onOpenTaskDetail}
+        onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
+        sessionsForDispatchLookup={sessionsForDispatchLookup}
         onNavigate={onNavigate}
         messageListProfile={messageListProfile}
         companionMessageListWindow={companionMessageListWindow}
