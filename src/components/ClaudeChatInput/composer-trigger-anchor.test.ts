@@ -1,6 +1,7 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import {
   computeSlashPopoverPlacement,
+  focusComposerAtPlainOffset,
   plainOffsetToProseMirrorPos,
 } from "./composer-trigger-anchor";
 
@@ -17,6 +18,33 @@ describe("plainOffsetToProseMirrorPos", () => {
     const editor = { state: { doc } } as Parameters<typeof plainOffsetToProseMirrorPos>[0];
     expect(plainOffsetToProseMirrorPos(editor, 0)).toBe(2);
     expect(plainOffsetToProseMirrorPos(editor, 1)).toBe(5);
+  });
+});
+
+describe("focusComposerAtPlainOffset", () => {
+  test("sets selection at mapped ProseMirror position", () => {
+    const run = mock(() => {});
+    const doc = {
+      content: { size: 5 },
+      textBetween: (from: number, to: number) => {
+        const segments = ["", "", "a", "", ""];
+        return segments.slice(from, to).join("");
+      },
+    };
+    const editor = {
+      state: { doc },
+      chain: () => ({
+        setTextSelection: (pos: number) => ({
+          focus: () => ({
+            run,
+          }),
+        }),
+      }),
+    };
+    const focusEditor = mock(() => {});
+    focusComposerAtPlainOffset({ getEditor: () => editor, focusEditor }, 1);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(focusEditor).not.toHaveBeenCalled();
   });
 });
 

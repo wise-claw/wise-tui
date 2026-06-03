@@ -5933,6 +5933,67 @@ button.app-message-part-header:disabled:hover {
   display: block;
 }
 
+/* @ 文件选项：与仓库资源管理器一致的扩展名图标 */
+.app-claude-slash-popover__file-icon {
+  margin-right: 8px;
+}
+
+.app-claude-slash-popover .explorer-tree-file-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.app-claude-slash-popover .explorer-tree-file-icon--react {
+  color: color-mix(in srgb, #149eca 88%, var(--ant-color-text-secondary));
+}
+
+.app-claude-slash-popover .explorer-tree-file-icon--docker {
+  color: #2496ed;
+}
+
+.app-claude-slash-popover .explorer-tree-file-icon--ts {
+  color: #3178c6;
+}
+
+.app-claude-slash-popover .explorer-tree-file-icon--js,
+.app-claude-slash-popover .explorer-tree-file-icon--json {
+  color: #cb9f17;
+}
+
+.app-claude-slash-popover .explorer-tree-file-icon--markdown {
+  color: #519aba;
+}
+
+.app-claude-slash-popover .explorer-tree-file-icon--media {
+  color: #7e57c2;
+}
+
+.app-claude-slash-popover .explorer-tree-file-icon--zip {
+  color: #d4a574;
+}
+
+.app-claude-slash-popover .explorer-tree-file-icon--pdf {
+  color: #e53935;
+}
+
+.app-claude-slash-popover .explorer-tree-file-icon--generic,
+.app-claude-slash-popover .explorer-tree-file-icon--plain,
+.app-claude-slash-popover .explorer-tree-file-icon--lock {
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-claude-slash-popover-item--active .explorer-tree-file-icon--generic,
+.app-claude-slash-popover-item--active .explorer-tree-file-icon--plain,
+.app-claude-slash-popover-item--active .explorer-tree-file-icon--lock {
+  color: var(--ant-color-primary);
+}
+
 /* Image thumbnails */
 
 .app-claude-image-thumbs {

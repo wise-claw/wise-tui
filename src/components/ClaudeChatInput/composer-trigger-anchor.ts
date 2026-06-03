@@ -87,6 +87,37 @@ function caretRectFromProseMirrorView(view: ComposerProseMirrorView, pos: number
 }
 
 /** 取纯文本某偏移处字符左缘在视口中的锚点矩形（用于 @ / 弹出框定位）。 */
+type ComposerFocusableEditor = ComposerProseMirrorEditor & {
+  chain?: () => {
+    setTextSelection: (pos: number) => { focus: () => { run: () => void } };
+    focus: (pos?: number) => { run: () => void };
+  };
+};
+
+/** 在纯文本偏移处聚焦并放置光标（与 `plainOffsetToProseMirrorPos` 对齐）。 */
+export function focusComposerAtPlainOffset(
+  aiChat: { getEditor?: () => unknown; focusEditor?: (pos?: number | string) => void } | null,
+  plainOffset: number,
+): void {
+  if (!aiChat) return;
+  const raw = aiChat.getEditor?.();
+  if (!raw || typeof raw !== "object") {
+    aiChat.focusEditor?.();
+    return;
+  }
+  try {
+    const editor = raw as ComposerFocusableEditor;
+    const pmPos = plainOffsetToProseMirrorPos(editor, plainOffset);
+    if (editor.chain) {
+      editor.chain().setTextSelection(pmPos).focus().run();
+      return;
+    }
+    aiChat.focusEditor?.(pmPos);
+  } catch {
+    aiChat.focusEditor?.();
+  }
+}
+
 export function getComposerEditorCaretRectAtPlainOffset(
   editor: ComposerProseMirrorEditor,
   plainOffset: number,
